@@ -2,6 +2,7 @@
 
 members = [
     "interact",
+    "particles",
 ]
 
 #[profile.release]
