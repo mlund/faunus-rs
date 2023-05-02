@@ -4,6 +4,7 @@
 //!
 //! This is a convertion from fortran -> C++ -> Rust.
 //! Serious refactoring is needed!
+use anyhow::Result;
 #[cfg(test)]
 use assert_approx_eq::assert_approx_eq;
 use itertools::{Itertools, Position};
@@ -98,9 +99,9 @@ impl Spline {
 pub struct Andrea {
     spline: Spline,
     /// Max number of control points
-    max_num_ctrl_points: i32,
+    max_num_ctrl_points: u32,
     /// Max number of trials to downscale dr
-    max_num_downscales: i32,
+    max_num_downscales: u32,
     /// Downscaling factor for dr
     downscale_factor: f64,
 }
@@ -192,7 +193,7 @@ impl Andrea {
         error_codes
     }
 
-    pub fn generate<F>(&mut self, func: &F, xmin_squared: f64, xmax_squared: f64) -> Knots
+    pub fn generate<F>(&mut self, func: &F, xmin_squared: f64, xmax_squared: f64) -> Result<Knots>
     where
         F: Fn(f64) -> f64,
     {
@@ -207,7 +208,6 @@ impl Andrea {
 
         let xmin = f64::sqrt(xmin_squared);
         let mut rumin = xmin;
-        let mut dx;
         let mut highx = f64::sqrt(xmax_squared);
         let mut highx_squared = xmax_squared;
         let mut high_repulsion = false;
@@ -215,19 +215,14 @@ impl Andrea {
         knots.r2.push(highx_squared);
 
         for attempt in (0..self.max_num_ctrl_points).with_position() {
-            if let Position::Last(_) = attempt {
-                panic!("increace tolerance!")
-            }
             let mut lowx = highx;
             let mut lowx_squared = 0.0;
             let mut coeff: Vec<f64> = Vec::new();
 
-            dx = highx - xmin;
+            let mut dx = highx - xmin;
 
             for attempt in (0..self.max_num_downscales).with_position() {
-                if let Position::Last(_) = attempt {
-                    panic!("increace tolerance!")
-                }
+                //            for attempt in dx_range.with_position() {
                 highx_squared = highx * highx;
                 lowx = highx - dx;
                 if rumin > lowx {
@@ -247,9 +242,14 @@ impl Andrea {
                     break;
                 }
                 dx *= self.downscale_factor;
+                if let Position::Last(_) = attempt {
+                    return Err(anyhow::Error::msg("increase tolerance"));
+                }
             }
 
-            assert_eq!(coeff.len(), 7);
+            if coeff.len() != 7 {
+                return Err(anyhow::Error::msg("invalid number of coefficients"));
+            }
 
             knots.r2.push(lowx_squared);
             knots.coeff.extend(coeff.iter().skip(1));
@@ -261,15 +261,14 @@ impl Andrea {
             if lowx <= rumin || high_repulsion {
                 break;
             }
+            if let Position::Last(_) = attempt {
+                return Err(anyhow::Error::msg("increase tolerance"));
+            }
         }
-
-        // if i >= self._mngrid {
-        //     panic!("Andrea spline: try to increase utol/ftol");
-        // }
 
         Self::swap_coefficients(&mut knots.coeff);
         knots.r2.reverse();
-        knots
+        Ok(knots)
     }
 
     /// Swap coefficients in packets of six, starting from both ends
@@ -324,55 +323,68 @@ mod tests {
     use super::*;
 
     #[test]
-    fn faunus_andrea() {
-        let f = |x: f64| 0.5 * x * x.sin() + 2.0;
+    fn spline_andrea() {
+        let func = |x: f64| 0.5 * x * x.sin() + 2.0;
         let mut spline = Andrea::default();
         spline.spline.set_tolerance(2.0e-6, 1.0e-4); // ftol carries no meaning
-        let d = spline.generate(&f, 0.0, 10.0);
+        let knots = spline.generate(&func, 0.0, 10.0).unwrap();
 
         assert_approx_eq!(spline.downscale_factor, 0.9, 1.0e-6);
         assert_eq!(spline.max_num_downscales, 100);
         assert_eq!(spline.max_num_ctrl_points, 1200);
 
-        assert_eq!(d.r2.len(), 19);
-        assert_eq!(d.coeff.len(), 108);
-        assert_eq!(d.len(), 19);
-        assert_approx_eq!(d.rmin2, 0.0, 1.0e-6);
-        assert_approx_eq!(d.rmax2, 10.0, 1.0e-6);
+        assert_eq!(knots.r2.len(), 19);
+        assert_eq!(knots.coeff.len(), 108);
+        assert_eq!(knots.len(), 19);
+        assert_approx_eq!(knots.rmin2, 0.0, 1.0e-6);
+        assert_approx_eq!(knots.rmax2, 10.0, 1.0e-6);
 
-        assert_approx_eq!(d.r2[0], 0.0, 1.0e-6);
-        assert_approx_eq!(d.r2[1], 0.212991, 1.0e-6);
-        assert_approx_eq!(d.r2[2], 0.782554, 1.0e-6);
-        assert_approx_eq!(*d.r2.last().unwrap(), 10.0, 1.0e-6);
+        assert_approx_eq!(knots.r2[0], 0.0, 1.0e-6);
+        assert_approx_eq!(knots.r2[1], 0.212991, 1.0e-6);
+        assert_approx_eq!(knots.r2[2], 0.782554, 1.0e-6);
+        assert_approx_eq!(*knots.r2.last().unwrap(), 10.0, 1.0e-6);
 
-        assert_approx_eq!(d.coeff[0], 2.0, 1.0e-6);
-        assert_approx_eq!(d.coeff[1], 0.0, 1.0e-6);
-        assert_approx_eq!(d.coeff[2], 0.5, 1.0e-6);
-        assert_approx_eq!(*d.coeff.last().unwrap(), -0.0441931, 1.0e-6);
+        assert_approx_eq!(knots.coeff[0], 2.0, 1.0e-6);
+        assert_approx_eq!(knots.coeff[1], 0.0, 1.0e-6);
+        assert_approx_eq!(knots.coeff[2], 0.5, 1.0e-6);
+        assert_approx_eq!(*knots.coeff.last().unwrap(), -0.0441931, 1.0e-6);
 
-        assert_approx_eq!(f(1.0e-9), spline.eval(&d, 1e-9), 1e-7);
-        assert_approx_eq!(f(5.0), spline.eval(&d, 5.0), 1e-7);
-        assert_approx_eq!(f(10.0), spline.eval(&d, 10.0), 1e-7);
+        assert_approx_eq!(func(1.0e-9), spline.eval(&knots, 1e-9), 1e-7);
+        assert_approx_eq!(func(5.0), spline.eval(&knots, 5.0), 1e-7);
+        assert_approx_eq!(func(10.0), spline.eval(&knots, 10.0), 1e-7);
 
         // Check if numerical derivation of *splined* function
         // matches the analytical solution in `eval_der()`.
-        let f_prime =
-            |x: f64, dx: f64| (spline.eval(&d, x + dx) - spline.eval(&d, x - dx)) / (2.0 * dx);
+        let f_prime = |x: f64, dx: f64| {
+            (spline.eval(&knots, x + dx) - spline.eval(&knots, x - dx)) / (2.0 * dx)
+        };
         let x = 1e-9;
-        assert_approx_eq!(f_prime(x, 1e-10), spline.eval_derivative(&d, x), 1e-7);
+        assert_approx_eq!(f_prime(x, 1e-10), spline.eval_derivative(&knots, x), 1e-7);
         let x = 1.0;
-        assert_approx_eq!(f_prime(x, 1e-10), spline.eval_derivative(&d, x), 2e-7);
+        assert_approx_eq!(f_prime(x, 1e-10), spline.eval_derivative(&knots, x), 2e-7);
         let x = 5.0;
-        assert_approx_eq!(f_prime(x, 1e-10), spline.eval_derivative(&d, x), 2e-7);
+        assert_approx_eq!(f_prime(x, 1e-10), spline.eval_derivative(&knots, x), 2e-7);
 
         // Check if analytical spline derivative matches
         // derivative of original function
-        let f_prime_exact = |x: f64, dx: f64| (f(x + dx) - f(x - dx)) / (2.0 * dx);
+        let f_prime_exact = |x: f64, dx: f64| (func(x + dx) - func(x - dx)) / (2.0 * dx);
         let x = 1e-9;
-        assert_approx_eq!(f_prime_exact(x, 1e-10), spline.eval_derivative(&d, x), 1e-8);
+        assert_approx_eq!(
+            f_prime_exact(x, 1e-10),
+            spline.eval_derivative(&knots, x),
+            1e-8
+        );
         let x = 1.0;
-        assert_approx_eq!(f_prime_exact(x, 1e-10), spline.eval_derivative(&d, x), 5e-6);
+        assert_approx_eq!(
+            f_prime_exact(x, 1e-10),
+            spline.eval_derivative(&knots, x),
+            5e-6
+        );
         let x = 5.0;
-        assert_approx_eq!(f_prime_exact(x, 1e-10), spline.eval_derivative(&d, x), 7e-7);
+        assert_approx_eq!(
+            f_prime_exact(x, 1e-10),
+            spline.eval_derivative(&knots, x),
+            7e-7
+        );
     }
 }

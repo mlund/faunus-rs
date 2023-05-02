@@ -22,6 +22,15 @@ pub trait TwobodyEnergy {
     }
 }
 
+/// Helper struct to combine two energies
+pub struct Combined<T, U>(T, U);
+
+impl<T: TwobodyEnergy, U: TwobodyEnergy> TwobodyEnergy for Combined<T, U> {
+    fn twobody_energy(&self, distance_squared: f64) -> f64 {
+        self.0.twobody_energy(distance_squared) + self.1.twobody_energy(distance_squared)
+    }
+}
+
 /// Defines a cutoff distance
 pub trait Cutoff {
     /// Squared cutoff distance
