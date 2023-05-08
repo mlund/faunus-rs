@@ -29,7 +29,9 @@ use serde::{Deserialize, Serialize};
 
 /// # Mie potential
 ///
-/// This is a generalization of the Lennard-Jones potential.
+/// This is a generalization of the Lennard-Jones potential due to G. Mie,
+/// ["Zur kinetischen Theorie der einatomigen Körper"](https://doi.org/10.1002/andp.19033160802),
+/// Annalen der Physik.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Mie<const N: u32, const M: u32> {
     /// Interaction strength, ε
@@ -66,6 +68,12 @@ impl<const N: u32, const M: u32> TwobodyEnergy for Mie<N, M> {
         }
         let s_over_r = self.sigma / distance_squared.sqrt(); // (σ/r)
         Mie::<N, M>::C * self.epsilon * (s_over_r.powi(N as i32) - s_over_r.powi(M as i32))
+    }
+}
+
+impl<const N: u32, const M: u32> Citation for Mie<N, M> {
+    fn citation(&self) -> Option<&'static str> {
+        Some("doi:10/fpvskc") // G. Mie, "Zur kinetischen Theorie der einatomigen Körper"
     }
 }
 
