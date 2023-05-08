@@ -18,6 +18,31 @@ pub mod qpochhammer;
 pub mod spline;
 pub mod twobody;
 
+/// Defines a citation which can be used to reference the source of a model
+pub trait Citation {
+    /// Returns a citation string which should preferably be a Digital Object Identifier (DOI)
+    /// in the format "doi:10.1103/PhysRevLett.120.143001". If not available, use an URL in the
+    /// format "https://...".
+    fn citation(&self) -> Option<&'static str> {
+        None
+    }
+    /// Tries to extract a URL from the citation string
+    fn url(&self) -> Option<String> {
+        if self.citation()?.starts_with("doi:") {
+            Some(format!(
+                "https://doi.org/{}",
+                &self.citation().unwrap()[4..]
+            ))
+        } else if self.citation()?.starts_with("https://")
+            || self.citation()?.starts_with("http://")
+        {
+            Some(self.citation().unwrap().to_string())
+        } else {
+            None
+        }
+    }
+}
+
 /// Defines a cutoff distance
 pub trait Cutoff {
     /// Squared cutoff distance

@@ -33,10 +33,6 @@ pub use self::mie::{LennardJones, Mie, WeeksChandlerAndersen};
 pub trait TwobodyEnergy {
     /// Interaction energy between a pair of isotropic particles
     fn twobody_energy(&self, distance_squared: f64) -> f64;
-    /// Litterature reference, preferably a Digital Object Identifier in the form "doi:..."
-    fn cite(&self) -> Option<&'static str> {
-        None
-    }
 }
 
 /// Helper struct to combine twobody energies

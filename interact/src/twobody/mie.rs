@@ -22,7 +22,7 @@
 use crate::twobody::TwobodyEnergy;
 use crate::{
     arithmetic_mean, divide4_serialize, geometric_mean, multiply4_deserialize, sqrt_serialize,
-    square_deserialize, Cutoff,
+    square_deserialize, Citation, Cutoff,
 };
 
 use serde::{Deserialize, Serialize};
@@ -111,7 +111,10 @@ impl LennardJones {
             sigma_squared: sigma.powi(2),
         }
     }
-    /// Construct using the Lorentz-Berthelot mixing rule
+    /// Construct using the Lorentz-Berthelot mixing rule.
+    ///
+    /// Epsilons are combined using the geometric mean, and sigmas using the arithmetic mean.
+    /// See [Wikipedia](https://en.wikipedia.org/wiki/Combining_rules) for more information.
     pub fn lorentz_berthelot(epsilons: (f64, f64), sigmas: (f64, f64)) -> Self {
         LennardJones::new(geometric_mean(epsilons), arithmetic_mean(sigmas))
     }
@@ -131,7 +134,10 @@ impl TwobodyEnergy for LennardJones {
         let x = x * x * x; // σ⁶/r⁶
         self.four_times_epsilon * (x * x - x)
     }
-    fn cite(&self) -> Option<&'static str> {
+}
+
+impl Citation for LennardJones {
+    fn citation(&self) -> Option<&'static str> {
         Some("doi:10/cqhgm7")
     }
 }
@@ -173,7 +179,10 @@ impl TwobodyEnergy for WeeksChandlerAndersen {
         let x6 = (self.lennard_jones.sigma_squared / distance_squared).powi(3); // (s/r)^6
         self.lennard_jones.four_times_epsilon * (x6 * x6 - x6 + WeeksChandlerAndersen::ONEFOURTH)
     }
-    fn cite(&self) -> Option<&'static str> {
+}
+
+impl Citation for WeeksChandlerAndersen {
+    fn citation(&self) -> Option<&'static str> {
         Some("doi:ct4kh9")
     }
 }
