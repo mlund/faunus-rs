@@ -1,8 +1,8 @@
-use interact::lj;
-use interact::TwobodyEnergy;
+use interact::twobody::LennardJones;
+use interact::twobody::TwobodyEnergy;
 
 fn main() {
-    let lj = lj::LennardJones::new(1.5, 2.0);
+    let lj = LennardJones::new(1.5, 2.0);
     let s = serde_json::to_string(&lj).unwrap();
 
     println!("{}", lj.cite().unwrap());

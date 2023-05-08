@@ -1,3 +1,17 @@
+// Copyright 2023 Mikael Lund
+//
+// Licensed under the Apache license, version 2.0 (the "license");
+// you may not use this file except in compliance with the license.
+// You may obtain a copy of the license at
+//
+//     http://www.apache.org/licenses/license-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the license is distributed on an "as is" basis,
+// without warranties or conditions of any kind, either express or implied.
+// See the license for the specific language governing permissions and
+// limitations under the license.
+
 //! Spline functions
 //!
 //! ## Todo
@@ -81,6 +95,7 @@ impl Spline {
         Ok(())
     }
 
+    /// Set the tolerance for the spline values and the derivative of the spline values
     pub fn set_tolerance(&mut self, utol: f64, ftol: f64) {
         self.tolerance = utol;
         self.derivative_tolerance = ftol;
@@ -222,7 +237,6 @@ impl Andrea {
             let mut dx = highx - xmin;
 
             for attempt in (0..self.max_num_downscales).with_position() {
-                //            for attempt in dx_range.with_position() {
                 highx_squared = highx * highx;
                 lowx = highx - dx;
                 if rumin > lowx {

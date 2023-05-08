@@ -1,22 +1,42 @@
+// Copyright 2023 Mikael Lund
+//
+// Licensed under the Apache license, version 2.0 (the "license");
+// you may not use this file except in compliance with the license.
+// You may obtain a copy of the license at
+//
+//     http://www.apache.org/licenses/license-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the license is distributed on an "as is" basis,
+// without warranties or conditions of any kind, either express or implied.
+// See the license for the specific language governing permissions and
+// limitations under the license.
+
 //! Lennard-Jones like potentials
 //!
 //! This includes the:
 //! - orignal 12-6 potential,
 //! - generalized Mie n-m potential,
-//! - cut and shifted LJ, i.e. the Weeks-Chandler-Andersen potential
+//! - cut and shifted Lennard-Jones, i.e. the Weeks-Chandler-Andersen potential
+
+use crate::twobody::TwobodyEnergy;
 use crate::{
     arithmetic_mean, divide4_serialize, geometric_mean, multiply4_deserialize, sqrt_serialize,
-    square_deserialize, Cutoff, TwobodyEnergy,
+    square_deserialize, Cutoff,
 };
+
 use serde::{Deserialize, Serialize};
 
 /// # Mie potential
 ///
 /// This is a generalization of the Lennard-Jones potential.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Mie<const N: u32, const M: u32> {
     /// Interaction strength, ε
+    #[serde(rename = "ε")]
     epsilon: f64,
     /// Diameter, σ
+    #[serde(rename = "σ")]
     sigma: f64,
 }
 
@@ -51,14 +71,13 @@ impl<const N: u32, const M: u32> TwobodyEnergy for Mie<N, M> {
 
 /// # Lennard-Jones potential
 ///
-/// Originally by John Edward Lennard-Jones, see
+/// Originally by J. E. Lennard-Jones, see
 /// [doi:10/cqhgm7](https://dx.doi.org/10/cqhgm7) or
 /// [Wikipedia](https://en.wikipedia.org/wiki/Lennard-Jones_potential).
 ///
 /// ## Examples:
 /// ~~~
-/// use interact::lj::LennardJones;
-/// use interact::TwobodyEnergy;
+/// use interact::twobody::{LennardJones, TwobodyEnergy};
 /// let epsilon = 1.5;
 /// let sigma = 2.0;
 /// let lj = LennardJones::new(epsilon, sigma);
@@ -66,7 +85,7 @@ impl<const N: u32, const M: u32> TwobodyEnergy for Mie<N, M> {
 /// let u_min = -epsilon;
 /// assert_eq!(lj.twobody_energy( r_min.powi(2) ), u_min);
 /// ~~~
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Default)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default)]
 #[serde(default)]
 pub struct LennardJones {
     /// Four times epsilon, 4ε
@@ -121,6 +140,7 @@ impl TwobodyEnergy for LennardJones {
 ///
 /// This is a Lennard-Jones type potential, cut and shifted to zero at r_cut = 2^(1/6)σ.
 /// More information [here](https://dx.doi.org/doi.org/ct4kh9).
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default)]
 pub struct WeeksChandlerAndersen {
     lennard_jones: LennardJones,
 }
@@ -134,8 +154,13 @@ impl WeeksChandlerAndersen {
 }
 
 impl Cutoff for WeeksChandlerAndersen {
+    #[inline]
     fn cutoff_squared(&self) -> f64 {
         self.lennard_jones.sigma_squared * WeeksChandlerAndersen::TWOTOTWOSIXTH
+    }
+    #[inline]
+    fn cutoff(&self) -> f64 {
+        self.cutoff_squared().sqrt()
     }
 }
 
@@ -145,10 +170,10 @@ impl TwobodyEnergy for WeeksChandlerAndersen {
         if distance_squared > self.cutoff_squared() {
             return 0.0;
         }
-        let x = (self.lennard_jones.sigma_squared / distance_squared).powi(3); // (s/r)^6
-        self.lennard_jones.four_times_epsilon * (x * x - x + WeeksChandlerAndersen::ONEFOURTH)
+        let x6 = (self.lennard_jones.sigma_squared / distance_squared).powi(3); // (s/r)^6
+        self.lennard_jones.four_times_epsilon * (x6 * x6 - x6 + WeeksChandlerAndersen::ONEFOURTH)
     }
     fn cite(&self) -> Option<&'static str> {
-        Some("doi.org/ct4kh9")
+        Some("doi:ct4kh9")
     }
 }
