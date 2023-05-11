@@ -20,6 +20,8 @@ pub type Point = Vector3<f64>;
 pub type PositionVec = Vec<Point>;
 pub type ParticleVec = Vec<Particle>;
 
+pub mod cell;
+
 trait PointParticle {
     /// Type of the particle identifier
     type Idtype;
@@ -63,6 +65,7 @@ pub enum GroupSize {
     /// Shrink with `usize` particles
     Shrink(usize),
 }
+
 /// Description of a change to a single group of particles
 ///
 /// Defines a change to a group of particles, e.g. a rigid body update,
@@ -208,6 +211,10 @@ impl<'a> Group<'a> {
     pub fn mass_center(&self) -> Option<&Point> {
         self.mass_center.as_ref()
     }
+
+    pub fn set_particles(&mut self, particles: &'a [Particle]) {
+        self.particles = particles;
+    }
 }
 
 pub enum GroupId {
@@ -215,6 +222,23 @@ pub enum GroupId {
     Id(usize),
     /// No molecular type id
     None,
+}
+
+pub trait Context {
+    /// List of all groups in the system
+    fn groups(&self) -> &[Group];
+
+    /// Set volume of system
+    fn set_volume(&mut self, volume: f64) -> anyhow::Result<()>;
+
+    /// Get volume of system
+    fn volume(&self) -> f64;
+
+    /// Add a group to the system
+    fn add_group(&mut self, id: GroupId, particles: &[Particle]) -> anyhow::Result<&mut Group>;
+
+    /// Get list of energies in the system
+    fn energies(&self);
 }
 
 /// Collection of particles

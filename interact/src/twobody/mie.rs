@@ -156,6 +156,7 @@ impl Citation for LennardJones {
 /// More information [here](https://dx.doi.org/doi.org/ct4kh9).
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default)]
 pub struct WeeksChandlerAndersen {
+    #[serde(flatten)]
     lennard_jones: LennardJones,
 }
 

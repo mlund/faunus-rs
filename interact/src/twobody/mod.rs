@@ -39,7 +39,14 @@ pub trait TwobodyEnergy: crate::Citation {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Combined<T, U>(T, U);
 
+impl<T: TwobodyEnergy, U: TwobodyEnergy> Combined<T, U> {
+    pub fn new(t: T, u: U) -> Self {
+        Self(t, u)
+    }
+}
+
 impl<T: TwobodyEnergy, U: TwobodyEnergy> TwobodyEnergy for Combined<T, U> {
+    #[inline]
     fn twobody_energy(&self, distance_squared: f64) -> f64 {
         self.0.twobody_energy(distance_squared) + self.1.twobody_energy(distance_squared)
     }
@@ -47,7 +54,7 @@ impl<T: TwobodyEnergy, U: TwobodyEnergy> TwobodyEnergy for Combined<T, U> {
 
 impl<T: TwobodyEnergy, U: TwobodyEnergy> Citation for Combined<T, U> {
     fn citation(&self) -> Option<&'static str> {
-        None
+        todo!("Implement citation for Combined");
     }
 }
 

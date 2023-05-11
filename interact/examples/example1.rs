@@ -1,9 +1,13 @@
-use interact::twobody::{LennardJones, TwobodyEnergy};
+use interact::twobody::{Combined, LennardJones, WeeksChandlerAndersen};
 use interact::Citation;
 
 fn main() {
     let lj = LennardJones::new(1.5, 2.0);
-    let s = serde_json::to_string(&lj).unwrap();
+    let wca = WeeksChandlerAndersen::new(lj.clone());
+    let pot = Combined::new(lj.clone(), wca.clone());
+    let pot2 = Combined::new(pot.clone(), wca.clone());
+
+    let s = serde_json::to_string(&pot2).unwrap();
 
     println!("{}", lj.url().unwrap());
     println!("h {}", s);
