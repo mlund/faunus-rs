@@ -21,9 +21,24 @@
 //! boundaries conditions. The `UnitCell` type represents the enclosing box of
 //! a simulated system, with some type of periodic condition.
 
+use crate::Point;
 use std::f64::consts::PI;
 type Matrix3 = nalgebra::Matrix3<f64>;
-type Vector3D = crate::Point;
+type Vector3D = Point;
+
+/// Interface for a unit cell used to describe the geometry of the simulation system
+pub trait SimulationCell {
+    /// Get volume of system
+    fn volume(&self) -> Option<f64>;
+    /// Set volume of system
+    fn set_volume(&mut self, volume: f64) -> anyhow::Result<()>;
+    /// Apply periodic boundary conditions to a point
+    fn boundary(&self, point: &mut Point);
+    /// Calculate the minimum image distance between two points
+    fn distance(&self, point1: &Point, point2: &Point) -> Point;
+    /// Get the minimum squared distance between two points
+    fn distance_squared(&self, point1: &Point, point2: &Point) -> f64;
+}
 
 /// The shape of a cell determine how we will be able to compute the periodic
 /// boundaries condition.
@@ -43,7 +58,7 @@ pub enum CellShape {
 /// influence how periodic boundary conditions are applied.
 ///
 /// [CellShape]: enum.CellShape.html
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct UnitCell {
     /// Unit cell matrix
     cell: Matrix3,

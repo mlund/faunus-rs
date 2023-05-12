@@ -12,9 +12,9 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
-//! Library for describing twobody interactions.
-//!
 //! ## Twobody interactions
+//! 
+//! Module for describing twobody interactions.
 //!
 //! - Hard-sphere overlap
 //! - Harmonic potential

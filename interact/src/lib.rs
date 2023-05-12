@@ -20,9 +20,9 @@ pub mod twobody;
 
 /// Defines a citation which can be used to reference the source of a model
 pub trait Citation {
-    /// Returns a citation string which should preferably be a Digital Object Identifier (DOI)
-    /// in the format "doi:10.1103/PhysRevLett.120.143001". If not available, use an URL in the
-    /// format "https://...".
+    /// Returns a citation string which should be a
+    /// 1. Digital Object Identifier (DOI) in the format `doi:...` (preferred)
+    /// 2. URL in the format `https://...`
     fn citation(&self) -> Option<&'static str> {
         None
     }
