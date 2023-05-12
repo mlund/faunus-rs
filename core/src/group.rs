@@ -12,6 +12,8 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
+//! Handling of groups of particles
+
 use crate::Change;
 use crate::Particle;
 use anyhow::Ok;
@@ -39,6 +41,12 @@ pub struct Group {
 }
 
 /// Activation status of a group of particles
+///
+/// This can be used to set the number of active particles in a group. The group can e.g. be set to
+/// full, empty, or to a specific number of active particles. This is used in connection with Grand
+/// Canonical Monte Carlo moves to add or remove particles or molecules.
+/// If resizing to zero, the group is `Empty` and considered *inactive*. If resizing to the
+/// capacity, the group is `Full` and considered *active*. Otherwise, the group is `Partial`.
 #[derive(Serialize, Deserialize, Default, Copy, Clone, PartialEq, Debug)]
 pub enum GroupSize {
     /// All particles are active and no more can be added
@@ -107,7 +115,7 @@ impl Group {
         Ok(())
     }
 
-    /// Get activation status
+    /// Get size status of the groups which can be `Full`, `Empty`, or `Partial`.
     pub fn size(&self) -> GroupSize {
         self.size_status
     }

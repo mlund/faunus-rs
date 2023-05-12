@@ -12,6 +12,8 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
+//! Transformations of particles and groups
+
 use crate::{cell::SimulationCell, Point, PointParticle};
 use anyhow::Ok;
 use nalgebra::Quaternion;
