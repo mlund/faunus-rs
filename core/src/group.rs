@@ -14,7 +14,6 @@
 
 //! Handling of groups of particles
 
-use crate::Change;
 use crate::Particle;
 use anyhow::Ok;
 use nalgebra::Vector3;
@@ -148,6 +147,16 @@ impl Group {
         }
     }
 
+    /// Converts a relative index to an absolute index with range check
+    /// If called with `0`, the beginning of the group in the main particle vector is returned.
+    pub fn absolute_index(&self, index: usize) -> anyhow::Result<usize> {
+        if index >= self.num_active {
+            anyhow::bail!("Index {} out of range (max {})", index, self.num_active - 1)
+        } else {
+            Ok(self.range.start + index)
+        }
+    }
+
     /// Range of all absolute indices in main particle vector
     pub fn all_indices(&self) -> std::ops::Range<usize> {
         self.range.clone()
@@ -184,11 +193,11 @@ pub trait GroupCollection {
     fn groups(&self) -> &[Group];
 
     /// Get copy of active particles for a given group
-    fn group_particles(&self, group_index: usize) -> Vec<Particle>;
+    fn get_particles(&self, group_index: usize) -> Vec<Particle>;
 
     /// Get copy of particles in a subset of particles for a given group.
     /// The indices are indices in the group, not in the full particle vector.
-    fn group_particles_partial(
+    fn get_indexed_particles(
         &self,
         group_index: usize,
         indices: impl Iterator<Item = usize> + Clone,
@@ -203,16 +212,16 @@ pub trait GroupCollection {
 
     /// Set a subset of particles for a given group. Errors if there's a mismatch with the current group size.
     /// The indices are in the group, not in the full particle vector, and may be in the full capacity range of the group.
-    fn set_particles_partial<'a>(
+    fn set_indexed_particles<'a>(
         &mut self,
         group_index: usize,
         particles: impl Iterator<Item = &'a Particle>,
         indices: impl Iterator<Item = usize>,
     ) -> anyhow::Result<()>;
 
-    /// Sync properties from another group collection, based on a `Change` object.
-    /// After this operation, the two group collections should be identical.
-    fn sync_from(&mut self, other_context: &Self, change: &Change) -> anyhow::Result<()>;
+    /// Resizes a group to a given size. Errors if the requested size is larger than the capacity, or if there are
+    /// too few active particles to shrink the group.
+    fn resize_group(&mut self, group_index: usize, status: GroupSize) -> anyhow::Result<()>;
 }
 
 /// Description of a change to a single group of particles
@@ -220,6 +229,7 @@ pub trait GroupCollection {
 /// Defines a change to a group of particles, e.g. a rigid body update,
 /// adding or removing particles, etc. It is used in connection with Monte Carlo
 /// moves to communicate an update to e.g. the Hamiltonian.
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum GroupChange {
     /// Rigid body update where *all* particles are e.g. rotated or translated with *no* internal energy change
     RigidBodyUpdate,

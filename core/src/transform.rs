@@ -132,11 +132,10 @@ pub fn transform(
             )?
         }
         Transform::PartialTranslate(displacement, indices) => {
-            let mut particles =
-                context.group_particles_partial(group_index, indices.iter().copied());
+            let mut particles = context.get_indexed_particles(group_index, indices.iter().copied());
             let positions = particles.iter_mut().map(|p| p.pos_mut());
-            partial_transform(context, positions, displacement);
-            context.set_particles_partial(group_index, particles.iter(), indices.iter().copied())?
+            partial_translate(context, positions, displacement);
+            context.set_indexed_particles(group_index, particles.iter(), indices.iter().copied())?
         }
         _ => {
             todo!("Implement other transforms")
@@ -146,7 +145,7 @@ pub fn transform(
 }
 
 /// Translates a set of particles by a vector and applies periodic boundary conditions
-fn partial_transform<'a>(
+fn partial_translate<'a>(
     cell: &impl SimulationCell,
     positions: impl Iterator<Item = &'a mut Point>,
     displacement: &Point,

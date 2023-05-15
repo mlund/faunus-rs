@@ -13,7 +13,7 @@
 // limitations under the license.
 
 //! ## Twobody interactions
-//! 
+//!
 //! Module for describing twobody interactions.
 //!
 //! - Hard-sphere overlap
@@ -30,7 +30,7 @@ mod mie;
 pub use self::mie::{LennardJones, Mie, WeeksChandlerAndersen};
 
 /// Potential energy between a pair of particles
-pub trait TwobodyEnergy: crate::Citation {
+pub trait TwobodyEnergy: crate::Citation + Clone + std::fmt::Debug + Serialize {
     /// Interaction energy between a pair of isotropic particles
     fn twobody_energy(&self, distance_squared: f64) -> f64;
 }

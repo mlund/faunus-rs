@@ -66,9 +66,9 @@ pub trait Move<T: Context>: Citation + std::fmt::Debug {
 }
 
 pub struct MonteCarlo<T: Context> {
-    moves: Vec<Box<dyn Move<T>>>,
+    _moves: Vec<Box<dyn Move<T>>>,
     /// Currently accepted state
-    old_context: T,
+    _old_context: T,
     /// All moves are performed in this context and, if accepted, synced to `old_context`
-    new_context: T,
+    _new_context: T,
 }

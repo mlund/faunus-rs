@@ -19,3 +19,5 @@ anyhow = "1.0.70"
 itertools = "0.10.5"
 nalgebra = { version = "0.32.2", features = ["serde-serialize"] }
 derive-getters = "0.2.1"
+interact = {path = "../interact"}
+as-any = "0.3.0"
