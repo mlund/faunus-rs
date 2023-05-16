@@ -72,6 +72,12 @@ impl<const N: u32, const M: u32> TwobodyEnergy for Mie<N, M> {
 }
 
 impl<const N: u32, const M: u32> Info for Mie<N, M> {
+    fn short_name(&self) -> Option<&'static str> {
+        Some("mie")
+    }
+    fn long_name(&self) -> Option<&'static str> {
+        Some("Mie potential")
+    }
     fn citation(&self) -> Option<&'static str> {
         Some("doi:10/fpvskc") // G. Mie, "Zur kinetischen Theorie der einatomigen Körper"
     }
@@ -145,6 +151,12 @@ impl TwobodyEnergy for LennardJones {
 }
 
 impl Info for LennardJones {
+    fn short_name(&self) -> Option<&'static str> {
+        Some("lj")
+    }
+    fn long_name(&self) -> Option<&'static str> {
+        Some("Lennard-Jones potential")
+    }
     fn citation(&self) -> Option<&'static str> {
         Some("doi:10/cqhgm7")
     }
@@ -191,6 +203,12 @@ impl TwobodyEnergy for WeeksChandlerAndersen {
 }
 
 impl Info for WeeksChandlerAndersen {
+    fn short_name(&self) -> Option<&'static str> {
+        Some("wca")
+    }
+    fn long_name(&self) -> Option<&'static str> {
+        Some("Weeks-Chandler-Andersen potential")
+    }
     fn citation(&self) -> Option<&'static str> {
         Some("doi:ct4kh9")
     }

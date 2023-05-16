@@ -92,6 +92,9 @@ impl TwobodyEnergy for HardSphere {
 }
 
 impl Info for HardSphere {
+    fn short_name(&self) -> Option<&'static str> {
+        Some("hardsphere")
+    }
     fn citation(&self) -> Option<&'static str> {
         Some("https://en.wikipedia.org/wiki/Hard_spheres")
     }
@@ -125,6 +128,12 @@ impl Harmonic {
 }
 
 impl Info for Harmonic {
+    fn short_name(&self) -> Option<&'static str> {
+        Some("harmonic")
+    }
+    fn long_name(&self) -> Option<&'static str> {
+        Some("Harmonic potential")
+    }
     fn citation(&self) -> Option<&'static str> {
         Some("https://en.wikipedia.org/wiki/Harmonic_oscillator")
     }
