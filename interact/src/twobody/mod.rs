@@ -58,7 +58,7 @@ impl<T: TwobodyEnergy, U: TwobodyEnergy> Citation for Combined<T, U> {
     }
 }
 
-/// # Hardsphere potential
+/// Hardsphere potential
 ///
 /// More information [here](http://www.sklogwiki.org/SklogWiki/index.php/Hard_sphere_model).
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq)]
@@ -94,5 +94,45 @@ impl TwobodyEnergy for HardSphere {
 impl Citation for HardSphere {
     fn citation(&self) -> Option<&'static str> {
         Some("https://en.wikipedia.org/wiki/Hard_spheres")
+    }
+}
+
+/// Harmonic potential
+///
+/// More information [here](https://en.wikipedia.org/wiki/Harmonic_oscillator).
+/// # Examples
+/// ~~~
+/// use interact::twobody::{Harmonic, TwobodyEnergy};
+/// let harmonic = Harmonic::new(1.0, 0.5);
+/// let distance: f64 = 2.0;
+/// assert_eq!(harmonic.twobody_energy(distance.powi(2)), 0.25);
+/// ~~~
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq)]
+pub struct Harmonic {
+    #[serde(rename = "r₀")]
+    eq_distance: f64,
+    #[serde(rename = "k")]
+    spring_constant: f64,
+}
+
+impl Harmonic {
+    pub fn new(eq_distance: f64, spring_constant: f64) -> Self {
+        Self {
+            eq_distance,
+            spring_constant,
+        }
+    }
+}
+
+impl Citation for Harmonic {
+    fn citation(&self) -> Option<&'static str> {
+        Some("https://en.wikipedia.org/wiki/Harmonic_oscillator")
+    }
+}
+
+impl TwobodyEnergy for Harmonic {
+    #[inline]
+    fn twobody_energy(&self, distance_squared: f64) -> f64 {
+        0.5 * self.spring_constant * (distance_squared.sqrt() - self.eq_distance).powi(2)
     }
 }
