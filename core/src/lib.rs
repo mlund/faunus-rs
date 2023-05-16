@@ -32,8 +32,16 @@ pub mod platform;
 pub mod time;
 pub mod transform;
 
+/// Boltzmann constant in J/K
 pub const BOLTZMANN: f64 = 1.380649e-23;
+/// Avogadro's number in 1/mol
 pub const AVOGADRO: f64 = 6.02214076e23;
+/// Gas constant in J/(mol K)
+pub const GAS_CONSTANT: f64 = BOLTZMANN * AVOGADRO;
+/// Electron unit charge in C
+pub const UNIT_CHARGE: f64 = 1.602176634e-19;
+/// Vacuum permittivity in F/m
+pub const VACUUM_PERMITTIVITY: f64 = 8.8541878128e-12;
 
 trait PointParticle {
     /// Type of the particle identifier

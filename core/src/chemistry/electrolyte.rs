@@ -14,6 +14,8 @@
 
 use anyhow::Result;
 
+use crate::{BOLTZMANN, UNIT_CHARGE, VACUUM_PERMITTIVITY};
+
 /// Stores information about salts for calculation of Debye screening length etc.
 ///
 /// In this context a _salt_ is an arbitrary set of cations and anions, combined to form
@@ -96,4 +98,24 @@ fn test_electrolyte() {
     assert!(Electrolyte::new(molarity, &[1, 1]).is_err());
     assert!(Electrolyte::new(molarity, &[-1, -1]).is_err());
     assert!(Electrolyte::new(molarity, &[0, 0]).is_err());
+}
+
+/// Calculates the Bjerrum length, lB = e²/4πεkT commonly used in electrostatics (ångström).
+///
+/// More information [here](https://en.wikipedia.org/wiki/Bjerrum_length).
+///
+/// # Examples
+/// ~~~
+/// use faunus::chemistry::electrolyte::bjerrum_length;
+/// let lB = bjerrum_length(298.15, 80.0); // angstroms
+/// assert_eq!(lB, 7.00574152684418);
+/// ~~~
+pub fn bjerrum_length(kelvin: f64, relative_dielectric_const: f64) -> f64 {
+    UNIT_CHARGE.powi(2) * 1e10
+        / (4.0
+            * std::f64::consts::PI
+            * relative_dielectric_const
+            * VACUUM_PERMITTIVITY
+            * BOLTZMANN
+            * kelvin)
 }
