@@ -18,6 +18,8 @@ use crate::time::Timer;
 use crate::Change;
 use crate::Context;
 use crate::Info;
+use crate::BOLTZMANN;
+use rand::prelude::*;
 use serde::{Deserialize, Serialize};
 
 /// Helper class to keep track of accepted and rejected moves
@@ -50,6 +52,33 @@ impl MoveStatistics {
     /// Acceptance ratio
     pub fn acceptance_ratio(&self) -> f64 {
         self.num_accepted as f64 / self.num_trials as f64
+    }
+}
+
+/// Interface for acceptance criterion for Monte Carlo moves
+trait AcceptanceCriterion {
+    fn accept(old_energy: f64, new_energy: f64, temperature: f64, rng: &mut ThreadRng) -> bool;
+}
+
+/// Metropolis-Hastings acceptance criterion
+#[derive(Clone, Debug, Default)]
+pub struct MetropolisHastings {}
+
+impl AcceptanceCriterion for MetropolisHastings {
+    fn accept(old_energy: f64, new_energy: f64, temperature: f64, rng: &mut ThreadRng) -> bool {
+        // useful for hard-sphere systems where initial configurations may overlap
+        if old_energy.is_infinite() && new_energy.is_finite() {
+            return true;
+        }
+        // always accept if negative infinity
+        if new_energy.is_infinite() && new_energy.is_sign_negative() {
+            return true;
+        }
+
+        let energy_change = new_energy - old_energy;
+        let thermal_energy = BOLTZMANN * temperature;
+        let acceptance_probability = f64::min(1.0, f64::exp(energy_change / thermal_energy));
+        rng.gen::<f64>() < acceptance_probability
     }
 }
 

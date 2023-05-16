@@ -24,12 +24,16 @@ pub use interact::Info;
 pub mod cell;
 mod change;
 pub use self::change::{Change, GroupChange};
+pub mod chemistry;
 pub mod energy;
 pub mod group;
 pub mod montecarlo;
 pub mod platform;
 pub mod time;
 pub mod transform;
+
+pub const BOLTZMANN: f64 = 1.380649e-23;
+pub const AVOGADRO: f64 = 6.02214076e23;
 
 trait PointParticle {
     /// Type of the particle identifier
