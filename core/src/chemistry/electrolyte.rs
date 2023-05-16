@@ -22,6 +22,16 @@ use crate::{BOLTZMANN, UNIT_CHARGE, VACUUM_PERMITTIVITY};
 /// a net-neutral compound. The object state is _temperature independent_.
 /// The stoichiometry is automatically worked out.
 ///
+/// # Example usage:
+/// ~~~
+/// use faunus::chemistry::electrolyte::Electrolyte;
+/// let molarity = 0.1;
+/// let salt = Electrolyte::new(molarity, &[1, -1]); // Nacl
+/// assert_eq!(salt.unwrap().ionic_strength, molarity);
+/// let alun = Electrolyte::new(molarity, &[1, 3, -2]).unwrap(); // KAl(SO₄)₂
+/// assert_eq!(alun.stoichiometry, vec![1, 1, 2]);
+/// ~~~
+///
 /// # Example valencies:
 ///
 /// Salt      | `valencies`
@@ -36,12 +46,15 @@ pub struct Electrolyte {
     pub molarity: f64,
     /// Molar ionic strength concentration
     pub ionic_strength: f64,
-    /// valencies for participating ions
+    /// Valencies for participating ions
     pub valencies: Vec<isize>,
+    /// Stoichiometric coefficients for participating ions
+    pub stoichiometry: Vec<usize>,
 }
 
 impl Electrolyte {
     pub fn new(molarity: f64, valencies: &[isize]) -> Result<Electrolyte> {
+        let mut stoichiometry = Vec::<usize>::new();
         let sum_positive: isize = valencies.iter().filter(|i| i.is_positive()).sum();
         let sum_negative: isize = valencies.iter().filter(|i| i.is_negative()).sum();
         let gcd = num::integer::gcd(sum_positive, sum_negative);
@@ -53,6 +66,7 @@ impl Electrolyte {
                 true => -sum_negative,
                 false => sum_positive,
             } / gcd;
+            stoichiometry.push(nu as usize);
             (nu * valency * valency) as f64
         });
         let ionic_strength = 0.5 * molarity * nu_times_squared_valency.sum::<f64>();
@@ -61,29 +75,30 @@ impl Electrolyte {
             molarity,
             ionic_strength,
             valencies: Vec::from(valencies),
+            stoichiometry,
         })
     }
 }
 
 #[test]
 fn test_electrolyte() {
-    let molarity = 0.1;
+    let molarity = 0.15;
 
     // NaCl
     approx::assert_abs_diff_eq!(
         Electrolyte::new(molarity, &[1, -1]).unwrap().ionic_strength,
-        0.1
+        molarity
     );
     // CaSO₄
     approx::assert_abs_diff_eq!(
         Electrolyte::new(molarity, &[2, -2]).unwrap().ionic_strength,
-        0.5 * (0.1 * 4.0 + 0.1 * 4.0)
+        0.5 * (molarity * 4.0 + molarity * 4.0)
     );
 
     // CaCl₂
     approx::assert_abs_diff_eq!(
         Electrolyte::new(molarity, &[2, -1]).unwrap().ionic_strength,
-        0.5 * (0.1 * 4.0 + 0.2)
+        0.5 * (molarity * 4.0 + 2.0 * molarity)
     );
 
     // KAl(SO₄)₂
@@ -91,7 +106,7 @@ fn test_electrolyte() {
         Electrolyte::new(molarity, &[1, 3, -2])
             .unwrap()
             .ionic_strength,
-        0.5 * (0.1 * 1.0 + 0.1 * 9.0 + 0.1 * 2.0 * 4.0)
+        0.5 * (molarity * 1.0 + molarity * 9.0 + 2.0 * molarity * 4.0)
     );
 
     // Invalid combinations
@@ -102,13 +117,13 @@ fn test_electrolyte() {
 
 /// Calculates the Bjerrum length, lB = e²/4πεkT commonly used in electrostatics (ångström).
 ///
-/// More information [here](https://en.wikipedia.org/wiki/Bjerrum_length).
+/// More information at https://en.wikipedia.org/wiki/Bjerrum_length.
 ///
 /// # Examples
 /// ~~~
 /// use faunus::chemistry::electrolyte::bjerrum_length;
-/// let lB = bjerrum_length(298.15, 80.0); // angstroms
-/// assert_eq!(lB, 7.00574152684418);
+/// let lB = bjerrum_length(293.0, 80.0); // angstroms
+/// assert_eq!(lB, 7.1288799871283);
 /// ~~~
 pub fn bjerrum_length(kelvin: f64, relative_dielectric_const: f64) -> f64 {
     UNIT_CHARGE.powi(2) * 1e10
