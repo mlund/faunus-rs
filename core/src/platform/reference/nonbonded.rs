@@ -12,23 +12,25 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
-use anyhow::{bail, Ok};
+use anyhow::Ok;
 use as_any::{AsAny, Downcast};
 use interact::twobody::TwobodyEnergy;
 use itertools::iproduct;
+use serde::Serialize;
 use std::fmt::Debug;
 
 use crate::platform::reference::ReferencePlatform;
 use crate::{
-    cite::Citation, energy::EnergyTerm, Change, Group, GroupCollection, Particle, PointParticle,
-    SyncFromAny,
+    cite::Citation, energy::EnergyTerm, Change, Group, GroupChange, GroupCollection, Particle,
+    PointParticle, SyncFromAny,
 };
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct Nonbonded<'a, T: TwobodyEnergy> {
     /// Matrix of pair potentials base on particle ids
     pair_potentials: Vec<Vec<T>>,
     /// Reference to the platform
+    #[serde(skip)]
     platform: &'a ReferencePlatform,
 }
 
@@ -39,9 +41,13 @@ where
     fn energy_change(&self, change: &Change) -> Option<f64> {
         let energy = match change {
             Change::Everything => self.all_with_all(),
-            Change::SingleParticle(group_index, particle_index) => {
-                self.particle_with_all(*group_index, *particle_index)
-            }
+            Change::SingleGroup(change) => match change {
+                GroupChange::RigidBody(group_index) => self.group_with_all(*group_index),
+                GroupChange::SingleParticle(group_index, rel_index) => {
+                    self.particle_with_all(*group_index, *rel_index)
+                }
+                _ => todo!("implement other group changes"),
+            },
             _ => todo!("implement other changes"),
         };
         Some(energy)
@@ -52,6 +58,13 @@ impl<T> Nonbonded<'_, T>
 where
     T: TwobodyEnergy + 'static,
 {
+    pub fn new(platform: &'static ReferencePlatform, pair_potentials: Vec<Vec<T>>) -> Self {
+        Self {
+            pair_potentials,
+            platform,
+        }
+    }
+
     /// Calculates the energy between two particles
     #[inline]
     fn particle_with_particle(&self, particle1: &Particle, particle2: &Particle) -> f64 {
@@ -75,6 +88,18 @@ where
                 let particle1 = &self.platform.particles[index];
                 let particle2 = &self.platform.particles[other];
                 sum + self.particle_with_particle(particle1, particle2)
+            })
+    }
+
+    /// Calculates the energy between a single group and all other groups
+    pub fn group_with_all(&self, group_index: usize) -> f64 {
+        let group = &self.platform.groups()[group_index];
+        self.platform
+            .groups()
+            .iter()
+            .filter(|other_group| other_group.index() != group_index)
+            .fold(0.0, |sum, other_group| {
+                sum + self.group_to_group(group, other_group)
             })
     }
 
@@ -109,15 +134,14 @@ where
     T: TwobodyEnergy + 'static,
 {
     fn sync_from(&mut self, other: &dyn AsAny, change: &Change) -> anyhow::Result<()> {
-        if let Some(other) = other.downcast_ref::<Self>() {
-            match change {
-                Change::Everything => {
-                    *self = other.clone();
-                }
-                _ => todo!(),
-            }
-            return Ok(());
+        let other = other
+            .downcast_ref::<Self>()
+            .ok_or_else(|| anyhow::anyhow!("Could not downcast"))?;
+
+        match change {
+            Change::Everything => *self = other.clone(),
+            _ => todo!(),
         }
-        bail!("Could not downcast")
+        Ok(())
     }
 }

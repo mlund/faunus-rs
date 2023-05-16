@@ -139,7 +139,7 @@ impl Group {
         self.num_active == 0
     }
 
-    /// Range of (absolute) active indices in main particle vector
+    /// Absolute indices of active particles in main particle vector
     pub fn indices(&self) -> std::ops::Range<usize> {
         std::ops::Range {
             start: self.range.start,
@@ -147,7 +147,7 @@ impl Group {
         }
     }
 
-    /// Converts a relative index to an absolute index with range check
+    /// Converts a relative index to an absolute index with range check.
     /// If called with `0`, the beginning of the group in the main particle vector is returned.
     pub fn absolute_index(&self, index: usize) -> anyhow::Result<usize> {
         if index >= self.num_active {
@@ -157,7 +157,8 @@ impl Group {
         }
     }
 
-    /// Range of all absolute indices in main particle vector
+    /// Absolute indices of *all* particles in main particle vector, both active and inactive (immutable).
+    /// This reflects the full capacity of the group and never changes over the lifetime of the group.
     pub fn all_indices(&self) -> std::ops::Range<usize> {
         self.range.clone()
     }
@@ -231,25 +232,27 @@ pub trait GroupCollection {
 /// moves to communicate an update to e.g. the Hamiltonian.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum GroupChange {
-    /// Rigid body update where *all* particles are e.g. rotated or translated with *no* internal energy change
-    RigidBodyUpdate,
-    /// Update a range of particle relative indices, assuming that the internal energy changes
-    Update(Vec<usize>),
-    /// Add `usize` particles at end
-    Push(usize),
-    /// Remove `usize` particles from end
-    Pop(usize),
-    /// The `id` of a set of particles has changed (relative indices)
-    UpdateIdentity(Vec<usize>),
-    /// Deactivate *all* particles
-    Deactivate,
-    /// Activate *all* particles
-    Activate,
+    /// Rigid body update where *all* particles are e.g. rotated or translated with *no* internal energy change (group index)
+    RigidBody(usize),
+    /// Update by relative indices, assuming that the internal energy changes (group index, relative indices)
+    PartialUpdate(usize, Vec<usize>),
+    /// Update a single particle in group (group index, relative index)
+    SingleParticle(usize, usize),
+    /// Add `usize` particles at end (group index, number of particles to add)
+    Push(usize, usize),
+    /// Remove `usize` particles from end (group index, number of particles to remove)
+    Pop(usize, usize),
+    /// The identity of a set of particles has changed (group index, relative indices)
+    UpdateIdentity(usize, Vec<usize>),
+    /// Deactivate *all* particles in group (group index)
+    Deactivate(usize),
+    /// Activate *all* particles in group (group index)
+    Activate(usize),
 }
 
 impl GroupChange {
     pub fn internal_change(&self) -> bool {
-        !matches!(self, GroupChange::RigidBodyUpdate)
+        !matches!(self, GroupChange::RigidBody(_))
     }
 }
 

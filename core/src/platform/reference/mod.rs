@@ -23,8 +23,8 @@ use anyhow::{anyhow, Ok};
 pub mod nonbonded;
 
 /// This is the default platform running on the CPU. Particles are stored in
-/// a single vector, and groups are stored in a separate vector. This essentially
-/// follows the same design as the original C++ Faunus code (version 2 and lower).
+/// a single vector, and groups are stored in a separate vector. This mostly
+/// follows the same layout as the original C++ Faunus code (version 2 and lower).
 #[derive(Debug)]
 pub struct ReferencePlatform {
     particles: Vec<Particle>,
@@ -155,8 +155,17 @@ impl GroupCollection for ReferencePlatform {
 /// The idea is to access the particle in a group-wise fashion, e.g. to update
 /// the center of mass of a group, or to rotate a group of particles.
 impl ReferencePlatform {
+    pub fn new(cell: UnitCell) -> Self {
+        Self {
+            particles: Vec::new(),
+            groups: Vec::new(),
+            cell,
+            _energies: Vec::new(),
+        }
+    }
+
     /// Get vector of indices to all other *active* particles in the system, excluding `range`
-    pub fn other_indices(&self, range: std::ops::Range<usize>) -> Vec<usize> {
+    fn _other_indices(&self, range: std::ops::Range<usize>) -> Vec<usize> {
         let no_overlap = |r: &std::ops::Range<usize>| {
             usize::max(r.start, range.start) > usize::min(r.end, range.end)
         };

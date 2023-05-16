@@ -87,10 +87,6 @@ pub enum Change {
     /// A single group has changed
     SingleGroup(GroupChange),
 
-    /// Single particle has changed
-    /// (group index, particle index relative to group)
-    SingleParticle(usize, usize),
-
     /// No change
     #[default]
     None,
