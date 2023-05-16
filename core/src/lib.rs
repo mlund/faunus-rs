@@ -21,6 +21,8 @@ pub type PositionVec = Vec<Point>;
 pub type ParticleVec = Vec<Particle>;
 
 pub mod cell;
+mod change;
+pub use self::change::{Change, GroupChange};
 pub mod cite;
 pub mod energy;
 pub mod group;
@@ -28,8 +30,6 @@ pub mod montecarlo;
 pub mod platform;
 pub mod time;
 pub mod transform;
-
-use crate::group::GroupChange;
 
 trait PointParticle {
     /// Type of the particle identifier
@@ -70,28 +70,6 @@ impl PointParticle for Particle {
     }
 }
 
-/// Describes a change in the system. This can for example be used to
-/// describe a change in the volume of the system, or a change in the
-/// number of particles in a group.
-#[derive(Serialize, Deserialize, Default, Debug, Clone)]
-pub enum Change {
-    /// Everything has changed
-    Everything,
-
-    /// The volume has changed
-    Volume,
-
-    /// Some groups have changed
-    Groups(Vec<GroupChange>),
-
-    /// A single group has changed
-    SingleGroup(GroupChange),
-
-    /// No change
-    #[default]
-    None,
-}
-
 /// Trait for synchronizing internal state from another object, given a change.
 pub trait SyncFrom {
     fn sync_from(&mut self, other: &Self, change: &Change) -> anyhow::Result<()>;
@@ -101,9 +79,7 @@ pub trait SyncFromAny {
     fn sync_from(&mut self, other: &dyn as_any::AsAny, change: &Change) -> anyhow::Result<()>;
 }
 
-pub trait Context:
-    GroupCollection + cell::SimulationCell + Clone + Default + std::fmt::Debug + Sized
-{
+pub trait Context: GroupCollection + cell::SimulationCell + Clone + std::fmt::Debug {
     /// Get list of energies in the system
     fn energies(&self) {}
 }

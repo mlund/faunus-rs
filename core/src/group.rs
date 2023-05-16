@@ -225,37 +225,6 @@ pub trait GroupCollection {
     fn resize_group(&mut self, group_index: usize, status: GroupSize) -> anyhow::Result<()>;
 }
 
-/// Description of a change to a single group of particles
-///
-/// Defines a change to a group of particles, e.g. a rigid body update,
-/// adding or removing particles, etc. It is used in connection with Monte Carlo
-/// moves to communicate an update to e.g. the Hamiltonian.
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub enum GroupChange {
-    /// Rigid body update where *all* particles are e.g. rotated or translated with *no* internal energy change (group index)
-    RigidBody(usize),
-    /// Update by relative indices, assuming that the internal energy changes (group index, relative indices)
-    PartialUpdate(usize, Vec<usize>),
-    /// Update a single particle in group (group index, relative index)
-    SingleParticle(usize, usize),
-    /// Add `usize` particles at end (group index, number of particles to add)
-    Push(usize, usize),
-    /// Remove `usize` particles from end (group index, number of particles to remove)
-    Pop(usize, usize),
-    /// The identity of a set of particles has changed (group index, relative indices)
-    UpdateIdentity(usize, Vec<usize>),
-    /// Deactivate *all* particles in group (group index)
-    Deactivate(usize),
-    /// Activate *all* particles in group (group index)
-    Activate(usize),
-}
-
-impl GroupChange {
-    pub fn internal_change(&self) -> bool {
-        !matches!(self, GroupChange::RigidBody(_))
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

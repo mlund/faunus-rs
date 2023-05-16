@@ -19,6 +19,7 @@ use itertools::iproduct;
 use serde::Serialize;
 use std::fmt::Debug;
 
+use crate::cell::SimulationCell;
 use crate::platform::reference::ReferencePlatform;
 use crate::{
     cite::Citation, energy::EnergyTerm, Change, Group, GroupChange, GroupCollection, Particle,
@@ -41,13 +42,8 @@ where
     fn energy_change(&self, change: &Change) -> Option<f64> {
         let energy = match change {
             Change::Everything => self.all_with_all(),
-            Change::SingleGroup(change) => match change {
-                GroupChange::RigidBody(group_index) => self.group_with_all(*group_index),
-                GroupChange::SingleParticle(group_index, rel_index) => {
-                    self.particle_with_all(*group_index, *rel_index)
-                }
-                _ => todo!("implement other group changes"),
-            },
+            Change::SingleGroup(group_change) => self.single_group_change(group_change),
+            Change::None => 0.0,
             _ => todo!("implement other changes"),
         };
         Some(energy)
@@ -58,10 +54,25 @@ impl<T> Nonbonded<'_, T>
 where
     T: TwobodyEnergy + 'static,
 {
-    pub fn new(platform: &'static ReferencePlatform, pair_potentials: Vec<Vec<T>>) -> Self {
+    pub fn new(platform: &'static ReferencePlatform) -> Self {
+        // TODO: Here we should fill out the pair potential matrix by looping
+        // over all particle id's.
+        let pair_potentials = Vec::new();
         Self {
             pair_potentials,
             platform,
+        }
+    }
+
+    /// Matches all possible single group perturbations and returns the energy
+    fn single_group_change(&self, change: &GroupChange) -> f64 {
+        match change {
+            GroupChange::RigidBody(group_index) => self.group_with_all(*group_index),
+            GroupChange::SingleParticle(group_index, rel_index) => {
+                self.particle_with_all(*group_index, *rel_index)
+            }
+            GroupChange::None => 0.0,
+            _ => todo!("implement other group changes"),
         }
     }
 
@@ -70,9 +81,7 @@ where
     fn particle_with_particle(&self, particle1: &Particle, particle2: &Particle) -> f64 {
         let distance_squared = self
             .platform
-            .cell
-            .distance(particle1.pos(), particle2.pos())
-            .powi(2); // TODO: use squared distance directly
+            .distance_squared(particle1.pos(), particle2.pos());
         self.pair_potentials[particle1.id][particle2.id].twobody_energy(distance_squared)
     }
 
