@@ -14,10 +14,10 @@
 
 //! Support for Monte Carlo moves.
 
-use crate::cite::Citation;
 use crate::time::Timer;
 use crate::Change;
 use crate::Context;
+use crate::Info;
 use serde::{Deserialize, Serialize};
 
 /// Helper class to keep track of accepted and rejected moves
@@ -53,7 +53,7 @@ impl MoveStatistics {
     }
 }
 
-pub trait Move<T: Context>: Citation + std::fmt::Debug {
+pub trait Move<T: Context>: Info + std::fmt::Debug {
     /// Make a trial move in the given `context` and return an object
     /// describing the change.
     fn do_move(&mut self, context: &mut T) -> Result<Change, anyhow::Error>;

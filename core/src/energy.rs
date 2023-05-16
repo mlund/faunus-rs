@@ -12,11 +12,11 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
-use crate::{cite::Citation, Change, SyncFromAny};
+use crate::{Change, Info, SyncFromAny};
 use as_any::AsAny;
 
 /// Trait for describing terms in the Hamiltonian.
-pub trait EnergyTerm: Citation + AsAny + std::fmt::Debug + SyncFromAny {
+pub trait EnergyTerm: Info + AsAny + std::fmt::Debug + SyncFromAny {
     /// Compute the energy change of the term due to a change in the system.
     /// The energy is returned in units of kJ/mol.
     fn energy_change(&self, change: &Change) -> Option<f64>;

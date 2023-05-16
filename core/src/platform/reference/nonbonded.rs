@@ -22,8 +22,8 @@ use std::fmt::Debug;
 use crate::cell::SimulationCell;
 use crate::platform::reference::ReferencePlatform;
 use crate::{
-    cite::Citation, energy::EnergyTerm, Change, Group, GroupChange, GroupCollection, Particle,
-    PointParticle, SyncFromAny,
+    energy::EnergyTerm, Change, Group, GroupChange, GroupCollection, Info, Particle, PointParticle,
+    SyncFromAny,
 };
 
 #[derive(Debug, Clone, Serialize)]
@@ -129,7 +129,7 @@ where
     }
 }
 
-impl<T> Citation for Nonbonded<'_, T>
+impl<T> Info for Nonbonded<'_, T>
 where
     T: TwobodyEnergy,
 {

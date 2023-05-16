@@ -23,14 +23,14 @@
 //!   - Lennard-Jones
 //!   - Weeks-Chandler-Andersen
 
-use crate::{sqrt_serialize, square_deserialize, Citation};
+use crate::{sqrt_serialize, square_deserialize, Info};
 use serde::{Deserialize, Serialize};
 
 mod mie;
 pub use self::mie::{LennardJones, Mie, WeeksChandlerAndersen};
 
 /// Potential energy between a pair of particles
-pub trait TwobodyEnergy: crate::Citation + Clone + std::fmt::Debug + Serialize {
+pub trait TwobodyEnergy: crate::Info + Clone + std::fmt::Debug + Serialize {
     /// Interaction energy between a pair of isotropic particles
     fn twobody_energy(&self, distance_squared: f64) -> f64;
 }
@@ -52,7 +52,7 @@ impl<T: TwobodyEnergy, U: TwobodyEnergy> TwobodyEnergy for Combined<T, U> {
     }
 }
 
-impl<T: TwobodyEnergy, U: TwobodyEnergy> Citation for Combined<T, U> {
+impl<T: TwobodyEnergy, U: TwobodyEnergy> Info for Combined<T, U> {
     fn citation(&self) -> Option<&'static str> {
         todo!("Implement citation for Combined");
     }
@@ -91,7 +91,7 @@ impl TwobodyEnergy for HardSphere {
     }
 }
 
-impl Citation for HardSphere {
+impl Info for HardSphere {
     fn citation(&self) -> Option<&'static str> {
         Some("https://en.wikipedia.org/wiki/Hard_spheres")
     }
@@ -124,7 +124,7 @@ impl Harmonic {
     }
 }
 
-impl Citation for Harmonic {
+impl Info for Harmonic {
     fn citation(&self) -> Option<&'static str> {
         Some("https://en.wikipedia.org/wiki/Harmonic_oscillator")
     }

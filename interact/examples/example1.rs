@@ -1,5 +1,5 @@
 use interact::twobody::{Combined, LennardJones, WeeksChandlerAndersen};
-use interact::Citation;
+use interact::Info;
 
 fn main() {
     let lj = LennardJones::new(1.5, 2.0);

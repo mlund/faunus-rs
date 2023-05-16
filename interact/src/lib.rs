@@ -18,8 +18,18 @@ pub mod qpochhammer;
 pub mod spline;
 pub mod twobody;
 
-/// Defines a citation which can be used to reference the source of a model
-pub trait Citation {
+/// Defines information about a concept, like a short name, citation, url etc.
+pub trait Info {
+    /// Returns a short name for the concept. Use `_` for spaces and avoid weird characters.
+    /// This is typically used as keywords in user input and output, e.g. in JSON files.
+    fn short_name(&self) -> Option<&'static str> {
+        None
+    }
+    /// Returns a long name for the concept. Spaces are allowed.
+    fn long_name(&self) -> Option<&'static str> {
+        None
+    }
+
     /// Returns a citation string which should be a
     /// 1. Digital Object Identifier (DOI) in the format `doi:...` (preferred)
     /// 2. URL in the format `https://...`
