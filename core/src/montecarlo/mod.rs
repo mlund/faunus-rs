@@ -14,11 +14,7 @@
 
 //! Support for Monte Carlo moves.
 
-use crate::time::Timer;
-use crate::Change;
-use crate::Context;
-use crate::Info;
-use crate::BOLTZMANN;
+use crate::{time::Timer, Change, Context, Info, SyncFromAny, GAS_CONSTANT};
 use rand::prelude::*;
 use serde::{Deserialize, Serialize};
 
@@ -57,10 +53,13 @@ impl MoveStatistics {
 
 /// Interface for acceptance criterion for Monte Carlo moves
 trait AcceptanceCriterion {
+    /// Acceptance criterion based on an old and new energy and a temperature (J/mol and Kelvin)
     fn accept(old_energy: f64, new_energy: f64, temperature: f64, rng: &mut ThreadRng) -> bool;
 }
 
 /// Metropolis-Hastings acceptance criterion
+///
+/// More information: https://en.wikipedia.org/wiki/Metropolis%E2%80%93Hastings_algorithm
 #[derive(Clone, Debug, Default)]
 pub struct MetropolisHastings {}
 
@@ -76,13 +75,13 @@ impl AcceptanceCriterion for MetropolisHastings {
         }
 
         let energy_change = new_energy - old_energy;
-        let thermal_energy = BOLTZMANN * temperature;
+        let thermal_energy = GAS_CONSTANT * temperature;
         let acceptance_probability = f64::min(1.0, f64::exp(energy_change / thermal_energy));
         rng.gen::<f64>() < acceptance_probability
     }
 }
 
-pub trait Move<T: Context>: Info + std::fmt::Debug {
+pub trait Move<T: Context>: Info + std::fmt::Debug + SyncFromAny {
     /// Make a trial move in the given `context` and return an object
     /// describing the change.
     fn do_move(&mut self, context: &mut T) -> Result<Change, anyhow::Error>;

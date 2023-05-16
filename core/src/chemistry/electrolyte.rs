@@ -13,6 +13,7 @@
 // limitations under the license.
 
 use anyhow::Result;
+use serde::{Deserialize, Serialize};
 
 use crate::{BOLTZMANN, UNIT_CHARGE, VACUUM_PERMITTIVITY};
 
@@ -26,10 +27,12 @@ use crate::{BOLTZMANN, UNIT_CHARGE, VACUUM_PERMITTIVITY};
 /// ~~~
 /// use faunus::chemistry::electrolyte::Electrolyte;
 /// let molarity = 0.1;
-/// let salt = Electrolyte::new(molarity, &[1, -1]); // Nacl
-/// assert_eq!(salt.unwrap().ionic_strength, molarity);
+/// let salt = Electrolyte::new(molarity, &[1, -1]).unwrap();    // Nacl
 /// let alun = Electrolyte::new(molarity, &[1, 3, -2]).unwrap(); // KAl(SO₄)₂
-/// assert_eq!(alun.stoichiometry, vec![1, 1, 2]);
+/// assert_eq!(salt.ionic_strength, 0.1);
+/// assert_eq!(salt.stoichiometry, [1, 1]);
+/// assert_eq!(alun.ionic_strength, 0.9);
+/// assert_eq!(alun.stoichiometry, [1, 1, 2]);
 /// ~~~
 ///
 /// # Example valencies:
@@ -40,7 +43,7 @@ use crate::{BOLTZMANN, UNIT_CHARGE, VACUUM_PERMITTIVITY};
 /// CaCl₂     | `[2, -1]`
 /// KAl(SO₄)₂ | `[1, 3, -2]`
 ///
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub struct Electrolyte {
     /// Molar salt concentration
     pub molarity: f64,
@@ -119,6 +122,7 @@ fn test_electrolyte() {
     assert!(Electrolyte::new(molarity, &[1, 1]).is_err());
     assert!(Electrolyte::new(molarity, &[-1, -1]).is_err());
     assert!(Electrolyte::new(molarity, &[0, 0]).is_err());
+    assert!(Electrolyte::new(molarity, &[0, 1]).is_err());
 }
 
 /// Calculates the Bjerrum length, lB = e²/4πεkT commonly used in electrostatics (ångström).
