@@ -54,28 +54,34 @@ pub struct Electrolyte {
 
 impl Electrolyte {
     pub fn new(molarity: f64, valencies: &[isize]) -> Result<Electrolyte> {
-        let mut stoichiometry = Vec::<usize>::new();
         let sum_positive: isize = valencies.iter().filter(|i| i.is_positive()).sum();
         let sum_negative: isize = valencies.iter().filter(|i| i.is_negative()).sum();
         let gcd = num::integer::gcd(sum_positive, sum_negative);
         if sum_positive == 0 || sum_negative == 0 || gcd == 0 {
             anyhow::bail!("cannot resolve stoichiometry; did you provide both + and - ions?")
         }
-        let nu_times_squared_valency = valencies.iter().map(|valency| {
-            let nu = match valency.is_positive() {
-                true => -sum_negative,
-                false => sum_positive,
-            } / gcd;
-            stoichiometry.push(nu as usize);
-            (nu * valency * valency) as f64
-        });
-        let ionic_strength = 0.5 * molarity * nu_times_squared_valency.sum::<f64>();
+
+        let stoichiometry: Vec<usize> = valencies
+            .iter()
+            .map(|valency| {
+                ((match valency.is_positive() {
+                    true => -sum_negative,
+                    false => sum_positive,
+                }) / gcd) as usize
+            })
+            .collect();
+
+        let nu_times_squared_valency_sum: usize = std::iter::zip(valencies, stoichiometry.iter())
+            .map(|(valency, nu)| (*nu * valency.checked_pow(2).unwrap() as usize))
+            .sum();
+
+        let ionic_strength = 0.5 * molarity * nu_times_squared_valency_sum as f64;
 
         Ok(Electrolyte {
             molarity,
             ionic_strength,
             valencies: Vec::from(valencies),
-            stoichiometry,
+            stoichiometry: stoichiometry,
         })
     }
 }
