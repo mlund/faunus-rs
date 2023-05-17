@@ -57,6 +57,7 @@ impl<const N: u32, const M: u32> Mie<N, M> {
     }
 }
 
+#[typetag::serialize]
 impl<const N: u32, const M: u32> TwobodyEnergy for Mie<N, M> {
     #[inline]
     fn twobody_energy(&self, distance_squared: f64) -> f64 {
@@ -141,6 +142,7 @@ impl LennardJones {
     }
 }
 
+#[typetag::serialize]
 impl TwobodyEnergy for LennardJones {
     #[inline]
     fn twobody_energy(&self, squared_distance: f64) -> f64 {
@@ -191,6 +193,7 @@ impl Cutoff for WeeksChandlerAndersen {
     }
 }
 
+#[typetag::serialize]
 impl TwobodyEnergy for WeeksChandlerAndersen {
     #[inline]
     fn twobody_energy(&self, distance_squared: f64) -> f64 {

@@ -84,7 +84,7 @@ impl Electrolyte {
             molarity,
             ionic_strength,
             valencies: Vec::from(valencies),
-            stoichiometry: stoichiometry,
+            stoichiometry,
         })
     }
 }

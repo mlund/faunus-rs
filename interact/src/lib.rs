@@ -12,6 +12,8 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
+extern crate typetag;
+
 use serde::{Deserialize, Deserializer, Serializer};
 
 pub mod qpochhammer;

@@ -30,7 +30,11 @@ mod mie;
 pub use self::mie::{LennardJones, Mie, WeeksChandlerAndersen};
 
 /// Potential energy between a pair of particles
-pub trait TwobodyEnergy: crate::Info + Clone + std::fmt::Debug + Serialize {
+///
+/// This uses the `typetag` crate to allow for dynamic dispatch
+/// and requires that implementations are tagged with `#[typetag::serialize]`.
+#[typetag::serialize(tag = "type")]
+pub trait TwobodyEnergy: crate::Info + std::fmt::Debug {
     /// Interaction energy between a pair of isotropic particles
     fn twobody_energy(&self, distance_squared: f64) -> f64;
 }
@@ -45,7 +49,8 @@ impl<T: TwobodyEnergy, U: TwobodyEnergy> Combined<T, U> {
     }
 }
 
-impl<T: TwobodyEnergy, U: TwobodyEnergy> TwobodyEnergy for Combined<T, U> {
+#[typetag::serialize]
+impl<T: TwobodyEnergy + Serialize, U: TwobodyEnergy + Serialize> TwobodyEnergy for Combined<T, U> {
     #[inline]
     fn twobody_energy(&self, distance_squared: f64) -> f64 {
         self.0.twobody_energy(distance_squared) + self.1.twobody_energy(distance_squared)
@@ -80,6 +85,7 @@ impl HardSphere {
     }
 }
 
+#[typetag::serialize]
 impl TwobodyEnergy for HardSphere {
     #[inline]
     fn twobody_energy(&self, distance_squared: f64) -> f64 {
@@ -139,6 +145,7 @@ impl Info for Harmonic {
     }
 }
 
+#[typetag::serialize]
 impl TwobodyEnergy for Harmonic {
     #[inline]
     fn twobody_energy(&self, distance_squared: f64) -> f64 {

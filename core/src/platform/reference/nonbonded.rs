@@ -37,7 +37,7 @@ pub struct Nonbonded<'a, T: TwobodyEnergy> {
 
 impl<T> EnergyTerm for Nonbonded<'static, T>
 where
-    T: TwobodyEnergy + 'static,
+    T: TwobodyEnergy + 'static + Clone,
 {
     fn energy_change(&self, change: &Change) -> Option<f64> {
         let energy = match change {
@@ -140,7 +140,7 @@ where
 
 impl<T> SyncFromAny for Nonbonded<'static, T>
 where
-    T: TwobodyEnergy + 'static,
+    T: TwobodyEnergy + 'static + Clone,
 {
     fn sync_from(&mut self, other: &dyn AsAny, change: &Change) -> anyhow::Result<()> {
         let other = other

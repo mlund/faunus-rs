@@ -12,6 +12,8 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
+extern crate chemfiles;
+
 use crate::group::{Group, GroupCollection};
 use nalgebra::Vector3;
 use serde::{Deserialize, Serialize};
@@ -27,6 +29,7 @@ pub use self::change::{Change, GroupChange};
 pub mod chemistry;
 pub mod energy;
 pub mod group;
+pub mod molecule;
 pub mod montecarlo;
 pub mod platform;
 pub mod time;
