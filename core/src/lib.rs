@@ -29,7 +29,7 @@ pub use self::change::{Change, GroupChange};
 pub mod chemistry;
 pub mod energy;
 pub mod group;
-pub mod molecule;
+pub mod topology;
 pub mod montecarlo;
 pub mod platform;
 pub mod time;
