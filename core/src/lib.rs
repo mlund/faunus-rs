@@ -28,11 +28,12 @@ mod change;
 pub use self::change::{Change, GroupChange};
 pub mod chemistry;
 pub mod energy;
+pub mod forcefield;
 pub mod group;
-pub mod topology;
 pub mod montecarlo;
 pub mod platform;
 pub mod time;
+pub mod topology;
 pub mod transform;
 
 /// Boltzmann constant in J/K
