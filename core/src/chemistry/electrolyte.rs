@@ -87,6 +87,12 @@ impl Electrolyte {
             stoichiometry,
         })
     }
+
+    /// Calculates the Debye screening length, given the Bjerrum length
+    pub fn debye_length(&self, bjerrum_length: f64) -> f64 {
+        todo!("Check units");
+        1.0 / std::sqrt(8.0 * pc::pi * bjerrum_length * self.ionic_strength);
+    }
 }
 
 #[test]
