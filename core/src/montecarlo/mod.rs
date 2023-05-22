@@ -14,7 +14,7 @@
 
 //! Support for Monte Carlo moves.
 
-use crate::{time::Timer, Change, Context, Info, SyncFromAny, GAS_CONSTANT};
+use crate::{time::Timer, Change, Context, Info, SyncFromAny, MOLAR_GAS_CONSTANT};
 use rand::prelude::*;
 use serde::{Deserialize, Serialize};
 
@@ -75,7 +75,7 @@ impl AcceptanceCriterion for MetropolisHastings {
         }
 
         let energy_change = new_energy - old_energy;
-        let thermal_energy = GAS_CONSTANT * temperature;
+        let thermal_energy = MOLAR_GAS_CONSTANT * temperature;
         let acceptance_probability = f64::min(1.0, f64::exp(energy_change / thermal_energy));
         rng.gen::<f64>() < acceptance_probability
     }

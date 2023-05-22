@@ -88,7 +88,7 @@ impl Electrolyte {
         })
     }
 
-    /// Calculates the Debye screening length, given the Bjerrum length in angstrom
+    /// Calculates the Debye screening length, given the Bjerrum length (angstrom)
     pub fn debye_length(&self, bjerrum_length: f64) -> f64 {
         (8.0 * core::f64::consts::PI * bjerrum_length * self.ionic_strength * AVOGADRO * 1e-27)
             .sqrt()
