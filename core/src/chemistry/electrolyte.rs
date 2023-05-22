@@ -15,7 +15,7 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
-use crate::{BOLTZMANN, UNIT_CHARGE, VACUUM_PERMITTIVITY};
+use crate::{AVOGADRO, BOLTZMANN, UNIT_CHARGE, VACUUM_PERMITTIVITY};
 
 /// Stores information about salts for calculation of Debye screening length etc.
 ///
@@ -47,7 +47,7 @@ use crate::{BOLTZMANN, UNIT_CHARGE, VACUUM_PERMITTIVITY};
 pub struct Electrolyte {
     /// Molar salt concentration
     pub molarity: f64,
-    /// Molar ionic strength concentration
+    /// Molar ionic strength
     pub ionic_strength: f64,
     /// Valencies for participating ions
     pub valencies: Vec<isize>,
@@ -88,10 +88,11 @@ impl Electrolyte {
         })
     }
 
-    /// Calculates the Debye screening length, given the Bjerrum length
+    /// Calculates the Debye screening length, given the Bjerrum length in angstrom
     pub fn debye_length(&self, bjerrum_length: f64) -> f64 {
-        todo!("Check units");
-        1.0 / std::sqrt(8.0 * pc::pi * bjerrum_length * self.ionic_strength);
+        (8.0 * core::f64::consts::PI * bjerrum_length * self.ionic_strength * AVOGADRO * 1e-27)
+            .sqrt()
+            .recip()
     }
 }
 
@@ -129,6 +130,12 @@ fn test_electrolyte() {
     assert!(Electrolyte::new(molarity, &[-1, -1]).is_err());
     assert!(Electrolyte::new(molarity, &[0, 0]).is_err());
     assert!(Electrolyte::new(molarity, &[0, 1]).is_err());
+
+    // Debye length
+    assert_eq!(
+        Electrolyte::new(0.03, &[1, -1]).unwrap().debye_length(7.0),
+        17.737604684006754
+    );
 }
 
 /// Calculates the Bjerrum length, lB = e²/4πεkT commonly used in electrostatics (ångström).
