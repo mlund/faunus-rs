@@ -17,7 +17,24 @@
 use crate::{cell::SimulationCell, Point, PointParticle};
 use anyhow::Ok;
 use nalgebra::Quaternion;
+use rand::prelude::*;
 use serde::{Deserialize, Serialize};
+
+/// Generate a random unit vector by sphere picking
+pub fn random_unit_vector(rng: &mut ThreadRng) -> Point {
+    const RADIUS_SQUARED: f64 = 0.5 * 0.5;
+    loop {
+        let p = Point::new(
+            rng.gen::<f64>() - 0.5,
+            rng.gen::<f64>() - 0.5,
+            rng.gen::<f64>() - 0.5,
+        );
+        let norm_squared = p.norm_squared();
+        if norm_squared <= RADIUS_SQUARED {
+            return p / norm_squared.sqrt();
+        }
+    }
+}
 
 /// Policies for how to scale a volume
 ///
