@@ -28,7 +28,6 @@ mod change;
 pub use self::change::{Change, GroupChange};
 pub mod chemistry;
 pub mod energy;
-pub mod forcefield;
 pub mod group;
 pub mod montecarlo;
 pub mod platform;
