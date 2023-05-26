@@ -46,12 +46,12 @@ impl Timer {
 
     /// Stop the timer and accumulate the time. Errors if the timer was not started.
     pub fn stop(&mut self) -> Result<(), anyhow::Error> {
-        if self.start.is_none() {
-            anyhow::bail!("Timer was not started");
-        } else {
-            self.accumulated += self.start.unwrap().elapsed();
+        if let Some(start) = self.start {
+            self.accumulated += start.elapsed();
             self.start = None;
             Ok(())
+        } else {
+            anyhow::bail!("Timer was not started");
         }
     }
 
@@ -61,7 +61,7 @@ impl Timer {
     }
 
     /// Clear the accumulated time
-    pub fn clear(&mut self) {
+    pub fn reset(&mut self) {
         *self = Self::new();
     }
 }
