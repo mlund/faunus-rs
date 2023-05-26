@@ -24,7 +24,7 @@
 //!   - Weeks-Chandler-Andersen
 
 use crate::{sqrt_serialize, square_deserialize, Info};
-use serde::{Deserialize, Serialize, __private::de};
+use serde::{Deserialize, Serialize};
 
 mod mie;
 pub use self::mie::{LennardJones, Mie, WeeksChandlerAndersen};
