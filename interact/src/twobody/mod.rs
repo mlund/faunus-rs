@@ -63,6 +63,32 @@ impl<T: TwobodyEnergy, U: TwobodyEnergy> Info for Combined<T, U> {
     }
 }
 
+/// Enum to describe two-body interaction variants.
+/// Use for serialization and deserialization of two-body interactions in user input.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum TwobodyKind {
+    HardSphere(HardSphere),
+    Harmonic(Harmonic),
+    #[serde(rename = "lj")]
+    LennardJones(LennardJones),
+    #[serde(rename = "wca")]
+    WeeksChandlerAndersen(WeeksChandlerAndersen),
+}
+
+// Test TwobodyKind for serialization
+#[test]
+fn test_twobodykind_serialize() {
+    let harmonic = TwobodyKind::Harmonic(Harmonic::new(1.0, 0.5));
+    let serialized = serde_json::to_string(&harmonic).unwrap();
+    assert_eq!(serialized, "{\"harmonic\":{\"r₀\":1.0,\"k\":0.5}}");
+
+    let lennard_jones = LennardJones::new(0.1, 2.5);
+    let weekschandlerandersen = TwobodyKind::WeeksChandlerAndersen(WeeksChandlerAndersen::new(lennard_jones));
+    let serialized = serde_json::to_string(&weekschandlerandersen).unwrap();
+    assert_eq!(serialized, "{\"wca\":{\"ε\":0.1,\"σ\":2.5}}");
+}
+
 /// Hardsphere potential
 ///
 /// More information [here](http://www.sklogwiki.org/SklogWiki/index.php/Hard_sphere_model).
