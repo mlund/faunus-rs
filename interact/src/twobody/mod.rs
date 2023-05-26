@@ -24,7 +24,7 @@
 //!   - Weeks-Chandler-Andersen
 
 use crate::{sqrt_serialize, square_deserialize, Info};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, __private::de};
 
 mod mie;
 pub use self::mie::{LennardJones, Mie, WeeksChandlerAndersen};
@@ -66,7 +66,7 @@ impl<T: TwobodyEnergy, U: TwobodyEnergy> Info for Combined<T, U> {
 /// Enum to describe two-body interaction variants.
 /// Use for serialization and deserialization of two-body interactions in user input.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "lowercase")]
 pub enum TwobodyKind {
     HardSphere(HardSphere),
     Harmonic(Harmonic),
@@ -79,14 +79,30 @@ pub enum TwobodyKind {
 // Test TwobodyKind for serialization
 #[test]
 fn test_twobodykind_serialize() {
+    let hardsphere = TwobodyKind::HardSphere(HardSphere::new(1.0));
+    assert_eq!(
+        serde_json::to_string(&hardsphere).unwrap(),
+        "{\"hardsphere\":{\"σ\":1.0}}"
+    );
+
     let harmonic = TwobodyKind::Harmonic(Harmonic::new(1.0, 0.5));
-    let serialized = serde_json::to_string(&harmonic).unwrap();
-    assert_eq!(serialized, "{\"harmonic\":{\"r₀\":1.0,\"k\":0.5}}");
+    assert_eq!(
+        serde_json::to_string(&harmonic).unwrap(),
+        "{\"harmonic\":{\"r₀\":1.0,\"k\":0.5}}"
+    );
+
+    let lj = TwobodyKind::LennardJones(LennardJones::new(0.1, 2.5));
+    assert_eq!(
+        serde_json::to_string(&lj).unwrap(),
+        "{\"lj\":{\"ε\":0.1,\"σ\":2.5}}"
+    );
 
     let lennard_jones = LennardJones::new(0.1, 2.5);
-    let weekschandlerandersen = TwobodyKind::WeeksChandlerAndersen(WeeksChandlerAndersen::new(lennard_jones));
-    let serialized = serde_json::to_string(&weekschandlerandersen).unwrap();
-    assert_eq!(serialized, "{\"wca\":{\"ε\":0.1,\"σ\":2.5}}");
+    let wca = TwobodyKind::WeeksChandlerAndersen(WeeksChandlerAndersen::new(lennard_jones));
+    assert_eq!(
+        serde_json::to_string(&wca).unwrap(),
+        "{\"wca\":{\"ε\":0.1,\"σ\":2.5}}"
+    );
 }
 
 /// Hardsphere potential
