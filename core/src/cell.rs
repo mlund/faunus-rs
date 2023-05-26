@@ -21,6 +21,8 @@
 //! boundaries conditions. The `UnitCell` type represents the enclosing box of
 //! a simulated system, with some type of periodic condition.
 
+use serde::{Deserialize, Serialize};
+
 use crate::Point;
 use std::f64::consts::PI;
 type Matrix3 = nalgebra::Matrix3<f64>;
@@ -39,6 +41,64 @@ pub trait SimulationCell {
     /// Get the minimum squared distance between two points
     fn distance_squared(&self, point1: &Point, point2: &Point) -> f64;
 }
+
+/// Cuboidal unit cell, with cuboid shape
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Cuboid {
+    /// Unit cell vectors
+    cell: Point,
+}
+
+impl SimulationCell for Cuboid {
+    fn volume(&self) -> Option<f64> {
+        Some(self.cell.x * self.cell.y * self.cell.z)
+    }
+    fn set_volume(&mut self, new_volume: f64) -> anyhow::Result<()> {
+        if let Some(volume) = self.volume() {
+            self.cell *= (new_volume / volume).powf(1.0 / 3.0);
+        } else {
+            self.cell = Point::from_element(new_volume.cbrt());
+        }
+        Ok(())
+    }
+    #[inline]
+    fn distance(&self, point1: &Point, point2: &Point) -> Point {
+        let mut delta = *point1 - *point2;
+        if delta.x > self.cell.x / 2.0 {
+            delta.x -= self.cell.x;
+        } else if delta.x < -self.cell.x / 2.0 {
+            delta.x += self.cell.x;
+        }
+        if delta.y > self.cell.y / 2.0 {
+            delta.y -= self.cell.y;
+        } else if delta.y < -self.cell.y / 2.0 {
+            delta.y += self.cell.y;
+        }
+        if delta.z > self.cell.z / 2.0 {
+            delta.z -= self.cell.z;
+        } else if delta.z < -self.cell.z / 2.0 {
+            delta.z += self.cell.z;
+        }
+        delta
+    }
+    fn boundary(&self, point: &mut Point) {
+        if point.x.abs() > self.cell.x / 2.0 {
+            point.x -= self.cell.x * (point.x / self.cell.x).round();
+        }
+        if point.y.abs() > self.cell.y / 2.0 {
+            point.y -= self.cell.y * (point.y / self.cell.y).round();
+        }
+        if point.z.abs() > self.cell.z / 2.0 {
+            point.z -= self.cell.z * (point.z / self.cell.z).round();
+        }
+    }
+
+    #[inline]
+    fn distance_squared(&self, point1: &Point, point2: &Point) -> f64 {
+        self.distance(point1, point2).norm_squared()
+    }
+}
+
 
 /// The shape of a cell determine how we will be able to compute the periodic
 /// boundaries condition.
