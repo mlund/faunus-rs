@@ -59,6 +59,11 @@ impl Timer {
     pub fn accumulated(&self) -> Duration {
         self.accumulated
     }
+
+    /// Clear the accumulated time
+    pub fn clear(&mut self) {
+        self.accumulated = Duration::new(0, 0);
+    }
 }
 
 impl Default for Timer {
