@@ -43,7 +43,7 @@ use crate::{AVOGADRO, BOLTZMANN, UNIT_CHARGE, VACUUM_PERMITTIVITY};
 /// CaCl₂     | `[2, -1]`
 /// KAl(SO₄)₂ | `[1, 3, -2]`
 ///
-#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize, Default)]
 pub struct Electrolyte {
     /// Molar salt concentration
     pub molarity: f64,
