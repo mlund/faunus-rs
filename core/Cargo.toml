@@ -9,21 +9,15 @@ edition = "2021"
 
 [dependencies]
 approx = "0.5"
-assert_approx_eq = "1.0.1"
 log = "0.4"
-pretty_env_logger = "0.4"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-ordslice = "0.3.0"
-anyhow = "1.0.70"
-itertools = "0.10.5"
-nalgebra = { version = "0.32.2", features = ["serde-serialize"] }
-derive-getters = "0.2.1"
+anyhow = "1.0"
+itertools = "0.10"
+nalgebra = { version = "0.32", features = ["serde-serialize"] }
 interact = {path = "../interact"}
-as-any = "0.3.0"
-rand = "0.8.5"
-num = "0.4.0"
-chemfiles = "0.10.3"
-typetag = "0.2.8"
-serde-xml-rs = "0.6.0"
-float-cmp = "0.9.0"
+as-any = "0.3"
+rand = "0.8"
+num = "0.4"
+chemfiles = "0.10"
+float-cmp = "0.9"
