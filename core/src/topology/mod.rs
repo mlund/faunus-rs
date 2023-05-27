@@ -69,6 +69,8 @@ pub enum AtomSelection<'a> {
     ByType(Vec<Box<&'a dyn AtomType>>),
     /// Repeat a single atom type `n` times
     ByRepeat(Box<&'a dyn AtomType>, usize),
+    /// Empty selection
+    None,
 }
 
 impl AtomSelection<'_> {
@@ -77,6 +79,7 @@ impl AtomSelection<'_> {
             AtomSelection::ById(v) => v.is_empty(),
             AtomSelection::ByType(v) => v.is_empty(),
             AtomSelection::ByRepeat(_, n) => *n == 0,
+            AtomSelection::None => true,
         }
     }
     pub fn len(&self) -> usize {
@@ -84,6 +87,7 @@ impl AtomSelection<'_> {
             AtomSelection::ById(v) => v.len(),
             AtomSelection::ByType(v) => v.len(),
             AtomSelection::ByRepeat(_, n) => *n,
+            AtomSelection::None => 0,
         }
     }
 }
