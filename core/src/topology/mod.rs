@@ -21,7 +21,7 @@ pub use bond::*;
 pub use dihedral::*;
 pub use torsion::*;
 
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 /// Enum to store a custom data for atoms, residues, molecules etc.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -118,7 +118,6 @@ pub trait ResidueType {
     }
 }
 
-
 // pub struct Atom<'a> {
 //     r#type: &'a dyn AtomType,
 //     pub index: usize,
@@ -202,4 +201,3 @@ fn residue_name_to_letter(name: &str) -> Option<char> {
 
 #[test]
 fn test_info() {}
-

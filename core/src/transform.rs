@@ -52,53 +52,16 @@ pub enum VolumeScalePolicy {
     ScaleXY,
 }
 
-/// Trait for scaling a point according to a policy.
-/// Typically implemented for a unit cell, othorhombic, triclinic, etc.
+/// Trait for scaling a position in a simulation cell according to a volume scaling policy.
+/// Typically implemented for a unit cell.
 pub trait VolumeScale {
-    /// Scale a point according to the policy
-    fn volume_scale(
+    /// Scale a `point` according to the policy
+    fn scale_position(
         &self,
         policy: VolumeScalePolicy,
-        old_volume: f64,
         new_volume: f64,
-        point: &mut Point,
+        position: &mut Point,
     ) -> Result<(), anyhow::Error>;
-}
-
-impl VolumeScale for crate::cell::UnitCell {
-    fn volume_scale(
-        &self,
-        policy: VolumeScalePolicy,
-        old_volume: f64,
-        new_volume: f64,
-        point: &mut Point,
-    ) -> Result<(), anyhow::Error> {
-        if self.shape() != crate::cell::CellShape::Orthorhombic {
-            return Err(anyhow::Error::msg(
-                "Currently only orthorhombic cells are supported for volume scaling",
-            ));
-        }
-        match policy {
-            VolumeScalePolicy::Isotropic => {
-                point.scale_mut((new_volume / old_volume).cbrt());
-            }
-            VolumeScalePolicy::IsochoricZ => {
-                let factor = (new_volume / old_volume).cbrt();
-                point.x = factor;
-                point.y = factor;
-                point.z = factor.powi(2).recip();
-            }
-            VolumeScalePolicy::ScaleZ => {
-                point.z *= new_volume / old_volume;
-            }
-            VolumeScalePolicy::ScaleXY => {
-                let factor = (new_volume / old_volume).sqrt();
-                point.x *= factor;
-                point.y *= factor;
-            }
-        }
-        Ok(())
-    }
 }
 
 /// This describes a transformation on a set of particles or a group.

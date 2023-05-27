@@ -21,84 +21,10 @@
 //! boundaries conditions. The `UnitCell` type represents the enclosing box of
 //! a simulated system, with some type of periodic condition.
 
-use serde::{Deserialize, Serialize};
-
-use crate::Point;
+use crate::{transform::VolumeScale, transform::VolumeScalePolicy, Point};
 use std::f64::consts::PI;
 type Matrix3 = nalgebra::Matrix3<f64>;
 type Vector3D = Point;
-
-/// Interface for a unit cell used to describe the geometry of the simulation system
-pub trait SimulationCell {
-    /// Get volume of system
-    fn volume(&self) -> Option<f64>;
-    /// Set volume of system
-    fn set_volume(&mut self, volume: f64) -> anyhow::Result<()>;
-    /// Apply periodic boundary conditions to a point
-    fn boundary(&self, point: &mut Point);
-    /// Calculate the minimum image distance between two points
-    fn distance(&self, point1: &Point, point2: &Point) -> Point;
-    /// Get the minimum squared distance between two points
-    fn distance_squared(&self, point1: &Point, point2: &Point) -> f64;
-}
-
-/// Cuboidal unit cell, with cuboid shape
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Cuboid {
-    /// Unit cell vectors
-    cell: Point,
-}
-
-impl SimulationCell for Cuboid {
-    fn volume(&self) -> Option<f64> {
-        Some(self.cell.x * self.cell.y * self.cell.z)
-    }
-    fn set_volume(&mut self, new_volume: f64) -> anyhow::Result<()> {
-        if let Some(volume) = self.volume() {
-            self.cell *= (new_volume / volume).powf(1.0 / 3.0);
-        } else {
-            self.cell = Point::from_element(new_volume.cbrt());
-        }
-        Ok(())
-    }
-    #[inline]
-    fn distance(&self, point1: &Point, point2: &Point) -> Point {
-        let mut delta = *point1 - *point2;
-        if delta.x > self.cell.x / 2.0 {
-            delta.x -= self.cell.x;
-        } else if delta.x < -self.cell.x / 2.0 {
-            delta.x += self.cell.x;
-        }
-        if delta.y > self.cell.y / 2.0 {
-            delta.y -= self.cell.y;
-        } else if delta.y < -self.cell.y / 2.0 {
-            delta.y += self.cell.y;
-        }
-        if delta.z > self.cell.z / 2.0 {
-            delta.z -= self.cell.z;
-        } else if delta.z < -self.cell.z / 2.0 {
-            delta.z += self.cell.z;
-        }
-        delta
-    }
-    fn boundary(&self, point: &mut Point) {
-        if point.x.abs() > self.cell.x / 2.0 {
-            point.x -= self.cell.x * (point.x / self.cell.x).round();
-        }
-        if point.y.abs() > self.cell.y / 2.0 {
-            point.y -= self.cell.y * (point.y / self.cell.y).round();
-        }
-        if point.z.abs() > self.cell.z / 2.0 {
-            point.z -= self.cell.z * (point.z / self.cell.z).round();
-        }
-    }
-
-    #[inline]
-    fn distance_squared(&self, point1: &Point, point2: &Point) -> f64 {
-        self.distance(point1, point2).norm_squared()
-    }
-}
-
 
 /// The shape of a cell determine how we will be able to compute the periodic
 /// boundaries condition.
@@ -127,6 +53,42 @@ pub struct UnitCell {
     inv: Matrix3,
     /// Unit cell shape
     shape: CellShape,
+}
+
+impl VolumeScale for UnitCell {
+    fn scale_position(
+        &self,
+        policy: VolumeScalePolicy,
+        new_volume: f64,
+        point: &mut Point,
+    ) -> Result<(), anyhow::Error> {
+        if self.shape() != CellShape::Orthorhombic {
+            return Err(anyhow::Error::msg(
+                "Currently only orthorhombic cells are supported for volume scaling",
+            ));
+        }
+        let old_volume = self.volume();
+        match policy {
+            VolumeScalePolicy::Isotropic => {
+                point.scale_mut((new_volume / old_volume).cbrt());
+            }
+            VolumeScalePolicy::IsochoricZ => {
+                let factor = (new_volume / old_volume).cbrt();
+                point.x = factor;
+                point.y = factor;
+                point.z = factor.powi(2).recip();
+            }
+            VolumeScalePolicy::ScaleZ => {
+                point.z *= new_volume / old_volume;
+            }
+            VolumeScalePolicy::ScaleXY => {
+                let factor = (new_volume / old_volume).sqrt();
+                point.x *= factor;
+                point.y *= factor;
+            }
+        }
+        Ok(())
+    }
 }
 
 impl UnitCell {

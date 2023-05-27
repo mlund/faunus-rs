@@ -39,7 +39,9 @@ impl DihedralKind {
     pub fn is_improper(&self) -> bool {
         matches!(
             self,
-            DihedralKind::ImproperHarmonic(..) | DihedralKind::ImproperAmber(..) | DihedralKind::ImproperCHARMM(..)
+            DihedralKind::ImproperHarmonic(..)
+                | DihedralKind::ImproperAmber(..)
+                | DihedralKind::ImproperCHARMM(..)
         )
     }
 }

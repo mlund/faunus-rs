@@ -15,7 +15,6 @@
 use float_cmp::approx_eq;
 use serde::{Deserialize, Serialize};
 
-
 /// Variants of bond types, e.g. harmonic, FENE, Morse, etc.
 /// Each varient stores the parameters for the bond type, like force constant, equilibrium distance, etc.
 /// For more information see:

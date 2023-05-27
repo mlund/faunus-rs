@@ -13,9 +13,10 @@
 // limitations under the license.
 
 use crate::{
-    cell::{SimulationCell, UnitCell},
+    cell::SimulationCell,
     energy::EnergyTerm,
     group::{GroupCollection, GroupSize},
+    transform::VolumeScalePolicy,
     Change, Group, Particle, Point, SyncFrom,
 };
 use anyhow::{anyhow, Ok};
@@ -29,7 +30,7 @@ pub mod nonbonded;
 pub struct ReferencePlatform {
     particles: Vec<Particle>,
     groups: Vec<Group>,
-    cell: UnitCell,
+    cell: crate::cell::lumol::UnitCell,
     _energies: Vec<Box<dyn EnergyTerm>>,
 }
 
@@ -56,11 +57,15 @@ impl SimulationCell for ReferencePlatform {
         self.cell.vector_image(point);
     }
 
+    fn is_inside(&self, _point: &Point) -> bool {
+        todo!("implement is_inside")
+    }
+
     fn volume(&self) -> Option<f64> {
         Some(self.cell.volume())
     }
 
-    fn set_volume(&mut self, _volume: f64) -> anyhow::Result<()> {
+    fn set_volume(&mut self, _volume: f64, _policy: VolumeScalePolicy) -> anyhow::Result<()> {
         todo!("set volume")
     }
 
@@ -155,7 +160,7 @@ impl GroupCollection for ReferencePlatform {
 /// The idea is to access the particle in a group-wise fashion, e.g. to update
 /// the center of mass of a group, or to rotate a group of particles.
 impl ReferencePlatform {
-    pub fn new(cell: UnitCell) -> Self {
+    pub fn new(cell: crate::cell::lumol::UnitCell) -> Self {
         Self {
             particles: Vec::new(),
             groups: Vec::new(),
