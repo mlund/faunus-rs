@@ -12,6 +12,8 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
+//! # Support for handling electrolyte solutions
+
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
@@ -140,7 +142,7 @@ fn test_electrolyte() {
 
 /// Calculates the Bjerrum length, lB = e²/4πεkT commonly used in electrostatics (ångström).
 ///
-/// More information at https://en.wikipedia.org/wiki/Bjerrum_length.
+/// More information at <https://en.wikipedia.org/wiki/Bjerrum_length>.
 ///
 /// # Examples
 /// ~~~

@@ -12,25 +12,27 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
+//! Bonds between atoms
+
 use float_cmp::approx_eq;
 use serde::{Deserialize, Serialize};
 
-/// Variants of bond types, e.g. harmonic, FENE, Morse, etc.
+/// Force field definition for bonds, e.g. harmonic, FENE, Morse, etc.
+/// 
 /// Each varient stores the parameters for the bond type, like force constant, equilibrium distance, etc.
-/// For more information see:
-/// - Morse: https://en.wikipedia.org/wiki/Morse_potential
-/// - Harmonic: https://en.wikipedia.org/wiki/Harmonic_oscillator
-/// - FENE: https://en.wikipedia.org/wiki/Finitely_extensible_nonlinear_elastic_potential
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Default)]
 pub enum BondKind {
-    /// Harmonic bond type (force constant, equilibrium distance)
+    /// Harmonic bond type (force constant, equilibrium distance).
+    /// See <https://en.wikipedia.org/wiki/Harmonic_oscillator>.
     Harmonic(f64, f64),
     /// Finite extensible nonlinear elastic bond type (force constant, equilibrium distance, maximum distance)
+    /// See <https://en.wikipedia.org/wiki/Finitely_extensible_nonlinear_elastic_potential>.
     FENE(f64, f64, f64),
-    /// Morse bond type (force constant, equilibrium distance, depth of potential well)
+    /// Morse bond type (force constant, equilibrium distance, depth of potential well).
+    /// See <https://en.wikipedia.org/wiki/Morse_potential>.
     Morse(f64, f64, f64),
     /// Harmonic Urey-Bradley bond type (force constant, equilibrium distance)
-    /// See https://manual.gromacs.org/documentation/current/reference-manual/functions/bonded-interactions.html#urey-bradley-potential
+    /// See <https://manual.gromacs.org/documentation/current/reference-manual/functions/bonded-interactions.html#urey-bradley-potential>
     /// for more information.
     UreyBradley(f64, f64),
     /// Undefined bond type
@@ -38,14 +40,19 @@ pub enum BondKind {
     None,
 }
 
-/// Bond order decribing the multiplicity of a bond between two atoms.
-/// See https://en.wikipedia.org/wiki/Bond_order for more information.
+/// Bond order describing the multiplicity of a bond between two atoms.
+/// 
+/// See <https://en.wikipedia.org/wiki/Bond_order> for more information.
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Default)]
 pub enum BondOrder {
     #[default]
+    /// Undefined bond order
     None,
+    /// Single bond, e.g. diatomic hydrogen, H–H
     Single,
+    /// Double bond, e.g. diatomic oxygen, O=O
     Double,
+    /// Triple bond, e.g. diatomic nitrogen, N≡N
     Triple,
     Quadruple,
     Quintuple,

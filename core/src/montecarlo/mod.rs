@@ -12,13 +12,14 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
-//! Support for Monte Carlo moves.
+//! # Support for Monte Carlo sampling
 
 use crate::{time::Timer, Change, Context, Info, SyncFromAny, MOLAR_GAS_CONSTANT};
 use rand::prelude::*;
 use serde::{Deserialize, Serialize};
 
-/// Helper class to keep track of accepted and rejected moves
+/// # Helper class to keep track of accepted and rejected moves
+/// 
 /// It is optionally possible to let this class keep track of a single mean square displacement
 /// which can be useful for many Monte Carlo moves.
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
@@ -59,7 +60,7 @@ trait AcceptanceCriterion {
 
 /// Metropolis-Hastings acceptance criterion
 ///
-/// More information: https://en.wikipedia.org/wiki/Metropolis%E2%80%93Hastings_algorithm
+/// More information: <https://en.wikipedia.org/wiki/Metropolis%E2%80%93Hastings_algorithm>
 #[derive(Clone, Debug, Default)]
 pub struct MetropolisHastings {}
 
@@ -93,7 +94,14 @@ pub trait Move<T: Context>: Info + std::fmt::Debug + SyncFromAny {
     fn statistics_mut(&mut self) -> &mut MoveStatistics;
 }
 
-pub struct MonteCarlo<T: Context> {
+/// # Monte Carlo simulation instance
+/// 
+/// This maintains two [`Context`]s, one for the current state and one for the new state, as
+/// well as a list of moves to perform.
+/// Moves are picked randomly and performed in the new context. If the move is accepted, the
+/// new context is synced to the old context. If the move is rejected, the new context is
+/// discarded.
+pub struct Simulation<T: Context> {
     _moves: Vec<Box<dyn Move<T>>>,
     /// Currently accepted state
     _old_context: T,

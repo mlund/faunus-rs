@@ -12,9 +12,11 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
+//! Torsion angles
+
 use serde::{Deserialize, Serialize};
 
-/// Variants of bond angles, e.g. harmonic, cosine, etc.
+/// Force field definition for torsion, e.g. harmonic, cosine, etc.
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Default)]
 pub enum TorsionKind {
     /// Harmonic torsion (force constant, equilibrium angle)
@@ -26,7 +28,7 @@ pub enum TorsionKind {
     None,
 }
 
-/// Torsion potential between three atoms
+/// Definition of torsion between three indexed atoms
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct Torsion {
     /// Indices of the three atoms in the angle

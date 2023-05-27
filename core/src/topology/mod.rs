@@ -23,7 +23,7 @@ pub use torsion::*;
 
 use serde::{Deserialize, Serialize};
 
-/// Enum to store a custom data for atoms, residues, molecules etc.
+/// Enum to store custom data for atoms, residues, molecules etc.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Property {
     Bool(bool),
@@ -61,26 +61,29 @@ pub trait AtomType: Debug {
     fn get_property(&self, name: &str) -> Option<&Property>;
 }
 
-/// Various ways to specify a collection of atoms in e.g. a residue
-pub enum AtomList<'a> {
+/// Ways to specify a collection of atoms in e.g. a residue
+pub enum AtomSelection<'a> {
+    /// Arbitrary selection of atoms by index
     ById(Vec<usize>),
+    /// Arbitrary selection of atoms by type
     ByType(Vec<Box<&'a dyn AtomType>>),
+    /// Repeat a single atom type `n` times
     ByRepeat(Box<&'a dyn AtomType>, usize),
 }
 
-impl AtomList<'_> {
+impl AtomSelection<'_> {
     pub fn is_empty(&self) -> bool {
         match self {
-            AtomList::ById(v) => v.is_empty(),
-            AtomList::ByType(v) => v.is_empty(),
-            AtomList::ByRepeat(_, n) => *n == 0,
+            AtomSelection::ById(v) => v.is_empty(),
+            AtomSelection::ByType(v) => v.is_empty(),
+            AtomSelection::ByRepeat(_, n) => *n == 0,
         }
     }
     pub fn len(&self) -> usize {
         match self {
-            AtomList::ById(v) => v.len(),
-            AtomList::ByType(v) => v.len(),
-            AtomList::ByRepeat(_, n) => *n,
+            AtomSelection::ById(v) => v.len(),
+            AtomSelection::ByType(v) => v.len(),
+            AtomSelection::ByRepeat(_, n) => *n,
         }
     }
 }
@@ -93,7 +96,7 @@ pub trait ResidueType {
     /// in the topology file, but the only requirement is that it is unique.
     fn id(&self) -> usize;
     /// Atoms in the residue
-    fn atoms(&self) -> AtomList;
+    fn atoms(&self) -> AtomSelection;
     /// Bonds between atoms in the residue. Indices are relative to the atoms in the residue.
     fn internal_bonds(&self) -> Vec<&Bond>;
     /// Short, one-letter code for residue (A, G, etc.). This follows the PDB standard.

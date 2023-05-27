@@ -17,9 +17,7 @@
 // Lumol, an extensible molecular simulation engine
 // Copyright (C) Lumol's contributors — BSD license
 
-//! Simulations in computational chemistry are often made using periodic
-//! boundaries conditions. The `UnitCell` type represents the enclosing box of
-//! a simulated system, with some type of periodic condition.
+//! # Unit cell from Lumol (experimental)
 
 use crate::{cell::VolumeScale, cell::VolumeScalePolicy, Point};
 use std::f64::consts::PI;

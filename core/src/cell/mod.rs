@@ -12,17 +12,26 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
+//! # Simulation cells with or without periodic boundary conditions
+//! 
+//! This module contains the interface for the simulation cell, which describes the geometry of the simulation system.
+//! The simulation cell is a geometric [`Shape`], e.g. a cube, sphere, etc., with defined [`BoundaryConditions`].
+//! Some statistical thermodynamic ensembles require volume fluctuations, which is implemented by scaling the simulation cell
+//! through the [`VolumeScale`] trait.
+
 pub mod cuboid;
-pub mod lumol;
+pub(crate) mod lumol;
 pub mod sphere;
 
 use crate::Point;
 use serde::{Deserialize, Serialize};
 
-/// Interface for a unit cell used to describe the geometry of the simulation system
+/// Final interface for a unit cell used to describe the geometry of a simulation system.
+/// 
+/// It is a combination of a [`Shape`], [`BoundaryConditions`] and [`VolumeScale`].
 pub trait SimulationCell: Shape + BoundaryConditions + VolumeScale {}
 
-/// Describes a geometric shape like a sphere, cube, etc.
+/// Geometric shape like a sphere, cube, etc.
 pub trait Shape {
     /// Get volume
     fn volume(&self) -> Option<f64>;
@@ -36,7 +45,7 @@ pub trait Shape {
     }
 }
 
-/// Variants for periodic boundary conditions in various directions
+/// Periodic boundary conditions in various directions
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq)]
 pub enum PeriodicDirections {
     /// Periodic boundary conditions in Z direction
@@ -86,8 +95,7 @@ pub enum VolumeScalePolicy {
     ScaleXY,
 }
 
-/// Trait for scaling a position in a simulation cell according to a volume scaling policy.
-/// Typically implemented for a unit cell.
+/// Trait for scaling a position or the simulation cell according to a scaling policy.
 pub trait VolumeScale {
     /// Scale a `position` inside a simulation cell according to a scaling policy.
     /// Errors if the scaling policy is unsupported.

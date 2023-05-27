@@ -12,4 +12,7 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
+//! # Chemistry module
+//! 
+//! This contains support for chemical systems, including electrolyte solutions.
 pub mod electrolyte;

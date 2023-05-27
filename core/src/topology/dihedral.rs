@@ -12,9 +12,11 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
+//! Dihedral angles
+
 use serde::{Deserialize, Serialize};
 
-/// Variants of dihedral angle potentials between four atoms
+/// Force field definition for dihedral angle potentials between four atoms
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Default)]
 pub enum DihedralKind {
     /// Harmonic dihedral type (force constant, equilibrium angle)
