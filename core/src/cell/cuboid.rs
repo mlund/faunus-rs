@@ -14,7 +14,7 @@
 
 use crate::{
     cell::SimulationCell,
-    transform::{VolumeScale, VolumeScalePolicy},
+    cell::{VolumeScale, VolumeScalePolicy},
     Point,
 };
 use anyhow::Ok;
@@ -30,21 +30,36 @@ pub struct Cuboid {
 }
 
 impl Cuboid {
-    /// Create new cubic unit cell with side lengths `a`, `b`, and `c`
-    fn new(a: f64, b: f64, c: f64) -> Cuboid {
-        Cuboid {
+    /// Create new cuboidal cell with side lengths `a`, `b`, and `c`
+    pub fn new(a: f64, b: f64, c: f64) -> Self {
+        Self {
             cell: Point::new(a, b, c),
             half_cell: Point::new(a / 2.0, b / 2.0, c / 2.0),
         }
     }
+    /// Create new cube with given volume
+    pub fn from_volume(volume: f64) -> Self {
+        let a = volume.cbrt();
+        Self::new(a, a, a)
+    }
 }
 
 impl VolumeScale for Cuboid {
+    fn scale_volume(&mut self, new_volume: f64, policy: VolumeScalePolicy) -> anyhow::Result<()> {
+        if let Some(_old_volume) = self.volume() {
+            let mut cell = self.cell;
+            self.scale_position(new_volume, &mut cell, policy)?;
+            *self = Self::new(cell.x, cell.y, cell.z);
+            Ok(())
+        } else {
+            anyhow::bail!("Cannot set volume of undefined cell volume");
+        }
+    }
     fn scale_position(
         &self,
-        policy: VolumeScalePolicy,
         new_volume: f64,
         point: &mut Point,
+        policy: VolumeScalePolicy,
     ) -> Result<(), anyhow::Error> {
         let old_volume = self.volume().unwrap();
         match policy {
@@ -73,16 +88,6 @@ impl VolumeScale for Cuboid {
 impl SimulationCell for Cuboid {
     fn volume(&self) -> Option<f64> {
         Some(self.cell.x * self.cell.y * self.cell.z)
-    }
-    fn set_volume(&mut self, new_volume: f64, policy: VolumeScalePolicy) -> anyhow::Result<()> {
-        if let Some(_old_volume) = self.volume() {
-            let mut cell = self.cell;
-            self.scale_position(policy, new_volume, &mut cell)?;
-            *self = Self::new(cell.x, cell.y, cell.z);
-            Ok(())
-        } else {
-            anyhow::bail!("Cannot set volume of undefined cell volume");
-        }
     }
     #[inline]
     fn distance(&self, point1: &Point, point2: &Point) -> Point {

@@ -16,7 +16,6 @@ use crate::{
     cell::SimulationCell,
     energy::EnergyTerm,
     group::{GroupCollection, GroupSize},
-    transform::VolumeScalePolicy,
     Change, Group, Particle, Point, SyncFrom,
 };
 use anyhow::{anyhow, Ok};
@@ -63,10 +62,6 @@ impl SimulationCell for ReferencePlatform {
 
     fn volume(&self) -> Option<f64> {
         Some(self.cell.volume())
-    }
-
-    fn set_volume(&mut self, _volume: f64, _policy: VolumeScalePolicy) -> anyhow::Result<()> {
-        todo!("set volume")
     }
 
     fn distance(&self, point1: &Point, point2: &Point) -> Point {

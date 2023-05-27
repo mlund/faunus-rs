@@ -14,7 +14,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::transform;
+use crate::cell;
 
 /// Describes a change in the system. This can for example be used to
 /// describe a change in the volume of the system, or a change in the
@@ -24,7 +24,7 @@ pub enum Change {
     /// Everything has changed
     Everything,
     /// The volume has changed (policy and tuple with old volume, new volume)
-    Volume(transform::VolumeScalePolicy, (u64, u64)),
+    Volume(cell::VolumeScalePolicy, (u64, u64)),
     /// Some groups have changed
     Groups(Vec<GroupChange>),
     /// A single group has changed

@@ -21,7 +21,7 @@
 //! boundaries conditions. The `UnitCell` type represents the enclosing box of
 //! a simulated system, with some type of periodic condition.
 
-use crate::{transform::VolumeScale, transform::VolumeScalePolicy, Point};
+use crate::{cell::VolumeScale, cell::VolumeScalePolicy, Point};
 use std::f64::consts::PI;
 type Matrix3 = nalgebra::Matrix3<f64>;
 type Vector3D = Point;
@@ -56,11 +56,18 @@ pub struct UnitCell {
 }
 
 impl VolumeScale for UnitCell {
+    fn scale_volume(
+        &mut self,
+        _new_volume: f64,
+        _policy: VolumeScalePolicy,
+    ) -> Result<(), anyhow::Error> {
+        todo!("implement scale_volume for UnitCell")
+    }
     fn scale_position(
         &self,
-        policy: VolumeScalePolicy,
         new_volume: f64,
         point: &mut Point,
+        policy: VolumeScalePolicy,
     ) -> Result<(), anyhow::Error> {
         if self.shape() != CellShape::Orthorhombic {
             return Err(anyhow::Error::msg(

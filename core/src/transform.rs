@@ -14,11 +14,10 @@
 
 //! Transformations of particles and groups
 
-use crate::{cell::SimulationCell, Point, PointParticle};
+use crate::{cell::SimulationCell, cell::VolumeScalePolicy, Point, PointParticle};
 use anyhow::Ok;
 use nalgebra::Quaternion;
 use rand::prelude::*;
-use serde::{Deserialize, Serialize};
 
 /// Generate a random unit vector by sphere picking
 pub fn random_unit_vector(rng: &mut ThreadRng) -> Point {
@@ -34,34 +33,6 @@ pub fn random_unit_vector(rng: &mut ThreadRng) -> Point {
             return p / norm_squared.sqrt();
         }
     }
-}
-
-/// Policies for how to scale a volume
-///
-/// This is used to scale a volume to a new volume. Each variant
-/// takes a tuple of (old_volume, new_volume) and scales a given point.
-#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
-pub enum VolumeScalePolicy {
-    /// Isotropic scaling (equal scaling in all directions)
-    Isotropic,
-    /// Isochoric scaling along z (constant volume)
-    IsochoricZ,
-    /// Scale along z-axis only
-    ScaleZ,
-    /// Scale along x and y
-    ScaleXY,
-}
-
-/// Trait for scaling a position in a simulation cell according to a volume scaling policy.
-/// Typically implemented for a unit cell.
-pub trait VolumeScale {
-    /// Scale a `point` according to the policy
-    fn scale_position(
-        &self,
-        policy: VolumeScalePolicy,
-        new_volume: f64,
-        position: &mut Point,
-    ) -> Result<(), anyhow::Error>;
 }
 
 /// This describes a transformation on a set of particles or a group.
