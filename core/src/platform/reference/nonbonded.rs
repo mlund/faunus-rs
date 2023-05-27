@@ -19,11 +19,9 @@ use itertools::iproduct;
 use serde::Serialize;
 use std::fmt::Debug;
 
-use crate::cell::SimulationCell;
 use crate::platform::reference::ReferencePlatform;
 use crate::{
-    energy::EnergyTerm, Change, Group, GroupChange, GroupCollection, Info, Particle, PointParticle,
-    SyncFromAny,
+    energy::EnergyTerm, Change, Group, GroupChange, GroupCollection, Info, Particle, SyncFromAny,
 };
 
 #[derive(Debug, Clone, Serialize)]
@@ -79,9 +77,10 @@ where
     /// Calculates the energy between two particles
     #[inline]
     fn particle_with_particle(&self, particle1: &Particle, particle2: &Particle) -> f64 {
-        let distance_squared = self
-            .platform
-            .distance_squared(particle1.pos(), particle2.pos());
+        let distance_squared = 0.0;
+        // let distance_squared = self
+        //     .platform
+        //     .distance_squared(particle1.pos(), particle2.pos());
         self.pair_potentials[particle1.id][particle2.id].twobody_energy(distance_squared)
     }
 

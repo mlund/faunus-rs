@@ -20,17 +20,55 @@ use crate::Point;
 use serde::{Deserialize, Serialize};
 
 /// Interface for a unit cell used to describe the geometry of the simulation system
-pub trait SimulationCell {
-    /// Get volume of system
+pub trait SimulationCell: Shape + BoundaryConditions + VolumeScale {}
+
+/// Describes a geometric shape like a sphere, cube, etc.
+pub trait Shape {
+    /// Get volume
     fn volume(&self) -> Option<f64>;
-    /// Apply periodic boundary conditions to a point, wrapping around PBC if necessary
+    /// Position of the geometric center of the shape. For a cube, this is the center of the box; for a sphere, this is the center of the sphere etc.
+    fn center(&self) -> Point;
+    /// Determines if a point lies inside the boundaries of the shape
+    fn is_inside(&self, point: &Point) -> bool;
+    /// Bounding box of the shape centered at `center()`
+    fn bounding_box(&self) -> Option<Point> {
+        None
+    }
+}
+
+/// Variants for periodic boundary conditions in various directions
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq)]
+pub enum PeriodicDirections {
+    /// Periodic boundary conditions in Z direction
+    PeriodicZ,
+    /// 2d periodic boundary conditions in the XY plane, e.g. a slab
+    PeriodicXY,
+    /// 3d periodic boundary conditions in XYZ directions
+    PeriodicXYZ,
+    /// No periodic boundaries in any direction
+    None,
+}
+
+impl PeriodicDirections {
+    /// True if periodic in some direction
+    pub fn is_some(&self) -> bool {
+        *self != PeriodicDirections::None
+    }
+}
+
+/// Interface for periodic boundary conditions and minimum image convention
+pub trait BoundaryConditions {
+    /// Report on periodic boundary conditions
+    fn pbc(&self) -> PeriodicDirections;
+    /// Apply minimum image convention to a point if appropriate
     fn boundary(&self, point: &mut Point);
-    /// Calculate the minimum distance between two points
+    /// Minimum image distance between two points inside a cell
     fn distance(&self, point1: &Point, point2: &Point) -> Point;
     /// Get the minimum squared distance between two points
-    fn distance_squared(&self, point1: &Point, point2: &Point) -> f64;
-    /// Determines if a point is inside the unit cell
-    fn is_inside(&self, point: &Point) -> bool;
+    #[inline]
+    fn distance_squared(&self, point1: &Point, point2: &Point) -> f64 {
+        self.distance(point1, point2).norm_squared()
+    }
 }
 
 /// Policies for how to scale a volume

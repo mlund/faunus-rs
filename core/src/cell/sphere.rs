@@ -13,8 +13,7 @@
 // limitations under the license.
 
 use crate::{
-    cell::SimulationCell,
-    cell::{VolumeScale, VolumeScalePolicy},
+    cell::{BoundaryConditions, Shape, SimulationCell, VolumeScale, VolumeScalePolicy},
     Point,
 };
 use anyhow::Ok;
@@ -38,26 +37,33 @@ impl Sphere {
     }
 }
 
-impl SimulationCell for Sphere {
-    fn volume(&self) -> Option<f64> {
-        Some(4.0 / 3.0 * std::f64::consts::PI * self.radius.powi(3))
+impl BoundaryConditions for Sphere {
+    fn pbc(&self) -> super::PeriodicDirections {
+        super::PeriodicDirections::None
     }
-
     fn boundary(&self, _point: &mut Point) {}
-
     #[inline]
     fn distance(&self, point1: &Point, point2: &Point) -> Point {
         point1 - point2
     }
-    #[inline]
-    fn distance_squared(&self, point1: &Point, point2: &Point) -> f64 {
-        self.distance(point1, point2).norm_squared()
-    }
+}
 
+impl Shape for Sphere {
+    fn center(&self) -> Point {
+        Point::zeros()
+    }
+    fn volume(&self) -> Option<f64> {
+        Some(4.0 / 3.0 * std::f64::consts::PI * self.radius.powi(3))
+    }
     fn is_inside(&self, point: &Point) -> bool {
         point.norm_squared() < self.radius.powi(2)
     }
+    fn bounding_box(&self) -> Option<Point> {
+        Some(Point::from_element(2.0 * self.radius))
+    }
 }
+
+impl SimulationCell for Sphere {}
 
 impl VolumeScale for Sphere {
     fn scale_volume(&mut self, new_volume: f64, policy: VolumeScalePolicy) -> anyhow::Result<()> {

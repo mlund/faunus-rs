@@ -13,8 +13,7 @@
 // limitations under the license.
 
 use crate::{
-    cell::SimulationCell,
-    cell::{VolumeScale, VolumeScalePolicy},
+    cell::{BoundaryConditions, Shape, SimulationCell, VolumeScale, VolumeScalePolicy},
     Point,
 };
 use anyhow::Ok;
@@ -41,6 +40,60 @@ impl Cuboid {
     pub fn from_volume(volume: f64) -> Self {
         let a = volume.cbrt();
         Self::new(a, a, a)
+    }
+}
+
+impl Shape for Cuboid {
+    fn center(&self) -> Point {
+        Point::zeros()
+    }
+    fn volume(&self) -> Option<f64> {
+        Some(self.cell.x * self.cell.y * self.cell.z)
+    }
+    fn is_inside(&self, point: &Point) -> bool {
+        point.x.abs() <= self.half_cell.x
+            && point.y.abs() <= self.half_cell.y
+            && point.z.abs() <= self.half_cell.z
+    }
+    fn bounding_box(&self) -> Option<Point> {
+        Some(self.cell)
+    }
+}
+
+impl BoundaryConditions for Cuboid {
+    fn pbc(&self) -> super::PeriodicDirections {
+        super::PeriodicDirections::PeriodicXYZ
+    }
+    #[inline]
+    fn distance(&self, point1: &Point, point2: &Point) -> Point {
+        let mut delta = *point1 - *point2;
+        if delta.x > self.half_cell.x {
+            delta.x -= self.cell.x;
+        } else if delta.x < -self.half_cell.x {
+            delta.x += self.cell.x;
+        }
+        if delta.y > self.half_cell.y {
+            delta.y -= self.cell.y;
+        } else if delta.y < -self.half_cell.y {
+            delta.y += self.cell.y;
+        }
+        if delta.z > self.half_cell.z {
+            delta.z -= self.cell.z;
+        } else if delta.z < -self.half_cell.z {
+            delta.z += self.cell.z;
+        }
+        delta
+    }
+    fn boundary(&self, point: &mut Point) {
+        if point.x.abs() > self.half_cell.x {
+            point.x -= self.cell.x * (point.x / self.cell.x).round();
+        }
+        if point.y.abs() > self.half_cell.y {
+            point.y -= self.cell.y * (point.y / self.cell.y).round();
+        }
+        if point.z.abs() > self.half_cell.z {
+            point.z -= self.cell.z * (point.z / self.cell.z).round();
+        }
     }
 }
 
@@ -85,49 +138,4 @@ impl VolumeScale for Cuboid {
     }
 }
 
-impl SimulationCell for Cuboid {
-    fn volume(&self) -> Option<f64> {
-        Some(self.cell.x * self.cell.y * self.cell.z)
-    }
-    #[inline]
-    fn distance(&self, point1: &Point, point2: &Point) -> Point {
-        let mut delta = *point1 - *point2;
-        if delta.x > self.half_cell.x {
-            delta.x -= self.cell.x;
-        } else if delta.x < -self.half_cell.x {
-            delta.x += self.cell.x;
-        }
-        if delta.y > self.half_cell.y {
-            delta.y -= self.cell.y;
-        } else if delta.y < -self.half_cell.y {
-            delta.y += self.cell.y;
-        }
-        if delta.z > self.half_cell.z {
-            delta.z -= self.cell.z;
-        } else if delta.z < -self.half_cell.z {
-            delta.z += self.cell.z;
-        }
-        delta
-    }
-    fn boundary(&self, point: &mut Point) {
-        if point.x.abs() > self.half_cell.x {
-            point.x -= self.cell.x * (point.x / self.cell.x).round();
-        }
-        if point.y.abs() > self.half_cell.y {
-            point.y -= self.cell.y * (point.y / self.cell.y).round();
-        }
-        if point.z.abs() > self.half_cell.z {
-            point.z -= self.cell.z * (point.z / self.cell.z).round();
-        }
-    }
-
-    #[inline]
-    fn distance_squared(&self, point1: &Point, point2: &Point) -> f64 {
-        self.distance(point1, point2).norm_squared()
-    }
-    fn is_inside(&self, point: &Point) -> bool {
-        point.x.abs() <= self.half_cell.x
-            && point.y.abs() <= self.half_cell.y
-            && point.z.abs() <= self.half_cell.z
-    }
-}
+impl SimulationCell for Cuboid {}

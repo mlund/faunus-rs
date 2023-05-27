@@ -13,10 +13,9 @@
 // limitations under the license.
 
 use crate::{
-    cell::SimulationCell,
     energy::EnergyTerm,
     group::{GroupCollection, GroupSize},
-    Change, Group, Particle, Point, SyncFrom,
+    Change, Group, Particle, SyncFrom,
 };
 use anyhow::{anyhow, Ok};
 
@@ -29,7 +28,7 @@ pub mod nonbonded;
 pub struct ReferencePlatform {
     particles: Vec<Particle>,
     groups: Vec<Group>,
-    cell: crate::cell::lumol::UnitCell,
+    _cell: crate::cell::lumol::UnitCell,
     _energies: Vec<Box<dyn EnergyTerm>>,
 }
 
@@ -48,29 +47,6 @@ impl SyncFrom for ReferencePlatform {
             _ => todo!(),
         }
         Ok(())
-    }
-}
-
-impl SimulationCell for ReferencePlatform {
-    fn boundary(&self, point: &mut Point) {
-        self.cell.vector_image(point);
-    }
-
-    fn is_inside(&self, _point: &Point) -> bool {
-        todo!("implement is_inside")
-    }
-
-    fn volume(&self) -> Option<f64> {
-        Some(self.cell.volume())
-    }
-
-    fn distance(&self, point1: &Point, point2: &Point) -> Point {
-        let mut d = point2 - point1;
-        self.cell.vector_image(&mut d);
-        d
-    }
-    fn distance_squared(&self, point1: &Point, point2: &Point) -> f64 {
-        self.distance(point1, point2).norm_squared()
     }
 }
 
@@ -159,7 +135,7 @@ impl ReferencePlatform {
         Self {
             particles: Vec::new(),
             groups: Vec::new(),
-            cell,
+            _cell: cell,
             _energies: Vec::new(),
         }
     }
