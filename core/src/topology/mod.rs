@@ -13,6 +13,7 @@
 // limitations under the license.
 
 mod bond;
+//pub mod chemfiles;
 mod dihedral;
 mod torsion;
 use std::fmt::Debug;
@@ -21,147 +22,176 @@ pub use bond::*;
 pub use dihedral::*;
 pub use torsion::*;
 
+use crate::Point;
 use serde::{Deserialize, Serialize};
 
-/// Enum to store custom data for atoms, residues, molecules etc.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum Property {
-    Bool(bool),
-    Int(i32),
-    Float(f64),
-    Vector(Vec<f64>),
+/// Enum to store hydrophobicity information of an atom or residue
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Copy, Default)]
+pub enum Hydrophobicity {
+    Hydrophobic,
+    Hydrophilic,
+    /// Stores information about surface tension
+    SurfaceTension(f64),
+    /// Unknown hydrophobicity
+    #[default]
+    None,
 }
 
-/// Defines a unique atom type used to template atoms in a molecule. Each type is uniquely identified by its name and
-/// accompaning identifier (`id`).
-pub trait AtomType: Debug {
-    /// Chemical symbol (He, C, O, Fe, etc.)
-    fn element(&self) -> Option<String> {
-        None
-    }
-    /// Unique name of atom type (opls_138, etc.)
+/// Information about an atom type.
+///
+/// Atoms need not be chemical elements, but can be custom atoms representing interaction sites.
+/// This does _not_ include:
+/// - index or id information, other than the name.
+/// - position information
+pub trait AtomType: CustomProperty {
+    /// Unique name for the atom type
     fn name(&self) -> String;
-    /// Unique identifier of atom type
+    /// Unique identifier for the atom type
     fn id(&self) -> usize;
-    /// Class of atom type (C138, etc.)
-    fn class(&self) -> Option<String> {
-        None
-    }
     /// Atomic mass
     fn mass(&self) -> f64;
     /// Atomic charge
     fn charge(&self) -> f64;
-    /// Lennard-Jones like well depth
-    fn epsilon(&self) -> f64;
-    /// Lennard-Jones like diameter
-    fn sigma(&self) -> f64;
-    /// Set a custom, named property
-    fn set_property(&mut self, name: &str, property: Property) -> anyhow::Result<()>;
-    /// Get named property
-    fn get_property(&self, name: &str) -> Option<&Property>;
-}
-
-/// Ways to specify a collection of atoms in e.g. a residue
-pub enum AtomSelection<'a> {
-    /// Arbitrary selection of atoms by index
-    ById(Vec<usize>),
-    /// Arbitrary selection of atoms by type
-    ByType(Vec<Box<&'a dyn AtomType>>),
-    /// Repeat a single atom type `n` times
-    ByRepeat(Box<&'a dyn AtomType>, usize),
-    /// Empty selection
-    None,
-}
-
-impl AtomSelection<'_> {
-    pub fn is_empty(&self) -> bool {
-        match self {
-            AtomSelection::ById(v) => v.is_empty(),
-            AtomSelection::ByType(v) => v.is_empty(),
-            AtomSelection::ByRepeat(_, n) => *n == 0,
-            AtomSelection::None => true,
-        }
+    /// Atomic number
+    fn atomic_number(&self) -> Option<usize> {
+        None
     }
-    pub fn len(&self) -> usize {
-        match self {
-            AtomSelection::ById(v) => v.len(),
-            AtomSelection::ByType(v) => v.len(),
-            AtomSelection::ByRepeat(_, n) => *n,
-            AtomSelection::None => 0,
-        }
+    /// Atomic symbol (He, C, O, Fe, etc.)
+    fn element(&self) -> Option<String> {
+        None
+    }
+    /// Lennard-Jones diameter and well-depth (sigma, epsilon)
+    fn sigma_epsilon(&self) -> Option<(f64, f64)> {
+        None
+    }
+    /// Hydrophobicity information
+    fn hydrophobicity(&self) -> Hydrophobicity {
+        Hydrophobicity::None
+    }
+    /// Intrinsic solvation radius
+    fn solvent_radius(&self) -> Option<f64> {
+        None
+    }
+    /// Generalized Born screening factor
+    fn gb_screening(&self) -> Option<f64> {
+        None
+    }
+    /// Generate new atom type
+    fn new(name: &str, id: usize) -> Self;
+}
+
+/// Trait for identifying elements in a collection, e.g. index
+pub trait Identity {
+    /// Positional index of element in a collection
+    fn index(&self) -> usize;
+    /// Set positional index of element in a collection
+    fn set_index(&mut self, index: usize);
+}
+
+/// Enum to store custom data for atoms, residues, molecules etc.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum Value {
+    Bool(bool),
+    Int(i32),
+    Float(f64),
+    Vector(Vec<f64>),
+    Point(Point),
+}
+
+/// A custom property for atoms, residues, chains etc.
+pub trait CustomProperty {
+    /// Set a custom, property associated with a unique `key`.
+    ///
+    /// The key could e.g. be a converted discriminant from a field-less enum.
+    fn set_property(&mut self, key: &str, value: Value) -> anyhow::Result<()>;
+    /// Get property assosiated with a `key`.
+    fn get_property(&self, key: &str) -> Option<Value>;
+}
+
+/// An atom is the smallest particle entity.
+///
+/// An atom can be a part of a molecule, or it can be a free atom.
+/// It does not have to be a real chemical element, but can be a dummy or custom atom.
+pub trait Atom: AtomType + Identity {
+    /// Position of atom (x, y, z)
+    fn pos(&self) -> Option<&Point> {
+        None
     }
 }
 
-/// A residue is a collection of atoms that can represent a single molecule, or used to build up a larger molecule.
-pub trait ResidueType {
-    /// Name of residue (ALA, GLY, etc.)
+/// A residue is a continuous collection of atoms that can represent a single molecule, or used to build up a larger chain.
+pub trait ResidueType: CustomProperty {
+    /// Unique name for the residue type
     fn name(&self) -> String;
-    /// Unique identifier of the residue type. This is typically an integer reflecting the insertion order of the atom type
-    /// in the topology file, but the only requirement is that it is unique.
+    /// Unique identifier for the residue type
     fn id(&self) -> usize;
-    /// Atoms in the residue
-    fn atoms(&self) -> AtomSelection;
-    /// Bonds between atoms in the residue. Indices are relative to the atoms in the residue.
-    fn internal_bonds(&self) -> Vec<&Bond>;
     /// Short, one-letter code for residue (A, G, etc.). This follows the PDB standard.
     fn short_name(&self) -> Option<char> {
         residue_name_to_letter(&self.name())
     }
-    /// One-letter chain identifier (A, B, etc.)
-    fn chain(&self) -> Option<char> {
-        None
-    }
-    /// Set a custom, named property
-    fn set_property(&mut self, name: &str, property: Property) -> anyhow::Result<()>;
-    /// Get named property
-    fn get_property(&self, name: &str) -> Option<Property>;
-    /// Number of atoms in residue
-    fn len(&self) -> usize {
-        self.atoms().len()
-    }
+    /// List of atom ids in the residue
+    fn atom_ids(&self) -> &[usize];
+    /// Bonds between atoms in the residue. Indices are relative to the atoms in the residue.
+    fn bonds(&self) -> &[Bond];
+    /// Dihedrals between atoms in the residue. Indices are relative to the atoms in the residue.
+    fn dihedrals(&self) -> &[Dihedral];
+    /// Torsions between atoms in the residue. Indices are relative to the atoms in the residue.
+    fn torsions(&self) -> &[Torsion];
     /// Check if residue is empty
     fn is_empty(&self) -> bool {
-        self.atoms().is_empty()
+        self.atom_ids().is_empty()
     }
 }
 
-// pub struct Atom<'a> {
-//     r#type: &'a dyn AtomType,
-//     pub index: usize,
-// }
+pub trait Residue<T: Atom>: ResidueType + Identity {
+    /// Atoms in the residue matching [`ResidueType::atom_ids`]
+    fn atoms(&self) -> &[T];
+    /// Atoms in the residue matching [`ResidueType::atom_ids`]
+    fn atoms_mut(&mut self) -> &mut [T];
+}
 
-// impl Atom<'_> {
-//     pub fn new(r#type: &dyn AtomType, index: usize) -> Atom {
-//         Atom { r#type, index }
-//     }
-//     pub fn get_type(&self) -> &dyn AtomType {
-//         self.r#type
-//     }
-//     pub fn get_index(&self) -> usize {
-//         self.index
-//     }
-// }
-
-pub trait System {
-    /// Unique atom types in the system
-    fn atom_types(&self) -> Vec<Box<&dyn AtomType>>;
-    /// Unique residue types in the system
-    fn residue_types(&self) -> Vec<Box<&dyn ResidueType>>;
+pub struct Top<A: Atom, R: Residue<A>> {
+    _t: core::marker::PhantomData<A>,
     /// All atoms in the system
-    fn atoms(&self) -> Vec<Box<&dyn AtomType>>;
-    /// All residues in the system
-    fn residues(&self) -> Vec<Box<&dyn ResidueType>>;
-    /// All bonds in the system. Automatically updated when adding residues.
-    fn bonds(&self) -> Vec<&Bond>;
-    /// All dihedrals in the system. Automatically updated when adding residues.
-    fn dihedrals(&self) -> Vec<&Dihedral>;
-    /// All torsions in the system. Automatically updated when adding residues.
-    fn torsions(&self) -> Vec<&Torsion>;
+    atoms: Vec<A>,
+    residues: Vec<R>,
+    inter_residue_bonds: Vec<Bond>,
+}
 
-    /// Add a new residue to the system. If the residue _type_ is new, it will be registered in `residue_types()` and
-    /// new atom types will be registered in `atom_types()`.
-    /// Bonds and dihedrals are automatically updated.
-    fn add_residue(&mut self, residue: Box<&dyn ResidueType>) -> anyhow::Result<()>;
+impl<A: Atom, R: Residue<A>> Top<A, R> {
+    pub fn residues(&self) -> &[R] {
+        &self.residues
+    }
+    pub fn residues_mut(&mut self) -> &mut [R] {
+        &mut self.residues
+    }
+    pub fn atoms(&self) -> impl Iterator<Item = &A> {
+        self.residues.iter().flat_map(|r| r.atoms())
+    }
+    pub fn atoms_mut(&mut self) -> impl Iterator<Item = &mut A> {
+        self.residues.iter_mut().flat_map(|r| r.atoms_mut())
+    }
+    /// List of all bonds in the system (intra- and inter-residue)
+    pub fn bonds(&self) -> impl Iterator<Item = &Bond> {
+        self.residues
+            .iter()
+            .flat_map(|r| r.bonds())
+            .chain(self.inter_residue_bonds.iter())
+    }
+}
+
+pub trait Topology<T: Atom, R: Residue<T>>: Debug {
+    /// Residues in the system
+    fn residues(&self) -> &[R];
+    /// Bonds between residues. Indices are relative to the residues in the system.
+    fn bonds(&self) -> &[Bond];
+    fn len(&self) -> usize {
+        self.residues().len()
+    }
+    /// Check if system is empty
+    fn is_empty(&self) -> bool {
+        self.residues().is_empty()
+    }
 }
 
 /// Function to convert an amino acid residue name to a one-letter code.

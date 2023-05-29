@@ -18,7 +18,7 @@ use float_cmp::approx_eq;
 use serde::{Deserialize, Serialize};
 
 /// Force field definition for bonds, e.g. harmonic, FENE, Morse, etc.
-/// 
+///
 /// Each varient stores the parameters for the bond type, like force constant, equilibrium distance, etc.
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Default)]
 pub enum BondKind {
@@ -41,7 +41,7 @@ pub enum BondKind {
 }
 
 /// Bond order describing the multiplicity of a bond between two atoms.
-/// 
+///
 /// See <https://en.wikipedia.org/wiki/Bond_order> for more information.
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Default)]
 pub enum BondOrder {

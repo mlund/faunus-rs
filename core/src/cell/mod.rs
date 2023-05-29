@@ -13,7 +13,7 @@
 // limitations under the license.
 
 //! # Simulation cells with or without periodic boundary conditions
-//! 
+//!
 //! This module contains the interface for the simulation cell, which describes the geometry of the simulation system.
 //! The simulation cell is a geometric [`Shape`], e.g. a cube, sphere, etc., with defined [`BoundaryConditions`].
 //! Some statistical thermodynamic ensembles require volume fluctuations, which is implemented by scaling the simulation cell
@@ -27,7 +27,7 @@ use crate::Point;
 use serde::{Deserialize, Serialize};
 
 /// Final interface for a unit cell used to describe the geometry of a simulation system.
-/// 
+///
 /// It is a combination of a [`Shape`], [`BoundaryConditions`] and [`VolumeScale`].
 pub trait SimulationCell: Shape + BoundaryConditions + VolumeScale {}
 

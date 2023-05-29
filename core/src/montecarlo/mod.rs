@@ -19,7 +19,7 @@ use rand::prelude::*;
 use serde::{Deserialize, Serialize};
 
 /// # Helper class to keep track of accepted and rejected moves
-/// 
+///
 /// It is optionally possible to let this class keep track of a single mean square displacement
 /// which can be useful for many Monte Carlo moves.
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
@@ -95,7 +95,7 @@ pub trait Move<T: Context>: Info + std::fmt::Debug + SyncFromAny {
 }
 
 /// # Monte Carlo simulation instance
-/// 
+///
 /// This maintains two [`Context`]s, one for the current state and one for the new state, as
 /// well as a list of moves to perform.
 /// Moves are picked randomly and performed in the new context. If the move is accepted, the
