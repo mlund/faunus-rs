@@ -143,8 +143,8 @@ fn test_selection() {
 }
 
 /// A topology is a collection of atoms, residues, bonds, etc.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
-pub struct Topology {
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct Topology<'a> {
     /// List of all possible atom types in the system
     ///
     /// Each type is uniquely numbered, starting from 0. Duplicate names are not allowed.
@@ -154,12 +154,16 @@ pub struct Topology {
     /// Each type is uniquely numbered, starting from 0. Duplicate names are not allowed.
     residue_kinds: Vec<ResidueKind>,
     /// List of all residues in the system
-    residues: Vec<Residue>,
+    residues: Vec<Residue<'a>>,
     /// Bonds between residues. Indices are relative to the residues in the system.
     inter_residue_bonds: Vec<Bond>,
 }
 
-impl Topology {
+/// See stackoverflow workaround: https://stackoverflow.com/questions/61446984/impl-iterator-failing-for-iterator-with-multiple-lifetime-parameters
+pub trait Captures<'a> {}
+impl<'a, T: ?Sized> Captures<'a> for T {}
+
+impl<'a> Topology<'a> {
     /// Find atom type by name in the list of atom types
     pub fn atom_kind(&self, name: &str) -> Option<&AtomKind> {
         self.atom_kinds.iter().find(|at| at.name() == name)
@@ -196,7 +200,7 @@ impl Topology {
     /// 2. Set all `Atom::index()` to the absolute positions in the system atom list
     /// 3. Copy bonds from the `ResidueType` if not already set
     /// 4. Shift all bonds to match the new atom indices.
-    pub fn add_residue(&mut self, residue: Residue) -> anyhow::Result<()> {
+    pub fn add_residue(&mut self, residue: Residue<'a>) -> anyhow::Result<()> {
         self.check_residue(&residue)?;
         let first_atom = self.len();
         let res_index = self.residues.len();
@@ -211,7 +215,7 @@ impl Topology {
         &self.residues
     }
     /// All residues in the system
-    pub fn residues_mut(&mut self) -> &mut [Residue] {
+    pub fn residues_mut(&mut self) -> &mut [Residue<'a>] {
         &mut self.residues
     }
     /// All atoms in the system
@@ -219,7 +223,7 @@ impl Topology {
         self.residues.iter().flat_map(|r| r.atoms())
     }
     /// All atoms in the system
-    pub fn atoms_mut(&mut self) -> impl Iterator<Item = &mut Atom> {
+    pub fn atoms_mut<'b>(&'b mut self) -> impl Iterator<Item = &mut Atom> + Captures<'a> + 'b {
         self.residues.iter_mut().flat_map(|r| r.atoms_mut())
     }
     /// List of all bonds in the system (intra- and inter-residue)
@@ -319,7 +323,7 @@ fn test_add_residue_kind() {
     assert_eq!(top.residue_kind("GLY").unwrap().id(), 1);
 }
 
-impl core::convert::From<chemfiles::Topology> for Topology {
+impl core::convert::From<chemfiles::Topology> for Topology<'_> {
     fn from(value: chemfiles::Topology) -> Self {
         let mut _atom_types: Vec<AtomKind> = (0..value.size())
             .map(|i| value.atom(i))

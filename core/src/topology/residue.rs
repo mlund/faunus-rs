@@ -70,12 +70,14 @@ impl ResidueKind {
 }
 
 /// Residue based on a `ResidueType` but with additional information such as atom positions; bonds; and indices relative to the whole system.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct Residue {
+/// 
+/// The `ResidueKind` is not owned by the `Residue` but is rather a reference to a `ResidueType` which acts as a template.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct Residue<'a> {
     /// Index; automatically set when added to a topology
     index: usize,
     /// Residue type
-    kind: ResidueKind,
+    kind: &'a ResidueKind,
     /// List of atoms in the residue; indices are automatically set when added to a topology
     atoms: Vec<Atom>,
     /// List of bonds in the residue; indices are automatically set when added to a topology
@@ -84,9 +86,9 @@ pub struct Residue {
     torsions: Vec<Torsion>,
 }
 
-impl Residue {
+impl<'a> Residue<'a> {
     /// New residue with given kind but with otherwise default values
-    pub fn new(kind: ResidueKind, atoms: &[Atom], bonds: Option<&[Bond]>) -> Self {
+    pub fn new(kind: &'a ResidueKind, atoms: &[Atom], bonds: Option<&[Bond]>) -> Self {
         Self {
             kind,
             atoms: atoms.to_vec(),
@@ -124,7 +126,7 @@ impl Residue {
 
     /// Residue type
     pub fn kind(&self) -> &ResidueKind {
-        &self.kind
+        self.kind
     }
     /// Index of first atom in the residue
     pub fn first_atom(&self) -> usize {
@@ -181,7 +183,7 @@ impl Residue {
     }
 }
 
-impl Indices for Residue {
+impl Indices for Residue<'_> {
     fn index(&self) -> usize {
         self.index
     }
