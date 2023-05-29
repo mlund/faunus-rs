@@ -13,67 +13,73 @@
 // limitations under the license.
 
 //! # Inteface to the [`chemfiles`] crate
-//! 
-//! This module implements the [`topology::Atom`] trait for [`chemfiles::Atom`].
 
 use crate::topology;
-use chemfiles::{Atom};
+use chemfiles::{AtomRef, ResidueRef, Topology};
+use itertools::Itertools;
 
-impl topology::Identity for Atom {
-    fn name(&self) -> String {
-        self.name()
-    }
-    fn id(&self) -> usize {
-        unimplemented!("chemfiles::Atom does not have an id")
-    }
-
-    fn index(&self) -> usize {
-        unimplemented!("chemfiles::Atom does not have an index")
-    }
-
-    fn set_index(&mut self, _index: usize) {
-        unimplemented!("chemfiles::Atom does not have an index")
-    }
-}
-
-impl topology::CustomProperty for chemfiles::Atom {
-    fn set_property(&mut self, key: &str, value: topology::Value) -> anyhow::Result<()> {
-        let property = match value {
-            topology::Value::Bool(b) => chemfiles::Property::Bool(b),
-            topology::Value::Float(f) => chemfiles::Property::Double(f),
-            _ => anyhow::bail!("chemfiles::Atom does not support this property type")
-        };
-        self.set(key, property);
-        Ok(())
-    }
-
-    fn get_property(&self, key: &str) -> Option<topology::Value> {
-        let property = self.get(key).unwrap();
-        match property {
-            chemfiles::Property::Bool(b) => Some(topology::Value::Bool(b)),
-            chemfiles::Property::Double(f) => Some(topology::Value::Float(f)),
-            _ => None
+impl core::convert::From<AtomRef<'_>> for topology::AtomType {
+    fn from(atom: AtomRef) -> Self {
+        topology::AtomType {
+            name: atom.name(),
+            id: 0,
+            mass: atom.mass(),
+            charge: atom.charge(),
+            sigma: Some(2.0 * atom.vdw_radius()),
+            element: Some(atom.atomic_type()),
+            atomic_number: Some(atom.atomic_number() as usize),
+            ..Default::default()
         }
     }
 }
 
-impl topology::Atom for Atom {
-    fn charge(&self) -> f64 {
-        self.charge()
+// Convert a chemfiles residue to a topology residue
+impl core::convert::From<ResidueRef<'_>> for topology::ResidueType {
+    fn from(residue: ResidueRef) -> Self {
+        topology::ResidueType {
+            name: residue.name(),
+            id: residue.id().unwrap() as usize,
+            atom_names: topology::Selection::Ids(residue.atoms()),
+            bonds: Default::default(),
+            properties: Default::default(),
+        }
     }
-    fn mass(&self) -> f64 {
-        self.mass()
-    }
-    fn epsilon(&self) -> f64 {
-        0.0
-    }
-    fn element(&self) -> Option<String> {
-        Some(self.atomic_type())
-    }
-    fn pos(&self) -> Option<&crate::Point> {
-        None
-    }
-    fn sigma(&self) -> f64 {
-        0.0
+}
+
+impl core::convert::From<Topology> for topology::Topology {
+    fn from(value: Topology) -> Self {
+        let mut _atom_types: Vec<topology::AtomType> = (0..value.size())
+            .map(|i| value.atom(i))
+            .unique_by(|atom| atom.name())
+            .map(|atom| atom.into())
+            .collect();
+
+        for (i, atom) in _atom_types.iter_mut().enumerate() {
+            atom.id = i;
+        }
+
+        let mut _residue_types: Vec<topology::ResidueType> = (0..value.residues_count())
+            .map(|i| value.residue(i).unwrap())
+            .unique_by(|residue| residue.name())
+            .map(|residue| residue.into())
+            .collect();
+
+        for (i, residue) in _residue_types.iter_mut().enumerate() {
+            residue.id = i;
+        }
+
+        let _bonds: Vec<topology::Bond> = value
+            .bonds()
+            .iter()
+            .map(|bond| {
+                topology::Bond::new(
+                    [bond[0], bond[1]],
+                    topology::BondKind::None,
+                    topology::BondOrder::None,
+                )
+            })
+            .collect();
+
+        unimplemented!()
     }
 }

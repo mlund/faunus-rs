@@ -113,6 +113,18 @@ impl Bond {
         Self { index, kind, order }
     }
 
+    /// Create new bond where indices are offset by `shift`. Panics if overflow.
+    pub fn shift_index(&self, shift: isize) -> Self {
+        Self {
+            index: [
+                self.index[0].checked_add_signed(shift).unwrap(),
+                self.index[1].checked_add_signed(shift).unwrap(),
+            ],
+            kind: self.kind.clone(),
+            order: self.order.clone(),
+        }
+    }
+
     /// Check if bond contains atom with index
     pub fn contains(&self, index: usize) -> bool {
         self.index.contains(&index)
