@@ -16,3 +16,4 @@
 //!
 //! This contains support for chemical systems, including electrolyte solutions.
 pub mod electrolyte;
+pub mod reaction;

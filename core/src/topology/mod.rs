@@ -159,7 +159,7 @@ pub struct Topology<'a> {
     inter_residue_bonds: Vec<Bond>,
 }
 
-/// See stackoverflow workaround: https://stackoverflow.com/questions/61446984/impl-iterator-failing-for-iterator-with-multiple-lifetime-parameters
+/// See stackoverflow workaround: <https://stackoverflow.com/questions/61446984/impl-iterator-failing-for-iterator-with-multiple-lifetime-parameters>
 pub trait Captures<'a> {}
 impl<'a, T: ?Sized> Captures<'a> for T {}
 
@@ -265,15 +265,8 @@ impl<'a> Topology<'a> {
     /// The residue type or "kind" will be assigned a unique `ResidueType::id()`, starting from 0 and increasing by 1 for each new residue type.
     /// Will fail if a residue type with the same name already exists.
     pub fn add_residue_kind(&mut self, kind: ResidueKind) -> anyhow::Result<()> {
-        if self
-            .residue_kinds
-            .iter()
-            .any(|rt| rt.name() == kind.name())
-        {
-            anyhow::bail!(
-                "Residue type with name '{}' already exists",
-                kind.name()
-            );
+        if self.residue_kinds.iter().any(|rt| rt.name() == kind.name()) {
+            anyhow::bail!("Residue type with name '{}' already exists", kind.name());
         }
         self.residue_kinds.push(kind);
         let len = self.residue_kinds.len();

@@ -70,7 +70,7 @@ impl ResidueKind {
 }
 
 /// Residue based on a `ResidueType` but with additional information such as atom positions; bonds; and indices relative to the whole system.
-/// 
+///
 /// The `ResidueKind` is not owned by the `Residue` but is rather a reference to a `ResidueType` which acts as a template.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Residue<'a> {
