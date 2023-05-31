@@ -20,11 +20,11 @@
 //!
 //! # Examples
 //!
-//! Description | Example | Notes
-//! ------------|---------------- | -----
-//! Molecular participants | `A + A = D`            | Possible arrows: `=`, `⇌`, `⇄`, `→`
-//! Implicit participants  | `RCOO- + 👻H+ ⇌ RCOOH` | Mark with `👻` or `~`
-//! Atomic participants    | `⚛Pb ⇄ ⚛Au`            | Mark with `⚛` or `.`
+//! Species     | Example                |  Notes
+//! ------------|----------------------- | ------------------------------------
+//! Molecular   | `A + A ⇌ D`            | Possible arrows: `=`, `⇌`, `⇄`, `→`
+//! Implicit    | `RCOO- + 👻H+ ⇌ RCOOH` | Mark with `👻` or `~`
+//! Atomic      | `⚛Pb ⇄ ⚛Au`            | Mark with `⚛` or `.`
 
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
@@ -111,15 +111,24 @@ impl Reaction {
             anyhow::bail!("Invalid reaction: missing '=' separator");
         }
 
+        // ensure that participants are separated by a plus sign
+        for s in &sides {
+            let num_plusses = s.matches(" + ").count();
+            let num_words = s.split_whitespace().count() - num_plusses;
+            if num_words > 0 && num_words != num_plusses + 1 {
+                anyhow::bail!("Invalid reaction: missing '+' separator");
+            }
+        }
+
         let reactants = sides[0]
             .trim()
-            .split_terminator('+')
+            .split_terminator(" + ")
             .map(|s| s.trim().parse::<Participant>())
             .collect::<Result<Vec<Participant>>>()?;
 
         let products = sides[1]
             .trim()
-            .split_terminator('+')
+            .split_terminator(" + ")
             .map(|s| s.trim().parse::<Participant>())
             .collect::<Result<Vec<Participant>>>()?;
 
@@ -211,6 +220,12 @@ fn test_parse_reaction() {
 fn test_reaction_edge_cases() {
     // neither reactants nor products NOT OK!
     assert!(Reaction::from_reaction(" = ", 1.0).is_err());
+
+    // missing plus sign NOT OK
+    assert!(Reaction::from_reaction("H+ Cl- =", 1.0).is_err());
+
+    // plus sign in species is OK
+    assert!(Reaction::from_reaction("H+ + Cl- =", 1.0).is_ok());
 
     // empty products OK
     let reaction = Reaction::from_reaction("A = ", 1.0).unwrap();
