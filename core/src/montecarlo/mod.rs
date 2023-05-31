@@ -17,6 +17,28 @@
 use crate::{time::Timer, Change, Context, Info, SyncFromAny, MOLAR_GAS_CONSTANT};
 use rand::prelude::*;
 use serde::{Deserialize, Serialize};
+use std::{cmp::Ordering, ops::Neg};
+
+/// Helper to handle old and new values
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OldNew<T> {
+    old: T,
+    new: T,
+}
+
+impl OldNew<usize> {
+    /// Difference `new - old` as a signed integer
+    pub fn delta(&self) -> i32 {
+        self.new as i32 - self.old as i32
+    }
+}
+
+impl OldNew<f64> {
+    /// Difference `new - old`
+    pub fn delta(&self) -> f64 {
+        self.new - self.old
+    }
+}
 
 /// # Helper class to keep track of accepted and rejected moves
 ///
@@ -107,4 +129,21 @@ pub struct Simulation<T: Context> {
     _old_context: T,
     /// All moves are performed in this context and, if accepted, synced to `old_context`
     _new_context: T,
+}
+
+/// Entropy contribution due to a change in number of particles
+///
+/// Note that the volume unit should match so that n/V matches the unit of the chemical potential
+pub fn entropy_bias(n: OldNew<usize>, volume: OldNew<f64>) -> f64 {
+    let dn = n.delta();
+    match dn.cmp(&0) {
+        Ordering::Equal => 0.0,
+        Ordering::Greater => (0..dn)
+            .map(|i| f64::ln(f64::from(i + 1 + n.old as i32) / volume.new))
+            .sum::<f64>(),
+        Ordering::Less => (0..-dn)
+            .map(|i| f64::ln(f64::from(i - n.old as i32) / volume.old))
+            .sum::<f64>()
+            .neg(),
+    }
 }
