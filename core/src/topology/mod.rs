@@ -338,7 +338,7 @@ impl core::convert::From<chemfiles::Topology> for Topology<'_> {
         // }
 
         let mut _residue_types: Vec<ResidueKind> = (0..value.residues_count())
-            .map(|i| value.residue(i).unwrap())
+            .map(|i| value.residue(i as usize).unwrap())
             .unique_by(|residue| residue.name())
             .map(|residue| residue.into())
             .collect();

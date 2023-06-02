@@ -20,6 +20,7 @@
 //! through the [`VolumeScale`] trait.
 
 pub mod cuboid;
+pub mod endless;
 pub(crate) mod lumol;
 pub mod sphere;
 
@@ -35,8 +36,10 @@ pub trait SimulationCell: Shape + BoundaryConditions + VolumeScale {}
 pub trait Shape {
     /// Get volume
     fn volume(&self) -> Option<f64>;
-    /// Position of the geometric center of the shape. For a cube, this is the center of the box; for a sphere, this is the center of the sphere etc.
-    fn center(&self) -> Point;
+    /// Position of the geometric center of the shape. For a cube, this is the center of the box; for a sphere, the center of the sphere etc.
+    fn center(&self) -> Point {
+        Point::zeros()
+    }
     /// Determines if a point lies inside the boundaries of the shape
     fn is_inside(&self, point: &Point) -> bool;
     /// Bounding box of the shape centered at `center()`
@@ -69,7 +72,7 @@ impl PeriodicDirections {
 pub trait BoundaryConditions {
     /// Report on periodic boundary conditions
     fn pbc(&self) -> PeriodicDirections;
-    /// Apply minimum image convention to a point if appropriate
+    /// Wrap a point to fit within boundaries, if appropriate
     fn boundary(&self, point: &mut Point);
     /// Minimum image distance between two points inside a cell
     fn distance(&self, point1: &Point, point2: &Point) -> Point;
@@ -87,11 +90,11 @@ pub trait BoundaryConditions {
 pub enum VolumeScalePolicy {
     /// Isotropic scaling (equal scaling in all directions)
     Isotropic,
-    /// Isochoric scaling along z (constant volume)
+    /// Isochoric scaling of z and the xy-plane (constant volume)
     IsochoricZ,
     /// Scale along z-axis only
     ScaleZ,
-    /// Scale along x and y
+    /// Scale the XY plane
     ScaleXY,
 }
 

@@ -12,7 +12,7 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
-//! # Spherical unit cell with no periodic boundary conditions
+//! # Spherical cell with hard walls, i.e. no periodic boundary conditions
 
 use crate::{
     cell::{BoundaryConditions, Shape, SimulationCell, VolumeScale, VolumeScalePolicy},
@@ -51,9 +51,6 @@ impl BoundaryConditions for Sphere {
 }
 
 impl Shape for Sphere {
-    fn center(&self) -> Point {
-        Point::zeros()
-    }
     fn volume(&self) -> Option<f64> {
         Some(4.0 / 3.0 * std::f64::consts::PI * self.radius.powi(3))
     }

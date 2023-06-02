@@ -19,9 +19,9 @@ use rand::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::{cmp::Ordering, ops::Neg};
 
-/// Helper to handle old and new values
+/// Helper to handle old and new values, e.g. before and after a Monte Carlo move
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct OldNew<T> {
+pub struct OldNew<T: core::fmt::Debug> {
     old: T,
     new: T,
 }
