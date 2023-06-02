@@ -55,15 +55,15 @@ pub enum GroupSize {
     Empty,
     /// Some (usize) particles are active
     Partial(usize),
-    /// Expand with `usize` particles
+    /// Special size used to expand with `usize` particles
     Expand(usize),
-    /// Shrink with `usize` particles
+    /// Special size used to shrink with `usize` particles
     Shrink(usize),
 }
 
 impl Group {
     /// Create a new group
-    pub fn new(index: usize, id: Option<usize>, range: std::ops::Range<usize>) -> Self {
+    pub fn new(index: usize, id: Option<usize>, range: core::ops::Range<usize>) -> Self {
         Self {
             id,
             index,

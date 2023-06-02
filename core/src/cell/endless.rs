@@ -12,7 +12,7 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
-//! # Endless simulation cell with no boundaries
+//! # Endless simulation cell with no boundaries and infinite volume
 
 use crate::{
     cell::{BoundaryConditions, Shape, VolumeScale, VolumeScalePolicy},
