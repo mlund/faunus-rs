@@ -12,7 +12,7 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
-//! # Poisson scheme
+//! # Poisson scheme that cover cutoff based methods like Wolf, Fanougakis etc.
 
 use super::{Energy, Field, Force, Potential, SplitingFunction};
 use num::integer::binomial;
@@ -66,6 +66,16 @@ pub struct Poisson<const C: i32, const D: i32> {
     #[serde(skip)]
     binom_cdc: f64,
 }
+
+pub type Plain = Poisson<1, -1>;
+pub type UndampedFennel = Poisson<1, 1>;
+pub type UndampedWolf = Poisson<1, 0>;
+pub type Kale = Poisson<1, 2>;
+pub type McCann = Poisson<1, 3>;
+pub type UndampedFukuda = Poisson<2, 1>;
+pub type Markland = Poisson<2, 2>;
+pub type Stenqvist = Poisson<3, 3>;
+pub type Fanourgakis = Poisson<4, 3>;
 
 impl<const C: i32, const D: i32> Poisson<C, D> {
     pub fn new(cutoff: f64, debye_length: f64) -> Self {
@@ -264,10 +274,10 @@ impl<const C: i32, const D: i32> SplitingFunction for Poisson<C, D> {
 
 #[test]
 fn test_poisson() {
-    let pot = Poisson::<3, 3>::new(29.0, f64::INFINITY);
+    let pot = Stenqvist::new(29.0, f64::INFINITY);
     let eps = 1e-9; // Set epsilon for approximate equality
 
-    // Test short-ranged function
+    // Test Stenqvist short-range function
     approx::assert_relative_eq!(pot.short_range_function(0.5), 0.15625, epsilon = eps);
     approx::assert_relative_eq!(
         pot.short_range_function_derivative(0.5),
@@ -318,7 +328,8 @@ fn test_poisson() {
         epsilon = eps
     );
 
-    let pot = Poisson::<4, 3>::new(29.0, f64::INFINITY);
+    // Test Fanougarkis short-range function
+    let pot = Fanourgakis::new(29.0, f64::INFINITY);
     approx::assert_relative_eq!(pot.short_range_function(0.5), 0.19921875, epsilon = eps);
     approx::assert_relative_eq!(
         pot.short_range_function_derivative(0.5),
@@ -335,4 +346,6 @@ fn test_poisson() {
         6.5625,
         epsilon = eps
     );
+
+    // Test
 }
