@@ -15,12 +15,14 @@
 extern crate approx;
 extern crate typetag;
 
+/// A point in 3D space
 pub type Point = nalgebra::Vector3<f64>;
+/// A stack-allocated 3x3 square matrix
 pub type Matrix3 = nalgebra::Matrix3<f64>;
 use serde::{Deserialize, Deserializer, Serializer};
 
 pub mod multipole;
-pub mod qpochhammer;
+mod qpochhammer;
 pub mod spline;
 pub mod twobody;
 

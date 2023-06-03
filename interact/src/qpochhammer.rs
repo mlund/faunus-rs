@@ -15,7 +15,7 @@
 #[cfg(test)]
 use assert_approx_eq::assert_approx_eq;
 
-pub fn q_pochhammer_symbol(q: f64, l: i32, p: i32) -> f64 {
+pub(crate) fn _q_pochhammer_symbol(q: f64, l: i32, p: i32) -> f64 {
     let ct = (1..=p)
         .map(|n| (1..=(n + l)).map(|k| q.powi(k - 1)).sum::<f64>())
         .product::<f64>();
@@ -24,7 +24,7 @@ pub fn q_pochhammer_symbol(q: f64, l: i32, p: i32) -> f64 {
 }
 
 /// Computes the derivative of the q-Pochhammer Symbol.
-pub fn q_pochhammer_symbol_derivative(q: f64, l: i32, p: i32) -> f64 {
+pub(crate) fn _q_pochhammer_symbol_derivative(q: f64, l: i32, p: i32) -> f64 {
     let ct = (1..=p)
         .map(|n| (1..=(n + l)).map(|k| q.powi(k - 1)).sum::<f64>())
         .product::<f64>();
@@ -47,7 +47,7 @@ pub fn q_pochhammer_symbol_derivative(q: f64, l: i32, p: i32) -> f64 {
     ct * (ddt + dct * dt)
 }
 
-pub fn q_pochhammer_symbol_second_derivative(q: f64, l: i32, p: i32) -> f64 {
+pub(crate) fn _q_pochhammer_symbol_second_derivative(q: f64, l: i32, p: i32) -> f64 {
     let mut ct = 1.0; // evaluates to \prod_{n=1}^P\sum_{k=0}^{n+l}q^k
     let mut ds = 0.0;
     let mut d_ds = 0.0;
@@ -94,25 +94,25 @@ mod tests {
 
     #[test]
     fn test_q_pochhammer_symbol() {
-        assert_eq!(q_pochhammer_symbol(0.5, 0, 0), 1.0);
-        assert_eq!(q_pochhammer_symbol(0.0, 0, 1), 1.0);
-        assert_eq!(q_pochhammer_symbol(1.0, 0, 1), 0.0);
-        assert_eq!(q_pochhammer_symbol(1.0, 1, 2), 0.0);
-        assert_approx_eq!(q_pochhammer_symbol(0.75, 0, 2), 0.109375);
-        assert_approx_eq!(q_pochhammer_symbol(2.0 / 3.0, 2, 5), 0.4211104676);
-        assert_approx_eq!(q_pochhammer_symbol(0.125, 1, 1), 0.984375);
-        assert_approx_eq!(q_pochhammer_symbol_derivative(0.75, 0, 2), -0.8125);
+        assert_eq!(_q_pochhammer_symbol(0.5, 0, 0), 1.0);
+        assert_eq!(_q_pochhammer_symbol(0.0, 0, 1), 1.0);
+        assert_eq!(_q_pochhammer_symbol(1.0, 0, 1), 0.0);
+        assert_eq!(_q_pochhammer_symbol(1.0, 1, 2), 0.0);
+        assert_approx_eq!(_q_pochhammer_symbol(0.75, 0, 2), 0.109375);
+        assert_approx_eq!(_q_pochhammer_symbol(2.0 / 3.0, 2, 5), 0.4211104676);
+        assert_approx_eq!(_q_pochhammer_symbol(0.125, 1, 1), 0.984375);
+        assert_approx_eq!(_q_pochhammer_symbol_derivative(0.75, 0, 2), -0.8125);
         assert_approx_eq!(
-            q_pochhammer_symbol_derivative(2.0 / 3.0, 2, 5),
+            _q_pochhammer_symbol_derivative(2.0 / 3.0, 2, 5),
             -2.538458169
         );
-        assert_approx_eq!(q_pochhammer_symbol_derivative(0.125, 1, 1), -0.25);
-        assert_approx_eq!(q_pochhammer_symbol_second_derivative(0.75, 0, 2), 2.5);
+        assert_approx_eq!(_q_pochhammer_symbol_derivative(0.125, 1, 1), -0.25);
+        assert_approx_eq!(_q_pochhammer_symbol_second_derivative(0.75, 0, 2), 2.5);
         assert_approx_eq!(
-            q_pochhammer_symbol_second_derivative(2.0 / 3.0, 2, 5),
+            _q_pochhammer_symbol_second_derivative(2.0 / 3.0, 2, 5),
             -1.444601767
         );
-        assert_approx_eq!(q_pochhammer_symbol_second_derivative(0.125, 1, 1), -2.0);
+        assert_approx_eq!(_q_pochhammer_symbol_second_derivative(0.125, 1, 1), -2.0);
         // assert_approx_eq!(q_pochhammer_symbol_third_derivative(0.75, 0, 2), 6.0);
         // assert_approx_eq!(
         //     q_pochhammer_symbol_third_derivative(2.0 / 3.0, 2, 5),

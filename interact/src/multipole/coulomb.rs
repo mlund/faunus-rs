@@ -12,9 +12,7 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
-//! # Plain Coulomb potential where _S(q)_ = 1
-
-use super::{Energy, Field, Force, Potential, SplitingFunction};
+use super::{Energy, Field, Force, Potential, ShortRangeFunction};
 #[cfg(test)]
 use crate::{Matrix3, Point};
 #[cfg(test)]
@@ -26,6 +24,9 @@ impl Field for Coulomb {}
 impl Energy for Coulomb {}
 impl Force for Coulomb {}
 
+/// # Scheme for vanilla coulomb interactions
+///
+/// In this scheme, the short-range function is _S(q)_ = 1.
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub struct Coulomb {
     cutoff: f64,
@@ -56,25 +57,25 @@ impl crate::Cutoff for Coulomb {
     }
 }
 
-impl SplitingFunction for Coulomb {
+impl ShortRangeFunction for Coulomb {
     #[inline]
     fn kappa(&self) -> Option<f64> {
         None
     }
     #[inline]
-    fn short_range_function(&self, _q: f64) -> f64 {
+    fn short_range_f0(&self, _q: f64) -> f64 {
         1.0
     }
     #[inline]
-    fn short_range_function_derivative(&self, _q: f64) -> f64 {
+    fn short_range_f1(&self, _q: f64) -> f64 {
         0.0
     }
     #[inline]
-    fn short_range_function_second_derivative(&self, _q: f64) -> f64 {
+    fn short_range_f2(&self, _q: f64) -> f64 {
         0.0
     }
     #[inline]
-    fn short_range_function_third_derivative(&self, _q: f64) -> f64 {
+    fn short_range_f3(&self, _q: f64) -> f64 {
         0.0
     }
 }
@@ -100,10 +101,10 @@ fn test_coulomb() {
     let eps = 1e-9;
 
     // Test short-ranged function
-    assert_eq!(pot.short_range_function(0.5), 1.0);
-    assert_eq!(pot.short_range_function_derivative(0.5), 0.0);
-    assert_eq!(pot.short_range_function_second_derivative(0.5), 0.0);
-    assert_eq!(pot.short_range_function_third_derivative(0.5), 0.0);
+    assert_eq!(pot.short_range_f0(0.5), 1.0);
+    assert_eq!(pot.short_range_f1(0.5), 0.0);
+    assert_eq!(pot.short_range_f2(0.5), 0.0);
+    assert_eq!(pot.short_range_f3(0.5), 0.0);
 
     // Test potentials
     assert_eq!(pot.ion_potential(z1, cutoff + 1.0), 0.0);

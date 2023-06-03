@@ -12,9 +12,21 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
-//! # Poisson scheme that cover cutoff based methods like Wolf, Fanougakis etc.
+//! # Scheme for the Poisson short-range function
+//!
+//! This covers cut-off based methods like Wolf, Fanougakis etc.
+//! The short-ranged function is given by:
+//! ```math
+//! S(q) = (1 - q~)^(D + 1) * \sum_{c = 0}^{C - 1} \frac{C - c}{C} * \binom{D - 1 + c}{c} * q^c
+//! ```
+//! where `C` is the number of cancelled derivatives at origin -2 (starting from the second derivative),
+//! and `D` is the number of cancelled derivatives at the cut-off (starting from the zeroth derivative).
+//! For infinite Debye-length, the following holds:
+//! ```math
+//! S(q) = (1 - q~)^(D + 1) * \sum_{c = 0}^{C - 1} \frac{C - c}{C} * \binom{D - 1 + c}{c} * q^c
+//! ```
 
-use super::{Energy, Field, Force, Potential, SplitingFunction};
+use super::{Energy, Field, Force, Potential, ShortRangeFunction};
 use num::integer::binomial;
 use serde::{Deserialize, Serialize};
 
@@ -23,7 +35,7 @@ impl<const C: i32, const D: i32> Field for Poisson<C, D> {}
 impl<const C: i32, const D: i32> Energy for Poisson<C, D> {}
 impl<const C: i32, const D: i32> Force for Poisson<C, D> {}
 
-/// Poisson scheme with and without specified Debye-length
+/// Scheme for the Poisson short-range function
 ///
 /// A general scheme which, depending on two parameters `C` and `D`, can model several different pair-potentials.
 /// The short-ranged function is given by:
@@ -37,18 +49,18 @@ impl<const C: i32, const D: i32> Force for Poisson<C, D> {}
 ///
 /// | Type          | C   | D   | Reference / Comment
 /// |---------------|-----|-----|---------------------
-/// | `plain`       | 1   | -1  | Plain Coulomb
-/// | `wolf`        | 1   | 0   | Undamped Wolf, doi:10.1063/1.478738
-/// | `fennell`     | 1   | 1   | Levitt/undamped Fennell, doi:10/fp959p or 10/bqgmv2
-/// | `kale`        | 1   | 2   | Kale, doi:10/csh8bg
-/// | `mccann`      | 1   | 3   | McCann, doi:10.1021/ct300961
-/// | `fukuda`      | 2   | 1   | Undamped Fukuda, doi:10.1063/1.3582791
-/// | `markland`    | 2   | 2   | Markland, doi:10.1016/j.cplett.2008.09.019
-/// | `stenqvist`   | 3   | 3   | Stenqvist, doi:10/c5fr
-/// | `fanourgakis` | 4   | 3   | Fanourgakis, doi:10.1063/1.3216520
+/// | `plain`       | 1   | -1  | Scheme for a vanilla coulomb interaction using the Poisson framework. Same as `Coulomb`.
+/// | `wolf`        | 1   | 0   | Scheme for [Undamped Wolf](https://doi.org/10.1063/1.478738)
+/// | `fennell`     | 1   | 1   | Scheme for [Levitt/undamped Fennell](https://doi.org/10/fp959p). See also doi:10/bqgmv2.
+/// | `kale`        | 1   | 2   | Scheme for [Kale](https://doi.org/10/csh8bg)
+/// | `mccann`      | 1   | 3   | Scheme for [McCann](https://doi.org/10.1021/ct300961)
+/// | `fukuda`      | 2   | 1   | Scheme for [Undamped Fukuda](https://doi.org/10.1063/1.3582791)
+/// | `markland`    | 2   | 2   | Scheme for [Markland](https://doi.org/10.1016/j.cplett.2008.09.019)
+/// | `stenqvist`   | 3   | 3   | Scheme for [Stenqvist](https://doi.org/10/c5fr)
+/// | `fanourgakis` | 4   | 3   | Scheme for [Fanourgakis](https://doi.org/10.1063/1.3216520)
 ///
 /// More info:
-/// - http://dx.doi.org/10.1088/1367-2630/ab1ec1
+/// - <http://dx.doi.org/10.1088/1367-2630/ab1ec1>
 ///
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Poisson<const C: i32, const D: i32> {
@@ -67,23 +79,23 @@ pub struct Poisson<const C: i32, const D: i32> {
     binom_cdc: f64,
 }
 
-/// Plain coulomb potential with S(q) = 1
+/// Scheme for a vanilla coulomb interaction using the Poisson framework. Same as `Coulomb`.
 pub type Plain = Poisson<1, -1>;
-/// Undamped Fennel, see `doi:10/fp959p` or `10/bqgmv2`
+/// Scheme for [Levitt/undamped Fennell](https://doi.org/10/fp959p). See also doi:10/bqgmv2.
 pub type UndampedFennel = Poisson<1, 1>;
-/// Undamped Wolf, see `doi:10.1063/1.478738`
+/// Scheme for [Undamped Wolf](https://doi.org/10.1063/1.478738)
 pub type UndampedWolf = Poisson<1, 0>;
-/// Kale, see `doi:10/csh8bg`
+/// Scheme for [Kale](https://doi.org/10/csh8bg)
 pub type Kale = Poisson<1, 2>;
-/// McCann, see `doi:10.1021/ct300961`
+/// Scheme for [McCann](https://doi.org/10.1021/ct300961)
 pub type McCann = Poisson<1, 3>;
-/// Undamped Fukuda, see `doi:10.1063/1.3582791`
+/// Scheme for [Undamped Fukuda](https://doi.org/10.1063/1.3582791)
 pub type UndampedFukuda = Poisson<2, 1>;
-/// Markland, see `doi:10.1016/j.cplett.2008.09.019`
+/// Scheme for [Markland](https://doi.org/10.1016/j.cplett.2008.09.019)
 pub type Markland = Poisson<2, 2>;
-/// Stenqvist, see `doi:10/c5fr`
+/// Scheme for [Stenqvist](https://doi.org/10/c5fr)
 pub type Stenqvist = Poisson<3, 3>;
-/// Fanourgakis, see `doi:10.1063/1.3216520`
+/// Scheme for [Fanourgakis](https://doi.org/10.1063/1.3216520)
 pub type Fanourgakis = Poisson<4, 3>;
 
 impl<const C: i32, const D: i32> Poisson<C, D> {
@@ -149,19 +161,19 @@ impl<const C: i32, const D: i32> crate::Cutoff for Poisson<C, D> {
     }
 }
 
-impl<const C: i32, const D: i32> SplitingFunction for Poisson<C, D> {
+impl<const C: i32, const D: i32> ShortRangeFunction for Poisson<C, D> {
     fn kappa(&self) -> Option<f64> {
         None
     }
-    fn short_range_function(&self, q: f64) -> f64 {
+    fn short_range_f0(&self, q: f64) -> f64 {
         if D == -C {
             return 1.0;
         }
-        let mut qp = q;
-
-        if self.use_yukawa_screening {
-            qp = (1.0 - (2.0 * self.reduced_kappa * q).exp()) * self.yukawa_denom;
-        }
+        let qp = if self.use_yukawa_screening {
+            (1.0 - (2.0 * self.reduced_kappa * q).exp()) * self.yukawa_denom
+        } else {
+            q
+        };
 
         if D == 0 && C == 1 {
             return 1.0 - qp;
@@ -169,13 +181,12 @@ impl<const C: i32, const D: i32> SplitingFunction for Poisson<C, D> {
 
         let sum: f64 = (0..C)
             .map(|c| {
-                f64::from(num::integer::binomial(D - 1 + c, c)) * f64::from(C - c) / f64::from(C)
-                    * qp.powi(c)
+                (num::integer::binomial(D - 1 + c, c) * (C - c)) as f64 / f64::from(C) * qp.powi(c)
             })
             .sum();
         (1.0 - qp).powi(D + 1) * sum
     }
-    fn short_range_function_derivative(&self, q: f64) -> f64 {
+    fn short_range_f1(&self, q: f64) -> f64 {
         if D == -C {
             return 0.0;
         }
@@ -196,11 +207,11 @@ impl<const C: i32, const D: i32> SplitingFunction for Poisson<C, D> {
             tmp1 += factor * qp.powi(c);
             tmp2 += factor * c as f64 * qp.powi(c - 1);
         }
-        let dsdqp = -(D + 1) as f64 * (1.0 - qp).powi(D) * tmp1 + (1.0 - qp).powi(D + 1) * tmp2;
+        let dsdqp = -f64::from(D + 1) * (1.0 - qp).powi(D) * tmp1 + (1.0 - qp).powi(D + 1) * tmp2;
         dsdqp * dqpdq
     }
 
-    fn short_range_function_second_derivative(&self, q: f64) -> f64 {
+    fn short_range_f2(&self, q: f64) -> f64 {
         if D == -C {
             return 0.0;
         }
@@ -223,18 +234,18 @@ impl<const C: i32, const D: i32> SplitingFunction for Poisson<C, D> {
                 * self.yukawa_denom;
             let mut tmp1 = 1.0;
             let mut tmp2 = 0.0;
-            for i in 1..C {
-                let b = binomial(D - 1 + i, i) as f64 * (C - i) as f64;
-                tmp1 += b / C as f64 * qp.powi(i);
-                tmp2 += b * i as f64 / C as f64 * qp.powi(i - 1);
+            for c in 1..C {
+                let b = binomial(D - 1 + c, c) as f64 * (C - c) as f64;
+                tmp1 += b / C as f64 * qp.powi(c);
+                tmp2 += b * c as f64 / C as f64 * qp.powi(c - 1);
             }
-            dsdqp = -(D + 1) as f64 * (1.0 - qp).powi(D) * tmp1 + (1.0 - qp).powi(D + 1) * tmp2;
+            dsdqp = -f64::from(D + 1) * (1.0 - qp).powi(D) * tmp1 + (1.0 - qp).powi(D + 1) * tmp2;
         }
         let d2sdqp2 = self.binom_cdc * (1.0 - qp).powi(D - 1) * qp.powi(C - 1);
         d2sdqp2 * dqpdq * dqpdq + dsdqp * d2qpdq2
     }
 
-    fn short_range_function_third_derivative(&self, q: f64) -> f64 {
+    fn short_range_f3(&self, q: f64) -> f64 {
         if D == -C {
             return 0.0;
         }
@@ -266,12 +277,12 @@ impl<const C: i32, const D: i32> SplitingFunction for Poisson<C, D> {
             let mut tmp1 = 1.0;
             let mut tmp2 = 0.0;
             for c in 1..C {
-                tmp1 += binomial(D - 1 + c, c) as f64 * (C - c) as f64 / C as f64 * qp.powi(c);
-                tmp2 += binomial(D - 1 + c, c) as f64 * (C - c) as f64 / C as f64
+                tmp1 += (binomial(D - 1 + c, c) * (C - c)) as f64 / C as f64 * qp.powi(c);
+                tmp2 += (binomial(D - 1 + c, c) * (C - c)) as f64 / C as f64
                     * c as f64
                     * qp.powi(c - 1);
             }
-            dsdqp = -(D + 1) as f64 * (1.0 - qp).powi(D) * tmp1 + (1.0 - qp).powi(D + 1) * tmp2;
+            dsdqp = -f64::from(D + 1) * (1.0 - qp).powi(D) * tmp1 + (1.0 - qp).powi(D + 1) * tmp2;
         }
         let d3sdqp3 = self.binom_cdc
             * (1.0 - qp).powi(D - 2)
@@ -287,74 +298,26 @@ fn test_poisson() {
     let eps = 1e-9; // Set epsilon for approximate equality
 
     // Test Stenqvist short-range function
-    approx::assert_relative_eq!(pot.short_range_function(0.5), 0.15625, epsilon = eps);
-    approx::assert_relative_eq!(
-        pot.short_range_function_derivative(0.5),
-        -1.0,
-        epsilon = eps
-    );
-    approx::assert_relative_eq!(
-        pot.short_range_function_second_derivative(0.5),
-        3.75,
-        epsilon = eps
-    );
-    approx::assert_relative_eq!(
-        pot.short_range_function_third_derivative(0.5),
-        0.0,
-        epsilon = eps
-    );
-    approx::assert_relative_eq!(
-        pot.short_range_function_third_derivative(0.6),
-        -5.76,
-        epsilon = eps
-    );
-    approx::assert_relative_eq!(pot.short_range_function(1.0), 0.0, epsilon = eps);
-    approx::assert_relative_eq!(pot.short_range_function_derivative(1.0), 0.0, epsilon = eps);
-    approx::assert_relative_eq!(
-        pot.short_range_function_second_derivative(1.0),
-        0.0,
-        epsilon = eps
-    );
-    approx::assert_relative_eq!(
-        pot.short_range_function_third_derivative(1.0),
-        0.0,
-        epsilon = eps
-    );
-    approx::assert_relative_eq!(pot.short_range_function(0.0), 1.0, epsilon = eps);
-    approx::assert_relative_eq!(
-        pot.short_range_function_derivative(0.0),
-        -2.0,
-        epsilon = eps
-    );
-    approx::assert_relative_eq!(
-        pot.short_range_function_second_derivative(0.0),
-        0.0,
-        epsilon = eps
-    );
-    approx::assert_relative_eq!(
-        pot.short_range_function_third_derivative(0.0),
-        0.0,
-        epsilon = eps
-    );
+    approx::assert_relative_eq!(pot.short_range_f0(0.5), 0.15625, epsilon = eps);
+    approx::assert_relative_eq!(pot.short_range_f1(0.5), -1.0, epsilon = eps);
+    approx::assert_relative_eq!(pot.short_range_f2(0.5), 3.75, epsilon = eps);
+    approx::assert_relative_eq!(pot.short_range_f3(0.5), 0.0, epsilon = eps);
+    approx::assert_relative_eq!(pot.short_range_f3(0.6), -5.76, epsilon = eps);
+    approx::assert_relative_eq!(pot.short_range_f0(1.0), 0.0, epsilon = eps);
+    approx::assert_relative_eq!(pot.short_range_f1(1.0), 0.0, epsilon = eps);
+    approx::assert_relative_eq!(pot.short_range_f2(1.0), 0.0, epsilon = eps);
+    approx::assert_relative_eq!(pot.short_range_f3(1.0), 0.0, epsilon = eps);
+    approx::assert_relative_eq!(pot.short_range_f0(0.0), 1.0, epsilon = eps);
+    approx::assert_relative_eq!(pot.short_range_f1(0.0), -2.0, epsilon = eps);
+    approx::assert_relative_eq!(pot.short_range_f2(0.0), 0.0, epsilon = eps);
+    approx::assert_relative_eq!(pot.short_range_f3(0.0), 0.0, epsilon = eps);
 
     // Test Fanougarkis short-range function
     let pot = Fanourgakis::new(29.0, None);
-    approx::assert_relative_eq!(pot.short_range_function(0.5), 0.19921875, epsilon = eps);
-    approx::assert_relative_eq!(
-        pot.short_range_function_derivative(0.5),
-        -1.1484375,
-        epsilon = eps
-    );
-    approx::assert_relative_eq!(
-        pot.short_range_function_second_derivative(0.5),
-        3.28125,
-        epsilon = eps
-    );
-    approx::assert_relative_eq!(
-        pot.short_range_function_third_derivative(0.5),
-        6.5625,
-        epsilon = eps
-    );
+    approx::assert_relative_eq!(pot.short_range_f0(0.5), 0.19921875, epsilon = eps);
+    approx::assert_relative_eq!(pot.short_range_f1(0.5), -1.1484375, epsilon = eps);
+    approx::assert_relative_eq!(pot.short_range_f2(0.5), 3.28125, epsilon = eps);
+    approx::assert_relative_eq!(pot.short_range_f3(0.5), 6.5625, epsilon = eps);
 
     // Test
 }

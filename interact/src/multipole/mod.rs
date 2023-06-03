@@ -13,31 +13,59 @@
 // limitations under the license.
 
 //! # Electric multipoles
+//!
+//! This module contains functions for computing the electrostatic potential;
+//! fields; forces; and energies from and between electric multipoles.
+//!
+//! ## Examples
+//! ~~~
+//! use interact::multipole::*;
+//! let charge = 1.0;
+//! let dist = 9.0;
+//! let plain = Coulomb::new(16.0); // cutoff at 16
+//! assert_eq!(plain.ion_potential(charge, dist), charge / dist);
+//! ~~~
 
-pub mod coulomb;
-pub mod poisson;
+mod coulomb;
+pub use coulomb::*;
+mod poisson;
 use crate::{Matrix3, Point};
+pub use poisson::*;
 
-/// Splitting function for electrostatic interaction schemes like real-space Ewald summation; Wolf methods; etc.
-pub trait SplitingFunction: crate::Cutoff {
+/// # Short-range function for electrostatic interaction schemes
+///
+/// The short-range function is a function of the reduced distance _q_ = _r_ / _r<sub>c</sub>_,
+/// where _r_ is the distance between the interacting particles and _r<sub>c</sub>_ is the cutoff
+/// distance.
+/// All _schemes_ implements this trait and is a requirement for the [`Potential`]; [`Field`]; [`Force`]; and [`Energy`] traits.
+///
+/// In connection with Ewald summation scemes, the short-range function is also known as the
+/// _splitting function_. There it is use to split the electrostatic interaction into a short-range
+/// part and a long-range part.
+pub trait ShortRangeFunction: crate::Cutoff {
     /// Inverse Debye screening length
     fn kappa(&self) -> Option<f64>;
-    fn short_range_function(&self, q: f64) -> f64;
-    fn short_range_function_derivative(&self, q: f64) -> f64;
-    fn short_range_function_second_derivative(&self, q: f64) -> f64;
-    fn short_range_function_third_derivative(&self, q: f64) -> f64;
+    /// Short-range function
+    fn short_range_f0(&self, q: f64) -> f64;
+    /// First derivative of the short-range function
+    fn short_range_f1(&self, q: f64) -> f64;
+    /// Second derivative of the short-range function
+    fn short_range_f2(&self, q: f64) -> f64;
+    /// Third derivative of the short-range function
+    fn short_range_f3(&self, q: f64) -> f64;
 }
 
-pub trait Potential: SplitingFunction {
+/// # Potential from electric multipoles
+pub trait Potential: ShortRangeFunction {
     #[inline]
     fn ion_potential(&self, charge: f64, distance: f64) -> f64 {
         if distance < self.cutoff() {
             let q = distance / self.cutoff();
             charge / distance
                 * if let Some(kappa) = self.kappa() {
-                    self.short_range_function(q) * (-kappa * distance).exp()
+                    self.short_range_f0(q) * (-kappa * distance).exp()
                 } else {
-                    self.short_range_function(q)
+                    self.short_range_f0(q)
                 }
         } else {
             0.0
@@ -61,8 +89,7 @@ pub trait Potential: SplitingFunction {
             let q = r1 / self.cutoff();
             let kr = self.kappa().unwrap_or(0.0) * r1;
             dipole.dot(r) / (r2 * r1)
-                * (self.short_range_function(q) * (1.0 + kr)
-                    - q * self.short_range_function_derivative(q))
+                * (self.short_range_f0(q) * (1.0 + kr) - q * self.short_range_f1(q))
                 * (-kr).exp()
         } else {
             0.0
@@ -75,9 +102,9 @@ pub trait Potential: SplitingFunction {
             let r1 = r.norm();
             let q = r1 / self.cutoff();
             let kr = self.kappa().unwrap_or(0.0) * r1;
-            let s0 = self.short_range_function(q);
-            let s1 = self.short_range_function_derivative(q);
-            let s2 = self.short_range_function_second_derivative(q);
+            let s0 = self.short_range_f0(q);
+            let s1 = self.short_range_f1(q);
+            let s2 = self.short_range_f2(q);
             let a = s0 * (1.0 + kr + kr * kr / 3.0) - q * s1 * (1.0 + 2.0 / 3.0 * kr)
                 + q * q / 3.0 * s2;
             let b = (s0 * kr * kr - 2.0 * kr * q * s1 + s2 * q * q) / 3.0;
@@ -90,7 +117,8 @@ pub trait Potential: SplitingFunction {
     }
 }
 
-pub trait Field: SplitingFunction {
+/// # Field due to electric multipoles
+pub trait Field: ShortRangeFunction {
     /// Electrostatic field from point charge.
     ///
     /// Parameters:
@@ -109,8 +137,7 @@ pub trait Field: SplitingFunction {
             let q = r1 / self.cutoff();
             let kr = self.kappa().unwrap_or(0.0) * r1;
             charge * r / (r2 * r1)
-                * (self.short_range_function(q) * (1.0 + kr)
-                    - q * self.short_range_function_derivative(q))
+                * (self.short_range_f0(q) * (1.0 + kr) - q * self.short_range_f1(q))
                 * (-kr).exp()
         } else {
             Point::zeros()
@@ -138,9 +165,9 @@ pub trait Field: SplitingFunction {
             let q = r1 / self.cutoff();
             let kr = self.kappa().unwrap_or(0.0) * r1;
             let kr2 = kr * kr;
-            let srf = self.short_range_function(q);
-            let dsrf = self.short_range_function_derivative(q);
-            let ddsrf = self.short_range_function_second_derivative(q);
+            let srf = self.short_range_f0(q);
+            let dsrf = self.short_range_f1(q);
+            let ddsrf = self.short_range_f2(q);
 
             let field_d = (3.0 * dipole.dot(r) * r / r2 - dipole) / r3
                 * (srf * (1.0 + kr + kr2 / 3.0) - q * dsrf * (1.0 + 2.0 / 3.0 * kr)
@@ -175,10 +202,10 @@ pub trait Field: SplitingFunction {
             let quad_trh = quad.transpose() * r_hat;
 
             let quadfactor = (1.0 / r2 * r.transpose() * quad * r)[0]; // 1x1 matrix -> f64 by taking first and only element
-            let s0 = self.short_range_function(q);
-            let s1 = self.short_range_function_derivative(q);
-            let s2 = self.short_range_function_second_derivative(q);
-            let s3 = self.short_range_function_third_derivative(q);
+            let s0 = self.short_range_f0(q);
+            let s1 = self.short_range_f1(q);
+            let s2 = self.short_range_f2(q);
+            let s3 = self.short_range_f3(q);
             let field_d = 3.0 * ((5.0 * quadfactor - quad.trace()) * r_hat - quadrh - quad_trh)
                 / r4
                 * (s0 * (1.0 + kr + kr2 / 3.0) - q * s1 * (1.0 + 2.0 / 3.0 * kr) + q2 / 3.0 * s2);
@@ -193,18 +220,19 @@ pub trait Field: SplitingFunction {
     }
 }
 
+/// # Interaction energy between multipoles
 pub trait Energy: Potential + Field {
     /// Interaction energy between two point charges
     ///
-    /// zA: Point charge, UNIT: [input charge]
-    /// zB: Point charge, UNIT: [input charge]
+    /// z1: Point charge, UNIT: [input charge]
+    /// z2: Point charge, UNIT: [input charge]
     /// r: Charge-charge separation, UNIT: [input length]
     ///
     /// Returns the interaction energy, UNIT: [(input charge)^2 / (input length)]
     ///
     /// The interaction energy between two charges is described by:
-    ///     u(z_A, z_B, r) = z_B * Phi(z_A,r)
-    /// where Phi(z_A,r) is the potential from ion A.
+    ///     u(z1, z2, r) = z2 * Phi(z1,r)
+    /// where Phi(z1,r) is the potential from ion 1.
     fn ion_ion_energy(&self, charge1: f64, charge2: f64, r: f64) -> f64 {
         charge2 * self.ion_potential(charge1, r)
     }
@@ -238,8 +266,8 @@ pub trait Energy: Potential + Field {
     /// Returns the interaction energy, UNIT: [(input charge)^2 / (input length)]
     ///
     /// The interaction energy between two dipoles is described by:
-    ///     u(mu_A, mu_B, r) = -mu_A.dot(E(mu_B, r))
-    /// where E(mu_B, r) is the field from dipole B at the location of dipole A.
+    ///     u(mu1, mu2, r) = -mu1.dot(E(mu2, r))
+    /// where E(mu2, r) is the field from dipole 2 at the location of dipole 1.
     fn dipole_dipole_energy(&self, dipole1: &Point, dipole2: &Point, r: &Point) -> f64 {
         -dipole1.dot(&self.dipole_field(dipole2, r))
     }
@@ -260,6 +288,7 @@ pub trait Energy: Potential + Field {
     }
 }
 
+/// # Force between multipoles
 pub trait Force: Field {
     /// Force between two point charges.
     ///
@@ -333,10 +362,10 @@ pub trait Force: Field {
                     - mu2_dot_rh * mu1
                     - mu1_dot_rh * mu2)
                 / r4;
-            let srf = self.short_range_function(q);
-            let dsrf = self.short_range_function_derivative(q);
-            let ddsrf = self.short_range_function_second_derivative(q);
-            let dddsrf = self.short_range_function_third_derivative(q);
+            let srf = self.short_range_f0(q);
+            let dsrf = self.short_range_f1(q);
+            let ddsrf = self.short_range_f2(q);
+            let dddsrf = self.short_range_f3(q);
             force_d *= srf * (1.0 + kr + kr * kr / 3.0) - q * dsrf * (1.0 + 2.0 / 3.0 * kr)
                 + q2 / 3.0 * ddsrf;
             let force_i = mu1_dot_rh * mu2_dot_rh * rh / r4
