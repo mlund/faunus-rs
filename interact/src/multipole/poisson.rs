@@ -12,16 +12,16 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
-//! # Plain Coulomb potential where _S(q)_ = 1
+//! # Poisson scheme
 
 use super::{Energy, Field, Force, Potential, SplitingFunction};
 use num::integer::binomial;
 use serde::{Deserialize, Serialize};
 
-impl Potential for Poisson {}
-impl Field for Poisson {}
-impl Energy for Poisson {}
-impl Force for Poisson {}
+impl<const C: i32, const D: i32> Potential for Poisson<C, D> {}
+impl<const C: i32, const D: i32> Field for Poisson<C, D> {}
+impl<const C: i32, const D: i32> Energy for Poisson<C, D> {}
+impl<const C: i32, const D: i32> Force for Poisson<C, D> {}
 
 /// Poisson scheme with and without specified Debye-length
 ///
@@ -51,10 +51,8 @@ impl Force for Poisson {}
 /// - http://dx.doi.org/10.1088/1367-2630/ab1ec1
 ///
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Poisson {
+pub struct Poisson<const C: i32, const D: i32> {
     cutoff: f64,
-    c: i32,
-    d: i32,
     debye_length: f64,
     has_dipolar_selfenergy: bool,
     #[serde(skip)]
@@ -69,19 +67,19 @@ pub struct Poisson {
     binom_cdc: f64,
 }
 
-impl Poisson {
-    pub fn new(cutoff: f64, c: i32, d: i32, debye_length: f64) -> Self {
-        if c < 1 {
+impl<const C: i32, const D: i32> Poisson<C, D> {
+    pub fn new(cutoff: f64, debye_length: f64) -> Self {
+        if C < 1 {
             panic!("`C` must be larger than zero");
         }
-        if d < -1 && d != -c {
+        if D < -1 && D != -C {
             panic!("If `D` is less than negative one, then it has to equal negative `C`");
         }
-        if d == 0 && c != 1 {
+        if D == 0 && C != 1 {
             panic!("If `D` is zero, then `C` has to equal one ");
         }
         let mut has_dipolar_selfenergy = true;
-        if c < 2 {
+        if C < 2 {
             has_dipolar_selfenergy = false;
         }
         let mut reduced_kappa = 0.0;
@@ -96,18 +94,16 @@ impl Poisson {
                 use_yukawa_screening = true;
                 reduced_kappa_squared = reduced_kappa * reduced_kappa;
                 yukawa_denom = 1.0 / (1.0 - (2.0 * reduced_kappa).exp());
-                let _a1 = -f64::from(c + d) / f64::from(c);
-                binom_cdc = f64::from(binomial(c + d, c) * d);
+                let _a1 = -f64::from(C + D) / f64::from(C);
+                binom_cdc = f64::from(binomial(C + D, C) * D);
             }
         }
-        if d != -c {
-            binom_cdc = f64::from(binomial(c + d, c) * d);
+        if D != -C {
+            binom_cdc = f64::from(binomial(C + D, C) * D);
         }
 
         Poisson {
             cutoff,
-            c,
-            d,
             debye_length,
             has_dipolar_selfenergy,
             reduced_kappa,
@@ -119,7 +115,7 @@ impl Poisson {
     }
 }
 
-impl crate::Info for Poisson {
+impl<const C: i32, const D: i32> crate::Info for Poisson<C, D> {
     fn short_name(&self) -> Option<&'static str> {
         Some("poisson")
     }
@@ -128,18 +124,18 @@ impl crate::Info for Poisson {
     }
 }
 
-impl crate::Cutoff for Poisson {
+impl<const C: i32, const D: i32> crate::Cutoff for Poisson<C, D> {
     fn cutoff(&self) -> f64 {
         self.cutoff
     }
 }
 
-impl SplitingFunction for Poisson {
+impl<const C: i32, const D: i32> SplitingFunction for Poisson<C, D> {
     fn kappa(&self) -> Option<f64> {
         None
     }
     fn short_range_function(&self, q: f64) -> f64 {
-        if self.d == -self.c {
+        if D == -C {
             return 1.0;
         }
         let mut tmp = 0.0;
@@ -149,22 +145,22 @@ impl SplitingFunction for Poisson {
             qp = (1.0 - (2.0 * self.reduced_kappa * q).exp()) * self.yukawa_denom;
         }
 
-        if self.d == 0 && self.c == 1 {
+        if D == 0 && C == 1 {
             return 1.0 - qp;
         }
 
-        for c in 0..self.c {
-            tmp += f64::from(num::integer::binomial(self.d - 1 + c, c)) * f64::from(self.c - c)
-                / f64::from(self.c)
+        for c in 0..C {
+            tmp += f64::from(num::integer::binomial(D - 1 + c, c)) * f64::from(C - c)
+                / f64::from(C)
                 * qp.powi(c);
         }
-        (1.0 - qp).powi(self.d + 1) * tmp
+        (1.0 - qp).powi(D + 1) * tmp
     }
     fn short_range_function_derivative(&self, q: f64) -> f64 {
-        if self.d == -self.c {
+        if D == -C {
             return 0.0;
         }
-        if self.d == 0 && self.c == 1 {
+        if D == 0 && C == 1 {
             return 0.0;
         }
         let mut qp = q;
@@ -176,21 +172,20 @@ impl SplitingFunction for Poisson {
         }
         let mut tmp1 = 1.0;
         let mut tmp2 = 0.0;
-        for c in 1..self.c {
-            let factor = (binomial(self.d - 1 + c, c) * (self.c - c)) as f64 / self.c as f64;
+        for c in 1..C {
+            let factor = (binomial(D - 1 + c, c) * (C - c)) as f64 / C as f64;
             tmp1 += factor * qp.powi(c);
             tmp2 += factor * c as f64 * qp.powi(c - 1);
         }
-        let dsdqp = -(self.d + 1) as f64 * (1.0 - qp).powi(self.d) * tmp1
-            + (1.0 - qp).powi(self.d + 1) * tmp2;
+        let dsdqp = -(D + 1) as f64 * (1.0 - qp).powi(D) * tmp1 + (1.0 - qp).powi(D + 1) * tmp2;
         dsdqp * dqpdq
     }
 
     fn short_range_function_second_derivative(&self, q: f64) -> f64 {
-        if self.d == -self.c {
+        if D == -C {
             return 0.0;
         }
-        if self.d == 0 && self.c == 1 {
+        if D == 0 && C == 1 {
             return 0.0;
         }
         let mut qp = q;
@@ -209,23 +204,22 @@ impl SplitingFunction for Poisson {
                 * self.yukawa_denom;
             let mut tmp1 = 1.0;
             let mut tmp2 = 0.0;
-            for i in 1..self.c {
-                let b = binomial(self.d - 1 + i, i) as f64 * (self.c - i) as f64;
-                tmp1 += b / self.c as f64 * qp.powi(i);
-                tmp2 += b * i as f64 / self.c as f64 * qp.powi(i - 1);
+            for i in 1..C {
+                let b = binomial(D - 1 + i, i) as f64 * (C - i) as f64;
+                tmp1 += b / C as f64 * qp.powi(i);
+                tmp2 += b * i as f64 / C as f64 * qp.powi(i - 1);
             }
-            dsdqp = -(self.d + 1) as f64 * (1.0 - qp).powi(self.d) * tmp1
-                + (1.0 - qp).powi(self.d + 1) * tmp2;
+            dsdqp = -(D + 1) as f64 * (1.0 - qp).powi(D) * tmp1 + (1.0 - qp).powi(D + 1) * tmp2;
         }
-        let d2sdqp2 = self.binom_cdc * (1.0 - qp).powi(self.d - 1) * qp.powi(self.c - 1);
+        let d2sdqp2 = self.binom_cdc * (1.0 - qp).powi(D - 1) * qp.powi(C - 1);
         d2sdqp2 * dqpdq * dqpdq + dsdqp * d2qpdq2
     }
 
     fn short_range_function_third_derivative(&self, q: f64) -> f64 {
-        if self.d == -self.c {
+        if D == -C {
             return 0.0;
         }
-        if self.d == 0 && self.c == 1 {
+        if D == 0 && C == 1 {
             return 0.0;
         }
         let mut qp = q;
@@ -249,30 +243,28 @@ impl SplitingFunction for Poisson {
                 * self.reduced_kappa
                 * (2.0 * self.reduced_kappa * q).exp()
                 * self.yukawa_denom;
-            d2sdqp2 = self.binom_cdc * (1.0 - qp).powi(self.d - 1) * qp.powi(self.c - 1);
+            d2sdqp2 = self.binom_cdc * (1.0 - qp).powi(D - 1) * qp.powi(C - 1);
             let mut tmp1 = 1.0;
             let mut tmp2 = 0.0;
-            for c in 1..self.c {
-                tmp1 += binomial(self.d - 1 + c, c) as f64 * (self.c - c) as f64 / self.c as f64
-                    * qp.powi(c);
-                tmp2 += binomial(self.d - 1 + c, c) as f64 * (self.c - c) as f64 / self.c as f64
+            for c in 1..C {
+                tmp1 += binomial(D - 1 + c, c) as f64 * (C - c) as f64 / C as f64 * qp.powi(c);
+                tmp2 += binomial(D - 1 + c, c) as f64 * (C - c) as f64 / C as f64
                     * c as f64
                     * qp.powi(c - 1);
             }
-            dsdqp = -(self.d + 1) as f64 * (1.0 - qp).powi(self.d) * tmp1
-                + (1.0 - qp).powi(self.d + 1) * tmp2;
+            dsdqp = -(D + 1) as f64 * (1.0 - qp).powi(D) * tmp1 + (1.0 - qp).powi(D + 1) * tmp2;
         }
         let d3sdqp3 = self.binom_cdc
-            * (1.0 - qp).powi(self.d - 2)
-            * qp.powi(self.c - 2)
-            * ((2.0 - self.c as f64 - self.d as f64) * qp + self.c as f64 - 1.0);
+            * (1.0 - qp).powi(D - 2)
+            * qp.powi(C - 2)
+            * ((2.0 - C as f64 - D as f64) * qp + C as f64 - 1.0);
         d3sdqp3 * dqpdq * dqpdq * dqpdq + 3.0 * d2sdqp2 * dqpdq * d2qpdq2 + dsdqp * d3qpdq3
     }
 }
 
 #[test]
 fn test_short_range_function() {
-    let pot33 = Poisson::new(29.0, 3, 3, f64::INFINITY);
+    let pot33 = Poisson::<3, 3>::new(29.0, f64::INFINITY);
     let eps = 1e-9; // Set epsilon for approximate equality
 
     // Test short-ranged function
