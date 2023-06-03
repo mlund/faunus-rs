@@ -87,7 +87,7 @@ pub type Stenqvist = Poisson<3, 3>;
 pub type Fanourgakis = Poisson<4, 3>;
 
 impl<const C: i32, const D: i32> Poisson<C, D> {
-    pub fn new(cutoff: f64, debye_length: f64) -> Self {
+    pub fn new(cutoff: f64, debye_length: Option<f64>) -> Self {
         if C < 1 {
             panic!("`C` must be larger than zero");
         }
@@ -107,7 +107,7 @@ impl<const C: i32, const D: i32> Poisson<C, D> {
         let mut yukawa_denom = 0.0;
         let mut binom_cdc = 0.0;
 
-        if !debye_length.is_infinite() {
+        if let Some(debye_length) = debye_length {
             reduced_kappa = cutoff / debye_length;
             if reduced_kappa.abs() > 1e-6 {
                 use_yukawa_screening = true;
@@ -123,7 +123,7 @@ impl<const C: i32, const D: i32> Poisson<C, D> {
 
         Poisson {
             cutoff,
-            debye_length,
+            debye_length: debye_length.unwrap_or(f64::INFINITY),
             has_dipolar_selfenergy,
             reduced_kappa,
             use_yukawa_screening,
@@ -283,7 +283,7 @@ impl<const C: i32, const D: i32> SplitingFunction for Poisson<C, D> {
 
 #[test]
 fn test_poisson() {
-    let pot = Stenqvist::new(29.0, f64::INFINITY);
+    let pot = Stenqvist::new(29.0, None);
     let eps = 1e-9; // Set epsilon for approximate equality
 
     // Test Stenqvist short-range function
@@ -338,7 +338,7 @@ fn test_poisson() {
     );
 
     // Test Fanougarkis short-range function
-    let pot = Fanourgakis::new(29.0, f64::INFINITY);
+    let pot = Fanourgakis::new(29.0, None);
     approx::assert_relative_eq!(pot.short_range_function(0.5), 0.19921875, epsilon = eps);
     approx::assert_relative_eq!(
         pot.short_range_function_derivative(0.5),
