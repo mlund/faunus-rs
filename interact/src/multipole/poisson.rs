@@ -1,0 +1,332 @@
+// Copyright 2023 Björn Stenqvist and Mikael Lund
+//
+// Licensed under the Apache license, version 2.0 (the "license");
+// you may not use this file except in compliance with the license.
+// You may obtain a copy of the license at
+//
+//     http://www.apache.org/licenses/license-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the license is distributed on an "as is" basis,
+// without warranties or conditions of any kind, either express or implied.
+// See the license for the specific language governing permissions and
+// limitations under the license.
+
+//! # Plain Coulomb potential where _S(q)_ = 1
+
+use super::{Energy, Field, Force, Potential, SplitingFunction};
+use num::integer::binomial;
+use serde::{Deserialize, Serialize};
+
+impl Potential for Poisson {}
+impl Field for Poisson {}
+impl Energy for Poisson {}
+impl Force for Poisson {}
+
+/// Poisson scheme with and without specified Debye-length
+///
+/// A general scheme which, depending on two parameters `C` and `D`, can model several different pair-potentials.
+/// The short-ranged function is given by:
+///
+/// S(q) = (1 - q~)^(D + 1) * sum_{c = 0}^{C - 1} ((C - c) / C) * (D - 1 + c choose c) * q^c
+///
+/// where `C` is the number of cancelled derivatives at origin -2 (starting from the second derivative),
+/// and `D` is the number of cancelled derivatives at the cut-off (starting from the zeroth derivative).
+///
+/// For infinite Debye-length, the following holds:
+///
+/// | Type          | C   | D   | Reference / Comment
+/// |---------------|-----|-----|---------------------
+/// | `plain`       | 1   | -1  | Plain Coulomb
+/// | `wolf`        | 1   | 0   | Undamped Wolf, doi:10.1063/1.478738
+/// | `fennell`     | 1   | 1   | Levitt/undamped Fennell, doi:10/fp959p or 10/bqgmv2
+/// | `kale`        | 1   | 2   | Kale, doi:10/csh8bg
+/// | `mccann`      | 1   | 3   | McCann, doi:10.1021/ct300961
+/// | `fukuda`      | 2   | 1   | Undamped Fukuda, doi:10.1063/1.3582791
+/// | `markland`    | 2   | 2   | Markland, doi:10.1016/j.cplett.2008.09.019
+/// | `stenqvist`   | 3   | 3   | Stenqvist, doi:10/c5fr
+/// | `fanourgakis` | 4   | 3   | Fanourgakis, doi:10.1063/1.3216520
+///
+/// More info:
+/// - http://dx.doi.org/10.1088/1367-2630/ab1ec1
+///
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Poisson {
+    cutoff: f64,
+    c: i32,
+    d: i32,
+    debye_length: f64,
+    has_dipolar_selfenergy: bool,
+    #[serde(skip)]
+    reduced_kappa: f64,
+    #[serde(skip)]
+    use_yukawa_screening: bool,
+    #[serde(skip)]
+    reduced_kappa_squared: f64,
+    #[serde(skip)]
+    yukawa_denom: f64,
+    #[serde(skip)]
+    binom_cdc: f64,
+}
+
+impl Poisson {
+    pub fn new(cutoff: f64, c: i32, d: i32, debye_length: f64) -> Self {
+        if c < 1 {
+            panic!("`C` must be larger than zero");
+        }
+        if d < -1 && d != -c {
+            panic!("If `D` is less than negative one, then it has to equal negative `C`");
+        }
+        if d == 0 && c != 1 {
+            panic!("If `D` is zero, then `C` has to equal one ");
+        }
+        let mut has_dipolar_selfenergy = true;
+        if c < 2 {
+            has_dipolar_selfenergy = false;
+        }
+        let mut reduced_kappa = 0.0;
+        let mut use_yukawa_screening = false;
+        let mut reduced_kappa_squared = 0.0;
+        let mut yukawa_denom = 0.0;
+        let mut binom_cdc = 0.0;
+
+        if !debye_length.is_infinite() {
+            reduced_kappa = cutoff / debye_length;
+            if reduced_kappa.abs() > 1e-6 {
+                use_yukawa_screening = true;
+                reduced_kappa_squared = reduced_kappa * reduced_kappa;
+                yukawa_denom = 1.0 / (1.0 - (2.0 * reduced_kappa).exp());
+                let _a1 = -f64::from(c + d) / f64::from(c);
+                binom_cdc = f64::from(binomial(c + d, c) * d);
+            }
+        }
+        if d != -c {
+            binom_cdc = f64::from(binomial(c + d, c) * d);
+        }
+
+        Poisson {
+            cutoff,
+            c,
+            d,
+            debye_length,
+            has_dipolar_selfenergy,
+            reduced_kappa,
+            use_yukawa_screening,
+            reduced_kappa_squared,
+            yukawa_denom,
+            binom_cdc,
+        }
+    }
+}
+
+impl crate::Info for Poisson {
+    fn short_name(&self) -> Option<&'static str> {
+        Some("poisson")
+    }
+    fn citation(&self) -> Option<&'static str> {
+        Some("doi:10.1088/1367-2630/ab1ec1")
+    }
+}
+
+impl crate::Cutoff for Poisson {
+    fn cutoff(&self) -> f64 {
+        self.cutoff
+    }
+}
+
+impl SplitingFunction for Poisson {
+    fn kappa(&self) -> Option<f64> {
+        None
+    }
+    fn short_range_function(&self, q: f64) -> f64 {
+        if self.d == -self.c {
+            return 1.0;
+        }
+        let mut tmp = 0.0;
+        let mut qp = q;
+
+        if self.use_yukawa_screening {
+            qp = (1.0 - (2.0 * self.reduced_kappa * q).exp()) * self.yukawa_denom;
+        }
+
+        if self.d == 0 && self.c == 1 {
+            return 1.0 - qp;
+        }
+
+        for c in 0..self.c {
+            tmp += f64::from(num::integer::binomial(self.d - 1 + c, c)) * f64::from(self.c - c)
+                / f64::from(self.c)
+                * qp.powi(c);
+        }
+        (1.0 - qp).powi(self.d + 1) * tmp
+    }
+    fn short_range_function_derivative(&self, q: f64) -> f64 {
+        if self.d == -self.c {
+            return 0.0;
+        }
+        if self.d == 0 && self.c == 1 {
+            return 0.0;
+        }
+        let mut qp = q;
+        let mut dqpdq = 1.0;
+        if self.use_yukawa_screening {
+            let exp2kq = (2.0 * self.reduced_kappa * q).exp();
+            qp = (1.0 - exp2kq) * self.yukawa_denom;
+            dqpdq = -2.0 * self.reduced_kappa * exp2kq * self.yukawa_denom;
+        }
+        let mut tmp1 = 1.0;
+        let mut tmp2 = 0.0;
+        for c in 1..self.c {
+            let factor = (binomial(self.d - 1 + c, c) * (self.c - c)) as f64 / self.c as f64;
+            tmp1 += factor * qp.powi(c);
+            tmp2 += factor * c as f64 * qp.powi(c - 1);
+        }
+        let dsdqp = -(self.d + 1) as f64 * (1.0 - qp).powi(self.d) * tmp1
+            + (1.0 - qp).powi(self.d + 1) * tmp2;
+        dsdqp * dqpdq
+    }
+
+    fn short_range_function_second_derivative(&self, q: f64) -> f64 {
+        if self.d == -self.c {
+            return 0.0;
+        }
+        if self.d == 0 && self.c == 1 {
+            return 0.0;
+        }
+        let mut qp = q;
+        let mut dqpdq = 1.0;
+        let mut d2qpdq2 = 0.0;
+        let mut dsdqp = 0.0;
+        if self.use_yukawa_screening {
+            qp = (1.0 - (2.0 * self.reduced_kappa * q).exp()) * self.yukawa_denom;
+            dqpdq = -2.0
+                * self.reduced_kappa
+                * (2.0 * self.reduced_kappa * q).exp()
+                * self.yukawa_denom;
+            d2qpdq2 = -4.0
+                * self.reduced_kappa_squared
+                * (2.0 * self.reduced_kappa * q).exp()
+                * self.yukawa_denom;
+            let mut tmp1 = 1.0;
+            let mut tmp2 = 0.0;
+            for i in 1..self.c {
+                let b = binomial(self.d - 1 + i, i) as f64 * (self.c - i) as f64;
+                tmp1 += b / self.c as f64 * qp.powi(i);
+                tmp2 += b * i as f64 / self.c as f64 * qp.powi(i - 1);
+            }
+            dsdqp = -(self.d + 1) as f64 * (1.0 - qp).powi(self.d) * tmp1
+                + (1.0 - qp).powi(self.d + 1) * tmp2;
+        }
+        let d2sdqp2 = self.binom_cdc * (1.0 - qp).powi(self.d - 1) * qp.powi(self.c - 1);
+        d2sdqp2 * dqpdq * dqpdq + dsdqp * d2qpdq2
+    }
+
+    fn short_range_function_third_derivative(&self, q: f64) -> f64 {
+        if self.d == -self.c {
+            return 0.0;
+        }
+        if self.d == 0 && self.c == 1 {
+            return 0.0;
+        }
+        let mut qp = q;
+        let mut dqpdq = 1.0;
+        let mut d2qpdq2 = 0.0;
+        let mut d3qpdq3 = 0.0;
+        let mut d2sdqp2 = 0.0;
+        let mut dsdqp = 0.0;
+        if self.use_yukawa_screening {
+            qp = (1.0 - (2.0 * self.reduced_kappa * q).exp()) * self.yukawa_denom;
+            dqpdq = -2.0
+                * self.reduced_kappa
+                * (2.0 * self.reduced_kappa * q).exp()
+                * self.yukawa_denom;
+            d2qpdq2 = -4.0
+                * self.reduced_kappa_squared
+                * (2.0 * self.reduced_kappa * q).exp()
+                * self.yukawa_denom;
+            d3qpdq3 = -8.0
+                * self.reduced_kappa_squared
+                * self.reduced_kappa
+                * (2.0 * self.reduced_kappa * q).exp()
+                * self.yukawa_denom;
+            d2sdqp2 = self.binom_cdc * (1.0 - qp).powi(self.d - 1) * qp.powi(self.c - 1);
+            let mut tmp1 = 1.0;
+            let mut tmp2 = 0.0;
+            for c in 1..self.c {
+                tmp1 += binomial(self.d - 1 + c, c) as f64 * (self.c - c) as f64 / self.c as f64
+                    * qp.powi(c);
+                tmp2 += binomial(self.d - 1 + c, c) as f64 * (self.c - c) as f64 / self.c as f64
+                    * c as f64
+                    * qp.powi(c - 1);
+            }
+            dsdqp = -(self.d + 1) as f64 * (1.0 - qp).powi(self.d) * tmp1
+                + (1.0 - qp).powi(self.d + 1) * tmp2;
+        }
+        let d3sdqp3 = self.binom_cdc
+            * (1.0 - qp).powi(self.d - 2)
+            * qp.powi(self.c - 2)
+            * ((2.0 - self.c as f64 - self.d as f64) * qp + self.c as f64 - 1.0);
+        d3sdqp3 * dqpdq * dqpdq * dqpdq + 3.0 * d2sdqp2 * dqpdq * d2qpdq2 + dsdqp * d3qpdq3
+    }
+}
+
+#[test]
+fn test_short_range_function() {
+    let pot33 = Poisson::new(29.0, 3, 3, f64::INFINITY);
+    let eps = 1e-9; // Set epsilon for approximate equality
+
+    // Test short-ranged function
+    approx::assert_relative_eq!(pot33.short_range_function(0.5), 0.15625, epsilon = eps);
+    approx::assert_relative_eq!(
+        pot33.short_range_function_derivative(0.5),
+        -1.0,
+        epsilon = eps
+    );
+    approx::assert_relative_eq!(
+        pot33.short_range_function_second_derivative(0.5),
+        3.75,
+        epsilon = eps
+    );
+    approx::assert_relative_eq!(
+        pot33.short_range_function_third_derivative(0.5),
+        0.0,
+        epsilon = eps
+    );
+    approx::assert_relative_eq!(
+        pot33.short_range_function_third_derivative(0.6),
+        -5.76,
+        epsilon = eps
+    );
+    approx::assert_relative_eq!(pot33.short_range_function(1.0), 0.0, epsilon = eps);
+    approx::assert_relative_eq!(
+        pot33.short_range_function_derivative(1.0),
+        0.0,
+        epsilon = eps
+    );
+    approx::assert_relative_eq!(
+        pot33.short_range_function_second_derivative(1.0),
+        0.0,
+        epsilon = eps
+    );
+    approx::assert_relative_eq!(
+        pot33.short_range_function_third_derivative(1.0),
+        0.0,
+        epsilon = eps
+    );
+    approx::assert_relative_eq!(pot33.short_range_function(0.0), 1.0, epsilon = eps);
+    approx::assert_relative_eq!(
+        pot33.short_range_function_derivative(0.0),
+        -2.0,
+        epsilon = eps
+    );
+    approx::assert_relative_eq!(
+        pot33.short_range_function_second_derivative(0.0),
+        0.0,
+        epsilon = eps
+    );
+    approx::assert_relative_eq!(
+        pot33.short_range_function_third_derivative(0.0),
+        0.0,
+        epsilon = eps
+    );
+}

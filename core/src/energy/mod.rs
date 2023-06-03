@@ -12,6 +12,8 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
+//! # Energy calculation and Hamiltonian
+
 use crate::{Change, Info, SyncFromAny};
 use as_any::AsAny;
 

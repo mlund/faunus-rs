@@ -46,9 +46,6 @@ impl Cuboid {
 }
 
 impl Shape for Cuboid {
-    fn center(&self) -> Point {
-        Point::zeros()
-    }
     fn volume(&self) -> Option<f64> {
         Some(self.cell.x * self.cell.y * self.cell.z)
     }

@@ -12,10 +12,14 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
+extern crate approx;
 extern crate typetag;
 
+pub type Point = nalgebra::Vector3<f64>;
+pub type Matrix3 = nalgebra::Matrix3<f64>;
 use serde::{Deserialize, Deserializer, Serializer};
 
+pub mod multipole;
 pub mod qpochhammer;
 pub mod spline;
 pub mod twobody;
