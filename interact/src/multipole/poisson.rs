@@ -138,7 +138,6 @@ impl<const C: i32, const D: i32> SplitingFunction for Poisson<C, D> {
         if D == -C {
             return 1.0;
         }
-        let mut tmp = 0.0;
         let mut qp = q;
 
         if self.use_yukawa_screening {
@@ -149,12 +148,13 @@ impl<const C: i32, const D: i32> SplitingFunction for Poisson<C, D> {
             return 1.0 - qp;
         }
 
-        for c in 0..C {
-            tmp += f64::from(num::integer::binomial(D - 1 + c, c)) * f64::from(C - c)
-                / f64::from(C)
-                * qp.powi(c);
-        }
-        (1.0 - qp).powi(D + 1) * tmp
+        let sum: f64 = (0..C)
+            .map(|c| {
+                f64::from(num::integer::binomial(D - 1 + c, c)) * f64::from(C - c) / f64::from(C)
+                    * qp.powi(c)
+            })
+            .sum();
+        (1.0 - qp).powi(D + 1) * sum
     }
     fn short_range_function_derivative(&self, q: f64) -> f64 {
         if D == -C {
@@ -263,62 +263,76 @@ impl<const C: i32, const D: i32> SplitingFunction for Poisson<C, D> {
 }
 
 #[test]
-fn test_short_range_function() {
-    let pot33 = Poisson::<3, 3>::new(29.0, f64::INFINITY);
+fn test_poisson() {
+    let pot = Poisson::<3, 3>::new(29.0, f64::INFINITY);
     let eps = 1e-9; // Set epsilon for approximate equality
 
     // Test short-ranged function
-    approx::assert_relative_eq!(pot33.short_range_function(0.5), 0.15625, epsilon = eps);
+    approx::assert_relative_eq!(pot.short_range_function(0.5), 0.15625, epsilon = eps);
     approx::assert_relative_eq!(
-        pot33.short_range_function_derivative(0.5),
+        pot.short_range_function_derivative(0.5),
         -1.0,
         epsilon = eps
     );
     approx::assert_relative_eq!(
-        pot33.short_range_function_second_derivative(0.5),
+        pot.short_range_function_second_derivative(0.5),
         3.75,
         epsilon = eps
     );
     approx::assert_relative_eq!(
-        pot33.short_range_function_third_derivative(0.5),
+        pot.short_range_function_third_derivative(0.5),
         0.0,
         epsilon = eps
     );
     approx::assert_relative_eq!(
-        pot33.short_range_function_third_derivative(0.6),
+        pot.short_range_function_third_derivative(0.6),
         -5.76,
         epsilon = eps
     );
-    approx::assert_relative_eq!(pot33.short_range_function(1.0), 0.0, epsilon = eps);
+    approx::assert_relative_eq!(pot.short_range_function(1.0), 0.0, epsilon = eps);
+    approx::assert_relative_eq!(pot.short_range_function_derivative(1.0), 0.0, epsilon = eps);
     approx::assert_relative_eq!(
-        pot33.short_range_function_derivative(1.0),
+        pot.short_range_function_second_derivative(1.0),
         0.0,
         epsilon = eps
     );
     approx::assert_relative_eq!(
-        pot33.short_range_function_second_derivative(1.0),
+        pot.short_range_function_third_derivative(1.0),
         0.0,
         epsilon = eps
     );
+    approx::assert_relative_eq!(pot.short_range_function(0.0), 1.0, epsilon = eps);
     approx::assert_relative_eq!(
-        pot33.short_range_function_third_derivative(1.0),
-        0.0,
-        epsilon = eps
-    );
-    approx::assert_relative_eq!(pot33.short_range_function(0.0), 1.0, epsilon = eps);
-    approx::assert_relative_eq!(
-        pot33.short_range_function_derivative(0.0),
+        pot.short_range_function_derivative(0.0),
         -2.0,
         epsilon = eps
     );
     approx::assert_relative_eq!(
-        pot33.short_range_function_second_derivative(0.0),
+        pot.short_range_function_second_derivative(0.0),
         0.0,
         epsilon = eps
     );
     approx::assert_relative_eq!(
-        pot33.short_range_function_third_derivative(0.0),
+        pot.short_range_function_third_derivative(0.0),
         0.0,
+        epsilon = eps
+    );
+
+    let pot = Poisson::<4, 3>::new(29.0, f64::INFINITY);
+    approx::assert_relative_eq!(pot.short_range_function(0.5), 0.19921875, epsilon = eps);
+    approx::assert_relative_eq!(
+        pot.short_range_function_derivative(0.5),
+        -1.1484375,
+        epsilon = eps
+    );
+    approx::assert_relative_eq!(
+        pot.short_range_function_second_derivative(0.5),
+        3.28125,
+        epsilon = eps
+    );
+    approx::assert_relative_eq!(
+        pot.short_range_function_third_derivative(0.5),
+        6.5625,
         epsilon = eps
     );
 }
