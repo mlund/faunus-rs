@@ -126,3 +126,29 @@ where
 {
     Ok(f64::deserialize(deserializer)? * 4.0)
 }
+
+/// Approximation of erfc-function
+///
+/// # Arguments
+/// * `x` - Value for which erfc should be calculated
+///
+/// # Details
+/// Reference for this approximation is found in Abramowitz and Stegun,
+/// Handbook of mathematical functions, eq. 7.1.26
+///
+/// erf(x) = 1 - (a1*t + a2*t^2 + a3*t^3 + a4*t^4 + a5*t^5)e^{-x^2} + epsilon(x)
+/// t = 1 / (1 + px)
+/// |epsilon(x)| <= 1.5 * 10^-7
+///
+/// # Warning
+/// Needs modification if x < 0
+#[inline]
+fn erfc_x(x: f64) -> f64 {
+    let t = 1.0 / (1.0 + 0.3275911 * x);
+    let a1 = 0.254829592;
+    let a2 = -0.284496736;
+    let a3 = 1.421413741;
+    let a4 = -1.453152027;
+    let a5 = 1.061405429;
+    t * (a1 + t * (a2 + t * (a3 + t * (a4 + t * a5)))) * f64::exp(-x * x)
+}

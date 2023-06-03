@@ -26,6 +26,8 @@
 //! assert_eq!(plain.ion_potential(charge, dist), charge / dist);
 //! ~~~
 
+mod ewald;
+pub use ewald::*;
 mod coulomb;
 pub use coulomb::*;
 mod poisson;
