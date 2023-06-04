@@ -13,6 +13,7 @@
 // limitations under the license.
 
 extern crate chemfiles;
+extern crate serde_json;
 
 use crate::group::{Group, GroupCollection};
 use nalgebra::Vector3;

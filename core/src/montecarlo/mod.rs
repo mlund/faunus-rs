@@ -15,6 +15,7 @@
 //! # Support for Monte Carlo sampling
 
 use crate::{time::Timer, Change, Context, Info, SyncFromAny, MOLAR_GAS_CONSTANT};
+use average::Mean;
 use rand::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::{cmp::Ordering, ops::Neg};
@@ -51,9 +52,11 @@ pub struct MoveStatistics {
     /// Number of accepted moves
     pub num_accepted: usize,
     /// Mean square displacement of some quantity (optional)
-    pub mean_square_displacement: Option<f64>,
+    pub mean_square_displacement: Option<Mean>,
     /// Timer that measures the time spent in the move
-    timer: Timer,
+    pub timer: Timer,
+    /// Custom statistics and information
+    pub info: serde_json::Map<String, serde_json::Value>,
 }
 
 impl MoveStatistics {
@@ -74,6 +77,21 @@ impl MoveStatistics {
     }
 }
 
+/// Frequency of a Monte Carlo move or a measurement
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+pub enum Frequency {
+    /// Every `n` steps
+    Every(usize),
+    /// With probability `p` regardless of number of affected molecules or atoms
+    Probability(f64),
+    /// With probability `p` for each affected molecule or atom
+    Sweep(f64),
+    /// Once at step `n`
+    Once(usize),
+    /// Once at the very last step
+    End,
+}
+
 /// Interface for acceptance criterion for Monte Carlo moves
 trait AcceptanceCriterion {
     /// Acceptance criterion based on an old and new energy and a temperature (J/mol and Kelvin)
@@ -83,7 +101,7 @@ trait AcceptanceCriterion {
 /// Metropolis-Hastings acceptance criterion
 ///
 /// More information: <https://en.wikipedia.org/wiki/Metropolis%E2%80%93Hastings_algorithm>
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize, Copy)]
 pub struct MetropolisHastings {}
 
 impl AcceptanceCriterion for MetropolisHastings {
@@ -104,9 +122,23 @@ impl AcceptanceCriterion for MetropolisHastings {
     }
 }
 
+/// Energy minimization acceptance criterion
+///
+/// This will always accept a move if the new energy is lower than the old energy.
+#[derive(Clone, Debug, Default, Serialize, Deserialize, Copy)]
+pub struct Minimize {}
+
+impl AcceptanceCriterion for Minimize {
+    fn accept(old_energy: f64, new_energy: f64, _temperature: f64, _rng: &mut ThreadRng) -> bool {
+        if old_energy.is_infinite() && new_energy.is_finite() {
+            return true;
+        }
+        new_energy <= old_energy
+    }
+}
+
 pub trait Move<T: Context>: Info + std::fmt::Debug + SyncFromAny {
-    /// Make a trial move in the given `context` and return an object
-    /// describing the change.
+    /// Try moving in the given `context` and return the change.
     fn do_move(&mut self, context: &mut T) -> Result<Change, anyhow::Error>;
 
     /// Get statistics for the move
@@ -114,6 +146,25 @@ pub trait Move<T: Context>: Info + std::fmt::Debug + SyncFromAny {
 
     /// Get mutable statistics for the move
     fn statistics_mut(&mut self) -> &mut MoveStatistics;
+
+    /// Called when the move is accepted
+    ///
+    /// This will update the statistics.
+    /// Can be re-implemented to perform additional actions.
+    fn accepted(&mut self, _change: Change) {
+        self.statistics_mut().accept();
+    }
+
+    /// Called when the move is rejected
+    ///
+    /// This will update the statistics.
+    /// Can be re-implemented to perform additional actions.
+    fn rejected(&mut self, _change: Change) {
+        self.statistics_mut().reject();
+    }
+
+    /// Get the move frequency
+    fn frequency(&self) -> Frequency;
 }
 
 /// # Monte Carlo simulation instance
