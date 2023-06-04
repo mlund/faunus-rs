@@ -22,7 +22,7 @@
 //! use interact::multipole::*;
 //! let charge = 1.0;
 //! let dist = 9.0;
-//! let plain = Coulomb::new(16.0); // cutoff at 16
+//! let plain = Coulomb::new(16.0, None); // cutoff at 16
 //! assert_eq!(plain.ion_potential(charge, dist), charge / dist);
 //! ~~~
 

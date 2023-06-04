@@ -29,12 +29,18 @@ impl Force for Coulomb {}
 /// In this scheme, the short-range function is _S(q)_ = 1.
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub struct Coulomb {
+    /// Cut-off distance
     cutoff: f64,
+    /// Inverse Debye length
+    kappa: f64,
 }
 
 impl Coulomb {
-    pub fn new(cutoff: f64) -> Self {
-        Self { cutoff }
+    pub fn new(cutoff: f64, debye_length: Option<f64>) -> Self {
+        Self {
+            cutoff,
+            kappa: 1.0 / debye_length.unwrap_or(f64::INFINITY),
+        }
     }
 }
 
@@ -60,7 +66,11 @@ impl crate::Cutoff for Coulomb {
 impl ShortRangeFunction for Coulomb {
     #[inline]
     fn kappa(&self) -> Option<f64> {
-        None
+        if self.kappa > 0.0 {
+            Some(self.kappa)
+        } else {
+            None
+        }
     }
     #[inline]
     fn short_range_f0(&self, _q: f64) -> f64 {
@@ -97,7 +107,7 @@ fn test_coulomb() {
     ); // distance vector for quadrupole check
     let rh = Point::new(1.0, 0.0, 0.0); // normalized distance vector
 
-    let pot = Coulomb::new(cutoff);
+    let pot = Coulomb::new(cutoff, None);
     let eps = 1e-9;
 
     // Test short-ranged function
@@ -191,27 +201,61 @@ fn test_coulomb() {
         0.0,
         epsilon = eps
     );
-    let ionion = pot.ion_ion_force(z1, z2, &r);
-    assert_relative_eq!(ionion[0], 0.01134215501, epsilon = eps);
-    assert_relative_eq!(ionion.norm(), 0.01134215501, epsilon = eps);
+    let force = pot.ion_ion_force(z1, z2, &r);
+    assert_relative_eq!(force[0], 0.01134215501, epsilon = eps);
+    assert_relative_eq!(force.norm(), 0.01134215501, epsilon = eps);
     assert_relative_eq!(
         pot.ion_dipole_force(z2, &mu1, &((cutoff + 1.0) * rh))
             .norm(),
         0.0,
         epsilon = eps
     );
-    let iondipole = pot.ion_dipole_force(z2, &mu1, &r);
-    assert_relative_eq!(iondipole[0], 0.009369606312, epsilon = eps);
-    assert_relative_eq!(iondipole[1], -0.001725980110, epsilon = eps);
-    assert_relative_eq!(iondipole[2], -0.002712254459, epsilon = eps);
+    let force = pot.ion_dipole_force(z2, &mu1, &r);
+    assert_relative_eq!(force[0], 0.009369606312, epsilon = eps);
+    assert_relative_eq!(force[1], -0.001725980110, epsilon = eps);
+    assert_relative_eq!(force[2], -0.002712254459, epsilon = eps);
     assert_relative_eq!(
         pot.dipole_dipole_force(&mu1, &mu2, &((cutoff + 1.0) * rh))
             .norm(),
         0.0,
         epsilon = eps
     );
-    let dipoledipole = pot.dipole_dipole_force(&mu1, &mu2, &r);
-    assert_relative_eq!(dipoledipole[0], 0.003430519474, epsilon = eps);
-    assert_relative_eq!(dipoledipole[1], -0.004438234569, epsilon = eps);
-    assert_relative_eq!(dipoledipole[2], -0.002551448858, epsilon = eps);
+    let force = pot.dipole_dipole_force(&mu1, &mu2, &r);
+    assert_relative_eq!(force[0], 0.003430519474, epsilon = eps);
+    assert_relative_eq!(force[1], -0.004438234569, epsilon = eps);
+    assert_relative_eq!(force[2], -0.002551448858, epsilon = eps);
+
+    // Now test with a non-zero kappa
+    let pot = Coulomb::new(cutoff, Some(23.0));
+    assert_relative_eq!(pot.ion_potential(z1, cutoff + 1.0), 0.0, epsilon = eps);
+    assert_relative_eq!(
+        pot.ion_potential(z1, r.norm()),
+        0.03198951663,
+        epsilon = eps
+    );
+    assert_relative_eq!(
+        pot.dipole_potential(&mu1, &((cutoff + 1.0) * rh)),
+        0.0,
+        epsilon = eps
+    );
+    assert_relative_eq!(pot.dipole_potential(&mu1, &r), 0.02642612243, epsilon = eps);
+
+    // Test fields
+    assert_relative_eq!(
+        pot.ion_field(z1, &((cutoff + 1.0) * rh)).norm(),
+        0.0,
+        epsilon = eps
+    );
+    let field = pot.ion_field(z1, &r);
+    assert_relative_eq!(field[0], 0.002781697098, epsilon = eps);
+    assert_relative_eq!(field.norm(), 0.002781697098, epsilon = eps);
+    assert_relative_eq!(
+        pot.dipole_field(&mu1, &((cutoff + 1.0) * rh)).norm(),
+        0.0,
+        epsilon = eps
+    );
+    let field = pot.dipole_field(&mu1, &r);
+    assert_relative_eq!(field[0], 0.002872404612, epsilon = eps);
+    assert_relative_eq!(field[1], -0.0004233017324, epsilon = eps);
+    assert_relative_eq!(field[2], -0.0006651884364, epsilon = eps);
 }
