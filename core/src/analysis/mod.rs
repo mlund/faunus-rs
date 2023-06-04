@@ -15,19 +15,22 @@
 //! # System analysis and reporting
 
 use super::montecarlo::Frequency;
+use crate::{Context, Info};
 use anyhow::Result;
 use core::fmt::Debug;
-use serde::Serialize;
 
-pub trait Analyze: Debug {
+/// Interface for system analysis.
+pub trait Analyze<T: Context>: Debug + Info {
     /// Get analysis frequency
+    ///
+    /// This is the frequency at which the analysis should be performed.
     fn frequency(&self) -> Frequency;
 
-    /// Sample system
-    fn sample(&mut self) -> Result<()>;
+    /// Sample system.
+    fn sample(&mut self, context: &T) -> Result<()>;
 
-    /// Total number of samples
-    fn samples(&self) -> usize;
+    /// Total number of samples which is the sum of successful calls to `sample()`.
+    fn num_samples(&self) -> usize;
 
     /// Flush output stream, if any, ensuring that all intermediately buffered contents reach their destination.
     fn flush(&mut self) -> Result<()> {
@@ -40,8 +43,14 @@ pub trait Analyze: Debug {
     }
 }
 
-impl From<Box<dyn Analyze>> for serde_json::Map<String, serde_json::Value> {
-    fn from(analyze: Box<dyn Analyze>) -> Self {
-        analyze.to_json().unwrap_or_default()
+impl<T: Context> From<Box<dyn Analyze<T>>> for serde_json::Value {
+    fn from(analyze: Box<dyn Analyze<T>>) -> Self {
+        let mut j = analyze.to_json().unwrap_or_default();
+        j.insert("samples".into(), analyze.num_samples().into());
+        j.insert(
+            "frequency".into(),
+            serde_json::to_value(analyze.frequency()).unwrap_or_default(),
+        );
+        j.into()
     }
 }

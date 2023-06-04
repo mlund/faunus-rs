@@ -92,6 +92,18 @@ pub enum Frequency {
     End,
 }
 
+impl Frequency {
+    /// Check if action, typically a move or analysis, should be performed at given step
+    pub fn should_perform(&self, step: usize, rng: &mut ThreadRng) -> bool {
+        match self {
+            Frequency::Every(n) => step % n == 0,
+            Frequency::Probability(p) => rng.gen::<f64>() < *p,
+            Frequency::Once(n) => step == *n,
+            _ => unimplemented!("Frequency policy not implemented"),
+        }
+    }
+}
+
 /// Interface for acceptance criterion for Monte Carlo moves
 trait AcceptanceCriterion {
     /// Acceptance criterion based on an old and new energy and a temperature (J/mol and Kelvin)
@@ -138,8 +150,8 @@ impl AcceptanceCriterion for Minimize {
 }
 
 pub trait Move<T: Context>: Info + std::fmt::Debug + SyncFromAny {
-    /// Try moving in the given `context` and return the change.
-    fn do_move(&mut self, context: &mut T) -> Result<Change, anyhow::Error>;
+    /// Perform a move on given `context`.
+    fn do_move(&mut self, context: &T) -> anyhow::Result<Change>;
 
     /// Get statistics for the move
     fn statistics(&self) -> &MoveStatistics;
@@ -150,7 +162,7 @@ pub trait Move<T: Context>: Info + std::fmt::Debug + SyncFromAny {
     /// Called when the move is accepted
     ///
     /// This will update the statistics.
-    /// Can be re-implemented to perform additional actions.
+    /// Often re-implemented to perform additional actions.
     fn accepted(&mut self, _change: Change) {
         self.statistics_mut().accept();
     }
@@ -158,7 +170,7 @@ pub trait Move<T: Context>: Info + std::fmt::Debug + SyncFromAny {
     /// Called when the move is rejected
     ///
     /// This will update the statistics.
-    /// Can be re-implemented to perform additional actions.
+    /// Often re-implemented to perform additional actions.
     fn rejected(&mut self, _change: Change) {
         self.statistics_mut().reject();
     }
