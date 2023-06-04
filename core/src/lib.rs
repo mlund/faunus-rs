@@ -27,6 +27,7 @@ pub use interact::Info;
 pub mod cell;
 mod change;
 pub use self::change::{Change, GroupChange};
+pub mod analysis;
 pub mod chemistry;
 pub mod energy;
 pub mod group;
