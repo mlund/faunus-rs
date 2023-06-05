@@ -65,8 +65,11 @@ trait PointParticle {
 
 #[derive(Serialize, Deserialize, Default, Debug, Clone, PartialEq)]
 pub struct Particle {
+    /// Type of the particle
     id: usize,
+    /// Index in main list of particles
     index: usize,
+    /// Position of the particle
     pos: Point,
 }
 
