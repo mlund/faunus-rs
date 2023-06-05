@@ -23,20 +23,26 @@ use std::{cmp::Ordering, ops::Neg};
 /// Helper to handle old and new values, e.g. before and after a Monte Carlo move
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OldNew<T: core::fmt::Debug> {
-    old: T,
-    new: T,
+    pub old: T,
+    pub new: T,
+}
+
+impl<T: core::fmt::Debug> OldNew<T> {
+    pub fn new(old: T, new: T) -> Self {
+        Self { old, new }
+    }
 }
 
 impl OldNew<usize> {
     /// Difference `new - old` as a signed integer
-    pub fn delta(&self) -> i32 {
+    pub fn difference(&self) -> i32 {
         self.new as i32 - self.old as i32
     }
 }
 
 impl OldNew<f64> {
     /// Difference `new - old`
-    pub fn delta(&self) -> f64 {
+    pub fn difference(&self) -> f64 {
         self.new - self.old
     }
 }
@@ -196,17 +202,32 @@ pub struct Simulation<T: Context> {
 
 /// Entropy contribution due to a change in number of particles
 ///
+/// See <https://en.wikipedia.org/wiki/Entropy_(statistical_thermodynamics)#Entropy_of_mixing>
+/// and <https://doi.org/10/fqcpg3>.
 /// Note that the volume unit should match so that n/V matches the unit of the chemical potential
 pub fn entropy_bias(n: OldNew<usize>, volume: OldNew<f64>) -> f64 {
-    let dn = n.delta();
+    let dn = n.difference();
     match dn.cmp(&0) {
-        Ordering::Equal => 0.0,
+        Ordering::Equal => {
+            if volume.difference().abs() > f64::EPSILON {
+                panic!("Entropy bias currently cannot be used for volume changes")
+            }
+            0.0
+        }
         Ordering::Greater => (0..dn)
-            .map(|i| f64::ln(f64::from(i + 1 + n.old as i32) / volume.new))
+            .map(|i| f64::ln(f64::from(n.old as i32 + i + 1) / volume.new))
             .sum::<f64>(),
         Ordering::Less => (0..-dn)
-            .map(|i| f64::ln(f64::from(i - n.old as i32) / volume.old))
+            .map(|i| f64::ln(f64::from(n.old as i32 - i) / volume.old))
             .sum::<f64>()
             .neg(),
     }
+}
+
+#[test]
+fn test_entropy_bias() {
+    let vol = OldNew::new(1.0, 1.0);
+    assert_eq!(entropy_bias(OldNew::new(0, 0), vol.clone()), 0.0);
+    assert_eq!(entropy_bias(OldNew::new(1, 2), vol.clone()), f64::ln(2.0));
+    assert_eq!(entropy_bias(OldNew::new(2, 1), vol.clone()), f64::ln(0.5));
 }
