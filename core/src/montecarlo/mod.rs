@@ -23,7 +23,7 @@ use std::{cmp::Ordering, ops::Neg};
 /// Custom bias to be added to the energy after a given move
 ///
 /// Some moves may need to add additional bias not captured by the Hamiltonian.
-#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug)]
 pub enum Bias {
     /// Custom bias to be added to the energy
     Energy(f64),
@@ -35,7 +35,7 @@ pub enum Bias {
 ///
 /// Used e.g. for data before and after a Monte Carlo move
 /// and prevents mixing up the order or old and new values.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct NewOld<T: core::fmt::Debug> {
     pub new: T,
     pub old: T,
@@ -74,8 +74,10 @@ pub struct MoveStatistics {
     /// Mean square displacement of some quantity (optional)
     pub mean_square_displacement: Option<Mean>,
     /// Timer that measures the time spent in the move
+    #[serde(skip_deserializing)]
     pub timer: Timer,
-    /// Custom statistics and information
+    /// Custom statistics and information (only serialized)
+    #[serde(skip_deserializing)]
     pub info: serde_json::Map<String, serde_json::Value>,
 }
 
