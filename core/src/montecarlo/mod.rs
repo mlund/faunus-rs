@@ -31,30 +31,30 @@ pub enum Bias {
     ForceAccept,
 }
 
-/// Named helper struct to handle (`old`, `new`) values.
+/// Named helper struct to handle `new`, `old`) pairs.
 ///
 /// Used e.g. for data before and after a Monte Carlo move
 /// and prevents mixing up the order or old and new values.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct OldNew<T: core::fmt::Debug> {
-    pub old: T,
+pub struct NewOld<T: core::fmt::Debug> {
     pub new: T,
+    pub old: T,
 }
 
-impl<T: core::fmt::Debug> From<(T, T)> for OldNew<T> {
-    fn from((old, new): (T, T)) -> Self {
-        Self { old, new }
+impl<T: core::fmt::Debug> NewOld<T> {
+    pub fn from(new: T, old: T) -> Self {
+        Self { new, old }
     }
 }
 
-impl OldNew<usize> {
+impl NewOld<usize> {
     /// Difference `new - old` as a signed integer
     pub fn difference(&self) -> i32 {
         self.new as i32 - self.old as i32
     }
 }
 
-impl OldNew<f64> {
+impl NewOld<f64> {
     /// Difference `new - old`
     pub fn difference(&self) -> f64 {
         self.new - self.old
@@ -176,7 +176,7 @@ pub trait Move<T: Context>: Info + std::fmt::Debug + SyncFromAny {
     /// Moves may generate optional bias that should be added to the trial energy
     /// when determining the acceptance probability.
     /// It can also be used to force acceptance of a move in e.g. hybrid MD/MC schemes.
-    fn bias(&self, _change: Change, _energies: OldNew<f64>) -> Option<Bias> {
+    fn bias(&self, _change: Change, _energies: NewOld<f64>) -> Option<Bias> {
         None
     }
 
@@ -230,13 +230,14 @@ pub struct Simulation<T: Context> {
 /// # Examples
 /// ~~~
 /// use faunus::montecarlo::*;
-/// assert_eq!(entropy_bias((0, 0).into(), (1.0, 1.0).into()), 0.0);
-/// assert_eq!(entropy_bias((1, 2).into(), (1.0, 1.0).into()), f64::ln(2.0));
-/// assert_eq!(entropy_bias((2, 1).into(), (1.0, 1.0).into()), f64::ln(0.5));
+/// let vol = NewOld::from(1.0, 1.0);
+/// assert_eq!(entropy_bias(NewOld::from(0, 0), vol.clone()), 0.0);
+/// assert_eq!(entropy_bias(NewOld::from(2, 1), vol.clone()), f64::ln(2.0));
+/// assert_eq!(entropy_bias(NewOld::from(1, 2), vol.clone()), f64::ln(0.5));
 /// ~~~
 ///
 /// Note that the volume unit should match so that n/V matches the unit of the chemical potential
-pub fn entropy_bias(n: OldNew<usize>, volume: OldNew<f64>) -> f64 {
+pub fn entropy_bias(n: NewOld<usize>, volume: NewOld<f64>) -> f64 {
     let dn = n.difference();
     match dn.cmp(&0) {
         Ordering::Equal => {
