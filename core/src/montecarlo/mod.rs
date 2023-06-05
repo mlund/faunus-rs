@@ -20,7 +20,10 @@ use rand::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::{cmp::Ordering, ops::Neg};
 
-/// Helper to handle old and new values, e.g. before and after a Monte Carlo move
+/// Named helper struct to handle `old` and `new` values.
+///
+/// Used e.g. for data before and after a Monte Carlo move
+/// and prevents mixing up the order or old and new values.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OldNew<T: core::fmt::Debug> {
     pub old: T,
