@@ -21,6 +21,7 @@ use crate::{
 use anyhow::Ok;
 use serde::{Deserialize, Serialize};
 
+/// Spherical cell with hard walls, i.e. no periodic boundary conditions
 #[derive(Clone, Debug, Serialize, Deserialize, Copy, PartialEq)]
 pub struct Sphere {
     radius: f64,

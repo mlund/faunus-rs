@@ -20,6 +20,7 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 
+/// Endless simulation cell with no boundaries and infinite volume
 #[derive(Clone, Debug, Serialize, Deserialize, Copy, Default)]
 pub struct Endless {}
 

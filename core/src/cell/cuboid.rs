@@ -21,7 +21,7 @@ use crate::{
 use anyhow::Ok;
 use serde::{Deserialize, Serialize};
 
-/// Cuboidal unit cell, with cuboid shape
+/// Cuboidal unit cell
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Cuboid {
     /// Unit cell vectors

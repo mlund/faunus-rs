@@ -100,6 +100,8 @@ pub trait SyncFromAny {
 }
 
 pub trait Context: GroupCollection + cell::SimulationCell + Clone + std::fmt::Debug {
+    /// Simulation cell type
+    type Cell: cell::SimulationCell;
     /// Get list of energies in the system
     fn energies(&self) {}
 }

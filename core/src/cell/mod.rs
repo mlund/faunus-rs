@@ -19,13 +19,16 @@
 //! Some statistical thermodynamic ensembles require volume fluctuations, which is implemented by scaling the simulation cell
 //! through the [`VolumeScale`] trait.
 
-pub mod cuboid;
-pub mod endless;
+mod cuboid;
+mod endless;
 pub(crate) mod lumol;
-pub mod sphere;
+mod sphere;
 
 use crate::Point;
+pub use cuboid::Cuboid;
+pub use endless::Endless;
 use serde::{Deserialize, Serialize};
+pub use sphere::Sphere;
 
 /// Final interface for a unit cell used to describe the geometry of a simulation system.
 ///

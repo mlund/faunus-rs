@@ -28,7 +28,7 @@ pub mod nonbonded;
 pub struct ReferencePlatform {
     particles: Vec<Particle>,
     groups: Vec<Group>,
-    _cell: crate::cell::lumol::UnitCell,
+    _cell: crate::cell::Cuboid,
     _energies: Vec<Box<dyn EnergyTerm>>,
 }
 
