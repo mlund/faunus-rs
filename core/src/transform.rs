@@ -14,7 +14,9 @@
 
 //! Transformations of particles and groups
 
-use crate::{cell::SimulationCell, cell::VolumeScalePolicy, Point, PointParticle};
+use crate::{
+    cell::SimulationCell, cell::VolumeScalePolicy, group::ParticleSelection, Point, PointParticle,
+};
 use anyhow::Ok;
 use nalgebra::Quaternion;
 use rand::prelude::*;
@@ -83,10 +85,11 @@ pub fn transform(
             )?
         }
         Transform::PartialTranslate(displacement, indices) => {
-            let mut particles = context.get_indexed_particles(group_index, indices.iter().copied());
+            let selection = ParticleSelection::RelIndex(indices.clone());
+            let mut particles = context.get_particles(group_index, selection.clone());
             let positions = particles.iter_mut().map(|p| p.pos_mut());
             partial_translate(context.cell(), positions, displacement);
-            context.set_indexed_particles(group_index, particles.iter(), indices.iter().copied())?
+            context.set_particles(group_index, selection, particles.iter())?
         }
         _ => {
             todo!("Implement other transforms")

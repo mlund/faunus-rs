@@ -90,7 +90,7 @@ where
         let index = groups[group_index].absolute_index(rel_index).unwrap();
         groups
             .iter()
-            .flat_map(|group| group.indices())
+            .flat_map(|group| group.iter_active())
             .filter(|other| *other != index)
             .fold(0.0, |sum, other| {
                 let particle1 = &self.platform.particles[index];
@@ -113,8 +113,8 @@ where
 
     /// Calculates the energy between two groups
     pub fn group_to_group(&self, group1: &Group, group2: &Group) -> f64 {
-        let particles1 = self.platform.particles[group1.indices()].iter();
-        let particles2 = self.platform.particles[group2.indices()].iter();
+        let particles1 = self.platform.particles[group1.iter_active()].iter();
+        let particles2 = self.platform.particles[group2.iter_active()].iter();
         iproduct!(particles1, particles2)
             .fold(0.0, |sum, (i, j)| sum + self.particle_with_particle(i, j))
     }

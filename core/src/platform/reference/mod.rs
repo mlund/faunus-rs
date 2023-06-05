@@ -19,7 +19,6 @@ use crate::{
     group::{GroupCollection, GroupSize},
     Change, Group, Particle, SyncFrom,
 };
-use anyhow::{anyhow, Ok};
 
 pub mod nonbonded;
 
@@ -69,14 +68,31 @@ impl GroupCollection for ReferencePlatform {
         self.groups.as_ref()
     }
 
-    fn get_particles(&self, group_index: usize) -> Vec<Particle> {
-        let indices = self.groups[group_index].indices();
-        self.particles[indices].to_vec()
+    fn particle(&self, index: usize) -> &Particle {
+        &self.particles[index]
+    }
+
+    fn set_particles<'a>(
+        &mut self,
+        group_index: usize,
+        selection: crate::group::ParticleSelection,
+        source: impl Iterator<Item = &'a Particle> + std::clone::Clone,
+    ) -> anyhow::Result<()> {
+        let indices = self.groups()[group_index].select(&selection).unwrap();
+        let mut count = 0;
+        for (src, i) in source.zip(&indices) {
+            self.particles[*i] = src.clone();
+            count += 1;
+        }
+        if count != indices.len() {
+            anyhow::bail!("Mismatch in selection and particle lengths");
+        }
+        Ok(())
     }
 
     fn add_group(&mut self, id: Option<usize>, particles: &[Particle]) -> anyhow::Result<&Group> {
         if particles.is_empty() {
-            return Err(anyhow!("Cannot create empty group"));
+            anyhow::bail!("Cannot create empty group");
         }
         let range = self.particles.len()..self.particles.len() + particles.len();
         self.particles.extend_from_slice(particles);
@@ -86,55 +102,6 @@ impl GroupCollection for ReferencePlatform {
 
     fn resize_group(&mut self, group_index: usize, status: GroupSize) -> anyhow::Result<()> {
         self.groups[group_index].resize(status)
-    }
-
-    fn set_particles<'a>(
-        &mut self,
-        group_index: usize,
-        particles: impl Iterator<Item = &'a Particle>,
-    ) -> anyhow::Result<()> {
-        let group = &self.groups[group_index];
-        self.set_indexed_particles(group_index, particles, 0..group.len())
-    }
-
-    fn set_indexed_particles<'a>(
-        &mut self,
-        group_index: usize,
-        particles: impl Iterator<Item = &'a Particle>,
-        relative_indices: impl Iterator<Item = usize>,
-    ) -> anyhow::Result<()> {
-        let group = &mut self.groups[group_index];
-        let mut particles = particles.peekable();
-        if particles.peek().is_none() {
-            return Err(anyhow!("Cannot set empty particle list"));
-        }
-        for (count, (particle, index)) in particles.zip(relative_indices).enumerate() {
-            if count > group.capacity() {
-                return Err(anyhow!(
-                    "Particle index {} exceeds group capacity {}",
-                    count,
-                    group.capacity()
-                ));
-            }
-            self.particles[group.all_indices().start + index] = particle.clone();
-        }
-        Ok(())
-    }
-
-    fn get_indexed_particles(
-        &self,
-        group_index: usize,
-        indices: impl Iterator<Item = usize> + Clone,
-    ) -> Vec<Particle> {
-        let group = &self.groups[group_index];
-        if !indices.clone().all(|i| i < group.capacity()) {
-            panic!("Particle index exceeds group capacity");
-        }
-
-        indices
-            .map(|i_rel| i_rel + group.all_indices().start)
-            .map(|i_abs| self.particles[i_abs].clone())
-            .collect::<Vec<Particle>>()
     }
 }
 
@@ -161,7 +128,7 @@ impl ReferencePlatform {
         };
         self.groups
             .iter()
-            .map(|g| g.indices())
+            .map(|g| g.iter_active())
             .filter(no_overlap)
             .flatten()
             .collect()

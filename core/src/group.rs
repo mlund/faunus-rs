@@ -61,6 +61,21 @@ pub enum GroupSize {
     Shrink(usize),
 }
 
+/// Enum for selecting a subset of particles in a group
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub enum ParticleSelection {
+    /// All particles
+    All,
+    /// Active particles
+    Active,
+    /// Inactive particles
+    Inactive,
+    /// Specific indices (relative indices)
+    RelIndex(Vec<usize>),
+    /// Specific indices (absolute indices)
+    AbsIndex(Vec<usize>),
+}
+
 impl Group {
     /// Create a new group
     pub fn new(index: usize, id: Option<usize>, range: core::ops::Range<usize>) -> Self {
@@ -140,11 +155,40 @@ impl Group {
     }
 
     /// Absolute indices of active particles in main particle vector
-    pub fn indices(&self) -> std::ops::Range<usize> {
+    pub fn iter_active(&self) -> std::ops::Range<usize> {
         std::ops::Range {
             start: self.range.start,
             end: self.range.start + self.num_active,
         }
+    }
+
+    /// Select (subset) of indices in the group.
+    ///
+    /// Absolute indices in main particle vector are returned and are guaranteed to be within the group.
+    pub fn select(&self, selection: &ParticleSelection) -> Result<Vec<usize>, anyhow::Error> {
+        let to_abs = |i: usize| i + self.iter_all().start;
+        let indices: Vec<usize> = match selection {
+            crate::group::ParticleSelection::AbsIndex(indices) => indices.clone(),
+            crate::group::ParticleSelection::RelIndex(indices_rel) => {
+                indices_rel.iter().map(|i| to_abs(*i)).collect()
+            }
+            crate::group::ParticleSelection::All => return Ok(self.iter_all().collect()),
+            crate::group::ParticleSelection::Active => return Ok(self.iter_active().collect()),
+            crate::group::ParticleSelection::Inactive => return Ok(self.iter_inactive().collect()),
+        };
+        if indices.iter().all(|i| self.contains(*i)) {
+            return Ok(indices);
+        }
+        anyhow::bail!(
+            "Invalid indices {:?} for group with range {:?}",
+            indices,
+            self.range
+        )
+    }
+
+    /// Check if given index is within the group
+    pub fn contains(&self, index: usize) -> bool {
+        index >= self.range.start && index < self.range.end
     }
 
     /// Converts a relative index to an absolute index with range check.
@@ -159,7 +203,7 @@ impl Group {
 
     /// Absolute indices of *all* particles in main particle vector, both active and inactive (immutable).
     /// This reflects the full capacity of the group and never changes over the lifetime of the group.
-    pub fn all_indices(&self) -> std::ops::Range<usize> {
+    pub fn iter_all(&self) -> std::ops::Range<usize> {
         self.range.clone()
     }
 
@@ -169,7 +213,7 @@ impl Group {
     }
 
     /// Iterator to inactive indices (absolute indices in main particle vector)
-    pub fn inactive(&self) -> impl Iterator<Item = usize> {
+    pub fn iter_inactive(&self) -> impl Iterator<Item = usize> {
         self.range.clone().skip(self.num_active)
     }
     /// Center of mass of the group
@@ -193,36 +237,34 @@ pub trait GroupCollection {
     /// List of all groups in the system
     fn groups(&self) -> &[Group];
 
-    /// Get copy of active particles for a given group
-    fn get_particles(&self, group_index: usize) -> Vec<Particle>;
+    /// Reference to i'th particle in the system
+    fn particle(&self, index: usize) -> &Particle;
 
-    /// Get copy of particles in a subset of particles for a given group.
-    /// The indices are indices in the group, not in the full particle vector.
-    fn get_indexed_particles(
-        &self,
-        group_index: usize,
-        indices: impl Iterator<Item = usize> + Clone,
-    ) -> Vec<Particle>;
+    /// Get copy of particles for a given group.
+    ///
+    /// The selection, which must be valid within the group, can be used to extract a subset of particles.
+    fn get_particles(&self, group_index: usize, selection: ParticleSelection) -> Vec<Particle> {
+        return self.groups()[group_index]
+            .select(&selection)
+            .unwrap()
+            .iter()
+            .map(|i| self.particle(*i).clone())
+            .collect();
+    }
 
-    /// Set particles for a given group. Errors if there's a mismatch with the current group size.
+    /// Set particles for a given group.
     fn set_particles<'a>(
         &mut self,
         group_index: usize,
-        particles: impl Iterator<Item = &'a Particle>,
+        selection: ParticleSelection,
+        source: impl Iterator<Item = &'a Particle> + Clone,
     ) -> anyhow::Result<()>;
 
-    /// Set a subset of particles for a given group. Errors if there's a mismatch with the current group size.
-    /// The indices are in the group, not in the full particle vector, and may be in the full capacity range of the group.
-    fn set_indexed_particles<'a>(
-        &mut self,
-        group_index: usize,
-        particles: impl Iterator<Item = &'a Particle>,
-        indices: impl Iterator<Item = usize>,
-    ) -> anyhow::Result<()>;
-
-    /// Resizes a group to a given size. Errors if the requested size is larger than the capacity, or if there are
-    /// too few active particles to shrink the group.
-    fn resize_group(&mut self, group_index: usize, status: GroupSize) -> anyhow::Result<()>;
+    /// Resizes a group to a given size.
+    ///
+    /// Errors if the requested size is larger than the capacity, or if there are
+    /// too few active particles to shrink a group.
+    fn resize_group(&mut self, group_index: usize, size: GroupSize) -> anyhow::Result<()>;
 }
 
 #[cfg(test)]
@@ -243,7 +285,7 @@ mod tests {
 
         assert_eq!(group.len(), 6);
         assert_eq!(group.capacity(), 10);
-        assert_eq!(group.indices(), 0..6);
+        assert_eq!(group.iter_active(), 0..6);
         assert_eq!(group.id(), Some(20));
         assert_eq!(group.size(), GroupSize::Partial(6));
         assert_eq!(group.index(), 2);
@@ -253,28 +295,28 @@ mod tests {
         let result = group.resize(GroupSize::Expand(2));
         assert!(result.is_ok());
         assert_eq!(group.len(), 8);
-        assert_eq!(group.indices(), 0..8);
+        assert_eq!(group.iter_active(), 0..8);
         assert_eq!(group.size(), GroupSize::Partial(8));
 
         // Test shrink group by 3 elements
         let result = group.resize(GroupSize::Shrink(3));
         assert!(result.is_ok());
         assert_eq!(group.len(), 5);
-        assert_eq!(group.indices(), 0..5);
+        assert_eq!(group.iter_active(), 0..5);
         assert_eq!(group.size(), GroupSize::Partial(5));
 
         // Test fully activate group
         let result = group.resize(GroupSize::Full);
         assert!(result.is_ok());
         assert_eq!(group.len(), 10);
-        assert_eq!(group.indices(), 0..10);
+        assert_eq!(group.iter_active(), 0..10);
         assert_eq!(group.size(), GroupSize::Full);
 
         // Test fully deactivate group
         let result = group.resize(GroupSize::Empty);
         assert!(result.is_ok());
         assert_eq!(group.len(), 0);
-        assert_eq!(group.indices(), 0..0);
+        assert_eq!(group.iter_active(), 0..0);
         assert_eq!(group.size(), GroupSize::Empty);
         assert!(group.is_empty());
 
