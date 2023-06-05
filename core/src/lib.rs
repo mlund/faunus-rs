@@ -99,9 +99,14 @@ pub trait SyncFromAny {
     fn sync_from(&mut self, other: &dyn as_any::AsAny, change: &Change) -> anyhow::Result<()>;
 }
 
-pub trait Context: GroupCollection + cell::SimulationCell + Clone + std::fmt::Debug {
+/// Context stores the state of a single simulation system
+///
+/// There can be multiple contexts in a simulation, e.g. one for a trial move and one for the current state.
+pub trait Context: GroupCollection + Clone + std::fmt::Debug {
     /// Simulation cell type
     type Cell: cell::SimulationCell;
-    /// Get list of energies in the system
-    fn energies(&self) {}
+    /// Get reference to simulation cell
+    fn cell(&self) -> &Self::Cell;
+    /// Get mutable reference to simulation cell
+    fn cell_mut(&mut self) -> &mut Self::Cell;
 }

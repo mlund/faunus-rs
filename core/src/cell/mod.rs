@@ -21,7 +21,7 @@
 
 mod cuboid;
 mod endless;
-pub(crate) mod lumol;
+//pub(crate) mod lumol;
 mod sphere;
 
 use crate::Point;

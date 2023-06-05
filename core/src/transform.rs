@@ -85,7 +85,7 @@ pub fn transform(
         Transform::PartialTranslate(displacement, indices) => {
             let mut particles = context.get_indexed_particles(group_index, indices.iter().copied());
             let positions = particles.iter_mut().map(|p| p.pos_mut());
-            partial_translate(context, positions, displacement);
+            partial_translate(context.cell(), positions, displacement);
             context.set_indexed_particles(group_index, particles.iter(), indices.iter().copied())?
         }
         _ => {

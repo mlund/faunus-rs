@@ -12,6 +12,8 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
+//! # Reference platform for CPU-based simulations
+
 use crate::{
     energy::EnergyTerm,
     group::{GroupCollection, GroupSize},
@@ -21,15 +23,27 @@ use anyhow::{anyhow, Ok};
 
 pub mod nonbonded;
 
-/// This is the default platform running on the CPU. Particles are stored in
+/// Default platform running on the CPU.
+///
+/// Particles are stored in
 /// a single vector, and groups are stored in a separate vector. This mostly
 /// follows the same layout as the original C++ Faunus code (version 2 and lower).
 #[derive(Debug)]
 pub struct ReferencePlatform {
     particles: Vec<Particle>,
     groups: Vec<Group>,
-    _cell: crate::cell::Cuboid,
+    cell: crate::cell::Cuboid,
     _energies: Vec<Box<dyn EnergyTerm>>,
+}
+
+impl crate::Context for ReferencePlatform {
+    type Cell = crate::cell::Cuboid;
+    fn cell(&self) -> &Self::Cell {
+        &self.cell
+    }
+    fn cell_mut(&mut self) -> &mut Self::Cell {
+        &mut self.cell
+    }
 }
 
 impl Clone for ReferencePlatform {
@@ -131,11 +145,11 @@ impl GroupCollection for ReferencePlatform {
 /// The idea is to access the particle in a group-wise fashion, e.g. to update
 /// the center of mass of a group, or to rotate a group of particles.
 impl ReferencePlatform {
-    pub fn new(cell: crate::cell::lumol::UnitCell) -> Self {
+    pub fn new(cell: crate::cell::Cuboid) -> Self {
         Self {
             particles: Vec::new(),
             groups: Vec::new(),
-            _cell: cell,
+            cell,
             _energies: Vec::new(),
         }
     }
