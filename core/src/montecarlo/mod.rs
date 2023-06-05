@@ -20,6 +20,17 @@ use rand::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::{cmp::Ordering, ops::Neg};
 
+/// Custom bias to be added to the energy after a given move
+///
+/// Some moves may need to add additional bias not captured by the Hamiltonian.
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+pub enum Bias {
+    /// Custom bias to be added to the energy
+    Energy(f64),
+    /// Force acceptance of the move regardless of energy change
+    ForceAccept,
+}
+
 /// Named helper struct to handle (`old`, `new`) values.
 ///
 /// Used e.g. for data before and after a Monte Carlo move
@@ -162,6 +173,13 @@ pub trait Move<T: Context>: Info + std::fmt::Debug + SyncFromAny {
     /// Perform a move on given `context`.
     fn do_move(&mut self, context: &T) -> anyhow::Result<Change>;
 
+    /// Moves may generate optional bias that should be added to the trial energy
+    /// when determining the acceptance probability.
+    /// It can also be used to force acceptance of a move in e.g. hybrid MD/MC schemes.
+    fn bias(&self, _change: Change, _energies: OldNew<f64>) -> Option<Bias> {
+        None
+    }
+
     /// Get statistics for the move
     fn statistics(&self) -> &MoveStatistics;
 
@@ -212,7 +230,6 @@ pub struct Simulation<T: Context> {
 /// # Examples
 /// ~~~
 /// use faunus::montecarlo::*;
-/// let vol = OldNew::from(1.0, 1.0);
 /// assert_eq!(entropy_bias((0, 0).into(), (1.0, 1.0).into()), 0.0);
 /// assert_eq!(entropy_bias((1, 2).into(), (1.0, 1.0).into()), f64::ln(2.0));
 /// assert_eq!(entropy_bias((2, 1).into(), (1.0, 1.0).into()), f64::ln(0.5));
