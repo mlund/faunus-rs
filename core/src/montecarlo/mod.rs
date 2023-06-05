@@ -20,7 +20,7 @@ use rand::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::{cmp::Ordering, ops::Neg};
 
-/// Named helper struct to handle `old` and `new` values.
+/// Named helper struct to handle (`old`, `new`) values.
 ///
 /// Used e.g. for data before and after a Monte Carlo move
 /// and prevents mixing up the order or old and new values.
@@ -30,8 +30,8 @@ pub struct OldNew<T: core::fmt::Debug> {
     pub new: T,
 }
 
-impl<T: core::fmt::Debug> OldNew<T> {
-    pub fn new(old: T, new: T) -> Self {
+impl<T: core::fmt::Debug> From<(T, T)> for OldNew<T> {
+    fn from((old, new): (T, T)) -> Self {
         Self { old, new }
     }
 }
@@ -108,7 +108,7 @@ impl Frequency {
             Frequency::Every(n) => step % n == 0,
             Frequency::Probability(p) => rng.gen::<f64>() < *p,
             Frequency::Once(n) => step == *n,
-            _ => unimplemented!("Frequency policy not implemented"),
+            _ => unimplemented!("Unsupported frequency policy"),
         }
     }
 }
@@ -203,17 +203,28 @@ pub struct Simulation<T: Context> {
     _new_context: T,
 }
 
-/// Entropy contribution due to a change in number of particles
+/// Entropy bias due to a change in number of particles
 ///
-/// See <https://en.wikipedia.org/wiki/Entropy_(statistical_thermodynamics)#Entropy_of_mixing>
-/// and <https://doi.org/10/fqcpg3>.
+/// See:
+/// - <https://en.wikipedia.org/wiki/Entropy_(statistical_thermodynamics)#Entropy_of_mixing>
+/// - <https://doi.org/10/fqcpg3>
+///
+/// # Examples
+/// ~~~
+/// use faunus::montecarlo::*;
+/// let vol = OldNew::from(1.0, 1.0);
+/// assert_eq!(entropy_bias((0, 0).into(), (1.0, 1.0).into()), 0.0);
+/// assert_eq!(entropy_bias((1, 2).into(), (1.0, 1.0).into()), f64::ln(2.0));
+/// assert_eq!(entropy_bias((2, 1).into(), (1.0, 1.0).into()), f64::ln(0.5));
+/// ~~~
+///
 /// Note that the volume unit should match so that n/V matches the unit of the chemical potential
 pub fn entropy_bias(n: OldNew<usize>, volume: OldNew<f64>) -> f64 {
     let dn = n.difference();
     match dn.cmp(&0) {
         Ordering::Equal => {
             if volume.difference().abs() > f64::EPSILON {
-                panic!("Entropy bias currently cannot be used for volume changes")
+                unimplemented!("Entropy bias currently cannot be used for volume changes")
             }
             0.0
         }
@@ -225,12 +236,4 @@ pub fn entropy_bias(n: OldNew<usize>, volume: OldNew<f64>) -> f64 {
             .sum::<f64>()
             .neg(),
     }
-}
-
-#[test]
-fn test_entropy_bias() {
-    let vol = OldNew::new(1.0, 1.0);
-    assert_eq!(entropy_bias(OldNew::new(0, 0), vol.clone()), 0.0);
-    assert_eq!(entropy_bias(OldNew::new(1, 2), vol.clone()), f64::ln(2.0));
-    assert_eq!(entropy_bias(OldNew::new(2, 1), vol.clone()), f64::ln(0.5));
 }
