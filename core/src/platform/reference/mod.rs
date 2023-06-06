@@ -16,7 +16,7 @@
 
 use crate::{
     energy::EnergyTerm,
-    group::{GroupCollection, GroupSize},
+    group::{GroupCollection, GroupId, GroupSize},
     topology::{self, Topology},
     Change, Group, Particle, SyncFrom,
 };
@@ -30,7 +30,7 @@ pub mod nonbonded;
 /// Particles are stored in
 /// a single vector, and groups are stored in a separate vector. This mostly
 /// follows the same layout as the original C++ Faunus code (version 2 and lower).
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ReferencePlatform {
     topology: Arc<Topology>,
     particles: Vec<Particle>,
@@ -49,12 +49,6 @@ impl crate::Context for ReferencePlatform {
     }
     fn topology(&self) -> Arc<topology::Topology> {
         self.topology.clone()
-    }
-}
-
-impl Clone for ReferencePlatform {
-    fn clone(&self) -> Self {
-        todo!("clone boxed energies")
     }
 }
 
@@ -90,7 +84,7 @@ impl GroupCollection for ReferencePlatform {
         Ok(())
     }
 
-    fn add_group(&mut self, id: Option<usize>, particles: &[Particle]) -> anyhow::Result<&Group> {
+    fn add_group(&mut self, id: GroupId, particles: &[Particle]) -> anyhow::Result<&Group> {
         if particles.is_empty() {
             anyhow::bail!("Cannot create empty group");
         }

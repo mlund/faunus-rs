@@ -71,6 +71,11 @@ impl ResidueKind {
         self.connectivity.bonds.push(bond);
         Ok(())
     }
+
+    /// Append atom to residue
+    pub fn add_atom(&mut self, atom: usize) {
+        self.atoms.push(atom);
+    }
 }
 
 // Convert a chemfiles residue to a topology residue

@@ -34,7 +34,7 @@ pub type ParticleVec = Vec<Particle>;
 /// Here an example of a group with 3 particles, starting at index 20 in the main particle vector.
 /// ~~~
 /// use faunus::group::*;
-/// let mut group = Group::new(7, None, 20..23);
+/// let mut group = Group::new(7, GroupId::None, 20..23);
 /// assert_eq!(group.len(), 3);
 /// assert_eq!(group.size(), GroupSize::Full);
 ///
@@ -51,7 +51,7 @@ pub type ParticleVec = Vec<Particle>;
 #[derive(Serialize, Deserialize, Default, Debug, PartialEq, Clone)]
 pub struct Group {
     /// Molecular type id (immutable)
-    id: Option<usize>,
+    id: GroupId,
     /// Index of group in main group vector (immutable and unique)
     index: usize,
     /// Optional mass center
@@ -62,6 +62,20 @@ pub struct Group {
     range: std::ops::Range<usize>,
     /// Size status
     size_status: GroupSize,
+}
+
+/// Describes how a group is built, i.e. what it is based on in the `Topology`
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone, Default)]
+pub enum GroupId {
+    /// Group consists of a single residue (residue kind)
+    Residue(usize),
+    /// Repeated residue (residue kind, n)
+    RepeatResidue(usize, usize),
+    /// Group is build from a chain (chainid)
+    Chain(usize),
+    /// Unspecified
+    #[default]
+    None,
 }
 
 /// Activation status of a group of particles
@@ -113,15 +127,15 @@ pub enum GroupSelection {
     /// Groups with given index
     Index(Vec<usize>),
     /// Groups with given id
-    ById(usize),
+    ById(GroupId),
 }
 
 impl Group {
     /// Create a new group
-    pub fn new(index: usize, id: Option<usize>, range: core::ops::Range<usize>) -> Self {
+    pub fn new(index: usize, id: GroupId, range: core::ops::Range<usize>) -> Self {
         Self {
-            id,
             index,
+            id,
             range: range.clone(),
             num_active: range.len(),
             ..Default::default()
@@ -176,8 +190,8 @@ impl Group {
 
     /// Get molecular id
     #[inline]
-    pub fn id(&self) -> Option<usize> {
-        self.id
+    pub fn id(&self) -> &GroupId {
+        &self.id
     }
     /// Maximum number of particles (active plus inactive)
     pub fn capacity(&self) -> usize {
@@ -272,7 +286,7 @@ impl Group {
 /// global particle list.
 pub trait GroupCollection {
     /// Add a group to the system based on an id and a set of particles given by an iterator.
-    fn add_group(&mut self, id: Option<usize>, particles: &[Particle]) -> anyhow::Result<&Group>;
+    fn add_group(&mut self, id: GroupId, particles: &[Particle]) -> anyhow::Result<&Group>;
 
     /// Resizes a group to a given size.
     ///
@@ -310,7 +324,7 @@ pub trait GroupCollection {
                 .groups()
                 .iter()
                 .enumerate()
-                .filter(|(_, g)| g.id() == Some(*id))
+                .filter(|(_, g)| g.id() == id)
                 .map(|(i, _)| i)
                 .collect(),
             GroupSelection::All => (0..self.groups().len()).collect(),
@@ -341,7 +355,7 @@ mod tests {
     fn test_group() {
         // Test group creation
         let mut group = Group {
-            id: Some(20),
+            id: GroupId::Residue(20),
             index: 2,
             mass_center: None,
             num_active: 6,
@@ -352,7 +366,7 @@ mod tests {
         assert_eq!(group.len(), 6);
         assert_eq!(group.capacity(), 10);
         assert_eq!(group.iter_active(), 0..6);
-        assert_eq!(group.id(), Some(20));
+        assert_eq!(group.id(), &GroupId::Residue(20));
         assert_eq!(group.size(), GroupSize::Partial(6));
         assert_eq!(group.index(), 2);
         assert!(group.mass_center().is_none());
@@ -405,7 +419,7 @@ mod tests {
         assert_eq!(group.size(), GroupSize::Empty);
 
         // Relative selection
-        let mut group = Group::new(7, None, 20..23);
+        let mut group = Group::new(7, GroupId::None, 20..23);
         assert_eq!(group.len(), 3);
         let indices = group
             .select(&ParticleSelection::RelIndex(vec![0, 1, 2]))

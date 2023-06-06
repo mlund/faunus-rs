@@ -23,3 +23,10 @@ pub trait EnergyTerm: Info + AsAny + std::fmt::Debug + SyncFromAny {
     /// The energy is returned in units of kJ/mol.
     fn energy_change(&self, change: &Change) -> Option<f64>;
 }
+
+impl Clone for Box<dyn EnergyTerm> {
+    #[allow(unconditional_recursion)]
+    fn clone(&self) -> Self {
+        self.as_any().downcast_ref::<Self>().unwrap().clone()
+    }
+}
