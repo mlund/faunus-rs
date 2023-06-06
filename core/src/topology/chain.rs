@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 
 /// Chain of connected residues
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
-pub struct Chain {
+pub struct ChainKind {
     /// Unique name, e.g. _"A"_, _"B"_, etc.
     pub name: String,
     /// Unique identifier

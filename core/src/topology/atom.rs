@@ -27,13 +27,13 @@ pub enum Hydrophobicity {
     SurfaceTension(f64),
 }
 
-/// Information about atoms
+/// Description of atom properties
 ///
 /// Atoms need not be chemical elements, but can be custom atoms representing interaction sites.
-/// The `AtomType` does _not_ include positions; indices etc., but is rather
+/// This does _not_ include positions; indices etc., but is rather
 /// used to represent static properties used for templating atoms.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
-pub struct Atom {
+pub struct AtomKind {
     /// Unique name
     pub name: String,
     /// Unique identifier
@@ -54,7 +54,7 @@ pub struct Atom {
     pub custom: std::collections::HashMap<String, Value>,
 }
 
-impl Atom {
+impl AtomKind {
     /// New atom type with given name but with otherwise default values
     pub fn new(name: &str) -> Self {
         Self {
@@ -68,7 +68,7 @@ impl Atom {
     }
 }
 
-impl CustomProperty for Atom {
+impl CustomProperty for AtomKind {
     fn set_property(&mut self, key: &str, value: Value) -> anyhow::Result<()> {
         self.custom.insert(key.to_string(), value);
         Ok(())
@@ -79,9 +79,9 @@ impl CustomProperty for Atom {
 }
 
 /// Convert from chemfiles atom to topology atom
-impl core::convert::From<chemfiles::AtomRef<'_>> for Atom {
+impl core::convert::From<chemfiles::AtomRef<'_>> for AtomKind {
     fn from(atom: chemfiles::AtomRef) -> Self {
-        Atom {
+        AtomKind {
             name: atom.name(),
             id: 0,
             mass: atom.mass(),

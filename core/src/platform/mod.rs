@@ -12,7 +12,10 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
-use crate::{cell::SimulationCell, group::GroupCollection, SyncFrom};
-pub mod reference;
+//! # Platform specific code.
+//!
+//! This containes implementations of e.g. `Context` and the Hamiltonian
+//! for different hardware platforms.
+//! This allows for e.g. GPU acceleration, or special parallelization schemes.
 
-pub trait Platform: GroupCollection + SimulationCell + SyncFrom + Clone {}
+pub mod reference;

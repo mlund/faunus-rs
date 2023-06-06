@@ -12,51 +12,19 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
-use crate::topology::{bond::Bond, dihedral::Dihedral, torsion::Torsion, Value};
-//use chemfiles;
+use crate::topology::{bond::Bond, Connectivity, Value};
 use serde::{Deserialize, Serialize};
 
 use super::DegreesOfFreedom;
 
-/// Connectivity information such as bonds, dihedrals, etc.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
-pub struct Connectivity {
-    /// Bonds between atoms
-    pub bonds: Vec<Bond>,
-    /// Dihedrals
-    pub dihedrals: Vec<Dihedral>,
-    /// Dihedrals between bonds
-    pub torsions: Vec<Torsion>,
-}
-
-impl Connectivity {
-    /// Find dihedrals based on bonds
-    pub fn find_dihedrals(&mut self) -> Vec<&Dihedral> {
-        todo!()
-    }
-
-    /// Shift all indices by a given offset
-    pub fn shift(&mut self, offset: isize) {
-        for bond in &mut self.bonds {
-            bond.shift(offset);
-        }
-        for dihedral in &mut self.dihedrals {
-            dihedral.shift(offset);
-        }
-        for torsion in &mut self.torsions {
-            torsion.shift(offset);
-        }
-    }
-}
-
 /// Collection of connected atoms
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
-pub struct Residue {
+pub struct ResidueKind {
     /// Unique name, e.g. _GLU_, _SOL_, etc.
     pub name: String,
     /// Unique identifier
     pub id: usize,
-    /// List of atom names in the residue
+    /// List of atom ids in the residue
     pub atoms: Vec<usize>,
     /// Map of custom properties
     pub custom: std::collections::HashMap<String, Value>,
@@ -66,12 +34,11 @@ pub struct Residue {
     pub dof: DegreesOfFreedom,
 }
 
-impl Residue {
-    pub fn new(name: &str, id: Option<usize>, atoms: &[usize]) -> Self {
+impl ResidueKind {
+    pub fn new(name: &str, atoms: &[usize]) -> Self {
         Self {
             name: name.to_string(),
             atoms: atoms.to_vec(),
-            id: id.unwrap_or_default(),
             ..Default::default()
         }
     }
@@ -106,18 +73,17 @@ impl Residue {
     }
 }
 
-// // Convert a chemfiles residue to a topology residue
-// impl core::convert::From<chemfiles::ResidueRef<'_>> for Residue {
-//     fn from(residue: chemfiles::ResidueRef) -> Self {
-//         Residue {
-//             name: residue.name(),
-//             id: residue.id().unwrap() as usize,
-//             atoms: super::Selection::Ids(residue.atoms()),
-//             bonds: Default::default(),
-//             properties: Default::default(),
-//         }
-//     }
-// }
+// Convert a chemfiles residue to a topology residue
+impl core::convert::From<chemfiles::ResidueRef<'_>> for ResidueKind {
+    fn from(residue: chemfiles::ResidueRef) -> Self {
+        ResidueKind {
+            name: residue.name(),
+            id: residue.id().unwrap() as usize,
+            atoms: residue.atoms(),
+            ..Default::default()
+        }
+    }
+}
 
 /// Function to convert an amino acid residue name to a one-letter code.
 /// This follows the PDB standard and handles the 20 standard amino acids and nucleic acids (A, G, C, T, U).

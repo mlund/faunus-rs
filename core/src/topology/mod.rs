@@ -20,27 +20,28 @@
 //! - include state information such as positions, velocities, etc.
 //! - know how many atoms or residues are present in the system.
 //!
-//! The topology is constructed using the following building blocks:
+//! The [`Topology`] is constructed using the following building blocks:
 //!
-//! - [`Atom`] is the smallest unit, but need not to be a chemical element.
-//! - [`Residue`] is a collection of atoms, e.g. a protein residue or a water molecule.
-//! - [`Chain`] is a collection of residues, e.g. a polymer or protein chain.
+//! - [`AtomKind`] is the smallest unit, but need not to be a chemical element.
+//! - [`ResidueKind`] is a collection of atoms, e.g. a protein residue or a water molecule.
+//! - [`ChainKind`] is a collection of residues, e.g. a polymer or protein chain.
 //!
 //! # Examples
 //! ~~~
 //! use faunus::topology::*;
 //! let mut top = Topology::default();
-//! top.add_atom(Atom::new("O")).unwrap();
-//! top.add_atom(Atom::new("H")).unwrap();
-//! assert!(top.add_atom(Atom::new("H")).is_err()); // error: duplicate name
+//! top.add_atom(AtomKind::new("Ow")).unwrap();
+//! top.add_atom(AtomKind::new("Hw")).unwrap();
+//! assert!(top.add_atom(AtomKind::new("Hw")).is_err()); // error: duplicate name
 //! assert_eq!(top.atoms().len(), 2);
 //!
-//! let mut water = Residue::new("Water", None, &[0, 1, 1]);
+//! let mut water = ResidueKind::new("Water", &[0, 1, 1]);
 //! assert_eq!(water.len(), 3);
 //! let bond1 = Bond::new([0, 1], BondKind::Harmonic(100.0, 1.0), None);
 //! let bond2 = Bond::new([1, 2], BondKind::Harmonic(100.0, 1.0), None);
 //! water.add_bond(bond1).unwrap();
 //! water.add_bond(bond2).unwrap();
+//! assert_eq!(water.connectivity.bonds().len(), 2);
 //!
 //! top.add_residue(water).unwrap();
 //! assert_eq!(top.residues().len(), 1);
@@ -195,36 +196,55 @@ pub struct Topology {
     /// List of all possible atom types.
     ///
     /// Atoms are identified either by their name or by their index in this list.
-    atoms: Vec<Atom>,
+    atoms: Vec<AtomKind>,
     /// List of all possible residue types.
     ///
     /// Residues are identified either by their name or by their index in this list.
-    residues: Vec<Residue>,
+    residues: Vec<ResidueKind>,
 
     /// List of all possible chain types.
     ///
     /// Chains are identified either by their name or by their index in this list.
-    chains: Vec<Chain>,
+    chains: Vec<ChainKind>,
 }
 
 impl Topology {
     /// List of all possible atom types.
     ///
     /// Atoms are identified either by their name or by their index in this list.
-    pub fn atoms(&self) -> &[Atom] {
+    pub fn atoms(&self) -> &[AtomKind] {
         self.atoms.as_slice()
+    }
+
+    /// Find atom with given name
+    ///
+    /// # Examples
+    /// ~~~
+    /// use faunus::topology::*;
+    /// let mut top = Topology::default();
+    /// top.add_atom(AtomKind::new("Au")).unwrap();
+    /// assert_eq!(top.find_atom("Au").unwrap().id, 0);
+    /// assert_eq!(top.find_atom("Pb"), None);
+    /// ~~~
+    pub fn find_atom(&self, name: &str) -> Option<&AtomKind> {
+        self.atoms.iter().find(|a| a.name == name)
+    }
+
+    /// Find residue with given name
+    pub fn find_residue(&self, name: &str) -> Option<&ResidueKind> {
+        self.residues.iter().find(|r| r.name == name)
     }
 
     /// List of all possible residue types.
     ///
     /// Residues are identified either by their name or by their index in this list.
-    pub fn residues(&self) -> &[Residue] {
+    pub fn residues(&self) -> &[ResidueKind] {
         self.residues.as_slice()
     }
     /// List of all possible chain types.
     ///
     /// Chains are identified either by their name or by their index in this list.
-    pub fn chains(&self) -> &[Chain] {
+    pub fn chains(&self) -> &[ChainKind] {
         self.chains.as_slice()
     }
 
@@ -232,7 +252,7 @@ impl Topology {
     ///
     /// The `id` will be overwritten with the last index in the atom list.
     /// Will error if the atom name already exists.
-    pub fn add_atom(&mut self, atom: Atom) -> anyhow::Result<()> {
+    pub fn add_atom(&mut self, atom: AtomKind) -> anyhow::Result<()> {
         // Ensure that the atom name does not already exist
         if self.atoms.iter().any(|a| a.name == atom.name) {
             anyhow::bail!("Atom with name '{}' already exists", atom.name);
@@ -249,7 +269,7 @@ impl Topology {
     /// Will error if:
     /// 1. the residue name already exists.
     /// 2. if any of the atom ids are not defined in the [`Topology::atoms()`] list.
-    pub fn add_residue(&mut self, residue: Residue) -> anyhow::Result<()> {
+    pub fn add_residue(&mut self, residue: ResidueKind) -> anyhow::Result<()> {
         // Ensure that the residue name does not already exist
         if self.residues.iter().any(|r| r.name == residue.name) {
             anyhow::bail!("Residue with name '{}' already exists", residue.name);
@@ -262,6 +282,49 @@ impl Topology {
         let index = self.residues.len() - 1;
         self.residues.last_mut().unwrap().set_id(index);
         Ok(())
+    }
+}
+
+/// Connectivity information such as bonds, dihedrals, etc.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct Connectivity {
+    /// Bonds between atoms
+    bonds: Vec<Bond>,
+    /// Dihedrals
+    dihedrals: Vec<Dihedral>,
+    /// Dihedrals between bonds
+    torsions: Vec<Torsion>,
+}
+
+impl Connectivity {
+    /// Bonds
+    pub fn bonds(&self) -> &[Bond] {
+        &self.bonds
+    }
+    /// Diherals
+    pub fn dihedrals(&self) -> &[Dihedral] {
+        &self.dihedrals
+    }
+    /// Torsions
+    pub fn torsions(&self) -> &[Torsion] {
+        &self.torsions
+    }
+    /// Find dihedrals based on bonds
+    pub fn find_dihedrals(&mut self) -> Vec<&Dihedral> {
+        todo!()
+    }
+
+    /// Shift all indices by a given offset
+    pub fn shift(&mut self, offset: isize) {
+        for bond in &mut self.bonds {
+            bond.shift(offset);
+        }
+        for dihedral in &mut self.dihedrals {
+            dihedral.shift(offset);
+        }
+        for torsion in &mut self.torsions {
+            torsion.shift(offset);
+        }
     }
 }
 
