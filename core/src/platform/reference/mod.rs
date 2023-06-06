@@ -17,8 +17,11 @@
 use crate::{
     energy::EnergyTerm,
     group::{GroupCollection, GroupSize},
+    topology::{self, Topology},
     Change, Group, Particle, SyncFrom,
 };
+
+use std::sync::Arc;
 
 pub mod nonbonded;
 
@@ -29,6 +32,7 @@ pub mod nonbonded;
 /// follows the same layout as the original C++ Faunus code (version 2 and lower).
 #[derive(Debug)]
 pub struct ReferencePlatform {
+    topology: Arc<Topology>,
     particles: Vec<Particle>,
     groups: Vec<Group>,
     cell: crate::cell::Cuboid,
@@ -42,6 +46,9 @@ impl crate::Context for ReferencePlatform {
     }
     fn cell_mut(&mut self) -> &mut Self::Cell {
         &mut self.cell
+    }
+    fn topology(&self) -> Arc<topology::Topology> {
+        self.topology.clone()
     }
 }
 
@@ -105,9 +112,10 @@ impl GroupCollection for ReferencePlatform {
 /// The idea is to access the particle in a group-wise fashion, e.g. to update
 /// the center of mass of a group, or to rotate a group of particles.
 impl ReferencePlatform {
-    pub fn new(cell: crate::cell::Cuboid) -> Self {
+    pub fn new(cell: crate::cell::Cuboid, topology: Arc<Topology>) -> Self {
         Self {
             particles: Vec::new(),
+            topology,
             groups: Vec::new(),
             cell,
             _energies: Vec::new(),

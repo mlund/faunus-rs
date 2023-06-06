@@ -18,6 +18,7 @@ extern crate serde_json;
 use crate::group::{Group, GroupCollection};
 use nalgebra::Vector3;
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 
 pub type Point = Vector3<f64>;
 pub type PositionVec = Vec<Point>;
@@ -109,4 +110,6 @@ pub trait Context: GroupCollection + Clone + std::fmt::Debug {
     fn cell(&self) -> &Self::Cell;
     /// Get mutable reference to simulation cell
     fn cell_mut(&mut self) -> &mut Self::Cell;
+    /// Get reference to the topology
+    fn topology(&self) -> Arc<topology::Topology>;
 }

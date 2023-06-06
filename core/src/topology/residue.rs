@@ -101,17 +101,18 @@ impl Residue {
         if bond.index.iter().any(|i| i >= &self.len()) || bond.index[0] == bond.index[1] {
             anyhow::bail!("Invalid index in bond {:?} for residue {}", bond, self.name);
         }
-        Ok(self.connectivity.bonds.push(bond))
+        self.connectivity.bonds.push(bond);
+        Ok(())
     }
 }
 
 // // Convert a chemfiles residue to a topology residue
-// impl core::convert::From<chemfiles::ResidueRef<'_>> for ResidueKind {
+// impl core::convert::From<chemfiles::ResidueRef<'_>> for Residue {
 //     fn from(residue: chemfiles::ResidueRef) -> Self {
-//         ResidueKind {
+//         Residue {
 //             name: residue.name(),
 //             id: residue.id().unwrap() as usize,
-//             atom_names: super::Selection::Ids(residue.atoms()),
+//             atoms: super::Selection::Ids(residue.atoms()),
 //             bonds: Default::default(),
 //             properties: Default::default(),
 //         }

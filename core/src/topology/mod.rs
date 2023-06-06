@@ -14,36 +14,38 @@
 
 //! Topology module for storing information about atoms, residues, bonds, etc.
 //!
-//! The topology describes which atoms and residues are present in the system, and how they are connected.
-//! It does _not_ include state information such as positions, velocities, etc.
+//! The topology describes which _kind_ of atoms and residues that are present in the system,
+//! and how they are connected.
+//! Notably it _does not_
+//! - include state information such as positions, velocities, etc.
+//! - know how many atoms or residues are present in the system.
 //!
-//! It has the following layers:
+//! The topology is constructed using the following building blocks:
 //!
-//! - [`Atom`] is the smallest unit in the system, but need not to be a chemical element.
+//! - [`Atom`] is the smallest unit, but need not to be a chemical element.
 //! - [`Residue`] is a collection of atoms, e.g. a protein residue or a water molecule.
-//! - [`Chain`] is a collection of residues, e.g. a protein chain.
+//! - [`Chain`] is a collection of residues, e.g. a polymer or protein chain.
 //!
 //! # Examples
 //! ~~~
 //! use faunus::topology::*;
 //! let mut top = Topology::default();
-//! top.push_atom(Atom::new("Ow")).unwrap();
-//! top.push_atom(Atom::new("Hw")).unwrap();
+//! top.add_atom(Atom::new("O")).unwrap();
+//! top.add_atom(Atom::new("H")).unwrap();
+//! assert!(top.add_atom(Atom::new("H")).is_err()); // error: duplicate name
 //! assert_eq!(top.atoms().len(), 2);
-//! assert!(top.push_atom(Atom::new("Hw")).is_err()); // error: duplicate name
 //!
 //! let mut water = Residue::new("Water", None, &[0, 1, 1]);
-//! let bond1 = Bond::new([0, 1], BondKind::Harmonic(100.0, 1.0), BondOrder::Unspecified);
-//! let bond2 = Bond::new([1, 2], BondKind::Harmonic(100.0, 1.0), BondOrder::Unspecified);
+//! assert_eq!(water.len(), 3);
+//! let bond1 = Bond::new([0, 1], BondKind::Harmonic(100.0, 1.0), None);
+//! let bond2 = Bond::new([1, 2], BondKind::Harmonic(100.0, 1.0), None);
 //! water.add_bond(bond1).unwrap();
 //! water.add_bond(bond2).unwrap();
-//! assert_eq!(water.id, 0);
-//! assert_eq!(water.len(), 3);
 //!
-//! top.push_residue(water).unwrap();
+//! top.add_residue(water).unwrap();
 //! assert_eq!(top.residues().len(), 1);
+//! assert_eq!(top.residues().last().unwrap().id, 0);
 //! ~~~
-
 mod atom;
 mod bond;
 mod chain;
@@ -66,7 +68,7 @@ use crate::Point;
 use serde::{Deserialize, Serialize};
 
 /// Trait for identifying elements in a collection, e.g. index
-pub trait Indices {
+trait Indices {
     /// Positional index of element in a collection
     fn index(&self) -> usize;
     /// Set positional index of element in a collection
@@ -190,44 +192,47 @@ pub enum DegreesOfFreedom {
 /// A topology is a collection of atoms, residues, bonds, etc.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 pub struct Topology {
-    /// List of all possible atom types in the system
+    /// List of all possible atom types.
     ///
     /// Atoms are identified either by their name or by their index in this list.
     atoms: Vec<Atom>,
-    /// List of all possible residue types in the system
+    /// List of all possible residue types.
     ///
     /// Residues are identified either by their name or by their index in this list.
     residues: Vec<Residue>,
 
-    /// List of all possible chain types in the system
+    /// List of all possible chain types.
     ///
     /// Chains are identified either by their name or by their index in this list.
     chains: Vec<Chain>,
 }
 
 impl Topology {
-    /// List of all possible atom types in the system
+    /// List of all possible atom types.
     ///
     /// Atoms are identified either by their name or by their index in this list.
     pub fn atoms(&self) -> &[Atom] {
         self.atoms.as_slice()
     }
 
-    /// List of all possible residue types in the system
+    /// List of all possible residue types.
     ///
     /// Residues are identified either by their name or by their index in this list.
     pub fn residues(&self) -> &[Residue] {
         self.residues.as_slice()
     }
-    /// List of all possible chain types in the system
+    /// List of all possible chain types.
     ///
     /// Chains are identified either by their name or by their index in this list.
     pub fn chains(&self) -> &[Chain] {
         self.chains.as_slice()
     }
 
-    /// Add a new atom
-    pub fn push_atom(&mut self, atom: Atom) -> anyhow::Result<()> {
+    /// Append a new atom.
+    ///
+    /// The `id` will be overwritten with the last index in the atom list.
+    /// Will error if the atom name already exists.
+    pub fn add_atom(&mut self, atom: Atom) -> anyhow::Result<()> {
         // Ensure that the atom name does not already exist
         if self.atoms.iter().any(|a| a.name == atom.name) {
             anyhow::bail!("Atom with name '{}' already exists", atom.name);
@@ -238,12 +243,13 @@ impl Topology {
         Ok(())
     }
 
-    /// Add a new residue
+    /// Append a new residue.
     ///
-    /// - The `id` will be set to the last index in the residue list.
-    /// - Checks are made to ensure that the residue `name` is unique.
-    /// - Checks are made to ensure that the atom ids are present in the atoms list.
-    pub fn push_residue(&mut self, residue: Residue) -> anyhow::Result<()> {
+    /// The `id` will be set to the last index in the residue list.
+    /// Will error if:
+    /// 1. the residue name already exists.
+    /// 2. if any of the atom ids are not defined in the [`Topology::atoms()`] list.
+    pub fn add_residue(&mut self, residue: Residue) -> anyhow::Result<()> {
         // Ensure that the residue name does not already exist
         if self.residues.iter().any(|r| r.name == residue.name) {
             anyhow::bail!("Residue with name '{}' already exists", residue.name);

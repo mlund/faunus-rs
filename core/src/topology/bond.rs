@@ -109,8 +109,12 @@ pub struct Bond {
 
 impl Bond {
     /// Create new bond
-    pub fn new(index: [usize; 2], kind: BondKind, order: BondOrder) -> Self {
-        Self { index, kind, order }
+    pub fn new(index: [usize; 2], kind: BondKind, order: Option<BondOrder>) -> Self {
+        Self {
+            index,
+            kind,
+            order: order.unwrap_or_default(),
+        }
     }
 
     /// Create new bond where indices are offset by `shift`. Panics if overflow.
