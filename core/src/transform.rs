@@ -85,11 +85,13 @@ pub fn transform(
             )?
         }
         Transform::PartialTranslate(displacement, indices) => {
-            let selection = ParticleSelection::RelIndex(indices.clone());
-            let mut particles = context.get_particles(group_index, selection.clone());
+            let indices = context.groups()[group_index]
+                .select(&ParticleSelection::RelIndex(indices.clone()))
+                .unwrap();
+            let mut particles = context.get_particles(indices.clone());
             let positions = particles.iter_mut().map(|p| p.pos_mut());
             partial_translate(context.cell(), positions, displacement);
-            context.set_particles(group_index, selection, particles.iter())?
+            context.set_particles(indices, particles.iter())?
         }
         _ => {
             todo!("Implement other transforms")

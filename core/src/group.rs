@@ -23,6 +23,31 @@ pub type Point = Vector3<f64>;
 pub type PositionVec = Vec<Point>;
 pub type ParticleVec = Vec<Particle>;
 
+/// Group of particles.
+///
+/// A group is a contiguous set of particles in a system. It has a unique index in a global list of
+/// groups, and a unique range of indices in a global particle list. The group can be resized
+/// within its capacity.
+///
+/// # Examples
+///
+/// Here an example of a group with 3 particles, starting at index 20 in the main particle vector.
+/// ~~~
+/// use faunus::group::*;
+/// let mut group = Group::new(7, None, 20..23);
+/// assert_eq!(group.len(), 3);
+/// assert_eq!(group.size(), GroupSize::Full);
+///
+/// // Resize active particles from 3 -> 2
+/// group.resize(GroupSize::Shrink(1)).unwrap();
+/// assert_eq!(group.len(), 2);
+/// assert_eq!(group.capacity(), 3);
+/// assert_eq!(group.size(), GroupSize::Partial(2));
+///
+/// let selection = group.select(&ParticleSelection::Inactive);
+/// assert_eq!(selection.unwrap(), vec![22]);
+/// ~~~
+
 #[derive(Serialize, Deserialize, Default, Debug, PartialEq, Clone)]
 pub struct Group {
     /// Molecular type id (immutable)
@@ -249,11 +274,19 @@ pub trait GroupCollection {
     /// Add a group to the system based on an id and a set of particles given by an iterator.
     fn add_group(&mut self, id: Option<usize>, particles: &[Particle]) -> anyhow::Result<&Group>;
 
+    /// Resizes a group to a given size.
+    ///
+    /// Errors if the requested size is larger than the capacity, or if there are
+    /// too few active particles to shrink a group.
+    fn resize_group(&mut self, group_index: usize, size: GroupSize) -> anyhow::Result<()>;
+
     /// All groups in the system
+    ///
+    /// The first group has index 0, the second group has index 1, etc.
     fn groups(&self) -> &[Group];
 
-    /// Reference to i'th particle in the system
-    fn particle(&self, index: usize) -> &Particle;
+    /// Copy of i'th particle in the system
+    fn particle(&self, index: usize) -> Particle;
 
     /// Find group indices based on a selection
     ///
@@ -262,7 +295,7 @@ pub trait GroupCollection {
     /// group with index `i` is returned. If the selection is `Index(indices)`, the groups with
     /// indices in `indices` are returned. If the selection is `ById(id)`, the groups with the
     /// given id are returned.
-    fn select_groups(&self, selection: &GroupSelection) -> Vec<usize> {
+    fn select(&self, selection: &GroupSelection) -> Vec<usize> {
         match selection {
             GroupSelection::Single(i) => vec![*i],
             GroupSelection::Index(indices) => indices.clone(),
@@ -284,31 +317,20 @@ pub trait GroupCollection {
         }
     }
 
-    /// Get copy of particles for a given group.
+    /// Extract copy of particles with given indices
     ///
-    /// The selection, which must be valid within the group, can be used to extract a subset of particles.
-    fn get_particles(&self, group_index: usize, selection: ParticleSelection) -> Vec<Particle> {
-        return self.groups()[group_index]
-            .select(&selection)
-            .unwrap()
-            .iter()
-            .map(|i| self.particle(*i).clone())
-            .collect();
+    /// This can potentially be an expensive operation as it involves copying the particles
+    /// from the underlying storage model.
+    fn get_particles(&self, indices: impl IntoIterator<Item = usize>) -> Vec<Particle> {
+        indices.into_iter().map(|i| self.particle(i)).collect()
     }
 
     /// Set particles for a given group.
     fn set_particles<'a>(
         &mut self,
-        group_index: usize,
-        selection: ParticleSelection,
+        indices: impl IntoIterator<Item = usize>,
         source: impl Iterator<Item = &'a Particle> + Clone,
     ) -> anyhow::Result<()>;
-
-    /// Resizes a group to a given size.
-    ///
-    /// Errors if the requested size is larger than the capacity, or if there are
-    /// too few active particles to shrink a group.
-    fn resize_group(&mut self, group_index: usize, size: GroupSize) -> anyhow::Result<()>;
 }
 
 #[cfg(test)]
@@ -381,5 +403,35 @@ mod tests {
         let result = group.resize(GroupSize::Partial(0));
         assert!(result.is_ok());
         assert_eq!(group.size(), GroupSize::Empty);
+
+        // Relative selection
+        let mut group = Group::new(7, None, 20..23);
+        assert_eq!(group.len(), 3);
+        let indices = group
+            .select(&ParticleSelection::RelIndex(vec![0, 1, 2]))
+            .unwrap();
+        assert_eq!(indices, vec![20, 21, 22]);
+
+        // Absolute selection
+        let indices = group
+            .select(&ParticleSelection::AbsIndex(vec![20, 21, 22]))
+            .unwrap();
+        assert_eq!(indices, vec![20, 21, 22]);
+
+        // Select all
+        let indices = group.select(&ParticleSelection::All).unwrap();
+        assert_eq!(indices, vec![20, 21, 22]);
+
+        // Out of range selection
+        assert!(group
+            .select(&ParticleSelection::RelIndex(vec![1, 2, 3]))
+            .is_err());
+
+        // Test partial selection
+        group.resize(GroupSize::Shrink(1)).unwrap();
+        let indices = group.select(&ParticleSelection::Active).unwrap();
+        assert_eq!(indices, vec![20, 21]);
+        let indices = group.select(&ParticleSelection::Inactive).unwrap();
+        assert_eq!(indices, vec![22]);
     }
 }

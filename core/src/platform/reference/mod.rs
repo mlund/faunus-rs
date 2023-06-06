@@ -68,24 +68,17 @@ impl GroupCollection for ReferencePlatform {
         self.groups.as_ref()
     }
 
-    fn particle(&self, index: usize) -> &Particle {
-        &self.particles[index]
+    fn particle(&self, index: usize) -> Particle {
+        self.particles[index].clone()
     }
 
     fn set_particles<'a>(
         &mut self,
-        group_index: usize,
-        selection: crate::group::ParticleSelection,
-        source: impl Iterator<Item = &'a Particle> + std::clone::Clone,
+        indices: impl IntoIterator<Item = usize>,
+        source: impl Iterator<Item = &'a Particle> + Clone,
     ) -> anyhow::Result<()> {
-        let indices = self.groups()[group_index].select(&selection).unwrap();
-        let mut count = 0;
-        for (src, i) in source.zip(&indices) {
-            self.particles[*i] = src.clone();
-            count += 1;
-        }
-        if count != indices.len() {
-            anyhow::bail!("Mismatch in selection and particle lengths");
+        for (src, i) in source.zip(indices.into_iter()) {
+            self.particles[i] = src.clone();
         }
         Ok(())
     }
