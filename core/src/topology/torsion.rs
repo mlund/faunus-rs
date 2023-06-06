@@ -25,7 +25,7 @@ pub enum TorsionKind {
     Cosine(f64, f64),
     /// Unspecified torsion type
     #[default]
-    None,
+    Unspecified,
 }
 
 /// Definition of torsion between three indexed atoms
@@ -46,5 +46,12 @@ impl Torsion {
     /// Check if torsion contains atom with index
     pub fn contains(&self, index: usize) -> bool {
         self.index.contains(&index)
+    }
+
+    /// Shift all indices by a given offset
+    pub fn shift(&mut self, offset: isize) {
+        for i in 0..3 {
+            self.index[i] = (self.index[i] as isize + offset) as usize;
+        }
     }
 }

@@ -33,7 +33,7 @@ pub enum DihedralKind {
     ImproperCHARMM(f64, f64, f64),
     /// Unspecified dihedral type
     #[default]
-    None,
+    Unspecified,
 }
 
 impl DihedralKind {
@@ -81,5 +81,12 @@ impl Dihedral {
     /// Determines if the dihedral is improper
     pub fn is_improper(&self) -> bool {
         self.kind.is_improper()
+    }
+
+    /// Shift all indices by a given offset
+    pub fn shift(&mut self, offset: isize) {
+        for i in &mut self.index {
+            *i = (*i as isize + offset) as usize;
+        }
     }
 }

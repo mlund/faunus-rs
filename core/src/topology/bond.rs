@@ -37,7 +37,7 @@ pub enum BondKind {
     UreyBradley(f64, f64),
     /// Undefined bond type
     #[default]
-    None,
+    Unspecified,
 }
 
 /// Bond order describing the multiplicity of a bond between two atoms.
@@ -47,7 +47,7 @@ pub enum BondKind {
 pub enum BondOrder {
     #[default]
     /// Undefined bond order
-    None,
+    Unspecified,
     /// Single bond, e.g. diatomic hydrogen, H–H
     Single,
     /// Double bond, e.g. diatomic oxygen, O=O
@@ -65,7 +65,7 @@ pub enum BondOrder {
 impl From<BondOrder> for f64 {
     fn from(value: BondOrder) -> Self {
         match value {
-            BondOrder::None => 0.0,
+            BondOrder::Unspecified => 0.0,
             BondOrder::Single => 1.0,
             BondOrder::Double => 2.0,
             BondOrder::Triple => 3.0,
@@ -82,7 +82,7 @@ impl From<BondOrder> for f64 {
 impl From<f64> for BondOrder {
     fn from(value: f64) -> Self {
         match value {
-            x if approx_eq!(f64, x, 0.0) => BondOrder::None,
+            x if approx_eq!(f64, x, 0.0) => BondOrder::Unspecified,
             x if approx_eq!(f64, x, 1.0) => BondOrder::Single,
             x if approx_eq!(f64, x, 2.0) => BondOrder::Double,
             x if approx_eq!(f64, x, 3.0) => BondOrder::Triple,
@@ -114,7 +114,7 @@ impl Bond {
     }
 
     /// Create new bond where indices are offset by `shift`. Panics if overflow.
-    pub fn shift_index(&self, shift: isize) -> Self {
+    pub fn shift(&self, shift: isize) -> Self {
         Self {
             index: [
                 self.index[0].checked_add_signed(shift).unwrap(),
