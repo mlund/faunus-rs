@@ -62,7 +62,7 @@ pub enum GroupSize {
 }
 
 /// Enum for selecting a subset of particles in a group
-#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug)]
 pub enum ParticleSelection {
     /// All particles
     All,
@@ -74,6 +74,21 @@ pub enum ParticleSelection {
     RelIndex(Vec<usize>),
     /// Specific indices (absolute indices)
     AbsIndex(Vec<usize>),
+}
+
+/// Enum for selecting a subset of groups
+#[derive(Clone, PartialEq, Debug)]
+pub enum GroupSelection {
+    /// All groups in the system
+    All,
+    /// Select by size
+    Size(GroupSize),
+    /// Single group with given index
+    Single(usize),
+    /// Groups with given index
+    Index(Vec<usize>),
+    /// Groups with given id
+    ById(usize),
 }
 
 impl Group {
@@ -226,19 +241,48 @@ impl Group {
     }
 }
 
-/// Trait for groups of particles
+/// Interface for groups of particles
 ///
-/// Each group has a unique index in the group vector, and a unique range of indices in the
-/// particle vector.
+/// Each group has a unique index in a global list of groups, and a unique range of indices in a
+/// global particle list.
 pub trait GroupCollection {
     /// Add a group to the system based on an id and a set of particles given by an iterator.
     fn add_group(&mut self, id: Option<usize>, particles: &[Particle]) -> anyhow::Result<&Group>;
 
-    /// List of all groups in the system
+    /// All groups in the system
     fn groups(&self) -> &[Group];
 
     /// Reference to i'th particle in the system
     fn particle(&self, index: usize) -> &Particle;
+
+    /// Find group indices based on a selection
+    ///
+    /// The selection can be used to select a subset of groups based on their index or id.
+    /// If the selection is `All`, all groups are returned. If the selection is `Single(i)`, the
+    /// group with index `i` is returned. If the selection is `Index(indices)`, the groups with
+    /// indices in `indices` are returned. If the selection is `ById(id)`, the groups with the
+    /// given id are returned.
+    fn select_groups(&self, selection: &GroupSelection) -> Vec<usize> {
+        match selection {
+            GroupSelection::Single(i) => vec![*i],
+            GroupSelection::Index(indices) => indices.clone(),
+            GroupSelection::Size(size) => self
+                .groups()
+                .iter()
+                .enumerate()
+                .filter(|(_, g)| g.size() == *size)
+                .map(|(i, _)| i)
+                .collect(),
+            GroupSelection::ById(id) => self
+                .groups()
+                .iter()
+                .enumerate()
+                .filter(|(_, g)| g.id() == Some(*id))
+                .map(|(i, _)| i)
+                .collect(),
+            GroupSelection::All => (0..self.groups().len()).collect(),
+        }
+    }
 
     /// Get copy of particles for a given group.
     ///
