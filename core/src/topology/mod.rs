@@ -160,7 +160,7 @@ pub struct Topology<'a> {
 }
 
 /// See stackoverflow workaround: <https://stackoverflow.com/questions/61446984/impl-iterator-failing-for-iterator-with-multiple-lifetime-parameters>
-pub trait Captures<'a> {}
+pub(crate) trait Captures<'a> {}
 impl<'a, T: ?Sized> Captures<'a> for T {}
 
 impl<'a> Topology<'a> {
