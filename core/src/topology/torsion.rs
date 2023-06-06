@@ -50,8 +50,8 @@ impl Torsion {
 
     /// Shift all indices by a given offset
     pub fn shift(&mut self, offset: isize) {
-        for i in 0..3 {
-            self.index[i] = (self.index[i] as isize + offset) as usize;
+        for i in &mut self.index {
+            *i = i.checked_add_signed(offset).unwrap();
         }
     }
 }

@@ -86,7 +86,7 @@ impl Dihedral {
     /// Shift all indices by a given offset
     pub fn shift(&mut self, offset: isize) {
         for i in &mut self.index {
-            *i = (*i as isize + offset) as usize;
+            *i = i.checked_add_signed(offset).unwrap();
         }
     }
 }
