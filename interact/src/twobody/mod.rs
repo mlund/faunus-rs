@@ -39,7 +39,7 @@ pub trait TwobodyEnergy: crate::Info + std::fmt::Debug {
     fn twobody_energy(&self, distance_squared: f64) -> f64;
 }
 
-/// Helper struct to combine twobody energies
+/// Combine twobody energies
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Combined<T, U>(T, U);
 
@@ -63,8 +63,10 @@ impl<T: TwobodyEnergy, U: TwobodyEnergy> Info for Combined<T, U> {
     }
 }
 
-/// Enum to describe two-body interaction variants.
-/// Use for serialization and deserialization of two-body interactions in user input.
+/// Enum with all two-body variants.
+///
+/// Use for serialization and deserialization of two-body interactions in
+/// e.g. user input.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum TwobodyKind {

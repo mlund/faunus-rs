@@ -12,13 +12,6 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
-//! Lennard-Jones like potentials
-//!
-//! This includes the:
-//! - orignal 12-6 potential,
-//! - generalized Mie n-m potential,
-//! - cut and shifted Lennard-Jones, i.e. the Weeks-Chandler-Andersen potential
-
 use crate::twobody::TwobodyEnergy;
 use crate::{
     arithmetic_mean, divide4_serialize, geometric_mean, multiply4_deserialize, sqrt_serialize,
@@ -32,6 +25,20 @@ use serde::{Deserialize, Serialize};
 /// This is a generalization of the Lennard-Jones potential due to G. Mie,
 /// ["Zur kinetischen Theorie der einatomigen Körper"](https://doi.org/10.1002/andp.19033160802),
 /// Annalen der Physik.
+/// The energy is
+/// $$ u(r) = ε C \left [\left (\frac{σ}{r}\right )^n - \left (\frac{σ}{r}\right )^m \right ]$$
+/// where $C = \frac{n}{n-m} \cdot \left (\frac{n}{m}\right )^{\frac{m}{n-m}}$ and $n > m$.
+/// The Lennard-Jones potential is recovered for $n = 12$ and $m = 6$.
+///
+/// ## Examples:
+/// ~~~
+/// use interact::twobody::*;
+/// let (epsilon, sigma, r2) = (1.5, 2.0, 2.5);
+/// let mie = Mie::<12, 6>::new(epsilon, sigma);
+/// let lj = LennardJones::new(epsilon, sigma);
+/// assert_eq!(mie.twobody_energy(r2), lj.twobody_energy(r2));
+/// ~~~
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Mie<const N: u32, const M: u32> {
     /// Interaction strength, ε
@@ -45,8 +52,8 @@ pub struct Mie<const N: u32, const M: u32> {
 impl<const N: u32, const M: u32> Mie<N, M> {
     const C: f64 = (N / (N - M) * (N / M).pow(M / (N - M))) as f64;
 
-    /// Optimize if N and M are divisible by 2
-    pub const OPTIMIZE: bool = (N % 2 == 0) && (M % 2 == 0);
+    /// Compile-time optimization if N and M are divisible by 2
+    const OPTIMIZE: bool = (N % 2 == 0) && (M % 2 == 0);
     const N_OVER_M: i32 = (N / M) as i32;
     const M_HALF: i32 = (M / 2) as i32;
 
