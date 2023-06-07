@@ -20,3 +20,9 @@ typetag = "0.2"
 nalgebra = { version = "0.32.2", features = ["serde-serialize"] }
 approx = "0.5.1"
 num = "0.4.0"
+
+# See https://github.com/victe/rust-latex-doc-minimal-example
+# for including math in the documentation
+[package.metadata.docs.rs]
+rustdoc-args = [ "--html-in-header", "interact/src/docs-header.html" ]
+

@@ -36,26 +36,30 @@ pub use poisson::*;
 
 /// # Short-range function for electrostatic interaction schemes
 ///
-/// The short-range function is a function of the reduced distance _q_ = _r_ / _r<sub>c</sub>_,
+/// The short-range function, _S(q)_, is a function of the reduced distance _q_ = _r_ / _r<sub>c</sub>_,
 /// where _r_ is the distance between the interacting particles and _r<sub>c</sub>_ is the cutoff
 /// distance.
-/// All _schemes_ implements this trait and is a requirement for the [`Potential`]; [`Field`]; [`Force`]; and [`Energy`] traits.
-///
+/// All _schemes_ implement this trait and is a requirement for the [`Potential`]; [`Field`]; [`Force`]; and [`Energy`] traits.
 /// In connection with Ewald summation scemes, the short-range function is also known as the
-/// _splitting function_. There it is use to split the electrostatic interaction into a short-range
-/// part and a long-range part.
+/// _splitting function_.
+/// There it is used to split the electrostatic interaction into a short-range part and a long-range part.
+/// The energy between two point charges is,
+/// $$ u(r) = \frac{q_1 q_2}{r} \cdot e^{-\kappa r} \cdot S(q) $$
+/// and all other quantities are derived from this.
 pub trait ShortRangeFunction: crate::Cutoff {
-    /// Inverse Debye screening length
+    /// Inverse Debye screening length.
+    ///
+    /// The default implementation returns `None`.
     fn kappa(&self) -> Option<f64> {
         None
     }
-    /// Short-range function
+    /// Short-range function.
     fn short_range_f0(&self, q: f64) -> f64;
-    /// First derivative of the short-range function
+    /// First derivative of the short-range function.
     fn short_range_f1(&self, q: f64) -> f64;
-    /// Second derivative of the short-range function
+    /// Second derivative of the short-range function.
     fn short_range_f2(&self, q: f64) -> f64;
-    /// Third derivative of the short-range function
+    /// Third derivative of the short-range function.
     fn short_range_f3(&self, q: f64) -> f64;
 }
 
