@@ -66,42 +66,41 @@ pub enum Transform {
     None,
 }
 
-/// Transform a set of particles using a transformation
-///
-/// The transformation is applied to the particles in a single group,
-/// given by `group_index`, in the `context`.
-pub fn transform(
-    context: &mut impl crate::Context,
-    group_index: usize,
-    transformation: &Transform,
-) -> Result<(), anyhow::Error> {
-    match transformation {
-        Transform::Translate(displacement) => {
-            let group_len = context.groups()[group_index].len();
-            transform(
-                context,
-                group_index,
-                &Transform::PartialTranslate(*displacement, (0..group_len).collect()),
-            )?
+impl Transform {
+    /// Transform a set of particles using a transformation
+    ///
+    /// The transformation is applied to the particles in a single group,
+    /// given by `group_index`, in the `context`.
+    pub fn on_group(
+        &self,
+        context: &mut impl crate::Context,
+        group_index: usize,
+    ) -> Result<(), anyhow::Error> {
+        match self {
+            Transform::Translate(displacement) => {
+                let group_len = context.groups()[group_index].len();
+                Self::PartialTranslate(*displacement, (0..group_len).collect())
+                    .on_group(context, group_index)?;
+            }
+            Transform::PartialTranslate(displacement, indices) => {
+                let indices = context.groups()[group_index]
+                    .select(&ParticleSelection::RelIndex(indices.clone()))
+                    .unwrap();
+                let mut particles = context.get_particles(indices.clone());
+                let positions = particles.iter_mut().map(|p| p.pos_mut());
+                translate(context.cell(), positions, displacement);
+                context.set_particles(indices, particles.iter())?
+            }
+            _ => {
+                todo!("Implement other transforms")
+            }
         }
-        Transform::PartialTranslate(displacement, indices) => {
-            let indices = context.groups()[group_index]
-                .select(&ParticleSelection::RelIndex(indices.clone()))
-                .unwrap();
-            let mut particles = context.get_particles(indices.clone());
-            let positions = particles.iter_mut().map(|p| p.pos_mut());
-            partial_translate(context.cell(), positions, displacement);
-            context.set_particles(indices, particles.iter())?
-        }
-        _ => {
-            todo!("Implement other transforms")
-        }
+        Ok(())
     }
-    Ok(())
 }
 
 /// Translates a set of particles by a vector and applies periodic boundary conditions
-fn partial_translate<'a>(
+fn translate<'a>(
     cell: &impl SimulationCell,
     positions: impl Iterator<Item = &'a mut Point>,
     displacement: &Point,

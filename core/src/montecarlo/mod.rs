@@ -31,10 +31,10 @@ pub enum Bias {
     ForceAccept,
 }
 
-/// Named helper struct to handle `new`, `old`) pairs.
+/// Named helper struct to handle `new`, `old` pairs.
 ///
 /// Used e.g. for data before and after a Monte Carlo move
-/// and prevents mixing up the order or old and new values.
+/// and reduces risk mixing up the order or old and new values.
 #[derive(Debug, Clone)]
 pub struct NewOld<T: core::fmt::Debug> {
     pub new: T,
