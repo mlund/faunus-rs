@@ -46,7 +46,9 @@ pub use poisson::*;
 /// part and a long-range part.
 pub trait ShortRangeFunction: crate::Cutoff {
     /// Inverse Debye screening length
-    fn kappa(&self) -> Option<f64>;
+    fn kappa(&self) -> Option<f64> {
+        None
+    }
     /// Short-range function
     fn short_range_f0(&self, q: f64) -> f64;
     /// First derivative of the short-range function
