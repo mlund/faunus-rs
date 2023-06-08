@@ -210,16 +210,23 @@ pub trait Move: Info + std::fmt::Debug + SyncFromAny {
 }
 
 /// Collection of moves
+///
+/// # Todo
+/// - `choose` should respect `frequency`
+/// - Should implement serialize, see e.g.
+/// <https://stackoverflow.com/questions/50021897/how-to-implement-serdeserialize-for-a-boxed-trait-object>
 #[derive(Default, Debug)]
 pub struct MoveCollection {
     moves: Vec<Box<dyn Move>>,
 }
 
 impl MoveCollection {
+    /// Appends a move to the back of the collection.
     pub fn push(&mut self, m: impl Move + 'static) {
         self.moves.push(Box::new(m));
     }
-    pub fn random_move(&mut self, rng: &mut ThreadRng) -> Option<&mut Box<dyn Move>> {
+    /// Picks a random move from the collection.
+    pub fn choose(&mut self, rng: &mut ThreadRng) -> Option<&mut Box<dyn Move>> {
         self.moves.iter_mut().choose(rng)
     }
 }
@@ -231,16 +238,17 @@ impl MoveCollection {
 /// Moves are picked randomly and performed in the new context. If the move is accepted, the
 /// new context is synced to the old context. If the move is rejected, the new context is
 /// discarded.
+#[derive(Debug)]
 pub struct Simulation<T: Context> {
     /// List of moves to perform
-    moves: MoveCollection,
+    pub moves: MoveCollection,
     /// Pair of contexts, one for the current state and one for the new state
     context: NewOld<T>,
 }
 
 impl<T: Context> Simulation<T> {
     pub fn do_move(&mut self, temperature: f64, rng: &mut ThreadRng) {
-        if let Some(m) = self.moves.random_move(rng) {
+        if let Some(m) = self.moves.choose(rng) {
             let change = m.do_move().unwrap();
             let energy = NewOld::<f64>::from(
                 self.context.new.hamiltonian().energy_change(&change),
