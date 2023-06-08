@@ -14,6 +14,7 @@
 
 //! # Support for Monte Carlo sampling
 
+use crate::energy::EnergyTerm;
 use crate::{time::Timer, Change, Context, Info, SyncFromAny, MOLAR_GAS_CONSTANT};
 use average::Mean;
 use rand::prelude::*;
@@ -35,7 +36,7 @@ pub enum Bias {
 ///
 /// Used e.g. for data before and after a Monte Carlo move
 /// and reduces risk mixing up the order or old and new values.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct NewOld<T: core::fmt::Debug> {
     pub new: T,
     pub old: T,
@@ -171,14 +172,14 @@ impl AcceptanceCriterion for Minimize {
     }
 }
 
-pub trait Move<T: Context>: Info + std::fmt::Debug + SyncFromAny {
+pub trait Move: Info + std::fmt::Debug + SyncFromAny {
     /// Perform a move on given `context`.
-    fn do_move(&mut self, context: &T) -> anyhow::Result<Change>;
+    fn do_move(&mut self) -> anyhow::Result<Change>;
 
     /// Moves may generate optional bias that should be added to the trial energy
     /// when determining the acceptance probability.
     /// It can also be used to force acceptance of a move in e.g. hybrid MD/MC schemes.
-    fn bias(&self, _change: Change, _energies: NewOld<f64>) -> Option<Bias> {
+    fn bias(&self, _change: &Change, _energies: NewOld<f64>) -> Option<Bias> {
         None
     }
 
@@ -192,7 +193,7 @@ pub trait Move<T: Context>: Info + std::fmt::Debug + SyncFromAny {
     ///
     /// This will update the statistics.
     /// Often re-implemented to perform additional actions.
-    fn accepted(&mut self, _change: Change) {
+    fn accepted(&mut self, _change: &Change) {
         self.statistics_mut().accept();
     }
 
@@ -200,7 +201,7 @@ pub trait Move<T: Context>: Info + std::fmt::Debug + SyncFromAny {
     ///
     /// This will update the statistics.
     /// Often re-implemented to perform additional actions.
-    fn rejected(&mut self, _change: Change) {
+    fn rejected(&mut self, _change: &Change) {
         self.statistics_mut().reject();
     }
 
@@ -210,15 +211,15 @@ pub trait Move<T: Context>: Info + std::fmt::Debug + SyncFromAny {
 
 /// Collection of moves
 #[derive(Default, Debug)]
-pub struct MoveCollection<T: Context> {
-    moves: Vec<Box<dyn Move<T>>>,
+pub struct MoveCollection {
+    moves: Vec<Box<dyn Move>>,
 }
 
-impl<T: Context> MoveCollection<T> {
-    pub fn push(&mut self, m: impl Move<T> + 'static) {
+impl MoveCollection {
+    pub fn push(&mut self, m: impl Move + 'static) {
         self.moves.push(Box::new(m));
     }
-    pub fn random_move(&mut self, rng: &mut ThreadRng) -> Option<&mut Box<dyn Move<T>>> {
+    pub fn random_move(&mut self, rng: &mut ThreadRng) -> Option<&mut Box<dyn Move>> {
         self.moves.iter_mut().choose(rng)
     }
 }
@@ -232,22 +233,35 @@ impl<T: Context> MoveCollection<T> {
 /// discarded.
 pub struct Simulation<T: Context> {
     /// List of moves to perform
-    moves: Vec<Box<dyn Move<T>>>,
+    moves: MoveCollection,
     /// Pair of contexts, one for the current state and one for the new state
     context: NewOld<T>,
 }
 
 impl<T: Context> Simulation<T> {
-    /// Pick a random move
-    pub fn pick_move(&mut self, rng: &mut ThreadRng) -> Option<&mut Box<dyn Move<T>>> {
-        self.moves.iter_mut().choose(rng)
-    }
-
-    pub fn do_move(&mut self, rng: &mut ThreadRng) {
-        let n = self.moves.iter_mut().choose(rng);
-        //let n = self.pick_move(rng);
-        if let Some(m) = n {
-            let _change = m.do_move(&self.context.new).unwrap();
+    pub fn do_move(&mut self, temperature: f64, rng: &mut ThreadRng) {
+        if let Some(m) = self.moves.random_move(rng) {
+            let change = m.do_move().unwrap();
+            let energy = NewOld::<f64>::from(
+                self.context.new.hamiltonian().energy_change(&change),
+                self.context.old.hamiltonian().energy_change(&change),
+            );
+            let acceptance = match m.bias(&change, energy.clone()) {
+                Some(Bias::ForceAccept) => true,
+                Some(Bias::Energy(bias)) => {
+                    MetropolisHastings::accept(energy.old, energy.new + bias, temperature, rng)
+                }
+                None => MetropolisHastings::accept(energy.old, energy.new, temperature, rng),
+            };
+            if acceptance {
+                m.accepted(&change);
+                todo!("Sync new context to old context")
+                //self.context.new.sync_from(&self._context.old);
+            } else {
+                m.rejected(&change);
+                todo!("Sync old context to new context")
+                //self.context.new.sync_from(&self._context.old);
+            }
         }
     }
 }
