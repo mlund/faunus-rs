@@ -164,7 +164,8 @@ impl AcceptanceCriterion for MetropolisHastings {
 pub struct Minimize {}
 
 impl AcceptanceCriterion for Minimize {
-    fn accept(energies: NewOld<f64>, _temperature: f64, _rng: &mut ThreadRng) -> bool {
+    #[allow(unused_variables)]
+    fn accept(energies: NewOld<f64>, temperature: f64, rng: &mut ThreadRng) -> bool {
         if energies.old.is_infinite() && energies.new.is_finite() {
             return true;
         }
@@ -179,7 +180,8 @@ pub trait Move: Info + std::fmt::Debug + SyncFromAny {
     /// Moves may generate optional bias that should be added to the trial energy
     /// when determining the acceptance probability.
     /// It can also be used to force acceptance of a move in e.g. hybrid MD/MC schemes.
-    fn bias(&self, _change: &Change, _energies: NewOld<f64>) -> Option<Bias> {
+    #[allow(unused_variables)]
+    fn bias(&self, change: &Change, energies: NewOld<f64>) -> Option<Bias> {
         None
     }
 
@@ -193,7 +195,8 @@ pub trait Move: Info + std::fmt::Debug + SyncFromAny {
     ///
     /// This will update the statistics.
     /// Often re-implemented to perform additional actions.
-    fn accepted(&mut self, _change: &Change) {
+    #[allow(unused_variables)]
+    fn accepted(&mut self, change: &Change) {
         self.statistics_mut().accept();
     }
 
@@ -201,7 +204,8 @@ pub trait Move: Info + std::fmt::Debug + SyncFromAny {
     ///
     /// This will update the statistics.
     /// Often re-implemented to perform additional actions.
-    fn rejected(&mut self, _change: &Change) {
+    #[allow(unused_variables)]
+    fn rejected(&mut self, change: &Change) {
         self.statistics_mut().reject();
     }
 
