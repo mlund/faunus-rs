@@ -335,8 +335,8 @@ pub trait GroupCollection {
     ///
     /// This can potentially be an expensive operation as it involves copying the particles
     /// from the underlying storage model.
-    fn get_particles(&self, indices: &mut dyn Iterator<Item = usize>) -> Vec<Particle> {
-        indices.map(|i| self.particle(i)).collect()
+    fn get_particles(&self, indices: impl IntoIterator<Item = usize>) -> Vec<Particle> {
+        indices.into_iter().map(|i| self.particle(i)).collect()
     }
 
     /// Set particles for a given group.

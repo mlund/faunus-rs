@@ -87,7 +87,7 @@ impl Transform {
                 let indices = context.groups()[group_index]
                     .select(&ParticleSelection::RelIndex(indices.clone()))
                     .unwrap();
-                let mut particles = context.get_particles(&mut indices.iter().copied());
+                let mut particles = context.get_particles(indices.iter().copied());
                 let positions = particles.iter_mut().map(|p| p.pos_mut());
                 translate(context.cell(), positions, displacement);
                 context.set_particles(indices, particles.iter())?
