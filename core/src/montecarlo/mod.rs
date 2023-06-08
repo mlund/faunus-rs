@@ -17,6 +17,7 @@
 use crate::energy::EnergyTerm;
 use crate::{time::Timer, Change, Context, Info, SyncFromAny, MOLAR_GAS_CONSTANT};
 use average::Mean;
+use log;
 use rand::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::{cmp::Ordering, ops::Neg};
@@ -143,6 +144,7 @@ impl AcceptanceCriterion for MetropolisHastings {
     fn accept(energies: NewOld<f64>, temperature: f64, rng: &mut ThreadRng) -> bool {
         // useful for hard-sphere systems where initial configurations may overlap
         if energies.old.is_infinite() && energies.new.is_finite() {
+            log::trace!("Accepting infinite -> finite energy change");
             return true;
         }
         // always accept if negative infinity
