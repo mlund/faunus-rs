@@ -1,0 +1,11 @@
+[book]
+authors = ["The Faunus contributers"]
+language = "en"
+multilingual = false
+src = "./"
+title = "Faunus Manual"
+
+[output.html]
+mathjax-support = true
+default-theme = "navy"
+preferred-dark-theme = "navy"
