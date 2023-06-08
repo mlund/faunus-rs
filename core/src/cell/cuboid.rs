@@ -38,6 +38,10 @@ impl Cuboid {
             half_cell: Point::new(a / 2.0, b / 2.0, c / 2.0),
         }
     }
+    /// Cube with side length `a`
+    pub fn cubic(a: f64) -> Self {
+        Self::new(a, a, a)
+    }
     /// Create new cube with given volume
     pub fn from_volume(volume: f64) -> Self {
         let a = volume.cbrt();

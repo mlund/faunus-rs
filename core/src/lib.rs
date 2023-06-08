@@ -18,7 +18,7 @@ extern crate serde_json;
 use crate::group::{Group, GroupCollection};
 use nalgebra::Vector3;
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
+use std::rc::Rc;
 
 pub type Point = Vector3<f64>;
 pub type PositionVec = Vec<Point>;
@@ -103,7 +103,7 @@ pub trait SyncFromAny {
 /// Context stores the state of a single simulation system
 ///
 /// There can be multiple contexts in a simulation, e.g. one for a trial move and one for the current state.
-pub trait Context: GroupCollection + Clone + std::fmt::Debug {
+pub trait Context: GroupCollection + Clone + std::fmt::Debug + Sized {
     /// Simulation cell type
     type Cell: cell::SimulationCell;
     /// Get reference to simulation cell
@@ -111,5 +111,9 @@ pub trait Context: GroupCollection + Clone + std::fmt::Debug {
     /// Get mutable reference to simulation cell
     fn cell_mut(&mut self) -> &mut Self::Cell;
     /// Get reference to the topology
-    fn topology(&self) -> Arc<topology::Topology>;
+    fn topology(&self) -> Rc<topology::Topology>;
+    /// Reference to Hamiltonian
+    fn hamiltonian(&self) -> &energy::Hamiltonian;
+    /// Mutable reference to Hamiltonian
+    fn hamiltonian_mut(&mut self) -> &mut energy::Hamiltonian;
 }

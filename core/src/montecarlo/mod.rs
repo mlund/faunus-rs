@@ -208,6 +208,21 @@ pub trait Move<T: Context>: Info + std::fmt::Debug + SyncFromAny {
     fn frequency(&self) -> Frequency;
 }
 
+/// Collection of moves
+#[derive(Default, Debug)]
+pub struct MoveCollection<T: Context> {
+    moves: Vec<Box<dyn Move<T>>>,
+}
+
+impl<T: Context> MoveCollection<T> {
+    pub fn push(&mut self, m: impl Move<T> + 'static) {
+        self.moves.push(Box::new(m));
+    }
+    pub fn random_move(&mut self, rng: &mut ThreadRng) -> Option<&mut Box<dyn Move<T>>> {
+        self.moves.iter_mut().choose(rng)
+    }
+}
+
 /// # Monte Carlo simulation instance
 ///
 /// This maintains two [`Context`]s, one for the current state and one for the new state, as
@@ -216,11 +231,25 @@ pub trait Move<T: Context>: Info + std::fmt::Debug + SyncFromAny {
 /// new context is synced to the old context. If the move is rejected, the new context is
 /// discarded.
 pub struct Simulation<T: Context> {
-    _moves: Vec<Box<dyn Move<T>>>,
-    /// Currently accepted state
-    _old_context: T,
-    /// All moves are performed in this context and, if accepted, synced to `old_context`
-    _new_context: T,
+    /// List of moves to perform
+    moves: Vec<Box<dyn Move<T>>>,
+    /// Pair of contexts, one for the current state and one for the new state
+    context: NewOld<T>,
+}
+
+impl<T: Context> Simulation<T> {
+    /// Pick a random move
+    pub fn pick_move(&mut self, rng: &mut ThreadRng) -> Option<&mut Box<dyn Move<T>>> {
+        self.moves.iter_mut().choose(rng)
+    }
+
+    pub fn do_move(&mut self, rng: &mut ThreadRng) {
+        let n = self.moves.iter_mut().choose(rng);
+        //let n = self.pick_move(rng);
+        if let Some(m) = n {
+            let _change = m.do_move(&self.context.new).unwrap();
+        }
+    }
 }
 
 /// Entropy bias due to a change in number of particles

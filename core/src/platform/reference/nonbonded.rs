@@ -37,14 +37,17 @@ impl<T> EnergyTerm for Nonbonded<'static, T>
 where
     T: TwobodyEnergy + 'static + Clone,
 {
-    fn energy_change(&self, change: &Change) -> Option<f64> {
-        let energy = match change {
+    fn energy_change(&self, change: &Change) -> f64 {
+        match change {
             Change::Everything => self.all_with_all(),
             Change::SingleGroup(group_change) => self.single_group_change(group_change),
             Change::None => 0.0,
             _ => todo!("implement other changes"),
-        };
-        Some(energy)
+        }
+    }
+
+    fn update(&mut self, _change: &Change) -> anyhow::Result<()> {
+        Ok(())
     }
 }
 

@@ -15,7 +15,8 @@
 //! Transformations of particles and groups
 
 use crate::{
-    cell::SimulationCell, cell::VolumeScalePolicy, group::ParticleSelection, Point, PointParticle,
+    cell::BoundaryConditions, cell::VolumeScalePolicy, group::ParticleSelection, Point,
+    PointParticle,
 };
 use anyhow::Ok;
 use nalgebra::Quaternion;
@@ -101,12 +102,12 @@ impl Transform {
 
 /// Translates a set of particles by a vector and applies periodic boundary conditions
 fn translate<'a>(
-    cell: &impl SimulationCell,
+    pbc: &impl BoundaryConditions,
     positions: impl Iterator<Item = &'a mut Point>,
     displacement: &Point,
 ) {
     positions.for_each(|pos| {
         *pos += displacement;
-        cell.boundary(pos);
+        pbc.boundary(pos);
     });
 }

@@ -15,13 +15,13 @@
 //! # Reference platform for CPU-based simulations
 
 use crate::{
-    energy::EnergyTerm,
+    energy::Hamiltonian,
     group::{GroupCollection, GroupId, GroupSize},
     topology::{self, Topology},
     Change, Group, Particle, SyncFrom,
 };
 
-use std::sync::Arc;
+use std::rc::Rc;
 
 pub mod nonbonded;
 
@@ -32,11 +32,11 @@ pub mod nonbonded;
 /// follows the same layout as the original C++ Faunus code (version 2 and lower).
 #[derive(Debug, Clone)]
 pub struct ReferencePlatform {
-    topology: Arc<Topology>,
+    topology: Rc<Topology>,
     particles: Vec<Particle>,
     groups: Vec<Group>,
     cell: crate::cell::Cuboid,
-    _energies: Vec<Box<dyn EnergyTerm>>,
+    hamiltonian: Hamiltonian,
 }
 
 impl crate::Context for ReferencePlatform {
@@ -47,8 +47,14 @@ impl crate::Context for ReferencePlatform {
     fn cell_mut(&mut self) -> &mut Self::Cell {
         &mut self.cell
     }
-    fn topology(&self) -> Arc<topology::Topology> {
+    fn topology(&self) -> Rc<topology::Topology> {
         self.topology.clone()
+    }
+    fn hamiltonian(&self) -> &crate::energy::Hamiltonian {
+        &self.hamiltonian
+    }
+    fn hamiltonian_mut(&mut self) -> &mut crate::energy::Hamiltonian {
+        &mut self.hamiltonian
     }
 }
 
@@ -106,13 +112,13 @@ impl GroupCollection for ReferencePlatform {
 /// The idea is to access the particle in a group-wise fashion, e.g. to update
 /// the center of mass of a group, or to rotate a group of particles.
 impl ReferencePlatform {
-    pub fn new(cell: crate::cell::Cuboid, topology: Arc<Topology>) -> Self {
+    pub fn new(cell: crate::cell::Cuboid, topology: Rc<Topology>) -> Self {
         Self {
             particles: Vec::new(),
             topology,
             groups: Vec::new(),
             cell,
-            _energies: Vec::new(),
+            hamiltonian: Hamiltonian::default(),
         }
     }
 
