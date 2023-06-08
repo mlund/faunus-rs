@@ -20,7 +20,7 @@
 //!
 //! # Examples
 //!
-//! Species     | Example                |  Notes
+//! Participant | Example                |  Notes
 //! ------------|----------------------- | ------------------------------------
 //! Molecular   | `A + A ⇌ D`            | Possible arrows: `=`, `⇌`, `⇄`, `→`
 //! Implicit    | `RCOO- + 👻H+ ⇌ RCOOH` | Mark with `👻` or `~`
