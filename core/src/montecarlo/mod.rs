@@ -173,9 +173,12 @@ impl AcceptanceCriterion for Minimize {
     }
 }
 
-pub trait Move: Info + std::fmt::Debug + SyncFromAny {
+pub trait Move<T>: Info + std::fmt::Debug + SyncFromAny
+where
+    T: Context,
+{
     /// Perform a move on given `context`.
-    fn do_move(&mut self) -> anyhow::Result<Change>;
+    fn do_move(&mut self, context: &mut T) -> anyhow::Result<Change>;
 
     /// Moves may generate optional bias that should be added to the trial energy
     /// when determining the acceptance probability.
@@ -220,17 +223,17 @@ pub trait Move: Info + std::fmt::Debug + SyncFromAny {
 /// - Should implement serialize, see e.g.
 /// <https://stackoverflow.com/questions/50021897/how-to-implement-serdeserialize-for-a-boxed-trait-object>
 #[derive(Default, Debug)]
-pub struct MoveCollection {
-    moves: Vec<Box<dyn Move>>,
+pub struct MoveCollection<T: Context> {
+    moves: Vec<Box<dyn Move<T>>>,
 }
 
-impl MoveCollection {
+impl<T: Context> MoveCollection<T> {
     /// Appends a move to the back of the collection.
-    pub fn push(&mut self, m: impl Move + 'static) {
+    pub fn push(&mut self, m: impl Move<T> + 'static) {
         self.moves.push(Box::new(m));
     }
     /// Picks a random move from the collection.
-    pub fn choose(&mut self, rng: &mut ThreadRng) -> Option<&mut Box<dyn Move>> {
+    pub fn choose(&mut self, rng: &mut ThreadRng) -> Option<&mut Box<dyn Move<T>>> {
         self.moves.iter_mut().choose(rng)
     }
 }
@@ -245,7 +248,7 @@ impl MoveCollection {
 #[derive(Debug)]
 pub struct Simulation<T: Context> {
     /// List of moves to perform
-    pub moves: MoveCollection,
+    pub moves: MoveCollection<T>,
     /// Pair of contexts, one for the current state and one for the new state
     context: NewOld<T>,
 }
@@ -253,7 +256,7 @@ pub struct Simulation<T: Context> {
 impl<T: Context> Simulation<T> {
     pub fn do_move(&mut self, temperature: f64, rng: &mut ThreadRng) {
         if let Some(m) = self.moves.choose(rng) {
-            let change = m.do_move().unwrap();
+            let change = m.do_move(&mut self.context.new).unwrap();
             let energy = NewOld::<f64>::from(
                 self.context.new.hamiltonian().energy_change(&change),
                 self.context.old.hamiltonian().energy_change(&change),
@@ -261,11 +264,11 @@ impl<T: Context> Simulation<T> {
             let acceptance = match m.bias(&change, energy.clone()) {
                 Some(Bias::ForceAccept) => true,
                 Some(Bias::Energy(bias)) => {
-                    let mut biased_energy = energy.clone();
+                    let mut biased_energy = energy;
                     biased_energy.new += bias;
                     MetropolisHastings::accept(biased_energy, temperature, rng)
                 }
-                None => MetropolisHastings::accept(energy.clone(), temperature, rng),
+                None => MetropolisHastings::accept(energy, temperature, rng),
             };
             if acceptance {
                 m.accepted(&change);
