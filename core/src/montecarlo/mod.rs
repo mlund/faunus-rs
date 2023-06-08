@@ -130,7 +130,7 @@ impl Frequency {
 /// Interface for acceptance criterion for Monte Carlo moves
 trait AcceptanceCriterion {
     /// Acceptance criterion based on an old and new energy and a temperature (J/mol and Kelvin)
-    fn accept(old_energy: f64, new_energy: f64, temperature: f64, rng: &mut ThreadRng) -> bool;
+    fn accept(energies: NewOld<f64>, temperature: f64, rng: &mut ThreadRng) -> bool;
 }
 
 /// Metropolis-Hastings acceptance criterion
@@ -140,19 +140,19 @@ trait AcceptanceCriterion {
 pub struct MetropolisHastings {}
 
 impl AcceptanceCriterion for MetropolisHastings {
-    fn accept(old_energy: f64, new_energy: f64, temperature: f64, rng: &mut ThreadRng) -> bool {
+    fn accept(energies: NewOld<f64>, temperature: f64, rng: &mut ThreadRng) -> bool {
         // useful for hard-sphere systems where initial configurations may overlap
-        if old_energy.is_infinite() && new_energy.is_finite() {
+        if energies.old.is_infinite() && energies.new.is_finite() {
             return true;
         }
         // always accept if negative infinity
-        if new_energy.is_infinite() && new_energy.is_sign_negative() {
+        if energies.new.is_infinite() && energies.new.is_sign_negative() {
             return true;
         }
 
-        let energy_change = new_energy - old_energy;
         let thermal_energy = MOLAR_GAS_CONSTANT * temperature;
-        let acceptance_probability = f64::min(1.0, f64::exp(energy_change / thermal_energy));
+        let acceptance_probability =
+            f64::min(1.0, f64::exp(-energies.difference() / thermal_energy));
         rng.gen::<f64>() < acceptance_probability
     }
 }
@@ -164,11 +164,11 @@ impl AcceptanceCriterion for MetropolisHastings {
 pub struct Minimize {}
 
 impl AcceptanceCriterion for Minimize {
-    fn accept(old_energy: f64, new_energy: f64, _temperature: f64, _rng: &mut ThreadRng) -> bool {
-        if old_energy.is_infinite() && new_energy.is_finite() {
+    fn accept(energies: NewOld<f64>, _temperature: f64, _rng: &mut ThreadRng) -> bool {
+        if energies.old.is_infinite() && energies.new.is_finite() {
             return true;
         }
-        new_energy <= old_energy
+        energies.difference() <= 0.0
     }
 }
 
@@ -249,9 +249,11 @@ impl<T: Context> Simulation<T> {
             let acceptance = match m.bias(&change, energy.clone()) {
                 Some(Bias::ForceAccept) => true,
                 Some(Bias::Energy(bias)) => {
-                    MetropolisHastings::accept(energy.old, energy.new + bias, temperature, rng)
+                    let mut biased_energy = energy.clone();
+                    biased_energy.new += bias;
+                    MetropolisHastings::accept(biased_energy, temperature, rng)
                 }
-                None => MetropolisHastings::accept(energy.old, energy.new, temperature, rng),
+                None => MetropolisHastings::accept(energy.clone(), temperature, rng),
             };
             if acceptance {
                 m.accepted(&change);
