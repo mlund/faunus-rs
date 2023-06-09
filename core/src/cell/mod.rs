@@ -33,7 +33,7 @@ pub use sphere::Sphere;
 /// Final interface for a unit cell used to describe the geometry of a simulation system.
 ///
 /// It is a combination of a [`Shape`], [`BoundaryConditions`] and [`VolumeScale`].
-pub trait SimulationCell: Shape + BoundaryConditions + VolumeScale {}
+pub trait SimulationCell: Shape + BoundaryConditions + VolumeScale + Clone {}
 
 /// Geometric shape like a sphere, cube, etc.
 pub trait Shape {

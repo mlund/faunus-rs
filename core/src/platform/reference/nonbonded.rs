@@ -21,7 +21,7 @@ use std::fmt::Debug;
 
 use crate::platform::reference::ReferencePlatform;
 use crate::{
-    energy::EnergyTerm, Change, Group, GroupChange, GroupCollection, Info, Particle, SyncFromAny,
+    energy::EnergyTerm, Change, Group, GroupChange, GroupCollection, Info, Particle, SyncFrom,
 };
 
 #[derive(Debug, Clone, Serialize)]
@@ -139,7 +139,7 @@ where
     }
 }
 
-impl<T> SyncFromAny for Nonbonded<'static, T>
+impl<T> SyncFrom for Nonbonded<'static, T>
 where
     T: TwobodyEnergy + 'static + Clone,
 {

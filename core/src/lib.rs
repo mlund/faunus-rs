@@ -91,19 +91,15 @@ impl PointParticle for Particle {
     }
 }
 
-/// Trait for synchronizing internal state from another object, given a change.
 pub trait SyncFrom {
-    fn sync_from(&mut self, other: &Self, change: &Change) -> anyhow::Result<()>;
-}
-
-pub trait SyncFromAny {
+    /// Synchronize internal state from another object
     fn sync_from(&mut self, other: &dyn as_any::AsAny, change: &Change) -> anyhow::Result<()>;
 }
 
 /// Context stores the state of a single simulation system
 ///
 /// There can be multiple contexts in a simulation, e.g. one for a trial move and one for the current state.
-pub trait Context: GroupCollection + Clone + std::fmt::Debug + Sized {
+pub trait Context: GroupCollection + Clone + std::fmt::Debug + Sized + SyncFrom {
     /// Simulation cell type
     type Cell: cell::SimulationCell;
     /// Get reference to simulation cell
@@ -116,4 +112,13 @@ pub trait Context: GroupCollection + Clone + std::fmt::Debug + Sized {
     fn hamiltonian(&self) -> &energy::Hamiltonian;
     /// Mutable reference to Hamiltonian
     fn hamiltonian_mut(&mut self) -> &mut energy::Hamiltonian;
+    /// Update the internal state to match a recently applied change
+    ///
+    /// By default, this function does nothing. For e.g. Ewald summation, the
+    /// reciprocal space energy needs to be updated and this function can there
+    /// be called after a change to the system.
+    #[allow(unused_variables)]
+    fn update(&mut self, change: &Change) -> anyhow::Result<()> {
+        Ok(())
+    }
 }

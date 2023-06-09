@@ -18,7 +18,7 @@ use crate::{
     energy::Hamiltonian,
     group::{GroupCollection, GroupId, GroupSize},
     topology::{self, Topology},
-    Change, Group, GroupChange, Particle, SyncFromAny,
+    Change, Context, Group, Particle, SyncFrom,
 };
 
 use std::rc::Rc;
@@ -58,39 +58,16 @@ impl crate::Context for ReferencePlatform {
     }
 }
 
-impl SyncFromAny for ReferencePlatform {
+impl SyncFrom for ReferencePlatform {
     fn sync_from(&mut self, other: &dyn as_any::AsAny, change: &Change) -> anyhow::Result<()> {
         let other = other.as_any().downcast_ref::<Self>().unwrap();
-        match change {
-            Change::Everything => {
-                *self = other.clone();
-            }
-            Change::SingleGroup(group_index, group_change) => match group_change {
-                GroupChange::RigidBody => {
-                    self.groups[*group_index] = other.groups[*group_index].clone();
-                }
-                GroupChange::PartialUpdate(_) => {
-                    self.groups[*group_index] = other.groups[*group_index].clone();
-                }
-                _ => todo!(),
-            },
-            _ => todo!(),
-        };
+        self.cell = other.cell.clone();
+        self.hamiltonian_mut()
+            .sync_from(other.hamiltonian(), change)?;
+        self.sync_from_groupcollection(change, other)?;
         Ok(())
     }
 }
-
-// impl SyncFrom for ReferencePlatform {
-//     fn sync_from(&mut self, other: &Self, change: &Change) -> anyhow::Result<()> {
-//         match change {
-//             Change::Everything => {
-//                 *self = other.clone();
-//             }
-//             _ => todo!(),
-//         }
-//         Ok(())
-//     }
-// }
 
 impl GroupCollection for ReferencePlatform {
     fn groups(&self) -> &[Group] {

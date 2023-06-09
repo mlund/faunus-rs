@@ -14,7 +14,7 @@
 
 //! # Energy calculation and Hamiltonian
 
-use crate::{Change, SyncFromAny};
+use crate::{Change, SyncFrom};
 use as_any::AsAny;
 
 /// Collection of energy terms.
@@ -24,7 +24,7 @@ use as_any::AsAny;
 pub type Hamiltonian = Vec<Box<dyn EnergyTerm>>;
 
 /// Trait for describing terms in the Hamiltonian.
-pub trait EnergyTerm: AsAny + std::fmt::Debug + SyncFromAny {
+pub trait EnergyTerm: AsAny + std::fmt::Debug + SyncFrom {
     /// Compute the energy change of the term due to a change in the system.
     /// The energy is returned in units of kJ/mol.
     fn energy_change(&self, change: &Change) -> f64;
@@ -33,7 +33,11 @@ pub trait EnergyTerm: AsAny + std::fmt::Debug + SyncFromAny {
     ///
     /// After a system change, the energy term may need to update its internal state.
     /// For example, in Ewald summation, the reciprocal space energy needs to be updated.
-    fn update(&mut self, change: &Change) -> anyhow::Result<()>;
+    /// By default, this does nothing.
+    #[allow(unused_variables)]
+    fn update(&mut self, change: &Change) -> anyhow::Result<()> {
+        Ok(())
+    }
 }
 
 impl Clone for Box<dyn EnergyTerm> {
@@ -57,23 +61,16 @@ impl EnergyTerm for Hamiltonian {
     }
 
     fn update(&mut self, change: &Change) -> anyhow::Result<()> {
-        for term in self.iter_mut() {
-            term.update(change)?;
-        }
-        Ok(())
+        self.iter_mut().try_for_each(|term| term.update(change))
     }
 }
 
-impl SyncFromAny for Hamiltonian {
+impl SyncFrom for Hamiltonian {
     fn sync_from(&mut self, other: &dyn as_any::AsAny, change: &Change) -> anyhow::Result<()> {
-        match other.as_any().downcast_ref::<Self>() {
-            Some(other) => {
-                for (term, other_term) in self.iter_mut().zip(other.iter()) {
-                    term.sync_from(other_term, change)?;
-                }
-                Ok(())
-            }
-            None => anyhow::bail!("Cannot cast to Vec<Box<dyn EnergyTerm>>"),
+        let other = other.as_any().downcast_ref::<Self>().unwrap();
+        for (term, other_term) in self.iter_mut().zip(other.iter()) {
+            term.sync_from(other_term, change)?;
         }
+        Ok(())
     }
 }

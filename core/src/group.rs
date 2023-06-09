@@ -14,7 +14,7 @@
 
 //! Handling of groups of particles
 
-use crate::{change::GroupChange, Particle};
+use crate::{change::Change, change::GroupChange, Particle, SyncFrom};
 use anyhow::Ok;
 use nalgebra::Vector3;
 use serde::{Deserialize, Serialize};
@@ -285,7 +285,7 @@ impl Group {
 ///
 /// Each group has a unique index in a global list of groups, and a unique range of indices in a
 /// global particle list.
-pub trait GroupCollection {
+pub trait GroupCollection: SyncFrom {
     /// Add a group to the system based on an id and a set of particles given by an iterator.
     fn add_group(&mut self, id: GroupId, particles: &[Particle]) -> anyhow::Result<&Group>;
 
@@ -352,6 +352,9 @@ pub trait GroupCollection {
     /// This is used to synchronize groups between different contexts after
     /// e.g. a Monte Carlo move.
     /// Errors if there's a mismatch in group index, id, or capacity.
+    /// The following is synchronized:
+    /// - Group size
+    /// - Particle properties (position, id, etc.)
     fn sync_group_from(
         &mut self,
         group_index: usize,
@@ -386,22 +389,22 @@ pub trait GroupCollection {
                 GroupSize::Full => {
                     assert_eq!(other_group.size(), GroupSize::Full);
                     self.resize_group(group_index, size)?;
-                    self.sync_group_from(group_index, GroupChange::RigidBody, other)?;
+                    self.sync_group_from(group_index, GroupChange::RigidBody, other)?
                 }
                 GroupSize::Empty => {
                     assert!(other_group.is_empty());
-                    self.resize_group(group_index, size)?;
+                    self.resize_group(group_index, size)?
                 }
                 GroupSize::Shrink(n) => {
                     assert_eq!(group.len() - n, other_group.len());
-                    self.resize_group(group_index, size)?;
+                    self.resize_group(group_index, size)?
                 }
                 GroupSize::Expand(n) => {
                     assert_eq!(group.len() + n, other_group.len());
                     // sync the extra n active indices in the other group
                     let indices = (other_group.len()..other_group.len() + n).collect::<Vec<_>>();
                     self.resize_group(group_index, size)?;
-                    self.sync_group_from(group_index, GroupChange::PartialUpdate(indices), other)?;
+                    self.sync_group_from(group_index, GroupChange::PartialUpdate(indices), other)?
                 }
                 GroupSize::Partial(n) => {
                     let dn = group.len() as isize - n as isize;
@@ -411,11 +414,43 @@ pub trait GroupCollection {
                         Ordering::Equal => return Ok(()),
                     };
                     self.sync_group_from(group_index, GroupChange::Resize(size), other)?;
+                    todo!("is this the behavior we want?");
                 }
             },
             _ => todo!("implement other group changes"),
         }
-        todo!("is this the behavior we want?");
+        Ok(())
+    }
+
+    /// Synchonize with another context
+    ///
+    /// This is used to synchronize groups between different contexts after
+    /// e.g. an accepted Monte Carlo move that proposes a change to the system.
+    fn sync_from_groupcollection(
+        &mut self,
+        change: &Change,
+        other: &impl GroupCollection,
+    ) -> anyhow::Result<()> {
+        match change {
+            Change::Everything => {
+                for i in 0..self.groups().len() {
+                    self.sync_group_from(i, GroupChange::RigidBody, other)?
+                }
+            }
+            Change::SingleGroup(group_index, change) => {
+                self.sync_group_from(*group_index, change.clone(), other)?
+            }
+            Change::Volume(_policy, _volumes) => {
+                todo!("implement volume change")
+            }
+            Change::Groups(changes) => {
+                for _change in changes {
+                    todo!("implement group changes")
+                }
+            }
+            _ => todo!("implement other changes"),
+        }
+        Ok(())
     }
 }
 

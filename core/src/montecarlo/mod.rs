@@ -15,7 +15,7 @@
 //! # Support for Monte Carlo sampling
 
 use crate::energy::EnergyTerm;
-use crate::{time::Timer, Change, Context, Info, SyncFromAny, MOLAR_GAS_CONSTANT};
+use crate::{time::Timer, Change, Context, Info, SyncFrom};
 use average::Mean;
 use log;
 use rand::prelude::*;
@@ -31,13 +31,15 @@ pub enum Bias {
     Energy(f64),
     /// Force acceptance of the move regardless of energy change
     ForceAccept,
+    /// No bias
+    None,
 }
 
 /// Named helper struct to handle `new`, `old` pairs.
 ///
 /// Used e.g. for data before and after a Monte Carlo move
 /// and reduces risk mixing up the order or old and new values.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct NewOld<T: core::fmt::Debug> {
     pub new: T,
     pub old: T,
@@ -130,8 +132,10 @@ impl Frequency {
 
 /// Interface for acceptance criterion for Monte Carlo moves
 trait AcceptanceCriterion {
-    /// Acceptance criterion based on an old and new energy and a temperature (J/mol and Kelvin)
-    fn accept(energies: NewOld<f64>, temperature: f64, rng: &mut ThreadRng) -> bool;
+    /// Acceptance criterion based on an old and new energy.
+    ///
+    /// The energies are normalized by the given thermal energy, _kT_,.
+    fn accept(energies: NewOld<f64>, bias: Bias, thermal_energy: f64, rng: &mut ThreadRng) -> bool;
 }
 
 /// Metropolis-Hastings acceptance criterion
@@ -141,21 +145,25 @@ trait AcceptanceCriterion {
 pub struct MetropolisHastings {}
 
 impl AcceptanceCriterion for MetropolisHastings {
-    fn accept(energies: NewOld<f64>, temperature: f64, rng: &mut ThreadRng) -> bool {
+    fn accept(energy: NewOld<f64>, bias: Bias, thermal_energy: f64, rng: &mut ThreadRng) -> bool {
         // useful for hard-sphere systems where initial configurations may overlap
-        if energies.old.is_infinite() && energies.new.is_finite() {
+        if energy.old.is_infinite() && energy.new.is_finite() {
             log::trace!("Accepting infinite -> finite energy change");
             return true;
         }
         // always accept if negative infinity
-        if energies.new.is_infinite() && energies.new.is_sign_negative() {
+        if energy.new.is_infinite() && energy.new.is_sign_negative() {
             return true;
         }
 
-        let thermal_energy = MOLAR_GAS_CONSTANT * temperature;
-        let acceptance_probability =
-            f64::min(1.0, f64::exp(-energies.difference() / thermal_energy));
-        rng.gen::<f64>() < acceptance_probability
+        let du = energy.difference()
+            + match bias {
+                Bias::Energy(bias) => bias,
+                Bias::None => 0.0,
+                Bias::ForceAccept => return true,
+            };
+        let p = f64::min(1.0, f64::exp(-du / thermal_energy));
+        rng.gen::<f64>() < p
     }
 }
 
@@ -167,15 +175,21 @@ pub struct Minimize {}
 
 impl AcceptanceCriterion for Minimize {
     #[allow(unused_variables)]
-    fn accept(energies: NewOld<f64>, temperature: f64, rng: &mut ThreadRng) -> bool {
-        if energies.old.is_infinite() && energies.new.is_finite() {
+    fn accept(energy: NewOld<f64>, bias: Bias, thermal_energy: f64, rng: &mut ThreadRng) -> bool {
+        if energy.old.is_infinite() && energy.new.is_finite() {
             return true;
         }
-        energies.difference() <= 0.0
+        energy.difference()
+            + match bias {
+                Bias::Energy(bias) => bias,
+                Bias::None => 0.0,
+                Bias::ForceAccept => return true,
+            }
+            <= 0.0
     }
 }
 
-pub trait Move<T>: Info + std::fmt::Debug + SyncFromAny
+pub trait Move<T>: Info + std::fmt::Debug + SyncFrom
 where
     T: Context,
 {
@@ -185,9 +199,10 @@ where
     /// Moves may generate optional bias that should be added to the trial energy
     /// when determining the acceptance probability.
     /// It can also be used to force acceptance of a move in e.g. hybrid MD/MC schemes.
+    /// By default, this returns `Bias::None`.
     #[allow(unused_variables)]
-    fn bias(&self, change: &Change, energies: NewOld<f64>) -> Option<Bias> {
-        None
+    fn bias(&self, change: &Change, energies: &NewOld<f64>) -> Bias {
+        Bias::None
     }
 
     /// Get statistics for the move
@@ -248,38 +263,35 @@ impl<T: Context> MoveCollection<T> {
 /// new context is synced to the old context. If the move is rejected, the new context is
 /// discarded.
 #[derive(Debug)]
-pub struct Simulation<T: Context> {
+pub struct MarkovChain<T: Context> {
     /// List of moves to perform
     pub moves: MoveCollection<T>,
     /// Pair of contexts, one for the current state and one for the new state
     context: NewOld<T>,
 }
 
-impl<T: Context> Simulation<T> {
-    pub fn do_move(&mut self, temperature: f64, rng: &mut ThreadRng) {
-        if let Some(m) = self.moves.choose(rng) {
-            let change = m.do_move(&mut self.context.new).unwrap();
+impl<T: Context + 'static> MarkovChain<T> {
+    pub fn do_move(&mut self, thermal_energy: f64, rng: &mut ThreadRng) {
+        if let Some(mv) = self.moves.choose(rng) {
+            let change = mv.do_move(&mut self.context.new).unwrap();
+            self.context.new.update(&change).unwrap();
             let energy = NewOld::<f64>::from(
                 self.context.new.hamiltonian().energy_change(&change),
                 self.context.old.hamiltonian().energy_change(&change),
             );
-            let acceptance = match m.bias(&change, energy.clone()) {
-                Some(Bias::ForceAccept) => true,
-                Some(Bias::Energy(bias)) => {
-                    let mut biased_energy = energy;
-                    biased_energy.new += bias;
-                    MetropolisHastings::accept(biased_energy, temperature, rng)
-                }
-                None => MetropolisHastings::accept(energy, temperature, rng),
-            };
-            if acceptance {
-                m.accepted(&change);
-                todo!("Sync new context to old context")
-                //self.context.new.sync_from(&self._context.old);
+            let bias = mv.bias(&change, &energy);
+            if MetropolisHastings::accept(energy, bias, thermal_energy, rng) {
+                mv.accepted(&change);
+                self.context
+                    .old
+                    .sync_from(&self.context.new, &change)
+                    .unwrap();
             } else {
-                m.rejected(&change);
-                todo!("Sync old context to new context")
-                //self.context.new.sync_from(&self._context.old);
+                mv.rejected(&change);
+                self.context
+                    .new
+                    .sync_from(&self.context.old, &change)
+                    .unwrap();
             }
         }
     }
