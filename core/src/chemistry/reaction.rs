@@ -27,6 +27,7 @@
 //! Atomic      | `⚛Pb ⇄ ⚛Au`            | Mark with `⚛` or `.`
 
 use anyhow::Result;
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 
 /// Participant in a reaction
@@ -95,6 +96,43 @@ pub struct Reaction {
     direction: Direction,
 }
 
+/// Repeat a reaction participant, e.g. "2A" -> ["A", "A"]
+fn repeat_participant(participant: &str) -> Vec<String> {
+    let re = Regex::new(r"^(?P<number>\d+)(?P<remaining>.*)").unwrap();
+    if let Some(captured) = re.captures(participant) {
+        let number_str = captured.name("number").unwrap().as_str();
+        let number = number_str.parse::<usize>().ok();
+        let remaining = captured.name("remaining").unwrap().as_str().trim();
+        vec![remaining.to_string(); number.unwrap_or(1)]
+    } else {
+        vec![participant.to_string()]
+    }
+}
+
+fn parse_side(side: &str) -> Result<Vec<Participant>> {
+    side.trim()
+        .split_terminator(" + ")
+        .map(|i| i.trim())
+        .flat_map(repeat_participant)
+        .map(|s| s.parse::<Participant>())
+        .collect::<Result<Vec<Participant>>>()
+}
+
+fn check_sides(sides: &[&str]) -> Result<()> {
+    if sides.len() != 2 {
+        anyhow::bail!("Invalid reaction: exactly one '=' separator required");
+    }
+    // check that participants are separated by a plus sign
+    for s in sides {
+        let num_plusses = s.matches(" + ").count();
+        let num_words = s.split_whitespace().count() - num_plusses;
+        if num_words > 0 && num_words != num_plusses + 1 {
+            anyhow::bail!("Invalid reaction: missing '+' separator");
+        }
+    }
+    Ok(())
+}
+
 impl Reaction {
     /// Parse a reaction from a string representation, e.g. "A + 👻B + ⚛C = D + E"
     ///
@@ -106,31 +144,9 @@ impl Reaction {
     /// See topology for more information about atomic and implicit participants.
     pub fn from_reaction(forward_reaction: &str, free_energy: f64) -> Result<Self> {
         let sides: Vec<&str> = forward_reaction.split(&['=', '⇌', '⇄', '→']).collect();
-
-        if sides.len() != 2 {
-            anyhow::bail!("Invalid reaction: missing '=' separator");
-        }
-
-        // ensure that participants are separated by a plus sign
-        for s in &sides {
-            let num_plusses = s.matches(" + ").count();
-            let num_words = s.split_whitespace().count() - num_plusses;
-            if num_words > 0 && num_words != num_plusses + 1 {
-                anyhow::bail!("Invalid reaction: missing '+' separator");
-            }
-        }
-
-        let reactants = sides[0]
-            .trim()
-            .split_terminator(" + ")
-            .map(|s| s.trim().parse::<Participant>())
-            .collect::<Result<Vec<Participant>>>()?;
-
-        let products = sides[1]
-            .trim()
-            .split_terminator(" + ")
-            .map(|s| s.trim().parse::<Participant>())
-            .collect::<Result<Vec<Participant>>>()?;
+        check_sides(&sides)?;
+        let reactants = parse_side(&sides[0])?;
+        let products = parse_side(&sides[1])?;
 
         if reactants.is_empty() && products.is_empty() {
             anyhow::bail!("Invalid reaction: no reactants or products");
@@ -202,6 +218,26 @@ fn test_parse_reaction() {
             reaction: "A + 👻B + ⚛C ⇌ D + E".to_string(),
             left: vec![
                 Participant::Molecule("A".to_string()),
+                Participant::Implicit("B".to_string()),
+                Participant::Atom("C".to_string())
+            ],
+            right: vec![
+                Participant::Molecule("D".to_string()),
+                Participant::Molecule("E".to_string())
+            ],
+            free_energy: 1.0,
+            direction: Direction::Forward,
+        }
+    );
+
+    let reaction = Reaction::from_reaction("A + 2~B + .C = D + 1E", 1.0).unwrap();
+    assert_eq!(
+        reaction,
+        Reaction {
+            reaction: "A + 2👻B + ⚛C ⇌ D + 1E".to_string(),
+            left: vec![
+                Participant::Molecule("A".to_string()),
+                Participant::Implicit("B".to_string()),
                 Participant::Implicit("B".to_string()),
                 Participant::Atom("C".to_string())
             ],
