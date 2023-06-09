@@ -40,7 +40,9 @@ where
     fn energy_change(&self, change: &Change) -> f64 {
         match change {
             Change::Everything => self.all_with_all(),
-            Change::SingleGroup(group_change) => self.single_group_change(group_change),
+            Change::SingleGroup(group_index, group_change) => {
+                self.single_group_change(*group_index, group_change)
+            }
             Change::None => 0.0,
             _ => todo!("implement other changes"),
         }
@@ -66,12 +68,9 @@ where
     }
 
     /// Matches all possible single group perturbations and returns the energy
-    fn single_group_change(&self, change: &GroupChange) -> f64 {
+    fn single_group_change(&self, group_index: usize, change: &GroupChange) -> f64 {
         match change {
-            GroupChange::RigidBody(group_index) => self.group_with_all(*group_index),
-            GroupChange::SingleParticle(group_index, rel_index) => {
-                self.particle_with_all(*group_index, *rel_index)
-            }
+            GroupChange::RigidBody => self.group_with_all(group_index),
             GroupChange::None => 0.0,
             _ => todo!("implement other group changes"),
         }
@@ -88,7 +87,7 @@ where
     }
 
     /// Single particle with all remaining active particles
-    fn particle_with_all(&self, group_index: usize, rel_index: usize) -> f64 {
+    fn _particle_with_all(&self, group_index: usize, rel_index: usize) -> f64 {
         let groups = &self.platform.groups();
         let index = groups[group_index].absolute_index(rel_index).unwrap();
         groups

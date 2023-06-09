@@ -28,7 +28,7 @@ pub enum Change {
     /// Some groups have changed
     Groups(Vec<GroupChange>),
     /// A single group has changed
-    SingleGroup(GroupChange),
+    SingleGroup(usize, GroupChange),
     /// No change
     #[default]
     None,
@@ -41,28 +41,26 @@ pub enum Change {
 /// moves to communicate an update to e.g. the Hamiltonian.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum GroupChange {
-    /// Rigid body update where *all* particles are e.g. rotated or translated with *no* internal energy change (group index)
-    RigidBody(usize),
-    /// Update by relative indices, assuming that the internal energy changes (group index, relative indices)
-    PartialUpdate(usize, Vec<usize>),
-    /// Update a single particle in group (group index, relative index)
-    SingleParticle(usize, usize),
-    /// Add `usize` particles at end (group index, number of particles to add)
-    Push(usize, usize),
-    /// Remove `usize` particles from end (group index, number of particles to remove)
-    Pop(usize, usize),
-    /// The identity of a set of particles has changed (group index, relative indices)
-    UpdateIdentity(usize, Vec<usize>),
-    /// Deactivate *all* particles in group (group index)
-    Deactivate(usize),
-    /// Activate *all* particles in group (group index)
-    Activate(usize),
+    /// Rigid body update where *all* particles are e.g. rotated or translated with *no* internal energy change
+    RigidBody,
+    /// Update by relative indices, assuming that the internal energy changes (relative indices)
+    PartialUpdate(Vec<usize>),
+    /// Add `usize` particles at end (number of particles to add)
+    Push(usize),
+    /// Remove `usize` particles from end (number of particles to remove)
+    Pop(usize),
+    /// The identity of a set of particles has changed (relative indices)
+    UpdateIdentity(Vec<usize>),
+    /// Deactivate *all* particles in group
+    Deactivate,
+    /// Activate *all* particles in group
+    Activate,
     /// Nothing has changed
     None,
 }
 
 impl GroupChange {
     pub fn internal_change(&self) -> bool {
-        !matches!(self, GroupChange::RigidBody(_))
+        !matches!(self, GroupChange::RigidBody)
     }
 }

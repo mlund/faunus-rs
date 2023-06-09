@@ -14,7 +14,7 @@
 
 //! Handling of groups of particles
 
-use crate::Particle;
+use crate::{change::GroupChange, Particle};
 use anyhow::Ok;
 use nalgebra::Vector3;
 use serde::{Deserialize, Serialize};
@@ -345,6 +345,63 @@ pub trait GroupCollection {
         indices: impl IntoIterator<Item = usize>,
         source: impl Iterator<Item = &'a Particle> + Clone,
     ) -> anyhow::Result<()>;
+
+    /// Synchronize with a group in another context
+    ///
+    /// This is used to synchronize groups between different contexts after
+    /// e.g. a Monte Carlo move.
+    /// Errors if there's a mismatch in group index, id, or capacity.
+    fn sync_group_from(
+        &mut self,
+        group_index: usize,
+        change: GroupChange,
+        other: &impl GroupCollection,
+    ) -> anyhow::Result<()> {
+        let other_group = &other.groups()[group_index];
+        let group = &self.groups()[group_index];
+        if (other_group.id() != group.id())
+            || (other_group.index() != group.index())
+            || (other_group.capacity() != group.capacity())
+        {
+            anyhow::bail!("Group mismatch");
+        }
+        match change {
+            GroupChange::RigidBody => {
+                let particles = other.get_particles(other_group.iter_active());
+                let group = &self.groups()[group_index];
+                assert_eq!(particles.len(), group.len());
+                self.set_particles(group.iter_active(), particles.iter())?;
+            }
+            GroupChange::PartialUpdate(indices) => {
+                let indices = indices
+                    .iter()
+                    .map(|i| other_group.absolute_index(*i).unwrap());
+                let particles = other.get_particles(indices.clone());
+                self.set_particles(indices, particles.iter())?;
+            }
+            GroupChange::Push(n) => {
+                let indices = other_group.iter_active().rev().take(n).collect::<Vec<_>>();
+                assert_eq!(indices.len(), n);
+                let particles = other.get_particles(indices.iter().copied());
+                self.resize_group(group_index, GroupSize::Expand(n))?;
+                self.set_particles(indices, particles.iter())?;
+            }
+            GroupChange::Pop(n) => {
+                self.resize_group(group_index, GroupSize::Shrink(n))?;
+                assert_eq!(self.groups()[group_index].size(), other_group.size());
+            }
+            GroupChange::Deactivate => {
+                assert!(other_group.is_empty());
+                self.resize_group(group_index, GroupSize::Empty)?;
+            }
+            GroupChange::Activate => {
+                assert!(other_group.size() == GroupSize::Full);
+                self.resize_group(group_index, GroupSize::Full)?;
+            }
+            _ => todo!("implement other group changes"),
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]
