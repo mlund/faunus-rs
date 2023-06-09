@@ -367,6 +367,7 @@ pub trait GroupCollection {
         }
         match change {
             GroupChange::PartialUpdate(indices) => {
+                assert_eq!(group.size(), other_group.size());
                 let indices = indices
                     .iter()
                     .map(|i| other_group.absolute_index(*i).unwrap());
@@ -374,42 +375,48 @@ pub trait GroupCollection {
                 self.set_particles(indices, particles.iter())?;
             }
             GroupChange::RigidBody => {
-                assert_eq!(other_group.len(), group.len());
                 self.sync_group_from(
                     group_index,
                     GroupChange::PartialUpdate((0..other_group.len()).collect()),
                     other,
                 )?;
             }
-            GroupChange::Push(n) => {
-                let indices = other_group.iter_active().rev().take(n).collect::<Vec<_>>();
-                assert_eq!(indices.len(), n);
-                self.resize_group(group_index, GroupSize::Expand(n))?;
-                self.sync_group_from(
-                    group_index,
-                    GroupChange::PartialUpdate(
-                        (other_group.len() - n..other_group.len()).collect(),
-                    ),
-                    other,
-                )?;
-            }
-            GroupChange::Pop(n) => {
-                self.resize_group(group_index, GroupSize::Shrink(n))?;
-                assert_eq!(self.groups()[group_index].size(), other_group.size());
-            }
-            GroupChange::Deactivate => {
-                assert!(other_group.is_empty());
-                self.resize_group(group_index, GroupSize::Empty)?;
-            }
-            GroupChange::Activate => {
-                assert!(other_group.size() == GroupSize::Full);
-                self.resize_group(group_index, GroupSize::Full)?;
-                self.sync_group_from(
-                    group_index,
-                    GroupChange::PartialUpdate((0..other_group.len()).collect()),
-                    other,
-                )?;
-            }
+            GroupChange::Resize(size) => match size {
+                GroupSize::Full => {
+                    assert_eq!(other_group.size(), GroupSize::Full);
+                    // sync the extra active indices in other group
+                    let indices =
+                        (self.groups()[group_index].len()..other_group.len()).collect::<Vec<_>>();
+                    self.resize_group(group_index, size)?;
+                    self.sync_group_from(group_index, GroupChange::PartialUpdate(indices), other)?;
+                }
+                GroupSize::Empty => {
+                    assert!(other_group.is_empty());
+                    self.resize_group(group_index, size)?;
+                }
+                GroupSize::Shrink(n) => {
+                    assert_eq!(group.len() - n, other_group.len());
+                    self.resize_group(group_index, size)?;
+                }
+                GroupSize::Expand(n) => {
+                    assert_eq!(group.len() + n, other_group.len());
+                    // sync the extra n active indices in the other group
+                    let indices = (other_group.len()..other_group.len() + n).collect::<Vec<_>>();
+                    self.resize_group(group_index, size)?;
+                    self.sync_group_from(group_index, GroupChange::PartialUpdate(indices), other)?;
+                }
+                GroupSize::Partial(n) => {
+                    let dn = group.len() as isize - n as isize;
+                    let size = if dn > 0 {
+                        GroupSize::Expand(dn as usize)
+                    } else if dn < 0 {
+                        GroupSize::Shrink(-dn as usize)
+                    } else {
+                        return Ok(());
+                    };
+                    self.sync_group_from(group_index, GroupChange::Resize(size), other)?;
+                }
+            },
             _ => todo!("implement other group changes"),
         }
         Ok(())

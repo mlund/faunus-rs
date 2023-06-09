@@ -14,7 +14,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::cell;
+use crate::{cell, group::GroupSize};
 
 /// Describes a change in the system. This can for example be used to
 /// describe a change in the volume of the system, or a change in the
@@ -45,16 +45,10 @@ pub enum GroupChange {
     RigidBody,
     /// Update by relative indices, assuming that the internal energy changes (relative indices)
     PartialUpdate(Vec<usize>),
-    /// Add `usize` particles at end (number of particles to add)
-    Push(usize),
-    /// Remove `usize` particles from end (number of particles to remove)
-    Pop(usize),
+    /// Resize group
+    Resize(GroupSize),
     /// The identity of a set of particles has changed (relative indices)
     UpdateIdentity(Vec<usize>),
-    /// Deactivate *all* particles in group
-    Deactivate,
-    /// Activate *all* particles in group
-    Activate,
     /// Nothing has changed
     None,
 }
