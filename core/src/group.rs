@@ -366,12 +366,6 @@ pub trait GroupCollection {
             anyhow::bail!("Group mismatch");
         }
         match change {
-            GroupChange::RigidBody => {
-                let particles = other.get_particles(other_group.iter_active());
-                let group = &self.groups()[group_index];
-                assert_eq!(particles.len(), group.len());
-                self.set_particles(group.iter_active(), particles.iter())?;
-            }
             GroupChange::PartialUpdate(indices) => {
                 let indices = indices
                     .iter()
@@ -379,12 +373,25 @@ pub trait GroupCollection {
                 let particles = other.get_particles(indices.clone());
                 self.set_particles(indices, particles.iter())?;
             }
+            GroupChange::RigidBody => {
+                assert_eq!(other_group.len(), group.len());
+                self.sync_group_from(
+                    group_index,
+                    GroupChange::PartialUpdate((0..other_group.len()).collect()),
+                    other,
+                )?;
+            }
             GroupChange::Push(n) => {
                 let indices = other_group.iter_active().rev().take(n).collect::<Vec<_>>();
                 assert_eq!(indices.len(), n);
-                let particles = other.get_particles(indices.iter().copied());
                 self.resize_group(group_index, GroupSize::Expand(n))?;
-                self.set_particles(indices, particles.iter())?;
+                self.sync_group_from(
+                    group_index,
+                    GroupChange::PartialUpdate(
+                        (other_group.len() - n..other_group.len()).collect(),
+                    ),
+                    other,
+                )?;
             }
             GroupChange::Pop(n) => {
                 self.resize_group(group_index, GroupSize::Shrink(n))?;
@@ -397,6 +404,11 @@ pub trait GroupCollection {
             GroupChange::Activate => {
                 assert!(other_group.size() == GroupSize::Full);
                 self.resize_group(group_index, GroupSize::Full)?;
+                self.sync_group_from(
+                    group_index,
+                    GroupChange::PartialUpdate((0..other_group.len()).collect()),
+                    other,
+                )?;
             }
             _ => todo!("implement other group changes"),
         }
