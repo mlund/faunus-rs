@@ -27,6 +27,7 @@
 //! Atomic      | `⚛Pb ⇄ ⚛Au`            | Mark with `⚛` or `.`
 
 use anyhow::Result;
+use num::traits::Inv;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 
@@ -90,8 +91,8 @@ pub struct Reaction {
     left: Vec<Participant>,
     /// Participants on the right side of the forward reaction
     right: Vec<Participant>,
-    /// Free energy of the forward reaction
-    free_energy: f64,
+    /// Equilibrium constant of the forward reaction
+    equilibrium_const: f64,
     /// Current direction of the reaction
     direction: Direction,
 }
@@ -99,13 +100,18 @@ pub struct Reaction {
 /// Repeat a reaction participant, e.g. "2A" -> ["A", "A"]
 fn repeat_participant(participant: &str) -> Vec<String> {
     let re = Regex::new(r"^(?P<number>\d+)(?P<remaining>.*)").unwrap();
-    if let Some(captured) = re.captures(participant) {
-        let number_str = captured.name("number").unwrap().as_str();
-        let number = number_str.parse::<usize>().ok();
-        let remaining = captured.name("remaining").unwrap().as_str().trim();
-        vec![remaining.to_string(); number.unwrap_or(1)]
-    } else {
-        vec![participant.to_string()]
+    match re.captures(participant) {
+        Some(captured) => {
+            let n: usize = captured
+                .name("number")
+                .unwrap()
+                .as_str()
+                .parse::<usize>()
+                .unwrap_or(1);
+            let remaining = captured.name("remaining").unwrap().as_str().trim();
+            vec![remaining.to_string(); n]
+        }
+        None => vec![participant.to_string()],
     }
 }
 
@@ -142,11 +148,11 @@ impl Reaction {
     /// - Implicit participants are prefixed with a tilde or a ghost, e.g. "~B" or "👻B".
     ///
     /// See topology for more information about atomic and implicit participants.
-    pub fn from_reaction(forward_reaction: &str, free_energy: f64) -> Result<Self> {
+    pub fn from_reaction(forward_reaction: &str, equilibrium_const: f64) -> Result<Self> {
         let sides: Vec<&str> = forward_reaction.split(&['=', '⇌', '⇄', '→']).collect();
         check_sides(&sides)?;
-        let reactants = parse_side(&sides[0])?;
-        let products = parse_side(&sides[1])?;
+        let reactants = parse_side(sides[0])?;
+        let products = parse_side(sides[1])?;
 
         if reactants.is_empty() && products.is_empty() {
             anyhow::bail!("Invalid reaction: no reactants or products");
@@ -159,7 +165,7 @@ impl Reaction {
                 .replace(['=', '⇄', '→'], "⇌"),
             left: reactants,
             right: products,
-            free_energy,
+            equilibrium_const,
             direction: Direction::Forward,
         })
     }
@@ -170,12 +176,12 @@ impl Reaction {
     /// ~~~
     /// use std::str::FromStr;
     /// use faunus::chemistry::reaction::{Reaction, Direction, Participant};
-    /// let mut reaction = Reaction::from_reaction("A = B", 1.0).unwrap();
+    /// let mut reaction = Reaction::from_reaction("A = B", 2.0).unwrap();
     /// reaction.set_direction(Direction::Backward);
     /// let (reactants, products) = reaction.get();
     /// assert_eq!(reactants[0], Participant::from_str("B").unwrap());
     /// assert_eq!(products[0], Participant::from_str("A").unwrap());
-    /// assert_eq!(reaction.free_energy(), -1.0);
+    /// assert_eq!(reaction.equilibrium_const(), 1.0 / 2.0);
     /// ~~~
     pub fn set_direction(&mut self, direction: Direction) {
         self.direction = direction;
@@ -193,10 +199,10 @@ impl Reaction {
         }
     }
     /// Get the free energy of the reaction in the current direction
-    pub fn free_energy(&self) -> f64 {
+    pub fn equilibrium_const(&self) -> f64 {
         match self.direction {
-            Direction::Forward => self.free_energy,
-            Direction::Backward => -self.free_energy,
+            Direction::Forward => self.equilibrium_const,
+            Direction::Backward => self.equilibrium_const.inv(),
         }
     }
     /// Get the reactants and products of the reaction in the current direction
@@ -225,7 +231,7 @@ fn test_parse_reaction() {
                 Participant::Molecule("D".to_string()),
                 Participant::Molecule("E".to_string())
             ],
-            free_energy: 1.0,
+            equilibrium_const: 1.0,
             direction: Direction::Forward,
         }
     );
@@ -245,7 +251,7 @@ fn test_parse_reaction() {
                 Participant::Molecule("D".to_string()),
                 Participant::Molecule("E".to_string())
             ],
-            free_energy: 1.0,
+            equilibrium_const: 1.0,
             direction: Direction::Forward,
         }
     );
@@ -271,7 +277,7 @@ fn test_reaction_edge_cases() {
             reaction: "A ⇌ ".to_string(),
             left: vec![Participant::Molecule("A".to_string())],
             right: vec![],
-            free_energy: 1.0,
+            equilibrium_const: 1.0,
             direction: Direction::Forward,
         }
     );
@@ -283,7 +289,7 @@ fn test_reaction_edge_cases() {
             reaction: " ⇌ A".to_string(),
             left: vec![],
             right: vec![Participant::Molecule("A".to_string())],
-            free_energy: 1.0,
+            equilibrium_const: 1.0,
             direction: Direction::Forward,
         }
     );
