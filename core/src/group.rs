@@ -18,6 +18,7 @@ use crate::{change::GroupChange, Particle};
 use anyhow::Ok;
 use nalgebra::Vector3;
 use serde::{Deserialize, Serialize};
+use std::cmp::Ordering;
 
 pub type Point = Vector3<f64>;
 pub type PositionVec = Vec<Point>;
@@ -384,11 +385,8 @@ pub trait GroupCollection {
             GroupChange::Resize(size) => match size {
                 GroupSize::Full => {
                     assert_eq!(other_group.size(), GroupSize::Full);
-                    // sync the extra active indices in other group
-                    let indices =
-                        (self.groups()[group_index].len()..other_group.len()).collect::<Vec<_>>();
                     self.resize_group(group_index, size)?;
-                    self.sync_group_from(group_index, GroupChange::PartialUpdate(indices), other)?;
+                    self.sync_group_from(group_index, GroupChange::RigidBody, other)?;
                 }
                 GroupSize::Empty => {
                     assert!(other_group.is_empty());
@@ -407,19 +405,17 @@ pub trait GroupCollection {
                 }
                 GroupSize::Partial(n) => {
                     let dn = group.len() as isize - n as isize;
-                    let size = if dn > 0 {
-                        GroupSize::Expand(dn as usize)
-                    } else if dn < 0 {
-                        GroupSize::Shrink(-dn as usize)
-                    } else {
-                        return Ok(());
+                    let size = match dn.cmp(&0) {
+                        Ordering::Greater => GroupSize::Expand(dn as usize),
+                        Ordering::Less => GroupSize::Shrink(-dn as usize),
+                        Ordering::Equal => return Ok(()),
                     };
                     self.sync_group_from(group_index, GroupChange::Resize(size), other)?;
                 }
             },
             _ => todo!("implement other group changes"),
         }
-        Ok(())
+        todo!("is this the behavior we want?");
     }
 }
 
