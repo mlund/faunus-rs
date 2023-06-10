@@ -90,7 +90,6 @@ impl PointParticle for Particle {
         self.index
     }
 }
-
 pub trait SyncFrom {
     /// Synchronize internal state from another object
     fn sync_from(&mut self, other: &dyn as_any::AsAny, change: &Change) -> anyhow::Result<()>;
@@ -112,13 +111,15 @@ pub trait Context: GroupCollection + Clone + std::fmt::Debug + Sized + SyncFrom 
     fn hamiltonian(&self) -> &energy::Hamiltonian;
     /// Mutable reference to Hamiltonian
     fn hamiltonian_mut(&mut self) -> &mut energy::Hamiltonian;
+
     /// Update the internal state to match a recently applied change
     ///
-    /// By default, this function does nothing. For e.g. Ewald summation, the
-    /// reciprocal space energy needs to be updated and this function can there
-    /// be called after a change to the system.
+    /// By default, this function tries to update the Hamiltonian.
+    /// For e.g. Ewald summation, the reciprocal space energy needs to be updated.
     #[allow(unused_variables)]
     fn update(&mut self, change: &Change) -> anyhow::Result<()> {
+        use crate::energy::EnergyTerm;
+        self.hamiltonian_mut().update(change)?;
         Ok(())
     }
 }
