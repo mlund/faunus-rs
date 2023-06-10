@@ -15,13 +15,16 @@
 //! # Support for Monte Carlo sampling
 
 use crate::energy::EnergyTerm;
-use crate::{time::Timer, Change, Context, Info, SyncFrom};
+use crate::{time::Timer, Change, Context, Info};
 use average::Mean;
 use log;
 use rand::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::iter::FusedIterator;
 use std::{cmp::Ordering, ops::Neg};
+
+mod translate;
+pub use translate::*;
 
 /// Custom bias to be added to the energy after a given move
 ///
@@ -226,12 +229,12 @@ impl AcceptanceCriterion for Minimize {
     }
 }
 
-pub trait Move<T>: Info + std::fmt::Debug + SyncFrom
+pub trait Move<T>: Info + std::fmt::Debug
 where
     T: Context,
 {
     /// Perform a move on given `context`.
-    fn do_move(&mut self, context: &mut T) -> anyhow::Result<Change>;
+    fn do_move(&mut self, context: &mut T, rng: &mut ThreadRng) -> Option<Change>;
 
     /// Moves may generate optional bias that should be added to the trial energy
     /// when determining the acceptance probability.
@@ -374,7 +377,7 @@ impl<T: Context + 'static> MarkovChain<T> {
 
     fn do_move(&mut self) {
         if let Some(mv) = self.moves.choose(&mut self.rng) {
-            let change = mv.do_move(&mut self.context.new).unwrap();
+            let change = mv.do_move(&mut self.context.new, &mut self.rng).unwrap();
             self.context.new.update(&change).unwrap();
             let energy = NewOld::<f64>::from(
                 self.context.new.hamiltonian().energy_change(&change),

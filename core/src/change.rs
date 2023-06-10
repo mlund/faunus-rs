@@ -25,8 +25,8 @@ pub enum Change {
     Everything,
     /// The volume has changed (policy, new/old volume)
     Volume(cell::VolumeScalePolicy, NewOld<f64>),
-    /// Some groups have changed
-    Groups(Vec<GroupChange>),
+    /// Some groups have changed vector of (group index, group change)
+    Groups(Vec<(usize, GroupChange)>),
     /// A single group has changed
     SingleGroup(usize, GroupChange),
     /// No change
