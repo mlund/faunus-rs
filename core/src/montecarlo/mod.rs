@@ -20,6 +20,7 @@ use average::Mean;
 use log;
 use rand::prelude::*;
 use serde::{Deserialize, Serialize};
+use std::iter::FusedIterator;
 use std::{cmp::Ordering, ops::Neg};
 
 /// Custom bias to be added to the energy after a given move
@@ -65,6 +66,9 @@ impl NewOld<f64> {
     }
 }
 
+impl Copy for NewOld<usize> {}
+impl Copy for NewOld<f64> {}
+
 /// # Helper class to keep track of accepted and rejected moves
 ///
 /// It is optionally possible to let this class keep track of a single mean square displacement
@@ -83,13 +87,16 @@ pub struct MoveStatistics {
     /// Custom statistics and information (only serialized)
     #[serde(skip_deserializing)]
     pub info: serde_json::Map<String, serde_json::Value>,
+    /// Sum of energy changes due to this move
+    pub energy_change_sum: f64,
 }
 
 impl MoveStatistics {
     /// Register an accepted move and increment counters
-    pub fn accept(&mut self) {
+    pub fn accept(&mut self, energy_change: f64) {
         self.num_trials += 1;
         self.num_accepted += 1;
+        self.energy_change_sum += energy_change;
     }
 
     /// Register a rejected move and increment counters
@@ -135,7 +142,25 @@ trait AcceptanceCriterion {
     /// Acceptance criterion based on an old and new energy.
     ///
     /// The energies are normalized by the given thermal energy, _kT_,.
-    fn accept(energies: NewOld<f64>, bias: Bias, thermal_energy: f64, rng: &mut ThreadRng) -> bool;
+    fn accept(
+        &self,
+        energies: NewOld<f64>,
+        bias: Bias,
+        thermal_energy: f64,
+        rng: &mut ThreadRng,
+    ) -> bool;
+}
+
+impl Default for Box<dyn AcceptanceCriterion> {
+    fn default() -> Self {
+        Box::<MetropolisHastings>::default()
+    }
+}
+
+impl std::fmt::Debug for Box<dyn AcceptanceCriterion> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AcceptanceCriterion").finish()
+    }
 }
 
 /// Metropolis-Hastings acceptance criterion
@@ -145,7 +170,13 @@ trait AcceptanceCriterion {
 pub struct MetropolisHastings {}
 
 impl AcceptanceCriterion for MetropolisHastings {
-    fn accept(energy: NewOld<f64>, bias: Bias, thermal_energy: f64, rng: &mut ThreadRng) -> bool {
+    fn accept(
+        &self,
+        energy: NewOld<f64>,
+        bias: Bias,
+        thermal_energy: f64,
+        rng: &mut ThreadRng,
+    ) -> bool {
         // useful for hard-sphere systems where initial configurations may overlap
         if energy.old.is_infinite() && energy.new.is_finite() {
             log::trace!("Accepting infinite -> finite energy change");
@@ -175,7 +206,13 @@ pub struct Minimize {}
 
 impl AcceptanceCriterion for Minimize {
     #[allow(unused_variables)]
-    fn accept(energy: NewOld<f64>, bias: Bias, thermal_energy: f64, rng: &mut ThreadRng) -> bool {
+    fn accept(
+        &self,
+        energy: NewOld<f64>,
+        bias: Bias,
+        thermal_energy: f64,
+        rng: &mut ThreadRng,
+    ) -> bool {
         if energy.old.is_infinite() && energy.new.is_finite() {
             return true;
         }
@@ -216,8 +253,8 @@ where
     /// This will update the statistics.
     /// Often re-implemented to perform additional actions.
     #[allow(unused_variables)]
-    fn accepted(&mut self, change: &Change) {
-        self.statistics_mut().accept();
+    fn accepted(&mut self, change: &Change, energy_change: f64) {
+        self.statistics_mut().accept(energy_change);
     }
 
     /// Called when the move is rejected
@@ -239,9 +276,15 @@ where
 /// - `choose` should respect `frequency`
 /// - Should implement serialize, see e.g.
 /// <https://stackoverflow.com/questions/50021897/how-to-implement-serdeserialize-for-a-boxed-trait-object>
-#[derive(Default, Debug)]
+#[derive(Debug)]
 pub struct MoveCollection<T: Context> {
     moves: Vec<Box<dyn Move<T>>>,
+}
+
+impl<T: Context> Default for MoveCollection<T> {
+    fn default() -> Self {
+        Self { moves: Vec::new() }
+    }
 }
 
 impl<T: Context> MoveCollection<T> {
@@ -262,17 +305,75 @@ impl<T: Context> MoveCollection<T> {
 /// Moves are picked randomly and performed in the new context. If the move is accepted, the
 /// new context is synced to the old context. If the move is rejected, the new context is
 /// discarded.
-#[derive(Debug)]
+///
+/// The chain implements `Iterator` where each iteration corresponds to a single Monte Carlo step.
+#[derive(Default, Debug)]
 pub struct MarkovChain<T: Context> {
     /// List of moves to perform
-    pub moves: MoveCollection<T>,
+    moves: MoveCollection<T>,
     /// Pair of contexts, one for the current state and one for the new state
     context: NewOld<T>,
+    /// Current step
+    step: usize,
+    /// Maximum number of steps
+    max_steps: usize,
+    /// Random number engine
+    rng: ThreadRng,
+    /// Thermal energy - must be same unit as energy
+    thermal_energy: f64,
+    /// Acceptance policy
+    criterion: Box<dyn AcceptanceCriterion>,
 }
 
+impl<T: Context + 'static> Iterator for MarkovChain<T> {
+    type Item = usize;
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.step >= self.max_steps {
+            return None;
+        }
+        self.do_move();
+        self.step += 1;
+        Some(self.step)
+    }
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let size = self.max_steps - self.step;
+        (size, Some(size))
+    }
+}
+
+impl<T: Context + 'static> ExactSizeIterator for MarkovChain<T> {}
+impl<T: Context + 'static> FusedIterator for MarkovChain<T> {}
+
 impl<T: Context + 'static> MarkovChain<T> {
-    pub fn do_move(&mut self, thermal_energy: f64, rng: &mut ThreadRng) {
-        if let Some(mv) = self.moves.choose(rng) {
+    pub fn new(context: T, max_steps: usize, thermal_energy: f64) -> Self {
+        Self {
+            context: NewOld::from(context.clone(), context),
+            max_steps,
+            thermal_energy,
+            step: 0,
+            rng: rand::thread_rng(),
+            moves: MoveCollection::default(),
+            criterion: Box::<MetropolisHastings>::default(),
+        }
+    }
+    /// Set the thermal energy, _kT_.
+    ///
+    /// This is used to normalize the energy change when determining the acceptance probability.
+    /// Must match the unit of the energy.
+    pub fn set_thermal_energy(&mut self, thermal_energy: f64) {
+        self.thermal_energy = thermal_energy;
+    }
+    /// Set random number generator
+    pub fn set_rng(&mut self, rng: ThreadRng) {
+        self.rng = rng;
+    }
+    /// Append a move to the back of the collection.
+    pub fn add_move(&mut self, m: impl Move<T> + 'static) {
+        self.moves.push(m);
+    }
+
+    fn do_move(&mut self) {
+        if let Some(mv) = self.moves.choose(&mut self.rng) {
             let change = mv.do_move(&mut self.context.new).unwrap();
             self.context.new.update(&change).unwrap();
             let energy = NewOld::<f64>::from(
@@ -280,8 +381,11 @@ impl<T: Context + 'static> MarkovChain<T> {
                 self.context.old.hamiltonian().energy_change(&change),
             );
             let bias = mv.bias(&change, &energy);
-            if MetropolisHastings::accept(energy, bias, thermal_energy, rng) {
-                mv.accepted(&change);
+            if self
+                .criterion
+                .accept(energy, bias, self.thermal_energy, &mut self.rng)
+            {
+                mv.accepted(&change, energy.difference());
                 self.context
                     .old
                     .sync_from(&self.context.new, &change)

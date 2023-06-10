@@ -114,6 +114,8 @@ pub enum ParticleSelection {
     RelIndex(Vec<usize>),
     /// Specific indices (absolute indices)
     AbsIndex(Vec<usize>),
+    /// Particles with given id
+    ById(usize),
 }
 
 /// Enum for selecting a subset of groups
@@ -230,6 +232,9 @@ impl Group {
             crate::group::ParticleSelection::All => return Ok(self.iter_all().collect()),
             crate::group::ParticleSelection::Active => return Ok(self.iter_active().collect()),
             crate::group::ParticleSelection::Inactive => return Ok(self.iter_inactive().collect()),
+            crate::group::ParticleSelection::ById(_) => {
+                anyhow::bail!("Not implemented: select particles by id")
+            }
         };
         if indices.iter().all(|i| self.contains(*i)) {
             return Ok(indices);
