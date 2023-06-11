@@ -64,18 +64,17 @@ impl crate::Info for TranslateGroup {
 
 impl<T: Context> super::Move<T> for TranslateGroup {
     fn do_move(&mut self, context: &mut T, rng: &mut ThreadRng) -> Option<Change> {
-        match self.random_group(context, rng) {
-            None => None,
-            Some(index) => {
-                let displacement = random_unit_vector(rng)
-                    * self.max_displacement
-                    * 2.0
-                    * (rng.gen::<f64>() - 0.5);
-                Transform::Translate(displacement)
-                    .on_group(index, context)
-                    .unwrap();
-                Some(Change::SingleGroup(index, GroupChange::RigidBody))
-            }
+        if let Some(index) = self.random_group(context, rng) {
+            let displacement = random_unit_vector(rng)
+                * self.max_displacement
+                * 2.0
+                * (rng.gen::<f64>() - 0.5);
+            Transform::Translate(displacement)
+                .on_group(index, context)
+                .unwrap();
+            Some(Change::SingleGroup(index, GroupChange::RigidBody))
+        } else {
+            None
         }
     }
     fn statistics(&self) -> &MoveStatistics {

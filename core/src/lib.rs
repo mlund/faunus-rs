@@ -24,7 +24,8 @@ pub type Point = Vector3<f64>;
 pub type PositionVec = Vec<Point>;
 pub type ParticleVec = Vec<Particle>;
 
-pub use interact::Info;
+mod info;
+pub use info::*;
 pub mod cell;
 mod change;
 pub use self::change::{Change, GroupChange};
