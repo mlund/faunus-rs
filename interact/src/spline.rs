@@ -16,7 +16,7 @@
 //!
 //! ## Todo
 //!
-//! This is a convertion from fortran -> C++ -> Rust.
+//! This is a conversion from Fortran → C++ → Rust 😱
 //! Serious refactoring is needed!
 use anyhow::Result;
 #[cfg(test)]
