@@ -46,15 +46,14 @@ pub trait Info {
     }
     /// Tries to extract a URL from the citation string
     fn url(&self) -> Option<String> {
-        if self.citation()?.starts_with("doi:") {
-            Some(format!(
-                "https://doi.org/{}",
-                &self.citation().unwrap()[4..]
-            ))
-        } else if self.citation()?.starts_with("https://")
-            || self.citation()?.starts_with("http://")
-        {
-            Some(self.citation().unwrap().to_string())
+        if let Some(c) = self.citation() {
+            if let Some(doi) = c.strip_prefix("doi:") {
+                Some(format!("https://doi.org/{}", doi))
+            } else if c.starts_with("https://") || c.starts_with("http://") {
+                Some(c.to_string())
+            } else {
+                None
+            }
         } else {
             None
         }
