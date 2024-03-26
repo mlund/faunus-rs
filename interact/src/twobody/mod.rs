@@ -23,7 +23,7 @@
 //!   - Lennard-Jones
 //!   - Weeks-Chandler-Andersen
 
-use crate::{sqrt_serialize, square_deserialize, Info};
+use crate::{sqrt_serialize, square_deserialize, Cutoff, Info};
 use serde::{Deserialize, Serialize};
 
 mod mie;
@@ -138,6 +138,15 @@ impl TwobodyEnergy for HardSphere {
         } else {
             0.0
         }
+    }
+}
+
+impl Cutoff for HardSphere {
+    fn cutoff(&self) -> f64 {
+        self.cutoff_squared().sqrt()
+    }
+    fn cutoff_squared(&self) -> f64 {
+        self.min_distance_squared
     }
 }
 
