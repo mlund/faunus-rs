@@ -18,14 +18,15 @@ use crate::erfc_x;
 use approx::assert_relative_eq;
 use serde::{Deserialize, Serialize};
 
-impl Potential for Ewald {}
-impl Field for Ewald {}
-impl Energy for Ewald {}
-impl Force for Ewald {}
+impl Potential for RealSpaceEwald {}
+impl Field for RealSpaceEwald {}
+impl Energy for RealSpaceEwald {}
+impl Force for RealSpaceEwald {}
 
-/// # Scheme for real-space Ewald interactions
+/// # Scheme for real-space Ewald interactionss
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
-pub struct Ewald {
+pub struct RealSpaceEwald {
+    /// Real space cutoff distance
     cutoff: f64,
     alpha: f64,
     /// alpha * cutoff
@@ -34,7 +35,7 @@ pub struct Ewald {
     zeta: f64,
 }
 
-impl Ewald {
+impl RealSpaceEwald {
     /// Square root of pi
     const SQRT_PI: f64 = 1.7724538509055159;
     /// Construct a new Ewald scheme with given cutoff and alpha.
@@ -49,28 +50,30 @@ impl Ewald {
     }
 }
 
-impl crate::Info for Ewald {
+impl crate::Info for RealSpaceEwald {
     fn citation(&self) -> Option<&'static str> {
-        Some("10.1002/andp.19213690304")
+        Some("doi:10.1002/andp.19213690304")
     }
     fn short_name(&self) -> Option<&'static str> {
         Some("ewald")
     }
 }
 
-impl crate::Cutoff for Ewald {
+impl crate::Cutoff for RealSpaceEwald {
     #[inline]
     fn cutoff(&self) -> f64 {
         self.cutoff
     }
 }
 
-impl ShortRangeFunction for Ewald {
+impl ShortRangeFunction for RealSpaceEwald {
+    /// The inverse Debye length if salt is present, otherwise `None`.
     #[inline]
     fn kappa(&self) -> Option<f64> {
-        match self.zeta > 0.0 {
-            true => Some(self.zeta / self.cutoff),
-            false => None,
+        if self.zeta > 0.0 {
+            Some(self.zeta / self.cutoff)
+        } else {
+            None
         }
     }
     #[inline]
@@ -109,14 +112,14 @@ impl ShortRangeFunction for Ewald {
 #[test]
 fn test_ewald() {
     // Test short-ranged function
-    let pot = Ewald::new(29.0, 0.1, None);
+    let pot = RealSpaceEwald::new(29.0, 0.1, None);
     let eps = 1e-8;
     assert_relative_eq!(pot.short_range_f0(0.5), 0.04030484067840161, epsilon = eps);
     assert_relative_eq!(pot.short_range_f1(0.5), -0.39971358519150996, epsilon = eps);
     assert_relative_eq!(pot.short_range_f2(0.5), 3.36159125, epsilon = eps);
     assert_relative_eq!(pot.short_range_f3(0.5), -21.54779992186245, epsilon = eps);
 
-    let pot = Ewald::new(29.0, 0.1, Some(23.0));
+    let pot = RealSpaceEwald::new(29.0, 0.1, Some(23.0));
     let eps = 1e-6;
     assert_relative_eq!(pot.kappa().unwrap(), 1.0 / 23.0, epsilon = eps);
     assert_relative_eq!(pot.short_range_f0(0.5), 0.07306333588, epsilon = eps);
