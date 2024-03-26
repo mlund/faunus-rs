@@ -19,7 +19,7 @@ use itertools::iproduct;
 use serde::Serialize;
 use std::fmt::Debug;
 
-use crate::platform::reference::ReferencePlatform;
+use super::ReferencePlatform;
 use crate::{
     energy::EnergyTerm, Change, Group, GroupChange, GroupCollection, Info, Particle, SyncFrom,
 };

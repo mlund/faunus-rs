@@ -323,14 +323,14 @@ pub trait GroupCollection: SyncFrom {
                 .groups()
                 .iter()
                 .enumerate()
-                .filter(|(_, g)| g.size() == *size)
+                .filter(|(_i, g)| g.size() == *size)
                 .map(|(i, _)| i)
                 .collect(),
             GroupSelection::ById(id) => self
                 .groups()
                 .iter()
                 .enumerate()
-                .filter(|(_, g)| g.id() == id)
+                .filter(|(_i, g)| g.id() == id)
                 .map(|(i, _)| i)
                 .collect(),
             GroupSelection::All => (0..self.groups().len()).collect(),
