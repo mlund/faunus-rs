@@ -91,6 +91,15 @@ impl<const N: u32, const M: u32> Info for Mie<N, M> {
     }
 }
 
+impl<const N: u32, const M: u32> Cutoff for Mie<N, M> {
+    fn cutoff(&self) -> f64 {
+        f64::INFINITY
+    }
+    fn cutoff_squared(&self) -> f64 {
+        f64::INFINITY
+    }
+}
+
 /// # Lennard-Jones potential
 ///
 /// Originally by J. E. Lennard-Jones, see
@@ -146,6 +155,15 @@ impl LennardJones {
             four_times_epsilon: b * b / a,
             sigma_squared: (a / b).cbrt(),
         }
+    }
+}
+
+impl Cutoff for LennardJones {
+    fn cutoff(&self) -> f64 {
+        f64::INFINITY
+    }
+    fn cutoff_squared(&self) -> f64 {
+        f64::INFINITY
     }
 }
 
