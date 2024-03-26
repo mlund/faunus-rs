@@ -68,6 +68,17 @@ pub trait Cutoff {
     fn cutoff(&self) -> f64;
 }
 
+/// Defines an optional Debye screening length for electrostatic interactions
+pub trait DebyeLength {
+    /// Optional Debye length
+    fn debye_length(&self) -> Option<f64>;
+
+    /// Optional inverse Debye screening length
+    fn kappa(&self) -> Option<f64> {
+        self.debye_length().map(f64::recip)
+    }
+}
+
 /// Rule for combining two numbers
 pub trait CombinationRule {
     /// Take a pair of epsilons and sigmas and return combined (epsilon, sigma)
