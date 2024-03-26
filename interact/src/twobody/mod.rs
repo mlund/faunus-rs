@@ -14,7 +14,7 @@
 
 //! ## Twobody interactions
 //!
-//! Module for describing twobody interactions.
+//! Module for describing exactly two particle interacting with each other.
 //!
 //! - Hard-sphere overlap
 //! - Harmonic potential
@@ -23,10 +23,16 @@
 //!   - Lennard-Jones
 //!   - Weeks-Chandler-Andersen
 
-use crate::{sqrt_serialize, square_deserialize, Cutoff, Info};
+use crate::Info;
 use serde::{Deserialize, Serialize};
 
+mod electrostatic;
+mod hardsphere;
+mod harmonic;
 mod mie;
+pub use self::electrostatic::IonIon;
+pub use self::hardsphere::HardSphere;
+pub use self::harmonic::Harmonic;
 pub use self::mie::{LennardJones, Mie, WeeksChandlerAndersen};
 
 /// Potential energy between a pair of particles
@@ -105,103 +111,4 @@ fn test_twobodykind_serialize() {
         serde_json::to_string(&wca).unwrap(),
         "{\"wca\":{\"ε\":0.1,\"σ\":2.5}}"
     );
-}
-
-/// Hardsphere potential
-///
-/// More information [here](http://www.sklogwiki.org/SklogWiki/index.php/Hard_sphere_model).
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq)]
-pub struct HardSphere {
-    /// Minimum distance
-    #[serde(
-        rename = "σ",
-        serialize_with = "sqrt_serialize",
-        deserialize_with = "square_deserialize"
-    )]
-    min_distance_squared: f64,
-}
-
-impl HardSphere {
-    pub fn new(min_distance: f64) -> Self {
-        Self {
-            min_distance_squared: min_distance.powi(2),
-        }
-    }
-}
-
-#[typetag::serialize]
-impl TwobodyEnergy for HardSphere {
-    #[inline]
-    fn twobody_energy(&self, distance_squared: f64) -> f64 {
-        if distance_squared < self.min_distance_squared {
-            f64::INFINITY
-        } else {
-            0.0
-        }
-    }
-}
-
-impl Cutoff for HardSphere {
-    fn cutoff(&self) -> f64 {
-        self.cutoff_squared().sqrt()
-    }
-    fn cutoff_squared(&self) -> f64 {
-        self.min_distance_squared
-    }
-}
-
-impl Info for HardSphere {
-    fn short_name(&self) -> Option<&'static str> {
-        Some("hardsphere")
-    }
-    fn citation(&self) -> Option<&'static str> {
-        Some("https://en.wikipedia.org/wiki/Hard_spheres")
-    }
-}
-
-/// Harmonic potential
-///
-/// More information [here](https://en.wikipedia.org/wiki/Harmonic_oscillator).
-/// # Examples
-/// ~~~
-/// use interact::twobody::{Harmonic, TwobodyEnergy};
-/// let harmonic = Harmonic::new(1.0, 0.5);
-/// let distance: f64 = 2.0;
-/// assert_eq!(harmonic.twobody_energy(distance.powi(2)), 0.25);
-/// ~~~
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq)]
-pub struct Harmonic {
-    #[serde(rename = "r₀")]
-    eq_distance: f64,
-    #[serde(rename = "k")]
-    spring_constant: f64,
-}
-
-impl Harmonic {
-    pub fn new(eq_distance: f64, spring_constant: f64) -> Self {
-        Self {
-            eq_distance,
-            spring_constant,
-        }
-    }
-}
-
-impl Info for Harmonic {
-    fn short_name(&self) -> Option<&'static str> {
-        Some("harmonic")
-    }
-    fn long_name(&self) -> Option<&'static str> {
-        Some("Harmonic potential")
-    }
-    fn citation(&self) -> Option<&'static str> {
-        Some("https://en.wikipedia.org/wiki/Harmonic_oscillator")
-    }
-}
-
-#[typetag::serialize]
-impl TwobodyEnergy for Harmonic {
-    #[inline]
-    fn twobody_energy(&self, distance_squared: f64) -> f64 {
-        0.5 * self.spring_constant * (distance_squared.sqrt() - self.eq_distance).powi(2)
-    }
 }
