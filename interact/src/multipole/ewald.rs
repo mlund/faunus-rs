@@ -78,34 +78,59 @@ impl ShortRangeFunction for RealSpaceEwald {
     }
     #[inline]
     fn short_range_f0(&self, q: f64) -> f64 {
-        0.5 * (erfc_x(self.eta * q + self.zeta / (2.0 * self.eta)) * f64::exp(2.0 * self.zeta * q)
-            + erfc_x(self.eta * q - self.zeta / (2.0 * self.eta)))
+        if self.zeta > 0.0 {
+            0.5 * (erfc_x(self.eta * q + self.zeta / (2.0 * self.eta))
+                * f64::exp(2.0 * self.zeta * q)
+                + erfc_x(self.eta * q - self.zeta / (2.0 * self.eta)))
+        } else {
+            0.5 * (erfc_x(self.eta * q) + erfc_x(self.eta * q))
+        }
     }
 
     fn short_range_f1(&self, q: f64) -> f64 {
-        let exp_c = f64::exp(-(self.eta * q - self.zeta / (2.0 * self.eta)).powi(2));
-        let erfc_c = erfc_x(self.eta * q + self.zeta / (2.0 * self.eta));
-        -2.0 * self.eta / Self::SQRT_PI * exp_c + self.zeta * erfc_c * f64::exp(2.0 * self.zeta * q)
+        if self.zeta > 0.0 {
+            let exp_c = f64::exp(-(self.eta * q - self.zeta / (2.0 * self.eta)).powi(2));
+            let erfc_c = erfc_x(self.eta * q + self.zeta / (2.0 * self.eta));
+            -2.0 * self.eta / Self::SQRT_PI * exp_c
+                + self.zeta * erfc_c * f64::exp(2.0 * self.zeta * q)
+        } else {
+            let exp_c = f64::exp(-self.eta.powi(2) * q.powi(2));
+            -2.0 * self.eta / Self::SQRT_PI * exp_c
+        }
     }
 
     fn short_range_f2(&self, q: f64) -> f64 {
-        let exp_c = f64::exp(-(self.eta * q - self.zeta / (2.0 * self.eta)).powi(2));
-        let erfc_c = erfc_x(self.eta * q + self.zeta / (2.0 * self.eta));
-        4.0 * self.eta.powi(2) / Self::SQRT_PI * (self.eta * q - self.zeta / self.eta) * exp_c
-            + 2.0 * self.zeta.powi(2) * erfc_c * f64::exp(2.0 * self.zeta * q)
+        if self.zeta > 0.0 {
+            let exp_c = f64::exp(-(self.eta * q - self.zeta / (2.0 * self.eta)).powi(2));
+            let erfc_c = erfc_x(self.eta * q + self.zeta / (2.0 * self.eta));
+            4.0 * self.eta.powi(2) / Self::SQRT_PI * (self.eta * q - self.zeta / self.eta) * exp_c
+                + 2.0 * self.zeta.powi(2) * erfc_c * f64::exp(2.0 * self.zeta * q)
+        } else {
+            let exp_c = f64::exp(-(self.eta * q).powi(2));
+            4.0 * self.eta.powi(2) / Self::SQRT_PI * (self.eta * q) * exp_c
+        }
+        // let exp_c = f64::exp(-(self.eta * q - self.zeta / (2.0 * self.eta)).powi(2));
+        // let erfc_c = erfc_x(self.eta * q + self.zeta / (2.0 * self.eta));
+        // 4.0 * self.eta.powi(2) / Self::SQRT_PI * (self.eta * q - self.zeta / self.eta) * exp_c
+        //     + 2.0 * self.zeta.powi(2) * erfc_c * f64::exp(2.0 * self.zeta * q)
     }
 
     fn short_range_f3(&self, q: f64) -> f64 {
-        let exp_c = f64::exp(-(self.eta * q - self.zeta / (2.0 * self.eta)).powi(2));
-        let erfc_c = erfc_x(self.eta * q + self.zeta / (2.0 * self.eta));
-        4.0 * self.eta.powi(3) / Self::SQRT_PI
-            * (1.0
-                - 2.0
-                    * (self.eta * q - self.zeta / self.eta)
-                    * (self.eta * q - self.zeta / (2.0 * self.eta))
-                - self.zeta.powi(2) / self.eta.powi(2))
-            * exp_c
-            + 4.0 * self.zeta.powi(3) * erfc_c * f64::exp(2.0 * self.zeta * q)
+        if self.zeta > 0.0 {
+            let exp_c = f64::exp(-(self.eta * q - self.zeta / (2.0 * self.eta)).powi(2));
+            let erfc_c = erfc_x(self.eta * q + self.zeta / (2.0 * self.eta));
+            4.0 * self.eta.powi(3) / Self::SQRT_PI
+                * (1.0
+                    - 2.0
+                        * (self.eta * q - self.zeta / self.eta)
+                        * (self.eta * q - self.zeta / (2.0 * self.eta))
+                    - self.zeta.powi(2) / self.eta.powi(2))
+                * exp_c
+                + 4.0 * self.zeta.powi(3) * erfc_c * f64::exp(2.0 * self.zeta * q)
+        } else {
+            let exp_c = f64::exp(-(self.eta * q).powi(2));
+            4.0 * self.eta.powi(3) / Self::SQRT_PI * (1.0 - 2.0 * (self.eta * q).powi(2)) * exp_c
+        }
     }
 }
 

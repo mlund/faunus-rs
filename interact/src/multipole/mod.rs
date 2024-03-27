@@ -67,17 +67,16 @@ pub trait ShortRangeFunction: crate::Cutoff {
 pub trait Potential: ShortRangeFunction {
     #[inline]
     fn ion_potential(&self, charge: f64, distance: f64) -> f64 {
-        if distance < self.cutoff() {
-            let q = distance / self.cutoff();
-            charge / distance
-                * if let Some(kappa) = self.kappa() {
-                    self.short_range_f0(q) * (-kappa * distance).exp()
-                } else {
-                    self.short_range_f0(q)
-                }
-        } else {
-            0.0
+        if distance >= self.cutoff() {
+            return 0.0;
         }
+        let q = distance / self.cutoff();
+        charge / distance
+            * if let Some(kappa) = self.kappa() {
+                self.short_range_f0(q) * (-kappa * distance).exp()
+            } else {
+                self.short_range_f0(q)
+            }
     }
     /// Electrostatic potential from a point dipole.
     ///
@@ -91,37 +90,39 @@ pub trait Potential: ShortRangeFunction {
     /// The potential from a point dipole is described by the formula:
     /// Phi(mu, r) = (mu dot r) / (|r|^2) * [s(q) - q * s'(q)] * exp(-kr)
     fn dipole_potential(&self, dipole: &Point, r: &Point) -> f64 {
-        let r2 = r.norm_squared();
-        if r2 < self.cutoff_squared() {
-            let r1 = r.norm();
-            let q = r1 / self.cutoff();
-            let kr = self.kappa().unwrap_or(0.0) * r1;
-            dipole.dot(r) / (r2 * r1)
+        let r_squared = r.norm_squared();
+        if r_squared >= self.cutoff_squared() {
+            return 0.0;
+        }
+        let r1 = r.norm();
+        let q = r1 / self.cutoff();
+        if let Some(kappa) = self.kappa() {
+            let kr = kappa * r1;
+            dipole.dot(r) / (r_squared * r1)
                 * (self.short_range_f0(q) * (1.0 + kr) - q * self.short_range_f1(q))
                 * (-kr).exp()
         } else {
-            0.0
+            dipole.dot(r) / (r_squared * r1) * self.short_range_f0(q)
         }
     }
 
     fn quadrupole_potential(&self, quad: &Matrix3, r: &Point) -> f64 {
         let r2 = r.norm_squared();
-        if r2 < self.cutoff_squared() {
-            let r1 = r.norm();
-            let q = r1 / self.cutoff();
-            let kr = self.kappa().unwrap_or(0.0) * r1;
-            let s0 = self.short_range_f0(q);
-            let s1 = self.short_range_f1(q);
-            let s2 = self.short_range_f2(q);
-            let a = s0 * (1.0 + kr + kr * kr / 3.0) - q * s1 * (1.0 + 2.0 / 3.0 * kr)
-                + q * q / 3.0 * s2;
-            let b = (s0 * kr * kr - 2.0 * kr * q * s1 + s2 * q * q) / 3.0;
-            0.5 * ((3.0 / r2 * (r.transpose() * quad * r)[0] - quad.trace()) * a + quad.trace() * b)
-                / (r1 * r2)
-                * (-kr).exp()
-        } else {
-            0.0
+        if r2 >= self.cutoff_squared() {
+            return 0.0;
         }
+        let r1 = r.norm();
+        let q = r1 / self.cutoff();
+        let kr = self.kappa().unwrap_or(0.0) * r1;
+        let s0 = self.short_range_f0(q);
+        let s1 = self.short_range_f1(q);
+        let s2 = self.short_range_f2(q);
+        let a =
+            s0 * (1.0 + kr + kr * kr / 3.0) - q * s1 * (1.0 + 2.0 / 3.0 * kr) + q * q / 3.0 * s2;
+        let b = (s0 * kr * kr - 2.0 * kr * q * s1 + s2 * q * q) / 3.0;
+        0.5 * ((3.0 / r2 * (r.transpose() * quad * r)[0] - quad.trace()) * a + quad.trace() * b)
+            / (r1 * r2)
+            * (-kr).exp()
     }
 }
 
@@ -140,15 +141,18 @@ pub trait Field: ShortRangeFunction {
     /// E(z, r) = z * r / |r|^2 * (s(q) - q * s'(q))
     fn ion_field(&self, charge: f64, r: &Point) -> Point {
         let r2 = r.norm_squared();
-        if r2 < self.cutoff_squared() {
-            let r1 = r.norm();
-            let q = r1 / self.cutoff();
-            let kr = self.kappa().unwrap_or(0.0) * r1;
+        if r2 >= self.cutoff_squared() {
+            return Point::zeros();
+        }
+        let r1 = r.norm();
+        let q = r1 / self.cutoff();
+        if let Some(kappa) = self.kappa() {
+            let kr = kappa * r1;
             charge * r / (r2 * r1)
                 * (self.short_range_f0(q) * (1.0 + kr) - q * self.short_range_f1(q))
                 * (-kr).exp()
         } else {
-            Point::zeros()
+            charge * r / (r2 * r1) * self.short_range_f0(q)
         }
     }
 
@@ -167,26 +171,25 @@ pub trait Field: ShortRangeFunction {
     ///             mu / r3 * (s(q) * kr^2 - 2 * kr * q * s'(q) + q^2 / 3 * s''(q))
     fn dipole_field(&self, dipole: &Point, r: &Point) -> Point {
         let r2 = r.norm_squared();
-        if r2 < self.cutoff_squared() {
-            let r1 = r.norm();
-            let r3 = r1 * r2;
-            let q = r1 / self.cutoff();
-            let kr = self.kappa().unwrap_or(0.0) * r1;
-            let kr2 = kr * kr;
-            let srf = self.short_range_f0(q);
-            let dsrf = self.short_range_f1(q);
-            let ddsrf = self.short_range_f2(q);
-
-            let field_d = (3.0 * dipole.dot(r) * r / r2 - dipole) / r3
-                * (srf * (1.0 + kr + kr2 / 3.0) - q * dsrf * (1.0 + 2.0 / 3.0 * kr)
-                    + q * q / 3.0 * ddsrf);
-
-            let field_i = dipole / r3 * (srf * kr2 - 2.0 * kr * q * dsrf + ddsrf * q * q) / 3.0;
-
-            (field_d + field_i) * (-kr).exp()
-        } else {
-            Point::zeros()
+        if r2 >= self.cutoff_squared() {
+            return Point::zeros();
         }
+        let r1 = r.norm();
+        let r3 = r1 * r2;
+        let q = r1 / self.cutoff();
+        let kr = self.kappa().unwrap_or(0.0) * r1;
+        let kr2 = kr * kr;
+        let srf = self.short_range_f0(q);
+        let dsrf = self.short_range_f1(q);
+        let ddsrf = self.short_range_f2(q);
+
+        let field_d = (3.0 * dipole.dot(r) * r / r2 - dipole) / r3
+            * (srf * (1.0 + kr + kr2 / 3.0) - q * dsrf * (1.0 + 2.0 / 3.0 * kr)
+                + q * q / 3.0 * ddsrf);
+
+        let field_i = dipole / r3 * (srf * kr2 - 2.0 * kr * q * dsrf + ddsrf * q * q) / 3.0;
+
+        (field_d + field_i) * (-kr).exp()
     }
     /// Electrostatic field from point quadrupole.
     ///
@@ -198,33 +201,30 @@ pub trait Field: ShortRangeFunction {
     /// Field from quadrupole [UNIT: (input charge) / (input length)^2]
     fn quadrupole_field(&self, quad: &Matrix3, r: &Point) -> Point {
         let r2 = r.norm_squared();
-        if r2 < self.cutoff_squared() {
-            let r_norm = r.norm();
-            let r_hat = r / r_norm;
-            let q = r_norm / self.cutoff();
-            let q2 = q * q;
-            let kr = self.kappa().unwrap_or(0.0) * r_norm;
-            let kr2 = kr * kr;
-            let r4 = r2 * r2;
-            let quadrh = quad * r_hat;
-            let quad_trh = quad.transpose() * r_hat;
-
-            let quadfactor = (1.0 / r2 * r.transpose() * quad * r)[0]; // 1x1 matrix -> f64 by taking first and only element
-            let s0 = self.short_range_f0(q);
-            let s1 = self.short_range_f1(q);
-            let s2 = self.short_range_f2(q);
-            let s3 = self.short_range_f3(q);
-            let field_d = 3.0 * ((5.0 * quadfactor - quad.trace()) * r_hat - quadrh - quad_trh)
-                / r4
-                * (s0 * (1.0 + kr + kr2 / 3.0) - q * s1 * (1.0 + 2.0 / 3.0 * kr) + q2 / 3.0 * s2);
-            let field_i = quadfactor * r_hat / r4
-                * (s0 * (1.0 + kr) * kr2 - q * s1 * (3.0 * kr + 2.0) * kr
-                    + s2 * (1.0 + 3.0 * kr) * q2
-                    - q2 * q * s3);
-            0.5 * (field_d + field_i) * (-kr).exp()
-        } else {
-            Point::zeros()
+        if r2 >= self.cutoff_squared() {
+            return Point::zeros();
         }
+        let r_norm = r.norm();
+        let r_hat = r / r_norm;
+        let q = r_norm / self.cutoff();
+        let q2 = q * q;
+        let kr = self.kappa().unwrap_or(0.0) * r_norm;
+        let kr2 = kr * kr;
+        let r4 = r2 * r2;
+        let quadrh = quad * r_hat;
+        let quad_trh = quad.transpose() * r_hat;
+
+        let quadfactor = (1.0 / r2 * r.transpose() * quad * r)[0]; // 1x1 matrix -> f64 by taking first and only element
+        let s0 = self.short_range_f0(q);
+        let s1 = self.short_range_f1(q);
+        let s2 = self.short_range_f2(q);
+        let s3 = self.short_range_f3(q);
+        let field_d = 3.0 * ((5.0 * quadfactor - quad.trace()) * r_hat - quadrh - quad_trh) / r4
+            * (s0 * (1.0 + kr + kr2 / 3.0) - q * s1 * (1.0 + 2.0 / 3.0 * kr) + q2 / 3.0 * s2);
+        let field_i = quadfactor * r_hat / r4
+            * (s0 * (1.0 + kr) * kr2 - q * s1 * (3.0 * kr + 2.0) * kr + s2 * (1.0 + 3.0 * kr) * q2
+                - q2 * q * s3);
+        0.5 * (field_d + field_i) * (-kr).exp()
     }
 }
 
