@@ -46,7 +46,7 @@ pub trait TwobodyEnergy: Info + Debug {
 }
 
 /// Combine twobody energies
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Combined<T, U>(T, U);
 
 impl<T: TwobodyEnergy, U: TwobodyEnergy> Combined<T, U> {
@@ -66,6 +66,22 @@ impl<T: TwobodyEnergy, U: TwobodyEnergy> Info for Combined<T, U> {
     fn citation(&self) -> Option<&'static str> {
         todo!("Implement citation for Combined");
     }
+}
+
+/// Plain Coulomb potential combined with Lennard-Jones
+pub type CoulombLennardJones = Combined<IonIon<crate::multipole::Coulomb>, LennardJones>;
+
+// test Combined
+#[test]
+pub fn test_combined() {
+    use approx::assert_relative_eq;
+    let r2 = 0.5;
+    let lj = LennardJones::new(0.5, 1.0);
+    let harmonic = Harmonic::new(0.0, 10.0);
+    let u_lj = lj.twobody_energy(r2);
+    let u_harmonic = harmonic.twobody_energy(r2);
+    let combined = Combined::new(lj, harmonic);
+    assert_relative_eq!(combined.twobody_energy(r2), u_lj + u_harmonic);
 }
 
 /*

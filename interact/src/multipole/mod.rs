@@ -72,11 +72,8 @@ pub trait MultipolePotential: ShortRangeFunction {
         }
         let q = distance / self.cutoff();
         charge / distance
-            * if let Some(kappa) = self.kappa() {
-                self.short_range_f0(q) * (-kappa * distance).exp()
-            } else {
-                self.short_range_f0(q)
-            }
+            * self.short_range_f0(q)
+            * self.kappa().map_or(1.0, |kappa| (-kappa * distance).exp())
     }
     /// Electrostatic potential from a point dipole.
     ///
