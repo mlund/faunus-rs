@@ -19,6 +19,7 @@ extern crate typetag;
 pub type Point = nalgebra::Vector3<f64>;
 /// A stack-allocated 3x3 square matrix
 pub type Matrix3 = nalgebra::Matrix3<f64>;
+use num::{Float, NumCast};
 use serde::{Deserialize, Deserializer, Serializer};
 
 pub mod multipole;
@@ -79,27 +80,53 @@ pub trait DebyeLength {
     }
 }
 
-/// Rule for combining two numbers
-pub trait CombinationRule {
-    /// Take a pair of epsilons and sigmas and return combined (epsilon, sigma)
-    fn mix(epsilons: (f64, f64), sigmas: (f64, f64)) -> (f64, f64);
-    fn get_epsilon(&self) -> f64;
-    fn get_sigma(&self) -> f64;
+/// Combination rules for mixing epsilon and sigma values
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum CombinationRule {
+    /// The Lotentz-Berthelot combination rule (geometric mean on epsilon, arithmetic mean on sigma)
+    LorentzBerthelot,
+    /// The Fender-Halsey combination rule (harmonic mean on epsilon, arithmetic mean on sigma)
+    FenderHalsey,
 }
 
-/// See https://en.wikipedia.org/wiki/Pythagorean_means
-fn geometric_mean(values: (f64, f64)) -> f64 {
-    f64::sqrt(values.0 * values.1)
+impl CombinationRule {
+    /// Combines epsilon and sigma pairs using the selected combination rule
+    pub fn mix(&self, epsilons: (f64, f64), sigmas: (f64, f64)) -> (f64, f64) {
+        let epsilon = self.mix_epsilons(epsilons);
+        let sigma = self.mix_sigmas(sigmas);
+        (epsilon, sigma)
+    }
+
+    /// Combine epsilon values using the selected combination rule
+    pub fn mix_epsilons(&self, epsilons: (f64, f64)) -> f64 {
+        match self {
+            Self::LorentzBerthelot => geometric_mean(epsilons),
+            Self::FenderHalsey => harmonic_mean(epsilons),
+        }
+    }
+
+    /// Combine sigma values using the selected combination rule
+    pub fn mix_sigmas(&self, sigmas: (f64, f64)) -> f64 {
+        match self {
+            Self::LorentzBerthelot => arithmetic_mean(sigmas),
+            Self::FenderHalsey => arithmetic_mean(sigmas),
+        }
+    }
 }
 
-/// See https://en.wikipedia.org/wiki/Pythagorean_means
-fn arithmetic_mean(values: (f64, f64)) -> f64 {
-    0.5 * (values.0 + values.1)
+/// See Pythagorean means on [Wikipedia](https://en.wikipedia.org/wiki/Pythagorean_means)
+fn geometric_mean<T: Float>(values: (T, T)) -> T {
+    T::sqrt(values.0 * values.1)
 }
 
-/// See https://en.wikipedia.org/wiki/Pythagorean_means
-fn _harmonic_mean(values: (f64, f64)) -> f64 {
-    2.0 * values.0 * values.1 / (values.0 + values.1)
+/// See Pythagorean means on [Wikipedia](https://en.wikipedia.org/wiki/Pythagorean_means)
+fn arithmetic_mean<T: Float>(values: (T, T)) -> T {
+    (values.0 + values.1) * NumCast::from(0.5).unwrap()
+}
+
+/// See Pythagorean means on [Wikipedia](https://en.wikipedia.org/wiki/Pythagorean_means)
+fn harmonic_mean<T: Float>(values: (T, T)) -> T {
+    values.0 * values.1 / (values.0 + values.1) * NumCast::from(2.0).unwrap()
 }
 
 /// Transform x^2 --> x when serializing
