@@ -12,17 +12,19 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
-use super::{Energy, Field, Force, Potential, ShortRangeFunction};
+use super::{
+    MultipoleEnergy, MultipoleField, MultipoleForce, MultipolePotential, ShortRangeFunction,
+};
 #[cfg(test)]
 use crate::{Matrix3, Point};
 #[cfg(test)]
 use approx::assert_relative_eq;
 use serde::{Deserialize, Serialize};
 
-impl Potential for Coulomb {}
-impl Field for Coulomb {}
-impl Energy for Coulomb {}
-impl Force for Coulomb {}
+impl MultipolePotential for Coulomb {}
+impl MultipoleField for Coulomb {}
+impl MultipoleEnergy for Coulomb {}
+impl MultipoleForce for Coulomb {}
 
 /// # Scheme for vanilla coulomb interactions
 ///

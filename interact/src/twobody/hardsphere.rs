@@ -34,7 +34,6 @@ impl HardSphere {
     }
 }
 
-#[typetag::serialize]
 impl TwobodyEnergy for HardSphere {
     #[inline]
     fn twobody_energy(&self, distance_squared: f64) -> f64 {

@@ -12,16 +12,18 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
-use super::{Energy, Field, Force, Potential, ShortRangeFunction};
+use super::{
+    MultipoleEnergy, MultipoleField, MultipoleForce, MultipolePotential, ShortRangeFunction,
+};
 use crate::erfc_x;
 #[cfg(test)]
 use approx::assert_relative_eq;
 use serde::{Deserialize, Serialize};
 
-impl Potential for RealSpaceEwald {}
-impl Field for RealSpaceEwald {}
-impl Energy for RealSpaceEwald {}
-impl Force for RealSpaceEwald {}
+impl MultipolePotential for RealSpaceEwald {}
+impl MultipoleField for RealSpaceEwald {}
+impl MultipoleEnergy for RealSpaceEwald {}
+impl MultipoleForce for RealSpaceEwald {}
 
 /// # Scheme for real-space Ewald interactionss
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]

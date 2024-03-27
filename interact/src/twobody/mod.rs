@@ -25,6 +25,7 @@
 
 use crate::Info;
 use serde::{Deserialize, Serialize};
+use std::fmt::Debug;
 
 mod electrostatic;
 mod hardsphere;
@@ -39,8 +40,7 @@ pub use self::mie::{LennardJones, Mie, WeeksChandlerAndersen};
 ///
 /// This uses the `typetag` crate to allow for dynamic dispatch
 /// and requires that implementations are tagged with `#[typetag::serialize]`.
-#[typetag::serialize(tag = "type")]
-pub trait TwobodyEnergy: crate::Info + std::fmt::Debug {
+pub trait TwobodyEnergy: Info + Debug {
     /// Interaction energy between a pair of isotropic particles
     fn twobody_energy(&self, distance_squared: f64) -> f64;
 }
@@ -55,8 +55,7 @@ impl<T: TwobodyEnergy, U: TwobodyEnergy> Combined<T, U> {
     }
 }
 
-#[typetag::serialize]
-impl<T: TwobodyEnergy + Serialize, U: TwobodyEnergy + Serialize> TwobodyEnergy for Combined<T, U> {
+impl<T: TwobodyEnergy, U: TwobodyEnergy> TwobodyEnergy for Combined<T, U> {
     #[inline]
     fn twobody_energy(&self, distance_squared: f64) -> f64 {
         self.0.twobody_energy(distance_squared) + self.1.twobody_energy(distance_squared)
@@ -69,6 +68,7 @@ impl<T: TwobodyEnergy, U: TwobodyEnergy> Info for Combined<T, U> {
     }
 }
 
+/*
 /// Enum with all two-body variants.
 ///
 /// Use for serialization and deserialization of two-body interactions in
@@ -112,3 +112,4 @@ fn test_twobodykind_serialize() {
         "{\"wca\":{\"ε\":0.1,\"σ\":2.5}}"
     );
 }
+*/

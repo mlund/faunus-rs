@@ -41,7 +41,6 @@ impl Info for Harmonic {
     }
 }
 
-#[typetag::serialize]
 impl TwobodyEnergy for Harmonic {
     #[inline]
     fn twobody_energy(&self, distance_squared: f64) -> f64 {

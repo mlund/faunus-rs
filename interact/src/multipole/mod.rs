@@ -64,7 +64,7 @@ pub trait ShortRangeFunction: crate::Cutoff {
 }
 
 /// # Potential from electric multipoles
-pub trait Potential: ShortRangeFunction {
+pub trait MultipolePotential: ShortRangeFunction {
     #[inline]
     fn ion_potential(&self, charge: f64, distance: f64) -> f64 {
         if distance >= self.cutoff() {
@@ -127,7 +127,7 @@ pub trait Potential: ShortRangeFunction {
 }
 
 /// # Field due to electric multipoles
-pub trait Field: ShortRangeFunction {
+pub trait MultipoleField: ShortRangeFunction {
     /// Electrostatic field from point charge.
     ///
     /// Parameters:
@@ -229,7 +229,7 @@ pub trait Field: ShortRangeFunction {
 }
 
 /// # Interaction energy between multipoles
-pub trait Energy: Potential + Field {
+pub trait MultipoleEnergy: MultipolePotential + MultipoleField {
     /// Interaction energy between two point charges
     ///
     /// z1: Point charge, UNIT: [input charge]
@@ -297,7 +297,7 @@ pub trait Energy: Potential + Field {
 }
 
 /// # Force between multipoles
-pub trait Force: Field {
+pub trait MultipoleForce: MultipoleField {
     /// Force between two point charges.
     ///
     /// Parameters:
