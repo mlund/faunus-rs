@@ -293,6 +293,7 @@ impl<const C: i32, const D: i32> ShortRangeFunction for Poisson<C, D> {
         let mut dqpdq = 1.0;
         let mut d2qpdq2 = 0.0;
         let mut dsdqp = 0.0;
+        // todo: use Option<f64> for kappa
         if self.use_yukawa_screening {
             qp = (1.0 - (2.0 * self.reduced_kappa * q).exp()) * self.yukawa_denom;
             dqpdq = -2.0
@@ -329,6 +330,7 @@ impl<const C: i32, const D: i32> ShortRangeFunction for Poisson<C, D> {
         let mut d3qpdq3 = 0.0;
         let mut d2sdqp2 = 0.0;
         let mut dsdqp = 0.0;
+        // todo: use Option<f64> for kappa
         if self.use_yukawa_screening {
             qp = (1.0 - (2.0 * self.reduced_kappa * q).exp()) * self.yukawa_denom;
             dqpdq = -2.0
