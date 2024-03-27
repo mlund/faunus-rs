@@ -107,10 +107,6 @@ impl ShortRangeFunction for RealSpaceEwald {
                     * f64::exp(-(self.eta * q).powi(2))
             }
         }
-        // let exp_c = f64::exp(-(self.eta * q - self.zeta / (2.0 * self.eta)).powi(2));
-        // let erfc_c = erfc_x(self.eta * q + self.zeta / (2.0 * self.eta));
-        // 4.0 * self.eta.powi(2) / Self::SQRT_PI * (self.eta * q - self.zeta / self.eta) * exp_c
-        //     + 2.0 * self.zeta.powi(2) * erfc_c * f64::exp(2.0 * self.zeta * q)
     }
 
     fn short_range_f3(&self, q: f64) -> f64 {
@@ -138,7 +134,7 @@ impl ShortRangeFunction for RealSpaceEwald {
 
 #[test]
 fn test_ewald() {
-    // Test short-ranged function
+    // Test short-ranged function without salt
     let pot = RealSpaceEwald::new(29.0, 0.1, None);
     let eps = 1e-8;
     assert_relative_eq!(pot.short_range_f0(0.5), 0.04030484067840161, epsilon = eps);
@@ -146,6 +142,7 @@ fn test_ewald() {
     assert_relative_eq!(pot.short_range_f2(0.5), 3.36159125, epsilon = eps);
     assert_relative_eq!(pot.short_range_f3(0.5), -21.54779992186245, epsilon = eps);
 
+    // Test short-ranged function with a Debye screening length
     let pot = RealSpaceEwald::new(29.0, 0.1, Some(23.0));
     let eps = 1e-6;
     assert_relative_eq!(pot.kappa().unwrap(), 1.0 / 23.0, epsilon = eps);
