@@ -65,10 +65,8 @@ impl crate::Info for TranslateGroup {
 impl<T: Context> super::Move<T> for TranslateGroup {
     fn do_move(&mut self, context: &mut T, rng: &mut ThreadRng) -> Option<Change> {
         if let Some(index) = self.random_group(context, rng) {
-            let displacement = random_unit_vector(rng)
-                * self.max_displacement
-                * 2.0
-                * (rng.gen::<f64>() - 0.5);
+            let displacement =
+                random_unit_vector(rng) * self.max_displacement * 2.0 * (rng.gen::<f64>() - 0.5);
             Transform::Translate(displacement)
                 .on_group(index, context)
                 .unwrap();
