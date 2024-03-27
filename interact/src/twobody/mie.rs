@@ -14,8 +14,8 @@
 
 use crate::twobody::TwobodyEnergy;
 use crate::{
-    arithmetic_mean, divide4_serialize, geometric_mean, multiply4_deserialize, sqrt_serialize,
-    square_deserialize, Cutoff, Info,
+    divide4_serialize, multiply4_deserialize, sqrt_serialize, square_deserialize, CombinationRule,
+    Cutoff, Info,
 };
 
 use serde::{Deserialize, Serialize};
@@ -61,6 +61,15 @@ impl<const N: u32, const M: u32> Mie<N, M> {
         assert!(M > 0);
         assert!(N > M);
         Self { epsilon, sigma }
+    }
+    /// Construct from a combination rule
+    pub fn from_combination_rule(
+        rule: CombinationRule,
+        epsilons: (f64, f64),
+        sigmas: (f64, f64),
+    ) -> Self {
+        let (epsilon, sigma) = rule.mix(epsilons, sigmas);
+        Self::new(epsilon, sigma)
     }
 }
 
@@ -142,12 +151,14 @@ impl LennardJones {
             sigma_squared: sigma.powi(2),
         }
     }
-    /// Construct using the Lorentz-Berthelot mixing rule.
-    ///
-    /// Epsilons are combined using the geometric mean, and sigmas using the arithmetic mean.
-    /// See [Wikipedia](https://en.wikipedia.org/wiki/Combining_rules) for more information.
-    pub fn lorentz_berthelot(epsilons: (f64, f64), sigmas: (f64, f64)) -> Self {
-        LennardJones::new(geometric_mean(epsilons), arithmetic_mean(sigmas))
+    /// Construct using arbitrary combination rule.
+    pub fn from_combination_rule(
+        rule: CombinationRule,
+        epsilons: (f64, f64),
+        sigmas: (f64, f64),
+    ) -> Self {
+        let (epsilon, sigma) = rule.mix(epsilons, sigmas);
+        Self::new(epsilon, sigma)
     }
     /// Construct from AB form, u = A/r¹² - B/r⁶
     pub fn from_ab(a: f64, b: f64) -> Self {
@@ -204,6 +215,16 @@ impl WeeksChandlerAndersen {
     const TWOTOTWOSIXTH: f64 = 1.2599210498948732; // f64::powf(2.0, 2.0/6.0)
     pub fn new(lennard_jones: LennardJones) -> Self {
         Self { lennard_jones }
+    }
+
+    /// Construct from combination rule
+    pub fn from_combination_rule(
+        rule: CombinationRule,
+        epsilons: (f64, f64),
+        sigmas: (f64, f64),
+    ) -> Self {
+        let lj = LennardJones::from_combination_rule(rule, epsilons, sigmas);
+        Self::new(lj)
     }
 }
 

@@ -35,7 +35,7 @@ pub use self::hardsphere::HardSphere;
 pub use self::harmonic::Harmonic;
 pub use self::mie::{LennardJones, Mie, WeeksChandlerAndersen};
 
-/// Potential energy between a pair of particles
+/// Potential energy between a pair of isotropic particles
 ///
 /// This uses the `typetag` crate to allow for dynamic dispatch
 /// and requires that implementations are tagged with `#[typetag::serialize]`.
