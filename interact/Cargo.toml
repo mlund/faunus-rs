@@ -20,6 +20,7 @@ typetag = "0.2"
 nalgebra = { version = "0.32", features = ["serde-serialize"] }
 approx = "0.5"
 num = "0.4"
+ordered-float = "4.2.0"
 
 # See https://github.com/victe/rust-latex-doc-minimal-example
 # for including math in the documentation

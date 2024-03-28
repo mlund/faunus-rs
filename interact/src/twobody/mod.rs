@@ -23,8 +23,8 @@
 //!   - Lennard-Jones
 //!   - Weeks-Chandler-Andersen
 
-use crate::Info;
-use serde::{Deserialize, Serialize};
+use crate::{Info, Point};
+use serde::Serialize;
 use std::fmt::Debug;
 
 mod electrostatic;
@@ -36,33 +36,45 @@ pub use self::hardsphere::HardSphere;
 pub use self::harmonic::Harmonic;
 pub use self::mie::{LennardJones, Mie, WeeksChandlerAndersen};
 
+/// Potential energy between a pair of anisotropic particles
+pub trait AnisotropicTwobodyEnergy: Info + Debug {
+    fn anisotropic_twobody_energy(&self, distance: &Point) -> f64;
+}
+
 /// Potential energy between a pair of isotropic particles
-///
-/// This uses the `typetag` crate to allow for dynamic dispatch
-/// and requires that implementations are tagged with `#[typetag::serialize]`.
-pub trait TwobodyEnergy: Info + Debug {
+pub trait IsotropicTwobodyEnergy: Info + Debug + AnisotropicTwobodyEnergy {
     /// Interaction energy between a pair of isotropic particles
-    fn twobody_energy(&self, distance_squared: f64) -> f64;
+    fn isotropic_twobody_energy(&self, distance_squared: f64) -> f64;
+}
+
+/// Isotropic potentials always implement the anisotropic trait
+impl<T: IsotropicTwobodyEnergy> AnisotropicTwobodyEnergy for T {
+    fn anisotropic_twobody_energy(&self, distance: &Point) -> f64 {
+        self.isotropic_twobody_energy(distance.norm_squared())
+    }
 }
 
 /// Combine twobody energies
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Combined<T, U>(T, U);
 
-impl<T: TwobodyEnergy, U: TwobodyEnergy> Combined<T, U> {
+impl<T: IsotropicTwobodyEnergy, U: IsotropicTwobodyEnergy> Combined<T, U> {
     pub fn new(t: T, u: U) -> Self {
         Self(t, u)
     }
 }
 
-impl<T: TwobodyEnergy, U: TwobodyEnergy> TwobodyEnergy for Combined<T, U> {
+impl<T: IsotropicTwobodyEnergy, U: IsotropicTwobodyEnergy> IsotropicTwobodyEnergy
+    for Combined<T, U>
+{
     #[inline]
-    fn twobody_energy(&self, distance_squared: f64) -> f64 {
-        self.0.twobody_energy(distance_squared) + self.1.twobody_energy(distance_squared)
+    fn isotropic_twobody_energy(&self, distance_squared: f64) -> f64 {
+        self.0.isotropic_twobody_energy(distance_squared)
+            + self.1.isotropic_twobody_energy(distance_squared)
     }
 }
 
-impl<T: TwobodyEnergy, U: TwobodyEnergy> Info for Combined<T, U> {
+impl<T: IsotropicTwobodyEnergy, U: IsotropicTwobodyEnergy> Info for Combined<T, U> {
     fn citation(&self) -> Option<&'static str> {
         todo!("Implement citation for Combined");
     }
@@ -78,10 +90,10 @@ pub fn test_combined() {
     let r2 = 0.5;
     let lj = LennardJones::new(0.5, 1.0);
     let harmonic = Harmonic::new(0.0, 10.0);
-    let u_lj = lj.twobody_energy(r2);
-    let u_harmonic = harmonic.twobody_energy(r2);
+    let u_lj = lj.isotropic_twobody_energy(r2);
+    let u_harmonic = harmonic.isotropic_twobody_energy(r2);
     let combined = Combined::new(lj, harmonic);
-    assert_relative_eq!(combined.twobody_energy(r2), u_lj + u_harmonic);
+    assert_relative_eq!(combined.isotropic_twobody_energy(r2), u_lj + u_harmonic);
 }
 
 /*

@@ -12,7 +12,7 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
-use crate::twobody::TwobodyEnergy;
+use crate::twobody::IsotropicTwobodyEnergy;
 use crate::{
     divide4_serialize, multiply4_deserialize, sqrt_serialize, square_deserialize, CombinationRule,
     Cutoff, Info,
@@ -36,7 +36,7 @@ use serde::{Deserialize, Serialize};
 /// let (epsilon, sigma, r2) = (1.5, 2.0, 2.5);
 /// let mie = Mie::<12, 6>::new(epsilon, sigma);
 /// let lj = LennardJones::new(epsilon, sigma);
-/// assert_eq!(mie.twobody_energy(r2), lj.twobody_energy(r2));
+/// assert_eq!(mie.isotropic_twobody_energy(r2), lj.isotropic_twobody_energy(r2));
 /// ~~~
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -73,9 +73,9 @@ impl<const N: u32, const M: u32> Mie<N, M> {
     }
 }
 
-impl<const N: u32, const M: u32> TwobodyEnergy for Mie<N, M> {
+impl<const N: u32, const M: u32> IsotropicTwobodyEnergy for Mie<N, M> {
     #[inline]
-    fn twobody_energy(&self, distance_squared: f64) -> f64 {
+    fn isotropic_twobody_energy(&self, distance_squared: f64) -> f64 {
         if Mie::<N, M>::OPTIMIZE {
             let mth_power = (self.sigma * self.sigma / distance_squared).powi(Mie::<N, M>::M_HALF); // (σ/r)^m
             return Mie::<N, M>::C
@@ -116,13 +116,13 @@ impl<const N: u32, const M: u32> Cutoff for Mie<N, M> {
 ///
 /// ## Examples:
 /// ~~~
-/// use interact::twobody::{LennardJones, TwobodyEnergy};
+/// use interact::twobody::{LennardJones, IsotropicTwobodyEnergy};
 /// let epsilon = 1.5;
 /// let sigma = 2.0;
 /// let lj = LennardJones::new(epsilon, sigma);
 /// let r_min = f64::powf(2.0, 1.0 / 6.0) * sigma;
 /// let u_min = -epsilon;
-/// assert_eq!(lj.twobody_energy( r_min.powi(2) ), u_min);
+/// assert_eq!(lj.isotropic_twobody_energy( r_min.powi(2) ), u_min);
 /// ~~~
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default)]
 #[serde(default)]
@@ -177,9 +177,9 @@ impl Cutoff for LennardJones {
     }
 }
 
-impl TwobodyEnergy for LennardJones {
+impl IsotropicTwobodyEnergy for LennardJones {
     #[inline]
-    fn twobody_energy(&self, squared_distance: f64) -> f64 {
+    fn isotropic_twobody_energy(&self, squared_distance: f64) -> f64 {
         let x = self.sigma_squared / squared_distance; // σ²/r²
         let x = x * x * x; // σ⁶/r⁶
         self.four_times_epsilon * (x * x - x)
@@ -237,9 +237,9 @@ impl Cutoff for WeeksChandlerAndersen {
     }
 }
 
-impl TwobodyEnergy for WeeksChandlerAndersen {
+impl IsotropicTwobodyEnergy for WeeksChandlerAndersen {
     #[inline]
-    fn twobody_energy(&self, distance_squared: f64) -> f64 {
+    fn isotropic_twobody_energy(&self, distance_squared: f64) -> f64 {
         if distance_squared > self.cutoff_squared() {
             return 0.0;
         }

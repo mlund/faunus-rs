@@ -1,4 +1,4 @@
-use super::TwobodyEnergy;
+use super::IsotropicTwobodyEnergy;
 use crate::{sqrt_serialize, square_deserialize, Cutoff, Info};
 use serde::{Deserialize, Serialize};
 
@@ -7,12 +7,12 @@ use serde::{Deserialize, Serialize};
 /// More information [here](http://www.sklogwiki.org/SklogWiki/index.php/Hard_sphere_model).
 /// # Examples
 /// ~~~
-/// use interact::twobody::{HardSphere, TwobodyEnergy};
+/// use interact::twobody::{HardSphere, IsotropicTwobodyEnergy};
 /// let hardsphere = HardSphere::new(1.0);
 /// let distance: f64 = 0.9; // smaller than the minimum distance
-/// assert!(hardsphere.twobody_energy(distance.powi(2)).is_infinite());
+/// assert!(hardsphere.isotropic_twobody_energy(distance.powi(2)).is_infinite());
 /// let distance: f64 = 1.1; // greater than the minimum distance
-/// assert_eq!(hardsphere.twobody_energy(distance.powi(2)), 0.0);
+/// assert_eq!(hardsphere.isotropic_twobody_energy(distance.powi(2)), 0.0);
 /// ~~~
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq)]
 pub struct HardSphere {
@@ -34,9 +34,9 @@ impl HardSphere {
     }
 }
 
-impl TwobodyEnergy for HardSphere {
+impl IsotropicTwobodyEnergy for HardSphere {
     #[inline]
-    fn twobody_energy(&self, distance_squared: f64) -> f64 {
+    fn isotropic_twobody_energy(&self, distance_squared: f64) -> f64 {
         if distance_squared < self.min_distance_squared {
             f64::INFINITY
         } else {

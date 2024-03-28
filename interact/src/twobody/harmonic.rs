@@ -1,4 +1,4 @@
-use super::TwobodyEnergy;
+use super::IsotropicTwobodyEnergy;
 use crate::Info;
 use serde::{Deserialize, Serialize};
 
@@ -7,10 +7,10 @@ use serde::{Deserialize, Serialize};
 /// More information [here](https://en.wikipedia.org/wiki/Harmonic_oscillator).
 /// # Examples
 /// ~~~
-/// use interact::twobody::{Harmonic, TwobodyEnergy};
+/// use interact::twobody::{Harmonic, IsotropicTwobodyEnergy};
 /// let harmonic = Harmonic::new(1.0, 0.5);
 /// let distance: f64 = 2.0;
-/// assert_eq!(harmonic.twobody_energy(distance.powi(2)), 0.25);
+/// assert_eq!(harmonic.isotropic_twobody_energy(distance.powi(2)), 0.25);
 /// ~~~
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq)]
 pub struct Harmonic {
@@ -41,9 +41,9 @@ impl Info for Harmonic {
     }
 }
 
-impl TwobodyEnergy for Harmonic {
+impl IsotropicTwobodyEnergy for Harmonic {
     #[inline]
-    fn twobody_energy(&self, distance_squared: f64) -> f64 {
+    fn isotropic_twobody_energy(&self, distance_squared: f64) -> f64 {
         0.5 * self.spring_constant * (distance_squared.sqrt() - self.eq_distance).powi(2)
     }
 }

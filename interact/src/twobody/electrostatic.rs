@@ -1,6 +1,6 @@
 use super::Info;
 use crate::multipole::MultipoleEnergy;
-use crate::twobody::TwobodyEnergy;
+use crate::twobody::IsotropicTwobodyEnergy;
 use serde::Serialize;
 
 /// Monopole-monopole interaction energy
@@ -36,8 +36,8 @@ impl<T: MultipoleEnergy + 'static> Info for IonIon<T> {
     }
 }
 
-impl<T: MultipoleEnergy + 'static + std::fmt::Debug> TwobodyEnergy for IonIon<T> {
-    fn twobody_energy(&self, distance_squared: f64) -> f64 {
+impl<T: MultipoleEnergy + 'static + std::fmt::Debug> IsotropicTwobodyEnergy for IonIon<T> {
+    fn isotropic_twobody_energy(&self, distance_squared: f64) -> f64 {
         self.multipole
             .ion_ion_energy(self.charge_product, 1.0, distance_squared.sqrt())
     }
