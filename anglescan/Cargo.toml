@@ -1,0 +1,13 @@
+[package]
+name = "anglescan"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+approx = "0.5"
+itertools = "0.12"
+itertools-num = "0.1"
+nalgebra = "0.32"
+rayon = "1.10"
