@@ -12,10 +12,10 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
-use crate::twobody::TwobodyEnergy;
+use crate::twobody::IsotropicTwobodyEnergy;
 use crate::{
-    arithmetic_mean, divide4_serialize, geometric_mean, multiply4_deserialize, sqrt_serialize,
-    square_deserialize, Cutoff, Info,
+    divide4_serialize, multiply4_deserialize, sqrt_serialize, square_deserialize, CombinationRule,
+    Cutoff, Info,
 };
 
 use serde::{Deserialize, Serialize};
@@ -36,7 +36,7 @@ use serde::{Deserialize, Serialize};
 /// let (epsilon, sigma, r2) = (1.5, 2.0, 2.5);
 /// let mie = Mie::<12, 6>::new(epsilon, sigma);
 /// let lj = LennardJones::new(epsilon, sigma);
-/// assert_eq!(mie.twobody_energy(r2), lj.twobody_energy(r2));
+/// assert_eq!(mie.isotropic_twobody_energy(r2), lj.isotropic_twobody_energy(r2));
 /// ~~~
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -62,12 +62,20 @@ impl<const N: u32, const M: u32> Mie<N, M> {
         assert!(N > M);
         Self { epsilon, sigma }
     }
+    /// Construct from a combination rule
+    pub fn from_combination_rule(
+        rule: CombinationRule,
+        epsilons: (f64, f64),
+        sigmas: (f64, f64),
+    ) -> Self {
+        let (epsilon, sigma) = rule.mix(epsilons, sigmas);
+        Self::new(epsilon, sigma)
+    }
 }
 
-#[typetag::serialize]
-impl<const N: u32, const M: u32> TwobodyEnergy for Mie<N, M> {
+impl<const N: u32, const M: u32> IsotropicTwobodyEnergy for Mie<N, M> {
     #[inline]
-    fn twobody_energy(&self, distance_squared: f64) -> f64 {
+    fn isotropic_twobody_energy(&self, distance_squared: f64) -> f64 {
         if Mie::<N, M>::OPTIMIZE {
             let mth_power = (self.sigma * self.sigma / distance_squared).powi(Mie::<N, M>::M_HALF); // (σ/r)^m
             return Mie::<N, M>::C
@@ -91,6 +99,15 @@ impl<const N: u32, const M: u32> Info for Mie<N, M> {
     }
 }
 
+impl<const N: u32, const M: u32> Cutoff for Mie<N, M> {
+    fn cutoff(&self) -> f64 {
+        f64::INFINITY
+    }
+    fn cutoff_squared(&self) -> f64 {
+        f64::INFINITY
+    }
+}
+
 /// # Lennard-Jones potential
 ///
 /// Originally by J. E. Lennard-Jones, see
@@ -99,13 +116,13 @@ impl<const N: u32, const M: u32> Info for Mie<N, M> {
 ///
 /// ## Examples:
 /// ~~~
-/// use interact::twobody::{LennardJones, TwobodyEnergy};
+/// use interact::twobody::{LennardJones, IsotropicTwobodyEnergy};
 /// let epsilon = 1.5;
 /// let sigma = 2.0;
 /// let lj = LennardJones::new(epsilon, sigma);
 /// let r_min = f64::powf(2.0, 1.0 / 6.0) * sigma;
 /// let u_min = -epsilon;
-/// assert_eq!(lj.twobody_energy( r_min.powi(2) ), u_min);
+/// assert_eq!(lj.isotropic_twobody_energy( r_min.powi(2) ), u_min);
 /// ~~~
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default)]
 #[serde(default)]
@@ -133,12 +150,14 @@ impl LennardJones {
             sigma_squared: sigma.powi(2),
         }
     }
-    /// Construct using the Lorentz-Berthelot mixing rule.
-    ///
-    /// Epsilons are combined using the geometric mean, and sigmas using the arithmetic mean.
-    /// See [Wikipedia](https://en.wikipedia.org/wiki/Combining_rules) for more information.
-    pub fn lorentz_berthelot(epsilons: (f64, f64), sigmas: (f64, f64)) -> Self {
-        LennardJones::new(geometric_mean(epsilons), arithmetic_mean(sigmas))
+    /// Construct using arbitrary combination rule.
+    pub fn from_combination_rule(
+        rule: CombinationRule,
+        epsilons: (f64, f64),
+        sigmas: (f64, f64),
+    ) -> Self {
+        let (epsilon, sigma) = rule.mix(epsilons, sigmas);
+        Self::new(epsilon, sigma)
     }
     /// Construct from AB form, u = A/r¹² - B/r⁶
     pub fn from_ab(a: f64, b: f64) -> Self {
@@ -149,10 +168,18 @@ impl LennardJones {
     }
 }
 
-#[typetag::serialize]
-impl TwobodyEnergy for LennardJones {
+impl Cutoff for LennardJones {
+    fn cutoff(&self) -> f64 {
+        f64::INFINITY
+    }
+    fn cutoff_squared(&self) -> f64 {
+        f64::INFINITY
+    }
+}
+
+impl IsotropicTwobodyEnergy for LennardJones {
     #[inline]
-    fn twobody_energy(&self, squared_distance: f64) -> f64 {
+    fn isotropic_twobody_energy(&self, squared_distance: f64) -> f64 {
         let x = self.sigma_squared / squared_distance; // σ²/r²
         let x = x * x * x; // σ⁶/r⁶
         self.four_times_epsilon * (x * x - x)
@@ -187,6 +214,16 @@ impl WeeksChandlerAndersen {
     pub fn new(lennard_jones: LennardJones) -> Self {
         Self { lennard_jones }
     }
+
+    /// Construct from combination rule
+    pub fn from_combination_rule(
+        rule: CombinationRule,
+        epsilons: (f64, f64),
+        sigmas: (f64, f64),
+    ) -> Self {
+        let lj = LennardJones::from_combination_rule(rule, epsilons, sigmas);
+        Self::new(lj)
+    }
 }
 
 impl Cutoff for WeeksChandlerAndersen {
@@ -200,10 +237,9 @@ impl Cutoff for WeeksChandlerAndersen {
     }
 }
 
-#[typetag::serialize]
-impl TwobodyEnergy for WeeksChandlerAndersen {
+impl IsotropicTwobodyEnergy for WeeksChandlerAndersen {
     #[inline]
-    fn twobody_energy(&self, distance_squared: f64) -> f64 {
+    fn isotropic_twobody_energy(&self, distance_squared: f64) -> f64 {
         if distance_squared > self.cutoff_squared() {
             return 0.0;
         }

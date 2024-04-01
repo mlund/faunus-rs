@@ -12,17 +12,19 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
-use super::{Energy, Field, Force, Potential, ShortRangeFunction};
+use super::{
+    MultipoleEnergy, MultipoleField, MultipoleForce, MultipolePotential, ShortRangeFunction,
+};
 #[cfg(test)]
 use crate::{Matrix3, Point};
 #[cfg(test)]
 use approx::assert_relative_eq;
 use serde::{Deserialize, Serialize};
 
-impl Potential for Coulomb {}
-impl Field for Coulomb {}
-impl Energy for Coulomb {}
-impl Force for Coulomb {}
+impl MultipolePotential for Coulomb {}
+impl MultipoleField for Coulomb {}
+impl MultipoleEnergy for Coulomb {}
+impl MultipoleForce for Coulomb {}
 
 /// # Scheme for vanilla coulomb interactions
 ///
@@ -31,15 +33,15 @@ impl Force for Coulomb {}
 pub struct Coulomb {
     /// Cut-off distance
     cutoff: f64,
-    /// Inverse Debye length
-    kappa: f64,
+    /// Optional inverse Debye length
+    kappa: Option<f64>,
 }
 
 impl Coulomb {
     pub fn new(cutoff: f64, debye_length: Option<f64>) -> Self {
         Self {
             cutoff,
-            kappa: 1.0 / debye_length.unwrap_or(f64::INFINITY),
+            kappa: debye_length.map(f64::recip),
         }
     }
 }
@@ -66,11 +68,7 @@ impl crate::Cutoff for Coulomb {
 impl ShortRangeFunction for Coulomb {
     #[inline]
     fn kappa(&self) -> Option<f64> {
-        if self.kappa > 0.0 {
-            Some(self.kappa)
-        } else {
-            None
-        }
+        self.kappa
     }
     #[inline]
     fn short_range_f0(&self, _q: f64) -> f64 {

@@ -14,7 +14,7 @@
 
 //! ## Twobody interactions
 //!
-//! Module for describing twobody interactions.
+//! Module for describing exactly two particle interacting with each other.
 //!
 //! - Hard-sphere overlap
 //! - Harmonic potential
@@ -23,46 +23,80 @@
 //!   - Lennard-Jones
 //!   - Weeks-Chandler-Andersen
 
-use crate::{sqrt_serialize, square_deserialize, Info};
-use serde::{Deserialize, Serialize};
+use crate::{Info, Point};
+use serde::Serialize;
+use std::fmt::Debug;
 
+mod electrostatic;
+mod hardsphere;
+mod harmonic;
 mod mie;
+pub use self::electrostatic::IonIon;
+pub use self::hardsphere::HardSphere;
+pub use self::harmonic::Harmonic;
 pub use self::mie::{LennardJones, Mie, WeeksChandlerAndersen};
 
-/// Potential energy between a pair of particles
-///
-/// This uses the `typetag` crate to allow for dynamic dispatch
-/// and requires that implementations are tagged with `#[typetag::serialize]`.
-#[typetag::serialize(tag = "type")]
-pub trait TwobodyEnergy: crate::Info + std::fmt::Debug {
+/// Potential energy between a pair of anisotropic particles
+pub trait AnisotropicTwobodyEnergy: Info + Debug {
+    fn anisotropic_twobody_energy(&self, distance: &Point) -> f64;
+}
+
+/// Potential energy between a pair of isotropic particles
+pub trait IsotropicTwobodyEnergy: Info + Debug + AnisotropicTwobodyEnergy {
     /// Interaction energy between a pair of isotropic particles
-    fn twobody_energy(&self, distance_squared: f64) -> f64;
+    fn isotropic_twobody_energy(&self, distance_squared: f64) -> f64;
+}
+
+/// Isotropic potentials always implement the anisotropic trait
+impl<T: IsotropicTwobodyEnergy> AnisotropicTwobodyEnergy for T {
+    fn anisotropic_twobody_energy(&self, distance: &Point) -> f64 {
+        self.isotropic_twobody_energy(distance.norm_squared())
+    }
 }
 
 /// Combine twobody energies
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Combined<T, U>(T, U);
 
-impl<T: TwobodyEnergy, U: TwobodyEnergy> Combined<T, U> {
+impl<T: IsotropicTwobodyEnergy, U: IsotropicTwobodyEnergy> Combined<T, U> {
     pub fn new(t: T, u: U) -> Self {
         Self(t, u)
     }
 }
 
-#[typetag::serialize]
-impl<T: TwobodyEnergy + Serialize, U: TwobodyEnergy + Serialize> TwobodyEnergy for Combined<T, U> {
+impl<T: IsotropicTwobodyEnergy, U: IsotropicTwobodyEnergy> IsotropicTwobodyEnergy
+    for Combined<T, U>
+{
     #[inline]
-    fn twobody_energy(&self, distance_squared: f64) -> f64 {
-        self.0.twobody_energy(distance_squared) + self.1.twobody_energy(distance_squared)
+    fn isotropic_twobody_energy(&self, distance_squared: f64) -> f64 {
+        self.0.isotropic_twobody_energy(distance_squared)
+            + self.1.isotropic_twobody_energy(distance_squared)
     }
 }
 
-impl<T: TwobodyEnergy, U: TwobodyEnergy> Info for Combined<T, U> {
+impl<T: IsotropicTwobodyEnergy, U: IsotropicTwobodyEnergy> Info for Combined<T, U> {
     fn citation(&self) -> Option<&'static str> {
         todo!("Implement citation for Combined");
     }
 }
 
+/// Plain Coulomb potential combined with Lennard-Jones
+pub type CoulombLennardJones = Combined<IonIon<crate::multipole::Coulomb>, LennardJones>;
+
+// test Combined
+#[test]
+pub fn test_combined() {
+    use approx::assert_relative_eq;
+    let r2 = 0.5;
+    let lj = LennardJones::new(0.5, 1.0);
+    let harmonic = Harmonic::new(0.0, 10.0);
+    let u_lj = lj.isotropic_twobody_energy(r2);
+    let u_harmonic = harmonic.isotropic_twobody_energy(r2);
+    let combined = Combined::new(lj, harmonic);
+    assert_relative_eq!(combined.isotropic_twobody_energy(r2), u_lj + u_harmonic);
+}
+
+/*
 /// Enum with all two-body variants.
 ///
 /// Use for serialization and deserialization of two-body interactions in
@@ -106,93 +140,4 @@ fn test_twobodykind_serialize() {
         "{\"wca\":{\"ε\":0.1,\"σ\":2.5}}"
     );
 }
-
-/// Hardsphere potential
-///
-/// More information [here](http://www.sklogwiki.org/SklogWiki/index.php/Hard_sphere_model).
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq)]
-pub struct HardSphere {
-    /// Minimum distance
-    #[serde(
-        rename = "σ",
-        serialize_with = "sqrt_serialize",
-        deserialize_with = "square_deserialize"
-    )]
-    min_distance_squared: f64,
-}
-
-impl HardSphere {
-    pub fn new(min_distance: f64) -> Self {
-        Self {
-            min_distance_squared: min_distance.powi(2),
-        }
-    }
-}
-
-#[typetag::serialize]
-impl TwobodyEnergy for HardSphere {
-    #[inline]
-    fn twobody_energy(&self, distance_squared: f64) -> f64 {
-        if distance_squared < self.min_distance_squared {
-            f64::INFINITY
-        } else {
-            0.0
-        }
-    }
-}
-
-impl Info for HardSphere {
-    fn short_name(&self) -> Option<&'static str> {
-        Some("hardsphere")
-    }
-    fn citation(&self) -> Option<&'static str> {
-        Some("https://en.wikipedia.org/wiki/Hard_spheres")
-    }
-}
-
-/// Harmonic potential
-///
-/// More information [here](https://en.wikipedia.org/wiki/Harmonic_oscillator).
-/// # Examples
-/// ~~~
-/// use interact::twobody::{Harmonic, TwobodyEnergy};
-/// let harmonic = Harmonic::new(1.0, 0.5);
-/// let distance: f64 = 2.0;
-/// assert_eq!(harmonic.twobody_energy(distance.powi(2)), 0.25);
-/// ~~~
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq)]
-pub struct Harmonic {
-    #[serde(rename = "r₀")]
-    eq_distance: f64,
-    #[serde(rename = "k")]
-    spring_constant: f64,
-}
-
-impl Harmonic {
-    pub fn new(eq_distance: f64, spring_constant: f64) -> Self {
-        Self {
-            eq_distance,
-            spring_constant,
-        }
-    }
-}
-
-impl Info for Harmonic {
-    fn short_name(&self) -> Option<&'static str> {
-        Some("harmonic")
-    }
-    fn long_name(&self) -> Option<&'static str> {
-        Some("Harmonic potential")
-    }
-    fn citation(&self) -> Option<&'static str> {
-        Some("https://en.wikipedia.org/wiki/Harmonic_oscillator")
-    }
-}
-
-#[typetag::serialize]
-impl TwobodyEnergy for Harmonic {
-    #[inline]
-    fn twobody_energy(&self, distance_squared: f64) -> f64 {
-        0.5 * self.spring_constant * (distance_squared.sqrt() - self.eq_distance).powi(2)
-    }
-}
+*/

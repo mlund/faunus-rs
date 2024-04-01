@@ -26,14 +26,16 @@
 //! S(q) = (1 - q~)^(D + 1) * \sum_{c = 0}^{C - 1} \frac{C - c}{C} * \binom{D - 1 + c}{c} * q^c
 //! ```
 
-use super::{Energy, Field, Force, Potential, ShortRangeFunction};
+use super::{
+    MultipoleEnergy, MultipoleField, MultipoleForce, MultipolePotential, ShortRangeFunction,
+};
 use num::integer::binomial;
 use serde::{Deserialize, Serialize};
 
-impl<const C: i32, const D: i32> Potential for Poisson<C, D> {}
-impl<const C: i32, const D: i32> Field for Poisson<C, D> {}
-impl<const C: i32, const D: i32> Energy for Poisson<C, D> {}
-impl<const C: i32, const D: i32> Force for Poisson<C, D> {}
+impl<const C: i32, const D: i32> MultipolePotential for Poisson<C, D> {}
+impl<const C: i32, const D: i32> MultipoleField for Poisson<C, D> {}
+impl<const C: i32, const D: i32> MultipoleEnergy for Poisson<C, D> {}
+impl<const C: i32, const D: i32> MultipoleForce for Poisson<C, D> {}
 
 /// Scheme for the Poisson short-range function
 ///
@@ -291,6 +293,7 @@ impl<const C: i32, const D: i32> ShortRangeFunction for Poisson<C, D> {
         let mut dqpdq = 1.0;
         let mut d2qpdq2 = 0.0;
         let mut dsdqp = 0.0;
+        // todo: use Option<f64> for kappa
         if self.use_yukawa_screening {
             qp = (1.0 - (2.0 * self.reduced_kappa * q).exp()) * self.yukawa_denom;
             dqpdq = -2.0
@@ -327,6 +330,7 @@ impl<const C: i32, const D: i32> ShortRangeFunction for Poisson<C, D> {
         let mut d3qpdq3 = 0.0;
         let mut d2sdqp2 = 0.0;
         let mut dsdqp = 0.0;
+        // todo: use Option<f64> for kappa
         if self.use_yukawa_screening {
             qp = (1.0 - (2.0 * self.reduced_kappa * q).exp()) * self.yukawa_denom;
             dqpdq = -2.0

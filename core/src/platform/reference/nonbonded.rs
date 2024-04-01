@@ -14,18 +14,18 @@
 
 use anyhow::Ok;
 use as_any::{AsAny, Downcast};
-use interact::twobody::TwobodyEnergy;
+use interact::twobody::IsotropicTwobodyEnergy;
 use itertools::iproduct;
 use serde::Serialize;
 use std::fmt::Debug;
 
-use crate::platform::reference::ReferencePlatform;
+use super::ReferencePlatform;
 use crate::{
     energy::EnergyTerm, Change, Group, GroupChange, GroupCollection, Info, Particle, SyncFrom,
 };
 
 #[derive(Debug, Clone, Serialize)]
-pub struct Nonbonded<'a, T: TwobodyEnergy> {
+pub struct Nonbonded<'a, T: IsotropicTwobodyEnergy> {
     /// Matrix of pair potentials base on particle ids
     pair_potentials: Vec<Vec<T>>,
     /// Reference to the platform
@@ -35,7 +35,7 @@ pub struct Nonbonded<'a, T: TwobodyEnergy> {
 
 impl<T> EnergyTerm for Nonbonded<'static, T>
 where
-    T: TwobodyEnergy + 'static + Clone,
+    T: IsotropicTwobodyEnergy + 'static + Clone,
 {
     fn energy_change(&self, change: &Change) -> f64 {
         match change {
@@ -55,7 +55,7 @@ where
 
 impl<T> Nonbonded<'_, T>
 where
-    T: TwobodyEnergy + 'static,
+    T: IsotropicTwobodyEnergy + 'static,
 {
     pub fn new(platform: &'static ReferencePlatform) -> Self {
         // TODO: Here we should fill out the pair potential matrix by looping
@@ -83,7 +83,7 @@ where
         // let distance_squared = self
         //     .platform
         //     .distance_squared(particle1.pos(), particle2.pos());
-        self.pair_potentials[particle1.id][particle2.id].twobody_energy(distance_squared)
+        self.pair_potentials[particle1.id][particle2.id].isotropic_twobody_energy(distance_squared)
     }
 
     /// Single particle with all remaining active particles
@@ -132,7 +132,7 @@ where
 
 impl<T> Info for Nonbonded<'_, T>
 where
-    T: TwobodyEnergy,
+    T: IsotropicTwobodyEnergy,
 {
     fn citation(&self) -> Option<&'static str> {
         None
@@ -141,7 +141,7 @@ where
 
 impl<T> SyncFrom for Nonbonded<'static, T>
 where
-    T: TwobodyEnergy + 'static + Clone,
+    T: IsotropicTwobodyEnergy + 'static + Clone,
 {
     fn sync_from(&mut self, other: &dyn AsAny, change: &Change) -> anyhow::Result<()> {
         let other = other
