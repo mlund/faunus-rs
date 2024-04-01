@@ -5,6 +5,7 @@ workspace.resolver = "2"
 members = [
     "interact",
     "core",
+    "anglescan",
 ]
 
 #[profile.release]
