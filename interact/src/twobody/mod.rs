@@ -31,7 +31,7 @@ mod electrostatic;
 mod hardsphere;
 mod harmonic;
 mod mie;
-pub use self::electrostatic::IonIon;
+pub use self::electrostatic::{IonIon, IonIonYukawa};
 pub use self::hardsphere::HardSphere;
 pub use self::harmonic::Harmonic;
 pub use self::mie::{LennardJones, Mie, WeeksChandlerAndersen};

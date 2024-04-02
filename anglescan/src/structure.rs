@@ -19,6 +19,12 @@ impl AtomKinds {
     }
 }
 
+impl Into<Vec<AtomKind>> for AtomKinds {
+    fn into(self) -> Vec<AtomKind> {
+        self.atomlist
+    }
+}
+
 // test yaml reading of atoms
 #[cfg(test)]
 mod tests {
@@ -27,8 +33,8 @@ mod tests {
     fn test_atomkinds() {
         let path = PathBuf::from("../assets/amino-acid-model-atoms.yml");
         let atomlist = AtomKinds::from_yaml(&path).unwrap();
-        assert_eq!(atomlist.atomlist.len(), 35);
-        assert_eq!(atomlist.version.to_string(), "1.0.0");
+        assert_eq!(atomlist.atomlist.len(), 37);
+        assert_eq!(atomlist.version.to_string(), "1.1.0");
         assert_eq!(atomlist.atomlist[0].name, "Na");
     }
 }

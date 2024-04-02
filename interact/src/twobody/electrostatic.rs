@@ -42,3 +42,6 @@ impl<T: MultipoleEnergy + 'static + std::fmt::Debug> IsotropicTwobodyEnergy for 
             .ion_ion_energy(self.charge_product, 1.0, distance_squared.sqrt())
     }
 }
+
+/// Alias for ion-ion with Yukawa
+pub type IonIonYukawa = IonIon<crate::multipole::Yukawa>;

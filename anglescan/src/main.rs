@@ -1,7 +1,7 @@
-// use super::interact::twobody::TwobodyInteraction;
 use anglescan::anglescan::TwobodyAngles;
 use anglescan::structure::AtomKinds;
 use anglescan::structure::Structure;
+use anglescan::Vector3;
 use clap::{Parser, Subcommand};
 use itertools_num::linspace;
 use rayon::prelude::*;
@@ -64,12 +64,13 @@ fn main() {
             let distances =
                 linspace(rmin, rmax, ((rmax - rmin) / dr) as usize).collect::<Vec<f64>>();
             distances.par_iter().for_each(|r| {
+                let r_vec = Vector3::<f64>::new(0.0, 0.0, *r);
                 let sum: f64 = scan
                     .iter()
                     .map(|(q1, q2)| {
                         let mut _pos1 = ref_pos1.positions.iter().map(|p| q1 * p);
-                        let mut _pos2 = ref_pos2.positions.iter().map(|p| q2 * p);
-                        _pos1.nth(0).unwrap()[0] + _pos2.nth(0).unwrap()[0]
+                        let mut _pos2 = ref_pos2.positions.iter().map(|p| (q2 * p) + r_vec);
+                        _pos1.nth(0).unwrap()[2] + _pos2.nth(0).unwrap()[2]
                     })
                     .sum();
                 println!("distance = {:.2}, sum: {:.2}", r, sum);
