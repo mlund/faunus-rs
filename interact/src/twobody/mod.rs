@@ -92,10 +92,10 @@ impl<T: IsotropicTwobodyEnergy, U: IsotropicTwobodyEnergy> Info for Combined<T, 
 }
 
 /// Plain Coulomb potential combined with Lennard-Jones
-pub type CoulombLennardJones = Combined<IonIon<crate::multipole::Coulomb>, LennardJones>;
+pub type CoulombLennardJones<'a> = Combined<IonIon<'a, crate::multipole::Coulomb>, LennardJones>;
 
 /// Yukawa potential combined with Lennard-Jones
-pub type YukawaLennardJones = Combined<IonIon<crate::multipole::Yukawa>, LennardJones>;
+pub type YukawaLennardJones<'a> = Combined<IonIon<'a, crate::multipole::Yukawa>, LennardJones>;
 
 // test Combined
 #[test]

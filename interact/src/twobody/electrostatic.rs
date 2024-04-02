@@ -5,16 +5,16 @@ use serde::Serialize;
 
 /// Monopole-monopole interaction energy
 #[derive(Serialize, Clone, PartialEq, Debug)]
-pub struct IonIon<T: MultipoleEnergy + 'static> {
+pub struct IonIon<'a, T: MultipoleEnergy> {
     /// Charge number product of the two particles, z₁ × z₂
     #[serde(rename = "z₁z₂")]
     charge_product: f64,
     /// Reference to the potential energy function
     #[serde(skip)]
-    multipole: &'static T,
+    multipole: &'a T,
 }
 
-impl<T: MultipoleEnergy + 'static> IonIon<T> {
+impl<'a, T: MultipoleEnergy> IonIon<'a, T> {
     /// Create a new ion-ion interaction
     pub fn new(charge_product: f64, potential: &'static T) -> Self {
         Self {
@@ -24,7 +24,7 @@ impl<T: MultipoleEnergy + 'static> IonIon<T> {
     }
 }
 
-impl<T: MultipoleEnergy + 'static> Info for IonIon<T> {
+impl<'a, T: MultipoleEnergy> Info for IonIon<'a, T> {
     fn short_name(&self) -> Option<&'static str> {
         Some("ion-ion")
     }
@@ -36,7 +36,7 @@ impl<T: MultipoleEnergy + 'static> Info for IonIon<T> {
     }
 }
 
-impl<T: MultipoleEnergy + 'static + std::fmt::Debug> IsotropicTwobodyEnergy for IonIon<T> {
+impl<T: MultipoleEnergy + 'static + std::fmt::Debug> IsotropicTwobodyEnergy for IonIon<'_, T> {
     fn isotropic_twobody_energy(&self, distance_squared: f64) -> f64 {
         self.multipole
             .ion_ion_energy(self.charge_product, 1.0, distance_squared.sqrt())
@@ -44,4 +44,4 @@ impl<T: MultipoleEnergy + 'static + std::fmt::Debug> IsotropicTwobodyEnergy for 
 }
 
 /// Alias for ion-ion with Yukawa
-pub type IonIonYukawa = IonIon<crate::multipole::Yukawa>;
+pub type IonIonYukawa<'a> = IonIon<'a, crate::multipole::Yukawa>;

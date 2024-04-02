@@ -6,12 +6,12 @@ use interact::CombinationRule;
 use crate::structure::Structure;
 
 /// Pair-matrix of twobody energies for pairs of atom ids
-pub struct PairMatrix {
+pub struct PairMatrix<'a> {
     /// Matrix of twobody energy terms
-    pub matrix: Vec<Vec<YukawaLennardJones>>,
+    pub matrix: Vec<Vec<YukawaLennardJones<'a>>>,
 }
 
-impl PairMatrix {
+impl PairMatrix<'_> {
     /// Create a new pair matrix
     pub fn new(atomkinds: &[AtomKind], multipole: &'static Yukawa) -> Self {
         let default =
