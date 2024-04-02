@@ -24,7 +24,7 @@
 //!   - Weeks-Chandler-Andersen
 
 use crate::{Info, Point};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 
 mod electrostatic;
@@ -36,9 +36,19 @@ pub use self::hardsphere::HardSphere;
 pub use self::harmonic::Harmonic;
 pub use self::mie::{LennardJones, Mie, WeeksChandlerAndersen};
 
+/// Relative orientation between a pair of anisotropic particles
+/// # Todo
+/// Unfinished and still not desided how to implement
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct RelativeOrientation {
+    /// Distance between the two particles
+    pub distance: Point,
+    pub orientation: Point,
+}
+
 /// Potential energy between a pair of anisotropic particles
 pub trait AnisotropicTwobodyEnergy: Info + Debug {
-    fn anisotropic_twobody_energy(&self, distance: &Point) -> f64;
+    fn anisotropic_twobody_energy(&self, orientation: &RelativeOrientation) -> f64;
 }
 
 /// Potential energy between a pair of isotropic particles
@@ -47,10 +57,10 @@ pub trait IsotropicTwobodyEnergy: Info + Debug + AnisotropicTwobodyEnergy {
     fn isotropic_twobody_energy(&self, distance_squared: f64) -> f64;
 }
 
-/// Isotropic potentials always implement the anisotropic trait
+/// All isotropic potentials implement the anisotropic trait
 impl<T: IsotropicTwobodyEnergy> AnisotropicTwobodyEnergy for T {
-    fn anisotropic_twobody_energy(&self, distance: &Point) -> f64 {
-        self.isotropic_twobody_energy(distance.norm_squared())
+    fn anisotropic_twobody_energy(&self, orientation: &RelativeOrientation) -> f64 {
+        self.isotropic_twobody_energy(orientation.distance.norm_squared())
     }
 }
 
