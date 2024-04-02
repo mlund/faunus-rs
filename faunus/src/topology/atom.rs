@@ -51,6 +51,7 @@ pub struct AtomKind {
     /// Hydrophobicity information
     pub hydrophobicity: Option<Hydrophobicity>,
     /// Map of custom properties
+    #[serde(default)]
     pub custom: std::collections::HashMap<String, Value>,
 }
 

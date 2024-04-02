@@ -1,9 +1,9 @@
 // use super::interact::twobody::TwobodyInteraction;
 use anglescan::anglescan::TwobodyAngles;
+use anglescan::structure::AtomKinds;
 use anglescan::structure::Structure;
 use clap::{Parser, Subcommand};
-use rayon::iter::ParallelBridge;
-use rayon::prelude::ParallelIterator;
+use itertools_num::linspace;
 use rayon::prelude::*;
 use std::path::PathBuf;
 
@@ -27,8 +27,18 @@ enum Commands {
         /// Angular resolution in radians
         #[arg(short = 'r', long, default_value = "0.1")]
         resolution: f64,
-        // #[arg(short = 'd', long)]
-        // distance_range: DistanceInterval,
+        /// Minimum mass center distance
+        #[arg(long)]
+        rmin: f64,
+        /// Maximum mass center distance
+        #[arg(long)]
+        rmax: f64,
+        /// Mass center distance step
+        #[arg(long)]
+        dr: f64,
+        /// YAML file with atom definitions
+        #[arg(short = 'a', long)]
+        atoms: PathBuf,
     },
 }
 
@@ -39,21 +49,31 @@ fn main() {
             mol1,
             mol2,
             resolution,
+            rmin,
+            rmax,
+            dr,
+            atoms,
         }) => {
-            let ref_pos1 = Structure::from_aam_file(&mol1);
-            let ref_pos2 = Structure::from_aam_file(&mol2);
+            let atomkinds = AtomKinds::from_yaml(&atoms).unwrap();
+            let ref_pos1 = Structure::from_aam_file(&mol1, &atomkinds);
+            let ref_pos2 = Structure::from_aam_file(&mol2, &atomkinds);
             let scan = TwobodyAngles::new(resolution);
-            println!("{}", scan);
+            println!("{} per distance", scan);
 
-            let sum: f64 = scan
-                .iter()
-                .map(|(q1, q2)| {
-                    let mut _pos1 = ref_pos1.positions.iter().map(|p| q1 * p);
-                    let mut _pos2 = ref_pos2.positions.iter().map(|p| q2 * p);
-                    _pos1.nth(0).unwrap()[0] + _pos2.nth(0).unwrap()[0]
-                })
-                .sum();
-            println!("sum: {}", sum);
+            assert!(rmin < rmax);
+            let distances =
+                linspace(rmin, rmax, ((rmax - rmin) / dr) as usize).collect::<Vec<f64>>();
+            distances.par_iter().for_each(|r| {
+                let sum: f64 = scan
+                    .iter()
+                    .map(|(q1, q2)| {
+                        let mut _pos1 = ref_pos1.positions.iter().map(|p| q1 * p);
+                        let mut _pos2 = ref_pos2.positions.iter().map(|p| q2 * p);
+                        _pos1.nth(0).unwrap()[0] + _pos2.nth(0).unwrap()[0]
+                    })
+                    .sum();
+                println!("distance = {:.2}, sum: {:.2}", r, sum);
+            })
         }
         None => {
             println!("No command given");

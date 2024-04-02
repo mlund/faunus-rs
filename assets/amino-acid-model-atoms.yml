@@ -1,0 +1,224 @@
+comment: Coarse grained residues amino acid model (AAM)
+version: "1.1.0"
+atomlist:
+  - name: Na
+    mass: 22.99
+    charge: 1.0
+    radius: 1.9
+    element: Na
+    id: 0
+  - name: Cl
+    mass: 35.45
+    charge: -1.0
+    radius: 1.7
+    element: Cl
+    id: 1
+  - name: ASP
+    mass: 110.0
+    charge: -1.0
+    radius: 3.6
+    element: ASP
+    id: 2
+  - name: HASP
+    mass: 110.0
+    charge: 0.0
+    radius: 3.6
+    element: ASP
+    id: 3
+  - name: LASP
+    mass: 110.0
+    charge: 2.0
+    radius: 3.6
+    element: ASP
+    id: 4
+  - name: CTR
+    mass: 16.0
+    charge: -1.0
+    radius: 2.0
+    element: C
+    id: 5
+  - name: HCTR
+    mass: 16.0
+    charge: 0.0
+    radius: 2.0
+    element: C
+    id: 6
+  - name: GLU
+    mass: 122.0
+    charge: -1.0
+    radius: 3.8
+    element: GLU
+    id: 7
+  - name: HGLU
+    mass: 122.0
+    charge: 0.0
+    radius: 3.8
+    element: GLU
+    id: 8
+  - name: LGLU
+    mass: 122.0
+    charge: 2.0
+    radius: 3.8
+    element: GLU
+    id: 9
+  - name: HIS
+    mass: 130.0
+    charge: 0.0
+    radius: 3.9
+    element: HIS
+    id: 10
+  - name: HHIS
+    mass: 130.0
+    charge: 1.0
+    radius: 3.9
+    element: HIS
+    id: 11
+  - name: NTR
+    mass: 14.0
+    charge: 0.0
+    radius: 2.0
+    element: N
+    id: 12
+  - name: HNTR
+    mass: 14.0
+    charge: 1.0
+    radius: 2.0
+    element: N
+    id: 13
+  - name: TYR
+    mass: 154.0
+    charge: -1.0
+    radius: 4.1
+    element: TYR
+    id: 14
+  - name: HTYR
+    mass: 154.0
+    charge: 0.0
+    radius: 4.1
+    element: TYR
+    id: 15
+  - name: LYS
+    mass: 116.0
+    charge: 0.0
+    radius: 3.7
+    element: LYS
+    id: 16
+  - name: HLYS
+    mass: 116.0
+    charge: 1.0
+    radius: 3.7
+    element: LYS
+    id: 17
+  - name: CYS
+    mass: 103.0
+    charge: -1.0
+    radius: 3.6
+    element: CYS
+    id: 18
+  - name: HCYS
+    mass: 103.0
+    charge: 0.0
+    radius: 3.6
+    element: CYS
+    id: 19
+  - name: ARG
+    mass: 144.0
+    charge: 0.0
+    radius: 4.0
+    element: ARG
+    id: 20
+  - name: HARG
+    mass: 144.0
+    charge: 1.0
+    radius: 4.0
+    element: ARG
+    id: 21
+  - name: ALA
+    mass: 66.0
+    charge: 0.0
+    radius: 3.1
+    element: ALA
+    id: 22
+  - name: ILE
+    mass: 102.0
+    charge: 0.0
+    radius: 3.6
+    element: ILE
+    id: 23
+  - name: LEU
+    mass: 102.0
+    charge: 0.0
+    radius: 3.6
+    element: LEU
+    id: 24
+  - name: MET
+    mass: 122.0
+    charge: 0.0
+    radius: 3.8
+    element: MET
+    id: 25
+  - name: PHE
+    mass: 138.0
+    charge: 0.0
+    radius: 3.9
+    element: PHE
+    id: 26
+  - name: PRO
+    mass: 90.0
+    charge: 0.0
+    radius: 3.4
+    element: PRO
+    id: 27
+  - name: TRP
+    mass: 176.0
+    charge: 0.0
+    radius: 4.3
+    element: TRP
+    id: 28
+  - name: VAL
+    mass: 90.0
+    charge: 0.0
+    radius: 3.4
+    element: VAL
+    id: 29
+  - name: SER
+    mass: 82.0
+    charge: 0.0
+    radius: 3.3
+    element: SER
+    id: 30
+  - name: THR
+    mass: 94.0
+    charge: 0.0
+    radius: 3.5
+    element: THR
+    id: 31
+  - name: ASN
+    mass: 108.0
+    charge: 0.0
+    radius: 3.6
+    element: ASN
+    id: 32
+  - name: GLN
+    mass: 120.0
+    charge: 0.0
+    radius: 3.8
+    element: GLN
+    id: 33
+  - name: GLY
+    mass: 54.0
+    charge: 0.0
+    radius: 2.9
+    element: GLY
+    id: 34
+  - name: FE
+    mass: 55.85
+    charge: 3.0
+    radius: 1.8
+    element: Fe
+    id: 35
+  - name: CYSs
+    mass: 98.0
+    charge: 0.0
+    radius: 3.5
+    id: 36

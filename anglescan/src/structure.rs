@@ -1,6 +1,37 @@
 use crate::Vector3;
+use anyhow::Result;
 use chemfiles::Frame;
+use faunus::topology::AtomKind;
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct AtomKinds {
+    pub atomlist: Vec<AtomKind>,
+    pub comment: Option<String>,
+    pub version: semver::Version,
+}
+
+impl AtomKinds {
+    pub fn from_yaml(path: &PathBuf) -> Result<Self> {
+        let file = std::fs::File::open(path)?;
+        serde_yaml::from_reader(file).map_err(Into::into)
+    }
+}
+
+// test yaml reading of atoms
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn test_atomkinds() {
+        let path = PathBuf::from("../assets/amino-acid-model-atoms.yml");
+        let atomlist = AtomKinds::from_yaml(&path).unwrap();
+        assert_eq!(atomlist.atomlist.len(), 35);
+        assert_eq!(atomlist.version.to_string(), "1.0.0");
+        assert_eq!(atomlist.atomlist[0].name, "Na");
+    }
+}
 
 /// Ancient AAM file format from Faunus
 #[derive(Debug, Default)]
@@ -48,22 +79,37 @@ pub struct Structure {
     pub charges: Vec<f64>,
     /// Particle radii
     pub radii: Vec<f64>,
+    /// Atom kind ids
+    pub atom_ids: Vec<usize>,
 }
 
 impl Structure {
     /// Constructs a new structure from a Faunus AAM file
-    pub fn from_aam_file(path: &PathBuf) -> Self {
+    pub fn from_aam_file(path: &PathBuf, atomkinds: &AtomKinds) -> Self {
         let aam: Vec<AminoAcidModelRecord> = std::fs::read_to_string(path)
             .unwrap()
             .lines()
             .skip(1) // skip header
             .map(|line| AminoAcidModelRecord::from_line(line))
             .collect();
+
+        let atom_ids = aam
+            .iter()
+            .map(|i| {
+                atomkinds
+                    .atomlist
+                    .iter()
+                    .position(|j| j.name == i.name)
+                    .expect(format!("Unknown atom name in AAM file: {}", i.name).as_str())
+            })
+            .collect();
+
         let mut structure = Self {
             positions: aam.iter().map(|i| i.pos).collect(),
             masses: aam.iter().map(|i| i.mass).collect(),
             charges: aam.iter().map(|i| i.charge).collect(),
             radii: aam.iter().map(|i| i.radius).collect(),
+            atom_ids,
         };
         let center = structure.mass_center();
         structure.translate(&-center); // translate to 0,0,0
@@ -71,7 +117,7 @@ impl Structure {
     }
 
     /// Constructs a new structure from a chemfiles trajectory file
-    pub fn from_chemfiles(path: &PathBuf) -> Self {
+    pub fn from_chemfiles(path: &PathBuf, atomkinds: &AtomKinds) -> Self {
         let mut traj = chemfiles::Trajectory::open(path, 'r').unwrap();
         let mut frame = Frame::new();
         traj.read(&mut frame).unwrap();
@@ -84,11 +130,22 @@ impl Structure {
             .iter()
             .map(to_vector3)
             .collect::<Vec<Vector3<f64>>>();
+        let atom_ids = frame
+            .iter_atoms()
+            .map(|atom| {
+                atomkinds
+                    .atomlist
+                    .iter()
+                    .position(|kind| kind.name == atom.name())
+                    .expect(format!("Unknown atom name in structure file: {:?}", atom).as_str())
+            })
+            .collect::<Vec<usize>>();
         let mut structure = Self {
             positions,
             masses,
             charges: vec![0.0; frame.size()],
             radii: vec![0.0; frame.size()],
+            atom_ids,
         };
         let center = structure.mass_center();
         structure.translate(&-center);
