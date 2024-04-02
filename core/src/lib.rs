@@ -21,6 +21,7 @@ use serde::{Deserialize, Serialize};
 use std::rc::Rc;
 
 pub type Point = Vector3<f64>;
+pub type UnitQuaternion = nalgebra::UnitQuaternion<f64>;
 pub type PositionVec = Vec<Point>;
 pub type ParticleVec = Vec<Particle>;
 
