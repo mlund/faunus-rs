@@ -106,7 +106,7 @@ impl Structure {
                     .atomlist
                     .iter()
                     .position(|j| j.name == i.name)
-                    .expect(format!("Unknown atom name in AAM file: {}", i.name).as_str())
+                    .unwrap_or_else(|| panic!("Unknown atom name in AAM file: {}", i.name))
             })
             .collect();
 
@@ -143,7 +143,7 @@ impl Structure {
                     .atomlist
                     .iter()
                     .position(|kind| kind.name == atom.name())
-                    .expect(format!("Unknown atom name in structure file: {:?}", atom).as_str())
+                    .unwrap_or_else(|| panic!("Unknown atom name in structure file: {:?}", atom))
             })
             .collect::<Vec<usize>>();
         let mut structure = Self {
