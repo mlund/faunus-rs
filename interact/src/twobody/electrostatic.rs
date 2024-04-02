@@ -16,7 +16,7 @@ pub struct IonIon<'a, T: MultipoleEnergy> {
 
 impl<'a, T: MultipoleEnergy> IonIon<'a, T> {
     /// Create a new ion-ion interaction
-    pub fn new(charge_product: f64, potential: &'static T) -> Self {
+    pub fn new(charge_product: f64, potential: &'a T) -> Self {
         Self {
             charge_product,
             multipole: potential,
@@ -36,7 +36,7 @@ impl<'a, T: MultipoleEnergy> Info for IonIon<'a, T> {
     }
 }
 
-impl<T: MultipoleEnergy + 'static + std::fmt::Debug> IsotropicTwobodyEnergy for IonIon<'_, T> {
+impl<T: MultipoleEnergy + std::fmt::Debug> IsotropicTwobodyEnergy for IonIon<'_, T> {
     fn isotropic_twobody_energy(&self, distance_squared: f64) -> f64 {
         self.multipole
             .ion_ion_energy(self.charge_product, 1.0, distance_squared.sqrt())

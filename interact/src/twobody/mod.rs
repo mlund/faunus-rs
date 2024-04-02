@@ -26,7 +26,6 @@
 use crate::{Info, Point};
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
-use std::process::Output;
 
 mod electrostatic;
 mod hardsphere;

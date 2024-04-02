@@ -11,9 +11,9 @@ pub struct PairMatrix<'a> {
     pub matrix: Vec<Vec<YukawaLennardJones<'a>>>,
 }
 
-impl PairMatrix<'_> {
+impl<'a> PairMatrix<'a> {
     /// Create a new pair matrix
-    pub fn new(atomkinds: &[AtomKind], multipole: &'static Yukawa) -> Self {
+    pub fn new(atomkinds: &[AtomKind], multipole: &'a Yukawa) -> Self {
         let default =
             YukawaLennardJones::new(IonIon::new(0.0, multipole), LennardJones::new(0.0, 0.0));
         let n = atomkinds.len();

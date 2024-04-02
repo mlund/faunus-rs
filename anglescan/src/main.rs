@@ -45,7 +45,6 @@ enum Commands {
 
 fn main() {
     let cli = Cli::parse();
-    let multipole = interact::multipole::Yukawa::new(30.0, Some(30.0));
     match cli.command {
         Some(Commands::Scan {
             mol1,
@@ -56,27 +55,31 @@ fn main() {
             dr,
             atoms,
         }) => {
+            assert!(rmin < rmax);
             let atomkinds = AtomKinds::from_yaml(&atoms).unwrap();
-            let ref_pos1 = Structure::from_aam_file(&mol1, &atomkinds);
-            let ref_pos2 = Structure::from_aam_file(&mol2, &atomkinds);
+            let ref_a = Structure::from_aam_file(&mol1, &atomkinds);
+            let ref_b = Structure::from_aam_file(&mol2, &atomkinds);
             let scan = TwobodyAngles::new(resolution);
             println!("{} per distance", scan);
 
-            assert!(rmin < rmax);
-            //let pair_matrix = energy::PairMatrix::new(&atomkinds.atomlist, &multipole);
+            let multipole = interact::multipole::Yukawa::new(30.0, Some(30.0));
+            let pair_matrix = energy::PairMatrix::new(&atomkinds.atomlist, &multipole);
             let distances =
                 linspace(rmin, rmax, ((rmax - rmin) / dr) as usize).collect::<Vec<f64>>();
             distances.par_iter().for_each(|r| {
                 let r_vec = Vector3::<f64>::new(0.0, 0.0, *r);
+                let mut a = ref_a.clone();
+                let mut b = ref_b.clone();
                 let sum: f64 = scan
                     .iter()
                     .map(|(q1, q2)| {
-                        let mut _pos1 = ref_pos1.positions.iter().map(|p| q1 * p);
-                        let mut _pos2 = ref_pos2.positions.iter().map(|p| (q2 * p) + r_vec);
-                        _pos1.nth(0).unwrap()[2] + _pos2.nth(0).unwrap()[2]
+                        a.positions = ref_a.positions.iter().map(|pos| q1 * pos).collect();
+                        b.positions =
+                            ref_b.positions.iter().map(|pos| q2 * pos + r_vec).collect();
+                        pair_matrix.sum_energy(&a, &b)
                     })
                     .sum();
-                println!("distance = {:.2}, sum: {:.2}", r, sum);
+                println!("distance = {:.2}, energy: {:.2}", r, sum);
             })
         }
         None => {

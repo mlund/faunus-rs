@@ -19,9 +19,9 @@ impl AtomKinds {
     }
 }
 
-impl Into<Vec<AtomKind>> for AtomKinds {
-    fn into(self) -> Vec<AtomKind> {
-        self.atomlist
+impl From<AtomKinds> for Vec<AtomKind> {
+    fn from(atomkinds: AtomKinds) -> Vec<AtomKind> {
+        atomkinds.atomlist
     }
 }
 
@@ -75,7 +75,7 @@ impl AminoAcidModelRecord {
 }
 
 /// Ad hoc molecular structure containing atoms with positions, masses, charges, and radii
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Structure {
     /// Particle positions
     pub positions: Vec<Vector3<f64>>,
@@ -96,7 +96,7 @@ impl Structure {
             .unwrap()
             .lines()
             .skip(1) // skip header
-            .map(|line| AminoAcidModelRecord::from_line(line))
+            .map(AminoAcidModelRecord::from_line)
             .collect();
 
         let atom_ids = aam
