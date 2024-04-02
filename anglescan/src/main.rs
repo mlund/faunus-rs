@@ -1,4 +1,5 @@
 use anglescan::anglescan::TwobodyAngles;
+use anglescan::energy;
 use anglescan::structure::AtomKinds;
 use anglescan::structure::Structure;
 use anglescan::Vector3;
@@ -44,6 +45,7 @@ enum Commands {
 
 fn main() {
     let cli = Cli::parse();
+    let multipole = interact::multipole::Yukawa::new(30.0, Some(30.0));
     match cli.command {
         Some(Commands::Scan {
             mol1,
@@ -61,6 +63,7 @@ fn main() {
             println!("{} per distance", scan);
 
             assert!(rmin < rmax);
+            //let pair_matrix = energy::PairMatrix::new(&atomkinds.atomlist, &multipole);
             let distances =
                 linspace(rmin, rmax, ((rmax - rmin) / dr) as usize).collect::<Vec<f64>>();
             distances.par_iter().for_each(|r| {
