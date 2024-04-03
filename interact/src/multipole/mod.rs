@@ -53,6 +53,12 @@ pub trait ShortRangeFunction: crate::Cutoff {
     fn kappa(&self) -> Option<f64> {
         None
     }
+    /// Inverse of the relative dielectric constant, 1/εᵣ (unitless).
+    #[inline]
+    fn rel_dielectric_inv(&self) -> f64 {
+        1.0
+    }
+
     /// Short-range function.
     fn short_range_f0(&self, q: f64) -> f64;
     /// First derivative of the short-range function.
@@ -400,5 +406,21 @@ pub trait MultipoleForce: MultipoleField {
      */
     fn ion_quadrupole_force(&self, charge: f64, quad: Matrix3, r: Point) -> Point {
         charge * self.quadrupole_field(&quad, &r)
+    }
+}
+
+/// Test electric constant
+#[cfg(test)]
+mod tests {
+    use approx::assert_relative_eq;
+
+    #[test]
+    fn test_electric_constant() {
+        let bjerrum_length = 7.1; // angstrom
+        let rel_dielectric_const = 80.0;
+        assert_relative_eq!(
+            crate::ELECTRIC_PREFACTOR / rel_dielectric_const / bjerrum_length,
+            2.4460467895137676 // In kJ/mol, roughly 1 KT at room temperature
+        );
     }
 }

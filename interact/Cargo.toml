@@ -2,7 +2,9 @@
 name = "interact"
 version = "0.1.0"
 edition = "2021"
-description = "Library for intermolecular interaction potentials"
+description = "Library for intermolecular interactions"
+readme = "README.md"
+authors = ["Mikael Lund"]
 license = "Apache-2.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -20,6 +22,7 @@ typetag = "0.2"
 nalgebra = { version = "0.32", features = ["serde-serialize"] }
 approx = "0.5"
 num = "0.4"
+physical_constants = "0.5"
 
 # See https://github.com/victe/rust-latex-doc-minimal-example
 # for including math in the documentation

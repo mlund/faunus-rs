@@ -74,8 +74,7 @@ fn main() {
                     .iter()
                     .map(|(q1, q2)| {
                         a.positions = ref_a.positions.iter().map(|pos| q1 * pos).collect();
-                        b.positions =
-                            ref_b.positions.iter().map(|pos| q2 * pos + r_vec).collect();
+                        b.positions = ref_b.positions.iter().map(|pos| q2 * pos + r_vec).collect();
                         pair_matrix.sum_energy(&a, &b)
                     })
                     .sum();

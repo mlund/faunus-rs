@@ -27,6 +27,39 @@ mod qpochhammer;
 pub mod spline;
 pub mod twobody;
 
+use physical_constants::{
+    AVOGADRO_CONSTANT, ELEMENTARY_CHARGE, MOLAR_GAS_CONSTANT, VACUUM_ELECTRIC_PERMITTIVITY,
+};
+use std::f64::consts::PI;
+
+/// Electrostatic prefactor, e²/4πε₀ × 10⁷ × NA (Å × kJ / mol).
+///
+/// Can be used to calculate e.g. the interaction energy bewteen two
+/// point charges in kJ/mol:
+///
+/// Examples:
+/// ```
+/// use interact::ELECTRIC_PREFACTOR;
+/// let z1 = 1.0;                    // unit-less charge number
+/// let z2 = -1.0;                   // unit-less charge number
+/// let r = 7.0;                     // separation in angstrom
+/// let rel_dielectric_const = 80.0; // relative dielectric constant
+/// let energy = ELECTRIC_PREFACTOR * z1 * z2 / (rel_dielectric_const * r);
+/// assert_eq!(energy, -2.48099031507825); // in kJ/mol
+pub const ELECTRIC_PREFACTOR: f64 =
+    ELEMENTARY_CHARGE * ELEMENTARY_CHARGE * 1.0e10 * AVOGADRO_CONSTANT * 1e-3
+        / (4.0 * PI * VACUUM_ELECTRIC_PERMITTIVITY);
+
+/// Bjerrum length in vacuum at 298.15 K, e²/4πε₀kT (Å).
+///
+/// Examples:
+/// ```
+/// use interact::BJERRUM_LEN_VACUUM_298K;
+/// let relative_dielectric_const = 80.0;
+/// assert_eq!(BJERRUM_LEN_VACUUM_298K / relative_dielectric_const, 7.0057415269733);
+/// ```
+pub const BJERRUM_LEN_VACUUM_298K: f64 = ELECTRIC_PREFACTOR / (MOLAR_GAS_CONSTANT * 1e-3 * 298.15);
+
 /// Defines information about a concept, like a short name, citation, url etc.
 pub trait Info {
     /// Returns a short name for the concept. Use `_` for spaces and avoid weird characters.
@@ -78,6 +111,11 @@ pub trait DebyeLength {
     fn kappa(&self) -> Option<f64> {
         self.debye_length().map(f64::recip)
     }
+}
+
+/// Defines the Bjerrum length, lB = e²/4πεkT commonly used in electrostatics (ångström).
+pub trait BjerrumLength {
+    fn bjerrum_length(&self) -> f64;
 }
 
 /// Combination rules for mixing epsilon and sigma values
