@@ -28,7 +28,7 @@ use crate::{AVOGADRO, BOLTZMANN, UNIT_CHARGE, VACUUM_PERMITTIVITY};
 ///
 /// # Example usage:
 /// ~~~
-/// use faunus::chemistry::electrolyte::Electrolyte;
+/// use faunus::chemistry::Electrolyte;
 /// let molarity = 0.1;
 /// let salt = Electrolyte::new(molarity, &Electrolyte::SODIUM_CHLORIDE).unwrap();    // Nacl
 /// assert_eq!(salt.ionic_strength, 0.1);
@@ -99,7 +99,7 @@ impl Electrolyte {
         Ok(Electrolyte {
             molarity,
             ionic_strength,
-            valencies: Vec::try_from(valencies)?,
+            valencies: Vec::from(valencies),
             stoichiometry,
         })
     }
@@ -170,7 +170,7 @@ fn test_electrolyte() {
 ///
 /// # Examples
 /// ~~~
-/// use faunus::chemistry::electrolyte::bjerrum_length;
+/// use faunus::chemistry::bjerrum_length;
 /// let lB = bjerrum_length(293.0, 80.0); // angstroms
 /// assert_eq!(lB, 7.1288799871283);
 /// ~~~

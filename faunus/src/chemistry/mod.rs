@@ -15,5 +15,7 @@
 //! # Chemistry module
 //!
 //! This contains support for chemical systems, including electrolyte solutions.
-pub mod electrolyte;
+mod electrolyte;
 pub mod reaction;
+
+pub use electrolyte::{bjerrum_length, Electrolyte};
