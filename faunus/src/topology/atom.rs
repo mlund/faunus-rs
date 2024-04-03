@@ -38,15 +38,15 @@ pub struct AtomKind {
     pub name: String,
     /// Unique identifier
     pub id: usize,
-    /// Atomic mass
+    /// Atomic mass (g/mol)
     pub mass: f64,
     /// Atomic charge
     pub charge: f64,
     /// Atomic symbol if appropriate (He, C, O, Fe, etc.)
     pub element: Option<String>,
-    /// Lennard-Jones diameter, σٖᵢᵢ
+    /// Lennard-Jones diameter, σٖᵢᵢ (angstrom)
     pub sigma: Option<f64>,
-    /// Lennard-Jones well depth, εᵢᵢ
+    /// Lennard-Jones well depth, εᵢᵢ (kJ/mol)
     pub epsilon: Option<f64>,
     /// Hydrophobicity information
     pub hydrophobicity: Option<Hydrophobicity>,
