@@ -1,6 +1,6 @@
 use faunus::topology::AtomKind;
-use interact::multipole::Yukawa;
-use interact::twobody::{IonIon, IsotropicTwobodyEnergy, LennardJones, YukawaLennardJones};
+use interact::multipole::Coulomb;
+use interact::twobody::{CoulombLennardJones, IonIon, IsotropicTwobodyEnergy, LennardJones};
 use interact::CombinationRule;
 
 use crate::structure::Structure;
@@ -8,30 +8,30 @@ use crate::structure::Structure;
 /// Pair-matrix of twobody energies for pairs of atom ids
 pub struct PairMatrix<'a> {
     /// Matrix of twobody energy terms
-    pub matrix: Vec<Vec<YukawaLennardJones<'a>>>,
+    pub matrix: Vec<Vec<CoulombLennardJones<'a>>>,
 }
 
 impl<'a> PairMatrix<'a> {
     /// Create a new pair matrix
-    pub fn new(atomkinds: &[AtomKind], multipole: &'a Yukawa) -> Self {
+    pub fn new(atomkinds: &[AtomKind], multipole: &'a Coulomb) -> Self {
         let default =
-            YukawaLennardJones::new(IonIon::new(0.0, multipole), LennardJones::new(0.0, 0.0));
+            CoulombLennardJones::new(IonIon::new(0.0, multipole), LennardJones::new(0.0, 0.0));
         let n = atomkinds.len();
         let mut matrix = vec![vec![default; n]; n];
         for i in 0..n {
             for j in 0..n {
                 let a = &atomkinds[i];
                 let b = &atomkinds[j];
-                let charge_product = a.charge * b.charge;
-                let epsilons = (a.epsilon.unwrap_or_default(), b.epsilon.unwrap_or_default());
-                let sigmas = (a.sigma.unwrap_or_default(), b.sigma.unwrap_or_default());
-                let ionion = IonIon::new(charge_product, multipole);
+
+                let ionion = IonIon::new(a.charge * b.charge, multipole);
+                let epsilons = (a.epsilon.unwrap_or(0.0), b.epsilon.unwrap_or(0.0));
+                let sigmas = (a.sigma.unwrap_or(0.0), b.sigma.unwrap_or(0.0));
                 let lj = LennardJones::from_combination_rule(
                     CombinationRule::LorentzBerthelot,
                     epsilons,
                     sigmas,
                 );
-                matrix[i][j] = YukawaLennardJones::new(ionion, lj);
+                matrix[i][j] = CoulombLennardJones::new(ionion, lj);
             }
         }
         Self { matrix }

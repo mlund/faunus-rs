@@ -4,9 +4,12 @@ use anglescan::structure::AtomKinds;
 use anglescan::structure::Structure;
 use anglescan::Vector3;
 use clap::{Parser, Subcommand};
+use faunus::chemistry::Electrolyte;
 use itertools_num::linspace;
 use rayon::prelude::*;
 use std::path::PathBuf;
+extern crate pretty_env_logger;
+use log::{debug, info};
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -44,6 +47,8 @@ enum Commands {
 }
 
 fn main() {
+    pretty_env_logger::init();
+
     let cli = Cli::parse();
     match cli.command {
         Some(Commands::Scan {
@@ -56,13 +61,21 @@ fn main() {
             atoms,
         }) => {
             assert!(rmin < rmax);
-            let atomkinds = AtomKinds::from_yaml(&atoms).unwrap();
-            let ref_a = Structure::from_aam_file(&mol1, &atomkinds);
-            let ref_b = Structure::from_aam_file(&mol2, &atomkinds);
+            let mut atomkinds = AtomKinds::from_yaml(&atoms).unwrap();
+            atomkinds.set_default_epsilon(0.05 * 2.45);
+            let ref_a = Structure::from_xyz(&mol1, &atomkinds);
+            let ref_b = Structure::from_xyz(&mol2, &atomkinds);
             let scan = TwobodyAngles::new(resolution);
             println!("{} per distance", scan);
 
-            let multipole = interact::multipole::Yukawa::new(30.0, Some(30.0));
+            let bjerrum_length = interact::BJERRUM_LEN_VACUUM_298K / 80.0;
+            let debye_length = Electrolyte::new(0.1, &Electrolyte::SODIUM_CHLORIDE)
+                .unwrap()
+                .debye_length(bjerrum_length);
+            info!("Debye length: {:.2} angstrom", debye_length);
+
+            let cutoff = 3.0 * debye_length;
+            let multipole = interact::multipole::Coulomb::new(cutoff, Some(debye_length));
             let pair_matrix = energy::PairMatrix::new(&atomkinds.atomlist, &multipole);
             let distances =
                 linspace(rmin, rmax, ((rmax - rmin) / dr) as usize).collect::<Vec<f64>>();
@@ -74,7 +87,11 @@ fn main() {
                     .iter()
                     .map(|(q1, q2)| {
                         a.positions = ref_a.positions.iter().map(|pos| q1 * pos).collect();
-                        b.positions = ref_b.positions.iter().map(|pos| q2 * pos + r_vec).collect();
+                        b.positions = ref_b
+                            .positions
+                            .iter()
+                            .map(|pos| (q2 * pos) + r_vec)
+                            .collect();
                         pair_matrix.sum_energy(&a, &b)
                     })
                     .sum();

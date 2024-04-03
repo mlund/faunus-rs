@@ -23,7 +23,7 @@ impl<'a, T: MultipoleEnergy> IonIon<'a, T> {
         Self {
             charge_product,
             multipole: potential,
-            inv_dielectric_const: 80.0,
+            inv_dielectric_const: 1.0 / 80.0,
         }
     }
 }
@@ -53,3 +53,33 @@ impl<T: MultipoleEnergy + std::fmt::Debug> IsotropicTwobodyEnergy for IonIon<'_,
 
 /// Alias for ion-ion with Yukawa
 pub type IonIonYukawa<'a> = IonIon<'a, crate::multipole::Yukawa>;
+
+/// Alias for ion-ion with a plain Coulomb potential that can be screened
+pub type IonIonPlain<'a> = IonIon<'a, crate::multipole::Coulomb>;
+
+// Test ion-ion energy
+#[cfg(test)]
+mod tests {
+    use approx::assert_relative_eq;
+
+    use super::*;
+    use crate::multipole::Coulomb;
+
+    #[test]
+    fn test_ion_ion() {
+        let r: f64 = 7.0;
+        let cutoff = f64::INFINITY;
+        let scheme = Coulomb::new(cutoff, None);
+        let ionion = IonIon::new(1.0, &scheme);
+        let unscreened_energy = ionion.isotropic_twobody_energy(r.powi(2));
+        assert_eq!(unscreened_energy, 2.48099031507825);
+        let debye_length = 30.0;
+        let scheme = Coulomb::new(cutoff, Some(debye_length));
+        let ionion = IonIon::new(1.0, &scheme);
+        let screened_energy = ionion.isotropic_twobody_energy(r.powi(2));
+        assert_relative_eq!(
+            screened_energy,
+            unscreened_energy * (-r / debye_length).exp()
+        );
+    }
+}

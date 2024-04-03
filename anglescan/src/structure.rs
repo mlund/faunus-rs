@@ -17,6 +17,24 @@ impl AtomKinds {
         let file = std::fs::File::open(path)?;
         serde_yaml::from_reader(file).map_err(Into::into)
     }
+    /// If not already defined, set a default sigma (angstrom) for each atom kind. Note that sigma is optional.
+    pub fn set_default_sigma(&mut self, default_sigma: f64) {
+        self.atomlist
+            .iter_mut()
+            .filter(|i| i.sigma.is_none())
+            .for_each(|i| {
+                i.sigma = Some(default_sigma);
+            });
+    }
+    /// If not already defined, set a default epsilon (kJ/mol) for each atom kind. Note that epsilon is optional.
+    pub fn set_default_epsilon(&mut self, default_epsilon: f64) {
+        self.atomlist
+            .iter_mut()
+            .filter(|i| i.epsilon.is_none())
+            .for_each(|i| {
+                i.epsilon = Some(default_epsilon);
+            });
+    }
 }
 
 impl From<AtomKinds> for Vec<AtomKind> {
@@ -89,9 +107,87 @@ pub struct Structure {
     pub atom_ids: Vec<usize>,
 }
 
+/// Parse a single line from an XYZ file
+fn from_xyz_line(line: &str) -> (String, Vector3<f64>) {
+    let mut parts = line.split_whitespace();
+    assert_eq!(parts.clone().count(), 4); // name, x, y, z
+    let name = parts.next().unwrap().to_string();
+    let x: f64 = parts.next().unwrap().parse().unwrap();
+    let y: f64 = parts.next().unwrap().parse().unwrap();
+    let z: f64 = parts.next().unwrap().parse().unwrap();
+    (name, Vector3::new(x, y, z))
+}
+
 impl Structure {
+    /// Constructs a new structure from an XYZ file, centering the structure at the origin
+    pub fn from_xyz(path: &PathBuf, atomkinds: &AtomKinds) -> Self {
+        let nxyz: Vec<(String, Vector3<f64>)> = std::fs::read_to_string(path)
+            .unwrap()
+            .lines()
+            .skip(2) // skip header
+            .map(from_xyz_line)
+            .collect();
+
+        let atom_ids = nxyz
+            .iter()
+            .map(|(name, _)| {
+                atomkinds
+                    .atomlist
+                    .iter()
+                    .position(|j| j.name == *name)
+                    .unwrap_or_else(|| panic!("Unknown atom name in XYZ file: {}", name))
+            })
+            .collect();
+
+        let masses = nxyz
+            .iter()
+            .map(|(name, _)| {
+                atomkinds
+                    .atomlist
+                    .iter()
+                    .find(|i| i.name == *name)
+                    .unwrap()
+                    .mass
+            })
+            .collect();
+
+        let charges = nxyz
+            .iter()
+            .map(|(name, _)| {
+                atomkinds
+                    .atomlist
+                    .iter()
+                    .find(|i| i.name == *name)
+                    .unwrap()
+                    .charge
+            })
+            .collect();
+
+        let radii = nxyz
+            .iter()
+            .map(|(name, _)| {
+                atomkinds
+                    .atomlist
+                    .iter()
+                    .find(|i| i.name == *name)
+                    .unwrap()
+                    .sigma
+                    .unwrap_or(0.0)
+            })
+            .collect();
+        let mut structure = Self {
+            positions: nxyz.iter().map(|(_, pos)| *pos).collect(),
+            masses,
+            charges,
+            radii,
+            atom_ids,
+        };
+        let center = structure.mass_center();
+        structure.translate(&-center); // translate to 0,0,0
+        structure
+    }
     /// Constructs a new structure from a Faunus AAM file
-    pub fn from_aam_file(path: &PathBuf, atomkinds: &AtomKinds) -> Self {
+    pub fn from_aam(path: &PathBuf, atomkinds: &AtomKinds) -> Self {
         let aam: Vec<AminoAcidModelRecord> = std::fs::read_to_string(path)
             .unwrap()
             .lines()
