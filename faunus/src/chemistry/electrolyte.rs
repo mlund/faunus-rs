@@ -78,7 +78,7 @@ impl Electrolyte {
             .collect();
 
         let nu_times_squared_valency_sum: usize = std::iter::zip(valencies, stoichiometry.iter())
-            .map(|(valency, nu)| (*nu * valency.checked_pow(2).unwrap() as usize))
+            .map(|(valency, nu)| (*nu * valency.pow(2) as usize))
             .sum();
 
         let ionic_strength = 0.5 * molarity * nu_times_squared_valency_sum as f64;
@@ -86,7 +86,7 @@ impl Electrolyte {
         Ok(Electrolyte {
             molarity,
             ionic_strength,
-            valencies: Vec::from(valencies),
+            valencies: Vec::try_from(valencies)?,
             stoichiometry,
         })
     }
