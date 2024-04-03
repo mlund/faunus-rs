@@ -16,6 +16,7 @@
 
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
+use std::f64::consts::PI;
 
 use crate::{AVOGADRO, BOLTZMANN, UNIT_CHARGE, VACUUM_PERMITTIVITY};
 
@@ -92,7 +93,8 @@ impl Electrolyte {
 
     /// Calculates the Debye screening length, given the Bjerrum length (angstrom)
     pub fn debye_length(&self, bjerrum_length: f64) -> f64 {
-        (8.0 * core::f64::consts::PI * bjerrum_length * self.ionic_strength * AVOGADRO * 1e-27)
+        const LITER_PER_ANGSTROM3: f64 = 1e-27;
+        (8.0 * PI * bjerrum_length * self.ionic_strength * AVOGADRO * LITER_PER_ANGSTROM3)
             .sqrt()
             .recip()
     }
@@ -151,11 +153,7 @@ fn test_electrolyte() {
 /// assert_eq!(lB, 7.1288799871283);
 /// ~~~
 pub fn bjerrum_length(kelvin: f64, relative_dielectric_const: f64) -> f64 {
-    UNIT_CHARGE.powi(2) * 1e10
-        / (4.0
-            * std::f64::consts::PI
-            * relative_dielectric_const
-            * VACUUM_PERMITTIVITY
-            * BOLTZMANN
-            * kelvin)
+    const ANGSTROM_PER_METER: f64 = 1e10;
+    UNIT_CHARGE.powi(2) * ANGSTROM_PER_METER
+        / (4.0 * PI * relative_dielectric_const * VACUUM_PERMITTIVITY * BOLTZMANN * kelvin)
 }
