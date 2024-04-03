@@ -30,21 +30,21 @@ use crate::{AVOGADRO, BOLTZMANN, UNIT_CHARGE, VACUUM_PERMITTIVITY};
 /// ~~~
 /// use faunus::chemistry::electrolyte::Electrolyte;
 /// let molarity = 0.1;
-/// let salt = Electrolyte::new(molarity, &[1, -1]).unwrap();    // Nacl
-/// let alun = Electrolyte::new(molarity, &[1, 3, -2]).unwrap(); // KAl(SO₄)₂
+/// let salt = Electrolyte::new(molarity, &Electrolyte::SODIUM_CHLORIDE).unwrap();    // Nacl
 /// assert_eq!(salt.ionic_strength, 0.1);
 /// assert_eq!(salt.stoichiometry, [1, 1]);
-/// assert_eq!(alun.ionic_strength, 0.9);
-/// assert_eq!(alun.stoichiometry, [1, 1, 2]);
+/// let alum = Electrolyte::new(molarity, &[1, 3, -2]).unwrap(); // KAl(SO₄)₂
+/// assert_eq!(alum.ionic_strength, 0.9);
+/// assert_eq!(alum.stoichiometry, [1, 1, 2]);
 /// ~~~
 ///
 /// # Example valencies:
 ///
 /// Salt      | `valencies`
-/// --------- | -------------
-/// NaCl      | `[1, -1]`
-/// CaCl₂     | `[2, -1]`
-/// KAl(SO₄)₂ | `[1, 3, -2]`
+/// --------- | ---------------------------------
+/// NaCl      | `[1, -1]` or `SODIUM_CHLORIDE`
+/// CaCl₂     | `[2, -1]` or `CALCIUM_CHLORIDE`
+/// KAl(SO₄)₂ | `[1, 3, -2]` or `POTASSIUM_ALUM`
 ///
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize, Default)]
 pub struct Electrolyte {
@@ -59,6 +59,19 @@ pub struct Electrolyte {
 }
 
 impl Electrolyte {
+    /// Valencies for sodium chloride, NaCl
+    pub const SODIUM_CHLORIDE: [isize; 2] = [1, -1];
+    /// Valencies for calcium chloride, CaCl₂
+    pub const CALCIUM_CHLORIDE: [isize; 2] = [2, -1];
+    /// Valencies for calcium sulfate, CaSO₄
+    pub const CALCIUM_SULFATE: [isize; 2] = [2, -2];
+    /// Valencies for potassium alum, KAl(SO₄)₂
+    pub const POTASSIUM_ALUM: [isize; 3] = [1, 3, -2];
+    /// Valencies for sodium sulfate, Na₂SO₄
+    pub const SODIUM_SULFATE: [isize; 2] = [1, -2];
+    /// Valencies for lanthanum chloride, LaCl₃
+    pub const LANTHANUM_CHLORIDE: [isize; 2] = [3, -1];
+
     pub fn new(molarity: f64, valencies: &[isize]) -> Result<Electrolyte> {
         let sum_positive: isize = valencies.iter().filter(|i| i.is_positive()).sum();
         let sum_negative: isize = valencies.iter().filter(|i| i.is_negative()).sum();
@@ -106,24 +119,30 @@ fn test_electrolyte() {
 
     // NaCl
     approx::assert_abs_diff_eq!(
-        Electrolyte::new(molarity, &[1, -1]).unwrap().ionic_strength,
+        Electrolyte::new(molarity, &Electrolyte::SODIUM_CHLORIDE)
+            .unwrap()
+            .ionic_strength,
         molarity
     );
     // CaSO₄
     approx::assert_abs_diff_eq!(
-        Electrolyte::new(molarity, &[2, -2]).unwrap().ionic_strength,
+        Electrolyte::new(molarity, &Electrolyte::CALCIUM_SULFATE)
+            .unwrap()
+            .ionic_strength,
         0.5 * (molarity * 4.0 + molarity * 4.0)
     );
 
     // CaCl₂
     approx::assert_abs_diff_eq!(
-        Electrolyte::new(molarity, &[2, -1]).unwrap().ionic_strength,
+        Electrolyte::new(molarity, &Electrolyte::CALCIUM_CHLORIDE)
+            .unwrap()
+            .ionic_strength,
         0.5 * (molarity * 4.0 + 2.0 * molarity)
     );
 
     // KAl(SO₄)₂
     approx::assert_abs_diff_eq!(
-        Electrolyte::new(molarity, &[1, 3, -2])
+        Electrolyte::new(molarity, &Electrolyte::POTASSIUM_ALUM)
             .unwrap()
             .ionic_strength,
         0.5 * (molarity * 1.0 + molarity * 9.0 + 2.0 * molarity * 4.0)
@@ -136,9 +155,12 @@ fn test_electrolyte() {
     assert!(Electrolyte::new(molarity, &[0, 1]).is_err());
 
     // Debye length
+    let bjerrum_length = bjerrum_length(293.0, 80.0);
     assert_eq!(
-        Electrolyte::new(0.03, &[1, -1]).unwrap().debye_length(7.0),
-        17.737604684006754
+        Electrolyte::new(0.03, &[1, -1])
+            .unwrap()
+            .debye_length(bjerrum_length),
+        17.576538097378368
     );
 }
 
