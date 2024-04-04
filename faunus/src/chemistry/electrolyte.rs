@@ -42,6 +42,8 @@ pub trait HasIonicStrength {
 
 pub trait DebyeLength: HasIonicStrength + HasPermittivity + HasTemperature {
     /// The Debye length in angstrom. None if the ionic strength is zero.
+    /// Note that this may perform calculates for each call so don't use in speed critical code,
+    /// such as inside tight interaction loops.
     fn debye_length(&self) -> Option<f64> {
         const ANGSTROM_PER_METER: f64 = 1e10;
         let temperature = self.temperature();
@@ -64,7 +66,7 @@ pub trait DebyeLength: HasIonicStrength + HasPermittivity + HasTemperature {
     }
 }
 
-/// Empirical model for relative permittivity according to Raspo and Neau (NR).
+/// Empirical model for relative permittivity according to Neau and Raspo (NR).
 ///
 /// https://doi.org/10.1016/j.fluid.2019.112371
 ///
@@ -207,13 +209,12 @@ impl Salt {
             .collect()
     }
 
-    /// Calculate ionic strength from the salt molarity (mol/l), I=½m∑(νᵢzᵢ²)
+    /// Calculate ionic strength from the salt molarity (mol/l), I = ½m∑(νᵢzᵢ²)
     pub fn ionic_strength(&self, molarity: f64) -> f64 {
-        let nu_times_squared_valency_sum: usize =
-            std::iter::zip(self.valencies(), self.stoichiometry().iter())
-                .map(|(valency, nu)| (*nu * valency.pow(2) as usize))
-                .sum();
-        0.5 * molarity * nu_times_squared_valency_sum as f64
+        0.5 * molarity
+            * std::iter::zip(self.valencies(), self.stoichiometry().iter().copied())
+                .map(|(valency, nu)| (nu * valency.pow(2) as usize))
+                .sum::<usize>() as f64
     }
 }
 
@@ -249,6 +250,95 @@ fn test_salt() {
         Salt::PotassiumAlum.ionic_strength(molarity),
         0.5 * (molarity * 1.0 + molarity * 9.0 + 2.0 * molarity * 4.0)
     );
+}
+
+/// Medium such as water or a salt solution
+///
+/// The state of this structure includes the temperature; salt concentration; and
+/// the relative permittivity of the medium.
+///
+/// # Examples
+/// ~~~
+/// use faunus::chemistry::{Medium, Salt, DebyeLength, HasPermittivity, HasIonicStrength};
+/// let medium = Medium::with_neat_water(298.15);
+/// assert_eq!(medium.permittivity(298.15).unwrap(), 78.35565171480539);
+/// assert_eq!(medium.ionic_strength(), 0.0);
+/// assert!(medium.debye_length().is_none());
+///
+/// let medium = Medium::with_salt_water(Salt::CalciumChloride, 0.1, 298.15);
+/// assert_eq!(medium.permittivity(298.15).unwrap(), 78.35565171480539);
+/// approx::assert_abs_diff_eq!(medium.ionic_strength(), 0.3);
+/// approx::assert_abs_diff_eq!(medium.debye_length().unwrap(), 4.226861330619744e26);
+/// ~~~
+pub struct Medium {
+    /// Relative permittivity of the medium
+    permittivity: Box<dyn HasPermittivity>,
+    /// Salt type
+    salt: Option<Salt>,
+    /// Salt molarity in mol/l
+    molarity: f64,
+    /// Temperature in Kelvin
+    temperature: f64,
+}
+
+impl DebyeLength for Medium {}
+
+impl Medium {
+    /// Creates a new medium
+    pub fn new(
+        salt: Option<Salt>,
+        molarity: f64,
+        temperature: f64,
+        permittivity: Box<dyn HasPermittivity>,
+    ) -> Self {
+        Self {
+            permittivity,
+            salt,
+            molarity,
+            temperature,
+        }
+    }
+    /// Medium with neat water using the `PermittivityNR::WATER` model
+    pub fn with_neat_water(temperature: f64) -> Self {
+        Self {
+            permittivity: Box::new(PermittivityNR::WATER),
+            salt: None,
+            molarity: 0.0,
+            temperature,
+        }
+    }
+    /// Medium with salt water using the `PermittivityNR::WATER` model
+    pub fn with_salt_water(salt: Salt, molarity: f64, temperature: f64) -> Self {
+        Self {
+            permittivity: Box::new(PermittivityNR::WATER),
+            salt: Some(salt),
+            molarity,
+            temperature,
+        }
+    }
+}
+
+impl HasTemperature for Medium {
+    fn temperature(&self) -> f64 {
+        self.temperature
+    }
+    fn set_temperature(&mut self, temperature: f64) -> anyhow::Result<()> {
+        self.temperature = temperature;
+        Ok(())
+    }
+}
+impl HasPermittivity for Medium {
+    fn permittivity(&self, temperature: f64) -> Result<f64> {
+        self.permittivity.permittivity(temperature)
+    }
+}
+impl HasIonicStrength for Medium {
+    fn ionic_strength(&self) -> f64 {
+        self.salt
+            .as_ref()
+            .map(|salt| salt.ionic_strength(self.molarity))
+            .unwrap_or(0.0)
+    }
 }
 
 /// Calculates the Bjerrum length, lB = e²/4πεkT commonly used in electrostatics (ångström).
