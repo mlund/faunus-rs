@@ -125,3 +125,12 @@ pub trait Context: GroupCollection + Clone + std::fmt::Debug + Sized + SyncFrom 
         Ok(())
     }
 }
+
+pub trait HasTemperature {
+    /// Get the temperature in K
+    fn temperature(&self) -> f64;
+    /// Set the temperature in K
+    fn set_temperature(&mut self, _temperature: f64) -> anyhow::Result<()> {
+        Err(anyhow::anyhow!("Temperature setting not implemented"))
+    }
+}

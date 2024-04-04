@@ -18,8 +18,51 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::f64::consts::PI;
 
-use crate::chemistry::RelativePermittivity;
+use crate::HasTemperature;
 use crate::{AVOGADRO, BOLTZMANN, UNIT_CHARGE, VACUUM_PERMITTIVITY};
+use physical_constants::MOLAR_GAS_CONSTANT;
+
+pub trait HasPermittivity {
+    /// Get the relative permittivity. May error if the temperature is out of range.
+    fn permittivity(&self, temperature: f64) -> Result<f64>;
+    /// Set the relative permittivity
+    fn set_permittivity(&mut self, _permittivity: f64) -> Result<()> {
+        Err(anyhow::anyhow!("Permittivity setting not implemented"))
+    }
+}
+
+pub trait HasIonicStrength {
+    /// Get the ionic strength in mol/l
+    fn ionic_strength(&self) -> f64;
+    /// Set the ionic strength in mol/l
+    fn set_ionic_strength(&mut self, _ionic_strength: f64) -> Result<()> {
+        Err(anyhow::anyhow!("Ionic strength setting not implemented"))
+    }
+}
+
+pub trait DebyeLength: HasIonicStrength + HasPermittivity + HasTemperature {
+    /// The Debye length in angstrom. None if the ionic strength is zero.
+    fn debye_length(&self) -> Option<f64> {
+        const ANGSTROM_PER_METER: f64 = 1e10;
+        let temperature = self.temperature();
+        let permittivity = self.permittivity(temperature).unwrap();
+        let ionic_strength = self.ionic_strength();
+        if ionic_strength > 0.0 {
+            let debye_length =
+                (8.0 * VACUUM_PERMITTIVITY * permittivity * MOLAR_GAS_CONSTANT * temperature
+                    / (ionic_strength * UNIT_CHARGE.powi(2)))
+                .sqrt()
+                    * ANGSTROM_PER_METER;
+            Some(debye_length)
+        } else {
+            None
+        }
+    }
+    /// Inverse Debye length in 1/angstrom. None if the ionic strength is zero.
+    fn kappa(&self) -> Option<f64> {
+        self.debye_length().map(f64::recip)
+    }
+}
 
 /// Empirical model for relative permittivity according to Raspo and Neau (NR).
 ///
@@ -27,10 +70,10 @@ use crate::{AVOGADRO, BOLTZMANN, UNIT_CHARGE, VACUUM_PERMITTIVITY};
 ///
 /// # Example
 /// ~~~
-/// use faunus::chemistry::{PermittivityNR, RelativePermittivity};
-/// assert_eq!(PermittivityNR::WATER.relative_permittivity(298.15).unwrap(), 78.35565171480539);
-/// assert_eq!(PermittivityNR::METHANOL.relative_permittivity(298.15).unwrap(), 33.081980713895064);
-/// assert_eq!(PermittivityNR::ETHANOL.relative_permittivity(298.15).unwrap(), 24.33523434183735);
+/// use faunus::chemistry::{PermittivityNR, HasPermittivity};
+/// assert_eq!(PermittivityNR::WATER.permittivity(298.15).unwrap(), 78.35565171480539);
+/// assert_eq!(PermittivityNR::METHANOL.permittivity(298.15).unwrap(), 33.081980713895064);
+/// assert_eq!(PermittivityNR::ETHANOL.permittivity(298.15).unwrap(), 24.33523434183735);
 /// ~~~
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub struct PermittivityNR {
@@ -65,37 +108,49 @@ impl PermittivityNR {
     );
 }
 
-impl RelativePermittivity for PermittivityNR {
-    fn relative_permittivity(&self, temperature: f64) -> Result<f64> {
+impl HasPermittivity for PermittivityNR {
+    fn permittivity(&self, temperature: f64) -> Result<f64> {
         if temperature < self.temperature_interval.0 || temperature > self.temperature_interval.1 {
-            anyhow::bail!("temperature out of range")
+            Err(anyhow::anyhow!(
+                "Temperature out of range for permittivity model"
+            ))
+        } else {
+            Ok(self.coeffs[0]
+                + self.coeffs[1] * temperature
+                + self.coeffs[2] * temperature.powi(2)
+                + self.coeffs[3] / temperature
+                + self.coeffs[4] * temperature.ln())
         }
-        Ok(self.coeffs[0]
-            + self.coeffs[1] * temperature
-            + self.coeffs[2] * temperature.powi(2)
-            + self.coeffs[3] / temperature
-            + self.coeffs[4] * temperature.ln())
     }
 }
 
 /// Enum for common salts as well as with custom valencies
+///
+/// Valency examples:
+///
+/// Salt      | `valencies`
+/// --------- | -----------
+/// NaCl      | `[1, -1]`
+/// CaCl₂     | `[2, -1]`
+/// KAl(SO₄)₂ | `[1, 3, -2]`
 ///
 /// # Examples:
 /// ~~~
 /// use faunus::chemistry::Salt;
 /// let molarity = 0.1;
 ///
-/// let salt = Salt::SodiumChloride; // Nacl
-/// assert_eq!(salt.ionic_strength(molarity).unwrap(), 0.1);
-/// assert_eq!(salt.stoichiometry().unwrap(), [1, 1]);
+/// let salt = Salt::SodiumChloride;
+/// assert_eq!(salt.valencies(), [1, -1]);
+/// assert_eq!(salt.stoichiometry(), [1, 1]);
+/// assert_eq!(salt.ionic_strength(molarity), 0.1);
 ///
-/// let alum = Salt::Custom(vec![1, 3, -2]); // KAl(SO₄)₂
-/// assert_eq!(alum.ionic_strength(molarity).unwrap(), 0.9);
-/// assert_eq!(alum.stoichiometry().unwrap(), [1, 1, 2]);
+/// let alum = Salt::Custom(vec![1, 3, -2]); // e.g. KAl(SO₄)₂
+/// assert_eq!(alum.stoichiometry(), [1, 1, 2]);
+/// assert_eq!(alum.ionic_strength(molarity), 0.9);
 /// ~~~
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize, Default)]
 pub enum Salt {
-    /// Sodium chloride, NaCl (default)
+    /// Sodium chloride, NaCl. This is an example of a 1:1 electrolyte and is the default salt type.
     #[serde(rename = "NaCl")]
     #[default]
     SodiumChloride,
@@ -133,15 +188,15 @@ impl Salt {
     }
 
     /// Deduce stoichiometry of the salt, νᵢ
-    pub fn stoichiometry(&self) -> Result<Vec<usize>> {
+    pub fn stoichiometry(&self) -> Vec<usize> {
         let valencies = self.valencies();
         let sum_positive: isize = valencies.iter().filter(|i| i.is_positive()).sum();
         let sum_negative: isize = valencies.iter().filter(|i| i.is_negative()).sum();
         let gcd = num::integer::gcd(sum_positive, sum_negative);
         if sum_positive == 0 || sum_negative == 0 || gcd == 0 {
-            anyhow::bail!("cannot resolve stoichiometry; did you provide both + and - ions?")
+            panic!("cannot resolve stoichiometry; did you provide both + and - ions?")
         }
-        Ok(valencies
+        valencies
             .iter()
             .map(|valency| {
                 ((match valency.is_positive() {
@@ -149,24 +204,17 @@ impl Salt {
                     false => sum_positive,
                 }) / gcd) as usize
             })
-            .collect())
+            .collect()
     }
 
     /// Calculate ionic strength from the salt molarity (mol/l), I=½m∑(νᵢzᵢ²)
-    pub fn ionic_strength(&self, molarity: f64) -> Result<f64> {
+    pub fn ionic_strength(&self, molarity: f64) -> f64 {
         let nu_times_squared_valency_sum: usize =
-            std::iter::zip(self.valencies(), self.stoichiometry()?.iter())
+            std::iter::zip(self.valencies(), self.stoichiometry().iter())
                 .map(|(valency, nu)| (*nu * valency.pow(2) as usize))
                 .sum();
-        Ok(0.5 * molarity * nu_times_squared_valency_sum as f64)
+        0.5 * molarity * nu_times_squared_valency_sum as f64
     }
-}
-
-pub struct NewElectrolyte {
-    /// Salt molarity (mol/l) or none if salt-free
-    molarity: Option<f64>,
-    salt: Option<Salt>,
-    relative_permittivity: Box<dyn RelativePermittivity>,
 }
 
 /// Stores information about salts for calculation of Debye screening length etc.
@@ -327,4 +375,24 @@ pub fn bjerrum_length(kelvin: f64, relative_dielectric_const: f64) -> f64 {
     const ANGSTROM_PER_METER: f64 = 1e10;
     UNIT_CHARGE.powi(2) * ANGSTROM_PER_METER
         / (4.0 * PI * relative_dielectric_const * VACUUM_PERMITTIVITY * BOLTZMANN * kelvin)
+}
+
+/// Calculates the Debye length in angstrom, λD = sqrt(8πlB·I·N·V)⁻¹, where I is the ionic strength in molar units (mol/l).
+///
+/// # Examples
+/// ~~~
+/// use faunus::chemistry::debye_length;
+/// let molarity = 0.03;                              // mol/l
+/// let lambda = debye_length(293.0, 80.0, molarity); // angstroms
+/// assert_eq!(lambda, 17.576538097378368);
+/// ~~~
+pub fn debye_length(kelvin: f64, relative_dielectric_const: f64, ionic_strength: f64) -> f64 {
+    const LITER_PER_ANGSTROM3: f64 = 1e-27;
+    (8.0 * PI
+        * bjerrum_length(kelvin, relative_dielectric_const)
+        * ionic_strength
+        * AVOGADRO
+        * LITER_PER_ANGSTROM3)
+        .sqrt()
+        .recip()
 }
