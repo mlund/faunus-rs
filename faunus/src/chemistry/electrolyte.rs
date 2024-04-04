@@ -135,9 +135,11 @@ impl RelativePermittivity for PermittivityNR {
     }
 }
 
-/// Enum for common salts as well as with custom valencies
+/// # Common salts and valencies
 ///
-/// Valency examples:
+/// Stores the valencies ions in a salt and is used to calculate
+/// the ionic strength of arbitrary salt types.
+/// Below are some common salts and their valencies:
 ///
 /// Salt      | `valencies`
 /// --------- | -----------
@@ -261,10 +263,15 @@ fn test_salt() {
     );
 }
 
-/// Medium such as water or a salt solution
+/// # Medium such as water or a salt solution
 ///
-/// The state of this structure includes the temperature; salt concentration; and
-/// the relative permittivity of the medium.
+/// Stores the following properties from which ionic strength,
+/// Debye and Bjerrums lengths can be calculated:
+///
+/// - Relative permittivity
+/// - Salt type
+/// - Salt molarity
+/// - Temperature
 ///
 /// # Examples
 /// ~~~

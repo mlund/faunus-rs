@@ -4,6 +4,7 @@ use anglescan::structure::AtomKinds;
 use anglescan::structure::Structure;
 use anglescan::Vector3;
 use clap::{Parser, Subcommand};
+use faunus::chemistry::{DebyeLength, Medium, Salt};
 use itertools_num::linspace;
 use rayon::prelude::*;
 use std::path::PathBuf;
@@ -67,10 +68,11 @@ fn main() {
             let scan = TwobodyAngles::new(resolution);
             println!("{} per distance", scan);
 
-            let bjerrum_length = interact::BJERRUM_LEN_VACUUM_298K / 80.0;
-            let debye_length = Electrolyte::new(0.1, &Electrolyte::SODIUM_CHLORIDE)
-                .unwrap()
-                .debye_length(bjerrum_length);
+            let temperature = 298.15; // K
+            let molarity = 0.1; // mol/l
+            let medium = Medium::with_salt_water(Salt::SodiumChloride, molarity, temperature);
+            let _bjerrum_length = interact::BJERRUM_LEN_VACUUM_298K / 80.0;
+            let debye_length = medium.debye_length().unwrap();
             info!("Debye length: {:.2} angstrom", debye_length);
 
             let cutoff = 3.0 * debye_length;
