@@ -19,6 +19,6 @@ mod electrolyte;
 pub mod reaction;
 
 pub use electrolyte::{
-    bjerrum_length, debye_length, DebyeLength, HasIonicStrength, HasPermittivity, Medium,
-    PermittivityNR, Salt,
+    bjerrum_length, debye_length, DebyeLength, IonicStrength, Medium, PermittivityNR,
+    RelativePermittivity, Salt,
 };

@@ -22,27 +22,33 @@ use crate::HasTemperature;
 use crate::{AVOGADRO, BOLTZMANN, UNIT_CHARGE, VACUUM_PERMITTIVITY};
 use physical_constants::MOLAR_GAS_CONSTANT;
 
-pub trait HasPermittivity {
+/// Trait for objects that has a relative permittivity
+pub trait RelativePermittivity {
     /// Get the relative permittivity. May error if the temperature is out of range.
     fn permittivity(&self, temperature: f64) -> Result<f64>;
     /// Set the relative permittivity
     fn set_permittivity(&mut self, _permittivity: f64) -> Result<()> {
-        Err(anyhow::anyhow!("Permittivity setting not implemented"))
+        Err(anyhow::anyhow!("Setting permittivity is not implemented"))
     }
 }
 
-pub trait HasIonicStrength {
+/// Trait for objects that has an ionic strength
+pub trait IonicStrength {
     /// Get the ionic strength in mol/l
     fn ionic_strength(&self) -> f64;
-    /// Set the ionic strength in mol/l
+    /// Try to set the ionic strength in mol/l
     fn set_ionic_strength(&mut self, _ionic_strength: f64) -> Result<()> {
-        Err(anyhow::anyhow!("Ionic strength setting not implemented"))
+        Err(anyhow::anyhow!(
+            "Setting the ionic strength is not implemented"
+        ))
     }
 }
 
-pub trait DebyeLength: HasIonicStrength + HasPermittivity + HasTemperature {
-    /// The Debye length in angstrom. None if the ionic strength is zero.
-    /// Note that this may perform calculates for each call so don't use in speed critical code,
+/// Trait for objects where a Debye length can be calculated
+pub trait DebyeLength: IonicStrength + RelativePermittivity + HasTemperature {
+    /// # Debye length in angstrom or `None` if the ionic strength is zero.
+    ///
+    /// May perform expensive operations so avoid use in speed critical code,
     /// such as inside tight interaction loops.
     fn debye_length(&self) -> Option<f64> {
         const ANGSTROM_PER_METER: f64 = 1e10;
@@ -60,7 +66,10 @@ pub trait DebyeLength: HasIonicStrength + HasPermittivity + HasTemperature {
             None
         }
     }
-    /// Inverse Debye length in 1/angstrom. None if the ionic strength is zero.
+    /// Inverse Debye length in 1/angstrom or `None`` if the ionic strength is zero.
+    ///
+    /// May perform expensive operations so avoid use in speed critical code,
+    /// such as inside tight interaction loops.
     fn kappa(&self) -> Option<f64> {
         self.debye_length().map(f64::recip)
     }
@@ -68,11 +77,11 @@ pub trait DebyeLength: HasIonicStrength + HasPermittivity + HasTemperature {
 
 /// Empirical model for relative permittivity according to Neau and Raspo (NR).
 ///
-/// https://doi.org/10.1016/j.fluid.2019.112371
+/// <https://doi.org/10.1016/j.fluid.2019.112371>
 ///
 /// # Example
 /// ~~~
-/// use faunus::chemistry::{PermittivityNR, HasPermittivity};
+/// use faunus::chemistry::{PermittivityNR, RelativePermittivity};
 /// assert_eq!(PermittivityNR::WATER.permittivity(298.15).unwrap(), 78.35565171480539);
 /// assert_eq!(PermittivityNR::METHANOL.permittivity(298.15).unwrap(), 33.081980713895064);
 /// assert_eq!(PermittivityNR::ETHANOL.permittivity(298.15).unwrap(), 24.33523434183735);
@@ -110,7 +119,7 @@ impl PermittivityNR {
     );
 }
 
-impl HasPermittivity for PermittivityNR {
+impl RelativePermittivity for PermittivityNR {
     fn permittivity(&self, temperature: f64) -> Result<f64> {
         if temperature < self.temperature_interval.0 || temperature > self.temperature_interval.1 {
             Err(anyhow::anyhow!(
@@ -259,7 +268,7 @@ fn test_salt() {
 ///
 /// # Examples
 /// ~~~
-/// use faunus::chemistry::{Medium, Salt, DebyeLength, HasPermittivity, HasIonicStrength};
+/// use faunus::chemistry::{Medium, Salt, DebyeLength, RelativePermittivity, IonicStrength};
 /// let medium = Medium::with_neat_water(298.15);
 /// assert_eq!(medium.permittivity(298.15).unwrap(), 78.35565171480539);
 /// assert_eq!(medium.ionic_strength(), 0.0);
@@ -272,7 +281,7 @@ fn test_salt() {
 /// ~~~
 pub struct Medium {
     /// Relative permittivity of the medium
-    permittivity: Box<dyn HasPermittivity>,
+    permittivity: Box<dyn RelativePermittivity>,
     /// Salt type
     salt: Option<Salt>,
     /// Salt molarity in mol/l
@@ -289,7 +298,7 @@ impl Medium {
         salt: Option<Salt>,
         molarity: f64,
         temperature: f64,
-        permittivity: Box<dyn HasPermittivity>,
+        permittivity: Box<dyn RelativePermittivity>,
     ) -> Self {
         Self {
             permittivity,
@@ -316,6 +325,15 @@ impl Medium {
             temperature,
         }
     }
+    /// Change the molarity of the salt solution. Error if no salt type is defined.
+    pub fn set_molarity(&mut self, molality: f64) -> Result<()> {
+        if self.salt.is_some() {
+            self.molarity = molality;
+            Ok(())
+        } else {
+            Err(anyhow::anyhow!("Cannot set molarity without a salt"))
+        }
+    }
 }
 
 impl HasTemperature for Medium {
@@ -327,12 +345,12 @@ impl HasTemperature for Medium {
         Ok(())
     }
 }
-impl HasPermittivity for Medium {
+impl RelativePermittivity for Medium {
     fn permittivity(&self, temperature: f64) -> Result<f64> {
         self.permittivity.permittivity(temperature)
     }
 }
-impl HasIonicStrength for Medium {
+impl IonicStrength for Medium {
     fn ionic_strength(&self) -> f64 {
         self.salt
             .as_ref()

@@ -126,6 +126,7 @@ pub trait Context: GroupCollection + Clone + std::fmt::Debug + Sized + SyncFrom 
     }
 }
 
+/// A trait for objects that have a temperature
 pub trait HasTemperature {
     /// Get the temperature in K
     fn temperature(&self) -> f64;
