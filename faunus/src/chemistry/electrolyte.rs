@@ -18,7 +18,63 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::f64::consts::PI;
 
+use crate::chemistry::RelativePermittivity;
 use crate::{AVOGADRO, BOLTZMANN, UNIT_CHARGE, VACUUM_PERMITTIVITY};
+
+/// Empirical model for relative permittivity according to Raspo and Neau (NR).
+///
+/// https://doi.org/10.1016/j.fluid.2019.112371
+///
+/// # Example
+/// ~~~
+/// use faunus::chemistry::{PermittivityNR, RelativePermittivity};
+/// assert_eq!(PermittivityNR::WATER.relative_permittivity(298.15).unwrap(), 78.35565171480539);
+/// assert_eq!(PermittivityNR::METHANOL.relative_permittivity(298.15).unwrap(), 33.081980713895064);
+/// assert_eq!(PermittivityNR::ETHANOL.relative_permittivity(298.15).unwrap(), 24.33523434183735);
+/// ~~~
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
+pub struct PermittivityNR {
+    coeffs: [f64; 5],
+    temperature_interval: (f64, f64),
+}
+
+impl PermittivityNR {
+    /// Creates a new instance of the NR model
+    pub const fn new(coeffs: &[f64; 5], temperature_interval: (f64, f64)) -> PermittivityNR {
+        PermittivityNR {
+            coeffs: *coeffs,
+            temperature_interval,
+        }
+    }
+    /// Relative permittivity of water
+    pub const WATER: PermittivityNR = PermittivityNR::new(
+        &[-1664.4988, -0.884533, 0.0003635, 64839.1736, 308.3394],
+        (273.0, 403.0),
+    );
+    /// Relative permittivity of methanol
+    pub const METHANOL: PermittivityNR = PermittivityNR::new(
+        &[-1750.3069, -0.99026, 0.0004666, 51360.2652, 327.3124],
+        (176.0, 318.0),
+    );
+    /// Relative permittivity of ethanol
+    pub const ETHANOL: PermittivityNR = PermittivityNR::new(
+        &[-1522.2782, -1.00508, 0.0005211, 38733.9481, 293.1133],
+        (288.0, 328.0),
+    );
+}
+
+impl RelativePermittivity for PermittivityNR {
+    fn relative_permittivity(&self, temperature: f64) -> Result<f64> {
+        if temperature < self.temperature_interval.0 || temperature > self.temperature_interval.1 {
+            anyhow::bail!("temperature out of range")
+        }
+        Ok(self.coeffs[0]
+            + self.coeffs[1] * temperature
+            + self.coeffs[2] * temperature.powi(2)
+            + self.coeffs[3] / temperature
+            + self.coeffs[4] * temperature.ln())
+    }
+}
 
 /// Stores information about salts for calculation of Debye screening length etc.
 ///

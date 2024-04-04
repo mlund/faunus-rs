@@ -18,4 +18,12 @@
 mod electrolyte;
 pub mod reaction;
 
-pub use electrolyte::{bjerrum_length, Electrolyte};
+pub use electrolyte::{bjerrum_length, Electrolyte, PermittivityNR};
+
+/// Trait for the relative permittivity
+pub trait RelativePermittivity {
+    /// Relative permittivity of the medium at a given temperature in K
+    /// # Errors
+    /// If the temperature is outside the valid range
+    fn relative_permittivity(&self, temperature: f64) -> anyhow::Result<f64>;
+}
