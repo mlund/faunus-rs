@@ -217,147 +217,37 @@ impl Salt {
     }
 }
 
-/// Stores information about salts for calculation of Debye screening length etc.
-///
-/// In this context a _salt_ is an arbitrary set of cations and anions, combined to form
-/// a net-neutral compound. The object state is _temperature independent_.
-/// The stoichiometry is automatically worked out.
-///
-/// # Example usage:
-/// ~~~
-/// use faunus::chemistry::Electrolyte;
-/// let molarity = 0.1;
-/// let salt = Electrolyte::new(molarity, &Electrolyte::SODIUM_CHLORIDE).unwrap();    // Nacl
-/// assert_eq!(salt.ionic_strength, 0.1);
-/// assert_eq!(salt.stoichiometry, [1, 1]);
-/// let alum = Electrolyte::new(molarity, &[1, 3, -2]).unwrap(); // KAl(SO₄)₂
-/// assert_eq!(alum.ionic_strength, 0.9);
-/// assert_eq!(alum.stoichiometry, [1, 1, 2]);
-/// ~~~
-///
-/// # Example valencies:
-///
-/// Salt      | `valencies`
-/// --------- | ---------------------------------
-/// NaCl      | `[1, -1]` or `SODIUM_CHLORIDE`
-/// CaCl₂     | `[2, -1]` or `CALCIUM_CHLORIDE`
-/// KAl(SO₄)₂ | `[1, 3, -2]` or `POTASSIUM_ALUM`
-///
-#[derive(Debug, PartialEq, Clone, Serialize, Deserialize, Default)]
-pub struct Electrolyte {
-    /// Molar salt concentration
-    pub molarity: f64,
-    /// Molar ionic strength
-    pub ionic_strength: f64,
-    /// Valencies for participating ions
-    pub valencies: Vec<isize>,
-    /// Stoichiometric coefficients for participating ions
-    pub stoichiometry: Vec<usize>,
-}
-
-impl Electrolyte {
-    /// Valencies for sodium chloride, NaCl
-    pub const SODIUM_CHLORIDE: [isize; 2] = [1, -1];
-    /// Valencies for calcium chloride, CaCl₂
-    pub const CALCIUM_CHLORIDE: [isize; 2] = [2, -1];
-    /// Valencies for calcium sulfate, CaSO₄
-    pub const CALCIUM_SULFATE: [isize; 2] = [2, -2];
-    /// Valencies for potassium alum, KAl(SO₄)₂
-    pub const POTASSIUM_ALUM: [isize; 3] = [1, 3, -2];
-    /// Valencies for sodium sulfate, Na₂SO₄
-    pub const SODIUM_SULFATE: [isize; 2] = [1, -2];
-    /// Valencies for lanthanum chloride, LaCl₃
-    pub const LANTHANUM_CHLORIDE: [isize; 2] = [3, -1];
-
-    pub fn new(molarity: f64, valencies: &[isize]) -> Result<Electrolyte> {
-        let sum_positive: isize = valencies.iter().filter(|i| i.is_positive()).sum();
-        let sum_negative: isize = valencies.iter().filter(|i| i.is_negative()).sum();
-        let gcd = num::integer::gcd(sum_positive, sum_negative);
-        if sum_positive == 0 || sum_negative == 0 || gcd == 0 {
-            anyhow::bail!("cannot resolve stoichiometry; did you provide both + and - ions?")
-        }
-
-        let stoichiometry: Vec<usize> = valencies
-            .iter()
-            .map(|valency| {
-                ((match valency.is_positive() {
-                    true => -sum_negative,
-                    false => sum_positive,
-                }) / gcd) as usize
-            })
-            .collect();
-
-        let nu_times_squared_valency_sum: usize = std::iter::zip(valencies, stoichiometry.iter())
-            .map(|(valency, nu)| (*nu * valency.pow(2) as usize))
-            .sum();
-
-        let ionic_strength = 0.5 * molarity * nu_times_squared_valency_sum as f64;
-
-        Ok(Electrolyte {
-            molarity,
-            ionic_strength,
-            valencies: Vec::from(valencies),
-            stoichiometry,
-        })
-    }
-
-    /// Calculates the Debye screening length, given the Bjerrum length (angstrom)
-    pub fn debye_length(&self, bjerrum_length: f64) -> f64 {
-        const LITER_PER_ANGSTROM3: f64 = 1e-27;
-        (8.0 * PI * bjerrum_length * self.ionic_strength * AVOGADRO * LITER_PER_ANGSTROM3)
-            .sqrt()
-            .recip()
-    }
-}
-
 #[test]
-fn test_electrolyte() {
+fn test_salt() {
     let molarity = 0.15;
 
     // NaCl
-    approx::assert_abs_diff_eq!(
-        Electrolyte::new(molarity, &Electrolyte::SODIUM_CHLORIDE)
-            .unwrap()
-            .ionic_strength,
-        molarity
-    );
+    assert_eq!(Salt::SodiumChloride.valencies(), [1, -1]);
+    assert_eq!(Salt::SodiumChloride.stoichiometry(), [1, 1]);
+    approx::assert_abs_diff_eq!(Salt::SodiumChloride.ionic_strength(molarity), molarity);
+
     // CaSO₄
+    assert_eq!(Salt::CalciumSulfate.valencies(), [2, -2]);
+    assert_eq!(Salt::CalciumSulfate.stoichiometry(), [1, 1]);
     approx::assert_abs_diff_eq!(
-        Electrolyte::new(molarity, &Electrolyte::CALCIUM_SULFATE)
-            .unwrap()
-            .ionic_strength,
+        Salt::CalciumSulfate.ionic_strength(molarity),
         0.5 * (molarity * 4.0 + molarity * 4.0)
     );
 
     // CaCl₂
+    assert_eq!(Salt::CalciumChloride.valencies(), [2, -1]);
+    assert_eq!(Salt::CalciumChloride.stoichiometry(), [1, 2]);
     approx::assert_abs_diff_eq!(
-        Electrolyte::new(molarity, &Electrolyte::CALCIUM_CHLORIDE)
-            .unwrap()
-            .ionic_strength,
+        Salt::CalciumChloride.ionic_strength(molarity),
         0.5 * (molarity * 4.0 + 2.0 * molarity)
     );
 
     // KAl(SO₄)₂
+    assert_eq!(Salt::PotassiumAlum.valencies(), [1, 3, -2]);
+    assert_eq!(Salt::PotassiumAlum.stoichiometry(), [1, 1, 2]);
     approx::assert_abs_diff_eq!(
-        Electrolyte::new(molarity, &Electrolyte::POTASSIUM_ALUM)
-            .unwrap()
-            .ionic_strength,
+        Salt::PotassiumAlum.ionic_strength(molarity),
         0.5 * (molarity * 1.0 + molarity * 9.0 + 2.0 * molarity * 4.0)
-    );
-
-    // Invalid combinations
-    assert!(Electrolyte::new(molarity, &[1, 1]).is_err());
-    assert!(Electrolyte::new(molarity, &[-1, -1]).is_err());
-    assert!(Electrolyte::new(molarity, &[0, 0]).is_err());
-    assert!(Electrolyte::new(molarity, &[0, 1]).is_err());
-
-    // Debye length
-    let bjerrum_length = bjerrum_length(293.0, 80.0);
-    assert_eq!(
-        Electrolyte::new(0.03, &[1, -1])
-            .unwrap()
-            .debye_length(bjerrum_length),
-        17.576538097378368
     );
 }
 

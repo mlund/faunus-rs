@@ -4,7 +4,6 @@ use anglescan::structure::AtomKinds;
 use anglescan::structure::Structure;
 use anglescan::Vector3;
 use clap::{Parser, Subcommand};
-use faunus::chemistry::Electrolyte;
 use itertools_num::linspace;
 use rayon::prelude::*;
 use std::path::PathBuf;
