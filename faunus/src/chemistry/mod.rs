@@ -18,7 +18,7 @@
 mod electrolyte;
 pub mod reaction;
 
-pub use electrolyte::{bjerrum_length, Electrolyte, PermittivityNR};
+pub use electrolyte::{bjerrum_length, Electrolyte, PermittivityNR, Salt};
 
 /// Trait for the relative permittivity
 pub trait RelativePermittivity {

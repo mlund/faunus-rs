@@ -34,7 +34,9 @@ use crate::{AVOGADRO, BOLTZMANN, UNIT_CHARGE, VACUUM_PERMITTIVITY};
 /// ~~~
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub struct PermittivityNR {
+    /// Coefficients for the model
     coeffs: [f64; 5],
+    /// Closed temperature interval in which the model is valid
     temperature_interval: (f64, f64),
 }
 
@@ -74,6 +76,97 @@ impl RelativePermittivity for PermittivityNR {
             + self.coeffs[3] / temperature
             + self.coeffs[4] * temperature.ln())
     }
+}
+
+/// Enum for common salts as well as with custom valencies
+///
+/// # Examples:
+/// ~~~
+/// use faunus::chemistry::Salt;
+/// let molarity = 0.1;
+///
+/// let salt = Salt::SodiumChloride; // Nacl
+/// assert_eq!(salt.ionic_strength(molarity).unwrap(), 0.1);
+/// assert_eq!(salt.stoichiometry().unwrap(), [1, 1]);
+///
+/// let alum = Salt::Custom(vec![1, 3, -2]); // KAl(SO₄)₂
+/// assert_eq!(alum.ionic_strength(molarity).unwrap(), 0.9);
+/// assert_eq!(alum.stoichiometry().unwrap(), [1, 1, 2]);
+/// ~~~
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize, Default)]
+pub enum Salt {
+    /// Sodium chloride, NaCl (default)
+    #[serde(rename = "NaCl")]
+    #[default]
+    SodiumChloride,
+    /// Calcium chloride, CaCl₂
+    #[serde(rename = "CaCl₂")]
+    CalciumChloride,
+    /// Calcium sulfate, CaSO₄
+    #[serde(rename = "CaSO₄")]
+    CalciumSulfate,
+    /// Potassium alum, KAl(SO₄)₂
+    #[serde(rename = "KAl(SO₄)₂")]
+    PotassiumAlum,
+    /// Sodium sulfate, Na₂SO₄
+    #[serde(rename = "Na₂SO₄")]
+    SodiumSulfate,
+    /// Lanthanum chloride, LaCl₃
+    #[serde(rename = "LaCl₃")]
+    LanthanumChloride,
+    /// Salt with custom valencies
+    Custom(Vec<isize>),
+}
+
+impl Salt {
+    /// Valencies of participating ions, zᵢ
+    pub fn valencies(&self) -> Vec<isize> {
+        match self {
+            Salt::SodiumChloride => vec![1, -1],
+            Salt::CalciumChloride => vec![2, -1],
+            Salt::CalciumSulfate => vec![2, -2],
+            Salt::PotassiumAlum => vec![1, 3, -2],
+            Salt::SodiumSulfate => vec![1, -2],
+            Salt::LanthanumChloride => vec![3, -1],
+            Salt::Custom(valencies) => valencies.clone(),
+        }
+    }
+
+    /// Deduce stoichiometry of the salt, νᵢ
+    pub fn stoichiometry(&self) -> Result<Vec<usize>> {
+        let valencies = self.valencies();
+        let sum_positive: isize = valencies.iter().filter(|i| i.is_positive()).sum();
+        let sum_negative: isize = valencies.iter().filter(|i| i.is_negative()).sum();
+        let gcd = num::integer::gcd(sum_positive, sum_negative);
+        if sum_positive == 0 || sum_negative == 0 || gcd == 0 {
+            anyhow::bail!("cannot resolve stoichiometry; did you provide both + and - ions?")
+        }
+        Ok(valencies
+            .iter()
+            .map(|valency| {
+                ((match valency.is_positive() {
+                    true => -sum_negative,
+                    false => sum_positive,
+                }) / gcd) as usize
+            })
+            .collect())
+    }
+
+    /// Calculate ionic strength from the salt molarity (mol/l), I=½m∑(νᵢzᵢ²)
+    pub fn ionic_strength(&self, molarity: f64) -> Result<f64> {
+        let nu_times_squared_valency_sum: usize =
+            std::iter::zip(self.valencies(), self.stoichiometry()?.iter())
+                .map(|(valency, nu)| (*nu * valency.pow(2) as usize))
+                .sum();
+        Ok(0.5 * molarity * nu_times_squared_valency_sum as f64)
+    }
+}
+
+pub struct NewElectrolyte {
+    /// Salt molarity (mol/l) or none if salt-free
+    molarity: Option<f64>,
+    salt: Option<Salt>,
+    relative_permittivity: Box<dyn RelativePermittivity>,
 }
 
 /// Stores information about salts for calculation of Debye screening length etc.
