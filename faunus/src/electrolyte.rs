@@ -14,10 +14,10 @@
 
 //! # Support for handling electrolyte solutions
 
-use anyhow::Result;
 use crate::{
     AVOGADRO_CONSTANT, BOLTZMANN_CONSTANT, ELEMENTARY_CHARGE, VACUUM_ELECTRIC_PERMITTIVITY,
 };
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::f64::consts::PI;
 
@@ -76,7 +76,7 @@ pub trait DebyeLength: IonicStrength + RelativePermittivity + Temperature {
 ///
 /// # Example
 /// ~~~
-/// use faunus::chemistry::{PermittivityNR, RelativePermittivity};
+/// use faunus::electrolyte::{PermittivityNR, RelativePermittivity};
 /// assert_eq!(PermittivityNR::WATER.permittivity(298.15).unwrap(), 78.35565171480539);
 /// assert_eq!(PermittivityNR::METHANOL.permittivity(298.15).unwrap(), 33.081980713895064);
 /// assert_eq!(PermittivityNR::ETHANOL.permittivity(298.15).unwrap(), 24.33523434183735);
@@ -144,7 +144,7 @@ impl RelativePermittivity for PermittivityNR {
 ///
 /// # Examples:
 /// ~~~
-/// use faunus::chemistry::Salt;
+/// use faunus::electrolyte::Salt;
 /// let molarity = 0.1;
 ///
 /// let salt = Salt::SodiumChloride;
@@ -270,7 +270,7 @@ fn test_salt() {
 ///
 /// # Examples
 /// ~~~
-/// use faunus::chemistry::{Medium, Salt, DebyeLength, RelativePermittivity, IonicStrength};
+/// use faunus::electrolyte::{Medium, Salt, DebyeLength, RelativePermittivity, IonicStrength};
 /// let medium = Medium::neat_water(298.15);
 /// assert_eq!(medium.permittivity(298.15).unwrap(), 78.35565171480539);
 /// assert_eq!(medium.ionic_strength(), 0.0);
@@ -367,7 +367,7 @@ impl IonicStrength for Medium {
 ///
 /// # Examples
 /// ~~~
-/// use faunus::chemistry::bjerrum_length;
+/// use faunus::electrolyte::bjerrum_length;
 /// let lB = bjerrum_length(293.0, 80.0); // angstroms
 /// assert_eq!(lB, 7.1288799871283);
 /// ~~~
@@ -386,7 +386,7 @@ pub fn bjerrum_length(kelvin: f64, relative_dielectric_const: f64) -> f64 {
 ///
 /// # Examples
 /// ~~~
-/// use faunus::chemistry::debye_length;
+/// use faunus::electrolyte::debye_length;
 /// let molarity = 0.03;                              // mol/l
 /// let lambda = debye_length(293.0, 80.0, molarity); // angstroms
 /// assert_eq!(lambda, 17.576538097378368);

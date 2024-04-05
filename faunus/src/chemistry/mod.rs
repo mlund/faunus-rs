@@ -15,10 +15,4 @@
 //! # Chemistry module
 //!
 //! This contains support for chemical systems, including electrolyte solutions.
-mod electrolyte;
 pub mod reaction;
-
-pub use electrolyte::{
-    bjerrum_length, debye_length, DebyeLength, IonicStrength, Medium, PermittivityNR,
-    RelativePermittivity, Salt,
-};

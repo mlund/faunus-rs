@@ -4,7 +4,7 @@ use anglescan::structure::AtomKinds;
 use anglescan::structure::Structure;
 use anglescan::Vector3;
 use clap::{Parser, Subcommand};
-use faunus::chemistry::{DebyeLength, Medium, Salt};
+use faunus::electrolyte::{DebyeLength, Medium, Salt};
 use itertools_num::linspace;
 use rayon::prelude::*;
 use std::path::PathBuf;

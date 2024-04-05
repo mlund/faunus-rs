@@ -37,6 +37,7 @@ pub mod group;
 pub mod montecarlo;
 pub mod platform;
 pub mod time;
+pub mod electrolyte;
 pub mod topology;
 pub mod transform;
 
