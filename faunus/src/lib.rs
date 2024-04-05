@@ -40,9 +40,8 @@ pub mod time;
 pub mod topology;
 pub mod transform;
 
-pub use physical_constants::{
-    AVOGADRO_CONSTANT, BOLTZMANN_CONSTANT, ELEMENTARY_CHARGE, MOLAR_GAS_CONSTANT,
-    VACUUM_ELECTRIC_PERMITTIVITY,
+use physical_constants::{
+    AVOGADRO_CONSTANT, BOLTZMANN_CONSTANT, ELEMENTARY_CHARGE, VACUUM_ELECTRIC_PERMITTIVITY,
 };
 
 trait PointParticle {

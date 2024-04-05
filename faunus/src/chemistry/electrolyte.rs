@@ -15,7 +15,7 @@
 //! # Support for handling electrolyte solutions
 
 use anyhow::Result;
-use physical_constants::{
+use crate::{
     AVOGADRO_CONSTANT, BOLTZMANN_CONSTANT, ELEMENTARY_CHARGE, VACUUM_ELECTRIC_PERMITTIVITY,
 };
 use serde::{Deserialize, Serialize};
