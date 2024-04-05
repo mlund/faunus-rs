@@ -40,16 +40,10 @@ pub mod time;
 pub mod topology;
 pub mod transform;
 
-/// Boltzmann constant in J/K
-pub const BOLTZMANN: f64 = 1.380649e-23;
-/// Avogadro's number in 1/mol
-pub const AVOGADRO: f64 = 6.02214076e23;
-/// Gas constant in J/(mol K)
-pub const MOLAR_GAS_CONSTANT: f64 = BOLTZMANN * AVOGADRO;
-/// Electron unit charge in C
-pub const UNIT_CHARGE: f64 = 1.602176634e-19;
-/// Vacuum permittivity in F/m
-pub const VACUUM_PERMITTIVITY: f64 = 8.8541878128e-12;
+pub use physical_constants::{
+    AVOGADRO_CONSTANT, BOLTZMANN_CONSTANT, ELEMENTARY_CHARGE, MOLAR_GAS_CONSTANT,
+    VACUUM_ELECTRIC_PERMITTIVITY,
+};
 
 trait PointParticle {
     /// Type of the particle identifier
@@ -127,11 +121,13 @@ pub trait Context: GroupCollection + Clone + std::fmt::Debug + Sized + SyncFrom 
 }
 
 /// A trait for objects that have a temperature
-pub trait HasTemperature {
+pub trait Temperature {
     /// Get the temperature in K
     fn temperature(&self) -> f64;
     /// Set the temperature in K
     fn set_temperature(&mut self, _temperature: f64) -> anyhow::Result<()> {
-        Err(anyhow::anyhow!("Temperature setting not implemented"))
+        Err(anyhow::anyhow!(
+            "Setting the temperature is not implemented"
+        ))
     }
 }

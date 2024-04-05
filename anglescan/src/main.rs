@@ -70,8 +70,7 @@ fn main() {
 
             let temperature = 298.15; // K
             let molarity = 0.1; // mol/l
-            let medium = Medium::with_salt_water(Salt::SodiumChloride, molarity, temperature);
-            let _bjerrum_length = interact::BJERRUM_LEN_VACUUM_298K / 80.0;
+            let medium = Medium::salt_water(temperature, Salt::SodiumChloride, molarity);
             let debye_length = medium.debye_length().unwrap();
             info!("Debye length: {:.2} angstrom", debye_length);
 

@@ -15,12 +15,13 @@
 //! # Support for handling electrolyte solutions
 
 use anyhow::Result;
+use physical_constants::{
+    AVOGADRO_CONSTANT, BOLTZMANN_CONSTANT, ELEMENTARY_CHARGE, VACUUM_ELECTRIC_PERMITTIVITY,
+};
 use serde::{Deserialize, Serialize};
 use std::f64::consts::PI;
 
-use crate::HasTemperature;
-use crate::{AVOGADRO, BOLTZMANN, UNIT_CHARGE, VACUUM_PERMITTIVITY};
-use physical_constants::MOLAR_GAS_CONSTANT;
+use crate::Temperature;
 
 /// Trait for objects that has a relative permittivity
 pub trait RelativePermittivity {
@@ -45,23 +46,17 @@ pub trait IonicStrength {
 }
 
 /// Trait for objects where a Debye length can be calculated
-pub trait DebyeLength: IonicStrength + RelativePermittivity + HasTemperature {
+pub trait DebyeLength: IonicStrength + RelativePermittivity + Temperature {
     /// # Debye length in angstrom or `None` if the ionic strength is zero.
     ///
     /// May perform expensive operations so avoid use in speed critical code,
     /// such as inside tight interaction loops.
     fn debye_length(&self) -> Option<f64> {
-        const ANGSTROM_PER_METER: f64 = 1e10;
         let temperature = self.temperature();
         let permittivity = self.permittivity(temperature).unwrap();
         let ionic_strength = self.ionic_strength();
         if ionic_strength > 0.0 {
-            let debye_length =
-                (8.0 * VACUUM_PERMITTIVITY * permittivity * MOLAR_GAS_CONSTANT * temperature
-                    / (ionic_strength * UNIT_CHARGE.powi(2)))
-                .sqrt()
-                    * ANGSTROM_PER_METER;
-            Some(debye_length)
+            Some(debye_length(temperature, permittivity, ionic_strength))
         } else {
             None
         }
@@ -266,7 +261,7 @@ fn test_salt() {
 /// # Medium such as water or a salt solution
 ///
 /// Stores the following properties from which ionic strength,
-/// Debye and Bjerrums lengths can be calculated:
+/// Debye and Bjerrum lengths can be obtained through traits:
 ///
 /// - Relative permittivity
 /// - Salt type
@@ -276,15 +271,15 @@ fn test_salt() {
 /// # Examples
 /// ~~~
 /// use faunus::chemistry::{Medium, Salt, DebyeLength, RelativePermittivity, IonicStrength};
-/// let medium = Medium::with_neat_water(298.15);
+/// let medium = Medium::neat_water(298.15);
 /// assert_eq!(medium.permittivity(298.15).unwrap(), 78.35565171480539);
 /// assert_eq!(medium.ionic_strength(), 0.0);
 /// assert!(medium.debye_length().is_none());
 ///
-/// let medium = Medium::with_salt_water(Salt::CalciumChloride, 0.1, 298.15);
+/// let medium = Medium::salt_water(298.15, Salt::CalciumChloride, 0.1);
 /// assert_eq!(medium.permittivity(298.15).unwrap(), 78.35565171480539);
 /// approx::assert_abs_diff_eq!(medium.ionic_strength(), 0.3);
-/// approx::assert_abs_diff_eq!(medium.debye_length().unwrap(), 4.226861330619744e26);
+/// approx::assert_abs_diff_eq!(medium.debye_length().unwrap(), 5.548902662386284);
 /// ~~~
 pub struct Medium {
     /// Relative permittivity of the medium
@@ -302,10 +297,10 @@ impl DebyeLength for Medium {}
 impl Medium {
     /// Creates a new medium
     pub fn new(
-        salt: Option<Salt>,
-        molarity: f64,
         temperature: f64,
         permittivity: Box<dyn RelativePermittivity>,
+        molarity: f64,
+        salt: Option<Salt>,
     ) -> Self {
         Self {
             permittivity,
@@ -315,7 +310,7 @@ impl Medium {
         }
     }
     /// Medium with neat water using the `PermittivityNR::WATER` model
-    pub fn with_neat_water(temperature: f64) -> Self {
+    pub fn neat_water(temperature: f64) -> Self {
         Self {
             permittivity: Box::new(PermittivityNR::WATER),
             salt: None,
@@ -324,7 +319,7 @@ impl Medium {
         }
     }
     /// Medium with salt water using the `PermittivityNR::WATER` model
-    pub fn with_salt_water(salt: Salt, molarity: f64, temperature: f64) -> Self {
+    pub fn salt_water(temperature: f64, salt: Salt, molarity: f64) -> Self {
         Self {
             permittivity: Box::new(PermittivityNR::WATER),
             salt: Some(salt),
@@ -343,7 +338,7 @@ impl Medium {
     }
 }
 
-impl HasTemperature for Medium {
+impl Temperature for Medium {
     fn temperature(&self) -> f64 {
         self.temperature
     }
@@ -378,8 +373,13 @@ impl IonicStrength for Medium {
 /// ~~~
 pub fn bjerrum_length(kelvin: f64, relative_dielectric_const: f64) -> f64 {
     const ANGSTROM_PER_METER: f64 = 1e10;
-    UNIT_CHARGE.powi(2) * ANGSTROM_PER_METER
-        / (4.0 * PI * relative_dielectric_const * VACUUM_PERMITTIVITY * BOLTZMANN * kelvin)
+    ELEMENTARY_CHARGE.powi(2) * ANGSTROM_PER_METER
+        / (4.0
+            * PI
+            * relative_dielectric_const
+            * VACUUM_ELECTRIC_PERMITTIVITY
+            * BOLTZMANN_CONSTANT
+            * kelvin)
 }
 
 /// Calculates the Debye length in angstrom, λD = sqrt(8πlB·I·N·V)⁻¹, where I is the ionic strength in molar units (mol/l).
@@ -396,7 +396,7 @@ pub fn debye_length(kelvin: f64, relative_dielectric_const: f64, ionic_strength:
     (8.0 * PI
         * bjerrum_length(kelvin, relative_dielectric_const)
         * ionic_strength
-        * AVOGADRO
+        * AVOGADRO_CONSTANT
         * LITER_PER_ANGSTROM3)
         .sqrt()
         .recip()
