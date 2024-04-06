@@ -258,7 +258,7 @@ fn test_salt() {
     );
 }
 
-/// # Medium such as water or a salt solution
+/// # Implicit solvent medium such as water or a salt solution
 ///
 /// Stores the following properties from which ionic strength,
 /// Debye and Bjerrum lengths can be obtained through traits:
