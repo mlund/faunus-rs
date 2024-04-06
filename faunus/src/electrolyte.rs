@@ -18,6 +18,7 @@ use crate::{
     AVOGADRO_CONSTANT, BOLTZMANN_CONSTANT, ELEMENTARY_CHARGE, VACUUM_ELECTRIC_PERMITTIVITY,
 };
 use anyhow::Result;
+use core::fmt::{Display, Formatter};
 use serde::{Deserialize, Serialize};
 use std::f64::consts::PI;
 
@@ -221,6 +222,29 @@ impl Salt {
             * std::iter::zip(self.valencies(), self.stoichiometry().iter().copied())
                 .map(|(valency, nu)| (nu * valency.pow(2) as usize))
                 .sum::<usize>() as f64
+    }
+}
+
+impl Display for Salt {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Salt::SodiumChloride => write!(f, "NaCl🧂"),
+            Salt::CalciumChloride => write!(f, "CaCl₂"),
+            Salt::CalciumSulfate => write!(f, "CaSO₄"),
+            Salt::PotassiumAlum => write!(f, "KAl(SO₄)₂"),
+            Salt::SodiumSulfate => write!(f, "Na₂SO₄"),
+            Salt::LanthanumChloride => write!(f, "LaCl₃"),
+            Salt::Custom(valencies) => {
+                write!(f, "Custom(")?;
+                for (i, valency) in valencies.iter().enumerate() {
+                    write!(f, "{}", valency)?;
+                    if i < valencies.len() - 1 {
+                        write!(f, ", ")?;
+                    }
+                }
+                write!(f, ")")
+            }
+        }
     }
 }
 

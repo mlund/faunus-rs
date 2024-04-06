@@ -9,7 +9,8 @@ use itertools_num::linspace;
 use rayon::prelude::*;
 use std::path::PathBuf;
 extern crate pretty_env_logger;
-use log::{debug, info};
+#[macro_use]
+extern crate log;
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -43,6 +44,9 @@ enum Commands {
         /// YAML file with atom definitions
         #[arg(short = 'a', long)]
         atoms: PathBuf,
+        /// Salt molarity in mol/l
+        #[arg(short = 'M', long, default_value = "0.1")]
+        molarity: f64,
     },
 }
 
@@ -59,17 +63,19 @@ fn main() {
             rmax,
             dr,
             atoms,
+            molarity,
         }) => {
             assert!(rmin < rmax);
             let mut atomkinds = AtomKinds::from_yaml(&atoms).unwrap();
-            atomkinds.set_default_epsilon(0.05 * 2.45);
+            atomkinds.set_default_epsilon(0.0); //0.05 * 2.45);
             let ref_a = Structure::from_xyz(&mol1, &atomkinds);
+            debug!("{}", ref_a);
             let ref_b = Structure::from_xyz(&mol2, &atomkinds);
+            debug!("{}", ref_b);
             let scan = TwobodyAngles::new(resolution);
-            println!("{} per distance", scan);
+            info!("{} per distance", scan);
 
             let temperature = 298.15; // K
-            let molarity = 0.1; // mol/l
             let medium = Medium::salt_water(temperature, Salt::SodiumChloride, molarity);
             let debye_length = medium.debye_length().unwrap();
             info!("Debye length: {:.2} angstrom", debye_length);
@@ -83,7 +89,7 @@ fn main() {
                 let r_vec = Vector3::<f64>::new(0.0, 0.0, *r);
                 let mut a = ref_a.clone();
                 let mut b = ref_b.clone();
-                let sum: f64 = scan
+                let energy: f64 = scan
                     .iter()
                     .map(|(q1, q2)| {
                         a.positions = ref_a.positions.iter().map(|pos| q1 * pos).collect();
@@ -92,10 +98,19 @@ fn main() {
                             .iter()
                             .map(|pos| (q2 * pos) + r_vec)
                             .collect();
-                        pair_matrix.sum_energy(&a, &b)
+                        let com_distance = &b.mass_center() - &a.mass_center();
+                        trace!(
+                            "com_distance = {:.2}, {:?}",
+                            com_distance.norm(),
+                            com_distance
+                        );
+                        let energy = pair_matrix.sum_energy(&a, &b);
+                        let exp_energy = (-energy / faunus::BOLTZMANN_CONSTANT / temperature).exp();
+                        energy
                     })
-                    .sum();
-                println!("distance = {:.2}, energy: {:.2}", r, sum);
+                    .sum::<f64>()
+                    / scan.len() as f64;
+                println!("distance = {:.2}, energy: {:.2}", r, energy);
             })
         }
         None => {

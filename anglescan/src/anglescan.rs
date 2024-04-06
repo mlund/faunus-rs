@@ -71,6 +71,10 @@ impl TwobodyAngles {
             .map(|(&i, &j)| i * j);
         self.q1.iter().cloned().cartesian_product(dihedral_x_q2)
     }
+    /// Total length of the iterator
+    pub fn len(&self) -> usize {
+        self.q1.len() * self.q2.len() * self.dihedrals.len()
+    }
 }
 
 // pub fn info(&self, points_on_sphere: Vec<Vector3>) {
@@ -114,6 +118,7 @@ mod tests {
         let twobody_angles = TwobodyAngles::new(1.1);
         let n = twobody_angles.q1.len() * twobody_angles.q2.len() * twobody_angles.dihedrals.len();
         assert_eq!(n, 600);
+        assert_eq!(twobody_angles.len(), n);
         assert_eq!(twobody_angles.iter().count(), n);
 
         let pairs = twobody_angles.iter().collect::<Vec<_>>();

@@ -3,6 +3,7 @@ use anyhow::Result;
 use chemfiles::Frame;
 use faunus::topology::AtomKind;
 use serde::{Deserialize, Serialize};
+use std::fmt::{self, Display, Formatter};
 use std::path::PathBuf;
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -269,6 +270,23 @@ impl Structure {
         self.positions
             .iter_mut()
             .for_each(|pos| *pos += displacement);
+    }
+    /// Net charge of the structure
+    pub fn net_charge(&self) -> f64 {
+        self.charges.iter().sum()
+    }
+}
+
+/// Display number of atoms, mass center etc.
+impl Display for Structure {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        write!(
+            f,
+            "{} atoms, mass center: {:?}, net charge: {}",
+            self.positions.len(),
+            self.mass_center(),
+            self.net_charge()
+        )
     }
 }
 
