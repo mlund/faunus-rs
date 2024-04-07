@@ -5,7 +5,7 @@ use anglescan::structure::Structure;
 use anglescan::Vector3;
 use clap::{Parser, Subcommand};
 use faunus::electrolyte::{DebyeLength, Medium, Salt};
-use itertools_num::linspace;
+use iter_num_tools::arange;
 use rayon::prelude::*;
 use std::iter::Sum;
 use std::ops::Add;
@@ -62,6 +62,8 @@ enum Commands {
 /// Structure to store energy samples
 #[derive(Debug, Default, Clone)]
 struct Sample {
+    /// Number of samples
+    n: u64,
     /// Thermal energy, RT in kJ/mol
     thermal_energy: f64,
     /// Boltzmann weighted energy, U * exp(-U/kT)
@@ -76,6 +78,7 @@ impl Sample {
         let thermal_energy = faunus::MOLAR_GAS_CONSTANT * temperature * 1e-3; // kJ/mol
         let exp_energy = (-energy / thermal_energy).exp();
         Self {
+            n: 1,
             thermal_energy,
             mean_energy: energy * exp_energy,
             exp_energy,
@@ -87,7 +90,7 @@ impl Sample {
     }
     /// Free energy (kJ / mol)
     pub fn free_energy(&self) -> f64 {
-        self.exp_energy.ln().neg() * self.thermal_energy
+        (self.exp_energy / self.n as f64).ln().neg() * self.thermal_energy
     }
 }
 
@@ -102,6 +105,7 @@ impl Add for Sample {
 
     fn add(self, other: Self) -> Self {
         Self {
+            n: self.n + other.n,
             thermal_energy: f64::max(self.thermal_energy, other.thermal_energy),
             mean_energy: self.mean_energy + other.mean_energy,
             exp_energy: self.exp_energy + other.exp_energy,
@@ -142,14 +146,15 @@ fn main() {
             let multipole = interact::multipole::Coulomb::new(cutoff, medium.debye_length());
             let pair_matrix = energy::PairMatrix::new(&atomkinds.atomlist, &multipole);
 
-            linspace(rmin, rmax, ((rmax - rmin) / dr) as usize)
+            // Scan over mass center distances
+            arange(rmin..rmax, dr)
                 .collect::<Vec<_>>()
                 .par_iter()
                 .map(|r| Vector3::<f64>::new(0.0, 0.0, *r))
                 .for_each(|r| {
                     let mut a = ref_a.clone();
                     let mut b = ref_b.clone();
-                    let samples: Sample = scan
+                    let samples: Sample = scan // Scan over angles
                         .iter()
                         .map(|(q1, q2)| {
                             a.pos = ref_a.pos.iter().map(|pos| q1 * pos).collect();
@@ -158,7 +163,7 @@ fn main() {
                         })
                         .sum();
                     println!(
-                        "R = {:.2} Å, ❬U❭ = {:.2} kT, w = {:.2} kT",
+                        "R = {:.2} Å, ❬U❭/kT = {:.2}, w/kT = {:.2}",
                         r.norm(),
                         samples.mean_energy() / samples.thermal_energy,
                         samples.free_energy() / samples.thermal_energy
