@@ -151,11 +151,11 @@ fn do_scan(scan_command: &Commands) {
         .par_iter()
         .progress_count(distances.len() as u64)
         .map(|r| Vector3::<f64>::new(0.0, 0.0, *r))
-        .for_each(|r| {
+        .map(|r| {
             let mut a = ref_a.clone();
             let mut b = ref_b.clone();
             let mut file = std::fs::File::create(format!("R_{:.1}.dat", r.norm())).unwrap();
-            let samples: Sample = scan // Scan over angles
+            let sample = scan // Scan over angles
                 .iter()
                 .map(|(q1, q2)| {
                     a.pos = ref_a.pos.iter().map(|pos| q1 * pos).collect();
@@ -165,7 +165,18 @@ fn do_scan(scan_command: &Commands) {
                     Sample::new(energy, *temperature)
                 })
                 .sum::<Sample>();
+            (r, sample)
         })
+        .collect::<Vec<_>>()
+        .iter()
+        .for_each(|(r, sample)| {
+            println!(
+                "R/Å = {:.2} nm, ❬βF❭ = {:.2}, ❬βU❭ = {:.2}",
+                r.norm(),
+                sample.free_energy() / sample.thermal_energy,
+                sample.mean_energy() / sample.thermal_energy,
+            );
+        });
 }
 fn main() {
     pretty_env_logger::init();
