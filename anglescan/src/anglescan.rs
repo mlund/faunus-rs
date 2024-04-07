@@ -76,6 +76,11 @@ impl TwobodyAngles {
     pub fn len(&self) -> usize {
         self.q1.len() * self.q2.len() * self.dihedrals.len()
     }
+
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
 }
 
 /// Generates n points uniformly distributed on a unit sphere

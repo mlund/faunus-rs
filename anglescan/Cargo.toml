@@ -24,3 +24,4 @@ log = "0.4"
 average = "0.15.0"
 iter_num_tools = "0.7.1"
 indicatif = {version = "*", features = ["rayon"]}
+flate2 = "1.0.28"
