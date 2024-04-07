@@ -373,7 +373,7 @@ impl Display for Medium {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "Medium(𝑇={:.2} K, εᵣ={:.1}, 𝐼={:.2} M, λᴮ={:.1} Å, λᴰ={:.1} Å)",
+            "Medium: 𝑇 = {:.2} K, εᵣ = {:.1}, 𝐼 = {:.2} mol/l, λᴮ = {:.1} Å, λᴰ = {:.1} Å",
             self.temperature,
             self.permittivity.permittivity(self.temperature).unwrap(),
             self.ionic_strength(),
