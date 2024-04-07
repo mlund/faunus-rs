@@ -5,7 +5,9 @@ use anglescan::structure::Structure;
 use anglescan::Vector3;
 use clap::{Parser, Subcommand};
 use faunus::electrolyte::{DebyeLength, Medium, Salt};
+use indicatif::ParallelProgressIterator;
 use iter_num_tools::arange;
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use rayon::prelude::*;
 use std::iter::Sum;
 use std::ops::Add;
@@ -113,63 +115,68 @@ impl Add for Sample {
     }
 }
 
+/// Calculate energy of all two-body poses
+fn do_scan(scan_command: &Commands) {
+    let Commands::Scan {
+        mol1,
+        mol2,
+        resolution,
+        rmin,
+        rmax,
+        dr,
+        atoms,
+        molarity,
+        cutoff,
+        temperature,
+    } = scan_command;
+    assert!(rmin < rmax);
+    let mut atomkinds = AtomKinds::from_yaml(&atoms).unwrap();
+    atomkinds.set_default_epsilon(0.05 * 2.45);
+    let scan = TwobodyAngles::new(*resolution);
+    let medium = Medium::salt_water(*temperature, Salt::SodiumChloride, *molarity);
+    let multipole = interact::multipole::Coulomb::new(*cutoff, medium.debye_length());
+    let pair_matrix = energy::PairMatrix::new(&atomkinds.atomlist, &multipole);
+    let ref_a = Structure::from_xyz(&mol1, &atomkinds);
+    let ref_b = Structure::from_xyz(&mol2, &atomkinds);
+
+    debug!("{}", ref_a);
+    debug!("{}", ref_b);
+    info!("{} per distance", scan);
+    info!("{}", medium);
+
+    // Scan over mass center distances
+    let distances: Vec<f64> = arange(*rmin..*rmax, *dr).collect::<Vec<_>>();
+    distances
+        .par_iter()
+        .map(|r| Vector3::<f64>::new(0.0, 0.0, *r))
+        .progress_count(distances.len() as u64)
+        .for_each(|r| {
+            let mut a = ref_a.clone();
+            let mut b = ref_b.clone();
+            let samples: Sample = scan // Scan over angles
+                .iter()
+                .map(|(q1, q2)| {
+                    a.pos = ref_a.pos.iter().map(|pos| q1 * pos).collect();
+                    b.pos = ref_b.pos.iter().map(|pos| (q2 * pos) + r).collect();
+                    Sample::new(pair_matrix.sum_energy(&a, &b), *temperature)
+                })
+                .sum();
+            println!(
+                "R = {:.2} Å, ❬U❭/kT = {:.2}, w/kT = {:.2}",
+                r.norm(),
+                samples.mean_energy() / samples.thermal_energy,
+                samples.free_energy() / samples.thermal_energy
+            );
+        })
+}
 fn main() {
     pretty_env_logger::init();
 
     let cli = Cli::parse();
     match cli.command {
-        Some(Commands::Scan {
-            mol1,
-            mol2,
-            resolution,
-            rmin,
-            rmax,
-            dr,
-            atoms,
-            molarity,
-            cutoff,
-            temperature,
-        }) => {
-            assert!(rmin < rmax);
-            let mut atomkinds = AtomKinds::from_yaml(&atoms).unwrap();
-            atomkinds.set_default_epsilon(0.05 * 2.45);
-            let scan = TwobodyAngles::new(resolution);
-            let ref_a = Structure::from_xyz(&mol1, &atomkinds);
-            let ref_b = Structure::from_xyz(&mol2, &atomkinds);
-            debug!("{}", ref_a);
-            debug!("{}", ref_b);
-            info!("{} per distance", scan);
-
-            let medium = Medium::salt_water(temperature, Salt::SodiumChloride, molarity);
-            info!("{}", medium);
-
-            let multipole = interact::multipole::Coulomb::new(cutoff, medium.debye_length());
-            let pair_matrix = energy::PairMatrix::new(&atomkinds.atomlist, &multipole);
-
-            // Scan over mass center distances
-            arange(rmin..rmax, dr)
-                .collect::<Vec<_>>()
-                .par_iter()
-                .map(|r| Vector3::<f64>::new(0.0, 0.0, *r))
-                .for_each(|r| {
-                    let mut a = ref_a.clone();
-                    let mut b = ref_b.clone();
-                    let samples: Sample = scan // Scan over angles
-                        .iter()
-                        .map(|(q1, q2)| {
-                            a.pos = ref_a.pos.iter().map(|pos| q1 * pos).collect();
-                            b.pos = ref_b.pos.iter().map(|pos| (q2 * pos) + r).collect();
-                            Sample::new(pair_matrix.sum_energy(&a, &b), temperature)
-                        })
-                        .sum();
-                    println!(
-                        "R = {:.2} Å, ❬U❭/kT = {:.2}, w/kT = {:.2}",
-                        r.norm(),
-                        samples.mean_energy() / samples.thermal_energy,
-                        samples.free_energy() / samples.thermal_energy
-                    );
-                })
-        }
+        Some(cmd) => match cmd {
+            Commands::Scan { .. } => do_scan(&cmd),
+        },
         None => {
             println!("No command given");
         }
