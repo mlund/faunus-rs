@@ -4,7 +4,9 @@ extern crate approx;
 use approx::assert_relative_eq;
 use itertools::Itertools;
 use itertools_num::linspace;
+use std::f64::consts::PI;
 use std::fmt::Display;
+use std::io::Write;
 
 pub type Vector3 = nalgebra::Vector3<f64>;
 pub type UnitQuaternion = nalgebra::UnitQuaternion<f64>;
@@ -34,7 +36,6 @@ impl TwobodyAngles {
     /// # Arguments
     /// angle_resolution: f64 - the resolution of the scan in radians
     pub fn new(angle_resolution: f64) -> Self {
-        use std::f64::consts::PI;
         assert!(
             angle_resolution > 0.0,
             "angle_resolution must be greater than 0"
@@ -68,7 +69,7 @@ impl TwobodyAngles {
             .dihedrals
             .iter()
             .cartesian_product(self.q2.iter())
-            .map(|(&i, &j)| i * j);
+            .map(|(&d, &q2)| d * q2);
         self.q1.iter().cloned().cartesian_product(dihedral_x_q2)
     }
     /// Total length of the iterator
@@ -77,36 +78,35 @@ impl TwobodyAngles {
     }
 }
 
-// pub fn info(&self, points_on_sphere: Vec<Vector3>) {
-//     let mut f = std::fs::File::create("fibonacci_points.xyz").unwrap();
-//     f.write_all(format!("# Fibinacci points\n{}\n", points_on_sphere.len()).as_bytes())
-//         .unwrap();
-//     for point in points_on_sphere {
-//         f.write_all(format!("C {}\n", point.transpose()).as_bytes())
-//             .unwrap();
-//     }
-// }
-
 /// Generates n points uniformly distributed on a unit sphere
 ///
 /// Related information:
 /// - https://stackoverflow.com/questions/9600801/evenly-distributing-n-points-on-a-sphere
 /// - https://en.wikipedia.org/wiki/Geodesic_polyhedron
 /// - c++: https://github.com/caosdoar/spheres
-pub fn fibonacci_sphere(n_samples: usize) -> Vec<Vector3> {
-    assert!(n_samples > 1, "samples must be greater than 1");
-    let phi = std::f64::consts::PI * (3.0 - (5.0f64).sqrt()); // golden angle in radians
-    let mut unit_points_on_sphere = Vec::with_capacity(n_samples);
-    for cnt in 0..n_samples {
-        let mut point = Vector3::zeros();
-        point.y = 1.0 - 2.0 * (cnt as f64 / (n_samples - 1) as f64); // y goes from 1 to -1
-        let radius = (1.0 - point.y * point.y).sqrt(); // radius at y
-        let theta = phi * cnt as f64; // golden angle increment
-        point.x = theta.cos() * radius;
-        point.z = theta.sin() * radius;
-        unit_points_on_sphere.push(point.normalize());
+pub fn fibonacci_sphere(n_points: usize) -> Vec<Vector3> {
+    assert!(n_points > 1, "n_points must be greater than 1");
+    let phi = PI * (3.0 - (5.0f64).sqrt()); // golden angle in radians
+    let make_ith_point = |i: usize| -> Vector3 {
+        let mut p = Vector3::zeros();
+        p.y = 1.0 - 2.0 * (i as f64 / (n_points - 1) as f64); // y goes from 1 to -1
+        let radius = (1.0 - p.y * p.y).sqrt(); // radius at y
+        let theta = phi * i as f64; // golden angle increment
+        p.x = theta.cos() * radius;
+        p.z = theta.sin() * radius;
+        p.normalize()
+    };
+    (0..n_points).map(make_ith_point).collect()
+}
+
+/// Write positions to a file in XYZ format
+pub fn write_xyz(filename: &str, positions: &[Vector3]) -> std::io::Result<()> {
+    let mut f = std::fs::File::create(filename)?;
+    f.write_all(format!("{}\n\n", positions.len()).as_bytes())?;
+    for pos in positions {
+        f.write_all(format!("C {} {} {}\n", pos.x, pos.y, pos.z).as_bytes())?;
     }
-    unit_points_on_sphere
+    Ok(())
 }
 
 #[cfg(test)]

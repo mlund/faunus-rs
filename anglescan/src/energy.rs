@@ -37,17 +37,18 @@ impl<'a> PairMatrix<'a> {
         Self { matrix }
     }
 
-    // Sum energy between two set of atomic structures
+    // Sum energy between two set of atomic structures (kJ/mol)
     pub fn sum_energy(&self, a: &Structure, b: &Structure) -> f64 {
         let mut energy = 0.0;
-        for i in 0..a.positions.len() {
-            for j in 0..b.positions.len() {
-                let distance_sq = (a.positions[i] - b.positions[j]).norm_squared();
+        for i in 0..a.pos.len() {
+            for j in 0..b.pos.len() {
+                let distance_sq = (a.pos[i] - b.pos[j]).norm_squared();
                 let id_a = a.atom_ids[i];
                 let id_b = b.atom_ids[j];
                 energy += self.matrix[id_a][id_b].isotropic_twobody_energy(distance_sq);
             }
         }
+        trace!("molecule-molecule energy: {:.2} kJ/mol", energy);
         energy
     }
 }

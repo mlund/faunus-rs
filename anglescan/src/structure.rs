@@ -97,7 +97,7 @@ impl AminoAcidModelRecord {
 #[derive(Debug, Clone)]
 pub struct Structure {
     /// Particle positions
-    pub positions: Vec<Vector3<f64>>,
+    pub pos: Vec<Vector3<f64>>,
     /// Particle masses
     pub masses: Vec<f64>,
     /// Particle charges
@@ -177,7 +177,7 @@ impl Structure {
             })
             .collect();
         let mut structure = Self {
-            positions: nxyz.iter().map(|(_, pos)| *pos).collect(),
+            pos: nxyz.iter().map(|(_, pos)| *pos).collect(),
             masses,
             charges,
             radii,
@@ -208,7 +208,7 @@ impl Structure {
             .collect();
 
         let mut structure = Self {
-            positions: aam.iter().map(|i| i.pos).collect(),
+            pos: aam.iter().map(|i| i.pos).collect(),
             masses: aam.iter().map(|i| i.mass).collect(),
             charges: aam.iter().map(|i| i.charge).collect(),
             radii: aam.iter().map(|i| i.radius).collect(),
@@ -244,7 +244,7 @@ impl Structure {
             })
             .collect::<Vec<usize>>();
         let mut structure = Self {
-            positions,
+            pos: positions,
             masses,
             charges: vec![0.0; frame.size()],
             radii: vec![0.0; frame.size()],
@@ -258,7 +258,7 @@ impl Structure {
     /// Returns the center of mass of the structure
     pub fn mass_center(&self) -> Vector3<f64> {
         let total_mass: f64 = self.masses.iter().sum();
-        self.positions
+        self.pos
             .iter()
             .zip(&self.masses)
             .map(|(pos, mass)| pos.scale(*mass))
@@ -267,9 +267,7 @@ impl Structure {
     }
     /// Translates the structure by a displacement vector
     pub fn translate(&mut self, displacement: &Vector3<f64>) {
-        self.positions
-            .iter_mut()
-            .for_each(|pos| *pos += displacement);
+        self.pos.iter_mut().for_each(|pos| *pos += displacement);
     }
     /// Net charge of the structure
     pub fn net_charge(&self) -> f64 {
@@ -283,7 +281,7 @@ impl Display for Structure {
         write!(
             f,
             "{} atoms, mass center: {:?}, net charge: {}",
-            self.positions.len(),
+            self.pos.len(),
             self.mass_center(),
             self.net_charge()
         )

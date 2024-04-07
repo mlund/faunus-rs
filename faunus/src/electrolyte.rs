@@ -360,6 +360,28 @@ impl Medium {
             Err(anyhow::anyhow!("Cannot set molarity without a salt"))
         }
     }
+    /// Bjerrum length in angstrom, lB = e²/4πεkT
+    pub fn bjerrum_length(&self) -> f64 {
+        bjerrum_length(
+            self.temperature,
+            self.permittivity.permittivity(self.temperature).unwrap(),
+        )
+    }
+}
+
+impl Display for Medium {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Medium(T={:.2} K, εᵣ={:.1}, salt={:?}, I={:.2} M, λᴮ={:.1} Å, λᴰ={:.1} Å)",
+            self.temperature,
+            self.permittivity.permittivity(self.temperature).unwrap(),
+            self.salt,
+            self.ionic_strength(),
+            self.bjerrum_length(),
+            self.debye_length().unwrap_or(f64::INFINITY)
+        )
+    }
 }
 
 impl Temperature for Medium {
