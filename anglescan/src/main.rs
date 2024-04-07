@@ -9,6 +9,7 @@ use indicatif::ParallelProgressIterator;
 use iter_num_tools::arange;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use rayon::prelude::*;
+use std::io::Write;
 use std::iter::Sum;
 use std::ops::Add;
 use std::ops::Neg;
@@ -148,25 +149,22 @@ fn do_scan(scan_command: &Commands) {
     let distances: Vec<f64> = arange(*rmin..*rmax, *dr).collect::<Vec<_>>();
     distances
         .par_iter()
-        .map(|r| Vector3::<f64>::new(0.0, 0.0, *r))
         .progress_count(distances.len() as u64)
+        .map(|r| Vector3::<f64>::new(0.0, 0.0, *r))
         .for_each(|r| {
             let mut a = ref_a.clone();
             let mut b = ref_b.clone();
+            let mut file = std::fs::File::create(format!("R_{:.1}.dat", r.norm())).unwrap();
             let samples: Sample = scan // Scan over angles
                 .iter()
                 .map(|(q1, q2)| {
                     a.pos = ref_a.pos.iter().map(|pos| q1 * pos).collect();
                     b.pos = ref_b.pos.iter().map(|pos| (q2 * pos) + r).collect();
-                    Sample::new(pair_matrix.sum_energy(&a, &b), *temperature)
+                    let energy = pair_matrix.sum_energy(&a, &b);
+                    writeln!(file, "{:.2} {:.2} {:.2} {:.2}", r.x, r.y, r.z, energy).unwrap();
+                    Sample::new(energy, *temperature)
                 })
-                .sum();
-            println!(
-                "R = {:.2} Å, ❬U❭/kT = {:.2}, w/kT = {:.2}",
-                r.norm(),
-                samples.mean_energy() / samples.thermal_energy,
-                samples.free_energy() / samples.thermal_energy
-            );
+                .sum::<Sample>();
         })
 }
 fn main() {
