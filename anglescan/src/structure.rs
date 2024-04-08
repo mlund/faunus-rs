@@ -2,6 +2,7 @@ use crate::Vector3;
 use anyhow::Result;
 use chemfiles::Frame;
 use faunus::topology::AtomKind;
+use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use std::fmt::{self, Display, Formatter};
 use std::path::PathBuf;
@@ -14,12 +15,13 @@ pub struct AtomKinds {
 }
 
 impl AtomKinds {
+    /// Construct from a YAML file with an `atomlist` array
     pub fn from_yaml(path: &PathBuf) -> Result<Self> {
         let file = std::fs::File::open(path)?;
         serde_yaml::from_reader(file).map_err(Into::into)
     }
-    /// If not already defined, set a default sigma (angstrom) for each atom kind. Note that sigma is optional.
-    pub fn set_default_sigma(&mut self, default_sigma: f64) {
+    /// Set sigma (Å) for atoms with `None` sigma
+    pub fn set_missing_sigma(&mut self, default_sigma: f64) {
         self.atomlist
             .iter_mut()
             .filter(|i| i.sigma.is_none())
@@ -27,8 +29,8 @@ impl AtomKinds {
                 i.sigma = Some(default_sigma);
             });
     }
-    /// If not already defined, set a default epsilon (kJ/mol) for each atom kind. Note that epsilon is optional.
-    pub fn set_default_epsilon(&mut self, default_epsilon: f64) {
+    /// Set epsilon (kJ/mol) for atoms with `None` epsilon.
+    pub fn set_missing_epsilon(&mut self, default_epsilon: f64) {
         self.atomlist
             .iter_mut()
             .filter(|i| i.epsilon.is_none())
@@ -73,18 +75,16 @@ impl AminoAcidModelRecord {
     pub fn from_line(text: &str) -> Self {
         let mut parts = text.split_whitespace();
         assert!(parts.clone().count() == 8);
-        let name = parts.next().unwrap();
+        let name = parts.next().unwrap().to_string();
         parts.next(); // skip the second field
         let pos = Vector3::new(
             parts.next().unwrap().parse().unwrap(),
             parts.next().unwrap().parse().unwrap(),
             parts.next().unwrap().parse().unwrap(),
         );
-        let charge: f64 = parts.next().unwrap().parse().unwrap();
-        let mass: f64 = parts.next().unwrap().parse().unwrap();
-        let radius: f64 = parts.next().unwrap().parse().unwrap();
+        let (charge, mass, radius) = parts.map(|i| i.parse().unwrap()).next_tuple().unwrap();
         Self {
-            name: name.to_string(),
+            name,
             pos,
             charge,
             mass,
@@ -281,9 +281,8 @@ impl Display for Structure {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         write!(
             f,
-            "{} atoms, mass center: {:?}, net charge: {}",
+            "{} atoms, net charge: {}",
             self.pos.len(),
-            self.mass_center(),
             self.net_charge()
         )
     }

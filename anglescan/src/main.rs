@@ -11,8 +11,7 @@ use iter_num_tools::arange;
 use nu_ansi_term::Color::{Red, Yellow};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use rgb::RGB8;
-use std::io::Write;
-use std::path::PathBuf;
+use std::{io::Write, path::PathBuf};
 extern crate pretty_env_logger;
 #[macro_use]
 extern crate log;
@@ -29,10 +28,10 @@ struct Cli {
 enum Commands {
     /// Scan angles and tabulate energy between two rigid bodies
     Scan {
-        /// Path to XYZ file
+        /// Path to first XYZ file
         #[arg(short = '1', long)]
         mol1: PathBuf,
-        /// Path to XYZ file
+        /// Path to second XYZ file
         #[arg(short = '2', long)]
         mol2: PathBuf,
         /// Angular resolution in radians
@@ -79,7 +78,7 @@ fn do_scan(scan_command: &Commands) {
     assert!(rmin < rmax);
 
     let mut atomkinds = AtomKinds::from_yaml(atoms).unwrap();
-    atomkinds.set_default_epsilon(2.479);
+    atomkinds.set_missing_epsilon(2.479);
 
     let scan = TwobodyAngles::new(*resolution);
     let medium = Medium::salt_water(*temperature, Salt::SodiumChloride, *molarity);
@@ -94,16 +93,16 @@ fn do_scan(scan_command: &Commands) {
     // Scan over mass center distances
     let distances: Vec<f64> = arange(*rmin..*rmax, *dr).collect::<Vec<_>>();
     info!(
-        "Scanning COM range [{:.1}, {:.1}) in {:.1} Å steps",
+        "Scanning COM range [{:.1}, {:.1}) in {:.1} Å steps 🐾",
         rmin, rmax, dr
     );
     let com_scan = distances
         .par_iter()
         .progress_count(distances.len() as u64)
-        .map(|r| Vector3::<f64>::new(0.0, 0.0, *r))
         .map(|r| {
-            let sample = scan.sample_all_angles(&ref_a, &ref_b, &pair_matrix, &r, *temperature);
-            (r, sample)
+            let r_vec = Vector3::<f64>::new(0.0, 0.0, *r);
+            let sample = scan.sample_all_angles(&ref_a, &ref_b, &pair_matrix, &r_vec, *temperature);
+            (r_vec, sample)
         })
         .collect::<Vec<_>>();
 
@@ -122,7 +121,14 @@ fn report_pmf(samples: &[(Vector3<f64>, Sample)], path: &PathBuf) {
         let free_energy = sample.free_energy() / sample.thermal_energy;
         pmf_data.push((r.norm() as f32, free_energy as f32));
         mean_energy_data.push((r.norm() as f32, mean_energy as f32));
-        writeln!(pmf_file, "{:.2} {:.2} {:.2}", r.norm(), free_energy, mean_energy).unwrap();
+        writeln!(
+            pmf_file,
+            "{:.2} {:.2} {:.2}",
+            r.norm(),
+            free_energy,
+            mean_energy
+        )
+        .unwrap();
     });
     info!(
         "Plot: {} and {} along mass center separation. In units of kT and angstroms.",
@@ -132,8 +138,8 @@ fn report_pmf(samples: &[(Vector3<f64>, Sample)], path: &PathBuf) {
     if log::max_level() >= log::Level::Info {
         const YELLOW: RGB8 = RGB8::new(255, 255, 0);
         const RED: RGB8 = RGB8::new(255, 0, 0);
-        let rmin = samples.first().unwrap().0.norm() as f32;
-        let rmax = samples.last().unwrap().0.norm() as f32;
+        let rmin = mean_energy_data.first().unwrap().0;
+        let rmax = mean_energy_data.last().unwrap().0;
         Chart::new(100, 50, rmin, rmax)
             .linecolorplot(&Shape::Lines(&mean_energy_data), RED)
             .linecolorplot(&Shape::Lines(&pmf_data), YELLOW)

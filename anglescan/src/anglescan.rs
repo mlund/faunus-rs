@@ -16,6 +16,9 @@ use flate2::Compression;
 pub type Vector3 = nalgebra::Vector3<f64>;
 pub type UnitQuaternion = nalgebra::UnitQuaternion<f64>;
 
+/// Struct to exhaust all possible 6D relative orientations between two rigid bodies.
+///
+/// Fibonacci sphere points are used to generate rotations around the z-axis.
 #[derive(Debug)]
 pub struct TwobodyAngles {
     /// Rotations of the first body
@@ -67,7 +70,7 @@ impl TwobodyAngles {
     }
 
     /// Generates a set of quaternions for a rigid body scan.
-    /// Each returned unit quaternion pair can be used to rotate a rigid body
+    /// Each returned unit quaternion pair can be used to rotate two rigid bodies
     /// to exhaustively scan all possible relative orientations.
     pub fn iter(&self) -> impl Iterator<Item = (UnitQuaternion, UnitQuaternion)> + '_ {
         let dihedral_x_q2 = self
@@ -90,11 +93,11 @@ impl TwobodyAngles {
     /// Scan over all angles and write to a file
     ///
     /// This does the following:
-    /// - Rotates the first body by q1
+    /// - Rotates the COM vector, r by q1
     /// - Rotates the second body by q2
     /// - Translates the second body by r
     /// - Calculates the energy between the two structures
-    /// - Writes the distance and energy to a file
+    /// - Writes the distance and energy to a buffered file
     /// - Sum energies and partition function and return as a `Sample`
     ///
     /// # Arguments:
@@ -121,18 +124,12 @@ impl TwobodyAngles {
             .map(|(q1, q2)| {
                 let (a, b) = Self::transform_structures(ref_a, ref_b, &q1, &q2, r);
                 let energy = pair_matrix.sum_energy(&a, &b);
-                let new_com = b.mass_center();
+                let com = b.mass_center();
                 let angles = q2.euler_angles();
                 writeln!(
                     encoder,
                     "{:.3} {:.3} {:.3} {:.3} {:.3} {:.3} {:.4}",
-                    new_com.x,
-                    new_com.y,
-                    new_com.z,
-                    angles.0,
-                    angles.1,
-                    angles.2,
-                    energy
+                    com.x, com.y, com.z, angles.0, angles.1, angles.2, energy
                 )
                 .unwrap();
                 Sample::new(energy, temperature)
@@ -142,8 +139,8 @@ impl TwobodyAngles {
     }
 
     /// Transform the two reference structures by the given quaternions and distance vector
-    /// 
-    /// This only transforms the second reference structure by translating and rotating it, 
+    ///
+    /// This only transforms the second reference structure by translating and rotating it,
     /// while the first reference structure is left unchanged.
     fn transform_structures(
         ref_a: &Structure,
@@ -153,7 +150,7 @@ impl TwobodyAngles {
         r: &Vector3,
     ) -> (Structure, Structure) {
         let mut b = ref_b.clone();
-        b.pos = ref_b.pos.iter().map(|pos| (q2 * pos) + (q1 * r)).collect();
+        b.pos = ref_b.pos.iter().map(|pos| q2 * pos + q1 * r).collect();
         (ref_a.clone(), b)
     }
 }
@@ -177,16 +174,6 @@ pub fn fibonacci_sphere(n_points: usize) -> Vec<Vector3> {
         p.normalize()
     };
     (0..n_points).map(make_ith_point).collect()
-}
-
-/// Write positions to a file in XYZ format
-pub fn write_xyz(filename: &str, positions: &[Vector3]) -> std::io::Result<()> {
-    let mut f = std::fs::File::create(filename)?;
-    f.write_all(format!("{}\n\n", positions.len()).as_bytes())?;
-    for pos in positions {
-        f.write_all(format!("C {} {} {}\n", pos.x, pos.y, pos.z).as_bytes())?;
-    }
-    Ok(())
 }
 
 #[cfg(test)]
