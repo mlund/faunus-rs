@@ -121,14 +121,14 @@ impl TwobodyAngles {
             .map(|(q1, q2)| {
                 let (a, b) = Self::transform_structures(ref_a, ref_b, &q1, &q2, r);
                 let energy = pair_matrix.sum_energy(&a, &b);
+                let new_com = b.mass_center();
                 writeln!(
                     encoder,
-                    "{:.2} {:.2} {:.2} {:?} {:?} {:.2}",
-                    r.x,
-                    r.y,
-                    r.z,
-                    q1.coords.as_slice(),
-                    q2.coords.as_slice(),
+                    "{:.2} {:.2} {:.2} {:?} {:.4}",
+                    new_com.x,
+                    new_com.y,
+                    new_com.z,
+                    q2.euler_angles(),
                     energy
                 )
                 .unwrap();
@@ -146,10 +146,11 @@ impl TwobodyAngles {
         q2: &UnitQuaternion,
         r: &Vector3,
     ) -> (Structure, Structure) {
+        let d = q1 * r;
         let mut a = ref_a.clone();
         let mut b = ref_b.clone();
-        a.pos = ref_a.pos.iter().map(|pos| q1 * pos).collect();
-        b.pos = ref_b.pos.iter().map(|pos| (q2 * pos) + r).collect();
+        a.pos = ref_a.pos.clone();//ref_a.pos.iter().map(|pos| q1 * pos).collect();
+        b.pos = ref_b.pos.iter().map(|pos| (q2 * pos) + d).collect();
         (a, b)
     }
 }
