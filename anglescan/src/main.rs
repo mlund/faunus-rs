@@ -29,10 +29,10 @@ struct Cli {
 enum Commands {
     /// Scan angles and tabulate energy between two rigid bodies
     Scan {
-        /// Path to the AAM structure
+        /// Path to XYZ file
         #[arg(short = '1', long)]
         mol1: PathBuf,
-        /// Path to the AAM structure
+        /// Path to XYZ file
         #[arg(short = '2', long)]
         mol2: PathBuf,
         /// Angular resolution in radians
@@ -47,10 +47,10 @@ enum Commands {
         /// Mass center distance step
         #[arg(long)]
         dr: f64,
-        /// YAML file with atom definitions
+        /// YAML file with atom definitions (names, charges, etc.)
         #[arg(short = 'a', long)]
         atoms: PathBuf,
-        /// Salt molarity in mol/l
+        /// 1:1 salt molarity in mol/l
         #[arg(short = 'M', long, default_value = "0.1")]
         molarity: f64,
         /// Cutoff distance for pair-wise interactions (angstroms)
