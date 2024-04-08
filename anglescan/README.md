@@ -9,3 +9,4 @@ $Q(r) = \sum e^{-\beta u(r)}$, is explicitly
 evaluated, whereby we can obtain the free energy, $w(r) = -kT \ln \langle e^{-\beta u(r)} \rangle$ and
 the thermally averaged energy, $u(r) = \sum u(r)e^{-\beta u(r)} / Q$.
 
+![Angular Scan](assets/illustration.png)
