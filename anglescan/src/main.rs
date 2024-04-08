@@ -6,18 +6,18 @@ use faunus::electrolyte::{DebyeLength, Medium, Salt};
 use indicatif::ParallelProgressIterator;
 use iter_num_tools::arange;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+use rgb::RGB8;
 use std::io::Write;
 use std::iter::Sum;
 use std::ops::{Add, Neg};
 use std::path::PathBuf;
-use rgb::RGB8;
 extern crate pretty_env_logger;
 #[macro_use]
 extern crate log;
 extern crate flate2;
-use textplots::{Chart, ColorPlot, Shape};
 use flate2::write::GzEncoder;
 use flate2::Compression;
+use textplots::{Chart, ColorPlot, Shape};
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -153,7 +153,10 @@ fn do_scan(scan_command: &Commands) {
 
     // Scan over mass center distances
     let distances: Vec<f64> = arange(*rmin..*rmax, *dr).collect::<Vec<_>>();
-    info!("Scanning COM range [{:.1}, {:.1}) with a step of {:.1} Å", rmin, rmax, dr);
+    info!(
+        "Scanning COM range [{:.1}, {:.1}) with a step of {:.1} Å",
+        rmin, rmax, dr
+    );
     distances
         .par_iter()
         .progress_count(distances.len() as u64)
@@ -200,14 +203,15 @@ fn do_scan(scan_command: &Commands) {
             )
             .unwrap();
         });
-        info!("Potential of mean force (kT):");
-        if log::max_level() >= log::Level::Info {
-            let yellow = RGB8::new(255, 255, 0);
-            Chart::new(100, 50, *rmin as f32, *rmax as f32).linecolorplot(&Shape::Lines(&pmf_data), yellow).nice();
-        }
+    info!("Potential of mean force (kT):");
+    if log::max_level() >= log::Level::Info {
+        let yellow = RGB8::new(255, 255, 0);
+        Chart::new(100, 50, *rmin as f32, *rmax as f32)
+            .linecolorplot(&Shape::Lines(&pmf_data), yellow)
+            .nice();
+    }
 }
 fn main() {
-    // if not set by environmental variable, set defailt log level to info
     if std::env::var("RUST_LOG").is_err() {
         std::env::set_var("RUST_LOG", "info");
     }
