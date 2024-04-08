@@ -79,7 +79,7 @@ fn do_scan(scan_command: &Commands) {
     assert!(rmin < rmax);
 
     let mut atomkinds = AtomKinds::from_yaml(atoms).unwrap();
-    atomkinds.set_default_epsilon(1.0 * 2.45);
+    atomkinds.set_default_epsilon(2.479);
 
     let scan = TwobodyAngles::new(*resolution);
     let medium = Medium::salt_water(*temperature, Salt::SodiumChloride, *molarity);
@@ -122,7 +122,7 @@ fn report_pmf(samples: &[(Vector3<f64>, Sample)], path: &PathBuf) {
         let free_energy = sample.free_energy() / sample.thermal_energy;
         pmf_data.push((r.norm() as f32, free_energy as f32));
         mean_energy_data.push((r.norm() as f32, mean_energy as f32));
-        writeln!(pmf_file, "{:.2} {:.2} {:.2}", *r, free_energy, mean_energy).unwrap();
+        writeln!(pmf_file, "{:.2} {:.2} {:.2}", r.norm(), free_energy, mean_energy).unwrap();
     });
     info!(
         "Plot: {} and {} along mass center separation. In units of kT and angstroms.",

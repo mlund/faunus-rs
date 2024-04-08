@@ -122,13 +122,16 @@ impl TwobodyAngles {
                 let (a, b) = Self::transform_structures(ref_a, ref_b, &q1, &q2, r);
                 let energy = pair_matrix.sum_energy(&a, &b);
                 let new_com = b.mass_center();
+                let angles = q2.euler_angles();
                 writeln!(
                     encoder,
-                    "{:.2} {:.2} {:.2} {:?} {:.4}",
+                    "{:.3} {:.3} {:.3} {:.3} {:.3} {:.3} {:.4}",
                     new_com.x,
                     new_com.y,
                     new_com.z,
-                    q2.euler_angles(),
+                    angles.0,
+                    angles.1,
+                    angles.2,
                     energy
                 )
                 .unwrap();
