@@ -87,6 +87,22 @@ impl TwobodyAngles {
         self.len() == 0
     }
 
+    /// Scan over all angles and write to a file
+    ///
+    /// This does the following:
+    /// - Rotates the first body by q1
+    /// - Rotates the second body by q2
+    /// - Translates the second body by r
+    /// - Calculates the energy between the two structures
+    /// - Writes the distance and energy to a file
+    /// - Sum energies and partition function and return as a `Sample`
+    ///
+    /// # Arguments:
+    /// - `ref_a: &Structure` - reference structure A
+    /// - `ref_b: &Structure` - reference structure B
+    /// - `pair_matrix: &PairMatrix` - pair matrix of twobody energies
+    /// - `r: &Vector3` - distance vector between the two structures
+    /// - `temperature: f64` - temperature in K
     pub fn sample_all_angles(
         &self,
         ref_a: &Structure,
@@ -100,13 +116,10 @@ impl TwobodyAngles {
             std::fs::File::create(outfile).unwrap(),
             Compression::default(),
         );
-        let mut a = ref_a.clone();
-        let mut b = ref_b.clone();
         let sample = self // Scan over angles
             .iter()
             .map(|(q1, q2)| {
-                a.pos = ref_a.pos.iter().map(|pos| q1 * pos).collect();
-                b.pos = ref_b.pos.iter().map(|pos| (q2 * pos) + r).collect();
+                let (a, b) = Self::transform_structures(ref_a, ref_b, &q1, &q2, r);
                 let energy = pair_matrix.sum_energy(&a, &b);
                 writeln!(
                     encoder,
@@ -123,6 +136,21 @@ impl TwobodyAngles {
             })
             .sum::<Sample>();
         sample
+    }
+
+    /// Transform the two reference structures by the given quaternions and distance vector
+    fn transform_structures(
+        ref_a: &Structure,
+        ref_b: &Structure,
+        q1: &UnitQuaternion,
+        q2: &UnitQuaternion,
+        r: &Vector3,
+    ) -> (Structure, Structure) {
+        let mut a = ref_a.clone();
+        let mut b = ref_b.clone();
+        a.pos = ref_a.pos.iter().map(|pos| q1 * pos).collect();
+        b.pos = ref_b.pos.iter().map(|pos| (q2 * pos) + r).collect();
+        (a, b)
     }
 }
 

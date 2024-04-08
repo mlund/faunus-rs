@@ -185,6 +185,7 @@ impl Structure {
         };
         let center = structure.mass_center();
         structure.translate(&-center); // translate to 0,0,0
+        debug!("Read {}: {}", path.display(), structure);
         structure
     }
     /// Constructs a new structure from a Faunus AAM file

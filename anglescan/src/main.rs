@@ -77,8 +77,10 @@ fn do_scan(scan_command: &Commands) {
         temperature,
     } = scan_command;
     assert!(rmin < rmax);
+
     let mut atomkinds = AtomKinds::from_yaml(atoms).unwrap();
     atomkinds.set_default_epsilon(1.0 * 2.45);
+
     let scan = TwobodyAngles::new(*resolution);
     let medium = Medium::salt_water(*temperature, Salt::SodiumChloride, *molarity);
     let multipole = interact::multipole::Coulomb::new(*cutoff, medium.debye_length());
@@ -86,8 +88,6 @@ fn do_scan(scan_command: &Commands) {
     let ref_a = Structure::from_xyz(mol1, &atomkinds);
     let ref_b = Structure::from_xyz(mol2, &atomkinds);
 
-    debug!("{}", ref_a);
-    debug!("{}", ref_b);
     info!("{} per distance", scan);
     info!("{}", medium);
 
