@@ -1,5 +1,6 @@
 #[cfg(test)]
 extern crate approx;
+use crate::{energy::PairMatrix, structure::Structure, Sample};
 #[cfg(test)]
 use approx::assert_relative_eq;
 use itertools::Itertools;
@@ -7,6 +8,10 @@ use itertools_num::linspace;
 use std::f64::consts::PI;
 use std::fmt::Display;
 use std::io::Write;
+
+extern crate flate2;
+use flate2::write::GzEncoder;
+use flate2::Compression;
 
 pub type Vector3 = nalgebra::Vector3<f64>;
 pub type UnitQuaternion = nalgebra::UnitQuaternion<f64>;
@@ -80,6 +85,44 @@ impl TwobodyAngles {
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.len() == 0
+    }
+
+    pub fn sample_all_angles(
+        &self,
+        ref_a: &Structure,
+        ref_b: &Structure,
+        pair_matrix: &PairMatrix,
+        r: &Vector3,
+        temperature: f64,
+    ) -> Sample {
+        let outfile = format!("R_{:.1}.dat", r.norm());
+        let mut encoder = GzEncoder::new(
+            std::fs::File::create(outfile).unwrap(),
+            Compression::default(),
+        );
+        let mut a = ref_a.clone();
+        let mut b = ref_b.clone();
+        let sample = self // Scan over angles
+            .iter()
+            .map(|(q1, q2)| {
+                a.pos = ref_a.pos.iter().map(|pos| q1 * pos).collect();
+                b.pos = ref_b.pos.iter().map(|pos| (q2 * pos) + r).collect();
+                let energy = pair_matrix.sum_energy(&a, &b);
+                writeln!(
+                    encoder,
+                    "{:.2} {:.2} {:.2} {:?} {:?} {:.2}",
+                    r.x,
+                    r.y,
+                    r.z,
+                    q1.coords.as_slice(),
+                    q2.coords.as_slice(),
+                    energy
+                )
+                .unwrap();
+                Sample::new(energy, temperature)
+            })
+            .sum::<Sample>();
+        sample
     }
 }
 
