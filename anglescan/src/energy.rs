@@ -1,21 +1,26 @@
 use faunus::topology::AtomKind;
-use interact::multipole::Coulomb;
-use interact::twobody::{CoulombLennardJones, IonIon, IsotropicTwobodyEnergy, LennardJones};
+use interact::twobody::{IonIon, IsotropicTwobodyEnergy, LennardJones};
 use interact::CombinationRule;
 
 use crate::structure::Structure;
 
+// type alias for the pair potential
+type CoulombMethod = interact::multipole::Coulomb;
+type ShortRange = interact::twobody::WeeksChandlerAndersen;
+type PairPotential<'a> = interact::twobody::Combined<IonIon<'a, CoulombMethod>, ShortRange>;
+
 /// Pair-matrix of twobody energies for pairs of atom ids
 pub struct PairMatrix<'a> {
     /// Matrix of twobody energy terms
-    pub matrix: Vec<Vec<CoulombLennardJones<'a>>>,
+    pub matrix: Vec<Vec<PairPotential<'a>>>,
 }
 
 impl<'a> PairMatrix<'a> {
     /// Create a new pair matrix
-    pub fn new(atomkinds: &[AtomKind], multipole: &'a Coulomb) -> Self {
+    pub fn new(atomkinds: &[AtomKind], multipole: &'a CoulombMethod) -> Self {
+        let lj_default = LennardJones::new(0.0, 0.0);
         let default =
-            CoulombLennardJones::new(IonIon::new(0.0, multipole), LennardJones::new(0.0, 0.0));
+        PairPotential::new(IonIon::new(0.0, multipole), ShortRange::new(lj_default));
         let n = atomkinds.len();
         let mut matrix = vec![vec![default; n]; n];
         for i in 0..n {
@@ -26,12 +31,12 @@ impl<'a> PairMatrix<'a> {
                 let ionion = IonIon::new(a.charge * b.charge, multipole);
                 let epsilons = (a.epsilon.unwrap_or(0.0), b.epsilon.unwrap_or(0.0));
                 let sigmas = (a.sigma.unwrap_or(0.0), b.sigma.unwrap_or(0.0));
-                let lj = LennardJones::from_combination_rule(
+                let lj = ShortRange::from_combination_rule(
                     CombinationRule::LorentzBerthelot,
                     epsilons,
                     sigmas,
                 );
-                matrix[i][j] = CoulombLennardJones::new(ionion, lj);
+                matrix[i][j] = PairPotential::new(ionion, lj);
             }
         }
         Self { matrix }

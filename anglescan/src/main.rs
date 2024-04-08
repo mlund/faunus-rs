@@ -133,7 +133,7 @@ fn do_scan(scan_command: &Commands) {
     } = scan_command;
     assert!(rmin < rmax);
     let mut atomkinds = AtomKinds::from_yaml(atoms).unwrap();
-    atomkinds.set_default_epsilon(0.05 * 2.45);
+    atomkinds.set_default_epsilon(1.0 * 2.45);
     let scan = TwobodyAngles::new(*resolution);
     let medium = Medium::salt_water(*temperature, Salt::SodiumChloride, *molarity);
     let multipole = interact::multipole::Coulomb::new(*cutoff, medium.debye_length());
@@ -149,12 +149,13 @@ fn do_scan(scan_command: &Commands) {
     // File with F(R) and U(R)
     let mut pmf_file = std::fs::File::create("pmf.dat").unwrap();
     let mut pmf_data = Vec::<(f32, f32)>::new();
-    writeln!(pmf_file, "R/Å F/kT U/kT").unwrap();
+    let mut mean_energy_data = Vec::<(f32, f32)>::new();
+    writeln!(pmf_file, "# R/Å F/kT U/kT").unwrap();
 
     // Scan over mass center distances
     let distances: Vec<f64> = arange(*rmin..*rmax, *dr).collect::<Vec<_>>();
     info!(
-        "Scanning COM range [{:.1}, {:.1}) with a step of {:.1} Å",
+        "Scanning COM range [{:.1}, {:.1}) in {:.1} Å steps",
         rmin, rmax, dr
     );
     distances
@@ -191,9 +192,10 @@ fn do_scan(scan_command: &Commands) {
         .collect::<Vec<_>>()
         .iter()
         .for_each(|(r, sample)| {
-            let mean_energy = sample.mean_energy() / sample.exp_energy;
+            let mean_energy = sample.mean_energy() / sample.thermal_energy;
             let free_energy = sample.free_energy() / sample.thermal_energy;
             pmf_data.push((r.norm() as f32, free_energy as f32));
+            mean_energy_data.push((r.norm() as f32, mean_energy as f32));
             writeln!(
                 pmf_file,
                 "{:.2} {:.2} {:.2}",
@@ -203,11 +205,13 @@ fn do_scan(scan_command: &Commands) {
             )
             .unwrap();
         });
-    info!("Potential of mean force (kT):");
+    info!("Plot: free energy (yellow) and energy (red) along mass center separation. In units of kT and angstroms.");
     if log::max_level() >= log::Level::Info {
-        let yellow = RGB8::new(255, 255, 0);
+        const YELLOW: RGB8 = RGB8::new(255, 255, 0);
+        const RED: RGB8 = RGB8::new(255, 0, 0);
         Chart::new(100, 50, *rmin as f32, *rmax as f32)
-            .linecolorplot(&Shape::Lines(&pmf_data), yellow)
+            .linecolorplot(&Shape::Lines(&mean_energy_data), RED)
+            .linecolorplot(&Shape::Lines(&pmf_data), YELLOW)
             .nice();
     }
 }
