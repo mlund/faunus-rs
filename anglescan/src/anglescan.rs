@@ -139,6 +139,9 @@ impl TwobodyAngles {
     }
 
     /// Transform the two reference structures by the given quaternions and distance vector
+    /// 
+    /// This only transforms the second reference structure by translating and rotating it, 
+    /// while the first reference structure is left unchanged.
     fn transform_structures(
         ref_a: &Structure,
         ref_b: &Structure,
@@ -146,12 +149,9 @@ impl TwobodyAngles {
         q2: &UnitQuaternion,
         r: &Vector3,
     ) -> (Structure, Structure) {
-        let d = q1 * r;
-        let mut a = ref_a.clone();
         let mut b = ref_b.clone();
-        a.pos = ref_a.pos.clone();//ref_a.pos.iter().map(|pos| q1 * pos).collect();
-        b.pos = ref_b.pos.iter().map(|pos| (q2 * pos) + d).collect();
-        (a, b)
+        b.pos = ref_b.pos.iter().map(|pos| (q2 * pos) + (q1 * r)).collect();
+        (ref_a.clone(), b)
     }
 }
 
@@ -192,6 +192,7 @@ mod tests {
 
     #[test]
     fn test_twobody_angles() {
+        use std::f64::consts::FRAC_1_SQRT_2;
         let twobody_angles = TwobodyAngles::new(1.1);
         let n = twobody_angles.q1.len() * twobody_angles.q2.len() * twobody_angles.dihedrals.len();
         assert_eq!(n, 600);
@@ -199,22 +200,22 @@ mod tests {
         assert_eq!(twobody_angles.iter().count(), n);
 
         let pairs = twobody_angles.iter().collect::<Vec<_>>();
-        assert_relative_eq!(pairs[0].0.coords.x, 0.7071067811865475);
+        assert_relative_eq!(pairs[0].0.coords.x, FRAC_1_SQRT_2);
         assert_relative_eq!(pairs[0].0.coords.y, 0.0);
         assert_relative_eq!(pairs[0].0.coords.z, 0.0);
-        assert_relative_eq!(pairs[0].0.coords.w, 0.7071067811865476);
-        assert_relative_eq!(pairs[0].1.coords.x, -0.7071067811865475);
+        assert_relative_eq!(pairs[0].0.coords.w, FRAC_1_SQRT_2);
+        assert_relative_eq!(pairs[0].1.coords.x, -FRAC_1_SQRT_2);
         assert_relative_eq!(pairs[0].1.coords.y, 0.0);
         assert_relative_eq!(pairs[0].1.coords.z, 0.0);
-        assert_relative_eq!(pairs[0].1.coords.w, 0.7071067811865476);
-        assert_relative_eq!(pairs[n - 1].0.coords.x, -0.7071067811865475);
+        assert_relative_eq!(pairs[0].1.coords.w, FRAC_1_SQRT_2);
+        assert_relative_eq!(pairs[n - 1].0.coords.x, -FRAC_1_SQRT_2);
         assert_relative_eq!(pairs[n - 1].0.coords.y, 0.0);
         assert_relative_eq!(pairs[n - 1].0.coords.z, 0.0);
-        assert_relative_eq!(pairs[n - 1].0.coords.w, 0.7071067811865476);
-        assert_relative_eq!(pairs[n - 1].1.coords.x, -0.7071067811865475);
+        assert_relative_eq!(pairs[n - 1].0.coords.w, FRAC_1_SQRT_2);
+        assert_relative_eq!(pairs[n - 1].1.coords.x, -FRAC_1_SQRT_2);
         assert_relative_eq!(pairs[n - 1].1.coords.y, 0.0);
         assert_relative_eq!(pairs[n - 1].1.coords.z, 0.0);
-        assert_relative_eq!(pairs[n - 1].1.coords.w, -0.7071067811865476);
+        assert_relative_eq!(pairs[n - 1].1.coords.w, -FRAC_1_SQRT_2);
         println!("{}", twobody_angles);
     }
 
