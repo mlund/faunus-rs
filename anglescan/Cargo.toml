@@ -25,3 +25,5 @@ average = "0.15.0"
 iter_num_tools = "0.7.1"
 indicatif = {version = "*", features = ["rayon"]}
 flate2 = "1.0.28"
+textplots = "0.8.6"
+rgb = "0.8.37"

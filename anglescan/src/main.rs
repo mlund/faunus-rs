@@ -10,11 +10,12 @@ use std::io::Write;
 use std::iter::Sum;
 use std::ops::{Add, Neg};
 use std::path::PathBuf;
+use rgb::RGB8;
 extern crate pretty_env_logger;
 #[macro_use]
 extern crate log;
 extern crate flate2;
-
+use textplots::{Chart, ColorPlot, Shape};
 use flate2::write::GzEncoder;
 use flate2::Compression;
 
@@ -145,8 +146,14 @@ fn do_scan(scan_command: &Commands) {
     info!("{} per distance", scan);
     info!("{}", medium);
 
+    // File with F(R) and U(R)
+    let mut pmf_file = std::fs::File::create("pmf.dat").unwrap();
+    let mut pmf_data = Vec::<(f32, f32)>::new();
+    writeln!(pmf_file, "R/Å F/kT U/kT").unwrap();
+
     // Scan over mass center distances
     let distances: Vec<f64> = arange(*rmin..*rmax, *dr).collect::<Vec<_>>();
+    info!("Scanning COM range [{:.1}, {:.1}) with a step of {:.1} Å", rmin, rmax, dr);
     distances
         .par_iter()
         .progress_count(distances.len() as u64)
@@ -181,15 +188,29 @@ fn do_scan(scan_command: &Commands) {
         .collect::<Vec<_>>()
         .iter()
         .for_each(|(r, sample)| {
-            println!(
-                "R/Å = {:.2} nm, ❬βF❭ = {:.2}, ❬βU❭ = {:.2}",
+            let mean_energy = sample.mean_energy() / sample.exp_energy;
+            let free_energy = sample.free_energy() / sample.thermal_energy;
+            pmf_data.push((r.norm() as f32, free_energy as f32));
+            writeln!(
+                pmf_file,
+                "{:.2} {:.2} {:.2}",
                 r.norm(),
-                sample.free_energy() / sample.thermal_energy,
-                sample.mean_energy() / sample.thermal_energy,
-            );
+                free_energy,
+                mean_energy
+            )
+            .unwrap();
         });
+        info!("Potential of mean force (kT):");
+        if log::max_level() >= log::Level::Info {
+            let yellow = RGB8::new(255, 255, 0);
+            Chart::new(100, 50, *rmin as f32, *rmax as f32).linecolorplot(&Shape::Lines(&pmf_data), yellow).nice();
+        }
 }
 fn main() {
+    // if not set by environmental variable, set defailt log level to info
+    if std::env::var("RUST_LOG").is_err() {
+        std::env::set_var("RUST_LOG", "info");
+    }
     pretty_env_logger::init();
 
     let cli = Cli::parse();
