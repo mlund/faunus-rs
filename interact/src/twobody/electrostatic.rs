@@ -64,12 +64,13 @@ mod tests {
     fn test_ion_ion() {
         let r: f64 = 7.0;
         let cutoff = f64::INFINITY;
+        let permittivity = 80.0;
         let scheme = Coulomb::new(80.0, cutoff, None);
         let ionion = IonIon::new(1.0, &scheme);
         let unscreened_energy = ionion.isotropic_twobody_energy(r.powi(2));
         assert_relative_eq!(unscreened_energy, 2.48099031507825);
         let debye_length = 30.0;
-        let scheme = Coulomb::new(80.0, cutoff, Some(debye_length));
+        let scheme = Coulomb::new(permittivity, cutoff, Some(debye_length));
         let ionion = IonIon::new(1.0, &scheme);
         let screened_energy = ionion.isotropic_twobody_energy(r.powi(2));
         assert_relative_eq!(
