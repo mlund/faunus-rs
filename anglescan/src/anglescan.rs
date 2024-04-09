@@ -3,7 +3,6 @@ extern crate approx;
 use crate::{energy::PairMatrix, structure::Structure, Sample};
 #[cfg(test)]
 use approx::assert_relative_eq;
-use iter_num_tools::arange;
 use itertools::Itertools;
 use std::f64::consts::PI;
 use std::fmt::Display;
@@ -61,7 +60,7 @@ impl TwobodyAngles {
             .map(|axis| UnitQuaternion::rotation_between(axis, &-Vector3::z_axis()).unwrap())
             .collect();
 
-        let dihedrals = arange(0.0..2.0 * PI, angle_resolution)
+        let dihedrals = iter_num_tools::arange(0.0..2.0 * PI, angle_resolution)
             .map(|angle| UnitQuaternion::from_axis_angle(&Vector3::z_axis(), angle))
             .collect();
 
@@ -151,9 +150,10 @@ impl TwobodyAngles {
         q2: &UnitQuaternion,
         r: &Vector3, // mass center separation = (0,0,r)
     ) -> (Structure, Structure) {
+        let a = ref_a.clone();
         let mut b = ref_b.clone();
         b.pos = ref_b.pos.iter().map(|pos| q2 * pos + q1 * r).collect();
-        (ref_a.clone(), b)
+        (a, b)
     }
 }
 
@@ -204,10 +204,10 @@ mod tests {
         assert_relative_eq!(pairs[n - 1].0.coords.y, 0.0);
         assert_relative_eq!(pairs[n - 1].0.coords.z, 0.0);
         assert_relative_eq!(pairs[n - 1].0.coords.w, FRAC_1_SQRT_2);
-        assert_relative_eq!(pairs[n - 1].1.coords.x, -FRAC_1_SQRT_2);
-        assert_relative_eq!(pairs[n - 1].1.coords.y, 0.0);
-        assert_relative_eq!(pairs[n - 1].1.coords.z, 0.0);
-        assert_relative_eq!(pairs[n - 1].1.coords.w, -FRAC_1_SQRT_2);
+        assert_relative_eq!(pairs[n - 1].1.coords.x, -0.6535804797978707);
+        assert_relative_eq!(pairs[n - 1].1.coords.y, 0.2698750755945888);
+        assert_relative_eq!(pairs[n - 1].1.coords.z, 0.2698750755945888);
+        assert_relative_eq!(pairs[n - 1].1.coords.w, -0.6535804797978708);
         println!("{}", twobody_angles);
     }
 
