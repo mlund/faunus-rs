@@ -227,7 +227,7 @@ impl Salt {
 
 impl Display for Salt {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "🧂Salt: ")?;
+        write!(f, "🧂Salt = ")?;
         match self {
             Salt::SodiumChloride => write!(f, "NaCl"),
             Salt::CalciumChloride => write!(f, "CaCl₂"),
@@ -374,10 +374,10 @@ impl Display for Medium {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "Medium: 𝑇 = {:.2} K, εᵣ = {:.1}, 𝐼 = {:.2} mol/l, λᴮ = {:.1} Å, λᴰ = {:.1} Å",
+            "Medium: 𝑇 = {:.2} K, εᵣ = {:.1}, 𝐼 = {:.1} mM, λᴮ = {:.1} Å, λᴰ = {:.1} Å",
             self.temperature,
             self.permittivity.permittivity(self.temperature).unwrap(),
-            self.ionic_strength(),
+            self.ionic_strength() * 1e3,
             self.bjerrum_length(),
             self.debye_length().unwrap_or(f64::INFINITY),
         )
