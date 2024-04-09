@@ -227,8 +227,9 @@ impl Salt {
 
 impl Display for Salt {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "🧂Salt: ")?;
         match self {
-            Salt::SodiumChloride => write!(f, "NaCl🧂"),
+            Salt::SodiumChloride => write!(f, "NaCl"),
             Salt::CalciumChloride => write!(f, "CaCl₂"),
             Salt::CalciumSulfate => write!(f, "CaSO₄"),
             Salt::PotassiumAlum => write!(f, "KAl(SO₄)₂"),

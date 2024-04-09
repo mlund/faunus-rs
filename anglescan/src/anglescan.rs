@@ -3,8 +3,8 @@ extern crate approx;
 use crate::{energy::PairMatrix, structure::Structure, Sample};
 #[cfg(test)]
 use approx::assert_relative_eq;
+use iter_num_tools::arange;
 use itertools::Itertools;
-use itertools_num::linspace;
 use std::f64::consts::PI;
 use std::fmt::Display;
 use std::io::Write;
@@ -54,17 +54,16 @@ impl TwobodyAngles {
         let q1 = points
             .iter()
             .map(|axis| UnitQuaternion::rotation_between(axis, &Vector3::z_axis()).unwrap())
-            .collect::<Vec<_>>();
+            .collect();
 
         let q2 = points
             .iter()
             .map(|axis| UnitQuaternion::rotation_between(axis, &-Vector3::z_axis()).unwrap())
-            .collect::<Vec<_>>();
+            .collect();
 
-        let n_dihedrals = (2.0 * PI / angle_resolution).round() as usize;
-        let dihedrals = linspace::<f64>(0.0, 2.0 * PI, n_dihedrals)
+        let dihedrals = arange(0.0..2.0 * PI, angle_resolution)
             .map(|angle| UnitQuaternion::from_axis_angle(&Vector3::z_axis(), angle))
-            .collect::<Vec<_>>();
+            .collect();
 
         Self { q1, q2, dihedrals }
     }
@@ -114,7 +113,7 @@ impl TwobodyAngles {
         r: &Vector3,
         temperature: f64,
     ) -> Sample {
-        let outfile = format!("R_{:.1}.dat", r.norm());
+        let outfile = format!("R_{:.1}.dat.gz", r.norm());
         let mut encoder = GzEncoder::new(
             std::fs::File::create(outfile).unwrap(),
             Compression::default(),
@@ -125,11 +124,14 @@ impl TwobodyAngles {
                 let (a, b) = Self::transform_structures(ref_a, ref_b, &q1, &q2, r);
                 let energy = pair_matrix.sum_energy(&a, &b);
                 let com = b.mass_center();
-                let angles = q2.euler_angles();
                 writeln!(
                     encoder,
-                    "{:.3} {:.3} {:.3} {:.3} {:.3} {:.3} {:.4}",
-                    com.x, com.y, com.z, angles.0, angles.1, angles.2, energy
+                    "{:.3} {:.3} {:.3} {:.3} {:?}",
+                    energy,
+                    com.x,
+                    com.y,
+                    com.z,
+                    q2.axis_angle().unwrap()
                 )
                 .unwrap();
                 Sample::new(energy, temperature)
@@ -147,7 +149,7 @@ impl TwobodyAngles {
         ref_b: &Structure,
         q1: &UnitQuaternion,
         q2: &UnitQuaternion,
-        r: &Vector3,
+        r: &Vector3, // mass center separation = (0,0,r)
     ) -> (Structure, Structure) {
         let mut b = ref_b.clone();
         b.pos = ref_b.pos.iter().map(|pos| q2 * pos + q1 * r).collect();
