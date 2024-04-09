@@ -20,9 +20,10 @@
 //! ## Examples
 //! ~~~
 //! use interact::multipole::*;
+//! let permittivity = 80.0;
 //! let charge = 1.0;
 //! let dist = 9.0;
-//! let plain = Coulomb::new(16.0, None); // cutoff at 16
+//! let plain = Coulomb::new(permittivity, 16.0, None); // cutoff at 16
 //! assert_eq!(plain.ion_potential(charge, dist), charge / dist);
 //! ~~~
 
@@ -53,12 +54,12 @@ pub trait ShortRangeFunction: crate::Cutoff {
     fn kappa(&self) -> Option<f64> {
         None
     }
-    /// Inverse of the relative dielectric constant, 1/εᵣ (unitless).
-    #[inline]
-    fn rel_dielectric_inv(&self) -> f64 {
-        1.0
-    }
-
+    /// Prefactor in LENGTH / CHARGE^2 * ENERGY units
+    ///
+    /// For example if the unit of charge is the elementary charge,
+    /// letting `prefactor()` return the Bjerrum length, the energy
+    /// will be in units of kT.
+    fn prefactor(&self) -> f64;
     /// Short-range function.
     fn short_range_f0(&self, q: f64) -> f64;
     /// First derivative of the short-range function.

@@ -5,7 +5,7 @@ use anglescan::{
     Sample, Vector3,
 };
 use clap::{Parser, Subcommand};
-use faunus::electrolyte::{DebyeLength, Medium, Salt};
+use faunus::electrolyte::{DebyeLength, Medium, RelativePermittivity, Salt};
 use indicatif::ParallelProgressIterator;
 use nu_ansi_term::Color::{Red, Yellow};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
@@ -81,7 +81,11 @@ fn do_scan(scan_command: &Commands) {
 
     let scan = TwobodyAngles::new(*resolution);
     let medium = Medium::salt_water(*temperature, Salt::SodiumChloride, *molarity);
-    let multipole = interact::multipole::Coulomb::new(*cutoff, medium.debye_length());
+    let multipole = interact::multipole::Coulomb::new(
+        medium.permittivity(*temperature).unwrap(),
+        *cutoff,
+        medium.debye_length(),
+    );
     let pair_matrix = energy::PairMatrix::new(&atomkinds.atomlist, &multipole);
     let ref_a = Structure::from_xyz(mol1, &atomkinds);
     let ref_b = Structure::from_xyz(mol2, &atomkinds);
