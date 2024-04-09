@@ -7,7 +7,6 @@ use anglescan::{
 use clap::{Parser, Subcommand};
 use faunus::electrolyte::{DebyeLength, Medium, Salt};
 use indicatif::ParallelProgressIterator;
-use iter_num_tools::arange;
 use nu_ansi_term::Color::{Red, Yellow};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use rgb::RGB8;
@@ -91,7 +90,7 @@ fn do_scan(scan_command: &Commands) {
     info!("{}", medium);
 
     // Scan over mass center distances
-    let distances: Vec<f64> = arange(*rmin..*rmax, *dr).collect::<Vec<_>>();
+    let distances: Vec<f64> = iter_num_tools::arange(*rmin..*rmax, *dr).collect::<Vec<_>>();
     info!(
         "Scanning COM range [{:.1}, {:.1}) in {:.1} Å steps 🐾",
         rmin, rmax, dr
@@ -132,8 +131,8 @@ fn report_pmf(samples: &[(Vector3<f64>, Sample)], path: &PathBuf) {
     });
     info!(
         "Plot: {} and {} along mass center separation. In units of kT and angstroms.",
-        Yellow.paint("free energy"),
-        Red.paint("mean energy")
+        Yellow.bold().paint("free energy"),
+        Red.bold().paint("mean energy")
     );
     if log::max_level() >= log::Level::Info {
         const YELLOW: RGB8 = RGB8::new(255, 255, 0);

@@ -379,8 +379,13 @@ impl Display for Medium {
             self.permittivity.permittivity(self.temperature).unwrap(),
             self.ionic_strength(),
             self.bjerrum_length(),
-            self.debye_length().unwrap_or(f64::INFINITY)
+            self.debye_length().unwrap_or(f64::INFINITY),
         )
+        .unwrap();
+        if self.salt.is_some() {
+            write!(f, ", {}", self.salt.as_ref().unwrap()).unwrap()
+        };
+        Ok(())
     }
 }
 
