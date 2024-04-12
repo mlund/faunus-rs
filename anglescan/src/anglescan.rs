@@ -51,15 +51,31 @@ impl TwobodyAngles {
         );
 
         let n_points = (4.0 * PI / angle_resolution.powi(2)).round() as usize;
-        let points = fibonacci_sphere(n_points);
+        // let mut points = fibonacci_sphere(n_points);
+        let mut points = generate_icosphere(n_points).unwrap();
+        let angle_resolution = (4.0 * PI / points.len() as f64).sqrt();
+        log::info!(
+            "Requested {} points on a sphere; got {} -> new resolution is {:.2}",
+            n_points,
+            points.len(),
+            angle_resolution
+        );
+
+        // Ensure that icosphere points are not on the z-axis
+        let v = nalgebra::UnitVector3::new_normalize(Vector3::new(0.01, 0.01, 1.0).normalize());
+        let q_bias = UnitQuaternion::from_axis_angle(&v, 0.01);
+        for p in &mut points {
+            *p = q_bias * (*p);
+        }
+
         let q1 = points
             .iter()
-            .map(|axis| UnitQuaternion::rotation_between(axis, &Vector3::z_axis()).unwrap())
+            .map(|axis| UnitQuaternion::rotation_between(axis, &-Vector3::z_axis()).unwrap())
             .collect();
 
         let q2 = points
             .iter()
-            .map(|axis| UnitQuaternion::rotation_between(axis, &-Vector3::z_axis()).unwrap())
+            .map(|axis| UnitQuaternion::rotation_between(axis, &Vector3::z_axis()).unwrap())
             .collect();
 
         let dihedrals = iter_num_tools::arange(0.0..2.0 * PI, angle_resolution)
@@ -180,6 +196,8 @@ pub fn fibonacci_sphere(n_points: usize) -> Vec<Vector3> {
     (0..n_points).map(make_ith_point).collect()
 }
 
+/// Generate an icosphere with at least `min_points` surface points
+///
 /// The number of _points_ on the icosphere is:
 ///
 ///    N = 10 * (n_divisions + 1)^2 + 2
@@ -193,19 +211,18 @@ pub fn fibonacci_sphere(n_points: usize) -> Vec<Vector3> {
 /// - https://danielsieger.com/blog/2021/03/27/generating-spheres.html
 /// - https://en.wikipedia.org/wiki/Loop_subdivision_surface
 ///
-fn ico_sphere(min_angle_resolution: f64) -> Result<(f64, Vec<Vector3>)> {
-    let min_points = (4.0 * PI / min_angle_resolution.powi(2)).ceil() as usize;
-    if min_points < 3 {
-        anyhow::bail!("angle_resolution is too large");
+fn generate_icosphere(min_points: usize) -> Result<Vec<Vector3>> {
+    let num_points = (0..200).map(|n_div| (10 * (n_div + 1) * (n_div + 1) + 2));
+    match num_points.enumerate().find(|(_, n)| *n >= min_points) {
+        Some((n_divisions, _)) => Ok(IcoSphere::new(n_divisions, |_| ())
+            .raw_points()
+            .iter()
+            .map(|p| Vector3::new(p.x as f64, p.y as f64, p.z as f64).normalize())
+            .collect()),
+        None => {
+            anyhow::bail!("too many points");
+        }
     }
-    let n_divisions = (((min_points - 2) as f64 / 10.0).sqrt() - 1.0).ceil() as usize;
-    let points = IcoSphere::new(n_divisions, |_| ())
-        .raw_points()
-        .iter()
-        .map(|p| Vector3::new(p.x as f64, p.y as f64, p.z as f64))
-        .collect::<Vec<Vector3>>();
-    let angle_resolution = (4.0 * PI / points.len() as f64).sqrt();
-    Ok((angle_resolution, points))
 }
 
 #[cfg(test)]
@@ -214,18 +231,27 @@ mod tests {
 
     #[test]
     fn test_icosphere() {
-        let (resolution, points) = ico_sphere(0.3).unwrap();
-        assert_eq!(points.len(), 162);
-        assert_relative_eq!(resolution, 0.2785142527367778, epsilon = 1e-10);
-        let (resolution, points) = ico_sphere(0.1).unwrap();
-        assert_eq!(points.len(), 1442);
-        assert_relative_eq!(resolution, 0.09335171518726594, epsilon = 1e-10);
-        let (resolution, points) = ico_sphere(0.6).unwrap();
-        assert_eq!(points.len(), 42);
-        assert_relative_eq!(resolution, 0.5469911336958626, epsilon = 1e-10);
-        let (resolution, points) = ico_sphere(1.2).unwrap();
+        let points = generate_icosphere(1).unwrap();
         assert_eq!(points.len(), 12);
-        assert_relative_eq!(resolution, 1.0233267079464885, epsilon = 1e-10);
+        let points = generate_icosphere(10).unwrap();
+        assert_eq!(points.len(), 12);
+        let points = generate_icosphere(13).unwrap();
+        assert_eq!(points.len(), 42);
+        let points = generate_icosphere(42).unwrap();
+        assert_eq!(points.len(), 42);
+        let points = generate_icosphere(43).unwrap();
+        assert_eq!(points.len(), 92);
+        let _ = generate_icosphere(400003).is_err();
+
+        let samples = 1000;
+        let points = generate_icosphere(samples).unwrap();
+        let mut center: Vector3 = Vector3::zeros();
+        assert_eq!(points.len(), 1002);
+        for point in points {
+            assert_relative_eq!((point.norm() - 1.0).abs(), 0.0, epsilon = 1e-6);
+            center += point;
+        }
+        assert_relative_eq!(center.norm(), 0.0, epsilon = 1e-1);
     }
 
     #[test]
