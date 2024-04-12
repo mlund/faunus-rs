@@ -1,8 +1,10 @@
 #[cfg(test)]
 extern crate approx;
 use crate::{energy::PairMatrix, structure::Structure, Sample};
+use anyhow::Result;
 #[cfg(test)]
 use approx::assert_relative_eq;
+use hexasphere::shapes::IcoSphere;
 use itertools::Itertools;
 use std::f64::consts::PI;
 use std::fmt::Display;
@@ -178,9 +180,53 @@ pub fn fibonacci_sphere(n_points: usize) -> Vec<Vector3> {
     (0..n_points).map(make_ith_point).collect()
 }
 
+/// The number of _points_ on the icosphere is:
+///
+///    N = 10 * (n_divisions + 1)^2 + 2
+///
+/// with the first few values 12, 42, 92, 162, ...
+/// for 0, 1, 2, 3, ... divisions.
+///
+/// ## Further reading
+///
+/// - https://danielsieger.com/blog/2021/01/03/generating-platonic-solids.html
+/// - https://danielsieger.com/blog/2021/03/27/generating-spheres.html
+/// - https://en.wikipedia.org/wiki/Loop_subdivision_surface
+///
+fn ico_sphere(min_angle_resolution: f64) -> Result<(f64, Vec<Vector3>)> {
+    let min_points = (4.0 * PI / min_angle_resolution.powi(2)).ceil() as usize;
+    if min_points < 3 {
+        anyhow::bail!("angle_resolution is too large");
+    }
+    let n_divisions = (((min_points - 2) as f64 / 10.0).sqrt() - 1.0).ceil() as usize;
+    let points = IcoSphere::new(n_divisions, |_| ())
+        .raw_points()
+        .iter()
+        .map(|p| Vector3::new(p.x as f64, p.y as f64, p.z as f64))
+        .collect::<Vec<Vector3>>();
+    let angle_resolution = (4.0 * PI / points.len() as f64).sqrt();
+    Ok((angle_resolution, points))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_icosphere() {
+        let (resolution, points) = ico_sphere(0.3).unwrap();
+        assert_eq!(points.len(), 162);
+        assert_relative_eq!(resolution, 0.2785142527367778, epsilon = 1e-10);
+        let (resolution, points) = ico_sphere(0.1).unwrap();
+        assert_eq!(points.len(), 1442);
+        assert_relative_eq!(resolution, 0.09335171518726594, epsilon = 1e-10);
+        let (resolution, points) = ico_sphere(0.6).unwrap();
+        assert_eq!(points.len(), 42);
+        assert_relative_eq!(resolution, 0.5469911336958626, epsilon = 1e-10);
+        let (resolution, points) = ico_sphere(1.2).unwrap();
+        assert_eq!(points.len(), 12);
+        assert_relative_eq!(resolution, 1.0233267079464885, epsilon = 1e-10);
+    }
 
     #[test]
     fn test_twobody_angles() {
