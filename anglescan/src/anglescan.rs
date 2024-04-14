@@ -51,35 +51,31 @@ impl TwobodyAngles {
         );
 
         let n_points = (4.0 * PI / angle_resolution.powi(2)).round() as usize;
-        // let mut points = fibonacci_sphere(n_points);
-        let mut points = generate_icosphere(n_points).unwrap();
+        let mut points = make_icosphere(n_points).unwrap();
         let angle_resolution = (4.0 * PI / points.len() as f64).sqrt();
         log::info!(
-            "Requested {} points on a sphere; got {} -> new resolution is {:.2}",
+            "Requested {} points on a sphere; got {} -> new resolution = {:.2}",
             n_points,
             points.len(),
             angle_resolution
         );
 
-        // Ensure that icosphere points are not on the z-axis
-        let v = nalgebra::UnitVector3::new_normalize(Vector3::new(0.01, 0.01, 1.0).normalize());
-        let q_bias = UnitQuaternion::from_axis_angle(&v, 0.01);
-        for p in &mut points {
-            *p = q_bias * (*p);
-        }
+        // Ensure that icosphere points are not *exactly* on the z-axis to
+        // enable trouble-free alignment below; see `rotation_between()` docs
+        let v = nalgebra::UnitVector3::new_normalize(Vector3::new(0.0005, 0.0005, 1.0));
+        let q_bias = UnitQuaternion::from_axis_angle(&v, 0.0001);
+        points.iter_mut().for_each(|p| *p = q_bias * (*p));
 
-        let q1 = points
-            .iter()
-            .map(|axis| UnitQuaternion::rotation_between(axis, &-Vector3::z_axis()).unwrap())
-            .collect();
+        // Rotation operations via unit quaternions
+        let to_zaxis = |p| UnitQuaternion::rotation_between(p, &Vector3::z_axis()).unwrap();
+        let to_neg_zaxis = |p| UnitQuaternion::rotation_between(p, &-Vector3::z_axis()).unwrap();
+        let around_z = |angle| UnitQuaternion::from_axis_angle(&Vector3::z_axis(), angle);
 
-        let q2 = points
-            .iter()
-            .map(|axis| UnitQuaternion::rotation_between(axis, &Vector3::z_axis()).unwrap())
-            .collect();
+        let q1 = points.iter().map(to_neg_zaxis).collect();
+        let q2 = points.iter().map(to_zaxis).collect();
 
         let dihedrals = iter_num_tools::arange(0.0..2.0 * PI, angle_resolution)
-            .map(|angle| UnitQuaternion::from_axis_angle(&Vector3::z_axis(), angle))
+            .map(around_z)
             .collect();
 
         Self { q1, q2, dihedrals }
@@ -106,6 +102,13 @@ impl TwobodyAngles {
         self.len() == 0
     }
 
+    fn open_compressed_file(outfile: &str) -> GzEncoder<std::fs::File> {
+        GzEncoder::new(
+            std::fs::File::create(outfile).unwrap(),
+            Compression::default(),
+        )
+    }
+
     /// Scan over all angles and write to a file
     ///
     /// This does the following:
@@ -130,11 +133,8 @@ impl TwobodyAngles {
         r: &Vector3,
         temperature: f64,
     ) -> Sample {
-        let outfile = format!("R_{:.1}.dat.gz", r.norm());
-        let mut encoder = GzEncoder::new(
-            std::fs::File::create(outfile).unwrap(),
-            Compression::default(),
-        );
+        let mut file = Self::open_compressed_file(&format!("R_{:.1}.dat.gz", r.norm()));
+
         let sample = self // Scan over angles
             .iter()
             .map(|(q1, q2)| {
@@ -142,7 +142,7 @@ impl TwobodyAngles {
                 let energy = pair_matrix.sum_energy(&a, &b);
                 let com = b.mass_center();
                 writeln!(
-                    encoder,
+                    file,
                     "{:.3} {:.3} {:.3} {:.3} {:?}",
                     energy,
                     com.x,
@@ -181,7 +181,7 @@ impl TwobodyAngles {
 /// - https://stackoverflow.com/questions/9600801/evenly-distributing-n-points-on-a-sphere
 /// - https://en.wikipedia.org/wiki/Geodesic_polyhedron
 /// - c++: https://github.com/caosdoar/spheres
-pub fn fibonacci_sphere(n_points: usize) -> Vec<Vector3> {
+pub fn make_fibonacci_sphere(n_points: usize) -> Vec<Vector3> {
     assert!(n_points > 1, "n_points must be greater than 1");
     let phi = PI * (3.0 - (5.0f64).sqrt()); // golden angle in radians
     let make_ith_point = |i: usize| -> Vector3 {
@@ -211,10 +211,11 @@ pub fn fibonacci_sphere(n_points: usize) -> Vec<Vector3> {
 /// - https://danielsieger.com/blog/2021/03/27/generating-spheres.html
 /// - https://en.wikipedia.org/wiki/Loop_subdivision_surface
 ///
-fn generate_icosphere(min_points: usize) -> Result<Vec<Vector3>> {
-    let num_points = (0..200).map(|n_div| (10 * (n_div + 1) * (n_div + 1) + 2));
-    match num_points.enumerate().find(|(_, n)| *n >= min_points) {
-        Some((n_divisions, _)) => Ok(IcoSphere::new(n_divisions, |_| ())
+pub fn make_icosphere(min_points: usize) -> Result<Vec<Vector3>> {
+    let points_per_division = |n_div: usize| 10 * (n_div + 1) * (n_div + 1) + 2;
+    let n_points = (0..200).map(points_per_division);
+    match n_points.enumerate().find(|(_, n)| *n >= min_points) {
+        Some((n_div, _)) => Ok(IcoSphere::new(n_div, |_| ())
             .raw_points()
             .iter()
             .map(|p| Vector3::new(p.x as f64, p.y as f64, p.z as f64).normalize())
@@ -231,20 +232,20 @@ mod tests {
 
     #[test]
     fn test_icosphere() {
-        let points = generate_icosphere(1).unwrap();
+        let points = make_icosphere(1).unwrap();
         assert_eq!(points.len(), 12);
-        let points = generate_icosphere(10).unwrap();
+        let points = make_icosphere(10).unwrap();
         assert_eq!(points.len(), 12);
-        let points = generate_icosphere(13).unwrap();
+        let points = make_icosphere(13).unwrap();
         assert_eq!(points.len(), 42);
-        let points = generate_icosphere(42).unwrap();
+        let points = make_icosphere(42).unwrap();
         assert_eq!(points.len(), 42);
-        let points = generate_icosphere(43).unwrap();
+        let points = make_icosphere(43).unwrap();
         assert_eq!(points.len(), 92);
-        let _ = generate_icosphere(400003).is_err();
+        let _ = make_icosphere(400003).is_err();
 
         let samples = 1000;
-        let points = generate_icosphere(samples).unwrap();
+        let points = make_icosphere(samples).unwrap();
         let mut center: Vector3 = Vector3::zeros();
         assert_eq!(points.len(), 1002);
         for point in points {
@@ -259,34 +260,34 @@ mod tests {
         use std::f64::consts::FRAC_1_SQRT_2;
         let twobody_angles = TwobodyAngles::new(1.1);
         let n = twobody_angles.q1.len() * twobody_angles.q2.len() * twobody_angles.dihedrals.len();
-        assert_eq!(n, 600);
+        assert_eq!(n, 1008);
         assert_eq!(twobody_angles.len(), n);
         assert_eq!(twobody_angles.iter().count(), n);
 
         let pairs = twobody_angles.iter().collect::<Vec<_>>();
-        assert_relative_eq!(pairs[0].0.coords.x, FRAC_1_SQRT_2);
-        assert_relative_eq!(pairs[0].0.coords.y, 0.0);
+        assert_relative_eq!(pairs[0].0.coords.x, -FRAC_1_SQRT_2, epsilon = 1e-5);
+        assert_relative_eq!(pairs[0].0.coords.y, 0.0, epsilon = 1e-4);
         assert_relative_eq!(pairs[0].0.coords.z, 0.0);
-        assert_relative_eq!(pairs[0].0.coords.w, FRAC_1_SQRT_2);
-        assert_relative_eq!(pairs[0].1.coords.x, -FRAC_1_SQRT_2);
-        assert_relative_eq!(pairs[0].1.coords.y, 0.0);
-        assert_relative_eq!(pairs[0].1.coords.z, 0.0);
-        assert_relative_eq!(pairs[0].1.coords.w, FRAC_1_SQRT_2);
-        assert_relative_eq!(pairs[n - 1].0.coords.x, -FRAC_1_SQRT_2);
-        assert_relative_eq!(pairs[n - 1].0.coords.y, 0.0);
-        assert_relative_eq!(pairs[n - 1].0.coords.z, 0.0);
-        assert_relative_eq!(pairs[n - 1].0.coords.w, FRAC_1_SQRT_2);
-        assert_relative_eq!(pairs[n - 1].1.coords.x, -0.6535804797978707);
-        assert_relative_eq!(pairs[n - 1].1.coords.y, 0.2698750755945888);
-        assert_relative_eq!(pairs[n - 1].1.coords.z, 0.2698750755945888);
-        assert_relative_eq!(pairs[n - 1].1.coords.w, -0.6535804797978708);
+        assert_relative_eq!(pairs[0].0.coords.w, FRAC_1_SQRT_2, epsilon = 1e-5);
+        assert_relative_eq!(pairs[0].1.coords.x, FRAC_1_SQRT_2, epsilon = 1e-5);
+        assert_relative_eq!(pairs[0].1.coords.y, 0.0, epsilon = 1e-4);
+        assert_relative_eq!(pairs[0].1.coords.z, 0.0, epsilon = 1e-4);
+        assert_relative_eq!(pairs[0].1.coords.w, FRAC_1_SQRT_2, epsilon = 1e-5);
+        assert_relative_eq!(pairs[n - 1].0.coords.x, FRAC_1_SQRT_2, epsilon = 1e-5);
+        assert_relative_eq!(pairs[n - 1].0.coords.y, 0.0, epsilon = 1e-4);
+        assert_relative_eq!(pairs[n - 1].0.coords.z, 0.0, epsilon = 1e-4);
+        assert_relative_eq!(pairs[n - 1].0.coords.w, FRAC_1_SQRT_2, epsilon = 1e-5);
+        assert_relative_eq!(pairs[n - 1].1.coords.x, 0.705299, epsilon = 1e-5);
+        assert_relative_eq!(pairs[n - 1].1.coords.y, -0.050523, epsilon = 1e-5);
+        assert_relative_eq!(pairs[n - 1].1.coords.z, 0.050594, epsilon = 1e-5);
+        assert_relative_eq!(pairs[n - 1].1.coords.w, -0.705294, epsilon = 1e-5);
         println!("{}", twobody_angles);
     }
 
     #[test]
     fn test_fibonacci_sphere() {
         let samples = 1000;
-        let points_on_sphere = fibonacci_sphere(samples);
+        let points_on_sphere = make_fibonacci_sphere(samples);
         let mut center: Vector3 = Vector3::zeros();
         assert_eq!(points_on_sphere.len(), samples);
         for point in points_on_sphere {
