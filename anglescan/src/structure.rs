@@ -285,35 +285,46 @@ impl Structure {
     ///
     pub fn inertia_tensor(&self) -> nalgebra::Matrix3<f64> {
         let center = self.mass_center();
-        inertia_tensor(self.pos.iter(), self.masses.iter(), Some(center))
+        inertia_tensor(
+            self.pos.iter().map(|&r| r - center),
+            self.masses.iter().cloned(),
+        )
     }
 }
 
 /// Calculates the moment of inertia tensor of a set of point masses.
 ///
 /// The inertia tensor is computed from positions, 𝒑₁,…,𝒑ₙ, with
-/// respect to a reference point, 𝑪, typically the center of mass:
 ///
-/// 𝐈 = ∑ mᵢ(|𝒓ᵢ|²𝑰₃ - 𝒓ᵢ𝒓ᵢᵀ) where 𝒓ᵢ = 𝒑ᵢ - 𝑪 and 𝑰₃ is the 3×3 identity matrix.
-///
-/// If no center is provided, 𝑪=(0,0,0).
+/// 𝐈 = ∑ mᵢ(|𝒓ᵢ|²𝑰₃ - 𝒓ᵢ𝒓ᵢᵀ) where 𝑰₃ is the 3×3 identity matrix.
 ///
 /// # Further Reading
 ///
 /// - <https://en.wikipedia.org/wiki/Moment_of_inertia#Inertia_tensor>
 ///
-pub fn inertia_tensor<'a>(
-    positions: impl Iterator<Item = &'a Vector3<f64>>,
-    masses: impl Iterator<Item = &'a f64>,
-    center: Option<Vector3<f64>>,
+pub fn inertia_tensor(
+    positions: impl Iterator<Item = Vector3<f64>>,
+    masses: impl Iterator<Item = f64>,
 ) -> Matrix3<f64> {
     positions
         .zip(masses)
-        .map(|(pos, mass)| {
-            let r = pos - center.unwrap_or(Vector3::<f64>::zeros());
-            (r.norm_squared() * Matrix3::<f64>::identity() - r * r.transpose()).scale(*mass)
-        })
+        .map(|(r, m)| m * (r.norm_squared() * Matrix3::<f64>::identity() - r * r.transpose()))
         .sum()
+}
+
+/// Calculates the gyration tensor of a set of positions.
+///
+/// The gyration tensor is computed from positions, 𝒑₁,…,𝒑ₙ, with
+/// respect to the geometric center, 𝑪:
+///
+/// 𝐆 = ∑ 𝒓ᵢ𝒓ᵢᵀ where 𝒓ᵢ = 𝒑ᵢ - 𝑪.
+///
+/// # Further Reading
+/// - <https://en.wikipedia.org/wiki/Gyration_tensor>
+///
+pub fn gyration_tensor(positions: impl Iterator<Item = Vector3<f64>> + Clone) -> Matrix3<f64> {
+    let c: Vector3<f64> = positions.clone().sum();
+    positions.map(|p| p - c).map(|r| r * r.transpose()).sum()
 }
 
 /// Display number of atoms, mass center etc.
