@@ -3,6 +3,7 @@ use anyhow::Result;
 use chemfiles::Frame;
 use faunus::topology::AtomKind;
 use itertools::Itertools;
+use nalgebra::Matrix3;
 use serde::{Deserialize, Serialize};
 use std::fmt::{self, Display, Formatter};
 use std::path::PathBuf;
@@ -275,23 +276,40 @@ impl Structure {
         self.charges.iter().sum()
     }
 
-    /// Calculates an inertia tensor of a molecular group
+    /// Calculates the inertia tensor of the structure
     ///
-    /// The inertia tensor is computed from the atomic position vectors with
-    /// respect to a reference point, typically the mass center,
-    /// 𝐒 = ∑ mᵢ(|𝒓ᵢ|² ⋅ 𝐈 - 𝒓ᵢ𝒓ᵢᵀ) and 𝐈 is the identity tensor.
-    /// where 𝒓ᵢ = pᵢ - 𝒑ᵣ.
+    /// The inertia tensor is computed from positions, 𝒑ᵢ,…𝒑ₙ, with
+    /// respect to a reference point, 𝒑ᵣ, here the center of mass.
+    ///
+    /// 𝐈 = ∑ mᵢ(|𝒓ᵢ|²𝑰₃ - 𝒓ᵢ𝒓ᵢᵀ) where 𝒓ᵢ = 𝒑ᵢ - 𝒑ᵣ.
     ///
     pub fn inertia_tensor(&self) -> nalgebra::Matrix3<f64> {
-        let mut tensor = nalgebra::Matrix3::<f64>::zeros();
         let center = self.mass_center();
-        for (pos, mass) in self.pos.iter().zip(&self.masses) {
-            let r = pos - center;
-            tensor += (r.norm_squared() * nalgebra::Matrix3::<f64>::identity() - r * r.transpose())
-                .scale(*mass);
-        }
-        tensor
+        inertia_tensor(self.pos.iter(), self.masses.iter(), Some(center))
     }
+}
+
+/// Returns the inertia tensor of a set of point masses
+///
+/// The inertia tensor is computed from positions, 𝒑ᵢ,…𝒑ₙ, with
+/// respect to a reference point, 𝒑ᵣ, typically the center of mass.
+///
+/// 𝐈 = ∑ mᵢ(|𝒓ᵢ|²𝑰₃ - 𝒓ᵢ𝒓ᵢᵀ) where 𝒓ᵢ = 𝒑ᵢ - 𝒑ᵣ.
+/// 
+/// If no center is provided, the origin is assumed to be at (0,0,0).
+pub fn inertia_tensor<'a>(
+    positions: impl Iterator<Item = &'a Vector3<f64>>,
+    masses: impl Iterator<Item = &'a f64>,
+    center: Option<Vector3<f64>>,
+) -> Matrix3<f64> {
+    let inertia = |(&pos, &mass)| {
+        let r: Vector3<f64> = pos - center.unwrap_or_default();
+        (r.norm_squared() * Matrix3::<f64>::identity() - r * r.transpose()).scale(mass)
+    };
+    positions
+        .zip(masses)
+        .map(inertia)
+        .fold(Matrix3::<f64>::zeros(), |sum, i| sum + i)
 }
 
 /// Display number of atoms, mass center etc.
