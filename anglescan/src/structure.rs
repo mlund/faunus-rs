@@ -332,12 +332,12 @@ pub fn mass_center(
 ///    Vector3::new(0.0, 1.0, 0.0),
 /// ];
 /// let center = mass_center(pos, masses.iter().cloned());
-/// let inertia = inertia_tensor(pos.iter().cloned(), masses.iter().copied(), Some(center));
-/// //let principal_moments = inertia.symmetric_eigenvalues();
+/// let inertia = inertia_tensor(pos, masses, Some(center));
+/// let principal_moments = inertia.symmetric_eigenvalues();
 ///
-/// //approx::assert_relative_eq!(principal_moments.x, 1.3903882032022075);
-/// //approx::assert_relative_eq!(principal_moments.y, 0.35961179679779254);
-/// //approx::assert_relative_eq!(principal_moments.z, 1.75);
+/// approx::assert_relative_eq!(principal_moments.x, 1.3903882032022075);
+/// approx::assert_relative_eq!(principal_moments.y, 0.35961179679779254);
+/// approx::assert_relative_eq!(principal_moments.z, 1.75);
 /// ~~~
 ///
 /// # Further Reading:
@@ -345,11 +345,11 @@ pub fn mass_center(
 /// - <https://en.wikipedia.org/wiki/Moment_of_inertia#Inertia_tensor>
 ///
 pub fn inertia_tensor(
-    positions: impl Iterator<Item = Vector3<f64>>,
-    masses: impl Iterator<Item = f64>,
+    positions: impl IntoIterator<Item = Vector3<f64>>,
+    masses: impl IntoIterator<Item = f64>,
     center: Option<Vector3<f64>>,
 ) -> Matrix3<f64> {
-    positions
+    positions.into_iter()
         .map(|r| r - center.unwrap_or(Vector3::<f64>::zeros()))
         .zip(masses)
         .map(|(r, m)| m * (r.norm_squared() * Matrix3::<f64>::identity() - r * r.transpose()))
@@ -369,11 +369,12 @@ pub fn principal_moments_of_inertia(inertia: &Matrix3<f64>) -> Vector3<f64> {
 /// 𝐆 = ∑ 𝒓ᵢ𝒓ᵢᵀ where 𝒓ᵢ = 𝒑ᵢ - 𝑪.
 ///
 /// # Further Reading
+/// 
 /// - <https://en.wikipedia.org/wiki/Gyration_tensor>
 ///
-pub fn gyration_tensor(positions: impl Iterator<Item = Vector3<f64>> + Clone) -> Matrix3<f64> {
-    let c: Vector3<f64> = positions.clone().sum();
-    positions.map(|p| p - c).map(|r| r * r.transpose()).sum()
+pub fn gyration_tensor(positions: impl IntoIterator<Item = Vector3<f64>> + Clone) -> Matrix3<f64> {
+    let c: Vector3<f64> = positions.clone().into_iter().sum();
+    positions.into_iter().map(|p| p - c).map(|r| r * r.transpose()).sum()
 }
 
 /// Display number of atoms, mass center etc.
