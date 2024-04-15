@@ -297,8 +297,26 @@ impl Structure {
 /// The inertia tensor is computed from positions, 𝒑₁,…,𝒑ₙ, with
 ///
 /// 𝐈 = ∑ mᵢ(|𝒓ᵢ|²𝑰₃ - 𝒓ᵢ𝒓ᵢᵀ) where 𝑰₃ is the 3×3 identity matrix.
+/// 
+/// # Examples:
+/// ~~~
+/// use nalgebra::Vector3;
+/// use anglescan::structure::inertia_tensor;
+/// let positions = [
+///    Vector3::new(0.0, 0.0, 0.0),
+///    Vector3::new(1.0, 0.0, 0.0),
+///    Vector3::new(0.0, 1.0, 0.0),
+/// ];
+/// let masses = vec![1.0, 1.0, 2.0];
+/// let inertia = inertia_tensor(positions.iter().cloned(), masses.iter().cloned());
+/// let principal_moments = inertia.symmetric_eigenvalues();
+/// 
+/// approx::assert_relative_eq!(principal_moments.x, 2.0);
+/// approx::assert_relative_eq!(principal_moments.y, 1.0);
+/// approx::assert_relative_eq!(principal_moments.z, 3.0);
+/// ~~~
 ///
-/// # Further Reading
+/// # Further Reading:
 ///
 /// - <https://en.wikipedia.org/wiki/Moment_of_inertia#Inertia_tensor>
 ///
@@ -310,6 +328,11 @@ pub fn inertia_tensor(
         .zip(masses)
         .map(|(r, m)| m * (r.norm_squared() * Matrix3::<f64>::identity() - r * r.transpose()))
         .sum()
+}
+
+/// Principal moments of inertia from the inertia tensor
+pub fn principal_moments_of_inertia(inertia: &Matrix3<f64>) -> Vector3<f64> {
+    inertia.symmetric_eigenvalues()
 }
 
 /// Calculates the gyration tensor of a set of positions.
