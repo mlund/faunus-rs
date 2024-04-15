@@ -289,27 +289,31 @@ impl Structure {
     }
 }
 
-/// Returns the inertia tensor of a set of point masses
+/// Calculates the moment of inertia tensor of a set of point masses.
 ///
-/// The inertia tensor is computed from positions, 𝒑ᵢ,…𝒑ₙ, with
-/// respect to a reference point, 𝒑ᵣ, typically the center of mass.
+/// The inertia tensor is computed from positions, 𝒑₁,…,𝒑ₙ, with
+/// respect to a reference point, 𝑪, typically the center of mass:
 ///
-/// 𝐈 = ∑ mᵢ(|𝒓ᵢ|²𝑰₃ - 𝒓ᵢ𝒓ᵢᵀ) where 𝒓ᵢ = 𝒑ᵢ - 𝒑ᵣ.
-/// 
-/// If no center is provided, the origin is assumed to be at (0,0,0).
+/// 𝐈 = ∑ mᵢ(|𝒓ᵢ|²𝑰₃ - 𝒓ᵢ𝒓ᵢᵀ) where 𝒓ᵢ = 𝒑ᵢ - 𝑪 and 𝑰₃ is the 3×3 identity matrix.
+///
+/// If no center is provided, 𝑪=(0,0,0).
+///
+/// # Further Reading
+///
+/// - <https://en.wikipedia.org/wiki/Moment_of_inertia#Inertia_tensor>
+///
 pub fn inertia_tensor<'a>(
     positions: impl Iterator<Item = &'a Vector3<f64>>,
     masses: impl Iterator<Item = &'a f64>,
     center: Option<Vector3<f64>>,
 ) -> Matrix3<f64> {
-    let inertia = |(&pos, &mass)| {
-        let r: Vector3<f64> = pos - center.unwrap_or_default();
-        (r.norm_squared() * Matrix3::<f64>::identity() - r * r.transpose()).scale(mass)
-    };
     positions
         .zip(masses)
-        .map(inertia)
-        .fold(Matrix3::<f64>::zeros(), |sum, i| sum + i)
+        .map(|(pos, mass)| {
+            let r = pos - center.unwrap_or(Vector3::<f64>::zeros());
+            (r.norm_squared() * Matrix3::<f64>::identity() - r * r.transpose()).scale(*mass)
+        })
+        .sum()
 }
 
 /// Display number of atoms, mass center etc.
@@ -317,9 +321,10 @@ impl Display for Structure {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         write!(
             f,
-            "{} atoms, net charge: {}",
+            "𝑁={}, ∑𝑞ᵢ={:.2}𝑒, ∑𝑚ᵢ={:.2}",
             self.pos.len(),
-            self.net_charge()
+            self.net_charge(),
+            self.masses.iter().sum::<f64>()
         )
     }
 }
