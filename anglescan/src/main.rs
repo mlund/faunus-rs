@@ -1,8 +1,7 @@
 use anglescan::{
-    anglescan::TwobodyAngles,
     energy,
     structure::{AtomKinds, Structure},
-    Sample, Vector3,
+    Sample, TwobodyAngles, Vector3,
 };
 use clap::{Parser, Subcommand};
 use faunus::electrolyte::{DebyeLength, Medium, RelativePermittivity, Salt};
@@ -79,7 +78,7 @@ fn do_scan(scan_command: &Commands) {
     let mut atomkinds = AtomKinds::from_yaml(atoms).unwrap();
     atomkinds.set_missing_epsilon(2.479);
 
-    let scan = TwobodyAngles::new(*resolution);
+    let scan = TwobodyAngles::new(*resolution).unwrap();
     let medium = Medium::salt_water(*temperature, Salt::SodiumChloride, *molarity);
     let multipole = interact::multipole::Coulomb::new(
         medium.permittivity(*temperature).unwrap(),
@@ -104,7 +103,9 @@ fn do_scan(scan_command: &Commands) {
         .progress_count(distances.len() as u64)
         .map(|r| {
             let r_vec = Vector3::<f64>::new(0.0, 0.0, *r);
-            let sample = scan.sample_all_angles(&ref_a, &ref_b, &pair_matrix, &r_vec, *temperature);
+            let sample = scan
+                .sample_all_angles(&ref_a, &ref_b, &pair_matrix, &r_vec, *temperature)
+                .unwrap();
             (r_vec, sample)
         })
         .collect::<Vec<_>>();

@@ -1,5 +1,5 @@
-pub use nalgebra::Vector3;
-pub mod anglescan;
+pub use nalgebra::{UnitQuaternion, Vector3};
+mod anglescan;
 pub mod energy;
 pub mod structure;
 extern crate pretty_env_logger;
@@ -8,6 +8,23 @@ extern crate log;
 
 use std::iter::Sum;
 use std::ops::{Add, Neg};
+
+pub use anglescan::{make_fibonacci_sphere, make_icosphere, TwobodyAngles};
+
+/// RMSD angle between two quaternion rotations
+///
+/// The root-mean-square deviation (RMSD) between two quaternion rotations is
+/// defined as the square of the angle between the two quaternions.
+///
+/// - <https://fr.mathworks.com/matlabcentral/answers/415936-angle-between-2-quaternions>
+/// - <https://github.com/charnley/rmsd>
+/// - <https://onlinelibrary.wiley.com/doi/full/10.1002/jcc.20296>
+/// - <https://www.ams.stonybrook.edu/~coutsias/papers/2004-rmsd.pdf>
+pub fn rmsd_angle(q1: &UnitQuaternion<f64>, q2: &UnitQuaternion<f64>) -> f64 {
+    // let q = q1 * q2.inverse();
+    // q.angle().powi(2)
+    q1.angle_to(q2).powi(2)
+}
 
 /// Structure to store energy samples
 #[derive(Debug, Default, Clone)]

@@ -274,6 +274,24 @@ impl Structure {
     pub fn net_charge(&self) -> f64 {
         self.charges.iter().sum()
     }
+
+    /// Calculates an inertia tensor of a molecular group
+    ///
+    /// The inertia tensor is computed from the atomic position vectors with
+    /// respect to a reference point, typically the mass center,
+    /// 𝐒 = ∑ mᵢ(|𝒓ᵢ|² ⋅ 𝐈 - 𝒓ᵢ𝒓ᵢᵀ) and 𝐈 is the identity tensor.
+    /// where 𝒓ᵢ = pᵢ - 𝒑ᵣ.
+    ///
+    pub fn inertia_tensor(&self) -> nalgebra::Matrix3<f64> {
+        let mut tensor = nalgebra::Matrix3::<f64>::zeros();
+        let center = self.mass_center();
+        for (pos, mass) in self.pos.iter().zip(&self.masses) {
+            let r = pos - center;
+            tensor += (r.norm_squared() * nalgebra::Matrix3::<f64>::identity() - r * r.transpose())
+                .scale(*mass);
+        }
+        tensor
+    }
 }
 
 /// Display number of atoms, mass center etc.

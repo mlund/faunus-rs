@@ -5,6 +5,7 @@ use anyhow::Result;
 #[cfg(test)]
 use approx::assert_relative_eq;
 use hexasphere::shapes::IcoSphere;
+use iter_num_tools::arange;
 use itertools::Itertools;
 use std::f64::consts::PI;
 use std::fmt::Display;
@@ -44,14 +45,14 @@ impl TwobodyAngles {
     ///
     /// # Arguments
     /// angle_resolution: f64 - the resolution of the scan in radians
-    pub fn new(angle_resolution: f64) -> Self {
+    pub fn new(angle_resolution: f64) -> Result<Self> {
         assert!(
             angle_resolution > 0.0,
             "angle_resolution must be greater than 0"
         );
 
         let n_points = (4.0 * PI / angle_resolution.powi(2)).round() as usize;
-        let mut points = make_icosphere(n_points).unwrap();
+        let mut points = make_icosphere(n_points)?;
         let angle_resolution = (4.0 * PI / points.len() as f64).sqrt();
         log::info!(
             "Requested {} points on a sphere; got {} -> new resolution = {:.2}",
@@ -74,11 +75,11 @@ impl TwobodyAngles {
         let q1 = points.iter().map(to_neg_zaxis).collect();
         let q2 = points.iter().map(to_zaxis).collect();
 
-        let dihedrals = iter_num_tools::arange(0.0..2.0 * PI, angle_resolution)
+        let dihedrals = arange(0.0..2.0 * PI, angle_resolution)
             .map(around_z)
             .collect();
 
-        Self { q1, q2, dihedrals }
+        Ok(Self { q1, q2, dihedrals })
     }
 
     /// Generates a set of quaternions for a rigid body scan.
@@ -102,11 +103,12 @@ impl TwobodyAngles {
         self.len() == 0
     }
 
-    fn open_compressed_file(outfile: &str) -> GzEncoder<std::fs::File> {
-        GzEncoder::new(
-            std::fs::File::create(outfile).unwrap(),
+    /// Opens a gz compressed file for writing
+    fn open_compressed_file(outfile: &str) -> Result<GzEncoder<std::fs::File>> {
+        Ok(GzEncoder::new(
+            std::fs::File::create(outfile)?,
             Compression::default(),
-        )
+        ))
     }
 
     /// Scan over all angles and write to a file
@@ -132,9 +134,8 @@ impl TwobodyAngles {
         pair_matrix: &PairMatrix,
         r: &Vector3,
         temperature: f64,
-    ) -> Sample {
-        let mut file = Self::open_compressed_file(&format!("R_{:.1}.dat.gz", r.norm()));
-
+    ) -> Result<Sample> {
+        let mut file = Self::open_compressed_file(&format!("R_{:.1}.dat.gz", r.norm()))?;
         let sample = self // Scan over angles
             .iter()
             .map(|(q1, q2)| {
@@ -154,7 +155,7 @@ impl TwobodyAngles {
                 Sample::new(energy, temperature)
             })
             .sum::<Sample>();
-        sample
+        Ok(sample)
     }
 
     /// Transform the two reference structures by the given quaternions and distance vector
@@ -178,9 +179,9 @@ impl TwobodyAngles {
 /// Generates n points uniformly distributed on a unit sphere
 ///
 /// Related information:
-/// - https://stackoverflow.com/questions/9600801/evenly-distributing-n-points-on-a-sphere
-/// - https://en.wikipedia.org/wiki/Geodesic_polyhedron
-/// - c++: https://github.com/caosdoar/spheres
+/// - <https://stackoverflow.com/questions/9600801/evenly-distributing-n-points-on-a-sphere>
+/// - <https://en.wikipedia.org/wiki/Geodesic_polyhedron>
+/// - c++: <https://github.com/caosdoar/spheres>
 pub fn make_fibonacci_sphere(n_points: usize) -> Vec<Vector3> {
     assert!(n_points > 1, "n_points must be greater than 1");
     let phi = PI * (3.0 - (5.0f64).sqrt()); // golden angle in radians
@@ -196,20 +197,27 @@ pub fn make_fibonacci_sphere(n_points: usize) -> Vec<Vector3> {
     (0..n_points).map(make_ith_point).collect()
 }
 
-/// Generate an icosphere with at least `min_points` surface points
+/// Make icosphere with at least `min_points` surface points.
 ///
-/// The number of _points_ on the icosphere is:
+/// This is done by iteratively subdividing the faces of an icosahedron
+/// until at least `min_points` surface points are achieved.
+/// The number of points on the icosphere is _N_ = 10 × (_n_divisions_ + 1)² + 2
+/// whereby 0, 1, 2, ... subdivisions give 12, 42, 92, ... points, respectively.
 ///
-///    N = 10 * (n_divisions + 1)^2 + 2
+/// ## Examples
+/// ~~~
+/// let points = anglescan::make_icosphere(20).unwrap();
+/// assert_eq!(points.len(), 42);
+/// ~~~
 ///
-/// with the first few values 12, 42, 92, 162, ...
-/// for 0, 1, 2, 3, ... divisions.
 ///
 /// ## Further reading
 ///
-/// - https://danielsieger.com/blog/2021/01/03/generating-platonic-solids.html
-/// - https://danielsieger.com/blog/2021/03/27/generating-spheres.html
-/// - https://en.wikipedia.org/wiki/Loop_subdivision_surface
+/// - <https://en.wikipedia.org/wiki/Loop_subdivision_surface>
+/// - <https://danielsieger.com/blog/2021/03/27/generating-spheres.html>
+/// - <https://danielsieger.com/blog/2021/01/03/generating-platonic-solids.html>
+///
+/// ![Image](https://upload.wikimedia.org/wikipedia/commons/thumb/f/f7/Loop_Subdivision_Icosahedron.svg/300px-Loop_Subdivision_Icosahedron.svg.png)
 ///
 pub fn make_icosphere(min_points: usize) -> Result<Vec<Vector3>> {
     let points_per_division = |n_div: usize| 10 * (n_div + 1) * (n_div + 1) + 2;
@@ -218,7 +226,7 @@ pub fn make_icosphere(min_points: usize) -> Result<Vec<Vector3>> {
         Some((n_div, _)) => Ok(IcoSphere::new(n_div, |_| ())
             .raw_points()
             .iter()
-            .map(|p| Vector3::new(p.x as f64, p.y as f64, p.z as f64).normalize())
+            .map(|p| Vector3::new(p.x as f64, p.y as f64, p.z as f64))
             .collect()),
         None => {
             anyhow::bail!("too many points");
@@ -258,7 +266,7 @@ mod tests {
     #[test]
     fn test_twobody_angles() {
         use std::f64::consts::FRAC_1_SQRT_2;
-        let twobody_angles = TwobodyAngles::new(1.1);
+        let twobody_angles = TwobodyAngles::new(1.1).unwrap();
         let n = twobody_angles.q1.len() * twobody_angles.q2.len() * twobody_angles.dihedrals.len();
         assert_eq!(n, 1008);
         assert_eq!(twobody_angles.len(), n);
