@@ -105,11 +105,11 @@ impl Transform {
 /// Translates a set of particles by a vector and applies periodic boundary conditions
 fn translate<'a>(
     pbc: &impl BoundaryConditions,
-    positions: impl Iterator<Item = &'a mut Point>,
+    positions: impl IntoIterator<Item = &'a mut Point>,
     displacement: &Point,
 ) {
-    positions.for_each(|pos| {
+    for pos in positions.into_iter() {
         *pos += displacement;
         pbc.boundary(pos);
-    });
+    }
 }

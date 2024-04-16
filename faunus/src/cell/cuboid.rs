@@ -33,9 +33,10 @@ pub struct Cuboid {
 impl Cuboid {
     /// Create new cuboidal cell with side lengths `a`, `b`, and `c`
     pub fn new(a: f64, b: f64, c: f64) -> Self {
+        let cell = Point::new(a, b, c);
         Self {
-            cell: Point::new(a, b, c),
-            half_cell: Point::new(a / 2.0, b / 2.0, c / 2.0),
+            cell,
+            half_cell: cell.scale(0.5),
         }
     }
     /// Cube with side length `a`

@@ -349,7 +349,7 @@ pub trait GroupCollection: SyncFrom {
     fn set_particles<'a>(
         &mut self,
         indices: impl IntoIterator<Item = usize>,
-        source: impl Iterator<Item = &'a Particle> + Clone,
+        source: impl IntoIterator<Item = &'a Particle> + Clone,
     ) -> anyhow::Result<()>;
 
     /// Synchronize with a group in another context

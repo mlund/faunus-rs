@@ -39,7 +39,10 @@ pub trait SimulationCell: Shape + BoundaryConditions + VolumeScale + Clone {}
 pub trait Shape {
     /// Get volume
     fn volume(&self) -> Option<f64>;
-    /// Position of the geometric center of the shape. For a cube, this is the center of the box; for a sphere, the center of the sphere etc.
+    /// Position of the geometric center of the shape.
+    ///
+    /// For a cube, this is the center of the box;
+    /// for a sphere, the center of the sphere etc.
     fn center(&self) -> Point {
         Point::zeros()
     }
@@ -104,6 +107,7 @@ pub enum VolumeScalePolicy {
 /// Trait for scaling a position or the simulation cell according to a scaling policy.
 pub trait VolumeScale {
     /// Scale a `position` inside a simulation cell according to a scaling policy.
+    ///
     /// Errors if the scaling policy is unsupported.
     fn scale_position(
         &self,
@@ -113,6 +117,7 @@ pub trait VolumeScale {
     ) -> Result<(), anyhow::Error>;
 
     /// Scale cell volume to a new volume according to a scaling policy.
+    ///
     /// This should typically be followed by a call to `scale_position` for each particle or mass center.
     /// Errors if the scaling policy is unsupported.
     fn scale_volume(

@@ -349,7 +349,8 @@ pub fn inertia_tensor(
     masses: impl IntoIterator<Item = f64>,
     center: Option<Vector3<f64>>,
 ) -> Matrix3<f64> {
-    positions.into_iter()
+    positions
+        .into_iter()
         .map(|r| r - center.unwrap_or(Vector3::<f64>::zeros()))
         .zip(masses)
         .map(|(r, m)| m * (r.norm_squared() * Matrix3::<f64>::identity() - r * r.transpose()))
@@ -369,12 +370,16 @@ pub fn principal_moments_of_inertia(inertia: &Matrix3<f64>) -> Vector3<f64> {
 /// 𝐆 = ∑ 𝒓ᵢ𝒓ᵢᵀ where 𝒓ᵢ = 𝒑ᵢ - 𝑪.
 ///
 /// # Further Reading
-/// 
+///
 /// - <https://en.wikipedia.org/wiki/Gyration_tensor>
 ///
 pub fn gyration_tensor(positions: impl IntoIterator<Item = Vector3<f64>> + Clone) -> Matrix3<f64> {
     let c: Vector3<f64> = positions.clone().into_iter().sum();
-    positions.into_iter().map(|p| p - c).map(|r| r * r.transpose()).sum()
+    positions
+        .into_iter()
+        .map(|p| p - c)
+        .map(|r| r * r.transpose())
+        .sum()
 }
 
 /// Display number of atoms, mass center etc.
