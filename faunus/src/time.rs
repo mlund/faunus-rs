@@ -15,11 +15,13 @@
 //! Support for operations dealing with *time*.
 
 use serde::{Deserialize, Serialize};
+use std::fmt::Display;
 use std::time::Duration;
 
 /// Helper class to keep track of time spent in a Monte Carlo move
+/// 
 /// The reported time is the accumulated time spent between multiple calls to `start` and `stop`.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Timer {
     /// Start time
     #[serde(skip_serializing)]
@@ -31,14 +33,6 @@ pub struct Timer {
 }
 
 impl Timer {
-    /// Create a new timer
-    pub fn new() -> Self {
-        Self {
-            start: None,
-            accumulated: Duration::new(0, 0),
-        }
-    }
-
     /// Start the timer
     pub fn start(&mut self) {
         self.start = Some(std::time::Instant::now());
@@ -62,12 +56,13 @@ impl Timer {
 
     /// Clear the accumulated time
     pub fn reset(&mut self) {
-        *self = Self::new();
+        *self = Self::default();
     }
 }
 
-impl Default for Timer {
-    fn default() -> Self {
-        Self::new()
+impl Display for Timer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let elapsed = self.accumulated.as_secs_f32();
+        write!(f, "⏱️ elapsed = {:.2} s", elapsed)
     }
 }
