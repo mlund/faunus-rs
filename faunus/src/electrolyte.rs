@@ -13,6 +13,9 @@
 // limitations under the license.
 
 //! # Support for handling electrolyte solutions
+//! 
+//! This module provides support for calculating properties of electrolyte solutions
+//! such as the Debye length, ionic strength, and Bjerrum length.
 
 use crate::{
     AVOGADRO_CONSTANT, BOLTZMANN_CONSTANT, ELEMENTARY_CHARGE, VACUUM_ELECTRIC_PERMITTIVITY,

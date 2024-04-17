@@ -1,3 +1,8 @@
+//! # Electric multipole interactions
+//!
+//! This module provides tools for calculating the two-body interaction energy between
+//! electric multipole moments, such as monopoles, dipoles, quadrupoles etc.
+
 use super::Info;
 use crate::electrostatic::MultipoleEnergy;
 use crate::twobody::IsotropicTwobodyEnergy;

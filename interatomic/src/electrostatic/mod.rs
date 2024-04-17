@@ -30,7 +30,7 @@
 mod ewald;
 pub use ewald::*;
 mod coulomb;
-pub use coulomb::*;
+pub use coulomb::Coulomb;
 mod poisson;
 use crate::{Matrix3, Vector3};
 pub use poisson::*;

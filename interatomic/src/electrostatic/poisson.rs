@@ -83,20 +83,29 @@ pub struct Poisson<const C: i32, const D: i32> {
 
 /// Scheme for a vanilla coulomb interaction using the Poisson framework. Same as `Coulomb`.
 pub type Plain = Poisson<1, -1>;
-/// Energy and force shifted Yukawa potential [Levitt/undamped Fennell](https://doi.org/10/fp959p). See also doi:10/bqgmv2.
+/// Energy and force shifted Yukawa potential [Levitt/undamped Fennell](https://doi.org/10/fp959p).
+/// 
+/// See also doi:10/bqgmv2.
 pub type Yukawa = Poisson<1, 1>;
+
 /// Scheme for [Undamped Wolf](https://doi.org/10.1063/1.478738)
 pub type UndampedWolf = Poisson<1, 0>;
+
 /// Scheme for [Kale](https://doi.org/10/csh8bg)
 pub type Kale = Poisson<1, 2>;
+
 /// Scheme for [McCann](https://doi.org/10.1021/ct300961)
 pub type McCann = Poisson<1, 3>;
+
 /// Scheme for [Undamped Fukuda](https://doi.org/10.1063/1.3582791)
 pub type UndampedFukuda = Poisson<2, 1>;
+
 /// Scheme for [Markland](https://doi.org/10.1016/j.cplett.2008.09.019)
 pub type Markland = Poisson<2, 2>;
+
 /// Scheme for [Stenqvist](https://doi.org/10/c5fr)
 pub type Stenqvist = Poisson<3, 3>;
+
 /// Scheme for [Fanourgakis](https://doi.org/10.1063/1.3216520)
 pub type Fanourgakis = Poisson<4, 3>;
 
