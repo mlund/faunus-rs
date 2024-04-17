@@ -27,14 +27,14 @@ use crate::{Info, Vector3};
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 
-mod electrostatic;
 mod hardsphere;
 mod harmonic;
 mod mie;
-pub use self::electrostatic::{IonIon, IonIonPlain, IonIonYukawa};
+mod multipole;
 pub use self::hardsphere::HardSphere;
 pub use self::harmonic::Harmonic;
 pub use self::mie::{LennardJones, Mie, WeeksChandlerAndersen};
+pub use self::multipole::{IonIon, IonIonPlain, IonIonYukawa};
 
 /// Relative orientation between a pair of anisotropic particles
 /// # Todo
