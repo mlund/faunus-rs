@@ -61,7 +61,7 @@ impl Medium {
     /// Medium with neat water using the `PermittivityNR::WATER` model
     pub fn neat_water(temperature: f64) -> Self {
         Self {
-            permittivity: Box::new(PermittivityNR::WATER),
+            permittivity: Box::new(EmpiricalPermittivity::WATER),
             salt: None,
             molarity: 0.0,
             temperature,
@@ -70,7 +70,7 @@ impl Medium {
     /// Medium with salt water using the `PermittivityNR::WATER` model
     pub fn salt_water(temperature: f64, salt: Salt, molarity: f64) -> Self {
         Self {
-            permittivity: Box::new(PermittivityNR::WATER),
+            permittivity: Box::new(EmpiricalPermittivity::WATER),
             salt: Some(salt),
             molarity,
             temperature,

@@ -24,8 +24,8 @@
 //!
 //! # Examples
 //!
-//! The is a medium of neat water at 298.15 K where the temperature-dependent
-//! dielectric constant is found by the [`PermittivityNR::WATER`] model:
+//! The is a [`Medium`] of neat water at 298.15 K where the temperature-dependent
+//! dielectric constant is found by the [`EmpiricalPermittivity::WATER`] model:
 //! ~~~
 //! # use approx::assert_relative_eq;
 //! use electrolyte::*;
@@ -35,7 +35,7 @@
 //! assert!(medium.debye_length().is_none());
 //! ~~~
 //!
-//! We can also add salt of arbitrary valency and concentration which
+//! We can also add [`Salt`] of arbitrary valency and concentration which
 //! leads to a non-zero ionic strength and Debye length,
 //! ~~~
 //! # use approx::assert_relative_eq;
@@ -52,7 +52,7 @@ use physical_constants::{
 use std::f64::consts::PI;
 
 mod permittivity;
-pub use permittivity::{PermittivityNR, RelativePermittivity};
+pub use permittivity::{EmpiricalPermittivity, RelativePermittivity};
 mod salt;
 pub use salt::Salt;
 mod medium;
