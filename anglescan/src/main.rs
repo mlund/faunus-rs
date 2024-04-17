@@ -4,7 +4,7 @@ use anglescan::{
     Sample, TwobodyAngles, Vector3,
 };
 use clap::{Parser, Subcommand};
-use faunus::electrolyte::{DebyeLength, Medium, RelativePermittivity, Salt};
+use electrolyte::{DebyeLength, Medium, RelativePermittivity, Salt};
 use indicatif::ParallelProgressIterator;
 use nu_ansi_term::Color::{Red, Yellow};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};

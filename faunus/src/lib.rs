@@ -32,7 +32,6 @@ mod change;
 pub use self::change::{Change, GroupChange};
 pub mod analysis;
 pub mod chemistry;
-pub mod electrolyte;
 pub mod energy;
 pub mod group;
 pub mod montecarlo;

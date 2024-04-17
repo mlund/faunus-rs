@@ -84,7 +84,7 @@ pub struct Poisson<const C: i32, const D: i32> {
 /// Scheme for a vanilla coulomb interaction using the Poisson framework. Same as `Coulomb`.
 pub type Plain = Poisson<1, -1>;
 /// Energy and force shifted Yukawa potential [Levitt/undamped Fennell](https://doi.org/10/fp959p).
-/// 
+///
 /// See also doi:10/bqgmv2.
 pub type Yukawa = Poisson<1, 1>;
 
