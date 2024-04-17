@@ -32,7 +32,7 @@ pub use ewald::*;
 mod coulomb;
 pub use coulomb::*;
 mod poisson;
-use crate::{Matrix3, Point};
+use crate::{Matrix3, Vector3};
 pub use poisson::*;
 
 /// # Short-range function for electrostatic interaction schemes
@@ -93,7 +93,7 @@ pub trait MultipolePotential: ShortRangeFunction {
     ///
     /// The potential from a point dipole is described by the formula:
     /// Phi(mu, r) = (mu dot r) / (|r|^2) * [s(q) - q * s'(q)] * exp(-kr)
-    fn dipole_potential(&self, dipole: &Point, r: &Point) -> f64 {
+    fn dipole_potential(&self, dipole: &Vector3, r: &Vector3) -> f64 {
         let r_squared = r.norm_squared();
         if r_squared >= self.cutoff_squared() {
             return 0.0;
@@ -110,7 +110,7 @@ pub trait MultipolePotential: ShortRangeFunction {
         }
     }
 
-    fn quadrupole_potential(&self, quad: &Matrix3, r: &Point) -> f64 {
+    fn quadrupole_potential(&self, quad: &Matrix3, r: &Vector3) -> f64 {
         let r2 = r.norm_squared();
         if r2 >= self.cutoff_squared() {
             return 0.0;
@@ -143,10 +143,10 @@ pub trait MultipoleField: ShortRangeFunction {
     ///
     /// The field from a charge is described by the formula:
     /// E(z, r) = z * r / |r|^2 * (s(q) - q * s'(q))
-    fn ion_field(&self, charge: f64, r: &Point) -> Point {
+    fn ion_field(&self, charge: f64, r: &Vector3) -> Vector3 {
         let r2 = r.norm_squared();
         if r2 >= self.cutoff_squared() {
-            return Point::zeros();
+            return Vector3::zeros();
         }
         let r1 = r.norm();
         let q = r1 / self.cutoff();
@@ -173,10 +173,10 @@ pub trait MultipoleField: ShortRangeFunction {
     /// E(mu, r) = (3 * (mu.dot(r) * r / r2) - mu) / r3 *
     ///             (s(q) - q * s'(q) + q^2 / 3 * s''(q)) +
     ///             mu / r3 * (s(q) * kr^2 - 2 * kr * q * s'(q) + q^2 / 3 * s''(q))
-    fn dipole_field(&self, dipole: &Point, r: &Point) -> Point {
+    fn dipole_field(&self, dipole: &Vector3, r: &Vector3) -> Vector3 {
         let r2 = r.norm_squared();
         if r2 >= self.cutoff_squared() {
-            return Point::zeros();
+            return Vector3::zeros();
         }
         let r1 = r.norm();
         let r3 = r1 * r2;
@@ -203,10 +203,10 @@ pub trait MultipoleField: ShortRangeFunction {
     ///
     /// Returns:
     /// Field from quadrupole [UNIT: (input charge) / (input length)^2]
-    fn quadrupole_field(&self, quad: &Matrix3, r: &Point) -> Point {
+    fn quadrupole_field(&self, quad: &Matrix3, r: &Vector3) -> Vector3 {
         let r2 = r.norm_squared();
         if r2 >= self.cutoff_squared() {
-            return Point::zeros();
+            return Vector3::zeros();
         }
         let r_norm = r.norm();
         let r_hat = r / r_norm;
@@ -263,7 +263,7 @@ pub trait MultipoleEnergy: MultipolePotential + MultipoleField {
     /// This interaction can also be described by:
     ///     u(z, mu, r) = -mu.dot(E(z, r))
     /// where E(charge, r) is the field from the ion at the location of the dipole.
-    fn ion_dipole_energy(&self, charge: f64, dipole: &Point, r: &Point) -> f64 {
+    fn ion_dipole_energy(&self, charge: f64, dipole: &Vector3, r: &Vector3) -> f64 {
         // Both expressions below give the same answer. Keep for possible optimization in the future.
         // return -dipole_moment.dot(self.ion_field(charge, r)); // field from charge interacting with dipole
         charge * self.dipole_potential(dipole, &(-r)) // potential of dipole interacting with charge
@@ -280,7 +280,7 @@ pub trait MultipoleEnergy: MultipolePotential + MultipoleField {
     /// The interaction energy between two dipoles is described by:
     ///     u(mu1, mu2, r) = -mu1.dot(E(mu2, r))
     /// where E(mu2, r) is the field from dipole 2 at the location of dipole 1.
-    fn dipole_dipole_energy(&self, dipole1: &Point, dipole2: &Point, r: &Point) -> f64 {
+    fn dipole_dipole_energy(&self, dipole1: &Vector3, dipole2: &Vector3, r: &Vector3) -> f64 {
         -dipole1.dot(&self.dipole_field(dipole2, r))
     }
 
@@ -295,7 +295,7 @@ pub trait MultipoleEnergy: MultipolePotential + MultipoleField {
     /// The interaction energy between an ion and a quadrupole is described by:
     ///     u(z, Q, r) = z * Phi(Q, -r)
     /// where Phi(Q, -r) is the potential from the quadrupole at the location of the ion.
-    fn ion_quadrupole_energy(&self, charge: f64, quad: &Matrix3, r: &Point) -> f64 {
+    fn ion_quadrupole_energy(&self, charge: f64, quad: &Matrix3, r: &Vector3) -> f64 {
         charge * self.quadrupole_potential(quad, &(-r)) // potential of quadrupole interacting with charge
     }
 }
@@ -320,7 +320,7 @@ pub trait MultipoleForce: MultipoleField {
     /// - `charge2`: Point charge
     /// - `r`: Distance vector between charges
     /// - `E(zA, r)`: Field from ion A at the location of ion B
-    fn ion_ion_force(&self, charge1: f64, charge2: f64, r: &Point) -> Point {
+    fn ion_ion_force(&self, charge1: f64, charge2: f64, r: &Vector3) -> Vector3 {
         charge2 * self.ion_field(charge1, r)
     }
     /// Interaction force between a point charge and a point dipole.
@@ -341,7 +341,7 @@ pub trait MultipoleForce: MultipoleField {
     /// - `mu`: Dipole moment
     /// - `r`: Distance vector between dipole and charge
     /// - `E(mu, r)`: Field from the dipole at the location of the ion
-    fn ion_dipole_force(&self, charge: f64, dipole: &Point, r: &Point) -> Point {
+    fn ion_dipole_force(&self, charge: f64, dipole: &Vector3, r: &Vector3) -> Vector3 {
         charge * self.dipole_field(dipole, r)
     }
 
@@ -358,7 +358,7 @@ pub trait MultipoleForce: MultipoleField {
     /// The force between two dipoles is described by the formula:
     /// F(mu1, mu2, r) = FD(mu1, mu2, r) * (s(q) - q * s'(q) + (q^2 / 3) * s''(q))
     ///                  + FI(mu1, mu2, r) * (s''(q) - q * s'''(q)) * q^2 * exp(-kr)
-    fn dipole_dipole_force(&self, mu1: &Point, mu2: &Point, r: &Point) -> Point {
+    fn dipole_dipole_force(&self, mu1: &Vector3, mu2: &Vector3, r: &Vector3) -> Vector3 {
         let r2 = r.norm_squared();
         if r2 < self.cutoff_squared() {
             let r1 = r.norm();
@@ -386,7 +386,7 @@ pub trait MultipoleForce: MultipoleField {
                     - q2 * q * dddsrf);
             (force_d + force_i) * (-kr).exp()
         } else {
-            Point::zeros()
+            Vector3::zeros()
         }
     }
 
@@ -405,7 +405,7 @@ pub trait MultipoleForce: MultipoleField {
      * F(charge, quad, r) = charge * E(quad, r)
      * where E(quad, r) is the field from the quadrupole at the location of the ion.
      */
-    fn ion_quadrupole_force(&self, charge: f64, quad: Matrix3, r: Point) -> Point {
+    fn ion_quadrupole_force(&self, charge: f64, quad: Matrix3, r: Vector3) -> Vector3 {
         charge * self.quadrupole_field(&quad, &r)
     }
 }

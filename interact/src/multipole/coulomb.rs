@@ -17,7 +17,7 @@ use super::{
 };
 use crate::ELECTRIC_PREFACTOR;
 #[cfg(test)]
-use crate::{Matrix3, Point};
+use crate::{Matrix3, Vector3};
 #[cfg(test)]
 use approx::assert_relative_eq;
 use serde::{Deserialize, Serialize};
@@ -101,17 +101,17 @@ fn test_coulomb() {
     let cutoff: f64 = 29.0; // cutoff distance
     let z1 = 2.0; // charge
     let z2 = 3.0; // charge
-    let mu1 = Point::new(19.0, 7.0, 11.0); // dipole moment
-    let mu2 = Point::new(13.0, 17.0, 5.0); // dipole moment
+    let mu1 = Vector3::new(19.0, 7.0, 11.0); // dipole moment
+    let mu2 = Vector3::new(13.0, 17.0, 5.0); // dipole moment
     let quad1 = Matrix3::new(3.0, 7.0, 8.0, 5.0, 9.0, 6.0, 2.0, 1.0, 4.0); // quadrupole moment
     let _quad2 = Matrix3::zeros(); // quadrupole moment
-    let r = Point::new(23.0, 0.0, 0.0); // distance vector
-    let rq = Point::new(
+    let r = Vector3::new(23.0, 0.0, 0.0); // distance vector
+    let rq = Vector3::new(
         5.75 * (6.0f64).sqrt(),
         5.75 * (2.0f64).sqrt(),
         11.5 * (2.0f64).sqrt(),
     ); // distance vector for quadrupole check
-    let rh = Point::new(1.0, 0.0, 0.0); // normalized distance vector
+    let rh = Vector3::new(1.0, 0.0, 0.0); // normalized distance vector
 
     let pot = Coulomb::new(80.0, cutoff, None);
     let eps = 1e-9;

@@ -23,7 +23,7 @@
 //!   - Lennard-Jones
 //!   - Weeks-Chandler-Andersen
 
-use crate::{Info, Point};
+use crate::{Info, Vector3};
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 
@@ -42,8 +42,8 @@ pub use self::mie::{LennardJones, Mie, WeeksChandlerAndersen};
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct RelativeOrientation {
     /// Distance between the two particles
-    pub distance: Point,
-    pub orientation: Point,
+    pub distance: Vector3,
+    pub orientation: Vector3,
 }
 
 /// Potential energy between a pair of anisotropic particles
