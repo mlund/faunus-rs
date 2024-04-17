@@ -12,6 +12,12 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
+//! # Interatomic
+//!
+//! This library provides a collection of tools for calculating interatomic interactions
+//! such as van der Waals, electrostatics, and other two-body or many-body potentials.
+//!
+
 extern crate approx;
 extern crate typetag;
 
