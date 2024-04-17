@@ -15,9 +15,35 @@
 //! # Support for handling electrolyte solutions
 //!
 //! This module provides support for calculating properties of electrolyte solutions
-//! such as the Debye length, ionic strength, and Bjerrum length.
+//! such as the
+//! [Debye length](https://en.wikipedia.org/wiki/Debye_length),
+//! [ionic strength](https://en.wikipedia.org/wiki/Ionic_strength), and
+//! [Bjerrum length](https://en.wikipedia.org/wiki/Bjerrum_length).
 //! It also has a module for empirical models of relative permittivity as a function
 //! of temperature.
+//!
+//! # Examples
+//!
+//! The is a medium of neat water at 298.15 K where the temperature-dependent
+//! dielectric constant is found by the [`PermittivityNR::WATER`] model:
+//! ~~~
+//! # use approx::assert_relative_eq;
+//! use electrolyte::*;
+//! let medium = Medium::neat_water(298.15);
+//! assert_relative_eq!(medium.permittivity(298.15).unwrap(), 78.35565171480539);
+//! assert_relative_eq!(medium.ionic_strength(), 0.0);
+//! assert!(medium.debye_length().is_none());
+//! ~~~
+//!
+//! We can also add salt of arbitrary valency and concentration which
+//! leads to a non-zero ionic strength and Debye length,
+//! ~~~
+//! # use approx::assert_relative_eq;
+//! # use electrolyte::{Medium, Salt, DebyeLength, IonicStrength};
+//! let medium = Medium::salt_water(298.15, Salt::CalciumChloride, 0.1);
+//! assert_relative_eq!(medium.ionic_strength(), 0.3);
+//! assert_relative_eq!(medium.debye_length().unwrap(), 5.548902662386284);
+//! ~~~
 
 use anyhow::Result;
 use physical_constants::{
@@ -32,6 +58,7 @@ pub use salt::Salt;
 mod medium;
 pub use medium::Medium;
 
+/// Trait for objects with a temperature
 pub trait Temperature {
     /// Get the temperature in Kelvin
     fn temperature(&self) -> f64;
@@ -67,7 +94,7 @@ pub trait DebyeLength: IonicStrength + RelativePermittivity + Temperature {
             None
         }
     }
-    /// Inverse Debye length in 1/angstrom or `None`` if the ionic strength is zero.
+    /// Inverse Debye length in inverse angstrom or `None` if the ionic strength is zero.
     ///
     /// May perform expensive operations so avoid use in speed critical code,
     /// such as inside tight interaction loops.

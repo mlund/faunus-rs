@@ -1,4 +1,7 @@
 use anyhow::Result;
+use core::fmt;
+use core::fmt::{Display, Formatter};
+#[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
 /// Trait for objects that has a relative permittivity
@@ -22,7 +25,15 @@ pub trait RelativePermittivity {
 /// assert_eq!(PermittivityNR::METHANOL.permittivity(298.15).unwrap(), 33.081980713895064);
 /// assert_eq!(PermittivityNR::ETHANOL.permittivity(298.15).unwrap(), 24.33523434183735);
 /// ~~~
-#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
+///
+/// We can also pretty print the model:
+/// ~~~
+/// # use electrolyte::PermittivityNR;
+/// assert_eq!(PermittivityNR::WATER.to_string(),
+///            "εᵣ(𝑇) = -1.66e3 + -8.85e-1𝑇 + 3.63e-4𝑇² + 6.48e4/𝑇 + 3.08e2㏑(𝑇); 𝑇 = [273.0, 403.0]");
+/// ~~~
+#[derive(Debug, PartialEq, Clone)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct PermittivityNR {
     /// Coefficients for the model
     coeffs: [f64; 5],
@@ -68,5 +79,21 @@ impl RelativePermittivity for PermittivityNR {
                 + self.coeffs[3] / temperature
                 + self.coeffs[4] * temperature.ln())
         }
+    }
+}
+
+impl Display for PermittivityNR {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "εᵣ(𝑇) = {:.2e} + {:.2e}𝑇 + {:.2e}𝑇² + {:.2e}/𝑇 + {:.2e}㏑(𝑇); 𝑇 = [{:.1}, {:.1}]",
+            self.coeffs[0],
+            self.coeffs[1],
+            self.coeffs[2],
+            self.coeffs[3],
+            self.coeffs[4],
+            self.temperature_interval.0,
+            self.temperature_interval.1
+        )
     }
 }

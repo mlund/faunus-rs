@@ -14,15 +14,19 @@ use core::fmt::{Display, Formatter};
 /// - Temperature
 ///
 /// # Examples
+///
+/// ## Pure water
 /// ~~~
 /// use electrolyte::{Medium, Salt, DebyeLength, RelativePermittivity, IonicStrength};
 /// let medium = Medium::neat_water(298.15);
 /// assert_eq!(medium.permittivity(298.15).unwrap(), 78.35565171480539);
 /// assert_eq!(medium.ionic_strength(), 0.0);
 /// assert!(medium.debye_length().is_none());
-///
+/// ~~~
+/// ## Salty water
+/// ~~~
+/// # use electrolyte::{Medium, Salt, DebyeLength, IonicStrength};
 /// let medium = Medium::salt_water(298.15, Salt::CalciumChloride, 0.1);
-/// assert_eq!(medium.permittivity(298.15).unwrap(), 78.35565171480539);
 /// approx::assert_abs_diff_eq!(medium.ionic_strength(), 0.3);
 /// approx::assert_abs_diff_eq!(medium.debye_length().unwrap(), 5.548902662386284);
 /// ~~~

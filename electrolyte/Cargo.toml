@@ -8,8 +8,11 @@ edition = "2021"
 [dev-dependencies]
 approx = "0.5"
 
+[features]
+default = []
+
 [dependencies]
 anyhow = "1.0"
-num = "0.4.2"
+num-integer = "0.1"
 physical_constants = "0.5"
-serde = { version = "1.0", features = ["derive"] }
+serde = { version = "1.0", features = ["derive"], optional = true }

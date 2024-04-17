@@ -1,4 +1,6 @@
 use core::fmt::{Display, Formatter};
+use num_integer::gcd;
+#[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
 /// # Common salts and valencies
@@ -13,7 +15,7 @@ use serde::{Deserialize, Serialize};
 /// CaCl₂     | `[2, -1]`
 /// KAl(SO₄)₂ | `[1, 3, -2]`
 ///
-/// # Examples:
+/// # Examples
 /// ~~~
 /// use electrolyte::Salt;
 /// let molarity = 0.1;
@@ -22,31 +24,46 @@ use serde::{Deserialize, Serialize};
 /// assert_eq!(salt.valencies(), [1, -1]);
 /// assert_eq!(salt.stoichiometry(), [1, 1]);
 /// assert_eq!(salt.ionic_strength(molarity), 0.1);
+/// ~~~
 ///
+/// We can also define arbitrary salts where the stoichiometry is
+/// automatically deduced from the valencies:
+///
+/// ~~~
+/// # use electrolyte::Salt;
+/// # let molarity = 0.1;
 /// let alum = Salt::Custom(vec![1, 3, -2]); // e.g. KAl(SO₄)₂
 /// assert_eq!(alum.stoichiometry(), [1, 1, 2]);
 /// assert_eq!(alum.ionic_strength(molarity), 0.9);
 /// ~~~
-#[derive(Debug, PartialEq, Clone, Serialize, Deserialize, Default)]
+///
+/// The `Display` trait is implemented to pretty print the salt type:
+/// ~~~
+/// # use electrolyte::Salt;
+/// assert_eq!(Salt::PotassiumAlum.to_string(), "🧂Salt = KAl(SO₄)₂");
+/// ~~~
+///
+#[derive(Debug, PartialEq, Clone, Default)]
+#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 pub enum Salt {
     /// Sodium chloride, NaCl. This is an example of a 1:1 electrolyte and is the default salt type.
-    #[serde(rename = "NaCl")]
+    #[cfg_attr(feature = "serde", serde(rename = "NaCl"))]
     #[default]
     SodiumChloride,
     /// Calcium chloride, CaCl₂
-    #[serde(rename = "CaCl₂")]
+    #[cfg_attr(feature = "serde", serde(rename = "CaCl₂"))]
     CalciumChloride,
     /// Calcium sulfate, CaSO₄
-    #[serde(rename = "CaSO₄")]
+    #[cfg_attr(feature = "serde", serde(rename = "CaSO₄"))]
     CalciumSulfate,
     /// Potassium alum, KAl(SO₄)₂
-    #[serde(rename = "KAl(SO₄)₂")]
+    #[cfg_attr(feature = "serde", serde(rename = "KAl(SO₄)₂"))]
     PotassiumAlum,
     /// Sodium sulfate, Na₂SO₄
-    #[serde(rename = "Na₂SO₄")]
+    #[cfg_attr(feature = "serde", serde(rename = "Na₂SO₄"))]
     SodiumSulfate,
     /// Lanthanum chloride, LaCl₃
-    #[serde(rename = "LaCl₃")]
+    #[cfg_attr(feature = "serde", serde(rename = "LaCl₃"))]
     LanthanumChloride,
     /// Salt with custom valencies
     Custom(Vec<isize>),
@@ -71,7 +88,7 @@ impl Salt {
         let valencies = self.valencies();
         let sum_positive: isize = valencies.iter().filter(|i| i.is_positive()).sum();
         let sum_negative: isize = valencies.iter().filter(|i| i.is_negative()).sum();
-        let gcd = num::integer::gcd(sum_positive, sum_negative);
+        let gcd = gcd(sum_positive, sum_negative);
         if sum_positive == 0 || sum_negative == 0 || gcd == 0 {
             panic!("cannot resolve stoichiometry; did you provide both + and - ions?")
         }
