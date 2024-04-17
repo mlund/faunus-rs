@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 /// More information [here](http://www.sklogwiki.org/SklogWiki/index.php/Hard_sphere_model).
 /// # Examples
 /// ~~~
-/// use interact::twobody::{HardSphere, IsotropicTwobodyEnergy};
+/// use interatomic::twobody::{HardSphere, IsotropicTwobodyEnergy};
 /// let hardsphere = HardSphere::new(1.0);
 /// let distance: f64 = 0.9; // smaller than the minimum distance
 /// assert!(hardsphere.isotropic_twobody_energy(distance.powi(2)).is_infinite());

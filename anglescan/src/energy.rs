@@ -1,13 +1,13 @@
 use faunus::topology::AtomKind;
-use interact::twobody::{IonIon, IsotropicTwobodyEnergy, LennardJones};
-use interact::CombinationRule;
+use interatomic::twobody::{IonIon, IsotropicTwobodyEnergy, LennardJones};
+use interatomic::CombinationRule;
 
 use crate::structure::Structure;
 
 // type alias for the pair potential
-type CoulombMethod = interact::multipole::Coulomb;
-type ShortRange = interact::twobody::WeeksChandlerAndersen;
-type PairPotential<'a> = interact::twobody::Combined<IonIon<'a, CoulombMethod>, ShortRange>;
+type CoulombMethod = interatomic::multipole::Coulomb;
+type ShortRange = interatomic::twobody::WeeksChandlerAndersen;
+type PairPotential<'a> = interatomic::twobody::Combined<IonIon<'a, CoulombMethod>, ShortRange>;
 
 /// Pair-matrix of twobody energies for pairs of atom ids
 pub struct PairMatrix<'a> {

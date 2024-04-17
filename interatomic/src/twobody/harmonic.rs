@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 /// More information [here](https://en.wikipedia.org/wiki/Harmonic_oscillator).
 /// # Examples
 /// ~~~
-/// use interact::twobody::{Harmonic, IsotropicTwobodyEnergy};
+/// use interatomic::twobody::{Harmonic, IsotropicTwobodyEnergy};
 /// let harmonic = Harmonic::new(1.0, 0.5);
 /// let distance: f64 = 2.0;
 /// assert_eq!(harmonic.isotropic_twobody_energy(distance.powi(2)), 0.25);

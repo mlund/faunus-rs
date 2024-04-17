@@ -19,7 +19,7 @@
 //!
 //! ## Examples
 //! ~~~
-//! use interact::multipole::*;
+//! use interatomic::multipole::*;
 //! let permittivity = 80.0;
 //! let charge = 1.0;
 //! let dist = 9.0;

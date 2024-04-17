@@ -14,7 +14,7 @@
 
 use anyhow::Ok;
 use as_any::{AsAny, Downcast};
-use interact::twobody::IsotropicTwobodyEnergy;
+use interatomic::twobody::IsotropicTwobodyEnergy;
 use itertools::iproduct;
 use serde::Serialize;
 use std::fmt::Debug;

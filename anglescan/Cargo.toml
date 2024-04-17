@@ -15,7 +15,7 @@ itertools-num = "0.1"
 nalgebra = "0.32"
 rayon = "1.10"
 faunus = { path = "../faunus" }
-interact = {path = "../interact"}
+interatomic = {path = "../interatomic"}
 serde_yaml = "0.9.34"
 serde = { version = "1.0", features = ["derive"] }
 semver = { version = "1.0", features = ["serde"] }

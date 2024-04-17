@@ -1,5 +1,5 @@
-use interact::twobody::{Combined, LennardJones, WeeksChandlerAndersen};
-use interact::Info;
+use interatomic::twobody::{Combined, LennardJones, WeeksChandlerAndersen};
+use interatomic::Info;
 
 fn main() {
     let lj = LennardJones::new(1.5, 2.0);

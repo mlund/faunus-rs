@@ -32,7 +32,7 @@ use serde::{Deserialize, Serialize};
 ///
 /// ## Examples:
 /// ~~~
-/// use interact::twobody::*;
+/// use interatomic::twobody::*;
 /// let (epsilon, sigma, r2) = (1.5, 2.0, 2.5);
 /// let mie = Mie::<12, 6>::new(epsilon, sigma);
 /// let lj = LennardJones::new(epsilon, sigma);
@@ -116,7 +116,7 @@ impl<const N: u32, const M: u32> Cutoff for Mie<N, M> {
 ///
 /// ## Examples:
 /// ~~~
-/// use interact::twobody::{LennardJones, IsotropicTwobodyEnergy};
+/// use interatomic::twobody::{LennardJones, IsotropicTwobodyEnergy};
 /// let epsilon = 1.5;
 /// let sigma = 2.0;
 /// let lj = LennardJones::new(epsilon, sigma);

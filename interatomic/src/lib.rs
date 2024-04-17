@@ -39,7 +39,7 @@ use std::f64::consts::PI;
 ///
 /// Examples:
 /// ```
-/// use interact::ELECTRIC_PREFACTOR;
+/// use interatomic::ELECTRIC_PREFACTOR;
 /// let z1 = 1.0;                    // unit-less charge number
 /// let z2 = -1.0;                   // unit-less charge number
 /// let r = 7.0;                     // separation in angstrom
@@ -54,7 +54,7 @@ pub const ELECTRIC_PREFACTOR: f64 =
 ///
 /// Examples:
 /// ```
-/// use interact::BJERRUM_LEN_VACUUM_298K;
+/// use interatomic::BJERRUM_LEN_VACUUM_298K;
 /// let relative_dielectric_const = 80.0;
 /// assert_eq!(BJERRUM_LEN_VACUUM_298K / relative_dielectric_const, 7.0057415269733);
 /// ```
