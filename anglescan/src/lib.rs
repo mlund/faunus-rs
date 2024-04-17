@@ -1,4 +1,4 @@
-pub use nalgebra::{UnitQuaternion, Vector3};
+pub use nalgebra::{Matrix3, UnitQuaternion, Vector3};
 mod anglescan;
 pub mod energy;
 pub mod structure;
@@ -24,6 +24,12 @@ pub fn rmsd_angle(q1: &UnitQuaternion<f64>, q2: &UnitQuaternion<f64>) -> f64 {
     // let q = q1 * q2.inverse();
     // q.angle().powi(2)
     q1.angle_to(q2).powi(2)
+}
+
+#[allow(non_snake_case)]
+pub fn rmsd2(Q: &UnitQuaternion<f64>, inertia: &Matrix3<f64>, total_mass: f64) -> f64 {
+    let q = Q.vector();
+    4.0 / total_mass * (q.transpose() * inertia * q)[0]
 }
 
 /// Structure to store energy samples

@@ -19,7 +19,7 @@ use std::fmt::Display;
 use std::time::Duration;
 
 /// Helper class to keep track of time spent in a Monte Carlo move
-/// 
+///
 /// The reported time is the accumulated time spent between multiple calls to `start` and `stop`.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Timer {
