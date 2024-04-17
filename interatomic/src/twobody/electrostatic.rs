@@ -1,5 +1,5 @@
 use super::Info;
-use crate::multipole::MultipoleEnergy;
+use crate::electrostatic::MultipoleEnergy;
 use crate::twobody::IsotropicTwobodyEnergy;
 use serde::Serialize;
 
@@ -11,15 +11,15 @@ pub struct IonIon<'a, T: MultipoleEnergy> {
     charge_product: f64,
     /// Reference to the potential energy function
     #[serde(skip)]
-    multipole: &'a T,
+    scheme: &'a T,
 }
 
 impl<'a, T: MultipoleEnergy> IonIon<'a, T> {
     /// Create a new ion-ion interaction
-    pub fn new(charge_product: f64, multipole: &'a T) -> Self {
+    pub fn new(charge_product: f64, scheme: &'a T) -> Self {
         Self {
             charge_product,
-            multipole,
+            scheme,
         }
     }
 }
@@ -39,18 +39,18 @@ impl<'a, T: MultipoleEnergy> Info for IonIon<'a, T> {
 impl<T: MultipoleEnergy + std::fmt::Debug> IsotropicTwobodyEnergy for IonIon<'_, T> {
     /// Calculate the isotropic twobody energy (kJ/mol)
     fn isotropic_twobody_energy(&self, distance_squared: f64) -> f64 {
-        self.multipole.prefactor()
+        self.scheme.prefactor()
             * self
-                .multipole
+                .scheme
                 .ion_ion_energy(self.charge_product, 1.0, distance_squared.sqrt())
     }
 }
 
 /// Alias for ion-ion with Yukawa
-pub type IonIonYukawa<'a> = IonIon<'a, crate::multipole::Yukawa>;
+pub type IonIonYukawa<'a> = IonIon<'a, crate::electrostatic::Yukawa>;
 
 /// Alias for ion-ion with a plain Coulomb potential that can be screened
-pub type IonIonPlain<'a> = IonIon<'a, crate::multipole::Coulomb>;
+pub type IonIonPlain<'a> = IonIon<'a, crate::electrostatic::Coulomb>;
 
 // Test ion-ion energy
 #[cfg(test)]
@@ -58,7 +58,7 @@ mod tests {
     use approx::assert_relative_eq;
 
     use super::*;
-    use crate::multipole::Coulomb;
+    use crate::electrostatic::Coulomb;
 
     #[test]
     fn test_ion_ion() {

@@ -12,14 +12,14 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
-//! # Electric multipoles
+//! # Electrostatic interactions
 //!
 //! This module contains functions for computing the electrostatic potential;
 //! fields; forces; and energies from and between electric multipoles.
 //!
 //! ## Examples
 //! ~~~
-//! use interatomic::multipole::*;
+//! use interatomic::electrostatic::*;
 //! let permittivity = 80.0;
 //! let charge = 1.0;
 //! let dist = 9.0;

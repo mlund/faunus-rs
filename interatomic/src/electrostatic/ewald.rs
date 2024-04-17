@@ -25,7 +25,7 @@ impl MultipoleField for RealSpaceEwald {}
 impl MultipoleEnergy for RealSpaceEwald {}
 impl MultipoleForce for RealSpaceEwald {}
 
-/// # Scheme for real-space Ewald interactionss
+/// Scheme for real-space Ewald interactionss
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub struct RealSpaceEwald {
     /// Real space cutoff distance

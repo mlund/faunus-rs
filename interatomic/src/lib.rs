@@ -28,7 +28,7 @@ pub type Matrix3 = nalgebra::Matrix3<f64>;
 use num::{Float, NumCast};
 use serde::{Deserialize, Deserializer, Serializer};
 
-pub mod multipole;
+pub mod electrostatic;
 mod qpochhammer;
 pub mod spline;
 pub mod twobody;
