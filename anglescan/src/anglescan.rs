@@ -222,6 +222,7 @@ pub fn make_fibonacci_sphere(n_points: usize) -> Vec<Vector3> {
 pub fn make_icosphere(min_points: usize) -> Result<Vec<Vector3>> {
     let points_per_division = |n_div: usize| 10 * (n_div + 1) * (n_div + 1) + 2;
     let n_points = (0..200).map(points_per_division);
+
     match n_points.enumerate().find(|(_, n)| *n >= min_points) {
         Some((n_div, _)) => Ok(IcoSphere::new(n_div, |_| ())
             .raw_points()
