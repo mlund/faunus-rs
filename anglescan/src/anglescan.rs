@@ -197,17 +197,17 @@ pub fn make_fibonacci_sphere(n_points: usize) -> Vec<Vector3> {
     (0..n_points).map(make_ith_point).collect()
 }
 
-/// Make icosphere with at least `min_points` surface points.
+/// Make icosphere with at least `min_points` surface points (vertices).
 ///
 /// This is done by iteratively subdividing the faces of an icosahedron
-/// until at least `min_points` surface points are achieved.
-/// The number of points on the icosphere is _N_ = 10 × (_n_divisions_ + 1)² + 2
-/// whereby 0, 1, 2, ... subdivisions give 12, 42, 92, ... points, respectively.
+/// until at least `min_points` vertices are achieved.
+/// The number of vertices on the icosphere is _N_ = 10 × (_n_divisions_ + 1)² + 2
+/// whereby 0, 1, 2, ... subdivisions give 12, 42, 92, ... vertices, respectively.
 ///
 /// ## Examples
 /// ~~~
-/// let points = anglescan::make_icosphere(20).unwrap();
-/// assert_eq!(points.len(), 42);
+/// let vertices = anglescan::make_icosphere(20).unwrap();
+/// assert_eq!(vertices.len(), 42);
 /// ~~~
 ///
 ///
@@ -229,7 +229,7 @@ pub fn make_icosphere(min_points: usize) -> Result<Vec<Vector3>> {
             .map(|p| Vector3::new(p.x as f64, p.y as f64, p.z as f64))
             .collect()),
         None => {
-            anyhow::bail!("too many points");
+            anyhow::bail!("too many vertices");
         }
     }
 }
