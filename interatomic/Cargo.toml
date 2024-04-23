@@ -12,15 +12,13 @@ license = "Apache-2.0"
 [lib]
 
 [dependencies]
-log = "0.4"
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"], optional = true }
 anyhow = "1.0"
 itertools = "0.10"
-typetag = "0.2"
 nalgebra = { version = "0.32", features = ["serde-serialize"] }
 num = "0.4"
 physical_constants = "0.5"
+coulomb = {path = "../coulomb"}
 
 [dev-dependencies]
 approx = "0.5"

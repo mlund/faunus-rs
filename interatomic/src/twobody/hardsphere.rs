@@ -1,5 +1,8 @@
 use super::IsotropicTwobodyEnergy;
-use crate::{sqrt_serialize, square_deserialize, Cutoff, Info};
+#[cfg(feature = "serde")]
+use crate::{sqrt_serialize, square_deserialize};
+use crate::{Cutoff, Info};
+#[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
 /// Hardsphere potential
@@ -14,13 +17,17 @@ use serde::{Deserialize, Serialize};
 /// let distance: f64 = 1.1; // greater than the minimum distance
 /// assert_eq!(hardsphere.isotropic_twobody_energy(distance.powi(2)), 0.0);
 /// ~~~
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 pub struct HardSphere {
     /// Minimum distance
-    #[serde(
-        rename = "σ",
-        serialize_with = "sqrt_serialize",
-        deserialize_with = "square_deserialize"
+    #[cfg_attr(
+        feature = "serde",
+        serde(
+            rename = "σ",
+            serialize_with = "sqrt_serialize",
+            deserialize_with = "square_deserialize"
+        )
     )]
     min_distance_squared: f64,
 }

@@ -1,5 +1,6 @@
 use super::IsotropicTwobodyEnergy;
 use crate::Info;
+#[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
 /// Harmonic potential
@@ -12,11 +13,12 @@ use serde::{Deserialize, Serialize};
 /// let distance: f64 = 2.0;
 /// assert_eq!(harmonic.isotropic_twobody_energy(distance.powi(2)), 0.25);
 /// ~~~
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 pub struct Harmonic {
-    #[serde(rename = "r₀")]
+    #[cfg_attr(feature = "serde", serde(rename = "r₀"))]
     eq_distance: f64,
-    #[serde(rename = "k")]
+    #[cfg_attr(feature = "serde", serde(rename = "k"))]
     spring_constant: f64,
 }
 

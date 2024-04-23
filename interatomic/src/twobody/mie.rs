@@ -13,11 +13,11 @@
 // limitations under the license.
 
 use crate::twobody::IsotropicTwobodyEnergy;
-use crate::{
-    divide4_serialize, multiply4_deserialize, sqrt_serialize, square_deserialize, CombinationRule,
-    Cutoff, Info,
-};
+#[cfg(feature = "serde")]
+use crate::{divide4_serialize, multiply4_deserialize, sqrt_serialize, square_deserialize};
+use crate::{CombinationRule, Cutoff, Info};
 
+#[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
 /// # Mie potential
@@ -39,13 +39,14 @@ use serde::{Deserialize, Serialize};
 /// assert_eq!(mie.isotropic_twobody_energy(r2), lj.isotropic_twobody_energy(r2));
 /// ~~~
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 pub struct Mie<const N: u32, const M: u32> {
     /// Interaction strength, ε
-    #[serde(rename = "ε")]
+    #[cfg_attr(feature = "serde", serde(rename = "ε"))]
     epsilon: f64,
     /// Diameter, σ
-    #[serde(rename = "σ")]
+    #[cfg_attr(feature = "serde", serde(rename = "σ"))]
     sigma: f64,
 }
 
@@ -124,21 +125,25 @@ impl<const N: u32, const M: u32> Cutoff for Mie<N, M> {
 /// let u_min = -epsilon;
 /// assert_eq!(lj.isotropic_twobody_energy( r_min.powi(2) ), u_min);
 /// ~~~
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default)]
-#[serde(default)]
+#[derive(Debug, Clone, PartialEq, Default)]
+#[cfg_attr(feature = "serde", derive(Deserialize, Serialize), serde(default))]
 pub struct LennardJones {
     /// Four times epsilon, 4ε
-    #[serde(
-        rename = "ε",
+    #[cfg_attr(
+        feature = "serde",
+        serde(rename = "ε",
         serialize_with = "divide4_serialize",
         deserialize_with = "multiply4_deserialize"
-    )]
+    ))]
     four_times_epsilon: f64,
     /// Squared diameter, σ²
-    #[serde(
-        rename = "σ",
-        serialize_with = "sqrt_serialize",
-        deserialize_with = "square_deserialize"
+    #[cfg_attr(
+        feature = "serde",
+        serde(
+            rename = "σ",
+            serialize_with = "sqrt_serialize",
+            deserialize_with = "square_deserialize"
+        )
     )]
     sigma_squared: f64,
 }
@@ -202,9 +207,10 @@ impl Info for LennardJones {
 ///
 /// This is a Lennard-Jones type potential, cut and shifted to zero at r_cut = 2^(1/6)σ.
 /// More information [here](https://dx.doi.org/doi.org/ct4kh9).
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq, Default)]
+#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 pub struct WeeksChandlerAndersen {
-    #[serde(flatten)]
+    #[cfg_attr(feature = "serde", serde(flatten))]
     lennard_jones: LennardJones,
 }
 

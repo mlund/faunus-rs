@@ -24,6 +24,7 @@
 //!   - Weeks-Chandler-Andersen
 
 use crate::{Info, Vector3};
+#[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 
@@ -39,7 +40,8 @@ pub use self::multipole::{IonIon, IonIonPlain, IonIonYukawa};
 /// Relative orientation between a pair of anisotropic particles
 /// # Todo
 /// Unfinished and still not desided how to implement
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 pub struct RelativeOrientation {
     /// Distance between the two particles
     pub distance: Vector3,
@@ -65,7 +67,8 @@ impl<T: IsotropicTwobodyEnergy> AnisotropicTwobodyEnergy for T {
 }
 
 /// Combine twobody energies
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct Combined<T, U>(T, U);
 
 impl<T: IsotropicTwobodyEnergy, U: IsotropicTwobodyEnergy> Combined<T, U> {
@@ -91,11 +94,10 @@ impl<T: IsotropicTwobodyEnergy, U: IsotropicTwobodyEnergy> Info for Combined<T, 
 }
 
 /// Plain Coulomb potential combined with Lennard-Jones
-pub type CoulombLennardJones<'a> =
-    Combined<IonIon<'a, crate::electrostatic::Coulomb>, LennardJones>;
+pub type CoulombLennardJones<'a> = Combined<IonIon<'a, coulomb::pairwise::Plain>, LennardJones>;
 
 /// Yukawa potential combined with Lennard-Jones
-pub type YukawaLennardJones<'a> = Combined<IonIon<'a, crate::electrostatic::Yukawa>, LennardJones>;
+pub type YukawaLennardJones<'a> = Combined<IonIon<'a, coulomb::pairwise::Yukawa>, LennardJones>;
 
 // test Combined
 #[test]

@@ -4,18 +4,20 @@
 //! electric multipole moments, such as monopoles, dipoles, quadrupoles etc.
 
 use super::Info;
-use crate::electrostatic::MultipoleEnergy;
 use crate::twobody::IsotropicTwobodyEnergy;
+use coulomb::pairwise::MultipoleEnergy;
+#[cfg(feature = "serde")]
 use serde::Serialize;
 
 /// Monopole-monopole interaction energy
-#[derive(Serialize, Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug)]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct IonIon<'a, T: MultipoleEnergy> {
     /// Charge number product of the two particles, z₁ × z₂
-    #[serde(rename = "z₁z₂")]
+    #[cfg_attr(feature = "serde", serde(rename = "z₁z₂"))]
     charge_product: f64,
     /// Reference to the potential energy function
-    #[serde(skip)]
+    #[cfg_attr(feature = "serde", serde(skip))]
     scheme: &'a T,
 }
 
@@ -52,10 +54,10 @@ impl<T: MultipoleEnergy + std::fmt::Debug> IsotropicTwobodyEnergy for IonIon<'_,
 }
 
 /// Alias for ion-ion with Yukawa
-pub type IonIonYukawa<'a> = IonIon<'a, crate::electrostatic::Yukawa>;
+pub type IonIonYukawa<'a> = IonIon<'a, coulomb::pairwise::Yukawa>;
 
 /// Alias for ion-ion with a plain Coulomb potential that can be screened
-pub type IonIonPlain<'a> = IonIon<'a, crate::electrostatic::Coulomb>;
+pub type IonIonPlain<'a> = IonIon<'a, coulomb::pairwise::Coulomb>;
 
 // Test ion-ion energy
 #[cfg(test)]
@@ -63,7 +65,7 @@ mod tests {
     use approx::assert_relative_eq;
 
     use super::*;
-    use crate::electrostatic::Coulomb;
+    use coulomb::pairwise::Coulomb;
 
     #[test]
     fn test_ion_ion() {
