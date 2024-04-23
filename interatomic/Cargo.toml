@@ -12,7 +12,6 @@ license = "Apache-2.0"
 [lib]
 
 [dependencies]
-assert_approx_eq = "1.0"
 log = "0.4"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
@@ -20,9 +19,12 @@ anyhow = "1.0"
 itertools = "0.10"
 typetag = "0.2"
 nalgebra = { version = "0.32", features = ["serde-serialize"] }
-approx = "0.5"
 num = "0.4"
 physical_constants = "0.5"
+
+[dev-dependencies]
+approx = "0.5"
+assert_approx_eq = "1.0"
 
 # See https://github.com/victe/rust-latex-doc-minimal-example
 # for including math in the documentation
