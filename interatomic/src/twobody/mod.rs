@@ -16,7 +16,7 @@
 //!
 //! Module for describing exactly two particles interacting with each other.
 
-use crate::Vector3;
+pub use coulomb::Vector3;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
