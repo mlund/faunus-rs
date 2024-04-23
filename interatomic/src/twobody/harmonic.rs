@@ -4,7 +4,11 @@ use serde::{Deserialize, Serialize};
 
 /// Harmonic potential
 ///
+/// $$ u(r) = \frac{1}{2} k (r - r_{eq})^2 $$
+///
+/// where $k$ is the spring constant and $r_{eq}$ is the equilibrium distance.
 /// More information [here](https://en.wikipedia.org/wiki/Harmonic_oscillator).
+///
 /// # Examples
 /// ~~~
 /// use interatomic::twobody::{Harmonic, IsotropicTwobodyEnergy};

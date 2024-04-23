@@ -5,9 +5,11 @@ use crate::{sqrt_serialize, square_deserialize};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-/// Hardsphere potential
+/// Hard sphere potential
 ///
+/// The hard sphere potential is infinite if the distance is smaller than the minimum distance, and zero otherwise.
 /// More information [here](http://www.sklogwiki.org/SklogWiki/index.php/Hard_sphere_model).
+///
 /// # Examples
 /// ~~~
 /// use interatomic::twobody::{HardSphere, IsotropicTwobodyEnergy};

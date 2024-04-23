@@ -14,14 +14,7 @@
 
 //! ## Twobody interactions
 //!
-//! Module for describing exactly two particle interacting with each other.
-//!
-//! - Hard-sphere overlap
-//! - Harmonic potential
-//! - Powerlaw potentials
-//!   - Mie
-//!   - Lennard-Jones
-//!   - Weeks-Chandler-Andersen
+//! Module for describing exactly two particles interacting with each other.
 
 use crate::Vector3;
 #[cfg(feature = "serde")]
@@ -66,7 +59,7 @@ impl<T: IsotropicTwobodyEnergy> AnisotropicTwobodyEnergy for T {
     }
 }
 
-/// Combine twobody energies
+/// Combine two twobody energy schemes
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct Combined<T, U>(T, U);

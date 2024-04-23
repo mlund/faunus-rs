@@ -20,17 +20,16 @@ use crate::{CombinationRule, Cutoff};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-/// # Mie potential
+/// Mie potential
 ///
 /// This is a generalization of the Lennard-Jones potential due to G. Mie,
-/// ["Zur kinetischen Theorie der einatomigen Körper"](https://doi.org/10.1002/andp.19033160802),
-/// Annalen der Physik.
+/// ["Zur kinetischen Theorie der einatomigen Körper"](https://doi.org/10.1002/andp.19033160802).
 /// The energy is
 /// $$ u(r) = ε C \left [\left (\frac{σ}{r}\right )^n - \left (\frac{σ}{r}\right )^m \right ]$$
 /// where $C = \frac{n}{n-m} \cdot \left (\frac{n}{m}\right )^{\frac{m}{n-m}}$ and $n > m$.
 /// The Lennard-Jones potential is recovered for $n = 12$ and $m = 6$.
 ///
-/// ## Examples:
+/// # Examples:
 /// ~~~
 /// use interatomic::twobody::*;
 /// let (epsilon, sigma, r2) = (1.5, 2.0, 2.5);
@@ -97,20 +96,20 @@ impl<const N: u32, const M: u32> Cutoff for Mie<N, M> {
     }
 }
 
-/// # Lennard-Jones potential
+/// Lennard-Jones potential
+///
+/// $$ u(r) = 4\epsilon_{ij} \left [\left (\frac{\sigma_{ij}}{r}\right )^{12} - \left (\frac{\sigma_{ij}}{r}\right )^6 \right ]$$
 ///
 /// Originally by J. E. Lennard-Jones, see
 /// [doi:10/cqhgm7](https://dx.doi.org/10/cqhgm7) or
 /// [Wikipedia](https://en.wikipedia.org/wiki/Lennard-Jones_potential).
 ///
-/// ## Examples:
+/// # Examples:
 /// ~~~
-/// use interatomic::twobody::{LennardJones, IsotropicTwobodyEnergy};
-/// let epsilon = 1.5;
-/// let sigma = 2.0;
+/// use interatomic::twobody::*;
+/// let (epsilon, sigma) = (1.5, 2.0);
 /// let lj = LennardJones::new(epsilon, sigma);
-/// let r_min = f64::powf(2.0, 1.0 / 6.0) * sigma;
-/// let u_min = -epsilon;
+/// let (r_min, u_min) = (f64::powf(2.0, 1.0 / 6.0) * sigma, -epsilon);
 /// assert_eq!(lj.isotropic_twobody_energy( r_min.powi(2) ), u_min);
 /// ~~~
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -181,10 +180,16 @@ impl IsotropicTwobodyEnergy for LennardJones {
     }
 }
 
-/// # Weeks-Chandler-Andersen potential
+/// Weeks-Chandler-Andersen potential
 ///
-/// This is a Lennard-Jones type potential, cut and shifted to zero at r_cut = 2^(1/6)σ.
-/// More information [here](https://dx.doi.org/doi.org/ct4kh9).
+/// This is a Lennard-Jones type potential, cut and shifted to zero:
+///
+/// $$u(r) = 4 \epsilon \left [ (\sigma_{ij}/r)^{12} - (\sigma_{ij}/r)^6 + \frac{1}{4} \right ]$$
+///
+/// for $r < r_{cut} = 2^{1/6} \sigma_{ij}$; zero otherwise.
+///
+/// Effectively, this provides soft repulsion without any attraction.
+/// More information, see <https://dx.doi.org/doi.org/ct4kh9>.
 #[derive(Debug, Clone, PartialEq, Default)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 pub struct WeeksChandlerAndersen {
