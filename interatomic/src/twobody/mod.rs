@@ -23,7 +23,7 @@
 //!   - Lennard-Jones
 //!   - Weeks-Chandler-Andersen
 
-use crate::{Info, Vector3};
+use crate::Vector3;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
@@ -49,12 +49,12 @@ pub struct RelativeOrientation {
 }
 
 /// Potential energy between a pair of anisotropic particles
-pub trait AnisotropicTwobodyEnergy: Info + Debug {
+pub trait AnisotropicTwobodyEnergy: Debug {
     fn anisotropic_twobody_energy(&self, orientation: &RelativeOrientation) -> f64;
 }
 
 /// Potential energy between a pair of isotropic particles
-pub trait IsotropicTwobodyEnergy: Info + Debug + AnisotropicTwobodyEnergy {
+pub trait IsotropicTwobodyEnergy: Debug + AnisotropicTwobodyEnergy {
     /// Interaction energy between a pair of isotropic particles
     fn isotropic_twobody_energy(&self, distance_squared: f64) -> f64;
 }
@@ -84,12 +84,6 @@ impl<T: IsotropicTwobodyEnergy, U: IsotropicTwobodyEnergy> IsotropicTwobodyEnerg
     fn isotropic_twobody_energy(&self, distance_squared: f64) -> f64 {
         self.0.isotropic_twobody_energy(distance_squared)
             + self.1.isotropic_twobody_energy(distance_squared)
-    }
-}
-
-impl<T: IsotropicTwobodyEnergy, U: IsotropicTwobodyEnergy> Info for Combined<T, U> {
-    fn citation(&self) -> Option<&'static str> {
-        todo!("Implement citation for Combined");
     }
 }
 

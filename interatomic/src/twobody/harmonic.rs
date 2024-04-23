@@ -1,5 +1,4 @@
 use super::IsotropicTwobodyEnergy;
-use crate::Info;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
@@ -28,18 +27,6 @@ impl Harmonic {
             eq_distance,
             spring_constant,
         }
-    }
-}
-
-impl Info for Harmonic {
-    fn short_name(&self) -> Option<&'static str> {
-        Some("harmonic")
-    }
-    fn long_name(&self) -> Option<&'static str> {
-        Some("Harmonic potential")
-    }
-    fn citation(&self) -> Option<&'static str> {
-        Some("https://en.wikipedia.org/wiki/Harmonic_oscillator")
     }
 }
 

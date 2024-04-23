@@ -15,7 +15,7 @@
 use crate::twobody::IsotropicTwobodyEnergy;
 #[cfg(feature = "serde")]
 use crate::{divide4_serialize, multiply4_deserialize, sqrt_serialize, square_deserialize};
-use crate::{CombinationRule, Cutoff, Info};
+use crate::{CombinationRule, Cutoff};
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -88,18 +88,6 @@ impl<const N: u32, const M: u32> IsotropicTwobodyEnergy for Mie<N, M> {
     }
 }
 
-impl<const N: u32, const M: u32> Info for Mie<N, M> {
-    fn short_name(&self) -> Option<&'static str> {
-        Some("mie")
-    }
-    fn long_name(&self) -> Option<&'static str> {
-        Some("Mie potential")
-    }
-    fn citation(&self) -> Option<&'static str> {
-        Some("doi:10/fpvskc") // G. Mie, "Zur kinetischen Theorie der einatomigen Körper"
-    }
-}
-
 impl<const N: u32, const M: u32> Cutoff for Mie<N, M> {
     fn cutoff(&self) -> f64 {
         f64::INFINITY
@@ -131,10 +119,12 @@ pub struct LennardJones {
     /// Four times epsilon, 4ε
     #[cfg_attr(
         feature = "serde",
-        serde(rename = "ε",
-        serialize_with = "divide4_serialize",
-        deserialize_with = "multiply4_deserialize"
-    ))]
+        serde(
+            rename = "ε",
+            serialize_with = "divide4_serialize",
+            deserialize_with = "multiply4_deserialize"
+        )
+    )]
     four_times_epsilon: f64,
     /// Squared diameter, σ²
     #[cfg_attr(
@@ -191,18 +181,6 @@ impl IsotropicTwobodyEnergy for LennardJones {
     }
 }
 
-impl Info for LennardJones {
-    fn short_name(&self) -> Option<&'static str> {
-        Some("lj")
-    }
-    fn long_name(&self) -> Option<&'static str> {
-        Some("Lennard-Jones potential")
-    }
-    fn citation(&self) -> Option<&'static str> {
-        Some("doi:10/cqhgm7")
-    }
-}
-
 /// # Weeks-Chandler-Andersen potential
 ///
 /// This is a Lennard-Jones type potential, cut and shifted to zero at r_cut = 2^(1/6)σ.
@@ -251,17 +229,5 @@ impl IsotropicTwobodyEnergy for WeeksChandlerAndersen {
         }
         let x6 = (self.lennard_jones.sigma_squared / distance_squared).powi(3); // (s/r)^6
         self.lennard_jones.four_times_epsilon * (x6 * x6 - x6 + WeeksChandlerAndersen::ONEFOURTH)
-    }
-}
-
-impl Info for WeeksChandlerAndersen {
-    fn short_name(&self) -> Option<&'static str> {
-        Some("wca")
-    }
-    fn long_name(&self) -> Option<&'static str> {
-        Some("Weeks-Chandler-Andersen potential")
-    }
-    fn citation(&self) -> Option<&'static str> {
-        Some("doi:ct4kh9")
     }
 }

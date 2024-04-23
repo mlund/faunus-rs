@@ -3,7 +3,6 @@
 //! This module provides tools for calculating the two-body interaction energy between
 //! electric multipole moments, such as monopoles, dipoles, quadrupoles etc.
 
-use super::Info;
 use crate::twobody::IsotropicTwobodyEnergy;
 use coulomb::pairwise::MultipoleEnergy;
 #[cfg(feature = "serde")]
@@ -28,18 +27,6 @@ impl<'a, T: MultipoleEnergy> IonIon<'a, T> {
             charge_product,
             scheme,
         }
-    }
-}
-
-impl<'a, T: MultipoleEnergy> Info for IonIon<'a, T> {
-    fn short_name(&self) -> Option<&'static str> {
-        Some("ion-ion")
-    }
-    fn long_name(&self) -> Option<&'static str> {
-        Some("Ion-ion interaction")
-    }
-    fn citation(&self) -> Option<&'static str> {
-        None
     }
 }
 

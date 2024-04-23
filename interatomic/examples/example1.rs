@@ -1,5 +1,4 @@
 use interatomic::twobody::{Combined, LennardJones, WeeksChandlerAndersen};
-use interatomic::Info;
 
 fn main() {
     let lj = LennardJones::new(1.5, 2.0);
@@ -7,7 +6,6 @@ fn main() {
     let pot = Combined::new(lj.clone(), wca.clone());
     let _pot2 = Combined::new(pot.clone(), wca.clone());
 
-    println!("{}", lj.url().unwrap());
     println!("{:?}", lj);
 
     // #[cfg(feature = "serde")]

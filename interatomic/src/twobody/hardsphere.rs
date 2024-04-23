@@ -1,7 +1,7 @@
 use super::IsotropicTwobodyEnergy;
+use crate::Cutoff;
 #[cfg(feature = "serde")]
 use crate::{sqrt_serialize, square_deserialize};
-use crate::{Cutoff, Info};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
@@ -58,14 +58,5 @@ impl Cutoff for HardSphere {
     }
     fn cutoff_squared(&self) -> f64 {
         self.min_distance_squared
-    }
-}
-
-impl Info for HardSphere {
-    fn short_name(&self) -> Option<&'static str> {
-        Some("hardsphere")
-    }
-    fn citation(&self) -> Option<&'static str> {
-        Some("https://en.wikipedia.org/wiki/Hard_spheres")
     }
 }
