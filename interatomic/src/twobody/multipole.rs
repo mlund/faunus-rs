@@ -44,7 +44,7 @@ impl<T: MultipoleEnergy + std::fmt::Debug> IsotropicTwobodyEnergy for IonIon<'_,
 pub type IonIonYukawa<'a> = IonIon<'a, coulomb::pairwise::Yukawa>;
 
 /// Alias for ion-ion with a plain Coulomb potential that can be screened
-pub type IonIonPlain<'a> = IonIon<'a, coulomb::pairwise::Coulomb>;
+pub type IonIonPlain<'a> = IonIon<'a, coulomb::pairwise::Plain>;
 
 // Test ion-ion energy
 #[cfg(test)]
@@ -52,19 +52,19 @@ mod tests {
     use approx::assert_relative_eq;
 
     use super::*;
-    use coulomb::pairwise::Coulomb;
+    use coulomb::pairwise::Plain;
 
     #[test]
     fn test_ion_ion() {
         let r: f64 = 7.0;
         let cutoff = f64::INFINITY;
         let permittivity = 80.0;
-        let scheme = Coulomb::new(80.0, cutoff, None);
+        let scheme = Plain::new(80.0, cutoff, None);
         let ionion = IonIon::new(1.0, &scheme);
         let unscreened_energy = ionion.isotropic_twobody_energy(r.powi(2));
         assert_relative_eq!(unscreened_energy, 2.48099031507825);
         let debye_length = 30.0;
-        let scheme = Coulomb::new(permittivity, cutoff, Some(debye_length));
+        let scheme = Plain::new(permittivity, cutoff, Some(debye_length));
         let ionion = IonIon::new(1.0, &scheme);
         let screened_energy = ionion.isotropic_twobody_energy(r.powi(2));
         assert_relative_eq!(

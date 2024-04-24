@@ -5,7 +5,7 @@ use interatomic::CombinationRule;
 use crate::structure::Structure;
 
 // type alias for the pair potential
-type CoulombMethod = coulomb::pairwise::Coulomb;
+type CoulombMethod = coulomb::pairwise::Plain;
 type ShortRange = interatomic::twobody::WeeksChandlerAndersen;
 type PairPotential<'a> = interatomic::twobody::Combined<IonIon<'a, CoulombMethod>, ShortRange>;
 

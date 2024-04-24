@@ -80,7 +80,7 @@ fn do_scan(scan_command: &Commands) {
 
     let scan = TwobodyAngles::new(*resolution).unwrap();
     let medium = Medium::salt_water(*temperature, Salt::SodiumChloride, *molarity);
-    let multipole = coulomb::pairwise::Coulomb::new(
+    let multipole = coulomb::pairwise::Plain::new(
         medium.permittivity(*temperature).unwrap(),
         *cutoff,
         medium.debye_length(),
