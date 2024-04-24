@@ -1,10 +1,15 @@
 use super::IsotropicTwobodyEnergy;
-use crate::{sqrt_serialize, square_deserialize, Cutoff, Info};
+use crate::Cutoff;
+#[cfg(feature = "serde")]
+use crate::{sqrt_serialize, square_deserialize};
+#[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-/// Hardsphere potential
+/// Hard sphere potential
 ///
+/// The hard sphere potential is infinite if the distance is smaller than the minimum distance, and zero otherwise.
 /// More information [here](http://www.sklogwiki.org/SklogWiki/index.php/Hard_sphere_model).
+///
 /// # Examples
 /// ~~~
 /// use interatomic::twobody::{HardSphere, IsotropicTwobodyEnergy};
@@ -14,13 +19,17 @@ use serde::{Deserialize, Serialize};
 /// let distance: f64 = 1.1; // greater than the minimum distance
 /// assert_eq!(hardsphere.isotropic_twobody_energy(distance.powi(2)), 0.0);
 /// ~~~
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 pub struct HardSphere {
     /// Minimum distance
-    #[serde(
-        rename = "σ",
-        serialize_with = "sqrt_serialize",
-        deserialize_with = "square_deserialize"
+    #[cfg_attr(
+        feature = "serde",
+        serde(
+            rename = "σ",
+            serialize_with = "sqrt_serialize",
+            deserialize_with = "square_deserialize"
+        )
     )]
     min_distance_squared: f64,
 }
@@ -51,14 +60,5 @@ impl Cutoff for HardSphere {
     }
     fn cutoff_squared(&self) -> f64 {
         self.min_distance_squared
-    }
-}
-
-impl Info for HardSphere {
-    fn short_name(&self) -> Option<&'static str> {
-        Some("hardsphere")
-    }
-    fn citation(&self) -> Option<&'static str> {
-        Some("https://en.wikipedia.org/wiki/Hard_spheres")
     }
 }

@@ -13,24 +13,23 @@
 // limitations under the license.
 
 use crate::twobody::IsotropicTwobodyEnergy;
-use crate::{
-    divide4_serialize, multiply4_deserialize, sqrt_serialize, square_deserialize, CombinationRule,
-    Cutoff, Info,
-};
+#[cfg(feature = "serde")]
+use crate::{divide4_serialize, multiply4_deserialize, sqrt_serialize, square_deserialize};
+use crate::{CombinationRule, Cutoff};
 
+#[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-/// # Mie potential
+/// Mie potential
 ///
 /// This is a generalization of the Lennard-Jones potential due to G. Mie,
-/// ["Zur kinetischen Theorie der einatomigen Körper"](https://doi.org/10.1002/andp.19033160802),
-/// Annalen der Physik.
+/// ["Zur kinetischen Theorie der einatomigen Körper"](https://doi.org/10.1002/andp.19033160802).
 /// The energy is
 /// $$ u(r) = ε C \left [\left (\frac{σ}{r}\right )^n - \left (\frac{σ}{r}\right )^m \right ]$$
 /// where $C = \frac{n}{n-m} \cdot \left (\frac{n}{m}\right )^{\frac{m}{n-m}}$ and $n > m$.
 /// The Lennard-Jones potential is recovered for $n = 12$ and $m = 6$.
 ///
-/// ## Examples:
+/// # Examples:
 /// ~~~
 /// use interatomic::twobody::*;
 /// let (epsilon, sigma, r2) = (1.5, 2.0, 2.5);
@@ -39,13 +38,14 @@ use serde::{Deserialize, Serialize};
 /// assert_eq!(mie.isotropic_twobody_energy(r2), lj.isotropic_twobody_energy(r2));
 /// ~~~
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 pub struct Mie<const N: u32, const M: u32> {
     /// Interaction strength, ε
-    #[serde(rename = "ε")]
+    #[cfg_attr(feature = "serde", serde(rename = "ε"))]
     epsilon: f64,
     /// Diameter, σ
-    #[serde(rename = "σ")]
+    #[cfg_attr(feature = "serde", serde(rename = "σ"))]
     sigma: f64,
 }
 
@@ -87,18 +87,6 @@ impl<const N: u32, const M: u32> IsotropicTwobodyEnergy for Mie<N, M> {
     }
 }
 
-impl<const N: u32, const M: u32> Info for Mie<N, M> {
-    fn short_name(&self) -> Option<&'static str> {
-        Some("mie")
-    }
-    fn long_name(&self) -> Option<&'static str> {
-        Some("Mie potential")
-    }
-    fn citation(&self) -> Option<&'static str> {
-        Some("doi:10/fpvskc") // G. Mie, "Zur kinetischen Theorie der einatomigen Körper"
-    }
-}
-
 impl<const N: u32, const M: u32> Cutoff for Mie<N, M> {
     fn cutoff(&self) -> f64 {
         f64::INFINITY
@@ -108,37 +96,43 @@ impl<const N: u32, const M: u32> Cutoff for Mie<N, M> {
     }
 }
 
-/// # Lennard-Jones potential
+/// Lennard-Jones potential
+///
+/// $$ u(r) = 4\epsilon_{ij} \left [\left (\frac{\sigma_{ij}}{r}\right )^{12} - \left (\frac{\sigma_{ij}}{r}\right )^6 \right ]$$
 ///
 /// Originally by J. E. Lennard-Jones, see
 /// [doi:10/cqhgm7](https://dx.doi.org/10/cqhgm7) or
 /// [Wikipedia](https://en.wikipedia.org/wiki/Lennard-Jones_potential).
 ///
-/// ## Examples:
+/// # Examples:
 /// ~~~
-/// use interatomic::twobody::{LennardJones, IsotropicTwobodyEnergy};
-/// let epsilon = 1.5;
-/// let sigma = 2.0;
+/// use interatomic::twobody::*;
+/// let (epsilon, sigma) = (1.5, 2.0);
 /// let lj = LennardJones::new(epsilon, sigma);
-/// let r_min = f64::powf(2.0, 1.0 / 6.0) * sigma;
-/// let u_min = -epsilon;
+/// let (r_min, u_min) = (f64::powf(2.0, 1.0 / 6.0) * sigma, -epsilon);
 /// assert_eq!(lj.isotropic_twobody_energy( r_min.powi(2) ), u_min);
 /// ~~~
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default)]
-#[serde(default)]
+#[derive(Debug, Clone, PartialEq, Default)]
+#[cfg_attr(feature = "serde", derive(Deserialize, Serialize), serde(default))]
 pub struct LennardJones {
     /// Four times epsilon, 4ε
-    #[serde(
-        rename = "ε",
-        serialize_with = "divide4_serialize",
-        deserialize_with = "multiply4_deserialize"
+    #[cfg_attr(
+        feature = "serde",
+        serde(
+            rename = "ε",
+            serialize_with = "divide4_serialize",
+            deserialize_with = "multiply4_deserialize"
+        )
     )]
     four_times_epsilon: f64,
     /// Squared diameter, σ²
-    #[serde(
-        rename = "σ",
-        serialize_with = "sqrt_serialize",
-        deserialize_with = "square_deserialize"
+    #[cfg_attr(
+        feature = "serde",
+        serde(
+            rename = "σ",
+            serialize_with = "sqrt_serialize",
+            deserialize_with = "square_deserialize"
+        )
     )]
     sigma_squared: f64,
 }
@@ -186,25 +180,20 @@ impl IsotropicTwobodyEnergy for LennardJones {
     }
 }
 
-impl Info for LennardJones {
-    fn short_name(&self) -> Option<&'static str> {
-        Some("lj")
-    }
-    fn long_name(&self) -> Option<&'static str> {
-        Some("Lennard-Jones potential")
-    }
-    fn citation(&self) -> Option<&'static str> {
-        Some("doi:10/cqhgm7")
-    }
-}
-
-/// # Weeks-Chandler-Andersen potential
+/// Weeks-Chandler-Andersen potential
 ///
-/// This is a Lennard-Jones type potential, cut and shifted to zero at r_cut = 2^(1/6)σ.
-/// More information [here](https://dx.doi.org/doi.org/ct4kh9).
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default)]
+/// This is a Lennard-Jones type potential, cut and shifted to zero:
+///
+/// $$u(r) = 4 \epsilon \left [ (\sigma_{ij}/r)^{12} - (\sigma_{ij}/r)^6 + \frac{1}{4} \right ]$$
+///
+/// for $r < r_{cut} = 2^{1/6} \sigma_{ij}$; zero otherwise.
+///
+/// Effectively, this provides soft repulsion without any attraction.
+/// More information, see <https://dx.doi.org/doi.org/ct4kh9>.
+#[derive(Debug, Clone, PartialEq, Default)]
+#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 pub struct WeeksChandlerAndersen {
-    #[serde(flatten)]
+    #[cfg_attr(feature = "serde", serde(flatten))]
     lennard_jones: LennardJones,
 }
 
@@ -245,17 +234,5 @@ impl IsotropicTwobodyEnergy for WeeksChandlerAndersen {
         }
         let x6 = (self.lennard_jones.sigma_squared / distance_squared).powi(3); // (s/r)^6
         self.lennard_jones.four_times_epsilon * (x6 * x6 - x6 + WeeksChandlerAndersen::ONEFOURTH)
-    }
-}
-
-impl Info for WeeksChandlerAndersen {
-    fn short_name(&self) -> Option<&'static str> {
-        Some("wca")
-    }
-    fn long_name(&self) -> Option<&'static str> {
-        Some("Weeks-Chandler-Andersen potential")
-    }
-    fn citation(&self) -> Option<&'static str> {
-        Some("doi:ct4kh9")
     }
 }
