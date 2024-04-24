@@ -4,7 +4,7 @@ use anglescan::{
     Sample, TwobodyAngles, Vector3,
 };
 use clap::{Parser, Subcommand};
-use electrolyte::{DebyeLength, Medium, RelativePermittivity, Salt};
+use electrolyte::{DebyeLength, Medium, Salt};
 use indicatif::ParallelProgressIterator;
 use nu_ansi_term::Color::{Red, Yellow};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
@@ -80,11 +80,7 @@ fn do_scan(scan_command: &Commands) {
 
     let scan = TwobodyAngles::new(*resolution).unwrap();
     let medium = Medium::salt_water(*temperature, Salt::SodiumChloride, *molarity);
-    let multipole = coulomb::pairwise::Plain::new(
-        medium.permittivity(*temperature).unwrap(),
-        *cutoff,
-        medium.debye_length(),
-    );
+    let multipole = coulomb::pairwise::Plain::new(*cutoff, medium.debye_length());
     let pair_matrix = energy::PairMatrix::new(&atomkinds.atomlist, &multipole);
     let ref_a = Structure::from_xyz(mol1, &atomkinds);
     let ref_b = Structure::from_xyz(mol2, &atomkinds);

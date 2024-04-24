@@ -33,7 +33,7 @@ impl<'a, T: MultipoleEnergy> IonIon<'a, T> {
 impl<T: MultipoleEnergy + std::fmt::Debug> IsotropicTwobodyEnergy for IonIon<'_, T> {
     /// Calculate the isotropic twobody energy (kJ/mol)
     fn isotropic_twobody_energy(&self, distance_squared: f64) -> f64 {
-        self.scheme.prefactor()
+        coulomb::ELECTRIC_PREFACTOR / 80.0
             * self
                 .scheme
                 .ion_ion_energy(self.charge_product, 1.0, distance_squared.sqrt())
@@ -58,13 +58,12 @@ mod tests {
     fn test_ion_ion() {
         let r: f64 = 7.0;
         let cutoff = f64::INFINITY;
-        let permittivity = 80.0;
-        let scheme = Plain::new(80.0, cutoff, None);
+        let scheme = Plain::new(cutoff, None);
         let ionion = IonIon::new(1.0, &scheme);
         let unscreened_energy = ionion.isotropic_twobody_energy(r.powi(2));
         assert_relative_eq!(unscreened_energy, 2.48099031507825);
         let debye_length = 30.0;
-        let scheme = Plain::new(permittivity, cutoff, Some(debye_length));
+        let scheme = Plain::new(cutoff, Some(debye_length));
         let ionion = IonIon::new(1.0, &scheme);
         let screened_energy = ionion.isotropic_twobody_energy(r.powi(2));
         assert_relative_eq!(
