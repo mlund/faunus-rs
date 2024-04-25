@@ -20,9 +20,9 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Default)]
 pub enum TorsionKind {
     /// Harmonic torsion (force constant, equilibrium angle)
-    Harmonic(f64, f64),
+    Harmonic { k: f64, aeq: f64 },
     /// Cosine angle as used in e.g. GROMOS-96 (force constant, equilibrium angle)
-    Cosine(f64, f64),
+    Cosine { k: f64, aeq: f64 },
     /// Unspecified torsion type
     #[default]
     Unspecified,

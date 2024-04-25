@@ -20,17 +20,17 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Default)]
 pub enum DihedralKind {
     /// Harmonic dihedral type (force constant, equilibrium angle)
-    Harmonic(f64, f64),
+    Harmonic { k: f64, aeq: f64 },
     /// Proper periodic dihedral type (force constant, periodicity, phase)
-    ProperPeriodic(f64, f64, f64),
+    ProperPeriodic { k: f64, n: f64, phi: f64 },
     /// Improper harmonic dihedral type (force constant, equilibrium angle)
-    ImproperHarmonic(f64, f64),
+    ImproperHarmonic { k: f64, aeq: f64 },
     /// Amber-style improper torsion, where atom3 is the central atom bonded to atoms 1, 2, and 4.
     /// Atoms 1, 2, and 4 are only bonded to atom 3 in this instance.
     /// (force constant, periodicity, phase)
-    ImproperAmber(f64, f64, f64),
+    ImproperAmber { k: f64, n: f64, phi: f64 },
     /// CHARMM-style improper torsion between 4 atoms. The first atom must be the central atom. (force constant, periodicity, phase)
-    ImproperCHARMM(f64, f64, f64),
+    ImproperCHARMM { k: f64, n: f64, phi: f64 },
     /// Unspecified dihedral type
     #[default]
     Unspecified,
@@ -41,9 +41,9 @@ impl DihedralKind {
     pub fn is_improper(&self) -> bool {
         matches!(
             self,
-            DihedralKind::ImproperHarmonic(..)
-                | DihedralKind::ImproperAmber(..)
-                | DihedralKind::ImproperCHARMM(..)
+            DihedralKind::ImproperHarmonic { .. }
+                | DihedralKind::ImproperAmber { .. }
+                | DihedralKind::ImproperCHARMM { .. }
         )
     }
 }

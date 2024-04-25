@@ -24,17 +24,17 @@ use serde::{Deserialize, Serialize};
 pub enum BondKind {
     /// Harmonic bond type (force constant, equilibrium distance).
     /// See <https://en.wikipedia.org/wiki/Harmonic_oscillator>.
-    Harmonic(f64, f64),
+    Harmonic { k: f64, req: f64 },
     /// Finite extensible nonlinear elastic bond type (force constant, equilibrium distance, maximum distance)
     /// See <https://en.wikipedia.org/wiki/Finitely_extensible_nonlinear_elastic_potential>.
-    FENE(f64, f64, f64),
+    FENE { k: f64, req: f64, rmax: f64 },
     /// Morse bond type (force constant, equilibrium distance, depth of potential well).
     /// See <https://en.wikipedia.org/wiki/Morse_potential>.
-    Morse(f64, f64, f64),
+    Morse { k: f64, req: f64, d: f64 },
     /// Harmonic Urey-Bradley bond type (force constant, equilibrium distance)
     /// See <https://manual.gromacs.org/documentation/current/reference-manual/functions/bonded-interactions.html#urey-bradley-potential>
     /// for more information.
-    UreyBradley(f64, f64),
+    UreyBradley { k: f64, req: f64 },
     /// Undefined bond type
     #[default]
     Unspecified,
