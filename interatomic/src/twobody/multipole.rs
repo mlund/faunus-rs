@@ -33,7 +33,7 @@ impl<'a, T: MultipoleEnergy> IonIon<'a, T> {
 impl<T: MultipoleEnergy + std::fmt::Debug> IsotropicTwobodyEnergy for IonIon<'_, T> {
     /// Calculate the isotropic twobody energy (kJ/mol)
     fn isotropic_twobody_energy(&self, distance_squared: f64) -> f64 {
-        coulomb::ELECTRIC_PREFACTOR / 80.0
+        coulomb::TO_CHEMISTRY_UNIT / 80.0
             * self
                 .scheme
                 .ion_ion_energy(self.charge_product, 1.0, distance_squared.sqrt())
