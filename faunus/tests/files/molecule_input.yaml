@@ -20,4 +20,9 @@ chains:
   - {name: A, atoms: [0, 7]}
   - {name: B, atoms: [7, 0]} # empty
 custom:
-  some_property: 64.0
+  bool: false
+  int: 13
+  float: 76.3
+  vector: [13.1, 18.9, -13.4, 12]
+  point: [1.4, 2.2, -0.71]
+

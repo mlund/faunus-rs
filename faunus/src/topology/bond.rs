@@ -14,8 +14,10 @@
 
 //! Bonds between atoms
 
+use derive_getters::Getters;
 use float_cmp::approx_eq;
 use serde::{Deserialize, Serialize};
+use validator::{Validate, ValidationError};
 
 /// Force field definition for bonds, e.g. harmonic, FENE, Morse, etc.
 ///
@@ -97,22 +99,23 @@ impl From<f64> for BondOrder {
 }
 
 /// Describes a bond between two atoms
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Validate, Getters)]
 #[serde(deny_unknown_fields)]
 pub struct Bond {
     /// Indices of the two atoms in the bond
-    pub index: [usize; 2],
+    #[validate(custom(function = "super::validate_unique_indices"))]
+    index: [usize; 2],
     /// Kind of bond, e.g. harmonic, FENE, Morse, etc.
     #[serde(default)]
-    pub kind: BondKind,
+    kind: BondKind,
     /// Bond order
     #[serde(default)]
-    pub order: BondOrder,
+    order: BondOrder,
 }
 
 impl Bond {
     /// Create new bond
-    pub fn new(index: [usize; 2], kind: BondKind, order: Option<BondOrder>) -> Self {
+    pub(super) fn new(index: [usize; 2], kind: BondKind, order: Option<BondOrder>) -> Self {
         Self {
             index,
             kind,

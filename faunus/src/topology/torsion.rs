@@ -14,34 +14,37 @@
 
 //! Torsion angles
 
+use derive_getters::Getters;
 use serde::{Deserialize, Serialize};
+use validator::{Validate, ValidationError};
 
 /// Force field definition for torsion, e.g. harmonic, cosine, etc.
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Default)]
 #[serde(deny_unknown_fields)]
 pub enum TorsionKind {
-    /// Harmonic torsion (force constant, equilibrium angle)
+    /// Harmonic torsion (force constant, equilibrium angle).
     Harmonic { k: f64, aeq: f64 },
-    /// Cosine angle as used in e.g. GROMOS-96 (force constant, equilibrium angle)
+    /// Cosine angle as used in e.g. GROMOS-96 (force constant, equilibrium angle).
     Cosine { k: f64, aeq: f64 },
-    /// Unspecified torsion type
+    /// Unspecified torsion type.
     #[default]
     Unspecified,
 }
 
 /// Definition of torsion between three indexed atoms
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Getters, Validate)]
 pub struct Torsion {
     /// Indices of the three atoms in the angle
-    pub index: [usize; 3],
+    #[validate(custom(function = "super::validate_unique_indices"))]
+    index: [usize; 3],
     /// Kind of torsion, e.g. harmonic, cosine, etc.
     #[serde(default)]
-    pub kind: TorsionKind,
+    kind: TorsionKind,
 }
 
 impl Torsion {
     /// Create new torsion
-    pub fn new(index: [usize; 3], kind: TorsionKind) -> Self {
+    pub(super) fn new(index: [usize; 3], kind: TorsionKind) -> Self {
         Self { index, kind }
     }
 

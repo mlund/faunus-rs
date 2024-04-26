@@ -14,7 +14,7 @@
 
 use std::collections::HashMap;
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::topology::{Chain, DegreesOfFreedom, Residue, Value};
 use validator::{Validate, ValidationError};
@@ -23,51 +23,54 @@ use super::{AtomKind, Bond, Dihedral, NonOverlapping, Torsion};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, Validate)]
 #[serde(deny_unknown_fields)]
-#[validate(schema(function = "validate_molecule_kind"))]
+#[validate(schema(function = "validate_molecule"))]
 pub struct MoleculeKind {
-    /// Unique name
+    /// Unique name.
     name: String,
-    /// Unique identifier
-    /// Only defined once the MoleculeKind is added to the system
+    /// Unique identifier.
+    /// Only defined if the MoleculeKind is inside of Topology.
     #[serde(skip_deserializing)]
     id: usize,
-    /// Names of atom kinds forming the molecule
+    /// Names of atom kinds forming the molecule.
     atoms: Vec<String>,
-    /// Indices of atom kinds forming the molecule
-    /// Populated once the molecule is added to a system
+    /// Indices of atom kinds forming the molecule.
+    /// Populated once the molecule is added to a system.
     #[serde(skip)]
     atom_indices: Vec<usize>,
-    /// Intramolecular bonds between the atoms
+    /// Intramolecular bonds between the atoms.
     #[serde(default)]
+    #[validate(nested)]
     bonds: Vec<Bond>,
-    /// Intramolecular dihedrals
+    /// Intramolecular dihedrals.
     #[serde(default)]
+    #[validate(nested)]
     dihedrals: Vec<Dihedral>,
-    /// Intramolecular torsions
+    /// Intramolecular torsions.
     #[serde(default)]
+    #[validate(nested)]
     torsions: Vec<Torsion>,
-    /// Internal degrees of freedom
+    /// Internal degrees of freedom.
     #[serde(default)]
     degrees_of_freedom: DegreesOfFreedom,
-    /// Names of atoms forming the molecule
+    /// Names of atoms forming the molecule.
     #[serde(default)]
     atom_names: Vec<Option<String>>,
-    /// Residues forming the molecule
-    #[validate(custom(function = "validate_overlap"))]
+    /// Residues forming the molecule.
+    #[validate(custom(function = "super::Residue::validate"))]
     #[serde(default)]
     residues: Vec<Residue>,
-    /// Chains forming the molecule
-    #[validate(custom(function = "validate_overlap"))]
+    /// Chains forming the molecule.
+    #[validate(custom(function = "super::Chain::validate"))]
     #[serde(default)]
     chains: Vec<Chain>,
-    /// Map of custom properties
-    /// TODO! Converting values
+    /// Map of custom properties.
     #[serde(default)]
     custom: HashMap<String, Value>,
 }
 
 impl MoleculeKind {
     /// Convert a yaml-formatted string into a MoleculeKind.
+    /// This performs sanity checks and always returns either a valid MoleculeKind or an error.
     pub fn from_str(string: &str) -> Result<MoleculeKind, anyhow::Error> {
         let mut molecule = serde_yaml::from_str::<MoleculeKind>(string)?;
 
@@ -80,26 +83,26 @@ impl MoleculeKind {
     }
 }
 
-fn validate_molecule_kind(molecule: &MoleculeKind) -> Result<(), ValidationError> {
+fn validate_molecule(molecule: &MoleculeKind) -> Result<(), ValidationError> {
     let n_atoms = molecule.atoms.len();
 
     // bonds must only exist between defined atoms
     for bond in molecule.bonds.iter() {
-        if bond.index.iter().any(|&index| index >= n_atoms) {
+        if bond.index().iter().any(|&index| index >= n_atoms) {
             return Err(ValidationError::new("bond between undefined atoms"));
         }
     }
 
     // torsions must only exist between defined atoms
     for torsion in molecule.torsions.iter() {
-        if torsion.index.iter().any(|&index| index >= n_atoms) {
+        if torsion.index().iter().any(|&index| index >= n_atoms) {
             return Err(ValidationError::new("torsion between undefined atoms"));
         }
     }
 
     // dihedrals must only exist between defined atoms
     for dihedral in molecule.dihedrals.iter() {
-        if dihedral.index.iter().any(|&index| index >= n_atoms) {
+        if dihedral.index().iter().any(|&index| index >= n_atoms) {
             return Err(ValidationError::new("dihedral between undefined atoms"));
         }
     }
@@ -127,34 +130,89 @@ fn validate_molecule_kind(molecule: &MoleculeKind) -> Result<(), ValidationError
     Ok(())
 }
 
-// TODO! tests
-fn validate_overlap(collection: &[impl NonOverlapping]) -> Result<(), ValidationError> {
-    if collection.iter().enumerate().any(|(i, item_i)| {
-        collection
-            .iter()
-            .skip(i + 1)
-            .any(|item_j| item_i.overlap(item_j))
-    }) {
-        Err(ValidationError::new("overlap between collections"))
-    } else {
-        Ok(())
-    }
-}
-
 /// TODO! Should not be placed here.
 #[derive(Debug, Clone, Serialize, Deserialize, Default, Validate)]
-#[validate(schema(function = "validate_topology"))]
 pub struct Topology {
-    /// All possible atom types
+    /// All possible atom types.
+    #[serde(deserialize_with = "deserialize_atoms")]
     atoms: Vec<AtomKind>,
-    /// All possible molecule types
-    #[validate(nested)]
+    /// All possible molecule types.
+    #[serde(deserialize_with = "deserialize_molecules")]
     molecules: Vec<MoleculeKind>,
 }
 
-// TODO!
-fn validate_topology(topology: &Topology) -> Result<(), ValidationError> {
-    Ok(())
+impl Topology {
+    /// Convert a yaml-formatted string into Topology.
+    pub fn from_str(string: &str) -> Result<Topology, anyhow::Error> {
+        let mut topology = serde_yaml::from_str::<Topology>(string)?;
+
+        // get indices of atom kinds forming each molecule
+        for molecule in topology.molecules.iter_mut() {
+            for atom in molecule.atoms.iter() {
+                let index = topology
+                    .atoms
+                    .iter()
+                    .position(|x| &x.name == atom)
+                    .ok_or(anyhow::Error::msg("undefined atom kind in a molecule"))?;
+                molecule.atom_indices.push(index);
+            }
+        }
+
+        Ok(topology)
+    }
+}
+
+/// Deserialize atoms in Topology and set their IDs.
+/// Makes sure that the atom names are unique.
+fn deserialize_atoms<'de, D>(deserializer: D) -> Result<Vec<AtomKind>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let atoms: Vec<_> = Vec::deserialize(deserializer)?
+        .into_iter()
+        .enumerate()
+        .map(|(i, mut atom): (usize, AtomKind)| {
+            atom.id = i;
+            atom
+        })
+        .collect();
+
+    // check for duplicate atom names
+    if super::are_unique(&atoms, |i: &AtomKind, j: &AtomKind| i.name == j.name) {
+        Ok(atoms)
+    } else {
+        Err(serde::de::Error::custom("atoms have non-unique names"))
+    }
+}
+
+/// Deserialize molecules in Topology and set their IDs.
+/// Makes sure that the molecule names are unique.
+fn deserialize_molecules<'de, D>(deserializer: D) -> Result<Vec<MoleculeKind>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let mut molecules: Vec<MoleculeKind> = Vec::deserialize(deserializer)?;
+
+    for (i, molecule) in molecules.iter_mut().enumerate() {
+        // set atom names
+        if molecule.atom_names.is_empty() {
+            molecule.atom_names = vec![None; molecule.atoms.len()];
+        }
+
+        molecule.validate().map_err(serde::de::Error::custom)?;
+
+        // set index
+        molecule.id = i;
+    }
+
+    // check for duplicate molecule names
+    if super::are_unique(&molecules, |i: &MoleculeKind, j: &MoleculeKind| {
+        i.name == j.name
+    }) {
+        Ok(molecules)
+    } else {
+        Err(serde::de::Error::custom("molecules have non-unique names"))
+    }
 }
 
 #[cfg(test)]
@@ -197,6 +255,8 @@ mod tests {
         let file = File::create("tests/files/molecule.yaml").unwrap();
         let mut writer = BufWriter::new(file);
 
+        // TODO! write a proper test
+
         write!(writer, "{}", serialized).unwrap();
     }
 
@@ -205,6 +265,7 @@ mod tests {
         let string = std::fs::read_to_string("tests/files/molecule_input.yaml").unwrap();
         let molecule = MoleculeKind::from_str(&string).unwrap();
 
+        // TODO! write a proper test
         println!("{:?}", molecule);
     }
 
@@ -226,5 +287,13 @@ mod tests {
         assert!(molecule.bonds.is_empty());
         assert!(molecule.torsions.is_empty());
         assert!(molecule.dihedrals.is_empty());
+    }
+
+    #[test]
+    fn read_topology() {
+        let string = std::fs::read_to_string("tests/files/topology_input.yaml").unwrap();
+        let topology = Topology::from_str(&string).unwrap();
+
+        println!("{:?}", topology);
     }
 }

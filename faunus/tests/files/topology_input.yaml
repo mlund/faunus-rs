@@ -1,0 +1,46 @@
+atoms:
+  - {name: OW, mass: 16.0, charge: -1.0, element: O, hydrophobicity: !SurfaceTension 1.0}
+  - {name: HW, mass: 1.0, charge: 0.0}
+  - {name: X, mass: 12.0, charge: 1.0, hydrophobicity: !Hydrophilic }
+
+molecules:
+  - name: MOL
+    atoms: [OW, HW, HW, HW, OW, OW, OW]
+    bonds:
+      - {index: [0, 1], kind: !Harmonic {k: 100.0, req: 1.0}, order: Single}
+      - {index: [1, 2], kind: !Morse {k: 100.0, req: 1.0, d: 10.0}}
+      - {index: [2, 3]}
+    dihedrals:
+      - {index: [0, 1, 2, 3], kind: !ImproperHarmonic {k: 100.0, aeq: 90.0}, electrostatic_scaling: 0.5, lj_scaling: 0.5}
+      - {index: [3, 4, 5, 6]}
+    torsions:
+      - {index: [2, 3, 4], kind: !Cosine {k: 50.0, aeq: 45.0}}
+      - {index: [1, 2, 3]}
+    degrees_of_freedom: Free
+    atom_names: [W1, null, W3, W4, null, W6, W7]
+    residues:
+      - {name: ALA, number: 2, atoms: [0, 3]}
+      - {name: GLY, number: 3, atoms: [1, 1]} # empty
+      - {name: ALA, number: 4, atoms: [4, 6]}
+    chains:
+      - {name: A, atoms: [0, 7]}
+      - {name: B, atoms: [7, 0]} # empty
+    custom:
+      bool: false
+      int: 13
+      float: 76.3
+      vector: [13.1, 18.9, -13.4, 12]
+      point: [1.4, 2.2, -0.71]
+  - name: MOL2
+    atoms: [OW, X, X]
+
+#intermolecular:
+
+#groups/blocks?:
+#  - {name: MOL, number: 50, group: false}  # each molecule of this block should have its own group
+#  - {name: MOL, number: 7}                 # by default, group is `false`
+#  - {name: MOL, number: 3, structure: "three_molecules.gro"}      # structure with three MOL molecules 
+#  - {name: MOL, number: 5, insert: true, structure = "mol.xyz"}   # insert molecules randomly into the system (structure contains structure of a single molecule)
+#  - {name: MOL2, number: 20, group: true, inactive: 5}  # all molecules of this block should be part of the same group?
+
+# structure for the other atoms is read from structure file provided to Faunus; blocks with the structure field are ignored when reading the structure file

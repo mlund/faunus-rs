@@ -27,3 +27,4 @@ physical_constants = "0.5.0"
 coulomb = {path = "../coulomb"}
 serde_yaml = "0.9"
 validator = { version = "0.18.1", features = ["derive"] }
+derive-getters = "0.3.0"

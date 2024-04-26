@@ -23,9 +23,9 @@ use super::DegreesOfFreedom;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Residue {
-    /// Residue name
+    /// Residue name.
     name: String,
-    /// Residue number
+    /// Residue number.
     number: Option<usize>,
     /// Atoms forming the residue.
     /// Range of indices relating to the atoms of a molecule.
@@ -112,7 +112,7 @@ impl ResidueKind {
 
     /// Add bond between atoms
     pub fn add_bond(&mut self, bond: Bond) -> anyhow::Result<()> {
-        if bond.index.iter().any(|i| i >= &self.len()) || bond.index[0] == bond.index[1] {
+        if bond.index().iter().any(|i| i >= &self.len()) || bond.index()[0] == bond.index()[1] {
             anyhow::bail!("Invalid index in bond {:?} for residue {}", bond, self.name);
         }
         self.connectivity.bonds.push(bond);

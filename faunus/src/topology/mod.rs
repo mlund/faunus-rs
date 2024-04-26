@@ -65,6 +65,7 @@ pub use chain::*;
 pub use dihedral::*;
 pub use residue::*;
 pub use torsion::*;
+use validator::ValidationError;
 
 use crate::Point;
 use serde::{Deserialize, Serialize};
@@ -79,13 +80,68 @@ pub(super) trait NonOverlapping {
     ///
     /// ## Return
     /// Returns `true` if the collections overlap, else returns `false`.
-    // TODO! add tests
     fn overlap(&self, other: &Self) -> bool {
-        !self.atoms().is_empty()
-            && !other.atoms().is_empty()
+        !self.is_empty()
+            && !other.is_empty()
             && self.atoms().start < other.atoms().end
             && other.atoms().start < self.atoms().end
     }
+
+    /// Check whether the collection is empty.
+    #[inline(always)]
+    fn is_empty(&self) -> bool {
+        self.atoms().is_empty()
+    }
+
+    // TODO! tests
+    /// Validate that collections in a list do not overlap.
+    fn validate(collection: &[impl NonOverlapping]) -> Result<(), ValidationError> {
+        if collection.iter().enumerate().any(|(i, item_i)| {
+            collection
+                .iter()
+                .skip(i + 1)
+                .any(|item_j| item_i.overlap(item_j))
+        }) {
+            Err(ValidationError::new("overlap between collections"))
+        } else {
+            core::result::Result::Ok(())
+        }
+    }
+}
+
+#[test]
+fn collections_overlap() {
+    let residue1 = Residue::new("ALA".to_owned(), None, 2..5);
+    let residue2 = Residue::new("LYS".to_owned(), None, 7..11);
+    assert!(!residue1.overlap(&residue2));
+
+    let residue2 = Residue::new("LYS".to_owned(), None, 5..11);
+    assert!(!residue1.overlap(&residue2));
+
+    let residue2 = Residue::new("LYS".to_owned(), None, 0..2);
+    assert!(!residue1.overlap(&residue2));
+
+    let residue2 = Residue::new("LYS".to_owned(), None, 2..5);
+    assert!(residue1.overlap(&residue2));
+
+    let residue2 = Residue::new("LYS".to_owned(), None, 1..11);
+    assert!(residue1.overlap(&residue2));
+
+    let residue2 = Residue::new("LYS".to_owned(), None, 3..4);
+    assert!(residue1.overlap(&residue2));
+
+    let residue2 = Residue::new("LYS".to_owned(), None, 1..3);
+    assert!(residue1.overlap(&residue2));
+
+    let residue2 = Residue::new("LYS".to_owned(), None, 4..11);
+    assert!(residue1.overlap(&residue2));
+
+    let chain1 = Chain::new("A", 2..5);
+    let chain2 = Chain::new("B", 7..11);
+    assert!(!chain1.overlap(&chain2));
+
+    let chain2 = Chain::new("B", 4..11);
+    assert!(chain1.overlap(&chain2));
 }
 
 /// Trait for identifying elements in a collection, e.g. index
@@ -103,8 +159,9 @@ pub enum Value {
     Bool(bool),
     Int(i32),
     Float(f64),
-    Vector(Vec<f64>),
+    // Point must be placed before Vector for correct classification by serde
     Point(Point),
+    Vector(Vec<f64>),
 }
 
 // Test Value conversions to f64 and bool
@@ -393,6 +450,33 @@ where
         start: arr[0],
         end: arr[1],
     })
+}
+
+/// Check that all items of a collection are unique.
+///
+/// ## Parameters
+/// - `collection` collection of items to compare
+/// - `compare_fn` function/closure used for comparing the items
+fn are_unique<T, F>(collection: &[T], compare_fn: F) -> bool
+where
+    F: Fn(&T, &T) -> bool,
+{
+    !collection.iter().enumerate().any(|(i, item_i)| {
+        collection
+            .iter()
+            .skip(i + 1)
+            .any(|item_j| compare_fn(item_i, item_j))
+    })
+}
+
+/// Validate that the provided atom indices are unique.
+/// Used e.g. to validate that a bond does not connect one and the same atom.
+fn validate_unique_indices(indices: &[usize]) -> Result<(), ValidationError> {
+    if are_unique(indices, |i: &usize, j: &usize| i == j) {
+        core::result::Result::Ok(())
+    } else {
+        Err(ValidationError::new("non-unqiue atom indices"))
+    }
 }
 
 /*

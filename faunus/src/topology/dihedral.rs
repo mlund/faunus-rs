@@ -14,24 +14,26 @@
 
 //! Dihedral angles
 
+use derive_getters::Getters;
 use serde::{Deserialize, Serialize};
+use validator::{Validate, ValidationError};
 
 /// Force field definition for dihedral angle potentials between four atoms
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Default)]
 pub enum DihedralKind {
-    /// Harmonic dihedral type (force constant, equilibrium angle)
+    /// Harmonic dihedral type (force constant, equilibrium angle).
     Harmonic { k: f64, aeq: f64 },
-    /// Proper periodic dihedral type (force constant, periodicity, phase)
+    /// Proper periodic dihedral type (force constant, periodicity, phase).
     ProperPeriodic { k: f64, n: f64, phi: f64 },
-    /// Improper harmonic dihedral type (force constant, equilibrium angle)
+    /// Improper harmonic dihedral type (force constant, equilibrium angle).
     ImproperHarmonic { k: f64, aeq: f64 },
     /// Amber-style improper torsion, where atom3 is the central atom bonded to atoms 1, 2, and 4.
     /// Atoms 1, 2, and 4 are only bonded to atom 3 in this instance.
-    /// (force constant, periodicity, phase)
+    /// (force constant, periodicity, phase).
     ImproperAmber { k: f64, n: f64, phi: f64 },
-    /// CHARMM-style improper torsion between 4 atoms. The first atom must be the central atom. (force constant, periodicity, phase)
+    /// CHARMM-style improper torsion between 4 atoms. The first atom must be the central atom. (force constant, periodicity, phase).
     ImproperCHARMM { k: f64, n: f64, phi: f64 },
-    /// Unspecified dihedral type
+    /// Unspecified dihedral type.
     #[default]
     Unspecified,
 }
@@ -49,24 +51,25 @@ impl DihedralKind {
 }
 
 /// Valence dihedral between four atoms separated by three covalent bonds.
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Getters, Validate)]
 #[serde(deny_unknown_fields)]
 pub struct Dihedral {
     /// Indices of the four atoms in the dihedral.
     /// The indices are bonded as 1-2-3-4.
-    pub index: [usize; 4],
+    #[validate(custom(function = "super::validate_unique_indices"))]
+    index: [usize; 4],
     /// Kind of dihedral, e.g. harmonic, proper periodic, improper harmonic, etc.
     #[serde(default)]
-    pub kind: DihedralKind,
+    kind: DihedralKind,
     /// Optional 1-4 electrostatic scaling factor
-    pub electrostatic_scaling: Option<f64>,
+    electrostatic_scaling: Option<f64>,
     /// Optional 1-4 Lennard-Jones scaling factor
-    pub lj_scaling: Option<f64>,
+    lj_scaling: Option<f64>,
 }
 
 impl Dihedral {
     /// Create new dihedral
-    pub fn new(index: [usize; 4], kind: DihedralKind) -> Self {
+    pub(super) fn new(index: [usize; 4], kind: DihedralKind) -> Self {
         Self {
             index,
             kind,
