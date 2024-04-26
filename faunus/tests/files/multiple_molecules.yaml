@@ -1,0 +1,24 @@
+molecules:
+- name: test
+  id: 0
+  atoms:
+  - OW
+  - HW
+  - HW
+  connectivity:
+    bonds: []
+    dihedrals: []
+    torsions: []
+  dof: Free
+  atom_names: []
+  residues: []
+  chains:
+  - name: A
+    atoms:
+    - 1
+    - 8
+  - name: B
+    atoms:
+    - 0
+    - 0
+  custom: {}

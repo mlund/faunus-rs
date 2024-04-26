@@ -37,6 +37,7 @@ pub struct AtomKind {
     /// Unique name
     pub name: String,
     /// Unique identifier
+    #[serde(skip_deserializing)]
     pub id: usize,
     /// Atomic mass (g/mol)
     pub mass: f64,

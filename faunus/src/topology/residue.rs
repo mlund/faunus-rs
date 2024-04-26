@@ -15,7 +15,54 @@
 use crate::topology::{bond::Bond, Connectivity, Value};
 use serde::{Deserialize, Serialize};
 
+use std::ops::Range;
+
 use super::DegreesOfFreedom;
+
+/// Non-overlapping collection of atoms with a non-unique name and number.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Residue {
+    /// Residue name
+    name: String,
+    /// Residue number
+    number: Option<usize>,
+    /// Atoms forming the residue.
+    /// Range of indices relating to the atoms of a molecule.
+    #[serde(
+        serialize_with = "crate::topology::serialize_range_as_array",
+        deserialize_with = "crate::topology::deserialize_range_from_array"
+    )]
+    atoms: Range<usize>,
+}
+
+impl Residue {
+    #[inline(always)]
+    pub fn new(name: String, number: Option<usize>, atoms: Range<usize>) -> Self {
+        Residue {
+            name,
+            number,
+            atoms,
+        }
+    }
+
+    #[inline(always)]
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    #[inline(always)]
+    pub fn number(&self) -> Option<usize> {
+        self.number
+    }
+}
+
+impl crate::topology::NonOverlapping for Residue {
+    #[inline(always)]
+    fn atoms(&self) -> &Range<usize> {
+        &self.atoms
+    }
+}
 
 /// Collection of connected atoms
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]

@@ -15,6 +15,45 @@
 use super::Connectivity;
 use serde::{Deserialize, Serialize};
 
+use std::ops::Range;
+
+/// Non-overlapping collection of atoms with a non-unique name.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Chain {
+    /// Name of the chain
+    name: String,
+    /// Atoms forming the chain.
+    /// Range of indices relating to the atoms of a molecule.
+    #[serde(
+        serialize_with = "crate::topology::serialize_range_as_array",
+        deserialize_with = "crate::topology::deserialize_range_from_array"
+    )]
+    atoms: Range<usize>,
+}
+
+impl Chain {
+    #[inline(always)]
+    pub fn new(name: &str, atoms: std::ops::Range<usize>) -> Self {
+        Self {
+            name: name.to_owned(),
+            atoms,
+        }
+    }
+
+    #[inline(always)]
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+}
+
+impl crate::topology::NonOverlapping for Chain {
+    #[inline(always)]
+    fn atoms(&self) -> &Range<usize> {
+        &self.atoms
+    }
+}
+
 /// Chain of connected residues
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct ChainKind {

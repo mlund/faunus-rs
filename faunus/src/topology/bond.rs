@@ -98,12 +98,15 @@ impl From<f64> for BondOrder {
 
 /// Describes a bond between two atoms
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[serde(deny_unknown_fields)]
 pub struct Bond {
     /// Indices of the two atoms in the bond
     pub index: [usize; 2],
     /// Kind of bond, e.g. harmonic, FENE, Morse, etc.
+    #[serde(default)]
     pub kind: BondKind,
     /// Bond order
+    #[serde(default)]
     pub order: BondOrder,
 }
 

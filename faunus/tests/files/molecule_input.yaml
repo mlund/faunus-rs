@@ -1,0 +1,23 @@
+name: test_molecule
+atoms: [OW, HW, HW, HW, OW, OW, OW]
+bonds:
+  - {index: [0, 1], kind: !Harmonic {k: 100.0, req: 1.0}, order: Single}
+  - {index: [1, 2], kind: !Morse {k: 100.0, req: 1.0, d: 10.0}}
+  - {index: [2, 3]}
+dihedrals:
+  - {index: [0, 1, 2, 3], kind: !ImproperHarmonic {k: 100.0, aeq: 90.0}, electrostatic_scaling: 0.5, lj_scaling: 0.5}
+  - {index: [3, 4, 5, 6]}
+torsions:
+  - {index: [2, 3, 4], kind: !Cosine {k: 50.0, aeq: 45.0}}
+  - {index: [1, 2, 3]}
+degrees_of_freedom: Free
+atom_names: [W1, null, W3, W4, null, W6, W7]
+residues:
+  - {name: ALA, number: 2, atoms: [0, 3]}
+  - {name: GLY, number: 3, atoms: [1, 1]} # empty
+  - {name: ALA, number: 4, atoms: [4, 6]}
+chains:
+  - {name: A, atoms: [0, 7]}
+  - {name: B, atoms: [7, 0]} # empty
+custom:
+  some_property: 64.0

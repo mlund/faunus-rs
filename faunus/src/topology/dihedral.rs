@@ -50,11 +50,13 @@ impl DihedralKind {
 
 /// Valence dihedral between four atoms separated by three covalent bonds.
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[serde(deny_unknown_fields)]
 pub struct Dihedral {
     /// Indices of the four atoms in the dihedral.
     /// The indices are bonded as 1-2-3-4.
     pub index: [usize; 4],
     /// Kind of dihedral, e.g. harmonic, proper periodic, improper harmonic, etc.
+    #[serde(default)]
     pub kind: DihedralKind,
     /// Optional 1-4 electrostatic scaling factor
     pub electrostatic_scaling: Option<f64>,

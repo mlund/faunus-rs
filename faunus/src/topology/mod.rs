@@ -37,8 +37,8 @@
 //!
 //! let mut water = ResidueKind::new("Water", &[0, 1, 1]);
 //! assert_eq!(water.len(), 3);
-//! let bond1 = Bond::new([0, 1], BondKind::Harmonic(100.0, 1.0), None);
-//! let bond2 = Bond::new([1, 2], BondKind::Harmonic(100.0, 1.0), None);
+//! let bond1 = Bond::new([0, 1], BondKind::Harmonic{ k: 100.0, req: 1.0 }, None);
+//! let bond2 = Bond::new([1, 2], BondKind::Harmonic{ k: 100.0, req: 1.0 }, None);
 //! water.add_bond(bond1).unwrap();
 //! water.add_bond(bond2).unwrap();
 //! assert_eq!(water.connectivity.bonds().len(), 2);
@@ -52,9 +52,11 @@ mod bond;
 mod chain;
 //pub mod chemfiles;
 mod dihedral;
+mod molecule;
 mod residue;
 mod torsion;
 use std::fmt::Debug;
+use std::ops::Range;
 
 use anyhow::Ok;
 pub use atom::*;
@@ -65,8 +67,26 @@ pub use residue::*;
 pub use torsion::*;
 
 use crate::Point;
-//use chemfiles;
 use serde::{Deserialize, Serialize};
+use serde::{Deserializer, Serializer};
+
+/// Trait implemented by collections of atoms that should not overlap (e.g., residues, chains).
+pub(super) trait NonOverlapping {
+    /// Get the indices of atoms in the collection.
+    fn atoms(&self) -> &Range<usize>;
+
+    /// Check whether two collections overlap.
+    ///
+    /// ## Return
+    /// Returns `true` if the collections overlap, else returns `false`.
+    // TODO! add tests
+    fn overlap(&self, other: &Self) -> bool {
+        !self.atoms().is_empty()
+            && !other.atoms().is_empty()
+            && self.atoms().start < other.atoms().end
+            && other.atoms().start < self.atoms().end
+    }
+}
 
 /// Trait for identifying elements in a collection, e.g. index
 trait Indices {
@@ -78,6 +98,7 @@ trait Indices {
 
 /// Enum to store custom data for atoms, residues, molecules etc.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(untagged)]
 pub enum Value {
     Bool(bool),
     Int(i32),
@@ -287,12 +308,16 @@ impl Topology {
 
 /// Connectivity information such as bonds, dihedrals, etc.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[serde(deny_unknown_fields)]
 pub struct Connectivity {
     /// Bonds between atoms
+    #[serde(default)]
     bonds: Vec<Bond>,
     /// Dihedrals
+    #[serde(default)]
     dihedrals: Vec<Dihedral>,
     /// Dihedrals between bonds
+    #[serde(default)]
     torsions: Vec<Torsion>,
 }
 
@@ -301,14 +326,32 @@ impl Connectivity {
     pub fn bonds(&self) -> &[Bond] {
         &self.bonds
     }
+
+    /// Add a new bond.
+    pub fn add_bond(&mut self, bond: &Bond) {
+        self.bonds.push(bond.clone())
+    }
+
     /// Diherals
     pub fn dihedrals(&self) -> &[Dihedral] {
         &self.dihedrals
     }
+
+    /// Add a new dihedral
+    pub fn add_dihedral(&mut self, dihedral: &Dihedral) {
+        self.dihedrals.push(dihedral.clone())
+    }
+
     /// Torsions
     pub fn torsions(&self) -> &[Torsion] {
         &self.torsions
     }
+
+    /// Add a new torsion
+    pub fn add_torsion(&mut self, torsion: &Torsion) {
+        self.torsions.push(torsion.clone())
+    }
+
     /// Find dihedrals based on bonds
     pub fn find_dihedrals(&mut self) -> Vec<&Dihedral> {
         todo!()
@@ -328,8 +371,31 @@ impl Connectivity {
     }
 }
 
-/*
+/// Serialize std::ops::Range as an array.
+fn serialize_range_as_array<S>(
+    range: &std::ops::Range<usize>,
+    serializer: S,
+) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    [range.start, range.end].serialize(serializer)
+}
 
+/// Deserialize std::ops::Range from an array.
+/// This allows the range to be defined as `[start, end]`.
+fn deserialize_range_from_array<'de, D>(deserializer: D) -> Result<std::ops::Range<usize>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let arr: [usize; 2] = Deserialize::deserialize(deserializer)?;
+    core::result::Result::Ok(std::ops::Range {
+        start: arr[0],
+        end: arr[1],
+    })
+}
+
+/*
 /// See stackoverflow workaround: <https://stackoverflow.com/questions/61446984/impl-iterator-failing-for-iterator-with-multiple-lifetime-parameters>
 pub(crate) trait Captures<'a> {}
 impl<'a, T: ?Sized> Captures<'a> for T {}
