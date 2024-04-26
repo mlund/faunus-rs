@@ -33,16 +33,16 @@ pub struct Residue {
         serialize_with = "crate::topology::serialize_range_as_array",
         deserialize_with = "crate::topology::deserialize_range_from_array"
     )]
-    atoms: Range<usize>,
+    range: Range<usize>,
 }
 
 impl Residue {
     #[inline(always)]
-    pub fn new(name: String, number: Option<usize>, atoms: Range<usize>) -> Self {
+    pub fn new(name: String, number: Option<usize>, range: Range<usize>) -> Self {
         Residue {
             name,
             number,
-            atoms,
+            range,
         }
     }
 
@@ -59,8 +59,8 @@ impl Residue {
 
 impl crate::topology::NonOverlapping for Residue {
     #[inline(always)]
-    fn atoms(&self) -> &Range<usize> {
-        &self.atoms
+    fn range(&self) -> &Range<usize> {
+        &self.range
     }
 }
 

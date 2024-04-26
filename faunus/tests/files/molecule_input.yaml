@@ -13,12 +13,12 @@ torsions:
 degrees_of_freedom: Free
 atom_names: [W1, null, W3, W4, null, W6, W7]
 residues:
-  - {name: ALA, number: 2, atoms: [0, 3]}
-  - {name: GLY, number: 3, atoms: [1, 1]} # empty
-  - {name: ALA, number: 4, atoms: [4, 6]}
+  - {name: ALA, number: 2, range: [0, 3]}
+  - {name: GLY, number: 3, range: [1, 1]} # empty
+  - {name: ALA, number: 4, range: [4, 6]}
 chains:
-  - {name: A, atoms: [0, 7]}
-  - {name: B, atoms: [7, 0]} # empty
+  - {name: A, range: [0, 7]}
+  - {name: B, range: [7, 0]} # empty
 custom:
   bool: false
   int: 13

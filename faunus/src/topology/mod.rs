@@ -51,6 +51,7 @@ mod atom;
 mod bond;
 mod chain;
 //pub mod chemfiles;
+mod block;
 mod dihedral;
 mod molecule;
 mod residue;
@@ -74,7 +75,7 @@ use serde::{Deserializer, Serializer};
 /// Trait implemented by collections of atoms that should not overlap (e.g., residues, chains).
 pub(super) trait NonOverlapping {
     /// Get the indices of atoms in the collection.
-    fn atoms(&self) -> &Range<usize>;
+    fn range(&self) -> &Range<usize>;
 
     /// Check whether two collections overlap.
     ///
@@ -83,14 +84,14 @@ pub(super) trait NonOverlapping {
     fn overlap(&self, other: &Self) -> bool {
         !self.is_empty()
             && !other.is_empty()
-            && self.atoms().start < other.atoms().end
-            && other.atoms().start < self.atoms().end
+            && self.range().start < other.range().end
+            && other.range().start < self.range().end
     }
 
     /// Check whether the collection is empty.
     #[inline(always)]
     fn is_empty(&self) -> bool {
-        self.atoms().is_empty()
+        self.range().is_empty()
     }
 
     // TODO! tests
@@ -305,7 +306,7 @@ impl Topology {
     /// assert_eq!(top.find_atom("Pb"), None);
     /// ~~~
     pub fn find_atom(&self, name: &str) -> Option<&AtomKind> {
-        self.atoms.iter().find(|a| a.name == name)
+        self.atoms.iter().find(|a| a.name() == name)
     }
 
     /// Find residue with given name
@@ -332,8 +333,8 @@ impl Topology {
     /// Will error if the atom name already exists.
     pub fn add_atom(&mut self, atom: AtomKind) -> anyhow::Result<()> {
         // Ensure that the atom name does not already exist
-        if self.atoms.iter().any(|a| a.name == atom.name) {
-            anyhow::bail!("Atom with name '{}' already exists", atom.name);
+        if self.atoms.iter().any(|a| a.name() == atom.name()) {
+            anyhow::bail!("Atom with name '{}' already exists", atom.name());
         }
         self.atoms.push(atom);
         let index = self.atoms.len() - 1;

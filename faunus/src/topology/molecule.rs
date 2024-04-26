@@ -14,14 +14,15 @@
 
 use std::collections::HashMap;
 
+use derive_getters::Getters;
 use serde::{Deserialize, Deserializer, Serialize};
 
-use crate::topology::{Chain, DegreesOfFreedom, Residue, Value};
+use crate::topology::{block::MoleculeBlock, Chain, DegreesOfFreedom, Residue, Value};
 use validator::{Validate, ValidationError};
 
 use super::{AtomKind, Bond, Dihedral, NonOverlapping, Torsion};
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default, Validate)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, Validate, Getters)]
 #[serde(deny_unknown_fields)]
 #[validate(schema(function = "validate_molecule"))]
 pub struct MoleculeKind {
@@ -81,6 +82,10 @@ impl MoleculeKind {
         molecule.validate()?;
         Ok(molecule)
     }
+
+    pub(super) fn set_atom_indices(&mut self, indices: Vec<usize>) {
+        self.atom_indices = indices;
+    }
 }
 
 fn validate_molecule(molecule: &MoleculeKind) -> Result<(), ValidationError> {
@@ -110,14 +115,14 @@ fn validate_molecule(molecule: &MoleculeKind) -> Result<(), ValidationError> {
     // residues can't contain undefined atoms
     for residue in molecule.residues.iter() {
         // empty residues can contain any indices
-        if !residue.atoms().is_empty() && residue.atoms().end > n_atoms {
+        if !residue.is_empty() && residue.range().end > n_atoms {
             return Err(ValidationError::new("residue contains undefined atoms"));
         }
     }
 
     // chains can't contain undefined atoms
     for chain in molecule.chains.iter() {
-        if !chain.atoms().is_empty() && chain.atoms().end > n_atoms {
+        if !chain.is_empty() && chain.range().end > n_atoms {
             return Err(ValidationError::new("chain contains undefined atoms"));
         }
     }
@@ -135,10 +140,15 @@ fn validate_molecule(molecule: &MoleculeKind) -> Result<(), ValidationError> {
 pub struct Topology {
     /// All possible atom types.
     #[serde(deserialize_with = "deserialize_atoms")]
+    #[serde(default)]
     atoms: Vec<AtomKind>,
     /// All possible molecule types.
     #[serde(deserialize_with = "deserialize_molecules")]
+    #[serde(default)]
     molecules: Vec<MoleculeKind>,
+    /// Molecules of the system.
+    #[serde(default)]
+    blocks: Vec<MoleculeBlock>,
 }
 
 impl Topology {
@@ -148,14 +158,28 @@ impl Topology {
 
         // get indices of atom kinds forming each molecule
         for molecule in topology.molecules.iter_mut() {
-            for atom in molecule.atoms.iter() {
-                let index = topology
-                    .atoms
-                    .iter()
-                    .position(|x| &x.name == atom)
-                    .ok_or(anyhow::Error::msg("undefined atom kind in a molecule"))?;
-                molecule.atom_indices.push(index);
-            }
+            let indices = molecule
+                .atoms()
+                .iter()
+                .map(|atom| {
+                    topology
+                        .atoms
+                        .iter()
+                        .position(|x| x.name() == atom)
+                        .ok_or_else(|| anyhow::Error::msg("undefined atom kind in a molecule"))
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            molecule.set_atom_indices(indices);
+        }
+
+        // validate molecule blocks
+        for block in topology.blocks.iter_mut() {
+            let index = topology
+                .molecules
+                .iter()
+                .position(|x| x.name() == block.molecule())
+                .ok_or(anyhow::Error::msg("undefined molecule kind in a block"))?;
+            block.set_molecule_index(index);
         }
 
         Ok(topology)
@@ -172,13 +196,13 @@ where
         .into_iter()
         .enumerate()
         .map(|(i, mut atom): (usize, AtomKind)| {
-            atom.id = i;
+            atom.set_id(i);
             atom
         })
         .collect();
 
     // check for duplicate atom names
-    if super::are_unique(&atoms, |i: &AtomKind, j: &AtomKind| i.name == j.name) {
+    if super::are_unique(&atoms, |i: &AtomKind, j: &AtomKind| i.name() == j.name()) {
         Ok(atoms)
     } else {
         Err(serde::de::Error::custom("atoms have non-unique names"))

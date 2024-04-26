@@ -14,6 +14,7 @@
 
 use crate::topology::{CustomProperty, Value};
 use chemfiles;
+use derive_getters::Getters;
 use serde::{Deserialize, Serialize};
 
 /// Description of atom properties
@@ -21,29 +22,29 @@ use serde::{Deserialize, Serialize};
 /// Atoms need not be chemical elements, but can be custom atoms representing interaction sites.
 /// This does _not_ include positions; indices etc., but is rather
 /// used to represent static properties used for templating atoms.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default, Getters)]
 pub struct AtomKind {
     /// Unique name.
-    pub name: String,
+    name: String,
     /// Unique identifier.
     /// Only defined if the AtomKind is inside of Topology.
     #[serde(skip_deserializing)]
-    pub id: usize,
+    id: usize,
     /// Atomic mass (g/mol).
-    pub mass: f64,
+    mass: f64,
     /// Atomic charge.
-    pub charge: f64,
+    charge: f64,
     /// Atomic symbol if appropriate (He, C, O, Fe, etc.).
-    pub element: Option<String>,
+    element: Option<String>,
     /// Lennard-Jones diameter, σٖᵢᵢ (angstrom).
-    pub sigma: Option<f64>,
+    sigma: Option<f64>,
     /// Lennard-Jones well depth, εᵢᵢ (kJ/mol).
-    pub epsilon: Option<f64>,
+    epsilon: Option<f64>,
     /// Hydrophobicity information.
-    pub hydrophobicity: Option<Hydrophobicity>,
+    hydrophobicity: Option<Hydrophobicity>,
     /// Map of custom properties.
     #[serde(default)]
-    pub custom: std::collections::HashMap<String, Value>,
+    custom: std::collections::HashMap<String, Value>,
 }
 
 impl AtomKind {

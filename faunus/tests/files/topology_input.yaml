@@ -19,12 +19,12 @@ molecules:
     degrees_of_freedom: Free
     atom_names: [W1, null, W3, W4, null, W6, W7]
     residues:
-      - {name: ALA, number: 2, atoms: [0, 3]}
-      - {name: GLY, number: 3, atoms: [1, 1]} # empty
-      - {name: ALA, number: 4, atoms: [4, 6]}
+      - {name: ALA, number: 2, range: [0, 3]}
+      - {name: GLY, number: 3, range: [1, 1]} # empty
+      - {name: ALA, number: 4, range: [4, 6]}
     chains:
-      - {name: A, atoms: [0, 7]}
-      - {name: B, atoms: [7, 0]} # empty
+      - {name: A, range: [0, 7]}
+      - {name: B, range: [7, 0]} # empty
     custom:
       bool: false
       int: 13
@@ -36,11 +36,16 @@ molecules:
 
 #intermolecular:
 
+blocks:
+  - {molecule: MOL, N: 3}
+  - {molecule: MOL2, N: 50, group: true, active: 30}
+
+
 #groups/blocks?:
-#  - {name: MOL, number: 50, group: false}  # each molecule of this block should have its own group
-#  - {name: MOL, number: 7}                 # by default, group is `false`
-#  - {name: MOL, number: 3, structure: "three_molecules.gro"}      # structure with three MOL molecules 
-#  - {name: MOL, number: 5, insert: true, structure = "mol.xyz"}   # insert molecules randomly into the system (structure contains structure of a single molecule)
-#  - {name: MOL2, number: 20, group: true, inactive: 5}  # all molecules of this block should be part of the same group?
+#  - {molecule: MOL, number: 50, group: false}  # each molecule of this block should have its own group
+#  - {molecule: MOL, number: 7}                 # by default, group is `false`
+#  - {molecule: MOL, number: 3, structure: "three_molecules.gro"}      # structure with three MOL molecules 
+#  - {molecule: MOL, number: 5, insert: true, structure = "mol.xyz"}   # insert molecules randomly into the system (structure contains structure of a single molecule)
+#  - {molecule: MOL2, number: 20, group: true, inactive: 5}  # all molecules of this block should be part of the same group?
 
 # structure for the other atoms is read from structure file provided to Faunus; blocks with the structure field are ignored when reading the structure file

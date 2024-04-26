@@ -29,15 +29,15 @@ pub struct Chain {
         serialize_with = "crate::topology::serialize_range_as_array",
         deserialize_with = "crate::topology::deserialize_range_from_array"
     )]
-    atoms: Range<usize>,
+    range: Range<usize>,
 }
 
 impl Chain {
     #[inline(always)]
-    pub fn new(name: &str, atoms: std::ops::Range<usize>) -> Self {
+    pub fn new(name: &str, range: Range<usize>) -> Self {
         Self {
             name: name.to_owned(),
-            atoms,
+            range,
         }
     }
 
@@ -49,8 +49,8 @@ impl Chain {
 
 impl crate::topology::NonOverlapping for Chain {
     #[inline(always)]
-    fn atoms(&self) -> &Range<usize> {
-        &self.atoms
+    fn range(&self) -> &Range<usize> {
+        &self.range
     }
 }
 
