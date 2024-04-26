@@ -13,6 +13,7 @@
 // limitations under the license.
 
 use crate::topology::{bond::Bond, Connectivity, Value};
+use derive_getters::Getters;
 use serde::{Deserialize, Serialize};
 
 use std::ops::Range;
@@ -20,7 +21,7 @@ use std::ops::Range;
 use super::DegreesOfFreedom;
 
 /// Non-overlapping collection of atoms with a non-unique name and number.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Getters)]
 #[serde(deny_unknown_fields)]
 pub struct Residue {
     /// Residue name.
@@ -33,6 +34,7 @@ pub struct Residue {
         serialize_with = "crate::topology::serialize_range_as_array",
         deserialize_with = "crate::topology::deserialize_range_from_array"
     )]
+    #[getter(skip)] // implemented as part of the NonOverlapping trait
     range: Range<usize>,
 }
 
@@ -44,16 +46,6 @@ impl Residue {
             number,
             range,
         }
-    }
-
-    #[inline(always)]
-    pub fn name(&self) -> &str {
-        &self.name
-    }
-
-    #[inline(always)]
-    pub fn number(&self) -> Option<usize> {
-        self.number
     }
 }
 

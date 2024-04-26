@@ -13,12 +13,13 @@
 // limitations under the license.
 
 use super::Connectivity;
+use derive_getters::Getters;
 use serde::{Deserialize, Serialize};
 
 use std::ops::Range;
 
 /// Non-overlapping collection of atoms with a non-unique name.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Getters)]
 #[serde(deny_unknown_fields)]
 pub struct Chain {
     /// Name of the chain
@@ -29,6 +30,7 @@ pub struct Chain {
         serialize_with = "crate::topology::serialize_range_as_array",
         deserialize_with = "crate::topology::deserialize_range_from_array"
     )]
+    #[getter(skip)] // implemented as part of the NonOverlapping trait
     range: Range<usize>,
 }
 
@@ -39,11 +41,6 @@ impl Chain {
             name: name.to_owned(),
             range,
         }
-    }
-
-    #[inline(always)]
-    pub fn name(&self) -> &str {
-        &self.name
     }
 }
 
