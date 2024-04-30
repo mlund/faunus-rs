@@ -12,7 +12,6 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
-use super::Connectivity;
 use derive_getters::Getters;
 use serde::{Deserialize, Serialize};
 
@@ -49,17 +48,4 @@ impl crate::topology::NonOverlapping for Chain {
     fn range(&self) -> &Range<usize> {
         &self.range
     }
-}
-
-/// Chain of connected residues
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
-pub struct ChainKind {
-    /// Unique name, e.g. _"A"_, _"B"_, etc.
-    pub name: String,
-    /// Unique identifier
-    pub id: usize,
-    /// List of residue ids in the chain
-    pub residue_ids: Vec<usize>,
-    /// Connectivity information _between_ residues
-    pub connectivity: Vec<Connectivity>,
 }

@@ -1,7 +1,13 @@
+# include other yaml files
+# paths can either be absolute or relative to the current topology file
+# the files are included in the provided order
+# definitions in files that are defined later in the list take precedence over those defined earlier
+# definitions in the main file take precedence over definitions in the included files
+include: [top1.yaml, top2.yaml]
+
 atoms:
   - {name: OW, mass: 16.0, charge: -1.0, element: O, hydrophobicity: !SurfaceTension 1.0}
-  - {name: HW, mass: 1.0, charge: 0.0}
-  - {name: X, mass: 12.0, charge: 1.0, hydrophobicity: !Hydrophilic }
+  - {name: HW, mass: 1.0}
 
 molecules:
   - name: MOL
@@ -10,12 +16,12 @@ molecules:
       - {index: [0, 1], kind: !Harmonic {k: 100.0, req: 1.0}, order: Single}
       - {index: [1, 2], kind: !Morse {k: 100.0, req: 1.0, d: 10.0}}
       - {index: [2, 3]}
-    dihedrals:
-      - {index: [0, 1, 2, 3], kind: !ImproperHarmonic {k: 100.0, aeq: 90.0}, electrostatic_scaling: 0.5, lj_scaling: 0.5}
-      - {index: [3, 4, 5, 6]}
     torsions:
       - {index: [2, 3, 4], kind: !Cosine {k: 50.0, aeq: 45.0}}
       - {index: [1, 2, 3]}
+    dihedrals:
+      - {index: [0, 1, 2, 3], kind: !ImproperHarmonic {k: 100.0, aeq: 90.0}, electrostatic_scaling: 0.5, lj_scaling: 0.5}
+      - {index: [3, 4, 5, 6]}
     degrees_of_freedom: Free
     atom_names: [W1, null, W3, W4, null, W6, W7]
     residues:
@@ -31,21 +37,16 @@ molecules:
       float: 76.3
       vector: [13.1, 18.9, -13.4, 12]
       point: [1.4, 2.2, -0.71]
+    has_com: false
   - name: MOL2
-    atoms: [OW, X, X]
+    atoms: [OW, OW, X]
 
 #intermolecular:
 
-blocks:
-  - {molecule: MOL, N: 3}
-  - {molecule: MOL2, N: 50, group: true, active: 30}
-
-
-#groups/blocks?:
-#  - {molecule: MOL, number: 50, group: false}  # each molecule of this block should have its own group
-#  - {molecule: MOL, number: 7}                 # by default, group is `false`
-#  - {molecule: MOL, number: 3, structure: "three_molecules.gro"}      # structure with three MOL molecules 
-#  - {molecule: MOL, number: 5, insert: true, structure = "mol.xyz"}   # insert molecules randomly into the system (structure contains structure of a single molecule)
-#  - {molecule: MOL2, number: 20, group: true, inactive: 5}  # all molecules of this block should be part of the same group?
-
-# structure for the other atoms is read from structure file provided to Faunus; blocks with the structure field are ignored when reading the structure file
+system:
+  - {molecule: MOL, N: 10}  # read from a separate structure file
+  - {molecule: MOL2, N: 50, active: 30, insert: !RandomCOM { filename: mol2.xyz }}
+  - {molecule: MOL2, N: 6, insert: !RandomCOM {filename: mol2.xyz, rotate: true, directions: [true, false, false]}}
+  - {molecule: MOL, N: 3, insert: !Manual [[1.43, 3.21, 2.65], [0.65, 1.19, 2.34], [2.1, 3.9, 0.8]]}
+  - {molecule: MOL, N: 2, insert: !RandomAtomPos {directions: [true, true, false]}}
+  - {molecule: MOL2, N: 5, insert: !FromFile mol2_absolute.xyz}

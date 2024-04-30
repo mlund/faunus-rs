@@ -14,16 +14,48 @@
 
 use derive_getters::Getters;
 use serde::{Deserialize, Serialize};
+use validator::{Validate, ValidationError};
 
+use crate::Point;
+
+/// Describes the activation status of a MoleculeBlock.
+/// Partial(n) means that only the first 'n' molecules of the block are active.
+/// All means that all molecules of the block are active.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(untagged)]
-pub enum ActivationStatus {
+pub enum BlockActivationStatus {
     Partial(usize),
     #[default]
     All,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default, Getters)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum InsertionPolicy {
+    /// Read molecule block from a file.
+    FromFile(String),
+    /// Place the atoms of each molecule of the block to random positions in the simulation cell.
+    RandomAtomPos {
+        #[serde(default = "default_directions")]
+        directions: [bool; 3],
+    },
+    /// Read the structure of the molecule. Then place all molecules of the block
+    /// to random positions in the simulation cell.
+    RandomCOM {
+        filename: String,
+        #[serde(default)]
+        rotate: bool,
+        #[serde(default = "default_directions")]
+        directions: [bool; 3],
+    },
+    /// Define the positions of the atoms of all molecules manually, directly in the topology file.
+    Manual(Vec<Point>),
+}
+
+fn default_directions() -> [bool; 3] {
+    [true, true, true]
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, Getters, Validate)]
 pub struct MoleculeBlock {
     /// Name of the molecule kind of molecules in this block.
     molecule: String,
@@ -34,41 +66,39 @@ pub struct MoleculeBlock {
     /// Number of molecules in this block.
     #[serde(rename = "N")]
     number: usize,
-    /// Should the block of molecules be treated as a single group?
-    /// Groups composed of multiple molecules have undefined center of mass.
-    /// The default value is `false`.
-    // TODO! Does the above make sense?
-    #[serde(default = "bool::default")]
-    group: bool,
     /// Number of active molecules in this block.
-    /// Only coordinates for active molecules are required to be present in the structure file.
-    // TODO! Is it so? (We should also allow inactive molecules)
-    // What if the partial block is between other blocks?
     #[serde(default)]
-    active: ActivationStatus,
+    active: BlockActivationStatus,
+    /// Specifies how the structure of the molecule block should be obtained.
+    /// None => structure should be read from a separately provided structure file
+    insert: Option<InsertionPolicy>,
 }
 
 impl MoleculeBlock {
     pub(super) fn set_molecule_index(&mut self, index: usize) {
         self.molecule_index = index;
     }
-}
 
-/*
-#[cfg(test)]
-mod tests {
-    use super::*;
+    pub(super) fn finalize(&mut self) -> Result<(), ValidationError> {
+        // check that the number of active particles is not higher than the total number of particles
+        if let BlockActivationStatus::Partial(active_mol) = self.active {
+            if active_mol > self.number {
+                // TODO! this might be a warning instead
+                return Err(ValidationError::new(
+                    "the specified number of active molecules in a block is higher than the total number of molecules"
+                ));
+            } else if active_mol == self.number {
+                self.active = BlockActivationStatus::All;
+            }
+        }
 
-    #[test]
-    fn test_molecule_block() {
-        let block = MoleculeBlock {
-            molecule: "MOL".to_string(),
-            number: 10,
-            group: false,
-            active: ActivationStatus::All,
-        };
+        // check that if positions are provided manually, they are all provided
+        if let Some(InsertionPolicy::Manual(positions)) = &self.insert {
+            if positions.len() != self.number {
+                return Err(ValidationError::new("the number of manually provided positions does not match the number of molecules"));
+            }
+        }
 
-        println!("{}", serde_yaml::to_string(&block).unwrap());
+        Ok(())
     }
 }
-*/

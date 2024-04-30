@@ -1,0 +1,3 @@
+molecules:
+  - name: MOL2
+    atoms: [OW, X, X]

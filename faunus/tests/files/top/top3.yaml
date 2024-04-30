@@ -1,0 +1,4 @@
+atoms:
+  - {name: O, mass: 16.0}
+  - {name: C, mass: 12.0}
+  - {name: HW, mass: 10.0, charge: 3.0}

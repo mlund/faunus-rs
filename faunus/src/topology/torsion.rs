@@ -16,7 +16,7 @@
 
 use derive_getters::Getters;
 use serde::{Deserialize, Serialize};
-use validator::{Validate, ValidationError};
+use validator::Validate;
 
 /// Force field definition for torsion, e.g. harmonic, cosine, etc.
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Default)]
@@ -44,7 +44,7 @@ pub struct Torsion {
 
 impl Torsion {
     /// Create new torsion
-    pub(super) fn new(index: [usize; 3], kind: TorsionKind) -> Self {
+    pub fn new(index: [usize; 3], kind: TorsionKind) -> Self {
         Self { index, kind }
     }
 

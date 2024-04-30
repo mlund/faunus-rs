@@ -28,11 +28,12 @@ pub struct AtomKind {
     name: String,
     /// Unique identifier.
     /// Only defined if the AtomKind is inside of Topology.
-    #[serde(skip_deserializing)]
+    #[serde(skip)]
     id: usize,
     /// Atomic mass (g/mol).
     mass: f64,
     /// Atomic charge.
+    #[serde(default)]
     charge: f64,
     /// Atomic symbol if appropriate (He, C, O, Fe, etc.).
     element: Option<String>,
@@ -53,7 +54,7 @@ impl AtomKind {
     }
 
     /// New atom type with given name but with otherwise default values
-    pub(super) fn new(name: &str) -> Self {
+    pub fn new(name: &str) -> Self {
         Self {
             name: name.to_string(),
             ..Default::default()
@@ -62,6 +63,16 @@ impl AtomKind {
     /// Set unique identifier
     pub(super) fn set_id(&mut self, id: usize) {
         self.id = id;
+    }
+
+    /// Set sigma.
+    pub fn set_sigma(&mut self, sigma: f64) {
+        self.sigma = Some(sigma);
+    }
+
+    /// Set epsilon.
+    pub fn set_epsilon(&mut self, epsilon: f64) {
+        self.epsilon = Some(epsilon);
     }
 }
 
@@ -99,35 +110,4 @@ pub enum Hydrophobicity {
     Hydrophilic,
     /// Stores information about surface tension
     SurfaceTension(f64),
-}
-
-#[cfg(test)]
-mod tests {
-
-    use super::*;
-
-    #[test]
-    fn read_atomkind() {
-        let string = std::fs::read_to_string("tests/files/atom_input.yaml").unwrap();
-        let atom = AtomKind::from_str(&string).unwrap();
-
-        // TODO! write a proper test
-        println!("{:?}", atom);
-    }
-
-    #[test]
-    fn read_atomkind_minimal() {
-        let string = std::fs::read_to_string("tests/files/minimal_atom.yaml").unwrap();
-        let atom = AtomKind::from_str(&string).unwrap();
-
-        assert_eq!(atom.name, "OW");
-        assert_eq!(atom.charge, -1.0);
-        assert_eq!(atom.mass, 16.0);
-        assert_eq!(atom.id, 0);
-        assert!(atom.element.is_none());
-        assert!(atom.sigma.is_none());
-        assert!(atom.epsilon.is_none());
-        assert!(atom.hydrophobicity.is_none());
-        assert!(atom.custom.is_empty());
-    }
 }

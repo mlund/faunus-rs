@@ -17,7 +17,7 @@
 use derive_getters::Getters;
 use float_cmp::approx_eq;
 use serde::{Deserialize, Serialize};
-use validator::{Validate, ValidationError};
+use validator::Validate;
 
 /// Force field definition for bonds, e.g. harmonic, FENE, Morse, etc.
 ///
@@ -115,7 +115,7 @@ pub struct Bond {
 
 impl Bond {
     /// Create new bond
-    pub(super) fn new(index: [usize; 2], kind: BondKind, order: Option<BondOrder>) -> Self {
+    pub fn new(index: [usize; 2], kind: BondKind, order: Option<BondOrder>) -> Self {
         Self {
             index,
             kind,

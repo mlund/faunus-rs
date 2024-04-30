@@ -12,13 +12,10 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
-use crate::topology::{bond::Bond, Connectivity, Value};
 use derive_getters::Getters;
 use serde::{Deserialize, Serialize};
 
 use std::ops::Range;
-
-use super::DegreesOfFreedom;
 
 /// Non-overlapping collection of atoms with a non-unique name and number.
 #[derive(Debug, Clone, Serialize, Deserialize, Getters)]
@@ -53,79 +50,6 @@ impl crate::topology::NonOverlapping for Residue {
     #[inline(always)]
     fn range(&self) -> &Range<usize> {
         &self.range
-    }
-}
-
-/// Collection of connected atoms
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
-pub struct ResidueKind {
-    /// Unique name, e.g. _GLU_, _SOL_, etc.
-    pub name: String,
-    /// Unique identifier
-    pub id: usize,
-    /// List of atom ids in the residue
-    pub atoms: Vec<usize>,
-    /// Map of custom properties
-    pub custom: std::collections::HashMap<String, Value>,
-    /// Internal connections between atoms in the residue.
-    pub connectivity: Connectivity,
-    /// Internal degrees of freedom
-    pub dof: DegreesOfFreedom,
-}
-
-impl ResidueKind {
-    pub fn new(name: &str, atoms: &[usize]) -> Self {
-        Self {
-            name: name.to_string(),
-            atoms: atoms.to_vec(),
-            ..Default::default()
-        }
-    }
-
-    /// Number of atoms in the residue
-    pub fn len(&self) -> usize {
-        self.atoms.len()
-    }
-
-    /// Check if residue is empty
-    pub fn is_empty(&self) -> bool {
-        self.atoms.is_empty()
-    }
-
-    /// Short, one-letter code for residue (A, G, etc.). This follows the PDB standard.
-    pub fn short_name(&self) -> Option<char> {
-        residue_name_to_letter(&self.name)
-    }
-
-    /// Set unique identifier
-    pub fn set_id(&mut self, id: usize) {
-        self.id = id;
-    }
-
-    /// Add bond between atoms
-    pub fn add_bond(&mut self, bond: Bond) -> anyhow::Result<()> {
-        if bond.index().iter().any(|i| i >= &self.len()) || bond.index()[0] == bond.index()[1] {
-            anyhow::bail!("Invalid index in bond {:?} for residue {}", bond, self.name);
-        }
-        self.connectivity.bonds.push(bond);
-        Ok(())
-    }
-
-    /// Append atom to residue
-    pub fn add_atom(&mut self, atom: usize) {
-        self.atoms.push(atom);
-    }
-}
-
-// Convert a chemfiles residue to a topology residue
-impl core::convert::From<chemfiles::ResidueRef<'_>> for ResidueKind {
-    fn from(residue: chemfiles::ResidueRef) -> Self {
-        ResidueKind {
-            name: residue.name(),
-            id: residue.id().unwrap() as usize,
-            atoms: residue.atoms(),
-            ..Default::default()
-        }
     }
 }
 
@@ -170,6 +94,3 @@ fn residue_name_to_letter(name: &str) -> Option<char> {
     };
     Some(letter)
 }
-
-#[test]
-fn test_info() {}

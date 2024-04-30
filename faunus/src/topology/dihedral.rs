@@ -16,7 +16,7 @@
 
 use derive_getters::Getters;
 use serde::{Deserialize, Serialize};
-use validator::{Validate, ValidationError};
+use validator::Validate;
 
 /// Force field definition for dihedral angle potentials between four atoms
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Default)]
@@ -69,7 +69,7 @@ pub struct Dihedral {
 
 impl Dihedral {
     /// Create new dihedral
-    pub(super) fn new(index: [usize; 4], kind: DihedralKind) -> Self {
+    pub fn new(index: [usize; 4], kind: DihedralKind) -> Self {
         Self {
             index,
             kind,

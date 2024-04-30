@@ -58,6 +58,7 @@ mod residue;
 mod torsion;
 use std::fmt::Debug;
 use std::ops::Range;
+use std::path::{Path, PathBuf};
 
 use anyhow::Ok;
 pub use atom::*;
@@ -66,11 +67,14 @@ pub use chain::*;
 pub use dihedral::*;
 pub use residue::*;
 pub use torsion::*;
-use validator::ValidationError;
+use validator::{Validate, ValidationError};
 
 use crate::Point;
 use serde::{Deserialize, Serialize};
 use serde::{Deserializer, Serializer};
+
+use self::block::MoleculeBlock;
+use self::molecule::MoleculeKind;
 
 /// Trait implemented by collections of atoms that should not overlap (e.g., residues, chains).
 pub(super) trait NonOverlapping {
@@ -269,163 +273,251 @@ pub enum DegreesOfFreedom {
     RigidAlchemical,
 }
 
-/// A topology is a collection of atoms, residues, bonds, etc.
-#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
-pub struct Topology {
-    /// List of all possible atom types.
-    ///
-    /// Atoms are identified either by their name or by their index in this list.
-    atoms: Vec<AtomKind>,
-    /// List of all possible residue types.
-    ///
-    /// Residues are identified either by their name or by their index in this list.
-    residues: Vec<ResidueKind>,
+/// Trait implemented by any structure resembling a Topology.
+pub trait TopologyLike {
+    /// Get atoms of the topology.
+    fn atoms(&self) -> &[AtomKind];
+    /// Add atom to the topology.
+    fn add_atom(&mut self, atom: AtomKind);
+    /// Get molecules of the topology.
+    fn molecules(&self) -> &[MoleculeKind];
+    /// Add molecule to the topology.
+    fn add_molecule(&mut self, molecule: MoleculeKind);
 
-    /// List of all possible chain types.
+    fn find_atom(&self, name: &str) -> Option<&AtomKind> {
+        self.atoms().iter().find(|a| a.name() == name)
+    }
+
+    /// Find molecule with given name
+    fn find_molecule(&self, name: &str) -> Option<&MoleculeKind> {
+        self.molecules().iter().find(|r| r.name() == name)
+    }
+
+    /// Add atom kinds into a topology. In case an AtomKind with the same name already
+    /// exists in the Topology, it is NOT overwritten and a warning is raised.
+    fn include_atoms(&mut self, atoms: Vec<AtomKind>) {
+        for atom in atoms.into_iter() {
+            if self.atoms().iter().any(|x| x.name() == atom.name()) {
+                log::warn!(
+                    "Atom kind '{}' redefinition in included topology.",
+                    atom.name()
+                )
+            } else {
+                self.add_atom(atom);
+            }
+        }
+    }
+
+    /// Add molecule kinds into a toplogy. In case a MoleculeKind with the same name
+    /// already exists in the Topology, it is NOT overwritten and a warning is raised.
+    fn include_molecules(&mut self, molecules: Vec<MoleculeKind>) {
+        for molecule in molecules.into_iter() {
+            if self.molecules().iter().any(|x| x.name() == molecule.name()) {
+                log::warn!(
+                    "Molecule kind '{}' redefinition in included topology.",
+                    molecule.name()
+                )
+            } else {
+                self.add_molecule(molecule);
+            }
+        }
+    }
+
+    /// Read additional topologies into topology.
     ///
-    /// Chains are identified either by their name or by their index in this list.
-    chains: Vec<ChainKind>,
+    /// ## Parameters
+    /// - `parent_path` path to the directory containing the parent topology file
+    /// - `topologies` paths to the topologies to be included (absolute or relative to the `parent_path`)
+    fn include_topologies(
+        &mut self,
+        parent_path: impl AsRef<Path>,
+        topologies: Vec<String>,
+    ) -> Result<(), anyhow::Error> {
+        for file in topologies.iter() {
+            // if the path to the included directory is absolute, use it
+            // otherwise consider it to be relative to the `parent_path`
+            let mut path = PathBuf::from(file);
+            if !path.is_absolute() {
+                path = parent_path.as_ref().parent().unwrap().join(path);
+            }
+
+            let included_top = IncludedTopology::from_file(path)?;
+            self.include_atoms(included_top.atoms);
+            self.include_molecules(included_top.molecules);
+        }
+
+        Ok(())
+    }
+}
+
+/// Topology of the molecular system.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct Topology {
+    /// Other yaml files that should be included in the topology.
+    #[serde(skip_serializing, default)]
+    include: Vec<String>,
+    /// All possible atom types.
+    #[serde(default)] // can be defined in an include
+    atoms: Vec<AtomKind>,
+    /// All possible molecule types.
+    #[serde(default)] // can be defined in an include
+    molecules: Vec<MoleculeKind>,
+    /// Molecules of the system.
+    /// Must always be provided.
+    system: Vec<MoleculeBlock>,
 }
 
 impl Topology {
-    /// List of all possible atom types.
-    ///
-    /// Atoms are identified either by their name or by their index in this list.
-    pub fn atoms(&self) -> &[AtomKind] {
-        self.atoms.as_slice()
-    }
+    /// Parse a yaml file as Topology.
+    pub fn from_file(filename: impl AsRef<Path> + Clone) -> Result<Topology, anyhow::Error> {
+        let yaml = std::fs::read_to_string(filename.clone())?;
+        let mut topology = serde_yaml::from_str::<Topology>(&yaml)?;
 
-    /// Find atom with given name
-    ///
-    /// # Examples
-    /// ~~~
-    /// use faunus::topology::*;
-    /// let mut top = Topology::default();
-    /// top.add_atom(AtomKind::new("Au")).unwrap();
-    /// assert_eq!(top.find_atom("Au").unwrap().id, 0);
-    /// assert_eq!(top.find_atom("Pb"), None);
-    /// ~~~
-    pub fn find_atom(&self, name: &str) -> Option<&AtomKind> {
-        self.atoms.iter().find(|a| a.name() == name)
-    }
+        // parse included files
+        topology.include_topologies(filename, topology.include.clone())?;
 
-    /// Find residue with given name
-    pub fn find_residue(&self, name: &str) -> Option<&ResidueKind> {
-        self.residues.iter().find(|r| r.name == name)
-    }
+        // finalize atoms and molecules
+        topology.finalize_atoms()?;
+        topology.finalize_molecules()?;
 
-    /// List of all possible residue types.
-    ///
-    /// Residues are identified either by their name or by their index in this list.
-    pub fn residues(&self) -> &[ResidueKind] {
-        self.residues.as_slice()
-    }
-    /// List of all possible chain types.
-    ///
-    /// Chains are identified either by their name or by their index in this list.
-    pub fn chains(&self) -> &[ChainKind] {
-        self.chains.as_slice()
-    }
+        // validate and finalize molecule blocks
+        for block in topology.system.iter_mut() {
+            block.finalize()?;
 
-    /// Append a new atom.
-    ///
-    /// The `id` will be overwritten with the last index in the atom list.
-    /// Will error if the atom name already exists.
-    pub fn add_atom(&mut self, atom: AtomKind) -> anyhow::Result<()> {
-        // Ensure that the atom name does not already exist
-        if self.atoms.iter().any(|a| a.name() == atom.name()) {
-            anyhow::bail!("Atom with name '{}' already exists", atom.name());
+            let index = topology
+                .molecules
+                .iter()
+                .position(|x| x.name() == block.molecule())
+                .ok_or(anyhow::Error::msg("undefined molecule kind in a block"))?;
+            block.set_molecule_index(index);
         }
-        self.atoms.push(atom);
-        let index = self.atoms.len() - 1;
-        self.atoms.last_mut().unwrap().set_id(index);
-        Ok(())
+
+        Ok(topology)
     }
 
-    /// Append a new residue.
-    ///
-    /// The `id` will be set to the last index in the residue list.
-    /// Will error if:
-    /// 1. the residue name already exists.
-    /// 2. if any of the atom ids are not defined in the [`Topology::atoms()`] list.
-    pub fn add_residue(&mut self, residue: ResidueKind) -> anyhow::Result<()> {
-        // Ensure that the residue name does not already exist
-        if self.residues.iter().any(|r| r.name == residue.name) {
-            anyhow::bail!("Residue with name '{}' already exists", residue.name);
+    /// Get molecule blocks of the system.
+    pub fn system(&self) -> &[MoleculeBlock] {
+        &self.system
+    }
+
+    /// Set ids for atom kinds in the topology and make sure that the atom names are unique.
+    fn finalize_atoms(&mut self) -> Result<(), anyhow::Error> {
+        self.atoms
+            .iter_mut()
+            .enumerate()
+            .for_each(|(i, atom): (usize, &mut AtomKind)| {
+                atom.set_id(i);
+            });
+
+        if are_unique(&self.atoms, |i: &AtomKind, j: &AtomKind| {
+            i.name() == j.name()
+        }) {
+            Ok(())
+        } else {
+            Err(anyhow::Error::msg("atoms have non-unique names"))
         }
-        // Ensure that the atom ids are valid
-        if residue.atoms.iter().any(|i| i >= &self.atoms.len()) {
-            anyhow::bail!("Atom id in residue '{}' is out of bounds", residue.name);
+    }
+
+    /// Set ids for molecule kinds in the topology, validate the molecules and
+    /// set indices of atom kinds forming each molecule.
+    fn finalize_molecules(&mut self) -> Result<(), anyhow::Error> {
+        for (i, molecule) in self.molecules.iter_mut().enumerate() {
+            // set atom names
+            if molecule.atom_names().is_empty() {
+                molecule.empty_atom_names();
+            }
+
+            // validate the molecule
+            molecule.validate()?;
+
+            // set index
+            molecule.set_id(i);
+
+            // set atom indices
+            let indices = molecule
+                .atoms()
+                .iter()
+                .map(|atom| {
+                    self.atoms
+                        .iter()
+                        .position(|x| x.name() == atom)
+                        .ok_or_else(|| anyhow::Error::msg("undefined atom kind in a molecule"))
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            molecule.set_atom_indices(indices);
         }
-        self.residues.push(residue);
-        let index = self.residues.len() - 1;
-        self.residues.last_mut().unwrap().set_id(index);
-        Ok(())
+
+        // check that all molecule names are unique
+        if are_unique(&self.molecules, |i: &MoleculeKind, j: &MoleculeKind| {
+            i.name() == j.name()
+        }) {
+            Ok(())
+        } else {
+            Err(anyhow::Error::msg("molecules have non-unique names"))
+        }
     }
 }
 
-/// Connectivity information such as bonds, dihedrals, etc.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
-#[serde(deny_unknown_fields)]
-pub struct Connectivity {
-    /// Bonds between atoms
-    #[serde(default)]
-    bonds: Vec<Bond>,
-    /// Dihedrals
-    #[serde(default)]
-    dihedrals: Vec<Dihedral>,
-    /// Dihedrals between bonds
-    #[serde(default)]
-    torsions: Vec<Torsion>,
+impl TopologyLike for Topology {
+    fn atoms(&self) -> &[AtomKind] {
+        &self.atoms
+    }
+
+    fn molecules(&self) -> &[MoleculeKind] {
+        &self.molecules
+    }
+
+    fn add_atom(&mut self, atom: AtomKind) {
+        self.atoms.push(atom)
+    }
+
+    fn add_molecule(&mut self, molecule: MoleculeKind) {
+        self.molecules.push(molecule)
+    }
 }
 
-impl Connectivity {
-    /// Bonds
-    pub fn bonds(&self) -> &[Bond] {
-        &self.bonds
+/// Partial topology that can be included in other topology files.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+struct IncludedTopology {
+    /// Other yaml files that should be included in the topology.
+    #[serde(skip_serializing)]
+    #[serde(default)]
+    include: Vec<String>,
+    /// All possible atom types.
+    #[serde(default)]
+    atoms: Vec<AtomKind>,
+    /// All possible molecule types.
+    #[serde(default)]
+    molecules: Vec<MoleculeKind>,
+}
+
+impl IncludedTopology {
+    /// Parse a yaml file as IncludedTopology.
+    fn from_file(filename: impl AsRef<Path> + Clone) -> Result<IncludedTopology, anyhow::Error> {
+        let yaml = std::fs::read_to_string(filename.clone())?;
+        let mut topology = serde_yaml::from_str::<IncludedTopology>(&yaml)?;
+        // parse included files
+        topology.include_topologies(filename, topology.include.clone())?;
+
+        Ok(topology)
+    }
+}
+
+impl TopologyLike for IncludedTopology {
+    fn atoms(&self) -> &[AtomKind] {
+        &self.atoms
     }
 
-    /// Add a new bond.
-    pub fn add_bond(&mut self, bond: &Bond) {
-        self.bonds.push(bond.clone())
+    fn molecules(&self) -> &[MoleculeKind] {
+        &self.molecules
     }
 
-    /// Diherals
-    pub fn dihedrals(&self) -> &[Dihedral] {
-        &self.dihedrals
+    fn add_atom(&mut self, atom: AtomKind) {
+        self.atoms.push(atom)
     }
 
-    /// Add a new dihedral
-    pub fn add_dihedral(&mut self, dihedral: &Dihedral) {
-        self.dihedrals.push(dihedral.clone())
-    }
-
-    /// Torsions
-    pub fn torsions(&self) -> &[Torsion] {
-        &self.torsions
-    }
-
-    /// Add a new torsion
-    pub fn add_torsion(&mut self, torsion: &Torsion) {
-        self.torsions.push(torsion.clone())
-    }
-
-    /// Find dihedrals based on bonds
-    pub fn find_dihedrals(&mut self) -> Vec<&Dihedral> {
-        todo!()
-    }
-
-    /// Shift all indices by a given offset
-    pub fn shift(&mut self, offset: isize) {
-        for bond in &mut self.bonds {
-            bond.shift(offset);
-        }
-        for dihedral in &mut self.dihedrals {
-            dihedral.shift(offset);
-        }
-        for torsion in &mut self.torsions {
-            torsion.shift(offset);
-        }
+    fn add_molecule(&mut self, molecule: MoleculeKind) {
+        self.molecules.push(molecule)
     }
 }
 
@@ -480,203 +572,16 @@ fn validate_unique_indices(indices: &[usize]) -> Result<(), ValidationError> {
     }
 }
 
-/*
-/// See stackoverflow workaround: <https://stackoverflow.com/questions/61446984/impl-iterator-failing-for-iterator-with-multiple-lifetime-parameters>
-pub(crate) trait Captures<'a> {}
-impl<'a, T: ?Sized> Captures<'a> for T {}
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-impl<'a> Topology<'a> {
-    /// Find atom type by name in the list of atom types
-    pub fn atom_kind(&self, name: &str) -> Option<&AtomKind> {
-        self.atom_kinds.iter().find(|at| at.name() == name)
-    }
-    /// Find residue type by name in the list of residue types
-    pub fn residue_kind(&self, name: &str) -> Option<&ResidueKind> {
-        self.residue_kinds.iter().find(|rt| rt.name() == name)
-    }
-    /// Check if residue type and atom types are defined before adding to topology
-    fn check_residue(&self, residue: &Residue) -> anyhow::Result<()> {
-        // check if residue type is defined
-        if self.atom_kind(residue.kind().name()).is_none() {
-            anyhow::bail!(
-                "Residue type '{}' is not defined in topology",
-                residue.kind().name()
-            );
-        }
-        // check of atom types are defined
-        for atom in residue.atoms().iter() {
-            if self.atom_kind(atom.kind().name()).is_none() {
-                anyhow::bail!(
-                    "Atom type '{}' is not defined in topology",
-                    atom.kind().name()
-                );
-            }
-        }
-        Ok(())
-    }
+    #[test]
+    fn read_topology() {
+        let topology = Topology::from_file("tests/files/topology_input.yaml").unwrap();
 
-    /// Add a new residue to the system
-    ///
-    /// This will automatically:
-    /// 1. Set the `Residue::index` to the last index in the list
-    /// 2. Set all `Atom::index()` to the absolute positions in the system atom list
-    /// 3. Copy bonds from the `ResidueType` if not already set
-    /// 4. Shift all bonds to match the new atom indices.
-    pub fn add_residue(&mut self, residue: Residue<'a>) -> anyhow::Result<()> {
-        self.check_residue(&residue)?;
-        let first_atom = self.len();
-        let res_index = self.residues.len();
-        self.residues.push(residue);
-        let residue = self.residues.last_mut().unwrap();
-        residue.set_index(res_index);
-        residue.shift_indices(first_atom);
-        Ok(())
-    }
-    /// All residues in the system
-    pub fn residues(&self) -> &[Residue] {
-        &self.residues
-    }
-    /// All residues in the system
-    pub fn residues_mut(&mut self) -> &mut [Residue<'a>] {
-        &mut self.residues
-    }
-    /// All atoms in the system
-    pub fn atoms(&self) -> impl Iterator<Item = &Atom> {
-        self.residues.iter().flat_map(|r| r.atoms())
-    }
-    /// All atoms in the system
-    pub fn atoms_mut<'b>(&'b mut self) -> impl Iterator<Item = &mut Atom> + Captures<'a> + 'b {
-        self.residues.iter_mut().flat_map(|r| r.atoms_mut())
-    }
-    /// List of all bonds in the system (intra- and inter-residue)
-    pub fn bonds(&self) -> impl Iterator<Item = &Bond> {
-        self.residues
-            .iter()
-            .flat_map(|r| r.bonds())
-            .chain(self.inter_residue_bonds.iter())
-    }
-    /// Total number of atoms in the system
-    pub fn len(&self) -> usize {
-        self.residues.iter().map(|r| r.len()).sum()
-    }
-    /// Check if system is empty
-    pub fn is_empty(&self) -> bool {
-        self.len() == 0
-    }
-
-    /// Add a new atom type or "kind" to the system
-    ///
-    /// The atom type will be assigned a unique `AtomType::id()`, starting from 0 and increasing by 1 for each new atom type.
-    /// Will fail if an atom type with the same name already exists.
-    pub fn add_atom_kind(&mut self, atom_type: AtomKind) -> anyhow::Result<()> {
-        if self
-            .atom_kinds
-            .iter()
-            .any(|at| at.name() == atom_type.name())
-        {
-            anyhow::bail!("Atom type with name '{}' already exists", atom_type.name());
-        }
-        self.atom_kinds.push(atom_type);
-        let len = self.atom_kinds.len();
-        self.atom_kinds.last_mut().unwrap().set_id(len - 1);
-        Ok(())
-    }
-
-    /// Add a new kind of residue to the system
-    ///
-    /// The residue type or "kind" will be assigned a unique `ResidueType::id()`, starting from 0 and increasing by 1 for each new residue type.
-    /// Will fail if a residue type with the same name already exists.
-    pub fn add_residue_kind(&mut self, kind: ResidueKind) -> anyhow::Result<()> {
-        if self.residue_kinds.iter().any(|rt| rt.name() == kind.name()) {
-            anyhow::bail!("Residue type with name '{}' already exists", kind.name());
-        }
-        self.residue_kinds.push(kind);
-        let len = self.residue_kinds.len();
-        self.residue_kinds.last_mut().unwrap().set_id(len - 1);
-        Ok(())
-    }
-    /// List of all possible atom types in the system
-    pub fn atom_types(&self) -> &[AtomKind] {
-        &self.atom_kinds
-    }
-    /// List of all possible residue types in the system
-    pub fn residue_types(&self) -> &[ResidueKind] {
-        &self.residue_kinds
+        println!("{:?}\n", topology.atoms());
+        println!("{:?}\n", topology.molecules());
+        println!("{:?}\n", topology.system);
     }
 }
-
-#[test]
-/// Test adding a new atom type
-fn test_add_atom_kind() {
-    let mut top = Topology::default();
-    let atom_type = AtomKind::new("C");
-    top.add_atom_kind(atom_type.clone()).unwrap();
-    assert_eq!(top.atom_types(), &[atom_type]);
-    assert!(top.atom_kind("C").is_some());
-    assert_eq!(top.atom_kind("C").unwrap().id(), 0);
-    top.add_atom_kind(AtomKind::new("O")).unwrap();
-    assert_eq!(top.atom_types().len(), 2);
-    assert_eq!(top.atom_kind("O").unwrap().id(), 1);
-}
-
-#[test]
-fn test_add_residue_kind() {
-    let mut top = Topology::default();
-    let residue_type = ResidueKind::new("ALA", Selection::Vec(vec!["CA".to_string()]), None, None);
-    top.add_residue_kind(residue_type.clone()).unwrap();
-    assert_eq!(top.residue_types(), &[residue_type]);
-    assert!(top.residue_kind("ALA").is_some());
-    assert_eq!(top.residue_kind("ALA").unwrap().id(), 0);
-    top.add_residue_kind(ResidueKind::new(
-        "GLY",
-        Selection::Vec(vec!["CA".to_string()]),
-        None,
-        None,
-    ))
-    .unwrap();
-    assert_eq!(top.residue_types().len(), 2);
-    assert_eq!(top.residue_kind("GLY").unwrap().id(), 1);
-}
-
-impl core::convert::From<chemfiles::Topology> for Topology<'_> {
-    fn from(value: chemfiles::Topology) -> Self {
-        let mut _atom_types: Vec<AtomKind> = (0..value.size())
-            .map(|i| value.atom(i))
-            .unique_by(|atom| atom.name())
-            .map(|atom| atom.into())
-            .collect();
-
-        for (i, atom) in _atom_types.iter_mut().enumerate() {
-            atom.set_id(i);
-        }
-
-        // let mut _atoms: Vec<Atom> = (0..value.size())
-        //     .map(|i| value.atom(i))
-        //     .map(|atom| Atom::new(atom.into())).collect();
-        // for (i, atom) in _atoms.iter_mut().enumerate() {
-        //     atom.set_index(i);
-        //     let atom_kind = _atom_types.iter().find(|at| at.name() == atom.kind().name()).unwrap();
-        //     atom.kind().
-        // }
-
-        let mut _residue_types: Vec<ResidueKind> = (0..value.residues_count())
-            .map(|i| value.residue(i).unwrap())
-            .unique_by(|residue| residue.name())
-            .map(|residue| residue.into())
-            .collect();
-
-        for (i, residue) in _residue_types.iter_mut().enumerate() {
-            residue.set_id(i);
-        }
-
-        let _bonds: Vec<Bond> = value
-            .bonds()
-            .iter()
-            .map(|bond| Bond::new([bond[0], bond[1]], BondKind::None, BondOrder::None))
-            .collect();
-
-        unimplemented!()
-    }
-}
-
-*/
