@@ -18,7 +18,7 @@ use serde::{Deserialize, Serialize};
 use std::ops::Range;
 
 /// Non-overlapping collection of atoms with a non-unique name.
-#[derive(Debug, Clone, Serialize, Deserialize, Getters)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Getters)]
 #[serde(deny_unknown_fields)]
 pub struct Chain {
     /// Name of the chain

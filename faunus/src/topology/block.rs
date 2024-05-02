@@ -25,7 +25,7 @@ use super::{molecule::MoleculeKind, InputPath};
 /// Describes the activation status of a MoleculeBlock.
 /// Partial(n) means that only the first 'n' molecules of the block are active.
 /// All means that all molecules of the block are active.
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, PartialEq, Copy, Serialize, Deserialize, Default)]
 #[serde(untagged)]
 pub enum BlockActivationStatus {
     Partial(usize),
@@ -33,7 +33,7 @@ pub enum BlockActivationStatus {
     All,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum InsertionPolicy {
     /// Read molecule block from a file.
     FromFile(InputPath),
@@ -101,7 +101,7 @@ fn default_directions() -> [bool; 3] {
 }
 
 /// A block of molecules of the same molecule kind.
-#[derive(Debug, Clone, Serialize, Deserialize, Default, Getters, Validate)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, Validate)]
 pub struct MoleculeBlock {
     /// Name of the molecule kind of molecules in this block.
     molecule: String,
@@ -121,6 +121,26 @@ pub struct MoleculeBlock {
 }
 
 impl MoleculeBlock {
+    pub fn molecule(&self) -> &str {
+        &self.molecule
+    }
+
+    pub fn molecule_index(&self) -> usize {
+        self.molecule_index
+    }
+
+    pub fn number(&self) -> usize {
+        self.number
+    }
+
+    pub fn active(&self) -> BlockActivationStatus {
+        self.active
+    }
+
+    pub fn insert(&self) -> Option<&InsertionPolicy> {
+        self.insert.as_ref()
+    }
+
     /// Create groups from a MoleculeBlock.
     ///
     /// ## Parameters
@@ -159,7 +179,7 @@ impl MoleculeBlock {
                 })
                 .collect();
 
-            let group = context.add_group(*molecule.id(), &particles)?;
+            let group = context.add_group(molecule.id(), &particles)?;
 
             // deactivate the groups that should not be active
             match self.active {

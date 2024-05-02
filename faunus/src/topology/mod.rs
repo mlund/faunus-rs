@@ -48,6 +48,7 @@ use anyhow::Ok;
 pub use atom::*;
 pub use bond::*;
 pub use chain::*;
+use derive_getters::Getters;
 pub use dihedral::*;
 pub use residue::*;
 pub use torsion::*;
@@ -100,29 +101,29 @@ pub(super) trait NonOverlapping {
 
 #[test]
 fn collections_overlap() {
-    let residue1 = Residue::new("ALA".to_owned(), None, 2..5);
-    let residue2 = Residue::new("LYS".to_owned(), None, 7..11);
+    let residue1 = Residue::new("ALA", None, 2..5);
+    let residue2 = Residue::new("LYS", None, 7..11);
     assert!(!residue1.overlap(&residue2));
 
-    let residue2 = Residue::new("LYS".to_owned(), None, 5..11);
+    let residue2 = Residue::new("LYS", None, 5..11);
     assert!(!residue1.overlap(&residue2));
 
-    let residue2 = Residue::new("LYS".to_owned(), None, 0..2);
+    let residue2 = Residue::new("LYS", None, 0..2);
     assert!(!residue1.overlap(&residue2));
 
-    let residue2 = Residue::new("LYS".to_owned(), None, 2..5);
+    let residue2 = Residue::new("LYS", None, 2..5);
     assert!(residue1.overlap(&residue2));
 
-    let residue2 = Residue::new("LYS".to_owned(), None, 1..11);
+    let residue2 = Residue::new("LYS", None, 1..11);
     assert!(residue1.overlap(&residue2));
 
-    let residue2 = Residue::new("LYS".to_owned(), None, 3..4);
+    let residue2 = Residue::new("LYS", None, 3..4);
     assert!(residue1.overlap(&residue2));
 
-    let residue2 = Residue::new("LYS".to_owned(), None, 1..3);
+    let residue2 = Residue::new("LYS", None, 1..3);
     assert!(residue1.overlap(&residue2));
 
-    let residue2 = Residue::new("LYS".to_owned(), None, 4..11);
+    let residue2 = Residue::new("LYS", None, 4..11);
     assert!(residue1.overlap(&residue2));
 
     let chain1 = Chain::new("A", 2..5);
@@ -247,7 +248,7 @@ fn test_selection() {
 }
 
 /// Describes the internal degrees of freedom of a system
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default, Copy)]
 pub enum DegreesOfFreedom {
     /// All degrees of freedom are free
     #[default]
@@ -650,7 +651,7 @@ struct System {
 }
 
 /// Intermolecular bonded interactions. Global atom indices have to be provided.
-#[derive(Debug, Clone, Serialize, Deserialize, Default, Validate)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, Validate, Getters)]
 pub struct IntermolecularBonded {
     /// Intermolecular bonds between the atoms.
     #[serde(default)]
@@ -718,7 +719,7 @@ fn validate_unique_indices(indices: &[usize]) -> Result<(), ValidationError> {
 }
 
 /// Path to input topology or structure file.
-#[derive(Debug, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct InputPath {
     /// Raw path to the input file. Treated either as absolute
     /// or as relative to the parent directory.
@@ -729,6 +730,17 @@ pub struct InputPath {
 }
 
 impl InputPath {
+    /// Create new InputPath.
+    pub(crate) fn new(raw: &str, parent_file: impl AsRef<Path>) -> InputPath {
+        let mut path = InputPath {
+            raw_path: raw.to_owned(),
+            path: None
+        };
+
+        path.finalize(parent_file);
+        path
+    }
+
     /// Get path to file.
     pub(crate) fn path(&self) -> Option<&PathBuf> {
         self.path.as_ref()
@@ -769,17 +781,339 @@ impl<'de> Deserialize<'de> for InputPath {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
+    use float_cmp::assert_approx_eq;
+
+    use self::block::BlockActivationStatus;
+
     use super::*;
 
+    /// Compare the fields of AtomKind with the expected values.
+    fn compare_atom_kind(
+        atom: &AtomKind,
+        name: &str, 
+        id: usize, 
+        mass: f64, 
+        charge: f64, 
+        element: Option<&str>, 
+        sigma: Option<f64>, 
+        epsilon: Option<f64>, 
+        hydrophobicity: Option<Hydrophobicity>, 
+        custom: &HashMap<String, Value>) 
+    {
+        assert_eq!(atom.name(), name);
+        assert_eq!(atom.id(), id);
+        assert_approx_eq!(f64, atom.mass(), mass);
+        assert_approx_eq!(f64, atom.charge(), charge);
+        assert_eq!(atom.element(), element);
+        assert_eq!(atom.sigma(), sigma);
+        assert_eq!(atom.epsilon(), epsilon);
+        assert_eq!(atom.hydrophobicity(), hydrophobicity);
+
+        compare_custom(atom.custom(), custom);
+    }
+
+    /// Compare two hashmaps of custom properties.
+    fn compare_custom(custom1: &HashMap<String, Value>, custom2: &HashMap<String, Value>) {
+        assert_eq!(custom1.len(), custom2.len());
+
+        for (key1, val1) in custom1 {
+            let val2 = custom2.get(key1).expect("Custom properties do not match.");
+            match (val1, val2) {
+                (Value::Bool(x), Value::Bool(y)) => assert_eq!(x, y),
+                (Value::Int(x), Value::Int(y)) => assert_eq!(x, y),
+                (Value::Float(x), Value::Float(y)) => assert_approx_eq!(f64, *x, *y),
+                (Value::Point(x), Value::Point(y)) => {
+                    assert_approx_eq!(f64, x[0], y[0]);
+                    assert_approx_eq!(f64, x[1], y[1]);
+                    assert_approx_eq!(f64, x[2], y[2]);
+                }
+                (Value::Vector(x), Value::Vector(y)) => {
+                    assert_eq!(x.len(), y.len());
+
+                    for (i, j) in x.iter().zip(y.iter()) {
+                        assert_approx_eq!(f64, *i, *j);
+                    }
+                }
+                _ => panic!("Custom properties do not match.")
+            }
+        }
+    }
+
+    /// Compare the fields of molecule kind.
+    fn compare_molecule_kind(
+        molecule: &MoleculeKind, 
+        name: &str, 
+        id: usize, 
+        atoms: &[&str], 
+        indices: &[usize],
+        bonds: &[Bond],
+        torsions: &[Torsion],
+        dihedrals: &[Dihedral],
+        dof: DegreesOfFreedom,
+        atom_names: &[Option<&str>],
+        residues: &[Residue],
+        chains: &[Chain],
+        com: bool,
+        custom: &HashMap<String, Value>,
+    ) {
+        assert_eq!(molecule.name(), name);
+        assert_eq!(molecule.id(), id);
+        assert_eq!(molecule.atoms(), atoms);
+        assert_eq!(molecule.atom_indices(), indices);
+        assert_eq!(molecule.bonds(), bonds);
+        assert_eq!(molecule.torsions(), torsions);
+        assert_eq!(molecule.dihedrals(), dihedrals);
+        assert_eq!(molecule.degrees_of_freedom(), dof);
+        assert_eq!(molecule.atom_names().len(), atom_names.len());
+        for (name1, name2) in molecule.atom_names().iter().zip(atom_names.iter()) {
+            assert_eq!(name1.as_deref(), *name2);
+        }
+        assert_eq!(molecule.residues(), residues);
+        assert_eq!(molecule.chains(), chains);
+        assert_eq!(molecule.has_com(), com);
+
+        compare_custom(molecule.custom(), custom);
+    }
+
+    /// Compare the intermolecular bonded interactions.
+    fn compare_intermolecular(
+        intermolecular: &IntermolecularBonded, 
+        bonds: &[Bond], 
+        torsions: &[Torsion], 
+        dihedrals: &[Dihedral]
+    ) {
+        assert_eq!(intermolecular.bonds(), bonds);
+        assert_eq!(intermolecular.torsions(), torsions);
+        assert_eq!(intermolecular.dihedrals(), dihedrals);
+    }
+
+    /// Compare the fields of a molecule block.
+    fn compare_block(
+        block: &MoleculeBlock, 
+        molecule_name: &str, 
+        molecule_index: usize, 
+        number: usize, 
+        active: BlockActivationStatus, 
+        insert: Option<&InsertionPolicy>
+    ) {
+        assert_eq!(block.molecule(), molecule_name);
+        assert_eq!(block.molecule_index(), molecule_index);
+        assert_eq!(block.number(), number);
+        assert_eq!(block.active(), active);
+        assert_eq!(block.insert(), insert);
+    }
+
     #[test]
-    fn read_topology() {
+    fn read_topology_pass() {
         let topology = Topology::from_file("tests/files/topology_input.yaml").unwrap();
 
-        println!("{:?}\n", topology.atoms());
-        println!("{:?}\n", topology.molecules());
-        println!("{:?}\n", topology.blocks());
-        println!("{:?}\n", topology.intermolecular());
+        assert_eq!(topology.atoms().len(), 5);
 
-        //println!("{}", serde_yaml::to_string(&topology).unwrap());
+        compare_atom_kind(&topology.atoms()[0],
+            "OW", 
+            0, 
+            16.0, 
+            -1.0, 
+            Some("O"), 
+            None, 
+            None, 
+            Some(Hydrophobicity::SurfaceTension(1.0)), 
+            &HashMap::new());
+
+        compare_atom_kind(&topology.atoms()[1],
+            "HW", 
+            1, 
+            1.0, 
+            0.0, 
+            None, 
+            None, 
+            None, 
+            None, 
+            &HashMap::new());
+
+        compare_atom_kind(&topology.atoms()[2],
+            "X", 
+            2, 
+            12.0, 
+            1.0, 
+            None, 
+            None, 
+            None, 
+            Some(Hydrophobicity::Hydrophilic), 
+            &HashMap::new());
+
+        let custom = HashMap::from([("unused".to_owned(), Value::Bool(true))]);
+
+        compare_atom_kind(&topology.atoms()[3],
+            "O", 
+            3, 
+            16.0, 
+            0.0, 
+            None, 
+            None, 
+            None, 
+            None, 
+            &custom);
+
+        compare_atom_kind(&topology.atoms()[4],
+            "C", 
+            4, 
+            12.0, 
+            0.0, 
+            None, 
+            None, 
+            None, 
+            None, 
+            &custom);
+
+        let atoms = vec!["OW", "HW", "HW", "HW", "OW", "OW", "OW"];
+        let indices = vec![0, 1, 1, 1, 0, 0, 0];
+        let bonds = vec![
+            Bond::new([0, 1], BondKind::Harmonic { k: 100.0, req: 1.0 }, Some(BondOrder::Single)),
+            Bond::new([1, 2], BondKind::Morse { k: 100.0, req: 1.0, d: 10.0 }, None),
+            Bond::new([2, 3], BondKind::default(), None),
+        ];
+        let torsions = vec![
+            Torsion::new([2, 3, 4], TorsionKind::Cosine { k: 50.0, aeq: 45.0 }),
+            Torsion::new([1, 2, 3], TorsionKind::default())
+        ];
+        let dihedrals = vec![
+            Dihedral::new([0, 1, 2, 3], DihedralKind::ImproperHarmonic { k: 100.0, aeq: 90.0 }, Some(0.5), Some(0.5)),
+            Dihedral::new([3, 4, 5, 6], DihedralKind::default(), None, None),
+        ];
+        let names = vec![Some("O1"), None, Some("H1"), Some("H2"), None, Some("O1"), Some("O2")];
+        let residues = vec![
+            Residue::new("ALA", Some(2), 0..3),
+            Residue::new("GLY", Some(3), 1..1),
+            Residue::new("ALA", Some(4), 4..6)
+        ];
+        let chains = vec![
+            Chain::new("A", 0..7),
+            Chain::new("Chain2", 7..0),
+        ];
+        let custom = HashMap::from(
+            [("bool".to_owned(), Value::Bool(false)),
+             ("int".to_owned(), Value::Int(13)),
+             ("float".to_owned(), Value::Float(76.3)),
+             ("vector".to_owned(), Value::Vector(vec![13.1, 18.9, -13.4, 12.0])),
+             ("point".to_owned(), Value::Point([1.4, 2.2, -0.71].into()))]
+        );
+
+        assert_eq!(topology.molecules().len(), 2);
+
+        compare_molecule_kind(
+            &topology.molecules()[0], 
+            "MOL", 
+            0, 
+            &atoms,
+            &indices,
+            &bonds,
+            &torsions,
+            &dihedrals,
+            DegreesOfFreedom::RigidAlchemical,
+            &names,
+            &residues,
+            &chains,
+            false,
+            &custom);
+        
+        compare_molecule_kind(
+            &topology.molecules()[1],
+            "MOL2",
+            1,
+            &["OW", "OW", "X"],
+            &[0, 0, 2],
+            &[],
+            &[],
+            &[],
+            DegreesOfFreedom::Free,
+            &[None, None, None],
+            &[],
+            &[],
+            true,
+            &HashMap::new(),
+        );
+
+        let bonds = vec![
+            Bond::new([0, 220], BondKind::Harmonic { k: 50.0, req: 3.0 }, None),
+            Bond::new([52, 175], BondKind::FENE { k: 25.0, req: 1.5, rmax: 5.0 }, Some(BondOrder::Triple)),
+        ];
+        let torsions = vec![
+            Torsion::new([1, 75, 128], TorsionKind::Harmonic { k: 100.0, aeq: 120.0 }),
+        ];
+        let dihedrals = vec![
+            Dihedral::new([1, 35, 75, 128], DihedralKind::Harmonic { k: 27.5, aeq: 105.0 }, None, Some(0.9)),
+            Dihedral::new([17, 45, 125, 215], DihedralKind::default(), None, None),
+        ];
+
+        compare_intermolecular(topology.intermolecular(), &bonds, &torsions, &dihedrals);
+
+        compare_block(
+            &topology.blocks()[0], 
+            "MOL", 
+            0, 
+            3, 
+            BlockActivationStatus::All, 
+            None
+        );
+
+        compare_block(
+            &topology.blocks()[1],
+            "MOL2",
+            1,
+            50,
+            BlockActivationStatus::Partial(30),
+            Some(&InsertionPolicy::RandomCOM { 
+                filename: InputPath::new("mol2.xyz", "tests/files/topology_input.yaml"), 
+                rotate: false, 
+                directions: [true, true, true] })
+        );
+
+        compare_block(
+            &topology.blocks()[2],
+            "MOL2",
+            1,
+            6,
+            BlockActivationStatus::All,
+            Some(&InsertionPolicy::RandomCOM {
+                filename: InputPath::new("mol2.xyz", "tests/files/topology_input.yaml"),
+                rotate: true,
+                directions: [true, false, false]
+            })
+        );
+
+        compare_block(
+            &topology.blocks()[3],
+            "MOL2",
+            1,
+            1,
+            BlockActivationStatus::All,
+            Some(&InsertionPolicy::Manual(vec![
+                Point::from([1.43, 3.21, 2.65]), 
+                Point::from([0.65, 1.19, 2.34]), 
+                Point::from([2.1, 3.9, 0.8])]))
+        );
+
+        compare_block(
+            &topology.blocks()[4],
+            "MOL",
+            0,
+            2,
+            BlockActivationStatus::All,
+            Some(&InsertionPolicy::RandomAtomPos {
+                directions: [true, true, false],
+            })
+        );
+
+        compare_block(
+            &topology.blocks()[5],
+            "MOL2",
+            1,
+            5,
+            BlockActivationStatus::All,
+            Some(&InsertionPolicy::FromFile(InputPath::new("mol2_absolute.xyz", "tests/files/topology_input.yaml")))
+        );
     }
 }

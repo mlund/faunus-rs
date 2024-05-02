@@ -151,7 +151,6 @@ impl Structure {
                     .unwrap()
                     .mass()
             })
-            .cloned()
             .collect::<Vec<f64>>();
 
         let charges = nxyz
@@ -164,7 +163,6 @@ impl Structure {
                     .unwrap()
                     .charge()
             })
-            .cloned()
             .collect::<Vec<f64>>();
 
         let radii = nxyz
@@ -206,7 +204,7 @@ impl Structure {
                 atomkinds
                     .atomlist
                     .iter()
-                    .position(|j| j.name() == &i.name)
+                    .position(|j| j.name() == i.name)
                     .unwrap_or_else(|| panic!("Unknown atom name in AAM file: {}", i.name))
             })
             .collect();
@@ -243,7 +241,7 @@ impl Structure {
                 atomkinds
                     .atomlist
                     .iter()
-                    .position(|kind| kind.name() == &atom.name())
+                    .position(|kind| kind.name() == atom.name())
                     .unwrap_or_else(|| panic!("Unknown atom name in structure file: {:?}", atom))
             })
             .collect::<Vec<usize>>();

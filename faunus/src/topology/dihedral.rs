@@ -71,12 +71,17 @@ pub struct Dihedral {
 
 impl Dihedral {
     /// Create new dihedral
-    pub fn new(index: [usize; 4], kind: DihedralKind) -> Self {
+    pub fn new(
+        index: [usize; 4],
+        kind: DihedralKind,
+        electrostatic_scaling: Option<f64>,
+        lj_scaling: Option<f64>,
+    ) -> Self {
         Self {
             index,
             kind,
-            electrostatic_scaling: None,
-            lj_scaling: None,
+            electrostatic_scaling: electrostatic_scaling,
+            lj_scaling: lj_scaling,
         }
     }
 

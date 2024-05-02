@@ -18,7 +18,7 @@ use serde::{Deserialize, Serialize};
 use std::ops::Range;
 
 /// Non-overlapping collection of atoms with a non-unique name and number.
-#[derive(Debug, Clone, Serialize, Deserialize, Getters)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Getters)]
 #[serde(deny_unknown_fields)]
 pub struct Residue {
     /// Residue name.
@@ -37,9 +37,9 @@ pub struct Residue {
 
 impl Residue {
     #[inline(always)]
-    pub fn new(name: String, number: Option<usize>, range: Range<usize>) -> Self {
+    pub fn new(name: &str, number: Option<usize>, range: Range<usize>) -> Self {
         Residue {
-            name,
+            name: name.to_owned(),
             number,
             range,
         }

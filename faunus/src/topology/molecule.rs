@@ -31,6 +31,7 @@ pub struct MoleculeKind {
     /// Unique identifier.
     /// Only defined if the MoleculeKind is inside of Topology.
     #[serde(skip)]
+    #[getter(skip)]
     id: usize,
     /// Names of atom kinds forming the molecule.
     atoms: Vec<String>,
@@ -52,6 +53,7 @@ pub struct MoleculeKind {
     torsions: Vec<Torsion>,
     /// Internal degrees of freedom.
     #[serde(default)]
+    #[getter(skip)]
     degrees_of_freedom: DegreesOfFreedom,
     /// Names of atoms forming the molecule.
     #[serde(default)]
@@ -66,6 +68,7 @@ pub struct MoleculeKind {
     chains: Vec<Chain>,
     /// Does it make sense to calculate center of mass for the molecule?
     #[serde(default = "default_true")]
+    #[getter(skip)]
     has_com: bool,
     /// Map of custom properties.
     #[serde(default)]
@@ -77,6 +80,18 @@ fn default_true() -> bool {
 }
 
 impl MoleculeKind {
+    pub fn id(&self) -> usize {
+        self.id
+    }
+
+    pub fn degrees_of_freedom(&self) -> DegreesOfFreedom {
+        self.degrees_of_freedom
+    }
+
+    pub fn has_com(&self) -> bool {
+        self.has_com
+    }
+
     /// Set indices of atom types.
     pub(super) fn set_atom_indices(&mut self, indices: Vec<usize>) {
         self.atom_indices = indices;

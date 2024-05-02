@@ -22,7 +22,7 @@ use serde::{Deserialize, Serialize};
 /// Atoms need not be chemical elements, but can be custom atoms representing interaction sites.
 /// This does _not_ include positions; indices etc., but is rather
 /// used to represent static properties used for templating atoms.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default, Getters)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct AtomKind {
     /// Unique name.
     name: String,
@@ -56,6 +56,43 @@ impl AtomKind {
             ..Default::default()
         }
     }
+
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn id(&self) -> usize {
+        self.id
+    }
+
+    pub fn mass(&self) -> f64 {
+        self.mass
+    }
+
+    pub fn charge(&self) -> f64 {
+        self.charge
+    }
+
+    pub fn element(&self) -> Option<&str> {
+        self.element.as_deref()
+    }
+
+    pub fn sigma(&self) -> Option<f64> {
+        self.sigma
+    }
+
+    pub fn epsilon(&self) -> Option<f64> {
+        self.epsilon
+    }
+
+    pub fn hydrophobicity(&self) -> Option<Hydrophobicity> {
+        self.hydrophobicity
+    }
+
+    pub fn custom(&self) -> &std::collections::HashMap<String, Value> {
+        &self.custom
+    }
+
     /// Set unique identifier
     pub(super) fn set_id(&mut self, id: usize) {
         self.id = id;
