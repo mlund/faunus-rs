@@ -18,6 +18,8 @@ use derive_getters::Getters;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
+use super::Indexed;
+
 /// Force field definition for torsion, e.g. harmonic, cosine, etc.
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Default)]
 #[serde(deny_unknown_fields)]
@@ -58,5 +60,11 @@ impl Torsion {
         for i in &mut self.index {
             *i = i.checked_add_signed(offset).unwrap();
         }
+    }
+}
+
+impl Indexed for Torsion {
+    fn index(&self) -> &[usize] {
+        &self.index
     }
 }

@@ -53,7 +53,7 @@ pub use residue::*;
 pub use torsion::*;
 use validator::{Validate, ValidationError};
 
-use crate::Point;
+use crate::{Context, Point};
 use serde::{Deserialize, Serialize};
 use serde::{Deserializer, Serializer};
 
@@ -133,12 +133,15 @@ fn collections_overlap() {
     assert!(chain1.overlap(&chain2));
 }
 
-/// Trait for identifying elements in a collection, e.g. index
-trait Indices {
-    /// Positional index of element in a collection
-    fn index(&self) -> usize;
-    /// Set positional index of element in a collection
-    fn set_index(&mut self, index: usize);
+/// Trait implemented by collections where atoms are provided as indices (e.g., bonds, torsions, dihedrals)
+pub(super) trait Indexed {
+    /// Get indices of atoms forming the collection.
+    fn index(&self) -> &[usize];
+
+    /// Check that all the indices are lower than the provided value.
+    fn lower(&self, value: usize) -> bool {
+        self.index().iter().all(|&index| index < value)
+    }
 }
 
 /// Enum to store custom data for atoms, residues, molecules etc.
@@ -268,11 +271,12 @@ pub trait TopologyLike {
     /// Add molecule to the topology.
     fn add_molecule(&mut self, molecule: MoleculeKind);
 
+    /// Find atom with given name.
     fn find_atom(&self, name: &str) -> Option<&AtomKind> {
         self.atoms().iter().find(|a| a.name() == name)
     }
 
-    /// Find molecule with given name
+    /// Find molecule with given name.
     fn find_molecule(&self, name: &str) -> Option<&MoleculeKind> {
         self.molecules().iter().find(|r| r.name() == name)
     }
@@ -314,18 +318,10 @@ pub trait TopologyLike {
     /// - `topologies` paths to the topologies to be included (absolute or relative to the `parent_path`)
     fn include_topologies(
         &mut self,
-        parent_path: impl AsRef<Path>,
-        topologies: Vec<String>,
+        topologies: Vec<InputPath>,
     ) -> Result<(), anyhow::Error> {
         for file in topologies.iter() {
-            // if the path to the included directory is absolute, use it
-            // otherwise consider it to be relative to the `parent_path`
-            let mut path = PathBuf::from(file);
-            if !path.is_absolute() {
-                path = parent_path.as_ref().parent().unwrap().join(path);
-            }
-
-            let included_top = IncludedTopology::from_file(path)?;
+            let included_top = IncludedTopology::from_file(file.path().unwrap())?;
             self.include_atoms(included_top.atoms);
             self.include_molecules(included_top.molecules);
         }
@@ -335,20 +331,21 @@ pub trait TopologyLike {
 }
 
 /// Topology of the molecular system.
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, Validate)]
 pub struct Topology {
     /// Other yaml files that should be included in the topology.
     #[serde(skip_serializing, default)]
-    include: Vec<String>,
+    include: Vec<InputPath>,
     /// All possible atom types.
     #[serde(default)] // can be defined in an include
     atoms: Vec<AtomKind>,
     /// All possible molecule types.
     #[serde(default)] // can be defined in an include
     molecules: Vec<MoleculeKind>,
-    /// Molecules of the system.
+    /// Properties of the system.
     /// Must always be provided.
-    system: Vec<MoleculeBlock>,
+    #[validate(nested)]
+    system: System,
 }
 
 impl Topology {
@@ -357,19 +354,91 @@ impl Topology {
         let yaml = std::fs::read_to_string(filename.clone())?;
         let mut topology = serde_yaml::from_str::<Topology>(&yaml)?;
 
+        // finalize includes
+        for file in topology.include.iter_mut() {
+            file.finalize(filename.clone());
+        }
+
         // parse included files
-        topology.include_topologies(filename, topology.include.clone())?;
+        topology.include_topologies(topology.include.clone())?;
 
         topology.finalize_atoms()?;
         topology.finalize_molecules()?;
-        topology.finalize_blocks()?;
+        topology.finalize_blocks(filename)?;
+        topology.validate_intermolecular()?;
+
+        topology.validate()?;
 
         Ok(topology)
     }
 
     /// Get molecule blocks of the system.
-    pub fn system(&self) -> &[MoleculeBlock] {
-        &self.system
+    pub fn blocks(&self) -> &[MoleculeBlock] {
+        &self.system.blocks
+    }
+
+    /// Get intermolecular bonded interactions of the system.
+    pub fn intermolecular(&self) -> &IntermolecularBonded {
+        &self.system.intermolecular
+    }
+
+    /// Get the total number of atoms in a topology
+    pub fn n_atoms(&self) -> usize {
+        self.system
+            .blocks
+            .iter()
+            .map(|block| block.n_atoms(&self.molecules))
+            .sum()
+    }
+
+    /// Create groups and populate target Context-implementing structure with particles.
+    pub(crate) fn to_groups(
+        &self,
+        context: &mut impl Context,
+        structure: Option<chemfiles::Frame>,
+    ) -> anyhow::Result<()> {
+        // current index of the coordinate in the external structure file to use
+        let mut curr_start = 0;
+
+        // create groups
+        for block in self.blocks() {
+            if block.insert().is_none() {
+                let atoms_in_block = block.n_atoms(self.molecules());
+
+                match structure {
+                    None => {
+                        anyhow::bail!(
+                            "molecule block requires external structure that was not provided"
+                        )
+                    }
+                    Some(ref frame) => {
+                        let positions = match frame
+                            .positions()
+                            .get(curr_start..(curr_start + atoms_in_block)) 
+                        {
+                            None => anyhow::bail!("external structure does not match topology - not enough coordinates"),
+                            Some(pos) => pos.iter().map(|x| (*x).into()).collect::<Vec<Point>>(),
+                        };
+
+                        block.to_groups(context, self.molecules(), &positions)?;
+
+                        curr_start += atoms_in_block;
+                    }
+                };
+            } else {
+                block.to_groups(context, self.molecules(), &[])?;
+            }
+        }
+
+        // check that all coordinates from the structure file have been used
+        match structure {
+            Some(frame) if frame.positions().len() != curr_start => {
+                anyhow::bail!("external structure does not match topology - too many coordinates")
+            }
+            _ => (),
+        }
+
+        Ok(())
     }
 
     /// Set ids for atom kinds in the topology and make sure that the atom names are unique.
@@ -430,9 +499,9 @@ impl Topology {
     }
 
     /// Set molecule indices for blocks and validate them.
-    fn finalize_blocks(&mut self) -> anyhow::Result<()> {
-        for block in self.system.iter_mut() {
-            block.finalize()?;
+    fn finalize_blocks(&mut self, filename: impl AsRef<Path> + Clone) -> anyhow::Result<()> {
+        for block in self.system.blocks.iter_mut() {
+            block.finalize(filename.clone())?;
 
             let index = self
                 .molecules
@@ -443,13 +512,58 @@ impl Topology {
 
             // check that if positions are provided manually, they are consistent with the topology
             if let Some(InsertionPolicy::Manual(positions)) = block.insert() {
-                if positions.len() != (*block.number() * self.molecules[index].atom_indices().len())
-                {
+                if positions.len() != block.n_atoms(&self.molecules) {
                     return Err(anyhow::Error::msg(
                         "the number of manually provided positions does not match the number of atoms",
                     ));
                 }
             }
+        }
+
+        Ok(())
+    }
+
+    /// Validate intermolecular bonded interactions.
+    fn validate_intermolecular(&mut self) -> anyhow::Result<()> {
+        let n_atoms = self.n_atoms();
+
+        // bonds must only exist between defined atoms
+        if !self
+            .system
+            .intermolecular
+            .bonds
+            .iter()
+            .all(|x| x.lower(n_atoms))
+        {
+            return Err(anyhow::Error::msg(
+                "intermolecular bond between undefined atoms",
+            ));
+        }
+
+        // torsions must only exist between defined atoms
+        if !self
+            .system
+            .intermolecular
+            .torsions
+            .iter()
+            .all(|x| x.lower(n_atoms))
+        {
+            return Err(anyhow::Error::msg(
+                "intermolecular torsion between undefined atoms",
+            ));
+        }
+
+        // dihedrals must only exist between defined atoms
+        if !self
+            .system
+            .intermolecular
+            .dihedrals
+            .iter()
+            .all(|x| x.lower(n_atoms))
+        {
+            return Err(anyhow::Error::msg(
+                "intermolecular dihedral between undefined atoms",
+            ));
         }
 
         Ok(())
@@ -480,7 +594,7 @@ struct IncludedTopology {
     /// Other yaml files that should be included in the topology.
     #[serde(skip_serializing)]
     #[serde(default)]
-    include: Vec<String>,
+    include: Vec<InputPath>,
     /// All possible atom types.
     #[serde(default)]
     atoms: Vec<AtomKind>,
@@ -494,8 +608,12 @@ impl IncludedTopology {
     fn from_file(filename: impl AsRef<Path> + Clone) -> anyhow::Result<IncludedTopology> {
         let yaml = std::fs::read_to_string(filename.clone())?;
         let mut topology = serde_yaml::from_str::<IncludedTopology>(&yaml)?;
+        
         // parse included files
-        topology.include_topologies(filename, topology.include.clone())?;
+        for file in topology.include.iter_mut() {
+            file.finalize(filename.clone());
+        }
+        topology.include_topologies(topology.include.clone())?;
 
         Ok(topology)
     }
@@ -517,6 +635,35 @@ impl TopologyLike for IncludedTopology {
     fn add_molecule(&mut self, molecule: MoleculeKind) {
         self.molecules.push(molecule)
     }
+}
+
+/// Fields of the topology related to specific molecular system.
+#[derive(Debug, Clone, Serialize, Deserialize, Default, Validate)]
+struct System {
+    /// Intermolecular bonded interactions.
+    #[serde(default)]
+    #[validate(nested)]
+    intermolecular: IntermolecularBonded,
+    /// Molecules of the system.
+    /// Must always be provided.
+    blocks: Vec<MoleculeBlock>,
+}
+
+/// Intermolecular bonded interactions. Global atom indices have to be provided.
+#[derive(Debug, Clone, Serialize, Deserialize, Default, Validate)]
+pub struct IntermolecularBonded {
+    /// Intermolecular bonds between the atoms.
+    #[serde(default)]
+    #[validate(nested)]
+    bonds: Vec<Bond>,
+    /// Intermolecular dihedrals.
+    #[serde(default)]
+    #[validate(nested)]
+    dihedrals: Vec<Dihedral>,
+    /// Intermolecular torsions.
+    #[serde(default)]
+    #[validate(nested)]
+    torsions: Vec<Torsion>,
 }
 
 /// Serialize std::ops::Range as an array.
@@ -570,6 +717,56 @@ fn validate_unique_indices(indices: &[usize]) -> Result<(), ValidationError> {
     }
 }
 
+/// Path to input topology or structure file.
+#[derive(Debug, Clone)]
+pub struct InputPath {
+    /// Raw path to the input file. Treated either as absolute
+    /// or as relative to the parent directory.
+    /// Used to construct the `path`.
+    raw_path: String,
+    /// Absolute path to the input file.
+    path: Option<PathBuf>,
+}
+
+impl InputPath {
+    /// Get path to file.
+    pub(crate) fn path(&self) -> Option<&PathBuf> {
+        self.path.as_ref()
+    }
+
+    /// Convert the raw_path to absolute path to the file.
+    fn finalize(&mut self, parent_file: impl AsRef<Path>) {
+        let path = PathBuf::from(&self.raw_path);
+        let parent_path = parent_file.as_ref().parent().unwrap();
+
+        if path.is_absolute() {
+            self.path = Some(path);
+        } else {
+            self.path = Some(parent_path.join(path));
+        }
+    }
+}
+
+impl Serialize for InputPath {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&self.raw_path)
+    }
+}
+
+impl<'de> Deserialize<'de> for InputPath {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let path: String = Deserialize::deserialize(deserializer)?;
+        
+        std::result::Result::Ok(InputPath { raw_path: path, path: None })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -580,7 +777,8 @@ mod tests {
 
         println!("{:?}\n", topology.atoms());
         println!("{:?}\n", topology.molecules());
-        println!("{:?}\n", topology.system);
+        println!("{:?}\n", topology.blocks());
+        println!("{:?}\n", topology.intermolecular());
 
         //println!("{}", serde_yaml::to_string(&topology).unwrap());
     }

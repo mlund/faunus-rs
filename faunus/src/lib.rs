@@ -53,7 +53,7 @@ trait PointParticle {
     /// Type of the particle position
     type Positiontype;
     /// Identifier for the particle type
-    fn id(&self) -> Self::Idtype;
+    fn atom_id(&self) -> Self::Idtype;
     /// Get position
     fn pos(&self) -> &Self::Positiontype;
     /// Get mutable position
@@ -64,8 +64,8 @@ trait PointParticle {
 
 #[derive(Serialize, Deserialize, Default, Debug, Clone, PartialEq)]
 pub struct Particle {
-    /// Type of the particle
-    id: usize,
+    /// Type of the particle (index of the atom kind)
+    atom_id: usize,
     /// Index in main list of particles
     index: usize,
     /// Position of the particle
@@ -73,16 +73,24 @@ pub struct Particle {
 }
 
 impl Particle {
-    pub(crate) fn new(id: usize, index: usize, pos: Point) -> Particle {
-        Particle { id, index, pos }
+    pub(crate) fn new(atom_id: usize, index: usize, pos: Point) -> Particle {
+        Particle {
+            atom_id,
+            index,
+            pos,
+        }
+    }
+
+    pub(crate) fn set_position(&mut self, position: Point) {
+        self.pos = position;
     }
 }
 
 impl PointParticle for Particle {
     type Idtype = usize;
     type Positiontype = Point;
-    fn id(&self) -> Self::Idtype {
-        self.id
+    fn atom_id(&self) -> Self::Idtype {
+        self.atom_id
     }
     fn pos(&self) -> &Self::Positiontype {
         &self.pos

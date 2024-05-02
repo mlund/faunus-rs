@@ -1,4 +1,4 @@
-include: ["top/top3.yaml"]
+include: ["../top3.yaml"]
 
 atoms:
   - {name: X, mass: 12.0, charge: 1.0, hydrophobicity: !Hydrophilic }

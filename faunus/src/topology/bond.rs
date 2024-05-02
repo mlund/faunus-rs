@@ -19,6 +19,8 @@ use float_cmp::approx_eq;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
+use super::Indexed;
+
 /// Force field definition for bonds, e.g. harmonic, FENE, Morse, etc.
 ///
 /// Each varient stores the parameters for the bond type, like force constant, equilibrium distance, etc.
@@ -138,5 +140,11 @@ impl Bond {
     /// Check if bond contains atom with index
     pub fn contains(&self, index: usize) -> bool {
         self.index.contains(&index)
+    }
+}
+
+impl Indexed for Bond {
+    fn index(&self) -> &[usize] {
+        &self.index
     }
 }

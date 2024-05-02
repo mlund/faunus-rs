@@ -18,6 +18,8 @@ use derive_getters::Getters;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
+use super::Indexed;
+
 /// Force field definition for dihedral angle potentials between four atoms
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Default)]
 pub enum DihedralKind {
@@ -93,5 +95,11 @@ impl Dihedral {
         for i in &mut self.index {
             *i = i.checked_add_signed(offset).unwrap();
         }
+    }
+}
+
+impl Indexed for Dihedral {
+    fn index(&self) -> &[usize] {
+        &self.index
     }
 }

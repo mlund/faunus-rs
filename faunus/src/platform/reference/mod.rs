@@ -71,12 +71,7 @@ impl Context for ReferencePlatform {
             hamiltonian,
         };
 
-        // create groups
-        for block in topology.system() {
-            block.to_groups(&mut context, topology.molecules())?;
-        }
-
-        // TODO! set coordinates of the particles from the global structure file
+        topology.to_groups(&mut context, structure)?;
 
         Ok(context)
     }

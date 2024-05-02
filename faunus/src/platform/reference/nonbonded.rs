@@ -83,7 +83,8 @@ where
         // let distance_squared = self
         //     .platform
         //     .distance_squared(particle1.pos(), particle2.pos());
-        self.pair_potentials[particle1.id][particle2.id].isotropic_twobody_energy(distance_squared)
+        self.pair_potentials[particle1.atom_id][particle2.atom_id]
+            .isotropic_twobody_energy(distance_squared)
     }
 
     /// Single particle with all remaining active particles

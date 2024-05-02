@@ -20,7 +20,7 @@ use serde::{Deserialize, Serialize};
 use crate::topology::{Chain, DegreesOfFreedom, Residue, Value};
 use validator::{Validate, ValidationError};
 
-use super::{Bond, CustomProperty, Dihedral, NonOverlapping, Torsion};
+use super::{Bond, CustomProperty, Dihedral, Indexed, NonOverlapping, Torsion};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, Validate, Getters)]
 #[serde(deny_unknown_fields)]
@@ -97,24 +97,18 @@ fn validate_molecule(molecule: &MoleculeKind) -> Result<(), ValidationError> {
     let n_atoms = molecule.atoms.len();
 
     // bonds must only exist between defined atoms
-    for bond in molecule.bonds.iter() {
-        if bond.index().iter().any(|&index| index >= n_atoms) {
-            return Err(ValidationError::new("bond between undefined atoms"));
-        }
+    if !molecule.bonds.iter().all(|x| x.lower(n_atoms)) {
+        return Err(ValidationError::new("bond between undefined atoms"));
     }
 
     // torsions must only exist between defined atoms
-    for torsion in molecule.torsions.iter() {
-        if torsion.index().iter().any(|&index| index >= n_atoms) {
-            return Err(ValidationError::new("torsion between undefined atoms"));
-        }
+    if !molecule.torsions.iter().all(|x| x.lower(n_atoms)) {
+        return Err(ValidationError::new("torsion between undefined atoms"));
     }
 
     // dihedrals must only exist between defined atoms
-    for dihedral in molecule.dihedrals.iter() {
-        if dihedral.index().iter().any(|&index| index >= n_atoms) {
-            return Err(ValidationError::new("dihedral between undefined atoms"));
-        }
+    if !molecule.dihedrals.iter().all(|x| x.lower(n_atoms)) {
+        return Err(ValidationError::new("dihedral between undefined atoms"));
     }
 
     // residues can't contain undefined atoms
