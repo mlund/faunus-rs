@@ -16,9 +16,9 @@
 
 use crate::{
     energy::Hamiltonian,
-    group::{GroupCollection, GroupId, GroupSize},
-    topology::{self, Topology},
-    Change, Context, Group, Particle, SyncFrom,
+    group::{GroupCollection, GroupSize},
+    topology::{self, Topology, TopologyLike},
+    Change, Context, Group, Particle, Point, SyncFrom,
 };
 
 use std::rc::Rc;
@@ -39,7 +39,7 @@ pub struct ReferencePlatform {
     hamiltonian: Hamiltonian,
 }
 
-impl crate::Context for ReferencePlatform {
+impl Context for ReferencePlatform {
     type Cell = crate::cell::Cuboid;
     fn cell(&self) -> &Self::Cell {
         &self.cell
@@ -47,14 +47,38 @@ impl crate::Context for ReferencePlatform {
     fn cell_mut(&mut self) -> &mut Self::Cell {
         &mut self.cell
     }
-    fn topology(&self) -> Rc<topology::Topology> {
+    fn topology(&self) -> Rc<Topology> {
         self.topology.clone()
     }
-    fn hamiltonian(&self) -> &crate::energy::Hamiltonian {
+    fn hamiltonian(&self) -> &Hamiltonian {
         &self.hamiltonian
     }
-    fn hamiltonian_mut(&mut self) -> &mut crate::energy::Hamiltonian {
+    fn hamiltonian_mut(&mut self) -> &mut Hamiltonian {
         &mut self.hamiltonian
+    }
+
+    fn new(
+        topology: Rc<Topology>,
+        cell: Self::Cell,
+        hamiltonian: Hamiltonian,
+        structure: Option<chemfiles::Frame>,
+    ) -> anyhow::Result<Self> {
+        let mut context = ReferencePlatform {
+            topology: topology.clone(),
+            particles: vec![],
+            groups: vec![],
+            cell,
+            hamiltonian,
+        };
+
+        // create groups
+        for block in topology.system() {
+            block.to_groups(&mut context, topology.molecules())?;
+        }
+
+        // TODO! set coordinates of the particles from the global structure file
+
+        Ok(context)
     }
 }
 
@@ -78,6 +102,10 @@ impl GroupCollection for ReferencePlatform {
         self.particles[index].clone()
     }
 
+    fn n_particles(&self) -> usize {
+        self.particles.len()
+    }
+
     fn set_particles<'a>(
         &mut self,
         indices: impl IntoIterator<Item = usize>,
@@ -89,14 +117,15 @@ impl GroupCollection for ReferencePlatform {
         Ok(())
     }
 
-    fn add_group(&mut self, id: GroupId, particles: &[Particle]) -> anyhow::Result<&Group> {
+    fn add_group(&mut self, molecule: usize, particles: &[Particle]) -> anyhow::Result<&mut Group> {
         if particles.is_empty() {
             anyhow::bail!("Cannot create empty group");
         }
         let range = self.particles.len()..self.particles.len() + particles.len();
         self.particles.extend_from_slice(particles);
-        self.groups.push(Group::new(self.groups.len(), id, range));
-        Ok(self.groups.last().unwrap())
+        self.groups
+            .push(Group::new(self.groups.len(), molecule, range));
+        Ok(self.groups.last_mut().unwrap())
     }
 
     fn resize_group(&mut self, group_index: usize, status: GroupSize) -> anyhow::Result<()> {
@@ -111,16 +140,6 @@ impl GroupCollection for ReferencePlatform {
 /// The idea is to access the particle in a group-wise fashion, e.g. to update
 /// the center of mass of a group, or to rotate a group of particles.
 impl ReferencePlatform {
-    pub fn new(cell: crate::cell::Cuboid, topology: Rc<Topology>) -> Self {
-        Self {
-            particles: Vec::new(),
-            topology,
-            groups: Vec::new(),
-            cell,
-            hamiltonian: Hamiltonian::default(),
-        }
-    }
-
     /// Get vector of indices to all other *active* particles in the system, excluding `range`
     fn _other_indices(&self, range: std::ops::Range<usize>) -> Vec<usize> {
         let no_overlap = |r: &std::ops::Range<usize>| {

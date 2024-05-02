@@ -24,7 +24,7 @@ use rand::prelude::*;
 #[derive(Clone, Debug)]
 pub struct TranslateGroup {
     /// Group id to translate
-    id: GroupId,
+    id: usize,
     /// Maximum displacement
     max_displacement: f64,
     /// Move statisticcs
@@ -34,11 +34,7 @@ pub struct TranslateGroup {
 }
 
 impl TranslateGroup {
-    pub fn new(id: GroupId, max_displacement: f64, frequency: Frequency) -> Self {
-        assert!(
-            matches!(id, GroupId::Residue(_)),
-            "Only residues can currently be translated"
-        );
+    pub fn new(id: usize, max_displacement: f64, frequency: Frequency) -> Self {
         Self {
             id,
             max_displacement,
@@ -48,7 +44,7 @@ impl TranslateGroup {
     }
     /// Pick a random group index with the correct molecule type
     fn random_group(&self, context: &impl Context, rng: &mut ThreadRng) -> Option<usize> {
-        let select = GroupSelection::ById(self.id.clone());
+        let select = GroupSelection::ByMoleculeId(self.id.clone());
         context.select(&select).iter().copied().choose(rng)
     }
 }

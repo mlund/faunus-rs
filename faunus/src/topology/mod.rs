@@ -23,30 +23,14 @@
 //! The [`Topology`] is constructed using the following building blocks:
 //!
 //! - [`AtomKind`] is the smallest unit, but need not to be a chemical element.
-//! - [`ResidueKind`] is a collection of atoms, e.g. a protein residue or a water molecule.
-//! - [`ChainKind`] is a collection of residues, e.g. a polymer or protein chain.
+//! - [`MoleculeKind`] is a collection of atoms, e.g. a protein or a water molecule.
+//! - [`MoleculeBlock`] is a collection of molecules of the same type.
 //!
-//! # Examples
-//! ~~~
-//! use faunus::topology::*;
-//! let mut top = Topology::default();
-//! top.add_atom(AtomKind::new("Ow")).unwrap();
-//! top.add_atom(AtomKind::new("Hw")).unwrap();
-//! assert!(top.add_atom(AtomKind::new("Hw")).is_err()); // error: duplicate name
-//! assert_eq!(top.atoms().len(), 2);
-//!
-//! let mut water = ResidueKind::new("Water", &[0, 1, 1]);
-//! assert_eq!(water.len(), 3);
-//! let bond1 = Bond::new([0, 1], BondKind::Harmonic{ k: 100.0, req: 1.0 }, None);
-//! let bond2 = Bond::new([1, 2], BondKind::Harmonic{ k: 100.0, req: 1.0 }, None);
-//! water.add_bond(bond1).unwrap();
-//! water.add_bond(bond2).unwrap();
-//! assert_eq!(water.connectivity.bonds().len(), 2);
-//!
-//! top.add_residue(water).unwrap();
-//! assert_eq!(top.residues().len(), 1);
-//! assert_eq!(top.residues().last().unwrap().id, 0);
-//! ~~~
+//! Topology is read from a file in yaml format using:
+//! ```
+//! # use faunus::topology::Topology;
+//! let top = Topology::from_file("tests/files/topology_input.yaml");
+//! ```
 mod atom;
 mod bond;
 mod chain;
@@ -73,7 +57,7 @@ use crate::Point;
 use serde::{Deserialize, Serialize};
 use serde::{Deserializer, Serializer};
 
-use self::block::MoleculeBlock;
+use self::block::{InsertionPolicy, MoleculeBlock};
 use self::molecule::MoleculeKind;
 
 /// Trait implemented by collections of atoms that should not overlap (e.g., residues, chains).
@@ -369,28 +353,16 @@ pub struct Topology {
 
 impl Topology {
     /// Parse a yaml file as Topology.
-    pub fn from_file(filename: impl AsRef<Path> + Clone) -> Result<Topology, anyhow::Error> {
+    pub fn from_file(filename: impl AsRef<Path> + Clone) -> anyhow::Result<Topology> {
         let yaml = std::fs::read_to_string(filename.clone())?;
         let mut topology = serde_yaml::from_str::<Topology>(&yaml)?;
 
         // parse included files
         topology.include_topologies(filename, topology.include.clone())?;
 
-        // finalize atoms and molecules
         topology.finalize_atoms()?;
         topology.finalize_molecules()?;
-
-        // validate and finalize molecule blocks
-        for block in topology.system.iter_mut() {
-            block.finalize()?;
-
-            let index = topology
-                .molecules
-                .iter()
-                .position(|x| x.name() == block.molecule())
-                .ok_or(anyhow::Error::msg("undefined molecule kind in a block"))?;
-            block.set_molecule_index(index);
-        }
+        topology.finalize_blocks()?;
 
         Ok(topology)
     }
@@ -401,7 +373,7 @@ impl Topology {
     }
 
     /// Set ids for atom kinds in the topology and make sure that the atom names are unique.
-    fn finalize_atoms(&mut self) -> Result<(), anyhow::Error> {
+    fn finalize_atoms(&mut self) -> anyhow::Result<()> {
         self.atoms
             .iter_mut()
             .enumerate()
@@ -420,7 +392,7 @@ impl Topology {
 
     /// Set ids for molecule kinds in the topology, validate the molecules and
     /// set indices of atom kinds forming each molecule.
-    fn finalize_molecules(&mut self) -> Result<(), anyhow::Error> {
+    fn finalize_molecules(&mut self) -> anyhow::Result<()> {
         for (i, molecule) in self.molecules.iter_mut().enumerate() {
             // set atom names
             if molecule.atom_names().is_empty() {
@@ -455,6 +427,32 @@ impl Topology {
         } else {
             Err(anyhow::Error::msg("molecules have non-unique names"))
         }
+    }
+
+    /// Set molecule indices for blocks and validate them.
+    fn finalize_blocks(&mut self) -> anyhow::Result<()> {
+        for block in self.system.iter_mut() {
+            block.finalize()?;
+
+            let index = self
+                .molecules
+                .iter()
+                .position(|x| x.name() == block.molecule())
+                .ok_or(anyhow::Error::msg("undefined molecule kind in a block"))?;
+            block.set_molecule_index(index);
+
+            // check that if positions are provided manually, they are consistent with the topology
+            if let Some(InsertionPolicy::Manual(positions)) = block.insert() {
+                if positions.len() != (*block.number() * self.molecules[index].atom_indices().len())
+                {
+                    return Err(anyhow::Error::msg(
+                        "the number of manually provided positions does not match the number of atoms",
+                    ));
+                }
+            }
+        }
+
+        Ok(())
     }
 }
 
@@ -493,7 +491,7 @@ struct IncludedTopology {
 
 impl IncludedTopology {
     /// Parse a yaml file as IncludedTopology.
-    fn from_file(filename: impl AsRef<Path> + Clone) -> Result<IncludedTopology, anyhow::Error> {
+    fn from_file(filename: impl AsRef<Path> + Clone) -> anyhow::Result<IncludedTopology> {
         let yaml = std::fs::read_to_string(filename.clone())?;
         let mut topology = serde_yaml::from_str::<IncludedTopology>(&yaml)?;
         // parse included files
@@ -583,5 +581,7 @@ mod tests {
         println!("{:?}\n", topology.atoms());
         println!("{:?}\n", topology.molecules());
         println!("{:?}\n", topology.system);
+
+        //println!("{}", serde_yaml::to_string(&topology).unwrap());
     }
 }

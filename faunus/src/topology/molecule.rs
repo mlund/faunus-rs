@@ -35,7 +35,7 @@ pub struct MoleculeKind {
     /// Names of atom kinds forming the molecule.
     atoms: Vec<String>,
     /// Indices of atom kinds forming the molecule.
-    /// Populated once the molecule is added to a system.
+    /// Populated once the molecule is added to a topology.
     #[serde(skip)]
     atom_indices: Vec<usize>,
     /// Intramolecular bonds between the atoms.

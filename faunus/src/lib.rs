@@ -16,9 +16,11 @@ extern crate chemfiles;
 extern crate serde_json;
 
 use crate::group::{Group, GroupCollection};
+use energy::Hamiltonian;
 use nalgebra::Vector3;
 use serde::{Deserialize, Serialize};
-use std::rc::Rc;
+use std::{path::Path, rc::Rc};
+use topology::Topology;
 
 pub type Point = Vector3<f64>;
 pub type UnitQuaternion = nalgebra::UnitQuaternion<f64>;
@@ -70,6 +72,12 @@ pub struct Particle {
     pos: Point,
 }
 
+impl Particle {
+    pub(crate) fn new(id: usize, index: usize, pos: Point) -> Particle {
+        Particle { id, index, pos }
+    }
+}
+
 impl PointParticle for Particle {
     type Idtype = usize;
     type Positiontype = Point;
@@ -102,9 +110,9 @@ pub trait Context: GroupCollection + Clone + std::fmt::Debug + Sized + SyncFrom 
     /// Get mutable reference to simulation cell
     fn cell_mut(&mut self) -> &mut Self::Cell;
     /// Get reference to the topology
-    fn topology(&self) -> Rc<topology::Topology>;
+    fn topology(&self) -> Rc<Topology>;
     /// Reference to Hamiltonian
-    fn hamiltonian(&self) -> &energy::Hamiltonian;
+    fn hamiltonian(&self) -> &Hamiltonian;
     /// Mutable reference to Hamiltonian
     fn hamiltonian_mut(&mut self) -> &mut energy::Hamiltonian;
 
@@ -118,6 +126,14 @@ pub trait Context: GroupCollection + Clone + std::fmt::Debug + Sized + SyncFrom 
         self.hamiltonian_mut().update(change)?;
         Ok(())
     }
+
+    /// Construct a new simulation system.
+    fn new(
+        topology: Rc<Topology>,
+        cell: Self::Cell,
+        hamiltonian: Hamiltonian,
+        structure: Option<chemfiles::Frame>,
+    ) -> anyhow::Result<Self>;
 }
 
 /// A trait for objects that have a temperature

@@ -49,10 +49,6 @@ pub struct AtomKind {
 }
 
 impl AtomKind {
-    pub fn from_str(string: &str) -> Result<AtomKind, anyhow::Error> {
-        serde_yaml::from_str::<AtomKind>(string).map_err(anyhow::Error::msg)
-    }
-
     /// New atom type with given name but with otherwise default values
     pub fn new(name: &str) -> Self {
         Self {

@@ -16,7 +16,9 @@ use derive_getters::Getters;
 use serde::{Deserialize, Serialize};
 use validator::{Validate, ValidationError};
 
-use crate::Point;
+use crate::{group::GroupSize, Context, Particle, Point};
+
+use super::molecule::MoleculeKind;
 
 /// Describes the activation status of a MoleculeBlock.
 /// Partial(n) means that only the first 'n' molecules of the block are active.
@@ -55,6 +57,7 @@ fn default_directions() -> [bool; 3] {
     [true, true, true]
 }
 
+/// A block of molecules of the same molecule kind.
 #[derive(Debug, Clone, Serialize, Deserialize, Default, Getters, Validate)]
 pub struct MoleculeBlock {
     /// Name of the molecule kind of molecules in this block.
@@ -75,10 +78,47 @@ pub struct MoleculeBlock {
 }
 
 impl MoleculeBlock {
+    /// Create groups from a MoleculeBlock.
+    pub(crate) fn to_groups(
+        &self,
+        context: &mut impl Context,
+        molecules: &[MoleculeKind],
+    ) -> anyhow::Result<()> {
+        let molecule = &molecules[self.molecule_index];
+        let mut particle_counter = context.n_particles();
+
+        for i in 0..self.number {
+            let particles: Vec<Particle> = molecule
+                .atom_indices()
+                .iter()
+                .map(|a| {
+                    let particle = Particle::new(*a, particle_counter, Point::default());
+                    particle_counter += 1;
+                    particle
+                })
+                .collect();
+
+            let group = context.add_group(*molecule.id(), &particles)?;
+
+            match self.active {
+                BlockActivationStatus::Partial(x) if i >= x => {
+                    group.resize(GroupSize::Empty).unwrap()
+                }
+                _ => (),
+            }
+        }
+
+        // TODO: set coordinates of the particles
+
+        Ok(())
+    }
+
+    /// Set index of the molecule of the block.
     pub(super) fn set_molecule_index(&mut self, index: usize) {
         self.molecule_index = index;
     }
 
+    /// Finalize MoleculeBlock parsing.
     pub(super) fn finalize(&mut self) -> Result<(), ValidationError> {
         // check that the number of active particles is not higher than the total number of particles
         if let BlockActivationStatus::Partial(active_mol) = self.active {
@@ -89,13 +129,6 @@ impl MoleculeBlock {
                 ));
             } else if active_mol == self.number {
                 self.active = BlockActivationStatus::All;
-            }
-        }
-
-        // check that if positions are provided manually, they are all provided
-        if let Some(InsertionPolicy::Manual(positions)) = &self.insert {
-            if positions.len() != self.number {
-                return Err(ValidationError::new("the number of manually provided positions does not match the number of molecules"));
             }
         }
 

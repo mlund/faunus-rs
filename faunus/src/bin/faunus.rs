@@ -20,6 +20,6 @@ fn main() {
 
     let top = Rc::new(topology::Topology::default());
     //let a = Particle::default();
-    let context = platform::reference::ReferencePlatform::new(cell::Cuboid::cubic(90.0), top);
-    println!("Hello, world! {:?} ", context);
+    //let context = platform::reference::ReferencePlatform::new(cell::Cuboid::cubic(90.0), top);
+    //println!("Hello, world! {:?} ", context);
 }

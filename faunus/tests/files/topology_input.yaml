@@ -1,6 +1,5 @@
 # include other yaml files
 # paths can either be absolute or relative to the current topology file
-# the files are included in the provided order
 # definitions in files that are defined later in the list take precedence over those defined earlier
 # definitions in the main file take precedence over definitions in the included files
 include: [top1.yaml, top2.yaml]
@@ -47,6 +46,6 @@ system:
   - {molecule: MOL, N: 10}  # read from a separate structure file
   - {molecule: MOL2, N: 50, active: 30, insert: !RandomCOM { filename: mol2.xyz }}
   - {molecule: MOL2, N: 6, insert: !RandomCOM {filename: mol2.xyz, rotate: true, directions: [true, false, false]}}
-  - {molecule: MOL, N: 3, insert: !Manual [[1.43, 3.21, 2.65], [0.65, 1.19, 2.34], [2.1, 3.9, 0.8]]}
+  - {molecule: MOL2, N: 1, insert: !Manual [[1.43, 3.21, 2.65], [0.65, 1.19, 2.34], [2.1, 3.9, 0.8]]}
   - {molecule: MOL, N: 2, insert: !RandomAtomPos {directions: [true, true, false]}}
   - {molecule: MOL2, N: 5, insert: !FromFile mol2_absolute.xyz}
