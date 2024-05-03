@@ -24,4 +24,4 @@ float-cmp = "0.9"
 average = { version = "0.13", features = ["std", "serde1"] }
 regex = "1.8.4"
 physical_constants = "0.5.0"
-electrolyte = {path = "../electrolyte"}
+coulomb = {path = "../coulomb"}
