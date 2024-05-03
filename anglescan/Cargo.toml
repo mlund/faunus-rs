@@ -30,4 +30,3 @@ textplots = "0.8.6"
 rgb = "0.8.37"
 nu-ansi-term = "0.50.0"
 hexasphere = {version = "12.0", features = ["adjacency"]}
-electrolyte = {path = "../electrolyte"}
