@@ -48,8 +48,20 @@ pub trait AnisotropicTwobodyEnergy: Debug {
 
 /// Potential energy between a pair of isotropic particles
 pub trait IsotropicTwobodyEnergy: Debug + AnisotropicTwobodyEnergy {
-    /// Interaction energy between a pair of isotropic particles
+    /// Interaction energy between a pair of isotropic particles.
     fn isotropic_twobody_energy(&self, distance_squared: f64) -> f64;
+
+    /// Force due to a particle with an isotropic interaction potential, F(r) = -dU/dr
+    ///
+    /// The default implementation uses a central difference to calculate the force
+    /// and should be overridden with the exact analytical expression for better speed
+    /// and accuracy.
+    fn isotropic_twobody_force(&self, distance_squared: f64) -> f64 {
+        const EPS: f64 = 1e-6;
+        let delta_u = self.isotropic_twobody_energy(distance_squared + EPS)
+            - self.isotropic_twobody_energy(distance_squared - EPS);
+        -delta_u / (2.0 * EPS)
+    }
 }
 
 /// All isotropic potentials implement the anisotropic trait
