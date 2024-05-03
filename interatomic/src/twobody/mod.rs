@@ -43,15 +43,21 @@ pub struct RelativeOrientation {
 
 /// Potential energy between a pair of anisotropic particles
 pub trait AnisotropicTwobodyEnergy: Debug {
+    /// Interaction energy between a pair of anisotropic particles, 𝑈(𝒓).
     fn anisotropic_twobody_energy(&self, orientation: &RelativeOrientation) -> f64;
+
+    /// Force magnitude due to an anisotropic interaction potential, 𝐹(𝒓) = -𝞩𝑈(𝒓)
+    fn anisotropic_twobody_force(&self, _: &RelativeOrientation) -> Vector3 {
+        todo!()
+    }
 }
 
-/// Potential energy between a pair of isotropic particles
+/// Potential energy between a pair of isotropic particles, 𝑈(𝑟)
 pub trait IsotropicTwobodyEnergy: Debug + AnisotropicTwobodyEnergy {
     /// Interaction energy between a pair of isotropic particles.
     fn isotropic_twobody_energy(&self, distance_squared: f64) -> f64;
 
-    /// Force due to a particle with an isotropic interaction potential, F(r) = -dU/dr
+    /// Force magnitude due to an isotropic interaction potential, 𝐹(𝑟) = -∇𝑈(𝑟)
     ///
     /// The default implementation uses a central difference to calculate the force
     /// and should be overridden with the exact analytical expression for better speed
@@ -68,6 +74,11 @@ pub trait IsotropicTwobodyEnergy: Debug + AnisotropicTwobodyEnergy {
 impl<T: IsotropicTwobodyEnergy> AnisotropicTwobodyEnergy for T {
     fn anisotropic_twobody_energy(&self, orientation: &RelativeOrientation) -> f64 {
         self.isotropic_twobody_energy(orientation.distance.norm_squared())
+    }
+    fn anisotropic_twobody_force(&self, orientation: &RelativeOrientation) -> Vector3 {
+        let r_squared = orientation.distance.norm_squared();
+        let r_hat = orientation.distance / r_squared.sqrt();
+        self.isotropic_twobody_force(r_squared) * r_hat
     }
 }
 
