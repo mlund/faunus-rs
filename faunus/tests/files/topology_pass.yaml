@@ -1,3 +1,5 @@
+# This topology file is valid and can be parsed.
+
 # include other yaml files
 # paths can either be absolute or relative to the directory containing the current topology file
 # definitions in files that are defined later in the list take precedence over those defined earlier
@@ -29,7 +31,7 @@ molecules:
       - {name: ALA, number: 4, range: [4, 6]}
     chains:
       - {name: A, range: [0, 7]}
-      - {name: Chain2, range: [7, 0]} # empty
+      - {name: Chain2, range: [14, 0]} # empty
     custom:
       bool: false
       int: 13

@@ -1,0 +1,12 @@
+# Parsing of this file should fail because the molecule type MOL is defined multiple times in the same topology file.
+include: [top/top1.yaml, top2.yaml]
+atoms:
+  - {name: A, mass: 1.0}
+molecules:
+  - name: MOL
+    atoms: [A, A, A]
+  - name: MOL
+    atoms: [A, A]
+system:
+  blocks:
+    - {molecule: MOL, N: 3}

@@ -23,6 +23,7 @@ use serde::{Deserialize, Serialize};
 /// This does _not_ include positions; indices etc., but is rather
 /// used to represent static properties used for templating atoms.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[serde(deny_unknown_fields)]
 pub struct AtomKind {
     /// Unique name.
     name: String,

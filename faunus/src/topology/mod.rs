@@ -92,7 +92,7 @@ pub(super) trait NonOverlapping {
                 .skip(i + 1)
                 .any(|item_j| item_i.overlap(item_j))
         }) {
-            Err(ValidationError::new("overlap between collections"))
+            Err(ValidationError::new("").with_message("overlap between collections".into()))
         } else {
             core::result::Result::Ok(())
         }
@@ -132,6 +132,35 @@ fn collections_overlap() {
 
     let chain2 = Chain::new("B", 4..11);
     assert!(chain1.overlap(&chain2));
+}
+
+#[test]
+fn collections_validate() {
+    let residue1 = Residue::new("ALA", None, 2..5);
+    let residue2 = Residue::new("GLY", None, 5..7);
+    let residue3 = Residue::new("LYS", None, 7..11);
+    let residue4 = Residue::new("ALA", None, 11..14);
+
+    assert!(Residue::validate(&[residue1.clone(), residue2.clone(), residue3.clone(), residue4.clone()]).is_ok());
+
+    let residue1b = Residue::new("ALA", None, 2..6);
+    assert!(Residue::validate(&[residue1b.clone(), residue2.clone(), residue3.clone(), residue4.clone()]).is_err());
+
+    let residue2b = Residue::new("GLY", None, 11..13);
+    assert!(Residue::validate(&[residue1.clone(), residue2b.clone(), residue3.clone(), residue4.clone()]).is_err());
+
+    let residue3b = Residue::new("LYS", None, 0..4);
+    assert!(Residue::validate(&[residue1.clone(), residue2.clone(), residue3b.clone(), residue4.clone()]).is_err());
+
+    let chain1 = Chain::new("A", 2..5);
+    let chain2 = Chain::new("B", 5..7);
+    let chain3 = Chain::new("C", 7..11);
+    let chain4 = Chain::new("D", 11..14);
+
+    assert!(Chain::validate(&[chain1.clone(), chain2.clone(), chain3.clone(), chain4.clone()]).is_ok());
+
+    let chain2b = Chain::new("B", 11..13);
+    assert!(Chain::validate(&[chain1.clone(), chain2b.clone(), chain3.clone(), chain4.clone()]).is_err());
 }
 
 /// Trait implemented by collections where atoms are provided as indices (e.g., bonds, torsions, dihedrals)
@@ -456,7 +485,7 @@ impl Topology {
         }) {
             Ok(())
         } else {
-            Err(anyhow::Error::msg("atoms have non-unique names"))
+            anyhow::bail!("atoms have non-unique names")
         }
     }
 
@@ -495,7 +524,7 @@ impl Topology {
         }) {
             Ok(())
         } else {
-            Err(anyhow::Error::msg("molecules have non-unique names"))
+            anyhow::bail!("molecules have non-unique names")
         }
     }
 
@@ -514,9 +543,9 @@ impl Topology {
             // check that if positions are provided manually, they are consistent with the topology
             if let Some(InsertionPolicy::Manual(positions)) = block.insert() {
                 if positions.len() != block.n_atoms(&self.molecules) {
-                    return Err(anyhow::Error::msg(
+                    anyhow::bail!(
                         "the number of manually provided positions does not match the number of atoms",
-                    ));
+                    );
                 }
             }
         }
@@ -536,9 +565,9 @@ impl Topology {
             .iter()
             .all(|x| x.lower(n_atoms))
         {
-            return Err(anyhow::Error::msg(
+            anyhow::bail!(
                 "intermolecular bond between undefined atoms",
-            ));
+            );
         }
 
         // torsions must only exist between defined atoms
@@ -549,9 +578,9 @@ impl Topology {
             .iter()
             .all(|x| x.lower(n_atoms))
         {
-            return Err(anyhow::Error::msg(
+            anyhow::bail!(
                 "intermolecular torsion between undefined atoms",
-            ));
+            );
         }
 
         // dihedrals must only exist between defined atoms
@@ -562,9 +591,9 @@ impl Topology {
             .iter()
             .all(|x| x.lower(n_atoms))
         {
-            return Err(anyhow::Error::msg(
+            anyhow::bail!(
                 "intermolecular dihedral between undefined atoms",
-            ));
+            );
         }
 
         Ok(())
@@ -714,7 +743,7 @@ fn validate_unique_indices(indices: &[usize]) -> Result<(), ValidationError> {
     if are_unique(indices, |i: &usize, j: &usize| i == j) {
         core::result::Result::Ok(())
     } else {
-        Err(ValidationError::new("non-unqiue atom indices"))
+        Err(ValidationError::new("").with_message("non-unique atom indices".into()))
     }
 }
 
@@ -731,6 +760,7 @@ pub struct InputPath {
 
 impl InputPath {
     /// Create new InputPath.
+    #[allow(dead_code)]
     pub(crate) fn new(raw: &str, parent_file: impl AsRef<Path>) -> InputPath {
         let mut path = InputPath {
             raw_path: raw.to_owned(),
@@ -778,6 +808,9 @@ impl<'de> Deserialize<'de> for InputPath {
         std::result::Result::Ok(InputPath { raw_path: path, path: None })
     }
 }
+
+
+
 
 #[cfg(test)]
 mod tests {
@@ -907,7 +940,7 @@ mod tests {
 
     #[test]
     fn read_topology_pass() {
-        let topology = Topology::from_file("tests/files/topology_input.yaml").unwrap();
+        let topology = Topology::from_file("tests/files/topology_pass.yaml").unwrap();
 
         assert_eq!(topology.atoms().len(), 5);
 
@@ -991,7 +1024,7 @@ mod tests {
         ];
         let chains = vec![
             Chain::new("A", 0..7),
-            Chain::new("Chain2", 7..0),
+            Chain::new("Chain2", 14..0),
         ];
         let custom = HashMap::from(
             [("bool".to_owned(), Value::Bool(false)),
@@ -1066,7 +1099,7 @@ mod tests {
             50,
             BlockActivationStatus::Partial(30),
             Some(&InsertionPolicy::RandomCOM { 
-                filename: InputPath::new("mol2.xyz", "tests/files/topology_input.yaml"), 
+                filename: InputPath::new("mol2.xyz", "tests/files/topology_pass.yaml"), 
                 rotate: false, 
                 directions: [true, true, true] })
         );
@@ -1078,7 +1111,7 @@ mod tests {
             6,
             BlockActivationStatus::All,
             Some(&InsertionPolicy::RandomCOM {
-                filename: InputPath::new("mol2.xyz", "tests/files/topology_input.yaml"),
+                filename: InputPath::new("mol2.xyz", "tests/files/topology_pass.yaml"),
                 rotate: true,
                 directions: [true, false, false]
             })
@@ -1113,7 +1146,223 @@ mod tests {
             1,
             5,
             BlockActivationStatus::All,
-            Some(&InsertionPolicy::FromFile(InputPath::new("mol2_absolute.xyz", "tests/files/topology_input.yaml")))
+            Some(&InsertionPolicy::FromFile(InputPath::new("mol2_absolute.xyz", "tests/files/topology_pass.yaml")))
         );
+    }
+
+    #[test]
+    fn read_topology_fail_nonexistent_file() {
+        let error = Topology::from_file("tests/files/this_file_does_not_exist.yaml").unwrap_err();
+        match error.downcast_ref::<std::io::Error>().unwrap().kind() {
+            std::io::ErrorKind::NotFound => (),
+            _ => panic!("Incorrect error type returned."),
+        }
+    }
+
+    #[test]
+    fn read_topology_fail_invalid_include() {
+        let error = Topology::from_file("tests/files/topology_invalid_include.yaml").unwrap_err();
+        match error.downcast_ref::<std::io::Error>().unwrap().kind() {
+            std::io::ErrorKind::NotFound => (),
+            _ => panic!("Incorrect error type returned."), 
+        }
+    }
+
+    #[test]
+    fn read_topology_fail_missing_system() {
+        let error = Topology::from_file("tests/files/topology_missing_system.yaml").unwrap_err();
+        assert!(error.to_string().contains("missing field `system`"));
+    }
+
+    #[test]
+    fn read_topology_fail_missing_blocks() {
+        let error = Topology::from_file("tests/files/topology_missing_blocks.yaml").unwrap_err();
+        assert!(error.to_string().contains("missing field `blocks`"));
+    }
+
+    #[test]
+    fn read_topology_fail_nonunique_atoms() {
+        let error = Topology::from_file("tests/files/topology_nonunique_atoms.yaml").unwrap_err();
+        assert_eq!(&error.to_string(), "atoms have non-unique names");
+    }
+
+    #[test]
+    fn read_topology_fail_nonunique_molecules() {
+        let error = Topology::from_file("tests/files/topology_nonunique_molecules.yaml").unwrap_err();
+        assert_eq!(&error.to_string(), "molecules have non-unique names");
+    }
+
+    #[test]
+    fn read_topology_fail_nonexistent_atom() {
+        let error = Topology::from_file("tests/files/topology_nonexistent_atom.yaml").unwrap_err();
+        assert_eq!(&error.to_string(), "undefined atom kind in a molecule");
+    }
+
+    #[test]
+    fn read_topology_fail_nonexistent_molecule() {
+        let error = Topology::from_file("tests/files/topology_nonexistent_molecule.yaml").unwrap_err();
+        assert_eq!(&error.to_string(), "undefined molecule kind in a block");
+    }
+
+    #[test]
+    fn read_topology_fail_bond_undefined_atoms() {
+        let error = Topology::from_file("tests/files/topology_bond_undefined_atoms.yaml").unwrap_err();
+        assert!(error.to_string().contains("bond between undefined atoms"));
+    }
+
+    #[test]
+    fn read_topology_fail_intermolecular_bond_undefined_atoms() {
+        let error = Topology::from_file("tests/files/topology_intermolecular_bond_undefined_atoms.yaml").unwrap_err();
+        assert!(error.to_string().contains("bond between undefined atoms"));
+    }
+
+    #[test]
+    fn read_topology_fail_torsion_undefined_atoms() {
+        let error = Topology::from_file("tests/files/topology_torsion_undefined_atoms.yaml").unwrap_err();
+        assert!(error.to_string().contains("torsion between undefined atoms"));
+    }
+
+    #[test]
+    fn read_topology_fail_intermolecular_torsion_undefined_atoms() {
+        let error = Topology::from_file("tests/files/topology_intermolecular_torsion_undefined_atoms.yaml").unwrap_err();
+        assert!(error.to_string().contains("torsion between undefined atoms"));
+    }
+
+    #[test]
+    fn read_topology_fail_dihedral_undefined_atoms() {
+        let error = Topology::from_file("tests/files/topology_dihedral_undefined_atoms.yaml").unwrap_err();
+        assert!(error.to_string().contains("dihedral between undefined atoms"));
+    }
+
+    #[test]
+    fn read_topology_fail_intermolecular_dihedral_undefined_atoms() {
+        let error = Topology::from_file("tests/files/topology_intermolecular_dihedral_undefined_atoms.yaml").unwrap_err();
+        assert!(error.to_string().contains("dihedral between undefined atoms"));
+    }
+
+    #[test]
+    fn read_topology_fail_residues_undefined_atoms() {
+        let error = Topology::from_file("tests/files/topology_residues_undefined_atoms.yaml").unwrap_err();
+        assert!(error.to_string().contains("residue contains undefined atoms"));
+    }
+
+    #[test]
+    fn read_topology_fail_chains_undefined_atoms() {
+        let error = Topology::from_file("tests/files/topology_chains_undefined_atoms.yaml").unwrap_err();
+        assert!(error.to_string().contains("chain contains undefined atoms"));
+    }
+
+    #[test]
+    fn read_topology_fail_residues_overlap() {
+        let error = Topology::from_file("tests/files/topology_residues_overlap.yaml").unwrap_err();
+        assert!(error.to_string().contains("overlap between collections"));
+    }
+
+    #[test]
+    fn read_topology_fail_chains_overlap() {
+        let error = Topology::from_file("tests/files/topology_chains_overlap.yaml").unwrap_err();
+        assert!(error.to_string().contains("overlap between collections"));
+    }
+
+    #[test]
+    fn read_topology_fail_too_few_names() {
+        let error = Topology::from_file("tests/files/topology_too_few_names.yaml").unwrap_err();
+        assert!(error.to_string().contains("the number of atom names does not match the number of atoms in a molecule"));
+    }
+
+    #[test]
+    fn read_topology_fail_too_many_names() {
+        let error = Topology::from_file("tests/files/topology_too_many_names.yaml").unwrap_err();
+        assert!(error.to_string().contains("the number of atom names does not match the number of atoms in a molecule"));
+    }
+
+    #[test]
+    fn read_topology_fail_bond_nonunique_atoms() {
+        let error = Topology::from_file("tests/files/topology_bond_nonunique_atoms.yaml").unwrap_err();
+        assert!(error.to_string().contains("non-unique atom indices"));
+    }
+
+    #[test]
+    fn read_topology_fail_intermolecular_bond_nonunique_atoms() {
+        let error = Topology::from_file("tests/files/topology_intermolecular_bond_nonunique_atoms.yaml").unwrap_err();
+        assert!(error.to_string().contains("non-unique atom indices"));
+    }
+
+    #[test]
+    fn read_topology_fail_torsion_nonunique_atoms() {
+        let error = Topology::from_file("tests/files/topology_torsion_nonunique_atoms.yaml").unwrap_err();
+        assert!(error.to_string().contains("non-unique atom indices"));
+    }
+
+    #[test]
+    fn read_topology_fail_intermolecular_torsion_nonunique_atoms() {
+        let error = Topology::from_file("tests/files/topology_intermolecular_torsion_nonunique_atoms.yaml").unwrap_err();
+        assert!(error.to_string().contains("non-unique atom indices"));
+    }
+
+    #[test]
+    fn read_topology_fail_dihedral_nonunique_atoms() {
+        let error = Topology::from_file("tests/files/topology_dihedral_nonunique_atoms.yaml").unwrap_err();
+        assert!(error.to_string().contains("non-unique atom indices"));
+    }
+
+    #[test]
+    fn read_topology_fail_intermolecular_dihedral_nonunique_atoms() {
+        let error = Topology::from_file("tests/files/topology_intermolecular_dihedral_nonunique_atoms.yaml").unwrap_err();
+        assert!(error.to_string().contains("non-unique atom indices"));
+    }
+
+    #[test]
+    fn read_topology_fail_block_too_many_active() {
+        let error = Topology::from_file("tests/files/topology_block_too_many_active.yaml").unwrap_err();
+        assert!(error.to_string().contains("the specified number of active molecules in a block is higher than the total number of molecules"))
+    }
+
+    #[test]
+    fn read_topology_fail_block_too_few_manual_positions() {
+        let error = Topology::from_file("tests/files/topology_block_too_few_manual_positions.yaml").unwrap_err();
+        assert_eq!(&error.to_string(), "the number of manually provided positions does not match the number of atoms");
+    }
+
+    #[test]
+    fn read_topology_fail_block_too_many_manual_positions() {
+        let error = Topology::from_file("tests/files/topology_block_too_many_manual_positions.yaml").unwrap_err();
+        assert_eq!(&error.to_string(), "the number of manually provided positions does not match the number of atoms");
+    }
+
+    #[test]
+    fn read_topology_fail_atom_unknown_field() {
+        let error = Topology::from_file("tests/files/topology_atom_unknown_field.yaml").unwrap_err();
+        assert!(error.to_string().contains("unknown field `nonexistent_field`"))
+    }
+
+    #[test]
+    fn read_topology_fail_molecule_unknown_field() {
+        let error = Topology::from_file("tests/files/topology_molecule_unknown_field.yaml").unwrap_err();
+        assert!(error.to_string().contains("unknown field `nonexistent_field`"))
+    }
+
+    #[test]
+    fn read_topology_fail_block_unknown_field() {
+        let error = Topology::from_file("tests/files/topology_block_unknown_field.yaml").unwrap_err();
+        assert!(error.to_string().contains("unknown field `nonexistent_field`"))
+    }
+
+    #[test]
+    fn read_topology_fail_bond_unknown_field() {
+        let error = Topology::from_file("tests/files/topology_bond_unknown_field.yaml").unwrap_err();
+        assert!(error.to_string().contains("unknown field `nonexistent_field`"))
+    }
+
+    #[test]
+    fn read_topology_fail_torsion_unknown_field() {
+        let error = Topology::from_file("tests/files/topology_torsion_unknown_field.yaml").unwrap_err();
+        assert!(error.to_string().contains("unknown field `nonexistent_field`"))
+    }
+
+    #[test]
+    fn read_topology_fail_dihedral_unknown_field() {
+        let error = Topology::from_file("tests/files/topology_dihedral_unknown_field.yaml").unwrap_err();
+        assert!(error.to_string().contains("unknown field `nonexistent_field`"))
     }
 }

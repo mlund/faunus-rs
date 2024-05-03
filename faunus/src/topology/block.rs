@@ -102,6 +102,7 @@ fn default_directions() -> [bool; 3] {
 
 /// A block of molecules of the same molecule kind.
 #[derive(Debug, Clone, Serialize, Deserialize, Default, Validate)]
+#[serde(deny_unknown_fields)]
 pub struct MoleculeBlock {
     /// Name of the molecule kind of molecules in this block.
     molecule: String,
@@ -215,9 +216,8 @@ impl MoleculeBlock {
         // check that the number of active particles is not higher than the total number of particles
         if let BlockActivationStatus::Partial(active_mol) = self.active {
             match active_mol.cmp(&self.number) {
-                Ordering::Greater => return Err(ValidationError::new(
-                    "the specified number of active molecules in a block is higher than the total number of molecules"
-                )),
+                Ordering::Greater => return Err(ValidationError::new("")
+                    .with_message("the specified number of active molecules in a block is higher than the total number of molecules".into())),
                 Ordering::Equal => self.active = BlockActivationStatus::All,
                 Ordering::Less => (),
             }

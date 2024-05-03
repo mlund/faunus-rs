@@ -1,0 +1,15 @@
+# Parsing of this file should fail because one of the intermolecular bonds contains an atom index that is too high.
+include: [top/top1.yaml, top2.yaml]
+atoms:
+  - {name: A, mass: 1.0}
+molecules:
+  - name: MOL
+    atoms: [A, A, A]
+system:
+  intermolecular:
+    bonds:
+      - {index: [0, 6], kind: !Harmonic {k: 50.0, req: 3.0}}
+      - {index: [3, 9], kind: !FENE {k: 25.0, req: 1.5, rmax: 5.0}, order: Triple}
+
+  blocks:
+    - {molecule: MOL, N: 3}

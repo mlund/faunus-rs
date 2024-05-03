@@ -1,0 +1,13 @@
+# Parsing of this file should fail due to the presence of `nonexistent_field` in the definition of one of the bonds.
+include: [top/top1.yaml, top2.yaml]
+atoms:
+  - {name: A, mass: 1.0}
+molecules:
+  - name: MOL
+    atoms: [A, A, A]
+    bonds:
+      - {index: [0, 1], kind: !Harmonic {k: 100.0, req: 1.0}, order: Single, nonexistent_field: false}
+      - {index: [1, 2], kind: !Morse {k: 100.0, req: 1.0, d: 10.0}}
+system:
+  blocks:
+    - {molecule: MOL, N: 3}

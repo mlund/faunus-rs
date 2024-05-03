@@ -22,7 +22,6 @@ use super::Indexed;
 
 /// Force field definition for torsion, e.g. harmonic, cosine, etc.
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Default)]
-#[serde(deny_unknown_fields)]
 pub enum TorsionKind {
     /// Harmonic torsion (force constant, equilibrium angle).
     Harmonic { k: f64, aeq: f64 },
@@ -35,6 +34,7 @@ pub enum TorsionKind {
 
 /// Definition of torsion between three indexed atoms
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Getters, Validate)]
+#[serde(deny_unknown_fields)]
 pub struct Torsion {
     /// Indices of the three atoms in the angle
     #[validate(custom(function = "super::validate_unique_indices"))]

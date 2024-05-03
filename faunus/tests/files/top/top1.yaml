@@ -1,3 +1,4 @@
+# This file can only be parsed as partial topology.
 include: ["../top3.yaml"]
 
 atoms:

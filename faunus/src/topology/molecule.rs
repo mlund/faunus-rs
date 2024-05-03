@@ -113,37 +113,45 @@ fn validate_molecule(molecule: &MoleculeKind) -> Result<(), ValidationError> {
 
     // bonds must only exist between defined atoms
     if !molecule.bonds.iter().all(|x| x.lower(n_atoms)) {
-        return Err(ValidationError::new("bond between undefined atoms"));
+        return Err(ValidationError::new("").with_message("bond between undefined atoms".into()));
     }
 
     // torsions must only exist between defined atoms
     if !molecule.torsions.iter().all(|x| x.lower(n_atoms)) {
-        return Err(ValidationError::new("torsion between undefined atoms"));
+        return Err(ValidationError::new("").with_message("torsion between undefined atoms".into()));
     }
 
     // dihedrals must only exist between defined atoms
     if !molecule.dihedrals.iter().all(|x| x.lower(n_atoms)) {
-        return Err(ValidationError::new("dihedral between undefined atoms"));
+        return Err(
+            ValidationError::new("").with_message("dihedral between undefined atoms".into())
+        );
     }
 
     // residues can't contain undefined atoms
     for residue in molecule.residues.iter() {
         // empty residues can contain any indices
         if !residue.is_empty() && residue.range().end > n_atoms {
-            return Err(ValidationError::new("residue contains undefined atoms"));
+            return Err(
+                ValidationError::new("").with_message("residue contains undefined atoms".into())
+            );
         }
     }
 
     // chains can't contain undefined atoms
     for chain in molecule.chains.iter() {
         if !chain.is_empty() && chain.range().end > n_atoms {
-            return Err(ValidationError::new("chain contains undefined atoms"));
+            return Err(
+                ValidationError::new("").with_message("chain contains undefined atoms".into())
+            );
         }
     }
 
     // vector of atom names must correspond to the number of atoms (or be empty)
     if molecule.atom_names.len() != n_atoms {
-        return Err(ValidationError::new("invalid number of atom names"));
+        return Err(ValidationError::new("").with_message(
+            "the number of atom names does not match the number of atoms in a molecule".into(),
+        ));
     }
 
     Ok(())

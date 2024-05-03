@@ -1,0 +1,10 @@
+# Parsing of this file should fail because it includes a file that does not exist.
+include: [top/top1.yaml, top_nonexistent.yaml]
+atoms:
+  - {name: A, mass: 1.0}
+molecules:
+  - name: MOL
+    atoms: [A, A, A]
+system:
+  blocks:
+    - {molecule: MOL, N: 3}
