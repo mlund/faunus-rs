@@ -34,6 +34,9 @@ impl Shape for Endless {
     fn bounding_box(&self) -> Option<Point> {
         None
     }
+    fn get_point_inside(&self, _rng: &mut rand::prelude::ThreadRng) -> Point {
+        todo!("Implement get_point_inside for endless box");
+    }
 }
 
 impl BoundaryConditions for Endless {

@@ -19,6 +19,7 @@ use crate::{
     Point,
 };
 use anyhow::Ok;
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 
 /// Spherical cell with hard walls, i.e. no periodic boundary conditions
@@ -62,6 +63,17 @@ impl Shape for Sphere {
     fn bounding_box(&self) -> Option<Point> {
         Some(Point::from_element(2.0 * self.radius))
     }
+    fn get_point_inside(&self, rng: &mut rand::prelude::ThreadRng) -> Point {
+        let theta = rng.gen_range(0.0..=2.0 * core::f64::consts::PI);
+        let phi = rng.gen_range(0.0..=core::f64::consts::PI);
+        let r = (rng.gen::<f64>()).powf(1.0 / 3.0) * self.radius;
+
+        let x = r * phi.sin() * theta.cos();
+        let y = r * phi.sin() * theta.sin();
+        let z = r * phi.cos();
+
+        Point::new(x, y, z)
+    }
 }
 
 impl SimulationCell for Sphere {}
@@ -90,5 +102,23 @@ impl VolumeScale for Sphere {
             }
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::cell::Shape;
+
+    use super::Sphere;
+
+    #[test]
+    fn generate_points() {
+        let shape = Sphere::new(2.5);
+        let mut rng = rand::thread_rng();
+
+        for _ in 0..1000 {
+            let point = shape.get_point_inside(&mut rng);
+            assert!(shape.is_inside(&point));
+        }
     }
 }

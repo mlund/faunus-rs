@@ -14,6 +14,21 @@
 
 //! # Inteface to the [`chemfiles`] crate
 
-use crate::topology;
+use std::path::Path;
+
+use crate::{topology, Point};
 use chemfiles::Topology;
 use itertools::Itertools;
+
+/// Create a new chemfiles::Frame from an input file in a supported format.
+pub(crate) fn frame_from_file(filename: &impl AsRef<Path>) -> anyhow::Result<chemfiles::Frame> {
+    let mut trajectory = chemfiles::Trajectory::open(filename, 'r')?;
+    let mut frame = chemfiles::Frame::new();
+    trajectory.read(&mut frame)?;
+    Ok(frame)
+}
+
+/// Get positions of particles from the chemfiles::Frame.
+pub(crate) fn positions_from_frame(frame: &chemfiles::Frame) -> Vec<Point> {
+    frame.positions().iter().map(|pos| (*pos).into()).collect()
+}

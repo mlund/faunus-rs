@@ -16,11 +16,15 @@ use std::{cmp::Ordering, path::Path};
 
 use derive_getters::Getters;
 use rand::rngs::ThreadRng;
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 use validator::{Validate, ValidationError};
 
-use crate::{cell::SimulationCell, group::GroupSize, Context, Dimension, Particle, Point};
+use crate::dimension::Dimension;
+use crate::topology::chemfiles_interface::*;
+use crate::{cell::SimulationCell, group::GroupSize, Context, Particle, Point};
 
+use super::AtomKind;
 use super::{molecule::MoleculeKind, InputPath};
 
 /// Describes the activation status of a MoleculeBlock.
@@ -60,29 +64,77 @@ impl InsertionPolicy {
     /// Obtain or generate positions of particles of a molecule block using the target InsertionPolicy.
     fn get_positions(
         &self,
+        atoms: &[AtomKind],
         molecule_kind: &MoleculeKind,
         number: usize,
         cell: &impl SimulationCell,
         rng: &mut ThreadRng,
     ) -> anyhow::Result<Vec<Point>> {
         match self {
-            Self::FromFile(filename) => {
-                let mut trajectory = chemfiles::Trajectory::open(filename.path().unwrap(), 'r')?;
-                let mut frame = chemfiles::Frame::new();
-                trajectory.read(&mut frame)?;
-                Ok(frame
-                    .positions()
-                    .iter()
-                    .map(|pos| (*pos).into())
-                    .collect::<Vec<Point>>())
-            }
-            Self::RandomAtomPos { directions } => todo!("Implement RandomAtomPos"),
+            Self::FromFile(filename) => Ok(positions_from_frame(&frame_from_file(
+                filename.path().unwrap(),
+            )?)),
+
+            Self::RandomAtomPos { directions } => Ok((0..(molecule_kind.atom_indices().len()
+                * number))
+                .map(|_| directions.filter(cell.get_point_inside(rng)))
+                .collect::<Vec<Point>>()),
+
             Self::RandomCOM {
                 filename,
                 rotate,
                 directions,
-            } => todo!("Implement RandomCOM insertion policy"),
-            // these should already be validated to be compatible with the topology
+            } => {
+                let mut ref_positions =
+                    positions_from_frame(&frame_from_file(filename.path().unwrap())?);
+
+                // get the center of mass of the molecule
+                let (com, total_mass) = ref_positions
+                    .iter()
+                    .enumerate()
+                    .map(|(i, pos)| {
+                        let mass = atoms[molecule_kind.atom_indices()[i]].mass();
+                        (pos * mass, mass)
+                    })
+                    .fold(
+                        (Point::default(), 0.0),
+                        |(sum, total), (weighted_pos, mass)| (sum + weighted_pos, total + mass),
+                    );
+                let com = com / total_mass;
+
+                // get positions relative to the center of mass
+                ref_positions.iter_mut().for_each(|pos| *pos -= com);
+
+                // generate random positions for the molecules
+                Ok((0..number)
+                    .flat_map(|_| {
+                        let random_com = directions.filter(cell.get_point_inside(rng));
+                        let mut molecule_positions = ref_positions
+                            .iter()
+                            .map(|pos| random_com + pos)
+                            .collect::<Vec<_>>();
+
+                        // rotate the molecule
+                        if *rotate {
+                            let angle = rng.gen_range(0.0..2.0 * std::f64::consts::PI);
+                            let axis = crate::transform::random_unit_vector(rng);
+                            let rotation = nalgebra::Rotation3::new(axis * angle);
+                            for pos in molecule_positions.iter_mut() {
+                                *pos = rotation * (*pos - random_com) + random_com;
+                            }
+                        }
+
+                        // wrap particles into simulation cell
+                        molecule_positions
+                            .iter_mut()
+                            .for_each(|pos| cell.boundary(pos));
+
+                        molecule_positions
+                    })
+                    .collect::<Vec<_>>())
+            }
+
+            // the coordinates should already be validated that they are compatible with the topology
             Self::Manual(positions) => Ok(positions.to_owned()),
         }
     }
@@ -96,10 +148,6 @@ impl InsertionPolicy {
             Self::RandomAtomPos { .. } | Self::Manual(_) => (),
         }
     }
-}
-
-fn default_directions() -> [bool; 3] {
-    [true, true, true]
 }
 
 /// A block of molecules of the same molecule kind.
@@ -154,6 +202,7 @@ impl MoleculeBlock {
     pub(crate) fn to_groups(
         &self,
         context: &mut impl Context,
+        atoms: &[AtomKind],
         molecules: &[MoleculeKind],
         external_positions: &[Point],
         rng: &mut ThreadRng,
@@ -168,7 +217,9 @@ impl MoleculeBlock {
                 None => external_positions[(i * molecule.atom_indices().len())
                     ..((i + 1) * molecule.atom_indices().len())]
                     .to_owned(),
-                Some(policy) => policy.get_positions(molecule, self.number, context.cell(), rng)?,
+                Some(policy) => {
+                    policy.get_positions(atoms, molecule, self.number, context.cell(), rng)?
+                }
             };
 
             // create the particles
@@ -183,12 +234,12 @@ impl MoleculeBlock {
                 })
                 .collect();
 
-            let group = context.add_group(molecule.id(), &particles)?;
+            let group_id = context.add_group(molecule.id(), &particles)?.index();
 
             // deactivate the groups that should not be active
             match self.active {
                 BlockActivationStatus::Partial(x) if i >= x => {
-                    group.resize(GroupSize::Empty).unwrap()
+                    context.resize_group(group_id, GroupSize::Empty).unwrap()
                 }
                 _ => (),
             }

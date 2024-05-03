@@ -18,8 +18,8 @@ extern crate serde_json;
 use crate::group::{Group, GroupCollection};
 use energy::Hamiltonian;
 use nalgebra::Vector3;
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use std::{default, path::Path, rc::Rc};
+use serde::{Deserialize, Serialize};
+use std::rc::Rc;
 use topology::Topology;
 
 pub type Point = Vector3<f64>;
@@ -34,6 +34,7 @@ mod change;
 pub use self::change::{Change, GroupChange};
 pub mod analysis;
 pub mod chemistry;
+pub mod dimension;
 pub mod energy;
 pub mod group;
 pub mod montecarlo;
@@ -153,58 +154,5 @@ pub trait Temperature {
         Err(anyhow::anyhow!(
             "Setting the temperature is not implemented"
         ))
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Default)]
-pub enum Dimension {
-    None,
-    X,
-    Y,
-    Z,
-    XY,
-    YZ,
-    XZ,
-    #[default]
-    XYZ,
-}
-
-impl Serialize for Dimension {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let s = match self {
-            Dimension::None => "none",
-            Dimension::X => "x",
-            Dimension::Y => "y",
-            Dimension::Z => "z",
-            Dimension::XY => "xy",
-            Dimension::YZ => "yz",
-            Dimension::XZ => "xz",
-            Dimension::XYZ => "xyz",
-        };
-        serializer.serialize_str(s)
-    }
-}
-
-impl<'de> Deserialize<'de> for Dimension {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let s: &str = Deserialize::deserialize(deserializer)?;
-        let dimension = match s {
-            "none" => Dimension::None,
-            "x" => Dimension::X,
-            "y" => Dimension::Y,
-            "z" => Dimension::Z,
-            "xy" => Dimension::XY,
-            "yz" => Dimension::YZ,
-            "xz" => Dimension::XZ,
-            "xyz" => Dimension::XYZ,
-            _ => return Err(serde::de::Error::custom("invalid dimension")),
-        };
-        Ok(dimension)
     }
 }

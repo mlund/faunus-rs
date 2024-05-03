@@ -34,7 +34,7 @@
 mod atom;
 mod bond;
 mod chain;
-//pub mod chemfiles;
+pub mod chemfiles_interface;
 mod block;
 mod dihedral;
 mod molecule;
@@ -454,13 +454,23 @@ impl Topology {
                             Some(pos) => pos.iter().map(|x| (*x).into()).collect::<Vec<Point>>(),
                         };
 
-                        block.to_groups(context, self.molecules(), &positions, &mut rng)?;
+                        block.to_groups(
+                            context, 
+                            self.atoms(),
+                            self.molecules(), 
+                            &positions, 
+                            &mut rng)?;
 
                         curr_start += atoms_in_block;
                     }
                 };
             } else {
-                block.to_groups(context, self.molecules(), &[], &mut rng)?;
+                block.to_groups(
+                    context, 
+                    self.atoms(),
+                    self.molecules(), 
+                    &[], 
+                    &mut rng)?;
             }
         }
 
@@ -819,11 +829,8 @@ impl<'de> Deserialize<'de> for InputPath {
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
-
     use float_cmp::assert_approx_eq;
-
-    use crate::Dimension;
-
+    use crate::dimension::Dimension;
     use self::block::BlockActivationStatus;
 
     use super::*;

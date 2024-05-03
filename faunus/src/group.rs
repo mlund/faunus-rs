@@ -19,7 +19,7 @@ use anyhow::Ok;
 use derive_getters::Getters;
 use nalgebra::Vector3;
 use serde::{Deserialize, Serialize};
-use std::cmp::Ordering;
+use std::{cmp::Ordering, collections::HashSet};
 
 pub type Point = Vector3<f64>;
 pub type PositionVec = Vec<Point>;
@@ -50,7 +50,7 @@ pub type ParticleVec = Vec<Particle>;
 /// assert_eq!(selection.unwrap(), vec![22]);
 /// ~~~
 
-#[derive(Serialize, Deserialize, Default, Debug, PartialEq, Clone, Getters)]
+#[derive(Default, Debug, PartialEq, Clone)]
 pub struct Group {
     /// Index of the molecule kind forming the group (immutable).
     molecule: usize,
@@ -176,6 +176,21 @@ impl Group {
     /// Get size status of the groups which can be `Full`, `Empty`, or `Partial`.
     pub fn size(&self) -> GroupSize {
         self.size_status
+    }
+
+    /// Get the index of the group.
+    pub fn index(&self) -> usize {
+        self.index
+    }
+
+    /// Get the molecule index of the group.
+    pub fn molecule(&self) -> usize {
+        self.molecule
+    }
+
+    /// Get the center of mass of the group.
+    pub fn mass_center(&self) -> Option<&Point> {
+        self.mass_center.as_ref()
     }
 
     /// Maximum number of particles (active plus inactive)
@@ -430,6 +445,94 @@ pub trait GroupCollection: SyncFrom {
     }
 }
 
+/// Structure storing groups separated into three types:
+/// - `full` - all of the atoms of the group are active
+/// - `partial` - some of the atoms of the group are active, some are inactive
+/// - `empty` - all of the atoms of the group are inactive
+///
+/// Length of each vector corresponds to the number of molecule kinds in the system.
+/// Each hash set then stores ids of groups corresponding to the specific molecule kind.
+#[derive(Debug, PartialEq, Clone)]
+pub struct GroupLists {
+    full: Vec<HashSet<usize>>,
+    partial: Vec<HashSet<usize>>,
+    empty: Vec<HashSet<usize>>,
+}
+
+impl GroupLists {
+    /// Create and initialize a new GroupLists structure.
+    ///
+    /// ## Parameters
+    /// `n_molecules` - the number of molecule kinds defined in the system
+    pub(crate) fn new(n_molecules: usize) -> GroupLists {
+        GroupLists {
+            full: vec![HashSet::new(); n_molecules],
+            partial: vec![HashSet::new(); n_molecules],
+            empty: vec![HashSet::new(); n_molecules],
+        }
+    }
+
+    /// Add group to the GroupList. The group will be automatically assigned to the correct list.
+    /// This method assumes that the group is NOT yet present in the GroupLists.
+    pub(crate) fn add_group(&mut self, group: &Group) {
+        let list = match group.size() {
+            GroupSize::Full => &mut self.full,
+            GroupSize::Partial(_) => &mut self.partial,
+            GroupSize::Empty => &mut self.empty,
+            _ => panic!("Unsupported GroupSize."),
+        };
+
+        GroupLists::add_to_list(list, group);
+    }
+
+    /// Update the position of the group in the GroupLists.
+    pub(crate) fn update_group(&mut self, group: &Group) {
+        match self.find_group(group) {
+            Some((set, size)) => {
+                // we can't use just `==` because GroupSize::Partial must match any GroupSize::Partial
+                match (group.size(), size) {
+                    (GroupSize::Empty, GroupSize::Empty) => (),
+                    (GroupSize::Partial(_), GroupSize::Partial(_)) => (),
+                    (GroupSize::Full, GroupSize::Full) => (),
+                    // update is needed only if the current group size does not match the previous one
+                    _ => {
+                        set.remove(&group.index());
+                        self.add_group(group);
+                    }
+                }
+            }
+            // group is not present in any list, add it
+            None => self.add_group(group),
+        }
+    }
+
+    /// Find the group in GroupLists.
+    ///
+    /// Returns the HashSet in which the group is located and the type of the set as GroupSize enum.
+    fn find_group(&mut self, group: &Group) -> Option<(&mut HashSet<usize>, GroupSize)> {
+        [&mut self.full, &mut self.partial, &mut self.empty]
+            .into_iter()
+            .zip([GroupSize::Full, GroupSize::Partial(1), GroupSize::Empty].into_iter())
+            .find_map(|(list, size)| {
+                let set = list
+                    .get_mut(group.molecule())
+                    .expect("Incorrectly initialized GroupLists structure.");
+                if set.contains(&group.index()) {
+                    Some((set, size))
+                } else {
+                    None
+                }
+            })
+    }
+
+    /// Add group to target list.
+    fn add_to_list(list: &mut Vec<HashSet<usize>>, group: &Group) {
+        list.get_mut(group.molecule())
+            .expect("Incorrectly initialized GroupLists structure.")
+            .insert(group.index());
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -449,9 +552,9 @@ mod tests {
         assert_eq!(group.len(), 6);
         assert_eq!(group.capacity(), 10);
         assert_eq!(group.iter_active(), 0..6);
-        assert_eq!(group.molecule(), &20);
+        assert_eq!(group.molecule(), 20);
         assert_eq!(group.size(), GroupSize::Partial(6));
-        assert_eq!(group.index(), &2);
+        assert_eq!(group.index(), 2);
         assert!(group.mass_center().is_none());
 
         // Test expand group by 2 elements

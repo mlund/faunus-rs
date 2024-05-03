@@ -16,7 +16,7 @@
 
 use crate::{
     energy::Hamiltonian,
-    group::{GroupCollection, GroupSize},
+    group::{GroupCollection, GroupLists, GroupSize},
     topology::{self, Topology, TopologyLike},
     Change, Context, Group, Particle, Point, SyncFrom,
 };
@@ -35,6 +35,7 @@ pub struct ReferencePlatform {
     topology: Rc<Topology>,
     particles: Vec<Particle>,
     groups: Vec<Group>,
+    group_lists: GroupLists,
     cell: crate::cell::Cuboid,
     hamiltonian: Hamiltonian,
 }
@@ -69,6 +70,7 @@ impl Context for ReferencePlatform {
             groups: vec![],
             cell,
             hamiltonian,
+            group_lists: GroupLists::new(topology.molecules().len()),
         };
 
         topology.to_groups(&mut context, structure)?;
@@ -120,11 +122,16 @@ impl GroupCollection for ReferencePlatform {
         self.particles.extend_from_slice(particles);
         self.groups
             .push(Group::new(self.groups.len(), molecule, range));
-        Ok(self.groups.last_mut().unwrap())
+
+        let group = self.groups.last_mut().unwrap();
+        self.group_lists.add_group(group);
+        Ok(group)
     }
 
     fn resize_group(&mut self, group_index: usize, status: GroupSize) -> anyhow::Result<()> {
-        self.groups[group_index].resize(status)
+        self.groups[group_index].resize(status)?;
+        self.group_lists.update_group(&self.groups[group_index]);
+        Ok(())
     }
 }
 

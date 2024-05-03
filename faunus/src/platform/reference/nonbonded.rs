@@ -108,7 +108,7 @@ where
         self.platform
             .groups()
             .iter()
-            .filter(|other_group| other_group.index() != &group_index)
+            .filter(|other_group| other_group.index() != group_index)
             .fold(0.0, |sum, other_group| {
                 sum + self.group_to_group(group, other_group)
             })

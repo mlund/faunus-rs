@@ -27,6 +27,7 @@ mod sphere;
 use crate::Point;
 pub use cuboid::Cuboid;
 pub use endless::Endless;
+use rand::rngs::ThreadRng;
 use serde::{Deserialize, Serialize};
 pub use sphere::Sphere;
 
@@ -52,6 +53,8 @@ pub trait Shape {
     fn bounding_box(&self) -> Option<Point> {
         None
     }
+    /// Generate a random point positioned inside the boundaries of the shape
+    fn get_point_inside(&self, rng: &mut ThreadRng) -> Point;
 }
 
 /// Periodic boundary conditions in various directions
