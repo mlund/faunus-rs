@@ -15,10 +15,11 @@
 use std::{cmp::Ordering, path::Path};
 
 use derive_getters::Getters;
+use rand::rngs::ThreadRng;
 use serde::{Deserialize, Serialize};
 use validator::{Validate, ValidationError};
 
-use crate::{cell::SimulationCell, group::GroupSize, Context, Particle, Point};
+use crate::{cell::SimulationCell, group::GroupSize, Context, Dimension, Particle, Point};
 
 use super::{molecule::MoleculeKind, InputPath};
 
@@ -39,8 +40,8 @@ pub enum InsertionPolicy {
     FromFile(InputPath),
     /// Place the atoms of each molecule of the block to random positions in the simulation cell.
     RandomAtomPos {
-        #[serde(default = "default_directions")]
-        directions: [bool; 3],
+        #[serde(default)]
+        directions: Dimension,
     },
     /// Read the structure of the molecule. Then place all molecules of the block
     /// to random positions in the simulation cell.
@@ -48,8 +49,8 @@ pub enum InsertionPolicy {
         filename: InputPath,
         #[serde(default)]
         rotate: bool,
-        #[serde(default = "default_directions")]
-        directions: [bool; 3],
+        #[serde(default)]
+        directions: Dimension,
     },
     /// Define the positions of the atoms of all molecules manually, directly in the topology file.
     Manual(Vec<Point>),
@@ -62,6 +63,7 @@ impl InsertionPolicy {
         molecule_kind: &MoleculeKind,
         number: usize,
         cell: &impl SimulationCell,
+        rng: &mut ThreadRng,
     ) -> anyhow::Result<Vec<Point>> {
         match self {
             Self::FromFile(filename) => {
@@ -74,7 +76,7 @@ impl InsertionPolicy {
                     .map(|pos| (*pos).into())
                     .collect::<Vec<Point>>())
             }
-            Self::RandomAtomPos { directions } => todo!("Implement RandomAtomPos insertion policy"),
+            Self::RandomAtomPos { directions } => todo!("Implement RandomAtomPos"),
             Self::RandomCOM {
                 filename,
                 rotate,
@@ -154,6 +156,7 @@ impl MoleculeBlock {
         context: &mut impl Context,
         molecules: &[MoleculeKind],
         external_positions: &[Point],
+        rng: &mut ThreadRng,
     ) -> anyhow::Result<()> {
         let molecule = &molecules[self.molecule_index];
         let mut particle_counter = context.n_particles();
@@ -165,7 +168,7 @@ impl MoleculeBlock {
                 None => external_positions[(i * molecule.atom_indices().len())
                     ..((i + 1) * molecule.atom_indices().len())]
                     .to_owned(),
-                Some(policy) => policy.get_positions(molecule, self.number, context.cell())?,
+                Some(policy) => policy.get_positions(molecule, self.number, context.cell(), rng)?,
             };
 
             // create the particles

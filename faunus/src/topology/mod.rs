@@ -50,6 +50,7 @@ pub use bond::*;
 pub use chain::*;
 use derive_getters::Getters;
 pub use dihedral::*;
+use rand::rngs::ThreadRng;
 pub use residue::*;
 pub use torsion::*;
 use validator::{Validate, ValidationError};
@@ -430,6 +431,9 @@ impl Topology {
         // current index of the coordinate in the external structure file to use
         let mut curr_start = 0;
 
+        // create a new random number generator
+        let mut rng = rand::thread_rng();
+
         // create groups
         for block in self.blocks() {
             if block.insert().is_none() {
@@ -450,13 +454,13 @@ impl Topology {
                             Some(pos) => pos.iter().map(|x| (*x).into()).collect::<Vec<Point>>(),
                         };
 
-                        block.to_groups(context, self.molecules(), &positions)?;
+                        block.to_groups(context, self.molecules(), &positions, &mut rng)?;
 
                         curr_start += atoms_in_block;
                     }
                 };
             } else {
-                block.to_groups(context, self.molecules(), &[])?;
+                block.to_groups(context, self.molecules(), &[], &mut rng)?;
             }
         }
 
@@ -818,6 +822,8 @@ mod tests {
 
     use float_cmp::assert_approx_eq;
 
+    use crate::Dimension;
+
     use self::block::BlockActivationStatus;
 
     use super::*;
@@ -1101,7 +1107,7 @@ mod tests {
             Some(&InsertionPolicy::RandomCOM { 
                 filename: InputPath::new("mol2.xyz", "tests/files/topology_pass.yaml"), 
                 rotate: false, 
-                directions: [true, true, true] })
+                directions: Dimension::default() })
         );
 
         compare_block(
@@ -1113,7 +1119,7 @@ mod tests {
             Some(&InsertionPolicy::RandomCOM {
                 filename: InputPath::new("mol2.xyz", "tests/files/topology_pass.yaml"),
                 rotate: true,
-                directions: [true, false, false]
+                directions: Dimension::X,
             })
         );
 
@@ -1136,7 +1142,7 @@ mod tests {
             2,
             BlockActivationStatus::All,
             Some(&InsertionPolicy::RandomAtomPos {
-                directions: [true, true, false],
+                directions: Dimension::XY,
             })
         );
 
