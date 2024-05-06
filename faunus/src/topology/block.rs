@@ -85,22 +85,19 @@ impl InsertionPolicy {
                 rotate,
                 directions,
             } => {
+                // read coordinates of the molecule from input file
                 let mut ref_positions =
                     positions_from_frame(&frame_from_file(filename.path().unwrap())?);
 
                 // get the center of mass of the molecule
-                let (com, total_mass) = ref_positions
-                    .iter()
-                    .enumerate()
-                    .map(|(i, pos)| {
-                        let mass = atoms[molecule_kind.atom_indices()[i]].mass();
-                        (pos * mass, mass)
-                    })
-                    .fold(
-                        (Point::default(), 0.0),
-                        |(sum, total), (weighted_pos, mass)| (sum + weighted_pos, total + mass),
-                    );
-                let com = com / total_mass;
+                let com = crate::analysis::center_of_mass(
+                    &ref_positions,
+                    &molecule_kind
+                        .atom_indices()
+                        .iter()
+                        .map(|index| atoms[*index].mass())
+                        .collect::<Vec<f64>>(),
+                );
 
                 // get positions relative to the center of mass
                 ref_positions.iter_mut().for_each(|pos| *pos -= com);
@@ -116,12 +113,11 @@ impl InsertionPolicy {
 
                         // rotate the molecule
                         if *rotate {
-                            let angle = rng.gen_range(0.0..2.0 * std::f64::consts::PI);
-                            let axis = crate::transform::random_unit_vector(rng);
-                            let rotation = nalgebra::Rotation3::new(axis * angle);
-                            for pos in molecule_positions.iter_mut() {
-                                *pos = rotation * (*pos - random_com) + random_com;
-                            }
+                            crate::transform::rotate_random(
+                                &mut molecule_positions,
+                                &random_com,
+                                rng,
+                            );
                         }
 
                         // wrap particles into simulation cell

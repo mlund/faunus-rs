@@ -126,9 +126,8 @@ impl Dimension {
         )
     }
 
-    /// Apply Dimension as a filter for Point.
-    ///
-    /// All dimensions of the Point which do not match the Dimension are set to 0.
+    /// Apply Dimension as a filter for Point. Creates a copy of the Point with
+    /// dimensions that do not match the Dimension set to 0.
     pub fn filter(&self, point: Point) -> Point {
         let x = if self.is_x() { point[0] } else { 0.0 };
         let y = if self.is_y() { point[1] } else { 0.0 };

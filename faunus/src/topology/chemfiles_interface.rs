@@ -28,7 +28,7 @@ pub(crate) fn frame_from_file(filename: &impl AsRef<Path>) -> anyhow::Result<che
     Ok(frame)
 }
 
-/// Get positions of particles from the chemfiles::Frame.
+/// Get positions of particles from chemfiles::Frame.
 pub(crate) fn positions_from_frame(frame: &chemfiles::Frame) -> Vec<Point> {
     frame.positions().iter().map(|pos| (*pos).into()).collect()
 }
