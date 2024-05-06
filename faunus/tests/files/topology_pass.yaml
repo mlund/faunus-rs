@@ -55,14 +55,14 @@ system:
 
   cell: [5.0, 5.0, 5.0]
 
-  energy:
-    nonbonded:
-      default: 
-        - lennardjones: {}
-        - ...
-      [Na, Cl]:  # not accepting [Cl, Na] 
-        - lennardjones: {}
-        - ...
+#  energy:
+#    nonbonded:
+#      default: 
+#        - lennardjones: {}
+#        - ...
+#      [Na, Cl]:  # not accepting [Cl, Na] 
+#        - lennardjones: {}
+#        - ...
 
   blocks:
     - {molecule: MOL, N: 3}  # read from a separate structure file

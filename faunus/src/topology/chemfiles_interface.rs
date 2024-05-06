@@ -18,17 +18,16 @@ use std::path::Path;
 
 use crate::{
     cell::{Cuboid, Endless, Shape, Sphere},
-    group::GroupCollection,
+    group::{Group, GroupCollection},
     platform::reference::ReferencePlatform,
     topology::Residue,
-    Context, Point, PointParticle,
+    Point, PointParticle, WithCell, WithTopology,
 };
 use chemfiles::Frame;
-use itertools::Itertools;
 
 use crate::topology::TopologyLike;
 
-use super::{AtomKind, NonOverlapping};
+use super::{molecule::MoleculeKind, AtomKind, NonOverlapping};
 
 /// Create a new chemfiles::Frame from an input file in a supported format.
 pub(crate) fn frame_from_file(filename: &impl AsRef<Path>) -> anyhow::Result<chemfiles::Frame> {
@@ -43,7 +42,8 @@ pub(crate) fn positions_from_frame(frame: &chemfiles::Frame) -> Vec<Point> {
     frame.positions().iter().map(|pos| (*pos).into()).collect()
 }
 
-pub trait ContextToChemFrame: Context {
+/// A trait for structure that can be converted to chemfiles Frame.
+pub trait ChemFrameConvert: WithCell + WithTopology + GroupCollection {
     /// Convert system to chemfiles::Frame structure.
     ///
     /// ## Notes
@@ -53,7 +53,7 @@ pub trait ContextToChemFrame: Context {
     fn to_frame(&self) -> Frame {
         let mut frame = Frame::new();
         self.add_atoms_to_frame(&mut frame);
-        //self.add_residues_to_frame(&mut frame);
+        self.add_residues_to_frame(&mut frame);
         frame.set_cell(&self.cell().to_chem_cell());
 
         // todo! connectivity
@@ -82,39 +82,57 @@ pub trait ContextToChemFrame: Context {
     fn add_residues_to_frame(&self, frame: &mut Frame) {
         let topology = self.topology();
 
-        let mut index = 0;
-        for group in self.groups() {
-            let molecule = &topology.molecules()[group.molecule()];
-            for residue in molecule.residues().iter() {
-                frame.add_residue(&residue.to_chem_residue(index));
-                index = residue.range().end;
-            }
-        }
+        self.groups()
+            .iter()
+            .fold((1, 0), |(residue_index, atom_index), group| {
+                let molecule = &topology.molecules()[group.molecule()];
+                group
+                    .to_chem_residues(atom_index, residue_index, molecule)
+                    .iter()
+                    .for_each(|residue| {
+                        frame
+                            .add_residue(residue)
+                            .expect("Faunus residue could not be converted to chemfiles topology.");
+                    });
+
+                (
+                    residue_index + molecule.residues().len() as i64,
+                    atom_index + group.capacity(),
+                )
+            });
     }
 
     //fn add_bonds_to_frame(&self, frame: &mut Frame) {}
 }
 
-pub trait ResidueToChemResidue {
-    /// Convert faunus residue to chemfiles residue.
-    fn to_chem_residue(&self, init_atom_index: usize) -> chemfiles::Residue;
+impl Group {
+    fn to_chem_residues(
+        &self,
+        abs_atom_index: usize,
+        first_resid: i64,
+        molecule: &MoleculeKind,
+    ) -> Vec<chemfiles::Residue> {
+        molecule
+            .residues()
+            .iter()
+            .enumerate()
+            .map(|(index, resid)| resid.to_chem_residue(abs_atom_index, first_resid + index as i64))
+            .collect()
+    }
 }
 
-impl ResidueToChemResidue for Residue {
-    fn to_chem_residue(&self, init_atom_index: usize) -> chemfiles::Residue {
-        let mut chemfiles_residue = match self.number() {
-            None => chemfiles::Residue::new(self.name()),
-            Some(n) => chemfiles::Residue::with_id(self.name(), n as i64),
-        };
+impl Residue {
+    fn to_chem_residue(&self, abs_atom_index: usize, resid: i64) -> chemfiles::Residue {
+        let mut chemfiles_residue = chemfiles::Residue::with_id(self.name(), resid as i64);
 
         self.range()
-            .for_each(|atom| chemfiles_residue.add_atom(atom + init_atom_index));
+            .for_each(|atom| chemfiles_residue.add_atom(atom + abs_atom_index));
 
         chemfiles_residue
     }
 }
 
-impl ContextToChemFrame for ReferencePlatform {
+impl ChemFrameConvert for ReferencePlatform {
     /// Convert all faunus particles to chemfiles particles and add them to the chemfiles Frame.
     ///
     /// ## Notes

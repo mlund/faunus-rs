@@ -18,7 +18,7 @@ use crate::{
     energy::Hamiltonian,
     group::{GroupCollection, GroupLists, GroupSize},
     topology::{Topology, TopologyLike},
-    Change, Context, Group, Particle, SyncFrom,
+    Change, Context, Group, Particle, SyncFrom, WithCell, WithHamiltonian, WithTopology,
 };
 
 use std::rc::Rc;
@@ -40,7 +40,7 @@ pub struct ReferencePlatform {
     hamiltonian: Hamiltonian,
 }
 
-impl Context for ReferencePlatform {
+impl WithCell for ReferencePlatform {
     type Cell = crate::cell::Cuboid;
     fn cell(&self) -> &Self::Cell {
         &self.cell
@@ -48,16 +48,24 @@ impl Context for ReferencePlatform {
     fn cell_mut(&mut self) -> &mut Self::Cell {
         &mut self.cell
     }
+}
+
+impl WithTopology for ReferencePlatform {
     fn topology(&self) -> Rc<Topology> {
         self.topology.clone()
     }
+}
+
+impl WithHamiltonian for ReferencePlatform {
     fn hamiltonian(&self) -> &Hamiltonian {
         &self.hamiltonian
     }
     fn hamiltonian_mut(&mut self) -> &mut Hamiltonian {
         &mut self.hamiltonian
     }
+}
 
+impl Context for ReferencePlatform {
     fn new(
         topology: Rc<Topology>,
         cell: Self::Cell,

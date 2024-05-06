@@ -20,7 +20,7 @@ use energy::Hamiltonian;
 use nalgebra::Vector3;
 use serde::{Deserialize, Serialize};
 use std::rc::Rc;
-use topology::Topology;
+use topology::{chemfiles_interface::ChemFrameConvert, Topology};
 
 pub type Point = Vector3<f64>;
 pub type UnitQuaternion = nalgebra::UnitQuaternion<f64>;
@@ -111,20 +111,17 @@ pub trait SyncFrom {
 /// Context stores the state of a single simulation system
 ///
 /// There can be multiple contexts in a simulation, e.g. one for a trial move and one for the current state.
-pub trait Context: GroupCollection + Clone + std::fmt::Debug + Sized + SyncFrom {
-    /// Simulation cell type
-    type Cell: cell::SimulationCell;
-    /// Get reference to simulation cell
-    fn cell(&self) -> &Self::Cell;
-    /// Get mutable reference to simulation cell
-    fn cell_mut(&mut self) -> &mut Self::Cell;
-    /// Get reference to the topology
-    fn topology(&self) -> Rc<Topology>;
-    /// Reference to Hamiltonian
-    fn hamiltonian(&self) -> &Hamiltonian;
-    /// Mutable reference to Hamiltonian
-    fn hamiltonian_mut(&mut self) -> &mut energy::Hamiltonian;
-
+pub trait Context:
+    GroupCollection
+    + WithCell
+    + WithTopology
+    + WithHamiltonian
+    + Clone
+    + std::fmt::Debug
+    + Sized
+    + SyncFrom
+    + ChemFrameConvert
+{
     /// Update the internal state to match a recently applied change
     ///
     /// By default, this function tries to update the Hamiltonian.
@@ -145,8 +142,32 @@ pub trait Context: GroupCollection + Clone + std::fmt::Debug + Sized + SyncFrom 
     ) -> anyhow::Result<Self>;
 }
 
+/// A trait for objects that have a simulation cell.
+pub trait WithCell {
+    /// Simulation cell type
+    type Cell: cell::SimulationCell;
+    /// Get reference to simulation cell
+    fn cell(&self) -> &Self::Cell;
+    /// Get mutable reference to simulation cell
+    fn cell_mut(&mut self) -> &mut Self::Cell;
+}
+
+/// A trait for objects that have a topology.
+pub trait WithTopology {
+    /// Get reference to the topology
+    fn topology(&self) -> Rc<Topology>;
+}
+
+/// A trait for objects that have a hamiltonian.
+pub trait WithHamiltonian {
+    /// Reference to Hamiltonian
+    fn hamiltonian(&self) -> &Hamiltonian;
+    /// Mutable reference to Hamiltonian
+    fn hamiltonian_mut(&mut self) -> &mut energy::Hamiltonian;
+}
+
 /// A trait for objects that have a temperature
-pub trait Temperature {
+pub trait WithTemperature {
     /// Get the temperature in K
     fn temperature(&self) -> f64;
     /// Set the temperature in K
