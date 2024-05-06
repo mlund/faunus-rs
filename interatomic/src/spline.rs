@@ -19,8 +19,6 @@
 //! This is a conversion from Fortran → C++ → Rust 😱
 //! Serious refactoring is needed!
 use anyhow::Result;
-#[cfg(test)]
-use assert_approx_eq::assert_approx_eq;
 use itertools::{Itertools, Position};
 use std::f64;
 use std::iter::zip;
@@ -334,7 +332,9 @@ impl Andrea {
 
 #[cfg(test)]
 mod tests {
+    const EPS: f64 = 1e-6;
     use super::*;
+    use approx::assert_relative_eq;
 
     #[test]
     fn spline_andrea() {
@@ -343,29 +343,29 @@ mod tests {
         spline.spline.set_tolerance(2.0e-6, 1.0e-4); // ftol carries no meaning
         let knots = spline.generate(&func, 0.0, 10.0).unwrap();
 
-        assert_approx_eq!(spline.downscale_factor, 0.9, 1.0e-6);
+        assert_relative_eq!(spline.downscale_factor, 0.9, epsilon = EPS);
         assert_eq!(spline.max_num_downscales, 100);
         assert_eq!(spline.max_num_ctrl_points, 1200);
 
         assert_eq!(knots.r2.len(), 19);
         assert_eq!(knots.coeff.len(), 108);
         assert_eq!(knots.len(), 19);
-        assert_approx_eq!(knots.rmin2, 0.0, 1.0e-6);
-        assert_approx_eq!(knots.rmax2, 10.0, 1.0e-6);
+        assert_relative_eq!(knots.rmin2, 0.0, epsilon = EPS);
+        assert_relative_eq!(knots.rmax2, 10.0, epsilon = EPS);
 
-        assert_approx_eq!(knots.r2[0], 0.0, 1.0e-6);
-        assert_approx_eq!(knots.r2[1], 0.212991, 1.0e-6);
-        assert_approx_eq!(knots.r2[2], 0.782554, 1.0e-6);
-        assert_approx_eq!(*knots.r2.last().unwrap(), 10.0, 1.0e-6);
+        assert_relative_eq!(knots.r2[0], 0.0, epsilon = EPS);
+        assert_relative_eq!(knots.r2[1], 0.212991, epsilon = EPS);
+        assert_relative_eq!(knots.r2[2], 0.782554, epsilon = EPS);
+        assert_relative_eq!(*knots.r2.last().unwrap(), 10.0, epsilon = EPS);
 
-        assert_approx_eq!(knots.coeff[0], 2.0, 1.0e-6);
-        assert_approx_eq!(knots.coeff[1], 0.0, 1.0e-6);
-        assert_approx_eq!(knots.coeff[2], 0.5, 1.0e-6);
-        assert_approx_eq!(*knots.coeff.last().unwrap(), -0.0441931, 1.0e-6);
+        assert_relative_eq!(knots.coeff[0], 2.0, epsilon = EPS);
+        assert_relative_eq!(knots.coeff[1], 0.0, epsilon = EPS);
+        assert_relative_eq!(knots.coeff[2], 0.5, epsilon = EPS);
+        assert_relative_eq!(*knots.coeff.last().unwrap(), -0.0441931, epsilon = EPS);
 
-        assert_approx_eq!(func(1.0e-9), spline.eval(&knots, 1e-9), 1e-7);
-        assert_approx_eq!(func(5.0), spline.eval(&knots, 5.0), 1e-7);
-        assert_approx_eq!(func(10.0), spline.eval(&knots, 10.0), 1e-7);
+        assert_relative_eq!(func(1.0e-9), spline.eval(&knots, 1e-9), epsilon = EPS);
+        assert_relative_eq!(func(5.0), spline.eval(&knots, 5.0), epsilon = EPS);
+        assert_relative_eq!(func(10.0), spline.eval(&knots, 10.0), epsilon = EPS);
 
         // Check if numerical derivation of *splined* function
         // matches the analytical solution in `eval_der()`.
@@ -373,32 +373,44 @@ mod tests {
             (spline.eval(&knots, x + dx) - spline.eval(&knots, x - dx)) / (2.0 * dx)
         };
         let x = 1e-9;
-        assert_approx_eq!(f_prime(x, 1e-10), spline.eval_derivative(&knots, x), 1e-7);
+        assert_relative_eq!(
+            f_prime(x, 1e-10),
+            spline.eval_derivative(&knots, x),
+            epsilon = EPS
+        );
         let x = 1.0;
-        assert_approx_eq!(f_prime(x, 1e-10), spline.eval_derivative(&knots, x), 2e-7);
+        assert_relative_eq!(
+            f_prime(x, 1e-10),
+            spline.eval_derivative(&knots, x),
+            epsilon = EPS
+        );
         let x = 5.0;
-        assert_approx_eq!(f_prime(x, 1e-10), spline.eval_derivative(&knots, x), 2e-7);
+        assert_relative_eq!(
+            f_prime(x, 1e-10),
+            spline.eval_derivative(&knots, x),
+            epsilon = EPS
+        );
 
         // Check if analytical spline derivative matches
         // derivative of original function
         let f_prime_exact = |x: f64, dx: f64| (func(x + dx) - func(x - dx)) / (2.0 * dx);
         let x = 1e-9;
-        assert_approx_eq!(
+        assert_relative_eq!(
             f_prime_exact(x, 1e-10),
             spline.eval_derivative(&knots, x),
-            1e-8
+            epsilon = 1.0e-6
         );
         let x = 1.0;
-        assert_approx_eq!(
+        assert_relative_eq!(
             f_prime_exact(x, 1e-10),
             spline.eval_derivative(&knots, x),
-            5e-6
+            epsilon = 5e-6
         );
         let x = 5.0;
-        assert_approx_eq!(
+        assert_relative_eq!(
             f_prime_exact(x, 1e-10),
             spline.eval_derivative(&knots, x),
-            7e-7
+            epsilon = 7e-7
         );
     }
 }

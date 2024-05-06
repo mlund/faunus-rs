@@ -2,7 +2,7 @@
 name = "interatomic"
 version = "0.1.0"
 edition = "2021"
-description = "Library for intermolecular interactions"
+description = "Library for calculating inter-particle interactions"
 readme = "README.md"
 authors = ["Mikael Lund"]
 license = "Apache-2.0"
@@ -22,7 +22,6 @@ coulomb = {path = "../coulomb"}
 
 [dev-dependencies]
 approx = "0.5"
-assert_approx_eq = "1.0"
 
 # See https://github.com/victe/rust-latex-doc-minimal-example
 # for including math in the documentation
