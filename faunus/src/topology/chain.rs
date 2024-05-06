@@ -48,7 +48,7 @@ impl Chain {
 
 impl crate::topology::NonOverlapping for Chain {
     #[inline(always)]
-    fn range(&self) -> &Range<usize> {
-        &self.range
+    fn range(&self) -> Range<usize> {
+        self.range.clone()
     }
 }

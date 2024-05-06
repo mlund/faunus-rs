@@ -154,4 +154,9 @@ impl ReferencePlatform {
             .flatten()
             .collect()
     }
+
+    /// Get reference to particles of the system.
+    pub fn particles(&self) -> &[Particle] {
+        &self.particles
+    }
 }

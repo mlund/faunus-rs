@@ -297,7 +297,14 @@ pub trait GroupCollection: SyncFrom {
     fn particle(&self, index: usize) -> Particle;
 
     /// Get the number of particles in the system.
-    fn n_particles(&self) -> usize;
+    fn n_particles(&self) -> usize {
+        self.groups().iter().map(|group| group.capacity()).sum()
+    }
+
+    /// Get the number of activate particles in the system.
+    fn n_particles_active(&self) -> usize {
+        self.groups().iter().map(|group| group.len()).sum()
+    }
 
     /// Find group indices based on a selection
     ///
@@ -328,6 +335,20 @@ pub trait GroupCollection: SyncFrom {
     /// from the underlying storage model.
     fn get_particles(&self, indices: impl IntoIterator<Item = usize>) -> Vec<Particle> {
         indices.into_iter().map(|i| self.particle(i)).collect()
+    }
+
+    /// Extract copy of all particles in the system (both active and inactive).
+    fn get_particles_all(&self) -> Vec<Particle> {
+        (0..self.n_particles()).map(|i| self.particle(i)).collect()
+    }
+
+    /// Extract copy of active particles in the system.
+    fn get_particles_active(&self) -> Vec<Particle> {
+        self.groups()
+            .iter()
+            .flat_map(|group| group.iter_active())
+            .map(|index| self.particle(index))
+            .collect()
     }
 
     /// Set particles for a given group.

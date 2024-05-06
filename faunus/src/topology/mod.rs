@@ -64,7 +64,7 @@ use self::molecule::MoleculeKind;
 /// Trait implemented by collections of atoms that should not overlap (e.g., residues, chains).
 pub(super) trait NonOverlapping {
     /// Get the indices of atoms in the collection.
-    fn range(&self) -> &Range<usize>;
+    fn range(&self) -> Range<usize>;
 
     /// Check whether two collections overlap.
     ///

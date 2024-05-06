@@ -13,7 +13,6 @@
 // limitations under the license.
 
 use crate::topology::{CustomProperty, Value};
-use chemfiles;
 use serde::{Deserialize, Serialize};
 
 /// Description of atom properties
@@ -116,21 +115,6 @@ impl CustomProperty for AtomKind {
     }
     fn get_property(&self, key: &str) -> Option<Value> {
         self.custom.get(key).cloned()
-    }
-}
-
-/// Convert from chemfiles atom to topology atom
-impl core::convert::From<chemfiles::AtomRef<'_>> for AtomKind {
-    fn from(atom: chemfiles::AtomRef) -> Self {
-        AtomKind {
-            name: atom.name(),
-            id: 0,
-            mass: atom.mass(),
-            charge: atom.charge(),
-            sigma: Some(2.0 * atom.vdw_radius()),
-            element: Some(atom.atomic_type()),
-            ..Default::default()
-        }
     }
 }
 

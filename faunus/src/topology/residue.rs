@@ -56,8 +56,8 @@ impl Residue {
 
 impl crate::topology::NonOverlapping for Residue {
     #[inline(always)]
-    fn range(&self) -> &Range<usize> {
-        &self.range
+    fn range(&self) -> Range<usize> {
+        self.range.clone()
     }
 }
 

@@ -24,7 +24,7 @@ mod endless;
 //pub(crate) mod lumol;
 mod sphere;
 
-use crate::Point;
+use crate::{topology::chemfiles_interface::CellToChemCell, Point};
 pub use cuboid::Cuboid;
 pub use endless::Endless;
 use rand::rngs::ThreadRng;
@@ -34,7 +34,10 @@ pub use sphere::Sphere;
 /// Final interface for a unit cell used to describe the geometry of a simulation system.
 ///
 /// It is a combination of a [`Shape`], [`BoundaryConditions`] and [`VolumeScale`].
-pub trait SimulationCell: Shape + BoundaryConditions + VolumeScale + Clone {}
+pub trait SimulationCell:
+    Shape + BoundaryConditions + VolumeScale + Clone + CellToChemCell
+{
+}
 
 /// Geometric shape like a sphere, cube, etc.
 pub trait Shape {
