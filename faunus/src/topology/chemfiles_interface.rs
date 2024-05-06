@@ -21,7 +21,7 @@ use crate::{
     group::{Group, GroupCollection},
     platform::reference::ReferencePlatform,
     topology::Residue,
-    Point, PointParticle, WithCell, WithTopology,
+    Point, WithCell, WithTopology,
 };
 use chemfiles::Frame;
 
@@ -71,15 +71,12 @@ pub trait ChemFrameConvert: WithCell + WithTopology + GroupCollection {
         // shift the particles
         // we need to shift them because faunus treats [0,0,0] as the center of the cell,
         // while chemfiles treats [half_cell, half_cell, half_cell] as the center of the cell
-        match self.cell().bounding_box() {
-            Some(bounding) => {
-                let shift = bounding / 2.0;
-                particles
-                    .iter_mut()
-                    .for_each(|particle| particle.pos += shift);
-            }
-            // no shifting needed if the box is infinite
-            None => (),
+        // no shifting is needed if the box is infinite
+        if let Some(bounding) = self.cell().bounding_box() {
+            let shift = bounding / 2.0;
+            particles
+                .iter_mut()
+                .for_each(|particle| particle.pos += shift);
         }
 
         // add atoms to the frame
@@ -175,7 +172,7 @@ impl Residue {
     /// `abs_atom_index` - absolute index of the first atom of the group this residue is part of
     /// `resid` - absolute index of the residue
     fn to_chem_residue(&self, abs_atom_index: usize, resid: i64) -> chemfiles::Residue {
-        let mut chemfiles_residue = chemfiles::Residue::with_id(self.name(), resid as i64);
+        let mut chemfiles_residue = chemfiles::Residue::with_id(self.name(), resid);
 
         self.range()
             .for_each(|atom| chemfiles_residue.add_atom(atom + abs_atom_index));

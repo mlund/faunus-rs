@@ -422,6 +422,7 @@ impl Topology {
     }
 
     /// Create a new Topology structure. This function performs no sanity checks.
+    #[allow(dead_code)]
     pub(crate) fn new(
         atoms: Vec<AtomKind>, 
         molecules: Vec<MoleculeKind>, 
@@ -726,6 +727,7 @@ pub struct IntermolecularBonded {
 
 impl IntermolecularBonded {
     /// Create a new IntermolecularBonded structure. This function does not perform any sanity checks.
+    #[allow(dead_code)]
     pub(crate) fn new(bonds: Vec<Bond>, dihedrals: Vec<Dihedral>, torsions: Vec<Torsion>) -> IntermolecularBonded {
         IntermolecularBonded {
             bonds,

@@ -49,7 +49,7 @@ pub struct AtomKind {
 
 impl AtomKind {
     /// Create a new AtomKind structure. This function does not perform any sanity checks.
-    #[allow(dead_code)]
+    #[allow(dead_code, clippy::too_many_arguments)]
     pub(crate) fn new(
         name: &str,
         id: usize,

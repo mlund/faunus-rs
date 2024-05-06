@@ -99,6 +99,7 @@ impl InsertionPolicy {
     }
 
     /// Generate positions using the insertion policy RandomCOM.
+    #[allow(clippy::too_many_arguments)]
     fn generate_random_com(
         molecule_kind: &MoleculeKind,
         atoms: &[AtomKind],
@@ -203,6 +204,7 @@ impl MoleculeBlock {
     }
 
     /// Create a new MoleculeBlock structure. This function does not perform any sanity checks.
+    #[allow(dead_code)]
     pub(crate) fn new(
         molecule: &str,
         molecule_index: usize,

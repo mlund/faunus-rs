@@ -132,12 +132,14 @@ impl GroupCollection for ReferencePlatform {
             .push(Group::new(self.groups.len(), molecule, range));
 
         let group = self.groups.last_mut().unwrap();
+        // add group to group lists
         self.group_lists.add_group(group);
         Ok(group)
     }
 
     fn resize_group(&mut self, group_index: usize, status: GroupSize) -> anyhow::Result<()> {
         self.groups[group_index].resize(status)?;
+        // update group in group lists
         self.group_lists.update_group(&self.groups[group_index]);
         Ok(())
     }

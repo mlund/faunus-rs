@@ -80,8 +80,8 @@ impl Dihedral {
         Self {
             index,
             kind,
-            electrostatic_scaling: electrostatic_scaling,
-            lj_scaling: lj_scaling,
+            electrostatic_scaling,
+            lj_scaling,
         }
     }
 
