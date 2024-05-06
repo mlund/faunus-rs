@@ -151,3 +151,21 @@ impl VolumeScale for Cuboid {
 }
 
 impl SimulationCell for Cuboid {}
+
+#[cfg(test)]
+mod tests {
+    use crate::cell::Shape;
+
+    use super::Cuboid;
+
+    #[test]
+    fn generate_points() {
+        let shape = Cuboid::new(10.0, 5.0, 2.5);
+        let mut rng = rand::thread_rng();
+
+        for _ in 0..1000 {
+            let point = shape.get_point_inside(&mut rng);
+            assert!(shape.is_inside(&point));
+        }
+    }
+}

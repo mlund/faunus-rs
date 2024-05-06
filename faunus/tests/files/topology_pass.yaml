@@ -55,6 +55,15 @@ system:
 
   cell: [5.0, 5.0, 5.0]
 
+  energy:
+    nonbonded:
+      default: 
+        - lennardjones: {}
+        - ...
+      [Na, Cl]:  # not accepting [Cl, Na] 
+        - lennardjones: {}
+        - ...
+
   blocks:
     - {molecule: MOL, N: 3}  # read from a separate structure file
     - {molecule: MOL2, N: 50, active: 30, insert: !RandomCOM { filename: mol2.xyz }}  # path is relative to the directory containing the topology file

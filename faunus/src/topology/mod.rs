@@ -50,7 +50,6 @@ pub use bond::*;
 pub use chain::*;
 use derive_getters::Getters;
 pub use dihedral::*;
-use rand::rngs::ThreadRng;
 pub use residue::*;
 pub use torsion::*;
 use validator::{Validate, ValidationError};

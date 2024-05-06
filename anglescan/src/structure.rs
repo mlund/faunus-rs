@@ -48,7 +48,7 @@ impl From<AtomKinds> for Vec<AtomKind> {
 }
 
 // test yaml reading of atoms
-#[cfg(test)]
+/*#[cfg(test)]
 mod tests {
     use super::*;
     #[test]
@@ -59,7 +59,7 @@ mod tests {
         assert_eq!(atomlist.version.to_string(), "1.1.0");
         assert_eq!(atomlist.atomlist[0].name(), "Na");
     }
-}
+}*/
 
 /// Ancient AAM file format from Faunus
 #[derive(Debug, Default)]

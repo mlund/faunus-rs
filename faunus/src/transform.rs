@@ -127,6 +127,7 @@ pub(crate) fn rotate_random(positions: &mut [Point], center: &Point, rng: &mut T
 #[cfg(test)]
 mod tests {
     use super::*;
+    use float_cmp::assert_approx_eq;
 
     #[test]
     fn test_rotate_random() {
@@ -143,6 +144,15 @@ mod tests {
             let mut cloned = positions.clone();
 
             rotate_random(&mut cloned, &com, &mut rng);
+
+            for (original, new) in positions.iter().zip(cloned.iter()) {
+                assert_ne!(original, new);
+            }
+
+            let com_rotated = crate::analysis::center_of_mass(&cloned, &masses);
+            assert_approx_eq!(f64, com.x, com_rotated.x);
+            assert_approx_eq!(f64, com.y, com_rotated.y);
+            assert_approx_eq!(f64, com.z, com_rotated.z);
         }
     }
 }

@@ -14,7 +14,6 @@
 
 use crate::topology::{CustomProperty, Value};
 use chemfiles;
-use derive_getters::Getters;
 use serde::{Deserialize, Serialize};
 
 /// Description of atom properties

@@ -14,9 +14,7 @@
 
 use std::{cmp::Ordering, path::Path};
 
-use derive_getters::Getters;
 use rand::rngs::ThreadRng;
-use rand::Rng;
 use serde::{Deserialize, Serialize};
 use validator::{Validate, ValidationError};
 
@@ -84,55 +82,71 @@ impl InsertionPolicy {
                 filename,
                 rotate,
                 directions,
-            } => {
-                // read coordinates of the molecule from input file
-                let mut ref_positions =
-                    positions_from_frame(&frame_from_file(filename.path().unwrap())?);
-
-                // get the center of mass of the molecule
-                let com = crate::analysis::center_of_mass(
-                    &ref_positions,
-                    &molecule_kind
-                        .atom_indices()
-                        .iter()
-                        .map(|index| atoms[*index].mass())
-                        .collect::<Vec<f64>>(),
-                );
-
-                // get positions relative to the center of mass
-                ref_positions.iter_mut().for_each(|pos| *pos -= com);
-
-                // generate random positions for the molecules
-                Ok((0..number)
-                    .flat_map(|_| {
-                        let random_com = directions.filter(cell.get_point_inside(rng));
-                        let mut molecule_positions = ref_positions
-                            .iter()
-                            .map(|pos| random_com + pos)
-                            .collect::<Vec<_>>();
-
-                        // rotate the molecule
-                        if *rotate {
-                            crate::transform::rotate_random(
-                                &mut molecule_positions,
-                                &random_com,
-                                rng,
-                            );
-                        }
-
-                        // wrap particles into simulation cell
-                        molecule_positions
-                            .iter_mut()
-                            .for_each(|pos| cell.boundary(pos));
-
-                        molecule_positions
-                    })
-                    .collect::<Vec<_>>())
-            }
+            } => InsertionPolicy::generate_random_com(
+                molecule_kind,
+                atoms,
+                number,
+                cell,
+                rng,
+                filename,
+                *rotate,
+                directions,
+            ),
 
             // the coordinates should already be validated that they are compatible with the topology
             Self::Manual(positions) => Ok(positions.to_owned()),
         }
+    }
+
+    /// Generate positions using the insertion policy RandomCOM.
+    fn generate_random_com(
+        molecule_kind: &MoleculeKind,
+        atoms: &[AtomKind],
+        number: usize,
+        cell: &impl SimulationCell,
+        rng: &mut ThreadRng,
+        filename: &InputPath,
+        rotate: bool,
+        directions: &Dimension,
+    ) -> anyhow::Result<Vec<Point>> {
+        // read coordinates of the molecule from input file
+        let mut ref_positions = positions_from_frame(&frame_from_file(filename.path().unwrap())?);
+
+        // get the center of mass of the molecule
+        let com = crate::analysis::center_of_mass(
+            &ref_positions,
+            &molecule_kind
+                .atom_indices()
+                .iter()
+                .map(|index| atoms[*index].mass())
+                .collect::<Vec<f64>>(),
+        );
+
+        // get positions relative to the center of mass
+        ref_positions.iter_mut().for_each(|pos| *pos -= com);
+
+        // generate random positions for the molecules
+        Ok((0..number)
+            .flat_map(|_| {
+                let random_com = directions.filter(cell.get_point_inside(rng));
+                let mut molecule_positions = ref_positions
+                    .iter()
+                    .map(|pos| random_com + pos)
+                    .collect::<Vec<_>>();
+
+                // rotate the molecule
+                if rotate {
+                    crate::transform::rotate_random(&mut molecule_positions, &random_com, rng);
+                }
+
+                // wrap particles into simulation cell
+                molecule_positions
+                    .iter_mut()
+                    .for_each(|pos| cell.boundary(pos));
+
+                molecule_positions
+            })
+            .collect::<Vec<_>>())
     }
 
     /// Finalize path to the provided structure file (if it is provided) treating it either as an absolute path

@@ -16,7 +16,6 @@
 
 use crate::{change::Change, change::GroupChange, Particle, SyncFrom};
 use anyhow::Ok;
-use derive_getters::Getters;
 use nalgebra::Vector3;
 use serde::{Deserialize, Serialize};
 use std::{cmp::Ordering, collections::HashSet};

@@ -12,7 +12,6 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
-use derive_getters::Getters;
 use serde::{Deserialize, Serialize};
 
 use std::ops::Range;

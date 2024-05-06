@@ -17,8 +17,8 @@
 use crate::{
     energy::Hamiltonian,
     group::{GroupCollection, GroupLists, GroupSize},
-    topology::{self, Topology, TopologyLike},
-    Change, Context, Group, Particle, Point, SyncFrom,
+    topology::{Topology, TopologyLike},
+    Change, Context, Group, Particle, SyncFrom,
 };
 
 use std::rc::Rc;
