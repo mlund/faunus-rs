@@ -103,6 +103,19 @@ impl<T: IsotropicTwobodyEnergy, U: IsotropicTwobodyEnergy> IsotropicTwobodyEnerg
     }
 }
 
+impl IsotropicTwobodyEnergy for Box<dyn IsotropicTwobodyEnergy> {
+    fn isotropic_twobody_energy(&self, distance_squared: f64) -> f64 {
+        self.as_ref().isotropic_twobody_energy(distance_squared)
+    }
+}
+
+impl std::ops::Add for Box<dyn IsotropicTwobodyEnergy> {
+    type Output = Box<dyn IsotropicTwobodyEnergy>;
+    fn add(self, other: Box<dyn IsotropicTwobodyEnergy>) -> Box<dyn IsotropicTwobodyEnergy> {
+        Box::new(Combined::new(self, other))
+    }
+}
+
 /// Plain Coulomb potential combined with Lennard-Jones
 pub type CoulombLennardJones<'a> = Combined<IonIon<'a, coulomb::pairwise::Plain>, LennardJones>;
 
@@ -118,7 +131,15 @@ pub fn test_combined() {
     let harmonic = Harmonic::new(0.0, 10.0);
     let u_lj = lj.isotropic_twobody_energy(r2);
     let u_harmonic = harmonic.isotropic_twobody_energy(r2);
-    let combined = Combined::new(lj, harmonic);
+
+    // static dispatch
+    let combined = Combined::new(lj.clone(), harmonic);
+    assert_relative_eq!(combined.isotropic_twobody_energy(r2), u_lj + u_harmonic);
+
+    // dynamic dispatch
+    let box1: Box<dyn IsotropicTwobodyEnergy> = Box::new(lj);
+    let box2: Box<dyn IsotropicTwobodyEnergy> = Box::new(harmonic);
+    let combined = box1 + box2;
     assert_relative_eq!(combined.isotropic_twobody_energy(r2), u_lj + u_harmonic);
 }
 
