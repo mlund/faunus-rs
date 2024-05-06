@@ -43,15 +43,15 @@ molecules:
     atoms: [OW, OW, X]
   
 system:
-  intermolecular:
-    bonds:
-      - {index: [0, 220], kind: !Harmonic {k: 50.0, req: 3.0}}
-      - {index: [52, 175], kind: !FENE {k: 25.0, req: 1.5, rmax: 5.0}, order: Triple}
-    torsions:
-      - {index: [1, 75, 128], kind: !Harmonic {k: 100.0, aeq: 120.0}}
-    dihedrals:
-      - {index: [1, 35, 75, 128], kind: !Harmonic {k: 27.5, aeq: 105.0}, lj_scaling: 0.9}
-      - {index: [17, 45, 125, 215]}
+  #intermolecular:
+  #  bonds:
+  #    - {index: [0, 220], kind: !Harmonic {k: 50.0, req: 3.0}}
+  #    - {index: [52, 175], kind: !FENE {k: 25.0, req: 1.5, rmax: 5.0}, order: Triple}
+  #  torsions:
+  #    - {index: [1, 75, 128], kind: !Harmonic {k: 100.0, aeq: 120.0}}
+  #  dihedrals:
+  #    - {index: [1, 35, 75, 128], kind: !Harmonic {k: 27.5, aeq: 105.0}, lj_scaling: 0.9}
+  #    - {index: [17, 45, 125, 215]}
 
   cell: [5.0, 5.0, 5.0]
 

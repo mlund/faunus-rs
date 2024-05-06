@@ -56,6 +56,7 @@ pub trait ChemFrameConvert: WithCell + WithTopology + GroupCollection {
         self.add_residues_to_frame(&mut frame);
         frame.set_cell(&self.cell().to_chem_cell());
 
+        // todo! shifting atoms in the box
         // todo! connectivity
 
         frame
