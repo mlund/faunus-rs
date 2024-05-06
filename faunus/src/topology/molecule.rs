@@ -80,6 +80,40 @@ fn default_true() -> bool {
 }
 
 impl MoleculeKind {
+    /// Create a new MoleculeKind structure. This function does not perform any sanity checks.
+    #[allow(dead_code)]
+    pub(crate) fn new(
+        name: &str,
+        id: usize,
+        atoms: Vec<String>,
+        atom_indices: Vec<usize>,
+        bonds: Vec<Bond>,
+        dihedrals: Vec<Dihedral>,
+        torsions: Vec<Torsion>,
+        degrees_of_freedom: DegreesOfFreedom,
+        atom_names: Vec<Option<String>>,
+        residues: Vec<Residue>,
+        chains: Vec<Chain>,
+        has_com: bool,
+        custom: HashMap<String, Value>,
+    ) -> MoleculeKind {
+        Self {
+            name: name.to_owned(),
+            id,
+            atoms,
+            atom_indices,
+            bonds,
+            dihedrals,
+            torsions,
+            degrees_of_freedom,
+            atom_names,
+            residues,
+            chains,
+            has_com,
+            custom,
+        }
+    }
+
     pub fn id(&self) -> usize {
         self.id
     }

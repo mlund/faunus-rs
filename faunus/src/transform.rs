@@ -103,7 +103,7 @@ impl Transform {
 }
 
 /// Translates a set of particles by a vector and applies periodic boundary conditions
-fn translate<'a>(
+pub(crate) fn translate<'a>(
     pbc: &impl BoundaryConditions,
     positions: impl IntoIterator<Item = &'a mut Point>,
     displacement: &Point,

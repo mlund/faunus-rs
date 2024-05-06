@@ -18,7 +18,7 @@ use std::rc::Rc;
 fn main() {
     let mut _hamiltonian = energy::Hamiltonian::default();
 
-    let top = Rc::new(topology::Topology::default());
+    let _top = Rc::new(topology::Topology::default());
     //let a = Particle::default();
     //let context = platform::reference::ReferencePlatform::new(cell::Cuboid::cubic(90.0), top);
     //println!("Hello, world! {:?} ", context);

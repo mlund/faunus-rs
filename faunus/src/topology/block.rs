@@ -202,6 +202,23 @@ impl MoleculeBlock {
         self.insert.as_ref()
     }
 
+    /// Create a new MoleculeBlock structure. This function does not perform any sanity checks.
+    pub(crate) fn new(
+        molecule: &str,
+        molecule_index: usize,
+        number: usize,
+        active: BlockActivationStatus,
+        insert: Option<InsertionPolicy>,
+    ) -> MoleculeBlock {
+        MoleculeBlock {
+            molecule: molecule.to_owned(),
+            molecule_index,
+            number,
+            active,
+            insert,
+        }
+    }
+
     /// Create groups from a MoleculeBlock.
     ///
     /// ## Parameters

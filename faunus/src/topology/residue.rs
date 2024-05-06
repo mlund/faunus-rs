@@ -63,6 +63,7 @@ impl crate::topology::NonOverlapping for Residue {
 
 /// Function to convert an amino acid residue name to a one-letter code.
 /// This follows the PDB standard and handles the 20 standard amino acids and nucleic acids (A, G, C, T, U).
+#[allow(dead_code)]
 fn residue_name_to_letter(name: &str) -> Option<char> {
     let letter = match name.to_uppercase().as_str() {
         // Amino acids

@@ -421,6 +421,21 @@ impl Topology {
             .sum()
     }
 
+    /// Create a new Topology structure. This function performs no sanity checks.
+    pub(crate) fn new(
+        atoms: Vec<AtomKind>, 
+        molecules: Vec<MoleculeKind>, 
+        intermolecular: IntermolecularBonded, 
+        blocks: Vec<MoleculeBlock>) -> Topology
+    {
+        Topology {
+            include: vec![],
+            atoms,
+            molecules,
+            system: System { intermolecular, blocks }
+        }
+    }
+
     /// Create groups and populate target Context-implementing structure with particles.
     pub(crate) fn to_groups(
         &self,
@@ -707,6 +722,17 @@ pub struct IntermolecularBonded {
     #[serde(default)]
     #[validate(nested)]
     torsions: Vec<Torsion>,
+}
+
+impl IntermolecularBonded {
+    /// Create a new IntermolecularBonded structure. This function does not perform any sanity checks.
+    pub(crate) fn new(bonds: Vec<Bond>, dihedrals: Vec<Dihedral>, torsions: Vec<Torsion>) -> IntermolecularBonded {
+        IntermolecularBonded {
+            bonds,
+            dihedrals,
+            torsions
+        }
+    }
 }
 
 /// Serialize std::ops::Range as an array.

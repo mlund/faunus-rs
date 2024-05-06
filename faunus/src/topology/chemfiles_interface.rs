@@ -50,36 +50,57 @@ pub trait ChemFrameConvert: WithCell + WithTopology + GroupCollection {
     /// - Positions, residues, atom types and bonds are converted.
     /// - Custom properties of atoms and residues are not converted.
     /// - Angles and dihedrals are not converted.
+    /// - Residues are renumbered starting from 1.
     fn to_frame(&self) -> Frame {
         let mut frame = Frame::new();
         self.add_atoms_to_frame(&mut frame);
         self.add_residues_to_frame(&mut frame);
+        self.add_bonds_to_frame(&mut frame);
         frame.set_cell(&self.cell().to_chem_cell());
-
-        // todo! shifting atoms in the box
-        // todo! connectivity
 
         frame
     }
 
-    /// Get all atom types defined for the system as chemfiles::Atom structures.
-    fn get_chemfiles_atoms(&self) -> Vec<chemfiles::Atom> {
-        self.topology().atoms().iter().map(|x| x.into()).collect()
-    }
-
     /// Convert all faunus particles to chemfiles particles and add them to the chemfiles Frame.
     /// This converts all atoms, both active and inactive.
+    /// This also shifts the particles so they fit into chemfiles cell.
     fn add_atoms_to_frame(&self, frame: &mut Frame) {
-        for particle in self.get_particles_all().iter() {
-            frame.add_atom(
-                self.get_chemfiles_atoms().get(particle.atom_id()).unwrap(),
-                particle.pos.into(),
-                None,
-            )
+        let topology = self.topology();
+        let mut particles = self.get_particles_all();
+
+        // shift the particles
+        // we need to shift them because faunus treats [0,0,0] as the center of the cell,
+        // while chemfiles treats [half_cell, half_cell, half_cell] as the center of the cell
+        match self.cell().bounding_box() {
+            Some(bounding) => {
+                let shift = bounding / 2.0;
+                particles
+                    .iter_mut()
+                    .for_each(|particle| particle.pos += shift);
+            }
+            // no shifting needed if the box is infinite
+            None => (),
         }
+
+        // add atoms to the frame
+        self.groups().iter().fold(0, |atom_index, group| {
+            let molecule = &topology.molecules()[group.molecule()];
+
+            for (i, index) in molecule.atom_indices().iter().enumerate() {
+                let atom = topology.atoms().get(*index).unwrap();
+
+                frame.add_atom(
+                    &atom.to_chem_atom(molecule.atom_names()[i].as_deref()),
+                    particles[atom_index].pos.into(),
+                    None,
+                );
+            }
+
+            atom_index + group.capacity()
+        });
     }
 
-    ///Convert faunus residues to chemfiles residues and add them to the chemfiles Frame.
+    /// Convert faunus residues to chemfiles residues and add them to the chemfiles Frame.
     fn add_residues_to_frame(&self, frame: &mut Frame) {
         let topology = self.topology();
 
@@ -103,10 +124,35 @@ pub trait ChemFrameConvert: WithCell + WithTopology + GroupCollection {
             });
     }
 
-    //fn add_bonds_to_frame(&self, frame: &mut Frame) {}
+    // Convert faunus bonds to chemfiles bonds and add them to the chemfiles Frame.
+    fn add_bonds_to_frame(&self, frame: &mut Frame) {
+        let topology = self.topology();
+
+        self.groups().iter().fold(0, |atom_index, group| {
+            let molecule = &topology.molecules()[group.molecule()];
+
+            molecule.bonds().iter().for_each(|bond| {
+                frame.add_bond(bond.index()[0] + atom_index, bond.index()[1] + atom_index)
+            });
+
+            atom_index + group.capacity()
+        });
+
+        topology
+            .intermolecular()
+            .bonds()
+            .iter()
+            .for_each(|bond| frame.add_bond(bond.index()[0], bond.index()[1]));
+    }
 }
 
 impl Group {
+    /// Convert Group to N chemfiles Residues.
+    ///
+    /// ## Parameters
+    /// `abs_atom_index` - absolute index of the first atom of the group
+    /// `first_resid` - absolute index of the first residue of the group
+    /// `molecule` - MoleculeKind forming this group
     fn to_chem_residues(
         &self,
         abs_atom_index: usize,
@@ -123,6 +169,11 @@ impl Group {
 }
 
 impl Residue {
+    /// Convert Residue to chemfiles Residue.
+    ///
+    /// ## Parameters
+    /// `abs_atom_index` - absolute index of the first atom of the group this residue is part of
+    /// `resid` - absolute index of the residue
     fn to_chem_residue(&self, abs_atom_index: usize, resid: i64) -> chemfiles::Residue {
         let mut chemfiles_residue = chemfiles::Residue::with_id(self.name(), resid as i64);
 
@@ -133,37 +184,27 @@ impl Residue {
     }
 }
 
-impl ChemFrameConvert for ReferencePlatform {
-    /// Convert all faunus particles to chemfiles particles and add them to the chemfiles Frame.
-    ///
-    /// ## Notes
-    /// This implementation is specific to the ReferencePlatform and works with reference to the
-    /// particles of the system instead of their copy. This should make the conversion faster.
-    fn add_atoms_to_frame(&self, frame: &mut Frame) {
-        for particle in self.particles() {
-            frame.add_atom(
-                self.get_chemfiles_atoms().get(particle.atom_id()).unwrap(),
-                particle.pos.into(),
-                None,
-            )
-        }
-    }
-}
-
-/// Convert topology atom to chemfiles atom.
-/// Does not convert custom properties.
-impl core::convert::From<&AtomKind> for chemfiles::Atom {
-    fn from(atom: &AtomKind) -> Self {
-        let mut chemfiles_atom = Self::new(atom.name());
-        chemfiles_atom.set_mass(atom.mass());
-        chemfiles_atom.set_charge(atom.charge());
-        if let Some(element) = atom.element() {
+impl AtomKind {
+    /// Convert topology atom to chemfiles atom.
+    /// Does not convert custom properties.
+    /// `name` is the name of the particle itself, not of the AtomKind.
+    /// If `name` is not provided, the name of the AtomKind itself is used.
+    fn to_chem_atom(&self, name: Option<&str>) -> chemfiles::Atom {
+        let mut chemfiles_atom = match name {
+            Some(name) => chemfiles::Atom::new(name),
+            None => chemfiles::Atom::new(self.name()),
+        };
+        chemfiles_atom.set_mass(self.mass());
+        chemfiles_atom.set_charge(self.charge());
+        if let Some(element) = self.element() {
             chemfiles_atom.set_atomic_type(element);
         }
 
         chemfiles_atom
     }
 }
+
+impl ChemFrameConvert for ReferencePlatform {}
 
 /// Convert topology Residue to chemfiles residue.
 impl core::convert::From<&Residue> for chemfiles::Residue {
@@ -173,7 +214,9 @@ impl core::convert::From<&Residue> for chemfiles::Residue {
             Some(n) => Self::with_id(residue.name(), n as i64),
         };
 
-        residue.range().map(|atom| chemfiles_residue.add_atom(atom));
+        residue
+            .range()
+            .for_each(|atom| chemfiles_residue.add_atom(atom));
 
         chemfiles_residue
     }
@@ -192,3 +235,221 @@ pub trait CellToChemCell: Shape {
 impl CellToChemCell for Cuboid {}
 impl CellToChemCell for Sphere {}
 impl CellToChemCell for Endless {}
+
+#[cfg(test)]
+mod tests {
+    use std::{collections::HashMap, rc::Rc};
+
+    use crate::{
+        topology::{
+            block::{BlockActivationStatus, InsertionPolicy, MoleculeBlock},
+            Bond, BondKind, DegreesOfFreedom, IntermolecularBonded, Topology,
+        },
+        Context,
+    };
+
+    use float_cmp::assert_approx_eq;
+
+    use super::*;
+
+    #[test]
+    fn atom_to_chemfiles() {
+        let atom = AtomKind::new(
+            "OW",
+            0,
+            16.0,
+            -1.0,
+            Some("O"),
+            None,
+            None,
+            None,
+            HashMap::default(),
+        );
+        let converted = atom.to_chem_atom(Some("OX"));
+
+        assert_eq!(converted.name(), "OX");
+        assert_eq!(converted.mass(), 16.0);
+        assert_eq!(converted.charge(), -1.0);
+        assert_eq!(converted.atomic_type(), "O");
+
+        let converted = atom.to_chem_atom(None);
+        assert_eq!(converted.name(), "OW");
+        assert_eq!(converted.mass(), 16.0);
+        assert_eq!(converted.charge(), -1.0);
+        assert_eq!(converted.atomic_type(), "O");
+    }
+
+    #[test]
+    fn residue_to_chemfiles() {
+        let residue = Residue::new("ALA", Some(4), 3..7);
+        let converted = residue.to_chem_residue(7, 2);
+
+        assert_eq!(converted.name(), "ALA");
+        assert_eq!(converted.id(), Some(2));
+        assert_eq!(converted.atoms(), vec![10, 11, 12, 13]);
+    }
+
+    #[test]
+    fn group_to_chemfiles() {
+        let residue1 = Residue::new("ALA", Some(4), 1..3);
+        let residue2 = Residue::new("SER", Some(5), 5..6);
+
+        let molecule = MoleculeKind::new(
+            "MOL",
+            0,
+            vec![
+                String::from("OW"),
+                String::from("OW"),
+                String::from("OW"),
+                String::from("HW"),
+                String::from("HW"),
+                String::from("OW"),
+            ],
+            vec![0, 0, 0, 1, 1, 0],
+            vec![],
+            vec![],
+            vec![],
+            DegreesOfFreedom::default(),
+            vec![None, None, None, None, None, None],
+            vec![residue1, residue2],
+            vec![],
+            true,
+            HashMap::default(),
+        );
+
+        let group = Group::new(0, 0, 0..6);
+
+        let converted = group.to_chem_residues(17, 3, &molecule);
+
+        assert_eq!(converted.len(), 2);
+
+        assert_eq!(converted[0].name(), "ALA");
+        assert_eq!(converted[0].id(), Some(3));
+        assert_eq!(converted[0].atoms(), vec![18, 19]);
+
+        assert_eq!(converted[1].name(), "SER");
+        assert_eq!(converted[1].id(), Some(4));
+        assert_eq!(converted[1].atoms(), vec![22]);
+    }
+
+    #[test]
+    fn reference_platform_to_chemfiles() {
+        let residue1 = Residue::new("ALA", Some(4), 1..3);
+        let residue2 = Residue::new("SER", Some(5), 5..6);
+
+        let bond1 = Bond::new([1, 3], BondKind::Unspecified, None);
+        let bond2 = Bond::new([3, 5], BondKind::Unspecified, None);
+
+        let molecule = MoleculeKind::new(
+            "MOL",
+            0,
+            vec![
+                String::from("OW"),
+                String::from("OW"),
+                String::from("OW"),
+                String::from("HW"),
+                String::from("HW"),
+                String::from("OW"),
+            ],
+            vec![0, 0, 0, 1, 1, 0],
+            vec![bond1, bond2],
+            vec![],
+            vec![],
+            DegreesOfFreedom::default(),
+            vec![None, None, Some("O3".to_string()), None, None, None],
+            vec![residue1, residue2],
+            vec![],
+            true,
+            HashMap::default(),
+        );
+
+        let atom1 = AtomKind::new(
+            "OW",
+            0,
+            16.0,
+            -1.0,
+            Some("O"),
+            None,
+            None,
+            None,
+            HashMap::default(),
+        );
+
+        let atom2 = AtomKind::new(
+            "HW",
+            0,
+            1.0,
+            0.0,
+            Some("H"),
+            None,
+            None,
+            None,
+            HashMap::default(),
+        );
+
+        let block = MoleculeBlock::new(
+            "MOL",
+            0,
+            3,
+            BlockActivationStatus::Partial(2),
+            Some(InsertionPolicy::Manual(vec![Point::default(); 21])),
+        );
+
+        let intermolecular_bond = Bond::new([7, 17], BondKind::Unspecified, None);
+
+        let intermolecular = IntermolecularBonded::new(vec![intermolecular_bond], vec![], vec![]);
+
+        let topology = Topology::new(
+            vec![atom1, atom2],
+            vec![molecule],
+            intermolecular,
+            vec![block],
+        );
+
+        let context =
+            ReferencePlatform::new(Rc::new(topology), Cuboid::new(10.0, 5.0, 2.5), vec![], None)
+                .unwrap();
+
+        let converted = context.to_frame();
+
+        // check atoms
+        let atom_names = vec!["OW", "OW", "O3", "HW", "HW", "OW"];
+        let atom_masses = [16.0, 16.0, 16.0, 1.0, 1.0, 16.0];
+        let atom_charges = [-1.0, -1.0, -1.0, 0.0, 0.0, -1.0];
+        let atomic_types = ["O", "O", "O", "H", "H", "O"];
+
+        for (a, atom) in converted.iter_atoms().enumerate() {
+            assert_eq!(atom.name(), atom_names[a % 6]);
+            assert_eq!(atom.mass(), atom_masses[a % 6]);
+            assert_eq!(atom.charge(), atom_charges[a % 6]);
+            assert_eq!(atom.atomic_type(), atomic_types[a % 6]);
+        }
+
+        // check residues
+        let residue_names = ["ALA", "SER"];
+        let topology = converted.topology();
+        for i in 0..6 {
+            let residue = topology.residue(i).unwrap();
+            assert_eq!(residue.name(), residue_names[i % 2]);
+            assert_eq!(residue.id(), Some((i + 1) as i64));
+            if i % 2 == 0 {
+                assert_eq!(residue.atoms(), vec![(i / 2) * 6 + 1, (i / 2) * 6 + 2]);
+            } else {
+                assert_eq!(residue.atoms(), vec![(i / 2) * 6 + 5]);
+            }
+        }
+
+        // check cell
+        let frame_cell = converted.cell().lengths();
+        assert_approx_eq!(f64, frame_cell[0], 10.0);
+        assert_approx_eq!(f64, frame_cell[1], 5.0);
+        assert_approx_eq!(f64, frame_cell[2], 2.5);
+
+        // check bonds
+        let bonds = [(1, 3), (3, 5), (7, 9), (7, 17), (9, 11), (13, 15), (15, 17)];
+        for (expected, bond) in bonds.iter().zip(topology.bonds().iter()) {
+            assert_eq!(expected.0, bond[0]);
+            assert_eq!(expected.1, bond[1]);
+        }
+    }
+}

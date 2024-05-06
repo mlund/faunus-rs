@@ -81,10 +81,6 @@ impl Particle {
             pos,
         }
     }
-
-    pub(crate) fn set_position(&mut self, position: Point) {
-        self.pos = position;
-    }
 }
 
 impl PointParticle for Particle {

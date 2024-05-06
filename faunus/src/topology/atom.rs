@@ -48,11 +48,29 @@ pub struct AtomKind {
 }
 
 impl AtomKind {
-    /// New atom type with given name but with otherwise default values
-    pub fn new(name: &str) -> Self {
+    /// Create a new AtomKind structure. This function does not perform any sanity checks.
+    #[allow(dead_code)]
+    pub(crate) fn new(
+        name: &str,
+        id: usize,
+        mass: f64,
+        charge: f64,
+        element: Option<&str>,
+        sigma: Option<f64>,
+        epsilon: Option<f64>,
+        hydrophobicity: Option<Hydrophobicity>,
+        custom: std::collections::HashMap<String, Value>,
+    ) -> Self {
         Self {
-            name: name.to_string(),
-            ..Default::default()
+            name: name.to_owned(),
+            id,
+            mass,
+            charge,
+            element: element.map(String::from),
+            sigma,
+            epsilon,
+            hydrophobicity,
+            custom,
         }
     }
 
