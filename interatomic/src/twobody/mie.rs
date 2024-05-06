@@ -38,7 +38,7 @@ use serde::{Deserialize, Serialize};
 /// assert_eq!(mie.isotropic_twobody_energy(r2), lj.isotropic_twobody_energy(r2));
 /// ~~~
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Copy)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 pub struct Mie<const N: u32, const M: u32> {
     /// Interaction strength, ε
@@ -190,7 +190,7 @@ impl IsotropicTwobodyEnergy for LennardJones {
 ///
 /// Effectively, this provides soft repulsion without any attraction.
 /// More information, see <https://dx.doi.org/doi.org/ct4kh9>.
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq, Default, Copy)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 pub struct WeeksChandlerAndersen {
     #[cfg_attr(feature = "serde", serde(flatten))]
