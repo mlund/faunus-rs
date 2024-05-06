@@ -21,8 +21,91 @@ use std::fmt::Debug;
 
 use super::ReferencePlatform;
 use crate::{
-    energy::EnergyTerm, Change, Group, GroupChange, GroupCollection, Info, Particle, SyncFrom,
+    cell::BoundaryConditions, energy::EnergyTerm, Change, Group, GroupChange, GroupCollection,
+    Info, Particle, SyncFrom,
 };
+
+/// Interface for nonbonded interactions.
+///
+/// # Todo
+/// Move out of the reference platform module as it's (mostly) platform independent.
+pub trait NonbondedInterface {
+    fn platform(&self) -> &ReferencePlatform;
+
+    /// Calculates the energy between two particles
+    fn particle_with_particle(&self, particle1: &Particle, particle2: &Particle) -> f64;
+
+    /// Matches all possible single group perturbations and returns the energy
+    fn single_group_change(&self, group_index: usize, change: &GroupChange) -> f64 {
+        match change {
+            GroupChange::RigidBody => self.group_with_all(group_index),
+            GroupChange::None => 0.0,
+            _ => todo!("implement other group changes"),
+        }
+    }
+
+    /// Calculates the energy between two groups
+    fn group_to_group(&self, group1: &Group, group2: &Group) -> f64 {
+        let particles1 = self.platform().particles[group1.iter_active()].iter();
+        let particles2 = self.platform().particles[group2.iter_active()].iter();
+        iproduct!(particles1, particles2)
+            .map(|(i, j)| self.particle_with_particle(i, j))
+            .sum()
+    }
+
+    /// Calculates the energy between a single group and all other groups
+    fn group_with_all(&self, group_index: usize) -> f64 {
+        let group = &self.platform().groups()[group_index];
+        self.platform()
+            .groups()
+            .iter()
+            .filter(|other_group| other_group.index() != group_index)
+            .map(|other_group| self.group_to_group(group, other_group))
+            .sum()
+    }
+    /// Calculates the full energy of the system by summing over
+    /// all group-to-group interactions
+    fn all_with_all(&self) -> f64 {
+        let groups = &self.platform().groups();
+        iproduct!(groups.iter(), groups.iter())
+            .map(|(i, j)| self.group_to_group(i, j))
+            .sum()
+    }
+}
+
+// impl<T: NonbondedInterface> EnergyTerm for T {
+//     fn energy_change(&self, change: &Change) -> f64 {
+//         match change {
+//             Change::Everything => self.all_with_all(),
+//             Change::SingleGroup(group_index, group_change) => {
+//                 self.single_group_change(*group_index, group_change)
+//             }
+//             Change::None => 0.0,
+//             _ => todo!("implement other changes"),
+//         }
+//     }
+
+//     fn update(&mut self, _change: &Change) -> anyhow::Result<()> {
+//         Ok(())
+//     }
+// }
+
+impl<T> NonbondedInterface for Nonbonded<'_, T>
+where
+    T: IsotropicTwobodyEnergy + 'static,
+{
+    fn platform(&self) -> &ReferencePlatform {
+        self.platform
+    }
+
+    fn particle_with_particle(&self, particle1: &Particle, particle2: &Particle) -> f64 {
+        let distance_squared = self
+            .platform()
+            .cell
+            .distance_squared(&particle1.pos, &particle2.pos);
+        self.pair_potentials[particle1.id][particle2.id].isotropic_twobody_energy(distance_squared)
+    }
+}
 
 #[derive(Debug, Clone, Serialize)]
 pub struct Nonbonded<'a, T: IsotropicTwobodyEnergy> {
@@ -65,68 +148,6 @@ where
             pair_potentials,
             platform,
         }
-    }
-
-    /// Matches all possible single group perturbations and returns the energy
-    fn single_group_change(&self, group_index: usize, change: &GroupChange) -> f64 {
-        match change {
-            GroupChange::RigidBody => self.group_with_all(group_index),
-            GroupChange::None => 0.0,
-            _ => todo!("implement other group changes"),
-        }
-    }
-
-    /// Calculates the energy between two particles
-    #[inline]
-    fn particle_with_particle(&self, particle1: &Particle, particle2: &Particle) -> f64 {
-        let distance_squared = 0.0;
-        // let distance_squared = self
-        //     .platform
-        //     .distance_squared(particle1.pos(), particle2.pos());
-        self.pair_potentials[particle1.id][particle2.id].isotropic_twobody_energy(distance_squared)
-    }
-
-    /// Single particle with all remaining active particles
-    fn _particle_with_all(&self, group_index: usize, rel_index: usize) -> f64 {
-        let groups = &self.platform.groups();
-        let index = groups[group_index].absolute_index(rel_index).unwrap();
-        groups
-            .iter()
-            .flat_map(|group| group.iter_active())
-            .filter(|other| *other != index)
-            .fold(0.0, |sum, other| {
-                let particle1 = &self.platform.particles[index];
-                let particle2 = &self.platform.particles[other];
-                sum + self.particle_with_particle(particle1, particle2)
-            })
-    }
-
-    /// Calculates the energy between a single group and all other groups
-    pub fn group_with_all(&self, group_index: usize) -> f64 {
-        let group = &self.platform.groups()[group_index];
-        self.platform
-            .groups()
-            .iter()
-            .filter(|other_group| other_group.index() != group_index)
-            .fold(0.0, |sum, other_group| {
-                sum + self.group_to_group(group, other_group)
-            })
-    }
-
-    /// Calculates the energy between two groups
-    pub fn group_to_group(&self, group1: &Group, group2: &Group) -> f64 {
-        let particles1 = self.platform.particles[group1.iter_active()].iter();
-        let particles2 = self.platform.particles[group2.iter_active()].iter();
-        iproduct!(particles1, particles2)
-            .fold(0.0, |sum, (i, j)| sum + self.particle_with_particle(i, j))
-    }
-
-    /// Calculates the full energy of the system by summing over
-    /// all group-to-group interactions
-    pub fn all_with_all(&self) -> f64 {
-        let groups = self.platform.groups();
-        iproduct!(groups.iter(), groups.iter())
-            .fold(0.0, |sum, (i, j)| sum + self.group_to_group(i, j))
     }
 }
 
