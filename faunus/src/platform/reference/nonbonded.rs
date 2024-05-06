@@ -22,13 +22,13 @@ use std::fmt::Debug;
 use super::ReferencePlatform;
 use crate::{
     cell::BoundaryConditions, energy::EnergyTerm, Change, Group, GroupChange, GroupCollection,
-    Info, Particle, SyncFrom,
+    Particle, SyncFrom,
 };
 
 /// Interface for nonbonded interactions.
 ///
 /// # Todo
-/// Move out of the reference platform module as it's (mostly) platform independent.
+/// This should ideally use a Context instead or ReferencePlatform to be fully platform independent.
 pub trait NonbondedInterface {
     fn platform(&self) -> &ReferencePlatform;
 
@@ -73,53 +73,7 @@ pub trait NonbondedInterface {
     }
 }
 
-// impl<T: NonbondedInterface> EnergyTerm for T {
-//     fn energy_change(&self, change: &Change) -> f64 {
-//         match change {
-//             Change::Everything => self.all_with_all(),
-//             Change::SingleGroup(group_index, group_change) => {
-//                 self.single_group_change(*group_index, group_change)
-//             }
-//             Change::None => 0.0,
-//             _ => todo!("implement other changes"),
-//         }
-//     }
-
-//     fn update(&mut self, _change: &Change) -> anyhow::Result<()> {
-//         Ok(())
-//     }
-// }
-
-impl<T> NonbondedInterface for Nonbonded<'_, T>
-where
-    T: IsotropicTwobodyEnergy + 'static,
-{
-    fn platform(&self) -> &ReferencePlatform {
-        self.platform
-    }
-
-    fn particle_with_particle(&self, particle1: &Particle, particle2: &Particle) -> f64 {
-        let distance_squared = self
-            .platform()
-            .cell
-            .distance_squared(&particle1.pos, &particle2.pos);
-        self.pair_potentials[particle1.id][particle2.id].isotropic_twobody_energy(distance_squared)
-    }
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub struct Nonbonded<'a, T: IsotropicTwobodyEnergy> {
-    /// Matrix of pair potentials base on particle ids
-    pair_potentials: Vec<Vec<T>>,
-    /// Reference to the platform
-    #[serde(skip)]
-    platform: &'a ReferencePlatform,
-}
-
-impl<T> EnergyTerm for Nonbonded<'static, T>
-where
-    T: IsotropicTwobodyEnergy + 'static + Clone,
-{
+impl<T: NonbondedInterface + SyncFrom + std::fmt::Debug + 'static> EnergyTerm for T {
     fn energy_change(&self, change: &Change) -> f64 {
         match change {
             Change::Everything => self.all_with_all(),
@@ -134,6 +88,15 @@ where
     fn update(&mut self, _change: &Change) -> anyhow::Result<()> {
         Ok(())
     }
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct Nonbonded<'a, T: IsotropicTwobodyEnergy> {
+    /// Matrix of pair potentials base on particle ids
+    pair_potentials: Vec<Vec<T>>,
+    /// Reference to the platform
+    #[serde(skip)]
+    platform: &'a ReferencePlatform,
 }
 
 impl<T> Nonbonded<'_, T>
@@ -151,12 +114,20 @@ where
     }
 }
 
-impl<T> Info for Nonbonded<'_, T>
+impl<T> NonbondedInterface for Nonbonded<'_, T>
 where
-    T: IsotropicTwobodyEnergy,
+    T: IsotropicTwobodyEnergy + 'static,
 {
-    fn citation(&self) -> Option<&'static str> {
-        None
+    fn platform(&self) -> &ReferencePlatform {
+        self.platform
+    }
+
+    fn particle_with_particle(&self, particle1: &Particle, particle2: &Particle) -> f64 {
+        let distance_squared = self
+            .platform()
+            .cell
+            .distance_squared(&particle1.pos, &particle2.pos);
+        self.pair_potentials[particle1.id][particle2.id].isotropic_twobody_energy(distance_squared)
     }
 }
 
