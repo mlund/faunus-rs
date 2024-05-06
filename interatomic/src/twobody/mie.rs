@@ -112,7 +112,7 @@ impl<const N: u32, const M: u32> Cutoff for Mie<N, M> {
 /// let (r_min, u_min) = (f64::powf(2.0, 1.0 / 6.0) * sigma, -epsilon);
 /// assert_eq!(lj.isotropic_twobody_energy( r_min.powi(2) ), u_min);
 /// ~~~
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq, Default, Copy)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize), serde(default))]
 pub struct LennardJones {
     /// Four times epsilon, 4ε

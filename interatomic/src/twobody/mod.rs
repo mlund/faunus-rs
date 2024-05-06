@@ -17,9 +17,10 @@
 //! Module for describing exactly two particles interacting with each other.
 
 pub use crate::Vector3;
+use core::fmt::Debug;
+use core::ops::Add;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
-use std::fmt::Debug;
 
 mod hardsphere;
 mod harmonic;
@@ -30,9 +31,10 @@ pub use self::harmonic::Harmonic;
 pub use self::mie::{LennardJones, Mie, WeeksChandlerAndersen};
 pub use self::multipole::{IonIon, IonIonPlain, IonIonYukawa};
 
-/// Relative orientation between a pair of anisotropic particles
+/// Relative orientation between a pair of anisotropic particles.
+///
 /// # Todo
-/// Unfinished and still not desided how to implement
+/// Unfinished and still not decided how to implement
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 pub struct RelativeOrientation {
@@ -41,7 +43,7 @@ pub struct RelativeOrientation {
     pub orientation: Vector3,
 }
 
-/// Potential energy between a pair of anisotropic particles
+/// Potential energy between a pair of anisotropic particles.
 pub trait AnisotropicTwobodyEnergy: Debug {
     /// Interaction energy between a pair of anisotropic particles, 𝑈(𝒓).
     fn anisotropic_twobody_energy(&self, orientation: &RelativeOrientation) -> f64;
@@ -52,7 +54,7 @@ pub trait AnisotropicTwobodyEnergy: Debug {
     }
 }
 
-/// Potential energy between a pair of isotropic particles, 𝑈(𝑟)
+/// Potential energy between a pair of isotropic particles, 𝑈(𝑟).
 pub trait IsotropicTwobodyEnergy: Debug + AnisotropicTwobodyEnergy {
     /// Interaction energy between a pair of isotropic particles.
     fn isotropic_twobody_energy(&self, distance_squared: f64) -> f64;
@@ -70,7 +72,7 @@ pub trait IsotropicTwobodyEnergy: Debug + AnisotropicTwobodyEnergy {
     }
 }
 
-/// All isotropic potentials implement the anisotropic trait
+/// All isotropic potentials implement the anisotropic trait.
 impl<T: IsotropicTwobodyEnergy> AnisotropicTwobodyEnergy for T {
     fn anisotropic_twobody_energy(&self, orientation: &RelativeOrientation) -> f64 {
         self.isotropic_twobody_energy(orientation.distance.norm_squared())
@@ -82,7 +84,12 @@ impl<T: IsotropicTwobodyEnergy> AnisotropicTwobodyEnergy for T {
     }
 }
 
-/// Combine two twobody energy schemes
+/// Combine two twobody pair potentials.
+///
+/// This works with both static and dynamic dispatch.
+/// For dynamic dispatch, `Box<dyn IsotropicTwobodyEnergy>`
+/// can be aggregated using the `+` operator.
+///
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct Combined<T, U>(T, U);
@@ -109,7 +116,7 @@ impl IsotropicTwobodyEnergy for Box<dyn IsotropicTwobodyEnergy> {
     }
 }
 
-impl std::ops::Add for Box<dyn IsotropicTwobodyEnergy> {
+impl Add for Box<dyn IsotropicTwobodyEnergy> {
     type Output = Box<dyn IsotropicTwobodyEnergy>;
     fn add(self, other: Box<dyn IsotropicTwobodyEnergy>) -> Box<dyn IsotropicTwobodyEnergy> {
         Box::new(Combined::new(self, other))
@@ -127,20 +134,41 @@ pub type YukawaLennardJones<'a> = Combined<IonIon<'a, coulomb::pairwise::Yukawa>
 pub fn test_combined() {
     use approx::assert_relative_eq;
     let r2 = 0.5;
-    let lj = LennardJones::new(0.5, 1.0);
-    let harmonic = Harmonic::new(0.0, 10.0);
-    let u_lj = lj.isotropic_twobody_energy(r2);
-    let u_harmonic = harmonic.isotropic_twobody_energy(r2);
+
+    let relative_orientation = RelativeOrientation {
+        distance: Vector3::new(f64::sqrt(r2), 0.0, 0.0),
+        orientation: Vector3::new(0.0, 1.0, 0.0),
+    };
+
+    let pot1 = LennardJones::new(0.5, 1.0);
+    let pot2 = Harmonic::new(0.0, 10.0);
+    let energy = (
+        pot1.isotropic_twobody_energy(r2),
+        pot2.isotropic_twobody_energy(r2),
+    );
+    assert_relative_eq!(energy.0, 112.0);
+    assert_relative_eq!(energy.1, 2.5);
 
     // static dispatch
-    let combined = Combined::new(lj.clone(), harmonic);
-    assert_relative_eq!(combined.isotropic_twobody_energy(r2), u_lj + u_harmonic);
+    let combined = Combined::new(pot1, pot2);
+    assert_relative_eq!(combined.isotropic_twobody_energy(r2), energy.0 + energy.1);
+    assert_relative_eq!(
+        combined.anisotropic_twobody_energy(&relative_orientation),
+        energy.0 + energy.1,
+        epsilon = 1e-7
+    );
 
     // dynamic dispatch
-    let box1: Box<dyn IsotropicTwobodyEnergy> = Box::new(lj);
-    let box2: Box<dyn IsotropicTwobodyEnergy> = Box::new(harmonic);
+    let box1 = Box::new(pot1) as Box<dyn IsotropicTwobodyEnergy>;
+    let box2 = Box::new(pot2) as Box<dyn IsotropicTwobodyEnergy>;
     let combined = box1 + box2;
-    assert_relative_eq!(combined.isotropic_twobody_energy(r2), u_lj + u_harmonic);
+
+    assert_relative_eq!(combined.isotropic_twobody_energy(r2), energy.0 + energy.1);
+    assert_relative_eq!(
+        combined.anisotropic_twobody_energy(&relative_orientation),
+        energy.0 + energy.1,
+        epsilon = 1e-7
+    );
 }
 
 /*
