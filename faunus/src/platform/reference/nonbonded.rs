@@ -14,10 +14,10 @@
 
 use anyhow::Ok;
 use as_any::{AsAny, Downcast};
+use core::fmt::Debug;
 use interatomic::twobody::IsotropicTwobodyEnergy;
 use itertools::iproduct;
 use serde::Serialize;
-use std::fmt::Debug;
 
 use super::ReferencePlatform;
 use crate::{
@@ -87,6 +87,53 @@ impl<T: NonbondedInterface + SyncFrom + std::fmt::Debug + 'static> EnergyTerm fo
 
     fn update(&mut self, _change: &Change) -> anyhow::Result<()> {
         Ok(())
+    }
+}
+
+/// Nonbonded interactions with boxed pair potentials.
+pub struct NonbondedBoxed {
+    pair_potentials: Vec<Vec<Box<dyn IsotropicTwobodyEnergy>>>,
+    platform: Box<ReferencePlatform>,
+}
+
+impl NonbondedBoxed {
+    pub fn new(platform: Box<ReferencePlatform>) -> Self {
+        let pair_potentials = Vec::new();
+        Self {
+            pair_potentials,
+            platform,
+        }
+    }
+
+    /// Sets a default pair potential for all `AtomKind` pairs.
+    pub fn with_default(
+        platform: Box<ReferencePlatform>,
+        default_pot: impl IsotropicTwobodyEnergy + Clone + 'static,
+    ) -> Self {
+        let n = platform.topology.atoms().len();
+        let mut pair_potentials = Vec::with_capacity(n);
+        let make_box = |_| Box::new(default_pot.clone()) as Box<dyn IsotropicTwobodyEnergy>;
+        for _ in 0..n {
+            pair_potentials.push((0..n).map(make_box).collect());
+        }
+        Self {
+            pair_potentials,
+            platform,
+        }
+    }
+}
+
+impl NonbondedInterface for NonbondedBoxed {
+    fn platform(&self) -> &ReferencePlatform {
+        &self.platform
+    }
+
+    fn particle_with_particle(&self, particle1: &Particle, particle2: &Particle) -> f64 {
+        let distance_squared = self
+            .platform()
+            .cell
+            .distance_squared(&particle1.pos, &particle2.pos);
+        self.pair_potentials[particle1.id][particle2.id].isotropic_twobody_energy(distance_squared)
     }
 }
 
