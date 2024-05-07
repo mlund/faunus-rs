@@ -16,8 +16,11 @@
 
 use derive_getters::Getters;
 use float_cmp::approx_eq;
+use interatomic::twobody::IsotropicTwobodyEnergy;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
+
+use crate::{cell::BoundaryConditions, Particle, PointParticle};
 
 use super::Indexed;
 
@@ -26,20 +29,20 @@ use super::Indexed;
 /// Each varient stores the parameters for the bond type, like force constant, equilibrium distance, etc.
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Default)]
 pub enum BondKind {
-    /// Harmonic bond type (force constant, equilibrium distance).
+    /// Harmonic bond type.
     /// See <https://en.wikipedia.org/wiki/Harmonic_oscillator>.
-    Harmonic { k: f64, req: f64 },
-    /// Finite extensible nonlinear elastic bond type (force constant, equilibrium distance, maximum distance)
+    Harmonic(interatomic::twobody::Harmonic),
+    /// Finitely extensible nonlinear elastic bond type,
     /// See <https://en.wikipedia.org/wiki/Finitely_extensible_nonlinear_elastic_potential>.
-    FENE { k: f64, req: f64, rmax: f64 },
-    /// Morse bond type (force constant, equilibrium distance, depth of potential well).
+    FENE(interatomic::twobody::FENE),
+    /// Morse bond type.
     /// See <https://en.wikipedia.org/wiki/Morse_potential>.
-    Morse { k: f64, req: f64, d: f64 },
-    /// Harmonic Urey-Bradley bond type (force constant, equilibrium distance)
+    Morse(interatomic::twobody::Morse),
+    /// Harmonic Urey-Bradley bond type.
     /// See <https://manual.gromacs.org/documentation/current/reference-manual/functions/bonded-interactions.html#urey-bradley-potential>
     /// for more information.
-    UreyBradley { k: f64, req: f64 },
-    /// Undefined bond type
+    UreyBradley(interatomic::twobody::UreyBradley),
+    /// Undefined bond type.
     #[default]
     Unspecified,
 }
@@ -141,10 +144,28 @@ impl Bond {
     pub fn contains(&self, index: usize) -> bool {
         self.index.contains(&index)
     }
+
+    /// Calculate energy of the bond.
+    pub fn energy(&self, particles: &[Particle], pbc: &impl BoundaryConditions) -> f64 {
+        let [i, j] = self.index;
+        self.isotropic_twobody_energy(pbc.distance_squared(particles[i].pos(), particles[j].pos()))
+    }
 }
 
 impl Indexed for Bond {
     fn index(&self) -> &[usize] {
         &self.index
+    }
+}
+
+impl interatomic::twobody::IsotropicTwobodyEnergy for Bond {
+    fn isotropic_twobody_energy(&self, distance_squared: f64) -> f64 {
+        match self.kind {
+            BondKind::Harmonic(x) => x.isotropic_twobody_energy(distance_squared),
+            BondKind::FENE(x) => x.isotropic_twobody_energy(distance_squared),
+            BondKind::Morse(x) => x.isotropic_twobody_energy(distance_squared),
+            BondKind::UreyBradley(x) => x.isotropic_twobody_energy(distance_squared),
+            BondKind::Unspecified => 0.0,
+        }
     }
 }

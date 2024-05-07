@@ -1088,16 +1088,12 @@ mod tests {
         let bonds = vec![
             Bond::new(
                 [0, 1],
-                BondKind::Harmonic { k: 100.0, req: 1.0 },
+                BondKind::Harmonic(interatomic::twobody::Harmonic::new(1.0, 100.0)),
                 Some(BondOrder::Single),
             ),
             Bond::new(
                 [1, 2],
-                BondKind::Morse {
-                    k: 100.0,
-                    req: 1.0,
-                    d: 10.0,
-                },
+                BondKind::Morse(interatomic::twobody::Morse::new(1.0, 10.0, 100.0)),
                 None,
             ),
             Bond::new([2, 3], BondKind::default(), None),
@@ -1181,14 +1177,14 @@ mod tests {
         );
 
         let bonds = vec![
-            Bond::new([0, 220], BondKind::Harmonic { k: 50.0, req: 3.0 }, None),
+            Bond::new(
+                [0, 220],
+                BondKind::Harmonic(interatomic::twobody::Harmonic::new(3.0, 50.0)),
+                None,
+            ),
             Bond::new(
                 [52, 175],
-                BondKind::FENE {
-                    k: 25.0,
-                    req: 1.5,
-                    rmax: 5.0,
-                },
+                BondKind::FENE(interatomic::twobody::FENE::new(1.5, 5.0, 25.0)),
                 Some(BondOrder::Triple),
             ),
         ];

@@ -22,14 +22,20 @@ use core::ops::Add;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
+mod fene;
 mod hardsphere;
 mod harmonic;
 mod mie;
+mod morse;
 mod multipole;
+mod ureybradley;
+pub use self::fene::FENE;
 pub use self::hardsphere::HardSphere;
 pub use self::harmonic::Harmonic;
 pub use self::mie::{LennardJones, Mie, WeeksChandlerAndersen};
+pub use self::morse::Morse;
 pub use self::multipole::{IonIon, IonIonPlain, IonIonYukawa};
+pub use self::ureybradley::UreyBradley;
 
 /// Relative orientation between a pair of anisotropic particles.
 ///
