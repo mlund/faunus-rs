@@ -332,7 +332,10 @@ pub trait GroupCollection: SyncFrom {
     ///
     /// This can potentially be an expensive operation as it involves copying the particles
     /// from the underlying storage model.
-    fn get_particles(&self, indices: impl IntoIterator<Item = usize>) -> Vec<Particle> {
+    fn get_particles(&self, indices: impl IntoIterator<Item = usize>) -> Vec<Particle>
+    where
+        Self: Sized,
+    {
         indices.into_iter().map(|i| self.particle(i)).collect()
     }
 
@@ -357,7 +360,9 @@ pub trait GroupCollection: SyncFrom {
         &mut self,
         indices: impl IntoIterator<Item = usize>,
         source: impl IntoIterator<Item = &'a Particle> + Clone,
-    ) -> anyhow::Result<()>;
+    ) -> anyhow::Result<()>
+    where
+        Self: Sized;
 
     /// Synchronize with a group in another context
     ///
@@ -372,7 +377,10 @@ pub trait GroupCollection: SyncFrom {
         group_index: usize,
         change: GroupChange,
         other: &impl GroupCollection,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<()>
+    where
+        Self: Sized,
+    {
         let other_group = &other.groups()[group_index];
         let group = &self.groups()[group_index];
         if (other_group.molecule() != group.molecule())
@@ -442,7 +450,10 @@ pub trait GroupCollection: SyncFrom {
         &mut self,
         change: &Change,
         other: &impl GroupCollection,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<()>
+    where
+        Self: Sized,
+    {
         match change {
             Change::Everything => {
                 for i in 0..self.groups().len() {
@@ -535,6 +546,19 @@ impl GroupLists {
             // group is not present in any list, add it
             None => self.add_group(group),
         }
+    }
+
+    /// Returns indices of all groups matching given molecule id and size.
+    ///
+    /// The lookup complexity is O(1).
+    pub fn find_molecules(&self, molecule_id: usize, size: GroupSize) -> Option<&[usize]> {
+        let indices = match size {
+            GroupSize::Full => self.full.get(molecule_id),
+            GroupSize::Partial(_) => self.partial.get(molecule_id),
+            GroupSize::Empty => self.empty.get(molecule_id),
+            _ => panic!("Unsupported GroupSize."),
+        };
+        indices.map(|i| i.as_slice())
     }
 
     /// Find the group in GroupLists.

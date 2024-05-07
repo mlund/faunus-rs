@@ -137,7 +137,9 @@ pub trait Context:
         hamiltonian: Hamiltonian,
         structure_file: Option<impl AsRef<Path>>,
         rng: &mut ThreadRng,
-    ) -> anyhow::Result<Self>;
+    ) -> anyhow::Result<Self>
+    where
+        Self: Sized;
 }
 
 /// Context stores the state of a single simulation system
