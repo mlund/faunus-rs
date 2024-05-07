@@ -537,6 +537,18 @@ impl GroupLists {
         }
     }
 
+    /// Returns indices of all groups matching given molecule id and size.
+    ///
+    /// The lookup complexity is O(1).
+    pub fn find_molecules(&self, molecule_id: usize, size: GroupSize) -> Option<&Vec<usize>> {
+        match size {
+            GroupSize::Full => self.full.get(molecule_id),
+            GroupSize::Partial(_) => self.partial.get(molecule_id),
+            GroupSize::Empty => self.empty.get(molecule_id),
+            _ => panic!("Unsupported GroupSize."),
+        }
+    }
+
     /// Find the group in GroupLists.
     ///
     /// Returns the inner vector in which the group is located,
