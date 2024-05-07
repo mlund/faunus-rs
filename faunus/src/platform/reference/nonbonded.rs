@@ -98,10 +98,7 @@ pub struct NonbondedBoxed {
 }
 
 impl NonbondedBoxed {
-    pub fn new(platform: Box<ReferencePlatform>) -> Self
-    where
-        Self: Sized,
-    {
+    pub fn new(platform: Box<ReferencePlatform>) -> Self {
         let pair_potentials = Vec::new();
         Self {
             pair_potentials,
@@ -113,10 +110,7 @@ impl NonbondedBoxed {
     pub fn with_default(
         platform: Box<ReferencePlatform>,
         default_pot: impl IsotropicTwobodyEnergy + Clone + 'static,
-    ) -> Self
-    where
-        Self: Sized,
-    {
+    ) -> Self {
         let n = platform.topology.atoms().len();
         let mut pair_potentials = Vec::with_capacity(n);
         let make_box = |_| Box::new(default_pot.clone()) as Box<dyn IsotropicTwobodyEnergy>;
