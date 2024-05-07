@@ -1,0 +1,12 @@
+# Parsing of this file should fail because the indices of the dihedral are too high.
+include: [top/top1.yaml, top2.yaml]
+atoms:
+  - {name: A, mass: 1.0}
+molecules:
+  - name: MOL
+    atoms: [A, A, A]
+    dihedrals:
+      - {index: [4, 5, 6, 7], kind: !ImproperHarmonic {k: 100.0, aeq: 90.0}, electrostatic_scaling: 0.5, lj_scaling: 0.5}
+system:
+  blocks:
+    - {molecule: MOL, N: 3}

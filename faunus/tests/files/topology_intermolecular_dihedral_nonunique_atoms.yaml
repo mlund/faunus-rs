@@ -1,0 +1,15 @@
+# Parsing of this file should fail because one of the intermolecular dihedrals is not defined for four unique atoms.
+include: [top/top1.yaml, top2.yaml]
+atoms:
+  - {name: A, mass: 1.0}
+molecules:
+  - name: MOL
+    atoms: [A, A, A]
+system:
+  intermolecular:
+    dihedrals:
+      - {index: [6, 6, 3, 0]}
+      - {index: [0, 2, 4, 6], kind: !Harmonic {k: 27.5, aeq: 105.0}, lj_scaling: 0.9}
+
+  blocks:
+    - {molecule: MOL, N: 3}

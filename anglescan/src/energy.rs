@@ -27,9 +27,9 @@ impl<'a> PairMatrix<'a> {
                 let a = &atomkinds[i];
                 let b = &atomkinds[j];
 
-                let ionion = IonIon::new(a.charge * b.charge, multipole);
-                let epsilons = (a.epsilon.unwrap_or(0.0), b.epsilon.unwrap_or(0.0));
-                let sigmas = (a.sigma.unwrap_or(0.0), b.sigma.unwrap_or(0.0));
+                let ionion = IonIon::new(a.charge() * b.charge(), multipole);
+                let epsilons = (a.epsilon().unwrap_or(0.0), b.epsilon().unwrap_or(0.0));
+                let sigmas = (a.sigma().unwrap_or(0.0), b.sigma().unwrap_or(0.0));
                 let lj = ShortRange::from_combination_rule(
                     CombinationRule::LorentzBerthelot,
                     epsilons,

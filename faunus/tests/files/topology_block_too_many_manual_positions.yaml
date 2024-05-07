@@ -1,0 +1,22 @@
+# Parsing of this file should fail because there is too many coordinates provided for the molecule block.
+include: [top/top1.yaml, top2.yaml]
+atoms:
+  - {name: A, mass: 1.0}
+molecules:
+  - name: MOL
+    atoms: [A, A, A]
+system:
+  blocks:
+    - molecule: MOL
+      N: 3
+      insert: !Manual 
+        - [1.0, 2.0, 3.0]
+        - [1.0, 2.0, 3.0]
+        - [1.0, 2.0, 3.0]
+        - [1.0, 2.0, 3.0]
+        - [1.0, 2.0, 3.0]
+        - [1.0, 2.0, 3.0]
+        - [1.0, 2.0, 3.0]
+        - [1.0, 2.0, 3.0]
+        - [1.0, 2.0, 3.0]
+        - [1.0, 2.0, 3.0]

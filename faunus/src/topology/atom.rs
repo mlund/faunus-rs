@@ -13,19 +13,7 @@
 // limitations under the license.
 
 use crate::topology::{CustomProperty, Value};
-use chemfiles;
 use serde::{Deserialize, Serialize};
-
-/// Enum to store hydrophobicity information of an atom or residue
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Copy)]
-pub enum Hydrophobicity {
-    /// Item is hydrophobic
-    Hydrophobic,
-    /// Item is hydrophilic
-    Hydrophilic,
-    /// Stores information about surface tension
-    SurfaceTension(f64),
-}
 
 /// Description of atom properties
 ///
@@ -33,39 +21,108 @@ pub enum Hydrophobicity {
 /// This does _not_ include positions; indices etc., but is rather
 /// used to represent static properties used for templating atoms.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[serde(deny_unknown_fields)]
 pub struct AtomKind {
-    /// Unique name
-    pub name: String,
-    /// Unique identifier
-    pub id: usize,
-    /// Atomic mass (g/mol)
-    pub mass: f64,
-    /// Atomic charge
-    pub charge: f64,
-    /// Atomic symbol if appropriate (He, C, O, Fe, etc.)
-    pub element: Option<String>,
-    /// Lennard-Jones diameter, σٖᵢᵢ (angstrom)
-    pub sigma: Option<f64>,
-    /// Lennard-Jones well depth, εᵢᵢ (kJ/mol)
-    pub epsilon: Option<f64>,
-    /// Hydrophobicity information
-    pub hydrophobicity: Option<Hydrophobicity>,
-    /// Map of custom properties
+    /// Unique name.
+    name: String,
+    /// Unique identifier.
+    /// Only defined if the AtomKind is inside of Topology.
+    #[serde(skip)]
+    id: usize,
+    /// Atomic mass (g/mol).
+    mass: f64,
+    /// Atomic charge.
     #[serde(default)]
-    pub custom: std::collections::HashMap<String, Value>,
+    charge: f64,
+    /// Atomic symbol if appropriate (He, C, O, Fe, etc.).
+    element: Option<String>,
+    /// Lennard-Jones diameter, σٖᵢᵢ (angstrom).
+    sigma: Option<f64>,
+    /// Lennard-Jones well depth, εᵢᵢ (kJ/mol).
+    epsilon: Option<f64>,
+    /// Hydrophobicity information.
+    hydrophobicity: Option<Hydrophobicity>,
+    /// Map of custom properties.
+    #[serde(default)]
+    custom: std::collections::HashMap<String, Value>,
 }
 
 impl AtomKind {
-    /// New atom type with given name but with otherwise default values
-    pub fn new(name: &str) -> Self {
+    /// Create a new AtomKind structure. This function does not perform any sanity checks.
+    #[allow(dead_code, clippy::too_many_arguments)]
+    pub(crate) fn new(
+        name: &str,
+        id: usize,
+        mass: f64,
+        charge: f64,
+        element: Option<&str>,
+        sigma: Option<f64>,
+        epsilon: Option<f64>,
+        hydrophobicity: Option<Hydrophobicity>,
+        custom: std::collections::HashMap<String, Value>,
+    ) -> Self {
         Self {
-            name: name.to_string(),
-            ..Default::default()
+            name: name.to_owned(),
+            id,
+            mass,
+            charge,
+            element: element.map(String::from),
+            sigma,
+            epsilon,
+            hydrophobicity,
+            custom,
         }
     }
+
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn id(&self) -> usize {
+        self.id
+    }
+
+    pub fn mass(&self) -> f64 {
+        self.mass
+    }
+
+    pub fn charge(&self) -> f64 {
+        self.charge
+    }
+
+    pub fn element(&self) -> Option<&str> {
+        self.element.as_deref()
+    }
+
+    pub fn sigma(&self) -> Option<f64> {
+        self.sigma
+    }
+
+    pub fn epsilon(&self) -> Option<f64> {
+        self.epsilon
+    }
+
+    pub fn hydrophobicity(&self) -> Option<Hydrophobicity> {
+        self.hydrophobicity
+    }
+
+    pub fn custom(&self) -> &std::collections::HashMap<String, Value> {
+        &self.custom
+    }
+
     /// Set unique identifier
-    pub fn set_id(&mut self, id: usize) {
+    pub(super) fn set_id(&mut self, id: usize) {
         self.id = id;
+    }
+
+    /// Set sigma.
+    pub fn set_sigma(&mut self, sigma: f64) {
+        self.sigma = Some(sigma);
+    }
+
+    /// Set epsilon.
+    pub fn set_epsilon(&mut self, epsilon: f64) {
+        self.epsilon = Some(epsilon);
     }
 }
 
@@ -79,17 +136,13 @@ impl CustomProperty for AtomKind {
     }
 }
 
-/// Convert from chemfiles atom to topology atom
-impl core::convert::From<chemfiles::AtomRef<'_>> for AtomKind {
-    fn from(atom: chemfiles::AtomRef) -> Self {
-        AtomKind {
-            name: atom.name(),
-            id: 0,
-            mass: atom.mass(),
-            charge: atom.charge(),
-            sigma: Some(2.0 * atom.vdw_radius()),
-            element: Some(atom.atomic_type()),
-            ..Default::default()
-        }
-    }
+/// Enum to store hydrophobicity information of an atom or residue
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Copy)]
+pub enum Hydrophobicity {
+    /// Item is hydrophobic
+    Hydrophobic,
+    /// Item is hydrophilic
+    Hydrophilic,
+    /// Stores information about surface tension
+    SurfaceTension(f64),
 }

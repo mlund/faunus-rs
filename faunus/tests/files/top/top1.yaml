@@ -1,0 +1,9 @@
+# This file can only be parsed as partial topology.
+include: ["../top3.yaml"]
+
+atoms:
+  - {name: X, mass: 12.0, charge: 1.0, hydrophobicity: !Hydrophilic }
+
+molecules:
+  - name: MOL2
+    atoms: [X, X, X]

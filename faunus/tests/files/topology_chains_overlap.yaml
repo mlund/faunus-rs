@@ -1,0 +1,13 @@
+# Parsing of this file should fail because the chains overlap.
+include: [top/top1.yaml, top2.yaml]
+atoms:
+  - {name: A, mass: 1.0}
+molecules:
+  - name: MOL
+    atoms: [A, A, A]
+    chains:
+      - {name: A, range: [1, 3]}
+      - {name: Chain2, range: [0, 2]}
+system:
+  blocks:
+    - {molecule: MOL, N: 3}

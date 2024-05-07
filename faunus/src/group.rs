@@ -35,7 +35,7 @@ pub type ParticleVec = Vec<Particle>;
 /// Here an example of a group with 3 particles, starting at index 20 in the main particle vector.
 /// ~~~
 /// use faunus::group::*;
-/// let mut group = Group::new(7, GroupId::None, 20..23);
+/// let mut group = Group::new(7, 0, 20..23);
 /// assert_eq!(group.len(), 3);
 /// assert_eq!(group.size(), GroupSize::Full);
 ///
@@ -49,34 +49,20 @@ pub type ParticleVec = Vec<Particle>;
 /// assert_eq!(selection.unwrap(), vec![22]);
 /// ~~~
 
-#[derive(Serialize, Deserialize, Default, Debug, PartialEq, Clone)]
+#[derive(Default, Debug, PartialEq, Clone)]
 pub struct Group {
-    /// Molecular type id (immutable)
-    id: GroupId,
-    /// Index of group in main group vector (immutable and unique)
+    /// Index of the molecule kind forming the group (immutable).
+    molecule: usize,
+    /// Index of the group in the main group vector (immutable and unique).
     index: usize,
     /// Optional mass center
     mass_center: Option<Point>,
-    /// Active number of active particles
+    /// Number of active particles
     num_active: usize,
     /// Absolute indices in main particle vector (active and inactive; immutable and unique)
     range: std::ops::Range<usize>,
     /// Size status
     size_status: GroupSize,
-}
-
-/// Describes how a group is built, i.e. what it is based on in the `Topology`
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone, Default)]
-pub enum GroupId {
-    /// Group consists of a single residue (residue kind)
-    Residue(usize),
-    /// Repeated residue (residue kind, n)
-    RepeatResidue(usize, usize),
-    /// Group is build from a chain (chainid)
-    Chain(usize),
-    /// Unspecified
-    #[default]
-    None,
 }
 
 /// Activation status of a group of particles
@@ -129,16 +115,16 @@ pub enum GroupSelection {
     Single(usize),
     /// Groups with given index
     Index(Vec<usize>),
-    /// Groups with given id
-    ById(GroupId),
+    /// Groups with a given molecule kind
+    ByMoleculeId(usize),
 }
 
 impl Group {
     /// Create a new group
-    pub fn new(index: usize, id: GroupId, range: core::ops::Range<usize>) -> Self {
+    pub fn new(index: usize, molecule: usize, range: core::ops::Range<usize>) -> Self {
         Self {
+            molecule,
             index,
-            id,
             range: range.clone(),
             num_active: range.len(),
             ..Default::default()
@@ -191,11 +177,21 @@ impl Group {
         self.size_status
     }
 
-    /// Get molecular id
-    #[inline]
-    pub fn id(&self) -> &GroupId {
-        &self.id
+    /// Get the index of the group.
+    pub fn index(&self) -> usize {
+        self.index
     }
+
+    /// Get the molecule index of the group.
+    pub fn molecule(&self) -> usize {
+        self.molecule
+    }
+
+    /// Get the center of mass of the group.
+    pub fn mass_center(&self) -> Option<&Point> {
+        self.mass_center.as_ref()
+    }
+
     /// Maximum number of particles (active plus inactive)
     pub fn capacity(&self) -> usize {
         self.range.len()
@@ -267,19 +263,11 @@ impl Group {
         self.range.clone()
     }
 
-    /// Index of group in group vector
-    pub fn index(&self) -> usize {
-        self.index
-    }
-
     /// Iterator to inactive indices (absolute indices in main particle vector)
     pub fn iter_inactive(&self) -> impl Iterator<Item = usize> {
         self.range.clone().skip(self.num_active)
     }
-    /// Center of mass of the group
-    pub fn mass_center(&self) -> Option<&Point> {
-        self.mass_center.as_ref()
-    }
+
     /// Set mass center
     pub fn set_mass_center(&mut self, mass_center: Point) {
         self.mass_center = Some(mass_center);
@@ -291,8 +279,8 @@ impl Group {
 /// Each group has a unique index in a global list of groups, and a unique range of indices in a
 /// global particle list.
 pub trait GroupCollection: SyncFrom {
-    /// Add a group to the system based on an id and a set of particles given by an iterator.
-    fn add_group(&mut self, id: GroupId, particles: &[Particle]) -> anyhow::Result<&Group>;
+    /// Add a group to the system based on an molecule id and a set of particles given by an iterator.
+    fn add_group(&mut self, molecule: usize, particles: &[Particle]) -> anyhow::Result<&mut Group>;
 
     /// Resizes a group to a given size.
     ///
@@ -307,6 +295,16 @@ pub trait GroupCollection: SyncFrom {
 
     /// Copy of i'th particle in the system
     fn particle(&self, index: usize) -> Particle;
+
+    /// Get the number of particles in the system.
+    fn num_particles(&self) -> usize {
+        self.groups().iter().map(|group| group.capacity()).sum()
+    }
+
+    /// Get the number of activate particles in the system.
+    fn num_active_particles(&self) -> usize {
+        self.groups().iter().map(|group| group.len()).sum()
+    }
 
     /// Find group indices based on a selection
     ///
@@ -323,17 +321,10 @@ pub trait GroupCollection: SyncFrom {
                 .groups()
                 .iter()
                 .enumerate()
-                .filter(|(_i, g)| g.size() == *size)
-                .map(|(i, _)| i)
-                .collect(),
-            GroupSelection::ById(id) => self
-                .groups()
-                .iter()
-                .enumerate()
-                .filter(|(_i, g)| g.id() == id)
-                .map(|(i, _)| i)
+                .filter_map(|(i, g)| if g.size() == *size { Some(i) } else { None })
                 .collect(),
             GroupSelection::All => (0..self.groups().len()).collect(),
+            GroupSelection::ByMoleculeId(_) => todo!("not implemented"),
         }
     }
 
@@ -343,6 +334,22 @@ pub trait GroupCollection: SyncFrom {
     /// from the underlying storage model.
     fn get_particles(&self, indices: impl IntoIterator<Item = usize>) -> Vec<Particle> {
         indices.into_iter().map(|i| self.particle(i)).collect()
+    }
+
+    /// Extract copy of all particles in the system (both active and inactive).
+    fn get_all_particles(&self) -> Vec<Particle> {
+        (0..self.num_particles())
+            .map(|i| self.particle(i))
+            .collect()
+    }
+
+    /// Extract copy of active particles in the system.
+    fn get_active_particles(&self) -> Vec<Particle> {
+        self.groups()
+            .iter()
+            .flat_map(|group| group.iter_active())
+            .map(|index| self.particle(index))
+            .collect()
     }
 
     /// Set particles for a given group.
@@ -368,7 +375,7 @@ pub trait GroupCollection: SyncFrom {
     ) -> anyhow::Result<()> {
         let other_group = &other.groups()[group_index];
         let group = &self.groups()[group_index];
-        if (other_group.id() != group.id())
+        if (other_group.molecule() != group.molecule())
             || (other_group.index() != group.index())
             || (other_group.capacity() != group.capacity())
         {
@@ -459,6 +466,113 @@ pub trait GroupCollection: SyncFrom {
     }
 }
 
+/// Structure storing groups separated into three types:
+/// - `full` - all of the atoms of the group are active
+/// - `partial` - some of the atoms of the group are active, some are inactive
+/// - `empty` - all of the atoms of the group are inactive
+///
+/// Length of each outer vector corresponds to the number of molecule kinds in the system.
+/// Each inner vector then stores ids of groups corresponding to the specific molecule kind.
+#[derive(Debug, PartialEq, Clone)]
+pub struct GroupLists {
+    full: Vec<Vec<usize>>,
+    partial: Vec<Vec<usize>>,
+    empty: Vec<Vec<usize>>,
+}
+
+impl GroupLists {
+    /// Create and initialize a new GroupLists structure.
+    ///
+    /// ## Parameters
+    /// `n_molecules` - the number of molecule kinds defined in the system
+    pub(crate) fn new(n_molecules: usize) -> GroupLists {
+        GroupLists {
+            full: vec![Vec::new(); n_molecules],
+            partial: vec![Vec::new(); n_molecules],
+            empty: vec![Vec::new(); n_molecules],
+        }
+    }
+
+    /// Add group to the GroupList. The group will be automatically assigned to the correct list.
+    /// This method assumes that the group is NOT yet present in the GroupLists.
+    ///
+    /// ## Notes
+    /// - The time complexity of this operation is O(1).
+    pub(crate) fn add_group(&mut self, group: &Group) {
+        let list = match group.size() {
+            GroupSize::Full => &mut self.full,
+            GroupSize::Partial(_) => &mut self.partial,
+            GroupSize::Empty => &mut self.empty,
+            _ => panic!("Unsupported GroupSize."),
+        };
+
+        GroupLists::add_to_list(list, group);
+    }
+
+    /// Update the position of the group in the GroupLists.
+    ///
+    /// ## Notes
+    /// - The time complexity of this operation is O(n).
+    /// - This operation always consists of searching for the group (O(n)).
+    /// If the position of the group must be updated, searching is followed by
+    /// removing the group from the original vector via `swap_remove` (O(1)) and by
+    /// adding the group to the correct vector (O(1)).
+    pub(crate) fn update_group(&mut self, group: &Group) {
+        match self.find_group(group) {
+            Some((list, index, size)) => {
+                // we can't use just `==` because GroupSize::Partial must match any GroupSize::Partial
+                match (group.size(), size) {
+                    (GroupSize::Empty, GroupSize::Empty) => (),
+                    (GroupSize::Partial(_), GroupSize::Partial(_)) => (),
+                    (GroupSize::Full, GroupSize::Full) => (),
+                    // update is needed only if the current group size does not match the previous one
+                    _ => {
+                        list.swap_remove(index);
+                        self.add_group(group);
+                    }
+                }
+            }
+            // group is not present in any list, add it
+            None => self.add_group(group),
+        }
+    }
+
+    /// Find the group in GroupLists.
+    ///
+    /// Returns the inner vector in which the group is located,
+    /// the index of the group in the vector, and
+    /// the type of the vector as GroupSize enum.
+    ///
+    /// ## Notes
+    /// - The time complexity of this operation is O(n), where `n` is the number of
+    /// groups with the same molecule kind as the searched group.
+    fn find_group(&mut self, group: &Group) -> Option<(&mut Vec<usize>, usize, GroupSize)> {
+        [&mut self.full, &mut self.partial, &mut self.empty]
+            .into_iter()
+            .zip([GroupSize::Full, GroupSize::Partial(1), GroupSize::Empty])
+            .find_map(|(outer, size)| {
+                let inner = outer
+                    .get_mut(group.molecule())
+                    .expect("Incorrectly initialized GroupLists structure.");
+
+                inner
+                    .iter()
+                    .position(|&x| x == group.index())
+                    .map(|pos| (inner, pos, size))
+            })
+    }
+
+    /// Add group to target list.
+    ///
+    /// ## Notes
+    /// - The time complexity of this operation is O(1).
+    fn add_to_list(list: &mut [Vec<usize>], group: &Group) {
+        list.get_mut(group.molecule())
+            .expect("Incorrectly initialized GroupLists structure.")
+            .push(group.index());
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -467,7 +581,7 @@ mod tests {
     fn test_group() {
         // Test group creation
         let mut group = Group {
-            id: GroupId::Residue(20),
+            molecule: 20,
             index: 2,
             mass_center: None,
             num_active: 6,
@@ -478,7 +592,7 @@ mod tests {
         assert_eq!(group.len(), 6);
         assert_eq!(group.capacity(), 10);
         assert_eq!(group.iter_active(), 0..6);
-        assert_eq!(group.id(), &GroupId::Residue(20));
+        assert_eq!(group.molecule(), 20);
         assert_eq!(group.size(), GroupSize::Partial(6));
         assert_eq!(group.index(), 2);
         assert!(group.mass_center().is_none());
@@ -531,7 +645,7 @@ mod tests {
         assert_eq!(group.size(), GroupSize::Empty);
 
         // Relative selection
-        let mut group = Group::new(7, GroupId::None, 20..23);
+        let mut group = Group::new(7, 0, 20..23);
         assert_eq!(group.len(), 3);
         let indices = group
             .select(&ParticleSelection::RelIndex(vec![0, 1, 2]))
@@ -559,5 +673,39 @@ mod tests {
         assert_eq!(indices, vec![20, 21]);
         let indices = group.select(&ParticleSelection::Inactive).unwrap();
         assert_eq!(indices, vec![22]);
+    }
+
+    #[test]
+    fn test_group_lists() {
+        let mut group_lists = GroupLists::new(3);
+
+        assert_eq!(group_lists.full.len(), 3);
+        assert_eq!(group_lists.partial.len(), 3);
+        assert_eq!(group_lists.empty.len(), 3);
+
+        let mut group1 = Group::new(0, 0, 3..8);
+        let group2 = Group::new(1, 0, 8..13);
+        let mut group3 = Group::new(2, 1, 13..20);
+
+        group_lists.add_group(&group1);
+        group_lists.add_group(&group2);
+        group_lists.add_group(&group3);
+
+        assert!(group_lists.full[0].contains(&0));
+        assert!(group_lists.full[0].contains(&1));
+        assert!(group_lists.full[1].contains(&2));
+
+        group1.resize(GroupSize::Empty).unwrap();
+        group3.resize(GroupSize::Partial(3)).unwrap();
+
+        group_lists.update_group(&group1);
+        group_lists.update_group(&group2);
+        group_lists.update_group(&group3);
+
+        assert!(!group_lists.full[0].contains(&0));
+        assert!(group_lists.empty[0].contains(&0));
+        assert!(group_lists.full[0].contains(&1));
+        assert!(!group_lists.full[1].contains(&2));
+        assert!(group_lists.partial[1].contains(&2));
     }
 }

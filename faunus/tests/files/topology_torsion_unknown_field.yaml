@@ -1,0 +1,13 @@
+# Parsing of this file should fail due to the presence of `nonexistent_field` in the definition of one of the torsions.
+include: [top/top1.yaml, top2.yaml]
+atoms:
+  - {name: A, mass: 1.0}
+molecules:
+  - name: MOL
+    atoms: [A, A, A]
+    torsions:
+      - {index: [0, 1, 2], kind: !Cosine {k: 50.0, aeq: 45.0}}
+      - {index: [2, 1, 0], nonexistent_field: false}
+system:
+  blocks:
+    - {molecule: MOL, N: 3}

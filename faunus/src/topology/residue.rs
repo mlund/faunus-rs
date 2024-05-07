@@ -12,86 +12,58 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
-use crate::topology::{bond::Bond, Connectivity, Value};
 use serde::{Deserialize, Serialize};
 
-use super::DegreesOfFreedom;
+use std::ops::Range;
 
-/// Collection of connected atoms
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
-pub struct ResidueKind {
-    /// Unique name, e.g. _GLU_, _SOL_, etc.
-    pub name: String,
-    /// Unique identifier
-    pub id: usize,
-    /// List of atom ids in the residue
-    pub atoms: Vec<usize>,
-    /// Map of custom properties
-    pub custom: std::collections::HashMap<String, Value>,
-    /// Internal connections between atoms in the residue.
-    pub connectivity: Connectivity,
-    /// Internal degrees of freedom
-    pub dof: DegreesOfFreedom,
+/// Continuous range of atoms with a non-unique name and number.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Residue {
+    /// Residue name.
+    name: String,
+    /// Residue number.
+    number: Option<usize>,
+    /// Atoms indices forming the residue.
+    /// Range of indices relating to the atoms of a molecule.
+    #[serde(
+        serialize_with = "crate::topology::serialize_range_as_array",
+        deserialize_with = "crate::topology::deserialize_range_from_array"
+    )]
+    range: Range<usize>,
 }
 
-impl ResidueKind {
-    pub fn new(name: &str, atoms: &[usize]) -> Self {
-        Self {
-            name: name.to_string(),
-            atoms: atoms.to_vec(),
-            ..Default::default()
+impl Residue {
+    #[inline(always)]
+    pub fn new(name: &str, number: Option<usize>, range: Range<usize>) -> Self {
+        Residue {
+            name: name.to_owned(),
+            number,
+            range,
         }
     }
 
-    /// Number of atoms in the residue
-    pub fn len(&self) -> usize {
-        self.atoms.len()
+    #[inline(always)]
+    pub fn name(&self) -> &str {
+        &self.name
     }
 
-    /// Check if residue is empty
-    pub fn is_empty(&self) -> bool {
-        self.atoms.is_empty()
-    }
-
-    /// Short, one-letter code for residue (A, G, etc.). This follows the PDB standard.
-    pub fn short_name(&self) -> Option<char> {
-        residue_name_to_letter(&self.name)
-    }
-
-    /// Set unique identifier
-    pub fn set_id(&mut self, id: usize) {
-        self.id = id;
-    }
-
-    /// Add bond between atoms
-    pub fn add_bond(&mut self, bond: Bond) -> anyhow::Result<()> {
-        if bond.index.iter().any(|i| i >= &self.len()) || bond.index[0] == bond.index[1] {
-            anyhow::bail!("Invalid index in bond {:?} for residue {}", bond, self.name);
-        }
-        self.connectivity.bonds.push(bond);
-        Ok(())
-    }
-
-    /// Append atom to residue
-    pub fn add_atom(&mut self, atom: usize) {
-        self.atoms.push(atom);
+    #[inline(always)]
+    pub fn number(&self) -> Option<usize> {
+        self.number
     }
 }
 
-// Convert a chemfiles residue to a topology residue
-impl core::convert::From<chemfiles::ResidueRef<'_>> for ResidueKind {
-    fn from(residue: chemfiles::ResidueRef) -> Self {
-        ResidueKind {
-            name: residue.name(),
-            id: residue.id().unwrap() as usize,
-            atoms: residue.atoms(),
-            ..Default::default()
-        }
+impl crate::topology::NonOverlapping for Residue {
+    #[inline(always)]
+    fn range(&self) -> Range<usize> {
+        self.range.clone()
     }
 }
 
 /// Function to convert an amino acid residue name to a one-letter code.
 /// This follows the PDB standard and handles the 20 standard amino acids and nucleic acids (A, G, C, T, U).
+#[allow(dead_code)]
 fn residue_name_to_letter(name: &str) -> Option<char> {
     let letter = match name.to_uppercase().as_str() {
         // Amino acids
@@ -131,6 +103,3 @@ fn residue_name_to_letter(name: &str) -> Option<char> {
     };
     Some(letter)
 }
-
-#[test]
-fn test_info() {}

@@ -103,7 +103,7 @@ impl Transform {
 }
 
 /// Translates a set of particles by a vector and applies periodic boundary conditions
-fn translate<'a>(
+pub(crate) fn translate<'a>(
     pbc: &impl BoundaryConditions,
     positions: impl IntoIterator<Item = &'a mut Point>,
     displacement: &Point,
@@ -111,5 +111,48 @@ fn translate<'a>(
     for pos in positions.into_iter() {
         *pos += displacement;
         pbc.boundary(pos);
+    }
+}
+
+/// Rotate a collection of points by a random angle in random direction.
+pub(crate) fn rotate_random(positions: &mut [Point], center: &Point, rng: &mut ThreadRng) {
+    let angle = rng.gen_range(0.0..2.0 * std::f64::consts::PI);
+    let axis = crate::transform::random_unit_vector(rng);
+    let rotation = nalgebra::Rotation3::new(axis * angle);
+    for pos in positions.iter_mut() {
+        *pos = rotation * (*pos - center) + center;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use float_cmp::assert_approx_eq;
+
+    #[test]
+    fn test_rotate_random() {
+        let positions = [
+            Point::new(10.4, 11.3, 12.8),
+            Point::new(7.3, 9.3, 2.6),
+            Point::new(9.3, 10.1, 17.2),
+        ];
+        let masses = [1.46, 2.23, 10.73];
+        let com = crate::analysis::center_of_mass(&positions, &masses);
+
+        let mut rng = rand::thread_rng();
+        for _ in 0..100 {
+            let mut cloned = positions.clone();
+
+            rotate_random(&mut cloned, &com, &mut rng);
+
+            for (original, new) in positions.iter().zip(cloned.iter()) {
+                assert_ne!(original, new);
+            }
+
+            let com_rotated = crate::analysis::center_of_mass(&cloned, &masses);
+            assert_approx_eq!(f64, com.x, com_rotated.x);
+            assert_approx_eq!(f64, com.y, com_rotated.y);
+            assert_approx_eq!(f64, com.z, com_rotated.z);
+        }
     }
 }
