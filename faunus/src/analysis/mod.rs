@@ -95,7 +95,7 @@ pub(crate) fn center_of_mass(positions: &[Point], masses: &[f64]) -> Point {
     let (com, total_mass) = positions
         .iter()
         .zip(masses.iter())
-        .map(|(pos, mass)| (*pos * *mass, mass))
+        .map(|(&pos, &mass)| (pos * mass, mass))
         .fold(
             (Point::default(), 0.0),
             |(sum, total), (weighted_pos, mass)| (sum + weighted_pos, total + mass),

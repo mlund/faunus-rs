@@ -297,12 +297,12 @@ pub trait GroupCollection: SyncFrom {
     fn particle(&self, index: usize) -> Particle;
 
     /// Get the number of particles in the system.
-    fn n_particles(&self) -> usize {
+    fn num_particles(&self) -> usize {
         self.groups().iter().map(|group| group.capacity()).sum()
     }
 
     /// Get the number of activate particles in the system.
-    fn n_particles_active(&self) -> usize {
+    fn num_active_particles(&self) -> usize {
         self.groups().iter().map(|group| group.len()).sum()
     }
 
@@ -321,8 +321,7 @@ pub trait GroupCollection: SyncFrom {
                 .groups()
                 .iter()
                 .enumerate()
-                .filter(|(_i, g)| g.size() == *size)
-                .map(|(i, _)| i)
+                .filter_map(|(i, g)| if g.size() == *size { Some(i) } else { None })
                 .collect(),
             GroupSelection::All => (0..self.groups().len()).collect(),
             GroupSelection::ByMoleculeId(_) => todo!("not implemented"),
@@ -338,12 +337,14 @@ pub trait GroupCollection: SyncFrom {
     }
 
     /// Extract copy of all particles in the system (both active and inactive).
-    fn get_particles_all(&self) -> Vec<Particle> {
-        (0..self.n_particles()).map(|i| self.particle(i)).collect()
+    fn get_all_particles(&self) -> Vec<Particle> {
+        (0..self.num_particles())
+            .map(|i| self.particle(i))
+            .collect()
     }
 
     /// Extract copy of active particles in the system.
-    fn get_particles_active(&self) -> Vec<Particle> {
+    fn get_active_particles(&self) -> Vec<Particle> {
         self.groups()
             .iter()
             .flat_map(|group| group.iter_active())
@@ -494,6 +495,9 @@ impl GroupLists {
 
     /// Add group to the GroupList. The group will be automatically assigned to the correct list.
     /// This method assumes that the group is NOT yet present in the GroupLists.
+    ///
+    /// ## Notes
+    /// - The time complexity of this operation is O(1).
     pub(crate) fn add_group(&mut self, group: &Group) {
         let list = match group.size() {
             GroupSize::Full => &mut self.full,
@@ -506,6 +510,13 @@ impl GroupLists {
     }
 
     /// Update the position of the group in the GroupLists.
+    ///
+    /// ## Notes
+    /// - The time complexity of this operation is O(n).
+    /// - This operation always consists of searching for the group (O(n)).
+    /// If the position of the group must be updated, searching is followed by
+    /// removing the group from the original vector via `swap_remove` (O(1)) and by
+    /// adding the group to the correct vector (O(1)).
     pub(crate) fn update_group(&mut self, group: &Group) {
         match self.find_group(group) {
             Some((list, index, size)) => {
@@ -531,6 +542,10 @@ impl GroupLists {
     /// Returns the inner vector in which the group is located,
     /// the index of the group in the vector, and
     /// the type of the vector as GroupSize enum.
+    ///
+    /// ## Notes
+    /// - The time complexity of this operation is O(n), where `n` is the number of
+    /// groups with the same molecule kind as the searched group.
     fn find_group(&mut self, group: &Group) -> Option<(&mut Vec<usize>, usize, GroupSize)> {
         [&mut self.full, &mut self.partial, &mut self.empty]
             .into_iter()
@@ -548,6 +563,9 @@ impl GroupLists {
     }
 
     /// Add group to target list.
+    ///
+    /// ## Notes
+    /// - The time complexity of this operation is O(1).
     fn add_to_list(list: &mut [Vec<usize>], group: &Group) {
         list.get_mut(group.molecule())
             .expect("Incorrectly initialized GroupLists structure.")

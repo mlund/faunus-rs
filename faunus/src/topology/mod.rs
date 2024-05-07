@@ -34,12 +34,15 @@
 mod atom;
 mod bond;
 mod chain;
+#[cfg(feature = "chemfiles")]
 pub mod chemfiles_interface;
 mod block;
 mod dihedral;
 mod molecule;
 mod residue;
+mod structure;
 mod torsion;
+use std::ffi::OsString;
 use std::fmt::Debug;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
@@ -50,6 +53,7 @@ pub use bond::*;
 pub use chain::*;
 use derive_getters::Getters;
 pub use dihedral::*;
+use rand::rngs::ThreadRng;
 pub use residue::*;
 pub use torsion::*;
 use validator::{Validate, ValidationError};
@@ -60,6 +64,7 @@ use serde::{Deserializer, Serializer};
 
 use self::block::{InsertionPolicy, MoleculeBlock};
 use self::molecule::MoleculeKind;
+use self::structure::positions_from_structure_file;
 
 /// Trait implemented by collections of atoms that should not overlap (e.g., residues, chains).
 pub(super) trait NonOverlapping {
@@ -413,11 +418,11 @@ impl Topology {
     }
 
     /// Get the total number of atoms in a topology
-    pub fn n_atoms(&self) -> usize {
+    pub fn num_atoms(&self) -> usize {
         self.system
             .blocks
             .iter()
-            .map(|block| block.n_atoms(&self.molecules))
+            .map(|block| block.num_atoms(&self.molecules))
             .sum()
     }
 
@@ -438,60 +443,62 @@ impl Topology {
     }
 
     /// Create groups and populate target Context-implementing structure with particles.
-    pub(crate) fn to_groups(
+    pub(crate) fn insert_groups(
         &self,
         context: &mut impl Context,
-        structure: Option<chemfiles::Frame>,
+        structure: Option<impl AsRef<Path>>,
+        rng: &mut ThreadRng,
     ) -> anyhow::Result<()> {
         // current index of the coordinate in the external structure file to use
         let mut curr_start = 0;
 
-        // create a new random number generator
-        let mut rng = rand::thread_rng();
+        let positions = match structure {
+            Some(x) => Some(positions_from_structure_file(&x)?),
+            None => None
+        };
 
         // create groups
         for block in self.blocks() {
             if block.insert().is_none() {
-                let atoms_in_block = block.n_atoms(self.molecules());
+                let atoms_in_block = block.num_atoms(self.molecules());
 
-                match structure {
+                match positions {
                     None => {
                         anyhow::bail!(
                             "molecule block requires external structure that was not provided"
                         )
                     }
-                    Some(ref frame) => {
-                        let positions = match frame
-                            .positions()
+                    Some(ref positions) => {
+                        let positions = match positions
                             .get(curr_start..(curr_start + atoms_in_block)) 
                         {
                             None => anyhow::bail!("external structure does not match topology - not enough coordinates"),
-                            Some(pos) => pos.iter().map(|x| (*x).into()).collect::<Vec<Point>>(),
+                            Some(pos) => pos,
                         };
 
-                        block.to_groups(
+                        block.insert_block(
                             context, 
                             self.atoms(),
                             self.molecules(), 
-                            &positions, 
-                            &mut rng)?;
+                            positions, 
+                            rng)?;
 
                         curr_start += atoms_in_block;
                     }
                 };
             } else {
-                block.to_groups(
+                block.insert_block(
                     context, 
                     self.atoms(),
                     self.molecules(), 
                     &[], 
-                    &mut rng)?;
+                    rng)?;
             }
         }
 
         // check that all coordinates from the structure file have been used
-        match structure {
-            Some(frame) if frame.positions().len() != curr_start => {
+        match positions {
+            Some(positions) if positions.len() != curr_start => {
                 anyhow::bail!("external structure does not match topology - too many coordinates")
             }
             _ => (),
@@ -571,7 +578,7 @@ impl Topology {
 
             // check that if positions are provided manually, they are consistent with the topology
             if let Some(InsertionPolicy::Manual(positions)) = block.insert() {
-                if positions.len() != block.n_atoms(&self.molecules) {
+                if positions.len() != block.num_atoms(&self.molecules) {
                     anyhow::bail!(
                         "the number of manually provided positions does not match the number of atoms",
                     );
@@ -584,46 +591,19 @@ impl Topology {
 
     /// Validate intermolecular bonded interactions.
     fn validate_intermolecular(&mut self) -> anyhow::Result<()> {
-        let n_atoms = self.n_atoms();
+        let num_atoms = self.num_atoms();
 
-        // bonds must only exist between defined atoms
-        if !self
-            .system
-            .intermolecular
-            .bonds
-            .iter()
-            .all(|x| x.lower(n_atoms))
-        {
-            anyhow::bail!(
-                "intermolecular bond between undefined atoms",
-            );
-        }
+        #[inline(always)]
+        fn check_intermolecular_items<T: Indexed>(items: &[T], num_atoms: usize, error_msg: &'static str) -> anyhow::Result<()> {
+            if !items.iter().all(|item| item.lower(num_atoms)) {
+                anyhow::bail!(error_msg);
+            }
 
-        // torsions must only exist between defined atoms
-        if !self
-            .system
-            .intermolecular
-            .torsions
-            .iter()
-            .all(|x| x.lower(n_atoms))
-        {
-            anyhow::bail!(
-                "intermolecular torsion between undefined atoms",
-            );
+            Ok(())
         }
-
-        // dihedrals must only exist between defined atoms
-        if !self
-            .system
-            .intermolecular
-            .dihedrals
-            .iter()
-            .all(|x| x.lower(n_atoms))
-        {
-            anyhow::bail!(
-                "intermolecular dihedral between undefined atoms",
-            );
-        }
+        check_intermolecular_items(&self.system.intermolecular.bonds, num_atoms, "intermolecular bond between undefined atoms")?;
+        check_intermolecular_items(&self.system.intermolecular.torsions, num_atoms, "intermolecular torsion between undefined atoms")?;
+        check_intermolecular_items(&self.system.intermolecular.dihedrals, num_atoms, "intermolecular dihedral between undefined atoms")?;
 
         Ok(())
     }
@@ -794,7 +774,7 @@ pub struct InputPath {
     /// Raw path to the input file. Treated either as absolute
     /// or as relative to the parent directory.
     /// Used to construct the `path`.
-    raw_path: String,
+    raw_path: OsString,
     /// Absolute path to the input file.
     path: Option<PathBuf>,
 }
@@ -802,9 +782,9 @@ pub struct InputPath {
 impl InputPath {
     /// Create new InputPath.
     #[allow(dead_code)]
-    pub(crate) fn new(raw: &str, parent_file: impl AsRef<Path>) -> InputPath {
+    pub(crate) fn new(raw_path: OsString, parent_file: impl AsRef<Path>) -> InputPath {
         let mut path = InputPath {
-            raw_path: raw.to_owned(),
+            raw_path,
             path: None
         };
 
@@ -835,7 +815,7 @@ impl Serialize for InputPath {
     where
         S: Serializer,
     {
-        serializer.serialize_str(&self.raw_path)
+        serializer.serialize_str(self.raw_path.to_str().unwrap())
     }
 }
 
@@ -846,7 +826,7 @@ impl<'de> Deserialize<'de> for InputPath {
     {
         let path: String = Deserialize::deserialize(deserializer)?;
         
-        std::result::Result::Ok(InputPath { raw_path: path, path: None })
+        std::result::Result::Ok(InputPath { raw_path: path.into(), path: None })
     }
 }
 
@@ -1139,7 +1119,7 @@ mod tests {
             50,
             BlockActivationStatus::Partial(30),
             Some(&InsertionPolicy::RandomCOM { 
-                filename: InputPath::new("mol2.xyz", "tests/files/topology_pass.yaml"), 
+                filename: InputPath::new("mol2.xyz".to_owned().into(), "tests/files/topology_pass.yaml"), 
                 rotate: false, 
                 directions: Dimension::default() })
         );
@@ -1151,7 +1131,7 @@ mod tests {
             6,
             BlockActivationStatus::All,
             Some(&InsertionPolicy::RandomCOM {
-                filename: InputPath::new("mol2.xyz", "tests/files/topology_pass.yaml"),
+                filename: InputPath::new("mol2.xyz".to_owned().into(), "tests/files/topology_pass.yaml"),
                 rotate: true,
                 directions: Dimension::X,
             })
@@ -1186,7 +1166,7 @@ mod tests {
             1,
             5,
             BlockActivationStatus::All,
-            Some(&InsertionPolicy::FromFile(InputPath::new("mol2_absolute.xyz", "tests/files/topology_pass.yaml")))
+            Some(&InsertionPolicy::FromFile(InputPath::new("mol2_absolute.xyz".to_owned().into(), "tests/files/topology_pass.yaml")))
         );
     }
 

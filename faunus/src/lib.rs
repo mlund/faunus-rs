@@ -12,15 +12,15 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
-extern crate chemfiles;
 extern crate serde_json;
 
 use crate::group::{Group, GroupCollection};
 use energy::Hamiltonian;
 use nalgebra::Vector3;
+use rand::rngs::ThreadRng;
 use serde::{Deserialize, Serialize};
-use std::rc::Rc;
-use topology::{chemfiles_interface::ChemFrameConvert, Topology};
+use std::{path::Path, rc::Rc};
+use topology::Topology;
 
 pub type Point = Vector3<f64>;
 pub type UnitQuaternion = nalgebra::UnitQuaternion<f64>;
@@ -107,6 +107,7 @@ pub trait SyncFrom {
 /// Context stores the state of a single simulation system
 ///
 /// There can be multiple contexts in a simulation, e.g. one for a trial move and one for the current state.
+#[cfg(feature = "chemfiles")]
 pub trait Context:
     GroupCollection
     + WithCell
@@ -116,7 +117,7 @@ pub trait Context:
     + std::fmt::Debug
     + Sized
     + SyncFrom
-    + ChemFrameConvert
+    + crate::topology::chemfiles_interface::ChemFrameConvert
 {
     /// Update the internal state to match a recently applied change
     ///
@@ -134,39 +135,75 @@ pub trait Context:
         topology: Rc<Topology>,
         cell: Self::Cell,
         hamiltonian: Hamiltonian,
-        structure: Option<chemfiles::Frame>,
+        structure_file: Option<impl AsRef<Path>>,
+        rng: &mut ThreadRng,
+    ) -> anyhow::Result<Self>;
+}
+
+/// Context stores the state of a single simulation system
+///
+/// There can be multiple contexts in a simulation, e.g. one for a trial move and one for the current state.
+#[cfg(not(feature = "chemfiles"))]
+pub trait Context:
+    GroupCollection
+    + WithCell
+    + WithTopology
+    + WithHamiltonian
+    + Clone
+    + std::fmt::Debug
+    + Sized
+    + SyncFrom
+{
+    /// Update the internal state to match a recently applied change
+    ///
+    /// By default, this function tries to update the Hamiltonian.
+    /// For e.g. Ewald summation, the reciprocal space energy needs to be updated.
+    #[allow(unused_variables)]
+    fn update(&mut self, change: &Change) -> anyhow::Result<()> {
+        use crate::energy::EnergyTerm;
+        self.hamiltonian_mut().update(change)?;
+        Ok(())
+    }
+
+    /// Construct a new simulation system.
+    fn new(
+        topology: Rc<Topology>,
+        cell: Self::Cell,
+        hamiltonian: Hamiltonian,
+        structure_file: Option<impl AsRef<Path>>,
+        rng: &mut ThreadRng,
     ) -> anyhow::Result<Self>;
 }
 
 /// A trait for objects that have a simulation cell.
 pub trait WithCell {
-    /// Simulation cell type
+    /// Simulation cell type.
     type Cell: cell::SimulationCell;
-    /// Get reference to simulation cell
+    /// Get reference to simulation cell.
     fn cell(&self) -> &Self::Cell;
-    /// Get mutable reference to simulation cell
+    /// Get mutable reference to simulation cell.
     fn cell_mut(&mut self) -> &mut Self::Cell;
 }
 
 /// A trait for objects that have a topology.
 pub trait WithTopology {
-    /// Get reference to the topology
+    /// Get reference to the topology.
     fn topology(&self) -> Rc<Topology>;
 }
 
 /// A trait for objects that have a hamiltonian.
 pub trait WithHamiltonian {
-    /// Reference to Hamiltonian
+    /// Reference to Hamiltonian.
     fn hamiltonian(&self) -> &Hamiltonian;
-    /// Mutable reference to Hamiltonian
+    /// Mutable reference to Hamiltonian.
     fn hamiltonian_mut(&mut self) -> &mut energy::Hamiltonian;
 }
 
 /// A trait for objects that have a temperature
 pub trait WithTemperature {
-    /// Get the temperature in K
+    /// Get the temperature in K.
     fn temperature(&self) -> f64;
-    /// Set the temperature in K
+    /// Set the temperature in K.
     fn set_temperature(&mut self, _temperature: f64) -> anyhow::Result<()> {
         Err(anyhow::anyhow!(
             "Setting the temperature is not implemented"

@@ -12,61 +12,31 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Serialize};
 
 use crate::Point;
 
-#[derive(Debug, Clone, PartialEq, Default)]
+/// Represents dimensions in which operations/calculations are performed.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
 pub enum Dimension {
+    /// No dimension
     None,
+    /// X axis
     X,
+    /// Y axis
     Y,
+    /// Z axis
     Z,
+    /// XY plane
     XY,
+    /// YZ plane
     YZ,
+    /// XZ plane
     XZ,
+    /// Volume of the cell
     #[default]
     XYZ,
-}
-
-impl Serialize for Dimension {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let s = match self {
-            Dimension::None => "none",
-            Dimension::X => "x",
-            Dimension::Y => "y",
-            Dimension::Z => "z",
-            Dimension::XY => "xy",
-            Dimension::YZ => "yz",
-            Dimension::XZ => "xz",
-            Dimension::XYZ => "xyz",
-        };
-        serializer.serialize_str(s)
-    }
-}
-
-impl<'de> Deserialize<'de> for Dimension {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let s: &str = Deserialize::deserialize(deserializer)?;
-        let dimension = match s {
-            "none" => Dimension::None,
-            "x" => Dimension::X,
-            "y" => Dimension::Y,
-            "z" => Dimension::Z,
-            "xy" => Dimension::XY,
-            "yz" => Dimension::YZ,
-            "xz" => Dimension::XZ,
-            "xyz" => Dimension::XYZ,
-            _ => return Err(serde::de::Error::custom("invalid dimension")),
-        };
-        Ok(dimension)
-    }
 }
 
 impl From<[bool; 3]> for Dimension {

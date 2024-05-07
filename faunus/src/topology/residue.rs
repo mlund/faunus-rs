@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 
 use std::ops::Range;
 
-/// Non-overlapping collection of atoms with a non-unique name and number.
+/// Continuous range of atoms with a non-unique name and number.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Residue {
@@ -24,7 +24,7 @@ pub struct Residue {
     name: String,
     /// Residue number.
     number: Option<usize>,
-    /// Atoms forming the residue.
+    /// Atoms indices forming the residue.
     /// Range of indices relating to the atoms of a molecule.
     #[serde(
         serialize_with = "crate::topology::serialize_range_as_array",

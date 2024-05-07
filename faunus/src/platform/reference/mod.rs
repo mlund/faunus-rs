@@ -14,6 +14,8 @@
 
 //! # Reference platform for CPU-based simulations
 
+use rand::rngs::ThreadRng;
+
 use crate::{
     energy::Hamiltonian,
     group::{GroupCollection, GroupLists, GroupSize},
@@ -21,7 +23,7 @@ use crate::{
     Change, Context, Group, Particle, SyncFrom, WithCell, WithHamiltonian, WithTopology,
 };
 
-use std::rc::Rc;
+use std::{path::Path, rc::Rc};
 
 pub mod nonbonded;
 
@@ -70,7 +72,8 @@ impl Context for ReferencePlatform {
         topology: Rc<Topology>,
         cell: Self::Cell,
         hamiltonian: Hamiltonian,
-        structure: Option<chemfiles::Frame>,
+        structure: Option<impl AsRef<Path>>,
+        rng: &mut ThreadRng,
     ) -> anyhow::Result<Self> {
         let mut context = ReferencePlatform {
             topology: topology.clone(),
@@ -81,7 +84,7 @@ impl Context for ReferencePlatform {
             group_lists: GroupLists::new(topology.molecules().len()),
         };
 
-        topology.to_groups(&mut context, structure)?;
+        topology.insert_groups(&mut context, structure, rng)?;
 
         Ok(context)
     }
@@ -107,7 +110,7 @@ impl GroupCollection for ReferencePlatform {
         self.particles[index].clone()
     }
 
-    fn n_particles(&self) -> usize {
+    fn num_particles(&self) -> usize {
         self.particles.len()
     }
 

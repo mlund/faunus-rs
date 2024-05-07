@@ -16,13 +16,13 @@ use serde::{Deserialize, Serialize};
 
 use std::ops::Range;
 
-/// Non-overlapping collection of atoms with a non-unique name.
+/// Continuous range of atoms with a non-unique name.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Chain {
     /// Name of the chain
     name: String,
-    /// Atoms forming the chain.
+    /// Atom indices forming the chain.
     /// Range of indices relating to the atoms of a molecule.
     #[serde(
         serialize_with = "crate::topology::serialize_range_as_array",

@@ -12,7 +12,7 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
-//! # Inteface to the [`chemfiles`] crate
+//! # Interface to the [`chemfiles`] crate
 
 use std::path::Path;
 
@@ -30,7 +30,7 @@ use crate::topology::TopologyLike;
 use super::{molecule::MoleculeKind, AtomKind, NonOverlapping};
 
 /// Create a new chemfiles::Frame from an input file in a supported format.
-pub(crate) fn frame_from_file(filename: &impl AsRef<Path>) -> anyhow::Result<chemfiles::Frame> {
+pub(super) fn frame_from_file(filename: &impl AsRef<Path>) -> anyhow::Result<chemfiles::Frame> {
     let mut trajectory = chemfiles::Trajectory::open(filename, 'r')?;
     let mut frame = chemfiles::Frame::new();
     trajectory.read(&mut frame)?;
@@ -38,7 +38,7 @@ pub(crate) fn frame_from_file(filename: &impl AsRef<Path>) -> anyhow::Result<che
 }
 
 /// Get positions of particles from chemfiles::Frame.
-pub(crate) fn positions_from_frame(frame: &chemfiles::Frame) -> Vec<Point> {
+pub(super) fn positions_from_frame(frame: &chemfiles::Frame) -> Vec<Point> {
     frame.positions().iter().map(|pos| (*pos).into()).collect()
 }
 
@@ -66,7 +66,7 @@ pub trait ChemFrameConvert: WithCell + WithTopology + GroupCollection {
     /// This also shifts the particles so they fit into chemfiles cell.
     fn add_atoms_to_frame(&self, frame: &mut Frame) {
         let topology = self.topology();
-        let mut particles = self.get_particles_all();
+        let mut particles = self.get_all_particles();
 
         // shift the particles
         // we need to shift them because faunus treats [0,0,0] as the center of the cell,
@@ -403,9 +403,16 @@ mod tests {
             vec![block],
         );
 
-        let context =
-            ReferencePlatform::new(Rc::new(topology), Cuboid::new(10.0, 5.0, 2.5), vec![], None)
-                .unwrap();
+        let mut rng = rand::thread_rng();
+
+        let context = ReferencePlatform::new(
+            Rc::new(topology),
+            Cuboid::new(10.0, 5.0, 2.5),
+            vec![],
+            None::<&str>,
+            &mut rng,
+        )
+        .unwrap();
 
         let converted = context.to_frame();
 

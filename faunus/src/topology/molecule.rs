@@ -22,6 +22,9 @@ use validator::{Validate, ValidationError};
 
 use super::{Bond, CustomProperty, Dihedral, Indexed, NonOverlapping, Torsion};
 
+/// Description of molecule properties.
+///
+/// Molecule is a collection of atoms that can (but not do not have to be) connected by bonds.
 #[derive(Debug, Clone, Serialize, Deserialize, Default, Validate, Getters)]
 #[serde(deny_unknown_fields)]
 #[validate(schema(function = "validate_molecule"))]

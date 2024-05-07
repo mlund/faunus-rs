@@ -19,7 +19,7 @@ interatomic = {path = "../interatomic"}
 as-any = "0.3"
 rand = "0.8"
 num = "0.4"
-chemfiles = "0.10"
+chemfiles = {version = "0.10", optional = true}
 average = { version = "0.13", features = ["std", "serde1"] }
 regex = "1.8.4"
 physical_constants = "0.5.0"
@@ -30,3 +30,7 @@ derive-getters = "0.3.0"
 
 [dev-dependencies]
 approx = "0.5"
+
+[features]
+default = ["chemfiles"]
+chemfiles = ["dep:chemfiles"]

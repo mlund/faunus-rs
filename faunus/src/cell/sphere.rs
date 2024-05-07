@@ -60,19 +60,28 @@ impl Shape for Sphere {
     fn is_inside(&self, point: &Point) -> bool {
         point.norm_squared() < self.radius.powi(2)
     }
+    /// Creates a box which volume fits the sphere.
     fn bounding_box(&self) -> Option<Point> {
         Some(Point::from_element(2.0 * self.radius))
     }
+    /// Get random point located inside the Sphere.
     fn get_point_inside(&self, rng: &mut rand::prelude::ThreadRng) -> Point {
-        let theta = rng.gen_range(0.0..=2.0 * core::f64::consts::PI);
-        let phi = rng.gen_range(0.0..=core::f64::consts::PI);
-        let r = (rng.gen::<f64>()).powf(1.0 / 3.0) * self.radius;
+        let r2 = self.radius * self.radius;
+        let d = 2.0 * self.radius;
+        let mut point;
 
-        let x = r * phi.sin() * theta.cos();
-        let y = r * phi.sin() * theta.sin();
-        let z = r * phi.cos();
+        loop {
+            point = Point::new(
+                (rng.gen::<f64>() - 0.5) * d,
+                (rng.gen::<f64>() - 0.5) * d,
+                (rng.gen::<f64>() - 0.5) * d,
+            );
+            if point.norm_squared() < r2 {
+                break;
+            }
+        }
 
-        Point::new(x, y, z)
+        point
     }
 }
 

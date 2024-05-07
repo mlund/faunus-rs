@@ -12,6 +12,10 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
+//! This module implements:
+//! a) the `MoleculeBlock` structure which is used to define the topology of the system,
+//! b) the `InsertionPolicy` used to specify the construction of the molecule blocks.
+
 use std::{cmp::Ordering, path::Path};
 
 use rand::rngs::ThreadRng;
@@ -19,7 +23,6 @@ use serde::{Deserialize, Serialize};
 use validator::{Validate, ValidationError};
 
 use crate::dimension::Dimension;
-use crate::topology::chemfiles_interface::*;
 use crate::{cell::SimulationCell, group::GroupSize, Context, Particle, Point};
 
 use super::AtomKind;
@@ -36,6 +39,7 @@ pub enum BlockActivationStatus {
     All,
 }
 
+/// Specifies how the structure of molecules of a molecule block should be obtained or generated.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum InsertionPolicy {
     /// Read molecule block from a file.
@@ -69,9 +73,9 @@ impl InsertionPolicy {
         rng: &mut ThreadRng,
     ) -> anyhow::Result<Vec<Point>> {
         match self {
-            Self::FromFile(filename) => Ok(positions_from_frame(&frame_from_file(
-                filename.path().unwrap(),
-            )?)),
+            Self::FromFile(filename) => {
+                super::structure::positions_from_structure_file(filename.path().unwrap())
+            }
 
             Self::RandomAtomPos { directions } => Ok((0..(molecule_kind.atom_indices().len()
                 * number))
@@ -111,7 +115,8 @@ impl InsertionPolicy {
         directions: &Dimension,
     ) -> anyhow::Result<Vec<Point>> {
         // read coordinates of the molecule from input file
-        let mut ref_positions = positions_from_frame(&frame_from_file(filename.path().unwrap())?);
+        let mut ref_positions =
+            super::structure::positions_from_structure_file(filename.path().unwrap())?;
 
         // get the center of mass of the molecule
         let com = crate::analysis::center_of_mass(
@@ -221,14 +226,14 @@ impl MoleculeBlock {
         }
     }
 
-    /// Create groups from a MoleculeBlock.
+    /// Create groups from a MoleculeBlock and insert them into Context.
     ///
     /// ## Parameters
     /// - `context` - structure into which the groups should be added
     /// - `molecules` - list of all molecule kinds in the system
     /// - `external_positions` - list of particle coordinates to use;
     ///    must match exactly the number of coordinates that are required
-    pub(crate) fn to_groups(
+    pub(crate) fn insert_block(
         &self,
         context: &mut impl Context,
         atoms: &[AtomKind],
@@ -237,7 +242,7 @@ impl MoleculeBlock {
         rng: &mut ThreadRng,
     ) -> anyhow::Result<()> {
         let molecule = &molecules[self.molecule_index];
-        let mut particle_counter = context.n_particles();
+        let mut particle_counter = context.num_particles();
 
         // create groups and populate them with particles
         for i in 0..self.number {
@@ -279,7 +284,7 @@ impl MoleculeBlock {
 
     /// Get the number of atoms in a block.
     /// Panics if the molecule kind defined in the block does not exist.
-    pub(crate) fn n_atoms(&self, molecules: &[MoleculeKind]) -> usize {
+    pub(crate) fn num_atoms(&self, molecules: &[MoleculeKind]) -> usize {
         self.number * molecules[self.molecule_index].atom_indices().len()
     }
 
