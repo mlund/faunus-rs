@@ -114,7 +114,6 @@ pub trait Context:
     + WithTopology
     + WithHamiltonian
     + Clone
-    + std::fmt::Debug
     + Sized
     + SyncFrom
     + crate::topology::chemfiles_interface::ChemFrameConvert

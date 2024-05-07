@@ -14,7 +14,6 @@
 
 use anyhow::Ok;
 use as_any::{AsAny, Downcast};
-use core::fmt::Debug;
 use interatomic::twobody::IsotropicTwobodyEnergy;
 use itertools::iproduct;
 use serde::Serialize;
@@ -25,11 +24,11 @@ use crate::{
     GroupChange, GroupCollection, Particle, PointParticle, SyncFrom,
 };
 
-/// Interface for nonbonded interactions.
+/// Common interface for nonbonded interactions.
 ///
 /// # Todo
 /// This should ideally use a Context instead or ReferencePlatform to be fully platform independent.
-pub trait NonbondedInterface {
+trait NonbondedCommon {
     fn platform(&self) -> &ReferencePlatform;
 
     /// Calculates the energy between two particles
@@ -73,7 +72,7 @@ pub trait NonbondedInterface {
     }
 }
 
-impl<T: NonbondedInterface + SyncFrom + std::fmt::Debug + 'static> EnergyTerm for T {
+impl<T: NonbondedCommon + SyncFrom + std::fmt::Debug + 'static> EnergyTerm for T {
     fn energy_change(&self, change: &Change) -> f64 {
         match change {
             Change::Everything => self.all_with_all(),
@@ -90,22 +89,13 @@ impl<T: NonbondedInterface + SyncFrom + std::fmt::Debug + 'static> EnergyTerm fo
     }
 }
 
-/// Nonbonded interactions with boxed pair potentials.
-#[derive(Debug)]
-pub struct NonbondedBoxed {
+/// Nonbonded interactions with pointer to pair potentials.
+pub struct NonbondedDynamic {
     pair_potentials: Vec<Vec<Box<dyn IsotropicTwobodyEnergy>>>,
     platform: Box<ReferencePlatform>,
 }
 
-impl NonbondedBoxed {
-    pub fn new(platform: Box<ReferencePlatform>) -> Self {
-        let pair_potentials = Vec::new();
-        Self {
-            pair_potentials,
-            platform,
-        }
-    }
-
+impl NonbondedDynamic {
     /// Sets a default pair potential for all `AtomKind` pairs.
     pub fn with_default(
         platform: Box<ReferencePlatform>,
@@ -122,25 +112,35 @@ impl NonbondedBoxed {
             platform,
         }
     }
+
+    /// Sets a pair potential for a specific pair of `AtomKind`s.
+    pub fn set_pair_potential(
+        &mut self,
+        pair: (usize, usize),
+        pair_pot: impl IsotropicTwobodyEnergy + Clone + 'static,
+    ) {
+        self.pair_potentials[pair.0][pair.1] = Box::new(pair_pot.clone());
+        self.pair_potentials[pair.1][pair.0] = Box::new(pair_pot);
+    }
 }
 
-impl NonbondedInterface for NonbondedBoxed {
+impl NonbondedCommon for NonbondedDynamic {
     fn platform(&self) -> &ReferencePlatform {
         &self.platform
     }
 
+    #[inline]
     fn particle_with_particle(&self, particle1: &Particle, particle2: &Particle) -> f64 {
-        let distance_squared = self
+        let r2 = self
             .platform()
             .cell
             .distance_squared(&particle1.pos, &particle2.pos);
-        self.pair_potentials[particle1.atom_id()][particle2.atom_id()]
-            .isotropic_twobody_energy(distance_squared)
+        self.pair_potentials[particle1.atom_id()][particle2.atom_id()].isotropic_twobody_energy(r2)
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
-pub struct Nonbonded<'a, T: IsotropicTwobodyEnergy> {
+#[derive(Clone, Serialize)]
+pub struct NonbondedStatic<'a, T: IsotropicTwobodyEnergy> {
     /// Matrix of pair potentials base on particle ids
     pair_potentials: Vec<Vec<T>>,
     /// Reference to the platform
@@ -148,7 +148,7 @@ pub struct Nonbonded<'a, T: IsotropicTwobodyEnergy> {
     platform: &'a ReferencePlatform,
 }
 
-impl<T> Nonbonded<'_, T>
+impl<T> NonbondedStatic<'_, T>
 where
     T: IsotropicTwobodyEnergy + 'static,
 {
@@ -163,7 +163,7 @@ where
     }
 }
 
-impl<T> NonbondedInterface for Nonbonded<'_, T>
+impl<T> NonbondedCommon for NonbondedStatic<'_, T>
 where
     T: IsotropicTwobodyEnergy + 'static,
 {
@@ -181,7 +181,7 @@ where
     }
 }
 
-impl<T> SyncFrom for Nonbonded<'static, T>
+impl<T> SyncFrom for NonbondedStatic<'static, T>
 where
     T: IsotropicTwobodyEnergy + 'static + Clone,
 {

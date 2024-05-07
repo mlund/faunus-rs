@@ -44,7 +44,7 @@ pub struct RelativeOrientation {
 }
 
 /// Potential energy between a pair of anisotropic particles.
-pub trait AnisotropicTwobodyEnergy: Debug {
+pub trait AnisotropicTwobodyEnergy {
     /// Interaction energy between a pair of anisotropic particles, 𝑈(𝒓).
     fn anisotropic_twobody_energy(&self, orientation: &RelativeOrientation) -> f64;
 
@@ -55,7 +55,7 @@ pub trait AnisotropicTwobodyEnergy: Debug {
 }
 
 /// Potential energy between a pair of isotropic particles, 𝑈(𝑟).
-pub trait IsotropicTwobodyEnergy: Debug + AnisotropicTwobodyEnergy {
+pub trait IsotropicTwobodyEnergy: AnisotropicTwobodyEnergy {
     /// Interaction energy between a pair of isotropic particles.
     fn isotropic_twobody_energy(&self, distance_squared: f64) -> f64;
 

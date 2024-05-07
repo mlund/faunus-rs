@@ -44,12 +44,12 @@ pub enum Bias {
 /// Used e.g. for data before and after a Monte Carlo move
 /// and reduces risk mixing up the order or old and new values.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct NewOld<T: core::fmt::Debug> {
+pub struct NewOld<T> {
     pub new: T,
     pub old: T,
 }
 
-impl<T: core::fmt::Debug> NewOld<T> {
+impl<T> NewOld<T> {
     pub fn from(new: T, old: T) -> Self {
         Self { new, old }
     }

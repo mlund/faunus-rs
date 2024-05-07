@@ -24,7 +24,7 @@ use as_any::AsAny;
 pub type Hamiltonian = Vec<Box<dyn EnergyTerm>>;
 
 /// Trait for describing terms in the Hamiltonian.
-pub trait EnergyTerm: AsAny + std::fmt::Debug + SyncFrom {
+pub trait EnergyTerm: AsAny + SyncFrom {
     /// Compute the energy change of the term due to a change in the system.
     /// The energy is returned in units of kJ/mol.
     fn energy_change(&self, change: &Change) -> f64;

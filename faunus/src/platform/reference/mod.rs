@@ -32,7 +32,7 @@ pub mod nonbonded;
 /// Particles are stored in
 /// a single vector, and groups are stored in a separate vector. This mostly
 /// follows the same layout as the original C++ Faunus code (version 2 and lower).
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct ReferencePlatform {
     topology: Rc<Topology>,
     particles: Vec<Particle>,
