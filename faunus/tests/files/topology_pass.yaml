@@ -1,0 +1,73 @@
+# This topology file is valid and can be parsed.
+
+# include other yaml files
+# paths can either be absolute or relative to the directory containing the current topology file
+# definitions in files that are defined later in the list take precedence over those defined earlier
+# definitions in the main file take precedence over definitions in the included files
+include: [top/top1.yaml, top2.yaml]
+
+atoms:
+  - {name: OW, mass: 16.0, charge: -1.0, element: O, hydrophobicity: !SurfaceTension 1.0}
+  - {name: HW, mass: 1.0}
+
+molecules:
+  - name: MOL
+    atoms: [OW, HW, HW, HW, OW, OW, OW]
+    bonds:
+      - {index: [0, 1], kind: !Harmonic {k: 100.0, req: 1.0}, order: Single}
+      - {index: [1, 2], kind: !Morse {k: 100.0, req: 1.0, d: 10.0}}
+      - {index: [2, 3]}
+    torsions:
+      - {index: [2, 3, 4], kind: !Cosine {k: 50.0, aeq: 45.0}}
+      - {index: [1, 2, 3]}
+    dihedrals:
+      - {index: [0, 1, 2, 3], kind: !ImproperHarmonic {k: 100.0, aeq: 90.0}, electrostatic_scaling: 0.5, lj_scaling: 0.5}
+      - {index: [3, 4, 5, 6]}
+    degrees_of_freedom: RigidAlchemical
+    atom_names: [O1, null, H1, H2, null, O1, O2]
+    residues:
+      - {name: ALA, number: 2, range: [0, 3]}
+      - {name: GLY, number: 3, range: [1, 1]} # empty
+      - {name: ALA, number: 4, range: [4, 6]}
+    chains:
+      - {name: A, range: [0, 7]}
+      - {name: Chain2, range: [14, 0]} # empty
+    custom:
+      bool: false
+      int: 13
+      float: 76.3
+      vector: [13.1, 18.9, -13.4, 12]
+      point: [1.4, 2.2, -0.71]
+    has_com: false
+  - name: MOL2
+    atoms: [OW, OW, X]
+  
+system:
+  intermolecular:
+    bonds:
+      - {index: [0, 220], kind: !Harmonic {k: 50.0, req: 3.0}}
+      - {index: [52, 175], kind: !FENE {k: 25.0, req: 1.5, rmax: 5.0}, order: Triple}
+    torsions:
+      - {index: [1, 75, 128], kind: !Harmonic {k: 100.0, aeq: 120.0}}
+    dihedrals:
+      - {index: [1, 35, 75, 128], kind: !Harmonic {k: 27.5, aeq: 105.0}, lj_scaling: 0.9}
+      - {index: [17, 45, 125, 215]}
+
+  cell: [5.0, 5.0, 5.0]
+
+#  energy:
+#    nonbonded:
+#      default: 
+#        - lennardjones: {}
+#        - ...
+#      [Na, Cl]:  # not accepting [Cl, Na] 
+#        - lennardjones: {}
+#        - ...
+
+  blocks:
+    - {molecule: MOL, N: 3}  # read from a separate structure file
+    - {molecule: MOL2, N: 50, active: 30, insert: !RandomCOM { filename: mol2.xyz }}  # path is relative to the directory containing the topology file
+    - {molecule: MOL2, N: 6, insert: !RandomCOM {filename: mol2.xyz, rotate: true, directions: x}}
+    - {molecule: MOL2, N: 1, insert: !Manual [[1.43, 3.21, 2.65], [0.65, 1.19, 2.34], [2.1, 3.9, 0.8]]}
+    - {molecule: MOL, N: 2, active: 2, insert: !RandomAtomPos {directions: xy}}
+    - {molecule: MOL2, N: 5, insert: !FromFile mol2_absolute.xyz}

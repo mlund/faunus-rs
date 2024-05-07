@@ -1,0 +1,7 @@
+# Parsing of this file (as a complete topology file) should fail because the `system` field is not defined.
+include: [top/top1.yaml, top2.yaml]
+atoms:
+  - {name: A, mass: 1.0}
+molecules:
+  - name: MOL
+    atoms: [A, A, A]

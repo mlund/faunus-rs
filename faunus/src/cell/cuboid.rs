@@ -19,6 +19,7 @@ use crate::{
     Point,
 };
 use anyhow::Ok;
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 
 /// Cuboidal unit cell
@@ -61,6 +62,13 @@ impl Shape for Cuboid {
     }
     fn bounding_box(&self) -> Option<Point> {
         Some(self.cell)
+    }
+    fn get_point_inside(&self, rng: &mut rand::prelude::ThreadRng) -> Point {
+        Point::new(
+            rng.gen_range(-self.half_cell.x..self.half_cell.x),
+            rng.gen_range(-self.half_cell.y..self.half_cell.y),
+            rng.gen_range(-self.half_cell.z..self.half_cell.z),
+        )
     }
 }
 
@@ -143,3 +151,21 @@ impl VolumeScale for Cuboid {
 }
 
 impl SimulationCell for Cuboid {}
+
+#[cfg(test)]
+mod tests {
+    use crate::cell::Shape;
+
+    use super::Cuboid;
+
+    #[test]
+    fn generate_points() {
+        let shape = Cuboid::new(10.0, 5.0, 2.5);
+        let mut rng = rand::thread_rng();
+
+        for _ in 0..1000 {
+            let point = shape.get_point_inside(&mut rng);
+            assert!(shape.is_inside(&point));
+        }
+    }
+}

@@ -1,0 +1,5 @@
+# This file can only be parsed as partial topology.
+atoms:
+  - {name: O, mass: 16.0, custom: {unused: true}}
+  - {name: C, mass: 12.0, custom: {unused: true}}
+  - {name: HW, mass: 10.0, charge: 3.0}

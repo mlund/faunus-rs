@@ -1,0 +1,10 @@
+# Parsing of this file should fail due to the presence of `nonexistent_field` in the atom definition.
+include: [top/top1.yaml, top2.yaml]
+atoms:
+  - {name: A, mass: 1.0, nonexistent_field: false}
+molecules:
+  - name: MOL
+    atoms: [A, A, A]
+system:
+  blocks:
+    - {molecule: MOL, N: 3}

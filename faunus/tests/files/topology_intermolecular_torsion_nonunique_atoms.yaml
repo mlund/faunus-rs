@@ -1,0 +1,15 @@
+# Parsing of this file should fail because one of the intermolecular torsions is not defined for three unique atoms.
+include: [top/top1.yaml, top2.yaml]
+atoms:
+  - {name: A, mass: 1.0}
+molecules:
+  - name: MOL
+    atoms: [A, A, A]
+system:
+  intermolecular:
+    torsions:
+      - {index: [1, 7, 4], kind: !Harmonic {k: 100.0, aeq: 120.0}}
+      - {index: [3, 5, 3]}
+
+  blocks:
+    - {molecule: MOL, N: 3}

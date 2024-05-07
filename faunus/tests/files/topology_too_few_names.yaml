@@ -1,0 +1,11 @@
+# Parsing of this file should fail because the number of provided atom names is lower than the number of atoms in the molecule.
+include: [top/top1.yaml, top2.yaml]
+atoms:
+  - {name: A, mass: 1.0}
+molecules:
+  - name: MOL
+    atoms: [A, A, A]
+    atom_names: [A1, A2]
+system:
+  blocks:
+    - {molecule: MOL, N: 3}

@@ -12,18 +12,43 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
-use super::Connectivity;
 use serde::{Deserialize, Serialize};
 
-/// Chain of connected residues
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
-pub struct ChainKind {
-    /// Unique name, e.g. _"A"_, _"B"_, etc.
-    pub name: String,
-    /// Unique identifier
-    pub id: usize,
-    /// List of residue ids in the chain
-    pub residue_ids: Vec<usize>,
-    /// Connectivity information _between_ residues
-    pub connectivity: Vec<Connectivity>,
+use std::ops::Range;
+
+/// Continuous range of atoms with a non-unique name.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Chain {
+    /// Name of the chain
+    name: String,
+    /// Atom indices forming the chain.
+    /// Range of indices relating to the atoms of a molecule.
+    #[serde(
+        serialize_with = "crate::topology::serialize_range_as_array",
+        deserialize_with = "crate::topology::deserialize_range_from_array"
+    )]
+    range: Range<usize>,
+}
+
+impl Chain {
+    #[inline(always)]
+    pub fn new(name: &str, range: Range<usize>) -> Self {
+        Self {
+            name: name.to_owned(),
+            range,
+        }
+    }
+
+    #[inline(always)]
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+}
+
+impl crate::topology::NonOverlapping for Chain {
+    #[inline(always)]
+    fn range(&self) -> Range<usize> {
+        self.range.clone()
+    }
 }

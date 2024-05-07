@@ -8,20 +8,29 @@ edition = "2021"
 [lib]
 
 [dependencies]
-approx = "0.5"
 log = "0.4"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 anyhow = "1.0"
+float-cmp = "0.9"
 itertools = "0.10"
 nalgebra = { version = "0.32", features = ["serde-serialize"] }
 interatomic = {path = "../interatomic"}
 as-any = "0.3"
 rand = "0.8"
 num = "0.4"
-chemfiles = "0.10"
-float-cmp = "0.9"
+chemfiles = {version = "0.10", optional = true}
 average = { version = "0.13", features = ["std", "serde1"] }
 regex = "1.8.4"
 physical_constants = "0.5.0"
 coulomb = {path = "../coulomb"}
+serde_yaml = "0.9"
+validator = { version = "0.18.1", features = ["derive"] }
+derive-getters = "0.3.0"
+
+[dev-dependencies]
+approx = "0.5"
+
+[features]
+default = ["chemfiles"]
+chemfiles = ["dep:chemfiles"]

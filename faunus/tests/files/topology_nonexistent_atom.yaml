@@ -1,0 +1,10 @@
+# Parsing of this file should fail because the molecule references an undefined atom.
+include: [top/top1.yaml, top2.yaml]
+atoms:
+  - {name: A, mass: 1.0}
+molecules:
+  - name: MOL
+    atoms: [A, B, A]
+system:
+  blocks:
+    - {molecule: MOL, N: 3}

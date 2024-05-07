@@ -21,8 +21,8 @@ use serde::Serialize;
 
 use super::ReferencePlatform;
 use crate::{
-    cell::BoundaryConditions, energy::EnergyTerm, Change, Group, GroupChange, GroupCollection,
-    Particle, SyncFrom,
+    cell::BoundaryConditions, energy::EnergyTerm, topology::TopologyLike, Change, Group,
+    GroupChange, GroupCollection, Particle, PointParticle, SyncFrom,
 };
 
 /// Interface for nonbonded interactions.
@@ -91,13 +91,17 @@ impl<T: NonbondedInterface + SyncFrom + std::fmt::Debug + 'static> EnergyTerm fo
 }
 
 /// Nonbonded interactions with boxed pair potentials.
+#[derive(Debug)]
 pub struct NonbondedBoxed {
     pair_potentials: Vec<Vec<Box<dyn IsotropicTwobodyEnergy>>>,
     platform: Box<ReferencePlatform>,
 }
 
 impl NonbondedBoxed {
-    pub fn new(platform: Box<ReferencePlatform>) -> Self {
+    pub fn new(platform: Box<ReferencePlatform>) -> Self
+    where
+        Self: Sized,
+    {
         let pair_potentials = Vec::new();
         Self {
             pair_potentials,
@@ -109,7 +113,10 @@ impl NonbondedBoxed {
     pub fn with_default(
         platform: Box<ReferencePlatform>,
         default_pot: impl IsotropicTwobodyEnergy + Clone + 'static,
-    ) -> Self {
+    ) -> Self
+    where
+        Self: Sized,
+    {
         let n = platform.topology.atoms().len();
         let mut pair_potentials = Vec::with_capacity(n);
         let make_box = |_| Box::new(default_pot.clone()) as Box<dyn IsotropicTwobodyEnergy>;
@@ -133,7 +140,8 @@ impl NonbondedInterface for NonbondedBoxed {
             .platform()
             .cell
             .distance_squared(&particle1.pos, &particle2.pos);
-        self.pair_potentials[particle1.id][particle2.id].isotropic_twobody_energy(distance_squared)
+        self.pair_potentials[particle1.atom_id()][particle2.atom_id()]
+            .isotropic_twobody_energy(distance_squared)
     }
 }
 
@@ -173,8 +181,9 @@ where
         let distance_squared = self
             .platform()
             .cell
-            .distance_squared(&particle1.pos, &particle2.pos);
-        self.pair_potentials[particle1.id][particle2.id].isotropic_twobody_energy(distance_squared)
+            .distance_squared(particle1.pos(), particle2.pos());
+        self.pair_potentials[particle1.atom_id()][particle2.atom_id()]
+            .isotropic_twobody_energy(distance_squared)
     }
 }
 
