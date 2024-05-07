@@ -17,6 +17,7 @@ use as_any::{AsAny, Downcast};
 use interatomic::twobody::IsotropicTwobodyEnergy;
 use itertools::iproduct;
 use serde::Serialize;
+use std::rc::Rc;
 
 use super::ReferencePlatform;
 use crate::{
@@ -92,23 +93,23 @@ impl<T: NonbondedCommon + SyncFrom + std::fmt::Debug + 'static> EnergyTerm for T
 /// Nonbonded interactions with pointer to pair potentials.
 pub struct NonbondedDynamic {
     pair_potentials: Vec<Vec<Box<dyn IsotropicTwobodyEnergy>>>,
-    platform: Box<ReferencePlatform>,
+    platform: Rc<ReferencePlatform>,
 }
 
 impl NonbondedDynamic {
     /// Sets a default pair potential for all `AtomKind` pairs.
     pub fn with_default(
-        platform: Box<ReferencePlatform>,
+        platform: Rc<ReferencePlatform>,
         default_pot: impl IsotropicTwobodyEnergy + Clone + 'static,
     ) -> Self {
         let n = platform.topology.atoms().len();
-        let mut pair_potentials = Vec::with_capacity(n);
-        let make_box = |_| Box::new(default_pot.clone()) as Box<dyn IsotropicTwobodyEnergy>;
-        for _ in 0..n {
-            pair_potentials.push((0..n).map(make_box).collect());
-        }
+        let make_row = || {
+            (0..n)
+                .map(|_| Box::new(default_pot.clone()) as Box<dyn IsotropicTwobodyEnergy>)
+                .collect()
+        };
         Self {
-            pair_potentials,
+            pair_potentials: (0..n).map(|_| make_row()).collect(),
             platform,
         }
     }
@@ -139,9 +140,10 @@ impl NonbondedCommon for NonbondedDynamic {
     }
 }
 
+///  Nonbonded interactions with a single, static pair potential for all `AtomKind` pairs.
 #[derive(Clone, Serialize)]
-pub struct NonbondedStatic<'a, T: IsotropicTwobodyEnergy> {
-    /// Matrix of pair potentials base on particle ids
+pub struct NonbondedStatic<'a, T> {
+    /// Matrix of pair potentials base on `AtomKind` id
     pair_potentials: Vec<Vec<T>>,
     /// Reference to the platform
     #[serde(skip)]
@@ -150,14 +152,13 @@ pub struct NonbondedStatic<'a, T: IsotropicTwobodyEnergy> {
 
 impl<T> NonbondedStatic<'_, T>
 where
-    T: IsotropicTwobodyEnergy + 'static,
+    T: IsotropicTwobodyEnergy + Clone + 'static,
 {
-    pub fn new(platform: &'static ReferencePlatform) -> Self {
-        // TODO: Here we should fill out the pair potential matrix by looping
-        // over all particle id's.
-        let pair_potentials = Vec::new();
+    pub fn with_default(platform: &'static ReferencePlatform, default_pot: T) -> Self {
+        let n = platform.topology.atoms().len();
+        let row = (0..n).map(|_| default_pot.clone()).collect();
         Self {
-            pair_potentials,
+            pair_potentials: vec![row; n],
             platform,
         }
     }
