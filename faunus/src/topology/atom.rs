@@ -116,13 +116,13 @@ impl AtomKind {
     }
 
     /// Set sigma.
-    pub fn set_sigma(&mut self, sigma: f64) {
-        self.sigma = Some(sigma);
+    pub fn set_sigma(&mut self, sigma: Option<f64>) {
+        self.sigma = sigma;
     }
 
     /// Set epsilon.
-    pub fn set_epsilon(&mut self, epsilon: f64) {
-        self.epsilon = Some(epsilon);
+    pub fn set_epsilon(&mut self, epsilon: Option<f64>) {
+        self.epsilon = epsilon;
     }
 }
 

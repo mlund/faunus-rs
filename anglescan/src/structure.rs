@@ -27,7 +27,7 @@ impl AtomKinds {
             .iter_mut()
             .filter(|i| i.sigma().is_none())
             .for_each(|i| {
-                i.set_sigma(default_sigma);
+                i.set_sigma(Some(default_sigma));
             });
     }
     /// Set epsilon (kJ/mol) for atoms with `None` epsilon.
@@ -36,7 +36,7 @@ impl AtomKinds {
             .iter_mut()
             .filter(|i| i.epsilon().is_none())
             .for_each(|i| {
-                i.set_epsilon(default_epsilon);
+                i.set_epsilon(Some(default_epsilon));
             });
     }
 }
