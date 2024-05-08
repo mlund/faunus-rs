@@ -37,11 +37,6 @@ pub trait Analyze<T: Context>: Debug + Info {
 
     /// Flush output stream, if any, ensuring that all intermediately buffered contents reach their destination.
     fn flush(&mut self) {}
-
-    /// Report analysis as JSON object
-    fn to_json(&self) -> Option<serde_json::Map<String, serde_json::Value>> {
-        None
-    }
 }
 
 impl<T: Context> crate::Info for AnalysisCollection<T> {
@@ -66,27 +61,6 @@ impl<T: Context> Analyze<T> for AnalysisCollection<T> {
     }
     fn flush(&mut self) {
         self.iter_mut().for_each(|a| a.flush())
-    }
-    fn to_json(&self) -> Option<serde_json::Map<String, serde_json::Value>> {
-        let mut j = serde_json::Map::new();
-        for a in self.iter() {
-            if let Some(mut j2) = a.to_json() {
-                j.append(&mut j2);
-            }
-        }
-        Some(j)
-    }
-}
-
-impl<T: Context> From<Box<dyn Analyze<T>>> for serde_json::Value {
-    fn from(analyze: Box<dyn Analyze<T>>) -> Self {
-        let mut j = analyze.to_json().unwrap_or_default();
-        j.insert("samples".into(), analyze.num_samples().into());
-        j.insert(
-            "frequency".into(),
-            serde_json::to_value(analyze.frequency()).unwrap_or_default(),
-        );
-        j.into()
     }
 }
 

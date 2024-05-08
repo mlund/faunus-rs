@@ -12,8 +12,6 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
-extern crate serde_json;
-
 use crate::group::{Group, GroupCollection};
 use energy::Hamiltonian;
 use nalgebra::Vector3;

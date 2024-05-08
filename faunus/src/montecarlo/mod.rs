@@ -87,9 +87,6 @@ pub struct MoveStatistics {
     /// Timer that measures the time spent in the move
     #[serde(skip_deserializing)]
     pub timer: Timer,
-    /// Custom statistics and information (only serialized)
-    #[serde(skip_deserializing)]
-    pub info: serde_json::Map<String, serde_json::Value>,
     /// Sum of energy changes due to this move
     pub energy_change_sum: f64,
 }
