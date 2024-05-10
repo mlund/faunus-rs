@@ -27,7 +27,7 @@ molecules:
     atom_names: [O1, null, H1, H2, null, O1, O2]
     residues:
       - {name: ALA, number: 2, range: [0, 3]}
-      - {name: GLY, number: 3, range: [1, 1]} # empty
+      - {name: GLY, range: [1, 1]} # empty
       - {name: ALA, number: 4, range: [4, 6]}
     chains:
       - {name: A, range: [0, 7]}

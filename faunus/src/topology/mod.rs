@@ -1125,7 +1125,7 @@ mod tests {
         ];
         let residues = vec![
             Residue::new("ALA", Some(2), 0..3),
-            Residue::new("GLY", Some(3), 1..1),
+            Residue::new("GLY", None, 1..1),
             Residue::new("ALA", Some(4), 4..6),
         ];
         let chains = vec![Chain::new("A", 0..7), Chain::new("Chain2", 14..0)];
