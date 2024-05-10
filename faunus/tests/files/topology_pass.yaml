@@ -23,6 +23,8 @@ molecules:
     dihedrals:
       - {index: [0, 1, 2, 3], kind: !ImproperHarmonic {k: 100.0, aeq: 90.0}, electrostatic_scaling: 0.5, lj_scaling: 0.5}
       - {index: [3, 4, 5, 6]}
+    excluded_neighbours: 1
+    exclusions: [[0, 4], [5, 6]]
     degrees_of_freedom: RigidAlchemical
     atom_names: [O1, null, H1, H2, null, O1, O2]
     residues:

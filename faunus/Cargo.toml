@@ -26,6 +26,7 @@ coulomb = {path = "../coulomb"}
 serde_yaml = "0.9"
 validator = { version = "0.18.1", features = ["derive"] }
 derive-getters = "0.3.0"
+unordered-pair = { version = "0.2.4", features = ["serde"] }
 
 [dev-dependencies]
 approx = "0.5"

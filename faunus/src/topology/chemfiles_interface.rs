@@ -235,12 +235,15 @@ impl CellToChemCell for Endless {}
 
 #[cfg(test)]
 mod tests {
-    use std::{collections::HashMap, rc::Rc};
+    use std::{
+        collections::{HashMap, HashSet},
+        rc::Rc,
+    };
 
     use crate::{
         topology::{
             block::{BlockActivationStatus, InsertionPolicy, MoleculeBlock},
-            Bond, BondKind, DegreesOfFreedom, IntermolecularBonded, Topology,
+            Bond, BondKind, BondOrder, DegreesOfFreedom, IntermolecularBonded, Topology,
         },
         Context,
     };
@@ -306,6 +309,8 @@ mod tests {
             vec![],
             vec![],
             vec![],
+            0,
+            HashSet::new(),
             DegreesOfFreedom::default(),
             vec![None, None, None, None, None, None],
             vec![residue1, residue2],
@@ -334,8 +339,8 @@ mod tests {
         let residue1 = Residue::new("ALA", Some(4), 1..3);
         let residue2 = Residue::new("SER", Some(5), 5..6);
 
-        let bond1 = Bond::new([1, 3], BondKind::Unspecified, None);
-        let bond2 = Bond::new([3, 5], BondKind::Unspecified, None);
+        let bond1 = Bond::new([1, 3], BondKind::Unspecified, BondOrder::Unspecified);
+        let bond2 = Bond::new([3, 5], BondKind::Unspecified, BondOrder::Unspecified);
 
         let molecule = MoleculeKind::new(
             "MOL",
@@ -352,6 +357,8 @@ mod tests {
             vec![bond1, bond2],
             vec![],
             vec![],
+            0,
+            HashSet::new(),
             DegreesOfFreedom::default(),
             vec![None, None, Some("O3".to_string()), None, None, None],
             vec![residue1, residue2],
@@ -392,7 +399,7 @@ mod tests {
             Some(InsertionPolicy::Manual(vec![Point::default(); 21])),
         );
 
-        let intermolecular_bond = Bond::new([7, 17], BondKind::Unspecified, None);
+        let intermolecular_bond = Bond::new([7, 17], BondKind::Unspecified, BondOrder::Unspecified);
 
         let intermolecular = IntermolecularBonded::new(vec![intermolecular_bond], vec![], vec![]);
 

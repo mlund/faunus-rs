@@ -584,6 +584,9 @@ impl Topology {
                 })
                 .collect::<Result<Vec<_>, _>>()?;
             molecule.set_atom_indices(indices);
+
+            // expand exclusions (must be done after validation - the bonds must be valid)
+            molecule.generate_exclusions();
         }
 
         // check that all molecule names are unique
@@ -889,8 +892,12 @@ impl<'de> Deserialize<'de> for InputPath {
 mod tests {
     use self::block::BlockActivationStatus;
     use crate::dimension::Dimension;
+    use crate::dimension::Dimension;
+    use float_cmp::assert_approx_eq;
     use float_cmp::assert_approx_eq;
     use std::collections::HashMap;
+    use std::collections::{HashMap, HashSet};
+    use unordered_pair::UnorderedPair;
 
     use super::*;
 
@@ -956,6 +963,8 @@ mod tests {
         bonds: &[Bond],
         torsions: &[Torsion],
         dihedrals: &[Dihedral],
+        excluded_neighbours: usize,
+        exclusions: &HashSet<UnorderedPair<usize>>,
         dof: DegreesOfFreedom,
         atom_names: &[Option<&str>],
         residues: &[Residue],
@@ -978,6 +987,8 @@ mod tests {
         assert_eq!(molecule.residues(), residues);
         assert_eq!(molecule.chains(), chains);
         assert_eq!(molecule.has_com(), com);
+        assert_eq!(*molecule.excluded_neighbours(), excluded_neighbours);
+        assert_eq!(molecule.exclusions(), exclusions);
 
         compare_custom(molecule.custom(), custom);
     }
@@ -1151,6 +1162,14 @@ mod tests {
             &bonds,
             &torsions,
             &dihedrals,
+            1,
+            &HashSet::from([
+                UnorderedPair(0, 1),
+                UnorderedPair(1, 2),
+                UnorderedPair(2, 3),
+                UnorderedPair(0, 4),
+                UnorderedPair(5, 6),
+            ]),
             DegreesOfFreedom::RigidAlchemical,
             &names,
             &residues,
@@ -1168,6 +1187,8 @@ mod tests {
             &[],
             &[],
             &[],
+            0,
+            &HashSet::new(),
             DegreesOfFreedom::Free,
             &[None, None, None],
             &[],
@@ -1568,5 +1589,41 @@ mod tests {
         assert!(error
             .to_string()
             .contains("unknown field `nonexistent_field`"))
+    }
+
+    #[test]
+    fn read_topology_fail_exclusions_nonunique_atoms() {
+        let error = Topology::from_file("tests/files/topology_exclusions_nonunique_atoms.yaml")
+            .unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("exclusion between the same atom"))
+    }
+
+    #[test]
+    fn read_topology_fail_exclusions_undefined_atoms() {
+        let error = Topology::from_file("tests/files/topology_exclusions_undefined_atoms.yaml")
+            .unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("exclusion between undefined atoms"))
+    }
+
+    #[test]
+    fn read_topology_fail_exclusions_nonunique_atoms() {
+        let error = Topology::from_file("tests/files/topology_exclusions_nonunique_atoms.yaml")
+            .unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("exclusion between the same atom"))
+    }
+
+    #[test]
+    fn read_topology_fail_exclusions_undefined_atoms() {
+        let error = Topology::from_file("tests/files/topology_exclusions_undefined_atoms.yaml")
+            .unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("exclusion between undefined atoms"))
     }
 }

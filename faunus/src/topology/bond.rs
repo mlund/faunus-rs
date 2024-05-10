@@ -119,12 +119,13 @@ pub struct Bond {
 }
 
 impl Bond {
-    /// Create new bond
-    pub fn new(index: [usize; 2], kind: BondKind, order: Option<BondOrder>) -> Self {
+    /// Create new bond. This function performs no sanity checks.
+    #[allow(dead_code)]
+    pub(crate) fn new(index: [usize; 2], kind: BondKind, order: BondOrder) -> Self {
         Self {
             index,
             kind,
-            order: order.unwrap_or_default(),
+            order: order,
         }
     }
 
