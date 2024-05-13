@@ -1,0 +1,17 @@
+#include "martini_v3.0.0.itp"
+#include "martini_v3.0.0_ions_v1.itp"
+#include "martini_v3.0.0_solvents_v1.itp"
+#include "martini_v3.0.0_phospholipids_v1.itp"
+#include "Transmembrane.itp"
+
+[system]
+; name
+INSANE! Membrane UpperLeaflet>POPE=1 LowerLeaflet>POPE=1
+
+[molecules]
+Transmembrane   1
+POPE           144
+POPE           144
+W           5049
+NA+              57
+CL-              57
