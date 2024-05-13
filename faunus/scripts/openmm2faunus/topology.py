@@ -259,6 +259,17 @@ class FaunusMoleculeKind:
         self.custom = custom
         self.has_com = has_com
 
+class FaunusNonbondedInteraction:
+    """Represents nonbonded interaction between atoms in the simulated system."""
+
+    @yaml_tag("!LennardJones")
+    class LennardJones:
+        def __init__(self, sigma: float, eps: float):
+            self.sigma = sigma
+            self.eps = eps
+
+    # TODO: add other supported nonbonded interactions
+
 class FaunusIntermolecularBonded:
     """Represents intermolecular bonded interactions for the simulation."""
     def __init__(self, 
@@ -275,10 +286,21 @@ class FaunusMoleculeBlock:
         self.molecule = molecule
         self.N = number
 
+class FaunusEnergy:
+    """Manages hamiltonian of the system."""
+    def __init__(self, nonbonded: dict[tuple[str, str], list[FaunusNonbondedInteraction]]):
+        self.nonbonded = nonbonded
+
 class FaunusSystem:
-    """Manages intermolecular bonded interactions and the molecule blocks in the system."""
-    def __init__(self, intermolecular: FaunusIntermolecularBonded | None = None, blocks: list[FaunusMoleculeBlock] | None = None):
+    """Manages intermolecular bonded interactions, hamiltonian and the molecule blocks in the system."""
+    def __init__(
+            self, 
+            intermolecular: FaunusIntermolecularBonded | None = None, 
+            energy: FaunusEnergy | None = None,
+            blocks: list[FaunusMoleculeBlock] | None = None):
+        
         self.intermolecular = intermolecular
+        self.energy = energy
         self.blocks = blocks
 
 class FaunusTopology:
@@ -294,7 +316,8 @@ class FaunusTopology:
 
     def _martini_get_atoms(self,
                     moltype: MartiniTopFile._MoleculeType, 
-                    atom_types: dict[list[str]]
+                    atom_types: dict[list[str]],
+                    martini_faunus_names: dict[str, list[str]]
         ) -> tuple[list[str], list[str]]:
         """
         Get atom kinds from a single Martini molecule type and add them to the topology.
@@ -305,8 +328,11 @@ class FaunusTopology:
         # if there are multiple Gromacs atoms with the same atom kind but redefined charge
         # and/or mass, we create separate atom kinds for these atoms
 
+        # atoms of the molecule type
         moltype_atoms = []
+        # names of the atoms of the molecule
         atom_names = []
+        
         for atom in moltype.atoms:
             if len(atom) >= 8:
                 mass = float(atom[7])
@@ -321,6 +347,11 @@ class FaunusTopology:
             faunus_atom_name = f"{atom[1]}_{charge}_{mass}"
             moltype_atoms.append(faunus_atom_name)
             atom_names.append(atom[4])
+
+            try:
+                martini_faunus_names[atom[1]].append(faunus_atom_name)
+            except KeyError:
+                martini_faunus_names[atom[1]] = [faunus_atom_name]
 
             exists = False
             for atom2 in self.atoms:
@@ -423,6 +454,32 @@ class FaunusTopology:
 
         return bonds
 
+    def _martini_get_nonbonded(self, 
+            martini_faunus_names: dict[str, list[str]], 
+            nonbonded: dict[tuple[str], list[str]]) -> dict[tuple[str, str], list[FaunusNonbondedInteraction]]:
+        """
+        Get nonbonded interactions from the Martini topology.
+        """
+        
+        faunus_nonbonded = {}
+
+        for name1 in martini_faunus_names:
+            for name2 in martini_faunus_names:
+                try:
+                    try:
+                        interaction = nonbonded[(name1, name2)]
+                    except KeyError:
+                        interaction = nonbonded[(name2, name1)]
+                except KeyError:
+                    raise Exception(f"Could not find LJ interaction between atoms {name1} and {name2}.")
+                
+                for faunus_name1 in martini_faunus_names[name1]:
+                        for faunus_name2 in martini_faunus_names[name2]:
+                            faunus_nonbonded[(faunus_name1, faunus_name2)] = \
+                                [FaunusNonbondedInteraction.LennardJones(float(interaction[3]), float(interaction[4]))]
+        
+        return faunus_nonbonded
+
     def __init__(self, martini_top: MartiniTopFile):
         """
         Convert Martini topology parsed by martini_openmm into Faunus topology.
@@ -430,13 +487,17 @@ class FaunusTopology:
         Notes:
         - Constraints are converted to harmonic bonds with a force constant of 50000.
         - Pairs and restricted angles are not supported and will raise an exception.
-        - Nonbonded interactions, cmaps, vsites, and intermolecular bonded interactions are ignored.
+        - Cmaps, vsites, and intermolecular bonded interactions are ignored.
+        - Electrostatic interactions are ignored.
         """
 
         self.atoms = []
         self.molecules = []
         blocks = []
         molnames = []
+
+        # dictionary mapping martini atom type names to all faunus atom kind names
+        martini_faunus_names = {}
 
         for (molname, number) in martini_top._molecules:
             blocks.append(FaunusMoleculeBlock(molname, number))
@@ -458,7 +519,7 @@ class FaunusTopology:
                 raise NotImplementedError("Restricted angles are currently not supported.")
 
             # get atom kinds for Faunus
-            moltype_atoms, atom_names = self._martini_get_atoms(moltype, martini_top._atom_types)
+            moltype_atoms, atom_names = self._martini_get_atoms(moltype, martini_top._atom_types, martini_faunus_names)
 
             # get bonds, torsions, dihedrals, constraints
             bonds = self._martini_get_bonds(moltype)
@@ -486,9 +547,14 @@ class FaunusTopology:
                     atom_names,
                     residues)) 
 
+        # get nonbonded interactions (LJ only)
+        nonbonded = self._martini_get_nonbonded(martini_faunus_names, martini_top._nonbond_types)
+        
+        self.system = FaunusSystem()
         if len(blocks) != 0:
-            self.system = FaunusSystem(None, blocks)
-
+            self.system.blocks = blocks
+        if len(nonbonded) != 0:
+            self.system.energy = FaunusEnergy(nonbonded)
 
     def to_yaml(self) -> str:
         """Serialize the Topology as a yaml structure readable by Faunus."""

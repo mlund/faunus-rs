@@ -231,6 +231,11 @@ mod tests {
     }
 
     #[test]
+    fn hamiltonian_deserialization_fail_duplicate_default() {
+        todo!()
+    }
+
+    #[test]
     fn hamiltonian_builder_validate() {
         let builder = HamiltonianBuilder::from_file("tests/files/topology_pass.yaml").unwrap();
 
@@ -277,6 +282,11 @@ mod tests {
             "Atom kind specified in `nonbonded` does not exist."
         );
     }
-}
 
-// TEST duplicate definitions, duplicate default
+    #[test]
+    fn playground() {
+        let hamiltonian =
+            HamiltonianBuilder::from_file("scripts/openmm2faunus/martini.yaml").unwrap();
+        println!("{:?}", hamiltonian);
+    }
+}

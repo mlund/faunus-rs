@@ -24,6 +24,12 @@ import yaml
 def notag_representer(dumper, data):
     return dumper.represent_mapping('tag:yaml.org,2002:map', dict((k, v) for (k, v) in data.__dict__.items() if v is not None))
 
+# Print no tag for a tuple
+def notag_tuple_representer(self, data):
+    return self.represent_sequence('tag:yaml.org,2002:seq', data)
+
+yaml.add_representer(tuple, notag_tuple_representer)
+
 # Decorator for adding YAML representers
 def yaml_tag(tag):
     def decorator(cls):
