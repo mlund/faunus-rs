@@ -97,9 +97,23 @@ pub trait BjerrumLength {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 pub enum CombinationRule {
-    /// The Lotentz-Berthelot combination rule (geometric mean on epsilon, arithmetic mean on sigma)
+    /// Arithmetic mean on both epsilon and sigma.
+    #[cfg_attr(feature = "serde", serde(alias = "arithmetic"))]
+    Arithmetic,
+    /// Geometric mean on both epsilon and sigma.
+    #[cfg_attr(feature = "serde", serde(alias = "geometric"))]
+    Geometric,
+    /// The Lotentz-Berthelot combination rule (geometric mean on epsilon, arithmetic mean on sigma).
+    #[cfg_attr(
+        feature = "serde",
+        serde(alias = "LB", alias = "lorentzberthelot", alias = "lorentz-berthelot")
+    )]
     LorentzBerthelot,
-    /// The Fender-Halsey combination rule (harmonic mean on epsilon, arithmetic mean on sigma)
+    /// The Fender-Halsey combination rule (harmonic mean on epsilon, arithmetic mean on sigma).
+    #[cfg_attr(
+        feature = "serde",
+        serde(alias = "FH", alias = "fenderhalsey", alias = "fender-halsey")
+    )]
     FenderHalsey,
 }
 
@@ -116,6 +130,8 @@ impl CombinationRule {
         match self {
             Self::LorentzBerthelot => geometric_mean(epsilons),
             Self::FenderHalsey => harmonic_mean(epsilons),
+            Self::Arithmetic => todo!("Not yet implemented."),
+            Self::Geometric => todo!("Not yet implemented."),
         }
     }
 
@@ -124,6 +140,8 @@ impl CombinationRule {
         match self {
             Self::LorentzBerthelot => arithmetic_mean(sigmas),
             Self::FenderHalsey => arithmetic_mean(sigmas),
+            Self::Arithmetic => todo!("Not yet implemented."),
+            Self::Geometric => todo!("Not yet implemented."),
         }
     }
 }

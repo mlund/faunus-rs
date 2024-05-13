@@ -186,10 +186,10 @@ impl MoleculeKind {
                 // continue if we are still in range
                 if current_distance < self.excluded_neighbours {
                     for &neighbour in edges[current].iter() {
-                        if !distances.contains_key(&neighbour) {
+                        distances.entry(neighbour).or_insert_with(|| {
                             queue.push_back(neighbour);
-                            distances.insert(neighbour, current_distance + 1);
-                        }
+                            current_distance + 1
+                        });
                     }
                 }
             }
@@ -250,9 +250,9 @@ fn validate_molecule(molecule: &MoleculeKind) -> Result<(), ValidationError> {
         }
 
         if i >= n_atoms || j >= n_atoms {
-            return Err(ValidationError::new("")
-                .with_message("exclusion between undefined atoms".into())
-                .into());
+            return Err(
+                ValidationError::new("").with_message("exclusion between undefined atoms".into())
+            );
         }
     }
 

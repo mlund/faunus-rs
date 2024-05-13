@@ -1,5 +1,5 @@
 use faunus::topology::AtomKind;
-use interatomic::twobody::{IonIon, IsotropicTwobodyEnergy, LennardJones};
+use interatomic::twobody::{IonIon, IsotropicTwobodyEnergy};
 use interatomic::CombinationRule;
 
 use crate::structure::Structure;
@@ -18,8 +18,7 @@ pub struct PairMatrix<'a> {
 impl<'a> PairMatrix<'a> {
     /// Create a new pair matrix
     pub fn new(atomkinds: &[AtomKind], multipole: &'a CoulombMethod) -> Self {
-        let lj_default = LennardJones::new(0.0, 0.0);
-        let default = PairPotential::new(IonIon::new(0.0, multipole), ShortRange::new(lj_default));
+        let default = PairPotential::new(IonIon::new(0.0, multipole), ShortRange::new(0.0, 0.0));
         let n = atomkinds.len();
         let mut matrix = vec![vec![default; n]; n];
         for i in 0..n {

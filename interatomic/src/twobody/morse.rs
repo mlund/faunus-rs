@@ -21,7 +21,11 @@ use serde::{Deserialize, Serialize};
 /// Morse potential.
 /// See <https://en.wikipedia.org/wiki/Morse_potential>.
 #[derive(Debug, Clone, Copy, PartialEq)]
-#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
+#[cfg_attr(
+    feature = "serde",
+    derive(Deserialize, Serialize),
+    serde(deny_unknown_fields)
+)]
 pub struct Morse {
     #[cfg_attr(feature = "serde", serde(rename = "req"))]
     equilibrium_distance: f64,

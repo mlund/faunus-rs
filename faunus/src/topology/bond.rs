@@ -122,11 +122,7 @@ impl Bond {
     /// Create new bond. This function performs no sanity checks.
     #[allow(dead_code)]
     pub(crate) fn new(index: [usize; 2], kind: BondKind, order: BondOrder) -> Self {
-        Self {
-            index,
-            kind,
-            order: order,
-        }
+        Self { index, kind, order }
     }
 
     /// Create new bond where indices are offset by `shift`. Panics if overflow.

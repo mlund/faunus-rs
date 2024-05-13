@@ -20,6 +20,7 @@ use average::Mean;
 use log;
 use rand::prelude::*;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::iter::FusedIterator;
 use std::{cmp::Ordering, ops::Neg};
 
@@ -87,6 +88,9 @@ pub struct MoveStatistics {
     /// Timer that measures the time spent in the move
     #[serde(skip_deserializing)]
     pub timer: Timer,
+    /// Custom statistics and information (only serialized)
+    #[serde(skip_deserializing)]
+    pub info: HashMap<String, crate::topology::Value>,
     /// Sum of energy changes due to this move
     pub energy_change_sum: f64,
 }

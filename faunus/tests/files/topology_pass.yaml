@@ -57,14 +57,16 @@ system:
 
   cell: [5.0, 5.0, 5.0]
 
-#  energy:
-#    nonbonded:
-#      default: 
-#        - lennardjones: {}
-#        - ...
-#      [Na, Cl]:  # not accepting [Cl, Na] 
-#        - lennardjones: {}
-#        - ...
+  energy:
+    nonbonded:
+      default:
+        - !LennardJones {sigma: 6.0, eps: 1.5}
+        - !WeeksChandlerAndersen {mixing: LB}
+      [OW, OW]:
+        - !WCA {sigma: 3.0, eps: 1.5} # also WeeksChandlerAndersen
+        - !HardSphere {mixing: Geometric}
+      [OW, HW]:
+        - !HardSphere {mixing: arithmetic}
 
   blocks:
     - {molecule: MOL, N: 3}  # read from a separate structure file

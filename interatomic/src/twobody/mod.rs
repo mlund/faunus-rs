@@ -175,6 +175,22 @@ pub fn test_combined() {
         energy.0 + energy.1,
         epsilon = 1e-7
     );
+
+    // three combined interactions
+    let pot3 = Harmonic::new(1.0, 10.0);
+    let energy3 = pot3.isotropic_twobody_energy(r2);
+    let box3 = Box::new(pot3) as Box<dyn IsotropicTwobodyEnergy>;
+    let combined2 = combined + box3;
+
+    assert_relative_eq!(
+        combined2.isotropic_twobody_energy(r2),
+        energy.0 + energy.1 + energy3
+    );
+    assert_relative_eq!(
+        combined2.anisotropic_twobody_energy(&relative_orientation),
+        energy.0 + energy.1 + energy3,
+        epsilon = 1e-7
+    );
 }
 
 /*

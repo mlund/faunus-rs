@@ -14,6 +14,7 @@
 
 //! # Energy calculation and Hamiltonian
 
+mod builder;
 use crate::{Change, SyncFrom};
 use as_any::AsAny;
 

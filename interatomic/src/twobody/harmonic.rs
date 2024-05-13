@@ -33,7 +33,11 @@ use serde::{Deserialize, Serialize};
 /// assert_eq!(harmonic.isotropic_twobody_energy(distance.powi(2)), 0.25);
 /// ~~~
 #[derive(Debug, Clone, Copy, PartialEq)]
-#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
+#[cfg_attr(
+    feature = "serde",
+    derive(Deserialize, Serialize),
+    serde(deny_unknown_fields)
+)]
 pub struct Harmonic {
     #[cfg_attr(feature = "serde", serde(rename = "req"))]
     eq_distance: f64,

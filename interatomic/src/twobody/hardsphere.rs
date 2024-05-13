@@ -33,14 +33,18 @@ use serde::{Deserialize, Serialize};
 /// let distance: f64 = 1.1; // greater than the minimum distance
 /// assert_eq!(hardsphere.isotropic_twobody_energy(distance.powi(2)), 0.0);
 /// ~~~
-#[derive(Debug, Clone, Copy, PartialEq)]
-#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[cfg_attr(
+    feature = "serde",
+    derive(Deserialize, Serialize),
+    serde(deny_unknown_fields)
+)]
 pub struct HardSphere {
     /// Minimum distance
     #[cfg_attr(
         feature = "serde",
         serde(
-            rename = "σ",
+            rename = "sigma",
             serialize_with = "sqrt_serialize",
             deserialize_with = "square_deserialize"
         )
