@@ -106,6 +106,14 @@ pub(super) enum NonbondedInteraction {
     WeeksChandlerAndersen(DirectOrMixing<interatomic::twobody::WeeksChandlerAndersen>),
     /// Hard sphere potential.
     HardSphere(DirectOrMixing<interatomic::twobody::HardSphere>),
+    /// Truncated Ewald potential.
+    CoulombEwald(coulomb::pairwise::EwaldTruncated),
+    /// Real-space Ewald potential.
+    CoulombRealSpaceEwald(coulomb::pairwise::RealSpaceEwald),
+    /// Plain coulombic potential.
+    CoulombPlain(coulomb::pairwise::Plain),
+    /// Reaction field.
+    CoulombReactionField(coulomb::pairwise::ReactionField),
 }
 
 /// Specifies whether the parameters for the interaction are
@@ -164,6 +172,8 @@ mod tests {
     fn hamiltonian_deserialization_pass() {
         let builder = HamiltonianBuilder::from_file("tests/files/topology_pass.yaml").unwrap();
 
+        println!("{:?}", &builder);
+
         assert!(builder.nonbonded.contains_key(&DefaultOrPair::Default));
         assert!(builder
             .nonbonded
@@ -191,7 +201,11 @@ mod tests {
                         NonbondedInteraction::WeeksChandlerAndersen(DirectOrMixing::Mixing {
                             mixing: CombinationRule::LorentzBerthelot,
                             _phantom: Default::default()
-                        })
+                        }),
+                        NonbondedInteraction::CoulombPlain(coulomb::pairwise::Plain::new(
+                            11.0,
+                            Some(2.0)
+                        ))
                     ]
                 );
             }
@@ -207,16 +221,24 @@ mod tests {
                             NonbondedInteraction::HardSphere(DirectOrMixing::Mixing {
                                 mixing: CombinationRule::Geometric,
                                 _phantom: Default::default()
-                            })
+                            }),
+                            NonbondedInteraction::CoulombReactionField(
+                                coulomb::pairwise::ReactionField::new(11.0, 100.0, 1.5, true)
+                            ),
                         ]
                     )
                 } else {
                     assert_eq!(
                         interactions,
-                        vec![NonbondedInteraction::HardSphere(DirectOrMixing::Mixing {
-                            mixing: CombinationRule::Arithmetic,
-                            _phantom: Default::default()
-                        })]
+                        vec![
+                            NonbondedInteraction::HardSphere(DirectOrMixing::Mixing {
+                                mixing: CombinationRule::Arithmetic,
+                                _phantom: Default::default()
+                            }),
+                            NonbondedInteraction::CoulombEwald(
+                                coulomb::pairwise::EwaldTruncated::new(11.0, 0.1)
+                            ),
+                        ]
                     )
                 }
             }
@@ -232,7 +254,9 @@ mod tests {
 
     #[test]
     fn hamiltonian_deserialization_fail_duplicate_default() {
-        todo!()
+        let error = HamiltonianBuilder::from_file("tests/files/nonbonded_duplicate_default.yaml")
+            .unwrap_err();
+        assert!(error.to_string().contains("duplicate entry with key"));
     }
 
     #[test]
@@ -281,12 +305,5 @@ mod tests {
             &error.to_string(),
             "Atom kind specified in `nonbonded` does not exist."
         );
-    }
-
-    #[test]
-    fn playground() {
-        let hamiltonian =
-            HamiltonianBuilder::from_file("scripts/openmm2faunus/martini.yaml").unwrap();
-        println!("{:?}", hamiltonian);
     }
 }

@@ -62,11 +62,14 @@ system:
       default:
         - !LennardJones {sigma: 6.0, eps: 1.5}
         - !WeeksChandlerAndersen {mixing: LB}
+        - !CoulombPlain {cutoff: 11.0, debye: 2.0}
       [OW, OW]:
         - !WCA {sigma: 3.0, eps: 1.5} # also WeeksChandlerAndersen
         - !HardSphere {mixing: Geometric}
+        - !CoulombReactionField {epsr: 1.5, epsrf: 100.0, shift: true, cutoff: 11.0}
       [OW, HW]:
         - !HardSphere {mixing: arithmetic}
+        - !CoulombEwald {alpha: 0.1, cutoff: 11.0}
 
   blocks:
     - {molecule: MOL, N: 3}  # read from a separate structure file
