@@ -18,38 +18,46 @@ limitations under the license.
 Faunus Topology represented by Python classes.
 """
 
-from to_yaml import yaml_tag, yaml_unit
-import yaml
-from martini_openmm import *
+# ruff: noqa: E402
+from typing import Union
+from to_yaml import yaml_tag, yaml_unit  # type: ignore
+import yaml  # type: ignore
+from martini_openmm import MartiniTopFile  # type: ignore
+
 
 class FaunusHydrophobicity:
     """Represents hydrophobicity of an atom."""
 
+    class Base:
+        pass
+
     @yaml_unit("!Hydrophobic")
-    class Hydrophobic:
+    class Hydrophobic(Base):
         pass
 
     @yaml_unit("!Hydrophilic")
-    class Hydrophilic:
+    class Hydrophilic(Base):
         pass
 
     @yaml_tag("!SurfaceTension")
-    class SurfaceTension:
+    class SurfaceTension(Base):
         def __init__(self, tension: float):
             self.tension = tension
 
+
 class FaunusAtomKind:
     """Defines an atom kind and its properties."""
+
     def __init__(
-            self, 
-            name: str, 
-            mass: float, 
-            charge: float = 0.0, 
-            element: str | None = None,  
-            sigma: float | None = None,
-            epsilon: float | None = None,
-            hydrophobicity: FaunusHydrophobicity | None = None,
-            custom: dict | None = None,
+        self,
+        name: str,
+        mass: float,
+        charge: float = 0.0,
+        element: str | None = None,
+        sigma: float | None = None,
+        epsilon: float | None = None,
+        hydrophobicity: FaunusHydrophobicity | None = None,
+        custom: dict | None = None,
     ):
         self.name = name
         self.mass = mass
@@ -60,108 +68,124 @@ class FaunusAtomKind:
         self.hydrophobicity = hydrophobicity
         self.custom = custom
 
+
 class FaunusBondKind:
     """Represents different types of bonds in Faunus."""
 
+    class Base:
+        pass
+
     @yaml_tag("!Harmonic")
-    class Harmonic:
+    class Harmonic(Base):
         def __init__(self, k: float, req: float):
             self.k = k
             self.req = req
 
     @yaml_tag("!FENE")
-    class FENE:
+    class FENE(Base):
         def __init__(self, req: float, rmax: float, k: float):
             self.req = req
             self.rmax = rmax
             self.k = k
 
+
 class FaunusBondOrder:
     """Represents the order of chemical bonds between atoms."""
 
+    class Base:
+        pass
+
     @yaml_unit("!Single")
-    class Single:
+    class Single(Base):
         pass
 
     @yaml_unit("!Double")
-    class Double:
+    class Double(Base):
         pass
 
     @yaml_unit("!Triple")
-    class Triple:
+    class Triple(Base):
         pass
 
     @yaml_unit("!Quadruple")
-    class Quadruple:
+    class Quadruple(Base):
         pass
 
     @yaml_unit("!Quintuple")
-    class Quintuple:
+    class Quintuple(Base):
         pass
 
     @yaml_unit("!Sextuple")
-    class Sextuple:
+    class Sextuple(Base):
         pass
 
     @yaml_unit("!Amide")
-    class Amide:
+    class Amide(Base):
         pass
 
     @yaml_unit("!Aromatic")
-    class Aromatic:
+    class Aromatic(Base):
         pass
 
     @yaml_unit("!Custom")
-    class Custom:
+    class Custom(Base):
         def __init__(self, value: float):
             self.value = value
+
 
 class FaunusTorsionKind:
     """Represents different types of torsions used in Faunus."""
 
+    class Base:
+        pass
+
     @yaml_tag("!Harmonic")
-    class Harmonic:
+    class Harmonic(Base):
         def __init__(self, k: float, aeq: float):
             self.k = k
             self.aeq = aeq
 
     @yaml_tag("!Cosine")
-    class Cosine:
+    class Cosine(Base):
         def __init__(self, k: float, aeq: float):
             self.k = k
             self.aeq = aeq
 
+
 class FaunusDihedralKind:
     """Represents different types of dihedral angles used in Faunus."""
 
+    class Base:
+        pass
+
     @yaml_tag("!Harmonic")
-    class Harmonic:
+    class Harmonic(Base):
         def __init__(self, k: float, aeq: float):
             self.k = k
             self.aeq = aeq
 
     @yaml_tag("!ProperPeriodic")
-    class ProperPeriodic:
+    class ProperPeriodic(Base):
         def __init__(self, k: float, n: float, phi: float):
             self.k = k
             self.n = n
             self.phi = phi
 
     @yaml_tag("!ImproperPeriodic")
-    class ImproperHarmonic:
+    class ImproperHarmonic(Base):
         def __init__(self, k: float, aeq: float):
             self.k = k
             self.aeq = aeq
 
     @yaml_tag("!ImproperAmber")
-    class ImproperAmber:
+    class ImproperAmber(Base):
         def __init__(self, k: float, n: float, phi: float):
             self.k = k
             self.n = n
             self.phi = phi
 
     @yaml_tag("!ImproperCharmm")
-    class ImproperCharmm:
+    class ImproperCharmm(Base):
         def __init__(self, k: float, n: float, phi: float):
             self.k = k
             self.n = n
@@ -170,81 +194,101 @@ class FaunusDihedralKind:
 
 class FaunusBond:
     """Represents a bond in a molecular system with specified indices and optional bond kind and order."""
-    def __init__(self, 
-                index: list[int], 
-                kind: FaunusBondKind | None = None, 
-                order: FaunusBondOrder | None = None):
+
+    def __init__(
+        self,
+        index: list[int],
+        kind: FaunusBondKind.Base | None = None,
+        order: FaunusBondOrder.Base | None = None,
+    ):
         self.index = index
         self.kind = kind
         self.order = order
 
+
 class FaunusTorsion:
     """Represents a torsional interaction within a molecular system, identified by indices and optional kind."""
-    def __init__(self, 
-                index: list[int],
-                kind: FaunusTorsionKind | None = None):
+
+    def __init__(self, index: list[int], kind: FaunusTorsionKind.Base | None = None):
         self.index = index
         self.kind = kind
 
+
 class FaunusDihedral:
     """Represents dihedral interactions within a molecular system, with additional properties for scaling."""
-    def __init__(self,
-                index: list[int],
-                kind: FaunusDihedralKind | None = None,
-                electrostatic_scaling: float | None = None,
-                lj_scaling: float | None = None):
+
+    def __init__(
+        self,
+        index: list[int],
+        kind: FaunusDihedralKind.Base | None = None,
+        electrostatic_scaling: float | None = None,
+        lj_scaling: float | None = None,
+    ):
         self.index = index
         self.kind = kind
         self.electrostatic_scaling = electrostatic_scaling
         self.lj_scaling = lj_scaling
 
+
 class FaunusDegreesOfFreedom:
     """Represents the degrees of freedom status for a molecule in simulations."""
+
+    class Base:
+        pass
+
     @yaml_unit("!Free")
-    class Free:
+    class Free(Base):
         pass
 
     @yaml_unit("!Frozen")
-    class Frozen:
+    class Frozen(Base):
         pass
 
     @yaml_unit("!Rigid")
-    class Rigid:
+    class Rigid(Base):
         pass
 
     @yaml_unit("!RigidAlchemical")
-    class RigidAlchemical:
+    class RigidAlchemical(Base):
         pass
+
 
 class FaunusResidue:
     """Represents a residue within a molecule, defined by a name and a range of atom indices."""
+
     def __init__(self, name: str, range: list[int], number: int | None = None):
         self.name = name
         self.number = number
         self.range = range
 
+
 class FaunusChain:
     """Represents a chain within a molecule, defined by a name and a range of atom indices."""
+
     def __init__(self, name: str, range: list[int]):
         self.name = name
         self.range = range
 
+
 class FaunusMoleculeKind:
     """Represents a molecule kind in the system, including details about its composition and bonded interactions."""
-    def __init__(self,
-            name: str,
-            atoms: list[str], 
-            bonds: list[FaunusBond] | None = None,
-            torsions: list[FaunusTorsion] | None = None,
-            dihedrals: list[FaunusDihedral] | None = None,
-            excluded_neighbours: int | None = None,
-            exclusions: list[list[int]] | None = None,
-            degrees_of_freedom: FaunusDegreesOfFreedom | None = None,
-            atom_names: list[str | None] | None = None,
-            residues: list[FaunusResidue] | None = None,
-            chains: list[FaunusChain] | None = None,
-            custom: dict | None = None,
-            has_com: bool | None = None):
+
+    def __init__(
+        self,
+        name: str,
+        atoms: list[str],
+        bonds: list[FaunusBond] | None = None,
+        torsions: list[FaunusTorsion] | None = None,
+        dihedrals: list[FaunusDihedral] | None = None,
+        excluded_neighbours: int | None = None,
+        exclusions: list[list[int]] | None = None,
+        degrees_of_freedom: FaunusDegreesOfFreedom.Base | None = None,
+        atom_names: list[str | None] | None = None,
+        residues: list[FaunusResidue] | None = None,
+        chains: list[FaunusChain] | None = None,
+        custom: dict | None = None,
+        has_com: bool | None = None,
+    ):
         self.name = name
         self.atoms = atoms
         self.bonds = bonds
@@ -259,80 +303,105 @@ class FaunusMoleculeKind:
         self.custom = custom
         self.has_com = has_com
 
+
 class FaunusNonbondedInteraction:
     """Represents nonbonded interaction between atoms in the simulated system."""
 
+    class Base:
+        pass
+
     @yaml_tag("!LennardJones")
-    class LennardJones:
+    class LennardJones(Base):
         def __init__(self, sigma: float, eps: float):
             self.sigma = sigma
             self.eps = eps
 
     # TODO: add other supported nonbonded interactions
 
+
 class FaunusIntermolecularBonded:
     """Represents intermolecular bonded interactions for the simulation."""
-    def __init__(self, 
-                bonds: list[FaunusBond] | None = None,
-                torsions: list[FaunusTorsion] | None = None,
-                dihedrals: list[FaunusDihedral] | None = None):
+
+    def __init__(
+        self,
+        bonds: list[FaunusBond] | None = None,
+        torsions: list[FaunusTorsion] | None = None,
+        dihedrals: list[FaunusDihedral] | None = None,
+    ):
         self.bonds = bonds
         self.torsions = torsions
         self.dihedrals = dihedrals
 
+
 class FaunusMoleculeBlock:
     """Represents a block of molecules for simulation purposes, specifying the molecule type and count."""
+
     def __init__(self, molecule: str, number: int):
         self.molecule = molecule
         self.N = number
 
+
 class FaunusEnergy:
     """Manages hamiltonian of the system."""
-    def __init__(self, nonbonded: dict[tuple[str, str], list[FaunusNonbondedInteraction]]):
+
+    def __init__(
+        self, nonbonded: dict[tuple[str, str], list[FaunusNonbondedInteraction.Base]]
+    ):
         self.nonbonded = nonbonded
+
 
 class FaunusSystem:
     """Manages intermolecular bonded interactions, hamiltonian and the molecule blocks in the system."""
+
     def __init__(
-            self, 
-            intermolecular: FaunusIntermolecularBonded | None = None, 
-            energy: FaunusEnergy | None = None,
-            blocks: list[FaunusMoleculeBlock] | None = None):
-        
+        self,
+        intermolecular: FaunusIntermolecularBonded | None = None,
+        energy: FaunusEnergy | None = None,
+        blocks: list[FaunusMoleculeBlock] | None = None,
+    ):
         self.intermolecular = intermolecular
         self.energy = energy
         self.blocks = blocks
 
+
 class FaunusTopology:
     """Manages the overall topology of a simulation, including molecules, atoms, and intermolecular interactions."""
-    def __init__(self, 
-                atom_kinds: list[FaunusAtomKind] | None = None,
-                molecule_kinds: list[FaunusMoleculeKind] | None = None,
-                intermolecular: FaunusIntermolecularBonded | None = None, 
-                molecule_blocks: list[FaunusMoleculeBlock] | None = None):
+
+    def __init__(
+        self,
+        atom_kinds: list[FaunusAtomKind] | None = None,
+        molecule_kinds: list[FaunusMoleculeKind] | None = None,
+        intermolecular: FaunusIntermolecularBonded | None = None,
+        energy: FaunusEnergy | None = None,
+        molecule_blocks: list[FaunusMoleculeBlock] | None = None,
+    ):
         self.atoms = atom_kinds
         self.molecules = molecule_kinds
-        self.system = FaunusSystem(intermolecular, molecule_blocks)
+        self.system = FaunusSystem(intermolecular, energy, molecule_blocks)
 
-    def _martini_get_atoms(self,
-                    moltype: MartiniTopFile._MoleculeType, 
-                    atom_types: dict[list[str]],
-                    martini_faunus_names: dict[str, list[str]]
-        ) -> tuple[list[str], list[str]]:
+    @classmethod
+    def _martini_get_atoms(
+        cls,
+        moltype: MartiniTopFile._MoleculeType,
+        atom_types: dict[str, list[str]],
+        martini_faunus_names: dict[str, list[str]],
+    ) -> tuple[list[FaunusAtomKind], list[str], list[str | None]]:
         """
-        Get atom kinds from a single Martini molecule type and add them to the topology.
-        Return list of atoms of the molecule and list of their names.
+        Get atom kinds from a single Martini molecule type.
+        Returns: list of atom kinds, list of atoms of the molecule and list of their names.
         """
         # Gromacs supports redefining masses and charges of atom types for specific molecules,
         # we therefore rename atom types to contain name, charge and mass information
         # if there are multiple Gromacs atoms with the same atom kind but redefined charge
         # and/or mass, we create separate atom kinds for these atoms
 
+        # list of faunus atom kinds
+        faunus_atoms: list[FaunusAtomKind] = []
         # atoms of the molecule type
         moltype_atoms = []
         # names of the atoms of the molecule
         atom_names = []
-        
+
         for atom in moltype.atoms:
             if len(atom) >= 8:
                 mass = float(atom[7])
@@ -342,8 +411,8 @@ class FaunusTopology:
                 charge = float(atom[6])
             else:
                 mass = float(atom_types[atom[1]][3])
-                charge = float(atom_types[atom[1][4]])
-            
+                charge = float(atom_types[atom[1]][4])
+
             faunus_atom_name = f"{atom[1]}_{charge}_{mass}"
             moltype_atoms.append(faunus_atom_name)
             atom_names.append(atom[4])
@@ -354,28 +423,37 @@ class FaunusTopology:
                 martini_faunus_names[atom[1]] = [faunus_atom_name]
 
             exists = False
-            for atom2 in self.atoms:
+            for atom2 in faunus_atoms:
                 if atom2.name == faunus_atom_name:
                     exists = True
                     break
-                    
-            if not exists:
-                self.atoms.append(FaunusAtomKind(faunus_atom_name, mass, charge))
-        
-        return (moltype_atoms, atom_names)
 
-    def _martini_get_bonds(self, moltype: MartiniTopFile._MoleculeType) -> list[FaunusBond]:
+            if not exists:
+                faunus_atoms.append(FaunusAtomKind(faunus_atom_name, mass, charge))
+
+        return (faunus_atoms, moltype_atoms, atom_names)
+
+    @classmethod
+    def _martini_get_bonds(
+        cls, moltype: MartiniTopFile._MoleculeType
+    ) -> list[FaunusBond]:
         """Get bonds from a Martini molecule type."""
 
         bonds = []
         for bond in moltype.bonds:
-            bonds.append(FaunusBond(
-                [int(x) - 1 for x in bond[:2]],
-                FaunusBondKind.Harmonic(float(bond[4]), float(bond[3]))))
-        
+            bonds.append(
+                FaunusBond(
+                    [int(x) - 1 for x in bond[:2]],
+                    FaunusBondKind.Harmonic(float(bond[4]), float(bond[3])),
+                )
+            )
+
         return bonds
 
-    def _martini_get_torsions(self, moltype: MartiniTopFile._MoleculeType) -> list[FaunusTorsion]:
+    @classmethod
+    def _martini_get_torsions(
+        cls, moltype: MartiniTopFile._MoleculeType
+    ) -> list[FaunusTorsion]:
         """Get torsions from a Martini molecule type."""
 
         torsions = []
@@ -383,17 +461,24 @@ class FaunusTopology:
             torsions.append(
                 FaunusTorsion(
                     [int(x) - 1 for x in torsion[:3]],
-                    FaunusTorsionKind.Cosine(float(torsion[5]), float(torsion[4]))))
-        
+                    FaunusTorsionKind.Cosine(float(torsion[5]), float(torsion[4])),
+                )
+            )
+
         for torsion in moltype.harmonic_angles:
             torsions.append(
                 FaunusTorsion(
                     [int(x) - 1 for x in torsion[:3]],
-                    FaunusTorsionKind.Harmonic(float(torsion[5]), float(torsion[4]))))
-            
+                    FaunusTorsionKind.Harmonic(float(torsion[5]), float(torsion[4])),
+                )
+            )
+
         return torsions
 
-    def _martini_get_dihedrals(self, moltype: MartiniTopFile._MoleculeType) -> list[FaunusDihedral]:
+    @classmethod
+    def _martini_get_dihedrals(
+        cls, moltype: MartiniTopFile._MoleculeType
+    ) -> list[FaunusDihedral]:
         """Get dihedrals from a Martini molecule type."""
 
         dihedrals = []
@@ -401,67 +486,95 @@ class FaunusTopology:
             dihedrals.append(
                 FaunusDihedral(
                     [int(x) - 1 for x in dihedral[:4]],
-                    FaunusDihedralKind.ProperPeriodic(float(dihedral[6]), float(dihedral[7]), float(dihedral[5]))))
-        
+                    FaunusDihedralKind.ProperPeriodic(
+                        float(dihedral[6]), float(dihedral[7]), float(dihedral[5])
+                    ),
+                )
+            )
+
         return dihedrals
 
-    def _martini_get_residues(self, moltype: MartiniTopFile._MoleculeType) -> list[FaunusResidue]:
+    @classmethod
+    def _martini_get_residues(
+        cls, moltype: MartiniTopFile._MoleculeType
+    ) -> list[FaunusResidue]:
         """Get residues from a Martini molecule type."""
+
+        class CurrResidue:
+            """Helper class for obtaining residues from the Martini topology."""
+
+            def __init__(self, range: list[int], name: str, number: int):
+                self.range = range
+                self.name = name
+                self.number = number
+
+            def to_faunus(self) -> FaunusResidue:
+                return FaunusResidue(self.name, self.range, self.number)
 
         last_resnum = None
         residues = []
-        curr_residue = [0, 0, None, 1]
-        for (i, atom) in enumerate(moltype.atoms):
+        curr_residue = CurrResidue([0, 0], "", 1)
+        for i, atom in enumerate(moltype.atoms):
             resnum = int(atom[2])
             if resnum != last_resnum:
                 if last_resnum is not None:
-                    curr_residue[1] = i
-                    residues.append(
-                        FaunusResidue(
-                            curr_residue[2], 
-                            [curr_residue[0], curr_residue[1]], 
-                            curr_residue[3]))
-                
+                    curr_residue.range[1] = i
+                    residues.append(curr_residue.to_faunus())
+
                 last_resnum = resnum
-                curr_residue[0] = i
-                curr_residue[2] = atom[3]
-                curr_residue[3] = resnum
+                curr_residue.range[0] = i
+                curr_residue.name = atom[3]
+                curr_residue.number = resnum
 
         # add last residue
-        curr_residue[1] = len(moltype.atoms)
-        curr_residue[2] = moltype.atoms[-1][3]
-        curr_residue[3] = int(moltype.atoms[-1][2])
-        residues.append(FaunusResidue(curr_residue[2], [curr_residue[0], curr_residue[1]], curr_residue[3]))
+        curr_residue.range[1] = len(moltype.atoms)
+        curr_residue.name = moltype.atoms[-1][3]
+        curr_residue.number = int(moltype.atoms[-1][2])
+        residues.append(curr_residue.to_faunus())
 
         return residues
 
-    def _martini_get_exclusions(self, moltype: MartiniTopFile._MoleculeType) -> list[list[int]]:
+    @classmethod
+    def _martini_get_exclusions(
+        cls, moltype: MartiniTopFile._MoleculeType
+    ) -> list[list[int]]:
         """Get exclusions from a Martini molecule type."""
 
         return [[int(excl[0]) - 1, int(excl[1]) - 1] for excl in moltype.exclusions]
-    
-    def _martini_get_constraints_as_bonds(self, moltype: MartiniTopFile._MoleculeType) -> list[FaunusBond]:
+
+    @classmethod
+    def _martini_get_constraints_as_bonds(
+        cls, moltype: MartiniTopFile._MoleculeType
+    ) -> list[FaunusBond]:
         """
-        Get constraints from a Martini molecule type and 
+        Get constraints from a Martini molecule type and
         convert them to harmonic bonds with a high force constant.
         """
 
         bonds = []
         for constraint in moltype.constraints:
-            bonds.append(FaunusBond(
-                [int(x) - 1 for x in constraint[:2]],
-                FaunusBondKind.Harmonic(50_000, float(constraint[3]))))
+            bonds.append(
+                FaunusBond(
+                    [int(x) - 1 for x in constraint[:2]],
+                    FaunusBondKind.Harmonic(50_000, float(constraint[3])),
+                )
+            )
 
         return bonds
 
-    def _martini_get_nonbonded(self, 
-            martini_faunus_names: dict[str, list[str]], 
-            nonbonded: dict[tuple[str], list[str]]) -> dict[tuple[str, str], list[FaunusNonbondedInteraction]]:
+    @classmethod
+    def _martini_get_nonbonded(
+        cls,
+        martini_faunus_names: dict[str, list[str]],
+        nonbonded: dict[tuple[str, str], list[str]],
+    ) -> dict[tuple[str, str], list[FaunusNonbondedInteraction.Base]]:
         """
         Get nonbonded interactions from the Martini topology.
         """
-        
-        faunus_nonbonded = {}
+
+        faunus_nonbonded: dict[
+            tuple[str, str], list[FaunusNonbondedInteraction.Base]
+        ] = {}
 
         for name1 in martini_faunus_names:
             for name2 in martini_faunus_names:
@@ -471,19 +584,31 @@ class FaunusTopology:
                     except KeyError:
                         interaction = nonbonded[(name2, name1)]
                 except KeyError:
-                    raise Exception(f"Could not find LJ interaction between atoms {name1} and {name2}.")
-                
+                    raise Exception(
+                        f"Could not find LJ interaction between atoms {name1} and {name2}."
+                    )
+
                 for faunus_name1 in martini_faunus_names[name1]:
-                        for faunus_name2 in martini_faunus_names[name2]:
-                            faunus_nonbonded[(faunus_name1, faunus_name2)] = \
-                                [FaunusNonbondedInteraction.LennardJones(float(interaction[3]), float(interaction[4]))]
-        
+                    for faunus_name2 in martini_faunus_names[name2]:
+                        if (faunus_name1, faunus_name2) in faunus_nonbonded.keys() or (
+                            faunus_name2,
+                            faunus_name1,
+                        ) in faunus_nonbonded.keys():
+                            continue
+
+                        faunus_nonbonded[(faunus_name1, faunus_name2)] = [
+                            FaunusNonbondedInteraction.LennardJones(
+                                float(interaction[3]), float(interaction[4])
+                            )
+                        ]
+
         return faunus_nonbonded
 
-    def __init__(self, martini_top: MartiniTopFile):
+    @classmethod
+    def from_martini(cls, martini_top: MartiniTopFile):
         """
         Convert Martini topology parsed by martini_openmm into Faunus topology.
-        
+
         Notes:
         - Constraints are converted to harmonic bonds with a force constant of 50000.
         - Pairs and restricted angles are not supported and will raise an exception.
@@ -491,49 +616,55 @@ class FaunusTopology:
         - Electrostatic interactions are ignored.
         """
 
-        self.atoms = []
-        self.molecules = []
+        atoms = []
+        molecules = []
         blocks = []
         molnames = []
 
         # dictionary mapping martini atom type names to all faunus atom kind names
-        martini_faunus_names = {}
+        martini_faunus_names: dict[str, list[str]] = {}
 
-        for (molname, number) in martini_top._molecules:
+        for molname, number in martini_top._molecules:
             blocks.append(FaunusMoleculeBlock(molname, number))
 
-            # if there are multiple blocks with the same molecule, 
+            # if there are multiple blocks with the same molecule,
             # only create the molecule once
             if molname in molnames:
                 continue
-            
+
             molnames.append(molname)
             moltype = martini_top._moleculeTypes[molname]
 
             # TODO: pairs are currently not supported by Faunus
             if len(moltype.pairs) != 0:
                 raise NotImplementedError("Pairs are currently not supported.")
-            
+
             # TODO: implement restricted angles
             if len(moltype.restricted_angles) != 0:
-                raise NotImplementedError("Restricted angles are currently not supported.")
+                raise NotImplementedError(
+                    "Restricted angles are currently not supported."
+                )
 
             # get atom kinds for Faunus
-            moltype_atoms, atom_names = self._martini_get_atoms(moltype, martini_top._atom_types, martini_faunus_names)
+            faunus_atoms, moltype_atoms, atom_names = FaunusTopology._martini_get_atoms(
+                moltype, martini_top._atom_types, martini_faunus_names
+            )
+
+            atoms.extend(faunus_atoms)
 
             # get bonds, torsions, dihedrals, constraints
-            bonds = self._martini_get_bonds(moltype)
-            bonds.extend(self._martini_get_constraints_as_bonds(moltype))
-            torsions = self._martini_get_torsions(moltype)
-            dihedrals = self._martini_get_dihedrals(moltype)
+            bonds = FaunusTopology._martini_get_bonds(moltype)
+            bonds.extend(FaunusTopology._martini_get_constraints_as_bonds(moltype))
+            torsions = FaunusTopology._martini_get_torsions(moltype)
+            dihedrals = FaunusTopology._martini_get_dihedrals(moltype)
 
             # get exclusions
-            exclusions = self._martini_get_exclusions(moltype)
-            
-            # get residues 
-            residues = self._martini_get_residues(moltype)
-            
-            self.molecules.append(
+            exclusions = FaunusTopology._martini_get_exclusions(moltype)
+
+            # get residues
+            residues = FaunusTopology._martini_get_residues(moltype)
+
+            molecules.append(
                 FaunusMoleculeKind(
                     moltype.molecule_name,
                     moltype_atoms,
@@ -545,17 +676,23 @@ class FaunusTopology:
                     exclusions if len(exclusions) != 0 else None,
                     FaunusDegreesOfFreedom.Free(),
                     atom_names,
-                    residues)) 
+                    residues,
+                )
+            )
 
         # get nonbonded interactions (LJ only)
-        nonbonded = self._martini_get_nonbonded(martini_faunus_names, martini_top._nonbond_types)
-        
-        self.system = FaunusSystem()
-        if len(blocks) != 0:
-            self.system.blocks = blocks
-        if len(nonbonded) != 0:
-            self.system.energy = FaunusEnergy(nonbonded)
+        nonbonded = FaunusTopology._martini_get_nonbonded(
+            martini_faunus_names, martini_top._nonbond_types
+        )
+
+        return FaunusTopology(
+            atoms,
+            molecules,
+            None,
+            FaunusEnergy(nonbonded) if len(nonbonded) != 0 else None,
+            blocks if len(blocks) != 0 else None,
+        )
 
     def to_yaml(self) -> str:
         """Serialize the Topology as a yaml structure readable by Faunus."""
-        return yaml.dump(self, sort_keys = False).replace("''", "")
+        return yaml.dump(self, sort_keys=False).replace("''", "")

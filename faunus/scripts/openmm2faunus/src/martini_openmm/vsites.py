@@ -1,6 +1,6 @@
 from collections import defaultdict
 from typing import List, Dict, Union
-import simtk.unit as unit
+import simtk.unit as unit  # type: ignore
 
 
 class LinearSite:

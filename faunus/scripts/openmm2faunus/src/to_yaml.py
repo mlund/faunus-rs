@@ -18,26 +18,39 @@ limitations under the license.
 Modifications of the default pyyaml tags.
 """
 
-import yaml
+# ruff: noqa: E402
+import yaml  # type: ignore
+
 
 # Print no tag for the class.
 def notag_representer(dumper, data):
-    return dumper.represent_mapping('tag:yaml.org,2002:map', dict((k, v) for (k, v) in data.__dict__.items() if v is not None))
+    return dumper.represent_mapping(
+        "tag:yaml.org,2002:map",
+        dict((k, v) for (k, v) in data.__dict__.items() if v is not None),
+    )
+
 
 # Print no tag for a tuple
 def notag_tuple_representer(self, data):
-    return self.represent_sequence('tag:yaml.org,2002:seq', data)
+    return self.represent_sequence("tag:yaml.org,2002:seq", data)
+
 
 yaml.add_representer(tuple, notag_tuple_representer)
+
 
 # Decorator for adding YAML representers
 def yaml_tag(tag):
     def decorator(cls):
         def representer(dumper, data):
-            return dumper.represent_mapping(tag, dict((k, v) for (k, v) in data.__dict__.items() if v is not None))
+            return dumper.represent_mapping(
+                tag, dict((k, v) for (k, v) in data.__dict__.items() if v is not None)
+            )
+
         yaml.add_representer(cls, representer)
         return cls
+
     return decorator
+
 
 def yaml_unit(tag):
     def decorator(cls):
@@ -46,9 +59,12 @@ def yaml_unit(tag):
             # the work-around is to just remove all instances of '' from the yaml output but that's not ideal
             # todo: find a proper solution
             return dumper.represent_scalar(tag, "")
+
         yaml.add_representer(cls, representer)
         return cls
+
     return decorator
+
 
 # Classes without a YAML representer decorator should have no tags.
 yaml.add_multi_representer(object, notag_representer)

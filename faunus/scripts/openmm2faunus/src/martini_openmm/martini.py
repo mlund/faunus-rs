@@ -29,21 +29,23 @@ DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
 OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
+
 __author__ = "Justin MacCallum"
 __version__ = "0.1"
 
+# ruff: noqa: E402
 import distutils.spawn
 import math
 import os
 import re
 from collections import OrderedDict, defaultdict
 
-import openmm as mm
-import simtk.unit as unit
-from openmm.app import PDBFile, Topology
-from openmm.app import amberprmtopfile as prmtop
-from openmm.app import element as elem
-from openmm.app import forcefield as ff
+import openmm as mm  # type: ignore
+import simtk.unit as unit  # type: ignore
+from openmm.app import PDBFile, Topology  # type: ignore
+from openmm.app import amberprmtopfile as prmtop  # type: ignore
+from openmm.app import element as elem  # type: ignore
+from openmm.app import forcefield as ff  # type: ignore
 from .vsites import (
     LinearSite,
     OutOfPlane,
@@ -51,7 +53,7 @@ from .vsites import (
     COMLinearSite,
     NormalizedInPlaneSite,
     NormalizedInPlaneTwoParticleSite,
-)
+)  # type: ignore
 
 HBonds = ff.HBonds
 AllBonds = ff.AllBonds
@@ -1455,8 +1457,8 @@ class MartiniTopFile(object):
                     if self._use_sigma_eps:
                         sigma = float(params[3])
                         eps = float(params[4])
-                        c6 = 4 * eps * sigma ** 6
-                        c12 = 4 * eps * sigma ** 12
+                        c6 = 4 * eps * sigma**6
+                        c12 = 4 * eps * sigma**12
                     else:
                         c6 = float(params[3])
                         c12 = float(params[4])
@@ -1473,8 +1475,8 @@ class MartiniTopFile(object):
                     if self._use_sigma_eps:
                         sigma = 0.5 * (v_i + v_j)
                         eps = math.sqrt(w_i * w_j)
-                        c6 = 4 * eps * sigma ** 6
-                        c12 = 4 * eps * sigma ** 12
+                        c6 = 4 * eps * sigma**6
+                        c12 = 4 * eps * sigma**12
                     else:
                         c6 = math.sqrt(v_i * v_j)
                         c12 = math.sqrt(w_i * w_j)
@@ -1557,7 +1559,7 @@ class MartiniTopFile(object):
             for i, j in except_map:
                 # Remove i,j from nonbonded interactions for all exceptions / exclusions
                 self.nb_force.addExclusion(i, j)
-            
+
                 # Handle electrostatic exceptions / exclusions.
                 # We're going to assume that q==0 means that this was an
                 # exclusion.
@@ -1579,7 +1581,7 @@ class MartiniTopFile(object):
                 # Now we'll add the LJ exceptions. We don't bother
                 # adding the interaction if the combined LJ parameters are zero.
                 if c6 != 0 and c12 != 0:
-                # As in lj_except_force we first add the parameter C12 and then C6
+                    # As in lj_except_force we first add the parameter C12 and then C6
                     self.lj_except_force.addBond(i, j, [c12, c6])
 
         if remove_com_motion:

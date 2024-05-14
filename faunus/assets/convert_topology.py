@@ -1,6 +1,5 @@
-import parmed as pmd
-import sys
-from ruamel.yaml import YAML
+import parmed as pmd # type: ignore
+from ruamel.yaml import YAML # type: ignore
 parm = pmd.load_file("solvated.top")
 bonds = (dict(index=[b.atom1.idx, b.atom2.idx], req=b.type.req, k=b.type.k, type='harmonic') for b in parm.bonds)
 atoms = (dict(sigma=a.sigma, epsilon=a.epsilon, name=a.name, charge=a.charge, type=a.type,

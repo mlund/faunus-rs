@@ -18,15 +18,21 @@ limitations under the license.
 Script for converting from Martini topology to Faunus topology.
 """
 
+# ruff: noqa: E402
 import sys
-import martini_openmm
-from topology import *
+import martini_openmm  # type: ignore
+from topology import FaunusTopology  # type: ignore
 
 try:
     input_file = sys.argv[1]
 except IndexError:
-    print(f"Usage: python {sys.argv[0]} INPUT_MARTINI_TOPOLOGY_FILE > OUTPUT_FAUNUS_TOPOLOGY_FILE")
+    print(
+        f"Usage: python {sys.argv[0]} INPUT_MARTINI_TOPOLOGY_FILE > OUTPUT_FAUNUS_TOPOLOGY_FILE"
+    )
     sys.exit()
 
-martini_topology = martini_openmm.MartiniTopFile(input_file, periodicBoxVectors = [[1000.0, 0.0, 0.0], [0.0, 1000.0, 0.0], [0.0, 0.0, 1000.0]])
-print(FaunusTopology(martini_topology).to_yaml())
+martini_topology = martini_openmm.MartiniTopFile(
+    input_file,
+    periodicBoxVectors=[[1000.0, 0.0, 0.0], [0.0, 1000.0, 0.0], [0.0, 0.0, 1000.0]],
+)
+print(FaunusTopology.from_martini(martini_topology).to_yaml())
