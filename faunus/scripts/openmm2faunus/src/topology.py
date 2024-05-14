@@ -19,10 +19,16 @@ Faunus Topology represented by Python classes.
 """
 
 # ruff: noqa: E402
-from typing import Union
-from to_yaml import yaml_tag, yaml_unit  # type: ignore
+from to_yaml import yaml_tag, yaml_unit, yaml_default # type: ignore
 import yaml  # type: ignore
 from martini_openmm import MartiniTopFile  # type: ignore
+
+
+@yaml_default()
+class FaunusDefault:
+    """Represents generic default value."""
+
+    pass
 
 
 class FaunusHydrophobicity:
@@ -316,6 +322,14 @@ class FaunusNonbondedInteraction:
             self.sigma = sigma
             self.eps = eps
 
+    @yaml_tag("!CoulombReactionField")
+    class CoulombReactionField(Base):
+        def __init__(self, epsr: float, epsrf: float, cutoff: float, shift: bool):
+            self.epsr = epsr
+            self.epsrf = epsrf
+            self.cutoff = cutoff
+            self.shift = shift
+
     # TODO: add other supported nonbonded interactions
 
 
@@ -345,7 +359,10 @@ class FaunusEnergy:
     """Manages hamiltonian of the system."""
 
     def __init__(
-        self, nonbonded: dict[tuple[str, str], list[FaunusNonbondedInteraction.Base]]
+        self,
+        nonbonded: dict[
+            tuple[str, str] | FaunusDefault, list[FaunusNonbondedInteraction.Base]
+        ],
     ):
         self.nonbonded = nonbonded
 
@@ -509,7 +526,7 @@ class FaunusTopology:
                 self.number = number
 
             def to_faunus(self) -> FaunusResidue:
-                return FaunusResidue(self.name, self.range, self.number)
+                return FaunusResidue(self.name, self.range.copy(), self.number)
 
         last_resnum = None
         residues = []
@@ -526,7 +543,7 @@ class FaunusTopology:
                 curr_residue.name = atom[3]
                 curr_residue.number = resnum
 
-        # add last residue
+        # add the last residue
         curr_residue.range[1] = len(moltype.atoms)
         curr_residue.name = moltype.atoms[-1][3]
         curr_residue.number = int(moltype.atoms[-1][2])
@@ -567,13 +584,13 @@ class FaunusTopology:
         cls,
         martini_faunus_names: dict[str, list[str]],
         nonbonded: dict[tuple[str, str], list[str]],
-    ) -> dict[tuple[str, str], list[FaunusNonbondedInteraction.Base]]:
+    ) -> dict[tuple[str, str] | FaunusDefault, list[FaunusNonbondedInteraction.Base]]:
         """
         Get nonbonded interactions from the Martini topology.
         """
 
         faunus_nonbonded: dict[
-            tuple[str, str], list[FaunusNonbondedInteraction.Base]
+            tuple[str, str] | FaunusDefault, list[FaunusNonbondedInteraction.Base]
         ] = {}
 
         for name1 in martini_faunus_names:
@@ -601,6 +618,13 @@ class FaunusTopology:
                                 float(interaction[3]), float(interaction[4])
                             )
                         ]
+
+        # add default electrostatic interactions
+        faunus_nonbonded[FaunusDefault()] = [
+            FaunusNonbondedInteraction.CoulombReactionField(
+                15.0, float("inf"), 11.0, True
+            )
+        ]
 
         return faunus_nonbonded
 

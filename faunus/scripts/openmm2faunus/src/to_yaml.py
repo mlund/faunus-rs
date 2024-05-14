@@ -21,7 +21,6 @@ Modifications of the default pyyaml tags.
 # ruff: noqa: E402
 import yaml  # type: ignore
 
-
 # Print no tag for the class.
 def notag_representer(dumper, data):
     return dumper.represent_mapping(
@@ -52,6 +51,7 @@ def yaml_tag(tag):
     return decorator
 
 
+# Decorator for unit class instance.
 def yaml_unit(tag):
     def decorator(cls):
         def representer(dumper, data):
@@ -59,6 +59,18 @@ def yaml_unit(tag):
             # the work-around is to just remove all instances of '' from the yaml output but that's not ideal
             # todo: find a proper solution
             return dumper.represent_scalar(tag, "")
+
+        yaml.add_representer(cls, representer)
+        return cls
+
+    return decorator
+
+
+# Decorator for Faunus Default.
+def yaml_default():
+    def decorator(cls):
+        def representer(dumper, obj):
+            return dumper.represent_scalar("tag:yaml.org,2002:str", "default", style="")
 
         yaml.add_representer(cls, representer)
         return cls
