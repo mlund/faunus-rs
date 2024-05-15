@@ -13,9 +13,9 @@
 // limitations under the license.
 
 use super::IsotropicTwobodyEnergy;
-use crate::Cutoff;
 #[cfg(feature = "serde")]
 use crate::{sqrt_serialize, square_deserialize};
+use crate::{CombinationRule, Cutoff};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
@@ -58,6 +58,11 @@ impl HardSphere {
         Self {
             min_distance_squared: min_distance.powi(2),
         }
+    }
+
+    pub fn from_combination_rule(rule: CombinationRule, sigmas: (f64, f64)) -> Self {
+        let sigma = rule.mix_sigmas(sigmas);
+        Self::new(sigma)
     }
 }
 

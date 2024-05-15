@@ -381,8 +381,14 @@ impl<T: Context + 'static> MarkovChain<T> {
             let change = mv.do_move(&mut self.context.new, &mut self.rng).unwrap();
             self.context.new.update(&change).unwrap();
             let energy = NewOld::<f64>::from(
-                self.context.new.hamiltonian().energy_change(&change),
-                self.context.old.hamiltonian().energy_change(&change),
+                self.context
+                    .new
+                    .hamiltonian()
+                    .energy_change(&self.context.new, &change),
+                self.context
+                    .old
+                    .hamiltonian()
+                    .energy_change(&self.context.old, &change),
             );
             let bias = mv.bias(&change, &energy);
             if self

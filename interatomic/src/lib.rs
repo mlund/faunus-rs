@@ -130,8 +130,8 @@ impl CombinationRule {
         match self {
             Self::LorentzBerthelot => geometric_mean(epsilons),
             Self::FenderHalsey => harmonic_mean(epsilons),
-            Self::Arithmetic => todo!("Not yet implemented."),
-            Self::Geometric => todo!("Not yet implemented."),
+            Self::Arithmetic => arithmetic_mean(epsilons),
+            Self::Geometric => geometric_mean(epsilons),
         }
     }
 
@@ -140,8 +140,8 @@ impl CombinationRule {
         match self {
             Self::LorentzBerthelot => arithmetic_mean(sigmas),
             Self::FenderHalsey => arithmetic_mean(sigmas),
-            Self::Arithmetic => todo!("Not yet implemented."),
-            Self::Geometric => todo!("Not yet implemented."),
+            Self::Arithmetic => arithmetic_mean(sigmas),
+            Self::Geometric => geometric_mean(sigmas),
         }
     }
 }

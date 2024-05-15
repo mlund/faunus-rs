@@ -157,7 +157,7 @@ impl Indexed for Bond {
 
 impl interatomic::twobody::IsotropicTwobodyEnergy for Bond {
     fn isotropic_twobody_energy(&self, distance_squared: f64) -> f64 {
-        match self.kind {
+        match &self.kind {
             BondKind::Harmonic(x) => x.isotropic_twobody_energy(distance_squared),
             BondKind::FENE(x) => x.isotropic_twobody_energy(distance_squared),
             BondKind::Morse(x) => x.isotropic_twobody_energy(distance_squared),

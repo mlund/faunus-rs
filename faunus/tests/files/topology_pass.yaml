@@ -7,8 +7,8 @@
 include: [top/top1.yaml, top2.yaml]
 
 atoms:
-  - {name: OW, mass: 16.0, charge: -1.0, element: O, hydrophobicity: !SurfaceTension 1.0}
-  - {name: HW, mass: 1.0}
+  - {name: OW, mass: 16.0, charge: -1.0, element: O, sigma: 3.4, epsilon: 1.8, hydrophobicity: !SurfaceTension 1.0}
+  - {name: HW, mass: 1.0, sigma: 1.0, epsilon: 0.5}
 
 molecules:
   - name: MOL
@@ -61,14 +61,14 @@ system:
     nonbonded:
       default:
         - !LennardJones {sigma: 6.0, eps: 1.5}
-        - !WeeksChandlerAndersen {mixing: LB}
+        - !WeeksChandlerAndersen {sigma: 8.0, eps: 1.3}
         - !CoulombPlain {cutoff: 11.0, debye: 2.0}
       [OW, OW]:
         - !WCA {sigma: 3.0, eps: 1.5} # also WeeksChandlerAndersen
         - !HardSphere {mixing: Geometric}
         - !CoulombReactionField {epsr: 1.5, epsrf: 100.0, shift: true, cutoff: 11.0}
       [OW, HW]:
-        - !HardSphere {mixing: arithmetic}
+        - !HardSphere {mixing: LB}
         - !CoulombEwald {alpha: 0.1, cutoff: 11.0}
 
   blocks:

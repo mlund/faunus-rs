@@ -241,6 +241,7 @@ mod tests {
     };
 
     use crate::{
+        energy::Hamiltonian,
         topology::{
             block::{BlockActivationStatus, InsertionPolicy, MoleculeBlock},
             Bond, BondKind, BondOrder, DegreesOfFreedom, IntermolecularBonded, Topology,
@@ -415,7 +416,7 @@ mod tests {
         let context = ReferencePlatform::new(
             Rc::new(topology),
             Cuboid::new(10.0, 5.0, 2.5),
-            vec![],
+            Hamiltonian::new(vec![]),
             None::<&str>,
             &mut rng,
         )

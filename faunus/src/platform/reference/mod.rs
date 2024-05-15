@@ -14,6 +14,8 @@
 
 //! # Reference platform for CPU-based simulations
 
+pub mod nonbonded;
+
 use rand::rngs::ThreadRng;
 
 use crate::{
@@ -24,8 +26,6 @@ use crate::{
 };
 
 use std::{path::Path, rc::Rc};
-
-pub mod nonbonded;
 
 /// Default platform running on the CPU.
 ///
@@ -91,8 +91,8 @@ impl Context for ReferencePlatform {
 }
 
 impl SyncFrom for ReferencePlatform {
-    fn sync_from(&mut self, other: &dyn as_any::AsAny, change: &Change) -> anyhow::Result<()> {
-        let other = other.as_any().downcast_ref::<Self>().unwrap();
+    /// Synchronize ReferencePlatform from another ReferencePlatform.
+    fn sync_from(&mut self, other: &ReferencePlatform, change: &Change) -> anyhow::Result<()> {
         self.cell = other.cell.clone();
         self.hamiltonian_mut()
             .sync_from(other.hamiltonian(), change)?;
@@ -114,10 +114,10 @@ impl GroupCollection for ReferencePlatform {
         self.particles.len()
     }
 
-    fn set_particles<'a>(
+    fn set_particles<'b>(
         &mut self,
         indices: impl IntoIterator<Item = usize>,
-        source: impl IntoIterator<Item = &'a Particle> + Clone,
+        source: impl IntoIterator<Item = &'b Particle> + Clone,
     ) -> anyhow::Result<()> {
         for (src, i) in source.into_iter().zip(indices.into_iter()) {
             self.particles[i] = src.clone();

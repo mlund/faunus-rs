@@ -1034,8 +1034,8 @@ mod tests {
             16.0,
             -1.0,
             Some("O"),
-            None,
-            None,
+            Some(3.4),
+            Some(1.8),
             Some(Hydrophobicity::SurfaceTension(1.0)),
             &HashMap::new(),
         );
@@ -1047,8 +1047,8 @@ mod tests {
             1.0,
             0.0,
             None,
-            None,
-            None,
+            Some(1.0),
+            Some(0.5),
             None,
             &HashMap::new(),
         );

@@ -20,7 +20,7 @@ use serde::{Deserialize, Serialize};
 
 /// Morse potential.
 /// See <https://en.wikipedia.org/wiki/Morse_potential>.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(
     feature = "serde",
     derive(Deserialize, Serialize),

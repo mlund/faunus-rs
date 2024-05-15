@@ -14,9 +14,21 @@
 
 //! # Implementation of the deserialization of the hamiltonian.
 
-use std::{collections::HashMap, fmt, path::Path};
+use std::{
+    collections::HashMap,
+    fmt::{self, Debug},
+    path::Path,
+};
 
-use interatomic::{twobody::IsotropicTwobodyEnergy, CombinationRule};
+use anyhow::Context as AnyhowContext;
+use coulomb::pairwise::MultipoleEnergy;
+use interatomic::{
+    twobody::{
+        HardSphere, IonIon, IsotropicTwobodyEnergy, LennardJones, NoInteraction,
+        WeeksChandlerAndersen,
+    },
+    CombinationRule,
+};
 use serde::{
     de::{self, Visitor},
     Deserialize, Deserializer, Serialize, Serializer,
@@ -25,17 +37,108 @@ use unordered_pair::UnorderedPair;
 
 use crate::topology::AtomKind;
 
-/// Structure used for (de)serializing the Hamiltonian of the system.
+/// Structure storing information about the nonbonded interactions in the system in serializable format.
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
-pub(super) struct HamiltonianBuilder {
+pub(crate) struct NonbondedBuilder(
     #[serde(with = "::serde_with::rust::maps_duplicate_key_is_error")]
     // defining interactions between the same atom kinds multiple times causes an error
-    nonbonded: HashMap<DefaultOrPair, Vec<NonbondedInteraction>>,
+    HashMap<DefaultOrPair, Vec<NonbondedInteraction>>,
+);
+
+impl NonbondedBuilder {
+    /// Are interactions defined for a specific pair of atoms or for default?
+    fn contains_key(&self, key: &DefaultOrPair) -> bool {
+        self.0.contains_key(key)
+    }
+
+    /// Get interactions for a specific pair of atoms or for default.
+    fn get(&self, key: &DefaultOrPair) -> Option<&Vec<NonbondedInteraction>> {
+        self.0.get(key)
+    }
+
+    /// Get interactions for a specific pair of atoms.
+    /// If this pair of atoms is not defined, get interactions for Default.
+    /// If Default is not defined, return an empty array.
+    fn collect_interactions(&self, atom1: &str, atom2: &str) -> &[NonbondedInteraction] {
+        let key = DefaultOrPair::Pair(UnorderedPair(atom1.to_owned(), atom2.to_owned()));
+
+        match self.0.get(&key) {
+            Some(x) => x,
+            None => match self.0.get(&DefaultOrPair::Default) {
+                Some(x) => x,
+                None => &[],
+            },
+        }
+    }
+
+    /// Get interactions for a specific pair of atoms and collect them into a single `IsotropicTwobodyEnergy` trait object.
+    /// If this pair of atoms has no explicitly defined interactions, get interactions for Default.
+    /// If Default is not defined or no interactions have been found, return `NoInteraction` structure and log a warning.
+    pub(crate) fn get_interaction(
+        &self,
+        atom1: &AtomKind,
+        atom2: &AtomKind,
+    ) -> anyhow::Result<Box<dyn IsotropicTwobodyEnergy>> {
+        let interactions = self.collect_interactions(atom1.name(), atom2.name());
+
+        if interactions.len() == 0 {
+            log::warn!(
+                "No nonbonded interaction defined for '{} <-> {}'.",
+                atom1.name(),
+                atom2.name()
+            );
+            return Ok(Box::from(NoInteraction::new()));
+        }
+
+        let charges = (atom1.charge(), atom2.charge());
+        let epsilons = match (atom1.epsilon(), atom2.epsilon()) {
+            (Some(x), Some(y)) => Some((x, y)),
+            _ => None,
+        };
+        let sigmas = match (atom1.sigma(), atom2.sigma()) {
+            (Some(x), Some(y)) => Some((x, y)),
+            _ => None,
+        };
+
+        let mut iterator = interactions.iter();
+        let mut total_interaction = loop {
+            // find the first existing interaction and use it to initialize the `total_interaction`
+            if let Some(interaction) = iterator.next() {
+                if let Some(converted) = interaction.convert(Some(charges), epsilons, sigmas)? {
+                    break converted;
+                }
+            } else {
+                // no interactions left
+                log::warn!(
+                    "No nonbonded interaction defined for '{} <-> {}'.",
+                    atom1.name(),
+                    atom2.name()
+                );
+                return Ok(Box::from(NoInteraction::new()));
+            }
+        };
+
+        // loop through the rest of the interactions and sum them together
+        for interaction in iterator {
+            if let Some(converted) = interaction.convert(Some(charges), epsilons, sigmas)? {
+                total_interaction = total_interaction + converted;
+            }
+        }
+
+        Ok(total_interaction)
+    }
+}
+
+/// Structure used for (de)serializing the Hamiltonian of the system.
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+pub(crate) struct HamiltonianBuilder {
+    /// Nonbonded interactions defined for the system.
+    pub nonbonded: NonbondedBuilder,
 }
 
 /// Specifies pair of atom kinds interacting with each other.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub(super) enum DefaultOrPair {
+enum DefaultOrPair {
     /// All pairs of atom kinds.
     Default,
     /// Pair of atom kinds.
@@ -98,14 +201,14 @@ impl<'de> Deserialize<'de> for DefaultOrPair {
 /// Type of nonbonded interaction.
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 #[serde(deny_unknown_fields)]
-pub(super) enum NonbondedInteraction {
+pub(crate) enum NonbondedInteraction {
     /// Lennard-Jones potential.
-    LennardJones(DirectOrMixing<interatomic::twobody::LennardJones>),
+    LennardJones(DirectOrMixing<LennardJones>),
     /// Weeks-Chandler-Andersen potential.
     #[serde(alias = "WCA")]
-    WeeksChandlerAndersen(DirectOrMixing<interatomic::twobody::WeeksChandlerAndersen>),
+    WeeksChandlerAndersen(DirectOrMixing<WeeksChandlerAndersen>),
     /// Hard sphere potential.
-    HardSphere(DirectOrMixing<interatomic::twobody::HardSphere>),
+    HardSphere(DirectOrMixing<HardSphere>),
     /// Truncated Ewald potential.
     CoulombEwald(coulomb::pairwise::EwaldTruncated),
     /// Real-space Ewald potential.
@@ -116,11 +219,69 @@ pub(super) enum NonbondedInteraction {
     CoulombReactionField(coulomb::pairwise::ReactionField),
 }
 
+impl NonbondedInteraction {
+    /// Converts a `NonbondedInteraction` structure to `IsotropicTwobodyEnergy` trait object.
+    ///
+    /// ## Notes
+    /// - A mixing rule is applied, if needed.
+    /// - Returns `None` for coulombic interactions with uncharged particles.
+    fn convert(
+        &self,
+        charges: Option<(f64, f64)>,
+        epsilons: Option<(f64, f64)>,
+        sigmas: Option<(f64, f64)>,
+    ) -> anyhow::Result<Option<Box<dyn IsotropicTwobodyEnergy>>> {
+        match self {
+            Self::LennardJones(x) => Ok(Some(x.convert_and_mix_sigma_epsilon(
+                epsilons,
+                sigmas,
+                LennardJones::from_combination_rule,
+            )?)),
+            Self::WeeksChandlerAndersen(x) => Ok(Some(x.convert_and_mix_sigma_epsilon(
+                epsilons,
+                sigmas,
+                WeeksChandlerAndersen::from_combination_rule,
+            )?)),
+            Self::HardSphere(x) => Ok(Some(
+                x.convert_and_mix_sigma(sigmas, HardSphere::from_combination_rule)?,
+            )),
+            Self::CoulombPlain(x) => NonbondedInteraction::convert_coulomb(charges, x.clone()),
+            Self::CoulombEwald(x) => NonbondedInteraction::convert_coulomb(charges, x.clone()),
+            Self::CoulombRealSpaceEwald(x) => {
+                NonbondedInteraction::convert_coulomb(charges, x.clone())
+            }
+            Self::CoulombReactionField(x) => {
+                NonbondedInteraction::convert_coulomb(charges, x.clone())
+            }
+        }
+    }
+
+    /// Convert coulombic interaction to `IonIon` interaction.
+    ///
+    /// ## Notes
+    /// - If any of the charges is `0.0`, returns None.
+    fn convert_coulomb<T: MultipoleEnergy + Debug + Clone + PartialEq + 'static>(
+        charges: Option<(f64, f64)>,
+        scheme: T,
+    ) -> anyhow::Result<Option<Box<dyn IsotropicTwobodyEnergy>>> {
+        let charges = charges
+            .context("Charges were not provided but are required for the coulombic interaction.")?;
+
+        if charges.0 == 0.0 || charges.1 == 0.0 {
+            // disable interaction between pairs of particles where at least one particle is uncharged
+            Ok(None)
+        } else {
+            Ok(Some(Box::new(IonIon::new(charges.0 * charges.1, scheme))
+                as Box<dyn IsotropicTwobodyEnergy>))
+        }
+    }
+}
+
 /// Specifies whether the parameters for the interaction are
 /// directly provided or should be calculated using a combination rule.
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 #[serde(untagged)]
-pub(super) enum DirectOrMixing<T: IsotropicTwobodyEnergy> {
+pub(crate) enum DirectOrMixing<T: IsotropicTwobodyEnergy> {
     /// Calculate the parameters using the provided combination rule.
     Mixing {
         mixing: CombinationRule,
@@ -129,6 +290,59 @@ pub(super) enum DirectOrMixing<T: IsotropicTwobodyEnergy> {
     },
     /// The parameters for the interaction are specifically provided.
     Direct(T),
+}
+
+impl<T> DirectOrMixing<T>
+where
+    T: IsotropicTwobodyEnergy + Clone + 'static,
+{
+    /// Converts `DirectOrMixing` enum to appropriate `IsotropicTwobodyEnergy` trait object
+    /// for which `from_combination_rule` function exists.
+    ///
+    /// Used for mixing `sigmas` and `epsilons` (e.g. LJ, WCA potentials).
+    ///
+    /// In case the parameters of the potential are directly provided, no mixing is performed.
+    fn convert_and_mix_sigma_epsilon(
+        &self,
+        epsilons: Option<(f64, f64)>,
+        sigmas: Option<(f64, f64)>,
+        from_combination_rule: impl Fn(CombinationRule, (f64, f64), (f64, f64)) -> T,
+    ) -> anyhow::Result<Box<dyn IsotropicTwobodyEnergy>> {
+        match self {
+            DirectOrMixing::Direct(inner) => Ok(Box::new(inner.clone())),
+            DirectOrMixing::Mixing {
+                mixing: rule,
+                _phantom: _,
+            } => Ok(Box::new(from_combination_rule(
+                *rule,
+                epsilons.context("Epsilons not provided but required for mixing.")?,
+                sigmas.context("Sigmas not provided but required for mixing.")?,
+            ))),
+        }
+    }
+
+    /// Converts `DirectOrMixing` enum to appropriate `IsotropicTwobodyEnergy` trait object
+    /// for which `from_combination_rule` function exists.
+    ///
+    /// Used for mixing `sigmas` (e.g. HardSphere potential).
+    ///
+    /// In case the parameters of the potential are directly provided, no mixing is performed.
+    fn convert_and_mix_sigma(
+        &self,
+        sigmas: Option<(f64, f64)>,
+        from_combination_rule: impl Fn(CombinationRule, (f64, f64)) -> T,
+    ) -> anyhow::Result<Box<dyn IsotropicTwobodyEnergy>> {
+        match self {
+            DirectOrMixing::Direct(inner) => Ok(Box::new(inner.clone())),
+            DirectOrMixing::Mixing {
+                mixing: rule,
+                _phantom: _,
+            } => Ok(Box::new(from_combination_rule(
+                *rule,
+                sigmas.context("Sigmas not provided but required for mixing.")?,
+            ))),
+        }
+    }
 }
 
 impl HamiltonianBuilder {
@@ -150,7 +364,7 @@ impl HamiltonianBuilder {
 
     /// Check that all atom kinds referred to in the hamiltonian exist.
     pub(crate) fn validate(&self, atom_kinds: &[AtomKind]) -> anyhow::Result<()> {
-        for pair in self.nonbonded.keys() {
+        for pair in self.nonbonded.0.keys() {
             if let DefaultOrPair::Pair(UnorderedPair(x, y)) = pair {
                 if !atom_kinds.iter().any(|atom| atom.name() == x)
                     || !atom_kinds.iter().any(|atom| atom.name() == y)
@@ -166,13 +380,14 @@ impl HamiltonianBuilder {
 
 #[cfg(test)]
 mod tests {
+    use as_any::AsAny;
+    use float_cmp::assert_approx_eq;
+
     use super::*;
 
     #[test]
     fn hamiltonian_deserialization_pass() {
         let builder = HamiltonianBuilder::from_file("tests/files/topology_pass.yaml").unwrap();
-
-        println!("{:?}", &builder);
 
         assert!(builder.nonbonded.contains_key(&DefaultOrPair::Default));
         assert!(builder
@@ -188,20 +403,19 @@ mod tests {
                 String::from("HW")
             ))));
 
-        assert_eq!(builder.nonbonded.len(), 3);
+        assert_eq!(builder.nonbonded.0.len(), 3);
 
-        for (pair, interactions) in builder.nonbonded {
+        for (pair, interactions) in builder.nonbonded.0 {
             if let DefaultOrPair::Default = pair {
                 assert_eq!(
                     interactions,
                     vec![
                         NonbondedInteraction::LennardJones(DirectOrMixing::Direct(
-                            interatomic::twobody::LennardJones::new(1.5, 6.0)
+                            LennardJones::new(1.5, 6.0)
                         )),
-                        NonbondedInteraction::WeeksChandlerAndersen(DirectOrMixing::Mixing {
-                            mixing: CombinationRule::LorentzBerthelot,
-                            _phantom: Default::default()
-                        }),
+                        NonbondedInteraction::WeeksChandlerAndersen(DirectOrMixing::Direct(
+                            WeeksChandlerAndersen::new(1.3, 8.0)
+                        )),
                         NonbondedInteraction::CoulombPlain(coulomb::pairwise::Plain::new(
                             11.0,
                             Some(2.0)
@@ -216,7 +430,7 @@ mod tests {
                         interactions,
                         vec![
                             NonbondedInteraction::WeeksChandlerAndersen(DirectOrMixing::Direct(
-                                interatomic::twobody::WeeksChandlerAndersen::new(1.5, 3.0)
+                                WeeksChandlerAndersen::new(1.5, 3.0)
                             )),
                             NonbondedInteraction::HardSphere(DirectOrMixing::Mixing {
                                 mixing: CombinationRule::Geometric,
@@ -232,7 +446,7 @@ mod tests {
                         interactions,
                         vec![
                             NonbondedInteraction::HardSphere(DirectOrMixing::Mixing {
-                                mixing: CombinationRule::Arithmetic,
+                                mixing: CombinationRule::LorentzBerthelot,
                                 _phantom: Default::default()
                             }),
                             NonbondedInteraction::CoulombEwald(
@@ -305,5 +519,197 @@ mod tests {
             &error.to_string(),
             "Atom kind specified in `nonbonded` does not exist."
         );
+    }
+
+    // we can not (easily) test equality of the trait objects so we test the equality of their behavior
+    fn assert_behavior(
+        obj1: Box<dyn IsotropicTwobodyEnergy>,
+        obj2: Box<dyn IsotropicTwobodyEnergy>,
+    ) {
+        let testing_distances = [0.00201, 0.7, 12.3, 12457.6];
+
+        for &dist in testing_distances.iter() {
+            assert_approx_eq!(
+                f64,
+                obj1.isotropic_twobody_energy(dist),
+                obj2.isotropic_twobody_energy(dist)
+            );
+        }
+    }
+
+    #[test]
+    fn test_convert_nonbonded() {
+        // Lennard Jones -- direct
+        let expected = LennardJones::new(1.5, 3.2);
+        let nonbonded =
+            NonbondedInteraction::LennardJones(DirectOrMixing::Direct(expected.clone()));
+
+        let converted = nonbonded.convert(None, None, None).unwrap().unwrap();
+
+        assert_behavior(converted, Box::new(expected));
+
+        // Lennard Jones -- mixing
+        let expected = LennardJones::new(1.5, 4.5);
+        let nonbonded = NonbondedInteraction::LennardJones(DirectOrMixing::Mixing {
+            mixing: CombinationRule::Arithmetic,
+            _phantom: LennardJones::default(),
+        });
+
+        let converted = nonbonded
+            .convert(None, Some((2.0, 1.0)), Some((8.2, 0.8)))
+            .unwrap()
+            .unwrap();
+
+        assert_behavior(converted, Box::new(expected));
+
+        // Hard Sphere -- mixing
+        let expected = HardSphere::new(3.0);
+        let nonbonded = NonbondedInteraction::HardSphere(DirectOrMixing::Mixing {
+            mixing: CombinationRule::Geometric,
+            _phantom: HardSphere::default(),
+        });
+
+        let converted = nonbonded
+            .convert(None, None, Some((4.5, 2.0)))
+            .unwrap()
+            .unwrap();
+
+        assert_behavior(converted, Box::new(expected));
+
+        // Coulomb Reaction Field -- charged atoms
+        let expected = coulomb::pairwise::ReactionField::new(11.0, 15.0, 1.5, false);
+        let nonbonded = NonbondedInteraction::CoulombReactionField(expected.clone());
+        let charge = (1.0, -1.0);
+
+        let converted = nonbonded
+            .convert(Some(charge), None, None)
+            .unwrap()
+            .unwrap();
+
+        assert_behavior(
+            converted,
+            Box::new(IonIon::new(charge.0 * charge.1, expected)),
+        );
+
+        // Coulomb Reaction Field -- uncharged atom => should result in None
+        let coulomb = coulomb::pairwise::ReactionField::new(11.0, 15.0, 1.5, false);
+        let nonbonded = NonbondedInteraction::CoulombReactionField(coulomb.clone());
+        let charge = (0.0, -1.0);
+
+        assert!(nonbonded
+            .convert(Some(charge), None, None)
+            .unwrap()
+            .is_none());
+    }
+
+    #[test]
+    fn test_get_interaction() {
+        let mut interactions = HashMap::new();
+
+        let interaction1 = NonbondedInteraction::WeeksChandlerAndersen(DirectOrMixing::Direct(
+            WeeksChandlerAndersen::new(1.5, 3.2),
+        ));
+        let interaction2 =
+            NonbondedInteraction::CoulombPlain(coulomb::pairwise::Plain::new(11.0, None));
+
+        let interaction3 = NonbondedInteraction::HardSphere(DirectOrMixing::Mixing {
+            mixing: CombinationRule::Arithmetic,
+            _phantom: HardSphere::default(),
+        });
+
+        let for_pair = vec![
+            interaction1.clone(),
+            interaction2.clone(),
+            interaction3.clone(),
+        ];
+
+        let for_default = vec![interaction1.clone(), interaction2.clone()];
+
+        interactions.insert(
+            DefaultOrPair::Pair(UnorderedPair(String::from("NA"), String::from("CL"))),
+            for_pair,
+        );
+
+        interactions.insert(DefaultOrPair::Default, for_default);
+
+        let atom1 = AtomKind::new(
+            "NA",
+            0,
+            12.0,
+            1.0,
+            None,
+            Some(1.0),
+            None,
+            None,
+            HashMap::new(),
+        );
+        let atom2 = AtomKind::new(
+            "CL",
+            1,
+            16.0,
+            -1.0,
+            None,
+            Some(3.0),
+            None,
+            None,
+            HashMap::new(),
+        );
+        let atom3 = AtomKind::new(
+            "K",
+            2,
+            32.0,
+            0.0,
+            None,
+            Some(2.0),
+            None,
+            None,
+            HashMap::new(),
+        );
+
+        let mut nonbonded = NonbondedBuilder(interactions);
+        let expected = interaction1.convert(None, None, None).unwrap().unwrap()
+            + interaction2
+                .convert(Some((1.0, -1.0)), None, None)
+                .unwrap()
+                .unwrap()
+            + interaction3
+                .convert(None, None, Some((1.0, 3.0)))
+                .unwrap()
+                .unwrap();
+
+        let interaction = nonbonded.get_interaction(&atom1, &atom2).unwrap();
+        assert_behavior(interaction, expected.clone());
+
+        // changed order of atoms = same result
+        let interaction = nonbonded.get_interaction(&atom2, &atom1).unwrap();
+        assert_behavior(interaction, expected);
+
+        // default
+        let expected = interaction1.convert(None, None, None).unwrap().unwrap();
+        let interaction = nonbonded.get_interaction(&atom1, &atom3).unwrap();
+        assert_behavior(interaction, expected);
+
+        // no interaction
+        nonbonded.0.remove(&DefaultOrPair::Default);
+        let expected = Box::new(NoInteraction::new());
+        let interaction = nonbonded.get_interaction(&atom1, &atom3).unwrap();
+        assert_behavior(interaction, expected);
+    }
+
+    #[test]
+    fn test_nonexistent() {
+        todo!("TEST that the behavior is valid even if the multiple interactions at the start of the list evaluate to None")
+    }
+
+    #[test]
+    fn test_nonexistent_all() {
+        todo!(
+            "TEST that the behavior is valid even if ALL interactions in the list evaluate to None"
+        )
+    }
+
+    #[test]
+    fn test_filling_nonbonded() {
+        todo!("TEST the nonbonded new function")
     }
 }

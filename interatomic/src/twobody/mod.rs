@@ -100,13 +100,20 @@ pub struct NoInteraction {}
 
 impl NoInteraction {
     /// Create a new null interaction.
+    #[inline(always)]
     pub fn new() -> Self {
         NoInteraction {}
     }
 }
 
 impl IsotropicTwobodyEnergy for NoInteraction {
+    #[inline(always)]
     fn isotropic_twobody_energy(&self, _distance_squared: f64) -> f64 {
+        0.0
+    }
+
+    #[inline(always)]
+    fn isotropic_twobody_force(&self, _distance_squared: f64) -> f64 {
         0.0
     }
 }
@@ -130,7 +137,7 @@ impl<T: IsotropicTwobodyEnergy, U: IsotropicTwobodyEnergy> Combined<T, U> {
 impl<T: IsotropicTwobodyEnergy + Clone, U: IsotropicTwobodyEnergy + Clone> IsotropicTwobodyEnergy
     for Combined<T, U>
 {
-    #[inline]
+    #[inline(always)]
     fn isotropic_twobody_energy(&self, distance_squared: f64) -> f64 {
         self.0.isotropic_twobody_energy(distance_squared)
             + self.1.isotropic_twobody_energy(distance_squared)
@@ -151,10 +158,10 @@ impl Add for Box<dyn IsotropicTwobodyEnergy> {
 }
 
 /// Plain Coulomb potential combined with Lennard-Jones
-pub type CoulombLennardJones<'a> = Combined<IonIon<'a, coulomb::pairwise::Plain>, LennardJones>;
+pub type CoulombLennardJones<'a> = Combined<IonIon<coulomb::pairwise::Plain>, LennardJones>;
 
 /// Yukawa potential combined with Lennard-Jones
-pub type YukawaLennardJones<'a> = Combined<IonIon<'a, coulomb::pairwise::Yukawa>, LennardJones>;
+pub type YukawaLennardJones<'a> = Combined<IonIon<coulomb::pairwise::Yukawa>, LennardJones>;
 
 // test Combined
 #[test]
@@ -213,49 +220,3 @@ pub fn test_combined() {
         epsilon = 1e-7
     );
 }
-
-/*
-/// Enum with all two-body variants.
-///
-/// Use for serialization and deserialization of two-body interactions in
-/// e.g. user input.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-#[serde(rename_all = "lowercase")]
-pub enum TwobodyKind {
-    HardSphere(HardSphere),
-    Harmonic(Harmonic),
-    #[serde(rename = "lj")]
-    LennardJones(LennardJones),
-    #[serde(rename = "wca")]
-    WeeksChandlerAndersen(WeeksChandlerAndersen),
-}
-
-// Test TwobodyKind for serialization
-#[test]
-fn test_twobodykind_serialize() {
-    let hardsphere = TwobodyKind::HardSphere(HardSphere::new(1.0));
-    assert_eq!(
-        serde_json::to_string(&hardsphere).unwrap(),
-        "{\"hardsphere\":{\"σ\":1.0}}"
-    );
-
-    let harmonic = TwobodyKind::Harmonic(Harmonic::new(1.0, 0.5));
-    assert_eq!(
-        serde_json::to_string(&harmonic).unwrap(),
-        "{\"harmonic\":{\"r₀\":1.0,\"k\":0.5}}"
-    );
-
-    let lj = TwobodyKind::LennardJones(LennardJones::new(0.1, 2.5));
-    assert_eq!(
-        serde_json::to_string(&lj).unwrap(),
-        "{\"lj\":{\"ε\":0.1,\"σ\":2.5}}"
-    );
-
-    let lennard_jones = LennardJones::new(0.1, 2.5);
-    let wca = TwobodyKind::WeeksChandlerAndersen(WeeksChandlerAndersen::new(lennard_jones));
-    assert_eq!(
-        serde_json::to_string(&wca).unwrap(),
-        "{\"wca\":{\"ε\":0.1,\"σ\":2.5}}"
-    );
-}
-*/

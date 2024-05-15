@@ -98,8 +98,8 @@ impl PointParticle for Particle {
     }
 }
 pub trait SyncFrom {
-    /// Synchronize internal state from another object
-    fn sync_from(&mut self, other: &dyn as_any::AsAny, change: &Change) -> anyhow::Result<()>;
+    /// Synchronize internal state from another object of the same type
+    fn sync_from(&mut self, other: &Self, change: &Change) -> anyhow::Result<()>;
 }
 
 /// Context stores the state of a single simulation system
@@ -112,7 +112,7 @@ pub trait Context:
     + WithTopology
     + WithHamiltonian
     + Clone
-    + Sized
+    + std::fmt::Debug
     + SyncFrom
     + crate::topology::chemfiles_interface::ChemFrameConvert
 {
@@ -122,7 +122,6 @@ pub trait Context:
     /// For e.g. Ewald summation, the reciprocal space energy needs to be updated.
     #[allow(unused_variables)]
     fn update(&mut self, change: &Change) -> anyhow::Result<()> {
-        use crate::energy::EnergyTerm;
         self.hamiltonian_mut().update(change)?;
         Ok(())
     }
@@ -191,11 +190,11 @@ pub trait WithTopology {
 }
 
 /// A trait for objects that have a hamiltonian.
-pub trait WithHamiltonian {
+pub trait WithHamiltonian: GroupCollection + Sized {
     /// Reference to Hamiltonian.
     fn hamiltonian(&self) -> &Hamiltonian;
     /// Mutable reference to Hamiltonian.
-    fn hamiltonian_mut(&mut self) -> &mut energy::Hamiltonian;
+    fn hamiltonian_mut(&mut self) -> &mut Hamiltonian;
 }
 
 /// A trait for objects that have a temperature

@@ -14,7 +14,10 @@
 
 //! Handling of groups of particles
 
-use crate::{change::Change, change::GroupChange, Particle, SyncFrom};
+use crate::{
+    change::{Change, GroupChange},
+    Particle, SyncFrom,
+};
 use anyhow::Ok;
 use nalgebra::Vector3;
 use serde::{Deserialize, Serialize};

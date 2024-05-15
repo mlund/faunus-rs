@@ -1,0 +1,1606 @@
+atoms:
+- name: Q5_1.0_72.0
+  mass: 72.0
+  charge: 1.0
+- name: SP5_0.0_54.0
+  mass: 54.0
+  charge: 0.0
+- name: P2_0.0_72.0
+  mass: 72.0
+  charge: 0.0
+- name: SC2_0.0_54.0
+  mass: 54.0
+  charge: 0.0
+- name: Q5_-1.0_72.0
+  mass: 72.0
+  charge: -1.0
+- name: Q4p_1.0_72.0
+  mass: 72.0
+  charge: 1.0
+- name: Q5_-1.0_72.0
+  mass: 72.0
+  charge: -1.0
+- name: SN4a_0.0_54.0
+  mass: 54.0
+  charge: 0.0
+- name: N4a_0.0_72.0
+  mass: 72.0
+  charge: 0.0
+- name: C1_0.0_72.0
+  mass: 72.0
+  charge: 0.0
+- name: C4h_0.0_72.0
+  mass: 72.0
+  charge: 0.0
+- name: W_0.0_72.0
+  mass: 72.0
+  charge: 0.0
+- name: TQ5_1.0_36.0
+  mass: 36.0
+  charge: 1.0
+- name: TQ5_-1.0_35.453
+  mass: 35.453
+  charge: -1.0
+molecules:
+- name: Transmembrane
+  atoms:
+  - Q5_1.0_72.0
+  - SP5_0.0_54.0
+  - P2_0.0_72.0
+  - SC2_0.0_54.0
+  - P2_0.0_72.0
+  - SC2_0.0_54.0
+  - P2_0.0_72.0
+  - SC2_0.0_54.0
+  - P2_0.0_72.0
+  - SC2_0.0_54.0
+  - P2_0.0_72.0
+  - SC2_0.0_54.0
+  - P2_0.0_72.0
+  - SC2_0.0_54.0
+  - P2_0.0_72.0
+  - SC2_0.0_54.0
+  - P2_0.0_72.0
+  - SC2_0.0_54.0
+  - P2_0.0_72.0
+  - SC2_0.0_54.0
+  - P2_0.0_72.0
+  - SC2_0.0_54.0
+  - P2_0.0_72.0
+  - SC2_0.0_54.0
+  - P2_0.0_72.0
+  - SC2_0.0_54.0
+  - P2_0.0_72.0
+  - SC2_0.0_54.0
+  - P2_0.0_72.0
+  - SC2_0.0_54.0
+  - P2_0.0_72.0
+  - SC2_0.0_54.0
+  - P2_0.0_72.0
+  - SC2_0.0_54.0
+  - P2_0.0_72.0
+  - SC2_0.0_54.0
+  - P2_0.0_72.0
+  - SC2_0.0_54.0
+  - P2_0.0_72.0
+  - SC2_0.0_54.0
+  - Q5_-1.0_72.0
+  - SP5_0.0_54.0
+  bonds:
+  - index:
+    - 0
+    - 1
+    kind: !Harmonic
+      k: 5000.0
+      req: 0.352
+  - index:
+    - 2
+    - 3
+    kind: !Harmonic
+      k: 7500.0
+      req: 0.363
+  - index:
+    - 4
+    - 5
+    kind: !Harmonic
+      k: 7500.0
+      req: 0.363
+  - index:
+    - 6
+    - 7
+    kind: !Harmonic
+      k: 7500.0
+      req: 0.363
+  - index:
+    - 8
+    - 9
+    kind: !Harmonic
+      k: 7500.0
+      req: 0.363
+  - index:
+    - 10
+    - 11
+    kind: !Harmonic
+      k: 7500.0
+      req: 0.363
+  - index:
+    - 12
+    - 13
+    kind: !Harmonic
+      k: 7500.0
+      req: 0.363
+  - index:
+    - 14
+    - 15
+    kind: !Harmonic
+      k: 7500.0
+      req: 0.363
+  - index:
+    - 16
+    - 17
+    kind: !Harmonic
+      k: 7500.0
+      req: 0.363
+  - index:
+    - 18
+    - 19
+    kind: !Harmonic
+      k: 7500.0
+      req: 0.363
+  - index:
+    - 20
+    - 21
+    kind: !Harmonic
+      k: 7500.0
+      req: 0.363
+  - index:
+    - 22
+    - 23
+    kind: !Harmonic
+      k: 7500.0
+      req: 0.363
+  - index:
+    - 24
+    - 25
+    kind: !Harmonic
+      k: 7500.0
+      req: 0.363
+  - index:
+    - 26
+    - 27
+    kind: !Harmonic
+      k: 7500.0
+      req: 0.363
+  - index:
+    - 28
+    - 29
+    kind: !Harmonic
+      k: 7500.0
+      req: 0.363
+  - index:
+    - 30
+    - 31
+    kind: !Harmonic
+      k: 7500.0
+      req: 0.363
+  - index:
+    - 32
+    - 33
+    kind: !Harmonic
+      k: 7500.0
+      req: 0.363
+  - index:
+    - 34
+    - 35
+    kind: !Harmonic
+      k: 7500.0
+      req: 0.363
+  - index:
+    - 36
+    - 37
+    kind: !Harmonic
+      k: 7500.0
+      req: 0.363
+  - index:
+    - 38
+    - 39
+    kind: !Harmonic
+      k: 7500.0
+      req: 0.363
+  - index:
+    - 40
+    - 41
+    kind: !Harmonic
+      k: 5000.0
+      req: 0.352
+  - index:
+    - 0
+    - 2
+    kind: !Harmonic
+      k: 50000
+      req: 0.31
+  - index:
+    - 2
+    - 4
+    kind: !Harmonic
+      k: 50000
+      req: 0.31
+  - index:
+    - 4
+    - 6
+    kind: !Harmonic
+      k: 50000
+      req: 0.31
+  - index:
+    - 6
+    - 8
+    kind: !Harmonic
+      k: 50000
+      req: 0.31
+  - index:
+    - 8
+    - 10
+    kind: !Harmonic
+      k: 50000
+      req: 0.31
+  - index:
+    - 10
+    - 12
+    kind: !Harmonic
+      k: 50000
+      req: 0.31
+  - index:
+    - 12
+    - 14
+    kind: !Harmonic
+      k: 50000
+      req: 0.31
+  - index:
+    - 14
+    - 16
+    kind: !Harmonic
+      k: 50000
+      req: 0.31
+  - index:
+    - 16
+    - 18
+    kind: !Harmonic
+      k: 50000
+      req: 0.31
+  - index:
+    - 18
+    - 20
+    kind: !Harmonic
+      k: 50000
+      req: 0.31
+  - index:
+    - 20
+    - 22
+    kind: !Harmonic
+      k: 50000
+      req: 0.31
+  - index:
+    - 22
+    - 24
+    kind: !Harmonic
+      k: 50000
+      req: 0.31
+  - index:
+    - 24
+    - 26
+    kind: !Harmonic
+      k: 50000
+      req: 0.31
+  - index:
+    - 26
+    - 28
+    kind: !Harmonic
+      k: 50000
+      req: 0.31
+  - index:
+    - 28
+    - 30
+    kind: !Harmonic
+      k: 50000
+      req: 0.31
+  - index:
+    - 30
+    - 32
+    kind: !Harmonic
+      k: 50000
+      req: 0.31
+  - index:
+    - 32
+    - 34
+    kind: !Harmonic
+      k: 50000
+      req: 0.31
+  - index:
+    - 34
+    - 36
+    kind: !Harmonic
+      k: 50000
+      req: 0.31
+  - index:
+    - 36
+    - 38
+    kind: !Harmonic
+      k: 50000
+      req: 0.31
+  - index:
+    - 38
+    - 40
+    kind: !Harmonic
+      k: 50000
+      req: 0.31
+  torsions:
+  - index:
+    - 0
+    - 2
+    - 4
+    kind: !Cosine
+      k: 700.0
+      aeq: 96.0
+  - index:
+    - 2
+    - 4
+    - 6
+    kind: !Cosine
+      k: 700.0
+      aeq: 96.0
+  - index:
+    - 4
+    - 6
+    - 8
+    kind: !Cosine
+      k: 700.0
+      aeq: 96.0
+  - index:
+    - 6
+    - 8
+    - 10
+    kind: !Cosine
+      k: 700.0
+      aeq: 96.0
+  - index:
+    - 8
+    - 10
+    - 12
+    kind: !Cosine
+      k: 700.0
+      aeq: 96.0
+  - index:
+    - 10
+    - 12
+    - 14
+    kind: !Cosine
+      k: 700.0
+      aeq: 96.0
+  - index:
+    - 12
+    - 14
+    - 16
+    kind: !Cosine
+      k: 700.0
+      aeq: 96.0
+  - index:
+    - 14
+    - 16
+    - 18
+    kind: !Cosine
+      k: 700.0
+      aeq: 96.0
+  - index:
+    - 16
+    - 18
+    - 20
+    kind: !Cosine
+      k: 700.0
+      aeq: 96.0
+  - index:
+    - 18
+    - 20
+    - 22
+    kind: !Cosine
+      k: 700.0
+      aeq: 96.0
+  - index:
+    - 20
+    - 22
+    - 24
+    kind: !Cosine
+      k: 700.0
+      aeq: 96.0
+  - index:
+    - 22
+    - 24
+    - 26
+    kind: !Cosine
+      k: 700.0
+      aeq: 96.0
+  - index:
+    - 24
+    - 26
+    - 28
+    kind: !Cosine
+      k: 700.0
+      aeq: 96.0
+  - index:
+    - 26
+    - 28
+    - 30
+    kind: !Cosine
+      k: 700.0
+      aeq: 96.0
+  - index:
+    - 28
+    - 30
+    - 32
+    kind: !Cosine
+      k: 700.0
+      aeq: 96.0
+  - index:
+    - 30
+    - 32
+    - 34
+    kind: !Cosine
+      k: 700.0
+      aeq: 96.0
+  - index:
+    - 32
+    - 34
+    - 36
+    kind: !Cosine
+      k: 700.0
+      aeq: 96.0
+  - index:
+    - 34
+    - 36
+    - 38
+    kind: !Cosine
+      k: 700.0
+      aeq: 96.0
+  - index:
+    - 36
+    - 38
+    - 40
+    kind: !Cosine
+      k: 700.0
+      aeq: 96.0
+  - index:
+    - 0
+    - 2
+    - 3
+    kind: !Cosine
+      k: 25.0
+      aeq: 100.0
+  - index:
+    - 2
+    - 4
+    - 5
+    kind: !Cosine
+      k: 25.0
+      aeq: 100.0
+  - index:
+    - 4
+    - 6
+    - 7
+    kind: !Cosine
+      k: 25.0
+      aeq: 100.0
+  - index:
+    - 6
+    - 8
+    - 9
+    kind: !Cosine
+      k: 25.0
+      aeq: 100.0
+  - index:
+    - 8
+    - 10
+    - 11
+    kind: !Cosine
+      k: 25.0
+      aeq: 100.0
+  - index:
+    - 10
+    - 12
+    - 13
+    kind: !Cosine
+      k: 25.0
+      aeq: 100.0
+  - index:
+    - 12
+    - 14
+    - 15
+    kind: !Cosine
+      k: 25.0
+      aeq: 100.0
+  - index:
+    - 14
+    - 16
+    - 17
+    kind: !Cosine
+      k: 25.0
+      aeq: 100.0
+  - index:
+    - 16
+    - 18
+    - 19
+    kind: !Cosine
+      k: 25.0
+      aeq: 100.0
+  - index:
+    - 18
+    - 20
+    - 21
+    kind: !Cosine
+      k: 25.0
+      aeq: 100.0
+  - index:
+    - 20
+    - 22
+    - 23
+    kind: !Cosine
+      k: 25.0
+      aeq: 100.0
+  - index:
+    - 22
+    - 24
+    - 25
+    kind: !Cosine
+      k: 25.0
+      aeq: 100.0
+  - index:
+    - 24
+    - 26
+    - 27
+    kind: !Cosine
+      k: 25.0
+      aeq: 100.0
+  - index:
+    - 26
+    - 28
+    - 29
+    kind: !Cosine
+      k: 25.0
+      aeq: 100.0
+  - index:
+    - 28
+    - 30
+    - 31
+    kind: !Cosine
+      k: 25.0
+      aeq: 100.0
+  - index:
+    - 30
+    - 32
+    - 33
+    kind: !Cosine
+      k: 25.0
+      aeq: 100.0
+  - index:
+    - 32
+    - 34
+    - 35
+    kind: !Cosine
+      k: 25.0
+      aeq: 100.0
+  - index:
+    - 34
+    - 36
+    - 37
+    kind: !Cosine
+      k: 25.0
+      aeq: 100.0
+  - index:
+    - 36
+    - 38
+    - 39
+    kind: !Cosine
+      k: 25.0
+      aeq: 100.0
+  - index:
+    - 38
+    - 40
+    - 41
+    kind: !Cosine
+      k: 25.0
+      aeq: 100.0
+  - index:
+    - 1
+    - 0
+    - 2
+    kind: !Cosine
+      k: 25.0
+      aeq: 100.0
+  dihedrals:
+  - index:
+    - 0
+    - 2
+    - 4
+    - 6
+    kind: !ProperPeriodic
+      k: 400.0
+      n: 1.0
+      phi: -120.0
+  - index:
+    - 2
+    - 4
+    - 6
+    - 8
+    kind: !ProperPeriodic
+      k: 400.0
+      n: 1.0
+      phi: -120.0
+  - index:
+    - 4
+    - 6
+    - 8
+    - 10
+    kind: !ProperPeriodic
+      k: 400.0
+      n: 1.0
+      phi: -120.0
+  - index:
+    - 6
+    - 8
+    - 10
+    - 12
+    kind: !ProperPeriodic
+      k: 400.0
+      n: 1.0
+      phi: -120.0
+  - index:
+    - 8
+    - 10
+    - 12
+    - 14
+    kind: !ProperPeriodic
+      k: 400.0
+      n: 1.0
+      phi: -120.0
+  - index:
+    - 10
+    - 12
+    - 14
+    - 16
+    kind: !ProperPeriodic
+      k: 400.0
+      n: 1.0
+      phi: -120.0
+  - index:
+    - 12
+    - 14
+    - 16
+    - 18
+    kind: !ProperPeriodic
+      k: 400.0
+      n: 1.0
+      phi: -120.0
+  - index:
+    - 14
+    - 16
+    - 18
+    - 20
+    kind: !ProperPeriodic
+      k: 400.0
+      n: 1.0
+      phi: -120.0
+  - index:
+    - 16
+    - 18
+    - 20
+    - 22
+    kind: !ProperPeriodic
+      k: 400.0
+      n: 1.0
+      phi: -120.0
+  - index:
+    - 18
+    - 20
+    - 22
+    - 24
+    kind: !ProperPeriodic
+      k: 400.0
+      n: 1.0
+      phi: -120.0
+  - index:
+    - 20
+    - 22
+    - 24
+    - 26
+    kind: !ProperPeriodic
+      k: 400.0
+      n: 1.0
+      phi: -120.0
+  - index:
+    - 22
+    - 24
+    - 26
+    - 28
+    kind: !ProperPeriodic
+      k: 400.0
+      n: 1.0
+      phi: -120.0
+  - index:
+    - 24
+    - 26
+    - 28
+    - 30
+    kind: !ProperPeriodic
+      k: 400.0
+      n: 1.0
+      phi: -120.0
+  - index:
+    - 26
+    - 28
+    - 30
+    - 32
+    kind: !ProperPeriodic
+      k: 400.0
+      n: 1.0
+      phi: -120.0
+  - index:
+    - 28
+    - 30
+    - 32
+    - 34
+    kind: !ProperPeriodic
+      k: 400.0
+      n: 1.0
+      phi: -120.0
+  - index:
+    - 30
+    - 32
+    - 34
+    - 36
+    kind: !ProperPeriodic
+      k: 400.0
+      n: 1.0
+      phi: -120.0
+  - index:
+    - 32
+    - 34
+    - 36
+    - 38
+    kind: !ProperPeriodic
+      k: 400.0
+      n: 1.0
+      phi: -120.0
+  - index:
+    - 34
+    - 36
+    - 38
+    - 40
+    kind: !ProperPeriodic
+      k: 400.0
+      n: 1.0
+      phi: -120.0
+  excluded_neighbours: 1
+  degrees_of_freedom: !Free 
+  atom_names:
+  - BB
+  - SC1
+  - BB
+  - SC1
+  - BB
+  - SC1
+  - BB
+  - SC1
+  - BB
+  - SC1
+  - BB
+  - SC1
+  - BB
+  - SC1
+  - BB
+  - SC1
+  - BB
+  - SC1
+  - BB
+  - SC1
+  - BB
+  - SC1
+  - BB
+  - SC1
+  - BB
+  - SC1
+  - BB
+  - SC1
+  - BB
+  - SC1
+  - BB
+  - SC1
+  - BB
+  - SC1
+  - BB
+  - SC1
+  - BB
+  - SC1
+  - BB
+  - SC1
+  - BB
+  - SC1
+  residues:
+  - name: ASN
+    number: 1
+    range:
+    - 0
+    - 2
+  - name: LEU
+    number: 2
+    range:
+    - 2
+    - 4
+  - name: LEU
+    number: 3
+    range:
+    - 4
+    - 6
+  - name: LEU
+    number: 4
+    range:
+    - 6
+    - 8
+  - name: LEU
+    number: 5
+    range:
+    - 8
+    - 10
+  - name: LEU
+    number: 6
+    range:
+    - 10
+    - 12
+  - name: LEU
+    number: 7
+    range:
+    - 12
+    - 14
+  - name: LEU
+    number: 8
+    range:
+    - 14
+    - 16
+  - name: LEU
+    number: 9
+    range:
+    - 16
+    - 18
+  - name: LEU
+    number: 10
+    range:
+    - 18
+    - 20
+  - name: LEU
+    number: 11
+    range:
+    - 20
+    - 22
+  - name: LEU
+    number: 12
+    range:
+    - 22
+    - 24
+  - name: LEU
+    number: 13
+    range:
+    - 24
+    - 26
+  - name: LEU
+    number: 14
+    range:
+    - 26
+    - 28
+  - name: LEU
+    number: 15
+    range:
+    - 28
+    - 30
+  - name: LEU
+    number: 16
+    range:
+    - 30
+    - 32
+  - name: LEU
+    number: 17
+    range:
+    - 32
+    - 34
+  - name: LEU
+    number: 18
+    range:
+    - 34
+    - 36
+  - name: LEU
+    number: 19
+    range:
+    - 36
+    - 38
+  - name: LEU
+    number: 20
+    range:
+    - 38
+    - 40
+  - name: ASN
+    number: 21
+    range:
+    - 40
+    - 42
+- name: POPE
+  atoms:
+  - Q4p_1.0_72.0
+  - Q5_-1.0_72.0
+  - SN4a_0.0_54.0
+  - N4a_0.0_72.0
+  - C1_0.0_72.0
+  - C4h_0.0_72.0
+  - C1_0.0_72.0
+  - C1_0.0_72.0
+  - C1_0.0_72.0
+  - C1_0.0_72.0
+  - C1_0.0_72.0
+  - C1_0.0_72.0
+  bonds:
+  - index:
+    - 0
+    - 1
+    kind: !Harmonic
+      k: 7000.0
+      req: 0.33
+  - index:
+    - 1
+    - 2
+    kind: !Harmonic
+      k: 1350.0
+      req: 0.42
+  - index:
+    - 2
+    - 3
+    kind: !Harmonic
+      k: 2500.0
+      req: 0.312
+  - index:
+    - 2
+    - 4
+    kind: !Harmonic
+      k: 5000.0
+      req: 0.47
+  - index:
+    - 4
+    - 5
+    kind: !Harmonic
+      k: 3800.0
+      req: 0.47
+  - index:
+    - 5
+    - 6
+    kind: !Harmonic
+      k: 3800.0
+      req: 0.47
+  - index:
+    - 6
+    - 7
+    kind: !Harmonic
+      k: 3800.0
+      req: 0.47
+  - index:
+    - 3
+    - 8
+    kind: !Harmonic
+      k: 3600.0
+      req: 0.47
+  - index:
+    - 8
+    - 9
+    kind: !Harmonic
+      k: 3800.0
+      req: 0.47
+  - index:
+    - 9
+    - 10
+    kind: !Harmonic
+      k: 3800.0
+      req: 0.47
+  - index:
+    - 10
+    - 11
+    kind: !Harmonic
+      k: 3800.0
+      req: 0.47
+  torsions:
+  - index:
+    - 1
+    - 2
+    - 3
+    kind: !Cosine
+      k: 21.5
+      aeq: 108.0
+  - index:
+    - 1
+    - 2
+    - 4
+    kind: !Cosine
+      k: 31.2
+      aeq: 139.1
+  - index:
+    - 2
+    - 4
+    - 5
+    kind: !Cosine
+      k: 35.0
+      aeq: 180.0
+  - index:
+    - 4
+    - 5
+    - 6
+    kind: !Cosine
+      k: 35.0
+      aeq: 120.0
+  - index:
+    - 5
+    - 6
+    - 7
+    kind: !Cosine
+      k: 35.0
+      aeq: 180.0
+  - index:
+    - 3
+    - 8
+    - 9
+    kind: !Cosine
+      k: 35.0
+      aeq: 180.0
+  - index:
+    - 8
+    - 9
+    - 10
+    kind: !Cosine
+      k: 35.0
+      aeq: 180.0
+  - index:
+    - 9
+    - 10
+    - 11
+    kind: !Cosine
+      k: 35.0
+      aeq: 180.0
+  excluded_neighbours: 1
+  degrees_of_freedom: !Free 
+  atom_names:
+  - NH3
+  - PO4
+  - GL1
+  - GL2
+  - C1A
+  - D2A
+  - C3A
+  - C4A
+  - C1B
+  - C2B
+  - C3B
+  - C4B
+  residues:
+  - name: POPE
+    number: 1
+    range:
+    - 0
+    - 12
+- name: W
+  atoms:
+  - W_0.0_72.0
+  excluded_neighbours: 1
+  degrees_of_freedom: !Free 
+  atom_names:
+  - W
+  residues:
+  - name: W
+    number: 1
+    range:
+    - 0
+    - 1
+- name: NA+
+  atoms:
+  - TQ5_1.0_36.0
+  excluded_neighbours: 1
+  degrees_of_freedom: !Free 
+  atom_names:
+  - NA
+  residues:
+  - name: ION
+    number: 1
+    range:
+    - 0
+    - 1
+- name: CL-
+  atoms:
+  - TQ5_-1.0_35.453
+  excluded_neighbours: 1
+  degrees_of_freedom: !Free 
+  atom_names:
+  - CL
+  residues:
+  - name: ION
+    number: 1
+    range:
+    - 0
+    - 1
+system:
+  energy:
+    nonbonded:
+      ? - Q5_1.0_72.0
+        - Q5_1.0_72.0
+      : - !LennardJones
+          sigma: 0.47
+          eps: 6.45
+      ? - Q5_1.0_72.0
+        - Q5_-1.0_72.0
+      : - !LennardJones
+          sigma: 0.47
+          eps: 6.45
+      ? - Q5_-1.0_72.0
+        - Q5_-1.0_72.0
+      : - !LennardJones
+          sigma: 0.47
+          eps: 6.45
+      ? - Q5_1.0_72.0
+        - SP5_0.0_54.0
+      : - !LennardJones
+          sigma: 0.43
+          eps: 5.161
+      ? - Q5_-1.0_72.0
+        - SP5_0.0_54.0
+      : - !LennardJones
+          sigma: 0.43
+          eps: 5.161
+      ? - Q5_1.0_72.0
+        - P2_0.0_72.0
+      : - !LennardJones
+          sigma: 0.47
+          eps: 5.408
+      ? - Q5_-1.0_72.0
+        - P2_0.0_72.0
+      : - !LennardJones
+          sigma: 0.47
+          eps: 5.408
+      ? - Q5_1.0_72.0
+        - SC2_0.0_54.0
+      : - !LennardJones
+          sigma: 0.552
+          eps: 1.126
+      ? - Q5_-1.0_72.0
+        - SC2_0.0_54.0
+      : - !LennardJones
+          sigma: 0.552
+          eps: 1.126
+      ? - Q5_1.0_72.0
+        - Q4p_1.0_72.0
+      : - !LennardJones
+          sigma: 0.47
+          eps: 6.2
+      ? - Q5_-1.0_72.0
+        - Q4p_1.0_72.0
+      : - !LennardJones
+          sigma: 0.47
+          eps: 6.2
+      ? - Q5_1.0_72.0
+        - SN4a_0.0_54.0
+      : - !LennardJones
+          sigma: 0.43
+          eps: 4.386
+      ? - Q5_-1.0_72.0
+        - SN4a_0.0_54.0
+      : - !LennardJones
+          sigma: 0.43
+          eps: 4.386
+      ? - Q5_1.0_72.0
+        - N4a_0.0_72.0
+      : - !LennardJones
+          sigma: 0.47
+          eps: 4.887
+      ? - Q5_-1.0_72.0
+        - N4a_0.0_72.0
+      : - !LennardJones
+          sigma: 0.47
+          eps: 4.887
+      ? - Q5_1.0_72.0
+        - C1_0.0_72.0
+      : - !LennardJones
+          sigma: 0.62
+          eps: 2.046
+      ? - Q5_-1.0_72.0
+        - C1_0.0_72.0
+      : - !LennardJones
+          sigma: 0.62
+          eps: 2.046
+      ? - Q5_1.0_72.0
+        - C4h_0.0_72.0
+      : - !LennardJones
+          sigma: 0.485
+          eps: 2.64
+      ? - Q5_-1.0_72.0
+        - C4h_0.0_72.0
+      : - !LennardJones
+          sigma: 0.485
+          eps: 2.64
+      ? - Q5_1.0_72.0
+        - W_0.0_72.0
+      : - !LennardJones
+          sigma: 0.465
+          eps: 6.34
+      ? - Q5_-1.0_72.0
+        - W_0.0_72.0
+      : - !LennardJones
+          sigma: 0.465
+          eps: 6.34
+      ? - Q5_1.0_72.0
+        - TQ5_1.0_36.0
+      : - !LennardJones
+          sigma: 0.405
+          eps: 6.62
+      ? - Q5_1.0_72.0
+        - TQ5_-1.0_35.453
+      : - !LennardJones
+          sigma: 0.405
+          eps: 6.62
+      ? - Q5_-1.0_72.0
+        - TQ5_1.0_36.0
+      : - !LennardJones
+          sigma: 0.405
+          eps: 6.62
+      ? - Q5_-1.0_72.0
+        - TQ5_-1.0_35.453
+      : - !LennardJones
+          sigma: 0.405
+          eps: 6.62
+      ? - SP5_0.0_54.0
+        - SP5_0.0_54.0
+      : - !LennardJones
+          sigma: 0.41
+          eps: 3.82
+      ? - SP5_0.0_54.0
+        - P2_0.0_72.0
+      : - !LennardJones
+          sigma: 0.43
+          eps: 3.77
+      ? - SP5_0.0_54.0
+        - SC2_0.0_54.0
+      : - !LennardJones
+          sigma: 0.414
+          eps: 1.56
+      ? - SP5_0.0_54.0
+        - Q4p_1.0_72.0
+      : - !LennardJones
+          sigma: 0.43
+          eps: 4.88
+      ? - SP5_0.0_54.0
+        - SN4a_0.0_54.0
+      : - !LennardJones
+          sigma: 0.41
+          eps: 2.6
+      ? - SP5_0.0_54.0
+        - N4a_0.0_72.0
+      : - !LennardJones
+          sigma: 0.43
+          eps: 3.16
+      ? - SP5_0.0_54.0
+        - C1_0.0_72.0
+      : - !LennardJones
+          sigma: 0.43
+          eps: 1.73
+      ? - SP5_0.0_54.0
+        - C4h_0.0_72.0
+      : - !LennardJones
+          sigma: 0.43
+          eps: 2.16
+      ? - SP5_0.0_54.0
+        - W_0.0_72.0
+      : - !LennardJones
+          sigma: 0.425
+          eps: 4.53
+      ? - SP5_0.0_54.0
+        - TQ5_1.0_36.0
+      : - !LennardJones
+          sigma: 0.365
+          eps: 9.037
+      ? - SP5_0.0_54.0
+        - TQ5_-1.0_35.453
+      : - !LennardJones
+          sigma: 0.365
+          eps: 9.037
+      ? - P2_0.0_72.0
+        - P2_0.0_72.0
+      : - !LennardJones
+          sigma: 0.47
+          eps: 4.06
+      ? - P2_0.0_72.0
+        - SC2_0.0_54.0
+      : - !LennardJones
+          sigma: 0.43
+          eps: 2.16
+      ? - P2_0.0_72.0
+        - Q4p_1.0_72.0
+      : - !LennardJones
+          sigma: 0.47
+          eps: 5.148
+      ? - P2_0.0_72.0
+        - SN4a_0.0_54.0
+      : - !LennardJones
+          sigma: 0.43
+          eps: 3.16
+      ? - P2_0.0_72.0
+        - N4a_0.0_72.0
+      : - !LennardJones
+          sigma: 0.47
+          eps: 3.52
+      ? - P2_0.0_72.0
+        - C1_0.0_72.0
+      : - !LennardJones
+          sigma: 0.47
+          eps: 2.62
+      ? - P2_0.0_72.0
+        - C4h_0.0_72.0
+      : - !LennardJones
+          sigma: 0.47
+          eps: 2.96
+      ? - P2_0.0_72.0
+        - W_0.0_72.0
+      : - !LennardJones
+          sigma: 0.465
+          eps: 4.33
+      ? - P2_0.0_72.0
+        - TQ5_1.0_36.0
+      : - !LennardJones
+          sigma: 0.395
+          eps: 9.642
+      ? - P2_0.0_72.0
+        - TQ5_-1.0_35.453
+      : - !LennardJones
+          sigma: 0.395
+          eps: 9.642
+      ? - SC2_0.0_54.0
+        - SC2_0.0_54.0
+      : - !LennardJones
+          sigma: 0.41
+          eps: 2.35
+      ? - SC2_0.0_54.0
+        - Q4p_1.0_72.0
+      : - !LennardJones
+          sigma: 0.473
+          eps: 1.448
+      ? - SC2_0.0_54.0
+        - SN4a_0.0_54.0
+      : - !LennardJones
+          sigma: 0.41
+          eps: 1.91
+      ? - SC2_0.0_54.0
+        - N4a_0.0_72.0
+      : - !LennardJones
+          sigma: 0.43
+          eps: 2.32
+      ? - SC2_0.0_54.0
+        - C1_0.0_72.0
+      : - !LennardJones
+          sigma: 0.43
+          eps: 3.16
+      ? - SC2_0.0_54.0
+        - C4h_0.0_72.0
+      : - !LennardJones
+          sigma: 0.43
+          eps: 2.77
+      ? - SC2_0.0_54.0
+        - W_0.0_72.0
+      : - !LennardJones
+          sigma: 0.425
+          eps: 1.69
+      ? - SC2_0.0_54.0
+        - TQ5_1.0_36.0
+      : - !LennardJones
+          sigma: 0.588
+          eps: 1.749
+      ? - SC2_0.0_54.0
+        - TQ5_-1.0_35.453
+      : - !LennardJones
+          sigma: 0.588
+          eps: 1.749
+      ? - Q4p_1.0_72.0
+        - Q4p_1.0_72.0
+      : - !LennardJones
+          sigma: 0.47
+          eps: 5.2
+      ? - Q4p_1.0_72.0
+        - SN4a_0.0_54.0
+      : - !LennardJones
+          sigma: 0.43
+          eps: 4.393
+      ? - Q4p_1.0_72.0
+        - N4a_0.0_72.0
+      : - !LennardJones
+          sigma: 0.47
+          eps: 4.881
+      ? - Q4p_1.0_72.0
+        - C1_0.0_72.0
+      : - !LennardJones
+          sigma: 0.52
+          eps: 2.276
+      ? - Q4p_1.0_72.0
+        - C4h_0.0_72.0
+      : - !LennardJones
+          sigma: 0.47
+          eps: 3.225
+      ? - Q4p_1.0_72.0
+        - W_0.0_72.0
+      : - !LennardJones
+          sigma: 0.465
+          eps: 5.96
+      ? - Q4p_1.0_72.0
+        - TQ5_1.0_36.0
+      : - !LennardJones
+          sigma: 0.405
+          eps: 6.36
+      ? - Q4p_1.0_72.0
+        - TQ5_-1.0_35.453
+      : - !LennardJones
+          sigma: 0.405
+          eps: 6.36
+      ? - SN4a_0.0_54.0
+        - SN4a_0.0_54.0
+      : - !LennardJones
+          sigma: 0.41
+          eps: 2.6
+      ? - SN4a_0.0_54.0
+        - N4a_0.0_72.0
+      : - !LennardJones
+          sigma: 0.43
+          eps: 2.93
+      ? - SN4a_0.0_54.0
+        - C1_0.0_72.0
+      : - !LennardJones
+          sigma: 0.43
+          eps: 2.16
+      ? - SN4a_0.0_54.0
+        - C4h_0.0_72.0
+      : - !LennardJones
+          sigma: 0.43
+          eps: 2.77
+      ? - SN4a_0.0_54.0
+        - W_0.0_72.0
+      : - !LennardJones
+          sigma: 0.425
+          eps: 3.0
+      ? - SN4a_0.0_54.0
+        - TQ5_1.0_36.0
+      : - !LennardJones
+          sigma: 0.365
+          eps: 7.523
+      ? - SN4a_0.0_54.0
+        - TQ5_-1.0_35.453
+      : - !LennardJones
+          sigma: 0.365
+          eps: 7.523
+      ? - N4a_0.0_72.0
+        - N4a_0.0_72.0
+      : - !LennardJones
+          sigma: 0.47
+          eps: 3.39
+      ? - N4a_0.0_72.0
+        - C1_0.0_72.0
+      : - !LennardJones
+          sigma: 0.47
+          eps: 2.79
+      ? - N4a_0.0_72.0
+        - C4h_0.0_72.0
+      : - !LennardJones
+          sigma: 0.47
+          eps: 3.24
+      ? - N4a_0.0_72.0
+        - W_0.0_72.0
+      : - !LennardJones
+          sigma: 0.465
+          eps: 3.5
+      ? - N4a_0.0_72.0
+        - TQ5_1.0_36.0
+      : - !LennardJones
+          sigma: 0.395
+          eps: 8.815
+      ? - N4a_0.0_72.0
+        - TQ5_-1.0_35.453
+      : - !LennardJones
+          sigma: 0.395
+          eps: 8.815
+      ? - C1_0.0_72.0
+        - C1_0.0_72.0
+      : - !LennardJones
+          sigma: 0.47
+          eps: 3.39
+      ? - C1_0.0_72.0
+        - C4h_0.0_72.0
+      : - !LennardJones
+          sigma: 0.47
+          eps: 3.07
+      ? - C1_0.0_72.0
+        - W_0.0_72.0
+      : - !LennardJones
+          sigma: 0.47
+          eps: 2.06
+      ? - C1_0.0_72.0
+        - TQ5_1.0_36.0
+      : - !LennardJones
+          sigma: 0.524
+          eps: 1.35
+      ? - C1_0.0_72.0
+        - TQ5_-1.0_35.453
+      : - !LennardJones
+          sigma: 0.524
+          eps: 1.35
+      ? - C4h_0.0_72.0
+        - C4h_0.0_72.0
+      : - !LennardJones
+          sigma: 0.47
+          eps: 3.52
+      ? - C4h_0.0_72.0
+        - W_0.0_72.0
+      : - !LennardJones
+          sigma: 0.465
+          eps: 2.42
+      ? - C4h_0.0_72.0
+        - TQ5_1.0_36.0
+      : - !LennardJones
+          sigma: 0.404
+          eps: 4.24
+      ? - C4h_0.0_72.0
+        - TQ5_-1.0_35.453
+      : - !LennardJones
+          sigma: 0.404
+          eps: 4.24
+      ? - W_0.0_72.0
+        - W_0.0_72.0
+      : - !LennardJones
+          sigma: 0.47
+          eps: 4.65
+      ? - W_0.0_72.0
+        - TQ5_1.0_36.0
+      : - !LennardJones
+          sigma: 0.385
+          eps: 11.46
+      ? - W_0.0_72.0
+        - TQ5_-1.0_35.453
+      : - !LennardJones
+          sigma: 0.385
+          eps: 11.46
+      ? - TQ5_1.0_36.0
+        - TQ5_1.0_36.0
+      : - !LennardJones
+          sigma: 0.354
+          eps: 1.18
+      ? - TQ5_1.0_36.0
+        - TQ5_-1.0_35.453
+      : - !LennardJones
+          sigma: 0.354
+          eps: 1.18
+      ? - TQ5_-1.0_35.453
+        - TQ5_-1.0_35.453
+      : - !LennardJones
+          sigma: 0.354
+          eps: 1.18
+      default:
+      - !CoulombReactionField
+        epsr: 15.0
+        epsrf: .inf
+        cutoff: 11.0
+        shift: true
+  blocks:
+  - molecule: Transmembrane
+    N: 1
+  - molecule: POPE
+    N: 144
+  - molecule: POPE
+    N: 144
+  - molecule: W
+    N: 5049
+  - molecule: NA+
+    N: 57
+  - molecule: CL-
+    N: 57
+
