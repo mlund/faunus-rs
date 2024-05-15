@@ -19,6 +19,7 @@
 pub use crate::Vector3;
 use core::fmt::Debug;
 use core::ops::Add;
+use dyn_clone::DynClone;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
@@ -28,6 +29,7 @@ mod harmonic;
 mod mie;
 mod morse;
 mod multipole;
+pub mod potential;
 mod ureybradley;
 pub use self::fene::FENE;
 pub use self::hardsphere::HardSphere;
@@ -61,7 +63,7 @@ pub trait AnisotropicTwobodyEnergy {
 }
 
 /// Potential energy between a pair of isotropic particles, 𝑈(𝑟).
-pub trait IsotropicTwobodyEnergy: AnisotropicTwobodyEnergy {
+pub trait IsotropicTwobodyEnergy: AnisotropicTwobodyEnergy + DynClone {
     /// Interaction energy between a pair of isotropic particles.
     fn isotropic_twobody_energy(&self, distance_squared: f64) -> f64;
 
@@ -78,6 +80,8 @@ pub trait IsotropicTwobodyEnergy: AnisotropicTwobodyEnergy {
     }
 }
 
+dyn_clone::clone_trait_object!(IsotropicTwobodyEnergy);
+
 /// All isotropic potentials implement the anisotropic trait.
 impl<T: IsotropicTwobodyEnergy> AnisotropicTwobodyEnergy for T {
     fn anisotropic_twobody_energy(&self, orientation: &RelativeOrientation) -> f64 {
@@ -87,6 +91,23 @@ impl<T: IsotropicTwobodyEnergy> AnisotropicTwobodyEnergy for T {
         let r_squared = orientation.distance.norm_squared();
         let r_hat = orientation.distance / r_squared.sqrt();
         self.isotropic_twobody_force(r_squared) * r_hat
+    }
+}
+
+/// Structure representing nonexistent interaction.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct NoInteraction {}
+
+impl NoInteraction {
+    /// Create a new null interaction.
+    pub fn new() -> Self {
+        NoInteraction {}
+    }
+}
+
+impl IsotropicTwobodyEnergy for NoInteraction {
+    fn isotropic_twobody_energy(&self, _distance_squared: f64) -> f64 {
+        0.0
     }
 }
 
@@ -106,7 +127,7 @@ impl<T: IsotropicTwobodyEnergy, U: IsotropicTwobodyEnergy> Combined<T, U> {
     }
 }
 
-impl<T: IsotropicTwobodyEnergy, U: IsotropicTwobodyEnergy> IsotropicTwobodyEnergy
+impl<T: IsotropicTwobodyEnergy + Clone, U: IsotropicTwobodyEnergy + Clone> IsotropicTwobodyEnergy
     for Combined<T, U>
 {
     #[inline]
@@ -156,7 +177,7 @@ pub fn test_combined() {
     assert_relative_eq!(energy.1, 2.5);
 
     // static dispatch
-    let combined = Combined::new(pot1, pot2);
+    let combined = Combined::new(pot1.clone(), pot2.clone());
     assert_relative_eq!(combined.isotropic_twobody_energy(r2), energy.0 + energy.1);
     assert_relative_eq!(
         combined.anisotropic_twobody_energy(&relative_orientation),

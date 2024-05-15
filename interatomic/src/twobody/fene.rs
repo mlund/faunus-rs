@@ -20,7 +20,7 @@ use serde::{Deserialize, Serialize};
 
 /// Finitely extensible nonlinear elastic potential
 /// See <https://en.wikipedia.org/wiki/Finitely_extensible_nonlinear_elastic_potential>.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(
     feature = "serde",
     derive(Deserialize, Serialize),

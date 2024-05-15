@@ -44,7 +44,9 @@ impl<'a, T: MultipoleEnergy> IonIon<'a, T> {
     }
 }
 
-impl<T: MultipoleEnergy + std::fmt::Debug> IsotropicTwobodyEnergy for IonIon<'_, T> {
+impl<T: MultipoleEnergy + std::fmt::Debug + Clone + PartialEq> IsotropicTwobodyEnergy
+    for IonIon<'_, T>
+{
     /// Calculate the isotropic twobody energy (kJ/mol)
     fn isotropic_twobody_energy(&self, distance_squared: f64) -> f64 {
         coulomb::TO_CHEMISTRY_UNIT / 80.0

@@ -112,7 +112,7 @@ impl<const N: u32, const M: u32> Cutoff for Mie<N, M> {
 /// let (r_min, u_min) = (f64::powf(2.0, 1.0 / 6.0) * sigma, -epsilon);
 /// assert_eq!(lj.isotropic_twobody_energy( r_min.powi(2) ), u_min);
 /// ~~~
-#[derive(Debug, Clone, PartialEq, Default, Copy)]
+#[derive(Debug, Clone, PartialEq, Default)]
 #[cfg_attr(
     feature = "serde",
     derive(Deserialize, Serialize),
@@ -194,7 +194,7 @@ impl IsotropicTwobodyEnergy for LennardJones {
 ///
 /// Effectively, this provides soft repulsion without any attraction.
 /// More information, see <https://dx.doi.org/doi.org/ct4kh9>.
-#[derive(Debug, Clone, PartialEq, Default, Copy)]
+#[derive(Debug, Clone, PartialEq, Default)]
 #[cfg_attr(
     feature = "serde",
     derive(Deserialize, Serialize),

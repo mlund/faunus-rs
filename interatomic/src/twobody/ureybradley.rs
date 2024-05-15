@@ -21,7 +21,7 @@ use serde::{Deserialize, Serialize};
 /// Harmonic Urey-Bradley potential.
 /// See <https://manual.gromacs.org/documentation/current/reference-manual/functions/bonded-interactions.html#urey-bradley-potential>
 /// for more information.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 pub struct UreyBradley {
     #[cfg_attr(feature = "serde", serde(rename = "req"))]

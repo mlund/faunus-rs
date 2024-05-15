@@ -19,6 +19,7 @@ nalgebra = { version = "0.32", features = ["serde-serialize"] }
 num = "0.4"
 physical_constants = "0.5"
 coulomb = {path = "../coulomb"}
+dyn-clone = "1.0.17"
 
 [dev-dependencies]
 approx = "0.5"

@@ -33,7 +33,7 @@ use serde::{Deserialize, Serialize};
 /// let distance: f64 = 1.1; // greater than the minimum distance
 /// assert_eq!(hardsphere.isotropic_twobody_energy(distance.powi(2)), 0.0);
 /// ~~~
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq, Default)]
 #[cfg_attr(
     feature = "serde",
     derive(Deserialize, Serialize),
