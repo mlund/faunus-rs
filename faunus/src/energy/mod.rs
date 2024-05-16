@@ -16,17 +16,15 @@
 
 pub mod bonded;
 pub(crate) mod builder;
-
+pub mod nonbonded;
 use std::path::Path;
 
-use crate::{
-    platform::reference::nonbonded::NonbondedReference, topology::Topology, Change, Context,
-    SyncFrom,
-};
+use crate::{topology::Topology, Change, Context, SyncFrom};
 
 use self::{
     bonded::{IntermolecularBonds, IntramolecularBonds},
     builder::HamiltonianBuilder,
+    nonbonded::Nonbonded,
 };
 
 /// Collection of energy terms.
@@ -90,7 +88,7 @@ impl Hamiltonian {
 #[derive(Debug, Clone)]
 pub enum EnergyTerm {
     /// Non-bonded interactions between particles for reference platform.
-    NonbondedReference(NonbondedReference),
+    Nonbonded(Nonbonded),
     /// Intramolecular bonded interactions.
     IntramolecularBonds(IntramolecularBonds),
     /// Intermolecular bonded interactions.
@@ -104,19 +102,19 @@ impl EnergyTerm {
         let hamiltonian_builder = HamiltonianBuilder::from_file(filename.clone())?;
         let topology = Topology::from_file(filename)?;
 
-        NonbondedReference::new(&hamiltonian_builder.nonbonded, &topology)
+        Nonbonded::new(&hamiltonian_builder.nonbonded, &topology)
     }
 
     /// Compute the energy change of the EnergyTerm due to a change in the system.
     /// The energy is returned in the units of kJ/mol.
     fn energy_change(&self, context: &impl Context, change: &Change) -> f64 {
-        todo!();
+        0.0
     }
 
     /// Update internal state due to a change in the system.
     fn update(&mut self, _change: &Change) -> anyhow::Result<()> {
         match self {
-            EnergyTerm::NonbondedReference(_)
+            EnergyTerm::Nonbonded(_)
             | EnergyTerm::IntramolecularBonds(_)
             | EnergyTerm::IntermolecularBonds(_) => (),
         }
@@ -131,15 +129,9 @@ impl SyncFrom for EnergyTerm {
     /// Panics if the EnergyTerms are not compatible with each other.
     fn sync_from(&mut self, other: &EnergyTerm, change: &Change) -> anyhow::Result<()> {
         match (self, other) {
-            (EnergyTerm::NonbondedReference(x), EnergyTerm::NonbondedReference(y)) => {
-                x.sync_from(y, change)?
-            }
-            (EnergyTerm::IntramolecularBonds(x), EnergyTerm::IntramolecularBonds(y)) => {
-                x.sync_from(y, change)?
-            }
-            (EnergyTerm::IntermolecularBonds(x), EnergyTerm::IntermolecularBonds(y)) => {
-                x.sync_from(y, change)?
-            }
+            (EnergyTerm::Nonbonded(x), EnergyTerm::Nonbonded(y)) => x.sync_from(y, change)?,
+            (EnergyTerm::IntramolecularBonds(_), EnergyTerm::IntramolecularBonds(_))
+            | (EnergyTerm::IntermolecularBonds(_), EnergyTerm::IntermolecularBonds(_)) => (),
             _ => panic!("Trying to sync incompatible energy terms."),
         }
 

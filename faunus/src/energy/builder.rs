@@ -17,6 +17,7 @@
 use std::{
     collections::HashMap,
     fmt::{self, Debug},
+    marker::PhantomData,
     path::Path,
 };
 
@@ -274,9 +275,11 @@ impl NonbondedInteraction {
 pub(crate) enum DirectOrMixing<T: IsotropicTwobodyEnergy> {
     /// Calculate the parameters using the provided combination rule.
     Mixing {
+        /// Combination rule to use for mixing.
         mixing: CombinationRule,
         #[serde(skip)]
-        _phantom: T,
+        /// Marker specifying the interaction type.
+        _phantom: PhantomData<T>,
     },
     /// The parameters for the interaction are specifically provided.
     Direct(T),
@@ -543,7 +546,7 @@ mod tests {
         let expected = LennardJones::new(1.5, 4.5);
         let nonbonded = NonbondedInteraction::LennardJones(DirectOrMixing::Mixing {
             mixing: CombinationRule::Arithmetic,
-            _phantom: LennardJones::default(),
+            _phantom: PhantomData,
         });
 
         let converted = nonbonded
@@ -557,7 +560,7 @@ mod tests {
         let expected = HardSphere::new(3.0);
         let nonbonded = NonbondedInteraction::HardSphere(DirectOrMixing::Mixing {
             mixing: CombinationRule::Geometric,
-            _phantom: HardSphere::default(),
+            _phantom: PhantomData,
         });
 
         let converted = nonbonded
@@ -605,7 +608,7 @@ mod tests {
 
         let interaction3 = NonbondedInteraction::HardSphere(DirectOrMixing::Mixing {
             mixing: CombinationRule::Arithmetic,
-            _phantom: HardSphere::default(),
+            _phantom: PhantomData,
         });
 
         let for_pair = vec![

@@ -18,7 +18,9 @@ use nalgebra::Vector3;
 use rand::rngs::ThreadRng;
 use serde::{Deserialize, Serialize};
 use std::{path::Path, rc::Rc};
-use topology::Topology;
+use topology::{AtomKind, Topology};
+
+use crate::cell::BoundaryConditions;
 
 pub type Point = Vector3<f64>;
 pub type UnitQuaternion = nalgebra::UnitQuaternion<f64>;
@@ -107,9 +109,7 @@ pub trait SyncFrom {
 /// There can be multiple contexts in a simulation, e.g. one for a trial move and one for the current state.
 #[cfg(feature = "chemfiles")]
 pub trait Context:
-    GroupCollection
-    + WithCell
-    + WithTopology
+    ParticleSystem
     + WithHamiltonian
     + Clone
     + std::fmt::Debug
@@ -143,14 +143,7 @@ pub trait Context:
 /// There can be multiple contexts in a simulation, e.g. one for a trial move and one for the current state.
 #[cfg(not(feature = "chemfiles"))]
 pub trait Context:
-    GroupCollection
-    + WithCell
-    + WithTopology
-    + WithHamiltonian
-    + Clone
-    + std::fmt::Debug
-    + Sized
-    + SyncFrom
+    ParticleSystem + WithHamiltonian + Clone + std::fmt::Debug + Sized + SyncFrom
 {
     /// Update the internal state to match a recently applied change
     ///
@@ -206,5 +199,32 @@ pub trait WithTemperature {
         Err(anyhow::anyhow!(
             "Setting the temperature is not implemented"
         ))
+    }
+}
+
+/// A trait for objects which contain particles with a specific topology in a specific cell.
+pub trait ParticleSystem: GroupCollection + WithCell + WithTopology {
+    /// Get distance between two particles with the given indices.
+    ///
+    /// ## Warning
+    /// The default implementation of this method may be slow since it involves copying the particles.
+    /// It is recommended to implement `get_atomkind` directly for your platform.
+    fn get_distance(&self, i: usize, j: usize) -> Point {
+        self.cell()
+            .distance(self.particle(i).pos(), self.particle(j).pos())
+    }
+
+    /// Get squared distance between two particles with the given indices.
+    fn get_distance_squared(&self, i: usize, j: usize) -> f64 {
+        self.get_distance(i, j).norm_squared()
+    }
+
+    /// Get index of the atom kind of the particle with the given index.
+    ///
+    /// ## Warning
+    /// The Default implementation of this method may be slow since it involves copying the particles.
+    /// It is recommended to implement `get_atomkind` directly for your platform.
+    fn get_atomkind(&self, i: usize) -> usize {
+        self.particle(i).atom_id
     }
 }

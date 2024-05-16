@@ -18,18 +18,17 @@ use std::fmt::Debug;
 
 use crate::{
     energy::{builder::NonbondedBuilder, EnergyTerm},
-    platform::reference::ReferencePlatform,
     topology::{Topology, TopologyLike},
-    Change, Group, GroupChange, GroupCollection, Particle, SyncFrom,
+    Change, Context, Group, GroupChange, SyncFrom,
 };
 
-/// Energy term for computing nonbonding interactions implemented for the reference platform.
+/// Energy term for computing nonbonding interactions.
 #[derive(Debug, Clone)]
-pub struct NonbondedReference {
+pub struct Nonbonded {
     /// Matrix of pair potentials based on particle ids.
     potentials: Vec<Vec<Box<dyn IsotropicTwobodyEnergy>>>,
 }
-impl NonbondedReference {
+impl Nonbonded {
     /// Create a new NonbondedReference structure wrapped in an EnergyTerm enum.
     #[allow(clippy::new_ret_no_self)]
     pub(crate) fn new(
@@ -48,13 +47,11 @@ impl NonbondedReference {
             })
             .collect::<Result<Vec<_>, _>>()?;
 
-        Ok(EnergyTerm::NonbondedReference(NonbondedReference {
-            potentials,
-        }))
+        Ok(EnergyTerm::Nonbonded(Nonbonded { potentials }))
     }
 
     /// Compute the energy change due to a change in the system.
-    pub(crate) fn energy_change(&self, context: &ReferencePlatform, change: &Change) -> f64 {
+    pub(crate) fn energy_change(&self, context: &impl Context, change: &Change) -> f64 {
         match change {
             Change::Everything => self.all_with_all(context),
             Change::SingleGroup(group_index, group_change) => {
@@ -68,7 +65,7 @@ impl NonbondedReference {
     /// Matches all possible single group perturbations and returns the energy.
     fn single_group_change(
         &self,
-        context: &ReferencePlatform,
+        context: &impl Context,
         group_index: usize,
         change: &GroupChange,
     ) -> f64 {
@@ -79,39 +76,53 @@ impl NonbondedReference {
         }
     }
 
-    /// Calculates the energy between two particles.
+    /// Calculates the energy between two particles given by indices.
+    ///
+    /// ## Parameters
+    /// - `context` Context to work with.
+    /// - `i, j` Indices of the particles in the `context`.
+    /// - `atom_kind_i, atom_kind_j` Indices of the atom kinds in the `context`.
     #[inline(always)]
-    fn particle_with_particle(&self, particle1: &Particle, particle2: &Particle) -> f64 {
-        let distance_squared = 0.0;
-        // let distance_squared = self
-        //     .platform
-        //     .distance_squared(particle1.pos(), particle2.pos());
-        self.potentials[particle1.atom_id][particle2.atom_id]
-            .isotropic_twobody_energy(distance_squared)
+    fn particle_with_particle(
+        &self,
+        context: &impl Context,
+        i: usize,
+        j: usize,
+        atom_kind_i: usize,
+        atom_kind_j: usize,
+    ) -> f64 {
+        let distance_squared = context.get_distance_squared(i, j);
+        self.potentials[atom_kind_i][atom_kind_j].isotropic_twobody_energy(distance_squared)
     }
 
     /// Single particle with all remaining active particles.
     fn particle_with_all(
         &self,
-        context: &ReferencePlatform,
+        context: &impl Context,
         group_index: usize,
         rel_index: usize,
     ) -> f64 {
         let groups = &context.groups();
         let index = groups[group_index].absolute_index(rel_index).unwrap();
+        let atomkind_index = context.get_atomkind(index);
         groups
             .iter()
             .flat_map(|group| group.iter_active())
             .filter(|other| *other != index)
             .fold(0.0, |sum, other| {
-                let particle1 = &context.particles()[index];
-                let particle2 = &context.particles()[other];
-                sum + self.particle_with_particle(particle1, particle2)
+                let atomkind_other = context.get_atomkind(other);
+                sum + self.particle_with_particle(
+                    context,
+                    index,
+                    other,
+                    atomkind_index,
+                    atomkind_other,
+                )
             })
     }
 
     /// Calculates the energy between a single group and all other groups.
-    pub(crate) fn group_with_all(&self, context: &ReferencePlatform, group_index: usize) -> f64 {
+    pub(crate) fn group_with_all(&self, context: &impl Context, group_index: usize) -> f64 {
         let group = &context.groups()[group_index];
         context
             .groups()
@@ -125,27 +136,30 @@ impl NonbondedReference {
     /// Calculates the energy between two groups.
     pub(crate) fn group_to_group(
         &self,
-        context: &ReferencePlatform,
+        context: &impl Context,
         group1: &Group,
         group2: &Group,
     ) -> f64 {
-        let particles1 = context.particles()[group1.iter_active()].iter();
-        let particles2 = context.particles()[group2.iter_active()].iter();
-        iproduct!(particles1, particles2)
-            .fold(0.0, |sum, (i, j)| sum + self.particle_with_particle(i, j))
+        let particles1 = group1.iter_active();
+        let particles2 = group2.iter_active();
+        iproduct!(particles1, particles2).fold(0.0, |sum, (i, j)| {
+            let atomkind_i = context.get_atomkind(i);
+            let atomkind_j = context.get_atomkind(j);
+            sum + self.particle_with_particle(context, i, j, atomkind_i, atomkind_j)
+        })
     }
 
     /// Calculates the full energy of the system by summing over
     /// all group-to-group interactions.
-    pub(crate) fn all_with_all(&self, context: &ReferencePlatform) -> f64 {
+    pub(crate) fn all_with_all(&self, context: &impl Context) -> f64 {
         let groups = context.groups();
         iproduct!(groups.iter(), groups.iter())
             .fold(0.0, |sum, (i, j)| sum + self.group_to_group(context, i, j))
     }
 }
 
-impl SyncFrom for NonbondedReference {
-    fn sync_from(&mut self, other: &NonbondedReference, change: &Change) -> anyhow::Result<()> {
+impl SyncFrom for Nonbonded {
+    fn sync_from(&mut self, other: &Nonbonded, change: &Change) -> anyhow::Result<()> {
         match change {
             Change::Everything => self.potentials = other.potentials.clone(),
             Change::None => (),
@@ -187,9 +201,9 @@ mod tests {
             .unwrap()
             .nonbonded;
 
-        let nonbonded = NonbondedReference::new(&builder, &topology).unwrap();
+        let nonbonded = Nonbonded::new(&builder, &topology).unwrap();
         let nonbonded = match nonbonded {
-            EnergyTerm::NonbondedReference(x) => x,
+            EnergyTerm::Nonbonded(x) => x,
             _ => panic!("Incorrect Energy Term constructed."),
         };
 

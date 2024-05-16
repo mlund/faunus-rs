@@ -16,38 +16,22 @@
 
 use interatomic::twobody::IsotropicTwobodyEnergy;
 
-use crate::{Change, SyncFrom};
+use crate::{Change, Context, SyncFrom};
 
 #[derive(Debug, Clone)]
-pub struct IntramolecularBonds {
-    potentials: Vec<Vec<Box<dyn IsotropicTwobodyEnergy>>>,
-}
+pub struct IntramolecularBonds {}
 
-impl SyncFrom for IntramolecularBonds {
-    fn sync_from(&mut self, other: &IntramolecularBonds, change: &Change) -> anyhow::Result<()> {
-        match change {
-            Change::Everything => self.potentials = other.potentials.clone(),
-            Change::None => (),
-            _ => todo!("Implement other changes."),
-        }
-
-        Ok(())
+impl IntramolecularBonds {
+    pub(crate) fn energy_change(&self, context: &impl Context, change: &Change) -> f64 {
+        todo!()
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct IntermolecularBonds {
-    potentials: Vec<Vec<Box<dyn IsotropicTwobodyEnergy>>>,
-}
+pub struct IntermolecularBonds {}
 
-impl SyncFrom for IntermolecularBonds {
-    fn sync_from(&mut self, other: &IntermolecularBonds, change: &Change) -> anyhow::Result<()> {
-        match change {
-            Change::Everything => self.potentials = other.potentials.clone(),
-            Change::None => (),
-            _ => todo!("Implement other changes."),
-        }
-
-        Ok(())
+impl IntermolecularBonds {
+    pub(crate) fn energy_change(&self, context: &impl Context, change: &Change) -> f64 {
+        todo!()
     }
 }

@@ -76,7 +76,7 @@ impl BoundaryConditions for Cuboid {
     fn pbc(&self) -> super::PeriodicDirections {
         super::PeriodicDirections::PeriodicXYZ
     }
-    #[inline]
+    #[inline(always)]
     fn distance(&self, point1: &Point, point2: &Point) -> Point {
         let mut delta = *point1 - *point2;
         if delta.x > self.half_cell.x {

@@ -101,7 +101,7 @@ pub trait BoundaryConditions {
     /// Minimum image distance between two points inside a cell
     fn distance(&self, point1: &Point, point2: &Point) -> Point;
     /// Get the minimum squared distance between two points
-    #[inline]
+    #[inline(always)]
     fn distance_squared(&self, point1: &Point, point2: &Point) -> f64 {
         self.distance(point1, point2).norm_squared()
     }

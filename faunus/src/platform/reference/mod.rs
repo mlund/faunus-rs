@@ -14,15 +14,15 @@
 
 //! # Reference platform for CPU-based simulations
 
-pub mod nonbonded;
-
 use rand::rngs::ThreadRng;
 
 use crate::{
+    cell::BoundaryConditions,
     energy::Hamiltonian,
     group::{GroupCollection, GroupLists, GroupSize},
     topology::{Topology, TopologyLike},
-    Change, Context, Group, Particle, SyncFrom, WithCell, WithHamiltonian, WithTopology,
+    Change, Context, Group, Particle, ParticleSystem, Point, PointParticle, SyncFrom, WithCell,
+    WithHamiltonian, WithTopology,
 };
 
 use std::{path::Path, rc::Rc};
@@ -148,6 +148,23 @@ impl GroupCollection for ReferencePlatform {
     }
 }
 
+impl ParticleSystem for ReferencePlatform {
+    /// Get distance between two particles.
+    ///
+    /// Faster implementation for Reference Platform which does not involve particle copying.
+    fn get_distance(&self, i: usize, j: usize) -> Point {
+        self.cell()
+            .distance(self.particles()[i].pos(), self.particles()[j].pos())
+    }
+
+    /// Get index of the atom kind of the particle.
+    ///
+    /// Faster implementation for Reference Platform which does not involve particle copying.
+    fn get_atomkind(&self, i: usize) -> usize {
+        self.particles()[i].atom_id
+    }
+}
+
 /// Group-wise collection of particles
 ///
 /// Particles are grouped into groups, which are defined by a slice of particles.
@@ -168,7 +185,7 @@ impl ReferencePlatform {
             .collect()
     }
 
-    /// Get reference to particles of the system.
+    /// Get reference to the particles of the system.
     pub fn particles(&self) -> &[Particle] {
         &self.particles
     }

@@ -16,7 +16,7 @@
 
 use crate::{
     change::{Change, GroupChange},
-    Particle, SyncFrom,
+    Particle, PointParticle, SyncFrom,
 };
 use anyhow::Ok;
 use nalgebra::Vector3;
