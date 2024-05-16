@@ -31,6 +31,7 @@ pub struct NonbondedReference {
 }
 impl NonbondedReference {
     /// Create a new NonbondedReference structure wrapped in an EnergyTerm enum.
+    #[allow(clippy::new_ret_no_self)]
     pub(crate) fn new(
         nonbonded: &NonbondedBuilder,
         topology: &Topology,
@@ -152,5 +153,95 @@ impl SyncFrom for NonbondedReference {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use float_cmp::assert_approx_eq;
+
+    use crate::{energy::builder::HamiltonianBuilder, topology::Topology};
+
+    use super::*;
+
+    /// Compare behavior of two `IsotropicTwobodyEnergy` trait objects.
+    fn assert_behavior(
+        obj1: &Box<dyn IsotropicTwobodyEnergy>,
+        obj2: &Box<dyn IsotropicTwobodyEnergy>,
+    ) {
+        let testing_distances = [0.00201, 0.7, 12.3, 12457.6];
+
+        for &dist in testing_distances.iter() {
+            assert_approx_eq!(
+                f64,
+                obj1.isotropic_twobody_energy(dist),
+                obj2.isotropic_twobody_energy(dist)
+            );
+        }
+    }
+
+    #[test]
+    fn test_nonbonded_reference_new() {
+        let topology = Topology::from_file("tests/files/topology_pass.yaml").unwrap();
+        let builder = HamiltonianBuilder::from_file("tests/files/topology_pass.yaml")
+            .unwrap()
+            .nonbonded;
+
+        let nonbonded = NonbondedReference::new(&builder, &topology).unwrap();
+        let nonbonded = match nonbonded {
+            EnergyTerm::NonbondedReference(x) => x,
+            _ => panic!("Incorrect Energy Term constructed."),
+        };
+
+        assert_eq!(nonbonded.potentials.len(), topology.atoms().len());
+        for potential in nonbonded.potentials.iter() {
+            assert_eq!(potential.len(), topology.atoms().len());
+        }
+
+        for i in 0..topology.atoms().len() {
+            for j in (i + 1)..topology.atoms().len() {
+                assert_behavior(&nonbonded.potentials[i][j], &nonbonded.potentials[j][i]);
+            }
+        }
+
+        // O, C with anything: default interaction
+        let o_index = topology
+            .atoms()
+            .iter()
+            .position(|x| x.name() == "O")
+            .unwrap();
+        let c_index = topology
+            .atoms()
+            .iter()
+            .position(|x| x.name() == "C")
+            .unwrap();
+
+        let default = &nonbonded.potentials[o_index][o_index];
+
+        for i in [o_index, c_index] {
+            for j in 0..topology.atoms().len() {
+                assert_behavior(&nonbonded.potentials[i][j], default);
+            }
+        }
+
+        // X interacts slightly differently with charged atoms because it is itself charged
+        let x_index = topology
+            .atoms()
+            .iter()
+            .position(|x| x.name() == "X")
+            .unwrap();
+        let ow_index = topology
+            .atoms()
+            .iter()
+            .position(|x| x.name() == "OW")
+            .unwrap();
+
+        for i in 0..topology.atoms().len() {
+            if i == x_index || i == ow_index {
+                continue;
+            }
+
+            assert_behavior(&nonbonded.potentials[x_index][i], default);
+        }
     }
 }

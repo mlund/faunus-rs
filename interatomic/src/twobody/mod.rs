@@ -106,6 +106,13 @@ impl NoInteraction {
     }
 }
 
+impl Default for NoInteraction {
+    #[inline(always)]
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl IsotropicTwobodyEnergy for NoInteraction {
     #[inline(always)]
     fn isotropic_twobody_energy(&self, _distance_squared: f64) -> f64 {

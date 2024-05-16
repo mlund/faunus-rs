@@ -46,16 +46,6 @@ pub(crate) struct NonbondedBuilder(
 );
 
 impl NonbondedBuilder {
-    /// Are interactions defined for a specific pair of atoms or for default?
-    fn contains_key(&self, key: &DefaultOrPair) -> bool {
-        self.0.contains_key(key)
-    }
-
-    /// Get interactions for a specific pair of atoms or for default.
-    fn get(&self, key: &DefaultOrPair) -> Option<&Vec<NonbondedInteraction>> {
-        self.0.get(key)
-    }
-
     /// Get interactions for a specific pair of atoms.
     /// If this pair of atoms is not defined, get interactions for Default.
     /// If Default is not defined, return an empty array.
@@ -81,7 +71,7 @@ impl NonbondedBuilder {
     ) -> anyhow::Result<Box<dyn IsotropicTwobodyEnergy>> {
         let interactions = self.collect_interactions(atom1.name(), atom2.name());
 
-        if interactions.len() == 0 {
+        if interactions.is_empty() {
             log::warn!(
                 "No nonbonded interaction defined for '{} <-> {}'.",
                 atom1.name(),
@@ -380,7 +370,6 @@ impl HamiltonianBuilder {
 
 #[cfg(test)]
 mod tests {
-    use as_any::AsAny;
     use float_cmp::assert_approx_eq;
 
     use super::*;
@@ -389,15 +378,17 @@ mod tests {
     fn hamiltonian_deserialization_pass() {
         let builder = HamiltonianBuilder::from_file("tests/files/topology_pass.yaml").unwrap();
 
-        assert!(builder.nonbonded.contains_key(&DefaultOrPair::Default));
+        assert!(builder.nonbonded.0.contains_key(&DefaultOrPair::Default));
         assert!(builder
             .nonbonded
+            .0
             .contains_key(&DefaultOrPair::Pair(UnorderedPair(
                 String::from("OW"),
                 String::from("OW")
             ))));
         assert!(builder
             .nonbonded
+            .0
             .contains_key(&DefaultOrPair::Pair(UnorderedPair(
                 String::from("OW"),
                 String::from("HW")
@@ -697,19 +688,77 @@ mod tests {
     }
 
     #[test]
-    fn test_nonexistent() {
-        todo!("TEST that the behavior is valid even if the multiple interactions at the start of the list evaluate to None")
-    }
+    fn test_get_interaction_empty() {
+        let mut interactions = HashMap::new();
 
-    #[test]
-    fn test_nonexistent_all() {
-        todo!(
-            "TEST that the behavior is valid even if ALL interactions in the list evaluate to None"
-        )
-    }
+        let interaction1 = coulomb::pairwise::Plain::new(11.0, None);
 
-    #[test]
-    fn test_filling_nonbonded() {
-        todo!("TEST the nonbonded new function")
+        let interaction2 = coulomb::pairwise::EwaldTruncated::new(11.0, 0.2);
+
+        let interaction3 =
+            HardSphere::from_combination_rule(CombinationRule::Arithmetic, (1.0, 3.0));
+
+        let for_pair = vec![
+            NonbondedInteraction::CoulombPlain(interaction1.clone()),
+            NonbondedInteraction::CoulombEwald(interaction2.clone()),
+            NonbondedInteraction::HardSphere(DirectOrMixing::Direct(interaction3.clone())),
+        ];
+
+        interactions.insert(
+            DefaultOrPair::Pair(UnorderedPair(String::from("NA"), String::from("BB"))),
+            for_pair,
+        );
+
+        let atom1 = AtomKind::new(
+            "NA",
+            0,
+            12.0,
+            1.0,
+            None,
+            Some(1.0),
+            None,
+            None,
+            HashMap::new(),
+        );
+        let atom2 = AtomKind::new(
+            "BB",
+            1,
+            16.0,
+            0.0,
+            None,
+            Some(3.0),
+            None,
+            None,
+            HashMap::new(),
+        );
+
+        // first two interactions evaluate to 0
+
+        let mut nonbonded = NonbondedBuilder(interactions);
+        let expected = Box::new(IonIon::new(0.0, interaction1.clone()))
+            as Box<dyn IsotropicTwobodyEnergy>
+            + Box::new(IonIon::new(0.0, interaction2.clone())) as Box<dyn IsotropicTwobodyEnergy>
+            + Box::new(interaction3) as Box<dyn IsotropicTwobodyEnergy>;
+
+        let interaction = nonbonded.get_interaction(&atom1, &atom2).unwrap();
+        assert_behavior(interaction, expected);
+
+        // all interactions evaluate to 0
+
+        let for_pair = vec![
+            NonbondedInteraction::CoulombPlain(interaction1.clone()),
+            NonbondedInteraction::CoulombEwald(interaction2.clone()),
+        ];
+
+        nonbonded.0.insert(
+            DefaultOrPair::Pair(UnorderedPair(String::from("NA"), String::from("BB"))),
+            for_pair,
+        );
+
+        let expected = Box::new(IonIon::new(0.0, interaction1)) as Box<dyn IsotropicTwobodyEnergy>
+            + Box::new(IonIon::new(0.0, interaction2)) as Box<dyn IsotropicTwobodyEnergy>;
+
+        let interaction = nonbonded.get_interaction(&atom1, &atom2).unwrap();
+        assert_behavior(interaction, expected);
     }
 }

@@ -34,7 +34,7 @@ pub struct IonIon<T: MultipoleEnergy> {
     scheme: T,
 }
 
-impl<'a, T: MultipoleEnergy> IonIon<T> {
+impl<T: MultipoleEnergy> IonIon<T> {
     /// Create a new ion-ion interaction
     pub fn new(charge_product: f64, scheme: T) -> Self {
         Self {

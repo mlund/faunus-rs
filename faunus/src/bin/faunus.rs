@@ -12,7 +12,7 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
-use faunus::{energy::Hamiltonian, platform::reference::ReferencePlatform, *};
+use faunus::{energy::Hamiltonian, *};
 use std::rc::Rc;
 
 fn main() {

@@ -110,7 +110,7 @@ impl EnergyTerm {
     /// Compute the energy change of the EnergyTerm due to a change in the system.
     /// The energy is returned in the units of kJ/mol.
     fn energy_change(&self, context: &impl Context, change: &Change) -> f64 {
-        0.0
+        todo!();
     }
 
     /// Update internal state due to a change in the system.

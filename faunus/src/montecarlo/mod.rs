@@ -14,7 +14,6 @@
 
 //! # Support for Monte Carlo sampling
 
-use crate::energy::EnergyTerm;
 use crate::{time::Timer, Change, Context, Info};
 use average::Mean;
 use log;
