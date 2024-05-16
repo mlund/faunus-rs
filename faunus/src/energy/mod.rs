@@ -16,6 +16,7 @@
 
 pub mod bonded;
 pub(crate) mod builder;
+pub mod exclusions;
 pub mod nonbonded;
 use std::path::Path;
 
@@ -24,7 +25,7 @@ use crate::{topology::Topology, Change, Context, SyncFrom};
 use self::{
     bonded::{IntermolecularBonds, IntramolecularBonds},
     builder::HamiltonianBuilder,
-    nonbonded::Nonbonded,
+    nonbonded::NonbondedMatrix,
 };
 
 /// Collection of energy terms.
@@ -87,8 +88,8 @@ impl Hamiltonian {
 
 #[derive(Debug, Clone)]
 pub enum EnergyTerm {
-    /// Non-bonded interactions between particles for reference platform.
-    Nonbonded(Nonbonded),
+    /// Non-bonded interactions between particles.
+    NonbondedMatrix(NonbondedMatrix),
     /// Intramolecular bonded interactions.
     IntramolecularBonds(IntramolecularBonds),
     /// Intermolecular bonded interactions.
@@ -96,13 +97,13 @@ pub enum EnergyTerm {
 }
 
 impl EnergyTerm {
-    /// Create an EnergyTerm for Nonbonded interactions by reading an input file.
+    /// Create an EnergyTerm for NonbondedMatrix by reading an input file.
     /// The input file must contain topology of the System and an `energy` section.
     pub fn nonbonded_from_file(filename: impl AsRef<Path> + Clone) -> anyhow::Result<Self> {
         let hamiltonian_builder = HamiltonianBuilder::from_file(filename.clone())?;
         let topology = Topology::from_file(filename)?;
 
-        Nonbonded::new(&hamiltonian_builder.nonbonded, &topology)
+        NonbondedMatrix::new(&hamiltonian_builder.nonbonded, &topology)
     }
 
     /// Compute the energy change of the EnergyTerm due to a change in the system.
@@ -114,7 +115,7 @@ impl EnergyTerm {
     /// Update internal state due to a change in the system.
     fn update(&mut self, _change: &Change) -> anyhow::Result<()> {
         match self {
-            EnergyTerm::Nonbonded(_)
+            EnergyTerm::NonbondedMatrix(_)
             | EnergyTerm::IntramolecularBonds(_)
             | EnergyTerm::IntermolecularBonds(_) => (),
         }
@@ -129,7 +130,9 @@ impl SyncFrom for EnergyTerm {
     /// Panics if the EnergyTerms are not compatible with each other.
     fn sync_from(&mut self, other: &EnergyTerm, change: &Change) -> anyhow::Result<()> {
         match (self, other) {
-            (EnergyTerm::Nonbonded(x), EnergyTerm::Nonbonded(y)) => x.sync_from(y, change)?,
+            (EnergyTerm::NonbondedMatrix(x), EnergyTerm::NonbondedMatrix(y)) => {
+                x.sync_from(y, change)?
+            }
             (EnergyTerm::IntramolecularBonds(_), EnergyTerm::IntramolecularBonds(_))
             | (EnergyTerm::IntermolecularBonds(_), EnergyTerm::IntermolecularBonds(_)) => (),
             _ => panic!("Trying to sync incompatible energy terms."),

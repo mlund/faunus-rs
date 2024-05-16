@@ -450,8 +450,8 @@ impl Topology {
         &self.system.intermolecular
     }
 
-    /// Get the total number of atoms in a topology
-    pub fn num_atoms(&self) -> usize {
+    /// Get the total number of particules in the topology.
+    pub fn num_particles(&self) -> usize {
         self.system
             .blocks
             .iter()
@@ -626,15 +626,15 @@ impl Topology {
 
     /// Validate intermolecular bonded interactions.
     fn validate_intermolecular(&mut self) -> anyhow::Result<()> {
-        let num_atoms = self.num_atoms();
+        let num_particles = self.num_particles();
 
         #[inline(always)]
         fn check_intermolecular_items<T: Indexed>(
             items: &[T],
-            num_atoms: usize,
+            num_particles: usize,
             error_msg: &'static str,
         ) -> anyhow::Result<()> {
-            if !items.iter().all(|item| item.lower(num_atoms)) {
+            if !items.iter().all(|item| item.lower(num_particles)) {
                 anyhow::bail!(error_msg);
             }
 
@@ -642,17 +642,17 @@ impl Topology {
         }
         check_intermolecular_items(
             &self.system.intermolecular.bonds,
-            num_atoms,
+            num_particles,
             "intermolecular bond between undefined atoms",
         )?;
         check_intermolecular_items(
             &self.system.intermolecular.torsions,
-            num_atoms,
+            num_particles,
             "intermolecular torsion between undefined atoms",
         )?;
         check_intermolecular_items(
             &self.system.intermolecular.dihedrals,
-            num_atoms,
+            num_particles,
             "intermolecular dihedral between undefined atoms",
         )?;
 

@@ -14,12 +14,22 @@
 
 //! Implementation of the bonded interactions.
 
+use std::collections::HashMap;
+
 use interatomic::twobody::IsotropicTwobodyEnergy;
+use unordered_pair::UnorderedPair;
 
 use crate::{Change, Context, SyncFrom};
 
 #[derive(Debug, Clone)]
-pub struct IntramolecularBonds {}
+pub struct IntramolecularBonds {
+    /// Sparse matrix of the bonds in the system.
+    /// Keys are pairs of particle ids,
+    /// values are indices of potentials in the `potentials` vector.
+    bonds: HashMap<UnorderedPair<usize>, usize>,
+    /// Potentials used for the bonds in the system.
+    potentials: Vec<Box<dyn IsotropicTwobodyEnergy>>,
+}
 
 impl IntramolecularBonds {
     pub(crate) fn energy_change(&self, context: &impl Context, change: &Change) -> f64 {

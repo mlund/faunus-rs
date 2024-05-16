@@ -12,6 +12,8 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
+//! Implementation of the Nonbonded energy terms.
+
 use interatomic::twobody::IsotropicTwobodyEnergy;
 use itertools::iproduct;
 use std::fmt::Debug;
@@ -22,13 +24,18 @@ use crate::{
     Change, Context, Group, GroupChange, SyncFrom,
 };
 
-/// Energy term for computing nonbonding interactions.
+use super::exclusions::ExclusionMatrix;
+
+/// Energy term for computing nonbonded interactions
+/// using a matrix of `IsotropicTwobodyEnergy` trait objects.
 #[derive(Debug, Clone)]
-pub struct Nonbonded {
+pub struct NonbondedMatrix {
     /// Matrix of pair potentials based on particle ids.
     potentials: Vec<Vec<Box<dyn IsotropicTwobodyEnergy>>>,
+    /// Matrix of exclusions.
+    exclusions: ExclusionMatrix,
 }
-impl Nonbonded {
+impl NonbondedMatrix {
     /// Create a new NonbondedReference structure wrapped in an EnergyTerm enum.
     #[allow(clippy::new_ret_no_self)]
     pub(crate) fn new(
@@ -47,7 +54,10 @@ impl Nonbonded {
             })
             .collect::<Result<Vec<_>, _>>()?;
 
-        Ok(EnergyTerm::Nonbonded(Nonbonded { potentials }))
+        Ok(EnergyTerm::NonbondedMatrix(NonbondedMatrix {
+            potentials,
+            exclusions: ExclusionMatrix::default(),
+        }))
     }
 
     /// Compute the energy change due to a change in the system.
@@ -92,7 +102,8 @@ impl Nonbonded {
         atom_kind_j: usize,
     ) -> f64 {
         let distance_squared = context.get_distance_squared(i, j);
-        self.potentials[atom_kind_i][atom_kind_j].isotropic_twobody_energy(distance_squared)
+        self.exclusions.get(i, j) as f64
+            * self.potentials[atom_kind_i][atom_kind_j].isotropic_twobody_energy(distance_squared)
     }
 
     /// Single particle with all remaining active particles.
@@ -158,8 +169,8 @@ impl Nonbonded {
     }
 }
 
-impl SyncFrom for Nonbonded {
-    fn sync_from(&mut self, other: &Nonbonded, change: &Change) -> anyhow::Result<()> {
+impl SyncFrom for NonbondedMatrix {
+    fn sync_from(&mut self, other: &NonbondedMatrix, change: &Change) -> anyhow::Result<()> {
         match change {
             Change::Everything => self.potentials = other.potentials.clone(),
             Change::None => (),
@@ -201,9 +212,9 @@ mod tests {
             .unwrap()
             .nonbonded;
 
-        let nonbonded = Nonbonded::new(&builder, &topology).unwrap();
+        let nonbonded = NonbondedMatrix::new(&builder, &topology).unwrap();
         let nonbonded = match nonbonded {
-            EnergyTerm::Nonbonded(x) => x,
+            EnergyTerm::NonbondedMatrix(x) => x,
             _ => panic!("Incorrect Energy Term constructed."),
         };
 
