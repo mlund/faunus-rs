@@ -56,6 +56,10 @@ impl WithTopology for ReferencePlatform {
     fn topology(&self) -> Rc<Topology> {
         self.topology.clone()
     }
+
+    fn topology_ref(&self) -> &Rc<Topology> {
+        &self.topology
+    }
 }
 
 impl WithHamiltonian for ReferencePlatform {

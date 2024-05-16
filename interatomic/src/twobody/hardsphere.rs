@@ -67,7 +67,7 @@ impl HardSphere {
 }
 
 impl IsotropicTwobodyEnergy for HardSphere {
-    #[inline]
+    #[inline(always)]
     fn isotropic_twobody_energy(&self, distance_squared: f64) -> f64 {
         if distance_squared < self.min_distance_squared {
             f64::INFINITY

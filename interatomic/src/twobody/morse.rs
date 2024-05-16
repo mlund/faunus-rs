@@ -47,7 +47,7 @@ impl Morse {
 }
 
 impl IsotropicTwobodyEnergy for Morse {
-    #[inline]
+    #[inline(always)]
     fn isotropic_twobody_energy(&self, _distance_squared: f64) -> f64 {
         todo!("Morse potential is not yet implemented");
     }

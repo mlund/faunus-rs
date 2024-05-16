@@ -16,7 +16,7 @@
 
 use crate::{
     change::{Change, GroupChange},
-    Particle, PointParticle, SyncFrom,
+    Particle, SyncFrom,
 };
 use anyhow::Ok;
 use nalgebra::Vector3;
@@ -173,6 +173,11 @@ impl Group {
             }
         };
         Ok(())
+    }
+
+    /// Get the absolute index of the first particle in the group.
+    pub fn start(&self) -> usize {
+        self.range.start
     }
 
     /// Get size status of the groups which can be `Full`, `Empty`, or `Partial`.

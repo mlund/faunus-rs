@@ -20,7 +20,7 @@ use interatomic::twobody::IsotropicTwobodyEnergy;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
-use crate::{cell::BoundaryConditions, Particle, PointParticle};
+use crate::{group::Group, Context};
 
 use super::Indexed;
 
@@ -125,27 +125,26 @@ impl Bond {
         Self { index, kind, order }
     }
 
-    /// Create new bond where indices are offset by `shift`. Panics if overflow.
-    pub fn shift(&self, shift: isize) -> Self {
-        Self {
-            index: [
-                self.index[0].checked_add_signed(shift).unwrap(),
-                self.index[1].checked_add_signed(shift).unwrap(),
-            ],
-            kind: self.kind.clone(),
-            order: self.order.clone(),
-        }
-    }
-
-    /// Check if bond contains atom with index
+    /// Check if the bond contains atom with index.
     pub fn contains(&self, index: usize) -> bool {
         self.index.contains(&index)
     }
 
-    /// Calculate energy of the bond.
-    pub fn energy(&self, particles: &[Particle], pbc: &impl BoundaryConditions) -> f64 {
-        let [i, j] = self.index;
-        self.isotropic_twobody_energy(pbc.distance_squared(particles[i].pos(), particles[j].pos()))
+    /// Calculate energy of a bond in a specific group.
+    /// Returns 0.0 if any of the bonded particles is inactive.
+    pub fn energy(&self, context: &impl Context, group: &Group) -> f64 {
+        let [rel_i, rel_j] = self.index;
+
+        // one or both particles are inactive
+        if rel_i >= group.len() || rel_j >= group.len() {
+            return 0.0;
+        }
+
+        let abs_i = rel_i + group.start();
+        let abs_j = rel_j + group.start();
+
+        let distance_squared = context.get_distance_squared(abs_i, abs_j);
+        self.isotropic_twobody_energy(distance_squared)
     }
 }
 
@@ -155,7 +154,7 @@ impl Indexed for Bond {
     }
 }
 
-impl interatomic::twobody::IsotropicTwobodyEnergy for Bond {
+impl IsotropicTwobodyEnergy for Bond {
     fn isotropic_twobody_energy(&self, distance_squared: f64) -> f64 {
         match &self.kind {
             BondKind::Harmonic(x) => x.isotropic_twobody_energy(distance_squared),

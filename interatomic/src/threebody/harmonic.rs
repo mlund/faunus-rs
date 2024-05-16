@@ -12,36 +12,37 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
-//! Implementation of the Urey-Bradley potential.
+//! Implementation of the three-body harmonic potential.
 
-use super::IsotropicTwobodyEnergy;
+use super::IsotropicThreebodyEnergy;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-/// Harmonic Urey-Bradley potential.
-/// See <https://manual.gromacs.org/documentation/current/reference-manual/functions/bonded-interactions.html#urey-bradley-potential>
-/// for more information.
 #[derive(Debug, Clone, PartialEq)]
-#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
-pub struct UreyBradley {
-    #[cfg_attr(feature = "serde", serde(rename = "req"))]
-    eq_distance: f64,
+#[cfg_attr(
+    feature = "serde",
+    derive(Deserialize, Serialize),
+    serde(deny_unknown_fields)
+)]
+pub struct HarmonicTorsion {
+    #[cfg_attr(feature = "serde", serde(rename = "aeq"))]
+    eq_angle: f64,
     #[cfg_attr(feature = "serde", serde(rename = "k"))]
     spring_constant: f64,
 }
 
-impl UreyBradley {
-    pub fn new(eq_distance: f64, spring_constant: f64) -> Self {
+impl HarmonicTorsion {
+    pub fn new(eq_angle: f64, spring_constant: f64) -> Self {
         Self {
-            eq_distance,
+            eq_angle,
             spring_constant,
         }
     }
 }
 
-impl IsotropicTwobodyEnergy for UreyBradley {
+impl IsotropicThreebodyEnergy for HarmonicTorsion {
     #[inline(always)]
-    fn isotropic_twobody_energy(&self, _distance_squared: f64) -> f64 {
-        todo!("Urey-Bradley potential is not yet implemented");
+    fn isotropic_threebody_energy(&self, angle: f64) -> f64 {
+        0.5 * self.spring_constant * (angle - self.eq_angle).powi(2)
     }
 }

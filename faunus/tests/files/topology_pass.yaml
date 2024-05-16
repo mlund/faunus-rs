@@ -52,7 +52,7 @@ system:
     torsions:
       - {index: [1, 75, 128], kind: !Harmonic {k: 100.0, aeq: 120.0}}
     dihedrals:
-      - {index: [1, 35, 75, 128], kind: !Harmonic {k: 27.5, aeq: 105.0}, lj_scaling: 0.9}
+      - {index: [1, 35, 75, 128], kind: !ProperHarmonic {k: 27.5, aeq: 105.0}, lj_scaling: 0.9}
       - {index: [17, 45, 125, 215]}
 
   cell: [5.0, 5.0, 5.0]

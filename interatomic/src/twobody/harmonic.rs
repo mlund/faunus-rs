@@ -55,7 +55,7 @@ impl Harmonic {
 }
 
 impl IsotropicTwobodyEnergy for Harmonic {
-    #[inline]
+    #[inline(always)]
     fn isotropic_twobody_energy(&self, distance_squared: f64) -> f64 {
         0.5 * self.spring_constant * (distance_squared.sqrt() - self.eq_distance).powi(2)
     }

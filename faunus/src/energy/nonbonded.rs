@@ -32,13 +32,13 @@ use super::exclusions::ExclusionMatrix;
 pub struct NonbondedMatrix {
     /// Matrix of pair potentials based on particle ids.
     potentials: Vec<Vec<Box<dyn IsotropicTwobodyEnergy>>>,
-    /// Matrix of exclusions.
+    /// Matrix of excluded interactions.
     exclusions: ExclusionMatrix,
 }
 impl NonbondedMatrix {
     /// Create a new NonbondedReference structure wrapped in an EnergyTerm enum.
     #[allow(clippy::new_ret_no_self)]
-    pub(crate) fn new(
+    pub(super) fn new(
         nonbonded: &NonbondedBuilder,
         topology: &Topology,
     ) -> anyhow::Result<EnergyTerm> {
@@ -61,7 +61,7 @@ impl NonbondedMatrix {
     }
 
     /// Compute the energy change due to a change in the system.
-    pub(crate) fn energy_change(&self, context: &impl Context, change: &Change) -> f64 {
+    pub(super) fn energy_change(&self, context: &impl Context, change: &Change) -> f64 {
         match change {
             Change::Everything => self.all_with_all(context),
             Change::SingleGroup(group_index, group_change) => {
@@ -133,7 +133,7 @@ impl NonbondedMatrix {
     }
 
     /// Calculates the energy between a single group and all other groups.
-    pub(crate) fn group_with_all(&self, context: &impl Context, group_index: usize) -> f64 {
+    pub fn group_with_all(&self, context: &impl Context, group_index: usize) -> f64 {
         let group = &context.groups()[group_index];
         context
             .groups()
@@ -145,12 +145,7 @@ impl NonbondedMatrix {
     }
 
     /// Calculates the energy between two groups.
-    pub(crate) fn group_to_group(
-        &self,
-        context: &impl Context,
-        group1: &Group,
-        group2: &Group,
-    ) -> f64 {
+    pub fn group_to_group(&self, context: &impl Context, group1: &Group, group2: &Group) -> f64 {
         let particles1 = group1.iter_active();
         let particles2 = group2.iter_active();
         iproduct!(particles1, particles2).fold(0.0, |sum, (i, j)| {
@@ -162,7 +157,7 @@ impl NonbondedMatrix {
 
     /// Calculates the full energy of the system by summing over
     /// all group-to-group interactions.
-    pub(crate) fn all_with_all(&self, context: &impl Context) -> f64 {
+    pub fn all_with_all(&self, context: &impl Context) -> f64 {
         let groups = context.groups();
         iproduct!(groups.iter(), groups.iter())
             .fold(0.0, |sum, (i, j)| sum + self.group_to_group(context, i, j))

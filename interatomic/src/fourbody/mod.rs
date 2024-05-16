@@ -12,22 +12,22 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
-//! ## Threebody interactions
+//! ## Fourbody interactions
 //!
-//! Module for describing exactly three particles interacting with each other, such as in a torsion.
+//! Module for describing exactly four particles interacting with each other, such as in a dihedral.
 
 use dyn_clone::DynClone;
 
-pub mod cosine;
 pub mod harmonic;
+pub mod periodic;
 
-pub use cosine::CosineTorsion;
-pub use harmonic::HarmonicTorsion;
+pub use harmonic::HarmonicDihedral;
+pub use periodic::PeriodicDihedral;
 
-/// Potential energy between three isotropic particles.
-pub trait IsotropicThreebodyEnergy: DynClone {
-    /// Interaction energy between three particles.
-    fn isotropic_threebody_energy(&self, angle: f64) -> f64;
+/// Potential energy between four isotropic particles.
+pub trait IsotropicFourbodyEnergy: DynClone {
+    /// Interaction energy between four particles.
+    fn isotropic_fourbody_energy(&self, angle: f64) -> f64;
 }
 
-dyn_clone::clone_trait_object!(IsotropicThreebodyEnergy);
+dyn_clone::clone_trait_object!(IsotropicFourbodyEnergy);

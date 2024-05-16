@@ -18,7 +18,7 @@ use nalgebra::Vector3;
 use rand::rngs::ThreadRng;
 use serde::{Deserialize, Serialize};
 use std::{path::Path, rc::Rc};
-use topology::{AtomKind, Topology};
+use topology::Topology;
 
 use crate::cell::BoundaryConditions;
 
@@ -178,8 +178,14 @@ pub trait WithCell {
 
 /// A trait for objects that have a topology.
 pub trait WithTopology {
-    /// Get reference to the topology.
+    /// Get reference-counted topology of the system.
     fn topology(&self) -> Rc<Topology>;
+
+    /// Get reference to the topology of the system.
+    ///
+    /// This does not increase the counter of Rc<Topology>
+    /// and should therefore be faster than using `WithTopology::topology`.
+    fn topology_ref(&self) -> &Rc<Topology>;
 }
 
 /// A trait for objects that have a hamiltonian.
@@ -208,7 +214,7 @@ pub trait ParticleSystem: GroupCollection + WithCell + WithTopology {
     ///
     /// ## Warning
     /// The default implementation of this method may be slow since it involves copying the particles.
-    /// It is recommended to implement `get_atomkind` directly for your platform.
+    /// It is recommended to implement the method specifically for your platform.
     fn get_distance(&self, i: usize, j: usize) -> Point {
         self.cell()
             .distance(self.particle(i).pos(), self.particle(j).pos())
@@ -223,8 +229,35 @@ pub trait ParticleSystem: GroupCollection + WithCell + WithTopology {
     ///
     /// ## Warning
     /// The Default implementation of this method may be slow since it involves copying the particles.
-    /// It is recommended to implement `get_atomkind` directly for your platform.
+    /// It is recommended to implement the method specifically for your platform.
     fn get_atomkind(&self, i: usize) -> usize {
         self.particle(i).atom_id
+    }
+
+    /// Get angle [in degrees] between three particles with the given indices.
+    ///
+    /// ## Warning
+    /// The default implementation of this method may be slow since it involves copying the particles.
+    /// It is recommended to implement the method specifically for your platform.
+    fn get_angle(&self, _i: usize, _j: usize, _k: usize) -> f64 {
+        todo!()
+    }
+
+    /// Get proper dihedral angle [in degrees] between four particles with the given indices.
+    ///
+    /// ## Warning
+    /// The default implementation of this method may be slow since it involves copying the particles.
+    /// It is recommended to implement the method specifically for your platform.
+    fn get_proper_dihedral(&self, _i: usize, _j: usize, _k: usize, _l: usize) -> f64 {
+        todo!()
+    }
+
+    /// Get improper dihedral angle [in degrees] between four particles with the given indices.
+    ///
+    /// ## Warning
+    /// The default implementation of this method may be slow since it involves copying the particles.
+    /// It is recommended to implement the method specifically for your platform.
+    fn get_improper_dihedral(&self, _i: usize, _j: usize, _k: usize, _l: usize) -> f64 {
+        todo!()
     }
 }

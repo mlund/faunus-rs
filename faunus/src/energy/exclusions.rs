@@ -21,7 +21,7 @@ use crate::{topology::TopologyLike, Topology};
 /// are assigned a value of 0. Pairs of particle indices which should interact
 /// are assigned a value of 1.
 #[derive(Debug, Clone, PartialEq, Default)]
-pub struct ExclusionMatrix(Vec<Vec<u8>>);
+pub(super) struct ExclusionMatrix(Vec<Vec<u8>>);
 
 impl ExclusionMatrix {
     /// Create a new ExclusionMatrix based on the Topology of the system.

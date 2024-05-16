@@ -176,7 +176,7 @@ impl Cutoff for LennardJones {
 }
 
 impl IsotropicTwobodyEnergy for LennardJones {
-    #[inline]
+    #[inline(always)]
     fn isotropic_twobody_energy(&self, squared_distance: f64) -> f64 {
         let x = self.sigma_squared / squared_distance; // σ²/r²
         let x = x * x * x; // σ⁶/r⁶
@@ -226,18 +226,18 @@ impl WeeksChandlerAndersen {
 }
 
 impl Cutoff for WeeksChandlerAndersen {
-    #[inline]
+    #[inline(always)]
     fn cutoff_squared(&self) -> f64 {
         self.lennard_jones.sigma_squared * WeeksChandlerAndersen::TWOTOTWOSIXTH
     }
-    #[inline]
+    #[inline(always)]
     fn cutoff(&self) -> f64 {
         self.cutoff_squared().sqrt()
     }
 }
 
 impl IsotropicTwobodyEnergy for WeeksChandlerAndersen {
-    #[inline]
+    #[inline(always)]
     fn isotropic_twobody_energy(&self, distance_squared: f64) -> f64 {
         if distance_squared > self.cutoff_squared() {
             return 0.0;

@@ -1110,16 +1110,18 @@ mod tests {
             Bond::new([2, 3], BondKind::default(), None),
         ];
         let torsions = vec![
-            Torsion::new([2, 3, 4], TorsionKind::Cosine { k: 50.0, aeq: 45.0 }),
+            Torsion::new(
+                [2, 3, 4],
+                TorsionKind::Cosine(interatomic::threebody::CosineTorsion::new(45.0, 50.0)),
+            ),
             Torsion::new([1, 2, 3], TorsionKind::default()),
         ];
         let dihedrals = vec![
             Dihedral::new(
                 [0, 1, 2, 3],
-                DihedralKind::ImproperHarmonic {
-                    k: 100.0,
-                    aeq: 90.0,
-                },
+                DihedralKind::ImproperHarmonic(interatomic::fourbody::HarmonicDihedral::new(
+                    90.0, 100.0,
+                )),
                 Some(0.5),
                 Some(0.5),
             ),
@@ -1211,18 +1213,14 @@ mod tests {
         ];
         let torsions = vec![Torsion::new(
             [1, 75, 128],
-            TorsionKind::Harmonic {
-                k: 100.0,
-                aeq: 120.0,
-            },
+            TorsionKind::Harmonic(interatomic::threebody::HarmonicTorsion::new(120.0, 100.0)),
         )];
         let dihedrals = vec![
             Dihedral::new(
                 [1, 35, 75, 128],
-                DihedralKind::Harmonic {
-                    k: 27.5,
-                    aeq: 105.0,
-                },
+                DihedralKind::ProperHarmonic(interatomic::fourbody::HarmonicDihedral::new(
+                    105.0, 27.5,
+                )),
                 None,
                 Some(0.9),
             ),

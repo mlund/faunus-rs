@@ -29,8 +29,10 @@ use num::{Float, NumCast};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
+pub mod fourbody;
 mod qpochhammer;
 pub mod spline;
+pub mod threebody;
 pub mod twobody;
 
 use physical_constants::{

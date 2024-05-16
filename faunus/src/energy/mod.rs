@@ -23,7 +23,7 @@ use std::path::Path;
 use crate::{topology::Topology, Change, Context, SyncFrom};
 
 use self::{
-    bonded::{IntermolecularBonds, IntramolecularBonds},
+    bonded::{IntermolecularBonded, IntramolecularBonded},
     builder::HamiltonianBuilder,
     nonbonded::NonbondedMatrix,
 };
@@ -91,9 +91,9 @@ pub enum EnergyTerm {
     /// Non-bonded interactions between particles.
     NonbondedMatrix(NonbondedMatrix),
     /// Intramolecular bonded interactions.
-    IntramolecularBonds(IntramolecularBonds),
+    IntramolecularBonded(IntramolecularBonded),
     /// Intermolecular bonded interactions.
-    IntermolecularBonds(IntermolecularBonds),
+    IntermolecularBonded(IntermolecularBonded),
 }
 
 impl EnergyTerm {
@@ -109,15 +109,19 @@ impl EnergyTerm {
     /// Compute the energy change of the EnergyTerm due to a change in the system.
     /// The energy is returned in the units of kJ/mol.
     fn energy_change(&self, context: &impl Context, change: &Change) -> f64 {
-        0.0
+        match self {
+            Self::NonbondedMatrix(x) => x.energy_change(context, change),
+            Self::IntramolecularBonded(x) => x.energy_change(context, change),
+            Self::IntermolecularBonded(x) => x.energy_change(context, change),
+        }
     }
 
     /// Update internal state due to a change in the system.
     fn update(&mut self, _change: &Change) -> anyhow::Result<()> {
         match self {
             EnergyTerm::NonbondedMatrix(_)
-            | EnergyTerm::IntramolecularBonds(_)
-            | EnergyTerm::IntermolecularBonds(_) => (),
+            | EnergyTerm::IntramolecularBonded(_)
+            | EnergyTerm::IntermolecularBonded(_) => (),
         }
 
         Ok(())
@@ -133,8 +137,8 @@ impl SyncFrom for EnergyTerm {
             (EnergyTerm::NonbondedMatrix(x), EnergyTerm::NonbondedMatrix(y)) => {
                 x.sync_from(y, change)?
             }
-            (EnergyTerm::IntramolecularBonds(_), EnergyTerm::IntramolecularBonds(_))
-            | (EnergyTerm::IntermolecularBonds(_), EnergyTerm::IntermolecularBonds(_)) => (),
+            (EnergyTerm::IntramolecularBonded(_), EnergyTerm::IntramolecularBonded(_))
+            | (EnergyTerm::IntermolecularBonded(_), EnergyTerm::IntermolecularBonded(_)) => (),
             _ => panic!("Trying to sync incompatible energy terms."),
         }
 
