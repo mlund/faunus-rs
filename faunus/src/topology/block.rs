@@ -119,7 +119,7 @@ impl InsertionPolicy {
             super::structure::positions_from_structure_file(filename.path().unwrap())?;
 
         // get the center of mass of the molecule
-        let com = crate::analysis::center_of_mass(
+        let com = crate::basic::center_of_mass(
             &ref_positions,
             &molecule_kind
                 .atom_indices()

@@ -41,7 +41,8 @@ pub enum TorsionKind {
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Getters, Validate)]
 #[serde(deny_unknown_fields)]
 pub struct Torsion {
-    /// Indices of the three atoms in the angle
+    /// Indices of the three atoms in the angle.
+    /// The atoms are bonded as 1-2-3.
     #[validate(custom(function = "super::validate_unique_indices"))]
     index: [usize; 3],
     /// Kind of torsion, e.g. harmonic, cosine, etc.

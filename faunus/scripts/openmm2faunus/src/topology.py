@@ -19,7 +19,7 @@ Faunus Topology represented by Python classes.
 """
 
 # ruff: noqa: E402
-from to_yaml import yaml_tag, yaml_unit, yaml_default # type: ignore
+from to_yaml import yaml_tag, yaml_unit, yaml_default  # type: ignore
 import yaml  # type: ignore
 from martini_openmm import MartiniTopFile  # type: ignore
 
@@ -164,8 +164,8 @@ class FaunusDihedralKind:
     class Base:
         pass
 
-    @yaml_tag("!Harmonic")
-    class Harmonic(Base):
+    @yaml_tag("!ProperHarmonic")
+    class ProperHarmonic(Base):
         def __init__(self, k: float, aeq: float):
             self.k = k
             self.aeq = aeq
@@ -177,12 +177,20 @@ class FaunusDihedralKind:
             self.n = n
             self.phi = phi
 
-    @yaml_tag("!ImproperPeriodic")
+    @yaml_tag("!ImproperHarmonic")
     class ImproperHarmonic(Base):
         def __init__(self, k: float, aeq: float):
             self.k = k
             self.aeq = aeq
 
+    @yaml_tag("!ImproperPeriodic")
+    class ImproperPeriodic(Base):
+        def __init__(self, k: float, n: float, phi: float):
+            self.k = k
+            self.n = n
+            self.phi = phi
+
+    """
     @yaml_tag("!ImproperAmber")
     class ImproperAmber(Base):
         def __init__(self, k: float, n: float, phi: float):
@@ -196,6 +204,7 @@ class FaunusDihedralKind:
             self.k = k
             self.n = n
             self.phi = phi
+    """
 
 
 class FaunusBond:
@@ -500,14 +509,38 @@ class FaunusTopology:
 
         dihedrals = []
         for dihedral in moltype.dihedrals:
-            dihedrals.append(
-                FaunusDihedral(
-                    [int(x) - 1 for x in dihedral[:4]],
-                    FaunusDihedralKind.ProperPeriodic(
-                        float(dihedral[6]), float(dihedral[7]), float(dihedral[5])
-                    ),
+            atoms = [int(x) - 1 for x in dihedral[:4]]
+            dihedral_type = int(dihedral[4])
+
+            if dihedral_type == 1:
+                dihedrals.append(
+                    FaunusDihedral(
+                        atoms,
+                        FaunusDihedralKind.ProperPeriodic(
+                            float(dihedral[6]), float(dihedral[7]), float(dihedral[5])
+                        ),
+                    )
                 )
-            )
+            elif dihedral_type == 2:
+                dihedrals.append(
+                    FaunusDihedral(
+                        atoms,
+                        FaunusDihedralKind.ImproperHarmonic(
+                            float(dihedral[6]), float(dihedral[5])
+                        ),
+                    )
+                )
+            elif dihedral_type == 4:
+                dihedrals.append(
+                    FaunusDihedral(
+                        atoms,
+                        FaunusDihedralKind.ImproperPeriodic(
+                            float(dihedral[6]), float(dihedral[7]), float(dihedral[5])
+                        ),
+                    )
+                )
+            else:
+                raise Exception(f"Dihedral type '{dihedral_type}' is not supported.")
 
         return dihedrals
 

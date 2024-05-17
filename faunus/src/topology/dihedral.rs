@@ -61,7 +61,9 @@ impl DihedralKind {
 #[serde(deny_unknown_fields)]
 pub struct Dihedral {
     /// Indices of the four atoms in the dihedral.
-    /// The indices are bonded as 1-2-3-4.
+    /// - In case the dihedral is **proper**, the indices are bonded as 1-2-3-4.
+    /// - In case the dihedral is **improper**, the first index is the central atom
+    ///   and the following atoms are all bonded to it.
     #[validate(custom(function = "super::validate_unique_indices"))]
     index: [usize; 4],
     /// Kind of dihedral, e.g. harmonic, proper periodic, improper harmonic, etc.
@@ -107,12 +109,7 @@ impl Dihedral {
             _ => return 0.0,
         };
 
-        let angle = if self.is_improper() {
-            context.get_proper_dihedral(i, j, k, l)
-        } else {
-            context.get_improper_dihedral(i, j, k, l)
-        };
-
+        let angle = context.get_dihedral(i, j, k, l);
         self.fourbody_angle_energy(angle)
     }
 
@@ -129,13 +126,7 @@ impl Dihedral {
         }
 
         let [i, j, k, l] = self.index;
-
-        let angle = if self.is_improper() {
-            context.get_proper_dihedral(i, j, k, l)
-        } else {
-            context.get_improper_dihedral(i, j, k, l)
-        };
-
+        let angle = context.get_dihedral(i, j, k, l);
         self.fourbody_angle_energy(angle)
     }
 }

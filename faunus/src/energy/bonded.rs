@@ -34,7 +34,7 @@ impl IntramolecularBonded {
     }
 
     /// Compute the energy change associated with the intramolecular
-    /// onded interactions due to a change in the system.
+    /// bonded interactions due to a change in the system.
     pub(super) fn energy_change(&self, context: &impl Context, change: &Change) -> f64 {
         match change {
             Change::Everything | Change::Volume(_, _) => self.all_groups(context),

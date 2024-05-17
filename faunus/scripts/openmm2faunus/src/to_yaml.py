@@ -21,6 +21,7 @@ Modifications of the default pyyaml tags.
 # ruff: noqa: E402
 import yaml  # type: ignore
 
+
 # Print no tag for the class.
 def notag_representer(dumper, data):
     return dumper.represent_mapping(

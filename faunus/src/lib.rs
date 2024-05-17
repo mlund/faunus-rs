@@ -37,6 +37,7 @@ pub mod cell;
 mod change;
 pub use self::change::{Change, GroupChange};
 pub mod analysis;
+pub mod basic;
 pub mod chemistry;
 pub mod dimension;
 pub mod energy;
@@ -240,7 +241,7 @@ pub trait WithTemperature {
     }
 }
 
-/// A trait for objects which contain particles with a specific topology in a specific cell.
+/// A trait for objects which contains groups of particles with defined topology in defined cell.
 pub trait ParticleSystem: GroupCollection + WithCell + WithTopology {
     /// Get distance between two particles with the given indices.
     ///
@@ -260,36 +261,46 @@ pub trait ParticleSystem: GroupCollection + WithCell + WithTopology {
     /// Get index of the atom kind of the particle with the given index.
     ///
     /// ## Warning
-    /// The Default implementation of this method may be slow since it involves copying the particles.
+    /// The default implementation of this method may be slow since it involves copying the particles.
     /// It is recommended to implement the method specifically for your platform.
     fn get_atomkind(&self, i: usize) -> usize {
         self.particle(i).atom_id
     }
 
-    /// Get angle [in degrees] between three particles with the given indices.
+    /// Get angle (in degrees) between three particles with the given indices.
+    /// `i`, `j`, `k` are consecutively bonded atoms (`j` is the vertex of the angle).
     ///
     /// ## Warning
     /// The default implementation of this method may be slow since it involves copying the particles.
     /// It is recommended to implement the method specifically for your platform.
-    fn get_angle(&self, _i: usize, _j: usize, _k: usize) -> f64 {
-        todo!()
+    fn get_angle(&self, i: usize, j: usize, k: usize) -> f64 {
+        let p1 = self.particle(i);
+        let p2 = self.particle(j);
+        let p3 = self.particle(k);
+
+        crate::basic::angle_points(p1.pos(), p2.pos(), p3.pos())
     }
 
-    /// Get proper dihedral angle [in degrees] between four particles with the given indices.
+    /// Get dihedral angle (in degrees) between four particles with the given indices.
+    ///
+    /// ## Details
+    /// - This method returns an angle between the plane formed by atoms `i`, `j`, `k` and the plane formed by
+    /// atoms `j`, `k`, `l`.
+    /// - In case of a **proper** dihedral, `i`, `j`, `k`, `l` are (considered to be) consecutively bonded atoms.
+    /// - In case of an **improper** dihedral, `i` is the central atom and `j`, `k`, `l` are (considered to be) bonded to it.
+    /// - The angle adopts values between −180° and +180°. If the angle represents proper dihedral,
+    /// then 0° corresponds to the *cis* conformation and ±180° to the *trans* conformation
+    /// in line with the IUPAC/IUB convention.
     ///
     /// ## Warning
     /// The default implementation of this method may be slow since it involves copying the particles.
     /// It is recommended to implement the method specifically for your platform.
-    fn get_proper_dihedral(&self, _i: usize, _j: usize, _k: usize, _l: usize) -> f64 {
-        todo!()
-    }
+    fn get_dihedral(&self, i: usize, j: usize, k: usize, l: usize) -> f64 {
+        let p1 = self.particle(i);
+        let p2 = self.particle(j);
+        let p3 = self.particle(k);
+        let p4 = self.particle(l);
 
-    /// Get improper dihedral angle [in degrees] between four particles with the given indices.
-    ///
-    /// ## Warning
-    /// The default implementation of this method may be slow since it involves copying the particles.
-    /// It is recommended to implement the method specifically for your platform.
-    fn get_improper_dihedral(&self, _i: usize, _j: usize, _k: usize, _l: usize) -> f64 {
-        todo!()
+        crate::basic::dihedral_points(p1.pos(), p2.pos(), p3.pos(), p4.pos())
     }
 }

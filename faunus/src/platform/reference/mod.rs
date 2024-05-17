@@ -172,6 +172,7 @@ impl ParticleSystem for ReferencePlatform {
     /// Get distance between two particles.
     ///
     /// Faster implementation for Reference Platform which does not involve particle copying.
+    #[inline(always)]
     fn get_distance(&self, i: usize, j: usize) -> Point {
         self.cell()
             .distance(self.particles()[i].pos(), self.particles()[j].pos())
@@ -180,8 +181,31 @@ impl ParticleSystem for ReferencePlatform {
     /// Get index of the atom kind of the particle.
     ///
     /// Faster implementation for Reference Platform which does not involve particle copying.
+    #[inline(always)]
     fn get_atomkind(&self, i: usize) -> usize {
         self.particles()[i].atom_id
+    }
+
+    /// Get angle between particles `i-j-k`.
+    ///
+    /// Faster implementation for Reference Platform which does not involve particle copying.
+    #[inline(always)]
+    fn get_angle(&self, i: usize, j: usize, k: usize) -> f64 {
+        let p1 = self.particles()[i].pos();
+        let p2 = self.particles()[j].pos();
+        let p3 = self.particles()[k].pos();
+
+        crate::basic::angle_points(p1, p2, p3)
+    }
+
+    /// Get dihedral between particles `i-j-k-l`.
+    /// Dihedral is defined as an angle between planes `ijk` and `jkl`.
+    ///
+    /// Faster implementation for Reference Platform which does not involve particle copying.
+    #[inline(always)]
+    fn get_dihedral(&self, i: usize, j: usize, k: usize, l: usize) -> f64 {
+        let [p1, p2, p3, p4] = [i, j, k, l].map(|x| self.particles()[x].pos());
+        crate::basic::dihedral_points(p1, p2, p3, p4)
     }
 }
 
@@ -206,6 +230,7 @@ impl ReferencePlatform {
     }
 
     /// Get reference to the particles of the system.
+    #[inline(always)]
     pub fn particles(&self) -> &[Particle] {
         &self.particles
     }
