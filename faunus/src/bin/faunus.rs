@@ -12,13 +12,11 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
-use faunus::{energy::Hamiltonian, *};
+use faunus::{energy::Hamiltonian, platform::reference::ReferencePlatform, *};
 use std::rc::Rc;
 
 fn main() {
-    let mut _hamiltonian: Hamiltonian = energy::Hamiltonian::new(vec![]);
-
-    let _top = Rc::new(topology::Topology::default());
+    //let system = ReferencePlatform::new();
     //let a = Particle::default();
     //let context = platform::reference::ReferencePlatform::new(cell::Cuboid::cubic(90.0), top);
     //println!("Hello, world! {:?} ", context);

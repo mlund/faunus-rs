@@ -14,10 +14,11 @@
 
 //! Implementation of the periodic dihedral.
 
-use super::IsotropicFourbodyEnergy;
+use super::FourbodyAngleEnergy;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
+/// Periodic dihedral potential.
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(
     feature = "serde",
@@ -43,9 +44,9 @@ impl PeriodicDihedral {
     }
 }
 
-impl IsotropicFourbodyEnergy for PeriodicDihedral {
+impl FourbodyAngleEnergy for PeriodicDihedral {
     #[inline(always)]
-    fn isotropic_fourbody_energy(&self, _angle: f64) -> f64 {
+    fn fourbody_angle_energy(&self, _angle: f64) -> f64 {
         todo!("Periodic dihedral is not yet implemented.")
     }
 }

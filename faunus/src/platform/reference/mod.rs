@@ -17,15 +17,19 @@
 use rand::rngs::ThreadRng;
 
 use crate::{
-    cell::BoundaryConditions,
-    energy::Hamiltonian,
+    cell::{BoundaryConditions, Cuboid},
+    energy::{builder::HamiltonianBuilder, Hamiltonian},
     group::{GroupCollection, GroupLists, GroupSize},
     topology::{Topology, TopologyLike},
     Change, Context, Group, Particle, ParticleSystem, Point, PointParticle, SyncFrom, WithCell,
     WithHamiltonian, WithTopology,
 };
 
-use std::{path::Path, rc::Rc};
+use std::{
+    cell::{Ref, RefCell, RefMut},
+    path::Path,
+    rc::Rc,
+};
 
 /// Default platform running on the CPU.
 ///
@@ -39,7 +43,7 @@ pub struct ReferencePlatform {
     groups: Vec<Group>,
     group_lists: GroupLists,
     cell: crate::cell::Cuboid,
-    hamiltonian: Hamiltonian,
+    hamiltonian: RefCell<Hamiltonian>,
 }
 
 impl WithCell for ReferencePlatform {
@@ -63,19 +67,31 @@ impl WithTopology for ReferencePlatform {
 }
 
 impl WithHamiltonian for ReferencePlatform {
-    fn hamiltonian(&self) -> &Hamiltonian {
-        &self.hamiltonian
+    fn hamiltonian(&self) -> Ref<Hamiltonian> {
+        self.hamiltonian.borrow()
     }
-    fn hamiltonian_mut(&mut self) -> &mut Hamiltonian {
-        &mut self.hamiltonian
+
+    fn hamiltonian_mut(&self) -> RefMut<Hamiltonian> {
+        self.hamiltonian.borrow_mut()
     }
 }
 
 impl Context for ReferencePlatform {
     fn new(
+        faunus_file: impl AsRef<Path>,
+        structure_file: Option<impl AsRef<Path>>,
+        rng: &mut ThreadRng,
+    ) -> anyhow::Result<Self> {
+        let topology = Topology::from_file(&faunus_file)?;
+        let hamiltonian_builder = HamiltonianBuilder::from_file(&faunus_file)?;
+
+        todo!()
+    }
+
+    fn from_raw_parts(
         topology: Rc<Topology>,
         cell: Self::Cell,
-        hamiltonian: Hamiltonian,
+        hamiltonian: RefCell<Hamiltonian>,
         structure: Option<impl AsRef<Path>>,
         rng: &mut ThreadRng,
     ) -> anyhow::Result<Self> {
@@ -84,7 +100,7 @@ impl Context for ReferencePlatform {
             particles: vec![],
             groups: vec![],
             cell,
-            hamiltonian,
+            hamiltonian: hamiltonian,
             group_lists: GroupLists::new(topology.molecules().len()),
         };
 
@@ -99,7 +115,7 @@ impl SyncFrom for ReferencePlatform {
     fn sync_from(&mut self, other: &ReferencePlatform, change: &Change) -> anyhow::Result<()> {
         self.cell = other.cell.clone();
         self.hamiltonian_mut()
-            .sync_from(other.hamiltonian(), change)?;
+            .sync_from(&other.hamiltonian(), change)?;
         self.sync_from_groupcollection(change, other)?;
         Ok(())
     }

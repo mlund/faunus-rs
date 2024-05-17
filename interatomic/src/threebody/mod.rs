@@ -24,10 +24,10 @@ pub mod harmonic;
 pub use cosine::CosineTorsion;
 pub use harmonic::HarmonicTorsion;
 
-/// Potential energy between three isotropic particles.
-pub trait IsotropicThreebodyEnergy: DynClone {
+/// Potential energy between three particles as a function of angle between them.
+pub trait ThreebodyAngleEnergy: DynClone {
     /// Interaction energy between three particles.
-    fn isotropic_threebody_energy(&self, angle: f64) -> f64;
+    fn threebody_angle_energy(&self, angle: f64) -> f64;
 }
 
-dyn_clone::clone_trait_object!(IsotropicThreebodyEnergy);
+dyn_clone::clone_trait_object!(ThreebodyAngleEnergy);

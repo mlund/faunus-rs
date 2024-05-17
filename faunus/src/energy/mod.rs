@@ -49,22 +49,37 @@ impl SyncFrom for Hamiltonian {
 }
 
 impl Hamiltonian {
+    /// Create a Hamiltonian from the provided HamiltonianBuilder and topology.
+    pub(crate) fn new(builder: &HamiltonianBuilder, topology: &Topology) -> anyhow::Result<Self> {
+        let nonbonded = NonbondedMatrix::new(&builder.nonbonded, topology)?;
+        let intramolecular_bonded = IntramolecularBonded::new();
+
+        let mut hamiltonian =
+            Hamiltonian::from_energy_terms(vec![nonbonded, intramolecular_bonded]);
+
+        // IntermolecularBonded term should only be added if it is actually needed
+        if !topology.intermolecular().is_empty() {
+            hamiltonian.add_energy_term(IntermolecularBonded::new(topology));
+        }
+
+        Ok(hamiltonian)
+    }
+
     /// Create a Hamiltonian from the provided energy terms.
-    pub fn new(terms: Vec<EnergyTerm>) -> Self {
+    pub(crate) fn from_energy_terms(terms: Vec<EnergyTerm>) -> Self {
         Hamiltonian {
             energy_terms: terms,
         }
     }
 
     /// Add an energy term into the Hamiltonian.
-    pub fn add_energy_term(&mut self, term: EnergyTerm) -> anyhow::Result<()> {
+    pub(crate) fn add_energy_term(&mut self, term: EnergyTerm) {
         self.energy_terms.push(term);
-        Ok(())
     }
 
     /// Compute the energy change of the Hamiltonian due to a change in the system.
     /// The energy is returned in the units of kJ/mol.
-    pub fn energy_change(&self, context: &impl Context, change: &Change) -> f64 {
+    pub(crate) fn energy_change(&self, context: &impl Context, change: &Change) -> f64 {
         self.energy_terms
             .iter()
             .map(|term| term.energy_change(context, change))
@@ -77,10 +92,10 @@ impl Hamiltonian {
     ///
     /// After a system change, the internal state of the energy terms may need to be updated.
     /// For example, in Ewald summation, the reciprocal space energy needs to be updated.
-    pub fn update(&mut self, change: &Change) -> anyhow::Result<()> {
+    pub(crate) fn update(&mut self, context: &impl Context, change: &Change) -> anyhow::Result<()> {
         self.energy_terms
             .iter_mut()
-            .try_for_each(|term| term.update(change))?;
+            .try_for_each(|term| term.update(context, change))?;
 
         Ok(())
     }
@@ -117,14 +132,11 @@ impl EnergyTerm {
     }
 
     /// Update internal state due to a change in the system.
-    fn update(&mut self, _change: &Change) -> anyhow::Result<()> {
+    fn update(&mut self, context: &impl Context, change: &Change) -> anyhow::Result<()> {
         match self {
-            EnergyTerm::NonbondedMatrix(_)
-            | EnergyTerm::IntramolecularBonded(_)
-            | EnergyTerm::IntermolecularBonded(_) => (),
+            EnergyTerm::NonbondedMatrix(_) | EnergyTerm::IntramolecularBonded(_) => Ok(()),
+            EnergyTerm::IntermolecularBonded(x) => x.update(context, change),
         }
-
-        Ok(())
     }
 }
 
@@ -137,8 +149,12 @@ impl SyncFrom for EnergyTerm {
             (EnergyTerm::NonbondedMatrix(x), EnergyTerm::NonbondedMatrix(y)) => {
                 x.sync_from(y, change)?
             }
-            (EnergyTerm::IntramolecularBonded(_), EnergyTerm::IntramolecularBonded(_))
-            | (EnergyTerm::IntermolecularBonded(_), EnergyTerm::IntermolecularBonded(_)) => (),
+            (EnergyTerm::IntramolecularBonded(x), EnergyTerm::IntramolecularBonded(y)) => {
+                x.sync_from(y, change)?
+            }
+            (EnergyTerm::IntermolecularBonded(x), EnergyTerm::IntermolecularBonded(y)) => {
+                x.sync_from(y, change)?
+            }
             _ => panic!("Trying to sync incompatible energy terms."),
         }
 

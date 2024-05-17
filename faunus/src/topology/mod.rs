@@ -33,6 +33,7 @@
 //! ```
 mod atom;
 mod block;
+pub(crate) mod block;
 mod bond;
 mod chain;
 #[cfg(feature = "chemfiles")]
@@ -418,13 +419,13 @@ pub struct Topology {
 
 impl Topology {
     /// Parse a yaml file as Topology.
-    pub fn from_file(filename: impl AsRef<Path> + Clone) -> anyhow::Result<Topology> {
-        let yaml = std::fs::read_to_string(filename.clone())?;
+    pub fn from_file(filename: impl AsRef<Path>) -> anyhow::Result<Topology> {
+        let yaml = std::fs::read_to_string(&filename)?;
         let mut topology = serde_yaml::from_str::<Topology>(&yaml)?;
 
         // finalize includes
         for file in topology.include.iter_mut() {
-            file.finalize(filename.clone());
+            file.finalize(&filename);
         }
 
         // parse included files
@@ -432,7 +433,7 @@ impl Topology {
 
         topology.finalize_atoms()?;
         topology.finalize_molecules()?;
-        topology.finalize_blocks(filename)?;
+        topology.finalize_blocks(&filename)?;
         topology.validate_intermolecular()?;
 
         topology.validate()?;
@@ -769,6 +770,18 @@ impl IntermolecularBonded {
             dihedrals,
             torsions,
         }
+    }
+
+    /// Returns `true` if the `IntermolecularBonded` structure is empty (contains no bonds, no torsions and no dihedrals).
+    /// Otherwise returns `false`.
+    pub(crate) fn is_empty(&self) -> bool {
+        self.bonds.is_empty() && self.torsions.is_empty() && self.dihedrals.is_empty()
+    }
+
+    /// Returns `true` if the `IntermolecularBonded` structure is empty (contains no bonds, no torsions and no dihedrals).
+    /// Otherwise returns `false`.
+    pub(crate) fn is_empty(&self) -> bool {
+        self.bonds.is_empty() && self.torsions.is_empty() && self.dihedrals.is_empty()
     }
 }
 

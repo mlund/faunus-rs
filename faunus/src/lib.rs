@@ -17,7 +17,11 @@ use energy::Hamiltonian;
 use nalgebra::Vector3;
 use rand::rngs::ThreadRng;
 use serde::{Deserialize, Serialize};
-use std::{path::Path, rc::Rc};
+use std::{
+    cell::{Ref, RefCell, RefMut},
+    path::Path,
+    rc::Rc,
+};
 use topology::Topology;
 
 use crate::cell::BoundaryConditions;
@@ -120,17 +124,28 @@ pub trait Context:
     ///
     /// By default, this function tries to update the Hamiltonian.
     /// For e.g. Ewald summation, the reciprocal space energy needs to be updated.
-    #[allow(unused_variables)]
     fn update(&mut self, change: &Change) -> anyhow::Result<()> {
-        self.hamiltonian_mut().update(change)?;
+        self.hamiltonian_mut().update(self, change)?;
         Ok(())
     }
 
     /// Construct a new simulation system.
+    ///
+    /// ## Parameters
+    /// - `faunus_file` Path to the input file with Faunus topology, hamiltonian etc.
+    /// - `structure_file` Path to optional external structure file.
+    /// - `rng` Random number generator.
     fn new(
+        faunus_file: impl AsRef<Path> + Clone,
+        structure_file: Option<impl AsRef<Path>>,
+        rng: &mut ThreadRng,
+    ) -> anyhow::Result<Self>;
+
+    /// Construct a new simulation system from raw parts.
+    fn from_raw_parts(
         topology: Rc<Topology>,
         cell: Self::Cell,
-        hamiltonian: Hamiltonian,
+        hamiltonian: RefCell<Hamiltonian>,
         structure_file: Option<impl AsRef<Path>>,
         rng: &mut ThreadRng,
     ) -> anyhow::Result<Self>
@@ -157,10 +172,22 @@ pub trait Context:
     }
 
     /// Construct a new simulation system.
+    ///
+    /// ## Parameters
+    /// - `faunus_file` Path to the input file with Faunus topology, hamiltonian etc.
+    /// - `structure_file` Optional external structure file.
+    /// - `rng` Random number generator.
     fn new(
+        faunus_file: impl AsRef<Path> + Clone,
+        structure_file: Option<impl AsRef<Path>>,
+        rng: &mut ThreadRng,
+    ) -> anyhow::Result<Self>;
+
+    /// Construct a new simulation system from raw parts.
+    fn from_raw_parts(
         topology: Rc<Topology>,
         cell: Self::Cell,
-        hamiltonian: Hamiltonian,
+        hamiltonian: RefCell<Hamiltonian>,
         structure_file: Option<impl AsRef<Path>>,
         rng: &mut ThreadRng,
     ) -> anyhow::Result<Self>;
@@ -191,9 +218,14 @@ pub trait WithTopology {
 /// A trait for objects that have a hamiltonian.
 pub trait WithHamiltonian: GroupCollection + Sized {
     /// Reference to Hamiltonian.
-    fn hamiltonian(&self) -> &Hamiltonian;
+    ///
+    /// Hamiltonian must be stored as `RefCell<Hamiltonian>`.
+    fn hamiltonian(&self) -> Ref<Hamiltonian>;
+
     /// Mutable reference to Hamiltonian.
-    fn hamiltonian_mut(&mut self) -> &mut Hamiltonian;
+    ///
+    /// Hamiltonian must be stored as `RefCell<Hamiltonian>`.
+    fn hamiltonian_mut(&self) -> RefMut<Hamiltonian>;
 }
 
 /// A trait for objects that have a temperature

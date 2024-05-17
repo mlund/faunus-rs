@@ -223,6 +223,11 @@ impl Group {
         }
     }
 
+    /// Check whether the particle with specified relative index is active.
+    pub fn is_active(&self, rel_index: usize) -> bool {
+        rel_index < self.num_active
+    }
+
     /// Select (subset) of indices in the group.
     ///
     /// Absolute indices in main particle vector are returned and are guaranteed to be within the group.
@@ -257,6 +262,7 @@ impl Group {
 
     /// Converts a relative index to an absolute index with range check.
     /// If called with `0`, the beginning of the group in the main particle vector is returned.
+    /// Returns an error if the index points to an inactive particle.
     pub fn absolute_index(&self, index: usize) -> anyhow::Result<usize> {
         if index >= self.num_active {
             anyhow::bail!("Index {} out of range (max {})", index, self.num_active - 1)

@@ -14,10 +14,11 @@
 
 //! Implementation of the harmonic dihedral.
 
-use super::IsotropicFourbodyEnergy;
+use super::FourbodyAngleEnergy;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
+/// Harmonic dihedral potential.
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(
     feature = "serde",
@@ -40,9 +41,9 @@ impl HarmonicDihedral {
     }
 }
 
-impl IsotropicFourbodyEnergy for HarmonicDihedral {
+impl FourbodyAngleEnergy for HarmonicDihedral {
     #[inline(always)]
-    fn isotropic_fourbody_energy(&self, dihedral: f64) -> f64 {
-        0.5 * self.spring_constant * (dihedral - self.eq_angle).powi(2)
+    fn fourbody_angle_energy(&self, angle: f64) -> f64 {
+        0.5 * self.spring_constant * (angle - self.eq_angle).powi(2)
     }
 }

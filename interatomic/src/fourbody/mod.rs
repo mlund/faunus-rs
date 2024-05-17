@@ -24,10 +24,10 @@ pub mod periodic;
 pub use harmonic::HarmonicDihedral;
 pub use periodic::PeriodicDihedral;
 
-/// Potential energy between four isotropic particles.
-pub trait IsotropicFourbodyEnergy: DynClone {
+/// Potential energy between four particles as a function of dihedral angle between them.
+pub trait FourbodyAngleEnergy: DynClone {
     /// Interaction energy between four particles.
-    fn isotropic_fourbody_energy(&self, angle: f64) -> f64;
+    fn fourbody_angle_energy(&self, angle: f64) -> f64;
 }
 
-dyn_clone::clone_trait_object!(IsotropicFourbodyEnergy);
+dyn_clone::clone_trait_object!(FourbodyAngleEnergy);

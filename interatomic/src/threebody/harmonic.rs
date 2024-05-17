@@ -14,10 +14,11 @@
 
 //! Implementation of the three-body harmonic potential.
 
-use super::IsotropicThreebodyEnergy;
+use super::ThreebodyAngleEnergy;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
+/// Harmonic torsion potential.
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(
     feature = "serde",
@@ -40,9 +41,9 @@ impl HarmonicTorsion {
     }
 }
 
-impl IsotropicThreebodyEnergy for HarmonicTorsion {
+impl ThreebodyAngleEnergy for HarmonicTorsion {
     #[inline(always)]
-    fn isotropic_threebody_energy(&self, angle: f64) -> f64 {
+    fn threebody_angle_energy(&self, angle: f64) -> f64 {
         0.5 * self.spring_constant * (angle - self.eq_angle).powi(2)
     }
 }

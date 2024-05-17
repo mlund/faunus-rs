@@ -14,10 +14,11 @@
 
 //! Implementation of the three-body cosine based potential as used in GROMOS-96.
 
-use super::IsotropicThreebodyEnergy;
+use super::ThreebodyAngleEnergy;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
+/// Cosine based torsion potential.
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(
     feature = "serde",
@@ -40,9 +41,9 @@ impl CosineTorsion {
     }
 }
 
-impl IsotropicThreebodyEnergy for CosineTorsion {
+impl ThreebodyAngleEnergy for CosineTorsion {
     #[inline(always)]
-    fn isotropic_threebody_energy(&self, _angle: f64) -> f64 {
+    fn threebody_angle_energy(&self, _angle: f64) -> f64 {
         todo!("Cosine torsion is not yet implemented.")
     }
 }

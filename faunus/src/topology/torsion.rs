@@ -16,7 +16,7 @@
 
 use derive_getters::Getters;
 use interatomic::threebody::{
-    cosine::CosineTorsion, harmonic::HarmonicTorsion, IsotropicThreebodyEnergy,
+    cosine::CosineTorsion, harmonic::HarmonicTorsion, ThreebodyAngleEnergy,
 };
 use serde::{Deserialize, Serialize};
 use validator::Validate;
@@ -63,19 +63,29 @@ impl Torsion {
     /// Calculate energy of a torsion in a specific group.
     /// Returns 0.0 if any of the interacting particles is inactive.
     pub fn energy(&self, context: &impl Context, group: &Group) -> f64 {
-        let [rel_i, rel_j, rel_k] = self.index;
+        let [i, j, k] = match self.index.map(|rel| group.absolute_index(rel)) {
+            [Ok(i), Ok(j), Ok(k)] => [i, j, k],
+            _ => return 0.0,
+        };
 
+        let angle = context.get_angle(i, j, k);
+        self.threebody_angle_energy(angle)
+    }
+
+    /// Calculate energy of an intermolecular torsion.
+    /// Returns 0.0 if any of the interacting particles is inactive.
+    pub fn energy_intermolecular(
+        &self,
+        context: &impl Context,
+        term: &crate::energy::bonded::IntermolecularBonded,
+    ) -> f64 {
         // any of the particles is inactive
-        if self.index.iter().any(|&i| i >= group.len()) {
+        if self.index.iter().any(|&i| !term.is_active(i)) {
             return 0.0;
         }
 
-        let abs_i = rel_i + group.start();
-        let abs_j = rel_j + group.start();
-        let abs_k = rel_k + group.start();
-
-        let angle = context.get_angle(abs_i, abs_j, abs_k);
-        self.isotropic_threebody_energy(angle)
+        let angle = context.get_angle(self.index[0], self.index[1], self.index[2]);
+        self.threebody_angle_energy(angle)
     }
 }
 
@@ -85,11 +95,11 @@ impl Indexed for Torsion {
     }
 }
 
-impl IsotropicThreebodyEnergy for Torsion {
-    fn isotropic_threebody_energy(&self, angle: f64) -> f64 {
+impl ThreebodyAngleEnergy for Torsion {
+    fn threebody_angle_energy(&self, angle: f64) -> f64 {
         match &self.kind {
-            TorsionKind::Harmonic(x) => x.isotropic_threebody_energy(angle),
-            TorsionKind::Cosine(x) => x.isotropic_threebody_energy(angle),
+            TorsionKind::Harmonic(x) => x.threebody_angle_energy(angle),
+            TorsionKind::Cosine(x) => x.threebody_angle_energy(angle),
             TorsionKind::Unspecified => 0.0,
         }
     }

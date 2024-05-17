@@ -236,6 +236,7 @@ impl CellToChemCell for Endless {}
 #[cfg(test)]
 mod tests {
     use std::{
+        cell::RefCell,
         collections::{HashMap, HashSet},
         rc::Rc,
     };
@@ -413,10 +414,10 @@ mod tests {
 
         let mut rng = rand::thread_rng();
 
-        let context = ReferencePlatform::new(
+        let context = ReferencePlatform::from_raw_parts(
             Rc::new(topology),
             Cuboid::new(10.0, 5.0, 2.5),
-            Hamiltonian::new(vec![]),
+            RefCell::new(Hamiltonian::from_energy_terms(vec![])),
             None::<&str>,
             &mut rng,
         )

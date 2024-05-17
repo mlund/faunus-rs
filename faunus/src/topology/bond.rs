@@ -133,17 +133,28 @@ impl Bond {
     /// Calculate energy of a bond in a specific group.
     /// Returns 0.0 if any of the bonded particles is inactive.
     pub fn energy(&self, context: &impl Context, group: &Group) -> f64 {
-        let [rel_i, rel_j] = self.index;
+        let [i, j] = match self.index.map(|rel| group.absolute_index(rel)) {
+            [Ok(i), Ok(j)] => [i, j],
+            _ => return 0.0,
+        };
 
+        let distance_squared = context.get_distance_squared(i, j);
+        self.isotropic_twobody_energy(distance_squared)
+    }
+
+    /// Calculate energy of an intermolecular bond.
+    /// Returns 0.0 if any of the bonded particles is inactive.
+    pub fn energy_intermolecular(
+        &self,
+        context: &impl Context,
+        term: &crate::energy::bonded::IntermolecularBonded,
+    ) -> f64 {
         // one or both particles are inactive
-        if rel_i >= group.len() || rel_j >= group.len() {
+        if self.index.iter().any(|&i| !term.is_active(i)) {
             return 0.0;
         }
 
-        let abs_i = rel_i + group.start();
-        let abs_j = rel_j + group.start();
-
-        let distance_squared = context.get_distance_squared(abs_i, abs_j);
+        let distance_squared = context.get_distance_squared(self.index[0], self.index[1]);
         self.isotropic_twobody_energy(distance_squared)
     }
 }
