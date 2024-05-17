@@ -490,7 +490,7 @@ impl Topology {
         let mut curr_start = 0;
 
         let positions = match structure {
-            Some(x) => Some(positions_from_structure_file(&x)?),
+            Some(x) => Some(positions_from_structure_file(&x, Some(context.cell()))?),
             None => None,
         };
 

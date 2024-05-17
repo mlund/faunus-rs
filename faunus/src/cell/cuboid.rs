@@ -19,6 +19,7 @@ use crate::{
     Point,
 };
 use anyhow::Ok;
+use nalgebra::Vector3;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 
@@ -96,16 +97,10 @@ impl BoundaryConditions for Cuboid {
         }
         delta
     }
-    fn boundary(&self, point: &mut Point) {
-        if point.x.abs() > self.half_cell.x {
-            point.x -= self.cell.x * (point.x / self.cell.x).round();
-        }
-        if point.y.abs() > self.half_cell.y {
-            point.y -= self.cell.y * (point.y / self.cell.y).round();
-        }
-        if point.z.abs() > self.half_cell.z {
-            point.z -= self.cell.z * (point.z / self.cell.z).round();
-        }
+    fn boundary(&self, point: &mut Vector3<f64>) {
+        point.x -= self.cell.x * (point.x / self.cell.x).round();
+        point.y -= self.cell.y * (point.y / self.cell.y).round();
+        point.z -= self.cell.z * (point.z / self.cell.z).round();
     }
 }
 

@@ -278,7 +278,7 @@ pub trait ParticleSystem: GroupCollection + WithCell + WithTopology {
         let p2 = self.particle(j);
         let p3 = self.particle(k);
 
-        crate::basic::angle_points(p1.pos(), p2.pos(), p3.pos())
+        crate::basic::angle_points(p1.pos(), p2.pos(), p3.pos(), self.cell())
     }
 
     /// Get dihedral angle (in degrees) between four particles with the given indices.
@@ -301,6 +301,9 @@ pub trait ParticleSystem: GroupCollection + WithCell + WithTopology {
         let p3 = self.particle(k);
         let p4 = self.particle(l);
 
-        crate::basic::dihedral_points(p1.pos(), p2.pos(), p3.pos(), p4.pos())
+        crate::basic::dihedral_points(p1.pos(), p2.pos(), p3.pos(), p4.pos(), self.cell())
     }
+
+    /// Shift positions of selected particles by target vector and apply periodic boundary conditions.
+    fn translate_particles(&mut self, indices: &[usize], shift: &Vector3<f64>);
 }

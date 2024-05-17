@@ -54,21 +54,26 @@ impl NonbondedMatrix {
             })
             .collect::<Result<Vec<_>, _>>()?;
 
+        let exclusions = ExclusionMatrix::new(topology);
+
         Ok(EnergyTerm::NonbondedMatrix(NonbondedMatrix {
             potentials,
-            exclusions: ExclusionMatrix::default(),
+            exclusions,
         }))
     }
 
     /// Compute the energy change due to a change in the system.
     pub(super) fn energy_change(&self, context: &impl Context, change: &Change) -> f64 {
         match change {
-            Change::Everything => self.all_with_all(context),
+            Change::Everything | Change::Volume(_, _) => self.all_with_all(context),
             Change::SingleGroup(group_index, group_change) => {
                 self.single_group_change(context, *group_index, group_change)
             }
+            Change::Groups(vec) => vec
+                .iter()
+                .map(|(group, change)| self.single_group_change(context, *group, change))
+                .sum(),
             Change::None => 0.0,
-            _ => todo!("implement other changes"),
         }
     }
 
@@ -81,8 +86,14 @@ impl NonbondedMatrix {
     ) -> f64 {
         match change {
             GroupChange::RigidBody => self.group_with_all(context, group_index),
+            GroupChange::Resize(_) | GroupChange::UpdateIdentity(_) => {
+                todo!("Resize and UpdateIdentity changes are not yet implemented for NonbondedMatrix.")
+            }
+            GroupChange::PartialUpdate(x) => x
+                .iter()
+                .map(|&particle| self.particle_with_all(context, group_index, particle))
+                .sum(),
             GroupChange::None => 0.0,
-            _ => todo!("implement other group changes"),
         }
     }
 
@@ -114,22 +125,23 @@ impl NonbondedMatrix {
         rel_index: usize,
     ) -> f64 {
         let groups = &context.groups();
-        let index = groups[group_index].absolute_index(rel_index).unwrap();
-        let atomkind_index = context.get_atomkind(index);
+        let i = groups[group_index]
+            .absolute_index(rel_index)
+            .expect("Particle 'i' should be active.");
+        let atom_kind_i = context.get_atomkind(i);
+
         groups
             .iter()
-            .flat_map(|group| group.iter_active())
-            .filter(|other| *other != index)
-            .fold(0.0, |sum, other| {
-                let atomkind_other = context.get_atomkind(other);
-                sum + self.particle_with_particle(
-                    context,
-                    index,
-                    other,
-                    atomkind_index,
-                    atomkind_other,
-                )
+            .flat_map(|group| {
+                group.iter_active().map(move |relative| {
+                    let j = group
+                        .absolute_index(relative)
+                        .expect("Particle 'j' should be active.");
+                    let atom_kind_j = context.get_atomkind(j);
+                    self.particle_with_particle(context, i, j, atom_kind_i, atom_kind_j)
+                })
             })
+            .sum()
     }
 
     /// Calculates the energy between a single group and all other groups.
@@ -168,8 +180,9 @@ impl SyncFrom for NonbondedMatrix {
     fn sync_from(&mut self, other: &NonbondedMatrix, change: &Change) -> anyhow::Result<()> {
         match change {
             Change::Everything => self.potentials = other.potentials.clone(),
-            Change::None => (),
-            _ => todo!("Implement other changes."),
+            Change::None | Change::Volume(_, _) | Change::SingleGroup(_, _) | Change::Groups(_) => {
+                ()
+            }
         }
 
         Ok(())

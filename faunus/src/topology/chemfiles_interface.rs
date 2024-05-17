@@ -17,13 +17,14 @@
 use std::path::Path;
 
 use crate::{
-    cell::{Cuboid, Endless, Shape, Sphere},
+    cell::{Cuboid, Endless, Shape, SimulationCell, Sphere},
     group::{Group, GroupCollection},
     platform::reference::ReferencePlatform,
     topology::Residue,
-    Point, WithCell, WithTopology,
+    Point, PointParticle, WithCell, WithTopology,
 };
 use chemfiles::Frame;
+use nalgebra::Vector3;
 
 use crate::topology::TopologyLike;
 
@@ -38,8 +39,26 @@ pub(super) fn frame_from_file(filename: &impl AsRef<Path>) -> anyhow::Result<che
 }
 
 /// Get positions of particles from chemfiles::Frame.
-pub(super) fn positions_from_frame(frame: &chemfiles::Frame) -> Vec<Point> {
-    frame.positions().iter().map(|pos| (*pos).into()).collect()
+/// If `cell` is provided, all the positions of particles from the frame are shifted by -half_cell.
+pub(super) fn positions_from_frame(
+    frame: &chemfiles::Frame,
+    cell: Option<&impl SimulationCell>,
+) -> Vec<Point> {
+    let shift = if let Some(cell) = cell {
+        if let Some(bounding_box) = cell.bounding_box() {
+            -bounding_box / 2.0
+        } else {
+            Vector3::default()
+        }
+    } else {
+        Vector3::default()
+    };
+
+    frame
+        .positions()
+        .iter()
+        .map(|pos| <[f64; 3] as Into<Point>>::into(*pos) + shift)
+        .collect()
 }
 
 /// A trait for structure that can be converted to chemfiles Frame.
@@ -65,7 +84,7 @@ pub trait ChemFrameConvert: WithCell + WithTopology + GroupCollection {
     /// This converts all atoms, both active and inactive.
     /// This also shifts the particles so they fit into chemfiles cell.
     fn add_atoms_to_frame(&self, frame: &mut Frame) {
-        let topology = self.topology();
+        let topology = self.topology_ref();
         let mut particles = self.get_all_particles();
 
         // shift the particles
@@ -80,26 +99,26 @@ pub trait ChemFrameConvert: WithCell + WithTopology + GroupCollection {
         }
 
         // add atoms to the frame
-        self.groups().iter().fold(0, |atom_index, group| {
+        self.groups().iter().for_each(|group| {
             let molecule = &topology.molecules()[group.molecule()];
-
-            for (i, index) in molecule.atom_indices().iter().enumerate() {
-                let atom = topology.atoms().get(*index).unwrap();
-
-                frame.add_atom(
-                    &atom.to_chem_atom(molecule.atom_names()[i].as_deref()),
-                    particles[atom_index].pos.into(),
-                    None,
-                );
-            }
-
-            atom_index + group.capacity()
+            molecule
+                .atom_indices()
+                .iter()
+                .enumerate()
+                .for_each(|(i, &index)| {
+                    let atom = &topology.atoms()[index];
+                    frame.add_atom(
+                        &atom.to_chem_atom(molecule.atom_names()[i].as_deref()),
+                        particles[i + group.start()].pos().clone().into(),
+                        None,
+                    );
+                });
         });
     }
 
     /// Convert faunus residues to chemfiles residues and add them to the chemfiles Frame.
     fn add_residues_to_frame(&self, frame: &mut Frame) {
-        let topology = self.topology();
+        let topology = self.topology_ref();
 
         self.groups()
             .iter()
@@ -123,7 +142,7 @@ pub trait ChemFrameConvert: WithCell + WithTopology + GroupCollection {
 
     // Convert faunus bonds to chemfiles bonds and add them to the chemfiles Frame.
     fn add_bonds_to_frame(&self, frame: &mut Frame) {
-        let topology = self.topology();
+        let topology = self.topology_ref();
 
         self.groups().iter().fold(0, |atom_index, group| {
             let molecule = &topology.molecules()[group.molecule()];

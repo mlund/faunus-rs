@@ -38,7 +38,9 @@ impl IntramolecularBonded {
     pub(super) fn energy_change(&self, context: &impl Context, change: &Change) -> f64 {
         match change {
             Change::Everything | Change::Volume(_, _) => self.all_groups(context),
-            Change::None => 0.0,
+            Change::None | Change::SingleGroup(_, GroupChange::RigidBody) => 0.0,
+            // TODO! optimization; currently any change to the group will
+            // cause recalculation of all bonded interactions inside the group
             Change::SingleGroup(id, _) => self.one_group(context, &context.groups()[*id]),
             Change::Groups(groups) => {
                 self.multiple_groups(context, &groups.iter().map(|x| x.0).collect::<Vec<usize>>())

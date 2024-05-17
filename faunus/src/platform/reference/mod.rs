@@ -77,6 +77,8 @@ impl WithHamiltonian for ReferencePlatform {
 }
 
 impl Context for ReferencePlatform {
+    /// Create a new simulation system on a reference platform from
+    /// faunus configuration file and optional structure file.
     fn new(
         faunus_file: impl AsRef<Path>,
         structure_file: Option<impl AsRef<Path>>,
@@ -85,7 +87,17 @@ impl Context for ReferencePlatform {
         let topology = Topology::from_file(&faunus_file)?;
         let hamiltonian_builder = HamiltonianBuilder::from_file(&faunus_file)?;
 
-        todo!()
+        // TODO! implement proper cell reading
+        let cell = Cuboid::cubic(100.0);
+
+        let hamiltonian = Hamiltonian::new(&hamiltonian_builder, &topology)?;
+        ReferencePlatform::from_raw_parts(
+            Rc::new(topology),
+            cell,
+            RefCell::new(hamiltonian),
+            structure_file,
+            rng,
+        )
     }
 
     fn from_raw_parts(
@@ -132,6 +144,10 @@ impl GroupCollection for ReferencePlatform {
 
     fn num_particles(&self) -> usize {
         self.particles.len()
+    }
+
+    fn group_lists(&self) -> &GroupLists {
+        &self.group_lists
     }
 
     fn set_particles<'b>(
@@ -195,7 +211,7 @@ impl ParticleSystem for ReferencePlatform {
         let p2 = self.particles()[j].pos();
         let p3 = self.particles()[k].pos();
 
-        crate::basic::angle_points(p1, p2, p3)
+        crate::basic::angle_points(p1, p2, p3, self.cell())
     }
 
     /// Get dihedral between particles `i-j-k-l`.
@@ -205,7 +221,18 @@ impl ParticleSystem for ReferencePlatform {
     #[inline(always)]
     fn get_dihedral(&self, i: usize, j: usize, k: usize, l: usize) -> f64 {
         let [p1, p2, p3, p4] = [i, j, k, l].map(|x| self.particles()[x].pos());
-        crate::basic::dihedral_points(p1, p2, p3, p4)
+        crate::basic::dihedral_points(p1, p2, p3, p4, self.cell())
+    }
+
+    /// Shift positions of target particles.
+    #[inline(always)]
+    fn translate_particles(&mut self, indices: &[usize], shift: &nalgebra::Vector3<f64>) {
+        let cell = self.cell.clone();
+        indices.iter().for_each(|&i| {
+            let position = self.particles_mut()[i].pos_mut();
+            *position += shift;
+            cell.boundary(position)
+        });
     }
 }
 
@@ -233,5 +260,11 @@ impl ReferencePlatform {
     #[inline(always)]
     pub fn particles(&self) -> &[Particle] {
         &self.particles
+    }
+
+    /// Get mutable reference to the particles of the system.
+    #[inline(always)]
+    pub fn particles_mut(&mut self) -> &mut [Particle] {
+        &mut self.particles
     }
 }

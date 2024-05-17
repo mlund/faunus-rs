@@ -73,9 +73,10 @@ impl InsertionPolicy {
         rng: &mut ThreadRng,
     ) -> anyhow::Result<Vec<Point>> {
         match self {
-            Self::FromFile(filename) => {
-                super::structure::positions_from_structure_file(filename.path().unwrap())
-            }
+            Self::FromFile(filename) => super::structure::positions_from_structure_file(
+                filename.path().unwrap(),
+                Some(cell),
+            ),
 
             Self::RandomAtomPos { directions } => Ok((0..(molecule_kind.atom_indices().len()
                 * number))
@@ -116,7 +117,7 @@ impl InsertionPolicy {
     ) -> anyhow::Result<Vec<Point>> {
         // read coordinates of the molecule from input file
         let mut ref_positions =
-            super::structure::positions_from_structure_file(filename.path().unwrap())?;
+            super::structure::positions_from_structure_file(filename.path().unwrap(), Some(cell))?;
 
         // get the center of mass of the molecule
         let com = crate::basic::center_of_mass(

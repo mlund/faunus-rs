@@ -17,7 +17,10 @@
 use nalgebra::Vector3;
 use std::f64::consts::PI;
 
-use crate::Point;
+use crate::{
+    cell::{BoundaryConditions, Endless},
+    Point,
+};
 
 /// Calculate center of mass of a collection of points with masses.
 /// Does not consider periodic boundary conditions.
@@ -110,11 +113,11 @@ fn test_angle_vectors() {
 /// Calculate angle between three points with `b` being the vertext of the angle.
 /// The angle is returned in degrees.
 #[inline(always)]
-pub(crate) fn angle_points(a: &Point, b: &Point, c: &Point) -> f64 {
+pub(crate) fn angle_points(a: &Point, b: &Point, c: &Point, pbc: &impl BoundaryConditions) -> f64 {
     // b->a
-    let ba = a - b;
+    let ba = pbc.distance(a, b);
     // b->c
-    let bc = c - b;
+    let bc = pbc.distance(c, b);
     angle_vectors(&ba, &bc)
 }
 
@@ -122,50 +125,64 @@ pub(crate) fn angle_points(a: &Point, b: &Point, c: &Point) -> f64 {
 fn test_angle_points() {
     use float_cmp::assert_approx_eq;
 
+    let endless_cell = Endless::default();
+
     let p1 = Point::new(3.2, 3.3, 2.5);
     let p2 = Point::new(1.2, 3.3, 2.5);
     let p3 = Point::new(1.2, 5.3, 2.5);
-    assert_approx_eq!(f64, angle_points(&p1, &p2, &p3), 90.0);
+    assert_approx_eq!(f64, angle_points(&p1, &p2, &p3, &endless_cell), 90.0);
 
     let p1 = Point::new(3.2, 3.3, 2.5);
     let p2 = Point::new(1.2, 3.3, 2.5);
     let p3 = Point::new(1.2, 1.3, 2.5);
-    assert_approx_eq!(f64, angle_points(&p1, &p2, &p3), 90.0);
+    assert_approx_eq!(f64, angle_points(&p1, &p2, &p3, &endless_cell), 90.0);
 
     let p1 = Point::new(4.2, 3.3, 2.5);
     let p2 = Point::new(3.2, 3.3, 2.5);
     let p3 = Point::new(3.2, 3.3, 9.5);
-    assert_approx_eq!(f64, angle_points(&p1, &p2, &p3), 90.0);
+    assert_approx_eq!(f64, angle_points(&p1, &p2, &p3, &endless_cell), 90.0);
 
     let p1 = Point::new(4.2, 3.3, 2.5);
     let p2 = Point::new(3.2, 3.3, 2.5);
     let p3 = Point::new(6.2, 3.3, 5.5);
-    assert_approx_eq!(f64, angle_points(&p1, &p2, &p3), 45.0);
+    assert_approx_eq!(f64, angle_points(&p1, &p2, &p3, &endless_cell), 45.0);
 
     let p1 = Point::new(4.2, 3.3, 2.5);
     let p2 = Point::new(3.2, 3.3, 2.5);
     let p3 = Point::new(7.2, 3.3, 2.5);
-    assert_approx_eq!(f64, angle_points(&p1, &p2, &p3), 0.0);
+    assert_approx_eq!(f64, angle_points(&p1, &p2, &p3, &endless_cell), 0.0);
 
     let p1 = Point::new(4.2, 3.3, 2.5);
     let p2 = Point::new(3.2, 3.3, 2.5);
     let p3 = Point::new(-1.2, 3.3, 2.5);
-    assert_approx_eq!(f64, angle_points(&p1, &p2, &p3), 180.0);
+    assert_approx_eq!(f64, angle_points(&p1, &p2, &p3, &endless_cell), 180.0);
 
     let p1 = Point::new(4.2, 2.3, 6.0);
     let p2 = Point::new(3.2, 3.3, 2.5);
     let p3 = Point::new(4.4, 5.7, 1.8);
-    assert_approx_eq!(f64, angle_points(&p1, &p2, &p3), 110.40636490060925);
+    assert_approx_eq!(
+        f64,
+        angle_points(&p1, &p2, &p3, &endless_cell),
+        110.40636490060925
+    );
+
+    // TODO: test periodic boundary conditions
 }
 
 /// Calculate dihedral angle between two planes defined by four points.
 /// The first plane is given by points `a`, `b`, `c`.
 /// The second plane is given by points `b`, `c`, `d`.
 /// The angle is returned in degrees and adopts values between −180° and +180°.
-pub(crate) fn dihedral_points(a: &Point, b: &Point, c: &Point, d: &Point) -> f64 {
-    let ab = b - a;
-    let bc = c - b;
-    let cd = d - c;
+pub(crate) fn dihedral_points(
+    a: &Point,
+    b: &Point,
+    c: &Point,
+    d: &Point,
+    pbc: &impl BoundaryConditions,
+) -> f64 {
+    let ab = pbc.distance(b, a);
+    let bc = pbc.distance(c, b);
+    let cd = pbc.distance(d, c);
 
     // normalized vectors normal to the planes
     let abc = ab.cross(&bc).normalize();
@@ -181,63 +198,93 @@ pub(crate) fn dihedral_points(a: &Point, b: &Point, c: &Point, d: &Point) -> f64
 fn test_dihedral_points() {
     use float_cmp::assert_approx_eq;
 
+    let endless_cell = Endless::default();
+
     // cis conformation
     let p1 = Point::new(1.2, 5.3, 2.5);
     let p2 = Point::new(1.2, 3.3, 2.5);
     let p3 = Point::new(3.2, 3.3, 2.5);
     let p4 = Point::new(3.2, 4.3, 2.5);
-    assert_approx_eq!(f64, dihedral_points(&p1, &p2, &p3, &p4), 0.0);
+    assert_approx_eq!(f64, dihedral_points(&p1, &p2, &p3, &p4, &endless_cell), 0.0);
 
     // cis conformation
     let p1 = Point::new(1.2, 3.3, 5.2);
     let p2 = Point::new(1.2, 3.3, 2.5);
     let p3 = Point::new(1.2, -1.3, 2.5);
     let p4 = Point::new(1.2, -1.3, 3.2);
-    assert_approx_eq!(f64, dihedral_points(&p1, &p2, &p3, &p4), 0.0);
+    assert_approx_eq!(f64, dihedral_points(&p1, &p2, &p3, &p4, &endless_cell), 0.0);
 
     // trans conformation
     let p1 = Point::new(1.2, -5.3, 2.5);
     let p2 = Point::new(1.2, 3.3, 2.5);
     let p3 = Point::new(3.2, 3.3, 2.5);
     let p4 = Point::new(3.2, 4.3, 2.5);
-    assert_approx_eq!(f64, dihedral_points(&p1, &p2, &p3, &p4), 180.0);
+    assert_approx_eq!(
+        f64,
+        dihedral_points(&p1, &p2, &p3, &p4, &endless_cell),
+        180.0
+    );
 
     // trans conformation
     let p1 = Point::new(1.2, 3.3, 5.2);
     let p2 = Point::new(1.2, 3.3, 2.5);
     let p3 = Point::new(1.2, -1.3, 2.5);
     let p4 = Point::new(1.2, -1.3, 2.2);
-    assert_approx_eq!(f64, dihedral_points(&p1, &p2, &p3, &p4), 180.0);
+    assert_approx_eq!(
+        f64,
+        dihedral_points(&p1, &p2, &p3, &p4, &endless_cell),
+        180.0
+    );
 
     let p1 = Point::new(1.2, 3.3, 5.2);
     let p2 = Point::new(1.2, 3.3, 2.5);
     let p3 = Point::new(1.2, -1.3, 2.5);
     let p4 = Point::new(-13.2, -1.3, 2.5);
-    assert_approx_eq!(f64, dihedral_points(&p1, &p2, &p3, &p4), 90.0);
+    assert_approx_eq!(
+        f64,
+        dihedral_points(&p1, &p2, &p3, &p4, &endless_cell),
+        90.0
+    );
 
     let p1 = Point::new(1.2, 3.3, 5.2);
     let p2 = Point::new(1.2, 3.3, 2.5);
     let p3 = Point::new(1.2, -1.3, 2.5);
     let p4 = Point::new(2.2, -1.3, 2.5);
-    assert_approx_eq!(f64, dihedral_points(&p1, &p2, &p3, &p4), -90.0);
+    assert_approx_eq!(
+        f64,
+        dihedral_points(&p1, &p2, &p3, &p4, &endless_cell),
+        -90.0
+    );
 
     let p1 = Point::new(3.2, -5.3, 2.5);
     let p2 = Point::new(3.2, 3.3, 2.5);
     let p3 = Point::new(1.2, 3.3, 2.5);
     let p4 = Point::new(1.2, 4.3, 3.5);
-    assert_approx_eq!(f64, dihedral_points(&p1, &p2, &p3, &p4), 135.0);
+    assert_approx_eq!(
+        f64,
+        dihedral_points(&p1, &p2, &p3, &p4, &endless_cell),
+        135.0
+    );
 
     let p1 = Point::new(3.2, 5.3, 2.5);
     let p2 = Point::new(3.2, 3.3, 2.5);
     let p3 = Point::new(1.2, 3.3, 2.5);
     let p4 = Point::new(1.2, 4.3, 3.5);
-    assert_approx_eq!(f64, dihedral_points(&p1, &p2, &p3, &p4), -45.0);
+    assert_approx_eq!(
+        f64,
+        dihedral_points(&p1, &p2, &p3, &p4, &endless_cell),
+        -45.0
+    );
 
     let p1 = Point::new(3.2, 5.3, 2.5);
     let p2 = Point::new(3.2, 3.3, 2.5);
     let p3 = Point::new(1.2, 3.3, 2.5);
     let p4 = Point::new(1.2, 4.3, 1.5);
-    assert_approx_eq!(f64, dihedral_points(&p1, &p2, &p3, &p4), 45.0);
+    assert_approx_eq!(
+        f64,
+        dihedral_points(&p1, &p2, &p3, &p4, &endless_cell),
+        45.0
+    );
 
     // realistic data
     let p0 = Point::new(24.969, 13.428, 30.692);
@@ -248,8 +295,26 @@ fn test_dihedral_points() {
     let p5 = Point::new(22.881, 10.326, 29.620);
     let p6 = Point::new(23.691, 9.935, 28.389);
     let p7 = Point::new(22.557, 9.096, 30.459);
-    assert_approx_eq!(f64, dihedral_points(&p0, &p1, &p2, &p3), -71.215151146714);
-    assert_approx_eq!(f64, dihedral_points(&p0, &p1, &p4, &p5), -171.9431994795364);
-    assert_approx_eq!(f64, dihedral_points(&p1, &p4, &p5, &p6), 60.82226735264639);
-    assert_approx_eq!(f64, dihedral_points(&p1, &p4, &p5, &p7), -177.6364115152126);
+    assert_approx_eq!(
+        f64,
+        dihedral_points(&p0, &p1, &p2, &p3, &endless_cell),
+        -71.215151146714
+    );
+    assert_approx_eq!(
+        f64,
+        dihedral_points(&p0, &p1, &p4, &p5, &endless_cell),
+        -171.9431994795364
+    );
+    assert_approx_eq!(
+        f64,
+        dihedral_points(&p1, &p4, &p5, &p6, &endless_cell),
+        60.82226735264639
+    );
+    assert_approx_eq!(
+        f64,
+        dihedral_points(&p1, &p4, &p5, &p7, &endless_cell),
+        -177.6364115152126
+    );
+
+    // TODO: test periodic boundary conditions
 }

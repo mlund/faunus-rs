@@ -14,6 +14,7 @@
 
 //! # Support for Monte Carlo sampling
 
+use crate::analysis::{AnalysisCollection, Analyze};
 use crate::{time::Timer, Change, Context, Info};
 use average::Mean;
 use log;
@@ -312,31 +313,43 @@ impl<T: Context> MoveCollection<T> {
 /// The chain implements `Iterator` where each iteration corresponds to a single Monte Carlo step.
 #[derive(Default, Debug)]
 pub struct MarkovChain<T: Context> {
-    /// List of moves to perform
+    /// List of moves to perform.
     moves: MoveCollection<T>,
-    /// Pair of contexts, one for the current state and one for the new state
+    /// Pair of contexts, one for the current state and one for the new state.
     context: NewOld<T>,
-    /// Current step
+    /// Current step.
     step: usize,
-    /// Maximum number of steps
+    /// Maximum number of steps.
     max_steps: usize,
-    /// Random number engine
+    /// Random number engine.
     rng: ThreadRng,
-    /// Thermal energy - must be same unit as energy
+    /// Thermal energy - must be same unit as energy.
     thermal_energy: f64,
-    /// Acceptance policy
+    /// Acceptance policy.
     criterion: Box<dyn AcceptanceCriterion>,
+    /// Collection of analyses to perform during the simulation.
+    analyses: AnalysisCollection<T>,
 }
 
 impl<T: Context + 'static> Iterator for MarkovChain<T> {
-    type Item = usize;
+    type Item = anyhow::Result<usize>;
     fn next(&mut self) -> Option<Self::Item> {
         if self.step >= self.max_steps {
             return None;
         }
         self.do_move();
+
+        // perform analyses
+        match self
+            .analyses
+            .sample(&self.context.new, self.step, &mut self.rng)
+        {
+            Ok(_) => (),
+            Err(e) => return Some(Err(e)),
+        }
+
         self.step += 1;
-        Some(self.step)
+        Some(Ok(self.step))
     }
     fn size_hint(&self) -> (usize, Option<usize>) {
         let size = self.max_steps - self.step;
@@ -357,6 +370,7 @@ impl<T: Context + 'static> MarkovChain<T> {
             rng: rand::thread_rng(),
             moves: MoveCollection::default(),
             criterion: Box::<MetropolisHastings>::default(),
+            analyses: AnalysisCollection::default(),
         }
     }
     /// Set the thermal energy, _kT_.
@@ -373,6 +387,11 @@ impl<T: Context + 'static> MarkovChain<T> {
     /// Append a move to the back of the collection.
     pub fn add_move(&mut self, m: impl Move<T> + 'static) {
         self.moves.push(m);
+    }
+
+    /// Append an analysis to the back of the collection.
+    pub fn add_analysis(&mut self, analysis: Box<dyn Analyze<T>>) {
+        self.analyses.push(analysis)
     }
 
     fn do_move(&mut self) {
