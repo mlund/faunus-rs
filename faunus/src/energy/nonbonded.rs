@@ -337,7 +337,7 @@ impl SyncFrom for NonbondedMatrix {
         match change {
             Change::Everything => self.potentials = other.potentials.clone(),
             Change::None | Change::Volume(_, _) | Change::SingleGroup(_, _) | Change::Groups(_) => {
-                ()
+                
             }
         }
 

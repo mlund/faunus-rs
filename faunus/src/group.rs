@@ -592,6 +592,7 @@ impl GroupLists {
     }
 
     /// Get all empty groups with the given molecule ID.
+    #[allow(dead_code)]
     pub(crate) fn get_empty_groups(&self, id: usize) -> &[usize] {
         &self.empty[id]
     }

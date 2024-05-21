@@ -186,7 +186,7 @@ impl Cell {
             },
             None => {
                 log::warn!("No cell defined for the system. Using Endless cell.");
-                Ok(Box::new(Endless::default()))
+                Ok(Box::<Endless>::default())
             }
         }
     }

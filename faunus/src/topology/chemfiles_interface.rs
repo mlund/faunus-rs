@@ -109,7 +109,7 @@ pub trait ChemFrameConvert: WithCell + WithTopology + GroupCollection {
                     let atom = &topology.atoms()[index];
                     frame.add_atom(
                         &atom.to_chem_atom(molecule.atom_names()[i].as_deref()),
-                        particles[i + group.start()].pos().clone().into(),
+                        (*particles[i + group.start()].pos()).into(),
                         None,
                     );
                 });

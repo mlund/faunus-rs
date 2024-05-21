@@ -70,7 +70,7 @@ fn test_center_of_mass() {
 /// The angle is returned in degrees.
 #[inline(always)]
 pub(crate) fn angle_vectors(v1: &Vector3<f64>, v2: &Vector3<f64>) -> f64 {
-    let cos = v1.dot(&v2) / (v1.norm() * v2.norm());
+    let cos = v1.dot(v2) / (v1.norm() * v2.norm());
     cos.acos() * 180.0 / PI
 }
 

@@ -93,7 +93,7 @@ impl Context for ReferencePlatform {
         let hamiltonian = Hamiltonian::new(&hamiltonian_builder, &topology)?;
         ReferencePlatform::from_raw_parts(
             Rc::new(topology),
-            Box::from(cell),
+            cell,
             RefCell::new(hamiltonian),
             structure_file,
             rng,
@@ -112,7 +112,7 @@ impl Context for ReferencePlatform {
             particles: vec![],
             groups: vec![],
             cell,
-            hamiltonian: hamiltonian,
+            hamiltonian,
             group_lists: GroupLists::new(topology.molecules().len()),
         };
 

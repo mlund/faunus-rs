@@ -245,7 +245,6 @@ impl SyncFrom for IntermolecularBonded {
                 self.particles_status = other.particles_status.clone()
             }
             Change::None | Change::Volume(_, _) | Change::SingleGroup(_, _) | Change::Groups(_) => {
-                ()
             }
         }
 
