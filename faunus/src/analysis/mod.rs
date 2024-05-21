@@ -76,6 +76,7 @@ pub struct StructureWriter {
     num_samples: usize,
 }
 
+#[cfg(feature = "chemfiles")]
 impl StructureWriter {
     pub fn new(output_file: &str, frequency: Frequency) -> StructureWriter {
         StructureWriter {

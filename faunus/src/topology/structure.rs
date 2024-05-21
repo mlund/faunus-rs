@@ -33,8 +33,8 @@ pub(crate) fn positions_from_structure_file(
 
 #[cfg(not(feature = "chemfiles"))]
 pub(crate) fn positions_from_structure_file(
-    filename: &impl AsRef<Path>,
-    cell: Option<&dyn SimulationCell>,
+    _filename: &impl AsRef<Path>,
+    _cell: Option<&dyn SimulationCell>,
 ) -> anyhow::Result<Vec<Point>> {
     todo!("Not implemented. Use the `chemfiles` feature.")
 }

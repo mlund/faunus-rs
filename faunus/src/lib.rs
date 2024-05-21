@@ -164,8 +164,7 @@ pub trait Context: ParticleSystem + WithHamiltonian + Clone + std::fmt::Debug + 
     /// For e.g. Ewald summation, the reciprocal space energy needs to be updated.
     #[allow(unused_variables)]
     fn update(&mut self, change: &Change) -> anyhow::Result<()> {
-        use crate::energy::EnergyTerm;
-        self.hamiltonian_mut().update(change)?;
+        self.hamiltonian_mut().update(self, change)?;
         Ok(())
     }
 
@@ -184,7 +183,7 @@ pub trait Context: ParticleSystem + WithHamiltonian + Clone + std::fmt::Debug + 
     /// Construct a new simulation system from raw parts.
     fn from_raw_parts(
         topology: Rc<Topology>,
-        cell: Self::Cell,
+        cell: Box<dyn SimulationCell>,
         hamiltonian: RefCell<Hamiltonian>,
         structure_file: Option<impl AsRef<Path>>,
         rng: &mut ThreadRng,
