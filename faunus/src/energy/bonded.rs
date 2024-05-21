@@ -149,37 +149,37 @@ impl IntermolecularBonded {
     /// Create a new IntermolecularBonded energy term from Topology.
     #[allow(clippy::new_ret_no_self)]
     pub(super) fn new(topology: &Topology) -> EnergyTerm {
-        let mut particles_status = Vec::new();
-
-        topology.blocks().iter().for_each(|block| {
-            let molecule = &topology.molecules()[block.molecule_index()];
-
-            match block.active() {
-                // add n_molecules * n_atoms active particles
-                BlockActivationStatus::All => {
-                    particles_status.extend(vec![true; block.number() * molecule.atoms().len()])
+        let particles_status: Vec<bool> = topology
+            .blocks()
+            .iter()
+            .flat_map(|block| {
+                let molecule = &topology.molecules()[block.molecule_index()];
+                let num_atoms = molecule.atoms().len();
+                match block.active() {
+                    BlockActivationStatus::All => vec![true; block.number() * num_atoms],
+                    BlockActivationStatus::Partial(x) => {
+                        let mut status = vec![true; x * num_atoms];
+                        status.extend(vec![false; (block.number() - x) * num_atoms]);
+                        status
+                    }
                 }
-
-                // add n_active_molecules * n_atoms active particles and
-                // (n_molecules - n_active_molecules) * n_atoms inactive particles
-                BlockActivationStatus::Partial(x) => {
-                    particles_status.extend(vec![true; x * molecule.atoms().len()]);
-                    particles_status
-                        .extend(vec![false; (block.number() - x) * molecule.atoms().len()]);
-                }
-            }
-        });
+            })
+            .collect();
 
         EnergyTerm::IntermolecularBonded(IntermolecularBonded { particles_status })
     }
 
     /// Update the energy term. The update is needed if at least one particle was activated or deactivated.
+    //
+    // TODO
+    // Currently this updates the entire group upon any change in the size of the group.
+    // However, `change` contains information about the number of (de)activated particles in the group.
+    // We should probably use this information to only update the relevant part of the group.
     pub(super) fn update(&mut self, context: &impl Context, change: &Change) -> anyhow::Result<()> {
         match change {
             Change::SingleGroup(i, GroupChange::Resize(_)) => {
                 self.update_status_one_group(&context.groups()[*i])
             }
-            Change::SingleGroup(_, _) => (),
             Change::Groups(groups) => self.update_status_multiple_groups(
                 context,
                 &groups
@@ -192,7 +192,7 @@ impl IntermolecularBonded {
                     .collect::<Vec<usize>>(),
             ),
             Change::Everything => self.update_status_all(context),
-            Change::None | Change::Volume { .. } => (),
+            Change::SingleGroup(_, _) | Change::None | Change::Volume { .. } => (),
         }
 
         Ok(())
@@ -209,7 +209,7 @@ impl IntermolecularBonded {
             .iter_active()
             .for_each(|x| self.particles_status[x] = true);
         group
-            .iter_active()
+            .iter_inactive()
             .for_each(|x| self.particles_status[x] = false);
     }
 
@@ -233,10 +233,20 @@ impl IntermolecularBonded {
 impl SyncFrom for IntermolecularBonded {
     fn sync_from(&mut self, other: &IntermolecularBonded, change: &Change) -> anyhow::Result<()> {
         match change {
-            Change::Everything | Change::Groups(_) | Change::SingleGroup(_, _) => {
+            // TODO: this can be optimized to only update the relevant parts of the status array
+            Change::Everything | Change::SingleGroup(_, GroupChange::Resize(_)) => {
                 self.particles_status = other.particles_status.clone()
             }
-            Change::None | Change::Volume(_, _) => (),
+            Change::Groups(vec)
+                if vec
+                    .iter()
+                    .any(|group| matches!(group.1, GroupChange::Resize(_))) =>
+            {
+                self.particles_status = other.particles_status.clone()
+            }
+            Change::None | Change::Volume(_, _) | Change::SingleGroup(_, _) | Change::Groups(_) => {
+                ()
+            }
         }
 
         Ok(())
@@ -244,14 +254,17 @@ impl SyncFrom for IntermolecularBonded {
 }
 
 #[cfg(test)]
-mod tests {
+mod tests_intramolecular {
     use std::{cell::RefCell, rc::Rc};
 
     use float_cmp::assert_approx_eq;
 
     use crate::{
-        cell::Cuboid, energy::Hamiltonian, group::GroupCollection, montecarlo::NewOld,
-        platform::reference::ReferencePlatform, WithTopology,
+        cell::Cuboid,
+        energy::Hamiltonian,
+        group::{GroupCollection, GroupSize},
+        montecarlo::NewOld,
+        platform::reference::ReferencePlatform,
     };
 
     use super::*;
@@ -281,33 +294,38 @@ mod tests {
     #[test]
     fn test_intramolecular_one_group() {
         let (system, bonded) = get_intramolecular_bonded();
-        let expected = 1559328.708422025;
+        let expected = [1559328.708422025, 1433671.4698209586];
 
         assert_approx_eq!(
             f64,
             bonded.one_group(&system, &system.groups()[0]),
-            expected
+            expected[0]
         );
         assert_approx_eq!(
             f64,
             bonded.one_group(&system, &system.groups()[1]),
-            expected
+            expected[1]
         );
+        assert_approx_eq!(f64, bonded.one_group(&system, &system.groups()[2]), 0.0)
     }
 
     #[test]
     fn test_intramolecular_multiple_groups() {
         let (system, bonded) = get_intramolecular_bonded();
-        let expected = 2.0 * 1559328.708422025;
+        let expected = 1559328.708422025 + 1433671.4698209586;
 
         assert_approx_eq!(f64, bonded.multiple_groups(&system, &[0, 1]), expected);
     }
 
     #[test]
     fn test_intramolecular_all_groups() {
-        let (system, bonded) = get_intramolecular_bonded();
-        let expected = 2.0 * 1559328.708422025;
+        let (mut system, bonded) = get_intramolecular_bonded();
+        let expected = 1559328.708422025 + 1433671.4698209586;
 
+        assert_approx_eq!(f64, bonded.all_groups(&system), expected);
+
+        system.resize_group(2, GroupSize::Expand(4)).unwrap();
+        let expected = 4112541.544583845;
         assert_approx_eq!(f64, bonded.all_groups(&system), expected);
     }
 
@@ -364,6 +382,240 @@ mod tests {
             (1, GroupChange::PartialUpdate(vec![0, 2])),
         ]);
         let expected = bonded.multiple_groups(&system, &[0, 1]);
+        assert_approx_eq!(f64, bonded.energy(&system, &change), expected);
+    }
+}
+
+#[cfg(test)]
+mod tests_intermolecular {
+    use std::{cell::RefCell, rc::Rc};
+
+    use float_cmp::assert_approx_eq;
+
+    use crate::{
+        cell::Cuboid,
+        energy::Hamiltonian,
+        group::{GroupCollection, GroupSize},
+        montecarlo::NewOld,
+        platform::reference::ReferencePlatform,
+    };
+
+    use super::*;
+
+    #[test]
+    fn test_intermolecular_new() {
+        let topology = Topology::from_file("tests/files/bonded_interactions.yaml").unwrap();
+        let intermolecular = match IntermolecularBonded::new(&topology) {
+            EnergyTerm::IntermolecularBonded(e) => e,
+            _ => panic!("IntermolecularBonded not constructed."),
+        };
+
+        for i in 0..8 {
+            assert!(intermolecular.is_active(i))
+        }
+
+        for i in 8..12 {
+            assert!(!intermolecular.is_active(i));
+        }
+    }
+
+    /// Get intermolecular bonded structure for testing.
+    fn get_intermolecular_bonded() -> (ReferencePlatform, IntermolecularBonded) {
+        let topology = Topology::from_file("tests/files/bonded_interactions.yaml").unwrap();
+
+        let mut rng = rand::thread_rng();
+        let system = ReferencePlatform::from_raw_parts(
+            Rc::new(topology.clone()),
+            Box::new(Cuboid::cubic(20.0)),
+            RefCell::new(Hamiltonian::default()),
+            None::<&str>,
+            &mut rng,
+        )
+        .unwrap();
+
+        let bonded = match IntermolecularBonded::new(&topology) {
+            EnergyTerm::IntermolecularBonded(e) => e,
+            _ => panic!("IntermolecularBonded not constructed."),
+        };
+
+        (system, bonded)
+    }
+
+    #[test]
+    fn test_intermolecular_update() {
+        let (mut system, mut bonded) = get_intermolecular_bonded();
+
+        let original_bonded = bonded.clone();
+
+        // we have to resize the groups at the start of the test so we can actually
+        // see what changes cause the energy term to get updated
+        system.resize_group(1, GroupSize::Shrink(2)).unwrap();
+        system.resize_group(2, GroupSize::Expand(3)).unwrap();
+
+        // no change
+        let change = Change::None;
+        let expected_status = vec![
+            true, true, true, true, // first group
+            true, true, true, true, // second group
+            false, false, false, false, // third group
+        ];
+        bonded.update(&system, &change).unwrap();
+        assert_eq!(bonded.particles_status, expected_status);
+
+        // volume change
+        let change = Change::Volume(
+            crate::cell::VolumeScalePolicy::Isotropic,
+            NewOld {
+                old: 104.0,
+                new: 108.0,
+            },
+        );
+        bonded.update(&system, &change).unwrap();
+        assert_eq!(bonded.particles_status, expected_status);
+
+        // irrelevant single group change
+        let change = Change::SingleGroup(2, GroupChange::PartialUpdate(vec![0, 1, 3]));
+        bonded.update(&system, &change).unwrap();
+        assert_eq!(bonded.particles_status, expected_status);
+
+        // irrelevant changes in multiple groups
+        let change = Change::Groups(vec![
+            (0, GroupChange::PartialUpdate(vec![2])),
+            (2, GroupChange::RigidBody),
+        ]);
+        bonded.update(&system, &change).unwrap();
+        assert_eq!(bonded.particles_status, expected_status);
+
+        // resize single group (irrelevant one)
+        let change = Change::SingleGroup(0, GroupChange::Resize(GroupSize::Shrink(2)));
+        bonded.update(&system, &change).unwrap();
+        assert_eq!(bonded.particles_status, expected_status);
+
+        // resize single group (relevant)
+        let change = Change::SingleGroup(1, GroupChange::Resize(GroupSize::Shrink(2)));
+        bonded.update(&system, &change).unwrap();
+        let expected_status = vec![
+            true, true, true, true, // first group
+            true, true, false, false, // second group
+            false, false, false, false, // third group
+        ];
+        assert_eq!(bonded.particles_status, expected_status);
+
+        let mut bonded = original_bonded.clone();
+
+        // resize multiple groups
+        let change = Change::Groups(vec![
+            (0, GroupChange::RigidBody),
+            (1, GroupChange::Resize(GroupSize::Shrink(2))),
+            (2, GroupChange::Resize(GroupSize::Expand(3))),
+        ]);
+        bonded.update(&system, &change).unwrap();
+        let expected_status = vec![
+            true, true, true, true, // first group
+            true, true, false, false, // second group
+            true, true, true, false, // third group
+        ];
+        assert_eq!(bonded.particles_status, expected_status);
+
+        let mut bonded = original_bonded.clone();
+
+        // everything changes
+        let change = Change::Everything;
+        bonded.update(&system, &change).unwrap();
+        let expected_status = vec![
+            true, true, true, true, // first group
+            true, true, false, false, // second group
+            true, true, true, false, // third group
+        ];
+        assert_eq!(bonded.particles_status, expected_status);
+    }
+
+    #[test]
+    fn test_intermolecular_sync() {
+        let (_, mut bonded) = get_intermolecular_bonded();
+
+        let original_bonded = bonded.clone();
+
+        let mut opposite_bonded = bonded.clone();
+        for status in opposite_bonded.particles_status.iter_mut() {
+            *status = false;
+        }
+
+        // no change
+        let change = Change::None;
+        bonded.sync_from(&opposite_bonded, &change).unwrap();
+        assert_eq!(bonded.particles_status, original_bonded.particles_status);
+
+        // volume change
+        let change = Change::Volume(
+            crate::cell::VolumeScalePolicy::Isotropic,
+            NewOld {
+                old: 104.0,
+                new: 108.0,
+            },
+        );
+        bonded.sync_from(&opposite_bonded, &change).unwrap();
+        assert_eq!(bonded.particles_status, original_bonded.particles_status);
+
+        // irrelevant single group change
+        let change = Change::SingleGroup(2, GroupChange::PartialUpdate(vec![0, 1, 3]));
+        bonded.sync_from(&opposite_bonded, &change).unwrap();
+        assert_eq!(bonded.particles_status, original_bonded.particles_status);
+
+        // irrelevant changes in multiple groups
+        let change = Change::Groups(vec![
+            (0, GroupChange::PartialUpdate(vec![2])),
+            (2, GroupChange::RigidBody),
+        ]);
+        bonded.sync_from(&opposite_bonded, &change).unwrap();
+        assert_eq!(bonded.particles_status, original_bonded.particles_status);
+
+        // resize single group
+        let change = Change::SingleGroup(1, GroupChange::Resize(GroupSize::Shrink(2)));
+        bonded.sync_from(&opposite_bonded, &change).unwrap();
+        assert_eq!(bonded.particles_status, opposite_bonded.particles_status);
+
+        let mut bonded = original_bonded.clone();
+
+        // resize multiple groups
+        let change = Change::Groups(vec![
+            (0, GroupChange::RigidBody),
+            (1, GroupChange::Resize(GroupSize::Shrink(2))),
+            (2, GroupChange::Resize(GroupSize::Expand(3))),
+        ]);
+        bonded.sync_from(&opposite_bonded, &change).unwrap();
+        assert_eq!(bonded.particles_status, opposite_bonded.particles_status);
+
+        let mut bonded = original_bonded.clone();
+
+        // everything changes
+        let change = Change::Everything;
+        bonded.sync_from(&opposite_bonded, &change).unwrap();
+        assert_eq!(bonded.particles_status, opposite_bonded.particles_status);
+    }
+
+    #[test]
+    fn test_intermolecular_energy() {
+        let (mut system, mut bonded) = get_intermolecular_bonded();
+
+        // no change
+        let change = Change::None;
+        assert_approx_eq!(f64, bonded.energy(&system, &change), 0.0);
+
+        // any other change
+        let change = Change::Everything;
+        let expected = 4349.90721737715;
+        assert_approx_eq!(f64, bonded.energy(&system, &change), expected);
+
+        let change = Change::SingleGroup(1, GroupChange::PartialUpdate(vec![0, 2]));
+        assert_approx_eq!(f64, bonded.energy(&system, &change), expected);
+
+        // resize group
+        let resize = GroupSize::Expand(2);
+        system.resize_group(2, resize).unwrap();
+        let change = Change::SingleGroup(2, GroupChange::Resize(resize));
+        bonded.update(&system, &change).unwrap();
+        let expected = 4362.58996700314;
         assert_approx_eq!(f64, bonded.energy(&system, &change), expected);
     }
 }
