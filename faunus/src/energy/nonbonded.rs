@@ -318,7 +318,13 @@ impl NonbondedMatrix {
             GroupChange::PartialUpdate(x) => x
                 .iter()
                 .map(|&particle| {
-                    self.particle_with_all(context, particle, &context.groups()[group_index])
+                    let group = &context.groups()[group_index];
+                    // the PartialUpdate stores relative indices of particles
+                    match group.absolute_index(particle) {
+                        Ok(abs_index) => self.particle_with_all(context, abs_index, group),
+                        // if the particle is not active, return 0.0
+                        Err(_) => 0.0,
+                    }
                 })
                 .sum(),
             GroupChange::None => 0.0,
@@ -454,8 +460,8 @@ mod tests {
 
     /// Get nonbonded matrix for testing.
     fn get_test_matrix() -> (ReferencePlatform, NonbondedMatrix) {
-        let topology = Topology::from_file("tests/files/topology_interactions_test.yaml").unwrap();
-        let builder = HamiltonianBuilder::from_file("tests/files/topology_interactions_test.yaml")
+        let topology = Topology::from_file("tests/files/nonbonded_interactions.yaml").unwrap();
+        let builder = HamiltonianBuilder::from_file("tests/files/nonbonded_interactions.yaml")
             .unwrap()
             .nonbonded;
 
@@ -890,7 +896,7 @@ mod tests {
         assert_approx_eq!(f64, nonbonded.energy(&system, &change), expected);
 
         // change several particles within a single group
-        let change = Change::SingleGroup(1, GroupChange::PartialUpdate(vec![3, 4]));
+        let change = Change::SingleGroup(1, GroupChange::PartialUpdate(vec![0, 1]));
         let expected = nonbonded.particle_with_all(&system, 3, &system.groups()[1])
             + nonbonded.particle_with_all(&system, 4, &system.groups()[1]);
         assert_approx_eq!(f64, nonbonded.energy(&system, &change), expected);
@@ -898,11 +904,19 @@ mod tests {
         // change several particles in multiple groups
         let change = Change::Groups(vec![
             (0, GroupChange::PartialUpdate(vec![1])),
-            (1, GroupChange::PartialUpdate(vec![3, 4])),
+            (1, GroupChange::PartialUpdate(vec![0, 1])),
         ]);
         let expected = nonbonded.particle_with_all(&system, 3, &system.groups()[1])
             + nonbonded.particle_with_all(&system, 4, &system.groups()[1])
             + nonbonded.particle_with_all(&system, 1, &system.groups()[0]);
+        assert_approx_eq!(f64, nonbonded.energy(&system, &change), expected);
+
+        // change several particles in multiple groups, some of which are inactive
+        let change = Change::Groups(vec![
+            (0, GroupChange::PartialUpdate(vec![1, 2])),
+            (1, GroupChange::PartialUpdate(vec![0, 1])),
+            (2, GroupChange::PartialUpdate(vec![0])),
+        ]);
         assert_approx_eq!(f64, nonbonded.energy(&system, &change), expected);
     }
 }

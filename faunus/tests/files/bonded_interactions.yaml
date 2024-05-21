@@ -1,0 +1,32 @@
+# File for testing the correctness of implementation of bonded interactions.
+atoms:
+  - {name: A, charge: -1.0, mass: 1.0}
+  - {name: B, mass: 2.0}
+
+molecules:
+  - name: MOL
+    atoms: [A, B, A, B]
+    bonds:
+      - {index: [0, 1], kind: !Harmonic {k: 100.0, req: 1.0}}
+      - {index: [1, 2], kind: !Harmonic {k: 25.0, req: 2.0}}
+      - {index: [2, 3], kind: !Harmonic {k: 50.0, req: 1.5}}
+    torsions:
+      - {index: [0, 1, 2], kind: !Harmonic {k: 50.0, aeq: 45.0}}
+      - {index: [1, 2, 3], kind: !Harmonic {k: 100.0, aeq: 90.0}}
+    dihedrals:
+      - {index: [0, 1, 2, 3], kind: !ProperHarmonic {k: 20.0, aeq: 130.0}}
+
+system:
+  blocks:
+    - molecule: MOL
+      N: 2
+      insert: !Manual
+        - [1.0, 2.0, 3.0]    # 0
+        - [0.0, 1.0, 2.0]    # 1
+        - [-1.0, -2.0, -3.0] # 2
+        - [-1.0, 0.0, 1.0]   # 3
+
+        - [3.0, 4.0, 5.0]    # 4
+        - [2.0, 3.0, 4.0]    # 5
+        - [1.0, 0.0, -1.0]   # 6
+        - [1.0, 2.0, 3.0]    # 7

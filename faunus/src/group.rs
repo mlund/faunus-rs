@@ -265,7 +265,11 @@ impl Group {
     /// Returns an error if the index points to an inactive particle.
     pub fn absolute_index(&self, index: usize) -> anyhow::Result<usize> {
         if index >= self.num_active {
-            anyhow::bail!("Index {} out of range (max {})", index, self.num_active - 1)
+            anyhow::bail!(
+                "Index {} out of range ({} active particles)",
+                index,
+                self.num_active
+            )
         } else {
             Ok(self.range.start + index)
         }

@@ -33,12 +33,21 @@ impl EnergyChange for IntramolecularBonded {
         match change {
             Change::Everything | Change::Volume(_, _) => self.all_groups(context),
             Change::None | Change::SingleGroup(_, GroupChange::RigidBody) => 0.0,
-            // TODO! optimization; currently any change to the group will
-            // cause recalculation of all bonded interactions inside the group
-            Change::SingleGroup(id, _) => self.one_group(context, &context.groups()[*id]),
-            Change::Groups(groups) => {
-                self.multiple_groups(context, &groups.iter().map(|x| x.0).collect::<Vec<usize>>())
-            }
+            // TODO! optimization: not all bonds have to be recalculated if a single particle inside a group changes
+            Change::SingleGroup(id, change) => match change {
+                GroupChange::None | GroupChange::RigidBody => 0.0,
+                _ => self.one_group(context, &context.groups()[*id]),
+            },
+            Change::Groups(groups) => self.multiple_groups(
+                context,
+                &groups
+                    .iter()
+                    .filter_map(|(index, change)| match change {
+                        GroupChange::None | GroupChange::RigidBody => None,
+                        _ => Some(*index),
+                    })
+                    .collect::<Vec<usize>>(),
+            ),
         }
     }
 }
@@ -231,5 +240,130 @@ impl SyncFrom for IntermolecularBonded {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{cell::RefCell, rc::Rc};
+
+    use float_cmp::assert_approx_eq;
+
+    use crate::{
+        cell::Cuboid, energy::Hamiltonian, group::GroupCollection, montecarlo::NewOld,
+        platform::reference::ReferencePlatform, WithTopology,
+    };
+
+    use super::*;
+
+    /// Get intramolecular bonded structure for testing.
+    fn get_intramolecular_bonded() -> (ReferencePlatform, IntramolecularBonded) {
+        let topology = Topology::from_file("tests/files/bonded_interactions.yaml").unwrap();
+
+        let mut rng = rand::thread_rng();
+        let system = ReferencePlatform::from_raw_parts(
+            Rc::new(topology),
+            Box::new(Cuboid::cubic(20.0)),
+            RefCell::new(Hamiltonian::default()),
+            None::<&str>,
+            &mut rng,
+        )
+        .unwrap();
+
+        let bonded = match IntramolecularBonded::new() {
+            EnergyTerm::IntramolecularBonded(e) => e,
+            _ => panic!("IntramolecularBonded not constructed."),
+        };
+
+        (system, bonded)
+    }
+
+    #[test]
+    fn test_intramolecular_one_group() {
+        let (system, bonded) = get_intramolecular_bonded();
+        let expected = 1559328.708422025;
+
+        assert_approx_eq!(
+            f64,
+            bonded.one_group(&system, &system.groups()[0]),
+            expected
+        );
+        assert_approx_eq!(
+            f64,
+            bonded.one_group(&system, &system.groups()[1]),
+            expected
+        );
+    }
+
+    #[test]
+    fn test_intramolecular_multiple_groups() {
+        let (system, bonded) = get_intramolecular_bonded();
+        let expected = 2.0 * 1559328.708422025;
+
+        assert_approx_eq!(f64, bonded.multiple_groups(&system, &[0, 1]), expected);
+    }
+
+    #[test]
+    fn test_intramolecular_all_groups() {
+        let (system, bonded) = get_intramolecular_bonded();
+        let expected = 2.0 * 1559328.708422025;
+
+        assert_approx_eq!(f64, bonded.all_groups(&system), expected);
+    }
+
+    #[test]
+    fn test_intramolecular_energy() {
+        let (system, bonded) = get_intramolecular_bonded();
+
+        // no change
+        let change = Change::None;
+        assert_approx_eq!(f64, bonded.energy(&system, &change), 0.0);
+
+        // change everything
+        let change = Change::Everything;
+        let expected = bonded.all_groups(&system);
+        assert_approx_eq!(f64, bonded.energy(&system, &change), expected);
+
+        // change volume
+        let change = Change::Volume(
+            crate::cell::VolumeScalePolicy::Isotropic,
+            NewOld {
+                old: 104.0,
+                new: 108.0,
+            },
+        );
+        assert_approx_eq!(f64, bonded.energy(&system, &change), expected);
+
+        // single group with no change
+        let change = Change::SingleGroup(1, GroupChange::None);
+        assert_approx_eq!(f64, bonded.energy(&system, &change), 0.0);
+
+        // multiple groups with no change
+        let change = Change::Groups(vec![(0, GroupChange::None), (1, GroupChange::None)]);
+        assert_approx_eq!(f64, bonded.energy(&system, &change), 0.0);
+
+        // change single rigid group
+        let change = Change::SingleGroup(1, GroupChange::RigidBody);
+        assert_approx_eq!(f64, bonded.energy(&system, &change), 0.0);
+
+        // change multiple rigid groups
+        let change = Change::Groups(vec![
+            (0, GroupChange::RigidBody),
+            (1, GroupChange::RigidBody),
+        ]);
+        assert_approx_eq!(f64, bonded.energy(&system, &change), 0.0);
+
+        // change several particles within a single group
+        let change = Change::SingleGroup(1, GroupChange::PartialUpdate(vec![1, 2]));
+        let expected = bonded.one_group(&system, &system.groups()[1]);
+        assert_approx_eq!(f64, bonded.energy(&system, &change), expected);
+
+        // change several particles in multiple groups
+        let change = Change::Groups(vec![
+            (0, GroupChange::PartialUpdate(vec![1])),
+            (1, GroupChange::PartialUpdate(vec![0, 2])),
+        ]);
+        let expected = bonded.multiple_groups(&system, &[0, 1]);
+        assert_approx_eq!(f64, bonded.energy(&system, &change), expected);
     }
 }
