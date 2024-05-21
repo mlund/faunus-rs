@@ -24,6 +24,8 @@ use std::collections::HashMap;
 use std::iter::FusedIterator;
 use std::{cmp::Ordering, ops::Neg};
 
+use crate::energy::EnergyChange;
+
 mod translate;
 pub use translate::*;
 
@@ -342,7 +344,7 @@ impl<T: Context + 'static> Iterator for MarkovChain<T> {
         // perform analyses
         match self
             .analyses
-            .sample(&self.context.new, self.step, &mut self.rng)
+            .sample(&self.context.old, self.step, &mut self.rng)
         {
             Ok(_) => (),
             Err(e) => return Some(Err(e)),
@@ -402,11 +404,11 @@ impl<T: Context + 'static> MarkovChain<T> {
                 self.context
                     .new
                     .hamiltonian()
-                    .energy_change(&self.context.new, &change),
+                    .energy(&self.context.new, &change),
                 self.context
                     .old
                     .hamiltonian()
-                    .energy_change(&self.context.old, &change),
+                    .energy(&self.context.old, &change),
             );
             let bias = mv.bias(&change, &energy);
             if self

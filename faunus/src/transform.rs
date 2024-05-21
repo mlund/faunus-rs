@@ -14,10 +14,7 @@
 
 //! Transformations of particles and groups
 
-use crate::{
-    cell::BoundaryConditions, cell::VolumeScalePolicy, group::ParticleSelection, Point,
-    PointParticle,
-};
+use crate::{cell::VolumeScalePolicy, group::ParticleSelection, Point};
 use anyhow::Ok;
 use nalgebra::Quaternion;
 use rand::prelude::*;

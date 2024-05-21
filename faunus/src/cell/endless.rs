@@ -20,6 +20,8 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 
+use super::SimulationCell;
+
 /// Endless simulation cell with no boundaries and infinite volume
 #[derive(Clone, Debug, Serialize, Deserialize, Copy, Default)]
 pub struct Endless {}
@@ -67,3 +69,5 @@ impl VolumeScale for Endless {
         anyhow::bail!("Cannot scale position in endless cell")
     }
 }
+
+impl SimulationCell for Endless {}

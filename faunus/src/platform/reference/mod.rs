@@ -17,7 +17,7 @@
 use rand::rngs::ThreadRng;
 
 use crate::{
-    cell::{BoundaryConditions, Cuboid},
+    cell::{Cell, SimulationCell},
     energy::{builder::HamiltonianBuilder, Hamiltonian},
     group::{GroupCollection, GroupLists, GroupSize},
     topology::{Topology, TopologyLike},
@@ -42,17 +42,16 @@ pub struct ReferencePlatform {
     particles: Vec<Particle>,
     groups: Vec<Group>,
     group_lists: GroupLists,
-    cell: crate::cell::Cuboid,
+    cell: Box<dyn SimulationCell>,
     hamiltonian: RefCell<Hamiltonian>,
 }
 
 impl WithCell for ReferencePlatform {
-    type Cell = crate::cell::Cuboid;
-    fn cell(&self) -> &Self::Cell {
-        &self.cell
+    fn cell(&self) -> &dyn SimulationCell {
+        &*self.cell
     }
-    fn cell_mut(&mut self) -> &mut Self::Cell {
-        &mut self.cell
+    fn cell_mut(&mut self) -> &mut dyn SimulationCell {
+        &mut *self.cell
     }
 }
 
@@ -86,14 +85,15 @@ impl Context for ReferencePlatform {
     ) -> anyhow::Result<Self> {
         let topology = Topology::from_file(&faunus_file)?;
         let hamiltonian_builder = HamiltonianBuilder::from_file(&faunus_file)?;
+        // validate hamiltonian builder
+        hamiltonian_builder.validate(topology.atoms())?;
 
-        // TODO! implement proper cell reading
-        let cell = Cuboid::cubic(100.0);
+        let cell = Cell::from_file(&faunus_file)?;
 
         let hamiltonian = Hamiltonian::new(&hamiltonian_builder, &topology)?;
         ReferencePlatform::from_raw_parts(
             Rc::new(topology),
-            cell,
+            Box::from(cell),
             RefCell::new(hamiltonian),
             structure_file,
             rng,
@@ -102,7 +102,7 @@ impl Context for ReferencePlatform {
 
     fn from_raw_parts(
         topology: Rc<Topology>,
-        cell: Self::Cell,
+        cell: Box<dyn SimulationCell>,
         hamiltonian: RefCell<Hamiltonian>,
         structure: Option<impl AsRef<Path>>,
         rng: &mut ThreadRng,

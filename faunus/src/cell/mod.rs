@@ -24,8 +24,11 @@ mod endless;
 //pub(crate) mod lumol;
 mod sphere;
 
+use std::path::Path;
+
 use crate::Point;
 pub use cuboid::Cuboid;
+use dyn_clone::DynClone;
 pub use endless::Endless;
 use rand::rngs::ThreadRng;
 use serde::{Deserialize, Serialize};
@@ -40,7 +43,8 @@ pub trait SimulationCell:
     Shape
     + BoundaryConditions
     + VolumeScale
-    + Clone
+    + DynClone
+    + std::fmt::Debug
     + crate::topology::chemfiles_interface::CellToChemCell
 {
 }
@@ -49,7 +53,10 @@ pub trait SimulationCell:
 ///
 /// It is a combination of a [`Shape`], [`BoundaryConditions`] and [`VolumeScale`].
 #[cfg(not(feature = "chemfiles"))]
-pub trait SimulationCell: Shape + BoundaryConditions + VolumeScale + Clone {}
+pub trait SimulationCell:
+    Shape + BoundaryConditions + VolumeScale + DynClone + std::fmt::Debug
+{
+}
 
 /// Geometric shape like a sphere, cube, etc.
 pub trait Shape {
@@ -71,6 +78,8 @@ pub trait Shape {
     /// Generate a random point positioned inside the boundaries of the shape
     fn get_point_inside(&self, rng: &mut ThreadRng) -> Point;
 }
+
+dyn_clone::clone_trait_object!(SimulationCell);
 
 /// Periodic boundary conditions in various directions
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq)]
@@ -143,4 +152,76 @@ pub trait VolumeScale {
         new_volume: f64,
         policy: VolumeScalePolicy,
     ) -> Result<(), anyhow::Error>;
+}
+
+/// Simulation cell enum used for reading information about cell from the input file.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub(crate) enum Cell {
+    Cuboid(Cuboid),
+    Endless(Endless),
+    Sphere(Sphere),
+}
+
+impl Cell {
+    /// Get simulation cell from a Faunus configuration file.
+    ///
+    /// Returns a trait object implementing `SimulationCell`.
+    pub(crate) fn from_file(filename: impl AsRef<Path>) -> anyhow::Result<Box<dyn SimulationCell>> {
+        let yaml = std::fs::read_to_string(filename)?;
+        let full: serde_yaml::Value = serde_yaml::from_str(&yaml)?;
+
+        let system = full.get("system").ok_or(anyhow::Error::msg(
+            "Could not find `system` in the YAML file.",
+        ))?;
+
+        match system.get("cell") {
+            Some(x) => match serde_yaml::from_value(x.clone()).map_err(anyhow::Error::msg)? {
+                Cell::Cuboid(mut x) => {
+                    // `half_cell` information is missing after parsing, we have to add it
+                    x.set_half_cell();
+                    Ok(Box::new(x))
+                }
+                Cell::Endless(x) => Ok(Box::new(x)),
+                Cell::Sphere(x) => Ok(Box::new(x)),
+            },
+            None => {
+                log::warn!("No cell defined for the system. Using Endless cell.");
+                Ok(Box::new(Endless::default()))
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::Point;
+
+    use super::Cell;
+
+    #[test]
+    fn test_read_from_file() {
+        // cuboid
+        let cell = Cell::from_file("tests/files/topology_pass.yaml").unwrap();
+        let point1 = Point::new(-4.9, 2.4, 5.71);
+        let point2 = Point::new(-5.1, 3.2, 4.6);
+        assert!(cell.is_inside(&point1));
+        assert!(!cell.is_inside(&point2));
+
+        // sphere
+        let cell = Cell::from_file("tests/files/cell_sphere.yaml").unwrap();
+        let point1 = Point::new(8.9, 5.2, 9.3);
+        let point2 = Point::new(8.9, 7.2, 9.3);
+        assert!(cell.is_inside(&point1));
+        assert!(!cell.is_inside(&point2));
+
+        // endless
+        let cell = Cell::from_file("tests/files/cell_endless.yaml").unwrap();
+        let point1 = Point::new(-203847.21, 947382.143, 2973212.14);
+        assert!(cell.is_inside(&point1));
+
+        // default
+        let cell = Cell::from_file("tests/files/cell_none.yaml").unwrap();
+        let point1 = Point::new(-203847.21, 947382.143, 2973212.14);
+        assert!(cell.is_inside(&point1));
+    }
 }

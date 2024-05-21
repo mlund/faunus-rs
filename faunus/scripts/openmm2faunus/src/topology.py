@@ -470,7 +470,7 @@ class FaunusTopology:
             bonds.append(
                 FaunusBond(
                     [int(x) - 1 for x in bond[:2]],
-                    FaunusBondKind.Harmonic(float(bond[4]), float(bond[3])),
+                    FaunusBondKind.Harmonic(float(bond[4]), float(bond[3]) * 10.0),
                 )
             )
 
@@ -606,7 +606,7 @@ class FaunusTopology:
             bonds.append(
                 FaunusBond(
                     [int(x) - 1 for x in constraint[:2]],
-                    FaunusBondKind.Harmonic(50_000, float(constraint[3])),
+                    FaunusBondKind.Harmonic(50_000, float(constraint[3]) * 10.0),
                 )
             )
 
@@ -648,7 +648,7 @@ class FaunusTopology:
 
                         faunus_nonbonded[(faunus_name1, faunus_name2)] = [
                             FaunusNonbondedInteraction.LennardJones(
-                                float(interaction[3]), float(interaction[4])
+                                float(interaction[3]) * 10.0, float(interaction[4])
                             )
                         ]
 

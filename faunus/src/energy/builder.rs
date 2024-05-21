@@ -411,8 +411,7 @@ mod tests {
                             WeeksChandlerAndersen::new(1.3, 8.0)
                         )),
                         NonbondedInteraction::CoulombPlain(coulomb::pairwise::Plain::new(
-                            11.0,
-                            Some(2.0)
+                            11.0, None,
                         ))
                     ]
                 );

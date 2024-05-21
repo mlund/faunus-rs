@@ -28,6 +28,13 @@ use self::{
     nonbonded::NonbondedMatrix,
 };
 
+/// Trait implemented by structures that can compute
+/// and return an energy relevant to some change in the system.
+pub trait EnergyChange {
+    /// Compute the energy associated with some change in the system.
+    fn energy(&self, context: &impl Context, change: &Change) -> f64;
+}
+
 /// Collection of energy terms.
 ///
 /// The Hamiltonian is a collection of energy terms,
@@ -77,17 +84,6 @@ impl Hamiltonian {
         self.energy_terms.push(term);
     }
 
-    /// Compute the energy change of the Hamiltonian due to a change in the system.
-    /// The energy is returned in the units of kJ/mol.
-    pub(crate) fn energy_change(&self, context: &impl Context, change: &Change) -> f64 {
-        self.energy_terms
-            .iter()
-            .map(|term| term.energy_change(context, change))
-            // early return if the total energy becomes none or infinite
-            .take_while(|&energy| !energy.is_nan() && !energy.is_infinite())
-            .sum()
-    }
-
     /// Update internal state due to a change in the system.
     ///
     /// After a system change, the internal state of the energy terms may need to be updated.
@@ -98,6 +94,19 @@ impl Hamiltonian {
             .try_for_each(|term| term.update(context, change))?;
 
         Ok(())
+    }
+}
+
+impl EnergyChange for Hamiltonian {
+    /// Compute the energy of the Hamiltonian associated with a change in the system.
+    /// The energy is returned in the units of kJ/mol.
+    fn energy(&self, context: &impl Context, change: &Change) -> f64 {
+        self.energy_terms
+            .iter()
+            .map(|term| term.energy(context, change))
+            // early return if the total energy becomes none or infinite
+            .take_while(|&energy| !energy.is_nan() && !energy.is_infinite())
+            .sum()
     }
 }
 
@@ -121,21 +130,23 @@ impl EnergyTerm {
         NonbondedMatrix::new(&hamiltonian_builder.nonbonded, &topology)
     }
 
-    /// Compute the energy change of the EnergyTerm due to a change in the system.
-    /// The energy is returned in the units of kJ/mol.
-    fn energy_change(&self, context: &impl Context, change: &Change) -> f64 {
-        match self {
-            Self::NonbondedMatrix(x) => x.energy_change(context, change),
-            Self::IntramolecularBonded(x) => x.energy_change(context, change),
-            Self::IntermolecularBonded(x) => x.energy_change(context, change),
-        }
-    }
-
     /// Update internal state due to a change in the system.
     fn update(&mut self, context: &impl Context, change: &Change) -> anyhow::Result<()> {
         match self {
             EnergyTerm::NonbondedMatrix(_) | EnergyTerm::IntramolecularBonded(_) => Ok(()),
             EnergyTerm::IntermolecularBonded(x) => x.update(context, change),
+        }
+    }
+}
+
+impl EnergyChange for EnergyTerm {
+    /// Compute the energy of the EnergyTerm relevant to the change in the system.
+    /// The energy is returned in the units of kJ/mol.
+    fn energy(&self, context: &impl Context, change: &Change) -> f64 {
+        match self {
+            Self::NonbondedMatrix(x) => x.energy(context, change),
+            Self::IntramolecularBonded(x) => x.energy(context, change),
+            Self::IntermolecularBonded(x) => x.energy(context, change),
         }
     }
 }

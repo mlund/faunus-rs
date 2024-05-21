@@ -23,7 +23,7 @@ use crate::Point;
 #[cfg(feature = "chemfiles")]
 pub(crate) fn positions_from_structure_file(
     filename: &impl AsRef<Path>,
-    cell: Option<&impl SimulationCell>,
+    cell: Option<&dyn SimulationCell>,
 ) -> anyhow::Result<Vec<Point>> {
     Ok(super::chemfiles_interface::positions_from_frame(
         &super::chemfiles_interface::frame_from_file(filename)?,
@@ -34,7 +34,7 @@ pub(crate) fn positions_from_structure_file(
 #[cfg(not(feature = "chemfiles"))]
 pub(crate) fn positions_from_structure_file(
     filename: &impl AsRef<Path>,
-    cell: Option<&impl SimulationCell>,
+    cell: Option<&dyn SimulationCell>,
 ) -> anyhow::Result<Vec<Point>> {
     todo!("Not implemented. Use the `chemfiles` feature.")
 }

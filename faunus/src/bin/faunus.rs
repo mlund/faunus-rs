@@ -12,9 +12,6 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
-use faunus::{energy::Hamiltonian, platform::reference::ReferencePlatform, *};
-use std::rc::Rc;
-
 fn main() {
     //let system = ReferencePlatform::new();
     //let a = Particle::default();

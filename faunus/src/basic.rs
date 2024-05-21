@@ -17,10 +17,7 @@
 use nalgebra::Vector3;
 use std::f64::consts::PI;
 
-use crate::{
-    cell::{BoundaryConditions, Endless},
-    Point,
-};
+use crate::{cell::SimulationCell, Point};
 
 /// Calculate center of mass of a collection of points with masses.
 /// Does not consider periodic boundary conditions.
@@ -113,7 +110,7 @@ fn test_angle_vectors() {
 /// Calculate angle between three points with `b` being the vertext of the angle.
 /// The angle is returned in degrees.
 #[inline(always)]
-pub(crate) fn angle_points(a: &Point, b: &Point, c: &Point, pbc: &impl BoundaryConditions) -> f64 {
+pub(crate) fn angle_points(a: &Point, b: &Point, c: &Point, pbc: &dyn SimulationCell) -> f64 {
     // b->a
     let ba = pbc.distance(a, b);
     // b->c
@@ -125,7 +122,7 @@ pub(crate) fn angle_points(a: &Point, b: &Point, c: &Point, pbc: &impl BoundaryC
 fn test_angle_points() {
     use float_cmp::assert_approx_eq;
 
-    let endless_cell = Endless::default();
+    let endless_cell = crate::cell::Endless::default();
 
     let p1 = Point::new(3.2, 3.3, 2.5);
     let p2 = Point::new(1.2, 3.3, 2.5);
@@ -165,8 +162,28 @@ fn test_angle_points() {
         angle_points(&p1, &p2, &p3, &endless_cell),
         110.40636490060925
     );
+}
 
-    // TODO: test periodic boundary conditions
+#[test]
+fn test_angle_points_pbc() {
+    use float_cmp::assert_approx_eq;
+
+    let cell = crate::cell::Cuboid::new(5.0, 10.0, 15.0);
+
+    let p1 = Point::new(2.2, 3.3, 2.5);
+    let p2 = Point::new(-2.0, 3.3, 2.5);
+    let p3 = Point::new(-2.2, 3.3, 2.5);
+    assert_approx_eq!(f64, angle_points(&p1, &p2, &p3, &cell), 0.0);
+
+    let p1 = Point::new(1.4, 3.3, 2.5);
+    let p2 = Point::new(2.2, 3.3, 2.5);
+    let p3 = Point::new(-2.3, 3.3, 2.5);
+    assert_approx_eq!(f64, angle_points(&p1, &p2, &p3, &cell), 180.0);
+
+    let p1 = Point::new(1.5, -4.7, 1.2);
+    let p2 = Point::new(1.5, 4.3, 1.2);
+    let p3 = Point::new(1.5, -2.7, 4.2);
+    assert_approx_eq!(f64, angle_points(&p1, &p2, &p3, &cell), 45.0);
 }
 
 /// Calculate dihedral angle between two planes defined by four points.
@@ -178,7 +195,7 @@ pub(crate) fn dihedral_points(
     b: &Point,
     c: &Point,
     d: &Point,
-    pbc: &impl BoundaryConditions,
+    pbc: &dyn SimulationCell,
 ) -> f64 {
     let ab = pbc.distance(b, a);
     let bc = pbc.distance(c, b);
@@ -198,7 +215,7 @@ pub(crate) fn dihedral_points(
 fn test_dihedral_points() {
     use float_cmp::assert_approx_eq;
 
-    let endless_cell = Endless::default();
+    let endless_cell = crate::cell::Endless::default();
 
     // cis conformation
     let p1 = Point::new(1.2, 5.3, 2.5);
@@ -317,4 +334,51 @@ fn test_dihedral_points() {
     );
 
     // TODO: test periodic boundary conditions
+}
+
+#[test]
+fn test_dihedral_points_pbc() {
+    use crate::cell::BoundaryConditions;
+    use float_cmp::assert_approx_eq;
+
+    let cuboid = crate::cell::Cuboid::new(20.0, 10.0, 28.0);
+
+    let mut p0 = Point::new(24.969, 13.428, 30.692);
+    let mut p1 = Point::new(24.044, 12.661, 29.808);
+    let mut p2 = Point::new(22.785, 13.482, 29.543);
+    let mut p3 = Point::new(21.951, 13.670, 30.431);
+    let mut p4 = Point::new(23.672, 11.328, 30.466);
+    let mut p5 = Point::new(22.881, 10.326, 29.620);
+    let mut p6 = Point::new(23.691, 9.935, 28.389);
+    let mut p7 = Point::new(22.557, 9.096, 30.459);
+
+    cuboid.boundary(&mut p0);
+    cuboid.boundary(&mut p1);
+    cuboid.boundary(&mut p2);
+    cuboid.boundary(&mut p3);
+    cuboid.boundary(&mut p4);
+    cuboid.boundary(&mut p5);
+    cuboid.boundary(&mut p6);
+    cuboid.boundary(&mut p7);
+
+    assert_approx_eq!(
+        f64,
+        dihedral_points(&p0, &p1, &p2, &p3, &cuboid),
+        -71.215151146714
+    );
+    assert_approx_eq!(
+        f64,
+        dihedral_points(&p0, &p1, &p4, &p5, &cuboid),
+        -171.9431994795364
+    );
+    assert_approx_eq!(
+        f64,
+        dihedral_points(&p1, &p4, &p5, &p6, &cuboid),
+        60.82226735264639
+    );
+    assert_approx_eq!(
+        f64,
+        dihedral_points(&p1, &p4, &p5, &p7, &cuboid),
+        -177.6364115152126
+    );
 }

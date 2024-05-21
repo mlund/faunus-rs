@@ -20,22 +20,16 @@ use crate::{
     Change, Context, GroupChange, SyncFrom,
 };
 
-use super::EnergyTerm;
+use super::{EnergyChange, EnergyTerm};
 
 /// Energy term for computing intramolecular bonded interactions.
 #[derive(Debug, Clone)]
 pub struct IntramolecularBonded {}
 
-impl IntramolecularBonded {
-    /// Create a new IntramolecularBonded energy term.
-    #[allow(clippy::new_ret_no_self)]
-    pub(super) fn new() -> EnergyTerm {
-        EnergyTerm::IntramolecularBonded(IntramolecularBonded {})
-    }
-
-    /// Compute the energy change associated with the intramolecular
-    /// bonded interactions due to a change in the system.
-    pub(super) fn energy_change(&self, context: &impl Context, change: &Change) -> f64 {
+impl EnergyChange for IntramolecularBonded {
+    /// Compute the energy associated with the intramolecular
+    /// bonded interactions relevant to some change in the system.
+    fn energy(&self, context: &impl Context, change: &Change) -> f64 {
         match change {
             Change::Everything | Change::Volume(_, _) => self.all_groups(context),
             Change::None | Change::SingleGroup(_, GroupChange::RigidBody) => 0.0,
@@ -46,6 +40,14 @@ impl IntramolecularBonded {
                 self.multiple_groups(context, &groups.iter().map(|x| x.0).collect::<Vec<usize>>())
             }
         }
+    }
+}
+
+impl IntramolecularBonded {
+    /// Create a new IntramolecularBonded energy term.
+    #[allow(clippy::new_ret_no_self)]
+    pub(super) fn new() -> EnergyTerm {
+        EnergyTerm::IntramolecularBonded(IntramolecularBonded {})
     }
 
     /// Calculate energy of all active bonded interactions of the specified groups.
@@ -104,6 +106,36 @@ pub struct IntermolecularBonded {
     particles_status: Vec<bool>,
 }
 
+impl EnergyChange for IntermolecularBonded {
+    /// Compute the energy associated with the intermolecular
+    /// bonded interactions relevant to some change in the system.
+    fn energy(&self, context: &impl Context, change: &Change) -> f64 {
+        match change {
+            Change::None => 0.0,
+            _ => {
+                let topology = context.topology_ref();
+                let intermolecular = topology.intermolecular();
+
+                intermolecular
+                    .bonds()
+                    .iter()
+                    .map(|bond| bond.energy_intermolecular(context, self))
+                    .sum::<f64>()
+                    + intermolecular
+                        .torsions()
+                        .iter()
+                        .map(|torsion| torsion.energy_intermolecular(context, self))
+                        .sum::<f64>()
+                    + intermolecular
+                        .dihedrals()
+                        .iter()
+                        .map(|dihedral| dihedral.energy_intermolecular(context, self))
+                        .sum::<f64>()
+            }
+        }
+    }
+}
+
 impl IntermolecularBonded {
     /// Create a new IntermolecularBonded energy term from Topology.
     #[allow(clippy::new_ret_no_self)]
@@ -130,34 +162,6 @@ impl IntermolecularBonded {
         });
 
         EnergyTerm::IntermolecularBonded(IntermolecularBonded { particles_status })
-    }
-
-    /// Compute the energy change associated with the intermolecular
-    /// bonded interactions due to a change in the system.
-    pub(super) fn energy_change(&self, context: &impl Context, change: &Change) -> f64 {
-        match change {
-            Change::None => 0.0,
-            _ => {
-                let topology = context.topology_ref();
-                let intermolecular = topology.intermolecular();
-
-                intermolecular
-                    .bonds()
-                    .iter()
-                    .map(|bond| bond.energy_intermolecular(context, self))
-                    .sum::<f64>()
-                    + intermolecular
-                        .torsions()
-                        .iter()
-                        .map(|torsion| torsion.energy_intermolecular(context, self))
-                        .sum::<f64>()
-                    + intermolecular
-                        .dihedrals()
-                        .iter()
-                        .map(|dihedral| dihedral.energy_intermolecular(context, self))
-                        .sum::<f64>()
-            }
-        }
     }
 
     /// Update the energy term. The update is needed if at least one particle was activated or deactivated.

@@ -25,10 +25,12 @@ use serde::{Deserialize, Serialize};
 
 /// Cuboidal unit cell
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct Cuboid {
     /// Unit cell vectors
     cell: Point,
     /// Half of the cell vectors
+    #[serde(skip)]
     half_cell: Point,
 }
 
@@ -49,6 +51,11 @@ impl Cuboid {
     pub fn from_volume(volume: f64) -> Self {
         let a = volume.cbrt();
         Self::new(a, a, a)
+    }
+
+    /// Sets `half_cell` based on the current cell size.
+    pub(super) fn set_half_cell(&mut self) {
+        self.half_cell = self.cell.scale(0.5);
     }
 }
 

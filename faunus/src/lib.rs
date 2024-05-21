@@ -13,6 +13,7 @@
 // limitations under the license.
 
 use crate::group::{Group, GroupCollection};
+use cell::SimulationCell;
 use energy::Hamiltonian;
 use nalgebra::Vector3;
 use rand::rngs::ThreadRng;
@@ -23,8 +24,6 @@ use std::{
     rc::Rc,
 };
 use topology::Topology;
-
-use crate::cell::BoundaryConditions;
 
 pub type Point = Vector3<f64>;
 pub type UnitQuaternion = nalgebra::UnitQuaternion<f64>;
@@ -145,7 +144,7 @@ pub trait Context:
     /// Construct a new simulation system from raw parts.
     fn from_raw_parts(
         topology: Rc<Topology>,
-        cell: Self::Cell,
+        cell: Box<dyn SimulationCell>,
         hamiltonian: RefCell<Hamiltonian>,
         structure_file: Option<impl AsRef<Path>>,
         rng: &mut ThreadRng,
@@ -196,12 +195,10 @@ pub trait Context:
 
 /// A trait for objects that have a simulation cell.
 pub trait WithCell {
-    /// Simulation cell type.
-    type Cell: cell::SimulationCell;
     /// Get reference to simulation cell.
-    fn cell(&self) -> &Self::Cell;
+    fn cell(&self) -> &dyn SimulationCell;
     /// Get mutable reference to simulation cell.
-    fn cell_mut(&mut self) -> &mut Self::Cell;
+    fn cell_mut(&mut self) -> &mut dyn SimulationCell;
 }
 
 /// A trait for objects that have a topology.

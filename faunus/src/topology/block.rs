@@ -69,7 +69,7 @@ impl InsertionPolicy {
         atoms: &[AtomKind],
         molecule_kind: &MoleculeKind,
         number: usize,
-        cell: &impl SimulationCell,
+        cell: &dyn SimulationCell,
         rng: &mut ThreadRng,
     ) -> anyhow::Result<Vec<Point>> {
         match self {
@@ -109,7 +109,7 @@ impl InsertionPolicy {
         molecule_kind: &MoleculeKind,
         atoms: &[AtomKind],
         number: usize,
-        cell: &impl SimulationCell,
+        cell: &dyn SimulationCell,
         rng: &mut ThreadRng,
         filename: &InputPath,
         rotate: bool,
@@ -245,23 +245,22 @@ impl MoleculeBlock {
         let molecule = &molecules[self.molecule_index];
         let mut particle_counter = context.num_particles();
 
+        // get positions of the particles in the block
+        let mut positions = match &self.insert {
+            None => external_positions.to_owned(),
+            Some(policy) => {
+                policy.get_positions(atoms, molecule, self.number, context.cell(), rng)?
+            }
+        }
+        .into_iter();
+
         // create groups and populate them with particles
         for i in 0..self.number {
-            // get positions of the particles
-            let positions = match &self.insert {
-                None => external_positions[(i * molecule.atom_indices().len())
-                    ..((i + 1) * molecule.atom_indices().len())]
-                    .to_owned(),
-                Some(policy) => {
-                    policy.get_positions(atoms, molecule, self.number, context.cell(), rng)?
-                }
-            };
-
             // create the particles
             let particles: Vec<Particle> = molecule
                 .atom_indices()
                 .iter()
-                .zip(positions.into_iter())
+                .zip(positions.by_ref())
                 .map(|(index, position)| {
                     let particle = Particle::new(*index, particle_counter, position);
                     particle_counter += 1;
