@@ -157,9 +157,7 @@ pub trait Context:
 ///
 /// There can be multiple contexts in a simulation, e.g. one for a trial move and one for the current state.
 #[cfg(not(feature = "chemfiles"))]
-pub trait Context:
-    ParticleSystem + WithHamiltonian + Clone + std::fmt::Debug + Sized + SyncFrom
-{
+pub trait Context: ParticleSystem + WithHamiltonian + Clone + std::fmt::Debug + SyncFrom {
     /// Update the internal state to match a recently applied change
     ///
     /// By default, this function tries to update the Hamiltonian.

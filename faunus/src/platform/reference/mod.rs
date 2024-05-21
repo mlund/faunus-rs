@@ -36,7 +36,7 @@ use std::{
 /// Particles are stored in
 /// a single vector, and groups are stored in a separate vector. This mostly
 /// follows the same layout as the original C++ Faunus code (version 2 and lower).
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct ReferencePlatform {
     topology: Rc<Topology>,
     particles: Vec<Particle>,

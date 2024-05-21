@@ -32,7 +32,6 @@
 //! let top = Topology::from_file("tests/files/topology_input.yaml");
 //! ```
 mod atom;
-mod block;
 pub(crate) mod block;
 mod bond;
 mod chain;
@@ -777,12 +776,6 @@ impl IntermolecularBonded {
     pub(crate) fn is_empty(&self) -> bool {
         self.bonds.is_empty() && self.torsions.is_empty() && self.dihedrals.is_empty()
     }
-
-    /// Returns `true` if the `IntermolecularBonded` structure is empty (contains no bonds, no torsions and no dihedrals).
-    /// Otherwise returns `false`.
-    pub(crate) fn is_empty(&self) -> bool {
-        self.bonds.is_empty() && self.torsions.is_empty() && self.dihedrals.is_empty()
-    }
 }
 
 /// Serialize std::ops::Range as an array.
@@ -905,10 +898,7 @@ impl<'de> Deserialize<'de> for InputPath {
 mod tests {
     use self::block::BlockActivationStatus;
     use crate::dimension::Dimension;
-    use crate::dimension::Dimension;
     use float_cmp::assert_approx_eq;
-    use float_cmp::assert_approx_eq;
-    use std::collections::HashMap;
     use std::collections::{HashMap, HashSet};
     use unordered_pair::UnorderedPair;
 
@@ -1113,14 +1103,14 @@ mod tests {
             Bond::new(
                 [0, 1],
                 BondKind::Harmonic(interatomic::twobody::Harmonic::new(1.0, 100.0)),
-                Some(BondOrder::Single),
+                BondOrder::Single,
             ),
             Bond::new(
                 [1, 2],
                 BondKind::Morse(interatomic::twobody::Morse::new(1.0, 10.0, 100.0)),
-                None,
+                BondOrder::Unspecified,
             ),
-            Bond::new([2, 3], BondKind::default(), None),
+            Bond::new([2, 3], BondKind::default(), BondOrder::Unspecified),
         ];
         let torsions = vec![
             Torsion::new(
@@ -1216,12 +1206,12 @@ mod tests {
             Bond::new(
                 [0, 220],
                 BondKind::Harmonic(interatomic::twobody::Harmonic::new(3.0, 50.0)),
-                None,
+                BondOrder::Unspecified,
             ),
             Bond::new(
                 [52, 175],
                 BondKind::FENE(interatomic::twobody::FENE::new(1.5, 5.0, 25.0)),
-                Some(BondOrder::Triple),
+                BondOrder::Triple,
             ),
         ];
         let torsions = vec![Torsion::new(
@@ -1600,24 +1590,6 @@ mod tests {
         assert!(error
             .to_string()
             .contains("unknown field `nonexistent_field`"))
-    }
-
-    #[test]
-    fn read_topology_fail_exclusions_nonunique_atoms() {
-        let error = Topology::from_file("tests/files/topology_exclusions_nonunique_atoms.yaml")
-            .unwrap_err();
-        assert!(error
-            .to_string()
-            .contains("exclusion between the same atom"))
-    }
-
-    #[test]
-    fn read_topology_fail_exclusions_undefined_atoms() {
-        let error = Topology::from_file("tests/files/topology_exclusions_undefined_atoms.yaml")
-            .unwrap_err();
-        assert!(error
-            .to_string()
-            .contains("exclusion between undefined atoms"))
     }
 
     #[test]

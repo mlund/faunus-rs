@@ -63,7 +63,7 @@ pub trait AnisotropicTwobodyEnergy {
 }
 
 /// Potential energy between a pair of isotropic particles, 𝑈(𝑟).
-pub trait IsotropicTwobodyEnergy: AnisotropicTwobodyEnergy + DynClone {
+pub trait IsotropicTwobodyEnergy: AnisotropicTwobodyEnergy + DynClone + Debug {
     /// Interaction energy between a pair of isotropic particles.
     fn isotropic_twobody_energy(&self, distance_squared: f64) -> f64;
 
