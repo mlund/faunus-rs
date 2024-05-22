@@ -45,11 +45,7 @@ pub(super) fn positions_from_frame(
     cell: Option<&dyn SimulationCell>,
 ) -> Vec<Point> {
     let shift = if let Some(cell) = cell {
-        if let Some(bounding_box) = cell.bounding_box() {
-            -bounding_box / 2.0
-        } else {
-            Vector3::default()
-        }
+        cell.bounding_box().map(|b| -0.5 * b).unwrap_or_default()
     } else {
         Vector3::default()
     };
@@ -91,8 +87,7 @@ pub trait ChemFrameConvert: WithCell + WithTopology + GroupCollection {
         // we need to shift them because faunus treats [0,0,0] as the center of the cell,
         // while chemfiles treats [half_cell, half_cell, half_cell] as the center of the cell
         // no shifting is needed if the box is infinite
-        if let Some(bounding) = self.cell().bounding_box() {
-            let shift = bounding / 2.0;
+        if let Some(shift) = self.cell().bounding_box().map(|b| -0.5 * b) {
             particles
                 .iter_mut()
                 .for_each(|particle| particle.pos += shift);
