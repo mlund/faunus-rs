@@ -45,6 +45,7 @@ pub struct HardSphere {
         feature = "serde",
         serde(
             rename = "sigma",
+            alias = "σ",
             serialize_with = "sqrt_serialize",
             deserialize_with = "square_deserialize"
         )

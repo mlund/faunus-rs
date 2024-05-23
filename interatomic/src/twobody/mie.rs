@@ -42,10 +42,10 @@ use serde::{Deserialize, Serialize};
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 pub struct Mie<const N: u32, const M: u32> {
     /// Interaction strength, ε
-    #[cfg_attr(feature = "serde", serde(rename = "eps"))]
+    #[cfg_attr(feature = "serde", serde(alias = "eps", alias = "ε"))]
     epsilon: f64,
     /// Diameter, σ
-    #[cfg_attr(feature = "serde", serde(rename = "sigma"))]
+    #[cfg_attr(feature = "serde", serde(alias = "σ"))]
     sigma: f64,
 }
 
@@ -123,7 +123,9 @@ pub struct LennardJones {
     #[cfg_attr(
         feature = "serde",
         serde(
-            rename = "eps",
+            rename = "epsilon",
+            alias = "eps",
+            alias = "ε",
             serialize_with = "divide4_serialize",
             deserialize_with = "multiply4_deserialize"
         )
@@ -134,6 +136,7 @@ pub struct LennardJones {
         feature = "serde",
         serde(
             rename = "sigma",
+            alias = "σ",
             serialize_with = "sqrt_serialize",
             deserialize_with = "square_deserialize"
         )

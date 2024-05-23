@@ -12,10 +12,10 @@ system:
   energy:
     nonbonded:
       default:
-        - !LennardJones {sigma: 1.0, eps: 2.5}
+        - !LennardJones {σ: 1.0, eps: 2.5}
         - !CoulombPlain {cutoff: 6.0}
       [B, B]:
-        - !LennardJones {sigma: 2.0, eps: 5.0}
+        - !LennardJones {sigma: 2.0, ε: 5.0}
 
   blocks:
     - molecule: MOL
