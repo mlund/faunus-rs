@@ -94,20 +94,17 @@ pub trait ChemFrameConvert: WithCell + WithTopology + GroupCollection {
         }
 
         // add atoms to the frame
+        let to_atomkind = |i: usize| &topology.atoms()[i];
         self.groups().iter().for_each(|group| {
             let molecule = &topology.molecules()[group.molecule()];
-            molecule
-                .atom_indices()
-                .iter()
-                .enumerate()
-                .for_each(|(i, &index)| {
-                    let atom = &topology.atoms()[index];
-                    frame.add_atom(
-                        &atom.to_chem_atom(molecule.atom_names()[i].as_deref()),
-                        (*particles[i + group.start()].pos()).into(),
-                        None,
-                    );
-                });
+            let atoms = molecule.atom_indices().iter().cloned().map(to_atomkind);
+            for (i, atom) in atoms.enumerate() {
+                frame.add_atom(
+                    &atom.to_chem_atom(molecule.atom_names()[i].as_deref()),
+                    (*particles[i + group.start()].pos()).into(),
+                    None,
+                );
+            }
         });
     }
 
