@@ -78,7 +78,7 @@ impl NonbondedBuilder {
                 atom1.name(),
                 atom2.name()
             );
-            return Ok(Box::from(NoInteraction::new()));
+            return Ok(Box::from(NoInteraction::default()));
         }
 
         let charges = (atom1.charge(), atom2.charge());
@@ -105,7 +105,7 @@ impl NonbondedBuilder {
                     atom1.name(),
                     atom2.name()
                 );
-                return Ok(Box::from(NoInteraction::new()));
+                return Ok(Box::from(NoInteraction::default()));
             }
         };
 
@@ -411,7 +411,8 @@ mod tests {
                             WeeksChandlerAndersen::new(1.3, 8.0)
                         )),
                         NonbondedInteraction::CoulombPlain(coulomb::pairwise::Plain::new(
-                            11.0, None,
+                            11.0,
+                            Some(1.0),
                         ))
                     ]
                 );
@@ -684,7 +685,7 @@ mod tests {
 
         // no interaction
         nonbonded.0.remove(&DefaultOrPair::Default);
-        let expected = Box::new(NoInteraction::new());
+        let expected = Box::new(NoInteraction::default());
         let interaction = nonbonded.get_interaction(&atom1, &atom3).unwrap();
         assert_behavior(interaction, expected);
     }

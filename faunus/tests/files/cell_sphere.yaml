@@ -1,2 +1,2 @@
 system:
-  cell: !Sphere 14.3
+  cell: !Sphere {radius: 14.3}

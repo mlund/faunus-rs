@@ -33,7 +33,7 @@ pub enum BondKind {
     /// See <https://en.wikipedia.org/wiki/Harmonic_oscillator>.
     Harmonic(interatomic::twobody::Harmonic),
     /// Finitely extensible nonlinear elastic bond type,
-    /// See <https://en.wikipedia.org/wiki/Finitely_extensible_nonlinear_elastic_potential>.
+    /// See <https://en.wikipedia.org/wiki/FENE>.
     FENE(interatomic::twobody::FENE),
     /// Morse bond type.
     /// See <https://en.wikipedia.org/wiki/Morse_potential>.
@@ -133,9 +133,9 @@ impl Bond {
     /// Calculate energy of a bond in a specific group.
     /// Returns 0.0 if any of the bonded particles is inactive.
     pub fn energy(&self, context: &impl Context, group: &Group) -> f64 {
-        let [i, j] = match self.index.map(|rel| group.absolute_index(rel)) {
-            [Ok(i), Ok(j)] => [i, j],
-            _ => return 0.0,
+        let to_abs_index = |i| group.absolute_index(i);
+        let [Ok(i), Ok(j)] = self.index.map(to_abs_index) else {
+            return 0.0;
         };
 
         let distance_squared = context.get_distance_squared(i, j);

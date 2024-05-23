@@ -219,14 +219,14 @@ impl ParticleSystem for ReferencePlatform {
     ///
     /// Faster implementation for Reference Platform which does not involve particle copying.
     #[inline(always)]
-    fn get_dihedral(&self, indices: &[usize; 4]) -> f64 {
+    fn get_dihedral_angle(&self, indices: &[usize; 4]) -> f64 {
         let [p1, p2, p3, p4] = indices.map(|x| self.particles()[x].pos());
         crate::aux::dihedral_points(p1, p2, p3, p4, self.cell())
     }
 
     /// Shift positions of target particles.
     #[inline(always)]
-    fn translate_particles(&mut self, indices: &[usize], shift: &nalgebra::Vector3<f64>) {
+    fn translate_particles(&mut self, indices: &[usize], shift: &Point) {
         let cell = self.cell.clone();
         indices.iter().for_each(|&i| {
             let position = self.particles_mut()[i].pos_mut();

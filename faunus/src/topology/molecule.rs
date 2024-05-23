@@ -240,9 +240,7 @@ fn validate_molecule(molecule: &MoleculeKind) -> Result<(), ValidationError> {
     }
 
     // exclusions can't contain undefined atoms or the same atom twice
-    for exclusion in molecule.exclusions.iter() {
-        let (i, j) = exclusion.into_ordered_tuple();
-
+    for (i, j) in molecule.exclusions.iter().map(|e| e.into_ordered_tuple()) {
         if i == j {
             return Err(
                 ValidationError::new("").with_message("exclusion between the same atom".into())

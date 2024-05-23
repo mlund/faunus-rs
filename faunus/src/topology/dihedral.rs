@@ -109,7 +109,7 @@ impl Dihedral {
             _ => return 0.0,
         };
 
-        let angle = context.get_dihedral(&indices);
+        let angle = context.get_dihedral_angle(&indices);
         self.fourbody_angle_energy(angle)
     }
 
@@ -125,7 +125,7 @@ impl Dihedral {
             return 0.0;
         }
 
-        let angle = context.get_dihedral(&self.index);
+        let angle = context.get_dihedral_angle(&self.index);
         self.fourbody_angle_energy(angle)
     }
 }

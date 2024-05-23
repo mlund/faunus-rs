@@ -14,7 +14,8 @@
 
 //! Implementation of the Nonbonded energy terms.
 
-use interatomic::twobody::IsotropicTwobodyEnergy;
+use interatomic::twobody::{IsotropicTwobodyEnergy, NoInteraction};
+use ndarray::Array2;
 use std::fmt::Debug;
 
 use crate::{
@@ -241,7 +242,7 @@ pub(super) trait NonbondedTerm {
 #[derive(Debug, Clone)]
 pub struct NonbondedMatrix {
     /// Matrix of pair potentials based on particle ids.
-    potentials: Vec<Vec<Box<dyn IsotropicTwobodyEnergy>>>,
+    potentials: Array2<Box<dyn IsotropicTwobodyEnergy>>,
     /// Matrix of excluded interactions.
     exclusions: ExclusionMatrix,
 }
@@ -269,7 +270,10 @@ impl NonbondedTerm for NonbondedMatrix {
     fn particle_with_particle(&self, context: &impl Context, i: usize, j: usize) -> f64 {
         let distance_squared = context.get_distance_squared(i, j);
         self.exclusions.get(i, j) as f64
-            * self.potentials[context.get_atomkind(i)][context.get_atomkind(j)]
+            * self
+                .potentials
+                .get((context.get_atomkind(i), context.get_atomkind(j)))
+                .expect("Atom kinds should exist in the nonbonded matrix.")
                 .isotropic_twobody_energy(distance_squared)
     }
 }
@@ -282,16 +286,16 @@ impl NonbondedMatrix {
         topology: &Topology,
     ) -> anyhow::Result<EnergyTerm> {
         let atoms = topology.atoms();
+        let n = atoms.len();
 
-        let potentials: Vec<Vec<_>> = atoms
-            .iter()
-            .map(|type1| {
-                atoms
-                    .iter()
-                    .map(|type2| nonbonded.get_interaction(type1, type2))
-                    .collect::<Result<Vec<_>, _>>()
-            })
-            .collect::<Result<Vec<_>, _>>()?;
+        let mut potentials: Array2<Box<dyn IsotropicTwobodyEnergy>> =
+            Array2::from_elem((n, n), Box::new(NoInteraction::default()));
+
+        for i in 0..n {
+            for j in 0..n {
+                potentials[(i, j)] = nonbonded.get_interaction(&atoms[i], &atoms[j])?;
+            }
+        }
 
         let exclusions = ExclusionMatrix::new(topology);
 
@@ -390,14 +394,17 @@ mod tests {
             _ => panic!("Incorrect Energy Term constructed."),
         };
 
-        assert_eq!(nonbonded.potentials.len(), topology.atoms().len());
-        for potential in nonbonded.potentials.iter() {
-            assert_eq!(potential.len(), topology.atoms().len());
-        }
+        assert_eq!(
+            nonbonded.potentials.len(),
+            topology.atoms().len() * topology.atoms().len()
+        );
 
         for i in 0..topology.atoms().len() {
             for j in (i + 1)..topology.atoms().len() {
-                assert_behavior(&nonbonded.potentials[i][j], &nonbonded.potentials[j][i]);
+                assert_behavior(
+                    &nonbonded.potentials.get((i, j)).unwrap(),
+                    &nonbonded.potentials.get((j, i)).unwrap(),
+                );
             }
         }
 
@@ -413,11 +420,11 @@ mod tests {
             .position(|x| x.name() == "C")
             .unwrap();
 
-        let default = &nonbonded.potentials[o_index][o_index];
+        let default = &nonbonded.potentials.get((o_index, o_index)).unwrap();
 
         for i in [o_index, c_index] {
             for j in 0..topology.atoms().len() {
-                assert_behavior(&nonbonded.potentials[i][j], default);
+                assert_behavior(&nonbonded.potentials.get((i, j)).unwrap(), default);
             }
         }
 
@@ -438,7 +445,7 @@ mod tests {
                 continue;
             }
 
-            assert_behavior(&nonbonded.potentials[x_index][i], default);
+            assert_behavior(&nonbonded.potentials.get((x_index, i)).unwrap(), default);
         }
     }
 

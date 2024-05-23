@@ -98,18 +98,11 @@ impl<T: IsotropicTwobodyEnergy> AnisotropicTwobodyEnergy for T {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct NoInteraction {}
 
-impl NoInteraction {
+impl Default for NoInteraction {
     /// Create a new null interaction.
     #[inline(always)]
-    pub fn new() -> Self {
-        NoInteraction {}
-    }
-}
-
-impl Default for NoInteraction {
-    #[inline(always)]
     fn default() -> Self {
-        Self::new()
+        Self {}
     }
 }
 

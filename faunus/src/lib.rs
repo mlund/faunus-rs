@@ -293,7 +293,7 @@ pub trait ParticleSystem: GroupCollection + WithCell + WithTopology {
     ///
     /// crate::aux::dihedral_points(p1.pos(), p2.pos(), p3.pos(), p4.pos(), self.cell())
     /// ```
-    fn get_dihedral(&self, indices: &[usize; 4]) -> f64;
+    fn get_dihedral_angle(&self, indices: &[usize; 4]) -> f64;
 
     /// Shift positions of selected particles by target vector and apply periodic boundary conditions.
     fn translate_particles(&mut self, indices: &[usize], shift: &Vector3<f64>);
