@@ -1,5 +1,5 @@
 """
-Copyright 2023-2024 Mikael Lund
+Copyright 2023-2024 Mikael Lund & Ladislav Bartos
 
 Licensed under the Apache license, version 2.0 (the "license");
 you may not use this file except in compliance with the license.
