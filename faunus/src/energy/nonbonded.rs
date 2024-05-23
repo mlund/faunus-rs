@@ -94,7 +94,7 @@ pub(super) trait NonbondedTerm {
             .groups()
             .iter()
             .filter_map(|group_j| {
-                if group_j.index() != group.index() {
+                if group.index() != group_j.index() {
                     Some(self.particle_with_group(context, i, group_j))
                 } else {
                     None

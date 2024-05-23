@@ -36,7 +36,7 @@ pub mod cell;
 mod change;
 pub use self::change::{Change, GroupChange};
 pub mod analysis;
-pub mod basic;
+pub mod aux;
 pub mod chemistry;
 pub mod dimension;
 pub mod energy;
@@ -239,13 +239,11 @@ pub trait WithTemperature {
 pub trait ParticleSystem: GroupCollection + WithCell + WithTopology {
     /// Get distance between two particles with the given indices.
     ///
-    /// ## Warning
-    /// The default implementation of this method may be slow since it involves copying the particles.
-    /// It is recommended to implement the method specifically for your platform.
-    fn get_distance(&self, i: usize, j: usize) -> Point {
-        self.cell()
-            .distance(self.particle(i).pos(), self.particle(j).pos())
-    }
+    /// ## Example implementation
+    /// ```ignore
+    /// self.cell().distance(self.particle(i).pos(), self.particle(j).pos())
+    /// ```
+    fn get_distance(&self, i: usize, j: usize) -> Point;
 
     /// Get squared distance between two particles with the given indices.
     fn get_distance_squared(&self, i: usize, j: usize) -> f64 {
@@ -254,30 +252,30 @@ pub trait ParticleSystem: GroupCollection + WithCell + WithTopology {
 
     /// Get index of the atom kind of the particle with the given index.
     ///
-    /// ## Warning
-    /// The default implementation of this method may be slow since it involves copying the particles.
-    /// It is recommended to implement the method specifically for your platform.
-    fn get_atomkind(&self, i: usize) -> usize {
-        self.particle(i).atom_id
-    }
+    /// ## Example implementation
+    /// ```ignore
+    /// self.particle(i).atom_id
+    /// ```
+    fn get_atomkind(&self, i: usize) -> usize;
 
     /// Get angle (in degrees) between three particles with the given indices.
+    /// Here, the provided indices are called `i`, `j`, `k`, in this order.
     /// `i`, `j`, `k` are consecutively bonded atoms (`j` is the vertex of the angle).
     ///
-    /// ## Warning
-    /// The default implementation of this method may be slow since it involves copying the particles.
-    /// It is recommended to implement the method specifically for your platform.
-    fn get_angle(&self, i: usize, j: usize, k: usize) -> f64 {
-        let p1 = self.particle(i);
-        let p2 = self.particle(j);
-        let p3 = self.particle(k);
-
-        crate::basic::angle_points(p1.pos(), p2.pos(), p3.pos(), self.cell())
-    }
+    /// ## Example implementation
+    /// ```ignore
+    /// let p1 = self.particle(indices[0]);
+    /// let p2 = self.particle(indices[1]);
+    /// let p3 = self.particle(indices[2]);
+    ///
+    /// crate::aux::angle_points(p1.pos(), p2.pos(), p3.pos(), self.cell())
+    /// ```
+    fn get_angle(&self, indices: &[usize; 3]) -> f64;
 
     /// Get dihedral angle (in degrees) between four particles with the given indices.
     ///
     /// ## Details
+    /// - In this documentation, the provided indices are called `i`, `j`, `k`, `l`, in this order.
     /// - This method returns an angle between the plane formed by atoms `i`, `j`, `k` and the plane formed by
     /// atoms `j`, `k`, `l`.
     /// - In case of a **proper** dihedral, `i`, `j`, `k`, `l` are (considered to be) consecutively bonded atoms.
@@ -286,17 +284,16 @@ pub trait ParticleSystem: GroupCollection + WithCell + WithTopology {
     /// then 0° corresponds to the *cis* conformation and ±180° to the *trans* conformation
     /// in line with the IUPAC/IUB convention.
     ///
-    /// ## Warning
-    /// The default implementation of this method may be slow since it involves copying the particles.
-    /// It is recommended to implement the method specifically for your platform.
-    fn get_dihedral(&self, i: usize, j: usize, k: usize, l: usize) -> f64 {
-        let p1 = self.particle(i);
-        let p2 = self.particle(j);
-        let p3 = self.particle(k);
-        let p4 = self.particle(l);
-
-        crate::basic::dihedral_points(p1.pos(), p2.pos(), p3.pos(), p4.pos(), self.cell())
-    }
+    /// ## Example implementation
+    /// ```ignore
+    /// let p1 = self.particle(indices[0]);
+    /// let p2 = self.particle(indices[1]);
+    /// let p3 = self.particle(indices[2]);
+    /// let p4 = self.particle(indices[3]);
+    ///
+    /// crate::aux::dihedral_points(p1.pos(), p2.pos(), p3.pos(), p4.pos(), self.cell())
+    /// ```
+    fn get_dihedral(&self, indices: &[usize; 4]) -> f64;
 
     /// Shift positions of selected particles by target vector and apply periodic boundary conditions.
     fn translate_particles(&mut self, indices: &[usize], shift: &Vector3<f64>);

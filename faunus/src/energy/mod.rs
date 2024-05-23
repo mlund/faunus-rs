@@ -105,7 +105,7 @@ impl EnergyChange for Hamiltonian {
             .iter()
             .map(|term| term.energy(context, change))
             // early return if the total energy becomes none or infinite
-            .take_while(|&energy| !energy.is_nan() && !energy.is_infinite())
+            .take_while(|&energy| energy.is_finite())
             .sum()
     }
 }
@@ -160,9 +160,7 @@ impl SyncFrom for EnergyTerm {
             (EnergyTerm::NonbondedMatrix(x), EnergyTerm::NonbondedMatrix(y)) => {
                 x.sync_from(y, change)?
             }
-            (EnergyTerm::IntramolecularBonded(x), EnergyTerm::IntramolecularBonded(y)) => {
-                x.sync_from(y, change)?
-            }
+            (EnergyTerm::IntramolecularBonded(_), EnergyTerm::IntramolecularBonded(_)) => (),
             (EnergyTerm::IntermolecularBonded(x), EnergyTerm::IntermolecularBonded(y)) => {
                 x.sync_from(y, change)?
             }

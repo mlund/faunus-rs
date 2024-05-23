@@ -94,7 +94,7 @@ impl<T: IsotropicTwobodyEnergy> AnisotropicTwobodyEnergy for T {
     }
 }
 
-/// Structure representing nonexistent interaction.
+/// Structure representing an interaction with always zero energy.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct NoInteraction {}
 

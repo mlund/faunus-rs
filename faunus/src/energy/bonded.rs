@@ -101,13 +101,6 @@ impl IntramolecularBonded {
     }
 }
 
-impl SyncFrom for IntramolecularBonded {
-    fn sync_from(&mut self, _other: &IntramolecularBonded, _change: &Change) -> anyhow::Result<()> {
-        // nothing to synchronize
-        Ok(())
-    }
-}
-
 /// Energy term for computing intermolecular bonded interactions.
 #[derive(Debug, Clone)]
 pub struct IntermolecularBonded {

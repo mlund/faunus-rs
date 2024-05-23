@@ -12,7 +12,7 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
-//! Implementation of basic functions for computing various properties.
+//! Implementation of auxiliary functions for computing various properties.
 
 use nalgebra::Vector3;
 use std::f64::consts::PI;

@@ -104,7 +104,7 @@ impl BoundaryConditions for Cuboid {
         }
         delta
     }
-    fn boundary(&self, point: &mut Vector3<f64>) {
+    fn boundary(&self, point: &mut Point) {
         point.x -= self.cell.x * (point.x / self.cell.x).round();
         point.y -= self.cell.y * (point.y / self.cell.y).round();
         point.z -= self.cell.z * (point.z / self.cell.z).round();

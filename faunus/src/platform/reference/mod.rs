@@ -79,16 +79,16 @@ impl Context for ReferencePlatform {
     /// Create a new simulation system on a reference platform from
     /// faunus configuration file and optional structure file.
     fn new(
-        faunus_file: impl AsRef<Path>,
+        yaml_file: impl AsRef<Path>,
         structure_file: Option<impl AsRef<Path>>,
         rng: &mut ThreadRng,
     ) -> anyhow::Result<Self> {
-        let topology = Topology::from_file(&faunus_file)?;
-        let hamiltonian_builder = HamiltonianBuilder::from_file(&faunus_file)?;
+        let topology = Topology::from_file(&yaml_file)?;
+        let hamiltonian_builder = HamiltonianBuilder::from_file(&yaml_file)?;
         // validate hamiltonian builder
         hamiltonian_builder.validate(topology.atoms())?;
 
-        let cell = Cell::from_file(&faunus_file)?;
+        let cell = Cell::from_file(&yaml_file)?;
 
         let hamiltonian = Hamiltonian::new(&hamiltonian_builder, &topology)?;
         ReferencePlatform::from_raw_parts(
@@ -206,12 +206,12 @@ impl ParticleSystem for ReferencePlatform {
     ///
     /// Faster implementation for Reference Platform which does not involve particle copying.
     #[inline(always)]
-    fn get_angle(&self, i: usize, j: usize, k: usize) -> f64 {
-        let p1 = self.particles()[i].pos();
-        let p2 = self.particles()[j].pos();
-        let p3 = self.particles()[k].pos();
+    fn get_angle(&self, indices: &[usize; 3]) -> f64 {
+        let p1 = self.particles()[indices[0]].pos();
+        let p2 = self.particles()[indices[1]].pos();
+        let p3 = self.particles()[indices[2]].pos();
 
-        crate::basic::angle_points(p1, p2, p3, self.cell())
+        crate::aux::angle_points(p1, p2, p3, self.cell())
     }
 
     /// Get dihedral between particles `i-j-k-l`.
@@ -219,9 +219,9 @@ impl ParticleSystem for ReferencePlatform {
     ///
     /// Faster implementation for Reference Platform which does not involve particle copying.
     #[inline(always)]
-    fn get_dihedral(&self, i: usize, j: usize, k: usize, l: usize) -> f64 {
-        let [p1, p2, p3, p4] = [i, j, k, l].map(|x| self.particles()[x].pos());
-        crate::basic::dihedral_points(p1, p2, p3, p4, self.cell())
+    fn get_dihedral(&self, indices: &[usize; 4]) -> f64 {
+        let [p1, p2, p3, p4] = indices.map(|x| self.particles()[x].pos());
+        crate::aux::dihedral_points(p1, p2, p3, p4, self.cell())
     }
 
     /// Shift positions of target particles.
