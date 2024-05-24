@@ -101,12 +101,20 @@ impl EnergyChange for Hamiltonian {
     /// Compute the energy of the Hamiltonian associated with a change in the system.
     /// The energy is returned in the units of kJ/mol.
     fn energy(&self, context: &impl Context, change: &Change) -> f64 {
-        self.energy_terms
+        let mut sum: f64 = 0.0;
+        let energies = self
+            .energy_terms
             .iter()
-            .map(|term| term.energy(context, change))
-            // early return if the total energy becomes none or infinite
-            .take_while(|&energy| energy.is_finite())
-            .sum()
+            .map(|term| term.energy(context, change));
+
+        for energy in energies {
+            if energy.is_finite() {
+                sum += energy;
+            } else {
+                return energy; // infinite or NaN
+            }
+        }
+        return sum;
     }
 }
 

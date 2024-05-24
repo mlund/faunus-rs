@@ -19,7 +19,6 @@ use crate::{
     Point,
 };
 use anyhow::Ok;
-use nalgebra::Vector3;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 
