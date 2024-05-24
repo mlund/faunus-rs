@@ -192,6 +192,32 @@ impl Cell {
     }
 }
 
+impl Shape for Cell {
+    fn volume(&self) -> Option<f64> {
+        match self {
+            Cell::Cuboid(x) => x.volume(),
+            Cell::Endless(_) => None,
+            Cell::Sphere(x) => x.volume(),
+        }
+    }
+
+    fn is_inside(&self, point: &Point) -> bool {
+        match self {
+            Cell::Cuboid(x) => x.is_inside(point),
+            Cell::Endless(_) => true,
+            Cell::Sphere(x) => x.is_inside(point),
+        }
+    }
+
+    fn get_point_inside(&self, rng: &mut ThreadRng) -> Point {
+        match self {
+            Cell::Cuboid(s) => s.get_point_inside(rng),
+            Cell::Endless(s) => s.get_point_inside(rng),
+            Cell::Sphere(s) => s.get_point_inside(rng),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::Point;
