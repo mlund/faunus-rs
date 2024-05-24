@@ -26,7 +26,7 @@ mod sphere;
 
 use std::path::Path;
 
-use crate::{topology::chemfiles_interface::CellToChemCell, Point};
+use crate::Point;
 pub use cuboid::Cuboid;
 use dyn_clone::DynClone;
 pub use endless::Endless;
@@ -267,17 +267,6 @@ impl BoundaryConditions for Cell {
             Cell::Cuboid(x) => x.distance(point1, point2),
             Cell::Endless(x) => x.distance(point1, point2),
             Cell::Sphere(x) => x.distance(point1, point2),
-        }
-    }
-}
-
-#[cfg(feature = "chemfiles")]
-impl CellToChemCell for Cell {
-    fn to_chem_cell(&self) -> chemfiles::UnitCell {
-        match self {
-            Cell::Cuboid(x) => x.to_chem_cell(),
-            Cell::Endless(x) => x.to_chem_cell(),
-            Cell::Sphere(x) => x.to_chem_cell(),
         }
     }
 }
