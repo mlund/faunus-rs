@@ -289,7 +289,7 @@ impl NonbondedMatrix {
         let n = atoms.len();
 
         let mut potentials: Array2<Box<dyn IsotropicTwobodyEnergy>> =
-            Array2::from_elem((n, n), Box::new(NoInteraction::default()));
+            Array2::from_elem((n, n), Box::<NoInteraction>::default());
 
         for i in 0..n {
             for j in 0..n {

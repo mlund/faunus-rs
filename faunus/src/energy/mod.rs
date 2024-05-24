@@ -114,7 +114,7 @@ impl EnergyChange for Hamiltonian {
                 return energy; // infinite or NaN
             }
         }
-        return sum;
+        sum
     }
 }
 
