@@ -69,7 +69,6 @@ impl Shape for Sphere {
         let r2 = self.radius * self.radius;
         let d = 2.0 * self.radius;
         let mut point;
-
         loop {
             point = Point::new(
                 (rng.gen::<f64>() - 0.5) * d,
@@ -77,11 +76,9 @@ impl Shape for Sphere {
                 (rng.gen::<f64>() - 0.5) * d,
             );
             if point.norm_squared() < r2 {
-                break;
+                return point;
             }
         }
-
-        point
     }
 }
 
