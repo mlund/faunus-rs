@@ -160,21 +160,15 @@ impl EnergyChange for EnergyTerm {
 }
 
 impl SyncFrom for EnergyTerm {
-    /// Synchronize the EnergyTerm from other EnergyTerm.
-    ///
-    /// Panics if the EnergyTerms are not compatible with each other.
+    /// Synchronize the EnergyTerm from other EnergyTerm
     fn sync_from(&mut self, other: &EnergyTerm, change: &Change) -> anyhow::Result<()> {
+        use EnergyTerm::*;
         match (self, other) {
-            (EnergyTerm::NonbondedMatrix(x), EnergyTerm::NonbondedMatrix(y)) => {
-                x.sync_from(y, change)?
-            }
-            (EnergyTerm::IntramolecularBonded(_), EnergyTerm::IntramolecularBonded(_)) => (),
-            (EnergyTerm::IntermolecularBonded(x), EnergyTerm::IntermolecularBonded(y)) => {
-                x.sync_from(y, change)?
-            }
-            _ => panic!("Trying to sync incompatible energy terms."),
+            (NonbondedMatrix(x), NonbondedMatrix(y)) => x.sync_from(y, change)?,
+            (IntramolecularBonded(_), IntramolecularBonded(_)) => (),
+            (IntermolecularBonded(x), IntermolecularBonded(y)) => x.sync_from(y, change)?,
+            _ => anyhow::bail!("Cannot sync incompatible energy terms."),
         }
-
         Ok(())
     }
 }
