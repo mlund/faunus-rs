@@ -26,7 +26,7 @@ mod sphere;
 
 use std::path::Path;
 
-use crate::Point;
+use crate::{topology::chemfiles_interface::CellToChemCell, Point};
 pub use cuboid::Cuboid;
 use dyn_clone::DynClone;
 pub use endless::Endless;
@@ -217,6 +217,72 @@ impl Shape for Cell {
         }
     }
 }
+
+impl VolumeScale for Cell {
+    fn scale_volume(
+        &mut self,
+        new_volume: f64,
+        policy: VolumeScalePolicy,
+    ) -> Result<(), anyhow::Error> {
+        match self {
+            Cell::Cuboid(x) => x.scale_volume(new_volume, policy),
+            Cell::Endless(x) => x.scale_volume(new_volume, policy),
+            Cell::Sphere(x) => x.scale_volume(new_volume, policy),
+        }
+    }
+
+    fn scale_position(
+        &self,
+        new_volume: f64,
+        point: &mut Point,
+        policy: VolumeScalePolicy,
+    ) -> Result<(), anyhow::Error> {
+        match self {
+            Cell::Cuboid(x) => x.scale_position(new_volume, point, policy),
+            Cell::Endless(x) => x.scale_position(new_volume, point, policy),
+            Cell::Sphere(x) => x.scale_position(new_volume, point, policy),
+        }
+    }
+}
+
+impl BoundaryConditions for Cell {
+    fn pbc(&self) -> PeriodicDirections {
+        match self {
+            Cell::Cuboid(x) => x.pbc(),
+            Cell::Endless(x) => x.pbc(),
+            Cell::Sphere(x) => x.pbc(),
+        }
+    }
+
+    fn boundary(&self, point: &mut Point) {
+        match self {
+            Cell::Cuboid(x) => x.boundary(point),
+            Cell::Endless(x) => x.boundary(point),
+            Cell::Sphere(x) => x.boundary(point),
+        }
+    }
+
+    fn distance(&self, point1: &Point, point2: &Point) -> Point {
+        match self {
+            Cell::Cuboid(x) => x.distance(point1, point2),
+            Cell::Endless(x) => x.distance(point1, point2),
+            Cell::Sphere(x) => x.distance(point1, point2),
+        }
+    }
+}
+
+#[cfg(feature = "chemfiles")]
+impl CellToChemCell for Cell {
+    fn to_chem_cell(&self) -> chemfiles::UnitCell {
+        match self {
+            Cell::Cuboid(x) => x.to_chem_cell(),
+            Cell::Endless(x) => x.to_chem_cell(),
+            Cell::Sphere(x) => x.to_chem_cell(),
+        }
+    }
+}
+
+impl SimulationCell for Cell {}
 
 #[cfg(test)]
 mod tests {
