@@ -31,18 +31,19 @@ pub(super) trait NonbondedTerm {
     /// Calculates the energy between two interacting particles given by absolute indices.
     fn particle_with_particle(&self, context: &impl Context, i: usize, j: usize) -> f64;
 
-    /// Compute the energy of a particle interacting with particles of the same group.
+    /// Compute the energy of a particle interacting with particles of the specified group.
+    /// Ensures self-avoidance, i.e. makes sure that the particle does not interact with itself.
     ///
     /// ## Parameters
     /// - `context` - simulated system
     /// - `i` - absolute index of the particle
-    /// - `group` - group this particle is part of
+    /// - `group` - group to calculate interactions with
     ///
     /// ## Example
-    /// - Group contains three active particles: A, B, C.
-    /// - Calling this method with particle A will return the sum of interactions A-B and A-C.
+    /// - Group 1 contains three active particles: A, B, C.
+    /// - Calling this method with particle A and group 1 will return the sum of interactions A-B and A-C.
     #[inline(always)]
-    fn particle_with_self_group(&self, context: &impl Context, i: usize, group: &Group) -> f64 {
+    fn particle_with_group(&self, context: &impl Context, i: usize, group: &Group) -> f64 {
         group
             .iter_active()
             .filter_map(|j| {
@@ -55,7 +56,11 @@ pub(super) trait NonbondedTerm {
             .sum()
     }
 
-    /// Compute the energy of a particle interacting with particles of other group.
+    /// Compute the energy of a particle interacting with particles of the specified group.
+    ///
+    /// ## Warning
+    /// **Does not ensure self-avoidance!**
+    /// Do not use if particle `i` belongs to `group`. Instead, use `particle_with_group`.
     ///
     /// ## Parameters
     /// - `context` - simulated system
@@ -67,8 +72,15 @@ pub(super) trait NonbondedTerm {
     /// Group 2 contains active particles C, D, and E.
     /// - Calling this method with particle A and group 2 will return the sum of interactions
     /// A-C, A-D, and A-E.
+    /// - Calling this method with particle A and group 1 will return the sum of interactions
+    /// A-A, A-B. To get just A-B, use `particle_with_group`.
     #[inline(always)]
-    fn particle_with_group(&self, context: &impl Context, i: usize, group: &Group) -> f64 {
+    fn particle_with_group_unchecked(
+        &self,
+        context: &impl Context,
+        i: usize,
+        group: &Group,
+    ) -> f64 {
         group
             .iter_active()
             .map(|j| self.particle_with_particle(context, i, j))
@@ -96,7 +108,7 @@ pub(super) trait NonbondedTerm {
             .iter()
             .filter_map(|group_j| {
                 if group.index() != group_j.index() {
-                    Some(self.particle_with_group(context, i, group_j))
+                    Some(self.particle_with_group_unchecked(context, i, group_j))
                 } else {
                     None
                 }
@@ -121,10 +133,14 @@ pub(super) trait NonbondedTerm {
     #[inline(always)]
     fn particle_with_all(&self, context: &impl Context, i: usize, group: &Group) -> f64 {
         self.particle_with_other_groups(context, i, group)
-            + self.particle_with_self_group(context, i, group)
+            + self.particle_with_group(context, i, group)
     }
 
-    /// Compute the energy of a group interacting with different group.
+    /// Compute the energy of a group interacting with a different group.
+    ///
+    /// ## Warning
+    /// **Does not ensure self-avoidance!**
+    /// Do not use if `group1` and `group2` are the same group. Instead, use `group_with_itself`.
     ///
     /// ## Parameters
     /// - `context` - simulated system
@@ -140,7 +156,7 @@ pub(super) trait NonbondedTerm {
     fn group_with_group(&self, context: &impl Context, group1: &Group, group2: &Group) -> f64 {
         group1
             .iter_active()
-            .map(|i| self.particle_with_group(context, i, group2))
+            .map(|i| self.particle_with_group_unchecked(context, i, group2))
             .sum()
     }
 
@@ -203,6 +219,7 @@ pub(super) trait NonbondedTerm {
     /// - Calling this method with group 1 will return the sum of interactions
     /// A-B, A-C, A-D, A-E, A-F, B-C, B-D, B-E and B-F.
     #[inline(always)]
+    #[allow(dead_code)]
     fn group_with_all(&self, context: &impl Context, group: &Group) -> f64 {
         self.group_with_other_groups(context, group) + self.group_with_itself(context, group)
     }
@@ -607,7 +624,7 @@ mod tests {
         let expected = nonbonded.particle_with_particle(&system, 0, 1);
         assert_approx_eq!(
             f64,
-            nonbonded.particle_with_self_group(&system, 0, &system.groups()[0]),
+            nonbonded.particle_with_group(&system, 0, &system.groups()[0]),
             expected
         );
 
@@ -615,7 +632,7 @@ mod tests {
             + nonbonded.particle_with_particle(&system, 4, 5);
         assert_approx_eq!(
             f64,
-            nonbonded.particle_with_self_group(&system, 4, &system.groups()[1]),
+            nonbonded.particle_with_group(&system, 4, &system.groups()[1]),
             expected
         )
     }
