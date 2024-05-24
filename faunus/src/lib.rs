@@ -211,7 +211,7 @@ pub trait WithTopology {
 }
 
 /// A trait for objects that have a hamiltonian.
-pub trait WithHamiltonian: GroupCollection + Sized {
+pub trait WithHamiltonian: GroupCollection {
     /// Reference to Hamiltonian.
     ///
     /// Hamiltonian must be stored as `RefCell<Hamiltonian>`.
