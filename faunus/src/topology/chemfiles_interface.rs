@@ -259,7 +259,6 @@ mod tests {
             block::{BlockActivationStatus, InsertionPolicy, MoleculeBlock},
             Bond, BondKind, BondOrder, DegreesOfFreedom, IntermolecularBonded, Topology,
         },
-        Context,
     };
 
     use float_cmp::assert_approx_eq;

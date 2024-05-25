@@ -19,7 +19,7 @@ use nalgebra::Vector3;
 use rand::rngs::ThreadRng;
 use serde::{Deserialize, Serialize};
 use std::{
-    cell::{Ref, RefCell, RefMut},
+    cell::{Ref, RefMut},
     path::Path,
     rc::Rc,
 };
@@ -140,17 +140,6 @@ pub trait Context:
         structure_file: Option<impl AsRef<Path>>,
         rng: &mut ThreadRng,
     ) -> anyhow::Result<Self>;
-
-    /// Construct a new simulation system from raw parts.
-    fn from_raw_parts(
-        topology: Rc<Topology>,
-        cell: Box<dyn SimulationCell>,
-        hamiltonian: RefCell<Hamiltonian>,
-        structure_file: Option<impl AsRef<Path>>,
-        rng: &mut ThreadRng,
-    ) -> anyhow::Result<Self>
-    where
-        Self: Sized;
 }
 
 /// Context stores the state of a single simulation system

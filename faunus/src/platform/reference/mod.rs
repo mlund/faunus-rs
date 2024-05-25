@@ -46,6 +46,29 @@ pub struct ReferencePlatform {
     hamiltonian: RefCell<Hamiltonian>,
 }
 
+impl ReferencePlatform {
+    pub fn from_raw_parts(
+        topology: Rc<Topology>,
+        cell: Box<dyn SimulationCell>,
+        hamiltonian: RefCell<Hamiltonian>,
+        structure: Option<impl AsRef<Path>>,
+        rng: &mut ThreadRng,
+    ) -> anyhow::Result<Self> {
+        let mut context = ReferencePlatform {
+            topology: topology.clone(),
+            particles: vec![],
+            groups: vec![],
+            cell,
+            hamiltonian,
+            group_lists: GroupLists::new(topology.molecules().len()),
+        };
+
+        topology.insert_groups(&mut context, structure, rng)?;
+
+        Ok(context)
+    }
+}
+
 impl WithCell for ReferencePlatform {
     fn cell(&self) -> &dyn SimulationCell {
         &*self.cell
@@ -98,27 +121,6 @@ impl Context for ReferencePlatform {
             structure_file,
             rng,
         )
-    }
-
-    fn from_raw_parts(
-        topology: Rc<Topology>,
-        cell: Box<dyn SimulationCell>,
-        hamiltonian: RefCell<Hamiltonian>,
-        structure: Option<impl AsRef<Path>>,
-        rng: &mut ThreadRng,
-    ) -> anyhow::Result<Self> {
-        let mut context = ReferencePlatform {
-            topology: topology.clone(),
-            particles: vec![],
-            groups: vec![],
-            cell,
-            hamiltonian,
-            group_lists: GroupLists::new(topology.molecules().len()),
-        };
-
-        topology.insert_groups(&mut context, structure, rng)?;
-
-        Ok(context)
     }
 }
 
