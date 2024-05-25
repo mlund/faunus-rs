@@ -437,7 +437,7 @@ mod tests {
         let converted = context.to_frame();
 
         // check atoms
-        let atom_names = vec!["OW", "OW", "O3", "HW", "HW", "OW"];
+        let atom_names = ["OW", "OW", "O3", "HW", "HW", "OW"];
         let atom_masses = [16.0, 16.0, 16.0, 1.0, 1.0, 16.0];
         let atom_charges = [-1.0, -1.0, -1.0, 0.0, 0.0, -1.0];
         let atomic_types = ["O", "O", "O", "H", "H", "O"];

@@ -419,8 +419,8 @@ mod tests {
         for i in 0..topology.atoms().len() {
             for j in (i + 1)..topology.atoms().len() {
                 assert_behavior(
-                    &nonbonded.potentials.get((i, j)).unwrap(),
-                    &nonbonded.potentials.get((j, i)).unwrap(),
+                    nonbonded.potentials.get((i, j)).unwrap(),
+                    nonbonded.potentials.get((j, i)).unwrap(),
                 );
             }
         }
@@ -441,7 +441,7 @@ mod tests {
 
         for i in [o_index, c_index] {
             for j in 0..topology.atoms().len() {
-                assert_behavior(&nonbonded.potentials.get((i, j)).unwrap(), default);
+                assert_behavior(nonbonded.potentials.get((i, j)).unwrap(), default);
             }
         }
 
@@ -462,7 +462,7 @@ mod tests {
                 continue;
             }
 
-            assert_behavior(&nonbonded.potentials.get((x_index, i)).unwrap(), default);
+            assert_behavior(nonbonded.potentials.get((x_index, i)).unwrap(), default);
         }
     }
 

@@ -124,7 +124,7 @@ mod tests {
 
         let mut rng = rand::thread_rng();
         for _ in 0..100 {
-            let mut cloned = positions.clone();
+            let mut cloned = positions;
 
             rotate_random(&mut cloned, &com, &mut rng);
 
