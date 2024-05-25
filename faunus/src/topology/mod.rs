@@ -1097,9 +1097,9 @@ mod tests {
             &custom,
         );
 
-        let atoms = vec!["OW", "HW", "HW", "HW", "OW", "OW", "OW"];
-        let indices = vec![0, 1, 1, 1, 0, 0, 0];
-        let bonds = vec![
+        let atoms = ["OW", "HW", "HW", "HW", "OW", "OW", "OW"];
+        let indices = [0, 1, 1, 1, 0, 0, 0];
+        let bonds = [
             Bond::new(
                 [0, 1],
                 BondKind::Harmonic(interatomic::twobody::Harmonic::new(1.0, 100.0)),
@@ -1112,14 +1112,14 @@ mod tests {
             ),
             Bond::new([2, 3], BondKind::default(), BondOrder::Unspecified),
         ];
-        let torsions = vec![
+        let torsions = [
             Torsion::new(
                 [2, 3, 4],
                 TorsionKind::Cosine(interatomic::threebody::CosineTorsion::new(45.0, 50.0)),
             ),
             Torsion::new([1, 2, 3], TorsionKind::default()),
         ];
-        let dihedrals = vec![
+        let dihedrals = [
             Dihedral::new(
                 [0, 1, 2, 3],
                 DihedralKind::ImproperHarmonic(interatomic::fourbody::HarmonicDihedral::new(
@@ -1130,7 +1130,7 @@ mod tests {
             ),
             Dihedral::new([3, 4, 5, 6], DihedralKind::default(), None, None),
         ];
-        let names = vec![
+        let names = [
             Some("O1"),
             None,
             Some("H1"),
@@ -1139,12 +1139,12 @@ mod tests {
             Some("O1"),
             Some("O2"),
         ];
-        let residues = vec![
+        let residues = [
             Residue::new("ALA", Some(2), 0..3),
             Residue::new("GLY", None, 1..1),
             Residue::new("ALA", Some(4), 4..6),
         ];
-        let chains = vec![Chain::new("A", 0..7), Chain::new("Chain2", 14..0)];
+        let chains = [Chain::new("A", 0..7), Chain::new("Chain2", 14..0)];
         let custom = HashMap::from([
             ("bool".to_owned(), Value::Bool(false)),
             ("int".to_owned(), Value::Int(13)),
