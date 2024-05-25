@@ -15,22 +15,19 @@
 //! Implementation of auxiliary functions for computing various properties.
 
 use nalgebra::Vector3;
-use std::f64::consts::PI;
 
 use crate::{cell::SimulationCell, Point};
 
 /// Calculate center of mass of a collection of points with masses.
 /// Does not consider periodic boundary conditions.
 pub(crate) fn center_of_mass(positions: &[Point], masses: &[f64]) -> Point {
-    let (com, total_mass) = positions
+    let total_mass: f64 = masses.iter().sum();
+    positions
         .iter()
         .zip(masses.iter())
-        .map(|(&pos, &mass)| (pos * mass, mass))
-        .fold(
-            (Point::default(), 0.0),
-            |(sum, total), (weighted_pos, mass)| (sum + weighted_pos, total + mass),
-        );
-    com / total_mass
+        .map(|(&r, &m)| r * m)
+        .sum::<Point>()
+        / total_mass
 }
 
 #[test]
@@ -71,7 +68,7 @@ fn test_center_of_mass() {
 #[inline(always)]
 pub(crate) fn angle_vectors(v1: &Vector3<f64>, v2: &Vector3<f64>) -> f64 {
     let cos = v1.dot(v2) / (v1.norm() * v2.norm());
-    cos.acos() * 180.0 / PI
+    cos.acos().to_degrees()
 }
 
 #[test]
@@ -208,7 +205,7 @@ pub(crate) fn dihedral_points(
     let cos_angle = abc.dot(&bcd);
     let sin_angle = bc.normalize().dot(&abc.cross(&bcd));
 
-    sin_angle.atan2(cos_angle) * 180.0 / PI
+    sin_angle.atan2(cos_angle).to_degrees()
 }
 
 #[test]
