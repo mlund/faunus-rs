@@ -192,6 +192,16 @@ impl Cell {
     }
 }
 
+impl From<Cell> for Box<dyn SimulationCell> {
+    fn from(cell: Cell) -> Self {
+        match cell {
+            Cell::Cuboid(c) => Box::new(c),
+            Cell::Endless(c) => Box::new(c),
+            Cell::Sphere(c) => Box::new(c),
+        }
+    }
+}
+
 impl Shape for Cell {
     fn volume(&self) -> Option<f64> {
         match self {
