@@ -164,9 +164,7 @@ pub(crate) enum Cell {
 
 impl Cell {
     /// Get simulation cell from a Faunus configuration file.
-    ///
-    /// Returns a trait object implementing `SimulationCell`.
-    pub(crate) fn from_file(filename: impl AsRef<Path>) -> anyhow::Result<Box<dyn SimulationCell>> {
+    pub(crate) fn from_file(filename: impl AsRef<Path>) -> anyhow::Result<Cell> {
         let yaml = std::fs::read_to_string(filename)?;
         let full: serde_yaml::Value = serde_yaml::from_str(&yaml)?;
 
@@ -174,20 +172,18 @@ impl Cell {
             "Could not find `system` in the YAML file.",
         ))?;
 
-        match system.get("cell") {
-            Some(x) => match serde_yaml::from_value(x.clone()).map_err(anyhow::Error::msg)? {
-                Cell::Cuboid(mut x) => {
-                    // `half_cell` information is missing after parsing, we have to add it
-                    x.set_half_cell();
-                    Ok(Box::new(x))
-                }
-                Cell::Endless(x) => Ok(Box::new(x)),
-                Cell::Sphere(x) => Ok(Box::new(x)),
-            },
-            None => {
-                log::warn!("No cell defined for the system. Using Endless cell.");
-                Ok(Box::<Endless>::default())
+        let Some(value) = system.get("cell") else {
+            log::warn!("No cell defined for the system. Using Endless cell.");
+            return Ok(Self::Endless(Endless::default()));
+        };
+        let cell = serde_yaml::from_value(value.clone()).map_err(anyhow::Error::msg)?;
+        match cell {
+            Self::Cuboid(mut cuboid) => {
+                // `half_cell` information is missing after parsing, we have to add it
+                cuboid.set_half_cell();
+                Ok(Self::Cuboid(cuboid))
             }
+            _ => Ok(cell),
         }
     }
 }
@@ -198,6 +194,36 @@ impl From<Cell> for Box<dyn SimulationCell> {
             Cell::Cuboid(c) => Box::new(c),
             Cell::Endless(c) => Box::new(c),
             Cell::Sphere(c) => Box::new(c),
+        }
+    }
+}
+
+impl TryFrom<Cell> for Cuboid {
+    type Error = anyhow::Error;
+    fn try_from(cell: Cell) -> Result<Self, Self::Error> {
+        match cell {
+            Cell::Cuboid(c) => Ok(c),
+            _ => Err(anyhow::Error::msg("Cell is not a cuboid")),
+        }
+    }
+}
+
+impl TryFrom<Cell> for Sphere {
+    type Error = anyhow::Error;
+    fn try_from(cell: Cell) -> Result<Self, Self::Error> {
+        match cell {
+            Cell::Sphere(c) => Ok(c),
+            _ => Err(anyhow::Error::msg("Cell is not a sphere")),
+        }
+    }
+}
+
+impl TryFrom<Cell> for Endless {
+    type Error = anyhow::Error;
+    fn try_from(cell: Cell) -> Result<Self, Self::Error> {
+        match cell {
+            Cell::Endless(c) => Ok(c),
+            _ => Err(anyhow::Error::msg("Cell is not endless")),
         }
     }
 }
@@ -285,34 +311,46 @@ impl SimulationCell for Cell {}
 
 #[cfg(test)]
 mod tests {
-    use crate::Point;
-
     use super::Cell;
+    use crate::{
+        cell::{Cuboid, Endless, Shape, Sphere},
+        Point,
+    };
 
     #[test]
     fn test_read_from_file() {
         // cuboid
-        let cell = Cell::from_file("tests/files/topology_pass.yaml").unwrap();
+        let cell: Cuboid = Cell::from_file("tests/files/topology_pass.yaml")
+            .unwrap()
+            .try_into()
+            .unwrap();
         let point1 = Point::new(-4.9, 2.4, 5.71);
         let point2 = Point::new(-5.1, 3.2, 4.6);
         assert!(cell.is_inside(&point1));
         assert!(!cell.is_inside(&point2));
 
         // sphere
-        let cell = Cell::from_file("tests/files/cell_sphere.yaml").unwrap();
+        let cell: Sphere = Cell::from_file("tests/files/cell_sphere.yaml")
+            .unwrap()
+            .try_into()
+            .unwrap();
         let point1 = Point::new(8.9, 5.2, 9.3);
         let point2 = Point::new(8.9, 7.2, 9.3);
         assert!(cell.is_inside(&point1));
         assert!(!cell.is_inside(&point2));
 
         // endless
-        let cell = Cell::from_file("tests/files/cell_endless.yaml").unwrap();
+        let cell: Endless = Cell::from_file("tests/files/cell_endless.yaml")
+            .unwrap()
+            .try_into()
+            .unwrap();
         let point1 = Point::new(-203847.21, 947382.143, 2973212.14);
         assert!(cell.is_inside(&point1));
 
-        // default
-        let cell = Cell::from_file("tests/files/cell_none.yaml").unwrap();
+        // default. Note that we can use Cell directly for all shapes.
+        let cell: Cell = Cell::from_file("tests/files/cell_none.yaml").unwrap();
         let point1 = Point::new(-203847.21, 947382.143, 2973212.14);
         assert!(cell.is_inside(&point1));
+        assert!(TryInto::<Endless>::try_into(cell).is_ok());
     }
 }

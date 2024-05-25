@@ -93,7 +93,7 @@ impl Context for ReferencePlatform {
         let hamiltonian = Hamiltonian::new(&hamiltonian_builder, &topology)?;
         ReferencePlatform::from_raw_parts(
             Rc::new(topology),
-            cell,
+            cell.into(),
             RefCell::new(hamiltonian),
             structure_file,
             rng,
