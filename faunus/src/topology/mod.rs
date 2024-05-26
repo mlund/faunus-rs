@@ -523,15 +523,12 @@ impl Topology {
             if block.insert_policy().is_some() {
                 block.insert_block(context, &[], rng)?;
             } else {
-                let atoms_in_block = block.num_atoms(self.moleculekinds());
-
                 match positions {
                     None => {
-                        anyhow::bail!(
-                            "molecule block requires external structure that was not provided"
-                        )
+                        anyhow::bail!("block requires structure that wasn't provided")
                     }
                     Some(ref positions) => {
+                        let atoms_in_block = block.num_atoms(self.moleculekinds());
                         let positions = match positions
                             .get(curr_start..(curr_start + atoms_in_block))
                         {
@@ -550,11 +547,10 @@ impl Topology {
         // check that all coordinates from the structure file have been used
         match positions {
             Some(positions) if positions.len() != curr_start => {
-                anyhow::bail!("external structure does not match topology - too many coordinates")
+                anyhow::bail!("structure does not match topology - too many coordinates")
             }
             _ => (),
         }
-
         Ok(())
     }
 
@@ -609,9 +605,13 @@ impl Topology {
         }
 
         // check that all molecule names are unique
-        if are_unique(&self.moleculekinds, |i: &MoleculeKind, j: &MoleculeKind| {
-            i.name() == j.name()
-        }) {
+        if self
+            .moleculekinds
+            .iter()
+            .duplicates_by(|m| m.name())
+            .count()
+            .eq(&0)
+        {
             Ok(())
         } else {
             anyhow::bail!("molecules have non-unique names")
