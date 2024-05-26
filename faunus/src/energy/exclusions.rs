@@ -34,7 +34,7 @@ impl ExclusionMatrix {
         // read the exclusions for the individual atoms
         let mut atom_cnt = 0;
         for block in topology.blocks() {
-            let molecule = &topology.molecules()[block.molecule_index()];
+            let molecule = &topology.moleculekinds()[block.molecule_index()];
             // loop through the specific number of molecules in the block
             for _ in 0..block.num_molecules() {
                 for exclusion in molecule.exclusions() {

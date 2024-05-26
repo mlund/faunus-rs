@@ -81,7 +81,7 @@ impl IntramolecularBonded {
     /// Calculate energy of all active bonded interactions of target group.
     fn one_group(&self, context: &impl Context, group: &Group) -> f64 {
         let topology = context.topology_ref();
-        let molecule = &topology.molecules()[group.molecule()];
+        let molecule = &topology.moleculekinds()[group.molecule()];
 
         let bond_energy: f64 = molecule
             .bonds()
@@ -152,7 +152,7 @@ impl IntermolecularBonded {
             .blocks()
             .iter()
             .flat_map(|block| {
-                let molecule = &topology.molecules()[block.molecule_index()];
+                let molecule = &topology.moleculekinds()[block.molecule_index()];
                 let num_atoms = molecule.atoms().len();
                 match block.active() {
                     BlockActivationStatus::All => vec![true; block.num_molecules() * num_atoms],

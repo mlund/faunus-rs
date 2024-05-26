@@ -336,35 +336,35 @@ pub enum DegreesOfFreedom {
 /// Trait implemented by any structure resembling a Topology.
 pub trait TopologyLike {
     /// Get atoms of the topology.
-    fn atoms(&self) -> &[AtomKind];
+    fn atomkinds(&self) -> &[AtomKind];
     /// Add atom to the topology.
-    fn add_atom(&mut self, atom: AtomKind);
+    fn add_atomkind(&mut self, atom: AtomKind);
     /// Get molecules of the topology.
-    fn molecules(&self) -> &[MoleculeKind];
+    fn moleculekinds(&self) -> &[MoleculeKind];
     /// Add molecule to the topology.
-    fn add_molecule(&mut self, molecule: MoleculeKind);
+    fn add_moleculekind(&mut self, molecule: MoleculeKind);
 
     /// Find atom with given name.
     fn find_atom(&self, name: &str) -> Option<&AtomKind> {
-        self.atoms().iter().find(|a| a.name() == name)
+        self.atomkinds().iter().find(|a| a.name() == name)
     }
 
     /// Find molecule with given name.
     fn find_molecule(&self, name: &str) -> Option<&MoleculeKind> {
-        self.molecules().iter().find(|r| r.name() == name)
+        self.moleculekinds().iter().find(|r| r.name() == name)
     }
 
     /// Add atom kinds into a topology. In case an AtomKind with the same name already
     /// exists in the Topology, it is NOT overwritten and a warning is raised.
     fn include_atoms(&mut self, atoms: Vec<AtomKind>) {
         for atom in atoms.into_iter() {
-            if self.atoms().iter().any(|x| x.name() == atom.name()) {
+            if self.atomkinds().iter().any(|x| x.name() == atom.name()) {
                 log::warn!(
                     "Atom kind '{}' redefinition in included topology.",
                     atom.name()
                 )
             } else {
-                self.add_atom(atom);
+                self.add_atomkind(atom);
             }
         }
     }
@@ -373,13 +373,17 @@ pub trait TopologyLike {
     /// already exists in the Topology, it is NOT overwritten and a warning is raised.
     fn include_molecules(&mut self, molecules: Vec<MoleculeKind>) {
         for molecule in molecules.into_iter() {
-            if self.molecules().iter().any(|x| x.name() == molecule.name()) {
+            if self
+                .moleculekinds()
+                .iter()
+                .any(|x| x.name() == molecule.name())
+            {
                 log::warn!(
                     "Molecule kind '{}' redefinition in included topology.",
                     molecule.name()
                 )
             } else {
-                self.add_molecule(molecule);
+                self.add_moleculekind(molecule);
             }
         }
     }
@@ -392,8 +396,8 @@ pub trait TopologyLike {
     fn include_topologies(&mut self, topologies: Vec<InputPath>) -> Result<(), anyhow::Error> {
         for file in topologies.iter() {
             let included_top = IncludedTopology::from_file(file.path().unwrap())?;
-            self.include_atoms(included_top.atoms);
-            self.include_molecules(included_top.molecules);
+            self.include_atoms(included_top.atomkinds);
+            self.include_molecules(included_top.moleculekinds);
         }
 
         Ok(())
@@ -498,7 +502,7 @@ impl Topology {
         // create groups
         for block in self.blocks() {
             if block.insert_policy().is_none() {
-                let atoms_in_block = block.num_atoms(self.molecules());
+                let atoms_in_block = block.num_atoms(self.moleculekinds());
 
                 match positions {
                     None => {
@@ -657,19 +661,19 @@ impl Topology {
 }
 
 impl TopologyLike for Topology {
-    fn atoms(&self) -> &[AtomKind] {
+    fn atomkinds(&self) -> &[AtomKind] {
         &self.atomkinds
     }
 
-    fn molecules(&self) -> &[MoleculeKind] {
+    fn moleculekinds(&self) -> &[MoleculeKind] {
         &self.moleculekinds
     }
 
-    fn add_atom(&mut self, atom: AtomKind) {
+    fn add_atomkind(&mut self, atom: AtomKind) {
         self.atomkinds.push(atom)
     }
 
-    fn add_molecule(&mut self, molecule: MoleculeKind) {
+    fn add_moleculekind(&mut self, molecule: MoleculeKind) {
         self.moleculekinds.push(molecule)
     }
 }
@@ -682,11 +686,11 @@ struct IncludedTopology {
     #[serde(default)]
     include: Vec<InputPath>,
     /// All possible atom types.
-    #[serde(default)]
-    atoms: Vec<AtomKind>,
+    #[serde(default, rename = "atoms")]
+    atomkinds: Vec<AtomKind>,
     /// All possible molecule types.
-    #[serde(default)]
-    molecules: Vec<MoleculeKind>,
+    #[serde(default, rename = "molecules")]
+    moleculekinds: Vec<MoleculeKind>,
 }
 
 impl IncludedTopology {
@@ -706,20 +710,20 @@ impl IncludedTopology {
 }
 
 impl TopologyLike for IncludedTopology {
-    fn atoms(&self) -> &[AtomKind] {
-        &self.atoms
+    fn atomkinds(&self) -> &[AtomKind] {
+        &self.atomkinds
     }
 
-    fn molecules(&self) -> &[MoleculeKind] {
-        &self.molecules
+    fn moleculekinds(&self) -> &[MoleculeKind] {
+        &self.moleculekinds
     }
 
-    fn add_atom(&mut self, atom: AtomKind) {
-        self.atoms.push(atom)
+    fn add_atomkind(&mut self, atom: AtomKind) {
+        self.atomkinds.push(atom)
     }
 
-    fn add_molecule(&mut self, molecule: MoleculeKind) {
-        self.molecules.push(molecule)
+    fn add_moleculekind(&mut self, molecule: MoleculeKind) {
+        self.moleculekinds.push(molecule)
     }
 }
 
@@ -1024,10 +1028,10 @@ mod tests {
     fn read_topology_pass() {
         let topology = Topology::from_file("tests/files/topology_pass.yaml").unwrap();
 
-        assert_eq!(topology.atoms().len(), 5);
+        assert_eq!(topology.atomkinds().len(), 5);
 
         compare_atom_kind(
-            &topology.atoms()[0],
+            &topology.atomkinds()[0],
             "OW",
             0,
             16.0,
@@ -1040,7 +1044,7 @@ mod tests {
         );
 
         compare_atom_kind(
-            &topology.atoms()[1],
+            &topology.atomkinds()[1],
             "HW",
             1,
             1.0,
@@ -1053,7 +1057,7 @@ mod tests {
         );
 
         compare_atom_kind(
-            &topology.atoms()[2],
+            &topology.atomkinds()[2],
             "X",
             2,
             12.0,
@@ -1068,7 +1072,7 @@ mod tests {
         let custom = HashMap::from([("unused".to_owned(), Value::Bool(true))]);
 
         compare_atom_kind(
-            &topology.atoms()[3],
+            &topology.atomkinds()[3],
             "O",
             3,
             16.0,
@@ -1081,7 +1085,7 @@ mod tests {
         );
 
         compare_atom_kind(
-            &topology.atoms()[4],
+            &topology.atomkinds()[4],
             "C",
             4,
             12.0,
@@ -1152,10 +1156,10 @@ mod tests {
             ("point".to_owned(), Value::Point([1.4, 2.2, -0.71].into())),
         ]);
 
-        assert_eq!(topology.molecules().len(), 2);
+        assert_eq!(topology.moleculekinds().len(), 2);
 
         compare_molecule_kind(
-            &topology.molecules()[0],
+            &topology.moleculekinds()[0],
             "MOL",
             0,
             &atoms,
@@ -1180,7 +1184,7 @@ mod tests {
         );
 
         compare_molecule_kind(
-            &topology.molecules()[1],
+            &topology.moleculekinds()[1],
             "MOL2",
             1,
             &["OW", "OW", "X"],

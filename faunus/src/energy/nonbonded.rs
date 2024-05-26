@@ -292,7 +292,7 @@ impl NonbondedMatrix {
         nonbonded: &NonbondedBuilder,
         topology: &Topology,
     ) -> anyhow::Result<EnergyTerm> {
-        let atoms = topology.atoms();
+        let atoms = topology.atomkinds();
         let n = atoms.len();
 
         let mut potentials: Array2<Box<dyn IsotropicTwobodyEnergy>> =
@@ -403,11 +403,11 @@ mod tests {
 
         assert_eq!(
             nonbonded.potentials.len(),
-            topology.atoms().len() * topology.atoms().len()
+            topology.atomkinds().len() * topology.atomkinds().len()
         );
 
-        for i in 0..topology.atoms().len() {
-            for j in (i + 1)..topology.atoms().len() {
+        for i in 0..topology.atomkinds().len() {
+            for j in (i + 1)..topology.atomkinds().len() {
                 assert_behavior(
                     nonbonded.potentials.get((i, j)).unwrap(),
                     nonbonded.potentials.get((j, i)).unwrap(),
@@ -417,12 +417,12 @@ mod tests {
 
         // O, C with anything: default interaction
         let o_index = topology
-            .atoms()
+            .atomkinds()
             .iter()
             .position(|x| x.name() == "O")
             .unwrap();
         let c_index = topology
-            .atoms()
+            .atomkinds()
             .iter()
             .position(|x| x.name() == "C")
             .unwrap();
@@ -430,24 +430,24 @@ mod tests {
         let default = &nonbonded.potentials.get((o_index, o_index)).unwrap();
 
         for i in [o_index, c_index] {
-            for j in 0..topology.atoms().len() {
+            for j in 0..topology.atomkinds().len() {
                 assert_behavior(nonbonded.potentials.get((i, j)).unwrap(), default);
             }
         }
 
         // X interacts slightly differently with charged atoms because it is itself charged
         let x_index = topology
-            .atoms()
+            .atomkinds()
             .iter()
             .position(|x| x.name() == "X")
             .unwrap();
         let ow_index = topology
-            .atoms()
+            .atomkinds()
             .iter()
             .position(|x| x.name() == "OW")
             .unwrap();
 
-        for i in 0..topology.atoms().len() {
+        for i in 0..topology.atomkinds().len() {
             if i == x_index || i == ow_index {
                 continue;
             }

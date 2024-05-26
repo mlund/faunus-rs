@@ -94,9 +94,9 @@ pub trait ChemFrameConvert: WithCell + WithTopology + GroupCollection {
         }
 
         // add atoms to the frame
-        let to_atomkind = |i: usize| &topology.atoms()[i];
+        let to_atomkind = |i: usize| &topology.atomkinds()[i];
         self.groups().iter().for_each(|group| {
-            let molecule = &topology.molecules()[group.molecule()];
+            let molecule = &topology.moleculekinds()[group.molecule()];
             let atoms = molecule.atom_indices().iter().cloned().map(to_atomkind);
             for (i, atom) in atoms.enumerate() {
                 frame.add_atom(
@@ -115,7 +115,7 @@ pub trait ChemFrameConvert: WithCell + WithTopology + GroupCollection {
         self.groups()
             .iter()
             .fold((1, 0), |(residue_index, atom_index), group| {
-                let molecule = &topology.molecules()[group.molecule()];
+                let molecule = &topology.moleculekinds()[group.molecule()];
                 group
                     .to_chem_residues(atom_index, residue_index, molecule)
                     .iter()
@@ -137,7 +137,7 @@ pub trait ChemFrameConvert: WithCell + WithTopology + GroupCollection {
         let topology = self.topology_ref();
 
         self.groups().iter().fold(0, |atom_index, group| {
-            let molecule = &topology.molecules()[group.molecule()];
+            let molecule = &topology.moleculekinds()[group.molecule()];
 
             molecule.bonds().iter().for_each(|bond| {
                 frame.add_bond(bond.index()[0] + atom_index, bond.index()[1] + atom_index)

@@ -57,7 +57,7 @@ impl ReferencePlatform {
         let topology = Topology::from_file(&yaml_file)?;
         let hamiltonian_builder = HamiltonianBuilder::from_file(&yaml_file)?;
         // validate hamiltonian builder
-        hamiltonian_builder.validate(topology.atoms())?;
+        hamiltonian_builder.validate(topology.atomkinds())?;
 
         let cell = Cell::from_file(&yaml_file)?;
 
@@ -84,7 +84,7 @@ impl ReferencePlatform {
             groups: vec![],
             cell,
             hamiltonian,
-            group_lists: GroupLists::new(topology.molecules().len()),
+            group_lists: GroupLists::new(topology.moleculekinds().len()),
         };
 
         topology.insert_groups(&mut context, structure, rng)?;
