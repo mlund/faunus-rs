@@ -395,7 +395,7 @@ pub trait TopologyLike {
     /// - `topologies` paths to the topologies to be included (absolute or relative to the `parent_path`)
     fn include_topologies(&mut self, topologies: Vec<InputPath>) -> Result<(), anyhow::Error> {
         for file in topologies.iter() {
-            let included_top = IncludedTopology::from_file(file.path().unwrap())?;
+            let included_top = Topology::from_file_partial(file.path().unwrap())?;
             self.include_atoms(&included_top.atomkinds);
             self.include_molecules(included_top.moleculekinds);
         }
@@ -423,9 +423,20 @@ pub struct Topology {
 }
 
 impl Topology {
-    pub fn system(&self) -> &System {
-        &self.system.as_ref().unwrap()
+    fn system(&self) -> &System {
+        self.system.as_ref().unwrap()
     }
+    /// Create partial topology without system. Used for topology includes.
+    pub fn from_file_partial(filename: impl AsRef<Path> + Clone) -> anyhow::Result<Topology> {
+        let yaml = std::fs::read_to_string(filename.clone())?;
+        let mut topology: Topology = serde_yaml::from_str(&yaml)?;
+        for file in topology.include.iter_mut() {
+            file.finalize(filename.clone());
+        }
+        topology.include_topologies(topology.include.clone())?;
+        Ok(topology)
+    }
+
     /// Parse a yaml file as Topology.
     pub fn from_file(filename: impl AsRef<Path>) -> anyhow::Result<Topology> {
         let yaml = std::fs::read_to_string(&filename)?;
@@ -443,16 +454,12 @@ impl Topology {
             file.finalize(&filename);
         }
 
-        // parse included files
         topology.include_topologies(topology.include.clone())?;
-
         topology.finalize_atoms()?;
         topology.finalize_molecules()?;
         topology.finalize_blocks(&filename)?;
         topology.validate_intermolecular()?;
-
         topology.validate()?;
-
         Ok(topology)
     }
 
@@ -671,55 +678,6 @@ impl Topology {
 }
 
 impl TopologyLike for Topology {
-    fn atomkinds(&self) -> &[AtomKind] {
-        &self.atomkinds
-    }
-
-    fn moleculekinds(&self) -> &[MoleculeKind] {
-        &self.moleculekinds
-    }
-
-    fn add_atomkind(&mut self, atom: AtomKind) {
-        self.atomkinds.push(atom)
-    }
-
-    fn add_moleculekind(&mut self, molecule: MoleculeKind) {
-        self.moleculekinds.push(molecule)
-    }
-}
-
-/// Partial topology that can be included in other topology files.
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-struct IncludedTopology {
-    /// Other yaml files that should be included in the topology.
-    #[serde(skip_serializing)]
-    #[serde(default)]
-    include: Vec<InputPath>,
-    /// All possible atom types.
-    #[serde(default, rename = "atoms")]
-    atomkinds: Vec<AtomKind>,
-    /// All possible molecule types.
-    #[serde(default, rename = "molecules")]
-    moleculekinds: Vec<MoleculeKind>,
-}
-
-impl IncludedTopology {
-    /// Parse a yaml file as IncludedTopology.
-    fn from_file(filename: impl AsRef<Path> + Clone) -> anyhow::Result<IncludedTopology> {
-        let yaml = std::fs::read_to_string(filename.clone())?;
-        let mut topology = serde_yaml::from_str::<IncludedTopology>(&yaml)?;
-
-        // parse included files
-        for file in topology.include.iter_mut() {
-            file.finalize(filename.clone());
-        }
-        topology.include_topologies(topology.include.clone())?;
-
-        Ok(topology)
-    }
-}
-
-impl TopologyLike for IncludedTopology {
     fn atomkinds(&self) -> &[AtomKind] {
         &self.atomkinds
     }
