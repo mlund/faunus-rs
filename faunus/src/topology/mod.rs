@@ -423,6 +423,9 @@ pub struct Topology {
 }
 
 impl Topology {
+    pub fn system(&self) -> &System {
+        &self.system
+    }
     /// Parse a yaml file as Topology.
     pub fn from_file(filename: impl AsRef<Path>) -> anyhow::Result<Topology> {
         let yaml = std::fs::read_to_string(&filename)?;
@@ -448,17 +451,17 @@ impl Topology {
 
     /// Get molecule blocks of the system.
     pub fn blocks(&self) -> &[MoleculeBlock] {
-        &self.system.blocks
+        &self.system().blocks
     }
 
     /// Get intermolecular bonded interactions of the system.
     pub fn intermolecular(&self) -> &IntermolecularBonded {
-        &self.system.intermolecular
+        &self.system().intermolecular
     }
 
     /// Get the total number of particules in the topology.
     pub fn num_particles(&self) -> usize {
-        self.system
+        self.system()
             .blocks
             .iter()
             .map(|block| block.num_atoms(&self.moleculekinds))
@@ -641,17 +644,17 @@ impl Topology {
             Ok(())
         }
         check_intermolecular_items(
-            &self.system.intermolecular.bonds,
+            &self.system().intermolecular.bonds,
             num_particles,
             "intermolecular bond between undefined atoms",
         )?;
         check_intermolecular_items(
-            &self.system.intermolecular.torsions,
+            &self.system().intermolecular.torsions,
             num_particles,
             "intermolecular torsion between undefined atoms",
         )?;
         check_intermolecular_items(
-            &self.system.intermolecular.dihedrals,
+            &self.system().intermolecular.dihedrals,
             num_particles,
             "intermolecular dihedral between undefined atoms",
         )?;
