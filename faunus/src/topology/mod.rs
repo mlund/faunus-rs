@@ -520,7 +520,9 @@ impl Topology {
 
         // create groups
         for block in self.blocks() {
-            if block.insert_policy().is_none() {
+            if block.insert_policy().is_some() {
+                block.insert_block(context, &[], rng)?;
+            } else {
                 let atoms_in_block = block.num_atoms(self.moleculekinds());
 
                 match positions {
@@ -542,8 +544,6 @@ impl Topology {
                         curr_start += atoms_in_block;
                     }
                 };
-            } else {
-                block.insert_block(context, &[], rng)?;
             }
         }
 
