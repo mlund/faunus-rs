@@ -422,7 +422,7 @@ mod tests {
                 if x == y {
                     assert_eq!(
                         interactions,
-                        vec![
+                        [
                             NonbondedInteraction::WeeksChandlerAndersen(DirectOrMixing::Direct(
                                 WeeksChandlerAndersen::new(1.5, 3.0)
                             )),
@@ -438,7 +438,7 @@ mod tests {
                 } else {
                     assert_eq!(
                         interactions,
-                        vec![
+                        [
                             NonbondedInteraction::HardSphere(DirectOrMixing::Mixing {
                                 mixing: CombinationRule::LorentzBerthelot,
                                 _phantom: Default::default()
