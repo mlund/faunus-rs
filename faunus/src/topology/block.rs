@@ -22,11 +22,9 @@ use rand::rngs::ThreadRng;
 use serde::{Deserialize, Serialize};
 use validator::{Validate, ValidationError};
 
+use super::{molecule::MoleculeKind, AtomKind, InputPath};
 use crate::dimension::Dimension;
 use crate::{cell::SimulationCell, group::GroupSize, Context, Particle, Point};
-
-use super::AtomKind;
-use super::{molecule::MoleculeKind, InputPath};
 
 /// Describes the activation status of a MoleculeBlock.
 /// Partial(n) means that only the first 'n' molecules of the block are active.
@@ -172,7 +170,8 @@ impl InsertionPolicy {
 #[serde(deny_unknown_fields)]
 pub struct MoleculeBlock {
     /// Name of the molecule kind of molecules in this block.
-    molecule: String,
+    #[serde(rename = "molecule")]
+    molecule_name: String,
     /// Index of the molecule kind.
     /// Only defined for MoleculeBlock in a specific Topology.
     #[serde(skip)]
@@ -190,7 +189,7 @@ pub struct MoleculeBlock {
 
 impl MoleculeBlock {
     pub fn molecule(&self) -> &str {
-        &self.molecule
+        &self.molecule_name
     }
 
     pub fn molecule_index(&self) -> usize {
@@ -219,7 +218,7 @@ impl MoleculeBlock {
         insert: Option<InsertionPolicy>,
     ) -> MoleculeBlock {
         MoleculeBlock {
-            molecule: molecule.to_owned(),
+            molecule_name: molecule.to_owned(),
             molecule_id,
             num_molecules,
             active,
