@@ -429,7 +429,14 @@ impl Topology {
     /// Parse a yaml file as Topology.
     pub fn from_file(filename: impl AsRef<Path>) -> anyhow::Result<Topology> {
         let yaml = std::fs::read_to_string(&filename)?;
-        let mut topology = serde_yaml::from_str::<Topology>(&yaml)?;
+        let mut topology: Topology = serde_yaml::from_str(&yaml)?;
+
+        let Some(ref system) = topology.system else {
+            anyhow::bail!("missing field `system`");
+        };
+        if system.blocks.is_empty() {
+            anyhow::bail!("missing field `blocks`");
+        }
 
         // finalize includes
         for file in topology.include.iter_mut() {
@@ -1339,8 +1346,8 @@ mod tests {
 
     #[test]
     fn read_topology_fail_missing_blocks() {
-        let error = Topology::from_file("tests/files/topology_missing_blocks.yaml").unwrap_err();
-        assert!(error.to_string().contains("missing field `blocks`"));
+        let res = Topology::from_file("tests/files/topology_missing_blocks.yaml");
+        assert!(res.is_err());
     }
 
     #[test]
