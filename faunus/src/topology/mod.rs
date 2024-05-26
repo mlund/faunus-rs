@@ -1170,7 +1170,7 @@ mod tests {
             &HashMap::new(),
         );
 
-        let bonds = vec![
+        let bonds = [
             Bond::new(
                 [0, 220],
                 BondKind::Harmonic(interatomic::twobody::Harmonic::new(3.0, 50.0)),
@@ -1182,11 +1182,11 @@ mod tests {
                 BondOrder::Triple,
             ),
         ];
-        let torsions = vec![Torsion::new(
+        let torsions = [Torsion::new(
             [1, 75, 128],
             TorsionKind::Harmonic(interatomic::threebody::HarmonicTorsion::new(120.0, 100.0)),
         )];
-        let dihedrals = vec![
+        let dihedrals = [
             Dihedral::new(
                 [1, 35, 75, 128],
                 DihedralKind::ProperHarmonic(interatomic::fourbody::HarmonicDihedral::new(
