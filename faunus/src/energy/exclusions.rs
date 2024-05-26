@@ -15,24 +15,21 @@
 //! Implementation of the exclusions.
 
 use crate::{topology::TopologyLike, Topology};
+use nalgebra::DMatrix;
 
 /// Matrix of exclusions based on particle ids.
 /// Pairs of particle indices which should not interact via nonbonded interactions
 /// are assigned a value of 0. Pairs of particle indices which should interact
 /// are assigned a value of 1.
-#[derive(Debug, Clone, PartialEq, Default)]
-pub(super) struct ExclusionMatrix(Vec<Vec<u8>>);
+#[derive(Debug, Clone, PartialEq)]
+pub(super) struct ExclusionMatrix(DMatrix<u8>);
 
 impl ExclusionMatrix {
-    /// Create a new ExclusionMatrix based on the Topology of the system.
+    /// Create exclusions based on topology.
     pub fn from_topology(topology: &Topology) -> Self {
         let n = topology.num_particles();
-        let mut exclusions = ExclusionMatrix(vec![vec![1; n]; n]);
-
-        // atoms should not interact with themselves
-        for i in 0..n {
-            exclusions.set(i, i, 0);
-        }
+        let exclude_self = |i, j| if i == j { 0 } else { 1 };
+        let mut exclusions = ExclusionMatrix(DMatrix::from_fn(n, n, exclude_self));
 
         // read the exclusions for the individual atoms
         let mut atom_cnt = 0;
@@ -41,11 +38,10 @@ impl ExclusionMatrix {
             // loop through the specific number of molecules in the block
             for _ in 0..block.number() {
                 for exclusion in molecule.exclusions() {
-                    let (rel1, rel2) = exclusion.into_ordered_tuple();
-                    let (abs1, abs2) = (rel1 + atom_cnt, rel2 + atom_cnt);
-                    exclusions.set(abs1, abs2, 0);
+                    let rel = exclusion.into_ordered_tuple();
+                    let abs = (rel.0 + atom_cnt, rel.1 + atom_cnt);
+                    exclusions.set(abs, 0);
                 }
-
                 atom_cnt += molecule.atoms().len();
             }
         }
@@ -60,15 +56,17 @@ impl ExclusionMatrix {
     /// be used to multiply the calculated interaction energy.
     ///
     /// Panics if the indices are out of range.
-    pub fn get(&self, i: usize, j: usize) -> u8 {
-        self.0[i][j]
+    #[inline]
+    pub fn get(&self, indices: (usize, usize)) -> u8 {
+        self.0[indices]
     }
 
     /// Set exclusion status for the specified pair of particle indices.
-    /// This sets both `(i,j)` and `(j,i)` in the matrix.
-    pub fn set(&mut self, i: usize, j: usize, value: u8) {
-        self.0[i][j] = value;
-        self.0[j][i] = value;
+    /// Sets both `(i,j)` and `(j,i)` in the matrix.
+    /// Panics if the indices are out of range.
+    pub fn set(&mut self, indices: (usize, usize), value: u8) {
+        self.0[(indices.0, indices.1)] = value;
+        self.0[(indices.1, indices.0)] = value;
     }
 }
 
@@ -82,10 +80,9 @@ mod tests {
         let exclusions = ExclusionMatrix::from_topology(&topology);
 
         let num_particles = topology.num_particles();
-        assert_eq!(exclusions.0.len(), num_particles);
-        for x in exclusions.0.iter() {
-            assert_eq!(x.len(), num_particles);
-        }
+        assert_eq!(exclusions.0.row(0).len(), num_particles);
+        assert_eq!(exclusions.0.column(0).len(), num_particles);
+        assert_eq!(exclusions.0.len(), num_particles * num_particles);
 
         let expected_exclusions = [
             (0, 1),
@@ -121,9 +118,9 @@ mod tests {
                     || expected_exclusions.contains(&(j, i))
                     || i == j
                 {
-                    assert_eq!(exclusions.get(i, j), 0);
+                    assert_eq!(exclusions.get((i, j)), 0);
                 } else {
-                    assert_eq!(exclusions.get(i, j), 1);
+                    assert_eq!(exclusions.get((i, j)), 1);
                 }
             }
         }

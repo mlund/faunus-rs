@@ -276,7 +276,7 @@ impl NonbondedTerm for NonbondedMatrix {
     #[inline(always)]
     fn particle_with_particle(&self, context: &impl Context, i: usize, j: usize) -> f64 {
         let distance_squared = context.get_distance_squared(i, j);
-        self.exclusions.get(i, j) as f64
+        self.exclusions.get((i, j)) as f64
             * self
                 .potentials
                 .get((context.get_atomkind(i), context.get_atomkind(j)))

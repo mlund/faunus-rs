@@ -14,6 +14,7 @@
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
+use faunus::topology::Topology;
 use pretty_env_logger::env_logger::DEFAULT_FILTER_ENV;
 use std::path::PathBuf;
 
@@ -56,5 +57,17 @@ fn do_main() -> Result<()> {
         std::env::set_var(DEFAULT_FILTER_ENV, "Debug");
     }
     pretty_env_logger::init();
+
+    match args.command {
+        Commands::Run { input, state } => {
+            run(input, state)?;
+        }
+    }
+
+    Ok(())
+}
+
+fn run(input: PathBuf, _state: PathBuf) -> Result<()> {
+    let _topology = Topology::from_file(input)?;
     Ok(())
 }
