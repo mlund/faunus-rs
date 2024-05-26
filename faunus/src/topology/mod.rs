@@ -514,19 +514,13 @@ impl Topology {
                             Some(pos) => pos,
                         };
 
-                        block.insert_block(
-                            context,
-                            self.atoms(),
-                            self.molecules(),
-                            positions,
-                            rng,
-                        )?;
+                        block.insert_block(context, positions, rng)?;
 
                         curr_start += atoms_in_block;
                     }
                 };
             } else {
-                block.insert_block(context, self.atoms(), self.molecules(), &[], rng)?;
+                block.insert_block(context, &[], rng)?;
             }
         }
 

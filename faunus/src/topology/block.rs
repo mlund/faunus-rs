@@ -237,20 +237,23 @@ impl MoleculeBlock {
     pub(crate) fn insert_block(
         &self,
         context: &mut impl Context,
-        atoms: &[AtomKind],
-        molecules: &[MoleculeKind],
         external_positions: &[Point],
         rng: &mut ThreadRng,
     ) -> anyhow::Result<()> {
-        let molecule = &molecules[self.molecule_id];
+        // let molecule = &molecules[self.molecule_id];
+        let molecule = &context.topology().molecules[self.molecule_id];
         let mut particle_counter = context.num_particles();
 
         // get positions of the particles in the block
         let mut positions = match &self.insert {
             None => external_positions.to_owned(),
-            Some(policy) => {
-                policy.get_positions(atoms, molecule, self.num_molecules, context.cell(), rng)?
-            }
+            Some(policy) => policy.get_positions(
+                &context.topology().atoms,
+                molecule,
+                self.num_molecules,
+                context.cell(),
+                rng,
+            )?,
         }
         .into_iter();
 
