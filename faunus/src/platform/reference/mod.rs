@@ -47,6 +47,30 @@ pub struct ReferencePlatform {
 }
 
 impl ReferencePlatform {
+    /// Create a new simulation system on a reference platform from
+    /// faunus configuration file and optional structure file.
+    pub fn new(
+        yaml_file: impl AsRef<Path>,
+        structure_file: Option<impl AsRef<Path>>,
+        rng: &mut ThreadRng,
+    ) -> anyhow::Result<Self> {
+        let topology = Topology::from_file(&yaml_file)?;
+        let hamiltonian_builder = HamiltonianBuilder::from_file(&yaml_file)?;
+        // validate hamiltonian builder
+        hamiltonian_builder.validate(topology.atoms())?;
+
+        let cell = Cell::from_file(&yaml_file)?;
+
+        let hamiltonian = Hamiltonian::new(&hamiltonian_builder, &topology)?;
+        Self::from_raw_parts(
+            Rc::new(topology),
+            cell.into(),
+            RefCell::new(hamiltonian),
+            structure_file,
+            rng,
+        )
+    }
+
     pub fn from_raw_parts(
         topology: Rc<Topology>,
         cell: Box<dyn SimulationCell>,
@@ -98,31 +122,7 @@ impl WithHamiltonian for ReferencePlatform {
     }
 }
 
-impl Context for ReferencePlatform {
-    /// Create a new simulation system on a reference platform from
-    /// faunus configuration file and optional structure file.
-    fn new(
-        yaml_file: impl AsRef<Path>,
-        structure_file: Option<impl AsRef<Path>>,
-        rng: &mut ThreadRng,
-    ) -> anyhow::Result<Self> {
-        let topology = Topology::from_file(&yaml_file)?;
-        let hamiltonian_builder = HamiltonianBuilder::from_file(&yaml_file)?;
-        // validate hamiltonian builder
-        hamiltonian_builder.validate(topology.atoms())?;
-
-        let cell = Cell::from_file(&yaml_file)?;
-
-        let hamiltonian = Hamiltonian::new(&hamiltonian_builder, &topology)?;
-        ReferencePlatform::from_raw_parts(
-            Rc::new(topology),
-            cell.into(),
-            RefCell::new(hamiltonian),
-            structure_file,
-            rng,
-        )
-    }
-}
+impl Context for ReferencePlatform {}
 
 impl SyncFrom for ReferencePlatform {
     /// Synchronize ReferencePlatform from another ReferencePlatform.

@@ -16,11 +16,9 @@ use crate::group::{Group, GroupCollection};
 use cell::SimulationCell;
 use energy::Hamiltonian;
 use nalgebra::Vector3;
-use rand::rngs::ThreadRng;
 use serde::{Deserialize, Serialize};
 use std::{
     cell::{Ref, RefMut},
-    path::Path,
     rc::Rc,
 };
 use topology::Topology;
@@ -128,18 +126,6 @@ pub trait Context:
         self.hamiltonian_mut().update(self, change)?;
         Ok(())
     }
-
-    /// Construct a new simulation system.
-    ///
-    /// ## Parameters
-    /// - `faunus_file` Path to the input file with Faunus topology, hamiltonian etc.
-    /// - `structure_file` Path to optional external structure file.
-    /// - `rng` Random number generator.
-    fn new(
-        faunus_file: impl AsRef<Path> + Clone,
-        structure_file: Option<impl AsRef<Path>>,
-        rng: &mut ThreadRng,
-    ) -> anyhow::Result<Self>;
 }
 
 /// Context stores the state of a single simulation system
