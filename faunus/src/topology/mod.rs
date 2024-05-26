@@ -407,11 +407,11 @@ pub struct Topology {
     #[serde(skip_serializing, default)]
     include: Vec<InputPath>,
     /// All possible atom types.
-    #[serde(default)] // can be defined in an include
-    atoms: Vec<AtomKind>,
+    #[serde(default, rename = "atoms")] // can be defined in an include
+    atomkinds: Vec<AtomKind>,
     /// All possible molecule types.
-    #[serde(default)] // can be defined in an include
-    molecules: Vec<MoleculeKind>,
+    #[serde(default, rename = "molecules")] // can be defined in an include
+    moleculekinds: Vec<MoleculeKind>,
     /// Properties of the system.
     /// Must always be provided.
     #[validate(nested)]
@@ -457,7 +457,7 @@ impl Topology {
         self.system
             .blocks
             .iter()
-            .map(|block| block.num_atoms(&self.molecules))
+            .map(|block| block.num_atoms(&self.moleculekinds))
             .sum()
     }
 
@@ -471,8 +471,8 @@ impl Topology {
     ) -> Topology {
         Topology {
             include: vec![],
-            atoms,
-            molecules,
+            atomkinds: atoms,
+            moleculekinds: molecules,
             system: System {
                 intermolecular,
                 blocks,
@@ -537,14 +537,14 @@ impl Topology {
 
     /// Set ids for atom kinds in the topology and make sure that the atom names are unique.
     fn finalize_atoms(&mut self) -> anyhow::Result<()> {
-        self.atoms
+        self.atomkinds
             .iter_mut()
             .enumerate()
             .for_each(|(i, atom): (usize, &mut AtomKind)| {
                 atom.set_id(i);
             });
 
-        if are_unique(&self.atoms, |i: &AtomKind, j: &AtomKind| {
+        if are_unique(&self.atomkinds, |i: &AtomKind, j: &AtomKind| {
             i.name() == j.name()
         }) {
             Ok(())
@@ -556,7 +556,7 @@ impl Topology {
     /// Set ids for molecule kinds in the topology, validate the molecules and
     /// set indices of atom kinds forming each molecule.
     fn finalize_molecules(&mut self) -> anyhow::Result<()> {
-        for (i, molecule) in self.molecules.iter_mut().enumerate() {
+        for (i, molecule) in self.moleculekinds.iter_mut().enumerate() {
             // set atom names
             if molecule.atom_names().is_empty() {
                 molecule.empty_atom_names();
@@ -573,7 +573,7 @@ impl Topology {
                 .atoms()
                 .iter()
                 .map(|atom| {
-                    self.atoms
+                    self.atomkinds
                         .iter()
                         .position(|x| x.name() == atom)
                         .ok_or_else(|| anyhow::Error::msg("undefined atom kind in a molecule"))
@@ -586,7 +586,7 @@ impl Topology {
         }
 
         // check that all molecule names are unique
-        if are_unique(&self.molecules, |i: &MoleculeKind, j: &MoleculeKind| {
+        if are_unique(&self.moleculekinds, |i: &MoleculeKind, j: &MoleculeKind| {
             i.name() == j.name()
         }) {
             Ok(())
@@ -601,7 +601,7 @@ impl Topology {
             block.finalize(filename.clone())?;
 
             let index = self
-                .molecules
+                .moleculekinds
                 .iter()
                 .position(|x| x.name() == block.molecule())
                 .ok_or(anyhow::Error::msg("undefined molecule kind in a block"))?;
@@ -609,7 +609,7 @@ impl Topology {
 
             // check that if positions are provided manually, they are consistent with the topology
             if let Some(InsertionPolicy::Manual(positions)) = block.insert_policy() {
-                if positions.len() != block.num_atoms(&self.molecules) {
+                if positions.len() != block.num_atoms(&self.moleculekinds) {
                     anyhow::bail!(
                         "the number of manually provided positions does not match the number of atoms",
                     );
@@ -658,19 +658,19 @@ impl Topology {
 
 impl TopologyLike for Topology {
     fn atoms(&self) -> &[AtomKind] {
-        &self.atoms
+        &self.atomkinds
     }
 
     fn molecules(&self) -> &[MoleculeKind] {
-        &self.molecules
+        &self.moleculekinds
     }
 
     fn add_atom(&mut self, atom: AtomKind) {
-        self.atoms.push(atom)
+        self.atomkinds.push(atom)
     }
 
     fn add_molecule(&mut self, molecule: MoleculeKind) {
-        self.molecules.push(molecule)
+        self.moleculekinds.push(molecule)
     }
 }
 
