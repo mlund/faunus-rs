@@ -53,6 +53,7 @@ pub use bond::*;
 pub use chain::*;
 use derive_getters::Getters;
 pub use dihedral::*;
+use itertools::Itertools;
 use rand::rngs::ThreadRng;
 pub use residue::*;
 pub use torsion::*;
@@ -71,11 +72,8 @@ pub(super) trait NonOverlapping {
     /// Get the indices of atoms in the collection.
     fn range(&self) -> Range<usize>;
 
-    /// Check whether two collections overlap.
-    ///
-    /// ## Return
-    /// Returns `true` if the collections overlap, else returns `false`.
-    fn overlap(&self, other: &Self) -> bool {
+    /// Check if elements are in union / shared with `other` range
+    fn is_union(&self, other: &Self) -> bool {
         !self.is_empty()
             && !other.is_empty()
             && self.range().start < other.range().end
@@ -88,15 +86,13 @@ pub(super) trait NonOverlapping {
         self.range().is_empty()
     }
 
-    // TODO! tests
-    /// Validate that collections in a list do not overlap.
+    /// Validate that ranges in a list do not overlap.
     fn validate(collection: &[impl NonOverlapping]) -> Result<(), ValidationError> {
-        if collection.iter().enumerate().any(|(i, item_i)| {
-            collection
-                .iter()
-                .skip(i + 1)
-                .any(|item_j| item_i.overlap(item_j))
-        }) {
+        let overlap = collection
+            .iter()
+            .permutations(2)
+            .any(|v| v[0].is_union(v[1]));
+        if overlap {
             Err(ValidationError::new("").with_message("overlap between collections".into()))
         } else {
             core::result::Result::Ok(())
@@ -108,35 +104,35 @@ pub(super) trait NonOverlapping {
 fn collections_overlap() {
     let residue1 = Residue::new("ALA", None, 2..5);
     let residue2 = Residue::new("LYS", None, 7..11);
-    assert!(!residue1.overlap(&residue2));
+    assert!(!residue1.is_union(&residue2));
 
     let residue2 = Residue::new("LYS", None, 5..11);
-    assert!(!residue1.overlap(&residue2));
+    assert!(!residue1.is_union(&residue2));
 
     let residue2 = Residue::new("LYS", None, 0..2);
-    assert!(!residue1.overlap(&residue2));
+    assert!(!residue1.is_union(&residue2));
 
     let residue2 = Residue::new("LYS", None, 2..5);
-    assert!(residue1.overlap(&residue2));
+    assert!(residue1.is_union(&residue2));
 
     let residue2 = Residue::new("LYS", None, 1..11);
-    assert!(residue1.overlap(&residue2));
+    assert!(residue1.is_union(&residue2));
 
     let residue2 = Residue::new("LYS", None, 3..4);
-    assert!(residue1.overlap(&residue2));
+    assert!(residue1.is_union(&residue2));
 
     let residue2 = Residue::new("LYS", None, 1..3);
-    assert!(residue1.overlap(&residue2));
+    assert!(residue1.is_union(&residue2));
 
     let residue2 = Residue::new("LYS", None, 4..11);
-    assert!(residue1.overlap(&residue2));
+    assert!(residue1.is_union(&residue2));
 
     let chain1 = Chain::new("A", 2..5);
     let chain2 = Chain::new("B", 7..11);
-    assert!(!chain1.overlap(&chain2));
+    assert!(!chain1.is_union(&chain2));
 
     let chain2 = Chain::new("B", 4..11);
-    assert!(chain1.overlap(&chain2));
+    assert!(chain1.is_union(&chain2));
 }
 
 #[test]
