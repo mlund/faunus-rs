@@ -446,7 +446,7 @@ mod tests_intermolecular {
 
         // no change
         let change = Change::None;
-        let expected_status = vec![
+        let expected_status = [
             true, true, true, true, // first group
             true, true, true, true, // second group
             false, false, false, false, // third group
@@ -486,7 +486,7 @@ mod tests_intermolecular {
         // resize single group (relevant)
         let change = Change::SingleGroup(1, GroupChange::Resize(GroupSize::Shrink(2)));
         bonded.update(&system, &change).unwrap();
-        let expected_status = vec![
+        let expected_status = [
             true, true, true, true, // first group
             true, true, false, false, // second group
             false, false, false, false, // third group
@@ -502,7 +502,7 @@ mod tests_intermolecular {
             (2, GroupChange::Resize(GroupSize::Expand(3))),
         ]);
         bonded.update(&system, &change).unwrap();
-        let expected_status = vec![
+        let expected_status = [
             true, true, true, true, // first group
             true, true, false, false, // second group
             true, true, true, false, // third group
@@ -514,11 +514,6 @@ mod tests_intermolecular {
         // everything changes
         let change = Change::Everything;
         bonded.update(&system, &change).unwrap();
-        let expected_status = vec![
-            true, true, true, true, // first group
-            true, true, false, false, // second group
-            true, true, true, false, // third group
-        ];
         assert_eq!(bonded.particles_status, expected_status);
     }
 
