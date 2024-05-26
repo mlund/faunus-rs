@@ -46,13 +46,8 @@ pub(super) trait NonbondedTerm {
     fn particle_with_group(&self, context: &impl Context, i: usize, group: &Group) -> f64 {
         group
             .iter_active()
-            .filter_map(|j| {
-                if j != i {
-                    Some(self.particle_with_particle(context, i, j))
-                } else {
-                    None
-                }
-            })
+            .filter(|j| *j != i)
+            .map(|j| self.particle_with_particle(context, i, j))
             .sum()
     }
 
@@ -106,13 +101,8 @@ pub(super) trait NonbondedTerm {
         context
             .groups()
             .iter()
-            .filter_map(|group_j| {
-                if group.index() != group_j.index() {
-                    Some(self.particle_with_group_unchecked(context, i, group_j))
-                } else {
-                    None
-                }
-            })
+            .filter(|group_j| group_j.index() != group.index())
+            .map(|group_j| self.particle_with_group(context, i, group_j))
             .sum()
     }
 
