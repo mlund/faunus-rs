@@ -419,12 +419,12 @@ pub struct Topology {
     /// Properties of the system.
     /// Must always be provided.
     #[validate(nested)]
-    system: System,
+    system: Option<System>,
 }
 
 impl Topology {
     pub fn system(&self) -> &System {
-        &self.system
+        &self.system.as_ref().unwrap()
     }
     /// Parse a yaml file as Topology.
     pub fn from_file(filename: impl AsRef<Path>) -> anyhow::Result<Topology> {
@@ -480,10 +480,10 @@ impl Topology {
             include: vec![],
             atomkinds: atoms,
             moleculekinds: molecules,
-            system: System {
+            system: Some(System {
                 intermolecular,
                 blocks,
-            },
+            }),
         }
     }
 
@@ -604,7 +604,7 @@ impl Topology {
 
     /// Set molecule indices for blocks and validate them.
     fn finalize_blocks(&mut self, filename: impl AsRef<Path> + Clone) -> anyhow::Result<()> {
-        for block in self.system.blocks.iter_mut() {
+        for block in self.system.as_mut().unwrap().blocks.iter_mut() {
             block.finalize(filename.clone())?;
 
             let index = self
