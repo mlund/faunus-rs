@@ -21,7 +21,7 @@ use unordered_pair::UnorderedPair;
 use crate::topology::{Chain, DegreesOfFreedom, Residue, Value};
 use validator::{Validate, ValidationError};
 
-use super::{Bond, CustomProperty, Dihedral, Indexed, NonOverlapping, Torsion};
+use super::{Bond, CustomProperty, Dihedral, IndexRange, Indexed, Torsion};
 
 /// Description of molecule properties.
 ///

@@ -28,7 +28,7 @@ use nalgebra::Vector3;
 
 use crate::topology::TopologyLike;
 
-use super::{molecule::MoleculeKind, AtomKind, NonOverlapping};
+use super::{molecule::MoleculeKind, AtomKind, IndexRange};
 
 /// Create a new chemfiles::Frame from an input file in a supported format.
 pub(super) fn frame_from_file(filename: &impl AsRef<Path>) -> anyhow::Result<chemfiles::Frame> {

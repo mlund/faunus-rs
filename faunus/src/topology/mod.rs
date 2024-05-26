@@ -68,7 +68,7 @@ use self::molecule::MoleculeKind;
 use self::structure::positions_from_structure_file;
 
 /// Trait implemented by collections of atoms that should not overlap (e.g., residues, chains).
-pub(super) trait NonOverlapping {
+pub(super) trait IndexRange {
     /// Get the indices of atoms in the collection.
     fn range(&self) -> Range<usize>;
 
@@ -90,7 +90,7 @@ pub(super) trait NonOverlapping {
     }
 
     /// Validate that ranges in a list do not overlap.
-    fn validate(collection: &[impl NonOverlapping]) -> Result<(), ValidationError>
+    fn validate(collection: &[impl IndexRange]) -> Result<(), ValidationError>
     where
         Self: Sized,
     {
