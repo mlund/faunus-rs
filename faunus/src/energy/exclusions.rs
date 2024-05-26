@@ -25,34 +25,30 @@ pub(super) struct ExclusionMatrix(Vec<Vec<u8>>);
 
 impl ExclusionMatrix {
     /// Create a new ExclusionMatrix based on the Topology of the system.
-    pub fn new(topology: &Topology) -> Self {
-        let num_particles = topology.num_particles();
-        let mut exclusions = ExclusionMatrix(vec![vec![1; num_particles]; num_particles]);
+    pub fn from_topology(topology: &Topology) -> Self {
+        let n = topology.num_particles();
+        let mut exclusions = ExclusionMatrix(vec![vec![1; n]; n]);
 
         // atoms should not interact with themselves
-        for i in 0..num_particles {
-            exclusions.0[i][i] = 0;
+        for i in 0..n {
+            exclusions.set(i, i, 0);
         }
 
         // read the exclusions for the individual atoms
-        let mut atom_counter = 0;
+        let mut atom_cnt = 0;
         for block in topology.blocks() {
             let molecule = &topology.molecules()[block.molecule_index()];
             // loop through the specific number of molecules in the block
             for _ in 0..block.number() {
                 for exclusion in molecule.exclusions() {
-                    let (relative1, relative2) = exclusion.into_ordered_tuple();
-                    let absolute1 = relative1 + atom_counter;
-                    let absolute2 = relative2 + atom_counter;
-
-                    exclusions.0[absolute1][absolute2] = 0;
-                    exclusions.0[absolute2][absolute1] = 0;
+                    let (rel1, rel2) = exclusion.into_ordered_tuple();
+                    let (abs1, abs2) = (rel1 + atom_cnt, rel2 + atom_cnt);
+                    exclusions.set(abs1, abs2, 0);
                 }
 
-                atom_counter += molecule.atoms().len();
+                atom_cnt += molecule.atoms().len();
             }
         }
-
         exclusions
     }
 
@@ -67,6 +63,13 @@ impl ExclusionMatrix {
     pub fn get(&self, i: usize, j: usize) -> u8 {
         self.0[i][j]
     }
+
+    /// Set exclusion status for the specified pair of particle indices.
+    /// This sets both `(i,j)` and `(j,i)` in the matrix.
+    pub fn set(&mut self, i: usize, j: usize, value: u8) {
+        self.0[i][j] = value;
+        self.0[j][i] = value;
+    }
 }
 
 #[cfg(test)]
@@ -76,7 +79,7 @@ mod tests {
     #[test]
     fn test_exclusion_matrix() {
         let topology = Topology::from_file("tests/files/topology_pass.yaml").unwrap();
-        let exclusions = ExclusionMatrix::new(&topology);
+        let exclusions = ExclusionMatrix::from_topology(&topology);
 
         let num_particles = topology.num_particles();
         assert_eq!(exclusions.0.len(), num_particles);

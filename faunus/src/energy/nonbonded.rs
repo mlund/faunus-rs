@@ -314,7 +314,7 @@ impl NonbondedMatrix {
             }
         }
 
-        let exclusions = ExclusionMatrix::new(topology);
+        let exclusions = ExclusionMatrix::from_topology(topology);
 
         Ok(EnergyTerm::NonbondedMatrix(NonbondedMatrix {
             potentials,
