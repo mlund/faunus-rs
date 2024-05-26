@@ -356,15 +356,15 @@ pub trait TopologyLike {
 
     /// Add atom kinds into a topology. In case an AtomKind with the same name already
     /// exists in the Topology, it is NOT overwritten and a warning is raised.
-    fn include_atoms(&mut self, atoms: Vec<AtomKind>) {
-        for atom in atoms.into_iter() {
+    fn include_atoms(&mut self, atoms: &[AtomKind]) {
+        for atom in atoms.iter() {
             if self.atomkinds().iter().any(|x| x.name() == atom.name()) {
                 log::warn!(
                     "Atom kind '{}' redefinition in included topology.",
                     atom.name()
                 )
             } else {
-                self.add_atomkind(atom);
+                self.add_atomkind(atom.clone());
             }
         }
     }
@@ -396,7 +396,7 @@ pub trait TopologyLike {
     fn include_topologies(&mut self, topologies: Vec<InputPath>) -> Result<(), anyhow::Error> {
         for file in topologies.iter() {
             let included_top = IncludedTopology::from_file(file.path().unwrap())?;
-            self.include_atoms(included_top.atomkinds);
+            self.include_atoms(&included_top.atomkinds);
             self.include_molecules(included_top.moleculekinds);
         }
 
