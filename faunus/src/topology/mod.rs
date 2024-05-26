@@ -423,9 +423,10 @@ pub struct Topology {
 }
 
 impl Topology {
-    fn system(&self) -> &System {
-        self.system.as_ref().unwrap()
+    fn system(&self) -> Option<&System> {
+        self.system.as_ref()
     }
+
     /// Create partial topology without system. Used for topology includes.
     pub fn from_file_partial(filename: impl AsRef<Path> + Clone) -> anyhow::Result<Topology> {
         let yaml = std::fs::read_to_string(filename.clone())?;
@@ -442,8 +443,8 @@ impl Topology {
         let yaml = std::fs::read_to_string(&filename)?;
         let mut topology: Topology = serde_yaml::from_str(&yaml)?;
 
-        let Some(ref system) = topology.system else {
-            anyhow::bail!("missing field `system`");
+        let Some(system) = topology.system() else {
+            anyhow::bail!("missing or empty field `system`");
         };
         if system.blocks.is_empty() {
             anyhow::bail!("missing field `blocks`");
@@ -465,17 +466,18 @@ impl Topology {
 
     /// Get molecule blocks of the system.
     pub fn blocks(&self) -> &[MoleculeBlock] {
-        &self.system().blocks
+        &self.system().unwrap().blocks
     }
 
     /// Get intermolecular bonded interactions of the system.
     pub fn intermolecular(&self) -> &IntermolecularBonded {
-        &self.system().intermolecular
+        &self.system().unwrap().intermolecular
     }
 
     /// Get the total number of particules in the topology.
     pub fn num_particles(&self) -> usize {
         self.system()
+            .unwrap()
             .blocks
             .iter()
             .map(|block| block.num_atoms(&self.moleculekinds))
@@ -485,15 +487,15 @@ impl Topology {
     /// Create a new Topology structure. This function performs no sanity checks.
     #[allow(dead_code)]
     pub(crate) fn new(
-        atoms: Vec<AtomKind>,
-        molecules: Vec<MoleculeKind>,
+        atomkinds: &[AtomKind],
+        moleculekinds: &[MoleculeKind],
         intermolecular: IntermolecularBonded,
         blocks: Vec<MoleculeBlock>,
     ) -> Topology {
         Topology {
             include: vec![],
-            atomkinds: atoms,
-            moleculekinds: molecules,
+            atomkinds: atomkinds.into(),
+            moleculekinds: moleculekinds.into(),
             system: Some(System {
                 intermolecular,
                 blocks,
@@ -658,17 +660,17 @@ impl Topology {
             Ok(())
         }
         check_intermolecular_items(
-            &self.system().intermolecular.bonds,
+            &self.system().unwrap().intermolecular.bonds,
             num_particles,
             "intermolecular bond between undefined atoms",
         )?;
         check_intermolecular_items(
-            &self.system().intermolecular.torsions,
+            &self.system().unwrap().intermolecular.torsions,
             num_particles,
             "intermolecular torsion between undefined atoms",
         )?;
         check_intermolecular_items(
-            &self.system().intermolecular.dihedrals,
+            &self.system().unwrap().intermolecular.dihedrals,
             num_particles,
             "intermolecular dihedral between undefined atoms",
         )?;
@@ -1299,7 +1301,9 @@ mod tests {
     #[test]
     fn read_topology_fail_missing_system() {
         let error = Topology::from_file("tests/files/topology_missing_system.yaml").unwrap_err();
-        assert!(error.to_string().contains("missing field `system`"));
+        assert!(error
+            .to_string()
+            .contains("missing or empty field `system`"));
     }
 
     #[test]

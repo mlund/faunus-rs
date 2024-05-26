@@ -417,8 +417,8 @@ mod tests {
         let intermolecular = IntermolecularBonded::new(vec![intermolecular_bond], vec![], vec![]);
 
         let topology = Topology::new(
-            vec![atom1, atom2],
-            vec![molecule],
+            vec![atom1, atom2].as_slice(),
+            vec![molecule].as_slice(),
             intermolecular,
             vec![block],
         );
