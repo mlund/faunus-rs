@@ -792,7 +792,7 @@ where
 /// Validate that the provided atom indices are unique.
 /// Used e.g. to validate that a bond does not connect one and the same atom.
 fn validate_unique_indices(indices: &[usize]) -> Result<(), ValidationError> {
-    if are_unique(indices, |i: &usize, j: &usize| i == j) {
+    if indices.iter().duplicates().count() == 0 {
         core::result::Result::Ok(())
     } else {
         Err(ValidationError::new("").with_message("non-unique atom indices".into()))
