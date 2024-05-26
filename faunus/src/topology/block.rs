@@ -176,10 +176,10 @@ pub struct MoleculeBlock {
     /// Index of the molecule kind.
     /// Only defined for MoleculeBlock in a specific Topology.
     #[serde(skip)]
-    molecule_index: usize,
+    molecule_id: usize,
     /// Number of molecules in this block.
     #[serde(rename = "N")]
-    number: usize,
+    num_molecules: usize,
     /// Number of active molecules in this block.
     #[serde(default)]
     active: BlockActivationStatus,
@@ -194,18 +194,18 @@ impl MoleculeBlock {
     }
 
     pub fn molecule_index(&self) -> usize {
-        self.molecule_index
+        self.molecule_id
     }
 
-    pub fn number(&self) -> usize {
-        self.number
+    pub fn num_molecules(&self) -> usize {
+        self.num_molecules
     }
 
     pub fn active(&self) -> BlockActivationStatus {
         self.active
     }
 
-    pub fn insert(&self) -> Option<&InsertionPolicy> {
+    pub fn insert_policy(&self) -> Option<&InsertionPolicy> {
         self.insert.as_ref()
     }
 
@@ -213,15 +213,15 @@ impl MoleculeBlock {
     #[allow(dead_code)]
     pub(crate) fn new(
         molecule: &str,
-        molecule_index: usize,
-        number: usize,
+        molecule_id: usize,
+        num_molecules: usize,
         active: BlockActivationStatus,
         insert: Option<InsertionPolicy>,
     ) -> MoleculeBlock {
         MoleculeBlock {
             molecule: molecule.to_owned(),
-            molecule_index,
-            number,
+            molecule_id,
+            num_molecules,
             active,
             insert,
         }
@@ -242,20 +242,20 @@ impl MoleculeBlock {
         external_positions: &[Point],
         rng: &mut ThreadRng,
     ) -> anyhow::Result<()> {
-        let molecule = &molecules[self.molecule_index];
+        let molecule = &molecules[self.molecule_id];
         let mut particle_counter = context.num_particles();
 
         // get positions of the particles in the block
         let mut positions = match &self.insert {
             None => external_positions.to_owned(),
             Some(policy) => {
-                policy.get_positions(atoms, molecule, self.number, context.cell(), rng)?
+                policy.get_positions(atoms, molecule, self.num_molecules, context.cell(), rng)?
             }
         }
         .into_iter();
 
         // create groups and populate them with particles
-        for i in 0..self.number {
+        for i in 0..self.num_molecules {
             // create the particles
             let particles: Vec<Particle> = molecule
                 .atom_indices()
@@ -282,15 +282,15 @@ impl MoleculeBlock {
         Ok(())
     }
 
-    /// Get the number of atoms in a block.
+    /// Get total number of atoms in a block.
     /// Panics if the molecule kind defined in the block does not exist.
     pub(crate) fn num_atoms(&self, molecules: &[MoleculeKind]) -> usize {
-        self.number * molecules[self.molecule_index].atom_indices().len()
+        self.num_molecules * molecules[self.molecule_id].atom_indices().len()
     }
 
-    /// Set index of the molecule of the block.
-    pub(super) fn set_molecule_index(&mut self, index: usize) {
-        self.molecule_index = index;
+    /// Set id (kind) of the molecules in the block.
+    pub(super) fn set_molecule_id(&mut self, molecule_id: usize) {
+        self.molecule_id = molecule_id;
     }
 
     /// Finalize MoleculeBlock parsing.
@@ -303,14 +303,13 @@ impl MoleculeBlock {
 
         // check that the number of active particles is not higher than the total number of particles
         if let BlockActivationStatus::Partial(active_mol) = self.active {
-            match active_mol.cmp(&self.number) {
+            match active_mol.cmp(&self.num_molecules) {
                 Ordering::Greater => return Err(ValidationError::new("")
                     .with_message("the specified number of active molecules in a block is higher than the total number of molecules".into())),
                 Ordering::Equal => self.active = BlockActivationStatus::All,
                 Ordering::Less => (),
             }
         }
-
         Ok(())
     }
 }

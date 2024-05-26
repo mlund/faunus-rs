@@ -497,7 +497,7 @@ impl Topology {
 
         // create groups
         for block in self.blocks() {
-            if block.insert().is_none() {
+            if block.insert_policy().is_none() {
                 let atoms_in_block = block.num_atoms(self.molecules());
 
                 match positions {
@@ -611,10 +611,10 @@ impl Topology {
                 .iter()
                 .position(|x| x.name() == block.molecule())
                 .ok_or(anyhow::Error::msg("undefined molecule kind in a block"))?;
-            block.set_molecule_index(index);
+            block.set_molecule_id(index);
 
             // check that if positions are provided manually, they are consistent with the topology
-            if let Some(InsertionPolicy::Manual(positions)) = block.insert() {
+            if let Some(InsertionPolicy::Manual(positions)) = block.insert_policy() {
                 if positions.len() != block.num_atoms(&self.molecules) {
                     anyhow::bail!(
                         "the number of manually provided positions does not match the number of atoms",
@@ -1021,9 +1021,9 @@ mod tests {
     ) {
         assert_eq!(block.molecule(), molecule_name);
         assert_eq!(block.molecule_index(), molecule_index);
-        assert_eq!(block.number(), number);
+        assert_eq!(block.num_molecules(), number);
         assert_eq!(block.active(), active);
-        assert_eq!(block.insert(), insert);
+        assert_eq!(block.insert_policy(), insert);
     }
 
     #[test]

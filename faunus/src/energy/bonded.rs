@@ -149,10 +149,10 @@ impl IntermolecularBonded {
                 let molecule = &topology.molecules()[block.molecule_index()];
                 let num_atoms = molecule.atoms().len();
                 match block.active() {
-                    BlockActivationStatus::All => vec![true; block.number() * num_atoms],
+                    BlockActivationStatus::All => vec![true; block.num_molecules() * num_atoms],
                     BlockActivationStatus::Partial(x) => {
                         let mut status = vec![true; x * num_atoms];
-                        status.extend(vec![false; (block.number() - x) * num_atoms]);
+                        status.extend(vec![false; (block.num_molecules() - x) * num_atoms]);
                         status
                     }
                 }

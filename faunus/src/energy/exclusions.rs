@@ -36,7 +36,7 @@ impl ExclusionMatrix {
         for block in topology.blocks() {
             let molecule = &topology.molecules()[block.molecule_index()];
             // loop through the specific number of molecules in the block
-            for _ in 0..block.number() {
+            for _ in 0..block.num_molecules() {
                 for exclusion in molecule.exclusions() {
                     let rel = exclusion.into_ordered_tuple();
                     let abs = (rel.0 + atom_cnt, rel.1 + atom_cnt);
