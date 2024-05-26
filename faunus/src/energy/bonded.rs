@@ -83,21 +83,25 @@ impl IntramolecularBonded {
         let topology = context.topology_ref();
         let molecule = &topology.molecules()[group.molecule()];
 
-        molecule
+        let bond_energy: f64 = molecule
             .bonds()
             .iter()
             .map(|bond| bond.energy(context, group))
-            .sum::<f64>()
-            + molecule
-                .torsions()
-                .iter()
-                .map(|torsion| torsion.energy(context, group))
-                .sum::<f64>()
-            + molecule
-                .dihedrals()
-                .iter()
-                .map(|dihedral| dihedral.energy(context, group))
-                .sum::<f64>()
+            .sum();
+
+        let torsion_energy: f64 = molecule
+            .torsions()
+            .iter()
+            .map(|torsion| torsion.energy(context, group))
+            .sum();
+
+        let dihedral_energy: f64 = molecule
+            .dihedrals()
+            .iter()
+            .map(|dihedral| dihedral.energy(context, group))
+            .sum();
+
+        bond_energy + torsion_energy + dihedral_energy
     }
 }
 
@@ -115,24 +119,26 @@ impl EnergyChange for IntermolecularBonded {
         match change {
             Change::None => 0.0,
             _ => {
-                let topology = context.topology_ref();
-                let intermolecular = topology.intermolecular();
-
-                intermolecular
+                let intermolecular = context.topology_ref().intermolecular();
+                let bond_energy: f64 = intermolecular
                     .bonds()
                     .iter()
                     .map(|bond| bond.energy_intermolecular(context, self))
-                    .sum::<f64>()
-                    + intermolecular
-                        .torsions()
-                        .iter()
-                        .map(|torsion| torsion.energy_intermolecular(context, self))
-                        .sum::<f64>()
-                    + intermolecular
-                        .dihedrals()
-                        .iter()
-                        .map(|dihedral| dihedral.energy_intermolecular(context, self))
-                        .sum::<f64>()
+                    .sum();
+
+                let torsion_energy: f64 = intermolecular
+                    .torsions()
+                    .iter()
+                    .map(|torsion| torsion.energy_intermolecular(context, self))
+                    .sum();
+
+                let dihedral_energy: f64 = intermolecular
+                    .dihedrals()
+                    .iter()
+                    .map(|dihedral| dihedral.energy_intermolecular(context, self))
+                    .sum();
+
+                bond_energy + torsion_energy + dihedral_energy
             }
         }
     }
