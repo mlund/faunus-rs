@@ -73,7 +73,10 @@ pub(super) trait NonOverlapping {
     fn range(&self) -> Range<usize>;
 
     /// Check if elements are in union / shared with `other` range
-    fn is_union(&self, other: &Self) -> bool {
+    fn is_union(&self, other: &Self) -> bool
+    where
+        Self: Sized,
+    {
         !self.is_empty()
             && !other.is_empty()
             && self.range().start < other.range().end
@@ -87,7 +90,10 @@ pub(super) trait NonOverlapping {
     }
 
     /// Validate that ranges in a list do not overlap.
-    fn validate(collection: &[impl NonOverlapping]) -> Result<(), ValidationError> {
+    fn validate(collection: &[impl NonOverlapping]) -> Result<(), ValidationError>
+    where
+        Self: Sized,
+    {
         let overlap = collection
             .iter()
             .permutations(2)
