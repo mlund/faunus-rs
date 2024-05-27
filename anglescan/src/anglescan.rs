@@ -169,7 +169,11 @@ impl TwobodyAngles {
     ) -> (Structure, Structure) {
         let a = ref_a.clone();
         let mut b = ref_b.clone();
-        b.pos = ref_b.pos.iter().map(|pos| q2 * pos + q1 * r).collect();
+        b.pos = ref_b
+            .pos
+            .iter()
+            .map(|pos| q2.transform_vector(pos) + q1.transform_vector(r))
+            .collect();
         (a, b)
     }
 }
