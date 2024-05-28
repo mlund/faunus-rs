@@ -420,20 +420,10 @@ pub struct Topology {
     /// Must always be provided.
     #[validate(nested)]
     #[serde(default)]
-    system: Option<System>,
+    pub system: System,
 }
 
 impl Topology {
-    /// Reference to system, if any
-    fn system(&self) -> Option<&System> {
-        self.system.as_ref()
-    }
-
-    /// Check if a system has been defined
-    pub fn has_system(&self) -> bool {
-        self.system.is_some()
-    }
-
     /// Create partial topology without system. Used for topology includes.
     pub fn from_file_partial(filename: impl AsRef<Path> + Clone) -> anyhow::Result<Topology> {
         let yaml = std::fs::read_to_string(filename.clone())?;
@@ -450,11 +440,11 @@ impl Topology {
         let yaml = std::fs::read_to_string(&filename)?;
         let mut topology: Topology = serde_yaml::from_str(&yaml)?;
 
-        let Some(system) = topology.system() else {
+        if topology.system.is_empty() {
             anyhow::bail!("missing or empty field `system`");
         };
-        if system.blocks.is_empty() {
-            anyhow::bail!("missing field `blocks`");
+        if topology.system.blocks.is_empty() {
+            anyhow::bail!("missing or empty field `blocks`");
         }
 
         // finalize includes
@@ -473,24 +463,21 @@ impl Topology {
 
     /// Get molecule blocks of the system.
     pub fn blocks(&self) -> &[MoleculeBlock] {
-        &self.system().unwrap().blocks
+        &self.system.blocks
     }
 
     /// Get intermolecular bonded interactions of the system.
     pub fn intermolecular(&self) -> &IntermolecularBonded {
-        &self.system().unwrap().intermolecular
+        &self.system.intermolecular
     }
 
     /// Get the total number of particules in the topology.
     pub fn num_particles(&self) -> usize {
-        match self.system() {
-            Some(system) => system
-                .blocks
-                .iter()
-                .map(|block| block.num_atoms(&self.moleculekinds))
-                .sum(),
-            None => 0,
-        }
+        self.system
+            .blocks
+            .iter()
+            .map(|block| block.num_atoms(&self.moleculekinds))
+            .sum()
     }
 
     /// Create a new Topology structure. This function performs no sanity checks.
@@ -505,10 +492,10 @@ impl Topology {
             include: vec![],
             atomkinds: atomkinds.into(),
             moleculekinds: moleculekinds.into(),
-            system: Some(System {
+            system: System {
                 intermolecular,
                 blocks,
-            }),
+            },
         }
     }
 
@@ -629,7 +616,7 @@ impl Topology {
 
     /// Set molecule indices for blocks and validate them.
     fn finalize_blocks(&mut self, filename: impl AsRef<Path> + Clone) -> anyhow::Result<()> {
-        for block in self.system.as_mut().unwrap().blocks.iter_mut() {
+        for block in self.system.blocks.iter_mut() {
             block.finalize(filename.clone())?;
 
             let index = self
@@ -669,17 +656,17 @@ impl Topology {
             Ok(())
         }
         check_intermolecular_items(
-            &self.system().unwrap().intermolecular.bonds,
+            &self.system.intermolecular.bonds,
             num_particles,
             "intermolecular bond between undefined atoms",
         )?;
         check_intermolecular_items(
-            &self.system().unwrap().intermolecular.torsions,
+            &self.system.intermolecular.torsions,
             num_particles,
             "intermolecular torsion between undefined atoms",
         )?;
         check_intermolecular_items(
-            &self.system().unwrap().intermolecular.dihedrals,
+            &self.system.intermolecular.dihedrals,
             num_particles,
             "intermolecular dihedral between undefined atoms",
         )?;
@@ -708,14 +695,20 @@ impl TopologyLike for Topology {
 
 /// Fields of the topology related to specific molecular system.
 #[derive(Debug, Clone, Serialize, Deserialize, Default, Validate)]
-struct System {
+pub struct System {
     /// Intermolecular bonded interactions.
     #[serde(default)]
     #[validate(nested)]
-    intermolecular: IntermolecularBonded,
+    pub intermolecular: IntermolecularBonded,
     /// Molecules of the system.
     #[serde(default)]
-    blocks: Vec<MoleculeBlock>,
+    pub blocks: Vec<MoleculeBlock>,
+}
+
+impl System {
+    pub fn is_empty(&self) -> bool {
+        self.intermolecular.is_empty() && self.blocks.is_empty()
+    }
 }
 
 /// Intermolecular bonded interactions. Global atom indices have to be provided.

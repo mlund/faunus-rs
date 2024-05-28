@@ -78,7 +78,7 @@ impl ReferencePlatform {
         structure: Option<impl AsRef<Path>>,
         rng: &mut ThreadRng,
     ) -> anyhow::Result<Self> {
-        if !topology.has_system() {
+        if topology.system.is_empty() {
             anyhow::bail!("Topology doesn't contain a system");
         }
         let mut context = ReferencePlatform {
