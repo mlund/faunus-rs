@@ -700,8 +700,9 @@ pub struct System {
 }
 
 impl System {
+    /// System is considered empty if it has no blocks
     pub fn is_empty(&self) -> bool {
-        self.intermolecular.is_empty() && self.blocks.is_empty()
+        self.blocks.is_empty()
     }
 }
 
