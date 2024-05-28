@@ -423,10 +423,12 @@ pub struct Topology {
 }
 
 impl Topology {
+    /// Reference to system, if any
     fn system(&self) -> Option<&System> {
         self.system.as_ref()
     }
 
+    /// Check if a system has been defined
     pub fn has_system(&self) -> bool {
         self.system.is_some()
     }
@@ -442,7 +444,7 @@ impl Topology {
         Ok(topology)
     }
 
-    /// Parse a yaml file as Topology.
+    /// Parse a yaml file as Topology which *must* include a system.
     pub fn from_file(filename: impl AsRef<Path>) -> anyhow::Result<Topology> {
         let yaml = std::fs::read_to_string(&filename)?;
         let mut topology: Topology = serde_yaml::from_str(&yaml)?;
