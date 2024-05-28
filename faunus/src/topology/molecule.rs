@@ -12,8 +12,12 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::{
+    collections::{HashMap, HashSet, VecDeque},
+    path::PathBuf,
+};
 
+use derive_builder::Builder;
 use derive_getters::Getters;
 use serde::{Deserialize, Serialize};
 use unordered_pair::UnorderedPair;
@@ -26,9 +30,10 @@ use super::{Bond, CustomProperty, Dihedral, IndexRange, Indexed, Torsion};
 /// Description of molecule properties.
 ///
 /// Molecule is a collection of atoms that can (but not do not have to be) connected by bonds.
-#[derive(Debug, Clone, Serialize, Deserialize, Default, Validate, Getters)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, Validate, Getters, Builder)]
 #[serde(deny_unknown_fields)]
 #[validate(schema(function = "validate_molecule"))]
+#[builder(default)]
 pub struct MoleculeKind {
     /// Unique name.
     name: String,
@@ -84,6 +89,9 @@ pub struct MoleculeKind {
     /// Map of custom properties.
     #[serde(default)]
     custom: HashMap<String, Value>,
+    /// Construct molecule from existing structure file (xyz, pdb, etc.)
+    #[serde(default)]
+    from_structure: Option<PathBuf>,
 }
 
 fn default_true() -> bool {
@@ -109,6 +117,7 @@ impl MoleculeKind {
         chains: Vec<Chain>,
         has_com: bool,
         custom: HashMap<String, Value>,
+        from_structure: Option<PathBuf>,
     ) -> MoleculeKind {
         Self {
             name: name.to_owned(),
@@ -126,6 +135,7 @@ impl MoleculeKind {
             chains,
             has_com,
             custom,
+            from_structure,
         }
     }
 
@@ -278,49 +288,37 @@ impl CustomProperty for MoleculeKind {
 #[cfg(test)]
 mod tests {
 
+    use itertools::Itertools;
+
     use crate::topology::{BondKind, BondOrder};
 
     use super::*;
 
     #[test]
     fn generate_exclusions_n1() {
-        let mut molecule = MoleculeKind::new(
-            "MOL",
-            0,
-            vec![
-                "A".into(),
-                "B".into(),
-                "C".into(),
-                "D".into(),
-                "E".into(),
-                "F".into(),
-                "G".into(),
-            ],
-            vec![0, 1, 2, 3, 4, 5, 6, 7],
-            [
-                [0, 1],
-                [1, 2],
-                [2, 3],
-                [3, 4],
-                [3, 5],
-                [5, 6],
-                [3, 6],
-                [4, 6],
-            ]
-            .iter()
-            .map(|&x| Bond::new(x, BondKind::Unspecified, BondOrder::Unspecified))
-            .collect(),
-            vec![],
-            vec![],
-            1,
-            HashSet::new(),
-            DegreesOfFreedom::Free,
-            vec![None, None, None, None, None, None, None],
-            vec![],
-            vec![],
-            true,
-            HashMap::new(),
-        );
+        let mut molecule = MoleculeKindBuilder::default()
+            .name("MOL".to_string())
+            .atoms("ABCDEFG".chars().map(|c| c.to_string()).collect())
+            .atom_indices((0..8).collect())
+            .bonds(
+                [
+                    [0, 1],
+                    [1, 2],
+                    [2, 3],
+                    [3, 4],
+                    [3, 5],
+                    [5, 6],
+                    [3, 6],
+                    [4, 6],
+                ]
+                .iter()
+                .map(|&ij| Bond::new(ij, BondKind::Unspecified, BondOrder::Unspecified))
+                .collect(),
+            )
+            .degrees_of_freedom(DegreesOfFreedom::Free)
+            .excluded_neighbours(1)
+            .build()
+            .unwrap();
 
         molecule.generate_exclusions();
 
@@ -373,6 +371,7 @@ mod tests {
             vec![],
             true,
             HashMap::new(),
+            None,
         );
 
         molecule.generate_exclusions();
@@ -440,6 +439,7 @@ mod tests {
             vec![],
             true,
             HashMap::new(),
+            None,
         );
 
         molecule.generate_exclusions();

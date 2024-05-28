@@ -34,6 +34,7 @@ unordered-pair = { version = "0.2.4", features = ["serde"] }
 serde_with = "3.8.1"
 dyn-clone = "1.0.17"
 ndarray = { version = "0.15.6", features = ["serde"] }
+derive_builder = "0.20.0"
 
 [dev-dependencies]
 approx = "0.5"

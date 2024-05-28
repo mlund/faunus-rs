@@ -330,6 +330,7 @@ mod tests {
             vec![],
             true,
             HashMap::default(),
+            None,
         );
 
         let group = Group::new(0, 0, 0..6);
@@ -378,6 +379,7 @@ mod tests {
             vec![],
             true,
             HashMap::default(),
+            None,
         );
 
         let atom1 = AtomKind::new(

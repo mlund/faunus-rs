@@ -13,6 +13,7 @@
 // limitations under the license.
 
 use crate::topology::{CustomProperty, Value};
+use derive_builder::Builder;
 use serde::{Deserialize, Serialize};
 
 /// Description of atom properties
@@ -20,7 +21,7 @@ use serde::{Deserialize, Serialize};
 /// Atoms need not be chemical elements, but can be custom atoms representing interaction sites.
 /// This does _not_ include positions; indices etc., but is rather
 /// used to represent static properties used for templating atoms.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default, Builder)]
 #[serde(deny_unknown_fields)]
 pub struct AtomKind {
     /// Unique name.
