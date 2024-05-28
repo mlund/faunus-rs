@@ -519,24 +519,18 @@ impl Topology {
             if block.insert_policy().is_some() {
                 block.insert_block(context, &[], rng)?;
             } else {
-                match positions {
-                    None => {
-                        anyhow::bail!("block requires structure that wasn't provided")
-                    }
-                    Some(ref positions) => {
-                        let atoms_in_block = block.num_atoms(self.moleculekinds());
-                        let positions = match positions
-                            .get(curr_start..(curr_start + atoms_in_block))
-                        {
-                            None => anyhow::bail!("external structure does not match topology - not enough coordinates"),
-                            Some(pos) => pos,
-                        };
-
-                        block.insert_block(context, positions, rng)?;
-
-                        curr_start += atoms_in_block;
-                    }
+                let Some(ref positions) = positions else {
+                    anyhow::bail!("block requires structure that wasn't provided")
                 };
+                let atoms_in_block = block.num_atoms(self.moleculekinds());
+                let positions = match positions.get(curr_start..(curr_start + atoms_in_block)) {
+                    None => anyhow::bail!(
+                        "external structure does not match topology - not enough coordinates"
+                    ),
+                    Some(pos) => pos,
+                };
+                block.insert_block(context, positions, rng)?;
+                curr_start += atoms_in_block;
             }
         }
 
