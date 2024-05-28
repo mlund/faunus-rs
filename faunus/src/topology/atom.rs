@@ -13,6 +13,7 @@
 // limitations under the license.
 
 use crate::topology::{CustomProperty, Value};
+use derive_builder::Builder;
 use serde::{Deserialize, Serialize};
 
 /// Description of atom properties
@@ -20,10 +21,12 @@ use serde::{Deserialize, Serialize};
 /// Atoms need not be chemical elements, but can be custom atoms representing interaction sites.
 /// This does _not_ include positions; indices etc., but is rather
 /// used to represent static properties used for templating atoms.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default, Builder)]
 #[serde(deny_unknown_fields)]
+#[builder(default)]
 pub struct AtomKind {
     /// Unique name.
+    #[builder(setter(into))]
     name: String,
     /// Unique identifier.
     /// Only defined if the AtomKind is inside of Topology.
@@ -35,14 +38,18 @@ pub struct AtomKind {
     #[serde(default)]
     charge: f64,
     /// Atomic symbol if appropriate (He, C, O, Fe, etc.).
+    #[builder(setter(into, strip_option), default)]
     element: Option<String>,
     /// Lennard-Jones diameter, σٖᵢᵢ (angstrom).
     #[serde(alias = "σ")]
+    #[builder(setter(strip_option), default)]
     sigma: Option<f64>,
     /// Lennard-Jones well depth, εᵢᵢ (kJ/mol).
     #[serde(alias = "ε", alias = "eps")]
+    #[builder(setter(strip_option), default)]
     epsilon: Option<f64>,
     /// Hydrophobicity information.
+    #[builder(setter(strip_option), default)]
     hydrophobicity: Option<Hydrophobicity>,
     /// Map of custom properties.
     #[serde(default)]
@@ -50,32 +57,6 @@ pub struct AtomKind {
 }
 
 impl AtomKind {
-    /// Create a new AtomKind structure. This function does not perform any sanity checks.
-    #[allow(dead_code, clippy::too_many_arguments)]
-    pub(crate) fn new(
-        name: &str,
-        id: usize,
-        mass: f64,
-        charge: f64,
-        element: Option<&str>,
-        sigma: Option<f64>,
-        epsilon: Option<f64>,
-        hydrophobicity: Option<Hydrophobicity>,
-        custom: std::collections::HashMap<String, Value>,
-    ) -> Self {
-        Self {
-            name: name.to_owned(),
-            id,
-            mass,
-            charge,
-            element: element.map(String::from),
-            sigma,
-            epsilon,
-            hydrophobicity,
-            custom,
-        }
-    }
-
     pub fn name(&self) -> &str {
         &self.name
     }

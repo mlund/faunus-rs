@@ -373,6 +373,7 @@ impl HamiltonianBuilder {
 
 #[cfg(test)]
 mod tests {
+    use crate::topology::AtomKindBuilder;
     use float_cmp::assert_approx_eq;
 
     use super::*;
@@ -471,43 +472,33 @@ mod tests {
     fn hamiltonian_builder_validate() {
         let builder = HamiltonianBuilder::from_file("tests/files/topology_pass.yaml").unwrap();
 
-        let atoms = [
-            AtomKind::new("OW", 0, 16.0, 1.0, None, None, None, None, HashMap::new()),
-            AtomKind::new("HW", 1, 1.0, 0.0, None, None, None, None, HashMap::new()),
-        ];
+        let atom_ow = AtomKindBuilder::default()
+            .name("OW")
+            .id(0)
+            .mass(16.0)
+            .charge(1.0)
+            .build()
+            .unwrap();
 
+        let atom_hw = AtomKindBuilder::default()
+            .name("HW")
+            .id(1)
+            .mass(1.0)
+            .charge(0.0)
+            .build()
+            .unwrap();
+
+        let atoms = [atom_ow.clone(), atom_hw.clone()];
         builder.validate(&atoms).unwrap();
 
-        let atoms = [AtomKind::new(
-            "OW",
-            0,
-            16.0,
-            1.0,
-            None,
-            None,
-            None,
-            None,
-            HashMap::new(),
-        )];
-
+        let atoms = [atom_ow.clone()];
         let error = builder.validate(&atoms).unwrap_err();
         assert_eq!(
             &error.to_string(),
             "Atom kind specified in `nonbonded` does not exist."
         );
 
-        let atoms = [AtomKind::new(
-            "HW",
-            1,
-            1.0,
-            0.0,
-            None,
-            None,
-            None,
-            None,
-            HashMap::new(),
-        )];
-
+        let atoms = [atom_hw.clone()];
         let error = builder.validate(&atoms).unwrap_err();
         assert_eq!(
             &error.to_string(),
@@ -626,39 +617,32 @@ mod tests {
 
         interactions.insert(DefaultOrPair::Default, for_default);
 
-        let atom1 = AtomKind::new(
-            "NA",
-            0,
-            12.0,
-            1.0,
-            None,
-            Some(1.0),
-            None,
-            None,
-            HashMap::new(),
-        );
-        let atom2 = AtomKind::new(
-            "CL",
-            1,
-            16.0,
-            -1.0,
-            None,
-            Some(3.0),
-            None,
-            None,
-            HashMap::new(),
-        );
-        let atom3 = AtomKind::new(
-            "K",
-            2,
-            32.0,
-            0.0,
-            None,
-            Some(2.0),
-            None,
-            None,
-            HashMap::new(),
-        );
+        let atom1 = AtomKindBuilder::default()
+            .name("NA")
+            .id(0)
+            .mass(12.0)
+            .charge(1.0)
+            .sigma(1.0)
+            .build()
+            .unwrap();
+
+        let atom2 = AtomKindBuilder::default()
+            .name("CL")
+            .id(1)
+            .mass(16.0)
+            .charge(-1.0)
+            .sigma(3.0)
+            .build()
+            .unwrap();
+
+        let atom3 = AtomKindBuilder::default()
+            .name("K")
+            .id(2)
+            .mass(32.0)
+            .charge(0.0)
+            .sigma(2.0)
+            .build()
+            .unwrap();
 
         let mut nonbonded = NonbondedBuilder(interactions);
         let expected = interaction1.convert(None, None, None).unwrap().unwrap()
@@ -712,31 +696,25 @@ mod tests {
             for_pair,
         );
 
-        let atom1 = AtomKind::new(
-            "NA",
-            0,
-            12.0,
-            1.0,
-            None,
-            Some(1.0),
-            None,
-            None,
-            HashMap::new(),
-        );
-        let atom2 = AtomKind::new(
-            "BB",
-            1,
-            16.0,
-            0.0,
-            None,
-            Some(3.0),
-            None,
-            None,
-            HashMap::new(),
-        );
+        let atom1 = AtomKindBuilder::default()
+            .name("NA")
+            .id(0)
+            .mass(12.0)
+            .charge(1.0)
+            .sigma(1.0)
+            .build()
+            .unwrap();
+
+        let atom2 = AtomKindBuilder::default()
+            .name("BB")
+            .id(1)
+            .mass(16.0)
+            .charge(0.0)
+            .sigma(3.0)
+            .build()
+            .unwrap();
 
         // first two interactions evaluate to 0
-
         let mut nonbonded = NonbondedBuilder(interactions);
         let expected = Box::new(IonIon::new(0.0, interaction1.clone()))
             as Box<dyn IsotropicTwobodyEnergy>
@@ -747,7 +725,6 @@ mod tests {
         assert_behavior(interaction, expected);
 
         // all interactions evaluate to 0
-
         let for_pair = vec![
             NonbondedInteraction::CoulombPlain(interaction1.clone()),
             NonbondedInteraction::CoulombEwald(interaction2.clone()),
