@@ -482,12 +482,14 @@ impl Topology {
 
     /// Get the total number of particules in the topology.
     pub fn num_particles(&self) -> usize {
-        self.system()
-            .unwrap()
-            .blocks
-            .iter()
-            .map(|block| block.num_atoms(&self.moleculekinds))
-            .sum()
+        match self.system() {
+            Some(system) => system
+                .blocks
+                .iter()
+                .map(|block| block.num_atoms(&self.moleculekinds))
+                .sum(),
+            None => 0,
+        }
     }
 
     /// Create a new Topology structure. This function performs no sanity checks.
