@@ -287,12 +287,8 @@ impl CustomProperty for MoleculeKind {
 
 #[cfg(test)]
 mod tests {
-
-    use itertools::Itertools;
-
-    use crate::topology::{BondKind, BondOrder};
-
     use super::*;
+    use crate::topology::{BondKind, BondOrder};
 
     #[test]
     fn generate_exclusions_n1() {
@@ -335,44 +331,29 @@ mod tests {
 
     #[test]
     fn generate_exclusions_n2() {
-        let mut molecule = MoleculeKind::new(
-            "MOL",
-            0,
-            vec![
-                "A".into(),
-                "B".into(),
-                "C".into(),
-                "D".into(),
-                "E".into(),
-                "F".into(),
-                "G".into(),
-            ],
-            vec![0, 1, 2, 3, 4, 5, 6, 7],
-            [
-                [0, 1],
-                [1, 2],
-                [2, 3],
-                [3, 4],
-                [3, 5],
-                [5, 6],
-                [3, 6],
-                [4, 6],
-            ]
-            .iter()
-            .map(|&x| Bond::new(x, BondKind::Unspecified, BondOrder::Unspecified))
-            .collect(),
-            vec![],
-            vec![],
-            2,
-            HashSet::new(),
-            DegreesOfFreedom::Free,
-            vec![None, None, None, None, None, None, None],
-            vec![],
-            vec![],
-            true,
-            HashMap::new(),
-            None,
-        );
+        let mut molecule = MoleculeKindBuilder::default()
+            .name("MOL".to_string())
+            .atoms("ABCDEFG".chars().map(|c| c.to_string()).collect())
+            .atom_indices((0..8).collect())
+            .bonds(
+                [
+                    [0, 1],
+                    [1, 2],
+                    [2, 3],
+                    [3, 4],
+                    [3, 5],
+                    [5, 6],
+                    [3, 6],
+                    [4, 6],
+                ]
+                .iter()
+                .map(|&ij| Bond::new(ij, BondKind::Unspecified, BondOrder::Unspecified))
+                .collect(),
+            )
+            .degrees_of_freedom(DegreesOfFreedom::Free)
+            .excluded_neighbours(2)
+            .build()
+            .unwrap();
 
         molecule.generate_exclusions();
 
@@ -403,44 +384,29 @@ mod tests {
 
     #[test]
     fn generate_exclusions_n3() {
-        let mut molecule = MoleculeKind::new(
-            "MOL",
-            0,
-            vec![
-                "A".into(),
-                "B".into(),
-                "C".into(),
-                "D".into(),
-                "E".into(),
-                "F".into(),
-                "G".into(),
-            ],
-            vec![0, 1, 2, 3, 4, 5, 6, 7],
-            [
-                [0, 1],
-                [1, 2],
-                [2, 3],
-                [3, 4],
-                [3, 5],
-                [5, 6],
-                [3, 6],
-                [4, 6],
-            ]
-            .iter()
-            .map(|&x| Bond::new(x, BondKind::Unspecified, BondOrder::Unspecified))
-            .collect(),
-            vec![],
-            vec![],
-            3,
-            HashSet::new(),
-            DegreesOfFreedom::Free,
-            vec![None, None, None, None, None, None, None],
-            vec![],
-            vec![],
-            true,
-            HashMap::new(),
-            None,
-        );
+        let mut molecule = MoleculeKindBuilder::default()
+            .name("MOL".to_string())
+            .atoms("ABCDEFG".chars().map(|c| c.to_string()).collect())
+            .atom_indices((0..8).collect())
+            .bonds(
+                [
+                    [0, 1],
+                    [1, 2],
+                    [2, 3],
+                    [3, 4],
+                    [3, 5],
+                    [5, 6],
+                    [3, 6],
+                    [4, 6],
+                ]
+                .iter()
+                .map(|&ij| Bond::new(ij, BondKind::Unspecified, BondOrder::Unspecified))
+                .collect(),
+            )
+            .degrees_of_freedom(DegreesOfFreedom::Free)
+            .excluded_neighbours(3)
+            .build()
+            .unwrap();
 
         molecule.generate_exclusions();
 
