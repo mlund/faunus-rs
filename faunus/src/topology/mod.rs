@@ -32,7 +32,7 @@
 //! let top = Topology::from_file("tests/files/topology_input.yaml");
 //! ```
 mod atom;
-mod block;
+pub(crate) mod block;
 mod bond;
 mod chain;
 #[cfg(feature = "chemfiles")]
@@ -53,6 +53,7 @@ pub use bond::*;
 pub use chain::*;
 use derive_getters::Getters;
 pub use dihedral::*;
+use itertools::Itertools;
 use rand::rngs::ThreadRng;
 pub use residue::*;
 pub use torsion::*;
@@ -67,15 +68,15 @@ use self::molecule::MoleculeKind;
 use self::structure::positions_from_structure_file;
 
 /// Trait implemented by collections of atoms that should not overlap (e.g., residues, chains).
-pub(super) trait NonOverlapping {
+pub(super) trait IndexRange {
     /// Get the indices of atoms in the collection.
     fn range(&self) -> Range<usize>;
 
-    /// Check whether two collections overlap.
-    ///
-    /// ## Return
-    /// Returns `true` if the collections overlap, else returns `false`.
-    fn overlap(&self, other: &Self) -> bool {
+    /// Check if elements are in union / shared with `other` range
+    fn is_union(&self, other: &Self) -> bool
+    where
+        Self: Sized,
+    {
         !self.is_empty()
             && !other.is_empty()
             && self.range().start < other.range().end
@@ -88,15 +89,16 @@ pub(super) trait NonOverlapping {
         self.range().is_empty()
     }
 
-    // TODO! tests
-    /// Validate that collections in a list do not overlap.
-    fn validate(collection: &[impl NonOverlapping]) -> Result<(), ValidationError> {
-        if collection.iter().enumerate().any(|(i, item_i)| {
-            collection
-                .iter()
-                .skip(i + 1)
-                .any(|item_j| item_i.overlap(item_j))
-        }) {
+    /// Validate that ranges in a list do not overlap.
+    fn validate(collection: &[impl IndexRange]) -> Result<(), ValidationError>
+    where
+        Self: Sized,
+    {
+        let overlap = collection
+            .iter()
+            .permutations(2)
+            .any(|v| v[0].is_union(v[1]));
+        if overlap {
             Err(ValidationError::new("").with_message("overlap between collections".into()))
         } else {
             core::result::Result::Ok(())
@@ -108,35 +110,35 @@ pub(super) trait NonOverlapping {
 fn collections_overlap() {
     let residue1 = Residue::new("ALA", None, 2..5);
     let residue2 = Residue::new("LYS", None, 7..11);
-    assert!(!residue1.overlap(&residue2));
+    assert!(!residue1.is_union(&residue2));
 
     let residue2 = Residue::new("LYS", None, 5..11);
-    assert!(!residue1.overlap(&residue2));
+    assert!(!residue1.is_union(&residue2));
 
     let residue2 = Residue::new("LYS", None, 0..2);
-    assert!(!residue1.overlap(&residue2));
+    assert!(!residue1.is_union(&residue2));
 
     let residue2 = Residue::new("LYS", None, 2..5);
-    assert!(residue1.overlap(&residue2));
+    assert!(residue1.is_union(&residue2));
 
     let residue2 = Residue::new("LYS", None, 1..11);
-    assert!(residue1.overlap(&residue2));
+    assert!(residue1.is_union(&residue2));
 
     let residue2 = Residue::new("LYS", None, 3..4);
-    assert!(residue1.overlap(&residue2));
+    assert!(residue1.is_union(&residue2));
 
     let residue2 = Residue::new("LYS", None, 1..3);
-    assert!(residue1.overlap(&residue2));
+    assert!(residue1.is_union(&residue2));
 
     let residue2 = Residue::new("LYS", None, 4..11);
-    assert!(residue1.overlap(&residue2));
+    assert!(residue1.is_union(&residue2));
 
     let chain1 = Chain::new("A", 2..5);
     let chain2 = Chain::new("B", 7..11);
-    assert!(!chain1.overlap(&chain2));
+    assert!(!chain1.is_union(&chain2));
 
     let chain2 = Chain::new("B", 4..11);
-    assert!(chain1.overlap(&chain2));
+    assert!(chain1.is_union(&chain2));
 }
 
 #[test]
@@ -334,35 +336,35 @@ pub enum DegreesOfFreedom {
 /// Trait implemented by any structure resembling a Topology.
 pub trait TopologyLike {
     /// Get atoms of the topology.
-    fn atoms(&self) -> &[AtomKind];
+    fn atomkinds(&self) -> &[AtomKind];
     /// Add atom to the topology.
-    fn add_atom(&mut self, atom: AtomKind);
+    fn add_atomkind(&mut self, atom: AtomKind);
     /// Get molecules of the topology.
-    fn molecules(&self) -> &[MoleculeKind];
+    fn moleculekinds(&self) -> &[MoleculeKind];
     /// Add molecule to the topology.
-    fn add_molecule(&mut self, molecule: MoleculeKind);
+    fn add_moleculekind(&mut self, molecule: MoleculeKind);
 
     /// Find atom with given name.
     fn find_atom(&self, name: &str) -> Option<&AtomKind> {
-        self.atoms().iter().find(|a| a.name() == name)
+        self.atomkinds().iter().find(|a| a.name() == name)
     }
 
     /// Find molecule with given name.
     fn find_molecule(&self, name: &str) -> Option<&MoleculeKind> {
-        self.molecules().iter().find(|r| r.name() == name)
+        self.moleculekinds().iter().find(|r| r.name() == name)
     }
 
     /// Add atom kinds into a topology. In case an AtomKind with the same name already
     /// exists in the Topology, it is NOT overwritten and a warning is raised.
-    fn include_atoms(&mut self, atoms: Vec<AtomKind>) {
-        for atom in atoms.into_iter() {
-            if self.atoms().iter().any(|x| x.name() == atom.name()) {
+    fn include_atoms(&mut self, atoms: &[AtomKind]) {
+        for atom in atoms.iter() {
+            if self.atomkinds().iter().any(|x| x.name() == atom.name()) {
                 log::warn!(
                     "Atom kind '{}' redefinition in included topology.",
                     atom.name()
                 )
             } else {
-                self.add_atom(atom);
+                self.add_atomkind(atom.clone());
             }
         }
     }
@@ -371,13 +373,17 @@ pub trait TopologyLike {
     /// already exists in the Topology, it is NOT overwritten and a warning is raised.
     fn include_molecules(&mut self, molecules: Vec<MoleculeKind>) {
         for molecule in molecules.into_iter() {
-            if self.molecules().iter().any(|x| x.name() == molecule.name()) {
+            if self
+                .moleculekinds()
+                .iter()
+                .any(|x| x.name() == molecule.name())
+            {
                 log::warn!(
                     "Molecule kind '{}' redefinition in included topology.",
                     molecule.name()
                 )
             } else {
-                self.add_molecule(molecule);
+                self.add_moleculekind(molecule);
             }
         }
     }
@@ -389,9 +395,9 @@ pub trait TopologyLike {
     /// - `topologies` paths to the topologies to be included (absolute or relative to the `parent_path`)
     fn include_topologies(&mut self, topologies: Vec<InputPath>) -> Result<(), anyhow::Error> {
         for file in topologies.iter() {
-            let included_top = IncludedTopology::from_file(file.path().unwrap())?;
-            self.include_atoms(included_top.atoms);
-            self.include_molecules(included_top.molecules);
+            let included_top = Topology::from_file_partial(file.path().unwrap())?;
+            self.include_atoms(&included_top.atomkinds);
+            self.include_molecules(included_top.moleculekinds);
         }
 
         Ok(())
@@ -405,38 +411,53 @@ pub struct Topology {
     #[serde(skip_serializing, default)]
     include: Vec<InputPath>,
     /// All possible atom types.
-    #[serde(default)] // can be defined in an include
-    atoms: Vec<AtomKind>,
+    #[serde(default, rename = "atoms")] // can be defined in an include
+    atomkinds: Vec<AtomKind>,
     /// All possible molecule types.
-    #[serde(default)] // can be defined in an include
-    molecules: Vec<MoleculeKind>,
+    #[serde(default, rename = "molecules")] // can be defined in an include
+    moleculekinds: Vec<MoleculeKind>,
     /// Properties of the system.
     /// Must always be provided.
     #[validate(nested)]
-    system: System,
+    #[serde(default)]
+    pub system: System,
 }
 
 impl Topology {
-    /// Parse a yaml file as Topology.
-    pub fn from_file(filename: impl AsRef<Path> + Clone) -> anyhow::Result<Topology> {
+    /// Create partial topology without system. Used for topology includes.
+    pub fn from_file_partial(filename: impl AsRef<Path> + Clone) -> anyhow::Result<Topology> {
         let yaml = std::fs::read_to_string(filename.clone())?;
-        let mut topology = serde_yaml::from_str::<Topology>(&yaml)?;
-
-        // finalize includes
+        let mut topology: Topology = serde_yaml::from_str(&yaml)?;
         for file in topology.include.iter_mut() {
             file.finalize(filename.clone());
         }
-
-        // parse included files
         topology.include_topologies(topology.include.clone())?;
+        Ok(topology)
+    }
 
+    /// Parse a yaml file as Topology which *must* include a system.
+    pub fn from_file(filename: impl AsRef<Path>) -> anyhow::Result<Topology> {
+        let yaml = std::fs::read_to_string(&filename)?;
+        let mut topology: Topology = serde_yaml::from_str(&yaml)?;
+
+        if topology.system.is_empty() {
+            anyhow::bail!("missing or empty field `system`");
+        };
+        if topology.system.blocks.is_empty() {
+            anyhow::bail!("missing or empty field `blocks`");
+        }
+
+        // finalize includes
+        for file in topology.include.iter_mut() {
+            file.finalize(&filename);
+        }
+
+        topology.include_topologies(topology.include.clone())?;
         topology.finalize_atoms()?;
         topology.finalize_molecules()?;
-        topology.finalize_blocks(filename)?;
+        topology.finalize_blocks(&filename)?;
         topology.validate_intermolecular()?;
-
         topology.validate()?;
-
         Ok(topology)
     }
 
@@ -450,27 +471,27 @@ impl Topology {
         &self.system.intermolecular
     }
 
-    /// Get the total number of atoms in a topology
-    pub fn num_atoms(&self) -> usize {
+    /// Get the total number of particules in the topology.
+    pub fn num_particles(&self) -> usize {
         self.system
             .blocks
             .iter()
-            .map(|block| block.num_atoms(&self.molecules))
+            .map(|block| block.num_atoms(&self.moleculekinds))
             .sum()
     }
 
     /// Create a new Topology structure. This function performs no sanity checks.
     #[allow(dead_code)]
     pub(crate) fn new(
-        atoms: Vec<AtomKind>,
-        molecules: Vec<MoleculeKind>,
+        atomkinds: &[AtomKind],
+        moleculekinds: &[MoleculeKind],
         intermolecular: IntermolecularBonded,
         blocks: Vec<MoleculeBlock>,
     ) -> Topology {
         Topology {
             include: vec![],
-            atoms,
-            molecules,
+            atomkinds: atomkinds.into(),
+            moleculekinds: moleculekinds.into(),
             system: System {
                 intermolecular,
                 blocks,
@@ -489,68 +510,50 @@ impl Topology {
         let mut curr_start = 0;
 
         let positions = match structure {
-            Some(x) => Some(positions_from_structure_file(&x)?),
+            Some(x) => Some(positions_from_structure_file(&x, Some(context.cell()))?),
             None => None,
         };
 
         // create groups
         for block in self.blocks() {
-            if block.insert().is_none() {
-                let atoms_in_block = block.num_atoms(self.molecules());
-
-                match positions {
-                    None => {
-                        anyhow::bail!(
-                            "molecule block requires external structure that was not provided"
-                        )
-                    }
-                    Some(ref positions) => {
-                        let positions = match positions
-                            .get(curr_start..(curr_start + atoms_in_block))
-                        {
-                            None => anyhow::bail!("external structure does not match topology - not enough coordinates"),
-                            Some(pos) => pos,
-                        };
-
-                        block.insert_block(
-                            context,
-                            self.atoms(),
-                            self.molecules(),
-                            positions,
-                            rng,
-                        )?;
-
-                        curr_start += atoms_in_block;
-                    }
-                };
+            if block.insert_policy().is_some() {
+                block.insert_block(context, &[], rng)?;
             } else {
-                block.insert_block(context, self.atoms(), self.molecules(), &[], rng)?;
+                let Some(ref positions) = positions else {
+                    anyhow::bail!("block requires structure that wasn't provided")
+                };
+                let atoms_in_block = block.num_atoms(self.moleculekinds());
+                let positions = match positions.get(curr_start..(curr_start + atoms_in_block)) {
+                    None => anyhow::bail!(
+                        "external structure does not match topology - not enough coordinates"
+                    ),
+                    Some(pos) => pos,
+                };
+                block.insert_block(context, positions, rng)?;
+                curr_start += atoms_in_block;
             }
         }
 
         // check that all coordinates from the structure file have been used
         match positions {
             Some(positions) if positions.len() != curr_start => {
-                anyhow::bail!("external structure does not match topology - too many coordinates")
+                anyhow::bail!("structure does not match topology - too many coordinates")
             }
             _ => (),
         }
-
         Ok(())
     }
 
     /// Set ids for atom kinds in the topology and make sure that the atom names are unique.
     fn finalize_atoms(&mut self) -> anyhow::Result<()> {
-        self.atoms
+        self.atomkinds
             .iter_mut()
             .enumerate()
             .for_each(|(i, atom): (usize, &mut AtomKind)| {
                 atom.set_id(i);
             });
 
-        if are_unique(&self.atoms, |i: &AtomKind, j: &AtomKind| {
-            i.name() == j.name()
-        }) {
+        if self.atomkinds.iter().map(|a| a.name()).all_unique() {
             Ok(())
         } else {
             anyhow::bail!("atoms have non-unique names")
@@ -560,7 +563,7 @@ impl Topology {
     /// Set ids for molecule kinds in the topology, validate the molecules and
     /// set indices of atom kinds forming each molecule.
     fn finalize_molecules(&mut self) -> anyhow::Result<()> {
-        for (i, molecule) in self.molecules.iter_mut().enumerate() {
+        for (i, molecule) in self.moleculekinds.iter_mut().enumerate() {
             // set atom names
             if molecule.atom_names().is_empty() {
                 molecule.empty_atom_names();
@@ -577,19 +580,26 @@ impl Topology {
                 .atoms()
                 .iter()
                 .map(|atom| {
-                    self.atoms
+                    self.atomkinds
                         .iter()
                         .position(|x| x.name() == atom)
                         .ok_or_else(|| anyhow::Error::msg("undefined atom kind in a molecule"))
                 })
                 .collect::<Result<Vec<_>, _>>()?;
             molecule.set_atom_indices(indices);
+
+            // expand exclusions (must be done after validation - the bonds must be valid)
+            molecule.generate_exclusions();
         }
 
         // check that all molecule names are unique
-        if are_unique(&self.molecules, |i: &MoleculeKind, j: &MoleculeKind| {
-            i.name() == j.name()
-        }) {
+        if self
+            .moleculekinds
+            .iter()
+            .duplicates_by(|m| m.name())
+            .count()
+            .eq(&0)
+        {
             Ok(())
         } else {
             anyhow::bail!("molecules have non-unique names")
@@ -602,15 +612,15 @@ impl Topology {
             block.finalize(filename.clone())?;
 
             let index = self
-                .molecules
+                .moleculekinds
                 .iter()
                 .position(|x| x.name() == block.molecule())
                 .ok_or(anyhow::Error::msg("undefined molecule kind in a block"))?;
-            block.set_molecule_index(index);
+            block.set_molecule_id(index);
 
             // check that if positions are provided manually, they are consistent with the topology
-            if let Some(InsertionPolicy::Manual(positions)) = block.insert() {
-                if positions.len() != block.num_atoms(&self.molecules) {
+            if let Some(InsertionPolicy::Manual(positions)) = block.insert_policy() {
+                if positions.len() != block.num_atoms(&self.moleculekinds) {
                     anyhow::bail!(
                         "the number of manually provided positions does not match the number of atoms",
                     );
@@ -623,15 +633,15 @@ impl Topology {
 
     /// Validate intermolecular bonded interactions.
     fn validate_intermolecular(&mut self) -> anyhow::Result<()> {
-        let num_atoms = self.num_atoms();
+        let num_particles = self.num_particles();
 
         #[inline(always)]
         fn check_intermolecular_items<T: Indexed>(
             items: &[T],
-            num_atoms: usize,
+            num_particles: usize,
             error_msg: &'static str,
         ) -> anyhow::Result<()> {
-            if !items.iter().all(|item| item.lower(num_atoms)) {
+            if !items.iter().all(|item| item.lower(num_particles)) {
                 anyhow::bail!(error_msg);
             }
 
@@ -639,17 +649,17 @@ impl Topology {
         }
         check_intermolecular_items(
             &self.system.intermolecular.bonds,
-            num_atoms,
+            num_particles,
             "intermolecular bond between undefined atoms",
         )?;
         check_intermolecular_items(
             &self.system.intermolecular.torsions,
-            num_atoms,
+            num_particles,
             "intermolecular torsion between undefined atoms",
         )?;
         check_intermolecular_items(
             &self.system.intermolecular.dihedrals,
-            num_atoms,
+            num_particles,
             "intermolecular dihedral between undefined atoms",
         )?;
 
@@ -658,82 +668,40 @@ impl Topology {
 }
 
 impl TopologyLike for Topology {
-    fn atoms(&self) -> &[AtomKind] {
-        &self.atoms
+    fn atomkinds(&self) -> &[AtomKind] {
+        &self.atomkinds
     }
 
-    fn molecules(&self) -> &[MoleculeKind] {
-        &self.molecules
+    fn moleculekinds(&self) -> &[MoleculeKind] {
+        &self.moleculekinds
     }
 
-    fn add_atom(&mut self, atom: AtomKind) {
-        self.atoms.push(atom)
+    fn add_atomkind(&mut self, atom: AtomKind) {
+        self.atomkinds.push(atom)
     }
 
-    fn add_molecule(&mut self, molecule: MoleculeKind) {
-        self.molecules.push(molecule)
-    }
-}
-
-/// Partial topology that can be included in other topology files.
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-struct IncludedTopology {
-    /// Other yaml files that should be included in the topology.
-    #[serde(skip_serializing)]
-    #[serde(default)]
-    include: Vec<InputPath>,
-    /// All possible atom types.
-    #[serde(default)]
-    atoms: Vec<AtomKind>,
-    /// All possible molecule types.
-    #[serde(default)]
-    molecules: Vec<MoleculeKind>,
-}
-
-impl IncludedTopology {
-    /// Parse a yaml file as IncludedTopology.
-    fn from_file(filename: impl AsRef<Path> + Clone) -> anyhow::Result<IncludedTopology> {
-        let yaml = std::fs::read_to_string(filename.clone())?;
-        let mut topology = serde_yaml::from_str::<IncludedTopology>(&yaml)?;
-
-        // parse included files
-        for file in topology.include.iter_mut() {
-            file.finalize(filename.clone());
-        }
-        topology.include_topologies(topology.include.clone())?;
-
-        Ok(topology)
-    }
-}
-
-impl TopologyLike for IncludedTopology {
-    fn atoms(&self) -> &[AtomKind] {
-        &self.atoms
-    }
-
-    fn molecules(&self) -> &[MoleculeKind] {
-        &self.molecules
-    }
-
-    fn add_atom(&mut self, atom: AtomKind) {
-        self.atoms.push(atom)
-    }
-
-    fn add_molecule(&mut self, molecule: MoleculeKind) {
-        self.molecules.push(molecule)
+    fn add_moleculekind(&mut self, molecule: MoleculeKind) {
+        self.moleculekinds.push(molecule)
     }
 }
 
 /// Fields of the topology related to specific molecular system.
 #[derive(Debug, Clone, Serialize, Deserialize, Default, Validate)]
-struct System {
+pub struct System {
     /// Intermolecular bonded interactions.
     #[serde(default)]
     #[validate(nested)]
-    intermolecular: IntermolecularBonded,
+    pub intermolecular: IntermolecularBonded,
     /// Molecules of the system.
-    /// Must always be provided.
-    blocks: Vec<MoleculeBlock>,
+    #[serde(default)]
+    pub blocks: Vec<MoleculeBlock>,
+}
+
+impl System {
+    /// System is considered empty if it has no blocks
+    pub fn is_empty(&self) -> bool {
+        self.blocks.is_empty()
+    }
 }
 
 /// Intermolecular bonded interactions. Global atom indices have to be provided.
@@ -767,6 +735,12 @@ impl IntermolecularBonded {
             torsions,
         }
     }
+
+    /// Returns `true` if the `IntermolecularBonded` structure is empty (contains no bonds, no torsions and no dihedrals).
+    /// Otherwise returns `false`.
+    pub(crate) fn is_empty(&self) -> bool {
+        self.bonds.is_empty() && self.torsions.is_empty() && self.dihedrals.is_empty()
+    }
 }
 
 /// Serialize std::ops::Range as an array.
@@ -793,27 +767,10 @@ where
     })
 }
 
-/// Check that all items of a collection are unique.
-///
-/// ## Parameters
-/// - `collection` collection of items to compare
-/// - `compare_fn` function/closure used for comparing the items
-fn are_unique<T, F>(collection: &[T], compare_fn: F) -> bool
-where
-    F: Fn(&T, &T) -> bool,
-{
-    !collection.iter().enumerate().any(|(i, item_i)| {
-        collection
-            .iter()
-            .skip(i + 1)
-            .any(|item_j| compare_fn(item_i, item_j))
-    })
-}
-
 /// Validate that the provided atom indices are unique.
 /// Used e.g. to validate that a bond does not connect one and the same atom.
 fn validate_unique_indices(indices: &[usize]) -> Result<(), ValidationError> {
-    if are_unique(indices, |i: &usize, j: &usize| i == j) {
+    if indices.iter().all_unique() {
         core::result::Result::Ok(())
     } else {
         Err(ValidationError::new("").with_message("non-unique atom indices".into()))
@@ -890,7 +847,8 @@ mod tests {
     use self::block::BlockActivationStatus;
     use crate::dimension::Dimension;
     use float_cmp::assert_approx_eq;
-    use std::collections::HashMap;
+    use std::collections::{HashMap, HashSet};
+    use unordered_pair::UnorderedPair;
 
     use super::*;
 
@@ -956,6 +914,8 @@ mod tests {
         bonds: &[Bond],
         torsions: &[Torsion],
         dihedrals: &[Dihedral],
+        excluded_neighbours: usize,
+        exclusions: &HashSet<UnorderedPair<usize>>,
         dof: DegreesOfFreedom,
         atom_names: &[Option<&str>],
         residues: &[Residue],
@@ -978,6 +938,8 @@ mod tests {
         assert_eq!(molecule.residues(), residues);
         assert_eq!(molecule.chains(), chains);
         assert_eq!(molecule.has_com(), com);
+        assert_eq!(*molecule.excluded_neighbours(), excluded_neighbours);
+        assert_eq!(molecule.exclusions(), exclusions);
 
         compare_custom(molecule.custom(), custom);
     }
@@ -1005,45 +967,45 @@ mod tests {
     ) {
         assert_eq!(block.molecule(), molecule_name);
         assert_eq!(block.molecule_index(), molecule_index);
-        assert_eq!(block.number(), number);
+        assert_eq!(block.num_molecules(), number);
         assert_eq!(block.active(), active);
-        assert_eq!(block.insert(), insert);
+        assert_eq!(block.insert_policy(), insert);
     }
 
     #[test]
     fn read_topology_pass() {
         let topology = Topology::from_file("tests/files/topology_pass.yaml").unwrap();
 
-        assert_eq!(topology.atoms().len(), 5);
+        assert_eq!(topology.atomkinds().len(), 5);
 
         compare_atom_kind(
-            &topology.atoms()[0],
+            &topology.atomkinds()[0],
             "OW",
             0,
             16.0,
             -1.0,
             Some("O"),
-            None,
-            None,
+            Some(3.4),
+            Some(1.8),
             Some(Hydrophobicity::SurfaceTension(1.0)),
             &HashMap::new(),
         );
 
         compare_atom_kind(
-            &topology.atoms()[1],
+            &topology.atomkinds()[1],
             "HW",
             1,
             1.0,
             0.0,
             None,
-            None,
-            None,
+            Some(1.0),
+            Some(0.5),
             None,
             &HashMap::new(),
         );
 
         compare_atom_kind(
-            &topology.atoms()[2],
+            &topology.atomkinds()[2],
             "X",
             2,
             12.0,
@@ -1058,7 +1020,7 @@ mod tests {
         let custom = HashMap::from([("unused".to_owned(), Value::Bool(true))]);
 
         compare_atom_kind(
-            &topology.atoms()[3],
+            &topology.atomkinds()[3],
             "O",
             3,
             16.0,
@@ -1071,7 +1033,7 @@ mod tests {
         );
 
         compare_atom_kind(
-            &topology.atoms()[4],
+            &topology.atomkinds()[4],
             "C",
             4,
             12.0,
@@ -1083,42 +1045,40 @@ mod tests {
             &custom,
         );
 
-        let atoms = vec!["OW", "HW", "HW", "HW", "OW", "OW", "OW"];
-        let indices = vec![0, 1, 1, 1, 0, 0, 0];
-        let bonds = vec![
+        let atoms = ["OW", "HW", "HW", "HW", "OW", "OW", "OW"];
+        let indices = [0, 1, 1, 1, 0, 0, 0];
+        let bonds = [
             Bond::new(
                 [0, 1],
-                BondKind::Harmonic { k: 100.0, req: 1.0 },
-                Some(BondOrder::Single),
+                BondKind::Harmonic(interatomic::twobody::Harmonic::new(1.0, 100.0)),
+                BondOrder::Single,
             ),
             Bond::new(
                 [1, 2],
-                BondKind::Morse {
-                    k: 100.0,
-                    req: 1.0,
-                    d: 10.0,
-                },
-                None,
+                BondKind::Morse(interatomic::twobody::Morse::new(1.0, 10.0, 100.0)),
+                BondOrder::Unspecified,
             ),
-            Bond::new([2, 3], BondKind::default(), None),
+            Bond::new([2, 3], BondKind::default(), BondOrder::Unspecified),
         ];
-        let torsions = vec![
-            Torsion::new([2, 3, 4], TorsionKind::Cosine { k: 50.0, aeq: 45.0 }),
+        let torsions = [
+            Torsion::new(
+                [2, 3, 4],
+                TorsionKind::Cosine(interatomic::threebody::CosineTorsion::new(45.0, 50.0)),
+            ),
             Torsion::new([1, 2, 3], TorsionKind::default()),
         ];
-        let dihedrals = vec![
+        let dihedrals = [
             Dihedral::new(
                 [0, 1, 2, 3],
-                DihedralKind::ImproperHarmonic {
-                    k: 100.0,
-                    aeq: 90.0,
-                },
+                DihedralKind::ImproperHarmonic(interatomic::fourbody::HarmonicDihedral::new(
+                    90.0, 100.0,
+                )),
                 Some(0.5),
                 Some(0.5),
             ),
             Dihedral::new([3, 4, 5, 6], DihedralKind::default(), None, None),
         ];
-        let names = vec![
+        let names = [
             Some("O1"),
             None,
             Some("H1"),
@@ -1127,12 +1087,12 @@ mod tests {
             Some("O1"),
             Some("O2"),
         ];
-        let residues = vec![
+        let residues = [
             Residue::new("ALA", Some(2), 0..3),
-            Residue::new("GLY", Some(3), 1..1),
+            Residue::new("GLY", None, 1..1),
             Residue::new("ALA", Some(4), 4..6),
         ];
-        let chains = vec![Chain::new("A", 0..7), Chain::new("Chain2", 14..0)];
+        let chains = [Chain::new("A", 0..7), Chain::new("Chain2", 14..0)];
         let custom = HashMap::from([
             ("bool".to_owned(), Value::Bool(false)),
             ("int".to_owned(), Value::Int(13)),
@@ -1144,10 +1104,10 @@ mod tests {
             ("point".to_owned(), Value::Point([1.4, 2.2, -0.71].into())),
         ]);
 
-        assert_eq!(topology.molecules().len(), 2);
+        assert_eq!(topology.moleculekinds().len(), 2);
 
         compare_molecule_kind(
-            &topology.molecules()[0],
+            &topology.moleculekinds()[0],
             "MOL",
             0,
             &atoms,
@@ -1155,6 +1115,14 @@ mod tests {
             &bonds,
             &torsions,
             &dihedrals,
+            1,
+            &HashSet::from([
+                UnorderedPair(0, 1),
+                UnorderedPair(1, 2),
+                UnorderedPair(2, 3),
+                UnorderedPair(0, 4),
+                UnorderedPair(5, 6),
+            ]),
             DegreesOfFreedom::RigidAlchemical,
             &names,
             &residues,
@@ -1164,7 +1132,7 @@ mod tests {
         );
 
         compare_molecule_kind(
-            &topology.molecules()[1],
+            &topology.moleculekinds()[1],
             "MOL2",
             1,
             &["OW", "OW", "X"],
@@ -1172,6 +1140,8 @@ mod tests {
             &[],
             &[],
             &[],
+            0,
+            &HashSet::new(),
             DegreesOfFreedom::Free,
             &[None, None, None],
             &[],
@@ -1180,32 +1150,28 @@ mod tests {
             &HashMap::new(),
         );
 
-        let bonds = vec![
-            Bond::new([0, 220], BondKind::Harmonic { k: 50.0, req: 3.0 }, None),
+        let bonds = [
+            Bond::new(
+                [0, 220],
+                BondKind::Harmonic(interatomic::twobody::Harmonic::new(3.0, 50.0)),
+                BondOrder::Unspecified,
+            ),
             Bond::new(
                 [52, 175],
-                BondKind::FENE {
-                    k: 25.0,
-                    req: 1.5,
-                    rmax: 5.0,
-                },
-                Some(BondOrder::Triple),
+                BondKind::FENE(interatomic::twobody::FENE::new(1.5, 5.0, 25.0)),
+                BondOrder::Triple,
             ),
         ];
-        let torsions = vec![Torsion::new(
+        let torsions = [Torsion::new(
             [1, 75, 128],
-            TorsionKind::Harmonic {
-                k: 100.0,
-                aeq: 120.0,
-            },
+            TorsionKind::Harmonic(interatomic::threebody::HarmonicTorsion::new(120.0, 100.0)),
         )];
-        let dihedrals = vec![
+        let dihedrals = [
             Dihedral::new(
                 [1, 35, 75, 128],
-                DihedralKind::Harmonic {
-                    k: 27.5,
-                    aeq: 105.0,
-                },
+                DihedralKind::ProperHarmonic(interatomic::fourbody::HarmonicDihedral::new(
+                    105.0, 27.5,
+                )),
                 None,
                 Some(0.9),
             ),
@@ -1313,13 +1279,15 @@ mod tests {
     #[test]
     fn read_topology_fail_missing_system() {
         let error = Topology::from_file("tests/files/topology_missing_system.yaml").unwrap_err();
-        assert!(error.to_string().contains("missing field `system`"));
+        assert!(error
+            .to_string()
+            .contains("missing or empty field `system`"));
     }
 
     #[test]
     fn read_topology_fail_missing_blocks() {
-        let error = Topology::from_file("tests/files/topology_missing_blocks.yaml").unwrap_err();
-        assert!(error.to_string().contains("missing field `blocks`"));
+        let res = Topology::from_file("tests/files/topology_missing_blocks.yaml");
+        assert!(res.is_err());
     }
 
     #[test]
@@ -1572,5 +1540,23 @@ mod tests {
         assert!(error
             .to_string()
             .contains("unknown field `nonexistent_field`"))
+    }
+
+    #[test]
+    fn read_topology_fail_exclusions_nonunique_atoms() {
+        let error = Topology::from_file("tests/files/topology_exclusions_nonunique_atoms.yaml")
+            .unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("exclusion between the same atom"))
+    }
+
+    #[test]
+    fn read_topology_fail_exclusions_undefined_atoms() {
+        let error = Topology::from_file("tests/files/topology_exclusions_undefined_atoms.yaml")
+            .unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("exclusion between undefined atoms"))
     }
 }

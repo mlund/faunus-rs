@@ -16,21 +16,25 @@
 
 use std::path::Path;
 
+use crate::cell::SimulationCell;
 use crate::Point;
 
 /// Obtain positions of particles from the provided structure file using the `chemfiles` crate.
 #[cfg(feature = "chemfiles")]
 pub(crate) fn positions_from_structure_file(
     filename: &impl AsRef<Path>,
+    cell: Option<&dyn SimulationCell>,
 ) -> anyhow::Result<Vec<Point>> {
     Ok(super::chemfiles_interface::positions_from_frame(
         &super::chemfiles_interface::frame_from_file(filename)?,
+        cell,
     ))
 }
 
 #[cfg(not(feature = "chemfiles"))]
 pub(crate) fn positions_from_structure_file(
-    filename: &impl AsRef<Path>,
+    _filename: &impl AsRef<Path>,
+    _cell: Option<&dyn SimulationCell>,
 ) -> anyhow::Result<Vec<Point>> {
     todo!("Not implemented. Use the `chemfiles` feature.")
 }

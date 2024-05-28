@@ -17,17 +17,18 @@
 use std::path::Path;
 
 use crate::{
-    cell::{Cuboid, Endless, Shape, Sphere},
+    cell::{Cell, Cuboid, Endless, Shape, SimulationCell, Sphere},
     group::{Group, GroupCollection},
     platform::reference::ReferencePlatform,
     topology::Residue,
-    Point, WithCell, WithTopology,
+    Point, PointParticle, WithCell, WithTopology,
 };
 use chemfiles::Frame;
+use nalgebra::Vector3;
 
 use crate::topology::TopologyLike;
 
-use super::{molecule::MoleculeKind, AtomKind, NonOverlapping};
+use super::{molecule::MoleculeKind, AtomKind, IndexRange};
 
 /// Create a new chemfiles::Frame from an input file in a supported format.
 pub(super) fn frame_from_file(filename: &impl AsRef<Path>) -> anyhow::Result<chemfiles::Frame> {
@@ -38,8 +39,22 @@ pub(super) fn frame_from_file(filename: &impl AsRef<Path>) -> anyhow::Result<che
 }
 
 /// Get positions of particles from chemfiles::Frame.
-pub(super) fn positions_from_frame(frame: &chemfiles::Frame) -> Vec<Point> {
-    frame.positions().iter().map(|pos| (*pos).into()).collect()
+/// If `cell` is provided, all the positions of particles from the frame are shifted by -half_cell.
+pub(super) fn positions_from_frame(
+    frame: &chemfiles::Frame,
+    cell: Option<&dyn SimulationCell>,
+) -> Vec<Point> {
+    let shift = if let Some(cell) = cell {
+        cell.bounding_box().map(|b| -0.5 * b).unwrap_or_default()
+    } else {
+        Vector3::default()
+    };
+
+    frame
+        .positions()
+        .iter()
+        .map(|pos| <[f64; 3] as Into<Point>>::into(*pos) + shift)
+        .collect()
 }
 
 /// A trait for structure that can be converted to chemfiles Frame.
@@ -65,46 +80,42 @@ pub trait ChemFrameConvert: WithCell + WithTopology + GroupCollection {
     /// This converts all atoms, both active and inactive.
     /// This also shifts the particles so they fit into chemfiles cell.
     fn add_atoms_to_frame(&self, frame: &mut Frame) {
-        let topology = self.topology();
+        let topology = self.topology_ref();
         let mut particles = self.get_all_particles();
 
         // shift the particles
         // we need to shift them because faunus treats [0,0,0] as the center of the cell,
         // while chemfiles treats [half_cell, half_cell, half_cell] as the center of the cell
         // no shifting is needed if the box is infinite
-        if let Some(bounding) = self.cell().bounding_box() {
-            let shift = bounding / 2.0;
+        if let Some(shift) = self.cell().bounding_box().map(|b| -0.5 * b) {
             particles
                 .iter_mut()
                 .for_each(|particle| particle.pos += shift);
         }
 
         // add atoms to the frame
-        self.groups().iter().fold(0, |atom_index, group| {
-            let molecule = &topology.molecules()[group.molecule()];
-
-            for (i, index) in molecule.atom_indices().iter().enumerate() {
-                let atom = topology.atoms().get(*index).unwrap();
-
+        let to_atomkind = |i: usize| &topology.atomkinds()[i];
+        self.groups().iter().for_each(|group| {
+            let molecule = &topology.moleculekinds()[group.molecule()];
+            let atoms = molecule.atom_indices().iter().cloned().map(to_atomkind);
+            for (i, atom) in atoms.enumerate() {
                 frame.add_atom(
                     &atom.to_chem_atom(molecule.atom_names()[i].as_deref()),
-                    particles[atom_index].pos.into(),
+                    (*particles[i + group.start()].pos()).into(),
                     None,
                 );
             }
-
-            atom_index + group.capacity()
         });
     }
 
     /// Convert faunus residues to chemfiles residues and add them to the chemfiles Frame.
     fn add_residues_to_frame(&self, frame: &mut Frame) {
-        let topology = self.topology();
+        let topology = self.topology_ref();
 
         self.groups()
             .iter()
             .fold((1, 0), |(residue_index, atom_index), group| {
-                let molecule = &topology.molecules()[group.molecule()];
+                let molecule = &topology.moleculekinds()[group.molecule()];
                 group
                     .to_chem_residues(atom_index, residue_index, molecule)
                     .iter()
@@ -123,10 +134,10 @@ pub trait ChemFrameConvert: WithCell + WithTopology + GroupCollection {
 
     // Convert faunus bonds to chemfiles bonds and add them to the chemfiles Frame.
     fn add_bonds_to_frame(&self, frame: &mut Frame) {
-        let topology = self.topology();
+        let topology = self.topology_ref();
 
         self.groups().iter().fold(0, |atom_index, group| {
-            let molecule = &topology.molecules()[group.molecule()];
+            let molecule = &topology.moleculekinds()[group.molecule()];
 
             molecule.bonds().iter().for_each(|bond| {
                 frame.add_bond(bond.index()[0] + atom_index, bond.index()[1] + atom_index)
@@ -232,17 +243,22 @@ pub trait CellToChemCell: Shape {
 impl CellToChemCell for Cuboid {}
 impl CellToChemCell for Sphere {}
 impl CellToChemCell for Endless {}
+impl CellToChemCell for Cell {}
 
 #[cfg(test)]
 mod tests {
-    use std::{collections::HashMap, rc::Rc};
+    use std::{
+        cell::RefCell,
+        collections::{HashMap, HashSet},
+        rc::Rc,
+    };
 
     use crate::{
+        energy::Hamiltonian,
         topology::{
             block::{BlockActivationStatus, InsertionPolicy, MoleculeBlock},
-            Bond, BondKind, DegreesOfFreedom, IntermolecularBonded, Topology,
+            Bond, BondKind, BondOrder, DegreesOfFreedom, IntermolecularBonded, Topology,
         },
-        Context,
     };
 
     use float_cmp::assert_approx_eq;
@@ -306,6 +322,8 @@ mod tests {
             vec![],
             vec![],
             vec![],
+            0,
+            HashSet::new(),
             DegreesOfFreedom::default(),
             vec![None, None, None, None, None, None],
             vec![residue1, residue2],
@@ -334,8 +352,8 @@ mod tests {
         let residue1 = Residue::new("ALA", Some(4), 1..3);
         let residue2 = Residue::new("SER", Some(5), 5..6);
 
-        let bond1 = Bond::new([1, 3], BondKind::Unspecified, None);
-        let bond2 = Bond::new([3, 5], BondKind::Unspecified, None);
+        let bond1 = Bond::new([1, 3], BondKind::Unspecified, BondOrder::Unspecified);
+        let bond2 = Bond::new([3, 5], BondKind::Unspecified, BondOrder::Unspecified);
 
         let molecule = MoleculeKind::new(
             "MOL",
@@ -352,6 +370,8 @@ mod tests {
             vec![bond1, bond2],
             vec![],
             vec![],
+            0,
+            HashSet::new(),
             DegreesOfFreedom::default(),
             vec![None, None, Some("O3".to_string()), None, None, None],
             vec![residue1, residue2],
@@ -392,23 +412,23 @@ mod tests {
             Some(InsertionPolicy::Manual(vec![Point::default(); 21])),
         );
 
-        let intermolecular_bond = Bond::new([7, 17], BondKind::Unspecified, None);
+        let intermolecular_bond = Bond::new([7, 17], BondKind::Unspecified, BondOrder::Unspecified);
 
         let intermolecular = IntermolecularBonded::new(vec![intermolecular_bond], vec![], vec![]);
 
         let topology = Topology::new(
-            vec![atom1, atom2],
-            vec![molecule],
+            vec![atom1, atom2].as_slice(),
+            vec![molecule].as_slice(),
             intermolecular,
             vec![block],
         );
 
         let mut rng = rand::thread_rng();
 
-        let context = ReferencePlatform::new(
+        let context = ReferencePlatform::from_raw_parts(
             Rc::new(topology),
-            Cuboid::new(10.0, 5.0, 2.5),
-            vec![],
+            Box::new(Cuboid::new(10.0, 5.0, 2.5)),
+            RefCell::new(Hamiltonian::from_energy_terms(vec![])),
             None::<&str>,
             &mut rng,
         )
@@ -417,7 +437,7 @@ mod tests {
         let converted = context.to_frame();
 
         // check atoms
-        let atom_names = vec!["OW", "OW", "O3", "HW", "HW", "OW"];
+        let atom_names = ["OW", "OW", "O3", "HW", "HW", "OW"];
         let atom_masses = [16.0, 16.0, 16.0, 1.0, 1.0, 16.0];
         let atom_charges = [-1.0, -1.0, -1.0, 0.0, 0.0, -1.0];
         let atomic_types = ["O", "O", "O", "H", "H", "O"];

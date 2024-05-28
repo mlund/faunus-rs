@@ -7,9 +7,7 @@ use approx::assert_relative_eq;
 use hexasphere::shapes::IcoSphere;
 use iter_num_tools::arange;
 use itertools::Itertools;
-use std::f64::consts::PI;
-use std::fmt::Display;
-use std::io::Write;
+use std::{f64::consts::PI, fmt::Display, io::Write, path::Path};
 
 extern crate flate2;
 use flate2::write::GzEncoder;
@@ -104,7 +102,7 @@ impl TwobodyAngles {
     }
 
     /// Opens a gz compressed file for writing
-    fn open_compressed_file(outfile: &str) -> Result<GzEncoder<std::fs::File>> {
+    fn open_compressed_file(outfile: impl AsRef<Path>) -> Result<GzEncoder<std::fs::File>> {
         Ok(GzEncoder::new(
             std::fs::File::create(outfile)?,
             Compression::default(),
@@ -171,7 +169,11 @@ impl TwobodyAngles {
     ) -> (Structure, Structure) {
         let a = ref_a.clone();
         let mut b = ref_b.clone();
-        b.pos = ref_b.pos.iter().map(|pos| q2 * pos + q1 * r).collect();
+        b.pos = ref_b
+            .pos
+            .iter()
+            .map(|pos| q2.transform_vector(pos) + q1.transform_vector(r))
+            .collect();
         (a, b)
     }
 }

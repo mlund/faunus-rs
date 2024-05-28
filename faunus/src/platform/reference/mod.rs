@@ -17,71 +17,77 @@
 use rand::rngs::ThreadRng;
 
 use crate::{
-    energy::Hamiltonian,
+    cell::{Cell, SimulationCell},
+    energy::{builder::HamiltonianBuilder, Hamiltonian},
     group::{GroupCollection, GroupLists, GroupSize},
     topology::{Topology, TopologyLike},
-    Change, Context, Group, Particle, SyncFrom, WithCell, WithHamiltonian, WithTopology,
+    Change, Context, Group, Particle, ParticleSystem, Point, PointParticle, SyncFrom, WithCell,
+    WithHamiltonian, WithTopology,
 };
 
-use std::{path::Path, rc::Rc};
-
-pub mod nonbonded;
+use std::{
+    cell::{Ref, RefCell, RefMut},
+    path::Path,
+    rc::Rc,
+};
 
 /// Default platform running on the CPU.
 ///
 /// Particles are stored in
 /// a single vector, and groups are stored in a separate vector. This mostly
 /// follows the same layout as the original C++ Faunus code (version 2 and lower).
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct ReferencePlatform {
     topology: Rc<Topology>,
     particles: Vec<Particle>,
     groups: Vec<Group>,
     group_lists: GroupLists,
-    cell: crate::cell::Cuboid,
-    hamiltonian: Hamiltonian,
+    cell: Box<dyn SimulationCell>,
+    hamiltonian: RefCell<Hamiltonian>,
 }
 
-impl WithCell for ReferencePlatform {
-    type Cell = crate::cell::Cuboid;
-    fn cell(&self) -> &Self::Cell {
-        &self.cell
-    }
-    fn cell_mut(&mut self) -> &mut Self::Cell {
-        &mut self.cell
-    }
-}
+impl ReferencePlatform {
+    /// Create a new simulation system on a reference platform from
+    /// faunus configuration file and optional structure file.
+    pub fn new(
+        yaml_file: impl AsRef<Path>,
+        structure_file: Option<impl AsRef<Path>>,
+        rng: &mut ThreadRng,
+    ) -> anyhow::Result<Self> {
+        let topology = Topology::from_file(&yaml_file)?;
+        let hamiltonian_builder = HamiltonianBuilder::from_file(&yaml_file)?;
+        // validate hamiltonian builder
+        hamiltonian_builder.validate(topology.atomkinds())?;
 
-impl WithTopology for ReferencePlatform {
-    fn topology(&self) -> Rc<Topology> {
-        self.topology.clone()
-    }
-}
+        let cell = Cell::from_file(&yaml_file)?;
 
-impl WithHamiltonian for ReferencePlatform {
-    fn hamiltonian(&self) -> &Hamiltonian {
-        &self.hamiltonian
+        let hamiltonian = Hamiltonian::new(&hamiltonian_builder, &topology)?;
+        Self::from_raw_parts(
+            Rc::new(topology),
+            cell.into(),
+            RefCell::new(hamiltonian),
+            structure_file,
+            rng,
+        )
     }
-    fn hamiltonian_mut(&mut self) -> &mut Hamiltonian {
-        &mut self.hamiltonian
-    }
-}
 
-impl Context for ReferencePlatform {
-    fn new(
+    pub fn from_raw_parts(
         topology: Rc<Topology>,
-        cell: Self::Cell,
-        hamiltonian: Hamiltonian,
+        cell: Box<dyn SimulationCell>,
+        hamiltonian: RefCell<Hamiltonian>,
         structure: Option<impl AsRef<Path>>,
         rng: &mut ThreadRng,
     ) -> anyhow::Result<Self> {
+        if topology.system.is_empty() {
+            anyhow::bail!("Topology doesn't contain a system");
+        }
         let mut context = ReferencePlatform {
             topology: topology.clone(),
             particles: vec![],
             groups: vec![],
             cell,
             hamiltonian,
-            group_lists: GroupLists::new(topology.molecules().len()),
+            group_lists: GroupLists::new(topology.moleculekinds().len()),
         };
 
         topology.insert_groups(&mut context, structure, rng)?;
@@ -90,12 +96,43 @@ impl Context for ReferencePlatform {
     }
 }
 
+impl WithCell for ReferencePlatform {
+    fn cell(&self) -> &dyn SimulationCell {
+        &*self.cell
+    }
+    fn cell_mut(&mut self) -> &mut dyn SimulationCell {
+        &mut *self.cell
+    }
+}
+
+impl WithTopology for ReferencePlatform {
+    fn topology(&self) -> Rc<Topology> {
+        self.topology.clone()
+    }
+
+    fn topology_ref(&self) -> &Rc<Topology> {
+        &self.topology
+    }
+}
+
+impl WithHamiltonian for ReferencePlatform {
+    fn hamiltonian(&self) -> Ref<Hamiltonian> {
+        self.hamiltonian.borrow()
+    }
+
+    fn hamiltonian_mut(&self) -> RefMut<Hamiltonian> {
+        self.hamiltonian.borrow_mut()
+    }
+}
+
+impl Context for ReferencePlatform {}
+
 impl SyncFrom for ReferencePlatform {
-    fn sync_from(&mut self, other: &dyn as_any::AsAny, change: &Change) -> anyhow::Result<()> {
-        let other = other.as_any().downcast_ref::<Self>().unwrap();
+    /// Synchronize ReferencePlatform from another ReferencePlatform.
+    fn sync_from(&mut self, other: &ReferencePlatform, change: &Change) -> anyhow::Result<()> {
         self.cell = other.cell.clone();
         self.hamiltonian_mut()
-            .sync_from(other.hamiltonian(), change)?;
+            .sync_from(&other.hamiltonian(), change)?;
         self.sync_from_groupcollection(change, other)?;
         Ok(())
     }
@@ -114,10 +151,14 @@ impl GroupCollection for ReferencePlatform {
         self.particles.len()
     }
 
-    fn set_particles<'a>(
+    fn group_lists(&self) -> &GroupLists {
+        &self.group_lists
+    }
+
+    fn set_particles<'b>(
         &mut self,
         indices: impl IntoIterator<Item = usize>,
-        source: impl IntoIterator<Item = &'a Particle> + Clone,
+        source: impl IntoIterator<Item = &'b Particle> + Clone,
     ) -> anyhow::Result<()> {
         for (src, i) in source.into_iter().zip(indices.into_iter()) {
             self.particles[i] = src.clone();
@@ -148,6 +189,58 @@ impl GroupCollection for ReferencePlatform {
     }
 }
 
+impl ParticleSystem for ReferencePlatform {
+    /// Get distance between two particles.
+    ///
+    /// Faster implementation for Reference Platform which does not involve particle copying.
+    #[inline(always)]
+    fn get_distance(&self, i: usize, j: usize) -> Point {
+        self.cell()
+            .distance(self.particles()[i].pos(), self.particles()[j].pos())
+    }
+
+    /// Get index of the atom kind of the particle.
+    ///
+    /// Faster implementation for Reference Platform which does not involve particle copying.
+    #[inline(always)]
+    fn get_atomkind(&self, i: usize) -> usize {
+        self.particles()[i].atom_id
+    }
+
+    /// Get angle between particles `i-j-k`.
+    ///
+    /// Faster implementation for Reference Platform which does not involve particle copying.
+    #[inline(always)]
+    fn get_angle(&self, indices: &[usize; 3]) -> f64 {
+        let p1 = self.particles()[indices[0]].pos();
+        let p2 = self.particles()[indices[1]].pos();
+        let p3 = self.particles()[indices[2]].pos();
+
+        crate::aux::angle_points(p1, p2, p3, self.cell())
+    }
+
+    /// Get dihedral between particles `i-j-k-l`.
+    /// Dihedral is defined as an angle between planes `ijk` and `jkl`.
+    ///
+    /// Faster implementation for Reference Platform which does not involve particle copying.
+    #[inline(always)]
+    fn get_dihedral_angle(&self, indices: &[usize; 4]) -> f64 {
+        let [p1, p2, p3, p4] = indices.map(|x| self.particles()[x].pos());
+        crate::aux::dihedral_points(p1, p2, p3, p4, self.cell())
+    }
+
+    /// Shift positions of target particles.
+    #[inline(always)]
+    fn translate_particles(&mut self, indices: &[usize], shift: &Point) {
+        let cell = self.cell.clone();
+        indices.iter().for_each(|&i| {
+            let position = self.particles_mut()[i].pos_mut();
+            *position += shift;
+            cell.boundary(position)
+        });
+    }
+}
+
 /// Group-wise collection of particles
 ///
 /// Particles are grouped into groups, which are defined by a slice of particles.
@@ -168,8 +261,15 @@ impl ReferencePlatform {
             .collect()
     }
 
-    /// Get reference to particles of the system.
+    /// Get reference to the particles of the system.
+    #[inline(always)]
     pub fn particles(&self) -> &[Particle] {
         &self.particles
+    }
+
+    /// Get mutable reference to the particles of the system.
+    #[inline(always)]
+    pub fn particles_mut(&mut self) -> &mut [Particle] {
+        &mut self.particles
     }
 }

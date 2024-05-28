@@ -1,0 +1,23 @@
+# Reading nonbonded interactions from this file should fail because 
+# the interactions between atom kinds OW and HW are defined twice.
+
+atoms:
+  - {name: OW, mass: 16.0, charge: -1.0, element: O, hydrophobicity: !SurfaceTension 1.0}
+  - {name: HW, mass: 1.0}
+
+molecules:
+  - name: MOL
+    atoms: [OW, OW, HW]
+  
+system:
+  energy:
+    nonbonded:
+      default:
+        - !LennardJones {sigma: 6.0, eps: 1.5}
+      [OW, HW]:
+        - !WCA {sigma: 3.0, eps: 1.5}
+      [HW, OW]:
+        - !HardSphere {mixing: arithmetic}
+
+  blocks:
+    - {molecule: MOL, N: 3}

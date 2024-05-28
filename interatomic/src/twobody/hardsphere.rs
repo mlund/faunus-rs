@@ -13,9 +13,9 @@
 // limitations under the license.
 
 use super::IsotropicTwobodyEnergy;
-use crate::Cutoff;
 #[cfg(feature = "serde")]
 use crate::{sqrt_serialize, square_deserialize};
+use crate::{CombinationRule, Cutoff};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
@@ -33,14 +33,19 @@ use serde::{Deserialize, Serialize};
 /// let distance: f64 = 1.1; // greater than the minimum distance
 /// assert_eq!(hardsphere.isotropic_twobody_energy(distance.powi(2)), 0.0);
 /// ~~~
-#[derive(Debug, Clone, Copy, PartialEq)]
-#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
+#[derive(Debug, Clone, PartialEq, Default)]
+#[cfg_attr(
+    feature = "serde",
+    derive(Deserialize, Serialize),
+    serde(deny_unknown_fields)
+)]
 pub struct HardSphere {
     /// Minimum distance
     #[cfg_attr(
         feature = "serde",
         serde(
-            rename = "σ",
+            rename = "sigma",
+            alias = "σ",
             serialize_with = "sqrt_serialize",
             deserialize_with = "square_deserialize"
         )
@@ -55,10 +60,15 @@ impl HardSphere {
             min_distance_squared: min_distance.powi(2),
         }
     }
+
+    pub fn from_combination_rule(rule: CombinationRule, sigmas: (f64, f64)) -> Self {
+        let sigma = rule.mix_sigmas(sigmas);
+        Self::new(sigma)
+    }
 }
 
 impl IsotropicTwobodyEnergy for HardSphere {
-    #[inline]
+    #[inline(always)]
     fn isotropic_twobody_energy(&self, distance_squared: f64) -> f64 {
         if distance_squared < self.min_distance_squared {
             f64::INFINITY

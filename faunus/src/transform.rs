@@ -14,10 +14,7 @@
 
 //! Transformations of particles and groups
 
-use crate::{
-    cell::BoundaryConditions, cell::VolumeScalePolicy, group::ParticleSelection, Point,
-    PointParticle,
-};
+use crate::{cell::VolumeScalePolicy, group::ParticleSelection, Point};
 use anyhow::Ok;
 use nalgebra::Quaternion;
 use rand::prelude::*;
@@ -89,28 +86,14 @@ impl Transform {
                 let indices = context.groups()[group_index]
                     .select(&ParticleSelection::RelIndex(indices.clone()))
                     .unwrap();
-                let mut particles = context.get_particles(indices.iter().copied());
-                let positions = particles.iter_mut().map(|p| p.pos_mut());
-                translate(context.cell(), positions, displacement);
-                context.set_particles(indices, particles.iter())?
+
+                context.translate_particles(&indices, displacement);
             }
             _ => {
                 todo!("Implement other transforms")
             }
         }
         Ok(())
-    }
-}
-
-/// Translates a set of particles by a vector and applies periodic boundary conditions
-pub(crate) fn translate<'a>(
-    pbc: &impl BoundaryConditions,
-    positions: impl IntoIterator<Item = &'a mut Point>,
-    displacement: &Point,
-) {
-    for pos in positions.into_iter() {
-        *pos += displacement;
-        pbc.boundary(pos);
     }
 }
 
@@ -137,11 +120,11 @@ mod tests {
             Point::new(9.3, 10.1, 17.2),
         ];
         let masses = [1.46, 2.23, 10.73];
-        let com = crate::analysis::center_of_mass(&positions, &masses);
+        let com = crate::aux::center_of_mass(&positions, &masses);
 
         let mut rng = rand::thread_rng();
         for _ in 0..100 {
-            let mut cloned = positions.clone();
+            let mut cloned = positions;
 
             rotate_random(&mut cloned, &com, &mut rng);
 
@@ -149,7 +132,7 @@ mod tests {
                 assert_ne!(original, new);
             }
 
-            let com_rotated = crate::analysis::center_of_mass(&cloned, &masses);
+            let com_rotated = crate::aux::center_of_mass(&cloned, &masses);
             assert_approx_eq!(f64, com.x, com_rotated.x);
             assert_approx_eq!(f64, com.y, com_rotated.y);
             assert_approx_eq!(f64, com.z, com_rotated.z);

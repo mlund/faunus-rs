@@ -12,14 +12,62 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
-use faunus::*;
-use std::rc::Rc;
+use anyhow::Result;
+use clap::{Parser, Subcommand};
+use faunus::topology::Topology;
+use pretty_env_logger::env_logger::DEFAULT_FILTER_ENV;
+use std::path::PathBuf;
+
+#[derive(Debug, Subcommand)]
+pub enum Commands {
+    /// Run Monte Carlo simulation
+    #[clap(arg_required_else_help = true)]
+    Run {
+        /// Input file in YAML format
+        #[clap(long, short = 'i')]
+        input: PathBuf,
+        /// Start from previously saved state file
+        #[clap(long, short = 's')]
+        state: PathBuf,
+    },
+}
+
+#[derive(Parser)]
+#[clap(version, about, long_about = None)]
+pub struct Args {
+    #[clap(subcommand)]
+    pub command: Commands,
+
+    /// Verbose output. See more with e.g. RUST_LOG=Trace
+    #[clap(long, short = 'v', action)]
+    pub verbose: bool,
+}
 
 fn main() {
-    let mut _hamiltonian = energy::Hamiltonian::default();
+    if let Err(err) = do_main() {
+        eprintln!("Error: {}", &err);
+        std::process::exit(1);
+    }
+}
 
-    let _top = Rc::new(topology::Topology::default());
-    //let a = Particle::default();
-    //let context = platform::reference::ReferencePlatform::new(cell::Cuboid::cubic(90.0), top);
-    //println!("Hello, world! {:?} ", context);
+fn do_main() -> Result<()> {
+    let args = Args::parse();
+
+    if args.verbose && std::env::var(DEFAULT_FILTER_ENV).is_err() {
+        std::env::set_var(DEFAULT_FILTER_ENV, "Debug");
+    }
+    pretty_env_logger::init();
+
+    match args.command {
+        Commands::Run { input, state } => {
+            run(input, state)?;
+        }
+    }
+
+    Ok(())
+}
+
+fn run(input: PathBuf, _state: PathBuf) -> Result<()> {
+    let _topology = Topology::from_file(input)?;
+    Ok(())
 }

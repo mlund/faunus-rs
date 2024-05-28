@@ -1,0 +1,11 @@
+# Parsing of this file should fail because one of the exclusions is defined for two identical atoms.
+include: [top/top1.yaml, top2.yaml]
+atoms:
+  - {name: A, mass: 1.0}
+molecules:
+  - name: MOL
+    atoms: [A, A, A]
+    exclusions: [[0, 1], [1, 2], [1, 1]]
+system:
+  blocks:
+    - {molecule: MOL, N: 3}

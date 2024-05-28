@@ -9,7 +9,7 @@ system:
   intermolecular:
     dihedrals:
       - {index: [9, 6, 3, 0]}
-      - {index: [0, 2, 4, 6], kind: !Harmonic {k: 27.5, aeq: 105.0}, lj_scaling: 0.9}
+      - {index: [0, 2, 4, 6], kind: !ProperHarmonic {k: 27.5, aeq: 105.0}, lj_scaling: 0.9}
 
   blocks:
     - {molecule: MOL, N: 3}

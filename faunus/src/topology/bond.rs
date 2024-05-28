@@ -16,8 +16,11 @@
 
 use derive_getters::Getters;
 use float_cmp::approx_eq;
+use interatomic::twobody::IsotropicTwobodyEnergy;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
+
+use crate::{group::Group, Context};
 
 use super::Indexed;
 
@@ -26,20 +29,20 @@ use super::Indexed;
 /// Each varient stores the parameters for the bond type, like force constant, equilibrium distance, etc.
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Default)]
 pub enum BondKind {
-    /// Harmonic bond type (force constant, equilibrium distance).
+    /// Harmonic bond type.
     /// See <https://en.wikipedia.org/wiki/Harmonic_oscillator>.
-    Harmonic { k: f64, req: f64 },
-    /// Finite extensible nonlinear elastic bond type (force constant, equilibrium distance, maximum distance)
-    /// See <https://en.wikipedia.org/wiki/Finitely_extensible_nonlinear_elastic_potential>.
-    FENE { k: f64, req: f64, rmax: f64 },
-    /// Morse bond type (force constant, equilibrium distance, depth of potential well).
+    Harmonic(interatomic::twobody::Harmonic),
+    /// Finitely extensible nonlinear elastic bond type,
+    /// See <https://en.wikipedia.org/wiki/FENE>.
+    FENE(interatomic::twobody::FENE),
+    /// Morse bond type.
     /// See <https://en.wikipedia.org/wiki/Morse_potential>.
-    Morse { k: f64, req: f64, d: f64 },
-    /// Harmonic Urey-Bradley bond type (force constant, equilibrium distance)
+    Morse(interatomic::twobody::Morse),
+    /// Harmonic Urey-Bradley bond type.
     /// See <https://manual.gromacs.org/documentation/current/reference-manual/functions/bonded-interactions.html#urey-bradley-potential>
     /// for more information.
-    UreyBradley { k: f64, req: f64 },
-    /// Undefined bond type
+    UreyBradley(interatomic::twobody::UreyBradley),
+    /// Undefined bond type.
     #[default]
     Unspecified,
 }
@@ -116,35 +119,60 @@ pub struct Bond {
 }
 
 impl Bond {
-    /// Create new bond
-    pub fn new(index: [usize; 2], kind: BondKind, order: Option<BondOrder>) -> Self {
-        Self {
-            index,
-            kind,
-            order: order.unwrap_or_default(),
-        }
+    /// Create new bond. This function performs no sanity checks.
+    #[allow(dead_code)]
+    pub(crate) fn new(index: [usize; 2], kind: BondKind, order: BondOrder) -> Self {
+        Self { index, kind, order }
     }
 
-    /// Create new bond where indices are offset by `shift`. Panics if overflow.
-    pub fn shift(&self, shift: isize) -> Self {
-        Self {
-            index: [
-                self.index[0].checked_add_signed(shift).unwrap(),
-                self.index[1].checked_add_signed(shift).unwrap(),
-            ],
-            kind: self.kind.clone(),
-            order: self.order.clone(),
-        }
-    }
-
-    /// Check if bond contains atom with index
+    /// Check if the bond contains atom with index.
     pub fn contains(&self, index: usize) -> bool {
         self.index.contains(&index)
+    }
+
+    /// Calculate energy of a bond in a specific group.
+    /// Returns 0.0 if any of the bonded particles is inactive.
+    pub fn energy(&self, context: &impl Context, group: &Group) -> f64 {
+        let to_abs_index = |i| group.absolute_index(i);
+        let [Ok(i), Ok(j)] = self.index.map(to_abs_index) else {
+            return 0.0;
+        };
+
+        let distance_squared = context.get_distance_squared(i, j);
+        self.isotropic_twobody_energy(distance_squared)
+    }
+
+    /// Calculate energy of an intermolecular bond.
+    /// Returns 0.0 if any of the bonded particles is inactive.
+    pub fn energy_intermolecular(
+        &self,
+        context: &impl Context,
+        term: &crate::energy::bonded::IntermolecularBonded,
+    ) -> f64 {
+        // one or both particles are inactive
+        if self.index.iter().any(|&i| !term.is_active(i)) {
+            return 0.0;
+        }
+
+        let distance_squared = context.get_distance_squared(self.index[0], self.index[1]);
+        self.isotropic_twobody_energy(distance_squared)
     }
 }
 
 impl Indexed for Bond {
     fn index(&self) -> &[usize] {
         &self.index
+    }
+}
+
+impl IsotropicTwobodyEnergy for Bond {
+    fn isotropic_twobody_energy(&self, distance_squared: f64) -> f64 {
+        match &self.kind {
+            BondKind::Harmonic(x) => x.isotropic_twobody_energy(distance_squared),
+            BondKind::FENE(x) => x.isotropic_twobody_energy(distance_squared),
+            BondKind::Morse(x) => x.isotropic_twobody_energy(distance_squared),
+            BondKind::UreyBradley(x) => x.isotropic_twobody_energy(distance_squared),
+            BondKind::Unspecified => 0.0,
+        }
     }
 }

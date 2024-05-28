@@ -14,7 +14,10 @@
 
 //! Handling of groups of particles
 
-use crate::{change::Change, change::GroupChange, Particle, SyncFrom};
+use crate::{
+    change::{Change, GroupChange},
+    Particle, SyncFrom,
+};
 use anyhow::Ok;
 use nalgebra::Vector3;
 use serde::{Deserialize, Serialize};
@@ -172,6 +175,11 @@ impl Group {
         Ok(())
     }
 
+    /// Get the absolute index of the first particle in the group.
+    pub fn start(&self) -> usize {
+        self.range.start
+    }
+
     /// Get size status of the groups which can be `Full`, `Empty`, or `Partial`.
     pub fn size(&self) -> GroupSize {
         self.size_status
@@ -215,6 +223,11 @@ impl Group {
         }
     }
 
+    /// Check whether the particle with specified relative index is active.
+    pub fn is_active(&self, rel_index: usize) -> bool {
+        rel_index < self.num_active
+    }
+
     /// Select (subset) of indices in the group.
     ///
     /// Absolute indices in main particle vector are returned and are guaranteed to be within the group.
@@ -249,9 +262,14 @@ impl Group {
 
     /// Converts a relative index to an absolute index with range check.
     /// If called with `0`, the beginning of the group in the main particle vector is returned.
+    /// Returns an error if the index points to an inactive particle.
     pub fn absolute_index(&self, index: usize) -> anyhow::Result<usize> {
         if index >= self.num_active {
-            anyhow::bail!("Index {} out of range (max {})", index, self.num_active - 1)
+            anyhow::bail!(
+                "Index {} out of range ({} active particles)",
+                index,
+                self.num_active
+            )
         } else {
             Ok(self.range.start + index)
         }
@@ -288,13 +306,16 @@ pub trait GroupCollection: SyncFrom {
     /// too few active particles to shrink a group.
     fn resize_group(&mut self, group_index: usize, size: GroupSize) -> anyhow::Result<()>;
 
-    /// All groups in the system
+    /// All groups in the system.
     ///
     /// The first group has index 0, the second group has index 1, etc.
     fn groups(&self) -> &[Group];
 
-    /// Copy of i'th particle in the system
+    /// Copy of i'th particle in the system.
     fn particle(&self, index: usize) -> Particle;
+
+    /// Get group lists of the system.
+    fn group_lists(&self) -> &GroupLists;
 
     /// Get the number of particles in the system.
     fn num_particles(&self) -> usize {
@@ -324,7 +345,19 @@ pub trait GroupCollection: SyncFrom {
                 .filter_map(|(i, g)| if g.size() == *size { Some(i) } else { None })
                 .collect(),
             GroupSelection::All => (0..self.groups().len()).collect(),
-            GroupSelection::ByMoleculeId(_) => todo!("not implemented"),
+            GroupSelection::ByMoleculeId(i) => self
+                .group_lists()
+                .get_full_groups(*i)
+                .iter()
+                .cloned()
+                .chain(
+                    self.group_lists()
+                        .get_partial_groups(*i)
+                        .iter()
+                        .cloned()
+                        .chain(self.group_lists().get_full_groups(*i).iter().cloned()),
+                )
+                .collect::<Vec<usize>>(),
         }
     }
 
@@ -546,6 +579,22 @@ impl GroupLists {
             // group is not present in any list, add it
             None => self.add_group(group),
         }
+    }
+
+    /// Get all full groups with the given molecule ID.
+    pub(crate) fn get_full_groups(&self, id: usize) -> &[usize] {
+        &self.full[id]
+    }
+
+    /// Get all partial groups with the given molecule ID.
+    pub(crate) fn get_partial_groups(&self, id: usize) -> &[usize] {
+        &self.partial[id]
+    }
+
+    /// Get all empty groups with the given molecule ID.
+    #[allow(dead_code)]
+    pub(crate) fn get_empty_groups(&self, id: usize) -> &[usize] {
+        &self.empty[id]
     }
 
     /// Returns indices of all groups matching given molecule id and size.

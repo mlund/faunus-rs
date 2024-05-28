@@ -24,8 +24,11 @@ mod endless;
 //pub(crate) mod lumol;
 mod sphere;
 
+use std::path::Path;
+
 use crate::Point;
 pub use cuboid::Cuboid;
+use dyn_clone::DynClone;
 pub use endless::Endless;
 use rand::rngs::ThreadRng;
 use serde::{Deserialize, Serialize};
@@ -40,7 +43,8 @@ pub trait SimulationCell:
     Shape
     + BoundaryConditions
     + VolumeScale
-    + Clone
+    + DynClone
+    + std::fmt::Debug
     + crate::topology::chemfiles_interface::CellToChemCell
 {
 }
@@ -49,7 +53,10 @@ pub trait SimulationCell:
 ///
 /// It is a combination of a [`Shape`], [`BoundaryConditions`] and [`VolumeScale`].
 #[cfg(not(feature = "chemfiles"))]
-pub trait SimulationCell: Shape + BoundaryConditions + VolumeScale + Clone {}
+pub trait SimulationCell:
+    Shape + BoundaryConditions + VolumeScale + DynClone + std::fmt::Debug
+{
+}
 
 /// Geometric shape like a sphere, cube, etc.
 pub trait Shape {
@@ -71,6 +78,8 @@ pub trait Shape {
     /// Generate a random point positioned inside the boundaries of the shape
     fn get_point_inside(&self, rng: &mut ThreadRng) -> Point;
 }
+
+dyn_clone::clone_trait_object!(SimulationCell);
 
 /// Periodic boundary conditions in various directions
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq)]
@@ -101,7 +110,7 @@ pub trait BoundaryConditions {
     /// Minimum image distance between two points inside a cell
     fn distance(&self, point1: &Point, point2: &Point) -> Point;
     /// Get the minimum squared distance between two points
-    #[inline]
+    #[inline(always)]
     fn distance_squared(&self, point1: &Point, point2: &Point) -> f64 {
         self.distance(point1, point2).norm_squared()
     }
@@ -143,4 +152,205 @@ pub trait VolumeScale {
         new_volume: f64,
         policy: VolumeScalePolicy,
     ) -> Result<(), anyhow::Error>;
+}
+
+/// Simulation cell enum used for reading information about cell from the input file.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub(crate) enum Cell {
+    Cuboid(Cuboid),
+    Endless(Endless),
+    Sphere(Sphere),
+}
+
+impl Cell {
+    /// Get simulation cell from a Faunus configuration file.
+    pub(crate) fn from_file(filename: impl AsRef<Path>) -> anyhow::Result<Cell> {
+        let yaml = std::fs::read_to_string(filename)?;
+        let full: serde_yaml::Value = serde_yaml::from_str(&yaml)?;
+
+        let system = full.get("system").ok_or(anyhow::Error::msg(
+            "Could not find `system` in the YAML file.",
+        ))?;
+
+        let Some(value) = system.get("cell") else {
+            log::warn!("No cell defined for the system. Using Endless cell.");
+            return Ok(Self::Endless(Endless::default()));
+        };
+        let cell = serde_yaml::from_value(value.clone()).map_err(anyhow::Error::msg)?;
+        match cell {
+            Self::Cuboid(mut cuboid) => {
+                // `half_cell` information is missing after parsing, we have to add it
+                cuboid.set_half_cell();
+                Ok(Self::Cuboid(cuboid))
+            }
+            _ => Ok(cell),
+        }
+    }
+}
+
+impl From<Cell> for Box<dyn SimulationCell> {
+    fn from(cell: Cell) -> Self {
+        match cell {
+            Cell::Cuboid(c) => Box::new(c),
+            Cell::Endless(c) => Box::new(c),
+            Cell::Sphere(c) => Box::new(c),
+        }
+    }
+}
+
+impl TryFrom<Cell> for Cuboid {
+    type Error = anyhow::Error;
+    fn try_from(cell: Cell) -> Result<Self, Self::Error> {
+        match cell {
+            Cell::Cuboid(c) => Ok(c),
+            _ => Err(anyhow::Error::msg("Cell is not a cuboid")),
+        }
+    }
+}
+
+impl TryFrom<Cell> for Sphere {
+    type Error = anyhow::Error;
+    fn try_from(cell: Cell) -> Result<Self, Self::Error> {
+        match cell {
+            Cell::Sphere(c) => Ok(c),
+            _ => Err(anyhow::Error::msg("Cell is not a sphere")),
+        }
+    }
+}
+
+impl TryFrom<Cell> for Endless {
+    type Error = anyhow::Error;
+    fn try_from(cell: Cell) -> Result<Self, Self::Error> {
+        match cell {
+            Cell::Endless(c) => Ok(c),
+            _ => Err(anyhow::Error::msg("Cell is not endless")),
+        }
+    }
+}
+
+impl Shape for Cell {
+    fn volume(&self) -> Option<f64> {
+        match self {
+            Cell::Cuboid(x) => x.volume(),
+            Cell::Endless(_) => None,
+            Cell::Sphere(x) => x.volume(),
+        }
+    }
+
+    fn is_inside(&self, point: &Point) -> bool {
+        match self {
+            Cell::Cuboid(x) => x.is_inside(point),
+            Cell::Endless(_) => true,
+            Cell::Sphere(x) => x.is_inside(point),
+        }
+    }
+
+    fn get_point_inside(&self, rng: &mut ThreadRng) -> Point {
+        match self {
+            Cell::Cuboid(s) => s.get_point_inside(rng),
+            Cell::Endless(s) => s.get_point_inside(rng),
+            Cell::Sphere(s) => s.get_point_inside(rng),
+        }
+    }
+}
+
+impl VolumeScale for Cell {
+    fn scale_volume(
+        &mut self,
+        new_volume: f64,
+        policy: VolumeScalePolicy,
+    ) -> Result<(), anyhow::Error> {
+        match self {
+            Cell::Cuboid(x) => x.scale_volume(new_volume, policy),
+            Cell::Endless(x) => x.scale_volume(new_volume, policy),
+            Cell::Sphere(x) => x.scale_volume(new_volume, policy),
+        }
+    }
+
+    fn scale_position(
+        &self,
+        new_volume: f64,
+        point: &mut Point,
+        policy: VolumeScalePolicy,
+    ) -> Result<(), anyhow::Error> {
+        match self {
+            Cell::Cuboid(x) => x.scale_position(new_volume, point, policy),
+            Cell::Endless(x) => x.scale_position(new_volume, point, policy),
+            Cell::Sphere(x) => x.scale_position(new_volume, point, policy),
+        }
+    }
+}
+
+impl BoundaryConditions for Cell {
+    fn pbc(&self) -> PeriodicDirections {
+        match self {
+            Cell::Cuboid(x) => x.pbc(),
+            Cell::Endless(x) => x.pbc(),
+            Cell::Sphere(x) => x.pbc(),
+        }
+    }
+
+    fn boundary(&self, point: &mut Point) {
+        match self {
+            Cell::Cuboid(x) => x.boundary(point),
+            Cell::Endless(x) => x.boundary(point),
+            Cell::Sphere(x) => x.boundary(point),
+        }
+    }
+
+    fn distance(&self, point1: &Point, point2: &Point) -> Point {
+        match self {
+            Cell::Cuboid(x) => x.distance(point1, point2),
+            Cell::Endless(x) => x.distance(point1, point2),
+            Cell::Sphere(x) => x.distance(point1, point2),
+        }
+    }
+}
+
+impl SimulationCell for Cell {}
+
+#[cfg(test)]
+mod tests {
+    use super::Cell;
+    use crate::{
+        cell::{Cuboid, Endless, Shape, Sphere},
+        Point,
+    };
+
+    #[test]
+    fn test_read_from_file() {
+        // cuboid
+        let cell: Cuboid = Cell::from_file("tests/files/topology_pass.yaml")
+            .unwrap()
+            .try_into()
+            .unwrap();
+        let point1 = Point::new(-4.9, 2.4, 5.71);
+        let point2 = Point::new(-5.1, 3.2, 4.6);
+        assert!(cell.is_inside(&point1));
+        assert!(!cell.is_inside(&point2));
+
+        // sphere
+        let cell: Sphere = Cell::from_file("tests/files/cell_sphere.yaml")
+            .unwrap()
+            .try_into()
+            .unwrap();
+        let point1 = Point::new(8.9, 5.2, 9.3);
+        let point2 = Point::new(8.9, 7.2, 9.3);
+        assert!(cell.is_inside(&point1));
+        assert!(!cell.is_inside(&point2));
+
+        // endless
+        let cell: Endless = Cell::from_file("tests/files/cell_endless.yaml")
+            .unwrap()
+            .try_into()
+            .unwrap();
+        let point1 = Point::new(-203847.21, 947382.143, 2973212.14);
+        assert!(cell.is_inside(&point1));
+
+        // default. Note that we can use Cell directly for all shapes.
+        let cell: Cell = Cell::from_file("tests/files/cell_none.yaml").unwrap();
+        let point1 = Point::new(-203847.21, 947382.143, 2973212.14);
+        assert!(cell.is_inside(&point1));
+        assert!(TryInto::<Endless>::try_into(cell).is_ok());
+    }
 }

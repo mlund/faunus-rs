@@ -15,9 +15,10 @@
 //! # System analysis and reporting
 
 use super::montecarlo::Frequency;
-use crate::{Context, Info, Point};
+use crate::{Context, Info};
 use anyhow::Result;
 use core::fmt::Debug;
+use rand::rngs::ThreadRng;
 
 /// Collection of analysis objects.
 pub type AnalysisCollection<T> = Vec<Box<dyn Analyze<T>>>;
@@ -30,7 +31,7 @@ pub trait Analyze<T: Context>: Debug + Info {
     fn frequency(&self) -> Frequency;
 
     /// Sample system.
-    fn sample(&mut self, context: &T) -> Result<()>;
+    fn sample(&mut self, context: &T, step: usize, rng: &mut ThreadRng) -> Result<()>;
 
     /// Total number of samples which is the sum of successful calls to `sample()`.
     fn num_samples(&self) -> usize;
@@ -49,8 +50,9 @@ impl<T: Context> crate::Info for AnalysisCollection<T> {
 }
 
 impl<T: Context> Analyze<T> for AnalysisCollection<T> {
-    fn sample(&mut self, context: &T) -> Result<()> {
-        self.iter_mut().try_for_each(|a| a.sample(context))
+    fn sample(&mut self, context: &T, step: usize, rng: &mut ThreadRng) -> Result<()> {
+        self.iter_mut()
+            .try_for_each(|a| a.sample(context, step, rng))
     }
     /// Summed number of samples for all analysis objects
     fn num_samples(&self) -> usize {
@@ -64,53 +66,61 @@ impl<T: Context> Analyze<T> for AnalysisCollection<T> {
     }
 }
 
-/// Calculate center of mass of a collection of points with masses.
-pub(crate) fn center_of_mass(positions: &[Point], masses: &[f64]) -> Point {
-    let (com, total_mass) = positions
-        .iter()
-        .zip(masses.iter())
-        .map(|(&pos, &mass)| (pos * mass, mass))
-        .fold(
-            (Point::default(), 0.0),
-            |(sum, total), (weighted_pos, mass)| (sum + weighted_pos, total + mass),
-        );
-    com / total_mass
+/// Writes structure of the system in the specified format during the simulation.
+#[cfg(feature = "chemfiles")]
+#[derive(Debug)]
+pub struct StructureWriter {
+    output_file: String,
+    trajectory: Option<chemfiles::Trajectory>,
+    frequency: Frequency,
+    num_samples: usize,
 }
 
-#[cfg(test)]
-mod tests {
+#[cfg(feature = "chemfiles")]
+impl StructureWriter {
+    pub fn new(output_file: &str, frequency: Frequency) -> StructureWriter {
+        StructureWriter {
+            output_file: output_file.to_owned(),
+            frequency,
+            trajectory: None,
+            num_samples: 0,
+        }
+    }
+}
 
-    use super::*;
-    use float_cmp::assert_approx_eq;
+#[cfg(feature = "chemfiles")]
+impl crate::Info for StructureWriter {
+    fn short_name(&self) -> Option<&'static str> {
+        Some("structure printer")
+    }
+    fn long_name(&self) -> Option<&'static str> {
+        Some("Writes structure of the system at specified frequency into an output trajectory.")
+    }
+}
 
-    #[test]
-    fn test_center_of_mass() {
-        let positions = [
-            Point::new(10.4, 11.3, 12.8),
-            Point::new(7.3, 9.3, 2.6),
-            Point::new(9.3, 10.1, 17.2),
-        ];
-        let masses = [1.46, 2.23, 10.73];
+#[cfg(feature = "chemfiles")]
+impl<T: Context> Analyze<T> for StructureWriter {
+    fn sample(&mut self, context: &T, step: usize, rng: &mut ThreadRng) -> anyhow::Result<()> {
+        if !self.frequency.should_perform(step, rng) {
+            return Ok(());
+        }
 
-        let com = center_of_mass(&positions, &masses);
+        let frame = context.to_frame();
 
-        assert_approx_eq!(f64, com.x, 9.10208044382802);
-        assert_approx_eq!(f64, com.y, 10.09778085991678);
-        assert_approx_eq!(f64, com.z, 14.49667128987517);
+        if self.trajectory.is_none() {
+            self.trajectory = Some(chemfiles::Trajectory::open(&self.output_file, 'w')?);
+        }
 
-        let positions = [
-            Point::new(10.4, 11.3, 12.8),
-            Point::new(7.3, 9.3, 2.6),
-            Point::new(9.3, 10.1, 17.2),
-            Point::new(3.1, 2.4, 1.8),
-        ];
+        self.trajectory.as_mut().unwrap().write(&frame)?;
+        self.num_samples += 1;
+        Ok(())
+    }
 
-        let masses = [1.46, 2.23, 10.73, 0.0];
+    fn frequency(&self) -> Frequency {
+        self.frequency
+    }
 
-        let com = center_of_mass(&positions, &masses);
-
-        assert_approx_eq!(f64, com.x, 9.10208044382802);
-        assert_approx_eq!(f64, com.y, 10.09778085991678);
-        assert_approx_eq!(f64, com.z, 14.49667128987517);
+    fn num_samples(&self) -> usize {
+        self.num_samples
     }
 }

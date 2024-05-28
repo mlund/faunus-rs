@@ -25,18 +25,18 @@ use serde::Serialize;
 /// Monopole-monopole interaction energy
 #[derive(Clone, PartialEq, Debug)]
 #[cfg_attr(feature = "serde", derive(Serialize))]
-pub struct IonIon<'a, T: MultipoleEnergy> {
+pub struct IonIon<T: MultipoleEnergy> {
     /// Charge number product of the two particles, z₁ × z₂
     #[cfg_attr(feature = "serde", serde(rename = "z₁z₂"))]
     charge_product: f64,
-    /// Reference to the potential energy function
+    /// Potential energy function to use.
     #[cfg_attr(feature = "serde", serde(skip))]
-    scheme: &'a T,
+    scheme: T,
 }
 
-impl<'a, T: MultipoleEnergy> IonIon<'a, T> {
+impl<T: MultipoleEnergy> IonIon<T> {
     /// Create a new ion-ion interaction
-    pub fn new(charge_product: f64, scheme: &'a T) -> Self {
+    pub fn new(charge_product: f64, scheme: T) -> Self {
         Self {
             charge_product,
             scheme,
@@ -44,7 +44,9 @@ impl<'a, T: MultipoleEnergy> IonIon<'a, T> {
     }
 }
 
-impl<T: MultipoleEnergy + std::fmt::Debug> IsotropicTwobodyEnergy for IonIon<'_, T> {
+impl<T: MultipoleEnergy + std::fmt::Debug + Clone + PartialEq> IsotropicTwobodyEnergy
+    for IonIon<T>
+{
     /// Calculate the isotropic twobody energy (kJ/mol)
     fn isotropic_twobody_energy(&self, distance_squared: f64) -> f64 {
         coulomb::TO_CHEMISTRY_UNIT / 80.0
@@ -55,10 +57,10 @@ impl<T: MultipoleEnergy + std::fmt::Debug> IsotropicTwobodyEnergy for IonIon<'_,
 }
 
 /// Alias for ion-ion with Yukawa
-pub type IonIonYukawa<'a> = IonIon<'a, coulomb::pairwise::Yukawa>;
+pub type IonIonYukawa<'a> = IonIon<coulomb::pairwise::Yukawa>;
 
 /// Alias for ion-ion with a plain Coulomb potential that can be screened
-pub type IonIonPlain<'a> = IonIon<'a, coulomb::pairwise::Plain>;
+pub type IonIonPlain<'a> = IonIon<coulomb::pairwise::Plain>;
 
 // Test ion-ion energy
 #[cfg(test)]
@@ -73,12 +75,12 @@ mod tests {
         let r: f64 = 7.0;
         let cutoff = f64::INFINITY;
         let scheme = Plain::new(cutoff, None);
-        let ionion = IonIon::new(1.0, &scheme);
+        let ionion = IonIon::new(1.0, scheme);
         let unscreened_energy = ionion.isotropic_twobody_energy(r.powi(2));
         assert_relative_eq!(unscreened_energy, 2.48099031507825);
         let debye_length = 30.0;
         let scheme = Plain::new(cutoff, Some(debye_length));
-        let ionion = IonIon::new(1.0, &scheme);
+        let ionion = IonIon::new(1.0, scheme);
         let screened_energy = ionion.isotropic_twobody_energy(r.powi(2));
         assert_relative_eq!(
             screened_energy,

@@ -24,10 +24,12 @@ use serde::{Deserialize, Serialize};
 
 /// Cuboidal unit cell
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct Cuboid {
     /// Unit cell vectors
     cell: Point,
     /// Half of the cell vectors
+    #[serde(skip)]
     half_cell: Point,
 }
 
@@ -48,6 +50,11 @@ impl Cuboid {
     pub fn from_volume(volume: f64) -> Self {
         let a = volume.cbrt();
         Self::new(a, a, a)
+    }
+
+    /// Sets `half_cell` based on the current cell size.
+    pub(super) fn set_half_cell(&mut self) {
+        self.half_cell = self.cell.scale(0.5);
     }
 }
 
@@ -76,7 +83,7 @@ impl BoundaryConditions for Cuboid {
     fn pbc(&self) -> super::PeriodicDirections {
         super::PeriodicDirections::PeriodicXYZ
     }
-    #[inline]
+    #[inline(always)]
     fn distance(&self, point1: &Point, point2: &Point) -> Point {
         let mut delta = *point1 - *point2;
         if delta.x > self.half_cell.x {
@@ -97,15 +104,9 @@ impl BoundaryConditions for Cuboid {
         delta
     }
     fn boundary(&self, point: &mut Point) {
-        if point.x.abs() > self.half_cell.x {
-            point.x -= self.cell.x * (point.x / self.cell.x).round();
-        }
-        if point.y.abs() > self.half_cell.y {
-            point.y -= self.cell.y * (point.y / self.cell.y).round();
-        }
-        if point.z.abs() > self.half_cell.z {
-            point.z -= self.cell.z * (point.z / self.cell.z).round();
-        }
+        point.x -= self.cell.x * (point.x / self.cell.x).round();
+        point.y -= self.cell.y * (point.y / self.cell.y).round();
+        point.z -= self.cell.z * (point.z / self.cell.z).round();
     }
 }
 

@@ -3,6 +3,7 @@ use anglescan::{
     structure::{AtomKinds, Structure},
     Sample, TwobodyAngles, Vector3,
 };
+use anyhow::Result;
 use clap::{Parser, Subcommand};
 use coulomb::{DebyeLength, Medium, Salt};
 use indicatif::ParallelProgressIterator;
@@ -60,7 +61,7 @@ enum Commands {
 }
 
 /// Calculate energy of all two-body poses
-fn do_scan(scan_command: &Commands) {
+fn do_scan(scan_command: &Commands) -> Result<()> {
     let Commands::Scan {
         mol1,
         mol2,
@@ -75,7 +76,7 @@ fn do_scan(scan_command: &Commands) {
     } = scan_command;
     assert!(rmin < rmax);
 
-    let mut atomkinds = AtomKinds::from_yaml(atoms).unwrap();
+    let mut atomkinds = AtomKinds::from_yaml(atoms)?;
     atomkinds.set_missing_epsilon(2.479);
 
     let scan = TwobodyAngles::new(*resolution).unwrap();
@@ -107,6 +108,7 @@ fn do_scan(scan_command: &Commands) {
         .collect::<Vec<_>>();
 
     report_pmf(com_scan.as_slice(), &PathBuf::from("pmf.dat"));
+    Ok(())
 }
 
 /// Write PMF and mean energy as a function of mass center separation to file
@@ -147,7 +149,7 @@ fn report_pmf(samples: &[(Vector3<f64>, Sample)], path: &PathBuf) {
     }
 }
 
-fn main() {
+fn do_main() -> Result<()> {
     if std::env::var("RUST_LOG").is_err() {
         std::env::set_var("RUST_LOG", "info");
     }
@@ -156,10 +158,18 @@ fn main() {
     let cli = Cli::parse();
     match cli.command {
         Some(cmd) => match cmd {
-            Commands::Scan { .. } => do_scan(&cmd),
+            Commands::Scan { .. } => do_scan(&cmd)?,
         },
         None => {
-            println!("No command given");
+            anyhow::bail!("No command given");
         }
+    };
+    Ok(())
+}
+
+fn main() {
+    if let Err(err) = do_main() {
+        eprintln!("Error: {}", &err);
+        std::process::exit(1);
     }
 }

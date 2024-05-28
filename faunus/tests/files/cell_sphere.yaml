@@ -1,0 +1,2 @@
+system:
+  cell: !Sphere {radius: 14.3}

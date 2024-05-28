@@ -1,0 +1,20 @@
+[tool.poetry]
+name = "openmm2faunus"
+version = "0.1.0"
+description = "Converts OpenMM and Martini OpenMM topologies to Faunus topologies."
+authors = ["Mikael Lund <mikael.lund@compchem.lu.se>", "Ladislav Bartos <ladmeb@gmail.com>"]
+
+[tool.poetry.dependencies]
+numpy  = "^1.26"
+python = "^3.10"
+openmm = "^8.1.1"
+pyyaml = "^6.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.2.0"
+ruff   = "^0.4.4"
+mypy   = "^1.10"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"

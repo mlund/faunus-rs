@@ -19,17 +19,25 @@
 pub use crate::Vector3;
 use core::fmt::Debug;
 use core::ops::Add;
+use dyn_clone::DynClone;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
+mod fene;
 mod hardsphere;
 mod harmonic;
 mod mie;
+mod morse;
 mod multipole;
+pub mod potential;
+mod ureybradley;
+pub use self::fene::FENE;
 pub use self::hardsphere::HardSphere;
 pub use self::harmonic::Harmonic;
 pub use self::mie::{LennardJones, Mie, WeeksChandlerAndersen};
+pub use self::morse::Morse;
 pub use self::multipole::{IonIon, IonIonPlain, IonIonYukawa};
+pub use self::ureybradley::UreyBradley;
 
 /// Relative orientation between a pair of anisotropic particles.
 ///
@@ -55,7 +63,7 @@ pub trait AnisotropicTwobodyEnergy {
 }
 
 /// Potential energy between a pair of isotropic particles, 𝑈(𝑟).
-pub trait IsotropicTwobodyEnergy: AnisotropicTwobodyEnergy {
+pub trait IsotropicTwobodyEnergy: AnisotropicTwobodyEnergy + DynClone + Debug {
     /// Interaction energy between a pair of isotropic particles.
     fn isotropic_twobody_energy(&self, distance_squared: f64) -> f64;
 
@@ -72,6 +80,8 @@ pub trait IsotropicTwobodyEnergy: AnisotropicTwobodyEnergy {
     }
 }
 
+dyn_clone::clone_trait_object!(IsotropicTwobodyEnergy);
+
 /// All isotropic potentials implement the anisotropic trait.
 impl<T: IsotropicTwobodyEnergy> AnisotropicTwobodyEnergy for T {
     fn anisotropic_twobody_energy(&self, orientation: &RelativeOrientation) -> f64 {
@@ -81,6 +91,30 @@ impl<T: IsotropicTwobodyEnergy> AnisotropicTwobodyEnergy for T {
         let r_squared = orientation.distance.norm_squared();
         let r_hat = orientation.distance / r_squared.sqrt();
         self.isotropic_twobody_force(r_squared) * r_hat
+    }
+}
+
+/// Structure representing an interaction with always zero energy.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct NoInteraction {}
+
+impl Default for NoInteraction {
+    /// Create a new null interaction.
+    #[inline(always)]
+    fn default() -> Self {
+        Self {}
+    }
+}
+
+impl IsotropicTwobodyEnergy for NoInteraction {
+    #[inline(always)]
+    fn isotropic_twobody_energy(&self, _distance_squared: f64) -> f64 {
+        0.0
+    }
+
+    #[inline(always)]
+    fn isotropic_twobody_force(&self, _distance_squared: f64) -> f64 {
+        0.0
     }
 }
 
@@ -100,10 +134,10 @@ impl<T: IsotropicTwobodyEnergy, U: IsotropicTwobodyEnergy> Combined<T, U> {
     }
 }
 
-impl<T: IsotropicTwobodyEnergy, U: IsotropicTwobodyEnergy> IsotropicTwobodyEnergy
+impl<T: IsotropicTwobodyEnergy + Clone, U: IsotropicTwobodyEnergy + Clone> IsotropicTwobodyEnergy
     for Combined<T, U>
 {
-    #[inline]
+    #[inline(always)]
     fn isotropic_twobody_energy(&self, distance_squared: f64) -> f64 {
         self.0.isotropic_twobody_energy(distance_squared)
             + self.1.isotropic_twobody_energy(distance_squared)
@@ -124,10 +158,10 @@ impl Add for Box<dyn IsotropicTwobodyEnergy> {
 }
 
 /// Plain Coulomb potential combined with Lennard-Jones
-pub type CoulombLennardJones<'a> = Combined<IonIon<'a, coulomb::pairwise::Plain>, LennardJones>;
+pub type CoulombLennardJones<'a> = Combined<IonIon<coulomb::pairwise::Plain>, LennardJones>;
 
 /// Yukawa potential combined with Lennard-Jones
-pub type YukawaLennardJones<'a> = Combined<IonIon<'a, coulomb::pairwise::Yukawa>, LennardJones>;
+pub type YukawaLennardJones<'a> = Combined<IonIon<coulomb::pairwise::Yukawa>, LennardJones>;
 
 // test Combined
 #[test]
@@ -150,7 +184,7 @@ pub fn test_combined() {
     assert_relative_eq!(energy.1, 2.5);
 
     // static dispatch
-    let combined = Combined::new(pot1, pot2);
+    let combined = Combined::new(pot1.clone(), pot2.clone());
     assert_relative_eq!(combined.isotropic_twobody_energy(r2), energy.0 + energy.1);
     assert_relative_eq!(
         combined.anisotropic_twobody_energy(&relative_orientation),
@@ -169,50 +203,20 @@ pub fn test_combined() {
         energy.0 + energy.1,
         epsilon = 1e-7
     );
-}
 
-/*
-/// Enum with all two-body variants.
-///
-/// Use for serialization and deserialization of two-body interactions in
-/// e.g. user input.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-#[serde(rename_all = "lowercase")]
-pub enum TwobodyKind {
-    HardSphere(HardSphere),
-    Harmonic(Harmonic),
-    #[serde(rename = "lj")]
-    LennardJones(LennardJones),
-    #[serde(rename = "wca")]
-    WeeksChandlerAndersen(WeeksChandlerAndersen),
-}
+    // three combined interactions
+    let pot3 = Harmonic::new(1.0, 10.0);
+    let energy3 = pot3.isotropic_twobody_energy(r2);
+    let box3 = Box::new(pot3) as Box<dyn IsotropicTwobodyEnergy>;
+    let combined2 = combined + box3;
 
-// Test TwobodyKind for serialization
-#[test]
-fn test_twobodykind_serialize() {
-    let hardsphere = TwobodyKind::HardSphere(HardSphere::new(1.0));
-    assert_eq!(
-        serde_json::to_string(&hardsphere).unwrap(),
-        "{\"hardsphere\":{\"σ\":1.0}}"
+    assert_relative_eq!(
+        combined2.isotropic_twobody_energy(r2),
+        energy.0 + energy.1 + energy3
     );
-
-    let harmonic = TwobodyKind::Harmonic(Harmonic::new(1.0, 0.5));
-    assert_eq!(
-        serde_json::to_string(&harmonic).unwrap(),
-        "{\"harmonic\":{\"r₀\":1.0,\"k\":0.5}}"
-    );
-
-    let lj = TwobodyKind::LennardJones(LennardJones::new(0.1, 2.5));
-    assert_eq!(
-        serde_json::to_string(&lj).unwrap(),
-        "{\"lj\":{\"ε\":0.1,\"σ\":2.5}}"
-    );
-
-    let lennard_jones = LennardJones::new(0.1, 2.5);
-    let wca = TwobodyKind::WeeksChandlerAndersen(WeeksChandlerAndersen::new(lennard_jones));
-    assert_eq!(
-        serde_json::to_string(&wca).unwrap(),
-        "{\"wca\":{\"ε\":0.1,\"σ\":2.5}}"
+    assert_relative_eq!(
+        combined2.anisotropic_twobody_energy(&relative_orientation),
+        energy.0 + energy.1 + energy3,
+        epsilon = 1e-7
     );
 }
-*/

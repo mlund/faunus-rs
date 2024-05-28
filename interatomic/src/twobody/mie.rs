@@ -42,10 +42,10 @@ use serde::{Deserialize, Serialize};
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 pub struct Mie<const N: u32, const M: u32> {
     /// Interaction strength, ε
-    #[cfg_attr(feature = "serde", serde(rename = "ε"))]
+    #[cfg_attr(feature = "serde", serde(alias = "eps", alias = "ε"))]
     epsilon: f64,
     /// Diameter, σ
-    #[cfg_attr(feature = "serde", serde(rename = "σ"))]
+    #[cfg_attr(feature = "serde", serde(alias = "σ"))]
     sigma: f64,
 }
 
@@ -112,14 +112,20 @@ impl<const N: u32, const M: u32> Cutoff for Mie<N, M> {
 /// let (r_min, u_min) = (f64::powf(2.0, 1.0 / 6.0) * sigma, -epsilon);
 /// assert_eq!(lj.isotropic_twobody_energy( r_min.powi(2) ), u_min);
 /// ~~~
-#[derive(Debug, Clone, PartialEq, Default, Copy)]
-#[cfg_attr(feature = "serde", derive(Deserialize, Serialize), serde(default))]
+#[derive(Debug, Clone, PartialEq, Default)]
+#[cfg_attr(
+    feature = "serde",
+    derive(Deserialize, Serialize),
+    serde(deny_unknown_fields)
+)]
 pub struct LennardJones {
     /// Four times epsilon, 4ε
     #[cfg_attr(
         feature = "serde",
         serde(
-            rename = "ε",
+            rename = "epsilon",
+            alias = "eps",
+            alias = "ε",
             serialize_with = "divide4_serialize",
             deserialize_with = "multiply4_deserialize"
         )
@@ -129,7 +135,8 @@ pub struct LennardJones {
     #[cfg_attr(
         feature = "serde",
         serde(
-            rename = "σ",
+            rename = "sigma",
+            alias = "σ",
             serialize_with = "sqrt_serialize",
             deserialize_with = "square_deserialize"
         )
@@ -172,7 +179,7 @@ impl Cutoff for LennardJones {
 }
 
 impl IsotropicTwobodyEnergy for LennardJones {
-    #[inline]
+    #[inline(always)]
     fn isotropic_twobody_energy(&self, squared_distance: f64) -> f64 {
         let x = self.sigma_squared / squared_distance; // σ²/r²
         let x = x * x * x; // σ⁶/r⁶
@@ -190,8 +197,12 @@ impl IsotropicTwobodyEnergy for LennardJones {
 ///
 /// Effectively, this provides soft repulsion without any attraction.
 /// More information, see <https://dx.doi.org/doi.org/ct4kh9>.
-#[derive(Debug, Clone, PartialEq, Default, Copy)]
-#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
+#[derive(Debug, Clone, PartialEq, Default)]
+#[cfg_attr(
+    feature = "serde",
+    derive(Deserialize, Serialize),
+    serde(deny_unknown_fields)
+)]
 pub struct WeeksChandlerAndersen {
     #[cfg_attr(feature = "serde", serde(flatten))]
     lennard_jones: LennardJones,
@@ -200,8 +211,10 @@ pub struct WeeksChandlerAndersen {
 impl WeeksChandlerAndersen {
     const ONEFOURTH: f64 = 0.25;
     const TWOTOTWOSIXTH: f64 = 1.2599210498948732; // f64::powf(2.0, 2.0/6.0)
-    pub fn new(lennard_jones: LennardJones) -> Self {
-        Self { lennard_jones }
+    pub fn new(epsilon: f64, sigma: f64) -> Self {
+        Self {
+            lennard_jones: LennardJones::new(epsilon, sigma),
+        }
     }
 
     /// Construct from combination rule
@@ -210,24 +223,24 @@ impl WeeksChandlerAndersen {
         epsilons: (f64, f64),
         sigmas: (f64, f64),
     ) -> Self {
-        let lj = LennardJones::from_combination_rule(rule, epsilons, sigmas);
-        Self::new(lj)
+        let (epsilon, sigma) = rule.mix(epsilons, sigmas);
+        Self::new(epsilon, sigma)
     }
 }
 
 impl Cutoff for WeeksChandlerAndersen {
-    #[inline]
+    #[inline(always)]
     fn cutoff_squared(&self) -> f64 {
         self.lennard_jones.sigma_squared * WeeksChandlerAndersen::TWOTOTWOSIXTH
     }
-    #[inline]
+    #[inline(always)]
     fn cutoff(&self) -> f64 {
         self.cutoff_squared().sqrt()
     }
 }
 
 impl IsotropicTwobodyEnergy for WeeksChandlerAndersen {
-    #[inline]
+    #[inline(always)]
     fn isotropic_twobody_energy(&self, distance_squared: f64) -> f64 {
         if distance_squared > self.cutoff_squared() {
             return 0.0;

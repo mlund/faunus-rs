@@ -12,15 +12,16 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet, VecDeque};
 
 use derive_getters::Getters;
 use serde::{Deserialize, Serialize};
+use unordered_pair::UnorderedPair;
 
 use crate::topology::{Chain, DegreesOfFreedom, Residue, Value};
 use validator::{Validate, ValidationError};
 
-use super::{Bond, CustomProperty, Dihedral, Indexed, NonOverlapping, Torsion};
+use super::{Bond, CustomProperty, Dihedral, IndexRange, Indexed, Torsion};
 
 /// Description of molecule properties.
 ///
@@ -54,6 +55,13 @@ pub struct MoleculeKind {
     #[serde(default)]
     #[validate(nested)]
     torsions: Vec<Torsion>,
+    /// Generate an exclusions list from bonds.
+    /// Add all atom pairs which are excluded_neighbours or less bonds apart.
+    #[serde(default)] // default value is 0
+    excluded_neighbours: usize,
+    /// List of atom pairs which nonbonded interactions are excluded.
+    #[serde(default)]
+    exclusions: HashSet<UnorderedPair<usize>>,
     /// Internal degrees of freedom.
     #[serde(default)]
     #[getter(skip)]
@@ -93,6 +101,8 @@ impl MoleculeKind {
         bonds: Vec<Bond>,
         dihedrals: Vec<Dihedral>,
         torsions: Vec<Torsion>,
+        excluded_neighbours: usize,
+        exclusions: HashSet<UnorderedPair<usize>>,
         degrees_of_freedom: DegreesOfFreedom,
         atom_names: Vec<Option<String>>,
         residues: Vec<Residue>,
@@ -108,6 +118,8 @@ impl MoleculeKind {
             bonds,
             dihedrals,
             torsions,
+            excluded_neighbours,
+            exclusions,
             degrees_of_freedom,
             atom_names,
             residues,
@@ -142,6 +154,49 @@ impl MoleculeKind {
     /// Set molecule id
     pub(super) fn set_id(&mut self, id: usize) {
         self.id = id;
+    }
+
+    /// Generate exclusions for the molecule based on value of the `excluded_neighbours`
+    /// and on the bonds of the molecule.
+    pub(super) fn generate_exclusions(&mut self) {
+        let mut edges = vec![Vec::new(); self.atoms.len()];
+
+        for bond in self.bonds.iter() {
+            let [i, j] = *bond.index();
+            edges[i].push(j);
+            edges[j].push(i);
+        }
+
+        // do BFS and get indices in range
+        let mut exclusions = HashSet::new();
+        for (index, _) in self.atoms.iter().enumerate() {
+            let mut queue = VecDeque::new();
+            let mut distances = HashMap::new();
+
+            queue.push_back(index);
+            distances.insert(index, 0);
+            while let Some(current) = queue.pop_front() {
+                let current_distance = *distances.get(&current).unwrap();
+
+                // create exclusion
+                if current_distance <= self.excluded_neighbours && current != index {
+                    exclusions.insert(UnorderedPair(index, current));
+                }
+
+                // continue if we are still in range
+                if current_distance < self.excluded_neighbours {
+                    for &neighbour in edges[current].iter() {
+                        distances.entry(neighbour).or_insert_with(|| {
+                            queue.push_back(neighbour);
+                            current_distance + 1
+                        });
+                    }
+                }
+            }
+        }
+
+        // add the obtained exclusions
+        self.exclusions.extend(exclusions.iter())
     }
 }
 
@@ -184,6 +239,21 @@ fn validate_molecule(molecule: &MoleculeKind) -> Result<(), ValidationError> {
         }
     }
 
+    // exclusions can't contain undefined atoms or the same atom twice
+    for (i, j) in molecule.exclusions.iter().map(|e| e.into_ordered_tuple()) {
+        if i == j {
+            return Err(
+                ValidationError::new("").with_message("exclusion between the same atom".into())
+            );
+        }
+
+        if i >= n_atoms || j >= n_atoms {
+            return Err(
+                ValidationError::new("").with_message("exclusion between undefined atoms".into())
+            );
+        }
+    }
+
     // vector of atom names must correspond to the number of atoms (or be empty)
     if molecule.atom_names.len() != n_atoms {
         return Err(ValidationError::new("").with_message(
@@ -202,5 +272,204 @@ impl CustomProperty for MoleculeKind {
     fn set_property(&mut self, key: &str, value: Value) -> anyhow::Result<()> {
         self.custom.insert(key.to_string(), value);
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+
+    use crate::topology::{BondKind, BondOrder};
+
+    use super::*;
+
+    #[test]
+    fn generate_exclusions_n1() {
+        let mut molecule = MoleculeKind::new(
+            "MOL",
+            0,
+            vec![
+                "A".into(),
+                "B".into(),
+                "C".into(),
+                "D".into(),
+                "E".into(),
+                "F".into(),
+                "G".into(),
+            ],
+            vec![0, 1, 2, 3, 4, 5, 6, 7],
+            [
+                [0, 1],
+                [1, 2],
+                [2, 3],
+                [3, 4],
+                [3, 5],
+                [5, 6],
+                [3, 6],
+                [4, 6],
+            ]
+            .iter()
+            .map(|&x| Bond::new(x, BondKind::Unspecified, BondOrder::Unspecified))
+            .collect(),
+            vec![],
+            vec![],
+            1,
+            HashSet::new(),
+            DegreesOfFreedom::Free,
+            vec![None, None, None, None, None, None, None],
+            vec![],
+            vec![],
+            true,
+            HashMap::new(),
+        );
+
+        molecule.generate_exclusions();
+
+        assert_eq!(molecule.exclusions.len(), 8);
+        assert!(molecule.exclusions.contains(&UnorderedPair(0, 1)));
+        assert!(molecule.exclusions.contains(&UnorderedPair(1, 2)));
+        assert!(molecule.exclusions.contains(&UnorderedPair(2, 3)));
+        assert!(molecule.exclusions.contains(&UnorderedPair(3, 4)));
+        assert!(molecule.exclusions.contains(&UnorderedPair(3, 5)));
+        assert!(molecule.exclusions.contains(&UnorderedPair(5, 6)));
+        assert!(molecule.exclusions.contains(&UnorderedPair(4, 6)));
+        assert!(molecule.exclusions.contains(&UnorderedPair(3, 6)));
+    }
+
+    #[test]
+    fn generate_exclusions_n2() {
+        let mut molecule = MoleculeKind::new(
+            "MOL",
+            0,
+            vec![
+                "A".into(),
+                "B".into(),
+                "C".into(),
+                "D".into(),
+                "E".into(),
+                "F".into(),
+                "G".into(),
+            ],
+            vec![0, 1, 2, 3, 4, 5, 6, 7],
+            [
+                [0, 1],
+                [1, 2],
+                [2, 3],
+                [3, 4],
+                [3, 5],
+                [5, 6],
+                [3, 6],
+                [4, 6],
+            ]
+            .iter()
+            .map(|&x| Bond::new(x, BondKind::Unspecified, BondOrder::Unspecified))
+            .collect(),
+            vec![],
+            vec![],
+            2,
+            HashSet::new(),
+            DegreesOfFreedom::Free,
+            vec![None, None, None, None, None, None, None],
+            vec![],
+            vec![],
+            true,
+            HashMap::new(),
+        );
+
+        molecule.generate_exclusions();
+
+        assert_eq!(molecule.exclusions.len(), 14);
+        let expected = [
+            [0, 1],
+            [0, 2],
+            [1, 2],
+            [1, 3],
+            [2, 3],
+            [2, 4],
+            [2, 5],
+            [2, 6],
+            [3, 4],
+            [3, 5],
+            [3, 6],
+            [4, 5],
+            [4, 6],
+            [5, 6],
+        ];
+
+        for pair in expected {
+            assert!(molecule
+                .exclusions
+                .contains(&UnorderedPair(pair[0], pair[1])));
+        }
+    }
+
+    #[test]
+    fn generate_exclusions_n3() {
+        let mut molecule = MoleculeKind::new(
+            "MOL",
+            0,
+            vec![
+                "A".into(),
+                "B".into(),
+                "C".into(),
+                "D".into(),
+                "E".into(),
+                "F".into(),
+                "G".into(),
+            ],
+            vec![0, 1, 2, 3, 4, 5, 6, 7],
+            [
+                [0, 1],
+                [1, 2],
+                [2, 3],
+                [3, 4],
+                [3, 5],
+                [5, 6],
+                [3, 6],
+                [4, 6],
+            ]
+            .iter()
+            .map(|&x| Bond::new(x, BondKind::Unspecified, BondOrder::Unspecified))
+            .collect(),
+            vec![],
+            vec![],
+            3,
+            HashSet::new(),
+            DegreesOfFreedom::Free,
+            vec![None, None, None, None, None, None, None],
+            vec![],
+            vec![],
+            true,
+            HashMap::new(),
+        );
+
+        molecule.generate_exclusions();
+
+        assert_eq!(molecule.exclusions.len(), 18);
+        let expected = [
+            [0, 1],
+            [0, 2],
+            [0, 3],
+            [1, 2],
+            [1, 3],
+            [1, 4],
+            [1, 5],
+            [1, 6],
+            [2, 3],
+            [2, 4],
+            [2, 5],
+            [2, 6],
+            [3, 4],
+            [3, 5],
+            [3, 6],
+            [4, 5],
+            [4, 6],
+            [5, 6],
+        ];
+
+        for pair in expected {
+            assert!(molecule
+                .exclusions
+                .contains(&UnorderedPair(pair[0], pair[1])));
+        }
     }
 }

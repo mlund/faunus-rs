@@ -14,14 +14,17 @@
 
 //! # Support for Monte Carlo sampling
 
-use crate::energy::EnergyTerm;
+use crate::analysis::{AnalysisCollection, Analyze};
 use crate::{time::Timer, Change, Context, Info};
 use average::Mean;
 use log;
 use rand::prelude::*;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::iter::FusedIterator;
 use std::{cmp::Ordering, ops::Neg};
+
+use crate::energy::EnergyChange;
 
 mod translate;
 pub use translate::*;
@@ -87,6 +90,9 @@ pub struct MoveStatistics {
     /// Timer that measures the time spent in the move
     #[serde(skip_deserializing)]
     pub timer: Timer,
+    /// Custom statistics and information (only serialized)
+    #[serde(skip_deserializing)]
+    pub info: HashMap<String, crate::topology::Value>,
     /// Sum of energy changes due to this move
     pub energy_change_sum: f64,
 }
@@ -309,31 +315,43 @@ impl<T: Context> MoveCollection<T> {
 /// The chain implements `Iterator` where each iteration corresponds to a single Monte Carlo step.
 #[derive(Default, Debug)]
 pub struct MarkovChain<T: Context> {
-    /// List of moves to perform
+    /// List of moves to perform.
     moves: MoveCollection<T>,
-    /// Pair of contexts, one for the current state and one for the new state
+    /// Pair of contexts, one for the current state and one for the new state.
     context: NewOld<T>,
-    /// Current step
+    /// Current step.
     step: usize,
-    /// Maximum number of steps
+    /// Maximum number of steps.
     max_steps: usize,
-    /// Random number engine
+    /// Random number engine.
     rng: ThreadRng,
-    /// Thermal energy - must be same unit as energy
+    /// Thermal energy - must be same unit as energy.
     thermal_energy: f64,
-    /// Acceptance policy
+    /// Acceptance policy.
     criterion: Box<dyn AcceptanceCriterion>,
+    /// Collection of analyses to perform during the simulation.
+    analyses: AnalysisCollection<T>,
 }
 
 impl<T: Context + 'static> Iterator for MarkovChain<T> {
-    type Item = usize;
+    type Item = anyhow::Result<usize>;
     fn next(&mut self) -> Option<Self::Item> {
         if self.step >= self.max_steps {
             return None;
         }
         self.do_move();
+
+        // perform analyses
+        match self
+            .analyses
+            .sample(&self.context.old, self.step, &mut self.rng)
+        {
+            Ok(_) => (),
+            Err(e) => return Some(Err(e)),
+        }
+
         self.step += 1;
-        Some(self.step)
+        Some(Ok(self.step))
     }
     fn size_hint(&self) -> (usize, Option<usize>) {
         let size = self.max_steps - self.step;
@@ -354,6 +372,7 @@ impl<T: Context + 'static> MarkovChain<T> {
             rng: rand::thread_rng(),
             moves: MoveCollection::default(),
             criterion: Box::<MetropolisHastings>::default(),
+            analyses: AnalysisCollection::default(),
         }
     }
     /// Set the thermal energy, _kT_.
@@ -372,13 +391,24 @@ impl<T: Context + 'static> MarkovChain<T> {
         self.moves.push(m);
     }
 
+    /// Append an analysis to the back of the collection.
+    pub fn add_analysis(&mut self, analysis: Box<dyn Analyze<T>>) {
+        self.analyses.push(analysis)
+    }
+
     fn do_move(&mut self) {
         if let Some(mv) = self.moves.choose(&mut self.rng) {
             let change = mv.do_move(&mut self.context.new, &mut self.rng).unwrap();
             self.context.new.update(&change).unwrap();
             let energy = NewOld::<f64>::from(
-                self.context.new.hamiltonian().energy_change(&change),
-                self.context.old.hamiltonian().energy_change(&change),
+                self.context
+                    .new
+                    .hamiltonian()
+                    .energy(&self.context.new, &change),
+                self.context
+                    .old
+                    .hamiltonian()
+                    .energy(&self.context.old, &change),
             );
             let bias = mv.bias(&change, &energy);
             if self
