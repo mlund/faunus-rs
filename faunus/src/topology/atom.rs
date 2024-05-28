@@ -26,6 +26,7 @@ use serde::{Deserialize, Serialize};
 #[builder(default)]
 pub struct AtomKind {
     /// Unique name.
+    #[builder(setter(into))]
     name: String,
     /// Unique identifier.
     /// Only defined if the AtomKind is inside of Topology.
@@ -37,6 +38,7 @@ pub struct AtomKind {
     #[serde(default)]
     charge: f64,
     /// Atomic symbol if appropriate (He, C, O, Fe, etc.).
+    #[builder(setter(into, strip_option), default)]
     element: Option<String>,
     /// Lennard-Jones diameter, σٖᵢᵢ (angstrom).
     #[serde(alias = "σ")]

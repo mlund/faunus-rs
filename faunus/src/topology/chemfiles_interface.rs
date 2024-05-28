@@ -265,10 +265,10 @@ mod tests {
     #[test]
     fn atom_to_chemfiles() {
         let atom = AtomKindBuilder::default()
-            .name("OW".to_owned())
+            .name("OW")
             .mass(16.0)
             .charge(-1.0)
-            .element(Some("O".to_owned()))
+            .element("O")
             .build()
             .unwrap();
 
@@ -329,7 +329,7 @@ mod tests {
     #[test]
     fn reference_platform_to_chemfiles() {
         let molecule = MoleculeKindBuilder::default()
-            .name("MOL".to_owned())
+            .name("MOL")
             .atoms(
                 ["OW", "OW", "OW", "HW", "HW", "OW"]
                     .into_iter()
@@ -350,18 +350,18 @@ mod tests {
             .unwrap();
 
         let atom1 = AtomKindBuilder::default()
-            .name("OW".to_owned())
+            .name("OW")
             .mass(16.0)
             .charge(-1.0)
-            .element(Some("O".to_owned()))
+            .element("O")
             .build()
             .unwrap();
 
         let atom2 = AtomKindBuilder::default()
-            .name("HW".to_owned())
+            .name("HW")
             .mass(1.0)
             .charge(0.0)
-            .element(Some("H".to_owned()))
+            .element("H")
             .build()
             .unwrap();
 

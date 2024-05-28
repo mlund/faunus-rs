@@ -36,6 +36,7 @@ use super::{Bond, CustomProperty, Dihedral, IndexRange, Indexed, Torsion};
 #[builder(default)]
 pub struct MoleculeKind {
     /// Unique name.
+    #[builder(setter(into))]
     name: String,
     /// Unique identifier.
     /// Only defined if the MoleculeKind is inside of Topology.
@@ -253,7 +254,7 @@ mod tests {
     #[test]
     fn generate_exclusions_n1() {
         let mut molecule = MoleculeKindBuilder::default()
-            .name("MOL".to_string())
+            .name("MOL")
             .atoms("ABCDEFG".chars().map(|c| c.to_string()).collect())
             .atom_indices((0..8).collect())
             .bonds(
@@ -292,7 +293,7 @@ mod tests {
     #[test]
     fn generate_exclusions_n2() {
         let mut molecule = MoleculeKindBuilder::default()
-            .name("MOL".to_string())
+            .name("MOL")
             .atoms("ABCDEFG".chars().map(|c| c.to_string()).collect())
             .atom_indices((0..8).collect())
             .bonds(
@@ -345,7 +346,7 @@ mod tests {
     #[test]
     fn generate_exclusions_n3() {
         let mut molecule = MoleculeKindBuilder::default()
-            .name("MOL".to_string())
+            .name("MOL")
             .atoms("ABCDEFG".chars().map(|c| c.to_string()).collect())
             .atom_indices((0..8).collect())
             .bonds(
