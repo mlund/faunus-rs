@@ -42,9 +42,11 @@ pub struct AtomKind {
     element: Option<String>,
     /// Lennard-Jones diameter, σٖᵢᵢ (angstrom).
     #[serde(alias = "σ")]
+    #[builder(setter(strip_option), default)]
     sigma: Option<f64>,
     /// Lennard-Jones well depth, εᵢᵢ (kJ/mol).
     #[serde(alias = "ε", alias = "eps")]
+    #[builder(setter(strip_option), default)]
     epsilon: Option<f64>,
     /// Hydrophobicity information.
     hydrophobicity: Option<Hydrophobicity>,

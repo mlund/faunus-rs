@@ -92,6 +92,7 @@ pub struct MoleculeKind {
     custom: HashMap<String, Value>,
     /// Construct molecule from existing structure file (xyz, pdb, etc.)
     #[serde(default)]
+    #[builder(setter(into, strip_option), default)]
     from_structure: Option<PathBuf>,
 }
 
