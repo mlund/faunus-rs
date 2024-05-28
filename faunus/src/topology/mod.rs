@@ -553,9 +553,7 @@ impl Topology {
                 atom.set_id(i);
             });
 
-        if are_unique(&self.atomkinds, |i: &AtomKind, j: &AtomKind| {
-            i.name() == j.name()
-        }) {
+        if self.atomkinds.iter().map(|a| a.name()).all_unique() {
             Ok(())
         } else {
             anyhow::bail!("atoms have non-unique names")
@@ -769,27 +767,10 @@ where
     })
 }
 
-/// Check that all items of a collection are unique.
-///
-/// ## Parameters
-/// - `collection` collection of items to compare
-/// - `compare_fn` function/closure used for comparing the items
-fn are_unique<T, F>(collection: &[T], compare_fn: F) -> bool
-where
-    F: Fn(&T, &T) -> bool,
-{
-    !collection.iter().enumerate().any(|(i, item_i)| {
-        collection
-            .iter()
-            .skip(i + 1)
-            .any(|item_j| compare_fn(item_i, item_j))
-    })
-}
-
 /// Validate that the provided atom indices are unique.
 /// Used e.g. to validate that a bond does not connect one and the same atom.
 fn validate_unique_indices(indices: &[usize]) -> Result<(), ValidationError> {
-    if indices.iter().duplicates().count() == 0 {
+    if indices.iter().all_unique() {
         core::result::Result::Ok(())
     } else {
         Err(ValidationError::new("").with_message("non-unique atom indices".into()))
