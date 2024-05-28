@@ -57,32 +57,6 @@ pub struct AtomKind {
 }
 
 impl AtomKind {
-    /// Create a new AtomKind structure. This function does not perform any sanity checks.
-    #[allow(dead_code, clippy::too_many_arguments)]
-    pub(crate) fn new(
-        name: &str,
-        id: usize,
-        mass: f64,
-        charge: f64,
-        element: Option<&str>,
-        sigma: Option<f64>,
-        epsilon: Option<f64>,
-        hydrophobicity: Option<Hydrophobicity>,
-        custom: std::collections::HashMap<String, Value>,
-    ) -> Self {
-        Self {
-            name: name.to_owned(),
-            id,
-            mass,
-            charge,
-            element: element.map(String::from),
-            sigma,
-            epsilon,
-            hydrophobicity,
-            custom,
-        }
-    }
-
     pub fn name(&self) -> &str {
         &self.name
     }
