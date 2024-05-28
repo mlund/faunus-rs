@@ -49,6 +49,7 @@ pub struct AtomKind {
     #[builder(setter(strip_option), default)]
     epsilon: Option<f64>,
     /// Hydrophobicity information.
+    #[builder(setter(strip_option), default)]
     hydrophobicity: Option<Hydrophobicity>,
     /// Map of custom properties.
     #[serde(default)]
