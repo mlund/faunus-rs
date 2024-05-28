@@ -99,46 +99,6 @@ fn default_true() -> bool {
 }
 
 impl MoleculeKind {
-    /// Create a new MoleculeKind structure. This function does not perform any sanity checks.
-    #[allow(dead_code, clippy::too_many_arguments)]
-    pub(crate) fn new(
-        name: &str,
-        id: usize,
-        atoms: Vec<String>,
-        atom_indices: Vec<usize>,
-        bonds: Vec<Bond>,
-        dihedrals: Vec<Dihedral>,
-        torsions: Vec<Torsion>,
-        excluded_neighbours: usize,
-        exclusions: HashSet<UnorderedPair<usize>>,
-        degrees_of_freedom: DegreesOfFreedom,
-        atom_names: Vec<Option<String>>,
-        residues: Vec<Residue>,
-        chains: Vec<Chain>,
-        has_com: bool,
-        custom: HashMap<String, Value>,
-        from_structure: Option<PathBuf>,
-    ) -> MoleculeKind {
-        Self {
-            name: name.to_owned(),
-            id,
-            atoms,
-            atom_indices,
-            bonds,
-            dihedrals,
-            torsions,
-            excluded_neighbours,
-            exclusions,
-            degrees_of_freedom,
-            atom_names,
-            residues,
-            chains,
-            has_com,
-            custom,
-            from_structure,
-        }
-    }
-
     pub fn id(&self) -> usize {
         self.id
     }

@@ -23,6 +23,7 @@ use serde::{Deserialize, Serialize};
 /// used to represent static properties used for templating atoms.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default, Builder)]
 #[serde(deny_unknown_fields)]
+#[builder(default)]
 pub struct AtomKind {
     /// Unique name.
     name: String,

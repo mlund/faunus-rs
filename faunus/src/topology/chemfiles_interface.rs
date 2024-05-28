@@ -247,17 +247,14 @@ impl CellToChemCell for Cell {}
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        cell::RefCell,
-        collections::{HashMap, HashSet},
-        rc::Rc,
-    };
+    use std::{cell::RefCell, rc::Rc};
 
     use crate::{
         energy::Hamiltonian,
         topology::{
             block::{BlockActivationStatus, InsertionPolicy, MoleculeBlock},
-            Bond, BondKind, BondOrder, DegreesOfFreedom, IntermolecularBonded, Topology,
+            molecule::MoleculeKindBuilder,
+            AtomKindBuilder, Bond, BondKind, BondOrder, IntermolecularBonded, Topology,
         },
     };
 
@@ -267,17 +264,14 @@ mod tests {
 
     #[test]
     fn atom_to_chemfiles() {
-        let atom = AtomKind::new(
-            "OW",
-            0,
-            16.0,
-            -1.0,
-            Some("O"),
-            None,
-            None,
-            None,
-            HashMap::default(),
-        );
+        let atom = AtomKindBuilder::default()
+            .name("OW".to_owned())
+            .mass(16.0)
+            .charge(-1.0)
+            .element(Some("O".to_owned()))
+            .build()
+            .unwrap();
+
         let converted = atom.to_chem_atom(Some("OX"));
 
         assert_eq!(converted.name(), "OX");
@@ -304,45 +298,29 @@ mod tests {
 
     #[test]
     fn group_to_chemfiles() {
-        let residue1 = Residue::new("ALA", Some(4), 1..3);
-        let residue2 = Residue::new("SER", Some(5), 5..6);
-
-        let molecule = MoleculeKind::new(
-            "MOL",
-            0,
-            vec![
-                String::from("OW"),
-                String::from("OW"),
-                String::from("OW"),
-                String::from("HW"),
-                String::from("HW"),
-                String::from("OW"),
-            ],
-            vec![0, 0, 0, 1, 1, 0],
-            vec![],
-            vec![],
-            vec![],
-            0,
-            HashSet::new(),
-            DegreesOfFreedom::default(),
-            vec![None, None, None, None, None, None],
-            vec![residue1, residue2],
-            vec![],
-            true,
-            HashMap::default(),
-            None,
-        );
+        let molecule = MoleculeKindBuilder::default()
+            .name("MOL".to_string())
+            .atoms(
+                ["OW", "OW", "OW", "HW", "HW", "OW"]
+                    .into_iter()
+                    .map(str::to_owned)
+                    .collect(),
+            )
+            .atom_indices(vec![0, 0, 0, 1, 1, 0])
+            .residues(vec![
+                Residue::new("ALA", Some(4), 1..3),
+                Residue::new("SER", Some(5), 5..6),
+            ])
+            .build()
+            .unwrap();
 
         let group = Group::new(0, 0, 0..6);
-
         let converted = group.to_chem_residues(17, 3, &molecule);
 
         assert_eq!(converted.len(), 2);
-
         assert_eq!(converted[0].name(), "ALA");
         assert_eq!(converted[0].id(), Some(3));
         assert_eq!(converted[0].atoms(), vec![18, 19]);
-
         assert_eq!(converted[1].name(), "SER");
         assert_eq!(converted[1].id(), Some(4));
         assert_eq!(converted[1].atoms(), vec![22]);
@@ -350,61 +328,42 @@ mod tests {
 
     #[test]
     fn reference_platform_to_chemfiles() {
-        let residue1 = Residue::new("ALA", Some(4), 1..3);
-        let residue2 = Residue::new("SER", Some(5), 5..6);
+        let molecule = MoleculeKindBuilder::default()
+            .name("MOL".to_owned())
+            .atoms(
+                ["OW", "OW", "OW", "HW", "HW", "OW"]
+                    .into_iter()
+                    .map(str::to_owned)
+                    .collect(),
+            )
+            .atom_indices(vec![0, 0, 0, 1, 1, 0])
+            .residues(vec![
+                Residue::new("ALA", Some(4), 1..3),
+                Residue::new("SER", Some(5), 5..6),
+            ])
+            .bonds(vec![
+                Bond::new([1, 3], BondKind::Unspecified, BondOrder::Unspecified),
+                Bond::new([3, 5], BondKind::Unspecified, BondOrder::Unspecified),
+            ])
+            .atom_names(vec![None, None, Some("O3".to_owned()), None, None, None])
+            .build()
+            .unwrap();
 
-        let bond1 = Bond::new([1, 3], BondKind::Unspecified, BondOrder::Unspecified);
-        let bond2 = Bond::new([3, 5], BondKind::Unspecified, BondOrder::Unspecified);
+        let atom1 = AtomKindBuilder::default()
+            .name("OW".to_owned())
+            .mass(16.0)
+            .charge(-1.0)
+            .element(Some("O".to_owned()))
+            .build()
+            .unwrap();
 
-        let molecule = MoleculeKind::new(
-            "MOL",
-            0,
-            vec![
-                String::from("OW"),
-                String::from("OW"),
-                String::from("OW"),
-                String::from("HW"),
-                String::from("HW"),
-                String::from("OW"),
-            ],
-            vec![0, 0, 0, 1, 1, 0],
-            vec![bond1, bond2],
-            vec![],
-            vec![],
-            0,
-            HashSet::new(),
-            DegreesOfFreedom::default(),
-            vec![None, None, Some("O3".to_string()), None, None, None],
-            vec![residue1, residue2],
-            vec![],
-            true,
-            HashMap::default(),
-            None,
-        );
-
-        let atom1 = AtomKind::new(
-            "OW",
-            0,
-            16.0,
-            -1.0,
-            Some("O"),
-            None,
-            None,
-            None,
-            HashMap::default(),
-        );
-
-        let atom2 = AtomKind::new(
-            "HW",
-            0,
-            1.0,
-            0.0,
-            Some("H"),
-            None,
-            None,
-            None,
-            HashMap::default(),
-        );
+        let atom2 = AtomKindBuilder::default()
+            .name("HW".to_owned())
+            .mass(1.0)
+            .charge(0.0)
+            .element(Some("H".to_owned()))
+            .build()
+            .unwrap();
 
         let block = MoleculeBlock::new(
             "MOL",
