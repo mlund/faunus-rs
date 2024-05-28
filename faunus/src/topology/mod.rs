@@ -419,6 +419,7 @@ pub struct Topology {
     /// Properties of the system.
     /// Must always be provided.
     #[validate(nested)]
+    #[serde(default)]
     system: Option<System>,
 }
 
@@ -713,7 +714,7 @@ struct System {
     #[validate(nested)]
     intermolecular: IntermolecularBonded,
     /// Molecules of the system.
-    /// Must always be provided.
+    #[serde(default)]
     blocks: Vec<MoleculeBlock>,
 }
 
