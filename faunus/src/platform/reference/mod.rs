@@ -78,6 +78,9 @@ impl ReferencePlatform {
         structure: Option<impl AsRef<Path>>,
         rng: &mut ThreadRng,
     ) -> anyhow::Result<Self> {
+        if !topology.has_system() {
+            anyhow::bail!("Topology doesn't contain a system");
+        }
         let mut context = ReferencePlatform {
             topology: topology.clone(),
             particles: vec![],

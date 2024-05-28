@@ -427,6 +427,10 @@ impl Topology {
         self.system.as_ref()
     }
 
+    pub fn has_system(&self) -> bool {
+        self.system.is_some()
+    }
+
     /// Create partial topology without system. Used for topology includes.
     pub fn from_file_partial(filename: impl AsRef<Path> + Clone) -> anyhow::Result<Topology> {
         let yaml = std::fs::read_to_string(filename.clone())?;
