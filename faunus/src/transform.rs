@@ -98,13 +98,19 @@ impl Transform {
 }
 
 /// Rotate a collection of points by a random angle in random direction.
-pub(crate) fn rotate_random(positions: &mut [Point], center: &Point, rng: &mut ThreadRng) {
+///
+/// The optional `center` of rotation is subtracted before rotation,
+/// and added again after.
+pub(crate) fn rotate_random<'a>(
+    positions: impl IntoIterator<Item = &'a mut Point>,
+    center: &Point,
+    rng: &mut ThreadRng,
+) {
     let angle = rng.gen_range(0.0..2.0 * std::f64::consts::PI);
     let axis = crate::transform::random_unit_vector(rng);
-    let rotation = nalgebra::Rotation3::new(axis * angle);
-    for pos in positions.iter_mut() {
-        *pos = rotation * (*pos - center) + center;
-    }
+    let matrix = nalgebra::Rotation3::new(axis * angle);
+    let rotate = |pos: &mut Point| *pos = matrix * (*pos - center) + center;
+    positions.into_iter().for_each(rotate);
 }
 
 #[cfg(test)]
