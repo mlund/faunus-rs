@@ -26,8 +26,6 @@ use crate::{
 use chemfiles::Frame;
 use nalgebra::Vector3;
 
-use crate::topology::TopologyLike;
-
 use super::{molecule::MoleculeKind, AtomKind, IndexRange};
 
 /// Create a new chemfiles::Frame from an input file in a supported format.

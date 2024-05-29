@@ -20,7 +20,7 @@ use crate::{
     cell::{Cell, SimulationCell},
     energy::{builder::HamiltonianBuilder, Hamiltonian},
     group::{GroupCollection, GroupLists, GroupSize},
-    topology::{Topology, TopologyLike},
+    topology::Topology,
     Change, Context, Group, Particle, ParticleSystem, Point, PointParticle, SyncFrom, WithCell,
     WithHamiltonian, WithTopology,
 };

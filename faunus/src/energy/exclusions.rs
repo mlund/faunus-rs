@@ -14,7 +14,7 @@
 
 //! Implementation of the exclusions.
 
-use crate::{topology::TopologyLike, Topology};
+use crate::Topology;
 use nalgebra::DMatrix;
 
 /// Matrix of exclusions based on particle ids.

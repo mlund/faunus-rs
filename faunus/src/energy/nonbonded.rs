@@ -20,7 +20,7 @@ use std::fmt::Debug;
 
 use crate::{
     energy::{builder::NonbondedBuilder, EnergyTerm},
-    topology::{Topology, TopologyLike},
+    topology::Topology,
     Change, Context, Group, GroupChange, SyncFrom,
 };
 
