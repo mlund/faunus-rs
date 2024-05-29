@@ -64,7 +64,7 @@ impl ReferencePlatform {
         let hamiltonian = Hamiltonian::new(&hamiltonian_builder, &topology)?;
         Self::from_raw_parts(
             Rc::new(topology),
-            cell.into(),
+            cell,
             RefCell::new(hamiltonian),
             structure_file,
             rng,
