@@ -167,10 +167,11 @@ pub trait Context: ParticleSystem + WithHamiltonian + Clone + std::fmt::Debug + 
 
 /// A trait for objects that have a simulation cell.
 pub trait WithCell {
+    type SimCell: SimulationCell;
     /// Get reference to simulation cell.
-    fn cell(&self) -> &dyn SimulationCell;
+    fn cell(&self) -> &Self::SimCell;
     /// Get mutable reference to simulation cell.
-    fn cell_mut(&mut self) -> &mut dyn SimulationCell;
+    fn cell_mut(&mut self) -> &mut Self::SimCell;
 }
 
 /// A trait for objects that have a topology.

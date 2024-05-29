@@ -362,7 +362,7 @@ mod tests {
     use float_cmp::assert_approx_eq;
 
     use crate::{
-        cell::Cuboid,
+        cell::{Cell, Cuboid},
         energy::{builder::HamiltonianBuilder, Hamiltonian},
         group::{GroupCollection, GroupSize},
         montecarlo::NewOld,
@@ -483,7 +483,7 @@ mod tests {
         let mut rng = rand::thread_rng();
         let system = ReferencePlatform::from_raw_parts(
             Rc::new(topology),
-            Box::new(Cuboid::cubic(20.0)),
+            Cell::Cuboid(Cuboid::cubic(20.0)),
             RefCell::new(Hamiltonian::from_energy_terms(vec![nonbonded.clone()])),
             None::<&str>,
             &mut rng,

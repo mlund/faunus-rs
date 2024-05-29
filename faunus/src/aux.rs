@@ -107,7 +107,7 @@ fn test_angle_vectors() {
 /// Calculate angle between three points with `b` being the vertext of the angle.
 /// The angle is returned in degrees.
 #[inline(always)]
-pub(crate) fn angle_points(a: &Point, b: &Point, c: &Point, pbc: &dyn SimulationCell) -> f64 {
+pub(crate) fn angle_points(a: &Point, b: &Point, c: &Point, pbc: &impl SimulationCell) -> f64 {
     // b->a
     let ba = pbc.distance(a, b);
     // b->c
@@ -192,7 +192,7 @@ pub(crate) fn dihedral_points(
     b: &Point,
     c: &Point,
     d: &Point,
-    pbc: &dyn SimulationCell,
+    pbc: &impl SimulationCell,
 ) -> f64 {
     let ab = pbc.distance(b, a);
     let bc = pbc.distance(c, b);

@@ -72,9 +72,7 @@ pub trait Shape {
     /// Determines if a point lies inside the boundaries of the shape
     fn is_inside(&self, point: &Point) -> bool;
     /// Bounding box of the shape centered at `center()`
-    fn bounding_box(&self) -> Option<Point> {
-        None
-    }
+    fn bounding_box(&self) -> Option<Point>;
     /// Generate a random point positioned inside the boundaries of the shape
     fn get_point_inside(&self, rng: &mut ThreadRng) -> Point;
 }
@@ -156,7 +154,7 @@ pub trait VolumeScale {
 
 /// Simulation cell enum used for reading information about cell from the input file.
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub(crate) enum Cell {
+pub enum Cell {
     Cuboid(Cuboid),
     Endless(Endless),
     Sphere(Sphere),
@@ -253,6 +251,15 @@ impl Shape for Cell {
             Cell::Cuboid(s) => s.get_point_inside(rng),
             Cell::Endless(s) => s.get_point_inside(rng),
             Cell::Sphere(s) => s.get_point_inside(rng),
+        }
+    }
+
+    #[inline]
+    fn bounding_box(&self) -> Option<Point> {
+        match self {
+            Cell::Cuboid(s) => s.bounding_box(),
+            Cell::Endless(s) => s.bounding_box(),
+            Cell::Sphere(s) => s.bounding_box(),
         }
     }
 }

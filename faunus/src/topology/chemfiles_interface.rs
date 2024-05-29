@@ -40,7 +40,7 @@ pub(super) fn frame_from_file(filename: &impl AsRef<Path>) -> anyhow::Result<che
 /// If `cell` is provided, all the positions of particles from the frame are shifted by -half_cell.
 pub(super) fn positions_from_frame(
     frame: &chemfiles::Frame,
-    cell: Option<&dyn SimulationCell>,
+    cell: Option<&impl SimulationCell>,
 ) -> Vec<Point> {
     let shift = if let Some(cell) = cell {
         cell.bounding_box().map(|b| -0.5 * b).unwrap_or_default()
@@ -386,7 +386,7 @@ mod tests {
 
         let context = ReferencePlatform::from_raw_parts(
             Rc::new(topology),
-            Box::new(Cuboid::new(10.0, 5.0, 2.5)),
+            Cell::Cuboid(Cuboid::new(10.0, 5.0, 2.5)),
             RefCell::new(Hamiltonian::from_energy_terms(vec![])),
             None::<&str>,
             &mut rng,
