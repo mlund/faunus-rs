@@ -334,75 +334,7 @@ pub enum DegreesOfFreedom {
 }
 
 /// Trait implemented by any structure resembling a Topology.
-pub trait TopologyLike {
-    /// Get atoms of the topology.
-    fn atomkinds(&self) -> &[AtomKind];
-    /// Add atom to the topology.
-    fn add_atomkind(&mut self, atom: AtomKind);
-    /// Get molecules of the topology.
-    fn moleculekinds(&self) -> &[MoleculeKind];
-    /// Add molecule to the topology.
-    fn add_moleculekind(&mut self, molecule: MoleculeKind);
-
-    /// Find atom with given name.
-    fn find_atom(&self, name: &str) -> Option<&AtomKind> {
-        self.atomkinds().iter().find(|a| a.name() == name)
-    }
-
-    /// Find molecule with given name.
-    fn find_molecule(&self, name: &str) -> Option<&MoleculeKind> {
-        self.moleculekinds().iter().find(|r| r.name() == name)
-    }
-
-    /// Add atom kinds into a topology. In case an AtomKind with the same name already
-    /// exists in the Topology, it is NOT overwritten and a warning is raised.
-    fn include_atoms(&mut self, atoms: &[AtomKind]) {
-        for atom in atoms.iter() {
-            if self.atomkinds().iter().any(|x| x.name() == atom.name()) {
-                log::warn!(
-                    "Atom kind '{}' redefinition in included topology.",
-                    atom.name()
-                )
-            } else {
-                self.add_atomkind(atom.clone());
-            }
-        }
-    }
-
-    /// Add molecule kinds into a toplogy. In case a MoleculeKind with the same name
-    /// already exists in the Topology, it is NOT overwritten and a warning is raised.
-    fn include_molecules(&mut self, molecules: Vec<MoleculeKind>) {
-        for molecule in molecules.into_iter() {
-            if self
-                .moleculekinds()
-                .iter()
-                .any(|x| x.name() == molecule.name())
-            {
-                log::warn!(
-                    "Molecule kind '{}' redefinition in included topology.",
-                    molecule.name()
-                )
-            } else {
-                self.add_moleculekind(molecule);
-            }
-        }
-    }
-
-    /// Read additional topologies into topology.
-    ///
-    /// ## Parameters
-    /// - `parent_path` path to the directory containing the parent topology file
-    /// - `topologies` paths to the topologies to be included (absolute or relative to the `parent_path`)
-    fn include_topologies(&mut self, topologies: Vec<InputPath>) -> Result<(), anyhow::Error> {
-        for file in topologies.iter() {
-            let included_top = Topology::from_file_partial(file.path().unwrap())?;
-            self.include_atoms(&included_top.atomkinds);
-            self.include_molecules(included_top.moleculekinds);
-        }
-
-        Ok(())
-    }
-}
+pub trait TopologyLike {}
 
 /// Topology of the molecular system.
 #[derive(Debug, Clone, Serialize, Deserialize, Default, Validate)]
@@ -424,6 +356,25 @@ pub struct Topology {
 }
 
 impl Topology {
+    /// Create a new Topology structure. This function performs no sanity checks.
+    #[allow(dead_code)]
+    pub(crate) fn new(
+        atomkinds: &[AtomKind],
+        moleculekinds: &[MoleculeKind],
+        intermolecular: IntermolecularBonded,
+        blocks: Vec<MoleculeBlock>,
+    ) -> Topology {
+        Topology {
+            include: vec![],
+            atomkinds: atomkinds.into(),
+            moleculekinds: moleculekinds.into(),
+            system: System {
+                intermolecular,
+                blocks,
+            },
+        }
+    }
+
     /// Create partial topology without system. Used for topology includes.
     pub fn from_file_partial(filename: impl AsRef<Path> + Clone) -> anyhow::Result<Topology> {
         let yaml = std::fs::read_to_string(filename.clone())?;
@@ -480,23 +431,86 @@ impl Topology {
             .sum()
     }
 
-    /// Create a new Topology structure. This function performs no sanity checks.
-    #[allow(dead_code)]
-    pub(crate) fn new(
-        atomkinds: &[AtomKind],
-        moleculekinds: &[MoleculeKind],
-        intermolecular: IntermolecularBonded,
-        blocks: Vec<MoleculeBlock>,
-    ) -> Topology {
-        Topology {
-            include: vec![],
-            atomkinds: atomkinds.into(),
-            moleculekinds: moleculekinds.into(),
-            system: System {
-                intermolecular,
-                blocks,
-            },
+    /// Get atoms kinds of the topology.
+    pub fn atomkinds(&self) -> &[AtomKind] {
+        &self.atomkinds
+    }
+
+    /// Get molecule kinds of the topology.
+    pub fn moleculekinds(&self) -> &[MoleculeKind] {
+        &self.moleculekinds
+    }
+
+    /// Add an atom kind to the topology.
+    pub fn add_atomkind(&mut self, atom: AtomKind) {
+        self.atomkinds.push(atom)
+    }
+
+    /// Add a molecule kind to the topology.
+    pub fn add_moleculekind(&mut self, molecule: MoleculeKind) {
+        self.moleculekinds.push(molecule)
+    }
+
+    /// Find atom with given name.
+    pub fn find_atom(&self, name: &str) -> Option<&AtomKind> {
+        self.atomkinds().iter().find(|a| a.name() == name)
+    }
+
+    /// Find molecule with given name.
+    pub fn find_molecule(&self, name: &str) -> Option<&MoleculeKind> {
+        self.moleculekinds().iter().find(|r| r.name() == name)
+    }
+
+    /// Add atom kinds into a topology. In case an AtomKind with the same name already
+    /// exists in the Topology, it is NOT overwritten and a warning is raised.
+    pub(crate) fn include_atomkinds(&mut self, atoms: &[AtomKind]) {
+        for atom in atoms.iter() {
+            if self.atomkinds().iter().any(|x| x.name() == atom.name()) {
+                log::warn!(
+                    "Atom kind '{}' redefinition in included topology.",
+                    atom.name()
+                )
+            } else {
+                self.add_atomkind(atom.clone());
+            }
         }
+    }
+
+    /// Add molecule kinds into a toplogy. In case a MoleculeKind with the same name
+    /// already exists in the Topology, it is NOT overwritten and a warning is raised.
+    pub(crate) fn include_moleculekinds(&mut self, molecules: Vec<MoleculeKind>) {
+        for molecule in molecules.into_iter() {
+            if self
+                .moleculekinds()
+                .iter()
+                .any(|x| x.name() == molecule.name())
+            {
+                log::warn!(
+                    "Molecule kind '{}' redefinition in included topology.",
+                    molecule.name()
+                )
+            } else {
+                self.add_moleculekind(molecule);
+            }
+        }
+    }
+
+    /// Read additional topologies into topology.
+    ///
+    /// ## Parameters
+    /// - `parent_path` path to the directory containing the parent topology file
+    /// - `topologies` paths to the topologies to be included (absolute or relative to the `parent_path`)
+    pub(crate) fn include_topologies(
+        &mut self,
+        topologies: Vec<InputPath>,
+    ) -> Result<(), anyhow::Error> {
+        for file in topologies.iter() {
+            let included_top = Topology::from_file_partial(file.path().unwrap())?;
+            self.include_atomkinds(&included_top.atomkinds);
+            self.include_moleculekinds(included_top.moleculekinds);
+        }
+
+        Ok(())
     }
 
     /// Create groups and populate target Context-implementing structure with particles.
@@ -664,24 +678,6 @@ impl Topology {
         )?;
 
         Ok(())
-    }
-}
-
-impl TopologyLike for Topology {
-    fn atomkinds(&self) -> &[AtomKind] {
-        &self.atomkinds
-    }
-
-    fn moleculekinds(&self) -> &[MoleculeKind] {
-        &self.moleculekinds
-    }
-
-    fn add_atomkind(&mut self, atom: AtomKind) {
-        self.atomkinds.push(atom)
-    }
-
-    fn add_moleculekind(&mut self, molecule: MoleculeKind) {
-        self.moleculekinds.push(molecule)
     }
 }
 

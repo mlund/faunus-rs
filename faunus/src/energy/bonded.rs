@@ -16,7 +16,7 @@
 
 use crate::{
     group::Group,
-    topology::{block::BlockActivationStatus, Topology, TopologyLike},
+    topology::{block::BlockActivationStatus, Topology},
     Change, Context, GroupChange, SyncFrom,
 };
 
