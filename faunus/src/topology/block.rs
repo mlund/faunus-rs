@@ -67,7 +67,7 @@ impl InsertionPolicy {
         atoms: &[AtomKind],
         molecule_kind: &MoleculeKind,
         number: usize,
-        cell: &dyn SimulationCell,
+        cell: &impl SimulationCell,
         rng: &mut ThreadRng,
     ) -> anyhow::Result<Vec<Point>> {
         match self {
@@ -107,7 +107,7 @@ impl InsertionPolicy {
         molecule_kind: &MoleculeKind,
         atoms: &[AtomKind],
         number: usize,
-        cell: &dyn SimulationCell,
+        cell: &impl SimulationCell,
         rng: &mut ThreadRng,
         filename: &InputPath,
         rotate: bool,

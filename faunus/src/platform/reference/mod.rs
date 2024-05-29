@@ -17,7 +17,7 @@
 use rand::rngs::ThreadRng;
 
 use crate::{
-    cell::{Cell, SimulationCell},
+    cell::{BoundaryConditions, Cell},
     energy::{builder::HamiltonianBuilder, Hamiltonian},
     group::{GroupCollection, GroupLists, GroupSize},
     topology::Topology,
@@ -42,7 +42,7 @@ pub struct ReferencePlatform {
     particles: Vec<Particle>,
     groups: Vec<Group>,
     group_lists: GroupLists,
-    cell: Box<dyn SimulationCell>,
+    cell: Cell,
     hamiltonian: RefCell<Hamiltonian>,
 }
 
@@ -64,16 +64,16 @@ impl ReferencePlatform {
         let hamiltonian = Hamiltonian::new(&hamiltonian_builder, &topology)?;
         Self::from_raw_parts(
             Rc::new(topology),
-            cell.into(),
+            cell,
             RefCell::new(hamiltonian),
             structure_file,
             rng,
         )
     }
 
-    pub fn from_raw_parts(
+    pub(crate) fn from_raw_parts(
         topology: Rc<Topology>,
-        cell: Box<dyn SimulationCell>,
+        cell: Cell,
         hamiltonian: RefCell<Hamiltonian>,
         structure: Option<impl AsRef<Path>>,
         rng: &mut ThreadRng,
@@ -97,11 +97,12 @@ impl ReferencePlatform {
 }
 
 impl WithCell for ReferencePlatform {
-    fn cell(&self) -> &dyn SimulationCell {
-        &*self.cell
+    type SimCell = Cell;
+    fn cell(&self) -> &Self::SimCell {
+        &self.cell
     }
-    fn cell_mut(&mut self) -> &mut dyn SimulationCell {
-        &mut *self.cell
+    fn cell_mut(&mut self) -> &mut Self::SimCell {
+        &mut self.cell
     }
 }
 

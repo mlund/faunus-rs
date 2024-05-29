@@ -142,35 +142,15 @@ pub trait Context: ParticleSystem + WithHamiltonian + Clone + std::fmt::Debug + 
         self.hamiltonian_mut().update(self, change)?;
         Ok(())
     }
-
-    /// Construct a new simulation system.
-    ///
-    /// ## Parameters
-    /// - `faunus_file` Path to the input file with Faunus topology, hamiltonian etc.
-    /// - `structure_file` Optional external structure file.
-    /// - `rng` Random number generator.
-    fn new(
-        faunus_file: impl AsRef<Path> + Clone,
-        structure_file: Option<impl AsRef<Path>>,
-        rng: &mut ThreadRng,
-    ) -> anyhow::Result<Self>;
-
-    /// Construct a new simulation system from raw parts.
-    fn from_raw_parts(
-        topology: Rc<Topology>,
-        cell: Box<dyn SimulationCell>,
-        hamiltonian: RefCell<Hamiltonian>,
-        structure_file: Option<impl AsRef<Path>>,
-        rng: &mut ThreadRng,
-    ) -> anyhow::Result<Self>;
 }
 
 /// A trait for objects that have a simulation cell.
 pub trait WithCell {
+    type SimCell: SimulationCell;
     /// Get reference to simulation cell.
-    fn cell(&self) -> &dyn SimulationCell;
+    fn cell(&self) -> &Self::SimCell;
     /// Get mutable reference to simulation cell.
-    fn cell_mut(&mut self) -> &mut dyn SimulationCell;
+    fn cell_mut(&mut self) -> &mut Self::SimCell;
 }
 
 /// A trait for objects that have a topology.

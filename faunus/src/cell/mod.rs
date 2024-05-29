@@ -72,9 +72,7 @@ pub trait Shape {
     /// Determines if a point lies inside the boundaries of the shape
     fn is_inside(&self, point: &Point) -> bool;
     /// Bounding box of the shape centered at `center()`
-    fn bounding_box(&self) -> Option<Point> {
-        None
-    }
+    fn bounding_box(&self) -> Option<Point>;
     /// Generate a random point positioned inside the boundaries of the shape
     fn get_point_inside(&self, rng: &mut ThreadRng) -> Point;
 }
@@ -156,7 +154,7 @@ pub trait VolumeScale {
 
 /// Simulation cell enum used for reading information about cell from the input file.
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub(crate) enum Cell {
+pub enum Cell {
     Cuboid(Cuboid),
     Endless(Endless),
     Sphere(Sphere),
@@ -229,6 +227,7 @@ impl TryFrom<Cell> for Endless {
 }
 
 impl Shape for Cell {
+    #[inline]
     fn volume(&self) -> Option<f64> {
         match self {
             Cell::Cuboid(x) => x.volume(),
@@ -237,6 +236,7 @@ impl Shape for Cell {
         }
     }
 
+    #[inline]
     fn is_inside(&self, point: &Point) -> bool {
         match self {
             Cell::Cuboid(x) => x.is_inside(point),
@@ -245,6 +245,7 @@ impl Shape for Cell {
         }
     }
 
+    #[inline]
     fn get_point_inside(&self, rng: &mut ThreadRng) -> Point {
         match self {
             Cell::Cuboid(s) => s.get_point_inside(rng),
@@ -252,9 +253,19 @@ impl Shape for Cell {
             Cell::Sphere(s) => s.get_point_inside(rng),
         }
     }
+
+    #[inline]
+    fn bounding_box(&self) -> Option<Point> {
+        match self {
+            Cell::Cuboid(s) => s.bounding_box(),
+            Cell::Endless(s) => s.bounding_box(),
+            Cell::Sphere(s) => s.bounding_box(),
+        }
+    }
 }
 
 impl VolumeScale for Cell {
+    #[inline]
     fn scale_volume(
         &mut self,
         new_volume: f64,
@@ -267,6 +278,7 @@ impl VolumeScale for Cell {
         }
     }
 
+    #[inline]
     fn scale_position(
         &self,
         new_volume: f64,
@@ -282,6 +294,7 @@ impl VolumeScale for Cell {
 }
 
 impl BoundaryConditions for Cell {
+    #[inline]
     fn pbc(&self) -> PeriodicDirections {
         match self {
             Cell::Cuboid(x) => x.pbc(),
@@ -290,6 +303,7 @@ impl BoundaryConditions for Cell {
         }
     }
 
+    #[inline]
     fn boundary(&self, point: &mut Point) {
         match self {
             Cell::Cuboid(x) => x.boundary(point),
@@ -298,6 +312,7 @@ impl BoundaryConditions for Cell {
         }
     }
 
+    #[inline]
     fn distance(&self, point1: &Point, point2: &Point) -> Point {
         match self {
             Cell::Cuboid(x) => x.distance(point1, point2),
