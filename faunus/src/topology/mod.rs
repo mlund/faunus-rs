@@ -64,8 +64,8 @@ use serde::{Deserialize, Serialize};
 use serde::{Deserializer, Serializer};
 
 use self::block::{InsertionPolicy, MoleculeBlock};
-use self::molecule::MoleculeKind;
-use self::structure::positions_from_structure_file;
+pub use self::molecule::{MoleculeKind, MoleculeKindBuilder};
+pub use structure::{positions_from_structure_file, molecule_from_file};
 
 /// Trait implemented by collections of atoms that should not overlap (e.g., residues, chains).
 pub(super) trait IndexRange {
