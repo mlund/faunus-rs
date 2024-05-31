@@ -14,8 +14,10 @@
 
 use std::{
     collections::{HashMap, HashSet, VecDeque},
-    path::PathBuf,
+    path::{Path, PathBuf},
 };
+
+use super::chemfiles_interface;
 
 use derive_builder::Builder;
 use derive_getters::Getters;
@@ -44,6 +46,7 @@ pub struct MoleculeKind {
     #[getter(skip)]
     id: usize,
     /// Names of atom kinds forming the molecule.
+    #[serde(default)]
     atoms: Vec<String>,
     /// Indices of atom kinds forming the molecule.
     /// Populated once the molecule is added to a topology.
@@ -92,8 +95,23 @@ pub struct MoleculeKind {
     custom: HashMap<String, Value>,
     /// Construct molecule from existing structure file (xyz, pdb, etc.)
     #[serde(default)]
-    #[builder(setter(into, strip_option), default)]
+    #[builder(setter(strip_option, custom), default)]
     from_structure: Option<PathBuf>,
+}
+
+impl MoleculeKindBuilder {
+    /// Populate `atoms` from structure file.
+    /// 
+    /// # Panics
+    /// Panics of the file doesn't exist or is of unknown format.
+    pub fn from_structure(&mut self, filename: impl AsRef<Path>) -> &mut Self {
+        let atom_names = chemfiles_interface::frame_from_file(&filename)
+            .unwrap()
+            .iter_atoms()
+            .map(|a| a.name())
+            .collect();
+        self.atoms(atom_names)
+    }
 }
 
 fn default_true() -> bool {
@@ -399,5 +417,20 @@ mod tests {
                 .exclusions
                 .contains(&UnorderedPair(pair[0], pair[1])));
         }
+    }
+
+    #[test]
+    fn test_load_structure() {
+        let molecule = MoleculeKindBuilder::default()
+            .name("MOL")
+            .from_structure("tests/files/mol2.xyz")
+            .build()
+            .unwrap();
+
+        assert_eq!(molecule.atoms.len(), 3);
+        assert_eq!(
+            molecule.atoms.as_slice(),
+            ["OW".to_owned(), "OW".to_owned(), "X".to_owned()]
+        );
     }
 }

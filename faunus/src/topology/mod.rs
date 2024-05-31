@@ -65,7 +65,7 @@ use serde::{Deserializer, Serializer};
 
 use self::block::{InsertionPolicy, MoleculeBlock};
 pub use self::molecule::{MoleculeKind, MoleculeKindBuilder};
-pub use structure::{positions_from_structure_file, molecule_from_file};
+pub use structure::{molecule_from_file, positions_from_structure_file};
 
 /// Trait implemented by collections of atoms that should not overlap (e.g., residues, chains).
 pub(super) trait IndexRange {
@@ -1100,7 +1100,7 @@ mod tests {
             ("point".to_owned(), Value::Point([1.4, 2.2, -0.71].into())),
         ]);
 
-        assert_eq!(topology.moleculekinds().len(), 2);
+        assert_eq!(topology.moleculekinds().len(), 3);
 
         compare_molecule_kind(
             &topology.moleculekinds()[0],

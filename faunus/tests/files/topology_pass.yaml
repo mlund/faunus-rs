@@ -43,6 +43,8 @@ molecules:
     has_com: false
   - name: MOL2
     atoms: [OW, OW, X]
+  - name: MOL3
+    from_structure: "tests/files/mol2.xyz" 
   
 system:
   intermolecular:
