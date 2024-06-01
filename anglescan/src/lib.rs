@@ -2,6 +2,7 @@ pub use nalgebra::{Matrix3, UnitQuaternion, Vector3};
 mod anglescan;
 pub mod energy;
 pub mod structure;
+pub mod table;
 extern crate pretty_env_logger;
 #[macro_use]
 extern crate log;

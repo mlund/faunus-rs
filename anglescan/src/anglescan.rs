@@ -133,7 +133,7 @@ impl TwobodyAngles {
         r: &Vector3,
         temperature: f64,
     ) -> Result<Sample> {
-        let mut file = Self::open_compressed_file(&format!("R_{:.1}.dat.gz", r.norm()))?;
+        let mut file = Self::open_compressed_file(format!("R_{:.1}.dat.gz", r.norm()))?;
         let sample = self // Scan over angles
             .iter()
             .map(|(q1, q2)| {
