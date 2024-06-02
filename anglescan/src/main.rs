@@ -10,6 +10,7 @@ use indicatif::ParallelProgressIterator;
 use nu_ansi_term::Color::{Red, Yellow};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use rgb::RGB8;
+use std::f64::consts::PI;
 use std::{io::Write, path::PathBuf};
 extern crate pretty_env_logger;
 #[macro_use]
@@ -25,6 +26,30 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
+    Potential {
+        /// Path to first XYZ file
+        #[arg(short = '1', long)]
+        mol1: PathBuf,
+        /// Angular resolution in radians
+        #[arg(short = 'r', long, default_value = "0.1")]
+        resolution: f64,
+        /// Radius around center of mass to scan to calc. potentil (angstroms)
+        #[arg(long)]
+        radius: f64,
+        /// YAML file with atom definitions (names, charges, etc.)
+        #[arg(short = 'a', long)]
+        atoms: PathBuf,
+        /// 1:1 salt molarity in mol/l
+        #[arg(short = 'M', long, default_value = "0.1")]
+        molarity: f64,
+        /// Cutoff distance for pair-wise interactions (angstroms)
+        #[arg(long, default_value = "40.0")]
+        cutoff: f64,
+        /// Temperature in K
+        #[arg(short = 'T', long, default_value = "298.15")]
+        temperature: f64,
+    },
+
     /// Scan angles and tabulate energy between two rigid bodies
     Scan {
         /// Path to first XYZ file
@@ -61,7 +86,7 @@ enum Commands {
 }
 
 /// Calculate energy of all two-body poses
-fn do_scan(scan_command: &Commands) -> Result<()> {
+fn do_scan(cmd: &Commands) -> Result<()> {
     let Commands::Scan {
         mol1,
         mol2,
@@ -73,7 +98,10 @@ fn do_scan(scan_command: &Commands) -> Result<()> {
         molarity,
         cutoff,
         temperature,
-    } = scan_command;
+    } = cmd
+    else {
+        anyhow::bail!("Unknown command");
+    };
     assert!(rmin < rmax);
 
     let mut atomkinds = AtomKinds::from_yaml(atoms)?;
@@ -149,6 +177,55 @@ fn report_pmf(samples: &[(Vector3<f64>, Sample)], path: &PathBuf) {
     }
 }
 
+// Calculate electric potential at points on a sphere around a molecule
+fn do_potential(cmd: &Commands) -> Result<()> {
+    let Commands::Potential {
+        mol1,
+        resolution,
+        radius,
+        atoms,
+        molarity,
+        cutoff,
+        temperature,
+    } = cmd
+    else {
+        panic!("Unexpected command");
+    };
+    let mut atomkinds = AtomKinds::from_yaml(atoms)?;
+    atomkinds.set_missing_epsilon(2.479);
+
+    let medium = Medium::salt_water(*temperature, Salt::SodiumChloride, *molarity);
+    let multipole = coulomb::pairwise::Plain::new(*cutoff, medium.debye_length());
+    let structure = Structure::from_xyz(mol1, &atomkinds);
+
+    let n_points = (4.0 * PI / resolution.powi(2)).round() as usize;
+    let points = anglescan::make_icosphere(n_points)?;
+    let resolution = (4.0 * PI / points.len() as f64).sqrt();
+    log::info!(
+        "Requested {} points on a sphere; got {} -> new resolution = {:.2}",
+        n_points,
+        points.len(),
+        resolution
+    );
+
+    let mut pqr_file = std::fs::File::create("potential.pqr")?;
+    let mut pot_file = std::fs::File::create("potential.dat")?;
+
+    for r in points.iter().map(|r| r.scale(*radius)) {
+        let potential = energy::electric_potential(&structure, &r, &multipole);
+        writeln!(
+            pqr_file,
+            "ATOM  {:5} {:4.4} {:4.3}{:5}    {:8.3} {:8.3} {:8.3} {:.3} {:.3}",
+            1, "A", "AAA", 1, r.x, r.y, r.z, potential, 2.0
+        )?;
+        
+        let theta = r.y.atan2(r.x);
+        let phi = (r.z / radius).acos();        
+        writeln!(pot_file, "{:.3} {:.3} {:.4}", theta, phi, potential)?;
+    }
+    Ok(())
+}
+
 fn do_main() -> Result<()> {
     if std::env::var("RUST_LOG").is_err() {
         std::env::set_var("RUST_LOG", "info");
@@ -159,6 +236,7 @@ fn do_main() -> Result<()> {
     match cli.command {
         Some(cmd) => match cmd {
             Commands::Scan { .. } => do_scan(&cmd)?,
+            Commands::Potential { .. } => do_potential(&cmd)?,
         },
         None => {
             anyhow::bail!("No command given");

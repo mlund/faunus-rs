@@ -1,7 +1,7 @@
 use anyhow::Result;
 
 /// Periodic table that emulate periodicity by padding edges
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct PaddedTable<T: Default + Clone> {
     /// Minimum value of keys in the table
     min: f64,
@@ -70,6 +70,13 @@ impl<T: Default + Clone> PaddedTable<T> {
         self.data.is_empty()
     }
 }
+
+pub type PaddedTable1D = PaddedTable<f64>;
+pub type PaddedTable2D = PaddedTable<PaddedTable1D>;
+pub type PaddedTable3D = PaddedTable<PaddedTable2D>;
+pub type PaddedTable4D = PaddedTable<PaddedTable3D>;
+pub type PaddedTable5D = PaddedTable<PaddedTable4D>;
+pub type PaddedTable6D = PaddedTable<PaddedTable5D>;
 
 #[cfg(test)]
 mod tests {

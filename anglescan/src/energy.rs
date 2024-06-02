@@ -1,6 +1,8 @@
+use coulomb::pairwise::MultipolePotential;
 use faunus::topology::AtomKind;
 use interatomic::twobody::{IonIon, IsotropicTwobodyEnergy};
 use interatomic::CombinationRule;
+use interatomic::Vector3;
 
 use crate::structure::Structure;
 
@@ -57,4 +59,11 @@ impl PairMatrix {
         trace!("molecule-molecule energy: {:.2} kJ/mol", energy);
         energy
     }
+}
+
+/// Calculate accumulated electric potential at point `r` due to charges in `structure`
+pub fn electric_potential(structure: &Structure, r: &Vector3, multipole: &CoulombMethod) -> f64 {
+    std::iter::zip(structure.pos.iter(), structure.charges.iter())
+        .map(|(pos, charge)| multipole.ion_potential(*charge, (pos - r).norm()))
+        .sum()
 }
