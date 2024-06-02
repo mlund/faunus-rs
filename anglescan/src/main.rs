@@ -1,7 +1,7 @@
 use anglescan::{
     energy,
     structure::{AtomKinds, Structure},
-    Sample, TwobodyAngles, Vector3,
+    Sample, TwobodyAngles, UnitQuaternion, Vector3,
 };
 use anyhow::Result;
 use clap::{Parser, Subcommand};
@@ -211,16 +211,22 @@ fn do_potential(cmd: &Commands) -> Result<()> {
     let mut pqr_file = std::fs::File::create("potential.pqr")?;
     let mut pot_file = std::fs::File::create("potential.dat")?;
 
-    for r in points.iter().map(|r| r.scale(*radius)) {
-        let potential = energy::electric_potential(&structure, &r, &multipole);
+    let pos = Vector3::new(0.0, 0.001, *radius);
+    let rotations = points
+        .iter()
+        .map(|i| UnitQuaternion::rotation_between(i, &pos).unwrap());
+
+    for q in rotations {
+        let rotated = q.transform_vector(&pos);
+        let potential = energy::electric_potential(&structure, &rotated, &multipole);
         writeln!(
             pqr_file,
             "ATOM  {:5} {:4.4} {:4.3}{:5}    {:8.3} {:8.3} {:8.3} {:.3} {:.3}",
-            1, "A", "AAA", 1, r.x, r.y, r.z, potential, 2.0
+            1, "A", "AAA", 1, rotated.x, rotated.y, rotated.z, potential, 2.0
         )?;
-        
-        let theta = r.y.atan2(r.x);
-        let phi = (r.z / radius).acos();        
+
+        let theta = rotated.y.atan2(rotated.x);
+        let phi = (rotated.z / radius).acos();
         writeln!(pot_file, "{:.3} {:.3} {:.4}", theta, phi, potential)?;
     }
     Ok(())
