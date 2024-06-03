@@ -4,7 +4,10 @@ use crate::{energy::PairMatrix, structure::Structure, Sample};
 use anyhow::{Context, Result};
 #[cfg(test)]
 use approx::assert_relative_eq;
-use hexasphere::shapes::IcoSphere;
+use hexasphere::{
+    shapes::{IcoSphere, IcoSphereBase},
+    AdjacencyBuilder, Subdivided,
+};
 use iter_num_tools::arange;
 use itertools::Itertools;
 use std::{f64::consts::PI, fmt::Display, io::Write, path::Path};
@@ -50,7 +53,7 @@ impl TwobodyAngles {
         );
 
         let n_points = (4.0 * PI / angle_resolution.powi(2)).round() as usize;
-        let mut points = make_icosphere(n_points)?;
+        let mut points = make_icosphere_vertices(n_points)?;
         let angle_resolution = (4.0 * PI / points.len() as f64).sqrt();
         log::info!(
             "Requested {} points on a sphere; got {} -> new resolution = {:.2}",
@@ -206,12 +209,6 @@ pub fn make_fibonacci_sphere(n_points: usize) -> Vec<Vector3> {
 /// The number of vertices on the icosphere is _N_ = 10 × (_n_divisions_ + 1)² + 2
 /// whereby 0, 1, 2, ... subdivisions give 12, 42, 92, ... vertices, respectively.
 ///
-/// ## Examples
-/// ~~~
-/// let vertices = anglescan::make_icosphere(20).unwrap();
-/// assert_eq!(vertices.len(), 42);
-/// ~~~
-///
 ///
 /// ## Further reading
 ///
@@ -221,7 +218,7 @@ pub fn make_fibonacci_sphere(n_points: usize) -> Vec<Vector3> {
 ///
 /// ![Image](https://upload.wikimedia.org/wikipedia/commons/thumb/f/f7/Loop_Subdivision_Icosahedron.svg/300px-Loop_Subdivision_Icosahedron.svg.png)
 ///
-pub fn make_icosphere(min_points: usize) -> Result<Vec<Vector3>> {
+pub fn make_icosphere(min_points: usize) -> Result<Subdivided<(), IcoSphereBase>> {
     let points_per_division = |n_div: usize| 10 * (n_div + 1) * (n_div + 1) + 2;
     let n_points = (0..200).map(points_per_division);
 
@@ -232,11 +229,89 @@ pub fn make_icosphere(min_points: usize) -> Result<Vec<Vector3>> {
         .map(|(n_div, _)| n_div)
         .context("too many vertices")?;
 
-    Ok(IcoSphere::new(n_divisions, |_| ())
+    Ok(IcoSphere::new(n_divisions, |_| ()))
+}
+
+/// Make icosphere vertices as 3D vectors
+///
+/// ## Examples
+/// ~~~
+/// let vertices = anglescan::make_icosphere_vertices(20).unwrap();
+/// assert_eq!(vertices.len(), 42);
+/// ~~~
+pub fn make_icosphere_vertices(min_points: usize) -> Result<Vec<Vector3>> {
+    let points = make_icosphere(min_points)?
         .raw_points()
         .iter()
         .map(|p| Vector3::new(p.x as f64, p.y as f64, p.z as f64))
-        .collect())
+        .collect();
+    Ok(points)
+}
+
+// https://en.wikipedia.org/wiki/Geodesic_polyhedron
+// 12 vertices will always have 5 neighbors; the rest will have 6.
+pub struct IcoSphereWithNeighbors {
+    _icosphere: Subdivided<(), IcoSphereBase>,
+    neighbors: Vec<Vec<usize>>,
+    vertices: Vec<Vector3>,
+}
+
+impl IcoSphereWithNeighbors {
+    pub fn from_min_points(min_points: usize) -> Result<Self> {
+        let icosphere = make_icosphere(min_points)?;
+        let indices = icosphere.get_all_indices();
+        let mut builder = AdjacencyBuilder::new(icosphere.raw_points().len());
+        builder.add_indices(indices.as_slice());
+        let neighbors = builder.finish().iter().map(|i| i.to_vec()).collect();
+        let vertices = icosphere
+            .raw_points()
+            .iter()
+            .map(|p| Vector3::new(p.x as f64, p.y as f64, p.z as f64))
+            .collect();
+        Ok(Self {
+            _icosphere: icosphere,
+            neighbors,
+            vertices,
+        })
+    }
+    /// Find nearest vertex to a given point
+    ///
+    /// This is brute force and has O(n) complexity. This
+    /// should be updated with a more efficient algorithm that
+    /// uses angular information to narrow down the search.
+    pub fn nearest_vertex(&self, point: &Vector3) -> usize {
+        let mut min_distance = f64::INFINITY;
+        let mut nearest = 0;
+        for (i, vertex) in self.vertices.iter().enumerate() {
+            let distance = (vertex - point).norm_squared();
+            if distance < min_distance {
+                min_distance = distance;
+                nearest = i;
+            }
+        }
+        nearest
+    }
+
+    /// Find nearest face to a given point
+    /// 
+    /// The first nearest point is O(n) whereafter neighbor information
+    /// is used to find the 2nd and 3rd nearest points which are guaranteed
+    /// to define a face.
+    pub fn nearest_face(&self, point: &Vector3) -> Vec<usize> {
+        let nearest_vertex = self.nearest_vertex(point);
+
+        let mut dist: Vec<(usize, f64)> = self.neighbors[nearest_vertex]
+            .iter()
+            .cloned()
+            .map(|i| (i, (self.vertices[i] - point).norm_squared()))
+            .collect();
+        dist.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+
+        let mut face: Vec<usize> = dist.iter().map(|(i, _)| i).cloned().take(2).collect();
+        face.push(nearest_vertex);
+        assert_eq!(face.iter().unique().count(), 3);
+        face
+    }
 }
 
 #[cfg(test)]
@@ -245,20 +320,20 @@ mod tests {
 
     #[test]
     fn test_icosphere() {
-        let points = make_icosphere(1).unwrap();
+        let points = make_icosphere_vertices(1).unwrap();
         assert_eq!(points.len(), 12);
-        let points = make_icosphere(10).unwrap();
+        let points = make_icosphere_vertices(10).unwrap();
         assert_eq!(points.len(), 12);
-        let points = make_icosphere(13).unwrap();
+        let points = make_icosphere_vertices(13).unwrap();
         assert_eq!(points.len(), 42);
-        let points = make_icosphere(42).unwrap();
+        let points = make_icosphere_vertices(42).unwrap();
         assert_eq!(points.len(), 42);
-        let points = make_icosphere(43).unwrap();
+        let points = make_icosphere_vertices(43).unwrap();
         assert_eq!(points.len(), 92);
-        let _ = make_icosphere(400003).is_err();
+        let _ = make_icosphere_vertices(400003).is_err();
 
         let samples = 1000;
-        let points = make_icosphere(samples).unwrap();
+        let points = make_icosphere_vertices(samples).unwrap();
         let mut center: Vector3 = Vector3::zeros();
         assert_eq!(points.len(), 1002);
         for point in points {

@@ -200,7 +200,7 @@ fn do_potential(cmd: &Commands) -> Result<()> {
     let structure = Structure::from_xyz(mol1, &atomkinds);
 
     let n_points = (4.0 * PI / resolution.powi(2)).round() as usize;
-    let points = anglescan::make_icosphere(n_points)?;
+    let points = anglescan::make_icosphere_vertices(n_points)?;
     let resolution = (4.0 * PI / points.len() as f64).sqrt();
     log::info!(
         "Requested {} points on a sphere; got {} -> new resolution = {:.2}",
@@ -240,6 +240,20 @@ fn do_potential(cmd: &Commands) -> Result<()> {
             .set(theta, potential)
             .unwrap();
     }
+
+    // https://en.wikipedia.org/wiki/Geodesic_polyhedron
+    // 12 vertices will always have 5 neighbors; the rest will have 6.
+    let icosphere = anglescan::make_icosphere(12)?;
+    let indices = icosphere.get_all_indices();
+    let mut builder = hexasphere::AdjacencyBuilder::new(icosphere.raw_points().len());
+    builder.add_indices(indices.as_slice());
+    let result = builder.finish();
+    for (i, res) in result.iter().enumerate() {
+        println!("{} {:?}", i, res);
+    }
+
+    println!("n5 = {}", result.iter().filter(|i| i.len() == 5).count());
+    println!("n6 = {}", result.iter().filter(|i| i.len() == 6).count());
 
     for phi in arange(0.0..PI, resolution) {
         for theta in arange(-PI..PI, resolution) {

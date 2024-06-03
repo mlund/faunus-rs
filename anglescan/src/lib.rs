@@ -10,7 +10,10 @@ extern crate log;
 use std::iter::Sum;
 use std::ops::{Add, Neg};
 
-pub use anglescan::{make_fibonacci_sphere, make_icosphere, TwobodyAngles};
+pub use anglescan::{
+    make_fibonacci_sphere, make_icosphere, make_icosphere_vertices, TwobodyAngles,
+    IcoSphereWithNeighbors,
+};
 
 /// RMSD angle between two quaternion rotations
 ///
