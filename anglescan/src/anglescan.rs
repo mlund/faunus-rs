@@ -1,7 +1,7 @@
 #[cfg(test)]
 extern crate approx;
 use crate::{energy::PairMatrix, structure::Structure, Sample};
-use anyhow::Result;
+use anyhow::{Context, Result};
 #[cfg(test)]
 use approx::assert_relative_eq;
 use hexasphere::shapes::IcoSphere;
@@ -225,16 +225,18 @@ pub fn make_icosphere(min_points: usize) -> Result<Vec<Vector3>> {
     let points_per_division = |n_div: usize| 10 * (n_div + 1) * (n_div + 1) + 2;
     let n_points = (0..200).map(points_per_division);
 
-    match n_points.enumerate().find(|(_, n)| *n >= min_points) {
-        Some((n_div, _)) => Ok(IcoSphere::new(n_div, |_| ())
-            .raw_points()
-            .iter()
-            .map(|p| Vector3::new(p.x as f64, p.y as f64, p.z as f64))
-            .collect()),
-        None => {
-            anyhow::bail!("too many vertices");
-        }
-    }
+    // Number of divisions to achieve at least `min_points` vertices
+    let n_divisions = n_points
+        .enumerate()
+        .find(|(_, n)| *n >= min_points)
+        .map(|(n_div, _)| n_div)
+        .context("too many vertices")?;
+
+    Ok(IcoSphere::new(n_divisions, |_| ())
+        .raw_points()
+        .iter()
+        .map(|p| Vector3::new(p.x as f64, p.y as f64, p.z as f64))
+        .collect())
 }
 
 #[cfg(test)]

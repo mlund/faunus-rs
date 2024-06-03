@@ -14,14 +14,14 @@ pub struct PaddedTable<T: Default + Clone> {
 }
 
 impl<T: Default + Clone> PaddedTable<T> {
-    pub fn new(min: f64, max: f64, res: f64) -> PaddedTable<T> {
+    pub fn new(min: f64, max: f64, res: f64, initial_value: T) -> PaddedTable<T> {
         assert!(min < max && res > 0.0);
         let n = ((max - min + 2.0 * res) / res + 0.5) as usize;
         Self {
             min: min - res,
             _max: max + res,
             res,
-            data: vec![T::default(); n],
+            data: vec![initial_value; n],
         }
     }
 
@@ -47,7 +47,7 @@ impl<T: Default + Clone> PaddedTable<T> {
         let index = self.to_index(key)?;
 
         if index == 0 || index == n - 1 {
-            anyhow::bail!("Cannot set value in padded region")
+            // anyhow::bail!("Cannot set value in padded region")
         } else if index == 1 {
             self.data[n - 1] = value.clone();
         } else if index == n - 2 {
@@ -61,6 +61,11 @@ impl<T: Default + Clone> PaddedTable<T> {
     pub fn get(&self, key: f64) -> Result<&T> {
         let index = self.to_index(key)?;
         Ok(&self.data[index])
+    }
+
+    pub fn get_mut(&mut self, key: f64) -> Result<&mut T> {
+        let index = self.to_index(key)?;
+        Ok(&mut self.data[index])
     }
 
     pub fn len(&self) -> usize {
@@ -87,7 +92,7 @@ mod tests {
     #[test]
     fn test_table() {
         let dx = 0.1;
-        let mut table = PaddedTable::new(0.0, 1.0, dx);
+        let mut table = PaddedTable::new(0.0, 1.0, dx, 0.0);
         let n = table.len();
         assert_eq!(n, 12);
         table.set(0.0, 1.0).unwrap();
@@ -129,7 +134,7 @@ mod tests {
         let res = 0.1;
         let angles = arange(0.0..2.0 * PI, res).collect::<Vec<f64>>();
 
-        let mut table = PaddedTable::<usize>::new(0.0, 2.0 * PI, res);
+        let mut table = PaddedTable::<usize>::new(0.0, 2.0 * PI, res, 0);
         assert_eq!(table.len(), angles.len() + 2);
 
         for (i, angle) in angles.iter().enumerate() {

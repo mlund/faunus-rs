@@ -1,7 +1,7 @@
 use anglescan::{
     energy,
     structure::{AtomKinds, Structure},
-    Sample, TwobodyAngles, UnitQuaternion, Vector3,
+    table, Sample, TwobodyAngles, UnitQuaternion, Vector3,
 };
 use anyhow::Result;
 use clap::{Parser, Subcommand};
@@ -15,6 +15,7 @@ use std::{io::Write, path::PathBuf};
 extern crate pretty_env_logger;
 #[macro_use]
 extern crate log;
+use iter_num_tools::arange;
 use textplots::{Chart, ColorPlot, Shape};
 
 #[derive(Parser)]
@@ -210,11 +211,15 @@ fn do_potential(cmd: &Commands) -> Result<()> {
 
     let mut pqr_file = std::fs::File::create("potential.pqr")?;
     let mut pot_file = std::fs::File::create("potential.dat")?;
+    let mut tab_file = std::fs::File::create("potential.tab")?;
 
     let pos = Vector3::new(0.0, 0.001, *radius);
     let rotations = points
         .iter()
         .map(|i| UnitQuaternion::rotation_between(i, &pos).unwrap());
+
+    let empty_theta = table::PaddedTable1D::new(-PI, PI, resolution, 0.0);
+    let mut angle_table = table::PaddedTable::new(0.0, PI, resolution, empty_theta);
 
     for q in rotations {
         let rotated = q.transform_vector(&pos);
@@ -225,10 +230,24 @@ fn do_potential(cmd: &Commands) -> Result<()> {
             1, "A", "AAA", 1, rotated.x, rotated.y, rotated.z, potential, 2.0
         )?;
 
-        let theta = rotated.y.atan2(rotated.x);
-        let phi = (rotated.z / radius).acos();
+        let theta = rotated.y.atan2(rotated.x); // -PI < theta < PI
+        let phi = (rotated.z / radius).acos(); // 0 < phi < PI
         writeln!(pot_file, "{:.3} {:.3} {:.4}", theta, phi, potential)?;
+
+        angle_table
+            .get_mut(phi)
+            .unwrap()
+            .set(theta, potential)
+            .unwrap();
     }
+
+    for phi in arange(0.0..PI, resolution) {
+        for theta in arange(-PI..PI, resolution) {
+            let potential = angle_table.get(phi).unwrap().get(theta).unwrap();
+            writeln!(tab_file, "{:.3} {:.3} {:.4}", theta, phi, potential)?;
+        }
+    }
+
     Ok(())
 }
 
