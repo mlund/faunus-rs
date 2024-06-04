@@ -252,8 +252,17 @@ fn do_potential(cmd: &Commands) -> Result<()> {
         println!("{} {:?}", i, res);
     }
 
+    for (i, triangle) in indices.chunks(3).enumerate() {
+        println!(
+            "{} [{}, {}, {}] is a triangle on the resulting shape",
+            i, triangle[0], triangle[1], triangle[2],
+        );
+    }
+
     println!("n5 = {}", result.iter().filter(|i| i.len() == 5).count());
     println!("n6 = {}", result.iter().filter(|i| i.len() == 6).count());
+
+    let _icotable = anglescan::IcoSphereTable::from_icosphere(icosphere);
 
     for phi in arange(0.0..PI, resolution) {
         for theta in arange(-PI..PI, resolution) {

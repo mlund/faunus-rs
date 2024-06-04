@@ -11,8 +11,8 @@ use std::iter::Sum;
 use std::ops::{Add, Neg};
 
 pub use anglescan::{
-    make_fibonacci_sphere, make_icosphere, make_icosphere_vertices, TwobodyAngles,
-    IcoSphereWithNeighbors,
+    make_fibonacci_sphere, make_icosphere, make_icosphere_vertices, IcoSphereTable,
+    TwobodyAngles,
 };
 
 /// RMSD angle between two quaternion rotations

@@ -250,30 +250,111 @@ pub fn make_icosphere_vertices(min_points: usize) -> Result<Vec<Vector3>> {
 
 // https://en.wikipedia.org/wiki/Geodesic_polyhedron
 // 12 vertices will always have 5 neighbors; the rest will have 6.
-pub struct IcoSphereWithNeighbors {
+pub struct IcoSphereTable {
+    /// Raw icosphere structure from hexasphere crate
     _icosphere: Subdivided<(), IcoSphereBase>,
+    /// Neighbor list of other vertices for each vertex
     neighbors: Vec<Vec<usize>>,
+    /// 3D coordinates of the vertices
     vertices: Vec<Vector3>,
+    /// All faces of the icosphere each consisting of three (sorted) vertex indices
+    faces: Vec<Vec<usize>>,
+    /// Data associated with each vertex
+    vertex_data: Vec<f64>,
 }
 
-impl IcoSphereWithNeighbors {
-    pub fn from_min_points(min_points: usize) -> Result<Self> {
-        let icosphere = make_icosphere(min_points)?;
+impl IcoSphereTable {
+    pub fn from_icosphere(icosphere: Subdivided<(), IcoSphereBase>) -> Self {
         let indices = icosphere.get_all_indices();
         let mut builder = AdjacencyBuilder::new(icosphere.raw_points().len());
         builder.add_indices(indices.as_slice());
         let neighbors = builder.finish().iter().map(|i| i.to_vec()).collect();
-        let vertices = icosphere
+        let vertices: Vec<Vector3> = icosphere
             .raw_points()
             .iter()
             .map(|p| Vector3::new(p.x as f64, p.y as f64, p.z as f64))
             .collect();
-        Ok(Self {
+
+        let faces = indices
+            .chunks(3)
+            .map(|c| {
+                let mut v = vec![c[0] as usize, c[1] as usize, c[2] as usize];
+                v.sort();
+                v
+            })
+            .collect();
+
+        let n_vertices = vertices.len();
+
+        Self {
             _icosphere: icosphere,
             neighbors,
             vertices,
-        })
+            faces,
+            vertex_data: Vec::with_capacity(n_vertices),
+        }
     }
+
+    pub fn from_min_points(min_points: usize) -> Result<Self> {
+        let icosphere = make_icosphere(min_points)?;
+        Ok(Self::from_icosphere(icosphere))
+    }
+
+    pub fn vertex_data(&self) -> &Vec<f64> {
+        &self.vertex_data
+    }
+
+    pub fn vertex_data_mut(&mut self) -> &mut Vec<f64> {
+        &mut self.vertex_data
+    }
+
+    /// Get interpolated data for an arbitrart point on the icosphere
+    /// 
+    /// Done by finding the nearest face and then interpolate using the three corner vertices
+    pub fn get(&self, point: &Vector3) -> f64 {
+        let face = self.nearest_face(point);
+        let data = face.iter().map(|i| &self.vertex_data[*i]);
+        let weights = face.iter().map(|i| 1.0 / (self.vertices[*i] - point).norm()).collect::<Vec<f64>>();
+        let sum_weights: f64 = weights.iter().sum();
+        data
+            .zip(weights)
+            .map(|(d, w)| *d * (w / sum_weights))
+            .sum()
+    }
+
+    /// Get data for a point on the surface using barycentric interpolation
+    /// https://en.wikipedia.org/wiki/Barycentric_coordinate_system#Interpolation_on_a_triangular_unstructured_grid
+    pub fn barycentric_interpolation(&self, point: &Vector3) -> f64 {
+        let bary = self.barycentric(point);
+        let face = self.nearest_face(point);
+        bary[0] * self.vertex_data[face[0]] + bary[1] * self.vertex_data[face[1]] + bary[2] * self.vertex_data[face[2]]
+    }
+
+    /// Get Barycentric coordinate for an arbitrart point on the icosphere
+    /// https://en.wikipedia.org/wiki/Barycentric_coordinate_system
+    pub fn barycentric(&self, point: &Vector3) -> Vec<f64> {
+        let face = self.nearest_face(point);
+        let a = self.vertices[face[0]];
+        let b = self.vertices[face[1]];
+        let c = self.vertices[face[2]];
+        let v0 = b - a;
+        let v1 = c - a;
+        let v2 = point - a;
+        let d00 = v0.dot(&v0);
+        let d01 = v0.dot(&v1);
+        let d11 = v1.dot(&v1);
+        let d20 = v2.dot(&v0);
+        let d21 = v2.dot(&v1);
+        let denom = d00 * d11 - d01 * d01;
+        let v = (d11 * d20 - d01 * d21) / denom;
+        let w = (d00 * d21 - d01 * d20) / denom;
+        vec![1.0 - v - w, v, w]
+    }
+
+    pub fn faces(&self) -> &Vec<Vec<usize>> {
+        &self.faces
+    }
+
     /// Find nearest vertex to a given point
     ///
     /// This is brute force and has O(n) complexity. This
@@ -282,8 +363,9 @@ impl IcoSphereWithNeighbors {
     pub fn nearest_vertex(&self, point: &Vector3) -> usize {
         let mut min_distance = f64::INFINITY;
         let mut nearest = 0;
+        let point_hat = point.normalize();
         for (i, vertex) in self.vertices.iter().enumerate() {
-            let distance = (vertex - point).norm_squared();
+            let distance = (vertex - point_hat).norm_squared();
             if distance < min_distance {
                 min_distance = distance;
                 nearest = i;
@@ -293,22 +375,24 @@ impl IcoSphereWithNeighbors {
     }
 
     /// Find nearest face to a given point
-    /// 
+    ///
     /// The first nearest point is O(n) whereafter neighbor information
     /// is used to find the 2nd and 3rd nearest points which are guaranteed
     /// to define a face.
     pub fn nearest_face(&self, point: &Vector3) -> Vec<usize> {
         let nearest_vertex = self.nearest_vertex(point);
+        let point_hat = point.normalize();
 
         let mut dist: Vec<(usize, f64)> = self.neighbors[nearest_vertex]
             .iter()
             .cloned()
-            .map(|i| (i, (self.vertices[i] - point).norm_squared()))
+            .map(|i| (i, (self.vertices[i] - point_hat).norm_squared()))
             .collect();
         dist.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
 
         let mut face: Vec<usize> = dist.iter().map(|(i, _)| i).cloned().take(2).collect();
         face.push(nearest_vertex);
+        face.sort_unstable();
         assert_eq!(face.iter().unique().count(), 3);
         face
     }
