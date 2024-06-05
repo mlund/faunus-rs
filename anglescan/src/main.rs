@@ -222,17 +222,27 @@ fn do_potential(cmd: &Commands) -> Result<()> {
         let rotated = q.transform_vector(&pos);
         let potential = energy::electric_potential(&structure, &rotated.scale(*radius), &multipole);
         icotable.vertex_data_mut()[i] = potential;
-        writeln!(
-            pqr_file,
-            "ATOM  {:5} {:4.4} {:4.3}{:5}    {:8.3} {:8.3} {:8.3} {:.3} {:.3}",
-            1, "A", "AAA", 1, rotated.x, rotated.y, rotated.z, potential, 2.0
-        )?;
 
+        // Write potential at vertices
         let (_r, theta, phi) = to_spherical(&rotated);
         writeln!(
             pot_vertices_file,
             "{:.3} {:.3} {:.4}",
             theta, phi, potential
+        )?;
+        // Write PQR file
+        writeln!(
+            pqr_file,
+            "ATOM  {:5} {:4.4} {:4.3}{:5}    {:8.3} {:8.3} {:8.3} {:.3} {:.3}",
+            1,
+            "A",
+            "AAA",
+            1,
+            *radius * rotated.x,
+            *radius * rotated.y,
+            *radius * rotated.z,
+            potential,
+            2.0
         )?;
     }
 
@@ -244,6 +254,17 @@ fn do_potential(cmd: &Commands) -> Result<()> {
             let exact_potential =
                 energy::electric_potential(&structure, &point.scale(*radius), &multipole);
             let rel_err = (potential - exact_potential) / exact_potential;
+            let abs_err = (potential - exact_potential).abs();
+            if abs_err > 0.05 {
+                println!(
+                    "Potential at theta={:.3} phi={:.3} is {:.4} (exact: {:.4}) abs. error {:.4}",
+                    theta, phi, potential, exact_potential, abs_err
+                );
+                let face = icotable.nearest_face(point);
+                let bary = icotable.barycentric(point, &face);
+                println!("Face: {:?} Barycentric: {:?}", face, bary);
+                println!("");
+            }
             writeln!(
                 pot_angles_file,
                 "{:.3} {:.3} {:.4} {:.4} {:.4}",
@@ -306,22 +327,6 @@ mod tests {
         }
     }
 }
-
-// /// Cartesian to spherical coordinates
-// fn to_spherical(v: &Vector3<f64>) -> (f64, f64, f64) {
-//     let r = v.norm();
-//     let theta = v.y.atan2(v.x);
-//     let phi = (v.z / r).acos();
-//     (r, theta, phi)
-// }
-
-// /// Convert spherical coordinate to Cartesian coordinates
-// pub fn to_cartesian(r: f64, theta: f64, phi: f64) -> Vector3<f64> {
-//     let x = r * theta.cos() * phi.sin();
-//     let y = r * theta.sin() * phi.sin();
-//     let z = r * phi.cos();
-//     Vector3::new(x, y, z)
-// }
 
 fn do_main() -> Result<()> {
     if std::env::var("RUST_LOG").is_err() {

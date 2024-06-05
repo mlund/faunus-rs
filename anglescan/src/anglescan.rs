@@ -300,30 +300,18 @@ impl IcoSphereTable {
         Ok(Self::from_icosphere(icosphere))
     }
 
+    /// Get data associated with each vertex
     pub fn vertex_data(&self) -> &Vec<f64> {
         &self.vertex_data
     }
 
+    /// Get mutable data associated with each vertex
     pub fn vertex_data_mut(&mut self) -> &mut Vec<f64> {
         &mut self.vertex_data
     }
 
-    /// Get interpolated data for an arbitrart point on the icosphere
-    ///
-    /// Done by finding the nearest face and then interpolate using the three corner vertices
-    pub fn get(&self, point: &Vector3) -> f64 {
-        let face = self.nearest_face(point);
-        let data = face.iter().map(|i| &self.vertex_data[*i]);
-        let weights = face
-            .iter()
-            .map(|i| 1.0 / (self.vertices[*i] - point).norm())
-            .collect::<Vec<f64>>();
-        let sum_weights: f64 = weights.iter().sum();
-        data.zip(weights).map(|(d, w)| *d * (w / sum_weights)).sum()
-    }
-
     /// Check is a point is on a face
-    pub fn is_on_face(&self, point: &Vector3, face: &Vec<usize>) -> bool {
+    pub fn is_on_face(&self, point: &Vector3, face: &[usize]) -> bool {
         let a = point - self.vertices[face[0]];
         let b = point - self.vertices[face[1]];
         let c = point - self.vertices[face[2]];
@@ -337,7 +325,6 @@ impl IcoSphereTable {
     /// https://en.wikipedia.org/wiki/Barycentric_coordinate_system#Interpolation_on_a_triangular_unstructured_grid
     pub fn barycentric_interpolation(&self, point: &Vector3) -> f64 {
         let face = self.nearest_face(point);
-        // assert!(self.is_on_face(point, &face));
         let bary = self.barycentric(point, &face);
         bary[0] * self.vertex_data[face[0]]
             + bary[1] * self.vertex_data[face[1]]
@@ -346,7 +333,7 @@ impl IcoSphereTable {
 
     /// Get Barycentric coordinate for an arbitrart point on a face
     /// https://en.wikipedia.org/wiki/Barycentric_coordinate_system
-    pub fn barycentric(&self, point: &Vector3, face: &Vec<usize>) -> Vec<f64> {
+    pub fn barycentric(&self, point: &Vector3, face: &[usize]) -> Vec<f64> {
         let a = self.vertices[face[0]];
         let b = self.vertices[face[1]];
         let c = self.vertices[face[2]];
@@ -364,6 +351,7 @@ impl IcoSphereTable {
         vec![1.0 - v - w, v, w]
     }
 
+    /// Get list of all faces (triangles) on the icosphere
     pub fn faces(&self) -> &Vec<Vec<usize>> {
         &self.faces
     }
@@ -373,7 +361,7 @@ impl IcoSphereTable {
     /// This is brute force and has O(n) complexity. This
     /// should be updated with a more efficient algorithm that
     /// uses angular information to narrow down the search.
-    pub fn nearest_vertex(&self, point: &Vector3) -> usize {
+    fn nearest_vertex(&self, point: &Vector3) -> usize {
         let mut min_distance = f64::INFINITY;
         let mut nearest = 0;
         let point_hat = point.normalize();
@@ -410,7 +398,6 @@ impl IcoSphereTable {
         face
     }
 }
-
 
 #[cfg(test)]
 mod tests {
