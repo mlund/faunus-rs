@@ -3,12 +3,19 @@ import numpy as np
 from scipy.interpolate import griddata
 from math import ceil
 
-angle_res = 0.05 # radians
-x, y, pot = np.loadtxt('potential.dat', unpack=True)
-print("x_min = ", x.min(), " x_max = ", x.max())
-print("y_min = ", y.min(), " y_max = ", y.max())
 
-# Contour plot of irregularly spaced data coordinates via grid interpolation
+exact = True
+angle_res = 0.005 # radians
+
+x, y, pot_interpolated, pot_exact, err = np.loadtxt('pot_at_angles.dat', unpack=True)
+if exact == True:
+    pot = pot_exact
+else:
+    pot = pot_interpolated
+
+fig, ax1 = plt.subplots(nrows=1)
+maxpot = max(abs(pot.min()), abs(pot.max()))
+
 ngridx = ceil((x.max() - x.min()) / angle_res)
 ngridy = ceil((y.max() - y.min()) / angle_res)
 print("ngridx = ", ngridx)
@@ -16,15 +23,14 @@ print("ngridy = ", ngridy)
 xi = np.linspace(x.min(), x.max(), ngridx)
 yi = np.linspace(y.min(), y.max(), ngridy)
 zi = griddata((x, y), pot, (xi[None,:], yi[:,None]), method='linear')
-
-fig, ax1 = plt.subplots(nrows=1)
 plt.contourf(xi, yi, zi, 20, cmap = plt.cm.RdBu)
-plt.colorbar() # draw colorbar
-plt.plot(x, y, 'ko', ms=1)
 
-# Load tabulated data
-x, y, pot = np.loadtxt('potential.tab', unpack=True)
-mask = (pot > 0.001) | (pot < -0.001)
-print("non-zero potential points = ", len(pot[mask]))
-#plt.scatter(x[mask], y[mask], c=pot[mask], cmap=plt.cm.RdBu, s=5, marker='o')
-plt.savefig('potential.png')
+# Overlay exact potential from each vertic (colored circles)
+x, y, pot = np.loadtxt('pot_at_vertices.dat', unpack=True)
+plt.scatter(x, y, c=pot, cmap=plt.cm.RdBu, s=15, marker='o', edgecolor='k', linewidths=0.1)
+plt.colorbar() # draw colorbar
+plt.clim(-maxpot, maxpot)
+plt.ylim(0.0, 2.0*np.pi)
+plt.xlim(0.0, np.pi)
+plt.savefig('potential.pdf')
+

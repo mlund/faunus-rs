@@ -1,7 +1,7 @@
 use anglescan::{
     energy,
     structure::{AtomKinds, Structure},
-    table, Sample, TwobodyAngles, UnitQuaternion, Vector3,
+    Sample, TwobodyAngles, UnitQuaternion, Vector3,
 };
 use anyhow::Result;
 use clap::{Parser, Subcommand};
@@ -200,79 +200,128 @@ fn do_potential(cmd: &Commands) -> Result<()> {
     let structure = Structure::from_xyz(mol1, &atomkinds);
 
     let n_points = (4.0 * PI / resolution.powi(2)).round() as usize;
-    let points = anglescan::make_icosphere_vertices(n_points)?;
-    let resolution = (4.0 * PI / points.len() as f64).sqrt();
+    let vertices = anglescan::make_icosphere_vertices(n_points)?;
+    let resolution = (4.0 * PI / vertices.len() as f64).sqrt();
     log::info!(
         "Requested {} points on a sphere; got {} -> new resolution = {:.2}",
         n_points,
-        points.len(),
+        vertices.len(),
         resolution
     );
 
-    let mut pqr_file = std::fs::File::create("potential.pqr")?;
-    let mut pot_file = std::fs::File::create("potential.dat")?;
-    let mut tab_file = std::fs::File::create("potential.tab")?;
-
-    let pos = Vector3::new(0.0, 0.001, *radius);
-    let rotations = points
+    let pos = (vertices.first().unwrap() + Vector3::new(0.0, 0.0, 0.0001)).normalize();
+    let rotations = vertices
         .iter()
-        .map(|i| UnitQuaternion::rotation_between(i, &pos).unwrap());
+        .map(|vertex| UnitQuaternion::rotation_between(&pos, vertex).unwrap());
 
-    let empty_theta = table::PaddedTable1D::new(-PI, PI, resolution, 0.0);
-    let mut angle_table = table::PaddedTable::new(0.0, PI, resolution, empty_theta);
+    let mut icotable = anglescan::IcoSphereTable::from_min_points(n_points)?;
+    let mut pqr_file = std::fs::File::create("potential.pqr")?;
+    let mut pot_vertices_file = std::fs::File::create("pot_at_vertices.dat")?;
 
-    for q in rotations {
+    for (i, q) in rotations.enumerate() {
         let rotated = q.transform_vector(&pos);
-        let potential = energy::electric_potential(&structure, &rotated, &multipole);
+        let potential = energy::electric_potential(&structure, &rotated.scale(*radius), &multipole);
+        icotable.vertex_data_mut()[i] = potential;
         writeln!(
             pqr_file,
             "ATOM  {:5} {:4.4} {:4.3}{:5}    {:8.3} {:8.3} {:8.3} {:.3} {:.3}",
             1, "A", "AAA", 1, rotated.x, rotated.y, rotated.z, potential, 2.0
         )?;
 
-        let theta = rotated.y.atan2(rotated.x); // -PI < theta < PI
-        let phi = (rotated.z / radius).acos(); // 0 < phi < PI
-        writeln!(pot_file, "{:.3} {:.3} {:.4}", theta, phi, potential)?;
-
-        angle_table
-            .get_mut(phi)
-            .unwrap()
-            .set(theta, potential)
-            .unwrap();
+        let (_r, theta, phi) = to_spherical(&rotated);
+        writeln!(
+            pot_vertices_file,
+            "{:.3} {:.3} {:.4}",
+            theta, phi, potential
+        )?;
     }
 
-    // https://en.wikipedia.org/wiki/Geodesic_polyhedron
-    // 12 vertices will always have 5 neighbors; the rest will have 6.
-    let icosphere = anglescan::make_icosphere(12)?;
-    let indices = icosphere.get_all_indices();
-    let mut builder = hexasphere::AdjacencyBuilder::new(icosphere.raw_points().len());
-    builder.add_indices(indices.as_slice());
-    let result = builder.finish();
-    for (i, res) in result.iter().enumerate() {
-        println!("{} {:?}", i, res);
-    }
-
-    for (i, triangle) in indices.chunks(3).enumerate() {
-        println!(
-            "{} [{}, {}, {}] is a triangle on the resulting shape",
-            i, triangle[0], triangle[1], triangle[2],
-        );
-    }
-
-    println!("n5 = {}", result.iter().filter(|i| i.len() == 5).count());
-    println!("n6 = {}", result.iter().filter(|i| i.len() == 6).count());
-
-    let _icotable = anglescan::IcoSphereTable::from_icosphere(icosphere);
-
-    for phi in arange(0.0..PI, resolution) {
-        for theta in arange(-PI..PI, resolution) {
-            let potential = angle_table.get(phi).unwrap().get(theta).unwrap();
-            writeln!(tab_file, "{:.3} {:.3} {:.4}", theta, phi, potential)?;
+    let mut pot_angles_file = std::fs::File::create("pot_at_angles.dat")?;
+    for theta in arange(0.0001..PI, resolution) {
+        for phi in arange(0.0001..2.0 * PI, resolution / 2.0) {
+            let point = &to_cartesian(1.0, theta, phi);
+            let potential = icotable.barycentric_interpolation(point);
+            let exact_potential =
+                energy::electric_potential(&structure, &point.scale(*radius), &multipole);
+            let rel_err = (potential - exact_potential) / exact_potential;
+            writeln!(
+                pot_angles_file,
+                "{:.3} {:.3} {:.4} {:.4} {:.4}",
+                theta, phi, potential, exact_potential, rel_err
+            )?;
         }
     }
 
     Ok(())
 }
+
+/// Converts Cartesian coordinates to spherical coordinates (r, theta, phi)
+/// where:
+/// - r is the radius
+/// - theta is the polar angle (0..pi)
+/// - phi is the azimuthal angle (0..2pi)
+fn to_spherical(cartesian: &Vector3<f64>) -> (f64, f64, f64) {
+    let r = cartesian.norm();
+    let theta = (cartesian.z / r).acos();
+    let phi = cartesian.y.atan2(cartesian.x);
+    if phi < 0.0 {
+        (r, theta, phi + 2.0 * PI)
+    } else {
+        (r, theta, phi)
+    }
+}
+
+/// Converts spherical coordinates (r, theta, phi) to Cartesian coordinates
+/// where:
+/// - r is the radius
+/// - theta is the polar angle (0..pi)
+/// - phi is the azimuthal angle (0..2pi)
+fn to_cartesian(r: f64, theta: f64, phi: f64) -> Vector3<f64> {
+    let (theta_sin, theta_cos) = theta.sin_cos();
+    let (phi_sin, phi_cos) = phi.sin_cos();
+    Vector3::new(
+        r * theta_sin * phi_cos,
+        r * theta_sin * phi_sin,
+        r * theta_cos,
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use approx::assert_relative_eq;
+    use std::f64::consts::PI;
+
+    #[test]
+    fn test_spherical_cartesian_conversion() {
+        const ANGLE_TOL: f64 = 1e-6;
+        // Skip theta = 0 as phi is undefined
+        for theta in arange(0.00001..PI, 0.01) {
+            for phi in arange(0.0..2.0 * PI, 0.01) {
+                let cartesian = to_cartesian(1.0, theta, phi);
+                let (_, theta_converted, phi_converted) = to_spherical(&cartesian);
+                assert_relative_eq!(theta, theta_converted, epsilon = ANGLE_TOL);
+                assert_relative_eq!(phi, phi_converted, epsilon = ANGLE_TOL);
+            }
+        }
+    }
+}
+
+// /// Cartesian to spherical coordinates
+// fn to_spherical(v: &Vector3<f64>) -> (f64, f64, f64) {
+//     let r = v.norm();
+//     let theta = v.y.atan2(v.x);
+//     let phi = (v.z / r).acos();
+//     (r, theta, phi)
+// }
+
+// /// Convert spherical coordinate to Cartesian coordinates
+// pub fn to_cartesian(r: f64, theta: f64, phi: f64) -> Vector3<f64> {
+//     let x = r * theta.cos() * phi.sin();
+//     let y = r * theta.sin() * phi.sin();
+//     let z = r * phi.cos();
+//     Vector3::new(x, y, z)
+// }
 
 fn do_main() -> Result<()> {
     if std::env::var("RUST_LOG").is_err() {

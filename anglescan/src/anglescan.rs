@@ -291,7 +291,7 @@ impl IcoSphereTable {
             neighbors,
             vertices,
             faces,
-            vertex_data: Vec::with_capacity(n_vertices),
+            vertex_data: vec![0.0; n_vertices],
         }
     }
 
@@ -309,31 +309,44 @@ impl IcoSphereTable {
     }
 
     /// Get interpolated data for an arbitrart point on the icosphere
-    /// 
+    ///
     /// Done by finding the nearest face and then interpolate using the three corner vertices
     pub fn get(&self, point: &Vector3) -> f64 {
         let face = self.nearest_face(point);
         let data = face.iter().map(|i| &self.vertex_data[*i]);
-        let weights = face.iter().map(|i| 1.0 / (self.vertices[*i] - point).norm()).collect::<Vec<f64>>();
+        let weights = face
+            .iter()
+            .map(|i| 1.0 / (self.vertices[*i] - point).norm())
+            .collect::<Vec<f64>>();
         let sum_weights: f64 = weights.iter().sum();
-        data
-            .zip(weights)
-            .map(|(d, w)| *d * (w / sum_weights))
-            .sum()
+        data.zip(weights).map(|(d, w)| *d * (w / sum_weights)).sum()
+    }
+
+    /// Check is a point is on a face
+    pub fn is_on_face(&self, point: &Vector3, face: &Vec<usize>) -> bool {
+        let a = point - self.vertices[face[0]];
+        let b = point - self.vertices[face[1]];
+        let c = point - self.vertices[face[2]];
+        let n = a.cross(&b);
+        let n = n.normalize();
+        let d = n.dot(&c);
+        d.abs() < 1e-3
     }
 
     /// Get data for a point on the surface using barycentric interpolation
     /// https://en.wikipedia.org/wiki/Barycentric_coordinate_system#Interpolation_on_a_triangular_unstructured_grid
     pub fn barycentric_interpolation(&self, point: &Vector3) -> f64 {
-        let bary = self.barycentric(point);
         let face = self.nearest_face(point);
-        bary[0] * self.vertex_data[face[0]] + bary[1] * self.vertex_data[face[1]] + bary[2] * self.vertex_data[face[2]]
+        // assert!(self.is_on_face(point, &face));
+        let bary = self.barycentric(point, &face);
+        bary[0] * self.vertex_data[face[0]]
+            + bary[1] * self.vertex_data[face[1]]
+            + bary[2] * self.vertex_data[face[2]]
     }
 
-    /// Get Barycentric coordinate for an arbitrart point on the icosphere
+    /// Get Barycentric coordinate for an arbitrart point on a face
     /// https://en.wikipedia.org/wiki/Barycentric_coordinate_system
-    pub fn barycentric(&self, point: &Vector3) -> Vec<f64> {
-        let face = self.nearest_face(point);
+    pub fn barycentric(&self, point: &Vector3, face: &Vec<usize>) -> Vec<f64> {
         let a = self.vertices[face[0]];
         let b = self.vertices[face[1]];
         let c = self.vertices[face[2]];
@@ -397,6 +410,7 @@ impl IcoSphereTable {
         face
     }
 }
+
 
 #[cfg(test)]
 mod tests {
