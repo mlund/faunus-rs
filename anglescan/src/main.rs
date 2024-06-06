@@ -1,7 +1,7 @@
 use anglescan::{
     energy,
     structure::{AtomKinds, Structure},
-    Sample, TwobodyAngles, UnitQuaternion, Vector3,
+    Sample, TwobodyAngles, Vector3,
 };
 use anyhow::Result;
 use clap::{Parser, Subcommand};
@@ -209,41 +209,16 @@ fn do_potential(cmd: &Commands) -> Result<()> {
         resolution
     );
 
-    let pos = (vertices.first().unwrap() + Vector3::new(0.0, 0.0, 0.0001)).normalize();
-    let rotations = vertices
-        .iter()
-        .map(|vertex| UnitQuaternion::rotation_between(&pos, vertex).unwrap());
-
     let mut icotable = anglescan::IcoSphereTable::from_min_points(n_points)?;
     let mut pqr_file = std::fs::File::create("potential.pqr")?;
     let mut pot_vertices_file = std::fs::File::create("pot_at_vertices.dat")?;
 
-    for (i, q) in rotations.enumerate() {
-        let rotated = q.transform_vector(&pos);
-        let potential = energy::electric_potential(&structure, &rotated.scale(*radius), &multipole);
-        icotable.vertex_data_mut()[i] = potential;
-
-        // Write potential at vertices
-        let (_r, theta, phi) = to_spherical(&rotated);
-        writeln!(
-            pot_vertices_file,
-            "{:.3} {:.3} {:.4}",
-            theta, phi, potential
-        )?;
-        // Write PQR file
-        writeln!(
-            pqr_file,
-            "ATOM  {:5} {:4.4} {:4.3}{:5}    {:8.3} {:8.3} {:8.3} {:.3} {:.3}",
-            1,
-            "A",
-            "AAA",
-            1,
-            *radius * rotated.x,
-            *radius * rotated.y,
-            *radius * rotated.z,
-            potential,
-            2.0
-        )?;
+    // Calculate electric potential at vertices scaled by radius
+    for (vertex, data) in std::iter::zip(icotable.vertices.clone(), icotable.vertex_data_mut()) {
+        *data = energy::electric_potential(&structure, &vertex.scale(*radius), &multipole);
+        let (_r, theta, phi) = to_spherical(&vertex);
+        writeln!(pot_vertices_file, "{:.3} {:.3} {:.4}", theta, phi, *data)?;
+        pqr_write_atom(&mut pqr_file, 1, &vertex.scale(*radius), *data, 2.0)?;
     }
 
     let mut pot_angles_file = std::fs::File::create("pot_at_angles.dat")?;
@@ -273,6 +248,21 @@ fn do_potential(cmd: &Commands) -> Result<()> {
         }
     }
 
+    Ok(())
+}
+
+fn pqr_write_atom(
+    stream: &mut impl std::io::Write,
+    atom_id: usize,
+    pos: &Vector3<f64>,
+    charge: f64,
+    radius: f64,
+) -> Result<()> {
+    writeln!(
+        stream,
+        "ATOM  {:5} {:4.4} {:4.3}{:5}    {:8.3} {:8.3} {:8.3} {:.3} {:.3}",
+        atom_id, "A", "AAA", 1, pos.x, pos.y, pos.z, charge, radius
+    )?;
     Ok(())
 }
 

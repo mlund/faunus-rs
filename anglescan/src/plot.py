@@ -29,5 +29,8 @@ plt.colorbar() # draw colorbar
 plt.clim(-maxpot, maxpot)
 plt.ylim(0.0, 2.0*np.pi)
 plt.xlim(0.0, np.pi)
+plt.xlabel(r"Polar angle, $\theta$")
+plt.ylabel(r"Azimuthal angle, $\phi$")
+plt.title("Electric potential around a patchy particle:\n(Circles = ref. points on subdivided icosahedron)", fontsize=12)
 plt.savefig('potential.pdf')
 

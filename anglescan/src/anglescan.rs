@@ -256,7 +256,7 @@ pub struct IcoSphereTable {
     /// Neighbor list of other vertices for each vertex
     neighbors: Vec<Vec<usize>>,
     /// 3D coordinates of the vertices
-    vertices: Vec<Vector3>,
+    pub vertices: Vec<Vector3>,
     /// All faces of the icosphere each consisting of three (sorted) vertex indices
     faces: Vec<Vec<usize>>,
     /// Data associated with each vertex
