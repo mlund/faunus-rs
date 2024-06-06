@@ -2,6 +2,7 @@ use anglescan::{
     energy,
     structure::{AtomKinds, Structure},
     Sample, TwobodyAngles, Vector3,
+    icotable::IcoSphereTable,
 };
 use anyhow::Result;
 use clap::{Parser, Subcommand};
@@ -209,7 +210,7 @@ fn do_potential(cmd: &Commands) -> Result<()> {
         resolution
     );
 
-    let mut icotable = anglescan::IcoSphereTable::from_min_points(n_points)?;
+    let mut icotable = IcoSphereTable::from_min_points(n_points)?;
     let mut pqr_file = std::fs::File::create("potential.pqr")?;
     let mut pot_vertices_file = std::fs::File::create("pot_at_vertices.dat")?;
 
@@ -231,14 +232,14 @@ fn do_potential(cmd: &Commands) -> Result<()> {
             let rel_err = (potential - exact_potential) / exact_potential;
             let abs_err = (potential - exact_potential).abs();
             if abs_err > 0.05 {
-                println!(
+                log::warn!(
                     "Potential at theta={:.3} phi={:.3} is {:.4} (exact: {:.4}) abs. error {:.4}",
                     theta, phi, potential, exact_potential, abs_err
                 );
                 let face = icotable.nearest_face(point);
                 let bary = icotable.barycentric(point, &face);
-                println!("Face: {:?} Barycentric: {:?}", face, bary);
-                println!("");
+                log::warn!("Face: {:?} Barycentric: {:?}", face, bary);
+                log::warn!("");
             }
             writeln!(
                 pot_angles_file,

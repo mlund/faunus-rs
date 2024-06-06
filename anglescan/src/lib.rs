@@ -1,6 +1,7 @@
 pub use nalgebra::{Matrix3, UnitQuaternion, Vector3};
 mod anglescan;
 pub mod energy;
+pub mod icotable;
 pub mod structure;
 pub mod table;
 extern crate pretty_env_logger;
@@ -11,7 +12,7 @@ use std::iter::Sum;
 use std::ops::{Add, Neg};
 
 pub use anglescan::{
-    make_fibonacci_sphere, make_icosphere, make_icosphere_vertices, IcoSphereTable, TwobodyAngles,
+    make_fibonacci_sphere, make_icosphere, make_icosphere_vertices, TwobodyAngles,
 };
 
 /// RMSD angle between two quaternion rotations
