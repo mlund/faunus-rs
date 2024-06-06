@@ -2,7 +2,7 @@ use anglescan::{
     energy,
     structure::{AtomKinds, Structure},
     Sample, TwobodyAngles, Vector3,
-    icotable::IcoSphereTable,
+    icotable::IcoSphereTable, to_cartesian, to_spherical,
 };
 use anyhow::Result;
 use clap::{Parser, Subcommand};
@@ -265,58 +265,6 @@ fn pqr_write_atom(
         atom_id, "A", "AAA", 1, pos.x, pos.y, pos.z, charge, radius
     )?;
     Ok(())
-}
-
-/// Converts Cartesian coordinates to spherical coordinates (r, theta, phi)
-/// where:
-/// - r is the radius
-/// - theta is the polar angle (0..pi)
-/// - phi is the azimuthal angle (0..2pi)
-fn to_spherical(cartesian: &Vector3<f64>) -> (f64, f64, f64) {
-    let r = cartesian.norm();
-    let theta = (cartesian.z / r).acos();
-    let phi = cartesian.y.atan2(cartesian.x);
-    if phi < 0.0 {
-        (r, theta, phi + 2.0 * PI)
-    } else {
-        (r, theta, phi)
-    }
-}
-
-/// Converts spherical coordinates (r, theta, phi) to Cartesian coordinates
-/// where:
-/// - r is the radius
-/// - theta is the polar angle (0..pi)
-/// - phi is the azimuthal angle (0..2pi)
-fn to_cartesian(r: f64, theta: f64, phi: f64) -> Vector3<f64> {
-    let (theta_sin, theta_cos) = theta.sin_cos();
-    let (phi_sin, phi_cos) = phi.sin_cos();
-    Vector3::new(
-        r * theta_sin * phi_cos,
-        r * theta_sin * phi_sin,
-        r * theta_cos,
-    )
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use approx::assert_relative_eq;
-    use std::f64::consts::PI;
-
-    #[test]
-    fn test_spherical_cartesian_conversion() {
-        const ANGLE_TOL: f64 = 1e-6;
-        // Skip theta = 0 as phi is undefined
-        for theta in arange(0.00001..PI, 0.01) {
-            for phi in arange(0.0..2.0 * PI, 0.01) {
-                let cartesian = to_cartesian(1.0, theta, phi);
-                let (_, theta_converted, phi_converted) = to_spherical(&cartesian);
-                assert_relative_eq!(theta, theta_converted, epsilon = ANGLE_TOL);
-                assert_relative_eq!(phi, phi_converted, epsilon = ANGLE_TOL);
-            }
-        }
-    }
 }
 
 fn do_main() -> Result<()> {
