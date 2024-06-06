@@ -6,7 +6,7 @@ use anyhow::{Context, Result};
 use approx::assert_relative_eq;
 use hexasphere::{
     shapes::{IcoSphere, IcoSphereBase},
-Subdivided,
+    Subdivided,
 };
 use iter_num_tools::arange;
 use itertools::Itertools;

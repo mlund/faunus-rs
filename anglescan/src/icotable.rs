@@ -1,7 +1,7 @@
 use super::anglescan::*;
+use anyhow::Result;
 use hexasphere::{shapes::IcoSphereBase, AdjacencyBuilder, Subdivided};
 use itertools::Itertools;
-use anyhow::Result;
 
 /// Icosphere table
 ///
@@ -123,7 +123,7 @@ impl IcoSphereTable {
     /// This is brute force and has O(n) complexity. This
     /// should be updated with a more efficient algorithm that
     /// uses angular information to narrow down the search.
-    /// 
+    ///
     /// See:
     /// - https://stackoverflow.com/questions/11947813/subdivided-icosahedron-how-to-find-the-nearest-vertex-to-an-arbitrary-point
     /// - Binary Space Partitioning: https://en.wikipedia.org/wiki/Binary_space_partitioning

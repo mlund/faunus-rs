@@ -1,8 +1,8 @@
 use anglescan::{
     energy,
+    icotable::IcoSphereTable,
     structure::{AtomKinds, Structure},
-    Sample, TwobodyAngles, Vector3,
-    icotable::IcoSphereTable, to_cartesian, to_spherical,
+    to_cartesian, to_spherical, Sample, TwobodyAngles, Vector3,
 };
 use anyhow::Result;
 use clap::{Parser, Subcommand};
@@ -234,7 +234,11 @@ fn do_potential(cmd: &Commands) -> Result<()> {
             if abs_err > 0.05 {
                 log::warn!(
                     "Potential at theta={:.3} phi={:.3} is {:.4} (exact: {:.4}) abs. error {:.4}",
-                    theta, phi, potential, exact_potential, abs_err
+                    theta,
+                    phi,
+                    potential,
+                    exact_potential,
+                    abs_err
                 );
                 let face = icotable.nearest_face(point);
                 let bary = icotable.barycentric(point, &face);
