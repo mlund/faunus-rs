@@ -17,39 +17,85 @@ use crate::group::*;
 use crate::transform::{random_unit_vector, Transform};
 use crate::{Change, Context, GroupChange};
 use rand::prelude::*;
+use serde::{Deserialize, Serialize};
 
 /// Move for translating a random molecule
 ///
 /// This will pick a random molecule of type `id` and translate it by a random displacement.
-#[derive(Clone, Debug)]
-pub struct TranslateGroup {
-    /// Group id to translate
-    id: usize,
-    /// Maximum displacement
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TranslateMolecule {
+    /// Name of the molecule type to translate.
+    #[serde(rename = "molecule")]
+    molecule_name: String,
+    /// Id of the molecule type to translate.
+    #[serde(skip)]
+    molecule_id: usize,
+    /// Maximum displacement.
+    #[serde(alias = "dp")]
     max_displacement: f64,
-    /// Move statisticcs
-    statistics: MoveStatistics,
-    /// Move frequency
+    /// Move frequency.
     frequency: Frequency,
+    /// Move statisticcs.
+    #[serde(skip_deserializing)]
+    statistics: MoveStatistics,
 }
 
-impl TranslateGroup {
-    pub fn new(id: usize, max_displacement: f64, frequency: Frequency) -> Self {
+impl TranslateMolecule {
+    pub fn new(name: &str, id: usize, max_displacement: f64, frequency: Frequency) -> Self {
         Self {
-            id,
+            molecule_name: name.to_owned(),
+            molecule_id: id,
             max_displacement,
             frequency,
             statistics: MoveStatistics::default(),
         }
     }
+
+    /// Validate and finalize the move.
+    pub(super) fn finalize(&mut self, context: &impl Context) -> anyhow::Result<()> {
+        self.molecule_id = context
+            .topology()
+            .moleculekinds()
+            .iter()
+            .position(|x| x.name() == &self.molecule_name)
+            .ok_or(anyhow::Error::msg(
+                "Molecule kind in the definition of 'TranslateMolecule' move does not exist.",
+            ))?;
+
+        Ok(())
+    }
+
     /// Pick a random group index with the correct molecule type
     fn random_group(&self, context: &impl Context, rng: &mut ThreadRng) -> Option<usize> {
-        let select = GroupSelection::ByMoleculeId(self.id);
+        let select = GroupSelection::ByMoleculeId(self.molecule_id);
         context.select(&select).iter().copied().choose(rng)
     }
 }
 
-impl crate::Info for TranslateGroup {
+#[test]
+fn test_finalize() {
+    use crate::platform::reference::ReferencePlatform;
+
+    let mut rng = rand::thread_rng();
+    let context = ReferencePlatform::new(
+        "tests/files/topology_pass.yaml",
+        Some("tests/files/structure.xyz"),
+        &mut rng,
+    )
+    .unwrap();
+
+    let mut propagator = TranslateMolecule::new("MOL2", 0, 0.5, super::Frequency::Every(4));
+
+    propagator.finalize(&context).unwrap();
+
+    assert_eq!(propagator.molecule_name, "MOL2");
+    assert_eq!(propagator.molecule_id, 1);
+    assert_eq!(propagator.max_displacement, 0.5);
+    assert!(matches!(propagator.frequency, super::Frequency::Every(4)));
+}
+
+impl crate::Info for TranslateMolecule {
     fn short_name(&self) -> Option<&'static str> {
         Some("translate")
     }
@@ -58,7 +104,7 @@ impl crate::Info for TranslateGroup {
     }
 }
 
-impl<T: Context> super::Move<T> for TranslateGroup {
+impl<T: Context> super::Move<T> for TranslateMolecule {
     fn do_move(&mut self, context: &mut T, rng: &mut ThreadRng) -> Option<Change> {
         if let Some(index) = self.random_group(context, rng) {
             let displacement =

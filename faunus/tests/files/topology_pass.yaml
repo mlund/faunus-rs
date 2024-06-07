@@ -45,7 +45,11 @@ molecules:
     atoms: [OW, OW, X]
   - name: MOL3
     from_structure: "tests/files/mol2.xyz" 
-  
+
+propagators:
+  - !TranslateMolecule {molecule: "MOL", max_displacement: 0.4, frequency: !Every 2}
+  - !TranslateMolecule {molecule: "MOL2", max_displacement: 0.3, frequency: !Probability 0.5}
+
 system:
   intermolecular:
     bonds:
