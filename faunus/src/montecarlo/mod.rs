@@ -310,7 +310,7 @@ impl<T: Context> MoveCollection<T> {
 
 impl<T: Context> MoveCollection<T> {
     /// Get the collection of moves from an input yaml file.
-    /// This method also requires a list of all molecule kinds defined in the system.
+    /// This method also requires a Context structure to validate and finalize the moves.
     pub fn from_file(filename: impl AsRef<Path>, context: &T) -> anyhow::Result<MoveCollection<T>> {
         let yaml = std::fs::read_to_string(filename)?;
         let full: serde_yaml::Value = serde_yaml::from_str(&yaml)?;
