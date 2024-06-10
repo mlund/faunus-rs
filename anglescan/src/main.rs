@@ -2,7 +2,7 @@ use anglescan::{
     energy,
     icotable::IcoSphereTable,
     structure::{AtomKinds, Structure},
-    to_cartesian, to_spherical, Sample, TwobodyAngles, Vector3,
+    to_cartesian, Sample, TwobodyAngles, Vector3,
 };
 use anyhow::Result;
 use clap::{Parser, Subcommand};
@@ -211,51 +211,53 @@ fn do_potential(cmd: &Commands) -> Result<()> {
     );
 
     let mut icotable = IcoSphereTable::from_min_points(n_points)?;
-    let mut pqr_file = std::fs::File::create("potential.pqr")?;
-    let mut pot_vertices_file = std::fs::File::create("pot_at_vertices.dat")?;
+    icotable
+        .set_vertex_data(|v| energy::electric_potential(&structure, &v.scale(*radius), &multipole));
+    icotable.save_table("pot_at_vertices.dat")?;
+    icotable.save_vmd("triangles.vmd", Some(*radius))?;
 
-    // Calculate electric potential at vertices scaled by radius
-    for (vertex, data) in std::iter::zip(icotable.vertices.clone(), icotable.vertex_data_mut()) {
-        *data = energy::electric_potential(&structure, &vertex.scale(*radius), &multipole);
-        let (_r, theta, phi) = to_spherical(&vertex);
-        writeln!(pot_vertices_file, "{:.3} {:.3} {:.4}", theta, phi, *data)?;
+    // Make PQR file illustrating the electric potential at each vertex
+    let mut pqr_file = std::fs::File::create("potential.pqr")?;
+    for (vertex, data) in std::iter::zip(&icotable.vertices, icotable.vertex_data()) {
         pqr_write_atom(&mut pqr_file, 1, &vertex.scale(*radius), *data, 2.0)?;
     }
 
+    // Compare interpolated and exact potential linearly in angular space
     let mut pot_angles_file = std::fs::File::create("pot_at_angles.dat")?;
+    let mut pqr_file = std::fs::File::create("potential_angles.pqr")?;
+    writeln!(pot_angles_file, "# theta phi interpolated exact relerr")?;
     for theta in arange(0.0001..PI, resolution) {
-        for phi in arange(0.0001..2.0 * PI, resolution / 2.0) {
+        for phi in arange(0.0001..2.0 * PI, resolution) {
             let point = &to_cartesian(1.0, theta, phi);
-            let potential = icotable.barycentric_interpolation(point);
-            let exact_potential =
-                energy::electric_potential(&structure, &point.scale(*radius), &multipole);
-            let rel_err = (potential - exact_potential) / exact_potential;
-            let abs_err = (potential - exact_potential).abs();
+            let interpolated = icotable.barycentric_interpolation(point);
+            let exact = energy::electric_potential(&structure, &point.scale(*radius), &multipole);
+            pqr_write_atom(&mut pqr_file, 1, &point.scale(*radius), exact, 2.0)?;
+            let rel_err = (interpolated - exact) / exact;
+            let abs_err = (interpolated - exact).abs();
             if abs_err > 0.05 {
-                log::warn!(
+                log::debug!(
                     "Potential at theta={:.3} phi={:.3} is {:.4} (exact: {:.4}) abs. error {:.4}",
                     theta,
                     phi,
-                    potential,
-                    exact_potential,
+                    interpolated,
+                    exact,
                     abs_err
                 );
                 let face = icotable.nearest_face(point);
                 let bary = icotable.barycentric(point, &face);
-                log::warn!("Face: {:?} Barycentric: {:?}", face, bary);
-                log::warn!("");
+                log::debug!("Face: {:?} Barycentric: {:?}\n", face, bary);
             }
             writeln!(
                 pot_angles_file,
                 "{:.3} {:.3} {:.4} {:.4} {:.4}",
-                theta, phi, potential, exact_potential, rel_err
+                theta, phi, interpolated, exact, rel_err
             )?;
         }
     }
-
     Ok(())
 }
 
+/// From single ATOM record in PQR file stream
 fn pqr_write_atom(
     stream: &mut impl std::io::Write,
     atom_id: usize,

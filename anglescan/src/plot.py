@@ -3,11 +3,11 @@ import numpy as np
 from scipy.interpolate import griddata
 from math import ceil
 
-exact = False
+exact = True
 angle_res = 0.005 # radians
 
 x, y, pot_interpolated, pot_exact, err = np.loadtxt('pot_at_angles.dat', unpack=True)
-if exact == True:
+if exact:
     pot = pot_exact
 else:
     pot = pot_interpolated
@@ -23,8 +23,8 @@ zi = griddata((x, y), pot, (xi[None,:], yi[:,None]), method='linear')
 plt.contourf(xi, yi, zi, 20, cmap = plt.cm.RdBu)
 
 # Overlay exact potential from each vertex (colored circles)
-x, y, pot = np.loadtxt('pot_at_vertices.dat', unpack=True)
-plt.scatter(x, y, c=pot, cmap=plt.cm.RdBu, s=15, marker='o', edgecolor='k', linewidths=0.1)
+x, y, z, theta, phi, pot = np.loadtxt('pot_at_vertices.dat', unpack=True)
+plt.scatter(theta, phi, c=pot, cmap=plt.cm.RdBu, s=15, marker='o', edgecolor='k', linewidths=0.1)
 plt.colorbar() # draw colorbar
 plt.clim(-maxpot, maxpot)
 plt.ylim(0.0, 2.0*np.pi)

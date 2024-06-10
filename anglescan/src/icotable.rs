@@ -2,6 +2,8 @@ use super::anglescan::*;
 use anyhow::Result;
 use hexasphere::{shapes::IcoSphereBase, AdjacencyBuilder, Subdivided};
 use itertools::Itertools;
+use std::io::Write;
+use std::path::Path;
 
 /// Icosphere table
 ///
@@ -56,20 +58,35 @@ impl IcoSphereTable {
         }
     }
 
+    /// Save tabulated vertices and aqssociated data to a file
+    pub fn save_table(&self, path: impl AsRef<Path>) -> Result<()> {
+        let mut file = std::fs::File::create(path)?;
+        writeln!(file, "# x y z θ φ data")?;
+        for (vertex, data) in self.vertices.iter().zip(&self.vertex_data) {
+            let (_r, theta, phi) = crate::to_spherical(vertex);
+            writeln!(
+                file,
+                "{} {} {} {} {} {:?}",
+                vertex.x, vertex.y, vertex.z, theta, phi, data
+            )?;
+        }
+        Ok(())
+    }
+
     /// Generate table based on a minimum number of vertices on the subdivided icosaedron
     pub fn from_min_points(min_points: usize) -> Result<Self> {
         let icosphere = make_icosphere(min_points)?;
         Ok(Self::from_icosphere(icosphere))
     }
 
+    /// Set data associated with each vertex using a generator function
+    pub fn set_vertex_data(&mut self, f: impl Fn(&Vector3) -> f64) {
+        self.vertex_data = self.vertices.iter().map(f).collect();
+    }
+
     /// Get data associated with each vertex
     pub fn vertex_data(&self) -> &Vec<f64> {
         &self.vertex_data
-    }
-
-    /// Get mutable data associated with each vertex
-    pub fn vertex_data_mut(&mut self) -> &mut Vec<f64> {
-        &mut self.vertex_data
     }
 
     /// Check is a point is on a face
@@ -163,4 +180,35 @@ impl IcoSphereTable {
         assert_eq!(face.iter().unique().count(), 3);
         face
     }
+    /// Save a VMD script to illustrate the icosphere
+    pub fn save_vmd(&self, path: impl AsRef<Path>, scale: Option<f64>) -> Result<()> {
+        let mut file = std::fs::File::create(path)?;
+        let s = scale.unwrap_or(1.0);
+        writeln!(file, "draw delete all")?;
+        for face in &self.faces {
+            let a = &self.vertices[face[0]].scale(s);
+            let b = &self.vertices[face[1]].scale(s);
+            let c = &self.vertices[face[2]].scale(s);
+            let color = "red";
+            vmd_draw_triangle(&mut file, a, b, c, color)?;
+        }
+        Ok(())
+    }
+}
+
+/// Draw a triangle in VMD format
+fn vmd_draw_triangle(
+    stream: &mut impl Write,
+    a: &Vector3,
+    b: &Vector3,
+    c: &Vector3,
+    color: &str,
+) -> Result<()> {
+    writeln!(stream, "draw color {}", color)?;
+    writeln!(
+        stream,
+        "draw triangle {{{:.3} {:.3} {:.3}}} {{{:.3} {:.3} {:.3}}} {{{:.3} {:.3} {:.3}}}",
+        a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z
+    )?;
+    Ok(())
 }
