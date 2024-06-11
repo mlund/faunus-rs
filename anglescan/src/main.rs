@@ -2,7 +2,7 @@ use anglescan::{
     energy,
     icotable::IcoSphereTable,
     structure::{AtomKinds, Structure},
-    to_cartesian, Sample, TwobodyAngles, Vector3,
+    to_cartesian, to_spherical, Sample, TwobodyAngles, Vector3,
 };
 use anyhow::Result;
 use clap::{Parser, Subcommand};
@@ -11,7 +11,7 @@ use indicatif::ParallelProgressIterator;
 use nu_ansi_term::Color::{Red, Yellow};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use rgb::RGB8;
-use std::f64::consts::PI;
+use std::{f64::consts::PI, ops::Neg};
 use std::{io::Write, path::PathBuf};
 extern crate pretty_env_logger;
 #[macro_use]
@@ -28,6 +28,27 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
+    Dipole {
+        /// Path to first XYZ file
+        #[arg(short = 'o', long)]
+        output: PathBuf,
+        /// Dipole moment strength
+        #[arg(short = 'm')]
+        mu: f64,
+        /// Angular resolution in radians
+        #[arg(short = 'r', long, default_value = "0.1")]
+        resolution: f64,
+        /// Minimum mass center distance
+        #[arg(long)]
+        rmin: f64,
+        /// Maximum mass center distance
+        #[arg(long)]
+        rmax: f64,
+        /// Mass center distance step
+        #[arg(long)]
+        dr: f64,
+    },
+
     Potential {
         /// Path to first XYZ file
         #[arg(short = '1', long)]
@@ -179,6 +200,88 @@ fn report_pmf(samples: &[(Vector3<f64>, Sample)], path: &PathBuf) {
     }
 }
 
+fn do_dipole(cmd: &Commands) -> Result<()> {
+    let Commands::Dipole {
+        output,
+        mu,
+        resolution,
+        rmin,
+        rmax,
+        dr,
+    } = cmd
+    else {
+        panic!("Unexpected command");
+    };
+    let distances: Vec<f64> = iter_num_tools::arange(*rmin..*rmax, *dr).collect();
+    let n_points = (4.0 * PI / resolution.powi(2)).round() as usize;
+    let mut icotable = IcoSphereTable::from_min_points(n_points)?;
+    let resolution = (4.0 * PI / icotable.vertices.len() as f64).sqrt();
+    log::info!(
+        "Requested {} points on a sphere; got {} -> new resolution = {:.2}",
+        n_points,
+        icotable.vertices.len(),
+        resolution
+    );
+
+    let mut dipole_file = std::fs::File::create(output)?;
+    writeln!(dipole_file, "# R/Å w_vertex w_exact w_interpolated")?;
+    let charge = 1.0;
+    let bjerrum_len = 7.0;
+
+    for radius in distances {
+        let vertex_energy = |v: &Vector3<f64>| {
+            let (_r, theta, _phi) = to_spherical(v);
+            let field = bjerrum_len * charge / radius.powi(2);
+            field * mu * theta.cos()
+        };
+        icotable.set_vertex_data(vertex_energy);
+
+        let partition_function = icotable
+            .vertex_data()
+            .iter()
+            .map(|u| (-u).exp())
+            .sum::<f64>()
+            / icotable.vertex_data().len() as f64;
+
+        let field = -bjerrum_len * charge / radius.powi(2);
+        let exact_energy = ((field * mu).sinh() / (field * mu)).ln().neg();
+
+        // Now also calculate the partition function by interpolated energies
+        // Here we need to take into account the volume element sin(theta) dtheta dphi
+        let mut partition_func_interpolated = 0.0;
+        // let mut norm = 0.0;
+        // for theta in arange(0.0001..PI, resolution) {
+        //     for phi in arange(0.0001..2.0 * PI, resolution) {
+        //         let point = &to_cartesian(1.0, theta, phi);
+        //         let energy = icotable.barycentric_interpolation(point);
+        //         partition_func_interpolated += (-energy).exp() * theta.sin();
+        //         norm += theta.sin();
+        //     }
+        // }
+        // partition_func_interpolated /= norm;
+
+        let mut rng = rand::thread_rng();
+        let n = 2000;
+        for _ in 0..n {
+            let point = faunus::transform::random_unit_vector(&mut rng);
+            let energy = icotable.barycentric_interpolation(&point);
+            partition_func_interpolated += (-energy).exp()
+        }
+        partition_func_interpolated /= n as f64;
+    
+        writeln!(
+            dipole_file,
+            "{:.5} {:.5} {:.5} {:.5}",
+            radius,
+            partition_function.ln().neg(),
+            exact_energy,
+            partition_func_interpolated.ln().neg()
+        )?;
+    }
+
+    Ok(())
+}
+
 // Calculate electric potential at points on a sphere around a molecule
 fn do_potential(cmd: &Commands) -> Result<()> {
     let Commands::Potential {
@@ -282,6 +385,7 @@ fn do_main() -> Result<()> {
     let cli = Cli::parse();
     match cli.command {
         Some(cmd) => match cmd {
+            Commands::Dipole { .. } => do_dipole(&cmd)?,
             Commands::Scan { .. } => do_scan(&cmd)?,
             Commands::Potential { .. } => do_potential(&cmd)?,
         },
