@@ -101,24 +101,84 @@ impl<T: Default + Debug + Clone> IcoSphereTable<T> {
         d.abs() < 1e-3
     }
 
-    /// Get Barycentric coordinate for an arbitrart point on a face
-    /// https://en.wikipedia.org/wiki/Barycentric_coordinate_system
-    pub fn barycentric(&self, point: &Vector3, face: &[usize]) -> Vec<f64> {
+    /// Get barycentric coordinate for an arbitrary point _projected_ on a face
+    ///
+    /// From "Real-Time Collision Detection" by Christer Ericson
+    pub fn projected_barycentric(&self, p: &Vector3, face: &[usize]) -> Vector3 {
+        let a = &self.vertices[face[0]];
+        let b = &self.vertices[face[1]];
+        let c = &self.vertices[face[2]];
+        // Check if P in vertex region outside A
+        let ab = b - a;
+        let ac = c - a;
+        let ap = p - a;
+        let d1 = ab.dot(&ap);
+        let d2 = ac.dot(&ap);
+        if d1 <= 0.0 && d2 <= 0.0 {
+            return Vector3::new(1.0, 0.0, 0.0);
+        }
+        // Check if P in vertex region outside B
+        let bp = p - b;
+        let d3 = ab.dot(&bp);
+        let d4 = ac.dot(&bp);
+        if d3 >= 0.0 && d4 <= d3 {
+            return Vector3::new(0.0, 1.0, 0.0);
+        }
+        // Check if P in edge region of AB, if so return projection of P onto AB
+        let vc = d1 * d4 - d3 * d2;
+        if vc <= 0.0 && d1 >= 0.0 && d3 <= 0.0 {
+            let v = d1 / (d1 - d3);
+            return Vector3::new(1.0 - v, v, 0.0);
+        }
+        // Check if P in vertex region outside C
+        let cp = p - c;
+        let d5 = ab.dot(&cp);
+        let d6 = ac.dot(&cp);
+        if d6 >= 0.0 && d5 <= d6 {
+            return Vector3::new(0.0, 0.0, 1.0);
+        }
+        // Check if P in edge region of AC, if so return projection of P onto AC
+        let vb = d5 * d2 - d1 * d6;
+        if vb <= 0.0 && d2 >= 0.0 && d6 <= 0.0 {
+            let w = d2 / (d2 - d6);
+            return Vector3::new(1.0 - w, 0.0, w);
+        }
+        // Check if P in edge region of BC, if so return projection of P onto BC
+        let va = d3 * d6 - d5 * d4;
+        if va <= 0.0 && (d4 - d3) >= 0.0 && (d5 - d6) >= 0.0 {
+            let w = (d4 - d3) / ((d4 - d3) + (d5 - d6));
+            return Vector3::new(0.0, 1.0 - w, w);
+        }
+        // P inside face region.
+        let denom = 1.0 / (va + vb + vc);
+        let v = vb * denom;
+        let w = vc * denom;
+        Vector3::new(1.0 - v - w, v, w)
+    }
+
+    /// Get barycentric coordinate for an arbitrart point on a face
+    ///
+    /// - Assume that `point` is on the plane defined by the face, i.e. no projection is done
+    /// - https://en.wikipedia.org/wiki/Barycentric_coordinate_system
+    /// - http://realtimecollisiondetection.net/
+    /// - https://gamedev.stackexchange.com/questions/23743/whats-the-most-efficient-way-to-find-barycentric-coordinates
+    pub fn barycentric(&self, p: &Vector3, face: &[usize]) -> Vector3 {
         let a = self.vertices[face[0]];
         let b = self.vertices[face[1]];
         let c = self.vertices[face[2]];
-        let v0 = b - a;
-        let v1 = c - a;
-        let v2 = point - a;
-        let d00 = v0.dot(&v0);
-        let d01 = v0.dot(&v1);
-        let d11 = v1.dot(&v1);
-        let d20 = v2.dot(&v0);
-        let d21 = v2.dot(&v1);
+        let ab = b - a;
+        let ac = c - a;
+        let ap = p - a;
+        let d00 = ab.dot(&ab);
+        let d01 = ab.dot(&ac);
+        let d11 = ac.dot(&ac);
+        let d20 = ap.dot(&ab);
+        let d21 = ap.dot(&ac);
         let denom = d00 * d11 - d01 * d01;
         let v = (d11 * d20 - d01 * d21) / denom;
         let w = (d00 * d21 - d01 * d20) / denom;
-        vec![1.0 - v - w, v, w]
+        let u = 1.0 - v - w;
+        Vector3::new(u, v, w)
     }
 
     /// Get list of all faces (triangles) on the icosphere
@@ -159,6 +219,7 @@ impl<T: Default + Debug + Clone> IcoSphereTable<T> {
             .cloned()
             .map(|i| (i, (self.vertices[i] - point_hat).norm_squared()))
             .collect();
+
         dist.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
 
         let mut face: Vec<usize> = dist.iter().map(|(i, _)| i).cloned().take(2).collect();
@@ -186,9 +247,8 @@ impl<T: Default + Debug + Clone> IcoSphereTable<T> {
 /// Get data for a point on the surface using barycentric interpolation
 /// https://en.wikipedia.org/wiki/Barycentric_coordinate_system#Interpolation_on_a_triangular_unstructured_grid
 pub fn barycentric_interpolation(icotable: &IcoSphereTable<f64>, point: &Vector3) -> f64 {
-    let point_norm = point.normalize();
-    let face = icotable.nearest_face(&point_norm);
-    let bary = icotable.barycentric(&point_norm, &face);
+    let face = icotable.nearest_face(point);
+    let bary = icotable.projected_barycentric(point, &face);
     bary[0] * icotable.vertex_data[face[0]]
         + bary[1] * icotable.vertex_data[face[1]]
         + bary[2] * icotable.vertex_data[face[2]]
@@ -209,4 +269,57 @@ fn vmd_draw_triangle(
         a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z
     )?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::anglescan::make_icosphere;
+    use approx::assert_relative_eq;
+
+    #[test]
+    fn test_icosphere_table() {
+        let icosphere = make_icosphere(3).unwrap();
+        let icotable = IcoSphereTable::<f64>::from_icosphere(icosphere);
+        assert_eq!(icotable.vertices.len(), 12);
+        assert_eq!(icotable.faces.len(), 20);
+
+        assert_relative_eq!(icotable.vertices[0].x, 0.0);
+        assert_relative_eq!(icotable.vertices[0].y, 1.0);
+        assert_relative_eq!(icotable.vertices[0].z, 0.0);
+
+        // find nearest vertex and face to vertex 0
+        let point = icotable.vertices[0];
+        let face = icotable.nearest_face(&point);
+        let bary = icotable.projected_barycentric(&point, &face);
+        assert_eq!(face, [0, 2, 5]);
+        assert_relative_eq!(bary[0], 1.0);
+        assert_relative_eq!(bary[1], 0.0);
+        assert_relative_eq!(bary[2], 0.0);
+
+        // Nearest face to slightly displaced vertex 0
+        let point = (icotable.vertices[0] + Vector3::new(1e-3, 0.0, 0.0)).normalize();
+        let face = icotable.nearest_face(&point);
+        let bary = icotable.projected_barycentric(&point, &face);
+        assert_eq!(face, [0, 1, 5]);
+        assert_relative_eq!(bary[0], 0.9991907334103153);
+        assert_relative_eq!(bary[1], 0.000809266589684687);
+        assert_relative_eq!(bary[2], 0.0);
+
+        // find nearest vertex and face to vertex 2
+        let point = icotable.vertices[2];
+        let face = icotable.nearest_face(&point);
+        let bary = icotable.projected_barycentric(&point, &face);
+        assert_eq!(face, [0, 1, 2]);
+        assert_relative_eq!(bary[0], 0.0);
+        assert_relative_eq!(bary[1], 0.0);
+        assert_relative_eq!(bary[2], 1.0);
+
+        // Midpoint on edge between vertices 0 and 2
+        let point = point + (icotable.vertices[0] - point) * 0.5;
+        let bary = icotable.projected_barycentric(&point, &face);
+        assert_relative_eq!(bary[0], 0.5);
+        assert_relative_eq!(bary[1], 0.0);
+        assert_relative_eq!(bary[2], 0.5);
+    }
 }
