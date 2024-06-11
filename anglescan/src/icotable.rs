@@ -2,9 +2,9 @@ use super::anglescan::*;
 use anyhow::Result;
 use hexasphere::{shapes::IcoSphereBase, AdjacencyBuilder, Subdivided};
 use itertools::Itertools;
+use std::fmt::Debug;
 use std::io::Write;
 use std::path::Path;
-use std::fmt::Debug;
 
 /// Icosphere table
 ///
@@ -136,17 +136,13 @@ impl<T: Default + Debug + Clone> IcoSphereTable<T> {
     /// - https://stackoverflow.com/questions/11947813/subdivided-icosahedron-how-to-find-the-nearest-vertex-to-an-arbitrary-point
     /// - Binary Space Partitioning: https://en.wikipedia.org/wiki/Binary_space_partitioning
     fn nearest_vertex(&self, point: &Vector3) -> usize {
-        let mut min_distance = f64::INFINITY;
-        let mut nearest = 0;
-        let point_hat = point.normalize();
-        for (i, vertex) in self.vertices.iter().enumerate() {
-            let distance = (vertex - point_hat).norm_squared();
-            if distance < min_distance {
-                min_distance = distance;
-                nearest = i;
-            }
-        }
-        nearest
+        self.vertices
+            .iter()
+            .map(|r| (r - point).norm_squared())
+            .enumerate()
+            .min_by(|a, b| a.1.partial_cmp(&b.1).unwrap())
+            .unwrap()
+            .0
     }
 
     /// Find nearest face to a given point
@@ -190,8 +186,9 @@ impl<T: Default + Debug + Clone> IcoSphereTable<T> {
 /// Get data for a point on the surface using barycentric interpolation
 /// https://en.wikipedia.org/wiki/Barycentric_coordinate_system#Interpolation_on_a_triangular_unstructured_grid
 pub fn barycentric_interpolation(icotable: &IcoSphereTable<f64>, point: &Vector3) -> f64 {
-    let face = icotable.nearest_face(point);
-    let bary = icotable.barycentric(point, &face);
+    let point_norm = point.normalize();
+    let face = icotable.nearest_face(&point_norm);
+    let bary = icotable.barycentric(&point_norm, &face);
     bary[0] * icotable.vertex_data[face[0]]
         + bary[1] * icotable.vertex_data[face[1]]
         + bary[2] * icotable.vertex_data[face[2]]

@@ -1,6 +1,5 @@
 use anglescan::{
-    energy,
-    icotable,
+    energy, icotable,
     icotable::IcoSphereTable,
     structure::{AtomKinds, Structure},
     to_cartesian, to_spherical, Sample, TwobodyAngles, Vector3,
@@ -269,7 +268,7 @@ fn do_dipole(cmd: &Commands) -> Result<()> {
             partition_func_interpolated += (-energy).exp()
         }
         partition_func_interpolated /= n as f64;
-    
+
         writeln!(
             dipole_file,
             "{:.5} {:.5} {:.5} {:.5}",
