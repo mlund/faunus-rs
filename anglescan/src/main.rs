@@ -1,5 +1,6 @@
 use anglescan::{
     energy,
+    icotable,
     icotable::IcoSphereTable,
     structure::{AtomKinds, Structure},
     to_cartesian, to_spherical, Sample, TwobodyAngles, Vector3,
@@ -253,7 +254,7 @@ fn do_dipole(cmd: &Commands) -> Result<()> {
         // for theta in arange(0.0001..PI, resolution) {
         //     for phi in arange(0.0001..2.0 * PI, resolution) {
         //         let point = &to_cartesian(1.0, theta, phi);
-        //         let energy = icotable.barycentric_interpolation(point);
+        //         let energy = icotable::barycentric_interpolation(&icotable,point);
         //         partition_func_interpolated += (-energy).exp() * theta.sin();
         //         norm += theta.sin();
         //     }
@@ -264,7 +265,7 @@ fn do_dipole(cmd: &Commands) -> Result<()> {
         let n = 2000;
         for _ in 0..n {
             let point = faunus::transform::random_unit_vector(&mut rng);
-            let energy = icotable.barycentric_interpolation(&point);
+            let energy = icotable::barycentric_interpolation(&icotable, &point);
             partition_func_interpolated += (-energy).exp()
         }
         partition_func_interpolated /= n as f64;
@@ -332,7 +333,7 @@ fn do_potential(cmd: &Commands) -> Result<()> {
     for theta in arange(0.0001..PI, resolution) {
         for phi in arange(0.0001..2.0 * PI, resolution) {
             let point = &to_cartesian(1.0, theta, phi);
-            let interpolated = icotable.barycentric_interpolation(point);
+            let interpolated = icotable::barycentric_interpolation(&icotable, point);
             let exact = energy::electric_potential(&structure, &point.scale(*radius), &multipole);
             pqr_write_atom(&mut pqr_file, 1, &point.scale(*radius), exact, 2.0)?;
             let rel_err = (interpolated - exact) / exact;

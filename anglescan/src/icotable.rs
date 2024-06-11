@@ -100,16 +100,6 @@ impl IcoSphereTable {
         d.abs() < 1e-3
     }
 
-    /// Get data for a point on the surface using barycentric interpolation
-    /// https://en.wikipedia.org/wiki/Barycentric_coordinate_system#Interpolation_on_a_triangular_unstructured_grid
-    pub fn barycentric_interpolation(&self, point: &Vector3) -> f64 {
-        let face = self.nearest_face(point);
-        let bary = self.barycentric(point, &face);
-        bary[0] * self.vertex_data[face[0]]
-            + bary[1] * self.vertex_data[face[1]]
-            + bary[2] * self.vertex_data[face[2]]
-    }
-
     /// Get Barycentric coordinate for an arbitrart point on a face
     /// https://en.wikipedia.org/wiki/Barycentric_coordinate_system
     pub fn barycentric(&self, point: &Vector3, face: &[usize]) -> Vec<f64> {
@@ -194,6 +184,16 @@ impl IcoSphereTable {
         }
         Ok(())
     }
+}
+
+/// Get data for a point on the surface using barycentric interpolation
+/// https://en.wikipedia.org/wiki/Barycentric_coordinate_system#Interpolation_on_a_triangular_unstructured_grid
+pub fn barycentric_interpolation(icotable: &IcoSphereTable, point: &Vector3) -> f64 {
+    let face = icotable.nearest_face(point);
+    let bary = icotable.barycentric(point, &face);
+    bary[0] * icotable.vertex_data[face[0]]
+        + bary[1] * icotable.vertex_data[face[1]]
+        + bary[2] * icotable.vertex_data[face[2]]
 }
 
 /// Draw a triangle in VMD format
