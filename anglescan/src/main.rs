@@ -215,7 +215,7 @@ fn do_dipole(cmd: &Commands) -> Result<()> {
     };
     let distances: Vec<f64> = iter_num_tools::arange(*rmin..*rmax, *dr).collect();
     let n_points = (4.0 * PI / resolution.powi(2)).round() as usize;
-    let mut icotable = IcoSphereTable::from_min_points(n_points)?;
+    let mut icotable = IcoSphereTable::<f64>::from_min_points(n_points)?;
     let resolution = (4.0 * PI / icotable.vertices.len() as f64).sqrt();
     log::info!(
         "Requested {} points on a sphere; got {} -> new resolution = {:.2}",
@@ -314,7 +314,7 @@ fn do_potential(cmd: &Commands) -> Result<()> {
         resolution
     );
 
-    let mut icotable = IcoSphereTable::from_min_points(n_points)?;
+    let mut icotable = IcoSphereTable::<f64>::from_min_points(n_points)?;
     icotable
         .set_vertex_data(|v| energy::electric_potential(&structure, &v.scale(*radius), &multipole));
     icotable.save_table("pot_at_vertices.dat")?;

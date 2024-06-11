@@ -4,6 +4,7 @@ use hexasphere::{shapes::IcoSphereBase, AdjacencyBuilder, Subdivided};
 use itertools::Itertools;
 use std::io::Write;
 use std::path::Path;
+use std::fmt::Debug;
 
 /// Icosphere table
 ///
@@ -12,7 +13,7 @@ use std::path::Path;
 ///
 /// https://en.wikipedia.org/wiki/Geodesic_polyhedron
 /// 12 vertices will always have 5 neighbors; the rest will have 6.
-pub struct IcoSphereTable {
+pub struct IcoSphereTable<T: Default + Debug + Clone> {
     /// Raw icosphere structure from hexasphere crate
     _icosphere: Subdivided<(), IcoSphereBase>,
     /// Neighbor list of other vertices for each vertex
@@ -22,10 +23,10 @@ pub struct IcoSphereTable {
     /// All faces of the icosphere each consisting of three (sorted) vertex indices
     faces: Vec<Vec<usize>>,
     /// Data associated with each vertex
-    vertex_data: Vec<f64>,
+    vertex_data: Vec<T>,
 }
 
-impl IcoSphereTable {
+impl<T: Default + Debug + Clone> IcoSphereTable<T> {
     /// Generate table based on an existing subdivided icosaedron
     pub fn from_icosphere(icosphere: Subdivided<(), IcoSphereBase>) -> Self {
         let indices = icosphere.get_all_indices();
@@ -54,7 +55,7 @@ impl IcoSphereTable {
             neighbors,
             vertices,
             faces,
-            vertex_data: vec![0.0; n_vertices],
+            vertex_data: vec![T::default(); n_vertices],
         }
     }
 
@@ -80,12 +81,12 @@ impl IcoSphereTable {
     }
 
     /// Set data associated with each vertex using a generator function
-    pub fn set_vertex_data(&mut self, f: impl Fn(&Vector3) -> f64) {
+    pub fn set_vertex_data(&mut self, f: impl Fn(&Vector3) -> T) {
         self.vertex_data = self.vertices.iter().map(f).collect();
     }
 
     /// Get data associated with each vertex
-    pub fn vertex_data(&self) -> &Vec<f64> {
+    pub fn vertex_data(&self) -> &Vec<T> {
         &self.vertex_data
     }
 
@@ -188,7 +189,7 @@ impl IcoSphereTable {
 
 /// Get data for a point on the surface using barycentric interpolation
 /// https://en.wikipedia.org/wiki/Barycentric_coordinate_system#Interpolation_on_a_triangular_unstructured_grid
-pub fn barycentric_interpolation(icotable: &IcoSphereTable, point: &Vector3) -> f64 {
+pub fn barycentric_interpolation(icotable: &IcoSphereTable<f64>, point: &Vector3) -> f64 {
     let face = icotable.nearest_face(point);
     let bary = icotable.barycentric(point, &face);
     bary[0] * icotable.vertex_data[face[0]]
