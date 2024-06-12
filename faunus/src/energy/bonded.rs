@@ -234,14 +234,14 @@ impl SyncFrom for IntermolecularBonded {
         match change {
             // TODO: this can be optimized to only update the relevant parts of the status array
             Change::Everything | Change::SingleGroup(_, GroupChange::Resize(_)) => {
-                self.particles_status = other.particles_status.clone()
+                self.particles_status.clone_from(&other.particles_status)
             }
             Change::Groups(vec)
                 if vec
                     .iter()
                     .any(|group| matches!(group.1, GroupChange::Resize(_))) =>
             {
-                self.particles_status = other.particles_status.clone()
+                self.particles_status.clone_from(&other.particles_status)
             }
             Change::None | Change::Volume(_, _) | Change::SingleGroup(_, _) | Change::Groups(_) => {
             }

@@ -346,7 +346,7 @@ impl NonbondedMatrix {
 impl SyncFrom for NonbondedMatrix {
     fn sync_from(&mut self, other: &NonbondedMatrix, change: &Change) -> anyhow::Result<()> {
         match change {
-            Change::Everything => self.potentials = other.potentials.clone(),
+            Change::Everything => self.potentials.clone_from(&other.potentials),
             Change::None | Change::Volume(_, _) | Change::SingleGroup(_, _) | Change::Groups(_) => {
             }
         }
@@ -373,10 +373,7 @@ mod tests {
     use super::*;
 
     /// Compare behavior of two `IsotropicTwobodyEnergy` trait objects.
-    fn assert_behavior(
-        obj1: &Box<dyn IsotropicTwobodyEnergy>,
-        obj2: &Box<dyn IsotropicTwobodyEnergy>,
-    ) {
+    fn assert_behavior(obj1: &dyn IsotropicTwobodyEnergy, obj2: &dyn IsotropicTwobodyEnergy) {
         let testing_distances = [0.00201, 0.7, 12.3, 12457.6];
 
         for &dist in testing_distances.iter() {
@@ -427,7 +424,7 @@ mod tests {
             .position(|x| x.name() == "C")
             .unwrap();
 
-        let default = &nonbonded.potentials.get((o_index, o_index)).unwrap();
+        let default = nonbonded.potentials.get((o_index, o_index)).unwrap();
 
         for i in [o_index, c_index] {
             for j in 0..topology.atomkinds().len() {

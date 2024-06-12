@@ -849,6 +849,7 @@ mod tests {
     use super::*;
 
     /// Compare the fields of AtomKind with the expected values.
+    #[allow(clippy::too_many_arguments)]
     fn compare_atom_kind(
         atom: &AtomKind,
         name: &str,
@@ -901,6 +902,7 @@ mod tests {
     }
 
     /// Compare the fields of molecule kind.
+    #[allow(clippy::too_many_arguments)]
     fn compare_molecule_kind(
         molecule: &MoleculeKind,
         name: &str,
