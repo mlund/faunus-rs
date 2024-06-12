@@ -238,7 +238,7 @@ fn do_potential(cmd: &Commands) -> Result<()> {
                 let face = icotable.nearest_face(point);
                 let bary = icotable.barycentric(point, &face);
                 println!("Face: {:?} Barycentric: {:?}", face, bary);
-                println!("");
+                println!();
             }
             writeln!(
                 pot_angles_file,
@@ -297,27 +297,6 @@ fn to_cartesian(r: f64, theta: f64, phi: f64) -> Vector3<f64> {
     )
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use approx::assert_relative_eq;
-    use std::f64::consts::PI;
-
-    #[test]
-    fn test_spherical_cartesian_conversion() {
-        const ANGLE_TOL: f64 = 1e-6;
-        // Skip theta = 0 as phi is undefined
-        for theta in arange(0.00001..PI, 0.01) {
-            for phi in arange(0.0..2.0 * PI, 0.01) {
-                let cartesian = to_cartesian(1.0, theta, phi);
-                let (_, theta_converted, phi_converted) = to_spherical(&cartesian);
-                assert_relative_eq!(theta, theta_converted, epsilon = ANGLE_TOL);
-                assert_relative_eq!(phi, phi_converted, epsilon = ANGLE_TOL);
-            }
-        }
-    }
-}
-
 fn do_main() -> Result<()> {
     if std::env::var("RUST_LOG").is_err() {
         std::env::set_var("RUST_LOG", "info");
@@ -341,5 +320,26 @@ fn main() {
     if let Err(err) = do_main() {
         eprintln!("Error: {}", &err);
         std::process::exit(1);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use approx::assert_relative_eq;
+    use std::f64::consts::PI;
+
+    #[test]
+    fn test_spherical_cartesian_conversion() {
+        const ANGLE_TOL: f64 = 1e-6;
+        // Skip theta = 0 as phi is undefined
+        for theta in arange(0.00001..PI, 0.01) {
+            for phi in arange(0.0..2.0 * PI, 0.01) {
+                let cartesian = to_cartesian(1.0, theta, phi);
+                let (_, theta_converted, phi_converted) = to_spherical(&cartesian);
+                assert_relative_eq!(theta, theta_converted, epsilon = ANGLE_TOL);
+                assert_relative_eq!(phi, phi_converted, epsilon = ANGLE_TOL);
+            }
+        }
     }
 }
