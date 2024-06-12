@@ -39,10 +39,12 @@ impl Propagator {
 
         Ok(())
     }
+}
 
+impl<T: Context> From<Propagator> for Box<dyn Move<T>> {
     /// Converts the propagator into a Move trait object.
-    pub(super) fn into_trait_object<T: Context>(self) -> Box<dyn Move<T>> {
-        match self {
+    fn from(value: Propagator) -> Self {
+        match value {
             Propagator::TranslateMolecule(x) => Box::from(x) as Box<dyn Move<T>>,
         }
     }

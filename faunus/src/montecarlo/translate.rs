@@ -42,10 +42,15 @@ pub struct TranslateMolecule {
 }
 
 impl TranslateMolecule {
-    pub fn new(name: &str, id: usize, max_displacement: f64, frequency: Frequency) -> Self {
+    pub fn new(
+        molecule_name: &str,
+        molecule_id: usize,
+        max_displacement: f64,
+        frequency: Frequency,
+    ) -> Self {
         Self {
-            molecule_name: name.to_owned(),
-            molecule_id: id,
+            molecule_name: molecule_name.to_owned(),
+            molecule_id,
             max_displacement,
             frequency,
             statistics: MoveStatistics::default(),

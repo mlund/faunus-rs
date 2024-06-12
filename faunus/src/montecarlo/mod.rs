@@ -311,7 +311,7 @@ impl<T: Context> MoveCollection<T> {
 impl<T: Context> MoveCollection<T> {
     /// Get the collection of moves from an input yaml file.
     /// This method also requires a Context structure to validate and finalize the moves.
-    pub fn from_file(filename: impl AsRef<Path>, context: &T) -> anyhow::Result<MoveCollection<T>> {
+    pub fn from_yaml(filename: impl AsRef<Path>, context: &T) -> anyhow::Result<MoveCollection<T>> {
         let yaml = std::fs::read_to_string(filename)?;
         let full: serde_yaml::Value = serde_yaml::from_str(&yaml)?;
 
@@ -328,10 +328,7 @@ impl<T: Context> MoveCollection<T> {
 
         // convert to trait objects
         Ok(MoveCollection {
-            moves: propagators
-                .into_iter()
-                .map(|x| x.into_trait_object::<T>())
-                .collect(),
+            moves: propagators.into_iter().map(|x| x.into()).collect(),
         })
     }
 }
@@ -514,7 +511,7 @@ mod tests {
         )
         .unwrap();
 
-        let moves = MoveCollection::from_file("tests/files/topology_pass.yaml", &context).unwrap();
+        let moves = MoveCollection::from_yaml("tests/files/topology_pass.yaml", &context).unwrap();
 
         assert_eq!(moves.moves.len(), 2);
         assert!(matches!(moves.moves[0].frequency(), Frequency::Every(2)));
