@@ -101,7 +101,7 @@ impl<T: Default + Debug + Clone> IcoSphereTable<T> {
         d.abs() < 1e-3
     }
 
-    /// Get barycentric coordinate for an arbitrary point _projected_ on a face
+    /// Get projected barycentric coordinate for an arbitrary point
     ///
     /// From "Real-Time Collision Detection" by Christer Ericson
     pub fn projected_barycentric(&self, p: &Vector3, face: &[usize]) -> Vector3 {
@@ -156,7 +156,7 @@ impl<T: Default + Debug + Clone> IcoSphereTable<T> {
         Vector3::new(1.0 - v - w, v, w)
     }
 
-    /// Get barycentric coordinate for an arbitrart point on a face
+    /// Get barycentric coordinate for an arbitrary point on a face
     ///
     /// - Assume that `point` is on the plane defined by the face, i.e. no projection is done
     /// - https://en.wikipedia.org/wiki/Barycentric_coordinate_system

@@ -261,7 +261,7 @@ fn do_dipole(cmd: &Commands) -> Result<()> {
         // partition_func_interpolated /= norm;
 
         let mut rng = rand::thread_rng();
-        let n = 2000;
+        let n = 4000;
         for _ in 0..n {
             let point = faunus::transform::random_unit_vector(&mut rng);
             let energy = icotable::barycentric_interpolation(&icotable, &point);
