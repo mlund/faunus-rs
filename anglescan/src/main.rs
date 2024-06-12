@@ -18,6 +18,7 @@ extern crate pretty_env_logger;
 extern crate log;
 use iter_num_tools::arange;
 use textplots::{Chart, ColorPlot, Shape};
+use rand::Rng;
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -229,19 +230,16 @@ fn do_dipole(cmd: &Commands) -> Result<()> {
     let bjerrum_len = 7.0;
 
     for radius in distances {
-        let vertex_energy = |v: &Vector3<f64>| {
+        let vertex_exp_energy = |v: &Vector3<f64>| {
             let (_r, theta, _phi) = to_spherical(v);
             let field = bjerrum_len * charge / radius.powi(2);
-            field * mu * theta.cos()
+            let u = field * mu * theta.cos();
+            (-u).exp()
         };
-        icotable.set_vertex_data(vertex_energy);
+        icotable.set_vertex_data(vertex_exp_energy);
 
-        let partition_function = icotable
-            .vertex_data()
-            .iter()
-            .map(|u| (-u).exp())
-            .sum::<f64>()
-            / icotable.vertex_data().len() as f64;
+        let partition_function =
+            icotable.vertex_data().iter().sum::<f64>() / icotable.vertex_data().len() as f64;
 
         let field = -bjerrum_len * charge / radius.powi(2);
         let exact_energy = ((field * mu).sinh() / (field * mu)).ln().neg();
@@ -249,25 +247,25 @@ fn do_dipole(cmd: &Commands) -> Result<()> {
         // Now also calculate the partition function by interpolated energies
         // Here we need to take into account the volume element sin(theta) dtheta dphi
         let mut partition_func_interpolated = 0.0;
-        // let mut norm = 0.0;
-        // for theta in arange(0.0001..PI, resolution) {
-        //     for phi in arange(0.0001..2.0 * PI, resolution) {
-        //         let point = &to_cartesian(1.0, theta, phi);
-        //         let energy = icotable::barycentric_interpolation(&icotable,point);
-        //         partition_func_interpolated += (-energy).exp() * theta.sin();
-        //         norm += theta.sin();
-        //     }
-        // }
-        // partition_func_interpolated /= norm;
-
-        let mut rng = rand::thread_rng();
-        let n = 4000;
-        for _ in 0..n {
-            let point = faunus::transform::random_unit_vector(&mut rng);
-            let energy = icotable::barycentric_interpolation(&icotable, &point);
-            partition_func_interpolated += (-energy).exp()
+        let mut norm = 0.0;
+        for theta in arange(0.0001..PI, resolution) {
+            for phi in arange(0.0001..2.0 * PI, resolution) {
+                let point = &to_cartesian(1.0, theta, phi);
+                let exp_energy = icotable::barycentric_interpolation(&icotable,point);
+                partition_func_interpolated += exp_energy * theta.sin();
+                norm += theta.sin();
+            }
         }
-        partition_func_interpolated /= n as f64;
+        partition_func_interpolated /= norm;
+
+        // let mut rng = rand::thread_rng();
+        // let n = 4000;
+        // for _ in 0..n {
+        //     let point = faunus::transform::random_unit_vector(&mut rng);
+        //     let exp_energy = icotable::barycentric_interpolation(&icotable, &point);
+        //     partition_func_interpolated += exp_energy;
+        // }
+        // partition_func_interpolated /= n as f64;
 
         writeln!(
             dipole_file,
