@@ -18,15 +18,19 @@ use crate::analysis::{AnalysisCollection, Analyze};
 use crate::{time::Timer, Change, Context, Info};
 use average::Mean;
 use log;
+use propagator::Propagator;
 use rand::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::iter::FusedIterator;
+use std::path::Path;
 use std::{cmp::Ordering, ops::Neg};
 
 use crate::energy::EnergyChange;
 
+mod propagator;
 mod translate;
+
 pub use translate::*;
 
 /// Custom bias to be added to the energy after a given move
@@ -304,6 +308,31 @@ impl<T: Context> MoveCollection<T> {
     }
 }
 
+impl<T: Context> MoveCollection<T> {
+    /// Get the collection of moves from an input yaml file.
+    /// This method also requires a Context structure to validate and finalize the moves.
+    pub fn from_yaml(filename: impl AsRef<Path>, context: &T) -> anyhow::Result<MoveCollection<T>> {
+        let yaml = std::fs::read_to_string(filename)?;
+        let full: serde_yaml::Value = serde_yaml::from_str(&yaml)?;
+
+        let propagators_section = full.get("propagators").ok_or(anyhow::Error::msg(
+            "Could not find `propagators` in the YAML file.",
+        ))?;
+
+        let mut propagators: Vec<Propagator> = serde_yaml::from_value(propagators_section.clone())?;
+
+        // validate and finalize all moves
+        propagators
+            .iter_mut()
+            .try_for_each(|x| x.finalize(context))?;
+
+        // convert to trait objects
+        Ok(MoveCollection {
+            moves: propagators.into_iter().map(|x| x.into()).collect(),
+        })
+    }
+}
+
 /// # Monte Carlo simulation instance
 ///
 /// This maintains two [`Context`]s, one for the current state and one for the new state, as
@@ -463,5 +492,32 @@ pub fn entropy_bias(n: NewOld<usize>, volume: NewOld<f64>) -> f64 {
             .map(|i| f64::ln(f64::from(n.old as i32 - i) / volume.old))
             .sum::<f64>()
             .neg(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::platform::reference::ReferencePlatform;
+
+    use super::*;
+
+    #[test]
+    fn parse_moves() {
+        let mut rng = rand::thread_rng();
+        let context = ReferencePlatform::new(
+            "tests/files/topology_pass.yaml",
+            Some("tests/files/structure.xyz"),
+            &mut rng,
+        )
+        .unwrap();
+
+        let moves = MoveCollection::from_yaml("tests/files/topology_pass.yaml", &context).unwrap();
+
+        assert_eq!(moves.moves.len(), 2);
+        assert!(matches!(moves.moves[0].frequency(), Frequency::Every(2)));
+        assert!(matches!(
+            moves.moves[1].frequency(),
+            Frequency::Probability(0.5)
+        ));
     }
 }
