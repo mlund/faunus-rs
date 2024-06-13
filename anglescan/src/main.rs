@@ -16,9 +16,10 @@ use std::{io::Write, path::PathBuf};
 extern crate pretty_env_logger;
 #[macro_use]
 extern crate log;
+use anglescan::UnitQuaternion;
 use iter_num_tools::arange;
-use textplots::{Chart, ColorPlot, Shape};
 use rand::Rng;
+use textplots::{Chart, ColorPlot, Shape};
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -247,18 +248,37 @@ fn do_dipole(cmd: &Commands) -> Result<()> {
         // Now also calculate the partition function by interpolated energies
         // Here we need to take into account the volume element sin(theta) dtheta dphi
         let mut partition_func_interpolated = 0.0;
-        let mut norm = 0.0;
-        for theta in arange(0.0001..PI, resolution) {
-            for phi in arange(0.0001..2.0 * PI, resolution) {
-                let point = &to_cartesian(1.0, theta, phi);
-                let exp_energy = icotable::barycentric_interpolation(&icotable,point);
-                partition_func_interpolated += exp_energy * theta.sin();
-                norm += theta.sin();
+        // let mut norm = 0.0;
+        // for theta in arange(0.0001..PI, resolution) {
+        //     for phi in arange(0.0001..2.0 * PI, resolution) {
+        //         let point = &to_cartesian(1.0, theta, phi);
+        //         let exp_energy = icotable::barycentric_interpolation(&icotable,point);
+        //         partition_func_interpolated += exp_energy * theta.sin();
+        //         norm += theta.sin();
+        //     }
+        // }
+        // partition_func_interpolated /= norm;
+
+        let mut rng = rand::thread_rng();
+        let mut rotated_icosphere = IcoSphereTable::<f64>::from_min_points(n_points)?;
+        let num_random_rotations: usize = 10;
+
+        for _ in 0..num_random_rotations {
+            let point: Vector3<f64> = faunus::transform::random_unit_vector(&mut rng);
+            let quaternion = UnitQuaternion::<f64>::from_axis_angle(
+                &nalgebra::Unit::new_normalize(point),
+                rng.gen_range(0.0..2.0 * PI),
+            );
+            rotated_icosphere.transform_vertices(|v| quaternion.transform_vector(v));
+
+            for vertex in rotated_icosphere.vertices.iter() {
+                let exp_energy = icotable::barycentric_interpolation(&icotable, vertex);
+                partition_func_interpolated += exp_energy;
             }
         }
-        partition_func_interpolated /= norm;
+        partition_func_interpolated /= (num_random_rotations * rotated_icosphere.vertices.len())
+            as f64;
 
-        // let mut rng = rand::thread_rng();
         // let n = 4000;
         // for _ in 0..n {
         //     let point = faunus::transform::random_unit_vector(&mut rng);

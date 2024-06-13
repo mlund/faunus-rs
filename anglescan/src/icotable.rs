@@ -90,6 +90,11 @@ impl<T: Default + Debug + Clone> IcoSphereTable<T> {
         &self.vertex_data
     }
 
+    /// Transform vertices using a function
+    pub fn transform_vertices(&mut self, f: impl Fn(&Vector3) -> Vector3) {
+        self.vertices = self.vertices.iter().map(f).collect();
+    }
+
     /// Check is a point is on a face
     pub fn is_on_face(&self, point: &Vector3, face: &[usize]) -> bool {
         let a = point - self.vertices[face[0]];
