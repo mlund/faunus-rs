@@ -50,6 +50,7 @@ pub use physical_constants::{
     VACUUM_ELECTRIC_PERMITTIVITY,
 };
 
+#[allow(dead_code)]
 trait PointParticle {
     /// Type of the particle identifier
     type Idtype;
