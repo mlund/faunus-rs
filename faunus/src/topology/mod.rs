@@ -1090,6 +1090,7 @@ mod tests {
             Residue::new("GLY", None, 1..1),
             Residue::new("ALA", Some(4), 4..6),
         ];
+        #[allow(clippy::reversed_empty_ranges)]
         let chains = [Chain::new("A", 0..7), Chain::new("Chain2", 14..0)];
         let custom = HashMap::from([
             ("bool".to_owned(), Value::Bool(false)),
