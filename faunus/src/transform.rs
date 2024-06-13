@@ -118,6 +118,29 @@ mod tests {
     use super::*;
     use float_cmp::assert_approx_eq;
 
+    // test random unit vector generation
+    #[test]
+    fn test_random_unit_vector() {
+        let n = 5000;
+        let mut rng = rand::thread_rng();
+        let mut x_mean = 0.0;
+        let mut y_mean = 0.0;
+        let mut z_mean = 0.0;
+        let mut rngsum = 0.0;
+        for _ in 0..n {
+            let v = random_unit_vector(&mut rng);
+            assert_approx_eq!(f64, v.norm(), 1.0);
+            x_mean += v.x;
+            y_mean += v.y;
+            z_mean += v.z;
+            rngsum += rng.gen::<f64>();
+        }
+        assert_approx_eq!(f64, x_mean / n as f64, 0.0, epsilon = 0.02);
+        assert_approx_eq!(f64, y_mean / n as f64, 0.0, epsilon = 0.02);
+        assert_approx_eq!(f64, z_mean / n as f64, 0.0, epsilon = 0.02);
+        assert_approx_eq!(f64, rngsum / n as f64, 0.5, epsilon = 0.01);
+    }
+
     #[test]
     fn test_rotate_random() {
         let positions = [

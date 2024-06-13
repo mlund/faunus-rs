@@ -48,12 +48,12 @@ pub enum Participant {
     Implicit(String),
 }
 
-impl std::string::ToString for Participant {
-    fn to_string(&self) -> String {
+impl std::fmt::Display for Participant {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Atom(s) => s.clone(),
-            Self::Implicit(s) => s.clone(),
-            Self::Molecule(s) => s.clone(),
+            Self::Atom(s) => write!(f, "{}", s),
+            Self::Implicit(s) => write!(f, "{}", s),
+            Self::Molecule(s) => write!(f, "{}", s),
         }
     }
 }

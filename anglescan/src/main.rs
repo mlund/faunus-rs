@@ -420,3 +420,24 @@ fn main() {
         std::process::exit(1);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use approx::assert_relative_eq;
+    use std::f64::consts::PI;
+
+    #[test]
+    fn test_spherical_cartesian_conversion() {
+        const ANGLE_TOL: f64 = 1e-6;
+        // Skip theta = 0 as phi is undefined
+        for theta in arange(0.00001..PI, 0.01) {
+            for phi in arange(0.0..2.0 * PI, 0.01) {
+                let cartesian = to_cartesian(1.0, theta, phi);
+                let (_, theta_converted, phi_converted) = to_spherical(&cartesian);
+                assert_relative_eq!(theta, theta_converted, epsilon = ANGLE_TOL);
+                assert_relative_eq!(phi, phi_converted, epsilon = ANGLE_TOL);
+            }
+        }
+    }
+}

@@ -669,7 +669,7 @@ mod tests {
 
         // no interaction
         nonbonded.0.remove(&DefaultOrPair::Default);
-        let expected = Box::new(NoInteraction::default());
+        let expected = Box::<NoInteraction>::default();
         let interaction = nonbonded.get_interaction(&atom1, &atom3).unwrap();
         assert_behavior(interaction, expected);
     }
