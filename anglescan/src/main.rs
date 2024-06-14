@@ -1,6 +1,6 @@
 use anglescan::{
-    energy, icotable,
-    icotable::IcoSphereTable,
+    energy::self,
+    icotable::{self, IcoSphereTable},
     structure::{AtomKinds, Structure},
     to_cartesian, to_spherical, Sample, TwobodyAngles, Vector3,
 };
@@ -219,7 +219,7 @@ fn do_dipole(cmd: &Commands) -> Result<()> {
     let mut icotable = IcoSphereTable::<f64>::from_min_points(n_points)?;
     let resolution = (4.0 * PI / icotable.vertices.len() as f64).sqrt();
     log::info!(
-        "Requested {} points on a sphere; got {} -> new resolution = {:.2}",
+        "Requested {} points on a sphere; got {} -> new resolution = {:.3}",
         n_points,
         icotable.vertices.len(),
         resolution
@@ -227,6 +227,7 @@ fn do_dipole(cmd: &Commands) -> Result<()> {
 
     let mut dipole_file = std::fs::File::create(output)?;
     writeln!(dipole_file, "# R/Å w_vertex w_exact w_interpolated")?;
+
     let charge = 1.0;
     let bjerrum_len = 7.0;
 
@@ -243,57 +244,42 @@ fn do_dipole(cmd: &Commands) -> Result<()> {
             icotable.vertex_data().iter().sum::<f64>() / icotable.vertex_data().len() as f64;
 
         let field = -bjerrum_len * charge / radius.powi(2);
-        let exact_energy = ((field * mu).sinh() / (field * mu)).ln().neg();
+        let exact_free_energy = ((field * mu).sinh() / (field * mu)).ln().neg();
 
-        // Now also calculate the partition function by interpolated energies
-        // Here we need to take into account the volume element sin(theta) dtheta dphi
-        let mut partition_func_interpolated = 0.0;
-        // let mut norm = 0.0;
-        // for theta in arange(0.0001..PI, resolution) {
-        //     for phi in arange(0.0001..2.0 * PI, resolution) {
-        //         let point = &to_cartesian(1.0, theta, phi);
-        //         let exp_energy = icotable::barycentric_interpolation(&icotable,point);
-        //         partition_func_interpolated += exp_energy * theta.sin();
-        //         norm += theta.sin();
-        //     }
-        // }
-        // partition_func_interpolated /= norm;
-
+        // Set of rotations to apply vertices of a new icosphere used for sampling interpolated points
         let mut rng = rand::thread_rng();
-        let mut rotated_icosphere = IcoSphereTable::<f64>::from_min_points(n_points)?;
-        let num_random_rotations: usize = 10;
+        let quaternions: Vec<UnitQuaternion<f64>> = (0..20)
+            .map(|_| {
+                let point: Vector3<f64> = faunus::transform::random_unit_vector(&mut rng);
+                UnitQuaternion::<f64>::from_axis_angle(
+                    &nalgebra::Unit::new_normalize(point),
+                    rng.gen_range(0.0..2.0 * PI),
+                )
+            })
+            .collect();
 
-        for _ in 0..num_random_rotations {
-            let point: Vector3<f64> = faunus::transform::random_unit_vector(&mut rng);
-            let quaternion = UnitQuaternion::<f64>::from_axis_angle(
-                &nalgebra::Unit::new_normalize(point),
-                rng.gen_range(0.0..2.0 * PI),
-            );
-            rotated_icosphere.transform_vertices(|v| quaternion.transform_vector(v));
+        // Sample interpolated points using a randomly rotated icosphere
+        let mut rotated_icosphere = IcoSphereTable::<f64>::from_min_points(1000)?;
+        let mut partition_func_interpolated = 0.0;
 
-            for vertex in rotated_icosphere.vertices.iter() {
-                let exp_energy = icotable::barycentric_interpolation(&icotable, vertex);
-                partition_func_interpolated += exp_energy;
-            }
+        for q in &quaternions {
+            rotated_icosphere.transform_vertices(|v| q.transform_vector(v));
+            partition_func_interpolated += rotated_icosphere
+                .vertices
+                .iter()
+                .map(|v| icotable::barycentric_interpolation(&icotable, v))
+                .sum::<f64>()
+                / rotated_icosphere.vertices.len() as f64;
         }
-        partition_func_interpolated /= (num_random_rotations * rotated_icosphere.vertices.len())
-            as f64;
-
-        // let n = 4000;
-        // for _ in 0..n {
-        //     let point = faunus::transform::random_unit_vector(&mut rng);
-        //     let exp_energy = icotable::barycentric_interpolation(&icotable, &point);
-        //     partition_func_interpolated += exp_energy;
-        // }
-        // partition_func_interpolated /= n as f64;
+        partition_func_interpolated /= quaternions.len() as f64;
 
         writeln!(
             dipole_file,
             "{:.5} {:.5} {:.5} {:.5}",
             radius,
             partition_function.ln().neg(),
-            exact_energy,
-            partition_func_interpolated.ln().neg()
+            exact_free_energy,
+            partition_func_interpolated.ln().neg(),
         )?;
     }
 

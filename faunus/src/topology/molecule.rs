@@ -101,7 +101,7 @@ pub struct MoleculeKind {
 
 impl MoleculeKindBuilder {
     /// Populate `atoms` from structure file.
-    /// 
+    ///
     /// # Panics
     /// Panics of the file doesn't exist or is of unknown format.
     pub fn from_structure(&mut self, filename: impl AsRef<Path>) -> &mut Self {
