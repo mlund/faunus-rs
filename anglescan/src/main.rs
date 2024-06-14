@@ -231,34 +231,38 @@ fn do_dipole(cmd: &Commands) -> Result<()> {
     let charge = 1.0;
     let bjerrum_len = 7.0;
 
+    // for each ion-dipole separation, calculate the partition function and free energy
     for radius in distances {
-        let vertex_exp_energy = |v: &Vector3<f64>| {
-            let (_r, theta, _phi) = to_spherical(v);
+        // exact exp. energy at a given point, exp(-βu)
+        let exact_exp_energy = |p: &Vector3<f64>| {
+            let (_r, theta, _phi) = to_spherical(p);
             let field = bjerrum_len * charge / radius.powi(2);
             let u = field * mu * theta.cos();
             (-u).exp()
         };
-        icotable.set_vertex_data(vertex_exp_energy);
+        icotable.set_vertex_data(exact_exp_energy);
 
+        // Q summed from exact data at each vertex
         let partition_function =
             icotable.vertex_data().iter().sum::<f64>() / icotable.vertex_data().len() as f64;
 
+        // analytical solution to angular average of exp(-βu)
         let field = -bjerrum_len * charge / radius.powi(2);
         let exact_free_energy = ((field * mu).sinh() / (field * mu)).ln().neg();
 
-        // Set of rotations to apply vertices of a new icosphere used for sampling interpolated points
+        // rotations to apply to vertices of a new icosphere used for sampling interpolated points
         let mut rng = rand::thread_rng();
         let quaternions: Vec<UnitQuaternion<f64>> = (0..20)
             .map(|_| {
                 let point: Vector3<f64> = faunus::transform::random_unit_vector(&mut rng);
                 UnitQuaternion::<f64>::from_axis_angle(
                     &nalgebra::Unit::new_normalize(point),
-                    rng.gen_range(0.0..2.0 * PI),
+                    rng.gen_range(0.0..PI),
                 )
             })
             .collect();
 
-        // Sample interpolated points using a randomly rotated icosphere
+        // Sample interpolated points using a randomly rotate icospheres
         let mut rotated_icosphere = IcoSphereTable::<f64>::from_min_points(1000)?;
         let mut partition_func_interpolated = 0.0;
 
@@ -282,7 +286,6 @@ fn do_dipole(cmd: &Commands) -> Result<()> {
             partition_func_interpolated.ln().neg(),
         )?;
     }
-
     Ok(())
 }
 
