@@ -29,6 +29,6 @@ flate2 = "1.0"
 textplots = "0.8.6"
 rgb = "0.8.37"
 nu-ansi-term = "0.50.0"
-hexasphere = {version = "12.0", features = ["adjacency"]}
+hexasphere = {version = "13.1", features = ["adjacency"]}
 num-traits = "0.2.19"
 rand = "0.8.5"

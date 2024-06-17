@@ -2,7 +2,7 @@ use super::anglescan::*;
 use anyhow::Result;
 use hexasphere::{shapes::IcoSphereBase, AdjacencyBuilder, Subdivided};
 use itertools::Itertools;
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 use std::io::Write;
 use std::path::Path;
 
@@ -13,7 +13,8 @@ use std::path::Path;
 ///
 /// https://en.wikipedia.org/wiki/Geodesic_polyhedron
 /// 12 vertices will always have 5 neighbors; the rest will have 6.
-pub struct IcoSphereTable<T: Default + Debug + Clone> {
+#[derive(Clone)]
+pub struct IcoSphereTable<T: Default + Display + Clone> {
     /// Raw icosphere structure from hexasphere crate
     _icosphere: Subdivided<(), IcoSphereBase>,
     /// Neighbor list of other vertices for each vertex
@@ -26,7 +27,7 @@ pub struct IcoSphereTable<T: Default + Debug + Clone> {
     vertex_data: Vec<T>,
 }
 
-impl<T: Default + Debug + Clone> IcoSphereTable<T> {
+impl<T: Default + Display + Clone> IcoSphereTable<T> {
     /// Generate table based on an existing subdivided icosaedron
     pub fn from_icosphere(icosphere: Subdivided<(), IcoSphereBase>) -> Self {
         let indices = icosphere.get_all_indices();
@@ -57,21 +58,6 @@ impl<T: Default + Debug + Clone> IcoSphereTable<T> {
             faces,
             vertex_data: vec![T::default(); n_vertices],
         }
-    }
-
-    /// Save tabulated vertices and aqssociated data to a file
-    pub fn save_table(&self, path: impl AsRef<Path>) -> Result<()> {
-        let mut file = std::fs::File::create(path)?;
-        writeln!(file, "# x y z θ φ data")?;
-        for (vertex, data) in self.vertices.iter().zip(&self.vertex_data) {
-            let (_r, theta, phi) = crate::to_spherical(vertex);
-            writeln!(
-                file,
-                "{} {} {} {} {} {:?}",
-                vertex.x, vertex.y, vertex.z, theta, phi, data
-            )?;
-        }
-        Ok(())
     }
 
     /// Generate table based on a minimum number of vertices on the subdivided icosaedron
@@ -108,7 +94,7 @@ impl<T: Default + Debug + Clone> IcoSphereTable<T> {
 
     /// Get projected barycentric coordinate for an arbitrary point
     ///
-    /// From "Real-Time Collision Detection" by Christer Ericson
+    /// See "Real-Time Collision Detection" by Christer Ericson (p141-142)
     pub fn projected_barycentric(&self, p: &Vector3, face: &[usize]) -> Vector3 {
         let a = &self.vertices[face[0]];
         let b = &self.vertices[face[1]];
@@ -244,6 +230,21 @@ impl<T: Default + Debug + Clone> IcoSphereTable<T> {
             let c = &self.vertices[face[2]].scale(s);
             let color = "red";
             vmd_draw_triangle(&mut file, a, b, c, color)?;
+        }
+        Ok(())
+    }
+}
+
+impl std::fmt::Display for IcoSphereTable<f64> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "# x y z θ φ data")?;
+        for (vertex, data) in self.vertices.iter().zip(&self.vertex_data) {
+            let (_r, theta, phi) = crate::to_spherical(vertex);
+            writeln!(
+                f,
+                "{} {} {} {} {} {}",
+                vertex.x, vertex.y, vertex.z, theta, phi, data
+            )?;
         }
         Ok(())
     }

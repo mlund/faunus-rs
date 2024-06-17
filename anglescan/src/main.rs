@@ -1,5 +1,5 @@
 use anglescan::{
-    energy::self,
+    energy,
     icotable::{self, IcoSphereTable},
     structure::{AtomKinds, Structure},
     to_cartesian, to_spherical, Sample, TwobodyAngles, Vector3,
@@ -11,8 +11,7 @@ use indicatif::ParallelProgressIterator;
 use nu_ansi_term::Color::{Red, Yellow};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use rgb::RGB8;
-use std::{f64::consts::PI, ops::Neg};
-use std::{io::Write, path::PathBuf};
+use std::{f64::consts::PI, ops::Neg, io::Write, path::PathBuf, string::ToString};
 extern crate pretty_env_logger;
 #[macro_use]
 extern crate log;
@@ -323,7 +322,9 @@ fn do_potential(cmd: &Commands) -> Result<()> {
     let mut icotable = IcoSphereTable::<f64>::from_min_points(n_points)?;
     icotable
         .set_vertex_data(|v| energy::electric_potential(&structure, &v.scale(*radius), &multipole));
-    icotable.save_table("pot_at_vertices.dat")?;
+    let mut table_file = std::fs::File::create("pot_at_vertices.dat")?;
+    writeln!(table_file, "{}", icotable.to_string())?;
+
     icotable.save_vmd("triangles.vmd", Some(*radius))?;
 
     // Make PQR file illustrating the electric potential at each vertex
