@@ -2,7 +2,8 @@ use super::anglescan::*;
 use anyhow::Result;
 use hexasphere::{shapes::IcoSphereBase, AdjacencyBuilder, Subdivided};
 use itertools::Itertools;
-use std::fmt::{Debug, Display};
+use nalgebra::Matrix3;
+use std::fmt::Display;
 use std::io::Write;
 use std::path::Path;
 
@@ -14,7 +15,7 @@ use std::path::Path;
 /// https://en.wikipedia.org/wiki/Geodesic_polyhedron
 /// 12 vertices will always have 5 neighbors; the rest will have 6.
 #[derive(Clone)]
-pub struct IcoSphereTable<T: Default + Display + Clone> {
+pub struct IcoSphereTable<T: Display + Clone> {
     /// Raw icosphere structure from hexasphere crate
     _icosphere: Subdivided<(), IcoSphereBase>,
     /// Neighbor list of other vertices for each vertex
@@ -27,9 +28,14 @@ pub struct IcoSphereTable<T: Default + Display + Clone> {
     vertex_data: Vec<T>,
 }
 
-impl<T: Default + Display + Clone> IcoSphereTable<T> {
+/// A icotable where each vertex holds data of type f64
+pub type IcoSphereTableOfFloats = IcoSphereTable<f64>;
+/// A icotable where each vertex holds an icotable of type f64
+pub type IcoSphereTableOfSpheres = IcoSphereTable<IcoSphereTableOfFloats>;
+
+impl<T: Display + Clone> IcoSphereTable<T> {
     /// Generate table based on an existing subdivided icosaedron
-    pub fn from_icosphere(icosphere: Subdivided<(), IcoSphereBase>) -> Self {
+    pub fn from_icosphere(icosphere: Subdivided<(), IcoSphereBase>, default_data: T) -> Self {
         let indices = icosphere.get_all_indices();
         let mut builder = AdjacencyBuilder::new(icosphere.raw_points().len());
         builder.add_indices(indices.as_slice());
@@ -56,14 +62,14 @@ impl<T: Default + Display + Clone> IcoSphereTable<T> {
             neighbors,
             vertices,
             faces,
-            vertex_data: vec![T::default(); n_vertices],
+            vertex_data: vec![default_data; n_vertices],
         }
     }
 
     /// Generate table based on a minimum number of vertices on the subdivided icosaedron
-    pub fn from_min_points(min_points: usize) -> Result<Self> {
+    pub fn from_min_points(min_points: usize, default_data: T) -> Result<Self> {
         let icosphere = make_icosphere(min_points)?;
-        Ok(Self::from_icosphere(icosphere))
+        Ok(Self::from_icosphere(icosphere, default_data))
     }
 
     /// Set data associated with each vertex using a generator function
@@ -260,6 +266,20 @@ pub fn barycentric_interpolation(icotable: &IcoSphereTable<f64>, point: &Vector3
         + bary[2] * icotable.vertex_data[face[2]]
 }
 
+impl IcoSphereTableOfSpheres {
+    /// Interpolate data between two faces
+    pub fn face_face_interpolate(
+        &self,
+        face_a: &[usize],
+        face_b: &[usize],
+        bary_a: &Vector3,
+        bary_b: &Vector3,
+    ) -> f64 {
+        let data_ab = Matrix3::from_fn(|i, j| self.vertex_data[face_a[i]].vertex_data[face_b[j]]);
+        (bary_a.transpose() * data_ab * bary_b).to_scalar()
+    }
+}
+
 /// Draw a triangle in VMD format
 fn vmd_draw_triangle(
     stream: &mut impl Write,
@@ -286,7 +306,7 @@ mod tests {
     #[test]
     fn test_icosphere_table() {
         let icosphere = make_icosphere(3).unwrap();
-        let icotable = IcoSphereTable::<f64>::from_icosphere(icosphere);
+        let icotable = IcoSphereTable::<f64>::from_icosphere(icosphere, 0.0);
         assert_eq!(icotable.vertices.len(), 12);
         assert_eq!(icotable.faces.len(), 20);
 
@@ -327,5 +347,21 @@ mod tests {
         assert_relative_eq!(bary[0], 0.5);
         assert_relative_eq!(bary[1], 0.0);
         assert_relative_eq!(bary[2], 0.5);
+    }
+
+    #[test]
+    fn test_table_of_spheres() {
+        let icotable = IcoSphereTable::<f64>::from_min_points(42, 0.0).unwrap();
+        let icotable_of_spheres = IcoSphereTableOfSpheres::from_min_points(42, icotable).unwrap();
+        assert_eq!(icotable_of_spheres.vertices.len(), 42);
+        assert_eq!(
+            icotable_of_spheres
+                .vertex_data
+                .first()
+                .unwrap()
+                .vertices
+                .len(),
+            42
+        );
     }
 }

@@ -11,7 +11,7 @@ use indicatif::ParallelProgressIterator;
 use nu_ansi_term::Color::{Red, Yellow};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use rgb::RGB8;
-use std::{f64::consts::PI, ops::Neg, io::Write, path::PathBuf, string::ToString};
+use std::{f64::consts::PI, io::Write, ops::Neg, path::PathBuf};
 extern crate pretty_env_logger;
 #[macro_use]
 extern crate log;
@@ -215,7 +215,7 @@ fn do_dipole(cmd: &Commands) -> Result<()> {
     };
     let distances: Vec<f64> = iter_num_tools::arange(*rmin..*rmax, *dr).collect();
     let n_points = (4.0 * PI / resolution.powi(2)).round() as usize;
-    let mut icotable = IcoSphereTable::<f64>::from_min_points(n_points)?;
+    let mut icotable = IcoSphereTable::<f64>::from_min_points(n_points, 0.0)?;
     let resolution = (4.0 * PI / icotable.vertices.len() as f64).sqrt();
     log::info!(
         "Requested {} points on a sphere; got {} -> new resolution = {:.3}",
@@ -262,7 +262,7 @@ fn do_dipole(cmd: &Commands) -> Result<()> {
             .collect();
 
         // Sample interpolated points using a randomly rotate icospheres
-        let mut rotated_icosphere = IcoSphereTable::<f64>::from_min_points(1000)?;
+        let mut rotated_icosphere = IcoSphereTable::<f64>::from_min_points(1000, 0.0)?;
         let mut partition_func_interpolated = 0.0;
 
         for q in &quaternions {
@@ -319,11 +319,11 @@ fn do_potential(cmd: &Commands) -> Result<()> {
         resolution
     );
 
-    let mut icotable = IcoSphereTable::<f64>::from_min_points(n_points)?;
+    let mut icotable = IcoSphereTable::<f64>::from_min_points(n_points, 0.0)?;
     icotable
         .set_vertex_data(|v| energy::electric_potential(&structure, &v.scale(*radius), &multipole));
-    let mut table_file = std::fs::File::create("pot_at_vertices.dat")?;
-    writeln!(table_file, "{}", icotable.to_string())?;
+
+    std::fs::File::create("pot_at_vertices.dat")?.write_fmt(format_args!("{}", icotable))?;
 
     icotable.save_vmd("triangles.vmd", Some(*radius))?;
 
