@@ -76,7 +76,7 @@ impl TwobodyAngles {
         let q1 = points.iter().map(to_neg_zaxis).collect();
         let q2 = points.iter().map(to_zaxis).collect();
 
-        let dihedrals = arange(0.0..2.0 * PI, angle_resolution)
+        let dihedrals = arange(angle_resolution..2.0 * PI, angle_resolution)
             .map(around_z)
             .collect();
 

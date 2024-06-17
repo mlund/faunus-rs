@@ -28,10 +28,8 @@ pub struct IcoSphereTable<T: Display + Clone> {
     vertex_data: Vec<T>,
 }
 
-/// A icotable where each vertex holds data of type f64
-pub type IcoSphereTableOfFloats = IcoSphereTable<f64>;
-/// A icotable where each vertex holds an icotable of type f64
-pub type IcoSphereTableOfSpheres = IcoSphereTable<IcoSphereTableOfFloats>;
+/// A icotable where each vertex holds an icotable of floats
+pub type IcoSphereTableOfSpheres = IcoSphereTable<IcoSphereTable<f64>>;
 
 impl<T: Display + Clone> IcoSphereTable<T> {
     /// Generate table based on an existing subdivided icosaedron
@@ -256,14 +254,16 @@ impl std::fmt::Display for IcoSphereTable<f64> {
     }
 }
 
-/// Get data for a point on the surface using barycentric interpolation
-/// https://en.wikipedia.org/wiki/Barycentric_coordinate_system#Interpolation_on_a_triangular_unstructured_grid
-pub fn barycentric_interpolation(icotable: &IcoSphereTable<f64>, point: &Vector3) -> f64 {
-    let face = icotable.nearest_face(point);
-    let bary = icotable.projected_barycentric(point, &face);
-    bary[0] * icotable.vertex_data[face[0]]
-        + bary[1] * icotable.vertex_data[face[1]]
-        + bary[2] * icotable.vertex_data[face[2]]
+impl IcoSphereTable<f64> {
+    /// Get data for a point on the surface using barycentric interpolation
+    /// https://en.wikipedia.org/wiki/Barycentric_coordinate_system#Interpolation_on_a_triangular_unstructured_grid
+    pub fn barycentric_interpolation(&self, point: &Vector3) -> f64 {
+        let face = self.nearest_face(point);
+        let bary = self.projected_barycentric(point, &face);
+        bary[0] * self.vertex_data[face[0]]
+            + bary[1] * self.vertex_data[face[1]]
+            + bary[2] * self.vertex_data[face[2]]
+    }
 }
 
 impl IcoSphereTableOfSpheres {

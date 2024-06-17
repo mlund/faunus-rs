@@ -1,6 +1,6 @@
 use anglescan::{
     energy,
-    icotable::{self, IcoSphereTable},
+    icotable::IcoSphereTable,
     structure::{AtomKinds, Structure},
     to_cartesian, to_spherical, Sample, TwobodyAngles, Vector3,
 };
@@ -270,7 +270,7 @@ fn do_dipole(cmd: &Commands) -> Result<()> {
             partition_func_interpolated += rotated_icosphere
                 .vertices
                 .iter()
-                .map(|v| icotable::barycentric_interpolation(&icotable, v))
+                .map(|v| icotable.barycentric_interpolation(v))
                 .sum::<f64>()
                 / rotated_icosphere.vertices.len() as f64;
         }
@@ -340,7 +340,7 @@ fn do_potential(cmd: &Commands) -> Result<()> {
     for theta in arange(0.0001..PI, resolution) {
         for phi in arange(0.0001..2.0 * PI, resolution) {
             let point = &to_cartesian(1.0, theta, phi);
-            let interpolated = icotable::barycentric_interpolation(&icotable, point);
+            let interpolated = icotable.barycentric_interpolation(point);
             let exact = energy::electric_potential(&structure, &point.scale(*radius), &multipole);
             pqr_write_atom(&mut pqr_file, 1, &point.scale(*radius), exact, 2.0)?;
             let rel_err = (interpolated - exact) / exact;
