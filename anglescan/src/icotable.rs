@@ -84,21 +84,10 @@ impl<T: Clone> IcoSphereTable<T> {
         self.vertices = self.vertices.iter().map(f).collect();
     }
 
-    /// Check is a point is on a face
-    pub fn is_on_face(&self, point: &Vector3, face: &[usize]) -> bool {
-        let a = point - self.vertices[face[0]];
-        let b = point - self.vertices[face[1]];
-        let c = point - self.vertices[face[2]];
-        let n = a.cross(&b);
-        let n = n.normalize();
-        let d = n.dot(&c);
-        d.abs() < 1e-3
-    }
-
     /// Get projected barycentric coordinate for an arbitrary point
     ///
     /// See "Real-Time Collision Detection" by Christer Ericson (p141-142)
-    pub fn projected_barycentric(&self, p: &Vector3, face: &[usize]) -> Vector3 {
+    pub fn projected_barycentric(&self, p: &Vector3, face: &Face) -> Vector3 {
         let a = &self.vertices[face[0]];
         let b = &self.vertices[face[1]];
         let c = &self.vertices[face[2]];
@@ -156,7 +145,7 @@ impl<T: Clone> IcoSphereTable<T> {
     /// - https://en.wikipedia.org/wiki/Barycentric_coordinate_system
     /// - http://realtimecollisiondetection.net/
     /// - https://gamedev.stackexchange.com/questions/23743/whats-the-most-efficient-way-to-find-barycentric-coordinates
-    pub fn barycentric(&self, p: &Vector3, face: &[usize]) -> Vector3 {
+    pub fn barycentric(&self, p: &Vector3, face: &Face) -> Vector3 {
         let a = self.vertices[face[0]];
         let b = self.vertices[face[1]];
         let c = self.vertices[face[2]];
@@ -204,7 +193,7 @@ impl<T: Clone> IcoSphereTable<T> {
     /// The first nearest point is O(n) whereafter neighbor information
     /// is used to find the 2nd and 3rd nearest points which are guaranteed
     /// to define a face.
-    pub fn nearest_face(&self, point: &Vector3) -> Vec<usize> {
+    pub fn nearest_face(&self, point: &Vector3) -> Face {
         let nearest_vertex = self.nearest_vertex(point);
         let point_hat = point.normalize();
 
@@ -220,7 +209,7 @@ impl<T: Clone> IcoSphereTable<T> {
         face.push(nearest_vertex);
         face.sort_unstable();
         assert_eq!(face.iter().unique().count(), 3);
-        face
+        face.try_into().unwrap()
     }
     /// Save a VMD script to illustrate the icosphere
     pub fn save_vmd(&self, path: impl AsRef<Path>, scale: Option<f64>) -> Result<()> {
@@ -269,8 +258,8 @@ impl IcoSphereTableOfSpheres {
     /// Interpolate data between two faces
     pub fn face_face_interpolate(
         &self,
-        face_a: &[usize],
-        face_b: &[usize],
+        face_a: &Face,
+        face_b: &Face,
         bary_a: &Vector3,
         bary_b: &Vector3,
     ) -> f64 {
