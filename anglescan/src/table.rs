@@ -1,8 +1,8 @@
 use anyhow::Result;
 
 /// Periodic table that emulate periodicity by padding edges
-#[derive(Debug, Clone, Default)]
-pub struct PaddedTable<T: Default + Clone> {
+#[derive(Debug, Clone)]
+pub struct PaddedTable<T: Clone> {
     /// Minimum value of keys in the table
     min: f64,
     /// Maximum value of keys in the table
@@ -13,7 +13,7 @@ pub struct PaddedTable<T: Default + Clone> {
     data: Vec<T>,
 }
 
-impl<T: Default + Clone> PaddedTable<T> {
+impl<T: Clone> PaddedTable<T> {
     pub fn new(min: f64, max: f64, res: f64, initial_value: T) -> PaddedTable<T> {
         assert!(min < max && res > 0.0);
         let n = ((max - min + 2.0 * res) / res + 0.5) as usize;
@@ -78,10 +78,6 @@ impl<T: Default + Clone> PaddedTable<T> {
 
 pub type PaddedTable1D = PaddedTable<f64>;
 pub type PaddedTable2D = PaddedTable<PaddedTable1D>;
-pub type PaddedTable3D = PaddedTable<PaddedTable2D>;
-pub type PaddedTable4D = PaddedTable<PaddedTable3D>;
-pub type PaddedTable5D = PaddedTable<PaddedTable4D>;
-pub type PaddedTable6D = PaddedTable<PaddedTable5D>;
 
 #[cfg(test)]
 mod tests {
