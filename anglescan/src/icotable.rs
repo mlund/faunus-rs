@@ -227,22 +227,18 @@ impl<T: Clone> IcoSphereTable<T> {
         let nearest = self.nearest_vertex(point);
         let point = point.normalize();
 
-        let dist: Vec<(usize, f64)> = self.vertices[nearest]
+        let mut face: Face = self.vertices[nearest]
             .neighbors
             .iter()
             .cloned()
             .map(|i| (i, (self.vertices[i].pos - point).norm_squared()))
-            .sorted_by(|a, b| a.1.partial_cmp(&b.1).unwrap())
-            .collect();
-
-        let mut face: Face = dist
-            .iter()
-            .map(|(i, _)| i)
-            .cloned()
-            .take(2)
+            .sorted_by(|a, b| a.1.partial_cmp(&b.1).unwrap()) // sort ascending
+            .map(|(i, _)| i) // keep only indices
+            .take(2) // take two next nearest distances
             .collect_tuple()
-            .map(|(a, b)| [a, b, nearest])
+            .map(|(a, b)| [a, b, nearest]) // append nearest
             .expect("Face requires exactly three indices");
+
         face.sort_unstable();
         assert_eq!(face.iter().unique().count(), 3);
         face
