@@ -7,6 +7,9 @@ use std::fmt::Display;
 use std::io::Write;
 use std::path::Path;
 
+/// Represents indices of a face
+pub type Face = [usize; 3];
+
 /// Icosphere table
 ///
 /// This is used to store data on the vertices of an icosphere.
@@ -21,7 +24,7 @@ pub struct IcoSphereTable<T: Display + Clone> {
     /// 3D coordinates of the vertices
     pub vertices: Vec<Vector3>,
     /// All faces of the icosphere each consisting of three (sorted) vertex indices
-    faces: Vec<Vec<usize>>,
+    faces: Vec<Face>,
     /// Data associated with each vertex
     vertex_data: Vec<T>,
 }
@@ -42,14 +45,14 @@ impl<T: Display + Clone> IcoSphereTable<T> {
             .map(|p| Vector3::new(p.x as f64, p.y as f64, p.z as f64))
             .collect();
 
-        let faces = indices
+        let faces: Vec<Face> = indices
             .chunks(3)
             .map(|c| {
                 let mut v = vec![c[0] as usize, c[1] as usize, c[2] as usize];
                 v.sort();
-                v
+                v.try_into().unwrap()
             })
-            .collect();
+            .collect_vec();
 
         let n_vertices = vertices.len();
 
@@ -174,7 +177,7 @@ impl<T: Display + Clone> IcoSphereTable<T> {
     }
 
     /// Get list of all faces (triangles) on the icosphere
-    pub fn faces(&self) -> &Vec<Vec<usize>> {
+    pub fn faces(&self) -> &Vec<Face> {
         &self.faces
     }
 
