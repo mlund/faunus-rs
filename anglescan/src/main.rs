@@ -8,6 +8,7 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 use coulomb::{DebyeLength, Medium, Salt};
 use indicatif::ParallelProgressIterator;
+use itertools::Itertools;
 use nu_ansi_term::Color::{Red, Yellow};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use rgb::RGB8;
@@ -106,6 +107,9 @@ enum Commands {
         /// Temperature in K
         #[arg(short = 'T', long, default_value = "298.15")]
         temperature: f64,
+        /// Use icosphere table
+        #[arg(long, default_value = "true")]
+        icotable: bool,
     },
 }
 
@@ -122,6 +126,7 @@ fn do_scan(cmd: &Commands) -> Result<()> {
         molarity,
         cutoff,
         temperature,
+        icotable,
     } = cmd
     else {
         anyhow::bail!("Unknown command");
@@ -131,22 +136,51 @@ fn do_scan(cmd: &Commands) -> Result<()> {
     let mut atomkinds = AtomKinds::from_yaml(atoms)?;
     atomkinds.set_missing_epsilon(2.479);
 
-    let scan = TwobodyAngles::new(*resolution).unwrap();
     let medium = Medium::salt_water(*temperature, Salt::SodiumChloride, *molarity);
     let multipole = coulomb::pairwise::Plain::new(*cutoff, medium.debye_length());
     let pair_matrix = energy::PairMatrix::new(&atomkinds.atomlist, &multipole);
     let ref_a = Structure::from_xyz(mol1, &atomkinds);
     let ref_b = Structure::from_xyz(mol2, &atomkinds);
 
-    info!("{} per distance", scan);
     info!("{}", medium);
 
     // Scan over mass center distances
-    let distances: Vec<f64> = iter_num_tools::arange(*rmin..*rmax, *dr).collect::<Vec<_>>();
+    let distances = iter_num_tools::arange(*rmin..*rmax, *dr).collect_vec();
     info!(
         "Scanning COM range [{:.1}, {:.1}) in {:.1} Å steps 🐾",
         rmin, rmax, dr
     );
+    if *icotable {
+        do_anglescan(
+            distances,
+            *resolution,
+            ref_a,
+            ref_b,
+            pair_matrix,
+            temperature,
+        )
+    } else {
+        do_anglescan(
+            distances,
+            *resolution,
+            ref_a,
+            ref_b,
+            pair_matrix,
+            temperature,
+        )
+    }
+}
+
+fn do_anglescan(
+    distances: Vec<f64>,
+    resolution: f64,
+    ref_a: Structure,
+    ref_b: Structure,
+    pair_matrix: energy::PairMatrix,
+    temperature: &f64,
+) -> std::result::Result<(), anyhow::Error> {
+    let scan = TwobodyAngles::new(resolution).unwrap();
+    info!("{} per distance", scan);
     let com_scan = distances
         .par_iter()
         .progress_count(distances.len() as u64)
