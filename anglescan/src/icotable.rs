@@ -16,8 +16,6 @@ use std::path::Path;
 /// 12 vertices will always have 5 neighbors; the rest will have 6.
 #[derive(Clone)]
 pub struct IcoSphereTable<T: Display + Clone> {
-    /// Raw icosphere structure from hexasphere crate
-    _icosphere: Subdivided<(), IcoSphereBase>,
     /// Neighbor list of other vertices for each vertex
     neighbors: Vec<Vec<usize>>,
     /// 3D coordinates of the vertices
@@ -56,7 +54,6 @@ impl<T: Display + Clone> IcoSphereTable<T> {
         let n_vertices = vertices.len();
 
         Self {
-            _icosphere: icosphere,
             neighbors,
             vertices,
             faces,

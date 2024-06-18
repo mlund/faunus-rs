@@ -3,11 +3,11 @@ use anyhow::Result;
 /// Periodic table that emulate periodicity by padding edges
 #[derive(Debug, Clone)]
 pub struct PaddedTable<T: Clone> {
-    /// Minimum value of keys in the table
+    /// Minimum key value
     min: f64,
-    /// Maximum value of keys in the table
+    /// Maximum key value
     _max: f64,
-    /// Resolution of the keys in table
+    /// Key resolution
     res: f64,
     /// Data of the table
     data: Vec<T>,
