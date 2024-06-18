@@ -9,6 +9,13 @@ use std::path::Path;
 /// Represents indices of a face
 pub type Face = [usize; 3];
 
+#[derive(Clone)]
+struct _Vertex<T: Clone> {
+    pos: Vector3,
+    data: T,
+    neighbors: Vec<usize>,
+}
+
 /// Icosphere table
 ///
 /// This is used to store data on the vertices of an icosphere.
