@@ -19,6 +19,7 @@ extern crate log;
 use iter_num_tools::arange;
 use rand::Rng;
 use textplots::{Chart, ColorPlot, Shape};
+use get_size::GetSize;
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -183,10 +184,20 @@ fn do_icoscan(
     _temperature: &f64,
 ) -> std::result::Result<(), anyhow::Error> {
     let distances = iter_num_tools::arange(rmin..rmax, dr).collect_vec();
+    let dihedral_angles = iter_num_tools::arange(0.0..2.0 * PI, angle_resolution).collect_vec();
+
 
     let _table = Table6D::from_resolution(rmin, rmax, dr, angle_resolution)?;
+
+    let n_points = _table.get(rmin).unwrap().get(0.0).unwrap().len();
+    let total = distances.len() * dihedral_angles.len() * n_points * n_points;
+
+    println!("{} x {} x {} x {} = {} poses 💃🕺", distances.len(), dihedral_angles.len(), n_points, n_points, total);
+    println!("Heap allocation for 6D table: {:.1} MB", _table.get_heap_size() as f64 / 1e6);
     for r in distances {
-        let _r_vec = Vector3::new(0.0, 0.0, r);
+        for _omega in &dihedral_angles {
+            let _r_vec = Vector3::new(0.0, 0.0, r);
+        }
     }
     Ok(())
 }

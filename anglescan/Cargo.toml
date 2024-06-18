@@ -32,3 +32,4 @@ nu-ansi-term = "0.50.0"
 hexasphere = {version = "13.1", features = ["adjacency"]}
 num-traits = "0.2.19"
 rand = "0.8.5"
+get-size = {version = "0.1.4", features = ["derive"]}

@@ -4,18 +4,19 @@ use hexasphere::{shapes::IcoSphereBase, AdjacencyBuilder, Subdivided};
 use itertools::Itertools;
 use nalgebra::Matrix3;
 use std::{io::Write, path::Path};
+use get_size::GetSize;
 
 /// A icotable where each vertex holds an icotable of floats
 pub type IcoTableOfSpheres = IcoTable<IcoTable<f64>>;
 
-/// A 6D table, R → 𝜔 → (𝜃𝜑) → (𝜃𝜑)
+/// A 6D table for relative twobody orientations, R → 𝜔 → (𝜃𝜑) → (𝜃𝜑)
 ///
 /// The first two dimensions are radial distances and dihedral angles.
-/// The last two dimensions are polar and azimuthal angles stored vertices of icospheres.
+/// The last two dimensions are polar and azimuthal angles represented via icospheres.
+/// The final `f64` data is stored at vertices of the deepest icospheres.
 pub type Table6D = PaddedTable<PaddedTable<IcoTableOfSpheres>>;
 
 impl Table6D {
-    /// Make a 6D table for storing twobody properties
     pub fn from_resolution(r_min: f64, r_max: f64, dr: f64, angle_resolution: f64) -> Result<Self> {
         use core::f64::consts::PI;
         let n_points = (4.0 * PI / angle_resolution.powi(2)).round() as usize;
@@ -30,9 +31,10 @@ impl Table6D {
 pub type Face = [usize; 3];
 
 /// Struct representing a vertex in the icosphere
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, GetSize)]
 pub struct Vertex<T: Clone> {
     /// 3D coordinates of the vertex on a unit sphere
+    #[get_size(size = 24)]
     pub pos: Vector3,
     /// Data associated with the vertex
     pub data: T,
@@ -59,7 +61,7 @@ impl<T: Clone> Vertex<T> {
 ///
 /// https://en.wikipedia.org/wiki/Geodesic_polyhedron
 /// 12 vertices will always have 5 neighbors; the rest will have 6.
-#[derive(Clone)]
+#[derive(Clone, GetSize)]
 pub struct IcoTable<T: Clone> {
     /// Vertex information (position, data, neighbors)
     pub vertices: Vec<Vertex<T>>,
