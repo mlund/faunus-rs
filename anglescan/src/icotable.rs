@@ -10,7 +10,7 @@ use std::path::Path;
 pub type Face = [usize; 3];
 
 /// Struct representing a vertex in the icosphere
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Vertex<T: Clone> {
     /// 3D coordinates of the vertex on a unit sphere
     pub pos: Vector3,
@@ -81,6 +81,11 @@ impl<T: Clone> IcoSphereTable<T> {
         self.vertices.len()
     }
 
+    /// Check if the table is empty, i.e. has no vertices
+    pub fn is_empty(&self) -> bool {
+        self.vertices.is_empty()
+    }
+
     /// Generate table based on a minimum number of vertices on the subdivided icosaedron
     pub fn from_min_points(min_points: usize, default_data: T) -> Result<Self> {
         let icosphere = make_icosphere(min_points)?;
@@ -106,9 +111,7 @@ impl<T: Clone> IcoSphereTable<T> {
     ///
     /// See "Real-Time Collision Detection" by Christer Ericson (p141-142)
     pub fn projected_barycentric(&self, p: &Vector3, face: &Face) -> Vector3 {
-        let a = &self.vertices[face[0]].pos;
-        let b = &self.vertices[face[1]].pos;
-        let c = &self.vertices[face[2]].pos;
+        let (a, b, c) = self.face_positions(face);
         // Check if P in vertex region outside A
         let ab = b - a;
         let ac = c - a;
@@ -164,9 +167,7 @@ impl<T: Clone> IcoSphereTable<T> {
     /// - http://realtimecollisiondetection.net/
     /// - https://gamedev.stackexchange.com/questions/23743/whats-the-most-efficient-way-to-find-barycentric-coordinates
     pub fn barycentric(&self, p: &Vector3, face: &Face) -> Vector3 {
-        let a = self.vertices[face[0]].pos;
-        let b = self.vertices[face[1]].pos;
-        let c = self.vertices[face[2]].pos;
+        let (a, b, c) = self.face_positions(face);
         let ab = b - a;
         let ac = c - a;
         let ap = p - a;
@@ -180,6 +181,14 @@ impl<T: Clone> IcoSphereTable<T> {
         let w = (d00 * d21 - d01 * d20) / denom;
         let u = 1.0 - v - w;
         Vector3::new(u, v, w)
+    }
+
+    /// Get the three vertices of a face
+    pub fn face_positions(&self, face: &Face) -> (&Vector3, &Vector3, &Vector3) {
+        let a = &self.vertices[face[0]].pos;
+        let b = &self.vertices[face[1]].pos;
+        let c = &self.vertices[face[2]].pos;
+        (a, b, c)
     }
 
     /// Get list of all faces (triangles) on the icosphere
@@ -230,6 +239,7 @@ impl<T: Clone> IcoSphereTable<T> {
         assert_eq!(face.iter().unique().count(), 3);
         face.try_into().unwrap()
     }
+
     /// Save a VMD script to illustrate the icosphere
     pub fn save_vmd(&self, path: impl AsRef<Path>, scale: Option<f64>) -> Result<()> {
         let mut file = std::fs::File::create(path)?;
