@@ -3,7 +3,6 @@ use anyhow::Result;
 use hexasphere::{shapes::IcoSphereBase, AdjacencyBuilder, Subdivided};
 use itertools::Itertools;
 use nalgebra::Matrix3;
-use std::fmt::Display;
 use std::io::Write;
 use std::path::Path;
 
@@ -18,7 +17,7 @@ pub type Face = [usize; 3];
 /// https://en.wikipedia.org/wiki/Geodesic_polyhedron
 /// 12 vertices will always have 5 neighbors; the rest will have 6.
 #[derive(Clone)]
-pub struct IcoSphereTable<T: Display + Clone> {
+pub struct IcoSphereTable<T: Clone> {
     /// Neighbor list of other vertices for each vertex
     neighbors: Vec<Vec<usize>>,
     /// 3D coordinates of the vertices
@@ -32,7 +31,7 @@ pub struct IcoSphereTable<T: Display + Clone> {
 /// A icotable where each vertex holds an icotable of floats
 pub type IcoSphereTableOfSpheres = IcoSphereTable<IcoSphereTable<f64>>;
 
-impl<T: Display + Clone> IcoSphereTable<T> {
+impl<T: Clone> IcoSphereTable<T> {
     /// Generate table based on an existing subdivided icosaedron
     pub fn from_icosphere(icosphere: Subdivided<(), IcoSphereBase>, default_data: T) -> Self {
         let indices = icosphere.get_all_indices();
