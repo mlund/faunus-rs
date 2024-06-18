@@ -20,6 +20,17 @@ pub struct Vertex<T: Clone> {
     pub neighbors: Vec<usize>,
 }
 
+impl<T: Clone> Vertex<T> {
+    /// Construct a new vertex
+    pub fn new(pos: Vector3, data: T, neighbors: Vec<usize>) -> Self {
+        Self {
+            pos,
+            data,
+            neighbors,
+        }
+    }
+}
+
 /// Icosphere table
 ///
 /// This is used to store data on the vertices of an icosphere.
@@ -45,10 +56,20 @@ impl<T: Clone> IcoSphereTable<T> {
         let mut builder = AdjacencyBuilder::new(icosphere.raw_points().len());
         builder.add_indices(indices.as_slice());
         let neighbors = builder.finish().iter().map(|i| i.to_vec()).collect_vec();
-        let vertices: Vec<Vector3> = icosphere
+        let vertex_positions: Vec<Vector3> = icosphere
             .raw_points()
             .iter()
             .map(|p| Vector3::new(p.x as f64, p.y as f64, p.z as f64))
+            .collect();
+
+        let vertices = (0..vertex_positions.len())
+            .map(|i| {
+                Vertex::new(
+                    vertex_positions[i],
+                    default_data.clone(),
+                    neighbors[i].clone(),
+                )
+            })
             .collect();
 
         let faces: Vec<Face> = indices
@@ -60,20 +81,7 @@ impl<T: Clone> IcoSphereTable<T> {
             })
             .collect_vec();
 
-        let n_vertices = vertices.len();
-
-        let new_vertices = (0..n_vertices)
-            .map(|i| Vertex {
-                pos: vertices[i],
-                data: default_data.clone(),
-                neighbors: neighbors[i].clone(),
-            })
-            .collect();
-
-        Self {
-            vertices: new_vertices,
-            faces,
-        }
+        Self { vertices, faces }
     }
 
     /// Number of vertices in the table
