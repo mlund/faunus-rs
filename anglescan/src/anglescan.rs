@@ -46,11 +46,8 @@ impl TwobodyAngles {
     ///
     /// # Arguments
     /// angle_resolution: f64 - the resolution of the scan in radians
-    pub fn new(angle_resolution: f64) -> Result<Self> {
-        assert!(
-            angle_resolution > 0.0,
-            "angle_resolution must be greater than 0"
-        );
+    pub fn from_resolution(angle_resolution: f64) -> Result<Self> {
+        assert!(angle_resolution > 0.0,);
 
         let n_points = (4.0 * PI / angle_resolution.powi(2)).round() as usize;
         let mut points = make_icosphere_vertices(n_points)?;
@@ -280,7 +277,7 @@ mod tests {
     #[test]
     fn test_twobody_angles() {
         use std::f64::consts::FRAC_1_SQRT_2;
-        let twobody_angles = TwobodyAngles::new(1.1).unwrap();
+        let twobody_angles = TwobodyAngles::from_resolution(1.1).unwrap();
         let n = twobody_angles.q1.len() * twobody_angles.q2.len() * twobody_angles.dihedrals.len();
         assert_eq!(n, 1008);
         assert_eq!(twobody_angles.len(), n);

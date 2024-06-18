@@ -173,13 +173,13 @@ fn do_scan(cmd: &Commands) -> Result<()> {
 
 fn do_anglescan(
     distances: Vec<f64>,
-    resolution: f64,
+    angle_resolution: f64,
     ref_a: Structure,
     ref_b: Structure,
     pair_matrix: energy::PairMatrix,
     temperature: &f64,
 ) -> std::result::Result<(), anyhow::Error> {
-    let scan = TwobodyAngles::new(resolution).unwrap();
+    let scan = TwobodyAngles::from_resolution(angle_resolution).unwrap();
     info!("{} per distance", scan);
     let com_scan = distances
         .par_iter()
