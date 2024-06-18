@@ -224,11 +224,10 @@ impl<T: Clone> IcoSphereTable<T> {
     /// is used to find the 2nd and 3rd nearest points which are guaranteed
     /// to define a face.
     pub fn nearest_face(&self, point: &Vector3) -> Face {
-        let nearest = self.nearest_vertex(point);
         let point = point.normalize();
-
-        let mut face: Face = self.vertices[nearest]
-            .neighbors
+        let nearest = self.nearest_vertex(&point);
+        let face: Face = self.vertices[nearest]
+            .neighbors // neighbors to nearest
             .iter()
             .cloned()
             .map(|i| (i, (self.vertices[i].pos - point).norm_squared()))
@@ -237,9 +236,14 @@ impl<T: Clone> IcoSphereTable<T> {
             .take(2) // take two next nearest distances
             .collect_tuple()
             .map(|(a, b)| [a, b, nearest]) // append nearest
-            .expect("Face requires exactly three indices");
+            .expect("Face requires exactly three indices")
+            .iter()
+            .copied()
+            .sorted_unstable() // we want sorted indices
+            .collect_vec() // collect into array
+            .try_into()
+            .unwrap();
 
-        face.sort_unstable();
         assert_eq!(face.iter().unique().count(), 3);
         face
     }
