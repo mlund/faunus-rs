@@ -3,8 +3,7 @@ use anyhow::Result;
 use hexasphere::{shapes::IcoSphereBase, AdjacencyBuilder, Subdivided};
 use itertools::Itertools;
 use nalgebra::Matrix3;
-use std::io::Write;
-use std::path::Path;
+use std::{io::Write, path::Path};
 
 /// Represents indices of a face
 pub type Face = [usize; 3];
@@ -85,6 +84,12 @@ impl<T: Clone> IcoSphereTable<T> {
         Self { vertices, faces }
     }
 
+    /// Generate table based on a minimum number of vertices on the subdivided icosaedron
+    pub fn from_min_points(min_points: usize, default_data: T) -> Result<Self> {
+        let icosphere = make_icosphere(min_points)?;
+        Ok(Self::from_icosphere(icosphere, default_data))
+    }
+
     /// Number of vertices in the table
     pub fn len(&self) -> usize {
         self.vertices.len()
@@ -93,12 +98,6 @@ impl<T: Clone> IcoSphereTable<T> {
     /// Check if the table is empty, i.e. has no vertices
     pub fn is_empty(&self) -> bool {
         self.vertices.is_empty()
-    }
-
-    /// Generate table based on a minimum number of vertices on the subdivided icosaedron
-    pub fn from_min_points(min_points: usize, default_data: T) -> Result<Self> {
-        let icosphere = make_icosphere(min_points)?;
-        Ok(Self::from_icosphere(icosphere, default_data))
     }
 
     /// Set data associated with each vertex using a generator function
@@ -111,15 +110,15 @@ impl<T: Clone> IcoSphereTable<T> {
         self.vertices.iter().map(|v| &v.data)
     }
 
-    /// Transform vertices using a function
-    pub fn transform_vertices(&mut self, f: impl Fn(&Vector3) -> Vector3) {
+    /// Transform vertex positions using a function
+    pub fn transform_vertex_positions(&mut self, f: impl Fn(&Vector3) -> Vector3) {
         self.vertices.iter_mut().for_each(|v| v.pos = f(&v.pos));
     }
 
     /// Get projected barycentric coordinate for an arbitrary point
     ///
     /// See "Real-Time Collision Detection" by Christer Ericson (p141-142)
-    pub fn projected_barycentric(&self, p: &Vector3, face: &Face) -> Vector3 {
+    pub fn barycentric(&self, p: &Vector3, face: &Face) -> Vector3 {
         let (a, b, c) = self.face_positions(face);
         // Check if P in vertex region outside A
         let ab = b - a;
@@ -175,7 +174,7 @@ impl<T: Clone> IcoSphereTable<T> {
     /// - https://en.wikipedia.org/wiki/Barycentric_coordinate_system
     /// - http://realtimecollisiondetection.net/
     /// - https://gamedev.stackexchange.com/questions/23743/whats-the-most-efficient-way-to-find-barycentric-coordinates
-    pub fn barycentric(&self, p: &Vector3, face: &Face) -> Vector3 {
+    pub fn naive_barycentric(&self, p: &Vector3, face: &Face) -> Vector3 {
         let (a, b, c) = self.face_positions(face);
         let ab = b - a;
         let ac = c - a;
@@ -198,11 +197,6 @@ impl<T: Clone> IcoSphereTable<T> {
         let b = &self.vertices[face[1]].pos;
         let c = &self.vertices[face[2]].pos;
         (a, b, c)
-    }
-
-    /// Get list of all faces (triangles) on the icosphere
-    pub fn faces(&self) -> &Vec<Face> {
-        &self.faces
     }
 
     /// Find nearest vertex to a given point
@@ -230,23 +224,28 @@ impl<T: Clone> IcoSphereTable<T> {
     /// is used to find the 2nd and 3rd nearest points which are guaranteed
     /// to define a face.
     pub fn nearest_face(&self, point: &Vector3) -> Face {
-        let nearest_vertex = self.nearest_vertex(point);
-        let point_hat = point.normalize();
+        let nearest = self.nearest_vertex(point);
+        let point = point.normalize();
 
-        let mut dist: Vec<(usize, f64)> = self.vertices[nearest_vertex]
+        let dist: Vec<(usize, f64)> = self.vertices[nearest]
             .neighbors
             .iter()
             .cloned()
-            .map(|i| (i, (self.vertices[i].pos - point_hat).norm_squared()))
+            .map(|i| (i, (self.vertices[i].pos - point).norm_squared()))
+            .sorted_by(|a, b| a.1.partial_cmp(&b.1).unwrap())
             .collect();
 
-        dist.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
-
-        let mut face: Vec<usize> = dist.iter().map(|(i, _)| i).cloned().take(2).collect();
-        face.push(nearest_vertex);
+        let mut face: Face = dist
+            .iter()
+            .map(|(i, _)| i)
+            .cloned()
+            .take(2)
+            .collect_tuple()
+            .map(|(a, b)| [a, b, nearest])
+            .expect("Face requires exactly three indices");
         face.sort_unstable();
         assert_eq!(face.iter().unique().count(), 3);
-        face.try_into().unwrap()
+        face
     }
 
     /// Save a VMD script to illustrate the icosphere
@@ -283,9 +282,9 @@ impl std::fmt::Display for IcoSphereTable<f64> {
 impl IcoSphereTable<f64> {
     /// Get data for a point on the surface using barycentric interpolation
     /// https://en.wikipedia.org/wiki/Barycentric_coordinate_system#Interpolation_on_a_triangular_unstructured_grid
-    pub fn barycentric_interpolation(&self, point: &Vector3) -> f64 {
+    pub fn interpolate(&self, point: &Vector3) -> f64 {
         let face = self.nearest_face(point);
-        let bary = self.projected_barycentric(point, &face);
+        let bary = self.barycentric(point, &face);
         bary[0] * self.vertices[face[0]].data
             + bary[1] * self.vertices[face[1]].data
             + bary[2] * self.vertices[face[2]].data
@@ -294,7 +293,7 @@ impl IcoSphereTable<f64> {
 
 impl IcoSphereTableOfSpheres {
     /// Interpolate data between two faces
-    pub fn face_face_interpolate(
+    pub fn interpolate(
         &self,
         face_a: &Face,
         face_b: &Face,
@@ -345,7 +344,7 @@ mod tests {
 
         // find nearest vertex and face to vertex 0
         let face = icotable.nearest_face(&point);
-        let bary = icotable.projected_barycentric(&point, &face);
+        let bary = icotable.barycentric(&point, &face);
         assert_eq!(face, [0, 2, 5]);
         assert_relative_eq!(bary[0], 1.0);
         assert_relative_eq!(bary[1], 0.0);
@@ -354,7 +353,7 @@ mod tests {
         // Nearest face to slightly displaced vertex 0
         let point = (icotable.vertices[0].pos + Vector3::new(1e-3, 0.0, 0.0)).normalize();
         let face = icotable.nearest_face(&point);
-        let bary = icotable.projected_barycentric(&point, &face);
+        let bary = icotable.barycentric(&point, &face);
         assert_eq!(face, [0, 1, 5]);
         assert_relative_eq!(bary[0], 0.9991907334103153);
         assert_relative_eq!(bary[1], 0.000809266589684687);
@@ -363,7 +362,7 @@ mod tests {
         // find nearest vertex and face to vertex 2
         let point = icotable.vertices[2].pos;
         let face = icotable.nearest_face(&point);
-        let bary = icotable.projected_barycentric(&point, &face);
+        let bary = icotable.barycentric(&point, &face);
         assert_eq!(face, [0, 1, 2]);
         assert_relative_eq!(bary[0], 0.0);
         assert_relative_eq!(bary[1], 0.0);
@@ -371,7 +370,7 @@ mod tests {
 
         // Midpoint on edge between vertices 0 and 2
         let point = point + (icotable.vertices[0].pos - point) * 0.5;
-        let bary = icotable.projected_barycentric(&point, &face);
+        let bary = icotable.barycentric(&point, &face);
         assert_relative_eq!(bary[0], 0.5);
         assert_relative_eq!(bary[1], 0.0);
         assert_relative_eq!(bary[2], 0.5);

@@ -299,11 +299,11 @@ fn do_dipole(cmd: &Commands) -> Result<()> {
         let mut partition_func_interpolated = 0.0;
 
         for q in &quaternions {
-            rotated_icosphere.transform_vertices(|v| q.transform_vector(v));
+            rotated_icosphere.transform_vertex_positions(|v| q.transform_vector(v));
             partition_func_interpolated += rotated_icosphere
                 .vertices
                 .iter()
-                .map(|v| icotable.barycentric_interpolation(&v.pos))
+                .map(|v| icotable.interpolate(&v.pos))
                 .sum::<f64>()
                 / rotated_icosphere.len() as f64;
         }
@@ -373,7 +373,7 @@ fn do_potential(cmd: &Commands) -> Result<()> {
     for theta in arange(0.0001..PI, resolution) {
         for phi in arange(0.0001..2.0 * PI, resolution) {
             let point = &to_cartesian(1.0, theta, phi);
-            let interpolated = icotable.barycentric_interpolation(point);
+            let interpolated = icotable.interpolate(point);
             let exact = energy::electric_potential(&structure, &point.scale(*radius), &multipole);
             pqr_write_atom(&mut pqr_file, 1, &point.scale(*radius), exact, 2.0)?;
             let rel_err = (interpolated - exact) / exact;
@@ -388,7 +388,7 @@ fn do_potential(cmd: &Commands) -> Result<()> {
                     abs_err
                 );
                 let face = icotable.nearest_face(point);
-                let bary = icotable.barycentric(point, &face);
+                let bary = icotable.naive_barycentric(point, &face);
                 log::debug!("Face: {:?} Barycentric: {:?}\n", face, bary);
             }
             writeln!(
