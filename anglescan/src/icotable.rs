@@ -1,9 +1,30 @@
-use super::anglescan::*;
+use super::{anglescan::*, table::PaddedTable};
 use anyhow::Result;
 use hexasphere::{shapes::IcoSphereBase, AdjacencyBuilder, Subdivided};
 use itertools::Itertools;
 use nalgebra::Matrix3;
 use std::{io::Write, path::Path};
+
+/// A icotable where each vertex holds an icotable of floats
+pub type IcoTableOfSpheres = IcoTable<IcoTable<f64>>;
+
+/// A 6D table, R → 𝜔 → (𝜃𝜑) → (𝜃𝜑)
+///
+/// The first two dimensions are radial distances and dihedral angles.
+/// The last two dimensions are polar and azimuthal angles stored vertices of icospheres.
+pub type Table6D = PaddedTable<PaddedTable<IcoTableOfSpheres>>;
+
+impl Table6D {
+    /// Make a 6D table for storing twobody properties
+    pub fn from_resolution(r_min: f64, r_max: f64, dr: f64, angle_resolution: f64) -> Result<Self> {
+        use core::f64::consts::PI;
+        let n_points = (4.0 * PI / angle_resolution.powi(2)).round() as usize;
+        let b = IcoTable::<f64>::from_min_points(n_points, 0.0)?; // B: 𝜃 and 𝜑
+        let a = IcoTableOfSpheres::from_min_points(n_points, b)?; // A: 𝜃 and 𝜑
+        let o = PaddedTable::<IcoTableOfSpheres>::new(0.0, 2.0 * PI, angle_resolution, a); // 𝜔
+        Ok(Self::new(r_min, r_max, dr, o)) // R
+    }
+}
 
 /// Represents indices of a face
 pub type Face = [usize; 3];
@@ -45,9 +66,6 @@ pub struct IcoTable<T: Clone> {
     /// All faces of the icosphere each consisting of three (sorted) vertex indices
     pub faces: Vec<Face>,
 }
-
-/// A icotable where each vertex holds an icotable of floats
-pub type IcoTableOfSpheres = IcoTable<IcoTable<f64>>;
 
 impl<T: Clone> IcoTable<T> {
     /// Generate table based on an existing subdivided icosaedron

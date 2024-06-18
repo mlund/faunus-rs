@@ -1,8 +1,8 @@
 use anglescan::{
     energy,
-    icotable::IcoTable,
+    icotable::{IcoTable, Table6D},
     structure::{AtomKinds, Structure},
-    to_cartesian, to_spherical, Sample, TwobodyAngles, Vector3,
+    to_cartesian, to_spherical, Sample, TwobodyAngles, UnitQuaternion, Vector3,
 };
 use anyhow::Result;
 use clap::{Parser, Subcommand};
@@ -16,7 +16,6 @@ use std::{f64::consts::PI, io::Write, ops::Neg, path::PathBuf};
 extern crate pretty_env_logger;
 #[macro_use]
 extern crate log;
-use anglescan::UnitQuaternion;
 use iter_num_tools::arange;
 use rand::Rng;
 use textplots::{Chart, ColorPlot, Shape};
@@ -151,8 +150,10 @@ fn do_scan(cmd: &Commands) -> Result<()> {
         rmin, rmax, dr
     );
     if *icotable {
-        do_anglescan(
-            distances,
+        do_icoscan(
+            *rmin,
+            *rmax,
+            *dr,
             *resolution,
             ref_a,
             ref_b,
@@ -169,6 +170,25 @@ fn do_scan(cmd: &Commands) -> Result<()> {
             temperature,
         )
     }
+}
+
+fn do_icoscan(
+    rmin: f64,
+    rmax: f64,
+    dr: f64,
+    angle_resolution: f64,
+    _ref_a: Structure,
+    _ref_b: Structure,
+    _pair_matrix: energy::PairMatrix,
+    _temperature: &f64,
+) -> std::result::Result<(), anyhow::Error> {
+    let distances = iter_num_tools::arange(rmin..rmax, dr).collect_vec();
+
+    let _table = Table6D::from_resolution(rmin, rmax, dr, angle_resolution)?;
+    for r in distances {
+        let _r_vec = Vector3::new(0.0, 0.0, r);
+    }
+    Ok(())
 }
 
 fn do_anglescan(
