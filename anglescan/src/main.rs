@@ -276,8 +276,7 @@ fn do_dipole(cmd: &Commands) -> Result<()> {
         icotable.set_vertex_data(exact_exp_energy);
 
         // Q summed from exact data at each vertex
-        let partition_function =
-            icotable.vertex_data().iter().sum::<f64>() / icotable.vertex_data().len() as f64;
+        let partition_function = icotable.vertex_data().sum::<f64>() / icotable.len() as f64;
 
         // analytical solution to angular average of exp(-βu)
         let field = -bjerrum_len * charge / radius.powi(2);
@@ -304,9 +303,9 @@ fn do_dipole(cmd: &Commands) -> Result<()> {
             partition_func_interpolated += rotated_icosphere
                 .vertices
                 .iter()
-                .map(|v| icotable.barycentric_interpolation(v))
+                .map(|v| icotable.barycentric_interpolation(&v.pos))
                 .sum::<f64>()
-                / rotated_icosphere.vertices.len() as f64;
+                / rotated_icosphere.len() as f64;
         }
         partition_func_interpolated /= quaternions.len() as f64;
 
@@ -364,7 +363,7 @@ fn do_potential(cmd: &Commands) -> Result<()> {
     // Make PQR file illustrating the electric potential at each vertex
     let mut pqr_file = std::fs::File::create("potential.pqr")?;
     for (vertex, data) in std::iter::zip(&icotable.vertices, icotable.vertex_data()) {
-        pqr_write_atom(&mut pqr_file, 1, &vertex.scale(*radius), *data, 2.0)?;
+        pqr_write_atom(&mut pqr_file, 1, &vertex.pos.scale(*radius), *data, 2.0)?;
     }
 
     // Compare interpolated and exact potential linearly in angular space

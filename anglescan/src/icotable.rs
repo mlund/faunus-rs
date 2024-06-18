@@ -9,11 +9,15 @@ use std::path::Path;
 /// Represents indices of a face
 pub type Face = [usize; 3];
 
+/// Struct representing a vertex in the icosphere
 #[derive(Clone)]
-struct _Vertex<T: Clone> {
-    pos: Vector3,
-    data: T,
-    neighbors: Vec<usize>,
+pub struct Vertex<T: Clone> {
+    /// 3D coordinates of the vertex on a unit sphere
+    pub pos: Vector3,
+    /// Data associated with the vertex
+    pub data: T,
+    /// Indices of neighboring vertices
+    pub neighbors: Vec<usize>,
 }
 
 /// Icosphere table
@@ -25,14 +29,10 @@ struct _Vertex<T: Clone> {
 /// 12 vertices will always have 5 neighbors; the rest will have 6.
 #[derive(Clone)]
 pub struct IcoSphereTable<T: Clone> {
-    /// Neighbor list of other vertices for each vertex
-    neighbors: Vec<Vec<usize>>,
-    /// 3D coordinates of the vertices
-    pub vertices: Vec<Vector3>,
+    /// Vertex information (position, data, neighbors)
+    pub vertices: Vec<Vertex<T>>,
     /// All faces of the icosphere each consisting of three (sorted) vertex indices
-    faces: Vec<Face>,
-    /// Data associated with each vertex
-    vertex_data: Vec<T>,
+    pub faces: Vec<Face>,
 }
 
 /// A icotable where each vertex holds an icotable of floats
@@ -44,7 +44,7 @@ impl<T: Clone> IcoSphereTable<T> {
         let indices = icosphere.get_all_indices();
         let mut builder = AdjacencyBuilder::new(icosphere.raw_points().len());
         builder.add_indices(indices.as_slice());
-        let neighbors = builder.finish().iter().map(|i| i.to_vec()).collect();
+        let neighbors = builder.finish().iter().map(|i| i.to_vec()).collect_vec();
         let vertices: Vec<Vector3> = icosphere
             .raw_points()
             .iter()
@@ -62,12 +62,23 @@ impl<T: Clone> IcoSphereTable<T> {
 
         let n_vertices = vertices.len();
 
+        let new_vertices = (0..n_vertices)
+            .map(|i| Vertex {
+                pos: vertices[i],
+                data: default_data.clone(),
+                neighbors: neighbors[i].clone(),
+            })
+            .collect();
+
         Self {
-            neighbors,
-            vertices,
+            vertices: new_vertices,
             faces,
-            vertex_data: vec![default_data; n_vertices],
         }
+    }
+
+    /// Number of vertices in the table
+    pub fn len(&self) -> usize {
+        self.vertices.len()
     }
 
     /// Generate table based on a minimum number of vertices on the subdivided icosaedron
@@ -78,26 +89,26 @@ impl<T: Clone> IcoSphereTable<T> {
 
     /// Set data associated with each vertex using a generator function
     pub fn set_vertex_data(&mut self, f: impl Fn(&Vector3) -> T) {
-        self.vertex_data = self.vertices.iter().map(f).collect();
+        self.vertices.iter_mut().for_each(|v| v.data = f(&v.pos));
     }
 
     /// Get data associated with each vertex
-    pub fn vertex_data(&self) -> &Vec<T> {
-        &self.vertex_data
+    pub fn vertex_data(&self) -> impl Iterator<Item = &T> {
+        self.vertices.iter().map(|v| &v.data)
     }
 
     /// Transform vertices using a function
     pub fn transform_vertices(&mut self, f: impl Fn(&Vector3) -> Vector3) {
-        self.vertices = self.vertices.iter().map(f).collect();
+        self.vertices.iter_mut().for_each(|v| v.pos = f(&v.pos));
     }
 
     /// Get projected barycentric coordinate for an arbitrary point
     ///
     /// See "Real-Time Collision Detection" by Christer Ericson (p141-142)
     pub fn projected_barycentric(&self, p: &Vector3, face: &Face) -> Vector3 {
-        let a = &self.vertices[face[0]];
-        let b = &self.vertices[face[1]];
-        let c = &self.vertices[face[2]];
+        let a = &self.vertices[face[0]].pos;
+        let b = &self.vertices[face[1]].pos;
+        let c = &self.vertices[face[2]].pos;
         // Check if P in vertex region outside A
         let ab = b - a;
         let ac = c - a;
@@ -153,9 +164,9 @@ impl<T: Clone> IcoSphereTable<T> {
     /// - http://realtimecollisiondetection.net/
     /// - https://gamedev.stackexchange.com/questions/23743/whats-the-most-efficient-way-to-find-barycentric-coordinates
     pub fn barycentric(&self, p: &Vector3, face: &Face) -> Vector3 {
-        let a = self.vertices[face[0]];
-        let b = self.vertices[face[1]];
-        let c = self.vertices[face[2]];
+        let a = self.vertices[face[0]].pos;
+        let b = self.vertices[face[1]].pos;
+        let c = self.vertices[face[2]].pos;
         let ab = b - a;
         let ac = c - a;
         let ap = p - a;
@@ -188,7 +199,7 @@ impl<T: Clone> IcoSphereTable<T> {
     fn nearest_vertex(&self, point: &Vector3) -> usize {
         self.vertices
             .iter()
-            .map(|r| (r - point).norm_squared())
+            .map(|v| (v.pos - point).norm_squared())
             .enumerate()
             .min_by(|a, b| a.1.partial_cmp(&b.1).unwrap())
             .unwrap()
@@ -204,10 +215,11 @@ impl<T: Clone> IcoSphereTable<T> {
         let nearest_vertex = self.nearest_vertex(point);
         let point_hat = point.normalize();
 
-        let mut dist: Vec<(usize, f64)> = self.neighbors[nearest_vertex]
+        let mut dist: Vec<(usize, f64)> = self.vertices[nearest_vertex]
+            .neighbors
             .iter()
             .cloned()
-            .map(|i| (i, (self.vertices[i] - point_hat).norm_squared()))
+            .map(|i| (i, (self.vertices[i].pos - point_hat).norm_squared()))
             .collect();
 
         dist.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
@@ -224,9 +236,9 @@ impl<T: Clone> IcoSphereTable<T> {
         let s = scale.unwrap_or(1.0);
         writeln!(file, "draw delete all")?;
         for face in &self.faces {
-            let a = &self.vertices[face[0]].scale(s);
-            let b = &self.vertices[face[1]].scale(s);
-            let c = &self.vertices[face[2]].scale(s);
+            let a = &self.vertices[face[0]].pos.scale(s);
+            let b = &self.vertices[face[1]].pos.scale(s);
+            let c = &self.vertices[face[2]].pos.scale(s);
             let color = "red";
             vmd_draw_triangle(&mut file, a, b, c, color)?;
         }
@@ -237,12 +249,12 @@ impl<T: Clone> IcoSphereTable<T> {
 impl std::fmt::Display for IcoSphereTable<f64> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "# x y z θ φ data")?;
-        for (vertex, data) in self.vertices.iter().zip(&self.vertex_data) {
-            let (_r, theta, phi) = crate::to_spherical(vertex);
+        for vertex in self.vertices.iter() {
+            let (_r, theta, phi) = crate::to_spherical(&vertex.pos);
             writeln!(
                 f,
                 "{} {} {} {} {} {}",
-                vertex.x, vertex.y, vertex.z, theta, phi, data
+                vertex.pos.x, vertex.pos.y, vertex.pos.z, theta, phi, vertex.data
             )?;
         }
         Ok(())
@@ -255,9 +267,9 @@ impl IcoSphereTable<f64> {
     pub fn barycentric_interpolation(&self, point: &Vector3) -> f64 {
         let face = self.nearest_face(point);
         let bary = self.projected_barycentric(point, &face);
-        bary[0] * self.vertex_data[face[0]]
-            + bary[1] * self.vertex_data[face[1]]
-            + bary[2] * self.vertex_data[face[2]]
+        bary[0] * self.vertices[face[0]].data
+            + bary[1] * self.vertices[face[1]].data
+            + bary[2] * self.vertices[face[2]].data
     }
 }
 
@@ -270,7 +282,8 @@ impl IcoSphereTableOfSpheres {
         bary_a: &Vector3,
         bary_b: &Vector3,
     ) -> f64 {
-        let data_ab = Matrix3::from_fn(|i, j| self.vertex_data[face_a[i]].vertex_data[face_b[j]]);
+        let data_ab =
+            Matrix3::from_fn(|i, j| self.vertices[face_a[i]].data.vertices[face_b[j]].data);
         (bary_a.transpose() * data_ab * bary_b).to_scalar()
     }
 }
@@ -305,12 +318,13 @@ mod tests {
         assert_eq!(icotable.vertices.len(), 12);
         assert_eq!(icotable.faces.len(), 20);
 
-        assert_relative_eq!(icotable.vertices[0].x, 0.0);
-        assert_relative_eq!(icotable.vertices[0].y, 1.0);
-        assert_relative_eq!(icotable.vertices[0].z, 0.0);
+        let point = icotable.vertices[0].pos;
+
+        assert_relative_eq!(point.x, 0.0);
+        assert_relative_eq!(point.y, 1.0);
+        assert_relative_eq!(point.z, 0.0);
 
         // find nearest vertex and face to vertex 0
-        let point = icotable.vertices[0];
         let face = icotable.nearest_face(&point);
         let bary = icotable.projected_barycentric(&point, &face);
         assert_eq!(face, [0, 2, 5]);
@@ -319,7 +333,7 @@ mod tests {
         assert_relative_eq!(bary[2], 0.0);
 
         // Nearest face to slightly displaced vertex 0
-        let point = (icotable.vertices[0] + Vector3::new(1e-3, 0.0, 0.0)).normalize();
+        let point = (icotable.vertices[0].pos + Vector3::new(1e-3, 0.0, 0.0)).normalize();
         let face = icotable.nearest_face(&point);
         let bary = icotable.projected_barycentric(&point, &face);
         assert_eq!(face, [0, 1, 5]);
@@ -328,7 +342,7 @@ mod tests {
         assert_relative_eq!(bary[2], 0.0);
 
         // find nearest vertex and face to vertex 2
-        let point = icotable.vertices[2];
+        let point = icotable.vertices[2].pos;
         let face = icotable.nearest_face(&point);
         let bary = icotable.projected_barycentric(&point, &face);
         assert_eq!(face, [0, 1, 2]);
@@ -337,7 +351,7 @@ mod tests {
         assert_relative_eq!(bary[2], 1.0);
 
         // Midpoint on edge between vertices 0 and 2
-        let point = point + (icotable.vertices[0] - point) * 0.5;
+        let point = point + (icotable.vertices[0].pos - point) * 0.5;
         let bary = icotable.projected_barycentric(&point, &face);
         assert_relative_eq!(bary[0], 0.5);
         assert_relative_eq!(bary[1], 0.0);
@@ -349,14 +363,6 @@ mod tests {
         let icotable = IcoSphereTable::<f64>::from_min_points(42, 0.0).unwrap();
         let icotable_of_spheres = IcoSphereTableOfSpheres::from_min_points(42, icotable).unwrap();
         assert_eq!(icotable_of_spheres.vertices.len(), 42);
-        assert_eq!(
-            icotable_of_spheres
-                .vertex_data
-                .first()
-                .unwrap()
-                .vertices
-                .len(),
-            42
-        );
+        assert_eq!(icotable_of_spheres.vertices[0].data.vertices.len(), 42);
     }
 }
