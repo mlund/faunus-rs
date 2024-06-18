@@ -39,7 +39,7 @@ impl<T: Clone> Vertex<T> {
 /// https://en.wikipedia.org/wiki/Geodesic_polyhedron
 /// 12 vertices will always have 5 neighbors; the rest will have 6.
 #[derive(Clone)]
-pub struct IcoSphereTable<T: Clone> {
+pub struct IcoTable<T: Clone> {
     /// Vertex information (position, data, neighbors)
     pub vertices: Vec<Vertex<T>>,
     /// All faces of the icosphere each consisting of three (sorted) vertex indices
@@ -47,9 +47,9 @@ pub struct IcoSphereTable<T: Clone> {
 }
 
 /// A icotable where each vertex holds an icotable of floats
-pub type IcoSphereTableOfSpheres = IcoSphereTable<IcoSphereTable<f64>>;
+pub type IcoTableOfSpheres = IcoTable<IcoTable<f64>>;
 
-impl<T: Clone> IcoSphereTable<T> {
+impl<T: Clone> IcoTable<T> {
     /// Generate table based on an existing subdivided icosaedron
     pub fn from_icosphere(icosphere: Subdivided<(), IcoSphereBase>, default_data: T) -> Self {
         let indices = icosphere.get_all_indices();
@@ -264,7 +264,7 @@ impl<T: Clone> IcoSphereTable<T> {
     }
 }
 
-impl std::fmt::Display for IcoSphereTable<f64> {
+impl std::fmt::Display for IcoTable<f64> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "# x y z θ φ data")?;
         for vertex in self.vertices.iter() {
@@ -279,7 +279,7 @@ impl std::fmt::Display for IcoSphereTable<f64> {
     }
 }
 
-impl IcoSphereTable<f64> {
+impl IcoTable<f64> {
     /// Get data for a point on the surface using barycentric interpolation
     /// https://en.wikipedia.org/wiki/Barycentric_coordinate_system#Interpolation_on_a_triangular_unstructured_grid
     pub fn interpolate(&self, point: &Vector3) -> f64 {
@@ -291,7 +291,7 @@ impl IcoSphereTable<f64> {
     }
 }
 
-impl IcoSphereTableOfSpheres {
+impl IcoTableOfSpheres {
     /// Interpolate data between two faces
     pub fn interpolate(
         &self,
@@ -332,7 +332,7 @@ mod tests {
     #[test]
     fn test_icosphere_table() {
         let icosphere = make_icosphere(3).unwrap();
-        let icotable = IcoSphereTable::<f64>::from_icosphere(icosphere, 0.0);
+        let icotable = IcoTable::<f64>::from_icosphere(icosphere, 0.0);
         assert_eq!(icotable.vertices.len(), 12);
         assert_eq!(icotable.faces.len(), 20);
 
@@ -378,8 +378,8 @@ mod tests {
 
     #[test]
     fn test_table_of_spheres() {
-        let icotable = IcoSphereTable::<f64>::from_min_points(42, 0.0).unwrap();
-        let icotable_of_spheres = IcoSphereTableOfSpheres::from_min_points(42, icotable).unwrap();
+        let icotable = IcoTable::<f64>::from_min_points(42, 0.0).unwrap();
+        let icotable_of_spheres = IcoTableOfSpheres::from_min_points(42, icotable).unwrap();
         assert_eq!(icotable_of_spheres.vertices.len(), 42);
         assert_eq!(icotable_of_spheres.vertices[0].data.vertices.len(), 42);
     }

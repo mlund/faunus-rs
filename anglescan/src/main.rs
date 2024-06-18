@@ -1,6 +1,6 @@
 use anglescan::{
     energy,
-    icotable::IcoSphereTable,
+    icotable::IcoTable,
     structure::{AtomKinds, Structure},
     to_cartesian, to_spherical, Sample, TwobodyAngles, Vector3,
 };
@@ -249,7 +249,7 @@ fn do_dipole(cmd: &Commands) -> Result<()> {
     };
     let distances: Vec<f64> = iter_num_tools::arange(*rmin..*rmax, *dr).collect();
     let n_points = (4.0 * PI / resolution.powi(2)).round() as usize;
-    let mut icotable = IcoSphereTable::<f64>::from_min_points(n_points, 0.0)?;
+    let mut icotable = IcoTable::<f64>::from_min_points(n_points, 0.0)?;
     let resolution = (4.0 * PI / icotable.vertices.len() as f64).sqrt();
     log::info!(
         "Requested {} points on a sphere; got {} -> new resolution = {:.3}",
@@ -295,7 +295,7 @@ fn do_dipole(cmd: &Commands) -> Result<()> {
             .collect();
 
         // Sample interpolated points using a randomly rotate icospheres
-        let mut rotated_icosphere = IcoSphereTable::<f64>::from_min_points(1000, 0.0)?;
+        let mut rotated_icosphere = IcoTable::<f64>::from_min_points(1000, 0.0)?;
         let mut partition_func_interpolated = 0.0;
 
         for q in &quaternions {
@@ -352,7 +352,7 @@ fn do_potential(cmd: &Commands) -> Result<()> {
         resolution
     );
 
-    let mut icotable = IcoSphereTable::<f64>::from_min_points(n_points, 0.0)?;
+    let mut icotable = IcoTable::<f64>::from_min_points(n_points, 0.0)?;
     icotable
         .set_vertex_data(|v| energy::electric_potential(&structure, &v.scale(*radius), &multipole));
 
