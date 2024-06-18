@@ -23,6 +23,7 @@ pub struct Vertex<T: Clone> {
 impl<T: Clone> Vertex<T> {
     /// Construct a new vertex
     pub fn new(pos: Vector3, data: T, neighbors: Vec<usize>) -> Self {
+        assert!(matches!(neighbors.len(), 5 | 6));
         Self {
             pos,
             data,
