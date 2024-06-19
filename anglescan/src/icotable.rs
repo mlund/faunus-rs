@@ -90,15 +90,6 @@ impl<T: Clone> IcoTable<T> {
             })
             .collect();
 
-        // let _faces: Vec<Face> = indices
-        //     .chunks(3)
-        //     .map(|c| {
-        //         let mut v = vec![c[0] as u16, c[1] as u16, c[2] as u16];
-        //         v.sort();
-        //         v.try_into().unwrap()
-        //     })
-        //     .collect_vec();
-
         Self { vertices }
     }
 
@@ -119,8 +110,12 @@ impl<T: Clone> IcoTable<T> {
     }
 
     /// Set data associated with each vertex using a generator function
-    pub fn set_vertex_data(&mut self, f: impl Fn(&Vector3) -> T) {
-        self.vertices.iter_mut().for_each(|v| v.data = f(&v.pos));
+    /// The function takes the index of the vertex and its position
+    pub fn set_vertex_data(&mut self, f: impl Fn(usize, &Vector3) -> T) {
+        self.vertices
+            .iter_mut()
+            .enumerate()
+            .for_each(|(i, v)| v.data = f(i, &v.pos));
     }
 
     /// Get data associated with each vertex
@@ -253,7 +248,7 @@ impl<T: Clone> IcoTable<T> {
             .map(|(i, _)| i) // keep only indices
             .take(2) // take two next nearest distances
             .collect_tuple()
-            .map(|(a, b)| [a  as u16, b  as u16, nearest as u16]) // append nearest
+            .map(|(a, b)| [a as u16, b as u16, nearest as u16]) // append nearest
             .expect("Face requires exactly three indices")
             .iter()
             .copied()
@@ -297,6 +292,18 @@ impl std::fmt::Display for IcoTable<f64> {
     }
 }
 
+/// Get list of all faces from an icosphere
+fn _get_faces_from_icosphere<T>(icosphere: Subdivided<T, IcoSphereBase>) -> Vec<Face> {
+    icosphere
+        .get_all_indices()
+        .chunks(3)
+        .map(|c| {
+            let v = vec![c[0] as u16, c[1] as u16, c[2] as u16];
+            v.try_into().unwrap()
+        })
+        .collect_vec()
+}
+
 impl IcoTable<f64> {
     /// Get data for a point on the surface using barycentric interpolation
     /// https://en.wikipedia.org/wiki/Barycentric_coordinate_system#Interpolation_on_a_triangular_unstructured_grid
@@ -318,8 +325,9 @@ impl IcoTableOfSpheres {
         bary_a: &Vector3,
         bary_b: &Vector3,
     ) -> f64 {
-        let data_ab =
-            Matrix3::from_fn(|i, j| self.vertices[face_a[i] as usize].data.vertices[face_b[j] as usize].data);
+        let data_ab = Matrix3::from_fn(|i, j| {
+            self.vertices[face_a[i] as usize].data.vertices[face_b[j] as usize].data
+        });
         (bary_a.transpose() * data_ab * bary_b).to_scalar()
     }
 }
@@ -391,6 +399,42 @@ mod tests {
         assert_relative_eq!(bary[0], 0.5);
         assert_relative_eq!(bary[1], 0.0);
         assert_relative_eq!(bary[2], 0.5);
+    }
+
+    #[test]
+    fn test_face_face_interpolation() {
+        let n_points = 12;
+        let icosphere = make_icosphere(n_points).unwrap();
+        let mut icotable = IcoTable::<f64>::from_icosphere(icosphere, 0.0);
+        icotable.set_vertex_data(|i, _| i as f64);
+        let icotable_of_spheres = IcoTableOfSpheres::from_min_points(n_points, icotable).unwrap();
+
+        let face_a = [0, 1, 2];
+        let face_b = [0, 1, 2];
+
+        // corner 1
+        let bary_a = Vector3::new(1.0, 0.0, 0.0);
+        let bary_b = Vector3::new(1.0, 0.0, 0.0);
+        let data = icotable_of_spheres.interpolate(&face_a, &face_b, &bary_a, &bary_b);
+        assert_relative_eq!(data, 0.0);
+
+        // corner 2
+        let bary_a = Vector3::new(0.0, 1.0, 0.0);
+        let bary_b = Vector3::new(0.0, 1.0, 0.0);
+        let data = icotable_of_spheres.interpolate(&face_a, &face_b, &bary_a, &bary_b);
+        assert_relative_eq!(data, 1.0);
+
+        // corner 3
+        let bary_a = Vector3::new(0.0, 0.0, 1.0);
+        let bary_b = Vector3::new(0.0, 0.0, 1.0);
+        let data = icotable_of_spheres.interpolate(&face_a, &face_b, &bary_a, &bary_b);
+        assert_relative_eq!(data, 2.0);
+
+        // center
+        let bary_a = Vector3::new(1.0 / 3.0, 1.0 / 3.0, 1.0 / 3.0);
+        let bary_b = Vector3::new(1.0 / 3.0, 1.0 / 3.0, 1.0 / 3.0);
+        let data = icotable_of_spheres.interpolate(&face_a, &face_b, &bary_a, &bary_b);
+        assert_relative_eq!(data, (0.0 + 1.0 + 2.0) / 3 as f64);
     }
 
     #[test]

@@ -307,7 +307,7 @@ fn do_dipole(cmd: &Commands) -> Result<()> {
     // for each ion-dipole separation, calculate the partition function and free energy
     for radius in distances {
         // exact exp. energy at a given point, exp(-βu)
-        let exact_exp_energy = |p: &Vector3<f64>| {
+        let exact_exp_energy = |_, p: &Vector3<f64>| {
             let (_r, theta, _phi) = to_spherical(p);
             let field = bjerrum_len * charge / radius.powi(2);
             let u = field * mu * theta.cos();
@@ -393,8 +393,9 @@ fn do_potential(cmd: &Commands) -> Result<()> {
     );
 
     let mut icotable = IcoTable::<f64>::from_min_points(n_points, 0.0)?;
-    icotable
-        .set_vertex_data(|v| energy::electric_potential(&structure, &v.scale(*radius), &multipole));
+    icotable.set_vertex_data(|_, v| {
+        energy::electric_potential(&structure, &v.scale(*radius), &multipole)
+    });
 
     std::fs::File::create("pot_at_vertices.dat")?.write_fmt(format_args!("{}", icotable))?;
 
