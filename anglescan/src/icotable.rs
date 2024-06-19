@@ -1,10 +1,10 @@
 use super::{anglescan::*, table::PaddedTable};
 use anyhow::Result;
+use get_size::GetSize;
 use hexasphere::{shapes::IcoSphereBase, AdjacencyBuilder, Subdivided};
 use itertools::Itertools;
 use nalgebra::Matrix3;
-use std::{io::Write, path::Path};
-use get_size::GetSize;
+use std::io::Write;
 
 /// A icotable where each vertex holds an icotable of floats
 pub type IcoTableOfSpheres = IcoTable<IcoTable<f64>>;
@@ -65,8 +65,6 @@ impl<T: Clone> Vertex<T> {
 pub struct IcoTable<T: Clone> {
     /// Vertex information (position, data, neighbors)
     pub vertices: Vec<Vertex<T>>,
-    /// All faces of the icosphere each consisting of three (sorted) vertex indices
-    pub faces: Vec<Face>,
 }
 
 impl<T: Clone> IcoTable<T> {
@@ -92,7 +90,7 @@ impl<T: Clone> IcoTable<T> {
             })
             .collect();
 
-        let faces: Vec<Face> = indices
+        let _faces: Vec<Face> = indices
             .chunks(3)
             .map(|c| {
                 let mut v = vec![c[0] as usize, c[1] as usize, c[2] as usize];
@@ -101,7 +99,7 @@ impl<T: Clone> IcoTable<T> {
             })
             .collect_vec();
 
-        Self { vertices, faces }
+        Self { vertices }
     }
 
     /// Generate table based on a minimum number of vertices on the subdivided icosaedron
@@ -268,20 +266,20 @@ impl<T: Clone> IcoTable<T> {
         face
     }
 
-    /// Save a VMD script to illustrate the icosphere
-    pub fn save_vmd(&self, path: impl AsRef<Path>, scale: Option<f64>) -> Result<()> {
-        let mut file = std::fs::File::create(path)?;
-        let s = scale.unwrap_or(1.0);
-        writeln!(file, "draw delete all")?;
-        for face in &self.faces {
-            let a = &self.vertices[face[0]].pos.scale(s);
-            let b = &self.vertices[face[1]].pos.scale(s);
-            let c = &self.vertices[face[2]].pos.scale(s);
-            let color = "red";
-            vmd_draw_triangle(&mut file, a, b, c, color)?;
-        }
-        Ok(())
-    }
+    // /// Save a VMD script to illustrate the icosphere
+    // pub fn save_vmd(&self, path: impl AsRef<Path>, scale: Option<f64>) -> Result<()> {
+    //     let mut file = std::fs::File::create(path)?;
+    //     let s = scale.unwrap_or(1.0);
+    //     writeln!(file, "draw delete all")?;
+    //     for face in &self.faces {
+    //         let a = &self.vertices[face[0]].pos.scale(s);
+    //         let b = &self.vertices[face[1]].pos.scale(s);
+    //         let c = &self.vertices[face[2]].pos.scale(s);
+    //         let color = "red";
+    //         vmd_draw_triangle(&mut file, a, b, c, color)?;
+    //     }
+    //     Ok(())
+    // }
 }
 
 impl std::fmt::Display for IcoTable<f64> {
@@ -327,7 +325,7 @@ impl IcoTableOfSpheres {
 }
 
 /// Draw a triangle in VMD format
-fn vmd_draw_triangle(
+fn _vmd_draw_triangle(
     stream: &mut impl Write,
     a: &Vector3,
     b: &Vector3,

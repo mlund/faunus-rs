@@ -16,10 +16,10 @@ use std::{f64::consts::PI, io::Write, ops::Neg, path::PathBuf};
 extern crate pretty_env_logger;
 #[macro_use]
 extern crate log;
+use get_size::GetSize;
 use iter_num_tools::arange;
 use rand::Rng;
 use textplots::{Chart, ColorPlot, Shape};
-use get_size::GetSize;
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -186,14 +186,23 @@ fn do_icoscan(
     let distances = iter_num_tools::arange(rmin..rmax, dr).collect_vec();
     let dihedral_angles = iter_num_tools::arange(0.0..2.0 * PI, angle_resolution).collect_vec();
 
-
     let _table = Table6D::from_resolution(rmin, rmax, dr, angle_resolution)?;
 
     let n_points = _table.get(rmin).unwrap().get(0.0).unwrap().len();
     let total = distances.len() * dihedral_angles.len() * n_points * n_points;
 
-    println!("{} x {} x {} x {} = {} poses 💃🕺", distances.len(), dihedral_angles.len(), n_points, n_points, total);
-    println!("Heap allocation for 6D table: {:.1} MB", _table.get_heap_size() as f64 / 1e6);
+    println!(
+        "{} x {} x {} x {} = {} poses 💃🕺",
+        distances.len(),
+        dihedral_angles.len(),
+        n_points,
+        n_points,
+        total
+    );
+    println!(
+        "Heap allocation for 6D table: {:.1} MB",
+        _table.get_heap_size() as f64 / 1e6
+    );
     for r in distances {
         for _omega in &dihedral_angles {
             let _r_vec = Vector3::new(0.0, 0.0, r);
@@ -388,8 +397,6 @@ fn do_potential(cmd: &Commands) -> Result<()> {
         .set_vertex_data(|v| energy::electric_potential(&structure, &v.scale(*radius), &multipole));
 
     std::fs::File::create("pot_at_vertices.dat")?.write_fmt(format_args!("{}", icotable))?;
-
-    icotable.save_vmd("triangles.vmd", Some(*radius))?;
 
     // Make PQR file illustrating the electric potential at each vertex
     let mut pqr_file = std::fs::File::create("potential.pqr")?;
