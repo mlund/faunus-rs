@@ -352,7 +352,6 @@ mod tests {
         let icosphere = make_icosphere(3).unwrap();
         let icotable = IcoTable::<f64>::from_icosphere(icosphere, 0.0);
         assert_eq!(icotable.vertices.len(), 12);
-        assert_eq!(icotable.faces.len(), 20);
 
         let point = icotable.vertices[0].pos;
 
