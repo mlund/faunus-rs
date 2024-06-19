@@ -28,7 +28,7 @@ impl Table6D {
 }
 
 /// Represents indices of a face
-pub type Face = [usize; 3];
+pub type Face = [u16; 3];
 
 /// Struct representing a vertex in the icosphere
 #[derive(Clone, Debug, GetSize)]
@@ -39,12 +39,12 @@ pub struct Vertex<T: Clone> {
     /// Data associated with the vertex
     pub data: T,
     /// Indices of neighboring vertices
-    pub neighbors: Vec<usize>,
+    pub neighbors: Vec<u16>,
 }
 
 impl<T: Clone> Vertex<T> {
     /// Construct a new vertex
-    pub fn new(pos: Vector3, data: T, neighbors: Vec<usize>) -> Self {
+    pub fn new(pos: Vector3, data: T, neighbors: Vec<u16>) -> Self {
         assert!(matches!(neighbors.len(), 5 | 6));
         Self {
             pos,
@@ -85,19 +85,19 @@ impl<T: Clone> IcoTable<T> {
                 Vertex::new(
                     vertex_positions[i],
                     default_data.clone(),
-                    neighbors[i].clone(),
+                    neighbors[i].iter().map(|i| *i as u16).collect_vec(),
                 )
             })
             .collect();
 
-        let _faces: Vec<Face> = indices
-            .chunks(3)
-            .map(|c| {
-                let mut v = vec![c[0] as usize, c[1] as usize, c[2] as usize];
-                v.sort();
-                v.try_into().unwrap()
-            })
-            .collect_vec();
+        // let _faces: Vec<Face> = indices
+        //     .chunks(3)
+        //     .map(|c| {
+        //         let mut v = vec![c[0] as u16, c[1] as u16, c[2] as u16];
+        //         v.sort();
+        //         v.try_into().unwrap()
+        //     })
+        //     .collect_vec();
 
         Self { vertices }
     }
@@ -211,9 +211,9 @@ impl<T: Clone> IcoTable<T> {
 
     /// Get the three vertices of a face
     pub fn face_positions(&self, face: &Face) -> (&Vector3, &Vector3, &Vector3) {
-        let a = &self.vertices[face[0]].pos;
-        let b = &self.vertices[face[1]].pos;
-        let c = &self.vertices[face[2]].pos;
+        let a = &self.vertices[face[0] as usize].pos;
+        let b = &self.vertices[face[1] as usize].pos;
+        let c = &self.vertices[face[2] as usize].pos;
         (a, b, c)
     }
 
@@ -248,12 +248,12 @@ impl<T: Clone> IcoTable<T> {
             .neighbors // neighbors to nearest
             .iter()
             .cloned()
-            .map(|i| (i, (self.vertices[i].pos - point).norm_squared()))
+            .map(|i| (i, (self.vertices[i as usize].pos - point).norm_squared()))
             .sorted_by(|a, b| a.1.partial_cmp(&b.1).unwrap()) // sort ascending
             .map(|(i, _)| i) // keep only indices
             .take(2) // take two next nearest distances
             .collect_tuple()
-            .map(|(a, b)| [a, b, nearest]) // append nearest
+            .map(|(a, b)| [a  as u16, b  as u16, nearest as u16]) // append nearest
             .expect("Face requires exactly three indices")
             .iter()
             .copied()
@@ -303,9 +303,9 @@ impl IcoTable<f64> {
     pub fn interpolate(&self, point: &Vector3) -> f64 {
         let face = self.nearest_face(point);
         let bary = self.barycentric(point, &face);
-        bary[0] * self.vertices[face[0]].data
-            + bary[1] * self.vertices[face[1]].data
-            + bary[2] * self.vertices[face[2]].data
+        bary[0] * self.vertices[face[0] as usize].data
+            + bary[1] * self.vertices[face[1] as usize].data
+            + bary[2] * self.vertices[face[2] as usize].data
     }
 }
 
@@ -319,7 +319,7 @@ impl IcoTableOfSpheres {
         bary_b: &Vector3,
     ) -> f64 {
         let data_ab =
-            Matrix3::from_fn(|i, j| self.vertices[face_a[i]].data.vertices[face_b[j]].data);
+            Matrix3::from_fn(|i, j| self.vertices[face_a[i] as usize].data.vertices[face_b[j] as usize].data);
         (bary_a.transpose() * data_ab * bary_b).to_scalar()
     }
 }
