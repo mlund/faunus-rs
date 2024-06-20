@@ -221,7 +221,7 @@ impl<T: Clone> IcoTable<T> {
     /// See:
     /// - https://stackoverflow.com/questions/11947813/subdivided-icosahedron-how-to-find-the-nearest-vertex-to-an-arbitrary-point
     /// - Binary Space Partitioning: https://en.wikipedia.org/wiki/Binary_space_partitioning
-    fn nearest_vertex(&self, point: &Vector3) -> usize {
+    pub fn nearest_vertex(&self, point: &Vector3) -> usize {
         self.vertices
             .iter()
             .map(|v| (v.pos - point).norm_squared())

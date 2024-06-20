@@ -2,11 +2,11 @@ use anglescan::{
     energy,
     icotable::{IcoTable, Table6D},
     structure::{AtomKinds, Structure},
-    to_cartesian, to_spherical, Sample, TwobodyAngles, UnitQuaternion, Vector3,
+    to_cartesian, to_spherical, Sample, TwobodyAngles, UnitQuaternion,
 };
 use anyhow::Result;
 use clap::{Parser, Subcommand};
-use coulomb::{DebyeLength, Medium, Salt};
+use coulomb::{DebyeLength, Medium, Salt, Vector3};
 use indicatif::ParallelProgressIterator;
 use itertools::Itertools;
 use nu_ansi_term::Color::{Red, Yellow};
@@ -108,7 +108,7 @@ enum Commands {
         #[arg(short = 'T', long, default_value = "298.15")]
         temperature: f64,
         /// Use icosphere table
-        #[arg(long, default_value = "true")]
+        #[arg(long)]
         icotable: bool,
     },
 }
@@ -147,7 +147,7 @@ fn do_scan(cmd: &Commands) -> Result<()> {
     // Scan over mass center distances
     let distances = iter_num_tools::arange(*rmin..*rmax, *dr).collect_vec();
     info!(
-        "Scanning COM range [{:.1}, {:.1}) in {:.1} Å steps 🐾",
+        "COM range: [{:.1}, {:.1}) in {:.1} Å steps 🐾",
         rmin, rmax, dr
     );
     if *icotable {
@@ -185,27 +185,45 @@ fn do_icoscan(
 ) -> std::result::Result<(), anyhow::Error> {
     let distances = iter_num_tools::arange(rmin..rmax, dr).collect_vec();
     let dihedral_angles = iter_num_tools::arange(0.0..2.0 * PI, angle_resolution).collect_vec();
-
-    let _table = Table6D::from_resolution(rmin, rmax, dr, angle_resolution)?;
-
-    let n_points = _table.get(rmin).unwrap().get(0.0).unwrap().len();
+    let mut table = Table6D::from_resolution(rmin, rmax, dr, angle_resolution)?;
+    let n_points = table.get(rmin).unwrap().get(0.0).unwrap().len();
     let total = distances.len() * dihedral_angles.len() * n_points * n_points;
 
-    println!(
-        "{} x {} x {} x {} = {} poses 💃🕺",
+    info!(
+        "6D table: 𝑅({}) x 𝜔({}) x 𝜃𝜑({}) x 𝜃𝜑({}) = {} poses 💃🕺 ({:.1} MB)",
         distances.len(),
         dihedral_angles.len(),
         n_points,
         n_points,
-        total
+        total,
+        table.get_heap_size() as f64 / 1e6
     );
-    println!(
-        "Heap allocation for 6D table: {:.1} MB",
-        _table.get_heap_size() as f64 / 1e6
-    );
+
+    use nalgebra::UnitVector3;
+
+    // Rotation operations via unit quaternions
+    let zaxis = UnitVector3::new_normalize(Vector3::new(0.0005, 0.0005, 1.0));
+    // let to_neg_zaxis = |p| UnitQuaternion::rotation_between(p, &-zaxis).unwrap();
+    // let around_z = |angle| UnitQuaternion::from_axis_angle(&zaxis, angle);
+
     for r in distances {
-        for _omega in &dihedral_angles {
-            let _r_vec = Vector3::new(0.0, 0.0, r);
+        let mut table_at_r = table.get_mut(r).unwrap();
+        let r_vec = Vector3::new(0.0, 0.0, r);
+
+        for omega in &dihedral_angles {
+            // let table_a = table_at_r.get_mut(*omega).unwrap();
+            // for vertex_a in table_a.vertices.iter_mut() {
+            //     for vertex_b in vertex_a.data.vertices.iter_mut() {
+            //         let q1 = to_neg_zaxis(&vertex_b.pos);
+            //         let q2 = around_z(*omega);
+            //         let q3 = UnitQuaternion::rotation_between(&zaxis, &vertex_a.pos).unwrap();
+            //         let q123 = q1 * q2 * q3;
+            //         let mut mol_b = _ref_b.clone(); // initially at origin
+            //         mol_b.transform(|pos| q123.transform_vector(&(pos + r_vec)));
+            // }
+
+            // let uvertex = UnitVector3::new_normalize(vertex_a.pos);
+            // }
         }
     }
     Ok(())
@@ -225,7 +243,7 @@ fn do_anglescan(
         .par_iter()
         .progress_count(distances.len() as u64)
         .map(|r| {
-            let r_vec = Vector3::<f64>::new(0.0, 0.0, *r);
+            let r_vec = Vector3::new(0.0, 0.0, *r);
             let sample = scan
                 .sample_all_angles(&ref_a, &ref_b, &pair_matrix, &r_vec, *temperature)
                 .unwrap();
@@ -238,7 +256,7 @@ fn do_anglescan(
 }
 
 /// Write PMF and mean energy as a function of mass center separation to file
-fn report_pmf(samples: &[(Vector3<f64>, Sample)], path: &PathBuf) {
+fn report_pmf(samples: &[(Vector3, Sample)], path: &PathBuf) {
     // File with F(R) and U(R)
     let mut pmf_file = std::fs::File::create(path).unwrap();
     let mut pmf_data = Vec::<(f32, f32)>::new();
@@ -307,7 +325,7 @@ fn do_dipole(cmd: &Commands) -> Result<()> {
     // for each ion-dipole separation, calculate the partition function and free energy
     for radius in distances {
         // exact exp. energy at a given point, exp(-βu)
-        let exact_exp_energy = |_, p: &Vector3<f64>| {
+        let exact_exp_energy = |_, p: &Vector3| {
             let (_r, theta, _phi) = to_spherical(p);
             let field = bjerrum_len * charge / radius.powi(2);
             let u = field * mu * theta.cos();
@@ -326,7 +344,7 @@ fn do_dipole(cmd: &Commands) -> Result<()> {
         let mut rng = rand::thread_rng();
         let quaternions: Vec<UnitQuaternion<f64>> = (0..20)
             .map(|_| {
-                let point: Vector3<f64> = faunus::transform::random_unit_vector(&mut rng);
+                let point: Vector3 = faunus::transform::random_unit_vector(&mut rng);
                 UnitQuaternion::<f64>::from_axis_angle(
                     &nalgebra::Unit::new_normalize(point),
                     rng.gen_range(0.0..PI),
@@ -444,7 +462,7 @@ fn do_potential(cmd: &Commands) -> Result<()> {
 fn pqr_write_atom(
     stream: &mut impl std::io::Write,
     atom_id: usize,
-    pos: &Vector3<f64>,
+    pos: &Vector3,
     charge: f64,
     radius: f64,
 ) -> Result<()> {

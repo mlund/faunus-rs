@@ -267,10 +267,16 @@ impl Structure {
             .fold(Vector3::<f64>::zeros(), |sum, i| sum + i)
             / total_mass
     }
-    /// Translates the structure by a displacement vector
+    /// Translates the coordinates by a displacement vector
     pub fn translate(&mut self, displacement: &Vector3<f64>) {
-        self.pos.iter_mut().for_each(|pos| *pos += displacement);
+        self.transform(|pos| pos + displacement);
     }
+
+    /// Transform the coordinates using a function
+    pub fn transform(&mut self, f: impl Fn(Vector3<f64>) -> Vector3<f64>) {
+        self.pos.iter_mut().for_each(|pos| *pos = f(*pos));
+    }
+
     /// Net charge of the structure
     pub fn net_charge(&self) -> f64 {
         self.charges.iter().sum()
