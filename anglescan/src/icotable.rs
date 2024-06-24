@@ -32,9 +32,11 @@ impl Table6D {
 pub type Face = [u16; 3];
 
 /// Struct representing a vertex in the icosphere
+///
+/// Interior mutability of vertex associated data is enabled using `std::sync::OnceLock`.
 #[derive(Clone, GetSize)]
 //#[get_size(ignore(T))]
-pub struct Vertex<T: Clone> {
+pub struct Vertex<T: Clone + GetSize> {
     /// 3D coordinates of the vertex on a unit sphere
     #[get_size(size = 24)]
     pub pos: Vector3,
@@ -45,11 +47,11 @@ pub struct Vertex<T: Clone> {
     pub neighbors: Vec<u16>,
 }
 
-fn get_size_helper<T>(_value: &T) -> usize {
-    std::mem::size_of::<OnceLock<T>>()
+fn get_size_helper<T>(value: &T) -> usize {
+    std::mem::size_of::<OnceLock<T>>() + value.get_heap_size()
 }
 
-impl<T: Clone> Vertex<T> {
+impl<T: Clone + GetSize> Vertex<T> {
     /// Construct a new vertex where data is *locked* to fixed value
     pub fn with_fixed_data(pos: Vector3, data: T, neighbors: Vec<u16>) -> Self {
         let vertex = Self::without_data(pos, neighbors);
@@ -75,12 +77,12 @@ impl<T: Clone> Vertex<T> {
 /// https://en.wikipedia.org/wiki/Geodesic_polyhedron
 /// 12 vertices will always have 5 neighbors; the rest will have 6.
 #[derive(Clone, GetSize)]
-pub struct IcoTable<T: Clone> {
+pub struct IcoTable<T: Clone + GetSize> {
     /// Vertex information (position, data, neighbors)
     pub vertices: Vec<Vertex<T>>,
 }
 
-impl<T: Clone> IcoTable<T> {
+impl<T: Clone + GetSize> IcoTable<T> {
     /// Generate table based on an existing subdivided icosaedron
     pub fn from_icosphere_without_data(icosphere: Subdivided<(), IcoSphereBase>) -> Self {
         let indices = icosphere.get_all_indices();
@@ -135,7 +137,7 @@ impl<T: Clone> IcoTable<T> {
     }
 
     /// Discard data associated with each vertex
-    /// 
+    ///
     /// After this call, `set_vertex_data` can be called again.
     pub fn clear_vertex_data(&mut self) {
         for vertex in self.vertices.iter_mut() {
@@ -345,14 +347,12 @@ impl IcoTable<f64> {
             + bary[2] * self.vertices[face[2] as usize].data.get().unwrap()
     }
     /// Generate table based on a minimum number of vertices on the subdivided icosaedron
-    /// 
+    ///
     /// Vertex data is left empty and can/should be set later
     pub fn from_min_points(min_points: usize) -> Result<Self> {
         let icosphere = make_icosphere(min_points)?;
         Ok(Self::from_icosphere_without_data(icosphere))
     }
-
-
 }
 impl IcoTableOfSpheres {
     /// Generate table based on a minimum number of vertices on the subdivided icosaedron
@@ -485,7 +485,7 @@ mod tests {
         let bary_a = Vector3::new(1.0 / 3.0, 1.0 / 3.0, 1.0 / 3.0);
         let bary_b = Vector3::new(1.0 / 3.0, 1.0 / 3.0, 1.0 / 3.0);
         let data = icotable_of_spheres.interpolate(&face_a, &face_b, &bary_a, &bary_b);
-        assert_relative_eq!(data, (0.0 + 1.0 + 2.0) / 3 as f64);
+        assert_relative_eq!(data, (0.0 + 1.0 + 2.0) / 3_f64);
     }
 
     #[test]
@@ -493,6 +493,14 @@ mod tests {
         let icotable = IcoTable::<f64>::from_min_points(42).unwrap();
         let icotable_of_spheres = IcoTableOfSpheres::from_min_points(42, icotable).unwrap();
         assert_eq!(icotable_of_spheres.vertices.len(), 42);
-        assert_eq!(icotable_of_spheres.vertices[0].data.get().unwrap().vertices.len(), 42);
+        assert_eq!(
+            icotable_of_spheres.vertices[0]
+                .data
+                .get()
+                .unwrap()
+                .vertices
+                .len(),
+            42
+        );
     }
 }
