@@ -1,6 +1,6 @@
 use anglescan::{
     energy,
-    icotable::{IcoTable, Table6D},
+    icotable::{IcoTable, IcoTableOfSpheres, Table6D},
     structure::{AtomKinds, Structure},
     to_cartesian, to_spherical, Sample, TwobodyAngles, UnitQuaternion,
 };
@@ -12,7 +12,7 @@ use itertools::Itertools;
 use nu_ansi_term::Color::{Red, Yellow};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use rgb::RGB8;
-use std::{f64::consts::PI, io::Write, ops::Neg, path::PathBuf};
+use std::{f64::consts::PI, io::Write, ops::Neg, path::PathBuf, sync::Mutex};
 extern crate pretty_env_logger;
 #[macro_use]
 extern crate log;
@@ -206,13 +206,20 @@ fn do_icoscan(
     // let to_neg_zaxis = |p| UnitQuaternion::rotation_between(p, &-zaxis).unwrap();
     // let around_z = |angle| UnitQuaternion::from_axis_angle(&zaxis, angle);
 
+    // Calculate all energies for a single A vertex by exploring all B vertices
+    let myfunc = |r: f64, omega: f64, vertex_a| {
+
+    };
+
     for r in distances {
-        let mut table_at_r = table.get_mut(r).unwrap();
+        let mut table_at_r = table.get(r).unwrap();
         let r_vec = Vector3::new(0.0, 0.0, r);
 
         for omega in &dihedral_angles {
-            // let table_a = table_at_r.get_mut(*omega).unwrap();
-            // for vertex_a in table_a.vertices.iter_mut() {
+            let table_a = table_at_r.get(*omega).unwrap();
+            for vertex_a in table_a.vertices.iter() {
+                myfunc(r, *omega, vertex_a);
+            }
             //     for vertex_b in vertex_a.data.vertices.iter_mut() {
             //         let q1 = to_neg_zaxis(&vertex_b.pos);
             //         let q2 = around_z(*omega);

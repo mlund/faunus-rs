@@ -5,6 +5,7 @@ use hexasphere::{shapes::IcoSphereBase, AdjacencyBuilder, Subdivided};
 use itertools::Itertools;
 use nalgebra::Matrix3;
 use std::io::Write;
+use std::sync::Mutex;
 
 /// A icotable where each vertex holds an icotable of floats
 pub type IcoTableOfSpheres = IcoTable<IcoTable<f64>>;
