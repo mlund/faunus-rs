@@ -5,7 +5,7 @@ use hexasphere::{shapes::IcoSphereBase, AdjacencyBuilder, Subdivided};
 use itertools::Itertools;
 use nalgebra::Matrix3;
 use std::io::Write;
-use std::sync::Mutex;
+use std::sync::OnceLock;
 
 /// A icotable where each vertex holds an icotable of floats
 pub type IcoTableOfSpheres = IcoTable<IcoTable<f64>>;
@@ -21,7 +21,7 @@ impl Table6D {
     pub fn from_resolution(r_min: f64, r_max: f64, dr: f64, angle_resolution: f64) -> Result<Self> {
         use core::f64::consts::PI;
         let n_points = (4.0 * PI / angle_resolution.powi(2)).round() as usize;
-        let b = IcoTable::<f64>::from_min_points(n_points, 0.0)?; // B: 𝜃 and 𝜑
+        let b = IcoTable::<f64>::from_min_points(n_points)?; // B: 𝜃 and 𝜑
         let a = IcoTableOfSpheres::from_min_points(n_points, b)?; // A: 𝜃 and 𝜑
         let o = PaddedTable::<IcoTableOfSpheres>::new(0.0, 2.0 * PI, angle_resolution, a); // 𝜔
         Ok(Self::new(r_min, r_max, dr, o)) // R
@@ -32,24 +32,36 @@ impl Table6D {
 pub type Face = [u16; 3];
 
 /// Struct representing a vertex in the icosphere
-#[derive(Clone, Debug, GetSize)]
+#[derive(Clone, GetSize)]
+//#[get_size(ignore(T))]
 pub struct Vertex<T: Clone> {
     /// 3D coordinates of the vertex on a unit sphere
     #[get_size(size = 24)]
     pub pos: Vector3,
     /// Data associated with the vertex
-    pub data: T,
+    #[get_size(size_fn = get_size_helper)]
+    pub data: OnceLock<T>,
     /// Indices of neighboring vertices
     pub neighbors: Vec<u16>,
 }
 
+fn get_size_helper<T>(_value: &T) -> usize {
+    std::mem::size_of::<T>()
+}
+
 impl<T: Clone> Vertex<T> {
-    /// Construct a new vertex
-    pub fn new(pos: Vector3, data: T, neighbors: Vec<u16>) -> Self {
+    /// Construct a new vertex where data is *locked* to fixed value
+    pub fn with_fixed_data(pos: Vector3, data: T, neighbors: Vec<u16>) -> Self {
+        let vertex = Self::without_data(pos, neighbors);
+        let _ = vertex.data.set(data);
+        vertex
+    }
+    /// Construct a new vertex where write-once data is empty and can/should be set later
+    pub fn without_data(pos: Vector3, neighbors: Vec<u16>) -> Self {
         assert!(matches!(neighbors.len(), 5 | 6));
         Self {
             pos,
-            data,
+            data: OnceLock::<T>::default(),
             neighbors,
         }
     }
@@ -70,7 +82,7 @@ pub struct IcoTable<T: Clone> {
 
 impl<T: Clone> IcoTable<T> {
     /// Generate table based on an existing subdivided icosaedron
-    pub fn from_icosphere(icosphere: Subdivided<(), IcoSphereBase>, default_data: T) -> Self {
+    pub fn from_icosphere_without_data(icosphere: Subdivided<(), IcoSphereBase>) -> Self {
         let indices = icosphere.get_all_indices();
         let mut builder = AdjacencyBuilder::new(icosphere.raw_points().len());
         builder.add_indices(indices.as_slice());
@@ -83,9 +95,8 @@ impl<T: Clone> IcoTable<T> {
 
         let vertices = (0..vertex_positions.len())
             .map(|i| {
-                Vertex::new(
+                Vertex::without_data(
                     vertex_positions[i],
-                    default_data.clone(),
                     neighbors[i].iter().map(|i| *i as u16).collect_vec(),
                 )
             })
@@ -94,10 +105,13 @@ impl<T: Clone> IcoTable<T> {
         Self { vertices }
     }
 
-    /// Generate table based on a minimum number of vertices on the subdivided icosaedron
-    pub fn from_min_points(min_points: usize, default_data: T) -> Result<Self> {
-        let icosphere = make_icosphere(min_points)?;
-        Ok(Self::from_icosphere(icosphere, default_data))
+    /// Generate table based on an existing subdivided icosaedron
+    pub fn from_icosphere(icosphere: Subdivided<(), IcoSphereBase>, default_data: T) -> Self {
+        let table = Self::from_icosphere_without_data(icosphere);
+        table.vertices.iter().for_each(|v| {
+            let _ = v.data.set(default_data.clone());
+        });
+        table
     }
 
     /// Number of vertices in the table
@@ -113,15 +127,17 @@ impl<T: Clone> IcoTable<T> {
     /// Set data associated with each vertex using a generator function
     /// The function takes the index of the vertex and its position
     pub fn set_vertex_data(&mut self, f: impl Fn(usize, &Vector3) -> T) {
-        self.vertices
-            .iter_mut()
-            .enumerate()
-            .for_each(|(i, v)| v.data = f(i, &v.pos));
+        self.vertices.iter_mut().enumerate().for_each(|(i, v)| {
+            assert!(v.data.get().is_none());
+            let value = f(i, &v.pos);
+            let result = v.data.set(value);
+            assert!(result.is_ok());
+        });
     }
 
     /// Get data associated with each vertex
     pub fn vertex_data(&self) -> impl Iterator<Item = &T> {
-        self.vertices.iter().map(|v| &v.data)
+        self.vertices.iter().map(|v| v.data.get().unwrap())
     }
 
     /// Transform vertex positions using a function
@@ -249,7 +265,7 @@ impl<T: Clone> IcoTable<T> {
             .map(|(i, _)| i) // keep only indices
             .take(2) // take two next nearest distances
             .collect_tuple()
-            .map(|(a, b)| [a as u16, b as u16, nearest as u16]) // append nearest
+            .map(|(a, b)| [a, b, nearest as u16]) // append nearest
             .expect("Face requires exactly three indices")
             .iter()
             .copied()
@@ -286,7 +302,12 @@ impl std::fmt::Display for IcoTable<f64> {
             writeln!(
                 f,
                 "{} {} {} {} {} {}",
-                vertex.pos.x, vertex.pos.y, vertex.pos.z, theta, phi, vertex.data
+                vertex.pos.x,
+                vertex.pos.y,
+                vertex.pos.z,
+                theta,
+                phi,
+                vertex.data.get().unwrap()
             )?;
         }
         Ok(())
@@ -311,13 +332,25 @@ impl IcoTable<f64> {
     pub fn interpolate(&self, point: &Vector3) -> f64 {
         let face = self.nearest_face(point);
         let bary = self.barycentric(point, &face);
-        bary[0] * self.vertices[face[0] as usize].data
-            + bary[1] * self.vertices[face[1] as usize].data
-            + bary[2] * self.vertices[face[2] as usize].data
+        bary[0] * self.vertices[face[0] as usize].data.get().unwrap()
+            + bary[1] * self.vertices[face[1] as usize].data.get().unwrap()
+            + bary[2] * self.vertices[face[2] as usize].data.get().unwrap()
     }
-}
+    /// Generate table based on a minimum number of vertices on the subdivided icosaedron
+    pub fn from_min_points(min_points: usize) -> Result<Self> {
+        let icosphere = make_icosphere(min_points)?;
+        Ok(Self::from_icosphere_without_data(icosphere))
+    }
 
+
+}
 impl IcoTableOfSpheres {
+    /// Generate table based on a minimum number of vertices on the subdivided icosaedron
+    pub fn from_min_points(min_points: usize, default_data: IcoTable<f64>) -> Result<Self> {
+        let icosphere = make_icosphere(min_points)?;
+        Ok(Self::from_icosphere(icosphere, default_data))
+    }
+
     /// Interpolate data between two faces
     pub fn interpolate(
         &self,
@@ -326,8 +359,15 @@ impl IcoTableOfSpheres {
         bary_a: &Vector3,
         bary_b: &Vector3,
     ) -> f64 {
-        let data_ab = Matrix3::from_fn(|i, j| {
-            self.vertices[face_a[i] as usize].data.vertices[face_b[j] as usize].data
+        let data_ab = Matrix3::<f64>::from_fn(|i, j| {
+            *self.vertices[face_a[i] as usize]
+                .data
+                .get()
+                .unwrap()
+                .vertices[face_b[j] as usize]
+                .data
+                .get()
+                .unwrap()
         });
         (bary_a.transpose() * data_ab * bary_b).to_scalar()
     }
@@ -406,7 +446,7 @@ mod tests {
     fn test_face_face_interpolation() {
         let n_points = 12;
         let icosphere = make_icosphere(n_points).unwrap();
-        let mut icotable = IcoTable::<f64>::from_icosphere(icosphere, 0.0);
+        let mut icotable = IcoTable::<f64>::from_icosphere_without_data(icosphere);
         icotable.set_vertex_data(|i, _| i as f64);
         let icotable_of_spheres = IcoTableOfSpheres::from_min_points(n_points, icotable).unwrap();
 
@@ -440,9 +480,9 @@ mod tests {
 
     #[test]
     fn test_table_of_spheres() {
-        let icotable = IcoTable::<f64>::from_min_points(42, 0.0).unwrap();
+        let icotable = IcoTable::<f64>::from_min_points(42).unwrap();
         let icotable_of_spheres = IcoTableOfSpheres::from_min_points(42, icotable).unwrap();
         assert_eq!(icotable_of_spheres.vertices.len(), 42);
-        assert_eq!(icotable_of_spheres.vertices[0].data.vertices.len(), 42);
+        assert_eq!(icotable_of_spheres.vertices[0].data.get().unwrap().vertices.len(), 42);
     }
 }

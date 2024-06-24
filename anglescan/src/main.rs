@@ -1,6 +1,6 @@
 use anglescan::{
     energy,
-    icotable::{IcoTable, IcoTableOfSpheres, Table6D},
+    icotable::{IcoTable, Table6D},
     structure::{AtomKinds, Structure},
     to_cartesian, to_spherical, Sample, TwobodyAngles, UnitQuaternion,
 };
@@ -12,7 +12,7 @@ use itertools::Itertools;
 use nu_ansi_term::Color::{Red, Yellow};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use rgb::RGB8;
-use std::{f64::consts::PI, io::Write, ops::Neg, path::PathBuf, sync::Mutex};
+use std::{f64::consts::PI, io::Write, ops::Neg, path::PathBuf};
 extern crate pretty_env_logger;
 #[macro_use]
 extern crate log;
@@ -173,6 +173,7 @@ fn do_scan(cmd: &Commands) -> Result<()> {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn do_icoscan(
     rmin: f64,
     rmax: f64,
@@ -185,7 +186,7 @@ fn do_icoscan(
 ) -> std::result::Result<(), anyhow::Error> {
     let distances = iter_num_tools::arange(rmin..rmax, dr).collect_vec();
     let dihedral_angles = iter_num_tools::arange(0.0..2.0 * PI, angle_resolution).collect_vec();
-    let mut table = Table6D::from_resolution(rmin, rmax, dr, angle_resolution)?;
+    let table = Table6D::from_resolution(rmin, rmax, dr, angle_resolution)?;
     let n_points = table.get(rmin).unwrap().get(0.0).unwrap().len();
     let total = distances.len() * dihedral_angles.len() * n_points * n_points;
 
@@ -202,25 +203,23 @@ fn do_icoscan(
     use nalgebra::UnitVector3;
 
     // Rotation operations via unit quaternions
-    let zaxis = UnitVector3::new_normalize(Vector3::new(0.0005, 0.0005, 1.0));
+    let _zaxis = UnitVector3::new_normalize(Vector3::new(0.0005, 0.0005, 1.0));
     // let to_neg_zaxis = |p| UnitQuaternion::rotation_between(p, &-zaxis).unwrap();
     // let around_z = |angle| UnitQuaternion::from_axis_angle(&zaxis, angle);
 
     // Calculate all energies for a single A vertex by exploring all B vertices
-    let myfunc = |r: f64, omega: f64, vertex_a| {
-
-    };
+    let myfunc = |_r: f64, _omega: f64, _vertex_a| {};
 
     for r in distances {
-        let mut table_at_r = table.get(r).unwrap();
-        let r_vec = Vector3::new(0.0, 0.0, r);
+        let table_at_r = table.get(r).unwrap();
+        let _r_vec = Vector3::new(0.0, 0.0, r);
 
         for omega in &dihedral_angles {
             let table_a = table_at_r.get(*omega).unwrap();
             for vertex_a in table_a.vertices.iter() {
                 myfunc(r, *omega, vertex_a);
             }
-            //     for vertex_b in vertex_a.data.vertices.iter_mut() {
+            // for vertex_b in vertex_a.data.vertices.iter() {
             //         let q1 = to_neg_zaxis(&vertex_b.pos);
             //         let q2 = around_z(*omega);
             //         let q3 = UnitQuaternion::rotation_between(&zaxis, &vertex_a.pos).unwrap();
@@ -314,7 +313,7 @@ fn do_dipole(cmd: &Commands) -> Result<()> {
     };
     let distances: Vec<f64> = iter_num_tools::arange(*rmin..*rmax, *dr).collect();
     let n_points = (4.0 * PI / resolution.powi(2)).round() as usize;
-    let mut icotable = IcoTable::<f64>::from_min_points(n_points, 0.0)?;
+    let mut icotable = IcoTable::<f64>::from_min_points(n_points)?;
     let resolution = (4.0 * PI / icotable.vertices.len() as f64).sqrt();
     log::info!(
         "Requested {} points on a sphere; got {} -> new resolution = {:.3}",
@@ -360,7 +359,7 @@ fn do_dipole(cmd: &Commands) -> Result<()> {
             .collect();
 
         // Sample interpolated points using a randomly rotate icospheres
-        let mut rotated_icosphere = IcoTable::<f64>::from_min_points(1000, 0.0)?;
+        let mut rotated_icosphere = IcoTable::<f64>::from_min_points(1000)?;
         let mut partition_func_interpolated = 0.0;
 
         for q in &quaternions {
@@ -417,7 +416,7 @@ fn do_potential(cmd: &Commands) -> Result<()> {
         resolution
     );
 
-    let mut icotable = IcoTable::<f64>::from_min_points(n_points, 0.0)?;
+    let mut icotable = IcoTable::<f64>::from_min_points(n_points)?;
     icotable.set_vertex_data(|_, v| {
         energy::electric_potential(&structure, &v.scale(*radius), &multipole)
     });
