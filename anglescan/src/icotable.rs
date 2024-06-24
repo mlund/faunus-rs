@@ -46,7 +46,7 @@ pub struct Vertex<T: Clone> {
 }
 
 fn get_size_helper<T>(_value: &T) -> usize {
-    std::mem::size_of::<T>()
+    std::mem::size_of::<OnceLock<T>>()
 }
 
 impl<T: Clone> Vertex<T> {
@@ -61,7 +61,7 @@ impl<T: Clone> Vertex<T> {
         assert!(matches!(neighbors.len(), 5 | 6));
         Self {
             pos,
-            data: OnceLock::<T>::default(),
+            data: OnceLock::<T>::new(),
             neighbors,
         }
     }
@@ -108,9 +108,7 @@ impl<T: Clone> IcoTable<T> {
     /// Generate table based on an existing subdivided icosaedron
     pub fn from_icosphere(icosphere: Subdivided<(), IcoSphereBase>, default_data: T) -> Self {
         let table = Self::from_icosphere_without_data(icosphere);
-        table.vertices.iter().for_each(|v| {
-            let _ = v.data.set(default_data.clone());
-        });
+        table.set_vertex_data(|_, _| default_data.clone());
         table
     }
 
@@ -126,13 +124,23 @@ impl<T: Clone> IcoTable<T> {
 
     /// Set data associated with each vertex using a generator function
     /// The function takes the index of the vertex and its position
-    pub fn set_vertex_data(&mut self, f: impl Fn(usize, &Vector3) -> T) {
-        self.vertices.iter_mut().enumerate().for_each(|(i, v)| {
+    /// Due to the `OnceLock` wrap, this can be done only once!
+    pub fn set_vertex_data(&self, f: impl Fn(usize, &Vector3) -> T) {
+        self.vertices.iter().enumerate().for_each(|(i, v)| {
             assert!(v.data.get().is_none());
             let value = f(i, &v.pos);
-            let result = v.data.set(value);
+            let result = v.data.set(value); // why can we not use unwrap here?!
             assert!(result.is_ok());
         });
+    }
+
+    /// Discard data associated with each vertex
+    /// 
+    /// After this call, `set_vertex_data` can be called again.
+    pub fn clear_vertex_data(&mut self) {
+        for vertex in self.vertices.iter_mut() {
+            vertex.data = OnceLock::new();
+        }
     }
 
     /// Get data associated with each vertex
@@ -337,6 +345,8 @@ impl IcoTable<f64> {
             + bary[2] * self.vertices[face[2] as usize].data.get().unwrap()
     }
     /// Generate table based on a minimum number of vertices on the subdivided icosaedron
+    /// 
+    /// Vertex data is left empty and can/should be set later
     pub fn from_min_points(min_points: usize) -> Result<Self> {
         let icosphere = make_icosphere(min_points)?;
         Ok(Self::from_icosphere_without_data(icosphere))
@@ -446,7 +456,7 @@ mod tests {
     fn test_face_face_interpolation() {
         let n_points = 12;
         let icosphere = make_icosphere(n_points).unwrap();
-        let mut icotable = IcoTable::<f64>::from_icosphere_without_data(icosphere);
+        let icotable = IcoTable::<f64>::from_icosphere_without_data(icosphere);
         icotable.set_vertex_data(|i, _| i as f64);
         let icotable_of_spheres = IcoTableOfSpheres::from_min_points(n_points, icotable).unwrap();
 

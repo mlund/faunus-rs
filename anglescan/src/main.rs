@@ -337,6 +337,7 @@ fn do_dipole(cmd: &Commands) -> Result<()> {
             let u = field * mu * theta.cos();
             (-u).exp()
         };
+        icotable.clear_vertex_data();
         icotable.set_vertex_data(exact_exp_energy);
 
         // Q summed from exact data at each vertex
@@ -416,7 +417,7 @@ fn do_potential(cmd: &Commands) -> Result<()> {
         resolution
     );
 
-    let mut icotable = IcoTable::<f64>::from_min_points(n_points)?;
+    let icotable = IcoTable::<f64>::from_min_points(n_points)?;
     icotable.set_vertex_data(|_, v| {
         energy::electric_potential(&structure, &v.scale(*radius), &multipole)
     });
