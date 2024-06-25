@@ -22,6 +22,12 @@ impl Table6D {
         use core::f64::consts::PI;
         let n_points = (4.0 * PI / angle_resolution.powi(2)).round() as usize;
         let b = IcoTable::<f64>::from_min_points(n_points)?; // B: 𝜃 and 𝜑
+        let n_points = b.vertices.len();
+        let angle_resolution = (4.0 * PI / n_points as f64).sqrt();
+        log::info!(
+            "Actual angle resolution = {:.2} radians",
+            angle_resolution
+        );
         let a = IcoTableOfSpheres::from_min_points(n_points, b)?; // A: 𝜃 and 𝜑
         let o = PaddedTable::<IcoTableOfSpheres>::new(0.0, 2.0 * PI, angle_resolution, a); // 𝜔
         Ok(Self::new(r_min, r_max, dr, o)) // R

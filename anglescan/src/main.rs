@@ -182,12 +182,14 @@ fn do_icoscan(
     ref_a: Structure,
     ref_b: Structure,
     pair_matrix: energy::PairMatrix,
-    _temperature: &f64,
+    temperature: &f64,
 ) -> std::result::Result<(), anyhow::Error> {
     let distances = iter_num_tools::arange(rmin..rmax, dr).collect_vec();
-    let dihedral_angles = iter_num_tools::arange(0.0..2.0 * PI, angle_resolution).collect_vec();
     let table = Table6D::from_resolution(rmin, rmax, dr, angle_resolution)?;
     let n_points = table.get(rmin).unwrap().get(0.0).unwrap().len();
+    let angle_resolution = (4.0 * PI / n_points as f64).sqrt();
+    let dihedral_angles = iter_num_tools::arange(0.0..2.0 * PI, angle_resolution).collect_vec();
+
     let total = distances.len() * dihedral_angles.len() * n_points * n_points;
 
     info!(
@@ -237,6 +239,7 @@ fn do_icoscan(
         });
 
     // Calculate partition function
+    let mut samples: Vec<(Vector3, Sample)> = Vec::default();
     for r in &distances {
         let mut partition_func = Sample::default();
         for omega in &dihedral_angles {
@@ -244,28 +247,14 @@ fn do_icoscan(
             for vertex_a in r_and_omega.vertices.iter() {
                 for vertex_b in vertex_a.data.get().unwrap().vertices.iter() {
                     let energy = vertex_b.data.get().unwrap();
-                    partition_func = partition_func + Sample::new(*energy, *_temperature);
+                    partition_func = partition_func + Sample::new(*energy, *temperature);
                 }
             }
         }
-        println!("{:.2} {:.2}", r, partition_func.free_energy());
+        samples.push((Vector3::new(0.0, 0.0, *r), partition_func));
     }
-
+    report_pmf(samples.as_slice(), &PathBuf::from("pmf.dat"));
     Ok(())
-
-    // let com_scan = distances
-    //     .par_iter()
-    //     .progress_count(distances.len() as u64)
-    //     .map(|r| {
-    //         let r_vec = Vector3::new(0.0, 0.0, *r);
-    //         let sample = scan
-    //             .sample_all_angles(&ref_a, &ref_b, &pair_matrix, &r_vec, *temperature)
-    //             .unwrap();
-    //         (r_vec, sample)
-    //     })
-    //     .collect::<Vec<_>>();
-
-    // report_pmf(com_scan.as_slice(), &PathBuf::from("pmf.dat"));
 }
 
 fn do_anglescan(
