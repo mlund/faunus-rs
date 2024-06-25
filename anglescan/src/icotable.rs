@@ -35,7 +35,6 @@ pub type Face = [u16; 3];
 ///
 /// Interior mutability of vertex associated data is enabled using `std::sync::OnceLock`.
 #[derive(Clone, GetSize)]
-//#[get_size(ignore(T))]
 pub struct Vertex<T: Clone + GetSize> {
     /// 3D coordinates of the vertex on a unit sphere
     #[get_size(size = 24)]
@@ -48,7 +47,7 @@ pub struct Vertex<T: Clone + GetSize> {
 }
 
 fn get_size_helper<T>(value: &T) -> usize {
-    std::mem::size_of::<OnceLock<T>>() + value.get_heap_size()
+    std::mem::size_of::<T>() + value.get_heap_size()
 }
 
 impl<T: Clone + GetSize> Vertex<T> {
@@ -58,7 +57,8 @@ impl<T: Clone + GetSize> Vertex<T> {
         let _ = vertex.data.set(data);
         vertex
     }
-    /// Construct a new vertex where write-once data is empty and can/should be set later
+
+    /// Construct a new vertex; write-once data is left empty and can/should be set later
     pub fn without_data(pos: Vector3, neighbors: Vec<u16>) -> Self {
         assert!(matches!(neighbors.len(), 5 | 6));
         Self {
