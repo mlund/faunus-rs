@@ -203,30 +203,28 @@ fn do_icoscan(
     use nalgebra::UnitVector3;
 
     // Rotation operations via unit quaternions
-    let _zaxis = UnitVector3::new_normalize(Vector3::new(0.0005, 0.0005, 1.0));
-    // let to_neg_zaxis = |p| UnitQuaternion::rotation_between(p, &-zaxis).unwrap();
-    // let around_z = |angle| UnitQuaternion::from_axis_angle(&zaxis, angle);
+    let zaxis = UnitVector3::new_normalize(Vector3::new(0.0005, 0.0005, 1.0));
+    let to_neg_zaxis = |p| UnitQuaternion::rotation_between(p, &-zaxis).unwrap();
+    let around_z = |angle| UnitQuaternion::from_axis_angle(&zaxis, angle);
 
-    // Calculate all energies for a single A vertex by exploring all B vertices
-    let myfunc = |_r: f64, _omega: f64, _vertex_a| {};
+    for omega in &dihedral_angles {
+        for r in &distances {
+            let table_at_r = table.get(*r).unwrap();
+            let r_vec = Vector3::new(0.0, 0.0, *r);
 
-    for r in distances {
-        let table_at_r = table.get(r).unwrap();
-        let _r_vec = Vector3::new(0.0, 0.0, r);
-
-        for omega in &dihedral_angles {
             let table_a = table_at_r.get(*omega).unwrap();
             for vertex_a in table_a.vertices.iter() {
-                myfunc(r, *omega, vertex_a);
+                for vertex_b in vertex_a.data.get().unwrap().vertices.iter() {
+                    let q1 = to_neg_zaxis(&vertex_b.pos);
+                    let q2 = around_z(*omega);
+                    let q3 = UnitQuaternion::rotation_between(&zaxis, &vertex_a.pos).unwrap();
+                    let q123 = q1 * q2 * q3;
+                    let mut mol_b = _ref_b.clone(); // initially at origin
+                    mol_b.transform(|pos| q123.transform_vector(&(pos + r_vec)));
+                    let energy = _pair_matrix.sum_energy(&_ref_a, &mol_b);
+                    vertex_b.data.set(energy).unwrap();
+                }
             }
-            // for vertex_b in vertex_a.data.vertices.iter() {
-            //         let q1 = to_neg_zaxis(&vertex_b.pos);
-            //         let q2 = around_z(*omega);
-            //         let q3 = UnitQuaternion::rotation_between(&zaxis, &vertex_a.pos).unwrap();
-            //         let q123 = q1 * q2 * q3;
-            //         let mut mol_b = _ref_b.clone(); // initially at origin
-            //         mol_b.transform(|pos| q123.transform_vector(&(pos + r_vec)));
-            // }
 
             // let uvertex = UnitVector3::new_normalize(vertex_a.pos);
             // }
