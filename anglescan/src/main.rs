@@ -179,9 +179,9 @@ fn do_icoscan(
     rmax: f64,
     dr: f64,
     angle_resolution: f64,
-    _ref_a: Structure,
-    _ref_b: Structure,
-    _pair_matrix: energy::PairMatrix,
+    ref_a: Structure,
+    ref_b: Structure,
+    pair_matrix: energy::PairMatrix,
     _temperature: &f64,
 ) -> std::result::Result<(), anyhow::Error> {
     let distances = iter_num_tools::arange(rmin..rmax, dr).collect_vec();
@@ -207,29 +207,32 @@ fn do_icoscan(
     let to_neg_zaxis = |p| UnitQuaternion::rotation_between(p, &-zaxis).unwrap();
     let around_z = |angle| UnitQuaternion::from_axis_angle(&zaxis, angle);
 
-    for omega in &dihedral_angles {
-        for r in &distances {
-            let table_at_r = table.get(*r).unwrap();
-            let r_vec = Vector3::new(0.0, 0.0, *r);
-
-            let table_a = table_at_r.get(*omega).unwrap();
-            for vertex_a in table_a.vertices.iter() {
-                for vertex_b in vertex_a.data.get().unwrap().vertices.iter() {
-                    let q1 = to_neg_zaxis(&vertex_b.pos);
-                    let q2 = around_z(*omega);
-                    let q3 = UnitQuaternion::rotation_between(&zaxis, &vertex_a.pos).unwrap();
-                    let q123 = q1 * q2 * q3;
-                    let mut mol_b = _ref_b.clone(); // initially at origin
-                    mol_b.transform(|pos| q123.transform_vector(&(pos + r_vec)));
-                    let energy = _pair_matrix.sum_energy(&_ref_a, &mol_b);
-                    vertex_b.data.set(energy).unwrap();
-                }
+    let calc_energy = |omega: f64, r: f64| {
+        let table_at_r = table.get(r).unwrap();
+        let r_vec = Vector3::new(0.0, 0.0, r);
+        let table_a = table_at_r.get(omega).unwrap();
+        for vertex_a in table_a.vertices.iter() {
+            for vertex_b in vertex_a.data.get().unwrap().vertices.iter() {
+                let q1 = to_neg_zaxis(&vertex_b.pos);
+                let q2 = around_z(omega);
+                let q3 = UnitQuaternion::rotation_between(&zaxis, &vertex_a.pos).unwrap();
+                let q123 = q1 * q2 * q3;
+                let mut mol_b = ref_b.clone(); // initially at origin
+                mol_b.transform(|pos| q123.transform_vector(&(pos + r_vec)));
+                let energy = pair_matrix.sum_energy(&ref_a, &mol_b);
+                vertex_b.data.set(energy).unwrap();
             }
-
-            // let uvertex = UnitVector3::new_normalize(vertex_a.pos);
-            // }
         }
-    }
+    };
+
+    dihedral_angles
+        .par_iter()
+        .progress_count(dihedral_angles.len() as u64)
+        .for_each(|omega| {
+            for r in &distances {
+                calc_energy(*omega, *r);
+            }
+        });
     Ok(())
 }
 
