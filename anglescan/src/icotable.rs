@@ -40,14 +40,14 @@ pub struct Vertex<T: Clone + GetSize> {
     #[get_size(size = 24)]
     pub pos: Vector3,
     /// Data associated with the vertex
-    #[get_size(size_fn = get_size_helper)]
+    #[get_size(size_fn = oncelock_size_helper)]
     pub data: OnceLock<T>,
     /// Indices of neighboring vertices
     pub neighbors: Vec<u16>,
 }
 
-fn get_size_helper<T>(value: &T) -> usize {
-    std::mem::size_of::<T>() + value.get_heap_size()
+fn oncelock_size_helper<T: GetSize>(value: &OnceLock<T>) -> usize {
+    std::mem::size_of::<OnceLock<T>>() + value.get().map(|v| v.get_heap_size()).unwrap_or(0)
 }
 
 impl<T: Clone + GetSize> Vertex<T> {
