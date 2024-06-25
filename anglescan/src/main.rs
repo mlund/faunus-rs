@@ -207,6 +207,7 @@ fn do_icoscan(
     let to_neg_zaxis = |p| UnitQuaternion::rotation_between(p, &-zaxis).unwrap();
     let around_z = |angle| UnitQuaternion::from_axis_angle(&zaxis, angle);
 
+    // Calculate energy of all two-body poses for given mass center separation and dihedral angle
     let calc_energy = |omega: f64, r: f64| {
         let table_at_r = table.get(r).unwrap();
         let r_vec = Vector3::new(0.0, 0.0, r);
@@ -225,6 +226,7 @@ fn do_icoscan(
         }
     };
 
+    // Populate 6D table with inter-particle energies
     dihedral_angles
         .par_iter()
         .progress_count(dihedral_angles.len() as u64)
@@ -233,7 +235,37 @@ fn do_icoscan(
                 calc_energy(*omega, *r);
             }
         });
+
+    // Calculate partition function
+    for r in &distances {
+        let mut partition_func = Sample::default();
+        for omega in &dihedral_angles {
+            let r_and_omega = table.get(*r).unwrap().get(*omega).unwrap();
+            for vertex_a in r_and_omega.vertices.iter() {
+                for vertex_b in vertex_a.data.get().unwrap().vertices.iter() {
+                    let energy = vertex_b.data.get().unwrap();
+                    partition_func = partition_func + Sample::new(*energy, *_temperature);
+                }
+            }
+        }
+        println!("{:.2} {:.2}", r, partition_func.free_energy());
+    }
+
     Ok(())
+
+    // let com_scan = distances
+    //     .par_iter()
+    //     .progress_count(distances.len() as u64)
+    //     .map(|r| {
+    //         let r_vec = Vector3::new(0.0, 0.0, *r);
+    //         let sample = scan
+    //             .sample_all_angles(&ref_a, &ref_b, &pair_matrix, &r_vec, *temperature)
+    //             .unwrap();
+    //         (r_vec, sample)
+    //     })
+    //     .collect::<Vec<_>>();
+
+    // report_pmf(com_scan.as_slice(), &PathBuf::from("pmf.dat"));
 }
 
 fn do_anglescan(
