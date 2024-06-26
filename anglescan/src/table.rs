@@ -15,15 +15,30 @@ pub struct PaddedTable<T: Clone> {
 }
 
 impl<T: Clone> PaddedTable<T> {
-    pub fn new(min: f64, max: f64, res: f64, initial_value: T) -> PaddedTable<T> {
-        assert!(min < max && res > 0.0);
-        let n = ((max - min + 2.0 * res) / res + 0.5) as usize;
+    pub fn new(min: f64, max: f64, step: f64, initial_value: T) -> PaddedTable<T> {
+        assert!(min < max && step > 0.0);
+        let n = ((max - min + 2.0 * step) / step + 0.5) as usize;
         Self {
-            min: min - res,
-            _max: max + res,
-            res,
+            min: min - step,
+            _max: max + step,
+            res: step,
             data: vec![initial_value; n],
         }
+    }
+
+    /// Get minimum key value (inclusive)
+    pub fn min_key(&self) -> f64 {
+        self.min + self.res
+    }
+
+    /// Get maximum key value (inclusive)
+    pub fn max_key(&self) -> f64 {
+        self._max - self.res
+    }
+
+    /// Get key spacing
+    pub fn key_step(&self) -> f64 {
+        self.res
     }
 
     /// Convert value to index

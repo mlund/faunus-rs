@@ -211,10 +211,9 @@ fn do_icoscan(
 
     // Calculate energy of all two-body poses for given mass center separation and dihedral angle
     let calc_energy = |omega: f64, r: f64| {
-        let table_at_r = table.get(r).unwrap();
         let r_vec = Vector3::new(0.0, 0.0, r);
-        let table_a = table_at_r.get(omega).unwrap();
-        for vertex_a in table_a.vertices.iter() {
+        let a = table.get(r).unwrap().get(omega).unwrap();
+        for vertex_a in a.vertices.iter() {
             for vertex_b in vertex_a.data.get().unwrap().vertices.iter() {
                 let q1 = to_neg_zaxis(&vertex_b.pos);
                 let q2 = around_z(omega);

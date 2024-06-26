@@ -1,5 +1,6 @@
 use super::{anglescan::*, table::PaddedTable};
 use anyhow::Result;
+use core::f64::consts::PI;
 use get_size::GetSize;
 use hexasphere::{shapes::IcoSphereBase, AdjacencyBuilder, Subdivided};
 use itertools::Itertools;
@@ -19,18 +20,15 @@ pub type Table6D = PaddedTable<PaddedTable<IcoTableOfSpheres>>;
 
 impl Table6D {
     pub fn from_resolution(r_min: f64, r_max: f64, dr: f64, angle_resolution: f64) -> Result<Self> {
-        use core::f64::consts::PI;
         let n_points = (4.0 * PI / angle_resolution.powi(2)).round() as usize;
-        let b = IcoTable::<f64>::from_min_points(n_points)?; // B: 𝜃 and 𝜑
-        let n_points = b.vertices.len();
-        let angle_resolution = (4.0 * PI / n_points as f64).sqrt();
-        log::info!(
-            "Actual angle resolution = {:.2} radians",
-            angle_resolution
-        );
-        let a = IcoTableOfSpheres::from_min_points(n_points, b)?; // A: 𝜃 and 𝜑
-        let o = PaddedTable::<IcoTableOfSpheres>::new(0.0, 2.0 * PI, angle_resolution, a); // 𝜔
-        Ok(Self::new(r_min, r_max, dr, o)) // R
+        let table1 = IcoTable::<f64>::from_min_points(n_points)?; // B: 𝜃 and 𝜑
+                                                                  // update angular resolution according to icosphere
+        let angle_resolution = table1.angle_resolution();
+        let n_points = table1.vertices.len();
+        log::info!("Actual angle resolution = {:.2} radians", angle_resolution);
+        let table2 = IcoTableOfSpheres::from_min_points(n_points, table1)?; // A: 𝜃 and 𝜑
+        let table3 = PaddedTable::<IcoTableOfSpheres>::new(0.0, 2.0 * PI, angle_resolution, table2); // 𝜔
+        Ok(Self::new(r_min, r_max, dr, table3)) // R
     }
 }
 
@@ -118,6 +116,11 @@ impl<T: Clone + GetSize> IcoTable<T> {
         let table = Self::from_icosphere_without_data(icosphere);
         table.set_vertex_data(|_, _| default_data.clone());
         table
+    }
+
+    pub fn angle_resolution(&self) -> f64 {
+        let n_points = self.vertices.len();
+        (4.0 * std::f64::consts::PI / n_points as f64).sqrt()
     }
 
     /// Number of vertices in the table
