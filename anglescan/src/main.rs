@@ -210,7 +210,7 @@ fn do_icoscan(
     let around_z = |angle| UnitQuaternion::from_axis_angle(&zaxis, angle);
 
     // Calculate energy of all two-body poses for given mass center separation and dihedral angle
-    let calc_energy = |omega: f64, r: f64| {
+    let calc_energy = |r: f64, omega: f64| {
         let r_vec = Vector3::new(0.0, 0.0, r);
         let a = table.get(r).unwrap().get(omega).unwrap();
         for vertex_a in a.vertices.iter() {
@@ -218,23 +218,28 @@ fn do_icoscan(
                 let q1 = to_neg_zaxis(&vertex_b.pos);
                 let q2 = around_z(omega);
                 let q3 = UnitQuaternion::rotation_between(&zaxis, &vertex_a.pos).unwrap();
-                let q123 = q1 * q2 * q3;
                 let mut mol_b = ref_b.clone(); // initially at origin
-                mol_b.transform(|pos| q123.transform_vector(&(pos + r_vec)));
+                mol_b.transform(|pos| (q1 * q2).transform_vector(&pos));
+                mol_b.transform(|pos| q3.transform_vector(&(pos + r_vec)));
                 let energy = pair_matrix.sum_energy(&ref_a, &mol_b);
                 vertex_b.data.set(energy).unwrap();
             }
         }
     };
 
-    // Populate 6D table with inter-particle energies
-    dihedral_angles
+    // Pair all mass center separations (r) and dihedral angles (omega)
+    let r_and_omega = distances
+        .iter()
+        .copied()
+        .cartesian_product(dihedral_angles.iter().copied())
+        .collect_vec();
+
+    // Populate 6D table with inter-particle energies (multi-threaded)
+    r_and_omega
         .par_iter()
-        .progress_count(dihedral_angles.len() as u64)
-        .for_each(|omega| {
-            for r in &distances {
-                calc_energy(*omega, *r);
-            }
+        .progress_count(r_and_omega.len() as u64)
+        .for_each(|(r, omega)| {
+            calc_energy(*r, *omega);
         });
 
     // Calculate partition function
