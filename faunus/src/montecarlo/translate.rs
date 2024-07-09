@@ -58,7 +58,7 @@ impl TranslateMolecule {
     }
 
     /// Validate and finalize the move.
-    pub(super) fn finalize(&mut self, context: &impl Context) -> anyhow::Result<()> {
+    pub(crate) fn finalize(&mut self, context: &impl Context) -> anyhow::Result<()> {
         self.molecule_id = context
             .topology()
             .moleculekinds()
@@ -109,8 +109,15 @@ impl crate::Info for TranslateMolecule {
     }
 }
 
-impl<T: Context> super::Move<T> for TranslateMolecule {
-    fn do_move(&mut self, context: &mut T, rng: &mut ThreadRng) -> Option<Change> {
+impl TranslateMolecule {
+    pub(crate) fn do_move(
+        &mut self,
+        context: &mut impl Context,
+        step: &mut usize,
+        rng: &mut ThreadRng,
+    ) -> Option<Change> {
+        *step += 1;
+
         if let Some(index) = self.random_group(context, rng) {
             let displacement =
                 random_unit_vector(rng) * self.max_displacement * 2.0 * (rng.gen::<f64>() - 0.5);
@@ -122,13 +129,13 @@ impl<T: Context> super::Move<T> for TranslateMolecule {
             None
         }
     }
-    fn statistics(&self) -> &MoveStatistics {
+    pub(crate) fn statistics(&self) -> &MoveStatistics {
         &self.statistics
     }
-    fn statistics_mut(&mut self) -> &mut MoveStatistics {
+    pub(crate) fn statistics_mut(&mut self) -> &mut MoveStatistics {
         &mut self.statistics
     }
-    fn frequency(&self) -> Frequency {
+    pub(crate) fn frequency(&self) -> Frequency {
         self.frequency
     }
 }

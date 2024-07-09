@@ -15,10 +15,10 @@
 //! # Support for Monte Carlo sampling
 
 use crate::analysis::{AnalysisCollection, Analyze};
+use crate::propagate::MoveCollection;
 use crate::{time::Timer, Change, Context, Info};
 use average::Mean;
 use log;
-use propagator::Propagator;
 use rand::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -28,7 +28,6 @@ use std::{cmp::Ordering, ops::Neg};
 
 use crate::energy::EnergyChange;
 
-mod propagator;
 mod translate;
 
 pub use translate::*;
@@ -137,12 +136,11 @@ pub enum Frequency {
 
 impl Frequency {
     /// Check if action, typically a move or analysis, should be performed at given step
-    pub fn should_perform(&self, step: usize, rng: &mut ThreadRng) -> bool {
+    pub fn should_perform(&self, step: usize) -> bool {
         match self {
             Frequency::Every(n) => step % n == 0,
-            Frequency::Probability(p) => rng.gen::<f64>() < *p,
             Frequency::Once(n) => step == *n,
-            _ => unimplemented!("Unsupported frequency policy"),
+            _ => unimplemented!("Unsupported frequency policy for `Frequency::should_perform`."),
         }
     }
 }
@@ -236,103 +234,6 @@ impl AcceptanceCriterion for Minimize {
     }
 }
 
-pub trait Move<T>: Info + std::fmt::Debug
-where
-    T: Context,
-{
-    /// Perform a move on given `context`.
-    fn do_move(&mut self, context: &mut T, rng: &mut ThreadRng) -> Option<Change>;
-
-    /// Moves may generate optional bias that should be added to the trial energy
-    /// when determining the acceptance probability.
-    /// It can also be used to force acceptance of a move in e.g. hybrid MD/MC schemes.
-    /// By default, this returns `Bias::None`.
-    #[allow(unused_variables)]
-    fn bias(&self, change: &Change, energies: &NewOld<f64>) -> Bias {
-        Bias::None
-    }
-
-    /// Get statistics for the move
-    fn statistics(&self) -> &MoveStatistics;
-
-    /// Get mutable statistics for the move
-    fn statistics_mut(&mut self) -> &mut MoveStatistics;
-
-    /// Called when the move is accepted
-    ///
-    /// This will update the statistics.
-    /// Often re-implemented to perform additional actions.
-    #[allow(unused_variables)]
-    fn accepted(&mut self, change: &Change, energy_change: f64) {
-        self.statistics_mut().accept(energy_change);
-    }
-
-    /// Called when the move is rejected
-    ///
-    /// This will update the statistics.
-    /// Often re-implemented to perform additional actions.
-    #[allow(unused_variables)]
-    fn rejected(&mut self, change: &Change) {
-        self.statistics_mut().reject();
-    }
-
-    /// Get the move frequency
-    fn frequency(&self) -> Frequency;
-}
-
-/// Collection of moves
-///
-/// # Todo
-/// - `choose` should respect `frequency`
-/// - Should implement serialize, see e.g.
-/// <https://stackoverflow.com/questions/50021897/how-to-implement-serdeserialize-for-a-boxed-trait-object>
-#[derive(Debug)]
-pub struct MoveCollection<T: Context> {
-    moves: Vec<Box<dyn Move<T>>>,
-}
-
-impl<T: Context> Default for MoveCollection<T> {
-    fn default() -> Self {
-        Self { moves: Vec::new() }
-    }
-}
-
-impl<T: Context> MoveCollection<T> {
-    /// Appends a move to the back of the collection.
-    pub fn push(&mut self, m: impl Move<T> + 'static) {
-        self.moves.push(Box::new(m));
-    }
-    /// Picks a random move from the collection.
-    pub fn choose(&mut self, rng: &mut ThreadRng) -> Option<&mut Box<dyn Move<T>>> {
-        self.moves.iter_mut().choose(rng)
-    }
-}
-
-impl<T: Context> MoveCollection<T> {
-    /// Get the collection of moves from an input yaml file.
-    /// This method also requires a Context structure to validate and finalize the moves.
-    pub fn from_yaml(filename: impl AsRef<Path>, context: &T) -> anyhow::Result<MoveCollection<T>> {
-        let yaml = std::fs::read_to_string(filename)?;
-        let full: serde_yaml::Value = serde_yaml::from_str(&yaml)?;
-
-        let propagators_section = full.get("propagators").ok_or(anyhow::Error::msg(
-            "Could not find `propagators` in the YAML file.",
-        ))?;
-
-        let mut propagators: Vec<Propagator> = serde_yaml::from_value(propagators_section.clone())?;
-
-        // validate and finalize all moves
-        propagators
-            .iter_mut()
-            .try_for_each(|x| x.finalize(context))?;
-
-        // convert to trait objects
-        Ok(MoveCollection {
-            moves: propagators.into_iter().map(|x| x.into()).collect(),
-        })
-    }
-}
-
 /// # Monte Carlo simulation instance
 ///
 /// This maintains two [`Context`]s, one for the current state and one for the new state, as
@@ -345,15 +246,13 @@ impl<T: Context> MoveCollection<T> {
 #[derive(Default, Debug)]
 pub struct MarkovChain<T: Context> {
     /// List of moves to perform.
-    moves: MoveCollection<T>,
+    moves: Vec<MoveCollection>,
     /// Pair of contexts, one for the current state and one for the new state.
     context: NewOld<T>,
     /// Current step.
     step: usize,
     /// Maximum number of steps.
     max_steps: usize,
-    /// Random number engine.
-    rng: ThreadRng,
     /// Thermal energy - must be same unit as energy.
     thermal_energy: f64,
     /// Acceptance policy.
@@ -368,13 +267,10 @@ impl<T: Context + 'static> Iterator for MarkovChain<T> {
         if self.step >= self.max_steps {
             return None;
         }
-        self.do_move();
+        self.propagate();
 
         // perform analyses
-        match self
-            .analyses
-            .sample(&self.context.old, self.step, &mut self.rng)
-        {
+        match self.analyses.sample(&self.context.old, self.step) {
             Ok(_) => (),
             Err(e) => return Some(Err(e)),
         }
@@ -398,8 +294,7 @@ impl<T: Context + 'static> MarkovChain<T> {
             max_steps,
             thermal_energy,
             step: 0,
-            rng: rand::thread_rng(),
-            moves: MoveCollection::default(),
+            moves: Vec::default(),
             criterion: Box::<MetropolisHastings>::default(),
             analyses: AnalysisCollection::default(),
         }
@@ -411,22 +306,16 @@ impl<T: Context + 'static> MarkovChain<T> {
     pub fn set_thermal_energy(&mut self, thermal_energy: f64) {
         self.thermal_energy = thermal_energy;
     }
-    /// Set random number generator
-    pub fn set_rng(&mut self, rng: ThreadRng) {
-        self.rng = rng;
-    }
-    /// Append a move to the back of the collection.
-    pub fn add_move(&mut self, m: impl Move<T> + 'static) {
-        self.moves.push(m);
-    }
-
     /// Append an analysis to the back of the collection.
     pub fn add_analysis(&mut self, analysis: Box<dyn Analyze<T>>) {
         self.analyses.push(analysis)
     }
 
-    fn do_move(&mut self) {
-        if let Some(mv) = self.moves.choose(&mut self.rng) {
+    /// Perform the specified moves.
+    fn propagate(&mut self) {
+        todo!()
+
+        /*if let Some(mv) = self.moves.choose(&mut self.rng) {
             let change = mv.do_move(&mut self.context.new, &mut self.rng).unwrap();
             self.context.new.update(&change).unwrap();
             let energy = NewOld::<f64>::from(
@@ -456,7 +345,7 @@ impl<T: Context + 'static> MarkovChain<T> {
                     .sync_from(&self.context.old, &change)
                     .unwrap();
             }
-        }
+        }*/
     }
 }
 
@@ -501,7 +390,7 @@ mod tests {
 
     use super::*;
 
-    #[test]
+    /*#[test]
     fn parse_moves() {
         let mut rng = rand::thread_rng();
         let context = ReferencePlatform::new(
@@ -519,5 +408,5 @@ mod tests {
             moves.moves[1].frequency(),
             Frequency::Probability(0.5)
         ));
-    }
+    }*/
 }

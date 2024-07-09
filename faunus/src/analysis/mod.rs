@@ -18,7 +18,6 @@ use super::montecarlo::Frequency;
 use crate::{Context, Info};
 use anyhow::Result;
 use core::fmt::Debug;
-use rand::rngs::ThreadRng;
 
 /// Collection of analysis objects.
 pub type AnalysisCollection<T> = Vec<Box<dyn Analyze<T>>>;
@@ -31,7 +30,7 @@ pub trait Analyze<T: Context>: Debug + Info {
     fn frequency(&self) -> Frequency;
 
     /// Sample system.
-    fn sample(&mut self, context: &T, step: usize, rng: &mut ThreadRng) -> Result<()>;
+    fn sample(&mut self, context: &T, step: usize) -> Result<()>;
 
     /// Total number of samples which is the sum of successful calls to `sample()`.
     fn num_samples(&self) -> usize;
@@ -50,9 +49,8 @@ impl<T: Context> crate::Info for AnalysisCollection<T> {
 }
 
 impl<T: Context> Analyze<T> for AnalysisCollection<T> {
-    fn sample(&mut self, context: &T, step: usize, rng: &mut ThreadRng) -> Result<()> {
-        self.iter_mut()
-            .try_for_each(|a| a.sample(context, step, rng))
+    fn sample(&mut self, context: &T, step: usize) -> Result<()> {
+        self.iter_mut().try_for_each(|a| a.sample(context, step))
     }
     /// Summed number of samples for all analysis objects
     fn num_samples(&self) -> usize {
@@ -100,8 +98,8 @@ impl crate::Info for StructureWriter {
 
 #[cfg(feature = "chemfiles")]
 impl<T: Context> Analyze<T> for StructureWriter {
-    fn sample(&mut self, context: &T, step: usize, rng: &mut ThreadRng) -> anyhow::Result<()> {
-        if !self.frequency.should_perform(step, rng) {
+    fn sample(&mut self, context: &T, step: usize) -> anyhow::Result<()> {
+        if !self.frequency.should_perform(step) {
             return Ok(());
         }
 
