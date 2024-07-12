@@ -15,20 +15,15 @@
 //! Reading Monte Carlo moves and MD propagators.
 
 use crate::{
-    montecarlo::{Bias, Frequency, MoveStatistics, NewOld},
+    analysis::{AnalysisCollection, Analyze},
+    energy::EnergyChange,
+    montecarlo::{AcceptanceCriterion, Bias, MoveStatistics, NewOld},
     Change, Context, Info,
 };
+use core::fmt::Debug;
+use rand::prelude::SliceRandom;
 use rand::rngs::ThreadRng;
 use serde::{Deserialize, Serialize};
-
-/// Collection of moves and their properties.
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct MoveCollection {
-    selection: MovesSelection,
-    repeat: Option<usize>,
-    moves: Vec<Move>,
-}
 
 /// All possible supported moves.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -36,10 +31,165 @@ pub enum Move {
     TranslateMolecule(crate::montecarlo::TranslateMolecule),
 }
 
+/// Specifies how many moves should be performed,
+/// what moves can be performed and how they should be selected.
+#[derive(Debug, Serialize, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+pub struct Propagate {
+    #[serde(rename = "repeat")]
+    #[serde(default)]
+    max_repeats: usize,
+    #[serde(skip)]
+    current_repeat: usize,
+    #[serde(default)]
+    seed: Seed,
+    #[serde(skip)]
+    rng: ThreadRng,
+    #[serde(default)]
+    move_collections: Vec<MoveCollection>,
+}
+
+impl Propagate {
+    /// Perform one 'propagate' cycle.
+    ///
+    /// ## Returns
+    /// - `true` if the cycle was performed successfully and the simulation should continue.
+    /// - `false` if the simulation is finished.
+    /// - Error if some issue occured.
+    pub fn propagate<C: Context>(
+        &mut self,
+        context: &mut NewOld<C>,
+        criterion: &AcceptanceCriterion,
+        thermal_energy: f64,
+        step: &mut usize,
+        analyses: &mut AnalysisCollection<C>,
+    ) -> anyhow::Result<bool> {
+        if self.current_repeat >= self.max_repeats {
+            return Ok(false);
+        }
+
+        for collection in self.move_collections.iter_mut() {
+            collection.propagate(
+                context,
+                criterion,
+                thermal_energy,
+                step,
+                &mut self.rng,
+                analyses,
+            )?;
+        }
+
+        Ok(true)
+    }
+}
+
+/// Collection of moves and their properties.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct MoveCollection {
+    /// The way moves should be selected from the collection.
+    selection: MovesSelection,
+    /// How many moves should be selected per one propagate cycle.
+    #[serde(default = "default_repeat")]
+    repeat: usize,
+    /// List of moves.
+    moves: Vec<Move>,
+}
+
+/// Default value of `repeat` for the `MoveCollection`.
+fn default_repeat() -> usize {
+    1
+}
+
+impl MoveCollection {
+    /// Select move from the `MoveCollection` and perform it. Repeat if requested.
+    pub(crate) fn propagate<C: Context>(
+        &mut self,
+        context: &mut NewOld<C>,
+        criterion: &AcceptanceCriterion,
+        thermal_energy: f64,
+        step: &mut usize,
+        rng: &mut ThreadRng,
+        analyses: &mut AnalysisCollection<C>,
+    ) -> anyhow::Result<()> {
+        for _ in 0..self.repeat {
+            match self.selection {
+                MovesSelection::Stochastic => self.propagate_stochastic(
+                    context,
+                    criterion,
+                    thermal_energy,
+                    step,
+                    rng,
+                    analyses,
+                ),
+                MovesSelection::Deterministic => self.propagate_deterministic(
+                    context,
+                    criterion,
+                    thermal_energy,
+                    step,
+                    rng,
+                    analyses,
+                ),
+            }?
+        }
+
+        Ok(())
+    }
+
+    /// Attempt to perform selected moves of the collection.
+    fn propagate_stochastic<C: Context>(
+        &mut self,
+        context: &mut NewOld<C>,
+        criterion: &AcceptanceCriterion,
+        thermal_energy: f64,
+        step: &mut usize,
+        rng: &mut ThreadRng,
+        analyses: &mut AnalysisCollection<C>,
+    ) -> anyhow::Result<()> {
+        for _ in 0..self.repeat {
+            let selected = self.moves.choose_weighted_mut(rng, |mv| mv.weight())?;
+            selected.do_move(context, criterion, thermal_energy, step, rng)?;
+
+            // perform analyses
+            match analyses.sample(&context.old, *step) {
+                Ok(_) => (),
+                Err(e) => return Err(e),
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Attempt to perform all moves of the collection.
+    fn propagate_deterministic<C: Context>(
+        &mut self,
+        context: &mut NewOld<C>,
+        criterion: &AcceptanceCriterion,
+        thermal_energy: f64,
+        step: &mut usize,
+        rng: &mut ThreadRng,
+        analyses: &mut AnalysisCollection<C>,
+    ) -> anyhow::Result<()> {
+        for _ in 0..self.repeat {
+            for mv in self.moves.iter_mut() {
+                mv.do_move(context, criterion, thermal_energy, step, rng)?;
+
+                // perform analyses
+                match analyses.sample(&context.old, *step) {
+                    Ok(_) => (),
+                    Err(e) => return Err(e),
+                }
+            }
+        }
+
+        Ok(())
+    }
+}
+
 /// The method for selecting moves from the collection.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub(crate) enum MovesSelection {
-    Stochastic { seed: Seed },
+    Stochastic,
     Deterministic,
 }
 
@@ -52,15 +202,53 @@ pub(crate) enum Seed {
 }
 
 impl Move {
-    /// Perform a move on given `context`.
-    pub fn do_move(
+    /// Attempts to perform the move.
+    /// Consists of proposing the move, accepting/rejecting it and updating the context.
+    /// This process is repeated N times, depending on the characteristics of the move.
+    fn do_move(
+        &mut self,
+        context: &mut NewOld<impl Context>,
+        criterion: &AcceptanceCriterion,
+        thermal_energy: f64,
+        step: &mut usize,
+        rng: &mut ThreadRng,
+    ) -> anyhow::Result<()> {
+        for _ in 0..self.repeat() {
+            let change = self
+                .propose_move(&mut context.new, step, rng)
+                .ok_or(anyhow::anyhow!("Could not propose a move."))?;
+            context.new.update(&change)?;
+
+            let energy = NewOld::<f64>::from(
+                context.new.hamiltonian().energy(&context.new, &change),
+                context.old.hamiltonian().energy(&context.old, &change),
+            );
+            let bias = self.bias(&change, &energy);
+
+            if criterion.accept(energy, bias, thermal_energy, rng) {
+                self.accepted(&change, energy.difference());
+                context.old.sync_from(&context.new, &change)?;
+            } else {
+                self.rejected(&change);
+                context.new.sync_from(&context.old, &change)?;
+            }
+        }
+
+        *step += self.step_by();
+
+        Ok(())
+    }
+
+    /// Propose a move on the given `context`.
+    /// This modifies the context and returns the proposed change.
+    fn propose_move(
         &mut self,
         context: &mut impl Context,
         step: &mut usize,
         rng: &mut ThreadRng,
     ) -> Option<Change> {
         match self {
-            Move::TranslateMolecule(x) => x.do_move(context, step, rng),
+            Move::TranslateMolecule(x) => x.propose_move(context, step, rng),
         }
     }
 
@@ -69,18 +257,18 @@ impl Move {
     /// It can also be used to force acceptance of a move in e.g. hybrid MD/MC schemes.
     /// By default, this returns `Bias::None`.
     #[allow(unused_variables)]
-    pub fn bias(&self, change: &Change, energies: &NewOld<f64>) -> Bias {
+    fn bias(&self, change: &Change, energies: &NewOld<f64>) -> Bias {
         Bias::None
     }
     /// Get statistics for the move.
-    pub fn statistics(&self) -> &MoveStatistics {
+    fn statistics(&self) -> &MoveStatistics {
         match self {
             Move::TranslateMolecule(x) => x.statistics(),
         }
     }
 
     /// Get mutable statistics for the move.
-    pub fn statistics_mut(&mut self) -> &mut MoveStatistics {
+    fn statistics_mut(&mut self) -> &mut MoveStatistics {
         match self {
             Move::TranslateMolecule(x) => x.statistics_mut(),
         }
@@ -90,7 +278,7 @@ impl Move {
     ///
     /// This will update the statistics.
     #[allow(unused_variables)]
-    pub fn accepted(&mut self, change: &Change, energy_change: f64) {
+    fn accepted(&mut self, change: &Change, energy_change: f64) {
         self.statistics_mut().accept(energy_change);
     }
 
@@ -98,14 +286,14 @@ impl Move {
     ///
     /// This will update the statistics.
     #[allow(unused_variables)]
-    pub fn rejected(&mut self, change: &Change) {
+    fn rejected(&mut self, change: &Change) {
         self.statistics_mut().reject();
     }
 
-    /// Get the frequency of the move.
-    pub fn frequency(&self) -> Frequency {
+    /// Get the weight of the move.
+    fn weight(&self) -> f64 {
         match self {
-            Move::TranslateMolecule(x) => x.frequency(),
+            Move::TranslateMolecule(x) => x.weight(),
         }
     }
 
@@ -113,6 +301,20 @@ impl Move {
     fn finalize(&mut self, context: &impl Context) -> anyhow::Result<()> {
         match self {
             Move::TranslateMolecule(x) => x.finalize(context),
+        }
+    }
+
+    /// How many times the move should be repeated upon selection.
+    fn repeat(&self) -> usize {
+        match self {
+            Move::TranslateMolecule(_) => 1,
+        }
+    }
+
+    /// The number of steps to move forward after attempting the move.
+    fn step_by(&self) -> usize {
+        match self {
+            Move::TranslateMolecule(_) => 1,
         }
     }
 }

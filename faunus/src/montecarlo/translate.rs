@@ -34,70 +34,11 @@ pub struct TranslateMolecule {
     /// Maximum displacement.
     #[serde(alias = "dp")]
     max_displacement: f64,
-    /// Move frequency.
-    frequency: Frequency,
+    /// Move selection weight.
+    weight: f64,
     /// Move statisticcs.
     #[serde(skip_deserializing)]
     statistics: MoveStatistics,
-}
-
-impl TranslateMolecule {
-    pub fn new(
-        molecule_name: &str,
-        molecule_id: usize,
-        max_displacement: f64,
-        frequency: Frequency,
-    ) -> Self {
-        Self {
-            molecule_name: molecule_name.to_owned(),
-            molecule_id,
-            max_displacement,
-            frequency,
-            statistics: MoveStatistics::default(),
-        }
-    }
-
-    /// Validate and finalize the move.
-    pub(crate) fn finalize(&mut self, context: &impl Context) -> anyhow::Result<()> {
-        self.molecule_id = context
-            .topology()
-            .moleculekinds()
-            .iter()
-            .position(|x| x.name() == &self.molecule_name)
-            .ok_or(anyhow::Error::msg(
-                "Molecule kind in the definition of 'TranslateMolecule' move does not exist.",
-            ))?;
-
-        Ok(())
-    }
-
-    /// Pick a random group index with the correct molecule type
-    fn random_group(&self, context: &impl Context, rng: &mut ThreadRng) -> Option<usize> {
-        let select = GroupSelection::ByMoleculeId(self.molecule_id);
-        context.select(&select).iter().copied().choose(rng)
-    }
-}
-
-#[test]
-fn test_finalize() {
-    use crate::platform::reference::ReferencePlatform;
-
-    let mut rng = rand::thread_rng();
-    let context = ReferencePlatform::new(
-        "tests/files/topology_pass.yaml",
-        Some("tests/files/structure.xyz"),
-        &mut rng,
-    )
-    .unwrap();
-
-    let mut propagator = TranslateMolecule::new("MOL2", 0, 0.5, super::Frequency::Every(4));
-
-    propagator.finalize(&context).unwrap();
-
-    assert_eq!(propagator.molecule_name, "MOL2");
-    assert_eq!(propagator.molecule_id, 1);
-    assert_eq!(propagator.max_displacement, 0.5);
-    assert!(matches!(propagator.frequency, super::Frequency::Every(4)));
 }
 
 impl crate::Info for TranslateMolecule {
@@ -110,7 +51,28 @@ impl crate::Info for TranslateMolecule {
 }
 
 impl TranslateMolecule {
-    pub(crate) fn do_move(
+    pub fn new(
+        molecule_name: &str,
+        molecule_id: usize,
+        max_displacement: f64,
+        weight: f64,
+    ) -> Self {
+        Self {
+            molecule_name: molecule_name.to_owned(),
+            molecule_id,
+            max_displacement,
+            weight,
+            statistics: MoveStatistics::default(),
+        }
+    }
+
+    /// Pick a random group index with the correct molecule type
+    fn random_group(&self, context: &impl Context, rng: &mut ThreadRng) -> Option<usize> {
+        let select = GroupSelection::ByMoleculeId(self.molecule_id);
+        context.select(&select).iter().copied().choose(rng)
+    }
+
+    pub(crate) fn propose_move(
         &mut self,
         context: &mut impl Context,
         step: &mut usize,
@@ -135,7 +97,43 @@ impl TranslateMolecule {
     pub(crate) fn statistics_mut(&mut self) -> &mut MoveStatistics {
         &mut self.statistics
     }
-    pub(crate) fn frequency(&self) -> Frequency {
-        self.frequency
+    pub(crate) fn weight(&self) -> f64 {
+        self.weight
     }
+
+    /// Validate and finalize the move.
+    pub(crate) fn finalize(&mut self, context: &impl Context) -> anyhow::Result<()> {
+        self.molecule_id = context
+            .topology()
+            .moleculekinds()
+            .iter()
+            .position(|x| x.name() == &self.molecule_name)
+            .ok_or(anyhow::Error::msg(
+                "Molecule kind in the definition of 'TranslateMolecule' move does not exist.",
+            ))?;
+
+        Ok(())
+    }
+}
+
+#[test]
+fn test_finalize() {
+    use crate::platform::reference::ReferencePlatform;
+
+    let mut rng = rand::thread_rng();
+    let context = ReferencePlatform::new(
+        "tests/files/topology_pass.yaml",
+        Some("tests/files/structure.xyz"),
+        &mut rng,
+    )
+    .unwrap();
+
+    let mut propagator = TranslateMolecule::new("MOL2", 0, 0.5, 4.0);
+
+    propagator.finalize(&context).unwrap();
+
+    assert_eq!(propagator.molecule_name, "MOL2");
+    assert_eq!(propagator.molecule_id, 1);
+    assert_eq!(propagator.max_displacement, 0.5);
+    assert_eq!(propagator.weight, 4.0);
 }

@@ -15,7 +15,7 @@
 //! # Support for Monte Carlo sampling
 
 use crate::analysis::{AnalysisCollection, Analyze};
-use crate::propagate::MoveCollection;
+use crate::propagate::{MoveCollection, Propagate};
 use crate::{time::Timer, Change, Context, Info};
 use average::Mean;
 use log;
@@ -126,8 +126,6 @@ pub enum Frequency {
     Every(usize),
     /// With probability `p` regardless of number of affected molecules or atoms
     Probability(f64),
-    /// With probability `p` for each affected molecule or atom
-    Sweep(f64),
     /// Once at step `n`
     Once(usize),
     /// Once at the very last step
@@ -145,92 +143,64 @@ impl Frequency {
     }
 }
 
-/// Interface for acceptance criterion for Monte Carlo moves
-trait AcceptanceCriterion {
+/// All possible acceptance criteria for Monte Carlo moves
+#[derive(Clone, Debug, Default, Serialize, Deserialize, Copy)]
+pub enum AcceptanceCriterion {
+    #[default]
+    /// Metropolis-Hastings acceptance criterion
+    /// More information: <https://en.wikipedia.org/wiki/Metropolis%E2%80%93Hastings_algorithm>
+    MetropolisHastings,
+    /// Energy minimization acceptance criterion
+    /// This will always accept a move if the new energy is lower than the old energy.
+    Minimize,
+}
+
+impl AcceptanceCriterion {
     /// Acceptance criterion based on an old and new energy.
     ///
     /// The energies are normalized by the given thermal energy, _kT_,.
-    fn accept(
-        &self,
-        energies: NewOld<f64>,
-        bias: Bias,
-        thermal_energy: f64,
-        rng: &mut ThreadRng,
-    ) -> bool;
-}
-
-impl Default for Box<dyn AcceptanceCriterion> {
-    fn default() -> Self {
-        Box::<MetropolisHastings>::default()
-    }
-}
-
-impl std::fmt::Debug for Box<dyn AcceptanceCriterion> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("AcceptanceCriterion").finish()
-    }
-}
-
-/// Metropolis-Hastings acceptance criterion
-///
-/// More information: <https://en.wikipedia.org/wiki/Metropolis%E2%80%93Hastings_algorithm>
-#[derive(Clone, Debug, Default, Serialize, Deserialize, Copy)]
-pub struct MetropolisHastings {}
-
-impl AcceptanceCriterion for MetropolisHastings {
-    fn accept(
+    pub(crate) fn accept(
         &self,
         energy: NewOld<f64>,
         bias: Bias,
         thermal_energy: f64,
         rng: &mut ThreadRng,
     ) -> bool {
-        // useful for hard-sphere systems where initial configurations may overlap
-        if energy.old.is_infinite() && energy.new.is_finite() {
-            log::trace!("Accepting infinite -> finite energy change");
-            return true;
-        }
-        // always accept if negative infinity
-        if energy.new.is_infinite() && energy.new.is_sign_negative() {
-            return true;
-        }
+        match self {
+            AcceptanceCriterion::MetropolisHastings => {
+                // useful for hard-sphere systems where initial configurations may overlap
+                if energy.old.is_infinite() && energy.new.is_finite() {
+                    log::trace!("Accepting infinite -> finite energy change");
+                    return true;
+                }
+                // always accept if negative infinity
+                if energy.new.is_infinite() && energy.new.is_sign_negative() {
+                    return true;
+                }
 
-        let du = energy.difference()
-            + match bias {
-                Bias::Energy(bias) => bias,
-                Bias::None => 0.0,
-                Bias::ForceAccept => return true,
-            };
-        let p = f64::min(1.0, f64::exp(-du / thermal_energy));
-        rng.gen::<f64>() < p
-    }
-}
-
-/// Energy minimization acceptance criterion
-///
-/// This will always accept a move if the new energy is lower than the old energy.
-#[derive(Clone, Debug, Default, Serialize, Deserialize, Copy)]
-pub struct Minimize {}
-
-impl AcceptanceCriterion for Minimize {
-    #[allow(unused_variables)]
-    fn accept(
-        &self,
-        energy: NewOld<f64>,
-        bias: Bias,
-        thermal_energy: f64,
-        rng: &mut ThreadRng,
-    ) -> bool {
-        if energy.old.is_infinite() && energy.new.is_finite() {
-            return true;
-        }
-        energy.difference()
-            + match bias {
-                Bias::Energy(bias) => bias,
-                Bias::None => 0.0,
-                Bias::ForceAccept => return true,
+                let du = energy.difference()
+                    + match bias {
+                        Bias::Energy(bias) => bias,
+                        Bias::None => 0.0,
+                        Bias::ForceAccept => return true,
+                    };
+                let p = f64::min(1.0, f64::exp(-du / thermal_energy));
+                rng.gen::<f64>() < p
             }
-            <= 0.0
+
+            AcceptanceCriterion::Minimize => {
+                if energy.old.is_infinite() && energy.new.is_finite() {
+                    return true;
+                }
+                energy.difference()
+                    + match bias {
+                        Bias::Energy(bias) => bias,
+                        Bias::None => 0.0,
+                        Bias::ForceAccept => return true,
+                    }
+                    <= 0.0
+            }
+        }
     }
 }
 
@@ -242,21 +212,19 @@ impl AcceptanceCriterion for Minimize {
 /// new context is synced to the old context. If the move is rejected, the new context is
 /// discarded.
 ///
-/// The chain implements `Iterator` where each iteration corresponds to a single Monte Carlo step.
-#[derive(Default, Debug)]
+/// The chain implements `Iterator` where each iteration corresponds to one 'propagate' cycle.
+#[derive(Debug)]
 pub struct MarkovChain<T: Context> {
-    /// List of moves to perform.
-    moves: Vec<MoveCollection>,
+    /// Description of moves to perform.
+    propagate: Propagate,
     /// Pair of contexts, one for the current state and one for the new state.
     context: NewOld<T>,
     /// Current step.
     step: usize,
-    /// Maximum number of steps.
-    max_steps: usize,
     /// Thermal energy - must be same unit as energy.
     thermal_energy: f64,
     /// Acceptance policy.
-    criterion: Box<dyn AcceptanceCriterion>,
+    criterion: AcceptanceCriterion,
     /// Collection of analyses to perform during the simulation.
     analyses: AnalysisCollection<T>,
 }
@@ -264,23 +232,17 @@ pub struct MarkovChain<T: Context> {
 impl<T: Context + 'static> Iterator for MarkovChain<T> {
     type Item = anyhow::Result<usize>;
     fn next(&mut self) -> Option<Self::Item> {
-        if self.step >= self.max_steps {
-            return None;
+        match self.propagate.propagate(
+            &mut self.context,
+            &self.criterion,
+            self.thermal_energy,
+            &mut self.step,
+            &mut self.analyses,
+        ) {
+            Err(e) => Some(Err(e)),
+            Ok(true) => Some(Ok(self.step)),
+            Ok(false) => None,
         }
-        self.propagate();
-
-        // perform analyses
-        match self.analyses.sample(&self.context.old, self.step) {
-            Ok(_) => (),
-            Err(e) => return Some(Err(e)),
-        }
-
-        self.step += 1;
-        Some(Ok(self.step))
-    }
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        let size = self.max_steps - self.step;
-        (size, Some(size))
     }
 }
 
@@ -291,11 +253,10 @@ impl<T: Context + 'static> MarkovChain<T> {
     pub fn new(context: T, max_steps: usize, thermal_energy: f64) -> Self {
         Self {
             context: NewOld::from(context.clone(), context),
-            max_steps,
             thermal_energy,
             step: 0,
-            moves: Vec::default(),
-            criterion: Box::<MetropolisHastings>::default(),
+            propagate: Propagate::default(),
+            criterion: AcceptanceCriterion::MetropolisHastings,
             analyses: AnalysisCollection::default(),
         }
     }
@@ -309,43 +270,6 @@ impl<T: Context + 'static> MarkovChain<T> {
     /// Append an analysis to the back of the collection.
     pub fn add_analysis(&mut self, analysis: Box<dyn Analyze<T>>) {
         self.analyses.push(analysis)
-    }
-
-    /// Perform the specified moves.
-    fn propagate(&mut self) {
-        todo!()
-
-        /*if let Some(mv) = self.moves.choose(&mut self.rng) {
-            let change = mv.do_move(&mut self.context.new, &mut self.rng).unwrap();
-            self.context.new.update(&change).unwrap();
-            let energy = NewOld::<f64>::from(
-                self.context
-                    .new
-                    .hamiltonian()
-                    .energy(&self.context.new, &change),
-                self.context
-                    .old
-                    .hamiltonian()
-                    .energy(&self.context.old, &change),
-            );
-            let bias = mv.bias(&change, &energy);
-            if self
-                .criterion
-                .accept(energy, bias, self.thermal_energy, &mut self.rng)
-            {
-                mv.accepted(&change, energy.difference());
-                self.context
-                    .old
-                    .sync_from(&self.context.new, &change)
-                    .unwrap();
-            } else {
-                mv.rejected(&change);
-                self.context
-                    .new
-                    .sync_from(&self.context.old, &change)
-                    .unwrap();
-            }
-        }*/
     }
 }
 
