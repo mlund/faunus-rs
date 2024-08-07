@@ -482,4 +482,19 @@ moves:
         assert_eq!(deterministic_collection.repeat, 5);
         assert_eq!(deterministic_collection.moves.len(), 1);
     }
+
+    #[test]
+    fn propagate_parse_fail() {
+        let mut rng = rand::thread_rng();
+        let context = ReferencePlatform::new(
+            "tests/files/topology_invalid_propagate.yaml",
+            Some("tests/files/structure.xyz"),
+            &mut rng,
+        )
+        .unwrap();
+
+        assert!(
+            Propagate::from_file("tests/files/topology_invalid_propagate.yaml", &context).is_err()
+        );
+    }
 }
