@@ -72,7 +72,7 @@ impl TranslateMolecule {
     }
 
     /// Pick a random group index with the correct molecule type
-    fn random_group(&self, context: &impl Context, rng: &mut ThreadRng) -> Option<usize> {
+    fn random_group(&self, context: &impl Context, rng: &mut impl Rng) -> Option<usize> {
         let select = GroupSelection::ByMoleculeId(self.molecule_id);
         context.select(&select).iter().copied().choose(rng)
     }
@@ -81,11 +81,8 @@ impl TranslateMolecule {
     pub(crate) fn propose_move(
         &mut self,
         context: &mut impl Context,
-        step: &mut usize,
-        rng: &mut ThreadRng,
+        rng: &mut impl Rng,
     ) -> Option<Change> {
-        *step += 1;
-
         if let Some(index) = self.random_group(context, rng) {
             let displacement =
                 random_unit_vector(rng) * self.max_displacement * 2.0 * (rng.gen::<f64>() - 0.5);

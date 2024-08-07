@@ -138,7 +138,7 @@ impl AcceptanceCriterion {
         energy: NewOld<f64>,
         bias: Bias,
         thermal_energy: f64,
-        rng: &mut ThreadRng,
+        rng: &mut impl Rng,
     ) -> bool {
         match self {
             AcceptanceCriterion::MetropolisHastings => {
@@ -276,32 +276,3 @@ pub fn entropy_bias(n: NewOld<usize>, volume: NewOld<f64>) -> f64 {
             .neg(),
     }
 }
-
-/*
-#[cfg(test)]
-mod tests {
-    use crate::platform::reference::ReferencePlatform;
-
-    use super::*;
-
-    #[test]
-    fn parse_moves() {
-        let mut rng = rand::thread_rng();
-        let context = ReferencePlatform::new(
-            "tests/files/topology_pass.yaml",
-            Some("tests/files/structure.xyz"),
-            &mut rng,
-        )
-        .unwrap();
-
-        let moves = MoveCollection::from_yaml("tests/files/topology_pass.yaml", &context).unwrap();
-
-        assert_eq!(moves.moves.len(), 2);
-        assert!(matches!(moves.moves[0].frequency(), Frequency::Every(2)));
-        assert!(matches!(
-            moves.moves[1].frequency(),
-            Frequency::Probability(0.5)
-        ));
-    }
-}
-*/

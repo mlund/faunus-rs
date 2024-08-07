@@ -21,8 +21,8 @@ use crate::{
     Change, Context, Info,
 };
 use core::fmt::Debug;
-use rand::prelude::SliceRandom;
-use rand::rngs::ThreadRng;
+use rand::Rng;
+use rand::{prelude::SliceRandom, rngs::StdRng};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
@@ -49,7 +49,7 @@ pub struct Propagate {
     seed: Seed,
     #[serde(skip)]
     /// Random number generator used for selecting the moves.
-    rng: ThreadRng,
+    rng: Option<StdRng>,
     #[serde(default)]
     #[serde(rename = "collections")]
     /// Collections of moves to be performed.
@@ -88,10 +88,14 @@ impl Propagate {
                 &self.criterion,
                 thermal_energy,
                 step,
-                &mut self.rng,
+                self.rng
+                    .as_mut()
+                    .expect("Random number generator should already be seeded."),
                 analyses,
             )?;
         }
+
+        self.current_repeat += 1;
 
         Ok(true)
     }
@@ -122,6 +126,12 @@ impl Propagate {
             .iter_mut()
             .try_for_each(|x| x.finalize(context))?;
 
+        // seed the random number generator
+        match propagate.seed {
+            Seed::Hardware => propagate.rng = Some(rand::SeedableRng::from_entropy()),
+            Seed::Fixed(x) => propagate.rng = Some(rand::SeedableRng::seed_from_u64(x as u64)),
+        }
+
         Ok(propagate)
     }
 }
@@ -147,7 +157,7 @@ impl StochasticCollection {
         criterion: &AcceptanceCriterion,
         thermal_energy: f64,
         step: &mut usize,
-        rng: &mut ThreadRng,
+        rng: &mut impl Rng,
         analyses: &mut AnalysisCollection<C>,
     ) -> anyhow::Result<()> {
         for _ in 0..self.repeat {
@@ -186,7 +196,7 @@ impl DeterministicCollection {
         criterion: &AcceptanceCriterion,
         thermal_energy: f64,
         step: &mut usize,
-        rng: &mut ThreadRng,
+        rng: &mut impl Rng,
         analyses: &mut AnalysisCollection<C>,
     ) -> anyhow::Result<()> {
         for _ in 0..self.repeat {
@@ -219,7 +229,7 @@ impl MoveCollection {
         criterion: &AcceptanceCriterion,
         thermal_energy: f64,
         step: &mut usize,
-        rng: &mut ThreadRng,
+        rng: &mut impl Rng,
         analyses: &mut AnalysisCollection<C>,
     ) -> anyhow::Result<()> {
         match self {
@@ -274,11 +284,11 @@ impl Move {
         criterion: &AcceptanceCriterion,
         thermal_energy: f64,
         step: &mut usize,
-        rng: &mut ThreadRng,
+        rng: &mut impl Rng,
     ) -> anyhow::Result<()> {
         for _ in 0..self.repeat() {
             let change = self
-                .propose_move(&mut context.new, step, rng)
+                .propose_move(&mut context.new, rng)
                 .ok_or(anyhow::anyhow!("Could not propose a move."))?;
             context.new.update(&change)?;
 
@@ -305,14 +315,9 @@ impl Move {
 
     /// Propose a move on the given `context`.
     /// This modifies the context and returns the proposed change.
-    fn propose_move(
-        &mut self,
-        context: &mut impl Context,
-        step: &mut usize,
-        rng: &mut ThreadRng,
-    ) -> Option<Change> {
+    fn propose_move(&mut self, context: &mut impl Context, rng: &mut impl Rng) -> Option<Change> {
         match self {
-            Move::TranslateMolecule(x) => x.propose_move(context, step, rng),
+            Move::TranslateMolecule(x) => x.propose_move(context, rng),
         }
     }
 

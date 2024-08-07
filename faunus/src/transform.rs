@@ -22,7 +22,7 @@ use rand::prelude::*;
 /// Generate a random unit vector by sphere picking
 ///
 /// See also: <https://docs.rs/rand_distr/0.4.0/rand_distr/struct.UnitSphere.html>
-pub fn random_unit_vector(rng: &mut ThreadRng) -> Point {
+pub fn random_unit_vector(rng: &mut impl Rng) -> Point {
     const RADIUS_SQUARED: f64 = 0.5 * 0.5;
     loop {
         let p = Point::new(
