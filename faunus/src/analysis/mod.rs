@@ -14,10 +14,34 @@
 
 //! # System analysis and reporting
 
-use super::montecarlo::Frequency;
 use crate::{Context, Info};
 use anyhow::Result;
 use core::fmt::Debug;
+use serde::{Deserialize, Serialize};
+
+/// Frequency of analysis.
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+pub enum Frequency {
+    /// Every `n` steps
+    Every(usize),
+    /// With probability `p` regardless of number of affected molecules or atoms
+    Probability(f64),
+    /// Once at step `n`
+    Once(usize),
+    /// Once at the very last step
+    End,
+}
+
+impl Frequency {
+    /// Check if action, typically a move or analysis, should be performed at given step
+    pub fn should_perform(&self, step: usize) -> bool {
+        match self {
+            Frequency::Every(n) => step % n == 0,
+            Frequency::Once(n) => step == *n,
+            _ => unimplemented!("Unsupported frequency policy for `Frequency::should_perform`."),
+        }
+    }
+}
 
 /// Collection of analysis objects.
 pub type AnalysisCollection<T> = Vec<Box<dyn Analyze<T>>>;

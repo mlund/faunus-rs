@@ -15,18 +15,15 @@
 //! # Support for Monte Carlo sampling
 
 use crate::analysis::{AnalysisCollection, Analyze};
-use crate::propagate::{MoveCollection, Propagate};
-use crate::{time::Timer, Change, Context, Info};
+use crate::propagate::Propagate;
+use crate::{time::Timer, Context};
 use average::Mean;
 use log;
 use rand::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::iter::FusedIterator;
-use std::path::Path;
 use std::{cmp::Ordering, ops::Neg};
-
-use crate::energy::EnergyChange;
 
 mod translate;
 
@@ -119,34 +116,11 @@ impl MoveStatistics {
     }
 }
 
-/// Frequency of a Monte Carlo move or a measurement
-#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
-pub enum Frequency {
-    /// Every `n` steps
-    Every(usize),
-    /// With probability `p` regardless of number of affected molecules or atoms
-    Probability(f64),
-    /// Once at step `n`
-    Once(usize),
-    /// Once at the very last step
-    End,
-}
-
-impl Frequency {
-    /// Check if action, typically a move or analysis, should be performed at given step
-    pub fn should_perform(&self, step: usize) -> bool {
-        match self {
-            Frequency::Every(n) => step % n == 0,
-            Frequency::Once(n) => step == *n,
-            _ => unimplemented!("Unsupported frequency policy for `Frequency::should_perform`."),
-        }
-    }
-}
-
 /// All possible acceptance criteria for Monte Carlo moves
-#[derive(Clone, Debug, Default, Serialize, Deserialize, Copy)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Copy)]
 pub enum AcceptanceCriterion {
     #[default]
+    #[serde(alias = "Metropolis")]
     /// Metropolis-Hastings acceptance criterion
     /// More information: <https://en.wikipedia.org/wiki/Metropolis%E2%80%93Hastings_algorithm>
     MetropolisHastings,
@@ -207,10 +181,9 @@ impl AcceptanceCriterion {
 /// # Monte Carlo simulation instance
 ///
 /// This maintains two [`Context`]s, one for the current state and one for the new state, as
-/// well as a list of moves to perform.
-/// Moves are picked randomly and performed in the new context. If the move is accepted, the
-/// new context is synced to the old context. If the move is rejected, the new context is
-/// discarded.
+/// well as a [`Propagate`] section specifying what moves to perform and how often.
+/// Selected moves are performed in the new context. If the move is accepted, the new context
+/// is synced to the old context. If the move is rejected, the new context is discarded.
 ///
 /// The chain implements `Iterator` where each iteration corresponds to one 'propagate' cycle.
 #[derive(Debug)]
@@ -223,8 +196,6 @@ pub struct MarkovChain<T: Context> {
     step: usize,
     /// Thermal energy - must be same unit as energy.
     thermal_energy: f64,
-    /// Acceptance policy.
-    criterion: AcceptanceCriterion,
     /// Collection of analyses to perform during the simulation.
     analyses: AnalysisCollection<T>,
 }
@@ -234,7 +205,6 @@ impl<T: Context + 'static> Iterator for MarkovChain<T> {
     fn next(&mut self) -> Option<Self::Item> {
         match self.propagate.propagate(
             &mut self.context,
-            &self.criterion,
             self.thermal_energy,
             &mut self.step,
             &mut self.analyses,
@@ -250,13 +220,12 @@ impl<T: Context + 'static> ExactSizeIterator for MarkovChain<T> {}
 impl<T: Context + 'static> FusedIterator for MarkovChain<T> {}
 
 impl<T: Context + 'static> MarkovChain<T> {
-    pub fn new(context: T, max_steps: usize, thermal_energy: f64) -> Self {
+    pub fn new(context: T, propagate: Propagate, thermal_energy: f64) -> Self {
         Self {
             context: NewOld::from(context.clone(), context),
             thermal_energy,
             step: 0,
-            propagate: Propagate::default(),
-            criterion: AcceptanceCriterion::MetropolisHastings,
+            propagate,
             analyses: AnalysisCollection::default(),
         }
     }
@@ -308,13 +277,14 @@ pub fn entropy_bias(n: NewOld<usize>, volume: NewOld<f64>) -> f64 {
     }
 }
 
+/*
 #[cfg(test)]
 mod tests {
     use crate::platform::reference::ReferencePlatform;
 
     use super::*;
 
-    /*#[test]
+    #[test]
     fn parse_moves() {
         let mut rng = rand::thread_rng();
         let context = ReferencePlatform::new(
@@ -332,5 +302,6 @@ mod tests {
             moves.moves[1].frequency(),
             Frequency::Probability(0.5)
         ));
-    }*/
+    }
 }
+*/

@@ -46,9 +46,19 @@ molecules:
   - name: MOL3
     from_structure: "tests/files/mol2.xyz" 
 
-propagators:
-  - !TranslateMolecule {molecule: "MOL", max_displacement: 0.4, frequency: !Every 2}
-  - !TranslateMolecule {molecule: "MOL2", max_displacement: 0.3, frequency: !Probability 0.5}
+propagate:
+  seed: Hardware
+  criterion: Metropolis
+  repeat: 10000
+  collections:
+    - !Stochastic
+      moves: 
+        - !TranslateMolecule {molecule: "MOL", max_displacement: 0.4, weight: 0.5, repeat: 2}
+        - !TranslateMolecule {molecule: "MOL2", max_displacement: 0.3, weight: 1.0}
+    - !Deterministic
+      repeat: 5
+      moves:
+        - !TranslateMolecule {molecule: "MOL", max_displacement: 1.0, weight: 1.0}
 
 system:
   intermolecular:

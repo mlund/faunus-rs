@@ -12,7 +12,7 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
-use super::{Frequency, MoveStatistics};
+use super::MoveStatistics;
 use crate::group::*;
 use crate::transform::{random_unit_vector, Transform};
 use crate::{Change, Context, GroupChange};
@@ -36,6 +36,9 @@ pub struct TranslateMolecule {
     max_displacement: f64,
     /// Move selection weight.
     weight: f64,
+    /// Repeat the move N times.
+    #[serde(default = "crate::propagate::default_repeat")]
+    repeat: usize,
     /// Move statisticcs.
     #[serde(skip_deserializing)]
     statistics: MoveStatistics,
@@ -51,6 +54,7 @@ impl crate::Info for TranslateMolecule {
 }
 
 impl TranslateMolecule {
+    /// Create a new `TranslateMolecule` move.
     pub fn new(
         molecule_name: &str,
         molecule_id: usize,
@@ -62,6 +66,7 @@ impl TranslateMolecule {
             molecule_id,
             max_displacement,
             weight,
+            repeat: 1,
             statistics: MoveStatistics::default(),
         }
     }
@@ -72,6 +77,7 @@ impl TranslateMolecule {
         context.select(&select).iter().copied().choose(rng)
     }
 
+    /// Propose a translation of a molecule.
     pub(crate) fn propose_move(
         &mut self,
         context: &mut impl Context,
@@ -91,14 +97,25 @@ impl TranslateMolecule {
             None
         }
     }
+
+    /// Get immutable reference to the statistics of the move.
     pub(crate) fn statistics(&self) -> &MoveStatistics {
         &self.statistics
     }
+
+    /// Get mutable reference to the statistics of the move.
     pub(crate) fn statistics_mut(&mut self) -> &mut MoveStatistics {
         &mut self.statistics
     }
+
+    /// Get weight of the move.
     pub(crate) fn weight(&self) -> f64 {
         self.weight
+    }
+
+    /// Number of times the move should be repeated if selected.
+    pub(crate) fn repeat(&self) -> usize {
+        self.repeat
     }
 
     /// Validate and finalize the move.
@@ -116,24 +133,40 @@ impl TranslateMolecule {
     }
 }
 
-#[test]
-fn test_finalize() {
-    use crate::platform::reference::ReferencePlatform;
+#[cfg(test)]
+mod tests {
 
-    let mut rng = rand::thread_rng();
-    let context = ReferencePlatform::new(
-        "tests/files/topology_pass.yaml",
-        Some("tests/files/structure.xyz"),
-        &mut rng,
-    )
-    .unwrap();
+    use super::*;
 
-    let mut propagator = TranslateMolecule::new("MOL2", 0, 0.5, 4.0);
+    #[test]
+    fn test_parse() {
+        let string = "{ molecule: Water, dp: 0.5, weight: 0.7 }";
+        let translate: TranslateMolecule = serde_yaml::from_str(string).unwrap();
 
-    propagator.finalize(&context).unwrap();
+        assert_eq!(translate.molecule_name, "Water");
+        assert_eq!(translate.max_displacement, 0.5);
+        assert_eq!(translate.weight, 0.7);
+    }
 
-    assert_eq!(propagator.molecule_name, "MOL2");
-    assert_eq!(propagator.molecule_id, 1);
-    assert_eq!(propagator.max_displacement, 0.5);
-    assert_eq!(propagator.weight, 4.0);
+    #[test]
+    fn test_finalize() {
+        use crate::platform::reference::ReferencePlatform;
+
+        let mut rng = rand::thread_rng();
+        let context = ReferencePlatform::new(
+            "tests/files/topology_pass.yaml",
+            Some("tests/files/structure.xyz"),
+            &mut rng,
+        )
+        .unwrap();
+
+        let mut propagator = TranslateMolecule::new("MOL2", 0, 0.5, 4.0);
+
+        propagator.finalize(&context).unwrap();
+
+        assert_eq!(propagator.molecule_name, "MOL2");
+        assert_eq!(propagator.molecule_id, 1);
+        assert_eq!(propagator.max_displacement, 0.5);
+        assert_eq!(propagator.weight, 4.0);
+    }
 }
