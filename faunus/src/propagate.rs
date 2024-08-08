@@ -134,6 +134,10 @@ impl Propagate {
 
         Ok(propagate)
     }
+
+    pub fn get_collections(&self) -> &[MoveCollection] {
+        &self.move_collections
+    }
 }
 
 /// Collection of moves that should be stochastically selected in the simulation.
@@ -242,16 +246,25 @@ impl MoveCollection {
         }
     }
 
-    pub(crate) fn moves(&mut self) -> &mut [Move] {
+    /// Get mutable reference to the moves of the collection.
+    pub(crate) fn get_moves_mut(&mut self) -> &mut [Move] {
         match self {
             Self::Stochastic(x) => &mut x.moves,
             Self::Deterministic(x) => &mut x.moves,
         }
     }
 
+    /// Get immutable reference to the moves of the collection.
+    pub fn get_moves(&self) -> &[Move] {
+        match self {
+            Self::Stochastic(x) => &x.moves,
+            Self::Deterministic(x) => &x.moves,
+        }
+    }
+
     /// Finalize and validate moves of a collection.
     pub(crate) fn finalize(&mut self, context: &impl Context) -> anyhow::Result<()> {
-        self.moves()
+        self.get_moves_mut()
             .iter_mut()
             .try_for_each(|x| x.finalize(context))?;
 
@@ -332,14 +345,14 @@ impl Move {
 
     /// Get statistics for the move.
     #[allow(dead_code)]
-    fn statistics(&self) -> &MoveStatistics {
+    pub fn get_statistics(&self) -> &MoveStatistics {
         match self {
             Move::TranslateMolecule(x) => x.statistics(),
         }
     }
 
     /// Get mutable statistics for the move.
-    fn statistics_mut(&mut self) -> &mut MoveStatistics {
+    pub(crate) fn get_statistics_mut(&mut self) -> &mut MoveStatistics {
         match self {
             Move::TranslateMolecule(x) => x.statistics_mut(),
         }
@@ -350,7 +363,7 @@ impl Move {
     /// This will update the statistics.
     #[allow(unused_variables)]
     fn accepted(&mut self, change: &Change, energy_change: f64) {
-        self.statistics_mut().accept(energy_change);
+        self.get_statistics_mut().accept(energy_change);
     }
 
     /// Called when the move is rejected.
@@ -358,11 +371,11 @@ impl Move {
     /// This will update the statistics.
     #[allow(unused_variables)]
     fn rejected(&mut self, change: &Change) {
-        self.statistics_mut().reject();
+        self.get_statistics_mut().reject();
     }
 
     /// Get the weight of the move.
-    fn weight(&self) -> f64 {
+    pub fn weight(&self) -> f64 {
         match self {
             Move::TranslateMolecule(x) => x.weight(),
         }
@@ -376,14 +389,14 @@ impl Move {
     }
 
     /// How many times the move should be repeated upon selection.
-    fn repeat(&self) -> usize {
+    pub fn repeat(&self) -> usize {
         match self {
             Move::TranslateMolecule(x) => x.repeat(),
         }
     }
 
     /// The number of steps to move forward after attempting the move.
-    fn step_by(&self) -> usize {
+    pub fn step_by(&self) -> usize {
         match self {
             Move::TranslateMolecule(_) => 1,
         }

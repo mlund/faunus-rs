@@ -1,4 +1,4 @@
-# This topology file is used in the `translate_molecules_simulation` integration test.
+# This topology file is used in the `translate_molecules_simulation` test.
 
 atoms:
   - {name: O, mass: 15.9994, charge: -0.834, element: O}

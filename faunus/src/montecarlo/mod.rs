@@ -22,7 +22,6 @@ use log;
 use rand::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::iter::FusedIterator;
 use std::{cmp::Ordering, ops::Neg};
 
 mod translate;
@@ -200,24 +199,32 @@ pub struct MarkovChain<T: Context> {
     analyses: AnalysisCollection<T>,
 }
 
-impl<T: Context + 'static> Iterator for MarkovChain<T> {
+impl<T: Context> MarkovChain<T> {
+    pub fn iter(&mut self) -> MarkovChainIterator<T> {
+        MarkovChainIterator { markov: self }
+    }
+}
+
+#[derive(Debug)]
+pub struct MarkovChainIterator<'a, T: Context> {
+    markov: &'a mut MarkovChain<T>,
+}
+
+impl<'a, T: Context> Iterator for MarkovChainIterator<'a, T> {
     type Item = anyhow::Result<usize>;
     fn next(&mut self) -> Option<Self::Item> {
-        match self.propagate.propagate(
-            &mut self.context,
-            self.thermal_energy,
-            &mut self.step,
-            &mut self.analyses,
+        match self.markov.propagate.propagate(
+            &mut self.markov.context,
+            self.markov.thermal_energy,
+            &mut self.markov.step,
+            &mut self.markov.analyses,
         ) {
             Err(e) => Some(Err(e)),
-            Ok(true) => Some(Ok(self.step)),
+            Ok(true) => Some(Ok(self.markov.step)),
             Ok(false) => None,
         }
     }
 }
-
-impl<T: Context + 'static> ExactSizeIterator for MarkovChain<T> {}
-impl<T: Context + 'static> FusedIterator for MarkovChain<T> {}
 
 impl<T: Context + 'static> MarkovChain<T> {
     pub fn new(context: T, propagate: Propagate, thermal_energy: f64) -> Self {
@@ -274,5 +281,50 @@ pub fn entropy_bias(n: NewOld<usize>, volume: NewOld<f64>) -> f64 {
             .map(|i| f64::ln(f64::from(n.old as i32 - i) / volume.old))
             .sum::<f64>()
             .neg(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+    use crate::platform::reference::ReferencePlatform;
+    use float_cmp::assert_approx_eq;
+
+    #[test]
+    fn translate_molecules_simulation() {
+        let mut rng = rand::thread_rng();
+        let context = ReferencePlatform::new(
+            "tests/files/translate_molecules_simulation.yaml",
+            None::<String>,
+            &mut rng,
+        )
+        .unwrap();
+
+        let propagate =
+            Propagate::from_file("tests/files/translate_molecules_simulation.yaml", &context)
+                .unwrap();
+
+        let mut markov_chain = MarkovChain::new(context, propagate, 1.0);
+
+        for step in markov_chain.iter() {
+            step.unwrap();
+        }
+
+        let move1_stats =
+            markov_chain.propagate.get_collections()[0].get_moves()[0].get_statistics();
+
+        assert_eq!(move1_stats.num_trials, 79);
+        assert_eq!(move1_stats.num_accepted, 49);
+        assert_approx_eq!(f64, move1_stats.energy_change_sum, -353.6153014384931);
+
+        let move2_stats =
+            markov_chain.propagate.get_collections()[0].get_moves()[1].get_statistics();
+
+        assert_eq!(move2_stats.num_trials, 63);
+        assert_eq!(move2_stats.num_accepted, 43);
+        assert_approx_eq!(f64, move2_stats.energy_change_sum, -224.56590380195496);
+
+        todo!("test context")
     }
 }
