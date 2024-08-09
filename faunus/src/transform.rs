@@ -45,11 +45,11 @@ pub enum Transform {
     /// Translate all active particles by a vector
     Translate(Point),
     /// Translate a partial set of particles by a vector
-    PartialTranslate(Point, Vec<usize>),
+    PartialTranslate(Point, ParticleSelection),
     /// Use a quaternion to rotatate around a given point
     Rotate(Point, Quaternion<f64>),
     /// Use a quaternion to rotatate a set of particles around a given point
-    PartialRotate(Point, Quaternion<f64>, Vec<usize>),
+    PartialRotate(Point, Quaternion<f64>, ParticleSelection),
     /// Scale coordinates from an old volume to a new, `(old_volume, new_volume)`
     VolumeScale(VolumeScalePolicy, (f64, f64)),
     /// Expand by `n` particles
@@ -78,13 +78,12 @@ impl Transform {
     ) -> Result<(), anyhow::Error> {
         match self {
             Transform::Translate(displacement) => {
-                let group_len = context.groups()[group_index].len();
-                Self::PartialTranslate(*displacement, (0..group_len).collect())
+                Self::PartialTranslate(*displacement, ParticleSelection::Active)
                     .on_group(group_index, context)?;
             }
-            Transform::PartialTranslate(displacement, indices) => {
+            Transform::PartialTranslate(displacement, selection) => {
                 let indices = context.groups()[group_index]
-                    .select(&ParticleSelection::RelIndex(indices.clone()))
+                    .select(selection, context)
                     .unwrap();
 
                 context.translate_particles(&indices, displacement);

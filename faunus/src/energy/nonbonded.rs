@@ -331,7 +331,7 @@ impl NonbondedMatrix {
                 .map(|&particle| {
                     let group = &context.groups()[group_index];
                     // the PartialUpdate stores relative indices of particles
-                    match group.absolute_index(particle) {
+                    match group.to_absolute_index(particle) {
                         Ok(abs_index) => self.particle_with_all(context, abs_index, group),
                         // if the particle is not active, return 0.0
                         Err(_) => 0.0,

@@ -26,12 +26,6 @@ use rand::{prelude::SliceRandom, rngs::StdRng};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
-/// All possible supported moves.
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub enum Move {
-    TranslateMolecule(crate::montecarlo::TranslateMolecule),
-}
-
 /// Specifies how many moves should be performed,
 /// what moves can be performed and how they should be selected.
 #[derive(Debug, Serialize, Deserialize, Default)]
@@ -287,6 +281,13 @@ pub(crate) enum Seed {
     Fixed(usize),
 }
 
+/// All possible supported moves.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum Move {
+    TranslateMolecule(crate::montecarlo::TranslateMolecule),
+    TranslateAtom(crate::montecarlo::TranslateAtom),
+}
+
 impl Move {
     /// Attempts to perform the move.
     /// Consists of proposing the move, accepting/rejecting it and updating the context.
@@ -331,6 +332,7 @@ impl Move {
     fn propose_move(&mut self, context: &mut impl Context, rng: &mut impl Rng) -> Option<Change> {
         match self {
             Move::TranslateMolecule(x) => x.propose_move(context, rng),
+            Move::TranslateAtom(x) => x.propose_move(context, rng),
         }
     }
 
@@ -347,14 +349,16 @@ impl Move {
     #[allow(dead_code)]
     pub fn get_statistics(&self) -> &MoveStatistics {
         match self {
-            Move::TranslateMolecule(x) => x.statistics(),
+            Move::TranslateMolecule(x) => x.get_statistics(),
+            Move::TranslateAtom(x) => x.get_statistics(),
         }
     }
 
     /// Get mutable statistics for the move.
     pub(crate) fn get_statistics_mut(&mut self) -> &mut MoveStatistics {
         match self {
-            Move::TranslateMolecule(x) => x.statistics_mut(),
+            Move::TranslateMolecule(x) => x.get_statistics_mut(),
+            Move::TranslateAtom(x) => x.get_statistics_mut(),
         }
     }
 
@@ -378,6 +382,7 @@ impl Move {
     pub fn weight(&self) -> f64 {
         match self {
             Move::TranslateMolecule(x) => x.weight(),
+            Move::TranslateAtom(x) => x.weight(),
         }
     }
 
@@ -385,6 +390,7 @@ impl Move {
     fn finalize(&mut self, context: &impl Context) -> anyhow::Result<()> {
         match self {
             Move::TranslateMolecule(x) => x.finalize(context),
+            Move::TranslateAtom(x) => x.finalize(context),
         }
     }
 
@@ -392,6 +398,7 @@ impl Move {
     pub fn repeat(&self) -> usize {
         match self {
             Move::TranslateMolecule(x) => x.repeat(),
+            Move::TranslateAtom(x) => x.repeat(),
         }
     }
 
@@ -399,6 +406,7 @@ impl Move {
     pub fn step_by(&self) -> usize {
         match self {
             Move::TranslateMolecule(_) => 1,
+            Move::TranslateAtom(_) => 1,
         }
     }
 }
@@ -407,12 +415,14 @@ impl Info for Move {
     fn short_name(&self) -> Option<&'static str> {
         match self {
             Move::TranslateMolecule(x) => x.short_name(),
+            Move::TranslateAtom(x) => x.short_name(),
         }
     }
 
     fn long_name(&self) -> Option<&'static str> {
         match self {
             Move::TranslateMolecule(x) => x.long_name(),
+            Move::TranslateAtom(x) => x.long_name(),
         }
     }
 }
@@ -484,7 +494,7 @@ moves:
         };
 
         assert_eq!(stochastic_collection.repeat, 1);
-        assert_eq!(stochastic_collection.moves.len(), 2);
+        assert_eq!(stochastic_collection.moves.len(), 3);
         let stochastic_move_1 = stochastic_collection.moves[0].clone();
         assert_eq!(stochastic_move_1.repeat(), 2);
         assert_eq!(stochastic_move_1.weight(), 0.5);
@@ -514,5 +524,56 @@ moves:
         assert!(
             Propagate::from_file("tests/files/topology_invalid_propagate.yaml", &context).is_err()
         );
+    }
+
+    #[test]
+    fn propagate_translate_atom_parse_fail1() {
+        let mut rng = rand::thread_rng();
+        let context = ReferencePlatform::new(
+            "tests/files/topology_invalid_translate_atom1.yaml",
+            Some("tests/files/structure.xyz"),
+            &mut rng,
+        )
+        .unwrap();
+
+        assert!(Propagate::from_file(
+            "tests/files/topology_invalid_translate_atom1.yaml",
+            &context
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn propagate_translate_atom_parse_fail2() {
+        let mut rng = rand::thread_rng();
+        let context = ReferencePlatform::new(
+            "tests/files/topology_invalid_translate_atom2.yaml",
+            Some("tests/files/structure.xyz"),
+            &mut rng,
+        )
+        .unwrap();
+
+        assert!(Propagate::from_file(
+            "tests/files/topology_invalid_translate_atom2.yaml",
+            &context
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn propagate_translate_atom_parse_fail3() {
+        let mut rng = rand::thread_rng();
+        let context = ReferencePlatform::new(
+            "tests/files/topology_invalid_translate_atom3.yaml",
+            Some("tests/files/structure.xyz"),
+            &mut rng,
+        )
+        .unwrap();
+
+        assert!(Propagate::from_file(
+            "tests/files/topology_invalid_translate_atom3.yaml",
+            &context
+        )
+        .is_err());
     }
 }

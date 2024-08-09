@@ -55,10 +55,11 @@ propagate:
       moves: 
         - !TranslateMolecule {molecule: "MOL", max_displacement: 0.4, weight: 0.5, repeat: 2}
         - !TranslateMolecule {molecule: "MOL2", max_displacement: 0.3, weight: 1.0}
+        - !TranslateAtom {max_displacement: 0.1, weight: 0.2}  # translate any atom
     - !Deterministic
       repeat: 5
       moves:
-        - !TranslateMolecule {molecule: "MOL", max_displacement: 1.0, weight: 1.0}
+        - !TranslateAtom {molecule: "MOL", atom: "OW", max_displacement: 1.0, weight: 1.0}
 
 system:
   intermolecular:

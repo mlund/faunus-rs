@@ -133,7 +133,7 @@ impl Bond {
     /// Calculate energy of a bond in a specific group.
     /// Returns 0.0 if any of the bonded particles is inactive.
     pub fn energy(&self, context: &impl Context, group: &Group) -> f64 {
-        let to_abs_index = |i| group.absolute_index(i);
+        let to_abs_index = |i| group.to_absolute_index(i);
         let [Ok(i), Ok(j)] = self.index.map(to_abs_index) else {
             return 0.0;
         };
