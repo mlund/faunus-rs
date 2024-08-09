@@ -25,7 +25,15 @@ propagate:
     - !Stochastic
       moves:
         - !TranslateMolecule {molecule: "TIP3P", max_displacement: 0.1, weight: 1.5}
-        - !TranslateMolecule {molecule: "TIP3P", max_displacement: 0.1, weight: 0.5, repeat: 3}
+        - !TranslateMolecule {molecule: "TIP3P", dp: 0.1, weight: 0.5, repeat: 3}
+        - !TranslateMolecule {molecule: "TIP3P", max_displacement: 1.0, weight: 0.0} # should never be chosen
+    - !Deterministic
+      moves:
+        - !TranslateMolecule {molecule: "TIP3P", dp: 0.2, weight: 0.0}
+    - !Stochastic
+      repeat: 5
+      moves:
+        - !TranslateMolecule {molecule: "TIP3P", dp: 0.5, weight: 1.0}
 
 system:
   cell: !Cuboid [10.0, 10.0, 10.0]

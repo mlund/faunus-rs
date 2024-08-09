@@ -184,7 +184,7 @@ impl AcceptanceCriterion {
 /// Selected moves are performed in the new context. If the move is accepted, the new context
 /// is synced to the old context. If the move is rejected, the new context is discarded.
 ///
-/// The chain implements `Iterator` where each iteration corresponds to one 'propagate' cycle.
+/// The MarkovChain can be converted into an `Iterator` where each iteration corresponds to one 'propagate' cycle.
 #[derive(Debug)]
 pub struct MarkovChain<T: Context> {
     /// Description of moves to perform.
@@ -205,6 +205,8 @@ impl<T: Context> MarkovChain<T> {
     }
 }
 
+/// Iterator over MarkovChain.
+/// Necessary if we want to access MarkovChain after the iteration is finished.
 #[derive(Debug)]
 pub struct MarkovChainIterator<'a, T: Context> {
     markov: &'a mut MarkovChain<T>,
@@ -314,17 +316,88 @@ mod tests {
         let move1_stats =
             markov_chain.propagate.get_collections()[0].get_moves()[0].get_statistics();
 
-        assert_eq!(move1_stats.num_trials, 79);
-        assert_eq!(move1_stats.num_accepted, 49);
-        assert_approx_eq!(f64, move1_stats.energy_change_sum, -353.6153014384931);
+        assert_eq!(move1_stats.num_trials, 72);
+        assert_eq!(move1_stats.num_accepted, 67);
+        assert_approx_eq!(f64, move1_stats.energy_change_sum, -12.85905689035304);
 
         let move2_stats =
             markov_chain.propagate.get_collections()[0].get_moves()[1].get_statistics();
 
-        assert_eq!(move2_stats.num_trials, 63);
-        assert_eq!(move2_stats.num_accepted, 43);
-        assert_approx_eq!(f64, move2_stats.energy_change_sum, -224.56590380195496);
+        assert_eq!(move2_stats.num_trials, 84);
+        assert_eq!(move2_stats.num_accepted, 80);
+        assert_approx_eq!(f64, move2_stats.energy_change_sum, -1.5958942938160332);
 
-        todo!("test context")
+        let move3_stats =
+            markov_chain.propagate.get_collections()[0].get_moves()[2].get_statistics();
+
+        assert_eq!(move3_stats.num_trials, 0);
+        assert_eq!(move3_stats.num_accepted, 0);
+        assert_approx_eq!(f64, move3_stats.energy_change_sum, 0.0);
+
+        let move4_stats =
+            markov_chain.propagate.get_collections()[1].get_moves()[0].get_statistics();
+
+        assert_eq!(move4_stats.num_trials, 100);
+        assert_eq!(move4_stats.num_accepted, 95);
+        assert_approx_eq!(f64, move4_stats.energy_change_sum, -213.78865095923885);
+
+        let move5_stats =
+            markov_chain.propagate.get_collections()[2].get_moves()[0].get_statistics();
+
+        assert_eq!(move5_stats.num_trials, 500);
+        assert_eq!(move5_stats.num_accepted, 449);
+        assert_approx_eq!(f64, move5_stats.energy_change_sum, -353.17829062392997);
+
+        println!("{:?}", markov_chain.context.new.particles());
+
+        for context in [&markov_chain.context.new, &markov_chain.context.old] {
+            let p1 = &context.particles()[0];
+            let p2 = &context.particles()[1];
+            let p3 = &context.particles()[2];
+
+            assert_approx_eq!(f64, p1.pos.x, p2.pos.x + 1.0, epsilon = 0.0000001);
+            assert_approx_eq!(f64, p1.pos.x, p3.pos.x + 1.0, epsilon = 0.0000001);
+            assert_approx_eq!(f64, p2.pos.x, p3.pos.x, epsilon = 0.0000001);
+
+            assert_approx_eq!(f64, p1.pos.y, p2.pos.y, epsilon = 0.0000001);
+            assert_approx_eq!(f64, p1.pos.y + 1.0, p3.pos.y, epsilon = 0.0000001);
+            assert_approx_eq!(f64, p2.pos.y + 1.0, p3.pos.y, epsilon = 0.0000001);
+
+            assert_approx_eq!(f64, p1.pos.z, p2.pos.z, epsilon = 0.0000001);
+            assert_approx_eq!(f64, p1.pos.z, p3.pos.z, epsilon = 0.0000001);
+            assert_approx_eq!(f64, p2.pos.z, p3.pos.z, epsilon = 0.0000001);
+
+            let p4 = &context.particles()[3];
+            let p5 = &context.particles()[4];
+            let p6 = &context.particles()[5];
+
+            assert_approx_eq!(f64, p4.pos.x + 1.0, p5.pos.x, epsilon = 0.0000001);
+            assert_approx_eq!(f64, p4.pos.x + 1.0, p6.pos.x, epsilon = 0.0000001);
+            assert_approx_eq!(f64, p5.pos.x, p6.pos.x, epsilon = 0.0000001);
+
+            assert_approx_eq!(f64, p4.pos.y, p5.pos.y, epsilon = 0.0000001);
+            assert_approx_eq!(f64, p4.pos.y, p6.pos.y, epsilon = 0.0000001);
+            assert_approx_eq!(f64, p5.pos.y, p6.pos.y, epsilon = 0.0000001);
+
+            assert_approx_eq!(f64, p4.pos.z, p5.pos.z, epsilon = 0.0000001);
+            assert_approx_eq!(f64, p4.pos.z, p6.pos.z + 1.0, epsilon = 0.0000001);
+            assert_approx_eq!(f64, p5.pos.z, p6.pos.z + 1.0, epsilon = 0.0000001);
+
+            let p7 = &context.particles()[6];
+            let p8 = &context.particles()[7];
+            let p9 = &context.particles()[8];
+
+            assert_approx_eq!(f64, p7.pos.x, p8.pos.x, epsilon = 0.0000001);
+            assert_approx_eq!(f64, p7.pos.x, p9.pos.x, epsilon = 0.0000001);
+            assert_approx_eq!(f64, p8.pos.x, p9.pos.x, epsilon = 0.0000001);
+
+            assert_approx_eq!(f64, p7.pos.y, p8.pos.y + 1.0, epsilon = 0.0000001);
+            assert_approx_eq!(f64, p7.pos.y, p9.pos.y + 2.0, epsilon = 0.0000001);
+            assert_approx_eq!(f64, p8.pos.y, p9.pos.y + 1.0, epsilon = 0.0000001);
+
+            assert_approx_eq!(f64, p7.pos.z, p8.pos.z, epsilon = 0.0000001);
+            assert_approx_eq!(f64, p7.pos.z, p9.pos.z, epsilon = 0.0000001);
+            assert_approx_eq!(f64, p8.pos.z, p9.pos.z, epsilon = 0.0000001);
+        }
     }
 }
