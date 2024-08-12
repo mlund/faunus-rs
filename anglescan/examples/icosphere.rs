@@ -1,4 +1,3 @@
-use hexasphere;
 
 fn main() {
     let divisions = 0;
@@ -18,7 +17,7 @@ fn main() {
     for (i, triangle) in indices.chunks(3).enumerate() {
         println!("{} [{}, {}, {}]", i, triangle[0], triangle[1], triangle[2],);
     }
-    let _adj = hexasphere::AdjacencyBuilder::new(1).add_indices(&indices);
+    hexasphere::AdjacencyBuilder::new(1).add_indices(&indices);
     //     .build()
     //     .unwrap()
     //     .print();

@@ -599,9 +599,9 @@ impl GroupLists {
     /// ## Notes
     /// - The time complexity of this operation is O(n).
     /// - This operation always consists of searching for the group (O(n)).
-    /// If the position of the group must be updated, searching is followed by
-    /// removing the group from the original vector via `swap_remove` (O(1)) and by
-    /// adding the group to the correct vector (O(1)).
+    ///   If the position of the group must be updated, searching is followed by
+    ///   removing the group from the original vector via `swap_remove` (O(1)) and by
+    ///   adding the group to the correct vector (O(1)).
     pub(crate) fn update_group(&mut self, group: &Group) {
         match self.find_group(group) {
             Some((list, index, size)) => {
@@ -659,7 +659,7 @@ impl GroupLists {
     ///
     /// ## Notes
     /// - The time complexity of this operation is O(n), where `n` is the number of
-    /// groups with the same molecule kind as the searched group.
+    ///   groups with the same molecule kind as the searched group.
     fn find_group(&mut self, group: &Group) -> Option<(&mut Vec<usize>, usize, GroupSize)> {
         [&mut self.full, &mut self.partial, &mut self.empty]
             .into_iter()
