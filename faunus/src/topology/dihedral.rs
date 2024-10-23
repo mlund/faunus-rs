@@ -104,7 +104,7 @@ impl Dihedral {
     /// Calculate energy of a dihedral in a specific group.
     /// Returns 0.0 if any of the interacting particles is inactive.
     pub fn energy(&self, context: &impl Context, group: &Group) -> f64 {
-        let indices = match self.index.map(|rel| group.absolute_index(rel)) {
+        let indices = match self.index.map(|rel| group.to_absolute_index(rel)) {
             [Ok(i), Ok(j), Ok(k), Ok(l)] => [i, j, k, l],
             _ => return 0.0,
         };

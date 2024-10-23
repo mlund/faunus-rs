@@ -41,6 +41,7 @@ pub mod energy;
 pub mod group;
 pub mod montecarlo;
 pub mod platform;
+pub mod propagate;
 pub mod time;
 pub mod topology;
 pub mod transform;
@@ -233,12 +234,12 @@ pub trait ParticleSystem: GroupCollection + WithCell + WithTopology {
     /// ## Details
     /// - In this documentation, the provided indices are called `i`, `j`, `k`, `l`, in this order.
     /// - This method returns an angle between the plane formed by atoms `i`, `j`, `k` and the plane formed by
-    /// atoms `j`, `k`, `l`.
+    ///   atoms `j`, `k`, `l`.
     /// - In case of a **proper** dihedral, `i`, `j`, `k`, `l` are (considered to be) consecutively bonded atoms.
     /// - In case of an **improper** dihedral, `i` is the central atom and `j`, `k`, `l` are (considered to be) bonded to it.
     /// - The angle adopts values between −180° and +180°. If the angle represents proper dihedral,
-    /// then 0° corresponds to the *cis* conformation and ±180° to the *trans* conformation
-    /// in line with the IUPAC/IUB convention.
+    ///   then 0° corresponds to the *cis* conformation and ±180° to the *trans* conformation
+    ///   in line with the IUPAC/IUB convention.
     ///
     /// ## Example implementation
     /// ```ignore

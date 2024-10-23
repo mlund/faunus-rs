@@ -14,11 +14,34 @@
 
 //! # System analysis and reporting
 
-use super::montecarlo::Frequency;
 use crate::{Context, Info};
 use anyhow::Result;
 use core::fmt::Debug;
-use rand::rngs::ThreadRng;
+use serde::{Deserialize, Serialize};
+
+/// Frequency of analysis.
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+pub enum Frequency {
+    /// Every `n` steps
+    Every(usize),
+    /// With probability `p` regardless of number of affected molecules or atoms
+    Probability(f64),
+    /// Once at step `n`
+    Once(usize),
+    /// Once at the very last step
+    End,
+}
+
+impl Frequency {
+    /// Check if action, typically a move or analysis, should be performed at given step
+    pub fn should_perform(&self, step: usize) -> bool {
+        match self {
+            Frequency::Every(n) => step % n == 0,
+            Frequency::Once(n) => step == *n,
+            _ => unimplemented!("Unsupported frequency policy for `Frequency::should_perform`."),
+        }
+    }
+}
 
 /// Collection of analysis objects.
 pub type AnalysisCollection<T> = Vec<Box<dyn Analyze<T>>>;
@@ -31,7 +54,7 @@ pub trait Analyze<T: Context>: Debug + Info {
     fn frequency(&self) -> Frequency;
 
     /// Sample system.
-    fn sample(&mut self, context: &T, step: usize, rng: &mut ThreadRng) -> Result<()>;
+    fn sample(&mut self, context: &T, step: usize) -> Result<()>;
 
     /// Total number of samples which is the sum of successful calls to `sample()`.
     fn num_samples(&self) -> usize;
@@ -50,9 +73,8 @@ impl<T: Context> crate::Info for AnalysisCollection<T> {
 }
 
 impl<T: Context> Analyze<T> for AnalysisCollection<T> {
-    fn sample(&mut self, context: &T, step: usize, rng: &mut ThreadRng) -> Result<()> {
-        self.iter_mut()
-            .try_for_each(|a| a.sample(context, step, rng))
+    fn sample(&mut self, context: &T, step: usize) -> Result<()> {
+        self.iter_mut().try_for_each(|a| a.sample(context, step))
     }
     /// Summed number of samples for all analysis objects
     fn num_samples(&self) -> usize {
@@ -100,8 +122,8 @@ impl crate::Info for StructureWriter {
 
 #[cfg(feature = "chemfiles")]
 impl<T: Context> Analyze<T> for StructureWriter {
-    fn sample(&mut self, context: &T, step: usize, rng: &mut ThreadRng) -> anyhow::Result<()> {
-        if !self.frequency.should_perform(step, rng) {
+    fn sample(&mut self, context: &T, step: usize) -> anyhow::Result<()> {
+        if !self.frequency.should_perform(step) {
             return Ok(());
         }
 

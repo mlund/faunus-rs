@@ -15,20 +15,15 @@
 //! # Support for Monte Carlo sampling
 
 use crate::analysis::{AnalysisCollection, Analyze};
-use crate::{time::Timer, Change, Context, Info};
+use crate::propagate::Propagate;
+use crate::{time::Timer, Context};
 use average::Mean;
 use log;
-use propagator::Propagator;
 use rand::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::iter::FusedIterator;
-use std::path::Path;
 use std::{cmp::Ordering, ops::Neg};
 
-use crate::energy::EnergyChange;
-
-mod propagator;
 mod translate;
 
 pub use translate::*;
@@ -120,287 +115,126 @@ impl MoveStatistics {
     }
 }
 
-/// Frequency of a Monte Carlo move or a measurement
-#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
-pub enum Frequency {
-    /// Every `n` steps
-    Every(usize),
-    /// With probability `p` regardless of number of affected molecules or atoms
-    Probability(f64),
-    /// With probability `p` for each affected molecule or atom
-    Sweep(f64),
-    /// Once at step `n`
-    Once(usize),
-    /// Once at the very last step
-    End,
+/// All possible acceptance criteria for Monte Carlo moves
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Copy)]
+pub enum AcceptanceCriterion {
+    #[default]
+    #[serde(alias = "Metropolis")]
+    /// Metropolis-Hastings acceptance criterion
+    /// More information: <https://en.wikipedia.org/wiki/Metropolis%E2%80%93Hastings_algorithm>
+    MetropolisHastings,
+    /// Energy minimization acceptance criterion
+    /// This will always accept a move if the new energy is lower than the old energy.
+    Minimize,
 }
 
-impl Frequency {
-    /// Check if action, typically a move or analysis, should be performed at given step
-    pub fn should_perform(&self, step: usize, rng: &mut ThreadRng) -> bool {
-        match self {
-            Frequency::Every(n) => step % n == 0,
-            Frequency::Probability(p) => rng.gen::<f64>() < *p,
-            Frequency::Once(n) => step == *n,
-            _ => unimplemented!("Unsupported frequency policy"),
-        }
-    }
-}
-
-/// Interface for acceptance criterion for Monte Carlo moves
-trait AcceptanceCriterion {
+impl AcceptanceCriterion {
     /// Acceptance criterion based on an old and new energy.
     ///
     /// The energies are normalized by the given thermal energy, _kT_,.
-    fn accept(
-        &self,
-        energies: NewOld<f64>,
-        bias: Bias,
-        thermal_energy: f64,
-        rng: &mut ThreadRng,
-    ) -> bool;
-}
-
-impl Default for Box<dyn AcceptanceCriterion> {
-    fn default() -> Self {
-        Box::<MetropolisHastings>::default()
-    }
-}
-
-impl std::fmt::Debug for Box<dyn AcceptanceCriterion> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("AcceptanceCriterion").finish()
-    }
-}
-
-/// Metropolis-Hastings acceptance criterion
-///
-/// More information: <https://en.wikipedia.org/wiki/Metropolis%E2%80%93Hastings_algorithm>
-#[derive(Clone, Debug, Default, Serialize, Deserialize, Copy)]
-pub struct MetropolisHastings {}
-
-impl AcceptanceCriterion for MetropolisHastings {
-    fn accept(
+    pub(crate) fn accept(
         &self,
         energy: NewOld<f64>,
         bias: Bias,
         thermal_energy: f64,
-        rng: &mut ThreadRng,
+        rng: &mut impl Rng,
     ) -> bool {
-        // useful for hard-sphere systems where initial configurations may overlap
-        if energy.old.is_infinite() && energy.new.is_finite() {
-            log::trace!("Accepting infinite -> finite energy change");
-            return true;
-        }
-        // always accept if negative infinity
-        if energy.new.is_infinite() && energy.new.is_sign_negative() {
-            return true;
-        }
+        match self {
+            AcceptanceCriterion::MetropolisHastings => {
+                // useful for hard-sphere systems where initial configurations may overlap
+                if energy.old.is_infinite() && energy.new.is_finite() {
+                    log::trace!("Accepting infinite -> finite energy change");
+                    return true;
+                }
+                // always accept if negative infinity
+                if energy.new.is_infinite() && energy.new.is_sign_negative() {
+                    return true;
+                }
 
-        let du = energy.difference()
-            + match bias {
-                Bias::Energy(bias) => bias,
-                Bias::None => 0.0,
-                Bias::ForceAccept => return true,
-            };
-        let p = f64::min(1.0, f64::exp(-du / thermal_energy));
-        rng.gen::<f64>() < p
-    }
-}
-
-/// Energy minimization acceptance criterion
-///
-/// This will always accept a move if the new energy is lower than the old energy.
-#[derive(Clone, Debug, Default, Serialize, Deserialize, Copy)]
-pub struct Minimize {}
-
-impl AcceptanceCriterion for Minimize {
-    #[allow(unused_variables)]
-    fn accept(
-        &self,
-        energy: NewOld<f64>,
-        bias: Bias,
-        thermal_energy: f64,
-        rng: &mut ThreadRng,
-    ) -> bool {
-        if energy.old.is_infinite() && energy.new.is_finite() {
-            return true;
-        }
-        energy.difference()
-            + match bias {
-                Bias::Energy(bias) => bias,
-                Bias::None => 0.0,
-                Bias::ForceAccept => return true,
+                let du = energy.difference()
+                    + match bias {
+                        Bias::Energy(bias) => bias,
+                        Bias::None => 0.0,
+                        Bias::ForceAccept => return true,
+                    };
+                let p = f64::min(1.0, f64::exp(-du / thermal_energy));
+                rng.gen::<f64>() < p
             }
-            <= 0.0
-    }
-}
 
-pub trait Move<T>: Info + std::fmt::Debug
-where
-    T: Context,
-{
-    /// Perform a move on given `context`.
-    fn do_move(&mut self, context: &mut T, rng: &mut ThreadRng) -> Option<Change>;
-
-    /// Moves may generate optional bias that should be added to the trial energy
-    /// when determining the acceptance probability.
-    /// It can also be used to force acceptance of a move in e.g. hybrid MD/MC schemes.
-    /// By default, this returns `Bias::None`.
-    #[allow(unused_variables)]
-    fn bias(&self, change: &Change, energies: &NewOld<f64>) -> Bias {
-        Bias::None
-    }
-
-    /// Get statistics for the move
-    fn statistics(&self) -> &MoveStatistics;
-
-    /// Get mutable statistics for the move
-    fn statistics_mut(&mut self) -> &mut MoveStatistics;
-
-    /// Called when the move is accepted
-    ///
-    /// This will update the statistics.
-    /// Often re-implemented to perform additional actions.
-    #[allow(unused_variables)]
-    fn accepted(&mut self, change: &Change, energy_change: f64) {
-        self.statistics_mut().accept(energy_change);
-    }
-
-    /// Called when the move is rejected
-    ///
-    /// This will update the statistics.
-    /// Often re-implemented to perform additional actions.
-    #[allow(unused_variables)]
-    fn rejected(&mut self, change: &Change) {
-        self.statistics_mut().reject();
-    }
-
-    /// Get the move frequency
-    fn frequency(&self) -> Frequency;
-}
-
-/// Collection of moves
-///
-/// # Todo
-/// - `choose` should respect `frequency`
-/// - Should implement serialize, see e.g.
-/// <https://stackoverflow.com/questions/50021897/how-to-implement-serdeserialize-for-a-boxed-trait-object>
-#[derive(Debug)]
-pub struct MoveCollection<T: Context> {
-    moves: Vec<Box<dyn Move<T>>>,
-}
-
-impl<T: Context> Default for MoveCollection<T> {
-    fn default() -> Self {
-        Self { moves: Vec::new() }
-    }
-}
-
-impl<T: Context> MoveCollection<T> {
-    /// Appends a move to the back of the collection.
-    pub fn push(&mut self, m: impl Move<T> + 'static) {
-        self.moves.push(Box::new(m));
-    }
-    /// Picks a random move from the collection.
-    pub fn choose(&mut self, rng: &mut ThreadRng) -> Option<&mut Box<dyn Move<T>>> {
-        self.moves.iter_mut().choose(rng)
-    }
-}
-
-impl<T: Context> MoveCollection<T> {
-    /// Get the collection of moves from an input yaml file.
-    /// This method also requires a Context structure to validate and finalize the moves.
-    pub fn from_yaml(filename: impl AsRef<Path>, context: &T) -> anyhow::Result<MoveCollection<T>> {
-        let yaml = std::fs::read_to_string(filename)?;
-        let full: serde_yaml::Value = serde_yaml::from_str(&yaml)?;
-
-        let propagators_section = full.get("propagators").ok_or(anyhow::Error::msg(
-            "Could not find `propagators` in the YAML file.",
-        ))?;
-
-        let mut propagators: Vec<Propagator> = serde_yaml::from_value(propagators_section.clone())?;
-
-        // validate and finalize all moves
-        propagators
-            .iter_mut()
-            .try_for_each(|x| x.finalize(context))?;
-
-        // convert to trait objects
-        Ok(MoveCollection {
-            moves: propagators.into_iter().map(|x| x.into()).collect(),
-        })
+            AcceptanceCriterion::Minimize => {
+                if energy.old.is_infinite() && energy.new.is_finite() {
+                    return true;
+                }
+                energy.difference()
+                    + match bias {
+                        Bias::Energy(bias) => bias,
+                        Bias::None => 0.0,
+                        Bias::ForceAccept => return true,
+                    }
+                    <= 0.0
+            }
+        }
     }
 }
 
 /// # Monte Carlo simulation instance
 ///
 /// This maintains two [`Context`]s, one for the current state and one for the new state, as
-/// well as a list of moves to perform.
-/// Moves are picked randomly and performed in the new context. If the move is accepted, the
-/// new context is synced to the old context. If the move is rejected, the new context is
-/// discarded.
+/// well as a [`Propagate`] section specifying what moves to perform and how often.
+/// Selected moves are performed in the new context. If the move is accepted, the new context
+/// is synced to the old context. If the move is rejected, the new context is discarded.
 ///
-/// The chain implements `Iterator` where each iteration corresponds to a single Monte Carlo step.
-#[derive(Default, Debug)]
+/// The MarkovChain can be converted into an `Iterator` where each iteration corresponds to one 'propagate' cycle.
+#[derive(Debug)]
 pub struct MarkovChain<T: Context> {
-    /// List of moves to perform.
-    moves: MoveCollection<T>,
+    /// Description of moves to perform.
+    propagate: Propagate,
     /// Pair of contexts, one for the current state and one for the new state.
     context: NewOld<T>,
     /// Current step.
     step: usize,
-    /// Maximum number of steps.
-    max_steps: usize,
-    /// Random number engine.
-    rng: ThreadRng,
     /// Thermal energy - must be same unit as energy.
     thermal_energy: f64,
-    /// Acceptance policy.
-    criterion: Box<dyn AcceptanceCriterion>,
     /// Collection of analyses to perform during the simulation.
     analyses: AnalysisCollection<T>,
 }
 
-impl<T: Context + 'static> Iterator for MarkovChain<T> {
-    type Item = anyhow::Result<usize>;
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.step >= self.max_steps {
-            return None;
-        }
-        self.do_move();
-
-        // perform analyses
-        match self
-            .analyses
-            .sample(&self.context.old, self.step, &mut self.rng)
-        {
-            Ok(_) => (),
-            Err(e) => return Some(Err(e)),
-        }
-
-        self.step += 1;
-        Some(Ok(self.step))
-    }
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        let size = self.max_steps - self.step;
-        (size, Some(size))
+impl<T: Context> MarkovChain<T> {
+    pub fn iter(&mut self) -> MarkovChainIterator<T> {
+        MarkovChainIterator { markov: self }
     }
 }
 
-impl<T: Context + 'static> ExactSizeIterator for MarkovChain<T> {}
-impl<T: Context + 'static> FusedIterator for MarkovChain<T> {}
+/// Iterator over MarkovChain.
+/// Necessary if we want to access MarkovChain after the iteration is finished.
+#[derive(Debug)]
+pub struct MarkovChainIterator<'a, T: Context> {
+    markov: &'a mut MarkovChain<T>,
+}
+
+impl<'a, T: Context> Iterator for MarkovChainIterator<'a, T> {
+    type Item = anyhow::Result<usize>;
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.markov.propagate.propagate(
+            &mut self.markov.context,
+            self.markov.thermal_energy,
+            &mut self.markov.step,
+            &mut self.markov.analyses,
+        ) {
+            Err(e) => Some(Err(e)),
+            Ok(true) => Some(Ok(self.markov.step)),
+            Ok(false) => None,
+        }
+    }
+}
 
 impl<T: Context + 'static> MarkovChain<T> {
-    pub fn new(context: T, max_steps: usize, thermal_energy: f64) -> Self {
+    pub fn new(context: T, propagate: Propagate, thermal_energy: f64) -> Self {
         Self {
             context: NewOld::from(context.clone(), context),
-            max_steps,
             thermal_energy,
             step: 0,
-            rng: rand::thread_rng(),
-            moves: MoveCollection::default(),
-            criterion: Box::<MetropolisHastings>::default(),
+            propagate,
             analyses: AnalysisCollection::default(),
         }
     }
@@ -411,52 +245,9 @@ impl<T: Context + 'static> MarkovChain<T> {
     pub fn set_thermal_energy(&mut self, thermal_energy: f64) {
         self.thermal_energy = thermal_energy;
     }
-    /// Set random number generator
-    pub fn set_rng(&mut self, rng: ThreadRng) {
-        self.rng = rng;
-    }
-    /// Append a move to the back of the collection.
-    pub fn add_move(&mut self, m: impl Move<T> + 'static) {
-        self.moves.push(m);
-    }
-
     /// Append an analysis to the back of the collection.
     pub fn add_analysis(&mut self, analysis: Box<dyn Analyze<T>>) {
         self.analyses.push(analysis)
-    }
-
-    fn do_move(&mut self) {
-        if let Some(mv) = self.moves.choose(&mut self.rng) {
-            let change = mv.do_move(&mut self.context.new, &mut self.rng).unwrap();
-            self.context.new.update(&change).unwrap();
-            let energy = NewOld::<f64>::from(
-                self.context
-                    .new
-                    .hamiltonian()
-                    .energy(&self.context.new, &change),
-                self.context
-                    .old
-                    .hamiltonian()
-                    .energy(&self.context.old, &change),
-            );
-            let bias = mv.bias(&change, &energy);
-            if self
-                .criterion
-                .accept(energy, bias, self.thermal_energy, &mut self.rng)
-            {
-                mv.accepted(&change, energy.difference());
-                self.context
-                    .old
-                    .sync_from(&self.context.new, &change)
-                    .unwrap();
-            } else {
-                mv.rejected(&change);
-                self.context
-                    .new
-                    .sync_from(&self.context.old, &change)
-                    .unwrap();
-            }
-        }
     }
 }
 
@@ -497,27 +288,116 @@ pub fn entropy_bias(n: NewOld<usize>, volume: NewOld<f64>) -> f64 {
 
 #[cfg(test)]
 mod tests {
-    use crate::platform::reference::ReferencePlatform;
 
     use super::*;
+    use crate::platform::reference::ReferencePlatform;
+    use float_cmp::assert_approx_eq;
 
     #[test]
-    fn parse_moves() {
+    fn translate_molecules_simulation() {
         let mut rng = rand::thread_rng();
         let context = ReferencePlatform::new(
-            "tests/files/topology_pass.yaml",
-            Some("tests/files/structure.xyz"),
+            "tests/files/translate_molecules_simulation.yaml",
+            None::<String>,
             &mut rng,
         )
         .unwrap();
 
-        let moves = MoveCollection::from_yaml("tests/files/topology_pass.yaml", &context).unwrap();
+        let propagate =
+            Propagate::from_file("tests/files/translate_molecules_simulation.yaml", &context)
+                .unwrap();
 
-        assert_eq!(moves.moves.len(), 2);
-        assert!(matches!(moves.moves[0].frequency(), Frequency::Every(2)));
-        assert!(matches!(
-            moves.moves[1].frequency(),
-            Frequency::Probability(0.5)
-        ));
+        let mut markov_chain = MarkovChain::new(context, propagate, 1.0);
+
+        for step in markov_chain.iter() {
+            step.unwrap();
+        }
+
+        let move1_stats =
+            markov_chain.propagate.get_collections()[0].get_moves()[0].get_statistics();
+
+        assert_eq!(move1_stats.num_trials, 73);
+        assert_eq!(move1_stats.num_accepted, 71);
+        assert_approx_eq!(f64, move1_stats.energy_change_sum, -3.3952572353350177);
+
+        let move2_stats =
+            markov_chain.propagate.get_collections()[0].get_moves()[1].get_statistics();
+
+        assert_eq!(move2_stats.num_trials, 81);
+        assert_eq!(move2_stats.num_accepted, 79);
+        assert_approx_eq!(f64, move2_stats.energy_change_sum, -1.1611869334060376);
+
+        let move3_stats =
+            markov_chain.propagate.get_collections()[0].get_moves()[2].get_statistics();
+
+        assert_eq!(move3_stats.num_trials, 0);
+        assert_eq!(move3_stats.num_accepted, 0);
+        assert_approx_eq!(f64, move3_stats.energy_change_sum, 0.0);
+
+        let move4_stats =
+            markov_chain.propagate.get_collections()[1].get_moves()[0].get_statistics();
+
+        assert_eq!(move4_stats.num_trials, 100);
+        assert_eq!(move4_stats.num_accepted, 94);
+        assert_approx_eq!(f64, move4_stats.energy_change_sum, -61.739122509342266);
+
+        let move5_stats =
+            markov_chain.propagate.get_collections()[2].get_moves()[0].get_statistics();
+
+        assert_eq!(move5_stats.num_trials, 500);
+        assert_eq!(move5_stats.num_accepted, 466);
+        assert_approx_eq!(f64, move5_stats.energy_change_sum, -515.1334649717064);
+
+        println!("{:?}", markov_chain.context.new.particles());
+
+        for context in [&markov_chain.context.new, &markov_chain.context.old] {
+            let p1 = &context.particles()[0];
+            let p2 = &context.particles()[1];
+            let p3 = &context.particles()[2];
+
+            assert_approx_eq!(f64, p1.pos.x, p2.pos.x + 1.0, epsilon = 0.0000001);
+            assert_approx_eq!(f64, p1.pos.x, p3.pos.x + 1.0, epsilon = 0.0000001);
+            assert_approx_eq!(f64, p2.pos.x, p3.pos.x, epsilon = 0.0000001);
+
+            assert_approx_eq!(f64, p1.pos.y, p2.pos.y, epsilon = 0.0000001);
+            assert_approx_eq!(f64, p1.pos.y + 1.0, p3.pos.y, epsilon = 0.0000001);
+            assert_approx_eq!(f64, p2.pos.y + 1.0, p3.pos.y, epsilon = 0.0000001);
+
+            assert_approx_eq!(f64, p1.pos.z, p2.pos.z, epsilon = 0.0000001);
+            assert_approx_eq!(f64, p1.pos.z, p3.pos.z, epsilon = 0.0000001);
+            assert_approx_eq!(f64, p2.pos.z, p3.pos.z, epsilon = 0.0000001);
+
+            let p4 = &context.particles()[3];
+            let p5 = &context.particles()[4];
+            let p6 = &context.particles()[5];
+
+            assert_approx_eq!(f64, p4.pos.x + 1.0, p5.pos.x, epsilon = 0.0000001);
+            assert_approx_eq!(f64, p4.pos.x + 1.0, p6.pos.x, epsilon = 0.0000001);
+            assert_approx_eq!(f64, p5.pos.x, p6.pos.x, epsilon = 0.0000001);
+
+            assert_approx_eq!(f64, p4.pos.y, p5.pos.y, epsilon = 0.0000001);
+            assert_approx_eq!(f64, p4.pos.y, p6.pos.y, epsilon = 0.0000001);
+            assert_approx_eq!(f64, p5.pos.y, p6.pos.y, epsilon = 0.0000001);
+
+            assert_approx_eq!(f64, p4.pos.z, p5.pos.z, epsilon = 0.0000001);
+            assert_approx_eq!(f64, p4.pos.z, p6.pos.z + 1.0, epsilon = 0.0000001);
+            assert_approx_eq!(f64, p5.pos.z, p6.pos.z + 1.0, epsilon = 0.0000001);
+
+            let p7 = &context.particles()[6];
+            let p8 = &context.particles()[7];
+            let p9 = &context.particles()[8];
+
+            assert_approx_eq!(f64, p7.pos.x, p8.pos.x, epsilon = 0.0000001);
+            assert_approx_eq!(f64, p7.pos.x, p9.pos.x, epsilon = 0.0000001);
+            assert_approx_eq!(f64, p8.pos.x, p9.pos.x, epsilon = 0.0000001);
+
+            assert_approx_eq!(f64, p7.pos.y, p8.pos.y + 1.0, epsilon = 0.0000001);
+            assert_approx_eq!(f64, p7.pos.y, p9.pos.y + 2.0, epsilon = 0.0000001);
+            assert_approx_eq!(f64, p8.pos.y, p9.pos.y + 1.0, epsilon = 0.0000001);
+
+            assert_approx_eq!(f64, p7.pos.z, p8.pos.z, epsilon = 0.0000001);
+            assert_approx_eq!(f64, p7.pos.z, p9.pos.z, epsilon = 0.0000001);
+            assert_approx_eq!(f64, p8.pos.z, p9.pos.z, epsilon = 0.0000001);
+        }
     }
 }
