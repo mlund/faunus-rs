@@ -16,7 +16,7 @@
 
 use crate::{
     change::{Change, GroupChange},
-    Particle, SyncFrom,
+    Context, Particle, SyncFrom,
 };
 use anyhow::Ok;
 use nalgebra::Vector3;
@@ -47,9 +47,6 @@ pub type ParticleVec = Vec<Particle>;
 /// assert_eq!(group.len(), 2);
 /// assert_eq!(group.capacity(), 3);
 /// assert_eq!(group.size(), GroupSize::Partial(2));
-///
-/// let selection = group.select(&ParticleSelection::Inactive);
-/// assert_eq!(selection.unwrap(), vec![22]);
 /// ~~~
 
 #[derive(Default, Debug, PartialEq, Clone)]
@@ -93,33 +90,36 @@ pub enum GroupSize {
 /// Enum for selecting a subset of particles in a group
 #[derive(Clone, PartialEq, Debug)]
 pub enum ParticleSelection {
-    /// All particles
+    /// All particles.
     All,
-    /// Active particles
+    /// Active particles.
     Active,
-    /// Inactive particles
+    /// Inactive particles.
     Inactive,
-    /// Specific indices (relative indices)
+    /// Specific indices (relative indices).
     RelIndex(Vec<usize>),
-    /// Specific indices (absolute indices)
+    /// Specific indices (absolute indices).
     AbsIndex(Vec<usize>),
-    /// Particles with given id
+    /// All active particles with given atom id.
     ById(usize),
 }
 
 /// Enum for selecting a subset of groups
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug, Default)]
 pub enum GroupSelection {
-    /// All groups in the system
+    /// All groups in the system.
+    #[default]
     All,
-    /// Select by size
+    /// Select by size.
     Size(GroupSize),
-    /// Single group with given index
+    /// Single group with given index.
     Single(usize),
-    /// Groups with given index
+    /// Groups with given index.
     Index(Vec<usize>),
-    /// Groups with a given molecule kind
+    /// Groups with a given molecule kind.
     ByMoleculeId(usize),
+    /// Groups with any of the given molecule kinds.
+    ByMoleculeIds(Vec<usize>),
 }
 
 impl Group {
@@ -231,7 +231,11 @@ impl Group {
     /// Select (subset) of indices in the group.
     ///
     /// Absolute indices in main particle vector are returned and are guaranteed to be within the group.
-    pub fn select(&self, selection: &ParticleSelection) -> Result<Vec<usize>, anyhow::Error> {
+    pub fn select(
+        &self,
+        selection: &ParticleSelection,
+        context: &impl Context,
+    ) -> Result<Vec<usize>, anyhow::Error> {
         let to_abs = |i: usize| i + self.iter_all().start;
         let indices: Vec<usize> = match selection {
             crate::group::ParticleSelection::AbsIndex(indices) => indices.clone(),
@@ -241,8 +245,8 @@ impl Group {
             crate::group::ParticleSelection::All => return Ok(self.iter_all().collect()),
             crate::group::ParticleSelection::Active => return Ok(self.iter_active().collect()),
             crate::group::ParticleSelection::Inactive => return Ok(self.iter_inactive().collect()),
-            crate::group::ParticleSelection::ById(_) => {
-                anyhow::bail!("Not implemented: select particles by id")
+            crate::group::ParticleSelection::ById(id) => {
+                return Ok(self.select_by_id(context, self.iter_active(), *id))
             }
         };
         if indices.iter().all(|i| self.contains(*i)) {
@@ -255,6 +259,28 @@ impl Group {
         )
     }
 
+    /// Select particle indices based on the indices of atom kinds.
+    fn select_by_id(
+        &self,
+        context: &impl Context,
+        absolute_indices: std::ops::Range<usize>,
+        id: usize,
+    ) -> Vec<usize> {
+        let atom_indices = context.topology_ref().moleculekinds()[self.molecule].atom_indices();
+
+        atom_indices
+            .iter()
+            .zip(absolute_indices)
+            .filter_map(|(atom_kind_id, atom_index)| {
+                if atom_kind_id == &id {
+                    Some(atom_index)
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
     /// Check if given index is within the group
     pub fn contains(&self, index: usize) -> bool {
         index >= self.range.start && index < self.range.end
@@ -263,7 +289,7 @@ impl Group {
     /// Converts a relative index to an absolute index with range check.
     /// If called with `0`, the beginning of the group in the main particle vector is returned.
     /// Returns an error if the index points to an inactive particle.
-    pub fn absolute_index(&self, index: usize) -> anyhow::Result<usize> {
+    pub fn to_absolute_index(&self, index: usize) -> anyhow::Result<usize> {
         if index >= self.num_active {
             anyhow::bail!(
                 "Index {} out of range ({} active particles)",
@@ -272,6 +298,19 @@ impl Group {
             )
         } else {
             Ok(self.range.start + index)
+        }
+    }
+
+    /// Converts an absolute index into a relative index with range check.
+    /// Returns an error if the absolute index is not inside the group.
+    pub fn to_relative_index(&self, index: usize) -> anyhow::Result<usize> {
+        match self.range.clone().position(|i| i == index) {
+            Some(relative) => Ok(relative),
+            None => anyhow::bail!(
+                "Absolute index {} not inside group (range {:?})",
+                index,
+                self.range
+            ),
         }
     }
 
@@ -350,14 +389,16 @@ pub trait GroupCollection: SyncFrom {
                 .get_full_groups(*i)
                 .iter()
                 .cloned()
-                .chain(
-                    self.group_lists()
-                        .get_partial_groups(*i)
-                        .iter()
-                        .cloned()
-                        .chain(self.group_lists().get_full_groups(*i).iter().cloned()),
-                )
+                .chain(self.group_lists().get_partial_groups(*i).iter().cloned())
                 .collect::<Vec<usize>>(),
+            GroupSelection::ByMoleculeIds(vec) => {
+                let mut vector = vec
+                    .iter()
+                    .flat_map(|&id| self.select(&GroupSelection::ByMoleculeId(id)))
+                    .collect::<Vec<usize>>();
+                vector.sort();
+                vector
+            }
         }
     }
 
@@ -427,7 +468,7 @@ pub trait GroupCollection: SyncFrom {
                 assert_eq!(group.size(), other_group.size());
                 let indices = indices
                     .iter()
-                    .map(|i| other_group.absolute_index(*i).unwrap());
+                    .map(|i| other_group.to_absolute_index(*i).unwrap());
                 let particles = other.get_particles(indices.clone());
                 self.set_particles(indices, particles.iter())?;
             }
@@ -558,9 +599,9 @@ impl GroupLists {
     /// ## Notes
     /// - The time complexity of this operation is O(n).
     /// - This operation always consists of searching for the group (O(n)).
-    /// If the position of the group must be updated, searching is followed by
-    /// removing the group from the original vector via `swap_remove` (O(1)) and by
-    /// adding the group to the correct vector (O(1)).
+    ///   If the position of the group must be updated, searching is followed by
+    ///   removing the group from the original vector via `swap_remove` (O(1)) and by
+    ///   adding the group to the correct vector (O(1)).
     pub(crate) fn update_group(&mut self, group: &Group) {
         match self.find_group(group) {
             Some((list, index, size)) => {
@@ -618,7 +659,7 @@ impl GroupLists {
     ///
     /// ## Notes
     /// - The time complexity of this operation is O(n), where `n` is the number of
-    /// groups with the same molecule kind as the searched group.
+    ///   groups with the same molecule kind as the searched group.
     fn find_group(&mut self, group: &Group) -> Option<(&mut Vec<usize>, usize, GroupSize)> {
         [&mut self.full, &mut self.partial, &mut self.empty]
             .into_iter()
@@ -648,6 +689,8 @@ impl GroupLists {
 
 #[cfg(test)]
 mod tests {
+    use crate::platform::reference::ReferencePlatform;
+
     use super::*;
 
     #[test]
@@ -661,6 +704,14 @@ mod tests {
             range: 0..10,
             size_status: GroupSize::Partial(6),
         };
+
+        let mut rng = rand::thread_rng();
+        let context = ReferencePlatform::new(
+            "tests/files/topology_pass.yaml",
+            Some("tests/files/structure.xyz"),
+            &mut rng,
+        )
+        .unwrap();
 
         assert_eq!(group.len(), 6);
         assert_eq!(group.capacity(), 10);
@@ -721,31 +772,81 @@ mod tests {
         let mut group = Group::new(7, 0, 20..23);
         assert_eq!(group.len(), 3);
         let indices = group
-            .select(&ParticleSelection::RelIndex(vec![0, 1, 2]))
+            .select(&ParticleSelection::RelIndex(vec![0, 1, 2]), &context)
             .unwrap();
         assert_eq!(indices, vec![20, 21, 22]);
 
         // Absolute selection
         let indices = group
-            .select(&ParticleSelection::AbsIndex(vec![20, 21, 22]))
+            .select(&ParticleSelection::AbsIndex(vec![20, 21, 22]), &context)
             .unwrap();
         assert_eq!(indices, vec![20, 21, 22]);
 
         // Select all
-        let indices = group.select(&ParticleSelection::All).unwrap();
+        let indices = group.select(&ParticleSelection::All, &context).unwrap();
         assert_eq!(indices, vec![20, 21, 22]);
 
         // Out of range selection
         assert!(group
-            .select(&ParticleSelection::RelIndex(vec![1, 2, 3]))
+            .select(&ParticleSelection::RelIndex(vec![1, 2, 3]), &context)
             .is_err());
 
         // Test partial selection
         group.resize(GroupSize::Shrink(1)).unwrap();
-        let indices = group.select(&ParticleSelection::Active).unwrap();
+        let indices = group.select(&ParticleSelection::Active, &context).unwrap();
         assert_eq!(indices, vec![20, 21]);
-        let indices = group.select(&ParticleSelection::Inactive).unwrap();
+        let indices = group
+            .select(&ParticleSelection::Inactive, &context)
+            .unwrap();
         assert_eq!(indices, vec![22]);
+    }
+
+    #[test]
+    fn test_group_select_by_id() {
+        let mut rng = rand::thread_rng();
+        let context = ReferencePlatform::new(
+            "tests/files/topology_pass.yaml",
+            Some("tests/files/structure.xyz"),
+            &mut rng,
+        )
+        .unwrap();
+
+        let group = context.groups().get(1).unwrap();
+        let expected0 = vec![7, 11, 12, 13];
+        let expected1 = vec![8, 9, 10];
+
+        assert_eq!(
+            group.select(&ParticleSelection::ById(0), &context).unwrap(),
+            expected0
+        );
+
+        assert_eq!(
+            group.select(&ParticleSelection::ById(1), &context).unwrap(),
+            expected1
+        );
+
+        let group = context.groups().get(45).unwrap();
+        let expected_active: Vec<usize> = vec![];
+
+        assert_eq!(
+            group.select(&ParticleSelection::ById(2), &context).unwrap(),
+            expected_active
+        );
+    }
+
+    #[test]
+    fn test_absolute_relative_indices() {
+        let group = Group {
+            molecule: 20,
+            index: 2,
+            mass_center: None,
+            num_active: 6,
+            range: 10..27,
+            size_status: GroupSize::Partial(6),
+        };
+
+        assert_eq!(group.to_absolute_index(4).unwrap(), 14);
+        assert_eq!(group.to_relative_index(21).unwrap(), 11);
     }
 
     #[test]
@@ -780,5 +881,61 @@ mod tests {
         assert!(group_lists.full[0].contains(&1));
         assert!(!group_lists.full[1].contains(&2));
         assert!(group_lists.partial[1].contains(&2));
+    }
+
+    #[test]
+    fn test_group_selections() {
+        let mut rng = rand::thread_rng();
+        let context = ReferencePlatform::new(
+            "tests/files/topology_pass.yaml",
+            Some("tests/files/structure.xyz"),
+            &mut rng,
+        )
+        .unwrap();
+
+        // All groups
+        let expected = vec![
+            0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
+            24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45,
+            46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66,
+        ];
+        let selected = context.select(&GroupSelection::All);
+        assert_eq!(selected, expected);
+
+        // Full groups
+        let expected = vec![
+            0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
+            24, 25, 26, 27, 28, 29, 30, 31, 32, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65,
+            66,
+        ];
+        let selected = context.select(&GroupSelection::Size(GroupSize::Full));
+        assert_eq!(selected, expected);
+
+        // Empty groups
+        let expected = vec![
+            33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52,
+        ];
+        let selected = context.select(&GroupSelection::Size(GroupSize::Empty));
+        assert_eq!(selected, expected);
+
+        // Single group with index
+        let expected = vec![16];
+        let selected = context.select(&GroupSelection::Single(16));
+        assert_eq!(selected, expected);
+
+        // Several groups with index
+        let expected = vec![16, 19, 24, 35];
+        let selected = context.select(&GroupSelection::Index(vec![16, 19, 24, 35]));
+        assert_eq!(selected, expected);
+
+        // With molecule ID
+        let expected = vec![0, 1, 2, 60, 61];
+        let selected = context.select(&GroupSelection::ByMoleculeId(0));
+        assert_eq!(selected, expected);
+
+        // With several molecule IDs
+        let expected = context.select(&GroupSelection::Size(GroupSize::Full));
+        let selected = context.select(&GroupSelection::ByMoleculeIds(vec![0, 1]));
+        assert_eq!(selected, expected);
     }
 }

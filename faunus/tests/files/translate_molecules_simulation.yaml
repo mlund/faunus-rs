@@ -1,0 +1,65 @@
+# This topology file is used in the `translate_molecules_simulation` test.
+
+atoms:
+  - {name: O, mass: 15.9994, charge: -0.834, element: O}
+  - {name: H, mass: 1.008, charge: 0.417, element: H}
+
+molecules:
+  - name: TIP3P
+    atoms: [H, O, H]
+    bonds:
+      - {index: [0, 1], kind: !Harmonic {k: 450.0, req: 0.9572}}
+      - {index: [1, 2], kind: !Harmonic {k: 450.0, req: 0.9572}}
+    torsions:
+      - {index: [0, 1, 2], kind: !Harmonic {k: 55.0, aeq: 104.52}}
+    exclusions: [[0, 1], [1, 2], [0, 2]]
+    degrees_of_freedom: Rigid
+    atom_names: [HW, OW, HW]
+    has_com: true
+
+propagate:
+  seed: !Fixed 12345
+  criterion: Metropolis
+  repeat: 100
+  collections:
+    - !Stochastic
+      moves:
+        - !TranslateMolecule {molecule: "TIP3P", max_displacement: 0.1, weight: 1.5}
+        - !TranslateMolecule {molecule: "TIP3P", dp: 0.1, weight: 0.5, repeat: 3}
+        - !TranslateMolecule {molecule: "TIP3P", max_displacement: 1.0, weight: 0.0} # should never be chosen
+    - !Deterministic
+      moves:
+        - !TranslateMolecule {molecule: "TIP3P", dp: 0.2, weight: 0.0}
+    - !Stochastic
+      repeat: 5
+      moves:
+        - !TranslateMolecule {molecule: "TIP3P", dp: 0.5, weight: 1.0}
+
+system:
+  cell: !Cuboid [10.0, 10.0, 10.0]
+  
+  energy:
+    nonbonded:
+      [O, O]:
+        - !LennardJones {epsilon: 0.1521, sigma: 3.1507}
+        - !CoulombPlain {cutoff: 11.0}
+      [H, H]:
+        - !LennardJones {epsilon: 0.0460, sigma: 0.4}
+        - !CoulombPlain {cutoff: 11.0}
+      [O, H]:
+        - !LennardJones {epsilon: 0.0836, sigma: 1.7753}
+        - !CoulombPlain {cutoff: 11.0}
+    
+  blocks:
+    - molecule: TIP3P
+      N: 3
+      insert: !Manual 
+        - [1.0, 0.0, 0.0]
+        - [0.0, 0.0, 0.0]
+        - [0.0, 1.0, 0.0]
+        - [-1.0, 0.0, 2.0]
+        - [0.0, 0.0, 2.0]
+        - [0.0, 0.0, 1.0]
+        - [0.0, 1.0, 4.0]
+        - [0.0, 0.0, 4.0]
+        - [0.0, -1.0, 4.0]

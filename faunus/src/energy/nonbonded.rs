@@ -64,11 +64,11 @@ pub(super) trait NonbondedTerm {
     ///
     /// ## Example
     /// - Group 1 contains active particles A, and B.
-    /// Group 2 contains active particles C, D, and E.
+    ///   Group 2 contains active particles C, D, and E.
     /// - Calling this method with particle A and group 2 will return the sum of interactions
-    /// A-C, A-D, and A-E.
+    ///   A-C, A-D, and A-E.
     /// - Calling this method with particle A and group 1 will return the sum of interactions
-    /// A-A, A-B. To get just A-B, use `particle_with_group`.
+    ///   A-A, A-B. To get just A-B, use `particle_with_group`.
     #[inline(always)]
     fn particle_with_group_unchecked(
         &self,
@@ -95,7 +95,7 @@ pub(super) trait NonbondedTerm {
     /// - Group 2 = C, D, E
     /// - Group 3 = F
     /// - Calling this method with particle A will return the sum of interactions
-    /// A-C, A-D, A-E, and A-F.
+    ///   A-C, A-D, A-E, and A-F.
     #[inline(always)]
     fn particle_with_other_groups(&self, context: &impl Context, i: usize, group: &Group) -> f64 {
         context
@@ -119,7 +119,7 @@ pub(super) trait NonbondedTerm {
     /// - Group 2 = C, D, E
     /// - Group 3 = F
     /// - Calling this method with particle A will return the sum of interactions
-    /// A-B, A-C, A-D, A-E, and A-F.
+    ///   A-B, A-C, A-D, A-E, and A-F.
     #[inline(always)]
     fn particle_with_all(&self, context: &impl Context, i: usize, group: &Group) -> f64 {
         self.particle_with_other_groups(context, i, group)
@@ -139,9 +139,9 @@ pub(super) trait NonbondedTerm {
     ///
     /// ## Example
     /// - Group 1 contains active particles A, and B.
-    /// Group 2 contains active particles C, D, and E.
+    ///   Group 2 contains active particles C, D, and E.
     /// - Calling this method with group 1 and group 2 will return the sum of interactions
-    /// A-C, A-D, A-E, B-C, B-D, and B-E.
+    ///   A-C, A-D, A-E, B-C, B-D, and B-E.
     #[inline(always)]
     fn group_with_group(&self, context: &impl Context, group1: &Group, group2: &Group) -> f64 {
         group1
@@ -185,7 +185,7 @@ pub(super) trait NonbondedTerm {
     /// - Group 2 = C, D, E
     /// - Group 3 = F
     /// - Calling this method with group 1 will return the sum of interactions
-    /// A-C, A-D, A-E, A-F, B-C, B-D, B-E and B-F.
+    ///   A-C, A-D, A-E, A-F, B-C, B-D, B-E and B-F.
     #[inline(always)]
     fn group_with_other_groups(&self, context: &impl Context, group: &Group) -> f64 {
         group
@@ -207,7 +207,7 @@ pub(super) trait NonbondedTerm {
     /// - Group 2 = C, D, E
     /// - Group 3 = F
     /// - Calling this method with group 1 will return the sum of interactions
-    /// A-B, A-C, A-D, A-E, A-F, B-C, B-D, B-E and B-F.
+    ///   A-B, A-C, A-D, A-E, A-F, B-C, B-D, B-E and B-F.
     #[inline(always)]
     #[allow(dead_code)]
     fn group_with_all(&self, context: &impl Context, group: &Group) -> f64 {
@@ -225,7 +225,7 @@ pub(super) trait NonbondedTerm {
     /// - Group 2 = C, D, E
     /// - Group 3 = F
     /// - Calling this method will return the sum of interactions
-    /// A-B, A-C, A-D, A-E, A-F, B-C, B-D, B-E, B-F, C-D, C-E, C-F, D-E, D-F, E-F.
+    ///   A-B, A-C, A-D, A-E, A-F, B-C, B-D, B-E, B-F, C-D, C-E, C-F, D-E, D-F, E-F.
     #[inline(always)]
     fn total_nonbonded(&self, context: &impl Context) -> f64 {
         context
@@ -331,7 +331,7 @@ impl NonbondedMatrix {
                 .map(|&particle| {
                     let group = &context.groups()[group_index];
                     // the PartialUpdate stores relative indices of particles
-                    match group.absolute_index(particle) {
+                    match group.to_absolute_index(particle) {
                         Ok(abs_index) => self.particle_with_all(context, abs_index, group),
                         // if the particle is not active, return 0.0
                         Err(_) => 0.0,

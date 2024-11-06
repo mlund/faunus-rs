@@ -64,7 +64,7 @@ impl Torsion {
     /// Calculate energy of a torsion in a specific group.
     /// Returns 0.0 if any of the interacting particles is inactive.
     pub fn energy(&self, context: &impl Context, group: &Group) -> f64 {
-        let indices = match self.index.map(|rel| group.absolute_index(rel)) {
+        let indices = match self.index.map(|rel| group.to_absolute_index(rel)) {
             [Ok(i), Ok(j), Ok(k)] => [i, j, k],
             _ => return 0.0,
         };
