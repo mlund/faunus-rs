@@ -1,28 +1,44 @@
 use anyhow::Result;
+use get_size::GetSize;
 
 /// Periodic table that emulate periodicity by padding edges
-#[derive(Debug, Clone, Default)]
-pub struct PaddedTable<T: Default + Clone> {
-    /// Minimum value of keys in the table
+#[derive(Debug, Clone, GetSize)]
+pub struct PaddedTable<T: Clone> {
+    /// Minimum key value
     min: f64,
-    /// Maximum value of keys in the table
+    /// Maximum key value
     _max: f64,
-    /// Resolution of the keys in table
+    /// Key resolution
     res: f64,
     /// Data of the table
     data: Vec<T>,
 }
 
-impl<T: Default + Clone> PaddedTable<T> {
-    pub fn new(min: f64, max: f64, res: f64, initial_value: T) -> PaddedTable<T> {
-        assert!(min < max && res > 0.0);
-        let n = ((max - min + 2.0 * res) / res + 0.5) as usize;
+impl<T: Clone> PaddedTable<T> {
+    pub fn new(min: f64, max: f64, step: f64, initial_value: T) -> PaddedTable<T> {
+        assert!(min < max && step > 0.0);
+        let n = ((max - min + 2.0 * step) / step + 0.5) as usize;
         Self {
-            min: min - res,
-            _max: max + res,
-            res,
+            min: min - step,
+            _max: max + step,
+            res: step,
             data: vec![initial_value; n],
         }
+    }
+
+    /// Get minimum key value (inclusive)
+    pub fn min_key(&self) -> f64 {
+        self.min + self.res
+    }
+
+    /// Get maximum key value (inclusive)
+    pub fn max_key(&self) -> f64 {
+        self._max - self.res
+    }
+
+    /// Get key spacing
+    pub fn key_step(&self) -> f64 {
+        self.res
     }
 
     /// Convert value to index
@@ -78,10 +94,6 @@ impl<T: Default + Clone> PaddedTable<T> {
 
 pub type PaddedTable1D = PaddedTable<f64>;
 pub type PaddedTable2D = PaddedTable<PaddedTable1D>;
-pub type PaddedTable3D = PaddedTable<PaddedTable2D>;
-pub type PaddedTable4D = PaddedTable<PaddedTable3D>;
-pub type PaddedTable5D = PaddedTable<PaddedTable4D>;
-pub type PaddedTable6D = PaddedTable<PaddedTable5D>;
 
 #[cfg(test)]
 mod tests {

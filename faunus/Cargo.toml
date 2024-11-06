@@ -17,8 +17,8 @@ serde = { version = "1.0", features = ["derive"] }
 anyhow = "1.0"
 float-cmp = "0.9"
 itertools = "0.10"
-nalgebra = { version = "0.32", features = ["serde-serialize"] }
-interatomic = { path = "../interatomic", features = ["serde"] }
+nalgebra = { version = "0.33", features = ["serde-serialize"] }
+interatomic = {path = "../interatomic", features = ["serde"]}
 as-any = "0.3"
 rand = "0.8"
 num = "0.4"

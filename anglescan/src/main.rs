@@ -1,21 +1,24 @@
 use anglescan::{
     energy,
+    icotable::{IcoTable, Table6D},
     structure::{AtomKinds, Structure},
-    Sample, TwobodyAngles, Vector3,
+    to_cartesian, to_spherical, Sample, TwobodyAngles, UnitQuaternion,
 };
 use anyhow::Result;
 use clap::{Parser, Subcommand};
-use coulomb::{DebyeLength, Medium, Salt};
+use coulomb::{DebyeLength, Medium, Salt, Vector3};
 use indicatif::ParallelProgressIterator;
+use itertools::Itertools;
 use nu_ansi_term::Color::{Red, Yellow};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use rgb::RGB8;
-use std::f64::consts::PI;
-use std::{io::Write, path::PathBuf};
+use std::{f64::consts::PI, io::Write, ops::Neg, path::PathBuf};
 extern crate pretty_env_logger;
 #[macro_use]
 extern crate log;
+use get_size::GetSize;
 use iter_num_tools::arange;
+use rand::Rng;
 use textplots::{Chart, ColorPlot, Shape};
 
 #[derive(Parser)]
@@ -27,6 +30,27 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
+    Dipole {
+        /// Path to first XYZ file
+        #[arg(short = 'o', long)]
+        output: PathBuf,
+        /// Dipole moment strength
+        #[arg(short = 'm')]
+        mu: f64,
+        /// Angular resolution in radians
+        #[arg(short = 'r', long, default_value = "0.1")]
+        resolution: f64,
+        /// Minimum mass center distance
+        #[arg(long)]
+        rmin: f64,
+        /// Maximum mass center distance
+        #[arg(long)]
+        rmax: f64,
+        /// Mass center distance step
+        #[arg(long)]
+        dr: f64,
+    },
+
     Potential {
         /// Path to first XYZ file
         #[arg(short = '1', long)]
@@ -83,6 +107,9 @@ enum Commands {
         /// Temperature in K
         #[arg(short = 'T', long, default_value = "298.15")]
         temperature: f64,
+        /// Use icosphere table
+        #[arg(long)]
+        icotable: bool,
     },
 }
 
@@ -99,6 +126,7 @@ fn do_scan(cmd: &Commands) -> Result<()> {
         molarity,
         cutoff,
         temperature,
+        icotable,
     } = cmd
     else {
         anyhow::bail!("Unknown command");
@@ -108,27 +136,146 @@ fn do_scan(cmd: &Commands) -> Result<()> {
     let mut atomkinds = AtomKinds::from_yaml(atoms)?;
     atomkinds.set_missing_epsilon(2.479);
 
-    let scan = TwobodyAngles::new(*resolution).unwrap();
     let medium = Medium::salt_water(*temperature, Salt::SodiumChloride, *molarity);
     let multipole = coulomb::pairwise::Plain::new(*cutoff, medium.debye_length());
     let pair_matrix = energy::PairMatrix::new(&atomkinds.atomlist, &multipole);
     let ref_a = Structure::from_xyz(mol1, &atomkinds);
     let ref_b = Structure::from_xyz(mol2, &atomkinds);
 
-    info!("{} per distance", scan);
     info!("{}", medium);
 
     // Scan over mass center distances
-    let distances: Vec<f64> = iter_num_tools::arange(*rmin..*rmax, *dr).collect::<Vec<_>>();
+    let distances = iter_num_tools::arange(*rmin..*rmax, *dr).collect_vec();
     info!(
-        "Scanning COM range [{:.1}, {:.1}) in {:.1} Å steps 🐾",
+        "COM range: [{:.1}, {:.1}) in {:.1} Å steps 🐾",
         rmin, rmax, dr
     );
+    if *icotable {
+        do_icoscan(
+            *rmin,
+            *rmax,
+            *dr,
+            *resolution,
+            ref_a,
+            ref_b,
+            pair_matrix,
+            temperature,
+        )
+    } else {
+        do_anglescan(
+            distances,
+            *resolution,
+            ref_a,
+            ref_b,
+            pair_matrix,
+            temperature,
+        )
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn do_icoscan(
+    rmin: f64,
+    rmax: f64,
+    dr: f64,
+    angle_resolution: f64,
+    ref_a: Structure,
+    ref_b: Structure,
+    pair_matrix: energy::PairMatrix,
+    temperature: &f64,
+) -> std::result::Result<(), anyhow::Error> {
+    let distances = iter_num_tools::arange(rmin..rmax, dr).collect_vec();
+    let table = Table6D::from_resolution(rmin, rmax, dr, angle_resolution)?;
+    let n_points = table.get(rmin).unwrap().get(0.0).unwrap().len();
+    let angle_resolution = (4.0 * PI / n_points as f64).sqrt();
+    let dihedral_angles = iter_num_tools::arange(0.0..2.0 * PI, angle_resolution).collect_vec();
+
+    let total = distances.len() * dihedral_angles.len() * n_points * n_points;
+
+    info!(
+        "6D table: 𝑅({}) x 𝜔({}) x 𝜃𝜑({}) x 𝜃𝜑({}) = {} poses 💃🕺 ({:.1} MB)",
+        distances.len(),
+        dihedral_angles.len(),
+        n_points,
+        n_points,
+        total,
+        table.get_heap_size() as f64 / 1e6
+    );
+
+    use nalgebra::UnitVector3;
+
+    // Rotation operations via unit quaternions
+    let zaxis = UnitVector3::new_normalize(Vector3::new(0.0005, 0.0005, 1.0));
+    let to_neg_zaxis = |p| UnitQuaternion::rotation_between(p, &-zaxis).unwrap();
+    let around_z = |angle| UnitQuaternion::from_axis_angle(&zaxis, angle);
+
+    // Calculate energy of all two-body poses for given mass center separation and dihedral angle
+    let calc_energy = |r: f64, omega: f64| {
+        let r_vec = Vector3::new(0.0, 0.0, r);
+        let a = table.get(r).unwrap().get(omega).unwrap();
+        for vertex_a in a.vertices.iter() {
+            for vertex_b in vertex_a.data.get().unwrap().vertices.iter() {
+                let q1 = to_neg_zaxis(&vertex_b.pos);
+                let q2 = around_z(omega);
+                let q3 = UnitQuaternion::rotation_between(&zaxis, &vertex_a.pos).unwrap();
+                let mut mol_b = ref_b.clone(); // initially at origin
+                mol_b.transform(|pos| (q1 * q2).transform_vector(&pos));
+                mol_b.transform(|pos| q3.transform_vector(&(pos + r_vec)));
+                let energy = pair_matrix.sum_energy(&ref_a, &mol_b);
+                vertex_b.data.set(energy).unwrap();
+            }
+        }
+    };
+
+    // Pair all mass center separations (r) and dihedral angles (omega)
+    let r_and_omega = distances
+        .iter()
+        .copied()
+        .cartesian_product(dihedral_angles.iter().copied())
+        .collect_vec();
+
+    // Populate 6D table with inter-particle energies (multi-threaded)
+    r_and_omega
+        .par_iter()
+        .progress_count(r_and_omega.len() as u64)
+        .for_each(|(r, omega)| {
+            calc_energy(*r, *omega);
+        });
+
+    // Calculate partition function
+    let mut samples: Vec<(Vector3, Sample)> = Vec::default();
+    for r in &distances {
+        let mut partition_func = Sample::default();
+        for omega in &dihedral_angles {
+            let r_and_omega = table.get(*r).unwrap().get(*omega).unwrap();
+            for vertex_a in r_and_omega.vertices.iter() {
+                for vertex_b in vertex_a.data.get().unwrap().vertices.iter() {
+                    let energy = vertex_b.data.get().unwrap();
+                    partition_func = partition_func + Sample::new(*energy, *temperature);
+                }
+            }
+        }
+        samples.push((Vector3::new(0.0, 0.0, *r), partition_func));
+    }
+    report_pmf(samples.as_slice(), &PathBuf::from("pmf.dat"));
+    Ok(())
+}
+
+fn do_anglescan(
+    distances: Vec<f64>,
+    angle_resolution: f64,
+    ref_a: Structure,
+    ref_b: Structure,
+    pair_matrix: energy::PairMatrix,
+    temperature: &f64,
+) -> std::result::Result<(), anyhow::Error> {
+    let scan = TwobodyAngles::from_resolution(angle_resolution).unwrap();
+    info!("{} per distance", scan);
     let com_scan = distances
         .par_iter()
         .progress_count(distances.len() as u64)
         .map(|r| {
-            let r_vec = Vector3::<f64>::new(0.0, 0.0, *r);
+            let r_vec = Vector3::new(0.0, 0.0, *r);
             let sample = scan
                 .sample_all_angles(&ref_a, &ref_b, &pair_matrix, &r_vec, *temperature)
                 .unwrap();
@@ -141,7 +288,7 @@ fn do_scan(cmd: &Commands) -> Result<()> {
 }
 
 /// Write PMF and mean energy as a function of mass center separation to file
-fn report_pmf(samples: &[(Vector3<f64>, Sample)], path: &PathBuf) {
+fn report_pmf(samples: &[(Vector3, Sample)], path: &PathBuf) {
     // File with F(R) and U(R)
     let mut pmf_file = std::fs::File::create(path).unwrap();
     let mut pmf_data = Vec::<(f32, f32)>::new();
@@ -178,6 +325,93 @@ fn report_pmf(samples: &[(Vector3<f64>, Sample)], path: &PathBuf) {
     }
 }
 
+fn do_dipole(cmd: &Commands) -> Result<()> {
+    let Commands::Dipole {
+        output,
+        mu,
+        resolution,
+        rmin,
+        rmax,
+        dr,
+    } = cmd
+    else {
+        panic!("Unexpected command");
+    };
+    let distances: Vec<f64> = iter_num_tools::arange(*rmin..*rmax, *dr).collect();
+    let n_points = (4.0 * PI / resolution.powi(2)).round() as usize;
+    let mut icotable = IcoTable::<f64>::from_min_points(n_points)?;
+    let resolution = (4.0 * PI / icotable.vertices.len() as f64).sqrt();
+    log::info!(
+        "Requested {} points on a sphere; got {} -> new resolution = {:.3}",
+        n_points,
+        icotable.vertices.len(),
+        resolution
+    );
+
+    let mut dipole_file = std::fs::File::create(output)?;
+    writeln!(dipole_file, "# R/Å w_vertex w_exact w_interpolated")?;
+
+    let charge = 1.0;
+    let bjerrum_len = 7.0;
+
+    // for each ion-dipole separation, calculate the partition function and free energy
+    for radius in distances {
+        // exact exp. energy at a given point, exp(-βu)
+        let exact_exp_energy = |_, p: &Vector3| {
+            let (_r, theta, _phi) = to_spherical(p);
+            let field = bjerrum_len * charge / radius.powi(2);
+            let u = field * mu * theta.cos();
+            (-u).exp()
+        };
+        icotable.clear_vertex_data();
+        icotable.set_vertex_data(exact_exp_energy);
+
+        // Q summed from exact data at each vertex
+        let partition_function = icotable.vertex_data().sum::<f64>() / icotable.len() as f64;
+
+        // analytical solution to angular average of exp(-βu)
+        let field = -bjerrum_len * charge / radius.powi(2);
+        let exact_free_energy = ((field * mu).sinh() / (field * mu)).ln().neg();
+
+        // rotations to apply to vertices of a new icosphere used for sampling interpolated points
+        let mut rng = rand::thread_rng();
+        let quaternions: Vec<UnitQuaternion<f64>> = (0..20)
+            .map(|_| {
+                let point: Vector3 = faunus::transform::random_unit_vector(&mut rng);
+                UnitQuaternion::<f64>::from_axis_angle(
+                    &nalgebra::Unit::new_normalize(point),
+                    rng.gen_range(0.0..PI),
+                )
+            })
+            .collect();
+
+        // Sample interpolated points using a randomly rotate icospheres
+        let mut rotated_icosphere = IcoTable::<f64>::from_min_points(1000)?;
+        let mut partition_func_interpolated = 0.0;
+
+        for q in &quaternions {
+            rotated_icosphere.transform_vertex_positions(|v| q.transform_vector(v));
+            partition_func_interpolated += rotated_icosphere
+                .vertices
+                .iter()
+                .map(|v| icotable.interpolate(&v.pos))
+                .sum::<f64>()
+                / rotated_icosphere.len() as f64;
+        }
+        partition_func_interpolated /= quaternions.len() as f64;
+
+        writeln!(
+            dipole_file,
+            "{:.5} {:.5} {:.5} {:.5}",
+            radius,
+            partition_function.ln().neg(),
+            exact_free_energy,
+            partition_func_interpolated.ln().neg(),
+        )?;
+    }
+    Ok(())
+}
+
 // Calculate electric potential at points on a sphere around a molecule
 fn do_potential(cmd: &Commands) -> Result<()> {
     let Commands::Potential {
@@ -209,52 +443,59 @@ fn do_potential(cmd: &Commands) -> Result<()> {
         resolution
     );
 
-    let mut icotable = anglescan::IcoSphereTable::from_min_points(n_points)?;
-    let mut pqr_file = std::fs::File::create("potential.pqr")?;
-    let mut pot_vertices_file = std::fs::File::create("pot_at_vertices.dat")?;
+    let icotable = IcoTable::<f64>::from_min_points(n_points)?;
+    icotable.set_vertex_data(|_, v| {
+        energy::electric_potential(&structure, &v.scale(*radius), &multipole)
+    });
 
-    // Calculate electric potential at vertices scaled by radius
-    for (vertex, data) in std::iter::zip(icotable.vertices.clone(), icotable.vertex_data_mut()) {
-        *data = energy::electric_potential(&structure, &vertex.scale(*radius), &multipole);
-        let (_r, theta, phi) = to_spherical(&vertex);
-        writeln!(pot_vertices_file, "{:.3} {:.3} {:.4}", theta, phi, *data)?;
-        pqr_write_atom(&mut pqr_file, 1, &vertex.scale(*radius), *data, 2.0)?;
+    std::fs::File::create("pot_at_vertices.dat")?.write_fmt(format_args!("{}", icotable))?;
+
+    // Make PQR file illustrating the electric potential at each vertex
+    let mut pqr_file = std::fs::File::create("potential.pqr")?;
+    for (vertex, data) in std::iter::zip(&icotable.vertices, icotable.vertex_data()) {
+        pqr_write_atom(&mut pqr_file, 1, &vertex.pos.scale(*radius), *data, 2.0)?;
     }
 
+    // Compare interpolated and exact potential linearly in angular space
     let mut pot_angles_file = std::fs::File::create("pot_at_angles.dat")?;
+    let mut pqr_file = std::fs::File::create("potential_angles.pqr")?;
+    writeln!(pot_angles_file, "# theta phi interpolated exact relerr")?;
     for theta in arange(0.0001..PI, resolution) {
-        for phi in arange(0.0001..2.0 * PI, resolution / 2.0) {
+        for phi in arange(0.0001..2.0 * PI, resolution) {
             let point = &to_cartesian(1.0, theta, phi);
-            let potential = icotable.barycentric_interpolation(point);
-            let exact_potential =
-                energy::electric_potential(&structure, &point.scale(*radius), &multipole);
-            let rel_err = (potential - exact_potential) / exact_potential;
-            let abs_err = (potential - exact_potential).abs();
+            let interpolated = icotable.interpolate(point);
+            let exact = energy::electric_potential(&structure, &point.scale(*radius), &multipole);
+            pqr_write_atom(&mut pqr_file, 1, &point.scale(*radius), exact, 2.0)?;
+            let rel_err = (interpolated - exact) / exact;
+            let abs_err = (interpolated - exact).abs();
             if abs_err > 0.05 {
-                println!(
+                log::debug!(
                     "Potential at theta={:.3} phi={:.3} is {:.4} (exact: {:.4}) abs. error {:.4}",
-                    theta, phi, potential, exact_potential, abs_err
+                    theta,
+                    phi,
+                    interpolated,
+                    exact,
+                    abs_err
                 );
                 let face = icotable.nearest_face(point);
-                let bary = icotable.barycentric(point, &face);
-                println!("Face: {:?} Barycentric: {:?}", face, bary);
-                println!();
+                let bary = icotable.naive_barycentric(point, &face);
+                log::debug!("Face: {:?} Barycentric: {:?}\n", face, bary);
             }
             writeln!(
                 pot_angles_file,
                 "{:.3} {:.3} {:.4} {:.4} {:.4}",
-                theta, phi, potential, exact_potential, rel_err
+                theta, phi, interpolated, exact, rel_err
             )?;
         }
     }
-
     Ok(())
 }
 
+/// From single ATOM record in PQR file stream
 fn pqr_write_atom(
     stream: &mut impl std::io::Write,
     atom_id: usize,
-    pos: &Vector3<f64>,
+    pos: &Vector3,
     charge: f64,
     radius: f64,
 ) -> Result<()> {
@@ -266,37 +507,6 @@ fn pqr_write_atom(
     Ok(())
 }
 
-/// Converts Cartesian coordinates to spherical coordinates (r, theta, phi)
-/// where:
-/// - r is the radius
-/// - theta is the polar angle (0..pi)
-/// - phi is the azimuthal angle (0..2pi)
-fn to_spherical(cartesian: &Vector3<f64>) -> (f64, f64, f64) {
-    let r = cartesian.norm();
-    let theta = (cartesian.z / r).acos();
-    let phi = cartesian.y.atan2(cartesian.x);
-    if phi < 0.0 {
-        (r, theta, phi + 2.0 * PI)
-    } else {
-        (r, theta, phi)
-    }
-}
-
-/// Converts spherical coordinates (r, theta, phi) to Cartesian coordinates
-/// where:
-/// - r is the radius
-/// - theta is the polar angle (0..pi)
-/// - phi is the azimuthal angle (0..2pi)
-fn to_cartesian(r: f64, theta: f64, phi: f64) -> Vector3<f64> {
-    let (theta_sin, theta_cos) = theta.sin_cos();
-    let (phi_sin, phi_cos) = phi.sin_cos();
-    Vector3::new(
-        r * theta_sin * phi_cos,
-        r * theta_sin * phi_sin,
-        r * theta_cos,
-    )
-}
-
 fn do_main() -> Result<()> {
     if std::env::var("RUST_LOG").is_err() {
         std::env::set_var("RUST_LOG", "info");
@@ -306,6 +516,7 @@ fn do_main() -> Result<()> {
     let cli = Cli::parse();
     match cli.command {
         Some(cmd) => match cmd {
+            Commands::Dipole { .. } => do_dipole(&cmd)?,
             Commands::Scan { .. } => do_scan(&cmd)?,
             Commands::Potential { .. } => do_potential(&cmd)?,
         },

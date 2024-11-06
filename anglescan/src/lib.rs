@@ -1,17 +1,18 @@
 pub use nalgebra::{Matrix3, UnitQuaternion, Vector3};
 mod anglescan;
 pub mod energy;
+pub mod icotable;
 pub mod structure;
 pub mod table;
 extern crate pretty_env_logger;
 #[macro_use]
 extern crate log;
-
+use std::f64::consts::PI;
 use std::iter::Sum;
 use std::ops::{Add, Neg};
 
 pub use anglescan::{
-    make_fibonacci_sphere, make_icosphere, make_icosphere_vertices, IcoSphereTable, TwobodyAngles,
+    make_fibonacci_sphere, make_icosphere, make_icosphere_vertices, TwobodyAngles,
 };
 
 /// RMSD angle between two quaternion rotations
@@ -85,6 +86,58 @@ impl Add for Sample {
             thermal_energy: f64::max(self.thermal_energy, other.thermal_energy),
             mean_energy: self.mean_energy + other.mean_energy,
             exp_energy: self.exp_energy + other.exp_energy,
+        }
+    }
+}
+
+/// Converts Cartesian coordinates to spherical coordinates (r, theta, phi)
+/// where:
+/// - r is the radius
+/// - theta is the polar angle (0..pi)
+/// - phi is the azimuthal angle (0..2pi)
+pub fn to_spherical(cartesian: &Vector3<f64>) -> (f64, f64, f64) {
+    let r = cartesian.norm();
+    let theta = (cartesian.z / r).acos();
+    let phi = cartesian.y.atan2(cartesian.x);
+    if phi < 0.0 {
+        (r, theta, phi + 2.0 * PI)
+    } else {
+        (r, theta, phi)
+    }
+}
+
+/// Converts spherical coordinates (r, theta, phi) to Cartesian coordinates
+/// where:
+/// - r is the radius
+/// - theta is the polar angle (0..pi)
+/// - phi is the azimuthal angle (0..2pi)
+pub fn to_cartesian(r: f64, theta: f64, phi: f64) -> Vector3<f64> {
+    let (theta_sin, theta_cos) = theta.sin_cos();
+    let (phi_sin, phi_cos) = phi.sin_cos();
+    Vector3::new(
+        r * theta_sin * phi_cos,
+        r * theta_sin * phi_sin,
+        r * theta_cos,
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use approx::assert_relative_eq;
+    use iter_num_tools::arange;
+
+    #[test]
+    fn test_spherical_cartesian_conversion() {
+        const ANGLE_TOL: f64 = 1e-6;
+        // Skip theta = 0 as phi is undefined
+        for theta in arange(0.00001..PI, 0.01) {
+            for phi in arange(0.0..2.0 * PI, 0.01) {
+                let cartesian = to_cartesian(1.0, theta, phi);
+                let (_, theta_converted, phi_converted) = to_spherical(&cartesian);
+                assert_relative_eq!(theta, theta_converted, epsilon = ANGLE_TOL);
+                assert_relative_eq!(phi, phi_converted, epsilon = ANGLE_TOL);
+            }
         }
     }
 }

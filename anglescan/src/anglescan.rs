@@ -6,7 +6,7 @@ use anyhow::{Context, Result};
 use approx::assert_relative_eq;
 use hexasphere::{
     shapes::{IcoSphere, IcoSphereBase},
-    AdjacencyBuilder, Subdivided,
+    Subdivided,
 };
 use iter_num_tools::arange;
 use itertools::Itertools;
@@ -46,11 +46,8 @@ impl TwobodyAngles {
     ///
     /// # Arguments
     /// angle_resolution: f64 - the resolution of the scan in radians
-    pub fn new(angle_resolution: f64) -> Result<Self> {
-        assert!(
-            angle_resolution > 0.0,
-            "angle_resolution must be greater than 0"
-        );
+    pub fn from_resolution(angle_resolution: f64) -> Result<Self> {
+        assert!(angle_resolution > 0.0,);
 
         let n_points = (4.0 * PI / angle_resolution.powi(2)).round() as usize;
         let mut points = make_icosphere_vertices(n_points)?;
@@ -248,157 +245,6 @@ pub fn make_icosphere_vertices(min_points: usize) -> Result<Vec<Vector3>> {
     Ok(points)
 }
 
-// https://en.wikipedia.org/wiki/Geodesic_polyhedron
-// 12 vertices will always have 5 neighbors; the rest will have 6.
-pub struct IcoSphereTable {
-    /// Raw icosphere structure from hexasphere crate
-    _icosphere: Subdivided<(), IcoSphereBase>,
-    /// Neighbor list of other vertices for each vertex
-    neighbors: Vec<Vec<usize>>,
-    /// 3D coordinates of the vertices
-    pub vertices: Vec<Vector3>,
-    /// All faces of the icosphere each consisting of three (sorted) vertex indices
-    faces: Vec<Vec<usize>>,
-    /// Data associated with each vertex
-    vertex_data: Vec<f64>,
-}
-
-impl IcoSphereTable {
-    pub fn from_icosphere(icosphere: Subdivided<(), IcoSphereBase>) -> Self {
-        let indices = icosphere.get_all_indices();
-        let mut builder = AdjacencyBuilder::new(icosphere.raw_points().len());
-        builder.add_indices(indices.as_slice());
-        let neighbors = builder.finish().iter().map(|i| i.to_vec()).collect();
-        let vertices: Vec<Vector3> = icosphere
-            .raw_points()
-            .iter()
-            .map(|p| Vector3::new(p.x as f64, p.y as f64, p.z as f64))
-            .collect();
-
-        let faces = indices
-            .chunks(3)
-            .map(|c| {
-                let mut v = vec![c[0] as usize, c[1] as usize, c[2] as usize];
-                v.sort();
-                v
-            })
-            .collect();
-
-        let n_vertices = vertices.len();
-
-        Self {
-            _icosphere: icosphere,
-            neighbors,
-            vertices,
-            faces,
-            vertex_data: vec![0.0; n_vertices],
-        }
-    }
-
-    pub fn from_min_points(min_points: usize) -> Result<Self> {
-        let icosphere = make_icosphere(min_points)?;
-        Ok(Self::from_icosphere(icosphere))
-    }
-
-    /// Get data associated with each vertex
-    pub fn vertex_data(&self) -> &Vec<f64> {
-        &self.vertex_data
-    }
-
-    /// Get mutable data associated with each vertex
-    pub fn vertex_data_mut(&mut self) -> &mut Vec<f64> {
-        &mut self.vertex_data
-    }
-
-    /// Check is a point is on a face
-    pub fn is_on_face(&self, point: &Vector3, face: &[usize]) -> bool {
-        let a = point - self.vertices[face[0]];
-        let b = point - self.vertices[face[1]];
-        let c = point - self.vertices[face[2]];
-        let n = a.cross(&b);
-        let n = n.normalize();
-        let d = n.dot(&c);
-        d.abs() < 1e-3
-    }
-
-    /// Get data for a point on the surface using barycentric interpolation
-    /// https://en.wikipedia.org/wiki/Barycentric_coordinate_system#Interpolation_on_a_triangular_unstructured_grid
-    pub fn barycentric_interpolation(&self, point: &Vector3) -> f64 {
-        let face = self.nearest_face(point);
-        let bary = self.barycentric(point, &face);
-        bary[0] * self.vertex_data[face[0]]
-            + bary[1] * self.vertex_data[face[1]]
-            + bary[2] * self.vertex_data[face[2]]
-    }
-
-    /// Get Barycentric coordinate for an arbitrart point on a face
-    /// https://en.wikipedia.org/wiki/Barycentric_coordinate_system
-    pub fn barycentric(&self, point: &Vector3, face: &[usize]) -> Vec<f64> {
-        let a = self.vertices[face[0]];
-        let b = self.vertices[face[1]];
-        let c = self.vertices[face[2]];
-        let v0 = b - a;
-        let v1 = c - a;
-        let v2 = point - a;
-        let d00 = v0.dot(&v0);
-        let d01 = v0.dot(&v1);
-        let d11 = v1.dot(&v1);
-        let d20 = v2.dot(&v0);
-        let d21 = v2.dot(&v1);
-        let denom = d00 * d11 - d01 * d01;
-        let v = (d11 * d20 - d01 * d21) / denom;
-        let w = (d00 * d21 - d01 * d20) / denom;
-        vec![1.0 - v - w, v, w]
-    }
-
-    /// Get list of all faces (triangles) on the icosphere
-    pub fn faces(&self) -> &Vec<Vec<usize>> {
-        &self.faces
-    }
-
-    /// Find nearest vertex to a given point
-    ///
-    /// This is brute force and has O(n) complexity. This
-    /// should be updated with a more efficient algorithm that
-    /// uses angular information to narrow down the search.
-    fn nearest_vertex(&self, point: &Vector3) -> usize {
-        let mut min_distance = f64::INFINITY;
-        let mut nearest = 0;
-        let point_hat = point.normalize();
-        for (i, vertex) in self.vertices.iter().enumerate() {
-            let distance = (vertex - point_hat).norm_squared();
-            if distance < min_distance {
-                min_distance = distance;
-                nearest = i;
-            }
-        }
-        nearest
-    }
-
-    /// Find nearest face to a given point
-    ///
-    /// The first nearest point is O(n) whereafter neighbor information
-    /// is used to find the 2nd and 3rd nearest points which are guaranteed
-    /// to define a face.
-    pub fn nearest_face(&self, point: &Vector3) -> Vec<usize> {
-        let nearest_vertex = self.nearest_vertex(point);
-        let point_hat = point.normalize();
-
-        let mut dist: Vec<(usize, f64)> = self.neighbors[nearest_vertex]
-            .iter()
-            .cloned()
-            .map(|i| (i, (self.vertices[i] - point_hat).norm_squared()))
-            .collect();
-        dist.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
-
-        let mut face: Vec<usize> = dist.iter().map(|(i, _)| i).cloned().take(2).collect();
-        face.push(nearest_vertex);
-        face.sort_unstable();
-        assert_eq!(face.iter().unique().count(), 3);
-        face
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -431,7 +277,7 @@ mod tests {
     #[test]
     fn test_twobody_angles() {
         use std::f64::consts::FRAC_1_SQRT_2;
-        let twobody_angles = TwobodyAngles::new(1.1).unwrap();
+        let twobody_angles = TwobodyAngles::from_resolution(1.1).unwrap();
         let n = twobody_angles.q1.len() * twobody_angles.q2.len() * twobody_angles.dihedrals.len();
         assert_eq!(n, 1008);
         assert_eq!(twobody_angles.len(), n);
