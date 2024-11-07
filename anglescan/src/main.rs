@@ -113,6 +113,9 @@ enum Commands {
         /// Optionally use fixed dielectric constant
         #[arg(long)]
         fixed_dielectric: Option<f64>,
+        /// Output file for PMF
+        #[arg(long = "pmf", default_value = "pmf.dat")]
+        pmf_file: PathBuf,
     },
 }
 
@@ -131,6 +134,7 @@ fn do_scan(cmd: &Commands) -> Result<()> {
         temperature,
         icotable,
         fixed_dielectric,
+        pmf_file,
     } = cmd
     else {
         anyhow::bail!("Unknown command");
@@ -174,6 +178,7 @@ fn do_scan(cmd: &Commands) -> Result<()> {
             ref_b,
             pair_matrix,
             temperature,
+            pmf_file,
         )
     } else {
         do_anglescan(
@@ -183,6 +188,7 @@ fn do_scan(cmd: &Commands) -> Result<()> {
             ref_b,
             pair_matrix,
             temperature,
+            pmf_file,
         )
     }
 }
@@ -197,6 +203,7 @@ fn do_icoscan(
     ref_b: Structure,
     pair_matrix: energy::PairMatrix,
     temperature: &f64,
+    pmf_file: &PathBuf,
 ) -> std::result::Result<(), anyhow::Error> {
     let distances = iter_num_tools::arange(rmin..rmax, dr).collect_vec();
     let table = Table6D::from_resolution(rmin, rmax, dr, angle_resolution)?;
@@ -271,7 +278,7 @@ fn do_icoscan(
         }
         samples.push((Vector3::new(0.0, 0.0, *r), partition_func));
     }
-    report_pmf(samples.as_slice(), &PathBuf::from("pmf.dat"));
+    report_pmf(samples.as_slice(), pmf_file);
     Ok(())
 }
 
@@ -282,6 +289,7 @@ fn do_anglescan(
     ref_b: Structure,
     pair_matrix: energy::PairMatrix,
     temperature: &f64,
+    pmf_file: &PathBuf,
 ) -> std::result::Result<(), anyhow::Error> {
     let scan = TwobodyAngles::from_resolution(angle_resolution).unwrap();
     info!("{} per distance", scan);
@@ -297,7 +305,7 @@ fn do_anglescan(
         })
         .collect::<Vec<_>>();
 
-    report_pmf(com_scan.as_slice(), &PathBuf::from("pmf.dat"));
+    report_pmf(com_scan.as_slice(), pmf_file);
     Ok(())
 }
 
