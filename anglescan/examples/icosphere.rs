@@ -1,4 +1,3 @@
-
 fn main() {
     let divisions = 0;
     let icosphere = hexasphere::shapes::IcoSphere::new(divisions, |_| ());

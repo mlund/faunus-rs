@@ -6,7 +6,7 @@ use anglescan::{
 };
 use anyhow::Result;
 use clap::{Parser, Subcommand};
-use coulomb::{DebyeLength, Medium, Salt, Vector3};
+use coulomb::{permittivity, DebyeLength, Medium, Salt, Vector3};
 use indicatif::ParallelProgressIterator;
 use itertools::Itertools;
 use nu_ansi_term::Color::{Red, Yellow};
@@ -110,6 +110,9 @@ enum Commands {
         /// Use icosphere table
         #[arg(long)]
         icotable: bool,
+        /// Optionally use fixed dielectric constant
+        #[arg(long)]
+        fixed_dielectric: Option<f64>,
     },
 }
 
@@ -127,6 +130,7 @@ fn do_scan(cmd: &Commands) -> Result<()> {
         cutoff,
         temperature,
         icotable,
+        fixed_dielectric,
     } = cmd
     else {
         anyhow::bail!("Unknown command");
@@ -136,7 +140,17 @@ fn do_scan(cmd: &Commands) -> Result<()> {
     let mut atomkinds = AtomKinds::from_yaml(atoms)?;
     atomkinds.set_missing_epsilon(2.479);
 
-    let medium = Medium::salt_water(*temperature, Salt::SodiumChloride, *molarity);
+    // Either use fixed dielectric constant or calculate it from the medium
+    let medium = if let Some(epsilon) = fixed_dielectric {
+        Medium::new(
+            *temperature,
+            Box::new(permittivity::ConstantPermittivity::new(*epsilon)),
+            Some((Salt::SodiumChloride, *molarity)),
+        )
+    } else {
+        Medium::salt_water(*temperature, Salt::SodiumChloride, *molarity)
+    };
+
     let multipole = coulomb::pairwise::Plain::new(*cutoff, medium.debye_length());
     let pair_matrix = energy::PairMatrix::new(&atomkinds.atomlist, &multipole);
     let ref_a = Structure::from_xyz(mol1, &atomkinds);
