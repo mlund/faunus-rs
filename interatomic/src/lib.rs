@@ -39,9 +39,6 @@ pub mod threebody;
 pub mod twobody;
 pub use coulomb::Cutoff;
 
-use physical_constants::{AVOGADRO_CONSTANT, ELEMENTARY_CHARGE, VACUUM_ELECTRIC_PERMITTIVITY};
-use std::f64::consts::PI;
-
 /// Electrostatic prefactor, e²/4πε₀ × 10⁷ × NA (Å × kJ / mol).
 ///
 /// Can be used to calculate e.g. the interaction energy bewteen two
@@ -56,6 +53,4 @@ use std::f64::consts::PI;
 /// let rel_dielectric_const = 80.0; // relative dielectric constant
 /// let energy = ELECTRIC_PREFACTOR * z1 * z2 / (rel_dielectric_const * r);
 /// assert_eq!(energy, -2.48099031507825); // in kJ/mol
-pub const ELECTRIC_PREFACTOR: f64 =
-    ELEMENTARY_CHARGE * ELEMENTARY_CHARGE * 1.0e10 * AVOGADRO_CONSTANT * 1e-3
-        / (4.0 * PI * VACUUM_ELECTRIC_PERMITTIVITY);
+pub use coulomb::TO_CHEMISTRY_UNIT as ELECTRIC_PREFACTOR;
