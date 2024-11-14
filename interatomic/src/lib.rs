@@ -27,9 +27,11 @@ pub type Vector3 = nalgebra::Vector3<f64>;
 pub type Matrix3 = nalgebra::Matrix3<f64>;
 
 mod combination_rule;
-pub use crate::combination_rule::CombinationRule;
+pub use self::combination_rule::CombinationRule;
+use crate::combination_rule::{
+    divide4_serialize, multiply4_deserialize, sqrt_serialize, square_deserialize,
+};
 pub mod fourbody;
-mod qpochhammer;
 pub mod spline;
 pub mod threebody;
 pub mod twobody;
@@ -68,7 +70,8 @@ pub const ELECTRIC_PREFACTOR: f64 =
 pub const BJERRUM_LEN_VACUUM_298K: f64 = ELECTRIC_PREFACTOR / (MOLAR_GAS_CONSTANT * 1e-3 * 298.15);
 
 /// Defines a cutoff distance
-pub trait Cutoff {
+#[allow(dead_code)]
+trait Cutoff {
     /// Squared cutoff distance
     fn cutoff_squared(&self) -> f64 {
         self.cutoff().powi(2)
@@ -76,20 +79,4 @@ pub trait Cutoff {
 
     /// Cutoff distance
     fn cutoff(&self) -> f64;
-}
-
-/// Defines an optional Debye screening length for electrostatic interactions
-pub trait DebyeLength {
-    /// Optional Debye length
-    fn debye_length(&self) -> Option<f64>;
-
-    /// Optional inverse Debye screening length
-    fn kappa(&self) -> Option<f64> {
-        self.debye_length().map(f64::recip)
-    }
-}
-
-/// Defines the Bjerrum length, lB = e²/4πεkT commonly used in electrostatics (ångström).
-pub trait BjerrumLength {
-    fn bjerrum_length(&self) -> f64;
 }
