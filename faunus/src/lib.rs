@@ -15,7 +15,7 @@
 use crate::group::{Group, GroupCollection};
 use cell::SimulationCell;
 use energy::Hamiltonian;
-use nalgebra::Vector3;
+use nalgebra::{DMatrix, Vector3};
 use serde::{Deserialize, Serialize};
 use std::{
     cell::{Ref, RefMut},

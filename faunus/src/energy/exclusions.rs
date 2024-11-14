@@ -14,8 +14,7 @@
 
 //! Implementation of the exclusions.
 
-use crate::Topology;
-use nalgebra::DMatrix;
+use crate::{DMatrix, Topology};
 
 /// Matrix of exclusions based on particle ids.
 /// Pairs of particle indices which should not interact via nonbonded interactions
