@@ -72,7 +72,7 @@ fn harmonic_mean<T: Float>(values: (T, T)) -> T {
 
 /// Transform x^2 --> x when serializing
 #[cfg(feature = "serde")]
-pub(crate) fn sqrt_serialize<S>(x: &f64, s: S) -> Result<S::Ok, S::Error>
+pub fn sqrt_serialize<S>(x: &f64, s: S) -> Result<S::Ok, S::Error>
 where
     S: Serializer,
 {
@@ -81,7 +81,7 @@ where
 
 /// Transform x --> x^2 when deserializing
 #[cfg(feature = "serde")]
-pub(crate) fn square_deserialize<'de, D>(deserializer: D) -> Result<f64, D::Error>
+pub fn square_deserialize<'de, D>(deserializer: D) -> Result<f64, D::Error>
 where
     D: Deserializer<'de>,
 {
@@ -90,7 +90,7 @@ where
 
 /// Transform x --> x/4 when serializing
 #[cfg(feature = "serde")]
-pub(crate) fn divide4_serialize<S>(x: &f64, s: S) -> Result<S::Ok, S::Error>
+pub fn divide4_serialize<S>(x: &f64, s: S) -> Result<S::Ok, S::Error>
 where
     S: Serializer,
 {
@@ -99,7 +99,7 @@ where
 
 /// Transform x --> 4x when deserializing
 #[cfg(feature = "serde")]
-pub(crate) fn multiply4_deserialize<'de, D>(deserializer: D) -> Result<f64, D::Error>
+pub fn multiply4_deserialize<'de, D>(deserializer: D) -> Result<f64, D::Error>
 where
     D: Deserializer<'de>,
 {

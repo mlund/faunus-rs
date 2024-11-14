@@ -28,18 +28,18 @@ pub type Matrix3 = nalgebra::Matrix3<f64>;
 
 mod combination_rule;
 pub use self::combination_rule::CombinationRule;
-use crate::combination_rule::{
+#[cfg(feature = "serde")]
+use self::combination_rule::{
     divide4_serialize, multiply4_deserialize, sqrt_serialize, square_deserialize,
 };
+
 pub mod fourbody;
 pub mod spline;
 pub mod threebody;
 pub mod twobody;
 pub use coulomb::Cutoff;
 
-use physical_constants::{
-    AVOGADRO_CONSTANT, ELEMENTARY_CHARGE, MOLAR_GAS_CONSTANT, VACUUM_ELECTRIC_PERMITTIVITY,
-};
+use physical_constants::{AVOGADRO_CONSTANT, ELEMENTARY_CHARGE, VACUUM_ELECTRIC_PERMITTIVITY};
 use std::f64::consts::PI;
 
 /// Electrostatic prefactor, e²/4πε₀ × 10⁷ × NA (Å × kJ / mol).
@@ -59,13 +59,3 @@ use std::f64::consts::PI;
 pub const ELECTRIC_PREFACTOR: f64 =
     ELEMENTARY_CHARGE * ELEMENTARY_CHARGE * 1.0e10 * AVOGADRO_CONSTANT * 1e-3
         / (4.0 * PI * VACUUM_ELECTRIC_PERMITTIVITY);
-
-/// Bjerrum length in vacuum at 298.15 K, e²/4πε₀kT (Å).
-///
-/// Examples:
-/// ```
-/// use interatomic::BJERRUM_LEN_VACUUM_298K;
-/// let relative_dielectric_const = 80.0;
-/// assert_eq!(BJERRUM_LEN_VACUUM_298K / relative_dielectric_const, 7.0057415269733);
-/// ```
-pub const BJERRUM_LEN_VACUUM_298K: f64 = ELECTRIC_PREFACTOR / (MOLAR_GAS_CONSTANT * 1e-3 * 298.15);
