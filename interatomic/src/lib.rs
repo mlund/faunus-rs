@@ -35,6 +35,7 @@ pub mod fourbody;
 pub mod spline;
 pub mod threebody;
 pub mod twobody;
+pub use coulomb::Cutoff;
 
 use physical_constants::{
     AVOGADRO_CONSTANT, ELEMENTARY_CHARGE, MOLAR_GAS_CONSTANT, VACUUM_ELECTRIC_PERMITTIVITY,
@@ -68,15 +69,3 @@ pub const ELECTRIC_PREFACTOR: f64 =
 /// assert_eq!(BJERRUM_LEN_VACUUM_298K / relative_dielectric_const, 7.0057415269733);
 /// ```
 pub const BJERRUM_LEN_VACUUM_298K: f64 = ELECTRIC_PREFACTOR / (MOLAR_GAS_CONSTANT * 1e-3 * 298.15);
-
-/// Defines a cutoff distance
-#[allow(dead_code)]
-trait Cutoff {
-    /// Squared cutoff distance
-    fn cutoff_squared(&self) -> f64 {
-        self.cutoff().powi(2)
-    }
-
-    /// Cutoff distance
-    fn cutoff(&self) -> f64;
-}
