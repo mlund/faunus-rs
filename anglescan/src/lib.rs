@@ -7,6 +7,7 @@ pub mod table;
 extern crate pretty_env_logger;
 #[macro_use]
 extern crate log;
+use physical_constants::MOLAR_GAS_CONSTANT;
 use std::f64::consts::PI;
 use std::iter::Sum;
 use std::ops::{Add, Neg};
@@ -52,7 +53,7 @@ pub struct Sample {
 impl Sample {
     /// New from energy in kJ/mol and temperature in K
     pub fn new(energy: f64, temperature: f64) -> Self {
-        let thermal_energy = faunus::MOLAR_GAS_CONSTANT * temperature * 1e-3; // kJ/mol
+        let thermal_energy = MOLAR_GAS_CONSTANT * temperature * 1e-3; // kJ/mol
         let exp_energy = (-energy / thermal_energy).exp();
         Self {
             n: 1,

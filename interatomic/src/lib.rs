@@ -22,9 +22,9 @@
 extern crate approx;
 
 /// A point in 3D space
-pub type Vector3 = nalgebra::Vector3<f64>;
+pub type Vector3 = coulomb::Vector3;
 /// A stack-allocated 3x3 square matrix
-pub type Matrix3 = nalgebra::Matrix3<f64>;
+pub type Matrix3 = coulomb::Matrix3;
 
 mod combination_rule;
 pub use self::combination_rule::CombinationRule;
