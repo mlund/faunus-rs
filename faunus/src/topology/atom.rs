@@ -128,4 +128,7 @@ pub enum Hydrophobicity {
     Hydrophilic,
     /// Stores information about surface tension
     SurfaceTension(f64),
+    /// Ashbaugh-Hatch scaling factor in the range [0.0-1.0]
+    #[serde(alias = "λ")]
+    Lambda(f64),
 }
