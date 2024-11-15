@@ -167,6 +167,12 @@ impl LennardJones {
             sigma_squared: (a / b).cbrt(),
         }
     }
+
+    /// Get epsilon parameter
+    #[inline(always)]
+    pub fn get_epsilon(&self) -> f64 {
+        self.four_times_epsilon * 0.25
+    }
 }
 
 impl Cutoff for LennardJones {
@@ -247,5 +253,59 @@ impl IsotropicTwobodyEnergy for WeeksChandlerAndersen {
         }
         let x6 = (self.lennard_jones.sigma_squared / distance_squared).powi(3); // (s/r)^6
         self.lennard_jones.four_times_epsilon * (x6 * x6 - x6 + WeeksChandlerAndersen::ONEFOURTH)
+    }
+}
+
+/// Truncated and shifted Ashbaugh-Hatch
+///
+/// More information, see <https://doi.org/10.1021/ja802124e>.
+#[derive(Debug, Clone, PartialEq, Default)]
+#[cfg_attr(
+    feature = "serde",
+    derive(Deserialize, Serialize),
+    serde(deny_unknown_fields)
+)]
+pub struct AshbaughHatch {
+    #[cfg_attr(feature = "serde", serde(flatten))]
+    lennard_jones: LennardJones,
+    /// Dimensionless scaling factor, λ
+    lambda: f64,
+    /// Spherical cutoff distance
+    cutoff: f64,
+}
+
+impl Cutoff for AshbaughHatch {
+    #[inline(always)]
+    fn cutoff_squared(&self) -> f64 {
+        self.cutoff * self.cutoff
+    }
+    #[inline(always)]
+    fn cutoff(&self) -> f64 {
+        self.cutoff
+    }
+}
+
+impl IsotropicTwobodyEnergy for AshbaughHatch {
+    #[inline(always)]
+    fn isotropic_twobody_energy(&self, distance_squared: f64) -> f64 {
+        if distance_squared > self.cutoff_squared() {
+            return 0.0;
+        }
+
+        let lj = self
+            .lennard_jones
+            .isotropic_twobody_energy(distance_squared);
+
+        let lj_rc = self
+            .lennard_jones
+            .isotropic_twobody_energy(self.cutoff_squared());
+
+        if distance_squared
+            > self.lennard_jones.sigma_squared * WeeksChandlerAndersen::TWOTOTWOSIXTH
+        {
+            self.lambda * (lj - lj_rc)
+        } else {
+            lj - self.lambda * lj_rc + self.lennard_jones.get_epsilon() * (1.0 - self.lambda)
+        }
     }
 }
