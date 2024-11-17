@@ -84,7 +84,7 @@ impl NonbondedBuilder {
         let mut total_interaction = loop {
             // find the first existing interaction and use it to initialize the `total_interaction`
             if let Some(interaction) = iterator.next() {
-                if let Some(converted) = interaction.to_dyn_energy(atom1, atom2)? {
+                if let converted = interaction.to_dyn_energy(atom1, atom2)? {
                     break converted;
                 }
             } else {
@@ -100,7 +100,7 @@ impl NonbondedBuilder {
 
         // loop through the rest of the interactions and sum them together
         for interaction in iterator {
-            if let Some(converted) = interaction.to_dyn_energy(atom1, atom2)? {
+            if let converted = interaction.to_dyn_energy(atom1, atom2)? {
                 total_interaction = total_interaction + converted;
             }
         }
@@ -211,7 +211,7 @@ impl NonbondedInteraction {
         &self,
         atom1: &AtomKind,
         atom2: &AtomKind,
-    ) -> anyhow::Result<Option<Box<dyn IsotropicTwobodyEnergy>>> {
+    ) -> anyhow::Result<Box<dyn IsotropicTwobodyEnergy>> {
         let charges = Some((atom1.charge(), atom2.charge()));
         let epsilons = match (atom1.epsilon(), atom2.epsilon()) {
             (Some(x), Some(y)) => Some((x, y)),
@@ -227,19 +227,19 @@ impl NonbondedInteraction {
         };
 
         match self {
-            Self::LennardJones(x) => Ok(Some(x.convert_and_mix_sigma_epsilon(
+            Self::LennardJones(x) => Ok(x.convert_and_mix_sigma_epsilon(
                 epsilons,
                 sigmas,
                 LennardJones::from_combination_rule,
-            )?)),
-            Self::WeeksChandlerAndersen(x) => Ok(Some(x.convert_and_mix_sigma_epsilon(
+            )?),
+            Self::WeeksChandlerAndersen(x) => Ok(x.convert_and_mix_sigma_epsilon(
                 epsilons,
                 sigmas,
                 WeeksChandlerAndersen::from_combination_rule,
-            )?)),
-            Self::HardSphere(x) => Ok(Some(
-                x.convert_and_mix_sigma(sigmas, HardSphere::from_combination_rule)?,
-            )),
+            )?),
+            Self::HardSphere(x) => {
+                Ok(x.convert_and_mix_sigma(sigmas, HardSphere::from_combination_rule)?)
+            }
             Self::CoulombPlain(x) => NonbondedInteraction::convert_coulomb(charges, x.clone()),
             Self::CoulombEwald(x) => NonbondedInteraction::convert_coulomb(charges, x.clone()),
             Self::CoulombRealSpaceEwald(x) => {
@@ -259,16 +259,16 @@ impl NonbondedInteraction {
     fn convert_coulomb<T: MultipoleEnergy + Debug + Clone + PartialEq + 'static>(
         charges: Option<(f64, f64)>,
         scheme: T,
-    ) -> anyhow::Result<Option<Box<dyn IsotropicTwobodyEnergy>>> {
+    ) -> anyhow::Result<Box<dyn IsotropicTwobodyEnergy>> {
         let charges = charges
             .context("Charges were not provided but are required for the coulombic interaction.")?;
 
         if (charges.0 * charges.1).abs() <= std::f64::EPSILON {
             // disable interaction between pairs of particles where at least one particle is uncharged
-            Ok(None)
+            Ok(Box::new(NoInteraction::default()) as Box<dyn IsotropicTwobodyEnergy>)
         } else {
-            Ok(Some(Box::new(IonIon::new(charges.0 * charges.1, scheme))
-                as Box<dyn IsotropicTwobodyEnergy>))
+            Ok(Box::new(IonIon::new(charges.0 * charges.1, scheme))
+                as Box<dyn IsotropicTwobodyEnergy>)
         }
     }
 }
@@ -654,9 +654,9 @@ mod tests {
             .unwrap();
 
         let mut nonbonded = NonbondedBuilder(interactions);
-        let expected = interaction1.to_dyn_energy(&atom1, &atom2).unwrap().unwrap()
-            + interaction2.to_dyn_energy(&atom1, &atom2).unwrap().unwrap()
-            + interaction3.to_dyn_energy(&atom1, &atom2).unwrap().unwrap();
+        let expected = interaction1.to_dyn_energy(&atom1, &atom2).unwrap()
+            + interaction2.to_dyn_energy(&atom1, &atom2).unwrap()
+            + interaction3.to_dyn_energy(&atom1, &atom2).unwrap();
 
         let interaction = nonbonded.get_interaction(&atom1, &atom2).unwrap();
         assert_behavior(interaction, expected.clone());
@@ -666,7 +666,7 @@ mod tests {
         assert_behavior(interaction, expected);
 
         // default
-        let expected = interaction1.to_dyn_energy(&atom2, &atom1).unwrap().unwrap();
+        let expected = interaction1.to_dyn_energy(&atom2, &atom1).unwrap();
         let interaction = nonbonded.get_interaction(&atom1, &atom3).unwrap();
         assert_behavior(interaction, expected);
 
