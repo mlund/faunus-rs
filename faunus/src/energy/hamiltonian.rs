@@ -2,6 +2,7 @@ use super::{
     bonded::{IntermolecularBonded, IntramolecularBonded},
     builder::HamiltonianBuilder,
     nonbonded::NonbondedMatrix,
+    sasa::SasaEnergy,
 };
 use crate::{topology::Topology, Change, Context, SyncFrom};
 use std::path::Path;
@@ -104,6 +105,8 @@ pub enum EnergyTerm {
     IntramolecularBonded(IntramolecularBonded),
     /// Intermolecular bonded interactions.
     IntermolecularBonded(IntermolecularBonded),
+    /// Solvent accessible surface area energy.
+    SasaEnergy(SasaEnergy),
 }
 
 impl EnergyTerm {
@@ -121,6 +124,7 @@ impl EnergyTerm {
         match self {
             EnergyTerm::NonbondedMatrix(_) | EnergyTerm::IntramolecularBonded(_) => Ok(()),
             EnergyTerm::IntermolecularBonded(x) => x.update(context, change),
+            EnergyTerm::SasaEnergy(x) => x.update(context, change),
         }
     }
 }
@@ -133,6 +137,7 @@ impl EnergyChange for EnergyTerm {
             Self::NonbondedMatrix(x) => x.energy(context, change),
             Self::IntramolecularBonded(x) => x.energy(context, change),
             Self::IntermolecularBonded(x) => x.energy(context, change),
+            Self::SasaEnergy(x) => x.energy(context, change),
         }
     }
 }
