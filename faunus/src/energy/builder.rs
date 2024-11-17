@@ -80,30 +80,10 @@ impl NonbondedBuilder {
             return Ok(Box::from(NoInteraction::default()));
         }
 
-        let mut iterator = interactions.iter();
-        let mut total_interaction = loop {
-            // find the first existing interaction and use it to initialize the `total_interaction`
-            if let Some(interaction) = iterator.next() {
-                if let converted = interaction.to_dyn_energy(atom1, atom2)? {
-                    break converted;
-                }
-            } else {
-                // no interactions left
-                log::warn!(
-                    "No nonbonded interaction defined for '{} <-> {}'.",
-                    atom1.name(),
-                    atom2.name()
-                );
-                return Ok(Box::from(NoInteraction::default()));
-            }
-        };
-
-        // loop through the rest of the interactions and sum them together
-        for interaction in iterator {
-            if let converted = interaction.to_dyn_energy(atom1, atom2)? {
-                total_interaction = total_interaction + converted;
-            }
-        }
+        let total_interaction = interactions
+            .iter()
+            .map(|interact| interact.to_dyn_energy(atom1, atom2).unwrap())
+            .sum();
 
         Ok(total_interaction)
     }

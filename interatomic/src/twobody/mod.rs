@@ -18,6 +18,7 @@
 
 pub use crate::Vector3;
 use core::fmt::Debug;
+use core::iter::Sum;
 use core::ops::Add;
 use dyn_clone::DynClone;
 #[cfg(feature = "serde")]
@@ -154,6 +155,12 @@ impl Add for Box<dyn IsotropicTwobodyEnergy> {
     type Output = Box<dyn IsotropicTwobodyEnergy>;
     fn add(self, other: Box<dyn IsotropicTwobodyEnergy>) -> Box<dyn IsotropicTwobodyEnergy> {
         Box::new(Combined::new(self, other))
+    }
+}
+
+impl Sum for Box<dyn IsotropicTwobodyEnergy> {
+    fn sum<I: Iterator<Item = Box<dyn IsotropicTwobodyEnergy>>>(iter: I) -> Self {
+        iter.fold(Box::new(NoInteraction {}), |acc, x| acc + x)
     }
 }
 
