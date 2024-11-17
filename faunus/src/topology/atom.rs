@@ -77,6 +77,15 @@ impl AtomKind {
         self.element.as_deref()
     }
 
+    /// Get the optional Ashbaugh-Hatch scaling factor, λ.
+    pub fn lambda(&self) -> Option<f64> {
+        match self.hydrophobicity {
+            Some(Hydrophobicity::Lambda(lambda)) => Some(lambda),
+            _ => None,
+        }
+    }
+
+    /// Get the particle diameter
     pub fn sigma(&self) -> Option<f64> {
         self.sigma
     }

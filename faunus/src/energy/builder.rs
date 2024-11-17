@@ -90,6 +90,10 @@ impl NonbondedBuilder {
             (Some(x), Some(y)) => Some((x, y)),
             _ => None,
         };
+        let lambdas = match (atom1.lambda(), atom2.lambda()) {
+            (Some(x), Some(y)) => Some((x, y)),
+            _ => None,
+        };
 
         let mut iterator = interactions.iter();
         let mut total_interaction = loop {
