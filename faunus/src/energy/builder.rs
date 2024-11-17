@@ -84,7 +84,7 @@ impl NonbondedBuilder {
         let mut total_interaction = loop {
             // find the first existing interaction and use it to initialize the `total_interaction`
             if let Some(interaction) = iterator.next() {
-                if let Some(converted) = interaction.convert(atom1, atom2)? {
+                if let Some(converted) = interaction.to_dyn_energy(atom1, atom2)? {
                     break converted;
                 }
             } else {
@@ -100,7 +100,7 @@ impl NonbondedBuilder {
 
         // loop through the rest of the interactions and sum them together
         for interaction in iterator {
-            if let Some(converted) = interaction.convert(atom1, atom2)? {
+            if let Some(converted) = interaction.to_dyn_energy(atom1, atom2)? {
                 total_interaction = total_interaction + converted;
             }
         }
@@ -207,7 +207,7 @@ impl NonbondedInteraction {
     /// ## Notes
     /// - A mixing rule is applied, if needed.
     /// - Returns `None` for coulombic interactions with uncharged particles.
-    fn convert(
+    fn to_dyn_energy(
         &self,
         atom1: &AtomKind,
         atom2: &AtomKind,
@@ -654,9 +654,9 @@ mod tests {
             .unwrap();
 
         let mut nonbonded = NonbondedBuilder(interactions);
-        let expected = interaction1.convert(&atom1, &atom2).unwrap().unwrap()
-            + interaction2.convert(&atom1, &atom2).unwrap().unwrap()
-            + interaction3.convert(&atom1, &atom2).unwrap().unwrap();
+        let expected = interaction1.to_dyn_energy(&atom1, &atom2).unwrap().unwrap()
+            + interaction2.to_dyn_energy(&atom1, &atom2).unwrap().unwrap()
+            + interaction3.to_dyn_energy(&atom1, &atom2).unwrap().unwrap();
 
         let interaction = nonbonded.get_interaction(&atom1, &atom2).unwrap();
         assert_behavior(interaction, expected.clone());
@@ -666,7 +666,7 @@ mod tests {
         assert_behavior(interaction, expected);
 
         // default
-        let expected = interaction1.convert(&atom2, &atom1).unwrap().unwrap();
+        let expected = interaction1.to_dyn_energy(&atom2, &atom1).unwrap().unwrap();
         let interaction = nonbonded.get_interaction(&atom1, &atom3).unwrap();
         assert_behavior(interaction, expected);
 
