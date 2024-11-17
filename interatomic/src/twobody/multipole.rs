@@ -27,7 +27,7 @@ use serde::Serialize;
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct IonIon<T: MultipoleEnergy> {
     /// Charge number product of the two particles, z₁ × z₂
-    #[cfg_attr(feature = "serde", serde(rename = "z₁z₂"))]
+    #[cfg_attr(feature = "serde", serde(rename = "z₁z₂", alias = "z1z2"))]
     charge_product: f64,
     /// Potential energy function to use.
     #[cfg_attr(feature = "serde", serde(skip))]

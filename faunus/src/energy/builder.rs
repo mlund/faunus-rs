@@ -21,6 +21,7 @@ use std::{
     path::Path,
 };
 
+use crate::topology::AtomKind;
 use anyhow::Context as AnyhowContext;
 use coulomb::pairwise::MultipoleEnergy;
 use interatomic::{
@@ -35,8 +36,6 @@ use serde::{
     Deserialize, Deserializer, Serialize, Serializer,
 };
 use unordered_pair::UnorderedPair;
-
-use crate::topology::AtomKind;
 
 /// Structure storing information about the nonbonded interactions in the system in serializable format.
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
@@ -99,7 +98,9 @@ impl NonbondedBuilder {
         let mut total_interaction = loop {
             // find the first existing interaction and use it to initialize the `total_interaction`
             if let Some(interaction) = iterator.next() {
-                if let Some(converted) = interaction.convert(Some(charges), epsilons, sigmas)? {
+                if let Some(converted) =
+                    interaction.convert(Some(charges), epsilons, sigmas, lambdas)?
+                {
                     break converted;
                 }
             } else {
@@ -115,7 +116,9 @@ impl NonbondedBuilder {
 
         // loop through the rest of the interactions and sum them together
         for interaction in iterator {
-            if let Some(converted) = interaction.convert(Some(charges), epsilons, sigmas)? {
+            if let Some(converted) =
+                interaction.convert(Some(charges), epsilons, sigmas, lambdas)?
+            {
                 total_interaction = total_interaction + converted;
             }
         }
@@ -227,6 +230,7 @@ impl NonbondedInteraction {
         charges: Option<(f64, f64)>,
         epsilons: Option<(f64, f64)>,
         sigmas: Option<(f64, f64)>,
+        _lambdas: Option<(f64, f64)>,
     ) -> anyhow::Result<Option<Box<dyn IsotropicTwobodyEnergy>>> {
         match self {
             Self::LennardJones(x) => Ok(Some(x.convert_and_mix_sigma_epsilon(
@@ -536,7 +540,7 @@ mod tests {
         let nonbonded =
             NonbondedInteraction::LennardJones(DirectOrMixing::Direct(expected.clone()));
 
-        let converted = nonbonded.convert(None, None, None).unwrap().unwrap();
+        let converted = nonbonded.convert(None, None, None, None).unwrap().unwrap();
 
         assert_behavior(converted, Box::new(expected));
 
@@ -548,7 +552,7 @@ mod tests {
         });
 
         let converted = nonbonded
-            .convert(None, Some((2.0, 1.0)), Some((8.2, 0.8)))
+            .convert(None, Some((2.0, 1.0)), Some((8.2, 0.8)), None)
             .unwrap()
             .unwrap();
 
@@ -562,7 +566,7 @@ mod tests {
         });
 
         let converted = nonbonded
-            .convert(None, None, Some((4.5, 2.0)))
+            .convert(None, None, Some((4.5, 2.0)), None)
             .unwrap()
             .unwrap();
 
@@ -574,7 +578,7 @@ mod tests {
         let charge = (1.0, -1.0);
 
         let converted = nonbonded
-            .convert(Some(charge), None, None)
+            .convert(Some(charge), None, None, None)
             .unwrap()
             .unwrap();
 
@@ -589,7 +593,7 @@ mod tests {
         let charge = (0.0, -1.0);
 
         assert!(nonbonded
-            .convert(Some(charge), None, None)
+            .convert(Some(charge), None, None, None)
             .unwrap()
             .is_none());
     }
@@ -652,13 +656,16 @@ mod tests {
             .unwrap();
 
         let mut nonbonded = NonbondedBuilder(interactions);
-        let expected = interaction1.convert(None, None, None).unwrap().unwrap()
+        let expected = interaction1
+            .convert(None, None, None, None)
+            .unwrap()
+            .unwrap()
             + interaction2
-                .convert(Some((1.0, -1.0)), None, None)
+                .convert(Some((1.0, -1.0)), None, None, None)
                 .unwrap()
                 .unwrap()
             + interaction3
-                .convert(None, None, Some((1.0, 3.0)))
+                .convert(None, None, Some((1.0, 3.0)), None)
                 .unwrap()
                 .unwrap();
 
@@ -670,7 +677,10 @@ mod tests {
         assert_behavior(interaction, expected);
 
         // default
-        let expected = interaction1.convert(None, None, None).unwrap().unwrap();
+        let expected = interaction1
+            .convert(None, None, None, None)
+            .unwrap()
+            .unwrap();
         let interaction = nonbonded.get_interaction(&atom1, &atom3).unwrap();
         assert_behavior(interaction, expected);
 
