@@ -20,6 +20,7 @@ use voronota::{Ball, RadicalTessellation};
 
 #[derive(Debug, Clone)]
 pub struct SasaEnergy {
+    /// Voronoi tessellation of the particles
     tesselation: RadicalTessellation,
     /// Surface tension for each particle
     tensions: Vec<f64>,
@@ -65,8 +66,8 @@ impl SasaEnergy {
     }
 
     /// Calculate the surface energy based in the available surface area
-    pub fn energy(&self, _: &impl Context, _: &Change) -> f64 {
-        // @TODO: calculate only for changed positions
+    pub fn energy(&self, _context: &impl Context, _change: &Change) -> f64 {
+        // TODO: calculate only for changed positions
         self.tensions
             .iter()
             .enumerate()
@@ -76,41 +77,58 @@ impl SasaEnergy {
 }
 
 impl SasaEnergy {
-    pub(super) fn update(&mut self, context: &impl Context, _: &Change) -> anyhow::Result<()> {
-        // @TODO: Update only the positions that have changed
+    /// Update internal state related to given change
+    /// TODO: Implement partial updates
+    pub(super) fn update(&mut self, context: &impl Context, change: &Change) -> anyhow::Result<()> {
+        // TODO: Update only the positions that have changed
+        match change {
+            Change::Everything => self.update_all(context),
+            _ => self.update_all(context),
+        }
+    }
+
+    /// Update internal state, considering all particles (expensive)
+    fn update_all(&mut self, context: &impl Context) -> anyhow::Result<()> {
         let particles = context.get_active_particles();
         let positions = particles
             .iter()
             .map(|particle: &Particle| -> &Point { &particle.pos });
-        let radii = particles.iter().map(|particle: &Particle| -> f64 {
+
+        // Closure to extract radius from topology for a single particle
+        let get_radius = |particle: &Particle| -> f64 {
             let atom_id = particle.atom_id;
             context.topology().atomkinds()[atom_id]
                 .sigma()
                 .unwrap_or(0.0)
-        });
-        let balls = Self::make_balls(positions, radii);
+        };
+        let radii = particles.iter().map(get_radius);
 
-        let tensions = particles.iter().map(|particle: &Particle| -> f64 {
+        // Closure to extract tension from topology for a single particle
+        let get_tension = |particle: &Particle| -> f64 {
             let atom_id = particle.atom_id;
-            let h = context.topology().atomkinds()[atom_id]
-                .hydrophobicity()
-                .unwrap_or(Hydrophobicity::SurfaceTension(0.0));
-            match h {
-                Hydrophobicity::SurfaceTension(tension) => tension,
+            match context.topology().atomkinds()[atom_id].hydrophobicity() {
+                Some(Hydrophobicity::SurfaceTension(tension)) => tension,
                 _ => 0.0,
             }
-        });
+        };
+
+        let balls = Self::make_balls(positions, radii);
         self.tesselation = RadicalTessellation::from_balls(self.tesselation.probe, &balls, None);
-        self.tensions = tensions.collect();
+        self.tensions = particles.iter().map(get_tension).collect();
         Ok(())
     }
 }
 
 impl SyncFrom for SasaEnergy {
-    fn sync_from(&mut self, other: &SasaEnergy, _: &Change) -> anyhow::Result<()> {
-        // @TODO only sync changes
-        self.tesselation = other.tesselation.clone();
-        self.tensions = other.tensions.clone();
+    fn sync_from(&mut self, other: &SasaEnergy, change: &Change) -> anyhow::Result<()> {
+        // TODO: implement partial sync
+        match change {
+            Change::Everything => {
+                self.tesselation = other.tesselation.clone();
+                self.tensions = other.tensions.clone();
+            }
+            _ => self.sync_from(other, &Change::Everything)?,
+        }
         Ok(())
     }
 }
