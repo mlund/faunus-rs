@@ -18,7 +18,7 @@ anyhow = "1.0"
 float-cmp = "0.9"
 itertools = "0.10"
 nalgebra = { version = "0.33", features = ["serde-serialize"] }
-interatomic = {path = "../interatomic", features = ["serde"]}
+interatomic = { path = "../interatomic", features = ["serde"] }
 as-any = "0.3"
 rand = "0.8"
 num = "0.4"
@@ -35,6 +35,7 @@ serde_with = "3.8.1"
 dyn-clone = "1.0.17"
 ndarray = { version = "0.15.6", features = ["serde"] }
 derive_builder = "0.20.0"
+voronota = "0.2"
 
 [dev-dependencies]
 approx = "0.5"

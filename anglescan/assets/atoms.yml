@@ -133,6 +133,7 @@ atomlist:
     charge: 0.0
     sigma: 7.2
     element: LEU
+    hydrophobicity: Hydrophobic
   - name: MET
     mass: 122.0
     charge: 0.0

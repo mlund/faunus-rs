@@ -18,6 +18,7 @@ pub mod bonded;
 pub(crate) mod builder;
 pub mod exclusions;
 pub mod nonbonded;
+pub mod sasa;
 
 mod hamiltonian;
 pub use hamiltonian::{EnergyChange, EnergyTerm, Hamiltonian};
