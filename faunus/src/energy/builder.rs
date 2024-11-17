@@ -25,7 +25,7 @@ use anyhow::Context as AnyhowContext;
 use coulomb::pairwise::MultipoleEnergy;
 use interatomic::{
     twobody::{
-        HardSphere, IonIon, IsotropicTwobodyEnergy, LennardJones, NoInteraction,
+        AshbaughHatch, HardSphere, IonIon, IsotropicTwobodyEnergy, LennardJones, NoInteraction,
         WeeksChandlerAndersen,
     },
     CombinationRule,
@@ -193,6 +193,8 @@ impl<'de> Deserialize<'de> for DefaultOrPair {
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub(crate) enum NonbondedInteraction {
+    /// Ashbaugh-Hatch potential.
+    AshbaughHatch(DirectOrMixing<AshbaughHatch>),
     /// Lennard-Jones potential.
     LennardJones(DirectOrMixing<LennardJones>),
     /// Weeks-Chandler-Andersen potential.
@@ -244,6 +246,7 @@ impl NonbondedInteraction {
             Self::CoulombReactionField(x) => {
                 NonbondedInteraction::convert_coulomb(charges, x.clone())
             }
+            _ => anyhow::bail!("Unsupported nonbonded interaction."),
         }
     }
 

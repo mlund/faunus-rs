@@ -61,7 +61,7 @@ fn geometric_mean<T: Float>(values: (T, T)) -> T {
 }
 
 /// See Pythagorean means on [Wikipedia](https://en.wikipedia.org/wiki/Pythagorean_means)
-fn arithmetic_mean<T: Float>(values: (T, T)) -> T {
+pub(crate) fn arithmetic_mean<T: Float>(values: (T, T)) -> T {
     (values.0 + values.1) * NumCast::from(0.5).unwrap()
 }
 

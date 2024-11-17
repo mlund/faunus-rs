@@ -34,7 +34,7 @@ mod ureybradley;
 pub use self::fene::FENE;
 pub use self::hardsphere::HardSphere;
 pub use self::harmonic::Harmonic;
-pub use self::mie::{LennardJones, Mie, WeeksChandlerAndersen};
+pub use self::mie::{AshbaughHatch, LennardJones, Mie, WeeksChandlerAndersen};
 pub use self::morse::Morse;
 pub use self::multipole::{IonIon, IonIonPlain, IonIonYukawa};
 pub use self::ureybradley::UreyBradley;
