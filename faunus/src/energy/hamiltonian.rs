@@ -150,6 +150,7 @@ impl SyncFrom for EnergyTerm {
             (NonbondedMatrix(x), NonbondedMatrix(y)) => x.sync_from(y, change)?,
             (IntramolecularBonded(_), IntramolecularBonded(_)) => (),
             (IntermolecularBonded(x), IntermolecularBonded(y)) => x.sync_from(y, change)?,
+            (SasaEnergy(x), SasaEnergy(y)) => x.sync_from(y, change)?,
             _ => anyhow::bail!("Cannot sync incompatible energy terms."),
         }
         Ok(())
