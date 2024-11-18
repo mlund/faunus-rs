@@ -203,6 +203,14 @@ impl IsotropicTwobodyEnergy for LennardJones {
 ///
 /// Effectively, this provides soft repulsion without any attraction.
 /// More information, see <https://dx.doi.org/doi.org/ct4kh9>.
+///
+/// # Examples:
+/// ~~~
+/// use interatomic::twobody::*;
+/// let (epsilon, sigma) = (1.5, 2.0);
+/// let wca = WeeksChandlerAndersen::new(epsilon, sigma);
+/// assert_eq!(wca.isotropic_twobody_energy(sigma * sigma), epsilon);
+/// ~~~
 #[derive(Debug, Clone, PartialEq, Default)]
 #[cfg_attr(
     feature = "serde",
@@ -217,6 +225,8 @@ pub struct WeeksChandlerAndersen {
 impl WeeksChandlerAndersen {
     const ONEFOURTH: f64 = 0.25;
     const TWOTOTWOSIXTH: f64 = 1.2599210498948732; // f64::powf(2.0, 2.0/6.0)
+
+    /// New from epsilon and sigma
     pub const fn new(epsilon: f64, sigma: f64) -> Self {
         Self {
             lennard_jones: LennardJones::new(epsilon, sigma),
@@ -245,6 +255,13 @@ impl Cutoff for WeeksChandlerAndersen {
     }
 }
 
+/// Conversion from Lennard-Jones
+impl From<LennardJones> for WeeksChandlerAndersen {
+    fn from(lennard_jones: LennardJones) -> Self {
+        Self { lennard_jones }
+    }
+}
+
 impl IsotropicTwobodyEnergy for WeeksChandlerAndersen {
     #[inline(always)]
     fn isotropic_twobody_energy(&self, distance_squared: f64) -> f64 {
@@ -259,6 +276,19 @@ impl IsotropicTwobodyEnergy for WeeksChandlerAndersen {
 /// Truncated and shifted Ashbaugh-Hatch
 ///
 /// More information, see <https://doi.org/10.1021/ja802124e>.
+///
+/// # Examples:
+/// ~~~
+/// use interatomic::twobody::*;
+/// // For λ=1.0 and cutoff = 2^(1/6)σ, we recover WCA:
+/// let (epsilon, sigma, lambda) = (1.5, 2.0, 1.0);
+/// let cutoff = 2.0_f64.powf(1.0/6.0) * sigma;
+/// let lj = LennardJones::new(epsilon, sigma);
+/// let ah = AshbaughHatch::new(lj.clone(), lambda, cutoff);
+/// let wca = WeeksChandlerAndersen::from(lj);
+/// let r2 = sigma * sigma;
+/// assert_eq!(ah.isotropic_twobody_energy(r2), wca.isotropic_twobody_energy(r2));
+/// ~~~
 #[derive(Debug, Clone, PartialEq, Default)]
 #[cfg_attr(
     feature = "serde",
@@ -277,6 +307,14 @@ pub struct AshbaughHatch {
 }
 
 impl AshbaughHatch {
+    pub const fn new(lennard_jones: LennardJones, lambda: f64, cutoff: f64) -> Self {
+        Self {
+            lennard_jones,
+            lambda,
+            cutoff,
+        }
+    }
+    /// New from epsilon, sigma, lambda, and cutoff
     /// Construct from combination rule; lambdas are mixed using the sigma rule
     pub fn from_combination_rule(
         rule: CombinationRule,
