@@ -36,7 +36,11 @@ pub struct FENE {
 }
 
 impl FENE {
-    pub fn new(equilibrium_distance: f64, maximum_distance: f64, force_constant: f64) -> Self {
+    pub const fn new(
+        equilibrium_distance: f64,
+        maximum_distance: f64,
+        force_constant: f64,
+    ) -> Self {
         Self {
             equilibrium_distance,
             maximum_distance,

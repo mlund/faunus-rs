@@ -61,15 +61,15 @@ impl AtomKind {
         &self.name
     }
 
-    pub fn id(&self) -> usize {
+    pub const fn id(&self) -> usize {
         self.id
     }
 
-    pub fn mass(&self) -> f64 {
+    pub const fn mass(&self) -> f64 {
         self.mass
     }
 
-    pub fn charge(&self) -> f64 {
+    pub const fn charge(&self) -> f64 {
         self.charge
     }
 
@@ -86,19 +86,19 @@ impl AtomKind {
     }
 
     /// Get the particle diameter
-    pub fn sigma(&self) -> Option<f64> {
+    pub const fn sigma(&self) -> Option<f64> {
         self.sigma
     }
 
-    pub fn epsilon(&self) -> Option<f64> {
+    pub const fn epsilon(&self) -> Option<f64> {
         self.epsilon
     }
 
-    pub fn hydrophobicity(&self) -> Option<Hydrophobicity> {
+    pub const fn hydrophobicity(&self) -> Option<Hydrophobicity> {
         self.hydrophobicity
     }
 
-    pub fn custom(&self) -> &std::collections::HashMap<String, Value> {
+    pub const fn custom(&self) -> &std::collections::HashMap<String, Value> {
         &self.custom
     }
 

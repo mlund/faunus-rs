@@ -50,7 +50,7 @@ impl Timer {
     }
 
     /// Get the accumulated time spent between all calls to `start` and `stop`
-    pub fn accumulated(&self) -> Duration {
+    pub const fn accumulated(&self) -> Duration {
         self.accumulated
     }
 

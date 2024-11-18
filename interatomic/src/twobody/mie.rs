@@ -57,7 +57,7 @@ impl<const N: u32, const M: u32> Mie<N, M> {
     const N_OVER_M: i32 = (N / M) as i32;
     const M_HALF: i32 = (M / 2) as i32;
 
-    pub fn new(epsilon: f64, sigma: f64) -> Self {
+    pub const fn new(epsilon: f64, sigma: f64) -> Self {
         assert!(M > 0);
         assert!(N > M);
         Self { epsilon, sigma }
@@ -145,10 +145,10 @@ pub struct LennardJones {
 }
 
 impl LennardJones {
-    pub fn new(epsilon: f64, sigma: f64) -> Self {
+    pub const fn new(epsilon: f64, sigma: f64) -> Self {
         Self {
             four_times_epsilon: 4.0 * epsilon,
-            sigma_squared: sigma.powi(2),
+            sigma_squared: sigma * sigma,
         }
     }
     /// Construct using arbitrary combination rule.
@@ -170,7 +170,7 @@ impl LennardJones {
 
     /// Get epsilon parameter
     #[inline(always)]
-    pub fn get_epsilon(&self) -> f64 {
+    pub const fn get_epsilon(&self) -> f64 {
         self.four_times_epsilon * 0.25
     }
 }
@@ -217,7 +217,7 @@ pub struct WeeksChandlerAndersen {
 impl WeeksChandlerAndersen {
     const ONEFOURTH: f64 = 0.25;
     const TWOTOTWOSIXTH: f64 = 1.2599210498948732; // f64::powf(2.0, 2.0/6.0)
-    pub fn new(epsilon: f64, sigma: f64) -> Self {
+    pub const fn new(epsilon: f64, sigma: f64) -> Self {
         Self {
             lennard_jones: LennardJones::new(epsilon, sigma),
         }
@@ -277,7 +277,7 @@ pub struct AshbaughHatch {
 }
 
 impl AshbaughHatch {
-    /// Construct from combination rule. Lambdas are mixed using the arithmetic mean.
+    /// Construct from combination rule; lambdas are mixed using the sigma rule
     pub fn from_combination_rule(
         rule: CombinationRule,
         cutoff: f64,
@@ -286,11 +286,9 @@ impl AshbaughHatch {
         lambdas: (f64, f64),
     ) -> Self {
         let (epsilon, sigma) = rule.mix(epsilons, sigmas);
-        let lennard_jones = LennardJones::new(epsilon, sigma);
-        let lambda = crate::arithmetic_mean(lambdas);
         Self {
-            lennard_jones,
-            lambda,
+            lennard_jones: LennardJones::new(epsilon, sigma),
+            lambda: rule.mix_sigmas(lambdas),
             cutoff,
         }
     }

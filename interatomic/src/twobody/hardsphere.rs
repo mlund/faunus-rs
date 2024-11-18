@@ -55,9 +55,9 @@ pub struct HardSphere {
 
 impl HardSphere {
     /// Create by giving the minimum distance where if smaller, the energy is infinite or zero otherwise
-    pub fn new(min_distance: f64) -> Self {
+    pub const fn new(min_distance: f64) -> Self {
         Self {
-            min_distance_squared: min_distance.powi(2),
+            min_distance_squared: min_distance * min_distance,
         }
     }
 

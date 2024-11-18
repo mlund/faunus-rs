@@ -37,7 +37,7 @@ pub struct Morse {
 }
 
 impl Morse {
-    pub fn new(equilibrium_distance: f64, well_depth: f64, force_constant: f64) -> Self {
+    pub const fn new(equilibrium_distance: f64, well_depth: f64, force_constant: f64) -> Self {
         Self {
             equilibrium_distance,
             well_depth,

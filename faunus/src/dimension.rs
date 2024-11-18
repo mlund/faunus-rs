@@ -73,7 +73,7 @@ impl From<Dimension> for [bool; 3] {
 
 impl Dimension {
     /// Return `true` if Dimension contains x-dimension.
-    pub fn is_x(&self) -> bool {
+    pub const fn is_x(&self) -> bool {
         matches!(
             self,
             Dimension::X | Dimension::XY | Dimension::XZ | Dimension::XYZ
@@ -81,7 +81,7 @@ impl Dimension {
     }
 
     /// Return `true` if Dimension contains y-dimension.
-    pub fn is_y(&self) -> bool {
+    pub const fn is_y(&self) -> bool {
         matches!(
             self,
             Dimension::Y | Dimension::XY | Dimension::YZ | Dimension::XYZ
@@ -89,7 +89,7 @@ impl Dimension {
     }
 
     /// Return `true` if Dimension contains z-dimension.
-    pub fn is_z(&self) -> bool {
+    pub const fn is_z(&self) -> bool {
         matches!(
             self,
             Dimension::Z | Dimension::XZ | Dimension::YZ | Dimension::XYZ

@@ -31,7 +31,7 @@ pub struct UreyBradley {
 }
 
 impl UreyBradley {
-    pub fn new(eq_distance: f64, spring_constant: f64) -> Self {
+    pub const fn new(eq_distance: f64, spring_constant: f64) -> Self {
         Self {
             eq_distance,
             spring_constant,

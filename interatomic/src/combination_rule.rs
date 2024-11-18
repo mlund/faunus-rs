@@ -37,20 +37,17 @@ impl CombinationRule {
     /// Combine epsilon values using the selected combination rule
     pub fn mix_epsilons(&self, epsilons: (f64, f64)) -> f64 {
         match self {
-            Self::LorentzBerthelot => geometric_mean(epsilons),
+            Self::LorentzBerthelot | Self::Geometric => geometric_mean(epsilons),
             Self::FenderHalsey => harmonic_mean(epsilons),
             Self::Arithmetic => arithmetic_mean(epsilons),
-            Self::Geometric => geometric_mean(epsilons),
         }
     }
 
     /// Combine sigma values using the selected combination rule
     pub fn mix_sigmas(&self, sigmas: (f64, f64)) -> f64 {
         match self {
-            Self::LorentzBerthelot => arithmetic_mean(sigmas),
-            Self::FenderHalsey => arithmetic_mean(sigmas),
-            Self::Arithmetic => arithmetic_mean(sigmas),
             Self::Geometric => geometric_mean(sigmas),
+            _ => arithmetic_mean(sigmas),
         }
     }
 }

@@ -54,7 +54,7 @@ pub enum GroupChange {
 }
 
 impl GroupChange {
-    pub fn internal_change(&self) -> bool {
+    pub const fn internal_change(&self) -> bool {
         !matches!(self, GroupChange::RigidBody)
     }
 }

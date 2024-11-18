@@ -130,7 +130,7 @@ impl IsotropicTwobodyEnergy for NoInteraction {
 pub struct Combined<T, U>(T, U);
 
 impl<T: IsotropicTwobodyEnergy, U: IsotropicTwobodyEnergy> Combined<T, U> {
-    pub fn new(t: T, u: U) -> Self {
+    pub const fn new(t: T, u: U) -> Self {
         Self(t, u)
     }
 }

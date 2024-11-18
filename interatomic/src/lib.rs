@@ -32,7 +32,6 @@ pub use self::combination_rule::CombinationRule;
 use self::combination_rule::{
     divide4_serialize, multiply4_deserialize, sqrt_serialize, square_deserialize,
 };
-pub(crate) use combination_rule::arithmetic_mean;
 
 pub mod fourbody;
 pub mod spline;
