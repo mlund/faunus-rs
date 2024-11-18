@@ -1,15 +1,15 @@
 use coulomb::pairwise::MultipolePotential;
 use faunus::topology::AtomKind;
-use interatomic::twobody::{IonIon, IsotropicTwobodyEnergy};
-use interatomic::CombinationRule;
-use interatomic::Vector3;
+use interatomic::twobody::{Combined, IonIon, IsotropicTwobodyEnergy, WeeksChandlerAndersen};
+use interatomic::{CombinationRule, Vector3};
 
 use crate::structure::Structure;
 
 // type alias for the pair potential
 type CoulombMethod = coulomb::pairwise::Plain;
-type ShortRange = interatomic::twobody::WeeksChandlerAndersen;
-type PairPotential = interatomic::twobody::Combined<IonIon<CoulombMethod>, ShortRange>;
+type CoulombPotential = IonIon<CoulombMethod>;
+type ShortRange = WeeksChandlerAndersen;
+type PairPotential = Combined<CoulombPotential, ShortRange>;
 
 /// Pair-matrix of twobody energies for pairs of atom ids
 pub struct PairMatrix {
@@ -21,7 +21,7 @@ impl PairMatrix {
     /// Create a new pair matrix
     pub fn new(atomkinds: &[AtomKind], multipole: &CoulombMethod) -> Self {
         let default = PairPotential::new(
-            IonIon::new(0.0, multipole.clone()),
+            CoulombPotential::new(0.0, multipole.clone()),
             ShortRange::new(0.0, 0.0),
         );
         let n = atomkinds.len();
