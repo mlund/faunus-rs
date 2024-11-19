@@ -272,10 +272,10 @@ pub struct AshbaughHatch {
     #[cfg_attr(feature = "serde", serde(flatten))]
     lennard_jones: LennardJones,
     /// Dimensionless scaling factor, λ in the interval [0, 1]
-    #[cfg_attr(feature = "serde", serde(alias = "λ"))]
+    #[cfg_attr(feature = "serde", serde(alias = "λ", default))]
     lambda: f64,
     /// Spherical cutoff distance
-    #[cfg_attr(feature = "serde", serde(alias = "rc"))]
+    #[cfg_attr(feature = "serde", serde(alias = "rc", default))]
     cutoff: f64,
 }
 
