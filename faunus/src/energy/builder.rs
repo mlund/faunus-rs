@@ -198,6 +198,7 @@ impl NonbondedInteraction {
                 DirectOrMixing::Direct(inner) => Ok(Box::new(inner.clone())),
                 DirectOrMixing::Mixing {
                     mixing: rule,
+                    cutoff: _,
                     _phantom: _,
                 } => {
                     let combined = AtomKind::combine(*rule, atom1, atom2);
@@ -211,6 +212,7 @@ impl NonbondedInteraction {
                 DirectOrMixing::Direct(inner) => Ok(Box::new(inner.clone())),
                 DirectOrMixing::Mixing {
                     mixing: rule,
+                    cutoff: _,
                     _phantom: _,
                 } => {
                     let combined = AtomKind::combine(*rule, atom1, atom2);
@@ -224,6 +226,7 @@ impl NonbondedInteraction {
                 DirectOrMixing::Direct(inner) => Ok(Box::new(inner.clone())),
                 DirectOrMixing::Mixing {
                     mixing: rule,
+                    cutoff: _,
                     _phantom: _,
                 } => {
                     let combined = AtomKind::combine(*rule, atom1, atom2);
@@ -265,6 +268,8 @@ pub(crate) enum DirectOrMixing<T: IsotropicTwobodyEnergy> {
     Mixing {
         /// Combination rule to use for mixing.
         mixing: CombinationRule,
+        /// Optional cutoff for the interaction.
+        cutoff: Option<f64>,
         #[serde(skip)]
         /// Marker specifying the interaction type.
         _phantom: PhantomData<T>,
@@ -364,6 +369,7 @@ mod tests {
                             )),
                             NonbondedInteraction::HardSphere(DirectOrMixing::Mixing {
                                 mixing: CombinationRule::Geometric,
+                                cutoff: None,
                                 _phantom: Default::default()
                             }),
                             NonbondedInteraction::CoulombReactionField(
@@ -377,6 +383,7 @@ mod tests {
                         [
                             NonbondedInteraction::HardSphere(DirectOrMixing::Mixing {
                                 mixing: CombinationRule::LorentzBerthelot,
+                                cutoff: None,
                                 _phantom: Default::default()
                             }),
                             NonbondedInteraction::CoulombEwald(
@@ -538,6 +545,7 @@ mod tests {
 
         let interaction3 = NonbondedInteraction::HardSphere(DirectOrMixing::Mixing {
             mixing: CombinationRule::Arithmetic,
+            cutoff: None,
             _phantom: PhantomData,
         });
 
