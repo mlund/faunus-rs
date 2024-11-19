@@ -185,7 +185,6 @@ impl NonbondedInteraction {
     ///
     /// ## Notes
     /// - A mixing rule is applied, if needed.
-    /// - Returns `None` for coulombic interactions with uncharged particles.
     fn to_dyn_energy(
         &self,
         atom1: &AtomKind,
@@ -235,22 +234,22 @@ impl NonbondedInteraction {
             },
             Self::CoulombPlain(scheme) => {
                 let ionion = IonIon::new(charge_product, scheme.clone());
-                Ok(Box::new(ionion) as Box<dyn IsotropicTwobodyEnergy>)
+                Ok(Box::new(ionion))
             }
 
             Self::CoulombEwald(scheme) => {
                 let ionion = IonIon::new(charge_product, scheme.clone());
-                Ok(Box::new(ionion) as Box<dyn IsotropicTwobodyEnergy>)
+                Ok(Box::new(ionion))
             }
 
             Self::CoulombRealSpaceEwald(scheme) => {
                 let ionion = IonIon::new(charge_product, scheme.clone());
-                Ok(Box::new(ionion) as Box<dyn IsotropicTwobodyEnergy>)
+                Ok(Box::new(ionion))
             }
 
             Self::CoulombReactionField(scheme) => {
                 let ionion = IonIon::new(charge_product, scheme.clone());
-                Ok(Box::new(ionion) as Box<dyn IsotropicTwobodyEnergy>)
+                Ok(Box::new(ionion))
             }
             _ => anyhow::bail!("Unsupported nonbonded interaction."),
         }
