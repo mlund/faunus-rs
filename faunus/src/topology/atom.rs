@@ -14,6 +14,7 @@
 
 use crate::topology::{CustomProperty, Value};
 use derive_builder::Builder;
+pub use interatomic::CombinationRule;
 use serde::{Deserialize, Serialize};
 
 /// Description of atom properties
@@ -85,6 +86,19 @@ impl AtomKind {
         }
     }
 
+    /// Set the Ashbaugh-Hatch scaling factor, λ.
+    ///
+    /// Asserts:
+    /// - λ must be in the range [0.0-1.0]
+    pub fn set_lambda(&mut self, lambda: f64) -> anyhow::Result<()> {
+        assert!(
+            lambda >= 0.0 && lambda <= 1.0,
+            "λ must be in the range [0.0-1.0]"
+        );
+        self.hydrophobicity = Some(Hydrophobicity::Lambda(lambda));
+        Ok(())
+    }
+
     /// Get the particle diameter
     pub const fn sigma(&self) -> Option<f64> {
         self.sigma
@@ -115,6 +129,38 @@ impl AtomKind {
     /// Set epsilon.
     pub fn set_epsilon(&mut self, epsilon: Option<f64>) {
         self.epsilon = epsilon;
+    }
+
+    /// Combine two atom kinds using a combination rule.
+    ///
+    /// The properties below are combined; all others have default (empty) values.
+    ///
+    /// Property  | Mixing rule
+    /// --------- | ---------------------
+    /// `charge`  | product
+    /// `epsilon` | epsilon rule
+    /// `lambda`  | sigma rule
+    /// `mass`    | sum
+    /// `sigma`   | sigma rule
+    ///
+    pub fn combine(rule: CombinationRule, atom1: &Self, atom2: &Self) -> Self {
+        let mut atomkind = AtomKind::default();
+
+        if let (Some(a), Some(b)) = (atom1.epsilon(), atom2.epsilon()) {
+            atomkind.epsilon = Some(rule.mix_epsilons((a, b)));
+        }
+
+        if let (Some(a), Some(b)) = (atom1.sigma(), atom2.sigma()) {
+            atomkind.sigma = Some(rule.mix_sigmas((a, b)));
+        }
+
+        if let (Some(a), Some(b)) = (atom1.lambda(), atom2.lambda()) {
+            atomkind.set_lambda(rule.mix_sigmas((a, b))).unwrap();
+        }
+
+        atomkind.charge = atom1.charge() * atom2.charge();
+        atomkind.mass = atom1.mass() + atom2.mass();
+        atomkind
     }
 }
 
