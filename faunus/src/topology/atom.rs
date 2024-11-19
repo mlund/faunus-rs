@@ -92,7 +92,7 @@ impl AtomKind {
     /// - λ must be in the range [0.0-1.0]
     pub fn set_lambda(&mut self, lambda: f64) -> anyhow::Result<()> {
         assert!(
-            lambda >= 0.0 && lambda <= 1.0,
+            (0.0..=1.0).contains(&lambda),
             "λ must be in the range [0.0-1.0]"
         );
         self.hydrophobicity = Some(Hydrophobicity::Lambda(lambda));

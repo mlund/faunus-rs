@@ -36,131 +36,29 @@ use serde::{
 };
 use unordered_pair::UnorderedPair;
 
-/// Structure storing information about the nonbonded interactions in the system in serializable format.
+/// Specifies whether the parameters for the interaction are
+/// directly provided or should be calculated using a combination rule.
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
-pub(crate) struct NonbondedBuilder(
-    #[serde(with = "::serde_with::rust::maps_duplicate_key_is_error")]
-    // defining interactions between the same atom kinds multiple times causes an error
-    HashMap<DefaultOrPair, Vec<NonbondedInteraction>>,
-);
-
-impl NonbondedBuilder {
-    /// Get interactions for a specific pair of atoms.
-    /// If this pair of atoms is not defined, get interactions for Default.
-    /// If Default is not defined, return an empty array.
-    fn collect_interactions(&self, atom1: &str, atom2: &str) -> &[NonbondedInteraction] {
-        let key = DefaultOrPair::Pair(UnorderedPair(atom1.to_owned(), atom2.to_owned()));
-
-        match self.0.get(&key) {
-            Some(x) => x,
-            None => match self.0.get(&DefaultOrPair::Default) {
-                Some(x) => x,
-                None => &[],
-            },
-        }
-    }
-
-    /// Get interactions for a specific pair of atoms and collect them into a single `IsotropicTwobodyEnergy` trait object.
-    /// If this pair of atoms has no explicitly defined interactions, get interactions for Default.
-    /// If Default is not defined or no interactions have been found, return `NoInteraction` structure and log a warning.
-    pub(crate) fn get_interaction(
-        &self,
-        atom1: &AtomKind,
-        atom2: &AtomKind,
-    ) -> anyhow::Result<Box<dyn IsotropicTwobodyEnergy>> {
-        let interactions = self.collect_interactions(atom1.name(), atom2.name());
-
-        if interactions.is_empty() {
-            log::warn!(
-                "No nonbonded interaction defined for '{} <-> {}'.",
-                atom1.name(),
-                atom2.name()
-            );
-            return Ok(Box::from(NoInteraction::default()));
-        }
-
-        let total_interaction = interactions
-            .iter()
-            .map(|interact| interact.to_dyn_energy(atom1, atom2).unwrap())
-            .sum();
-
-        Ok(total_interaction)
-    }
+#[serde(untagged)]
+pub(crate) enum DirectOrMixing<T: IsotropicTwobodyEnergy> {
+    /// Calculate the parameters using the provided combination rule.
+    Mixing {
+        /// Combination rule to use for mixing.
+        mixing: CombinationRule,
+        /// Optional cutoff for the interaction.
+        cutoff: Option<f64>,
+        #[serde(skip)]
+        /// Marker specifying the interaction type.
+        _phantom: PhantomData<T>,
+    },
+    /// The parameters for the interaction are specifically provided.
+    Direct(T),
 }
 
-/// Structure used for (de)serializing the Hamiltonian of the system.
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
-pub(crate) struct HamiltonianBuilder {
-    /// Nonbonded interactions defined for the system.
-    pub nonbonded: NonbondedBuilder,
-}
-
-/// Specifies pair of atom kinds interacting with each other.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-enum DefaultOrPair {
-    /// All pairs of atom kinds.
-    Default,
-    /// Pair of atom kinds.
-    Pair(UnorderedPair<String>),
-}
-
-impl Serialize for DefaultOrPair {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        match *self {
-            DefaultOrPair::Default => serializer.serialize_str("default"),
-            DefaultOrPair::Pair(ref pair) => pair.serialize(serializer),
-        }
-    }
-}
-
-impl<'de> Deserialize<'de> for DefaultOrPair {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        struct DefaultOrPairVisitor;
-
-        impl<'de> Visitor<'de> for DefaultOrPairVisitor {
-            type Value = DefaultOrPair;
-
-            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-                formatter.write_str("\"default\" or a pair of atom kinds")
-            }
-
-            // parse default as string
-            fn visit_str<E>(self, value: &str) -> Result<DefaultOrPair, E>
-            where
-                E: de::Error,
-            {
-                if value == "default" {
-                    Ok(DefaultOrPair::Default)
-                } else {
-                    Err(E::invalid_value(de::Unexpected::Str(value), &self))
-                }
-            }
-
-            // parse pair of atom kinds
-            fn visit_seq<A>(self, seq: A) -> Result<DefaultOrPair, A::Error>
-            where
-                A: serde::de::SeqAccess<'de>,
-            {
-                let pair =
-                    UnorderedPair::deserialize(serde::de::value::SeqAccessDeserializer::new(seq))?;
-                Ok(DefaultOrPair::Pair(pair))
-            }
-        }
-
-        deserializer.deserialize_any(DefaultOrPairVisitor)
-    }
-}
-
-/// Type of nonbonded interaction.
+/// Types of pair interactions
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 #[serde(deny_unknown_fields)]
-pub(crate) enum NonbondedInteraction {
+pub(crate) enum PairInteraction {
     /// Ashbaugh-Hatch potential.
     AshbaughHatch(DirectOrMixing<AshbaughHatch>),
     /// Lennard-Jones potential.
@@ -180,12 +78,12 @@ pub(crate) enum NonbondedInteraction {
     CoulombReactionField(coulomb::pairwise::ReactionField),
 }
 
-impl NonbondedInteraction {
-    /// Converts a `NonbondedInteraction` structure to `IsotropicTwobodyEnergy` trait object.
+impl PairInteraction {
+    /// Convert to a boxed `IsotropicTwobodyEnergy` trait object for a given pair of atom types.
     ///
     /// ## Notes
     /// - A mixing rule is applied, if needed.
-    fn to_dyn_energy(
+    fn to_boxed(
         &self,
         atom1: &AtomKind,
         atom2: &AtomKind,
@@ -254,46 +152,85 @@ impl NonbondedInteraction {
                     )))
                 }
             },
-            Self::CoulombPlain(scheme) => {
-                let ionion = IonIon::new(charge_product, scheme.clone());
-                Ok(Box::new(ionion))
-            }
-
-            Self::CoulombEwald(scheme) => {
-                let ionion = IonIon::new(charge_product, scheme.clone());
-                Ok(Box::new(ionion))
-            }
-
+            Self::CoulombPlain(scheme) => Self::make_coulomb(charge_product, scheme.clone()),
+            Self::CoulombEwald(scheme) => Self::make_coulomb(charge_product, scheme.clone()),
             Self::CoulombRealSpaceEwald(scheme) => {
-                let ionion = IonIon::new(charge_product, scheme.clone());
-                Ok(Box::new(ionion))
+                Self::make_coulomb(charge_product, scheme.clone())
             }
-
             Self::CoulombReactionField(scheme) => {
-                let ionion = IonIon::new(charge_product, scheme.clone());
-                Ok(Box::new(ionion))
+                Self::make_coulomb(charge_product, scheme.clone())
             }
         }
     }
+    /// Helper to create a coulombic interaction with a generic scheme
+    fn make_coulomb<
+        T: coulomb::pairwise::MultipoleEnergy + Clone + Debug + std::cmp::PartialEq + 'static,
+    >(
+        charge_product: f64,
+        scheme: T,
+    ) -> anyhow::Result<Box<dyn IsotropicTwobodyEnergy>> {
+        let ionion = IonIon::new(charge_product, scheme.clone());
+        Ok(Box::new(ionion))
+    }
 }
 
-/// Specifies whether the parameters for the interaction are
-/// directly provided or should be calculated using a combination rule.
+/// Structure storing information about the nonbonded interactions in the system in serializable format.
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
-#[serde(untagged)]
-pub(crate) enum DirectOrMixing<T: IsotropicTwobodyEnergy> {
-    /// Calculate the parameters using the provided combination rule.
-    Mixing {
-        /// Combination rule to use for mixing.
-        mixing: CombinationRule,
-        /// Optional cutoff for the interaction.
-        cutoff: Option<f64>,
-        #[serde(skip)]
-        /// Marker specifying the interaction type.
-        _phantom: PhantomData<T>,
-    },
-    /// The parameters for the interaction are specifically provided.
-    Direct(T),
+pub(crate) struct PairPotentialBuilder(
+    #[serde(with = "::serde_with::rust::maps_duplicate_key_is_error")]
+    // defining interactions between the same atom kinds multiple times causes an error
+    HashMap<DefaultOrPair, Vec<PairInteraction>>,
+);
+
+impl PairPotentialBuilder {
+    /// Get interactions for a specific pair of atoms.
+    /// If this pair of atoms is not defined, get interactions for Default.
+    /// If Default is not defined, return an empty array.
+    fn collect_interactions(&self, atom1: &str, atom2: &str) -> &[PairInteraction] {
+        let key = DefaultOrPair::Pair(UnorderedPair(atom1.to_owned(), atom2.to_owned()));
+
+        match self.0.get(&key) {
+            Some(x) => x,
+            None => match self.0.get(&DefaultOrPair::Default) {
+                Some(x) => x,
+                None => &[],
+            },
+        }
+    }
+
+    /// Get interactions for a specific pair of atoms and collect them into a single `IsotropicTwobodyEnergy` trait object.
+    /// If this pair of atoms has no explicitly defined interactions, get interactions for Default.
+    /// If Default is not defined or no interactions have been found, return `NoInteraction` structure and log a warning.
+    pub(crate) fn get_interaction(
+        &self,
+        atom1: &AtomKind,
+        atom2: &AtomKind,
+    ) -> anyhow::Result<Box<dyn IsotropicTwobodyEnergy>> {
+        let interactions = self.collect_interactions(atom1.name(), atom2.name());
+
+        if interactions.is_empty() {
+            log::warn!(
+                "No nonbonded interaction defined for '{} <-> {}'.",
+                atom1.name(),
+                atom2.name()
+            );
+            return Ok(Box::from(NoInteraction::default()));
+        }
+
+        let total_interaction = interactions
+            .iter()
+            .map(|interact| interact.to_boxed(atom1, atom2).unwrap())
+            .sum();
+
+        Ok(total_interaction)
+    }
+}
+
+/// Structure used for (de)serializing the Hamiltonian of the system.
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+pub(crate) struct HamiltonianBuilder {
+    /// Nonbonded interactions defined for the system.
+    pub nonbonded: PairPotentialBuilder,
 }
 
 impl HamiltonianBuilder {
@@ -326,6 +263,68 @@ impl HamiltonianBuilder {
         }
 
         Ok(())
+    }
+}
+
+/// Specifies pair of atom kinds interacting with each other.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+enum DefaultOrPair {
+    /// All pairs of atom kinds.
+    Default,
+    /// Pair of atom kinds.
+    Pair(UnorderedPair<String>),
+}
+
+impl Serialize for DefaultOrPair {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match *self {
+            DefaultOrPair::Default => serializer.serialize_str("default"),
+            DefaultOrPair::Pair(ref pair) => pair.serialize(serializer),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for DefaultOrPair {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct DefaultOrPairVisitor;
+
+        impl<'de> Visitor<'de> for DefaultOrPairVisitor {
+            type Value = DefaultOrPair;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("\"default\" or a pair of atom kinds")
+            }
+
+            // parse default as string
+            fn visit_str<E>(self, value: &str) -> Result<DefaultOrPair, E>
+            where
+                E: de::Error,
+            {
+                if value == "default" {
+                    Ok(DefaultOrPair::Default)
+                } else {
+                    Err(E::invalid_value(de::Unexpected::Str(value), &self))
+                }
+            }
+
+            // parse pair of atom kinds
+            fn visit_seq<A>(self, seq: A) -> Result<DefaultOrPair, A::Error>
+            where
+                A: serde::de::SeqAccess<'de>,
+            {
+                let pair =
+                    UnorderedPair::deserialize(serde::de::value::SeqAccessDeserializer::new(seq))?;
+                Ok(DefaultOrPair::Pair(pair))
+            }
+        }
+
+        deserializer.deserialize_any(DefaultOrPairVisitor)
     }
 }
 
@@ -363,13 +362,13 @@ mod tests {
                 assert_eq!(
                     interactions,
                     vec![
-                        NonbondedInteraction::LennardJones(DirectOrMixing::Direct(
-                            LennardJones::new(1.5, 6.0)
-                        )),
-                        NonbondedInteraction::WeeksChandlerAndersen(DirectOrMixing::Direct(
+                        PairInteraction::LennardJones(DirectOrMixing::Direct(LennardJones::new(
+                            1.5, 6.0
+                        ))),
+                        PairInteraction::WeeksChandlerAndersen(DirectOrMixing::Direct(
                             WeeksChandlerAndersen::new(1.3, 8.0)
                         )),
-                        NonbondedInteraction::CoulombPlain(coulomb::pairwise::Plain::new(
+                        PairInteraction::CoulombPlain(coulomb::pairwise::Plain::new(
                             11.0,
                             Some(1.0),
                         ))
@@ -382,15 +381,15 @@ mod tests {
                     assert_eq!(
                         interactions,
                         [
-                            NonbondedInteraction::WeeksChandlerAndersen(DirectOrMixing::Direct(
+                            PairInteraction::WeeksChandlerAndersen(DirectOrMixing::Direct(
                                 WeeksChandlerAndersen::new(1.5, 3.0)
                             )),
-                            NonbondedInteraction::HardSphere(DirectOrMixing::Mixing {
+                            PairInteraction::HardSphere(DirectOrMixing::Mixing {
                                 mixing: CombinationRule::Geometric,
                                 cutoff: None,
                                 _phantom: Default::default()
                             }),
-                            NonbondedInteraction::CoulombReactionField(
+                            PairInteraction::CoulombReactionField(
                                 coulomb::pairwise::ReactionField::new(11.0, 100.0, 1.5, true)
                             ),
                         ]
@@ -399,14 +398,14 @@ mod tests {
                     assert_eq!(
                         interactions,
                         [
-                            NonbondedInteraction::HardSphere(DirectOrMixing::Mixing {
+                            PairInteraction::HardSphere(DirectOrMixing::Mixing {
                                 mixing: CombinationRule::LorentzBerthelot,
                                 cutoff: None,
                                 _phantom: Default::default()
                             }),
-                            NonbondedInteraction::CoulombEwald(
-                                coulomb::pairwise::EwaldTruncated::new(11.0, 0.1)
-                            ),
+                            PairInteraction::CoulombEwald(coulomb::pairwise::EwaldTruncated::new(
+                                11.0, 0.1
+                            )),
                         ]
                     )
                 }
@@ -555,13 +554,12 @@ mod tests {
     fn test_get_interaction() {
         let mut interactions = HashMap::new();
 
-        let interaction1 = NonbondedInteraction::WeeksChandlerAndersen(DirectOrMixing::Direct(
+        let interaction1 = PairInteraction::WeeksChandlerAndersen(DirectOrMixing::Direct(
             WeeksChandlerAndersen::new(1.5, 3.2),
         ));
-        let interaction2 =
-            NonbondedInteraction::CoulombPlain(coulomb::pairwise::Plain::new(11.0, None));
+        let interaction2 = PairInteraction::CoulombPlain(coulomb::pairwise::Plain::new(11.0, None));
 
-        let interaction3 = NonbondedInteraction::HardSphere(DirectOrMixing::Mixing {
+        let interaction3 = PairInteraction::HardSphere(DirectOrMixing::Mixing {
             mixing: CombinationRule::Arithmetic,
             cutoff: None,
             _phantom: PhantomData,
@@ -609,10 +607,10 @@ mod tests {
             .build()
             .unwrap();
 
-        let mut nonbonded = NonbondedBuilder(interactions);
-        let expected = interaction1.to_dyn_energy(&atom1, &atom2).unwrap()
-            + interaction2.to_dyn_energy(&atom1, &atom2).unwrap()
-            + interaction3.to_dyn_energy(&atom1, &atom2).unwrap();
+        let mut nonbonded = PairPotentialBuilder(interactions);
+        let expected = interaction1.to_boxed(&atom1, &atom2).unwrap()
+            + interaction2.to_boxed(&atom1, &atom2).unwrap()
+            + interaction3.to_boxed(&atom1, &atom2).unwrap();
 
         let interaction = nonbonded.get_interaction(&atom1, &atom2).unwrap();
         assert_behavior(interaction, expected.clone());
@@ -622,7 +620,7 @@ mod tests {
         assert_behavior(interaction, expected);
 
         // default
-        let expected = interaction1.to_dyn_energy(&atom2, &atom1).unwrap();
+        let expected = interaction1.to_boxed(&atom2, &atom1).unwrap();
         let interaction = nonbonded.get_interaction(&atom1, &atom3).unwrap();
         assert_behavior(interaction, expected);
 
@@ -645,9 +643,9 @@ mod tests {
             HardSphere::from_combination_rule(CombinationRule::Arithmetic, (1.0, 3.0));
 
         let for_pair = vec![
-            NonbondedInteraction::CoulombPlain(interaction1.clone()),
-            NonbondedInteraction::CoulombEwald(interaction2.clone()),
-            NonbondedInteraction::HardSphere(DirectOrMixing::Direct(interaction3.clone())),
+            PairInteraction::CoulombPlain(interaction1.clone()),
+            PairInteraction::CoulombEwald(interaction2.clone()),
+            PairInteraction::HardSphere(DirectOrMixing::Direct(interaction3.clone())),
         ];
 
         interactions.insert(
@@ -674,7 +672,7 @@ mod tests {
             .unwrap();
 
         // first two interactions evaluate to 0
-        let mut nonbonded = NonbondedBuilder(interactions);
+        let mut nonbonded = PairPotentialBuilder(interactions);
         let expected = Box::new(IonIon::new(0.0, interaction1.clone()))
             as Box<dyn IsotropicTwobodyEnergy>
             + Box::new(IonIon::new(0.0, interaction2.clone())) as Box<dyn IsotropicTwobodyEnergy>
@@ -685,8 +683,8 @@ mod tests {
 
         // all interactions evaluate to 0
         let for_pair = vec![
-            NonbondedInteraction::CoulombPlain(interaction1.clone()),
-            NonbondedInteraction::CoulombEwald(interaction2.clone()),
+            PairInteraction::CoulombPlain(interaction1.clone()),
+            PairInteraction::CoulombEwald(interaction2.clone()),
         ];
 
         nonbonded.0.insert(

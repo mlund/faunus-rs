@@ -19,7 +19,7 @@ use ndarray::Array2;
 use std::fmt::Debug;
 
 use crate::{
-    energy::{builder::NonbondedBuilder, EnergyTerm},
+    energy::{builder::PairPotentialBuilder, EnergyTerm},
     topology::Topology,
     Change, Context, Group, GroupChange, SyncFrom,
 };
@@ -289,7 +289,7 @@ impl NonbondedMatrix {
     /// Create a new NonbondedReference structure wrapped in an EnergyTerm enum.
     #[allow(clippy::new_ret_no_self)]
     pub(super) fn new(
-        nonbonded: &NonbondedBuilder,
+        nonbonded: &PairPotentialBuilder,
         topology: &Topology,
     ) -> anyhow::Result<EnergyTerm> {
         let atoms = topology.atomkinds();
