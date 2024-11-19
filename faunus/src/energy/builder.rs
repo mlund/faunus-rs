@@ -222,14 +222,33 @@ impl NonbondedInteraction {
                     )))
                 }
             },
+            Self::AshbaughHatch(x) => match x {
+                DirectOrMixing::Direct(inner) => Ok(Box::new(inner.clone())),
+                DirectOrMixing::Mixing {
+                    mixing,
+                    cutoff,
+                    _phantom,
+                } => {
+                    let combined = AtomKind::combine(*mixing, atom1, atom2);
+                    let lj = LennardJones::new(
+                        combined.epsilon().context("Epsilons not defined!")?,
+                        combined.sigma().context("Sigmas not defined!")?,
+                    );
+                    Ok(Box::new(AshbaughHatch::new(
+                        lj,
+                        cutoff.context("Cutoff undefined!")?,
+                        combined.lambda().context("No lambda defined!")?,
+                    )))
+                }
+            },
             Self::HardSphere(x) => match x {
                 DirectOrMixing::Direct(inner) => Ok(Box::new(inner.clone())),
                 DirectOrMixing::Mixing {
-                    mixing: rule,
+                    mixing,
                     cutoff: _,
-                    _phantom: _,
+                    _phantom,
                 } => {
-                    let combined = AtomKind::combine(*rule, atom1, atom2);
+                    let combined = AtomKind::combine(*mixing, atom1, atom2);
                     Ok(Box::new(HardSphere::new(
                         combined.sigma().context("Sigmas not defined!")?,
                     )))
@@ -254,7 +273,6 @@ impl NonbondedInteraction {
                 let ionion = IonIon::new(charge_product, scheme.clone());
                 Ok(Box::new(ionion))
             }
-            _ => anyhow::bail!("Unsupported nonbonded interaction."),
         }
     }
 }
