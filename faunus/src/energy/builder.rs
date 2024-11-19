@@ -23,7 +23,6 @@ use std::{
 
 use crate::topology::AtomKind;
 use anyhow::Context as AnyhowContext;
-use coulomb::pairwise::MultipoleEnergy;
 use interatomic::{
     twobody::{
         AshbaughHatch, HardSphere, IonIon, IsotropicTwobodyEnergy, LennardJones, NoInteraction,
@@ -192,63 +191,68 @@ impl NonbondedInteraction {
         atom1: &AtomKind,
         atom2: &AtomKind,
     ) -> anyhow::Result<Box<dyn IsotropicTwobodyEnergy>> {
-        let charges = Some((atom1.charge(), atom2.charge()));
-        let epsilons = match (atom1.epsilon(), atom2.epsilon()) {
-            (Some(x), Some(y)) => Some((x, y)),
-            _ => None,
-        };
-        let sigmas = match (atom1.sigma(), atom2.sigma()) {
-            (Some(x), Some(y)) => Some((x, y)),
-            _ => None,
-        };
-        let _lambdas = match (atom1.lambda(), atom2.lambda()) {
-            (Some(x), Some(y)) => Some((x, y)),
-            _ => None,
-        };
+        let mixed = AtomKind::combine(CombinationRule::Arithmetic, atom1, atom2);
+        let charge_product = mixed.charge();
 
         match self {
-            Self::LennardJones(x) => Ok(x.convert_and_mix_sigma_epsilon(
-                epsilons,
-                sigmas,
-                LennardJones::from_combination_rule,
-            )?),
-            Self::WeeksChandlerAndersen(x) => Ok(x.convert_and_mix_sigma_epsilon(
-                epsilons,
-                sigmas,
-                WeeksChandlerAndersen::from_combination_rule,
-            )?),
-            Self::HardSphere(x) => {
-                Ok(x.convert_and_mix_sigma(sigmas, HardSphere::from_combination_rule)?)
+            Self::LennardJones(x) => match x {
+                DirectOrMixing::Direct(inner) => Ok(Box::new(inner.clone())),
+                DirectOrMixing::Mixing {
+                    mixing: rule,
+                    _phantom: _,
+                } => {
+                    let combined = AtomKind::combine(*rule, atom1, atom2);
+                    Ok(Box::new(LennardJones::new(
+                        combined.epsilon().context("Epsilons not defined!")?,
+                        combined.sigma().context("Sigmas not defined!")?,
+                    )))
+                }
+            },
+            Self::WeeksChandlerAndersen(x) => match x {
+                DirectOrMixing::Direct(inner) => Ok(Box::new(inner.clone())),
+                DirectOrMixing::Mixing {
+                    mixing: rule,
+                    _phantom: _,
+                } => {
+                    let combined = AtomKind::combine(*rule, atom1, atom2);
+                    Ok(Box::new(WeeksChandlerAndersen::new(
+                        combined.epsilon().context("Epsilons not defined!")?,
+                        combined.sigma().context("Sigmas not defined!")?,
+                    )))
+                }
+            },
+            Self::HardSphere(x) => match x {
+                DirectOrMixing::Direct(inner) => Ok(Box::new(inner.clone())),
+                DirectOrMixing::Mixing {
+                    mixing: rule,
+                    _phantom: _,
+                } => {
+                    let combined = AtomKind::combine(*rule, atom1, atom2);
+                    Ok(Box::new(HardSphere::new(
+                        combined.sigma().context("Sigmas not defined!")?,
+                    )))
+                }
+            },
+            Self::CoulombPlain(scheme) => {
+                let ionion = IonIon::new(charge_product, scheme.clone());
+                Ok(Box::new(ionion) as Box<dyn IsotropicTwobodyEnergy>)
             }
-            Self::CoulombPlain(x) => NonbondedInteraction::convert_coulomb(charges, x.clone()),
-            Self::CoulombEwald(x) => NonbondedInteraction::convert_coulomb(charges, x.clone()),
-            Self::CoulombRealSpaceEwald(x) => {
-                NonbondedInteraction::convert_coulomb(charges, x.clone())
+
+            Self::CoulombEwald(scheme) => {
+                let ionion = IonIon::new(charge_product, scheme.clone());
+                Ok(Box::new(ionion) as Box<dyn IsotropicTwobodyEnergy>)
             }
-            Self::CoulombReactionField(x) => {
-                NonbondedInteraction::convert_coulomb(charges, x.clone())
+
+            Self::CoulombRealSpaceEwald(scheme) => {
+                let ionion = IonIon::new(charge_product, scheme.clone());
+                Ok(Box::new(ionion) as Box<dyn IsotropicTwobodyEnergy>)
+            }
+
+            Self::CoulombReactionField(scheme) => {
+                let ionion = IonIon::new(charge_product, scheme.clone());
+                Ok(Box::new(ionion) as Box<dyn IsotropicTwobodyEnergy>)
             }
             _ => anyhow::bail!("Unsupported nonbonded interaction."),
-        }
-    }
-
-    /// Convert coulombic interaction to `IonIon` interaction.
-    ///
-    /// ## Notes
-    /// - If any of the charges is `0.0`, returns None.
-    fn convert_coulomb<T: MultipoleEnergy + Debug + Clone + PartialEq + 'static>(
-        charges: Option<(f64, f64)>,
-        scheme: T,
-    ) -> anyhow::Result<Box<dyn IsotropicTwobodyEnergy>> {
-        let charges = charges
-            .context("Charges were not provided but are required for the coulombic interaction.")?;
-
-        if (charges.0 * charges.1).abs() <= std::f64::EPSILON {
-            // disable interaction between pairs of particles where at least one particle is uncharged
-            Ok(Box::new(NoInteraction::default()) as Box<dyn IsotropicTwobodyEnergy>)
-        } else {
-            Ok(Box::new(IonIon::new(charges.0 * charges.1, scheme))
-                as Box<dyn IsotropicTwobodyEnergy>)
         }
     }
 }
@@ -268,59 +272,6 @@ pub(crate) enum DirectOrMixing<T: IsotropicTwobodyEnergy> {
     },
     /// The parameters for the interaction are specifically provided.
     Direct(T),
-}
-
-impl<T> DirectOrMixing<T>
-where
-    T: IsotropicTwobodyEnergy + Clone + 'static,
-{
-    /// Converts `DirectOrMixing` enum to appropriate `IsotropicTwobodyEnergy` trait object
-    /// for which `from_combination_rule` function exists.
-    ///
-    /// Used for mixing `sigmas` and `epsilons` (e.g. LJ, WCA potentials).
-    ///
-    /// In case the parameters of the potential are directly provided, no mixing is performed.
-    fn convert_and_mix_sigma_epsilon(
-        &self,
-        epsilons: Option<(f64, f64)>,
-        sigmas: Option<(f64, f64)>,
-        from_combination_rule: impl Fn(CombinationRule, (f64, f64), (f64, f64)) -> T,
-    ) -> anyhow::Result<Box<dyn IsotropicTwobodyEnergy>> {
-        match self {
-            DirectOrMixing::Direct(inner) => Ok(Box::new(inner.clone())),
-            DirectOrMixing::Mixing {
-                mixing: rule,
-                _phantom: _,
-            } => Ok(Box::new(from_combination_rule(
-                *rule,
-                epsilons.context("Epsilons not provided but required for mixing.")?,
-                sigmas.context("Sigmas not provided but required for mixing.")?,
-            ))),
-        }
-    }
-
-    /// Converts `DirectOrMixing` enum to appropriate `IsotropicTwobodyEnergy` trait object
-    /// for which `from_combination_rule` function exists.
-    ///
-    /// Used for mixing `sigmas` (e.g. HardSphere potential).
-    ///
-    /// In case the parameters of the potential are directly provided, no mixing is performed.
-    fn convert_and_mix_sigma(
-        &self,
-        sigmas: Option<(f64, f64)>,
-        from_combination_rule: impl Fn(CombinationRule, (f64, f64)) -> T,
-    ) -> anyhow::Result<Box<dyn IsotropicTwobodyEnergy>> {
-        match self {
-            DirectOrMixing::Direct(inner) => Ok(Box::new(inner.clone())),
-            DirectOrMixing::Mixing {
-                mixing: rule,
-                _phantom: _,
-            } => Ok(Box::new(from_combination_rule(
-                *rule,
-                sigmas.context("Sigmas not provided but required for mixing.")?,
-            ))),
-        }
-    }
 }
 
 impl HamiltonianBuilder {

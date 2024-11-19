@@ -13,9 +13,9 @@
 // limitations under the license.
 
 use crate::twobody::IsotropicTwobodyEnergy;
+use crate::Cutoff;
 #[cfg(feature = "serde")]
 use crate::{divide4_serialize, multiply4_deserialize, sqrt_serialize, square_deserialize};
-use crate::{CombinationRule, Cutoff};
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -61,15 +61,6 @@ impl<const N: u32, const M: u32> Mie<N, M> {
         assert!(M > 0);
         assert!(N > M);
         Self { epsilon, sigma }
-    }
-    /// Construct from a combination rule
-    pub fn from_combination_rule(
-        rule: CombinationRule,
-        epsilons: (f64, f64),
-        sigmas: (f64, f64),
-    ) -> Self {
-        let (epsilon, sigma) = rule.mix(epsilons, sigmas);
-        Self::new(epsilon, sigma)
     }
 }
 
@@ -151,15 +142,7 @@ impl LennardJones {
             sigma_squared: sigma * sigma,
         }
     }
-    /// Construct using arbitrary combination rule.
-    pub fn from_combination_rule(
-        rule: CombinationRule,
-        epsilons: (f64, f64),
-        sigmas: (f64, f64),
-    ) -> Self {
-        let (epsilon, sigma) = rule.mix(epsilons, sigmas);
-        Self::new(epsilon, sigma)
-    }
+
     /// Construct from AB form, u = A/r¹² - B/r⁶
     pub fn from_ab(a: f64, b: f64) -> Self {
         Self {
@@ -232,16 +215,6 @@ impl WeeksChandlerAndersen {
             lennard_jones: LennardJones::new(epsilon, sigma),
         }
     }
-
-    /// Construct from combination rule
-    pub fn from_combination_rule(
-        rule: CombinationRule,
-        epsilons: (f64, f64),
-        sigmas: (f64, f64),
-    ) -> Self {
-        let (epsilon, sigma) = rule.mix(epsilons, sigmas);
-        Self::new(epsilon, sigma)
-    }
 }
 
 impl Cutoff for WeeksChandlerAndersen {
@@ -311,22 +284,6 @@ impl AshbaughHatch {
         Self {
             lennard_jones,
             lambda,
-            cutoff,
-        }
-    }
-    /// New from epsilon, sigma, lambda, and cutoff
-    /// Construct from combination rule; lambdas are mixed using the sigma rule
-    pub fn from_combination_rule(
-        rule: CombinationRule,
-        cutoff: f64,
-        epsilons: (f64, f64),
-        sigmas: (f64, f64),
-        lambdas: (f64, f64),
-    ) -> Self {
-        let (epsilon, sigma) = rule.mix(epsilons, sigmas);
-        Self {
-            lennard_jones: LennardJones::new(epsilon, sigma),
-            lambda: rule.mix_sigmas(lambdas),
             cutoff,
         }
     }

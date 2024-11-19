@@ -32,13 +32,8 @@ impl PairMatrix {
                 let b = &atomkinds[j];
 
                 let ionion = IonIon::new(a.charge() * b.charge(), multipole.clone());
-                let epsilons = (a.epsilon().unwrap_or(0.0), b.epsilon().unwrap_or(0.0));
-                let sigmas = (a.sigma().unwrap_or(0.0), b.sigma().unwrap_or(0.0));
-                let lj = ShortRange::from_combination_rule(
-                    CombinationRule::LorentzBerthelot,
-                    epsilons,
-                    sigmas,
-                );
+                let mixed = AtomKind::combine(CombinationRule::LorentzBerthelot, a, b);
+                let lj = ShortRange::new(mixed.epsilon().unwrap(), mixed.sigma().unwrap());
                 matrix[i][j] = PairPotential::new(ionion, lj);
             }
         }

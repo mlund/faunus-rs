@@ -135,13 +135,11 @@ impl AtomKind {
     ///
     /// The properties below are combined; all others have default (empty) values.
     ///
-    /// Property  | Mixing rule
-    /// --------- | ---------------------
-    /// `charge`  | product
-    /// `epsilon` | epsilon rule
-    /// `lambda`  | sigma rule
-    /// `mass`    | sum
-    /// `sigma`   | sigma rule
+    /// - `charge` (product)
+    /// - `epsilon` (epsilon rule)
+    /// - `lambda` (sigma rule)
+    /// - `mass` (sum)
+    /// - `sigma` (sigma rule)
     ///
     pub fn combine(rule: CombinationRule, atom1: &Self, atom2: &Self) -> Self {
         let mut atomkind = AtomKind::default();
