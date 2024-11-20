@@ -55,7 +55,7 @@ impl EnergyChange for IntramolecularBonded {
 impl IntramolecularBonded {
     /// Create a new IntramolecularBonded energy term.
     #[allow(clippy::new_ret_no_self)]
-    pub(super) fn new() -> EnergyTerm {
+    pub(super) fn make_energy() -> EnergyTerm {
         EnergyTerm::IntramolecularBonded(IntramolecularBonded {})
     }
 
@@ -281,7 +281,7 @@ mod tests_intramolecular {
         )
         .unwrap();
 
-        let bonded = match IntramolecularBonded::new() {
+        let bonded = match IntramolecularBonded::make_energy() {
             EnergyTerm::IntramolecularBonded(e) => e,
             _ => panic!("IntramolecularBonded not constructed."),
         };

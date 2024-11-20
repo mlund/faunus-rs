@@ -294,7 +294,7 @@ impl NonbondedTerm for NonbondedMatrix {
 impl NonbondedMatrix {
     /// Create a new NonbondedReference structure wrapped in an EnergyTerm enum.
     #[allow(clippy::new_ret_no_self)]
-    pub(super) fn new(
+    pub(super) fn make_energy(
         nonbonded: &PairPotentialBuilder,
         topology: &Topology,
     ) -> anyhow::Result<EnergyTerm> {
@@ -405,7 +405,7 @@ mod tests {
             .unwrap()
             .nonbonded;
 
-        let nonbonded = NonbondedMatrix::new(&pairpot_builder, &topology).unwrap();
+        let nonbonded = NonbondedMatrix::make_energy(&pairpot_builder, &topology).unwrap();
         let nonbonded = match nonbonded {
             EnergyTerm::NonbondedMatrix(x) => x,
             _ => panic!("Incorrect Energy Term constructed."),
@@ -488,7 +488,7 @@ mod tests {
             .unwrap()
             .nonbonded;
 
-        let nonbonded = NonbondedMatrix::new(&builder, &topology).unwrap();
+        let nonbonded = NonbondedMatrix::make_energy(&builder, &topology).unwrap();
 
         let mut rng = rand::thread_rng();
         let system = ReferencePlatform::from_raw_parts(

@@ -36,8 +36,8 @@ impl SyncFrom for Hamiltonian {
 impl Hamiltonian {
     /// Create a Hamiltonian from the provided HamiltonianBuilder and topology.
     pub(crate) fn new(builder: &HamiltonianBuilder, topology: &Topology) -> anyhow::Result<Self> {
-        let nonbonded = NonbondedMatrix::new(&builder.nonbonded, topology)?;
-        let intramolecular_bonded = IntramolecularBonded::new();
+        let nonbonded = NonbondedMatrix::make_energy(&builder.nonbonded, topology)?;
+        let intramolecular_bonded = IntramolecularBonded::make_energy();
 
         let mut hamiltonian =
             Hamiltonian::from_energy_terms(vec![nonbonded, intramolecular_bonded]);
@@ -115,7 +115,7 @@ impl EnergyTerm {
         let hamiltonian_builder = HamiltonianBuilder::from_file(filename.clone())?;
         let topology = Topology::from_file(filename)?;
 
-        NonbondedMatrix::new(&hamiltonian_builder.nonbonded, &topology)
+        NonbondedMatrix::make_energy(&hamiltonian_builder.nonbonded, &topology)
     }
 
     /// Update internal state due to a change in the system.
