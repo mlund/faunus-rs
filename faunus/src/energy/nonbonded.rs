@@ -17,6 +17,7 @@
 use interatomic::twobody::{IsotropicTwobodyEnergy, NoInteraction};
 use ndarray::Array2;
 use std::fmt::Debug;
+use std::sync::Arc;
 
 use crate::{
     energy::{builder::PairPotentialBuilder, EnergyTerm},
@@ -246,10 +247,15 @@ pub(super) trait NonbondedTerm {
 
 /// Energy term for computing nonbonded interactions
 /// using a matrix of `IsotropicTwobodyEnergy` trait objects.
+///
+/// # Note
+///
+/// We use `Arc<dyn IsotropicTwobodyEnergy>` for thread-safety.
+/// `Box` is not thread-safe but perhaps more performant(?).
 #[derive(Debug, Clone)]
 pub struct NonbondedMatrix {
     /// Matrix of pair potentials based on particle ids.
-    potentials: Array2<Box<dyn IsotropicTwobodyEnergy>>,
+    potentials: Array2<Arc<dyn IsotropicTwobodyEnergy>>,
     /// Matrix of excluded interactions.
     exclusions: ExclusionMatrix,
 }
@@ -295,12 +301,13 @@ impl NonbondedMatrix {
         let atoms = topology.atomkinds();
         let n = atoms.len();
 
-        let mut potentials: Array2<Box<dyn IsotropicTwobodyEnergy>> =
-            Array2::from_elem((n, n), Box::<NoInteraction>::default());
+        let mut potentials: Array2<Arc<dyn IsotropicTwobodyEnergy>> =
+            Array2::from_elem((n, n), Arc::<NoInteraction>::default());
 
         for i in 0..n {
             for j in 0..n {
-                potentials[(i, j)] = nonbonded.get_interaction(&atoms[i], &atoms[j])?;
+                let interaction = nonbonded.get_interaction(&atoms[i], &atoms[j])?;
+                potentials[(i, j)] = interaction.into();
             }
         }
 

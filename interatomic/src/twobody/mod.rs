@@ -23,6 +23,7 @@ use core::ops::Add;
 use dyn_clone::DynClone;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 
 mod fene;
 mod hardsphere;
@@ -146,6 +147,12 @@ impl<T: IsotropicTwobodyEnergy + Clone, U: IsotropicTwobodyEnergy + Clone> Isotr
 }
 
 impl IsotropicTwobodyEnergy for Box<dyn IsotropicTwobodyEnergy> {
+    fn isotropic_twobody_energy(&self, distance_squared: f64) -> f64 {
+        self.as_ref().isotropic_twobody_energy(distance_squared)
+    }
+}
+
+impl IsotropicTwobodyEnergy for Arc<dyn IsotropicTwobodyEnergy> {
     fn isotropic_twobody_energy(&self, distance_squared: f64) -> f64 {
         self.as_ref().isotropic_twobody_energy(distance_squared)
     }
