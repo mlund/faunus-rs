@@ -35,11 +35,11 @@ impl SyncFrom for Hamiltonian {
 impl Hamiltonian {
     /// Create a Hamiltonian from the provided HamiltonianBuilder and topology.
     pub(crate) fn new(builder: &HamiltonianBuilder, topology: &Topology) -> anyhow::Result<Self> {
-        let nonbonded = NonbondedMatrix::make_energy(&builder.nonbonded, topology)?;
+        let nonbonded = NonbondedMatrix::new(&builder.pairpot_builder, topology)?;
         let intramolecular_bonded = IntramolecularBonded::make_energy();
 
         let mut hamiltonian =
-            Hamiltonian::from_energy_terms(vec![nonbonded, intramolecular_bonded]);
+            Hamiltonian::from_energy_terms(vec![nonbonded.into(), intramolecular_bonded]);
 
         // IntermolecularBonded term should only be added if it is actually needed
         if !topology.intermolecular().is_empty() {

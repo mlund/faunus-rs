@@ -105,6 +105,12 @@ impl IntramolecularBonded {
     }
 }
 
+impl From<IntramolecularBonded> for EnergyTerm {
+    fn from(term: IntramolecularBonded) -> Self {
+        EnergyTerm::IntramolecularBonded(term)
+    }
+}
+
 /// Energy term for computing intermolecular bonded interactions.
 #[derive(Debug, Clone)]
 pub struct IntermolecularBonded {
@@ -170,7 +176,7 @@ impl IntermolecularBonded {
 
     /// Update the energy term. The update is needed if at least one particle was activated or deactivated.
     //
-    // TODO
+    // TODO:
     // Currently this updates the entire group upon any change in the size of the group.
     // However, `change` contains information about the number of (de)activated particles in the group.
     // We should probably use this information to only update the relevant part of the group.
@@ -226,6 +232,12 @@ impl IntermolecularBonded {
             .groups()
             .iter()
             .for_each(|group| self.update_status_one_group(group));
+    }
+}
+
+impl From<IntermolecularBonded> for EnergyTerm {
+    fn from(term: IntermolecularBonded) -> Self {
+        EnergyTerm::IntermolecularBonded(term)
     }
 }
 

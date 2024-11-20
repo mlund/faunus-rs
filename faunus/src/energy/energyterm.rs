@@ -1,12 +1,10 @@
 use super::{
     bonded::{IntermolecularBonded, IntramolecularBonded},
-    builder::HamiltonianBuilder,
     nonbonded::NonbondedMatrix,
     sasa::SasaEnergy,
     EnergyChange,
 };
-use crate::{topology::Topology, Change, Context, SyncFrom};
-use std::path::Path;
+use crate::{Change, Context, SyncFrom};
 
 #[derive(Debug, Clone)]
 pub enum EnergyTerm {
@@ -21,17 +19,8 @@ pub enum EnergyTerm {
 }
 
 impl EnergyTerm {
-    /// Create an EnergyTerm for NonbondedMatrix by reading an input file.
-    /// The input file must contain topology of the System and an `energy` section.
-    pub fn nonbonded_from_file(filename: impl AsRef<Path> + Clone) -> anyhow::Result<Self> {
-        let hamiltonian_builder = HamiltonianBuilder::from_file(filename.clone())?;
-        let topology = Topology::from_file(filename)?;
-
-        NonbondedMatrix::make_energy(&hamiltonian_builder.nonbonded, &topology)
-    }
-
     /// Update internal state due to a change in the system.
-    pub(crate) fn update(&mut self, context: &impl Context, change: &Change) -> anyhow::Result<()> {
+    pub fn update(&mut self, context: &impl Context, change: &Change) -> anyhow::Result<()> {
         match self {
             EnergyTerm::NonbondedMatrix(_) | EnergyTerm::IntramolecularBonded(_) => Ok(()),
             EnergyTerm::IntermolecularBonded(x) => x.update(context, change),

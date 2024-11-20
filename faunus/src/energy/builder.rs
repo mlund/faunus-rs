@@ -230,11 +230,20 @@ impl PairPotentialBuilder {
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub(crate) struct HamiltonianBuilder {
     /// Nonbonded interactions defined for the system.
-    pub nonbonded: PairPotentialBuilder,
+    #[serde(rename = "nonbonded")]
+    pub pairpot_builder: PairPotentialBuilder,
 }
 
 impl HamiltonianBuilder {
     /// Get hamiltonian from faunus input file.
+    ///
+    /// This assumes this YAML layout:
+    /// ```yaml
+    /// system:
+    ///   energy:
+    ///     nonbonded:
+    ///       ...
+    /// ```
     pub(crate) fn from_file(filename: impl AsRef<Path>) -> anyhow::Result<HamiltonianBuilder> {
         let yaml = std::fs::read_to_string(filename)?;
         let full: serde_yaml::Value = serde_yaml::from_str(&yaml)?;
@@ -252,7 +261,7 @@ impl HamiltonianBuilder {
 
     /// Check that all atom kinds referred to in the hamiltonian exist.
     pub(crate) fn validate(&self, atom_kinds: &[AtomKind]) -> anyhow::Result<()> {
-        for pair in self.nonbonded.0.keys() {
+        for pair in self.pairpot_builder.0.keys() {
             if let DefaultOrPair::Pair(UnorderedPair(x, y)) = pair {
                 if !atom_kinds.iter().any(|atom| atom.name() == x)
                     || !atom_kinds.iter().any(|atom| atom.name() == y)
@@ -339,25 +348,28 @@ mod tests {
     fn hamiltonian_deserialization_pass() {
         let builder = HamiltonianBuilder::from_file("tests/files/topology_pass.yaml").unwrap();
 
-        assert!(builder.nonbonded.0.contains_key(&DefaultOrPair::Default));
         assert!(builder
-            .nonbonded
+            .pairpot_builder
+            .0
+            .contains_key(&DefaultOrPair::Default));
+        assert!(builder
+            .pairpot_builder
             .0
             .contains_key(&DefaultOrPair::Pair(UnorderedPair(
                 String::from("OW"),
                 String::from("OW")
             ))));
         assert!(builder
-            .nonbonded
+            .pairpot_builder
             .0
             .contains_key(&DefaultOrPair::Pair(UnorderedPair(
                 String::from("OW"),
                 String::from("HW")
             ))));
 
-        assert_eq!(builder.nonbonded.0.len(), 3);
+        assert_eq!(builder.pairpot_builder.0.len(), 3);
 
-        for (pair, interactions) in builder.nonbonded.0 {
+        for (pair, interactions) in builder.pairpot_builder.0 {
             if let DefaultOrPair::Default = pair {
                 assert_eq!(
                     interactions,

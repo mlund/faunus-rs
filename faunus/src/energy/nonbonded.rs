@@ -17,6 +17,7 @@
 use interatomic::twobody::{IsotropicTwobodyEnergy, NoInteraction};
 use ndarray::Array2;
 use std::fmt::Debug;
+use std::path::Path;
 use std::sync::Arc;
 
 use crate::{
@@ -25,7 +26,7 @@ use crate::{
     Change, Context, Group, GroupChange, SyncFrom,
 };
 
-use super::{exclusions::ExclusionMatrix, EnergyChange};
+use super::{builder::HamiltonianBuilder, exclusions::ExclusionMatrix, EnergyChange};
 
 /// Trait implemented by all Energy Terms dealing with nonbonded interactions.
 pub(super) trait NonbondedTerm {
@@ -292,31 +293,50 @@ impl NonbondedTerm for NonbondedMatrix {
 }
 
 impl NonbondedMatrix {
+    /// Create from YAML file and a topology
+    ///
+    /// Can be used to generate a new `EnergyTerm` with:
+    ///
+    /// ```ignore
+    /// let energy = EnergyTerm::From(NonbondedMatrix::from_file(...).unwrap());
+    /// ```
+    pub fn from_file(
+        file: impl AsRef<Path>,
+        topology: &Topology,
+    ) -> anyhow::Result<NonbondedMatrix> {
+        Self::new(
+            &HamiltonianBuilder::from_file(file)?.pairpot_builder,
+            topology,
+        )
+    }
+
     /// Create a new NonbondedReference structure wrapped in an EnergyTerm enum.
     #[allow(clippy::new_ret_no_self)]
-    pub(super) fn make_energy(
-        nonbonded: &PairPotentialBuilder,
+    pub(super) fn new(
+        pairpot_builder: &PairPotentialBuilder,
         topology: &Topology,
-    ) -> anyhow::Result<EnergyTerm> {
+    ) -> anyhow::Result<NonbondedMatrix> {
         let atoms = topology.atomkinds();
-        let n = atoms.len();
+        let n_atom_types = atoms.len();
 
-        let mut potentials: Array2<Arc<dyn IsotropicTwobodyEnergy>> =
-            Array2::from_elem((n, n), Arc::<NoInteraction>::default());
+        let mut potentials: Array2<Arc<dyn IsotropicTwobodyEnergy>> = Array2::from_elem(
+            (n_atom_types, n_atom_types),
+            Arc::<NoInteraction>::default(),
+        );
 
-        for i in 0..n {
-            for j in 0..n {
-                let interaction = nonbonded.get_interaction(&atoms[i], &atoms[j])?;
+        for i in 0..n_atom_types {
+            for j in 0..n_atom_types {
+                let interaction = pairpot_builder.get_interaction(&atoms[i], &atoms[j])?;
                 potentials[(i, j)] = interaction.into();
             }
         }
 
         let exclusions = ExclusionMatrix::from_topology(topology);
 
-        Ok(EnergyTerm::NonbondedMatrix(NonbondedMatrix {
+        Ok(NonbondedMatrix {
             potentials,
             exclusions,
-        }))
+        })
     }
 
     /// Matches all possible single group perturbations and returns the energy.
@@ -363,7 +383,6 @@ impl SyncFrom for NonbondedMatrix {
             Change::None | Change::Volume(_, _) | Change::SingleGroup(_, _) | Change::Groups(_) => {
             }
         }
-
         Ok(())
     }
 }
@@ -403,13 +422,9 @@ mod tests {
         let topology = Topology::from_file("tests/files/topology_pass.yaml").unwrap();
         let pairpot_builder = HamiltonianBuilder::from_file("tests/files/topology_pass.yaml")
             .unwrap()
-            .nonbonded;
+            .pairpot_builder;
 
-        let nonbonded = NonbondedMatrix::make_energy(&pairpot_builder, &topology).unwrap();
-        let nonbonded = match nonbonded {
-            EnergyTerm::NonbondedMatrix(x) => x,
-            _ => panic!("Incorrect Energy Term constructed."),
-        };
+        let nonbonded = NonbondedMatrix::new(&pairpot_builder, &topology).unwrap();
 
         assert_eq!(
             nonbonded.potentials.len(),
@@ -486,24 +501,21 @@ mod tests {
         let topology = Topology::from_file("tests/files/nonbonded_interactions.yaml").unwrap();
         let builder = HamiltonianBuilder::from_file("tests/files/nonbonded_interactions.yaml")
             .unwrap()
-            .nonbonded;
+            .pairpot_builder;
 
-        let nonbonded = NonbondedMatrix::make_energy(&builder, &topology).unwrap();
+        let nonbonded = NonbondedMatrix::new(&builder, &topology).unwrap();
 
         let mut rng = rand::thread_rng();
         let system = ReferencePlatform::from_raw_parts(
             Rc::new(topology),
             Cell::Cuboid(Cuboid::cubic(20.0)),
-            RefCell::new(Hamiltonian::from_energy_terms(vec![nonbonded.clone()])),
+            RefCell::new(Hamiltonian::from_energy_terms(vec![nonbonded
+                .clone()
+                .into()])),
             None::<&str>,
             &mut rng,
         )
         .unwrap();
-
-        let nonbonded = match nonbonded {
-            EnergyTerm::NonbondedMatrix(e) => e,
-            _ => panic!("NonbondedMatrix not constructed."),
-        };
 
         (system, nonbonded)
     }
