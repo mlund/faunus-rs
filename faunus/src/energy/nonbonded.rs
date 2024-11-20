@@ -254,7 +254,7 @@ pub(super) trait NonbondedTerm {
 /// `Box` is not thread-safe but perhaps more performant(?).
 #[derive(Debug, Clone)]
 pub struct NonbondedMatrix {
-    /// Matrix of pair potentials based on particle ids.
+    /// Matrix of pair potentials based on atom type ids.
     potentials: Array2<Arc<dyn IsotropicTwobodyEnergy>>,
     /// Matrix of excluded interactions.
     exclusions: ExclusionMatrix,
@@ -350,6 +350,12 @@ impl NonbondedMatrix {
     }
 }
 
+impl From<NonbondedMatrix> for EnergyTerm {
+    fn from(nonbonded: NonbondedMatrix) -> Self {
+        EnergyTerm::NonbondedMatrix(nonbonded)
+    }
+}
+
 impl SyncFrom for NonbondedMatrix {
     fn sync_from(&mut self, other: &NonbondedMatrix, change: &Change) -> anyhow::Result<()> {
         match change {
@@ -395,11 +401,11 @@ mod tests {
     #[test]
     fn test_nonbonded_matrix_new() {
         let topology = Topology::from_file("tests/files/topology_pass.yaml").unwrap();
-        let builder = HamiltonianBuilder::from_file("tests/files/topology_pass.yaml")
+        let pairpot_builder = HamiltonianBuilder::from_file("tests/files/topology_pass.yaml")
             .unwrap()
             .nonbonded;
 
-        let nonbonded = NonbondedMatrix::new(&builder, &topology).unwrap();
+        let nonbonded = NonbondedMatrix::new(&pairpot_builder, &topology).unwrap();
         let nonbonded = match nonbonded {
             EnergyTerm::NonbondedMatrix(x) => x,
             _ => panic!("Incorrect Energy Term constructed."),

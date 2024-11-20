@@ -29,7 +29,6 @@ impl SyncFrom for Hamiltonian {
         for (term, other_term) in self.energy_terms.iter_mut().zip(other.energy_terms.iter()) {
             term.sync_from(other_term, change)?;
         }
-
         Ok(())
     }
 }
