@@ -5,6 +5,7 @@ use super::{
     EnergyTerm,
 };
 use crate::{topology::Topology, Change, Context, SyncFrom};
+use std::path::Path;
 
 /// Trait implemented by structures that can compute
 /// and return an energy relevant to some change in the system.
@@ -35,11 +36,11 @@ impl SyncFrom for Hamiltonian {
 impl Hamiltonian {
     /// Create a Hamiltonian from the provided HamiltonianBuilder and topology.
     pub(crate) fn new(builder: &HamiltonianBuilder, topology: &Topology) -> anyhow::Result<Self> {
-        let nonbonded = NonbondedMatrix::new(&builder.pairpot_builder, topology)?;
-        let intramolecular_bonded = IntramolecularBonded::default();
-
-        let mut hamiltonian =
-            Hamiltonian::from(vec![nonbonded.into(), intramolecular_bonded.into()]);
+        let mut hamiltonian: Self = vec![
+            NonbondedMatrix::new(&builder.pairpot_builder, topology)?.into(),
+            IntramolecularBonded::default().into(),
+        ]
+        .into();
 
         // IntermolecularBonded term should only be added if it is actually needed
         if !topology.intermolecular().is_empty() {
@@ -47,6 +48,12 @@ impl Hamiltonian {
         }
 
         Ok(hamiltonian)
+    }
+
+    /// Create a Hamiltonian from a YAML file and topology.
+    pub fn from_file(filename: impl AsRef<Path>, topology: &Topology) -> anyhow::Result<Self> {
+        let builder = HamiltonianBuilder::from_file(filename)?;
+        Self::new(&builder, topology)
     }
 
     /// Appends an energy term to the back of the Hamiltonian.
