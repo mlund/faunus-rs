@@ -14,13 +14,16 @@
 
 //! # Energy calculation and Hamiltonian
 
-pub mod bonded;
+mod bonded;
 pub(crate) mod builder;
 mod energyterm;
 pub mod exclusions;
 mod hamiltonian;
-pub mod nonbonded;
-pub mod sasa;
+mod nonbonded;
+mod sasa;
 
+pub use bonded::{IntermolecularBonded, IntramolecularBonded};
 pub use energyterm::EnergyTerm;
 pub use hamiltonian::{EnergyChange, Hamiltonian};
+pub use nonbonded::NonbondedMatrix;
+pub use sasa::SasaEnergy;

@@ -8,13 +8,14 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 use coulomb::{permittivity, DebyeLength, Medium, Salt, Vector3};
 use faunus::{
-    // energy::{nonbonded::NonbondedMatrix, EnergyTerm, Hamiltonian},
+    energy::{EnergyTerm, Hamiltonian, NonbondedMatrix},
     topology::Topology,
 };
-use indicatif::ParallelProgressIterator;
+// use indicatif::ParallelProgressIterator;
+use indicatif::ProgressIterator;
 use itertools::Itertools;
 use nu_ansi_term::Color::{Red, Yellow};
-use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+// use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use rgb::RGB8;
 use std::{f64::consts::PI, io::Write, ops::Neg, path::PathBuf};
 extern crate pretty_env_logger;
@@ -159,8 +160,9 @@ fn do_scan(cmd: &Commands) -> Result<()> {
         Medium::salt_water(*temperature, Salt::SodiumChloride, *molarity)
     };
 
-    let multipole = coulomb::pairwise::Plain::new(*cutoff, medium.debye_length());
-    let pair_matrix = energy::PairMatrix::new(&topology.atomkinds(), &multipole);
+    let _multipole = coulomb::pairwise::Plain::new(*cutoff, medium.debye_length());
+    let nonbonded = NonbondedMatrix::from_file(atoms, &topology)?;
+    let pair_matrix = energy::PairMatrix::new(nonbonded);
     let ref_a = Structure::from_xyz(mol1, &topology.atomkinds());
     let ref_b = Structure::from_xyz(mol2, &topology.atomkinds());
 
@@ -261,7 +263,8 @@ fn do_icoscan(
 
     // Populate 6D table with inter-particle energies (multi-threaded)
     r_and_omega
-        .par_iter()
+        .iter()
+        // .par_iter()
         .progress_count(r_and_omega.len() as u64)
         .for_each(|(r, omega)| {
             calc_energy(*r, *omega);
@@ -298,8 +301,9 @@ fn do_anglescan(
     let scan = TwobodyAngles::from_resolution(angle_resolution).unwrap();
     info!("{} per distance", scan);
     let com_scan = distances
-        .par_iter()
-        .progress_count(distances.len() as u64)
+        .iter()
+        // .par_iter()
+        // .progress_count(distances.len() as u64)
         .map(|r| {
             let r_vec = Vector3::new(0.0, 0.0, *r);
             let sample = scan

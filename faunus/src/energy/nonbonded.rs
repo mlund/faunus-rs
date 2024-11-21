@@ -372,6 +372,10 @@ impl NonbondedMatrix {
     pub fn get_potentials(&self) -> &Array2<Arc<dyn IsotropicTwobodyEnergy>> {
         &self.potentials
     }
+    /// Get square matrix of pair potentials for all atom type combinations.
+    pub fn get_potentials_mut(&mut self) -> &mut Array2<Arc<dyn IsotropicTwobodyEnergy>> {
+        &mut self.potentials
+    }
 }
 
 impl From<NonbondedMatrix> for EnergyTerm {

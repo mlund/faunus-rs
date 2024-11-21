@@ -147,7 +147,7 @@ impl Bond {
     pub fn energy_intermolecular(
         &self,
         context: &impl Context,
-        term: &crate::energy::bonded::IntermolecularBonded,
+        term: &crate::energy::IntermolecularBonded,
     ) -> f64 {
         // one or both particles are inactive
         if self.index.iter().any(|&i| !term.is_active(i)) {
