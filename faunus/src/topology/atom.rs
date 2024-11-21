@@ -185,3 +185,23 @@ pub enum Hydrophobicity {
     #[serde(alias = "λ")]
     Lambda(f64),
 }
+
+/// Set sigma for a list of atomkinds with `None` sigma
+pub fn set_missing_sigma(atomkinds: &mut [AtomKind], default_sigma: f64) {
+    atomkinds
+        .iter_mut()
+        .filter(|i| i.sigma().is_none())
+        .for_each(|i| {
+            i.set_sigma(Some(default_sigma));
+        });
+}
+
+/// Set epsilon for for a list of atomkinds with `None` epsilon.
+pub fn set_missing_epsilon(atomkinds: &mut [AtomKind], default_epsilon: f64) {
+    atomkinds
+        .iter_mut()
+        .filter(|i| i.epsilon().is_none())
+        .for_each(|i| {
+            i.set_epsilon(Some(default_epsilon));
+        });
+}

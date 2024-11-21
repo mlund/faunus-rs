@@ -436,6 +436,11 @@ impl Topology {
         &self.atomkinds
     }
 
+    /// Get atoms kinds of the topology.
+    pub fn atomkinds_mut(&mut self) -> &mut [AtomKind] {
+        &mut self.atomkinds
+    }
+
     /// Get molecule kinds of the topology.
     pub fn moleculekinds(&self) -> &[MoleculeKind] {
         &self.moleculekinds

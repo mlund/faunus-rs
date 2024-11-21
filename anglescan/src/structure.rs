@@ -1,65 +1,10 @@
 use crate::Vector3;
-use anyhow::Result;
 use chemfiles::Frame;
 use faunus::topology::AtomKind;
 use itertools::Itertools;
 use nalgebra::Matrix3;
-use serde::{Deserialize, Serialize};
 use std::fmt::{self, Display, Formatter};
 use std::path::PathBuf;
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct AtomKinds {
-    pub atomlist: Vec<AtomKind>,
-    pub comment: Option<String>,
-    pub version: semver::Version,
-}
-
-impl AtomKinds {
-    /// Construct from a YAML file with an `atomlist` array
-    pub fn from_yaml(path: &PathBuf) -> Result<Self> {
-        let file = std::fs::File::open(path)?;
-        serde_yaml::from_reader(file).map_err(Into::into)
-    }
-    /// Set sigma (Å) for atoms with `None` sigma
-    pub fn set_missing_sigma(&mut self, default_sigma: f64) {
-        self.atomlist
-            .iter_mut()
-            .filter(|i| i.sigma().is_none())
-            .for_each(|i| {
-                i.set_sigma(Some(default_sigma));
-            });
-    }
-    /// Set epsilon (kJ/mol) for atoms with `None` epsilon.
-    pub fn set_missing_epsilon(&mut self, default_epsilon: f64) {
-        self.atomlist
-            .iter_mut()
-            .filter(|i| i.epsilon().is_none())
-            .for_each(|i| {
-                i.set_epsilon(Some(default_epsilon));
-            });
-    }
-}
-
-impl From<AtomKinds> for Vec<AtomKind> {
-    fn from(atomkinds: AtomKinds) -> Vec<AtomKind> {
-        atomkinds.atomlist
-    }
-}
-
-// test yaml reading of atoms
-/*#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn test_atomkinds() {
-        let path = PathBuf::from("../assets/amino-acid-model-atoms.yml");
-        let atomlist = AtomKinds::from_yaml(&path).unwrap();
-        assert_eq!(atomlist.atomlist.len(), 37);
-        assert_eq!(atomlist.version.to_string(), "1.1.0");
-        assert_eq!(atomlist.atomlist[0].name(), "Na");
-    }
-}*/
 
 /// Ancient AAM file format from Faunus
 #[derive(Debug, Default)]
@@ -122,7 +67,7 @@ fn from_xyz_line(line: &str) -> (String, Vector3<f64>) {
 
 impl Structure {
     /// Constructs a new structure from an XYZ file, centering the structure at the origin
-    pub fn from_xyz(path: &PathBuf, atomkinds: &AtomKinds) -> Self {
+    pub fn from_xyz(path: &PathBuf, atomkinds: &[AtomKind]) -> Self {
         let nxyz: Vec<(String, Vector3<f64>)> = std::fs::read_to_string(path)
             .unwrap()
             .lines()
@@ -134,7 +79,6 @@ impl Structure {
             .iter()
             .map(|(name, _)| {
                 atomkinds
-                    .atomlist
                     .iter()
                     .position(|j| j.name() == name)
                     .unwrap_or_else(|| panic!("Unknown atom name in XYZ file: {}", name))
@@ -143,21 +87,13 @@ impl Structure {
 
         let masses = nxyz
             .iter()
-            .map(|(name, _)| {
-                atomkinds
-                    .atomlist
-                    .iter()
-                    .find(|i| i.name() == name)
-                    .unwrap()
-                    .mass()
-            })
+            .map(|(name, _)| atomkinds.iter().find(|i| i.name() == name).unwrap().mass())
             .collect::<Vec<f64>>();
 
         let charges = nxyz
             .iter()
             .map(|(name, _)| {
                 atomkinds
-                    .atomlist
                     .iter()
                     .find(|i| i.name() == name)
                     .unwrap()
@@ -169,7 +105,6 @@ impl Structure {
             .iter()
             .map(|(name, _)| {
                 atomkinds
-                    .atomlist
                     .iter()
                     .find(|i| i.name() == name)
                     .unwrap()
@@ -190,7 +125,7 @@ impl Structure {
         structure
     }
     /// Constructs a new structure from a Faunus AAM file
-    pub fn from_aam(path: &PathBuf, atomkinds: &AtomKinds) -> Self {
+    pub fn from_aam(path: &PathBuf, atomkinds: &[AtomKind]) -> Self {
         let aam: Vec<AminoAcidModelRecord> = std::fs::read_to_string(path)
             .unwrap()
             .lines()
@@ -202,7 +137,6 @@ impl Structure {
             .iter()
             .map(|i| {
                 atomkinds
-                    .atomlist
                     .iter()
                     .position(|j| j.name() == i.name)
                     .unwrap_or_else(|| panic!("Unknown atom name in AAM file: {}", i.name))
@@ -222,7 +156,7 @@ impl Structure {
     }
 
     /// Constructs a new structure from a chemfiles trajectory file
-    pub fn from_chemfiles(path: &PathBuf, atomkinds: &AtomKinds) -> Self {
+    pub fn from_chemfiles(path: &PathBuf, atomkinds: &[AtomKind]) -> Self {
         let mut traj = chemfiles::Trajectory::open(path, 'r').unwrap();
         let mut frame = Frame::new();
         traj.read(&mut frame).unwrap();
@@ -239,7 +173,6 @@ impl Structure {
             .iter_atoms()
             .map(|atom| {
                 atomkinds
-                    .atomlist
                     .iter()
                     .position(|kind| kind.name() == atom.name())
                     .unwrap_or_else(|| panic!("Unknown atom name in structure file: {:?}", atom))
