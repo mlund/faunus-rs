@@ -1,0 +1,32 @@
+atoms:
+  - name: PP # positive particle
+    mass: 1.0
+    charge: 1.0
+    sigma: 4.0
+  - name: NP # negative particle
+    mass: 1.0
+    charge: -1.0
+    sigma: 4.0
+  - name: MP # middle particle
+    mass: 10000000000.0
+    charge: 0.0
+    sigma: 40.0
+molecules:
+  - name: P00
+    from_structure: "cppm-p00.xyz" 
+  - name: P18
+    from_structure: "cppm-p18.xyz" 
+
+system:
+  energy:
+    nonbonded:
+      default:
+        - !WCA {mixing: LB}
+        - !CoulombPlain {cutoff: 11.0, debye: 30}
+      [MP, MP]:
+        - !WCA {mixing: LB}
+
+  blocks:
+    - {molecule: P00, N: 1}
+    - {molecule: P00, N: 1}
+

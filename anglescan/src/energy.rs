@@ -16,7 +16,7 @@ pub struct PairMatrix {
 impl PairMatrix {
     /// Create a new pair matrix
     pub fn new(mut nonbonded: NonbondedMatrix) -> Self {
-        nonbonded.get_potentials_mut().iter_mut().for_each(|_| {});
+        nonbonded.get_potentials_mut().for_each(|_v| {});
         Self { nonbonded }
     }
 
