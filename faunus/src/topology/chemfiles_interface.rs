@@ -247,13 +247,10 @@ impl CellToChemCell for Cell {}
 mod tests {
     use std::{cell::RefCell, rc::Rc};
 
-    use crate::{
-        energy::Hamiltonian,
-        topology::{
-            block::{BlockActivationStatus, InsertionPolicy, MoleculeBlock},
-            molecule::MoleculeKindBuilder,
-            AtomKindBuilder, Bond, BondKind, BondOrder, IntermolecularBonded, Topology,
-        },
+    use crate::topology::{
+        block::{BlockActivationStatus, InsertionPolicy, MoleculeBlock},
+        molecule::MoleculeKindBuilder,
+        AtomKindBuilder, Bond, BondKind, BondOrder, IntermolecularBonded, Topology,
     };
 
     use float_cmp::assert_approx_eq;
@@ -387,7 +384,7 @@ mod tests {
         let context = ReferencePlatform::from_raw_parts(
             Rc::new(topology),
             Cell::Cuboid(Cuboid::new(10.0, 5.0, 2.5)),
-            RefCell::new(Hamiltonian::from_energy_terms(vec![])),
+            RefCell::new(vec![].into()),
             None::<&str>,
             &mut rng,
         )

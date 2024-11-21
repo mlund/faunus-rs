@@ -509,9 +509,7 @@ mod tests {
         let system = ReferencePlatform::from_raw_parts(
             Rc::new(topology),
             Cell::Cuboid(Cuboid::cubic(20.0)),
-            RefCell::new(Hamiltonian::from_energy_terms(vec![nonbonded
-                .clone()
-                .into()])),
+            RefCell::new(Hamiltonian::from(vec![nonbonded.clone().into()])),
             None::<&str>,
             &mut rng,
         )
