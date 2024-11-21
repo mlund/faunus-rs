@@ -36,7 +36,7 @@ impl SyncFrom for Hamiltonian {
 impl Hamiltonian {
     /// Create a Hamiltonian from the provided HamiltonianBuilder and topology.
     pub(crate) fn new(builder: &HamiltonianBuilder, topology: &Topology) -> anyhow::Result<Self> {
-        let mut hamiltonian: Self = vec![
+        let mut hamiltonian: Self = [
             NonbondedMatrix::new(&builder.pairpot_builder, topology)?.into(),
             IntramolecularBonded::default().into(),
         ]
@@ -74,9 +74,11 @@ impl Hamiltonian {
     }
 }
 
-impl From<Vec<EnergyTerm>> for Hamiltonian {
-    fn from(energy_terms: Vec<EnergyTerm>) -> Self {
-        Self { energy_terms }
+impl<T: Into<Vec<EnergyTerm>>> From<T> for Hamiltonian {
+    fn from(energy_terms: T) -> Self {
+        Self {
+            energy_terms: energy_terms.into(),
+        }
     }
 }
 
