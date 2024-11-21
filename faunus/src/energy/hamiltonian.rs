@@ -36,27 +36,21 @@ impl Hamiltonian {
     /// Create a Hamiltonian from the provided HamiltonianBuilder and topology.
     pub(crate) fn new(builder: &HamiltonianBuilder, topology: &Topology) -> anyhow::Result<Self> {
         let nonbonded = NonbondedMatrix::new(&builder.pairpot_builder, topology)?;
-        let intramolecular_bonded = IntramolecularBonded::make_energy();
+        let intramolecular_bonded = IntramolecularBonded::default();
 
-        let mut hamiltonian = Hamiltonian::from(vec![nonbonded.into(), intramolecular_bonded]);
+        let mut hamiltonian =
+            Hamiltonian::from(vec![nonbonded.into(), intramolecular_bonded.into()]);
 
         // IntermolecularBonded term should only be added if it is actually needed
         if !topology.intermolecular().is_empty() {
-            hamiltonian.add_energy_term(IntermolecularBonded::new(topology));
+            hamiltonian.push(IntermolecularBonded::new(topology));
         }
 
         Ok(hamiltonian)
     }
 
-    // /// Create a Hamiltonian from the provided energy terms.
-    // pub(crate) fn from_energy_terms(terms: Vec<EnergyTerm>) -> Self {
-    //     Hamiltonian {
-    //         energy_terms: terms,
-    //     }
-    // }
-
-    /// Add an energy term into the Hamiltonian.
-    pub(crate) fn add_energy_term(&mut self, term: EnergyTerm) {
+    /// Appends an energy term to the back of the Hamiltonian.
+    pub(crate) fn push(&mut self, term: EnergyTerm) {
         self.energy_terms.push(term);
     }
 

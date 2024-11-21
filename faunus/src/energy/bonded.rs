@@ -23,7 +23,7 @@ use crate::{
 use super::{EnergyChange, EnergyTerm};
 
 /// Energy term for computing intramolecular bonded interactions.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct IntramolecularBonded {}
 
 impl EnergyChange for IntramolecularBonded {
@@ -53,12 +53,6 @@ impl EnergyChange for IntramolecularBonded {
 }
 
 impl IntramolecularBonded {
-    /// Create a new IntramolecularBonded energy term.
-    #[allow(clippy::new_ret_no_self)]
-    pub(super) fn make_energy() -> EnergyTerm {
-        EnergyTerm::IntramolecularBonded(IntramolecularBonded {})
-    }
-
     /// Calculate energy of all active bonded interactions of the specified groups.
     #[inline(always)]
     fn multiple_groups(&self, context: &impl Context, groups: &[usize]) -> f64 {
@@ -293,11 +287,7 @@ mod tests_intramolecular {
         )
         .unwrap();
 
-        let bonded = match IntramolecularBonded::make_energy() {
-            EnergyTerm::IntramolecularBonded(e) => e,
-            _ => panic!("IntramolecularBonded not constructed."),
-        };
-
+        let bonded = IntramolecularBonded::default();
         (system, bonded)
     }
 

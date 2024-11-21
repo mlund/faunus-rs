@@ -186,7 +186,7 @@ impl PairPotentialBuilder {
     /// Get interactions for a specific pair of atoms.
     /// If this pair of atoms is not defined, get interactions for Default.
     /// If Default is not defined, return an empty array.
-    fn collect_interactions(&self, atom1: &str, atom2: &str) -> &[PairInteraction] {
+    fn get_pair_interactions(&self, atom1: &str, atom2: &str) -> &[PairInteraction] {
         let key = DefaultOrPair::Pair(UnorderedPair(atom1.to_owned(), atom2.to_owned()));
 
         match self.0.get(&key) {
@@ -206,7 +206,7 @@ impl PairPotentialBuilder {
         atom1: &AtomKind,
         atom2: &AtomKind,
     ) -> anyhow::Result<Box<dyn IsotropicTwobodyEnergy>> {
-        let interactions = self.collect_interactions(atom1.name(), atom2.name());
+        let interactions = self.get_pair_interactions(atom1.name(), atom2.name());
 
         if interactions.is_empty() {
             log::warn!(
@@ -276,6 +276,8 @@ impl HamiltonianBuilder {
 }
 
 /// Specifies pair of atom kinds interacting with each other.
+///
+/// TODO: Why not just `Option<UnorderedPair<String>>`?
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 enum DefaultOrPair {
     /// All pairs of atom kinds.

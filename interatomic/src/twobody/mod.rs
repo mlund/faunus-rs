@@ -25,21 +25,27 @@ use dyn_clone::DynClone;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
+mod ashbaugh_hatch;
 mod fene;
 mod hardsphere;
 mod harmonic;
+mod lennard_jones;
 mod mie;
 mod morse;
 mod multipole;
 pub mod potential;
 mod ureybradley;
-pub use self::fene::FENE;
-pub use self::hardsphere::HardSphere;
-pub use self::harmonic::Harmonic;
-pub use self::mie::{AshbaughHatch, LennardJones, Mie, WeeksChandlerAndersen};
-pub use self::morse::Morse;
-pub use self::multipole::{IonIon, IonIonPlain, IonIonYukawa};
-pub use self::ureybradley::UreyBradley;
+mod wca;
+pub use ashbaugh_hatch::AshbaughHatch;
+pub use fene::FENE;
+pub use hardsphere::HardSphere;
+pub use harmonic::Harmonic;
+pub use lennard_jones::LennardJones;
+pub use mie::Mie;
+pub use morse::Morse;
+pub use multipole::{IonIon, IonIonPlain, IonIonYukawa};
+pub use ureybradley::UreyBradley;
+pub use wca::WeeksChandlerAndersen;
 
 /// Relative orientation between a pair of anisotropic particles.
 ///
