@@ -170,7 +170,6 @@ impl Add for Box<dyn IsotropicTwobodyEnergy> {
         Box::new(Combined::new(self, other))
     }
 }
-
 impl Sum for Box<dyn IsotropicTwobodyEnergy> {
     fn sum<I: Iterator<Item = Box<dyn IsotropicTwobodyEnergy>>>(iter: I) -> Self {
         iter.fold(Box::new(NoInteraction {}), |acc, x| acc + x)
