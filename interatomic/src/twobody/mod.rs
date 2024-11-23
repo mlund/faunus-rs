@@ -60,7 +60,7 @@ pub struct RelativeOrientation {
 }
 
 /// Potential energy between a pair of anisotropic particles.
-pub trait AnisotropicTwobodyEnergy {
+pub trait AnisotropicTwobodyEnergy: Send + Sync {
     /// Interaction energy between a pair of anisotropic particles, 𝑈(𝒓).
     fn anisotropic_twobody_energy(&self, orientation: &RelativeOrientation) -> f64;
 
@@ -170,6 +170,7 @@ impl Add for Box<dyn IsotropicTwobodyEnergy> {
         Box::new(Combined::new(self, other))
     }
 }
+
 impl Sum for Box<dyn IsotropicTwobodyEnergy> {
     fn sum<I: Iterator<Item = Box<dyn IsotropicTwobodyEnergy>>>(iter: I) -> Self {
         iter.fold(Box::new(NoInteraction {}), |acc, x| acc + x)

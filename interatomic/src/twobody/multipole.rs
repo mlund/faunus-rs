@@ -44,7 +44,7 @@ impl<T: MultipoleEnergy> IonIon<T> {
     }
 }
 
-impl<T: MultipoleEnergy + std::fmt::Debug + Clone + PartialEq> IsotropicTwobodyEnergy
+impl<T: MultipoleEnergy + std::fmt::Debug + Clone + PartialEq + Send + Sync> IsotropicTwobodyEnergy
     for IonIon<T>
 {
     /// Calculate the isotropic twobody energy (kJ/mol)

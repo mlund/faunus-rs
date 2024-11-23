@@ -164,7 +164,13 @@ impl PairInteraction {
     }
     /// Helper to create a coulombic interaction with a generic scheme
     fn make_coulomb<
-        T: coulomb::pairwise::MultipoleEnergy + Clone + Debug + std::cmp::PartialEq + 'static,
+        T: coulomb::pairwise::MultipoleEnergy
+            + Clone
+            + Debug
+            + std::cmp::PartialEq
+            + 'static
+            + Sync
+            + Send,
     >(
         charge_product: f64,
         scheme: T,
