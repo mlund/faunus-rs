@@ -1,4 +1,4 @@
-use coulomb::pairwise::MultipolePotential;
+use coulomb::pairwise::{MultipoleEnergy, MultipolePotential};
 use faunus::energy::NonbondedMatrix;
 use faunus::topology::AtomKind;
 use interatomic::twobody::{IonIon, IsotropicTwobodyEnergy};
@@ -8,7 +8,6 @@ use crate::structure::Structure;
 
 // type alias for the pair potential
 type CoulombMethod = coulomb::pairwise::Plain;
-type CoulombPotential = IonIon<CoulombMethod>;
 
 /// Pair-matrix of twobody energies for pairs of atom ids
 pub struct PairMatrix {
@@ -17,20 +16,20 @@ pub struct PairMatrix {
 
 impl PairMatrix {
     /// Create a new pair matrix with added Coulomb potential
-    pub fn new_append_ionion(
+    pub fn new_append_ionion<
+        T: MultipoleEnergy + Clone + Send + Sync + std::fmt::Debug + std::cmp::PartialEq + 'static,
+    >(
         mut nonbonded: NonbondedMatrix,
         atomkinds: &[AtomKind],
-        coulomb_method: CoulombMethod,
+        coulomb_method: &T,
     ) -> Self {
         nonbonded
             .get_potentials_mut()
             .indexed_iter_mut()
             .for_each(|((i, j), pairpot)| {
                 let charge_product = atomkinds[i].charge() * atomkinds[j].charge();
-                let coulomb = Box::new(CoulombPotential::new(
-                    charge_product,
-                    coulomb_method.clone(),
-                )) as Box<dyn IsotropicTwobodyEnergy>;
+                let coulomb = Box::new(IonIon::<T>::new(charge_product, coulomb_method.clone()))
+                    as Box<dyn IsotropicTwobodyEnergy>;
                 let combined = coulomb + Box::new(pairpot.clone());
                 *pairpot = std::sync::Arc::new(combined);
             });
