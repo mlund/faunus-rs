@@ -7,10 +7,7 @@ use anglescan::{
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use coulomb::{permittivity, DebyeLength, Medium, Salt, Vector3};
-use faunus::{
-    energy::{EnergyTerm, Hamiltonian, NonbondedMatrix},
-    topology::Topology,
-};
+use faunus::{energy::NonbondedMatrix, topology::Topology};
 use indicatif::ParallelProgressIterator;
 // use indicatif::ProgressIterator;
 use itertools::Itertools;
