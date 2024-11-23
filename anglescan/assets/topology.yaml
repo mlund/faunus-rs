@@ -20,9 +20,9 @@ molecules:
 system:
   energy:
     nonbonded:
+      # Note that a Coulomb term is added later, so don't specify one here!
       default:
         - !WCA {mixing: LB}
-        - !CoulombPlain {cutoff: 11.0, debye: 30}
       [MP, MP]:
         - !WCA {mixing: LB}
 
