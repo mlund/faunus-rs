@@ -11,11 +11,11 @@ use faunus::{
     energy::{EnergyTerm, Hamiltonian, NonbondedMatrix},
     topology::Topology,
 };
-// use indicatif::ParallelProgressIterator;
-use indicatif::ProgressIterator;
+use indicatif::ParallelProgressIterator;
+// use indicatif::ProgressIterator;
 use itertools::Itertools;
 use nu_ansi_term::Color::{Red, Yellow};
-// use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use rgb::RGB8;
 use std::{f64::consts::PI, io::Write, ops::Neg, path::PathBuf};
 extern crate pretty_env_logger;
@@ -264,8 +264,7 @@ fn do_icoscan(
 
     // Populate 6D table with inter-particle energies (multi-threaded)
     r_and_omega
-        .iter()
-        // .par_iter()
+        .par_iter()
         .progress_count(r_and_omega.len() as u64)
         .for_each(|(r, omega)| {
             calc_energy(*r, *omega);
@@ -302,9 +301,8 @@ fn do_anglescan(
     let scan = TwobodyAngles::from_resolution(angle_resolution).unwrap();
     info!("{} per distance", scan);
     let com_scan = distances
-        .iter()
-        // .par_iter()
-        // .progress_count(distances.len() as u64)
+        .par_iter()
+        .progress_count(distances.len() as u64)
         .map(|r| {
             let r_vec = Vector3::new(0.0, 0.0, *r);
             let sample = scan
