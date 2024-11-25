@@ -1,3 +1,4 @@
+include: [calvados3.yaml]
 atoms:
   - name: PP # positive particle
     mass: 1.0
