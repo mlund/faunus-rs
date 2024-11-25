@@ -1,13 +1,11 @@
-use coulomb::pairwise::{MultipoleEnergy, MultipolePotential};
+use crate::structure::Structure;
+use coulomb::pairwise::{MultipoleEnergy, MultipolePotential, Plain};
 use faunus::energy::NonbondedMatrix;
 use faunus::topology::AtomKind;
 use interatomic::twobody::{IonIon, IsotropicTwobodyEnergy};
 use interatomic::Vector3;
-
-use crate::structure::Structure;
-
-// type alias for the pair potential
-type CoulombMethod = coulomb::pairwise::Plain;
+use std::cmp::PartialEq;
+use std::fmt::Debug;
 
 /// Pair-matrix of twobody energies for pairs of atom ids
 pub struct PairMatrix {
@@ -16,13 +14,14 @@ pub struct PairMatrix {
 
 impl PairMatrix {
     /// Create a new pair matrix with added Coulomb potential
-    pub fn new_append_ionion<
-        T: MultipoleEnergy + Clone + Send + Sync + std::fmt::Debug + std::cmp::PartialEq + 'static,
+    pub fn new_with_coulomb<
+        T: MultipoleEnergy + Clone + Send + Sync + Debug + PartialEq + 'static,
     >(
         mut nonbonded: NonbondedMatrix,
         atomkinds: &[AtomKind],
         coulomb_method: &T,
     ) -> Self {
+        log::info!("Adding Coulomb potential to nonbonded matrix");
         nonbonded
             .get_potentials_mut()
             .indexed_iter_mut()
@@ -54,7 +53,7 @@ impl PairMatrix {
 }
 
 /// Calculate accumulated electric potential at point `r` due to charges in `structure`
-pub fn electric_potential(structure: &Structure, r: &Vector3, multipole: &CoulombMethod) -> f64 {
+pub fn electric_potential(structure: &Structure, r: &Vector3, multipole: &Plain) -> f64 {
     std::iter::zip(structure.pos.iter(), structure.charges.iter())
         .map(|(pos, charge)| multipole.ion_potential(*charge, (pos - r).norm()))
         .sum()
