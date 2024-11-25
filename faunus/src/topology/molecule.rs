@@ -119,15 +119,15 @@ fn default_true() -> bool {
 }
 
 impl MoleculeKind {
-    pub fn id(&self) -> usize {
+    pub const fn id(&self) -> usize {
         self.id
     }
 
-    pub fn degrees_of_freedom(&self) -> DegreesOfFreedom {
+    pub const fn degrees_of_freedom(&self) -> DegreesOfFreedom {
         self.degrees_of_freedom
     }
 
-    pub fn has_com(&self) -> bool {
+    pub const fn has_com(&self) -> bool {
         self.has_com
     }
 

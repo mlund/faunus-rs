@@ -52,7 +52,7 @@ pub struct Torsion {
 
 impl Torsion {
     /// Create new torsion
-    pub fn new(index: [usize; 3], kind: TorsionKind) -> Self {
+    pub const fn new(index: [usize; 3], kind: TorsionKind) -> Self {
         Self { index, kind }
     }
 

@@ -33,7 +33,7 @@ pub struct HarmonicDihedral {
 }
 
 impl HarmonicDihedral {
-    pub fn new(eq_angle: f64, spring_constant: f64) -> Self {
+    pub const fn new(eq_angle: f64, spring_constant: f64) -> Self {
         Self {
             eq_angle,
             spring_constant,

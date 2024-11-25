@@ -47,7 +47,7 @@ pub enum DihedralKind {
 
 impl DihedralKind {
     /// Check if dihedral is improper
-    pub fn is_improper(&self) -> bool {
+    pub const fn is_improper(&self) -> bool {
         matches!(
             self,
             DihedralKind::ImproperHarmonic(_) | DihedralKind::ImproperPeriodic(_) //| DihedralKind::ImproperAmber { .. }
@@ -77,7 +77,7 @@ pub struct Dihedral {
 
 impl Dihedral {
     /// Create new dihedral
-    pub fn new(
+    pub const fn new(
         index: [usize; 4],
         kind: DihedralKind,
         electrostatic_scaling: Option<f64>,
@@ -97,7 +97,7 @@ impl Dihedral {
     }
 
     /// Determines if the dihedral is improper
-    pub fn is_improper(&self) -> bool {
+    pub const fn is_improper(&self) -> bool {
         self.kind.is_improper()
     }
 
