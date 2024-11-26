@@ -16,6 +16,7 @@
 //! a) the `MoleculeBlock` structure which is used to define the topology of the system,
 //! b) the `InsertionPolicy` used to specify the construction of the molecule blocks.
 
+use std::iter::zip;
 use std::{cmp::Ordering, path::Path};
 
 use super::structure;
@@ -94,7 +95,7 @@ impl InsertionPolicy {
             Self::RandomAtomPos { directions } => Ok((0..(molecule_kind.atom_indices().len()
                 * number))
                 .map(|_| directions.filter(cell.get_point_inside(rng)))
-                .collect::<Vec<Point>>()),
+                .collect::<Vec<_>>()),
 
             Self::RandomCOM {
                 filename,
@@ -149,7 +150,7 @@ impl InsertionPolicy {
                 .atom_indices()
                 .iter()
                 .map(|index| atoms[*index].mass())
-                .collect::<Vec<f64>>(),
+                .collect::<Vec<_>>(),
         );
 
         // get positions relative to the center of mass
@@ -205,10 +206,8 @@ impl InsertionPolicy {
             let new_com =
                 directions.filter(cell.get_point_inside(rng)) + offset.unwrap_or(Point::zeros());
 
-            let mut positions = centered_positions
-                .iter()
-                .map(|pos| pos + new_com)
-                .collect::<Vec<_>>();
+            let mut positions: Vec<_> =
+                centered_positions.iter().map(|pos| pos + new_com).collect();
 
             // Rotate the molecule
             // TODO: Optimize. We possibly want to do this before translating the molecule out
@@ -318,7 +317,7 @@ impl MoleculeBlock {
         let mut particle_counter = context.num_particles();
 
         // get flat list of positions of *all* molecules in the block
-        let positions = match &self.insert {
+        let mut positions = match &self.insert {
             None => external_positions.to_owned(),
             Some(policy) => policy.get_positions(
                 &context.topology().atomkinds,
@@ -327,21 +326,19 @@ impl MoleculeBlock {
                 context.cell(),
                 rng,
             )?,
-        };
+        }
+        .into_iter();
 
         // create groups and populate them with particles
         for i in 0..self.num_molecules {
             // create the particles
-            let particles = molecule
-                .atom_indices()
-                .iter()
-                .zip(&positions)
-                .map(|(index, position)| {
-                    let particle = Particle::new(*index, particle_counter, *position);
+            let particles: Vec<_> = zip(molecule.atom_indices(), positions.by_ref())
+                .map(|(atom_id, position)| {
+                    let particle = Particle::new(*atom_id, particle_counter, position);
                     particle_counter += 1;
                     particle
                 })
-                .collect::<Vec<_>>();
+                .collect();
 
             let group_id = context.add_group(molecule.id(), &particles)?.index();
 
