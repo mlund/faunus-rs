@@ -1206,6 +1206,7 @@ mod tests {
                 ),
                 rotate: false,
                 directions: Dimension::default(),
+                offset: None,
             }),
         );
 
@@ -1222,6 +1223,7 @@ mod tests {
                 ),
                 rotate: true,
                 directions: Dimension::X,
+                offset: None,
             }),
         );
 

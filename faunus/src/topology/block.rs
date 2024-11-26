@@ -18,13 +18,14 @@
 
 use std::{cmp::Ordering, path::Path};
 
+use super::structure;
+use super::{molecule::MoleculeKind, AtomKind, InputPath};
+use crate::dimension::Dimension;
+use crate::transform;
+use crate::{cell::SimulationCell, group::GroupSize, Context, Particle, Point};
 use rand::rngs::ThreadRng;
 use serde::{Deserialize, Serialize};
 use validator::{Validate, ValidationError};
-
-use super::{molecule::MoleculeKind, AtomKind, InputPath};
-use crate::dimension::Dimension;
-use crate::{cell::SimulationCell, group::GroupSize, Context, Particle, Point};
 
 /// Describes the activation status of a MoleculeBlock.
 /// Partial(n) means that only the first 'n' molecules of the block are active.
@@ -50,11 +51,16 @@ pub enum InsertionPolicy {
     /// Read the structure of the molecule. Then place all molecules of the block
     /// to random positions in the simulation cell.
     RandomCOM {
+        /// File containing the structure of the molecule.
         filename: InputPath,
         #[serde(default)]
+        /// Rotate the molecule randomly; default is false.
         rotate: bool,
         #[serde(default)]
+        /// Random directions to place the molecule.
         directions: Dimension,
+        /// Optional offset vector to add to the molecule _after_ random COM has been chosen.
+        offset: Option<Point>,
     },
     /// Define the positions of the atoms of all molecules manually, directly in the topology file.
     Manual(Vec<Point>),
@@ -71,10 +77,9 @@ impl InsertionPolicy {
         rng: &mut ThreadRng,
     ) -> anyhow::Result<Vec<Point>> {
         match self {
-            Self::FromFile(filename) => super::structure::positions_from_structure_file(
-                filename.path().unwrap(),
-                Some(cell),
-            ),
+            Self::FromFile(filename) => {
+                structure::positions_from_structure_file(filename.path().unwrap(), Some(cell))
+            }
 
             Self::RandomAtomPos { directions } => Ok((0..(molecule_kind.atom_indices().len()
                 * number))
@@ -85,6 +90,7 @@ impl InsertionPolicy {
                 filename,
                 rotate,
                 directions,
+                offset,
             } => InsertionPolicy::generate_random_com(
                 molecule_kind,
                 atoms,
@@ -94,6 +100,7 @@ impl InsertionPolicy {
                 filename,
                 *rotate,
                 directions,
+                offset,
             ),
 
             // the coordinates should already be validated that they are compatible with the topology
@@ -101,21 +108,16 @@ impl InsertionPolicy {
         }
     }
 
-    /// Generate positions using the insertion policy RandomCOM.
-    #[allow(clippy::too_many_arguments)]
-    fn generate_random_com(
+    /// Read molecule positions from file and translate COM to origin (0,0,0)
+    fn load_positions_to_origin(
+        filename: &InputPath,
         molecule_kind: &MoleculeKind,
         atoms: &[AtomKind],
-        number: usize,
-        cell: &impl SimulationCell,
-        rng: &mut ThreadRng,
-        filename: &InputPath,
-        rotate: bool,
-        directions: &Dimension,
+        cell: Option<&impl SimulationCell>,
     ) -> anyhow::Result<Vec<Point>> {
         // read coordinates of the molecule from input file
         let mut ref_positions =
-            super::structure::positions_from_structure_file(filename.path().unwrap(), Some(cell))?;
+            structure::positions_from_structure_file(filename.path().unwrap(), cell)?;
 
         // get the center of mass of the molecule
         let com = crate::aux::center_of_mass(
@@ -129,29 +131,47 @@ impl InsertionPolicy {
 
         // get positions relative to the center of mass
         ref_positions.iter_mut().for_each(|pos| *pos -= com);
+        Ok(ref_positions)
+    }
 
-        // generate random positions for the molecules
-        Ok((0..number)
-            .flat_map(|_| {
-                let random_com = directions.filter(cell.get_point_inside(rng));
-                let mut molecule_positions = ref_positions
-                    .iter()
-                    .map(|pos| random_com + pos)
-                    .collect::<Vec<_>>();
+    /// Generate positions using the insertion policy RandomCOM.
+    #[allow(clippy::too_many_arguments)]
+    fn generate_random_com(
+        molecule_kind: &MoleculeKind,
+        atoms: &[AtomKind],
+        num_molecules: usize,
+        cell: &impl SimulationCell,
+        rng: &mut ThreadRng,
+        filename: &InputPath,
+        rotate: bool,
+        directions: &Dimension,
+        offset: &Option<Point>,
+    ) -> anyhow::Result<Vec<Point>> {
+        let molecule_at_origin =
+            Self::load_positions_to_origin(filename, molecule_kind, atoms, Some(cell))?;
 
-                // rotate the molecule
-                if rotate {
-                    crate::transform::rotate_random(&mut molecule_positions, &random_com, rng);
-                }
+        // generate positions for a single molecule
+        let gen_pos = |_| {
+            let random_com = directions.filter(cell.get_point_inside(rng));
+            let mut positions = molecule_at_origin
+                .iter()
+                .map(|pos| random_com + pos + offset.unwrap_or(Point::zeros()))
+                .collect::<Vec<_>>();
 
-                // wrap particles into simulation cell
-                molecule_positions
-                    .iter_mut()
-                    .for_each(|pos| cell.boundary(pos));
+            // rotate the molecule
+            // TODO: Optimize. We possibly want to do this before translating the molecule out
+            //       of the origin.
+            if rotate {
+                transform::rotate_random(&mut positions, &random_com, rng);
+            }
 
-                molecule_positions
-            })
-            .collect::<Vec<_>>())
+            // wrap particles into simulation cell
+            positions.iter_mut().for_each(|pos| cell.boundary(pos));
+            positions
+        };
+
+        // return a flat list of positions for `num_molecules` molecules
+        Ok((0..num_molecules).flat_map(gen_pos).collect::<Vec<_>>())
     }
 
     /// Finalize path to the provided structure file (if it is provided) treating it either as an absolute path
