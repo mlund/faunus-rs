@@ -9,7 +9,7 @@ atoms:
     charge: -1.0
     sigma: 4.0
   - name: MP # middle particle
-    mass: 10000000000.0
+    mass: 1e9
     charge: 0.0
     sigma: 40.0
 molecules:
@@ -28,6 +28,6 @@ system:
         - !WCA {mixing: LB}
 
   blocks:
-    - {molecule: P00, N: 1}
-    - {molecule: P00, N: 1}
+    - {molecule: P00, N: 1, insert: !FixedCOM {filename: "cppm-p00.xyz", position: [0,0,0]}}
+    - {molecule: P00, N: 1, insert: !FixedCOM {filename: "cppm-p00.xyz", position: [0,0,20]}}
 

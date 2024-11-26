@@ -179,7 +179,7 @@ impl InsertionPolicy {
             &mut rand::thread_rng(),
             filename,
             rotate,
-            &Dimension::None,
+            &Dimension::None, // no random directions
             &Some(*position),
         )
     }
@@ -257,6 +257,7 @@ pub struct MoleculeBlock {
     active: BlockActivationStatus,
     /// Specifies how the structure of the molecule block should be obtained.
     /// None => structure should be read from a separately provided structure file
+    ///         TODO: Replace Option with variant so that it's more explicit what `None` means.
     insert: Option<InsertionPolicy>,
 }
 

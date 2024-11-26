@@ -63,7 +63,7 @@ use crate::{Context, Point};
 use serde::{Deserialize, Serialize};
 use serde::{Deserializer, Serializer};
 
-use self::block::{InsertionPolicy, MoleculeBlock};
+pub use self::block::{InsertionPolicy, MoleculeBlock};
 pub use self::molecule::{MoleculeKind, MoleculeKindBuilder};
 pub use structure::{molecule_from_file, positions_from_structure_file};
 
