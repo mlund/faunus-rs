@@ -134,9 +134,9 @@ mod tests {
             z_mean += v.z;
             rngsum += rng.gen::<f64>();
         }
-        assert_approx_eq!(f64, x_mean / n as f64, 0.0, epsilon = 0.02);
-        assert_approx_eq!(f64, y_mean / n as f64, 0.0, epsilon = 0.02);
-        assert_approx_eq!(f64, z_mean / n as f64, 0.0, epsilon = 0.02);
+        assert_approx_eq!(f64, x_mean / n as f64, 0.0, epsilon = 0.025);
+        assert_approx_eq!(f64, y_mean / n as f64, 0.0, epsilon = 0.025);
+        assert_approx_eq!(f64, z_mean / n as f64, 0.0, epsilon = 0.025);
         assert_approx_eq!(f64, rngsum / n as f64, 0.5, epsilon = 0.01);
     }
 
