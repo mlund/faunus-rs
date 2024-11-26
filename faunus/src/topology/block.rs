@@ -317,8 +317,8 @@ impl MoleculeBlock {
         let molecule = &context.topology().moleculekinds[self.molecule_id];
         let mut particle_counter = context.num_particles();
 
-        // get positions of the particles in the block
-        let mut positions = match &self.insert {
+        // get flat list of positions of *all* molecules in the block
+        let positions = match &self.insert {
             None => external_positions.to_owned(),
             Some(policy) => policy.get_positions(
                 &context.topology().atomkinds,
@@ -327,22 +327,21 @@ impl MoleculeBlock {
                 context.cell(),
                 rng,
             )?,
-        }
-        .into_iter();
+        };
 
         // create groups and populate them with particles
         for i in 0..self.num_molecules {
             // create the particles
-            let particles: Vec<Particle> = molecule
+            let particles = molecule
                 .atom_indices()
                 .iter()
-                .zip(positions.by_ref())
+                .zip(&positions)
                 .map(|(index, position)| {
-                    let particle = Particle::new(*index, particle_counter, position);
+                    let particle = Particle::new(*index, particle_counter, *position);
                     particle_counter += 1;
                     particle
                 })
-                .collect();
+                .collect::<Vec<_>>();
 
             let group_id = context.add_group(molecule.id(), &particles)?.index();
 
