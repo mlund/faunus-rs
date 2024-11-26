@@ -48,7 +48,7 @@ pub struct MoleculeKind {
     /// Names of atom kinds forming the molecule.
     #[serde(default)]
     atoms: Vec<String>,
-    /// Indices of atom kinds forming the molecule.
+    /// Indices / atom ids of atom kinds forming the molecule.
     /// Populated once the molecule is added to a topology.
     #[serde(skip)]
     atom_indices: Vec<usize>,
@@ -187,6 +187,16 @@ impl MoleculeKind {
 
         // add the obtained exclusions
         self.exclusions.extend(exclusions.iter())
+    }
+
+    /// Get number of atoms in the molecule.
+    pub fn len(&self) -> usize {
+        self.atom_indices().len()
+    }
+
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 }
 

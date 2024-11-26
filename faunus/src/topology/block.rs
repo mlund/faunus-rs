@@ -315,6 +315,7 @@ impl MoleculeBlock {
         // let molecule = &molecules[self.molecule_id];
         let molecule = &context.topology().moleculekinds[self.molecule_id];
         let mut particle_counter = context.num_particles();
+        let n_particles = molecule.len();
 
         // get flat list of positions of *all* molecules in the block
         let mut positions = match &self.insert {
@@ -329,17 +330,24 @@ impl MoleculeBlock {
         }
         .into_iter();
 
+        // Make particles for a single molecule
+        let mut make_particles = || {
+            let particles: Vec<_> = zip(
+                molecule.atom_indices(),
+                positions.by_ref().take(n_particles),
+            )
+            .map(|(atom_id, position)| {
+                let particle = Particle::new(*atom_id, particle_counter, position);
+                particle_counter += 1;
+                particle
+            })
+            .collect();
+            particles
+        };
+
         // create groups and populate them with particles
         for i in 0..self.num_molecules {
-            // create the particles
-            let particles: Vec<_> = zip(molecule.atom_indices(), positions.by_ref())
-                .map(|(atom_id, position)| {
-                    let particle = Particle::new(*atom_id, particle_counter, position);
-                    particle_counter += 1;
-                    particle
-                })
-                .collect();
-
+            let particles = make_particles();
             let group_id = context.add_group(molecule.id(), &particles)?.index();
 
             // deactivate the groups that should not be active
