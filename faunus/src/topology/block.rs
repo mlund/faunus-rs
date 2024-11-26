@@ -62,6 +62,16 @@ pub enum InsertionPolicy {
         /// Optional offset vector to add to the molecule _after_ random COM has been chosen.
         offset: Option<Point>,
     },
+    FixedCOM {
+        /// File containing the structure of the molecule.
+        filename: InputPath,
+        /// Mass center position.
+        position: Point,
+        /// Rotate the molecule randomly; default is false.
+        #[serde(default)]
+        rotate: bool,
+    },
+
     /// Define the positions of the atoms of all molecules manually, directly in the topology file.
     Manual(Vec<Point>),
 }
@@ -102,6 +112,19 @@ impl InsertionPolicy {
                 directions,
                 offset,
             ),
+            Self::FixedCOM {
+                filename,
+                position,
+                rotate,
+            } => InsertionPolicy::generate_fixed_com(
+                molecule_kind,
+                atoms,
+                number,
+                cell,
+                filename,
+                *rotate,
+                position,
+            ),
 
             // the coordinates should already be validated that they are compatible with the topology
             Self::Manual(positions) => Ok(positions.to_owned()),
@@ -134,6 +157,33 @@ impl InsertionPolicy {
         Ok(ref_positions)
     }
 
+    /// Generate positions using the insertion policy FixedCOM.
+    #[allow(clippy::too_many_arguments)]
+    fn generate_fixed_com(
+        molecule_kind: &MoleculeKind,
+        atoms: &[AtomKind],
+        num_molecules: usize,
+        cell: &impl SimulationCell,
+        filename: &InputPath,
+        rotate: bool,
+        position: &Point,
+    ) -> anyhow::Result<Vec<Point>> {
+        if num_molecules != 1 {
+            anyhow::bail!("FixedCOM policy can only be used to insert a single molecule.");
+        }
+        Self::generate_random_com(
+            molecule_kind,
+            atoms,
+            num_molecules,
+            cell,
+            &mut rand::thread_rng(),
+            filename,
+            rotate,
+            &Dimension::None,
+            &Some(*position),
+        )
+    }
+
     /// Generate positions using the insertion policy RandomCOM.
     #[allow(clippy::too_many_arguments)]
     fn generate_random_com(
@@ -147,22 +197,24 @@ impl InsertionPolicy {
         directions: &Dimension,
         offset: &Option<Point>,
     ) -> anyhow::Result<Vec<Point>> {
-        let molecule_at_origin =
+        let centered_positions =
             Self::load_positions_to_origin(filename, molecule_kind, atoms, Some(cell))?;
 
         // generate positions for a single molecule
         let gen_pos = |_| {
-            let random_com = directions.filter(cell.get_point_inside(rng));
-            let mut positions = molecule_at_origin
+            let new_com =
+                directions.filter(cell.get_point_inside(rng)) + offset.unwrap_or(Point::zeros());
+
+            let mut positions = centered_positions
                 .iter()
-                .map(|pos| random_com + pos + offset.unwrap_or(Point::zeros()))
+                .map(|pos| pos + new_com)
                 .collect::<Vec<_>>();
 
-            // rotate the molecule
+            // Rotate the molecule
             // TODO: Optimize. We possibly want to do this before translating the molecule out
             //       of the origin.
             if rotate {
-                transform::rotate_random(&mut positions, &random_com, rng);
+                transform::rotate_random(&mut positions, &new_com, rng);
             }
 
             // wrap particles into simulation cell
@@ -180,6 +232,7 @@ impl InsertionPolicy {
         match self {
             Self::FromFile(x) => x.finalize(filename),
             Self::RandomCOM { filename: x, .. } => x.finalize(filename),
+            Self::FixedCOM { filename: x, .. } => x.finalize(filename),
             Self::RandomAtomPos { .. } | Self::Manual(_) => (),
         }
     }
