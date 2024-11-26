@@ -7,7 +7,7 @@ readme = "README.md"
 authors = ["Mikael Lund"]
 license = "Apache-2.0"
 categories = ["science"]
-keywords = ["pairwise_interaction", "intermolecular_interaction", "chemical_bond", "pair_potential"]
+keywords = ["pairwise_interaction", "chemistry", "chemical_bond", "pair_potential"]
 documentation = "https://docs.rs/interatomic"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
