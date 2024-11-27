@@ -14,7 +14,7 @@ use itertools::Itertools;
 use nu_ansi_term::Color::{Red, Yellow};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use rgb::RGB8;
-use std::{f64::consts::PI, io::Write, ops::Neg, path::PathBuf};
+use std::{f64::consts::PI, fs::File, io::Write, ops::Neg, path::PathBuf};
 extern crate pretty_env_logger;
 #[macro_use]
 extern crate log;
@@ -316,7 +316,7 @@ fn do_anglescan(
 /// Write PMF and mean energy as a function of mass center separation to file
 fn report_pmf(samples: &[(Vector3, Sample)], path: &PathBuf) {
     // File with F(R) and U(R)
-    let mut pmf_file = std::fs::File::create(path).unwrap();
+    let mut pmf_file = File::create(path).unwrap();
     let mut pmf_data = Vec::<(f32, f32)>::new();
     let mut mean_energy_data = Vec::<(f32, f32)>::new();
     writeln!(pmf_file, "# R/Å F/kT U/kT").unwrap();
@@ -374,7 +374,7 @@ fn do_dipole(cmd: &Commands) -> Result<()> {
         resolution
     );
 
-    let mut dipole_file = std::fs::File::create(output)?;
+    let mut dipole_file = File::create(output)?;
     writeln!(dipole_file, "# R/Å w_vertex w_exact w_interpolated")?;
 
     let charge = 1.0;
@@ -476,17 +476,17 @@ fn do_potential(cmd: &Commands) -> Result<()> {
         energy::electric_potential(&structure, &v.scale(*radius), &multipole)
     });
 
-    std::fs::File::create("pot_at_vertices.dat")?.write_fmt(format_args!("{}", icotable))?;
+    File::create("pot_at_vertices.dat")?.write_fmt(format_args!("{}", icotable))?;
 
     // Make PQR file illustrating the electric potential at each vertex
-    let mut pqr_file = std::fs::File::create("potential.pqr")?;
+    let mut pqr_file = File::create("potential.pqr")?;
     for (vertex, data) in std::iter::zip(&icotable.vertices, icotable.vertex_data()) {
         pqr_write_atom(&mut pqr_file, 1, &vertex.pos.scale(*radius), *data, 2.0)?;
     }
 
     // Compare interpolated and exact potential linearly in angular space
-    let mut pot_angles_file = std::fs::File::create("pot_at_angles.dat")?;
-    let mut pqr_file = std::fs::File::create("potential_angles.pqr")?;
+    let mut pot_angles_file = File::create("pot_at_angles.dat")?;
+    let mut pqr_file = File::create("potential_angles.pqr")?;
     writeln!(pot_angles_file, "# theta phi interpolated exact relerr")?;
     for theta in arange(0.0001..PI, resolution) {
         for phi in arange(0.0001..2.0 * PI, resolution) {
