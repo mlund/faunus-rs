@@ -41,6 +41,7 @@ mod dihedral;
 mod molecule;
 mod residue;
 mod structure;
+#[allow(clippy::module_inception)]
 mod topology;
 mod torsion;
 use std::ffi::OsString;
@@ -457,14 +458,12 @@ impl InputPath {
 
     /// Convert the raw_path to absolute path to the file.
     fn finalize(&mut self, parent_file: impl AsRef<Path>) {
-        let path = PathBuf::from(&self.raw_path);
-        let parent_path = parent_file.as_ref().parent().unwrap();
-
-        if path.is_absolute() {
-            self.path = Some(path);
-        } else {
-            self.path = Some(parent_path.join(path));
+        let mut path = PathBuf::from(&self.raw_path);
+        if path.is_relative() {
+            let parent_path = parent_file.as_ref().parent().unwrap();
+            path = parent_path.join(path);
         }
+        self.path = Some(path);
     }
 }
 

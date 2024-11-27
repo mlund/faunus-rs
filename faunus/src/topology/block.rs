@@ -322,7 +322,7 @@ impl MoleculeBlock {
         let mut positions = match &self.insert {
             None => external_positions.to_owned(),
             Some(policy) => policy.get_positions(
-                &context.topology().atomkinds(),
+                context.topology().atomkinds(),
                 molecule,
                 self.num_molecules,
                 context.cell(),
