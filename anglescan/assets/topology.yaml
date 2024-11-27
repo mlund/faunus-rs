@@ -12,22 +12,15 @@ atoms:
     mass: 1e9
     charge: 0.0
     sigma: 40.0
-molecules:
-  - name: P00
-    from_structure: "cppm-p00.xyz" 
-  - name: P18
-    from_structure: "cppm-p18.xyz" 
 
 system:
   energy:
     nonbonded:
-      # Note that a Coulomb term is added later, so don't specify one here!
+      # Note that a Coulomb term is automatically added, so don't specify one here!
       default:
         - !WCA {mixing: LB}
+        # Uncomment this for a Calvados potential
+        #- !AshbaughHatch {mixing: arithmetic, cutoff: 20.0}
       [MP, MP]:
         - !WCA {mixing: LB}
-
-  blocks:
-    - {molecule: P00, N: 1, insert: !FixedCOM {filename: "cppm-p00.xyz", position: [0,0,0]}}
-    - {molecule: P00, N: 1, insert: !FixedCOM {filename: "cppm-p00.xyz", position: [0,0,20]}}
 
