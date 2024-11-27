@@ -14,7 +14,13 @@ use itertools::Itertools;
 use nu_ansi_term::Color::{Red, Yellow};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use rgb::RGB8;
-use std::{f64::consts::PI, fs::File, io::Write, ops::Neg, path::PathBuf};
+use std::{
+    f64::consts::PI,
+    fs::File,
+    io::Write,
+    ops::{Add, Mul, Neg},
+    path::PathBuf,
+};
 extern crate pretty_env_logger;
 #[macro_use]
 extern crate log;
@@ -338,20 +344,20 @@ fn report_pmf(samples: &[(Vector3, Sample)], path: &PathBuf) {
     });
 
     // Now calculate the osmotic second virial coefficient by integrating `pmf_data`, w(r)
-    let dr = pmf_data[1].0 - pmf_data[0].0;
-    let sigma = pmf_data[0].0; // distance of closest approach
+    let (r0, r1) = (pmf_data[0].0, pmf_data[1].0);
+    let dr = r1 - r0;
     assert!(dr > 0.0);
-    let b2_hs = 2.0 * std::f32::consts::PI / 3.0 * sigma.powi(3);
-    let b2 = -2.0
-        * std::f32::consts::PI
-        * dr
-        * pmf_data
-            .iter()
-            .map(|(r, w)| f32::exp_m1(-w) * r * r)
-            .sum::<f32>();
+    use std::f32::consts::PI;
+    let b2_hardsphere = 2.0 * PI / 3.0 * r0.powi(3);
+    let b2 = pmf_data
+        .iter()
+        .map(|(r, w)| w.neg().exp_m1() * r * r)
+        .sum::<f32>()
+        .mul(-2.0 * PI * dr)
+        .add(b2_hardsphere);
     info!(
-        "Unit-less second virial coefficient, 𝐵₂ / 𝐵₂hs = {:.3}",
-        (b2_hs + b2) / b2_hs
+        "Unit-less second virial coefficient, 𝐵₂ / 𝐵₂hs = {:.2}",
+        b2 / b2_hardsphere
     );
 
     info!(
