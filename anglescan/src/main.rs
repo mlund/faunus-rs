@@ -336,6 +336,24 @@ fn report_pmf(samples: &[(Vector3, Sample)], path: &PathBuf) {
             .unwrap();
         }
     });
+
+    // Now calculate the osmotic second virial coefficient by integrating `pmf_data`, w(r)
+    let dr = pmf_data[1].0 - pmf_data[0].0;
+    let sigma = pmf_data[0].0; // distance of closest approach
+    assert!(dr > 0.0);
+    let b2_hs = 2.0 * std::f32::consts::PI / 3.0 * sigma.powi(3);
+    let b2 = -2.0
+        * std::f32::consts::PI
+        * dr
+        * pmf_data
+            .iter()
+            .map(|(r, w)| f32::exp_m1(-w) * r * r)
+            .sum::<f32>();
+    info!(
+        "Unit-less second virial coefficient, 𝐵₂ / 𝐵₂hs = {:.3}",
+        (b2_hs + b2) / b2_hs
+    );
+
     info!(
         "Plot: {} and {} along mass center separation. In units of kT and angstroms.",
         Yellow.bold().paint("free energy"),
