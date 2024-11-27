@@ -132,11 +132,13 @@ impl PairInteraction {
                         combined.epsilon().context("Epsilons not defined!")?,
                         combined.sigma().context("Sigmas not defined!")?,
                     );
-                    Ok(Box::new(AshbaughHatch::new(
+                    let ah = AshbaughHatch::new(
                         lj,
-                        cutoff.context("Cutoff undefined!")?,
                         combined.lambda().context("No lambda defined!")?,
-                    )))
+                        cutoff.context("Cutoff undefined!")?,
+                    );
+                    log::trace!("{}-{}: {}", atom1.name(), atom2.name(), ah);
+                    Ok(Box::new(ah))
                 }
             },
             Self::HardSphere(x) => match x {

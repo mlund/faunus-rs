@@ -17,6 +17,8 @@ use crate::twobody::IsotropicTwobodyEnergy;
 use crate::Cutoff;
 #[cfg(feature = "serde")]
 use crate::{divide4_serialize, multiply4_deserialize, sqrt_serialize, square_deserialize};
+use std::fmt;
+use std::fmt::{Display, Formatter};
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -90,6 +92,11 @@ impl LennardJones {
     pub const fn get_epsilon(&self) -> f64 {
         self.four_times_epsilon * 0.25
     }
+
+    /// Get sigma parameter
+    pub fn get_sigma(&self) -> f64 {
+        self.sigma_squared.sqrt()
+    }
 }
 
 impl Cutoff for LennardJones {
@@ -113,5 +120,16 @@ impl IsotropicTwobodyEnergy for LennardJones {
 impl From<AshbaughHatch> for LennardJones {
     fn from(ah: AshbaughHatch) -> Self {
         ah.lennard_jones
+    }
+}
+
+impl Display for LennardJones {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        write!(
+            f,
+            "Lennard-Jones: ε = {:.3}, σ = {:.3}",
+            self.get_epsilon(),
+            self.get_sigma()
+        )
     }
 }

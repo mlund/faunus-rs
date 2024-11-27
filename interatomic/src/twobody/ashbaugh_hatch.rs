@@ -17,6 +17,8 @@ use crate::{
     twobody::{LennardJones, WeeksChandlerAndersen},
     Cutoff,
 };
+use std::fmt;
+use std::fmt::{Display, Formatter};
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -91,11 +93,24 @@ impl IsotropicTwobodyEnergy for AshbaughHatch {
             .isotropic_twobody_energy(self.cutoff_squared());
 
         if distance_squared
-            > self.lennard_jones.sigma_squared * WeeksChandlerAndersen::TWOTOTWOSIXTH
+            <= self.lennard_jones.sigma_squared * WeeksChandlerAndersen::TWOTOTWOSIXTH
         {
-            self.lambda * (lj - lj_rc)
-        } else {
             lj - self.lambda * lj_rc + self.lennard_jones.get_epsilon() * (1.0 - self.lambda)
+        } else {
+            self.lambda * (lj - lj_rc)
         }
+    }
+}
+
+impl Display for AshbaughHatch {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        write!(
+            f,
+            "Ashbaugh-Hatch with λ = {:.3}, cutoff = {:.3}, ε = {:.3}, σ = {:.3}",
+            self.lambda,
+            self.cutoff,
+            self.lennard_jones.get_epsilon(),
+            self.lennard_jones.get_sigma()
+        )
     }
 }

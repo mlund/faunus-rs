@@ -87,14 +87,7 @@ impl AtomKind {
     }
 
     /// Set the Ashbaugh-Hatch scaling factor, λ.
-    ///
-    /// Asserts:
-    /// - λ must be in the range [0.0-1.0]
     pub fn set_lambda(&mut self, lambda: f64) -> anyhow::Result<()> {
-        assert!(
-            (0.0..=1.0).contains(&lambda),
-            "λ must be in the range [0.0-1.0]"
-        );
         self.hydrophobicity = Some(Hydrophobicity::Lambda(lambda));
         Ok(())
     }
@@ -181,7 +174,7 @@ pub enum Hydrophobicity {
     Hydrophilic,
     /// Stores information about surface tension
     SurfaceTension(f64),
-    /// Ashbaugh-Hatch scaling factor in the range [0.0-1.0]
+    /// Ashbaugh-Hatch scaling factor
     #[serde(alias = "λ")]
     Lambda(f64),
 }

@@ -1,6 +1,6 @@
 comment: "Calvados 3 coarse grained amino acid model for Faunus. Charges fixed to generic, neutral pH"
 version: 0.1.0
-atomlist:
+atoms:
   - {charge: 1.0,  hydrophobicity: !Lambda 0.7407902764839954, mass: 156.19, name: ARG, σ: 6.56, ε: 0.8368}
   - {charge: -1.0, hydrophobicity: !Lambda 0.092587557536158,  mass: 115.09, name: ASP, σ: 5.58, ε: 0.8368}
   - {charge: 0.0,  hydrophobicity: !Lambda 0.3706962163690402, mass: 114.1,  name: ASN, σ: 5.68, ε: 0.8368}

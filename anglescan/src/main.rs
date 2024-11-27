@@ -323,16 +323,18 @@ fn report_pmf(samples: &[(Vector3, Sample)], path: &PathBuf) {
     samples.iter().for_each(|(r, sample)| {
         let mean_energy = sample.mean_energy() / sample.thermal_energy;
         let free_energy = sample.free_energy() / sample.thermal_energy;
-        pmf_data.push((r.norm() as f32, free_energy as f32));
-        mean_energy_data.push((r.norm() as f32, mean_energy as f32));
-        writeln!(
-            pmf_file,
-            "{:.2} {:.2} {:.2}",
-            r.norm(),
-            free_energy,
-            mean_energy
-        )
-        .unwrap();
+        if mean_energy.is_finite() && free_energy.is_finite() {
+            pmf_data.push((r.norm() as f32, free_energy as f32));
+            mean_energy_data.push((r.norm() as f32, mean_energy as f32));
+            writeln!(
+                pmf_file,
+                "{:.2} {:.2} {:.2}",
+                r.norm(),
+                free_energy,
+                mean_energy
+            )
+            .unwrap();
+        }
     });
     info!(
         "Plot: {} and {} along mass center separation. In units of kT and angstroms.",
