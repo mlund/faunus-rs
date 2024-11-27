@@ -313,7 +313,8 @@ impl MoleculeBlock {
         rng: &mut ThreadRng,
     ) -> anyhow::Result<()> {
         // let molecule = &molecules[self.molecule_id];
-        let molecule = &context.topology().moleculekinds[self.molecule_id];
+        let topology = context.topology();
+        let molecule = &topology.moleculekinds()[self.molecule_id];
         let mut particle_counter = context.num_particles();
         let n_particles = molecule.len();
 
@@ -321,7 +322,7 @@ impl MoleculeBlock {
         let mut positions = match &self.insert {
             None => external_positions.to_owned(),
             Some(policy) => policy.get_positions(
-                &context.topology().atomkinds,
+                &context.topology().atomkinds(),
                 molecule,
                 self.num_molecules,
                 context.cell(),
