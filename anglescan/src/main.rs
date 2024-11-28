@@ -12,6 +12,8 @@ use indicatif::ParallelProgressIterator;
 // use indicatif::ProgressIterator;
 use itertools::Itertools;
 use nu_ansi_term::Color::{Red, Yellow};
+use num_traits::Inv;
+use physical_constants::AVOGADRO_CONSTANT;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use rgb::RGB8;
 use std::{
@@ -347,18 +349,33 @@ fn report_pmf(samples: &[(Vector3, Sample)], path: &PathBuf) {
     let (r0, r1) = (pmf_data[0].0, pmf_data[1].0);
     let dr = r1 - r0;
     assert!(dr > 0.0);
+    let closest_approach = r0; // "σ"
     use std::f32::consts::PI;
-    let b2_hardsphere = 2.0 * PI / 3.0 * r0.powi(3);
+    let b2_hardsphere = 2.0 * PI / 3.0 * closest_approach.powi(3);
     let b2 = pmf_data
         .iter()
         .map(|(r, w)| w.neg().exp_m1() * r * r)
         .sum::<f32>()
         .mul(-2.0 * PI * dr)
         .add(b2_hardsphere);
+    info!("Second virial coefficient, 𝐵₂ = {:.2} Å³", b2);
     info!(
-        "Unit-less second virial coefficient, 𝐵₂ / 𝐵₂hs = {:.2}",
-        b2 / b2_hardsphere
+        "Reduced second virial coefficient, 𝐵₂ / 𝐵₂hs = {:.2} using σ = {:.2} Å",
+        b2 / b2_hardsphere,
+        closest_approach
     );
+    if b2 < 0.0 {
+        // See "Colloidal Domain" by Evans and Wennerström, 2nd Ed, p. 408
+        const LITER_PER_CUBIC_ANGSTROM: f32 = 1e-27;
+        const MOLAR_TO_MILLIMOLAR: f32 = 1000.0;
+        info!(
+            "Dissociation constant, 𝐾𝑑 = {:.2} mM using σ = {:.2} Å",
+            (-2.0 * (b2 - b2_hardsphere) * LITER_PER_CUBIC_ANGSTROM * AVOGADRO_CONSTANT as f32)
+                .inv()
+                .mul(MOLAR_TO_MILLIMOLAR),
+            closest_approach
+        );
+    }
 
     info!(
         "Plot: {} and {} along mass center separation. In units of kT and angstroms.",
