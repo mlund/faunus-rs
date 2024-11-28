@@ -367,12 +367,10 @@ fn report_pmf(samples: &[(Vector3, Sample)], path: &PathBuf) {
     if b2 < 0.0 {
         // See "Colloidal Domain" by Evans and Wennerström, 2nd Ed, p. 408
         const LITER_PER_CUBIC_ANGSTROM: f32 = 1e-27;
-        const MOLAR_TO_MILLIMOLAR: f32 = 1000.0;
         info!(
-            "Dissociation constant, 𝐾𝑑 = {:.2} mM using σ = {:.2} Å",
+            "Dissociation constant, 𝐾𝑑 = {:.2e} M using σ = {:.2} Å",
             (-2.0 * (b2 - b2_hardsphere) * LITER_PER_CUBIC_ANGSTROM * AVOGADRO_CONSTANT as f32)
-                .inv()
-                .mul(MOLAR_TO_MILLIMOLAR),
+                .inv(),
             closest_approach
         );
     }
