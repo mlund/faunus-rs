@@ -346,16 +346,18 @@ fn report_pmf(samples: &[(Vector3, Sample)], path: &PathBuf) {
     });
 
     // Now calculate the osmotic second virial coefficient by integrating `pmf_data`, w(r)
+    // 𝐵₂ = -½ ∫ [ exp(-𝛽𝑤(𝑟) ) - 1 ] 4π𝑟² d𝑟
     let (r0, r1) = (pmf_data[0].0, pmf_data[1].0);
-    let dr = r1 - r0;
+    let dr = (r1 - r0) as f64;
     assert!(dr > 0.0);
-    let closest_approach = r0; // "σ"
-    use std::f32::consts::PI;
+    let closest_approach = r0 as f64; // "σ"
+    use std::f64::consts::PI;
     let b2_hardsphere = 2.0 * PI / 3.0 * closest_approach.powi(3);
     let b2 = pmf_data
         .iter()
+        .map(|(r, w)| (*r as f64, *w as f64))
         .map(|(r, w)| w.neg().exp_m1() * r * r)
-        .sum::<f32>()
+        .sum::<f64>()
         .mul(-2.0 * PI * dr)
         .add(b2_hardsphere);
     info!("Second virial coefficient, 𝐵₂ = {:.2} Å³", b2);
@@ -364,13 +366,16 @@ fn report_pmf(samples: &[(Vector3, Sample)], path: &PathBuf) {
         b2 / b2_hardsphere,
         closest_approach
     );
-    if b2 < 0.0 {
-        // See "Colloidal Domain" by Evans and Wennerström, 2nd Ed, p. 408
-        const LITER_PER_CUBIC_ANGSTROM: f32 = 1e-27;
+
+    // See "Colloidal Domain" by Evans and Wennerström, 2nd Ed, p. 408
+    // 𝐾𝑑⁻¹ = -2(𝐵₂ - 𝐵₂hs)
+    const LITER_PER_CUBIC_ANGSTROM: f64 = 1e-27;
+    let association_const =
+        -2.0 * (b2 - b2_hardsphere) * LITER_PER_CUBIC_ANGSTROM * AVOGADRO_CONSTANT;
+    if association_const.is_positive() {
         info!(
-            "Dissociation constant, 𝐾𝑑 = {:.2e} M using σ = {:.2} Å",
-            (-2.0 * (b2 - b2_hardsphere) * LITER_PER_CUBIC_ANGSTROM * AVOGADRO_CONSTANT as f32)
-                .inv(),
+            "Dissociation constant, 𝐾𝑑 = {:.2e} mol/l using σ = {:.2} Å",
+            association_const.inv(),
             closest_approach
         );
     }
