@@ -1,8 +1,8 @@
+use crate::Sample;
 use coulomb::Vector3;
-use physical_constants::AVOGADRO_CONSTANT;
-// use indicatif::ProgressIterator;
 use nu_ansi_term::Color::{Red, Yellow};
 use num_traits::Inv;
+use physical_constants::AVOGADRO_CONSTANT;
 use rgb::RGB8;
 use std::{
     fs::File,
@@ -10,8 +10,6 @@ use std::{
     ops::{Add, Mul, Neg},
     path::PathBuf,
 };
-extern crate pretty_env_logger;
-use crate::Sample;
 use textplots::{Chart, ColorPlot, Shape};
 
 /// Write PMF and mean energy as a function of mass center separation to file

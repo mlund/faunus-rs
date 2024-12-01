@@ -3,8 +3,10 @@ use chemfiles::Frame;
 use faunus::topology::AtomKind;
 use itertools::Itertools;
 use nalgebra::Matrix3;
-use std::fmt::{self, Display, Formatter};
-use std::path::PathBuf;
+use std::{
+    fmt::{self, Display, Formatter},
+    path::PathBuf,
+};
 
 /// Ancient AAM file format from Faunus
 #[derive(Debug, Default)]
