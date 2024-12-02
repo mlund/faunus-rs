@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["interatomic", "faunus", "anglescan", "coulomb"]
+members = ["interatomic", "faunus", "virialize", "coulomb"]
 
 [profile.release]
 opt-level = 3

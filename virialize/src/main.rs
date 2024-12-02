@@ -1,11 +1,11 @@
-use anglescan::{
-    anglescan::do_anglescan, energy, icoscan, icotable::IcoTable, structure::Structure,
-    to_cartesian, to_spherical, UnitQuaternion,
-};
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use coulomb::{permittivity, DebyeLength, Medium, Salt, Vector3};
 use faunus::{energy::NonbondedMatrix, topology::Topology};
+use virialize::{
+    anglescan::do_anglescan, energy, icoscan, icotable::IcoTable, structure::Structure,
+    to_cartesian, to_spherical, UnitQuaternion,
+};
 // use indicatif::ProgressIterator;
 use itertools::Itertools;
 use std::{f64::consts::PI, fs::File, io::Write, ops::Neg, path::PathBuf};
@@ -56,13 +56,13 @@ enum Commands {
         #[arg(long)]
         radius: f64,
         /// YAML file with atom definitions (names, charges, etc.)
-        #[arg(short = 'a', long)]
-        atoms: PathBuf,
+        #[arg(short = 'p', long = "top")]
+        topology: PathBuf,
         /// 1:1 salt molarity in mol/l
         #[arg(short = 'M', long, default_value = "0.1")]
         molarity: f64,
         /// Cutoff distance for pair-wise interactions (angstroms)
-        #[arg(long, default_value = "40.0")]
+        #[arg(long, default_value = "50.0")]
         cutoff: f64,
         /// Temperature in K
         #[arg(short = 'T', long, default_value = "298.15")]
@@ -90,13 +90,13 @@ enum Commands {
         #[arg(long)]
         dr: f64,
         /// YAML file with atom definitions (names, charges, etc.)
-        #[arg(short = 'a', long)]
-        atoms: PathBuf,
+        #[arg(short = 'a', long = "top")]
+        topology: PathBuf,
         /// 1:1 salt molarity in mol/l
         #[arg(short = 'M', long, default_value = "0.1")]
         molarity: f64,
         /// Cutoff distance for pair-wise interactions (angstroms)
-        #[arg(long, default_value = "40.0")]
+        #[arg(long, default_value = "50.0")]
         cutoff: f64,
         /// Temperature in K
         #[arg(short = 'T', long, default_value = "298.15")]
@@ -122,7 +122,7 @@ fn do_scan(cmd: &Commands) -> Result<()> {
         rmin,
         rmax,
         dr,
-        atoms,
+        topology: top_file,
         molarity,
         cutoff,
         temperature,
@@ -135,7 +135,7 @@ fn do_scan(cmd: &Commands) -> Result<()> {
     };
     assert!(rmin < rmax);
 
-    let mut topology = Topology::from_file_partial(atoms)?;
+    let mut topology = Topology::from_file_partial(top_file)?;
     faunus::topology::set_missing_epsilon(topology.atomkinds_mut(), 2.479);
 
     // Either use fixed dielectric constant or calculate it from the medium
@@ -149,7 +149,7 @@ fn do_scan(cmd: &Commands) -> Result<()> {
     };
 
     let multipole = coulomb::pairwise::Plain::new(*cutoff, medium.debye_length());
-    let nonbonded = NonbondedMatrix::from_file(atoms, &topology)?;
+    let nonbonded = NonbondedMatrix::from_file(top_file, &topology)?;
     let pair_matrix =
         energy::PairMatrix::new_with_coulomb(nonbonded, topology.atomkinds(), &multipole);
     let ref_a = Structure::from_xyz(mol1, topology.atomkinds());
@@ -281,7 +281,7 @@ fn do_potential(cmd: &Commands) -> Result<()> {
         mol1,
         resolution,
         radius,
-        atoms,
+        topology,
         molarity,
         cutoff,
         temperature,
@@ -289,13 +289,13 @@ fn do_potential(cmd: &Commands) -> Result<()> {
     else {
         panic!("Unexpected command");
     };
-    let mut topology = Topology::from_file_partial(atoms)?;
+    let mut topology = Topology::from_file_partial(topology)?;
     faunus::topology::set_missing_epsilon(topology.atomkinds_mut(), 2.479);
 
     let structure = Structure::from_xyz(mol1, topology.atomkinds());
 
     let n_points = (4.0 * PI / resolution.powi(2)).round() as usize;
-    let vertices = anglescan::make_icosphere_vertices(n_points)?;
+    let vertices = virialize::make_icosphere_vertices(n_points)?;
     let resolution = (4.0 * PI / vertices.len() as f64).sqrt();
     log::info!(
         "Requested {} points on a sphere; got {} -> new resolution = {:.2}",
