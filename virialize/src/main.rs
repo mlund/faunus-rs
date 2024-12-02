@@ -1,27 +1,19 @@
-use anglescan::{
-    energy,
-    icotable::{IcoTable, Table6D},
-    structure::Structure,
-    to_cartesian, to_spherical, Sample, TwobodyAngles, UnitQuaternion,
-};
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use coulomb::{permittivity, DebyeLength, Medium, Salt, Vector3};
 use faunus::{energy::NonbondedMatrix, topology::Topology};
-use indicatif::ParallelProgressIterator;
+use virialize::{
+    anglescan::do_anglescan, energy, icoscan, icotable::IcoTable, structure::Structure,
+    to_cartesian, to_spherical, UnitQuaternion,
+};
 // use indicatif::ProgressIterator;
 use itertools::Itertools;
-use nu_ansi_term::Color::{Red, Yellow};
-use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
-use rgb::RGB8;
 use std::{f64::consts::PI, fs::File, io::Write, ops::Neg, path::PathBuf};
 extern crate pretty_env_logger;
 #[macro_use]
 extern crate log;
-use get_size::GetSize;
 use iter_num_tools::arange;
 use rand::Rng;
-use textplots::{Chart, ColorPlot, Shape};
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -64,13 +56,13 @@ enum Commands {
         #[arg(long)]
         radius: f64,
         /// YAML file with atom definitions (names, charges, etc.)
-        #[arg(short = 'a', long)]
-        atoms: PathBuf,
+        #[arg(short = 'p', long = "top")]
+        topology: PathBuf,
         /// 1:1 salt molarity in mol/l
         #[arg(short = 'M', long, default_value = "0.1")]
         molarity: f64,
         /// Cutoff distance for pair-wise interactions (angstroms)
-        #[arg(long, default_value = "40.0")]
+        #[arg(long, default_value = "50.0")]
         cutoff: f64,
         /// Temperature in K
         #[arg(short = 'T', long, default_value = "298.15")]
@@ -98,13 +90,13 @@ enum Commands {
         #[arg(long)]
         dr: f64,
         /// YAML file with atom definitions (names, charges, etc.)
-        #[arg(short = 'a', long)]
-        atoms: PathBuf,
+        #[arg(short = 'a', long = "top")]
+        topology: PathBuf,
         /// 1:1 salt molarity in mol/l
         #[arg(short = 'M', long, default_value = "0.1")]
         molarity: f64,
         /// Cutoff distance for pair-wise interactions (angstroms)
-        #[arg(long, default_value = "40.0")]
+        #[arg(long, default_value = "50.0")]
         cutoff: f64,
         /// Temperature in K
         #[arg(short = 'T', long, default_value = "298.15")]
@@ -130,7 +122,7 @@ fn do_scan(cmd: &Commands) -> Result<()> {
         rmin,
         rmax,
         dr,
-        atoms,
+        topology: top_file,
         molarity,
         cutoff,
         temperature,
@@ -143,22 +135,21 @@ fn do_scan(cmd: &Commands) -> Result<()> {
     };
     assert!(rmin < rmax);
 
-    let mut topology = Topology::from_file_partial(atoms)?;
+    let mut topology = Topology::from_file_partial(top_file)?;
     faunus::topology::set_missing_epsilon(topology.atomkinds_mut(), 2.479);
 
     // Either use fixed dielectric constant or calculate it from the medium
-    let medium = if let Some(epsilon) = fixed_dielectric {
-        Medium::new(
+    let medium = match fixed_dielectric {
+        Some(dielectric_const) => Medium::new(
             *temperature,
-            Box::new(permittivity::ConstantPermittivity::new(*epsilon)),
+            Box::new(permittivity::ConstantPermittivity::new(*dielectric_const)),
             Some((Salt::SodiumChloride, *molarity)),
-        )
-    } else {
-        Medium::salt_water(*temperature, Salt::SodiumChloride, *molarity)
+        ),
+        _ => Medium::salt_water(*temperature, Salt::SodiumChloride, *molarity),
     };
 
     let multipole = coulomb::pairwise::Plain::new(*cutoff, medium.debye_length());
-    let nonbonded = NonbondedMatrix::from_file(atoms, &topology)?;
+    let nonbonded = NonbondedMatrix::from_file(top_file, &topology)?;
     let pair_matrix =
         energy::PairMatrix::new_with_coulomb(nonbonded, topology.atomkinds(), &multipole);
     let ref_a = Structure::from_xyz(mol1, topology.atomkinds());
@@ -173,7 +164,7 @@ fn do_scan(cmd: &Commands) -> Result<()> {
         rmin, rmax, dr
     );
     if *icotable {
-        do_icoscan(
+        icoscan::do_icoscan(
             *rmin,
             *rmax,
             *dr,
@@ -194,162 +185,6 @@ fn do_scan(cmd: &Commands) -> Result<()> {
             temperature,
             pmf_file,
         )
-    }
-}
-
-#[allow(clippy::too_many_arguments)]
-fn do_icoscan(
-    rmin: f64,
-    rmax: f64,
-    dr: f64,
-    angle_resolution: f64,
-    ref_a: Structure,
-    ref_b: Structure,
-    pair_matrix: energy::PairMatrix,
-    temperature: &f64,
-    pmf_file: &PathBuf,
-) -> std::result::Result<(), anyhow::Error> {
-    let distances = iter_num_tools::arange(rmin..rmax, dr).collect_vec();
-    let table = Table6D::from_resolution(rmin, rmax, dr, angle_resolution)?;
-    let n_points = table.get(rmin).unwrap().get(0.0).unwrap().len();
-    let angle_resolution = (4.0 * PI / n_points as f64).sqrt();
-    let dihedral_angles = iter_num_tools::arange(0.0..2.0 * PI, angle_resolution).collect_vec();
-
-    let total = distances.len() * dihedral_angles.len() * n_points * n_points;
-
-    info!(
-        "6D table: 𝑅({}) x 𝜔({}) x 𝜃𝜑({}) x 𝜃𝜑({}) = {} poses 💃🕺 ({:.1} MB)",
-        distances.len(),
-        dihedral_angles.len(),
-        n_points,
-        n_points,
-        total,
-        table.get_heap_size() as f64 / 1e6
-    );
-
-    use nalgebra::UnitVector3;
-
-    // Rotation operations via unit quaternions
-    let zaxis = UnitVector3::new_normalize(Vector3::new(0.0005, 0.0005, 1.0));
-    let to_neg_zaxis = |p| UnitQuaternion::rotation_between(p, &-zaxis).unwrap();
-    let around_z = |angle| UnitQuaternion::from_axis_angle(&zaxis, angle);
-
-    // Calculate energy of all two-body poses for given mass center separation and dihedral angle
-    let calc_energy = |r: f64, omega: f64| {
-        let r_vec = Vector3::new(0.0, 0.0, r);
-        let a = table.get(r).unwrap().get(omega).unwrap();
-        for vertex_a in a.vertices.iter() {
-            for vertex_b in vertex_a.data.get().unwrap().vertices.iter() {
-                let q1 = to_neg_zaxis(&vertex_b.pos);
-                let q2 = around_z(omega);
-                let q3 = UnitQuaternion::rotation_between(&zaxis, &vertex_a.pos).unwrap();
-                let mut mol_b = ref_b.clone(); // initially at origin
-                mol_b.transform(|pos| (q1 * q2).transform_vector(&pos));
-                mol_b.transform(|pos| q3.transform_vector(&(pos + r_vec)));
-                let energy = pair_matrix.sum_energy(&ref_a, &mol_b);
-                vertex_b.data.set(energy).unwrap();
-            }
-        }
-    };
-
-    // Pair all mass center separations (r) and dihedral angles (omega)
-    let r_and_omega = distances
-        .iter()
-        .copied()
-        .cartesian_product(dihedral_angles.iter().copied())
-        .collect_vec();
-
-    // Populate 6D table with inter-particle energies (multi-threaded)
-    r_and_omega
-        .par_iter()
-        .progress_count(r_and_omega.len() as u64)
-        .for_each(|(r, omega)| {
-            calc_energy(*r, *omega);
-        });
-
-    // Calculate partition function
-    let mut samples: Vec<(Vector3, Sample)> = Vec::default();
-    for r in &distances {
-        let mut partition_func = Sample::default();
-        for omega in &dihedral_angles {
-            let r_and_omega = table.get(*r).unwrap().get(*omega).unwrap();
-            for vertex_a in r_and_omega.vertices.iter() {
-                for vertex_b in vertex_a.data.get().unwrap().vertices.iter() {
-                    let energy = vertex_b.data.get().unwrap();
-                    partition_func = partition_func + Sample::new(*energy, *temperature);
-                }
-            }
-        }
-        samples.push((Vector3::new(0.0, 0.0, *r), partition_func));
-    }
-    report_pmf(samples.as_slice(), pmf_file);
-    Ok(())
-}
-
-fn do_anglescan(
-    distances: Vec<f64>,
-    angle_resolution: f64,
-    ref_a: Structure,
-    ref_b: Structure,
-    pair_matrix: energy::PairMatrix,
-    temperature: &f64,
-    pmf_file: &PathBuf,
-) -> std::result::Result<(), anyhow::Error> {
-    let scan = TwobodyAngles::from_resolution(angle_resolution).unwrap();
-    info!("{} per distance", scan);
-    let com_scan = distances
-        .par_iter()
-        .progress_count(distances.len() as u64)
-        .map(|r| {
-            let r_vec = Vector3::new(0.0, 0.0, *r);
-            let sample = scan
-                .sample_all_angles(&ref_a, &ref_b, &pair_matrix, &r_vec, *temperature)
-                .unwrap();
-            (r_vec, sample)
-        })
-        .collect::<Vec<_>>();
-
-    report_pmf(com_scan.as_slice(), pmf_file);
-    Ok(())
-}
-
-/// Write PMF and mean energy as a function of mass center separation to file
-fn report_pmf(samples: &[(Vector3, Sample)], path: &PathBuf) {
-    // File with F(R) and U(R)
-    let mut pmf_file = File::create(path).unwrap();
-    let mut pmf_data = Vec::<(f32, f32)>::new();
-    let mut mean_energy_data = Vec::<(f32, f32)>::new();
-    writeln!(pmf_file, "# R/Å F/kT U/kT").unwrap();
-    samples.iter().for_each(|(r, sample)| {
-        let mean_energy = sample.mean_energy() / sample.thermal_energy;
-        let free_energy = sample.free_energy() / sample.thermal_energy;
-        if mean_energy.is_finite() && free_energy.is_finite() {
-            pmf_data.push((r.norm() as f32, free_energy as f32));
-            mean_energy_data.push((r.norm() as f32, mean_energy as f32));
-            writeln!(
-                pmf_file,
-                "{:.2} {:.2} {:.2}",
-                r.norm(),
-                free_energy,
-                mean_energy
-            )
-            .unwrap();
-        }
-    });
-    info!(
-        "Plot: {} and {} along mass center separation. In units of kT and angstroms.",
-        Yellow.bold().paint("free energy"),
-        Red.bold().paint("mean energy")
-    );
-    if log::max_level() >= log::Level::Info {
-        const YELLOW: RGB8 = RGB8::new(255, 255, 0);
-        const RED: RGB8 = RGB8::new(255, 0, 0);
-        let rmin = mean_energy_data.first().unwrap().0;
-        let rmax = mean_energy_data.last().unwrap().0;
-        Chart::new(100, 50, rmin, rmax)
-            .linecolorplot(&Shape::Lines(&mean_energy_data), RED)
-            .linecolorplot(&Shape::Lines(&pmf_data), YELLOW)
-            .nice();
     }
 }
 
@@ -446,7 +281,7 @@ fn do_potential(cmd: &Commands) -> Result<()> {
         mol1,
         resolution,
         radius,
-        atoms,
+        topology,
         molarity,
         cutoff,
         temperature,
@@ -454,13 +289,13 @@ fn do_potential(cmd: &Commands) -> Result<()> {
     else {
         panic!("Unexpected command");
     };
-    let mut topology = Topology::from_file_partial(atoms)?;
+    let mut topology = Topology::from_file_partial(topology)?;
     faunus::topology::set_missing_epsilon(topology.atomkinds_mut(), 2.479);
 
     let structure = Structure::from_xyz(mol1, topology.atomkinds());
 
     let n_points = (4.0 * PI / resolution.powi(2)).round() as usize;
-    let vertices = anglescan::make_icosphere_vertices(n_points)?;
+    let vertices = virialize::make_icosphere_vertices(n_points)?;
     let resolution = (4.0 * PI / vertices.len() as f64).sqrt();
     log::info!(
         "Requested {} points on a sphere; got {} -> new resolution = {:.2}",

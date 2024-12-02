@@ -1,11 +1,11 @@
 use crate::structure::Structure;
 use coulomb::pairwise::{MultipoleEnergy, MultipolePotential, Plain};
-use faunus::energy::NonbondedMatrix;
-use faunus::topology::AtomKind;
-use interatomic::twobody::{IonIon, IsotropicTwobodyEnergy};
-use interatomic::Vector3;
-use std::cmp::PartialEq;
-use std::fmt::Debug;
+use faunus::{energy::NonbondedMatrix, topology::AtomKind};
+use interatomic::{
+    twobody::{IonIon, IsotropicTwobodyEnergy},
+    Vector3,
+};
+use std::{cmp::PartialEq, fmt::Debug};
 
 /// Pair-matrix of twobody energies for pairs of atom ids
 pub struct PairMatrix {

@@ -1,20 +1,29 @@
 #[cfg(test)]
 extern crate approx;
-use crate::{energy::PairMatrix, structure::Structure, Sample};
+use crate::{
+    energy::{self, PairMatrix},
+    report::report_pmf,
+    structure::Structure,
+    Sample,
+};
 use anyhow::{Context, Result};
 #[cfg(test)]
 use approx::assert_relative_eq;
+use flate2::{write::GzEncoder, Compression};
 use hexasphere::{
     shapes::{IcoSphere, IcoSphereBase},
     Subdivided,
 };
+use indicatif::ParallelProgressIterator;
 use iter_num_tools::arange;
 use itertools::Itertools;
-use std::{f64::consts::PI, fmt::Display, io::Write, path::Path};
-
-extern crate flate2;
-use flate2::write::GzEncoder;
-use flate2::Compression;
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+use std::{
+    f64::consts::PI,
+    fmt::Display,
+    io::Write,
+    path::{Path, PathBuf},
+};
 
 pub type Vector3 = nalgebra::Vector3<f64>;
 pub type UnitQuaternion = nalgebra::UnitQuaternion<f64>;
@@ -243,6 +252,33 @@ pub fn make_icosphere_vertices(min_points: usize) -> Result<Vec<Vector3>> {
         .map(|p| Vector3::new(p.x as f64, p.y as f64, p.z as f64))
         .collect();
     Ok(points)
+}
+
+pub fn do_anglescan(
+    distances: Vec<f64>,
+    angle_resolution: f64,
+    ref_a: Structure,
+    ref_b: Structure,
+    pair_matrix: energy::PairMatrix,
+    temperature: &f64,
+    pmf_file: &PathBuf,
+) -> std::result::Result<(), anyhow::Error> {
+    let scan = TwobodyAngles::from_resolution(angle_resolution).unwrap();
+    info!("{} per distance", scan);
+    let com_scan = distances
+        .par_iter()
+        .progress_count(distances.len() as u64)
+        .map(|r| {
+            let r_vec = Vector3::new(0.0, 0.0, *r);
+            let sample = scan
+                .sample_all_angles(&ref_a, &ref_b, &pair_matrix, &r_vec, *temperature)
+                .unwrap();
+            (r_vec, sample)
+        })
+        .collect::<Vec<_>>();
+
+    report_pmf(com_scan.as_slice(), pmf_file);
+    Ok(())
 }
 
 #[cfg(test)]

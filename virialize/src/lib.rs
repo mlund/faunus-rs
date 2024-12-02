@@ -1,7 +1,9 @@
 pub use nalgebra::{Matrix3, UnitQuaternion, Vector3};
-mod anglescan;
+pub mod anglescan;
 pub mod energy;
+pub mod icoscan;
 pub mod icotable;
+pub mod report;
 pub mod structure;
 pub mod table;
 extern crate pretty_env_logger;
@@ -11,6 +13,8 @@ use physical_constants::MOLAR_GAS_CONSTANT;
 use std::f64::consts::PI;
 use std::iter::Sum;
 use std::ops::{Add, Neg};
+
+extern crate flate2;
 
 pub use anglescan::{
     make_fibonacci_sphere, make_icosphere, make_icosphere_vertices, TwobodyAngles,
