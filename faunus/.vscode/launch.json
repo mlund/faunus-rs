@@ -1,0 +1,45 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in library 'faunus'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--lib",
+                    "--package=faunus"
+                ],
+                "filter": {
+                    "name": "faunus",
+                    "kind": "lib"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug executable 'faunus'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=faunus",
+                    "--package=faunus"
+                ],
+                "filter": {
+                    "name": "faunus",
+                    "kind": "bin"
+                }
+            },
+            "args": ["run", "--input=assets/topology_twobody.yaml"],
+            "cwd": "${workspaceFolder}"
+        }
+    ]
+}
