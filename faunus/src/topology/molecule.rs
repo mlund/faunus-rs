@@ -221,6 +221,7 @@ fn validate_molecule(molecule: &MoleculeKind) -> Result<(), ValidationError> {
     }
 
     // residues can't contain undefined atoms
+    // TODO: use `.any()` instead of for-loop
     for residue in molecule.residues.iter() {
         // empty residues can contain any indices
         if !residue.is_empty() && residue.range().end > n_atoms {
@@ -231,6 +232,7 @@ fn validate_molecule(molecule: &MoleculeKind) -> Result<(), ValidationError> {
     }
 
     // chains can't contain undefined atoms
+    // TODO: use `.any()` instead of for-loop
     for chain in molecule.chains.iter() {
         if !chain.is_empty() && chain.range().end > n_atoms {
             return Err(
@@ -240,6 +242,7 @@ fn validate_molecule(molecule: &MoleculeKind) -> Result<(), ValidationError> {
     }
 
     // exclusions can't contain undefined atoms or the same atom twice
+    // TODO: use `.any()` instead of for-loop
     for (i, j) in molecule.exclusions.iter().map(|e| e.into_ordered_tuple()) {
         if i == j {
             return Err(
