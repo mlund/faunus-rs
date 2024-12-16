@@ -121,7 +121,7 @@ impl Dihedral {
         term: &crate::energy::IntermolecularBonded,
     ) -> f64 {
         // any of the particles is inactive
-        if self.index.iter().any(|&i| !term.is_active(i)) {
+        if self.index.iter().any(|&i| term.is_inactive(i)) {
             return 0.0;
         }
 
