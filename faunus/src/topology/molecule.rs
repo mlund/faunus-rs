@@ -132,6 +132,24 @@ impl MoleculeKind {
         self.has_com
     }
 
+    /// Set atom names from optional structure file
+    ///
+    /// Returns error if file is specified and cannot be loaded.
+    pub fn set_names_from_structure(&mut self) -> anyhow::Result<()> {
+        if let Some(filename) = &self.from_structure {
+            self.atoms = chemfiles_interface::frame_from_file(&filename)?
+                .iter_atoms()
+                .map(|a| a.name())
+                .collect();
+            log::debug!(
+                "Set {} atom names from {}",
+                self.atoms.len(),
+                filename.display()
+            );
+        }
+        Ok(())
+    }
+
     /// Set indices of atom types.
     pub(super) fn set_atom_indices(&mut self, indices: Vec<usize>) {
         self.atom_indices = indices;

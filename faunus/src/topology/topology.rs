@@ -279,7 +279,9 @@ impl Topology {
     /// set indices of atom kinds forming each molecule.
     fn finalize_molecules(&mut self) -> anyhow::Result<()> {
         for (i, molecule) in self.moleculekinds.iter_mut().enumerate() {
-            // set atom names
+            if molecule.atom_names().is_empty() {
+                molecule.set_names_from_structure()?;
+            }
             if molecule.atom_names().is_empty() {
                 molecule.empty_atom_names();
             }
