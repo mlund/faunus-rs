@@ -385,7 +385,7 @@ mod tests {
             Rc::new(topology),
             Cell::Cuboid(Cuboid::new(10.0, 5.0, 2.5)),
             RefCell::new(vec![].into()),
-            None::<&str>,
+            None,
             &mut rng,
         )
         .unwrap();

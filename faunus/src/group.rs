@@ -689,6 +689,8 @@ impl GroupLists {
 
 #[cfg(test)]
 mod tests {
+    use std::path::Path;
+
     use crate::platform::reference::ReferencePlatform;
 
     use super::*;
@@ -708,7 +710,7 @@ mod tests {
         let mut rng = rand::thread_rng();
         let context = ReferencePlatform::new(
             "tests/files/topology_pass.yaml",
-            Some("tests/files/structure.xyz"),
+            Some(Path::new("tests/files/structure.xyz")),
             &mut rng,
         )
         .unwrap();
@@ -806,7 +808,7 @@ mod tests {
         let mut rng = rand::thread_rng();
         let context = ReferencePlatform::new(
             "tests/files/topology_pass.yaml",
-            Some("tests/files/structure.xyz"),
+            Some(Path::new("tests/files/structure.xyz")),
             &mut rng,
         )
         .unwrap();
@@ -888,7 +890,7 @@ mod tests {
         let mut rng = rand::thread_rng();
         let context = ReferencePlatform::new(
             "tests/files/topology_pass.yaml",
-            Some("tests/files/structure.xyz"),
+            Some(Path::new("tests/files/structure.xyz")),
             &mut rng,
         )
         .unwrap();

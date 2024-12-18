@@ -287,7 +287,7 @@ mod tests_intramolecular {
             Rc::new(topology),
             Cell::Cuboid(Cuboid::cubic(20.0)),
             RefCell::new(Hamiltonian::default()),
-            None::<&str>,
+            None,
             &mut rng,
         )
         .unwrap();
@@ -433,7 +433,7 @@ mod tests_intermolecular {
             Rc::new(topology.clone()),
             Cell::Cuboid(Cuboid::cubic(20.0)),
             RefCell::new(Hamiltonian::default()),
-            None::<&str>,
+            None,
             &mut rng,
         )
         .unwrap();

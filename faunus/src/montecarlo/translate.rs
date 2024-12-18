@@ -381,6 +381,8 @@ impl TranslateAtom {
 #[cfg(test)]
 mod tests {
 
+    use std::path::Path;
+
     use super::*;
     use crate::platform::reference::ReferencePlatform;
 
@@ -411,7 +413,7 @@ mod tests {
         let mut rng = rand::thread_rng();
         let context = ReferencePlatform::new(
             "tests/files/topology_pass.yaml",
-            Some("tests/files/structure.xyz"),
+            Some(Path::new("tests/files/structure.xyz")),
             &mut rng,
         )
         .unwrap();
@@ -432,7 +434,7 @@ mod tests {
         let mut rng = rand::thread_rng();
         let context = ReferencePlatform::new(
             "tests/files/topology_pass.yaml",
-            Some("tests/files/structure.xyz"),
+            Some(Path::new("tests/files/structure.xyz")),
             &mut rng,
         )
         .unwrap();
@@ -454,7 +456,7 @@ mod tests {
         let mut rng = rand::thread_rng();
         let mut context = ReferencePlatform::new(
             "tests/files/topology_pass.yaml",
-            Some("tests/files/structure.xyz"),
+            Some(Path::new("tests/files/structure.xyz")),
             &mut rng,
         )
         .unwrap();

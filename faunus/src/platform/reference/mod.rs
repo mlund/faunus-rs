@@ -51,7 +51,7 @@ impl ReferencePlatform {
     /// faunus configuration file and optional structure file.
     pub fn new(
         yaml_file: impl AsRef<Path>,
-        structure_file: Option<impl AsRef<Path>>,
+        structure_file: Option<&Path>,
         rng: &mut ThreadRng,
     ) -> anyhow::Result<Self> {
         let topology = Topology::from_file(&yaml_file)?;
@@ -75,7 +75,7 @@ impl ReferencePlatform {
         topology: Rc<Topology>,
         cell: Cell,
         hamiltonian: RefCell<Hamiltonian>,
-        structure: Option<impl AsRef<Path>>,
+        structure: Option<&Path>,
         rng: &mut ThreadRng,
     ) -> anyhow::Result<Self> {
         if topology.system.is_empty() {

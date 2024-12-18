@@ -14,7 +14,7 @@
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
-use faunus::topology::Topology;
+use faunus::{montecarlo, platform::reference::ReferencePlatform, propagate::Propagate};
 use pretty_env_logger::env_logger::DEFAULT_FILTER_ENV;
 use std::path::PathBuf;
 
@@ -28,7 +28,7 @@ pub enum Commands {
         input: PathBuf,
         /// Start from previously saved state file
         #[clap(long, short = 's')]
-        state: PathBuf,
+        state: Option<PathBuf>,
     },
 }
 
@@ -63,11 +63,16 @@ fn do_main() -> Result<()> {
             run(input, state)?;
         }
     }
-
     Ok(())
 }
 
-fn run(input: PathBuf, _state: PathBuf) -> Result<()> {
-    let _topology = Topology::from_file(input)?;
+fn run(input: PathBuf, _state: Option<PathBuf>) -> Result<()> {
+    let context = ReferencePlatform::new(&input, None, &mut rand::thread_rng())?;
+    let propagate = Propagate::from_file(&input, &context).unwrap();
+    let mut markov_chain = montecarlo::MarkovChain::new(context, propagate, 1.0);
+    for step in markov_chain.iter() {
+        step?;
+    }
+
     Ok(())
 }

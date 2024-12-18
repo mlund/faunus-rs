@@ -298,7 +298,7 @@ mod tests {
         let mut rng = rand::thread_rng();
         let context = ReferencePlatform::new(
             "tests/files/translate_molecules_simulation.yaml",
-            None::<String>,
+            None,
             &mut rng,
         )
         .unwrap();

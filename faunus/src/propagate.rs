@@ -477,7 +477,7 @@ moves:
         let mut rng = rand::thread_rng();
         let context = ReferencePlatform::new(
             "tests/files/topology_pass.yaml",
-            Some("tests/files/structure.xyz"),
+            Some(Path::new("tests/files/structure.xyz")),
             &mut rng,
         )
         .unwrap();
@@ -516,7 +516,7 @@ moves:
         let mut rng = rand::thread_rng();
         let context = ReferencePlatform::new(
             "tests/files/topology_invalid_propagate.yaml",
-            Some("tests/files/structure.xyz"),
+            Some(Path::new("tests/files/structure.xyz")),
             &mut rng,
         )
         .unwrap();
@@ -531,7 +531,7 @@ moves:
         let mut rng = rand::thread_rng();
         let context = ReferencePlatform::new(
             "tests/files/topology_invalid_translate_atom1.yaml",
-            Some("tests/files/structure.xyz"),
+            Some(Path::new("tests/files/structure.xyz")),
             &mut rng,
         )
         .unwrap();
@@ -548,7 +548,7 @@ moves:
         let mut rng = rand::thread_rng();
         let context = ReferencePlatform::new(
             "tests/files/topology_invalid_translate_atom2.yaml",
-            Some("tests/files/structure.xyz"),
+            Some(Path::new("tests/files/structure.xyz")),
             &mut rng,
         )
         .unwrap();
@@ -565,7 +565,7 @@ moves:
         let mut rng = rand::thread_rng();
         let context = ReferencePlatform::new(
             "tests/files/topology_invalid_translate_atom3.yaml",
-            Some("tests/files/structure.xyz"),
+            Some(Path::new("tests/files/structure.xyz")),
             &mut rng,
         )
         .unwrap();
