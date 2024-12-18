@@ -312,11 +312,17 @@ impl MoleculeBlock {
         external_positions: &[Point],
         rng: &mut ThreadRng,
     ) -> anyhow::Result<()> {
-        // let molecule = &molecules[self.molecule_id];
         let topology = context.topology();
         let molecule = &topology.moleculekinds()[self.molecule_id];
         let mut particle_counter = context.num_particles();
         let n_particles = molecule.len();
+
+        log::debug!(
+            "Attempting to insert N={} '{}' molecules each with n={} particles.",
+            self.num_molecules,
+            molecule.name(),
+            n_particles
+        );
 
         // get flat list of positions of *all* molecules in the block
         let mut positions = match &self.insert {
@@ -343,6 +349,11 @@ impl MoleculeBlock {
                 particle
             })
             .collect();
+            log::debug!(
+                "Generated {} particles for molecule '{}'",
+                particles.len(),
+                molecule.name()
+            );
             particles
         };
 
