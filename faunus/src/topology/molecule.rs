@@ -105,11 +105,12 @@ impl MoleculeKindBuilder {
     /// # Panics
     /// Panics of the file doesn't exist or is of unknown format.
     pub fn from_structure(&mut self, filename: impl AsRef<Path>) -> &mut Self {
-        let atom_names = chemfiles_interface::frame_from_file(&filename)
+        let atom_names: Vec<_> = chemfiles_interface::frame_from_file(&filename)
             .unwrap()
             .iter_atoms()
             .map(|a| a.name())
             .collect();
+        log::debug!("Loaded {} atoms from structure file", atom_names.len());
         self.atoms(atom_names)
     }
 }
