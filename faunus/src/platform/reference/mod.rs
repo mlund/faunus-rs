@@ -169,7 +169,9 @@ impl GroupCollection for ReferencePlatform {
 
     fn add_group(&mut self, molecule: usize, particles: &[Particle]) -> anyhow::Result<&mut Group> {
         if particles.is_empty() {
-            anyhow::bail!("Cannot create empty group");
+            let msg = "No particles defined for reference platform; cannot create empty group";
+            log::error!("{msg}");
+            anyhow::bail!(msg);
         }
         let range = self.particles.len()..self.particles.len() + particles.len();
         self.particles.extend_from_slice(particles);
