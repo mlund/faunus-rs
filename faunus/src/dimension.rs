@@ -106,3 +106,8 @@ impl Dimension {
         Point::new(x, y, z)
     }
 }
+
+// Helper for deserialization
+pub(crate) fn default_dimension() -> Dimension {
+    Dimension::XYZ
+}

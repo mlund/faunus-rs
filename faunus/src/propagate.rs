@@ -419,7 +419,8 @@ impl Move {
     /// This will update the statistics.
     #[allow(unused_variables)]
     fn accepted(&mut self, change: &Change, energy_change: f64, displacement: Displacement) {
-        self.get_statistics_mut().accept(energy_change, displacement);
+        self.get_statistics_mut()
+            .accept(energy_change, displacement);
     }
 
     /// Called when the move is rejected.

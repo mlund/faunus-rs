@@ -74,6 +74,9 @@ pub struct TranslateMolecule {
     /// Move statisticcs.
     #[serde(skip_deserializing)]
     statistics: MoveStatistics,
+    /// Move directions
+    #[serde(default = "crate::dimension::default_dimension")]
+    directions: crate::dimension::Dimension,
 }
 
 impl crate::Info for TranslateMolecule {
@@ -92,6 +95,7 @@ impl TranslateMolecule {
         molecule_id: usize,
         max_displacement: f64,
         weight: f64,
+        directions: crate::dimension::Dimension,
         repeat: usize,
     ) -> Self {
         Self {
@@ -101,6 +105,7 @@ impl TranslateMolecule {
             weight,
             repeat,
             statistics: MoveStatistics::default(),
+            directions,
         }
     }
 
@@ -114,8 +119,9 @@ impl TranslateMolecule {
         rng: &mut impl Rng,
     ) -> Option<(Change, Displacement)> {
         if let Some(group_index) = random_group(context, rng, self.molecule_id) {
-            let displacement =
-                random_unit_vector(rng) * self.max_displacement * 2.0 * (rng.gen::<f64>() - 0.5);
+            let displacement = self.directions.filter(
+                random_unit_vector(rng) * self.max_displacement * 2.0 * (rng.gen::<f64>() - 0.5),
+            );
             Transform::Translate(displacement)
                 .on_group(group_index, context)
                 .unwrap();
