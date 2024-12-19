@@ -18,7 +18,7 @@ use crate::{
     analysis::{AnalysisCollection, Analyze},
     energy::EnergyChange,
     montecarlo::{AcceptanceCriterion, Bias, MoveStatistics, NewOld},
-    Change, Context, Info,
+    Change, Context, Info, Point,
 };
 use core::fmt::Debug;
 use rand::Rng;
@@ -306,6 +306,32 @@ pub enum Move {
     TranslateAtom(crate::montecarlo::TranslateAtom),
 }
 
+/// Enum used to store the extent of displacement of a move.
+///
+/// This is used for collecting statistics about mean squared displacements.
+pub(crate) enum Displacement {
+    /// Displacement vector; typically due to a translation
+    Distance(Point),
+    /// Angular displacement; typically due to a rotation
+    _Angle(f64),
+    /// Displacement vector and angular displacement; typically due to a rototrational move
+    _AngleDistance(f64, Point),
+    /// A custom displacement
+    _Custom(f64),
+}
+
+impl TryFrom<Displacement> for f64 {
+    type Error = &'static str;
+    fn try_from(value: Displacement) -> Result<Self, Self::Error> {
+        match value {
+            Displacement::Distance(x) => Ok(x.norm()),
+            Displacement::_Angle(x) => Ok(x),
+            Displacement::_AngleDistance(_, _) => Err("Cannot convert AngleDistance to f64."),
+            Displacement::_Custom(x) => Ok(x),
+        }
+    }
+}
+
 impl Move {
     /// Attempts to perform the move.
     /// Consists of proposing the move, accepting/rejecting it and updating the context.
@@ -319,7 +345,7 @@ impl Move {
         rng: &mut impl Rng,
     ) -> anyhow::Result<()> {
         for _ in 0..self.repeat() {
-            let change = self
+            let (change, _displacement) = self
                 .propose_move(&mut context.new, rng)
                 .ok_or(anyhow::anyhow!("Could not propose a move."))?;
             context.new.update(&change)?;
@@ -347,7 +373,11 @@ impl Move {
 
     /// Propose a move on the given `context`.
     /// This modifies the context and returns the proposed change.
-    fn propose_move(&mut self, context: &mut impl Context, rng: &mut impl Rng) -> Option<Change> {
+    fn propose_move(
+        &mut self,
+        context: &mut impl Context,
+        rng: &mut impl Rng,
+    ) -> Option<(Change, Displacement)> {
         match self {
             Move::TranslateMolecule(x) => x.propose_move(context, rng),
             Move::TranslateAtom(x) => x.propose_move(context, rng),

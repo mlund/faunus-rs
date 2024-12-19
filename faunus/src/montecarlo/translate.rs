@@ -14,6 +14,7 @@
 
 use super::MoveStatistics;
 use crate::group::*;
+use crate::propagate::Displacement;
 use crate::transform::{random_unit_vector, Transform};
 use crate::{Change, Context, GroupChange};
 use anyhow::Ok;
@@ -104,21 +105,24 @@ impl TranslateMolecule {
     }
 
     /// Propose a translation of a molecule.
-    /// 
+    ///
     /// Translates molecule in given `context` and return a change object
-    /// describing the change.
+    /// describing the change as well as the magnitude of the displacement.
     pub(crate) fn propose_move(
         &mut self,
         context: &mut impl Context,
         rng: &mut impl Rng,
-    ) -> Option<Change> {
+    ) -> Option<(Change, Displacement)> {
         if let Some(group_index) = random_group(context, rng, self.molecule_id) {
             let displacement =
                 random_unit_vector(rng) * self.max_displacement * 2.0 * (rng.gen::<f64>() - 0.5);
             Transform::Translate(displacement)
                 .on_group(group_index, context)
                 .unwrap();
-            Some(Change::SingleGroup(group_index, GroupChange::RigidBody))
+            Some((
+                Change::SingleGroup(group_index, GroupChange::RigidBody),
+                Displacement::Distance(displacement),
+            ))
         } else {
             None
         }
@@ -278,7 +282,7 @@ impl TranslateAtom {
         &mut self,
         context: &mut impl Context,
         rng: &mut impl Rng,
-    ) -> Option<Change> {
+    ) -> Option<(Change, Displacement)> {
         // repeat until you find a suitable atom
         let (group, absolute_atom) = std::iter::repeat_with(|| self.get_group_atom(context, rng))
             .find_map(|group_atom| group_atom)
@@ -299,10 +303,8 @@ impl TranslateAtom {
             .to_relative_index(absolute_atom)
             .expect("Atom should be part of the group.");
 
-        Some(Change::SingleGroup(
-            group,
-            GroupChange::PartialUpdate(vec![relative_atom]),
-        ))
+        let change = Change::SingleGroup(group, GroupChange::PartialUpdate(vec![relative_atom]));
+        Some((change, Displacement::Distance(displacement)))
     }
 
     /// Get immutable reference to the statistics of the move.
