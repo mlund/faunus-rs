@@ -104,18 +104,21 @@ impl TranslateMolecule {
     }
 
     /// Propose a translation of a molecule.
+    /// 
+    /// Translates molecule in given `context` and return a change object
+    /// describing the change.
     pub(crate) fn propose_move(
         &mut self,
         context: &mut impl Context,
         rng: &mut impl Rng,
     ) -> Option<Change> {
-        if let Some(index) = random_group(context, rng, self.molecule_id) {
+        if let Some(group_index) = random_group(context, rng, self.molecule_id) {
             let displacement =
                 random_unit_vector(rng) * self.max_displacement * 2.0 * (rng.gen::<f64>() - 0.5);
             Transform::Translate(displacement)
-                .on_group(index, context)
+                .on_group(group_index, context)
                 .unwrap();
-            Some(Change::SingleGroup(index, GroupChange::RigidBody))
+            Some(Change::SingleGroup(group_index, GroupChange::RigidBody))
         } else {
             None
         }
