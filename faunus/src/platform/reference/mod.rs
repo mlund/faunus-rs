@@ -25,6 +25,8 @@ use crate::{
     WithHamiltonian, WithTopology,
 };
 
+use serde::Serialize;
+
 use std::{
     cell::{Ref, RefCell, RefMut},
     path::Path,
@@ -36,13 +38,16 @@ use std::{
 /// Particles are stored in
 /// a single vector, and groups are stored in a separate vector. This mostly
 /// follows the same layout as the original C++ Faunus code (version 2 and lower).
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize)]
 pub struct ReferencePlatform {
     topology: Rc<Topology>,
     particles: Vec<Particle>,
+    #[serde(skip)]
     groups: Vec<Group>,
+    #[serde(skip)]
     group_lists: GroupLists,
     cell: Cell,
+    #[serde(skip)]
     hamiltonian: RefCell<Hamiltonian>,
 }
 

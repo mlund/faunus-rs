@@ -115,6 +115,19 @@ impl MoveStatistics {
     }
 }
 
+impl std::fmt::Display for MoveStatistics {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(
+            f,
+            "trials: {}, accepted: {}, acceptance ratio: {:.3}, energy change sum: {:.3}",
+            self.num_trials,
+            self.num_accepted,
+            self.acceptance_ratio(),
+            self.energy_change_sum
+        )
+    }
+}
+
 /// All possible acceptance criteria for Monte Carlo moves
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Copy)]
 pub enum AcceptanceCriterion {
@@ -212,7 +225,7 @@ pub struct MarkovChainIterator<'a, T: Context> {
     markov: &'a mut MarkovChain<T>,
 }
 
-impl<'a, T: Context> Iterator for MarkovChainIterator<'a, T> {
+impl<T: Context> Iterator for MarkovChainIterator<'_, T> {
     type Item = anyhow::Result<usize>;
     fn next(&mut self) -> Option<Self::Item> {
         match self.markov.propagate.propagate(
@@ -238,6 +251,12 @@ impl<T: Context + 'static> MarkovChain<T> {
             analyses: AnalysisCollection::default(),
         }
     }
+
+    /// Get propagate instance
+    pub fn get_propagate(&self) -> &Propagate {
+        &self.propagate
+    }
+
     /// Set the thermal energy, _kT_.
     ///
     /// This is used to normalize the energy change when determining the acceptance probability.

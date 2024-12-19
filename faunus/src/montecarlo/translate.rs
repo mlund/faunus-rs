@@ -16,6 +16,7 @@ use super::MoveStatistics;
 use crate::group::*;
 use crate::transform::{random_unit_vector, Transform};
 use crate::{Change, Context, GroupChange};
+use anyhow::Ok;
 use rand::prelude::*;
 use serde::{Deserialize, Serialize};
 
@@ -152,6 +153,15 @@ impl TranslateMolecule {
             ))?;
 
         Ok(())
+    }
+}
+
+impl std::fmt::Display for TranslateMolecule {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "Translate Molecule 🏃‍♀️‍➡️:")?;
+        writeln!(f, "  Molecule:         {}", self.molecule_name)?;
+        writeln!(f, "  Max displacement: {} Å", self.max_displacement)?;
+        writeln!(f, "  Statistics📈:     {}", self.statistics)
     }
 }
 

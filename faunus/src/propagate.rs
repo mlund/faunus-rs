@@ -132,6 +132,10 @@ impl Propagate {
     pub fn get_collections(&self) -> &[MoveCollection] {
         &self.move_collections
     }
+
+    pub fn max_repeats(&self) -> usize {
+        self.max_repeats
+    }
 }
 
 /// Collection of moves that should be stochastically selected in the simulation.
@@ -145,6 +149,20 @@ pub struct StochasticCollection {
     /// List of moves.
     #[serde(default)]
     moves: Vec<Move>,
+}
+
+impl std::fmt::Display for StochasticCollection {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for m in self.moves.iter() {
+            match m {
+                Move::TranslateMolecule(x) => write!(f, "{}", x),
+                Move::TranslateAtom(x) => {
+                    writeln!(f, "Atomic translate 🏃🏻: {}", x.get_statistics())
+                }
+            }?;
+        }
+        write!(f, "StochasticCollection")
+    }
 }
 
 impl StochasticCollection {
