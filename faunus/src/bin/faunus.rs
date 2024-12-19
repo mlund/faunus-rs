@@ -15,8 +15,7 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use faunus::{
-    montecarlo, platform::reference::ReferencePlatform, propagate::Propagate, WithCell,
-    WithTopology,
+    analysis::Analyze, montecarlo, platform::reference::ReferencePlatform, propagate::Propagate, WithCell, WithTopology
 };
 use indicatif::ProgressBar;
 use pretty_env_logger::env_logger::DEFAULT_FILTER_ENV;
@@ -99,6 +98,10 @@ fn run(input: PathBuf, _state: Option<PathBuf>, yaml_output: &mut std::fs::File)
     let context = ReferencePlatform::new(&input, None, &mut rand::thread_rng())?;
     let propagate = Propagate::from_file(&input, &context).unwrap();
     let mut markov_chain = montecarlo::MarkovChain::new(context.clone(), propagate, 1.0);
+
+    let structure_writer = faunus::analysis::StructureWriter::new("output.xyz", faunus::analysis::Frequency::Every(1));
+    markov_chain.add_analysis(Box::new(structure_writer));
+
 
     write_yaml(&context.cell(), yaml_output, Some("cell"))?;
     write_yaml(&context.topology().blocks(), yaml_output, Some("blocks"))?;
