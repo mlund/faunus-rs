@@ -308,16 +308,20 @@ pub enum Move {
 
 /// Enum used to store the extent of displacement of a move.
 ///
-/// This is used for collecting statistics about mean squared displacements.
-pub(crate) enum Displacement {
+/// This is used for collecting statistics about for far moves change
+/// the system. Used to track mean squared displacements.
+#[derive(Clone)]
+pub enum Displacement {
     /// Displacement vector; typically due to a translation
     Distance(Point),
     /// Angular displacement; typically due to a rotation
-    _Angle(f64),
-    /// Displacement vector and angular displacement; typically due to a rototrational move
-    _AngleDistance(f64, Point),
+    Angle(f64),
+    /// Displacement vector and angular displacement; typically due to a rototranslational move
+    AngleDistance(f64, Point),
     /// A custom displacement
-    _Custom(f64),
+    Custom(f64),
+    /// No displacement appropriate
+    None,
 }
 
 impl TryFrom<Displacement> for f64 {
@@ -325,9 +329,9 @@ impl TryFrom<Displacement> for f64 {
     fn try_from(value: Displacement) -> Result<Self, Self::Error> {
         match value {
             Displacement::Distance(x) => Ok(x.norm()),
-            Displacement::_Angle(x) => Ok(x),
-            Displacement::_AngleDistance(_, _) => Err("Cannot convert AngleDistance to f64."),
-            Displacement::_Custom(x) => Ok(x),
+            Displacement::Angle(x) => Ok(x),
+            Displacement::Custom(x) => Ok(x),
+            _ => Err("Cannot convert displacement to floating point number"),
         }
     }
 }
@@ -357,7 +361,7 @@ impl Move {
             let bias = self.bias(&change, &energy);
 
             if criterion.accept(energy, bias, thermal_energy, rng) {
-                self.accepted(&change, energy.difference());
+                self.accepted(&change, energy.difference(), _displacement);
                 context.old.sync_from(&context.new, &change)?;
             } else {
                 self.rejected(&change);
@@ -414,8 +418,8 @@ impl Move {
     ///
     /// This will update the statistics.
     #[allow(unused_variables)]
-    fn accepted(&mut self, change: &Change, energy_change: f64) {
-        self.get_statistics_mut().accept(energy_change);
+    fn accepted(&mut self, change: &Change, energy_change: f64, displacement: Displacement) {
+        self.get_statistics_mut().accept(energy_change, displacement);
     }
 
     /// Called when the move is rejected.

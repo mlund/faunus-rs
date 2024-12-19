@@ -15,9 +15,9 @@
 //! # Support for Monte Carlo sampling
 
 use crate::analysis::{AnalysisCollection, Analyze};
-use crate::propagate::Propagate;
+use crate::propagate::{Displacement, Propagate};
 use crate::{time::Timer, Context};
-use average::Mean;
+use average::{Estimate, Mean};
 use log;
 use rand::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -98,10 +98,11 @@ pub struct MoveStatistics {
 
 impl MoveStatistics {
     /// Register an accepted move and increment counters
-    pub fn accept(&mut self, energy_change: f64) {
+    pub fn accept(&mut self, energy_change: f64, displacement: Displacement) {
         self.num_trials += 1;
         self.num_accepted += 1;
         self.energy_change_sum += energy_change;
+        self.update_msd(displacement);
     }
 
     /// Register a rejected move and increment counters
@@ -112,6 +113,16 @@ impl MoveStatistics {
     /// Acceptance ratio
     pub fn acceptance_ratio(&self) -> f64 {
         self.num_accepted as f64 / self.num_trials as f64
+    }
+
+    /// Update mean square displacement if possible
+    pub(crate) fn update_msd(&mut self, displacement: Displacement) {
+        if let Ok(dp) = f64::try_from(displacement) {
+            if self.mean_square_displacement.is_none() {
+                self.mean_square_displacement = Some(Mean::new());
+            }
+            self.mean_square_displacement.as_mut().unwrap().add(dp * dp);
+        }
     }
 }
 
