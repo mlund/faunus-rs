@@ -349,7 +349,7 @@ impl Move {
         rng: &mut impl Rng,
     ) -> anyhow::Result<()> {
         for _ in 0..self.repeat() {
-            let (change, _displacement) = self
+            let (change, displacement) = self
                 .propose_move(&mut context.new, rng)
                 .ok_or(anyhow::anyhow!("Could not propose a move."))?;
             context.new.update(&change)?;
@@ -361,7 +361,7 @@ impl Move {
             let bias = self.bias(&change, &energy);
 
             if criterion.accept(energy, bias, thermal_energy, rng) {
-                self.accepted(&change, energy.difference(), _displacement);
+                self.accepted(&change, energy.difference(), displacement);
                 context.old.sync_from(&context.new, &change)?;
             } else {
                 self.rejected(&change);
