@@ -152,6 +152,25 @@ pub trait ParticleSystem: GroupCollection + WithCell + WithTopology {
     /// ```
     fn get_dihedral_angle(&self, indices: &[usize; 4]) -> f64;
 
+    /// Calculate mass center of set of particles given by their indices. Periodic boundry conditions are respected.
+    fn mass_center(&self, indices: &[usize]) -> Point {
+        let positions: Vec<Point> = indices.iter().map(|&i| self.particle(i).pos).collect();
+        let atomids = indices.iter().map(|&i| self.get_atomkind(i));
+        let masses: Vec<_> = atomids.map(|i| self.topology().atomkinds()[i].mass()).collect();
+        let shift = -positions.first().unwrap_or(&Point::zeros());
+        crate::aux::center_of_mass_pbc(&positions, &masses, self.cell(), Some(shift))
+    }
+
     /// Shift positions of selected particles by target vector and apply periodic boundary conditions.
     fn translate_particles(&mut self, indices: &[usize], shift: &Point);
+
+    /// Rotate selected particles around the center of mass by the given quaternion. An optional
+    /// translational shift can be provided to help remove PBC. The shift is added before rotation and
+    /// subtracted after.
+    fn rotate_particles(
+        &mut self,
+        indices: &[usize],
+        quaternion: &crate::UnitQuaternion,
+        center: Option<Point>,
+    );
 }
