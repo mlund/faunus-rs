@@ -20,14 +20,40 @@ use crate::{cell::SimulationCell, Point};
 
 /// Calculate center of mass of a collection of points with masses.
 /// Does not consider periodic boundary conditions.
-pub(crate) fn center_of_mass(positions: &[Point], masses: &[f64]) -> Point {
+pub(crate) fn center_of_mass<'a>(positions: impl IntoIterator<Item = &'a Point>, masses: &[f64]) -> Point {
     let total_mass: f64 = masses.iter().sum();
     positions
-        .iter()
-        .zip(masses.iter())
-        .map(|(&r, &m)| r * m)
+        .into_iter()
+        .zip(masses)
+        .map(|(r, &m)| r * m)
         .sum::<Point>()
         / total_mass
+}
+
+/// Calculate center of mass of a collection of points with masses using PBC.
+pub(crate) fn center_of_mass_pbc<'a>(
+    positions: impl IntoIterator<Item = &'a Point>,
+    masses: &[f64],
+    cell: &impl SimulationCell,
+    shift: Option<Point>,
+) -> Point {
+    let shift = shift.unwrap_or_else(Point::zeros);
+    let total_mass: f64 = masses.iter().sum();
+    let to_origin = |&r| {
+        let mut shifted = r + shift;
+        cell.boundary(&mut shifted);
+        shifted
+    };
+    let mut com: Point = positions
+        .into_iter()
+        .map(to_origin)
+        .zip(masses)
+        .map(|(r, &m)| r * m)
+        .sum::<Point>()
+        / total_mass
+        - shift;
+    cell.boundary(&mut com);
+    com
 }
 
 #[test]
