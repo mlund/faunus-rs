@@ -92,7 +92,7 @@ impl Transform {
                 let indices = context.groups()[group_index]
                     .select(selection, context)
                     .unwrap();
-                context.rotate_particles(&indices, quaternion, Some(context.mass_center(&indices)));
+                context.rotate_particles(&indices, quaternion, Some(-context.mass_center(&indices)));
             }
             Transform::Rotate(axis, quaternion) => {
                 Self::PartialRotate(*axis, *quaternion, ParticleSelection::Active)
