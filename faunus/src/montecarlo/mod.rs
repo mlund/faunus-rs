@@ -15,6 +15,7 @@
 //! # Support for Monte Carlo sampling
 
 use crate::analysis::{AnalysisCollection, Analyze};
+use crate::group::*;
 use crate::propagate::{Displacement, Propagate};
 use crate::{time::Timer, Context};
 use average::{Estimate, Mean};
@@ -24,9 +25,41 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::{cmp::Ordering, ops::Neg};
 
+mod rotate;
 mod translate;
 
+pub use rotate::RotateMolecule;
 pub use translate::*;
+
+/// Pick a random group index of the specified molecule type.
+fn random_group(context: &impl Context, rng: &mut impl Rng, molecule_id: usize) -> Option<usize> {
+    let select = GroupSelection::ByMoleculeId(molecule_id);
+    context.select(&select).iter().copied().choose(rng)
+}
+
+/// Pick a random atom from the specified group.
+/// Returns an absolute index of the atom.
+fn random_atom(
+    context: &impl Context,
+    rng: &mut impl Rng,
+    group_index: usize,
+    atom_id: Option<usize>,
+) -> Option<usize> {
+    let select = match atom_id {
+        Some(a) => ParticleSelection::ById(a),
+        None => ParticleSelection::Active,
+    };
+
+    context
+        .groups()
+        .get(group_index)
+        .expect("Group should exist.")
+        .select(&select, context)
+        .expect("Selection should be successful.")
+        .iter()
+        .copied()
+        .choose(rng)
+}
 
 /// Custom bias to be added to the energy after a given move
 ///

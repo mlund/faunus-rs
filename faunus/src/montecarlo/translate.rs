@@ -12,7 +12,7 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
-use super::MoveStatistics;
+use super::{random_atom, random_group, MoveStatistics};
 use crate::group::*;
 use crate::propagate::Displacement;
 use crate::transform::{random_unit_vector, Transform};
@@ -20,36 +20,6 @@ use crate::{Change, Context, GroupChange};
 use anyhow::Ok;
 use rand::prelude::*;
 use serde::{Deserialize, Serialize};
-
-/// Pick a random group index of the specified molecule type.
-fn random_group(context: &impl Context, rng: &mut impl Rng, molecule_id: usize) -> Option<usize> {
-    let select = GroupSelection::ByMoleculeId(molecule_id);
-    context.select(&select).iter().copied().choose(rng)
-}
-
-/// Pick a random atom from the specified group.
-/// Returns an absolute index of the atom.
-fn random_atom(
-    context: &impl Context,
-    rng: &mut impl Rng,
-    group_index: usize,
-    atom_id: Option<usize>,
-) -> Option<usize> {
-    let select = match atom_id {
-        Some(a) => ParticleSelection::ById(a),
-        None => ParticleSelection::Active,
-    };
-
-    context
-        .groups()
-        .get(group_index)
-        .expect("Group should exist.")
-        .select(&select, context)
-        .expect("Selection should be successful.")
-        .iter()
-        .copied()
-        .choose(rng)
-}
 
 /// Move for translating a random molecule.
 ///

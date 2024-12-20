@@ -151,20 +151,6 @@ pub struct StochasticCollection {
     moves: Vec<Move>,
 }
 
-impl std::fmt::Display for StochasticCollection {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for m in self.moves.iter() {
-            match m {
-                Move::TranslateMolecule(x) => write!(f, "{}", x),
-                Move::TranslateAtom(x) => {
-                    writeln!(f, "Atomic translate 🏃🏻: {}", x.get_statistics())
-                }
-            }?;
-        }
-        write!(f, "StochasticCollection")
-    }
-}
-
 impl StochasticCollection {
     /// Attempt to perform selected moves of the collection.
     fn propagate<C: Context>(
@@ -304,6 +290,7 @@ pub(crate) enum Seed {
 pub enum Move {
     TranslateMolecule(crate::montecarlo::TranslateMolecule),
     TranslateAtom(crate::montecarlo::TranslateAtom),
+    RotateMolecule(crate::montecarlo::RotateMolecule),
 }
 
 /// Enum used to store the extent of displacement of a move.
@@ -385,6 +372,7 @@ impl Move {
         match self {
             Move::TranslateMolecule(x) => x.propose_move(context, rng),
             Move::TranslateAtom(x) => x.propose_move(context, rng),
+            Move::RotateMolecule(x) => x.propose_move(context, rng),
         }
     }
 
@@ -403,6 +391,7 @@ impl Move {
         match self {
             Move::TranslateMolecule(x) => x.get_statistics(),
             Move::TranslateAtom(x) => x.get_statistics(),
+            Move::RotateMolecule(x) => x.get_statistics(),
         }
     }
 
@@ -411,6 +400,7 @@ impl Move {
         match self {
             Move::TranslateMolecule(x) => x.get_statistics_mut(),
             Move::TranslateAtom(x) => x.get_statistics_mut(),
+            Move::RotateMolecule(x) => x.get_statistics_mut(),
         }
     }
 
@@ -436,6 +426,7 @@ impl Move {
         match self {
             Move::TranslateMolecule(x) => x.weight(),
             Move::TranslateAtom(x) => x.weight(),
+            Move::RotateMolecule(x) => x.weight(),
         }
     }
 
@@ -444,6 +435,7 @@ impl Move {
         match self {
             Move::TranslateMolecule(x) => x.finalize(context),
             Move::TranslateAtom(x) => x.finalize(context),
+            Move::RotateMolecule(x) => x.finalize(context),
         }
     }
 
@@ -452,6 +444,7 @@ impl Move {
         match self {
             Move::TranslateMolecule(x) => x.repeat(),
             Move::TranslateAtom(x) => x.repeat(),
+            Move::RotateMolecule(x) => x.repeat(),
         }
     }
 
@@ -460,6 +453,7 @@ impl Move {
         match self {
             Move::TranslateMolecule(_) => 1,
             Move::TranslateAtom(_) => 1,
+            Move::RotateMolecule(_) => 1,
         }
     }
 }
@@ -469,6 +463,7 @@ impl Info for Move {
         match self {
             Move::TranslateMolecule(x) => x.short_name(),
             Move::TranslateAtom(x) => x.short_name(),
+            Move::RotateMolecule(x) => x.short_name(),
         }
     }
 
@@ -476,6 +471,7 @@ impl Info for Move {
         match self {
             Move::TranslateMolecule(x) => x.long_name(),
             Move::TranslateAtom(x) => x.long_name(),
+            Move::RotateMolecule(x) => x.long_name(),
         }
     }
 }

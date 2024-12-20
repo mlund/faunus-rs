@@ -247,6 +247,22 @@ impl ParticleSystem for ReferencePlatform {
             cell.boundary(position)
         });
     }
+
+    fn rotate_particles(
+        &mut self,
+        indices: &[usize],
+        quaternion: &crate::UnitQuaternion,
+        shift: Option<Point>,
+    ) {
+        let shift = shift.unwrap_or(Point::zeros());
+        indices.iter().for_each(|&i| {
+            let position = self.particles[i].pos_mut();
+            *position += shift;
+            self.cell.boundary(position);
+            *position = quaternion.transform_vector(position) - shift;
+            self.cell.boundary(position);
+        });
+    }
 }
 
 /// Group-wise collection of particles

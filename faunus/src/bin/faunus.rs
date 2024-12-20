@@ -15,8 +15,8 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use faunus::{
-    montecarlo, platform::reference::ReferencePlatform, propagate::Propagate,
-    WithCell, WithTopology,
+    montecarlo, platform::reference::ReferencePlatform, propagate::Propagate, WithCell,
+    WithTopology,
 };
 use indicatif::ProgressBar;
 use pretty_env_logger::env_logger::DEFAULT_FILTER_ENV;

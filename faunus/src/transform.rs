@@ -16,7 +16,7 @@
 
 use crate::{cell::VolumeScalePolicy, group::ParticleSelection, Point};
 use anyhow::Ok;
-use nalgebra::Quaternion;
+use crate::UnitQuaternion;
 use rand::prelude::*;
 
 /// Generate a random unit vector by sphere picking
@@ -47,9 +47,9 @@ pub enum Transform {
     /// Translate a partial set of particles by a vector
     PartialTranslate(Point, ParticleSelection),
     /// Use a quaternion to rotatate around a given point
-    Rotate(Point, Quaternion<f64>),
+    Rotate(Point, UnitQuaternion),
     /// Use a quaternion to rotatate a set of particles around a given point
-    PartialRotate(Point, Quaternion<f64>, ParticleSelection),
+    PartialRotate(Point, UnitQuaternion, ParticleSelection),
     /// Scale coordinates from an old volume to a new, `(old_volume, new_volume)`
     VolumeScale(VolumeScalePolicy, (f64, f64)),
     /// Expand by `n` particles
@@ -88,6 +88,20 @@ impl Transform {
 
                 context.translate_particles(&indices, displacement);
             }
+            Transform::PartialRotate(_axis, quaternion, selection) => {
+                let indices = context.groups()[group_index]
+                    .select(selection, context)
+                    .unwrap();
+                context.rotate_particles(
+                    &indices,
+                    quaternion,
+                    Some(context.mass_center(&indices)),
+                );
+            }
+            Transform::Rotate(axis, quaternion) => {
+                Self::PartialRotate(*axis, *quaternion, ParticleSelection::Active)
+                    .on_group(group_index, context)?;
+            }
             _ => {
                 todo!("Implement other transforms")
             }
@@ -106,6 +120,16 @@ pub(crate) fn rotate_random<'a>(
     rng: &mut ThreadRng,
 ) {
     let angle = rng.gen_range(0.0..2.0 * std::f64::consts::PI);
+    rotate_random_angle(positions, center, rng, angle);
+}
+
+/// Rotate a collection of points by a given angle around a random axis.
+pub(crate) fn rotate_random_angle<'a>(
+    positions: impl IntoIterator<Item = &'a mut Point>,
+    center: &Point,
+    rng: &mut ThreadRng,
+    angle: f64,
+) {
     let axis = crate::transform::random_unit_vector(rng);
     let matrix = nalgebra::Rotation3::new(axis * angle);
     let rotate = |pos: &mut Point| *pos = matrix * (*pos - center) + center;
