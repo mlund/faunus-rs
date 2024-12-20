@@ -14,9 +14,9 @@
 
 //! Transformations of particles and groups
 
+use crate::UnitQuaternion;
 use crate::{cell::VolumeScalePolicy, group::ParticleSelection, Point};
 use anyhow::Ok;
-use crate::UnitQuaternion;
 use rand::prelude::*;
 
 /// Generate a random unit vector by sphere picking
@@ -92,11 +92,7 @@ impl Transform {
                 let indices = context.groups()[group_index]
                     .select(selection, context)
                     .unwrap();
-                context.rotate_particles(
-                    &indices,
-                    quaternion,
-                    Some(context.mass_center(&indices)),
-                );
+                context.rotate_particles(&indices, quaternion, Some(context.mass_center(&indices)));
             }
             Transform::Rotate(axis, quaternion) => {
                 Self::PartialRotate(*axis, *quaternion, ParticleSelection::Active)
@@ -106,6 +102,7 @@ impl Transform {
                 todo!("Implement other transforms")
             }
         }
+        context.update_mass_center(group_index);
         Ok(())
     }
 }
@@ -172,7 +169,7 @@ mod tests {
             Point::new(9.3, 10.1, 17.2),
         ];
         let masses = [1.46, 2.23, 10.73];
-        let com = crate::aux::center_of_mass(&positions, &masses);
+        let com = crate::aux::mass_center(&positions, &masses);
 
         let mut rng = rand::thread_rng();
         for _ in 0..100 {
@@ -184,7 +181,7 @@ mod tests {
                 assert_ne!(original, new);
             }
 
-            let com_rotated = crate::aux::center_of_mass(&cloned, &masses);
+            let com_rotated = crate::aux::mass_center(&cloned, &masses);
             assert_approx_eq!(f64, com.x, com_rotated.x);
             assert_approx_eq!(f64, com.y, com_rotated.y);
             assert_approx_eq!(f64, com.z, com_rotated.z);

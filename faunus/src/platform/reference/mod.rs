@@ -28,9 +28,7 @@ use crate::{
 use serde::Serialize;
 
 use std::{
-    cell::{Ref, RefCell, RefMut},
-    path::Path,
-    rc::Rc,
+    cell::{Ref, RefCell, RefMut}, path::Path, rc::Rc
 };
 
 /// Default platform running on the CPU.
@@ -170,6 +168,15 @@ impl GroupCollection for ReferencePlatform {
             self.particles[i] = src.clone();
         }
         Ok(())
+    }
+
+    fn update_mass_center(&mut self, group_index: usize) {
+        let group = &self.groups[group_index];
+        let indices = group.select(&crate::group::ParticleSelection::Active, self).unwrap();
+        if self.topology().moleculekinds()[group.molecule()].has_com(){
+            let com = self.mass_center(&indices);
+            self.groups[group_index].set_mass_center(com);
+        }
     }
 
     fn add_group(&mut self, molecule: usize, particles: &[Particle]) -> anyhow::Result<&mut Group> {

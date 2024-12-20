@@ -18,7 +18,10 @@ use crate::{Context, Info};
 use anyhow::Result;
 use core::fmt::Debug;
 use serde::{Deserialize, Serialize};
+
+mod distance;
 mod structure_writer;
+pub use distance::MassCenterDistance;
 pub use structure_writer::StructureWriter;
 
 /// Frequency of analysis.

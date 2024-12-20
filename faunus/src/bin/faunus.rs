@@ -15,8 +15,11 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use faunus::{
-    montecarlo, platform::reference::ReferencePlatform, propagate::Propagate, WithCell,
-    WithTopology,
+    analysis::{self, Frequency},
+    montecarlo::MarkovChain,
+    platform::reference::ReferencePlatform,
+    propagate::Propagate,
+    WithCell, WithTopology,
 };
 use indicatif::ProgressBar;
 use pretty_env_logger::env_logger::DEFAULT_FILTER_ENV;
@@ -98,11 +101,19 @@ fn write_yaml<T: serde::Serialize>(
 fn run(input: PathBuf, _state: Option<PathBuf>, yaml_output: &mut std::fs::File) -> Result<()> {
     let context = ReferencePlatform::new(&input, None, &mut rand::thread_rng())?;
     let propagate = Propagate::from_file(&input, &context).unwrap();
-    let mut markov_chain = montecarlo::MarkovChain::new(context.clone(), propagate, 1.0);
+    let mut markov_chain = MarkovChain::new(context.clone(), propagate, 1.0);
 
-    let structure_writer =
-        faunus::analysis::StructureWriter::new("output.xyz", faunus::analysis::Frequency::Every(1));
+    let structure_writer = analysis::StructureWriter::new("output.xyz", Frequency::Every(1));
+
+    let com_distance = analysis::MassCenterDistance::new(
+        ("MOL1", "MOL2"),
+        "com_distance.yaml".into(),
+        Frequency::Every(1),
+        &context.topology(),
+    )?;
+
     markov_chain.add_analysis(Box::new(structure_writer));
+    markov_chain.add_analysis(Box::new(com_distance));
 
     write_yaml(&context.cell(), yaml_output, Some("cell"))?;
     write_yaml(&context.topology().blocks(), yaml_output, Some("blocks"))?;

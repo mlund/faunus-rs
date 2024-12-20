@@ -144,7 +144,7 @@ impl InsertionPolicy {
             structure::positions_from_structure_file(filename.path().unwrap(), cell)?;
 
         // get the center of mass of the molecule
-        let com = crate::aux::center_of_mass(
+        let com = crate::aux::mass_center(
             &ref_positions,
             &molecule_kind
                 .atom_indices()
@@ -360,12 +360,13 @@ impl MoleculeBlock {
         // create groups and populate them with particles
         for i in 0..self.num_molecules {
             let particles = make_particles();
-            let group_id = context.add_group(molecule.id(), &particles)?.index();
+            let group_index = context.add_group(molecule.id(), &particles)?.index();
+            context.update_mass_center(group_index);
 
             // deactivate the groups that should not be active
             match self.active {
                 BlockActivationStatus::Partial(x) if i >= x => {
-                    context.resize_group(group_id, GroupSize::Empty).unwrap()
+                    context.resize_group(group_index, GroupSize::Empty).unwrap()
                 }
                 _ => (),
             }

@@ -339,6 +339,9 @@ pub trait GroupCollection: SyncFrom {
     /// Add a group to the system based on an molecule id and a set of particles given by an iterator.
     fn add_group(&mut self, molecule: usize, particles: &[Particle]) -> anyhow::Result<&mut Group>;
 
+    /// Update mass center for a given group, respecting PBC if appropriate.
+    fn update_mass_center(&mut self, group_index: usize);
+
     /// Resizes a group to a given size.
     ///
     /// Errors if the requested size is larger than the capacity, or if there are
@@ -446,6 +449,7 @@ pub trait GroupCollection: SyncFrom {
     /// The following is synchronized:
     /// - Group size
     /// - Particle properties (position, id, etc.)
+    /// - Mass centers if appropriate
     fn sync_group_from(
         &mut self,
         group_index: usize,
@@ -513,6 +517,7 @@ pub trait GroupCollection: SyncFrom {
             },
             _ => todo!("implement other group changes"),
         }
+        self.update_mass_center(group_index);
         Ok(())
     }
 

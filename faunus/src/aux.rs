@@ -20,7 +20,10 @@ use crate::{cell::SimulationCell, Point};
 
 /// Calculate center of mass of a collection of points with masses.
 /// Does not consider periodic boundary conditions.
-pub(crate) fn center_of_mass<'a>(positions: impl IntoIterator<Item = &'a Point>, masses: &[f64]) -> Point {
+pub(crate) fn mass_center<'a>(
+    positions: impl IntoIterator<Item = &'a Point>,
+    masses: &[f64],
+) -> Point {
     let total_mass: f64 = masses.iter().sum();
     positions
         .into_iter()
@@ -31,7 +34,7 @@ pub(crate) fn center_of_mass<'a>(positions: impl IntoIterator<Item = &'a Point>,
 }
 
 /// Calculate center of mass of a collection of points with masses using PBC.
-pub(crate) fn center_of_mass_pbc<'a>(
+pub(crate) fn mass_center_pbc<'a>(
     positions: impl IntoIterator<Item = &'a Point>,
     masses: &[f64],
     cell: &impl SimulationCell,
@@ -67,7 +70,7 @@ fn test_center_of_mass() {
     ];
     let masses = [1.46, 2.23, 10.73];
 
-    let com = center_of_mass(&positions, &masses);
+    let com = mass_center(&positions, &masses);
 
     assert_approx_eq!(f64, com.x, 9.10208044382802);
     assert_approx_eq!(f64, com.y, 10.09778085991678);
@@ -82,7 +85,7 @@ fn test_center_of_mass() {
 
     let masses = [1.46, 2.23, 10.73, 0.0];
 
-    let com = center_of_mass(&positions, &masses);
+    let com = mass_center(&positions, &masses);
 
     assert_approx_eq!(f64, com.x, 9.10208044382802);
     assert_approx_eq!(f64, com.y, 10.09778085991678);
