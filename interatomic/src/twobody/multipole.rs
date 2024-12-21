@@ -32,13 +32,16 @@ pub struct IonIon<T: MultipoleEnergy> {
     /// Potential energy function to use.
     #[cfg_attr(feature = "serde", serde(skip))]
     scheme: T,
+    /// Relative dielectric constant of the medium
+    permittivity: f64,
 }
 
 impl<T: MultipoleEnergy> IonIon<T> {
     /// Create a new ion-ion interaction
-    pub const fn new(charge_product: f64, scheme: T) -> Self {
+    pub const fn new(charge_product: f64, permittivity: f64, scheme: T) -> Self {
         Self {
             charge_product,
+            permittivity,
             scheme,
         }
     }
@@ -49,7 +52,7 @@ impl<T: MultipoleEnergy + std::fmt::Debug + Clone + PartialEq + Send + Sync> Iso
 {
     /// Calculate the isotropic twobody energy (kJ/mol)
     fn isotropic_twobody_energy(&self, distance_squared: f64) -> f64 {
-        coulomb::TO_CHEMISTRY_UNIT
+        coulomb::TO_CHEMISTRY_UNIT / self.permittivity
             * self
                 .scheme
                 .ion_ion_energy(self.charge_product, 1.0, distance_squared.sqrt())
@@ -72,15 +75,16 @@ mod tests {
 
     #[test]
     fn test_ion_ion() {
+        let permittivity = 80.0;
         let r: f64 = 7.0;
         let cutoff = f64::INFINITY;
         let scheme = Plain::new(cutoff, None);
-        let ionion = IonIon::new(1.0, scheme);
+        let ionion = IonIon::new(1.0, permittivity, scheme);
         let unscreened_energy = ionion.isotropic_twobody_energy(r.powi(2));
-        assert_relative_eq!(unscreened_energy, 2.48099031507825 * 80.0);
+        assert_relative_eq!(unscreened_energy, 2.48099031507825);
         let debye_length = 30.0;
         let scheme = Plain::new(cutoff, Some(debye_length));
-        let ionion = IonIon::new(1.0, scheme);
+        let ionion = IonIon::new(1.0, permittivity, scheme);
         let screened_energy = ionion.isotropic_twobody_energy(r.powi(2));
         assert_relative_eq!(
             screened_energy,
