@@ -108,7 +108,7 @@ fn run(input: PathBuf, _state: Option<PathBuf>, yaml_output: &mut std::fs::File)
     let com_distance = analysis::MassCenterDistance::new(
         ("MOL1", "MOL2"),
         "com_distance.yaml".into(),
-        Frequency::Every(1),
+        Frequency::Every(3),
         &context.topology(),
     )?;
 
