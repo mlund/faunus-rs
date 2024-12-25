@@ -18,7 +18,7 @@
 //! electric multipole moments, such as monopoles, dipoles, quadrupoles etc.
 
 use crate::twobody::IsotropicTwobodyEnergy;
-use coulomb::pairwise::MultipoleEnergy;
+use coulomb::{pairwise::MultipoleEnergy, permittivity::ConstantPermittivity};
 #[cfg(feature = "serde")]
 use serde::Serialize;
 
@@ -33,12 +33,12 @@ pub struct IonIon<T: MultipoleEnergy> {
     #[cfg_attr(feature = "serde", serde(skip))]
     scheme: T,
     /// Relative dielectric constant of the medium
-    permittivity: f64,
+    permittivity: ConstantPermittivity,
 }
 
 impl<T: MultipoleEnergy> IonIon<T> {
     /// Create a new ion-ion interaction
-    pub const fn new(charge_product: f64, permittivity: f64, scheme: T) -> Self {
+    pub const fn new(charge_product: f64, permittivity: ConstantPermittivity, scheme: T) -> Self {
         Self {
             charge_product,
             permittivity,
@@ -52,7 +52,7 @@ impl<T: MultipoleEnergy + std::fmt::Debug + Clone + PartialEq + Send + Sync> Iso
 {
     /// Calculate the isotropic twobody energy (kJ/mol)
     fn isotropic_twobody_energy(&self, distance_squared: f64) -> f64 {
-        coulomb::TO_CHEMISTRY_UNIT / self.permittivity
+        coulomb::TO_CHEMISTRY_UNIT / f64::from(self.permittivity)
             * self
                 .scheme
                 .ion_ion_energy(self.charge_product, 1.0, distance_squared.sqrt())
@@ -75,7 +75,7 @@ mod tests {
 
     #[test]
     fn test_ion_ion() {
-        let permittivity = 80.0;
+        let permittivity = ConstantPermittivity::new(80.0);
         let r: f64 = 7.0;
         let cutoff = f64::INFINITY;
         let scheme = Plain::new(cutoff, None);
