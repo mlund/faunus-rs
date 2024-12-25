@@ -42,13 +42,13 @@ system:
     nonbonded:
       [O, O]:
         - !LennardJones {epsilon: 0.1521, sigma: 3.1507}
-        - !CoulombPlain {cutoff: 11.0}
+        - !CoulombPlain {epsr: 80.0, cutoff: 11.0}
       [H, H]:
         - !LennardJones {epsilon: 0.0460, sigma: 0.4}
-        - !CoulombPlain {cutoff: 11.0}
+        - !CoulombPlain {epsr: 80.0, cutoff: 11.0}
       [O, H]:
         - !LennardJones {epsilon: 0.0836, sigma: 1.7753}
-        - !CoulombPlain {cutoff: 11.0}
+        - !CoulombPlain {epsr: 80.0, cutoff: 11.0}
     
   blocks:
     - molecule: TIP3P

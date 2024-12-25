@@ -409,7 +409,8 @@ mod tests {
         )
         .unwrap();
 
-        let mut propagator = TranslateMolecule::new("MOL2", 0, 0.5, 4.0, 1);
+        let mut propagator =
+            TranslateMolecule::new("MOL2", 0, 0.5, 4.0, crate::dimension::Dimension::XYZ, 1);
 
         propagator.finalize(&context).unwrap();
 
@@ -462,7 +463,7 @@ mod tests {
         let expected_indices = [2, 2, 1, 2, 1, 2, 1, 1, 1, 2];
 
         for i in 0..10 {
-            let change = move1.propose_move(&mut context, &mut seedable).unwrap();
+            let (change, _displacement) = move1.propose_move(&mut context, &mut seedable).unwrap();
             match change {
                 Change::SingleGroup(group, group_change) => {
                     assert_eq!(group, expected_groups[i]);
@@ -483,7 +484,7 @@ mod tests {
         let expected_indices = [2, 4, 1, 2, 3, 2, 0, 2, 5, 2];
 
         for i in 0..10 {
-            let change = move2.propose_move(&mut context, &mut seedable).unwrap();
+            let (change, _displacement) = move2.propose_move(&mut context, &mut seedable).unwrap();
             match change {
                 Change::SingleGroup(group, group_change) => {
                     assert_eq!(group, expected_groups[i]);
@@ -504,7 +505,7 @@ mod tests {
         let expected_indices = [0, 5, 4, 5, 0, 0, 5, 5, 4, 5];
 
         for i in 0..10 {
-            let change = move3.propose_move(&mut context, &mut seedable).unwrap();
+            let (change, _displacement) = move3.propose_move(&mut context, &mut seedable).unwrap();
             match change {
                 Change::SingleGroup(group, group_change) => {
                     assert_eq!(group, expected_groups[i]);
@@ -529,7 +530,7 @@ mod tests {
         let expected_groups = [1, 1, 60, 61, 2, 60, 2, 2, 2, 60];
         let expected_indices = [3, 3, 1, 3, 2, 2, 3, 2, 2, 3];
         for i in 0..10 {
-            let change = move4.propose_move(&mut context, &mut seedable).unwrap();
+            let (change, _diplacement) = move4.propose_move(&mut context, &mut seedable).unwrap();
             match change {
                 Change::SingleGroup(group, group_change) => {
                     assert_eq!(group, expected_groups[i]);

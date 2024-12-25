@@ -13,7 +13,7 @@ system:
     nonbonded:
       default:
         - !LennardJones {σ: 1.0, eps: 2.5}
-        - !CoulombPlain {cutoff: 6.0}
+        - !CoulombPlain {epsr: 80.0, cutoff: 6.0}
       [B, B]:
         - !LennardJones {sigma: 2.0, ε: 5.0}
 
