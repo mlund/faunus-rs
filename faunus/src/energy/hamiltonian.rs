@@ -35,11 +35,16 @@ impl SyncFrom for Hamiltonian {
 
 impl Hamiltonian {
     /// Create a Hamiltonian from the provided HamiltonianBuilder and topology.
-    pub(crate) fn new(builder: &HamiltonianBuilder, topology: &Topology) -> anyhow::Result<Self> {
+    pub(crate) fn new(
+        builder: &HamiltonianBuilder,
+        topology: &Topology,
+        medium: Option<coulomb::Medium>,
+    ) -> anyhow::Result<Self> {
         let mut hamiltonian = Self::default();
 
         if let Some(nonbonded_matrix) = &builder.pairpot_builder {
-            hamiltonian.push(NonbondedMatrix::new(nonbonded_matrix, topology)?.into());
+            hamiltonian
+                .push(NonbondedMatrix::new(nonbonded_matrix, topology, medium.clone())?.into());
         }
 
         hamiltonian.push(IntramolecularBonded::default().into());
@@ -53,9 +58,13 @@ impl Hamiltonian {
     }
 
     /// Create a Hamiltonian from a YAML file and topology.
-    pub fn from_file(filename: impl AsRef<Path>, topology: &Topology) -> anyhow::Result<Self> {
+    pub fn from_file(
+        filename: impl AsRef<Path>,
+        topology: &Topology,
+        medium: Option<coulomb::Medium>,
+    ) -> anyhow::Result<Self> {
         let builder = HamiltonianBuilder::from_file(filename)?;
-        Self::new(&builder, topology)
+        Self::new(&builder, topology, medium)
     }
 
     /// Appends an energy term to the back of the Hamiltonian.

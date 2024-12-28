@@ -118,6 +118,7 @@ impl PairInteraction {
         &self,
         atom1: &AtomKind,
         atom2: &AtomKind,
+        _medium: Option<coulomb::Medium>,
     ) -> anyhow::Result<Box<dyn IsotropicTwobodyEnergy>> {
         let mixed = AtomKind::combine(CombinationRule::Arithmetic, atom1, atom2);
         let charge_product = mixed.charge();
@@ -251,6 +252,7 @@ impl PairPotentialBuilder {
         &self,
         atom1: &AtomKind,
         atom2: &AtomKind,
+        medium: Option<coulomb::Medium>,
     ) -> anyhow::Result<Box<dyn IsotropicTwobodyEnergy>> {
         let interactions = self.get_pair_interactions(atom1.name(), atom2.name());
 
@@ -265,7 +267,7 @@ impl PairPotentialBuilder {
 
         let total_interaction = interactions
             .iter()
-            .map(|interact| interact.to_boxed(atom1, atom2).unwrap())
+            .map(|interact| interact.to_boxed(atom1, atom2, medium.clone()).unwrap())
             .sum();
 
         Ok(total_interaction)
@@ -275,8 +277,6 @@ impl PairPotentialBuilder {
 /// Structure used for (de)serializing the Hamiltonian of the system.
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub(crate) struct HamiltonianBuilder {
-    /// Common medium for the system.
-    pub medium: Option<coulomb::Medium>,
     /// Nonbonded interactions defined for the system.
     #[serde(rename = "nonbonded")]
     pub pairpot_builder: Option<PairPotentialBuilder>,
@@ -682,26 +682,26 @@ mod tests {
             .unwrap();
 
         let mut nonbonded = PairPotentialBuilder(interactions);
-        let expected = interaction1.to_boxed(&atom1, &atom2).unwrap()
-            + interaction2.to_boxed(&atom1, &atom2).unwrap()
-            + interaction3.to_boxed(&atom1, &atom2).unwrap();
+        let expected = interaction1.to_boxed(&atom1, &atom2, None).unwrap()
+            + interaction2.to_boxed(&atom1, &atom2, None).unwrap()
+            + interaction3.to_boxed(&atom1, &atom2, None).unwrap();
 
-        let interaction = nonbonded.get_interaction(&atom1, &atom2).unwrap();
+        let interaction = nonbonded.get_interaction(&atom1, &atom2, None).unwrap();
         assert_behavior(interaction, expected.clone());
 
         // changed order of atoms = same result
-        let interaction = nonbonded.get_interaction(&atom2, &atom1).unwrap();
+        let interaction = nonbonded.get_interaction(&atom2, &atom1, None).unwrap();
         assert_behavior(interaction, expected);
 
         // default
-        let expected = interaction1.to_boxed(&atom2, &atom1).unwrap();
-        let interaction = nonbonded.get_interaction(&atom1, &atom3).unwrap();
+        let expected = interaction1.to_boxed(&atom2, &atom1, None).unwrap();
+        let interaction = nonbonded.get_interaction(&atom1, &atom3, None).unwrap();
         assert_behavior(interaction, expected);
 
         // no interaction
         nonbonded.0.remove(&DefaultOrPair::Default);
         let expected = Box::<NoInteraction>::default();
-        let interaction = nonbonded.get_interaction(&atom1, &atom3).unwrap();
+        let interaction = nonbonded.get_interaction(&atom1, &atom3, None).unwrap();
         assert_behavior(interaction, expected);
     }
 
@@ -753,7 +753,7 @@ mod tests {
                 as Box<dyn IsotropicTwobodyEnergy>
             + Box::new(interaction3) as Box<dyn IsotropicTwobodyEnergy>;
 
-        let interaction = nonbonded.get_interaction(&atom1, &atom2).unwrap();
+        let interaction = nonbonded.get_interaction(&atom1, &atom2, None).unwrap();
         assert_behavior(interaction, expected);
 
         // all interactions evaluate to 0
@@ -772,7 +772,7 @@ mod tests {
             + Box::new(IonIon::new(0.0, VACUUM_PERMITTIVITY, interaction2))
                 as Box<dyn IsotropicTwobodyEnergy>;
 
-        let interaction = nonbonded.get_interaction(&atom1, &atom2).unwrap();
+        let interaction = nonbonded.get_interaction(&atom1, &atom2, None).unwrap();
         assert_behavior(interaction, expected);
     }
 }

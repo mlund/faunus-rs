@@ -9,6 +9,9 @@ molecules:
     exclusions: [[0, 2]]
 
 system:
+  medium:
+    permittivity: !Fixed {80.0}
+    temperature: 298.15
   energy:
     nonbonded:
       default:

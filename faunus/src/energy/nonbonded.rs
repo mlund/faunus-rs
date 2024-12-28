@@ -303,12 +303,14 @@ impl NonbondedMatrix {
     pub fn from_file(
         file: impl AsRef<Path>,
         topology: &Topology,
+        medium: Option<coulomb::Medium>,
     ) -> anyhow::Result<NonbondedMatrix> {
         Self::new(
             &HamiltonianBuilder::from_file(file)?
                 .pairpot_builder
                 .unwrap(),
             topology,
+            medium,
         )
     }
 
@@ -317,6 +319,7 @@ impl NonbondedMatrix {
     pub(super) fn new(
         pairpot_builder: &PairPotentialBuilder,
         topology: &Topology,
+        medium: Option<coulomb::Medium>,
     ) -> anyhow::Result<NonbondedMatrix> {
         let atoms = topology.atomkinds();
         let n_atom_types = atoms.len();
@@ -328,7 +331,8 @@ impl NonbondedMatrix {
 
         for i in 0..n_atom_types {
             for j in 0..n_atom_types {
-                let interaction = pairpot_builder.get_interaction(&atoms[i], &atoms[j])?;
+                let interaction =
+                    pairpot_builder.get_interaction(&atoms[i], &atoms[j], medium.clone())?;
                 potentials[(i, j)] = interaction.into();
             }
         }
@@ -429,13 +433,21 @@ mod tests {
 
     #[test]
     fn test_nonbonded_matrix_new() {
-        let topology = Topology::from_file("tests/files/topology_pass.yaml").unwrap();
-        let pairpot_builder = HamiltonianBuilder::from_file("tests/files/topology_pass.yaml")
+        let file = "tests/files/topology_pass.yaml";
+        let topology = Topology::from_file(&file).unwrap();
+        let pairpot_builder = HamiltonianBuilder::from_file(&file)
             .unwrap()
             .pairpot_builder
             .unwrap();
+        let medium: Option<coulomb::Medium> =
+            serde_yaml::from_reader(std::fs::File::open(&file).unwrap())
+                .ok()
+                .and_then(|s: serde_yaml::Value| {
+                    let medium = s.get("system")?.get("medium")?;
+                    serde_yaml::from_value(medium.clone()).ok()
+                });
 
-        let nonbonded = NonbondedMatrix::new(&pairpot_builder, &topology).unwrap();
+        let nonbonded = NonbondedMatrix::new(&pairpot_builder, &topology, medium).unwrap();
 
         assert_eq!(
             nonbonded.potentials.len(),
@@ -509,13 +521,22 @@ mod tests {
 
     /// Get nonbonded matrix for testing.
     fn get_test_matrix() -> (ReferencePlatform, NonbondedMatrix) {
-        let topology = Topology::from_file("tests/files/nonbonded_interactions.yaml").unwrap();
-        let builder = HamiltonianBuilder::from_file("tests/files/nonbonded_interactions.yaml")
+        let file = "tests/files/nonbonded_interactions.yaml";
+        let topology = Topology::from_file(&file).unwrap();
+        let builder = HamiltonianBuilder::from_file(&file)
             .unwrap()
             .pairpot_builder
             .unwrap();
+        let medium: Option<coulomb::Medium> =
+            serde_yaml::from_reader(std::fs::File::open(&file).unwrap())
+                .ok()
+                .and_then(|s: serde_yaml::Value| {
+                    log::info!("system/medium found!");
+                    let medium = s.get("system")?.get("medium")?;
+                    serde_yaml::from_value(medium.clone()).ok()
+                });
 
-        let nonbonded = NonbondedMatrix::new(&builder, &topology).unwrap();
+        let nonbonded = NonbondedMatrix::new(&builder, &topology, medium).unwrap();
 
         let mut rng = rand::thread_rng();
         let system = ReferencePlatform::from_raw_parts(

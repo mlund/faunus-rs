@@ -62,6 +62,10 @@ propagate:
         - !TranslateAtom {molecule: "MOL", atom: "OW", max_displacement: 1.0, weight: 1.0}
 
 system:
+  medium:
+    permittivity: !Fixed {80.0}
+    temperature: 298.15
+
   intermolecular:
     bonds:
       - {index: [0, 220], kind: !Harmonic {k: 50.0, req: 3.0}}
