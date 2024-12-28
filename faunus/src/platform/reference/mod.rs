@@ -64,7 +64,7 @@ impl ReferencePlatform {
                 .ok()
                 .and_then(|s: serde_yaml::Value| {
                     let medium = s.get("system")?.get("medium")?;
-                    serde_yaml::from_value(medium.clone()).ok()
+                    Some(serde_yaml::from_value(medium.clone()).unwrap())
                 });
 
         let topology = Topology::from_file(&yaml_file)?;
