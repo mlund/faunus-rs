@@ -99,10 +99,13 @@ pub(crate) enum PairInteraction {
     /// Truncated Ewald potential.
     CoulombEwald(FlatCoulomb<coulomb::pairwise::EwaldTruncated>),
     /// Real-space Ewald potential.
+    #[serde(alias = "Ewald")]
     CoulombRealSpaceEwald(FlatCoulomb<coulomb::pairwise::RealSpaceEwald>),
     /// Plain coulombic potential.
+    #[serde(alias = "Coulomb")]
     CoulombPlain(FlatCoulomb<coulomb::pairwise::Plain>),
     /// Reaction field.
+    #[serde(alias = "ReactionField")]
     CoulombReactionField(coulomb::pairwise::ReactionField),
 }
 
