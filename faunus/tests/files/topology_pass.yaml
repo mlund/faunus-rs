@@ -63,7 +63,7 @@ propagate:
 
 system:
   medium:
-    permittivity: !Fixed {80.0}
+    permittivity: !Vacuum
     temperature: 298.15
 
   intermolecular:

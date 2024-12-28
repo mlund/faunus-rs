@@ -527,16 +527,11 @@ mod tests {
             .unwrap()
             .pairpot_builder
             .unwrap();
-        let medium: Option<coulomb::Medium> =
-            serde_yaml::from_reader(std::fs::File::open(&file).unwrap())
-                .ok()
-                .and_then(|s: serde_yaml::Value| {
-                    log::info!("system/medium found!");
-                    let medium = s.get("system")?.get("medium")?;
-                    serde_yaml::from_value(medium.clone()).ok()
-                });
 
-        let nonbonded = NonbondedMatrix::new(&builder, &topology, medium).unwrap();
+        let medium =
+            coulomb::Medium::new(298.15, coulomb::permittivity::Permittivity::Vacuum, None);
+
+        let nonbonded = NonbondedMatrix::new(&builder, &topology, Some(medium)).unwrap();
 
         let mut rng = rand::thread_rng();
         let system = ReferencePlatform::from_raw_parts(
@@ -577,8 +572,11 @@ mod tests {
 
         // intermolecular
 
-        let intermolecular_a1a1_energy =
-            [5.00761780387822, 5.00761780387822, -0.000090421636081691];
+        let intermolecular_a1a1_energy = [
+            401.06633566678175,
+            401.06633566678175,
+            -0.000090421636081691,
+        ];
         for ((i, j), energy) in [(0, 3), (0, 6), (3, 6)]
             .into_iter()
             .zip(intermolecular_a1a1_energy)
@@ -605,10 +603,10 @@ mod tests {
 
         let intermolecular_a1a2_energy = [
             -6.406572630990959e-6,
-            3.88211425347351,
-            6.120644662447584,
+            310.66787793413096,
+            491.1915281349669,
             -1.2499998437500003e-6,
-            3.88211425347351,
+            310.66787793413096,
             -6.406572630990959e-6,
         ];
         for ((i, j), energy) in [(0, 5), (0, 8), (3, 8), (5, 6), (2, 3), (2, 6)]
@@ -645,8 +643,11 @@ mod tests {
             assert_part_part(&system, &nonbonded, j, i, energy);
         }
 
-        let intermolecular_a2a2_energy =
-            [5.00761780387822, 5.007617803878217, -9.042163608169031e-5];
+        let intermolecular_a2a2_energy = [
+            401.06633566678175,
+            401.06633566678175,
+            -9.042163608169031e-5,
+        ];
         for ((i, j), energy) in [(2, 5), (2, 8), (5, 8)]
             .into_iter()
             .zip(intermolecular_a2a2_energy)

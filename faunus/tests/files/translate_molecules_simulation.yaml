@@ -37,6 +37,10 @@ propagate:
 
 system:
   cell: !Cuboid [10.0, 10.0, 10.0]
+  medium:
+    permittivity: !Fixed 80.0
+    temperature: 298.15
+
   
   energy:
     nonbonded:
