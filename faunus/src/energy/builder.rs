@@ -118,7 +118,7 @@ impl PairInteraction {
         &self,
         atom1: &AtomKind,
         atom2: &AtomKind,
-        _medium: Option<coulomb::Medium>,
+        medium: Option<coulomb::Medium>,
     ) -> anyhow::Result<Box<dyn IsotropicTwobodyEnergy>> {
         let mixed = AtomKind::combine(CombinationRule::Arithmetic, atom1, atom2);
         let charge_product = mixed.charge();
@@ -186,21 +186,15 @@ impl PairInteraction {
                     )))
                 }
             },
-            Self::CoulombPlain(input) => Self::make_coulomb(
-                charge_product,
-                _medium.unwrap().into(),
-                input.scheme.clone(),
-            ),
-            Self::CoulombEwald(input) => Self::make_coulomb(
-                charge_product,
-                _medium.unwrap().into(),
-                input.scheme.clone(),
-            ),
-            Self::CoulombRealSpaceEwald(input) => Self::make_coulomb(
-                charge_product,
-                _medium.unwrap().into(),
-                input.scheme.clone(),
-            ),
+            Self::CoulombPlain(input) => {
+                Self::make_coulomb(charge_product, medium.unwrap().into(), input.scheme.clone())
+            }
+            Self::CoulombEwald(input) => {
+                Self::make_coulomb(charge_product, medium.unwrap().into(), input.scheme.clone())
+            }
+            Self::CoulombRealSpaceEwald(input) => {
+                Self::make_coulomb(charge_product, medium.unwrap().into(), input.scheme.clone())
+            }
             Self::CoulombReactionField(scheme) => Self::make_coulomb(
                 charge_product,
                 scheme.permittivity_out().into(),
