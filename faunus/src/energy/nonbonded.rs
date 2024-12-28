@@ -305,7 +305,9 @@ impl NonbondedMatrix {
         topology: &Topology,
     ) -> anyhow::Result<NonbondedMatrix> {
         Self::new(
-            &HamiltonianBuilder::from_file(file)?.pairpot_builder,
+            &HamiltonianBuilder::from_file(file)?
+                .pairpot_builder
+                .unwrap(),
             topology,
         )
     }
@@ -430,7 +432,8 @@ mod tests {
         let topology = Topology::from_file("tests/files/topology_pass.yaml").unwrap();
         let pairpot_builder = HamiltonianBuilder::from_file("tests/files/topology_pass.yaml")
             .unwrap()
-            .pairpot_builder;
+            .pairpot_builder
+            .unwrap();
 
         let nonbonded = NonbondedMatrix::new(&pairpot_builder, &topology).unwrap();
 
@@ -509,7 +512,8 @@ mod tests {
         let topology = Topology::from_file("tests/files/nonbonded_interactions.yaml").unwrap();
         let builder = HamiltonianBuilder::from_file("tests/files/nonbonded_interactions.yaml")
             .unwrap()
-            .pairpot_builder;
+            .pairpot_builder
+            .unwrap();
 
         let nonbonded = NonbondedMatrix::new(&builder, &topology).unwrap();
 

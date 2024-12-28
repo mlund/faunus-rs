@@ -275,9 +275,11 @@ impl PairPotentialBuilder {
 /// Structure used for (de)serializing the Hamiltonian of the system.
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub(crate) struct HamiltonianBuilder {
+    /// Common medium for the system.
+    pub medium: Option<coulomb::Medium>,
     /// Nonbonded interactions defined for the system.
     #[serde(rename = "nonbonded")]
-    pub pairpot_builder: PairPotentialBuilder,
+    pub pairpot_builder: Option<PairPotentialBuilder>,
 }
 
 impl HamiltonianBuilder {
@@ -305,14 +307,16 @@ impl HamiltonianBuilder {
         serde_yaml::from_value(current.clone()).map_err(anyhow::Error::msg)
     }
 
-    /// Check that all atom kinds referred to in the hamiltonian exist.
+    /// Check that all atom kinds referred to in the pair potentials exist.
     pub(crate) fn validate(&self, atom_kinds: &[AtomKind]) -> anyhow::Result<()> {
-        for pair in self.pairpot_builder.0.keys() {
-            if let DefaultOrPair::Pair(UnorderedPair(x, y)) = pair {
-                if !atom_kinds.iter().any(|atom| atom.name() == x)
-                    || !atom_kinds.iter().any(|atom| atom.name() == y)
-                {
-                    anyhow::bail!("Atom kind specified in `nonbonded` does not exist.")
+        if let Some(pairpot_builder) = &self.pairpot_builder {
+            for pair in pairpot_builder.0.keys() {
+                if let DefaultOrPair::Pair(UnorderedPair(x, y)) = pair {
+                    if !atom_kinds.iter().any(|atom| atom.name() == x)
+                        || !atom_kinds.iter().any(|atom| atom.name() == y)
+                    {
+                        anyhow::bail!("Atom kind specified in `nonbonded` does not exist.")
+                    }
                 }
             }
         }
@@ -396,28 +400,25 @@ mod tests {
     fn hamiltonian_deserialization_pass() {
         let builder = HamiltonianBuilder::from_file("tests/files/topology_pass.yaml").unwrap();
 
-        assert!(builder
-            .pairpot_builder
-            .0
-            .contains_key(&DefaultOrPair::Default));
-        assert!(builder
-            .pairpot_builder
+        let pairpot_builder = builder.pairpot_builder.unwrap();
+
+        assert!(pairpot_builder.0.contains_key(&DefaultOrPair::Default));
+        assert!(pairpot_builder
             .0
             .contains_key(&DefaultOrPair::Pair(UnorderedPair(
                 String::from("OW"),
                 String::from("OW")
             ))));
-        assert!(builder
-            .pairpot_builder
+        assert!(pairpot_builder
             .0
             .contains_key(&DefaultOrPair::Pair(UnorderedPair(
                 String::from("OW"),
                 String::from("HW")
             ))));
 
-        assert_eq!(builder.pairpot_builder.0.len(), 3);
+        assert_eq!(pairpot_builder.0.len(), 3);
 
-        for (pair, interactions) in builder.pairpot_builder.0 {
+        for (pair, interactions) in pairpot_builder.0 {
             if let DefaultOrPair::Default = pair {
                 assert_eq!(
                     interactions,

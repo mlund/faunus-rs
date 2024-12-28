@@ -36,11 +36,13 @@ impl SyncFrom for Hamiltonian {
 impl Hamiltonian {
     /// Create a Hamiltonian from the provided HamiltonianBuilder and topology.
     pub(crate) fn new(builder: &HamiltonianBuilder, topology: &Topology) -> anyhow::Result<Self> {
-        let mut hamiltonian: Self = [
-            NonbondedMatrix::new(&builder.pairpot_builder, topology)?.into(),
-            IntramolecularBonded::default().into(),
-        ]
-        .into();
+        let mut hamiltonian = Self::default();
+
+        if let Some(nonbonded_matrix) = &builder.pairpot_builder {
+            hamiltonian.push(NonbondedMatrix::new(nonbonded_matrix, topology)?.into());
+        }
+
+        hamiltonian.push(IntramolecularBonded::default().into());
 
         // IntermolecularBonded term should only be added if it is actually needed
         if !topology.intermolecular().is_empty() {
