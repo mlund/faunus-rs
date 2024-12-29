@@ -36,6 +36,18 @@ pub struct IonIon<T: MultipoleEnergy> {
     permittivity: ConstantPermittivity,
 }
 
+impl<T: MultipoleEnergy> coulomb::DebyeLength for IonIon<T> {
+    fn kappa(&self) -> Option<f64> {
+        self.scheme.kappa()
+    }
+    fn set_debye_length(&mut self, _debye_length: Option<f64>) -> anyhow::Result<()> {
+        self.scheme.set_debye_length(_debye_length)
+    }
+    fn debye_length(&self) -> Option<f64> {
+        self.scheme.debye_length()
+    }
+}
+
 impl<T: MultipoleEnergy> IonIon<T> {
     /// Create a new ion-ion interaction
     pub const fn new(charge_product: f64, permittivity: ConstantPermittivity, scheme: T) -> Self {
