@@ -4,6 +4,8 @@ use crate::Context;
 use anyhow::Result;
 use std::io::Write;
 use std::path::PathBuf;
+use flate2::write::GzEncoder;
+use flate2::Compression;
 
 /// Writes structure of the system in the specified format during the simulation.
 #[derive(Debug)]
@@ -13,7 +15,7 @@ pub struct MassCenterDistance {
     /// Stream distances to this file at each sample.
     _output_file: PathBuf,
     /// Stream object
-    stream: std::fs::File,
+    encoder: GzEncoder<std::fs::File>,
     /// Sample frequency.
     frequency: Frequency,
     /// Counter for the number of samples taken.
@@ -48,7 +50,7 @@ impl MassCenterDistance {
         Ok(Self {
             molids,
             _output_file: output_file,
-            stream,
+            encoder: GzEncoder::new(stream, Compression::default()),
             frequency,
             num_samples: 0,
         })
@@ -76,7 +78,7 @@ impl<T: Context> Analyze<T> for MassCenterDistance {
                 let com2 = context.groups()[*j].mass_center();
                 if let Some((a, b)) = com1.zip(com2) {
                     let distance = (a - b).norm();
-                    writeln!(self.stream, "{:.3}", distance)?;
+                    writeln!(self.encoder, "{:.3}", distance)?;
                 } else {
                     log::error!("Skipping COM distance calculation due to missing COM.");
                 }
