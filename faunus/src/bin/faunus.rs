@@ -14,6 +14,7 @@
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
+use coulomb::Temperature;
 use faunus::{
     analysis::{self, Frequency},
     montecarlo::MarkovChain,
@@ -98,13 +99,27 @@ fn write_yaml<T: serde::Serialize>(
     Ok(())
 }
 
+fn get_medium(file: &PathBuf) -> Option<coulomb::Medium> {
+    serde_yaml::from_reader(std::fs::File::open(&file).unwrap())
+        .ok()
+        .and_then(|s: serde_yaml::Value| {
+            let medium = s.get("system")?.get("medium")?;
+            serde_yaml::from_value(medium.clone()).ok()
+        })
+}
+
 fn run(input: PathBuf, _state: Option<PathBuf>, yaml_output: &mut std::fs::File) -> Result<()> {
     let context = ReferencePlatform::new(&input, None, &mut rand::thread_rng())?;
     let propagate = Propagate::from_file(&input, &context).unwrap();
+
+    let medium = get_medium(&input)
+        .ok_or_else(|| anyhow::anyhow!("Could not find `system/medium` in input file"))?;
+    println!("{}", medium);
+
     let mut markov_chain = MarkovChain::new(
         context.clone(),
         propagate,
-        physical_constants::MOLAR_GAS_CONSTANT * 1e-3 * 300.0,
+        physical_constants::MOLAR_GAS_CONSTANT * 1e-3 * medium.temperature(),
     );
 
     let structure_writer = analysis::StructureWriter::new("output.xyz", Frequency::Every(1));
