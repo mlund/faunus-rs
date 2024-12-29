@@ -100,7 +100,7 @@ fn write_yaml<T: serde::Serialize>(
 }
 
 fn get_medium(file: &PathBuf) -> Option<coulomb::Medium> {
-    serde_yaml::from_reader(std::fs::File::open(&file).unwrap())
+    serde_yaml::from_reader(std::fs::File::open(file).unwrap())
         .ok()
         .and_then(|s: serde_yaml::Value| {
             let medium = s.get("system")?.get("medium")?;

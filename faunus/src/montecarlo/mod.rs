@@ -23,6 +23,7 @@ use log;
 use rand::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::ops::Div;
 use std::{cmp::Ordering, ops::Neg};
 
 mod rotate;
@@ -340,10 +341,10 @@ pub fn entropy_bias(n: NewOld<usize>, volume: NewOld<f64>) -> f64 {
             0.0
         }
         Ordering::Greater => (0..dn)
-            .map(|i| f64::ln(f64::from(n.old as i32 + i + 1) / volume.new))
-            .sum::<f64>(),
+            .map(|i| f64::from(n.old as i32 + i + 1).div(volume.new).ln())
+            .sum(),
         Ordering::Less => (0..-dn)
-            .map(|i| f64::ln(f64::from(n.old as i32 - i) / volume.old))
+            .map(|i| f64::from(n.old as i32 - i).div(volume.old).ln())
             .sum::<f64>()
             .neg(),
     }
