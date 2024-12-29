@@ -187,19 +187,17 @@ impl PairInteraction {
                 }
             },
             Self::CoulombPlain(input) => {
-                Self::make_coulomb(charge_product, medium.unwrap().into(), input.scheme.clone())
+                Self::make_coulomb(charge_product, medium.unwrap(), input.scheme.clone())
             }
             Self::CoulombEwald(input) => {
-                Self::make_coulomb(charge_product, medium.unwrap().into(), input.scheme.clone())
+                Self::make_coulomb(charge_product, medium.unwrap(), input.scheme.clone())
             }
             Self::CoulombRealSpaceEwald(input) => {
-                Self::make_coulomb(charge_product, medium.unwrap().into(), input.scheme.clone())
+                Self::make_coulomb(charge_product, medium.unwrap(), input.scheme.clone())
             }
-            Self::CoulombReactionField(scheme) => Self::make_coulomb(
-                charge_product,
-                scheme.permittivity_out().into(),
-                scheme.clone(),
-            ),
+            Self::CoulombReactionField(scheme) => {
+                Self::make_coulomb(charge_product, medium.unwrap(), scheme.clone())
+            }
         }
     }
     /// Helper to create a coulombic interaction with a generic scheme
@@ -213,10 +211,10 @@ impl PairInteraction {
             + Send,
     >(
         charge_product: f64,
-        permittivity: ConstantPermittivity,
+        medium: coulomb::Medium,
         scheme: T,
     ) -> anyhow::Result<Box<dyn IsotropicTwobodyEnergy>> {
-        let ionion = IonIon::new(charge_product, permittivity, scheme.clone());
+        let ionion = IonIon::new(charge_product, medium.into(), scheme.clone());
         Ok(Box::new(ionion))
     }
 }
