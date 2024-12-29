@@ -114,7 +114,7 @@ fn run(input: PathBuf, _state: Option<PathBuf>, yaml_output: &mut std::fs::File)
 
     let medium = get_medium(&input)
         .ok_or_else(|| anyhow::anyhow!("Could not find `system/medium` in input file"))?;
-    println!("{}", medium);
+    log::info!("{}", medium);
 
     let mut markov_chain = MarkovChain::new(
         context.clone(),
