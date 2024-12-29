@@ -40,11 +40,21 @@ impl<T: MultipoleEnergy> coulomb::DebyeLength for IonIon<T> {
     fn kappa(&self) -> Option<f64> {
         self.scheme.kappa()
     }
-    fn set_debye_length(&mut self, _debye_length: Option<f64>) -> anyhow::Result<()> {
-        self.scheme.set_debye_length(_debye_length)
+    fn set_debye_length(&mut self, debye_length: Option<f64>) -> anyhow::Result<()> {
+        self.scheme.set_debye_length(debye_length)
     }
     fn debye_length(&self) -> Option<f64> {
         self.scheme.debye_length()
+    }
+}
+
+impl<T: MultipoleEnergy> coulomb::permittivity::RelativePermittivity for IonIon<T> {
+    fn permittivity(&self, _temperature: f64) -> anyhow::Result<f64> {
+        Ok(f64::from(self.permittivity))
+    }
+    fn set_permittivity(&mut self, permittivity: f64) -> anyhow::Result<()> {
+        self.permittivity = ConstantPermittivity::new(permittivity);
+        Ok(())
     }
 }
 
