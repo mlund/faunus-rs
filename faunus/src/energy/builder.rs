@@ -23,9 +23,9 @@ use std::{
 
 use crate::topology::AtomKind;
 use anyhow::Context as AnyhowContext;
-use coulomb::permittivity::ConstantPermittivity;
 #[cfg(test)]
 use coulomb::permittivity::VACUUM as VACUUM_PERMITTIVITY;
+use coulomb::{permittivity::ConstantPermittivity, DebyeLength};
 use interatomic::{
     twobody::{
         AshbaughHatch, HardSphere, IonIon, IsotropicTwobodyEnergy, LennardJones, NoInteraction,
@@ -214,7 +214,18 @@ impl PairInteraction {
         medium: coulomb::Medium,
         scheme: T,
     ) -> anyhow::Result<Box<dyn IsotropicTwobodyEnergy>> {
-        let ionion = IonIon::new(charge_product, medium.into(), scheme.clone());
+        let mut ionion = IonIon::new(charge_product, medium.clone().into(), scheme.clone());
+        // If the medium has a Debye length AND it is not already set in the ion-ion potential, try to set it.
+        if let Some(e) = medium
+            .debye_length()
+            .take_if(|_| ionion.debye_length().is_none())
+            .and_then(|d| ionion.set_debye_length(Some(d)).err())
+        {
+            log::warn!(
+                "Couldn't set global medium::debye_length for ion-ion pair potential: {}",
+                e
+            )
+        };
         Ok(Box::new(ionion))
     }
 }
