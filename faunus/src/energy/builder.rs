@@ -25,7 +25,7 @@ use crate::topology::AtomKind;
 use anyhow::Context as AnyhowContext;
 #[cfg(test)]
 use coulomb::permittivity::VACUUM as VACUUM_PERMITTIVITY;
-use coulomb::{permittivity::ConstantPermittivity, DebyeLength};
+use coulomb::{permittivity::RelativePermittivity, DebyeLength};
 use interatomic::{
     twobody::{
         AshbaughHatch, HardSphere, IonIon, IsotropicTwobodyEnergy, LennardJones, NoInteraction,
@@ -58,31 +58,6 @@ pub(crate) enum DirectOrMixing<T: IsotropicTwobodyEnergy> {
     Direct(T),
 }
 
-/// Internal helper struct to flatten YAML input for Coulomb potentials.
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
-#[serde(deny_unknown_fields)]
-pub(crate) struct FlatCoulomb<T>
-where
-    T: coulomb::pairwise::ShortRangeFunction,
-{
-    #[serde(flatten)]
-    permittivity: ConstantPermittivity,
-    #[serde(flatten)]
-    scheme: T,
-}
-
-impl<T> From<(ConstantPermittivity, T)> for FlatCoulomb<T>
-where
-    T: coulomb::pairwise::ShortRangeFunction,
-{
-    fn from((permittivity, scheme): (ConstantPermittivity, T)) -> Self {
-        Self {
-            permittivity,
-            scheme,
-        }
-    }
-}
-
 /// Types of pair interactions
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 #[serde(deny_unknown_fields)]
@@ -97,13 +72,13 @@ pub(crate) enum PairInteraction {
     /// Hard sphere potential.
     HardSphere(DirectOrMixing<HardSphere>),
     /// Truncated Ewald potential.
-    CoulombEwald(FlatCoulomb<coulomb::pairwise::EwaldTruncated>),
+    CoulombEwald(coulomb::pairwise::EwaldTruncated),
     /// Real-space Ewald potential.
     #[serde(alias = "Ewald")]
-    CoulombRealSpaceEwald(FlatCoulomb<coulomb::pairwise::RealSpaceEwald>),
+    CoulombRealSpaceEwald(coulomb::pairwise::RealSpaceEwald),
     /// Plain coulombic potential.
     #[serde(alias = "Coulomb")]
-    CoulombPlain(FlatCoulomb<coulomb::pairwise::Plain>),
+    CoulombPlain(coulomb::pairwise::Plain),
     /// Reaction field.
     #[serde(alias = "ReactionField")]
     CoulombReactionField(coulomb::pairwise::ReactionField),
@@ -186,14 +161,14 @@ impl PairInteraction {
                     )))
                 }
             },
-            Self::CoulombPlain(input) => {
-                Self::make_coulomb(charge_product, medium.unwrap(), input.scheme.clone())
+            Self::CoulombPlain(scheme) => {
+                Self::make_coulomb(charge_product, medium.unwrap(), scheme.clone())
             }
-            Self::CoulombEwald(input) => {
-                Self::make_coulomb(charge_product, medium.unwrap(), input.scheme.clone())
+            Self::CoulombEwald(scheme) => {
+                Self::make_coulomb(charge_product, medium.unwrap(), scheme.clone())
             }
-            Self::CoulombRealSpaceEwald(input) => {
-                Self::make_coulomb(charge_product, medium.unwrap(), input.scheme.clone())
+            Self::CoulombRealSpaceEwald(scheme) => {
+                Self::make_coulomb(charge_product, medium.unwrap(), scheme.clone())
             }
             Self::CoulombReactionField(scheme) => {
                 Self::make_coulomb(charge_product, medium.unwrap(), scheme.clone())
@@ -215,6 +190,9 @@ impl PairInteraction {
         scheme: T,
     ) -> anyhow::Result<Box<dyn IsotropicTwobodyEnergy>> {
         let mut ionion = IonIon::new(charge_product, medium.clone().into(), scheme.clone());
+
+        ionion.set_permittivity(medium.permittivity()).unwrap();
+
         // If the medium has a Debye length AND it is not already set in the ion-ion potential, try to set it.
         if let Some(e) = medium
             .debye_length()
@@ -438,13 +416,10 @@ mod tests {
                         PairInteraction::WeeksChandlerAndersen(DirectOrMixing::Direct(
                             WeeksChandlerAndersen::new(1.3, 8.0)
                         )),
-                        PairInteraction::CoulombPlain(
-                            (
-                                ConstantPermittivity::new(80.0),
-                                coulomb::pairwise::Plain::new(11.0, Some(1.0),)
-                            )
-                                .into()
-                        )
+                        PairInteraction::CoulombPlain(coulomb::pairwise::Plain::new(
+                            11.0,
+                            Some(1.0),
+                        ))
                     ]
                 );
             }
@@ -476,13 +451,9 @@ mod tests {
                                 cutoff: None,
                                 _phantom: Default::default()
                             }),
-                            PairInteraction::CoulombEwald(
-                                (
-                                    ConstantPermittivity::new(80.0),
-                                    coulomb::pairwise::EwaldTruncated::new(11.0, 0.1)
-                                )
-                                    .into()
-                            ),
+                            PairInteraction::CoulombEwald(coulomb::pairwise::EwaldTruncated::new(
+                                11.0, 0.1
+                            )),
                         ]
                     )
                 }
@@ -637,13 +608,7 @@ mod tests {
         let interaction1 = PairInteraction::WeeksChandlerAndersen(DirectOrMixing::Direct(
             WeeksChandlerAndersen::new(1.5, 3.2),
         ));
-        let interaction2 = PairInteraction::CoulombPlain(
-            (
-                medium.clone().into(),
-                coulomb::pairwise::Plain::new(11.0, None),
-            )
-                .into(),
-        );
+        let interaction2 = PairInteraction::CoulombPlain(coulomb::pairwise::Plain::new(11.0, None));
 
         let interaction3 = PairInteraction::HardSphere(DirectOrMixing::Mixing {
             mixing: CombinationRule::Arithmetic,
@@ -740,8 +705,8 @@ mod tests {
         let hardsphere = HardSphere::from_combination_rule(CombinationRule::Arithmetic, (1.0, 3.0));
 
         let for_pair = vec![
-            PairInteraction::CoulombPlain((medium.clone().into(), plain_coulomb.clone()).into()),
-            PairInteraction::CoulombEwald((medium.clone().into(), truncated_ewald.clone()).into()),
+            PairInteraction::CoulombPlain(plain_coulomb.clone()),
+            PairInteraction::CoulombEwald(truncated_ewald.clone()),
             PairInteraction::HardSphere(DirectOrMixing::Direct(hardsphere.clone())),
         ];
 
@@ -786,8 +751,8 @@ mod tests {
 
         // all interactions evaluate to 0
         let for_pair = vec![
-            PairInteraction::CoulombPlain((VACUUM_PERMITTIVITY, plain_coulomb.clone()).into()),
-            PairInteraction::CoulombEwald((VACUUM_PERMITTIVITY, truncated_ewald.clone()).into()),
+            PairInteraction::CoulombPlain(plain_coulomb.clone()),
+            PairInteraction::CoulombEwald(truncated_ewald.clone()),
         ];
 
         nonbonded.0.insert(

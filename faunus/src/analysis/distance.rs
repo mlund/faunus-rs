@@ -2,10 +2,10 @@ use super::{Analyze, Frequency};
 use crate::topology::Topology;
 use crate::Context;
 use anyhow::Result;
-use std::io::Write;
-use std::path::PathBuf;
 use flate2::write::GzEncoder;
 use flate2::Compression;
+use std::io::Write;
+use std::path::PathBuf;
 
 /// Writes structure of the system in the specified format during the simulation.
 #[derive(Debug)]
