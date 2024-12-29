@@ -101,7 +101,7 @@ fn write_yaml<T: serde::Serialize>(
 fn run(input: PathBuf, _state: Option<PathBuf>, yaml_output: &mut std::fs::File) -> Result<()> {
     let context = ReferencePlatform::new(&input, None, &mut rand::thread_rng())?;
     let propagate = Propagate::from_file(&input, &context).unwrap();
-    let mut markov_chain = MarkovChain::new(context.clone(), propagate, 1.0);
+    let mut markov_chain = MarkovChain::new(context.clone(), propagate, physical_constants::MOLAR_GAS_CONSTANT * 1e-3 * 300.0);
 
     let structure_writer = analysis::StructureWriter::new("output.xyz", Frequency::Every(1));
 
