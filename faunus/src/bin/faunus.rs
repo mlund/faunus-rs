@@ -99,31 +99,33 @@ fn write_yaml<T: serde::Serialize>(
     Ok(())
 }
 
-fn get_medium(file: &PathBuf) -> Option<coulomb::Medium> {
-    serde_yaml::from_reader(std::fs::File::open(file).unwrap())
+// Helper function to extract medium from system/medium in YAML file
+fn get_medium(filename: &PathBuf) -> Result<coulomb::Medium> {
+    let file = std::fs::File::open(filename)?;
+    serde_yaml::from_reader(file)
         .ok()
         .and_then(|s: serde_yaml::Value| {
-            let medium = s.get("system")?.get("medium")?;
-            serde_yaml::from_value(medium.clone()).ok()
+            let val = s.get("system")?.get("medium")?;
+            serde_yaml::from_value(val.clone()).ok()
         })
+        .ok_or_else(|| anyhow::anyhow!("Could not find `system/medium` in input file"))
 }
 
 fn run(input: PathBuf, _state: Option<PathBuf>, yaml_output: &mut std::fs::File) -> Result<()> {
     let context = ReferencePlatform::new(&input, None, &mut rand::thread_rng())?;
     let propagate = Propagate::from_file(&input, &context).unwrap();
 
-    let medium = get_medium(&input)
-        .ok_or_else(|| anyhow::anyhow!("Could not find `system/medium` in input file"))?;
+    let medium = get_medium(&input)?;
     log::info!("{}", medium);
 
-    let mut markov_chain = MarkovChain::new(
-        context.clone(),
-        propagate,
-        physical_constants::MOLAR_GAS_CONSTANT * 1e-3 * medium.temperature(),
-    );
+    const KILO_JOULE_PER_JOULE: f64 = 1e-3;
+    let thermal_energy =
+        physical_constants::MOLAR_GAS_CONSTANT * KILO_JOULE_PER_JOULE * medium.temperature();
+    log::info!("Thermal energy: {:.2} kJ/mol", thermal_energy);
+
+    let mut markov_chain = MarkovChain::new(context.clone(), propagate, thermal_energy);
 
     let structure_writer = analysis::StructureWriter::new("output.xyz", Frequency::Every(1));
-
     let com_distance = analysis::MassCenterDistance::new(
         ("MOL1", "MOL2"),
         "com_distance.yaml".into(),
@@ -134,6 +136,7 @@ fn run(input: PathBuf, _state: Option<PathBuf>, yaml_output: &mut std::fs::File)
     markov_chain.add_analysis(Box::new(structure_writer));
     markov_chain.add_analysis(Box::new(com_distance));
 
+    write_yaml(&medium, yaml_output, Some("medium"))?;
     write_yaml(&context.cell(), yaml_output, Some("cell"))?;
     write_yaml(&context.topology().blocks(), yaml_output, Some("blocks"))?;
 
