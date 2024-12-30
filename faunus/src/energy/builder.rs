@@ -16,7 +16,7 @@
 
 use std::{
     collections::HashMap,
-    fmt::{self, Debug},
+    fmt::{self, Debug, Display},
     marker::PhantomData,
     path::Path,
 };
@@ -183,6 +183,7 @@ impl PairInteraction {
             + std::cmp::PartialEq
             + 'static
             + Sync
+            + Display
             + Send,
     >(
         charge_product: f64,
@@ -200,10 +201,11 @@ impl PairInteraction {
             .and_then(|d| ionion.set_debye_length(Some(d)).err())
         {
             log::warn!(
-                "Couldn't set global medium::debye_length for ion-ion pair potential: {}",
+                "Couldn't copy global medium::debye_length to ion-ion pair potential: {}",
                 e
             )
         };
+        log::debug!("{}", &ionion);
         Ok(Box::new(ionion))
     }
 }

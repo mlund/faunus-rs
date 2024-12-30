@@ -21,6 +21,7 @@ use crate::twobody::IsotropicTwobodyEnergy;
 use coulomb::{pairwise::MultipoleEnergy, permittivity::ConstantPermittivity};
 #[cfg(feature = "serde")]
 use serde::Serialize;
+use std::fmt::Display;
 
 /// Monopole-monopole interaction energy
 #[derive(Clone, PartialEq, Debug)]
@@ -34,6 +35,12 @@ pub struct IonIon<T: MultipoleEnergy> {
     scheme: T,
     /// Relative dielectric constant of the medium
     permittivity: ConstantPermittivity,
+}
+
+impl<T: MultipoleEnergy + Display> Display for IonIon<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}, {}", self.scheme, self.permittivity)
+    }
 }
 
 impl<T: MultipoleEnergy> coulomb::DebyeLength for IonIon<T> {
