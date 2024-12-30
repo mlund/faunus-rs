@@ -11,14 +11,18 @@ use std::path::PathBuf;
 
 /// Writes structure of the system in the specified format during the simulation.
 #[derive(Debug, Builder)]
-#[builder(derive(Deserialize, Serialize))]
+#[builder(build_fn(skip), derive(Deserialize, Serialize))]
 pub struct MassCenterDistance {
+    /// Pair of molecule names to calculate the distance between. May be identical.
+    #[allow(dead_code)]
+    molecules: (String, String),
     /// Pair of molecule id's to calculate the distance between. May be identical.
     #[builder(setter(skip))]
     molids: (usize, usize),
     /// Stream distances to this file at each sample.
     #[builder_field_attr(serde(rename = "file"))]
-    _output_file: PathBuf,
+    #[allow(dead_code)]
+    output_file: PathBuf,
     /// Stream object
     #[builder(setter(skip))]
     encoder: Option<GzEncoder<std::fs::File>>,
@@ -27,6 +31,25 @@ pub struct MassCenterDistance {
     /// Counter for the number of samples taken.
     #[builder(setter(skip))]
     num_samples: usize,
+}
+
+impl MassCenterDistanceBuilder {
+    fn validate(&self) -> Result<()> {
+        if self.molecules.is_none() || self.output_file.is_none() || self.frequency.is_none() {
+            anyhow::bail!("Missing required fields for Mass Center Distance Analysis.");
+        }
+        Ok(())
+    }
+    pub fn build(&self, topology: &Topology) -> Result<MassCenterDistance> {
+        self.validate()?;
+        let molecules = self.molecules.clone().unwrap();
+        MassCenterDistance::new(
+            (&molecules.0, &molecules.1),
+            self.output_file.clone().unwrap(),
+            self.frequency.unwrap(),
+            topology,
+        )
+    }
 }
 
 impl crate::Info for MassCenterDistance {
@@ -55,8 +78,9 @@ impl MassCenterDistance {
         let molids = (get_id(molecules.0), get_id(molecules.1));
         let stream = std::fs::File::create(&output_file)?;
         Ok(Self {
+            molecules: (molecules.0.to_owned(), molecules.1.to_owned()),
             molids,
-            _output_file: output_file,
+            output_file,
             encoder: Some(GzEncoder::new(stream, Compression::default())),
             frequency,
             num_samples: 0,

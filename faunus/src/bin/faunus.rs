@@ -126,12 +126,11 @@ fn run(input: PathBuf, _state: Option<PathBuf>, yaml_output: &mut std::fs::File)
     let mut markov_chain = MarkovChain::new(context.clone(), propagate, thermal_energy);
 
     let structure_writer = analysis::StructureWriter::new("output.xyz", Frequency::Every(1));
-    let com_distance = analysis::MassCenterDistance::new(
-        ("MOL1", "MOL2"),
-        "com_distance.yaml".into(),
-        Frequency::Every(3),
-        &context.topology(),
-    )?;
+    let com_distance = analysis::MassCenterDistanceBuilder::default()
+        .molecules(("MOL1".to_owned(), "MOL2".to_owned()))
+        .output_file("com_distance.yaml".into())
+        .frequency(Frequency::Every(3))
+        .build(&context.topology())?;
 
     markov_chain.add_analysis(Box::new(structure_writer));
     markov_chain.add_analysis(Box::new(com_distance));

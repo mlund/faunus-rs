@@ -21,7 +21,7 @@ use serde::{Deserialize, Serialize};
 
 mod distance;
 mod structure_writer;
-pub use distance::MassCenterDistance;
+pub use distance::{MassCenterDistance, MassCenterDistanceBuilder};
 pub use structure_writer::StructureWriter;
 
 /// Frequency of analysis.
