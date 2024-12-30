@@ -1,13 +1,23 @@
 use super::{Analyze, Frequency};
 use crate::Context;
+use derive_builder::Builder;
+use serde::{Deserialize, Serialize};
 
 /// Writes structure of the system in the specified format during the simulation.
 #[cfg(feature = "chemfiles")]
-#[derive(Debug)]
+#[derive(Debug, Builder)]
+#[builder(derive(Deserialize, Serialize))]
 pub struct StructureWriter {
+    /// Output file name (xyz, pdb, etc.)
+    #[builder_field_attr(serde(rename = "file"))]
     output_file: String,
+    /// Trajectory object
+    #[builder(setter(skip))]
     trajectory: Option<chemfiles::Trajectory>,
+    /// Sample frequency.
     frequency: Frequency,
+    /// Counter for the number of samples taken.
+    #[builder(setter(skip))]
     num_samples: usize,
 }
 

@@ -2,23 +2,30 @@ use super::{Analyze, Frequency};
 use crate::topology::Topology;
 use crate::Context;
 use anyhow::Result;
+use derive_builder::Builder;
 use flate2::write::GzEncoder;
 use flate2::Compression;
+use serde::{Deserialize, Serialize};
 use std::io::Write;
 use std::path::PathBuf;
 
 /// Writes structure of the system in the specified format during the simulation.
-#[derive(Debug)]
+#[derive(Debug, Builder)]
+#[builder(derive(Deserialize, Serialize))]
 pub struct MassCenterDistance {
     /// Pair of molecule id's to calculate the distance between. May be identical.
+    #[builder(setter(skip))]
     molids: (usize, usize),
     /// Stream distances to this file at each sample.
+    #[builder_field_attr(serde(rename = "file"))]
     _output_file: PathBuf,
     /// Stream object
-    encoder: GzEncoder<std::fs::File>,
+    #[builder(setter(skip))]
+    encoder: Option<GzEncoder<std::fs::File>>,
     /// Sample frequency.
     frequency: Frequency,
     /// Counter for the number of samples taken.
+    #[builder(setter(skip))]
     num_samples: usize,
 }
 
@@ -50,7 +57,7 @@ impl MassCenterDistance {
         Ok(Self {
             molids,
             _output_file: output_file,
-            encoder: GzEncoder::new(stream, Compression::default()),
+            encoder: Some(GzEncoder::new(stream, Compression::default())),
             frequency,
             num_samples: 0,
         })
@@ -78,7 +85,7 @@ impl<T: Context> Analyze<T> for MassCenterDistance {
                 let com2 = context.groups()[*j].mass_center();
                 if let Some((a, b)) = com1.zip(com2) {
                     let distance = (a - b).norm();
-                    writeln!(self.encoder, "{:.3}", distance)?;
+                    writeln!(self.encoder.as_mut().unwrap(), "{:.3}", distance)?;
                 } else {
                     log::error!("Skipping COM distance calculation due to missing COM.");
                 }
