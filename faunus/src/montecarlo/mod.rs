@@ -18,7 +18,7 @@ use crate::analysis::{AnalysisBuilder, AnalysisCollection, Analyze};
 use crate::group::*;
 use crate::propagate::{Displacement, Propagate};
 use crate::{time::Timer, Context};
-use anyhow::{Ok, Result};
+use anyhow::Result;
 use average::{Estimate, Mean};
 use log;
 use rand::prelude::*;
@@ -152,11 +152,14 @@ impl MoveStatistics {
 
     /// Update mean square displacement if possible
     pub(crate) fn update_msd(&mut self, displacement: Displacement) {
-        if let std::result::Result::Ok(dp) = f64::try_from(displacement) {
-            if self.mean_square_displacement.is_none() {
-                self.mean_square_displacement = Some(Mean::new());
+        if let Ok(dp) = f64::try_from(displacement) {
+            if let Some(msd) = self.mean_square_displacement.as_mut() {
+                msd.add(dp * dp);
+            } else {
+                let mut msd = Mean::new();
+                msd.add(dp * dp);
+                self.mean_square_displacement = Some(msd);
             }
-            self.mean_square_displacement.as_mut().unwrap().add(dp * dp);
         }
     }
 }
@@ -281,8 +284,8 @@ impl<T: Context> Iterator for MarkovChainIterator<'_, T> {
             &mut self.markov.analyses,
         ) {
             Err(e) => Some(Err(e)),
-            std::result::Result::Ok(true) => Some(Ok(self.markov.step)),
-            std::result::Result::Ok(false) => None,
+            Ok(true) => Some(Ok(self.markov.step)),
+            Ok(false) => None,
         }
     }
 }
