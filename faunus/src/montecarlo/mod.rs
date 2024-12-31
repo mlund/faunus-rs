@@ -14,10 +14,11 @@
 
 //! # Support for Monte Carlo sampling
 
-use crate::analysis::{AnalysisCollection, Analyze};
+use crate::analysis::{AnalysisBuilder, AnalysisCollection, Analyze};
 use crate::group::*;
 use crate::propagate::{Displacement, Propagate};
 use crate::{time::Timer, Context};
+use anyhow::{Ok, Result};
 use average::{Estimate, Mean};
 use log;
 use rand::prelude::*;
@@ -151,7 +152,7 @@ impl MoveStatistics {
 
     /// Update mean square displacement if possible
     pub(crate) fn update_msd(&mut self, displacement: Displacement) {
-        if let Ok(dp) = f64::try_from(displacement) {
+        if let std::result::Result::Ok(dp) = f64::try_from(displacement) {
             if self.mean_square_displacement.is_none() {
                 self.mean_square_displacement = Some(Mean::new());
             }
@@ -280,21 +281,38 @@ impl<T: Context> Iterator for MarkovChainIterator<'_, T> {
             &mut self.markov.analyses,
         ) {
             Err(e) => Some(Err(e)),
-            Ok(true) => Some(Ok(self.markov.step)),
-            Ok(false) => None,
+            std::result::Result::Ok(true) => Some(Ok(self.markov.step)),
+            std::result::Result::Ok(false) => None,
         }
     }
 }
 
 impl<T: Context + 'static> MarkovChain<T> {
-    pub fn new(context: T, propagate: Propagate, thermal_energy: f64) -> Self {
-        Self {
+    pub fn new(
+        context: T,
+        propagate: Propagate,
+        thermal_energy: f64,
+        analysis_builders: Option<&[AnalysisBuilder]>,
+    ) -> Result<Self> {
+        // Build analyses from array of builders
+        let analyses = match analysis_builders {
+            Some(analysis) => analysis
+                .iter()
+                .map(|b| {
+                    b.build(&context)
+                        .or_else(|e| anyhow::bail!("Analysis build error: {}", e))
+                        .unwrap()
+                })
+                .collect(),
+            None => AnalysisCollection::default(),
+        };
+        Ok(Self {
             context: NewOld::from(context.clone(), context),
             thermal_energy,
             step: 0,
             propagate,
-            analyses: AnalysisCollection::default(),
-        }
+            analyses,
+        })
     }
 
     /// Get propagate instance

@@ -13,12 +13,19 @@ pub struct StructureWriter {
     output_file: String,
     /// Trajectory object
     #[builder(setter(skip))]
+    #[builder_field_attr(serde(skip))]
     trajectory: Option<chemfiles::Trajectory>,
     /// Sample frequency.
     frequency: Frequency,
     /// Counter for the number of samples taken.
     #[builder(setter(skip))]
     num_samples: usize,
+}
+
+impl<T: Context> From<StructureWriter> for Box<dyn Analyze<T>> {
+    fn from(analysis: StructureWriter) -> Box<dyn Analyze<T>> {
+        Box::new(analysis)
+    }
 }
 
 #[cfg(feature = "chemfiles")]

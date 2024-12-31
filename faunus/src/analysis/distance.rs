@@ -122,3 +122,9 @@ impl<T: Context> Analyze<T> for MassCenterDistance {
         self.num_samples
     }
 }
+
+impl<T: Context> From<MassCenterDistance> for Box<dyn Analyze<T>> {
+    fn from(analysis: MassCenterDistance) -> Box<dyn Analyze<T>> {
+        Box::new(analysis)
+    }
+}

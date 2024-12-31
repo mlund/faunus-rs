@@ -123,7 +123,7 @@ fn run(input: PathBuf, _state: Option<PathBuf>, yaml_output: &mut std::fs::File)
         physical_constants::MOLAR_GAS_CONSTANT * KILO_JOULE_PER_JOULE * medium.temperature();
     log::info!("Thermal energy: {:.2} kJ/mol", thermal_energy);
 
-    let mut markov_chain = MarkovChain::new(context.clone(), propagate, thermal_energy);
+    let mut markov_chain = MarkovChain::new(context.clone(), propagate, thermal_energy, None)?;
 
     let structure_writer = analysis::StructureWriter::new("output.xyz", Frequency::Every(1));
     let com_distance = analysis::MassCenterDistanceBuilder::default()
@@ -132,8 +132,8 @@ fn run(input: PathBuf, _state: Option<PathBuf>, yaml_output: &mut std::fs::File)
         .frequency(Frequency::Every(3))
         .build(&context.topology())?;
 
-    markov_chain.add_analysis(Box::new(structure_writer));
-    markov_chain.add_analysis(Box::new(com_distance));
+    markov_chain.add_analysis(structure_writer.into());
+    markov_chain.add_analysis(com_distance.into());
 
     write_yaml(&medium, yaml_output, Some("medium"))?;
     write_yaml(&context.cell(), yaml_output, Some("cell"))?;

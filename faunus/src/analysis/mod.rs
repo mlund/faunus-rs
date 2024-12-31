@@ -22,7 +22,7 @@ use serde::{Deserialize, Serialize};
 mod distance;
 mod structure_writer;
 pub use distance::{MassCenterDistance, MassCenterDistanceBuilder};
-pub use structure_writer::StructureWriter;
+pub use structure_writer::{StructureWriter, StructureWriterBuilder};
 
 /// Frequency of analysis.
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
@@ -45,6 +45,28 @@ impl Frequency {
             Frequency::Once(n) => step == *n,
             _ => unimplemented!("Unsupported frequency policy for `Frequency::should_perform`."),
         }
+    }
+}
+
+/// Helper to deserialize analysis input and create a boxed `Analyze` object.
+#[derive(Clone, Deserialize)]
+pub enum AnalysisBuilder {
+    /// Mass center distance analysis
+    MassCenterDistance(MassCenterDistanceBuilder),
+    /// Structure writer
+    StructureWriter(StructureWriterBuilder),
+}
+
+impl AnalysisBuilder {
+    /// Build analysis object
+    pub fn build<T: Context>(&self, context: &T) -> Result<Box<dyn Analyze<T>>> {
+        let analysis: Box<dyn Analyze<T>> = match self {
+            AnalysisBuilder::MassCenterDistance(builder) => {
+                Box::new(builder.build(&context.topology())?)
+            }
+            AnalysisBuilder::StructureWriter(builder) => Box::new(builder.build()?),
+        };
+        Ok(analysis)
     }
 }
 
