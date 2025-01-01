@@ -392,7 +392,7 @@ mod tests {
             Propagate::from_file("tests/files/translate_molecules_simulation.yaml", &context)
                 .unwrap();
 
-        let mut markov_chain = MarkovChain::new(context, propagate, 1.0);
+        let mut markov_chain = MarkovChain::new(context, propagate, 1.0, None).unwrap();
 
         for step in markov_chain.iter() {
             step.unwrap();

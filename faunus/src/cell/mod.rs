@@ -176,7 +176,7 @@ impl Cell {
 
         let Some(value) = system.get("cell") else {
             log::warn!("No cell defined for the system. Using Endless cell.");
-            return Ok(Self::Endless(Endless::default()));
+            return Ok(Self::Endless(Endless));
         };
         let cell = serde_yaml::from_value(value.clone()).map_err(anyhow::Error::msg)?;
         match cell {

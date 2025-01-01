@@ -24,7 +24,7 @@ use super::SimulationCell;
 
 /// Endless simulation cell with no boundaries and infinite volume
 #[derive(Clone, Debug, Serialize, Deserialize, Copy, Default)]
-pub struct Endless {}
+pub struct Endless;
 
 impl Shape for Endless {
     fn volume(&self) -> Option<f64> {
