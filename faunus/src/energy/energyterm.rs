@@ -2,7 +2,7 @@ use super::{
     bonded::{IntermolecularBonded, IntramolecularBonded},
     nonbonded::NonbondedMatrix,
     sasa::SasaEnergy,
-    EnergyChange,
+    CellOverlap, EnergyChange,
 };
 use crate::{Change, Context, SyncFrom};
 
@@ -16,6 +16,8 @@ pub enum EnergyTerm {
     IntermolecularBonded(IntermolecularBonded),
     /// Solvent accessible surface area energy.
     SasaEnergy(SasaEnergy),
+    /// Cell overlap energy.
+    CellOverlap(CellOverlap),
 }
 
 impl EnergyTerm {
@@ -25,6 +27,7 @@ impl EnergyTerm {
             EnergyTerm::NonbondedMatrix(_) | EnergyTerm::IntramolecularBonded(_) => Ok(()),
             EnergyTerm::IntermolecularBonded(x) => x.update(context, change),
             EnergyTerm::SasaEnergy(x) => x.update(context, change),
+            EnergyTerm::CellOverlap(_) => Ok(()),
         }
     }
 }
@@ -38,6 +41,7 @@ impl EnergyChange for EnergyTerm {
             Self::IntramolecularBonded(x) => x.energy(context, change),
             Self::IntermolecularBonded(x) => x.energy(context, change),
             Self::SasaEnergy(x) => x.energy(context, change),
+            Self::CellOverlap(x) => x.energy(context, change),
         }
     }
 }
@@ -51,6 +55,7 @@ impl SyncFrom for EnergyTerm {
             (IntramolecularBonded(_), IntramolecularBonded(_)) => (),
             (IntermolecularBonded(x), IntermolecularBonded(y)) => x.sync_from(y, change)?,
             (SasaEnergy(x), SasaEnergy(y)) => x.sync_from(y, change)?,
+            (CellOverlap(_), CellOverlap(_)) => (),
             _ => anyhow::bail!("Cannot sync incompatible energy terms."),
         }
         Ok(())

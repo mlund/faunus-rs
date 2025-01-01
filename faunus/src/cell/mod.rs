@@ -71,6 +71,10 @@ pub trait Shape {
     }
     /// Determines if a point lies inside the boundaries of the shape
     fn is_inside(&self, point: &Point) -> bool;
+    /// Determines if a point lies outside the boundaries of the shape
+    fn is_outside(&self, point: &Point) -> bool {
+        !self.is_inside(point)
+    }
     /// Bounding box of the shape centered at `center()`
     fn bounding_box(&self) -> Option<Point>;
     /// Generate a random point positioned inside the boundaries of the shape

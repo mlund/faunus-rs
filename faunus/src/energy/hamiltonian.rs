@@ -2,7 +2,7 @@ use super::{
     bonded::{IntermolecularBonded, IntramolecularBonded},
     builder::HamiltonianBuilder,
     nonbonded::NonbondedMatrix,
-    EnergyTerm,
+    CellOverlap, EnergyTerm,
 };
 use crate::{topology::Topology, Change, Context, SyncFrom};
 use std::path::Path;
@@ -41,6 +41,8 @@ impl Hamiltonian {
         medium: Option<coulomb::Medium>,
     ) -> anyhow::Result<Self> {
         let mut hamiltonian = Self::default();
+
+        hamiltonian.push(CellOverlap.into());
 
         if let Some(nonbonded_matrix) = &builder.pairpot_builder {
             hamiltonian
