@@ -72,6 +72,7 @@ pub trait Shape {
     /// Determines if a point lies inside the boundaries of the shape
     fn is_inside(&self, point: &Point) -> bool;
     /// Determines if a point lies outside the boundaries of the shape
+    #[inline(always)]
     fn is_outside(&self, point: &Point) -> bool {
         !self.is_inside(point)
     }
@@ -182,6 +183,7 @@ impl Cell {
         match cell {
             Self::Cuboid(mut cuboid) => {
                 // `half_cell` information is missing after parsing, we have to add it
+                // TODO: This is a workaround. Should be fixed during `Cuboid` deserialization.
                 cuboid.set_half_cell();
                 Ok(Self::Cuboid(cuboid))
             }

@@ -307,6 +307,8 @@ pub enum Displacement {
     AngleDistance(f64, Point),
     /// A custom displacement
     Custom(f64),
+    /// Zero displacement - typically used for rejected moves
+    Zero,
     /// No displacement appropriate
     None,
 }
@@ -318,6 +320,7 @@ impl TryFrom<Displacement> for f64 {
             Displacement::Distance(x) => Ok(x.norm()),
             Displacement::Angle(x) => Ok(x),
             Displacement::Custom(x) => Ok(x),
+            Displacement::Zero => Ok(0.0),
             _ => Err("Cannot convert displacement to floating point number"),
         }
     }

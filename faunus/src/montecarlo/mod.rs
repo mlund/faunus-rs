@@ -143,6 +143,7 @@ impl MoveStatistics {
     /// Register a rejected move and increment counters
     pub fn reject(&mut self) {
         self.num_trials += 1;
+        self.update_msd(Displacement::Zero);
     }
 
     /// Acceptance ratio
