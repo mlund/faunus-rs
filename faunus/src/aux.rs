@@ -14,9 +14,23 @@
 
 //! Implementation of auxiliary functions for computing various properties.
 
-use nalgebra::Vector3;
-
 use crate::{cell::SimulationCell, Point};
+use flate2::write::GzEncoder;
+use flate2::Compression;
+use nalgebra::Vector3;
+use std::io::Write;
+use std::path::PathBuf;
+
+/// If the output file has a `.gz` extension, return a `GzEncoder` wrapped around the file
+pub fn open_compressed(path: &PathBuf) -> anyhow::Result<Box<dyn Write>> {
+    let file = std::fs::File::create(path)?;
+    let writer: Box<dyn Write> = if path.extension().unwrap_or_default() == "gz" {
+        Box::new(GzEncoder::new(file, Compression::default()))
+    } else {
+        Box::new(file)
+    };
+    Ok(writer)
+}
 
 /// Calculate center of mass of a collection of points with masses.
 /// Does not consider periodic boundary conditions.

@@ -3,8 +3,7 @@ use crate::topology::Topology;
 use crate::Context;
 use anyhow::Result;
 use derive_builder::Builder;
-use flate2::write::GzEncoder;
-use flate2::Compression;
+use derive_more::Debug;
 use serde::{Deserialize, Serialize};
 use std::io::Write;
 use std::path::PathBuf;
@@ -25,7 +24,8 @@ pub struct MassCenterDistance {
     output_file: PathBuf,
     /// Stream object
     #[builder(setter(skip))]
-    encoder: Option<GzEncoder<std::fs::File>>,
+    #[debug(skip)]
+    stream: Box<dyn Write>,
     /// Sample frequency.
     frequency: Frequency,
     /// Counter for the number of samples taken.
@@ -76,12 +76,13 @@ impl MassCenterDistance {
                 .expect("Molecule now found.")
         };
         let molids = (get_id(molecules.0), get_id(molecules.1));
-        let stream = std::fs::File::create(&output_file)?;
+        let molecules = (molecules.0.to_owned(), molecules.1.to_owned());
+        let stream = crate::aux::open_compressed(&output_file)?;
         Ok(Self {
-            molecules: (molecules.0.to_owned(), molecules.1.to_owned()),
+            molecules,
             molids,
             output_file,
-            encoder: Some(GzEncoder::new(stream, Compression::default())),
+            stream,
             frequency,
             num_samples: 0,
         })
@@ -109,7 +110,7 @@ impl<T: Context> Analyze<T> for MassCenterDistance {
                 let com2 = context.groups()[*j].mass_center();
                 if let Some((a, b)) = com1.zip(com2) {
                     let distance = (a - b).norm();
-                    writeln!(self.encoder.as_mut().unwrap(), "{:.3}", distance)?;
+                    writeln!(self.stream.as_mut(), "{:.3}", distance)?;
                 } else {
                     log::error!("Skipping COM distance calculation due to missing COM.");
                 }

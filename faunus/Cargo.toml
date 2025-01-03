@@ -38,6 +38,7 @@ derive_builder = "0.20.0"
 voronota = "0.2"
 indicatif = {version = "*"}
 flate2 = "1.0.35"
+derive_more = {version = "1.0.0", features = ["debug"]}
 
 [dev-dependencies]
 approx = "0.5"
