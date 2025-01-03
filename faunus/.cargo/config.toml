@@ -1,0 +1,2 @@
+[alias]
+run-twobody = "./scripts/twobody.sh"
