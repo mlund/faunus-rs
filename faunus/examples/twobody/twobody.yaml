@@ -1,3 +1,16 @@
+# Places two rigid molecules on a spherical cell and tracks
+# the mass center separation during a MC simulation run. This
+# can be used to calculate the potential of mean force.
+#
+# - The first molecule is placed at the center of a sphere and
+#   can rotate only.
+# - The second molecule is offset along the z-axis. It can
+#   translate along z only, and freely rotate.
+# - The `medium` information is used to set a Debye screening length
+#   for the `Coulomb` potential under `nonbonded`.
+# - The simulation cell is a sphere with hard boundaries from which no
+#   particles can escape.
+
 atoms:
   - name: PP # positive particle
     mass: 1.0
@@ -59,7 +72,7 @@ system:
     nonbonded:
       default:
         - !Coulomb {cutoff: 1e3}
-        - !WCA {mixing: LB}
+        - !WeeksChandlerAndersen {mixing: LB}
 
 propagate:
   seed: Hardware
