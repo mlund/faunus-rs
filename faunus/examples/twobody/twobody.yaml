@@ -1,0 +1,86 @@
+atoms:
+  - name: PP # positive particle
+    mass: 1.0
+    charge: 1.0
+    sigma: 4.0
+    epsilon: 0.5
+  - name: NP # negative particle
+    mass: 1.0
+    charge: -1.0
+    sigma: 4.0
+    epsilon: 0.5
+  - name: MP # middle particle
+    mass: 1e9
+    charge: 0.0
+    sigma: 40.0
+    epsilon: 0.5
+
+molecules:
+  - name: MOL1
+    degrees_of_freedom: Rigid
+    has_com: true
+    from_structure: "../../assets/cppm-p18.xyz" 
+  - name: MOL2
+    degrees_of_freedom: Rigid
+    has_com: true
+    from_structure: "../../assets/cppm-p18.xyz" 
+
+system:
+  cell: !Sphere { radius: 125.0 }
+  medium:
+    permittivity: !Water
+    temperature: 298.15
+    # salt type and concentration in mol/l
+    salt: [!NaCl, 0.005]
+
+  blocks:
+    - molecule: MOL1
+      N: 1
+      insert:
+        # Place in the middle of the box
+        !RandomCOM {
+          filename: "../../assets/cppm-p18.xyz",
+          rotate: true,
+          directions: none,
+          offset: [0.0, 0.0, 0.0],
+        }
+    - molecule: MOL2
+      N: 1
+      insert:
+        # Place along z-axis
+        !RandomCOM {
+          filename: "../../assets/cppm-p18.xyz",
+          rotate: true,
+          directions: none,
+          offset: [0.0, 0.0, 42.0],
+        }
+
+  energy:
+    nonbonded:
+      default:
+        - !Coulomb {cutoff: 1e3}
+        - !WCA {mixing: LB}
+
+propagate:
+  seed: Hardware
+  criterion: Metropolis
+  repeat: 2000000
+  collections:
+    - !Stochastic
+      moves:
+        - !RotateMolecule {
+            molecule: MOL1,
+            dp: 1.0,
+            weight: 1.0,
+          }
+        - !RotateMolecule {
+            molecule: MOL2,
+            dp: 1.0,
+            weight: 1.0,
+          }
+        - !TranslateMolecule {
+            molecule: MOL2,
+            dp: 10.0,
+            weight: 1.0,
+            directions: !z,
+          }
