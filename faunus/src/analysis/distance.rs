@@ -17,6 +17,7 @@ pub struct MassCenterDistance {
     molecules: (String, String),
     /// Pair of molecule id's to calculate the distance between. May be identical.
     #[builder(setter(skip))]
+    #[builder_field_attr(serde(skip))]
     molids: (usize, usize),
     /// Stream distances to this file at each sample.
     #[builder_field_attr(serde(rename = "file"))]
@@ -24,12 +25,14 @@ pub struct MassCenterDistance {
     output_file: PathBuf,
     /// Stream object
     #[builder(setter(skip))]
+    #[builder_field_attr(serde(skip))]
     #[debug(skip)]
     stream: Box<dyn Write>,
     /// Sample frequency.
     frequency: Frequency,
     /// Counter for the number of samples taken.
     #[builder(setter(skip))]
+    #[builder_field_attr(serde(skip_deserializing))]
     num_samples: usize,
 }
 

@@ -281,8 +281,9 @@ impl HamiltonianBuilder {
     ///     nonbonded:
     ///       ...
     /// ```
-    pub(crate) fn from_file(filename: impl AsRef<Path>) -> anyhow::Result<HamiltonianBuilder> {
-        let yaml = std::fs::read_to_string(filename)?;
+    pub(crate) fn from_file(path: impl AsRef<Path>) -> anyhow::Result<HamiltonianBuilder> {
+        let yaml = std::fs::read_to_string(&path)
+            .map_err(|err| anyhow::anyhow!("Error reading file {:?}: {}", &path.as_ref(), err))?;
         let full: serde_yaml::Value = serde_yaml::from_str(&yaml)?;
 
         let mut current = &full;

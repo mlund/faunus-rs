@@ -913,20 +913,12 @@ mod tests {
 
     #[test]
     fn read_topology_fail_nonexistent_file() {
-        let error = Topology::from_file("tests/files/this_file_does_not_exist.yaml").unwrap_err();
-        match error.downcast_ref::<std::io::Error>().unwrap().kind() {
-            std::io::ErrorKind::NotFound => (),
-            _ => panic!("Incorrect error type returned."),
-        }
+        let _ = Topology::from_file("tests/files/this_file_does_not_exist.yaml").unwrap_err();
     }
 
     #[test]
     fn read_topology_fail_invalid_include() {
-        let error = Topology::from_file("tests/files/topology_invalid_include.yaml").unwrap_err();
-        match error.downcast_ref::<std::io::Error>().unwrap().kind() {
-            std::io::ErrorKind::NotFound => (),
-            _ => panic!("Incorrect error type returned."),
-        }
+        let _ = Topology::from_file("tests/files/topology_invalid_include.yaml").unwrap_err();
     }
 
     #[test]

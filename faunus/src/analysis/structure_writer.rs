@@ -19,6 +19,7 @@ pub struct StructureWriter {
     frequency: Frequency,
     /// Counter for the number of samples taken.
     #[builder(setter(skip))]
+    #[builder_field_attr(serde(skip_deserializing))]
     num_samples: usize,
 }
 

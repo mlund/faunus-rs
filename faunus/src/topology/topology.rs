@@ -72,19 +72,21 @@ impl Topology {
     }
 
     /// Create partial topology without system. Used for topology includes.
-    pub fn from_file_partial(filename: impl AsRef<Path> + Clone) -> anyhow::Result<Topology> {
-        let yaml = std::fs::read_to_string(filename.clone())?;
+    pub fn from_file_partial(path: impl AsRef<Path> + Clone) -> anyhow::Result<Topology> {
+        let yaml = std::fs::read_to_string(path.clone())
+            .map_err(|err| anyhow::anyhow!("Error reading file {:?}: {}", &path.as_ref(), err))?;
         let mut topology: Topology = serde_yaml::from_str(&yaml)?;
         for file in topology.include.iter_mut() {
-            file.finalize(filename.clone());
+            file.finalize(path.clone());
         }
         topology.include_topologies(topology.include.clone())?;
         Ok(topology)
     }
 
     /// Parse a yaml file as Topology which *must* include a system.
-    pub fn from_file(filename: impl AsRef<Path>) -> anyhow::Result<Topology> {
-        let yaml = std::fs::read_to_string(&filename)?;
+    pub fn from_file(path: impl AsRef<Path>) -> anyhow::Result<Topology> {
+        let yaml = std::fs::read_to_string(&path)
+            .map_err(|err| anyhow::anyhow!("Error loading file {:?}: {}", &path.as_ref(), err))?;
         let mut topology: Topology = serde_yaml::from_str(&yaml)?;
 
         if topology.system.is_empty() {
@@ -96,13 +98,13 @@ impl Topology {
 
         // finalize includes
         for file in topology.include.iter_mut() {
-            file.finalize(&filename);
+            file.finalize(&path);
         }
 
         topology.include_topologies(topology.include.clone())?;
         topology.finalize_atoms()?;
         topology.finalize_molecules()?;
-        topology.finalize_blocks(&filename)?;
+        topology.finalize_blocks(&path)?;
         topology.validate_intermolecular()?;
         topology.validate()?;
         Ok(topology)

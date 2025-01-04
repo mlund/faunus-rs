@@ -59,14 +59,7 @@ impl ReferencePlatform {
         structure_file: Option<&Path>,
         rng: &mut ThreadRng,
     ) -> anyhow::Result<Self> {
-        let medium: Option<coulomb::Medium> =
-            serde_yaml::from_reader(std::fs::File::open(&yaml_file)?)
-                .ok()
-                .and_then(|s: serde_yaml::Value| {
-                    let medium = s.get("system")?.get("medium")?;
-                    Some(serde_yaml::from_value(medium.clone()).unwrap())
-                });
-
+        let medium = Some(crate::cli::get_medium(&yaml_file)?);
         let topology = Topology::from_file(&yaml_file)?;
         let hamiltonian_builder = HamiltonianBuilder::from_file(&yaml_file)?;
         // validate hamiltonian builder

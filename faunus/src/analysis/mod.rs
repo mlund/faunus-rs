@@ -18,6 +18,8 @@ use crate::{Context, Info};
 use anyhow::Result;
 use core::fmt::Debug;
 use serde::{Deserialize, Serialize};
+use serde_yaml::Value;
+use std::path::PathBuf;
 
 mod distance;
 mod structure_writer;
@@ -54,6 +56,7 @@ pub enum AnalysisBuilder {
     /// Mass center distance analysis
     MassCenterDistance(MassCenterDistanceBuilder),
     /// Structure writer
+    #[serde(rename = "Trajectory")]
     StructureWriter(StructureWriterBuilder),
 }
 
@@ -72,6 +75,20 @@ impl AnalysisBuilder {
 
 /// Collection of analysis objects.
 pub type AnalysisCollection<T> = Vec<Box<dyn Analyze<T>>>;
+
+/// Create analysis collection from yaml file containing a list of analysis objects under an "analysis" key.
+pub fn from_file<T: Context>(path: &PathBuf, context: &T) -> Result<AnalysisCollection<T>> {
+    let yaml = std::fs::read_to_string(path)
+        .map_err(|err| anyhow::anyhow!("Error reading file {:?}: {}", &path, err))?;
+    let value = serde_yaml::from_str::<Value>(&yaml)?
+        .get("analysis")
+        .ok_or_else(|| anyhow::anyhow!("No 'analysis' key found in input yaml file."))?
+        .clone();
+    serde_yaml::from_value::<Vec<AnalysisBuilder>>(value)?
+        .into_iter()
+        .map(|builder| builder.build(context))
+        .collect()
+}
 
 /// Interface for system analysis.
 pub trait Analyze<T: Context>: Debug + Info {

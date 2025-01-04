@@ -14,7 +14,7 @@
 
 //! # Support for Monte Carlo sampling
 
-use crate::analysis::{AnalysisBuilder, AnalysisCollection, Analyze};
+use crate::analysis::{AnalysisCollection, Analyze};
 use crate::group::*;
 use crate::propagate::{Displacement, Propagate};
 use crate::{time::Timer, Context};
@@ -296,20 +296,20 @@ impl<T: Context + 'static> MarkovChain<T> {
         context: T,
         propagate: Propagate,
         thermal_energy: f64,
-        analysis_builders: Option<&[AnalysisBuilder]>,
+        analyses: AnalysisCollection<T>,
     ) -> Result<Self> {
-        // Build analyses from array of builders
-        let analyses = match analysis_builders {
-            Some(analysis) => analysis
-                .iter()
-                .map(|b| {
-                    b.build(&context)
-                        .or_else(|e| anyhow::bail!("Analysis build error: {}", e))
-                        .unwrap()
-                })
-                .collect(),
-            None => AnalysisCollection::default(),
-        };
+        // // Build analyses from array of builders
+        // let analyses = match analysis_builders {
+        //     Some(analysis) => analysis
+        //         .iter()
+        //         .map(|b| {
+        //             b.build(&context)
+        //                 .or_else(|e| anyhow::bail!("Analysis build error: {}", e))
+        //                 .unwrap()
+        //         })
+        //         .collect(),
+        //     None => AnalysisCollection::default(),
+        // };
         Ok(Self {
             context: NewOld::from(context.clone(), context),
             thermal_energy,
@@ -393,7 +393,8 @@ mod tests {
             Propagate::from_file("tests/files/translate_molecules_simulation.yaml", &context)
                 .unwrap();
 
-        let mut markov_chain = MarkovChain::new(context, propagate, 1.0, None).unwrap();
+        let mut markov_chain =
+            MarkovChain::new(context, propagate, 1.0, AnalysisCollection::default()).unwrap();
 
         for step in markov_chain.iter() {
             step.unwrap();

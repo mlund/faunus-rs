@@ -13,7 +13,7 @@
 // limitations under the license.
 
 use crate::{
-    analysis::{self, Frequency},
+    analysis::{self},
     montecarlo::MarkovChain,
     platform::reference::ReferencePlatform,
     propagate::Propagate,
@@ -93,8 +93,9 @@ fn write_yaml<T: serde::Serialize>(
 }
 
 // Helper function to extract medium from system/medium in YAML file
-fn get_medium(filename: &PathBuf) -> Result<coulomb::Medium> {
-    let file = std::fs::File::open(filename)?;
+pub(crate) fn get_medium(path: impl AsRef<std::path::Path>) -> Result<coulomb::Medium> {
+    let file = std::fs::File::open(&path)
+        .map_err(|err| anyhow::anyhow!("Could not open {:?}: {}", path.as_ref(), err))?;
     serde_yaml::from_reader(file)
         .ok()
         .and_then(|s: serde_yaml::Value| {
@@ -116,28 +117,20 @@ fn run(input: PathBuf, _state: Option<PathBuf>, yaml_output: &mut std::fs::File)
         physical_constants::MOLAR_GAS_CONSTANT * KILO_JOULE_PER_JOULE * medium.temperature();
     log::info!("Thermal energy: {:.2} kJ/mol", thermal_energy);
 
-    let mut markov_chain = MarkovChain::new(context.clone(), propagate, thermal_energy, None)?;
-
-    let structure_writer = analysis::StructureWriter::new("output.xyz", Frequency::Every(50));
-    let com_distance = analysis::MassCenterDistanceBuilder::default()
-        .molecules(("MOL1".to_owned(), "MOL2".to_owned()))
-        .output_file("com_distance.dat.gz".into())
-        .frequency(Frequency::Every(10))
-        .build(&context.topology())?;
-
-    markov_chain.add_analysis(structure_writer.into());
-    markov_chain.add_analysis(com_distance.into());
+    let analysis = analysis::from_file(&input, &context)?;
+    let mut markov_chain = MarkovChain::new(context.clone(), propagate, thermal_energy, analysis)?;
 
     write_yaml(&medium, yaml_output, Some("medium"))?;
     write_yaml(&context.cell(), yaml_output, Some("cell"))?;
     write_yaml(&context.topology().blocks(), yaml_output, Some("blocks"))?;
 
+    // Step through the Markov chain and update progress bar
     let pb = ProgressBar::new(markov_chain.get_propagate().max_repeats() as u64);
-
     for step in markov_chain.iter() {
         pb.set_position(step? as u64);
     }
 
+    // Write final state
     write_yaml(
         &markov_chain.get_propagate(),
         yaml_output,

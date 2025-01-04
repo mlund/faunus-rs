@@ -434,13 +434,13 @@ mod tests {
     #[test]
     fn test_nonbonded_matrix_new() {
         let file = "tests/files/topology_pass.yaml";
-        let topology = Topology::from_file(&file).unwrap();
-        let pairpot_builder = HamiltonianBuilder::from_file(&file)
+        let topology = Topology::from_file(file).unwrap();
+        let pairpot_builder = HamiltonianBuilder::from_file(file)
             .unwrap()
             .pairpot_builder
             .unwrap();
         let medium: Option<coulomb::Medium> =
-            serde_yaml::from_reader(std::fs::File::open(&file).unwrap())
+            serde_yaml::from_reader(std::fs::File::open(file).unwrap())
                 .ok()
                 .and_then(|s: serde_yaml::Value| {
                     let medium = s.get("system")?.get("medium")?;
