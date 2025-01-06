@@ -18,7 +18,7 @@ anyhow = "1.0"
 float-cmp = "0.9"
 itertools = "0.10"
 nalgebra = { version = "0.33", features = ["serde-serialize"] }
-interatomic = { path = "../interatomic", features = ["serde"] }
+interatomic = { git = "https://github.com/mlund/interatomic.git", version = "0.2", features = ["serde"] }
 as-any = "0.3"
 rand = "0.8"
 num = "0.4"
@@ -26,7 +26,7 @@ chemfiles = { version = "0.10", optional = true }
 average = { version = "0.13", features = ["std", "serde1"] }
 regex = "1.8.4"
 physical_constants = "0.5.0"
-coulomb = { path = "../coulomb", features = ["serde"] }
+coulomb = {git = "https://github.com/mlund/coulomb.git", version = "0.2", features = ["serde"] }
 serde_yaml = "0.9"
 validator = { version = "0.18.1", features = ["derive"] }
 derive-getters = "0.3.0"
