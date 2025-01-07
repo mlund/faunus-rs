@@ -1,7 +1,0 @@
-[workspace]
-resolver = "2"
-members = ["faunus", "virialize"]
-
-[profile.release]
-opt-level = 3
-lto = true
