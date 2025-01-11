@@ -52,8 +52,12 @@ impl Hamiltonian {
         hamiltonian.push(IntramolecularBonded::default().into());
 
         // IntermolecularBonded term should only be added if it is actually needed
-        if !topology.intermolecular().is_empty() {
+        if !&topology.intermolecular().is_empty() {
             hamiltonian.push(IntermolecularBonded::new(topology));
+        }
+
+        if let Some(sasa_builder) = &builder.sasa {
+            hamiltonian.push(sasa_builder.build()?.into());
         }
 
         Ok(hamiltonian)

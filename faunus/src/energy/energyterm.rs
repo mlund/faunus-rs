@@ -61,3 +61,9 @@ impl SyncFrom for EnergyTerm {
         Ok(())
     }
 }
+
+impl From<SasaEnergy> for EnergyTerm {
+    fn from(sasa: SasaEnergy) -> Self {
+        EnergyTerm::SasaEnergy(sasa)
+    }
+}

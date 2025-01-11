@@ -39,6 +39,8 @@ use serde::{
 };
 use unordered_pair::UnorderedPair;
 
+use super::sasa::SasaEnergyBuilder;
+
 /// Specifies whether the parameters for the interaction are
 /// directly provided or should be calculated using a combination rule.
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
@@ -264,11 +266,14 @@ impl PairPotentialBuilder {
 }
 
 /// Structure used for (de)serializing the Hamiltonian of the system.
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub(crate) struct HamiltonianBuilder {
     /// Nonbonded interactions defined for the system.
     #[serde(rename = "nonbonded")]
     pub pairpot_builder: Option<PairPotentialBuilder>,
+
+    /// Solvent Accessible Surface Area (SASA) energy term.
+    pub sasa: Option<SasaEnergyBuilder>,
 }
 
 impl HamiltonianBuilder {

@@ -16,13 +16,22 @@
 
 use crate::{topology::Hydrophobicity, Change, Context, SyncFrom};
 use crate::{Particle, Point};
+use derive_builder::Builder;
+use serde::{Deserialize, Serialize};
 use voronota::{Ball, RadicalTessellation};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Builder)]
+#[builder(derive(Deserialize, Serialize, Debug))]
 pub struct SasaEnergy {
+    /// Probe radius for the tessellation
+    probe_radius: f64,
     /// Voronoi tessellation of the particles
+    #[builder_field_attr(serde(skip))]
+    #[builder(default)]
     tesselation: RadicalTessellation,
     /// Surface tension for each particle
+    #[builder_field_attr(serde(skip_serializing))]
+    #[builder(default)]
     tensions: Vec<f64>,
 }
 
@@ -36,6 +45,7 @@ impl SasaEnergy {
     ) -> Self {
         let balls = Self::make_balls(positions, radii);
         Self {
+            probe_radius,
             tesselation: RadicalTessellation::from_balls(probe_radius, &balls, None),
             tensions: tensions.into_iter().collect(),
         }
@@ -62,7 +72,7 @@ impl SasaEnergy {
             ball.z = pos.z;
         });
         self.tesselation =
-            RadicalTessellation::from_balls(self.tesselation.probe, &self.tesselation.balls, None);
+            RadicalTessellation::from_balls(self.probe_radius, &self.tesselation.balls, None);
     }
 
     /// Calculate the surface energy based in the available surface area
@@ -113,7 +123,7 @@ impl SasaEnergy {
         };
 
         let balls = Self::make_balls(positions, radii);
-        self.tesselation = RadicalTessellation::from_balls(self.tesselation.probe, &balls, None);
+        self.tesselation = RadicalTessellation::from_balls(self.probe_radius, &balls, None);
         self.tensions = particles.iter().map(get_tension).collect();
         Ok(())
     }
