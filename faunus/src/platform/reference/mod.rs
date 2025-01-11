@@ -96,6 +96,8 @@ impl ReferencePlatform {
             group_lists: GroupLists::new(topology.moleculekinds().len()),
         };
 
+        context.update(&Change::Everything)?;
+
         topology.insert_groups(&mut context, structure, rng)?;
 
         Ok(context)
