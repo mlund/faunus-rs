@@ -14,8 +14,8 @@
 
 //! # Energy due to solvent-accessible surface area and atomic-level tensions.
 
+use crate::Point;
 use crate::{Change, Context, SyncFrom};
-use crate::{Particle, Point};
 use derive_builder::Builder;
 use serde::{Deserialize, Serialize};
 use voronota::{Ball, RadicalTessellation};
@@ -34,6 +34,9 @@ pub struct SasaEnergy {
     #[builder_field_attr(serde(skip_serializing))]
     #[builder(default)]
     tensions: Vec<f64>,
+    /// Shift calculated energy by this value (kJ/mol); default is 0.
+    #[builder(default)]
+    energy_offset: f64,
 }
 
 impl SasaEnergy {
@@ -43,12 +46,14 @@ impl SasaEnergy {
         positions: impl IntoIterator<Item = &'a Point>,
         radii: impl IntoIterator<Item = f64>,
         tensions: impl IntoIterator<Item = f64>,
+        energy_offset: f64,
     ) -> Self {
         let balls = Self::make_balls(positions, radii);
         Self {
             probe_radius,
             tesselation: RadicalTessellation::from_balls(probe_radius, &balls, None),
             tensions: tensions.into_iter().collect(),
+            energy_offset,
         }
     }
 
@@ -83,7 +88,8 @@ impl SasaEnergy {
             .iter()
             .enumerate()
             .map(|(i, tension)| tension * self.tesselation.available_area(i))
-            .sum()
+            .sum::<f64>()
+            + self.energy_offset
     }
 }
 
@@ -101,9 +107,7 @@ impl SasaEnergy {
     /// Update internal state, considering all particles (expensive)
     fn update_all(&mut self, context: &impl Context) -> anyhow::Result<()> {
         let particles = context.get_active_particles();
-        let positions = particles
-            .iter()
-            .map(|particle: &Particle| -> &Point { &particle.pos });
+        let positions = particles.iter().map(|p| -> &Point { &p.pos });
 
         let radii = particles.iter().map(|p| {
             context.topology().atomkinds()[p.atom_id]

@@ -14,7 +14,7 @@ system:
     permittivity: !Vacuum
 
   energy:
-    sasa: {probe_radius: 1.4}
+    sasa: {probe_radius: 1.4, energy_offset: 0}
 
   blocks:
     - molecule: MOL
