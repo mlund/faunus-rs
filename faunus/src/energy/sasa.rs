@@ -105,26 +105,22 @@ impl SasaEnergy {
             .iter()
             .map(|particle: &Particle| -> &Point { &particle.pos });
 
-        // Closure to extract radius from topology for a single particle
-        let get_radius = |particle: &Particle| -> f64 {
-            let atom_id = particle.atom_id;
-            context.topology().atomkinds()[atom_id]
+        let radii = particles.iter().map(|p| {
+            context.topology().atomkinds()[p.atom_id]
                 .sigma()
                 .map(|sigma| sigma / 2.0)
                 .unwrap_or(0.0)
-        };
-        let radii = particles.iter().map(get_radius);
-
-        // Closure to extract tension from topology for a single particle
-        let get_tension = |particle: &Particle| -> f64 {
-            context.topology().atomkinds()[particle.atom_id]
-                .surface_tension()
-                .unwrap_or(0.0)
-        };
-
+        });
         let balls = Self::make_balls(positions, radii);
         self.tesselation = RadicalTessellation::from_balls(self.probe_radius, &balls, None);
-        self.tensions = particles.iter().map(get_tension).collect();
+        self.tensions = particles
+            .iter()
+            .map(|p| {
+                context.topology().atomkinds()[p.atom_id]
+                    .surface_tension()
+                    .unwrap_or(0.0)
+            })
+            .collect();
         Ok(())
     }
 }
