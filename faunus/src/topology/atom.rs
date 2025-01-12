@@ -92,16 +92,12 @@ impl AtomKind {
         Ok(())
     }
 
-    /// Get the optional surface tension.
+    /// Get optional surface tension (kJ/mol/Å²)
     pub fn surface_tension(&self) -> Option<f64> {
         self.hydrophobicity.and_then(|h| match h {
             Hydrophobicity::SurfaceTension(tension) => Some(tension),
             _ => None,
         })
-        // match self.hydrophobicity {
-        //     Some(Hydrophobicity::SurfaceTension(tension)) => Some(tension),
-        //     _ => None,
-        // }
     }
 
     /// Get the particle diameter

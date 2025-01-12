@@ -118,8 +118,7 @@ impl SasaEnergy {
         // Closure to extract tension from topology for a single particle
         let get_tension = |particle: &Particle| -> f64 {
             context.topology().atomkinds()[particle.atom_id]
-                .hydrophobicity()
-                .and_then(|h| h.surface_tension())
+                .surface_tension()
                 .unwrap_or(0.0)
         };
 
