@@ -18,10 +18,11 @@ use rand::rngs::ThreadRng;
 
 use crate::{
     cell::{BoundaryConditions, Cell},
+    change::Change,
     energy::{builder::HamiltonianBuilder, Hamiltonian},
     group::{GroupCollection, GroupLists, GroupSize},
     topology::Topology,
-    Change, Context, Group, Particle, ParticleSystem, Point, PointParticle, SyncFrom, WithCell,
+    Context, Group, Particle, ParticleSystem, Point, PointParticle, SyncFrom, WithCell,
     WithHamiltonian, WithTopology,
 };
 
@@ -75,6 +76,10 @@ impl ReferencePlatform {
             structure_file,
             rng,
         )
+        .and_then(|mut context| {
+            context.update(&Change::Everything)?;
+            Ok(context)
+        })
     }
 
     pub(crate) fn from_raw_parts(

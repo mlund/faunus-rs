@@ -1,0 +1,25 @@
+# File for testing the correctness of implementation of SASA interactions.
+atoms:
+  - {name: A, mass: 1.0, sigma: 3.0, hydrophobicity: !SurfaceTension 0.9}
+  - {name: B, mass: 1.0, sigma: 4.0, hydrophobicity: !SurfaceTension 1.5}
+
+molecules:
+  - name: MOL
+    atoms: [A, B]
+
+system:
+
+  medium:
+    temperature: 300.0
+    permittivity: !Vacuum
+
+  energy:
+    sasa: {probe_radius: 1.4}
+
+  blocks:
+    - molecule: MOL
+      N: 1
+      insert: !Manual
+        - [0.0, 0.0, 0.0]
+        - [0.0, 0.0, 3.5]
+

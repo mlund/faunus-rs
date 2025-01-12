@@ -14,7 +14,7 @@
 
 //! # Energy due to solvent-accessible surface area and atomic-level tensions.
 
-use crate::{topology::Hydrophobicity, Change, Context, SyncFrom};
+use crate::{Change, Context, SyncFrom};
 use crate::{Particle, Point};
 use derive_builder::Builder;
 use serde::{Deserialize, Serialize};
@@ -22,6 +22,7 @@ use voronota::{Ball, RadicalTessellation};
 
 #[derive(Debug, Clone, Builder)]
 #[builder(derive(Deserialize, Serialize, Debug))]
+#[builder_struct_attr(serde(deny_unknown_fields))]
 pub struct SasaEnergy {
     /// Probe radius for the tessellation
     probe_radius: f64,
@@ -75,7 +76,7 @@ impl SasaEnergy {
             RadicalTessellation::from_balls(self.probe_radius, &self.tesselation.balls, None);
     }
 
-    /// Calculate the surface energy based in the available surface area
+    /// Calculate the surface energy based in the available surface area (kJ/mol)
     pub fn energy(&self, _context: &impl Context, _change: &Change) -> f64 {
         // TODO: calculate only for changed positions
         self.tensions
@@ -109,17 +110,17 @@ impl SasaEnergy {
             let atom_id = particle.atom_id;
             context.topology().atomkinds()[atom_id]
                 .sigma()
+                .map(|sigma| sigma / 2.0)
                 .unwrap_or(0.0)
         };
         let radii = particles.iter().map(get_radius);
 
         // Closure to extract tension from topology for a single particle
         let get_tension = |particle: &Particle| -> f64 {
-            let atom_id = particle.atom_id;
-            match context.topology().atomkinds()[atom_id].hydrophobicity() {
-                Some(Hydrophobicity::SurfaceTension(tension)) => tension,
-                _ => 0.0,
-            }
+            context.topology().atomkinds()[particle.atom_id]
+                .hydrophobicity()
+                .and_then(|h| h.surface_tension())
+                .unwrap_or(0.0)
         };
 
         let balls = Self::make_balls(positions, radii);
@@ -140,5 +141,27 @@ impl SyncFrom for SasaEnergy {
             _ => self.sync_from(other, &Change::Everything)?,
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests_sasaenergy {
+    use crate::{energy::EnergyChange, platform::reference::ReferencePlatform, WithHamiltonian};
+    use float_cmp::assert_approx_eq;
+
+    #[test]
+    fn test_sasa() {
+        let context = ReferencePlatform::new(
+            "tests/files/sasa_interactions.yaml",
+            None,
+            &mut rand::thread_rng(),
+        )
+        .unwrap();
+
+        let energy = context
+            .hamiltonian()
+            .energy(&context, &crate::Change::Everything);
+
+        assert_approx_eq!(f64, energy, 262.3481193159764);
     }
 }
