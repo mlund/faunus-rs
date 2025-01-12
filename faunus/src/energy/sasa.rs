@@ -34,9 +34,12 @@ pub struct SasaEnergy {
     #[builder_field_attr(serde(skip_serializing))]
     #[builder(default)]
     tensions: Vec<f64>,
-    /// Shift calculated energy by this value (kJ/mol); default is 0.
-    #[builder(default)]
-    energy_offset: f64,
+    /// Optionally shift calculated energy by this value (kJ/mol)
+    #[builder(default = None, setter(strip_option))]
+    energy_offset: Option<f64>,
+    /// Set offset from first SASA energy calculation event
+    #[builder(default = "false")]
+    offset_from_first: bool,
 }
 
 impl SasaEnergy {
@@ -46,7 +49,8 @@ impl SasaEnergy {
         positions: impl IntoIterator<Item = &'a Point>,
         radii: impl IntoIterator<Item = f64>,
         tensions: impl IntoIterator<Item = f64>,
-        energy_offset: f64,
+        energy_offset: Option<f64>,
+        offset_from_first: bool,
     ) -> Self {
         let balls = Self::make_balls(positions, radii);
         Self {
@@ -54,6 +58,7 @@ impl SasaEnergy {
             tesselation: RadicalTessellation::from_balls(probe_radius, &balls, None),
             tensions: tensions.into_iter().collect(),
             energy_offset,
+            offset_from_first,
         }
     }
 
@@ -89,7 +94,7 @@ impl SasaEnergy {
             .enumerate()
             .map(|(i, tension)| tension * self.tesselation.available_area(i))
             .sum::<f64>()
-            + self.energy_offset
+            + self.energy_offset.unwrap_or(0.0)
     }
 }
 
@@ -125,6 +130,18 @@ impl SasaEnergy {
                     .unwrap_or(0.0)
             })
             .collect();
+
+        // Set energy offset from the first configuration if requested and only if not already set.
+        // This is useful for the SASA energy to be zero for the first configuration, e.g. when
+        // molecules are not in contact and fully exposed to the solvent.
+        if self.offset_from_first && self.energy_offset.is_none() && !particles.is_empty() {
+            let energy = self.energy(context, &Change::Everything);
+            self.energy_offset = Some(-energy);
+            log::info!(
+                "SASA energy offset set from first configuration = {:.2} kJ/mol",
+                self.energy_offset.unwrap()
+            );
+        }
         Ok(())
     }
 }
@@ -162,5 +179,21 @@ mod tests_sasaenergy {
             .energy(&context, &crate::Change::Everything);
 
         assert_approx_eq!(f64, energy, 262.3481193159764);
+    }
+
+    #[test]
+    fn test_sasa_offset() {
+        let context = ReferencePlatform::new(
+            "tests/files/sasa_interactions_offset.yaml",
+            None,
+            &mut rand::thread_rng(),
+        )
+        .unwrap();
+
+        let energy = context
+            .hamiltonian()
+            .energy(&context, &crate::Change::Everything);
+
+        assert_approx_eq!(f64, energy, 0.0);
     }
 }
