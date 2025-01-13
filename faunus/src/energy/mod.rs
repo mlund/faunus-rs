@@ -28,4 +28,4 @@ pub use celloverlap::CellOverlap;
 pub use energyterm::EnergyTerm;
 pub use hamiltonian::{EnergyChange, Hamiltonian};
 pub use nonbonded::NonbondedMatrix;
-pub use sasa::SasaEnergy;
+pub use sasa::{SasaEnergy, SasaEnergyBuilder};
