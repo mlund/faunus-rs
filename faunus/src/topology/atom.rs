@@ -216,3 +216,29 @@ pub fn set_missing_epsilon(atomkinds: &mut [AtomKind], default_epsilon: f64) {
             i.set_epsilon(Some(default_epsilon));
         });
 }
+
+impl PartialEq<&str> for AtomKind {
+    fn eq(&self, other: &&str) -> bool {
+        self.name == *other
+    }
+}
+
+impl PartialEq<usize> for AtomKind {
+    fn eq(&self, other: &usize) -> bool {
+        self.id == *other
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_atomkind_partial_eq() {
+        let atomkind = crate::topology::AtomKindBuilder::default()
+            .name("my_atomkind")
+            .id(3)
+            .build()
+            .unwrap();
+        assert_eq!(atomkind, "my_atomkind");
+        assert_eq!(atomkind, 3);
+    }
+}
