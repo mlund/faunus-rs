@@ -29,6 +29,25 @@ pub use super::block::{InsertionPolicy, MoleculeBlock};
 pub use super::molecule::MoleculeKind;
 pub use super::structure::positions_from_structure_file;
 
+/// Trait to search collections by name.
+pub trait FindByName<T> {
+    fn find_name(&self, name: &str) -> Option<&T>;
+}
+
+impl FindByName<AtomKind> for &[AtomKind] {
+    /// Find atom with given name.
+    fn find_name(&self, name: &str) -> Option<&AtomKind> {
+        self.iter().find(|a| a.name() == name)
+    }
+}
+
+impl FindByName<MoleculeKind> for &[MoleculeKind] {
+    /// Find molecule with given name.
+    fn find_name(&self, name: &str) -> Option<&MoleculeKind> {
+        self.iter().find(|m| m.name() == name)
+    }
+}
+
 /// Trait implemented by any structure resembling a Topology.
 pub trait TopologyLike {}
 
