@@ -281,7 +281,7 @@ impl Topology {
     }
 
     /// Set ids for atom kinds in the topology and make sure that the atom names are unique.
-    fn finalize_atoms(&mut self) -> anyhow::Result<()> {
+    pub fn finalize_atoms(&mut self) -> anyhow::Result<()> {
         self.atomkinds
             .iter_mut()
             .enumerate()
@@ -298,7 +298,7 @@ impl Topology {
 
     /// Set ids for molecule kinds in the topology, validate the molecules and
     /// set indices of atom kinds forming each molecule.
-    fn finalize_molecules(&mut self) -> anyhow::Result<()> {
+    pub fn finalize_molecules(&mut self) -> anyhow::Result<()> {
         for (i, molecule) in self.moleculekinds.iter_mut().enumerate() {
             if molecule.atom_names().is_empty() {
                 molecule.set_names_from_structure()?;
