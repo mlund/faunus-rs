@@ -22,7 +22,7 @@ use serde::{Deserialize, Serialize};
 /// Atoms need not be chemical elements, but can be custom atoms representing interaction sites.
 /// This does _not_ include positions; indices etc., but is rather
 /// used to represent static properties used for templating atoms.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default, Builder)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, Builder)]
 #[serde(deny_unknown_fields)]
 #[builder(default)]
 pub struct AtomKind {
@@ -118,7 +118,7 @@ impl AtomKind {
     }
 
     /// Set unique identifier
-    pub(super) fn set_id(&mut self, id: usize) {
+    pub fn set_id(&mut self, id: usize) {
         self.id = id;
     }
 
@@ -160,6 +160,32 @@ impl AtomKind {
         atomkind.charge = atom1.charge() * atom2.charge();
         atomkind.mass = atom1.mass() + atom2.mass();
         atomkind
+    }
+}
+
+impl PartialEq for AtomKind {
+    fn eq(&self, other: &Self) -> bool {
+        self.id.eq(&other.id)
+    }
+}
+
+impl Eq for AtomKind {}
+
+impl std::hash::Hash for AtomKind {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.id.hash(state);
+    }
+}
+
+impl std::cmp::PartialOrd for AtomKind {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.id.partial_cmp(&other.id)
+    }
+}
+
+impl std::cmp::Ord for AtomKind {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.id.cmp(&other.id)
     }
 }
 
