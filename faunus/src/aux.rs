@@ -163,7 +163,7 @@ pub(crate) fn angle_points(a: &Point, b: &Point, c: &Point, pbc: &impl Simulatio
 fn test_angle_points() {
     use float_cmp::assert_approx_eq;
 
-    let endless_cell = crate::cell::Endless::default();
+    let endless_cell = crate::cell::Endless;
 
     let p1 = Point::new(3.2, 3.3, 2.5);
     let p2 = Point::new(1.2, 3.3, 2.5);
@@ -256,7 +256,7 @@ pub(crate) fn dihedral_points(
 fn test_dihedral_points() {
     use float_cmp::assert_approx_eq;
 
-    let endless_cell = crate::cell::Endless::default();
+    let endless_cell = crate::cell::Endless;
 
     // cis conformation
     let p1 = Point::new(1.2, 5.3, 2.5);

@@ -305,7 +305,7 @@ impl MoleculeBlock {
     /// - `context` - structure into which the groups should be added
     /// - `molecules` - list of all molecule kinds in the system
     /// - `external_positions` - list of particle coordinates to use;
-    ///    must match exactly the number of coordinates that are required
+    ///   must match exactly the number of coordinates that are required
     pub(crate) fn insert_block(
         &self,
         context: &mut impl Context,

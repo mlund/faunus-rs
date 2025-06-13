@@ -300,7 +300,7 @@ impl<T> Selection<T> {
     pub fn iter(&self) -> anyhow::Result<Box<dyn Iterator<Item = &T> + '_>> {
         match self {
             Selection::Vec(v) => Ok(Box::new(v.iter())),
-            Selection::Repeat(t, n) => Ok(Box::new(std::iter::repeat(t).take(*n))),
+            Selection::Repeat(t, n) => Ok(Box::new(std::iter::repeat_n(t, *n))),
             _ => anyhow::bail!("Cannot iterate over selection"),
         }
     }

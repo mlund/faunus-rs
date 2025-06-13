@@ -522,8 +522,8 @@ mod tests {
     /// Get nonbonded matrix for testing.
     fn get_test_matrix() -> (ReferencePlatform, NonbondedMatrix) {
         let file = "tests/files/nonbonded_interactions.yaml";
-        let topology = Topology::from_file(&file).unwrap();
-        let builder = HamiltonianBuilder::from_file(&file)
+        let topology = Topology::from_file(file).unwrap();
+        let builder = HamiltonianBuilder::from_file(file)
             .unwrap()
             .pairpot_builder
             .unwrap();
