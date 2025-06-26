@@ -1,0 +1,27 @@
+atoms:
+  - name: MP # middle particle
+    mass: 1
+    charge: 0.0
+    sigma: 4.0
+    epsilon: 0.5
+    hydrophobicity: !Lambda 0.7
+  - name: cation
+    mass: 1
+    charge: 2.0
+    sigma: 3.0
+    epsilon: 0.4
+    hydrophobicity: !Lambda 0.6
+  - name: anion
+    mass: 1
+    charge: -2.0
+    sigma: 2.0
+    epsilon: 0.3
+    hydrophobicity: !Lambda 0.5
+system:
+  energy:
+    nonbonded:
+      # Note that a Coulomb term is automatically added, so don't specify one here!
+      default:
+        - !AshbaughHatch {mixing: arithmetic, cutoff: 20.0}
+        # !WCA {mixing: LB}
+

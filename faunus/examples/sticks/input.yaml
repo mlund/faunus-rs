@@ -12,39 +12,42 @@
 #   particles can escape.
 
 atoms:
-  - name: PP # positive particle
-    mass: 1.0
-    charge: 1.0
-    sigma: 4.0
-    epsilon: 0.5
-  - name: NP # negative particle
-    mass: 1.0
-    charge: -1.0
-    sigma: 4.0
-    epsilon: 0.5
   - name: MP # middle particle
-    mass: 1e9
+    mass: 1
     charge: 0.0
-    sigma: 40.0
+    sigma: 4.0
     epsilon: 0.5
+    hydrophobicity: !Lambda 0.7
+  - name: cation
+    mass: 1
+    charge: 2.0
+    sigma: 3.0
+    epsilon: 0.4
+    hydrophobicity: !Lambda 0.6
+  - name: anion
+    mass: 1
+    charge: -2.0
+    sigma: 2.0
+    epsilon: 0.3
+    hydrophobicity: !Lambda 0.5
 
 molecules:
   - name: MOL1
     degrees_of_freedom: Rigid
     has_com: true
-    from_structure: "cppm-p18.xyz" 
+    from_structure: "stick.xyz" 
   - name: MOL2
     degrees_of_freedom: Rigid
     has_com: true
-    from_structure: "cppm-p18.xyz" 
+    from_structure: "stick.xyz" 
 
 system:
-  cell: !Sphere { radius: 125.0 }
+  cell: !Sphere { radius: 60.0 }
   medium:
     permittivity: !Water
     temperature: 298.15
     # salt type and concentration in mol/l
-    salt: [!NaCl, 0.005]
+    salt: [!NaCl, 0.01]
 
   blocks:
     - molecule: MOL1
@@ -52,7 +55,7 @@ system:
       insert:
         # Place in the middle of the box
         !RandomCOM {
-          filename: "cppm-p18.xyz",
+          filename: "stick.xyz",
           rotate: true,
           directions: none,
           offset: [0.0, 0.0, 0.0],
@@ -62,7 +65,7 @@ system:
       insert:
         # Place along z-axis
         !RandomCOM {
-          filename: "cppm-p18.xyz",
+          filename: "stick.xyz",
           rotate: true,
           directions: none,
           offset: [0.0, 0.0, 42.0],
@@ -71,8 +74,9 @@ system:
   energy:
     nonbonded:
       default:
-        - !Coulomb {cutoff: 1e3}
-        - !WeeksChandlerAndersen {mixing: LB}
+        - !Coulomb {cutoff: 1000}
+        - !AshbaughHatch {mixing: arithmetic, cutoff: 20.0}
+        # !WeeksChandlerAndersen {mixing: LB}
 
 analysis:
   - !MassCenterDistance
@@ -86,7 +90,7 @@ analysis:
 propagate:
   seed: Hardware
   criterion: Metropolis
-  repeat: 1000000
+  repeat: 10000000
   collections:
     - !Stochastic
       moves:
