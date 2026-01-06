@@ -72,12 +72,12 @@ pub trait WithHamiltonian: GroupCollection {
     /// Reference to Hamiltonian.
     ///
     /// Hamiltonian must be stored as `RefCell<Hamiltonian>`.
-    fn hamiltonian(&self) -> Ref<Hamiltonian>;
+    fn hamiltonian(&self) -> Ref<'_, Hamiltonian>;
 
     /// Mutable reference to Hamiltonian.
     ///
     /// Hamiltonian must be stored as `RefCell<Hamiltonian>`.
-    fn hamiltonian_mut(&self) -> RefMut<Hamiltonian>;
+    fn hamiltonian_mut(&self) -> RefMut<'_, Hamiltonian>;
 }
 
 /// A trait for objects that have a temperature

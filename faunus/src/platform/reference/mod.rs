@@ -130,11 +130,11 @@ impl WithTopology for ReferencePlatform {
 }
 
 impl WithHamiltonian for ReferencePlatform {
-    fn hamiltonian(&self) -> Ref<Hamiltonian> {
+    fn hamiltonian(&self) -> Ref<'_, Hamiltonian> {
         self.hamiltonian.borrow()
     }
 
-    fn hamiltonian_mut(&self) -> RefMut<Hamiltonian> {
+    fn hamiltonian_mut(&self) -> RefMut<'_, Hamiltonian> {
         self.hamiltonian.borrow_mut()
     }
 }

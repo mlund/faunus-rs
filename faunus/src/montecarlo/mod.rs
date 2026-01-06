@@ -263,7 +263,7 @@ pub struct MarkovChain<T: Context> {
 }
 
 impl<T: Context> MarkovChain<T> {
-    pub fn iter(&mut self) -> MarkovChainIterator<T> {
+    pub fn iter(&mut self) -> MarkovChainIterator<'_, T> {
         MarkovChainIterator { markov: self }
     }
 }
