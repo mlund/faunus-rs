@@ -28,8 +28,8 @@ use coulomb::permittivity::VACUUM as VACUUM_PERMITTIVITY;
 use coulomb::{permittivity::RelativePermittivity, DebyeLength};
 use interatomic::{
     twobody::{
-        AshbaughHatch, HardSphere, IonIon, IsotropicTwobodyEnergy, LennardJones, NoInteraction,
-        WeeksChandlerAndersen,
+        AshbaughHatch, HardSphere, IonIon, IsotropicTwobodyEnergy, KimHummer, LennardJones,
+        NoInteraction, WeeksChandlerAndersen,
     },
     CombinationRule,
 };
@@ -66,6 +66,9 @@ pub(crate) enum DirectOrMixing<T: IsotropicTwobodyEnergy> {
 pub(crate) enum PairInteraction {
     /// Ashbaugh-Hatch potential.
     AshbaughHatch(DirectOrMixing<AshbaughHatch>),
+    /// Kim-Hummer coarse-grained protein potential.
+    #[serde(alias = "KH")]
+    KimHummer(DirectOrMixing<KimHummer>),
     /// Lennard-Jones potential.
     LennardJones(DirectOrMixing<LennardJones>),
     /// Weeks-Chandler-Andersen potential.
@@ -101,6 +104,20 @@ impl PairInteraction {
         let charge_product = mixed.charge();
 
         match self {
+            Self::KimHummer(x) => match x {
+                DirectOrMixing::Direct(inner) => Ok(Box::new(inner.clone())),
+                DirectOrMixing::Mixing {
+                    mixing: rule,
+                    cutoff: _,
+                    _phantom: _,
+                } => {
+                    let combined = AtomKind::combine(*rule, atom1, atom2);
+                    Ok(Box::new(KimHummer::new(
+                        combined.epsilon().context("Epsilons not defined!")?,
+                        combined.sigma().context("Sigmas not defined!")?,
+                    )))
+                }
+            },
             Self::LennardJones(x) => match x {
                 DirectOrMixing::Direct(inner) => Ok(Box::new(inner.clone())),
                 DirectOrMixing::Mixing {
@@ -777,5 +794,65 @@ mod tests {
             .get_interaction(&atom1, &atom2, Some(medium.clone()))
             .unwrap();
         assert_behavior(interaction, expected);
+    }
+
+    #[test]
+    fn test_kimhummer_deserialization() {
+        let builder =
+            HamiltonianBuilder::from_file("tests/files/nonbonded_kimhummer.yaml").unwrap();
+
+        let pairpot_builder = builder.pairpot_builder.unwrap();
+
+        // Check that we have the expected keys
+        assert!(pairpot_builder.0.contains_key(&DefaultOrPair::Default));
+        assert!(pairpot_builder
+            .0
+            .contains_key(&DefaultOrPair::Pair(UnorderedPair(
+                String::from("A"),
+                String::from("A")
+            ))));
+        assert!(pairpot_builder
+            .0
+            .contains_key(&DefaultOrPair::Pair(UnorderedPair(
+                String::from("B"),
+                String::from("B")
+            ))));
+
+        assert_eq!(pairpot_builder.0.len(), 3);
+
+        for (pair, interactions) in pairpot_builder.0 {
+            match pair {
+                DefaultOrPair::Default => {
+                    // Default uses mixing rule
+                    assert_eq!(
+                        interactions,
+                        vec![PairInteraction::KimHummer(DirectOrMixing::Mixing {
+                            mixing: CombinationRule::LorentzBerthelot,
+                            cutoff: None,
+                            _phantom: Default::default()
+                        })]
+                    );
+                }
+                DefaultOrPair::Pair(UnorderedPair(x, y)) if x == "A" && y == "A" => {
+                    // A-A uses direct parameters (attractive)
+                    assert_eq!(
+                        interactions,
+                        vec![PairInteraction::KimHummer(DirectOrMixing::Direct(
+                            KimHummer::new(-0.5, 6.0)
+                        ))]
+                    );
+                }
+                DefaultOrPair::Pair(UnorderedPair(x, y)) if x == "B" && y == "B" => {
+                    // B-B uses direct parameters with unicode aliases (repulsive)
+                    assert_eq!(
+                        interactions,
+                        vec![PairInteraction::KimHummer(DirectOrMixing::Direct(
+                            KimHummer::new(0.3, 8.0)
+                        ))]
+                    );
+                }
+                _ => panic!("Unexpected pair in interactions"),
+            }
+        }
     }
 }
