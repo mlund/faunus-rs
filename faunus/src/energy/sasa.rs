@@ -55,7 +55,7 @@ impl SasaEnergy {
         let balls = Self::make_balls(positions, radii);
         Self {
             probe_radius,
-            tesselation: RadicalTessellation::from_balls(probe_radius, &balls, None),
+            tesselation: RadicalTessellation::from_balls(probe_radius, &balls, None, None, false),
             tensions: tensions.into_iter().collect(),
             energy_offset,
             offset_from_first,
@@ -82,8 +82,13 @@ impl SasaEnergy {
             ball.y = pos.y;
             ball.z = pos.z;
         });
-        self.tesselation =
-            RadicalTessellation::from_balls(self.probe_radius, &self.tesselation.balls, None);
+        self.tesselation = RadicalTessellation::from_balls(
+            self.probe_radius,
+            &self.tesselation.balls,
+            None,
+            None,
+            false,
+        );
     }
 
     /// Calculate the surface energy based in the available surface area (kJ/mol)
@@ -92,7 +97,7 @@ impl SasaEnergy {
         self.tensions
             .iter()
             .enumerate()
-            .map(|(i, tension)| tension * self.tesselation.available_area(i))
+            .map(|(i, tension)| tension * self.tesselation.contact_area(i))
             .sum::<f64>()
             + self.energy_offset.unwrap_or(0.0)
     }
@@ -121,7 +126,8 @@ impl SasaEnergy {
                 .unwrap_or(0.0)
         });
         let balls = Self::make_balls(positions, radii);
-        self.tesselation = RadicalTessellation::from_balls(self.probe_radius, &balls, None);
+        self.tesselation =
+            RadicalTessellation::from_balls(self.probe_radius, &balls, None, None, false);
         self.tensions = particles
             .iter()
             .map(|p| {
