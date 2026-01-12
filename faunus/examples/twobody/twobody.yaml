@@ -85,6 +85,13 @@ analysis:
   - !Trajectory
     file: "traj.xyz"
     frequency: !Every 100
+  - !VirtualTranslate
+    molecule: MOL2
+    dL: 0.1
+    directions: !z
+    file: "vt.dat.gz"
+    temperature: 298.15
+    frequency: !Every 10
 
 propagate:
   seed: Hardware
