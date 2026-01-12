@@ -24,9 +24,11 @@ use std::path::PathBuf;
 
 mod distance;
 mod structure_writer;
+mod virtual_translate;
 pub use distance::{MassCenterDistance, MassCenterDistanceBuilder};
 #[cfg(feature = "chemfiles")]
 pub use structure_writer::{StructureWriter, StructureWriterBuilder};
+pub use virtual_translate::{VirtualTranslate, VirtualTranslateBuilder};
 
 /// Frequency of analysis.
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
@@ -87,6 +89,8 @@ pub enum AnalysisBuilder {
     #[cfg(feature = "chemfiles")]
     #[serde(rename = "Trajectory")]
     StructureWriter(StructureWriterBuilder),
+    /// Virtual translate analysis for force measurement
+    VirtualTranslate(VirtualTranslateBuilder),
 }
 
 impl AnalysisBuilder {
@@ -97,6 +101,9 @@ impl AnalysisBuilder {
             Self::MassCenterDistance(builder) => Box::new(builder.build(&context.topology())?),
             #[cfg(feature = "chemfiles")]
             Self::StructureWriter(builder) => Box::new(builder.build()?),
+            Self::VirtualTranslate(builder) => {
+                Box::new(builder.build(&context.topology())?)
+            }
         };
         Ok(analysis)
     }
