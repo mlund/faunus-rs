@@ -73,12 +73,15 @@ system:
       default:
         - !Coulomb {cutoff: 1e3}
         - !WeeksChandlerAndersen {mixing: LB}
+    spline:
+      cutoff: 15.0
+      n_points: 2000
 
 analysis:
   - !MassCenterDistance
     molecules: ["MOL1", "MOL2"]
     file: "com_distance.dat.gz"
-    frequency: !Every 10
+    frequency: !Every 100
   - !Trajectory
     file: "traj.xyz"
     frequency: !Every 100
@@ -86,7 +89,7 @@ analysis:
 propagate:
   seed: Hardware
   criterion: Metropolis
-  repeat: 1000000
+  repeat: 500000
   collections:
     - !Stochastic
       moves:
