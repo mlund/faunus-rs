@@ -1,6 +1,6 @@
 use super::{
     bonded::{IntermolecularBonded, IntramolecularBonded},
-    nonbonded::NonbondedMatrix,
+    nonbonded::{NonbondedMatrix, NonbondedMatrixSplined},
     sasa::SasaEnergy,
     CellOverlap, EnergyChange,
 };
@@ -10,6 +10,8 @@ use crate::{Change, Context, SyncFrom};
 pub enum EnergyTerm {
     /// Non-bonded interactions between particles.
     NonbondedMatrix(NonbondedMatrix),
+    /// Non-bonded interactions using splined pair potentials.
+    NonbondedMatrixSplined(NonbondedMatrixSplined),
     /// Intramolecular bonded interactions.
     IntramolecularBonded(IntramolecularBonded),
     /// Intermolecular bonded interactions.
@@ -24,7 +26,9 @@ impl EnergyTerm {
     /// Update internal state due to a change in the system.
     pub fn update(&mut self, context: &impl Context, change: &Change) -> anyhow::Result<()> {
         match self {
-            EnergyTerm::NonbondedMatrix(_) | EnergyTerm::IntramolecularBonded(_) => Ok(()),
+            EnergyTerm::NonbondedMatrix(_)
+            | EnergyTerm::NonbondedMatrixSplined(_)
+            | EnergyTerm::IntramolecularBonded(_) => Ok(()),
             EnergyTerm::IntermolecularBonded(x) => x.update(context, change),
             EnergyTerm::SasaEnergy(x) => x.update(context, change),
             EnergyTerm::CellOverlap(_) => Ok(()),
@@ -38,6 +42,7 @@ impl EnergyChange for EnergyTerm {
     fn energy(&self, context: &impl Context, change: &Change) -> f64 {
         match self {
             Self::NonbondedMatrix(x) => x.energy(context, change),
+            Self::NonbondedMatrixSplined(x) => x.energy(context, change),
             Self::IntramolecularBonded(x) => x.energy(context, change),
             Self::IntermolecularBonded(x) => x.energy(context, change),
             Self::SasaEnergy(x) => x.energy(context, change),
@@ -52,6 +57,7 @@ impl SyncFrom for EnergyTerm {
         use EnergyTerm::*;
         match (self, other) {
             (NonbondedMatrix(x), NonbondedMatrix(y)) => x.sync_from(y, change)?,
+            (NonbondedMatrixSplined(x), NonbondedMatrixSplined(y)) => x.sync_from(y, change)?,
             (IntramolecularBonded(_), IntramolecularBonded(_)) => (),
             (IntermolecularBonded(x), IntermolecularBonded(y)) => x.sync_from(y, change)?,
             (SasaEnergy(x), SasaEnergy(y)) => x.sync_from(y, change)?,

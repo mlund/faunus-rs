@@ -14,7 +14,7 @@
 
 //! Implementation of the Nonbonded energy terms.
 
-use interatomic::twobody::{IsotropicTwobodyEnergy, NoInteraction};
+use interatomic::twobody::{IsotropicTwobodyEnergy, NoInteraction, SplineConfig, SplinedPotential};
 use ndarray::Array2;
 use std::fmt::Debug;
 use std::path::Path;
@@ -392,6 +392,144 @@ impl From<NonbondedMatrix> for EnergyTerm {
 
 impl SyncFrom for NonbondedMatrix {
     fn sync_from(&mut self, other: &NonbondedMatrix, change: &Change) -> anyhow::Result<()> {
+        match change {
+            Change::Everything => self.potentials.clone_from(&other.potentials),
+            Change::None | Change::Volume(_, _) | Change::SingleGroup(_, _) | Change::Groups(_) => {
+            }
+        }
+        Ok(())
+    }
+}
+
+/// Energy term for computing nonbonded interactions using splined pair potentials.
+///
+/// This is a performance-optimized version of [`NonbondedMatrix`] that pre-tabulates
+/// all pair potentials using cubic Hermite splines for O(1) energy evaluation.
+///
+/// # Notes
+///
+/// - Splined potentials trade memory for speed and are most beneficial for
+///   complex potentials (coarse-grained models, combined potentials).
+/// - The spline operates in r² space to avoid square root calculations.
+/// - Energy evaluation uses Horner's method requiring only 4 FMA operations.
+#[derive(Debug, Clone)]
+pub struct NonbondedMatrixSplined {
+    /// Matrix of splined pair potentials based on atom type ids.
+    potentials: Array2<SplinedPotential>,
+    /// Matrix of excluded interactions.
+    exclusions: ExclusionMatrix,
+}
+
+impl NonbondedMatrixSplined {
+    /// Create a splined nonbonded matrix from an existing [`NonbondedMatrix`].
+    ///
+    /// # Parameters
+    /// - `nonbonded`: The source nonbonded matrix containing pair potentials to spline.
+    /// - `cutoff`: The cutoff distance for all interactions.
+    /// - `config`: Optional spline configuration. If `None`, uses default settings.
+    ///
+    /// # Example
+    /// ```ignore
+    /// let nonbonded = NonbondedMatrix::new(&builder, &topology, medium)?;
+    /// let splined = NonbondedMatrixSplined::new(&nonbonded, 12.0, None);
+    /// ```
+    pub fn new(nonbonded: &NonbondedMatrix, cutoff: f64, config: Option<SplineConfig>) -> Self {
+        let config = config.unwrap_or_default();
+        let source = nonbonded.get_potentials();
+        let shape = source.raw_dim();
+
+        let potentials = Array2::from_shape_fn(shape, |(i, j)| {
+            let potential = source.get((i, j)).expect("Index should be valid");
+            SplinedPotential::with_cutoff(potential, cutoff, config.clone())
+        });
+
+        Self {
+            potentials,
+            exclusions: nonbonded.exclusions.clone(),
+        }
+    }
+
+    /// Get reference to the splined potentials matrix.
+    pub fn get_potentials(&self) -> &Array2<SplinedPotential> {
+        &self.potentials
+    }
+
+    /// Matches all possible single group perturbations and returns the energy.
+    fn single_group_change(
+        &self,
+        context: &impl Context,
+        group_index: usize,
+        change: &GroupChange,
+    ) -> f64 {
+        match change {
+            GroupChange::RigidBody => {
+                self.group_with_other_groups(context, &context.groups()[group_index])
+            }
+            GroupChange::Resize(_) | GroupChange::UpdateIdentity(_) => {
+                todo!("Resize and UpdateIdentity changes are not yet implemented for NonbondedMatrixSplined.")
+            }
+            GroupChange::PartialUpdate(x) => x
+                .iter()
+                .map(|&particle| {
+                    let group = &context.groups()[group_index];
+                    match group.to_absolute_index(particle) {
+                        Ok(abs_index) => self.particle_with_all(context, abs_index, group),
+                        Err(_) => 0.0,
+                    }
+                })
+                .sum(),
+            GroupChange::None => 0.0,
+        }
+    }
+}
+
+impl NonbondedTerm for NonbondedMatrixSplined {
+    #[inline(always)]
+    fn particle_with_particle(&self, context: &impl Context, i: usize, j: usize) -> f64 {
+        let distance_squared = context.get_distance_squared(i, j);
+        self.exclusions.get((i, j)) as f64
+            * self
+                .potentials
+                .get((context.get_atomkind(i), context.get_atomkind(j)))
+                .expect("Atom kinds should exist in the nonbonded matrix.")
+                .isotropic_twobody_energy(distance_squared)
+    }
+}
+
+impl EnergyChange for NonbondedMatrixSplined {
+    fn energy(&self, context: &impl Context, change: &Change) -> f64 {
+        match change {
+            Change::Everything | Change::Volume(_, _) => self.total_nonbonded(context),
+            Change::SingleGroup(group_index, group_change) => {
+                self.single_group_change(context, *group_index, group_change)
+            }
+            Change::Groups(vec) => vec
+                .iter()
+                .map(|(group, change)| self.single_group_change(context, *group, change))
+                .sum(),
+            Change::None => 0.0,
+        }
+    }
+}
+
+impl From<NonbondedMatrixSplined> for EnergyTerm {
+    fn from(nonbonded: NonbondedMatrixSplined) -> Self {
+        EnergyTerm::NonbondedMatrixSplined(nonbonded)
+    }
+}
+
+impl From<&NonbondedMatrix> for NonbondedMatrixSplined {
+    /// Create a splined nonbonded matrix from a reference to [`NonbondedMatrix`]
+    /// using default spline configuration and a cutoff of 15.0 Å.
+    ///
+    /// For custom cutoff or configuration, use [`NonbondedMatrixSplined::new`] instead.
+    fn from(nonbonded: &NonbondedMatrix) -> Self {
+        Self::new(nonbonded, 15.0, None)
+    }
+}
+
+impl SyncFrom for NonbondedMatrixSplined {
+    fn sync_from(&mut self, other: &NonbondedMatrixSplined, change: &Change) -> anyhow::Result<()> {
         match change {
             Change::Everything => self.potentials.clone_from(&other.potentials),
             Change::None | Change::Volume(_, _) | Change::SingleGroup(_, _) | Change::Groups(_) => {
@@ -985,5 +1123,186 @@ mod tests {
             (2, GroupChange::PartialUpdate(vec![0])),
         ]);
         assert_approx_eq!(f64, nonbonded.energy(&system, &change), expected);
+    }
+
+    // ====== NonbondedMatrixSplined tests ======
+
+    /// Get splined nonbonded matrix for testing.
+    fn get_test_splined_matrix() -> (ReferencePlatform, NonbondedMatrix, NonbondedMatrixSplined) {
+        let (system, nonbonded) = get_test_matrix();
+        let cutoff = 15.0; // Use a cutoff that covers all test distances
+        let splined = NonbondedMatrixSplined::new(&nonbonded, cutoff, None);
+        (system, nonbonded, splined)
+    }
+
+    #[test]
+    fn test_nonbonded_matrix_splined_new() {
+        let (_, nonbonded, splined) = get_test_splined_matrix();
+
+        // Check that the splined matrix has the same dimensions as the original
+        assert_eq!(
+            splined.get_potentials().raw_dim(),
+            nonbonded.get_potentials().raw_dim()
+        );
+    }
+
+    #[test]
+    fn test_nonbonded_matrix_splined_particle_particle() {
+        let (system, nonbonded, splined) = get_test_splined_matrix();
+
+        // Use tolerance since splines are approximations
+        let relative_tolerance = 2e-3; // 0.2% relative error for larger values
+        let absolute_tolerance = 1e-5; // Absolute tolerance for very small values
+
+        // Test some representative pairs
+        let test_pairs = [(0, 1), (0, 3), (1, 4), (3, 4), (0, 5), (1, 5)];
+
+        for (i, j) in test_pairs {
+            let analytical = nonbonded.particle_with_particle(&system, i, j);
+            let splined_energy = splined.particle_with_particle(&system, i, j);
+            let abs_diff = (analytical - splined_energy).abs();
+
+            // For very small energies, check absolute difference
+            // For larger energies, check relative difference
+            if analytical.abs() < 1e-4 {
+                assert!(
+                    abs_diff < absolute_tolerance,
+                    "Pair ({}, {}): analytical={}, splined={}, abs_diff={}",
+                    i,
+                    j,
+                    analytical,
+                    splined_energy,
+                    abs_diff
+                );
+            } else {
+                let relative_error = abs_diff / analytical.abs();
+                assert!(
+                    relative_error < relative_tolerance,
+                    "Pair ({}, {}): analytical={}, splined={}, relative_error={}",
+                    i,
+                    j,
+                    analytical,
+                    splined_energy,
+                    relative_error
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_nonbonded_matrix_splined_total_nonbonded() {
+        let (mut system, nonbonded, splined) = get_test_splined_matrix();
+
+        // Deactivate some particles like in the original test
+        system.resize_group(0, GroupSize::Shrink(1)).unwrap();
+        system.resize_group(2, GroupSize::Shrink(3)).unwrap();
+
+        let analytical_total = nonbonded.total_nonbonded(&system);
+        let splined_total = splined.total_nonbonded(&system);
+
+        // Allow for some tolerance due to spline approximation
+        let tolerance = 1e-3;
+        let relative_error = ((analytical_total - splined_total) / analytical_total).abs();
+
+        assert!(
+            relative_error < tolerance,
+            "Total energy: analytical={}, splined={}, relative_error={}",
+            analytical_total,
+            splined_total,
+            relative_error
+        );
+    }
+
+    #[test]
+    fn test_nonbonded_matrix_splined_energy_changes() {
+        let (mut system, nonbonded, splined) = get_test_splined_matrix();
+
+        // Deactivate some particles
+        system.resize_group(0, GroupSize::Shrink(1)).unwrap();
+        system.resize_group(2, GroupSize::Shrink(3)).unwrap();
+
+        let tolerance = 1e-3;
+
+        // Test Change::None
+        let change = Change::None;
+        assert_approx_eq!(f64, splined.energy(&system, &change), 0.0);
+
+        // Test Change::Everything
+        let change = Change::Everything;
+        let analytical = nonbonded.energy(&system, &change);
+        let splined_energy = splined.energy(&system, &change);
+        let relative_error = ((analytical - splined_energy) / analytical).abs();
+        assert!(
+            relative_error < tolerance,
+            "Change::Everything: analytical={}, splined={}, relative_error={}",
+            analytical,
+            splined_energy,
+            relative_error
+        );
+
+        // Test single rigid group change
+        let change = Change::SingleGroup(1, GroupChange::RigidBody);
+        let analytical = nonbonded.energy(&system, &change);
+        let splined_energy = splined.energy(&system, &change);
+        let relative_error = ((analytical - splined_energy) / analytical).abs();
+        assert!(
+            relative_error < tolerance,
+            "SingleGroup RigidBody: analytical={}, splined={}, relative_error={}",
+            analytical,
+            splined_energy,
+            relative_error
+        );
+
+        // Test partial update
+        let change = Change::SingleGroup(1, GroupChange::PartialUpdate(vec![0, 1]));
+        let analytical = nonbonded.energy(&system, &change);
+        let splined_energy = splined.energy(&system, &change);
+        let relative_error = ((analytical - splined_energy) / analytical).abs();
+        assert!(
+            relative_error < tolerance,
+            "SingleGroup PartialUpdate: analytical={}, splined={}, relative_error={}",
+            analytical,
+            splined_energy,
+            relative_error
+        );
+    }
+
+    #[test]
+    fn test_nonbonded_matrix_splined_with_config() {
+        let (system, nonbonded, _) = get_test_splined_matrix();
+
+        // Test with high accuracy config
+        let config = SplineConfig::high_accuracy();
+        let splined_high = NonbondedMatrixSplined::new(&nonbonded, 15.0, Some(config));
+
+        // Test with fast config
+        let config = SplineConfig::fast();
+        let splined_fast = NonbondedMatrixSplined::new(&nonbonded, 15.0, Some(config));
+
+        // Both should produce reasonable energies
+        let energy_high = splined_high.total_nonbonded(&system);
+        let energy_fast = splined_fast.total_nonbonded(&system);
+        let analytical = nonbonded.total_nonbonded(&system);
+
+        // High accuracy should be closer to analytical
+        let error_high = ((analytical - energy_high) / analytical).abs();
+        let error_fast = ((analytical - energy_fast) / analytical).abs();
+
+        // Both should be within reasonable bounds
+        assert!(
+            error_high < 1e-3,
+            "High accuracy error too large: {}",
+            error_high
+        );
+        assert!(error_fast < 1e-2, "Fast config error too large: {}", error_fast);
+
+        // High accuracy should generally be better (or at least not significantly worse)
+        // Note: this isn't always guaranteed but should hold for most cases
+        assert!(
+            error_high <= error_fast * 1.1,
+            "High accuracy ({}) should be better than fast ({})",
+            error_high,
+            error_fast
+        );
     }
 }

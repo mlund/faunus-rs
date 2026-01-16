@@ -1,7 +1,7 @@
 use super::{
     bonded::{IntermolecularBonded, IntramolecularBonded},
     builder::HamiltonianBuilder,
-    nonbonded::NonbondedMatrix,
+    nonbonded::{NonbondedMatrix, NonbondedMatrixSplined},
     CellOverlap, EnergyTerm,
 };
 use crate::{topology::Topology, Change, Context, SyncFrom};
@@ -45,8 +45,22 @@ impl Hamiltonian {
         hamiltonian.push(CellOverlap.into());
 
         if let Some(nonbonded_matrix) = &builder.pairpot_builder {
-            hamiltonian
-                .push(NonbondedMatrix::new(nonbonded_matrix, topology, medium.clone())?.into());
+            let nonbonded = NonbondedMatrix::new(nonbonded_matrix, topology, medium.clone())?;
+
+            // Use splined potentials if configured
+            if let Some(spline_opts) = &builder.spline {
+                let config = spline_opts.to_spline_config();
+                let splined =
+                    NonbondedMatrixSplined::new(&nonbonded, spline_opts.cutoff, Some(config));
+                log::info!(
+                    "Using splined nonbonded potentials (cutoff={}, n_points={})",
+                    spline_opts.cutoff,
+                    spline_opts.n_points
+                );
+                hamiltonian.push(splined.into());
+            } else {
+                hamiltonian.push(nonbonded.into());
+            }
         }
 
         hamiltonian.push(IntramolecularBonded::default().into());

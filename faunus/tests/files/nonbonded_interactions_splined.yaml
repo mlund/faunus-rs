@@ -1,0 +1,40 @@
+# File for testing splined nonbonded interactions.
+atoms:
+  - {name: A, charge: -1.0, mass: 1.0}
+  - {name: B, mass: 2.0}
+
+molecules:
+  - name: MOL
+    atoms: [A, B, A]
+    exclusions: [[0, 2]]
+
+system:
+  medium:
+    permittivity: !Vacuum
+    temperature: 298.15
+  energy:
+    nonbonded:
+      default:
+        - !LennardJones {σ: 1.0, eps: 2.5}
+        - !CoulombPlain {cutoff: 6.0}
+      [B, B]:
+        - !LennardJones {sigma: 2.0, ε: 5.0}
+    spline:
+      cutoff: 15.0
+      n_points: 2000
+
+  blocks:
+    - molecule: MOL
+      N: 3
+      insert: !Manual
+        - [1.0, 2.0, 3.0]    # 0
+        - [0.0, 1.0, 2.0]    # 1
+        - [-1.0, -2.0, -3.0] # 2
+
+        - [-1.0, 0.0, 1.0]   # 3
+        - [-2.0, -1.0, 0.0]  # 4
+        - [-3.0, -4.0, -5.0] # 5
+
+        - [3.0, 4.0, 5.0]    # 6
+        - [2.0, 3.0, 4.0]    # 7
+        - [1.0, 0.0, -1.0]   # 8

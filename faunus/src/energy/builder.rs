@@ -40,6 +40,7 @@ use serde::{
 use unordered_pair::UnorderedPair;
 
 use super::sasa::SasaEnergyBuilder;
+use interatomic::twobody::SplineConfig;
 
 /// Specifies whether the parameters for the interaction are
 /// directly provided or should be calculated using a combination rule.
@@ -282,12 +283,43 @@ impl PairPotentialBuilder {
     }
 }
 
+fn default_spline_n_points() -> usize {
+    2000
+}
+
+/// Configuration for splined nonbonded potentials.
+///
+/// When present in the YAML input, nonbonded interactions will be
+/// tabulated using cubic Hermite splines for faster evaluation.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct SplineOptions {
+    /// Cutoff distance for splined potentials (Ångström).
+    pub cutoff: f64,
+    /// Number of grid points for the spline table.
+    #[serde(default = "default_spline_n_points")]
+    pub n_points: usize,
+}
+
+impl SplineOptions {
+    /// Convert to interatomic's SplineConfig.
+    pub fn to_spline_config(&self) -> SplineConfig {
+        SplineConfig {
+            n_points: self.n_points,
+            ..Default::default()
+        }
+    }
+}
+
 /// Structure used for (de)serializing the Hamiltonian of the system.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub(crate) struct HamiltonianBuilder {
     /// Nonbonded interactions defined for the system.
     #[serde(rename = "nonbonded")]
     pub pairpot_builder: Option<PairPotentialBuilder>,
+
+    /// Optional spline configuration for nonbonded interactions.
+    /// When present, `NonbondedMatrixSplined` is used instead of `NonbondedMatrix`.
+    pub spline: Option<SplineOptions>,
 
     /// Solvent Accessible Surface Area (SASA) energy term.
     pub sasa: Option<SasaEnergyBuilder>,
@@ -854,5 +886,24 @@ mod tests {
                 _ => panic!("Unexpected pair in interactions"),
             }
         }
+    }
+
+    #[test]
+    fn test_spline_options_deserialization() {
+        let builder =
+            HamiltonianBuilder::from_file("tests/files/nonbonded_interactions_splined.yaml")
+                .unwrap();
+
+        // Check that nonbonded interactions are present
+        assert!(builder.pairpot_builder.is_some());
+
+        // Check that spline options are present and correctly parsed
+        let spline = builder.spline.expect("Spline options should be present");
+        assert_approx_eq!(f64, spline.cutoff, 15.0);
+        assert_eq!(spline.n_points, 2000);
+
+        // Verify conversion to SplineConfig works
+        let config = spline.to_spline_config();
+        assert_eq!(config.n_points, 2000);
     }
 }
