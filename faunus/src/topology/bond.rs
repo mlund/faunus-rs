@@ -17,6 +17,7 @@
 use derive_getters::Getters;
 use float_cmp::approx_eq;
 use interatomic::twobody::IsotropicTwobodyEnergy;
+use interatomic::Cutoff;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
@@ -162,6 +163,12 @@ impl Bond {
 impl Indexed for Bond {
     fn index(&self) -> &[usize] {
         &self.index
+    }
+}
+
+impl Cutoff for Bond {
+    fn cutoff(&self) -> f64 {
+        f64::INFINITY
     }
 }
 

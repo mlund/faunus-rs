@@ -14,11 +14,12 @@
 
 //! Implementation of the Nonbonded energy terms.
 
-use interatomic::twobody::{IsotropicTwobodyEnergy, NoInteraction, SplineConfig, SplinedPotential};
+use interatomic::twobody::{
+    ArcPotential, IsotropicTwobodyEnergy, NoInteraction, SplineConfig, SplinedPotential,
+};
 use ndarray::Array2;
 use std::fmt::Debug;
 use std::path::Path;
-use std::sync::Arc;
 
 use crate::{
     energy::{builder::PairPotentialBuilder, EnergyTerm},
@@ -251,12 +252,12 @@ pub(super) trait NonbondedTerm {
 ///
 /// # Note
 ///
-/// We use `Arc<dyn IsotropicTwobodyEnergy>` for thread-safety.
+/// We use `ArcPotential` for thread-safety.
 /// `Box` is not thread-safe but perhaps more performant(?).
 #[derive(Debug, Clone)]
 pub struct NonbondedMatrix {
     /// Matrix of pair potentials based on atom type ids.
-    potentials: Array2<Arc<dyn IsotropicTwobodyEnergy>>,
+    potentials: Array2<ArcPotential>,
     /// Matrix of excluded interactions.
     exclusions: ExclusionMatrix,
 }
@@ -324,16 +325,16 @@ impl NonbondedMatrix {
         let atoms = topology.atomkinds();
         let n_atom_types = atoms.len();
 
-        let mut potentials: Array2<Arc<dyn IsotropicTwobodyEnergy>> = Array2::from_elem(
+        let mut potentials: Array2<ArcPotential> = Array2::from_elem(
             (n_atom_types, n_atom_types),
-            Arc::<NoInteraction>::default(),
+            ArcPotential::new(NoInteraction::default()),
         );
 
         for i in 0..n_atom_types {
             for j in 0..n_atom_types {
                 let interaction =
                     pairpot_builder.get_interaction(&atoms[i], &atoms[j], medium.clone())?;
-                potentials[(i, j)] = interaction.into();
+                potentials[(i, j)] = ArcPotential(interaction.into());
             }
         }
 
@@ -375,11 +376,11 @@ impl NonbondedMatrix {
         }
     }
     /// Get square matrix of pair potentials for all atom type combinations.
-    pub fn get_potentials(&self) -> &Array2<Arc<dyn IsotropicTwobodyEnergy>> {
+    pub fn get_potentials(&self) -> &Array2<ArcPotential> {
         &self.potentials
     }
     /// Get square matrix of pair potentials for all atom type combinations.
-    pub fn get_potentials_mut(&mut self) -> &mut Array2<Arc<dyn IsotropicTwobodyEnergy>> {
+    pub fn get_potentials_mut(&mut self) -> &mut Array2<ArcPotential> {
         &mut self.potentials
     }
 }
