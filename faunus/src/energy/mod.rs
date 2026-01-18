@@ -30,5 +30,5 @@ pub use hamiltonian::{EnergyChange, Hamiltonian};
 pub use nonbonded::{NonbondedMatrix, NonbondedMatrixSplined};
 pub use sasa::{SasaEnergy, SasaEnergyBuilder};
 
-// Re-export SplineConfig from interatomic for convenience
-pub use interatomic::twobody::SplineConfig;
+// Re-export spline types from interatomic for convenience
+pub use interatomic::twobody::{GridType, SplineConfig};

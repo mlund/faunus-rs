@@ -40,7 +40,7 @@ use serde::{
 use unordered_pair::UnorderedPair;
 
 use super::sasa::SasaEnergyBuilder;
-use interatomic::twobody::SplineConfig;
+use interatomic::twobody::{GridType, SplineConfig};
 
 /// Specifies whether the parameters for the interaction are
 /// directly provided or should be calculated using a combination rule.
@@ -298,6 +298,9 @@ pub struct SplineOptions {
     /// Number of grid points for the spline table.
     #[serde(default = "default_spline_n_points")]
     pub n_points: usize,
+    /// Grid spacing strategy for spline construction.
+    #[serde(default)]
+    pub grid_type: GridType,
 }
 
 impl SplineOptions {
@@ -305,6 +308,7 @@ impl SplineOptions {
     pub fn to_spline_config(&self) -> SplineConfig {
         SplineConfig {
             n_points: self.n_points,
+            grid_type: self.grid_type,
             ..Default::default()
         }
     }
@@ -901,9 +905,11 @@ mod tests {
         let spline = builder.spline.expect("Spline options should be present");
         assert_approx_eq!(f64, spline.cutoff, 15.0);
         assert_eq!(spline.n_points, 2000);
+        assert_eq!(spline.grid_type, GridType::PowerLaw2);
 
         // Verify conversion to SplineConfig works
         let config = spline.to_spline_config();
         assert_eq!(config.n_points, 2000);
+        assert_eq!(config.grid_type, GridType::PowerLaw2);
     }
 }
