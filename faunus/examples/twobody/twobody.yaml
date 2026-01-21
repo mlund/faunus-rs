@@ -71,10 +71,10 @@ system:
   energy:
     nonbonded:
       default:
-        - !Coulomb {cutoff: 1e3}
+        - !Coulomb {cutoff: 200}
         - !WeeksChandlerAndersen {mixing: LB}
     spline:
-      cutoff: 15.0
+      cutoff: 200.0
       n_points: 2000
 
 analysis:
