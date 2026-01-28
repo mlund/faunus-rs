@@ -23,8 +23,10 @@ use std::path::PathBuf;
 
 mod distance;
 mod structure_writer;
+mod virtual_translate;
 pub use distance::{MassCenterDistance, MassCenterDistanceBuilder};
 pub use structure_writer::{StructureWriter, StructureWriterBuilder};
+pub use virtual_translate::{VirtualTranslate, VirtualTranslateBuilder};
 
 /// Frequency of analysis.
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
@@ -43,7 +45,7 @@ impl Frequency {
     /// Check if action, typically a move or analysis, should be performed at given step
     pub fn should_perform(&self, step: usize) -> bool {
         match self {
-            Frequency::Every(n) => step % n == 0,
+            Frequency::Every(n) => step.is_multiple_of(*n),
             Frequency::Once(n) => step == *n,
             _ => unimplemented!("Unsupported frequency policy for `Frequency::should_perform`."),
         }
@@ -58,6 +60,8 @@ pub enum AnalysisBuilder {
     /// Structure writer
     #[serde(rename = "Trajectory")]
     StructureWriter(StructureWriterBuilder),
+    /// Virtual translate analysis for force measurement
+    VirtualTranslate(VirtualTranslateBuilder),
 }
 
 impl AnalysisBuilder {
@@ -68,6 +72,9 @@ impl AnalysisBuilder {
                 Box::new(builder.build(&context.topology())?)
             }
             AnalysisBuilder::StructureWriter(builder) => Box::new(builder.build()?),
+            AnalysisBuilder::VirtualTranslate(builder) => {
+                Box::new(builder.build(&context.topology())?)
+            }
         };
         Ok(analysis)
     }
