@@ -21,7 +21,7 @@ nalgebra = { version = "0.34.1", features = ["serde-serialize"] }
 interatomic = { version = "0.4", features=["serde"] }
 rand = "0.8"
 num = "0.4"
-chemfiles = { version = "0.10.41", optional = true, features = ["build-from-sources"] }
+chemfiles = { version = "0.10.41", optional = true }
 average = { version = "0.13", features = ["std", "serde1"] }
 regex = "1.8.4"
 physical_constants = "0.5.0"
@@ -45,3 +45,6 @@ approx = "0.5"
 [features]
 default = ["chemfiles"]
 chemfiles = ["dep:chemfiles"]
+
+[patch.crates-io]
+interatomic = { git = "https://github.com/mlund/interatomic.git" }

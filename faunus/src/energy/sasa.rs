@@ -96,8 +96,8 @@ impl SasaEnergy {
         // TODO: calculate only for changed positions
         self.tensions
             .iter()
-            .enumerate()
-            .map(|(i, tension)| tension * self.tesselation.contact_area(i))
+            .zip(self.tesselation.cells.iter())
+            .map(|(tension, cell)| tension * cell.sas_area)
             .sum::<f64>()
             + self.energy_offset.unwrap_or(0.0)
     }
@@ -184,7 +184,7 @@ mod tests_sasaenergy {
             .hamiltonian()
             .energy(&context, &crate::Change::Everything);
 
-        assert_approx_eq!(f64, energy, 262.3481193159764);
+        assert_approx_eq!(f64, energy, 248.32404971035157);
     }
 
     #[test]
