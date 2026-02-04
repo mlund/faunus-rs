@@ -273,7 +273,7 @@ impl ParticleSystem for ReferencePlatform {
         quaternion: &crate::UnitQuaternion,
         shift: Option<Point>,
     ) {
-        let shift = shift.unwrap_or(Point::zeros());
+        let shift = shift.unwrap_or_else(Point::zeros);
         indices.iter().for_each(|&i| {
             let position = self.particles[i].pos_mut();
             *position += shift;

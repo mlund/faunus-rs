@@ -159,7 +159,7 @@ pub trait ParticleSystem: GroupCollection + WithCell + WithTopology {
         let masses: Vec<_> = atomids
             .map(|i| self.topology().atomkinds()[i].mass())
             .collect();
-        let shift = -positions.first().unwrap_or(&Point::zeros());
+        let shift = positions.first().map_or_else(Point::zeros, |p| -*p);
         crate::aux::mass_center_pbc(&positions, &masses, self.cell(), Some(shift))
     }
 

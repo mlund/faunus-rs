@@ -105,7 +105,7 @@ pub enum ParticleSelection {
 }
 
 /// Enum for selecting a subset of groups
-#[derive(Clone, PartialEq, Debug, Default)]
+#[derive(Clone, PartialEq, Eq, Debug, Default)]
 pub enum GroupSelection {
     /// All groups in the system.
     #[default]
@@ -168,7 +168,7 @@ impl Group {
             GroupSize::Shrink(n) => {
                 return self.resize(GroupSize::Partial(
                     usize::checked_sub(self.num_active, n)
-                        .ok_or(anyhow::anyhow!("Cannot shrink group by {} particles", n))?,
+                        .ok_or_else(|| anyhow::anyhow!("Cannot shrink group by {} particles", n))?,
                 ));
             }
         };

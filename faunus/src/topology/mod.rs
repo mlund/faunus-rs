@@ -294,7 +294,7 @@ impl<T> Selection<T> {
         }
     }
     /// Check if selection is empty
-    pub fn is_empty(&self) -> bool {
+    pub const fn is_empty(&self) -> bool {
         self.len() == 0
     }
     /// Iterate over selection

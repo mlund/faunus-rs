@@ -119,9 +119,11 @@ impl RotateMolecule {
             .moleculekinds()
             .iter()
             .position(|x| x.name() == &self.molecule_name)
-            .ok_or(anyhow::Error::msg(
-                "Molecule kind in the definition of 'RotateMolecule' move does not exist.",
-            ))?;
+            .ok_or_else(|| {
+                anyhow::Error::msg(
+                    "Molecule kind in the definition of 'RotateMolecule' move does not exist.",
+                )
+            })?;
         Ok(())
     }
 }

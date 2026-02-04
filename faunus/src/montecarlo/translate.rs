@@ -131,9 +131,11 @@ impl TranslateMolecule {
             .moleculekinds()
             .iter()
             .position(|x| x.name() == &self.molecule_name)
-            .ok_or(anyhow::Error::msg(
-                "Molecule kind in the definition of 'TranslateMolecule' move does not exist.",
-            ))?;
+            .ok_or_else(|| {
+                anyhow::Error::msg(
+                    "Molecule kind in the definition of 'TranslateMolecule' move does not exist.",
+                )
+            })?;
 
         Ok(())
     }
@@ -312,9 +314,11 @@ impl TranslateAtom {
                     .moleculekinds()
                     .iter()
                     .position(|x| x.name() == molecule_name)
-                    .ok_or(anyhow::Error::msg(
-                        "Molecule kind in the definition of 'TranslateAtom' move does not exist.",
-                    ))?,
+                    .ok_or_else(|| {
+                        anyhow::Error::msg(
+                            "Molecule kind in the definition of 'TranslateAtom' move does not exist.",
+                        )
+                    })?,
             );
         }
 
@@ -325,9 +329,11 @@ impl TranslateAtom {
                     .atomkinds()
                     .iter()
                     .position(|x| x.name() == atom_name)
-                    .ok_or(anyhow::Error::msg(
-                        "Atom kind in the definition of 'TranslateAtom' move does not exist.",
-                    ))?,
+                    .ok_or_else(|| {
+                        anyhow::Error::msg(
+                            "Atom kind in the definition of 'TranslateAtom' move does not exist.",
+                        )
+                    })?,
             );
         }
 

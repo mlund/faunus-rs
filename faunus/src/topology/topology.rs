@@ -353,7 +353,7 @@ impl Topology {
                 .moleculekinds
                 .iter()
                 .position(|x| x.name() == block.molecule())
-                .ok_or(anyhow::Error::msg("undefined molecule kind in a block"))?;
+                .ok_or_else(|| anyhow::Error::msg("undefined molecule kind in a block"))?;
             block.set_molecule_id(index);
 
             // check that if positions are provided manually, they are consistent with the topology

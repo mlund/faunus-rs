@@ -341,7 +341,7 @@ impl Move {
         for _ in 0..self.repeat() {
             let (change, displacement) = self
                 .propose_move(&mut context.new, rng)
-                .ok_or(anyhow::anyhow!("Could not propose a move."))?;
+                .ok_or_else(|| anyhow::anyhow!("Could not propose a move."))?;
             context.new.update(&change)?;
 
             let energy = NewOld::<f64>::from(
@@ -390,7 +390,7 @@ impl Move {
 
     /// Get statistics for the move.
     #[allow(dead_code)]
-    pub fn get_statistics(&self) -> &MoveStatistics {
+    pub const fn get_statistics(&self) -> &MoveStatistics {
         match self {
             Self::TranslateMolecule(x) => x.get_statistics(),
             Self::TranslateAtom(x) => x.get_statistics(),
@@ -399,7 +399,7 @@ impl Move {
     }
 
     /// Get mutable statistics for the move.
-    pub(crate) fn get_statistics_mut(&mut self) -> &mut MoveStatistics {
+    pub(crate) const fn get_statistics_mut(&mut self) -> &mut MoveStatistics {
         match self {
             Self::TranslateMolecule(x) => x.get_statistics_mut(),
             Self::TranslateAtom(x) => x.get_statistics_mut(),
@@ -425,7 +425,7 @@ impl Move {
     }
 
     /// Get the weight of the move.
-    pub fn weight(&self) -> f64 {
+    pub const fn weight(&self) -> f64 {
         match self {
             Self::TranslateMolecule(x) => x.weight(),
             Self::TranslateAtom(x) => x.weight(),
@@ -443,7 +443,7 @@ impl Move {
     }
 
     /// How many times the move should be repeated upon selection.
-    pub fn repeat(&self) -> usize {
+    pub const fn repeat(&self) -> usize {
         match self {
             Self::TranslateMolecule(x) => x.repeat(),
             Self::TranslateAtom(x) => x.repeat(),
