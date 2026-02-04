@@ -23,7 +23,7 @@ use crate::{
 };
 
 /// Returns infinite energy if particles are outside the simulation cell boundaries; zero otherwise.
-#[derive(Copy, Clone, Default, PartialEq, Debug)]
+#[derive(Copy, Clone, Default, PartialEq, Eq, Debug)]
 pub struct CellOverlap;
 
 impl CellOverlap {
@@ -46,6 +46,6 @@ impl CellOverlap {
 
 impl From<CellOverlap> for EnergyTerm {
     fn from(celloverlap: CellOverlap) -> Self {
-        EnergyTerm::CellOverlap(celloverlap)
+        Self::CellOverlap(celloverlap)
     }
 }

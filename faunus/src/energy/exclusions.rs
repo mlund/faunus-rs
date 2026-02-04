@@ -28,7 +28,7 @@ impl ExclusionMatrix {
     pub fn from_topology(topology: &Topology) -> Self {
         let n = topology.num_particles();
         let exclude_self = |i, j| if i == j { 0 } else { 1 };
-        let mut exclusions = ExclusionMatrix(DMatrix::from_fn(n, n, exclude_self));
+        let mut exclusions = Self(DMatrix::from_fn(n, n, exclude_self));
 
         // read the exclusions for the individual atoms
         let mut atom_cnt = 0;

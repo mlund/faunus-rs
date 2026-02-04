@@ -38,7 +38,7 @@ use serde::{Deserialize, Serialize};
 /// Implicit participants are prefixed with a tilde or a ghost, e.g. "~H" or "👻H".
 /// Molecules are not prefixed, e.g. "Cl".
 /// The prefix is not stored in the participant.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum Participant {
     /// Atomic participant like "Au"
     Atom(String),
@@ -73,7 +73,7 @@ impl std::str::FromStr for Participant {
 }
 
 /// Direction of a reaction
-#[derive(Debug, Clone, Serialize, Deserialize, Copy, PartialEq, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Copy, PartialEq, Eq, Default)]
 pub enum Direction {
     /// Forward reaction, i.e. left to right
     #[default]
@@ -183,11 +183,11 @@ impl Reaction {
     /// assert_eq!(products[0], Participant::from_str("A").unwrap());
     /// assert_eq!(reaction.equilibrium_const(), 1.0 / 2.0);
     /// ~~~
-    pub fn set_direction(&mut self, direction: Direction) {
+    pub const fn set_direction(&mut self, direction: Direction) {
         self.direction = direction;
     }
     /// Get the current direction of the reaction
-    pub fn direction(&self) -> Direction {
+    pub const fn direction(&self) -> Direction {
         self.direction
     }
     /// Set a random direction
@@ -206,7 +206,7 @@ impl Reaction {
         }
     }
     /// Get the reactants and products of the reaction in the current direction
-    pub fn get(&self) -> (&Vec<Participant>, &Vec<Participant>) {
+    pub const fn get(&self) -> (&Vec<Participant>, &Vec<Participant>) {
         match self.direction {
             Direction::Forward => (&self.left, &self.right),
             Direction::Backward => (&self.right, &self.left),

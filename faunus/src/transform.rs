@@ -38,6 +38,7 @@ pub fn random_unit_vector(rng: &mut impl Rng) -> Point {
 }
 
 /// This describes a transformation on a set of particles or a group.
+///
 /// For example, a translation by a vector, a rotation by an angle and axis,
 /// or a contraction by `n` particles. It is mainly used to describe Monte Carlo moves.
 #[derive(Clone, Debug)]
@@ -77,18 +78,18 @@ impl Transform {
         context: &mut impl crate::Context,
     ) -> Result<(), anyhow::Error> {
         match self {
-            Transform::Translate(displacement) => {
+            Self::Translate(displacement) => {
                 Self::PartialTranslate(*displacement, ParticleSelection::Active)
                     .on_group(group_index, context)?;
             }
-            Transform::PartialTranslate(displacement, selection) => {
+            Self::PartialTranslate(displacement, selection) => {
                 let indices = context.groups()[group_index]
                     .select(selection, context)
                     .unwrap();
 
                 context.translate_particles(&indices, displacement);
             }
-            Transform::PartialRotate(_axis, quaternion, selection) => {
+            Self::PartialRotate(_axis, quaternion, selection) => {
                 let indices = context.groups()[group_index]
                     .select(selection, context)
                     .unwrap();
@@ -98,7 +99,7 @@ impl Transform {
                     Some(-context.mass_center(&indices)),
                 );
             }
-            Transform::Rotate(axis, quaternion) => {
+            Self::Rotate(axis, quaternion) => {
                 Self::PartialRotate(*axis, *quaternion, ParticleSelection::Active)
                     .on_group(group_index, context)?;
             }

@@ -31,7 +31,7 @@ use validator::{Validate, ValidationError};
 /// Describes the activation status of a MoleculeBlock.
 /// Partial(n) means that only the first 'n' molecules of the block are active.
 /// All means that all molecules of the block are active.
-#[derive(Debug, Clone, PartialEq, Copy, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Copy, Serialize, Deserialize, Default)]
 #[serde(untagged)]
 pub enum BlockActivationStatus {
     Partial(usize),
@@ -102,7 +102,7 @@ impl InsertionPolicy {
                 rotate,
                 directions,
                 offset,
-            } => InsertionPolicy::generate_random_com(
+            } => Self::generate_random_com(
                 molecule_kind,
                 atoms,
                 number,
@@ -117,7 +117,7 @@ impl InsertionPolicy {
                 filename,
                 position,
                 rotate,
-            } => InsertionPolicy::generate_fixed_com(
+            } => Self::generate_fixed_com(
                 molecule_kind,
                 atoms,
                 number,
@@ -265,19 +265,19 @@ impl MoleculeBlock {
         &self.molecule_name
     }
 
-    pub fn molecule_index(&self) -> usize {
+    pub const fn molecule_index(&self) -> usize {
         self.molecule_id
     }
 
-    pub fn num_molecules(&self) -> usize {
+    pub const fn num_molecules(&self) -> usize {
         self.num_molecules
     }
 
-    pub fn active(&self) -> BlockActivationStatus {
+    pub const fn active(&self) -> BlockActivationStatus {
         self.active
     }
 
-    pub fn insert_policy(&self) -> Option<&InsertionPolicy> {
+    pub const fn insert_policy(&self) -> Option<&InsertionPolicy> {
         self.insert.as_ref()
     }
 
@@ -289,8 +289,8 @@ impl MoleculeBlock {
         num_molecules: usize,
         active: BlockActivationStatus,
         insert: Option<InsertionPolicy>,
-    ) -> MoleculeBlock {
-        MoleculeBlock {
+    ) -> Self {
+        Self {
             molecule_name: molecule.to_owned(),
             molecule_id,
             num_molecules,
@@ -382,7 +382,7 @@ impl MoleculeBlock {
     }
 
     /// Set id (kind) of the molecules in the block.
-    pub(super) fn set_molecule_id(&mut self, molecule_id: usize) {
+    pub(super) const fn set_molecule_id(&mut self, molecule_id: usize) {
         self.molecule_id = molecule_id;
     }
 

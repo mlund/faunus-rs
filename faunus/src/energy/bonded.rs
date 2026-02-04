@@ -101,7 +101,7 @@ impl IntramolecularBonded {
 
 impl From<IntramolecularBonded> for EnergyTerm {
     fn from(term: IntramolecularBonded) -> Self {
-        EnergyTerm::IntramolecularBonded(term)
+        Self::IntramolecularBonded(term)
     }
 }
 
@@ -165,7 +165,7 @@ impl IntermolecularBonded {
             })
             .collect();
 
-        EnergyTerm::IntermolecularBonded(IntermolecularBonded { particles_status })
+        EnergyTerm::IntermolecularBonded(Self { particles_status })
     }
 
     /// Update the energy term. The update is needed if at least one particle was activated or deactivated.
@@ -236,12 +236,12 @@ impl IntermolecularBonded {
 
 impl From<IntermolecularBonded> for EnergyTerm {
     fn from(term: IntermolecularBonded) -> Self {
-        EnergyTerm::IntermolecularBonded(term)
+        Self::IntermolecularBonded(term)
     }
 }
 
 impl SyncFrom for IntermolecularBonded {
-    fn sync_from(&mut self, other: &IntermolecularBonded, change: &Change) -> anyhow::Result<()> {
+    fn sync_from(&mut self, other: &Self, change: &Change) -> anyhow::Result<()> {
         match change {
             // TODO: this can be optimized to only update the relevant parts of the status array
             Change::Everything | Change::SingleGroup(_, GroupChange::Resize(_)) => {

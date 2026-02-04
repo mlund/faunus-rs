@@ -128,7 +128,7 @@ impl<T: Context> Analyze<T> for MassCenterDistance {
 }
 
 impl<T: Context> From<MassCenterDistance> for Box<dyn Analyze<T>> {
-    fn from(analysis: MassCenterDistance) -> Box<dyn Analyze<T>> {
+    fn from(analysis: MassCenterDistance) -> Self {
         Box::new(analysis)
     }
 }

@@ -85,7 +85,7 @@ pub trait Shape {
 dyn_clone::clone_trait_object!(SimulationCell);
 
 /// Periodic boundary conditions in various directions
-#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub enum PeriodicDirections {
     /// Periodic boundary conditions in Z direction
     PeriodicZ,
@@ -100,7 +100,7 @@ pub enum PeriodicDirections {
 impl PeriodicDirections {
     /// True if periodic in some direction
     pub fn is_some(&self) -> bool {
-        *self != PeriodicDirections::None
+        *self != Self::None
     }
 }
 
@@ -122,7 +122,7 @@ pub trait BoundaryConditions {
 /// Policies for how to scale a volume
 ///
 /// This is used to scale an old volume to a new volume.
-#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub enum VolumeScalePolicy {
     /// Isotropic scaling (equal scaling in all directions)
     Isotropic,
@@ -167,7 +167,7 @@ pub enum Cell {
 
 impl Cell {
     /// Get simulation cell from a Faunus configuration file.
-    pub(crate) fn from_file(path: impl AsRef<Path>) -> anyhow::Result<Cell> {
+    pub(crate) fn from_file(path: impl AsRef<Path>) -> anyhow::Result<Self> {
         let yaml = std::fs::read_to_string(&path)
             .map_err(|err| anyhow::anyhow!("Error reading file {:?}: {}", path.as_ref(), err))?;
         let full: serde_yaml::Value = serde_yaml::from_str(&yaml)?;
@@ -237,36 +237,36 @@ impl Shape for Cell {
     #[inline]
     fn volume(&self) -> Option<f64> {
         match self {
-            Cell::Cuboid(x) => x.volume(),
-            Cell::Endless(_) => None,
-            Cell::Sphere(x) => x.volume(),
+            Self::Cuboid(x) => x.volume(),
+            Self::Endless(_) => None,
+            Self::Sphere(x) => x.volume(),
         }
     }
 
     #[inline]
     fn is_inside(&self, point: &Point) -> bool {
         match self {
-            Cell::Cuboid(x) => x.is_inside(point),
-            Cell::Endless(_) => true,
-            Cell::Sphere(x) => x.is_inside(point),
+            Self::Cuboid(x) => x.is_inside(point),
+            Self::Endless(_) => true,
+            Self::Sphere(x) => x.is_inside(point),
         }
     }
 
     #[inline]
     fn get_point_inside(&self, rng: &mut ThreadRng) -> Point {
         match self {
-            Cell::Cuboid(s) => s.get_point_inside(rng),
-            Cell::Endless(s) => s.get_point_inside(rng),
-            Cell::Sphere(s) => s.get_point_inside(rng),
+            Self::Cuboid(s) => s.get_point_inside(rng),
+            Self::Endless(s) => s.get_point_inside(rng),
+            Self::Sphere(s) => s.get_point_inside(rng),
         }
     }
 
     #[inline]
     fn bounding_box(&self) -> Option<Point> {
         match self {
-            Cell::Cuboid(s) => s.bounding_box(),
-            Cell::Endless(s) => s.bounding_box(),
-            Cell::Sphere(s) => s.bounding_box(),
+            Self::Cuboid(s) => s.bounding_box(),
+            Self::Endless(s) => s.bounding_box(),
+            Self::Sphere(s) => s.bounding_box(),
         }
     }
 }
@@ -279,9 +279,9 @@ impl VolumeScale for Cell {
         policy: VolumeScalePolicy,
     ) -> Result<(), anyhow::Error> {
         match self {
-            Cell::Cuboid(x) => x.scale_volume(new_volume, policy),
-            Cell::Endless(x) => x.scale_volume(new_volume, policy),
-            Cell::Sphere(x) => x.scale_volume(new_volume, policy),
+            Self::Cuboid(x) => x.scale_volume(new_volume, policy),
+            Self::Endless(x) => x.scale_volume(new_volume, policy),
+            Self::Sphere(x) => x.scale_volume(new_volume, policy),
         }
     }
 
@@ -293,9 +293,9 @@ impl VolumeScale for Cell {
         policy: VolumeScalePolicy,
     ) -> Result<(), anyhow::Error> {
         match self {
-            Cell::Cuboid(x) => x.scale_position(new_volume, point, policy),
-            Cell::Endless(x) => x.scale_position(new_volume, point, policy),
-            Cell::Sphere(x) => x.scale_position(new_volume, point, policy),
+            Self::Cuboid(x) => x.scale_position(new_volume, point, policy),
+            Self::Endless(x) => x.scale_position(new_volume, point, policy),
+            Self::Sphere(x) => x.scale_position(new_volume, point, policy),
         }
     }
 }
@@ -304,27 +304,27 @@ impl BoundaryConditions for Cell {
     #[inline]
     fn pbc(&self) -> PeriodicDirections {
         match self {
-            Cell::Cuboid(x) => x.pbc(),
-            Cell::Endless(x) => x.pbc(),
-            Cell::Sphere(x) => x.pbc(),
+            Self::Cuboid(x) => x.pbc(),
+            Self::Endless(x) => x.pbc(),
+            Self::Sphere(x) => x.pbc(),
         }
     }
 
     #[inline]
     fn boundary(&self, point: &mut Point) {
         match self {
-            Cell::Cuboid(x) => x.boundary(point),
-            Cell::Endless(x) => x.boundary(point),
-            Cell::Sphere(x) => x.boundary(point),
+            Self::Cuboid(x) => x.boundary(point),
+            Self::Endless(x) => x.boundary(point),
+            Self::Sphere(x) => x.boundary(point),
         }
     }
 
     #[inline]
     fn distance(&self, point1: &Point, point2: &Point) -> Point {
         match self {
-            Cell::Cuboid(x) => x.distance(point1, point2),
-            Cell::Endless(x) => x.distance(point1, point2),
-            Cell::Sphere(x) => x.distance(point1, point2),
+            Self::Cuboid(x) => x.distance(point1, point2),
+            Self::Endless(x) => x.distance(point1, point2),
+            Self::Sphere(x) => x.distance(point1, point2),
         }
     }
 }

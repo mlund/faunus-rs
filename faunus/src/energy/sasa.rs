@@ -153,7 +153,7 @@ impl SasaEnergy {
 }
 
 impl SyncFrom for SasaEnergy {
-    fn sync_from(&mut self, other: &SasaEnergy, change: &Change) -> anyhow::Result<()> {
+    fn sync_from(&mut self, other: &Self, change: &Change) -> anyhow::Result<()> {
         // TODO: implement partial sync
         match change {
             Change::Everything => {

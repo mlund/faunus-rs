@@ -25,7 +25,7 @@ pub struct Hamiltonian {
 
 impl SyncFrom for Hamiltonian {
     /// Synchronize the Hamiltonian from other Hamiltonian.
-    fn sync_from(&mut self, other: &Hamiltonian, change: &Change) -> anyhow::Result<()> {
+    fn sync_from(&mut self, other: &Self, change: &Change) -> anyhow::Result<()> {
         for (term, other_term) in self.energy_terms.iter_mut().zip(other.energy_terms.iter()) {
             term.sync_from(other_term, change)?;
         }
@@ -45,7 +45,7 @@ impl Hamiltonian {
         hamiltonian.push(CellOverlap.into());
 
         if let Some(nonbonded_matrix) = &builder.pairpot_builder {
-            let nonbonded = NonbondedMatrix::new(nonbonded_matrix, topology, medium.clone())?;
+            let nonbonded = NonbondedMatrix::new(nonbonded_matrix, topology, medium)?;
 
             // Use splined potentials if configured
             if let Some(spline_opts) = &builder.spline {

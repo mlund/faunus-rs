@@ -54,7 +54,7 @@ pub struct Propagate {
 }
 
 /// Default value of `repeat` for various structures.
-pub(crate) fn default_repeat() -> usize {
+pub(crate) const fn default_repeat() -> usize {
     1
 }
 
@@ -99,7 +99,7 @@ impl Propagate {
     pub fn from_file(
         filename: impl AsRef<Path>,
         context: &impl Context,
-    ) -> anyhow::Result<Propagate> {
+    ) -> anyhow::Result<Self> {
         let yaml = std::fs::read_to_string(filename)?;
         let full: serde_yaml::Value = serde_yaml::from_str(&yaml)?;
 
@@ -111,7 +111,7 @@ impl Propagate {
             }
         }
 
-        let mut propagate: Propagate =
+        let mut propagate: Self =
             serde_yaml::from_value(current.clone()).map_err(anyhow::Error::msg)?;
 
         // finalize and validate the collections
@@ -133,7 +133,7 @@ impl Propagate {
         &self.move_collections
     }
 
-    pub fn max_repeats(&self) -> usize {
+    pub const fn max_repeats(&self) -> usize {
         self.max_repeats
     }
 }
@@ -373,9 +373,9 @@ impl Move {
         rng: &mut impl Rng,
     ) -> Option<(Change, Displacement)> {
         match self {
-            Move::TranslateMolecule(x) => x.propose_move(context, rng),
-            Move::TranslateAtom(x) => x.propose_move(context, rng),
-            Move::RotateMolecule(x) => x.propose_move(context, rng),
+            Self::TranslateMolecule(x) => x.propose_move(context, rng),
+            Self::TranslateAtom(x) => x.propose_move(context, rng),
+            Self::RotateMolecule(x) => x.propose_move(context, rng),
         }
     }
 
@@ -384,7 +384,7 @@ impl Move {
     /// It can also be used to force acceptance of a move in e.g. hybrid MD/MC schemes.
     /// By default, this returns `Bias::None`.
     #[allow(unused_variables)]
-    fn bias(&self, change: &Change, energies: &NewOld<f64>) -> Bias {
+    const fn bias(&self, change: &Change, energies: &NewOld<f64>) -> Bias {
         Bias::None
     }
 
@@ -392,18 +392,18 @@ impl Move {
     #[allow(dead_code)]
     pub fn get_statistics(&self) -> &MoveStatistics {
         match self {
-            Move::TranslateMolecule(x) => x.get_statistics(),
-            Move::TranslateAtom(x) => x.get_statistics(),
-            Move::RotateMolecule(x) => x.get_statistics(),
+            Self::TranslateMolecule(x) => x.get_statistics(),
+            Self::TranslateAtom(x) => x.get_statistics(),
+            Self::RotateMolecule(x) => x.get_statistics(),
         }
     }
 
     /// Get mutable statistics for the move.
     pub(crate) fn get_statistics_mut(&mut self) -> &mut MoveStatistics {
         match self {
-            Move::TranslateMolecule(x) => x.get_statistics_mut(),
-            Move::TranslateAtom(x) => x.get_statistics_mut(),
-            Move::RotateMolecule(x) => x.get_statistics_mut(),
+            Self::TranslateMolecule(x) => x.get_statistics_mut(),
+            Self::TranslateAtom(x) => x.get_statistics_mut(),
+            Self::RotateMolecule(x) => x.get_statistics_mut(),
         }
     }
 
@@ -427,36 +427,36 @@ impl Move {
     /// Get the weight of the move.
     pub fn weight(&self) -> f64 {
         match self {
-            Move::TranslateMolecule(x) => x.weight(),
-            Move::TranslateAtom(x) => x.weight(),
-            Move::RotateMolecule(x) => x.weight(),
+            Self::TranslateMolecule(x) => x.weight(),
+            Self::TranslateAtom(x) => x.weight(),
+            Self::RotateMolecule(x) => x.weight(),
         }
     }
 
     /// Validate and finalize the move.
     fn finalize(&mut self, context: &impl Context) -> anyhow::Result<()> {
         match self {
-            Move::TranslateMolecule(x) => x.finalize(context),
-            Move::TranslateAtom(x) => x.finalize(context),
-            Move::RotateMolecule(x) => x.finalize(context),
+            Self::TranslateMolecule(x) => x.finalize(context),
+            Self::TranslateAtom(x) => x.finalize(context),
+            Self::RotateMolecule(x) => x.finalize(context),
         }
     }
 
     /// How many times the move should be repeated upon selection.
     pub fn repeat(&self) -> usize {
         match self {
-            Move::TranslateMolecule(x) => x.repeat(),
-            Move::TranslateAtom(x) => x.repeat(),
-            Move::RotateMolecule(x) => x.repeat(),
+            Self::TranslateMolecule(x) => x.repeat(),
+            Self::TranslateAtom(x) => x.repeat(),
+            Self::RotateMolecule(x) => x.repeat(),
         }
     }
 
     /// The number of steps to move forward after attempting the move.
-    pub fn step_by(&self) -> usize {
+    pub const fn step_by(&self) -> usize {
         match self {
-            Move::TranslateMolecule(_) => 1,
-            Move::TranslateAtom(_) => 1,
-            Move::RotateMolecule(_) => 1,
+            Self::TranslateMolecule(_) => 1,
+            Self::TranslateAtom(_) => 1,
+            Self::RotateMolecule(_) => 1,
         }
     }
 }
@@ -464,17 +464,17 @@ impl Move {
 impl Info for Move {
     fn short_name(&self) -> Option<&'static str> {
         match self {
-            Move::TranslateMolecule(x) => x.short_name(),
-            Move::TranslateAtom(x) => x.short_name(),
-            Move::RotateMolecule(x) => x.short_name(),
+            Self::TranslateMolecule(x) => x.short_name(),
+            Self::TranslateAtom(x) => x.short_name(),
+            Self::RotateMolecule(x) => x.short_name(),
         }
     }
 
     fn long_name(&self) -> Option<&'static str> {
         match self {
-            Move::TranslateMolecule(x) => x.long_name(),
-            Move::TranslateAtom(x) => x.long_name(),
-            Move::RotateMolecule(x) => x.long_name(),
+            Self::TranslateMolecule(x) => x.long_name(),
+            Self::TranslateAtom(x) => x.long_name(),
+            Self::RotateMolecule(x) => x.long_name(),
         }
     }
 }

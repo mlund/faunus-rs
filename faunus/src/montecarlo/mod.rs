@@ -87,14 +87,14 @@ pub struct NewOld<T> {
 }
 
 impl<T> NewOld<T> {
-    pub fn from(new: T, old: T) -> Self {
+    pub const fn from(new: T, old: T) -> Self {
         Self { new, old }
     }
 }
 
 impl NewOld<usize> {
     /// Difference `new - old` as a signed integer
-    pub fn difference(&self) -> i32 {
+    pub const fn difference(&self) -> i32 {
         self.new as i32 - self.old as i32
     }
 }
@@ -203,7 +203,7 @@ impl AcceptanceCriterion {
         rng: &mut impl Rng,
     ) -> bool {
         match self {
-            AcceptanceCriterion::MetropolisHastings => {
+            Self::MetropolisHastings => {
                 // useful for hard-sphere systems where initial configurations may overlap
                 if energy.old.is_infinite() && energy.new.is_finite() {
                     log::trace!("Accepting infinite -> finite energy change");
@@ -224,7 +224,7 @@ impl AcceptanceCriterion {
                 rng.gen::<f64>() < p
             }
 
-            AcceptanceCriterion::Minimize => {
+            Self::Minimize => {
                 if energy.old.is_infinite() && energy.new.is_finite() {
                     return true;
                 }
@@ -263,7 +263,7 @@ pub struct MarkovChain<T: Context> {
 }
 
 impl<T: Context> MarkovChain<T> {
-    pub fn iter(&mut self) -> MarkovChainIterator<'_, T> {
+    pub const fn iter(&mut self) -> MarkovChainIterator<'_, T> {
         MarkovChainIterator { markov: self }
     }
 }
@@ -320,7 +320,7 @@ impl<T: Context + 'static> MarkovChain<T> {
     }
 
     /// Get propagate instance
-    pub fn get_propagate(&self) -> &Propagate {
+    pub const fn get_propagate(&self) -> &Propagate {
         &self.propagate
     }
 
@@ -328,7 +328,7 @@ impl<T: Context + 'static> MarkovChain<T> {
     ///
     /// This is used to normalize the energy change when determining the acceptance probability.
     /// Must match the unit of the energy.
-    pub fn set_thermal_energy(&mut self, thermal_energy: f64) {
+    pub const fn set_thermal_energy(&mut self, thermal_energy: f64) {
         self.thermal_energy = thermal_energy;
     }
     /// Append an analysis to the back of the collection.

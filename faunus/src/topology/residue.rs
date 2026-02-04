@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 use std::ops::Range;
 
 /// Continuous range of atoms with a non-unique name and number.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Residue {
     /// Residue name.
@@ -36,7 +36,7 @@ pub struct Residue {
 impl Residue {
     #[inline(always)]
     pub fn new(name: &str, number: Option<usize>, range: Range<usize>) -> Self {
-        Residue {
+        Self {
             name: name.to_owned(),
             number,
             range,
@@ -49,7 +49,7 @@ impl Residue {
     }
 
     #[inline(always)]
-    pub fn number(&self) -> Option<usize> {
+    pub const fn number(&self) -> Option<usize> {
         self.number
     }
 }

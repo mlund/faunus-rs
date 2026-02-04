@@ -90,16 +90,16 @@ impl From<BondOrder> for f64 {
 impl From<f64> for BondOrder {
     fn from(value: f64) -> Self {
         match value {
-            x if approx_eq!(f64, x, 0.0) => BondOrder::Unspecified,
-            x if approx_eq!(f64, x, 1.0) => BondOrder::Single,
-            x if approx_eq!(f64, x, 2.0) => BondOrder::Double,
-            x if approx_eq!(f64, x, 3.0) => BondOrder::Triple,
-            x if approx_eq!(f64, x, 4.0) => BondOrder::Quadruple,
-            x if approx_eq!(f64, x, 5.0) => BondOrder::Quintuple,
-            x if approx_eq!(f64, x, 6.0) => BondOrder::Sextuple,
-            x if approx_eq!(f64, x, 1.25) => BondOrder::Amide,
-            x if approx_eq!(f64, x, 1.5) => BondOrder::Aromatic,
-            _ => BondOrder::Custom(value),
+            x if approx_eq!(f64, x, 0.0) => Self::Unspecified,
+            x if approx_eq!(f64, x, 1.0) => Self::Single,
+            x if approx_eq!(f64, x, 2.0) => Self::Double,
+            x if approx_eq!(f64, x, 3.0) => Self::Triple,
+            x if approx_eq!(f64, x, 4.0) => Self::Quadruple,
+            x if approx_eq!(f64, x, 5.0) => Self::Quintuple,
+            x if approx_eq!(f64, x, 6.0) => Self::Sextuple,
+            x if approx_eq!(f64, x, 1.25) => Self::Amide,
+            x if approx_eq!(f64, x, 1.5) => Self::Aromatic,
+            _ => Self::Custom(value),
         }
     }
 }

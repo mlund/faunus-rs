@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 use crate::Point;
 
 /// Represents dimensions in which operations/calculations are performed.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum Dimension {
     /// No dimension
@@ -43,14 +43,14 @@ impl From<[bool; 3]> for Dimension {
     /// Convert 3-member boolean array to Dimension enum.
     fn from(arr: [bool; 3]) -> Self {
         match arr {
-            [false, false, false] => Dimension::None,
-            [true, false, false] => Dimension::X,
-            [false, true, false] => Dimension::Y,
-            [false, false, true] => Dimension::Z,
-            [true, true, false] => Dimension::XY,
-            [true, false, true] => Dimension::XZ,
-            [false, true, true] => Dimension::YZ,
-            [true, true, true] => Dimension::XYZ,
+            [false, false, false] => Self::None,
+            [true, false, false] => Self::X,
+            [false, true, false] => Self::Y,
+            [false, false, true] => Self::Z,
+            [true, true, false] => Self::XY,
+            [true, false, true] => Self::XZ,
+            [false, true, true] => Self::YZ,
+            [true, true, true] => Self::XYZ,
         }
     }
 }
@@ -76,7 +76,7 @@ impl Dimension {
     pub const fn is_x(&self) -> bool {
         matches!(
             self,
-            Dimension::X | Dimension::XY | Dimension::XZ | Dimension::XYZ
+            Self::X | Self::XY | Self::XZ | Self::XYZ
         )
     }
 
@@ -84,7 +84,7 @@ impl Dimension {
     pub const fn is_y(&self) -> bool {
         matches!(
             self,
-            Dimension::Y | Dimension::XY | Dimension::YZ | Dimension::XYZ
+            Self::Y | Self::XY | Self::YZ | Self::XYZ
         )
     }
 
@@ -92,7 +92,7 @@ impl Dimension {
     pub const fn is_z(&self) -> bool {
         matches!(
             self,
-            Dimension::Z | Dimension::XZ | Dimension::YZ | Dimension::XYZ
+            Self::Z | Self::XZ | Self::YZ | Self::XYZ
         )
     }
 
@@ -108,6 +108,6 @@ impl Dimension {
 }
 
 // Helper for deserialization
-pub(crate) fn default_dimension() -> Dimension {
+pub(crate) const fn default_dimension() -> Dimension {
     Dimension::XYZ
 }

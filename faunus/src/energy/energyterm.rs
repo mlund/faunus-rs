@@ -26,12 +26,12 @@ impl EnergyTerm {
     /// Update internal state due to a change in the system.
     pub fn update(&mut self, context: &impl Context, change: &Change) -> anyhow::Result<()> {
         match self {
-            EnergyTerm::NonbondedMatrix(_)
-            | EnergyTerm::NonbondedMatrixSplined(_)
-            | EnergyTerm::IntramolecularBonded(_) => Ok(()),
-            EnergyTerm::IntermolecularBonded(x) => x.update(context, change),
-            EnergyTerm::SasaEnergy(x) => x.update(context, change),
-            EnergyTerm::CellOverlap(_) => Ok(()),
+            Self::NonbondedMatrix(_)
+            | Self::NonbondedMatrixSplined(_)
+            | Self::IntramolecularBonded(_) => Ok(()),
+            Self::IntermolecularBonded(x) => x.update(context, change),
+            Self::SasaEnergy(x) => x.update(context, change),
+            Self::CellOverlap(_) => Ok(()),
         }
     }
 }
@@ -53,7 +53,7 @@ impl EnergyChange for EnergyTerm {
 
 impl SyncFrom for EnergyTerm {
     /// Synchronize the EnergyTerm from other EnergyTerm
-    fn sync_from(&mut self, other: &EnergyTerm, change: &Change) -> anyhow::Result<()> {
+    fn sync_from(&mut self, other: &Self, change: &Change) -> anyhow::Result<()> {
         use EnergyTerm::*;
         match (self, other) {
             (NonbondedMatrix(x), NonbondedMatrix(y)) => x.sync_from(y, change)?,
@@ -70,6 +70,6 @@ impl SyncFrom for EnergyTerm {
 
 impl From<SasaEnergy> for EnergyTerm {
     fn from(sasa: SasaEnergy) -> Self {
-        EnergyTerm::SasaEnergy(sasa)
+        Self::SasaEnergy(sasa)
     }
 }

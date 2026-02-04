@@ -24,15 +24,15 @@ pub struct StructureWriter {
 }
 
 impl<T: Context> From<StructureWriter> for Box<dyn Analyze<T>> {
-    fn from(analysis: StructureWriter) -> Box<dyn Analyze<T>> {
+    fn from(analysis: StructureWriter) -> Self {
         Box::new(analysis)
     }
 }
 
 #[cfg(feature = "chemfiles")]
 impl StructureWriter {
-    pub fn new(output_file: &str, frequency: Frequency) -> StructureWriter {
-        StructureWriter {
+    pub fn new(output_file: &str, frequency: Frequency) -> Self {
+        Self {
             output_file: output_file.to_owned(),
             frequency,
             trajectory: None,

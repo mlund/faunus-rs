@@ -78,8 +78,8 @@ impl Topology {
         moleculekinds: &[MoleculeKind],
         intermolecular: IntermolecularBonded,
         blocks: Vec<MoleculeBlock>,
-    ) -> Topology {
-        Topology {
+    ) -> Self {
+        Self {
             include: vec![],
             atomkinds: atomkinds.into(),
             moleculekinds: moleculekinds.into(),
@@ -91,10 +91,10 @@ impl Topology {
     }
 
     /// Create partial topology without system. Used for topology includes.
-    pub fn from_file_partial(path: impl AsRef<Path> + Clone) -> anyhow::Result<Topology> {
+    pub fn from_file_partial(path: impl AsRef<Path> + Clone) -> anyhow::Result<Self> {
         let yaml = std::fs::read_to_string(path.clone())
             .map_err(|err| anyhow::anyhow!("Error reading file {:?}: {}", &path.as_ref(), err))?;
-        let mut topology: Topology = serde_yaml::from_str(&yaml)?;
+        let mut topology: Self = serde_yaml::from_str(&yaml)?;
         for file in topology.include.iter_mut() {
             file.finalize(path.clone());
         }
@@ -103,10 +103,10 @@ impl Topology {
     }
 
     /// Parse a yaml file as Topology which *must* include a system.
-    pub fn from_file(path: impl AsRef<Path>) -> anyhow::Result<Topology> {
+    pub fn from_file(path: impl AsRef<Path>) -> anyhow::Result<Self> {
         let yaml = std::fs::read_to_string(&path)
             .map_err(|err| anyhow::anyhow!("Error loading file {:?}: {}", &path.as_ref(), err))?;
-        let mut topology: Topology = serde_yaml::from_str(&yaml)?;
+        let mut topology: Self = serde_yaml::from_str(&yaml)?;
 
         if topology.system.is_empty() {
             anyhow::bail!("missing or empty field `system`");
@@ -135,7 +135,7 @@ impl Topology {
     }
 
     /// Get intermolecular bonded interactions of the system.
-    pub fn intermolecular(&self) -> &IntermolecularBonded {
+    pub const fn intermolecular(&self) -> &IntermolecularBonded {
         &self.system.intermolecular
     }
 
@@ -227,7 +227,7 @@ impl Topology {
         topologies: Vec<InputPath>,
     ) -> Result<(), anyhow::Error> {
         for file in topologies.iter() {
-            let included_top = Topology::from_file_partial(file.path().unwrap())?;
+            let included_top = Self::from_file_partial(file.path().unwrap())?;
             self.include_atomkinds(&included_top.atomkinds);
             self.include_moleculekinds(included_top.moleculekinds);
         }

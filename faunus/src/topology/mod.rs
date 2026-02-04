@@ -75,6 +75,7 @@ pub(super) trait IndexRange {
     fn range(&self) -> Range<usize>;
 
     /// Check if elements are in union / shared with `other` range
+    #[allow(clippy::suspicious_operation_groupings)] // correct interval overlap check
     fn is_union(&self, other: &Self) -> bool
     where
         Self: Sized,
@@ -273,7 +274,7 @@ pub trait CustomProperty {
 }
 
 /// A selection of atoms or residues
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum Selection<T> {
     /// A list of names
     Vec(Vec<T>),
@@ -285,11 +286,11 @@ pub enum Selection<T> {
 
 impl<T> Selection<T> {
     /// Number of elements in selection
-    pub fn len(&self) -> usize {
+    pub const fn len(&self) -> usize {
         match self {
-            Selection::Vec(v) => v.len(),
-            Selection::Ids(v) => v.len(),
-            Selection::Repeat(_, n) => *n,
+            Self::Vec(v) => v.len(),
+            Self::Ids(v) => v.len(),
+            Self::Repeat(_, n) => *n,
         }
     }
     /// Check if selection is empty
@@ -299,8 +300,8 @@ impl<T> Selection<T> {
     /// Iterate over selection
     pub fn iter(&self) -> anyhow::Result<Box<dyn Iterator<Item = &T> + '_>> {
         match self {
-            Selection::Vec(v) => Ok(Box::new(v.iter())),
-            Selection::Repeat(t, n) => Ok(Box::new(std::iter::repeat_n(t, *n))),
+            Self::Vec(v) => Ok(Box::new(v.iter())),
+            Self::Repeat(t, n) => Ok(Box::new(std::iter::repeat_n(t, *n))),
             _ => anyhow::bail!("Cannot iterate over selection"),
         }
     }
@@ -322,7 +323,7 @@ fn test_selection() {
 }
 
 /// Describes the internal degrees of freedom of a system
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default, Copy)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default, Copy)]
 pub enum DegreesOfFreedom {
     /// All degrees of freedom are free
     #[default]
@@ -349,7 +350,7 @@ pub struct System {
 
 impl System {
     /// System is considered empty if it has no blocks
-    pub fn is_empty(&self) -> bool {
+    pub const fn is_empty(&self) -> bool {
         self.blocks.is_empty()
     }
 }
@@ -374,12 +375,12 @@ pub struct IntermolecularBonded {
 impl IntermolecularBonded {
     /// Create a new IntermolecularBonded structure. This function does not perform any sanity checks.
     #[allow(dead_code)]
-    pub(crate) fn new(
+    pub(crate) const fn new(
         bonds: Vec<Bond>,
         dihedrals: Vec<Dihedral>,
         torsions: Vec<Torsion>,
-    ) -> IntermolecularBonded {
-        IntermolecularBonded {
+    ) -> Self {
+        Self {
             bonds,
             dihedrals,
             torsions,
@@ -388,7 +389,7 @@ impl IntermolecularBonded {
 
     /// Returns `true` if the `IntermolecularBonded` structure is empty (contains no bonds, no torsions and no dihedrals).
     /// Otherwise returns `false`.
-    pub(crate) fn is_empty(&self) -> bool {
+    pub(crate) const fn is_empty(&self) -> bool {
         self.bonds.is_empty() && self.torsions.is_empty() && self.dihedrals.is_empty()
     }
 }
@@ -428,7 +429,7 @@ fn validate_unique_indices(indices: &[usize]) -> Result<(), ValidationError> {
 }
 
 /// Path to input topology or structure file.
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct InputPath {
     /// Raw path to the input file. Treated either as absolute
     /// or as relative to the parent directory.
@@ -441,8 +442,8 @@ pub struct InputPath {
 impl InputPath {
     /// Create new InputPath.
     #[allow(dead_code)]
-    pub(crate) fn new(raw_path: OsString, parent_file: impl AsRef<Path>) -> InputPath {
-        let mut path = InputPath {
+    pub(crate) fn new(raw_path: OsString, parent_file: impl AsRef<Path>) -> Self {
+        let mut path = Self {
             raw_path,
             path: None,
         };
@@ -452,7 +453,7 @@ impl InputPath {
     }
 
     /// Get path to file.
-    pub(crate) fn path(&self) -> Option<&PathBuf> {
+    pub(crate) const fn path(&self) -> Option<&PathBuf> {
         self.path.as_ref()
     }
 
@@ -483,7 +484,7 @@ impl<'de> Deserialize<'de> for InputPath {
     {
         let path: String = Deserialize::deserialize(deserializer)?;
 
-        std::result::Result::Ok(InputPath {
+        std::result::Result::Ok(Self {
             raw_path: path.into(),
             path: None,
         })

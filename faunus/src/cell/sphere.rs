@@ -31,7 +31,7 @@ pub struct Sphere {
 
 impl Sphere {
     /// Create new sphere with given radius
-    pub fn new(radius: f64) -> Self {
+    pub const fn new(radius: f64) -> Self {
         Self { radius }
     }
     /// Create new sphere with given volume

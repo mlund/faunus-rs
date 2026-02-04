@@ -1,0 +1,91 @@
+# Places two rigid molecules on a spherical cell and tracks
+# the mass center separation during a MC simulation run. This
+# can be used to calculate the potential of mean force.
+#
+# - The first molecule is placed at the center of a sphere and
+#   can rotate only.
+# - The second molecule is offset along the z-axis. It can
+#   translate along z only, and freely rotate.
+# - The `medium` information is used to set a Debye screening length
+#   for the `Coulomb` potential under `nonbonded`.
+# - The simulation cell is a sphere with hard boundaries from which no
+#   particles can escape.
+
+include: [calvados3.yaml]
+molecules:
+  - name: MOL1
+    degrees_of_freedom: Rigid
+    has_com: true
+    from_structure: "4lzt.xyz"
+  - name: MOL2
+    degrees_of_freedom: Rigid
+    has_com: true
+    from_structure: "4lzt.xyz"
+
+system:
+  cell: !Sphere {radius: 100.0}
+  medium:
+    permittivity: !Water
+    temperature: 298.15
+    salt: [!NaCl, 0.05]
+
+  blocks:
+    - molecule: MOL1
+      N: 1
+      insert:
+        # Place in the middle of the box
+        !RandomCOM {
+          filename: "4lzt.xyz",
+          rotate: true,
+          directions: none,
+          offset: [0.0, 0.0, 0.0],
+        }
+    - molecule: MOL2
+      N: 1
+      insert:
+        # Place along z-axis
+        !RandomCOM {
+          filename: "4lzt.xyz",
+          rotate: true,
+          directions: none,
+          offset: [0.0, 0.0, 40.0],
+        }
+
+  energy:
+    nonbonded:
+      default:
+        - !Coulomb {cutoff: 1000}
+        - !AshbaughHatch {mixing: arithmetic, cutoff: 20.0}
+
+analysis:
+  - !MassCenterDistance
+    molecules: ["MOL1", "MOL2"]
+    file: "com_distance.dat.gz"
+    frequency: !Every 10
+  - !Trajectory
+    file: "traj.xyz"
+    frequency: !Every 100
+
+propagate:
+  seed: Hardware
+  criterion: Metropolis
+  repeat: 5000000
+  collections:
+    - !Stochastic
+      moves:
+        - !RotateMolecule {
+            molecule: MOL1,
+            dp: 1.0,
+            weight: 0.5,
+          }
+        - !RotateMolecule {
+            molecule: MOL2,
+            dp: 2.0,
+            weight: 1.0,
+          }
+        - !TranslateMolecule {
+            molecule: MOL2,
+            dp: 15.0,
+            weight: 1.0,
+            directions: !z,
+          }

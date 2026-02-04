@@ -28,8 +28,8 @@ pub struct Particle {
 }
 
 impl Particle {
-    pub(crate) fn new(atom_id: usize, index: usize, pos: Point) -> Particle {
-        Particle {
+    pub(crate) const fn new(atom_id: usize, index: usize, pos: Point) -> Self {
+        Self {
             atom_id,
             index,
             pos,

@@ -72,7 +72,7 @@ pub struct Group {
 /// Canonical Monte Carlo moves to add or remove particles or molecules.
 /// If resizing to zero, the group is `Empty` and considered *inactive*. If resizing to the
 /// capacity, the group is `Full` and considered *active*. Otherwise, the group is `Partial`.
-#[derive(Serialize, Deserialize, Default, Copy, Clone, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, Default, Copy, Clone, PartialEq, Eq, Debug)]
 pub enum GroupSize {
     /// All particles are active and no more can be added
     #[default]
@@ -88,7 +88,7 @@ pub enum GroupSize {
 }
 
 /// Enum for selecting a subset of particles in a group
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub enum ParticleSelection {
     /// All particles.
     All,
@@ -176,27 +176,27 @@ impl Group {
     }
 
     /// Get the absolute index of the first particle in the group.
-    pub fn start(&self) -> usize {
+    pub const fn start(&self) -> usize {
         self.range.start
     }
 
     /// Get size status of the groups which can be `Full`, `Empty`, or `Partial`.
-    pub fn size(&self) -> GroupSize {
+    pub const fn size(&self) -> GroupSize {
         self.size_status
     }
 
     /// Get the index of the group.
-    pub fn index(&self) -> usize {
+    pub const fn index(&self) -> usize {
         self.index
     }
 
     /// Get the molecule index of the group.
-    pub fn molecule(&self) -> usize {
+    pub const fn molecule(&self) -> usize {
         self.molecule
     }
 
     /// Get the center of mass of the group.
-    pub fn mass_center(&self) -> Option<&Point> {
+    pub const fn mass_center(&self) -> Option<&Point> {
         self.mass_center.as_ref()
     }
 
@@ -206,17 +206,17 @@ impl Group {
     }
 
     /// Number of active particles
-    pub fn len(&self) -> usize {
+    pub const fn len(&self) -> usize {
         self.num_active
     }
 
     /// True if no active particles
-    pub fn is_empty(&self) -> bool {
+    pub const fn is_empty(&self) -> bool {
         self.num_active == 0
     }
 
     /// Absolute indices of active particles in main particle vector
-    pub fn iter_active(&self) -> std::ops::Range<usize> {
+    pub const fn iter_active(&self) -> std::ops::Range<usize> {
         std::ops::Range {
             start: self.range.start,
             end: self.range.start + self.num_active,
@@ -224,7 +224,7 @@ impl Group {
     }
 
     /// Check whether the particle with specified relative index is active.
-    pub fn is_active(&self, rel_index: usize) -> bool {
+    pub const fn is_active(&self, rel_index: usize) -> bool {
         rel_index < self.num_active
     }
 
@@ -282,7 +282,7 @@ impl Group {
     }
 
     /// Check if given index is within the group
-    pub fn contains(&self, index: usize) -> bool {
+    pub const fn contains(&self, index: usize) -> bool {
         index >= self.range.start && index < self.range.end
     }
 
@@ -326,7 +326,7 @@ impl Group {
     }
 
     /// Set mass center
-    pub fn set_mass_center(&mut self, mass_center: Point) {
+    pub const fn set_mass_center(&mut self, mass_center: Point) {
         self.mass_center = Some(mass_center);
     }
 }
@@ -563,7 +563,7 @@ pub trait GroupCollection: SyncFrom {
 ///
 /// Length of each outer vector corresponds to the number of molecule kinds in the system.
 /// Each inner vector then stores ids of groups corresponding to the specific molecule kind.
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct GroupLists {
     full: Vec<Vec<usize>>,
     partial: Vec<Vec<usize>>,
@@ -575,8 +575,8 @@ impl GroupLists {
     ///
     /// ## Parameters
     /// `n_molecules` - the number of molecule kinds defined in the system
-    pub(crate) fn new(n_molecules: usize) -> GroupLists {
-        GroupLists {
+    pub(crate) fn new(n_molecules: usize) -> Self {
+        Self {
             full: vec![Vec::new(); n_molecules],
             partial: vec![Vec::new(); n_molecules],
             empty: vec![Vec::new(); n_molecules],
@@ -596,7 +596,7 @@ impl GroupLists {
             _ => panic!("Unsupported GroupSize."),
         };
 
-        GroupLists::add_to_list(list, group);
+        Self::add_to_list(list, group);
     }
 
     /// Update the position of the group in the GroupLists.

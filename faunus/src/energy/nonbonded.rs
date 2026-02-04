@@ -305,7 +305,7 @@ impl NonbondedMatrix {
         file: impl AsRef<Path>,
         topology: &Topology,
         medium: Option<coulomb::Medium>,
-    ) -> anyhow::Result<NonbondedMatrix> {
+    ) -> anyhow::Result<Self> {
         Self::new(
             &HamiltonianBuilder::from_file(file)?
                 .pairpot_builder
@@ -321,13 +321,13 @@ impl NonbondedMatrix {
         pairpot_builder: &PairPotentialBuilder,
         topology: &Topology,
         medium: Option<coulomb::Medium>,
-    ) -> anyhow::Result<NonbondedMatrix> {
+    ) -> anyhow::Result<Self> {
         let atoms = topology.atomkinds();
         let n_atom_types = atoms.len();
 
         let mut potentials: Array2<ArcPotential> = Array2::from_elem(
             (n_atom_types, n_atom_types),
-            ArcPotential::new(NoInteraction::default()),
+            ArcPotential::new(NoInteraction),
         );
 
         for i in 0..n_atom_types {
@@ -340,7 +340,7 @@ impl NonbondedMatrix {
 
         let exclusions = ExclusionMatrix::from_topology(topology);
 
-        Ok(NonbondedMatrix {
+        Ok(Self {
             potentials,
             exclusions,
         })
@@ -376,23 +376,23 @@ impl NonbondedMatrix {
         }
     }
     /// Get square matrix of pair potentials for all atom type combinations.
-    pub fn get_potentials(&self) -> &Array2<ArcPotential> {
+    pub const fn get_potentials(&self) -> &Array2<ArcPotential> {
         &self.potentials
     }
     /// Get square matrix of pair potentials for all atom type combinations.
-    pub fn get_potentials_mut(&mut self) -> &mut Array2<ArcPotential> {
+    pub const fn get_potentials_mut(&mut self) -> &mut Array2<ArcPotential> {
         &mut self.potentials
     }
 }
 
 impl From<NonbondedMatrix> for EnergyTerm {
     fn from(nonbonded: NonbondedMatrix) -> Self {
-        EnergyTerm::NonbondedMatrix(nonbonded)
+        Self::NonbondedMatrix(nonbonded)
     }
 }
 
 impl SyncFrom for NonbondedMatrix {
-    fn sync_from(&mut self, other: &NonbondedMatrix, change: &Change) -> anyhow::Result<()> {
+    fn sync_from(&mut self, other: &Self, change: &Change) -> anyhow::Result<()> {
         match change {
             Change::Everything => self.potentials.clone_from(&other.potentials),
             Change::None | Change::Volume(_, _) | Change::SingleGroup(_, _) | Change::Groups(_) => {
@@ -451,7 +451,7 @@ impl NonbondedMatrixSplined {
     }
 
     /// Get reference to the splined potentials matrix.
-    pub fn get_potentials(&self) -> &Array2<SplinedPotential> {
+    pub const fn get_potentials(&self) -> &Array2<SplinedPotential> {
         &self.potentials
     }
 
@@ -515,7 +515,7 @@ impl EnergyChange for NonbondedMatrixSplined {
 
 impl From<NonbondedMatrixSplined> for EnergyTerm {
     fn from(nonbonded: NonbondedMatrixSplined) -> Self {
-        EnergyTerm::NonbondedMatrixSplined(nonbonded)
+        Self::NonbondedMatrixSplined(nonbonded)
     }
 }
 
@@ -530,7 +530,7 @@ impl From<&NonbondedMatrix> for NonbondedMatrixSplined {
 }
 
 impl SyncFrom for NonbondedMatrixSplined {
-    fn sync_from(&mut self, other: &NonbondedMatrixSplined, change: &Change) -> anyhow::Result<()> {
+    fn sync_from(&mut self, other: &Self, change: &Change) -> anyhow::Result<()> {
         match change {
             Change::Everything => self.potentials.clone_from(&other.potentials),
             Change::None | Change::Volume(_, _) | Change::SingleGroup(_, _) | Change::Groups(_) => {

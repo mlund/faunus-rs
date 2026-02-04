@@ -46,7 +46,7 @@ use interatomic::twobody::{GridType, SplineConfig};
 /// directly provided or should be calculated using a combination rule.
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 #[serde(untagged)]
-pub(crate) enum DirectOrMixing<T: IsotropicTwobodyEnergy> {
+pub enum DirectOrMixing<T: IsotropicTwobodyEnergy> {
     /// Calculate the parameters using the provided combination rule.
     Mixing {
         /// Combination rule to use for mixing.
@@ -64,7 +64,7 @@ pub(crate) enum DirectOrMixing<T: IsotropicTwobodyEnergy> {
 /// Types of pair interactions
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 #[serde(deny_unknown_fields)]
-pub(crate) enum PairInteraction {
+pub enum PairInteraction {
     /// Ashbaugh-Hatch potential.
     AshbaughHatch(DirectOrMixing<AshbaughHatch>),
     /// Kim-Hummer coarse-grained protein potential.
@@ -210,7 +210,7 @@ impl PairInteraction {
         medium: coulomb::Medium,
         scheme: T,
     ) -> anyhow::Result<Box<dyn IsotropicTwobodyEnergy>> {
-        let mut ionion = IonIon::new(charge_product, medium.clone().into(), scheme.clone());
+        let mut ionion = IonIon::new(charge_product, medium.clone().into(), scheme);
 
         ionion.set_permittivity(medium.permittivity()).unwrap();
 
@@ -232,7 +232,7 @@ impl PairInteraction {
 
 /// Structure storing information about the nonbonded interactions in the system in serializable format.
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
-pub(crate) struct PairPotentialBuilder(
+pub struct PairPotentialBuilder(
     #[serde(with = "::serde_with::rust::maps_duplicate_key_is_error")]
     // defining interactions between the same atom kinds multiple times causes an error
     HashMap<DefaultOrPair, Vec<PairInteraction>>,
@@ -271,7 +271,7 @@ impl PairPotentialBuilder {
                 atom1.name(),
                 atom2.name()
             );
-            return Ok(Box::from(NoInteraction::default()));
+            return Ok(Box::from(NoInteraction));
         }
 
         let total_interaction = interactions
@@ -283,7 +283,7 @@ impl PairPotentialBuilder {
     }
 }
 
-fn default_spline_n_points() -> usize {
+const fn default_spline_n_points() -> usize {
     2000
 }
 
@@ -316,7 +316,7 @@ impl SplineOptions {
 
 /// Structure used for (de)serializing the Hamiltonian of the system.
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub(crate) struct HamiltonianBuilder {
+pub struct HamiltonianBuilder {
     /// Nonbonded interactions defined for the system.
     #[serde(rename = "nonbonded")]
     pub pairpot_builder: Option<PairPotentialBuilder>,
@@ -339,7 +339,7 @@ impl HamiltonianBuilder {
     ///     nonbonded:
     ///       ...
     /// ```
-    pub(crate) fn from_file(path: impl AsRef<Path>) -> anyhow::Result<HamiltonianBuilder> {
+    pub(crate) fn from_file(path: impl AsRef<Path>) -> anyhow::Result<Self> {
         let yaml = std::fs::read_to_string(&path)
             .map_err(|err| anyhow::anyhow!("Error reading file {:?}: {}", &path.as_ref(), err))?;
         let full: serde_yaml::Value = serde_yaml::from_str(&yaml)?;
@@ -390,8 +390,8 @@ impl Serialize for DefaultOrPair {
         S: Serializer,
     {
         match *self {
-            DefaultOrPair::Default => serializer.serialize_str("default"),
-            DefaultOrPair::Pair(ref pair) => pair.serialize(serializer),
+            Self::Default => serializer.serialize_str("default"),
+            Self::Pair(ref pair) => pair.serialize(serializer),
         }
     }
 }

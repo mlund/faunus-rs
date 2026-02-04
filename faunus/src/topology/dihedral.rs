@@ -50,7 +50,7 @@ impl DihedralKind {
     pub const fn is_improper(&self) -> bool {
         matches!(
             self,
-            DihedralKind::ImproperHarmonic(_) | DihedralKind::ImproperPeriodic(_) //| DihedralKind::ImproperAmber { .. }
+            Self::ImproperHarmonic(_) | Self::ImproperPeriodic(_) //| DihedralKind::ImproperAmber { .. }
                                                                                   //| DihedralKind::ImproperCHARMM { .. }
         )
     }

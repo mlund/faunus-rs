@@ -92,7 +92,7 @@ impl ReferencePlatform {
         if topology.system.is_empty() {
             anyhow::bail!("Topology doesn't contain a system");
         }
-        let mut context = ReferencePlatform {
+        let mut context = Self {
             topology: topology.clone(),
             particles: vec![],
             groups: vec![],
@@ -143,7 +143,7 @@ impl Context for ReferencePlatform {}
 
 impl SyncFrom for ReferencePlatform {
     /// Synchronize ReferencePlatform from another ReferencePlatform.
-    fn sync_from(&mut self, other: &ReferencePlatform, change: &Change) -> anyhow::Result<()> {
+    fn sync_from(&mut self, other: &Self, change: &Change) -> anyhow::Result<()> {
         self.cell = other.cell.clone();
         self.hamiltonian_mut()
             .sync_from(&other.hamiltonian(), change)?;

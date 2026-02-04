@@ -43,8 +43,8 @@ impl Frequency {
     /// Check if action, typically a move or analysis, should be performed at given step
     pub fn should_perform(&self, step: usize) -> bool {
         match self {
-            Frequency::Every(n) => step % n == 0,
-            Frequency::Once(n) => step == *n,
+            Self::Every(n) => step.is_multiple_of(*n),
+            Self::Once(n) => step == *n,
             _ => unimplemented!("Unsupported frequency policy for `Frequency::should_perform`."),
         }
     }
@@ -64,10 +64,10 @@ impl AnalysisBuilder {
     /// Build analysis object
     pub fn build<T: Context>(&self, context: &T) -> Result<Box<dyn Analyze<T>>> {
         let analysis: Box<dyn Analyze<T>> = match self {
-            AnalysisBuilder::MassCenterDistance(builder) => {
+            Self::MassCenterDistance(builder) => {
                 Box::new(builder.build(&context.topology())?)
             }
-            AnalysisBuilder::StructureWriter(builder) => Box::new(builder.build()?),
+            Self::StructureWriter(builder) => Box::new(builder.build()?),
         };
         Ok(analysis)
     }

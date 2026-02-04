@@ -79,7 +79,7 @@ impl AtomKind {
     }
 
     /// Get the optional Ashbaugh-Hatch scaling factor, λ.
-    pub fn lambda(&self) -> Option<f64> {
+    pub const fn lambda(&self) -> Option<f64> {
         match self.hydrophobicity {
             Some(Hydrophobicity::Lambda(lambda)) => Some(lambda),
             _ => None,
@@ -87,7 +87,7 @@ impl AtomKind {
     }
 
     /// Set the Ashbaugh-Hatch scaling factor, λ.
-    pub fn set_lambda(&mut self, lambda: f64) -> anyhow::Result<()> {
+    pub const fn set_lambda(&mut self, lambda: f64) -> anyhow::Result<()> {
         self.hydrophobicity = Some(Hydrophobicity::Lambda(lambda));
         Ok(())
     }
@@ -118,17 +118,17 @@ impl AtomKind {
     }
 
     /// Set unique identifier
-    pub fn set_id(&mut self, id: usize) {
+    pub const fn set_id(&mut self, id: usize) {
         self.id = id;
     }
 
     /// Set sigma.
-    pub fn set_sigma(&mut self, sigma: Option<f64>) {
+    pub const fn set_sigma(&mut self, sigma: Option<f64>) {
         self.sigma = sigma;
     }
 
     /// Set epsilon.
-    pub fn set_epsilon(&mut self, epsilon: Option<f64>) {
+    pub const fn set_epsilon(&mut self, epsilon: Option<f64>) {
         self.epsilon = epsilon;
     }
 
@@ -143,7 +143,7 @@ impl AtomKind {
     /// - `sigma` (sigma rule)
     ///
     pub fn combine(rule: CombinationRule, atom1: &Self, atom2: &Self) -> Self {
-        let mut atomkind = AtomKind::default();
+        let mut atomkind = Self::default();
 
         if let (Some(a), Some(b)) = (atom1.epsilon(), atom2.epsilon()) {
             atomkind.epsilon = Some(rule.mix_epsilons((a, b)));
@@ -215,7 +215,7 @@ pub enum Hydrophobicity {
 
 impl Hydrophobicity {
     /// Get surface tension (kJ/mol/Å²)
-    pub fn surface_tension(&self) -> Option<f64> {
+    pub const fn surface_tension(&self) -> Option<f64> {
         match self {
             Self::SurfaceTension(tension) => Some(*tension),
             _ => None,

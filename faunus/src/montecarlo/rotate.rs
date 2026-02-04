@@ -93,22 +93,22 @@ impl RotateMolecule {
     }
 
     /// Get immutable reference to the statistics of the move.
-    pub(crate) fn get_statistics(&self) -> &MoveStatistics {
+    pub(crate) const fn get_statistics(&self) -> &MoveStatistics {
         &self.statistics
     }
 
     /// Get mutable reference to the statistics of the move.
-    pub(crate) fn get_statistics_mut(&mut self) -> &mut MoveStatistics {
+    pub(crate) const fn get_statistics_mut(&mut self) -> &mut MoveStatistics {
         &mut self.statistics
     }
 
     /// Get weight of the move.
-    pub(crate) fn weight(&self) -> f64 {
+    pub(crate) const fn weight(&self) -> f64 {
         self.weight
     }
 
     /// Number of times the move should be repeated if selected.
-    pub(crate) fn repeat(&self) -> usize {
+    pub(crate) const fn repeat(&self) -> usize {
         self.repeat
     }
 

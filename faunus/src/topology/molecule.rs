@@ -115,7 +115,7 @@ impl MoleculeKindBuilder {
     }
 }
 
-fn default_true() -> bool {
+const fn default_true() -> bool {
     true
 }
 
@@ -161,7 +161,7 @@ impl MoleculeKind {
     }
 
     /// Set molecule id
-    pub(super) fn set_id(&mut self, id: usize) {
+    pub(super) const fn set_id(&mut self, id: usize) {
         self.id = id;
     }
 
