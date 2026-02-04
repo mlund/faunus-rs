@@ -91,6 +91,7 @@ impl Topology {
     }
 
     /// Create partial topology without system. Used for topology includes.
+    #[must_use = "this returns a Result that should be handled"]
     pub fn from_file_partial(path: impl AsRef<Path> + Clone) -> anyhow::Result<Self> {
         let yaml = std::fs::read_to_string(path.clone())
             .map_err(|err| anyhow::anyhow!("Error reading file {:?}: {}", &path.as_ref(), err))?;
@@ -103,6 +104,7 @@ impl Topology {
     }
 
     /// Parse a yaml file as Topology which *must* include a system.
+    #[must_use = "this returns a Result that should be handled"]
     pub fn from_file(path: impl AsRef<Path>) -> anyhow::Result<Self> {
         let yaml = std::fs::read_to_string(&path)
             .map_err(|err| anyhow::anyhow!("Error loading file {:?}: {}", &path.as_ref(), err))?;

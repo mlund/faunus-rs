@@ -365,9 +365,9 @@ impl NonbondedMatrix {
                 .map(|&particle| {
                     let group = &context.groups()[group_index];
                     // the PartialUpdate stores relative indices of particles
-                    group
-                        .to_absolute_index(particle)
-                        .map_or(0.0, |abs_index| self.particle_with_all(context, abs_index, group))
+                    group.to_absolute_index(particle).map_or(0.0, |abs_index| {
+                        self.particle_with_all(context, abs_index, group)
+                    })
                 })
                 .sum(),
             GroupChange::None => 0.0,
@@ -471,9 +471,9 @@ impl NonbondedMatrixSplined {
                 .iter()
                 .map(|&particle| {
                     let group = &context.groups()[group_index];
-                    group
-                        .to_absolute_index(particle)
-                        .map_or(0.0, |abs_index| self.particle_with_all(context, abs_index, group))
+                    group.to_absolute_index(particle).map_or(0.0, |abs_index| {
+                        self.particle_with_all(context, abs_index, group)
+                    })
                 })
                 .sum(),
             GroupChange::None => 0.0,
@@ -1292,7 +1292,11 @@ mod tests {
             "High accuracy error too large: {}",
             error_high
         );
-        assert!(error_fast < 1e-2, "Fast config error too large: {}", error_fast);
+        assert!(
+            error_fast < 1e-2,
+            "Fast config error too large: {}",
+            error_fast
+        );
 
         // High accuracy should generally be better (or at least not significantly worse)
         // Note: this isn't always guaranteed but should hold for most cases

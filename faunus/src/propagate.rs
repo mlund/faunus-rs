@@ -96,10 +96,7 @@ impl Propagate {
 
     /// Get the `Propagate` structure from input yaml file.
     /// This also requires `Context` which is used to validate and finalize the individual moves.
-    pub fn from_file(
-        filename: impl AsRef<Path>,
-        context: &impl Context,
-    ) -> anyhow::Result<Self> {
+    pub fn from_file(filename: impl AsRef<Path>, context: &impl Context) -> anyhow::Result<Self> {
         let yaml = std::fs::read_to_string(filename)?;
         let full: serde_yaml::Value = serde_yaml::from_str(&yaml)?;
 

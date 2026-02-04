@@ -51,7 +51,7 @@ impl DihedralKind {
         matches!(
             self,
             Self::ImproperHarmonic(_) | Self::ImproperPeriodic(_) //| DihedralKind::ImproperAmber { .. }
-                                                                                  //| DihedralKind::ImproperCHARMM { .. }
+                                                                  //| DihedralKind::ImproperCHARMM { .. }
         )
     }
 }

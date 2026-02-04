@@ -74,26 +74,17 @@ impl From<Dimension> for [bool; 3] {
 impl Dimension {
     /// Return `true` if Dimension contains x-dimension.
     pub const fn is_x(&self) -> bool {
-        matches!(
-            self,
-            Self::X | Self::XY | Self::XZ | Self::XYZ
-        )
+        matches!(self, Self::X | Self::XY | Self::XZ | Self::XYZ)
     }
 
     /// Return `true` if Dimension contains y-dimension.
     pub const fn is_y(&self) -> bool {
-        matches!(
-            self,
-            Self::Y | Self::XY | Self::YZ | Self::XYZ
-        )
+        matches!(self, Self::Y | Self::XY | Self::YZ | Self::XYZ)
     }
 
     /// Return `true` if Dimension contains z-dimension.
     pub const fn is_z(&self) -> bool {
-        matches!(
-            self,
-            Self::Z | Self::XZ | Self::YZ | Self::XYZ
-        )
+        matches!(self, Self::Z | Self::XZ | Self::YZ | Self::XYZ)
     }
 
     /// Apply Dimension as a filter for Point. Creates a copy of the Point with

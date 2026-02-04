@@ -28,7 +28,14 @@ pub struct Particle {
 }
 
 impl Particle {
-    pub(crate) const fn new(atom_id: usize, index: usize, pos: Point) -> Self {
+    /// Create a new particle.
+    ///
+    /// # Arguments
+    /// * `atom_id` - Index of the atom kind in the topology
+    /// * `index` - Index in the main particle list
+    /// * `pos` - Position of the particle
+    #[must_use]
+    pub const fn new(atom_id: usize, index: usize, pos: Point) -> Self {
         Self {
             atom_id,
             index,

@@ -16,16 +16,11 @@
 
 use crate::{
     change::{Change, GroupChange},
-    Context, Particle, SyncFrom,
+    Context, Particle, Point, SyncFrom,
 };
 use anyhow::Ok;
-use nalgebra::Vector3;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
-
-pub type Point = Vector3<f64>;
-pub type PositionVec = Vec<Point>;
-pub type ParticleVec = Vec<Particle>;
 
 /// Group of particles.
 ///
@@ -145,6 +140,9 @@ impl Group {
     ///
     /// An error is returned if the requested size is larger than the capacity, or if there are
     /// too few active particles to shrink the group.
+    ///
+    /// # Errors
+    /// Returns an error if the requested size exceeds capacity or if shrinking by more particles than active.
     pub fn resize(&mut self, status: GroupSize) -> anyhow::Result<()> {
         self.size_status = status;
         self.num_active = match self.size_status {
@@ -288,7 +286,10 @@ impl Group {
 
     /// Converts a relative index to an absolute index with range check.
     /// If called with `0`, the beginning of the group in the main particle vector is returned.
+    ///
+    /// # Errors
     /// Returns an error if the index points to an inactive particle.
+    #[must_use = "this returns a Result that should be handled"]
     pub fn to_absolute_index(&self, index: usize) -> anyhow::Result<usize> {
         if index >= self.num_active {
             anyhow::bail!(
@@ -302,7 +303,10 @@ impl Group {
     }
 
     /// Converts an absolute index into a relative index with range check.
+    ///
+    /// # Errors
     /// Returns an error if the absolute index is not inside the group.
+    #[must_use = "this returns a Result that should be handled"]
     pub fn to_relative_index(&self, index: usize) -> anyhow::Result<usize> {
         match self.range.clone().position(|i| i == index) {
             Some(relative) => Ok(relative),

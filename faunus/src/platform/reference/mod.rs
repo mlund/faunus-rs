@@ -55,6 +55,7 @@ pub struct ReferencePlatform {
 impl ReferencePlatform {
     /// Create a new simulation system on a reference platform from
     /// faunus configuration file and optional structure file.
+    #[must_use = "this returns a Result that should be handled"]
     pub fn new(
         yaml_file: impl AsRef<Path>,
         structure_file: Option<&Path>,

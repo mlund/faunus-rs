@@ -172,9 +172,9 @@ impl Cell {
             .map_err(|err| anyhow::anyhow!("Error reading file {:?}: {}", path.as_ref(), err))?;
         let full: serde_yaml::Value = serde_yaml::from_str(&yaml)?;
 
-        let system = full.get("system").ok_or_else(|| {
-            anyhow::Error::msg("Could not find `system` in the YAML file.")
-        })?;
+        let system = full
+            .get("system")
+            .ok_or_else(|| anyhow::Error::msg("Could not find `system` in the YAML file."))?;
 
         let Some(value) = system.get("cell") else {
             log::warn!("No cell defined for the system. Using Endless cell.");

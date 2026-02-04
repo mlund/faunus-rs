@@ -43,7 +43,8 @@ pub(super) fn positions_from_frame(
     cell: Option<&impl SimulationCell>,
 ) -> Vec<Point> {
     let shift = cell.map_or_else(Vector3::default, |cell| {
-        cell.bounding_box().map_or_else(Vector3::default, |b| -0.5 * b)
+        cell.bounding_box()
+            .map_or_else(Vector3::default, |b| -0.5 * b)
     });
 
     frame
@@ -194,8 +195,7 @@ impl AtomKind {
     /// `name` is the name of the particle itself, not of the AtomKind.
     /// If `name` is not provided, the name of the AtomKind itself is used.
     fn to_chem_atom(&self, name: Option<&str>) -> chemfiles::Atom {
-        let mut chemfiles_atom =
-            chemfiles::Atom::new(name.unwrap_or_else(|| self.name()));
+        let mut chemfiles_atom = chemfiles::Atom::new(name.unwrap_or_else(|| self.name()));
         chemfiles_atom.set_mass(self.mass());
         chemfiles_atom.set_charge(self.charge());
         if let Some(element) = self.element() {

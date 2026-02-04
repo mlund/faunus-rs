@@ -149,6 +149,7 @@ impl Reaction {
     /// - Implicit participants are prefixed with a tilde or a ghost, e.g. "~B" or "👻B".
     ///
     /// See topology for more information about atomic and implicit participants.
+    #[must_use = "this returns a Result that should be handled"]
     pub fn from_reaction(forward_reaction: &str, equilibrium_const: f64) -> Result<Self> {
         let sides: Vec<&str> = forward_reaction.split(&['=', '⇌', '⇄', '→']).collect();
         check_sides(&sides)?;

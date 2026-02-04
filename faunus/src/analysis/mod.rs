@@ -17,6 +17,7 @@
 use crate::{Context, Info};
 use anyhow::Result;
 use core::fmt::Debug;
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 use serde_yaml::Value;
 use std::path::PathBuf;
@@ -40,12 +41,38 @@ pub enum Frequency {
 }
 
 impl Frequency {
-    /// Check if action, typically a move or analysis, should be performed at given step
-    pub fn should_perform(&self, step: usize) -> bool {
+    /// Check if action, typically a move or analysis, should be performed at given step.
+    ///
+    /// This handles `Every(n)` and `Once(n)` variants. For `Probability` use
+    /// [`should_perform_randomly`](Self::should_perform_randomly), and for `End` use
+    /// [`should_perform_at_end`](Self::should_perform_at_end).
+    #[must_use]
+    #[allow(clippy::manual_is_multiple_of)] // is_multiple_of is not const
+    pub const fn should_perform(&self, step: usize) -> bool {
         match self {
-            Self::Every(n) => step.is_multiple_of(*n),
+            Self::Every(n) => step % *n == 0,
             Self::Once(n) => step == *n,
-            _ => unimplemented!("Unsupported frequency policy for `Frequency::should_perform`."),
+            Self::Probability(_) | Self::End => false,
+        }
+    }
+
+    /// Check if action should be performed at the final step.
+    ///
+    /// Returns `true` only for the `End` variant.
+    #[must_use]
+    pub const fn should_perform_at_end(&self) -> bool {
+        matches!(self, Self::End)
+    }
+
+    /// Check if action should be performed based on probability.
+    ///
+    /// For `Probability(p)`, returns `true` with probability `p`.
+    /// Returns `false` for all other variants.
+    #[must_use]
+    pub fn should_perform_randomly(&self, rng: &mut impl Rng) -> bool {
+        match self {
+            Self::Probability(p) => rng.gen_bool(*p),
+            _ => false,
         }
     }
 }
@@ -62,11 +89,10 @@ pub enum AnalysisBuilder {
 
 impl AnalysisBuilder {
     /// Build analysis object
+    #[must_use = "this returns a Result that should be handled"]
     pub fn build<T: Context>(&self, context: &T) -> Result<Box<dyn Analyze<T>>> {
         let analysis: Box<dyn Analyze<T>> = match self {
-            Self::MassCenterDistance(builder) => {
-                Box::new(builder.build(&context.topology())?)
-            }
+            Self::MassCenterDistance(builder) => Box::new(builder.build(&context.topology())?),
             Self::StructureWriter(builder) => Box::new(builder.build()?),
         };
         Ok(analysis)
@@ -77,6 +103,7 @@ impl AnalysisBuilder {
 pub type AnalysisCollection<T> = Vec<Box<dyn Analyze<T>>>;
 
 /// Create analysis collection from yaml file containing a list of analysis objects under an "analysis" key.
+#[must_use = "this returns a Result that should be handled"]
 pub fn from_file<T: Context>(path: &PathBuf, context: &T) -> Result<AnalysisCollection<T>> {
     let yaml = std::fs::read_to_string(path)
         .map_err(|err| anyhow::anyhow!("Error reading file {:?}: {}", &path, err))?;

@@ -402,14 +402,24 @@ mod tests {
 
         assert_eq!(move1_stats.num_trials, 73);
         assert_eq!(move1_stats.num_accepted, 71);
-        assert_approx_eq!(f64, move1_stats.energy_change_sum, -3.3952572353350177, epsilon = 1e-14);
+        assert_approx_eq!(
+            f64,
+            move1_stats.energy_change_sum,
+            -3.3952572353350177,
+            epsilon = 1e-14
+        );
 
         let move2_stats =
             markov_chain.propagate.get_collections()[0].get_moves()[1].get_statistics();
 
         assert_eq!(move2_stats.num_trials, 81);
         assert_eq!(move2_stats.num_accepted, 79);
-        assert_approx_eq!(f64, move2_stats.energy_change_sum, -1.1611869334060376, epsilon = 1e-14);
+        assert_approx_eq!(
+            f64,
+            move2_stats.energy_change_sum,
+            -1.1611869334060376,
+            epsilon = 1e-14
+        );
 
         let move3_stats =
             markov_chain.propagate.get_collections()[0].get_moves()[2].get_statistics();
@@ -423,14 +433,24 @@ mod tests {
 
         assert_eq!(move4_stats.num_trials, 100);
         assert_eq!(move4_stats.num_accepted, 94);
-        assert_approx_eq!(f64, move4_stats.energy_change_sum, -61.739122509342266, epsilon = 1e-14);
+        assert_approx_eq!(
+            f64,
+            move4_stats.energy_change_sum,
+            -61.739122509342266,
+            epsilon = 1e-14
+        );
 
         let move5_stats =
             markov_chain.propagate.get_collections()[2].get_moves()[0].get_statistics();
 
         assert_eq!(move5_stats.num_trials, 500);
         assert_eq!(move5_stats.num_accepted, 466);
-        assert_approx_eq!(f64, move5_stats.energy_change_sum, -515.1334649717064, epsilon = 1e-14);
+        assert_approx_eq!(
+            f64,
+            move5_stats.energy_change_sum,
+            -515.1334649717064,
+            epsilon = 1e-14
+        );
 
         println!("{:?}", markov_chain.context.new.particles());
 
