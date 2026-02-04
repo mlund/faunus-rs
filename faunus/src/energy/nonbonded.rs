@@ -365,11 +365,9 @@ impl NonbondedMatrix {
                 .map(|&particle| {
                     let group = &context.groups()[group_index];
                     // the PartialUpdate stores relative indices of particles
-                    match group.to_absolute_index(particle) {
-                        Ok(abs_index) => self.particle_with_all(context, abs_index, group),
-                        // if the particle is not active, return 0.0
-                        Err(_) => 0.0,
-                    }
+                    group
+                        .to_absolute_index(particle)
+                        .map_or(0.0, |abs_index| self.particle_with_all(context, abs_index, group))
                 })
                 .sum(),
             GroupChange::None => 0.0,
@@ -473,10 +471,9 @@ impl NonbondedMatrixSplined {
                 .iter()
                 .map(|&particle| {
                     let group = &context.groups()[group_index];
-                    match group.to_absolute_index(particle) {
-                        Ok(abs_index) => self.particle_with_all(context, abs_index, group),
-                        Err(_) => 0.0,
-                    }
+                    group
+                        .to_absolute_index(particle)
+                        .map_or(0.0, |abs_index| self.particle_with_all(context, abs_index, group))
                 })
                 .sum(),
             GroupChange::None => 0.0,

@@ -47,10 +47,7 @@ fn random_atom(
     group_index: usize,
     atom_id: Option<usize>,
 ) -> Option<usize> {
-    let select = match atom_id {
-        Some(a) => ParticleSelection::ById(a),
-        None => ParticleSelection::Active,
-    };
+    let select = atom_id.map_or(ParticleSelection::Active, ParticleSelection::ById);
 
     context
         .groups()

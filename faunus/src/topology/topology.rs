@@ -370,6 +370,7 @@ impl Topology {
     }
 
     /// Validate intermolecular bonded interactions.
+    #[allow(clippy::needless_pass_by_ref_mut)] // may need mutation in future
     fn validate_intermolecular(&mut self) -> anyhow::Result<()> {
         let num_particles = self.num_particles();
 

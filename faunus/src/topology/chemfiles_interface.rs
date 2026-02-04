@@ -42,11 +42,9 @@ pub(super) fn positions_from_frame(
     frame: &chemfiles::Frame,
     cell: Option<&impl SimulationCell>,
 ) -> Vec<Point> {
-    let shift = if let Some(cell) = cell {
-        cell.bounding_box().map(|b| -0.5 * b).unwrap_or_default()
-    } else {
-        Vector3::default()
-    };
+    let shift = cell.map_or_else(Vector3::default, |cell| {
+        cell.bounding_box().map_or_else(Vector3::default, |b| -0.5 * b)
+    });
 
     frame
         .positions()
@@ -196,10 +194,8 @@ impl AtomKind {
     /// `name` is the name of the particle itself, not of the AtomKind.
     /// If `name` is not provided, the name of the AtomKind itself is used.
     fn to_chem_atom(&self, name: Option<&str>) -> chemfiles::Atom {
-        let mut chemfiles_atom = match name {
-            Some(name) => chemfiles::Atom::new(name),
-            None => chemfiles::Atom::new(self.name()),
-        };
+        let mut chemfiles_atom =
+            chemfiles::Atom::new(name.unwrap_or_else(|| self.name()));
         chemfiles_atom.set_mass(self.mass());
         chemfiles_atom.set_charge(self.charge());
         if let Some(element) = self.element() {
@@ -215,10 +211,10 @@ impl ChemFrameConvert for ReferencePlatform {}
 /// Convert topology Residue to chemfiles residue.
 impl core::convert::From<&Residue> for chemfiles::Residue {
     fn from(residue: &Residue) -> Self {
-        let mut chemfiles_residue = match residue.number() {
-            None => Self::new(residue.name()),
-            Some(n) => Self::with_id(residue.name(), n as i64),
-        };
+        let mut chemfiles_residue = residue.number().map_or_else(
+            || Self::new(residue.name()),
+            |n| Self::with_id(residue.name(), n as i64),
+        );
 
         residue
             .range()
@@ -231,10 +227,10 @@ impl core::convert::From<&Residue> for chemfiles::Residue {
 /// Any Shape implementing this trait may be converted into chemfiles::UnitCell.
 pub trait CellToChemCell: Shape {
     fn to_chem_cell(&self) -> chemfiles::UnitCell {
-        match self.bounding_box() {
-            Some(x) => chemfiles::UnitCell::new(x.into()),
-            None => chemfiles::UnitCell::infinite(),
-        }
+        self.bounding_box()
+            .map_or_else(chemfiles::UnitCell::infinite, |x| {
+                chemfiles::UnitCell::new(x.into())
+            })
     }
 }
 

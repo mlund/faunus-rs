@@ -69,6 +69,7 @@ impl RotateMolecule {
     ///
     /// Translates molecule in given `context` and return a change object
     /// describing the change as well as the magnitude of the displacement.
+    #[allow(clippy::needless_pass_by_ref_mut)] // may need mutation in future
     pub(crate) fn propose_move(
         &mut self,
         context: &mut impl Context,

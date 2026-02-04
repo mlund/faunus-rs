@@ -271,6 +271,7 @@ impl MoveCollection {
 }
 
 /// The method for selecting moves from the collection.
+#[allow(dead_code)]
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub(crate) enum MovesSelection {
     Stochastic,

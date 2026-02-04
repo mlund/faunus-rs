@@ -60,6 +60,7 @@ impl std::fmt::Display for Participant {
 
 impl std::str::FromStr for Participant {
     type Err = anyhow::Error;
+    #[allow(clippy::option_if_let_else)] // chained if-let-else is clearer here
     fn from_str(s: &str) -> Result<Self> {
         let p = if let Some(s) = s.strip_prefix(['.', '⚛']) {
             Self::Atom(s.to_string())
@@ -100,8 +101,9 @@ pub struct Reaction {
 /// Repeat a reaction participant, e.g. "2A" -> ["A", "A"]
 fn repeat_participant(participant: &str) -> Vec<String> {
     let re = Regex::new(r"^(?P<number>\d+)(?P<remaining>.*)").unwrap();
-    match re.captures(participant) {
-        Some(captured) => {
+    re.captures(participant).map_or_else(
+        || vec![participant.to_string()],
+        |captured| {
             let n: usize = captured
                 .name("number")
                 .unwrap()
@@ -110,9 +112,8 @@ fn repeat_participant(participant: &str) -> Vec<String> {
                 .unwrap_or(1);
             let remaining = captured.name("remaining").unwrap().as_str().trim();
             vec![remaining.to_string(); n]
-        }
-        None => vec![participant.to_string()],
-    }
+        },
+    )
 }
 
 fn parse_side(side: &str) -> Result<Vec<Participant>> {
