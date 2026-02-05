@@ -15,7 +15,7 @@
 use crate::{
     analysis::{self},
     montecarlo::MarkovChain,
-    platform::reference::ReferencePlatform,
+    platform::reference::{get_medium, ReferencePlatform},
     propagate::Propagate,
     WithCell, WithTopology,
 };
@@ -90,19 +90,6 @@ fn write_yaml<T: serde::Serialize>(
         }
     }
     Ok(())
-}
-
-// Helper function to extract medium from system/medium in YAML file
-pub(crate) fn get_medium(path: impl AsRef<std::path::Path>) -> Result<coulomb::Medium> {
-    let file = std::fs::File::open(&path)
-        .map_err(|err| anyhow::anyhow!("Could not open {:?}: {}", path.as_ref(), err))?;
-    serde_yaml::from_reader(file)
-        .ok()
-        .and_then(|s: serde_yaml::Value| {
-            let val = s.get("system")?.get("medium")?;
-            serde_yaml::from_value(val.clone()).ok()
-        })
-        .ok_or_else(|| anyhow::anyhow!("Could not find `system/medium` in input file"))
 }
 
 fn run(input: PathBuf, _state: Option<PathBuf>, yaml_output: &mut std::fs::File) -> Result<()> {

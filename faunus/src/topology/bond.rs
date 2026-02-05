@@ -15,7 +15,6 @@
 //! Bonds between atoms
 
 use derive_getters::Getters;
-use float_cmp::approx_eq;
 use interatomic::twobody::IsotropicTwobodyEnergy;
 use interatomic::Cutoff;
 use serde::{Deserialize, Serialize};
@@ -90,15 +89,15 @@ impl From<BondOrder> for f64 {
 impl From<f64> for BondOrder {
     fn from(value: f64) -> Self {
         match value {
-            x if approx_eq!(f64, x, 0.0) => Self::Unspecified,
-            x if approx_eq!(f64, x, 1.0) => Self::Single,
-            x if approx_eq!(f64, x, 2.0) => Self::Double,
-            x if approx_eq!(f64, x, 3.0) => Self::Triple,
-            x if approx_eq!(f64, x, 4.0) => Self::Quadruple,
-            x if approx_eq!(f64, x, 5.0) => Self::Quintuple,
-            x if approx_eq!(f64, x, 6.0) => Self::Sextuple,
-            x if approx_eq!(f64, x, 1.25) => Self::Amide,
-            x if approx_eq!(f64, x, 1.5) => Self::Aromatic,
+            0.0 => Self::Unspecified,
+            1.0 => Self::Single,
+            2.0 => Self::Double,
+            3.0 => Self::Triple,
+            4.0 => Self::Quadruple,
+            5.0 => Self::Quintuple,
+            6.0 => Self::Sextuple,
+            1.25 => Self::Amide,
+            1.5 => Self::Aromatic,
             _ => Self::Custom(value),
         }
     }

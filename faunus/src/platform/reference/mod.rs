@@ -34,6 +34,19 @@ use std::{
     rc::Rc,
 };
 
+/// Extract medium from system/medium in YAML file
+pub fn get_medium(path: impl AsRef<Path>) -> anyhow::Result<coulomb::Medium> {
+    let file = std::fs::File::open(&path)
+        .map_err(|err| anyhow::anyhow!("Could not open {:?}: {}", path.as_ref(), err))?;
+    serde_yaml::from_reader(file)
+        .ok()
+        .and_then(|s: serde_yaml::Value| {
+            let val = s.get("system")?.get("medium")?;
+            serde_yaml::from_value(val.clone()).ok()
+        })
+        .ok_or_else(|| anyhow::anyhow!("Could not find `system/medium` in input file"))
+}
+
 /// Default platform running on the CPU.
 ///
 /// Particles are stored in
@@ -61,7 +74,7 @@ impl ReferencePlatform {
         structure_file: Option<&Path>,
         rng: &mut ThreadRng,
     ) -> anyhow::Result<Self> {
-        let medium = Some(crate::cli::get_medium(&yaml_file)?);
+        let medium = Some(get_medium(&yaml_file)?);
         let topology = Topology::from_file(&yaml_file)?;
         let hamiltonian_builder = HamiltonianBuilder::from_file(&yaml_file)?;
         // validate hamiltonian builder
