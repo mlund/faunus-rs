@@ -34,7 +34,7 @@ serde_with = "3.8.1"
 dyn-clone = "1.0.17"
 ndarray = { version = "0.15.6", features = ["serde"] }
 derive_builder = "0.20.0"
-voronota = "0.3"
+voronota-ltr = "0.1"
 indicatif = {version = "*"}
 flate2 = "1.0.35"
 derive_more = {version = "1.0.0", features = ["debug"]}

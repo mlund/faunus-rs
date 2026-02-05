@@ -18,7 +18,7 @@ use crate::Point;
 use crate::{Change, Context, SyncFrom};
 use derive_builder::Builder;
 use serde::{Deserialize, Serialize};
-use voronota::{Ball, RadicalTessellation};
+use voronota_ltr::{compute_tessellation, Ball, TessellationResult};
 
 #[derive(Debug, Clone, Builder)]
 #[builder(derive(Deserialize, Serialize, Debug))]
@@ -26,10 +26,14 @@ use voronota::{Ball, RadicalTessellation};
 pub struct SasaEnergy {
     /// Probe radius for the tessellation
     probe_radius: f64,
+    /// Input balls for tessellation
+    #[builder_field_attr(serde(skip))]
+    #[builder(default)]
+    balls: Vec<Ball>,
     /// Voronoi tessellation of the particles
     #[builder_field_attr(serde(skip))]
     #[builder(default)]
-    tesselation: RadicalTessellation,
+    tessellation: TessellationResult,
     /// Surface tension for each particle
     #[builder_field_attr(serde(skip_serializing))]
     #[builder(default)]
@@ -53,9 +57,11 @@ impl SasaEnergy {
         offset_from_first: bool,
     ) -> Self {
         let balls = Self::make_balls(positions, radii);
+        let tessellation = compute_tessellation(&balls, probe_radius, None, None);
         Self {
             probe_radius,
-            tesselation: RadicalTessellation::from_balls(probe_radius, &balls, None, None, false),
+            balls,
+            tessellation,
             tensions: tensions.into_iter().collect(),
             energy_offset,
             offset_from_first,
@@ -66,29 +72,19 @@ impl SasaEnergy {
         positions: impl IntoIterator<Item = &'a Point>,
         radii: impl IntoIterator<Item = f64>,
     ) -> Vec<Ball> {
-        let to_ball = |(pos, radius): (&Point, f64)| Ball {
-            x: pos.x,
-            y: pos.y,
-            z: pos.z,
-            r: radius,
-        };
-        std::iter::zip(positions, radii).map(to_ball).collect()
+        std::iter::zip(positions, radii)
+            .map(|(pos, radius)| Ball::new(pos.x, pos.y, pos.z, radius))
+            .collect()
     }
 
     /// Update positions only; radii and tensions are left unchanged.
     pub fn update_positions<'a>(&mut self, positions: impl IntoIterator<Item = &'a Point>) {
-        std::iter::zip(positions, self.tesselation.balls.iter_mut()).for_each(|(pos, ball)| {
+        std::iter::zip(positions, self.balls.iter_mut()).for_each(|(pos, ball)| {
             ball.x = pos.x;
             ball.y = pos.y;
             ball.z = pos.z;
         });
-        self.tesselation = RadicalTessellation::from_balls(
-            self.probe_radius,
-            &self.tesselation.balls,
-            None,
-            None,
-            false,
-        );
+        self.tessellation = compute_tessellation(&self.balls, self.probe_radius, None, None);
     }
 
     /// Calculate the surface energy based in the available surface area (kJ/mol)
@@ -96,7 +92,7 @@ impl SasaEnergy {
         // TODO: calculate only for changed positions
         self.tensions
             .iter()
-            .zip(self.tesselation.cells.iter())
+            .zip(self.tessellation.cells.iter())
             .map(|(tension, cell)| tension * cell.sas_area)
             .sum::<f64>()
             + self.energy_offset.unwrap_or(0.0)
@@ -125,9 +121,8 @@ impl SasaEnergy {
                 .map(|sigma| sigma / 2.0)
                 .unwrap_or(0.0)
         });
-        let balls = Self::make_balls(positions, radii);
-        self.tesselation =
-            RadicalTessellation::from_balls(self.probe_radius, &balls, None, None, false);
+        self.balls = Self::make_balls(positions, radii);
+        self.tessellation = compute_tessellation(&self.balls, self.probe_radius, None, None);
         self.tensions = particles
             .iter()
             .map(|p| {
@@ -157,7 +152,8 @@ impl SyncFrom for SasaEnergy {
         // TODO: implement partial sync
         match change {
             Change::Everything => {
-                self.tesselation = other.tesselation.clone();
+                self.balls = other.balls.clone();
+                self.tessellation = other.tessellation.clone();
                 self.tensions = other.tensions.clone();
             }
             _ => self.sync_from(other, &Change::Everything)?,
