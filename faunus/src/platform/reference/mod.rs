@@ -244,7 +244,7 @@ impl ParticleSystem for ReferencePlatform {
         let p2 = self.particles()[indices[1]].pos();
         let p3 = self.particles()[indices[2]].pos();
 
-        crate::aux::angle_points(p1, p2, p3, self.cell())
+        crate::auxiliary::angle_points(p1, p2, p3, self.cell())
     }
 
     /// Get dihedral between particles `i-j-k-l`.
@@ -254,7 +254,7 @@ impl ParticleSystem for ReferencePlatform {
     #[inline(always)]
     fn get_dihedral_angle(&self, indices: &[usize; 4]) -> f64 {
         let [p1, p2, p3, p4] = indices.map(|x| self.particles()[x].pos());
-        crate::aux::dihedral_points(p1, p2, p3, p4, self.cell())
+        crate::auxiliary::dihedral_points(p1, p2, p3, p4, self.cell())
     }
 
     /// Shift positions of target particles.

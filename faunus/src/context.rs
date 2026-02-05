@@ -125,7 +125,7 @@ pub trait ParticleSystem: GroupCollection + WithCell + WithTopology {
     /// let p2 = self.particle(indices[1]);
     /// let p3 = self.particle(indices[2]);
     ///
-    /// crate::aux::angle_points(p1.pos(), p2.pos(), p3.pos(), self.cell())
+    /// crate::auxiliary::angle_points(p1.pos(), p2.pos(), p3.pos(), self.cell())
     /// ```
     fn get_angle(&self, indices: &[usize; 3]) -> f64;
 
@@ -148,7 +148,7 @@ pub trait ParticleSystem: GroupCollection + WithCell + WithTopology {
     /// let p3 = self.particle(indices[2]);
     /// let p4 = self.particle(indices[3]);
     ///
-    /// crate::aux::dihedral_points(p1.pos(), p2.pos(), p3.pos(), p4.pos(), self.cell())
+    /// crate::auxiliary::dihedral_points(p1.pos(), p2.pos(), p3.pos(), p4.pos(), self.cell())
     /// ```
     fn get_dihedral_angle(&self, indices: &[usize; 4]) -> f64;
 
@@ -160,7 +160,7 @@ pub trait ParticleSystem: GroupCollection + WithCell + WithTopology {
             .map(|i| self.topology().atomkinds()[i].mass())
             .collect();
         let shift = positions.first().map_or_else(Point::zeros, |p| -*p);
-        crate::aux::mass_center_pbc(&positions, &masses, self.cell(), Some(shift))
+        crate::auxiliary::mass_center_pbc(&positions, &masses, self.cell(), Some(shift))
     }
 
     /// Shift positions of selected particles by target vector and apply periodic boundary conditions.

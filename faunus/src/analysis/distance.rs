@@ -80,7 +80,7 @@ impl MassCenterDistance {
         };
         let molids = (get_id(molecules.0), get_id(molecules.1));
         let molecules = (molecules.0.to_owned(), molecules.1.to_owned());
-        let stream = crate::aux::open_compressed(&output_file)?;
+        let stream = crate::auxiliary::open_compressed(&output_file)?;
         Ok(Self {
             molecules,
             molids,

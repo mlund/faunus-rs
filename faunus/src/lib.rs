@@ -28,7 +28,7 @@ pub mod cell;
 mod change;
 pub use self::change::{Change, GroupChange};
 pub mod analysis;
-pub mod aux;
+pub mod auxiliary;
 pub mod chemistry;
 pub mod cli;
 pub mod dimension;
