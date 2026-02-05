@@ -69,7 +69,7 @@ impl ExclusionMatrix {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "chemfiles"))]
 mod tests {
     use super::*;
 

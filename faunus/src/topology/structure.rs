@@ -16,7 +16,10 @@
 
 use std::path::Path;
 
-use super::{chemfiles_interface, AtomKind, MoleculeKind, MoleculeKindBuilder};
+#[cfg(feature = "chemfiles")]
+use super::chemfiles_interface;
+#[cfg(feature = "chemfiles")]
+use super::{AtomKind, MoleculeKind, MoleculeKindBuilder};
 use crate::cell::SimulationCell;
 use crate::Point;
 
@@ -42,6 +45,7 @@ pub(crate) fn positions_from_structure_file(
 /// Make `MoleculeKind` from structure file populated with atom ids and names
 ///
 /// Atom names must already exist in the list of `AtomKind` objects.
+#[cfg(feature = "chemfiles")]
 pub fn molecule_from_file(
     molname: &str,
     filename: &impl AsRef<Path>,

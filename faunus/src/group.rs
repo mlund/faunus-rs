@@ -696,7 +696,7 @@ impl GroupLists {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "chemfiles"))]
 mod tests {
     use std::path::Path;
 

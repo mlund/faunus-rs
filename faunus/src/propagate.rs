@@ -477,7 +477,7 @@ impl Info for Move {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "chemfiles"))]
 mod tests {
 
     use crate::platform::reference::ReferencePlatform;

@@ -67,6 +67,7 @@ use serde::{Deserializer, Serializer};
 
 pub use self::block::{InsertionPolicy, MoleculeBlock};
 pub use self::molecule::{MoleculeKind, MoleculeKindBuilder};
+#[cfg(feature = "chemfiles")]
 pub use structure::{molecule_from_file, positions_from_structure_file};
 
 /// Trait implemented by collections of atoms that should not overlap (e.g., residues, chains).
@@ -491,7 +492,7 @@ impl<'de> Deserialize<'de> for InputPath {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "chemfiles"))]
 mod tests {
     use self::block::BlockActivationStatus;
     use crate::dimension::Dimension;

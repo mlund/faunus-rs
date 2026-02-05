@@ -1,6 +1,10 @@
+#[cfg(feature = "chemfiles")]
 use super::{Analyze, Frequency};
+#[cfg(feature = "chemfiles")]
 use crate::Context;
+#[cfg(feature = "chemfiles")]
 use derive_builder::Builder;
+#[cfg(feature = "chemfiles")]
 use serde::{Deserialize, Serialize};
 
 /// Writes structure of the system in the specified format during the simulation.
@@ -23,6 +27,7 @@ pub struct StructureWriter {
     num_samples: usize,
 }
 
+#[cfg(feature = "chemfiles")]
 impl<T: Context> From<StructureWriter> for Box<dyn Analyze<T>> {
     fn from(analysis: StructureWriter) -> Self {
         Box::new(analysis)

@@ -27,7 +27,9 @@ use serde::{Deserialize, Serialize};
 
 pub use super::block::{InsertionPolicy, MoleculeBlock};
 pub use super::molecule::MoleculeKind;
-pub use super::structure::positions_from_structure_file;
+
+use super::structure::positions_from_structure_file as load_positions;
+use crate::Point;
 
 /// Trait to search collections by name.
 pub trait FindByName<T> {
@@ -247,8 +249,8 @@ impl Topology {
         // current index of the coordinate in the external structure file to use
         let mut curr_start = 0;
 
-        let positions = match structure {
-            Some(x) => Some(positions_from_structure_file(&x, Some(context.cell()))?),
+        let positions: Option<Vec<Point>> = match structure {
+            Some(x) => Some(load_positions(&x, Some(context.cell()))?),
             None => None,
         };
 

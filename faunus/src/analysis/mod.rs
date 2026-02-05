@@ -25,6 +25,7 @@ use std::path::PathBuf;
 mod distance;
 mod structure_writer;
 pub use distance::{MassCenterDistance, MassCenterDistanceBuilder};
+#[cfg(feature = "chemfiles")]
 pub use structure_writer::{StructureWriter, StructureWriterBuilder};
 
 /// Frequency of analysis.
@@ -83,6 +84,7 @@ pub enum AnalysisBuilder {
     /// Mass center distance analysis
     MassCenterDistance(MassCenterDistanceBuilder),
     /// Structure writer
+    #[cfg(feature = "chemfiles")]
     #[serde(rename = "Trajectory")]
     StructureWriter(StructureWriterBuilder),
 }
@@ -93,6 +95,7 @@ impl AnalysisBuilder {
     pub fn build<T: Context>(&self, context: &T) -> Result<Box<dyn Analyze<T>>> {
         let analysis: Box<dyn Analyze<T>> = match self {
             Self::MassCenterDistance(builder) => Box::new(builder.build(&context.topology())?),
+            #[cfg(feature = "chemfiles")]
             Self::StructureWriter(builder) => Box::new(builder.build()?),
         };
         Ok(analysis)

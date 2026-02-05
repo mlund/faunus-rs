@@ -537,7 +537,7 @@ impl SyncFrom for NonbondedMatrixSplined {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "chemfiles"))]
 mod tests {
     use std::{cell::RefCell, rc::Rc};
 
