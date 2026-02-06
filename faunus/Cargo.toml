@@ -46,7 +46,7 @@ approx = "0.5"
 float-cmp = "0.9"
 
 [features]
-default = ["chemfiles", "cli"]
+default = ["cli"]
 chemfiles = ["dep:chemfiles"]
 cli = ["dep:clap", "dep:pretty_env_logger", "dep:indicatif", "dep:physical_constants"]
 

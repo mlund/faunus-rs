@@ -13,12 +13,7 @@
 // limitations under the license.
 
 use std::collections::{HashMap, HashSet, VecDeque};
-#[cfg(feature = "chemfiles")]
-use std::path::Path;
-use std::path::PathBuf;
-
-#[cfg(feature = "chemfiles")]
-use super::chemfiles_interface;
+use std::path::{Path, PathBuf};
 
 use derive_builder::Builder;
 use derive_getters::Getters;
@@ -100,20 +95,15 @@ pub struct MoleculeKind {
     from_structure: Option<PathBuf>,
 }
 
-#[cfg(feature = "chemfiles")]
 impl MoleculeKindBuilder {
     /// Populate `atoms` from structure file.
     ///
     /// # Panics
-    /// Panics of the file doesn't exist or is of unknown format.
+    /// Panics if the file doesn't exist or is of unknown format.
     pub fn from_structure(&mut self, filename: impl AsRef<Path>) -> &mut Self {
-        let atom_names: Vec<_> = chemfiles_interface::frame_from_file(&filename)
-            .unwrap()
-            .iter_atoms()
-            .map(|a| a.name())
-            .collect();
-        log::debug!("Loaded {} atoms from structure file", atom_names.len());
-        self.atoms(atom_names)
+        let data = super::io::read_structure(&filename).unwrap();
+        log::debug!("Loaded {} atoms from structure file", data.names.len());
+        self.atoms(data.names)
     }
 }
 
@@ -134,30 +124,18 @@ impl MoleculeKind {
         self.has_com
     }
 
-    /// Set atom names from optional structure file
+    /// Set atom names from optional structure file.
     ///
     /// Returns error if file is specified and cannot be loaded.
-    #[cfg(feature = "chemfiles")]
     pub fn set_names_from_structure(&mut self) -> anyhow::Result<()> {
         if let Some(filename) = &self.from_structure {
-            self.atoms = chemfiles_interface::frame_from_file(&filename)?
-                .iter_atoms()
-                .map(|a| a.name())
-                .collect();
+            let data = super::io::read_structure(&filename)?;
+            self.atoms = data.names;
             log::debug!(
                 "Set {} atom names from {}",
                 self.atoms.len(),
                 filename.display()
             );
-        }
-        Ok(())
-    }
-
-    /// Set atom names from optional structure file (stub when chemfiles is disabled)
-    #[cfg(not(feature = "chemfiles"))]
-    pub fn set_names_from_structure(&mut self) -> anyhow::Result<()> {
-        if self.from_structure.is_some() {
-            anyhow::bail!("Loading structure files requires the `chemfiles` feature");
         }
         Ok(())
     }
@@ -464,7 +442,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "chemfiles")]
     fn test_load_structure() {
         let molecule = MoleculeKindBuilder::default()
             .name("MOL")

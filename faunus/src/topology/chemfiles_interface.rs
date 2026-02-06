@@ -29,6 +29,7 @@ use nalgebra::Vector3;
 use super::{molecule::MoleculeKind, AtomKind, IndexRange};
 
 /// Create a new chemfiles::Frame from an input file in a supported format.
+#[allow(dead_code)]
 pub(super) fn frame_from_file(filename: &impl AsRef<Path>) -> anyhow::Result<chemfiles::Frame> {
     let mut trajectory = chemfiles::Trajectory::open(filename, 'r')?;
     let mut frame = chemfiles::Frame::new();
@@ -38,6 +39,7 @@ pub(super) fn frame_from_file(filename: &impl AsRef<Path>) -> anyhow::Result<che
 
 /// Get positions of particles from chemfiles::Frame.
 /// If `cell` is provided, all the positions of particles from the frame are shifted by -half_cell.
+#[allow(dead_code)]
 pub(super) fn positions_from_frame(
     frame: &chemfiles::Frame,
     cell: Option<&impl SimulationCell>,
