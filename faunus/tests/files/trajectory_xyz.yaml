@@ -1,0 +1,6 @@
+- !Trajectory
+  file: "traj.xyz"
+  frequency: !Every 100
+- !Trajectory
+  file: "traj.xtc"
+  frequency: !Every 50

@@ -16,60 +16,65 @@
 
 use std::path::Path;
 
-#[cfg(feature = "chemfiles")]
-use super::chemfiles_interface;
-#[cfg(feature = "chemfiles")]
+use super::io;
 use super::{AtomKind, MoleculeKind, MoleculeKindBuilder};
 use crate::cell::SimulationCell;
 use crate::Point;
+use nalgebra::Vector3;
 
-/// Obtain positions of particles from the provided structure file using the `chemfiles` crate.
-#[cfg(feature = "chemfiles")]
+/// Obtain positions of particles from the provided structure file.
+///
+/// If a simulation cell is given, coordinates are shifted by `-0.5 * bounding_box`
+/// to convert from file convention (corner origin) to Faunus convention (center origin).
 pub fn positions_from_structure_file(
     filename: &impl AsRef<Path>,
     cell: Option<&impl SimulationCell>,
 ) -> anyhow::Result<Vec<Point>> {
-    let frame = chemfiles_interface::frame_from_file(filename)?;
-    let positions = chemfiles_interface::positions_from_frame(&frame, cell);
+    let data = io::read_structure(filename)?;
+
+    let shift = cell.map_or_else(Vector3::default, |cell| {
+        cell.bounding_box()
+            .map_or_else(Vector3::default, |b| -0.5 * b)
+    });
+
+    let positions = data.positions.into_iter().map(|pos| pos + shift).collect();
     Ok(positions)
 }
 
-#[cfg(not(feature = "chemfiles"))]
-pub(crate) fn positions_from_structure_file(
-    _filename: &impl AsRef<Path>,
-    _cell: Option<&impl SimulationCell>,
-) -> anyhow::Result<Vec<Point>> {
-    todo!("Not implemented. Use the `chemfiles` feature.")
-}
-
-/// Make `MoleculeKind` from structure file populated with atom ids and names
+/// Make `MoleculeKind` from structure file populated with atom ids and names.
 ///
 /// Atom names must already exist in the list of `AtomKind` objects.
-#[cfg(feature = "chemfiles")]
 pub fn molecule_from_file(
     molname: &str,
     filename: &impl AsRef<Path>,
     atomkinds: &[AtomKind],
     cell: Option<&impl SimulationCell>,
 ) -> anyhow::Result<(MoleculeKind, Vec<Point>)> {
-    let frame = chemfiles_interface::frame_from_file(filename)?;
+    let data = io::read_structure(filename)?;
+
     let ok_name = |n: &_| atomkinds.iter().any(|a| a.name() == n);
-    let (good_names, bad_names) = frame
-        .iter_atoms()
-        .map(|a| a.name())
+    let (good_names, bad_names) = data
+        .names
+        .iter()
+        .cloned()
         .partition::<Vec<String>, _>(ok_name);
     if !bad_names.is_empty() {
         anyhow::bail!("Unknown atom names: {:?}", bad_names);
     };
 
-    let get_atom_id = |name| atomkinds.iter().find(|a| a.name() == name).unwrap().id();
-    let atom_ids = good_names.iter().map(get_atom_id);
+    let get_atom_id = |name: &String| atomkinds.iter().find(|a| a.name() == name).unwrap().id();
+    let atom_ids: Vec<usize> = good_names.iter().map(get_atom_id).collect();
     let molecule = MoleculeKindBuilder::default()
         .name(molname)
-        .atom_indices(atom_ids.collect())
+        .atom_indices(atom_ids)
         .atoms(good_names)
         .build()?;
 
-    let positions = chemfiles_interface::positions_from_frame(&frame, cell);
+    let shift = cell.map_or_else(Vector3::default, |cell| {
+        cell.bounding_box()
+            .map_or_else(Vector3::default, |b| -0.5 * b)
+    });
+
+    let positions = data.positions.into_iter().map(|pos| pos + shift).collect();
     Ok((molecule, positions))
 }

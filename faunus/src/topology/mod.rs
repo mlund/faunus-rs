@@ -38,6 +38,7 @@ mod chain;
 #[cfg(feature = "chemfiles")]
 pub mod chemfiles_interface;
 mod dihedral;
+pub(crate) mod io;
 mod molecule;
 mod residue;
 mod structure;
@@ -67,7 +68,6 @@ use serde::{Deserializer, Serializer};
 
 pub use self::block::{InsertionPolicy, MoleculeBlock};
 pub use self::molecule::{MoleculeKind, MoleculeKindBuilder};
-#[cfg(feature = "chemfiles")]
 pub use structure::{molecule_from_file, positions_from_structure_file};
 
 /// Trait implemented by collections of atoms that should not overlap (e.g., residues, chains).
