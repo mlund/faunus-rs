@@ -34,6 +34,7 @@ derive_builder = "0.20.0"
 voronota-ltr = "0.1"
 flate2 = "1.0.35"
 derive_more = {version = "1.0.0", features = ["debug"]}
+molly = "0.5"
 
 # CLI-only dependencies
 clap = { version = "4.0", features = ["derive"], optional = true }

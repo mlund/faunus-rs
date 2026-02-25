@@ -61,7 +61,6 @@ impl<T: Context> Analyze<T> for StructureWriter {
             .map(|b| 0.5 * b)
             .unwrap_or_default();
 
-        // Build atom names and shifted positions
         let mut names = Vec::with_capacity(particles.len());
         let mut positions = Vec::with_capacity(particles.len());
 
@@ -76,10 +75,14 @@ impl<T: Context> Analyze<T> for StructureWriter {
             }
         }
 
+        let box_lengths = context.cell().bounding_box();
+
         let data = StructureData {
             names,
             positions,
-            comment: None,
+            step: Some(step as u32),
+            box_lengths,
+            ..Default::default()
         };
 
         let append = self.num_samples > 0;
@@ -94,5 +97,34 @@ impl<T: Context> Analyze<T> for StructureWriter {
 
     fn num_samples(&self) -> usize {
         self.num_samples
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::analysis::AnalysisBuilder;
+
+    #[test]
+    fn deserialize_trajectory_builders() {
+        let yaml = std::fs::read_to_string("tests/files/trajectory_xyz.yaml").unwrap();
+        let builders: Vec<AnalysisBuilder> = serde_yaml::from_str(&yaml).unwrap();
+        assert_eq!(builders.len(), 2);
+
+        // Verify first entry: xyz trajectory
+        let AnalysisBuilder::StructureWriter(ref b) = builders[0] else {
+            panic!("expected StructureWriter variant");
+        };
+        let writer = b.build().unwrap();
+        assert_eq!(writer.output_file, "traj.xyz");
+        assert!(matches!(writer.frequency, Frequency::Every(100)));
+
+        // Verify second entry: xtc trajectory
+        let AnalysisBuilder::StructureWriter(ref b) = builders[1] else {
+            panic!("expected StructureWriter variant");
+        };
+        let writer = b.build().unwrap();
+        assert_eq!(writer.output_file, "traj.xtc");
+        assert!(matches!(writer.frequency, Frequency::Every(50)));
     }
 }

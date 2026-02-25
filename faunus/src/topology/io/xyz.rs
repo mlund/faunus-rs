@@ -92,6 +92,7 @@ impl StructureIO for XyzFormat {
             names,
             positions,
             comment,
+            ..Default::default()
         })
     }
 
@@ -202,6 +203,7 @@ mod tests {
             names: vec!["H".into(), "O".into()],
             positions: vec![Point::new(1.0, 2.0, 3.0), Point::new(4.0, 5.0, 6.0)],
             comment: Some("test frame".into()),
+            ..Default::default()
         };
         XyzFormat.write(&dir, &data, false).unwrap();
 
@@ -221,11 +223,13 @@ mod tests {
             names: vec!["H".into()],
             positions: vec![Point::new(1.0, 2.0, 3.0)],
             comment: Some("frame1".into()),
+            ..Default::default()
         };
         let frame2 = StructureData {
             names: vec!["O".into(), "N".into()],
             positions: vec![Point::new(4.0, 5.0, 6.0), Point::new(7.0, 8.0, 9.0)],
             comment: Some("frame2".into()),
+            ..Default::default()
         };
 
         XyzFormat.write(&dir, &frame1, false).unwrap();

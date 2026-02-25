@@ -14,21 +14,29 @@
 
 //! Format-agnostic structure file I/O.
 //!
-//! XYZ format is always available natively. Other formats require the `chemfiles` feature.
+//! XYZ format is always available natively. XTC (Gromacs) is handled by the `molly` crate.
+//! Other formats require the `chemfiles` feature.
 
 #[cfg(feature = "chemfiles")]
 mod chemfiles_io;
+mod xtc;
 mod xyz;
 
 use crate::Point;
 use std::path::Path;
 
 /// Format-agnostic in-memory representation of a structure frame.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub(crate) struct StructureData {
     pub names: Vec<String>,
     pub positions: Vec<Point>,
     pub comment: Option<String>,
+    /// Simulation step number (used by trajectory formats like XTC).
+    pub step: Option<u32>,
+    /// Time in picoseconds (used by trajectory formats like XTC).
+    pub time: Option<f32>,
+    /// Bounding box lengths (used by trajectory formats like XTC).
+    pub box_lengths: Option<Point>,
 }
 
 /// Trait for reading and writing molecular structure files.
@@ -44,6 +52,7 @@ pub(crate) trait StructureIO: std::fmt::Debug {
 pub(crate) fn format_for_path(path: &Path) -> anyhow::Result<Box<dyn StructureIO>> {
     match path.extension().and_then(|e| e.to_str()) {
         Some("xyz") => Ok(Box::new(xyz::XyzFormat)),
+        Some("xtc") => Ok(Box::new(xtc::XtcFormat)),
         #[cfg(feature = "chemfiles")]
         Some(_) => Ok(Box::new(chemfiles_io::ChemfilesFormat)),
         #[cfg(not(feature = "chemfiles"))]
@@ -73,6 +82,11 @@ mod tests {
     #[test]
     fn format_for_xyz() {
         assert!(format_for_path(Path::new("test.xyz")).is_ok());
+    }
+
+    #[test]
+    fn format_for_xtc() {
+        assert!(format_for_path(Path::new("test.xtc")).is_ok());
     }
 
     #[test]

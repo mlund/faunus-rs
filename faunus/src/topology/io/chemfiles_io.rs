@@ -39,6 +39,7 @@ impl StructureIO for ChemfilesFormat {
             names,
             positions,
             comment: None,
+            ..Default::default()
         })
     }
 
