@@ -250,19 +250,30 @@ pub(super) trait NonbondedTerm {
 /// Energy term for computing nonbonded interactions
 /// using a matrix of `IsotropicTwobodyEnergy` trait objects.
 ///
-/// # Note
-///
-/// We use `ArcPotential` for thread-safety.
-/// `Box` is not thread-safe but perhaps more performant(?).
+/// The type parameter `P` determines the potential type:
+/// - [`ArcPotential`] for dynamic dispatch (default)
+/// - [`SplinedPotential`] for pre-tabulated spline evaluation
 #[derive(Debug, Clone)]
-pub struct NonbondedMatrix {
+pub struct NonbondedMatrix<P = ArcPotential> {
     /// Matrix of pair potentials based on atom type ids.
-    potentials: Array2<ArcPotential>,
+    potentials: Array2<P>,
     /// Matrix of excluded interactions.
     exclusions: ExclusionMatrix,
 }
 
-impl EnergyChange for NonbondedMatrix {
+/// Type alias for the splined variant of [`NonbondedMatrix`].
+///
+/// This is a performance-optimized version that pre-tabulates all pair potentials
+/// using cubic Hermite splines for O(1) energy evaluation.
+///
+/// # Notes
+/// - Splined potentials trade memory for speed and are most beneficial for
+///   complex potentials (coarse-grained models, combined potentials).
+/// - The spline operates in r² space to avoid square root calculations.
+/// - Energy evaluation uses Horner's method requiring only 4 FMA operations.
+pub type NonbondedMatrixSplined = NonbondedMatrix<SplinedPotential>;
+
+impl<P: IsotropicTwobodyEnergy> EnergyChange for NonbondedMatrix<P> {
     /// Compute the energy of the EnergyTerm relevant to some change in the system.
     fn energy(&self, context: &impl Context, change: &Change) -> f64 {
         match change {
@@ -279,7 +290,7 @@ impl EnergyChange for NonbondedMatrix {
     }
 }
 
-impl NonbondedTerm for NonbondedMatrix {
+impl<P: IsotropicTwobodyEnergy> NonbondedTerm for NonbondedMatrix<P> {
     /// Calculates the energy between two particles given by indices.
     #[inline(always)]
     fn particle_with_particle(&self, context: &impl Context, i: usize, j: usize) -> f64 {
@@ -290,6 +301,43 @@ impl NonbondedTerm for NonbondedMatrix {
                 .get((context.get_atomkind(i), context.get_atomkind(j)))
                 .expect("Atom kinds should exist in the nonbonded matrix.")
                 .isotropic_twobody_energy(distance_squared)
+    }
+}
+
+impl<P> NonbondedMatrix<P> {
+    /// Get square matrix of pair potentials for all atom type combinations.
+    pub const fn get_potentials(&self) -> &Array2<P> {
+        &self.potentials
+    }
+}
+
+impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
+    /// Matches all possible single group perturbations and returns the energy.
+    fn single_group_change(
+        &self,
+        context: &impl Context,
+        group_index: usize,
+        change: &GroupChange,
+    ) -> f64 {
+        match change {
+            GroupChange::RigidBody => {
+                self.group_with_other_groups(context, &context.groups()[group_index])
+            }
+            GroupChange::Resize(_) | GroupChange::UpdateIdentity(_) => {
+                todo!("Resize and UpdateIdentity changes are not yet implemented for NonbondedMatrix.")
+            }
+            GroupChange::PartialUpdate(x) => x
+                .iter()
+                .map(|&particle| {
+                    let group = &context.groups()[group_index];
+                    // the PartialUpdate stores relative indices of particles
+                    group.to_absolute_index(particle).map_or(0.0, |abs_index| {
+                        self.particle_with_all(context, abs_index, group)
+                    })
+                })
+                .sum(),
+            GroupChange::None => 0.0,
+        }
     }
 }
 
@@ -346,38 +394,7 @@ impl NonbondedMatrix {
         })
     }
 
-    /// Matches all possible single group perturbations and returns the energy.
-    fn single_group_change(
-        &self,
-        context: &impl Context,
-        group_index: usize,
-        change: &GroupChange,
-    ) -> f64 {
-        match change {
-            GroupChange::RigidBody => {
-                self.group_with_other_groups(context, &context.groups()[group_index])
-            }
-            GroupChange::Resize(_) | GroupChange::UpdateIdentity(_) => {
-                todo!("Resize and UpdateIdentity changes are not yet implemented for NonbondedMatrix.")
-            }
-            GroupChange::PartialUpdate(x) => x
-                .iter()
-                .map(|&particle| {
-                    let group = &context.groups()[group_index];
-                    // the PartialUpdate stores relative indices of particles
-                    group.to_absolute_index(particle).map_or(0.0, |abs_index| {
-                        self.particle_with_all(context, abs_index, group)
-                    })
-                })
-                .sum(),
-            GroupChange::None => 0.0,
-        }
-    }
-    /// Get square matrix of pair potentials for all atom type combinations.
-    pub const fn get_potentials(&self) -> &Array2<ArcPotential> {
-        &self.potentials
-    }
-    /// Get square matrix of pair potentials for all atom type combinations.
+    /// Get mutable reference to pair potentials matrix.
     pub const fn get_potentials_mut(&mut self) -> &mut Array2<ArcPotential> {
         &mut self.potentials
     }
@@ -389,7 +406,7 @@ impl From<NonbondedMatrix> for EnergyTerm {
     }
 }
 
-impl SyncFrom for NonbondedMatrix {
+impl<P: Clone> SyncFrom for NonbondedMatrix<P> {
     fn sync_from(&mut self, other: &Self, change: &Change) -> anyhow::Result<()> {
         match change {
             Change::Everything => self.potentials.clone_from(&other.potentials),
@@ -400,26 +417,7 @@ impl SyncFrom for NonbondedMatrix {
     }
 }
 
-/// Energy term for computing nonbonded interactions using splined pair potentials.
-///
-/// This is a performance-optimized version of [`NonbondedMatrix`] that pre-tabulates
-/// all pair potentials using cubic Hermite splines for O(1) energy evaluation.
-///
-/// # Notes
-///
-/// - Splined potentials trade memory for speed and are most beneficial for
-///   complex potentials (coarse-grained models, combined potentials).
-/// - The spline operates in r² space to avoid square root calculations.
-/// - Energy evaluation uses Horner's method requiring only 4 FMA operations.
-#[derive(Debug, Clone)]
-pub struct NonbondedMatrixSplined {
-    /// Matrix of splined pair potentials based on atom type ids.
-    potentials: Array2<SplinedPotential>,
-    /// Matrix of excluded interactions.
-    exclusions: ExclusionMatrix,
-}
-
-impl NonbondedMatrixSplined {
+impl NonbondedMatrix<SplinedPotential> {
     /// Create a splined nonbonded matrix from an existing [`NonbondedMatrix`].
     ///
     /// # Parameters
@@ -430,9 +428,13 @@ impl NonbondedMatrixSplined {
     /// # Example
     /// ```ignore
     /// let nonbonded = NonbondedMatrix::new(&builder, &topology, medium)?;
-    /// let splined = NonbondedMatrixSplined::new(&nonbonded, 12.0, None);
+    /// let splined = NonbondedMatrixSplined::from_nonbonded(&nonbonded, 12.0, None);
     /// ```
-    pub fn new(nonbonded: &NonbondedMatrix, cutoff: f64, config: Option<SplineConfig>) -> Self {
+    pub fn from_nonbonded(
+        nonbonded: &NonbondedMatrix,
+        cutoff: f64,
+        config: Option<SplineConfig>,
+    ) -> Self {
         let config = config.unwrap_or_default();
         let source = nonbonded.get_potentials();
         let shape = source.raw_dim();
@@ -447,67 +449,6 @@ impl NonbondedMatrixSplined {
             exclusions: nonbonded.exclusions.clone(),
         }
     }
-
-    /// Get reference to the splined potentials matrix.
-    pub const fn get_potentials(&self) -> &Array2<SplinedPotential> {
-        &self.potentials
-    }
-
-    /// Matches all possible single group perturbations and returns the energy.
-    fn single_group_change(
-        &self,
-        context: &impl Context,
-        group_index: usize,
-        change: &GroupChange,
-    ) -> f64 {
-        match change {
-            GroupChange::RigidBody => {
-                self.group_with_other_groups(context, &context.groups()[group_index])
-            }
-            GroupChange::Resize(_) | GroupChange::UpdateIdentity(_) => {
-                todo!("Resize and UpdateIdentity changes are not yet implemented for NonbondedMatrixSplined.")
-            }
-            GroupChange::PartialUpdate(x) => x
-                .iter()
-                .map(|&particle| {
-                    let group = &context.groups()[group_index];
-                    group.to_absolute_index(particle).map_or(0.0, |abs_index| {
-                        self.particle_with_all(context, abs_index, group)
-                    })
-                })
-                .sum(),
-            GroupChange::None => 0.0,
-        }
-    }
-}
-
-impl NonbondedTerm for NonbondedMatrixSplined {
-    #[inline(always)]
-    fn particle_with_particle(&self, context: &impl Context, i: usize, j: usize) -> f64 {
-        let distance_squared = context.get_distance_squared(i, j);
-        self.exclusions.get((i, j)) as f64
-            * self
-                .potentials
-                .get((context.get_atomkind(i), context.get_atomkind(j)))
-                .expect("Atom kinds should exist in the nonbonded matrix.")
-                .isotropic_twobody_energy(distance_squared)
-    }
-}
-
-impl EnergyChange for NonbondedMatrixSplined {
-    fn energy(&self, context: &impl Context, change: &Change) -> f64 {
-        match change {
-            Change::Everything | Change::Volume(_, _) => self.total_nonbonded(context),
-            Change::SingleGroup(group_index, group_change) => {
-                self.single_group_change(context, *group_index, group_change)
-            }
-            Change::Groups(vec) => vec
-                .iter()
-                .map(|(group, change)| self.single_group_change(context, *group, change))
-                .sum(),
-            Change::None => 0.0,
-        }
-    }
 }
 
 impl From<NonbondedMatrixSplined> for EnergyTerm {
@@ -520,20 +461,9 @@ impl From<&NonbondedMatrix> for NonbondedMatrixSplined {
     /// Create a splined nonbonded matrix from a reference to [`NonbondedMatrix`]
     /// using default spline configuration and a cutoff of 15.0 Å.
     ///
-    /// For custom cutoff or configuration, use [`NonbondedMatrixSplined::new`] instead.
+    /// For custom cutoff or configuration, use [`NonbondedMatrixSplined::from_nonbonded`] instead.
     fn from(nonbonded: &NonbondedMatrix) -> Self {
-        Self::new(nonbonded, 15.0, None)
-    }
-}
-
-impl SyncFrom for NonbondedMatrixSplined {
-    fn sync_from(&mut self, other: &Self, change: &Change) -> anyhow::Result<()> {
-        match change {
-            Change::Everything => self.potentials.clone_from(&other.potentials),
-            Change::None | Change::Volume(_, _) | Change::SingleGroup(_, _) | Change::Groups(_) => {
-            }
-        }
-        Ok(())
+        Self::from_nonbonded(nonbonded, 15.0, None)
     }
 }
 
@@ -1129,7 +1059,7 @@ mod tests {
     fn get_test_splined_matrix() -> (ReferencePlatform, NonbondedMatrix, NonbondedMatrixSplined) {
         let (system, nonbonded) = get_test_matrix();
         let cutoff = 15.0; // Use a cutoff that covers all test distances
-        let splined = NonbondedMatrixSplined::new(&nonbonded, cutoff, None);
+        let splined = NonbondedMatrixSplined::from_nonbonded(&nonbonded, cutoff, None);
         (system, nonbonded, splined)
     }
 
@@ -1271,11 +1201,11 @@ mod tests {
 
         // Test with high accuracy config
         let config = SplineConfig::high_accuracy();
-        let splined_high = NonbondedMatrixSplined::new(&nonbonded, 15.0, Some(config));
+        let splined_high = NonbondedMatrixSplined::from_nonbonded(&nonbonded, 15.0, Some(config));
 
         // Test with fast config
         let config = SplineConfig::fast();
-        let splined_fast = NonbondedMatrixSplined::new(&nonbonded, 15.0, Some(config));
+        let splined_fast = NonbondedMatrixSplined::from_nonbonded(&nonbonded, 15.0, Some(config));
 
         // Both should produce reasonable energies
         let energy_high = splined_high.total_nonbonded(&system);

@@ -50,8 +50,11 @@ impl Hamiltonian {
             // Use splined potentials if configured
             if let Some(spline_opts) = &builder.spline {
                 let config = spline_opts.to_spline_config();
-                let splined =
-                    NonbondedMatrixSplined::new(&nonbonded, spline_opts.cutoff, Some(config));
+                let splined = NonbondedMatrixSplined::from_nonbonded(
+                    &nonbonded,
+                    spline_opts.cutoff,
+                    Some(config),
+                );
                 log::info!(
                     "Using splined nonbonded potentials (cutoff={}, n_points={})",
                     spline_opts.cutoff,
