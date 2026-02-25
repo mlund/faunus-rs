@@ -38,6 +38,7 @@ pub mod group;
 pub mod montecarlo;
 pub mod platform;
 pub mod propagate;
+pub mod selection;
 pub mod time;
 pub mod topology;
 pub mod transform;
