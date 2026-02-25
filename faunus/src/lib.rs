@@ -26,6 +26,7 @@ mod info;
 pub use info::*;
 pub mod cell;
 mod change;
+pub mod collective_variable;
 pub use self::change::{Change, GroupChange};
 pub mod analysis;
 pub mod auxiliary;
