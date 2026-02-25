@@ -442,7 +442,10 @@ impl CollectiveVariableBuilder {
     ///
     /// This is the primary construction method. [`build`](Self::build) delegates
     /// here and wraps the result into a trait object.
-    pub(crate) fn build_concrete(&self, context: &impl Context) -> Result<ConcreteCollectiveVariable> {
+    pub(crate) fn build_concrete(
+        &self,
+        context: &impl Context,
+    ) -> Result<ConcreteCollectiveVariable> {
         let axis = AxisDescriptor {
             name: format!("{:?}", self.property),
             min: self.range.0,

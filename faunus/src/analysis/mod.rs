@@ -22,9 +22,11 @@ use serde::{Deserialize, Serialize};
 use serde_yaml::Value;
 use std::path::PathBuf;
 
+mod collective_variable;
 mod distance;
 mod structure_writer;
 mod virtual_translate;
+pub use collective_variable::{CollectiveVariableAnalysis, CollectiveVariableAnalysisBuilder};
 pub use distance::{MassCenterDistance, MassCenterDistanceBuilder};
 pub use structure_writer::{StructureWriter, StructureWriterBuilder};
 pub use virtual_translate::{VirtualTranslate, VirtualTranslateBuilder};
@@ -89,16 +91,19 @@ pub enum AnalysisBuilder {
     StructureWriter(StructureWriterBuilder),
     /// Virtual translate analysis for force measurement
     VirtualTranslate(VirtualTranslateBuilder),
+    /// Collective variable time series
+    CollectiveVariable(CollectiveVariableAnalysisBuilder),
 }
 
 impl AnalysisBuilder {
     /// Build analysis object
     #[must_use = "this returns a Result that should be handled"]
-    pub fn build<T: Context>(&self, _context: &T) -> Result<Box<dyn Analyze<T>>> {
+    pub fn build<T: Context>(&self, context: &T) -> Result<Box<dyn Analyze<T>>> {
         Ok(match self {
             Self::MassCenterDistance(builder) => Box::new(builder.build()?),
             Self::StructureWriter(builder) => Box::new(builder.build()?),
             Self::VirtualTranslate(builder) => Box::new(builder.build()?),
+            Self::CollectiveVariable(builder) => Box::new(builder.build(context)?),
         })
     }
 }
