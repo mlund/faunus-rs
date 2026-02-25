@@ -270,17 +270,22 @@ impl VirtualTranslate {
         Ok(delta_u)
     }
 
-    /// Add exp(-dU) to the Widom average, with overflow protection
+    /// Add exp(-dU) to the Widom average, with overflow protection.
+    ///
+    /// Returns `true` if the sample was added to the running average,
+    /// `false` if it was skipped due to extreme energy values that would
+    /// cause overflow in `exp()`. Skipped samples are still written to
+    /// the output stream to keep it synchronized with other analyses.
     fn collect_widom_average(&mut self, energy_change: f64) -> bool {
         if energy_change < -(f64::MAX_EXP as f64) {
             log::warn!(
-                "VirtualTranslate: skipping sample due to too negative energy; consider decreasing dL"
+                "VirtualTranslate: skipping Widom average due to too negative energy; consider decreasing dL"
             );
             return false;
         }
         if energy_change > f64::MAX_EXP as f64 {
             log::warn!(
-                "VirtualTranslate: skipping sample due to too positive energy; consider decreasing dL"
+                "VirtualTranslate: skipping Widom average due to too positive energy; consider decreasing dL"
             );
             return false;
         }
@@ -288,7 +293,11 @@ impl VirtualTranslate {
         true
     }
 
-    /// Write data to the output stream
+    /// Write data to the output stream.
+    ///
+    /// Called for every sampled step, including those where the Widom average
+    /// was skipped due to overflow. This ensures the output file has one row
+    /// per sampled step, staying in sync with other analyses at the same frequency.
     fn write_to_stream(&mut self, step: usize, energy_change: f64) -> Result<()> {
         // Calculate mean_force before mutable borrow of stream
         let mean_force = self.mean_force();
@@ -349,8 +358,10 @@ impl<T: Context> Analyze<T> for VirtualTranslate {
 
         if self.collect_widom_average(energy_change) {
             self.num_samples += 1;
-            self.write_to_stream(step, energy_change)?;
         }
+        // Always write to stream to stay synchronized with other analyses
+        // (e.g. MassCenterDistance) that sample at the same frequency.
+        self.write_to_stream(step, energy_change)?;
 
         Ok(())
     }

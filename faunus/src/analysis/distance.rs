@@ -97,7 +97,10 @@ impl<T: Context> Analyze<T> for MassCenterDistance {
         self.frequency
     }
 
-    fn sample(&mut self, context: &T, _step: usize) -> Result<()> {
+    fn sample(&mut self, context: &T, step: usize) -> Result<()> {
+        if !self.frequency.should_perform(step) {
+            return Ok(());
+        }
         let sel1 = crate::group::GroupSelection::ByMoleculeId(self.molids.0);
         let sel2 = crate::group::GroupSelection::ByMoleculeId(self.molids.1);
         let indices1 = context.select(&sel1);
@@ -114,6 +117,7 @@ impl<T: Context> Analyze<T> for MassCenterDistance {
                 if let Some((a, b)) = com1.zip(com2) {
                     let distance = (a - b).norm();
                     writeln!(self.stream.as_mut(), "{:.3}", distance)?;
+                    self.num_samples += 1;
                 } else {
                     log::error!("Skipping COM distance calculation due to missing COM.");
                 }

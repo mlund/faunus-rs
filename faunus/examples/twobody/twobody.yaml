@@ -81,13 +81,13 @@ analysis:
   - !MassCenterDistance
     molecules: ["MOL1", "MOL2"]
     file: "com_distance.dat.gz"
-    frequency: !Every 100
+    frequency: !Every 10
   - !Trajectory
-    file: "traj.xyz"
-    frequency: !Every 100
+    file: "traj.xtc"
+    frequency: !Every 1000
   - !VirtualTranslate
     molecule: MOL2
-    dL: 0.1
+    dL: 0.01
     directions: !z
     file: "vt.dat.gz"
     temperature: 298.15
