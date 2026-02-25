@@ -1,0 +1,57 @@
+site_name: Faunus User Guide
+site_description: User guide for the Faunus molecular simulation framework
+repo_url: https://github.com/mlund/faunus-rs
+repo_name: faunus-rs
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - content.code.copy
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - toc.follow
+
+markdown_extensions:
+  # Math support
+  - pymdownx.arithmatex:
+      generic: true
+  # Code blocks with syntax highlighting
+  - pymdownx.highlight:
+      use_pygments: true
+  - pymdownx.inlinehilite
+  - pymdownx.superfences
+  # Admonitions (tips, warnings, notes)
+  - admonition
+  - pymdownx.details
+  # Tables
+  - tables
+  # Footnotes
+  - footnotes
+  # Table of contents
+  - toc:
+      permalink: true
+
+extra_javascript:
+  - javascript/mathjax.js
+  - https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js
+
+nav:
+  - Home: index.md
+  - Topology: topology.md
+  - Energy: energy.md

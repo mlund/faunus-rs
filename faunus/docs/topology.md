@@ -15,4 +15,3 @@ Participant | Example                |  Notes
 Molecular   | `A + A ⇌ D`            | Possible arrows: `=`, `⇌`, `⇄`, `→`
 Implicit    | `RCOO- + 👻H+ ⇌ RCOOH` | Mark with `👻` or `~`
 Atomic      | `⚛Pb ⇄ ⚛Au`            | Mark with `⚛` or `.`
-

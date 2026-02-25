@@ -27,3 +27,6 @@ output.*
 .DS_Store
 .mypy*
 .ipynb_checkpoints
+
+# MkDocs build output
+site/
