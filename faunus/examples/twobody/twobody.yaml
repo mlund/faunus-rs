@@ -86,7 +86,7 @@ analysis:
     file: "traj.xtc"
     frequency: !Every 1000
   - !VirtualTranslate
-    molecule: MOL2
+    selection: "molecule MOL2"
     dL: 0.01
     directions: !z
     file: "vt.dat.gz"

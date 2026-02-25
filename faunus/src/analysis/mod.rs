@@ -98,7 +98,7 @@ impl AnalysisBuilder {
         let analysis: Box<dyn Analyze<T>> = match self {
             Self::MassCenterDistance(builder) => Box::new(builder.build(&context.topology())?),
             Self::StructureWriter(builder) => Box::new(builder.build()?),
-            Self::VirtualTranslate(builder) => Box::new(builder.build(&context.topology())?),
+            Self::VirtualTranslate(builder) => Box::new(builder.build()?),
         };
         Ok(analysis)
     }
