@@ -57,7 +57,10 @@ struct Args {
 pub fn do_main() -> Result<()> {
     let args = Args::parse();
     if std::env::var(DEFAULT_FILTER_ENV).is_err() {
-        std::env::set_var(DEFAULT_FILTER_ENV, if args.verbose { "Debug" } else { "Info" });
+        std::env::set_var(
+            DEFAULT_FILTER_ENV,
+            if args.verbose { "Debug" } else { "Info" },
+        );
     }
     pretty_env_logger::init();
 
