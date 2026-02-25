@@ -27,10 +27,12 @@ use std::collections::HashMap;
 use std::ops::Div;
 use std::{cmp::Ordering, ops::Neg};
 
+mod pivot;
 mod rotate;
 mod translate;
 mod volume;
 
+pub use pivot::PivotMove;
 pub use rotate::RotateMolecule;
 pub use translate::*;
 pub use volume::VolumeMove;
@@ -219,6 +221,10 @@ impl AcceptanceCriterion {
                         Bias::None => 0.0,
                         Bias::ForceAccept => return true,
                     };
+                // Reject if du is NaN (e.g. from inf - inf during hard-sphere overlap)
+                if du.is_nan() {
+                    return false;
+                }
                 let p = f64::min(1.0, f64::exp(-du / thermal_energy));
                 rng.r#gen::<f64>() < p
             }
