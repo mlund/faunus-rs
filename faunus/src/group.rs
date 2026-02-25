@@ -547,7 +547,9 @@ pub trait GroupCollection: SyncFrom {
                 self.sync_group_from(*group_index, change.clone(), other)?
             }
             Change::Volume(_policy, _volumes) => {
-                todo!("implement volume change")
+                for i in 0..self.groups().len() {
+                    self.sync_group_from(i, GroupChange::RigidBody, other)?
+                }
             }
             Change::Groups(changes) => {
                 for _change in changes {

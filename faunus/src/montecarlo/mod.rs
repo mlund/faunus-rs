@@ -29,9 +29,11 @@ use std::{cmp::Ordering, ops::Neg};
 
 mod rotate;
 mod translate;
+mod volume;
 
 pub use rotate::RotateMolecule;
 pub use translate::*;
+pub use volume::VolumeMove;
 
 /// Pick a random group index of the specified molecule type.
 fn random_group(context: &impl Context, rng: &mut impl Rng, molecule_id: usize) -> Option<usize> {

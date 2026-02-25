@@ -163,6 +163,17 @@ pub trait ParticleSystem: GroupCollection + WithCell + WithTopology {
         crate::auxiliary::mass_center_pbc(&positions, &masses, self.cell(), Some(shift))
     }
 
+    /// Scale all particle positions and cell volume to a new volume.
+    ///
+    /// The algorithm unwraps PBC for molecular groups, scales positions using the old cell,
+    /// resizes the cell, re-applies PBC with the new cell, and recomputes mass centers.
+    /// Returns the old volume.
+    fn scale_volume_and_positions(
+        &mut self,
+        new_volume: f64,
+        policy: crate::cell::VolumeScalePolicy,
+    ) -> anyhow::Result<f64>;
+
     /// Shift positions of selected particles by target vector and apply periodic boundary conditions.
     fn translate_particles(&mut self, indices: &[usize], shift: &Point);
 

@@ -289,6 +289,7 @@ pub enum Move {
     TranslateMolecule(crate::montecarlo::TranslateMolecule),
     TranslateAtom(crate::montecarlo::TranslateAtom),
     RotateMolecule(crate::montecarlo::RotateMolecule),
+    VolumeMove(crate::montecarlo::VolumeMove),
 }
 
 /// Enum used to store the extent of displacement of a move.
@@ -374,6 +375,7 @@ impl Move {
             Self::TranslateMolecule(x) => x.propose_move(context, rng),
             Self::TranslateAtom(x) => x.propose_move(context, rng),
             Self::RotateMolecule(x) => x.propose_move(context, rng),
+            Self::VolumeMove(x) => x.propose_move(context, rng),
         }
     }
 
@@ -393,6 +395,7 @@ impl Move {
             Self::TranslateMolecule(x) => x.get_statistics(),
             Self::TranslateAtom(x) => x.get_statistics(),
             Self::RotateMolecule(x) => x.get_statistics(),
+            Self::VolumeMove(x) => x.get_statistics(),
         }
     }
 
@@ -402,6 +405,7 @@ impl Move {
             Self::TranslateMolecule(x) => x.get_statistics_mut(),
             Self::TranslateAtom(x) => x.get_statistics_mut(),
             Self::RotateMolecule(x) => x.get_statistics_mut(),
+            Self::VolumeMove(x) => x.get_statistics_mut(),
         }
     }
 
@@ -428,6 +432,7 @@ impl Move {
             Self::TranslateMolecule(x) => x.weight(),
             Self::TranslateAtom(x) => x.weight(),
             Self::RotateMolecule(x) => x.weight(),
+            Self::VolumeMove(x) => x.weight(),
         }
     }
 
@@ -437,6 +442,7 @@ impl Move {
             Self::TranslateMolecule(x) => x.finalize(context),
             Self::TranslateAtom(x) => x.finalize(context),
             Self::RotateMolecule(x) => x.finalize(context),
+            Self::VolumeMove(x) => x.finalize(context),
         }
     }
 
@@ -446,6 +452,7 @@ impl Move {
             Self::TranslateMolecule(x) => x.repeat(),
             Self::TranslateAtom(x) => x.repeat(),
             Self::RotateMolecule(x) => x.repeat(),
+            Self::VolumeMove(x) => x.repeat(),
         }
     }
 
@@ -455,6 +462,7 @@ impl Move {
             Self::TranslateMolecule(_) => 1,
             Self::TranslateAtom(_) => 1,
             Self::RotateMolecule(_) => 1,
+            Self::VolumeMove(_) => 1,
         }
     }
 }
@@ -465,6 +473,7 @@ impl Info for Move {
             Self::TranslateMolecule(x) => x.short_name(),
             Self::TranslateAtom(x) => x.short_name(),
             Self::RotateMolecule(x) => x.short_name(),
+            Self::VolumeMove(x) => x.short_name(),
         }
     }
 
@@ -473,6 +482,7 @@ impl Info for Move {
             Self::TranslateMolecule(x) => x.long_name(),
             Self::TranslateAtom(x) => x.long_name(),
             Self::RotateMolecule(x) => x.long_name(),
+            Self::VolumeMove(x) => x.long_name(),
         }
     }
 }

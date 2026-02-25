@@ -19,3 +19,5 @@ geometry:
 
 - [Topology](topology.md) — atoms, molecules, and chemical reactions
 - [Energy](energy.md) — Hamiltonian and energy terms
+- [Moves](moves.md) — Monte Carlo moves and propagation
+- [Analysis](analysis.md) — runtime analysis and output

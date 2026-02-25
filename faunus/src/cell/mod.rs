@@ -122,9 +122,10 @@ pub trait BoundaryConditions {
 /// Policies for how to scale a volume
 ///
 /// This is used to scale an old volume to a new volume.
-#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub enum VolumeScalePolicy {
     /// Isotropic scaling (equal scaling in all directions)
+    #[default]
     Isotropic,
     /// Isochoric scaling of z and the xy-plane (constant volume)
     IsochoricZ,

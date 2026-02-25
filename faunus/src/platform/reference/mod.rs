@@ -277,6 +277,58 @@ impl ParticleSystem for ReferencePlatform {
         crate::auxiliary::dihedral_points(p1, p2, p3, p4, self.cell())
     }
 
+    fn scale_volume_and_positions(
+        &mut self,
+        new_volume: f64,
+        policy: crate::cell::VolumeScalePolicy,
+    ) -> anyhow::Result<f64> {
+        use crate::cell::{Shape, VolumeScale};
+
+        let old_volume = self
+            .cell
+            .volume()
+            .ok_or_else(|| anyhow::anyhow!("Cell has no defined volume"))?;
+
+        if old_volume.is_infinite() {
+            anyhow::bail!("Cannot scale volume of an infinite cell");
+        }
+
+        let num_groups = self.groups.len();
+
+        // 1. Unwrap PBC for molecular groups (>1 atom) using mass center as reference.
+        for g in 0..num_groups {
+            if let Some(&com) = self.groups[g].mass_center() {
+                if self.groups[g].len() > 1 {
+                    for i in self.groups[g].iter_active() {
+                        let d = self.cell.distance(&self.particles[i].pos, &com);
+                        self.particles[i].pos = com + d;
+                    }
+                }
+            }
+        }
+
+        // 2. Scale all active particle positions (using old cell geometry)
+        for g in 0..num_groups {
+            for i in self.groups[g].iter_active() {
+                self.cell
+                    .scale_position(new_volume, &mut self.particles[i].pos, policy)?;
+            }
+        }
+
+        // 3. Resize the cell
+        self.cell.scale_volume(new_volume, policy)?;
+
+        // 4. Apply PBC with new cell geometry and recompute mass centers
+        for g in 0..num_groups {
+            for i in self.groups[g].iter_active() {
+                self.cell.boundary(&mut self.particles[i].pos);
+            }
+            self.update_mass_center(g);
+        }
+
+        Ok(old_volume)
+    }
+
     /// Shift positions of target particles.
     #[inline(always)]
     fn translate_particles(&mut self, indices: &[usize], shift: &Point) {
