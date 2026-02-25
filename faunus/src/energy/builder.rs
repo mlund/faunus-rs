@@ -40,6 +40,7 @@ use serde::{
 use unordered_pair::UnorderedPair;
 
 use super::constrain::ConstrainBuilder;
+use super::external_pressure::Pressure;
 use super::sasa::SasaEnergyBuilder;
 use interatomic::twobody::{GridType, SplineConfig};
 
@@ -331,6 +332,9 @@ pub struct HamiltonianBuilder {
 
     /// Collective variable constraints (hard or harmonic).
     pub constrain: Option<Vec<ConstrainBuilder>>,
+
+    /// External pressure for the NPT ensemble (isobaric).
+    pub isobaric: Option<Pressure>,
 }
 
 impl HamiltonianBuilder {

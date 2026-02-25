@@ -1,6 +1,7 @@
 use super::{
     bonded::{IntermolecularBonded, IntramolecularBonded},
     constrain::Constrain,
+    external_pressure::ExternalPressure,
     nonbonded::{NonbondedMatrix, NonbondedMatrixSplined},
     sasa::SasaEnergy,
     CellOverlap, EnergyChange,
@@ -23,6 +24,8 @@ pub enum EnergyTerm {
     CellOverlap(CellOverlap),
     /// Collective variable constraint.
     Constrain(Constrain),
+    /// External pressure (NPT ensemble).
+    ExternalPressure(ExternalPressure),
 }
 
 impl EnergyTerm {
@@ -33,7 +36,8 @@ impl EnergyTerm {
             | Self::NonbondedMatrixSplined(_)
             | Self::IntramolecularBonded(_)
             | Self::CellOverlap(_)
-            | Self::Constrain(_) => Ok(()),
+            | Self::Constrain(_)
+            | Self::ExternalPressure(_) => Ok(()),
             Self::IntermolecularBonded(x) => x.update(context, change),
             Self::SasaEnergy(x) => x.update(context, change),
         }
@@ -52,6 +56,7 @@ impl EnergyChange for EnergyTerm {
             Self::SasaEnergy(x) => x.energy(context, change),
             Self::CellOverlap(x) => x.energy(context, change),
             Self::Constrain(x) => x.energy(context, change),
+            Self::ExternalPressure(x) => x.energy(context, change),
         }
     }
 }
@@ -68,6 +73,7 @@ impl SyncFrom for EnergyTerm {
             (SasaEnergy(x), SasaEnergy(y)) => x.sync_from(y, change)?,
             (CellOverlap(_), CellOverlap(_)) => (),
             (Constrain(_), Constrain(_)) => (),
+            (ExternalPressure(_), ExternalPressure(_)) => (),
             _ => anyhow::bail!("Cannot sync incompatible energy terms."),
         }
         Ok(())

@@ -1,10 +1,12 @@
 use super::{
     bonded::{IntermolecularBonded, IntramolecularBonded},
     builder::HamiltonianBuilder,
+    external_pressure::ExternalPressure,
     nonbonded::{NonbondedMatrix, NonbondedMatrixSplined},
     CellOverlap, EnergyTerm,
 };
 use crate::{topology::Topology, Change, Context, SyncFrom};
+use coulomb::Temperature;
 use std::path::Path;
 
 /// Trait implemented by structures that can compute
@@ -41,6 +43,7 @@ impl Hamiltonian {
         medium: Option<coulomb::Medium>,
     ) -> anyhow::Result<Self> {
         let mut hamiltonian = Self::default();
+        let temperature = medium.as_ref().map(|m| m.temperature());
 
         hamiltonian.push(CellOverlap.into());
 
@@ -75,6 +78,14 @@ impl Hamiltonian {
 
         if let Some(sasa_builder) = &builder.sasa {
             hamiltonian.push(sasa_builder.build()?.into());
+        }
+
+        if let Some(pressure) = &builder.isobaric {
+            let temperature = temperature.ok_or_else(|| {
+                anyhow::anyhow!("Medium with temperature required for isobaric energy term")
+            })?;
+            let thermal_energy = ExternalPressure::thermal_energy_from_temperature(temperature);
+            hamiltonian.push(ExternalPressure::new(pressure, thermal_energy).into());
         }
 
         Ok(hamiltonian)
