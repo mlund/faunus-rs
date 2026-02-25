@@ -1,5 +1,5 @@
 use super::{Analyze, Frequency};
-use crate::topology::Topology;
+use crate::selection::Selection;
 use crate::Context;
 use anyhow::Result;
 use derive_builder::Builder;
@@ -8,17 +8,16 @@ use serde::{Deserialize, Serialize};
 use std::io::Write;
 use std::path::PathBuf;
 
-/// Writes structure of the system in the specified format during the simulation.
+/// Measures the mass-center distance between two groups of molecules.
+///
+/// At each sample step, resolves both selections to groups and writes
+/// all pairwise COM distances. When both selections match the same groups,
+/// pairs are deduplicated to avoid double counting.
 #[derive(Debug, Builder)]
 #[builder(build_fn(skip), derive(Deserialize, Serialize))]
 pub struct MassCenterDistance {
-    /// Pair of molecule names to calculate the distance between. May be identical.
-    #[allow(dead_code)]
-    molecules: (String, String),
-    /// Pair of molecule id's to calculate the distance between. May be identical.
-    #[builder(setter(skip))]
-    #[builder_field_attr(serde(skip))]
-    molids: (usize, usize),
+    /// Pair of selection expressions for the two molecule groups.
+    selections: (Selection, Selection),
     /// Stream distances to this file at each sample.
     #[builder_field_attr(serde(rename = "file"))]
     #[allow(dead_code)]
@@ -38,20 +37,22 @@ pub struct MassCenterDistance {
 
 impl MassCenterDistanceBuilder {
     fn validate(&self) -> Result<()> {
-        if self.molecules.is_none() || self.output_file.is_none() || self.frequency.is_none() {
-            anyhow::bail!("Missing required fields for Mass Center Distance Analysis.");
+        if self.selections.is_none() || self.output_file.is_none() || self.frequency.is_none() {
+            anyhow::bail!("Missing required fields for MassCenterDistance analysis.");
         }
         Ok(())
     }
-    pub fn build(&self, topology: &Topology) -> Result<MassCenterDistance> {
+
+    pub fn build(&self) -> Result<MassCenterDistance> {
         self.validate()?;
-        let molecules = self.molecules.clone().unwrap();
-        MassCenterDistance::new(
-            (&molecules.0, &molecules.1),
-            self.output_file.clone().unwrap(),
-            self.frequency.unwrap(),
-            topology,
-        )
+        let stream = crate::auxiliary::open_compressed(self.output_file.as_ref().unwrap())?;
+        Ok(MassCenterDistance {
+            selections: self.selections.clone().unwrap(),
+            output_file: self.output_file.clone().unwrap(),
+            stream,
+            frequency: self.frequency.unwrap(),
+            num_samples: 0,
+        })
     }
 }
 
@@ -60,35 +61,7 @@ impl crate::Info for MassCenterDistance {
         Some("com distance")
     }
     fn long_name(&self) -> Option<&'static str> {
-        Some("Writes structure of the system at specified frequency into an output trajectory.")
-    }
-}
-
-impl MassCenterDistance {
-    /// Create a new `MassCenterDistance` object.
-    pub fn new(
-        molecules: (&str, &str),
-        output_file: PathBuf,
-        frequency: Frequency,
-        topology: &Topology,
-    ) -> Result<Self> {
-        let get_id = |name| {
-            topology
-                .find_molecule(name)
-                .map(|m| m.id())
-                .expect("Molecule now found.")
-        };
-        let molids = (get_id(molecules.0), get_id(molecules.1));
-        let molecules = (molecules.0.to_owned(), molecules.1.to_owned());
-        let stream = crate::auxiliary::open_compressed(&output_file)?;
-        Ok(Self {
-            molecules,
-            molids,
-            output_file,
-            stream,
-            frequency,
-            num_samples: 0,
-        })
+        Some("Mass center distance between two molecule selections")
     }
 }
 
@@ -101,22 +74,21 @@ impl<T: Context> Analyze<T> for MassCenterDistance {
         if !self.frequency.should_perform(step) {
             return Ok(());
         }
-        let sel1 = crate::group::GroupSelection::ByMoleculeId(self.molids.0);
-        let sel2 = crate::group::GroupSelection::ByMoleculeId(self.molids.1);
-        let indices1 = context.select(&sel1);
-        let indices2 = context.select(&sel2);
+        let topology = context.topology_ref();
+        let groups = context.groups();
+        let indices1 = self.selections.0.resolve_groups(topology, groups);
+        let indices2 = self.selections.1.resolve_groups(topology, groups);
+        let same_selection = self.selections.0.source() == self.selections.1.source();
 
-        for i in &indices1 {
-            for j in &indices2 {
-                // Avoid double counting when the two molids are identical
-                if self.molids.0 == self.molids.1 && i >= j {
-                    continue;
+        for &i in &indices1 {
+            for &j in &indices2 {
+                if same_selection && i >= j {
+                    continue; // avoid double-counting and self-pairing
                 }
-                let com1 = context.groups()[*i].mass_center();
-                let com2 = context.groups()[*j].mass_center();
+                let com1 = groups[i].mass_center();
+                let com2 = groups[j].mass_center();
                 if let Some((a, b)) = com1.zip(com2) {
-                    let distance = (a - b).norm();
-                    writeln!(self.stream.as_mut(), "{:.3}", distance)?;
+                    writeln!(self.stream.as_mut(), "{:.3}", (a - b).norm())?;
                     self.num_samples += 1;
                 } else {
                     log::error!("Skipping COM distance calculation due to missing COM.");

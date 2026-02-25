@@ -94,13 +94,12 @@ pub enum AnalysisBuilder {
 impl AnalysisBuilder {
     /// Build analysis object
     #[must_use = "this returns a Result that should be handled"]
-    pub fn build<T: Context>(&self, context: &T) -> Result<Box<dyn Analyze<T>>> {
-        let analysis: Box<dyn Analyze<T>> = match self {
-            Self::MassCenterDistance(builder) => Box::new(builder.build(&context.topology())?),
+    pub fn build<T: Context>(&self, _context: &T) -> Result<Box<dyn Analyze<T>>> {
+        Ok(match self {
+            Self::MassCenterDistance(builder) => Box::new(builder.build()?),
             Self::StructureWriter(builder) => Box::new(builder.build()?),
             Self::VirtualTranslate(builder) => Box::new(builder.build()?),
-        };
-        Ok(analysis)
+        })
     }
 }
 
