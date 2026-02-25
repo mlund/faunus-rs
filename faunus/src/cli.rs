@@ -57,10 +57,13 @@ struct Args {
 pub fn do_main() -> Result<()> {
     let args = Args::parse();
     if std::env::var(DEFAULT_FILTER_ENV).is_err() {
-        std::env::set_var(
-            DEFAULT_FILTER_ENV,
-            if args.verbose { "Debug" } else { "Info" },
-        );
+        // TODO: Audit that the environment access only happens in single-threaded code.
+        unsafe {
+            std::env::set_var(
+                DEFAULT_FILTER_ENV,
+                if args.verbose { "Debug" } else { "Info" },
+            )
+        };
     }
     pretty_env_logger::init();
 

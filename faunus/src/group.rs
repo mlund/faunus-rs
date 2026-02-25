@@ -325,7 +325,7 @@ impl Group {
     }
 
     /// Iterator to inactive indices (absolute indices in main particle vector)
-    pub fn iter_inactive(&self) -> impl Iterator<Item = usize> {
+    pub fn iter_inactive(&self) -> impl Iterator<Item = usize> + use<> {
         self.range.clone().skip(self.num_active)
     }
 

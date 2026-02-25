@@ -91,7 +91,7 @@ impl TranslateMolecule {
     ) -> Option<(Change, Displacement)> {
         if let Some(group_index) = random_group(context, rng, self.molecule_id) {
             let displacement = self.directions.filter(
-                random_unit_vector(rng) * self.max_displacement * 2.0 * (rng.gen::<f64>() - 0.5),
+                random_unit_vector(rng) * self.max_displacement * 2.0 * (rng.r#gen::<f64>() - 0.5),
             );
             Transform::Translate(displacement)
                 .on_group(group_index, context)
@@ -270,7 +270,7 @@ impl TranslateAtom {
             .unwrap();
 
         let displacement =
-            random_unit_vector(rng) * self.max_displacement * 2.0 * (rng.gen::<f64>() - 0.5);
+            random_unit_vector(rng) * self.max_displacement * 2.0 * (rng.r#gen::<f64>() - 0.5);
 
         Transform::PartialTranslate(
             displacement,

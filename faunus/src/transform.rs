@@ -26,9 +26,9 @@ pub fn random_unit_vector(rng: &mut impl Rng) -> Point {
     const RADIUS_SQUARED: f64 = 0.5 * 0.5;
     loop {
         let p = Point::new(
-            rng.gen::<f64>() - 0.5,
-            rng.gen::<f64>() - 0.5,
-            rng.gen::<f64>() - 0.5,
+            rng.r#gen::<f64>() - 0.5,
+            rng.r#gen::<f64>() - 0.5,
+            rng.r#gen::<f64>() - 0.5,
         );
         let norm_squared = p.norm_squared();
         if norm_squared <= RADIUS_SQUARED {
@@ -158,7 +158,7 @@ mod tests {
             x_mean += v.x;
             y_mean += v.y;
             z_mean += v.z;
-            rngsum += rng.gen::<f64>();
+            rngsum += rng.r#gen::<f64>();
         }
         assert_approx_eq!(f64, x_mean / n as f64, 0.0, epsilon = 0.025);
         assert_approx_eq!(f64, y_mean / n as f64, 0.0, epsilon = 0.025);

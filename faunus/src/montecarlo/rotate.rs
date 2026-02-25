@@ -79,7 +79,7 @@ impl RotateMolecule {
             Some(group_index) => {
                 let axis = random_unit_vector(rng);
                 let uaxis = UnitVector3::new_normalize(axis);
-                let angle = self.max_displacement * 2.0 * (rng.gen::<f64>() - 0.5);
+                let angle = self.max_displacement * 2.0 * (rng.r#gen::<f64>() - 0.5);
                 let quaternion = crate::UnitQuaternion::from_axis_angle(&uaxis, angle);
                 Transform::Rotate(axis, quaternion)
                     .on_group(group_index, context)

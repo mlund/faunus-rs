@@ -368,7 +368,7 @@ mod tests {
 
     /// Assert approximate equality of a Point's x, y, z components.
     macro_rules! assert_point_approx_eq {
-        ($point:expr, $x:expr, $y:expr, $z:expr) => {
+        ($point:expr_2021, $x:expr_2021, $y:expr_2021, $z:expr_2021) => {
             assert_approx_eq!(f64, $point.x, $x);
             assert_approx_eq!(f64, $point.y, $y);
             assert_approx_eq!(f64, $point.z, $z);

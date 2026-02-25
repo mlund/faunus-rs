@@ -218,7 +218,7 @@ impl AcceptanceCriterion {
                         Bias::ForceAccept => return true,
                     };
                 let p = f64::min(1.0, f64::exp(-du / thermal_energy));
-                rng.gen::<f64>() < p
+                rng.r#gen::<f64>() < p
             }
 
             Self::Minimize => {
