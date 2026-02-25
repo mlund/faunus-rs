@@ -27,7 +27,6 @@
 //! displacement magnitude.
 
 use super::{Analyze, Frequency};
-use average::{Estimate, Mean};
 use crate::change::{Change, GroupChange};
 use crate::dimension::Dimension;
 use crate::energy::EnergyChange;
@@ -35,12 +34,12 @@ use crate::group::{GroupSelection, GroupSize};
 use crate::topology::Topology;
 use crate::{Context, Point};
 use anyhow::Result;
+use average::{Estimate, Mean};
 use derive_builder::Builder;
 use derive_more::Debug;
 use serde::{Deserialize, Serialize};
 use std::io::Write;
 use std::path::PathBuf;
-
 
 /// Virtual translate move analysis.
 ///
@@ -106,15 +105,18 @@ pub struct VirtualTranslate {
 
     /// Temperature in Kelvin (needed to convert energy to kT).
     /// Default is 298.15 K if not specified.
+    #[builder_field_attr(serde(default = "default_temperature"))]
     temperature: f64,
 }
 
-/// Default temperature in Kelvin (298.15 K = 25°C)
-fn default_temperature() -> f64 {
-    298.15
+/// Default temperature in Kelvin (298.15 K = 25°C).
+/// Returns `Option` because derive_builder wraps fields in `Option`.
+fn default_temperature() -> Option<f64> {
+    Some(298.15)
 }
 
-/// Default displacement directions (z-axis)
+/// Default displacement directions (z-axis).
+/// Returns `Option` because derive_builder wraps fields in `Option`.
 fn default_directions() -> Option<Dimension> {
     Some(Dimension::Z)
 }
@@ -169,15 +171,14 @@ impl VirtualTranslateBuilder {
 
         let displacement = self.displacement.unwrap();
         let directions = self.directions.clone().unwrap_or(Dimension::Z);
-        let temperature = self.temperature.unwrap_or_else(default_temperature);
+        let temperature = self.temperature.unwrap_or(298.15);
 
         // Convert Dimension to unit direction vector
         let unit_direction = dimension_to_unit_vector(&directions)?;
 
         // Open output stream if file specified
-        let stream = if let Some(ref path) = self.output_file {
-            let path = path.clone().unwrap();
-            let mut stream = crate::aux::open_compressed(&path)?;
+        let stream = if let Some(path) = self.output_file.as_ref().and_then(|p| p.as_ref()) {
+            let mut stream = crate::auxiliary::open_compressed(path)?;
             // Write header
             writeln!(stream, "# step dL/Å dU/kT <force>/kT/Å")?;
             Some(stream)
@@ -220,7 +221,15 @@ impl VirtualTranslate {
     /// Calculate the mean free energy from the Widom average
     /// Returns -ln(<exp(-dU/kT)>) in units of kT
     fn mean_free_energy(&self) -> f64 {
-        -self.mean_exp_energy.mean().ln()
+        let mean = self.mean_exp_energy.mean();
+        if !mean.is_finite() || mean <= 0.0 {
+            log::warn!(
+                "VirtualTranslate: invalid Widom average <exp(-dU/kT)> = {}; returning +inf free energy",
+                mean
+            );
+            return f64::INFINITY;
+        }
+        -mean.ln()
     }
 
     /// Calculate the mean force in units of kT/Å
@@ -269,6 +278,12 @@ impl VirtualTranslate {
             );
             return false;
         }
+        if energy_change > f64::MAX_EXP as f64 {
+            log::warn!(
+                "VirtualTranslate: skipping sample due to too positive energy; consider decreasing dL"
+            );
+            return false;
+        }
         self.mean_exp_energy.add((-energy_change).exp());
         true
     }
@@ -296,6 +311,10 @@ impl<T: Context> Analyze<T> for VirtualTranslate {
     }
 
     fn sample(&mut self, context: &T, step: usize) -> Result<()> {
+        if !self.frequency.should_perform(step) {
+            return Ok(());
+        }
+
         // Check for zero displacement
         if self.displacement.abs() < f64::EPSILON {
             return Ok(());
@@ -322,10 +341,10 @@ impl<T: Context> Analyze<T> for VirtualTranslate {
 
         let group_index = active_groups[0];
 
-        // We need a mutable clone of the context for perturbation
-        // This is a virtual move - we perturb and restore
+        // Clone context because `Analyze::sample` receives `&T` but perturbation
+        // needs `&mut T` to translate particles. The perturbation is virtual
+        // (translate + restore), so the clone is discarded unchanged.
         let mut trial_context = context.clone();
-
         let energy_change = self.perturb(&mut trial_context, group_index)?;
 
         if self.collect_widom_average(energy_change) {
