@@ -39,6 +39,7 @@ use serde::{
 };
 use unordered_pair::UnorderedPair;
 
+use super::constrain::ConstrainBuilder;
 use super::sasa::SasaEnergyBuilder;
 use interatomic::twobody::{GridType, SplineConfig};
 
@@ -327,6 +328,9 @@ pub struct HamiltonianBuilder {
 
     /// Solvent Accessible Surface Area (SASA) energy term.
     pub sasa: Option<SasaEnergyBuilder>,
+
+    /// Collective variable constraints (hard or harmonic).
+    pub constrain: Option<Vec<ConstrainBuilder>>,
 }
 
 impl HamiltonianBuilder {

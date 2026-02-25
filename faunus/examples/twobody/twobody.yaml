@@ -69,6 +69,11 @@ system:
         }
 
   energy:
+    constrain:
+      - property: mass_center_position
+        selection: "molecule MOL2"
+        dimension: z
+        range: [0.0, 100.0]
     nonbonded:
       default:
         - !Coulomb {cutoff: 200}
@@ -82,16 +87,16 @@ analysis:
     selections: ["molecule MOL1", "molecule MOL2"]
     file: "com_distance.dat.gz"
     frequency: !Every 10
-  - !Trajectory
-    file: "traj.xtc"
-    frequency: !Every 1000
   - !VirtualTranslate
     selection: "molecule MOL2"
-    dL: 0.01
+    dL: -0.01 # minus to not push against hard constraints
     directions: !z
     file: "vt.dat.gz"
     temperature: 298.15
     frequency: !Every 10
+  - !Trajectory
+    file: "traj.xtc"
+    frequency: !Every 1000
 
 propagate:
   seed: Hardware

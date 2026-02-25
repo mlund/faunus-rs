@@ -17,6 +17,7 @@
 mod bonded;
 pub(crate) mod builder;
 mod celloverlap;
+mod constrain;
 mod energyterm;
 pub mod exclusions;
 mod hamiltonian;
@@ -25,6 +26,7 @@ mod sasa;
 
 pub use bonded::{IntermolecularBonded, IntramolecularBonded};
 pub use celloverlap::CellOverlap;
+pub use constrain::{Constrain, ConstrainBuilder};
 pub use energyterm::EnergyTerm;
 pub use hamiltonian::{EnergyChange, Hamiltonian};
 pub use nonbonded::{NonbondedMatrix, NonbondedMatrixSplined};

@@ -91,6 +91,13 @@ impl ReferencePlatform {
             rng,
         )
         .and_then(|mut context| {
+            // Build constrain terms after groups exist (selections need groups).
+            if let Some(constrain_builders) = &hamiltonian_builder.constrain {
+                for builder in constrain_builders {
+                    let constrain = builder.build(&context)?;
+                    context.hamiltonian_mut().push(constrain.into());
+                }
+            }
             context.update(&Change::Everything)?;
             Ok(context)
         })

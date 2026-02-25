@@ -127,56 +127,7 @@ impl CollectiveVariableBuilder {
     /// Takes `context` (not just topology) because selection resolution
     /// needs live group state to determine which groups are active.
     pub fn build<T: Context>(&self, context: &T) -> Result<Box<dyn CollectiveVariable<T>>> {
-        let axis = AxisDescriptor {
-            name: format!("{:?}", self.property),
-            min: self.range.0,
-            max: self.range.1,
-            resolution: self.resolution,
-        };
-
-        match &self.property {
-            Property::Volume => {
-                reject_selection(self)?;
-                Ok(Box::new(VolumeCV { axis }))
-            }
-            Property::BoxLength => {
-                reject_selection(self)?;
-                let component = single_component(&self.dimension)?;
-                Ok(Box::new(BoxLengthCV { component, axis }))
-            }
-            Property::AtomPosition => {
-                let index = resolve_one_atom(self, context)?;
-                Ok(Box::new(AtomPositionCV {
-                    dimension: self.dimension.clone(),
-                    index,
-                    axis,
-                }))
-            }
-            Property::Size | Property::EndToEnd | Property::MassCenterPosition => {
-                let group = resolve_one_group(self, context)?;
-                let property = match self.property {
-                    Property::Size => GroupProperty::Size,
-                    Property::EndToEnd => GroupProperty::EndToEnd,
-                    Property::MassCenterPosition => GroupProperty::MassCenterPosition,
-                    _ => unreachable!(),
-                };
-                Ok(Box::new(GroupCV {
-                    property,
-                    dimension: self.dimension.clone(),
-                    group,
-                    axis,
-                }))
-            }
-            Property::MassCenterSeparation => {
-                let (group1, group2) = resolve_two_groups(self, context)?;
-                Ok(Box::new(MassCenterSeparationCV {
-                    dimension: self.dimension.clone(),
-                    group1,
-                    group2,
-                    axis,
-                }))
-            }
-        }
+        self.build_concrete(context).map(|cv| cv.into_boxed())
     }
 }
 
@@ -266,8 +217,8 @@ fn resolve_two_groups<T: Context>(
 // ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone)]
-struct VolumeCV {
-    axis: AxisDescriptor,
+pub(crate) struct VolumeCV {
+    pub(crate) axis: AxisDescriptor,
 }
 
 impl crate::Info for VolumeCV {
@@ -289,7 +240,7 @@ impl<T: Context> CollectiveVariable<T> for VolumeCV {
 }
 
 #[derive(Debug, Clone)]
-struct BoxLengthCV {
+pub(crate) struct BoxLengthCV {
     /// Index into `bounding_box()` Point: 0=x, 1=y, 2=z.
     component: usize,
     axis: AxisDescriptor,
@@ -318,7 +269,7 @@ impl<T: Context> CollectiveVariable<T> for BoxLengthCV {
 }
 
 #[derive(Debug, Clone)]
-struct AtomPositionCV {
+pub(crate) struct AtomPositionCV {
     dimension: Dimension,
     index: usize,
     axis: AxisDescriptor,
@@ -345,14 +296,14 @@ impl<T: Context> CollectiveVariable<T> for AtomPositionCV {
 
 /// Discriminant for [`GroupCV`] — all share the same resolved fields.
 #[derive(Debug, Clone)]
-enum GroupProperty {
+pub(crate) enum GroupProperty {
     Size,
     EndToEnd,
     MassCenterPosition,
 }
 
 #[derive(Debug, Clone)]
-struct GroupCV {
+pub(crate) struct GroupCV {
     property: GroupProperty,
     dimension: Dimension,
     group: usize,
@@ -403,7 +354,7 @@ impl<T: Context> CollectiveVariable<T> for GroupCV {
 }
 
 #[derive(Debug, Clone)]
-struct MassCenterSeparationCV {
+pub(crate) struct MassCenterSeparationCV {
     dimension: Dimension,
     group1: usize,
     group2: usize,
@@ -434,6 +385,119 @@ impl<T: Context> CollectiveVariable<T> for MassCenterSeparationCV {
     }
     fn axis(&self) -> &AxisDescriptor {
         &self.axis
+    }
+}
+
+// ---------------------------------------------------------------------------
+// ConcreteCollectiveVariable — non-generic wrapper for energy terms
+// ---------------------------------------------------------------------------
+
+/// Energy terms like `Constrain` need to store a CV without a generic type
+/// parameter because `EnergyTerm` is a concrete enum. This wraps each CV
+/// type so it can be held directly.
+#[derive(Debug, Clone)]
+pub(crate) enum ConcreteCollectiveVariable {
+    Volume(VolumeCV),
+    BoxLength(BoxLengthCV),
+    AtomPosition(AtomPositionCV),
+    Group(GroupCV),
+    MassCenterSeparation(MassCenterSeparationCV),
+}
+
+impl ConcreteCollectiveVariable {
+    /// Convert into a type-erased trait object.
+    fn into_boxed<T: Context>(self) -> Box<dyn CollectiveVariable<T>> {
+        match self {
+            Self::Volume(cv) => Box::new(cv),
+            Self::BoxLength(cv) => Box::new(cv),
+            Self::AtomPosition(cv) => Box::new(cv),
+            Self::Group(cv) => Box::new(cv),
+            Self::MassCenterSeparation(cv) => Box::new(cv),
+        }
+    }
+
+    pub fn evaluate(&self, context: &impl Context) -> f64 {
+        match self {
+            Self::Volume(cv) => cv.evaluate(context),
+            Self::BoxLength(cv) => cv.evaluate(context),
+            Self::AtomPosition(cv) => cv.evaluate(context),
+            Self::Group(cv) => cv.evaluate(context),
+            Self::MassCenterSeparation(cv) => cv.evaluate(context),
+        }
+    }
+
+    pub fn axis(&self) -> &AxisDescriptor {
+        match self {
+            Self::Volume(cv) => &cv.axis,
+            Self::BoxLength(cv) => &cv.axis,
+            Self::AtomPosition(cv) => &cv.axis,
+            Self::Group(cv) => &cv.axis,
+            Self::MassCenterSeparation(cv) => &cv.axis,
+        }
+    }
+}
+
+impl CollectiveVariableBuilder {
+    /// Resolve selections and construct a [`ConcreteCollectiveVariable`].
+    ///
+    /// This is the primary construction method. [`build`](Self::build) delegates
+    /// here and wraps the result into a trait object.
+    pub(crate) fn build_concrete(&self, context: &impl Context) -> Result<ConcreteCollectiveVariable> {
+        let axis = AxisDescriptor {
+            name: format!("{:?}", self.property),
+            min: self.range.0,
+            max: self.range.1,
+            resolution: self.resolution,
+        };
+
+        match &self.property {
+            Property::Volume => {
+                reject_selection(self)?;
+                Ok(ConcreteCollectiveVariable::Volume(VolumeCV { axis }))
+            }
+            Property::BoxLength => {
+                reject_selection(self)?;
+                let component = single_component(&self.dimension)?;
+                Ok(ConcreteCollectiveVariable::BoxLength(BoxLengthCV {
+                    component,
+                    axis,
+                }))
+            }
+            Property::AtomPosition => {
+                let index = resolve_one_atom(self, context)?;
+                Ok(ConcreteCollectiveVariable::AtomPosition(AtomPositionCV {
+                    dimension: self.dimension.clone(),
+                    index,
+                    axis,
+                }))
+            }
+            Property::Size | Property::EndToEnd | Property::MassCenterPosition => {
+                let group = resolve_one_group(self, context)?;
+                let property = match self.property {
+                    Property::Size => GroupProperty::Size,
+                    Property::EndToEnd => GroupProperty::EndToEnd,
+                    Property::MassCenterPosition => GroupProperty::MassCenterPosition,
+                    _ => unreachable!(),
+                };
+                Ok(ConcreteCollectiveVariable::Group(GroupCV {
+                    property,
+                    dimension: self.dimension.clone(),
+                    group,
+                    axis,
+                }))
+            }
+            Property::MassCenterSeparation => {
+                let (group1, group2) = resolve_two_groups(self, context)?;
+                Ok(ConcreteCollectiveVariable::MassCenterSeparation(
+                    MassCenterSeparationCV {
+                        dimension: self.dimension.clone(),
+                        group1,
+                        group2,
+                        axis,
+                    },
+                ))
+            }
+        }
     }
 }
 

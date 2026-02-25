@@ -1,5 +1,6 @@
 use super::{
     bonded::{IntermolecularBonded, IntramolecularBonded},
+    constrain::Constrain,
     nonbonded::{NonbondedMatrix, NonbondedMatrixSplined},
     sasa::SasaEnergy,
     CellOverlap, EnergyChange,
@@ -20,6 +21,8 @@ pub enum EnergyTerm {
     SasaEnergy(SasaEnergy),
     /// Cell overlap energy.
     CellOverlap(CellOverlap),
+    /// Collective variable constraint.
+    Constrain(Constrain),
 }
 
 impl EnergyTerm {
@@ -28,10 +31,11 @@ impl EnergyTerm {
         match self {
             Self::NonbondedMatrix(_)
             | Self::NonbondedMatrixSplined(_)
-            | Self::IntramolecularBonded(_) => Ok(()),
+            | Self::IntramolecularBonded(_)
+            | Self::CellOverlap(_)
+            | Self::Constrain(_) => Ok(()),
             Self::IntermolecularBonded(x) => x.update(context, change),
             Self::SasaEnergy(x) => x.update(context, change),
-            Self::CellOverlap(_) => Ok(()),
         }
     }
 }
@@ -47,6 +51,7 @@ impl EnergyChange for EnergyTerm {
             Self::IntermolecularBonded(x) => x.energy(context, change),
             Self::SasaEnergy(x) => x.energy(context, change),
             Self::CellOverlap(x) => x.energy(context, change),
+            Self::Constrain(x) => x.energy(context, change),
         }
     }
 }
@@ -62,6 +67,7 @@ impl SyncFrom for EnergyTerm {
             (IntermolecularBonded(x), IntermolecularBonded(y)) => x.sync_from(y, change)?,
             (SasaEnergy(x), SasaEnergy(y)) => x.sync_from(y, change)?,
             (CellOverlap(_), CellOverlap(_)) => (),
+            (Constrain(_), Constrain(_)) => (),
             _ => anyhow::bail!("Cannot sync incompatible energy terms."),
         }
         Ok(())
@@ -71,5 +77,11 @@ impl SyncFrom for EnergyTerm {
 impl From<SasaEnergy> for EnergyTerm {
     fn from(sasa: SasaEnergy) -> Self {
         Self::SasaEnergy(sasa)
+    }
+}
+
+impl From<Constrain> for EnergyTerm {
+    fn from(constrain: Constrain) -> Self {
+        Self::Constrain(constrain)
     }
 }
