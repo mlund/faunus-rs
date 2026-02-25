@@ -126,6 +126,28 @@ impl StructureIO for XyzFormat {
 mod tests {
     use super::*;
     use float_cmp::assert_approx_eq;
+    use std::path::PathBuf;
+
+    /// Temporary file that is automatically deleted when dropped.
+    struct TempFile(PathBuf);
+
+    impl TempFile {
+        fn new(name: &str) -> Self {
+            Self(std::env::temp_dir().join(name))
+        }
+    }
+
+    impl Drop for TempFile {
+        fn drop(&mut self) {
+            std::fs::remove_file(&self.0).ok();
+        }
+    }
+
+    impl AsRef<Path> for TempFile {
+        fn as_ref(&self) -> &Path {
+            &self.0
+        }
+    }
 
     #[test]
     fn read_mol2_xyz() {
@@ -164,61 +186,56 @@ mod tests {
 
     #[test]
     fn read_empty_file() {
-        let dir = std::env::temp_dir().join("faunus_test_empty.xyz");
-        std::fs::write(&dir, "").unwrap();
-        assert!(XyzFormat.read(&dir).is_err());
-        std::fs::remove_file(&dir).ok();
+        let file = TempFile::new("faunus_test_empty.xyz");
+        std::fs::write(&file, "").unwrap();
+        assert!(XyzFormat.read(file.as_ref()).is_err());
     }
 
     #[test]
     fn read_bad_atom_count() {
-        let dir = std::env::temp_dir().join("faunus_test_bad_count.xyz");
-        std::fs::write(&dir, "abc\ncomment\n").unwrap();
-        assert!(XyzFormat.read(&dir).is_err());
-        std::fs::remove_file(&dir).ok();
+        let file = TempFile::new("faunus_test_bad_count.xyz");
+        std::fs::write(&file, "abc\ncomment\n").unwrap();
+        assert!(XyzFormat.read(file.as_ref()).is_err());
     }
 
     #[test]
     fn read_malformed_line() {
-        let dir = std::env::temp_dir().join("faunus_test_malformed.xyz");
-        std::fs::write(&dir, "1\ncomment\nOW 1.0 2.0\n").unwrap();
-        let err = XyzFormat.read(&dir).unwrap_err();
+        let file = TempFile::new("faunus_test_malformed.xyz");
+        std::fs::write(&file, "1\ncomment\nOW 1.0 2.0\n").unwrap();
+        let err = XyzFormat.read(file.as_ref()).unwrap_err();
         assert!(err.to_string().contains("Malformed"));
-        std::fs::remove_file(&dir).ok();
     }
 
     #[test]
     fn read_too_few_atoms() {
-        let dir = std::env::temp_dir().join("faunus_test_few.xyz");
-        std::fs::write(&dir, "3\ncomment\nOW 1.0 2.0 3.0\n").unwrap();
-        let err = XyzFormat.read(&dir).unwrap_err();
+        let file = TempFile::new("faunus_test_few.xyz");
+        std::fs::write(&file, "3\ncomment\nOW 1.0 2.0 3.0\n").unwrap();
+        let err = XyzFormat.read(file.as_ref()).unwrap_err();
         assert!(err.to_string().contains("Expected 3"));
-        std::fs::remove_file(&dir).ok();
     }
 
     #[test]
     fn write_and_read_roundtrip() {
-        let dir = std::env::temp_dir().join("faunus_test_roundtrip.xyz");
+        let file = TempFile::new("faunus_test_roundtrip.xyz");
         let data = StructureData {
             names: vec!["H".into(), "O".into()],
             positions: vec![Point::new(1.0, 2.0, 3.0), Point::new(4.0, 5.0, 6.0)],
             comment: Some("test frame".into()),
             ..Default::default()
         };
-        XyzFormat.write(&dir, &data, false).unwrap();
+        XyzFormat.write(file.as_ref(), &data, false).unwrap();
 
-        let read_back = XyzFormat.read(&dir).unwrap();
+        let read_back = XyzFormat.read(file.as_ref()).unwrap();
         assert_eq!(read_back.names, data.names);
         assert_eq!(read_back.positions.len(), 2);
         assert_approx_eq!(f64, read_back.positions[0].x, 1.0);
         assert_approx_eq!(f64, read_back.positions[1].z, 6.0);
         assert_eq!(read_back.comment.as_deref(), Some("test frame"));
-        std::fs::remove_file(&dir).ok();
     }
 
     #[test]
     fn write_append_mode() {
-        let dir = std::env::temp_dir().join("faunus_test_append.xyz");
+        let file = TempFile::new("faunus_test_append.xyz");
         let frame1 = StructureData {
             names: vec!["H".into()],
             positions: vec![Point::new(1.0, 2.0, 3.0)],
@@ -232,17 +249,15 @@ mod tests {
             ..Default::default()
         };
 
-        XyzFormat.write(&dir, &frame1, false).unwrap();
-        XyzFormat.write(&dir, &frame2, true).unwrap();
+        XyzFormat.write(file.as_ref(), &frame1, false).unwrap();
+        XyzFormat.write(file.as_ref(), &frame2, true).unwrap();
 
-        // Verify the file contains both frames
-        let content = std::fs::read_to_string(&dir).unwrap();
+        let content = std::fs::read_to_string(&file).unwrap();
         let lines: Vec<&str> = content.lines().collect();
         assert_eq!(lines[0], "1"); // frame1 count
         assert_eq!(lines[1], "frame1");
         assert_eq!(lines[3], "2"); // frame2 count
         assert_eq!(lines[4], "frame2");
         assert_eq!(lines.len(), 7);
-        std::fs::remove_file(&dir).ok();
     }
 }

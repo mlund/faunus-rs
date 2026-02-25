@@ -263,7 +263,7 @@ impl SyncFrom for IntermolecularBonded {
 }
 
 #[cfg(test)]
-mod tests_intramolecular {
+mod tests {
     use std::{cell::RefCell, rc::Rc};
 
     use float_cmp::assert_approx_eq;
@@ -278,22 +278,23 @@ mod tests_intramolecular {
 
     use super::*;
 
-    /// Get intramolecular bonded structure for testing.
-    fn get_intramolecular_bonded() -> (ReferencePlatform, IntramolecularBonded) {
+    fn make_system() -> (Topology, ReferencePlatform) {
         let topology = Topology::from_file("tests/files/bonded_interactions.yaml").unwrap();
-
         let mut rng = rand::thread_rng();
         let system = ReferencePlatform::from_raw_parts(
-            Rc::new(topology),
+            Rc::new(topology.clone()),
             Cell::Cuboid(Cuboid::cubic(20.0)),
             RefCell::new(Hamiltonian::default()),
             None,
             &mut rng,
         )
         .unwrap();
+        (topology, system)
+    }
 
-        let bonded = IntramolecularBonded::default();
-        (system, bonded)
+    fn get_intramolecular_bonded() -> (ReferencePlatform, IntramolecularBonded) {
+        let (_topology, system) = make_system();
+        (system, IntramolecularBonded::default())
     }
 
     #[test]
@@ -389,27 +390,10 @@ mod tests_intramolecular {
         let expected = bonded.multiple_groups(&system, &[0, 1]);
         assert_approx_eq!(f64, bonded.energy(&system, &change), expected);
     }
-}
-
-#[cfg(test)]
-mod tests_intermolecular {
-    use std::{cell::RefCell, rc::Rc};
-
-    use float_cmp::assert_approx_eq;
-
-    use crate::{
-        cell::{Cell, Cuboid},
-        energy::Hamiltonian,
-        group::{GroupCollection, GroupSize},
-        montecarlo::NewOld,
-        platform::reference::ReferencePlatform,
-    };
-
-    use super::*;
 
     #[test]
     fn test_intermolecular_new() {
-        let topology = Topology::from_file("tests/files/bonded_interactions.yaml").unwrap();
+        let (topology, _) = make_system();
         let intermolecular = match IntermolecularBonded::new(&topology) {
             EnergyTerm::IntermolecularBonded(e) => e,
             _ => panic!("IntermolecularBonded not constructed."),
@@ -424,25 +408,12 @@ mod tests_intermolecular {
         }
     }
 
-    /// Get intermolecular bonded structure for testing.
     fn get_intermolecular_bonded() -> (ReferencePlatform, IntermolecularBonded) {
-        let topology = Topology::from_file("tests/files/bonded_interactions.yaml").unwrap();
-
-        let mut rng = rand::thread_rng();
-        let system = ReferencePlatform::from_raw_parts(
-            Rc::new(topology.clone()),
-            Cell::Cuboid(Cuboid::cubic(20.0)),
-            RefCell::new(Hamiltonian::default()),
-            None,
-            &mut rng,
-        )
-        .unwrap();
-
+        let (topology, system) = make_system();
         let bonded = match IntermolecularBonded::new(&topology) {
             EnergyTerm::IntermolecularBonded(e) => e,
             _ => panic!("IntermolecularBonded not constructed."),
         };
-
         (system, bonded)
     }
 
