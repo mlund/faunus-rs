@@ -49,9 +49,9 @@ pub enum Expr {
     /// Select no atoms.
     None,
     /// Boolean AND.
-    And(Box<Expr>, Box<Expr>),
+    And(Box<Self>, Box<Self>),
     /// Boolean OR.
-    Or(Box<Expr>, Box<Expr>),
+    Or(Box<Self>, Box<Self>),
     /// Boolean NOT.
-    Not(Box<Expr>),
+    Not(Box<Self>),
 }

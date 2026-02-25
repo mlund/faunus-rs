@@ -19,7 +19,7 @@ use std::fs::OpenOptions;
 use std::path::Path;
 
 #[derive(Debug)]
-pub(crate) struct XtcFormat;
+pub struct XtcFormat;
 
 impl StructureIO for XtcFormat {
     fn read(&self, path: &Path) -> anyhow::Result<StructureData> {

@@ -426,7 +426,7 @@ impl ConcreteCollectiveVariable {
         }
     }
 
-    pub fn axis(&self) -> &AxisDescriptor {
+    pub const fn axis(&self) -> &AxisDescriptor {
         match self {
             Self::Volume(cv) => &cv.axis,
             Self::BoxLength(cv) => &cv.axis,

@@ -103,13 +103,13 @@ pub struct VirtualTranslate {
 
 /// Default temperature in Kelvin (298.15 K = 25°C).
 /// Returns `Option` because derive_builder wraps fields in `Option`.
-fn default_temperature() -> Option<f64> {
+const fn default_temperature() -> Option<f64> {
     Some(298.15)
 }
 
 /// Default displacement directions (z-axis).
 /// Returns `Option` because derive_builder wraps fields in `Option`.
-fn default_directions() -> Option<Dimension> {
+const fn default_directions() -> Option<Dimension> {
     Some(Dimension::Z)
 }
 
@@ -336,7 +336,7 @@ impl<T: Context> Analyze<T> for VirtualTranslate {
 }
 
 impl<T: Context> From<VirtualTranslate> for Box<dyn Analyze<T>> {
-    fn from(analysis: VirtualTranslate) -> Box<dyn Analyze<T>> {
+    fn from(analysis: VirtualTranslate) -> Self {
         Box::new(analysis)
     }
 }

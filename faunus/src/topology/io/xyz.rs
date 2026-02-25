@@ -21,7 +21,7 @@ use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::path::Path;
 
 #[derive(Debug)]
-pub(crate) struct XyzFormat;
+pub struct XyzFormat;
 
 impl StructureIO for XyzFormat {
     fn read(&self, path: &Path) -> anyhow::Result<StructureData> {

@@ -27,7 +27,7 @@ use std::path::Path;
 
 /// Format-agnostic in-memory representation of a structure frame.
 #[derive(Debug, Default)]
-pub(crate) struct StructureData {
+pub struct StructureData {
     pub names: Vec<String>,
     pub positions: Vec<Point>,
     pub comment: Option<String>,
@@ -40,7 +40,7 @@ pub(crate) struct StructureData {
 }
 
 /// Trait for reading and writing molecular structure files.
-pub(crate) trait StructureIO: std::fmt::Debug {
+pub trait StructureIO: std::fmt::Debug {
     /// Read a structure from a file path.
     fn read(&self, path: &Path) -> anyhow::Result<StructureData>;
     /// Write a structure frame to a file path. If `append` is true, append to existing file.
@@ -49,7 +49,7 @@ pub(crate) trait StructureIO: std::fmt::Debug {
 
 /// Return a reader/writer for the given file path based on its extension.
 /// XYZ is always available. Other formats require the `chemfiles` feature.
-pub(crate) fn format_for_path(path: &Path) -> anyhow::Result<Box<dyn StructureIO>> {
+pub fn format_for_path(path: &Path) -> anyhow::Result<Box<dyn StructureIO>> {
     match path.extension().and_then(|e| e.to_str()) {
         Some("xyz") => Ok(Box::new(xyz::XyzFormat)),
         Some("xtc") => Ok(Box::new(xtc::XtcFormat)),
@@ -62,12 +62,12 @@ pub(crate) fn format_for_path(path: &Path) -> anyhow::Result<Box<dyn StructureIO
 }
 
 /// Convenience: read a structure file, auto-detecting format.
-pub(crate) fn read_structure(path: &impl AsRef<Path>) -> anyhow::Result<StructureData> {
+pub fn read_structure(path: &impl AsRef<Path>) -> anyhow::Result<StructureData> {
     format_for_path(path.as_ref())?.read(path.as_ref())
 }
 
 /// Convenience: write a structure frame, auto-detecting format.
-pub(crate) fn write_structure_frame(
+pub fn write_structure_frame(
     path: &impl AsRef<Path>,
     data: &StructureData,
     append: bool,

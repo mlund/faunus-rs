@@ -127,7 +127,7 @@ impl serde::Serialize for Selection {
 impl<'de> serde::Deserialize<'de> for Selection {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let s = String::deserialize(deserializer)?;
-        Selection::parse(&s).map_err(serde::de::Error::custom)
+        Self::parse(&s).map_err(serde::de::Error::custom)
     }
 }
 

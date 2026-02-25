@@ -6,7 +6,7 @@
 use super::SelectionError;
 
 /// Token type for lexer.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Token {
     // Keywords
     Chain,
