@@ -24,10 +24,12 @@ use std::path::PathBuf;
 
 mod collective_variable;
 mod distance;
+mod shape;
 mod structure_writer;
 mod virtual_translate;
 pub use collective_variable::{CollectiveVariableAnalysis, CollectiveVariableAnalysisBuilder};
 pub use distance::{MassCenterDistance, MassCenterDistanceBuilder};
+pub use shape::{ShapeAnalysis, ShapeAnalysisBuilder};
 pub use structure_writer::{StructureWriter, StructureWriterBuilder};
 pub use virtual_translate::{VirtualTranslate, VirtualTranslateBuilder};
 
@@ -93,6 +95,8 @@ pub enum AnalysisBuilder {
     VirtualTranslate(VirtualTranslateBuilder),
     /// Collective variable time series
     CollectiveVariable(CollectiveVariableAnalysisBuilder),
+    /// Polymer shape analysis via gyration tensor
+    PolymerShape(ShapeAnalysisBuilder),
 }
 
 impl AnalysisBuilder {
@@ -104,6 +108,7 @@ impl AnalysisBuilder {
             Self::StructureWriter(builder) => Box::new(builder.build()?),
             Self::VirtualTranslate(builder) => Box::new(builder.build()?),
             Self::CollectiveVariable(builder) => Box::new(builder.build(context)?),
+            Self::PolymerShape(builder) => Box::new(builder.build(context)?),
         })
     }
 }

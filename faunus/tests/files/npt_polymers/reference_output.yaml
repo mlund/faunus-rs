@@ -32,16 +32,16 @@ propagate:
       repeat: 8
       statistics:
         num_trials: 200000
-        num_accepted: 85474
+        num_accepted: 86671
         mean_square_displacement:
-          avg: 8.616523889158938
+          avg: 8.751476215119526
           n: 200000
         timer:
           accumulated:
             secs: 0
             nanos: 0
         info: {}
-        energy_change_sum: -125.85012186506073
+        energy_change_sum: -275.6174119064689
       directions: xyz
     - !RotateMolecule
       molecule: polymer
@@ -50,16 +50,16 @@ propagate:
       repeat: 8
       statistics:
         num_trials: 200000
-        num_accepted: 133326
+        num_accepted: 133787
         mean_square_displacement:
-          avg: 0.183688705779426
+          avg: 0.18444374956322732
           n: 200000
         timer:
           accumulated:
             secs: 0
             nanos: 0
         info: {}
-        energy_change_sum: -28.579324949290438
+        energy_change_sum: -114.77540012237073
     - !PivotMove
       molecule: polymer
       max_displacement: 3.0
@@ -67,16 +67,16 @@ propagate:
       repeat: 24
       statistics:
         num_trials: 600000
-        num_accepted: 273327
+        num_accepted: 275990
         mean_square_displacement:
-          avg: 1.0039494897315353
+          avg: 1.019444977476145
           n: 600000
         timer:
           accumulated:
             secs: 0
             nanos: 0
         info: {}
-        energy_change_sum: -115.5179157364089
+        energy_change_sum: -310.04051055756713
     - !TranslateAtom
       atom: null
       molecule: polymer
@@ -85,16 +85,16 @@ propagate:
       repeat: 32
       statistics:
         num_trials: 800000
-        num_accepted: 203790
+        num_accepted: 204198
         mean_square_displacement:
-          avg: 3.115105125685767
+          avg: 3.126889593240609
           n: 800000
         timer:
           accumulated:
             secs: 0
             nanos: 0
         info: {}
-        energy_change_sum: 262.7689004204801
+        energy_change_sum: 472.07465945419756
     - !TranslateAtom
       atom: null
       molecule: counterion
@@ -103,16 +103,16 @@ propagate:
       repeat: 32
       statistics:
         num_trials: 800000
-        num_accepted: 119959
+        num_accepted: 121096
         mean_square_displacement:
-          avg: 77.46041916531514
+          avg: 78.86417910993339
           n: 800000
         timer:
           accumulated:
             secs: 0
             nanos: 0
         info: {}
-        energy_change_sum: -1.5729931150131342
+        energy_change_sum: 222.90765769483227
     - !VolumeMove
       volume_displacement: 2.0
       method: Isotropic
@@ -120,20 +120,32 @@ propagate:
       repeat: 1
       statistics:
         num_trials: 25000
-        num_accepted: 732
+        num_accepted: 729
         mean_square_displacement:
-          avg: 2836893.200722725
+          avg: 3050608.143747214
           n: 25000
         timer:
           accumulated:
             secs: 0
             nanos: 0
         info: {}
-        energy_change_sum: 10.847675486018034
+        energy_change_sum: 5.315596846496192
   criterion: MetropolisHastings
 analysis:
 - collectivevariable:
     property: Volume
     num_samples: 15000
-    mean: 221836.8964629325
-    rms: 225239.75077409757
+    mean: 226344.28994823658
+    rms: 230489.85106307664
+- polymershape:
+    Rg: 6.737208598648129
+    Re: 15.706991930182848
+    Re2/Rg2: 5.435331699115045
+    asphericity: 33.39222862300146
+    acylindricity: 5.898889536484632
+    relative_shape_anisotropy: 0.5405641876592316
+    prolateness: 0.7278584513613011
+    Cl: 0.6293011013096385
+    Cp: 0.28656919475426684
+    Cs: 0.08412970393608746
+    num_samples: 120000

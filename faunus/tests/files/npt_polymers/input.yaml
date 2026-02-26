@@ -51,6 +51,9 @@ analysis:
     range: [0.0, 40000000.0]
     file: volume.dat.gz
     frequency: !Every 10
+  - !PolymerShape
+    selection: "molecule polymer"
+    frequency: !Every 10
 
 propagate:
   seed: !Fixed 42
