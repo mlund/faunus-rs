@@ -6,7 +6,7 @@ use super::{
     CellOverlap, EnergyTerm,
 };
 use crate::{topology::Topology, Change, Context, SyncFrom};
-use coulomb::Temperature;
+use interatomic::coulomb::Temperature;
 use std::path::Path;
 
 /// Trait implemented by structures that can compute
@@ -40,7 +40,7 @@ impl Hamiltonian {
     pub(crate) fn new(
         builder: &HamiltonianBuilder,
         topology: &Topology,
-        medium: Option<coulomb::Medium>,
+        medium: Option<interatomic::coulomb::Medium>,
     ) -> anyhow::Result<Self> {
         let mut hamiltonian = Self::default();
         let temperature = medium.as_ref().map(|m| m.temperature());
@@ -95,7 +95,7 @@ impl Hamiltonian {
     pub fn from_file(
         filename: impl AsRef<Path>,
         topology: &Topology,
-        medium: Option<coulomb::Medium>,
+        medium: Option<interatomic::coulomb::Medium>,
     ) -> anyhow::Result<Self> {
         let builder = HamiltonianBuilder::from_file(filename)?;
         Self::new(&builder, topology, medium)

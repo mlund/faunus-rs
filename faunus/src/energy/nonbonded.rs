@@ -352,7 +352,7 @@ impl NonbondedMatrix {
     pub fn from_file(
         file: impl AsRef<Path>,
         topology: &Topology,
-        medium: Option<coulomb::Medium>,
+        medium: Option<interatomic::coulomb::Medium>,
     ) -> anyhow::Result<Self> {
         Self::new(
             &HamiltonianBuilder::from_file(file)?
@@ -368,7 +368,7 @@ impl NonbondedMatrix {
     pub(super) fn new(
         pairpot_builder: &PairPotentialBuilder,
         topology: &Topology,
-        medium: Option<coulomb::Medium>,
+        medium: Option<interatomic::coulomb::Medium>,
     ) -> anyhow::Result<Self> {
         let atoms = topology.atomkinds();
         let n_atom_types = atoms.len();
@@ -505,7 +505,7 @@ mod tests {
             .unwrap()
             .pairpot_builder
             .unwrap();
-        let medium: Option<coulomb::Medium> =
+        let medium: Option<interatomic::coulomb::Medium> =
             serde_yaml::from_reader(std::fs::File::open(file).unwrap())
                 .ok()
                 .and_then(|s: serde_yaml::Value| {
@@ -595,7 +595,7 @@ mod tests {
             .unwrap();
 
         let medium =
-            coulomb::Medium::new(298.15, coulomb::permittivity::Permittivity::Vacuum, None);
+            interatomic::coulomb::Medium::new(298.15, interatomic::coulomb::permittivity::Permittivity::Vacuum, None);
 
         let nonbonded = NonbondedMatrix::new(&builder, &topology, Some(medium)).unwrap();
 

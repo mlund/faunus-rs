@@ -35,7 +35,7 @@ use std::{
 };
 
 /// Extract medium from system/medium in YAML file
-pub fn get_medium(path: impl AsRef<Path>) -> anyhow::Result<coulomb::Medium> {
+pub fn get_medium(path: impl AsRef<Path>) -> anyhow::Result<interatomic::coulomb::Medium> {
     let file = std::fs::File::open(&path)
         .map_err(|err| anyhow::anyhow!("Could not open {:?}: {}", path.as_ref(), err))?;
     serde_yaml::from_reader(file)
