@@ -182,15 +182,7 @@ impl Cell {
             return Ok(Self::Endless(Endless));
         };
         let cell = serde_yaml::from_value(value.clone()).map_err(anyhow::Error::msg)?;
-        match cell {
-            Self::Cuboid(mut cuboid) => {
-                // `half_cell` information is missing after parsing, we have to add it
-                // TODO: This is a workaround. Should be fixed during `Cuboid` deserialization.
-                cuboid.set_half_cell();
-                Ok(Self::Cuboid(cuboid))
-            }
-            _ => Ok(cell),
-        }
+        Ok(cell)
     }
 }
 

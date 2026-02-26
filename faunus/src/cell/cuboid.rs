@@ -18,12 +18,11 @@ use crate::{
     cell::{BoundaryConditions, Shape, SimulationCell, VolumeScale, VolumeScalePolicy},
     Point,
 };
-use anyhow::Ok;
 use rand::Rng;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 
 /// Cuboidal unit cell
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize)]
 #[serde(transparent)]
 pub struct Cuboid {
     /// Unit cell vectors
@@ -31,6 +30,16 @@ pub struct Cuboid {
     /// Half of the cell vectors
     #[serde(skip)]
     half_cell: Point,
+}
+
+impl<'de> Deserialize<'de> for Cuboid {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let cell = Point::deserialize(deserializer)?;
+        Ok(Self {
+            cell,
+            half_cell: cell.scale(0.5),
+        })
+    }
 }
 
 impl Cuboid {
@@ -50,11 +59,6 @@ impl Cuboid {
     pub fn from_volume(volume: f64) -> Self {
         let a = volume.cbrt();
         Self::new(a, a, a)
-    }
-
-    /// Sets `half_cell` based on the current cell size.
-    pub(super) fn set_half_cell(&mut self) {
-        self.half_cell = self.cell.scale(0.5);
     }
 }
 

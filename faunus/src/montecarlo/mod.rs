@@ -17,6 +17,7 @@
 use crate::analysis::{AnalysisCollection, Analyze};
 use crate::group::*;
 use crate::propagate::{Displacement, Propagate};
+use crate::state::{GroupState, State};
 use crate::{time::Timer, Context};
 use anyhow::Result;
 use average::{Estimate, Mean};
@@ -339,6 +340,106 @@ impl<T: Context + 'static> MarkovChain<T> {
     /// Append an analysis to the back of the collection.
     pub fn add_analysis(&mut self, analysis: Box<dyn Analyze<T>>) {
         self.analyses.push(analysis)
+    }
+}
+
+impl<T: Context + crate::WithCell<SimCell = crate::cell::Cell> + 'static> MarkovChain<T> {
+    /// Extract the current simulation state for checkpointing.
+    pub fn save_state(&self) -> State {
+        let context = &self.context.old;
+        State {
+            particles: context.get_all_particles(),
+            cell: context.cell().clone(),
+            groups: context
+                .groups()
+                .iter()
+                .map(|g| GroupState {
+                    molecule: g.molecule(),
+                    capacity: g.capacity(),
+                    size: g.size(),
+                })
+                .collect(),
+            step: self.step,
+        }
+    }
+
+    /// Restore simulation state from a checkpoint.
+    ///
+    /// Validates topology compatibility before modifying any state,
+    /// so a mismatched state file is rejected cleanly.
+    pub fn load_state(&mut self, state: State) -> Result<()> {
+        let num_particles = self.context.old.num_particles();
+        let num_groups = self.context.old.groups().len();
+
+        if state.particles.len() != num_particles {
+            anyhow::bail!(
+                "Particle count mismatch: state has {}, context has {}",
+                state.particles.len(),
+                num_particles
+            );
+        }
+        if state.groups.len() != num_groups {
+            anyhow::bail!(
+                "Group count mismatch: state has {}, context has {}",
+                state.groups.len(),
+                num_groups
+            );
+        }
+
+        // Catch topology changes that alter atom types but preserve total count
+        for (i, state_p) in state.particles.iter().enumerate() {
+            let ctx_id = self.context.old.particle(i).atom_id;
+            if state_p.atom_id != ctx_id {
+                anyhow::bail!(
+                    "Particle {} atom_id mismatch: state has {}, topology has {}",
+                    i,
+                    state_p.atom_id,
+                    ctx_id
+                );
+            }
+        }
+
+        // Catch molecule reordering or resized molecule definitions
+        for (i, (gs, group)) in state
+            .groups
+            .iter()
+            .zip(self.context.old.groups().iter())
+            .enumerate()
+        {
+            if gs.molecule != group.molecule() {
+                anyhow::bail!(
+                    "Group {} molecule mismatch: state has {}, topology has {}",
+                    i,
+                    gs.molecule,
+                    group.molecule()
+                );
+            }
+            if gs.capacity != group.capacity() {
+                anyhow::bail!(
+                    "Group {} capacity mismatch: state has {}, topology has {}",
+                    i,
+                    gs.capacity,
+                    group.capacity()
+                );
+            }
+        }
+
+        // Both contexts must be identical for the MC accept/reject bookkeeping to work
+        for ctx in [&mut self.context.old, &mut self.context.new] {
+            ctx.set_particles(0..num_particles, state.particles.iter())?;
+            *ctx.cell_mut() = state.cell.clone();
+            for (i, gs) in state.groups.iter().enumerate() {
+                ctx.resize_group(i, gs.size)?;
+            }
+            for i in 0..num_groups {
+                ctx.update_mass_center(i);
+            }
+            ctx.update(&crate::Change::Everything)?;
+        }
+
+        self.step = state.step;
+        log::info!("Restored simulation state at step {}", self.step);
+        Ok(())
     }
 }
 

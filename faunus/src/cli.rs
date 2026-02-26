@@ -34,7 +34,7 @@ enum Commands {
         /// Input file in YAML format
         #[clap(long, short = 'i')]
         input: PathBuf,
-        /// Start from previously saved state file
+        /// State file for saving and restoring simulation state
         #[clap(long, short = 's')]
         state: Option<PathBuf>,
     },
@@ -98,9 +98,9 @@ fn write_yaml<T: serde::Serialize>(
     Ok(())
 }
 
-fn run(input: PathBuf, _state: Option<PathBuf>, yaml_output: &mut std::fs::File) -> Result<()> {
+fn run(input: PathBuf, state: Option<PathBuf>, yaml_output: &mut std::fs::File) -> Result<()> {
     let context = ReferencePlatform::new(&input, None, &mut rand::thread_rng())?;
-    let propagate = Propagate::from_file(&input, &context).unwrap();
+    let propagate = Propagate::from_file(&input, &context)?;
 
     let medium = get_medium(&input)?;
     log::info!("{}", medium);
@@ -112,6 +112,13 @@ fn run(input: PathBuf, _state: Option<PathBuf>, yaml_output: &mut std::fs::File)
 
     let analysis = analysis::from_file(&input, &context)?;
     let mut markov_chain = MarkovChain::new(context.clone(), propagate, thermal_energy, analysis)?;
+
+    if let Some(state_path) = &state {
+        if state_path.exists() {
+            let saved = crate::state::State::from_file(state_path)?;
+            markov_chain.load_state(saved)?;
+        }
+    }
 
     write_yaml(&medium, yaml_output, Some("medium"))?;
     write_yaml(&context.cell(), yaml_output, Some("cell"))?;
@@ -129,6 +136,11 @@ fn run(input: PathBuf, _state: Option<PathBuf>, yaml_output: &mut std::fs::File)
         yaml_output,
         Some("propagate"),
     )?;
+
+    if let Some(state_path) = &state {
+        markov_chain.save_state().to_file(state_path)?;
+        log::info!("Saved simulation state to {}", state_path.display());
+    }
 
     Ok(())
 }
