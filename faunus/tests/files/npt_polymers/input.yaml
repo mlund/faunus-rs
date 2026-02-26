@@ -1,0 +1,67 @@
+atoms:
+  - name: Cl
+    mass: 35.45
+    charge: -1.0
+    sigma: 6.0
+  - name: MM
+    mass: 1.0
+    charge: 1.0
+    sigma: 6.0
+
+molecules:
+  - name: counterion
+    atoms: [Cl]
+  - name: polymer
+    atoms: [MM, MM, MM, MM]
+    bonds:
+      - {index: [0, 1], kind: !Harmonic {k: 0.27583, req: 0.0}}
+      - {index: [1, 2], kind: !Harmonic {k: 0.27583, req: 0.0}}
+      - {index: [2, 3], kind: !Harmonic {k: 0.27583, req: 0.0}}
+    has_com: true
+
+system:
+  cell: !Sphere { radius: 200.0 }
+  medium:
+    permittivity: !Water
+    temperature: 298.15
+
+  blocks:
+    - molecule: counterion
+      N: 32
+      insert: !RandomAtomPos {}
+    - molecule: polymer
+      N: 8
+      insert:
+        !RandomCOM {
+          filename: "polymer.xyz",
+          rotate: true,
+        }
+
+  energy:
+    nonbonded:
+      default:
+        - !Coulomb {cutoff: 200.0}
+        - !HardSphere {mixing: Arithmetic}
+    isobaric:
+      P/mM: 113.2
+
+analysis:
+  - !CollectiveVariable
+    property: volume
+    range: [0.0, 40000000.0]
+    file: volume.dat.gz
+    frequency: !Every 10
+
+propagate:
+  seed: !Fixed 42
+  criterion: Metropolis
+  repeat: 25000
+  collections:
+    - !Deterministic
+      moves:
+        - !TranslateMolecule {molecule: polymer, dp: 10.0, weight: 1.0, repeat: 8}
+        - !RotateMolecule {molecule: polymer, dp: 1.0, weight: 1.0, repeat: 8}
+        - !PivotMove {molecule: polymer, dp: 3.0, weight: 1.0, repeat: 24}
+        - !TranslateAtom {molecule: polymer, dp: 10.0, weight: 1.0, repeat: 32}
+        - !TranslateAtom {molecule: counterion, dp: 110.0, weight: 1.0, repeat: 32}
+        - !VolumeMove {dV: 2.0, weight: 1.0}

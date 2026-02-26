@@ -141,6 +141,25 @@ pub trait Analyze<T: Context>: Debug + Info {
 
     /// Flush output stream, if any, ensuring that all intermediately buffered contents reach their destination.
     fn flush(&mut self) {}
+
+    /// Return a YAML representation of the analysis results, if any.
+    fn to_yaml(&self) -> Option<serde_yaml::Value> {
+        None
+    }
+}
+
+/// Collect YAML results from all analyses, keyed by short name.
+pub fn analyses_to_yaml<T: Context>(analyses: &AnalysisCollection<T>) -> Vec<serde_yaml::Value> {
+    analyses
+        .iter()
+        .filter_map(|a| {
+            let yaml = a.to_yaml()?;
+            let name = a.short_name().unwrap_or("unknown");
+            let mut map = serde_yaml::Mapping::new();
+            map.insert(serde_yaml::Value::String(name.to_string()), yaml);
+            Some(serde_yaml::Value::Mapping(map))
+        })
+        .collect()
 }
 
 impl<T: Context> crate::Info for AnalysisCollection<T> {

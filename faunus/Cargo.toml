@@ -45,6 +45,7 @@ indicatif = { version = "*", optional = true }
 [dev-dependencies]
 approx = "0.5"
 float-cmp = "0.9"
+tempfile = "3"
 
 [features]
 default = ["cli"]

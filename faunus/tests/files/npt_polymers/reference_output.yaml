@@ -1,0 +1,139 @@
+medium:
+  permittivity: Water
+  salt: null
+  temperature: 298.15
+cell: !Sphere
+  radius: 200.0
+blocks:
+- molecule: counterion
+  N: 32
+  active: null
+  insert: !RandomAtomPos
+    directions: xyz
+- molecule: polymer
+  N: 8
+  active: null
+  insert: !RandomCOM
+    filename: polymer.xyz
+    rotate: true
+    directions: xyz
+    offset: null
+propagate:
+  repeat: 25000
+  seed: !Fixed 42
+  collections:
+  - !Deterministic
+    repeat: 1
+    moves:
+    - !TranslateMolecule
+      molecule: polymer
+      max_displacement: 10.0
+      weight: 1.0
+      repeat: 8
+      statistics:
+        num_trials: 200000
+        num_accepted: 85474
+        mean_square_displacement:
+          avg: 8.616523889158938
+          n: 200000
+        timer:
+          accumulated:
+            secs: 0
+            nanos: 0
+        info: {}
+        energy_change_sum: -125.85012186506073
+      directions: xyz
+    - !RotateMolecule
+      molecule: polymer
+      max_displacement: 1.0
+      weight: 1.0
+      repeat: 8
+      statistics:
+        num_trials: 200000
+        num_accepted: 133326
+        mean_square_displacement:
+          avg: 0.183688705779426
+          n: 200000
+        timer:
+          accumulated:
+            secs: 0
+            nanos: 0
+        info: {}
+        energy_change_sum: -28.579324949290438
+    - !PivotMove
+      molecule: polymer
+      max_displacement: 3.0
+      weight: 1.0
+      repeat: 24
+      statistics:
+        num_trials: 600000
+        num_accepted: 273327
+        mean_square_displacement:
+          avg: 1.0039494897315353
+          n: 600000
+        timer:
+          accumulated:
+            secs: 0
+            nanos: 0
+        info: {}
+        energy_change_sum: -115.5179157364089
+    - !TranslateAtom
+      atom: null
+      molecule: polymer
+      max_displacement: 10.0
+      weight: 1.0
+      repeat: 32
+      statistics:
+        num_trials: 800000
+        num_accepted: 203790
+        mean_square_displacement:
+          avg: 3.115105125685767
+          n: 800000
+        timer:
+          accumulated:
+            secs: 0
+            nanos: 0
+        info: {}
+        energy_change_sum: 262.7689004204801
+    - !TranslateAtom
+      atom: null
+      molecule: counterion
+      max_displacement: 110.0
+      weight: 1.0
+      repeat: 32
+      statistics:
+        num_trials: 800000
+        num_accepted: 119959
+        mean_square_displacement:
+          avg: 77.46041916531514
+          n: 800000
+        timer:
+          accumulated:
+            secs: 0
+            nanos: 0
+        info: {}
+        energy_change_sum: -1.5729931150131342
+    - !VolumeMove
+      volume_displacement: 2.0
+      method: Isotropic
+      weight: 1.0
+      repeat: 1
+      statistics:
+        num_trials: 25000
+        num_accepted: 732
+        mean_square_displacement:
+          avg: 2836893.200722725
+          n: 25000
+        timer:
+          accumulated:
+            secs: 0
+            nanos: 0
+        info: {}
+        energy_change_sum: 10.847675486018034
+  criterion: MetropolisHastings
+analysis:
+- collectivevariable:
+    property: Volume
+    num_samples: 15000
+    mean: 221836.8964629325
+    rms: 225239.75077409757

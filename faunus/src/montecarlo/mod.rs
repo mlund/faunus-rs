@@ -330,6 +330,11 @@ impl<T: Context + 'static> MarkovChain<T> {
         &self.propagate
     }
 
+    /// Get the collection of analyses
+    pub fn get_analyses(&self) -> &AnalysisCollection<T> {
+        &self.analyses
+    }
+
     /// Set the thermal energy, _kT_.
     ///
     /// This is used to normalize the energy change when determining the acceptance probability.

@@ -60,6 +60,7 @@ impl CollectiveVariableAnalysisBuilder {
             stream,
             frequency: self.frequency,
             mean: Mean::new(),
+            mean_squared: Mean::new(),
             num_samples: 0,
         })
     }
@@ -76,6 +77,7 @@ pub struct CollectiveVariableAnalysis {
     stream: Option<Box<dyn Write>>,
     frequency: Frequency,
     mean: Mean,
+    mean_squared: Mean,
     num_samples: usize,
 }
 
@@ -106,6 +108,7 @@ impl<T: Context> Analyze<T> for CollectiveVariableAnalysis {
         }
         let value = self.cv.evaluate(context);
         self.mean.add(value);
+        self.mean_squared.add(value * value);
         self.num_samples += 1;
 
         if let Some(ref mut stream) = self.stream {
@@ -122,6 +125,15 @@ impl<T: Context> Analyze<T> for CollectiveVariableAnalysis {
         if let Some(ref mut stream) = self.stream {
             let _ = stream.flush();
         }
+    }
+
+    fn to_yaml(&self) -> Option<serde_yaml::Value> {
+        let mut map = serde_yaml::Mapping::new();
+        map.insert("property".into(), serde_yaml::Value::String(self.cv.axis().name.clone()));
+        map.insert("num_samples".into(), serde_yaml::Value::Number(self.num_samples.into()));
+        map.insert("mean".into(), serde_yaml::to_value(self.mean.mean()).ok()?);
+        map.insert("rms".into(), serde_yaml::to_value(self.mean_squared.mean().sqrt()).ok()?);
+        Some(serde_yaml::Value::Mapping(map))
     }
 }
 

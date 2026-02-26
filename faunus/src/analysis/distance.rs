@@ -101,6 +101,12 @@ impl<T: Context> Analyze<T> for MassCenterDistance {
     fn num_samples(&self) -> usize {
         self.num_samples
     }
+
+    fn to_yaml(&self) -> Option<serde_yaml::Value> {
+        let mut map = serde_yaml::Mapping::new();
+        map.insert("num_samples".into(), serde_yaml::Value::Number(self.num_samples.into()));
+        Some(serde_yaml::Value::Mapping(map))
+    }
 }
 
 impl<T: Context> From<MassCenterDistance> for Box<dyn Analyze<T>> {
