@@ -41,7 +41,7 @@ pub enum BlockActivationStatus {
 
 /// Specifies how the structure of molecules of a molecule block should be obtained or generated.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub enum InsertionPolicy {
+pub(crate) enum InsertionPolicy {
     /// Read molecule block from a file.
     FromFile(InputPath),
     /// Place the atoms of each molecule of the block to random positions in the simulation cell.
@@ -277,7 +277,7 @@ impl MoleculeBlock {
         self.active
     }
 
-    pub const fn insert_policy(&self) -> Option<&InsertionPolicy> {
+    pub(crate) const fn insert_policy(&self) -> Option<&InsertionPolicy> {
         self.insert.as_ref()
     }
 

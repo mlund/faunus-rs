@@ -19,7 +19,7 @@ use std::ops::Range;
 /// Continuous range of atoms with a non-unique name and number.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct Residue {
+pub(crate) struct Residue {
     /// Residue name.
     name: String,
     /// Residue number.
@@ -35,7 +35,8 @@ pub struct Residue {
 
 impl Residue {
     #[inline(always)]
-    pub fn new(name: &str, number: Option<usize>, range: Range<usize>) -> Self {
+    #[allow(dead_code)] // used in tests
+    pub(crate) fn new(name: &str, number: Option<usize>, range: Range<usize>) -> Self {
         Self {
             name: name.to_owned(),
             number,

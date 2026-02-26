@@ -28,7 +28,7 @@ use super::Indexed;
 ///
 /// Each varient stores the parameters for the bond type, like force constant, equilibrium distance, etc.
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Default)]
-pub enum BondKind {
+pub(crate) enum BondKind {
     /// Harmonic bond type.
     /// See <https://en.wikipedia.org/wiki/Harmonic_oscillator>.
     Harmonic(interatomic::twobody::Harmonic),
@@ -51,7 +51,7 @@ pub enum BondKind {
 ///
 /// See <https://en.wikipedia.org/wiki/Bond_order> for more information.
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Default)]
-pub enum BondOrder {
+pub(crate) enum BondOrder {
     #[default]
     /// Undefined bond order
     Unspecified,

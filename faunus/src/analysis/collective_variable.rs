@@ -129,10 +129,19 @@ impl<T: Context> Analyze<T> for CollectiveVariableAnalysis {
 
     fn to_yaml(&self) -> Option<serde_yaml::Value> {
         let mut map = serde_yaml::Mapping::new();
-        map.insert("property".into(), serde_yaml::Value::String(self.cv.axis().name.clone()));
-        map.insert("num_samples".into(), serde_yaml::Value::Number(self.num_samples.into()));
+        map.insert(
+            "property".into(),
+            serde_yaml::Value::String(self.cv.axis().name.clone()),
+        );
+        map.insert(
+            "num_samples".into(),
+            serde_yaml::Value::Number(self.num_samples.into()),
+        );
         map.insert("mean".into(), serde_yaml::to_value(self.mean.mean()).ok()?);
-        map.insert("rms".into(), serde_yaml::to_value(self.mean_squared.mean().sqrt()).ok()?);
+        map.insert(
+            "rms".into(),
+            serde_yaml::to_value(self.mean_squared.mean().sqrt()).ok()?,
+        );
         Some(serde_yaml::Value::Mapping(map))
     }
 }

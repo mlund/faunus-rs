@@ -336,10 +336,22 @@ impl<T: Context> Analyze<T> for VirtualTranslate {
 
     fn to_yaml(&self) -> Option<serde_yaml::Value> {
         let mut map = serde_yaml::Mapping::new();
-        map.insert("displacement".into(), serde_yaml::to_value(self.displacement).ok()?);
-        map.insert("num_samples".into(), serde_yaml::Value::Number(self.num_samples.into()));
-        map.insert("mean_force".into(), serde_yaml::to_value(self.mean_force()).ok()?);
-        map.insert("mean_free_energy".into(), serde_yaml::to_value(self.mean_free_energy()).ok()?);
+        map.insert(
+            "displacement".into(),
+            serde_yaml::to_value(self.displacement).ok()?,
+        );
+        map.insert(
+            "num_samples".into(),
+            serde_yaml::Value::Number(self.num_samples.into()),
+        );
+        map.insert(
+            "mean_force".into(),
+            serde_yaml::to_value(self.mean_force()).ok()?,
+        );
+        map.insert(
+            "mean_free_energy".into(),
+            serde_yaml::to_value(self.mean_free_energy()).ok()?,
+        );
         Some(serde_yaml::Value::Mapping(map))
     }
 }

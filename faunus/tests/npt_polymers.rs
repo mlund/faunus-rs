@@ -82,7 +82,10 @@ fn generate_npt_polymers_fixtures() {
     std::fs::copy(&state, &tmp_state).expect("failed to copy state.yaml");
     run_faunus(&input, &tmp_state, &reference_output);
 
-    assert!(reference_output.exists(), "reference_output.yaml was not created");
+    assert!(
+        reference_output.exists(),
+        "reference_output.yaml was not created"
+    );
     println!("Generated {}", reference_output.display());
 }
 

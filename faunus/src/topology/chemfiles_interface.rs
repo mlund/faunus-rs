@@ -248,7 +248,8 @@ mod tests {
     use crate::topology::{
         block::{BlockActivationStatus, InsertionPolicy, MoleculeBlock},
         molecule::MoleculeKindBuilder,
-        AtomKindBuilder, Bond, BondKind, BondOrder, IntermolecularBonded, Topology,
+        bond::{BondKind, BondOrder},
+        AtomKindBuilder, Bond, IntermolecularBonded, Topology,
     };
 
     use float_cmp::assert_approx_eq;

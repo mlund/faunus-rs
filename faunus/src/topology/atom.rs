@@ -109,7 +109,8 @@ impl AtomKind {
         self.epsilon
     }
 
-    pub const fn hydrophobicity(&self) -> Option<Hydrophobicity> {
+    #[allow(dead_code)] // used in tests
+    pub(crate) const fn hydrophobicity(&self) -> Option<Hydrophobicity> {
         self.hydrophobicity
     }
 
@@ -201,7 +202,7 @@ impl CustomProperty for AtomKind {
 
 /// Enum to store hydrophobicity information of an atom or residue
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Copy)]
-pub enum Hydrophobicity {
+pub(crate) enum Hydrophobicity {
     /// Item is hydrophobic
     Hydrophobic,
     /// Item is hydrophilic
@@ -213,27 +214,7 @@ pub enum Hydrophobicity {
     Lambda(f64),
 }
 
-impl Hydrophobicity {
-    /// Get surface tension (kJ/mol/Å²)
-    pub const fn surface_tension(&self) -> Option<f64> {
-        match self {
-            Self::SurfaceTension(tension) => Some(*tension),
-            _ => None,
-        }
-    }
-}
-
-/// Set sigma for a list of atomkinds with `None` sigma
-pub fn set_missing_sigma(atomkinds: &mut [AtomKind], default_sigma: f64) {
-    atomkinds
-        .iter_mut()
-        .filter(|i| i.sigma().is_none())
-        .for_each(|i| {
-            i.set_sigma(Some(default_sigma));
-        });
-}
-
-/// Set epsilon for for a list of atomkinds with `None` epsilon.
+/// Set epsilon for a list of atomkinds with `None` epsilon.
 pub fn set_missing_epsilon(atomkinds: &mut [AtomKind], default_epsilon: f64) {
     atomkinds
         .iter_mut()

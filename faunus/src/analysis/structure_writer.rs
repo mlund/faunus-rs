@@ -101,8 +101,14 @@ impl<T: Context> Analyze<T> for StructureWriter {
 
     fn to_yaml(&self) -> Option<serde_yaml::Value> {
         let mut map = serde_yaml::Mapping::new();
-        map.insert("file".into(), serde_yaml::Value::String(self.output_file.clone()));
-        map.insert("num_samples".into(), serde_yaml::Value::Number(self.num_samples.into()));
+        map.insert(
+            "file".into(),
+            serde_yaml::Value::String(self.output_file.clone()),
+        );
+        map.insert(
+            "num_samples".into(),
+            serde_yaml::Value::Number(self.num_samples.into()),
+        );
         Some(serde_yaml::Value::Mapping(map))
     }
 }

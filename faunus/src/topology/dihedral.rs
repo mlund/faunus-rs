@@ -25,7 +25,7 @@ use super::Indexed;
 
 /// Force field definition for dihedral angle potentials between four atoms
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Default)]
-pub enum DihedralKind {
+pub(crate) enum DihedralKind {
     /// Proper harmonic dihedral type.
     ProperHarmonic(HarmonicDihedral),
     /// Improper harmonic dihedral type.
@@ -77,7 +77,8 @@ pub struct Dihedral {
 
 impl Dihedral {
     /// Create new dihedral
-    pub const fn new(
+    #[allow(dead_code)] // used in tests
+    pub(crate) const fn new(
         index: [usize; 4],
         kind: DihedralKind,
         electrostatic_scaling: Option<f64>,

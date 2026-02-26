@@ -50,25 +50,25 @@ use std::fmt::Debug;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
 
-use anyhow::Ok;
-pub use atom::*;
-pub use bond::*;
-pub use chain::*;
+pub use atom::{set_missing_epsilon, AtomKind, AtomKindBuilder, CombinationRule};
+pub use bond::Bond;
+pub use dihedral::Dihedral;
+pub use topology::{FindByName, Topology};
+pub use torsion::Torsion;
+
+pub(crate) use chain::Chain;
+pub(crate) use residue::Residue;
+
 use derive_getters::Getters;
-pub use dihedral::*;
 use itertools::Itertools;
-pub use residue::*;
-pub use topology::*;
-pub use torsion::*;
 use validator::{Validate, ValidationError};
 
 use crate::Point;
 use serde::{Deserialize, Serialize};
 use serde::{Deserializer, Serializer};
 
-pub use self::block::{InsertionPolicy, MoleculeBlock};
+pub(crate) use self::block::{InsertionPolicy, MoleculeBlock};
 pub use self::molecule::{MoleculeKind, MoleculeKindBuilder};
-pub use structure::{molecule_from_file, positions_from_structure_file};
 
 /// Trait implemented by collections of atoms that should not overlap (e.g., residues, chains).
 pub(super) trait IndexRange {
@@ -270,62 +270,13 @@ pub trait CustomProperty {
     ///
     /// The key could e.g. be a converted discriminant from a field-less enum.
     fn set_property(&mut self, key: &str, value: Value) -> anyhow::Result<()>;
-    /// Get property assosiated with a `key`.
+    /// Get property associated with a `key`.
     fn get_property(&self, key: &str) -> Option<Value>;
-}
-
-/// A selection of atoms or residues
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub enum Selection<T> {
-    /// A list of names
-    Vec(Vec<T>),
-    /// A repeated element
-    Repeat(T, usize),
-    /// Vector of identifiers like atom or residue ids
-    Ids(Vec<usize>),
-}
-
-impl<T> Selection<T> {
-    /// Number of elements in selection
-    pub const fn len(&self) -> usize {
-        match self {
-            Self::Vec(v) => v.len(),
-            Self::Ids(v) => v.len(),
-            Self::Repeat(_, n) => *n,
-        }
-    }
-    /// Check if selection is empty
-    pub const fn is_empty(&self) -> bool {
-        self.len() == 0
-    }
-    /// Iterate over selection
-    pub fn iter(&self) -> anyhow::Result<Box<dyn Iterator<Item = &T> + '_>> {
-        match self {
-            Self::Vec(v) => Ok(Box::new(v.iter())),
-            Self::Repeat(t, n) => Ok(Box::new(std::iter::repeat_n(t, *n))),
-            _ => anyhow::bail!("Cannot iterate over selection"),
-        }
-    }
-}
-#[test]
-fn test_selection() {
-    let s = Selection::Vec(vec!["a", "b", "c"]);
-    assert_eq!(s.len(), 3);
-    assert_eq!(
-        s.iter().unwrap().collect::<Vec<_>>(),
-        vec![&"a", &"b", &"c"]
-    );
-    let s = Selection::Repeat("a", 3);
-    assert_eq!(s.len(), 3);
-    assert_eq!(
-        s.iter().unwrap().collect::<Vec<_>>(),
-        vec![&"a", &"a", &"a"]
-    );
 }
 
 /// Describes the internal degrees of freedom of a system
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default, Copy)]
-pub enum DegreesOfFreedom {
+pub(crate) enum DegreesOfFreedom {
     /// All degrees of freedom are free
     #[default]
     Free,
@@ -339,7 +290,7 @@ pub enum DegreesOfFreedom {
 
 /// Fields of the topology related to specific molecular system.
 #[derive(Debug, Clone, Serialize, Deserialize, Default, Validate)]
-pub struct System {
+pub(crate) struct System {
     /// Intermolecular bonded interactions.
     #[serde(default)]
     #[validate(nested)]
@@ -431,7 +382,7 @@ fn validate_unique_indices(indices: &[usize]) -> Result<(), ValidationError> {
 
 /// Path to input topology or structure file.
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub struct InputPath {
+pub(crate) struct InputPath {
     /// Raw path to the input file. Treated either as absolute
     /// or as relative to the parent directory.
     /// Used to construct the `path`.
@@ -496,6 +447,10 @@ impl<'de> Deserialize<'de> for InputPath {
 mod tests {
     use self::block::BlockActivationStatus;
     use crate::dimension::Dimension;
+    use crate::topology::atom::Hydrophobicity;
+    use crate::topology::bond::{BondKind, BondOrder};
+    use crate::topology::dihedral::DihedralKind;
+    use crate::topology::torsion::TorsionKind;
     use float_cmp::assert_approx_eq;
     use std::collections::{HashMap, HashSet};
     use unordered_pair::UnorderedPair;

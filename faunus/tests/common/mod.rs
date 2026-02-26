@@ -16,7 +16,14 @@ pub fn compare_yaml(
     ignored_keys: &[&str],
 ) -> Vec<String> {
     let mut diffs = Vec::new();
-    compare_recursive(expected, actual, "", float_tolerance, ignored_keys, &mut diffs);
+    compare_recursive(
+        expected,
+        actual,
+        "",
+        float_tolerance,
+        ignored_keys,
+        &mut diffs,
+    );
     diffs
 }
 
@@ -60,7 +67,9 @@ fn compare_recursive(
         }
         (Value::String(a), Value::String(b)) => {
             if a != b {
-                diffs.push(format!("{path}: string mismatch: expected \"{a}\", got \"{b}\""));
+                diffs.push(format!(
+                    "{path}: string mismatch: expected \"{a}\", got \"{b}\""
+                ));
             }
         }
         (Value::Number(a), Value::Number(b)) => {
@@ -113,9 +122,7 @@ fn compare_numbers(
         // Both are integers — exact match
         (Some(ai), Some(bi)) => {
             if ai != bi {
-                diffs.push(format!(
-                    "{path}: integer mismatch: expected {ai}, got {bi}"
-                ));
+                diffs.push(format!("{path}: integer mismatch: expected {ai}, got {bi}"));
             }
         }
         _ => {

@@ -19,7 +19,7 @@ use std::ops::Range;
 /// Continuous range of atoms with a non-unique name.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct Chain {
+pub(crate) struct Chain {
     /// Name of the chain
     name: String,
     /// Atom indices forming the chain.
@@ -33,7 +33,8 @@ pub struct Chain {
 
 impl Chain {
     #[inline(always)]
-    pub fn new(name: &str, range: Range<usize>) -> Self {
+    #[allow(dead_code)] // used in tests
+    pub(crate) fn new(name: &str, range: Range<usize>) -> Self {
         Self {
             name: name.to_owned(),
             range,

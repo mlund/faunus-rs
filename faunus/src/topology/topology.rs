@@ -25,9 +25,6 @@ use super::*;
 use crate::Context;
 use serde::{Deserialize, Serialize};
 
-pub use super::block::{InsertionPolicy, MoleculeBlock};
-pub use super::molecule::MoleculeKind;
-
 use super::structure::positions_from_structure_file as load_positions;
 use crate::Point;
 
@@ -50,9 +47,6 @@ impl FindByName<MoleculeKind> for &[MoleculeKind] {
     }
 }
 
-/// Trait implemented by any structure resembling a Topology.
-pub trait TopologyLike {}
-
 /// Topology of the molecular system.
 #[derive(Debug, Clone, Serialize, Deserialize, Default, Validate)]
 pub struct Topology {
@@ -69,7 +63,7 @@ pub struct Topology {
     /// Must always be provided.
     #[validate(nested)]
     #[serde(default)]
-    pub system: System,
+    pub(crate) system: System,
 }
 
 impl Topology {

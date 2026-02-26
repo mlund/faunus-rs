@@ -116,7 +116,8 @@ impl MoleculeKind {
         self.id
     }
 
-    pub const fn degrees_of_freedom(&self) -> DegreesOfFreedom {
+    #[allow(dead_code)] // used in tests
+    pub(crate) const fn degrees_of_freedom(&self) -> DegreesOfFreedom {
         self.degrees_of_freedom
     }
 
@@ -290,7 +291,7 @@ impl CustomProperty for MoleculeKind {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::topology::{BondKind, BondOrder};
+    use crate::topology::bond::{BondKind, BondOrder};
 
     #[test]
     fn generate_exclusions_n1() {

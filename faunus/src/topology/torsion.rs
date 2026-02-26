@@ -27,7 +27,7 @@ use super::Indexed;
 
 /// Force field definition for torsion, e.g. harmonic, cosine, etc.
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Default)]
-pub enum TorsionKind {
+pub(crate) enum TorsionKind {
     /// Harmonic torsion.
     Harmonic(HarmonicTorsion),
     /// Cosine angle as used in e.g. GROMOS-96.
@@ -52,7 +52,8 @@ pub struct Torsion {
 
 impl Torsion {
     /// Create new torsion
-    pub const fn new(index: [usize; 3], kind: TorsionKind) -> Self {
+    #[allow(dead_code)] // used in tests
+    pub(crate) const fn new(index: [usize; 3], kind: TorsionKind) -> Self {
         Self { index, kind }
     }
 
