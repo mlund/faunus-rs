@@ -102,3 +102,54 @@ Key          | Required | Default | Description
 `selection`  | yes      |         | Selection expression for molecule group(s)
 `file`       | no       |         | Streaming output file (single molecule only)
 `frequency`  | yes      |         | Sample frequency, e.g. `!Every 100`
+
+## Radial Distribution Function
+
+Computes the radial distribution function g(r) for pairs of particles or
+molecule centers of mass.
+Distances use the minimum image convention for periodic boundary conditions.
+The output file is updated at each sample with columns `r` and `g(r)`,
+normalized using the average volume (NPT-compatible).
+
+Two modes are supported:
+
+- **Atom-atom** (default): pairwise distances between individual atoms.
+  Intramolecular pairs (atoms in the same molecule) are excluded by default.
+- **COM-COM** (`use_com: true`): pairwise distances between molecular
+  centers of mass.
+
+When both selections are identical, self-pairs and duplicates are
+automatically excluded.
+
+### Examples
+
+```yaml
+analysis:
+  # Atom-atom RDF between Na and Cl
+  - !RadialDistribution
+    selections: ["atomtype Na", "atomtype Cl"]
+    file: rdf_nacl.dat
+    dr: 0.1
+    frequency: !Every 100
+
+  # COM-COM RDF for polymer molecules
+  - !RadialDistribution
+    selections: ["molecule polymer", "molecule polymer"]
+    use_com: true
+    file: rdf_com.dat
+    dr: 0.5
+    max_r: 30.0
+    frequency: !Every 100
+```
+
+### Options
+
+Key                        | Required | Default               | Description
+-------------------------- | -------- | --------------------- | -------------------------------------------
+`selections`               | yes      |                       | Pair of selection expressions, e.g. `["atomtype Na", "atomtype Cl"]`
+`file`                     | yes      |                       | Output file path (`.gz` for gzip)
+`dr`                       | yes      |                       | Bin width in distance units
+`frequency`                | yes      |                       | Sample frequency, e.g. `!Every 100`
+`max_r`                    | no       | half shortest box dim | Maximum distance for histogram
+`use_com`                  | no       | `false`               | Use center-of-mass distances instead of atom-atom
+`exclude_intramolecular`   | no       | `true` (atom-atom)    | Skip pairs within the same molecule (atom-atom only)

@@ -1,4 +1,5 @@
 use super::{Analyze, Frequency};
+use crate::cell::BoundaryConditions;
 use crate::selection::Selection;
 use crate::Context;
 use anyhow::Result;
@@ -88,7 +89,11 @@ impl<T: Context> Analyze<T> for MassCenterDistance {
                 let com1 = groups[i].mass_center();
                 let com2 = groups[j].mass_center();
                 if let Some((a, b)) = com1.zip(com2) {
-                    writeln!(self.stream.as_mut(), "{:.3}", (a - b).norm())?;
+                    writeln!(
+                        self.stream.as_mut(),
+                        "{:.3}",
+                        context.cell().distance(a, b).norm()
+                    )?;
                     self.num_samples += 1;
                 } else {
                     log::error!("Skipping COM distance calculation due to missing COM.");

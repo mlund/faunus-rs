@@ -36,6 +36,7 @@ pub mod cli;
 pub mod dimension;
 pub mod energy;
 pub mod group;
+pub(crate) mod histogram;
 pub mod montecarlo;
 pub mod platform;
 pub mod propagate;
