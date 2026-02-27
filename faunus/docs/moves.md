@@ -76,6 +76,31 @@ Key        | Required | Default | Description
 `weight`   | yes      |         | Selection weight
 `repeat`   | no       | 1       | Repetitions per selection
 
+## Pivot Move
+
+Picks a random atom as pivot in a polymer chain, randomly selects a bonded direction,
+and rotates the connected sub-tree around the pivot position.
+Uses the bond graph from the molecule topology, so it works for arbitrary
+topologies (linear, branched, star, dendrimer).
+Molecules without bonds are skipped.
+
+See [Madras & Sokal, _J. Stat. Phys._ 50, 109–186 (1988)](https://doi.org/10.1007/BF01022990).
+
+> **Note:** The rotated sub-tree must fit within half the box length (L/2).
+> For molecules spanning more than L/2, the minimum-image convention used
+> during rotation can map atoms to incorrect periodic images.
+
+```yaml
+- !PivotMove { molecule: Polymer, dp: 1.5, weight: 1.0 }
+```
+
+Key        | Required | Default | Description
+---------- | -------- | ------- | -------------------------------------------
+`molecule` | yes      |         | Name of the molecule type
+`dp`       | yes      |         | Maximum angular displacement (radians)
+`weight`   | yes      |         | Selection weight
+`repeat`   | no       | 1       | Repetitions per selection
+
 ## Volume Move (NPT)
 
 Proposes isotropic or anisotropic volume changes for the NPT ensemble.

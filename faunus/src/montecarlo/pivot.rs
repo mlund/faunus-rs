@@ -15,6 +15,7 @@
 use super::MoveStatistics;
 use crate::montecarlo;
 use crate::propagate::Displacement;
+use crate::topology::BondGraph;
 use crate::transform::random_unit_vector;
 use crate::{Change, Context, GroupChange};
 use nalgebra::UnitVector3;
@@ -46,32 +47,48 @@ pub struct PivotMove {
     /// Move statistics.
     #[serde(skip_deserializing)]
     statistics: MoveStatistics,
+    /// Cached bond graph for topology-aware pivot selection.
+    #[serde(skip)]
+    bond_graph: BondGraph,
 }
 
 impl PivotMove {
     /// Propose a pivot rotation on a polymer chain.
     ///
-    /// Picks a random group of the specified molecule type, selects a random
-    /// pivot atom (excluding the first atom), and rotates the segment before
-    /// the pivot around the pivot atom's position.
+    /// Picks a random bond in the molecule, then BFS-walks the bond graph
+    /// from one side of that bond to find the sub-tree to rotate.
+    /// Works for arbitrary topologies (linear, branched, star, dendrimer).
     #[allow(clippy::needless_pass_by_ref_mut)]
     pub(crate) fn propose_move(
         &mut self,
         context: &mut impl Context,
         rng: &mut impl Rng,
     ) -> Option<(Change, Displacement)> {
+        if self.bond_graph.is_empty() {
+            return None;
+        }
+
         let group_index = montecarlo::random_group(context, rng, self.molecule_id)?;
         let group = &context.groups()[group_index];
         let n = group.iter_active().count();
-
         if n < 3 {
             return None;
         }
 
-        // Pick random pivot index i in 1..N (relative; atom 0 is excluded as pivot)
-        let i = rng.gen_range(1..n);
-        let pivot_abs = group.start() + i;
-        let pivot_pos = context.particle(pivot_abs).pos;
+        let pivot_rel = rng.gen_range(0..n);
+        let &direction = self.bond_graph.neighbors(pivot_rel).choose(rng)?;
+
+        // Rotate the smaller side for better acceptance
+        let side_a = self.bond_graph.connected_from(direction, pivot_rel);
+        let side_b = self.bond_graph.connected_from(pivot_rel, direction);
+        let rotated_rel = if side_a.len() <= side_b.len() {
+            side_a
+        } else {
+            side_b
+        };
+
+        let group_start = group.start();
+        let pivot_pos = context.particle(group_start + pivot_rel).pos;
 
         // Generate random rotation
         let axis = random_unit_vector(rng);
@@ -79,16 +96,13 @@ impl PivotMove {
         let angle = self.max_displacement * 2.0 * (rng.r#gen::<f64>() - 0.5);
         let quaternion = crate::UnitQuaternion::from_axis_angle(&uaxis, angle);
 
-        // Absolute indices of atoms to rotate (segment before pivot)
-        let abs_indices: Vec<usize> = (group.start()..group.start() + i).collect();
+        let abs_indices: Vec<usize> = rotated_rel.iter().map(|&r| group_start + r).collect();
 
-        // Rotate the segment around the pivot position
         context.rotate_particles(&abs_indices, &quaternion, Some(-pivot_pos));
         context.update_mass_center(group_index);
 
-        // Return change with relative indices of rotated atoms
         Some((
-            Change::SingleGroup(group_index, GroupChange::PartialUpdate((0..i).collect())),
+            Change::SingleGroup(group_index, GroupChange::PartialUpdate(rotated_rel)),
             Displacement::Angle(angle),
         ))
     }
@@ -115,16 +129,19 @@ impl PivotMove {
 
     /// Validate and finalize the move.
     pub(crate) fn finalize(&mut self, context: &impl Context) -> anyhow::Result<()> {
-        self.molecule_id = context
-            .topology()
+        let topology = context.topology();
+        let (id, mol_kind) = topology
             .moleculekinds()
             .iter()
-            .position(|x| x.name() == &self.molecule_name)
+            .enumerate()
+            .find(|(_, x)| x.name() == &self.molecule_name)
             .ok_or_else(|| {
                 anyhow::Error::msg(
                     "Molecule kind in the definition of 'PivotMove' move does not exist.",
                 )
             })?;
+        self.molecule_id = id;
+        self.bond_graph = mol_kind.bond_graph().clone();
         Ok(())
     }
 }

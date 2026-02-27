@@ -206,6 +206,27 @@ impl BondGraph {
         self.neighbors.len()
     }
 
+    /// BFS from `start`, treating `excluded` as a barrier.
+    /// Returns all reachable nodes including `start`.
+    pub fn connected_from(&self, start: usize, excluded: usize) -> Vec<usize> {
+        let mut visited = vec![false; self.neighbors.len()];
+        visited[excluded] = true;
+        visited[start] = true;
+        let mut queue = VecDeque::new();
+        queue.push_back(start);
+        let mut result = vec![start];
+        while let Some(current) = queue.pop_front() {
+            for &neighbor in &self.neighbors[current] {
+                if !visited[neighbor] {
+                    visited[neighbor] = true;
+                    queue.push_back(neighbor);
+                    result.push(neighbor);
+                }
+            }
+        }
+        result
+    }
+
     /// Uses BFS from each atom to find all pairs within `max_distance` bonds.
     pub fn pairs_within(&self, max_distance: usize) -> HashSet<UnorderedPair<usize>> {
         let n = self.num_atoms();
@@ -320,5 +341,56 @@ mod tests {
         let graph = BondGraph::default();
         assert!(graph.is_empty());
         assert_eq!(graph.num_atoms(), 0);
+    }
+
+    #[test]
+    fn connected_from_branched() {
+        // Branched: 0-1-2-3(-4,-5-6), plus 3-6, 4-6
+        let bonds: Vec<Bond> = [
+            [0, 1],
+            [1, 2],
+            [2, 3],
+            [3, 4],
+            [3, 5],
+            [5, 6],
+            [3, 6],
+            [4, 6],
+        ]
+        .iter()
+        .map(|&[i, j]| make_bond(i, j))
+        .collect();
+        let graph = BondGraph::from_bonds(&bonds, 7);
+
+        // Pivot at node 2, walk toward node 3 (away from 0-1 side)
+        let mut result = graph.connected_from(3, 2);
+        result.sort();
+        assert_eq!(result, vec![3, 4, 5, 6]);
+
+        // Pivot at node 2, walk toward node 1 (away from 3-6 side)
+        let mut result = graph.connected_from(1, 2);
+        result.sort();
+        assert_eq!(result, vec![0, 1]);
+
+        // Pivot must not appear in result
+        let result = graph.connected_from(3, 2);
+        assert!(!result.contains(&2));
+    }
+
+    #[test]
+    fn connected_from_linear() {
+        // Linear chain: 0-1-2-3-4
+        let bonds: Vec<Bond> = [[0, 1], [1, 2], [2, 3], [3, 4]]
+            .iter()
+            .map(|&[i, j]| make_bond(i, j))
+            .collect();
+        let graph = BondGraph::from_bonds(&bonds, 5);
+
+        let mut result = graph.connected_from(0, 1);
+        result.sort();
+        assert_eq!(result, vec![0]);
+
+        let mut result = graph.connected_from(2, 1);
+        result.sort();
+        assert_eq!(result, vec![2, 3, 4]);
     }
 }
