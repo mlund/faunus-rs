@@ -12,7 +12,7 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
-use super::{random_atom, random_group, MoveStatistics};
+use super::{find_molecule_id, random_atom, random_group, MoveStatistics};
 use crate::group::*;
 use crate::propagate::Displacement;
 use crate::transform::{random_unit_vector, Transform};
@@ -127,17 +127,7 @@ impl TranslateMolecule {
 
     /// Validate and finalize the move.
     pub(crate) fn finalize(&mut self, context: &impl Context) -> anyhow::Result<()> {
-        self.molecule_id = context
-            .topology()
-            .moleculekinds()
-            .iter()
-            .position(|x| x.name() == &self.molecule_name)
-            .ok_or_else(|| {
-                anyhow::Error::msg(
-                    "Molecule kind in the definition of 'TranslateMolecule' move does not exist.",
-                )
-            })?;
-
+        self.molecule_id = find_molecule_id(context, &self.molecule_name, "TranslateMolecule")?;
         Ok(())
     }
 }

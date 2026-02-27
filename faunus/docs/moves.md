@@ -101,6 +101,27 @@ Key        | Required | Default | Description
 `weight`   | yes      |         | Selection weight
 `repeat`   | no       | 1       | Repetitions per selection
 
+## Crankshaft Move
+
+Picks a random proper dihedral in the molecule and rotates the smaller sub-tree
+around the middle bond vector (the dihedral axis) by an angle uniformly sampled
+in $[-\text{dp}, +\text{dp}]$ (radians).
+This preserves bond lengths and angles by construction and is well suited
+for sampling internal degrees of freedom in peptides and other molecules with
+defined dihedral angles.
+Molecules without proper dihedrals are skipped.
+
+```yaml
+- !CrankshaftMove { molecule: Peptide, dp: 0.5, weight: 1.0 }
+```
+
+Key        | Required | Default | Description
+---------- | -------- | ------- | -------------------------------------------
+`molecule` | yes      |         | Name of the molecule type
+`dp`       | yes      |         | Maximum angular displacement (radians)
+`weight`   | yes      |         | Selection weight
+`repeat`   | no       | 1       | Repetitions per selection
+
 ## Volume Move (NPT)
 
 Proposes isotropic or anisotropic volume changes for the NPT ensemble.

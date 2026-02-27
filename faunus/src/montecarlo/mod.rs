@@ -28,15 +28,37 @@ use std::collections::HashMap;
 use std::ops::Div;
 use std::{cmp::Ordering, ops::Neg};
 
+mod crankshaft;
 mod pivot;
 mod rotate;
 mod translate;
 mod volume;
 
+pub use crankshaft::CrankshaftMove;
 pub use pivot::PivotMove;
 pub use rotate::RotateMolecule;
 pub use translate::*;
 pub use volume::VolumeMove;
+
+/// Look up a molecule kind by name and return its id.
+fn find_molecule_id(
+    context: &impl Context,
+    molecule_name: &str,
+    move_name: &str,
+) -> anyhow::Result<usize> {
+    context
+        .topology()
+        .moleculekinds()
+        .iter()
+        .position(|x| x.name() == molecule_name)
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "Molecule '{}' in '{}' move does not exist.",
+                molecule_name,
+                move_name
+            )
+        })
+}
 
 /// Pick a random group index of the specified molecule type.
 fn random_group(context: &impl Context, rng: &mut impl Rng, molecule_id: usize) -> Option<usize> {

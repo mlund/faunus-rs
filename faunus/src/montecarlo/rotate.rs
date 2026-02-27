@@ -115,16 +115,8 @@ impl RotateMolecule {
 
     /// Validate and finalize the move.
     pub(crate) fn finalize(&mut self, context: &impl Context) -> anyhow::Result<()> {
-        self.molecule_id = context
-            .topology()
-            .moleculekinds()
-            .iter()
-            .position(|x| x.name() == &self.molecule_name)
-            .ok_or_else(|| {
-                anyhow::Error::msg(
-                    "Molecule kind in the definition of 'RotateMolecule' move does not exist.",
-                )
-            })?;
+        self.molecule_id =
+            montecarlo::find_molecule_id(context, &self.molecule_name, "RotateMolecule")?;
         Ok(())
     }
 }

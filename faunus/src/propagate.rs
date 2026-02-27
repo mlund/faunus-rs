@@ -291,6 +291,7 @@ pub enum Move {
     RotateMolecule(crate::montecarlo::RotateMolecule),
     VolumeMove(crate::montecarlo::VolumeMove),
     PivotMove(crate::montecarlo::PivotMove),
+    CrankshaftMove(crate::montecarlo::CrankshaftMove),
 }
 
 /// Enum used to store the extent of displacement of a move.
@@ -378,6 +379,7 @@ impl Move {
             Self::RotateMolecule(x) => x.propose_move(context, rng),
             Self::VolumeMove(x) => x.propose_move(context, rng),
             Self::PivotMove(x) => x.propose_move(context, rng),
+            Self::CrankshaftMove(x) => x.propose_move(context, rng),
         }
     }
 
@@ -399,6 +401,7 @@ impl Move {
             Self::RotateMolecule(x) => x.get_statistics(),
             Self::VolumeMove(x) => x.get_statistics(),
             Self::PivotMove(x) => x.get_statistics(),
+            Self::CrankshaftMove(x) => x.get_statistics(),
         }
     }
 
@@ -410,6 +413,7 @@ impl Move {
             Self::RotateMolecule(x) => x.get_statistics_mut(),
             Self::VolumeMove(x) => x.get_statistics_mut(),
             Self::PivotMove(x) => x.get_statistics_mut(),
+            Self::CrankshaftMove(x) => x.get_statistics_mut(),
         }
     }
 
@@ -438,6 +442,7 @@ impl Move {
             Self::RotateMolecule(x) => x.weight(),
             Self::VolumeMove(x) => x.weight(),
             Self::PivotMove(x) => x.weight(),
+            Self::CrankshaftMove(x) => x.weight(),
         }
     }
 
@@ -449,6 +454,7 @@ impl Move {
             Self::RotateMolecule(x) => x.finalize(context),
             Self::VolumeMove(x) => x.finalize(context),
             Self::PivotMove(x) => x.finalize(context),
+            Self::CrankshaftMove(x) => x.finalize(context),
         }
     }
 
@@ -460,6 +466,7 @@ impl Move {
             Self::RotateMolecule(x) => x.repeat(),
             Self::VolumeMove(x) => x.repeat(),
             Self::PivotMove(x) => x.repeat(),
+            Self::CrankshaftMove(x) => x.repeat(),
         }
     }
 
@@ -471,6 +478,7 @@ impl Move {
             Self::RotateMolecule(_) => 1,
             Self::VolumeMove(_) => 1,
             Self::PivotMove(_) => 1,
+            Self::CrankshaftMove(_) => 1,
         }
     }
 }
@@ -483,6 +491,7 @@ impl Info for Move {
             Self::RotateMolecule(x) => x.short_name(),
             Self::VolumeMove(x) => x.short_name(),
             Self::PivotMove(x) => x.short_name(),
+            Self::CrankshaftMove(x) => x.short_name(),
         }
     }
 
@@ -493,6 +502,7 @@ impl Info for Move {
             Self::RotateMolecule(x) => x.long_name(),
             Self::VolumeMove(x) => x.long_name(),
             Self::PivotMove(x) => x.long_name(),
+            Self::CrankshaftMove(x) => x.long_name(),
         }
     }
 }
