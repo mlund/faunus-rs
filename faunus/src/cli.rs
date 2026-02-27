@@ -21,8 +21,8 @@ use crate::{
 };
 use anyhow::Result;
 use clap::{Parser, Subcommand};
-use interatomic::coulomb::Temperature;
 use indicatif::ProgressBar;
+use interatomic::coulomb::Temperature;
 use pretty_env_logger::env_logger::DEFAULT_FILTER_ENV;
 use std::{io::Write, path::PathBuf};
 

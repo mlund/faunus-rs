@@ -594,8 +594,11 @@ mod tests {
             .pairpot_builder
             .unwrap();
 
-        let medium =
-            interatomic::coulomb::Medium::new(298.15, interatomic::coulomb::permittivity::Permittivity::Vacuum, None);
+        let medium = interatomic::coulomb::Medium::new(
+            298.15,
+            interatomic::coulomb::permittivity::Permittivity::Vacuum,
+            None,
+        );
 
         let nonbonded = NonbondedMatrix::new(&builder, &topology, Some(medium)).unwrap();
 

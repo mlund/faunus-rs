@@ -325,7 +325,7 @@ impl Topology {
             molecule.set_atom_indices(indices);
 
             // expand exclusions (must be done after validation - the bonds must be valid)
-            molecule.generate_exclusions();
+            molecule.finalize_bonds();
         }
 
         // check that all molecule names are unique

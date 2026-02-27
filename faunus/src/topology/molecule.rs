@@ -12,7 +12,7 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use derive_builder::Builder;
@@ -23,7 +23,7 @@ use unordered_pair::UnorderedPair;
 use crate::topology::{Chain, DegreesOfFreedom, Residue, Value};
 use validator::{Validate, ValidationError};
 
-use super::{Bond, CustomProperty, Dihedral, IndexRange, Indexed, Torsion};
+use super::{Bond, BondGraph, CustomProperty, Dihedral, IndexRange, Indexed, Torsion};
 
 /// Description of molecule properties.
 ///
@@ -82,6 +82,11 @@ pub struct MoleculeKind {
     #[validate(custom(function = "super::Chain::validate"))]
     #[serde(default)]
     chains: Vec<Chain>,
+    /// Persistent connectivity for bond-walking algorithms (COM, pivot).
+    #[serde(skip)]
+    #[builder(default)]
+    #[getter(skip)]
+    bond_graph: BondGraph,
     /// Does it make sense to calculate center of mass for the molecule?
     #[serde(default = "default_true")]
     #[getter(skip)]
@@ -125,6 +130,10 @@ impl MoleculeKind {
         self.has_com
     }
 
+    pub const fn bond_graph(&self) -> &BondGraph {
+        &self.bond_graph
+    }
+
     /// Set atom names from optional structure file.
     ///
     /// Returns error if file is specified and cannot be loaded.
@@ -156,47 +165,11 @@ impl MoleculeKind {
         self.id = id;
     }
 
-    /// Generate exclusions for the molecule based on value of the `excluded_neighbours`
-    /// and on the bonds of the molecule.
-    pub(super) fn generate_exclusions(&mut self) {
-        let mut edges = vec![Vec::new(); self.atoms.len()];
-
-        for bond in self.bonds.iter() {
-            let [i, j] = *bond.index();
-            edges[i].push(j);
-            edges[j].push(i);
-        }
-
-        // do BFS and get indices in range
-        let mut exclusions = HashSet::new();
-        for (index, _) in self.atoms.iter().enumerate() {
-            let mut queue = VecDeque::new();
-            let mut distances = HashMap::new();
-
-            queue.push_back(index);
-            distances.insert(index, 0);
-            while let Some(current) = queue.pop_front() {
-                let current_distance = *distances.get(&current).unwrap();
-
-                // create exclusion
-                if current_distance <= self.excluded_neighbours && current != index {
-                    exclusions.insert(UnorderedPair(index, current));
-                }
-
-                // continue if we are still in range
-                if current_distance < self.excluded_neighbours {
-                    for &neighbour in edges[current].iter() {
-                        distances.entry(neighbour).or_insert_with(|| {
-                            queue.push_back(neighbour);
-                            current_distance + 1
-                        });
-                    }
-                }
-            }
-        }
-
-        // add the obtained exclusions
-        self.exclusions.extend(exclusions.iter())
+    /// Build the bond graph and generate nonbonded exclusions from it.
+    pub(super) fn finalize_bonds(&mut self) {
+        self.bond_graph = BondGraph::from_bonds(&self.bonds, self.atoms.len());
+        self.exclusions
+            .extend(self.bond_graph.pairs_within(self.excluded_neighbours));
     }
 
     /// Get number of atoms in the molecule.
@@ -319,7 +292,7 @@ mod tests {
             .build()
             .unwrap();
 
-        molecule.generate_exclusions();
+        molecule.finalize_bonds();
 
         assert_eq!(molecule.exclusions.len(), 8);
         assert!(molecule.exclusions.contains(&UnorderedPair(0, 1)));
@@ -358,7 +331,7 @@ mod tests {
             .build()
             .unwrap();
 
-        molecule.generate_exclusions();
+        molecule.finalize_bonds();
 
         assert_eq!(molecule.exclusions.len(), 14);
         let expected = [
@@ -411,7 +384,7 @@ mod tests {
             .build()
             .unwrap();
 
-        molecule.generate_exclusions();
+        molecule.finalize_bonds();
 
         assert_eq!(molecule.exclusions.len(), 18);
         let expected = [

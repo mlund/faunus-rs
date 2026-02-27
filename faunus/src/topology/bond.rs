@@ -14,10 +14,13 @@
 
 //! Bonds between atoms
 
+use std::collections::{HashSet, VecDeque};
+
 use derive_getters::Getters;
 use interatomic::twobody::IsotropicTwobodyEnergy;
 use interatomic::Cutoff;
 use serde::{Deserialize, Serialize};
+use unordered_pair::UnorderedPair;
 use validator::Validate;
 
 use crate::{group::Group, Context};
@@ -171,6 +174,71 @@ impl Cutoff for Bond {
     }
 }
 
+/// Adjacency list built from intramolecular bonds.
+///
+/// Used for bond-walking algorithms such as PBC-aware COM calculation
+/// and pivot moves on branched molecules.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct BondGraph {
+    neighbors: Vec<Vec<usize>>,
+}
+
+impl BondGraph {
+    pub fn from_bonds(bonds: &[Bond], num_atoms: usize) -> Self {
+        let mut neighbors = vec![Vec::new(); num_atoms];
+        for bond in bonds {
+            let [i, j] = *bond.index();
+            neighbors[i].push(j);
+            neighbors[j].push(i);
+        }
+        Self { neighbors }
+    }
+
+    pub fn neighbors(&self, index: usize) -> &[usize] {
+        &self.neighbors[index]
+    }
+
+    pub const fn is_empty(&self) -> bool {
+        self.neighbors.is_empty()
+    }
+
+    pub const fn num_atoms(&self) -> usize {
+        self.neighbors.len()
+    }
+
+    /// Uses BFS from each atom to find all pairs within `max_distance` bonds.
+    pub fn pairs_within(&self, max_distance: usize) -> HashSet<UnorderedPair<usize>> {
+        let n = self.num_atoms();
+        let mut pairs = HashSet::new();
+        let mut distances = vec![None; n];
+        let mut queue = VecDeque::new();
+
+        for start in 0..n {
+            distances.fill(None);
+            distances[start] = Some(0);
+            queue.push_back(start);
+
+            while let Some(current) = queue.pop_front() {
+                let d = distances[current].unwrap();
+
+                if current != start {
+                    pairs.insert(UnorderedPair(start, current));
+                }
+
+                if d < max_distance {
+                    for &neighbour in &self.neighbors[current] {
+                        if distances[neighbour].is_none() {
+                            distances[neighbour] = Some(d + 1);
+                            queue.push_back(neighbour);
+                        }
+                    }
+                }
+            }
+        }
+        pairs
+    }
+}
+
 impl IsotropicTwobodyEnergy for Bond {
     fn isotropic_twobody_energy(&self, distance_squared: f64) -> f64 {
         match &self.kind {
@@ -180,5 +248,77 @@ impl IsotropicTwobodyEnergy for Bond {
             BondKind::UreyBradley(x) => x.isotropic_twobody_energy(distance_squared),
             BondKind::Unspecified => 0.0,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_bond(i: usize, j: usize) -> Bond {
+        Bond::new([i, j], BondKind::Unspecified, BondOrder::Unspecified)
+    }
+
+    #[test]
+    fn bond_graph_branched() {
+        // Branched molecule: 0-1-2-3(-4,-5-6), plus 3-6 and 4-6
+        let bonds: Vec<Bond> = [
+            [0, 1],
+            [1, 2],
+            [2, 3],
+            [3, 4],
+            [3, 5],
+            [5, 6],
+            [3, 6],
+            [4, 6],
+        ]
+        .iter()
+        .map(|&[i, j]| make_bond(i, j))
+        .collect();
+
+        let graph = BondGraph::from_bonds(&bonds, 7);
+        assert_eq!(graph.num_atoms(), 7);
+        assert!(!graph.is_empty());
+
+        // Verify neighbor counts
+        assert_eq!(graph.neighbors(0).len(), 1); // 0 -> [1]
+        assert_eq!(graph.neighbors(1).len(), 2); // 1 -> [0, 2]
+        assert_eq!(graph.neighbors(2).len(), 2); // 2 -> [1, 3]
+        assert_eq!(graph.neighbors(3).len(), 4); // 3 -> [2, 4, 5, 6]
+        assert_eq!(graph.neighbors(4).len(), 2); // 4 -> [3, 6]
+        assert_eq!(graph.neighbors(5).len(), 2); // 5 -> [3, 6]
+        assert_eq!(graph.neighbors(6).len(), 3); // 6 -> [5, 3, 4]
+
+        // Verify symmetry: if j in neighbors(i), then i in neighbors(j)
+        for i in 0..graph.num_atoms() {
+            for &j in graph.neighbors(i) {
+                assert!(
+                    graph.neighbors(j).contains(&i),
+                    "asymmetry: {j} in neighbors({i}) but {i} not in neighbors({j})"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn bond_graph_empty() {
+        let graph = BondGraph::from_bonds(&[], 0);
+        assert!(graph.is_empty());
+        assert_eq!(graph.num_atoms(), 0);
+
+        // No bonds but some atoms
+        let graph = BondGraph::from_bonds(&[], 3);
+        assert!(!graph.is_empty());
+        assert_eq!(graph.num_atoms(), 3);
+        assert!(graph.neighbors(0).is_empty());
+        assert!(graph.neighbors(1).is_empty());
+        assert!(graph.neighbors(2).is_empty());
+    }
+
+    #[test]
+    fn bond_graph_default() {
+        let graph = BondGraph::default();
+        assert!(graph.is_empty());
+        assert_eq!(graph.num_atoms(), 0);
     }
 }

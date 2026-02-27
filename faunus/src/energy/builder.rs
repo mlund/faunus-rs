@@ -507,7 +507,9 @@ mod tests {
                                 _phantom: Default::default()
                             }),
                             PairInteraction::CoulombReactionField(
-                                interatomic::coulomb::pairwise::ReactionField::new(11.0, 100.0, 1.5, true)
+                                interatomic::coulomb::pairwise::ReactionField::new(
+                                    11.0, 100.0, 1.5, true
+                                )
                             ),
                         ]
                     )
@@ -520,9 +522,9 @@ mod tests {
                                 cutoff: None,
                                 _phantom: Default::default()
                             }),
-                            PairInteraction::CoulombEwald(interatomic::coulomb::pairwise::EwaldTruncated::new(
-                                11.0, 0.1
-                            )),
+                            PairInteraction::CoulombEwald(
+                                interatomic::coulomb::pairwise::EwaldTruncated::new(11.0, 0.1)
+                            ),
                         ]
                     )
                 }
@@ -669,15 +671,19 @@ mod tests {
 
     #[test]
     fn test_get_interaction() {
-        let medium =
-            interatomic::coulomb::Medium::new(298.15, interatomic::coulomb::permittivity::Permittivity::Vacuum, None);
+        let medium = interatomic::coulomb::Medium::new(
+            298.15,
+            interatomic::coulomb::permittivity::Permittivity::Vacuum,
+            None,
+        );
 
         let mut interactions = HashMap::new();
 
         let interaction1 = PairInteraction::WeeksChandlerAndersen(DirectOrMixing::Direct(
             WeeksChandlerAndersen::new(1.5, 3.2),
         ));
-        let interaction2 = PairInteraction::CoulombPlain(interatomic::coulomb::pairwise::Plain::new(11.0, None));
+        let interaction2 =
+            PairInteraction::CoulombPlain(interatomic::coulomb::pairwise::Plain::new(11.0, None));
 
         let interaction3 = PairInteraction::HardSphere(DirectOrMixing::Mixing {
             mixing: CombinationRule::Arithmetic,
@@ -766,8 +772,11 @@ mod tests {
     #[test]
     fn test_get_interaction_empty() {
         let mut interactions = HashMap::new();
-        let medium =
-            interatomic::coulomb::Medium::new(298.15, interatomic::coulomb::permittivity::Permittivity::Vacuum, None);
+        let medium = interatomic::coulomb::Medium::new(
+            298.15,
+            interatomic::coulomb::permittivity::Permittivity::Vacuum,
+            None,
+        );
 
         let plain_coulomb = interatomic::coulomb::pairwise::Plain::new(11.0, None);
         let truncated_ewald = interatomic::coulomb::pairwise::EwaldTruncated::new(11.0, 0.2);

@@ -136,10 +136,7 @@ fn decompose_tensor(tensor: Matrix3<f64>) -> GyrationResult {
 }
 
 /// Compute the mass-weighted gyration tensor for a group of particles.
-fn gyration_tensor(
-    group: &crate::group::Group,
-    context: &impl Context,
-) -> Option<GyrationResult> {
+fn gyration_tensor(group: &crate::group::Group, context: &impl Context) -> Option<GyrationResult> {
     let com = group.mass_center()?;
     if group.len() < 2 {
         return None;
@@ -247,10 +244,9 @@ impl<T: Context> Analyze<T> for ShapeAnalysis {
             let first = group.iter_active().next().unwrap();
             let last = group.iter_active().last().unwrap();
             if first != last {
-                let re2 = context.cell().distance_squared(
-                    context.particle(first).pos(),
-                    context.particle(last).pos(),
-                );
+                let re2 = context
+                    .cell()
+                    .distance_squared(context.particle(first).pos(), context.particle(last).pos());
                 self.end_to_end_squared.add(re2);
             }
 
@@ -306,10 +302,7 @@ impl<T: Context> Analyze<T> for ShapeAnalysis {
 
         map.insert("Rg".into(), serde_yaml::to_value(rg2.sqrt()).ok()?);
         map.insert("Re".into(), serde_yaml::to_value(re2.sqrt()).ok()?);
-        map.insert(
-            "Re2/Rg2".into(),
-            serde_yaml::to_value(re2 / rg2).ok()?,
-        );
+        map.insert("Re2/Rg2".into(), serde_yaml::to_value(re2 / rg2).ok()?);
         map.insert(
             "asphericity".into(),
             serde_yaml::to_value(self.asphericity.mean()).ok()?,
@@ -392,8 +385,7 @@ frequency: !Every 50
     /// Helper: build gyration result from equal-mass positions.
     fn gyration_from_positions(positions: &[nalgebra::Vector3<f64>]) -> GyrationResult {
         let n = positions.len() as f64;
-        let com: nalgebra::Vector3<f64> =
-            positions.iter().sum::<nalgebra::Vector3<f64>>() / n;
+        let com: nalgebra::Vector3<f64> = positions.iter().sum::<nalgebra::Vector3<f64>>() / n;
 
         let mut tensor = Matrix3::<f64>::zeros();
         for p in positions {
@@ -509,7 +501,10 @@ frequency: !Every 50
             let desc = compute_descriptors(&result.eigenvalues, result.rg_squared).unwrap();
 
             assert!(result.rg_squared > 0.0, "Rg² must be positive");
-            assert!(desc.asphericity >= -1e-10, "asphericity must be non-negative");
+            assert!(
+                desc.asphericity >= -1e-10,
+                "asphericity must be non-negative"
+            );
             assert!(
                 desc.relative_shape_anisotropy >= -1e-10
                     && desc.relative_shape_anisotropy <= 1.0 + 1e-10,

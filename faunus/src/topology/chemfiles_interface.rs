@@ -247,8 +247,8 @@ mod tests {
 
     use crate::topology::{
         block::{BlockActivationStatus, InsertionPolicy, MoleculeBlock},
-        molecule::MoleculeKindBuilder,
         bond::{BondKind, BondOrder},
+        molecule::MoleculeKindBuilder,
         AtomKindBuilder, Bond, IntermolecularBonded, Topology,
     };
 

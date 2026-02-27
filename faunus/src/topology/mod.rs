@@ -51,7 +51,7 @@ use std::ops::Range;
 use std::path::{Path, PathBuf};
 
 pub use atom::{set_missing_epsilon, AtomKind, AtomKindBuilder, CombinationRule};
-pub use bond::Bond;
+pub use bond::{Bond, BondGraph};
 pub use dihedral::Dihedral;
 pub use topology::{FindByName, Topology};
 pub use torsion::Torsion;
