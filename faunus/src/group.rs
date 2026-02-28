@@ -359,6 +359,11 @@ pub trait GroupCollection {
     /// Copy of i'th particle in the system.
     fn particle(&self, index: usize) -> Particle;
 
+    /// Position of the i'th particle in the system.
+    fn position(&self, index: usize) -> Point {
+        self.particle(index).pos
+    }
+
     /// Get group lists of the system.
     fn group_lists(&self) -> &GroupLists;
 

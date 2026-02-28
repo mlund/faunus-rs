@@ -246,7 +246,7 @@ impl<T: Context> Analyze<T> for ShapeAnalysis {
             if first != last {
                 let re2 = context
                     .cell()
-                    .distance_squared(context.particle(first).pos(), context.particle(last).pos());
+                    .distance_squared(&context.position(first), &context.position(last));
                 self.end_to_end_squared.add(re2);
             }
 

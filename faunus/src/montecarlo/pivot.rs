@@ -91,7 +91,7 @@ impl<T: Context> MoveProposal<T> for PivotMove {
             side_b
         };
 
-        let pivot_pos = context.particle(group.start() + pivot_rel).pos;
+        let pivot_pos = context.position(group.start() + pivot_rel);
 
         let axis = random_unit_vector(rng);
         let uaxis = UnitVector3::new_normalize(axis);

@@ -286,7 +286,7 @@ impl crate::Info for AtomPositionCV {
 
 impl<T: Context> CollectiveVariable<T> for AtomPositionCV {
     fn evaluate(&self, context: &T) -> f64 {
-        let pos = context.particle(self.index).pos;
+        let pos = context.position(self.index);
         self.dimension.filter(pos).norm()
     }
     fn axis(&self) -> &AxisDescriptor {

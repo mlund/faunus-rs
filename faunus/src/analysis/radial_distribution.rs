@@ -142,7 +142,7 @@ impl RadialDistribution {
             &atoms1,
             &atoms2,
             self.same_selection(),
-            |i| Some(context.particle(i).pos),
+            |i| Some(context.position(i)),
             |i, j| {
                 exclude && {
                     let gi = Self::group_of_atom(groups, i);

@@ -179,6 +179,11 @@ impl GroupCollection for ReferencePlatform {
         self.particles[index].clone()
     }
 
+    #[inline(always)]
+    fn position(&self, index: usize) -> Point {
+        self.particles[index].pos
+    }
+
     fn num_particles(&self) -> usize {
         self.particles.len()
     }

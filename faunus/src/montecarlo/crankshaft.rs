@@ -103,8 +103,8 @@ impl<T: Context> MoveProposal<T> for CrankshaftMove {
         };
 
         let group_start = group.start();
-        let pivot_pos = context.particle(group_start + pivot_rel).pos;
-        let dir_pos = context.particle(group_start + dir_rel).pos;
+        let pivot_pos = context.position(group_start + pivot_rel);
+        let dir_pos = context.position(group_start + dir_rel);
 
         let uaxis = UnitVector3::new_normalize(dir_pos - pivot_pos);
         let angle = self.max_displacement * 2.0 * (rng.r#gen::<f64>() - 0.5);

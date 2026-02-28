@@ -103,7 +103,7 @@ pub trait ParticleSystem: GroupCollection + WithCell + WithTopology {
     ///
     /// ## Example implementation
     /// ```ignore
-    /// self.cell().distance(self.particle(i).pos(), self.particle(j).pos())
+    /// self.cell().distance(self.position(i), self.position(j))
     /// ```
     fn get_distance(&self, i: usize, j: usize) -> Point;
 
@@ -126,11 +126,8 @@ pub trait ParticleSystem: GroupCollection + WithCell + WithTopology {
     ///
     /// ## Example implementation
     /// ```ignore
-    /// let p1 = self.particle(indices[0]);
-    /// let p2 = self.particle(indices[1]);
-    /// let p3 = self.particle(indices[2]);
-    ///
-    /// crate::auxiliary::angle_points(p1.pos(), p2.pos(), p3.pos(), self.cell())
+    /// let [p1, p2, p3] = indices.map(|i| self.position(i));
+    /// crate::auxiliary::angle_points(p1, p2, p3, self.cell())
     /// ```
     fn get_angle(&self, indices: &[usize; 3]) -> f64;
 
@@ -148,18 +145,14 @@ pub trait ParticleSystem: GroupCollection + WithCell + WithTopology {
     ///
     /// ## Example implementation
     /// ```ignore
-    /// let p1 = self.particle(indices[0]);
-    /// let p2 = self.particle(indices[1]);
-    /// let p3 = self.particle(indices[2]);
-    /// let p4 = self.particle(indices[3]);
-    ///
-    /// crate::auxiliary::dihedral_points(p1.pos(), p2.pos(), p3.pos(), p4.pos(), self.cell())
+    /// let [p1, p2, p3, p4] = indices.map(|i| self.position(i));
+    /// crate::auxiliary::dihedral_points(p1, p2, p3, p4, self.cell())
     /// ```
     fn get_dihedral_angle(&self, indices: &[usize; 4]) -> f64;
 
     /// Calculate mass center of set of particles given by their indices. Periodic boundry conditions are respected.
     fn mass_center(&self, indices: &[usize]) -> Point {
-        let positions: Vec<Point> = indices.iter().map(|&i| self.particle(i).pos).collect();
+        let positions: Vec<Point> = indices.iter().map(|&i| self.position(i)).collect();
         let atomids = indices.iter().map(|&i| self.get_atomkind(i));
         let masses: Vec<_> = atomids
             .map(|i| self.topology().atomkinds()[i].mass())
