@@ -87,6 +87,45 @@ impl Dimension {
         matches!(self, Self::Z | Self::XZ | Self::YZ | Self::XYZ)
     }
 
+    /// Number of active dimensions (0–3).
+    pub const fn ndim(&self) -> usize {
+        match self {
+            Self::None => 0,
+            Self::X | Self::Y | Self::Z => 1,
+            Self::XY | Self::XZ | Self::YZ => 2,
+            Self::XYZ => 3,
+        }
+    }
+
+    /// Shell measure between `r_inner` and `r_outer` for this dimensionality.
+    ///
+    /// - 3D: spherical shell volume 4/3 π (r₂³ − r₁³)
+    /// - 2D: ring area π (r₂² − r₁²)
+    /// - 1D: line segment 2 (r₂ − r₁), factor 2 for ±r degeneracy
+    pub fn shell_volume(&self, r_inner: f64, r_outer: f64) -> f64 {
+        use std::f64::consts::PI;
+        match self.ndim() {
+            3 => (4.0 / 3.0) * PI * (r_outer.powi(3) - r_inner.powi(3)),
+            2 => PI * (r_outer.powi(2) - r_inner.powi(2)),
+            1 => 2.0 * (r_outer - r_inner), // ±r degeneracy
+            _ => 0.0,
+        }
+    }
+
+    /// Effective "volume" (volume, area, or length) projected from a 3D bounding box.
+    pub fn effective_volume(&self, bbox: Point) -> f64 {
+        match self {
+            Self::XYZ => bbox.x * bbox.y * bbox.z,
+            Self::XY => bbox.x * bbox.y,
+            Self::XZ => bbox.x * bbox.z,
+            Self::YZ => bbox.y * bbox.z,
+            Self::X => bbox.x,
+            Self::Y => bbox.y,
+            Self::Z => bbox.z,
+            Self::None => 0.0,
+        }
+    }
+
     /// Apply Dimension as a filter for Point. Creates a copy of the Point with
     /// dimensions that do not match the Dimension set to 0.
     pub fn filter(&self, point: Point) -> Point {
@@ -96,9 +135,4 @@ impl Dimension {
 
         Point::new(x, y, z)
     }
-}
-
-// Helper for deserialization
-pub(crate) const fn default_dimension() -> Dimension {
-    Dimension::XYZ
 }

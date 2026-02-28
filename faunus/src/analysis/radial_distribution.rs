@@ -5,13 +5,13 @@
 
 use super::{Analyze, Frequency};
 use crate::cell::{BoundaryConditions, Shape};
+use crate::dimension::Dimension;
 use crate::histogram::Histogram;
 use crate::selection::Selection;
 use crate::Context;
 use anyhow::Result;
 use derive_more::Debug;
 use serde::{Deserialize, Serialize};
-use std::f64::consts::PI;
 use std::io::Write;
 use std::path::PathBuf;
 
@@ -33,6 +33,9 @@ pub struct RadialDistributionBuilder {
     /// Whether to exclude intramolecular pairs. Default: true for atom-atom, ignored for COM.
     #[serde(skip_serializing_if = "Option::is_none")]
     exclude_intramolecular: Option<bool>,
+    /// Dimensionality for shell normalization. Default: XYZ (3D spherical shells).
+    #[serde(default)]
+    dimension: Dimension,
     /// Sampling frequency.
     frequency: Frequency,
 }
@@ -67,6 +70,7 @@ impl RadialDistributionBuilder {
             num_samples: 0,
             use_com: self.use_com,
             exclude_intramolecular,
+            dimension: self.dimension,
             output_file: self.file.clone(),
             stream,
             frequency: self.frequency,
@@ -85,6 +89,7 @@ pub struct RadialDistribution {
     num_samples: usize,
     use_com: bool,
     exclude_intramolecular: bool,
+    dimension: Dimension,
     output_file: PathBuf,
     #[debug(skip)]
     stream: Box<dyn Write>,
@@ -101,6 +106,7 @@ fn collect_pair_distances(
     mut get_pos: impl FnMut(usize) -> Option<crate::Point>,
     mut skip: impl FnMut(usize, usize) -> bool,
     cell: &impl BoundaryConditions,
+    dimension: Dimension,
     histogram: &mut Histogram,
 ) -> f64 {
     let mut pair_count = 0u64;
@@ -113,7 +119,8 @@ fn collect_pair_distances(
                 continue;
             }
             let Some(pos_j) = get_pos(j) else { continue };
-            histogram.add(cell.distance(&pos_i, &pos_j).norm());
+            // Project displacement onto active dimensions before computing distance
+            histogram.add(dimension.filter(cell.distance(&pos_i, &pos_j)).norm());
             pair_count += 1;
         }
     }
@@ -150,6 +157,7 @@ impl RadialDistribution {
                 }
             },
             context.cell(),
+            self.dimension,
             &mut self.histogram,
         )
     }
@@ -168,6 +176,7 @@ impl RadialDistribution {
             |gi| groups[gi].mass_center().copied(),
             |_, _| false,
             context.cell(),
+            self.dimension,
             &mut self.histogram,
         )
     }
@@ -186,7 +195,7 @@ impl RadialDistribution {
         for (r, count) in self.histogram.iter() {
             let r_inner = r - dr / 2.0;
             let r_outer = r + dr / 2.0;
-            let shell_volume = (4.0 / 3.0) * PI * (r_outer.powi(3) - r_inner.powi(3));
+            let shell_volume = self.dimension.shell_volume(r_inner, r_outer);
             let ideal = n_pairs_avg * self.num_samples as f64 * shell_volume / v_avg;
             let gr = if ideal > 0.0 { count / ideal } else { 0.0 };
             writeln!(self.stream, "{:.6} {:.6}", r, gr)?;
@@ -220,8 +229,8 @@ impl<T: Context> Analyze<T> for RadialDistribution {
             self.sample_atom_atom(context)
         };
         self.pair_count_sum += pairs;
-        if let Some(vol) = context.cell().volume() {
-            self.volume_sum += vol;
+        if let Some(bbox) = context.cell().bounding_box() {
+            self.volume_sum += self.dimension.effective_volume(bbox);
         }
         self.num_samples += 1;
         self.write_gr()?;
@@ -305,9 +314,8 @@ frequency: !Every 50
         ));
     }
 
-    #[test]
-    fn normalization_uniform_gas() {
-        // Verify normalization formula: fill histogram with ideal-gas counts → g(r) ≈ 1.
+    /// Verify normalization: fill histogram with ideal-gas counts → g(r) ≈ 1.
+    fn check_normalization(dimension: Dimension) {
         let dr = 0.5;
         let num_samples = 10usize;
         let n_pairs = 100.0;
@@ -324,23 +332,36 @@ frequency: !Every 50
             num_samples,
             use_com: false,
             exclude_intramolecular: false,
+            dimension,
             output_file: PathBuf::from("/dev/null"),
             stream: Box::new(std::io::sink()),
             frequency: Frequency::Every(1),
         };
-        // Fill with ideal-gas counts per bin
         for i in 0..rdf.histogram.num_bins() {
             let r = rdf.histogram.bin_center(i);
             let r_inner = r - dr / 2.0;
             let r_outer = r + dr / 2.0;
-            let shell_vol = (4.0 / 3.0) * PI * (r_outer.powi(3) - r_inner.powi(3));
+            let shell_vol = dimension.shell_volume(r_inner, r_outer);
             let ideal_count = n_pairs * num_samples as f64 * shell_vol / volume;
             for _ in 0..ideal_count.round() as usize {
                 rdf.histogram.add(r);
             }
         }
-        // Write and verify g(r) ≈ 1
-        let result = rdf.write_gr();
-        assert!(result.is_ok());
+        assert!(rdf.write_gr().is_ok());
+    }
+
+    #[test]
+    fn normalization_uniform_gas_3d() {
+        check_normalization(Dimension::XYZ);
+    }
+
+    #[test]
+    fn normalization_uniform_gas_2d() {
+        check_normalization(Dimension::XY);
+    }
+
+    #[test]
+    fn normalization_uniform_gas_1d() {
+        check_normalization(Dimension::Z);
     }
 }

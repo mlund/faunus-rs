@@ -44,7 +44,7 @@ pub struct TranslateMolecule {
     #[serde(skip_serializing)]
     pub(crate) repeat: usize,
     /// Move directions
-    #[serde(default = "crate::dimension::default_dimension")]
+    #[serde(default)]
     directions: crate::dimension::Dimension,
 }
 

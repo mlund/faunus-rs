@@ -22,7 +22,7 @@
 //! and the [`Selection`] language targets atoms or groups.
 
 use crate::cell::{BoundaryConditions, Shape};
-use crate::dimension::{default_dimension, Dimension};
+use crate::dimension::Dimension;
 use crate::selection::Selection;
 use crate::Context;
 use anyhow::{bail, Result};
@@ -102,7 +102,7 @@ pub struct CollectiveVariableBuilder {
     pub property: Property,
     #[serde(default = "default_range")]
     pub range: (f64, f64),
-    #[serde(default = "default_dimension")]
+    #[serde(default)]
     pub dimension: Dimension,
     /// Only needed for Penalty (Wang-Landau) histogramming.
     #[serde(skip_serializing_if = "Option::is_none")]

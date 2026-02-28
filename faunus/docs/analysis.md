@@ -169,6 +169,15 @@ Two modes are supported:
 - **COM-COM** (`use_com: true`): pairwise distances between molecular
   centers of mass.
 
+The `dimension` option controls which spatial components are used for the
+pair distance and shell normalization:
+
+- `xyz` (default): full 3D distance, normalized with spherical shells (4πr²).
+- `xy`, `xz`, `yz`: projected distance in a plane, normalized with cylindrical shells (2πr).
+- `x`, `y`, `z`: projected distance along an axis, normalized with linear shells.
+
+This is useful for systems where particles are constrained to a plane or a line.
+
 When both selections are identical, self-pairs and duplicates are
 automatically excluded.
 
@@ -204,3 +213,4 @@ Key                        | Required | Default               | Description
 `max_r`                    | no       | half shortest box dim | Maximum distance for histogram
 `use_com`                  | no       | `false`               | Use center-of-mass distances instead of atom-atom
 `exclude_intramolecular`   | no       | `true` (atom-atom)    | Skip pairs within the same molecule (atom-atom only)
+`dimension`                | no       | `xyz`                 | Dimension for distance projection and normalization (`x`, `y`, `z`, `xy`, …)
