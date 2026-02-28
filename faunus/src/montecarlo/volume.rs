@@ -14,11 +14,10 @@
 
 use crate::cell::{Shape, VolumeScalePolicy};
 use crate::montecarlo::NewOld;
-use crate::propagate::{tagged_yaml, Displacement, MoveProposal};
+use crate::propagate::{tagged_yaml, Displacement, MoveProposal, MoveTarget, ProposedMove};
 use crate::transform::Transform;
 use crate::{Change, Context};
 use rand::prelude::*;
-use rand::RngCore;
 use serde::{Deserialize, Serialize};
 
 /// Monte Carlo move for proposing volume changes in the NPT ensemble.
@@ -57,7 +56,7 @@ impl crate::Info for VolumeMove {
 
 impl VolumeMove {
     /// Validate and finalize the move.
-    pub(crate) fn finalize(&self, context: &impl Context) -> anyhow::Result<()> {
+    pub(crate) fn finalize(&mut self, context: &impl Context) -> anyhow::Result<()> {
         if self.volume_displacement <= 0.0 {
             anyhow::bail!(
                 "VolumeMove: volume displacement (dV) must be positive, got {}",
@@ -79,11 +78,7 @@ impl VolumeMove {
 }
 
 impl<T: Context> MoveProposal<T> for VolumeMove {
-    fn propose_move(
-        &mut self,
-        context: &mut T,
-        rng: &mut dyn RngCore,
-    ) -> Option<(Change, Displacement)> {
+    fn propose_move(&mut self, context: &T, rng: &mut dyn RngCore) -> Option<ProposedMove> {
         let old_volume = context.cell().volume()?;
         if old_volume.is_infinite() {
             return None;
@@ -93,13 +88,12 @@ impl<T: Context> MoveProposal<T> for VolumeMove {
             (rng.r#gen::<f64>() - 0.5).mul_add(self.volume_displacement, old_volume.ln());
         let new_volume = ln_new_volume.exp();
 
-        Transform::VolumeScale(self.method, new_volume)
-            .on_system_with_backup(context)
-            .ok()?;
-
-        let change = Change::Volume(self.method, NewOld::from(new_volume, old_volume));
-        let displacement = Displacement::Custom(new_volume - old_volume);
-        Some((change, displacement))
+        Some(ProposedMove {
+            change: Change::Volume(self.method, NewOld::from(new_volume, old_volume)),
+            displacement: Displacement::Custom(new_volume - old_volume),
+            transform: Transform::VolumeScale(self.method, new_volume),
+            target: MoveTarget::System,
+        })
     }
 
     fn to_yaml(&self) -> Option<serde_yaml::Value> {

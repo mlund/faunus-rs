@@ -13,24 +13,22 @@
 // limitations under the license.
 
 use crate::montecarlo;
-use crate::propagate::{tagged_yaml, Displacement, MoveProposal};
-use crate::transform::{random_unit_vector, Transform};
+use crate::propagate::{tagged_yaml, Displacement, MoveProposal, MoveTarget, ProposedMove};
+use crate::transform::{random_quaternion, Transform};
 use crate::{Change, Context, GroupChange};
-use nalgebra::UnitVector3;
-use rand::prelude::*;
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
 
-/// Move for translating a random molecule.
+/// Move for rotating a random molecule.
 ///
-/// This will pick a random molecule of type `molecule_id` and translate it by a random displacement.
+/// This will pick a random molecule of type `molecule_id` and rotate it by a random angle.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct RotateMolecule {
-    /// Name of the molecule type to translate.
+    /// Name of the molecule type to rotate.
     #[serde(rename = "molecule")]
     molecule_name: String,
-    /// Id of the molecule type to translate.
+    /// Id of the molecule type to rotate.
     #[serde(skip)]
     molecule_id: usize,
     /// Maximum angular displacement (radians).
@@ -55,23 +53,15 @@ impl RotateMolecule {
 }
 
 impl<T: Context> MoveProposal<T> for RotateMolecule {
-    fn propose_move(
-        &mut self,
-        context: &mut T,
-        rng: &mut dyn RngCore,
-    ) -> Option<(Change, Displacement)> {
+    fn propose_move(&mut self, context: &T, rng: &mut dyn RngCore) -> Option<ProposedMove> {
         let group_index = montecarlo::random_group(context, rng, self.molecule_id)?;
-        let axis = random_unit_vector(rng);
-        let uaxis = UnitVector3::new_normalize(axis);
-        let angle = self.max_displacement * 2.0 * (rng.r#gen::<f64>() - 0.5);
-        let quaternion = crate::UnitQuaternion::from_axis_angle(&uaxis, angle);
-        Transform::Rotate(quaternion)
-            .on_group_with_backup(group_index, context)
-            .unwrap();
-        Some((
-            Change::SingleGroup(group_index, GroupChange::RigidBody),
-            Displacement::Angle(angle),
-        ))
+        let (quaternion, angle) = random_quaternion(rng, self.max_displacement);
+        Some(ProposedMove {
+            change: Change::SingleGroup(group_index, GroupChange::RigidBody),
+            displacement: Displacement::Angle(angle),
+            transform: Transform::Rotate(quaternion),
+            target: MoveTarget::Group(group_index),
+        })
     }
 
     fn to_yaml(&self) -> Option<serde_yaml::Value> {

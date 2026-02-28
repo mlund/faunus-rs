@@ -18,6 +18,7 @@ use crate::{
     analysis::{AnalysisCollection, Analyze},
     energy::EnergyChange,
     montecarlo::{AcceptanceCriterion, Bias, MoveStatistics, NewOld},
+    transform::Transform,
     Change, Context, Info, Point,
 };
 use core::fmt::{self, Debug};
@@ -32,14 +33,38 @@ pub(crate) const fn default_repeat() -> usize {
     1
 }
 
+/// Target for a proposed Monte Carlo move.
+#[derive(Clone, Debug)]
+pub enum MoveTarget {
+    /// Apply to a single group.
+    Group(usize),
+    /// Apply to the entire system.
+    System,
+}
+
+/// A fully described but unapplied Monte Carlo move.
+#[derive(Clone, Debug)]
+pub struct ProposedMove {
+    pub change: Change,
+    pub displacement: Displacement,
+    pub transform: Transform,
+    pub target: MoveTarget,
+}
+
+impl ProposedMove {
+    /// Apply the transform to the context, saving backup for undo.
+    pub fn apply_with_backup(&self, context: &mut impl Context) -> anyhow::Result<()> {
+        match self.target {
+            MoveTarget::Group(i) => self.transform.on_group_with_backup(i, context),
+            MoveTarget::System => self.transform.on_system_with_backup(context),
+        }
+    }
+}
+
 /// Narrow trait for the unique logic of each Monte Carlo move.
 pub trait MoveProposal<T: Context>: Debug + Info {
-    /// Propose a move on the given context, returning the change and displacement.
-    fn propose_move(
-        &mut self,
-        context: &mut T,
-        rng: &mut dyn RngCore,
-    ) -> Option<(Change, Displacement)>;
+    /// Describe a move without applying it; context is read-only.
+    fn propose_move(&mut self, context: &T, rng: &mut dyn RngCore) -> Option<ProposedMove>;
 
     /// Optional bias added to the trial energy for acceptance.
     fn bias(&self, _change: &Change, _energies: &NewOld<f64>) -> Bias {
@@ -110,32 +135,33 @@ impl<T: Context> MoveRunner<T> {
     /// Perform the move: propose, evaluate energy, accept/reject. Repeats as configured.
     pub fn do_move(
         &mut self,
-        context: &mut NewOld<T>,
+        context: &mut T,
         criterion: &AcceptanceCriterion,
         thermal_energy: f64,
         step: &mut usize,
         rng: &mut dyn RngCore,
     ) -> anyhow::Result<()> {
         for _ in 0..self.repeat {
-            let (change, displacement) = self
+            let proposed = self
                 .inner
-                .propose_move(&mut context.new, rng)
+                .propose_move(context, rng)
                 .ok_or_else(|| anyhow::anyhow!("Could not propose a move."))?;
-            context.new.update_with_backup(&change)?;
 
-            let energy = NewOld::<f64>::from(
-                context.new.hamiltonian().energy(&context.new, &change),
-                context.old.hamiltonian().energy(&context.old, &change),
-            );
-            let bias = self.inner.bias(&change, &energy);
+            let old_energy = context.hamiltonian().energy(context, &proposed.change);
+            proposed.apply_with_backup(context)?;
+            context.update_with_backup(&proposed.change)?;
+            let new_energy = context.hamiltonian().energy(context, &proposed.change);
+
+            let energy = NewOld::<f64>::from(new_energy, old_energy);
+            let bias = self.inner.bias(&proposed.change, &energy);
 
             if criterion.accept(energy, bias, thermal_energy, rng) {
-                self.statistics.accept(energy.difference(), displacement);
-                context.old.sync_from(&context.new, &change)?;
-                context.new.discard_backup();
+                self.statistics
+                    .accept(energy.difference(), proposed.displacement);
+                context.discard_backup();
             } else {
                 self.statistics.reject();
-                context.new.undo()?;
+                context.undo()?;
             }
         }
 
@@ -166,7 +192,7 @@ impl<T: Context> MoveRunner<T> {
 ///
 /// This is used for collecting statistics about for far moves change
 /// the system. Used to track mean squared displacements.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum Displacement {
     /// Displacement vector; typically due to a translation
     Distance(Point),
@@ -221,11 +247,7 @@ impl MoveBuilder {
             Self::TranslateMolecule(m) => build_move!(m),
             Self::TranslateAtom(m) => build_move!(m),
             Self::RotateMolecule(m) => build_move!(m),
-            Self::VolumeMove(m) => {
-                m.finalize(context)?;
-                let (w, r) = (m.weight, m.repeat);
-                MoveRunner::new(Box::new(m), w, r)
-            }
+            Self::VolumeMove(m) => build_move!(m),
             Self::PivotMove(m) => build_move!(m),
             Self::CrankshaftMove(m) => build_move!(m),
         })
@@ -318,7 +340,7 @@ pub struct MoveCollection<T: Context> {
 impl<T: Context> MoveCollection<T> {
     pub(crate) fn propagate(
         &mut self,
-        context: &mut NewOld<T>,
+        context: &mut T,
         criterion: &AcceptanceCriterion,
         thermal_energy: f64,
         step: &mut usize,
@@ -330,12 +352,12 @@ impl<T: Context> MoveCollection<T> {
                 SelectionStrategy::Stochastic => {
                     let selected = self.moves.choose_weighted_mut(rng, |mv| mv.weight())?;
                     selected.do_move(context, criterion, thermal_energy, step, rng)?;
-                    analyses.sample(&context.old, *step)?;
+                    analyses.sample(context, *step)?;
                 }
                 SelectionStrategy::Deterministic => {
                     for mv in self.moves.iter_mut() {
                         mv.do_move(context, criterion, thermal_energy, step, rng)?;
-                        analyses.sample(&context.old, *step)?;
+                        analyses.sample(context, *step)?;
                     }
                 }
             }
@@ -385,7 +407,7 @@ impl<T: Context> Propagate<T> {
     /// Returns `true` if the simulation should continue, `false` if finished.
     pub fn propagate(
         &mut self,
-        context: &mut NewOld<T>,
+        context: &mut T,
         thermal_energy: f64,
         step: &mut usize,
         analyses: &mut AnalysisCollection<T>,
@@ -484,11 +506,11 @@ mod tests {
     fn seed_parse() {
         let string = "!Fixed 49786352";
         let seed: Seed = serde_yaml::from_str(string).unwrap();
-        matches!(seed, Seed::Fixed(49786352));
+        assert!(matches!(seed, Seed::Fixed(49786352)));
 
         let string = "Hardware";
         let seed: Seed = serde_yaml::from_str(string).unwrap();
-        matches!(seed, Seed::Hardware);
+        assert!(matches!(seed, Seed::Hardware));
     }
 
     #[test]

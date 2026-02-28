@@ -36,6 +36,20 @@ pub fn random_unit_vector(rng: &mut (impl Rng + ?Sized)) -> Point {
     }
 }
 
+/// Random displacement uniformly sampled in `[-max, max]`.
+pub fn random_displacement(rng: &mut (impl Rng + ?Sized), max: f64) -> f64 {
+    max * 2.0 * (rng.r#gen::<f64>() - 0.5)
+}
+
+/// Random quaternion for rotation about a random axis with angle in `[-max_angle, max_angle]`.
+///
+/// Returns `(quaternion, angle)`.
+pub fn random_quaternion(rng: &mut (impl Rng + ?Sized), max_angle: f64) -> (UnitQuaternion, f64) {
+    let axis = nalgebra::UnitVector3::new_normalize(random_unit_vector(rng));
+    let angle = random_displacement(rng, max_angle);
+    (UnitQuaternion::from_axis_angle(&axis, angle), angle)
+}
+
 /// This describes a transformation on a set of particles or a group.
 ///
 /// For example, a translation by a vector, a rotation by an angle and axis,
@@ -107,8 +121,9 @@ impl Transform {
         context: &mut impl crate::Context,
     ) -> anyhow::Result<()> {
         let indices = match self {
-            Self::Translate(_) | Self::Rotate(_) => context.groups()[group_index]
-                .select(&ParticleSelection::Active, context)?,
+            Self::Translate(_) | Self::Rotate(_) => {
+                context.groups()[group_index].select(&ParticleSelection::Active, context)?
+            }
             Self::PartialTranslate(_, selection) | Self::PartialRotate(_, _, selection) => {
                 context.groups()[group_index].select(selection, context)?
             }
@@ -119,10 +134,7 @@ impl Transform {
     }
 
     /// Apply a system-wide transformation with backup (saves all particles, mass centers, cell).
-    pub fn on_system_with_backup(
-        &self,
-        context: &mut impl crate::Context,
-    ) -> anyhow::Result<()> {
+    pub fn on_system_with_backup(&self, context: &mut impl crate::Context) -> anyhow::Result<()> {
         context.save_system_backup();
         self.on_system(context)
     }

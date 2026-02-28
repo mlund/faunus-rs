@@ -14,13 +14,12 @@
 
 use crate::group::ParticleSelection;
 use crate::montecarlo;
-use crate::propagate::{tagged_yaml, Displacement, MoveProposal};
+use crate::propagate::{tagged_yaml, Displacement, MoveProposal, MoveTarget, ProposedMove};
 use crate::topology::BondGraph;
-use crate::transform::Transform;
+use crate::transform::{random_displacement, Transform};
 use crate::{Change, Context, GroupChange};
 use nalgebra::UnitVector3;
 use rand::prelude::*;
-use rand::RngCore;
 use serde::{Deserialize, Serialize};
 
 /// Move for performing crankshaft rotations around dihedral axes.
@@ -76,11 +75,7 @@ impl CrankshaftMove {
 }
 
 impl<T: Context> MoveProposal<T> for CrankshaftMove {
-    fn propose_move(
-        &mut self,
-        context: &mut T,
-        rng: &mut dyn RngCore,
-    ) -> Option<(Change, Displacement)> {
+    fn propose_move(&mut self, context: &T, rng: &mut dyn RngCore) -> Option<ProposedMove> {
         if self.dihedral_bonds.is_empty() {
             return None;
         }
@@ -107,21 +102,22 @@ impl<T: Context> MoveProposal<T> for CrankshaftMove {
         let dir_pos = context.position(group_start + dir_rel);
 
         let uaxis = UnitVector3::new_normalize(dir_pos - pivot_pos);
-        let angle = self.max_displacement * 2.0 * (rng.r#gen::<f64>() - 0.5);
+        let angle = random_displacement(rng, self.max_displacement);
         let quaternion = crate::UnitQuaternion::from_axis_angle(&uaxis, angle);
 
-        Transform::PartialRotate(
-            pivot_pos,
-            quaternion,
-            ParticleSelection::RelIndex(rotated_rel.clone()),
-        )
-        .on_group_with_backup(group_index, context)
-        .unwrap();
-
-        Some((
-            Change::SingleGroup(group_index, GroupChange::PartialUpdate(rotated_rel)),
-            Displacement::Angle(angle),
-        ))
+        Some(ProposedMove {
+            change: Change::SingleGroup(
+                group_index,
+                GroupChange::PartialUpdate(rotated_rel.clone()),
+            ),
+            displacement: Displacement::Angle(angle),
+            transform: Transform::PartialRotate(
+                pivot_pos,
+                quaternion,
+                ParticleSelection::RelIndex(rotated_rel),
+            ),
+            target: MoveTarget::Group(group_index),
+        })
     }
 
     fn to_yaml(&self) -> Option<serde_yaml::Value> {

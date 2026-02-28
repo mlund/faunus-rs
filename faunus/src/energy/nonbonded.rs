@@ -406,15 +406,6 @@ impl From<NonbondedMatrix> for EnergyTerm {
     }
 }
 
-impl<P: Clone> NonbondedMatrix<P> {
-    pub(crate) fn sync_from(&mut self, other: &Self, change: &Change) -> anyhow::Result<()> {
-        if matches!(change, Change::Everything) {
-            self.potentials.clone_from(&other.potentials);
-        }
-        Ok(())
-    }
-}
-
 impl NonbondedMatrix<SplinedPotential> {
     /// Create a splined nonbonded matrix from an existing [`NonbondedMatrix`].
     ///

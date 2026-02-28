@@ -14,12 +14,8 @@
 
 //! Handling of groups of particles
 
-use crate::{
-    change::{Change, GroupChange},
-    Context, Particle, Point,
-};
+use crate::{Context, Particle, Point};
 use serde::{Deserialize, Serialize};
-use std::cmp::Ordering;
 
 /// Group of particles.
 ///
@@ -448,122 +444,6 @@ pub trait GroupCollection {
     ) -> anyhow::Result<()>
     where
         Self: Sized;
-
-    /// Synchronize with a group in another context
-    ///
-    /// This is used to synchronize groups between different contexts after
-    /// e.g. a Monte Carlo move.
-    /// Errors if there's a mismatch in group index, id, or capacity.
-    /// The following is synchronized:
-    /// - Group size
-    /// - Particle properties (position, id, etc.)
-    /// - Mass centers if appropriate
-    fn sync_group_from(
-        &mut self,
-        group_index: usize,
-        change: GroupChange,
-        other: &impl GroupCollection,
-    ) -> anyhow::Result<()>
-    where
-        Self: Sized,
-    {
-        let other_group = &other.groups()[group_index];
-        let group = &self.groups()[group_index];
-        if (other_group.molecule() != group.molecule())
-            || (other_group.index() != group.index())
-            || (other_group.capacity() != group.capacity())
-        {
-            anyhow::bail!("Group mismatch");
-        }
-        match change {
-            GroupChange::PartialUpdate(indices) => {
-                assert_eq!(group.size(), other_group.size());
-                let indices = indices
-                    .iter()
-                    .map(|i| other_group.to_absolute_index(*i).unwrap());
-                let particles = other.get_particles(indices.clone());
-                self.set_particles(indices, particles.iter())?;
-            }
-            GroupChange::RigidBody => {
-                self.sync_group_from(
-                    group_index,
-                    GroupChange::PartialUpdate((0..other_group.len()).collect()),
-                    other,
-                )?;
-            }
-            GroupChange::Resize(size) => match size {
-                GroupSize::Full => {
-                    assert_eq!(other_group.size(), GroupSize::Full);
-                    self.resize_group(group_index, size)?;
-                    self.sync_group_from(group_index, GroupChange::RigidBody, other)?
-                }
-                GroupSize::Empty => {
-                    assert!(other_group.is_empty());
-                    self.resize_group(group_index, size)?
-                }
-                GroupSize::Shrink(n) => {
-                    assert_eq!(group.len() - n, other_group.len());
-                    self.resize_group(group_index, size)?
-                }
-                GroupSize::Expand(n) => {
-                    assert_eq!(group.len() + n, other_group.len());
-                    // sync the extra n active indices in the other group
-                    let indices = (other_group.len()..other_group.len() + n).collect::<Vec<_>>();
-                    self.resize_group(group_index, size)?;
-                    self.sync_group_from(group_index, GroupChange::PartialUpdate(indices), other)?
-                }
-                GroupSize::Partial(n) => {
-                    let dn = group.len() as isize - n as isize;
-                    let size = match dn.cmp(&0) {
-                        Ordering::Greater => GroupSize::Expand(dn as usize),
-                        Ordering::Less => GroupSize::Shrink(-dn as usize),
-                        Ordering::Equal => return Ok(()),
-                    };
-                    self.sync_group_from(group_index, GroupChange::Resize(size), other)?;
-                    todo!("is this the behavior we want?");
-                }
-            },
-            _ => todo!("implement other group changes"),
-        }
-        self.update_mass_center(group_index);
-        Ok(())
-    }
-
-    /// Synchonize with another context
-    ///
-    /// This is used to synchronize groups between different contexts after
-    /// e.g. an accepted Monte Carlo move that proposes a change to the system.
-    fn sync_from_groupcollection(
-        &mut self,
-        change: &Change,
-        other: &impl GroupCollection,
-    ) -> anyhow::Result<()>
-    where
-        Self: Sized,
-    {
-        match change {
-            Change::Everything => {
-                for i in 0..self.groups().len() {
-                    self.sync_group_from(i, GroupChange::RigidBody, other)?
-                }
-            }
-            Change::SingleGroup(group_index, change) => {
-                self.sync_group_from(*group_index, change.clone(), other)?
-            }
-            Change::Volume(_policy, _volumes) => {
-                for i in 0..self.groups().len() {
-                    self.sync_group_from(i, GroupChange::RigidBody, other)?
-                }
-            }
-            Change::Groups(changes) => {
-                for _change in changes {
-                    todo!("implement group changes")
-                }
-            }
-            _ => todo!("implement other changes"),
-        }
-        Ok(())
-    }
 }
 
 /// Structure storing groups separated into three types:

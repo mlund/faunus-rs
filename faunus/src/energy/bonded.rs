@@ -241,25 +241,6 @@ impl From<IntermolecularBonded> for EnergyTerm {
 }
 
 impl IntermolecularBonded {
-    pub(crate) fn sync_from(&mut self, other: &Self, change: &Change) -> anyhow::Result<()> {
-        match change {
-            // TODO: this can be optimized to only update the relevant parts of the status array
-            Change::Everything | Change::SingleGroup(_, GroupChange::Resize(_)) => {
-                self.particles_status.clone_from(&other.particles_status)
-            }
-            Change::Groups(vec)
-                if vec
-                    .iter()
-                    .any(|group| matches!(group.1, GroupChange::Resize(_))) =>
-            {
-                self.particles_status.clone_from(&other.particles_status)
-            }
-            Change::None | Change::Volume(_, _) | Change::SingleGroup(_, _) | Change::Groups(_) => {
-            }
-        }
-        Ok(())
-    }
-
     /// Only save when `update()` would actually modify state.
     pub(super) fn save_backup(&mut self, change: &Change) {
         let dominated = matches!(
@@ -521,70 +502,6 @@ mod tests {
         let change = Change::Everything;
         bonded.update(&system, &change).unwrap();
         assert_eq!(bonded.particles_status, expected_status);
-    }
-
-    #[test]
-    fn test_intermolecular_sync() {
-        let (_, mut bonded) = get_intermolecular_bonded();
-
-        let original_bonded = bonded.clone();
-
-        let mut opposite_bonded = bonded.clone();
-        for status in opposite_bonded.particles_status.iter_mut() {
-            *status = false;
-        }
-
-        // no change
-        let change = Change::None;
-        bonded.sync_from(&opposite_bonded, &change).unwrap();
-        assert_eq!(bonded.particles_status, original_bonded.particles_status);
-
-        // volume change
-        let change = Change::Volume(
-            crate::cell::VolumeScalePolicy::Isotropic,
-            NewOld {
-                old: 104.0,
-                new: 108.0,
-            },
-        );
-        bonded.sync_from(&opposite_bonded, &change).unwrap();
-        assert_eq!(bonded.particles_status, original_bonded.particles_status);
-
-        // irrelevant single group change
-        let change = Change::SingleGroup(2, GroupChange::PartialUpdate(vec![0, 1, 3]));
-        bonded.sync_from(&opposite_bonded, &change).unwrap();
-        assert_eq!(bonded.particles_status, original_bonded.particles_status);
-
-        // irrelevant changes in multiple groups
-        let change = Change::Groups(vec![
-            (0, GroupChange::PartialUpdate(vec![2])),
-            (2, GroupChange::RigidBody),
-        ]);
-        bonded.sync_from(&opposite_bonded, &change).unwrap();
-        assert_eq!(bonded.particles_status, original_bonded.particles_status);
-
-        // resize single group
-        let change = Change::SingleGroup(1, GroupChange::Resize(GroupSize::Shrink(2)));
-        bonded.sync_from(&opposite_bonded, &change).unwrap();
-        assert_eq!(bonded.particles_status, opposite_bonded.particles_status);
-
-        let mut bonded = original_bonded.clone();
-
-        // resize multiple groups
-        let change = Change::Groups(vec![
-            (0, GroupChange::RigidBody),
-            (1, GroupChange::Resize(GroupSize::Shrink(2))),
-            (2, GroupChange::Resize(GroupSize::Expand(3))),
-        ]);
-        bonded.sync_from(&opposite_bonded, &change).unwrap();
-        assert_eq!(bonded.particles_status, opposite_bonded.particles_status);
-
-        let mut bonded = original_bonded.clone();
-
-        // everything changes
-        let change = Change::Everything;
-        bonded.sync_from(&opposite_bonded, &change).unwrap();
-        assert_eq!(bonded.particles_status, opposite_bonded.particles_status);
     }
 
     #[test]

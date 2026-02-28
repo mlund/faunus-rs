@@ -83,22 +83,6 @@ impl EnergyTerm {
     pub fn discard_backup(&mut self) {
         dispatch_stateful!(self, discard_backup);
     }
-
-    /// Synchronize cached state from another energy term after an MC accept/reject step.
-    pub(crate) fn sync_from(&mut self, other: &Self, change: &Change) -> anyhow::Result<()> {
-        use EnergyTerm::*;
-        match (self, other) {
-            (NonbondedMatrix(x), NonbondedMatrix(y)) => x.sync_from(y, change),
-            (NonbondedMatrixSplined(x), NonbondedMatrixSplined(y)) => x.sync_from(y, change),
-            (IntramolecularBonded(_), IntramolecularBonded(_)) => Ok(()),
-            (IntermolecularBonded(x), IntermolecularBonded(y)) => x.sync_from(y, change),
-            (SasaEnergy(x), SasaEnergy(y)) => x.sync_from(y, change),
-            (CellOverlap(_), CellOverlap(_)) => Ok(()),
-            (Constrain(_), Constrain(_)) => Ok(()),
-            (ExternalPressure(_), ExternalPressure(_)) => Ok(()),
-            _ => anyhow::bail!("Cannot sync incompatible energy terms."),
-        }
-    }
 }
 
 impl EnergyChange for EnergyTerm {

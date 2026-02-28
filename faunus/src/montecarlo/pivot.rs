@@ -14,13 +14,11 @@
 
 use crate::group::ParticleSelection;
 use crate::montecarlo;
-use crate::propagate::{tagged_yaml, Displacement, MoveProposal};
+use crate::propagate::{tagged_yaml, Displacement, MoveProposal, MoveTarget, ProposedMove};
 use crate::topology::BondGraph;
-use crate::transform::{random_unit_vector, Transform};
+use crate::transform::{random_quaternion, Transform};
 use crate::{Change, Context, GroupChange};
-use nalgebra::UnitVector3;
 use rand::prelude::*;
-use rand::RngCore;
 use serde::{Deserialize, Serialize};
 
 /// Move for performing pivot rotations on flexible polymer chains.
@@ -64,11 +62,7 @@ impl PivotMove {
 }
 
 impl<T: Context> MoveProposal<T> for PivotMove {
-    fn propose_move(
-        &mut self,
-        context: &mut T,
-        rng: &mut dyn RngCore,
-    ) -> Option<(Change, Displacement)> {
+    fn propose_move(&mut self, context: &T, rng: &mut dyn RngCore) -> Option<ProposedMove> {
         if self.bond_graph.is_empty() {
             return None;
         }
@@ -92,24 +86,21 @@ impl<T: Context> MoveProposal<T> for PivotMove {
         };
 
         let pivot_pos = context.position(group.start() + pivot_rel);
+        let (quaternion, angle) = random_quaternion(rng, self.max_displacement);
 
-        let axis = random_unit_vector(rng);
-        let uaxis = UnitVector3::new_normalize(axis);
-        let angle = self.max_displacement * 2.0 * (rng.r#gen::<f64>() - 0.5);
-        let quaternion = crate::UnitQuaternion::from_axis_angle(&uaxis, angle);
-
-        Transform::PartialRotate(
-            pivot_pos,
-            quaternion,
-            ParticleSelection::RelIndex(rotated_rel.clone()),
-        )
-        .on_group_with_backup(group_index, context)
-        .unwrap();
-
-        Some((
-            Change::SingleGroup(group_index, GroupChange::PartialUpdate(rotated_rel)),
-            Displacement::Angle(angle),
-        ))
+        Some(ProposedMove {
+            change: Change::SingleGroup(
+                group_index,
+                GroupChange::PartialUpdate(rotated_rel.clone()),
+            ),
+            displacement: Displacement::Angle(angle),
+            transform: Transform::PartialRotate(
+                pivot_pos,
+                quaternion,
+                ParticleSelection::RelIndex(rotated_rel),
+            ),
+            target: MoveTarget::Group(group_index),
+        })
     }
 
     fn to_yaml(&self) -> Option<serde_yaml::Value> {

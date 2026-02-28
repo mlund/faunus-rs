@@ -172,14 +172,6 @@ impl WithHamiltonian for ReferencePlatform {
 }
 
 impl Context for ReferencePlatform {
-    fn sync_from(&mut self, other: &Self, change: &Change) -> anyhow::Result<()> {
-        self.cell = other.cell.clone();
-        self.hamiltonian_mut()
-            .sync_from(&other.hamiltonian(), change)?;
-        self.sync_from_groupcollection(change, other)?;
-        Ok(())
-    }
-
     fn save_particle_backup(&mut self, group_index: usize, indices: &[usize]) {
         assert!(self.backup.is_none(), "backup already exists");
         let particles = indices

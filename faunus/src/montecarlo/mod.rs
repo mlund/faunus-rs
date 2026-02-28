@@ -182,13 +182,9 @@ impl MoveStatistics {
     /// Update mean square displacement if possible
     pub(crate) fn update_msd(&mut self, displacement: Displacement) {
         if let Ok(dp) = f64::try_from(displacement) {
-            if let Some(msd) = self.mean_square_displacement.as_mut() {
-                msd.add(dp * dp);
-            } else {
-                let mut msd = Mean::new();
-                msd.add(dp * dp);
-                self.mean_square_displacement = Some(msd);
-            }
+            self.mean_square_displacement
+                .get_or_insert_with(Mean::new)
+                .add(dp * dp);
         }
     }
 }
@@ -261,18 +257,17 @@ impl AcceptanceCriterion {
 
 /// # Monte Carlo simulation instance
 ///
-/// This maintains two [`Context`]s, one for the current state and one for the new state, as
-/// well as a [`Propagate`] section specifying what moves to perform and how often.
-/// Selected moves are performed in the new context. If the move is accepted, the new context
-/// is synced to the old context. If the move is rejected, the new context is discarded.
+/// This maintains a single [`Context`] with backup/undo support, and a [`Propagate`] section
+/// specifying what moves to perform and how often. The MC loop computes old energy before
+/// mutation, applies the transform with backup, then accepts (discard backup) or rejects (undo).
 ///
 /// The MarkovChain can be converted into an `Iterator` where each iteration corresponds to one 'propagate' cycle.
 #[derive(Debug)]
 pub struct MarkovChain<T: Context> {
     /// Description of moves to perform.
     propagate: Propagate<T>,
-    /// Pair of contexts, one for the current state and one for the new state.
-    context: NewOld<T>,
+    /// Simulation context.
+    context: T,
     /// Current step.
     step: usize,
     /// Thermal energy - must be same unit as energy.
@@ -318,7 +313,7 @@ impl<T: Context + 'static> MarkovChain<T> {
         analyses: AnalysisCollection<T>,
     ) -> Result<Self> {
         Ok(Self {
-            context: NewOld::from(context.clone(), context),
+            context,
             thermal_energy,
             step: 0,
             propagate,
@@ -352,7 +347,7 @@ impl<T: Context + 'static> MarkovChain<T> {
 impl<T: Context + crate::WithCell<SimCell = crate::cell::Cell> + 'static> MarkovChain<T> {
     /// Extract the current simulation state for checkpointing.
     pub fn save_state(&self) -> State {
-        let context = &self.context.old;
+        let context = &self.context;
         State {
             particles: context.get_all_particles(),
             cell: context.cell().clone(),
@@ -374,8 +369,8 @@ impl<T: Context + crate::WithCell<SimCell = crate::cell::Cell> + 'static> Markov
     /// Validates topology compatibility before modifying any state,
     /// so a mismatched state file is rejected cleanly.
     pub fn load_state(&mut self, state: State) -> Result<()> {
-        let num_particles = self.context.old.num_particles();
-        let num_groups = self.context.old.groups().len();
+        let num_particles = self.context.num_particles();
+        let num_groups = self.context.groups().len();
 
         if state.particles.len() != num_particles {
             anyhow::bail!(
@@ -394,7 +389,7 @@ impl<T: Context + crate::WithCell<SimCell = crate::cell::Cell> + 'static> Markov
 
         // Catch topology changes that alter atom types but preserve total count
         for (i, state_p) in state.particles.iter().enumerate() {
-            let ctx_id = self.context.old.particle(i).atom_id;
+            let ctx_id = self.context.particle(i).atom_id;
             if state_p.atom_id != ctx_id {
                 anyhow::bail!(
                     "Particle {} atom_id mismatch: state has {}, topology has {}",
@@ -409,7 +404,7 @@ impl<T: Context + crate::WithCell<SimCell = crate::cell::Cell> + 'static> Markov
         for (i, (gs, group)) in state
             .groups
             .iter()
-            .zip(self.context.old.groups().iter())
+            .zip(self.context.groups().iter())
             .enumerate()
         {
             if gs.molecule != group.molecule() {
@@ -430,18 +425,16 @@ impl<T: Context + crate::WithCell<SimCell = crate::cell::Cell> + 'static> Markov
             }
         }
 
-        // Both contexts must be identical for the MC accept/reject bookkeeping to work
-        for ctx in [&mut self.context.old, &mut self.context.new] {
-            ctx.set_particles(0..num_particles, state.particles.iter())?;
-            *ctx.cell_mut() = state.cell.clone();
-            for (i, gs) in state.groups.iter().enumerate() {
-                ctx.resize_group(i, gs.size)?;
-            }
-            for i in 0..num_groups {
-                ctx.update_mass_center(i);
-            }
-            ctx.update(&crate::Change::Everything)?;
+        self.context
+            .set_particles(0..num_particles, state.particles.iter())?;
+        *self.context.cell_mut() = state.cell;
+        for (i, gs) in state.groups.iter().enumerate() {
+            self.context.resize_group(i, gs.size)?;
         }
+        for i in 0..num_groups {
+            self.context.update_mass_center(i);
+        }
+        self.context.update(&crate::Change::Everything)?;
 
         self.step = state.step;
         log::info!("Restored simulation state at step {}", self.step);
@@ -558,60 +551,59 @@ mod tests {
         assert_approx_eq!(
             f64,
             move5_stats.energy_change_sum,
-            -515.1334649717064,
+            -515.1334649717062,
             epsilon = 1e-14
         );
 
-        println!("{:?}", markov_chain.context.new.particles());
+        let context = &markov_chain.context;
+        println!("{:?}", context.particles());
 
-        for context in [&markov_chain.context.new, &markov_chain.context.old] {
-            let p1 = &context.particles()[0];
-            let p2 = &context.particles()[1];
-            let p3 = &context.particles()[2];
+        let p1 = &context.particles()[0];
+        let p2 = &context.particles()[1];
+        let p3 = &context.particles()[2];
 
-            assert_approx_eq!(f64, p1.pos.x, p2.pos.x + 1.0, epsilon = 0.0000001);
-            assert_approx_eq!(f64, p1.pos.x, p3.pos.x + 1.0, epsilon = 0.0000001);
-            assert_approx_eq!(f64, p2.pos.x, p3.pos.x, epsilon = 0.0000001);
+        assert_approx_eq!(f64, p1.pos.x, p2.pos.x + 1.0, epsilon = 0.0000001);
+        assert_approx_eq!(f64, p1.pos.x, p3.pos.x + 1.0, epsilon = 0.0000001);
+        assert_approx_eq!(f64, p2.pos.x, p3.pos.x, epsilon = 0.0000001);
 
-            assert_approx_eq!(f64, p1.pos.y, p2.pos.y, epsilon = 0.0000001);
-            assert_approx_eq!(f64, p1.pos.y + 1.0, p3.pos.y, epsilon = 0.0000001);
-            assert_approx_eq!(f64, p2.pos.y + 1.0, p3.pos.y, epsilon = 0.0000001);
+        assert_approx_eq!(f64, p1.pos.y, p2.pos.y, epsilon = 0.0000001);
+        assert_approx_eq!(f64, p1.pos.y + 1.0, p3.pos.y, epsilon = 0.0000001);
+        assert_approx_eq!(f64, p2.pos.y + 1.0, p3.pos.y, epsilon = 0.0000001);
 
-            assert_approx_eq!(f64, p1.pos.z, p2.pos.z, epsilon = 0.0000001);
-            assert_approx_eq!(f64, p1.pos.z, p3.pos.z, epsilon = 0.0000001);
-            assert_approx_eq!(f64, p2.pos.z, p3.pos.z, epsilon = 0.0000001);
+        assert_approx_eq!(f64, p1.pos.z, p2.pos.z, epsilon = 0.0000001);
+        assert_approx_eq!(f64, p1.pos.z, p3.pos.z, epsilon = 0.0000001);
+        assert_approx_eq!(f64, p2.pos.z, p3.pos.z, epsilon = 0.0000001);
 
-            let p4 = &context.particles()[3];
-            let p5 = &context.particles()[4];
-            let p6 = &context.particles()[5];
+        let p4 = &context.particles()[3];
+        let p5 = &context.particles()[4];
+        let p6 = &context.particles()[5];
 
-            assert_approx_eq!(f64, p4.pos.x + 1.0, p5.pos.x, epsilon = 0.0000001);
-            assert_approx_eq!(f64, p4.pos.x + 1.0, p6.pos.x, epsilon = 0.0000001);
-            assert_approx_eq!(f64, p5.pos.x, p6.pos.x, epsilon = 0.0000001);
+        assert_approx_eq!(f64, p4.pos.x + 1.0, p5.pos.x, epsilon = 0.0000001);
+        assert_approx_eq!(f64, p4.pos.x + 1.0, p6.pos.x, epsilon = 0.0000001);
+        assert_approx_eq!(f64, p5.pos.x, p6.pos.x, epsilon = 0.0000001);
 
-            assert_approx_eq!(f64, p4.pos.y, p5.pos.y, epsilon = 0.0000001);
-            assert_approx_eq!(f64, p4.pos.y, p6.pos.y, epsilon = 0.0000001);
-            assert_approx_eq!(f64, p5.pos.y, p6.pos.y, epsilon = 0.0000001);
+        assert_approx_eq!(f64, p4.pos.y, p5.pos.y, epsilon = 0.0000001);
+        assert_approx_eq!(f64, p4.pos.y, p6.pos.y, epsilon = 0.0000001);
+        assert_approx_eq!(f64, p5.pos.y, p6.pos.y, epsilon = 0.0000001);
 
-            assert_approx_eq!(f64, p4.pos.z, p5.pos.z, epsilon = 0.0000001);
-            assert_approx_eq!(f64, p4.pos.z, p6.pos.z + 1.0, epsilon = 0.0000001);
-            assert_approx_eq!(f64, p5.pos.z, p6.pos.z + 1.0, epsilon = 0.0000001);
+        assert_approx_eq!(f64, p4.pos.z, p5.pos.z, epsilon = 0.0000001);
+        assert_approx_eq!(f64, p4.pos.z, p6.pos.z + 1.0, epsilon = 0.0000001);
+        assert_approx_eq!(f64, p5.pos.z, p6.pos.z + 1.0, epsilon = 0.0000001);
 
-            let p7 = &context.particles()[6];
-            let p8 = &context.particles()[7];
-            let p9 = &context.particles()[8];
+        let p7 = &context.particles()[6];
+        let p8 = &context.particles()[7];
+        let p9 = &context.particles()[8];
 
-            assert_approx_eq!(f64, p7.pos.x, p8.pos.x, epsilon = 0.0000001);
-            assert_approx_eq!(f64, p7.pos.x, p9.pos.x, epsilon = 0.0000001);
-            assert_approx_eq!(f64, p8.pos.x, p9.pos.x, epsilon = 0.0000001);
+        assert_approx_eq!(f64, p7.pos.x, p8.pos.x, epsilon = 0.0000001);
+        assert_approx_eq!(f64, p7.pos.x, p9.pos.x, epsilon = 0.0000001);
+        assert_approx_eq!(f64, p8.pos.x, p9.pos.x, epsilon = 0.0000001);
 
-            assert_approx_eq!(f64, p7.pos.y, p8.pos.y + 1.0, epsilon = 0.0000001);
-            assert_approx_eq!(f64, p7.pos.y, p9.pos.y + 2.0, epsilon = 0.0000001);
-            assert_approx_eq!(f64, p8.pos.y, p9.pos.y + 1.0, epsilon = 0.0000001);
+        assert_approx_eq!(f64, p7.pos.y, p8.pos.y + 1.0, epsilon = 0.0000001);
+        assert_approx_eq!(f64, p7.pos.y, p9.pos.y + 2.0, epsilon = 0.0000001);
+        assert_approx_eq!(f64, p8.pos.y, p9.pos.y + 1.0, epsilon = 0.0000001);
 
-            assert_approx_eq!(f64, p7.pos.z, p8.pos.z, epsilon = 0.0000001);
-            assert_approx_eq!(f64, p7.pos.z, p9.pos.z, epsilon = 0.0000001);
-            assert_approx_eq!(f64, p8.pos.z, p9.pos.z, epsilon = 0.0000001);
-        }
+        assert_approx_eq!(f64, p7.pos.z, p8.pos.z, epsilon = 0.0000001);
+        assert_approx_eq!(f64, p7.pos.z, p9.pos.z, epsilon = 0.0000001);
+        assert_approx_eq!(f64, p8.pos.z, p9.pos.z, epsilon = 0.0000001);
     }
 }

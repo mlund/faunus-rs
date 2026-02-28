@@ -14,11 +14,11 @@
 
 use super::{find_molecule_id, random_atom, random_group};
 use crate::group::*;
-use crate::propagate::{tagged_yaml, Displacement, MoveProposal};
-use crate::transform::{random_unit_vector, Transform};
+use crate::propagate::{tagged_yaml, Displacement, MoveProposal, MoveTarget, ProposedMove};
+use crate::transform::{random_displacement, random_unit_vector, Transform};
 use crate::{Change, Context, GroupChange};
+
 use rand::prelude::*;
-use rand::RngCore;
 use serde::{Deserialize, Serialize};
 
 /// Move for translating a random molecule.
@@ -85,22 +85,17 @@ impl TranslateMolecule {
 }
 
 impl<T: Context> MoveProposal<T> for TranslateMolecule {
-    fn propose_move(
-        &mut self,
-        context: &mut T,
-        rng: &mut dyn RngCore,
-    ) -> Option<(Change, Displacement)> {
+    fn propose_move(&mut self, context: &T, rng: &mut dyn RngCore) -> Option<ProposedMove> {
         let group_index = random_group(context, rng, self.molecule_id)?;
-        let displacement = self.directions.filter(
-            random_unit_vector(rng) * self.max_displacement * 2.0 * (rng.r#gen::<f64>() - 0.5),
-        );
-        Transform::Translate(displacement)
-            .on_group_with_backup(group_index, context)
-            .unwrap();
-        Some((
-            Change::SingleGroup(group_index, GroupChange::RigidBody),
-            Displacement::Distance(displacement),
-        ))
+        let displacement = self
+            .directions
+            .filter(random_unit_vector(rng) * random_displacement(rng, self.max_displacement));
+        Some(ProposedMove {
+            change: Change::SingleGroup(group_index, GroupChange::RigidBody),
+            displacement: Displacement::Distance(displacement),
+            transform: Transform::Translate(displacement),
+            target: MoveTarget::Group(group_index),
+        })
     }
 
     fn to_yaml(&self) -> Option<serde_yaml::Value> {
@@ -191,10 +186,9 @@ impl TranslateAtom {
 
     /// Returns group id and absolute index of an atom to act on.
     /// If no atom could be selected, returns None.
-    #[allow(clippy::needless_pass_by_ref_mut)] // may need mutation in future
     fn get_group_atom(
         &self,
-        context: &mut impl Context,
+        context: &impl Context,
         rng: &mut (impl Rng + ?Sized),
     ) -> Option<(usize, usize)> {
         let group = match self.molecule_id {
@@ -283,31 +277,28 @@ impl TranslateAtom {
 }
 
 impl<T: Context> MoveProposal<T> for TranslateAtom {
-    fn propose_move(
-        &mut self,
-        context: &mut T,
-        rng: &mut dyn RngCore,
-    ) -> Option<(Change, Displacement)> {
+    fn propose_move(&mut self, context: &T, rng: &mut dyn RngCore) -> Option<ProposedMove> {
         let (group, absolute_atom) = std::iter::repeat_with(|| self.get_group_atom(context, rng))
-            .find_map(|group_atom| group_atom)
+            .flatten()
+            .next()
             .unwrap();
 
         let displacement =
-            random_unit_vector(rng) * self.max_displacement * 2.0 * (rng.r#gen::<f64>() - 0.5);
-
-        Transform::PartialTranslate(
-            displacement,
-            ParticleSelection::AbsIndex(vec![absolute_atom]),
-        )
-        .on_group_with_backup(group, context)
-        .unwrap();
+            random_unit_vector(rng) * random_displacement(rng, self.max_displacement);
 
         let relative_atom = context.groups()[group]
             .to_relative_index(absolute_atom)
             .expect("Atom should be part of the group.");
 
-        let change = Change::SingleGroup(group, GroupChange::PartialUpdate(vec![relative_atom]));
-        Some((change, Displacement::Distance(displacement)))
+        Some(ProposedMove {
+            change: Change::SingleGroup(group, GroupChange::PartialUpdate(vec![relative_atom])),
+            displacement: Displacement::Distance(displacement),
+            transform: Transform::PartialTranslate(
+                displacement,
+                ParticleSelection::AbsIndex(vec![absolute_atom]),
+            ),
+            target: MoveTarget::Group(group),
+        })
     }
 
     fn to_yaml(&self) -> Option<serde_yaml::Value> {
@@ -409,7 +400,7 @@ mod tests {
         let expected_indices = [2, 2, 1, 2, 1, 2, 1, 1, 1, 2];
 
         for i in 0..10 {
-            let (change, _displacement) = move1.propose_move(&mut context, &mut seedable).unwrap();
+            let change = move1.propose_move(&context, &mut seedable).unwrap().change;
             match change {
                 Change::SingleGroup(group, group_change) => {
                     assert_eq!(group, expected_groups[i]);
@@ -430,7 +421,7 @@ mod tests {
         let expected_indices = [2, 4, 1, 2, 3, 2, 0, 2, 5, 2];
 
         for i in 0..10 {
-            let (change, _displacement) = move2.propose_move(&mut context, &mut seedable).unwrap();
+            let change = move2.propose_move(&context, &mut seedable).unwrap().change;
             match change {
                 Change::SingleGroup(group, group_change) => {
                     assert_eq!(group, expected_groups[i]);
@@ -451,7 +442,7 @@ mod tests {
         let expected_indices = [0, 5, 4, 5, 0, 0, 5, 5, 4, 5];
 
         for i in 0..10 {
-            let (change, _displacement) = move3.propose_move(&mut context, &mut seedable).unwrap();
+            let change = move3.propose_move(&context, &mut seedable).unwrap().change;
             match change {
                 Change::SingleGroup(group, group_change) => {
                     assert_eq!(group, expected_groups[i]);
@@ -476,7 +467,7 @@ mod tests {
         let expected_groups = [1, 1, 60, 61, 2, 60, 2, 2, 2, 60];
         let expected_indices = [3, 3, 1, 3, 2, 2, 3, 2, 2, 3];
         for i in 0..10 {
-            let (change, _diplacement) = move4.propose_move(&mut context, &mut seedable).unwrap();
+            let change = move4.propose_move(&context, &mut seedable).unwrap().change;
             match change {
                 Change::SingleGroup(group, group_change) => {
                     assert_eq!(group, expected_groups[i]);

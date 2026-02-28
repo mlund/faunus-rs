@@ -160,14 +160,6 @@ impl SasaEnergy {
 }
 
 impl SasaEnergy {
-    // TODO: implement partial sync
-    pub(crate) fn sync_from(&mut self, other: &Self, _change: &Change) -> anyhow::Result<()> {
-        self.balls.clone_from(&other.balls);
-        self.tessellation.clone_from(&other.tessellation);
-        self.tensions.clone_from(&other.tensions);
-        Ok(())
-    }
-
     pub(super) fn save_backup(&mut self) {
         assert!(self.backup.is_none(), "backup already exists");
         self.backup = Some(SasaBackup {

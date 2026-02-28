@@ -26,14 +26,6 @@ pub struct Hamiltonian {
 }
 
 impl Hamiltonian {
-    /// Synchronize cached state from another Hamiltonian after an MC accept/reject step.
-    pub(crate) fn sync_from(&mut self, other: &Self, change: &Change) -> anyhow::Result<()> {
-        for (term, other_term) in self.energy_terms.iter_mut().zip(other.energy_terms.iter()) {
-            term.sync_from(other_term, change)?;
-        }
-        Ok(())
-    }
-
     /// Create a Hamiltonian from the provided HamiltonianBuilder and topology.
     pub(crate) fn new(
         builder: &HamiltonianBuilder,

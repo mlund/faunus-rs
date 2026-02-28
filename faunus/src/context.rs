@@ -8,84 +8,43 @@ use std::{
     rc::Rc,
 };
 
-/// Context stores the state of a single simulation system
-///
-/// There can be multiple contexts in a simulation, e.g. one for a trial move and one for the current state.
+/// Defines the `Context` trait with optional extra supertraits (e.g. `ChemFrameConvert`).
+macro_rules! define_context {
+    ($($extra:tt)*) => {
+        /// Context stores the state of a single simulation system.
+        pub trait Context: ParticleSystem + WithHamiltonian + Clone + std::fmt::Debug $($extra)* {
+            /// Update internal state after a change (e.g. reciprocal-space energy for Ewald).
+            fn update(&mut self, change: &Change) -> anyhow::Result<()> {
+                self.hamiltonian_mut().update(self, change)?;
+                Ok(())
+            }
+
+            /// Update internal state with backup for later undo on MC reject.
+            fn update_with_backup(&mut self, change: &Change) -> anyhow::Result<()> {
+                self.hamiltonian_mut().update_with_backup(self, change)?;
+                Ok(())
+            }
+
+            /// Save particles at given indices and the group's mass center as backup.
+            fn save_particle_backup(&mut self, group_index: usize, indices: &[usize]);
+
+            /// Save all particles, mass centers, and cell as backup (for volume moves).
+            fn save_system_backup(&mut self);
+
+            /// Restore state from backup (reject path). Consumes the backup.
+            fn undo(&mut self) -> anyhow::Result<()>;
+
+            /// Drop backup without restoring (accept path).
+            fn discard_backup(&mut self);
+        }
+    };
+}
+
 #[cfg(feature = "chemfiles")]
-pub trait Context:
-    ParticleSystem
-    + WithHamiltonian
-    + Clone
-    + std::fmt::Debug
-    + crate::topology::chemfiles_interface::ChemFrameConvert
-{
-    /// Update the internal state to match a recently applied change
-    ///
-    /// By default, this function tries to update the Hamiltonian.
-    /// For e.g. Ewald summation, the reciprocal space energy needs to be updated.
-    fn update(&mut self, change: &Change) -> anyhow::Result<()> {
-        self.hamiltonian_mut().update(self, change)?;
-        Ok(())
-    }
+define_context!(+ crate::topology::chemfiles_interface::ChemFrameConvert);
 
-    /// Update internal state with backup for later undo on MC reject.
-    fn update_with_backup(&mut self, change: &Change) -> anyhow::Result<()> {
-        self.hamiltonian_mut().update_with_backup(self, change)?;
-        Ok(())
-    }
-
-    /// Synchronize state from another context after an MC accept/reject step.
-    fn sync_from(&mut self, other: &Self, change: &Change) -> anyhow::Result<()>;
-
-    /// Save particles at given indices and the group's mass center as backup.
-    fn save_particle_backup(&mut self, group_index: usize, indices: &[usize]);
-
-    /// Save all particles, mass centers, and cell as backup (for volume moves).
-    fn save_system_backup(&mut self);
-
-    /// Restore state from backup (reject path). Consumes the backup.
-    fn undo(&mut self) -> anyhow::Result<()>;
-
-    /// Drop backup without restoring (accept path).
-    fn discard_backup(&mut self);
-}
-
-/// Context stores the state of a single simulation system
-///
-/// There can be multiple contexts in a simulation, e.g. one for a trial move and one for the current state.
 #[cfg(not(feature = "chemfiles"))]
-pub trait Context: ParticleSystem + WithHamiltonian + Clone + std::fmt::Debug {
-    /// Update the internal state to match a recently applied change
-    ///
-    /// By default, this function tries to update the Hamiltonian.
-    /// For e.g. Ewald summation, the reciprocal space energy needs to be updated.
-    #[allow(unused_variables)]
-    fn update(&mut self, change: &Change) -> anyhow::Result<()> {
-        self.hamiltonian_mut().update(self, change)?;
-        Ok(())
-    }
-
-    /// Update internal state with backup for later undo on MC reject.
-    fn update_with_backup(&mut self, change: &Change) -> anyhow::Result<()> {
-        self.hamiltonian_mut().update_with_backup(self, change)?;
-        Ok(())
-    }
-
-    /// Synchronize state from another context after an MC accept/reject step.
-    fn sync_from(&mut self, other: &Self, change: &Change) -> anyhow::Result<()>;
-
-    /// Save particles at given indices and the group's mass center as backup.
-    fn save_particle_backup(&mut self, group_index: usize, indices: &[usize]);
-
-    /// Save all particles, mass centers, and cell as backup (for volume moves).
-    fn save_system_backup(&mut self);
-
-    /// Restore state from backup (reject path). Consumes the backup.
-    fn undo(&mut self) -> anyhow::Result<()>;
-
-    /// Drop backup without restoring (accept path).
-    fn discard_backup(&mut self);
-}
+define_context!();
 
 /// A trait for objects that have a simulation cell.
 pub trait WithCell {
