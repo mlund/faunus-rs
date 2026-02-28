@@ -2,7 +2,7 @@ use super::{
     bonded::{IntermolecularBonded, IntramolecularBonded},
     constrain::Constrain,
     external_pressure::ExternalPressure,
-    nonbonded::{NonbondedMatrix, NonbondedMatrixSplined},
+    nonbonded::{NonbondedMatrix, NonbondedMatrixSplined, NonbondedTerm},
     sasa::SasaEnergy,
     CellOverlap, EnergyChange,
 };
@@ -82,6 +82,36 @@ impl EnergyTerm {
     /// Drop internal backup (accept path).
     pub fn discard_backup(&mut self) {
         dispatch_stateful!(self, discard_backup);
+    }
+
+    /// Nonbonded energy between two sets of atom indices; `None` for non-nonbonded terms.
+    pub fn nonbonded_energy_between_atoms(
+        &self,
+        context: &impl Context,
+        atoms1: &[usize],
+        atoms2: &[usize],
+    ) -> Option<f64> {
+        match self {
+            Self::NonbondedMatrix(nb) => Some(nb.indices_with_indices(context, atoms1, atoms2)),
+            Self::NonbondedMatrixSplined(nb) => {
+                Some(nb.indices_with_indices(context, atoms1, atoms2))
+            }
+            _ => None,
+        }
+    }
+}
+
+impl crate::Info for EnergyTerm {
+    fn short_name(&self) -> Option<&'static str> {
+        Some(match self {
+            Self::NonbondedMatrix(_) | Self::NonbondedMatrixSplined(_) => "nonbonded",
+            Self::IntramolecularBonded(_) => "intramolecular",
+            Self::IntermolecularBonded(_) => "intermolecular",
+            Self::SasaEnergy(_) => "sasa",
+            Self::CellOverlap(_) => "celloverlap",
+            Self::Constrain(_) => "constrain",
+            Self::ExternalPressure(_) => "externalpressure",
+        })
     }
 }
 

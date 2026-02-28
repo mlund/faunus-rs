@@ -217,6 +217,30 @@ pub(super) trait NonbondedTerm {
         self.group_with_other_groups(context, group) + self.group_with_itself(context, group)
     }
 
+    /// Energy between two sets of particle indices with automatic deduplication.
+    ///
+    /// When both slices are identical, only unique pairs (i < j) are summed.
+    /// Otherwise, all cross-pairs are included.
+    fn indices_with_indices(
+        &self,
+        context: &impl Context,
+        indices1: &[usize],
+        indices2: &[usize],
+    ) -> f64 {
+        let same = indices1 == indices2;
+        indices1
+            .iter()
+            .enumerate()
+            .map(|(idx, &i)| {
+                let others = if same { &indices2[idx + 1..] } else { indices2 };
+                others
+                    .iter()
+                    .map(|&j| self.particle_with_particle(context, i, j))
+                    .sum::<f64>()
+            })
+            .sum()
+    }
+
     /// Compute the energy of all nonbonded interactions.
     ///
     /// ## Parameters

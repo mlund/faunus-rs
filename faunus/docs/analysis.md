@@ -103,6 +103,57 @@ Key          | Required | Default | Description
 `file`       | no       |         | Streaming output file (single molecule only)
 `frequency`  | yes      |         | Sample frequency, e.g. `!Every 100`
 
+## Energy
+
+Streams energy values to a file at each sampled step.
+Two modes are supported:
+
+- **Total** (default): writes every Hamiltonian term plus the total.
+  Output columns: `step term1 term2 ... total`.
+- **Partial**: writes the nonbonded energy between two sets of atoms
+  selected with VMD-like expressions.
+  Output columns: `step energy running_average`.
+
+The file may be gzip-compressed by using a `.gz` extension.
+
+### Examples
+
+```yaml
+analysis:
+  # Total energy with per-term breakdown
+  - !Energy
+    file: energy.dat.gz
+    frequency: !Every 100
+
+  # Nonbonded energy between two molecules
+  - !Energy
+    file: mol1_mol2_energy.dat.gz
+    frequency: !Every 100
+    selections: ["molecule MOL1", "molecule MOL2"]
+
+  # Nonbonded energy between hydrophobic atoms in two molecules
+  - !Energy
+    file: hydrophobic_energy.dat.gz
+    frequency: !Every 100
+    selections: ["hydrophobic and molecule MOL1", "hydrophobic and molecule MOL2"]
+```
+
+### Options
+
+Key            | Required | Default | Description
+-------------- | -------- | ------- | -------------------------------------------
+`file`         | yes      |         | Output file path (`.gz` for gzip)
+`frequency`    | yes      |         | Sample frequency, e.g. `!Every 100`
+`selections`   | no       |         | Pair of selection expressions for partial nonbonded energy
+
+When `selections` is omitted, total mode is used.
+When given, only nonbonded energy terms contribute; other terms
+(bonded, constraints, etc.) are skipped.
+Selections resolve at the atom level, so atom-type filters
+(e.g. `hydrophobic and molecule MOL1`) work correctly.
+When both selections resolve to the same atoms, self-pairs and
+duplicates are automatically excluded.
+
 ## Radial Distribution Function
 
 Computes the radial distribution function g(r) for pairs of particles or

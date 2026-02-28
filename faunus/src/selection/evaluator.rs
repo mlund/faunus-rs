@@ -51,6 +51,17 @@ impl<'a> AtomContext<'a> {
     }
 }
 
+impl<'a> AtomContext<'a> {
+    /// Check if the residue name (or atom type as fallback) is in the given list.
+    /// Allows coarse-grained models without residue info to use residue-category keywords.
+    fn residue_or_atomtype_in(&self, names: &[&str]) -> bool {
+        self.residue.map_or_else(
+            || names.contains(&self.atom_kind.name()),
+            |r| resname_in(r.name(), names),
+        )
+    }
+}
+
 impl Expr {
     /// Evaluate whether a single atom matches this expression.
     fn matches(&self, ctx: &AtomContext) -> bool {
@@ -80,9 +91,7 @@ impl Expr {
                 ranges.iter().any(|(lo, hi)| id >= *lo && id <= *hi)
             }
             Self::Molecule(patterns) => patterns.iter().any(|p| p.matches(ctx.mol_kind.name())),
-            Self::Protein => ctx
-                .residue
-                .is_some_and(|r| resname_in(r.name(), PROTEIN_RESIDUES)),
+            Self::Protein => ctx.residue_or_atomtype_in(PROTEIN_RESIDUES),
             Self::Backbone => ctx.residue.is_some_and(|r| {
                 resname_in(r.name(), PROTEIN_RESIDUES)
                     && ctx
@@ -95,27 +104,18 @@ impl Expr {
                         .atom_name
                         .is_none_or(|name| !BACKBONE_ATOMS.contains(&name))
             }),
-            Self::Nucleic => ctx.residue.is_some_and(|r| {
-                resname_in(r.name(), DNA_RESIDUES) || resname_in(r.name(), RNA_RESIDUES)
-            }),
-            Self::Hydrophobic => ctx
-                .residue
-                .is_some_and(|r| resname_in(r.name(), HYDROPHOBIC_RESIDUES)),
-            Self::Aromatic => ctx
-                .residue
-                .is_some_and(|r| resname_in(r.name(), AROMATIC_RESIDUES)),
-            Self::Acidic => ctx
-                .residue
-                .is_some_and(|r| resname_in(r.name(), ACIDIC_RESIDUES)),
-            Self::Basic => ctx
-                .residue
-                .is_some_and(|r| resname_in(r.name(), BASIC_RESIDUES)),
-            Self::Polar => ctx
-                .residue
-                .is_some_and(|r| resname_in(r.name(), POLAR_RESIDUES)),
-            Self::Charged => ctx.residue.is_some_and(|r| {
-                resname_in(r.name(), ACIDIC_RESIDUES) || resname_in(r.name(), BASIC_RESIDUES)
-            }),
+            Self::Nucleic => {
+                ctx.residue_or_atomtype_in(DNA_RESIDUES) || ctx.residue_or_atomtype_in(RNA_RESIDUES)
+            }
+            Self::Hydrophobic => ctx.residue_or_atomtype_in(HYDROPHOBIC_RESIDUES),
+            Self::Aromatic => ctx.residue_or_atomtype_in(AROMATIC_RESIDUES),
+            Self::Acidic => ctx.residue_or_atomtype_in(ACIDIC_RESIDUES),
+            Self::Basic => ctx.residue_or_atomtype_in(BASIC_RESIDUES),
+            Self::Polar => ctx.residue_or_atomtype_in(POLAR_RESIDUES),
+            Self::Charged => {
+                ctx.residue_or_atomtype_in(ACIDIC_RESIDUES)
+                    || ctx.residue_or_atomtype_in(BASIC_RESIDUES)
+            }
             Self::All => true,
             Self::None => false,
             Self::And(a, b) => a.matches(ctx) && b.matches(ctx),

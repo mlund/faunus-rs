@@ -96,6 +96,26 @@ impl Hamiltonian {
         self.energy_terms.push(term);
     }
 
+    /// Access the individual energy terms.
+    pub fn energy_terms(&self) -> &[EnergyTerm] {
+        &self.energy_terms
+    }
+
+    /// Compute each term's energy, returning `(name, energy)` pairs.
+    pub fn per_term_energies(
+        &self,
+        context: &impl Context,
+        change: &Change,
+    ) -> Vec<(&'static str, f64)> {
+        self.energy_terms
+            .iter()
+            .filter_map(|term| {
+                let name = crate::Info::short_name(term)?;
+                Some((name, term.energy(context, change)))
+            })
+            .collect()
+    }
+
     /// Update internal state due to a change in the system.
     ///
     /// After a system change, the internal state of the energy terms may need to be updated.

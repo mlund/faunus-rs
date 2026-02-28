@@ -56,12 +56,23 @@ system:
       default:
         - !Coulomb {cutoff: 1000}
         - !AshbaughHatch {mixing: arithmetic, cutoff: 20.0}
+    spline:
+      cutoff: 250.0
+      n_points: 2000
+
 
 analysis:
   - !MassCenterDistance
     selections: ["molecule MOL1", "molecule MOL2"]
     file: "com_distance.dat.gz"
     frequency: !Every 10
+  - !Energy
+    file: "energy.dat.gz"
+    frequency: !Every 100
+  - !Energy
+    file: "hydrophobic_energy.dat.gz"
+    frequency: !Every 100
+    selections: ["hydrophobic and molecule MOL1", "hydrophobic and molecule MOL2"]
   - !Trajectory
     file: "traj.xyz"
     frequency: !Every 100
@@ -69,7 +80,7 @@ analysis:
 propagate:
   seed: Hardware
   criterion: Metropolis
-  repeat: 5000000
+  repeat: 50000
   collections:
     - !Stochastic
       moves:

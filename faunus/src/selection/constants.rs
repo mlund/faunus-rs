@@ -3,11 +3,11 @@
 
 //! Residue classification constants for selection keywords.
 
-/// Standard protein residue names.
+/// Standard protein residue names (including terminal patches).
 pub const PROTEIN_RESIDUES: &[&str] = &[
     "ALA", "ARG", "ASN", "ASP", "CYS", "GLN", "GLU", "GLY", "HIS", "ILE", "LEU", "LYS", "MET",
     "PHE", "PRO", "SER", "THR", "TRP", "TYR", "VAL", "HIE", "HID", "HIP", "CYX", "ASH", "GLH",
-    "LYN",
+    "LYN", "NTR", "CTR",
 ];
 
 /// DNA residue names.
@@ -28,10 +28,10 @@ pub const HYDROPHOBIC_RESIDUES: &[&str] = &[
 pub const AROMATIC_RESIDUES: &[&str] = &["PHE", "TYR", "TRP", "HIS", "HIE", "HID", "HIP"];
 
 /// Acidic (negatively charged) residues.
-pub const ACIDIC_RESIDUES: &[&str] = &["ASP", "GLU", "ASH", "GLH"];
+pub const ACIDIC_RESIDUES: &[&str] = &["ASP", "GLU", "ASH", "GLH", "CTR"];
 
 /// Basic (positively charged) residues.
-pub const BASIC_RESIDUES: &[&str] = &["ARG", "LYS", "HIS", "HIE", "HID", "HIP", "LYN"];
+pub const BASIC_RESIDUES: &[&str] = &["ARG", "LYS", "HIS", "HIE", "HID", "HIP", "LYN", "NTR"];
 
 /// Polar (uncharged) residues.
 pub const POLAR_RESIDUES: &[&str] = &["SER", "THR", "ASN", "GLN", "CYS", "CYX", "TYR"];

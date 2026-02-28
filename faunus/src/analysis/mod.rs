@@ -24,12 +24,14 @@ use std::path::PathBuf;
 
 mod collective_variable;
 mod distance;
+mod energy;
 mod radial_distribution;
 mod shape;
 mod structure_writer;
 mod virtual_translate;
 pub use collective_variable::{CollectiveVariableAnalysis, CollectiveVariableAnalysisBuilder};
 pub use distance::{MassCenterDistance, MassCenterDistanceBuilder};
+pub use energy::{EnergyAnalysis, EnergyAnalysisBuilder};
 pub use radial_distribution::{RadialDistribution, RadialDistributionBuilder};
 pub use shape::{ShapeAnalysis, ShapeAnalysisBuilder};
 pub use structure_writer::{StructureWriter, StructureWriterBuilder};
@@ -101,6 +103,8 @@ pub enum AnalysisBuilder {
     PolymerShape(ShapeAnalysisBuilder),
     /// Radial distribution function g(r)
     RadialDistribution(RadialDistributionBuilder),
+    /// Energy time series (total or partial)
+    Energy(EnergyAnalysisBuilder),
 }
 
 impl AnalysisBuilder {
@@ -114,6 +118,7 @@ impl AnalysisBuilder {
             Self::CollectiveVariable(builder) => Box::new(builder.build(context)?),
             Self::PolymerShape(builder) => Box::new(builder.build(context)?),
             Self::RadialDistribution(builder) => Box::new(builder.build(context)?),
+            Self::Energy(builder) => Box::new(builder.build(context)?),
         })
     }
 }
