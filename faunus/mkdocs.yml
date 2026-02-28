@@ -55,4 +55,6 @@ nav:
   - Home: index.md
   - Topology: topology.md
   - Energy: energy.md
+  - Moves: moves.md
   - Analysis: analysis.md
+  - Selection Language: selection_language.md
