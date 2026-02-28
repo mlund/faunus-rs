@@ -52,7 +52,10 @@ pub fn generate_fixtures(dir: &Path) {
     let tmp_state = tmp2.path().join("state.yaml");
     std::fs::copy(&state, &tmp_state).expect("failed to copy state.yaml");
     run_faunus(&input, &tmp_state, &reference_output);
-    assert!(reference_output.exists(), "reference_output.yaml was not created");
+    assert!(
+        reference_output.exists(),
+        "reference_output.yaml was not created"
+    );
     println!("Generated {}", reference_output.display());
 }
 
@@ -90,7 +93,12 @@ pub fn run_regression(dir: &Path) {
     )
     .expect("failed to parse reference_output.yaml");
 
-    assert_yaml_eq(&reference, &actual, 1e-10, &["timer", "num_accepted", "acceptance_ratio"]);
+    assert_yaml_eq(
+        &reference,
+        &actual,
+        1e-10,
+        &["timer", "num_accepted", "acceptance_ratio"],
+    );
 }
 
 /// Compare two YAML values recursively.
