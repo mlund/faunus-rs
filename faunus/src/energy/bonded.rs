@@ -17,7 +17,7 @@
 use crate::{
     group::Group,
     topology::{block::BlockActivationStatus, Topology},
-    Change, Context, GroupChange, SyncFrom,
+    Change, Context, GroupChange,
 };
 
 use super::{EnergyChange, EnergyTerm};
@@ -240,8 +240,8 @@ impl From<IntermolecularBonded> for EnergyTerm {
     }
 }
 
-impl SyncFrom for IntermolecularBonded {
-    fn sync_from(&mut self, other: &Self, change: &Change) -> anyhow::Result<()> {
+impl IntermolecularBonded {
+    pub(crate) fn sync_from(&mut self, other: &Self, change: &Change) -> anyhow::Result<()> {
         match change {
             // TODO: this can be optimized to only update the relevant parts of the status array
             Change::Everything | Change::SingleGroup(_, GroupChange::Resize(_)) => {
@@ -257,7 +257,6 @@ impl SyncFrom for IntermolecularBonded {
             Change::None | Change::Volume(_, _) | Change::SingleGroup(_, _) | Change::Groups(_) => {
             }
         }
-
         Ok(())
     }
 }

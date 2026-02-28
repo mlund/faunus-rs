@@ -15,7 +15,7 @@
 //! # Energy due to solvent-accessible surface area and atomic-level tensions.
 
 use crate::Point;
-use crate::{Change, Context, SyncFrom};
+use crate::{Change, Context};
 use derive_builder::Builder;
 use serde::{Deserialize, Serialize};
 use voronota_ltr::{compute_tessellation, Ball, TessellationResult};
@@ -147,17 +147,12 @@ impl SasaEnergy {
     }
 }
 
-impl SyncFrom for SasaEnergy {
-    fn sync_from(&mut self, other: &Self, change: &Change) -> anyhow::Result<()> {
-        // TODO: implement partial sync
-        match change {
-            Change::Everything => {
-                self.balls = other.balls.clone();
-                self.tessellation = other.tessellation.clone();
-                self.tensions = other.tensions.clone();
-            }
-            _ => self.sync_from(other, &Change::Everything)?,
-        }
+impl SasaEnergy {
+    // TODO: implement partial sync
+    pub(crate) fn sync_from(&mut self, other: &Self, _change: &Change) -> anyhow::Result<()> {
+        self.balls.clone_from(&other.balls);
+        self.tessellation.clone_from(&other.tessellation);
+        self.tensions.clone_from(&other.tensions);
         Ok(())
     }
 }

@@ -52,7 +52,3 @@ pub use particle::{Particle, PointParticle};
 mod context;
 pub use context::*;
 
-pub trait SyncFrom {
-    /// Synchronize internal state from another object of the same type
-    fn sync_from(&mut self, other: &Self, change: &Change) -> anyhow::Result<()>;
-}

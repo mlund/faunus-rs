@@ -2,7 +2,7 @@ use crate::cell::SimulationCell;
 use crate::energy::Hamiltonian;
 use crate::group::GroupCollection;
 use crate::Point;
-use crate::{change::Change, topology::Topology, SyncFrom};
+use crate::{change::Change, topology::Topology};
 use std::{
     cell::{Ref, RefMut},
     rc::Rc,
@@ -17,7 +17,6 @@ pub trait Context:
     + WithHamiltonian
     + Clone
     + std::fmt::Debug
-    + SyncFrom
     + crate::topology::chemfiles_interface::ChemFrameConvert
 {
     /// Update the internal state to match a recently applied change
@@ -28,13 +27,16 @@ pub trait Context:
         self.hamiltonian_mut().update(self, change)?;
         Ok(())
     }
+
+    /// Synchronize state from another context after an MC accept/reject step.
+    fn sync_from(&mut self, other: &Self, change: &Change) -> anyhow::Result<()>;
 }
 
 /// Context stores the state of a single simulation system
 ///
 /// There can be multiple contexts in a simulation, e.g. one for a trial move and one for the current state.
 #[cfg(not(feature = "chemfiles"))]
-pub trait Context: ParticleSystem + WithHamiltonian + Clone + std::fmt::Debug + SyncFrom {
+pub trait Context: ParticleSystem + WithHamiltonian + Clone + std::fmt::Debug {
     /// Update the internal state to match a recently applied change
     ///
     /// By default, this function tries to update the Hamiltonian.
@@ -44,6 +46,9 @@ pub trait Context: ParticleSystem + WithHamiltonian + Clone + std::fmt::Debug + 
         self.hamiltonian_mut().update(self, change)?;
         Ok(())
     }
+
+    /// Synchronize state from another context after an MC accept/reject step.
+    fn sync_from(&mut self, other: &Self, change: &Change) -> anyhow::Result<()>;
 }
 
 /// A trait for objects that have a simulation cell.

@@ -6,7 +6,7 @@ use super::{
     sasa::SasaEnergy,
     CellOverlap, EnergyChange,
 };
-use crate::{Change, Context, SyncFrom};
+use crate::{Change, Context};
 
 #[derive(Debug, Clone)]
 pub enum EnergyTerm {
@@ -61,22 +61,21 @@ impl EnergyChange for EnergyTerm {
     }
 }
 
-impl SyncFrom for EnergyTerm {
-    /// Synchronize the EnergyTerm from other EnergyTerm
-    fn sync_from(&mut self, other: &Self, change: &Change) -> anyhow::Result<()> {
+impl EnergyTerm {
+    /// Synchronize cached state from another energy term after an MC accept/reject step.
+    pub(crate) fn sync_from(&mut self, other: &Self, change: &Change) -> anyhow::Result<()> {
         use EnergyTerm::*;
         match (self, other) {
-            (NonbondedMatrix(x), NonbondedMatrix(y)) => x.sync_from(y, change)?,
-            (NonbondedMatrixSplined(x), NonbondedMatrixSplined(y)) => x.sync_from(y, change)?,
-            (IntramolecularBonded(_), IntramolecularBonded(_)) => (),
-            (IntermolecularBonded(x), IntermolecularBonded(y)) => x.sync_from(y, change)?,
-            (SasaEnergy(x), SasaEnergy(y)) => x.sync_from(y, change)?,
-            (CellOverlap(_), CellOverlap(_)) => (),
-            (Constrain(_), Constrain(_)) => (),
-            (ExternalPressure(_), ExternalPressure(_)) => (),
+            (NonbondedMatrix(x), NonbondedMatrix(y)) => x.sync_from(y, change),
+            (NonbondedMatrixSplined(x), NonbondedMatrixSplined(y)) => x.sync_from(y, change),
+            (IntramolecularBonded(_), IntramolecularBonded(_)) => Ok(()),
+            (IntermolecularBonded(x), IntermolecularBonded(y)) => x.sync_from(y, change),
+            (SasaEnergy(x), SasaEnergy(y)) => x.sync_from(y, change),
+            (CellOverlap(_), CellOverlap(_)) => Ok(()),
+            (Constrain(_), Constrain(_)) => Ok(()),
+            (ExternalPressure(_), ExternalPressure(_)) => Ok(()),
             _ => anyhow::bail!("Cannot sync incompatible energy terms."),
         }
-        Ok(())
     }
 }
 

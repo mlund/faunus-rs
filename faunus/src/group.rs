@@ -16,7 +16,7 @@
 
 use crate::{
     change::{Change, GroupChange},
-    Context, Particle, Point, SyncFrom,
+    Context, Particle, Point,
 };
 use anyhow::Ok;
 use serde::{Deserialize, Serialize};
@@ -339,7 +339,7 @@ impl Group {
 ///
 /// Each group has a unique index in a global list of groups, and a unique range of indices in a
 /// global particle list.
-pub trait GroupCollection: SyncFrom {
+pub trait GroupCollection {
     /// Add a group to the system based on an molecule id and a set of particles given by an iterator.
     fn add_group(&mut self, molecule: usize, particles: &[Particle]) -> anyhow::Result<&mut Group>;
 

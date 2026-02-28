@@ -24,7 +24,7 @@ use std::path::Path;
 use crate::{
     energy::{builder::PairPotentialBuilder, EnergyTerm},
     topology::Topology,
-    Change, Context, Group, GroupChange, SyncFrom,
+    Change, Context, Group, GroupChange,
 };
 
 use super::{builder::HamiltonianBuilder, exclusions::ExclusionMatrix, EnergyChange};
@@ -406,12 +406,10 @@ impl From<NonbondedMatrix> for EnergyTerm {
     }
 }
 
-impl<P: Clone> SyncFrom for NonbondedMatrix<P> {
-    fn sync_from(&mut self, other: &Self, change: &Change) -> anyhow::Result<()> {
-        match change {
-            Change::Everything => self.potentials.clone_from(&other.potentials),
-            Change::None | Change::Volume(_, _) | Change::SingleGroup(_, _) | Change::Groups(_) => {
-            }
+impl<P: Clone> NonbondedMatrix<P> {
+    pub(crate) fn sync_from(&mut self, other: &Self, change: &Change) -> anyhow::Result<()> {
+        if matches!(change, Change::Everything) {
+            self.potentials.clone_from(&other.potentials);
         }
         Ok(())
     }

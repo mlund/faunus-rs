@@ -22,8 +22,8 @@ use crate::{
     energy::{builder::HamiltonianBuilder, Hamiltonian},
     group::{GroupCollection, GroupLists, GroupSize},
     topology::Topology,
-    Context, Group, Particle, ParticleSystem, Point, PointParticle, SyncFrom, WithCell,
-    WithHamiltonian, WithTopology,
+    Context, Group, Particle, ParticleSystem, Point, PointParticle, WithCell, WithHamiltonian,
+    WithTopology,
 };
 
 use serde::Serialize;
@@ -160,10 +160,7 @@ impl WithHamiltonian for ReferencePlatform {
     }
 }
 
-impl Context for ReferencePlatform {}
-
-impl SyncFrom for ReferencePlatform {
-    /// Synchronize ReferencePlatform from another ReferencePlatform.
+impl Context for ReferencePlatform {
     fn sync_from(&mut self, other: &Self, change: &Change) -> anyhow::Result<()> {
         self.cell = other.cell.clone();
         self.hamiltonian_mut()

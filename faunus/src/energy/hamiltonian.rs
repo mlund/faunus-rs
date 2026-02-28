@@ -5,7 +5,7 @@ use super::{
     nonbonded::{NonbondedMatrix, NonbondedMatrixSplined},
     CellOverlap, EnergyTerm,
 };
-use crate::{topology::Topology, Change, Context, SyncFrom};
+use crate::{topology::Topology, Change, Context};
 use interatomic::coulomb::Temperature;
 use std::path::Path;
 
@@ -25,17 +25,15 @@ pub struct Hamiltonian {
     energy_terms: Vec<EnergyTerm>,
 }
 
-impl SyncFrom for Hamiltonian {
-    /// Synchronize the Hamiltonian from other Hamiltonian.
-    fn sync_from(&mut self, other: &Self, change: &Change) -> anyhow::Result<()> {
+impl Hamiltonian {
+    /// Synchronize cached state from another Hamiltonian after an MC accept/reject step.
+    pub(crate) fn sync_from(&mut self, other: &Self, change: &Change) -> anyhow::Result<()> {
         for (term, other_term) in self.energy_terms.iter_mut().zip(other.energy_terms.iter()) {
             term.sync_from(other_term, change)?;
         }
         Ok(())
     }
-}
 
-impl Hamiltonian {
     /// Create a Hamiltonian from the provided HamiltonianBuilder and topology.
     pub(crate) fn new(
         builder: &HamiltonianBuilder,
