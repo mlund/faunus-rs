@@ -18,7 +18,6 @@ use crate::{
     change::{Change, GroupChange},
     Context, Particle, Point,
 };
-use anyhow::Ok;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 
@@ -233,7 +232,7 @@ impl Group {
         &self,
         selection: &ParticleSelection,
         context: &impl Context,
-    ) -> Result<Vec<usize>, anyhow::Error> {
+    ) -> anyhow::Result<Vec<usize>> {
         let to_abs = |i: usize| i + self.iter_all().start;
         let indices: Vec<usize> = match selection {
             crate::group::ParticleSelection::AbsIndex(indices) => indices.clone(),

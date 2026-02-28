@@ -58,7 +58,7 @@ impl VolumeScale for UnitCell {
         &mut self,
         _new_volume: f64,
         _policy: VolumeScalePolicy,
-    ) -> Result<(), anyhow::Error> {
+    ) -> anyhow::Result<()> {
         todo!("implement scale_volume for UnitCell")
     }
     fn scale_position(
@@ -66,7 +66,7 @@ impl VolumeScale for UnitCell {
         new_volume: f64,
         point: &mut Point,
         policy: VolumeScalePolicy,
-    ) -> Result<(), anyhow::Error> {
+    ) -> anyhow::Result<()> {
         if self.shape() != CellShape::Orthorhombic {
             return Err(anyhow::Error::msg(
                 "Currently only orthorhombic cells are supported for volume scaling",

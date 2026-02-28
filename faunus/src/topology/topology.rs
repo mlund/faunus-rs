@@ -219,7 +219,7 @@ impl Topology {
     pub(crate) fn include_topologies(
         &mut self,
         topologies: Vec<InputPath>,
-    ) -> Result<(), anyhow::Error> {
+    ) -> anyhow::Result<()> {
         for file in topologies.iter() {
             let included_top = Self::from_file_partial(file.path().unwrap())?;
             self.include_atomkinds(&included_top.atomkinds);

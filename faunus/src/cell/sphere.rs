@@ -18,7 +18,6 @@ use crate::{
     cell::{BoundaryConditions, Shape, SimulationCell, VolumeScale, VolumeScalePolicy},
     Point,
 };
-use anyhow::Ok;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 
@@ -97,7 +96,7 @@ impl VolumeScale for Sphere {
         new_volume: f64,
         point: &mut Point,
         policy: VolumeScalePolicy,
-    ) -> Result<(), anyhow::Error> {
+    ) -> anyhow::Result<()> {
         match policy {
             VolumeScalePolicy::Isotropic => {
                 let new_radius = (new_volume / (4.0 / 3.0 * std::f64::consts::PI)).cbrt();

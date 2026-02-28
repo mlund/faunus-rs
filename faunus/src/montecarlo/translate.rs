@@ -17,7 +17,6 @@ use crate::group::*;
 use crate::propagate::{tagged_yaml, Displacement, MoveProposal};
 use crate::transform::{random_unit_vector, Transform};
 use crate::{Change, Context, GroupChange};
-use anyhow::Ok;
 use rand::prelude::*;
 use rand::RngCore;
 use serde::{Deserialize, Serialize};

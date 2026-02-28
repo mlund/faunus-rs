@@ -145,7 +145,7 @@ pub trait VolumeScale {
         new_volume: f64,
         position: &mut Point,
         policy: VolumeScalePolicy,
-    ) -> Result<(), anyhow::Error>;
+    ) -> anyhow::Result<()>;
 
     /// Scale cell volume to a new volume according to a scaling policy.
     ///
@@ -155,7 +155,7 @@ pub trait VolumeScale {
         &mut self,
         new_volume: f64,
         policy: VolumeScalePolicy,
-    ) -> Result<(), anyhow::Error>;
+    ) -> anyhow::Result<()>;
 }
 
 /// Simulation cell enum used for reading information about cell from the input file.
@@ -270,7 +270,7 @@ impl VolumeScale for Cell {
         &mut self,
         new_volume: f64,
         policy: VolumeScalePolicy,
-    ) -> Result<(), anyhow::Error> {
+    ) -> anyhow::Result<()> {
         match self {
             Self::Cuboid(x) => x.scale_volume(new_volume, policy),
             Self::Endless(x) => x.scale_volume(new_volume, policy),
@@ -284,7 +284,7 @@ impl VolumeScale for Cell {
         new_volume: f64,
         point: &mut Point,
         policy: VolumeScalePolicy,
-    ) -> Result<(), anyhow::Error> {
+    ) -> anyhow::Result<()> {
         match self {
             Self::Cuboid(x) => x.scale_position(new_volume, point, policy),
             Self::Endless(x) => x.scale_position(new_volume, point, policy),

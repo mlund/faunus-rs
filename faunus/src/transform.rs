@@ -72,7 +72,7 @@ impl Transform {
         &self,
         group_index: usize,
         context: &mut impl crate::Context,
-    ) -> Result<(), anyhow::Error> {
+    ) -> anyhow::Result<()> {
         match self {
             Self::Translate(displacement) => {
                 Self::PartialTranslate(*displacement, ParticleSelection::Active)
@@ -101,7 +101,7 @@ impl Transform {
     }
 
     /// Apply a system-wide transformation to the context.
-    pub fn on_system(&self, context: &mut impl crate::Context) -> Result<(), anyhow::Error> {
+    pub fn on_system(&self, context: &mut impl crate::Context) -> anyhow::Result<()> {
         match self {
             Self::VolumeScale(policy, new_volume) => {
                 context.scale_volume_and_positions(*new_volume, *policy)?;

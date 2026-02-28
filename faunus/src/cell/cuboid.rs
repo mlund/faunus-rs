@@ -130,7 +130,7 @@ impl VolumeScale for Cuboid {
         new_volume: f64,
         point: &mut Point,
         policy: VolumeScalePolicy,
-    ) -> Result<(), anyhow::Error> {
+    ) -> anyhow::Result<()> {
         let old_volume = self.volume().unwrap();
         match policy {
             VolumeScalePolicy::Isotropic => {

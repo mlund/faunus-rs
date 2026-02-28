@@ -39,7 +39,7 @@ impl Timer {
     }
 
     /// Stop the timer and accumulate the time. Errors if the timer was not started.
-    pub fn stop(&mut self) -> Result<(), anyhow::Error> {
+    pub fn stop(&mut self) -> anyhow::Result<()> {
         if let Some(start) = self.start {
             self.accumulated += start.elapsed();
             self.start = None;

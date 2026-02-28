@@ -65,7 +65,7 @@ impl VolumeScale for Endless {
         _new_volume: f64,
         _point: &mut Point,
         _policy: VolumeScalePolicy,
-    ) -> Result<(), anyhow::Error> {
+    ) -> anyhow::Result<()> {
         anyhow::bail!("Cannot scale position in endless cell")
     }
 }
