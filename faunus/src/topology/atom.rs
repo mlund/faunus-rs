@@ -87,9 +87,8 @@ impl AtomKind {
     }
 
     /// Set the Ashbaugh-Hatch scaling factor, λ.
-    pub const fn set_lambda(&mut self, lambda: f64) -> anyhow::Result<()> {
+    pub const fn set_lambda(&mut self, lambda: f64) {
         self.hydrophobicity = Some(Hydrophobicity::Lambda(lambda));
-        Ok(())
     }
 
     /// Get optional surface tension (kJ/mol/Å²)
@@ -155,7 +154,7 @@ impl AtomKind {
         }
 
         if let (Some(a), Some(b)) = (atom1.lambda(), atom2.lambda()) {
-            atomkind.set_lambda(rule.mix_sigmas((a, b))).unwrap();
+            atomkind.set_lambda(rule.mix_sigmas((a, b)));
         }
 
         atomkind.charge = atom1.charge() * atom2.charge();

@@ -139,7 +139,7 @@ impl MoleculeKind {
     /// Returns error if file is specified and cannot be loaded.
     pub fn set_names_from_structure(&mut self) -> anyhow::Result<()> {
         if let Some(filename) = &self.from_structure {
-            let data = super::io::read_structure(&filename)?;
+            let data = super::io::read_structure(filename)?;
             self.atoms = data.names;
             log::debug!(
                 "Set {} atom names from {}",
@@ -203,41 +203,45 @@ fn validate_molecule(molecule: &MoleculeKind) -> Result<(), ValidationError> {
         );
     }
 
-    // residues can't contain undefined atoms
-    // TODO: use `.any()` instead of for-loop
-    for residue in molecule.residues.iter() {
-        // empty residues can contain any indices
-        if !residue.is_empty() && residue.range().end > n_atoms {
-            return Err(
-                ValidationError::new("").with_message("residue contains undefined atoms".into())
-            );
-        }
+    // residues can't contain undefined atoms (empty residues can contain any indices)
+    if molecule
+        .residues
+        .iter()
+        .any(|r| !r.is_empty() && r.range().end > n_atoms)
+    {
+        return Err(
+            ValidationError::new("").with_message("residue contains undefined atoms".into())
+        );
     }
 
     // chains can't contain undefined atoms
-    // TODO: use `.any()` instead of for-loop
-    for chain in molecule.chains.iter() {
-        if !chain.is_empty() && chain.range().end > n_atoms {
-            return Err(
-                ValidationError::new("").with_message("chain contains undefined atoms".into())
-            );
-        }
+    if molecule
+        .chains
+        .iter()
+        .any(|c| !c.is_empty() && c.range().end > n_atoms)
+    {
+        return Err(ValidationError::new("").with_message("chain contains undefined atoms".into()));
     }
 
     // exclusions can't contain undefined atoms or the same atom twice
-    // TODO: use `.any()` instead of for-loop
-    for (i, j) in molecule.exclusions.iter().map(|e| e.into_ordered_tuple()) {
-        if i == j {
-            return Err(
-                ValidationError::new("").with_message("exclusion between the same atom".into())
-            );
-        }
+    if molecule
+        .exclusions
+        .iter()
+        .map(|e| e.into_ordered_tuple())
+        .any(|(i, j)| i == j)
+    {
+        return Err(ValidationError::new("").with_message("exclusion between the same atom".into()));
+    }
 
-        if i >= n_atoms || j >= n_atoms {
-            return Err(
-                ValidationError::new("").with_message("exclusion between undefined atoms".into())
-            );
-        }
+    if molecule
+        .exclusions
+        .iter()
+        .map(|e| e.into_ordered_tuple())
+        .any(|(i, j)| i >= n_atoms || j >= n_atoms)
+    {
+        return Err(
+            ValidationError::new("").with_message("exclusion between undefined atoms".into())
+        );
     }
 
     // vector of atom names must correspond to the number of atoms (or be empty)

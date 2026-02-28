@@ -364,11 +364,10 @@ impl MoleculeBlock {
             context.update_mass_center(group_index);
 
             // deactivate the groups that should not be active
-            match self.active {
-                BlockActivationStatus::Partial(x) if i >= x => {
-                    context.resize_group(group_index, GroupSize::Empty).unwrap()
+            if let BlockActivationStatus::Partial(x) = self.active {
+                if i >= x {
+                    context.resize_group(group_index, GroupSize::Empty).unwrap();
                 }
-                _ => (),
             }
         }
 
@@ -388,10 +387,8 @@ impl MoleculeBlock {
 
     /// Finalize MoleculeBlock parsing.
     pub(super) fn finalize(&mut self, filename: impl AsRef<Path>) -> Result<(), ValidationError> {
-        // finalize the paths to input structure files
-        match self.insert.as_mut() {
-            None => (),
-            Some(x) => x.finalize_path(filename),
+        if let Some(x) = self.insert.as_mut() {
+            x.finalize_path(filename);
         }
 
         // check that the number of active particles is not higher than the total number of particles

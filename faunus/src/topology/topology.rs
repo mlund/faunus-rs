@@ -18,15 +18,11 @@ use rand::rngs::ThreadRng;
 use std::fmt::Debug;
 use std::path::Path;
 
-use anyhow::Ok;
 use validator::Validate;
 
 use super::*;
 use crate::Context;
 use serde::{Deserialize, Serialize};
-
-use super::structure::positions_from_structure_file as load_positions;
-use crate::Point;
 
 /// Trait to search collections by name.
 pub trait FindByName<T> {
@@ -243,10 +239,9 @@ impl Topology {
         // current index of the coordinate in the external structure file to use
         let mut curr_start = 0;
 
-        let positions: Option<Vec<Point>> = match structure {
-            Some(x) => Some(load_positions(&x, Some(context.cell()))?),
-            None => None,
-        };
+        let positions = structure
+            .map(|x| super::structure::positions_from_structure_file(&x, Some(context.cell())))
+            .transpose()?;
 
         // create groups
         for block in self.blocks() {
@@ -280,12 +275,9 @@ impl Topology {
 
     /// Set ids for atom kinds in the topology and make sure that the atom names are unique.
     pub fn finalize_atoms(&mut self) -> anyhow::Result<()> {
-        self.atomkinds
-            .iter_mut()
-            .enumerate()
-            .for_each(|(i, atom): (usize, &mut AtomKind)| {
-                atom.set_id(i);
-            });
+        for (i, atom) in self.atomkinds.iter_mut().enumerate() {
+            atom.set_id(i);
+        }
 
         if self.atomkinds.iter().map(|a| a.name()).all_unique() {
             Ok(())
@@ -328,14 +320,7 @@ impl Topology {
             molecule.finalize_bonds();
         }
 
-        // check that all molecule names are unique
-        if self
-            .moleculekinds
-            .iter()
-            .duplicates_by(|m| m.name())
-            .count()
-            .eq(&0)
-        {
+        if self.moleculekinds.iter().map(|m| m.name()).all_unique() {
             Ok(())
         } else {
             anyhow::bail!("molecules have non-unique names")

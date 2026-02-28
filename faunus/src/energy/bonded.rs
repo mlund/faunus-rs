@@ -202,11 +202,6 @@ impl IntermolecularBonded {
         self.particles_status[abs_index]
     }
 
-    /// Check whether the particle with the provided absolute index is inactive.
-    pub(crate) fn is_inactive(&self, abs_index: usize) -> bool {
-        !self.is_active(abs_index)
-    }
-
     /// Update the status of particles from a single group.
     fn update_status_one_group(&mut self, group: &Group) {
         group

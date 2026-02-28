@@ -100,12 +100,12 @@ pub(super) trait IndexRange {
     {
         let overlap = collection
             .iter()
-            .permutations(2)
-            .any(|v| v[0].is_union(v[1]));
+            .tuple_combinations()
+            .any(|(a, b)| a.is_union(b));
         if overlap {
             Err(ValidationError::new("").with_message("overlap between collections".into()))
         } else {
-            core::result::Result::Ok(())
+            Ok(())
         }
     }
 }
@@ -364,17 +364,14 @@ where
     D: Deserializer<'de>,
 {
     let arr: [usize; 2] = Deserialize::deserialize(deserializer)?;
-    core::result::Result::Ok(std::ops::Range {
-        start: arr[0],
-        end: arr[1],
-    })
+    Ok(arr[0]..arr[1])
 }
 
 /// Validate that the provided atom indices are unique.
 /// Used e.g. to validate that a bond does not connect one and the same atom.
 fn validate_unique_indices(indices: &[usize]) -> Result<(), ValidationError> {
     if indices.iter().all_unique() {
-        core::result::Result::Ok(())
+        Ok(())
     } else {
         Err(ValidationError::new("").with_message("non-unique atom indices".into()))
     }
@@ -436,7 +433,7 @@ impl<'de> Deserialize<'de> for InputPath {
     {
         let path: String = Deserialize::deserialize(deserializer)?;
 
-        std::result::Result::Ok(Self {
+        Ok(Self {
             raw_path: path.into(),
             path: None,
         })

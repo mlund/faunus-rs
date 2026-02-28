@@ -114,15 +114,14 @@ impl Dihedral {
         self.fourbody_angle_energy(angle)
     }
 
-    /// Calculate energy of a dihedral in a specific group.
+    /// Calculate energy of an intermolecular dihedral.
     /// Returns 0.0 if any of the interacting particles is inactive.
     pub fn energy_intermolecular(
         &self,
         context: &impl Context,
         term: &crate::energy::IntermolecularBonded,
     ) -> f64 {
-        // any of the particles is inactive
-        if self.index.iter().any(|&i| term.is_inactive(i)) {
+        if self.index.iter().any(|&i| !term.is_active(i)) {
             return 0.0;
         }
 
