@@ -47,6 +47,14 @@ pub fn get_medium(path: impl AsRef<Path>) -> anyhow::Result<interatomic::coulomb
         .ok_or_else(|| anyhow::anyhow!("Could not find `system/medium` in input file"))
 }
 
+/// Lightweight backup of context state for undo on MC reject.
+#[derive(Clone, Debug)]
+struct ContextBackup {
+    particles: Vec<(usize, Particle)>,
+    mass_centers: Vec<(usize, Option<Point>)>,
+    cell: Option<Cell>,
+}
+
 /// Default platform running on the CPU.
 ///
 /// Particles are stored in
@@ -63,6 +71,8 @@ pub struct ReferencePlatform {
     cell: Cell,
     #[serde(skip)]
     hamiltonian: RefCell<Hamiltonian>,
+    #[serde(skip)]
+    backup: Option<ContextBackup>,
 }
 
 impl ReferencePlatform {
@@ -120,6 +130,7 @@ impl ReferencePlatform {
             cell,
             hamiltonian,
             group_lists: GroupLists::new(topology.moleculekinds().len()),
+            backup: None,
         };
 
         context.update(&Change::Everything)?;
@@ -167,6 +178,63 @@ impl Context for ReferencePlatform {
             .sync_from(&other.hamiltonian(), change)?;
         self.sync_from_groupcollection(change, other)?;
         Ok(())
+    }
+
+    fn save_particle_backup(&mut self, group_index: usize, indices: &[usize]) {
+        assert!(self.backup.is_none(), "backup already exists");
+        let particles = indices
+            .iter()
+            .map(|&i| (i, self.particles[i].clone()))
+            .collect();
+        let mass_center = self.groups[group_index].mass_center().cloned();
+        self.backup = Some(ContextBackup {
+            particles,
+            mass_centers: vec![(group_index, mass_center)],
+            cell: None,
+        });
+    }
+
+    fn save_system_backup(&mut self) {
+        assert!(self.backup.is_none(), "backup already exists");
+        let particles = self
+            .particles
+            .iter()
+            .enumerate()
+            .map(|(i, p)| (i, p.clone()))
+            .collect();
+        let mass_centers = self
+            .groups
+            .iter()
+            .enumerate()
+            .map(|(i, g)| (i, g.mass_center().cloned()))
+            .collect();
+        self.backup = Some(ContextBackup {
+            particles,
+            mass_centers,
+            cell: Some(self.cell.clone()),
+        });
+    }
+
+    fn undo(&mut self) -> anyhow::Result<()> {
+        let backup = self.backup.take().expect("undo called without backup");
+        for (idx, particle) in backup.particles {
+            self.particles[idx] = particle;
+        }
+        for (group_idx, old_com) in backup.mass_centers {
+            if let Some(com) = old_com {
+                self.groups[group_idx].set_mass_center(com);
+            }
+        }
+        if let Some(cell) = backup.cell {
+            self.cell = cell;
+        }
+        self.hamiltonian_mut().undo();
+        Ok(())
+    }
+
+    fn discard_backup(&mut self) {
+        self.backup = None;
+        self.hamiltonian_mut().discard_backup();
     }
 }
 

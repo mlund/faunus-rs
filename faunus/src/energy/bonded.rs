@@ -110,6 +110,8 @@ impl From<IntramolecularBonded> for EnergyTerm {
 pub struct IntermolecularBonded {
     /// Stores whether each particle of the system is active (true) or inactive (false).
     particles_status: Vec<bool>,
+    /// Backup for undo on MC reject
+    backup: Option<Vec<bool>>,
 }
 
 impl EnergyChange for IntermolecularBonded {
@@ -165,7 +167,10 @@ impl IntermolecularBonded {
             })
             .collect();
 
-        EnergyTerm::IntermolecularBonded(Self { particles_status })
+        EnergyTerm::IntermolecularBonded(Self {
+            particles_status,
+            backup: None,
+        })
     }
 
     /// Update the energy term. The update is needed if at least one particle was activated or deactivated.
@@ -253,6 +258,29 @@ impl IntermolecularBonded {
             }
         }
         Ok(())
+    }
+
+    /// Only save when `update()` would actually modify state.
+    pub(super) fn save_backup(&mut self, change: &Change) {
+        let dominated = matches!(
+            change,
+            Change::SingleGroup(_, GroupChange::Resize(_)) | Change::Everything
+        ) || matches!(change, Change::Groups(v) if v.iter().any(|g| matches!(g.1, GroupChange::Resize(_))));
+
+        if dominated {
+            assert!(self.backup.is_none(), "backup already exists");
+            self.backup = Some(self.particles_status.clone());
+        }
+    }
+
+    pub(super) fn undo(&mut self) {
+        if let Some(backup) = self.backup.take() {
+            self.particles_status = backup;
+        }
+    }
+
+    pub(super) fn discard_backup(&mut self) {
+        self.backup = None;
     }
 }
 

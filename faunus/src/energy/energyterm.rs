@@ -28,6 +28,23 @@ pub enum EnergyTerm {
     ExternalPressure(ExternalPressure),
 }
 
+/// Dispatch a no-arg method to stateful energy terms; stateless terms are no-ops.
+/// Explicit variant listing ensures new variants trigger a compile error.
+macro_rules! dispatch_stateful {
+    ($self:expr, $method:ident) => {
+        match $self {
+            EnergyTerm::IntermolecularBonded(x) => x.$method(),
+            EnergyTerm::SasaEnergy(x) => x.$method(),
+            EnergyTerm::NonbondedMatrix(_)
+            | EnergyTerm::NonbondedMatrixSplined(_)
+            | EnergyTerm::IntramolecularBonded(_)
+            | EnergyTerm::CellOverlap(_)
+            | EnergyTerm::Constrain(_)
+            | EnergyTerm::ExternalPressure(_) => {}
+        }
+    };
+}
+
 impl EnergyTerm {
     /// Update internal state due to a change in the system.
     pub fn update(&mut self, context: &impl Context, change: &Change) -> anyhow::Result<()> {
@@ -41,6 +58,30 @@ impl EnergyTerm {
             Self::IntermolecularBonded(x) => x.update(context, change),
             Self::SasaEnergy(x) => x.update(context, change),
         }
+    }
+
+    /// Save internal state for later undo. Stateless terms are no-ops.
+    pub(crate) fn save_backup(&mut self, change: &Change) {
+        match self {
+            Self::IntermolecularBonded(x) => x.save_backup(change),
+            Self::SasaEnergy(x) => x.save_backup(),
+            Self::NonbondedMatrix(_)
+            | Self::NonbondedMatrixSplined(_)
+            | Self::IntramolecularBonded(_)
+            | Self::CellOverlap(_)
+            | Self::Constrain(_)
+            | Self::ExternalPressure(_) => {}
+        }
+    }
+
+    /// Restore from internal backup (reject path).
+    pub fn undo(&mut self) {
+        dispatch_stateful!(self, undo);
+    }
+
+    /// Drop internal backup (accept path).
+    pub fn discard_backup(&mut self) {
+        dispatch_stateful!(self, discard_backup);
     }
 
     /// Synchronize cached state from another energy term after an MC accept/reject step.

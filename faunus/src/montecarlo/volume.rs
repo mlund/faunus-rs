@@ -94,7 +94,7 @@ impl<T: Context> MoveProposal<T> for VolumeMove {
         let new_volume = ln_new_volume.exp();
 
         Transform::VolumeScale(self.method, new_volume)
-            .on_system(context)
+            .on_system_with_backup(context)
             .ok()?;
 
         let change = Change::Volume(self.method, NewOld::from(new_volume, old_volume));

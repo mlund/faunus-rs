@@ -113,6 +113,30 @@ impl Hamiltonian {
             .iter_mut()
             .try_for_each(|term| term.update(context, change))
     }
+
+    /// Update with backup for later undo on MC reject.
+    pub(crate) fn update_with_backup(
+        &mut self,
+        context: &impl Context,
+        change: &Change,
+    ) -> anyhow::Result<()> {
+        self.energy_terms
+            .iter_mut()
+            .for_each(|term| term.save_backup(change));
+        self.update(context, change)
+    }
+
+    /// Restore all energy terms from their internal backups.
+    pub(crate) fn undo(&mut self) {
+        self.energy_terms.iter_mut().for_each(|term| term.undo());
+    }
+
+    /// Drop all energy term backups.
+    pub(crate) fn discard_backup(&mut self) {
+        self.energy_terms
+            .iter_mut()
+            .for_each(|term| term.discard_backup());
+    }
 }
 
 impl<T: Into<Vec<EnergyTerm>>> From<T> for Hamiltonian {

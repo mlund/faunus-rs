@@ -28,8 +28,26 @@ pub trait Context:
         Ok(())
     }
 
+    /// Update internal state with backup for later undo on MC reject.
+    fn update_with_backup(&mut self, change: &Change) -> anyhow::Result<()> {
+        self.hamiltonian_mut().update_with_backup(self, change)?;
+        Ok(())
+    }
+
     /// Synchronize state from another context after an MC accept/reject step.
     fn sync_from(&mut self, other: &Self, change: &Change) -> anyhow::Result<()>;
+
+    /// Save particles at given indices and the group's mass center as backup.
+    fn save_particle_backup(&mut self, group_index: usize, indices: &[usize]);
+
+    /// Save all particles, mass centers, and cell as backup (for volume moves).
+    fn save_system_backup(&mut self);
+
+    /// Restore state from backup (reject path). Consumes the backup.
+    fn undo(&mut self) -> anyhow::Result<()>;
+
+    /// Drop backup without restoring (accept path).
+    fn discard_backup(&mut self);
 }
 
 /// Context stores the state of a single simulation system
@@ -47,8 +65,26 @@ pub trait Context: ParticleSystem + WithHamiltonian + Clone + std::fmt::Debug {
         Ok(())
     }
 
+    /// Update internal state with backup for later undo on MC reject.
+    fn update_with_backup(&mut self, change: &Change) -> anyhow::Result<()> {
+        self.hamiltonian_mut().update_with_backup(self, change)?;
+        Ok(())
+    }
+
     /// Synchronize state from another context after an MC accept/reject step.
     fn sync_from(&mut self, other: &Self, change: &Change) -> anyhow::Result<()>;
+
+    /// Save particles at given indices and the group's mass center as backup.
+    fn save_particle_backup(&mut self, group_index: usize, indices: &[usize]);
+
+    /// Save all particles, mass centers, and cell as backup (for volume moves).
+    fn save_system_backup(&mut self);
+
+    /// Restore state from backup (reject path). Consumes the backup.
+    fn undo(&mut self) -> anyhow::Result<()>;
+
+    /// Drop backup without restoring (accept path).
+    fn discard_backup(&mut self);
 }
 
 /// A trait for objects that have a simulation cell.

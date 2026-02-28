@@ -121,7 +121,7 @@ impl<T: Context> MoveRunner<T> {
                 .inner
                 .propose_move(&mut context.new, rng)
                 .ok_or_else(|| anyhow::anyhow!("Could not propose a move."))?;
-            context.new.update(&change)?;
+            context.new.update_with_backup(&change)?;
 
             let energy = NewOld::<f64>::from(
                 context.new.hamiltonian().energy(&context.new, &change),
@@ -132,9 +132,10 @@ impl<T: Context> MoveRunner<T> {
             if criterion.accept(energy, bias, thermal_energy, rng) {
                 self.statistics.accept(energy.difference(), displacement);
                 context.old.sync_from(&context.new, &change)?;
+                context.new.discard_backup();
             } else {
                 self.statistics.reject();
-                context.new.sync_from(&context.old, &change)?;
+                context.new.undo()?;
             }
         }
 

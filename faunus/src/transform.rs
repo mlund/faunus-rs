@@ -100,6 +100,33 @@ impl Transform {
         Ok(())
     }
 
+    /// Apply the transformation to a group, saving affected particles as backup first.
+    pub fn on_group_with_backup(
+        &self,
+        group_index: usize,
+        context: &mut impl crate::Context,
+    ) -> anyhow::Result<()> {
+        let indices = match self {
+            Self::Translate(_) | Self::Rotate(_) => context.groups()[group_index]
+                .select(&ParticleSelection::Active, context)?,
+            Self::PartialTranslate(_, selection) | Self::PartialRotate(_, _, selection) => {
+                context.groups()[group_index].select(selection, context)?
+            }
+            _ => vec![],
+        };
+        context.save_particle_backup(group_index, &indices);
+        self.on_group(group_index, context)
+    }
+
+    /// Apply a system-wide transformation with backup (saves all particles, mass centers, cell).
+    pub fn on_system_with_backup(
+        &self,
+        context: &mut impl crate::Context,
+    ) -> anyhow::Result<()> {
+        context.save_system_backup();
+        self.on_system(context)
+    }
+
     /// Apply a system-wide transformation to the context.
     pub fn on_system(&self, context: &mut impl crate::Context) -> anyhow::Result<()> {
         match self {

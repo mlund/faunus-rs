@@ -20,6 +20,13 @@ use derive_builder::Builder;
 use serde::{Deserialize, Serialize};
 use voronota_ltr::{compute_tessellation, Ball, TessellationResult};
 
+#[derive(Clone, Debug)]
+struct SasaBackup {
+    balls: Vec<Ball>,
+    tessellation: TessellationResult,
+    tensions: Vec<f64>,
+}
+
 #[derive(Debug, Clone, Builder)]
 #[builder(derive(Deserialize, Serialize, Debug))]
 #[builder_struct_attr(serde(deny_unknown_fields))]
@@ -44,6 +51,10 @@ pub struct SasaEnergy {
     /// Set offset from first SASA energy calculation event
     #[builder(default = "false")]
     offset_from_first: bool,
+    /// Backup for undo on MC reject
+    #[builder_field_attr(serde(skip))]
+    #[builder(default)]
+    backup: Option<SasaBackup>,
 }
 
 impl SasaEnergy {
@@ -65,6 +76,7 @@ impl SasaEnergy {
             tensions: tensions.into_iter().collect(),
             energy_offset,
             offset_from_first,
+            backup: None,
         }
     }
 
@@ -154,6 +166,26 @@ impl SasaEnergy {
         self.tessellation.clone_from(&other.tessellation);
         self.tensions.clone_from(&other.tensions);
         Ok(())
+    }
+
+    pub(super) fn save_backup(&mut self) {
+        assert!(self.backup.is_none(), "backup already exists");
+        self.backup = Some(SasaBackup {
+            balls: self.balls.clone(),
+            tessellation: self.tessellation.clone(),
+            tensions: self.tensions.clone(),
+        });
+    }
+
+    pub(super) fn undo(&mut self) {
+        let backup = self.backup.take().expect("undo called without backup");
+        self.balls = backup.balls;
+        self.tessellation = backup.tessellation;
+        self.tensions = backup.tensions;
+    }
+
+    pub(super) fn discard_backup(&mut self) {
+        self.backup = None;
     }
 }
 

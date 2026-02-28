@@ -95,7 +95,7 @@ impl<T: Context> MoveProposal<T> for TranslateMolecule {
             random_unit_vector(rng) * self.max_displacement * 2.0 * (rng.r#gen::<f64>() - 0.5),
         );
         Transform::Translate(displacement)
-            .on_group(group_index, context)
+            .on_group_with_backup(group_index, context)
             .unwrap();
         Some((
             Change::SingleGroup(group_index, GroupChange::RigidBody),
@@ -299,7 +299,7 @@ impl<T: Context> MoveProposal<T> for TranslateAtom {
             displacement,
             ParticleSelection::AbsIndex(vec![absolute_atom]),
         )
-        .on_group(group, context)
+        .on_group_with_backup(group, context)
         .unwrap();
 
         let relative_atom = context.groups()[group]

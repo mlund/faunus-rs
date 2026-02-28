@@ -103,7 +103,7 @@ impl<T: Context> MoveProposal<T> for PivotMove {
             quaternion,
             ParticleSelection::RelIndex(rotated_rel.clone()),
         )
-        .on_group(group_index, context)
+        .on_group_with_backup(group_index, context)
         .unwrap();
 
         Some((
