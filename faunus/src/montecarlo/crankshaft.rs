@@ -12,13 +12,13 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
-use super::MoveStatistics;
 use crate::montecarlo;
-use crate::propagate::Displacement;
+use crate::propagate::{tagged_yaml, Displacement, MoveProposal};
 use crate::topology::BondGraph;
 use crate::{Change, Context, GroupChange};
 use nalgebra::UnitVector3;
 use rand::prelude::*;
+use rand::RngCore;
 use serde::{Deserialize, Serialize};
 
 /// Move for performing crankshaft rotations around dihedral axes.
@@ -39,13 +39,12 @@ pub struct CrankshaftMove {
     #[serde(alias = "dp")]
     max_displacement: f64,
     /// Move selection weight.
-    weight: f64,
+    #[serde(skip_serializing)]
+    pub(crate) weight: f64,
     /// Repeat the move N times.
     #[serde(default = "crate::propagate::default_repeat")]
-    repeat: usize,
-    /// Move statistics.
-    #[serde(skip_deserializing)]
-    statistics: MoveStatistics,
+    #[serde(skip_serializing)]
+    pub(crate) repeat: usize,
     /// Cached bond graph for sub-tree selection.
     #[serde(skip)]
     bond_graph: BondGraph,
@@ -55,15 +54,30 @@ pub struct CrankshaftMove {
 }
 
 impl CrankshaftMove {
-    /// Propose a crankshaft rotation around a dihedral axis.
-    ///
-    /// Picks a random proper dihedral's middle bond, BFS-walks the bond graph
-    /// from both sides, and rotates the smaller sub-tree around the bond vector.
-    #[allow(clippy::needless_pass_by_ref_mut)]
-    pub(crate) fn propose_move(
+    /// Validate and finalize the move.
+    pub(crate) fn finalize(&mut self, context: &impl Context) -> anyhow::Result<()> {
+        self.molecule_id =
+            montecarlo::find_molecule_id(context, &self.molecule_name, "CrankshaftMove")?;
+        let topology = context.topology();
+        let mol_kind = &topology.moleculekinds()[self.molecule_id];
+        self.bond_graph = mol_kind.bond_graph().clone();
+        self.dihedral_bonds = mol_kind
+            .dihedrals()
+            .iter()
+            .filter(|d| !d.is_improper())
+            .map(|d| [d.index()[1], d.index()[2]])
+            .collect();
+        self.dihedral_bonds.sort_unstable();
+        self.dihedral_bonds.dedup();
+        Ok(())
+    }
+}
+
+impl<T: Context> MoveProposal<T> for CrankshaftMove {
+    fn propose_move(
         &mut self,
-        context: &mut impl Context,
-        rng: &mut impl Rng,
+        context: &mut T,
+        rng: &mut dyn RngCore,
     ) -> Option<(Change, Displacement)> {
         if self.dihedral_bonds.is_empty() {
             return None;
@@ -78,7 +92,6 @@ impl CrankshaftMove {
 
         let &[i, j] = self.dihedral_bonds.choose(rng)?;
 
-        // Rotate the smaller side for better acceptance
         let side_a = self.bond_graph.connected_from(i, j);
         let side_b = self.bond_graph.connected_from(j, i);
         let (pivot_rel, dir_rel, rotated_rel) = if side_a.len() <= side_b.len() {
@@ -106,42 +119,8 @@ impl CrankshaftMove {
         ))
     }
 
-    /// Get immutable reference to the statistics of the move.
-    pub(crate) const fn get_statistics(&self) -> &MoveStatistics {
-        &self.statistics
-    }
-
-    /// Get mutable reference to the statistics of the move.
-    pub(crate) const fn get_statistics_mut(&mut self) -> &mut MoveStatistics {
-        &mut self.statistics
-    }
-
-    /// Get weight of the move.
-    pub(crate) const fn weight(&self) -> f64 {
-        self.weight
-    }
-
-    /// Number of times the move should be repeated if selected.
-    pub(crate) const fn repeat(&self) -> usize {
-        self.repeat
-    }
-
-    /// Validate and finalize the move.
-    pub(crate) fn finalize(&mut self, context: &impl Context) -> anyhow::Result<()> {
-        self.molecule_id =
-            montecarlo::find_molecule_id(context, &self.molecule_name, "CrankshaftMove")?;
-        let topology = context.topology();
-        let mol_kind = &topology.moleculekinds()[self.molecule_id];
-        self.bond_graph = mol_kind.bond_graph().clone();
-        self.dihedral_bonds = mol_kind
-            .dihedrals()
-            .iter()
-            .filter(|d| !d.is_improper())
-            .map(|d| [d.index()[1], d.index()[2]])
-            .collect();
-        self.dihedral_bonds.sort_unstable();
-        self.dihedral_bonds.dedup();
-        Ok(())
+    fn to_yaml(&self) -> Option<serde_yaml::Value> {
+        tagged_yaml("CrankshaftMove", self)
     }
 }
 

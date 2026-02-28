@@ -12,14 +12,14 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
-use super::MoveStatistics;
 use crate::montecarlo;
-use crate::propagate::Displacement;
+use crate::propagate::{tagged_yaml, Displacement, MoveProposal};
 use crate::topology::BondGraph;
 use crate::transform::random_unit_vector;
 use crate::{Change, Context, GroupChange};
 use nalgebra::UnitVector3;
 use rand::prelude::*;
+use rand::RngCore;
 use serde::{Deserialize, Serialize};
 
 /// Move for performing pivot rotations on flexible polymer chains.
@@ -40,29 +40,33 @@ pub struct PivotMove {
     #[serde(alias = "dp")]
     max_displacement: f64,
     /// Move selection weight.
-    weight: f64,
+    #[serde(skip_serializing)]
+    pub(crate) weight: f64,
     /// Repeat the move N times.
     #[serde(default = "crate::propagate::default_repeat")]
-    repeat: usize,
-    /// Move statistics.
-    #[serde(skip_deserializing)]
-    statistics: MoveStatistics,
+    #[serde(skip_serializing)]
+    pub(crate) repeat: usize,
     /// Cached bond graph for topology-aware pivot selection.
     #[serde(skip)]
     bond_graph: BondGraph,
 }
 
 impl PivotMove {
-    /// Propose a pivot rotation on a polymer chain.
-    ///
-    /// Picks a random bond in the molecule, then BFS-walks the bond graph
-    /// from one side of that bond to find the sub-tree to rotate.
-    /// Works for arbitrary topologies (linear, branched, star, dendrimer).
-    #[allow(clippy::needless_pass_by_ref_mut)]
-    pub(crate) fn propose_move(
+    /// Validate and finalize the move.
+    pub(crate) fn finalize(&mut self, context: &impl Context) -> anyhow::Result<()> {
+        self.molecule_id = montecarlo::find_molecule_id(context, &self.molecule_name, "PivotMove")?;
+        self.bond_graph = context.topology().moleculekinds()[self.molecule_id]
+            .bond_graph()
+            .clone();
+        Ok(())
+    }
+}
+
+impl<T: Context> MoveProposal<T> for PivotMove {
+    fn propose_move(
         &mut self,
-        context: &mut impl Context,
-        rng: &mut impl Rng,
+        context: &mut T,
+        rng: &mut dyn RngCore,
     ) -> Option<(Change, Displacement)> {
         if self.bond_graph.is_empty() {
             return None;
@@ -78,7 +82,6 @@ impl PivotMove {
         let pivot_rel = rng.gen_range(0..n);
         let &direction = self.bond_graph.neighbors(pivot_rel).choose(rng)?;
 
-        // Rotate the smaller side for better acceptance
         let side_a = self.bond_graph.connected_from(direction, pivot_rel);
         let side_b = self.bond_graph.connected_from(pivot_rel, direction);
         let rotated_rel = if side_a.len() <= side_b.len() {
@@ -90,7 +93,6 @@ impl PivotMove {
         let group_start = group.start();
         let pivot_pos = context.particle(group_start + pivot_rel).pos;
 
-        // Generate random rotation
         let axis = random_unit_vector(rng);
         let uaxis = UnitVector3::new_normalize(axis);
         let angle = self.max_displacement * 2.0 * (rng.r#gen::<f64>() - 0.5);
@@ -107,33 +109,8 @@ impl PivotMove {
         ))
     }
 
-    /// Get immutable reference to the statistics of the move.
-    pub(crate) const fn get_statistics(&self) -> &MoveStatistics {
-        &self.statistics
-    }
-
-    /// Get mutable reference to the statistics of the move.
-    pub(crate) const fn get_statistics_mut(&mut self) -> &mut MoveStatistics {
-        &mut self.statistics
-    }
-
-    /// Get weight of the move.
-    pub(crate) const fn weight(&self) -> f64 {
-        self.weight
-    }
-
-    /// Number of times the move should be repeated if selected.
-    pub(crate) const fn repeat(&self) -> usize {
-        self.repeat
-    }
-
-    /// Validate and finalize the move.
-    pub(crate) fn finalize(&mut self, context: &impl Context) -> anyhow::Result<()> {
-        self.molecule_id = montecarlo::find_molecule_id(context, &self.molecule_name, "PivotMove")?;
-        self.bond_graph = context.topology().moleculekinds()[self.molecule_id]
-            .bond_graph()
-            .clone();
-        Ok(())
+    fn to_yaml(&self) -> Option<serde_yaml::Value> {
+        tagged_yaml("PivotMove", self)
     }
 }
 

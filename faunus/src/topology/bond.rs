@@ -37,6 +37,7 @@ pub(crate) enum BondKind {
     Harmonic(interatomic::twobody::Harmonic),
     /// Finitely extensible nonlinear elastic bond type,
     /// See <https://en.wikipedia.org/wiki/FENE>.
+    #[allow(clippy::upper_case_acronyms)]
     FENE(interatomic::twobody::FENE),
     /// Morse bond type.
     /// See <https://en.wikipedia.org/wiki/Morse_potential>.

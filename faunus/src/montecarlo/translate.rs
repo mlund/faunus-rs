@@ -12,13 +12,14 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
-use super::{find_molecule_id, random_atom, random_group, MoveStatistics};
+use super::{find_molecule_id, random_atom, random_group};
 use crate::group::*;
-use crate::propagate::Displacement;
+use crate::propagate::{tagged_yaml, Displacement, MoveProposal};
 use crate::transform::{random_unit_vector, Transform};
 use crate::{Change, Context, GroupChange};
 use anyhow::Ok;
 use rand::prelude::*;
+use rand::RngCore;
 use serde::{Deserialize, Serialize};
 
 /// Move for translating a random molecule.
@@ -37,13 +38,12 @@ pub struct TranslateMolecule {
     #[serde(alias = "dp")]
     max_displacement: f64,
     /// Move selection weight.
-    weight: f64,
+    #[serde(skip_serializing)]
+    pub(crate) weight: f64,
     /// Repeat the move N times.
     #[serde(default = "crate::propagate::default_repeat")]
-    repeat: usize,
-    /// Move statisticcs.
-    #[serde(skip_deserializing)]
-    statistics: MoveStatistics,
+    #[serde(skip_serializing)]
+    pub(crate) repeat: usize,
     /// Move directions
     #[serde(default = "crate::dimension::default_dimension")]
     directions: crate::dimension::Dimension,
@@ -74,55 +74,8 @@ impl TranslateMolecule {
             max_displacement,
             weight,
             repeat,
-            statistics: MoveStatistics::default(),
             directions,
         }
-    }
-
-    /// Propose a translation of a molecule.
-    ///
-    /// Translates molecule in given `context` and return a change object
-    /// describing the change as well as the magnitude of the displacement.
-    #[allow(clippy::needless_pass_by_ref_mut)] // may need mutation in future
-    pub(crate) fn propose_move(
-        &mut self,
-        context: &mut impl Context,
-        rng: &mut impl Rng,
-    ) -> Option<(Change, Displacement)> {
-        if let Some(group_index) = random_group(context, rng, self.molecule_id) {
-            let displacement = self.directions.filter(
-                random_unit_vector(rng) * self.max_displacement * 2.0 * (rng.r#gen::<f64>() - 0.5),
-            );
-            Transform::Translate(displacement)
-                .on_group(group_index, context)
-                .unwrap();
-            Some((
-                Change::SingleGroup(group_index, GroupChange::RigidBody),
-                Displacement::Distance(displacement),
-            ))
-        } else {
-            None
-        }
-    }
-
-    /// Get immutable reference to the statistics of the move.
-    pub(crate) const fn get_statistics(&self) -> &MoveStatistics {
-        &self.statistics
-    }
-
-    /// Get mutable reference to the statistics of the move.
-    pub(crate) const fn get_statistics_mut(&mut self) -> &mut MoveStatistics {
-        &mut self.statistics
-    }
-
-    /// Get weight of the move.
-    pub(crate) const fn weight(&self) -> f64 {
-        self.weight
-    }
-
-    /// Number of times the move should be repeated if selected.
-    pub(crate) const fn repeat(&self) -> usize {
-        self.repeat
     }
 
     /// Validate and finalize the move.
@@ -132,12 +85,27 @@ impl TranslateMolecule {
     }
 }
 
-impl std::fmt::Display for TranslateMolecule {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(f, "Translate Molecule 🏃‍♀️‍➡️:")?;
-        writeln!(f, "  Molecule:         {}", self.molecule_name)?;
-        writeln!(f, "  Max displacement: {} Å", self.max_displacement)?;
-        writeln!(f, "  Statistics📈:     {}", self.statistics)
+impl<T: Context> MoveProposal<T> for TranslateMolecule {
+    fn propose_move(
+        &mut self,
+        context: &mut T,
+        rng: &mut dyn RngCore,
+    ) -> Option<(Change, Displacement)> {
+        let group_index = random_group(context, rng, self.molecule_id)?;
+        let displacement = self.directions.filter(
+            random_unit_vector(rng) * self.max_displacement * 2.0 * (rng.r#gen::<f64>() - 0.5),
+        );
+        Transform::Translate(displacement)
+            .on_group(group_index, context)
+            .unwrap();
+        Some((
+            Change::SingleGroup(group_index, GroupChange::RigidBody),
+            Displacement::Distance(displacement),
+        ))
+    }
+
+    fn to_yaml(&self) -> Option<serde_yaml::Value> {
+        tagged_yaml("TranslateMolecule", self)
     }
 }
 
@@ -173,13 +141,12 @@ pub struct TranslateAtom {
     #[serde(alias = "dp")]
     max_displacement: f64,
     /// Move selection weight.
-    weight: f64,
+    #[serde(skip_serializing)]
+    pub(crate) weight: f64,
     /// Repeat the move N times.
     #[serde(default = "crate::propagate::default_repeat")]
-    repeat: usize,
-    /// Move statisticcs.
-    #[serde(skip_deserializing)]
-    statistics: MoveStatistics,
+    #[serde(skip_serializing)]
+    pub(crate) repeat: usize,
     /// Molecule types to select from. Only used if `molecule_name` is not provided.
     #[serde(skip)]
     #[serde(default = "default_select_molecule_ids")]
@@ -219,7 +186,6 @@ impl TranslateAtom {
             max_displacement,
             weight,
             repeat,
-            statistics: MoveStatistics::default(),
             select_molecule_ids: GroupSelection::Size(GroupSize::Full),
         }
     }
@@ -230,7 +196,7 @@ impl TranslateAtom {
     fn get_group_atom(
         &self,
         context: &mut impl Context,
-        rng: &mut impl Rng,
+        rng: &mut (impl Rng + ?Sized),
     ) -> Option<(usize, usize)> {
         let group = match self.molecule_id {
             Some(m) => random_group(context, rng, m)?,
@@ -245,57 +211,6 @@ impl TranslateAtom {
         };
 
         Some((group, random_atom(context, rng, group, self.atom_id)?))
-    }
-
-    /// Propose a translation of an atom.
-    #[allow(clippy::needless_pass_by_ref_mut)] // may need mutation in future
-    pub(crate) fn propose_move(
-        &mut self,
-        context: &mut impl Context,
-        rng: &mut impl Rng,
-    ) -> Option<(Change, Displacement)> {
-        // repeat until you find a suitable atom
-        let (group, absolute_atom) = std::iter::repeat_with(|| self.get_group_atom(context, rng))
-            .find_map(|group_atom| group_atom)
-            .unwrap();
-
-        let displacement =
-            random_unit_vector(rng) * self.max_displacement * 2.0 * (rng.r#gen::<f64>() - 0.5);
-
-        Transform::PartialTranslate(
-            displacement,
-            ParticleSelection::AbsIndex(vec![absolute_atom]),
-        )
-        .on_group(group, context)
-        .unwrap();
-
-        // we need to convert to relative index because `GroupChange` expects it
-        let relative_atom = context.groups()[group]
-            .to_relative_index(absolute_atom)
-            .expect("Atom should be part of the group.");
-
-        let change = Change::SingleGroup(group, GroupChange::PartialUpdate(vec![relative_atom]));
-        Some((change, Displacement::Distance(displacement)))
-    }
-
-    /// Get immutable reference to the statistics of the move.
-    pub(crate) const fn get_statistics(&self) -> &MoveStatistics {
-        &self.statistics
-    }
-
-    /// Get mutable reference to the statistics of the move.
-    pub(crate) const fn get_statistics_mut(&mut self) -> &mut MoveStatistics {
-        &mut self.statistics
-    }
-
-    /// Get weight of the move.
-    pub(crate) const fn weight(&self) -> f64 {
-        self.weight
-    }
-
-    /// Number of times the move should be repeated if selected.
-    pub(crate) const fn repeat(&self) -> usize {
-        self.repeat
     }
 
     /// Validate and finalize the move.
@@ -365,6 +280,39 @@ impl TranslateAtom {
         }
 
         Ok(())
+    }
+}
+
+impl<T: Context> MoveProposal<T> for TranslateAtom {
+    fn propose_move(
+        &mut self,
+        context: &mut T,
+        rng: &mut dyn RngCore,
+    ) -> Option<(Change, Displacement)> {
+        let (group, absolute_atom) = std::iter::repeat_with(|| self.get_group_atom(context, rng))
+            .find_map(|group_atom| group_atom)
+            .unwrap();
+
+        let displacement =
+            random_unit_vector(rng) * self.max_displacement * 2.0 * (rng.r#gen::<f64>() - 0.5);
+
+        Transform::PartialTranslate(
+            displacement,
+            ParticleSelection::AbsIndex(vec![absolute_atom]),
+        )
+        .on_group(group, context)
+        .unwrap();
+
+        let relative_atom = context.groups()[group]
+            .to_relative_index(absolute_atom)
+            .expect("Atom should be part of the group.");
+
+        let change = Change::SingleGroup(group, GroupChange::PartialUpdate(vec![relative_atom]));
+        Some((change, Displacement::Distance(displacement)))
+    }
+
+    fn to_yaml(&self) -> Option<serde_yaml::Value> {
+        tagged_yaml("TranslateAtom", self)
     }
 }
 

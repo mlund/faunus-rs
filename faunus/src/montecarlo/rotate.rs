@@ -12,13 +12,13 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
-use super::MoveStatistics;
 use crate::montecarlo;
-use crate::propagate::Displacement;
+use crate::propagate::{tagged_yaml, Displacement, MoveProposal};
 use crate::transform::{random_unit_vector, Transform};
 use crate::{Change, Context, GroupChange};
 use nalgebra::UnitVector3;
 use rand::prelude::*;
+use rand::RngCore;
 use serde::{Deserialize, Serialize};
 
 /// Move for translating a random molecule.
@@ -37,87 +37,45 @@ pub struct RotateMolecule {
     #[serde(alias = "dp")]
     max_displacement: f64,
     /// Move selection weight.
-    weight: f64,
+    #[serde(skip_serializing)]
+    pub(crate) weight: f64,
     /// Repeat the move N times.
     #[serde(default = "crate::propagate::default_repeat")]
-    repeat: usize,
-    /// Move statisticcs.
-    #[serde(skip_deserializing)]
-    statistics: MoveStatistics,
+    #[serde(skip_serializing)]
+    pub(crate) repeat: usize,
 }
 
 impl RotateMolecule {
-    /// Create a new `TranslateMolecule` move.
-    pub fn new(
-        molecule_name: &str,
-        molecule_id: usize,
-        max_displacement: f64,
-        weight: f64,
-        repeat: usize,
-    ) -> Self {
-        Self {
-            molecule_name: molecule_name.to_owned(),
-            molecule_id,
-            max_displacement,
-            weight,
-            repeat,
-            statistics: MoveStatistics::default(),
-        }
-    }
-
-    /// Propose a translation of a molecule.
-    ///
-    /// Translates molecule in given `context` and return a change object
-    /// describing the change as well as the magnitude of the displacement.
-    #[allow(clippy::needless_pass_by_ref_mut)] // may need mutation in future
-    pub(crate) fn propose_move(
-        &mut self,
-        context: &mut impl Context,
-        rng: &mut impl Rng,
-    ) -> Option<(Change, Displacement)> {
-        match montecarlo::random_group(context, rng, self.molecule_id) {
-            Some(group_index) => {
-                let axis = random_unit_vector(rng);
-                let uaxis = UnitVector3::new_normalize(axis);
-                let angle = self.max_displacement * 2.0 * (rng.r#gen::<f64>() - 0.5);
-                let quaternion = crate::UnitQuaternion::from_axis_angle(&uaxis, angle);
-                Transform::Rotate(axis, quaternion)
-                    .on_group(group_index, context)
-                    .unwrap();
-                Some((
-                    Change::SingleGroup(group_index, GroupChange::RigidBody),
-                    Displacement::Angle(angle),
-                ))
-            }
-            None => None,
-        }
-    }
-
-    /// Get immutable reference to the statistics of the move.
-    pub(crate) const fn get_statistics(&self) -> &MoveStatistics {
-        &self.statistics
-    }
-
-    /// Get mutable reference to the statistics of the move.
-    pub(crate) const fn get_statistics_mut(&mut self) -> &mut MoveStatistics {
-        &mut self.statistics
-    }
-
-    /// Get weight of the move.
-    pub(crate) const fn weight(&self) -> f64 {
-        self.weight
-    }
-
-    /// Number of times the move should be repeated if selected.
-    pub(crate) const fn repeat(&self) -> usize {
-        self.repeat
-    }
-
     /// Validate and finalize the move.
     pub(crate) fn finalize(&mut self, context: &impl Context) -> anyhow::Result<()> {
         self.molecule_id =
             montecarlo::find_molecule_id(context, &self.molecule_name, "RotateMolecule")?;
         Ok(())
+    }
+}
+
+impl<T: Context> MoveProposal<T> for RotateMolecule {
+    fn propose_move(
+        &mut self,
+        context: &mut T,
+        rng: &mut dyn RngCore,
+    ) -> Option<(Change, Displacement)> {
+        let group_index = montecarlo::random_group(context, rng, self.molecule_id)?;
+        let axis = random_unit_vector(rng);
+        let uaxis = UnitVector3::new_normalize(axis);
+        let angle = self.max_displacement * 2.0 * (rng.r#gen::<f64>() - 0.5);
+        let quaternion = crate::UnitQuaternion::from_axis_angle(&uaxis, angle);
+        Transform::Rotate(axis, quaternion)
+            .on_group(group_index, context)
+            .unwrap();
+        Some((
+            Change::SingleGroup(group_index, GroupChange::RigidBody),
+            Displacement::Angle(angle),
+        ))
+    }
+
+    fn to_yaml(&self) -> Option<serde_yaml::Value> {
+        tagged_yaml("RotateMolecule", self)
     }
 }
 

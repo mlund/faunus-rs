@@ -20,278 +20,145 @@ use crate::{
     montecarlo::{AcceptanceCriterion, Bias, MoveStatistics, NewOld},
     Change, Context, Info, Point,
 };
-use core::fmt::Debug;
-use rand::Rng;
-use rand::{prelude::SliceRandom, rngs::StdRng};
+use core::fmt::{self, Debug};
+use rand::prelude::SliceRandom;
+use rand::rngs::StdRng;
+use rand::{Rng, RngCore};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
-
-/// Specifies how many moves should be performed,
-/// what moves can be performed and how they should be selected.
-#[derive(Debug, Serialize, Deserialize, Default)]
-#[serde(deny_unknown_fields)]
-pub struct Propagate {
-    #[serde(rename = "repeat")]
-    #[serde(default = "default_repeat")]
-    /// Number of times the `Propagate` block should be performed.
-    max_repeats: usize,
-    #[serde(skip)]
-    /// Current repeat.
-    current_repeat: usize,
-    #[serde(default)]
-    /// Seed for the random number generator.
-    seed: Seed,
-    #[serde(skip)]
-    /// Random number generator used for selecting the moves.
-    rng: Option<StdRng>,
-    #[serde(default)]
-    #[serde(rename = "collections")]
-    /// Collections of moves to be performed.
-    move_collections: Vec<MoveCollection>,
-    /// Acceptance criterion.
-    #[serde(default)]
-    criterion: AcceptanceCriterion,
-}
 
 /// Default value of `repeat` for various structures.
 pub(crate) const fn default_repeat() -> usize {
     1
 }
 
-impl Propagate {
-    /// Perform one 'propagate' cycle.
-    ///
-    /// ## Returns
-    /// - `true` if the cycle was performed successfully and the simulation should continue.
-    /// - `false` if the simulation is finished.
-    /// - Error if some issue occured.
-    pub fn propagate<C: Context>(
+/// Narrow trait for the unique logic of each Monte Carlo move.
+pub trait MoveProposal<T: Context>: Debug + Info {
+    /// Propose a move on the given context, returning the change and displacement.
+    fn propose_move(
         &mut self,
-        context: &mut NewOld<C>,
-        thermal_energy: f64,
-        step: &mut usize,
-        analyses: &mut AnalysisCollection<C>,
-    ) -> anyhow::Result<bool> {
-        if self.current_repeat >= self.max_repeats {
-            return Ok(false);
-        }
+        context: &mut T,
+        rng: &mut dyn RngCore,
+    ) -> Option<(Change, Displacement)>;
 
-        for collection in self.move_collections.iter_mut() {
-            collection.propagate(
-                context,
-                &self.criterion,
-                thermal_energy,
-                step,
-                self.rng
-                    .as_mut()
-                    .expect("Random number generator should already be seeded."),
-                analyses,
-            )?;
-        }
-
-        self.current_repeat += 1;
-
-        Ok(true)
+    /// Optional bias added to the trial energy for acceptance.
+    fn bias(&self, _change: &Change, _energies: &NewOld<f64>) -> Bias {
+        Bias::None
     }
 
-    /// Get the `Propagate` structure from input yaml file.
-    /// This also requires `Context` which is used to validate and finalize the individual moves.
-    pub fn from_file(filename: impl AsRef<Path>, context: &impl Context) -> anyhow::Result<Self> {
-        let yaml = std::fs::read_to_string(filename)?;
-        let full: serde_yaml::Value = serde_yaml::from_str(&yaml)?;
-
-        let mut current = &full;
-        for key in ["propagate"] {
-            current = match current.get(key) {
-                Some(x) => x,
-                None => anyhow::bail!("Could not find `{}` in the YAML file.", key),
-            }
-        }
-
-        let mut propagate: Self =
-            serde_yaml::from_value(current.clone()).map_err(anyhow::Error::msg)?;
-
-        // finalize and validate the collections
-        propagate
-            .move_collections
-            .iter_mut()
-            .try_for_each(|x| x.finalize(context))?;
-
-        // seed the random number generator
-        match propagate.seed {
-            Seed::Hardware => propagate.rng = Some(rand::SeedableRng::from_entropy()),
-            Seed::Fixed(x) => propagate.rng = Some(rand::SeedableRng::seed_from_u64(x as u64)),
-        }
-
-        Ok(propagate)
+    /// Number of steps to advance after attempting the move.
+    fn step_by(&self) -> usize {
+        1
     }
 
-    pub fn get_collections(&self) -> &[MoveCollection] {
-        &self.move_collections
-    }
-
-    pub const fn max_repeats(&self) -> usize {
-        self.max_repeats
-    }
+    /// Serialize the move-specific fields to a tagged YAML value.
+    fn to_yaml(&self) -> Option<serde_yaml::Value>;
 }
 
-/// Collection of moves that should be stochastically selected in the simulation.
-/// Only one move is selected per repeat.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct StochasticCollection {
-    /// How many moves should be selected per one propagate cycle.
-    #[serde(default = "default_repeat")]
+/// Wrap a serializable value in a YAML tag.
+pub(crate) fn tagged_yaml(tag: &str, value: &impl Serialize) -> Option<serde_yaml::Value> {
+    let value = serde_yaml::to_value(value).ok()?;
+    Some(serde_yaml::Value::Tagged(Box::new(
+        serde_yaml::value::TaggedValue {
+            tag: serde_yaml::value::Tag::new(tag),
+            value,
+        },
+    )))
+}
+
+/// Wrapper that owns bookkeeping (statistics, weight, repeat) and delegates proposal logic.
+pub struct MoveRunner<T: Context> {
+    inner: Box<dyn MoveProposal<T>>,
+    statistics: MoveStatistics,
+    weight: f64,
     repeat: usize,
-    /// List of moves.
-    #[serde(default)]
-    moves: Vec<Move>,
 }
 
-impl StochasticCollection {
-    /// Attempt to perform selected moves of the collection.
-    fn propagate<C: Context>(
+impl<T: Context> fmt::Debug for MoveRunner<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("MoveRunner")
+            .field("inner", &self.inner)
+            .field("statistics", &self.statistics)
+            .field("weight", &self.weight)
+            .field("repeat", &self.repeat)
+            .finish()
+    }
+}
+
+impl<T: Context> MoveRunner<T> {
+    pub fn new(inner: Box<dyn MoveProposal<T>>, weight: f64, repeat: usize) -> Self {
+        Self {
+            inner,
+            statistics: MoveStatistics::default(),
+            weight,
+            repeat,
+        }
+    }
+
+    pub const fn weight(&self) -> f64 {
+        self.weight
+    }
+
+    pub const fn repeat(&self) -> usize {
+        self.repeat
+    }
+
+    pub const fn statistics(&self) -> &MoveStatistics {
+        &self.statistics
+    }
+
+    /// Perform the move: propose, evaluate energy, accept/reject. Repeats as configured.
+    pub fn do_move(
         &mut self,
-        context: &mut NewOld<C>,
+        context: &mut NewOld<T>,
         criterion: &AcceptanceCriterion,
         thermal_energy: f64,
         step: &mut usize,
-        rng: &mut impl Rng,
-        analyses: &mut AnalysisCollection<C>,
+        rng: &mut dyn RngCore,
     ) -> anyhow::Result<()> {
         for _ in 0..self.repeat {
-            let selected = self.moves.choose_weighted_mut(rng, |mv| mv.weight())?;
-            selected.do_move(context, criterion, thermal_energy, step, rng)?;
+            let (change, displacement) = self
+                .inner
+                .propose_move(&mut context.new, rng)
+                .ok_or_else(|| anyhow::anyhow!("Could not propose a move."))?;
+            context.new.update(&change)?;
 
-            // perform analyses
-            match analyses.sample(&context.old, *step) {
-                Ok(_) => (),
-                Err(e) => return Err(e),
+            let energy = NewOld::<f64>::from(
+                context.new.hamiltonian().energy(&context.new, &change),
+                context.old.hamiltonian().energy(&context.old, &change),
+            );
+            let bias = self.inner.bias(&change, &energy);
+
+            if criterion.accept(energy, bias, thermal_energy, rng) {
+                self.statistics.accept(energy.difference(), displacement);
+                context.old.sync_from(&context.new, &change)?;
+            } else {
+                self.statistics.reject();
+                context.new.sync_from(&context.old, &change)?;
             }
         }
 
+        *step += self.inner.step_by();
         Ok(())
     }
-}
 
-/// Collection of moves that are deterministally selected during the simulation.
-/// Multiple moves can be selected per repeat.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct DeterministicCollection {
-    /// How many times the moves should be performed per one propagate cycle.
-    #[serde(default = "default_repeat")]
-    repeat: usize,
-    /// List of moves.
-    #[serde(default)]
-    moves: Vec<Move>,
-}
-
-impl DeterministicCollection {
-    /// Attempt to perform all moves of the collection.
-    fn propagate<C: Context>(
-        &mut self,
-        context: &mut NewOld<C>,
-        criterion: &AcceptanceCriterion,
-        thermal_energy: f64,
-        step: &mut usize,
-        rng: &mut impl Rng,
-        analyses: &mut AnalysisCollection<C>,
-    ) -> anyhow::Result<()> {
-        for _ in 0..self.repeat {
-            for mv in self.moves.iter_mut() {
-                mv.do_move(context, criterion, thermal_energy, step, rng)?;
-
-                // perform analyses
-                match analyses.sample(&context.old, *step) {
-                    Ok(_) => (),
-                    Err(e) => return Err(e),
-                }
+    /// Serialize to YAML, merging bookkeeping fields into the inner move's tagged output.
+    pub fn to_yaml(&self) -> Option<serde_yaml::Value> {
+        let tagged = self.inner.to_yaml()?;
+        if let serde_yaml::Value::Tagged(mut tagged_value) = tagged {
+            if let serde_yaml::Value::Mapping(ref mut map) = tagged_value.value {
+                map.insert("weight".into(), self.weight.into());
+                map.insert("repeat".into(), self.repeat.into());
+                map.insert(
+                    "statistics".into(),
+                    serde_yaml::to_value(&self.statistics).ok()?,
+                );
             }
-        }
-
-        Ok(())
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum MoveCollection {
-    Stochastic(StochasticCollection),
-    Deterministic(DeterministicCollection),
-}
-
-impl MoveCollection {
-    /// Select move from the `MoveCollection` and perform it. Repeat if requested.
-    pub(crate) fn propagate<C: Context>(
-        &mut self,
-        context: &mut NewOld<C>,
-        criterion: &AcceptanceCriterion,
-        thermal_energy: f64,
-        step: &mut usize,
-        rng: &mut impl Rng,
-        analyses: &mut AnalysisCollection<C>,
-    ) -> anyhow::Result<()> {
-        match self {
-            Self::Stochastic(x) => {
-                x.propagate(context, criterion, thermal_energy, step, rng, analyses)
-            }
-            Self::Deterministic(x) => {
-                x.propagate(context, criterion, thermal_energy, step, rng, analyses)
-            }
+            Some(serde_yaml::Value::Tagged(tagged_value))
+        } else {
+            Some(tagged)
         }
     }
-
-    /// Get mutable reference to the moves of the collection.
-    pub(crate) fn get_moves_mut(&mut self) -> &mut [Move] {
-        match self {
-            Self::Stochastic(x) => &mut x.moves,
-            Self::Deterministic(x) => &mut x.moves,
-        }
-    }
-
-    /// Get immutable reference to the moves of the collection.
-    pub fn get_moves(&self) -> &[Move] {
-        match self {
-            Self::Stochastic(x) => &x.moves,
-            Self::Deterministic(x) => &x.moves,
-        }
-    }
-
-    /// Finalize and validate moves of a collection.
-    pub(crate) fn finalize(&mut self, context: &impl Context) -> anyhow::Result<()> {
-        self.get_moves_mut()
-            .iter_mut()
-            .try_for_each(|x| x.finalize(context))?;
-
-        Ok(())
-    }
-}
-
-/// The method for selecting moves from the collection.
-#[allow(dead_code)]
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub(crate) enum MovesSelection {
-    Stochastic,
-    Deterministic,
-}
-
-/// Seed used for selecting stochastic moves.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
-pub(crate) enum Seed {
-    #[default]
-    Hardware,
-    Fixed(usize),
-}
-
-/// All possible supported moves.
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub enum Move {
-    TranslateMolecule(crate::montecarlo::TranslateMolecule),
-    TranslateAtom(crate::montecarlo::TranslateAtom),
-    RotateMolecule(crate::montecarlo::RotateMolecule),
-    VolumeMove(crate::montecarlo::VolumeMove),
-    PivotMove(crate::montecarlo::PivotMove),
-    CrankshaftMove(crate::montecarlo::CrankshaftMove),
 }
 
 /// Enum used to store the extent of displacement of a move.
@@ -327,183 +194,277 @@ impl TryFrom<Displacement> for f64 {
     }
 }
 
-impl Move {
-    /// Attempts to perform the move.
-    /// Consists of proposing the move, accepting/rejecting it and updating the context.
-    /// This process is repeated N times, depending on the characteristics of the move.
-    fn do_move(
+/// All possible supported moves (used for YAML deserialization).
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum MoveBuilder {
+    TranslateMolecule(crate::montecarlo::TranslateMolecule),
+    TranslateAtom(crate::montecarlo::TranslateAtom),
+    RotateMolecule(crate::montecarlo::RotateMolecule),
+    VolumeMove(crate::montecarlo::VolumeMove),
+    PivotMove(crate::montecarlo::PivotMove),
+    CrankshaftMove(crate::montecarlo::CrankshaftMove),
+}
+
+impl MoveBuilder {
+    /// Finalize and validate the inner move, then wrap it in a `MoveRunner`.
+    pub fn build<T: Context>(self, context: &T) -> anyhow::Result<MoveRunner<T>> {
+        macro_rules! build_move {
+            ($m:expr) => {{
+                let mut m = $m;
+                m.finalize(context)?;
+                let (w, r) = (m.weight, m.repeat);
+                MoveRunner::new(Box::new(m), w, r)
+            }};
+        }
+        Ok(match self {
+            Self::TranslateMolecule(m) => build_move!(m),
+            Self::TranslateAtom(m) => build_move!(m),
+            Self::RotateMolecule(m) => build_move!(m),
+            Self::VolumeMove(m) => build_move!(m),
+            Self::PivotMove(m) => build_move!(m),
+            Self::CrankshaftMove(m) => build_move!(m),
+        })
+    }
+}
+
+/// Shared builder for both stochastic and deterministic move collections.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct CollectionBuilder {
+    #[serde(default = "default_repeat")]
+    repeat: usize,
+    #[serde(default)]
+    moves: Vec<MoveBuilder>,
+}
+
+impl CollectionBuilder {
+    fn build_moves<T: Context>(self, context: &T) -> anyhow::Result<(usize, Vec<MoveRunner<T>>)> {
+        let moves = self
+            .moves
+            .into_iter()
+            .map(|m| m.build(context))
+            .collect::<anyhow::Result<Vec<_>>>()?;
+        Ok((self.repeat, moves))
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+enum MoveCollectionBuilder {
+    Stochastic(CollectionBuilder),
+    Deterministic(CollectionBuilder),
+}
+
+impl MoveCollectionBuilder {
+    fn build<T: Context>(self, context: &T) -> anyhow::Result<MoveCollection<T>> {
+        let (strategy, builder) = match self {
+            Self::Stochastic(b) => (SelectionStrategy::Stochastic, b),
+            Self::Deterministic(b) => (SelectionStrategy::Deterministic, b),
+        };
+        let (repeat, moves) = builder.build_moves(context)?;
+        Ok(MoveCollection {
+            strategy,
+            repeat,
+            moves,
+        })
+    }
+}
+
+/// Non-generic builder for deserialization; produces `Propagate<T>` via `build()`.
+#[derive(Debug, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+struct PropagateBuilder {
+    #[serde(rename = "repeat")]
+    #[serde(default = "default_repeat")]
+    max_repeats: usize,
+    #[serde(default)]
+    seed: Seed,
+    #[serde(default)]
+    #[serde(rename = "collections")]
+    move_collections: Vec<MoveCollectionBuilder>,
+    #[serde(default)]
+    criterion: AcceptanceCriterion,
+}
+
+/// Seed used for selecting stochastic moves.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub(crate) enum Seed {
+    #[default]
+    Hardware,
+    Fixed(usize),
+}
+
+/// How moves in a collection are selected during propagation.
+#[derive(Clone, Copy, Debug)]
+enum SelectionStrategy {
+    /// One move chosen per iteration via weighted random sampling.
+    Stochastic,
+    /// All moves executed in order each iteration.
+    Deterministic,
+}
+
+/// A collection of moves with a selection strategy and repeat count.
+#[derive(Debug)]
+pub struct MoveCollection<T: Context> {
+    strategy: SelectionStrategy,
+    repeat: usize,
+    moves: Vec<MoveRunner<T>>,
+}
+
+impl<T: Context> MoveCollection<T> {
+    pub(crate) fn propagate(
         &mut self,
-        context: &mut NewOld<impl Context>,
+        context: &mut NewOld<T>,
         criterion: &AcceptanceCriterion,
         thermal_energy: f64,
         step: &mut usize,
         rng: &mut impl Rng,
+        analyses: &mut AnalysisCollection<T>,
     ) -> anyhow::Result<()> {
-        for _ in 0..self.repeat() {
-            let (change, displacement) = self
-                .propose_move(&mut context.new, rng)
-                .ok_or_else(|| anyhow::anyhow!("Could not propose a move."))?;
-            context.new.update(&change)?;
-
-            let energy = NewOld::<f64>::from(
-                context.new.hamiltonian().energy(&context.new, &change),
-                context.old.hamiltonian().energy(&context.old, &change),
-            );
-            let bias = self.bias(&change, &energy);
-
-            if criterion.accept(energy, bias, thermal_energy, rng) {
-                self.accepted(&change, energy.difference(), displacement);
-                context.old.sync_from(&context.new, &change)?;
-            } else {
-                self.rejected(&change);
-                context.new.sync_from(&context.old, &change)?;
+        for _ in 0..self.repeat {
+            match self.strategy {
+                SelectionStrategy::Stochastic => {
+                    let selected = self.moves.choose_weighted_mut(rng, |mv| mv.weight())?;
+                    selected.do_move(context, criterion, thermal_energy, step, rng)?;
+                    analyses.sample(&context.old, *step)?;
+                }
+                SelectionStrategy::Deterministic => {
+                    for mv in self.moves.iter_mut() {
+                        mv.do_move(context, criterion, thermal_energy, step, rng)?;
+                        analyses.sample(&context.old, *step)?;
+                    }
+                }
             }
         }
-
-        // repeated moves only increase the step counter by 1
-        *step += self.step_by();
-
         Ok(())
     }
 
-    /// Propose a move on the given `context`.
-    /// This modifies the context and returns the proposed change.
-    fn propose_move(
-        &mut self,
-        context: &mut impl Context,
-        rng: &mut impl Rng,
-    ) -> Option<(Change, Displacement)> {
-        match self {
-            Self::TranslateMolecule(x) => x.propose_move(context, rng),
-            Self::TranslateAtom(x) => x.propose_move(context, rng),
-            Self::RotateMolecule(x) => x.propose_move(context, rng),
-            Self::VolumeMove(x) => x.propose_move(context, rng),
-            Self::PivotMove(x) => x.propose_move(context, rng),
-            Self::CrankshaftMove(x) => x.propose_move(context, rng),
-        }
+    pub fn moves(&self) -> &[MoveRunner<T>] {
+        &self.moves
     }
 
-    /// Moves may generate optional bias that should be added to the trial energy
-    /// when determining the acceptance probability.
-    /// It can also be used to force acceptance of a move in e.g. hybrid MD/MC schemes.
-    /// By default, this returns `Bias::None`.
-    #[allow(unused_variables)]
-    const fn bias(&self, change: &Change, energies: &NewOld<f64>) -> Bias {
-        Bias::None
-    }
-
-    /// Get statistics for the move.
-    #[allow(dead_code)]
-    pub const fn get_statistics(&self) -> &MoveStatistics {
-        match self {
-            Self::TranslateMolecule(x) => x.get_statistics(),
-            Self::TranslateAtom(x) => x.get_statistics(),
-            Self::RotateMolecule(x) => x.get_statistics(),
-            Self::VolumeMove(x) => x.get_statistics(),
-            Self::PivotMove(x) => x.get_statistics(),
-            Self::CrankshaftMove(x) => x.get_statistics(),
-        }
-    }
-
-    /// Get mutable statistics for the move.
-    pub(crate) const fn get_statistics_mut(&mut self) -> &mut MoveStatistics {
-        match self {
-            Self::TranslateMolecule(x) => x.get_statistics_mut(),
-            Self::TranslateAtom(x) => x.get_statistics_mut(),
-            Self::RotateMolecule(x) => x.get_statistics_mut(),
-            Self::VolumeMove(x) => x.get_statistics_mut(),
-            Self::PivotMove(x) => x.get_statistics_mut(),
-            Self::CrankshaftMove(x) => x.get_statistics_mut(),
-        }
-    }
-
-    /// Called when the move is accepted.
-    ///
-    /// This will update the statistics.
-    #[allow(unused_variables)]
-    fn accepted(&mut self, change: &Change, energy_change: f64, displacement: Displacement) {
-        self.get_statistics_mut()
-            .accept(energy_change, displacement);
-    }
-
-    /// Called when the move is rejected.
-    ///
-    /// This will update the statistics.
-    #[allow(unused_variables)]
-    fn rejected(&mut self, change: &Change) {
-        self.get_statistics_mut().reject();
-    }
-
-    /// Get the weight of the move.
-    pub const fn weight(&self) -> f64 {
-        match self {
-            Self::TranslateMolecule(x) => x.weight(),
-            Self::TranslateAtom(x) => x.weight(),
-            Self::RotateMolecule(x) => x.weight(),
-            Self::VolumeMove(x) => x.weight(),
-            Self::PivotMove(x) => x.weight(),
-            Self::CrankshaftMove(x) => x.weight(),
-        }
-    }
-
-    /// Validate and finalize the move.
-    fn finalize(&mut self, context: &impl Context) -> anyhow::Result<()> {
-        match self {
-            Self::TranslateMolecule(x) => x.finalize(context),
-            Self::TranslateAtom(x) => x.finalize(context),
-            Self::RotateMolecule(x) => x.finalize(context),
-            Self::VolumeMove(x) => x.finalize(context),
-            Self::PivotMove(x) => x.finalize(context),
-            Self::CrankshaftMove(x) => x.finalize(context),
-        }
-    }
-
-    /// How many times the move should be repeated upon selection.
     pub const fn repeat(&self) -> usize {
-        match self {
-            Self::TranslateMolecule(x) => x.repeat(),
-            Self::TranslateAtom(x) => x.repeat(),
-            Self::RotateMolecule(x) => x.repeat(),
-            Self::VolumeMove(x) => x.repeat(),
-            Self::PivotMove(x) => x.repeat(),
-            Self::CrankshaftMove(x) => x.repeat(),
-        }
+        self.repeat
     }
 
-    /// The number of steps to move forward after attempting the move.
-    pub const fn step_by(&self) -> usize {
-        match self {
-            Self::TranslateMolecule(_) => 1,
-            Self::TranslateAtom(_) => 1,
-            Self::RotateMolecule(_) => 1,
-            Self::VolumeMove(_) => 1,
-            Self::PivotMove(_) => 1,
-            Self::CrankshaftMove(_) => 1,
-        }
+    fn to_yaml(&self) -> serde_yaml::Value {
+        let tag = match self.strategy {
+            SelectionStrategy::Stochastic => "Stochastic",
+            SelectionStrategy::Deterministic => "Deterministic",
+        };
+        let mut map = serde_yaml::Mapping::new();
+        map.insert("repeat".into(), self.repeat.into());
+        let moves: Vec<_> = self.moves.iter().filter_map(|m| m.to_yaml()).collect();
+        map.insert("moves".into(), serde_yaml::Value::Sequence(moves));
+        serde_yaml::Value::Tagged(Box::new(serde_yaml::value::TaggedValue {
+            tag: serde_yaml::value::Tag::new(tag),
+            value: serde_yaml::Value::Mapping(map),
+        }))
     }
 }
 
-impl Info for Move {
-    fn short_name(&self) -> Option<&'static str> {
-        match self {
-            Self::TranslateMolecule(x) => x.short_name(),
-            Self::TranslateAtom(x) => x.short_name(),
-            Self::RotateMolecule(x) => x.short_name(),
-            Self::VolumeMove(x) => x.short_name(),
-            Self::PivotMove(x) => x.short_name(),
-            Self::CrankshaftMove(x) => x.short_name(),
+/// Specifies how many moves should be performed,
+/// what moves can be performed and how they should be selected.
+#[derive(Debug)]
+pub struct Propagate<T: Context> {
+    max_repeats: usize,
+    current_repeat: usize,
+    seed: Seed,
+    rng: Option<StdRng>,
+    move_collections: Vec<MoveCollection<T>>,
+    criterion: AcceptanceCriterion,
+}
+
+impl<T: Context> Propagate<T> {
+    /// Perform one 'propagate' cycle.
+    ///
+    /// Returns `true` if the simulation should continue, `false` if finished.
+    pub fn propagate(
+        &mut self,
+        context: &mut NewOld<T>,
+        thermal_energy: f64,
+        step: &mut usize,
+        analyses: &mut AnalysisCollection<T>,
+    ) -> anyhow::Result<bool> {
+        if self.current_repeat >= self.max_repeats {
+            return Ok(false);
         }
+
+        for collection in self.move_collections.iter_mut() {
+            collection.propagate(
+                context,
+                &self.criterion,
+                thermal_energy,
+                step,
+                self.rng
+                    .as_mut()
+                    .expect("Random number generator should already be seeded."),
+                analyses,
+            )?;
+        }
+
+        self.current_repeat += 1;
+        Ok(true)
     }
 
-    fn long_name(&self) -> Option<&'static str> {
-        match self {
-            Self::TranslateMolecule(x) => x.long_name(),
-            Self::TranslateAtom(x) => x.long_name(),
-            Self::RotateMolecule(x) => x.long_name(),
-            Self::VolumeMove(x) => x.long_name(),
-            Self::PivotMove(x) => x.long_name(),
-            Self::CrankshaftMove(x) => x.long_name(),
-        }
+    /// Build a `Propagate<T>` from an input YAML file.
+    pub fn from_file(filename: impl AsRef<Path>, context: &T) -> anyhow::Result<Self> {
+        let yaml = std::fs::read_to_string(filename)?;
+        let full: serde_yaml::Value = serde_yaml::from_str(&yaml)?;
+
+        let current = full
+            .get("propagate")
+            .ok_or_else(|| anyhow::anyhow!("Could not find `propagate` in the YAML file."))?;
+
+        let builder: PropagateBuilder =
+            serde_yaml::from_value(current.clone()).map_err(anyhow::Error::msg)?;
+
+        let move_collections = builder
+            .move_collections
+            .into_iter()
+            .map(|c| c.build(context))
+            .collect::<anyhow::Result<Vec<_>>>()?;
+
+        let rng = match builder.seed {
+            Seed::Hardware => Some(rand::SeedableRng::from_entropy()),
+            Seed::Fixed(x) => Some(rand::SeedableRng::seed_from_u64(x as u64)),
+        };
+
+        Ok(Self {
+            max_repeats: builder.max_repeats,
+            current_repeat: 0,
+            seed: builder.seed,
+            rng,
+            move_collections,
+            criterion: builder.criterion,
+        })
+    }
+
+    pub fn collections(&self) -> &[MoveCollection<T>] {
+        &self.move_collections
+    }
+
+    pub const fn max_repeats(&self) -> usize {
+        self.max_repeats
+    }
+
+    /// Serialize the propagate state to a YAML value.
+    pub fn to_yaml(&self) -> serde_yaml::Value {
+        let mut map = serde_yaml::Mapping::new();
+        map.insert("repeat".into(), self.max_repeats.into());
+        map.insert(
+            "seed".into(),
+            serde_yaml::to_value(&self.seed).unwrap_or_default(),
+        );
+        let collections: Vec<_> = self.move_collections.iter().map(|c| c.to_yaml()).collect();
+        map.insert(
+            "collections".into(),
+            serde_yaml::Value::Sequence(collections),
+        );
+        map.insert(
+            "criterion".into(),
+            serde_yaml::to_value(self.criterion).unwrap_or_default(),
+        );
+        serde_yaml::Value::Mapping(map)
     }
 }
 
@@ -533,21 +494,20 @@ moves:
    - !TranslateMolecule { molecule: Protein, dp: 0.6, weight: 2.0 }
    - !TranslateMolecule { molecule: Lipid, dp: 0.5, weight: 0.5 }";
 
-        let collection: StochasticCollection = serde_yaml::from_str(string).unwrap();
+        let collection: CollectionBuilder = serde_yaml::from_str(string).unwrap();
         assert_eq!(collection.repeat, 20);
         assert_eq!(collection.moves.len(), 3);
     }
 
     #[test]
     fn deterministic_parse() {
-        // TODO: replace with some actual deterministic moves
         let string = "repeat: 10
 moves:
    - !TranslateMolecule { molecule: Water, dp: 0.4, weight: 1.0 }
    - !TranslateMolecule { molecule: Protein, dp: 0.6, weight: 2.0 }
    - !TranslateMolecule { molecule: Lipid, dp: 0.5, weight: 0.5 }";
 
-        let collection: StochasticCollection = serde_yaml::from_str(string).unwrap();
+        let collection: CollectionBuilder = serde_yaml::from_str(string).unwrap();
         assert_eq!(collection.repeat, 10);
         assert_eq!(collection.moves.len(), 3);
     }
@@ -568,27 +528,17 @@ moves:
         assert_eq!(propagate.current_repeat, 0);
         assert_eq!(propagate.criterion, AcceptanceCriterion::MetropolisHastings);
         assert_eq!(propagate.move_collections.len(), 2);
-        let stochastic_collection = match propagate.move_collections[0].clone() {
-            MoveCollection::Stochastic(x) => x,
-            _ => panic!("Invalid Move Collection variant."),
-        };
 
-        assert_eq!(stochastic_collection.repeat, 1);
-        assert_eq!(stochastic_collection.moves.len(), 3);
-        let stochastic_move_1 = stochastic_collection.moves[0].clone();
-        assert_eq!(stochastic_move_1.repeat(), 2);
-        assert_eq!(stochastic_move_1.weight(), 0.5);
-        let stochastic_move_2 = stochastic_collection.moves[1].clone();
-        assert_eq!(stochastic_move_2.repeat(), 1);
-        assert_eq!(stochastic_move_2.weight(), 1.0);
+        let stochastic = &propagate.move_collections[0];
+        assert_eq!(stochastic.moves().len(), 3);
+        assert_eq!(stochastic.moves()[0].repeat(), 2);
+        assert_eq!(stochastic.moves()[0].weight(), 0.5);
+        assert_eq!(stochastic.moves()[1].repeat(), 1);
+        assert_eq!(stochastic.moves()[1].weight(), 1.0);
 
-        let deterministic_collection = match propagate.move_collections[1].clone() {
-            MoveCollection::Deterministic(x) => x,
-            _ => panic!("Invalid Move Collection variant."),
-        };
-
-        assert_eq!(deterministic_collection.repeat, 5);
-        assert_eq!(deterministic_collection.moves.len(), 1);
+        let deterministic = &propagate.move_collections[1];
+        assert_eq!(deterministic.repeat(), 5);
+        assert_eq!(deterministic.moves().len(), 1);
     }
 
     #[test]

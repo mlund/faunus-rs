@@ -12,12 +12,12 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
-use super::MoveStatistics;
 use crate::cell::{Shape, VolumeScalePolicy};
 use crate::montecarlo::NewOld;
-use crate::propagate::Displacement;
+use crate::propagate::{tagged_yaml, Displacement, MoveProposal};
 use crate::{Change, Context};
 use rand::prelude::*;
+use rand::RngCore;
 use serde::{Deserialize, Serialize};
 
 /// Monte Carlo move for proposing volume changes in the NPT ensemble.
@@ -37,13 +37,12 @@ pub struct VolumeMove {
     #[serde(default)]
     method: VolumeScalePolicy,
     /// Move selection weight.
-    weight: f64,
+    #[serde(skip_serializing)]
+    pub(crate) weight: f64,
     /// Repeat the move N times.
     #[serde(default = "crate::propagate::default_repeat")]
-    repeat: usize,
-    /// Move statistics.
-    #[serde(skip_deserializing)]
-    statistics: MoveStatistics,
+    #[serde(skip_serializing)]
+    pub(crate) repeat: usize,
 }
 
 impl crate::Info for VolumeMove {
@@ -56,54 +55,6 @@ impl crate::Info for VolumeMove {
 }
 
 impl VolumeMove {
-    /// Propose a volume change on the given context.
-    ///
-    /// Returns `None` if the cell has no finite volume.
-    #[allow(clippy::needless_pass_by_ref_mut)]
-    pub(crate) fn propose_move(
-        &mut self,
-        context: &mut impl Context,
-        rng: &mut impl Rng,
-    ) -> Option<(Change, Displacement)> {
-        let old_volume = context.cell().volume()?;
-        if old_volume.is_infinite() {
-            return None;
-        }
-
-        // Logarithmic volume sampling
-        let ln_new_volume = old_volume.ln() + (rng.r#gen::<f64>() - 0.5) * self.volume_displacement;
-        let new_volume = ln_new_volume.exp();
-
-        // Scale positions and cell
-        let old_volume = context
-            .scale_volume_and_positions(new_volume, self.method)
-            .ok()?;
-
-        let change = Change::Volume(self.method, NewOld::from(new_volume, old_volume));
-        let displacement = Displacement::Custom(new_volume - old_volume);
-        Some((change, displacement))
-    }
-
-    /// Get immutable reference to the statistics of the move.
-    pub(crate) const fn get_statistics(&self) -> &MoveStatistics {
-        &self.statistics
-    }
-
-    /// Get mutable reference to the statistics of the move.
-    pub(crate) const fn get_statistics_mut(&mut self) -> &mut MoveStatistics {
-        &mut self.statistics
-    }
-
-    /// Get weight of the move.
-    pub(crate) const fn weight(&self) -> f64 {
-        self.weight
-    }
-
-    /// Number of times the move should be repeated if selected.
-    pub(crate) const fn repeat(&self) -> usize {
-        self.repeat
-    }
-
     /// Validate and finalize the move.
     pub(crate) fn finalize(&mut self, context: &impl Context) -> anyhow::Result<()> {
         if self.volume_displacement <= 0.0 {
@@ -123,6 +74,34 @@ impl VolumeMove {
             anyhow::bail!("VolumeMove: cell volume must be positive, got {}", volume);
         }
         Ok(())
+    }
+}
+
+impl<T: Context> MoveProposal<T> for VolumeMove {
+    fn propose_move(
+        &mut self,
+        context: &mut T,
+        rng: &mut dyn RngCore,
+    ) -> Option<(Change, Displacement)> {
+        let old_volume = context.cell().volume()?;
+        if old_volume.is_infinite() {
+            return None;
+        }
+
+        let ln_new_volume = old_volume.ln() + (rng.r#gen::<f64>() - 0.5) * self.volume_displacement;
+        let new_volume = ln_new_volume.exp();
+
+        let old_volume = context
+            .scale_volume_and_positions(new_volume, self.method)
+            .ok()?;
+
+        let change = Change::Volume(self.method, NewOld::from(new_volume, old_volume));
+        let displacement = Displacement::Custom(new_volume - old_volume);
+        Some((change, displacement))
+    }
+
+    fn to_yaml(&self) -> Option<serde_yaml::Value> {
+        tagged_yaml("VolumeMove", self)
     }
 }
 
