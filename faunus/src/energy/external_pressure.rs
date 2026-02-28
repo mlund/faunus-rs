@@ -21,9 +21,7 @@
 use crate::cell::Shape;
 use crate::change::GroupChange;
 use crate::{Change, Context};
-use serde::de;
-use serde::ser::SerializeMap;
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Serialize};
 
 use super::EnergyTerm;
 
@@ -49,61 +47,25 @@ pub struct ExternalPressure {
     thermal_energy: f64, // kT in kJ/mol
 }
 
-/// Pressure with unit, serialized as a single-key YAML map (e.g. `P/atm: 1.0`).
-///
-/// Custom Serialize/Deserialize are needed because serde_yaml represents
-/// externally-tagged enums as YAML tags (`!P/atm 1.0`), not as maps.
-#[derive(Debug, Clone)]
+/// Pressure with unit, serialized as a YAML tag (e.g. `!atm 1.0`).
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Pressure {
+    #[serde(rename = "atm")]
     Atm(f64),
+    #[serde(rename = "bar")]
     Bar(f64),
+    #[serde(rename = "kT")]
     Kt(f64),
+    #[serde(rename = "mM")]
     MilliMolar(f64),
-    Pascal(f64),
-}
-
-const PRESSURE_VARIANTS: &[&str] = &["P/atm", "P/bar", "P/kT", "P/mM", "P/Pa"];
-
-impl Serialize for Pressure {
-    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        let mut map = serializer.serialize_map(Some(1))?;
-        match self {
-            Self::Atm(v) => map.serialize_entry("P/atm", v)?,
-            Self::Bar(v) => map.serialize_entry("P/bar", v)?,
-            Self::Kt(v) => map.serialize_entry("P/kT", v)?,
-            Self::MilliMolar(v) => map.serialize_entry("P/mM", v)?,
-            Self::Pascal(v) => map.serialize_entry("P/Pa", v)?,
-        }
-        map.end()
-    }
-}
-
-impl<'de> Deserialize<'de> for Pressure {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let map: std::collections::HashMap<String, f64> =
-            std::collections::HashMap::deserialize(deserializer)?;
-        if map.len() != 1 {
-            return Err(de::Error::custom(
-                "expected exactly one pressure key (e.g. P/atm: 1.0)",
-            ));
-        }
-        let (key, value) = map.into_iter().next().unwrap();
-        match key.as_str() {
-            "P/atm" => Ok(Self::Atm(value)),
-            "P/bar" => Ok(Self::Bar(value)),
-            "P/kT" => Ok(Self::Kt(value)),
-            "P/mM" => Ok(Self::MilliMolar(value)),
-            "P/Pa" => Ok(Self::Pascal(value)),
-            _ => Err(de::Error::unknown_variant(&key, PRESSURE_VARIANTS)),
-        }
-    }
+    Pa(f64),
 }
 
 impl Pressure {
     /// Convert to internal pressure units: kJ/(mol·Å³).
     pub fn to_internal(&self, thermal_energy: f64) -> f64 {
         match self {
-            Self::Pascal(p) => p * PA_TO_INTERNAL,
+            Self::Pa(p) => p * PA_TO_INTERNAL,
             Self::Atm(p) => p * physical_constants::STANDARD_ATMOSPHERE * PA_TO_INTERNAL,
             Self::Bar(p) => p * 1e5 * PA_TO_INTERNAL, // 1 bar = 10⁵ Pa by definition
             Self::Kt(p) => p * thermal_energy,
@@ -200,7 +162,7 @@ mod tests {
     #[test]
     fn pressure_pascal_conversion() {
         let kt = 2.4789; // kJ/mol at ~298 K
-        let p = Pressure::Pascal(101325.0);
+        let p = Pressure::Pa(101325.0);
         let internal = p.to_internal(kt);
         assert_approx_eq!(f64, internal, 101325.0 * PA_TO_INTERNAL, epsilon = 1e-15);
     }
@@ -208,7 +170,7 @@ mod tests {
     #[test]
     fn pressure_atm_conversion() {
         let kt = 2.4789;
-        let p_pa = Pressure::Pascal(101325.0);
+        let p_pa = Pressure::Pa(101325.0);
         let p_atm = Pressure::Atm(1.0);
         assert_approx_eq!(
             f64,
@@ -221,7 +183,7 @@ mod tests {
     #[test]
     fn pressure_bar_conversion() {
         let kt = 2.4789;
-        let p_pa = Pressure::Pascal(1e5);
+        let p_pa = Pressure::Pa(1e5);
         let p_bar = Pressure::Bar(1.0);
         assert_approx_eq!(
             f64,
@@ -252,23 +214,23 @@ mod tests {
 
     #[test]
     fn pressure_yaml_roundtrip() {
-        let yaml = "P/atm: 1.0";
+        let yaml = "!atm 1.0";
         let p: Pressure = serde_yaml::from_str(yaml).unwrap();
         assert!(matches!(p, Pressure::Atm(v) if (v - 1.0).abs() < f64::EPSILON));
 
-        let yaml = "P/bar: 2.5";
+        let yaml = "!bar 2.5";
         let p: Pressure = serde_yaml::from_str(yaml).unwrap();
         assert!(matches!(p, Pressure::Bar(v) if (v - 2.5).abs() < f64::EPSILON));
 
-        let yaml = "P/Pa: 101325.0";
+        let yaml = "!Pa 101325.0";
         let p: Pressure = serde_yaml::from_str(yaml).unwrap();
-        assert!(matches!(p, Pressure::Pascal(v) if (v - 101325.0).abs() < f64::EPSILON));
+        assert!(matches!(p, Pressure::Pa(v) if (v - 101325.0).abs() < f64::EPSILON));
 
-        let yaml = "P/kT: 0.1";
+        let yaml = "!kT 0.1";
         let p: Pressure = serde_yaml::from_str(yaml).unwrap();
         assert!(matches!(p, Pressure::Kt(v) if (v - 0.1).abs() < f64::EPSILON));
 
-        let yaml = "P/mM: 10.0";
+        let yaml = "!mM 10.0";
         let p: Pressure = serde_yaml::from_str(yaml).unwrap();
         assert!(matches!(p, Pressure::MilliMolar(v) if (v - 10.0).abs() < f64::EPSILON));
     }

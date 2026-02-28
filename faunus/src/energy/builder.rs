@@ -309,6 +309,13 @@ pub struct SplineOptions {
     /// Grid spacing strategy for spline construction.
     #[serde(default)]
     pub grid_type: GridType,
+    /// Shift energy to zero at cutoff (default: true).
+    #[serde(default = "default_shift_energy")]
+    pub shift_energy: bool,
+}
+
+const fn default_shift_energy() -> bool {
+    true
 }
 
 impl SplineOptions {
@@ -317,6 +324,7 @@ impl SplineOptions {
         SplineConfig {
             n_points: self.n_points,
             grid_type: self.grid_type,
+            shift_energy: self.shift_energy,
             ..Default::default()
         }
     }
@@ -339,8 +347,9 @@ pub struct HamiltonianBuilder {
     /// Collective variable constraints (hard or harmonic).
     pub constrain: Option<Vec<ConstrainBuilder>>,
 
-    /// External pressure for the NPT ensemble (isobaric).
-    pub isobaric: Option<Pressure>,
+    /// External pressure for the NPT ensemble.
+    #[serde(alias = "isobaric")]
+    pub pressure: Option<Pressure>,
 }
 
 impl HamiltonianBuilder {

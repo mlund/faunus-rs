@@ -42,8 +42,7 @@ system:
       default:
         - !Coulomb {cutoff: 200.0}
         - !HardSphere {mixing: Arithmetic}
-    isobaric:
-      P/mM: 113.2
+    pressure: !mM 113.2
 
 analysis:
   - !CollectiveVariable

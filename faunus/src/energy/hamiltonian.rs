@@ -70,7 +70,7 @@ impl Hamiltonian {
             hamiltonian.push(sasa_builder.build()?.into());
         }
 
-        if let Some(pressure) = &builder.isobaric {
+        if let Some(pressure) = &builder.pressure {
             let temperature = temperature.ok_or_else(|| {
                 anyhow::anyhow!("Medium with temperature required for isobaric energy term")
             })?;

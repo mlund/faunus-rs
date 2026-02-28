@@ -5,7 +5,7 @@ Energy terms are defined in the `energy` section of the YAML input.
 
 ## External Pressure (Isobaric)
 
-The `isobaric` energy term adds an external pressure contribution for the NPT ensemble:
+The `pressure` energy term adds an external pressure contribution for the NPT ensemble:
 
 $$
 E = PV - (N + 1) k_BT \ln V
@@ -20,19 +20,18 @@ for multi-atom molecule kinds, each non-empty group contributes 1.
 
 ```yaml
 energy:
-  isobaric:
-    P/atm: 1.0
+  pressure: !atm 1.0
 ```
 
-Supported pressure units:
+Supported pressure units (YAML tags):
 
-| Key      | Unit                          |
-|----------|-------------------------------|
-| `P/atm`  | atmospheres                  |
-| `P/bar`  | bar                          |
-| `P/Pa`   | Pascal                       |
-| `P/kT`   | $k_BT/\text{Å}^3$           |
-| `P/mM`   | millimolar (ideal gas)       |
+| Tag    | Unit                          |
+|--------|-------------------------------|
+| `!atm` | atmospheres                   |
+| `!bar` | bar                           |
+| `!Pa`  | Pascal                        |
+| `!kT`  | $k_BT/\text{Å}^3$            |
+| `!mM`  | millimolar (ideal gas)        |
 
 ## Example
 

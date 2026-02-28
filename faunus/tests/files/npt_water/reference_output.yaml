@@ -12,13 +12,13 @@ blocks:
     directions: xyz
     offset: null
 cell: !Cuboid
-- 15.79827312482486
-- 15.79827312482486
-- 15.79827312482486
+- 15.828856424335074
+- 15.828856424335074
+- 15.828856424335074
 energy_change:
-  drift: 8.847564458847046e-9
-  final: -98133.26082754026
-  initial: -98222.38746721989
+  drift: 5.165929906070232e-10
+  final: -8610.310997419969
+  initial: -8660.199025315074
 propagate:
   repeat: 2000
   seed: !Fixed 42
@@ -34,17 +34,17 @@ propagate:
       repeat: 64
       statistics:
         num_trials: 128000
-        num_accepted: 55034
+        num_accepted: 53740
         mean_square_displacement:
-          avg: 0.011353563266171042
+          avg: 0.010826649678102778
           n: 128000
         timer:
           accumulated:
             secs: 0
             nanos: 0
         info: {}
-        energy_change_sum: 390.49320856180634
-        acceptance_ratio: 0.429953125
+        energy_change_sum: -588.4040031238737
+        acceptance_ratio: 0.41984375
     - !RotateMolecule
       molecule: water
       max_displacement: 0.4
@@ -52,17 +52,17 @@ propagate:
       repeat: 64
       statistics:
         num_trials: 128000
-        num_accepted: 64783
+        num_accepted: 63657
         mean_square_displacement:
-          avg: 0.016109599182029644
+          avg: 0.015526999449008155
           n: 128000
         timer:
           accumulated:
             secs: 0
             nanos: 0
         info: {}
-        energy_change_sum: -254.43886531751636
-        acceptance_ratio: 0.5061171875
+        energy_change_sum: 664.4383693597814
+        acceptance_ratio: 0.4973203125
     - !VolumeMove
       volume_displacement: 0.03
       method: Isotropic
@@ -70,24 +70,24 @@ propagate:
       repeat: 5
       statistics:
         num_trials: 10000
-        num_accepted: 6928
+        num_accepted: 6019
         mean_square_displacement:
-          avg: 629.4830089477009
+          avg: 557.8085431265854
           n: 10000
         timer:
           accumulated:
             secs: 0
             nanos: 0
         info: {}
-        energy_change_sum: -46.92770357351401
-        acceptance_ratio: 0.6928
+        energy_change_sum: -26.14633834131928
+        acceptance_ratio: 0.6019
   criterion: MetropolisHastings
 analysis:
 - collectivevariable:
     property: Volume
     num_samples: 600
-    mean: 3918.5105281919928
-    rms: 3918.951687225975
+    mean: 3923.3443670149077
+    rms: 3923.756246220727
 - structure printer:
     file: traj.xtc
     num_samples: 6

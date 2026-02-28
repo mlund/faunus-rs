@@ -13,7 +13,7 @@ atoms:
 molecules:
   - name: water
     atoms: [OW, HW, HW]
-    #exclusions: [[0, 1], [0, 2], [1, 2]] # exclude internal energy calc.
+    exclusions: [[0, 1], [0, 2], [1, 2]]
     has_com: true
 
 system:
@@ -36,15 +36,17 @@ system:
       default:
         - !LennardJones {mixing: LB}
         - !Fanourgakis {cutoff: 9.0}
-    isobaric:
-      P/atm: 1
+    spline:
+      cutoff: 14.0
+      shift_energy: false
+    pressure: !atm 1
 
 analysis:
   - !CollectiveVariable {property: volume, frequency: !Every 10}
   - !Trajectory {file: "traj.xtc", frequency: !Every 1000}
   - !Trajectory {file: "confout.xyz", frequency: End}
   - !RadialDistribution
-    selections: ["name OW", "name OW"]
+    selections: ["atomtype OW", "atomtype OW"]
     file: rdf.dat
     dr: 0.1
     frequency: !Every 10
