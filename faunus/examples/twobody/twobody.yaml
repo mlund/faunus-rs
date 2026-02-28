@@ -94,6 +94,13 @@ analysis:
     file: "vt.dat.gz"
     temperature: 298.15
     frequency: !Every 10
+  - !RadialDistribution
+    selections: ["molecule MOL1", "molecule MOL2"]
+    use_com: true
+    dimension: z
+    file: "rdf_z.dat"
+    dr: 0.5
+    frequency: !Every 10
   - !Trajectory
     file: "traj.xtc"
     frequency: !Every 1000
