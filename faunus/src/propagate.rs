@@ -470,6 +470,15 @@ impl<T: Context> Propagate<T> {
         &self.move_collections
     }
 
+    /// Total accumulated energy change from all accepted moves.
+    pub fn energy_change_sum(&self) -> f64 {
+        self.move_collections
+            .iter()
+            .flat_map(|c| c.moves())
+            .map(|m| m.statistics().energy_change_sum)
+            .sum()
+    }
+
     pub const fn max_repeats(&self) -> usize {
         self.max_repeats
     }

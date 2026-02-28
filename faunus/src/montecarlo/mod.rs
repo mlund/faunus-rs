@@ -15,6 +15,7 @@
 //! # Support for Monte Carlo sampling
 
 use crate::analysis::{AnalysisCollection, Analyze};
+use crate::energy::EnergyChange;
 use crate::group::*;
 use crate::propagate::{Displacement, Propagate};
 use crate::state::{GroupState, State};
@@ -321,6 +322,19 @@ impl<T: Context + 'static> MarkovChain<T> {
         })
     }
 
+    /// Compute total system energy using `Change::Everything`.
+    pub fn system_energy(&self) -> f64 {
+        self.context
+            .hamiltonian()
+            .energy(&self.context, &crate::Change::Everything)
+    }
+
+    /// Absolute energy drift: |initial + sum(accepted ΔE) - current|.
+    pub fn energy_drift(&self, initial_energy: f64) -> f64 {
+        let sum_du = self.propagate.energy_change_sum();
+        (initial_energy + sum_du - self.system_energy()).abs()
+    }
+
     /// Propagate instance describing moves to perform.
     pub const fn propagation(&self) -> &Propagate<T> {
         &self.propagate
@@ -501,9 +515,14 @@ mod tests {
         let mut markov_chain =
             MarkovChain::new(context, propagate, 1.0, AnalysisCollection::default()).unwrap();
 
+        let initial_energy = markov_chain.system_energy();
+
         for step in markov_chain.iter() {
             step.unwrap();
         }
+
+        let drift = markov_chain.energy_drift(initial_energy);
+        assert!(drift < 1e-10, "Energy drift {drift:.6e} exceeds tolerance");
 
         let move1_stats = markov_chain.propagate.collections()[0].moves()[0].statistics();
 

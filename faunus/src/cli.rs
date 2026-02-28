@@ -13,7 +13,7 @@
 // limitations under the license.
 
 use crate::{
-    analysis::{self},
+    analysis,
     montecarlo::MarkovChain,
     platform::reference::{get_medium, ReferencePlatform},
     propagate::Propagate,
@@ -124,6 +124,9 @@ fn run(input: PathBuf, state: Option<PathBuf>, yaml_output: &mut std::fs::File) 
     write_yaml(&context.cell(), yaml_output, Some("cell"))?;
     write_yaml(&context.topology().blocks(), yaml_output, Some("blocks"))?;
 
+    let initial_energy = markov_chain.system_energy();
+    log::info!("Initial energy = {initial_energy:.2} kJ/mol");
+
     // Step through the Markov chain and update progress bar
     let pb = ProgressBar::new(markov_chain.propagation().max_repeats() as u64);
     for (i, step) in markov_chain.iter().enumerate() {
@@ -131,6 +134,27 @@ fn run(input: PathBuf, state: Option<PathBuf>, yaml_output: &mut std::fs::File) 
         pb.set_position(i as u64 + 1);
     }
     pb.finish();
+
+    let final_energy = markov_chain.system_energy();
+    let drift = markov_chain.energy_drift(initial_energy);
+    let relative_drift = if final_energy.abs() > f64::EPSILON {
+        drift / final_energy.abs()
+    } else {
+        drift
+    };
+    log::info!("Final energy = {final_energy:.2} kJ/mol");
+    if relative_drift > 1e-9 {
+        log::warn!("Energy drift: {drift:.2e} kJ/mol (relative: {relative_drift:.2e}) ⚠️");
+    } else {
+        log::info!("Energy drift: {drift:.2e} kJ/mol (relative: {relative_drift:.2e}) ✅");
+    }
+
+    let energy_summary = std::collections::BTreeMap::from([
+        ("initial".to_string(), initial_energy),
+        ("final".to_string(), final_energy),
+        ("drift".to_string(), drift),
+    ]);
+    write_yaml(&energy_summary, yaml_output, Some("energy_change"))?;
 
     // Write final state
     write_yaml(
