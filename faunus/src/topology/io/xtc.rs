@@ -56,6 +56,7 @@ impl StructureIO for XtcFormat {
             .collect();
 
         // Only diagonal elements needed for orthorhombic boxes
+        #[allow(clippy::option_if_let_else)]
         let boxvec = if let Some(b) = &data.box_lengths {
             molly::BoxVec::from_cols_array(&[
                 b.x as f32 * ANGSTROM_TO_NM,

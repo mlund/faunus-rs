@@ -19,7 +19,7 @@ use std::ops::Range;
 /// Continuous range of atoms with a non-unique name.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct Chain {
+pub struct Chain {
     /// Name of the chain
     name: String,
     /// Atom indices forming the chain.

@@ -220,7 +220,11 @@ impl MoveBuilder {
             Self::TranslateMolecule(m) => build_move!(m),
             Self::TranslateAtom(m) => build_move!(m),
             Self::RotateMolecule(m) => build_move!(m),
-            Self::VolumeMove(m) => build_move!(m),
+            Self::VolumeMove(m) => {
+                m.finalize(context)?;
+                let (w, r) = (m.weight, m.repeat);
+                MoveRunner::new(Box::new(m), w, r)
+            }
             Self::PivotMove(m) => build_move!(m),
             Self::CrankshaftMove(m) => build_move!(m),
         })

@@ -27,7 +27,7 @@ use super::Indexed;
 
 /// Force field definition for torsion, e.g. harmonic, cosine, etc.
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Default)]
-pub(crate) enum TorsionKind {
+pub enum TorsionKind {
     /// Harmonic torsion.
     Harmonic(HarmonicTorsion),
     /// Cosine angle as used in e.g. GROMOS-96.

@@ -161,7 +161,8 @@ impl ExternalPressure {
             _ => return 0.0,
         };
         let n = Self::count_entities(context) as f64;
-        self.pressure * volume - (n + 1.0) * self.thermal_energy * volume.ln()
+        self.pressure
+            .mul_add(volume, -((n + 1.0) * self.thermal_energy * volume.ln()))
     }
 
     /// Compute energy for a given change.

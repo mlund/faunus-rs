@@ -30,6 +30,7 @@ use anyhow::Result;
 use num::traits::Inv;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
+use std::sync::LazyLock;
 
 /// Participant in a reaction
 ///
@@ -99,9 +100,11 @@ pub struct Reaction {
 }
 
 /// Repeat a reaction participant, e.g. "2A" -> ["A", "A"]
+static PARTICIPANT_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^(?P<number>\d+)(?P<remaining>.*)").unwrap());
+
 fn repeat_participant(participant: &str) -> Vec<String> {
-    let re = Regex::new(r"^(?P<number>\d+)(?P<remaining>.*)").unwrap();
-    re.captures(participant).map_or_else(
+    PARTICIPANT_RE.captures(participant).map_or_else(
         || vec![participant.to_string()],
         |captured| {
             let n: usize = captured
@@ -208,7 +211,7 @@ impl Reaction {
         }
     }
     /// Get the reactants and products of the reaction in the current direction
-    pub const fn get(&self) -> (&Vec<Participant>, &Vec<Participant>) {
+    pub fn get(&self) -> (&[Participant], &[Participant]) {
         match self.direction {
             Direction::Forward => (&self.left, &self.right),
             Direction::Backward => (&self.right, &self.left),

@@ -25,7 +25,7 @@ use super::Indexed;
 
 /// Force field definition for dihedral angle potentials between four atoms
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Default)]
-pub(crate) enum DihedralKind {
+pub enum DihedralKind {
     /// Proper harmonic dihedral type.
     ProperHarmonic(HarmonicDihedral),
     /// Improper harmonic dihedral type.

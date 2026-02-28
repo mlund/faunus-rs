@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 use crate::Point;
 
 /// Represents dimensions in which operations/calculations are performed.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum Dimension {
     /// No dimension

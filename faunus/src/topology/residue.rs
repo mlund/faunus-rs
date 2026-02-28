@@ -19,7 +19,7 @@ use std::ops::Range;
 /// Continuous range of atoms with a non-unique name and number.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct Residue {
+pub struct Residue {
     /// Residue name.
     name: String,
     /// Residue number.

@@ -57,7 +57,7 @@ impl crate::Info for VolumeMove {
 
 impl VolumeMove {
     /// Validate and finalize the move.
-    pub(crate) fn finalize(&mut self, context: &impl Context) -> anyhow::Result<()> {
+    pub(crate) fn finalize(&self, context: &impl Context) -> anyhow::Result<()> {
         if self.volume_displacement <= 0.0 {
             anyhow::bail!(
                 "VolumeMove: volume displacement (dV) must be positive, got {}",
@@ -89,7 +89,8 @@ impl<T: Context> MoveProposal<T> for VolumeMove {
             return None;
         }
 
-        let ln_new_volume = old_volume.ln() + (rng.r#gen::<f64>() - 0.5) * self.volume_displacement;
+        let ln_new_volume =
+            (rng.r#gen::<f64>() - 0.5).mul_add(self.volume_displacement, old_volume.ln());
         let new_volume = ln_new_volume.exp();
 
         Transform::VolumeScale(self.method, new_volume)

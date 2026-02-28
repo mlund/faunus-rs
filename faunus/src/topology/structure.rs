@@ -25,7 +25,7 @@ use nalgebra::Vector3;
 ///
 /// If a simulation cell is given, coordinates are shifted by `-0.5 * bounding_box`
 /// to convert from file convention (corner origin) to Faunus convention (center origin).
-pub(crate) fn positions_from_structure_file(
+pub fn positions_from_structure_file(
     filename: &impl AsRef<Path>,
     cell: Option<&impl SimulationCell>,
 ) -> anyhow::Result<Vec<Point>> {

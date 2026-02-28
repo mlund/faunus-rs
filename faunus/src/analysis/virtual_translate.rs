@@ -146,7 +146,7 @@ impl VirtualTranslateBuilder {
         self.validate()?;
 
         let displacement = self.displacement.unwrap();
-        let directions = self.directions.clone().unwrap_or(Dimension::Z);
+        let directions = self.directions.unwrap_or(Dimension::Z);
         let temperature = self.temperature.unwrap_or(298.15);
 
         let unit_direction = dimension_to_unit_vector(&directions)?;
@@ -160,11 +160,11 @@ impl VirtualTranslateBuilder {
         };
 
         Ok(VirtualTranslate {
-            selection: self.selection.clone().unwrap(),
+            selection: self.selection.as_ref().unwrap().clone(),
             displacement,
             directions,
             unit_direction,
-            output_file: self.output_file.clone().flatten(),
+            output_file: self.output_file.as_ref().and_then(|p| p.clone()),
             stream,
             frequency: self.frequency.unwrap(),
             mean_exp_energy: Mean::new(),

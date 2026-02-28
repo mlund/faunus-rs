@@ -179,7 +179,7 @@ impl MoleculeKind {
 
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.len() == 0
+        self.atom_indices().is_empty()
     }
 }
 

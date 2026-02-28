@@ -84,14 +84,15 @@ impl Topology {
 
     /// Create partial topology without system. Used for topology includes.
     #[must_use = "this returns a Result that should be handled"]
-    pub fn from_file_partial(path: impl AsRef<Path> + Clone) -> anyhow::Result<Self> {
-        let yaml = std::fs::read_to_string(path.clone())
-            .map_err(|err| anyhow::anyhow!("Error reading file {:?}: {}", &path.as_ref(), err))?;
+    pub fn from_file_partial(path: impl AsRef<Path>) -> anyhow::Result<Self> {
+        let yaml = std::fs::read_to_string(&path)
+            .map_err(|err| anyhow::anyhow!("Error reading file {:?}: {}", path.as_ref(), err))?;
         let mut topology: Self = serde_yaml::from_str(&yaml)?;
         for file in topology.include.iter_mut() {
-            file.finalize(path.clone());
+            file.finalize(&path);
         }
-        topology.include_topologies(topology.include.clone())?;
+        let includes = std::mem::take(&mut topology.include);
+        topology.include_topologies(includes)?;
         Ok(topology)
     }
 
@@ -114,7 +115,8 @@ impl Topology {
             file.finalize(&path);
         }
 
-        topology.include_topologies(topology.include.clone())?;
+        let includes = std::mem::take(&mut topology.include);
+        topology.include_topologies(includes)?;
         topology.finalize_atoms()?;
         topology.finalize_molecules()?;
         topology.finalize_blocks(&path)?;
@@ -180,7 +182,7 @@ impl Topology {
     /// Add atom kinds into a topology. In case an AtomKind with the same name already
     /// exists in the Topology, it is NOT overwritten and a warning is raised.
     pub(crate) fn include_atomkinds(&mut self, atoms: &[AtomKind]) {
-        for atom in atoms.iter() {
+        for atom in atoms {
             if self.atomkinds().iter().any(|x| x.name() == atom.name()) {
                 log::warn!(
                     "Atom kind '{}' redefinition in included topology.",
@@ -195,7 +197,7 @@ impl Topology {
     /// Add molecule kinds into a toplogy. In case a MoleculeKind with the same name
     /// already exists in the Topology, it is NOT overwritten and a warning is raised.
     pub(crate) fn include_moleculekinds(&mut self, molecules: Vec<MoleculeKind>) {
-        for molecule in molecules.into_iter() {
+        for molecule in molecules {
             if self
                 .moleculekinds()
                 .iter()
@@ -216,11 +218,8 @@ impl Topology {
     /// ## Parameters
     /// - `parent_path` path to the directory containing the parent topology file
     /// - `topologies` paths to the topologies to be included (absolute or relative to the `parent_path`)
-    pub(crate) fn include_topologies(
-        &mut self,
-        topologies: Vec<InputPath>,
-    ) -> anyhow::Result<()> {
-        for file in topologies.iter() {
+    pub(crate) fn include_topologies(&mut self, topologies: Vec<InputPath>) -> anyhow::Result<()> {
+        for file in &topologies {
             let included_top = Self::from_file_partial(file.path().unwrap())?;
             self.include_atomkinds(&included_top.atomkinds);
             self.include_moleculekinds(included_top.moleculekinds);
@@ -328,9 +327,9 @@ impl Topology {
     }
 
     /// Set molecule indices for blocks and validate them.
-    fn finalize_blocks(&mut self, filename: impl AsRef<Path> + Clone) -> anyhow::Result<()> {
+    fn finalize_blocks(&mut self, filename: impl AsRef<Path>) -> anyhow::Result<()> {
         for block in self.system.blocks.iter_mut() {
-            block.finalize(filename.clone())?;
+            block.finalize(&filename)?;
 
             let index = self
                 .moleculekinds

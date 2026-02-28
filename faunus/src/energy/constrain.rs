@@ -75,6 +75,7 @@ impl Constrain {
             return 0.0;
         }
         let value = self.cv.evaluate(context);
+        #[allow(clippy::option_if_let_else)] // if-let-else with else-if is clearer here
         if let Some(h) = &self.harmonic {
             let delta = h.equilibrium - value;
             0.5 * h.force_constant * delta * delta

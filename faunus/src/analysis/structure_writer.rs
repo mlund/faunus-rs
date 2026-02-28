@@ -69,7 +69,7 @@ impl<T: Context> Analyze<T> for StructureWriter {
             for (i, &atom_idx) in molecule.atom_indices().iter().enumerate() {
                 let atom_name = molecule.atom_names()[i]
                     .as_deref()
-                    .unwrap_or(topology.atomkinds()[atom_idx].name());
+                    .unwrap_or_else(|| topology.atomkinds()[atom_idx].name());
                 names.push(atom_name.to_string());
                 positions.push(particles[i + group.start()].pos + shift);
             }

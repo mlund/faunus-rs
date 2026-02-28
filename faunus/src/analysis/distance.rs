@@ -48,8 +48,8 @@ impl MassCenterDistanceBuilder {
         self.validate()?;
         let stream = crate::auxiliary::open_compressed(self.output_file.as_ref().unwrap())?;
         Ok(MassCenterDistance {
-            selections: self.selections.clone().unwrap(),
-            output_file: self.output_file.clone().unwrap(),
+            selections: self.selections.as_ref().unwrap().clone(),
+            output_file: self.output_file.as_ref().unwrap().clone(),
             stream,
             frequency: self.frequency.unwrap(),
             num_samples: 0,

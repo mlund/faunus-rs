@@ -151,11 +151,7 @@ pub trait VolumeScale {
     ///
     /// This should typically be followed by a call to `scale_position` for each particle or mass center.
     /// Errors if the scaling policy is unsupported.
-    fn scale_volume(
-        &mut self,
-        new_volume: f64,
-        policy: VolumeScalePolicy,
-    ) -> anyhow::Result<()>;
+    fn scale_volume(&mut self, new_volume: f64, policy: VolumeScalePolicy) -> anyhow::Result<()>;
 }
 
 /// Simulation cell enum used for reading information about cell from the input file.
@@ -266,11 +262,7 @@ impl Shape for Cell {
 
 impl VolumeScale for Cell {
     #[inline]
-    fn scale_volume(
-        &mut self,
-        new_volume: f64,
-        policy: VolumeScalePolicy,
-    ) -> anyhow::Result<()> {
+    fn scale_volume(&mut self, new_volume: f64, policy: VolumeScalePolicy) -> anyhow::Result<()> {
         match self {
             Self::Cuboid(x) => x.scale_volume(new_volume, policy),
             Self::Endless(x) => x.scale_volume(new_volume, policy),

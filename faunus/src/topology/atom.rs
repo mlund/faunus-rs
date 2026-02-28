@@ -201,7 +201,7 @@ impl CustomProperty for AtomKind {
 
 /// Enum to store hydrophobicity information of an atom or residue
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Copy)]
-pub(crate) enum Hydrophobicity {
+pub enum Hydrophobicity {
     /// Item is hydrophobic
     Hydrophobic,
     /// Item is hydrophilic

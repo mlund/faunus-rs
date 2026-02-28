@@ -469,7 +469,7 @@ impl CollectiveVariableBuilder {
             Property::AtomPosition => {
                 let index = resolve_one_atom(self, context)?;
                 Ok(ConcreteCollectiveVariable::AtomPosition(AtomPositionCV {
-                    dimension: self.dimension.clone(),
+                    dimension: self.dimension,
                     index,
                     axis,
                 }))
@@ -484,7 +484,7 @@ impl CollectiveVariableBuilder {
                 };
                 Ok(ConcreteCollectiveVariable::Group(GroupCV {
                     property,
-                    dimension: self.dimension.clone(),
+                    dimension: self.dimension,
                     group,
                     axis,
                 }))
@@ -493,7 +493,7 @@ impl CollectiveVariableBuilder {
                 let (group1, group2) = resolve_two_groups(self, context)?;
                 Ok(ConcreteCollectiveVariable::MassCenterSeparation(
                     MassCenterSeparationCV {
-                        dimension: self.dimension.clone(),
+                        dimension: self.dimension,
                         group1,
                         group2,
                         axis,

@@ -34,17 +34,17 @@ impl Histogram {
     }
 
     /// Number of bins.
-    pub fn num_bins(&self) -> usize {
+    pub const fn num_bins(&self) -> usize {
         self.bins.len()
     }
 
     /// Center of the i-th bin.
     pub fn bin_center(&self, i: usize) -> f64 {
-        self.min + (i as f64 + 0.5) * self.bin_width
+        (i as f64 + 0.5).mul_add(self.bin_width, self.min)
     }
 
     /// Bin width.
-    pub fn bin_width(&self) -> f64 {
+    pub const fn bin_width(&self) -> f64 {
         self.bin_width
     }
 
