@@ -65,7 +65,7 @@ impl<T: Context> MoveProposal<T> for RotateMolecule {
         let uaxis = UnitVector3::new_normalize(axis);
         let angle = self.max_displacement * 2.0 * (rng.r#gen::<f64>() - 0.5);
         let quaternion = crate::UnitQuaternion::from_axis_angle(&uaxis, angle);
-        Transform::Rotate(axis, quaternion)
+        Transform::Rotate(quaternion)
             .on_group(group_index, context)
             .unwrap();
         Some((

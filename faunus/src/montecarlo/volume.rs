@@ -15,6 +15,7 @@
 use crate::cell::{Shape, VolumeScalePolicy};
 use crate::montecarlo::NewOld;
 use crate::propagate::{tagged_yaml, Displacement, MoveProposal};
+use crate::transform::Transform;
 use crate::{Change, Context};
 use rand::prelude::*;
 use rand::RngCore;
@@ -91,8 +92,8 @@ impl<T: Context> MoveProposal<T> for VolumeMove {
         let ln_new_volume = old_volume.ln() + (rng.r#gen::<f64>() - 0.5) * self.volume_displacement;
         let new_volume = ln_new_volume.exp();
 
-        let old_volume = context
-            .scale_volume_and_positions(new_volume, self.method)
+        Transform::VolumeScale(self.method, new_volume)
+            .on_system(context)
             .ok()?;
 
         let change = Change::Volume(self.method, NewOld::from(new_volume, old_volume));

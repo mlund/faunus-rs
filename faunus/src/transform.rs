@@ -16,7 +16,6 @@
 
 use crate::UnitQuaternion;
 use crate::{cell::VolumeScalePolicy, group::ParticleSelection, Point};
-use anyhow::Ok;
 use rand::prelude::*;
 
 /// Generate a random unit vector by sphere picking
@@ -47,12 +46,12 @@ pub enum Transform {
     Translate(Point),
     /// Translate a partial set of particles by a vector
     PartialTranslate(Point, ParticleSelection),
-    /// Use a quaternion to rotatate around a given point
-    Rotate(Point, UnitQuaternion),
-    /// Use a quaternion to rotatate a set of particles around a given point
+    /// Rotate all active particles around their mass center
+    Rotate(UnitQuaternion),
+    /// Rotate selected particles around a given center point
     PartialRotate(Point, UnitQuaternion, ParticleSelection),
-    /// Scale coordinates from an old volume to a new, `(old_volume, new_volume)`
-    VolumeScale(VolumeScalePolicy, (f64, f64)),
+    /// Scale coordinates to a new volume using the given policy
+    VolumeScale(VolumeScalePolicy, f64),
     /// Expand by `n` particles
     Expand(usize),
     /// Contract by `n` particles
@@ -68,10 +67,7 @@ pub enum Transform {
 }
 
 impl Transform {
-    /// Transform a set of particles using a transformation
-    ///
-    /// The transformation is applied to the particles in a single group,
-    /// given by `group_index`, in the `context`.
+    /// Apply the transformation to a single group in the context.
     pub fn on_group(
         &self,
         group_index: usize,
@@ -83,31 +79,37 @@ impl Transform {
                     .on_group(group_index, context)?;
             }
             Self::PartialTranslate(displacement, selection) => {
-                let indices = context.groups()[group_index]
-                    .select(selection, context)
-                    .unwrap();
-
+                let indices = context.groups()[group_index].select(selection, context)?;
                 context.translate_particles(&indices, displacement);
             }
-            Self::PartialRotate(_axis, quaternion, selection) => {
-                let indices = context.groups()[group_index]
-                    .select(selection, context)
-                    .unwrap();
-                context.rotate_particles(
-                    &indices,
-                    quaternion,
-                    Some(-context.mass_center(&indices)),
-                );
+            Self::Rotate(quaternion) => {
+                let indices =
+                    context.groups()[group_index].select(&ParticleSelection::Active, context)?;
+                let center = context.mass_center(&indices);
+                context.rotate_particles(&indices, quaternion, Some(-center));
             }
-            Self::Rotate(axis, quaternion) => {
-                Self::PartialRotate(*axis, *quaternion, ParticleSelection::Active)
-                    .on_group(group_index, context)?;
+            Self::PartialRotate(center, quaternion, selection) => {
+                let indices = context.groups()[group_index].select(selection, context)?;
+                context.rotate_particles(&indices, quaternion, Some(-*center));
             }
             _ => {
                 todo!("Implement other transforms")
             }
         }
         context.update_mass_center(group_index);
+        Ok(())
+    }
+
+    /// Apply a system-wide transformation to the context.
+    pub fn on_system(&self, context: &mut impl crate::Context) -> Result<(), anyhow::Error> {
+        match self {
+            Self::VolumeScale(policy, new_volume) => {
+                context.scale_volume_and_positions(*new_volume, *policy)?;
+            }
+            _ => {
+                todo!("Implement other system-wide transforms")
+            }
+        }
         Ok(())
     }
 }

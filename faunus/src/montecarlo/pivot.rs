@@ -12,10 +12,11 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
+use crate::group::ParticleSelection;
 use crate::montecarlo;
 use crate::propagate::{tagged_yaml, Displacement, MoveProposal};
 use crate::topology::BondGraph;
-use crate::transform::random_unit_vector;
+use crate::transform::{random_unit_vector, Transform};
 use crate::{Change, Context, GroupChange};
 use nalgebra::UnitVector3;
 use rand::prelude::*;
@@ -90,18 +91,20 @@ impl<T: Context> MoveProposal<T> for PivotMove {
             side_b
         };
 
-        let group_start = group.start();
-        let pivot_pos = context.particle(group_start + pivot_rel).pos;
+        let pivot_pos = context.particle(group.start() + pivot_rel).pos;
 
         let axis = random_unit_vector(rng);
         let uaxis = UnitVector3::new_normalize(axis);
         let angle = self.max_displacement * 2.0 * (rng.r#gen::<f64>() - 0.5);
         let quaternion = crate::UnitQuaternion::from_axis_angle(&uaxis, angle);
 
-        let abs_indices: Vec<usize> = rotated_rel.iter().map(|&r| group_start + r).collect();
-
-        context.rotate_particles(&abs_indices, &quaternion, Some(-pivot_pos));
-        context.update_mass_center(group_index);
+        Transform::PartialRotate(
+            pivot_pos,
+            quaternion,
+            ParticleSelection::RelIndex(rotated_rel.clone()),
+        )
+        .on_group(group_index, context)
+        .unwrap();
 
         Some((
             Change::SingleGroup(group_index, GroupChange::PartialUpdate(rotated_rel)),
