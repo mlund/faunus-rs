@@ -1,0 +1,31 @@
+# File for testing CustomPotential pair interaction.
+atoms:
+  - {name: A, charge: 0.0, mass: 1.0}
+  - {name: B, charge: 0.0, mass: 2.0}
+
+molecules:
+  - name: MOL
+    atoms: [A, B]
+
+system:
+  medium:
+    permittivity: !Vacuum
+    temperature: 298.15
+  energy:
+    nonbonded:
+      default:
+        - !CustomPotential
+          function: "4*eps*((sigma/r)^12 - (sigma/r)^6)"
+          cutoff: 14.0
+          constants: { eps: 0.5, sigma: 3.4 }
+      [A, A]:
+        - !CustomPotential
+          function: "1/r"
+          cutoff: 10.0
+
+  blocks:
+    - molecule: MOL
+      N: 1
+      insert: !Manual
+        - [0.0, 0.0, 0.0]
+        - [1.0, 0.0, 0.0]
