@@ -125,7 +125,7 @@ fn run(input: PathBuf, state: Option<PathBuf>, yaml_output: &mut std::fs::File) 
     write_yaml(&context.topology().blocks(), yaml_output, Some("blocks"))?;
 
     // Step through the Markov chain and update progress bar
-    let pb = ProgressBar::new(markov_chain.get_propagate().max_repeats() as u64);
+    let pb = ProgressBar::new(markov_chain.propagation().max_repeats() as u64);
     for (i, step) in markov_chain.iter().enumerate() {
         step?;
         pb.set_position(i as u64 + 1);
@@ -134,12 +134,12 @@ fn run(input: PathBuf, state: Option<PathBuf>, yaml_output: &mut std::fs::File) 
 
     // Write final state
     write_yaml(
-        &markov_chain.get_propagate(),
+        &markov_chain.propagation().to_yaml(),
         yaml_output,
         Some("propagate"),
     )?;
 
-    let analysis_yaml = analysis::analyses_to_yaml(markov_chain.get_analyses());
+    let analysis_yaml = analysis::analyses_to_yaml(markov_chain.analyses());
     if !analysis_yaml.is_empty() {
         write_yaml(&analysis_yaml, yaml_output, Some("analysis"))?;
     }

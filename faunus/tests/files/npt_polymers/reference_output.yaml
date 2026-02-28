@@ -32,16 +32,16 @@ propagate:
       repeat: 8
       statistics:
         num_trials: 200000
-        num_accepted: 86671
+        num_accepted: 87703
         mean_square_displacement:
-          avg: 8.751476215119526
+          avg: 9.136104007631703
           n: 200000
         timer:
           accumulated:
             secs: 0
             nanos: 0
         info: {}
-        energy_change_sum: -275.6174119064689
+        energy_change_sum: -293.1588182287145
       directions: xyz
     - !RotateMolecule
       molecule: polymer
@@ -50,16 +50,16 @@ propagate:
       repeat: 8
       statistics:
         num_trials: 200000
-        num_accepted: 133787
+        num_accepted: 135227
         mean_square_displacement:
-          avg: 0.18444374956322732
+          avg: 0.18778536066285198
           n: 200000
         timer:
           accumulated:
             secs: 0
             nanos: 0
         info: {}
-        energy_change_sum: -114.77540012237073
+        energy_change_sum: -116.40544728858227
     - !PivotMove
       molecule: polymer
       max_displacement: 3.0
@@ -67,16 +67,16 @@ propagate:
       repeat: 24
       statistics:
         num_trials: 600000
-        num_accepted: 275990
+        num_accepted: 457017
         mean_square_displacement:
-          avg: 1.019444977476145
+          avg: 2.1025547926633577
           n: 600000
         timer:
           accumulated:
             secs: 0
             nanos: 0
         info: {}
-        energy_change_sum: -310.04051055756713
+        energy_change_sum: 596.260543665887
     - !TranslateAtom
       atom: null
       molecule: polymer
@@ -85,16 +85,16 @@ propagate:
       repeat: 32
       statistics:
         num_trials: 800000
-        num_accepted: 204198
+        num_accepted: 204816
         mean_square_displacement:
-          avg: 3.126889593240609
+          avg: 3.156902780382428
           n: 800000
         timer:
           accumulated:
             secs: 0
             nanos: 0
         info: {}
-        energy_change_sum: 472.07465945419756
+        energy_change_sum: -307.49636197004645
     - !TranslateAtom
       atom: null
       molecule: counterion
@@ -103,16 +103,16 @@ propagate:
       repeat: 32
       statistics:
         num_trials: 800000
-        num_accepted: 121096
+        num_accepted: 122675
         mean_square_displacement:
-          avg: 78.86417910993339
+          avg: 82.60372420140777
           n: 800000
         timer:
           accumulated:
             secs: 0
             nanos: 0
         info: {}
-        energy_change_sum: 222.90765769483227
+        energy_change_sum: 106.47909790383395
     - !VolumeMove
       volume_displacement: 2.0
       method: Isotropic
@@ -120,32 +120,32 @@ propagate:
       repeat: 1
       statistics:
         num_trials: 25000
-        num_accepted: 729
+        num_accepted: 781
         mean_square_displacement:
-          avg: 3050608.143747214
+          avg: 3025487.225481384
           n: 25000
         timer:
           accumulated:
             secs: 0
             nanos: 0
         info: {}
-        energy_change_sum: 5.315596846496192
+        energy_change_sum: -19.95734653344516
   criterion: MetropolisHastings
 analysis:
 - collectivevariable:
     property: Volume
     num_samples: 15000
-    mean: 226344.28994823658
-    rms: 230489.85106307664
+    mean: 234315.61404903958
+    rms: 237439.53035763366
 - polymershape:
-    Rg: 6.737208598648129
-    Re: 15.706991930182848
-    Re2/Rg2: 5.435331699115045
-    asphericity: 33.39222862300146
-    acylindricity: 5.898889536484632
-    relative_shape_anisotropy: 0.5405641876592316
-    prolateness: 0.7278584513613011
-    Cl: 0.6293011013096385
-    Cp: 0.28656919475426684
-    Cs: 0.08412970393608746
+    Rg: 6.721540641449282
+    Re: 15.666689729893427
+    Re2/Rg2: 5.432713807943283
+    asphericity: 33.173639477721665
+    acylindricity: 5.8944495571895414
+    relative_shape_anisotropy: 0.5388249669964658
+    prolateness: 0.7242966448936013
+    Cl: 0.6275271182104007
+    Cp: 0.2874619650227436
+    Cs: 0.08501091676684745
     num_samples: 120000

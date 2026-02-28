@@ -61,7 +61,11 @@ fn find_molecule_id(
 }
 
 /// Pick a random group index of the specified molecule type.
-fn random_group(context: &impl Context, rng: &mut impl Rng, molecule_id: usize) -> Option<usize> {
+fn random_group(
+    context: &impl Context,
+    rng: &mut (impl Rng + ?Sized),
+    molecule_id: usize,
+) -> Option<usize> {
     let select = GroupSelection::ByMoleculeId(molecule_id);
     context.select(&select).iter().copied().choose(rng)
 }
@@ -70,7 +74,7 @@ fn random_group(context: &impl Context, rng: &mut impl Rng, molecule_id: usize) 
 /// Returns an absolute index of the atom.
 fn random_atom(
     context: &impl Context,
-    rng: &mut impl Rng,
+    rng: &mut (impl Rng + ?Sized),
     group_index: usize,
     atom_id: Option<usize>,
 ) -> Option<usize> {
@@ -189,19 +193,6 @@ impl MoveStatistics {
     }
 }
 
-impl std::fmt::Display for MoveStatistics {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(
-            f,
-            "trials: {}, accepted: {}, acceptance ratio: {:.3}, energy change sum: {:.3}",
-            self.num_trials,
-            self.num_accepted,
-            self.acceptance_ratio(),
-            self.energy_change_sum
-        )
-    }
-}
-
 /// All possible acceptance criteria for Monte Carlo moves
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Copy)]
 pub enum AcceptanceCriterion {
@@ -224,7 +215,7 @@ impl AcceptanceCriterion {
         energy: NewOld<f64>,
         bias: Bias,
         thermal_energy: f64,
-        rng: &mut impl Rng,
+        rng: &mut (impl Rng + ?Sized),
     ) -> bool {
         match self {
             Self::MetropolisHastings => {
@@ -279,7 +270,7 @@ impl AcceptanceCriterion {
 #[derive(Debug)]
 pub struct MarkovChain<T: Context> {
     /// Description of moves to perform.
-    propagate: Propagate,
+    propagate: Propagate<T>,
     /// Pair of contexts, one for the current state and one for the new state.
     context: NewOld<T>,
     /// Current step.
@@ -322,22 +313,10 @@ impl<T: Context> Iterator for MarkovChainIterator<'_, T> {
 impl<T: Context + 'static> MarkovChain<T> {
     pub fn new(
         context: T,
-        propagate: Propagate,
+        propagate: Propagate<T>,
         thermal_energy: f64,
         analyses: AnalysisCollection<T>,
     ) -> Result<Self> {
-        // // Build analyses from array of builders
-        // let analyses = match analysis_builders {
-        //     Some(analysis) => analysis
-        //         .iter()
-        //         .map(|b| {
-        //             b.build(&context)
-        //                 .or_else(|e| anyhow::bail!("Analysis build error: {}", e))
-        //                 .unwrap()
-        //         })
-        //         .collect(),
-        //     None => AnalysisCollection::default(),
-        // };
         Ok(Self {
             context: NewOld::from(context.clone(), context),
             thermal_energy,
@@ -347,13 +326,13 @@ impl<T: Context + 'static> MarkovChain<T> {
         })
     }
 
-    /// Get propagate instance
-    pub const fn get_propagate(&self) -> &Propagate {
+    /// Propagate instance describing moves to perform.
+    pub const fn propagation(&self) -> &Propagate<T> {
         &self.propagate
     }
 
-    /// Get the collection of analyses
-    pub fn get_analyses(&self) -> &AnalysisCollection<T> {
+    /// Collection of analyses.
+    pub fn analyses(&self) -> &AnalysisCollection<T> {
         &self.analyses
     }
 
@@ -533,8 +512,7 @@ mod tests {
             step.unwrap();
         }
 
-        let move1_stats =
-            markov_chain.propagate.get_collections()[0].get_moves()[0].get_statistics();
+        let move1_stats = markov_chain.propagate.collections()[0].moves()[0].statistics();
 
         assert_eq!(move1_stats.num_trials, 73);
         assert_eq!(move1_stats.num_accepted, 71);
@@ -545,8 +523,7 @@ mod tests {
             epsilon = 1e-14
         );
 
-        let move2_stats =
-            markov_chain.propagate.get_collections()[0].get_moves()[1].get_statistics();
+        let move2_stats = markov_chain.propagate.collections()[0].moves()[1].statistics();
 
         assert_eq!(move2_stats.num_trials, 81);
         assert_eq!(move2_stats.num_accepted, 79);
@@ -557,15 +534,13 @@ mod tests {
             epsilon = 1e-14
         );
 
-        let move3_stats =
-            markov_chain.propagate.get_collections()[0].get_moves()[2].get_statistics();
+        let move3_stats = markov_chain.propagate.collections()[0].moves()[2].statistics();
 
         assert_eq!(move3_stats.num_trials, 0);
         assert_eq!(move3_stats.num_accepted, 0);
         assert_approx_eq!(f64, move3_stats.energy_change_sum, 0.0, epsilon = 1e-14);
 
-        let move4_stats =
-            markov_chain.propagate.get_collections()[1].get_moves()[0].get_statistics();
+        let move4_stats = markov_chain.propagate.collections()[1].moves()[0].statistics();
 
         assert_eq!(move4_stats.num_trials, 100);
         assert_eq!(move4_stats.num_accepted, 94);
@@ -576,8 +551,7 @@ mod tests {
             epsilon = 1e-14
         );
 
-        let move5_stats =
-            markov_chain.propagate.get_collections()[2].get_moves()[0].get_statistics();
+        let move5_stats = markov_chain.propagate.collections()[2].moves()[0].statistics();
 
         assert_eq!(move5_stats.num_trials, 500);
         assert_eq!(move5_stats.num_accepted, 466);
