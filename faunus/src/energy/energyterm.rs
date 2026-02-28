@@ -42,6 +42,22 @@ impl EnergyTerm {
             Self::SasaEnergy(x) => x.update(context, change),
         }
     }
+
+    /// Synchronize cached state from another energy term after an MC accept/reject step.
+    pub(crate) fn sync_from(&mut self, other: &Self, change: &Change) -> anyhow::Result<()> {
+        use EnergyTerm::*;
+        match (self, other) {
+            (NonbondedMatrix(x), NonbondedMatrix(y)) => x.sync_from(y, change),
+            (NonbondedMatrixSplined(x), NonbondedMatrixSplined(y)) => x.sync_from(y, change),
+            (IntramolecularBonded(_), IntramolecularBonded(_)) => Ok(()),
+            (IntermolecularBonded(x), IntermolecularBonded(y)) => x.sync_from(y, change),
+            (SasaEnergy(x), SasaEnergy(y)) => x.sync_from(y, change),
+            (CellOverlap(_), CellOverlap(_)) => Ok(()),
+            (Constrain(_), Constrain(_)) => Ok(()),
+            (ExternalPressure(_), ExternalPressure(_)) => Ok(()),
+            _ => anyhow::bail!("Cannot sync incompatible energy terms."),
+        }
+    }
 }
 
 impl EnergyChange for EnergyTerm {
@@ -57,24 +73,6 @@ impl EnergyChange for EnergyTerm {
             Self::CellOverlap(x) => x.energy(context, change),
             Self::Constrain(x) => x.energy(context, change),
             Self::ExternalPressure(x) => x.energy(context, change),
-        }
-    }
-}
-
-impl EnergyTerm {
-    /// Synchronize cached state from another energy term after an MC accept/reject step.
-    pub(crate) fn sync_from(&mut self, other: &Self, change: &Change) -> anyhow::Result<()> {
-        use EnergyTerm::*;
-        match (self, other) {
-            (NonbondedMatrix(x), NonbondedMatrix(y)) => x.sync_from(y, change),
-            (NonbondedMatrixSplined(x), NonbondedMatrixSplined(y)) => x.sync_from(y, change),
-            (IntramolecularBonded(_), IntramolecularBonded(_)) => Ok(()),
-            (IntermolecularBonded(x), IntermolecularBonded(y)) => x.sync_from(y, change),
-            (SasaEnergy(x), SasaEnergy(y)) => x.sync_from(y, change),
-            (CellOverlap(_), CellOverlap(_)) => Ok(()),
-            (Constrain(_), Constrain(_)) => Ok(()),
-            (ExternalPressure(_), ExternalPressure(_)) => Ok(()),
-            _ => anyhow::bail!("Cannot sync incompatible energy terms."),
         }
     }
 }

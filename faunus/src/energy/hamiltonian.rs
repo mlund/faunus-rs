@@ -70,7 +70,7 @@ impl Hamiltonian {
         hamiltonian.push(IntramolecularBonded::default().into());
 
         // IntermolecularBonded term should only be added if it is actually needed
-        if !&topology.intermolecular().is_empty() {
+        if !topology.intermolecular().is_empty() {
             hamiltonian.push(IntermolecularBonded::new(topology));
         }
 
@@ -111,9 +111,7 @@ impl Hamiltonian {
     pub(crate) fn update(&mut self, context: &impl Context, change: &Change) -> anyhow::Result<()> {
         self.energy_terms
             .iter_mut()
-            .try_for_each(|term| term.update(context, change))?;
-
-        Ok(())
+            .try_for_each(|term| term.update(context, change))
     }
 }
 

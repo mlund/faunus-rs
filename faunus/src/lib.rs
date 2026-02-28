@@ -51,4 +51,3 @@ pub use particle::{Particle, PointParticle};
 
 mod context;
 pub use context::*;
-
