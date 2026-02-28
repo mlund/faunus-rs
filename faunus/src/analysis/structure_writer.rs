@@ -45,12 +45,8 @@ impl crate::Info for StructureWriter {
     }
 }
 
-impl<T: Context> Analyze<T> for StructureWriter {
-    fn sample(&mut self, context: &T, step: usize) -> anyhow::Result<()> {
-        if !self.frequency.should_perform(step) {
-            return Ok(());
-        }
-
+impl StructureWriter {
+    fn write_frame<T: Context>(&mut self, context: &T) -> anyhow::Result<()> {
         let topology = context.topology();
         let particles = context.get_all_particles();
 
@@ -75,19 +71,33 @@ impl<T: Context> Analyze<T> for StructureWriter {
             }
         }
 
-        let box_lengths = context.cell().bounding_box();
-
         let data = StructureData {
             names,
             positions,
-            step: Some(step as u32),
-            box_lengths,
+            step: None,
+            box_lengths: context.cell().bounding_box(),
             ..Default::default()
         };
 
         let append = self.num_samples > 0;
         io::write_structure_frame(&self.output_file, &data, append)?;
         self.num_samples += 1;
+        Ok(())
+    }
+}
+
+impl<T: Context> Analyze<T> for StructureWriter {
+    fn sample(&mut self, context: &T, step: usize) -> anyhow::Result<()> {
+        if self.frequency.should_perform(step) {
+            self.write_frame(context)?;
+        }
+        Ok(())
+    }
+
+    fn finalize(&mut self, context: &T) -> anyhow::Result<()> {
+        if self.frequency.should_perform_at_end() {
+            self.write_frame(context)?;
+        }
         Ok(())
     }
 

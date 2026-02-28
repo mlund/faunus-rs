@@ -1,0 +1,99 @@
+medium:
+  permittivity: Vacuum
+  salt: null
+  temperature: 300.0
+blocks:
+- molecule: water
+  N: 128
+  active: null
+  insert: !RandomCOM
+    filename: water.xyz
+    rotate: true
+    directions: xyz
+    offset: null
+cell: !Cuboid
+- 15.79827312482486
+- 15.79827312482486
+- 15.79827312482486
+energy_change:
+  drift: 8.847564458847046e-9
+  final: -98133.26082754026
+  initial: -98222.38746721989
+propagate:
+  repeat: 2000
+  seed: !Fixed 42
+  collections:
+  - !Deterministic
+    repeat: 1
+    moves:
+    - !TranslateMolecule
+      molecule: water
+      max_displacement: 0.4
+      directions: xyz
+      weight: 1.0
+      repeat: 64
+      statistics:
+        num_trials: 128000
+        num_accepted: 55034
+        mean_square_displacement:
+          avg: 0.011353563266171042
+          n: 128000
+        timer:
+          accumulated:
+            secs: 0
+            nanos: 0
+        info: {}
+        energy_change_sum: 390.49320856180634
+        acceptance_ratio: 0.429953125
+    - !RotateMolecule
+      molecule: water
+      max_displacement: 0.4
+      weight: 1.0
+      repeat: 64
+      statistics:
+        num_trials: 128000
+        num_accepted: 64783
+        mean_square_displacement:
+          avg: 0.016109599182029644
+          n: 128000
+        timer:
+          accumulated:
+            secs: 0
+            nanos: 0
+        info: {}
+        energy_change_sum: -254.43886531751636
+        acceptance_ratio: 0.5061171875
+    - !VolumeMove
+      volume_displacement: 0.03
+      method: Isotropic
+      weight: 1.0
+      repeat: 5
+      statistics:
+        num_trials: 10000
+        num_accepted: 6928
+        mean_square_displacement:
+          avg: 629.4830089477009
+          n: 10000
+        timer:
+          accumulated:
+            secs: 0
+            nanos: 0
+        info: {}
+        energy_change_sum: -46.92770357351401
+        acceptance_ratio: 0.6928
+  criterion: MetropolisHastings
+analysis:
+- collectivevariable:
+    property: Volume
+    num_samples: 600
+    mean: 3918.5105281919928
+    rms: 3918.951687225975
+- structure printer:
+    file: traj.xtc
+    num_samples: 6
+- structure printer:
+    file: confout.xyz
+    num_samples: 1
+- rdf:
+    num_samples: 600
+    num_bins: 93

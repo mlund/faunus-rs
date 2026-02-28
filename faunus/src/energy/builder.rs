@@ -90,6 +90,9 @@ pub enum PairInteraction {
     /// Reaction field.
     #[serde(alias = "ReactionField")]
     CoulombReactionField(interatomic::coulomb::pairwise::ReactionField),
+    /// Fanourgakis coulomb scheme.
+    #[serde(alias = "Fanourgakis")]
+    CoulombFanourgakis(interatomic::coulomb::pairwise::Fanourgakis),
 }
 
 impl PairInteraction {
@@ -193,6 +196,9 @@ impl PairInteraction {
                 Self::make_coulomb(charge_product, medium.unwrap(), scheme.clone())
             }
             Self::CoulombReactionField(scheme) => {
+                Self::make_coulomb(charge_product, medium.unwrap(), scheme.clone())
+            }
+            Self::CoulombFanourgakis(scheme) => {
                 Self::make_coulomb(charge_product, medium.unwrap(), scheme.clone())
             }
         }

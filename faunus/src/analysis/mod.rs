@@ -149,6 +149,12 @@ pub trait Analyze<T: Context>: Debug + Info {
     /// Total number of samples which is the sum of successful calls to `sample()`.
     fn num_samples(&self) -> usize;
 
+    /// Called once after the simulation ends for `End`-frequency work.
+    fn finalize(&mut self, context: &T) -> Result<()> {
+        let _ = context;
+        Ok(())
+    }
+
     /// Flush output stream, if any, ensuring that all intermediately buffered contents reach their destination.
     fn flush(&mut self) {}
 
@@ -191,6 +197,9 @@ impl<T: Context> Analyze<T> for AnalysisCollection<T> {
     }
     fn frequency(&self) -> Frequency {
         Frequency::Every(1)
+    }
+    fn finalize(&mut self, context: &T) -> Result<()> {
+        self.iter_mut().try_for_each(|a| a.finalize(context))
     }
     fn flush(&mut self) {
         self.iter_mut().for_each(|a| a.flush())

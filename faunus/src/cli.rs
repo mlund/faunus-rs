@@ -121,7 +121,6 @@ fn run(input: PathBuf, state: Option<PathBuf>, yaml_output: &mut std::fs::File) 
     }
 
     write_yaml(&medium, yaml_output, Some("medium"))?;
-    write_yaml(&context.cell(), yaml_output, Some("cell"))?;
     write_yaml(&context.topology().blocks(), yaml_output, Some("blocks"))?;
 
     let initial_energy = markov_chain.system_energy();
@@ -134,6 +133,8 @@ fn run(input: PathBuf, state: Option<PathBuf>, yaml_output: &mut std::fs::File) 
         pb.set_position(i as u64 + 1);
     }
     pb.finish();
+
+    markov_chain.finalize_analyses()?;
 
     let final_energy = markov_chain.system_energy();
     let drift = markov_chain.energy_drift(initial_energy);
@@ -148,6 +149,8 @@ fn run(input: PathBuf, state: Option<PathBuf>, yaml_output: &mut std::fs::File) 
     } else {
         log::info!("Energy drift: {drift:.2e} kJ/mol (relative: {relative_drift:.2e}) ✅");
     }
+
+    write_yaml(&markov_chain.context().cell(), yaml_output, Some("cell"))?;
 
     let energy_summary = std::collections::BTreeMap::from([
         ("initial".to_string(), initial_energy),

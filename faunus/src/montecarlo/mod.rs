@@ -336,6 +336,10 @@ impl<T: Context + 'static> MarkovChain<T> {
     }
 
     /// Propagate instance describing moves to perform.
+    pub const fn context(&self) -> &T {
+        &self.context
+    }
+
     pub const fn propagation(&self) -> &Propagate<T> {
         &self.propagate
     }
@@ -343,6 +347,11 @@ impl<T: Context + 'static> MarkovChain<T> {
     /// Collection of analyses.
     pub fn analyses(&self) -> &AnalysisCollection<T> {
         &self.analyses
+    }
+
+    /// Run end-of-simulation analyses (e.g. `Trajectory` with `frequency: End`).
+    pub fn finalize_analyses(&mut self) -> Result<()> {
+        self.analyses.finalize(&self.context)
     }
 
     /// Set the thermal energy, _kT_.

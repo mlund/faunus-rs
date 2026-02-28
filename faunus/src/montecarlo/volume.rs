@@ -37,7 +37,7 @@ pub struct VolumeMove {
     #[serde(default)]
     method: VolumeScalePolicy,
     /// Move selection weight.
-    #[serde(skip_serializing)]
+    #[serde(skip_serializing, default = "crate::propagate::default_weight")]
     pub(crate) weight: f64,
     /// Repeat the move N times.
     #[serde(default = "crate::propagate::default_repeat")]

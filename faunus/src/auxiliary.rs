@@ -49,27 +49,25 @@ pub(crate) fn mass_center<'a>(
 }
 
 /// Calculate center of mass of a collection of points with masses using PBC.
+///
+/// Uses the first atom as reference and unwraps all others via minimum image
+/// convention to guarantee consistent geometry regardless of box wrapping.
 pub(crate) fn mass_center_pbc<'a>(
     positions: impl IntoIterator<Item = &'a Point>,
     masses: &[f64],
     cell: &impl SimulationCell,
-    shift: Option<Point>,
+    _shift: Option<Point>,
 ) -> Point {
-    let shift = shift.unwrap_or_else(Point::zeros);
     let total_mass: f64 = masses.iter().sum();
-    let to_origin = |&r| {
-        let mut shifted = r + shift;
-        cell.boundary(&mut shifted);
-        shifted
-    };
-    let mut com: Point = positions
-        .into_iter()
-        .map(to_origin)
-        .zip(masses)
-        .map(|(r, &m)| r * m)
-        .sum::<Point>()
-        / total_mass
-        - shift;
+    let mut iter = positions.into_iter().zip(masses.iter());
+    let (&ref_pos, &ref_mass) = iter.next().expect("at least one position required");
+    let mut com = ref_pos * ref_mass;
+    for (&pos, &m) in iter {
+        // Unwrap relative to reference atom using MIC
+        let unwrapped = ref_pos + cell.distance(&pos, &ref_pos);
+        com += unwrapped * m;
+    }
+    com /= total_mass;
     cell.boundary(&mut com);
     com
 }

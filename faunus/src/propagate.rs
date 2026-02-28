@@ -33,6 +33,11 @@ pub(crate) const fn default_repeat() -> usize {
     1
 }
 
+/// Default value of `weight` for move selection.
+pub(crate) const fn default_weight() -> f64 {
+    1.0
+}
+
 /// Target for a proposed Monte Carlo move.
 #[derive(Clone, Debug)]
 pub enum MoveTarget {
@@ -176,10 +181,14 @@ impl<T: Context> MoveRunner<T> {
             if let serde_yaml::Value::Mapping(ref mut map) = tagged_value.value {
                 map.insert("weight".into(), self.weight.into());
                 map.insert("repeat".into(), self.repeat.into());
-                map.insert(
-                    "statistics".into(),
-                    serde_yaml::to_value(&self.statistics).ok()?,
-                );
+                let mut stats = serde_yaml::to_value(&self.statistics).ok()?;
+                if let serde_yaml::Value::Mapping(ref mut smap) = stats {
+                    smap.insert(
+                        "acceptance_ratio".into(),
+                        self.statistics.acceptance_ratio().into(),
+                    );
+                }
+                map.insert("statistics".into(), stats);
             }
             Some(serde_yaml::Value::Tagged(tagged_value))
         } else {

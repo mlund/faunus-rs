@@ -89,6 +89,10 @@ pub enum Property {
 // Builder
 // ---------------------------------------------------------------------------
 
+fn default_range() -> (f64, f64) {
+    (f64::NEG_INFINITY, f64::INFINITY)
+}
+
 /// Builder for constructing a collective variable from YAML or code.
 ///
 /// Which fields are required depends on `property`; see [`Property`] docs.
@@ -96,6 +100,7 @@ pub enum Property {
 #[serde(deny_unknown_fields)]
 pub struct CollectiveVariableBuilder {
     pub property: Property,
+    #[serde(default = "default_range")]
     pub range: (f64, f64),
     #[serde(default = "default_dimension")]
     pub dimension: Dimension,

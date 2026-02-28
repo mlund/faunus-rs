@@ -357,30 +357,42 @@ impl ParticleSystem for ReferencePlatform {
 
         let num_groups = self.groups.len();
 
-        // 1. Unwrap PBC for molecular groups (>1 atom) using mass center as reference.
+        // Pre-compute per-group molecular flag to avoid holding topology borrow
+        let is_molecular: Vec<bool> = (0..num_groups)
+            .map(|g| {
+                self.topology.moleculekinds()[self.groups[g].molecule()].has_com()
+            })
+            .collect();
+
+        // Molecular groups (has_com): scale only mass center, translate atoms
+        // to preserve intramolecular geometry. Atomic groups: scale each atom.
         for g in 0..num_groups {
-            if let Some(&com) = self.groups[g].mass_center() {
-                if self.groups[g].len() > 1 {
+            if is_molecular[g] {
+                if let Some(&com) = self.groups[g].mass_center() {
                     for i in self.groups[g].iter_active() {
                         let d = self.cell.distance(&self.particles[i].pos, &com);
                         self.particles[i].pos = com + d;
                     }
+                    let mut scaled_com = com;
+                    self.cell
+                        .scale_position(new_volume, &mut scaled_com, policy)?;
+                    let shift = scaled_com - com;
+                    for i in self.groups[g].iter_active() {
+                        self.particles[i].pos += shift;
+                    }
+                }
+            } else {
+                for i in self.groups[g].iter_active() {
+                    self.cell
+                        .scale_position(new_volume, &mut self.particles[i].pos, policy)?;
                 }
             }
         }
 
-        // 2. Scale all active particle positions (using old cell geometry)
-        for g in 0..num_groups {
-            for i in self.groups[g].iter_active() {
-                self.cell
-                    .scale_position(new_volume, &mut self.particles[i].pos, policy)?;
-            }
-        }
-
-        // 3. Resize the cell
+        // Resize the cell
         self.cell.scale_volume(new_volume, policy)?;
 
-        // 4. Apply PBC with new cell geometry and recompute mass centers
+        // Apply PBC with new cell geometry and recompute mass centers
         for g in 0..num_groups {
             for i in self.groups[g].iter_active() {
                 self.cell.boundary(&mut self.particles[i].pos);
@@ -408,12 +420,12 @@ impl ParticleSystem for ReferencePlatform {
         quaternion: &crate::UnitQuaternion,
         shift: Option<Point>,
     ) {
-        let shift = shift.unwrap_or_else(Point::zeros);
+        let center = -shift.unwrap_or_else(Point::zeros);
         indices.iter().for_each(|&i| {
             let position = self.particles[i].pos_mut();
-            *position += shift;
-            self.cell.boundary(position);
-            *position = quaternion.transform_vector(position) - shift;
+            // Unwrap via MIC, rotate around center, apply PBC
+            let relative = self.cell.distance(position, &center);
+            *position = quaternion.transform_vector(&relative) + center;
             self.cell.boundary(position);
         });
     }

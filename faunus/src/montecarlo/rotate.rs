@@ -35,7 +35,7 @@ pub struct RotateMolecule {
     #[serde(alias = "dp")]
     max_displacement: f64,
     /// Move selection weight.
-    #[serde(skip_serializing)]
+    #[serde(skip_serializing, default = "crate::propagate::default_weight")]
     pub(crate) weight: f64,
     /// Repeat the move N times.
     #[serde(default = "crate::propagate::default_repeat")]

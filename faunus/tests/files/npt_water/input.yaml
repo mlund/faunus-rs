@@ -1,0 +1,62 @@
+atoms:
+  - name: OW
+    mass: 15.999
+    charge: -0.8476
+    sigma: 3.166
+    epsilon: 0.650
+  - name: HW
+    mass: 1.007
+    charge: 0.4238
+    sigma: 2.0
+    epsilon: 0.0
+
+molecules:
+  - name: water
+    atoms: [OW, HW, HW]
+    #exclusions: [[0, 1], [0, 2], [1, 2]] # exclude internal energy calc.
+    has_com: true
+
+system:
+  cell: !Cuboid [18.6, 18.6, 18.6]
+  medium:
+    temperature: 300
+    permittivity: !Vacuum
+
+  blocks:
+    - molecule: water
+      N: 128
+      insert:
+        !RandomCOM {
+          filename: "water.xyz",
+          rotate: true,
+        }
+
+  energy:
+    nonbonded:
+      default:
+        - !LennardJones {mixing: LB}
+        - !Fanourgakis {cutoff: 9.0}
+    isobaric:
+      P/atm: 1
+
+analysis:
+  - !CollectiveVariable {property: volume, frequency: !Every 10}
+  - !Trajectory {file: "traj.xtc", frequency: !Every 1000}
+  - !Trajectory {file: "confout.xyz", frequency: End}
+  - !RadialDistribution
+    selections: ["name OW", "name OW"]
+    file: rdf.dat
+    dr: 0.1
+    frequency: !Every 10
+
+
+propagate:
+  seed: !Fixed 42
+  criterion: Metropolis
+  repeat: 2000
+  collections:
+    - !Deterministic
+      moves:
+        - !TranslateMolecule {molecule: water, dp: 0.4, repeat: 64}
+        - !RotateMolecule {molecule: water, dp: 0.4, repeat: 64}
+        - !VolumeMove {dV: 0.03, repeat: 5}
