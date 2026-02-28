@@ -108,6 +108,12 @@ impl ReferencePlatform {
                     context.hamiltonian_mut().push(constrain.into());
                 }
             }
+            if let Some(ext_builders) = &hamiltonian_builder.customexternal {
+                for builder in ext_builders {
+                    let ext = builder.build()?;
+                    context.hamiltonian_mut().push(ext.into());
+                }
+            }
             context.update(&Change::Everything)?;
             Ok(context)
         })
@@ -359,9 +365,7 @@ impl ParticleSystem for ReferencePlatform {
 
         // Pre-compute per-group molecular flag to avoid holding topology borrow
         let is_molecular: Vec<bool> = (0..num_groups)
-            .map(|g| {
-                self.topology.moleculekinds()[self.groups[g].molecule()].has_com()
-            })
+            .map(|g| self.topology.moleculekinds()[self.groups[g].molecule()].has_com())
             .collect();
 
         // Molecular groups (has_com): scale only mass center, translate atoms

@@ -40,6 +40,7 @@ use serde::{
 use unordered_pair::UnorderedPair;
 
 use super::constrain::ConstrainBuilder;
+use super::custom_external::CustomExternalBuilder;
 use super::external_pressure::Pressure;
 use super::sasa::SasaEnergyBuilder;
 use interatomic::twobody::{GridType, SplineConfig};
@@ -350,6 +351,9 @@ pub struct HamiltonianBuilder {
     /// External pressure for the NPT ensemble.
     #[serde(alias = "isobaric")]
     pub pressure: Option<Pressure>,
+
+    /// Custom external potentials from math expressions.
+    pub customexternal: Option<Vec<CustomExternalBuilder>>,
 }
 
 impl HamiltonianBuilder {

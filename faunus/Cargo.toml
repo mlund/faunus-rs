@@ -35,6 +35,7 @@ flate2 = "1.0.35"
 derive_more = {version = "1.0.0", features = ["debug"]}
 molly = "0.5"
 physical_constants = "0.5.0"
+exmex = "0.20"
 
 # CLI-only dependencies
 clap = { version = "4.0", features = ["derive"], optional = true }

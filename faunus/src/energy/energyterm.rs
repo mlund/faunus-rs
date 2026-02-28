@@ -1,6 +1,7 @@
 use super::{
     bonded::{IntermolecularBonded, IntramolecularBonded},
     constrain::Constrain,
+    custom_external::CustomExternal,
     external_pressure::ExternalPressure,
     nonbonded::{NonbondedMatrix, NonbondedMatrixSplined, NonbondedTerm},
     sasa::SasaEnergy,
@@ -26,6 +27,8 @@ pub enum EnergyTerm {
     Constrain(Constrain),
     /// External pressure (NPT ensemble).
     ExternalPressure(ExternalPressure),
+    /// Custom external potential from math expression.
+    CustomExternal(CustomExternal),
 }
 
 /// Dispatch a no-arg method to stateful energy terms; stateless terms are no-ops.
@@ -40,7 +43,8 @@ macro_rules! dispatch_stateful {
             | EnergyTerm::IntramolecularBonded(_)
             | EnergyTerm::CellOverlap(_)
             | EnergyTerm::Constrain(_)
-            | EnergyTerm::ExternalPressure(_) => {}
+            | EnergyTerm::ExternalPressure(_)
+            | EnergyTerm::CustomExternal(_) => {}
         }
     };
 }
@@ -54,7 +58,8 @@ impl EnergyTerm {
             | Self::IntramolecularBonded(_)
             | Self::CellOverlap(_)
             | Self::Constrain(_)
-            | Self::ExternalPressure(_) => Ok(()),
+            | Self::ExternalPressure(_)
+            | Self::CustomExternal(_) => Ok(()),
             Self::IntermolecularBonded(x) => x.update(context, change),
             Self::SasaEnergy(x) => x.update(context, change),
         }
@@ -70,7 +75,8 @@ impl EnergyTerm {
             | Self::IntramolecularBonded(_)
             | Self::CellOverlap(_)
             | Self::Constrain(_)
-            | Self::ExternalPressure(_) => {}
+            | Self::ExternalPressure(_)
+            | Self::CustomExternal(_) => {}
         }
     }
 
@@ -111,6 +117,7 @@ impl crate::Info for EnergyTerm {
             Self::CellOverlap(_) => "celloverlap",
             Self::Constrain(_) => "constrain",
             Self::ExternalPressure(_) => "externalpressure",
+            Self::CustomExternal(_) => "customexternal",
         })
     }
 }
@@ -128,6 +135,7 @@ impl EnergyChange for EnergyTerm {
             Self::CellOverlap(x) => x.energy(context, change),
             Self::Constrain(x) => x.energy(context, change),
             Self::ExternalPressure(x) => x.energy(context, change),
+            Self::CustomExternal(x) => x.energy(context, change),
         }
     }
 }
