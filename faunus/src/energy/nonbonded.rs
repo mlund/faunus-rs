@@ -480,7 +480,7 @@ impl From<&NonbondedMatrix> for NonbondedMatrixSplined {
     }
 }
 
-#[cfg(all(test, feature = "chemfiles"))]
+#[cfg(test)]
 mod tests {
     use std::{cell::RefCell, rc::Rc};
 

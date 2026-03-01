@@ -53,23 +53,7 @@ pub use sphere::Sphere;
 
 /// Final interface for a unit cell used to describe the geometry of a simulation system.
 ///
-/// It is a combination of a [`Shape`], [`BoundaryConditions`], [`VolumeScale`], [`CellToChemCell`].
-/// Only used when `chemfiles` feature is active.
-#[cfg(feature = "chemfiles")]
-pub trait SimulationCell:
-    Shape
-    + BoundaryConditions
-    + VolumeScale
-    + DynClone
-    + std::fmt::Debug
-    + crate::topology::chemfiles_interface::CellToChemCell
-{
-}
-
-/// Final interface for a unit cell used to describe the geometry of a simulation system.
-///
 /// It is a combination of a [`Shape`], [`BoundaryConditions`] and [`VolumeScale`].
-#[cfg(not(feature = "chemfiles"))]
 pub trait SimulationCell:
     Shape + BoundaryConditions + VolumeScale + DynClone + std::fmt::Debug
 {

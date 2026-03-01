@@ -242,7 +242,7 @@ mod tests {
     }
 }
 
-#[cfg(all(test, feature = "chemfiles"))]
+#[cfg(test)]
 mod integration_tests {
     use super::*;
     use crate::cell::Shape;

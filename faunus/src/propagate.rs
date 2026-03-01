@@ -513,7 +513,7 @@ impl<T: Context> Propagate<T> {
     }
 }
 
-#[cfg(all(test, feature = "chemfiles"))]
+#[cfg(test)]
 mod tests {
 
     use crate::platform::reference::ReferencePlatform;

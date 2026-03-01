@@ -8,43 +8,32 @@ use std::{
     rc::Rc,
 };
 
-/// Defines the `Context` trait with optional extra supertraits (e.g. `ChemFrameConvert`).
-macro_rules! define_context {
-    ($($extra:tt)*) => {
-        /// Context stores the state of a single simulation system.
-        pub trait Context: ParticleSystem + WithHamiltonian + Clone + std::fmt::Debug $($extra)* {
-            /// Update internal state after a change (e.g. reciprocal-space energy for Ewald).
-            fn update(&mut self, change: &Change) -> anyhow::Result<()> {
-                self.hamiltonian_mut().update(self, change)?;
-                Ok(())
-            }
+/// Context stores the state of a single simulation system.
+pub trait Context: ParticleSystem + WithHamiltonian + Clone + std::fmt::Debug {
+    /// Update internal state after a change (e.g. reciprocal-space energy for Ewald).
+    fn update(&mut self, change: &Change) -> anyhow::Result<()> {
+        self.hamiltonian_mut().update(self, change)?;
+        Ok(())
+    }
 
-            /// Update internal state with backup for later undo on MC reject.
-            fn update_with_backup(&mut self, change: &Change) -> anyhow::Result<()> {
-                self.hamiltonian_mut().update_with_backup(self, change)?;
-                Ok(())
-            }
+    /// Update internal state with backup for later undo on MC reject.
+    fn update_with_backup(&mut self, change: &Change) -> anyhow::Result<()> {
+        self.hamiltonian_mut().update_with_backup(self, change)?;
+        Ok(())
+    }
 
-            /// Save particles at given indices and the group's mass center as backup.
-            fn save_particle_backup(&mut self, group_index: usize, indices: &[usize]);
+    /// Save particles at given indices and the group's mass center as backup.
+    fn save_particle_backup(&mut self, group_index: usize, indices: &[usize]);
 
-            /// Save all particles, mass centers, and cell as backup (for volume moves).
-            fn save_system_backup(&mut self);
+    /// Save all particles, mass centers, and cell as backup (for volume moves).
+    fn save_system_backup(&mut self);
 
-            /// Restore state from backup (reject path). Consumes the backup.
-            fn undo(&mut self) -> anyhow::Result<()>;
+    /// Restore state from backup (reject path). Consumes the backup.
+    fn undo(&mut self) -> anyhow::Result<()>;
 
-            /// Drop backup without restoring (accept path).
-            fn discard_backup(&mut self);
-        }
-    };
+    /// Drop backup without restoring (accept path).
+    fn discard_backup(&mut self);
 }
-
-#[cfg(feature = "chemfiles")]
-define_context!(+ crate::topology::chemfiles_interface::ChemFrameConvert);
-
-#[cfg(not(feature = "chemfiles"))]
-define_context!();
 
 /// A trait for objects that have a simulation cell.
 pub trait WithCell {

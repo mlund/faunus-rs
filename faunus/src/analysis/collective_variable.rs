@@ -217,7 +217,7 @@ range: [1000.0, 5000.0]
     }
 }
 
-#[cfg(all(test, feature = "chemfiles"))]
+#[cfg(test)]
 mod integration_tests {
     use super::*;
     use crate::analysis::Analyze;

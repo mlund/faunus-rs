@@ -19,7 +19,6 @@ use std::path::Path;
 use crate::{
     cell::{Cell, Cuboid, Cylinder, Endless, HexagonalPrism, Shape, SimulationCell, Slit, Sphere},
     group::{Group, GroupCollection},
-    platform::reference::ReferencePlatform,
     topology::Residue,
     Point, PointParticle, WithCell, WithTopology,
 };
@@ -56,101 +55,91 @@ pub(super) fn positions_from_frame(
         .collect()
 }
 
-/// A trait for structure that can be converted to chemfiles Frame.
-pub trait ChemFrameConvert: WithCell + WithTopology + GroupCollection {
-    /// Convert system to chemfiles::Frame structure.
-    ///
-    /// ## Notes
-    /// - Positions, residues, atom types and bonds are converted.
-    /// - Custom properties of atoms and residues are not converted.
-    /// - Angles and dihedrals are not converted.
-    /// - Residues are renumbered starting from 1.
-    fn to_frame(&self) -> Frame {
-        let mut frame = Frame::new();
-        self.add_atoms_to_frame(&mut frame);
-        self.add_residues_to_frame(&mut frame);
-        self.add_bonds_to_frame(&mut frame);
-        frame.set_cell(&self.cell().to_chem_cell());
+/// Convert a simulation context to a chemfiles::Frame.
+///
+/// - Positions, residues, atom types and bonds are converted.
+/// - Custom properties of atoms and residues are not converted.
+/// - Angles and dihedrals are not converted.
+/// - Residues are renumbered starting from 1.
+pub(crate) fn to_frame(ctx: &(impl WithCell + WithTopology + GroupCollection)) -> Frame {
+    let mut frame = Frame::new();
+    add_atoms_to_frame(ctx, &mut frame);
+    add_residues_to_frame(ctx, &mut frame);
+    add_bonds_to_frame(ctx, &mut frame);
+    frame.set_cell(&ctx.cell().to_chem_cell());
+    frame
+}
 
-        frame
+/// Convert all faunus particles to chemfiles atoms and add them to the frame.
+/// Shifts positions because faunus centers at origin while chemfiles centers at half-cell.
+fn add_atoms_to_frame(ctx: &(impl WithCell + WithTopology + GroupCollection), frame: &mut Frame) {
+    let topology = ctx.topology_ref();
+    let mut particles = ctx.get_all_particles();
+
+    if let Some(shift) = ctx.cell().bounding_box().map(|b| -0.5 * b) {
+        particles
+            .iter_mut()
+            .for_each(|particle| particle.pos += shift);
     }
 
-    /// Convert all faunus particles to chemfiles particles and add them to the chemfiles Frame.
-    /// This converts all atoms, both active and inactive.
-    /// This also shifts the particles so they fit into chemfiles cell.
-    fn add_atoms_to_frame(&self, frame: &mut Frame) {
-        let topology = self.topology_ref();
-        let mut particles = self.get_all_particles();
-
-        // shift the particles
-        // we need to shift them because faunus treats [0,0,0] as the center of the cell,
-        // while chemfiles treats [half_cell, half_cell, half_cell] as the center of the cell
-        // no shifting is needed if the box is infinite
-        if let Some(shift) = self.cell().bounding_box().map(|b| -0.5 * b) {
-            particles
-                .iter_mut()
-                .for_each(|particle| particle.pos += shift);
+    let to_atomkind = |i: usize| &topology.atomkinds()[i];
+    ctx.groups().iter().for_each(|group| {
+        let molecule = &topology.moleculekinds()[group.molecule()];
+        let atoms = molecule.atom_indices().iter().cloned().map(to_atomkind);
+        for (i, atom) in atoms.enumerate() {
+            frame.add_atom(
+                &atom.to_chem_atom(molecule.atom_names()[i].as_deref()),
+                (*particles[i + group.start()].pos()).into(),
+                None,
+            );
         }
+    });
+}
 
-        // add atoms to the frame
-        let to_atomkind = |i: usize| &topology.atomkinds()[i];
-        self.groups().iter().for_each(|group| {
+fn add_residues_to_frame(
+    ctx: &(impl WithCell + WithTopology + GroupCollection),
+    frame: &mut Frame,
+) {
+    let topology = ctx.topology_ref();
+
+    ctx.groups()
+        .iter()
+        .fold((1, 0), |(residue_index, atom_index), group| {
             let molecule = &topology.moleculekinds()[group.molecule()];
-            let atoms = molecule.atom_indices().iter().cloned().map(to_atomkind);
-            for (i, atom) in atoms.enumerate() {
-                frame.add_atom(
-                    &atom.to_chem_atom(molecule.atom_names()[i].as_deref()),
-                    (*particles[i + group.start()].pos()).into(),
-                    None,
-                );
-            }
+            group
+                .to_chem_residues(atom_index, residue_index, molecule)
+                .iter()
+                .for_each(|residue| {
+                    frame
+                        .add_residue(residue)
+                        .expect("Faunus residue could not be converted to chemfiles topology.");
+                });
+
+            (
+                residue_index + molecule.residues().len() as i64,
+                atom_index + group.capacity(),
+            )
         });
-    }
+}
 
-    /// Convert faunus residues to chemfiles residues and add them to the chemfiles Frame.
-    fn add_residues_to_frame(&self, frame: &mut Frame) {
-        let topology = self.topology_ref();
+fn add_bonds_to_frame(ctx: &(impl WithCell + WithTopology + GroupCollection), frame: &mut Frame) {
+    let topology = ctx.topology_ref();
 
-        self.groups()
-            .iter()
-            .fold((1, 0), |(residue_index, atom_index), group| {
-                let molecule = &topology.moleculekinds()[group.molecule()];
-                group
-                    .to_chem_residues(atom_index, residue_index, molecule)
-                    .iter()
-                    .for_each(|residue| {
-                        frame
-                            .add_residue(residue)
-                            .expect("Faunus residue could not be converted to chemfiles topology.");
-                    });
+    ctx.groups().iter().fold(0, |atom_index, group| {
+        let molecule = &topology.moleculekinds()[group.molecule()];
 
-                (
-                    residue_index + molecule.residues().len() as i64,
-                    atom_index + group.capacity(),
-                )
-            });
-    }
-
-    // Convert faunus bonds to chemfiles bonds and add them to the chemfiles Frame.
-    fn add_bonds_to_frame(&self, frame: &mut Frame) {
-        let topology = self.topology_ref();
-
-        self.groups().iter().fold(0, |atom_index, group| {
-            let molecule = &topology.moleculekinds()[group.molecule()];
-
-            molecule.bonds().iter().for_each(|bond| {
-                frame.add_bond(bond.index()[0] + atom_index, bond.index()[1] + atom_index)
-            });
-
-            atom_index + group.capacity()
+        molecule.bonds().iter().for_each(|bond| {
+            frame.add_bond(bond.index()[0] + atom_index, bond.index()[1] + atom_index)
         });
 
-        topology
-            .intermolecular()
-            .bonds()
-            .iter()
-            .for_each(|bond| frame.add_bond(bond.index()[0], bond.index()[1]));
-    }
+        atom_index + group.capacity()
+    });
+
+    topology
+        .intermolecular()
+        .bonds()
+        .iter()
+        .for_each(|bond| frame.add_bond(bond.index()[0], bond.index()[1]));
 }
 
 impl Group {
@@ -208,8 +197,6 @@ impl AtomKind {
     }
 }
 
-impl ChemFrameConvert for ReferencePlatform {}
-
 /// Convert topology Residue to chemfiles residue.
 impl core::convert::From<&Residue> for chemfiles::Residue {
     fn from(residue: &Residue) -> Self {
@@ -255,6 +242,7 @@ mod tests {
         AtomKindBuilder, Bond, IntermolecularBonded, Topology,
     };
 
+    use crate::platform::reference::ReferencePlatform;
     use float_cmp::assert_approx_eq;
 
     use super::*;
@@ -392,7 +380,7 @@ mod tests {
         )
         .unwrap();
 
-        let converted = context.to_frame();
+        let converted = to_frame(&context);
 
         // check atoms
         let atom_names = ["OW", "OW", "O3", "HW", "HW", "OW"];

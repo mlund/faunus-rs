@@ -306,7 +306,7 @@ impl<T: Context> MoveProposal<T> for TranslateAtom {
     }
 }
 
-#[cfg(all(test, feature = "chemfiles"))]
+#[cfg(test)]
 mod tests {
 
     use std::path::Path;
@@ -383,7 +383,7 @@ mod tests {
     #[test]
     fn test_translate_atom_selections() {
         let mut rng = rand::thread_rng();
-        let mut context = ReferencePlatform::new(
+        let context = ReferencePlatform::new(
             "tests/files/topology_pass.yaml",
             Some(Path::new("tests/files/structure.xyz")),
             &mut rng,

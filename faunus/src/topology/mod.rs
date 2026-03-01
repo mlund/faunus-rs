@@ -440,7 +440,7 @@ impl<'de> Deserialize<'de> for InputPath {
     }
 }
 
-#[cfg(all(test, feature = "chemfiles"))]
+#[cfg(test)]
 mod tests {
     use self::block::BlockActivationStatus;
     use crate::dimension::Dimension;
