@@ -50,13 +50,6 @@ impl StructureWriter {
         let topology = context.topology();
         let particles = context.get_all_particles();
 
-        // Shift from Faunus convention (center at origin) to file convention (corner at origin)
-        let shift = context
-            .cell()
-            .bounding_box()
-            .map(|b| 0.5 * b)
-            .unwrap_or_default();
-
         let mut names = Vec::with_capacity(particles.len());
         let mut positions = Vec::with_capacity(particles.len());
 
@@ -67,15 +60,47 @@ impl StructureWriter {
                     .as_deref()
                     .unwrap_or_else(|| topology.atomkinds()[atom_idx].name());
                 names.push(atom_name.to_string());
-                positions.push(particles[i + group.start()].pos + shift);
+                positions.push(particles[i + group.start()].pos);
             }
+        }
+
+        let (box_lengths, shift) = match context.cell().orthorhombic_expansion() {
+            Some(expansion) => {
+                if self.num_samples == 0 {
+                    log::info!(
+                        "Expanding {} → {} particles for orthorhombic output",
+                        names.len(),
+                        names.len() * (1 + expansion.translations.len())
+                    );
+                }
+                let n = names.len();
+                let extra = n * expansion.translations.len();
+                names.reserve(extra);
+                positions.reserve(extra);
+                for translation in &expansion.translations {
+                    names.extend_from_within(..n);
+                    for i in 0..n {
+                        positions.push(positions[i] + translation);
+                    }
+                }
+                (Some(expansion.box_lengths), 0.5 * expansion.box_lengths)
+            }
+            None => {
+                let bb = context.cell().bounding_box();
+                (bb, bb.map(|b| 0.5 * b).unwrap_or_default())
+            }
+        };
+
+        // Shift from Faunus convention (center at origin) to file convention (corner at origin)
+        for pos in &mut positions {
+            *pos += shift;
         }
 
         let data = StructureData {
             names,
             positions,
             step: None,
-            box_lengths: context.cell().bounding_box(),
+            box_lengths,
             ..Default::default()
         };
 

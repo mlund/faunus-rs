@@ -173,6 +173,27 @@ system:
     - {molecule: Na, N: 10, insert: !RandomAtomPos {}}
 ```
 
+### Simulation Cell
+
+The `cell` field selects the geometry and boundary conditions.
+
+| Cell | PBC | Parameters | Description |
+|------|-----|------------|-------------|
+| `!Cuboid` | XYZ | `[x, y, z]` | Orthorhombic box with side lengths x, y, z |
+| `!HexagonalPrism` | XYZ | `{side, height}` | Hexagonal cross-section prism |
+| `!Slit` | XY | `[x, y, z]` | Cuboidal box, hard walls in Z |
+| `!Cylinder` | Z | `{radius, height}` | Cylindrical cell, hard walls in XY |
+| `!Sphere` | — | `{radius}` | Spherical cell, hard walls |
+| `!Endless` | — | | Infinite, open cell |
+
+Examples:
+
+```yaml
+cell: !Cuboid [30.0, 30.0, 30.0]
+cell: !HexagonalPrism {side: 15.0, height: 30.0}
+cell: !Cylinder {radius: 10.0, height: 50.0}
+```
+
 ### Molecule Blocks
 
 Blocks specify how many copies of each molecule to create and how to initialize their positions.

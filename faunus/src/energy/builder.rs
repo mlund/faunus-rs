@@ -954,8 +954,7 @@ mod tests {
 
     #[test]
     fn test_custom_potential_deserialization() {
-        let builder =
-            HamiltonianBuilder::from_file("tests/files/nonbonded_custom.yaml").unwrap();
+        let builder = HamiltonianBuilder::from_file("tests/files/nonbonded_custom.yaml").unwrap();
         let pairpot_builder = builder.pairpot_builder.unwrap();
 
         assert!(pairpot_builder.0.contains_key(&DefaultOrPair::Default));

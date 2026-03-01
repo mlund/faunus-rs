@@ -18,20 +18,37 @@
 //! The simulation cell is a geometric [`Shape`], e.g. a cube, sphere, etc., with defined [`BoundaryConditions`].
 //! Some statistical thermodynamic ensembles require volume fluctuations, which is implemented by scaling the simulation cell
 //! through the [`VolumeScale`] trait.
+//!
+//! ## Available cell types
+//!
+//! | Cell | PBC | Description |
+//! |------|-----|-------------|
+//! | [`Cuboid`] | XYZ | Orthorhombic box |
+//! | [`HexagonalPrism`] | XYZ | Hexagonal cross-section with non-orthorhombic lattice |
+//! | [`Slit`] | XY | Cuboidal box with hard walls in Z |
+//! | [`Cylinder`] | Z | Cylindrical cell with hard walls in XY |
+//! | [`Sphere`] | None | Spherical cell with hard walls |
+//! | [`Endless`] | None | Infinite, open cell |
 
 mod cuboid;
+mod cylinder;
 mod endless;
+mod hexagonal_prism;
 //pub(crate) mod lumol;
+mod slit;
 mod sphere;
 
 use std::path::Path;
 
 use crate::Point;
 pub use cuboid::Cuboid;
+pub use cylinder::Cylinder;
 use dyn_clone::DynClone;
 pub use endless::Endless;
+pub use hexagonal_prism::HexagonalPrism;
 use rand::rngs::ThreadRng;
 use serde::{Deserialize, Serialize};
+pub use slit::Slit;
 pub use sphere::Sphere;
 
 /// Final interface for a unit cell used to describe the geometry of a simulation system.
@@ -58,6 +75,15 @@ pub trait SimulationCell:
 {
 }
 
+/// Orthorhombic supercell expansion for I/O formats that require cuboid boxes.
+pub struct OrthorhombicExpansion {
+    /// Supercell dimensions
+    pub box_lengths: Point,
+    /// Translation vectors for replicating particles to fill the supercell.
+    /// Each vector produces one additional copy of all particles.
+    pub translations: Vec<Point>,
+}
+
 /// Geometric shape like a sphere, cube, etc.
 pub trait Shape {
     /// Get volume
@@ -80,6 +106,12 @@ pub trait Shape {
     fn bounding_box(&self) -> Option<Point>;
     /// Generate a random point positioned inside the boundaries of the shape
     fn get_point_inside(&self, rng: &mut ThreadRng) -> Point;
+    /// Orthorhombic supercell expansion needed for I/O of non-orthorhombic cells.
+    ///
+    /// Returns `None` for cells whose bounding box is already orthorhombic.
+    fn orthorhombic_expansion(&self) -> Option<OrthorhombicExpansion> {
+        None
+    }
 }
 
 dyn_clone::clone_trait_object!(SimulationCell);
@@ -158,7 +190,10 @@ pub trait VolumeScale {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum Cell {
     Cuboid(Cuboid),
+    Cylinder(Cylinder),
     Endless(Endless),
+    HexagonalPrism(HexagonalPrism),
+    Slit(Slit),
     Sphere(Sphere),
 }
 
@@ -186,7 +221,10 @@ impl From<Cell> for Box<dyn SimulationCell> {
     fn from(cell: Cell) -> Self {
         match cell {
             Cell::Cuboid(c) => Box::new(c),
+            Cell::Cylinder(c) => Box::new(c),
             Cell::Endless(c) => Box::new(c),
+            Cell::HexagonalPrism(c) => Box::new(c),
+            Cell::Slit(c) => Box::new(c),
             Cell::Sphere(c) => Box::new(c),
         }
     }
@@ -202,12 +240,32 @@ impl TryFrom<Cell> for Cuboid {
     }
 }
 
+impl TryFrom<Cell> for Cylinder {
+    type Error = anyhow::Error;
+    fn try_from(cell: Cell) -> Result<Self, Self::Error> {
+        match cell {
+            Cell::Cylinder(c) => Ok(c),
+            _ => Err(anyhow::Error::msg("Cell is not a cylinder")),
+        }
+    }
+}
+
 impl TryFrom<Cell> for Sphere {
     type Error = anyhow::Error;
     fn try_from(cell: Cell) -> Result<Self, Self::Error> {
         match cell {
             Cell::Sphere(c) => Ok(c),
             _ => Err(anyhow::Error::msg("Cell is not a sphere")),
+        }
+    }
+}
+
+impl TryFrom<Cell> for Slit {
+    type Error = anyhow::Error;
+    fn try_from(cell: Cell) -> Result<Self, Self::Error> {
+        match cell {
+            Cell::Slit(c) => Ok(c),
+            _ => Err(anyhow::Error::msg("Cell is not a slit")),
         }
     }
 }
@@ -222,12 +280,25 @@ impl TryFrom<Cell> for Endless {
     }
 }
 
+impl TryFrom<Cell> for HexagonalPrism {
+    type Error = anyhow::Error;
+    fn try_from(cell: Cell) -> Result<Self, Self::Error> {
+        match cell {
+            Cell::HexagonalPrism(c) => Ok(c),
+            _ => Err(anyhow::Error::msg("Cell is not a hexagonal prism")),
+        }
+    }
+}
+
 impl Shape for Cell {
     #[inline]
     fn volume(&self) -> Option<f64> {
         match self {
             Self::Cuboid(x) => x.volume(),
+            Self::Cylinder(x) => x.volume(),
             Self::Endless(_) => None,
+            Self::HexagonalPrism(x) => x.volume(),
+            Self::Slit(x) => x.volume(),
             Self::Sphere(x) => x.volume(),
         }
     }
@@ -236,7 +307,10 @@ impl Shape for Cell {
     fn is_inside(&self, point: &Point) -> bool {
         match self {
             Self::Cuboid(x) => x.is_inside(point),
+            Self::Cylinder(x) => x.is_inside(point),
             Self::Endless(_) => true,
+            Self::HexagonalPrism(x) => x.is_inside(point),
+            Self::Slit(x) => x.is_inside(point),
             Self::Sphere(x) => x.is_inside(point),
         }
     }
@@ -245,7 +319,10 @@ impl Shape for Cell {
     fn get_point_inside(&self, rng: &mut ThreadRng) -> Point {
         match self {
             Self::Cuboid(s) => s.get_point_inside(rng),
+            Self::Cylinder(s) => s.get_point_inside(rng),
             Self::Endless(s) => s.get_point_inside(rng),
+            Self::HexagonalPrism(s) => s.get_point_inside(rng),
+            Self::Slit(s) => s.get_point_inside(rng),
             Self::Sphere(s) => s.get_point_inside(rng),
         }
     }
@@ -254,8 +331,18 @@ impl Shape for Cell {
     fn bounding_box(&self) -> Option<Point> {
         match self {
             Self::Cuboid(s) => s.bounding_box(),
+            Self::Cylinder(s) => s.bounding_box(),
             Self::Endless(s) => s.bounding_box(),
+            Self::HexagonalPrism(s) => s.bounding_box(),
+            Self::Slit(s) => s.bounding_box(),
             Self::Sphere(s) => s.bounding_box(),
+        }
+    }
+
+    fn orthorhombic_expansion(&self) -> Option<OrthorhombicExpansion> {
+        match self {
+            Self::HexagonalPrism(s) => s.orthorhombic_expansion(),
+            _ => None,
         }
     }
 }
@@ -265,7 +352,10 @@ impl VolumeScale for Cell {
     fn scale_volume(&mut self, new_volume: f64, policy: VolumeScalePolicy) -> anyhow::Result<()> {
         match self {
             Self::Cuboid(x) => x.scale_volume(new_volume, policy),
+            Self::Cylinder(x) => x.scale_volume(new_volume, policy),
             Self::Endless(x) => x.scale_volume(new_volume, policy),
+            Self::HexagonalPrism(x) => x.scale_volume(new_volume, policy),
+            Self::Slit(x) => x.scale_volume(new_volume, policy),
             Self::Sphere(x) => x.scale_volume(new_volume, policy),
         }
     }
@@ -279,7 +369,10 @@ impl VolumeScale for Cell {
     ) -> anyhow::Result<()> {
         match self {
             Self::Cuboid(x) => x.scale_position(new_volume, point, policy),
+            Self::Cylinder(x) => x.scale_position(new_volume, point, policy),
             Self::Endless(x) => x.scale_position(new_volume, point, policy),
+            Self::HexagonalPrism(x) => x.scale_position(new_volume, point, policy),
+            Self::Slit(x) => x.scale_position(new_volume, point, policy),
             Self::Sphere(x) => x.scale_position(new_volume, point, policy),
         }
     }
@@ -290,7 +383,10 @@ impl BoundaryConditions for Cell {
     fn pbc(&self) -> PeriodicDirections {
         match self {
             Self::Cuboid(x) => x.pbc(),
+            Self::Cylinder(x) => x.pbc(),
             Self::Endless(x) => x.pbc(),
+            Self::HexagonalPrism(x) => x.pbc(),
+            Self::Slit(x) => x.pbc(),
             Self::Sphere(x) => x.pbc(),
         }
     }
@@ -299,7 +395,10 @@ impl BoundaryConditions for Cell {
     fn boundary(&self, point: &mut Point) {
         match self {
             Self::Cuboid(x) => x.boundary(point),
+            Self::Cylinder(x) => x.boundary(point),
             Self::Endless(x) => x.boundary(point),
+            Self::HexagonalPrism(x) => x.boundary(point),
+            Self::Slit(x) => x.boundary(point),
             Self::Sphere(x) => x.boundary(point),
         }
     }
@@ -308,7 +407,10 @@ impl BoundaryConditions for Cell {
     fn distance(&self, point1: &Point, point2: &Point) -> Point {
         match self {
             Self::Cuboid(x) => x.distance(point1, point2),
+            Self::Cylinder(x) => x.distance(point1, point2),
             Self::Endless(x) => x.distance(point1, point2),
+            Self::HexagonalPrism(x) => x.distance(point1, point2),
+            Self::Slit(x) => x.distance(point1, point2),
             Self::Sphere(x) => x.distance(point1, point2),
         }
     }

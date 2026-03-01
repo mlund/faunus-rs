@@ -17,7 +17,7 @@
 use std::path::Path;
 
 use crate::{
-    cell::{Cell, Cuboid, Endless, Shape, SimulationCell, Sphere},
+    cell::{Cell, Cuboid, Cylinder, Endless, HexagonalPrism, Shape, SimulationCell, Slit, Sphere},
     group::{Group, GroupCollection},
     platform::reference::ReferencePlatform,
     topology::Residue,
@@ -237,6 +237,9 @@ pub trait CellToChemCell: Shape {
 }
 
 impl CellToChemCell for Cuboid {}
+impl CellToChemCell for Cylinder {}
+impl CellToChemCell for HexagonalPrism {}
+impl CellToChemCell for Slit {}
 impl CellToChemCell for Sphere {}
 impl CellToChemCell for Endless {}
 impl CellToChemCell for Cell {}

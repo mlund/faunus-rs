@@ -26,10 +26,10 @@ use serde::{Deserialize, Deserializer, Serialize};
 #[serde(transparent)]
 pub struct Cuboid {
     /// Unit cell vectors
-    cell: Point,
+    pub(super) cell: Point,
     /// Half of the cell vectors
     #[serde(skip)]
-    half_cell: Point,
+    pub(super) half_cell: Point,
 }
 
 impl<'de> Deserialize<'de> for Cuboid {
