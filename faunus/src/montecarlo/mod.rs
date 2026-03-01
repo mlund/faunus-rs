@@ -460,7 +460,7 @@ impl<T: Context + crate::WithCell<SimCell = crate::cell::Cell> + 'static> Markov
         self.context.update(&crate::Change::Everything)?;
 
         self.step = state.step;
-        log::info!("Restored simulation state at step {}", self.step);
+        log::info!("Restored simulation state");
         Ok(())
     }
 }
