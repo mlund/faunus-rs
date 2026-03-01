@@ -199,6 +199,49 @@ Available grid types:
 | `PowerLaw(p)`  | Power-law with custom exponent $p$                       |
 | `InverseRsq`   | Uniform in $1/r^2$ — dense at short range               |
 
+## Bonded Interactions
+
+Bonded energy terms are automatically added to the Hamiltonian based on the
+bonds, torsions, and dihedrals defined in the [topology](topology.md#molecules).
+No explicit `energy:` configuration is needed.
+
+- **Intramolecular** — bonds, torsions, and dihedrals within each molecule,
+  using local atom indices defined in the molecule type.
+  Always active.
+- **Intermolecular** — bonds, torsions, and dihedrals between atoms in different
+  molecules, using global atom indices defined in
+  [`system.intermolecular`](topology.md#intermolecular-bonded-interactions).
+  Only added when at least one intermolecular interaction is defined.
+
+### Supported potentials
+
+**Bonds** (two-body, function of distance $r$):
+
+| Kind            | Energy                                                       |
+|-----------------|--------------------------------------------------------------|
+| `!Harmonic`     | $\frac{1}{2} k (r - r_\text{eq})^2$                         |
+| `!FENE`         | not yet implemented                                          |
+| `!Morse`        | not yet implemented                                          |
+| `!UreyBradley`  | $\frac{1}{2} k (r - r_\text{eq})^2$                         |
+
+**Torsions** (three-body, function of angle $\theta$ in degrees):
+
+| Kind         | Energy                                         |
+|--------------|------------------------------------------------|
+| `!Harmonic`  | $\frac{1}{2} k (\theta - \theta_\text{eq})^2$  |
+| `!Cosine`    | not yet implemented                             |
+
+**Dihedrals** (four-body, function of dihedral angle $\phi$ in degrees):
+
+| Kind               | Energy                                                  |
+|--------------------|---------------------------------------------------------|
+| `!ProperHarmonic`  | $\frac{1}{2} k (\phi - \phi_\text{eq})^2$               |
+| `!ProperPeriodic`  | $k \bigl[1 + \cos(n\phi - \phi_0)\bigr]$                |
+| `!ImproperHarmonic`| $\frac{1}{2} k (\phi - \phi_\text{eq})^2$               |
+| `!ImproperPeriodic`| $k \bigl[1 + \cos(n\phi - \phi_0)\bigr]$                |
+
+See [Topology — Bonds, Torsions, Dihedrals](topology.md#bonds) for YAML syntax, parameters, and units.
+
 ## Custom External Potential
 
 The `customexternal` energy term applies a user-defined mathematical expression

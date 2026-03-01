@@ -106,6 +106,13 @@ bonds:
 | `!Morse`        | `k`, `req`, `d`       | Anharmonic Morse potential            |
 | `!UreyBradley`  | `k`, `req`            | Urey-Bradley potential                |
 
+| Parameter | Unit        |
+|-----------|-------------|
+| `k`       | kJ/mol/Å²   |
+| `req`     | Å           |
+| `rmax`    | Å           |
+| `d`       | kJ/mol      |
+
 Bond order can optionally be specified: `Single`, `Double`, `Triple`, `Aromatic`, etc.
 
 ### Torsions (Three-Body Angles)
@@ -120,6 +127,11 @@ torsions:
 |--------------|-------------|----------------------------|
 | `!Harmonic`  | `k`, `aeq`  | Harmonic angle bending     |
 | `!Cosine`    | `k`, `aeq`  | Cosine form (GROMOS-96)    |
+
+| Parameter | Unit        |
+|-----------|-------------|
+| `k`       | kJ/mol/deg² |
+| `aeq`     | degrees     |
 
 ### Dihedrals (Four-Body Angles)
 
@@ -139,6 +151,13 @@ dihedrals:
 | `!ProperPeriodic`    | `k`, `n`, `phi`  | Proper periodic dihedral         |
 | `!ImproperHarmonic`  | `k`, `aeq`       | Improper harmonic dihedral       |
 | `!ImproperPeriodic`  | `k`, `n`, `phi`  | Improper periodic dihedral       |
+
+| Parameter | Unit                                    |
+|-----------|-----------------------------------------|
+| `k`       | kJ/mol/deg² (harmonic) or kJ/mol (periodic) |
+| `aeq`     | degrees                                 |
+| `n`       | integer                                 |
+| `phi`     | degrees                                 |
 
 Optional 1-4 scaling factors: `electrostatic_scaling` and `lj_scaling`.
 
