@@ -44,6 +44,40 @@ impl std::fmt::Display for SelectionError {
 
 impl std::error::Error for SelectionError {}
 
+/// Caches resolved selection indices, invalidated when `GroupLists` generation changes.
+///
+/// Use `get_or_resolve()` to lazily re-resolve only when the group composition
+/// has actually changed (e.g. after Grand Canonical insert/delete moves).
+#[derive(Debug, Clone)]
+pub struct SelectionCache {
+    indices: Vec<usize>,
+    generation: u64,
+}
+
+impl Default for SelectionCache {
+    fn default() -> Self {
+        Self {
+            indices: Vec::new(),
+            generation: u64::MAX,
+        }
+    }
+}
+
+impl SelectionCache {
+    /// Return cached indices, or re-resolve if the generation has changed.
+    pub fn get_or_resolve(
+        &mut self,
+        generation: u64,
+        resolve: impl FnOnce() -> Vec<usize>,
+    ) -> &[usize] {
+        if self.generation != generation {
+            self.indices = resolve();
+            self.generation = generation;
+        }
+        &self.indices
+    }
+}
+
 /// A parsed VMD-like atom selection expression.
 ///
 /// Parses from a string, then resolves against topology and groups

@@ -453,12 +453,22 @@ pub trait GroupCollection {
 ///
 /// Length of each outer vector corresponds to the number of molecule kinds in the system.
 /// Each inner vector then stores ids of groups corresponding to the specific molecule kind.
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, Clone)]
 pub struct GroupLists {
     full: Vec<Vec<usize>>,
     partial: Vec<Vec<usize>>,
     empty: Vec<Vec<usize>>,
+    /// Monotonically increasing counter, bumped when lists change.
+    generation: u64,
 }
+
+impl PartialEq for GroupLists {
+    fn eq(&self, other: &Self) -> bool {
+        self.full == other.full && self.partial == other.partial && self.empty == other.empty
+    }
+}
+
+impl Eq for GroupLists {}
 
 impl GroupLists {
     /// Create and initialize a new GroupLists structure.
@@ -470,7 +480,14 @@ impl GroupLists {
             full: vec![Vec::new(); n_molecules],
             partial: vec![Vec::new(); n_molecules],
             empty: vec![Vec::new(); n_molecules],
+            generation: 0,
         }
+    }
+
+    /// Monotonically increasing counter, bumped when group lists change.
+    /// Consumers can compare against a stored generation to detect staleness.
+    pub fn generation(&self) -> u64 {
+        self.generation
     }
 
     /// Add group to the GroupList. The group will be automatically assigned to the correct list.
@@ -487,6 +504,7 @@ impl GroupLists {
         };
 
         Self::add_to_list(list, group);
+        self.generation += 1;
     }
 
     /// Update the position of the group in the GroupLists.
@@ -508,6 +526,7 @@ impl GroupLists {
                     // update is needed only if the current group size does not match the previous one
                     _ => {
                         list.swap_remove(index);
+                        // add_group already bumps generation
                         self.add_group(group);
                     }
                 }
@@ -753,6 +772,7 @@ mod tests {
         assert_eq!(group_lists.full.len(), 3);
         assert_eq!(group_lists.partial.len(), 3);
         assert_eq!(group_lists.empty.len(), 3);
+        assert_eq!(group_lists.generation(), 0);
 
         let mut group1 = Group::new(0, 0, 3..8);
         let group2 = Group::new(1, 0, 8..13);
@@ -761,6 +781,7 @@ mod tests {
         group_lists.add_group(&group1);
         group_lists.add_group(&group2);
         group_lists.add_group(&group3);
+        assert_eq!(group_lists.generation(), 3);
 
         assert!(group_lists.full[0].contains(&0));
         assert!(group_lists.full[0].contains(&1));
@@ -769,9 +790,11 @@ mod tests {
         group1.resize(GroupSize::Empty).unwrap();
         group3.resize(GroupSize::Partial(3)).unwrap();
 
-        group_lists.update_group(&group1);
-        group_lists.update_group(&group2);
-        group_lists.update_group(&group3);
+        let gen_before = group_lists.generation();
+        group_lists.update_group(&group1); // Full→Empty: bumps generation
+        group_lists.update_group(&group2); // Full→Full: no change
+        group_lists.update_group(&group3); // Full→Partial: bumps generation
+        assert_eq!(group_lists.generation(), gen_before + 2);
 
         assert!(!group_lists.full[0].contains(&0));
         assert!(group_lists.empty[0].contains(&0));

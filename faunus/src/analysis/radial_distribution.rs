@@ -7,7 +7,7 @@ use super::{Analyze, Frequency};
 use crate::cell::{BoundaryConditions, Shape};
 use crate::dimension::Dimension;
 use crate::histogram::Histogram;
-use crate::selection::Selection;
+use crate::selection::{Selection, SelectionCache};
 use crate::Context;
 use anyhow::Result;
 use derive_more::Debug;
@@ -64,6 +64,7 @@ impl RadialDistributionBuilder {
 
         Ok(RadialDistribution {
             selections: self.selections.clone(),
+            caches: Default::default(),
             histogram,
             volume_sum: 0.0,
             pair_count_sum: 0.0,
@@ -82,6 +83,7 @@ impl RadialDistributionBuilder {
 #[derive(Debug)]
 pub struct RadialDistribution {
     selections: (Selection, Selection),
+    caches: (SelectionCache, SelectionCache),
     histogram: Histogram,
     volume_sum: f64,
     /// Accumulated pair count across all frames (for GC ensemble correctness).
@@ -141,14 +143,24 @@ impl RadialDistribution {
     fn sample_atom_atom(&mut self, context: &impl Context) -> f64 {
         let topology = context.topology_ref();
         let groups = context.groups();
-        let atoms1 = self.selections.0.resolve_atoms(topology, groups);
-        let atoms2 = self.selections.1.resolve_atoms(topology, groups);
+        let gen = context.group_lists().generation();
+        let same = self.same_selection();
         let exclude = self.exclude_intramolecular;
 
+        let (sel0, sel1) = (&self.selections.0, &self.selections.1);
+        let atoms1 = self
+            .caches
+            .0
+            .get_or_resolve(gen, || sel0.resolve_atoms(topology, groups));
+        let atoms2 = self
+            .caches
+            .1
+            .get_or_resolve(gen, || sel1.resolve_atoms(topology, groups));
+
         collect_pair_distances(
-            &atoms1,
-            &atoms2,
-            self.same_selection(),
+            atoms1,
+            atoms2,
+            same,
             |i| Some(context.position(i)),
             |i, j| {
                 exclude && {
@@ -166,13 +178,23 @@ impl RadialDistribution {
     fn sample_com_com(&mut self, context: &impl Context) -> f64 {
         let topology = context.topology_ref();
         let groups = context.groups();
-        let gi1 = self.selections.0.resolve_groups(topology, groups);
-        let gi2 = self.selections.1.resolve_groups(topology, groups);
+        let gen = context.group_lists().generation();
+        let same = self.same_selection();
+
+        let (sel0, sel1) = (&self.selections.0, &self.selections.1);
+        let gi1 = self
+            .caches
+            .0
+            .get_or_resolve(gen, || sel0.resolve_groups(topology, groups));
+        let gi2 = self
+            .caches
+            .1
+            .get_or_resolve(gen, || sel1.resolve_groups(topology, groups));
 
         collect_pair_distances(
-            &gi1,
-            &gi2,
-            self.same_selection(),
+            gi1,
+            gi2,
+            same,
             |gi| groups[gi].mass_center().copied(),
             |_, _| false,
             context.cell(),
@@ -326,6 +348,7 @@ frequency: !Every 50
                 Selection::parse("all").unwrap(),
                 Selection::parse("all").unwrap(),
             ),
+            caches: Default::default(),
             histogram: Histogram::new(0.0, 5.0, dr),
             volume_sum: volume * num_samples as f64,
             pair_count_sum: n_pairs * num_samples as f64,

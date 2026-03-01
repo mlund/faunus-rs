@@ -19,10 +19,11 @@
 //! are available in the expression (evaluated in alphabetical order per exmex convention).
 
 use crate::change::GroupChange;
-use crate::selection::Selection;
+use crate::selection::{Selection, SelectionCache};
 use crate::{Change, Context};
 use exmex::{Express, FlatEx};
 use serde::{Deserialize, Serialize};
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -87,36 +88,41 @@ impl CustomExternalBuilder {
             var_indices,
             selection: self.selection.clone(),
             com: self.com,
+            group_cache: RefCell::default(),
         })
     }
 }
 
-/// Return group indices affected by a change that also match a selection.
-fn affected_groups(change: &Change, selection: &Selection, context: &impl Context) -> Vec<usize> {
+/// Return group indices affected by a change that also match a cached selection.
+fn affected_groups(
+    change: &Change,
+    cache: &RefCell<SelectionCache>,
+    selection: &Selection,
+    context: &impl Context,
+) -> Vec<usize> {
+    if matches!(change, Change::None) {
+        return vec![];
+    }
+    let gen = context.group_lists().generation();
+    let mut cache = cache.borrow_mut();
+    let selected = cache.get_or_resolve(gen, || {
+        selection.resolve_groups(context.topology_ref(), context.groups())
+    });
     match change {
-        Change::None => vec![],
-        Change::Everything | Change::Volume(..) => {
-            selection.resolve_groups(context.topology_ref(), context.groups())
-        }
+        Change::Everything | Change::Volume(..) => selected.to_vec(),
         Change::SingleGroup(gi, gc) => {
-            if matches!(gc, GroupChange::None) {
-                return vec![];
-            }
-            let selected = selection.resolve_groups(context.topology_ref(), context.groups());
-            if selected.contains(gi) {
+            if !matches!(gc, GroupChange::None) && selected.contains(gi) {
                 vec![*gi]
             } else {
                 vec![]
             }
         }
-        Change::Groups(changes) => {
-            let selected = selection.resolve_groups(context.topology_ref(), context.groups());
-            changes
-                .iter()
-                .filter(|(_, gc)| !matches!(gc, GroupChange::None))
-                .filter_map(|(gi, _)| selected.contains(gi).then_some(*gi))
-                .collect()
-        }
+        Change::Groups(changes) => changes
+            .iter()
+            .filter(|(_, gc)| !matches!(gc, GroupChange::None))
+            .filter_map(|(gi, _)| selected.contains(gi).then_some(*gi))
+            .collect(),
+        Change::None => unreachable!(),
     }
 }
 
@@ -148,6 +154,8 @@ pub struct CustomExternal {
     var_indices: Vec<usize>,
     selection: Selection,
     com: bool,
+    /// RefCell because energy() takes &self
+    group_cache: RefCell<SelectionCache>,
 }
 
 impl CustomExternal {
@@ -193,8 +201,7 @@ impl CustomExternal {
 
     /// Compute energy for a given change.
     pub fn energy(&self, context: &impl Context, change: &Change) -> f64 {
-        let affected = affected_groups(change, &self.selection, context);
-        affected
+        affected_groups(change, &self.group_cache, &self.selection, context)
             .iter()
             .map(|&gi| self.energy_for_group(context, gi))
             .sum()

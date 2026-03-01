@@ -30,7 +30,7 @@ use super::{Analyze, Frequency};
 use crate::change::{Change, GroupChange};
 use crate::dimension::Dimension;
 use crate::energy::EnergyChange;
-use crate::selection::Selection;
+use crate::selection::{Selection, SelectionCache};
 use crate::{Context, Point};
 use anyhow::Result;
 use average::{Estimate, Mean};
@@ -94,6 +94,11 @@ pub struct VirtualTranslate {
     #[builder(setter(skip))]
     #[builder_field_attr(serde(skip_deserializing))]
     num_samples: usize,
+
+    /// Cached resolved group indices to avoid re-resolution when N hasn't changed.
+    #[builder(setter(skip))]
+    #[builder_field_attr(serde(skip))]
+    group_cache: SelectionCache,
 
     /// Temperature in Kelvin (needed to convert energy to kT).
     /// Default is 298.15 K if not specified.
@@ -169,6 +174,7 @@ impl VirtualTranslateBuilder {
             frequency: self.frequency.unwrap(),
             mean_exp_energy: Mean::new(),
             num_samples: 0,
+            group_cache: SelectionCache::default(),
             temperature,
         })
     }
@@ -290,9 +296,11 @@ impl<T: Context> Analyze<T> for VirtualTranslate {
             return Ok(());
         }
 
-        let active_groups = self
-            .selection
-            .resolve_groups(context.topology_ref(), context.groups());
+        let gen = context.group_lists().generation();
+        let selection = &self.selection;
+        let active_groups = self.group_cache.get_or_resolve(gen, || {
+            selection.resolve_groups(context.topology_ref(), context.groups())
+        });
 
         if active_groups.is_empty() {
             return Ok(());
