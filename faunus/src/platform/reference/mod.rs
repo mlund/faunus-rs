@@ -370,26 +370,27 @@ impl ParticleSystem for ReferencePlatform {
 
         // Molecular groups (has_com): scale only mass center, translate atoms
         // to preserve intramolecular geometry. Atomic groups: scale each atom.
-        for g in 0..num_groups {
-            if is_molecular[g] {
-                if let Some(&com) = self.groups[g].mass_center() {
-                    for i in self.groups[g].iter_active() {
-                        let d = self.cell.distance(&self.particles[i].pos, &com);
-                        self.particles[i].pos = com + d;
-                    }
-                    let mut scaled_com = com;
-                    self.cell
-                        .scale_position(new_volume, &mut scaled_com, policy)?;
-                    let shift = scaled_com - com;
-                    for i in self.groups[g].iter_active() {
-                        self.particles[i].pos += shift;
-                    }
-                }
-            } else {
+        for (g, &is_mol) in is_molecular.iter().enumerate() {
+            if !is_mol {
                 for i in self.groups[g].iter_active() {
                     self.cell
                         .scale_position(new_volume, &mut self.particles[i].pos, policy)?;
                 }
+                continue;
+            }
+            let Some(&com) = self.groups[g].mass_center() else {
+                continue;
+            };
+            for i in self.groups[g].iter_active() {
+                let d = self.cell.distance(&self.particles[i].pos, &com);
+                self.particles[i].pos = com + d;
+            }
+            let mut scaled_com = com;
+            self.cell
+                .scale_position(new_volume, &mut scaled_com, policy)?;
+            let shift = scaled_com - com;
+            for i in self.groups[g].iter_active() {
+                self.particles[i].pos += shift;
             }
         }
 

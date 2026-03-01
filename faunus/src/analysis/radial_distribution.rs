@@ -101,6 +101,7 @@ pub struct RadialDistribution {
 /// Iterate unique pairs from two index lists, deduplicating when `same` is true,
 /// look up a position for each index, and feed each PBC distance into the histogram.
 /// Returns the number of pairs evaluated.
+#[allow(clippy::too_many_arguments)]
 fn collect_pair_distances(
     indices1: &[usize],
     indices2: &[usize],
