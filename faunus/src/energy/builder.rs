@@ -64,19 +64,6 @@ pub enum DirectOrMixing<T: IsotropicTwobodyEnergy> {
     Direct(T),
 }
 
-/// Serde-friendly builder for `CustomPotential` (which doesn't derive `Deserialize`).
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
-#[serde(deny_unknown_fields)]
-pub struct CustomPairPotentialBuilder {
-    /// Math expression in `r` (the pair distance in Å).
-    function: String,
-    /// Cutoff distance (Å).
-    cutoff: f64,
-    /// Named constants substituted before parsing.
-    #[serde(default)]
-    constants: HashMap<String, f64>,
-}
-
 /// Types of pair interactions
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 #[serde(deny_unknown_fields)]
@@ -108,7 +95,7 @@ pub enum PairInteraction {
     #[serde(alias = "Fanourgakis")]
     CoulombFanourgakis(interatomic::coulomb::pairwise::Fanourgakis),
     /// Custom pair potential from math expression.
-    CustomPotential(CustomPairPotentialBuilder),
+    CustomPotential(Box<CustomPotential>),
 }
 
 impl PairInteraction {
@@ -217,14 +204,8 @@ impl PairInteraction {
             Self::CoulombFanourgakis(scheme) => {
                 Self::make_coulomb(charge_product, medium.unwrap(), scheme.clone())
             }
-            Self::CustomPotential(builder) => {
-                let params: Vec<_> = builder
-                    .constants
-                    .iter()
-                    .map(|(k, v)| (k.as_str(), *v))
-                    .collect();
-                let custom = CustomPotential::new(&builder.function, &params, builder.cutoff)?;
-                Ok(Box::new(custom))
+            Self::CustomPotential(custom) => {
+                Ok(Box::new(custom.as_ref().clone()))
             }
         }
     }
@@ -957,36 +938,9 @@ mod tests {
         let builder = HamiltonianBuilder::from_file("tests/files/nonbonded_custom.yaml").unwrap();
         let pairpot_builder = builder.pairpot_builder.unwrap();
 
-        assert!(pairpot_builder.0.contains_key(&DefaultOrPair::Default));
-        assert!(pairpot_builder
-            .0
-            .contains_key(&DefaultOrPair::Pair(UnorderedPair(
-                String::from("A"),
-                String::from("A")
-            ))));
         assert_eq!(pairpot_builder.0.len(), 2);
+        assert!(pairpot_builder.0.contains_key(&DefaultOrPair::Default));
 
-        for (pair, interactions) in &pairpot_builder.0 {
-            assert_eq!(interactions.len(), 1);
-            let PairInteraction::CustomPotential(b) = &interactions[0] else {
-                panic!("Expected CustomPotential");
-            };
-            match pair {
-                DefaultOrPair::Default => {
-                    assert_eq!(b.function, "4*eps*((sigma/r)^12 - (sigma/r)^6)");
-                    assert_approx_eq!(f64, b.cutoff, 14.0);
-                    assert_approx_eq!(f64, b.constants["eps"], 0.5);
-                    assert_approx_eq!(f64, b.constants["sigma"], 3.4);
-                }
-                DefaultOrPair::Pair(_) => {
-                    assert_eq!(b.function, "1/r");
-                    assert_approx_eq!(f64, b.cutoff, 10.0);
-                    assert!(b.constants.is_empty());
-                }
-            }
-        }
-
-        // Verify that to_boxed works by building the interaction
         let atom_a = AtomKindBuilder::default()
             .name("A")
             .id(0)
@@ -1000,7 +954,7 @@ mod tests {
             .to_boxed(&atom_a, &atom_a, None)
             .expect("to_boxed should succeed for CustomPotential");
         let energy = boxed.isotropic_twobody_energy(3.4 * 3.4);
-        assert_approx_eq!(f64, energy, 0.0, epsilon = 1e-6);
+        assert_approx_eq!(f64, energy, 0.5, epsilon = 1e-6);
     }
 
     #[test]

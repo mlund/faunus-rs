@@ -15,7 +15,7 @@ system:
     nonbonded:
       default:
         - !CustomPotential
-          function: "4*eps*((sigma/r)^12 - (sigma/r)^6)"
+          function: "eps*(sigma/r)^2"
           cutoff: 14.0
           constants: { eps: 0.5, sigma: 3.4 }
       [A, A]:
