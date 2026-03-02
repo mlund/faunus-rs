@@ -320,6 +320,10 @@ struct PropagateBuilder {
     move_collections: Vec<MoveCollectionBuilder>,
     #[serde(default)]
     criterion: AcceptanceCriterion,
+    /// Present so `deny_unknown_fields` accepts the `gibbs` key; parsed separately.
+    #[serde(default)]
+    #[allow(dead_code)]
+    gibbs: Option<serde_yaml::Value>,
 }
 
 /// Seed used for selecting stochastic moves.
@@ -493,6 +497,12 @@ impl<T: Context> Propagate<T> {
         self.max_repeats
     }
 
+    /// Replace the internal RNG with one seeded from `seed`.
+    /// Used to give each Gibbs box a unique seed.
+    pub fn reseed(&mut self, seed: u64) {
+        self.rng = Some(rand::SeedableRng::seed_from_u64(seed));
+    }
+
     /// Serialize the propagate state to a YAML value.
     pub fn to_yaml(&self) -> serde_yaml::Value {
         let mut map = serde_yaml::Mapping::new();
@@ -512,6 +522,19 @@ impl<T: Context> Propagate<T> {
         );
         serde_yaml::Value::Mapping(map)
     }
+}
+
+/// Parse the optional `propagate.gibbs` section from an input YAML file.
+pub fn gibbs_config_from_file(
+    filename: impl AsRef<Path>,
+) -> anyhow::Result<Option<crate::montecarlo::gibbs::GibbsConfig>> {
+    let yaml = std::fs::read_to_string(filename)?;
+    let full: serde_yaml::Value = serde_yaml::from_str(&yaml)?;
+    let Some(gibbs_value) = full.get("propagate").and_then(|p| p.get("gibbs")) else {
+        return Ok(None);
+    };
+    let config = serde_yaml::from_value(gibbs_value.clone())?;
+    Ok(Some(config))
 }
 
 #[cfg(test)]

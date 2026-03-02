@@ -30,6 +30,7 @@ use std::ops::Div;
 use std::{cmp::Ordering, ops::Neg};
 
 mod crankshaft;
+pub mod gibbs;
 mod pivot;
 mod rotate;
 mod translate;
@@ -335,9 +336,14 @@ impl<T: Context + 'static> MarkovChain<T> {
         (initial_energy + sum_du - self.system_energy()).abs()
     }
 
-    /// Propagate instance describing moves to perform.
+    /// Immutable reference to the simulation context.
     pub const fn context(&self) -> &T {
         &self.context
+    }
+
+    /// Mutable reference to the simulation context (needed for inter-box Gibbs moves).
+    pub fn context_mut(&mut self) -> &mut T {
+        &mut self.context
     }
 
     pub const fn propagation(&self) -> &Propagate<T> {

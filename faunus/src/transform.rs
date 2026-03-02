@@ -87,30 +87,54 @@ impl Transform {
         group_index: usize,
         context: &mut impl crate::Context,
     ) -> anyhow::Result<()> {
-        match self {
+        use crate::group::GroupSize;
+        let needs_mass_center_update = match self {
             Self::Translate(displacement) => {
-                Self::PartialTranslate(*displacement, ParticleSelection::Active)
-                    .on_group(group_index, context)?;
+                let indices =
+                    context.groups()[group_index].select(&ParticleSelection::Active, context)?;
+                context.translate_particles(&indices, displacement);
+                true
             }
             Self::PartialTranslate(displacement, selection) => {
                 let indices = context.groups()[group_index].select(selection, context)?;
                 context.translate_particles(&indices, displacement);
+                true
             }
             Self::Rotate(quaternion) => {
                 let indices =
                     context.groups()[group_index].select(&ParticleSelection::Active, context)?;
                 let center = context.mass_center(&indices);
                 context.rotate_particles(&indices, quaternion, Some(-center));
+                true
             }
             Self::PartialRotate(center, quaternion, selection) => {
                 let indices = context.groups()[group_index].select(selection, context)?;
                 context.rotate_particles(&indices, quaternion, Some(-*center));
+                true
+            }
+            Self::Activate => {
+                context.resize_group(group_index, GroupSize::Full)?;
+                true
+            }
+            Self::Expand(n) => {
+                context.resize_group(group_index, GroupSize::Expand(*n))?;
+                true
+            }
+            Self::Deactivate => {
+                context.resize_group(group_index, GroupSize::Empty)?;
+                false
+            }
+            Self::Contract(n) => {
+                context.resize_group(group_index, GroupSize::Shrink(*n))?;
+                false
             }
             _ => {
                 todo!("Implement other transforms")
             }
+        };
+        if needs_mass_center_update {
+            context.update_mass_center(group_index);
         }
-        context.update_mass_center(group_index);
         Ok(())
     }
 

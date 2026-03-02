@@ -204,9 +204,7 @@ impl PairInteraction {
             Self::CoulombFanourgakis(scheme) => {
                 Self::make_coulomb(charge_product, medium.unwrap(), scheme.clone())
             }
-            Self::CustomPotential(custom) => {
-                Ok(Box::new(custom.as_ref().clone()))
-            }
+            Self::CustomPotential(custom) => Ok(Box::new(custom.as_ref().clone())),
         }
     }
     /// Helper to create a coulombic interaction with a generic scheme

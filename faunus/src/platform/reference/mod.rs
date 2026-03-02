@@ -275,7 +275,7 @@ impl GroupCollection for ReferencePlatform {
         let indices = group
             .select(&crate::group::ParticleSelection::Active, self)
             .unwrap();
-        if self.topology().moleculekinds()[group.molecule()].has_com() {
+        if !indices.is_empty() && self.topology().moleculekinds()[group.molecule()].has_com() {
             let com = self.mass_center(&indices);
             self.groups[group_index].set_mass_center(com);
         }
