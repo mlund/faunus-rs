@@ -350,6 +350,10 @@ impl<T: Context + 'static> MarkovChain<T> {
         &self.propagate
     }
 
+    pub fn propagation_mut(&mut self) -> &mut Propagate<T> {
+        &mut self.propagate
+    }
+
     /// Collection of analyses.
     pub fn analyses(&self) -> &AnalysisCollection<T> {
         &self.analyses

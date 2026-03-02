@@ -222,3 +222,93 @@ Policy       | Description
 ```yaml
 - !VolumeMove { dV: 0.05, method: ScaleZ, weight: 0.5, repeat: 2 }
 ```
+
+---
+
+## Gibbs Ensemble
+
+The Gibbs ensemble method
+([Panagiotopoulos, _Mol. Phys._ 61, 813 (1987)](https://doi.org/10/cvzgw9))
+simulates two coupled simulation boxes to study phase coexistence without
+an explicit interface.
+When `propagate.gibbs` is present, faunus clones the system into two boxes
+and alternates between:
+
+1. **Intra-box MC** — each box runs `intra_steps` propagation cycles in parallel
+   (using the `collections` defined above).
+2. **Inter-box moves** — volume exchange and particle transfer between the two boxes.
+
+The total number of Gibbs sweeps is `repeat / intra_steps`.
+
+Molecule blocks must pre-allocate inactive slots for transfer using `active < N`
+in the `blocks` section, e.g. `{ molecule: LJ, N: 600, active: 300 }`.
+
+### Configuration
+
+```yaml
+propagate:
+  repeat: 5000
+  collections:
+    - !Stochastic
+      moves:
+        - !TranslateMolecule { molecule: LJ, dp: 0.3, repeat: 100 }
+  gibbs:
+    intra_steps: 1
+    moves:
+      - !GibbsVolumeExchange { dV: 10 }
+      - !GibbsParticleTransfer { molecule: LJ }
+```
+
+Key            | Required | Default | Description
+-------------- | -------- | ------- | -------------------------------------------
+`intra_steps`  | yes      |         | Intra-box propagation cycles between inter-box moves
+`moves`        | yes      |         | List of inter-box moves
+
+### Gibbs Volume Exchange
+
+Proposes a linear volume transfer $\Delta V$ between the two boxes:
+$V_1' = V_1 + \Delta V$, $V_2' = V_2 - \Delta V$,
+where $\Delta V \in [-\text{dV}/2, +\text{dV}/2]$.
+Both boxes are isotropically rescaled and all particle positions scale with the box.
+
+Acceptance includes the ideal-gas entropy bias:
+
+$$
+\operatorname{acc} = \min\!\bigl(1,\;
+  \exp\bigl[-\beta(\Delta U_1 + \Delta U_2)
+  + N_1 \ln(V_1'/V_1) + N_2 \ln(V_2'/V_2)\bigr]\bigr)
+$$
+
+```yaml
+- !GibbsVolumeExchange { dV: 10 }
+```
+
+Key  | Required | Description
+---- | -------- | -------------------------------------------
+`dV` | yes      | Maximum volume displacement (linear scale)
+
+### Gibbs Particle Transfer
+
+Transfers a molecule from one box to the other.
+A random direction is chosen (box 0 → 1 or box 1 → 0).
+A full group is deactivated in the source box, and an empty group
+is activated at a random position in the target box.
+If no suitable group exists in either box, the move is rejected.
+
+Acceptance follows Panagiotopoulos Eq. 8:
+
+$$
+\operatorname{acc} = \min\!\bigl(1,\;
+  \exp\bigl[-\beta(\Delta U_\text{src} + \Delta U_\text{tgt})
+  + \ln\!\bigl(\tfrac{V_\text{tgt}\, N_\text{src}}{V_\text{src}\,(N_\text{tgt}+1)}\bigr)\bigr]\bigr)
+$$
+
+where $N$ counts are measured _before_ the move.
+
+```yaml
+- !GibbsParticleTransfer { molecule: LJ }
+```
+
+Key        | Required | Description
+---------- | -------- | -------------------------------------------
+`molecule` | yes      | Name of the molecule type to transfer

@@ -27,6 +27,17 @@ pub enum Simulation {
     Gibbs(Box<GibbsEnsemble<ReferencePlatform>>),
 }
 
+/// Build a MarkovChain from an input file, context, and thermal energy.
+fn build_markov_chain(
+    input: &Path,
+    context: ReferencePlatform,
+    kt: f64,
+) -> Result<MarkovChain<ReferencePlatform>> {
+    let propagate = Propagate::from_file(input, &context)?;
+    let analyses = analysis::from_file(input, &context)?;
+    MarkovChain::new(context, propagate, kt, analyses)
+}
+
 impl Simulation {
     /// Build a simulation from an input YAML file.
     ///
@@ -44,11 +55,8 @@ impl Simulation {
             return Ok((sim, medium));
         }
 
-        // --- single-box path (unchanged) ---
         let context = ReferencePlatform::new(input, None, &mut rand::thread_rng())?;
-        let propagate = Propagate::from_file(input, &context)?;
-        let analyses = analysis::from_file(input, &context)?;
-        let mut mc = MarkovChain::new(context, propagate, kt, analyses)?;
+        let mut mc = build_markov_chain(input, context, kt)?;
 
         if let Some(state_path) = state {
             if state_path.exists() {
@@ -69,30 +77,24 @@ impl Simulation {
         let context0 = ReferencePlatform::new(input, None, &mut rand::thread_rng())?;
         let context1 = context0.clone();
 
-        let propagate0 = Propagate::from_file(input, &context0)?;
-        let mut propagate1 = Propagate::from_file(input, &context1)?;
-        // give box 1 a distinct seed so intra-box trajectories diverge
-        propagate1.reseed(0x000D_EADB_EEFC_AFE1);
-
-        let analyses0 = analysis::from_file(input, &context0)?;
-        let analyses1 = analysis::from_file(input, &context1)?;
-
-        let max_sweeps = propagate0.max_repeats() / gibbs_cfg.intra_steps.max(1);
-        log::info!(
-            "Gibbs ensemble: {} sweeps, {} intra-steps, {} inter-moves",
-            max_sweeps,
-            gibbs_cfg.intra_steps,
-            gibbs_cfg.moves.len()
-        );
-
         let inter_moves: Vec<_> = gibbs_cfg
             .moves
             .into_iter()
             .map(|b| b.build(&context0))
             .collect::<Result<_>>()?;
 
-        let mut mc0 = MarkovChain::new(context0, propagate0, kt, analyses0)?;
-        let mut mc1 = MarkovChain::new(context1, propagate1, kt, analyses1)?;
+        let mut mc0 = build_markov_chain(input, context0, kt)?;
+        let mut mc1 = build_markov_chain(input, context1, kt)?;
+        // give box 1 a distinct seed so intra-box trajectories diverge
+        mc1.propagation_mut().reseed(0x000D_EADB_EEFC_AFE1);
+
+        let max_sweeps = mc0.propagation().max_repeats() / gibbs_cfg.intra_steps.max(1);
+        log::info!(
+            "Gibbs ensemble: {} sweeps, {} intra-steps, {} inter-moves",
+            max_sweeps,
+            gibbs_cfg.intra_steps,
+            inter_moves.len()
+        );
 
         // load per-box state files if they exist
         if let Some(state_path) = state {
