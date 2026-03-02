@@ -5,7 +5,7 @@ use crate::Point;
 use crate::{change::Change, topology::Topology};
 use std::{
     cell::{Ref, RefMut},
-    rc::Rc,
+    sync::Arc,
 };
 
 /// Context stores the state of a single simulation system.
@@ -47,13 +47,13 @@ pub trait WithCell {
 /// A trait for objects that have a topology.
 pub trait WithTopology {
     /// Get reference-counted topology of the system.
-    fn topology(&self) -> Rc<Topology>;
+    fn topology(&self) -> Arc<Topology>;
 
     /// Get reference to the topology of the system.
     ///
-    /// This does not increase the counter of Rc<Topology>
+    /// This does not increase the counter of Arc<Topology>
     /// and should therefore be faster than using `WithTopology::topology`.
-    fn topology_ref(&self) -> &Rc<Topology>;
+    fn topology_ref(&self) -> &Arc<Topology>;
 }
 
 /// A trait for objects that have a hamiltonian.

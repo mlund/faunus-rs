@@ -31,7 +31,7 @@ use serde::Serialize;
 use std::{
     cell::{Ref, RefCell, RefMut},
     path::Path,
-    rc::Rc,
+    sync::Arc,
 };
 
 /// Extract medium from system/medium in YAML file
@@ -62,7 +62,8 @@ struct ContextBackup {
 /// follows the same layout as the original C++ Faunus code (version 2 and lower).
 #[derive(Clone, Debug, Serialize)]
 pub struct ReferencePlatform {
-    topology: Rc<Topology>,
+    /// Arc (not Rc) so that MarkovChain is Send for Gibbs ensemble scoped threads
+    topology: Arc<Topology>,
     particles: Vec<Particle>,
     #[serde(skip)]
     groups: Vec<Group>,
@@ -94,7 +95,7 @@ impl ReferencePlatform {
 
         let hamiltonian = Hamiltonian::new(&hamiltonian_builder, &topology, medium)?;
         Self::from_raw_parts(
-            Rc::new(topology),
+            Arc::new(topology),
             cell,
             RefCell::new(hamiltonian),
             structure_file,
@@ -120,7 +121,7 @@ impl ReferencePlatform {
     }
 
     pub(crate) fn from_raw_parts(
-        topology: Rc<Topology>,
+        topology: Arc<Topology>,
         cell: Cell,
         hamiltonian: RefCell<Hamiltonian>,
         structure: Option<&Path>,
@@ -158,11 +159,11 @@ impl WithCell for ReferencePlatform {
 }
 
 impl WithTopology for ReferencePlatform {
-    fn topology(&self) -> Rc<Topology> {
+    fn topology(&self) -> Arc<Topology> {
         self.topology.clone()
     }
 
-    fn topology_ref(&self) -> &Rc<Topology> {
+    fn topology_ref(&self) -> &Arc<Topology> {
         &self.topology
     }
 }

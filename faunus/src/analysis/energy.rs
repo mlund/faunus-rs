@@ -37,7 +37,7 @@ enum EnergyMode {
 pub struct EnergyAnalysis {
     mode: EnergyMode,
     #[debug(skip)]
-    stream: Box<dyn Write>,
+    stream: Box<dyn Write + Send>,
     frequency: Frequency,
     mean: Mean,
     num_samples: usize,

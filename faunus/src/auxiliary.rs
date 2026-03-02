@@ -22,10 +22,10 @@ use std::io::Write;
 use std::path::PathBuf;
 
 /// If the output file has a `.gz` extension, return a `GzEncoder` wrapped around the file
-pub fn open_compressed(path: &PathBuf) -> anyhow::Result<Box<dyn Write>> {
+pub fn open_compressed(path: &PathBuf) -> anyhow::Result<Box<dyn Write + Send>> {
     let file = std::fs::File::create(path)
         .map_err(|err| anyhow::anyhow!("Error creating file {:?}: {}", path, err))?;
-    let writer: Box<dyn Write> = if path.extension().unwrap_or_default() == "gz" {
+    let writer: Box<dyn Write + Send> = if path.extension().unwrap_or_default() == "gz" {
         Box::new(GzEncoder::new(file, Compression::default()))
     } else {
         Box::new(file)

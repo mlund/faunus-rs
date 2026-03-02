@@ -80,7 +80,7 @@ pub struct VirtualTranslate {
     #[builder(setter(skip))]
     #[builder_field_attr(serde(skip))]
     #[debug(skip)]
-    stream: Option<Box<dyn Write>>,
+    stream: Option<Box<dyn Write + Send>>,
 
     /// Sample frequency
     frequency: Frequency,

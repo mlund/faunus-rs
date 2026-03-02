@@ -94,7 +94,7 @@ pub struct RadialDistribution {
     dimension: Dimension,
     output_file: PathBuf,
     #[debug(skip)]
-    stream: Box<dyn Write>,
+    stream: Box<dyn Write + Send>,
     frequency: Frequency,
 }
 

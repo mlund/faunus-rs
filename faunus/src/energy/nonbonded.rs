@@ -348,7 +348,11 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
                 self.group_with_other_groups(context, &context.groups()[group_index])
             }
             GroupChange::Resize(_) | GroupChange::UpdateIdentity(_) => {
-                todo!("Resize and UpdateIdentity changes are not yet implemented for NonbondedMatrix.")
+                // Unlike RigidBody, the active particle set changed so intra-group
+                // interactions must also be recomputed
+                let group = &context.groups()[group_index];
+                self.group_with_other_groups(context, group)
+                    + self.group_with_itself(context, group)
             }
             GroupChange::PartialUpdate(x) => x
                 .iter()
@@ -482,7 +486,7 @@ impl From<&NonbondedMatrix> for NonbondedMatrixSplined {
 
 #[cfg(test)]
 mod tests {
-    use std::{cell::RefCell, rc::Rc};
+    use std::{cell::RefCell, sync::Arc};
 
     use float_cmp::assert_approx_eq;
 
@@ -617,7 +621,7 @@ mod tests {
 
         let mut rng = rand::thread_rng();
         let system = ReferencePlatform::from_raw_parts(
-            Rc::new(topology),
+            Arc::new(topology),
             Cell::Cuboid(Cuboid::cubic(20.0)),
             RefCell::new(Hamiltonian::from(vec![nonbonded.clone().into()])),
             None,

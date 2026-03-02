@@ -98,7 +98,8 @@ pub(crate) fn tagged_yaml(tag: &str, value: &impl Serialize) -> Option<serde_yam
 
 /// Wrapper that owns bookkeeping (statistics, weight, repeat) and delegates proposal logic.
 pub struct MoveRunner<T: Context> {
-    inner: Box<dyn MoveProposal<T>>,
+    /// Send-bound required for Gibbs ensemble scoped threads
+    inner: Box<dyn MoveProposal<T> + Send>,
     statistics: MoveStatistics,
     weight: f64,
     repeat: usize,
@@ -116,7 +117,7 @@ impl<T: Context> fmt::Debug for MoveRunner<T> {
 }
 
 impl<T: Context> MoveRunner<T> {
-    pub fn new(inner: Box<dyn MoveProposal<T>>, weight: f64, repeat: usize) -> Self {
+    pub fn new(inner: Box<dyn MoveProposal<T> + Send>, weight: f64, repeat: usize) -> Self {
         Self {
             inner,
             statistics: MoveStatistics::default(),

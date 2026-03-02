@@ -27,7 +27,7 @@ pub struct MassCenterDistance {
     #[builder(setter(skip))]
     #[builder_field_attr(serde(skip))]
     #[debug(skip)]
-    stream: Box<dyn Write>,
+    stream: Box<dyn Write + Send>,
     /// Sample frequency.
     frequency: Frequency,
     /// Counter for the number of samples taken.

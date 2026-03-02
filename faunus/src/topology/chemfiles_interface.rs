@@ -233,7 +233,7 @@ impl CellToChemCell for Cell {}
 
 #[cfg(test)]
 mod tests {
-    use std::{cell::RefCell, rc::Rc};
+    use std::{cell::RefCell, sync::Arc};
 
     use crate::topology::{
         block::{BlockActivationStatus, InsertionPolicy, MoleculeBlock},
@@ -372,7 +372,7 @@ mod tests {
         let mut rng = rand::thread_rng();
 
         let context = ReferencePlatform::from_raw_parts(
-            Rc::new(topology),
+            Arc::new(topology),
             Cell::Cuboid(Cuboid::new(10.0, 5.0, 2.5)),
             RefCell::new(vec![].into()),
             None,

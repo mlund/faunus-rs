@@ -74,7 +74,7 @@ impl CollectiveVariableAnalysisBuilder {
 pub struct CollectiveVariableAnalysis {
     cv: ConcreteCollectiveVariable,
     #[debug(skip)]
-    stream: Option<Box<dyn Write>>,
+    stream: Option<Box<dyn Write + Send>>,
     frequency: Frequency,
     mean: Mean,
     mean_squared: Mean,

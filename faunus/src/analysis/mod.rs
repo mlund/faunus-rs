@@ -20,7 +20,7 @@ use core::fmt::Debug;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use serde_yaml::Value;
-use std::path::PathBuf;
+use std::path::Path;
 
 mod collective_variable;
 mod distance;
@@ -110,7 +110,7 @@ pub enum AnalysisBuilder {
 impl AnalysisBuilder {
     /// Build analysis object
     #[must_use = "this returns a Result that should be handled"]
-    pub fn build<T: Context>(&self, context: &T) -> Result<Box<dyn Analyze<T>>> {
+    pub fn build<T: Context>(&self, context: &T) -> Result<Box<dyn Analyze<T> + Send>> {
         Ok(match self {
             Self::MassCenterDistance(builder) => Box::new(builder.build()?),
             Self::StructureWriter(builder) => Box::new(builder.build()?),
@@ -123,12 +123,12 @@ impl AnalysisBuilder {
     }
 }
 
-/// Collection of analysis objects.
-pub type AnalysisCollection<T> = Vec<Box<dyn Analyze<T>>>;
+/// Collection of analysis objects. Send-bound required for Gibbs ensemble scoped threads.
+pub type AnalysisCollection<T> = Vec<Box<dyn Analyze<T> + Send>>;
 
 /// Create analysis collection from yaml file containing a list of analysis objects under an "analysis" key.
 #[must_use = "this returns a Result that should be handled"]
-pub fn from_file<T: Context>(path: &PathBuf, context: &T) -> Result<AnalysisCollection<T>> {
+pub fn from_file<T: Context>(path: &Path, context: &T) -> Result<AnalysisCollection<T>> {
     let yaml = std::fs::read_to_string(path)
         .map_err(|err| anyhow::anyhow!("Error reading file {:?}: {}", &path, err))?;
     let value = serde_yaml::from_str::<Value>(&yaml)?

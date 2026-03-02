@@ -14,17 +14,14 @@
 
 use crate::{
     analysis,
-    montecarlo::MarkovChain,
-    platform::reference::{get_medium, ReferencePlatform},
-    propagate::Propagate,
+    simulation::{self, write_yaml, Simulation},
     WithCell, WithTopology,
 };
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use indicatif::ProgressBar;
-use interatomic::coulomb::Temperature;
 use pretty_env_logger::env_logger::DEFAULT_FILTER_ENV;
-use std::{io::Write, path::PathBuf};
+use std::path::PathBuf;
 
 #[derive(Debug, Subcommand)]
 enum Commands {
@@ -77,67 +74,35 @@ pub fn do_main() -> Result<()> {
     Ok(())
 }
 
-/// Helper function to serialize data to an existing YAML file
-fn write_yaml<T: serde::Serialize>(
-    data: &T,
-    output: &mut std::fs::File,
-    key: Option<&str>,
-) -> Result<()> {
-    match key {
-        Some(key) => {
-            let mut wrapper = std::collections::BTreeMap::new();
-            wrapper.insert(key.to_string(), data);
-            let yaml = serde_yaml::to_string(&wrapper)?;
-            output.write_all(yaml.as_bytes())?;
-        }
-        None => {
-            let yaml = serde_yaml::to_string(data)?;
-            output.write_all(yaml.as_bytes())?;
-        }
-    }
-    Ok(())
-}
-
 fn run(input: PathBuf, state: Option<PathBuf>, yaml_output: &mut std::fs::File) -> Result<()> {
-    let context = ReferencePlatform::new(&input, None, &mut rand::thread_rng())?;
-    let propagate = Propagate::from_file(&input, &context)?;
+    let (mut sim, medium) = Simulation::from_file(&input, state.as_deref())?;
+    let mc = sim.as_single_box_mut();
 
-    let medium = get_medium(&input)?;
+    let thermal_energy = simulation::thermal_energy(&medium);
     log::info!("{}", medium);
-
-    const KILO_JOULE_PER_JOULE: f64 = 1e-3;
-    let thermal_energy =
-        physical_constants::MOLAR_GAS_CONSTANT * KILO_JOULE_PER_JOULE * medium.temperature();
-    log::info!("Thermal energy: {:.2} kJ/mol", thermal_energy);
-
-    let analysis = analysis::from_file(&input, &context)?;
-    let mut markov_chain = MarkovChain::new(context.clone(), propagate, thermal_energy, analysis)?;
-
-    if let Some(state_path) = &state {
-        if state_path.exists() {
-            let saved = crate::state::State::from_file(state_path)?;
-            markov_chain.load_state(saved)?;
-        }
-    }
+    log::info!("Thermal energy: {thermal_energy:.2} kJ/mol");
 
     write_yaml(&medium, yaml_output, Some("medium"))?;
-    write_yaml(&context.topology().blocks(), yaml_output, Some("blocks"))?;
+    write_yaml(
+        &mc.context().topology().blocks(),
+        yaml_output,
+        Some("blocks"),
+    )?;
 
-    let initial_energy = markov_chain.system_energy();
+    let initial_energy = mc.system_energy();
     log::info!("Initial energy = {initial_energy:.2} kJ/mol");
 
-    // Step through the Markov chain and update progress bar
-    let pb = ProgressBar::new(markov_chain.propagation().max_repeats() as u64);
-    for (i, step) in markov_chain.iter().enumerate() {
+    let pb = ProgressBar::new(mc.propagation().max_repeats() as u64);
+    for (i, step) in mc.iter().enumerate() {
         step?;
         pb.set_position(i as u64 + 1);
     }
     pb.finish();
 
-    markov_chain.finalize_analyses()?;
+    mc.finalize_analyses()?;
 
-    let final_energy = markov_chain.system_energy();
-    let drift = markov_chain.energy_drift(initial_energy);
+    let final_energy = mc.system_energy();
+    let drift = mc.energy_drift(initial_energy);
     let relative_drift = if final_energy.abs() > f64::EPSILON {
         drift / final_energy.abs()
     } else {
@@ -150,7 +115,7 @@ fn run(input: PathBuf, state: Option<PathBuf>, yaml_output: &mut std::fs::File) 
         log::info!("Energy drift: {drift:.2e} kJ/mol (relative: {relative_drift:.2e}) ✅");
     }
 
-    write_yaml(&markov_chain.context().cell(), yaml_output, Some("cell"))?;
+    write_yaml(&mc.context().cell(), yaml_output, Some("cell"))?;
 
     let energy_summary = std::collections::BTreeMap::from([
         ("initial".to_string(), initial_energy),
@@ -158,21 +123,19 @@ fn run(input: PathBuf, state: Option<PathBuf>, yaml_output: &mut std::fs::File) 
         ("drift".to_string(), drift),
     ]);
     write_yaml(&energy_summary, yaml_output, Some("energy_change"))?;
-
-    // Write final state
     write_yaml(
-        &markov_chain.propagation().to_yaml(),
+        &mc.propagation().to_yaml(),
         yaml_output,
         Some("propagate"),
     )?;
 
-    let analysis_yaml = analysis::analyses_to_yaml(markov_chain.analyses());
+    let analysis_yaml = analysis::analyses_to_yaml(mc.analyses());
     if !analysis_yaml.is_empty() {
         write_yaml(&analysis_yaml, yaml_output, Some("analysis"))?;
     }
 
     if let Some(state_path) = &state {
-        markov_chain.save_state().to_file(state_path)?;
+        mc.save_state().to_file(state_path)?;
         log::info!("Saved simulation state to {}", state_path.display());
     }
 

@@ -267,7 +267,7 @@ impl IntermolecularBonded {
 
 #[cfg(test)]
 mod tests {
-    use std::{cell::RefCell, rc::Rc};
+    use std::{cell::RefCell, sync::Arc};
 
     use float_cmp::assert_approx_eq;
 
@@ -285,7 +285,7 @@ mod tests {
         let topology = Topology::from_file("tests/files/bonded_interactions.yaml").unwrap();
         let mut rng = rand::thread_rng();
         let system = ReferencePlatform::from_raw_parts(
-            Rc::new(topology.clone()),
+            Arc::new(topology.clone()),
             Cell::Cuboid(Cuboid::cubic(20.0)),
             RefCell::new(Hamiltonian::default()),
             None,

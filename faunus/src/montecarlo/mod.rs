@@ -354,6 +354,21 @@ impl<T: Context + 'static> MarkovChain<T> {
         self.analyses.finalize(&self.context)
     }
 
+    /// Run up to `n` propagation cycles (intra-box steps for Gibbs ensemble).
+    pub fn run_n_steps(&mut self, n: usize) -> Result<()> {
+        for _ in 0..n {
+            if !self.propagate.propagate(
+                &mut self.context,
+                self.thermal_energy,
+                &mut self.step,
+                &mut self.analyses,
+            )? {
+                break;
+            }
+        }
+        Ok(())
+    }
+
     /// Set the thermal energy, _kT_.
     ///
     /// This is used to normalize the energy change when determining the acceptance probability.
@@ -362,7 +377,7 @@ impl<T: Context + 'static> MarkovChain<T> {
         self.thermal_energy = thermal_energy;
     }
     /// Append an analysis to the back of the collection.
-    pub fn add_analysis(&mut self, analysis: Box<dyn Analyze<T>>) {
+    pub fn add_analysis(&mut self, analysis: Box<dyn Analyze<T> + Send>) {
         self.analyses.push(analysis)
     }
 }

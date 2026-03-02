@@ -92,7 +92,7 @@ impl ShapeAnalysisBuilder {
 pub struct ShapeAnalysis {
     selection: Selection,
     #[debug(skip)]
-    stream: Option<Box<dyn Write>>,
+    stream: Option<Box<dyn Write + Send>>,
     frequency: Frequency,
     num_samples: usize,
     gyration_radius_squared: Mean,
