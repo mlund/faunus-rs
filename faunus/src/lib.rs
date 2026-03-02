@@ -14,7 +14,6 @@
 
 use crate::group::Group;
 
-use nalgebra::DMatrix;
 use topology::Topology;
 
 pub type Point = interatomic::Vector3;

@@ -29,7 +29,7 @@ use crate::{
 use serde::Serialize;
 
 use std::{
-    cell::{Ref, RefCell, RefMut},
+    cell::RefCell,
     path::Path,
     sync::Arc,
 };
@@ -148,35 +148,7 @@ impl ReferencePlatform {
     }
 }
 
-impl WithCell for ReferencePlatform {
-    type SimCell = Cell;
-    fn cell(&self) -> &Self::SimCell {
-        &self.cell
-    }
-    fn cell_mut(&mut self) -> &mut Self::SimCell {
-        &mut self.cell
-    }
-}
-
-impl WithTopology for ReferencePlatform {
-    fn topology(&self) -> Arc<Topology> {
-        self.topology.clone()
-    }
-
-    fn topology_ref(&self) -> &Arc<Topology> {
-        &self.topology
-    }
-}
-
-impl WithHamiltonian for ReferencePlatform {
-    fn hamiltonian(&self) -> Ref<'_, Hamiltonian> {
-        self.hamiltonian.borrow()
-    }
-
-    fn hamiltonian_mut(&self) -> RefMut<'_, Hamiltonian> {
-        self.hamiltonian.borrow_mut()
-    }
-}
+super::impl_platform_shared!(ReferencePlatform);
 
 impl Context for ReferencePlatform {
     fn save_particle_backup(&mut self, group_index: usize, indices: &[usize]) {

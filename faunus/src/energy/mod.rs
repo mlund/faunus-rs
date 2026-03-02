@@ -34,6 +34,7 @@ pub use energyterm::EnergyTerm;
 pub use external_pressure::{ExternalPressure, Pressure};
 pub use hamiltonian::{EnergyChange, Hamiltonian};
 pub use nonbonded::{NonbondedMatrix, NonbondedMatrixSplined};
+pub use nonbonded::PbcParams;
 pub use sasa::{SasaEnergy, SasaEnergyBuilder};
 
 // Re-export spline types from interatomic for convenience
