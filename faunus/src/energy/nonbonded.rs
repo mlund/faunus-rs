@@ -318,7 +318,9 @@ impl<P: IsotropicTwobodyEnergy> EnergyChange for NonbondedMatrix<P> {
         {
             let cell = context.cell();
             // Prefer cached PBC params (SimdPlatform); fall back to computing them (ReferencePlatform)
-            let pbc = context.pbc_params().or_else(|| PbcParams::try_from_cell(cell));
+            let pbc = context
+                .pbc_params()
+                .or_else(|| PbcParams::try_from_cell(cell));
             let soa = SoaSlices {
                 x,
                 y,
@@ -329,9 +331,7 @@ impl<P: IsotropicTwobodyEnergy> EnergyChange for NonbondedMatrix<P> {
             };
             let groups = context.groups();
             return match change {
-                Change::Everything | Change::Volume(_, _) => {
-                    self.total_nonbonded_soa(&soa, groups)
-                }
+                Change::Everything | Change::Volume(_, _) => self.total_nonbonded_soa(&soa, groups),
                 Change::SingleGroup(gi, GroupChange::RigidBody) => {
                     // Cache miss — lazy-initialize all pairwise energies
                     self.initialize_cache_soa(&soa, groups);
@@ -429,12 +429,12 @@ impl NonbondedMatrix {
         topology: &Topology,
         medium: Option<interatomic::coulomb::Medium>,
     ) -> anyhow::Result<Self> {
+        let builder = HamiltonianBuilder::from_file(file)?;
         Self::new(
-            &HamiltonianBuilder::from_file(file)?
-                .pairpot_builder
-                .unwrap(),
+            &builder.pairpot_builder.unwrap(),
             topology,
             medium,
+            builder.combine_with_default,
         )
     }
 
@@ -444,6 +444,7 @@ impl NonbondedMatrix {
         pairpot_builder: &PairPotentialBuilder,
         topology: &Topology,
         medium: Option<interatomic::coulomb::Medium>,
+        combine_with_default: bool,
     ) -> anyhow::Result<Self> {
         let atoms = topology.atomkinds();
         let n_atom_types = atoms.len();
@@ -455,8 +456,12 @@ impl NonbondedMatrix {
 
         for i in 0..n_atom_types {
             for j in 0..n_atom_types {
-                let interaction =
-                    pairpot_builder.get_interaction(&atoms[i], &atoms[j], medium.clone())?;
+                let interaction = pairpot_builder.get_interaction(
+                    &atoms[i],
+                    &atoms[j],
+                    medium.clone(),
+                    combine_with_default,
+                )?;
                 potentials[(i, j)] = ArcPotential(interaction.into());
             }
         }
@@ -492,7 +497,7 @@ impl NonbondedMatrix<SplinedPotential> {
     ///
     /// # Example
     /// ```ignore
-    /// let nonbonded = NonbondedMatrix::new(&builder, &topology, medium)?;
+    /// let nonbonded = NonbondedMatrix::new(&builder, &topology, medium, false)?;
     /// let splined = NonbondedMatrixSplined::from_nonbonded(&nonbonded, 12.0, None);
     /// ```
     pub fn from_nonbonded(
@@ -538,10 +543,14 @@ impl PbcParams {
             return None;
         }
         let pbc = cell.pbc();
-        let periodic_xy =
-            matches!(pbc, PeriodicDirections::PeriodicXYZ | PeriodicDirections::PeriodicXY);
-        let periodic_z =
-            matches!(pbc, PeriodicDirections::PeriodicXYZ | PeriodicDirections::PeriodicZ);
+        let periodic_xy = matches!(
+            pbc,
+            PeriodicDirections::PeriodicXYZ | PeriodicDirections::PeriodicXY
+        );
+        let periodic_z = matches!(
+            pbc,
+            PeriodicDirections::PeriodicXYZ | PeriodicDirections::PeriodicZ
+        );
 
         let bb = cell.bounding_box();
         // Non-periodic directions get (MAX, 0.0): round(dx * 0.0) = 0, so no correction
@@ -601,9 +610,11 @@ impl GroupEnergyCache {
         let n = self.n_groups;
         let row_start = group_index * n;
         self.backup_row.clear();
-        self.backup_row.extend_from_slice(&self.pairwise[row_start..row_start + n]);
+        self.backup_row
+            .extend_from_slice(&self.pairwise[row_start..row_start + n]);
         self.backup_group_energies.clear();
-        self.backup_group_energies.extend_from_slice(&self.group_energies);
+        self.backup_group_energies
+            .extend_from_slice(&self.group_energies);
         self.backup_group_index = group_index;
         self.has_backup = true;
     }
@@ -617,7 +628,8 @@ impl GroupEnergyCache {
                 self.pairwise[m * n + j] = self.backup_row[j];
                 self.pairwise[j * n + m] = self.backup_row[j];
             }
-            self.group_energies.copy_from_slice(&self.backup_group_energies);
+            self.group_energies
+                .copy_from_slice(&self.backup_group_energies);
             self.has_backup = false;
         }
     }
@@ -823,11 +835,7 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
     }
 
     /// Compute all pairwise inter-group energies and populate the cache.
-    fn initialize_cache_soa(
-        &self,
-        soa: &SoaSlices<'_, impl SimulationCell>,
-        groups: &[Group],
-    ) {
+    fn initialize_cache_soa(&self, soa: &SoaSlices<'_, impl SimulationCell>, groups: &[Group]) {
         let n = groups.len();
         let mut pairwise = vec![0.0; n * n];
         let mut group_energies = vec![0.0; n];
@@ -884,7 +892,9 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
                 (context.positions_soa(), context.atom_kinds_u32())
             {
                 let cell = context.cell();
-                let pbc = context.pbc_params().or_else(|| PbcParams::try_from_cell(cell));
+                let pbc = context
+                    .pbc_params()
+                    .or_else(|| PbcParams::try_from_cell(cell));
                 let soa = SoaSlices {
                     x,
                     y,
@@ -993,7 +1003,7 @@ mod tests {
                     serde_yaml::from_value(medium.clone()).ok()
                 });
 
-        let nonbonded = NonbondedMatrix::new(&pairpot_builder, &topology, medium).unwrap();
+        let nonbonded = NonbondedMatrix::new(&pairpot_builder, &topology, medium, false).unwrap();
 
         assert_eq!(
             nonbonded.potentials.len(),
@@ -1080,7 +1090,7 @@ mod tests {
             None,
         );
 
-        let nonbonded = NonbondedMatrix::new(&builder, &topology, Some(medium)).unwrap();
+        let nonbonded = NonbondedMatrix::new(&builder, &topology, Some(medium), false).unwrap();
 
         let mut rng = rand::thread_rng();
         let system = ReferencePlatform::from_raw_parts(
@@ -1720,5 +1730,4 @@ mod tests {
             error_fast
         );
     }
-
 }

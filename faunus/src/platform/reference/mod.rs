@@ -28,11 +28,7 @@ use crate::{
 
 use serde::Serialize;
 
-use std::{
-    cell::RefCell,
-    path::Path,
-    sync::Arc,
-};
+use std::{cell::RefCell, path::Path, sync::Arc};
 
 /// Extract medium from system/medium in YAML file
 pub fn get_medium(path: impl AsRef<Path>) -> anyhow::Result<interatomic::coulomb::Medium> {

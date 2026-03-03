@@ -38,7 +38,12 @@ impl Hamiltonian {
         hamiltonian.push(CellOverlap.into());
 
         if let Some(nonbonded_matrix) = &builder.pairpot_builder {
-            let nonbonded = NonbondedMatrix::new(nonbonded_matrix, topology, medium)?;
+            let nonbonded = NonbondedMatrix::new(
+                nonbonded_matrix,
+                topology,
+                medium,
+                builder.combine_with_default,
+            )?;
 
             // Use splined potentials if configured
             if let Some(spline_opts) = &builder.spline {

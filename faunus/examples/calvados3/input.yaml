@@ -52,10 +52,10 @@ system:
         }
 
   energy:
+    combine_with_default: true
     nonbonded:
       default:
         - !Coulomb {cutoff: 1000}
-        - !AshbaughHatch {mixing: arithmetic, cutoff: 20.0}
     spline:
       cutoff: 250.0
       n_points: 2000

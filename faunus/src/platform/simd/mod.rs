@@ -106,7 +106,6 @@ impl SimdPlatform {
 
         Ok(platform)
     }
-
 }
 
 impl crate::WithCell for SimdPlatform {
@@ -175,11 +174,7 @@ impl GroupCollection for SimdPlatform {
         }
     }
 
-    fn add_group(
-        &mut self,
-        molecule: usize,
-        particles: &[Particle],
-    ) -> anyhow::Result<&mut Group> {
+    fn add_group(&mut self, molecule: usize, particles: &[Particle]) -> anyhow::Result<&mut Group> {
         if particles.is_empty() {
             anyhow::bail!("Cannot create empty group on SimdPlatform");
         }

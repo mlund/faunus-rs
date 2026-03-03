@@ -53,10 +53,41 @@ energy:
       - !Coulomb {cutoff: 12.0}
 ```
 
-| Key                | Required | Description                                           |
-|--------------------|----------|-------------------------------------------------------|
-| `default`          | yes      | List of pair potentials applied to all atom pairs      |
-| `[atom1, atom2]`   | no       | Override for a specific pair (order does not matter)   |
+| Key                      | Required | Default | Description                                          |
+|--------------------------|----------|---------|------------------------------------------------------|
+| `default`                | no       |         | List of pair potentials applied to all atom pairs     |
+| `[atom1, atom2]`         | no       |         | Override for a specific pair (order does not matter)  |
+| `combine_with_default`   | no       | `false` | Pair-specific entries extend `default` instead of replacing it |
+
+By default, a pair-specific entry replaces the `default` entirely.
+When `combine_with_default` is `true`, pair-specific potentials are _added_ to the
+default interactions, which is useful for layering per-pair short-range potentials
+on top of a shared Coulomb term.
+
+### Loading nonbonded from include files
+
+Nonbonded pair definitions can be provided in an included force field file
+instead of being inlined in the input. The top-level `include` list is scanned
+for files containing an `energy` section, and any `nonbonded` pairs found there
+are merged into the input — entries in the input file take precedence.
+
+```yaml
+# assets/forcefield.yaml
+energy:
+  nonbonded:
+    [A, A]:
+      - !KimHummer {sigma: 5.0, epsilon: -0.18}
+
+# input.yaml
+include: [assets/forcefield.yaml]
+system:
+  energy:
+    combine_with_default: true
+    nonbonded:
+      default:
+        - !Coulomb {cutoff: 40.0}
+    spline: {cutoff: 40.0}
+```
 
 ### Short-range potentials
 

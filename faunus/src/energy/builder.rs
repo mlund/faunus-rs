@@ -251,31 +251,44 @@ pub struct PairPotentialBuilder(
 );
 
 impl PairPotentialBuilder {
-    /// Get interactions for a specific pair of atoms.
-    /// If this pair of atoms is not defined, get interactions for Default.
-    /// If Default is not defined, return an empty array.
-    fn get_pair_interactions(&self, atom1: &str, atom2: &str) -> &[PairInteraction] {
-        let key = DefaultOrPair::Pair(UnorderedPair(atom1.to_owned(), atom2.to_owned()));
-
-        match self.0.get(&key) {
-            Some(x) => x,
-            None => match self.0.get(&DefaultOrPair::Default) {
-                Some(x) => x,
-                None => &[],
-            },
+    /// Insert pairs from `other` that are not already present (input overrides include).
+    fn merge_from(&mut self, other: Self) {
+        for (key, value) in other.0 {
+            self.0.entry(key).or_insert(value);
         }
     }
 
     /// Get interactions for a specific pair of atoms and collect them into a single `IsotropicTwobodyEnergy` trait object.
     /// If this pair of atoms has no explicitly defined interactions, get interactions for Default.
     /// If Default is not defined or no interactions have been found, return `NoInteraction` structure and log a warning.
+    ///
+    /// When `combine_with_default` is true, pair-specific interactions are combined with
+    /// default interactions rather than replacing them.
     pub(crate) fn get_interaction(
         &self,
         atom1: &AtomKind,
         atom2: &AtomKind,
         medium: Option<interatomic::coulomb::Medium>,
+        combine_with_default: bool,
     ) -> anyhow::Result<Box<dyn IsotropicTwobodyEnergy>> {
-        let interactions = self.get_pair_interactions(atom1.name(), atom2.name());
+        let key = DefaultOrPair::Pair(UnorderedPair(
+            atom1.name().to_owned(),
+            atom2.name().to_owned(),
+        ));
+        let pair = self.0.get(&key);
+        let default = self.0.get(&DefaultOrPair::Default);
+
+        let interactions: Vec<&PairInteraction> = if combine_with_default {
+            default
+                .into_iter()
+                .chain(pair)
+                .flat_map(|v| v.iter())
+                .collect()
+        } else {
+            pair.or(default)
+                .map(|v| v.iter().collect())
+                .unwrap_or_default()
+        };
 
         if interactions.is_empty() {
             log::warn!(
@@ -341,6 +354,12 @@ pub struct HamiltonianBuilder {
     #[serde(rename = "nonbonded")]
     pub pairpot_builder: Option<PairPotentialBuilder>,
 
+    /// When true, pair-specific interactions are combined with `default`
+    /// rather than replacing it. Useful for adding per-pair short-range
+    /// potentials on top of a shared Coulomb interaction.
+    #[serde(default)]
+    pub combine_with_default: bool,
+
     /// Optional spline configuration for nonbonded interactions.
     /// When present, `NonbondedMatrixSplined` is used instead of `NonbondedMatrix`.
     pub spline: Option<SplineOptions>,
@@ -369,6 +388,8 @@ impl HamiltonianBuilder {
     ///     nonbonded:
     ///       ...
     /// ```
+    ///
+    /// Nonbonded pairs from `include` files are merged in; the input file takes precedence.
     pub(crate) fn from_file(path: impl AsRef<Path>) -> anyhow::Result<Self> {
         let yaml = std::fs::read_to_string(&path)
             .map_err(|err| anyhow::anyhow!("Error reading file {:?}: {}", &path.as_ref(), err))?;
@@ -382,7 +403,34 @@ impl HamiltonianBuilder {
             }
         }
 
-        serde_yaml::from_value(current.clone()).map_err(anyhow::Error::msg)
+        let mut builder: Self =
+            serde_yaml::from_value(current.clone()).map_err(anyhow::Error::msg)?;
+
+        // Merge nonbonded from included files (input overrides)
+        if let Some(includes) = full.get("include").and_then(|v| v.as_sequence()) {
+            let parent_dir = path.as_ref().parent().unwrap_or(Path::new("."));
+            for entry in includes {
+                if let Some(rel) = entry.as_str() {
+                    let inc_path = parent_dir.join(rel);
+                    let inc_yaml = std::fs::read_to_string(&inc_path).map_err(|err| {
+                        anyhow::anyhow!("Error reading include {:?}: {}", &inc_path, err)
+                    })?;
+                    let inc_full: serde_yaml::Value = serde_yaml::from_str(&inc_yaml)?;
+                    if let Some(energy_val) = inc_full.get("energy") {
+                        let inc_builder: Self = serde_yaml::from_value(energy_val.clone())
+                            .map_err(anyhow::Error::msg)?;
+                        if let Some(inc_pairpot) = inc_builder.pairpot_builder {
+                            builder
+                                .pairpot_builder
+                                .get_or_insert_with(|| PairPotentialBuilder(HashMap::new()))
+                                .merge_from(inc_pairpot);
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(builder)
     }
 
     /// Check that all atom kinds referred to in the pair potentials exist.
@@ -765,20 +813,20 @@ mod tests {
                 .unwrap();
 
         let interaction = nonbonded
-            .get_interaction(&atom1, &atom2, Some(medium.clone()))
+            .get_interaction(&atom1, &atom2, Some(medium.clone()), false)
             .unwrap();
         assert_behavior(interaction, expected.clone());
 
         // changed order of atoms = same result
         let interaction = nonbonded
-            .get_interaction(&atom2, &atom1, Some(medium.clone()))
+            .get_interaction(&atom2, &atom1, Some(medium.clone()), false)
             .unwrap();
         assert_behavior(interaction, expected);
 
         // default
         let expected = interaction1.to_boxed(&atom2, &atom1, None).unwrap();
         let interaction = nonbonded
-            .get_interaction(&atom1, &atom3, Some(medium.clone()))
+            .get_interaction(&atom1, &atom3, Some(medium.clone()), false)
             .unwrap();
         assert_behavior(interaction, expected);
 
@@ -786,7 +834,7 @@ mod tests {
         nonbonded.0.remove(&DefaultOrPair::Default);
         let expected = Box::<NoInteraction>::default();
         let interaction = nonbonded
-            .get_interaction(&atom1, &atom3, Some(medium.clone()))
+            .get_interaction(&atom1, &atom3, Some(medium.clone()), false)
             .unwrap();
         assert_behavior(interaction, expected);
     }
@@ -845,7 +893,7 @@ mod tests {
             + Box::new(hardsphere) as Box<dyn IsotropicTwobodyEnergy>;
 
         let interaction = nonbonded
-            .get_interaction(&atom1, &atom2, Some(medium.clone()))
+            .get_interaction(&atom1, &atom2, Some(medium.clone()), false)
             .unwrap();
         assert_behavior(interaction, expected);
 
@@ -866,7 +914,7 @@ mod tests {
                 as Box<dyn IsotropicTwobodyEnergy>;
 
         let interaction = nonbonded
-            .get_interaction(&atom1, &atom2, Some(medium.clone()))
+            .get_interaction(&atom1, &atom2, Some(medium.clone()), false)
             .unwrap();
         assert_behavior(interaction, expected);
     }
@@ -947,7 +995,7 @@ mod tests {
             .build()
             .unwrap();
 
-        let default_interactions = pairpot_builder.get_pair_interactions("A", "B");
+        let default_interactions = &pairpot_builder.0[&DefaultOrPair::Default];
         let boxed = default_interactions[0]
             .to_boxed(&atom_a, &atom_a, None)
             .expect("to_boxed should succeed for CustomPotential");
@@ -974,5 +1022,36 @@ mod tests {
         let config = spline.to_spline_config();
         assert_eq!(config.n_points, 2000);
         assert_eq!(config.grid_type, GridType::PowerLaw2);
+    }
+
+    #[test]
+    fn test_pairpot_merge_from() {
+        let pair_aa = DefaultOrPair::Pair(UnorderedPair("A".into(), "A".into()));
+        let pair_ab = DefaultOrPair::Pair(UnorderedPair("A".into(), "B".into()));
+
+        let interaction1 = vec![PairInteraction::KimHummer(DirectOrMixing::Direct(
+            KimHummer::new(-0.5, 6.0),
+        ))];
+        let interaction2 = vec![PairInteraction::KimHummer(DirectOrMixing::Direct(
+            KimHummer::new(0.3, 8.0),
+        ))];
+        let interaction3 = vec![PairInteraction::KimHummer(DirectOrMixing::Direct(
+            KimHummer::new(0.1, 5.0),
+        ))];
+
+        let mut base =
+            PairPotentialBuilder(HashMap::from([(pair_aa.clone(), interaction1.clone())]));
+        let other = PairPotentialBuilder(HashMap::from([
+            (pair_aa.clone(), interaction2.clone()),
+            (pair_ab.clone(), interaction3.clone()),
+        ]));
+
+        base.merge_from(other);
+
+        // existing key kept (input overrides include)
+        assert_eq!(base.0[&pair_aa], interaction1);
+        // new key inserted from include
+        assert_eq!(base.0[&pair_ab], interaction3);
+        assert_eq!(base.0.len(), 2);
     }
 }

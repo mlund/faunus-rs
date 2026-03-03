@@ -77,10 +77,7 @@ propagate:
 }
 
 fn write_tmp_yaml(yaml: &str) -> tempfile::NamedTempFile {
-    let mut tmp = tempfile::Builder::new()
-        .suffix(".yaml")
-        .tempfile()
-        .unwrap();
+    let mut tmp = tempfile::Builder::new().suffix(".yaml").tempfile().unwrap();
     tmp.write_all(yaml.as_bytes()).unwrap();
     tmp
 }
@@ -159,5 +156,10 @@ fn bench_mc_scaling(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, bench_mc_sweep, bench_mc_multistep, bench_mc_scaling);
+criterion_group!(
+    benches,
+    bench_mc_sweep,
+    bench_mc_multistep,
+    bench_mc_scaling
+);
 criterion_main!(benches);

@@ -1,0 +1,77 @@
+# Kim-Hummer coarse-grained protein simulation example.
+# Two rigid lysozyme molecules in a spherical cell with
+# Kim-Hummer nonbonded interactions and Coulomb electrostatics.
+
+include: [../../assets/kimhummer.yaml]
+molecules:
+  - name: MOL1
+    degrees_of_freedom: Rigid
+    has_com: true
+    from_structure: "../calvados3/4lzt.xyz"
+  - name: MOL2
+    degrees_of_freedom: Rigid
+    has_com: true
+    from_structure: "../calvados3/4lzt.xyz"
+
+system:
+  cell: !Sphere {radius: 100.0}
+  medium:
+    permittivity: !Water
+    temperature: 300.0
+    salt: [!NaCl, 0.15]
+
+  blocks:
+    - molecule: MOL1
+      N: 1
+      insert:
+        !RandomCOM {
+          filename: "../calvados3/4lzt.xyz",
+          rotate: true,
+          directions: none,
+          offset: [0.0, 0.0, 0.0],
+        }
+    - molecule: MOL2
+      N: 1
+      insert:
+        !RandomCOM {
+          filename: "../calvados3/4lzt.xyz",
+          rotate: true,
+          directions: none,
+          offset: [0.0, 0.0, 40.0],
+        }
+
+  energy:
+    combine_with_default: true
+    nonbonded:
+      default:
+        - !Coulomb {cutoff: 40.0}
+    spline:
+      cutoff: 40.0
+      n_points: 2000
+
+analysis:
+  - !Energy
+    file: "energy.dat.gz"
+    frequency: !Every 100
+  - !RadialDistribution
+    selections: ["molecule MOL1", "molecule MOL2"]
+    file: "rdf.dat.gz"
+    dr: 0.5
+    use_com: true
+    dimension: !z
+    frequency: !Every 10
+
+propagate:
+  seed: Hardware
+  criterion: Metropolis
+  repeat: 10000
+  collections:
+    - !Stochastic
+      moves:
+        - !RotateMolecule {molecule: MOL1, dp: 1.0, weight: 0.5}
+        - !RotateMolecule {molecule: MOL2, dp: 2.0, weight: 1.0}
+        - !TranslateMolecule
+          molecule: MOL2
+          dp: 15.0
+          weight: 1.0
+          directions: !z
