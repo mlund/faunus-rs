@@ -18,6 +18,7 @@ use interatomic::twobody::{
     ArcPotential, IsotropicTwobodyEnergy, NoInteraction, SplineConfig, SplinedPotential,
 };
 use ndarray::Array2;
+use std::cell::RefCell;
 use std::path::Path;
 
 use crate::{
@@ -283,6 +284,8 @@ pub struct NonbondedMatrix<P = ArcPotential> {
     potentials: Array2<P>,
     /// Matrix of excluded interactions.
     exclusions: ExclusionMatrix,
+    /// Pairwise inter-group energy cache for O(1) old-energy lookup in MC moves.
+    cache: RefCell<Option<GroupEnergyCache>>,
 }
 
 /// Type alias for the splined variant of [`NonbondedMatrix`].
@@ -299,6 +302,14 @@ pub type NonbondedMatrixSplined = NonbondedMatrix<SplinedPotential>;
 
 impl<P: IsotropicTwobodyEnergy> EnergyChange for NonbondedMatrix<P> {
     fn energy(&self, context: &impl Context, change: &Change) -> f64 {
+        // O(1) cache hit for rigid body moves (the MC hot path)
+        if let Change::SingleGroup(gi, GroupChange::RigidBody) = change {
+            if let Some(ref cache) = *self.cache.borrow() {
+                debug_assert_eq!(cache.n_groups, context.groups().len());
+                return cache.group_energies[*gi];
+            }
+        }
+
         // SoA fast path: bypasses per-pair Context trait dispatch and Cell enum
         // matching by reading directly from contiguous f64 slices with inline
         // branchless PBC distance (~26% faster than scalar AoS path).
@@ -320,6 +331,11 @@ impl<P: IsotropicTwobodyEnergy> EnergyChange for NonbondedMatrix<P> {
             return match change {
                 Change::Everything | Change::Volume(_, _) => {
                     self.total_nonbonded_soa(&soa, groups)
+                }
+                Change::SingleGroup(gi, GroupChange::RigidBody) => {
+                    // Cache miss — lazy-initialize all pairwise energies
+                    self.initialize_cache_soa(&soa, groups);
+                    self.cache.borrow().as_ref().unwrap().group_energies[*gi]
                 }
                 Change::SingleGroup(group_index, group_change) => {
                     self.single_group_change_soa(&soa, groups, *group_index, group_change)
@@ -450,6 +466,7 @@ impl NonbondedMatrix {
         Ok(Self {
             potentials,
             exclusions,
+            cache: RefCell::new(None),
         })
     }
 
@@ -495,6 +512,7 @@ impl NonbondedMatrix<SplinedPotential> {
         Self {
             potentials,
             exclusions: nonbonded.exclusions.clone(),
+            cache: RefCell::new(None),
         }
     }
 }
@@ -555,6 +573,57 @@ impl PbcParams {
         let mut dz = zi - zj;
         dz -= self.box_len[2] * (dz * self.inv_box_len[2]).round();
         dx.mul_add(dx, dy.mul_add(dy, dz * dz))
+    }
+}
+
+/// Pairwise inter-group nonbonded energy cache.
+///
+/// Stores E(i,j) for all group pairs so that `group_energies[m]` (the total
+/// inter-group energy of group m) can be returned in O(1) instead of O(N_groups).
+/// On accept, symmetric delta propagation keeps all entries consistent in O(N_groups).
+#[derive(Debug, Clone, Default)]
+struct GroupEnergyCache {
+    /// `pairwise[i * n + j]` = nonbonded energy between groups i and j
+    pairwise: Vec<f64>,
+    /// `group_energies[i]` = Σ_j pairwise[i * n + j]
+    group_energies: Vec<f64>,
+    n_groups: usize,
+    // Backup buffers live inline so save_backup() reuses capacity instead of
+    // allocating new Vecs on every MC step.
+    backup_row: Vec<f64>,
+    backup_group_energies: Vec<f64>,
+    backup_group_index: usize,
+    has_backup: bool,
+}
+
+impl GroupEnergyCache {
+    fn save_backup(&mut self, group_index: usize) {
+        let n = self.n_groups;
+        let row_start = group_index * n;
+        self.backup_row.clear();
+        self.backup_row.extend_from_slice(&self.pairwise[row_start..row_start + n]);
+        self.backup_group_energies.clear();
+        self.backup_group_energies.extend_from_slice(&self.group_energies);
+        self.backup_group_index = group_index;
+        self.has_backup = true;
+    }
+
+    /// Restore both row and column of the moved group to keep the matrix symmetric.
+    fn undo(&mut self) {
+        if self.has_backup {
+            let m = self.backup_group_index;
+            let n = self.n_groups;
+            for j in 0..n {
+                self.pairwise[m * n + j] = self.backup_row[j];
+                self.pairwise[j * n + m] = self.backup_row[j];
+            }
+            self.group_energies.copy_from_slice(&self.backup_group_energies);
+            self.has_backup = false;
+        }
+    }
+
+    fn discard_backup(&mut self) {
+        self.has_backup = false;
     }
 }
 
@@ -736,6 +805,128 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
                 })
                 .sum(),
             GroupChange::None => 0.0,
+        }
+    }
+
+    /// Inter-group nonbonded energy between two specific groups via SoA arrays.
+    #[inline]
+    fn group_pair_energy_soa(
+        &self,
+        soa: &SoaSlices<'_, impl SimulationCell>,
+        group_i: &Group,
+        group_j: &Group,
+    ) -> f64 {
+        group_i
+            .iter_active()
+            .map(|i| self.particle_energy_soa(soa, i, group_j.iter_active()))
+            .sum()
+    }
+
+    /// Compute all pairwise inter-group energies and populate the cache.
+    fn initialize_cache_soa(
+        &self,
+        soa: &SoaSlices<'_, impl SimulationCell>,
+        groups: &[Group],
+    ) {
+        let n = groups.len();
+        let mut pairwise = vec![0.0; n * n];
+        let mut group_energies = vec![0.0; n];
+
+        for (gi, group_i) in groups.iter().enumerate() {
+            debug_assert!(group_i.index() == gi);
+            for group_j in groups.iter().skip(gi + 1) {
+                let gj = group_j.index();
+                let e = self.group_pair_energy_soa(soa, group_i, group_j);
+                pairwise[gi * n + gj] = e;
+                pairwise[gj * n + gi] = e;
+                group_energies[gi] += e;
+                group_energies[gj] += e;
+            }
+        }
+
+        *self.cache.borrow_mut() = Some(GroupEnergyCache {
+            pairwise,
+            group_energies,
+            n_groups: n,
+            ..Default::default()
+        });
+    }
+}
+
+impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
+    /// Backup cache state before a move. Invalidates for non-RigidBody changes.
+    pub(super) fn save_backup(&mut self, change: &Change) {
+        match change {
+            Change::SingleGroup(gi, GroupChange::RigidBody) => {
+                if let Some(c) = self.cache.get_mut().as_mut() {
+                    c.save_backup(*gi);
+                }
+            }
+            // Non-rigid moves (resize, insert, etc.) change the group topology,
+            // invalidating the entire N×N pairwise matrix.
+            _ => {
+                *self.cache.get_mut() = None;
+            }
+        }
+    }
+
+    /// Recompute the moved group's cache row with new positions (accept/reject agnostic).
+    pub(super) fn update_cache(&mut self, context: &impl Context, change: &Change) {
+        let Change::SingleGroup(group_index, GroupChange::RigidBody) = change else {
+            return;
+        };
+
+        // take() avoids a borrow conflict: we need &mut cache while calling
+        // group_pair_energy_soa(&self), and the cache lives inside self.
+        let mut cache_opt = self.cache.get_mut().take();
+        if let Some(ref mut cache) = cache_opt {
+            if let (Some((x, y, z)), Some(atom_kinds)) =
+                (context.positions_soa(), context.atom_kinds_u32())
+            {
+                let cell = context.cell();
+                let pbc = context.pbc_params().or_else(|| PbcParams::try_from_cell(cell));
+                let soa = SoaSlices {
+                    x,
+                    y,
+                    z,
+                    atom_kinds,
+                    pbc,
+                    cell,
+                };
+                let groups = context.groups();
+                let n = cache.n_groups;
+                let m = *group_index;
+
+                for gj in groups.iter() {
+                    let j = gj.index();
+                    if j == m {
+                        continue;
+                    }
+                    let new_pair = self.group_pair_energy_soa(&soa, &groups[m], gj);
+                    let old_pair = cache.pairwise[m * n + j];
+                    let delta = new_pair - old_pair;
+                    cache.pairwise[m * n + j] = new_pair;
+                    cache.pairwise[j * n + m] = new_pair;
+                    cache.group_energies[j] += delta;
+                }
+                // Resum from the updated row to avoid accumulating floating-point drift.
+                cache.group_energies[m] = (0..n).map(|j| cache.pairwise[m * n + j]).sum();
+            }
+        }
+        *self.cache.get_mut() = cache_opt;
+    }
+
+    /// Restore cache from backup (MC reject path).
+    pub(super) fn undo(&mut self) {
+        if let Some(c) = self.cache.get_mut().as_mut() {
+            c.undo();
+        }
+    }
+
+    /// Drop cache backup (MC accept path).
+    pub(super) fn discard_backup(&mut self) {
+        if let Some(c) = self.cache.get_mut().as_mut() {
+            c.discard_backup();
         }
     }
 }
