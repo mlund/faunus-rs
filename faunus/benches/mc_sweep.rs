@@ -6,9 +6,14 @@ use faunus::simulation::Simulation;
 use std::io::Write;
 use std::path::Path;
 
-fn yaml_config() -> String {
+fn yaml_config(spline: bool) -> String {
     let xyz = Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/twobody/cppm-p18.xyz");
     let xyz = xyz.to_str().unwrap();
+    let spline_section = if spline {
+        "\n    spline:\n      cutoff: 90.0\n      n_points: 500"
+    } else {
+        ""
+    };
     format!(
         r#"
 atoms:
@@ -44,10 +49,7 @@ system:
     nonbonded:
       default:
         - !Coulomb {{cutoff: 90}}
-        - !WeeksChandlerAndersen {{mixing: LB}}
-    spline:
-      cutoff: 90.0
-      n_points: 500
+        - !WeeksChandlerAndersen {{mixing: LB}}{spline_section}
   blocks:
     - molecule: MOL
       N: 20
@@ -66,7 +68,7 @@ propagate:
   collections:
     - !Stochastic
       moves:
-        - !TranslateMolecule {{molecule: MOL, dp: 2.0, weight: 1.0}}
+        - !TranslateMolecule {{molecule: MOL, dp: 40.0, weight: 1.0}}
         - !RotateMolecule {{molecule: MOL, dp: 1.0, weight: 1.0}}
 "#
     )
@@ -81,8 +83,8 @@ fn write_tmp_yaml(yaml: &str) -> tempfile::NamedTempFile {
     tmp
 }
 
-fn build_mc_reference() -> MarkovChain<ReferencePlatform> {
-    let yaml = yaml_config();
+fn build_mc_reference(spline: bool) -> MarkovChain<ReferencePlatform> {
+    let yaml = yaml_config(spline);
     let tmp = write_tmp_yaml(&yaml);
     let (sim, _medium) = Simulation::from_file(tmp.path(), None).unwrap();
     match sim {
@@ -92,7 +94,7 @@ fn build_mc_reference() -> MarkovChain<ReferencePlatform> {
 }
 
 fn build_mc_simd() -> MarkovChain<SimdPlatform> {
-    let yaml = yaml_config();
+    let yaml = yaml_config(true);
     let tmp = write_tmp_yaml(&yaml);
 
     let medium = faunus::platform::reference::get_medium(tmp.path()).unwrap();
@@ -104,12 +106,16 @@ fn build_mc_simd() -> MarkovChain<SimdPlatform> {
 }
 
 fn bench_mc_sweep(c: &mut Criterion) {
-    let mut mc_ref = build_mc_reference();
+    let mut mc_ref_nospline = build_mc_reference(false);
+    let mut mc_ref_spline = build_mc_reference(true);
     let mut mc_simd = build_mc_simd();
 
     let mut group = c.benchmark_group("mc_sweep_20cppm");
     group.bench_function("reference", |b| {
-        b.iter(|| mc_ref.run_n_steps(1).unwrap());
+        b.iter(|| mc_ref_nospline.run_n_steps(1).unwrap());
+    });
+    group.bench_function("reference_splined", |b| {
+        b.iter(|| mc_ref_spline.run_n_steps(1).unwrap());
     });
     group.bench_function("simd_soa", |b| {
         b.iter(|| mc_simd.run_n_steps(1).unwrap());
