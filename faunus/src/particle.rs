@@ -1,5 +1,5 @@
 use crate::Point;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 #[allow(dead_code)]
 pub trait PointParticle {
@@ -13,34 +13,20 @@ pub trait PointParticle {
     fn pos(&self) -> &Self::Positiontype;
     /// Get mutable position
     fn pos_mut(&mut self) -> &mut Self::Positiontype;
-    /// Index in main list of particle (immutable)
-    fn index(&self) -> usize;
 }
 
-#[derive(Serialize, Deserialize, Default, Debug, Clone, PartialEq)]
+#[derive(Default, Debug, Clone, PartialEq)]
 pub struct Particle {
     /// Type of the particle (index of the atom kind)
     pub(crate) atom_id: usize,
-    /// Index in main list of particles
-    pub(crate) index: usize,
     /// Position of the particle
     pub(crate) pos: Point,
 }
 
 impl Particle {
-    /// Create a new particle.
-    ///
-    /// # Arguments
-    /// * `atom_id` - Index of the atom kind in the topology
-    /// * `index` - Index in the main particle list
-    /// * `pos` - Position of the particle
     #[must_use]
-    pub const fn new(atom_id: usize, index: usize, pos: Point) -> Self {
-        Self {
-            atom_id,
-            index,
-            pos,
-        }
+    pub const fn new(atom_id: usize, pos: Point) -> Self {
+        Self { atom_id, pos }
     }
 }
 
@@ -56,7 +42,63 @@ impl PointParticle for Particle {
     fn pos_mut(&mut self) -> &mut Self::Positiontype {
         &mut self.pos
     }
-    fn index(&self) -> usize {
-        self.index
+}
+
+impl Serialize for Particle {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeStruct;
+        let mut s = serializer.serialize_struct("Particle", 2)?;
+        s.serialize_field("atom_id", &self.atom_id)?;
+        s.serialize_field("pos", &self.pos)?;
+        s.end()
+    }
+}
+
+/// Backward-compatible deserialization: ignores the legacy `index` field if present.
+impl<'de> Deserialize<'de> for Particle {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        struct Helper {
+            atom_id: usize,
+            #[serde(default)]
+            #[allow(dead_code)]
+            index: Option<usize>,
+            pos: Point,
+        }
+        let h = Helper::deserialize(deserializer)?;
+        Ok(Particle {
+            atom_id: h.atom_id,
+            pos: h.pos,
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn deserialize_legacy_state_with_index() {
+        let yaml = "atom_id: 0\nindex: 42\npos:\n- 1.0\n- 2.0\n- 3.0\n";
+        let p: Particle = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(p.atom_id, 0);
+        assert_eq!(p.pos, Point::new(1.0, 2.0, 3.0));
+    }
+
+    #[test]
+    fn deserialize_new_format_without_index() {
+        let yaml = "atom_id: 1\npos:\n- 4.0\n- 5.0\n- 6.0\n";
+        let p: Particle = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(p.atom_id, 1);
+        assert_eq!(p.pos, Point::new(4.0, 5.0, 6.0));
+    }
+
+    #[test]
+    fn roundtrip_serialization() {
+        let p = Particle::new(3, Point::new(7.0, 8.0, 9.0));
+        let yaml = serde_yaml::to_string(&p).unwrap();
+        assert!(!yaml.contains("index"));
+        let p2: Particle = serde_yaml::from_str(&yaml).unwrap();
+        assert_eq!(p, p2);
     }
 }

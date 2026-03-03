@@ -92,6 +92,9 @@ pub trait ParticleSystem: GroupCollection + WithCell + WithTopology {
     fn get_distance(&self, i: usize, j: usize) -> Point;
 
     /// Get squared distance between two particles with the given indices.
+    // Called per pair in nonbonded inner loops; must inline to expose
+    // the full distance→square→spline chain for the compiler to optimize.
+    #[inline(always)]
     fn get_distance_squared(&self, i: usize, j: usize) -> f64 {
         self.get_distance(i, j).norm_squared()
     }
@@ -103,6 +106,22 @@ pub trait ParticleSystem: GroupCollection + WithCell + WithTopology {
     /// self.particle(i).atom_id
     /// ```
     fn get_atomkind(&self, i: usize) -> usize;
+
+    /// Optional SoA position arrays for SIMD batch evaluation.
+    /// Returns None for AoS platforms; Some for SoA platforms.
+    fn positions_soa(&self) -> Option<(&[f64], &[f64], &[f64])> {
+        None
+    }
+
+    /// Optional contiguous atom kind array (u32 for SIMD gather).
+    fn atom_kinds_u32(&self) -> Option<&[u32]> {
+        None
+    }
+
+    /// Optional cached PBC parameters for branchless minimum image distance.
+    fn pbc_params(&self) -> Option<crate::energy::PbcParams> {
+        None
+    }
 
     /// Get angle (in degrees) between three particles with the given indices.
     /// Here, the provided indices are called `i`, `j`, `k`, in this order.

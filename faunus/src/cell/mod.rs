@@ -375,7 +375,9 @@ impl BoundaryConditions for Cell {
         }
     }
 
-    #[inline]
+    // Force-inline so the compiler can hoist the variant check out of
+    // tight per-particle loops and devirtualize the inner call.
+    #[inline(always)]
     fn boundary(&self, point: &mut Point) {
         match self {
             Self::Cuboid(x) => x.boundary(point),
@@ -387,7 +389,9 @@ impl BoundaryConditions for Cell {
         }
     }
 
-    #[inline]
+    // Force-inline so the compiler can hoist the variant check out of
+    // nonbonded pair loops and devirtualize the inner distance call.
+    #[inline(always)]
     fn distance(&self, point1: &Point, point2: &Point) -> Point {
         match self {
             Self::Cuboid(x) => x.distance(point1, point2),

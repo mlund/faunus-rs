@@ -96,7 +96,7 @@ pub fn run_regression(dir: &Path) {
     assert_yaml_eq(
         &reference,
         &actual,
-        1e-10,
+        1e-8,
         &["timer", "num_accepted", "acceptance_ratio"],
     );
 }

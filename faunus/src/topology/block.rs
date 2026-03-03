@@ -314,7 +314,6 @@ impl MoleculeBlock {
     ) -> anyhow::Result<()> {
         let topology = context.topology();
         let molecule = &topology.moleculekinds()[self.molecule_id];
-        let mut particle_counter = context.num_particles();
         let n_particles = molecule.len();
 
         log::debug!(
@@ -343,11 +342,7 @@ impl MoleculeBlock {
                 molecule.atom_indices(),
                 positions.by_ref().take(n_particles),
             )
-            .map(|(atom_id, position)| {
-                let particle = Particle::new(*atom_id, particle_counter, position);
-                particle_counter += 1;
-                particle
-            })
+            .map(|(atom_id, position)| Particle::new(*atom_id, position))
             .collect();
             log::debug!(
                 "Generated {} particles for molecule '{}'",

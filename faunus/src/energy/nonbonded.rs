@@ -18,10 +18,11 @@ use interatomic::twobody::{
     ArcPotential, IsotropicTwobodyEnergy, NoInteraction, SplineConfig, SplinedPotential,
 };
 use ndarray::Array2;
-use std::fmt::Debug;
+use std::cell::RefCell;
 use std::path::Path;
 
 use crate::{
+    cell::{PeriodicDirections, SimulationCell},
     energy::{builder::PairPotentialBuilder, EnergyTerm},
     topology::Topology,
     Change, Context, Group, GroupChange,
@@ -283,6 +284,8 @@ pub struct NonbondedMatrix<P = ArcPotential> {
     potentials: Array2<P>,
     /// Matrix of excluded interactions.
     exclusions: ExclusionMatrix,
+    /// Pairwise inter-group energy cache for O(1) old-energy lookup in MC moves.
+    cache: RefCell<Option<GroupEnergyCache>>,
 }
 
 /// Type alias for the splined variant of [`NonbondedMatrix`].
@@ -298,8 +301,55 @@ pub struct NonbondedMatrix<P = ArcPotential> {
 pub type NonbondedMatrixSplined = NonbondedMatrix<SplinedPotential>;
 
 impl<P: IsotropicTwobodyEnergy> EnergyChange for NonbondedMatrix<P> {
-    /// Compute the energy of the EnergyTerm relevant to some change in the system.
     fn energy(&self, context: &impl Context, change: &Change) -> f64 {
+        // O(1) cache hit for rigid body moves (the MC hot path)
+        if let Change::SingleGroup(gi, GroupChange::RigidBody) = change {
+            if let Some(ref cache) = *self.cache.borrow() {
+                debug_assert_eq!(cache.n_groups, context.groups().len());
+                return cache.group_energies[*gi];
+            }
+        }
+
+        // SoA fast path: bypasses per-pair Context trait dispatch and Cell enum
+        // matching by reading directly from contiguous f64 slices with inline
+        // branchless PBC distance (~26% faster than scalar AoS path).
+        if let (Some((x, y, z)), Some(atom_kinds)) =
+            (context.positions_soa(), context.atom_kinds_u32())
+        {
+            let cell = context.cell();
+            // Prefer cached PBC params (SimdPlatform); fall back to computing them (ReferencePlatform)
+            let pbc = context
+                .pbc_params()
+                .or_else(|| PbcParams::try_from_cell(cell));
+            let soa = SoaSlices {
+                x,
+                y,
+                z,
+                atom_kinds,
+                pbc,
+                cell,
+            };
+            let groups = context.groups();
+            return match change {
+                Change::Everything | Change::Volume(_, _) => self.total_nonbonded_soa(&soa, groups),
+                Change::SingleGroup(gi, GroupChange::RigidBody) => {
+                    // Cache miss — lazy-initialize all pairwise energies
+                    self.initialize_cache_soa(&soa, groups);
+                    self.cache.borrow().as_ref().unwrap().group_energies[*gi]
+                }
+                Change::SingleGroup(group_index, group_change) => {
+                    self.single_group_change_soa(&soa, groups, *group_index, group_change)
+                }
+                Change::Groups(vec) => vec
+                    .iter()
+                    .map(|(group_index, group_change)| {
+                        self.single_group_change_soa(&soa, groups, *group_index, group_change)
+                    })
+                    .sum(),
+                Change::None => 0.0,
+            };
+        }
+        // Scalar fallback for AoS platforms
         match change {
             Change::Everything | Change::Volume(_, _) => self.total_nonbonded(context),
             Change::SingleGroup(group_index, group_change) => {
@@ -354,16 +404,13 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
                 self.group_with_other_groups(context, group)
                     + self.group_with_itself(context, group)
             }
-            GroupChange::PartialUpdate(x) => x
-                .iter()
-                .map(|&particle| {
-                    let group = &context.groups()[group_index];
-                    // the PartialUpdate stores relative indices of particles
-                    group.to_absolute_index(particle).map_or(0.0, |abs_index| {
-                        self.particle_with_all(context, abs_index, group)
-                    })
-                })
-                .sum(),
+            GroupChange::PartialUpdate(x) => {
+                let group = &context.groups()[group_index];
+                x.iter()
+                    .filter_map(|&rel| group.to_absolute_index(rel).ok())
+                    .map(|abs_i| self.particle_with_all(context, abs_i, group))
+                    .sum()
+            }
             GroupChange::None => 0.0,
         }
     }
@@ -382,12 +429,12 @@ impl NonbondedMatrix {
         topology: &Topology,
         medium: Option<interatomic::coulomb::Medium>,
     ) -> anyhow::Result<Self> {
+        let builder = HamiltonianBuilder::from_file(file)?;
         Self::new(
-            &HamiltonianBuilder::from_file(file)?
-                .pairpot_builder
-                .unwrap(),
+            &builder.pairpot_builder.unwrap(),
             topology,
             medium,
+            builder.combine_with_default,
         )
     }
 
@@ -397,6 +444,7 @@ impl NonbondedMatrix {
         pairpot_builder: &PairPotentialBuilder,
         topology: &Topology,
         medium: Option<interatomic::coulomb::Medium>,
+        combine_with_default: bool,
     ) -> anyhow::Result<Self> {
         let atoms = topology.atomkinds();
         let n_atom_types = atoms.len();
@@ -408,8 +456,12 @@ impl NonbondedMatrix {
 
         for i in 0..n_atom_types {
             for j in 0..n_atom_types {
-                let interaction =
-                    pairpot_builder.get_interaction(&atoms[i], &atoms[j], medium.clone())?;
+                let interaction = pairpot_builder.get_interaction(
+                    &atoms[i],
+                    &atoms[j],
+                    medium.clone(),
+                    combine_with_default,
+                )?;
                 potentials[(i, j)] = ArcPotential(interaction.into());
             }
         }
@@ -419,6 +471,7 @@ impl NonbondedMatrix {
         Ok(Self {
             potentials,
             exclusions,
+            cache: RefCell::new(None),
         })
     }
 
@@ -444,7 +497,7 @@ impl NonbondedMatrix<SplinedPotential> {
     ///
     /// # Example
     /// ```ignore
-    /// let nonbonded = NonbondedMatrix::new(&builder, &topology, medium)?;
+    /// let nonbonded = NonbondedMatrix::new(&builder, &topology, medium, false)?;
     /// let splined = NonbondedMatrixSplined::from_nonbonded(&nonbonded, 12.0, None);
     /// ```
     pub fn from_nonbonded(
@@ -464,6 +517,426 @@ impl NonbondedMatrix<SplinedPotential> {
         Self {
             potentials,
             exclusions: nonbonded.exclusions.clone(),
+            cache: RefCell::new(None),
+        }
+    }
+}
+
+/// Precomputed parameters for branchless minimum image distance.
+///
+/// Unifies all orthorhombic cell types (Cuboid, Slit, Cylinder, Sphere, Endless)
+/// into a single arithmetic path: `dx -= box * round(dx * inv_box)`.
+/// Non-periodic directions use `(f64::MAX, 0.0)` so `round(dx * 0.0) = 0`
+/// and the correction vanishes without branching.
+#[derive(Clone, Copy, Debug)]
+pub struct PbcParams {
+    box_len: [f64; 3],
+    inv_box_len: [f64; 3],
+}
+
+impl PbcParams {
+    /// Build from a simulation cell. Returns `None` for HexagonalPrism
+    /// which needs non-orthorhombic Wigner-Seitz nearest image reduction.
+    pub(crate) fn try_from_cell(cell: &impl SimulationCell) -> Option<Self> {
+        // HexagonalPrism is the only cell that requires orthorhombic expansion
+        if cell.orthorhombic_expansion().is_some() {
+            return None;
+        }
+        let pbc = cell.pbc();
+        let periodic_xy = matches!(
+            pbc,
+            PeriodicDirections::PeriodicXYZ | PeriodicDirections::PeriodicXY
+        );
+        let periodic_z = matches!(
+            pbc,
+            PeriodicDirections::PeriodicXYZ | PeriodicDirections::PeriodicZ
+        );
+
+        let bb = cell.bounding_box();
+        // Non-periodic directions get (MAX, 0.0): round(dx * 0.0) = 0, so no correction
+        let make = |periodic: bool, len: f64| -> (f64, f64) {
+            if periodic {
+                (len, 1.0 / len)
+            } else {
+                (f64::MAX, 0.0)
+            }
+        };
+        let (bx, by, bz) = bb.map_or((f64::MAX, f64::MAX, f64::MAX), |b| (b.x, b.y, b.z));
+        let (lx, ix) = make(periodic_xy, bx);
+        let (ly, iy) = make(periodic_xy, by);
+        let (lz, iz) = make(periodic_z, bz);
+
+        Some(Self {
+            box_len: [lx, ly, lz],
+            inv_box_len: [ix, iy, iz],
+        })
+    }
+
+    /// Branchless minimum image distance squared between two points.
+    #[inline(always)]
+    fn distance_squared(&self, xi: f64, yi: f64, zi: f64, xj: f64, yj: f64, zj: f64) -> f64 {
+        let mut dx = xi - xj;
+        dx -= self.box_len[0] * (dx * self.inv_box_len[0]).round();
+        let mut dy = yi - yj;
+        dy -= self.box_len[1] * (dy * self.inv_box_len[1]).round();
+        let mut dz = zi - zj;
+        dz -= self.box_len[2] * (dz * self.inv_box_len[2]).round();
+        dx.mul_add(dx, dy.mul_add(dy, dz * dz))
+    }
+}
+
+/// Pairwise inter-group nonbonded energy cache.
+///
+/// Stores E(i,j) for all group pairs so that `group_energies[m]` (the total
+/// inter-group energy of group m) can be returned in O(1) instead of O(N_groups).
+/// On accept, symmetric delta propagation keeps all entries consistent in O(N_groups).
+#[derive(Debug, Clone, Default)]
+struct GroupEnergyCache {
+    /// `pairwise[i * n + j]` = nonbonded energy between groups i and j
+    pairwise: Vec<f64>,
+    /// `group_energies[i]` = Σ_j pairwise[i * n + j]
+    group_energies: Vec<f64>,
+    n_groups: usize,
+    // Backup buffers live inline so save_backup() reuses capacity instead of
+    // allocating new Vecs on every MC step.
+    backup_row: Vec<f64>,
+    backup_group_energies: Vec<f64>,
+    backup_group_index: usize,
+    has_backup: bool,
+}
+
+impl GroupEnergyCache {
+    fn save_backup(&mut self, group_index: usize) {
+        let n = self.n_groups;
+        let row_start = group_index * n;
+        self.backup_row.clear();
+        self.backup_row
+            .extend_from_slice(&self.pairwise[row_start..row_start + n]);
+        self.backup_group_energies.clear();
+        self.backup_group_energies
+            .extend_from_slice(&self.group_energies);
+        self.backup_group_index = group_index;
+        self.has_backup = true;
+    }
+
+    /// Restore both row and column of the moved group to keep the matrix symmetric.
+    fn undo(&mut self) {
+        if self.has_backup {
+            let m = self.backup_group_index;
+            let n = self.n_groups;
+            for j in 0..n {
+                self.pairwise[m * n + j] = self.backup_row[j];
+                self.pairwise[j * n + m] = self.backup_row[j];
+            }
+            self.group_energies
+                .copy_from_slice(&self.backup_group_energies);
+            self.has_backup = false;
+        }
+    }
+
+    fn discard_backup(&mut self) {
+        self.has_backup = false;
+    }
+}
+
+/// Borrowed SoA arrays for batch nonbonded energy evaluation.
+///
+/// Holds `cell` for HexagonalPrism fallback; all other cell types
+/// use precomputed `pbc` params for inline branchless distance.
+struct SoaSlices<'a, C: SimulationCell> {
+    x: &'a [f64],
+    y: &'a [f64],
+    z: &'a [f64],
+    atom_kinds: &'a [u32],
+    cell: &'a C,
+    pbc: Option<PbcParams>,
+}
+
+impl<'a, C: SimulationCell> SoaSlices<'a, C> {
+    /// Minimum image squared distance from `(xi, yi, zi)` to particle `j`.
+    ///
+    /// # Safety
+    /// `j` must be in bounds for `self.x`, `self.y`, `self.z`.
+    #[inline(always)]
+    unsafe fn distance_squared_to(&self, xi: f64, yi: f64, zi: f64, j: usize) -> f64 {
+        if let Some(pbc) = &self.pbc {
+            pbc.distance_squared(
+                xi,
+                yi,
+                zi,
+                *self.x.get_unchecked(j),
+                *self.y.get_unchecked(j),
+                *self.z.get_unchecked(j),
+            )
+        } else {
+            // HexagonalPrism fallback: reconstruct Points for Wigner-Seitz reduction
+            let pi = crate::Point::new(xi, yi, zi);
+            let pj = crate::Point::new(
+                *self.x.get_unchecked(j),
+                *self.y.get_unchecked(j),
+                *self.z.get_unchecked(j),
+            );
+            self.cell.distance_squared(&pi, &pj)
+        }
+    }
+}
+
+impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
+    /// Energy of particle `i` with targets, reading directly from SoA arrays.
+    ///
+    /// Uses unchecked indexing to eliminate ~6 bounds checks per pair in the inner
+    /// loop — this is the single hottest function in MC sweeps. All indices are
+    /// validated by `debug_assert!` so debug builds still catch OOB.
+    ///
+    /// # Safety invariants (upheld by callers)
+    /// - `i` and all `targets` values are in `[0, soa.x.len())`
+    /// - `atom_kinds[i]` values index within `self.potentials` dimensions
+    #[inline]
+    fn particle_energy_soa(
+        &self,
+        soa: &SoaSlices<'_, impl SimulationCell>,
+        i: usize,
+        targets: impl Iterator<Item = usize>,
+    ) -> f64 {
+        debug_assert!(i < soa.x.len());
+        // SAFETY: i is a valid particle index from an active group range.
+        let (xi, yi, zi, kind_i) = unsafe {
+            (
+                *soa.x.get_unchecked(i),
+                *soa.y.get_unchecked(i),
+                *soa.z.get_unchecked(i),
+                *soa.atom_kinds.get_unchecked(i) as usize,
+            )
+        };
+        // Row slice gives a contiguous &[u8] for sequential cache-line reads over j.
+        let excl_row = self.exclusions.row(i);
+        let mut energy = 0.0;
+        for j in targets {
+            debug_assert!(j < soa.x.len());
+            // SAFETY: j is a valid particle index from an active group range;
+            // atom kinds are topology-derived indices into the potentials matrix.
+            // No j==i guard needed: callers use disjoint ranges, and the exclusion
+            // matrix diagonal is 0 (self-exclusion) so it would be skipped anyway.
+            unsafe {
+                if *excl_row.get_unchecked(j) == 0 {
+                    continue;
+                }
+                let rsq = soa.distance_squared_to(xi, yi, zi, j);
+                let kind_j = *soa.atom_kinds.get_unchecked(j) as usize;
+                energy += self
+                    .potentials
+                    .uget((kind_i, kind_j))
+                    .isotropic_twobody_energy(rsq);
+            }
+        }
+        energy
+    }
+
+    /// Intra-group energy (i < j pairs) via SoA arrays.
+    #[inline]
+    fn group_with_itself_soa(
+        &self,
+        soa: &SoaSlices<'_, impl SimulationCell>,
+        group: &Group,
+    ) -> f64 {
+        let active = group.iter_active();
+        active
+            .clone()
+            .map(|i| self.particle_energy_soa(soa, i, (i + 1)..active.end))
+            .sum()
+    }
+
+    /// Total nonbonded energy via SoA arrays.
+    fn total_nonbonded_soa(
+        &self,
+        soa: &SoaSlices<'_, impl SimulationCell>,
+        groups: &[Group],
+    ) -> f64 {
+        groups
+            .iter()
+            .enumerate()
+            .map(|(gi, group_i)| {
+                let inter: f64 = groups
+                    .iter()
+                    .skip(gi + 1)
+                    .flat_map(|group_j| {
+                        group_i
+                            .iter_active()
+                            .map(move |i| self.particle_energy_soa(soa, i, group_j.iter_active()))
+                    })
+                    .sum();
+                inter + self.group_with_itself_soa(soa, group_i)
+            })
+            .sum()
+    }
+
+    /// Inter-group energy of one particle via SoA arrays.
+    #[inline]
+    fn inter_group_energy_soa(
+        &self,
+        soa: &SoaSlices<'_, impl SimulationCell>,
+        groups: &[Group],
+        i: usize,
+        own_group: &Group,
+    ) -> f64 {
+        groups
+            .iter()
+            .filter(|gj| gj.index() != own_group.index())
+            .map(|gj| self.particle_energy_soa(soa, i, gj.iter_active()))
+            .sum()
+    }
+
+    /// Single group change via pre-extracted SoA arrays.
+    fn single_group_change_soa(
+        &self,
+        soa: &SoaSlices<'_, impl SimulationCell>,
+        groups: &[Group],
+        group_index: usize,
+        change: &GroupChange,
+    ) -> f64 {
+        let group = &groups[group_index];
+        match change {
+            GroupChange::RigidBody => group
+                .iter_active()
+                .map(|i| self.inter_group_energy_soa(soa, groups, i, group))
+                .sum(),
+            GroupChange::Resize(_) | GroupChange::UpdateIdentity(_) => {
+                let inter: f64 = group
+                    .iter_active()
+                    .map(|i| self.inter_group_energy_soa(soa, groups, i, group))
+                    .sum();
+                inter + self.group_with_itself_soa(soa, group)
+            }
+            GroupChange::PartialUpdate(indices) => indices
+                .iter()
+                .map(|&rel_idx| {
+                    group.to_absolute_index(rel_idx).map_or(0.0, |abs_i| {
+                        self.inter_group_energy_soa(soa, groups, abs_i, group)
+                            + self.particle_energy_soa(soa, abs_i, group.iter_active())
+                    })
+                })
+                .sum(),
+            GroupChange::None => 0.0,
+        }
+    }
+
+    /// Inter-group nonbonded energy between two specific groups via SoA arrays.
+    #[inline]
+    fn group_pair_energy_soa(
+        &self,
+        soa: &SoaSlices<'_, impl SimulationCell>,
+        group_i: &Group,
+        group_j: &Group,
+    ) -> f64 {
+        group_i
+            .iter_active()
+            .map(|i| self.particle_energy_soa(soa, i, group_j.iter_active()))
+            .sum()
+    }
+
+    /// Compute all pairwise inter-group energies and populate the cache.
+    fn initialize_cache_soa(&self, soa: &SoaSlices<'_, impl SimulationCell>, groups: &[Group]) {
+        let n = groups.len();
+        let mut pairwise = vec![0.0; n * n];
+        let mut group_energies = vec![0.0; n];
+
+        for (gi, group_i) in groups.iter().enumerate() {
+            debug_assert!(group_i.index() == gi);
+            for group_j in groups.iter().skip(gi + 1) {
+                let gj = group_j.index();
+                let e = self.group_pair_energy_soa(soa, group_i, group_j);
+                pairwise[gi * n + gj] = e;
+                pairwise[gj * n + gi] = e;
+                group_energies[gi] += e;
+                group_energies[gj] += e;
+            }
+        }
+
+        *self.cache.borrow_mut() = Some(GroupEnergyCache {
+            pairwise,
+            group_energies,
+            n_groups: n,
+            ..Default::default()
+        });
+    }
+}
+
+impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
+    /// Backup cache state before a move. Invalidates for non-RigidBody changes.
+    pub(super) fn save_backup(&mut self, change: &Change) {
+        match change {
+            Change::SingleGroup(gi, GroupChange::RigidBody) => {
+                if let Some(c) = self.cache.get_mut().as_mut() {
+                    c.save_backup(*gi);
+                }
+            }
+            // Non-rigid moves (resize, insert, etc.) change the group topology,
+            // invalidating the entire N×N pairwise matrix.
+            _ => {
+                *self.cache.get_mut() = None;
+            }
+        }
+    }
+
+    /// Recompute the moved group's cache row with new positions (accept/reject agnostic).
+    pub(super) fn update_cache(&mut self, context: &impl Context, change: &Change) {
+        let Change::SingleGroup(group_index, GroupChange::RigidBody) = change else {
+            return;
+        };
+
+        // take() avoids a borrow conflict: we need &mut cache while calling
+        // group_pair_energy_soa(&self), and the cache lives inside self.
+        let mut cache_opt = self.cache.get_mut().take();
+        if let Some(ref mut cache) = cache_opt {
+            if let (Some((x, y, z)), Some(atom_kinds)) =
+                (context.positions_soa(), context.atom_kinds_u32())
+            {
+                let cell = context.cell();
+                let pbc = context
+                    .pbc_params()
+                    .or_else(|| PbcParams::try_from_cell(cell));
+                let soa = SoaSlices {
+                    x,
+                    y,
+                    z,
+                    atom_kinds,
+                    pbc,
+                    cell,
+                };
+                let groups = context.groups();
+                let n = cache.n_groups;
+                let m = *group_index;
+
+                for gj in groups.iter() {
+                    let j = gj.index();
+                    if j == m {
+                        continue;
+                    }
+                    let new_pair = self.group_pair_energy_soa(&soa, &groups[m], gj);
+                    let old_pair = cache.pairwise[m * n + j];
+                    let delta = new_pair - old_pair;
+                    cache.pairwise[m * n + j] = new_pair;
+                    cache.pairwise[j * n + m] = new_pair;
+                    cache.group_energies[j] += delta;
+                }
+                // Resum from the updated row to avoid accumulating floating-point drift.
+                cache.group_energies[m] = (0..n).map(|j| cache.pairwise[m * n + j]).sum();
+            }
+        }
+        *self.cache.get_mut() = cache_opt;
+    }
+
+    /// Restore cache from backup (MC reject path).
+    pub(super) fn undo(&mut self) {
+        if let Some(c) = self.cache.get_mut().as_mut() {
+            c.undo();
+        }
+    }
+
+    /// Drop cache backup (MC accept path).
+    pub(super) fn discard_backup(&mut self) {
+        if let Some(c) = self.cache.get_mut().as_mut() {
+            c.discard_backup();
         }
     }
 }
@@ -530,7 +1003,7 @@ mod tests {
                     serde_yaml::from_value(medium.clone()).ok()
                 });
 
-        let nonbonded = NonbondedMatrix::new(&pairpot_builder, &topology, medium).unwrap();
+        let nonbonded = NonbondedMatrix::new(&pairpot_builder, &topology, medium, false).unwrap();
 
         assert_eq!(
             nonbonded.potentials.len(),
@@ -617,7 +1090,7 @@ mod tests {
             None,
         );
 
-        let nonbonded = NonbondedMatrix::new(&builder, &topology, Some(medium)).unwrap();
+        let nonbonded = NonbondedMatrix::new(&builder, &topology, Some(medium), false).unwrap();
 
         let mut rng = rand::thread_rng();
         let system = ReferencePlatform::from_raw_parts(

@@ -38,9 +38,9 @@ macro_rules! dispatch_stateful {
         match $self {
             EnergyTerm::IntermolecularBonded(x) => x.$method(),
             EnergyTerm::SasaEnergy(x) => x.$method(),
-            EnergyTerm::NonbondedMatrix(_)
-            | EnergyTerm::NonbondedMatrixSplined(_)
-            | EnergyTerm::IntramolecularBonded(_)
+            EnergyTerm::NonbondedMatrix(x) => x.$method(),
+            EnergyTerm::NonbondedMatrixSplined(x) => x.$method(),
+            EnergyTerm::IntramolecularBonded(_)
             | EnergyTerm::CellOverlap(_)
             | EnergyTerm::Constrain(_)
             | EnergyTerm::ExternalPressure(_)
@@ -53,15 +53,21 @@ impl EnergyTerm {
     /// Update internal state due to a change in the system.
     pub fn update(&mut self, context: &impl Context, change: &Change) -> anyhow::Result<()> {
         match self {
-            Self::NonbondedMatrix(_)
-            | Self::NonbondedMatrixSplined(_)
-            | Self::IntramolecularBonded(_)
+            Self::NonbondedMatrix(x) => {
+                x.update_cache(context, change);
+                Ok(())
+            }
+            Self::NonbondedMatrixSplined(x) => {
+                x.update_cache(context, change);
+                Ok(())
+            }
+            Self::IntermolecularBonded(x) => x.update(context, change),
+            Self::SasaEnergy(x) => x.update(context, change),
+            Self::IntramolecularBonded(_)
             | Self::CellOverlap(_)
             | Self::Constrain(_)
             | Self::ExternalPressure(_)
             | Self::CustomExternal(_) => Ok(()),
-            Self::IntermolecularBonded(x) => x.update(context, change),
-            Self::SasaEnergy(x) => x.update(context, change),
         }
     }
 
@@ -70,9 +76,9 @@ impl EnergyTerm {
         match self {
             Self::IntermolecularBonded(x) => x.save_backup(change),
             Self::SasaEnergy(x) => x.save_backup(),
-            Self::NonbondedMatrix(_)
-            | Self::NonbondedMatrixSplined(_)
-            | Self::IntramolecularBonded(_)
+            Self::NonbondedMatrix(x) => x.save_backup(change),
+            Self::NonbondedMatrixSplined(x) => x.save_backup(change),
+            Self::IntramolecularBonded(_)
             | Self::CellOverlap(_)
             | Self::Constrain(_)
             | Self::ExternalPressure(_)
