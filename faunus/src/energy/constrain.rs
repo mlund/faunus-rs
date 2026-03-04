@@ -140,12 +140,12 @@ mod integration_tests {
     use super::*;
     use crate::cell::Shape;
     use crate::context::WithCell;
-    use crate::platform::reference::ReferencePlatform;
+    use crate::platform::aos::AosPlatform;
     use std::path::Path;
 
-    fn make_context() -> ReferencePlatform {
+    fn make_context() -> AosPlatform {
         let mut rng = rand::thread_rng();
-        ReferencePlatform::new(
+        AosPlatform::new(
             "tests/files/topology_pass.yaml",
             Some(Path::new("tests/files/structure.xyz")),
             &mut rng,

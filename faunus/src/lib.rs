@@ -34,6 +34,8 @@ pub mod chemistry;
 pub mod cli;
 pub mod dimension;
 pub mod energy;
+#[cfg(feature = "gpu")]
+pub mod gpu;
 pub mod group;
 pub(crate) mod histogram;
 pub mod montecarlo;

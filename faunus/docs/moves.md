@@ -312,3 +312,140 @@ where $N$ counts are measured _before_ the move.
 Key        | Required | Description
 ---------- | -------- | -------------------------------------------
 `molecule` | yes      | Name of the molecule type to transfer
+
+---
+
+## Langevin Dynamics
+
+GPU-accelerated rigid-body Langevin dynamics using the BAOAB splitting scheme.
+Molecules are treated as rigid bodies with translational and rotational degrees of freedom,
+integrated with per-body friction and stochastic forces at the target temperature.
+Requires the `gpu` cargo feature (`cargo run --features gpu`).
+
+Langevin dynamics is placed as a collection entry alongside Monte Carlo moves,
+enabling hybrid MC/LD schemes where MC sweeps alternate with LD blocks within
+each propagation cycle. On each MC→LD transition, atom positions, centers of mass,
+and rigid-body orientations are uploaded to the GPU; after the LD block, updated
+positions and orientations are downloaded back.
+
+Pair interactions are evaluated on the GPU using cubic spline interpolation of the
+tabulated pair potentials (see `energy.spline` in [Energy](energy.md)).
+
+### Theory
+
+The Langevin equation couples Newtonian dynamics to a heat bath through
+friction and stochastic forces:
+
+$$
+m \ddot{\mathbf{r}} = \mathbf{F}(\mathbf{r}) - \gamma\, m\, \dot{\mathbf{r}} + \sqrt{2\gamma\, m\, k_BT}\;\boldsymbol{\xi}(t)
+$$
+
+where $m$ is the particle mass, $\gamma$ the friction coefficient (1/ps),
+$\mathbf{F}$ the conservative force, and $\boldsymbol{\xi}(t)$ is Gaussian white noise
+with $\langle \xi_i(t)\,\xi_j(t') \rangle = \delta_{ij}\,\delta(t - t')$.
+The friction and noise terms satisfy the fluctuation–dissipation theorem,
+ensuring that the system samples the canonical (NVT) ensemble at temperature $T$.
+
+#### BAOAB integrator
+
+Time integration uses the BAOAB splitting
+([Leimkuhler & Matthews, _Appl. Math. Res. Express_ 2013, 34–56](https://doi.org/10.1093/amrx/abs010)),
+which splits each timestep $\Delta t$ into five sub-steps:
+
+| Step | Operation |
+|------|-----------|
+| **B** | Half-kick: $\mathbf{v} \leftarrow \mathbf{v} + \frac{\Delta t}{2m}\,\mathbf{F}$ |
+| **A** | Half-drift: $\mathbf{r} \leftarrow \mathbf{r} + \frac{\Delta t}{2}\,\mathbf{v}$ |
+| **O** | Ornstein–Uhlenbeck: $\mathbf{v} \leftarrow e^{-\gamma \Delta t}\,\mathbf{v} + \sqrt{\frac{k_BT}{m}(1 - e^{-2\gamma \Delta t})}\;\mathbf{R}$ |
+| **A** | Half-drift: $\mathbf{r} \leftarrow \mathbf{r} + \frac{\Delta t}{2}\,\mathbf{v}$ |
+| **B** | Half-kick: $\mathbf{v} \leftarrow \mathbf{v} + \frac{\Delta t}{2m}\,\mathbf{F}$ |
+
+Here $\mathbf{R}$ is a vector of independent standard normal variates.
+Placing the stochastic step (**O**) at the center gives superior configurational
+sampling accuracy compared to other splittings, with the
+configurational distribution correct to $\mathcal{O}(\Delta t^2)$.
+
+#### Rigid-body rotational dynamics
+
+Each molecule is represented by its center-of-mass position and a unit quaternion
+$\mathbf{q}$ encoding orientation. Atom positions are reconstructed as
+
+$$
+\mathbf{r}_i = \mathbf{r}_\text{com} + \mathbf{q}\,\mathbf{r}_i^{\,\text{ref}}\,\mathbf{q}^{-1}
+$$
+
+where $\mathbf{r}_i^{\,\text{ref}}$ are time-independent reference coordinates in the body frame.
+Rotational equations of motion follow the same BAOAB pattern, with
+the body-frame angular velocity $\boldsymbol{\omega}$ and diagonal inertia tensor
+$\mathbf{I} = \operatorname{diag}(I_{xx}, I_{yy}, I_{zz})$ replacing
+$\mathbf{v}$ and $m$. The **O** step applies the Ornstein–Uhlenbeck
+thermostat independently to each angular velocity component:
+
+$$
+\omega_\alpha \leftarrow e^{-\gamma \Delta t}\,\omega_\alpha + \sqrt{\frac{k_BT}{I_{\alpha\alpha}}(1 - e^{-2\gamma \Delta t})}\;R_\alpha
+$$
+
+The **A** drift steps update the quaternion by composing an incremental rotation:
+
+$$
+\mathbf{q} \leftarrow \Delta\mathbf{q}\;\mathbf{q}, \quad
+\Delta\mathbf{q} = \exp\!\bigl(\tfrac{\Delta t}{4}\,\boldsymbol{\omega}\bigr)
+$$
+
+Torques are computed from the forces on each atom in the body frame:
+$\boldsymbol{\tau} = \sum_i \mathbf{r}_i^{\,\text{ref}} \times \mathbf{f}_i^{\,\text{body}}$.
+
+### Example
+
+```yaml
+propagate:
+  seed: Hardware
+  criterion: Metropolis
+  repeat: 500
+  collections:
+    - !Stochastic
+      repeat: 20
+      moves:
+        - !TranslateMolecule { molecule: Water, dp: 0.5, repeat: 1 }
+        - !RotateMolecule { molecule: Water, dp: 0.3, repeat: 1 }
+    - !LangevinDynamics
+      timestep: 0.1
+      friction: 5.0
+      steps: 20
+      temperature: 298.15
+```
+
+### Options
+
+Key           | Required | Default | Description
+------------- | -------- | ------- | -------------------------------------------
+`timestep`    | yes      |         | Integration timestep (ps)
+`friction`    | yes      |         | Friction coefficient (1/ps)
+`steps`       | yes      |         | Number of LD steps per block
+`temperature` | yes      |         | Target temperature (K)
+
+### Output
+
+After simulation, the YAML output reports measured temperatures
+from the equipartition theorem:
+
+```yaml
+- !LangevinDynamics
+  timestep: 0.1
+  friction: 5.0
+  steps: 20
+  temperature: 298.15
+  measured_temperature:
+    translational: "298.3 ± 1.2"
+    rotational: "297.8 ± 2.1"
+```
+
+### Notes
+
+- Molecules must have `degrees_of_freedom: Rigid` and `has_com: true` in the topology.
+- The simulation cell must be bounded (cuboid).
+- Velocities are initialized from the Maxwell–Boltzmann distribution on the first call
+  and persist on the GPU across subsequent LD blocks.
+- MC rotation moves (`!RotateMolecule`) automatically track rigid-body orientation,
+  which is transferred to the GPU at each LD block start.
+- Energy splines must be configured (`energy.spline`) to provide GPU-evaluated pair potentials.

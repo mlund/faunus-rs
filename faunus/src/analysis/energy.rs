@@ -228,12 +228,12 @@ selections: ["molecule water", "atomtype Na"]
 mod integration_tests {
     use super::*;
     use crate::analysis::Analyze;
-    use crate::platform::reference::ReferencePlatform;
+    use crate::platform::aos::AosPlatform;
     use std::path::Path;
 
-    fn make_context() -> ReferencePlatform {
+    fn make_context() -> AosPlatform {
         let mut rng = rand::thread_rng();
-        ReferencePlatform::new(
+        AosPlatform::new(
             "tests/files/topology_pass.yaml",
             Some(Path::new("tests/files/structure.xyz")),
             &mut rng,
@@ -252,11 +252,11 @@ frequency: !Every 1
         let builder: EnergyAnalysisBuilder = serde_yaml::from_str(yaml).unwrap();
         let mut analysis = builder.build(&ctx).unwrap();
 
-        assert_eq!(Analyze::<ReferencePlatform>::num_samples(&analysis), 0);
+        assert_eq!(Analyze::<AosPlatform>::num_samples(&analysis), 0);
         analysis.sample(&ctx, 1).unwrap();
-        assert_eq!(Analyze::<ReferencePlatform>::num_samples(&analysis), 1);
+        assert_eq!(Analyze::<AosPlatform>::num_samples(&analysis), 1);
 
-        let yaml_out = Analyze::<ReferencePlatform>::to_yaml(&analysis).unwrap();
+        let yaml_out = Analyze::<AosPlatform>::to_yaml(&analysis).unwrap();
         let mean = yaml_out.get("mean").unwrap().as_f64().unwrap();
         assert!(mean.is_finite());
     }
@@ -274,9 +274,9 @@ selections: ["all", "all"]
         let mut analysis = builder.build(&ctx).unwrap();
 
         analysis.sample(&ctx, 1).unwrap();
-        assert_eq!(Analyze::<ReferencePlatform>::num_samples(&analysis), 1);
+        assert_eq!(Analyze::<AosPlatform>::num_samples(&analysis), 1);
 
-        let yaml_out = Analyze::<ReferencePlatform>::to_yaml(&analysis).unwrap();
+        let yaml_out = Analyze::<AosPlatform>::to_yaml(&analysis).unwrap();
         let mean = yaml_out.get("mean").unwrap().as_f64().unwrap();
         assert!(mean.is_finite());
         assert!(yaml_out.get("selections").is_some());

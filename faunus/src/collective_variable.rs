@@ -657,12 +657,12 @@ mod integration_tests {
     use crate::cell::Shape;
     use crate::context::{WithCell, WithTopology};
     use crate::group::GroupCollection;
-    use crate::platform::reference::ReferencePlatform;
+    use crate::platform::aos::AosPlatform;
     use std::path::Path;
 
-    fn make_context() -> ReferencePlatform {
+    fn make_context() -> AosPlatform {
         let mut rng = rand::thread_rng();
-        ReferencePlatform::new(
+        AosPlatform::new(
             "tests/files/topology_pass.yaml",
             Some(Path::new("tests/files/structure.xyz")),
             &mut rng,
@@ -679,7 +679,7 @@ mod integration_tests {
     }
 
     /// Find a molecule kind that has exactly one group instance in the test context.
-    fn single_group_selection(ctx: &ReferencePlatform) -> Option<(Selection, usize)> {
+    fn single_group_selection(ctx: &AosPlatform) -> Option<(Selection, usize)> {
         ctx.topology_ref().moleculekinds().iter().find_map(|mk| {
             let sel = Selection::parse(&format!("molecule {}", mk.name())).ok()?;
             let groups = sel.resolve_groups(ctx.topology_ref(), ctx.groups());

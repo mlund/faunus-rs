@@ -1,0 +1,74 @@
+# 100 rigid CPPM molecules in a cuboidal box with GPU Langevin dynamics.
+# Each molecule has 67 atoms (charged patchy particle).
+# Requires the `gpu` cargo feature: cargo run --features gpu -- run -i langevin.yaml
+
+atoms:
+  - name: PP     # positive patch
+    mass: 1.0
+    charge: 1.0
+    sigma: 4.0
+    epsilon: 0.5
+  - name: NP     # negative patch
+    mass: 1.0
+    charge: -1.0
+    sigma: 4.0
+    epsilon: 0.5
+  - name: MP     # main particle
+    mass: 100.0
+    charge: 0.0
+    sigma: 40.0
+    epsilon: 0.5
+
+molecules:
+  - name: CPPM
+    degrees_of_freedom: Rigid
+    has_com: true
+    from_structure: "../twobody/cppm-p18.xyz"
+
+system:
+  cell: !Cuboid [292.4, 292.4, 292.4]
+  medium:
+    permittivity: !Water
+    temperature: 298.15
+    salt: [!NaCl, 0.05]
+
+  blocks:
+    - molecule: CPPM
+      N: 20
+      insert:
+        !RandomCOM {
+          filename: "../twobody/cppm-p18.xyz",
+          rotate: true,
+        }
+
+  energy:
+    nonbonded:
+      default:
+        - !Coulomb {cutoff: 200}
+        - !WeeksChandlerAndersen {mixing: LB}
+    spline:             # tabulate potentials for GPU evaluation
+      cutoff: 200.0
+      n_points: 2000
+
+analysis:
+  - !Trajectory
+    file: "traj.xtc"
+    frequency: !Every 1
+  - !Trajectory         # final configuration for visualization/restart
+    file: "confout.xyz"
+    frequency: !End
+
+propagate:
+  seed: Hardware
+  criterion: Metropolis
+  repeat: 100
+  collections:
+   #- !Stochastic
+   #  repeat: 10
+   #  moves:
+   #    - !TranslateMolecule {molecule: CPPM, dp: 40.0, repeat: 100}
+    - !LangevinDynamics
+      timestep: 0.1      # ps
+      friction: 5.0      # 1/ps
+      steps: 10          # LD steps per sweep
+      temperature: 298.15

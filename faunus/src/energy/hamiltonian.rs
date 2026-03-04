@@ -106,6 +106,16 @@ impl Hamiltonian {
         &self.energy_terms
     }
 
+    /// Invalidate all nonbonded energy caches.
+    /// Call after bulk position updates (e.g. Langevin dynamics) that bypass
+    /// the normal MC backup/update path.
+    #[cfg_attr(not(feature = "gpu"), allow(dead_code))]
+    pub(crate) fn invalidate_caches(&mut self) {
+        self.energy_terms
+            .iter_mut()
+            .for_each(|t| t.invalidate_cache());
+    }
+
     /// Compute each term's energy, returning `(name, energy)` pairs.
     pub fn per_term_energies(
         &self,

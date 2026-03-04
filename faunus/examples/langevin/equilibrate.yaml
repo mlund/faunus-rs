@@ -1,0 +1,60 @@
+atoms:
+  - name: PP
+    mass: 1.0
+    charge: 1.0
+    sigma: 4.0
+    epsilon: 0.5
+  - name: NP
+    mass: 1.0
+    charge: -1.0
+    sigma: 4.0
+    epsilon: 0.5
+  - name: MP
+    mass: 100.0
+    charge: 0.0
+    sigma: 40.0
+    epsilon: 0.5
+
+molecules:
+  - name: CPPM
+    degrees_of_freedom: Rigid
+    has_com: true
+    from_structure: "../twobody/cppm-p18.xyz"
+
+system:
+  cell: !Cuboid [292.4, 292.4, 292.4]
+  medium:
+    permittivity: !Water
+    temperature: 298.15
+    salt: [!NaCl, 0.05]
+  blocks:
+    - molecule: CPPM
+      N: 20
+      insert:
+        !RandomCOM { filename: "../twobody/cppm-p18.xyz", rotate: true }
+  energy:
+    nonbonded:
+      default:
+        - !Coulomb {cutoff: 200}
+        - !WeeksChandlerAndersen {mixing: LB}
+    spline:             # tabulate potentials for GPU evaluation
+      cutoff: 200.0
+      n_points: 2000
+
+
+analysis:
+  - !Trajectory         # final configuration for visualization/restart
+    file: "eqout.xyz"
+    frequency: !End
+
+
+propagate:
+  seed: Hardware
+  criterion: Metropolis
+  repeat: 100
+  collections:
+    - !Stochastic
+      repeat: 100
+      moves:
+        - !TranslateMolecule {molecule: CPPM, dp: 80.0}
+        - !RotateMolecule {molecule: CPPM, dp: 3.0}

@@ -46,7 +46,7 @@ impl crate::Info for StructureWriter {
 }
 
 impl StructureWriter {
-    fn write_frame<T: Context>(&mut self, context: &T) -> anyhow::Result<()> {
+    fn write_frame<T: Context>(&mut self, context: &T, step: usize) -> anyhow::Result<()> {
         let topology = context.topology();
         let particles = context.get_all_particles();
 
@@ -99,7 +99,7 @@ impl StructureWriter {
         let data = StructureData {
             names,
             positions,
-            step: None,
+            step: Some(step as u32),
             box_lengths,
             ..Default::default()
         };
@@ -114,14 +114,14 @@ impl StructureWriter {
 impl<T: Context> Analyze<T> for StructureWriter {
     fn sample(&mut self, context: &T, step: usize) -> anyhow::Result<()> {
         if self.frequency.should_perform(step) {
-            self.write_frame(context)?;
+            self.write_frame(context, step)?;
         }
         Ok(())
     }
 
     fn finalize(&mut self, context: &T) -> anyhow::Result<()> {
         if self.frequency.should_perform_at_end() {
-            self.write_frame(context)?;
+            self.write_frame(context, self.num_samples)?;
         }
         Ok(())
     }

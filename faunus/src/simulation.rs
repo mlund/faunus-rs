@@ -3,7 +3,7 @@
 use crate::{
     analysis,
     montecarlo::{gibbs::GibbsEnsemble, MarkovChain},
-    platform::reference::ReferencePlatform,
+    platform::soa::SoaPlatform,
     propagate::{self, Propagate},
     state::State,
 };
@@ -21,21 +21,31 @@ pub fn thermal_energy(medium: &interatomic::coulomb::Medium) -> f64 {
 /// Top-level simulation driver.
 #[allow(clippy::large_enum_variant)]
 pub enum Simulation {
-    /// Standard single-box NVT / NPT simulation.
-    SingleBox(MarkovChain<ReferencePlatform>),
+    /// Standard single-box simulation.
+    SingleBox(MarkovChain<SoaPlatform>),
     /// Two coupled boxes for Gibbs ensemble MC.
-    Gibbs(Box<GibbsEnsemble<ReferencePlatform>>),
+    Gibbs(Box<GibbsEnsemble<SoaPlatform>>),
 }
 
-/// Build a MarkovChain from an input file, context, and thermal energy.
-fn build_markov_chain(
+/// Build a MarkovChain from an input file, context, and thermal energy,
+/// optionally restoring from a state checkpoint.
+pub fn build_markov_chain<
+    T: crate::Context + crate::WithCell<SimCell = crate::cell::Cell> + 'static,
+>(
     input: &Path,
-    context: ReferencePlatform,
+    context: T,
     kt: f64,
-) -> Result<MarkovChain<ReferencePlatform>> {
+    state: Option<&Path>,
+) -> Result<MarkovChain<T>> {
     let propagate = Propagate::from_file(input, &context)?;
     let analyses = analysis::from_file(input, &context)?;
-    MarkovChain::new(context, propagate, kt, analyses)
+    let mut mc = MarkovChain::new(context, propagate, kt, analyses)?;
+    if let Some(state_path) = state {
+        if state_path.exists() {
+            mc.load_state(State::from_file(state_path)?)?;
+        }
+    }
+    Ok(mc)
 }
 
 impl Simulation {
@@ -47,7 +57,7 @@ impl Simulation {
         input: &Path,
         state: Option<&Path>,
     ) -> Result<(Self, interatomic::coulomb::Medium)> {
-        let medium = crate::platform::reference::get_medium(input)?;
+        let medium = crate::platform::get_medium(input)?;
         let kt = thermal_energy(&medium);
 
         if let Some(gibbs_cfg) = propagate::gibbs_config_from_file(input)? {
@@ -55,15 +65,8 @@ impl Simulation {
             return Ok((sim, medium));
         }
 
-        let context = ReferencePlatform::new(input, None, &mut rand::thread_rng())?;
-        let mut mc = build_markov_chain(input, context, kt)?;
-
-        if let Some(state_path) = state {
-            if state_path.exists() {
-                mc.load_state(State::from_file(state_path)?)?;
-            }
-        }
-
+        let context = SoaPlatform::new(input, None, &mut rand::thread_rng())?;
+        let mc = build_markov_chain(input, context, kt, state)?;
         Ok((Self::SingleBox(mc), medium))
     }
 
@@ -74,7 +77,7 @@ impl Simulation {
         kt: f64,
         gibbs_cfg: crate::montecarlo::gibbs::GibbsConfig,
     ) -> Result<Self> {
-        let context0 = ReferencePlatform::new(input, None, &mut rand::thread_rng())?;
+        let context0 = SoaPlatform::new(input, None, &mut rand::thread_rng())?;
         let context1 = context0.clone();
 
         let inter_moves: Vec<_> = gibbs_cfg
@@ -83,8 +86,8 @@ impl Simulation {
             .map(|b| b.build(&context0))
             .collect::<Result<_>>()?;
 
-        let mut mc0 = build_markov_chain(input, context0, kt)?;
-        let mut mc1 = build_markov_chain(input, context1, kt)?;
+        let mut mc0 = build_markov_chain(input, context0, kt, None)?;
+        let mut mc1 = build_markov_chain(input, context1, kt, None)?;
         // give box 1 a distinct seed so intra-box trajectories diverge
         mc1.propagation_mut().reseed(0x000D_EADB_EEFC_AFE1);
 

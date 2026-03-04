@@ -21,6 +21,10 @@ system:
     nonbonded:
       default:
         - !LennardJones {mixing: LB}
+    spline:
+      cutoff: 20.0
+      n_points: 2000
+
   blocks:
     - molecule: molecule1
       N: 600

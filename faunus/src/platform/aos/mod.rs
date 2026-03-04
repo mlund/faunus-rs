@@ -12,7 +12,7 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
-//! # Reference platform for CPU-based simulations
+//! # AoS (Array-of-Structures) platform for CPU-based simulations
 
 use rand::rngs::ThreadRng;
 
@@ -22,42 +22,29 @@ use crate::{
     energy::{builder::HamiltonianBuilder, Hamiltonian},
     group::{GroupCollection, GroupLists, GroupSize},
     topology::Topology,
-    Context, Group, Particle, ParticleSystem, Point, PointParticle, WithCell, WithHamiltonian,
-    WithTopology,
+    Context, Group, Particle, ParticleSystem, Point, PointParticle, UnitQuaternion, WithCell,
+    WithHamiltonian, WithTopology,
 };
 
 use serde::Serialize;
 
 use std::{cell::RefCell, path::Path, sync::Arc};
 
-/// Extract medium from system/medium in YAML file
-pub fn get_medium(path: impl AsRef<Path>) -> anyhow::Result<interatomic::coulomb::Medium> {
-    let file = std::fs::File::open(&path)
-        .map_err(|err| anyhow::anyhow!("Could not open {:?}: {}", path.as_ref(), err))?;
-    serde_yaml::from_reader(file)
-        .ok()
-        .and_then(|s: serde_yaml::Value| {
-            let val = s.get("system")?.get("medium")?;
-            serde_yaml::from_value(val.clone()).ok()
-        })
-        .ok_or_else(|| anyhow::anyhow!("Could not find `system/medium` in input file"))
-}
-
 /// Lightweight backup of context state for undo on MC reject.
 #[derive(Clone, Debug)]
 struct ContextBackup {
     particles: Vec<(usize, Particle)>,
     mass_centers: Vec<(usize, Option<Point>)>,
+    quaternions: Vec<(usize, UnitQuaternion)>,
     cell: Option<Cell>,
 }
 
-/// Default platform running on the CPU.
+/// AoS (Array-of-Structures) platform running on the CPU.
 ///
-/// Particles are stored in
-/// a single vector, and groups are stored in a separate vector. This mostly
-/// follows the same layout as the original C++ Faunus code (version 2 and lower).
+/// Particles are stored in a single `Vec<Particle>`, and groups in a separate vector.
+/// This follows the same layout as the original C++ Faunus code (version 2 and lower).
 #[derive(Clone, Debug, Serialize)]
-pub struct ReferencePlatform {
+pub struct AosPlatform {
     /// Arc (not Rc) so that MarkovChain is Send for Gibbs ensemble scoped threads
     topology: Arc<Topology>,
     particles: Vec<Particle>,
@@ -72,7 +59,7 @@ pub struct ReferencePlatform {
     backup: Option<ContextBackup>,
 }
 
-impl ReferencePlatform {
+impl AosPlatform {
     /// Create a new simulation system on a reference platform from
     /// faunus configuration file and optional structure file.
     #[must_use = "this returns a Result that should be handled"]
@@ -81,7 +68,7 @@ impl ReferencePlatform {
         structure_file: Option<&Path>,
         rng: &mut ThreadRng,
     ) -> anyhow::Result<Self> {
-        let medium = Some(get_medium(&yaml_file)?);
+        let medium = Some(super::get_medium(&yaml_file)?);
         let topology = Topology::from_file(&yaml_file)?;
         let hamiltonian_builder = HamiltonianBuilder::from_file(&yaml_file)?;
         // validate hamiltonian builder
@@ -144,9 +131,9 @@ impl ReferencePlatform {
     }
 }
 
-super::impl_platform_shared!(ReferencePlatform);
+super::impl_platform_shared!(AosPlatform);
 
-impl Context for ReferencePlatform {
+impl Context for AosPlatform {
     fn save_particle_backup(&mut self, group_index: usize, indices: &[usize]) {
         assert!(self.backup.is_none(), "backup already exists");
         let particles = indices
@@ -154,9 +141,11 @@ impl Context for ReferencePlatform {
             .map(|&i| (i, self.particles[i].clone()))
             .collect();
         let mass_center = self.groups[group_index].mass_center().cloned();
+        let quaternion = *self.groups[group_index].quaternion();
         self.backup = Some(ContextBackup {
             particles,
             mass_centers: vec![(group_index, mass_center)],
+            quaternions: vec![(group_index, quaternion)],
             cell: None,
         });
     }
@@ -175,9 +164,16 @@ impl Context for ReferencePlatform {
             .enumerate()
             .map(|(i, g)| (i, g.mass_center().cloned()))
             .collect();
+        let quaternions = self
+            .groups
+            .iter()
+            .enumerate()
+            .map(|(i, g)| (i, *g.quaternion()))
+            .collect();
         self.backup = Some(ContextBackup {
             particles,
             mass_centers,
+            quaternions,
             cell: Some(self.cell.clone()),
         });
     }
@@ -192,6 +188,9 @@ impl Context for ReferencePlatform {
                 self.groups[group_idx].set_mass_center(com);
             }
         }
+        for (group_idx, q) in backup.quaternions {
+            self.groups[group_idx].set_quaternion(q);
+        }
         if let Some(cell) = backup.cell {
             self.cell = cell;
         }
@@ -205,9 +204,13 @@ impl Context for ReferencePlatform {
     }
 }
 
-impl GroupCollection for ReferencePlatform {
+impl GroupCollection for AosPlatform {
     fn groups(&self) -> &[Group] {
         self.groups.as_ref()
+    }
+
+    fn groups_mut(&mut self) -> &mut [Group] {
+        &mut self.groups
     }
 
     fn particle(&self, index: usize) -> Particle {
@@ -251,7 +254,7 @@ impl GroupCollection for ReferencePlatform {
 
     fn add_group(&mut self, molecule: usize, particles: &[Particle]) -> anyhow::Result<&mut Group> {
         if particles.is_empty() {
-            let msg = "No particles defined for reference platform; cannot create empty group";
+            let msg = "No particles defined for AoS platform; cannot create empty group";
             log::error!("{msg}");
             anyhow::bail!(msg);
         }
@@ -274,10 +277,10 @@ impl GroupCollection for ReferencePlatform {
     }
 }
 
-impl ParticleSystem for ReferencePlatform {
+impl ParticleSystem for AosPlatform {
     /// Get distance between two particles.
     ///
-    /// Faster implementation for Reference Platform which does not involve particle copying.
+    /// Faster implementation for AoS platform which does not involve particle copying.
     #[inline(always)]
     fn get_distance(&self, i: usize, j: usize) -> Point {
         self.cell()
@@ -286,7 +289,7 @@ impl ParticleSystem for ReferencePlatform {
 
     /// Get index of the atom kind of the particle.
     ///
-    /// Faster implementation for Reference Platform which does not involve particle copying.
+    /// Faster implementation for AoS platform which does not involve particle copying.
     #[inline(always)]
     fn get_atomkind(&self, i: usize) -> usize {
         self.particles()[i].atom_id
@@ -294,7 +297,7 @@ impl ParticleSystem for ReferencePlatform {
 
     /// Get angle between particles `i-j-k`.
     ///
-    /// Faster implementation for Reference Platform which does not involve particle copying.
+    /// Faster implementation for AoS platform which does not involve particle copying.
     #[inline(always)]
     fn get_angle(&self, indices: &[usize; 3]) -> f64 {
         let p1 = self.particles()[indices[0]].pos();
@@ -307,7 +310,7 @@ impl ParticleSystem for ReferencePlatform {
     /// Get dihedral between particles `i-j-k-l`.
     /// Dihedral is defined as an angle between planes `ijk` and `jkl`.
     ///
-    /// Faster implementation for Reference Platform which does not involve particle copying.
+    /// Faster implementation for AoS platform which does not involve particle copying.
     #[inline(always)]
     fn get_dihedral_angle(&self, indices: &[usize; 4]) -> f64 {
         let [p1, p2, p3, p4] = indices.map(|x| self.particles()[x].pos());
@@ -411,7 +414,7 @@ impl ParticleSystem for ReferencePlatform {
 /// Each group could be a rigid body, a molecule, etc.
 /// The idea is to access the particle in a group-wise fashion, e.g. to update
 /// the center of mass of a group, or to rotate a group of particles.
-impl ReferencePlatform {
+impl AosPlatform {
     /// Get vector of indices to all other *active* particles in the system, excluding `range`
     fn _other_indices(&self, range: std::ops::Range<usize>) -> Vec<usize> {
         let no_overlap = |r: &std::ops::Range<usize>| {
@@ -435,5 +438,48 @@ impl ReferencePlatform {
     #[inline(always)]
     pub fn particles_mut(&mut self) -> &mut [Particle] {
         &mut self.particles
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::transform::Transform;
+
+    #[test]
+    fn backup_undo_restores_quaternion() {
+        let mut rng = rand::thread_rng();
+        let mut context = AosPlatform::new(
+            "tests/files/topology_pass.yaml",
+            Some(Path::new("tests/files/structure.xyz")),
+            &mut rng,
+        )
+        .unwrap();
+
+        let group_index = 1;
+        assert_eq!(
+            *context.groups()[group_index].quaternion(),
+            crate::UnitQuaternion::identity()
+        );
+
+        // Rotate with backup
+        let axis = nalgebra::UnitVector3::new_normalize(crate::Point::new(0.0, 0.0, 1.0));
+        let q = crate::UnitQuaternion::from_axis_angle(&axis, 0.8);
+        let transform = Transform::Rotate(q);
+        transform
+            .on_group_with_backup(group_index, &mut context)
+            .unwrap();
+
+        // Quaternion should be updated
+        assert!(context.groups()[group_index].quaternion().angle_to(&q) < 1e-12);
+
+        // Undo should restore identity
+        context.undo().unwrap();
+        assert!(
+            context.groups()[group_index]
+                .quaternion()
+                .angle_to(&crate::UnitQuaternion::identity())
+                < 1e-12
+        );
     }
 }

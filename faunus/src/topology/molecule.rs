@@ -166,10 +166,22 @@ impl MoleculeKind {
     }
 
     /// Build the bond graph and generate nonbonded exclusions from it.
+    ///
+    /// Rigid molecules exclude all internal pairs since intramolecular
+    /// distances are constant and the energy offset is meaningless.
     pub(super) fn finalize_bonds(&mut self) {
         self.bond_graph = BondGraph::from_bonds(&self.bonds, self.atoms.len());
-        self.exclusions
-            .extend(self.bond_graph.pairs_within(self.excluded_neighbours));
+        if self.degrees_of_freedom == DegreesOfFreedom::Rigid {
+            let n = self.atoms.len();
+            for i in 0..n {
+                for j in (i + 1)..n {
+                    self.exclusions.insert(UnorderedPair(i, j));
+                }
+            }
+        } else {
+            self.exclusions
+                .extend(self.bond_graph.pairs_within(self.excluded_neighbours));
+        }
     }
 
     /// Get number of atoms in the molecule.
@@ -416,6 +428,27 @@ mod tests {
             assert!(molecule
                 .exclusions
                 .contains(&UnorderedPair(pair[0], pair[1])));
+        }
+    }
+
+    #[test]
+    fn rigid_molecule_excludes_all_internal_pairs() {
+        let mut molecule = MoleculeKindBuilder::default()
+            .name("RIG")
+            .atoms(vec!["A".into(), "B".into(), "C".into(), "D".into()])
+            .atom_indices(vec![0, 1, 2, 3])
+            .degrees_of_freedom(DegreesOfFreedom::Rigid)
+            .build()
+            .unwrap();
+
+        molecule.finalize_bonds();
+
+        // 4 atoms → C(4,2) = 6 exclusion pairs
+        assert_eq!(molecule.exclusions.len(), 6);
+        for i in 0..4 {
+            for j in (i + 1)..4 {
+                assert!(molecule.exclusions.contains(&UnorderedPair(i, j)));
+            }
         }
     }
 

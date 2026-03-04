@@ -416,13 +416,13 @@ impl<T: Context + Send + 'static> GibbsEnsemble<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::platform::reference::ReferencePlatform;
+    use crate::platform::aos::AosPlatform;
     use crate::WithCell;
 
     #[test]
     fn gibbs_volume_exchange_conserves_total_volume() {
         let mut rng = rand::thread_rng();
-        let context = ReferencePlatform::new(
+        let context = AosPlatform::new(
             "tests/files/translate_molecules_simulation.yaml",
             None,
             &mut rng,
