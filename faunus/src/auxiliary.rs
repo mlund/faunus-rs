@@ -52,6 +52,7 @@ pub(crate) fn mass_center<'a>(
 ///
 /// Uses the first atom as reference and unwraps all others via minimum image
 /// convention to guarantee consistent geometry regardless of box wrapping.
+#[cfg(test)]
 pub(crate) fn mass_center_pbc<'a>(
     positions: impl IntoIterator<Item = &'a Point>,
     masses: &[f64],

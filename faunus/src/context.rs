@@ -1,4 +1,4 @@
-use crate::cell::SimulationCell;
+use crate::cell::{BoundaryConditions, SimulationCell};
 use crate::energy::Hamiltonian;
 use crate::group::GroupCollection;
 use crate::Point;
@@ -153,15 +153,26 @@ pub trait ParticleSystem: GroupCollection + WithCell + WithTopology {
     /// ```
     fn get_dihedral_angle(&self, indices: &[usize; 4]) -> f64;
 
-    /// Calculate mass center of set of particles given by their indices. Periodic boundry conditions are respected.
+    /// Calculate mass center of set of particles given by their indices. Periodic boundary conditions are respected.
     fn mass_center(&self, indices: &[usize]) -> Point {
-        let positions: Vec<Point> = indices.iter().map(|&i| self.position(i)).collect();
-        let atomids = indices.iter().map(|&i| self.get_atomkind(i));
-        let masses: Vec<_> = atomids
-            .map(|i| self.topology().atomkinds()[i].mass())
-            .collect();
-        let shift = positions.first().map_or_else(Point::zeros, |p| -*p);
-        crate::auxiliary::mass_center_pbc(&positions, &masses, self.cell(), Some(shift))
+        if indices.is_empty() {
+            return Point::zeros();
+        }
+        let topology = self.topology_ref();
+        let atomkinds = topology.atomkinds();
+        let ref_pos = self.position(indices[0]);
+        let first_mass = atomkinds[self.get_atomkind(indices[0])].mass();
+        let mut total_mass = first_mass;
+        let mut com = ref_pos * first_mass;
+        for &i in &indices[1..] {
+            let mass = atomkinds[self.get_atomkind(i)].mass();
+            let unwrapped = ref_pos + self.cell().distance(&self.position(i), &ref_pos);
+            com += unwrapped * mass;
+            total_mass += mass;
+        }
+        com /= total_mass;
+        self.cell().boundary(&mut com);
+        com
     }
 
     /// Scale all particle positions and cell volume to a new volume.

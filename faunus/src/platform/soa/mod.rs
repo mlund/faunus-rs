@@ -168,6 +168,18 @@ impl GroupCollection for SoaPlatform {
         Ok(())
     }
 
+    fn set_positions<'a>(
+        &mut self,
+        indices: impl IntoIterator<Item = usize>,
+        positions: impl IntoIterator<Item = &'a Point>,
+    ) {
+        for (i, pos) in indices.into_iter().zip(positions) {
+            self.x[i] = pos.x;
+            self.y[i] = pos.y;
+            self.z[i] = pos.z;
+        }
+    }
+
     fn update_mass_center(&mut self, group_index: usize) {
         let group = &self.groups[group_index];
         let indices = group
@@ -469,6 +481,29 @@ mod tests {
             rel_err
         );
 
+        // Verify allocation-free mass_center matches auxiliary::mass_center_pbc
+        for group in simd_ctx.groups() {
+            if group.is_empty() {
+                continue;
+            }
+            let indices: Vec<usize> = group.iter_active().collect();
+            let com_trait = simd_ctx.mass_center(&indices);
+            let positions: Vec<Point> = indices.iter().map(|&i| simd_ctx.position(i)).collect();
+            let topology = simd_ctx.topology();
+            let masses: Vec<f64> = indices
+                .iter()
+                .map(|&i| topology.atomkinds()[simd_ctx.get_atomkind(i)].mass())
+                .collect();
+            let com_aux =
+                crate::auxiliary::mass_center_pbc(&positions, &masses, simd_ctx.cell(), None);
+            let err = (com_trait - com_aux).norm();
+            assert!(
+                err < 1e-10,
+                "mass_center mismatch for group {}: trait={com_trait:?}, aux={com_aux:?}, err={err:.2e}",
+                group.index()
+            );
+        }
+
         // Also test SingleGroup RigidBody change
         let change = crate::Change::SingleGroup(0, crate::GroupChange::RigidBody);
         let e_ref = ref_ctx.hamiltonian().energy(&ref_ctx, &change);
@@ -481,5 +516,33 @@ mod tests {
             e_simd,
             rel_err
         );
+    }
+
+    /// Verify set_positions updates coordinates without changing atom kinds.
+    #[test]
+    fn set_positions_preserves_atom_kinds() {
+        let yaml = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/files/gibbs_ensemble/input.yaml");
+        let mut ctx = SoaPlatform::new(&yaml, None, &mut rand::thread_rng()).unwrap();
+
+        let group = &ctx.groups()[0];
+        let indices: Vec<usize> = group.iter_active().collect();
+        let original_kinds: Vec<u32> = indices.iter().map(|&i| ctx.atom_kinds[i]).collect();
+
+        let new_positions: Vec<Point> = indices
+            .iter()
+            .enumerate()
+            .map(|(j, _)| Point::new(j as f64, j as f64 * 2.0, j as f64 * 3.0))
+            .collect();
+        ctx.set_positions(indices.clone(), new_positions.iter());
+
+        for (j, &i) in indices.iter().enumerate() {
+            let pos = ctx.position(i);
+            assert_eq!(pos, new_positions[j], "position not updated at index {i}");
+            assert_eq!(
+                ctx.atom_kinds[i], original_kinds[j],
+                "atom kind changed at index {i}"
+            );
+        }
     }
 }

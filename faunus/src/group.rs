@@ -478,6 +478,27 @@ pub trait GroupCollection {
     ) -> anyhow::Result<()>
     where
         Self: Sized;
+
+    /// Update only positions (not atom kinds) for the given indices.
+    fn set_positions<'a>(
+        &mut self,
+        indices: impl IntoIterator<Item = usize>,
+        positions: impl IntoIterator<Item = &'a Point>,
+    ) where
+        Self: Sized,
+    {
+        let pairs: Vec<(usize, Point)> = indices
+            .into_iter()
+            .zip(positions.into_iter().copied())
+            .collect();
+        let particles: Vec<Particle> = pairs
+            .iter()
+            .map(|&(i, pos)| Particle::new(self.particle(i).atom_id, pos))
+            .collect();
+        let indices_iter = pairs.iter().map(|&(i, _)| i);
+        self.set_particles(indices_iter, particles.iter())
+            .expect("set_particles failed in default set_positions impl");
+    }
 }
 
 /// Structure storing groups separated into three types:

@@ -202,17 +202,18 @@ impl GibbsParticleTransfer {
 
         // copy source molecule positions and compute COM
         let src_indices: Vec<usize> = src.groups()[src_group].iter_active().collect();
-        let mut particles: Vec<_> = src_indices.iter().map(|&i| src.particle(i)).collect();
         let com = src.mass_center(&src_indices);
 
-        // shift particles to a random position in target cell
+        // shift positions to a random position in target cell
         let shift = tgt.cell().get_point_inside(&mut rand::thread_rng()) - com;
-        for p in &mut particles {
-            p.pos += shift;
-        }
+        let positions: Vec<_> = src_indices
+            .iter()
+            .map(|&i| src.position(i) + shift)
+            .collect();
         let tgt_start = tgt.groups()[tgt_group].start();
-        let tgt_indices = tgt_start..tgt_start + particles.len();
-        tgt.set_particles(tgt_indices, particles.iter())?;
+        let tgt_indices = tgt_start..tgt_start + positions.len();
+        // atom kinds are already correct in the target slot
+        tgt.set_positions(tgt_indices, positions.iter());
 
         Transform::Deactivate.on_group(src_group, src)?;
         Transform::Activate.on_group(tgt_group, tgt)?;

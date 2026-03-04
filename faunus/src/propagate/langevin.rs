@@ -350,17 +350,16 @@ impl LangevinRunner {
 
     #[cfg(feature = "gpu")]
     fn write_positions<T: Context>(context: &mut T, positions: &[[f32; 4]]) -> anyhow::Result<()> {
-        let particles: Vec<crate::Particle> = positions
+        let points: Vec<crate::Point> = positions
             .iter()
             .map(|p| {
-                let kind = f32::to_bits(p[3]) as usize;
                 let mut pos = crate::Point::new(p[0] as f64, p[1] as f64, p[2] as f64);
                 context.cell().boundary(&mut pos);
-                crate::Particle::new(kind, pos)
+                pos
             })
             .collect();
 
-        context.set_particles(0..particles.len(), particles.iter())?;
+        context.set_positions(0..points.len(), points.iter());
         Ok(())
     }
 

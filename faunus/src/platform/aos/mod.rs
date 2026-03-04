@@ -241,6 +241,16 @@ impl GroupCollection for AosPlatform {
         Ok(())
     }
 
+    fn set_positions<'a>(
+        &mut self,
+        indices: impl IntoIterator<Item = usize>,
+        positions: impl IntoIterator<Item = &'a Point>,
+    ) {
+        for (i, pos) in indices.into_iter().zip(positions) {
+            self.particles[i].pos = *pos;
+        }
+    }
+
     fn update_mass_center(&mut self, group_index: usize) {
         let group = &self.groups[group_index];
         let indices = group
