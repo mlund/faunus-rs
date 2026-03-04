@@ -96,6 +96,17 @@ impl EnergyTerm {
         dispatch_stateful!(self, discard_backup);
     }
 
+    /// Invalidate any internal energy caches (e.g. after Langevin dynamics
+    /// has moved all molecules, making the pairwise cache stale).
+    #[cfg_attr(not(feature = "gpu"), allow(dead_code))]
+    pub(crate) fn invalidate_cache(&mut self) {
+        match self {
+            Self::NonbondedMatrix(x) => x.invalidate_cache(),
+            Self::NonbondedMatrixSplined(x) => x.invalidate_cache(),
+            _ => {}
+        }
+    }
+
     /// Nonbonded energy between two sets of atom indices; `None` for non-nonbonded terms.
     pub fn nonbonded_energy_between_atoms(
         &self,

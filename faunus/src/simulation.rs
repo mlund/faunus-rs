@@ -11,6 +11,9 @@ use anyhow::Result;
 use rand::SeedableRng;
 use std::path::Path;
 
+#[cfg(feature = "gpu")]
+use crate::platform::simd::SimdPlatform;
+
 /// Thermal energy kT in kJ/mol from a medium's temperature.
 pub fn thermal_energy(medium: &interatomic::coulomb::Medium) -> f64 {
     use interatomic::coulomb::Temperature;
@@ -25,24 +28,36 @@ pub enum Simulation {
     SingleBox(MarkovChain<ReferencePlatform>),
     /// Two coupled boxes for Gibbs ensemble MC.
     Gibbs(Box<GibbsEnsemble<ReferencePlatform>>),
+    /// Single-box with SoA platform for GPU Langevin dynamics.
+    #[cfg(feature = "gpu")]
+    GpuSingleBox(MarkovChain<SimdPlatform>),
 }
 
-/// Build a MarkovChain from an input file, context, and thermal energy.
-fn build_markov_chain(
+/// Build a MarkovChain from an input file, context, and thermal energy,
+/// optionally restoring from a state checkpoint.
+fn build_markov_chain<T: crate::Context + crate::WithCell<SimCell = crate::cell::Cell> + 'static>(
     input: &Path,
-    context: ReferencePlatform,
+    context: T,
     kt: f64,
-) -> Result<MarkovChain<ReferencePlatform>> {
+    state: Option<&Path>,
+) -> Result<MarkovChain<T>> {
     let propagate = Propagate::from_file(input, &context)?;
     let analyses = analysis::from_file(input, &context)?;
-    MarkovChain::new(context, propagate, kt, analyses)
+    let mut mc = MarkovChain::new(context, propagate, kt, analyses)?;
+    if let Some(state_path) = state {
+        if state_path.exists() {
+            mc.load_state(State::from_file(state_path)?)?;
+        }
+    }
+    Ok(mc)
 }
 
 impl Simulation {
     /// Build a simulation from an input YAML file.
     ///
     /// If `propagate.gibbs` is present, constructs a two-box Gibbs ensemble;
-    /// otherwise falls back to single-box mode.
+    /// otherwise falls back to single-box mode. When the `gpu` feature is
+    /// enabled, uses `SimdPlatform` for SoA layout needed by GPU kernels.
     pub fn from_file(
         input: &Path,
         state: Option<&Path>,
@@ -55,16 +70,20 @@ impl Simulation {
             return Ok((sim, medium));
         }
 
-        let context = ReferencePlatform::new(input, None, &mut rand::thread_rng())?;
-        let mut mc = build_markov_chain(input, context, kt)?;
-
-        if let Some(state_path) = state {
-            if state_path.exists() {
-                mc.load_state(State::from_file(state_path)?)?;
-            }
+        #[cfg(feature = "gpu")]
+        {
+            log::info!("Using SimdPlatform (SoA + SIMD splines)");
+            let context = SimdPlatform::new(input, None, &mut rand::thread_rng())?;
+            let mc = build_markov_chain(input, context, kt, state)?;
+            Ok((Self::GpuSingleBox(mc), medium))
         }
 
-        Ok((Self::SingleBox(mc), medium))
+        #[cfg(not(feature = "gpu"))]
+        {
+            let context = ReferencePlatform::new(input, None, &mut rand::thread_rng())?;
+            let mc = build_markov_chain(input, context, kt, state)?;
+            Ok((Self::SingleBox(mc), medium))
+        }
     }
 
     /// Build Gibbs ensemble from two cloned boxes.
@@ -83,8 +102,8 @@ impl Simulation {
             .map(|b| b.build(&context0))
             .collect::<Result<_>>()?;
 
-        let mut mc0 = build_markov_chain(input, context0, kt)?;
-        let mut mc1 = build_markov_chain(input, context1, kt)?;
+        let mut mc0 = build_markov_chain(input, context0, kt, None)?;
+        let mut mc1 = build_markov_chain(input, context1, kt, None)?;
         // give box 1 a distinct seed so intra-box trajectories diverge
         mc1.propagation_mut().reseed(0x000D_EADB_EEFC_AFE1);
 

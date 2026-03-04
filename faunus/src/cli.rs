@@ -17,7 +17,7 @@ use crate::{
     montecarlo::{gibbs::GibbsEnsemble, MarkovChain},
     platform::reference::ReferencePlatform,
     simulation::{self, box_prefixed_path, write_yaml, Simulation},
-    WithCell, WithTopology,
+    Context, WithCell,
 };
 use anyhow::Result;
 use clap::{Parser, Subcommand};
@@ -77,6 +77,11 @@ pub fn do_main() -> Result<()> {
                 Simulation::Gibbs(ensemble) => {
                     run_gibbs(*ensemble, &medium, state.as_deref(), &args.output)?;
                 }
+                #[cfg(feature = "gpu")]
+                Simulation::GpuSingleBox(mc) => {
+                    let mut yaml_output = std::fs::File::create(&args.output)?;
+                    run_single_box(mc, &medium, state.as_deref(), &mut yaml_output)?;
+                }
             }
         }
     }
@@ -85,8 +90,8 @@ pub fn do_main() -> Result<()> {
 
 /// Write per-box YAML output: medium, blocks, cell, energy, propagate, analysis.
 /// Returns `(final_energy, drift)`.
-fn write_mc_output(
-    mc: &MarkovChain<ReferencePlatform>,
+fn write_mc_output<T: Context + WithCell<SimCell = crate::cell::Cell> + 'static>(
+    mc: &MarkovChain<T>,
     medium: &interatomic::coulomb::Medium,
     initial_energy: f64,
     output: &mut std::fs::File,
@@ -112,8 +117,8 @@ fn write_mc_output(
     Ok((final_energy, drift))
 }
 
-fn run_single_box(
-    mut mc: MarkovChain<ReferencePlatform>,
+fn run_single_box<T: Context + WithCell<SimCell = crate::cell::Cell> + 'static>(
+    mut mc: MarkovChain<T>,
     medium: &interatomic::coulomb::Medium,
     state: Option<&std::path::Path>,
     yaml_output: &mut std::fs::File,

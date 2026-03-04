@@ -558,7 +558,7 @@ mod tests {
         let drift = markov_chain.energy_drift(initial_energy);
         assert!(drift < 1e-10, "Energy drift {drift:.6e} exceeds tolerance");
 
-        let move1_stats = markov_chain.propagate.collections()[0].moves()[0].statistics();
+        let move1_stats = markov_chain.propagate.blocks()[0].moves()[0].statistics();
 
         assert_eq!(move1_stats.num_trials, 73);
         assert_eq!(move1_stats.num_accepted, 71);
@@ -569,7 +569,7 @@ mod tests {
             epsilon = 1e-14
         );
 
-        let move2_stats = markov_chain.propagate.collections()[0].moves()[1].statistics();
+        let move2_stats = markov_chain.propagate.blocks()[0].moves()[1].statistics();
 
         assert_eq!(move2_stats.num_trials, 81);
         assert_eq!(move2_stats.num_accepted, 79);
@@ -580,13 +580,13 @@ mod tests {
             epsilon = 1e-14
         );
 
-        let move3_stats = markov_chain.propagate.collections()[0].moves()[2].statistics();
+        let move3_stats = markov_chain.propagate.blocks()[0].moves()[2].statistics();
 
         assert_eq!(move3_stats.num_trials, 0);
         assert_eq!(move3_stats.num_accepted, 0);
         assert_approx_eq!(f64, move3_stats.energy_change_sum, 0.0, epsilon = 1e-14);
 
-        let move4_stats = markov_chain.propagate.collections()[1].moves()[0].statistics();
+        let move4_stats = markov_chain.propagate.blocks()[1].moves()[0].statistics();
 
         assert_eq!(move4_stats.num_trials, 100);
         assert_eq!(move4_stats.num_accepted, 94);
@@ -597,7 +597,7 @@ mod tests {
             epsilon = 1e-14
         );
 
-        let move5_stats = markov_chain.propagate.collections()[2].moves()[0].statistics();
+        let move5_stats = markov_chain.propagate.blocks()[2].moves()[0].statistics();
 
         assert_eq!(move5_stats.num_trials, 500);
         assert_eq!(move5_stats.num_accepted, 466);

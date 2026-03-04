@@ -939,6 +939,13 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
             c.discard_backup();
         }
     }
+
+    /// Invalidate the pairwise energy cache (e.g. after Langevin dynamics).
+    /// The cache will be lazily rebuilt on the next rigid-body energy evaluation.
+    #[cfg_attr(not(feature = "gpu"), allow(dead_code))]
+    pub(crate) fn invalidate_cache(&mut self) {
+        *self.cache.get_mut() = None;
+    }
 }
 
 impl From<NonbondedMatrixSplined> for EnergyTerm {
