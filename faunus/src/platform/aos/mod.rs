@@ -36,6 +36,7 @@ struct ContextBackup {
     particles: Vec<(usize, Particle)>,
     mass_centers: Vec<(usize, Option<Point>)>,
     quaternions: Vec<(usize, UnitQuaternion)>,
+    group_sizes: Vec<(usize, GroupSize)>,
     cell: Option<Cell>,
 }
 
@@ -142,10 +143,12 @@ impl Context for AosPlatform {
             .collect();
         let mass_center = self.groups[group_index].mass_center().cloned();
         let quaternion = *self.groups[group_index].quaternion();
+        let group_size = self.groups[group_index].size();
         self.backup = Some(ContextBackup {
             particles,
             mass_centers: vec![(group_index, mass_center)],
             quaternions: vec![(group_index, quaternion)],
+            group_sizes: vec![(group_index, group_size)],
             cell: None,
         });
     }
@@ -170,10 +173,17 @@ impl Context for AosPlatform {
             .enumerate()
             .map(|(i, g)| (i, *g.quaternion()))
             .collect();
+        let group_sizes = self
+            .groups
+            .iter()
+            .enumerate()
+            .map(|(i, g)| (i, g.size()))
+            .collect();
         self.backup = Some(ContextBackup {
             particles,
             mass_centers,
             quaternions,
+            group_sizes,
             cell: Some(self.cell.clone()),
         });
     }
@@ -190,6 +200,10 @@ impl Context for AosPlatform {
         }
         for (group_idx, q) in backup.quaternions {
             self.groups[group_idx].set_quaternion(q);
+        }
+        for (group_idx, size) in backup.group_sizes {
+            self.groups[group_idx].resize(size)?;
+            self.group_lists.update_group(&self.groups[group_idx]);
         }
         if let Some(cell) = backup.cell {
             self.cell = cell;

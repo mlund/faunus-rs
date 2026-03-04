@@ -73,6 +73,7 @@ dyn_clone::clone_trait_object!(<T> CollectiveVariable<T> where T: Context);
 /// - One atom (`selection`): `AtomPosition`
 /// - One group (`selection`): `Size`, `EndToEnd`, `MassCenterPosition`
 /// - Two groups (`selection` + `selection2`): `MassCenterSeparation`
+/// - Any selection (`selection`): `Count` — re-resolves each evaluation
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Property {
@@ -83,6 +84,8 @@ pub enum Property {
     EndToEnd,
     MassCenterPosition,
     MassCenterSeparation,
+    /// Number of active atoms matching a selection (re-resolves each evaluation).
+    Count,
 }
 
 // ---------------------------------------------------------------------------
@@ -393,6 +396,35 @@ impl<T: Context> CollectiveVariable<T> for MassCenterSeparationCV {
     }
 }
 
+/// Counts active atoms matching a selection (re-resolved each evaluation).
+#[derive(Debug, Clone)]
+pub(crate) struct CountCV {
+    selection: Selection,
+    axis: AxisDescriptor,
+}
+
+impl crate::Info for CountCV {
+    fn short_name(&self) -> Option<&'static str> {
+        Some("count")
+    }
+    fn long_name(&self) -> Option<&'static str> {
+        Some("Number of active atoms matching selection")
+    }
+}
+
+impl<T: Context> CollectiveVariable<T> for CountCV {
+    fn evaluate(&self, context: &T) -> f64 {
+        self.selection
+            .resolve_atoms_live(context.topology_ref(), context.groups(), &|i| {
+                context.get_atomkind(i)
+            })
+            .len() as f64
+    }
+    fn axis(&self) -> &AxisDescriptor {
+        &self.axis
+    }
+}
+
 // ---------------------------------------------------------------------------
 // ConcreteCollectiveVariable — non-generic wrapper for energy terms
 // ---------------------------------------------------------------------------
@@ -407,6 +439,7 @@ pub(crate) enum ConcreteCollectiveVariable {
     AtomPosition(AtomPositionCV),
     Group(GroupCV),
     MassCenterSeparation(MassCenterSeparationCV),
+    Count(CountCV),
 }
 
 impl ConcreteCollectiveVariable {
@@ -418,6 +451,7 @@ impl ConcreteCollectiveVariable {
             Self::AtomPosition(cv) => Box::new(cv),
             Self::Group(cv) => Box::new(cv),
             Self::MassCenterSeparation(cv) => Box::new(cv),
+            Self::Count(cv) => Box::new(cv),
         }
     }
 
@@ -428,6 +462,7 @@ impl ConcreteCollectiveVariable {
             Self::AtomPosition(cv) => cv.evaluate(context),
             Self::Group(cv) => cv.evaluate(context),
             Self::MassCenterSeparation(cv) => cv.evaluate(context),
+            Self::Count(cv) => cv.evaluate(context),
         }
     }
 
@@ -438,6 +473,7 @@ impl ConcreteCollectiveVariable {
             Self::AtomPosition(cv) => &cv.axis,
             Self::Group(cv) => &cv.axis,
             Self::MassCenterSeparation(cv) => &cv.axis,
+            Self::Count(cv) => &cv.axis,
         }
     }
 }
@@ -504,6 +540,16 @@ impl CollectiveVariableBuilder {
                         axis,
                     },
                 ))
+            }
+            Property::Count => {
+                let selection = self
+                    .selection
+                    .clone()
+                    .ok_or_else(|| anyhow::anyhow!("Count requires a 'selection' field"))?;
+                Ok(ConcreteCollectiveVariable::Count(CountCV {
+                    selection,
+                    axis,
+                }))
             }
         }
     }
@@ -624,6 +670,27 @@ resolution: 0.2
             builders[1].property,
             Property::MassCenterSeparation
         ));
+    }
+
+    #[test]
+    fn deserialize_count() {
+        let yaml = r#"
+property: count
+selection: "molecule M"
+"#;
+        let builder: CollectiveVariableBuilder = serde_yaml::from_str(yaml).unwrap();
+        assert!(matches!(builder.property, Property::Count));
+        assert_eq!(builder.selection.as_ref().unwrap().source(), "molecule M");
+    }
+
+    #[test]
+    fn count_requires_selection() {
+        let yaml = r#"
+property: count
+"#;
+        let builder: CollectiveVariableBuilder = serde_yaml::from_str(yaml).unwrap();
+        assert!(matches!(builder.property, Property::Count));
+        assert!(builder.selection.is_none());
     }
 
     #[test]
@@ -768,5 +835,36 @@ mod integration_tests {
         let cv = builder(Property::Volume).build(&ctx).unwrap();
         let cloned = cv.clone();
         assert!((cv.evaluate(&ctx) - cloned.evaluate(&ctx)).abs() < 1e-10);
+    }
+
+    #[test]
+    fn build_count_cv() {
+        let ctx = make_context();
+        let sel = Selection::parse("all").unwrap();
+        let mut b = builder(Property::Count);
+        b.selection = Some(sel);
+        let cv = b.build(&ctx).unwrap();
+        let expected: usize = ctx.groups().iter().map(|g| g.len()).sum();
+        assert_eq!(cv.evaluate(&ctx) as usize, expected);
+    }
+
+    #[test]
+    fn count_cv_with_active_inactive_groups() {
+        // Uses speciation test topology with active/inactive groups
+        let mut rng = rand::thread_rng();
+        let ctx = AosPlatform::new("tests/files/speciation_test.yaml", None, &mut rng).unwrap();
+        let sel = Selection::parse("molecule M").unwrap();
+        let mut b = builder(Property::Count);
+        b.selection = Some(sel);
+        let cv = b.build(&ctx).unwrap();
+        // speciation_test.yaml: M has N=10, active=5 (single-atom molecules)
+        assert_eq!(cv.evaluate(&ctx) as usize, 5);
+    }
+
+    #[test]
+    fn count_cv_requires_selection() {
+        let ctx = make_context();
+        let b = builder(Property::Count);
+        assert!(b.build(&ctx).is_err());
     }
 }

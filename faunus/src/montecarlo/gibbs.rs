@@ -238,9 +238,6 @@ impl GibbsParticleTransfer {
             self.statistics.reject();
             src.undo()?;
             tgt.undo()?;
-            // undo restores particles but not group sizes
-            Transform::Activate.on_group(src_group, src)?;
-            Transform::Deactivate.on_group(tgt_group, tgt)?;
         }
         Ok(())
     }

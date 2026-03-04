@@ -33,12 +33,14 @@ mod crankshaft;
 pub mod gibbs;
 mod pivot;
 mod rotate;
+pub mod speciation;
 mod translate;
 mod volume;
 
 pub use crankshaft::CrankshaftMove;
 pub use pivot::PivotMove;
 pub use rotate::RotateMolecule;
+pub use speciation::SpeciationMove;
 pub use translate::*;
 pub use volume::VolumeMove;
 
@@ -435,12 +437,12 @@ impl<T: Context + crate::WithCell<SimCell = crate::cell::Cell> + 'static> Markov
             );
         }
 
-        // Catch topology changes that alter atom types but preserve total count
+        // Warn about atom_id changes (expected after atom swap reactions)
         for (i, state_p) in state.particles.iter().enumerate() {
             let ctx_id = self.context.particle(i).atom_id;
             if state_p.atom_id != ctx_id {
-                anyhow::bail!(
-                    "Particle {} atom_id mismatch: state has {}, topology has {}",
+                log::warn!(
+                    "Particle {} atom_id differs: state has {}, topology has {} (atom swap?)",
                     i,
                     state_p.atom_id,
                     ctx_id

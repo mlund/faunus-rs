@@ -298,8 +298,9 @@ impl<T: Context> Analyze<T> for VirtualTranslate {
 
         let gen = context.group_lists().generation();
         let selection = &self.selection;
+        let get_kind = |i| context.get_atomkind(i);
         let active_groups = self.group_cache.get_or_resolve(gen, || {
-            selection.resolve_groups(context.topology_ref(), context.groups())
+            selection.resolve_groups_live(context.topology_ref(), context.groups(), &get_kind)
         });
 
         if active_groups.is_empty() {

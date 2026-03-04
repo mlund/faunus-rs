@@ -121,8 +121,21 @@ impl Selection {
     ///
     /// Iterates all active particles in all non-empty groups and returns
     /// the absolute indices of those matching the expression.
+    /// Uses static topology atom kinds; see [`resolve_atoms_live`](Self::resolve_atoms_live)
+    /// for runtime-aware resolution after atom-type swaps.
     pub fn resolve_atoms(&self, topology: &Topology, groups: &[Group]) -> Vec<usize> {
         evaluator::resolve_atoms(&self.expr, topology, groups)
+    }
+
+    /// Like [`resolve_atoms`](Self::resolve_atoms), but reads atom kinds from
+    /// live particle data via `get_atom_kind(abs_index) -> atom_kind_id`.
+    pub fn resolve_atoms_live(
+        &self,
+        topology: &Topology,
+        groups: &[Group],
+        get_atom_kind: &dyn Fn(usize) -> usize,
+    ) -> Vec<usize> {
+        evaluator::resolve_atoms_live(&self.expr, topology, groups, get_atom_kind)
     }
 
     /// Resolve to group indices where ANY active atom matches.
@@ -130,8 +143,21 @@ impl Selection {
     /// Returns the index of each non-empty group that contains at least
     /// one active atom matching the expression. This naturally gives
     /// molecule-level selection.
+    /// Uses static topology atom kinds; see [`resolve_groups_live`](Self::resolve_groups_live)
+    /// for runtime-aware resolution after atom-type swaps.
     pub fn resolve_groups(&self, topology: &Topology, groups: &[Group]) -> Vec<usize> {
         evaluator::resolve_groups(&self.expr, topology, groups)
+    }
+
+    /// Like [`resolve_groups`](Self::resolve_groups), but reads atom kinds from
+    /// live particle data via `get_atom_kind(abs_index) -> atom_kind_id`.
+    pub fn resolve_groups_live(
+        &self,
+        topology: &Topology,
+        groups: &[Group],
+        get_atom_kind: &dyn Fn(usize) -> usize,
+    ) -> Vec<usize> {
+        evaluator::resolve_groups_live(&self.expr, topology, groups, get_atom_kind)
     }
 
     /// Convert resolved groups to a `GroupSelection` for use with existing code.

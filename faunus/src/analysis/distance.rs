@@ -77,8 +77,15 @@ impl<T: Context> Analyze<T> for MassCenterDistance {
         }
         let topology = context.topology_ref();
         let groups = context.groups();
-        let indices1 = self.selections.0.resolve_groups(topology, groups);
-        let indices2 = self.selections.1.resolve_groups(topology, groups);
+        let get_kind = |i| context.get_atomkind(i);
+        let indices1 = self
+            .selections
+            .0
+            .resolve_groups_live(topology, groups, &get_kind);
+        let indices2 = self
+            .selections
+            .1
+            .resolve_groups_live(topology, groups, &get_kind);
         let same_selection = self.selections.0.source() == self.selections.1.source();
 
         for &i in &indices1 {

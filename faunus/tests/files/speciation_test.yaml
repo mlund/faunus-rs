@@ -1,0 +1,40 @@
+# Minimal topology for speciation move unit tests.
+# Two molecule types (M, AB) with active/inactive groups.
+
+atoms:
+  - {name: A, mass: 1.0, sigma: 1.0}
+  - {name: B, mass: 2.0, sigma: 1.0}
+
+molecules:
+  - name: M
+    atoms: [A]
+  - name: AB
+    atoms: [A, B]
+
+system:
+  cell: !Cuboid [10.0, 10.0, 10.0]
+  medium:
+    permittivity: !Vacuum
+    temperature: 298.15
+  energy: {}
+  blocks:
+    - molecule: M
+      N: 10
+      active: 5
+      insert: !RandomAtomPos {}
+    - molecule: AB
+      N: 6
+      active: 3
+      insert: !RandomAtomPos {}
+
+propagate:
+  seed: !Fixed 42
+  criterion: Metropolis
+  repeat: 10
+  collections:
+    - !Stochastic
+      moves:
+        - !SpeciationMove
+          temperature: 298.15
+          reactions:
+            - {reaction: "= M", K: 10.0}

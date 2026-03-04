@@ -20,14 +20,18 @@ struct AtomContext<'a> {
 
 impl<'a> AtomContext<'a> {
     /// Build context for an atom at `abs_idx` within `group`.
+    ///
+    /// `runtime_atom_id` overrides the topology template's atom kind,
+    /// reflecting runtime changes like atom-type swaps.
     fn new(
         abs_idx: usize,
         group: &Group,
         mol_kind: &'a MoleculeKind,
         topology: &'a Topology,
+        runtime_atom_id: Option<usize>,
     ) -> Self {
         let rel_idx = abs_idx - group.start();
-        let atom_kind_id = mol_kind.atom_indices()[rel_idx];
+        let atom_kind_id = runtime_atom_id.unwrap_or(mol_kind.atom_indices()[rel_idx]);
         let atom_kind = &topology.atomkinds()[atom_kind_id];
         let atom_name = mol_kind
             .atom_names()
@@ -126,14 +130,42 @@ impl Expr {
 }
 
 /// Resolve an expression to absolute particle indices (sorted, deduplicated).
+///
+/// Uses the static topology atom kinds. For runtime-aware resolution
+/// (e.g. after atom-type swaps), use [`resolve_atoms_live`].
 pub fn resolve_atoms(expr: &Expr, topology: &Topology, groups: &[Group]) -> Vec<usize> {
+    resolve_atoms_impl(expr, topology, groups, &|_| None)
+}
+
+/// Like [`resolve_atoms`], but reads atom kinds from live particle data.
+pub fn resolve_atoms_live(
+    expr: &Expr,
+    topology: &Topology,
+    groups: &[Group],
+    get_atom_kind: &dyn Fn(usize) -> usize,
+) -> Vec<usize> {
+    resolve_atoms_impl(expr, topology, groups, &|idx| Some(get_atom_kind(idx)))
+}
+
+fn resolve_atoms_impl(
+    expr: &Expr,
+    topology: &Topology,
+    groups: &[Group],
+    get_runtime_atom_id: &dyn Fn(usize) -> Option<usize>,
+) -> Vec<usize> {
     let mut result: Vec<usize> = groups
         .iter()
         .filter(|g| !g.is_empty())
         .flat_map(|group| {
             let mol_kind = &topology.moleculekinds()[group.molecule()];
             group.iter_active().filter(|&abs_idx| {
-                expr.matches(&AtomContext::new(abs_idx, group, mol_kind, topology))
+                expr.matches(&AtomContext::new(
+                    abs_idx,
+                    group,
+                    mol_kind,
+                    topology,
+                    get_runtime_atom_id(abs_idx),
+                ))
             })
         })
         .collect();
@@ -144,16 +176,44 @@ pub fn resolve_atoms(expr: &Expr, topology: &Topology, groups: &[Group]) -> Vec<
 }
 
 /// Resolve an expression to group indices where ANY active atom matches.
+///
+/// Uses the static topology atom kinds. For runtime-aware resolution
+/// (e.g. after atom-type swaps), use [`resolve_groups_live`].
 pub fn resolve_groups(expr: &Expr, topology: &Topology, groups: &[Group]) -> Vec<usize> {
+    resolve_groups_impl(expr, topology, groups, &|_| None)
+}
+
+/// Like [`resolve_groups`], but reads atom kinds from live particle data.
+pub fn resolve_groups_live(
+    expr: &Expr,
+    topology: &Topology,
+    groups: &[Group],
+    get_atom_kind: &dyn Fn(usize) -> usize,
+) -> Vec<usize> {
+    resolve_groups_impl(expr, topology, groups, &|idx| Some(get_atom_kind(idx)))
+}
+
+fn resolve_groups_impl(
+    expr: &Expr,
+    topology: &Topology,
+    groups: &[Group],
+    get_runtime_atom_id: &dyn Fn(usize) -> Option<usize>,
+) -> Vec<usize> {
     groups
         .iter()
         .enumerate()
         .filter(|(_, group)| !group.is_empty())
         .filter(|(_, group)| {
             let mol_kind = &topology.moleculekinds()[group.molecule()];
-            group
-                .iter_active()
-                .any(|abs_idx| expr.matches(&AtomContext::new(abs_idx, group, mol_kind, topology)))
+            group.iter_active().any(|abs_idx| {
+                expr.matches(&AtomContext::new(
+                    abs_idx,
+                    group,
+                    mol_kind,
+                    topology,
+                    get_runtime_atom_id(abs_idx),
+                ))
+            })
         })
         .map(|(idx, _)| idx)
         .collect()

@@ -1,0 +1,65 @@
+medium:
+  permittivity: Vacuum
+  salt: null
+  temperature: 298.15
+blocks:
+- molecule: M
+  N: 20
+  active: 10
+  insert: !RandomAtomPos
+    directions: xyz
+- molecule: AB
+  N: 8
+  active: null
+  insert: !RandomAtomPos
+    directions: xyz
+cell: !Cuboid
+- 10.0
+- 10.0
+- 10.0
+energy_change:
+  drift: 0.0
+  final: 0.0
+  initial: 0.0
+propagate:
+  repeat: 5000
+  seed: !Fixed 42
+  collections:
+  - !Deterministic
+    repeat: 1
+    elapsed_seconds: 0.018405277
+    moves:
+    - !SpeciationMove
+      reactions:
+      - reaction: ⚛A = ⚛B
+        equilibrium_constant: 3.0
+      - reaction: = M
+        equilibrium_constant: 0.01
+      temperature: 298.15
+      weight: 1.0
+      repeat: 1
+      statistics:
+        num_trials: 5000
+        num_accepted: 4162
+        mean_square_displacement:
+          avg: 0.0
+          n: 838
+        timer:
+          accumulated:
+            secs: 0
+            nanos: 0
+        info: {}
+        energy_change_sum: 0.0
+        acceptance_ratio: 0.8324
+  criterion: MetropolisHastings
+analysis:
+- collectivevariable:
+    property: Count
+    num_samples: 5000
+    mean: 10.613799999999966
+    rms: 11.059900542048288
+- collectivevariable:
+    property: Count
+    num_samples: 5000
+    mean: 14.54840000000004
+    rms: 14.94521997161634

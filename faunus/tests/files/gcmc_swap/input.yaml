@@ -1,0 +1,59 @@
+# Ideal gas with atom swap and molecular GCMC.
+# Acceptance follows Smith & Triska (1994) with combinatorial factors
+# N_from/(N_to+1) for swaps, consistent with ESPResSo's reaction ensemble.
+#
+# - Reaction "⚛A = ⚛B" swaps atom types within AB molecules (K=3 -> P(A)=1/(1+K)=1/4)
+# - Reaction "= M" inserts/deletes single-atom molecules (ideal gas GCMC)
+#
+# Expected analysis:
+#   count("molecule M")  = K*V = 0.01 * 1000 = 10
+#   count("atomtype A")  = <N_M> + 8*2/(1+K) = 10 + 4 = 14
+
+atoms:
+  - {name: A, mass: 1.0, sigma: 1.0}
+  - {name: B, mass: 2.0, sigma: 1.0}
+
+molecules:
+  - name: M
+    atoms: [A]
+  - name: AB
+    atoms: [A, B]
+
+system:
+  cell: !Cuboid [10.0, 10.0, 10.0]
+  medium:
+    permittivity: !Vacuum
+    temperature: 298.15
+  energy: {}
+  blocks:
+    - molecule: M
+      N: 20
+      active: 10
+      insert: !RandomAtomPos {}
+    - molecule: AB
+      N: 8
+      active: 8
+      insert: !RandomAtomPos {}
+
+analysis:
+  - !CollectiveVariable
+    property: count
+    selection: "molecule M"
+    frequency: !Every 1
+  - !CollectiveVariable
+    property: count
+    selection: "atomtype A"
+    frequency: !Every 1
+
+propagate:
+  seed: !Fixed 42
+  criterion: Metropolis
+  repeat: 5000
+  collections:
+    - !Deterministic
+      moves:
+        - !SpeciationMove
+          temperature: 298.15
+          reactions:
+            - {reaction: "⚛A = ⚛B", K: 3.0}
+            - {reaction: "= M", K: 0.01}

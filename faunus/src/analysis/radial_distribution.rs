@@ -149,14 +149,15 @@ impl RadialDistribution {
         let exclude = self.exclude_intramolecular;
 
         let (sel0, sel1) = (&self.selections.0, &self.selections.1);
+        let get_kind = |i| context.get_atomkind(i);
         let atoms1 = self
             .caches
             .0
-            .get_or_resolve(gen, || sel0.resolve_atoms(topology, groups));
+            .get_or_resolve(gen, || sel0.resolve_atoms_live(topology, groups, &get_kind));
         let atoms2 = self
             .caches
             .1
-            .get_or_resolve(gen, || sel1.resolve_atoms(topology, groups));
+            .get_or_resolve(gen, || sel1.resolve_atoms_live(topology, groups, &get_kind));
 
         collect_pair_distances(
             atoms1,
@@ -183,14 +184,13 @@ impl RadialDistribution {
         let same = self.same_selection();
 
         let (sel0, sel1) = (&self.selections.0, &self.selections.1);
-        let gi1 = self
-            .caches
-            .0
-            .get_or_resolve(gen, || sel0.resolve_groups(topology, groups));
-        let gi2 = self
-            .caches
-            .1
-            .get_or_resolve(gen, || sel1.resolve_groups(topology, groups));
+        let get_kind = |i| context.get_atomkind(i);
+        let gi1 = self.caches.0.get_or_resolve(gen, || {
+            sel0.resolve_groups_live(topology, groups, &get_kind)
+        });
+        let gi2 = self.caches.1.get_or_resolve(gen, || {
+            sel1.resolve_groups_live(topology, groups, &get_kind)
+        });
 
         collect_pair_distances(
             gi1,

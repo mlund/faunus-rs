@@ -48,6 +48,7 @@ Property                 | Selection       | Description
 `volume`                 | none            | Simulation cell volume
 `box_length`             | none            | Cell side length along `dimension`
 `atom_position`          | one atom        | Atom position projected onto `dimension`
+`count`                  | atoms or groups | Number of active atoms matching selection
 `size`                   | one group       | Number of active particles in a group
 `end_to_end`             | one group       | End-to-end distance of a molecular group
 `mass_center_position`   | one group       | Mass center position along `dimension`

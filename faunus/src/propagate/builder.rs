@@ -30,6 +30,7 @@ pub enum MoveBuilder {
     VolumeMove(crate::montecarlo::VolumeMove),
     PivotMove(crate::montecarlo::PivotMove),
     CrankshaftMove(crate::montecarlo::CrankshaftMove),
+    SpeciationMove(crate::montecarlo::SpeciationMove),
 }
 
 impl MoveBuilder {
@@ -50,6 +51,7 @@ impl MoveBuilder {
             Self::VolumeMove(m) => build_move!(m),
             Self::PivotMove(m) => build_move!(m),
             Self::CrankshaftMove(m) => build_move!(m),
+            Self::SpeciationMove(m) => build_move!(m),
         })
     }
 }

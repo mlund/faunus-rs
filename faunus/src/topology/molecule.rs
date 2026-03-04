@@ -91,6 +91,14 @@ pub struct MoleculeKind {
     #[serde(default = "default_true")]
     #[getter(skip)]
     has_com: bool,
+    /// GCMC fugacity for insertion/deletion reactions
+    #[serde(default)]
+    #[getter(skip)]
+    activity: Option<f64>,
+    /// Single-atom molecules pooled in one expandable group
+    #[serde(default)]
+    #[getter(skip)]
+    atomic: bool,
     /// Map of custom properties.
     #[serde(default)]
     custom: HashMap<String, Value>,
@@ -128,6 +136,14 @@ impl MoleculeKind {
 
     pub const fn has_com(&self) -> bool {
         self.has_com
+    }
+
+    pub const fn activity(&self) -> Option<f64> {
+        self.activity
+    }
+
+    pub const fn atomic(&self) -> bool {
+        self.atomic
     }
 
     pub const fn bond_graph(&self) -> &BondGraph {

@@ -50,6 +50,24 @@ pub fn random_quaternion(rng: &mut (impl Rng + ?Sized), max_angle: f64) -> (Unit
     (UnitQuaternion::from_axis_angle(&axis, angle), angle)
 }
 
+/// A single group-level action for speciation (reaction ensemble) moves.
+#[derive(Clone, Debug)]
+pub enum SpeciationAction {
+    /// Activate an empty group and set particle positions
+    ActivateGroup {
+        group_index: usize,
+        positions: Vec<Point>,
+    },
+    /// Deactivate a full group
+    DeactivateGroup(usize),
+    /// Swap atom kind of a particle
+    SwapAtomKind {
+        group_index: usize,
+        abs_index: usize,
+        new_atom_id: usize,
+    },
+}
+
 /// This describes a transformation on a set of particles or a group.
 ///
 /// For example, a translation by a vector, a rotation by an angle and axis,
@@ -76,6 +94,8 @@ pub enum Transform {
     Activate,
     /// Apply periodic boundary conditions to all particles
     Boundary,
+    /// Sequence of group-level actions for reaction ensemble moves
+    Speciation(Vec<SpeciationAction>),
     /// No operation
     None,
 }
@@ -169,6 +189,33 @@ impl Transform {
         match self {
             Self::VolumeScale(policy, new_volume) => {
                 context.scale_volume_and_positions(*new_volume, *policy)?;
+            }
+            Self::Speciation(actions) => {
+                for action in actions {
+                    match action {
+                        SpeciationAction::ActivateGroup {
+                            group_index,
+                            positions,
+                        } => {
+                            let start = context.groups()[*group_index].start();
+                            let indices = start..start + positions.len();
+                            context.set_positions(indices, positions.iter());
+                            Self::Activate.on_group(*group_index, context)?;
+                        }
+                        SpeciationAction::DeactivateGroup(group_index) => {
+                            Self::Deactivate.on_group(*group_index, context)?;
+                        }
+                        SpeciationAction::SwapAtomKind {
+                            group_index: _,
+                            abs_index,
+                            new_atom_id,
+                        } => {
+                            let mut p = context.particle(*abs_index);
+                            p.atom_id = *new_atom_id;
+                            context.set_particles([*abs_index], [&p].into_iter())?;
+                        }
+                    }
+                }
             }
             _ => {
                 todo!("Implement other system-wide transforms")

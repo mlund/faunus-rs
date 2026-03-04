@@ -225,6 +225,119 @@ Policy       | Description
 
 ---
 
+## Speciation Move (Reaction Ensemble)
+
+Performs molecular insertion/deletion and atom-type swaps according to
+chemical reactions in the grand canonical or semi-grand canonical ensemble.
+The acceptance criterion follows
+[Smith & Triska, _J. Chem. Phys._ 100, 3019 (1994)](https://doi.org/10.1063/1.466443).
+
+Each step randomly picks a reaction and direction (forward or backward),
+then proposes the corresponding operations:
+
+- **Molecular insertion**: activates an empty group at a random position in the cell.
+- **Molecular deletion**: deactivates a randomly chosen active group.
+- **Atom swap**: changes the type of a random atom (for reactions like $A \rightleftharpoons B$).
+
+Reactions are written using the syntax described in [Chemical Reactions](topology.md#chemical-reactions).
+The equilibrium constant $K$ is related to the excess chemical potential,
+and the system must pre-allocate inactive molecule slots using `active < N`
+in the `blocks` section.
+
+### Molecular insertion and deletion
+
+For a reaction that creates or destroys molecules (e.g. $\emptyset \rightleftharpoons M$
+with equilibrium constant $K$), the acceptance follows:
+
+$$
+\operatorname{acc}_\text{insert} = \min\!\biggl(1,\;
+K \cdot \frac{V}{N+1} \cdot e^{-\beta \Delta U}\biggr),
+\qquad
+\operatorname{acc}_\text{delete} = \min\!\biggl(1,\;
+\frac{N}{K \cdot V} \cdot e^{-\beta \Delta U}\biggr)
+$$
+
+where $N$ is the number of molecules _before_ the move and $V$ is the cell volume.
+At equilibrium for an ideal gas ($\Delta U = 0$), this yields $\langle N \rangle = KV$.
+
+For a general reaction $\sum_i \nu_i A_i = 0$ involving multiple species,
+the combinatorial bias generalises to
+
+$$
+\ln \Gamma = \sum_i \sum_{j=0}^{|\nu_i|-1}
+\ln\!\Bigl(\frac{N_i^{(\text{old})} \pm (j+1)}{V}\Bigr)
+$$
+
+with the sign matching the direction of the stoichiometric change
+([doi:10/fqcpg3](https://doi.org/10/fqcpg3)).
+
+### Atom-type swaps
+
+For reactions that swap atom types within a molecule (e.g. $A \rightleftharpoons B$
+with equilibrium constant $K$), the acceptance is:
+
+$$
+\operatorname{acc} = \min\!\biggl(1,\;
+K \cdot \frac{N_\text{from}}{N_\text{to}+1} \cdot e^{-\beta \Delta U}\biggr)
+$$
+
+where $N_\text{from}$ and $N_\text{to}$ are the counts of the source and target
+atom types _before_ the swap, summed over all molecules of the relevant type.
+This $N_\text{from}/(N_\text{to}+1)$ factor ensures detailed balance and
+yields a binomial equilibrium distribution with
+$\langle N_B \rangle / \langle N_A \rangle = K$,
+consistent with
+[Faunus](https://doi.org/10.5281/zenodo.5235137) and
+[ESPResSo](https://doi.org/10.1140/epjst/e2019-800186-9).
+
+### Example
+
+```yaml
+system:
+  blocks:
+    - molecule: NaCl
+      N: 200
+      active: 100
+      insert: !RandomAtomPos {}
+
+propagate:
+  repeat: 10000
+  collections:
+    - !Stochastic
+      repeat: 100
+      moves:
+        - !TranslateMolecule { molecule: NaCl, dp: 0.5 }
+        - !SpeciationMove
+          temperature: 298.15
+          reactions:
+            - { reaction: "= NaCl", K: 0.01 }
+            - { reaction: "⚛A = ⚛B", K: 1.0 }
+```
+
+### Options
+
+Key           | Required | Default | Description
+------------- | -------- | ------- | -------------------------------------------
+`temperature` | yes      |         | Temperature in Kelvin (used to compute $k_BT$)
+`reactions`   | yes      |         | List of reactions (see below)
+`weight`      | no       | 1       | Selection weight
+`repeat`      | no       | 1       | Repetitions per selection
+
+Each reaction entry:
+
+Key                    | Required | Description
+---------------------- | -------- | -------------------------------------------
+`reaction`             | yes      | Reaction string, e.g. `"= NaCl"` or `"⚛A = ⚛B"`
+`K`                    | yes      | Equilibrium constant (not ln K; must be positive)
+
+### Notes
+
+- Molecule blocks must have `active < N` to provide empty slots for insertion.
+- Atom swap reactions require that both atom types belong to the same molecule definition.
+- The move targets the entire system, so energy is recomputed globally on each trial.
+
+---
+
 ## Gibbs Ensemble
 
 The Gibbs ensemble method

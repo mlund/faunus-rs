@@ -230,7 +230,10 @@ impl<T: Context> Analyze<T> for ShapeAnalysis {
 
         let topology = context.topology_ref();
         let groups = context.groups();
-        let group_indices = self.selection.resolve_groups(topology, groups);
+        let get_kind = |i| context.get_atomkind(i);
+        let group_indices = self
+            .selection
+            .resolve_groups_live(topology, groups, &get_kind);
 
         for &gi in &group_indices {
             let group = &groups[gi];

@@ -1,0 +1,247 @@
+particles:
+- atom_id: 0
+  pos:
+  - 4.688916734927437
+  - 1.9478536562475686
+  - -1.5733216698943586
+- atom_id: 0
+  pos:
+  - -0.12035728420042346
+  - 2.9506993121778873
+  - -4.949629867218473
+- atom_id: 0
+  pos:
+  - -4.885387994243294
+  - 4.154747930603875
+  - -2.872392375432029
+- atom_id: 0
+  pos:
+  - 1.056227770361275
+  - -2.0097264626508715
+  - -4.617254446666282
+- atom_id: 0
+  pos:
+  - 2.3488515938066445
+  - 3.4700745974119656
+  - -3.454071964716945
+- atom_id: 0
+  pos:
+  - 3.7124219791425688
+  - 0.39716647004288497
+  - 3.310575527048057
+- atom_id: 0
+  pos:
+  - -2.0933826513359
+  - -0.49094783185760704
+  - 2.6542653068375577
+- atom_id: 0
+  pos:
+  - 2.96456091460787
+  - 4.807914096435816
+  - 2.6598100445411665
+- atom_id: 0
+  pos:
+  - 1.3716234296231944
+  - 3.279773992801516
+  - 4.14233557693975
+- atom_id: 0
+  pos:
+  - -1.9530638520388277
+  - 1.6854143662536147
+  - 0.6998507986521174
+- atom_id: 0
+  pos:
+  - 4.499497467935928
+  - -3.525670034986814
+  - 4.586057087915362
+- atom_id: 0
+  pos:
+  - -3.9257791789462226
+  - -2.997918148304073
+  - 4.585235142891085
+- atom_id: 0
+  pos:
+  - 0.8077913609147664
+  - 4.409975518652383
+  - -3.37401893664224
+- atom_id: 0
+  pos:
+  - -0.6544664276733947
+  - -3.0006246423251426
+  - -4.318482443972147
+- atom_id: 0
+  pos:
+  - -3.366841574105379
+  - 0.9837501610039556
+  - 2.6164450168371323
+- atom_id: 0
+  pos:
+  - 2.958826273823827
+  - 4.9467031050182815
+  - -3.3979844049746233
+- atom_id: 0
+  pos:
+  - -4.771036414237102
+  - 3.8248330945211233
+  - -0.008244858620505724
+- atom_id: 0
+  pos:
+  - 4.260843905612408
+  - 0.8945237591507427
+  - -2.7839266519904537
+- atom_id: 0
+  pos:
+  - 4.183632283282574
+  - -4.696466031085711
+  - -2.6220393576843515
+- atom_id: 0
+  pos:
+  - 2.879398880768993
+  - 4.522416369073007
+  - 2.819945715476462
+- atom_id: 0
+  pos:
+  - 4.280803411144662
+  - -0.9438123474958999
+  - 3.592642539385917
+- atom_id: 0
+  pos:
+  - -2.4865273980926372
+  - 1.4667105085576093
+  - 1.9602201598181868
+- atom_id: 0
+  pos:
+  - -3.372569491234687
+  - -2.194729206799928
+  - -1.410302613402643
+- atom_id: 0
+  pos:
+  - 1.6268821656523835
+  - -0.017412695104397358
+  - 0.9406168926448322
+- atom_id: 0
+  pos:
+  - 2.2941164891417003
+  - 0.5569807749643036
+  - -4.202649176736082
+- atom_id: 0
+  pos:
+  - -2.966261884038721
+  - -4.252809452957333
+  - 2.7103164021746107
+- atom_id: 0
+  pos:
+  - -1.0945905973764836
+  - 3.9289394131408564
+  - -1.071594669714182
+- atom_id: 0
+  pos:
+  - 1.6199572913691673
+  - -0.47250168466282716
+  - 4.761486594289439
+- atom_id: 0
+  pos:
+  - 4.916948184123175
+  - -2.4601133106086692
+  - 3.5604997896768538
+- atom_id: 0
+  pos:
+  - -1.0651551795777658
+  - 3.281535007355327
+  - 3.8802567182506635
+cell: !Cuboid
+- 10.0
+- 10.0
+- 10.0
+groups:
+- molecule: 0
+  capacity: 1
+  size: Empty
+- molecule: 0
+  capacity: 1
+  size: Empty
+- molecule: 0
+  capacity: 1
+  size: Empty
+- molecule: 0
+  capacity: 1
+  size: Empty
+- molecule: 0
+  capacity: 1
+  size: Empty
+- molecule: 0
+  capacity: 1
+  size: Empty
+- molecule: 0
+  capacity: 1
+  size: Full
+- molecule: 0
+  capacity: 1
+  size: Empty
+- molecule: 0
+  capacity: 1
+  size: Empty
+- molecule: 0
+  capacity: 1
+  size: Full
+- molecule: 0
+  capacity: 1
+  size: Full
+- molecule: 0
+  capacity: 1
+  size: Empty
+- molecule: 0
+  capacity: 1
+  size: Empty
+- molecule: 0
+  capacity: 1
+  size: Empty
+- molecule: 0
+  capacity: 1
+  size: Full
+- molecule: 0
+  capacity: 1
+  size: Empty
+- molecule: 0
+  capacity: 1
+  size: Empty
+- molecule: 0
+  capacity: 1
+  size: Empty
+- molecule: 0
+  capacity: 1
+  size: Empty
+- molecule: 0
+  capacity: 1
+  size: Empty
+- molecule: 0
+  capacity: 1
+  size: Empty
+- molecule: 0
+  capacity: 1
+  size: Empty
+- molecule: 0
+  capacity: 1
+  size: Empty
+- molecule: 0
+  capacity: 1
+  size: Empty
+- molecule: 0
+  capacity: 1
+  size: Empty
+- molecule: 0
+  capacity: 1
+  size: Empty
+- molecule: 0
+  capacity: 1
+  size: Empty
+- molecule: 0
+  capacity: 1
+  size: Full
+- molecule: 0
+  capacity: 1
+  size: Empty
+- molecule: 0
+  capacity: 1
+  size: Empty
+step: 16000

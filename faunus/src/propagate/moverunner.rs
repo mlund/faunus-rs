@@ -73,10 +73,11 @@ impl<T: Context> MoveRunner<T> {
         rng: &mut dyn RngCore,
     ) -> anyhow::Result<()> {
         for _ in 0..self.repeat {
-            let proposed = self
-                .inner
-                .propose_move(context, rng)
-                .ok_or_else(|| anyhow::anyhow!("Could not propose a move."))?;
+            let Some(proposed) = self.inner.propose_move(context, rng) else {
+                // Move couldn't be proposed (e.g. no feasible reaction) — count as rejected
+                self.statistics.reject();
+                continue;
+            };
 
             let old_energy = context.hamiltonian().energy(context, &proposed.change);
             proposed.apply_with_backup(context)?;
