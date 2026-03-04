@@ -341,7 +341,7 @@ Key                    | Required | Description
 ## Gibbs Ensemble
 
 The Gibbs ensemble method
-([Panagiotopoulos, _Mol. Phys._ 61, 813 (1987)](https://doi.org/10/cvzgw9))
+([Panagiotopoulos, _Mol. Phys._ 61, 813 (1987)](https://doi.org/10.1080/00268978700101491))
 simulates two coupled simulation boxes to study phase coexistence without
 an explicit interface.
 When `propagate.gibbs` is present, faunus clones the system into two boxes
@@ -450,11 +450,11 @@ The Langevin equation couples Newtonian dynamics to a heat bath through
 friction and stochastic forces:
 
 $$
-m \ddot{\mathbf{r}} = \mathbf{F}(\mathbf{r}) - \gamma\, m\, \dot{\mathbf{r}} + \sqrt{2\gamma\, m\, k_BT}\;\boldsymbol{\xi}(t)
+m \ddot{\mathbf{r}} = \mathbf{F}(\mathbf{r}) - \gamma\, m\, \dot{\mathbf{r}} + \sqrt{2\gamma\, m\, k_BT}\;\mathbf{\xi}(t)
 $$
 
 where $m$ is the particle mass, $\gamma$ the friction coefficient (1/ps),
-$\mathbf{F}$ the conservative force, and $\boldsymbol{\xi}(t)$ is Gaussian white noise
+$\mathbf{F}$ the conservative force, and $\mathbf{\xi}(t)$ is Gaussian white noise
 with $\langle \xi_i(t)\,\xi_j(t') \rangle = \delta_{ij}\,\delta(t - t')$.
 The friction and noise terms satisfy the fluctuation–dissipation theorem,
 ensuring that the system samples the canonical (NVT) ensemble at temperature $T$.
@@ -489,7 +489,7 @@ $$
 
 where $\mathbf{r}_i^{\,\text{ref}}$ are time-independent reference coordinates in the body frame.
 Rotational equations of motion follow the same BAOAB pattern, with
-the body-frame angular velocity $\boldsymbol{\omega}$ and diagonal inertia tensor
+the body-frame angular velocity $\mathbf{\omega}$ and diagonal inertia tensor
 $\mathbf{I} = \operatorname{diag}(I_{xx}, I_{yy}, I_{zz})$ replacing
 $\mathbf{v}$ and $m$. The **O** step applies the Ornstein–Uhlenbeck
 thermostat independently to each angular velocity component:
@@ -502,11 +502,11 @@ The **A** drift steps update the quaternion by composing an incremental rotation
 
 $$
 \mathbf{q} \leftarrow \Delta\mathbf{q}\;\mathbf{q}, \quad
-\Delta\mathbf{q} = \exp\!\bigl(\tfrac{\Delta t}{4}\,\boldsymbol{\omega}\bigr)
+\Delta\mathbf{q} = \exp\!\bigl(\tfrac{\Delta t}{4}\,\mathbf{\omega}\bigr)
 $$
 
 Torques are computed from the forces on each atom in the body frame:
-$\boldsymbol{\tau} = \sum_i \mathbf{r}_i^{\,\text{ref}} \times \mathbf{f}_i^{\,\text{body}}$.
+$\mathbf{\tau} = \sum_i \mathbf{r}_i^{\,\text{ref}} \times \mathbf{f}_i^{\,\text{body}}$.
 
 ### Example
 

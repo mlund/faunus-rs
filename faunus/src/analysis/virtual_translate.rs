@@ -190,7 +190,7 @@ impl crate::Info for VirtualTranslate {
     }
 
     fn citation(&self) -> Option<&'static str> {
-        Some("doi:10.1063/1.1749657") // Widom insertion method
+        Some("doi:10.1063/1.1734110") // Widom insertion method
     }
 }
 

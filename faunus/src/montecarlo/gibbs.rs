@@ -2,7 +2,7 @@
 //!
 //! Two simulation boxes exchange volume and particles while running
 //! independent intra-box MC in parallel via `std::thread::scope`.
-//! Reference: Panagiotopoulos, Mol. Phys. 61, 813 (1987), doi:10/cvzgw9.
+//! Reference: Panagiotopoulos, Mol. Phys. 61, 813 (1987), doi:10.1080/00268978700101491.
 
 use super::{MarkovChain, MoveStatistics};
 use crate::cell::{Shape, VolumeScalePolicy};
