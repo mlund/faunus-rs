@@ -235,9 +235,9 @@ mod tests {
     #[test]
     fn rotate_updates_group_quaternion() {
         use crate::group::GroupCollection;
-        use crate::platform::reference::ReferencePlatform;
+        use crate::platform::aos::AosPlatform;
         let mut rng = rand::thread_rng();
-        let mut context = ReferencePlatform::new(
+        let mut context = AosPlatform::new(
             "tests/files/topology_pass.yaml",
             Some(std::path::Path::new("tests/files/structure.xyz")),
             &mut rng,
@@ -270,9 +270,9 @@ mod tests {
     #[test]
     fn partial_rotate_does_not_update_quaternion() {
         use crate::group::{GroupCollection, ParticleSelection};
-        use crate::platform::reference::ReferencePlatform;
+        use crate::platform::aos::AosPlatform;
         let mut rng = rand::thread_rng();
-        let mut context = ReferencePlatform::new(
+        let mut context = AosPlatform::new(
             "tests/files/topology_pass.yaml",
             Some(std::path::Path::new("tests/files/structure.xyz")),
             &mut rng,

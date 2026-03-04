@@ -3,16 +3,13 @@
 use crate::{
     analysis,
     montecarlo::{gibbs::GibbsEnsemble, MarkovChain},
-    platform::reference::ReferencePlatform,
+    platform::soa::SoaPlatform,
     propagate::{self, Propagate},
     state::State,
 };
 use anyhow::Result;
 use rand::SeedableRng;
 use std::path::Path;
-
-#[cfg(feature = "gpu")]
-use crate::platform::simd::SimdPlatform;
 
 /// Thermal energy kT in kJ/mol from a medium's temperature.
 pub fn thermal_energy(medium: &interatomic::coulomb::Medium) -> f64 {
@@ -24,18 +21,15 @@ pub fn thermal_energy(medium: &interatomic::coulomb::Medium) -> f64 {
 /// Top-level simulation driver.
 #[allow(clippy::large_enum_variant)]
 pub enum Simulation {
-    /// Standard single-box NVT / NPT simulation.
-    SingleBox(MarkovChain<ReferencePlatform>),
+    /// Standard single-box simulation.
+    SingleBox(MarkovChain<SoaPlatform>),
     /// Two coupled boxes for Gibbs ensemble MC.
-    Gibbs(Box<GibbsEnsemble<ReferencePlatform>>),
-    /// Single-box with SoA platform for GPU Langevin dynamics.
-    #[cfg(feature = "gpu")]
-    GpuSingleBox(MarkovChain<SimdPlatform>),
+    Gibbs(Box<GibbsEnsemble<SoaPlatform>>),
 }
 
 /// Build a MarkovChain from an input file, context, and thermal energy,
 /// optionally restoring from a state checkpoint.
-fn build_markov_chain<
+pub fn build_markov_chain<
     T: crate::Context + crate::WithCell<SimCell = crate::cell::Cell> + 'static,
 >(
     input: &Path,
@@ -58,13 +52,12 @@ impl Simulation {
     /// Build a simulation from an input YAML file.
     ///
     /// If `propagate.gibbs` is present, constructs a two-box Gibbs ensemble;
-    /// otherwise falls back to single-box mode. When the `gpu` feature is
-    /// enabled, uses `SimdPlatform` for SoA layout needed by GPU kernels.
+    /// otherwise falls back to single-box mode.
     pub fn from_file(
         input: &Path,
         state: Option<&Path>,
     ) -> Result<(Self, interatomic::coulomb::Medium)> {
-        let medium = crate::platform::reference::get_medium(input)?;
+        let medium = crate::platform::get_medium(input)?;
         let kt = thermal_energy(&medium);
 
         if let Some(gibbs_cfg) = propagate::gibbs_config_from_file(input)? {
@@ -72,20 +65,9 @@ impl Simulation {
             return Ok((sim, medium));
         }
 
-        #[cfg(feature = "gpu")]
-        {
-            log::info!("Using SimdPlatform (SoA + SIMD splines)");
-            let context = SimdPlatform::new(input, None, &mut rand::thread_rng())?;
-            let mc = build_markov_chain(input, context, kt, state)?;
-            Ok((Self::GpuSingleBox(mc), medium))
-        }
-
-        #[cfg(not(feature = "gpu"))]
-        {
-            let context = ReferencePlatform::new(input, None, &mut rand::thread_rng())?;
-            let mc = build_markov_chain(input, context, kt, state)?;
-            Ok((Self::SingleBox(mc), medium))
-        }
+        let context = SoaPlatform::new(input, None, &mut rand::thread_rng())?;
+        let mc = build_markov_chain(input, context, kt, state)?;
+        Ok((Self::SingleBox(mc), medium))
     }
 
     /// Build Gibbs ensemble from two cloned boxes.
@@ -95,7 +77,7 @@ impl Simulation {
         kt: f64,
         gibbs_cfg: crate::montecarlo::gibbs::GibbsConfig,
     ) -> Result<Self> {
-        let context0 = ReferencePlatform::new(input, None, &mut rand::thread_rng())?;
+        let context0 = SoaPlatform::new(input, None, &mut rand::thread_rng())?;
         let context1 = context0.clone();
 
         let inter_moves: Vec<_> = gibbs_cfg

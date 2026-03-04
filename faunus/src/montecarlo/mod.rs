@@ -529,13 +529,13 @@ pub fn entropy_bias(n: NewOld<usize>, volume: NewOld<f64>) -> f64 {
 mod tests {
 
     use super::*;
-    use crate::platform::reference::ReferencePlatform;
+    use crate::platform::aos::AosPlatform;
     use float_cmp::assert_approx_eq;
 
     #[test]
     fn translate_molecules_simulation() {
         let mut rng = rand::thread_rng();
-        let context = ReferencePlatform::new(
+        let context = AosPlatform::new(
             "tests/files/translate_molecules_simulation.yaml",
             None,
             &mut rng,

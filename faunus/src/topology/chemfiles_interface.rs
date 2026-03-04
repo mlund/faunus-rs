@@ -242,7 +242,7 @@ mod tests {
         AtomKindBuilder, Bond, IntermolecularBonded, Topology,
     };
 
-    use crate::platform::reference::ReferencePlatform;
+    use crate::platform::aos::AosPlatform;
     use float_cmp::assert_approx_eq;
 
     use super::*;
@@ -371,7 +371,7 @@ mod tests {
 
         let mut rng = rand::thread_rng();
 
-        let context = ReferencePlatform::from_raw_parts(
+        let context = AosPlatform::from_raw_parts(
             Arc::new(topology),
             Cell::Cuboid(Cuboid::new(10.0, 5.0, 2.5)),
             RefCell::new(vec![].into()),

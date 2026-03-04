@@ -15,7 +15,7 @@
 use crate::{
     analysis,
     montecarlo::{gibbs::GibbsEnsemble, MarkovChain},
-    platform::reference::ReferencePlatform,
+    platform::soa::SoaPlatform,
     simulation::{self, box_prefixed_path, write_yaml, Simulation},
     Context, WithCell,
 };
@@ -76,11 +76,6 @@ pub fn do_main() -> Result<()> {
                 }
                 Simulation::Gibbs(ensemble) => {
                     run_gibbs(*ensemble, &medium, state.as_deref(), &args.output)?;
-                }
-                #[cfg(feature = "gpu")]
-                Simulation::GpuSingleBox(mc) => {
-                    let mut yaml_output = std::fs::File::create(&args.output)?;
-                    run_single_box(mc, &medium, state.as_deref(), &mut yaml_output)?;
                 }
             }
         }
@@ -162,7 +157,7 @@ fn run_single_box<T: Context + WithCell<SimCell = crate::cell::Cell> + 'static>(
 }
 
 fn run_gibbs(
-    mut ensemble: GibbsEnsemble<ReferencePlatform>,
+    mut ensemble: GibbsEnsemble<SoaPlatform>,
     medium: &interatomic::coulomb::Medium,
     state: Option<&std::path::Path>,
     output_path: &std::path::Path,

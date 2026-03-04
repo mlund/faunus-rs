@@ -317,7 +317,7 @@ impl<P: IsotropicTwobodyEnergy> EnergyChange for NonbondedMatrix<P> {
             (context.positions_soa(), context.atom_kinds_u32())
         {
             let cell = context.cell();
-            // Prefer cached PBC params (SimdPlatform); fall back to computing them (ReferencePlatform)
+            // Prefer cached PBC params (SoaPlatform); fall back to computing them (AosPlatform)
             let pbc = context
                 .pbc_params()
                 .or_else(|| PbcParams::try_from_cell(cell));
@@ -975,7 +975,7 @@ mod tests {
         energy::{builder::HamiltonianBuilder, Hamiltonian},
         group::{GroupCollection, GroupSize},
         montecarlo::NewOld,
-        platform::reference::ReferencePlatform,
+        platform::aos::AosPlatform,
         topology::Topology,
     };
 
@@ -1083,7 +1083,7 @@ mod tests {
     }
 
     /// Get nonbonded matrix for testing.
-    fn get_test_matrix() -> (ReferencePlatform, NonbondedMatrix) {
+    fn get_test_matrix() -> (AosPlatform, NonbondedMatrix) {
         let file = "tests/files/nonbonded_interactions.yaml";
         let topology = Topology::from_file(file).unwrap();
         let builder = HamiltonianBuilder::from_file(file)
@@ -1100,7 +1100,7 @@ mod tests {
         let nonbonded = NonbondedMatrix::new(&builder, &topology, Some(medium), false).unwrap();
 
         let mut rng = rand::thread_rng();
-        let system = ReferencePlatform::from_raw_parts(
+        let system = AosPlatform::from_raw_parts(
             Arc::new(topology),
             Cell::Cuboid(Cuboid::cubic(20.0)),
             RefCell::new(Hamiltonian::from(vec![nonbonded.clone().into()])),
@@ -1556,7 +1556,7 @@ mod tests {
     // ====== NonbondedMatrixSplined tests ======
 
     /// Get splined nonbonded matrix for testing.
-    fn get_test_splined_matrix() -> (ReferencePlatform, NonbondedMatrix, NonbondedMatrixSplined) {
+    fn get_test_splined_matrix() -> (AosPlatform, NonbondedMatrix, NonbondedMatrixSplined) {
         let (system, nonbonded) = get_test_matrix();
         let cutoff = 15.0; // Use a cutoff that covers all test distances
         let splined = NonbondedMatrixSplined::from_nonbonded(&nonbonded, cutoff, None);

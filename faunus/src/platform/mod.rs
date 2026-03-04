@@ -18,8 +18,23 @@
 //! for different hardware platforms.
 //! This allows for e.g. GPU acceleration, or special parallelization schemes.
 
-pub mod reference;
-pub mod simd;
+use std::path::Path;
+
+pub mod aos;
+pub mod soa;
+
+/// Extract medium from system/medium in YAML file
+pub fn get_medium(path: impl AsRef<Path>) -> anyhow::Result<interatomic::coulomb::Medium> {
+    let file = std::fs::File::open(&path)
+        .map_err(|err| anyhow::anyhow!("Could not open {:?}: {}", path.as_ref(), err))?;
+    serde_yaml::from_reader(file)
+        .ok()
+        .and_then(|s: serde_yaml::Value| {
+            let val = s.get("system")?.get("medium")?;
+            serde_yaml::from_value(val.clone()).ok()
+        })
+        .ok_or_else(|| anyhow::anyhow!("Could not find `system/medium` in input file"))
+}
 
 /// Implement `WithCell`, `WithTopology`, and `WithHamiltonian` for a platform type.
 ///

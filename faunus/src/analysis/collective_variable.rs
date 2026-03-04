@@ -223,12 +223,12 @@ mod integration_tests {
     use crate::analysis::Analyze;
     use crate::cell::Shape;
     use crate::context::WithCell;
-    use crate::platform::reference::ReferencePlatform;
+    use crate::platform::aos::AosPlatform;
     use std::path::Path;
 
-    fn make_context() -> ReferencePlatform {
+    fn make_context() -> AosPlatform {
         let mut rng = rand::thread_rng();
-        ReferencePlatform::new(
+        AosPlatform::new(
             "tests/files/topology_pass.yaml",
             Some(Path::new("tests/files/structure.xyz")),
             &mut rng,
@@ -247,13 +247,13 @@ frequency: !Every 1
         let builder: CollectiveVariableAnalysisBuilder = serde_yaml::from_str(yaml).unwrap();
         let mut analysis = builder.build(&ctx).unwrap();
 
-        assert_eq!(Analyze::<ReferencePlatform>::num_samples(&analysis), 0);
+        assert_eq!(Analyze::<AosPlatform>::num_samples(&analysis), 0);
 
         analysis.sample(&ctx, 1).unwrap();
-        assert_eq!(Analyze::<ReferencePlatform>::num_samples(&analysis), 1);
+        assert_eq!(Analyze::<AosPlatform>::num_samples(&analysis), 1);
 
         analysis.sample(&ctx, 2).unwrap();
-        assert_eq!(Analyze::<ReferencePlatform>::num_samples(&analysis), 2);
+        assert_eq!(Analyze::<AosPlatform>::num_samples(&analysis), 2);
 
         let expected_volume = ctx.cell().volume().unwrap();
         assert!((analysis.mean() - expected_volume).abs() < 1e-10);
@@ -272,15 +272,15 @@ frequency: !Every 10
 
         // Step 1 should not sample (not multiple of 10)
         analysis.sample(&ctx, 1).unwrap();
-        assert_eq!(Analyze::<ReferencePlatform>::num_samples(&analysis), 0);
+        assert_eq!(Analyze::<AosPlatform>::num_samples(&analysis), 0);
 
         // Step 10 should sample
         analysis.sample(&ctx, 10).unwrap();
-        assert_eq!(Analyze::<ReferencePlatform>::num_samples(&analysis), 1);
+        assert_eq!(Analyze::<AosPlatform>::num_samples(&analysis), 1);
 
         // Step 20 should sample
         analysis.sample(&ctx, 20).unwrap();
-        assert_eq!(Analyze::<ReferencePlatform>::num_samples(&analysis), 2);
+        assert_eq!(Analyze::<AosPlatform>::num_samples(&analysis), 2);
     }
 
     #[test]

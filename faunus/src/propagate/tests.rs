@@ -1,7 +1,7 @@
 use super::builder::{CollectionBuilder, MoveCollectionBuilder, Seed};
 use super::Propagate;
 use crate::montecarlo::AcceptanceCriterion;
-use crate::platform::reference::ReferencePlatform;
+use crate::platform::aos::AosPlatform;
 use std::path::Path;
 
 #[test]
@@ -63,7 +63,7 @@ moves:
 #[test]
 fn propagate_parse() {
     let mut rng = rand::thread_rng();
-    let context = ReferencePlatform::new(
+    let context = AosPlatform::new(
         "tests/files/topology_pass.yaml",
         Some(Path::new("tests/files/structure.xyz")),
         &mut rng,
@@ -92,7 +92,7 @@ fn propagate_parse() {
 #[test]
 fn propagate_parse_fail() {
     let mut rng = rand::thread_rng();
-    let context = ReferencePlatform::new(
+    let context = AosPlatform::new(
         "tests/files/topology_invalid_propagate.yaml",
         Some(Path::new("tests/files/structure.xyz")),
         &mut rng,
@@ -105,7 +105,7 @@ fn propagate_parse_fail() {
 #[test]
 fn propagate_translate_atom_parse_fail1() {
     let mut rng = rand::thread_rng();
-    let context = ReferencePlatform::new(
+    let context = AosPlatform::new(
         "tests/files/topology_invalid_translate_atom1.yaml",
         Some(Path::new("tests/files/structure.xyz")),
         &mut rng,
@@ -122,7 +122,7 @@ fn propagate_translate_atom_parse_fail1() {
 #[test]
 fn propagate_translate_atom_parse_fail2() {
     let mut rng = rand::thread_rng();
-    let context = ReferencePlatform::new(
+    let context = AosPlatform::new(
         "tests/files/topology_invalid_translate_atom2.yaml",
         Some(Path::new("tests/files/structure.xyz")),
         &mut rng,
@@ -139,7 +139,7 @@ fn propagate_translate_atom_parse_fail2() {
 #[test]
 fn propagate_translate_atom_parse_fail3() {
     let mut rng = rand::thread_rng();
-    let context = ReferencePlatform::new(
+    let context = AosPlatform::new(
         "tests/files/topology_invalid_translate_atom3.yaml",
         Some(Path::new("tests/files/structure.xyz")),
         &mut rng,

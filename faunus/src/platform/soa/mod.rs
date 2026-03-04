@@ -31,7 +31,7 @@ struct SoaBackup {
 
 /// Platform with SoA position layout for SIMD-friendly access.
 #[derive(Clone, Debug, Serialize)]
-pub struct SimdPlatform {
+pub struct SoaPlatform {
     topology: Arc<Topology>,
     /// Separate x, y, z arrays for SIMD-friendly access
     #[serde(skip)]
@@ -57,14 +57,14 @@ pub struct SimdPlatform {
     backup: Option<SoaBackup>,
 }
 
-impl SimdPlatform {
-    /// Build from a YAML input file, same interface as ReferencePlatform.
+impl SoaPlatform {
+    /// Build from a YAML input file, same interface as AosPlatform.
     pub fn new(
         yaml_file: impl AsRef<Path>,
         structure_file: Option<&Path>,
         rng: &mut ThreadRng,
     ) -> anyhow::Result<Self> {
-        let medium = Some(super::reference::get_medium(&yaml_file)?);
+        let medium = Some(super::get_medium(&yaml_file)?);
         let topology = Topology::from_file(&yaml_file)?;
         let hamiltonian_builder = HamiltonianBuilder::from_file(&yaml_file)?;
         hamiltonian_builder.validate(topology.atomkinds())?;
@@ -109,7 +109,7 @@ impl SimdPlatform {
     }
 }
 
-impl crate::WithCell for SimdPlatform {
+impl crate::WithCell for SoaPlatform {
     type SimCell = crate::cell::Cell;
     #[inline(always)]
     fn cell(&self) -> &Self::SimCell {
@@ -122,9 +122,9 @@ impl crate::WithCell for SimdPlatform {
     }
 }
 
-super::impl_platform_topology_hamiltonian!(SimdPlatform);
+super::impl_platform_topology_hamiltonian!(SoaPlatform);
 
-impl GroupCollection for SimdPlatform {
+impl GroupCollection for SoaPlatform {
     fn groups(&self) -> &[Group] {
         &self.groups
     }
@@ -181,7 +181,7 @@ impl GroupCollection for SimdPlatform {
 
     fn add_group(&mut self, molecule: usize, particles: &[Particle]) -> anyhow::Result<&mut Group> {
         if particles.is_empty() {
-            anyhow::bail!("Cannot create empty group on SimdPlatform");
+            anyhow::bail!("Cannot create empty group on SoaPlatform");
         }
         let start = self.x.len();
         for p in particles {
@@ -207,7 +207,7 @@ impl GroupCollection for SimdPlatform {
     }
 }
 
-impl ParticleSystem for SimdPlatform {
+impl ParticleSystem for SoaPlatform {
     #[inline(always)]
     fn get_distance(&self, i: usize, j: usize) -> Point {
         let pi = Point::new(self.x[i], self.y[i], self.z[i]);
@@ -350,7 +350,7 @@ impl ParticleSystem for SimdPlatform {
     }
 }
 
-impl Context for SimdPlatform {
+impl Context for SoaPlatform {
     fn save_particle_backup(&mut self, group_index: usize, indices: &[usize]) {
         assert!(self.backup.is_none(), "backup already exists");
         let particles = indices
@@ -427,18 +427,18 @@ impl Context for SimdPlatform {
 mod tests {
     use super::*;
     use crate::energy::EnergyChange;
-    use crate::platform::reference::ReferencePlatform;
+    use crate::platform::aos::AosPlatform;
 
     /// Verify SoA energy path matches scalar path for identical positions.
     ///
     /// Builds both platforms from the same input, copies positions from
-    /// ReferencePlatform into SimdPlatform, then compares energies.
+    /// AosPlatform into SoaPlatform, then compares energies.
     #[test]
     fn soa_energy_matches_scalar() {
         let yaml = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("tests/files/gibbs_ensemble/input.yaml");
-        let ref_ctx = ReferencePlatform::new(&yaml, None, &mut rand::thread_rng()).unwrap();
-        let mut simd_ctx = SimdPlatform::new(&yaml, None, &mut rand::thread_rng()).unwrap();
+        let ref_ctx = AosPlatform::new(&yaml, None, &mut rand::thread_rng()).unwrap();
+        let mut simd_ctx = SoaPlatform::new(&yaml, None, &mut rand::thread_rng()).unwrap();
 
         assert_eq!(ref_ctx.num_particles(), simd_ctx.num_particles());
         assert_eq!(ref_ctx.groups().len(), simd_ctx.groups().len());
