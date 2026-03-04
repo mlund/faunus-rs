@@ -35,7 +35,9 @@ pub enum Simulation {
 
 /// Build a MarkovChain from an input file, context, and thermal energy,
 /// optionally restoring from a state checkpoint.
-fn build_markov_chain<T: crate::Context + crate::WithCell<SimCell = crate::cell::Cell> + 'static>(
+fn build_markov_chain<
+    T: crate::Context + crate::WithCell<SimCell = crate::cell::Cell> + 'static,
+>(
     input: &Path,
     context: T,
     kt: f64,

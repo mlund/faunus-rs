@@ -14,7 +14,7 @@
 
 //! Handling of groups of particles
 
-use crate::{Context, Particle, Point};
+use crate::{Context, Particle, Point, UnitQuaternion};
 use serde::{Deserialize, Serialize};
 
 /// Group of particles.
@@ -39,7 +39,7 @@ use serde::{Deserialize, Serialize};
 /// assert_eq!(group.size(), GroupSize::Partial(2));
 /// ~~~
 
-#[derive(Default, Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Group {
     /// Index of the molecule kind forming the group (immutable).
     molecule: usize,
@@ -53,6 +53,22 @@ pub struct Group {
     range: std::ops::Range<usize>,
     /// Size status
     size_status: GroupSize,
+    /// Rigid-body orientation for MC↔LD state transfer (transient, not serialized)
+    quaternion: UnitQuaternion,
+}
+
+impl Default for Group {
+    fn default() -> Self {
+        Self {
+            molecule: 0,
+            index: 0,
+            mass_center: None,
+            num_active: 0,
+            range: 0..0,
+            size_status: GroupSize::default(),
+            quaternion: UnitQuaternion::identity(),
+        }
+    }
 }
 
 /// Activation status of a group of particles
@@ -328,6 +344,21 @@ impl Group {
     pub const fn set_mass_center(&mut self, mass_center: Point) {
         self.mass_center = Some(mass_center);
     }
+
+    /// Rigid-body orientation quaternion (for MC↔LD state transfer).
+    pub fn quaternion(&self) -> &UnitQuaternion {
+        &self.quaternion
+    }
+
+    /// Set the orientation quaternion.
+    pub fn set_quaternion(&mut self, q: UnitQuaternion) {
+        self.quaternion = q;
+    }
+
+    /// Compose a rotation onto the current quaternion: q_new = rotation * q_current.
+    pub fn rotate_by(&mut self, rotation: &UnitQuaternion) {
+        self.quaternion = rotation * self.quaternion;
+    }
 }
 
 /// Interface for groups of particles
@@ -351,6 +382,9 @@ pub trait GroupCollection {
     ///
     /// The first group has index 0, the second group has index 1, etc.
     fn groups(&self) -> &[Group];
+
+    /// Mutable access to all groups (e.g. for quaternion or mass center updates).
+    fn groups_mut(&mut self) -> &mut [Group];
 
     /// Copy of i'th particle in the system.
     fn particle(&self, index: usize) -> Particle;
@@ -619,6 +653,7 @@ mod tests {
             num_active: 6,
             range: 0..10,
             size_status: GroupSize::Partial(6),
+            ..Default::default()
         };
 
         let mut rng = rand::thread_rng();
@@ -759,6 +794,7 @@ mod tests {
             num_active: 6,
             range: 10..27,
             size_status: GroupSize::Partial(6),
+            ..Default::default()
         };
 
         assert_eq!(group.to_absolute_index(4).unwrap(), 14);
@@ -857,5 +893,34 @@ mod tests {
         let expected = context.select(&GroupSelection::Size(GroupSize::Full));
         let selected = context.select(&GroupSelection::ByMoleculeIds(vec![0, 1]));
         assert_eq!(selected, expected);
+    }
+
+    #[test]
+    fn quaternion_default_is_identity() {
+        let group = Group::default();
+        assert_eq!(*group.quaternion(), crate::UnitQuaternion::identity());
+        let group = Group::new(0, 0, 0..5);
+        assert_eq!(*group.quaternion(), crate::UnitQuaternion::identity());
+    }
+
+    #[test]
+    fn quaternion_rotate_by() {
+        let mut group = Group::new(0, 0, 0..3);
+        let axis = nalgebra::UnitVector3::new_normalize(crate::Point::new(0.0, 0.0, 1.0));
+        let q1 = crate::UnitQuaternion::from_axis_angle(&axis, 0.3);
+        let q2 = crate::UnitQuaternion::from_axis_angle(&axis, 0.5);
+        group.rotate_by(&q1);
+        group.rotate_by(&q2);
+        let expected = q2 * q1;
+        assert!((group.quaternion().angle_to(&expected)).abs() < 1e-12);
+    }
+
+    #[test]
+    fn quaternion_set_get() {
+        let mut group = Group::new(0, 0, 0..3);
+        let axis = nalgebra::UnitVector3::new_normalize(crate::Point::new(1.0, 0.0, 0.0));
+        let q = crate::UnitQuaternion::from_axis_angle(&axis, 1.2);
+        group.set_quaternion(q);
+        assert_eq!(*group.quaternion(), q);
     }
 }

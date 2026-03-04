@@ -22,8 +22,8 @@ use crate::{
     energy::{builder::HamiltonianBuilder, Hamiltonian},
     group::{GroupCollection, GroupLists, GroupSize},
     topology::Topology,
-    Context, Group, Particle, ParticleSystem, Point, PointParticle, WithCell, WithHamiltonian,
-    WithTopology,
+    Context, Group, Particle, ParticleSystem, Point, PointParticle, UnitQuaternion, WithCell,
+    WithHamiltonian, WithTopology,
 };
 
 use serde::Serialize;
@@ -48,6 +48,7 @@ pub fn get_medium(path: impl AsRef<Path>) -> anyhow::Result<interatomic::coulomb
 struct ContextBackup {
     particles: Vec<(usize, Particle)>,
     mass_centers: Vec<(usize, Option<Point>)>,
+    quaternions: Vec<(usize, UnitQuaternion)>,
     cell: Option<Cell>,
 }
 
@@ -154,9 +155,11 @@ impl Context for ReferencePlatform {
             .map(|&i| (i, self.particles[i].clone()))
             .collect();
         let mass_center = self.groups[group_index].mass_center().cloned();
+        let quaternion = *self.groups[group_index].quaternion();
         self.backup = Some(ContextBackup {
             particles,
             mass_centers: vec![(group_index, mass_center)],
+            quaternions: vec![(group_index, quaternion)],
             cell: None,
         });
     }
@@ -175,9 +178,16 @@ impl Context for ReferencePlatform {
             .enumerate()
             .map(|(i, g)| (i, g.mass_center().cloned()))
             .collect();
+        let quaternions = self
+            .groups
+            .iter()
+            .enumerate()
+            .map(|(i, g)| (i, *g.quaternion()))
+            .collect();
         self.backup = Some(ContextBackup {
             particles,
             mass_centers,
+            quaternions,
             cell: Some(self.cell.clone()),
         });
     }
@@ -191,6 +201,9 @@ impl Context for ReferencePlatform {
             if let Some(com) = old_com {
                 self.groups[group_idx].set_mass_center(com);
             }
+        }
+        for (group_idx, q) in backup.quaternions {
+            self.groups[group_idx].set_quaternion(q);
         }
         if let Some(cell) = backup.cell {
             self.cell = cell;
@@ -208,6 +221,10 @@ impl Context for ReferencePlatform {
 impl GroupCollection for ReferencePlatform {
     fn groups(&self) -> &[Group] {
         self.groups.as_ref()
+    }
+
+    fn groups_mut(&mut self) -> &mut [Group] {
+        &mut self.groups
     }
 
     fn particle(&self, index: usize) -> Particle {
@@ -435,5 +452,48 @@ impl ReferencePlatform {
     #[inline(always)]
     pub fn particles_mut(&mut self) -> &mut [Particle] {
         &mut self.particles
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::transform::Transform;
+
+    #[test]
+    fn backup_undo_restores_quaternion() {
+        let mut rng = rand::thread_rng();
+        let mut context = ReferencePlatform::new(
+            "tests/files/topology_pass.yaml",
+            Some(Path::new("tests/files/structure.xyz")),
+            &mut rng,
+        )
+        .unwrap();
+
+        let group_index = 1;
+        assert_eq!(
+            *context.groups()[group_index].quaternion(),
+            crate::UnitQuaternion::identity()
+        );
+
+        // Rotate with backup
+        let axis = nalgebra::UnitVector3::new_normalize(crate::Point::new(0.0, 0.0, 1.0));
+        let q = crate::UnitQuaternion::from_axis_angle(&axis, 0.8);
+        let transform = Transform::Rotate(q);
+        transform
+            .on_group_with_backup(group_index, &mut context)
+            .unwrap();
+
+        // Quaternion should be updated
+        assert!(context.groups()[group_index].quaternion().angle_to(&q) < 1e-12);
+
+        // Undo should restore identity
+        context.undo().unwrap();
+        assert!(
+            context.groups()[group_index]
+                .quaternion()
+                .angle_to(&crate::UnitQuaternion::identity())
+                < 1e-12
+        );
     }
 }

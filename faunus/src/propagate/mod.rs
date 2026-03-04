@@ -144,11 +144,13 @@ impl<T: Context> PropagationBlock<T> {
                 mc.propagate(context, criterion, thermal_energy, step, rng, analyses)
             }
             Self::LangevinDynamics(ld) => {
-                let energy_before =
-                    context.hamiltonian().energy(context, &crate::Change::Everything);
+                let energy_before = context
+                    .hamiltonian()
+                    .energy(context, &crate::Change::Everything);
                 ld.propagate(context)?;
-                let energy_after =
-                    context.hamiltonian().energy(context, &crate::Change::Everything);
+                let energy_after = context
+                    .hamiltonian()
+                    .energy(context, &crate::Change::Everything);
                 ld.energy_change_sum += energy_after - energy_before;
                 // Sample analyses after positions are written back to context
                 analyses.sample(context, *step)?;
@@ -272,9 +274,11 @@ impl<T: Context> Propagate<T> {
         self.blocks
             .iter()
             .map(|b| match b {
-                PropagationBlock::MonteCarlo(mc) => {
-                    mc.moves().iter().map(|m| m.statistics().energy_change_sum).sum()
-                }
+                PropagationBlock::MonteCarlo(mc) => mc
+                    .moves()
+                    .iter()
+                    .map(|m| m.statistics().energy_change_sum)
+                    .sum(),
                 PropagationBlock::LangevinDynamics(ld) => ld.energy_change_sum,
             })
             .sum()

@@ -97,7 +97,12 @@ pub fn run_regression(dir: &Path) {
         &reference,
         &actual,
         1e-8,
-        &["timer", "num_accepted", "acceptance_ratio", "elapsed_seconds"],
+        &[
+            "timer",
+            "num_accepted",
+            "acceptance_ratio",
+            "elapsed_seconds",
+        ],
     );
 }
 

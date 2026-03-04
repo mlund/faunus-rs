@@ -10,8 +10,8 @@ use crate::{
     energy::{builder::HamiltonianBuilder, Hamiltonian, PbcParams},
     group::{GroupCollection, GroupLists, GroupSize},
     topology::Topology,
-    Context, Group, Particle, ParticleSystem, Point, PointParticle, WithCell, WithHamiltonian,
-    WithTopology,
+    Context, Group, Particle, ParticleSystem, Point, PointParticle, UnitQuaternion, WithCell,
+    WithHamiltonian, WithTopology,
 };
 
 use rand::rngs::ThreadRng;
@@ -25,6 +25,7 @@ struct SoaBackup {
     /// (index, x, y, z, atom_kind) tuples for changed particles
     particles: Vec<(usize, f64, f64, f64, u32)>,
     mass_centers: Vec<(usize, Option<Point>)>,
+    quaternions: Vec<(usize, UnitQuaternion)>,
     cell: Option<Cell>,
 }
 
@@ -126,6 +127,10 @@ super::impl_platform_topology_hamiltonian!(SimdPlatform);
 impl GroupCollection for SimdPlatform {
     fn groups(&self) -> &[Group] {
         &self.groups
+    }
+
+    fn groups_mut(&mut self) -> &mut [Group] {
+        &mut self.groups
     }
 
     fn particle(&self, index: usize) -> Particle {
@@ -353,9 +358,11 @@ impl Context for SimdPlatform {
             .map(|&i| (i, self.x[i], self.y[i], self.z[i], self.atom_kinds[i]))
             .collect();
         let mass_center = self.groups[group_index].mass_center().cloned();
+        let quaternion = *self.groups[group_index].quaternion();
         self.backup = Some(SoaBackup {
             particles,
             mass_centers: vec![(group_index, mass_center)],
+            quaternions: vec![(group_index, quaternion)],
             cell: None,
         });
     }
@@ -371,9 +378,16 @@ impl Context for SimdPlatform {
             .enumerate()
             .map(|(i, g)| (i, g.mass_center().cloned()))
             .collect();
+        let quaternions = self
+            .groups
+            .iter()
+            .enumerate()
+            .map(|(i, g)| (i, *g.quaternion()))
+            .collect();
         self.backup = Some(SoaBackup {
             particles,
             mass_centers,
+            quaternions,
             cell: Some(self.cell.clone()),
         });
     }
@@ -390,6 +404,9 @@ impl Context for SimdPlatform {
             if let Some(com) = old_com {
                 self.groups[group_idx].set_mass_center(com);
             }
+        }
+        for (group_idx, q) in backup.quaternions {
+            self.groups[group_idx].set_quaternion(q);
         }
         if let Some(cell) = backup.cell {
             self.cell = cell;

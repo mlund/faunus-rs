@@ -105,6 +105,7 @@ impl Transform {
                     context.groups()[group_index].select(&ParticleSelection::Active, context)?;
                 let center = context.mass_center(&indices);
                 context.rotate_particles(&indices, quaternion, Some(-center));
+                context.groups_mut()[group_index].rotate_by(quaternion);
                 true
             }
             Self::PartialRotate(center, quaternion, selection) => {
@@ -229,6 +230,65 @@ mod tests {
         assert_approx_eq!(f64, y_mean / n as f64, 0.0, epsilon = 0.025);
         assert_approx_eq!(f64, z_mean / n as f64, 0.0, epsilon = 0.025);
         assert_approx_eq!(f64, rngsum / n as f64, 0.5, epsilon = 0.01);
+    }
+
+    #[test]
+    fn rotate_updates_group_quaternion() {
+        use crate::group::GroupCollection;
+        use crate::platform::reference::ReferencePlatform;
+        let mut rng = rand::thread_rng();
+        let mut context = ReferencePlatform::new(
+            "tests/files/topology_pass.yaml",
+            Some(std::path::Path::new("tests/files/structure.xyz")),
+            &mut rng,
+        )
+        .unwrap();
+
+        // Pick a molecular group (index 1 has multiple atoms)
+        let group_index = 1;
+        assert!(context.groups()[group_index].len() > 1);
+
+        let axis = nalgebra::UnitVector3::new_normalize(Point::new(0.0, 0.0, 1.0));
+        let q1 = UnitQuaternion::from_axis_angle(&axis, 0.5);
+        let transform = Transform::Rotate(q1);
+        transform.on_group(group_index, &mut context).unwrap();
+        assert!(context.groups()[group_index].quaternion().angle_to(&q1) < 1e-12);
+
+        // Second rotation composes
+        let q2 = UnitQuaternion::from_axis_angle(&axis, 0.3);
+        let transform2 = Transform::Rotate(q2);
+        transform2.on_group(group_index, &mut context).unwrap();
+        let expected = q2 * q1;
+        assert!(
+            context.groups()[group_index]
+                .quaternion()
+                .angle_to(&expected)
+                < 1e-12
+        );
+    }
+
+    #[test]
+    fn partial_rotate_does_not_update_quaternion() {
+        use crate::group::{GroupCollection, ParticleSelection};
+        use crate::platform::reference::ReferencePlatform;
+        let mut rng = rand::thread_rng();
+        let mut context = ReferencePlatform::new(
+            "tests/files/topology_pass.yaml",
+            Some(std::path::Path::new("tests/files/structure.xyz")),
+            &mut rng,
+        )
+        .unwrap();
+
+        let group_index = 1;
+        let center = Point::new(0.0, 0.0, 0.0);
+        let axis = nalgebra::UnitVector3::new_normalize(Point::new(1.0, 0.0, 0.0));
+        let q = UnitQuaternion::from_axis_angle(&axis, 0.7);
+        let transform = Transform::PartialRotate(center, q, ParticleSelection::Active);
+        transform.on_group(group_index, &mut context).unwrap();
+        assert_eq!(
+            *context.groups()[group_index].quaternion(),
+            UnitQuaternion::identity()
+        );
     }
 
     #[test]

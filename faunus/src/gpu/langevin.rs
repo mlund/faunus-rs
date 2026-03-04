@@ -710,16 +710,40 @@ impl LangevinGpu {
         (t_trans, t_rot)
     }
 
-    /// Download atom positions from GPU to a flat f32 array (xyz interleaved as vec4).
-    pub fn download_positions(&self) -> Vec<[f32; 4]> {
-        let data = super::readback_f32(
-            &self.gpu.device,
-            &self.gpu.queue,
-            &self.positions,
-            self.n_atoms as usize * 4,
-        );
-        data.chunks_exact(4)
+    /// Download a GPU buffer as a vector of `[f32; 4]` elements.
+    fn readback_vec4(&self, buffer: &wgpu::Buffer, count: usize) -> Vec<[f32; 4]> {
+        self.readback(buffer, count * 4)
+            .chunks_exact(4)
             .map(|c| [c[0], c[1], c[2], c[3]])
             .collect()
+    }
+
+    /// Download atom positions from GPU (vec4 per atom: x, y, z, atom_type_bits).
+    pub fn download_positions(&self) -> Vec<[f32; 4]> {
+        self.readback_vec4(&self.positions, self.n_atoms as usize)
+    }
+
+    /// Download per-molecule quaternions [x, y, z, w] from GPU.
+    pub fn download_quaternions(&self) -> Vec<[f32; 4]> {
+        self.readback_vec4(&self.quaternions, self.n_molecules as usize)
+    }
+
+    /// Upload only positions, COM positions, and quaternions (velocities untouched).
+    ///
+    /// Used on MC→LD transitions to sync atom positions and rigid-body orientations
+    /// that may have changed during MC moves, without disturbing GPU velocities.
+    pub fn upload_positions_com_quaternions(
+        &self,
+        positions: &[f32],
+        com_positions: &[f32],
+        quaternions: &[f32],
+    ) {
+        debug_assert_eq!(positions.len(), self.n_atoms as usize * 4);
+        debug_assert_eq!(com_positions.len(), self.n_molecules as usize * 4);
+        debug_assert_eq!(quaternions.len(), self.n_molecules as usize * 4);
+        let q = &self.gpu.queue;
+        q.write_buffer(&self.positions, 0, bytemuck::cast_slice(positions));
+        q.write_buffer(&self.com_positions, 0, bytemuck::cast_slice(com_positions));
+        q.write_buffer(&self.quaternions, 0, bytemuck::cast_slice(quaternions));
     }
 }
