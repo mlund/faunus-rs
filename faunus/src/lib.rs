@@ -16,7 +16,7 @@ use crate::group::Group;
 
 use topology::Topology;
 
-pub type Point = interatomic::Vector3;
+pub type Point = nalgebra::Vector3<f64>;
 pub type UnitQuaternion = nalgebra::UnitQuaternion<f64>;
 pub type PositionVec = Vec<Point>;
 pub type ParticleVec = Vec<Particle>;
