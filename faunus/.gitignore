@@ -28,5 +28,8 @@ output.*
 .mypy*
 .ipynb_checkpoints
 
+# Runtime state files
+examples/langevin/state.yaml
+
 # MkDocs build output
 site/

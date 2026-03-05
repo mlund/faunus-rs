@@ -8,7 +8,7 @@ struct SplineParams {
     r_max: f32,
     n_coeffs: u32,
     coeff_offset: u32,
-    u_at_rmin: f32,
+    f_at_rmin: f32,
     _pad0: f32,
     _pad1: f32,
     _pad2: f32,
@@ -41,12 +41,15 @@ fn spline_force(type_i: u32, type_j: u32, r: f32) -> f32 {
     let pair_idx = type_i * pc.n_atom_types + type_j;
     let params = spline_params[pair_idx];
 
-    if (r >= params.r_max || r <= params.r_min) {
+    if (r >= params.r_max) {
         return 0.0;
     }
 
+    // Clamp to r_min: below r_min returns f_at_rmin (matching CPU extrapolation)
+    let r_clamped = max(r, params.r_min);
+
     // PowerLaw2 grid mapping
-    let t = (r - params.r_min) / (params.r_max - params.r_min);
+    let t = (r_clamped - params.r_min) / (params.r_max - params.r_min);
     let x = sqrt(t);
 
     let n_intervals = params.n_coeffs - 1u;

@@ -6,9 +6,8 @@
 
 pub mod buffers;
 pub mod langevin;
-pub mod spline;
 
-use spline::GpuSplineData;
+use interatomic::gpu::{GpuGridType, GpuSplineData};
 use std::sync::Arc;
 
 /// Owns the wgpu device and queue. Created once at simulation startup.
@@ -58,16 +57,16 @@ impl GpuContext {
     }
 
     /// Upload immutable spline data to GPU storage buffers.
-    pub fn upload_spline_data(&self, data: &GpuSplineData) -> SplineBuffers {
+    pub fn upload_spline_data<G: GpuGridType>(&self, data: &GpuSplineData<G>) -> SplineBuffers {
         let params = buffers::storage_buffer_init_readonly(
             &self.device,
             "spline_params",
-            bytemuck::cast_slice(&data.params),
+            data.params_as_bytes(),
         );
         let coeffs = buffers::storage_buffer_init_readonly(
             &self.device,
             "spline_coeffs",
-            bytemuck::cast_slice(&data.coefficients),
+            data.coefficients_as_bytes(),
         );
         SplineBuffers { params, coeffs }
     }

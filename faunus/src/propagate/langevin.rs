@@ -144,18 +144,19 @@ impl LangevinRunner {
 
         // Extract spline data from the hamiltonian's nonbonded term
         let hamiltonian = context.hamiltonian();
-        let spline_data = hamiltonian
+        let nonbonded = hamiltonian
             .energy_terms()
             .iter()
             .find_map(|term| match term {
-                crate::energy::EnergyTerm::NonbondedMatrixSplined(nb) => {
-                    Some(crate::gpu::spline::GpuSplineData::from_matrix(nb))
-                }
+                crate::energy::EnergyTerm::NonbondedMatrixSplined(nb) => Some(nb),
                 _ => None,
             })
             .ok_or_else(|| {
                 anyhow::anyhow!("LangevinDynamics requires a splined nonbonded potential")
             })?;
+        let spline_data = interatomic::gpu::GpuSplineData::<interatomic::gpu::PowerLaw2>::from_potentials(
+            nonbonded.get_potentials().iter(),
+        );
 
         let spline_buffers = gpu_ctx.upload_spline_data(&spline_data);
 
