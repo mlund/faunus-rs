@@ -41,6 +41,7 @@ use unordered_pair::UnorderedPair;
 
 use super::constrain::ConstrainBuilder;
 use super::custom_external::CustomExternalBuilder;
+use super::ewald::EwaldBuilder;
 use super::external_pressure::Pressure;
 use super::sasa::SasaEnergyBuilder;
 use interatomic::twobody::{GridType, SplineConfig};
@@ -243,7 +244,7 @@ impl PairInteraction {
 }
 
 /// Structure storing information about the nonbonded interactions in the system in serializable format.
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Default, Serialize, Deserialize, Clone, PartialEq)]
 pub struct PairPotentialBuilder(
     #[serde(with = "::serde_with::rust::maps_duplicate_key_is_error")]
     // defining interactions between the same atom kinds multiple times causes an error
@@ -256,6 +257,14 @@ impl PairPotentialBuilder {
         for (key, value) in other.0 {
             self.0.entry(key).or_insert(value);
         }
+    }
+
+    /// Append a pair interaction to the `default` list.
+    pub(crate) fn push_default(&mut self, interaction: PairInteraction) {
+        self.0
+            .entry(DefaultOrPair::Default)
+            .or_default()
+            .push(interaction);
     }
 
     /// Get interactions for a specific pair of atoms and collect them into a single `IsotropicTwobodyEnergy` trait object.
@@ -299,9 +308,11 @@ impl PairPotentialBuilder {
             return Ok(Box::from(NoInteraction));
         }
 
-        let total_interaction = interactions
+        let total_interaction: Box<dyn IsotropicTwobodyEnergy> = interactions
             .iter()
-            .map(|interact| interact.to_boxed(atom1, atom2, medium.clone()).unwrap())
+            .map(|interact| interact.to_boxed(atom1, atom2, medium.clone()))
+            .collect::<anyhow::Result<Vec<_>>>()?
+            .into_iter()
             .sum();
 
         Ok(total_interaction)
@@ -376,6 +387,9 @@ pub struct HamiltonianBuilder {
 
     /// Custom external potentials from math expressions.
     pub customexternal: Option<Vec<CustomExternalBuilder>>,
+
+    /// Ewald reciprocal-space energy configuration.
+    pub ewald: Option<EwaldBuilder>,
 }
 
 impl HamiltonianBuilder {
@@ -422,7 +436,7 @@ impl HamiltonianBuilder {
                         if let Some(inc_pairpot) = inc_builder.pairpot_builder {
                             builder
                                 .pairpot_builder
-                                .get_or_insert_with(|| PairPotentialBuilder(HashMap::new()))
+                                .get_or_insert_default()
                                 .merge_from(inc_pairpot);
                         }
                     }

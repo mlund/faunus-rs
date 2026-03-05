@@ -1,0 +1,99 @@
+medium:
+  permittivity: Vacuum
+  salt: null
+  temperature: 300.0
+blocks:
+- molecule: water
+  N: 128
+  active: null
+  insert: !RandomCOM
+    filename: water.xyz
+    rotate: true
+    directions: xyz
+    offset: null
+cell: !Cuboid
+- 15.74767930102348
+- 15.74767930102348
+- 15.74767930102348
+energy_change:
+  drift: 0.0
+  final: -48376.16779407484
+  initial: -48519.16627747471
+energy_timers:
+  celloverlap: 0.14
+  nonbonded: 99.56
+  externalpressure: 0.16
+  ewald_reciprocal: 0.14
+propagate:
+  repeat: 1000
+  seed: !Fixed 42
+  collections:
+  - !Deterministic
+    repeat: 1
+    elapsed_seconds: 13.491959793
+    moves:
+    - !TranslateMolecule
+      molecule: water
+      max_displacement: 0.4
+      directions: xyz
+      weight: 1.0
+      repeat: 64
+      statistics:
+        num_trials: 64000
+        num_accepted: 26875
+        mean_square_displacement:
+          avg: 0.0109051054962656
+          n: 64000
+        timer:
+          accumulated:
+            secs: 0
+            nanos: 0
+        info: {}
+        energy_change_sum: 293.83382708442514
+        acceptance_ratio: 0.419921875
+    - !RotateMolecule
+      molecule: water
+      max_displacement: 0.4
+      weight: 1.0
+      repeat: 64
+      statistics:
+        num_trials: 64000
+        num_accepted: 31980
+        mean_square_displacement:
+          avg: 0.01564127239079273
+          n: 64000
+        timer:
+          accumulated:
+            secs: 0
+            nanos: 0
+        info: {}
+        energy_change_sum: -125.26737013847742
+        acceptance_ratio: 0.4996875
+    - !VolumeMove
+      volume_displacement: 0.03
+      method: Isotropic
+      weight: 1.0
+      repeat: 5
+      statistics:
+        num_trials: 5000
+        num_accepted: 3291
+        mean_square_displacement:
+          avg: 618.0065259159553
+          n: 5000
+        timer:
+          accumulated:
+            secs: 0
+            nanos: 0
+        info: {}
+        energy_change_sum: -25.567973546079884
+        acceptance_ratio: 0.6582
+  criterion: MetropolisHastings
+analysis:
+- collectivevariable:
+    property: Volume
+    num_samples: 300
+    mean: 3986.1479831431466
+    rms: 3986.541929757464
+- energy:
+    num_samples: 300
+    mean: -48437.17842209294

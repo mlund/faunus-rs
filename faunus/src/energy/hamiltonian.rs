@@ -6,8 +6,10 @@ use super::{
     CellOverlap, EnergyTerm,
 };
 use crate::{topology::Topology, Change, Context};
-use interatomic::coulomb::Temperature;
+use interatomic::coulomb::{DebyeLength, Temperature};
+use std::cell::Cell;
 use std::path::Path;
+use std::time::{Duration, Instant};
 
 /// Trait implemented by structures that can compute
 /// and return an energy relevant to some change in the system.
@@ -23,6 +25,8 @@ pub trait EnergyChange {
 #[derive(Debug, Clone, Default)]
 pub struct Hamiltonian {
     energy_terms: Vec<EnergyTerm>,
+    /// Accumulated wall-clock time spent in each energy term's `energy()` call.
+    energy_timers: Vec<Cell<Duration>>,
 }
 
 impl Hamiltonian {
@@ -37,7 +41,31 @@ impl Hamiltonian {
 
         hamiltonian.push(CellOverlap.into());
 
-        if let Some(nonbonded_matrix) = &builder.pairpot_builder {
+        // If Ewald is configured, inject real-space pair potential into nonbonded
+        // defaults *before* building (and potentially splining) the pair matrix.
+        let mut pairpot_builder;
+        let pairpot_ref = if let Some(ewald) = &builder.ewald {
+            let debye_length = medium.as_ref().and_then(|m| m.debye_length());
+            let real_space = interatomic::coulomb::pairwise::RealSpaceEwald::new(
+                ewald.cutoff,
+                ewald.accuracy,
+                debye_length,
+            );
+            pairpot_builder = builder.pairpot_builder.clone().unwrap_or_default();
+            pairpot_builder.push_default(super::builder::PairInteraction::CoulombRealSpaceEwald(
+                real_space,
+            ));
+            log::info!(
+                "Ewald: injected real-space pair potential (cutoff={}, accuracy={})",
+                ewald.cutoff,
+                ewald.accuracy
+            );
+            Some(&pairpot_builder)
+        } else {
+            builder.pairpot_builder.as_ref()
+        };
+
+        if let Some(nonbonded_matrix) = pairpot_ref {
             let nonbonded = NonbondedMatrix::new(
                 nonbonded_matrix,
                 topology,
@@ -64,7 +92,13 @@ impl Hamiltonian {
             }
         }
 
-        hamiltonian.push(IntramolecularBonded::default().into());
+        if topology
+            .moleculekinds()
+            .iter()
+            .any(|m| m.has_bonded_potentials())
+        {
+            hamiltonian.push(IntramolecularBonded::default().into());
+        }
 
         // IntermolecularBonded term should only be added if it is actually needed
         if !topology.intermolecular().is_empty() {
@@ -99,6 +133,7 @@ impl Hamiltonian {
     /// Appends an energy term to the back of the Hamiltonian.
     pub(crate) fn push(&mut self, term: EnergyTerm) {
         self.energy_terms.push(term);
+        self.energy_timers.push(Cell::new(Duration::ZERO));
     }
 
     /// Access the individual energy terms.
@@ -141,15 +176,23 @@ impl Hamiltonian {
             .try_for_each(|term| term.update(context, change))
     }
 
+    /// Save backups of all energy terms for later undo.
+    ///
+    /// Call before applying a move so that terms like Ewald can snapshot
+    /// positions of affected particles in their pre-move state.
+    pub(crate) fn save_backups(&mut self, change: &Change, context: &impl Context) {
+        self.energy_terms
+            .iter_mut()
+            .for_each(|term| term.save_backup(change, context));
+    }
+
     /// Update with backup for later undo on MC reject.
     pub(crate) fn update_with_backup(
         &mut self,
         context: &impl Context,
         change: &Change,
     ) -> anyhow::Result<()> {
-        self.energy_terms
-            .iter_mut()
-            .for_each(|term| term.save_backup(change));
+        self.save_backups(change, context);
         self.update(context, change)
     }
 
@@ -164,12 +207,42 @@ impl Hamiltonian {
             .iter_mut()
             .for_each(|term| term.discard_backup());
     }
+
+    /// Per-term energy timing as a YAML-serializable map (term name → percentage of total).
+    pub fn timing_to_yaml(&self) -> serde_yaml::Value {
+        let total: f64 = self
+            .energy_timers
+            .iter()
+            .map(|t| t.get().as_secs_f64())
+            .sum();
+        let map: serde_yaml::Mapping = self
+            .energy_terms
+            .iter()
+            .zip(self.energy_timers.iter())
+            .filter_map(|(term, timer)| {
+                let name = crate::Info::short_name(term)?;
+                let pct = if total > 0.0 {
+                    (timer.get().as_secs_f64() / total * 10000.0).round() / 100.0
+                } else {
+                    0.0
+                };
+                Some((
+                    serde_yaml::Value::String(name.to_string()),
+                    serde_yaml::Value::Number(serde_yaml::Number::from(pct)),
+                ))
+            })
+            .collect();
+        serde_yaml::Value::Mapping(map)
+    }
 }
 
 impl<T: Into<Vec<EnergyTerm>>> From<T> for Hamiltonian {
     fn from(energy_terms: T) -> Self {
+        let terms: Vec<EnergyTerm> = energy_terms.into();
+        let timers = vec![Cell::new(Duration::ZERO); terms.len()];
         Self {
-            energy_terms: energy_terms.into(),
+            energy_terms: terms,
+            energy_timers: timers,
         }
     }
 }
@@ -179,16 +252,14 @@ impl EnergyChange for Hamiltonian {
     /// The energy is returned in the units of kJ/mol.
     fn energy(&self, context: &impl Context, change: &Change) -> f64 {
         let mut sum: f64 = 0.0;
-        let energies = self
-            .energy_terms
-            .iter()
-            .map(|term| term.energy(context, change));
-
-        for energy in energies {
+        for (term, timer) in self.energy_terms.iter().zip(self.energy_timers.iter()) {
+            let start = Instant::now();
+            let energy = term.energy(context, change);
+            timer.set(timer.get() + start.elapsed());
             if energy.is_finite() {
                 sum += energy;
             } else {
-                return energy; // infinite or NaN
+                return energy;
             }
         }
         sum

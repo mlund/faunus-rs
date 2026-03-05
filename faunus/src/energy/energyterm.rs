@@ -2,6 +2,7 @@ use super::{
     bonded::{IntermolecularBonded, IntramolecularBonded},
     constrain::Constrain,
     custom_external::CustomExternal,
+    ewald::EwaldReciprocalEnergy,
     external_pressure::ExternalPressure,
     nonbonded::{NonbondedMatrix, NonbondedMatrixSplined, NonbondedTerm},
     sasa::SasaEnergy,
@@ -29,6 +30,8 @@ pub enum EnergyTerm {
     ExternalPressure(ExternalPressure),
     /// Custom external potential from math expression.
     CustomExternal(CustomExternal),
+    /// Ewald reciprocal-space electrostatic energy.
+    EwaldReciprocal(Box<EwaldReciprocalEnergy>),
 }
 
 /// Dispatch a no-arg method to stateful energy terms; stateless terms are no-ops.
@@ -40,6 +43,7 @@ macro_rules! dispatch_stateful {
             EnergyTerm::SasaEnergy(x) => x.$method(),
             EnergyTerm::NonbondedMatrix(x) => x.$method(),
             EnergyTerm::NonbondedMatrixSplined(x) => x.$method(),
+            EnergyTerm::EwaldReciprocal(x) => x.$method(),
             EnergyTerm::IntramolecularBonded(_)
             | EnergyTerm::CellOverlap(_)
             | EnergyTerm::Constrain(_)
@@ -63,6 +67,7 @@ impl EnergyTerm {
             }
             Self::IntermolecularBonded(x) => x.update(context, change),
             Self::SasaEnergy(x) => x.update(context, change),
+            Self::EwaldReciprocal(x) => x.update(context, change),
             Self::IntramolecularBonded(_)
             | Self::CellOverlap(_)
             | Self::Constrain(_)
@@ -72,12 +77,16 @@ impl EnergyTerm {
     }
 
     /// Save internal state for later undo. Stateless terms are no-ops.
-    pub(crate) fn save_backup(&mut self, change: &Change) {
+    ///
+    /// Context is passed so that terms like Ewald can snapshot positions
+    /// of affected particles before the move is applied.
+    pub(crate) fn save_backup(&mut self, change: &Change, context: &impl Context) {
         match self {
             Self::IntermolecularBonded(x) => x.save_backup(change),
             Self::SasaEnergy(x) => x.save_backup(),
             Self::NonbondedMatrix(x) => x.save_backup(change),
             Self::NonbondedMatrixSplined(x) => x.save_backup(change),
+            Self::EwaldReciprocal(x) => x.save_backup(change, context),
             Self::IntramolecularBonded(_)
             | Self::CellOverlap(_)
             | Self::Constrain(_)
@@ -135,6 +144,7 @@ impl crate::Info for EnergyTerm {
             Self::Constrain(_) => "constrain",
             Self::ExternalPressure(_) => "externalpressure",
             Self::CustomExternal(_) => "customexternal",
+            Self::EwaldReciprocal(_) => "ewald_reciprocal",
         })
     }
 }
@@ -153,6 +163,7 @@ impl EnergyChange for EnergyTerm {
             Self::Constrain(x) => x.energy(context, change),
             Self::ExternalPressure(x) => x.energy(context, change),
             Self::CustomExternal(x) => x.energy(context, change),
+            Self::EwaldReciprocal(x) => x.energy(context, change),
         }
     }
 }

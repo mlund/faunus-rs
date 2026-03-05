@@ -134,6 +134,10 @@ impl MoleculeKind {
         self.degrees_of_freedom
     }
 
+    pub(crate) fn has_bonded_potentials(&self) -> bool {
+        !self.bonds.is_empty() || !self.torsions.is_empty() || !self.dihedrals.is_empty()
+    }
+
     pub const fn has_com(&self) -> bool {
         self.has_com
     }

@@ -77,7 +77,7 @@ impl AosPlatform {
 
         let cell = Cell::from_file(&yaml_file)?;
 
-        let hamiltonian = Hamiltonian::new(&hamiltonian_builder, &topology, medium)?;
+        let hamiltonian = Hamiltonian::new(&hamiltonian_builder, &topology, medium.clone())?;
         Self::from_raw_parts(
             Arc::new(topology),
             cell,
@@ -98,6 +98,15 @@ impl AosPlatform {
                     let ext = builder.build()?;
                     context.hamiltonian_mut().push(ext.into());
                 }
+            }
+            // Ewald reciprocal term needs particles in place
+            if let Some(ewald_builder) = &hamiltonian_builder.ewald {
+                let medium = medium
+                    .as_ref()
+                    .ok_or_else(|| anyhow::anyhow!("Ewald requires a medium with permittivity"))?;
+                let ewald =
+                    crate::energy::EwaldReciprocalEnergy::new(ewald_builder, &context, medium)?;
+                context.hamiltonian_mut().push(ewald.into());
             }
             context.update(&Change::Everything)?;
             Ok(context)

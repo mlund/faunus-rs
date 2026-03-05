@@ -190,6 +190,85 @@ Electrostatic potentials combine atom charges with a coulombic scheme.
 | `!ReactionField`  | `epsr_in`, `epsr_out`, `cutoff`, `shift`   |
 | `!Fanourgakis`    | `cutoff`                                   |
 
+## Ewald Summation
+
+The Ewald method splits long-range electrostatic (or Yukawa) interactions into
+a short-range real-space sum and a long-range reciprocal-space sum,
+plus a self-energy correction:
+
+$$U = U_\text{real} + U_\text{recip} + U_\text{self}$$
+
+The reciprocal-space contribution is
+
+$$U_\text{recip} = \frac{2\pi}{V} \sum_{\mathbf{k} \neq 0}
+  \frac{\exp\bigl(-(k^2 + \kappa^2)/4\alpha^2\bigr)}{k^2 + \kappa^2}
+  \, |S(\mathbf{k})|^2$$
+
+where $S(\mathbf{k}) = \sum_j q_j e^{i \mathbf{k} \cdot \mathbf{r}_j}$ is the
+structure factor, $\alpha$ is the Ewald splitting parameter, and $\kappa$ is the
+Debye screening parameter ($\kappa = 0$ for unscreened Coulomb).
+For screened electrostatics ($\kappa > 0$), the method generalises to Yukawa Ewald summation
+([Salin & Caillol, 2000](https://doi.org/10.1063/1.1326477)).
+
+The self-energy correction removes spurious self-interaction:
+
+$$U_\text{self} = -\frac{\alpha}{\sqrt{\pi}} \sum_j q_j^2$$
+
+### How accuracy controls parameters
+
+The `accuracy` parameter $\varepsilon$ (typically $10^{-5}$) controls the
+Ewald splitting parameter and the number of k-vectors via the
+Kolafa–Perram error estimates:
+
+$$\alpha = \frac{\sqrt{-\ln \varepsilon}}{r_c}, \quad
+  n_\text{max} = \left\lceil \frac{\alpha \, L_\text{max}}{\pi}
+  \sqrt{-\ln \varepsilon} \right\rceil$$
+
+where $r_c$ is the real-space cutoff and $L_\text{max}$ is the largest box side length.
+Higher accuracy (smaller $\varepsilon$) increases both $\alpha$ and the number of
+k-vectors. For Yukawa ($\kappa > 0$), the optimal $\alpha$ is independent of $\kappa$
+([Salin & Caillol, 2000](https://doi.org/10.1063/1.1326477), Eq. 3.3),
+so the same parameters are used for both Coulomb and Yukawa.
+The screening makes both real- and reciprocal-space sums converge faster,
+so Coulomb-derived parameters are conservative for Yukawa.
+
+### YAML configuration
+
+The `ewald` section automatically sets up both the real-space pair potential
+(injected into the nonbonded defaults before splining) and the reciprocal-space
+energy term. No manual `!Ewald` entry is needed in the nonbonded list.
+
+```yaml
+energy:
+  nonbonded:
+    default:
+      - !LennardJones {mixing: LB}
+  combine_with_default: true
+  spline:
+    cutoff: 14.0
+  ewald:
+    cutoff: 9.0
+    accuracy: 1e-5
+    policy: PBC
+```
+
+| Key        | Required | Default | Description                                                 |
+|------------|----------|---------|-------------------------------------------------------------|
+| `cutoff`   | yes      |         | Real-space cutoff (Å)                                       |
+| `accuracy` | no       | `1e-5`  | Target relative accuracy $\varepsilon$                      |
+| `policy`   | no       | `PBC`   | `PBC` or `IPBC` ([Stenqvist & Lund, 2018](https://doi.org/10/css8)) |
+
+If the medium defines a salt concentration, the corresponding Debye screening
+parameter $\kappa$ is automatically propagated to both the real-space and
+reciprocal-space Ewald terms (Yukawa Ewald summation).
+
+### MC move optimisation
+
+For single-group Monte Carlo moves, the structure factors are updated
+incrementally in $O(M \cdot N_k)$ time (where $M$ is the number of moved particles),
+rather than the $O(N \cdot N_k)$ full rebuild required for volume changes or
+multi-group moves.
+
 ### Bonded exclusions
 
 Particles connected by bonds within the same molecule can have their nonbonded

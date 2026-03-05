@@ -77,6 +77,10 @@ impl IntramolecularBonded {
         let topology = context.topology_ref();
         let molecule = &topology.moleculekinds()[group.molecule()];
 
+        if !molecule.has_bonded_potentials() {
+            return 0.0;
+        }
+
         let bond_energy: f64 = molecule
             .bonds()
             .iter()

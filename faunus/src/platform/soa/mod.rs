@@ -70,7 +70,7 @@ impl SoaPlatform {
         let hamiltonian_builder = HamiltonianBuilder::from_file(&yaml_file)?;
         hamiltonian_builder.validate(topology.atomkinds())?;
         let cell = Cell::from_file(&yaml_file)?;
-        let hamiltonian = Hamiltonian::new(&hamiltonian_builder, &topology, medium)?;
+        let hamiltonian = Hamiltonian::new(&hamiltonian_builder, &topology, medium.clone())?;
 
         let group_lists = GroupLists::new(topology.moleculekinds().len());
         let pbc_params = PbcParams::try_from_cell(&cell);
@@ -103,6 +103,15 @@ impl SoaPlatform {
                 let ext = builder.build()?;
                 platform.hamiltonian_mut().push(ext.into());
             }
+        }
+        // Ewald reciprocal term needs particles in place
+        if let Some(ewald_builder) = &hamiltonian_builder.ewald {
+            let medium = medium
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("Ewald requires a medium with permittivity"))?;
+            let ewald =
+                crate::energy::EwaldReciprocalEnergy::new(ewald_builder, &platform, medium)?;
+            platform.hamiltonian_mut().push(ewald.into());
         }
         platform.update(&Change::Everything)?;
 

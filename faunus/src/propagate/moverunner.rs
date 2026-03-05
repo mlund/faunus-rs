@@ -80,8 +80,10 @@ impl<T: Context> MoveRunner<T> {
             };
 
             let old_energy = context.hamiltonian().energy(context, &proposed.change);
+            // Save energy term backups while context still has old positions
+            context.save_energy_backups(&proposed.change);
             proposed.apply_with_backup(context)?;
-            context.update_with_backup(&proposed.change)?;
+            context.update(&proposed.change)?;
             let new_energy = context.hamiltonian().energy(context, &proposed.change);
 
             let energy = NewOld::<f64>::from(new_energy, old_energy);

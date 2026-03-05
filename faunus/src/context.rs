@@ -16,6 +16,13 @@ pub trait Context: ParticleSystem + WithHamiltonian + Clone + std::fmt::Debug {
         Ok(())
     }
 
+    /// Save energy term backups before a move is applied.
+    ///
+    /// Call before `apply_with_backup` so Ewald can snapshot old positions.
+    fn save_energy_backups(&mut self, change: &Change) {
+        self.hamiltonian_mut().save_backups(change, self);
+    }
+
     /// Update internal state with backup for later undo on MC reject.
     fn update_with_backup(&mut self, change: &Change) -> anyhow::Result<()> {
         self.hamiltonian_mut().update_with_backup(self, change)?;

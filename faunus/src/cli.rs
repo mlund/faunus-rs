@@ -103,6 +103,11 @@ fn write_mc_output<T: Context + WithCell<SimCell = crate::cell::Cell> + 'static>
         ("drift".to_string(), drift),
     ]);
     write_yaml(&energy_summary, output, Some("energy_change"))?;
+    write_yaml(
+        &mc.context().hamiltonian().timing_to_yaml(),
+        output,
+        Some("energy_timers"),
+    )?;
     write_yaml(&mc.propagation().to_yaml(), output, Some("propagate"))?;
 
     let analysis_yaml = analysis::analyses_to_yaml(mc.analyses());

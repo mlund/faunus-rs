@@ -102,6 +102,7 @@ pub fn run_regression(dir: &Path) {
             "num_accepted",
             "acceptance_ratio",
             "elapsed_seconds",
+            "energy_timers",
         ],
     );
 }

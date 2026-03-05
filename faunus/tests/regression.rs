@@ -33,3 +33,4 @@ regression_test!(npt_polymers);
 regression_test!(npt_water);
 regression_test!(gcmc_ideal_gas);
 regression_test!(gcmc_swap);
+regression_test!(npt_water_ewald);
