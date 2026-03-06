@@ -282,6 +282,11 @@ impl GroupCollection for AosPlatform {
         if !indices.is_empty() && self.topology().moleculekinds()[group.molecule()].has_com() {
             let com = self.mass_center(&indices);
             self.groups[group_index].set_mass_center(com);
+            let radius = indices
+                .iter()
+                .map(|&i| self.cell().distance(&self.position(i), &com).norm())
+                .fold(0.0_f64, f64::max);
+            self.groups[group_index].set_bounding_radius(radius);
         }
     }
 

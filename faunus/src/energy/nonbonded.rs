@@ -18,8 +18,8 @@ use interatomic::twobody::{
     ArcPotential, IsotropicTwobodyEnergy, NoInteraction, SplineConfig, SplinedPotential,
 };
 use ndarray::Array2;
-use std::sync::RwLock;
 use std::path::Path;
+use std::sync::RwLock;
 
 use crate::{
     cell::{PeriodicDirections, SimulationCell},
@@ -286,6 +286,10 @@ pub struct NonbondedMatrix<P = ArcPotential> {
     exclusions: ExclusionMatrix,
     /// Pairwise inter-group energy cache for O(1) old-energy lookup in MC moves.
     cache: RwLock<Option<GroupEnergyCache>>,
+    /// Global interaction cutoff for bounding-sphere culling (None = no culling).
+    cutoff: Option<f64>,
+    /// Enable bounding-sphere culling of distant group pairs.
+    use_bounding_spheres: bool,
 }
 
 impl<P: Clone> Clone for NonbondedMatrix<P> {
@@ -294,6 +298,8 @@ impl<P: Clone> Clone for NonbondedMatrix<P> {
             potentials: self.potentials.clone(),
             exclusions: self.exclusions.clone(),
             cache: RwLock::new(self.cache.read().unwrap().clone()),
+            cutoff: self.cutoff,
+            use_bounding_spheres: self.use_bounding_spheres,
         }
     }
 }
@@ -338,6 +344,7 @@ impl<P: IsotropicTwobodyEnergy> EnergyChange for NonbondedMatrix<P> {
                 atom_kinds,
                 pbc,
                 cell,
+                cell_list: context.cell_list(),
             };
             let groups = context.groups();
             return match change {
@@ -392,6 +399,11 @@ impl<P> NonbondedMatrix<P> {
     /// Get square matrix of pair potentials for all atom type combinations.
     pub const fn get_potentials(&self) -> &Array2<P> {
         &self.potentials
+    }
+
+    /// Enable or disable bounding-sphere culling of distant group pairs.
+    pub(crate) fn set_bounding_spheres(&mut self, enabled: bool) {
+        self.use_bounding_spheres = enabled;
     }
 }
 
@@ -482,6 +494,8 @@ impl NonbondedMatrix {
             potentials,
             exclusions,
             cache: RwLock::new(None),
+            cutoff: None,
+            use_bounding_spheres: true,
         })
     }
 
@@ -528,6 +542,8 @@ impl NonbondedMatrix<SplinedPotential> {
             potentials,
             exclusions: nonbonded.exclusions.clone(),
             cache: RwLock::new(None),
+            cutoff: Some(cutoff),
+            use_bounding_spheres: true,
         }
     }
 }
@@ -649,6 +665,24 @@ impl GroupEnergyCache {
     }
 }
 
+/// Conservative lower bound on group-group distance using bounding spheres.
+///
+/// Returns `None` if either group lacks a mass center or bounding radius,
+/// meaning the caller should fall back to exact pair evaluation.
+#[cfg(test)]
+fn min_group_distance(
+    gi: &Group,
+    gj: &Group,
+    cell: &impl SimulationCell,
+) -> Option<f64> {
+    let com_i = gi.mass_center()?;
+    let com_j = gj.mass_center()?;
+    let ri = gi.bounding_radius()?;
+    let rj = gj.bounding_radius()?;
+    let com_dist = cell.distance(com_i, com_j).norm();
+    Some((com_dist - ri - rj).max(0.0))
+}
+
 /// Borrowed SoA arrays for batch nonbonded energy evaluation.
 ///
 /// Holds `cell` for HexagonalPrism fallback; all other cell types
@@ -660,6 +694,7 @@ struct SoaSlices<'a, C: SimulationCell> {
     atom_kinds: &'a [u32],
     cell: &'a C,
     pbc: Option<PbcParams>,
+    cell_list: Option<&'a crate::celllist::CellList>,
 }
 
 impl<'a, C: SimulationCell> SoaSlices<'a, C> {
@@ -692,6 +727,45 @@ impl<'a, C: SimulationCell> SoaSlices<'a, C> {
 }
 
 impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
+    /// Fast check if two groups are beyond interaction range using squared
+    /// COM distance and precomputed (cutoff + R_i + R_j)². Uses branchless
+    /// PBC distance when available, avoiding sqrt and trait dispatch.
+    #[inline(always)]
+    fn groups_beyond_cutoff(
+        &self,
+        gi: &Group,
+        gj: &Group,
+        pbc: Option<&PbcParams>,
+    ) -> bool {
+        if !self.use_bounding_spheres {
+            return false;
+        }
+        let cutoff = match self.cutoff {
+            Some(c) => c,
+            None => return false,
+        };
+        let (com_i, com_j) = match (gi.mass_center(), gj.mass_center()) {
+            (Some(a), Some(b)) => (a, b),
+            _ => return false,
+        };
+        // (cutoff + R_i + R_j)² — no sqrt needed
+        let ri = gi.bounding_radius().unwrap_or(0.0);
+        let rj = gj.bounding_radius().unwrap_or(0.0);
+        let threshold = cutoff + ri + rj;
+        let threshold_sq = threshold * threshold;
+        let dist_sq = match pbc {
+            Some(pbc) => {
+                pbc.distance_squared(com_i.x, com_i.y, com_i.z, com_j.x, com_j.y, com_j.z)
+            }
+            None => {
+                // Non-orthorhombic fallback (rare)
+                let d = com_i - com_j;
+                d.x * d.x + d.y * d.y + d.z * d.z
+            }
+        };
+        dist_sq > threshold_sq
+    }
+
     /// Energy of particle `i` with targets, reading directly from SoA arrays.
     ///
     /// Uses unchecked indexing to eliminate ~6 bounds checks per pair in the inner
@@ -769,6 +843,7 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
                 let inter: f64 = groups
                     .iter()
                     .skip(gi + 1)
+                    .filter(|group_j| !self.groups_beyond_cutoff(group_i, group_j, soa.pbc.as_ref()))
                     .flat_map(|group_j| {
                         group_i
                             .iter_active()
@@ -792,6 +867,7 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
         groups
             .iter()
             .filter(|gj| gj.index() != own_group.index())
+            .filter(|gj| !self.groups_beyond_cutoff(own_group, gj, soa.pbc.as_ref()))
             .map(|gj| self.particle_energy_soa(soa, i, gj.iter_active()))
             .sum()
     }
@@ -806,28 +882,76 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
     ) -> f64 {
         let group = &groups[group_index];
         match change {
-            GroupChange::RigidBody => group
-                .iter_active()
-                .map(|i| self.inter_group_energy_soa(soa, groups, i, group))
-                .sum(),
+            GroupChange::RigidBody => self.inter_group_energy_all_soa(soa, groups, group),
             GroupChange::Resize(_) | GroupChange::UpdateIdentity(_) => {
-                let inter: f64 = group
-                    .iter_active()
-                    .map(|i| self.inter_group_energy_soa(soa, groups, i, group))
-                    .sum();
-                inter + self.group_with_itself_soa(soa, group)
+                self.inter_group_energy_all_soa(soa, groups, group)
+                    + self.group_with_itself_soa(soa, group)
             }
             GroupChange::PartialUpdate(indices) => indices
                 .iter()
                 .map(|&rel_idx| {
                     group.to_absolute_index(rel_idx).map_or(0.0, |abs_i| {
-                        self.inter_group_energy_soa(soa, groups, abs_i, group)
-                            + self.particle_energy_soa(soa, abs_i, group.iter_active())
+                        self.particle_energy_all_soa(soa, groups, abs_i, group)
                     })
                 })
                 .sum(),
             GroupChange::None => 0.0,
         }
+    }
+
+    /// Inter-group energy of an entire group with all other groups.
+    ///
+    /// With a cell list, iterates spatial neighbors per atom and excludes
+    /// own-group contributions. Falls back to bounding-sphere-filtered
+    /// group iteration otherwise.
+    fn inter_group_energy_all_soa(
+        &self,
+        soa: &SoaSlices<'_, impl SimulationCell>,
+        groups: &[Group],
+        group: &Group,
+    ) -> f64 {
+        if let Some(cl) = soa.cell_list {
+            let own_range = group.iter_active();
+            return group
+                .iter_active()
+                .map(|i| {
+                    self.particle_energy_soa(
+                        soa,
+                        i,
+                        cl.neighbors(i)
+                            .filter(move |&j| j < own_range.start || j >= own_range.end),
+                    )
+                })
+                .sum();
+        }
+        group
+            .iter_active()
+            .map(|i| self.inter_group_energy_soa(soa, groups, i, group))
+            .sum()
+    }
+
+    /// Total energy of particle `abs_i` with all other particles.
+    ///
+    /// When a cell list is available, iterates only over spatial neighbors
+    /// (O(neighbors) instead of O(N)). Falls back to group-based iteration otherwise.
+    #[inline]
+    fn particle_energy_all_soa(
+        &self,
+        soa: &SoaSlices<'_, impl SimulationCell>,
+        groups: &[Group],
+        abs_i: usize,
+        own_group: &Group,
+    ) -> f64 {
+        if let Some(cl) = soa.cell_list {
+            return self.particle_energy_soa(
+                soa,
+                abs_i,
+                cl.neighbors(abs_i).filter(move |&j| j != abs_i),
+            );
+        }
+        // Fallback: inter-group + intra-group
+        self.inter_group_energy_soa(soa, groups, abs_i, own_group)
+            + self.particle_energy_soa(soa, abs_i, own_group.iter_active())
     }
 
     /// Inter-group nonbonded energy between two specific groups via SoA arrays.
@@ -838,6 +962,9 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
         group_i: &Group,
         group_j: &Group,
     ) -> f64 {
+        if self.groups_beyond_cutoff(group_i, group_j, soa.pbc.as_ref()) {
+            return 0.0;
+        }
         group_i
             .iter_active()
             .map(|i| self.particle_energy_soa(soa, i, group_j.iter_active()))
@@ -872,16 +999,16 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
 }
 
 impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
-    /// Backup cache state before a move. Invalidates for non-RigidBody changes.
+    /// Backup cache state before a move. Invalidates for topology-changing moves.
     pub(super) fn save_backup(&mut self, change: &Change) {
         match change {
-            Change::SingleGroup(gi, GroupChange::RigidBody) => {
+            Change::SingleGroup(gi, GroupChange::RigidBody | GroupChange::PartialUpdate(_)) => {
                 if let Some(c) = self.cache.get_mut().unwrap().as_mut() {
                     c.save_backup(*gi);
                 }
             }
-            // Non-rigid moves (resize, insert, etc.) change the group topology,
-            // invalidating the entire N×N pairwise matrix.
+            // Topology-changing moves (resize, insert, identity swap, etc.)
+            // invalidate the entire N×N pairwise matrix.
             _ => {
                 *self.cache.get_mut().unwrap() = None;
             }
@@ -890,8 +1017,9 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
 
     /// Recompute the moved group's cache row with new positions (accept/reject agnostic).
     pub(super) fn update_cache(&mut self, context: &impl Context, change: &Change) {
-        let Change::SingleGroup(group_index, GroupChange::RigidBody) = change else {
-            return;
+        let group_index = match change {
+            Change::SingleGroup(gi, GroupChange::RigidBody | GroupChange::PartialUpdate(_)) => gi,
+            _ => return,
         };
 
         // take() avoids a borrow conflict: we need &mut cache while calling
@@ -912,6 +1040,7 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
                     atom_kinds,
                     pbc,
                     cell,
+                    cell_list: None,
                 };
                 let groups = context.groups();
                 let n = cache.n_groups;
@@ -1703,6 +1832,44 @@ mod tests {
             splined_energy,
             relative_error
         );
+    }
+
+    #[test]
+    fn test_min_group_distance() {
+        use crate::cell::Cuboid;
+        let cell = Cuboid::cubic(20.0);
+
+        let mut g1 = Group::new(0, 0, 0..3);
+        g1.set_mass_center(crate::Point::new(0.0, 0.0, 0.0));
+        g1.set_bounding_radius(1.0);
+
+        let mut g2 = Group::new(1, 0, 3..6);
+        g2.set_mass_center(crate::Point::new(5.0, 0.0, 0.0));
+        g2.set_bounding_radius(1.5);
+
+        // COM distance = 5.0, sum of radii = 2.5, min distance = 2.5
+        let d = min_group_distance(&g1, &g2, &cell).unwrap();
+        assert_approx_eq!(f64, d, 2.5);
+
+        // Overlapping spheres → 0
+        let mut g3 = Group::new(2, 0, 6..9);
+        g3.set_mass_center(crate::Point::new(1.0, 0.0, 0.0));
+        g3.set_bounding_radius(2.0);
+        let d = min_group_distance(&g1, &g3, &cell).unwrap();
+        assert_approx_eq!(f64, d, 0.0);
+
+        // PBC wrapping: groups near opposite edges
+        let mut g4 = Group::new(3, 0, 9..12);
+        g4.set_mass_center(crate::Point::new(9.0, 0.0, 0.0));
+        g4.set_bounding_radius(0.5);
+        // COM distance via PBC = 20 - 9 = 11, but PBC gives min image = 9
+        // Actually: g1 at 0, g4 at 9 → distance via PBC in [-10,10] box: 9.0
+        let d = min_group_distance(&g1, &g4, &cell).unwrap();
+        assert_approx_eq!(f64, d, 9.0 - 1.0 - 0.5);
+
+        // Missing bounding radius → None
+        let g5 = Group::new(4, 0, 12..15);
+        assert!(min_group_distance(&g1, &g5, &cell).is_none());
     }
 
     #[test]

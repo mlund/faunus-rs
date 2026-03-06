@@ -24,6 +24,7 @@ pub type ParticleVec = Vec<Particle>;
 mod info;
 pub use info::*;
 pub mod cell;
+pub mod celllist;
 mod change;
 pub mod collective_variable;
 pub use self::change::{Change, GroupChange};

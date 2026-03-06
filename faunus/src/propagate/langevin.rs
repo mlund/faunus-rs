@@ -154,9 +154,10 @@ impl LangevinRunner {
             .ok_or_else(|| {
                 anyhow::anyhow!("LangevinDynamics requires a splined nonbonded potential")
             })?;
-        let spline_data = interatomic::gpu::GpuSplineData::<interatomic::gpu::PowerLaw2>::from_potentials(
-            nonbonded.get_potentials().iter(),
-        );
+        let spline_data =
+            interatomic::gpu::GpuSplineData::<interatomic::gpu::PowerLaw2>::from_potentials(
+                nonbonded.get_potentials().iter(),
+            );
 
         let spline_buffers = gpu_ctx.upload_spline_data(&spline_data);
 

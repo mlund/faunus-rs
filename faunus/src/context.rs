@@ -90,6 +90,11 @@ pub trait WithTemperature {
 
 /// A trait for objects which contains groups of particles with defined topology in defined cell.
 pub trait ParticleSystem: GroupCollection + WithCell + WithTopology {
+    /// Optional cell list for spatial acceleration of pair interactions.
+    fn cell_list(&self) -> Option<&crate::celllist::CellList> {
+        None
+    }
+
     /// Get distance between two particles with the given indices.
     ///
     /// ## Example implementation

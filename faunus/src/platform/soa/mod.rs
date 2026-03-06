@@ -25,9 +25,14 @@ struct SoaBackup {
     /// (index, x, y, z, atom_kind) tuples for changed particles
     particles: Vec<(usize, f64, f64, f64, u32)>,
     mass_centers: Vec<(usize, Option<Point>)>,
+    bounding_radii: Vec<(usize, Option<f64>)>,
     quaternions: Vec<(usize, UnitQuaternion)>,
     group_sizes: Vec<(usize, GroupSize)>,
     cell: Option<Cell>,
+    /// Incremental cell list changes for undo (particle moves)
+    cell_list_backup: Option<crate::celllist::CellListBackup>,
+    /// Full cell list clone for undo (volume changes)
+    cell_list_clone: Option<crate::celllist::CellList>,
 }
 
 /// Platform with SoA position layout for SIMD-friendly access.
@@ -56,6 +61,9 @@ pub struct SoaPlatform {
     hamiltonian: RefCell<Hamiltonian>,
     #[serde(skip)]
     backup: Option<SoaBackup>,
+    /// Optional cell list for spatial acceleration (built when cutoff is known).
+    #[serde(skip)]
+    cell_list: Option<crate::celllist::CellList>,
 }
 
 impl SoaPlatform {
@@ -86,6 +94,7 @@ impl SoaPlatform {
             pbc_params,
             hamiltonian: RefCell::new(hamiltonian),
             backup: None,
+            cell_list: None,
         };
 
         platform.update(&Change::Everything)?;
@@ -115,7 +124,59 @@ impl SoaPlatform {
         }
         platform.update(&Change::Everything)?;
 
+        // Build cell list if configured and cell is orthorhombic
+        if let Some(spline_opts) = &hamiltonian_builder.spline {
+            if spline_opts.cell_list {
+                platform.build_cell_list(spline_opts.cutoff);
+            }
+        }
+
         Ok(platform)
+    }
+
+    /// Update cell list assignments for moved particles, tracking changes in backup.
+    fn update_cell_list_particles(&mut self, indices: &[usize]) {
+        if let (Some(cl), Some(backup)) = (&mut self.cell_list, &mut self.backup) {
+            if let Some(cl_backup) = &mut backup.cell_list_backup {
+                for &i in indices {
+                    let pos = Point::new(self.x[i], self.y[i], self.z[i]);
+                    cl.update_particle_tracked(i, &pos, cl_backup);
+                }
+            }
+        } else if let Some(cl) = &mut self.cell_list {
+            for &i in indices {
+                let pos = Point::new(self.x[i], self.y[i], self.z[i]);
+                cl.update_particle(i, &pos);
+            }
+        }
+    }
+
+    /// Build the cell list from current positions and box dimensions.
+    fn build_cell_list(&mut self, cutoff: f64) {
+        use crate::cell::Shape;
+        let Some(bb) = self.cell.bounding_box() else {
+            return;
+        };
+        let box_len = [bb.x, bb.y, bb.z];
+        // Only for finite orthorhombic cells
+        if box_len.iter().any(|&l| l.is_infinite() || l <= 0.0) {
+            return;
+        }
+        let mut cl = crate::celllist::CellList::new(box_len, cutoff);
+        let x = &self.x;
+        let y = &self.y;
+        let z = &self.z;
+        let active_indices = self.groups.iter().flat_map(|g| g.iter_active());
+        cl.build(
+            |i| Point::new(x[i], y[i], z[i]),
+            self.x.len(),
+            active_indices,
+        );
+        log::info!(
+            "Built cell list with cutoff={cutoff:.1} Å for {} active particles",
+            self.num_active_particles()
+        );
+        self.cell_list = Some(cl);
     }
 }
 
@@ -198,6 +259,15 @@ impl GroupCollection for SoaPlatform {
         if !indices.is_empty() && self.topology().moleculekinds()[group.molecule()].has_com() {
             let com = self.mass_center(&indices);
             self.groups[group_index].set_mass_center(com);
+            // Bounding radius: max PBC distance from COM to any active particle
+            let radius = indices
+                .iter()
+                .map(|&i| {
+                    let pos = Point::new(self.x[i], self.y[i], self.z[i]);
+                    self.cell.distance(&pos, &com).norm()
+                })
+                .fold(0.0_f64, f64::max);
+            self.groups[group_index].set_bounding_radius(radius);
         }
     }
 
@@ -252,6 +322,10 @@ impl ParticleSystem for SoaPlatform {
 
     fn pbc_params(&self) -> Option<crate::energy::PbcParams> {
         self.pbc_params
+    }
+
+    fn cell_list(&self) -> Option<&crate::celllist::CellList> {
+        self.cell_list.as_ref()
     }
 
     #[inline(always)]
@@ -334,6 +408,11 @@ impl ParticleSystem for SoaPlatform {
             self.update_mass_center(g);
         }
 
+        // Cell dimensions changed — rebuild cell list
+        if let Some(cutoff) = self.cell_list.as_ref().map(|cl| cl.cutoff()) {
+            self.build_cell_list(cutoff);
+        }
+
         Ok(old_volume)
     }
 
@@ -351,6 +430,7 @@ impl ParticleSystem for SoaPlatform {
             self.y[i] = pos.y;
             self.z[i] = pos.z;
         }
+        self.update_cell_list_particles(indices);
     }
 
     fn rotate_particles(
@@ -369,6 +449,7 @@ impl ParticleSystem for SoaPlatform {
             self.y[i] = rotated.y;
             self.z[i] = rotated.z;
         }
+        self.update_cell_list_particles(indices);
     }
 }
 
@@ -379,15 +460,21 @@ impl Context for SoaPlatform {
             .iter()
             .map(|&i| (i, self.x[i], self.y[i], self.z[i], self.atom_kinds[i]))
             .collect();
-        let mass_center = self.groups[group_index].mass_center().cloned();
-        let quaternion = *self.groups[group_index].quaternion();
-        let group_size = self.groups[group_index].size();
+        let group = &self.groups[group_index];
+        let mass_center = group.mass_center().cloned();
+        let bounding_radius = group.bounding_radius();
+        let quaternion = *group.quaternion();
+        let group_size = group.size();
+        let cell_list_backup = self.cell_list.as_ref().map(|cl| cl.begin_changes());
         self.backup = Some(SoaBackup {
             particles,
             mass_centers: vec![(group_index, mass_center)],
+            bounding_radii: vec![(group_index, bounding_radius)],
             quaternions: vec![(group_index, quaternion)],
             group_sizes: vec![(group_index, group_size)],
             cell: None,
+            cell_list_backup,
+            cell_list_clone: None,
         });
     }
 
@@ -401,6 +488,12 @@ impl Context for SoaPlatform {
             .iter()
             .enumerate()
             .map(|(i, g)| (i, g.mass_center().cloned()))
+            .collect();
+        let bounding_radii = self
+            .groups
+            .iter()
+            .enumerate()
+            .map(|(i, g)| (i, g.bounding_radius()))
             .collect();
         let quaternions = self
             .groups
@@ -417,9 +510,12 @@ impl Context for SoaPlatform {
         self.backup = Some(SoaBackup {
             particles,
             mass_centers,
+            bounding_radii,
             quaternions,
             group_sizes,
             cell: Some(self.cell.clone()),
+            cell_list_backup: None,
+            cell_list_clone: self.cell_list.clone(),
         });
     }
 
@@ -436,6 +532,11 @@ impl Context for SoaPlatform {
                 self.groups[group_idx].set_mass_center(com);
             }
         }
+        for (group_idx, old_radius) in backup.bounding_radii {
+            if let Some(r) = old_radius {
+                self.groups[group_idx].set_bounding_radius(r);
+            }
+        }
         for (group_idx, q) in backup.quaternions {
             self.groups[group_idx].set_quaternion(q);
         }
@@ -443,9 +544,16 @@ impl Context for SoaPlatform {
             self.groups[group_idx].resize(size)?;
             self.group_lists.update_group(&self.groups[group_idx]);
         }
+        if let Some(cell_list_backup) = backup.cell_list_backup {
+            if let Some(cl) = &mut self.cell_list {
+                cl.undo(cell_list_backup);
+            }
+        }
         if let Some(cell) = backup.cell {
             self.cell = cell;
             self.pbc_params = PbcParams::try_from_cell(&self.cell);
+            // Volume change: restore pre-move cell list (avoids O(N) rebuild)
+            self.cell_list = backup.cell_list_clone;
         }
         self.hamiltonian_mut().undo();
         Ok(())
@@ -565,6 +673,81 @@ mod tests {
                 ctx.atom_kinds[i], original_kinds[j],
                 "atom kind changed at index {i}"
             );
+        }
+    }
+
+    /// Verify cell-list-accelerated PartialUpdate energy matches brute-force group iteration.
+    #[test]
+    fn cell_list_partial_update_matches_brute_force() {
+        let yaml = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/files/gibbs_ensemble/input.yaml");
+
+        let ref_ctx = AosPlatform::new(&yaml, None, &mut rand::thread_rng()).unwrap();
+        let mut soa_ctx = SoaPlatform::new(&yaml, None, &mut rand::thread_rng()).unwrap();
+        assert!(
+            soa_ctx.cell_list.is_some(),
+            "Cell list should be built for splined input"
+        );
+
+        // Copy positions for exact comparison
+        for i in 0..ref_ctx.num_particles() {
+            let p = &ref_ctx.particles()[i];
+            soa_ctx.x[i] = p.pos().x;
+            soa_ctx.y[i] = p.pos().y;
+            soa_ctx.z[i] = p.pos().z;
+            soa_ctx.atom_kinds[i] = p.atom_id() as u32;
+        }
+        // Rebuild cell list with copied positions
+        let cutoff = soa_ctx.cell_list.as_ref().unwrap().cutoff();
+        soa_ctx.build_cell_list(cutoff);
+
+        // Test PartialUpdate for several single-atom groups (ion-like moves)
+        for gi in 0..5.min(ref_ctx.groups().len()) {
+            let group = &ref_ctx.groups()[gi];
+            if group.is_empty() {
+                continue;
+            }
+            let change = crate::Change::SingleGroup(gi, crate::GroupChange::PartialUpdate(vec![0]));
+
+            let e_ref = ref_ctx.hamiltonian().energy(&ref_ctx, &change);
+            let e_soa = soa_ctx.hamiltonian().energy(&soa_ctx, &change);
+
+            if e_ref.abs() < 1e-10 {
+                assert!(
+                    e_soa.abs() < 1e-6,
+                    "Group {gi}: expected ~0, got soa={e_soa}"
+                );
+            } else {
+                let rel_err = ((e_ref - e_soa) / e_ref).abs();
+                assert!(
+                    rel_err < 1e-3,
+                    "Group {gi}: ref={e_ref}, soa={e_soa}, rel_err={rel_err:.2e}"
+                );
+            }
+        }
+
+        // Test RigidBody via cell list (protein-like whole-group move)
+        for gi in 0..5.min(ref_ctx.groups().len()) {
+            if ref_ctx.groups()[gi].is_empty() {
+                continue;
+            }
+            let change = crate::Change::SingleGroup(gi, crate::GroupChange::RigidBody);
+
+            let e_ref = ref_ctx.hamiltonian().energy(&ref_ctx, &change);
+            let e_soa = soa_ctx.hamiltonian().energy(&soa_ctx, &change);
+
+            if e_ref.abs() < 1e-10 {
+                assert!(
+                    e_soa.abs() < 1e-6,
+                    "RigidBody group {gi}: expected ~0, got soa={e_soa}"
+                );
+            } else {
+                let rel_err = ((e_ref - e_soa) / e_ref).abs();
+                assert!(
+                    rel_err < 1e-3,
+                    "RigidBody group {gi}: ref={e_ref}, soa={e_soa}, rel_err={rel_err:.2e}"
+                );
+            }
         }
     }
 }

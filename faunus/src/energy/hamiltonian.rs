@@ -27,6 +27,8 @@ pub struct Hamiltonian {
     energy_terms: Vec<EnergyTerm>,
     /// Accumulated wall-clock time spent in each energy term's `energy()` call.
     energy_timers: Vec<Cell<Duration>>,
+    /// Accumulated wall-clock time spent in each energy term's `update()` call.
+    update_timers: Vec<Cell<Duration>>,
 }
 
 impl Hamiltonian {
@@ -76,11 +78,12 @@ impl Hamiltonian {
             // Use splined potentials if configured
             if let Some(spline_opts) = &builder.spline {
                 let config = spline_opts.to_spline_config();
-                let splined = NonbondedMatrixSplined::from_nonbonded(
+                let mut splined = NonbondedMatrixSplined::from_nonbonded(
                     &nonbonded,
                     spline_opts.cutoff,
                     Some(config),
                 );
+                splined.set_bounding_spheres(spline_opts.bounding_spheres);
                 log::info!(
                     "Using splined nonbonded potentials (cutoff={}, n_points={})",
                     spline_opts.cutoff,
@@ -134,6 +137,7 @@ impl Hamiltonian {
     pub(crate) fn push(&mut self, term: EnergyTerm) {
         self.energy_terms.push(term);
         self.energy_timers.push(Cell::new(Duration::ZERO));
+        self.update_timers.push(Cell::new(Duration::ZERO));
     }
 
     /// Access the individual energy terms.
@@ -171,9 +175,12 @@ impl Hamiltonian {
     /// After a system change, the internal state of the energy terms may need to be updated.
     /// For example, in Ewald summation, the reciprocal space energy needs to be updated.
     pub(crate) fn update(&mut self, context: &impl Context, change: &Change) -> anyhow::Result<()> {
-        self.energy_terms
-            .iter_mut()
-            .try_for_each(|term| term.update(context, change))
+        for (term, timer) in self.energy_terms.iter_mut().zip(self.update_timers.iter()) {
+            let start = Instant::now();
+            term.update(context, change)?;
+            timer.set(timer.get() + start.elapsed());
+        }
+        Ok(())
     }
 
     /// Save backups of all energy terms for later undo.
@@ -209,26 +216,44 @@ impl Hamiltonian {
     }
 
     /// Per-term energy timing as a YAML-serializable map (term name → percentage of total).
+    ///
+    /// Reports both `energy()` and `update()` time per term.
     pub fn timing_to_yaml(&self) -> serde_yaml::Value {
         let total: f64 = self
             .energy_timers
             .iter()
+            .chain(self.update_timers.iter())
             .map(|t| t.get().as_secs_f64())
             .sum();
         let map: serde_yaml::Mapping = self
             .energy_terms
             .iter()
             .zip(self.energy_timers.iter())
-            .filter_map(|(term, timer)| {
+            .zip(self.update_timers.iter())
+            .filter_map(|((term, e_timer), u_timer)| {
                 let name = crate::Info::short_name(term)?;
-                let pct = if total > 0.0 {
-                    (timer.get().as_secs_f64() / total * 10000.0).round() / 100.0
+                let to_pct = |secs: f64| {
+                    if total > 0.0 {
+                        (secs / total * 10000.0).round() / 100.0
+                    } else {
+                        0.0
+                    }
+                };
+                let e_pct = to_pct(e_timer.get().as_secs_f64());
+                let u_pct = to_pct(u_timer.get().as_secs_f64());
+                let combined = e_pct + u_pct;
+                if combined == 0.0 {
+                    return None;
+                }
+                // Show "energy + update" breakdown only when update is significant
+                let label = if u_pct >= 0.01 {
+                    format!("{combined} (energy: {e_pct}, update: {u_pct})")
                 } else {
-                    0.0
+                    format!("{combined}")
                 };
                 Some((
                     serde_yaml::Value::String(name.to_string()),
-                    serde_yaml::Value::Number(serde_yaml::Number::from(pct)),
+                    serde_yaml::Value::String(label),
                 ))
             })
             .collect();
@@ -239,10 +264,11 @@ impl Hamiltonian {
 impl<T: Into<Vec<EnergyTerm>>> From<T> for Hamiltonian {
     fn from(energy_terms: T) -> Self {
         let terms: Vec<EnergyTerm> = energy_terms.into();
-        let timers = vec![Cell::new(Duration::ZERO); terms.len()];
+        let n = terms.len();
         Self {
             energy_terms: terms,
-            energy_timers: timers,
+            energy_timers: vec![Cell::new(Duration::ZERO); n],
+            update_timers: vec![Cell::new(Duration::ZERO); n],
         }
     }
 }

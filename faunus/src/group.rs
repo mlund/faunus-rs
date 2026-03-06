@@ -47,6 +47,8 @@ pub struct Group {
     index: usize,
     /// Optional mass center
     mass_center: Option<Point>,
+    /// Max distance from mass center to any active particle (for spatial culling)
+    bounding_radius: Option<f64>,
     /// Number of active particles
     num_active: usize,
     /// Absolute indices in main particle vector (active and inactive; immutable and unique)
@@ -63,6 +65,7 @@ impl Default for Group {
             molecule: 0,
             index: 0,
             mass_center: None,
+            bounding_radius: None,
             num_active: 0,
             range: 0..0,
             size_status: GroupSize::default(),
@@ -343,6 +346,16 @@ impl Group {
     /// Set mass center
     pub const fn set_mass_center(&mut self, mass_center: Point) {
         self.mass_center = Some(mass_center);
+    }
+
+    /// Get bounding radius (max distance from mass center to any active particle).
+    pub const fn bounding_radius(&self) -> Option<f64> {
+        self.bounding_radius
+    }
+
+    /// Set bounding radius.
+    pub const fn set_bounding_radius(&mut self, radius: f64) {
+        self.bounding_radius = Some(radius);
     }
 
     /// Rigid-body orientation quaternion (for MC↔LD state transfer).
@@ -671,6 +684,7 @@ mod tests {
             molecule: 20,
             index: 2,
             mass_center: None,
+            bounding_radius: None,
             num_active: 6,
             range: 0..10,
             size_status: GroupSize::Partial(6),
@@ -812,6 +826,7 @@ mod tests {
             molecule: 20,
             index: 2,
             mass_center: None,
+            bounding_radius: None,
             num_active: 6,
             range: 10..27,
             size_status: GroupSize::Partial(6),

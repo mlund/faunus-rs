@@ -340,6 +340,20 @@ pub struct SplineOptions {
     /// Shift energy to zero at cutoff (default: true).
     #[serde(default = "default_shift_energy")]
     pub shift_energy: bool,
+    /// Build a cell list for spatial acceleration (default: true).
+    #[serde(default = "default_cell_list")]
+    pub cell_list: bool,
+    /// Use bounding-sphere culling of distant group pairs (default: true).
+    #[serde(default = "default_bounding_spheres")]
+    pub bounding_spheres: bool,
+}
+
+const fn default_cell_list() -> bool {
+    true
+}
+
+const fn default_bounding_spheres() -> bool {
+    true
 }
 
 const fn default_shift_energy() -> bool {
