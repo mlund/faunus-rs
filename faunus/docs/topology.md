@@ -66,6 +66,7 @@ molecules:
 | `name`                | yes      |         | Unique molecule type name                        |
 | `atoms`               | no       | `[]`    | List of atom type names                          |
 | `from_structure`      | no       |         | Load atoms from a structure file (XYZ, PDB, etc.)|
+| `fasta`               | no       |         | Build from FASTA sequence (see below)            |
 | `bonds`               | no       | `[]`    | Intramolecular bonds                             |
 | `torsions`            | no       | `[]`    | Three-body angle potentials                      |
 | `dihedrals`           | no       | `[]`    | Four-body dihedral potentials                    |
@@ -77,6 +78,64 @@ molecules:
 | `chains`              | no       | `[]`    | Protein chains                                   |
 | `has_com`             | no       | `true`  | Whether center-of-mass makes sense               |
 | `custom`              | no       | `{}`    | Arbitrary key-value properties                   |
+
+### FASTA Sequence
+
+Linear, flexible peptides can be built from a [FASTA](https://doi.org/10.1073/pnas.85.8.2444) sequence string.
+Each letter is mapped to a three-letter atom type name following
+[IUPAC-IUB conventions](https://doi.org/10.1111/j.1432-1033.1984.tb07877.x),
+and consecutive residues are connected by harmonic bonds.
+The atom types must be defined in the `atoms` section (or an included force field file).
+
+```yaml
+molecules:
+  - name: peptide
+    fasta:
+      sequence: "nAGGKRc"
+      k: 80.33       # harmonic bond force constant (kJ/mol/Å²)
+      req: 3.8       # equilibrium bond distance (Å)
+    excluded_neighbours: 1
+```
+
+Uppercase letters follow the standard
+[IUPAC one-letter codes](https://doi.org/10.1111/j.1432-1033.1984.tb07877.x)
+for the 20 amino acids.
+In addition, the following Faunus-specific lowercase codes are supported:
+
+| FASTA letter | Atom type | Description |
+|:------------:|-----------|-------------|
+| `n`          | NTR       | N-terminus  |
+| `c`          | CTR       | C-terminus  |
+| `a`          | ANK       | Ankyrin repeat |
+
+Whitespace in the sequence is ignored and `*` terminates parsing.
+The `fasta` field is mutually exclusive with `atoms` and `from_structure`.
+
+If `sequence` ends with `.fasta`, it is read as a [FASTA file](https://doi.org/10.1073/pnas.85.8.2444)
+where header lines (`>`) and comment lines (`;`) are skipped:
+
+```yaml
+molecules:
+  - name: my_protein
+    fasta: {sequence: "my_protein.fasta", k: 80.33, req: 3.8}
+```
+
+For the [CALVADOS](https://doi.org/10.1073/pnas.2111696119) coarse-grained model,
+use `k: 80.33` and `req: 3.8` together with the `calvados3.yaml` force field:
+
+```yaml
+include: [calvados3.yaml]
+molecules:
+  - name: histatin5
+    fasta: {sequence: "DSHAKRHHGYKRKFHEKHHSHRGY", k: 80.33, req: 3.8}
+    excluded_neighbours: 1
+system:
+  cell: !Cuboid [200.0, 200.0, 200.0]
+  blocks:
+    - molecule: histatin5
+      N: 1
+      insert: !RandomWalk {bond_length: 3.8}
+```
 
 ### Degrees of Freedom
 
@@ -233,6 +292,7 @@ Blocks specify how many copies of each molecule to create and how to initialize 
 | `!FixedCOM`      | `{filename: mol.xyz, position: [0, 0, 0]}`           | Place at specific position                     |
 | `!FromFile`      | `structure.xyz`                                      | Read all positions from file                   |
 | `!Manual`        | `[[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]`                | Explicit coordinates for all atoms             |
+| `!RandomWalk`    | `{bond_length: 3.8}`                                 | Random walk chain from random origin           |
 
 The `directions` field controls which axes are randomized: `xyz` (default), `xy`, `xz`, `yz`, `x`, `y`, or `z`.
 

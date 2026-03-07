@@ -75,6 +75,15 @@ pub enum InsertionPolicy {
 
     /// Define the positions of the atoms of all molecules manually, directly in the topology file.
     Manual(Vec<Point>),
+    /// Generate positions as a random walk with a fixed step size.
+    /// Useful for linear polymer chains built from FASTA sequences.
+    RandomWalk {
+        /// Step size between consecutive atoms (Å)
+        bond_length: f64,
+        #[serde(default)]
+        /// Random directions for placing the chain center.
+        directions: Dimension,
+    },
 }
 
 impl InsertionPolicy {
@@ -129,6 +138,18 @@ impl InsertionPolicy {
 
             // the coordinates should already be validated that they are compatible with the topology
             Self::Manual(positions) => Ok(positions.to_owned()),
+
+            Self::RandomWalk {
+                bond_length,
+                directions,
+            } => Self::generate_random_walk(
+                molecule_kind,
+                number,
+                cell,
+                rng,
+                *bond_length,
+                directions,
+            ),
         }
     }
 
@@ -225,6 +246,32 @@ impl InsertionPolicy {
         Ok((0..num_molecules).flat_map(gen_pos).collect::<Vec<_>>())
     }
 
+    /// Generate positions as a random walk from a random origin.
+    ///
+    /// Each molecule starts at a random point inside the cell, then each
+    /// subsequent atom is placed `bond_length` away in a random direction.
+    fn generate_random_walk(
+        molecule_kind: &MoleculeKind,
+        num_molecules: usize,
+        cell: &impl SimulationCell,
+        rng: &mut ThreadRng,
+        bond_length: f64,
+        directions: &Dimension,
+    ) -> anyhow::Result<Vec<Point>> {
+        let n_atoms = molecule_kind.atom_indices().len();
+        let mut all_positions = Vec::with_capacity(n_atoms * num_molecules);
+
+        for _ in 0..num_molecules {
+            let mut pos = directions.filter(cell.get_point_inside(rng));
+            all_positions.push(pos);
+            for _ in 1..n_atoms {
+                pos += transform::random_unit_vector(rng) * bond_length;
+                all_positions.push(pos);
+            }
+        }
+        Ok(all_positions)
+    }
+
     /// Finalize path to the provided structure file (if it is provided) treating it either as an absolute path
     /// (if it is absolute) or as a path relative to `filename`.
     pub(super) fn finalize_path(&mut self, filename: impl AsRef<Path>) {
@@ -232,7 +279,7 @@ impl InsertionPolicy {
             Self::FromFile(x) => x.finalize(filename),
             Self::RandomCOM { filename: x, .. } => x.finalize(filename),
             Self::FixedCOM { filename: x, .. } => x.finalize(filename),
-            Self::RandomAtomPos { .. } | Self::Manual(_) => (),
+            Self::RandomAtomPos { .. } | Self::Manual(_) | Self::RandomWalk { .. } => (),
         }
     }
 }

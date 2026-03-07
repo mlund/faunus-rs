@@ -23,7 +23,26 @@ use unordered_pair::UnorderedPair;
 use crate::topology::{Chain, DegreesOfFreedom, Residue, Value};
 use validator::{Validate, ValidationError};
 
+use super::bond::BondKind;
 use super::{Bond, BondGraph, CustomProperty, Dihedral, IndexRange, Indexed, Torsion};
+
+/// FASTA sequence with harmonic bond parameters for building linear, flexible peptides.
+///
+/// Each letter maps to a three-letter atom/residue name (e.g. `A` → `ALA`).
+/// Harmonic bonds are automatically generated between consecutive residues.
+/// Lowercase `n`/`c` map to `NTR`/`CTR` termini.
+///
+/// See [IUPAC-IUB 1983 nomenclature](https://doi.org/10.1111/j.1432-1033.1984.tb07877.x).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct FastaStructure {
+    /// FASTA sequence string, e.g. `"nAGGKc"`
+    pub sequence: String,
+    /// Harmonic bond force constant (kJ/mol/Å²)
+    pub k: f64,
+    /// Equilibrium bond distance (Å)
+    pub req: f64,
+}
 
 /// Description of molecule properties.
 ///
@@ -106,6 +125,10 @@ pub struct MoleculeKind {
     #[serde(default)]
     #[builder(setter(strip_option, custom), default)]
     from_structure: Option<PathBuf>,
+    /// Build linear peptide from FASTA sequence with automatic harmonic bonds.
+    #[serde(default)]
+    #[builder(setter(strip_option), default)]
+    fasta: Option<FastaStructure>,
 }
 
 impl MoleculeKindBuilder {
@@ -170,6 +193,47 @@ impl MoleculeKind {
         Ok(())
     }
 
+    /// Expand FASTA sequence into atom names and harmonic bonds.
+    ///
+    /// If `sequence` ends with `.fasta`, it is treated as a file path and the
+    /// sequence is read from the file (headers and comments are skipped).
+    /// Otherwise it is parsed as an inline FASTA string.
+    ///
+    /// Each letter is converted to a three-letter residue name (atom type).
+    /// Consecutive residues are connected by harmonic bonds with the given `k` and `req`.
+    pub(crate) fn expand_fasta(&mut self) -> anyhow::Result<()> {
+        if let Some(fasta) = &self.fasta {
+            let path = std::path::Path::new(&fasta.sequence);
+            let names = if path
+                .extension()
+                .is_some_and(|e| e.eq_ignore_ascii_case("fasta"))
+            {
+                log::info!("Reading FASTA sequence from '{}'", path.display());
+                let file_sequence = super::residue::read_fasta_file(path)?;
+                super::residue::fasta_to_residue_names(&file_sequence)?
+            } else {
+                super::residue::fasta_to_residue_names(&fasta.sequence)?
+            };
+            if names.is_empty() {
+                anyhow::bail!("molecule '{}': FASTA sequence is empty", self.name);
+            }
+            let harmonic = interatomic::twobody::Harmonic::new(fasta.k, fasta.req);
+            let bond_kind = BondKind::Harmonic(harmonic);
+            for i in 1..names.len() {
+                self.bonds
+                    .push(Bond::new([i - 1, i], bond_kind.clone(), Default::default()));
+            }
+            self.atoms = names.into_iter().map(String::from).collect();
+            log::debug!(
+                "FASTA expanded '{}' into {} atoms and {} bonds",
+                self.name,
+                self.atoms.len(),
+                self.bonds.len()
+            );
+        }
+        Ok(())
+    }
+
     /// Set indices of atom types.
     pub(super) fn set_atom_indices(&mut self, indices: Vec<usize>) {
         self.atom_indices = indices;
@@ -216,6 +280,16 @@ impl MoleculeKind {
 }
 
 fn validate_molecule(molecule: &MoleculeKind) -> Result<(), ValidationError> {
+    // fasta is mutually exclusive with from_structure and atoms
+    if molecule.fasta.is_some() && molecule.from_structure.is_some() {
+        return Err(ValidationError::new("")
+            .with_message("`fasta` and `from_structure` are mutually exclusive".into()));
+    }
+    if molecule.fasta.is_some() && !molecule.atoms.is_empty() {
+        return Err(ValidationError::new("")
+            .with_message("`fasta` and `atoms` are mutually exclusive".into()));
+    }
+
     let n_atoms = molecule.atoms.len();
 
     // bonds must only exist between defined atoms
@@ -470,6 +544,44 @@ mod tests {
                 assert!(molecule.exclusions.contains(&UnorderedPair(i, j)));
             }
         }
+    }
+
+    #[test]
+    fn fasta_expands_atoms_and_bonds() {
+        let mut molecule = MoleculeKindBuilder::default()
+            .name("peptide")
+            .fasta(FastaStructure {
+                sequence: "nAGKc".to_string(),
+                k: 80.33,
+                req: 3.8,
+            })
+            .build()
+            .unwrap();
+
+        molecule.expand_fasta().unwrap();
+
+        assert_eq!(molecule.atoms, ["NTR", "ALA", "GLY", "LYS", "CTR"]);
+        assert_eq!(molecule.bonds.len(), 4);
+        // verify bond indices are sequential
+        for (i, bond) in molecule.bonds.iter().enumerate() {
+            assert_eq!(*bond.index(), [i, i + 1]);
+        }
+    }
+
+    #[test]
+    fn fasta_rejects_with_atoms() {
+        let molecule = MoleculeKindBuilder::default()
+            .name("bad")
+            .atoms(vec!["ALA".into()])
+            .fasta(FastaStructure {
+                sequence: "AG".to_string(),
+                k: 1.0,
+                req: 1.0,
+            })
+            .build()
+            .unwrap();
+
+        assert!(molecule.validate().is_err());
     }
 
     #[test]
