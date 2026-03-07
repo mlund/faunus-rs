@@ -12,9 +12,8 @@ E = PV - (N + 1) k_BT \ln V
 $$
 
 where $P$ is the external pressure, $V$ is the volume, $k_BT$ is the thermal energy,
-and $N$ is the number of independently translatable entities.
-For single-atom molecule kinds, each atom counts independently ($N$ += group size);
-for multi-atom molecule kinds, each non-empty group contributes 1.
+and $N$ is the number of independently translatable entities
+(individual atoms for single-atom molecules, one per molecule for multi-atom molecules).
 
 ### YAML configuration
 
@@ -240,10 +239,10 @@ energy term. No manual `!Ewald` entry is needed in the nonbonded list.
 
 ```yaml
 energy:
+  combine_with_default: true
   nonbonded:
     default:
       - !LennardJones {mixing: LB}
-  combine_with_default: true
   spline:
     cutoff: 14.0
   ewald:
@@ -256,7 +255,8 @@ energy:
 |------------|----------|---------|-------------------------------------------------------------|
 | `cutoff`   | yes      |         | Real-space cutoff (Å)                                       |
 | `accuracy` | no       | `1e-5`  | Target relative accuracy $\varepsilon$                      |
-| `policy`   | no       | `PBC`   | `PBC` or `IPBC` ([Stenqvist & Lund, 2018](https://doi.org/10/css8)) |
+| `policy`   | no       | `PBC`   | `PBC` or `IPBC` ([Stenqvist & Lund, 2018](https://doi.org/10.1080/00268976.2018.1516231)) |
+| `optimize` | no       | `false` | Jointly optimize $\alpha$ and $n_\text{max}$ to minimize k-vectors (Yukawa only) |
 
 If the medium defines a salt concentration, the corresponding Debye screening
 parameter $\kappa$ is automatically propagated to both the real-space and
@@ -292,12 +292,14 @@ energy:
     grid_type: PowerLaw2
 ```
 
-| Key            | Required | Default      | Description                              |
-|----------------|----------|--------------|------------------------------------------|
-| `cutoff`       | yes      |              | Cutoff distance (Å)                      |
-| `n_points`     | no       | `2000`       | Number of spline grid points             |
-| `grid_type`    | no       | `PowerLaw2`  | Grid spacing strategy (see below)        |
-| `shift_energy` | no       | `true`       | Shift energy to zero at cutoff           |
+| Key                | Required | Default      | Description                              |
+|--------------------|----------|--------------|------------------------------------------|
+| `cutoff`           | yes      |              | Cutoff distance (Å)                      |
+| `n_points`         | no       | `2000`       | Number of spline grid points             |
+| `grid_type`        | no       | `PowerLaw2`  | Grid spacing strategy (see below)        |
+| `shift_energy`     | no       | `true`       | Shift energy to zero at cutoff           |
+| `cell_list`        | no       | `true`       | Use cell list for spatial acceleration   |
+| `bounding_spheres` | no       | `true`       | Use bounding-sphere culling of distant group pairs |
 
 Available grid types:
 
@@ -330,8 +332,8 @@ No explicit `energy:` configuration is needed.
 | Kind            | Energy                                                       |
 |-----------------|--------------------------------------------------------------|
 | `!Harmonic`     | $\frac{1}{2} k (r - r_\text{eq})^2$                         |
-| `!FENE`         | not yet implemented                                          |
-| `!Morse`        | not yet implemented                                          |
+| `!FENE`         | $-\tfrac{1}{2}k R_0^2 \ln\bigl(1 - (r/R_0)^2\bigr)$        |
+| `!Morse`        | $D_e\bigl(1 - e^{-a(r - r_e)}\bigr)^2$                      |
 | `!UreyBradley`  | $\frac{1}{2} k (r - r_\text{eq})^2$                         |
 
 **Torsions** (three-body, function of angle $\theta$ in degrees):
@@ -339,7 +341,7 @@ No explicit `energy:` configuration is needed.
 | Kind         | Energy                                         |
 |--------------|------------------------------------------------|
 | `!Harmonic`  | $\frac{1}{2} k (\theta - \theta_\text{eq})^2$  |
-| `!Cosine`    | not yet implemented                             |
+| `!Cosine`    | $\frac{1}{2} k (\cos\theta - \cos\theta_\text{eq})^2$ |
 
 **Dihedrals** (four-body, function of dihedral angle $\phi$ in degrees):
 

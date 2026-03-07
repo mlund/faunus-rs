@@ -32,7 +32,7 @@ use std::path::PathBuf;
 /// Uses `#[serde(flatten)]` on [`CollectiveVariableBuilder`] so users write
 /// CV fields (`property`, `range`, …) at the same level as `file` and
 /// `frequency`, avoiding a nested `cv:` block. Same approach as
-/// [`ConstrainBuilder`](crate::energy::constrain::ConstrainBuilder).
+/// [`ConstrainBuilder`](crate::energy::ConstrainBuilder).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CollectiveVariableAnalysisBuilder {
     #[serde(flatten)]

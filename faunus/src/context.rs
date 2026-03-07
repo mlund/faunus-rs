@@ -58,7 +58,7 @@ pub trait WithTopology {
 
     /// Get reference to the topology of the system.
     ///
-    /// This does not increase the counter of Arc<Topology>
+    /// This does not increase the counter of `Arc<Topology>`
     /// and should therefore be faster than using `WithTopology::topology`.
     fn topology_ref(&self) -> &Arc<Topology>;
 }

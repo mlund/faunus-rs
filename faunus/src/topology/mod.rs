@@ -24,7 +24,7 @@
 //!
 //! - [`AtomKind`] is the smallest unit, but need not to be a chemical element.
 //! - [`MoleculeKind`] is a collection of atoms, e.g. a protein or a water molecule.
-//! - [`MoleculeBlock`] is a collection of molecules of the same type.
+//! - `MoleculeBlock` is a collection of molecules of the same type.
 //!
 //! Topology is read from a file in yaml format using:
 //! ```
