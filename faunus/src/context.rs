@@ -120,7 +120,6 @@ pub trait ParticleSystem: GroupCollection + WithCell + WithTopology {
     fn get_atomkind(&self, i: usize) -> usize;
 
     /// Optional SoA position arrays for SIMD batch evaluation.
-    /// Returns None for AoS platforms; Some for SoA platforms.
     fn positions_soa(&self) -> Option<(&[f64], &[f64], &[f64])> {
         None
     }

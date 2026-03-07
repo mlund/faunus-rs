@@ -324,12 +324,12 @@ function: "q * z"
 #[cfg(test)]
 mod integration_tests {
     use super::*;
-    use crate::platform::aos::AosPlatform;
+    use crate::platform::soa::SoaPlatform;
     use std::path::Path;
 
-    fn make_context() -> AosPlatform {
+    fn make_context() -> SoaPlatform {
         let mut rng = rand::thread_rng();
-        AosPlatform::new(
+        SoaPlatform::new(
             "tests/files/topology_pass.yaml",
             Some(Path::new("tests/files/structure.xyz")),
             &mut rng,

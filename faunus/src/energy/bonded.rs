@@ -272,15 +272,16 @@ mod tests {
         energy::Hamiltonian,
         group::{GroupCollection, GroupSize},
         montecarlo::NewOld,
-        platform::aos::AosPlatform,
+        platform::soa::SoaPlatform,
+        GroupChange,
     };
 
     use super::*;
 
-    fn make_system() -> (Topology, AosPlatform) {
+    fn make_system() -> (Topology, SoaPlatform) {
         let topology = Topology::from_file("tests/files/bonded_interactions.yaml").unwrap();
         let mut rng = rand::thread_rng();
-        let system = AosPlatform::from_raw_parts(
+        let system = SoaPlatform::from_raw_parts(
             Arc::new(topology.clone()),
             Cell::Cuboid(Cuboid::cubic(20.0)),
             RefCell::new(Hamiltonian::default()),
@@ -291,7 +292,7 @@ mod tests {
         (topology, system)
     }
 
-    fn get_intramolecular_bonded() -> (AosPlatform, IntramolecularBonded) {
+    fn get_intramolecular_bonded() -> (SoaPlatform, IntramolecularBonded) {
         let (_topology, system) = make_system();
         (system, IntramolecularBonded::default())
     }
@@ -407,7 +408,7 @@ mod tests {
         }
     }
 
-    fn get_intermolecular_bonded() -> (AosPlatform, IntermolecularBonded) {
+    fn get_intermolecular_bonded() -> (SoaPlatform, IntermolecularBonded) {
         let (topology, system) = make_system();
         let bonded = match IntermolecularBonded::new(&topology) {
             EnergyTerm::IntermolecularBonded(e) => e,

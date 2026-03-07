@@ -251,7 +251,7 @@ mod integration_tests {
     use super::*;
     use crate::cell::Shape;
     use crate::group::GroupCollection;
-    use crate::platform::aos::AosPlatform;
+    use crate::platform::soa::SoaPlatform;
     use crate::{WithCell, WithTopology};
     use float_cmp::assert_approx_eq;
     use std::path::Path;
@@ -259,7 +259,7 @@ mod integration_tests {
     #[test]
     fn energy_with_reference_platform() {
         let mut rng = rand::thread_rng();
-        let context = AosPlatform::new(
+        let context = SoaPlatform::new(
             "tests/files/topology_pass.yaml",
             Some(Path::new("tests/files/structure.xyz")),
             &mut rng,

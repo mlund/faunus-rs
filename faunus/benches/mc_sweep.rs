@@ -1,18 +1,12 @@
 use criterion::{criterion_group, criterion_main, Criterion};
 use faunus::montecarlo::MarkovChain;
-use faunus::platform::aos::AosPlatform;
 use faunus::platform::soa::SoaPlatform;
 use std::io::Write;
 use std::path::Path;
 
-fn yaml_config(spline: bool, n_molecules: usize) -> String {
+fn yaml_config(n_molecules: usize) -> String {
     let xyz = Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/twobody/cppm-p18.xyz");
     let xyz = xyz.to_str().unwrap();
-    let spline_section = if spline {
-        "\n    spline:\n      cutoff: 90.0\n      n_points: 500"
-    } else {
-        ""
-    };
     // Scale box so density stays roughly constant relative to 20 molecules in 200^3
     let box_len = (200.0_f64.powi(3) * n_molecules as f64 / 20.0).cbrt() as usize;
     format!(
@@ -50,7 +44,10 @@ system:
     nonbonded:
       default:
         - !Coulomb {{cutoff: 90}}
-        - !WeeksChandlerAndersen {{mixing: LB}}{spline_section}
+        - !WeeksChandlerAndersen {{mixing: LB}}
+    spline:
+      cutoff: 90.0
+      n_points: 500
   blocks:
     - molecule: MOL
       N: {n_molecules}
@@ -81,71 +78,41 @@ fn write_tmp_yaml(yaml: &str) -> tempfile::NamedTempFile {
     tmp
 }
 
-/// Build a MarkovChain for any platform from a generated YAML config.
-fn build_mc<T: faunus::Context + faunus::WithCell<SimCell = faunus::cell::Cell> + 'static>(
-    context: T,
-    tmp_path: &std::path::Path,
-) -> MarkovChain<T> {
-    let medium = faunus::platform::get_medium(tmp_path).unwrap();
-    let kt = faunus::simulation::thermal_energy(&medium);
-    faunus::simulation::build_markov_chain(tmp_path, context, kt, None).unwrap()
-}
-
-fn build_mc_aos(spline: bool, n_molecules: usize) -> MarkovChain<AosPlatform> {
-    let yaml = yaml_config(spline, n_molecules);
-    let tmp = write_tmp_yaml(&yaml);
-    let context = AosPlatform::new(tmp.path(), None, &mut rand::thread_rng()).unwrap();
-    build_mc(context, tmp.path())
-}
-
-fn build_mc_soa(n_molecules: usize) -> MarkovChain<SoaPlatform> {
-    let yaml = yaml_config(true, n_molecules);
+fn build_mc(n_molecules: usize) -> MarkovChain<SoaPlatform> {
+    let yaml = yaml_config(n_molecules);
     let tmp = write_tmp_yaml(&yaml);
     let context = SoaPlatform::new(tmp.path(), None, &mut rand::thread_rng()).unwrap();
-    build_mc(context, tmp.path())
+    let medium = faunus::platform::get_medium(tmp.path()).unwrap();
+    let kt = faunus::simulation::thermal_energy(&medium);
+    faunus::simulation::build_markov_chain(tmp.path(), context, kt, None).unwrap()
 }
 
 /// Single MC move benchmarks for 20 CPPM molecules
 fn bench_mc_sweep(c: &mut Criterion) {
-    let mut mc_aos_nospline = build_mc_aos(false, 20);
-    let mut mc_aos_spline = build_mc_aos(true, 20);
-    let mut mc_soa = build_mc_soa(20);
+    let mut mc = build_mc(20);
 
     let mut group = c.benchmark_group("mc_sweep_20cppm");
-    group.bench_function("aos", |b| {
-        b.iter(|| mc_aos_nospline.run_n_steps(1).unwrap());
-    });
-    group.bench_function("aos_splined", |b| {
-        b.iter(|| mc_aos_spline.run_n_steps(1).unwrap());
-    });
     group.bench_function("soa", |b| {
-        b.iter(|| mc_soa.run_n_steps(1).unwrap());
+        b.iter(|| mc.run_n_steps(1).unwrap());
     });
     group.finish();
 }
 
 /// Multi-step MC benchmarks (20 moves per iteration).
-/// With a group energy cache, old_energy lookups become O(1) after the first
-/// step, so the per-move cost should drop by ~50% for nonbonded-dominated systems.
 fn bench_mc_multistep(c: &mut Criterion) {
-    let mut mc_soa_20 = build_mc_soa(20);
-    let mut mc_aos_20 = build_mc_aos(true, 20);
+    let mut mc = build_mc(20);
 
     let mut group = c.benchmark_group("mc_multistep_20cppm");
-    group.bench_function("aos_splined_20steps", |b| {
-        b.iter(|| mc_aos_20.run_n_steps(20).unwrap());
-    });
     group.bench_function("soa_20steps", |b| {
-        b.iter(|| mc_soa_20.run_n_steps(20).unwrap());
+        b.iter(|| mc.run_n_steps(20).unwrap());
     });
     group.finish();
 }
 
 /// Scaling benchmark: 80 molecules to measure how performance scales with
-/// system size. The group cache saves O(N_groups) work per step, so the
-/// absolute time saved grows linearly with molecule count.
+/// system size.
 fn bench_mc_scaling(c: &mut Criterion) {
-    let mut mc_soa_80 = build_mc_soa(80);
+    let mut mc_soa_80 = build_mc(80);
 
     let mut group = c.benchmark_group("mc_sweep_80cppm");
     group.bench_function("soa", |b| {

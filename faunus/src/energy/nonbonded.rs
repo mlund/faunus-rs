@@ -328,12 +328,12 @@ impl<P: IsotropicTwobodyEnergy> EnergyChange for NonbondedMatrix<P> {
 
         // SoA fast path: bypasses per-pair Context trait dispatch and Cell enum
         // matching by reading directly from contiguous f64 slices with inline
-        // branchless PBC distance (~26% faster than scalar AoS path).
+        // branchless PBC distance.
         if let (Some((x, y, z)), Some(atom_kinds)) =
             (context.positions_soa(), context.atom_kinds_u32())
         {
             let cell = context.cell();
-            // Prefer cached PBC params (SoaPlatform); fall back to computing them (AosPlatform)
+            // Prefer cached PBC params; fall back to computing them
             let pbc = context
                 .pbc_params()
                 .or_else(|| PbcParams::try_from_cell(cell));
@@ -361,7 +361,7 @@ impl<P: IsotropicTwobodyEnergy> EnergyChange for NonbondedMatrix<P> {
                 Change::None => 0.0,
             };
         }
-        // Scalar fallback for AoS platforms
+        // Scalar fallback when SoA arrays are unavailable
         match change {
             Change::Everything | Change::Volume(_, _) => self.total_nonbonded(context),
             Change::SingleGroup(group_index, group_change) => {
@@ -1210,7 +1210,7 @@ mod tests {
         energy::{builder::HamiltonianBuilder, Hamiltonian},
         group::{GroupCollection, GroupSize},
         montecarlo::NewOld,
-        platform::aos::AosPlatform,
+        platform::soa::SoaPlatform,
         topology::Topology,
     };
 
@@ -1318,7 +1318,7 @@ mod tests {
     }
 
     /// Get nonbonded matrix for testing.
-    fn get_test_matrix() -> (AosPlatform, NonbondedMatrix) {
+    fn get_test_matrix() -> (SoaPlatform, NonbondedMatrix) {
         let file = "tests/files/nonbonded_interactions.yaml";
         let topology = Topology::from_file(file).unwrap();
         let builder = HamiltonianBuilder::from_file(file)
@@ -1335,7 +1335,7 @@ mod tests {
         let nonbonded = NonbondedMatrix::new(&builder, &topology, Some(medium), false).unwrap();
 
         let mut rng = rand::thread_rng();
-        let system = AosPlatform::from_raw_parts(
+        let system = SoaPlatform::from_raw_parts(
             Arc::new(topology),
             Cell::Cuboid(Cuboid::cubic(20.0)),
             RefCell::new(Hamiltonian::from(vec![nonbonded.clone().into()])),
@@ -1792,7 +1792,7 @@ mod tests {
     // ====== NonbondedMatrixSplined tests ======
 
     /// Get splined nonbonded matrix for testing.
-    fn get_test_splined_matrix() -> (AosPlatform, NonbondedMatrix, NonbondedMatrixSplined) {
+    fn get_test_splined_matrix() -> (SoaPlatform, NonbondedMatrix, NonbondedMatrixSplined) {
         let (system, nonbonded) = get_test_matrix();
         let cutoff = 15.0; // Use a cutoff that covers all test distances
         let splined = NonbondedMatrixSplined::from_nonbonded(&nonbonded, cutoff, None);

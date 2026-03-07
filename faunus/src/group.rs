@@ -673,7 +673,7 @@ impl GroupLists {
 mod tests {
     use std::path::Path;
 
-    use crate::platform::aos::AosPlatform;
+    use crate::platform::soa::SoaPlatform;
 
     use super::*;
 
@@ -692,7 +692,7 @@ mod tests {
         };
 
         let mut rng = rand::thread_rng();
-        let context = AosPlatform::new(
+        let context = SoaPlatform::new(
             "tests/files/topology_pass.yaml",
             Some(Path::new("tests/files/structure.xyz")),
             &mut rng,
@@ -790,7 +790,7 @@ mod tests {
     #[test]
     fn test_group_select_by_id() {
         let mut rng = rand::thread_rng();
-        let context = AosPlatform::new(
+        let context = SoaPlatform::new(
             "tests/files/topology_pass.yaml",
             Some(Path::new("tests/files/structure.xyz")),
             &mut rng,
@@ -878,7 +878,7 @@ mod tests {
     #[test]
     fn test_group_selections() {
         let mut rng = rand::thread_rng();
-        let context = AosPlatform::new(
+        let context = SoaPlatform::new(
             "tests/files/topology_pass.yaml",
             Some(Path::new("tests/files/structure.xyz")),
             &mut rng,

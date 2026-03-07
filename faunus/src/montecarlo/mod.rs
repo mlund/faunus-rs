@@ -531,13 +531,13 @@ pub fn entropy_bias(n: NewOld<usize>, volume: NewOld<f64>) -> f64 {
 mod tests {
 
     use super::*;
-    use crate::platform::aos::AosPlatform;
+    use crate::platform::soa::SoaPlatform;
     use float_cmp::assert_approx_eq;
 
     #[test]
     fn translate_molecules_simulation() {
         let mut rng = rand::thread_rng();
-        let context = AosPlatform::new(
+        let context = SoaPlatform::new(
             "tests/files/translate_molecules_simulation.yaml",
             None,
             &mut rng,
@@ -578,7 +578,7 @@ mod tests {
         assert_approx_eq!(
             f64,
             move2_stats.energy_change_sum,
-            -1.1611869334060376,
+            -1.1611869334060478,
             epsilon = 1e-14
         );
 
@@ -595,7 +595,7 @@ mod tests {
         assert_approx_eq!(
             f64,
             move4_stats.energy_change_sum,
-            -61.739122509342266,
+            -61.73912250934224,
             epsilon = 1e-14
         );
 
@@ -606,59 +606,47 @@ mod tests {
         assert_approx_eq!(
             f64,
             move5_stats.energy_change_sum,
-            -515.1334649717062,
+            -515.1334649717063,
             epsilon = 1e-14
         );
 
         let context = &markov_chain.context;
-        println!("{:?}", context.particles());
+        let pos = |i: usize| context.position(i);
 
-        let p1 = &context.particles()[0];
-        let p2 = &context.particles()[1];
-        let p3 = &context.particles()[2];
+        assert_approx_eq!(f64, pos(0).x, pos(1).x + 1.0, epsilon = 0.0000001);
+        assert_approx_eq!(f64, pos(0).x, pos(2).x + 1.0, epsilon = 0.0000001);
+        assert_approx_eq!(f64, pos(1).x, pos(2).x, epsilon = 0.0000001);
 
-        assert_approx_eq!(f64, p1.pos.x, p2.pos.x + 1.0, epsilon = 0.0000001);
-        assert_approx_eq!(f64, p1.pos.x, p3.pos.x + 1.0, epsilon = 0.0000001);
-        assert_approx_eq!(f64, p2.pos.x, p3.pos.x, epsilon = 0.0000001);
+        assert_approx_eq!(f64, pos(0).y, pos(1).y, epsilon = 0.0000001);
+        assert_approx_eq!(f64, pos(0).y + 1.0, pos(2).y, epsilon = 0.0000001);
+        assert_approx_eq!(f64, pos(1).y + 1.0, pos(2).y, epsilon = 0.0000001);
 
-        assert_approx_eq!(f64, p1.pos.y, p2.pos.y, epsilon = 0.0000001);
-        assert_approx_eq!(f64, p1.pos.y + 1.0, p3.pos.y, epsilon = 0.0000001);
-        assert_approx_eq!(f64, p2.pos.y + 1.0, p3.pos.y, epsilon = 0.0000001);
+        assert_approx_eq!(f64, pos(0).z, pos(1).z, epsilon = 0.0000001);
+        assert_approx_eq!(f64, pos(0).z, pos(2).z, epsilon = 0.0000001);
+        assert_approx_eq!(f64, pos(1).z, pos(2).z, epsilon = 0.0000001);
 
-        assert_approx_eq!(f64, p1.pos.z, p2.pos.z, epsilon = 0.0000001);
-        assert_approx_eq!(f64, p1.pos.z, p3.pos.z, epsilon = 0.0000001);
-        assert_approx_eq!(f64, p2.pos.z, p3.pos.z, epsilon = 0.0000001);
+        assert_approx_eq!(f64, pos(3).x + 1.0, pos(4).x, epsilon = 0.0000001);
+        assert_approx_eq!(f64, pos(3).x + 1.0, pos(5).x, epsilon = 0.0000001);
+        assert_approx_eq!(f64, pos(4).x, pos(5).x, epsilon = 0.0000001);
 
-        let p4 = &context.particles()[3];
-        let p5 = &context.particles()[4];
-        let p6 = &context.particles()[5];
+        assert_approx_eq!(f64, pos(3).y, pos(4).y, epsilon = 0.0000001);
+        assert_approx_eq!(f64, pos(3).y, pos(5).y, epsilon = 0.0000001);
+        assert_approx_eq!(f64, pos(4).y, pos(5).y, epsilon = 0.0000001);
 
-        assert_approx_eq!(f64, p4.pos.x + 1.0, p5.pos.x, epsilon = 0.0000001);
-        assert_approx_eq!(f64, p4.pos.x + 1.0, p6.pos.x, epsilon = 0.0000001);
-        assert_approx_eq!(f64, p5.pos.x, p6.pos.x, epsilon = 0.0000001);
+        assert_approx_eq!(f64, pos(3).z, pos(4).z, epsilon = 0.0000001);
+        assert_approx_eq!(f64, pos(3).z, pos(5).z + 1.0, epsilon = 0.0000001);
+        assert_approx_eq!(f64, pos(4).z, pos(5).z + 1.0, epsilon = 0.0000001);
 
-        assert_approx_eq!(f64, p4.pos.y, p5.pos.y, epsilon = 0.0000001);
-        assert_approx_eq!(f64, p4.pos.y, p6.pos.y, epsilon = 0.0000001);
-        assert_approx_eq!(f64, p5.pos.y, p6.pos.y, epsilon = 0.0000001);
+        assert_approx_eq!(f64, pos(6).x, pos(7).x, epsilon = 0.0000001);
+        assert_approx_eq!(f64, pos(6).x, pos(8).x, epsilon = 0.0000001);
+        assert_approx_eq!(f64, pos(7).x, pos(8).x, epsilon = 0.0000001);
 
-        assert_approx_eq!(f64, p4.pos.z, p5.pos.z, epsilon = 0.0000001);
-        assert_approx_eq!(f64, p4.pos.z, p6.pos.z + 1.0, epsilon = 0.0000001);
-        assert_approx_eq!(f64, p5.pos.z, p6.pos.z + 1.0, epsilon = 0.0000001);
+        assert_approx_eq!(f64, pos(6).y, pos(7).y + 1.0, epsilon = 0.0000001);
+        assert_approx_eq!(f64, pos(6).y, pos(8).y + 2.0, epsilon = 0.0000001);
+        assert_approx_eq!(f64, pos(7).y, pos(8).y + 1.0, epsilon = 0.0000001);
 
-        let p7 = &context.particles()[6];
-        let p8 = &context.particles()[7];
-        let p9 = &context.particles()[8];
-
-        assert_approx_eq!(f64, p7.pos.x, p8.pos.x, epsilon = 0.0000001);
-        assert_approx_eq!(f64, p7.pos.x, p9.pos.x, epsilon = 0.0000001);
-        assert_approx_eq!(f64, p8.pos.x, p9.pos.x, epsilon = 0.0000001);
-
-        assert_approx_eq!(f64, p7.pos.y, p8.pos.y + 1.0, epsilon = 0.0000001);
-        assert_approx_eq!(f64, p7.pos.y, p9.pos.y + 2.0, epsilon = 0.0000001);
-        assert_approx_eq!(f64, p8.pos.y, p9.pos.y + 1.0, epsilon = 0.0000001);
-
-        assert_approx_eq!(f64, p7.pos.z, p8.pos.z, epsilon = 0.0000001);
-        assert_approx_eq!(f64, p7.pos.z, p9.pos.z, epsilon = 0.0000001);
-        assert_approx_eq!(f64, p8.pos.z, p9.pos.z, epsilon = 0.0000001);
+        assert_approx_eq!(f64, pos(6).z, pos(7).z, epsilon = 0.0000001);
+        assert_approx_eq!(f64, pos(6).z, pos(8).z, epsilon = 0.0000001);
+        assert_approx_eq!(f64, pos(7).z, pos(8).z, epsilon = 0.0000001);
     }
 }
