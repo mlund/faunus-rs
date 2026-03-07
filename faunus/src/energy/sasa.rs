@@ -179,6 +179,16 @@ impl SasaEnergy {
     pub(super) fn discard_backup(&mut self) {
         self.backup = None;
     }
+
+    /// Report SASA parameters as YAML.
+    pub(super) fn to_yaml(&self) -> serde_yaml::Value {
+        let mut map = serde_yaml::Mapping::new();
+        map.insert("probe_radius".into(), self.probe_radius.into());
+        if let Some(offset) = self.energy_offset {
+            map.insert("energy_offset".into(), offset.into());
+        }
+        serde_yaml::Value::Mapping(map)
+    }
 }
 
 #[cfg(test)]

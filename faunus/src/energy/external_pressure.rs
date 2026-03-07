@@ -146,6 +146,14 @@ impl ExternalPressure {
             _ => 0.0,
         }
     }
+
+    /// Report pressure parameters as YAML.
+    pub(super) fn to_yaml(&self) -> serde_yaml::Value {
+        let mut map = serde_yaml::Mapping::new();
+        map.insert("pressure_kj_mol_A3".into(), self.pressure.into());
+        map.insert("thermal_energy".into(), self.thermal_energy.into());
+        serde_yaml::Value::Mapping(map)
+    }
 }
 
 impl From<ExternalPressure> for EnergyTerm {

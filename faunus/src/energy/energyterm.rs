@@ -126,16 +126,16 @@ impl EnergyTerm {
     pub fn to_yaml(&self) -> Option<serde_yaml::Value> {
         match self {
             Self::PolymerDepletion(x) => Some(x.to_yaml()),
+            Self::EwaldReciprocal(x) => Some(x.to_yaml()),
+            Self::ExternalPressure(x) => Some(x.to_yaml()),
+            Self::CustomExternal(x) => Some(x.to_yaml()),
+            Self::SasaEnergy(x) => Some(x.to_yaml()),
             Self::NonbondedMatrix(_)
             | Self::NonbondedMatrixSplined(_)
             | Self::IntramolecularBonded(_)
             | Self::IntermolecularBonded(_)
-            | Self::SasaEnergy(_)
             | Self::CellOverlap(_)
-            | Self::Constrain(_)
-            | Self::ExternalPressure(_)
-            | Self::CustomExternal(_)
-            | Self::EwaldReciprocal(_) => None,
+            | Self::Constrain(_) => None,
         }
     }
 

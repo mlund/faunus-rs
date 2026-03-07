@@ -85,6 +85,7 @@ impl CustomExternalBuilder {
 
         Ok(CustomExternal {
             expression: Arc::new(expression),
+            function: self.function.clone(),
             var_indices,
             selection: self.selection.clone(),
             com: self.com,
@@ -151,6 +152,8 @@ fn substitute_constants(expression: &str, constants: &HashMap<String, f64>) -> S
 pub struct CustomExternal {
     /// Arc avoids copying ~19KB FlatEx on clone.
     expression: Arc<FlatEx<f64>>,
+    /// Original function string for reporting.
+    function: String,
     /// Maps each exmex variable slot to index in [q, x, y, z].
     var_indices: Vec<usize>,
     selection: Selection,
@@ -206,6 +209,15 @@ impl CustomExternal {
             .iter()
             .map(|&gi| self.energy_for_group(context, gi))
             .sum()
+    }
+
+    /// Report custom external parameters as YAML.
+    pub(super) fn to_yaml(&self) -> serde_yaml::Value {
+        let mut map = serde_yaml::Mapping::new();
+        map.insert("function".into(), self.function.clone().into());
+        map.insert("com".into(), self.com.into());
+        map.insert("selection".into(), self.selection.to_string().into());
+        serde_yaml::Value::Mapping(map)
     }
 }
 

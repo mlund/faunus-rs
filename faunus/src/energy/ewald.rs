@@ -371,6 +371,18 @@ impl EwaldReciprocalEnergy {
     pub(super) fn discard_backup(&mut self) {
         self.backup = None;
     }
+
+    /// Report Ewald parameters as YAML.
+    pub(super) fn to_yaml(&self) -> serde_yaml::Value {
+        let mut map = serde_yaml::Mapping::new();
+        map.insert("alpha".into(), self.ewald.alpha().into());
+        map.insert("n_max".into(), (self.ewald.n_max() as u64).into());
+        map.insert(
+            "k_vectors".into(),
+            (self.ewald.num_k_vectors() as u64).into(),
+        );
+        serde_yaml::Value::Mapping(map)
+    }
 }
 
 impl From<EwaldReciprocalEnergy> for EnergyTerm {
