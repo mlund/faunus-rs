@@ -274,7 +274,7 @@ mod tests {
         assert_eq!(cl.cells.len(), 27);
 
         let positions = vec![
-            Point::new(0.0, 0.0, 0.0),   // center cell
+            Point::new(0.0, 0.0, 0.0),    // center cell
             Point::new(-4.0, -4.0, -4.0), // corner cell
             Point::new(4.0, 4.0, 4.0),    // opposite corner
         ];
@@ -315,10 +315,7 @@ mod tests {
         let mut cl = CellList::new(box_len, cutoff);
 
         // Two particles near opposite edges — PBC neighbors
-        let positions = vec![
-            Point::new(-4.9, 0.0, 0.0),
-            Point::new(4.9, 0.0, 0.0),
-        ];
+        let positions = vec![Point::new(-4.9, 0.0, 0.0), Point::new(4.9, 0.0, 0.0)];
 
         cl.build(|i| positions[i], 2, 0..2);
 

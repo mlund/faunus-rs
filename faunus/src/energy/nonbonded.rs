@@ -670,11 +670,7 @@ impl GroupEnergyCache {
 /// Returns `None` if either group lacks a mass center or bounding radius,
 /// meaning the caller should fall back to exact pair evaluation.
 #[cfg(test)]
-fn min_group_distance(
-    gi: &Group,
-    gj: &Group,
-    cell: &impl SimulationCell,
-) -> Option<f64> {
+fn min_group_distance(gi: &Group, gj: &Group, cell: &impl SimulationCell) -> Option<f64> {
     let com_i = gi.mass_center()?;
     let com_j = gj.mass_center()?;
     let ri = gi.bounding_radius()?;
@@ -731,12 +727,7 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
     /// COM distance and precomputed (cutoff + R_i + R_j)². Uses branchless
     /// PBC distance when available, avoiding sqrt and trait dispatch.
     #[inline(always)]
-    fn groups_beyond_cutoff(
-        &self,
-        gi: &Group,
-        gj: &Group,
-        pbc: Option<&PbcParams>,
-    ) -> bool {
+    fn groups_beyond_cutoff(&self, gi: &Group, gj: &Group, pbc: Option<&PbcParams>) -> bool {
         if !self.use_bounding_spheres {
             return false;
         }
@@ -754,9 +745,7 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
         let threshold = cutoff + ri + rj;
         let threshold_sq = threshold * threshold;
         let dist_sq = match pbc {
-            Some(pbc) => {
-                pbc.distance_squared(com_i.x, com_i.y, com_i.z, com_j.x, com_j.y, com_j.z)
-            }
+            Some(pbc) => pbc.distance_squared(com_i.x, com_i.y, com_i.z, com_j.x, com_j.y, com_j.z),
             None => {
                 // Non-orthorhombic fallback (rare)
                 let d = com_i - com_j;
@@ -843,7 +832,9 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
                 let inter: f64 = groups
                     .iter()
                     .skip(gi + 1)
-                    .filter(|group_j| !self.groups_beyond_cutoff(group_i, group_j, soa.pbc.as_ref()))
+                    .filter(|group_j| {
+                        !self.groups_beyond_cutoff(group_i, group_j, soa.pbc.as_ref())
+                    })
                     .flat_map(|group_j| {
                         group_i
                             .iter_active()

@@ -14,6 +14,7 @@ use crate::{
     WithHamiltonian, WithTopology,
 };
 
+use interatomic::coulomb::DebyeLength;
 use rand::rngs::ThreadRng;
 use serde::Serialize;
 
@@ -118,8 +119,25 @@ impl SoaPlatform {
             let medium = medium
                 .as_ref()
                 .ok_or_else(|| anyhow::anyhow!("Ewald requires a medium with permittivity"))?;
+            let initial_alpha = {
+                let debye_length = medium.debye_length();
+                interatomic::coulomb::pairwise::RealSpaceEwald::new(
+                    ewald_builder.cutoff,
+                    ewald_builder.accuracy,
+                    debye_length,
+                )
+                .alpha()
+            };
             let ewald =
                 crate::energy::EwaldReciprocalEnergy::new(ewald_builder, &platform, medium)?;
+            if ewald.alpha() != initial_alpha {
+                platform.hamiltonian_mut().rebuild_nonbonded(
+                    &hamiltonian_builder,
+                    platform.topology_ref(),
+                    Some(medium.clone()),
+                    ewald.real_space_scheme(),
+                )?;
+            }
             platform.hamiltonian_mut().push(ewald.into());
         }
         platform.update(&Change::Everything)?;

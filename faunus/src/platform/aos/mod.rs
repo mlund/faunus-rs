@@ -14,6 +14,7 @@
 
 //! # AoS (Array-of-Structures) platform for CPU-based simulations
 
+use interatomic::coulomb::DebyeLength;
 use rand::rngs::ThreadRng;
 
 use crate::{
@@ -104,8 +105,26 @@ impl AosPlatform {
                 let medium = medium
                     .as_ref()
                     .ok_or_else(|| anyhow::anyhow!("Ewald requires a medium with permittivity"))?;
+                // Record initial α so we can detect if optimization changed it
+                let initial_alpha = {
+                    let debye_length = medium.debye_length();
+                    interatomic::coulomb::pairwise::RealSpaceEwald::new(
+                        ewald_builder.cutoff,
+                        ewald_builder.accuracy,
+                        debye_length,
+                    )
+                    .alpha()
+                };
                 let ewald =
                     crate::energy::EwaldReciprocalEnergy::new(ewald_builder, &context, medium)?;
+                if ewald.alpha() != initial_alpha {
+                    context.hamiltonian_mut().rebuild_nonbonded(
+                        &hamiltonian_builder,
+                        context.topology_ref(),
+                        Some(medium.clone()),
+                        ewald.real_space_scheme(),
+                    )?;
+                }
                 context.hamiltonian_mut().push(ewald.into());
             }
             context.update(&Change::Everything)?;

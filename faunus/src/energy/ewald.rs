@@ -18,6 +18,12 @@
 //! contribution to the electrostatic energy in Monte Carlo simulations.
 //! Uses the Nymand–Linse O(M·N_k) partial structure factor update for
 //! single-group moves instead of O(N·N_k) full rebuilds.
+//!
+//! When `optimize` is enabled, the splitting parameter α and wave-vector
+//! cutoff n_max are jointly optimized at startup to minimize the number of
+//! k-vectors while preserving energy accuracy. This is only effective for
+//! Yukawa electrostatics (κ > 0) with PBC policy. If optimization changes α,
+//! the nonbonded real-space pair potential is automatically rebuilt to match.
 
 use crate::cell::Shape;
 use crate::change::GroupChange;
@@ -66,6 +72,16 @@ struct EwaldBackup {
 /// When present, a matching real-space Ewald pair potential is automatically
 /// injected into the nonbonded defaults (before splining), and the reciprocal-space
 /// term is added as a separate energy contribution.
+///
+/// # Example
+///
+/// ```yaml
+/// ewald:
+///   cutoff: 12.0
+///   accuracy: 1e-5
+///   policy: PBC
+///   optimize: true  # reduce k-vectors for Yukawa; no-op for pure Coulomb or IPBC
+/// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EwaldBuilder {
     /// Real-space cutoff (Å)
@@ -76,6 +92,14 @@ pub struct EwaldBuilder {
     /// Ewald policy: PBC (default) or IPBC
     #[serde(default)]
     pub policy: EwaldPolicy,
+    /// Jointly optimize α and n_max to minimize k-vectors at startup.
+    ///
+    /// Scans (α, n_max) pairs against actual particle data, picking the
+    /// fewest k-vectors that reproduce the reference total energy within
+    /// the accuracy target. Only effective for Yukawa (κ > 0) with PBC;
+    /// silently ignored for pure Coulomb or IPBC.
+    #[serde(default)]
+    pub optimize: bool,
 }
 
 const fn default_accuracy() -> f64 {
@@ -91,8 +115,8 @@ impl EwaldReciprocalEnergy {
     ) -> anyhow::Result<Self> {
         let box_length = Self::box_length_from_context(context)?;
         let kappa = medium.debye_length().map(|d| 1.0 / d);
-        let ewald = EwaldReciprocal::new(box_length, builder.cutoff, builder.accuracy, kappa)
-            .with_policy(builder.policy);
+        let mut ewald = EwaldReciprocal::new(box_length, builder.cutoff, builder.accuracy, kappa);
+        ewald.set_policy(builder.policy);
         let prefactor = interatomic::coulomb::TO_CHEMISTRY_UNIT / medium.permittivity();
 
         log::info!(
@@ -113,8 +137,30 @@ impl EwaldReciprocalEnergy {
             backup: None,
             pos_buf: (vec![0.0; n], vec![0.0; n], vec![0.0; n]),
         };
-        term.full_update(context);
+        term.full_update_impl(context, builder.optimize);
+        if builder.optimize {
+            log::info!(
+                "Ewald optimized: α={:.4}, n_max={}, k-vectors={}",
+                term.ewald.alpha(),
+                term.ewald.n_max(),
+                term.ewald.num_k_vectors()
+            );
+        }
         Ok(term)
+    }
+
+    /// Current Ewald splitting parameter α.
+    pub fn alpha(&self) -> f64 {
+        self.ewald.alpha()
+    }
+
+    /// Return the real-space Ewald scheme matching the current α.
+    ///
+    /// After optimization this may differ from the initial scheme derived from
+    /// `accuracy` alone, so callers should use this to rebuild the nonbonded
+    /// pair matrix when `optimize` is enabled.
+    pub fn real_space_scheme(&self) -> interatomic::coulomb::pairwise::RealSpaceEwald {
+        self.ewald.real_space_scheme()
     }
 
     fn box_length_from_context(context: &impl Context) -> anyhow::Result<[f64; 3]> {
@@ -149,9 +195,14 @@ impl EwaldReciprocalEnergy {
 
     /// Full recompute of structure factors and cached energy.
     fn full_update(&mut self, context: &impl Context) {
+        self.full_update_impl(context, false);
+    }
+
+    fn full_update_impl(&mut self, context: &impl Context, optimize: bool) {
         self.fill_positions(context);
         let (x, y, z) = &self.pos_buf;
-        self.ewald.update_all(x, y, z, &self.charges, None);
+        self.ewald
+            .update_all(x, y, z, &self.charges, None, optimize);
         self.update_cached_energy();
     }
 
@@ -161,7 +212,7 @@ impl EwaldReciprocalEnergy {
         self.fill_positions(context);
         let (x, y, z) = &self.pos_buf;
         self.ewald
-            .update_all(x, y, z, &self.charges, Some(box_length));
+            .update_all(x, y, z, &self.charges, Some(box_length), false);
         self.update_cached_energy();
         Ok(())
     }

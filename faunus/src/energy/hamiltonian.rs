@@ -68,31 +68,12 @@ impl Hamiltonian {
         };
 
         if let Some(nonbonded_matrix) = pairpot_ref {
-            let nonbonded = NonbondedMatrix::new(
+            hamiltonian.push(Self::build_nonbonded_term(
                 nonbonded_matrix,
+                builder,
                 topology,
                 medium,
-                builder.combine_with_default,
-            )?;
-
-            // Use splined potentials if configured
-            if let Some(spline_opts) = &builder.spline {
-                let config = spline_opts.to_spline_config();
-                let mut splined = NonbondedMatrixSplined::from_nonbonded(
-                    &nonbonded,
-                    spline_opts.cutoff,
-                    Some(config),
-                );
-                splined.set_bounding_spheres(spline_opts.bounding_spheres);
-                log::info!(
-                    "Using splined nonbonded potentials (cutoff={}, n_points={})",
-                    spline_opts.cutoff,
-                    spline_opts.n_points
-                );
-                hamiltonian.push(splined.into());
-            } else {
-                hamiltonian.push(nonbonded.into());
-            }
+            )?);
         }
 
         if topology
@@ -123,6 +104,38 @@ impl Hamiltonian {
         Ok(hamiltonian)
     }
 
+    /// Build a nonbonded energy term (plain or splined) from a pair potential builder.
+    fn build_nonbonded_term(
+        pairpot_builder: &super::builder::PairPotentialBuilder,
+        builder: &HamiltonianBuilder,
+        topology: &Topology,
+        medium: Option<interatomic::coulomb::Medium>,
+    ) -> anyhow::Result<EnergyTerm> {
+        let nonbonded = NonbondedMatrix::new(
+            pairpot_builder,
+            topology,
+            medium,
+            builder.combine_with_default,
+        )?;
+        if let Some(spline_opts) = &builder.spline {
+            let config = spline_opts.to_spline_config();
+            let mut splined = NonbondedMatrixSplined::from_nonbonded(
+                &nonbonded,
+                spline_opts.cutoff,
+                Some(config),
+            );
+            splined.set_bounding_spheres(spline_opts.bounding_spheres);
+            log::info!(
+                "Using splined nonbonded potentials (cutoff={}, n_points={})",
+                spline_opts.cutoff,
+                spline_opts.n_points
+            );
+            Ok(splined.into())
+        } else {
+            Ok(nonbonded.into())
+        }
+    }
+
     /// Create a Hamiltonian from a YAML file and topology.
     pub fn from_file(
         filename: impl AsRef<Path>,
@@ -143,6 +156,36 @@ impl Hamiltonian {
     /// Access the individual energy terms.
     pub fn energy_terms(&self) -> &[EnergyTerm] {
         &self.energy_terms
+    }
+
+    /// Replace the nonbonded energy term with a rebuilt version using an updated real-space scheme.
+    ///
+    /// Called after Ewald optimization changes α, requiring a new pair matrix and splines.
+    pub(crate) fn rebuild_nonbonded(
+        &mut self,
+        builder: &HamiltonianBuilder,
+        topology: &Topology,
+        medium: Option<interatomic::coulomb::Medium>,
+        real_space: interatomic::coulomb::pairwise::RealSpaceEwald,
+    ) -> anyhow::Result<()> {
+        let mut pairpot_builder = builder.pairpot_builder.clone().unwrap_or_default();
+        pairpot_builder.push_default(super::builder::PairInteraction::CoulombRealSpaceEwald(
+            real_space,
+        ));
+
+        let new_term = Self::build_nonbonded_term(&pairpot_builder, builder, topology, medium)?;
+
+        for term in &mut self.energy_terms {
+            if matches!(
+                term,
+                EnergyTerm::NonbondedMatrix(_) | EnergyTerm::NonbondedMatrixSplined(_)
+            ) {
+                *term = new_term;
+                log::info!("Rebuilt nonbonded interactions with optimized Ewald real-space scheme");
+                return Ok(());
+            }
+        }
+        Ok(())
     }
 
     /// Invalidate all nonbonded energy caches.
