@@ -808,6 +808,7 @@ mod tests {
                 rotate: false,
                 directions: Dimension::default(),
                 offset: None,
+                min_distance: None,
             }),
         );
 
@@ -825,6 +826,7 @@ mod tests {
                 rotate: true,
                 directions: Dimension::X,
                 offset: None,
+                min_distance: None,
             }),
         );
 

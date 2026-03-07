@@ -287,14 +287,17 @@ Blocks specify how many copies of each molecule to create and how to initialize 
 
 | Policy           | Example                                              | Description                                    |
 |------------------|------------------------------------------------------|------------------------------------------------|
-| `!RandomCOM`     | `{filename: mol.xyz, rotate: true, directions: xyz}` | Random center-of-mass placement                |
+| `!RandomCOM`     | `{filename: mol.xyz, rotate: true, min_distance: 2.0}` | Random center-of-mass placement              |
 | `!RandomAtomPos` | `{directions: xy}`                                   | Random position per atom                       |
 | `!FixedCOM`      | `{filename: mol.xyz, position: [0, 0, 0]}`           | Place at specific position                     |
 | `!FromFile`      | `structure.xyz`                                      | Read all positions from file                   |
 | `!Manual`        | `[[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]`                | Explicit coordinates for all atoms             |
 | `!RandomWalk`    | `{bond_length: 3.8}`                                 | Random walk chain from random origin           |
+| `!GridCOM`       | `{filename: mol.xyz, rotate: true}`                  | Simple cubic grid; cuboidal cells only         |
 
 The `directions` field controls which axes are randomized: `xyz` (default), `xy`, `xz`, `yz`, `x`, `y`, or `z`.
+The optional `min_distance` field (Å) in `!RandomCOM` uses bounding sphere rejection to avoid molecular overlaps in dense systems.
+`!GridCOM` places molecules on a simple cubic lattice with auto-calculated spacing; requires `!Cuboid` or `!Slit` cells.
 
 ### Intermolecular Bonded Interactions
 

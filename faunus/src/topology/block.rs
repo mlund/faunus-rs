@@ -62,6 +62,9 @@ pub enum InsertionPolicy {
         directions: Dimension,
         /// Optional offset vector to add to the molecule _after_ random COM has been chosen.
         offset: Option<Point>,
+        /// Optional minimum distance (Å) between bounding spheres of placed molecules.
+        /// Uses rejection sampling to avoid overlaps in dense systems.
+        min_distance: Option<f64>,
     },
     FixedCOM {
         /// File containing the structure of the molecule.
@@ -83,6 +86,14 @@ pub enum InsertionPolicy {
         #[serde(default)]
         /// Random directions for placing the chain center.
         directions: Dimension,
+    },
+    /// Place molecules on a simple cubic grid. Requires a cuboidal cell.
+    GridCOM {
+        /// File containing the structure of the molecule.
+        filename: InputPath,
+        #[serde(default)]
+        /// Rotate each molecule randomly; default is false.
+        rotate: bool,
     },
 }
 
@@ -111,6 +122,7 @@ impl InsertionPolicy {
                 rotate,
                 directions,
                 offset,
+                min_distance,
             } => Self::generate_random_com(
                 molecule_kind,
                 atoms,
@@ -121,6 +133,7 @@ impl InsertionPolicy {
                 *rotate,
                 directions,
                 offset,
+                *min_distance,
             ),
             Self::FixedCOM {
                 filename,
@@ -150,6 +163,10 @@ impl InsertionPolicy {
                 *bond_length,
                 directions,
             ),
+
+            Self::GridCOM { filename, rotate } => {
+                Self::generate_grid_com(molecule_kind, atoms, number, cell, rng, filename, *rotate)
+            }
         }
     }
 
@@ -203,10 +220,15 @@ impl InsertionPolicy {
             rotate,
             &Dimension::None, // no random directions
             &Some(*position),
+            None,
         )
     }
 
     /// Generate positions using the insertion policy RandomCOM.
+    ///
+    /// If `min_distance` is set, rejection sampling ensures bounding spheres
+    /// of placed molecules do not overlap. The check uses COM–COM distance
+    /// vs. the sum of bounding radii plus `min_distance`.
     #[allow(clippy::too_many_arguments)]
     fn generate_random_com(
         molecule_kind: &MoleculeKind,
@@ -218,32 +240,150 @@ impl InsertionPolicy {
         rotate: bool,
         directions: &Dimension,
         offset: &Option<Point>,
+        min_distance: Option<f64>,
     ) -> anyhow::Result<Vec<Point>> {
+        const MAX_ATTEMPTS: usize = 1_000_000;
+
         let centered_positions =
             Self::load_positions_to_origin(filename, molecule_kind, atoms, Some(cell))?;
 
-        // generate positions for a single molecule
-        let gen_pos = |_| {
+        let bounding_radius = centered_positions
+            .iter()
+            .map(|p| p.norm())
+            .fold(0.0_f64, f64::max);
+
+        // generate positions for a single molecule at a random COM
+        let mut gen_pos = || {
             let new_com =
                 directions.filter(cell.get_point_inside(rng)) + offset.unwrap_or(Point::zeros());
-
-            let mut positions: Vec<_> =
-                centered_positions.iter().map(|pos| pos + new_com).collect();
-
-            // Rotate the molecule
-            // TODO: Optimize. We possibly want to do this before translating the molecule out
-            //       of the origin.
-            if rotate {
-                transform::rotate_random(&mut positions, &new_com, rng);
-            }
-
-            // wrap particles into simulation cell
-            positions.iter_mut().for_each(|pos| cell.boundary(pos));
-            positions
+            let positions =
+                Self::place_molecule_at(&centered_positions, &new_com, rotate, cell, rng);
+            (new_com, positions)
         };
 
-        // return a flat list of positions for `num_molecules` molecules
-        Ok((0..num_molecules).flat_map(gen_pos).collect::<Vec<_>>())
+        let mut placed_coms: Vec<Point> = Vec::with_capacity(num_molecules);
+        let mut all_positions: Vec<Point> =
+            Vec::with_capacity(num_molecules * centered_positions.len());
+
+        // threshold squared for bounding sphere overlap check
+        let threshold_sq = min_distance.map(|d| {
+            let t = 2.0 * bounding_radius + d;
+            t * t
+        });
+
+        for i in 0..num_molecules {
+            let (com, positions) = if let Some(tsq) = threshold_sq {
+                let mut attempts = 0;
+                loop {
+                    let (com, positions) = gen_pos();
+                    let overlaps = placed_coms
+                        .iter()
+                        .any(|other| cell.distance(&com, other).norm_squared() < tsq);
+                    if !overlaps {
+                        break (com, positions);
+                    }
+                    attempts += 1;
+                    if attempts >= MAX_ATTEMPTS {
+                        anyhow::bail!(
+                            "failed to place molecule {} of {} after {} attempts; \
+                             consider reducing min_distance ({:.2} Å) or molecule count",
+                            i + 1,
+                            num_molecules,
+                            MAX_ATTEMPTS,
+                            min_distance.unwrap_or(0.0),
+                        );
+                    }
+                }
+            } else {
+                gen_pos()
+            };
+
+            placed_coms.push(com);
+            all_positions.extend(positions);
+        }
+
+        Ok(all_positions)
+    }
+
+    /// Translate centered molecule positions to a given COM, optionally rotate, and wrap into cell.
+    fn place_molecule_at(
+        centered_positions: &[Point],
+        com: &Point,
+        rotate: bool,
+        cell: &impl SimulationCell,
+        rng: &mut ThreadRng,
+    ) -> Vec<Point> {
+        let mut positions: Vec<_> = centered_positions.iter().map(|pos| pos + com).collect();
+        if rotate {
+            transform::rotate_random(&mut positions, com, rng);
+        }
+        positions.iter_mut().for_each(|pos| cell.boundary(pos));
+        positions
+    }
+
+    /// Place molecules on a simple cubic grid within a cuboidal cell.
+    ///
+    /// Grid spacing is auto-calculated from box dimensions and molecule count.
+    /// Fails if the cell has no bounding box or if any grid point falls outside the cell.
+    fn generate_grid_com(
+        molecule_kind: &MoleculeKind,
+        atoms: &[AtomKind],
+        num_molecules: usize,
+        cell: &impl SimulationCell,
+        rng: &mut ThreadRng,
+        filename: &InputPath,
+        rotate: bool,
+    ) -> anyhow::Result<Vec<Point>> {
+        let box_lengths = cell
+            .bounding_box()
+            .ok_or_else(|| anyhow::anyhow!("GridCOM requires a cell with a bounding box"))?;
+
+        let centered_positions =
+            Self::load_positions_to_origin(filename, molecule_kind, atoms, Some(cell))?;
+
+        // number of grid divisions per axis: ceil(N^(1/3))
+        let n_per_axis = (num_molecules as f64).cbrt().ceil() as usize;
+        let spacing = Point::new(
+            box_lengths.x / n_per_axis as f64,
+            box_lengths.y / n_per_axis as f64,
+            box_lengths.z / n_per_axis as f64,
+        );
+        let half_box = box_lengths * 0.5;
+
+        // generate grid points, offset by half a spacing so they're centered in each subcell
+        let mut grid_points = Vec::with_capacity(n_per_axis.pow(3));
+        for ix in 0..n_per_axis {
+            for iy in 0..n_per_axis {
+                for iz in 0..n_per_axis {
+                    let point = Point::new(
+                        (ix as f64 + 0.5) * spacing.x - half_box.x,
+                        (iy as f64 + 0.5) * spacing.y - half_box.y,
+                        (iz as f64 + 0.5) * spacing.z - half_box.z,
+                    );
+                    if cell.is_outside(&point) {
+                        anyhow::bail!(
+                            "GridCOM grid point falls outside cell; \
+                             this policy requires a cuboidal cell (Cuboid or Slit)"
+                        );
+                    }
+                    grid_points.push(point);
+                }
+            }
+        }
+
+        let mut all_positions = Vec::with_capacity(num_molecules * centered_positions.len());
+
+        for com in grid_points.iter().take(num_molecules) {
+            all_positions.extend(Self::place_molecule_at(
+                &centered_positions,
+                com,
+                rotate,
+                cell,
+                rng,
+            ));
+        }
+
+        Ok(all_positions)
     }
 
     /// Generate positions as a random walk from a random origin.
@@ -279,6 +419,7 @@ impl InsertionPolicy {
             Self::FromFile(x) => x.finalize(filename),
             Self::RandomCOM { filename: x, .. } => x.finalize(filename),
             Self::FixedCOM { filename: x, .. } => x.finalize(filename),
+            Self::GridCOM { filename: x, .. } => x.finalize(filename),
             Self::RandomAtomPos { .. } | Self::Manual(_) | Self::RandomWalk { .. } => (),
         }
     }
