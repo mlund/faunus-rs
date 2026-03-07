@@ -1,0 +1,46 @@
+# Ideal titration with implicit protons: HA ⇌ A⁻ + H⁺
+# No interactions, so Henderson-Hasselbalch is exact.
+#
+# With pK = 4.0 and pH = 4.0 (activity H⁺ = 1e-4):
+#   K_eff = 10^(-pK) / a(H⁺) = 1.0
+#   => P(deprotonated) = K_eff / (1 + K_eff) = 0.5
+#   => expected count(A) ≈ 20 * 0.5 = 10.0
+
+atoms:
+  - {name: HA, mass: 1.0, sigma: 1.0}
+  - {name: A, mass: 1.0, sigma: 1.0}
+  - {name: H+, mass: 1.0, activity: 1.0e-4}
+
+molecules:
+  - name: site
+    atoms: [HA]
+
+system:
+  cell: !Cuboid [10.0, 10.0, 10.0]
+  medium:
+    permittivity: !Vacuum
+    temperature: 298.15
+  energy: {}
+  blocks:
+    - molecule: site
+      N: 20
+      active: 20
+      insert: !RandomAtomPos {}
+
+analysis:
+  - !CollectiveVariable
+    property: count
+    selection: "atomtype A"
+    frequency: !Every 1
+
+propagate:
+  seed: !Fixed 42
+  criterion: Metropolis
+  repeat: 5000
+  collections:
+    - !Deterministic
+      moves:
+        - !SpeciationMove
+          temperature: 298.15
+          reactions:
+            - ["⚛HA = ⚛A + ~H+", !pK 4.0]

@@ -47,6 +47,9 @@ pub enum GroupChange {
     PartialUpdate(Vec<usize>),
     /// Resize group
     Resize(GroupSize),
+    /// Resize group, excluding intramolecular energy (used for molecular swaps where
+    /// intramolecular contributions are absorbed into the equilibrium constant)
+    ResizeExcludeIntra(GroupSize),
     /// The identity of a set of particles has changed (relative indices)
     UpdateIdentity(Vec<usize>),
     /// Nothing has changed
@@ -54,7 +57,29 @@ pub enum GroupChange {
 }
 
 impl GroupChange {
+    /// Whether intramolecular energy must be recomputed.
+    /// Returns `false` for `RigidBody` (no internal change), `ResizeExcludeIntra`
+    /// (intra energy absorbed into K), and `None` (no change at all).
     pub const fn internal_change(&self) -> bool {
-        !matches!(self, Self::RigidBody)
+        !matches!(
+            self,
+            Self::RigidBody | Self::ResizeExcludeIntra(_) | Self::None
+        )
+    }
+
+    /// True for changes that affect all particles in a group.
+    pub const fn is_whole_group(&self) -> bool {
+        matches!(
+            self,
+            Self::RigidBody
+                | Self::Resize(_)
+                | Self::ResizeExcludeIntra(_)
+                | Self::UpdateIdentity(_)
+        )
+    }
+
+    /// True for any resize operation (with or without intramolecular energy).
+    pub const fn is_resize(&self) -> bool {
+        matches!(self, Self::Resize(_) | Self::ResizeExcludeIntra(_))
     }
 }

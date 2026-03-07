@@ -1,0 +1,132 @@
+medium:
+  permittivity: Water
+  salt: null
+  temperature: 298.0
+blocks:
+- molecule: protein
+  N: 1
+  active: null
+  insert: !Manual
+  - - 0.0
+    - 0.0
+    - 0.0
+  - - 0.0
+    - 0.0
+    - 5.0
+  - - 0.0
+    - 5.0
+    - 0.0
+- molecule: Na+
+  N: 30
+  active: 10
+  insert: !RandomAtomPos
+    directions: xyz
+- molecule: Cl-
+  N: 30
+  active: 10
+  insert: !RandomAtomPos
+    directions: xyz
+cell: !Sphere
+  radius: 50.0
+energy_change:
+  drift: 1.0480505352461478e-13
+  final: -13.475385455192631
+  initial: -6.948560709555825
+energy_timers:
+  celloverlap: '19.95 (energy: 19.36, update: 0.59)'
+  nonbonded: '80.06 (energy: 79.44, update: 0.62)'
+propagate:
+  repeat: 2000
+  seed: !Fixed 42
+  collections:
+  - !Deterministic
+    repeat: 1
+    elapsed_seconds: 0.562530547
+    moves:
+    - !SpeciationMove
+      reactions:
+      - - ⚛HGLU + Cl- = ⚛GLU + ~H+
+        - !pK 4.24
+      - - ⚛HGLU = Na+ + ⚛GLU + ~H+
+        - !pK 4.24
+      - - ⚛HHIS + Cl- = ⚛HIS + ~H+
+        - !pK 6.54
+      - - ⚛HHIS = Na+ + ⚛HIS + ~H+
+        - !pK 6.54
+      - - ⚛HCYS + Cl- = ⚛CYS + ~H+
+        - !pK 8.55
+      - - ⚛HCYS = Na+ + ⚛CYS + ~H+
+        - !pK 8.55
+      - - = Na+ + Cl-
+        - !K 1.0
+      temperature: 298.0
+      weight: 1.0
+      repeat: 50
+      statistics:
+        num_trials: 100000
+        num_accepted: 17657
+        mean_square_displacement:
+          avg: 0.0
+          n: 82343
+        timer:
+          accumulated:
+            secs: 0
+            nanos: 0
+        info: {}
+        energy_change_sum: -3.928698600243143
+        acceptance_ratio: 0.17657
+    - !TranslateAtom
+      atom: Na
+      molecule: Na+
+      max_displacement: 50.0
+      weight: 1.0
+      repeat: 1
+      statistics:
+        num_trials: 2000
+        num_accepted: 1157
+        mean_square_displacement:
+          avg: 325.0948567450118
+          n: 2000
+        timer:
+          accumulated:
+            secs: 0
+            nanos: 0
+        info: {}
+        energy_change_sum: 6.057442060763445
+        acceptance_ratio: 0.5785
+    - !TranslateAtom
+      atom: Cl
+      molecule: Cl-
+      max_displacement: 50.0
+      weight: 1.0
+      repeat: 1
+      statistics:
+        num_trials: 2000
+        num_accepted: 1068
+        mean_square_displacement:
+          avg: 300.3983966689457
+          n: 2000
+        timer:
+          accumulated:
+            secs: 0
+            nanos: 0
+        info: {}
+        energy_change_sum: -8.655568206157213
+        acceptance_ratio: 0.534
+  criterion: MetropolisHastings
+analysis:
+- collectivevariable:
+    property: Count
+    num_samples: 6000
+    mean: 0.9979999999999991
+    rms: 0.9989994994993737
+- collectivevariable:
+    property: Count
+    num_samples: 6000
+    mean: 0.1999999999999999
+    rms: 0.4472135954999578
+- collectivevariable:
+    property: Count
+    num_samples: 6000
+    mean: 0.04600000000000011
+    rms: 0.2144761058952724

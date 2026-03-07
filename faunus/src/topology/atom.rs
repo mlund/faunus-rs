@@ -52,6 +52,10 @@ pub struct AtomKind {
     /// Hydrophobicity information.
     #[builder(setter(strip_option), default)]
     hydrophobicity: Option<Hydrophobicity>,
+    /// Activity for implicit species in reaction ensemble (dimensionless).
+    #[serde(default)]
+    #[builder(setter(strip_option), default)]
+    activity: Option<f64>,
     /// Map of custom properties.
     #[serde(default)]
     custom: std::collections::HashMap<String, Value>,
@@ -76,6 +80,10 @@ impl AtomKind {
 
     pub fn element(&self) -> Option<&str> {
         self.element.as_deref()
+    }
+
+    pub const fn activity(&self) -> Option<f64> {
+        self.activity
     }
 
     /// Get the optional Ashbaugh-Hatch scaling factor, λ.

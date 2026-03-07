@@ -55,5 +55,5 @@ propagate:
         - !SpeciationMove
           temperature: 298.15
           reactions:
-            - {reaction: "⚛A = ⚛B", K: 3.0}
-            - {reaction: "= M", K: 0.01}
+            - ["⚛A = ⚛B", !K 3.0]
+            - ["= M", !K 0.01]

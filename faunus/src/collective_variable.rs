@@ -86,6 +86,8 @@ pub enum Property {
     MassCenterSeparation,
     /// Number of active atoms matching a selection (re-resolves each evaluation).
     Count,
+    /// Sum of charges of active atoms matching a selection (re-resolves each evaluation).
+    Charge,
 }
 
 // ---------------------------------------------------------------------------
@@ -396,29 +398,57 @@ impl<T: Context> CollectiveVariable<T> for MassCenterSeparationCV {
     }
 }
 
-/// Counts active atoms matching a selection (re-resolved each evaluation).
+/// What to reduce over matched atoms.
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum SelectionReduce {
+    /// Count matched atoms.
+    Count,
+    /// Sum charges of matched atoms.
+    Charge,
+}
+
+/// Reduces active atoms matching a selection to a scalar.
+///
+/// Re-resolves atom types live because speciation moves change atom identities.
 #[derive(Debug, Clone)]
-pub(crate) struct CountCV {
+pub(crate) struct SelectionCV {
+    reduce: SelectionReduce,
     selection: Selection,
     axis: AxisDescriptor,
 }
 
-impl crate::Info for CountCV {
+impl crate::Info for SelectionCV {
     fn short_name(&self) -> Option<&'static str> {
-        Some("count")
+        match self.reduce {
+            SelectionReduce::Count => Some("count"),
+            SelectionReduce::Charge => Some("charge"),
+        }
     }
     fn long_name(&self) -> Option<&'static str> {
-        Some("Number of active atoms matching selection")
+        match self.reduce {
+            SelectionReduce::Count => Some("Number of active atoms matching selection"),
+            SelectionReduce::Charge => Some("Sum of charges of active atoms matching selection"),
+        }
     }
 }
 
-impl<T: Context> CollectiveVariable<T> for CountCV {
+impl<T: Context> CollectiveVariable<T> for SelectionCV {
     fn evaluate(&self, context: &T) -> f64 {
-        self.selection
-            .resolve_atoms_live(context.topology_ref(), context.groups(), &|i| {
-                context.get_atomkind(i)
-            })
-            .len() as f64
+        let indices =
+            self.selection
+                .resolve_atoms_live(context.topology_ref(), context.groups(), &|i| {
+                    context.get_atomkind(i)
+                });
+        match self.reduce {
+            SelectionReduce::Count => indices.len() as f64,
+            SelectionReduce::Charge => {
+                let atomkinds = context.topology_ref().atomkinds();
+                indices
+                    .iter()
+                    .map(|&i| atomkinds[context.get_atomkind(i)].charge())
+                    .sum()
+            }
+        }
     }
     fn axis(&self) -> &AxisDescriptor {
         &self.axis
@@ -439,7 +469,7 @@ pub(crate) enum ConcreteCollectiveVariable {
     AtomPosition(AtomPositionCV),
     Group(GroupCV),
     MassCenterSeparation(MassCenterSeparationCV),
-    Count(CountCV),
+    Selection(SelectionCV),
 }
 
 impl ConcreteCollectiveVariable {
@@ -451,7 +481,7 @@ impl ConcreteCollectiveVariable {
             Self::AtomPosition(cv) => Box::new(cv),
             Self::Group(cv) => Box::new(cv),
             Self::MassCenterSeparation(cv) => Box::new(cv),
-            Self::Count(cv) => Box::new(cv),
+            Self::Selection(cv) => Box::new(cv),
         }
     }
 
@@ -462,7 +492,7 @@ impl ConcreteCollectiveVariable {
             Self::AtomPosition(cv) => cv.evaluate(context),
             Self::Group(cv) => cv.evaluate(context),
             Self::MassCenterSeparation(cv) => cv.evaluate(context),
-            Self::Count(cv) => cv.evaluate(context),
+            Self::Selection(cv) => cv.evaluate(context),
         }
     }
 
@@ -473,7 +503,7 @@ impl ConcreteCollectiveVariable {
             Self::AtomPosition(cv) => &cv.axis,
             Self::Group(cv) => &cv.axis,
             Self::MassCenterSeparation(cv) => &cv.axis,
-            Self::Count(cv) => &cv.axis,
+            Self::Selection(cv) => &cv.axis,
         }
     }
 }
@@ -541,12 +571,17 @@ impl CollectiveVariableBuilder {
                     },
                 ))
             }
-            Property::Count => {
-                let selection = self
-                    .selection
-                    .clone()
-                    .ok_or_else(|| anyhow::anyhow!("Count requires a 'selection' field"))?;
-                Ok(ConcreteCollectiveVariable::Count(CountCV {
+            Property::Count | Property::Charge => {
+                let reduce = match self.property {
+                    Property::Count => SelectionReduce::Count,
+                    Property::Charge => SelectionReduce::Charge,
+                    _ => unreachable!(),
+                };
+                let selection = self.selection.clone().ok_or_else(|| {
+                    anyhow::anyhow!("{:?} requires a 'selection' field", self.property)
+                })?;
+                Ok(ConcreteCollectiveVariable::Selection(SelectionCV {
+                    reduce,
                     selection,
                     axis,
                 }))

@@ -257,19 +257,16 @@ impl EwaldReciprocalEnergy {
                 self.full_update_with_box(context)?;
             }
             Change::Groups(changes) => {
-                if changes
-                    .iter()
-                    .any(|(_, gc)| matches!(gc, GroupChange::Resize(_)))
-                {
+                if changes.iter().any(|(_, gc)| gc.is_resize()) {
                     self.refresh_charges(context);
                 }
                 self.full_update(context);
             }
+            Change::SingleGroup(_, gc) if gc.is_resize() => {
+                self.refresh_charges(context);
+                self.full_update(context);
+            }
             Change::SingleGroup(gi, gc) => match gc {
-                GroupChange::Resize(_) => {
-                    self.refresh_charges(context);
-                    self.full_update(context);
-                }
                 GroupChange::None => {}
                 _ => {
                     self.incremental_update(context, *gi, gc);
@@ -287,7 +284,9 @@ impl EwaldReciprocalEnergy {
                 let offset = group.iter_active().next().unwrap_or(0);
                 rel.iter().map(|&ri| offset + ri).collect()
             }
-            GroupChange::None | GroupChange::Resize(_) => Vec::new(),
+            GroupChange::None | GroupChange::Resize(_) | GroupChange::ResizeExcludeIntra(_) => {
+                Vec::new()
+            }
         }
     }
 

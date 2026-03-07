@@ -85,6 +85,16 @@ ssh user@host 'source ~/.cargo/env && cd faunus && RUSTFLAGS="-C target-cpu=nati
 rsync -az user@host:faunus/output.yaml .
 ```
 
+## Testing
+
+```bash
+# Unit and integration tests
+cargo test
+
+# Regression tests (always use --release for performance)
+cargo test --test regression --release -- --include-ignored --test-threads=1
+```
+
 ## Key Tips
 
 - Energy drift in `output.yaml` should be ~0; large drift indicates a bug

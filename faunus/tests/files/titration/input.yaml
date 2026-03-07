@@ -1,0 +1,99 @@
+# Titration of a rigid 3-residue protein (GLU, HIS, CYS) at pH 7.0
+# with implicit protons and a grand canonical 1:1 salt bath.
+#
+# Matches the C++ Faunus titration example: coupled reactions
+# ensure electroneutrality via Na⁺/Cl⁻ exchange.
+#
+# Henderson-Hasselbalch (ideal, no interactions):
+#   GLU (pK 4.24): ~100% deprotonated, <q> ≈ -1.0
+#   HIS (pK 6.54): ~74% deprotonated,  <q> ≈ 0.26
+#   CYS (pK 8.55): ~3% deprotonated,   <q> ≈ -0.03
+# Coulomb interactions shift these values.
+
+atoms:
+  # Titratable residues: deprotonated / protonated pairs
+  - {name: GLU,  mass: 122.0, charge: -1.0, sigma: 3.8, epsilon: 0.125}
+  - {name: HGLU, mass: 122.0, charge:  0.0, sigma: 3.8, epsilon: 0.125}
+  - {name: HIS,  mass: 130.0, charge:  0.0, sigma: 3.9, epsilon: 0.125}
+  - {name: HHIS, mass: 130.0, charge:  1.0, sigma: 3.9, epsilon: 0.125}
+  - {name: CYS,  mass: 103.0, charge: -1.0, sigma: 3.6, epsilon: 0.125}
+  - {name: HCYS, mass: 103.0, charge:  0.0, sigma: 3.6, epsilon: 0.125}
+  # Salt ions
+  - {name: Na, mass: 22.99, charge:  1.0, sigma: 4.6, epsilon: 0.125}
+  - {name: Cl, mass: 35.45, charge: -1.0, sigma: 4.6, epsilon: 0.125}
+  # Implicit proton: activity = 10^(-pH) = 10^(-7)
+  - {name: H+, mass: 1.0, sigma: 0.0, epsilon: 0.0, activity: 1.0e-7}
+
+molecules:
+  - name: Na+
+    atoms: [Na]
+    activity: 0.030   # molar; GCMC fugacity for titration coupling
+  - name: Cl-
+    atoms: [Cl]
+    activity: 0.030   # molar; GCMC fugacity for titration coupling
+  - name: protein
+    degrees_of_freedom: Rigid
+    atoms: [GLU, HIS, CYS]
+
+system:
+  cell: !Sphere {radius: 50.0}
+  medium:
+    permittivity: !Water
+    temperature: 298.0
+  blocks:
+    - molecule: protein
+      N: 1
+      insert: !Manual [[0, 0, 0], [0, 0, 5], [0, 5, 0]]
+    - molecule: Na+
+      N: 30
+      active: 10
+      insert: !RandomAtomPos {}
+    - molecule: Cl-
+      N: 30
+      active: 10
+      insert: !RandomAtomPos {}
+  energy:
+    nonbonded:
+      default:
+        - !CoulombPlain {cutoff: 100.0}
+        - !LennardJones {mixing: LB}
+
+analysis:
+  - !CollectiveVariable
+    property: count
+    selection: "atomtype GLU"
+    frequency: !Every 1
+  - !CollectiveVariable
+    property: count
+    selection: "atomtype HHIS"
+    frequency: !Every 1
+  - !CollectiveVariable
+    property: count
+    selection: "atomtype CYS"
+    frequency: !Every 1
+
+propagate:
+  seed: !Fixed 42
+  criterion: Metropolis
+  repeat: 2000
+  collections:
+    - !Deterministic
+      moves:
+        - !SpeciationMove
+          temperature: 298.0
+          repeat: 50
+          reactions:
+            # GLU: HGLU ⇌ GLU⁻ + H⁺ (two pathways, coupled with salt for electroneutrality)
+            - ["⚛HGLU + Cl- = ⚛GLU + ~H+", !pK 4.24]
+            - ["⚛HGLU = Na+ + ⚛GLU + ~H+", !pK 4.24]
+            # HIS: HHIS⁺ ⇌ HIS + H⁺
+            - ["⚛HHIS + Cl- = ⚛HIS + ~H+", !pK 6.54]
+            - ["⚛HHIS = Na+ + ⚛HIS + ~H+", !pK 6.54]
+            # CYS: HCYS ⇌ CYS⁻ + H⁺
+            - ["⚛HCYS + Cl- = ⚛CYS + ~H+", !pK 8.55]
+            - ["⚛HCYS = Na+ + ⚛CYS + ~H+", !pK 8.55]
+            # Grand canonical salt: ∅ ⇌ Na⁺ + Cl⁻
+            # Bare dG=0; molecular activities (0.030 M) are folded in automatically
+            - ["= Na+ + Cl-", !dG 0.0]
+        - !TranslateAtom {atom: Na, molecule: Na+, dp: 50.0}
+        - !TranslateAtom {atom: Cl, molecule: Cl-, dp: 50.0}

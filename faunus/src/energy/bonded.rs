@@ -17,7 +17,7 @@
 use crate::{
     group::Group,
     topology::{block::BlockActivationStatus, Topology},
-    Change, Context, GroupChange,
+    Change, Context,
 };
 
 use super::{EnergyChange, EnergyTerm};
@@ -32,20 +32,17 @@ impl EnergyChange for IntramolecularBonded {
     fn energy(&self, context: &impl Context, change: &Change) -> f64 {
         match change {
             Change::Everything | Change::Volume(_, _) => self.all_groups(context),
-            Change::None | Change::SingleGroup(_, GroupChange::RigidBody) => 0.0,
+            Change::None => 0.0,
             // TODO! optimization: not all bonds have to be recalculated if a single particle inside a group changes
-            Change::SingleGroup(id, change) => match change {
-                GroupChange::None | GroupChange::RigidBody => 0.0,
-                _ => self.one_group(context, &context.groups()[*id]),
-            },
+            Change::SingleGroup(id, gc) if gc.internal_change() => {
+                self.one_group(context, &context.groups()[*id])
+            }
+            Change::SingleGroup(..) => 0.0,
             Change::Groups(groups) => self.multiple_groups(
                 context,
                 &groups
                     .iter()
-                    .filter_map(|(index, change)| match change {
-                        GroupChange::None | GroupChange::RigidBody => None,
-                        _ => Some(*index),
-                    })
+                    .filter_map(|(index, change)| change.internal_change().then_some(*index))
                     .collect::<Vec<usize>>(),
             ),
         }
@@ -185,18 +182,14 @@ impl IntermolecularBonded {
     // We should probably use this information to only update the relevant part of the group.
     pub(super) fn update(&mut self, context: &impl Context, change: &Change) -> anyhow::Result<()> {
         match change {
-            Change::SingleGroup(i, GroupChange::Resize(_)) => {
+            Change::SingleGroup(i, gc) if gc.is_resize() => {
                 self.update_status_one_group(&context.groups()[*i])
             }
             Change::Groups(groups) => self.update_status_multiple_groups(
                 context,
                 &groups
                     .iter()
-                    .filter_map(|x| match x.1 {
-                        // filter out groups which were not resized
-                        GroupChange::Resize(_) => Some(x.0),
-                        _ => None,
-                    })
+                    .filter_map(|(idx, gc)| gc.is_resize().then_some(*idx))
                     .collect::<Vec<usize>>(),
             ),
             Change::Everything => self.update_status_all(context),
@@ -247,10 +240,9 @@ impl From<IntermolecularBonded> for EnergyTerm {
 impl IntermolecularBonded {
     /// Only save when `update()` would actually modify state.
     pub(super) fn save_backup(&mut self, change: &Change) {
-        let dominated = matches!(
-            change,
-            Change::SingleGroup(_, GroupChange::Resize(_)) | Change::Everything
-        ) || matches!(change, Change::Groups(v) if v.iter().any(|g| matches!(g.1, GroupChange::Resize(_))));
+        let dominated = matches!(change, Change::Everything)
+            || matches!(change, Change::SingleGroup(_, gc) if gc.is_resize())
+            || matches!(change, Change::Groups(v) if v.iter().any(|(_, gc)| gc.is_resize()));
 
         if dominated {
             assert!(self.backup.is_none(), "backup already exists");

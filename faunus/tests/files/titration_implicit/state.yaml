@@ -1,0 +1,167 @@
+particles:
+- atom_id: 0
+  pos:
+  - 3.612679348921235
+  - 3.5071445278869042
+  - 1.9657704182416724
+- atom_id: 1
+  pos:
+  - -3.851721686684757
+  - -3.4270156072769975
+  - -2.2737622549029513
+- atom_id: 0
+  pos:
+  - -2.9151669838909466
+  - -1.853326147991079
+  - -4.298742688521571
+- atom_id: 0
+  pos:
+  - -2.4212123816201503
+  - -4.801791603486738
+  - -4.268455321789919
+- atom_id: 1
+  pos:
+  - 4.678244165553195
+  - -1.7413531826175177
+  - -1.314271894989496
+- atom_id: 0
+  pos:
+  - 1.1287604480123843
+  - 4.938689714541626
+  - -1.9362058590008657
+- atom_id: 0
+  pos:
+  - 2.7588793993875127
+  - -0.09198173697181122
+  - -3.9213908434580214
+- atom_id: 0
+  pos:
+  - 2.2208222610797907
+  - 1.1046905316875089
+  - -4.575433022664159
+- atom_id: 1
+  pos:
+  - -4.382825844697351
+  - 3.4118616737019707
+  - -2.930959108335729
+- atom_id: 0
+  pos:
+  - 4.406506449945638
+  - -3.9374413014612353
+  - -4.294360248664675
+- atom_id: 0
+  pos:
+  - 0.4598098478444701
+  - 4.48406458220494
+  - 1.9276553367140359
+- atom_id: 0
+  pos:
+  - -0.01725856155244454
+  - 3.9762770447456663
+  - 1.809189810134047
+- atom_id: 1
+  pos:
+  - 1.0932907694659777
+  - -3.8861717875777546
+  - -2.2126003822202844
+- atom_id: 1
+  pos:
+  - -1.7479062492887576
+  - 0.6384885559978208
+  - 3.066721713099467
+- atom_id: 0
+  pos:
+  - -3.936559831647828
+  - -1.9260271406450946
+  - -1.155060591795476
+- atom_id: 1
+  pos:
+  - 3.4691184526584244
+  - -2.3910510028884713
+  - -0.7770100791228867
+- atom_id: 0
+  pos:
+  - 4.154110510223202
+  - -0.9205991725578411
+  - 1.992655141864157
+- atom_id: 1
+  pos:
+  - -0.546669775589395
+  - -3.8187566260267825
+  - -3.946446964301724
+- atom_id: 0
+  pos:
+  - 2.4056908484081703
+  - 4.520615668590779
+  - 2.7628444835818904
+- atom_id: 0
+  pos:
+  - 3.8754179612100224
+  - -4.49647217973906
+  - 3.72728482908677
+cell: !Cuboid
+- 10.0
+- 10.0
+- 10.0
+groups:
+- molecule: 0
+  capacity: 1
+  size: Full
+- molecule: 0
+  capacity: 1
+  size: Full
+- molecule: 0
+  capacity: 1
+  size: Full
+- molecule: 0
+  capacity: 1
+  size: Full
+- molecule: 0
+  capacity: 1
+  size: Full
+- molecule: 0
+  capacity: 1
+  size: Full
+- molecule: 0
+  capacity: 1
+  size: Full
+- molecule: 0
+  capacity: 1
+  size: Full
+- molecule: 0
+  capacity: 1
+  size: Full
+- molecule: 0
+  capacity: 1
+  size: Full
+- molecule: 0
+  capacity: 1
+  size: Full
+- molecule: 0
+  capacity: 1
+  size: Full
+- molecule: 0
+  capacity: 1
+  size: Full
+- molecule: 0
+  capacity: 1
+  size: Full
+- molecule: 0
+  capacity: 1
+  size: Full
+- molecule: 0
+  capacity: 1
+  size: Full
+- molecule: 0
+  capacity: 1
+  size: Full
+- molecule: 0
+  capacity: 1
+  size: Full
+- molecule: 0
+  capacity: 1
+  size: Full
+- molecule: 0
+  capacity: 1
+  size: Full
+step: 65000

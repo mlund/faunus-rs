@@ -42,4 +42,4 @@ propagate:
         - !SpeciationMove
           temperature: 298.15
           reactions:
-            - {reaction: "= particle", K: 0.01}
+            - ["= particle", !K 0.01]

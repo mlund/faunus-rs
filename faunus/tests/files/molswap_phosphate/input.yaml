@@ -1,0 +1,79 @@
+# Ideal molecular swap: phosphate charge states via pKa titration.
+# No interactions, so Henderson-Hasselbalch is exact.
+#
+# Species: H₃PO₄ (0), H₂PO₄⁻ (-1), HPO₄²⁻ (-2), PO₄³⁻ (-3)
+# pKa values: 2.15, 7.20, 12.35
+# At pH = 7.20 (activity H⁺ = 10^-7.20):
+#   H₃PO₄  ⇌ H₂PO₄⁻  + H⁺   pKa = 2.15
+#   H₂PO₄⁻ ⇌ HPO₄²⁻   + H⁺   pKa = 7.20
+#   HPO₄²⁻  ⇌ PO₄³⁻    + H⁺   pKa = 12.35
+#
+# At pH = 7.20:
+#   K₁_eff = 10^(pH-pKa₁) = 10^5.05  ≈ 1.12e5  → H₃PO₄  negligible
+#   K₂_eff = 10^(pH-pKa₂) = 10^0.00  = 1.0      → H₂PO₄⁻ ≈ HPO₄²⁻
+#   K₃_eff = 10^(pH-pKa₃) = 10^-5.15 ≈ 7.08e-6  → PO₄³⁻  negligible
+#
+# Expected: count(molecule HPO₄²⁻) ≈ count(molecule H₂PO₄⁻) ≈ N/2 = 10
+
+atoms:
+  - {name: P, mass: 31.0, sigma: 3.0, charge: 0.0}
+  - {name: O, mass: 16.0, sigma: 2.8, charge: 0.0}
+  - {name: H+, mass: 1.0, activity: 6.30957e-8}  # 10^(-7.20)
+
+molecules:
+  - name: H₃PO₄
+    atoms: [P, O, O, O, O]
+  - name: H₂PO₄⁻
+    atoms: [P, O, O, O, O]
+  - name: HPO₄²⁻
+    atoms: [P, O, O, O, O]
+  - name: PO₄³⁻
+    atoms: [P, O, O, O, O]
+
+system:
+  cell: !Cuboid [20.0, 20.0, 20.0]
+  medium:
+    permittivity: !Vacuum
+    temperature: 298.15
+  energy: {}
+  blocks:
+    - molecule: H₃PO₄
+      N: 20
+      active: 0
+      insert: !RandomAtomPos {}
+    - molecule: H₂PO₄⁻
+      N: 20
+      active: 20
+      insert: !RandomAtomPos {}
+    - molecule: HPO₄²⁻
+      N: 20
+      active: 0
+      insert: !RandomAtomPos {}
+    - molecule: PO₄³⁻
+      N: 20
+      active: 0
+      insert: !RandomAtomPos {}
+
+analysis:
+  - !CollectiveVariable
+    property: count
+    selection: "molecule 'H₂PO₄⁻'"
+    frequency: !Every 1
+  - !CollectiveVariable
+    property: count
+    selection: "molecule 'HPO₄²⁻'"
+    frequency: !Every 1
+
+propagate:
+  seed: !Fixed 42
+  criterion: Metropolis
+  repeat: 5000
+  collections:
+    - !Deterministic
+      moves:
+        - !SpeciationMove
+          temperature: 298.15
+          reactions:
+            - ["H₃PO₄ = H₂PO₄⁻ + ~H+", !pK 2.15]
+            - ["H₂PO₄⁻ = HPO₄²⁻ + ~H+", !pK 7.20]
+            - ["HPO₄²⁻ = PO₄³⁻ + ~H+", !pK 12.35]

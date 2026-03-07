@@ -33,6 +33,7 @@ atoms:
 | `sigma` / `σ`    | no       |         | Lennard-Jones diameter (Å)               |
 | `epsilon` / `ε` / `eps` | no |      | Lennard-Jones well depth (kJ/mol)        |
 | `hydrophobicity` | no       |         | See below                                |
+| `activity`       | no       |         | Activity for implicit species (molar)    |
 | `custom`         | no       | `{}`    | Arbitrary key-value properties           |
 
 ### Hydrophobicity
@@ -76,6 +77,7 @@ molecules:
 | `atom_names`          | no       | `[]`    | Per-atom names (use `null` to skip)              |
 | `residues`            | no       | `[]`    | Protein residues                                 |
 | `chains`              | no       | `[]`    | Protein chains                                   |
+| `activity`            | no       |         | Activity for GCMC fugacity (molar)               |
 | `has_com`             | no       | `true`  | Whether center-of-mass makes sense               |
 | `custom`              | no       | `{}`    | Arbitrary key-value properties                   |
 
@@ -325,7 +327,8 @@ include: [forcefield.yaml, overrides.yaml]
 
 ## Chemical Reactions
 
-Chemical reactions are used for speciation moves in the grand canonical ensemble.
+Chemical reactions are used for [speciation moves](moves.md#speciation-move-reaction-ensemble)
+in the grand canonical and semi-grand canonical ensembles.
 A participant is either an atom, a molecule, or an implicit participant.
 When parsing a reaction, atoms are prefixed with a dot or an atom sign, e.g. _.Na_ or _⚛Na_.
 Implicit participants are prefixed with a tilde or a ghost, e.g. _~H_ or _👻H_.
@@ -336,3 +339,8 @@ Participant | Example                |  Notes
 Molecular   | `A + A ⇌ D`            | Possible arrows: `=`, `⇌`, `⇄`, `→`
 Implicit    | `RCOO- + 👻H+ ⇌ RCOOH` | Mark with `👻` or `~`
 Atomic      | `⚛Pb ⇄ ⚛Au`            | Mark with `⚛` or `.`
+
+When a reaction has one molecular reactant and one molecular product with equal
+atom counts (e.g. `A = B + ~H+`), it is treated as a molecular swap:
+the source group is deactivated and a target group is activated with aligned positions.
+Unicode names are supported in reactions and molecule definitions.

@@ -34,3 +34,6 @@ regression_test!(npt_water);
 regression_test!(gcmc_ideal_gas);
 regression_test!(gcmc_swap);
 regression_test!(npt_water_ewald);
+regression_test!(titration_implicit);
+regression_test!(titration);
+regression_test!(molswap_phosphate);

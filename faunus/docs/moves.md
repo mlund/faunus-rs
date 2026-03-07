@@ -237,6 +237,8 @@ then proposes the corresponding operations:
 
 - **Molecular insertion**: activates an empty group at a random position in the cell.
 - **Molecular deletion**: deactivates a randomly chosen active group.
+- **Molecular swap**: replaces a molecule of one type with another of equal atom count,
+  preserving spatial orientation via gyration tensor alignment.
 - **Atom swap**: changes the type of a random atom (for reactions like $A \rightleftharpoons B$).
 
 Reactions are written using the syntax described in [Chemical Reactions](topology.md#chemical-reactions).
@@ -290,28 +292,109 @@ consistent with
 [Faunus](https://doi.org/10.5281/zenodo.5235137) and
 [ESPResSo](https://doi.org/10.1140/epjst/e2019-800186-9).
 
-### Example
+### Molecular swaps
+
+When a reaction has exactly one molecular reactant and one molecular product
+with the same number of atoms (e.g. $A \rightleftharpoons B + \text{implicit}$),
+the move is automatically detected as a molecular swap.
+A full group of the source type is deactivated and an empty group of the
+target type is activated with positions transferred via
+[gyration tensor](https://doi.org/10.1002/jcc.21776) principal-axis alignment.
+
+The acceptance is:
+
+$$
+\operatorname{acc} = \min\!\biggl(1,\;
+K_\text{eff} \cdot \frac{N_\text{from}}{N_\text{to}+1} \cdot e^{-\beta \Delta U}\biggr)
+$$
+
+where $N_\text{from}$ and $N_\text{to}$ are the counts of source and target
+molecule groups _before_ the move.
+No volume factor appears because the total molecule count is conserved.
+$\Delta U$ excludes intramolecular energy (bonded and nonbonded self-interactions)
+since these are absorbed into the equilibrium constant $K$.
+Each species must have pre-allocated groups (`active < N`) to serve as a pool;
+if the pool is exhausted, the move is silently rejected.
+
+#### Phosphate titration example
+
+Four charge states of orthophosphate with three $pK_a$ values
+and implicit protons:
 
 ```yaml
+atoms:
+  - {name: P, mass: 31.0, sigma: 3.0}
+  - {name: O, mass: 16.0, sigma: 2.8}
+  - {name: H+, mass: 1.0, activity: 6.31e-8}  # pH 7.2
+
+molecules:
+  - name: H₃PO₄
+    atoms: [P, O, O, O, O]
+  - name: H₂PO₄⁻
+    atoms: [P, O, O, O, O]
+  - name: HPO₄²⁻
+    atoms: [P, O, O, O, O]
+  - name: PO₄³⁻
+    atoms: [P, O, O, O, O]
+
 system:
   blocks:
-    - molecule: NaCl
-      N: 200
-      active: 100
+    - {molecule: H₃PO₄,  N: 20, active: 0,  insert: !RandomAtomPos {}}
+    - {molecule: H₂PO₄⁻, N: 20, active: 20, insert: !RandomAtomPos {}}
+    - {molecule: HPO₄²⁻,  N: 20, active: 0,  insert: !RandomAtomPos {}}
+    - {molecule: PO₄³⁻,   N: 20, active: 0,  insert: !RandomAtomPos {}}
+
+propagate:
+  collections:
+    - !Deterministic
+      moves:
+        - !SpeciationMove
+          temperature: 298.15
+          reactions:
+            - ["H₃PO₄ = H₂PO₄⁻ + ~H+", !pK 2.15]
+            - ["H₂PO₄⁻ = HPO₄²⁻ + ~H+", !pK 7.20]
+            - ["HPO₄²⁻ = PO₄³⁻ + ~H+", !pK 12.35]
+```
+
+At $pH = pK_{a2} = 7.20$, the effective equilibrium constant for the
+second reaction is unity, giving equal populations of H₂PO₄⁻ and HPO₄²⁻.
+
+### GCMC example
+
+```yaml
+molecules:
+  - name: Na+
+    atoms: [Na]
+    activity: 0.030           # molar GCMC fugacity
+  - name: Cl-
+    atoms: [Cl]
+    activity: 0.030
+
+system:
+  blocks:
+    - molecule: Na+
+      N: 30
+      active: 10
+      insert: !RandomAtomPos {}
+    - molecule: Cl-
+      N: 30
+      active: 10
       insert: !RandomAtomPos {}
 
 propagate:
   repeat: 10000
   collections:
-    - !Stochastic
-      repeat: 100
+    - !Deterministic
       moves:
-        - !TranslateMolecule { molecule: NaCl, dp: 0.5 }
         - !SpeciationMove
           temperature: 298.15
           reactions:
-            - { reaction: "= NaCl", K: 0.01 }
-            - { reaction: "⚛A = ⚛B", K: 1.0 }
+            # Coupled titration + salt exchange to maintain electroneutrality
+            - ["⚛HGLU + Cl- = ⚛GLU + ~H+", !pK 4.24]
+            # Grand canonical salt: activities folded into K_eff
+            - ["= Na+ + Cl-", !K 1.0]
+        - !TranslateAtom { atom: Na, molecule: Na+, dp: 50.0 }
+        - !TranslateAtom { atom: Cl, molecule: Cl-, dp: 50.0 }
 ```
 
 ### Options
@@ -323,17 +406,47 @@ Key           | Required | Default | Description
 `weight`      | no       | 1       | Selection weight
 `repeat`      | no       | 1       | Repetitions per selection
 
-Each reaction entry:
+Each reaction is a two-element tuple `[reaction_string, equilibrium_constant]`:
 
-Key                    | Required | Description
----------------------- | -------- | -------------------------------------------
-`reaction`             | yes      | Reaction string, e.g. `"= NaCl"` or `"⚛A = ⚛B"`
-`K`                    | yes      | Equilibrium constant (not ln K; must be positive)
+- **Reaction string**: e.g. `"= NaCl"` or `"⚛A = ⚛B"`
+- **Equilibrium constant**: `!K <value>`, `!lnK <value>`, `!pK <value>` ($K = 10^{-\text{pK}}$), or `!dG <kJ/mol>` ($K = e^{-\Delta G/k_BT}$)
+
+### Activity folding
+
+The user-specified $K$ (or $10^{-\text{pK}}$) is combined with species
+activities to form an effective equilibrium constant used in acceptance:
+
+$$\ln K_\text{eff} = \ln K
+  + \sum_{\text{implicit reactants}} \ln a_i
+  - \sum_{\text{implicit products}} \ln a_i
+  - \sum_{\text{insert/delete reactants}} \ln z_i
+  + \sum_{\text{insert/delete products}} \ln z_i$$
+
+where:
+
+- **Implicit species** (`~H+`): $a_i$ is the `activity` field on the
+  matching atom type. Consumed reactants increase $K_\text{eff}$;
+  produced products decrease it.
+- **Molecular species** involved in insertion/deletion (`Na+`, `Cl-`):
+  $z_i = a_i \times N_A / 10^{27}$
+  converts the molar `activity` on the molecule type to number density.
+  The sign is reversed relative to implicit species because the
+  acceptance criterion already includes a $V$-dependent combinatorial
+  factor $V^{\Delta\nu} \cdot \prod [N!/(N+\nu)!]$ that uses $N/V$;
+  the fugacity correction replaces $N/V$ with $N/(V \cdot z)$.
+- **Molecular swap** participants are excluded from fugacity folding since
+  no volume factor enters the acceptance (total molecule count is conserved).
+
+For example, with `["= Na+ + Cl-", !K 1.0]` and molecular activities
+of 0.030 M on both ions, the bare $K=1$ is modified by the two product
+fugacities: $\ln K_\text{eff} = 0 + \ln z_\text{Na} + \ln z_\text{Cl}$.
 
 ### Notes
 
-- Molecule blocks must have `active < N` to provide empty slots for insertion.
-- Atom swap reactions require that both atom types belong to the same molecule definition.
+- Molecule blocks must have `active < N` to provide empty slots for insertion and swap targets.
+- Atom swap reactions require that at least one atom type belongs to the target molecule definition.
+- Molecular swaps are auto-detected when a reaction has one molecular reactant and one molecular
+  product with equal atom counts. Pool exhaustion silently rejects the move — increase `N` if needed.
 - The move targets the entire system, so energy is recomputed globally on each trial.
 
 ---

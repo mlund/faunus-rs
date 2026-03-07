@@ -20,13 +20,13 @@
 
 use super::{Analyze, Frequency};
 use crate::cell::BoundaryConditions;
+use crate::geometry::GyrationTensor;
 use crate::particle::PointParticle;
 use crate::selection::Selection;
 use crate::Context;
 use anyhow::Result;
 use average::{Estimate, Mean};
 use derive_more::Debug;
-use nalgebra::{Matrix3, SymmetricEigen};
 use serde::{Deserialize, Serialize};
 use std::io::Write;
 use std::path::PathBuf;
@@ -107,62 +107,22 @@ pub struct ShapeAnalysis {
     westin_cs: Mean,
 }
 
-/// Eigenvalues sorted ascending and the gyration tensor.
-struct GyrationResult {
-    eigenvalues: [f64; 3],
-    tensor: Matrix3<f64>,
-    rg_squared: f64,
-}
-
 /// Minimum Rg² to guard against division by zero.
 const RG2_EPSILON: f64 = 1e-20;
 
-/// Eigendecompose a symmetric tensor and return sorted results.
-fn decompose_tensor(tensor: Matrix3<f64>) -> GyrationResult {
-    let eigen = SymmetricEigen::new(tensor);
-    let mut evals = [
-        eigen.eigenvalues[0],
-        eigen.eigenvalues[1],
-        eigen.eigenvalues[2],
-    ];
-    evals.sort_by(f64::total_cmp);
-
-    let rg_squared = evals.iter().sum();
-    GyrationResult {
-        eigenvalues: evals,
-        tensor,
-        rg_squared,
-    }
-}
-
 /// Compute the mass-weighted gyration tensor for a group of particles.
-fn gyration_tensor(group: &crate::group::Group, context: &impl Context) -> Option<GyrationResult> {
+fn gyration_tensor(group: &crate::group::Group, context: &impl Context) -> Option<GyrationTensor> {
     let com = group.mass_center()?;
     if group.len() < 2 {
         return None;
     }
-
     let topology = context.topology_ref();
     let atomkinds = topology.atomkinds();
-    let cell = context.cell();
-
-    let mut tensor = Matrix3::<f64>::zeros();
-    let mut total_mass = 0.0;
-
-    for i in group.iter_active() {
+    let positions_masses = group.iter_active().map(|i| {
         let particle = context.particle(i);
-        let mass = atomkinds[particle.atom_id()].mass();
-        let r = cell.distance(particle.pos(), com);
-        total_mass += mass;
-        tensor += r * r.transpose() * mass;
-    }
-
-    if total_mass <= 0.0 {
-        return None;
-    }
-    tensor /= total_mass;
-
-    Some(decompose_tensor(tensor))
+        (*particle.pos(), atomkinds[particle.atom_id()].mass())
+    });
+    GyrationTensor::from_positions_masses_com(positions_masses, com, context.cell())
 }
 
 /// Compute shape descriptors from sorted eigenvalues λ₁ ≤ λ₂ ≤ λ₃.
@@ -347,6 +307,7 @@ impl<T: Context> Analyze<T> for ShapeAnalysis {
 mod tests {
     use super::*;
     use crate::analysis::AnalysisBuilder;
+    use crate::geometry::GyrationTensor;
     use approx::assert_relative_eq;
 
     #[test]
@@ -385,18 +346,9 @@ frequency: !Every 50
         assert!(matches!(builders[0], AnalysisBuilder::PolymerShape(_)));
     }
 
-    /// Helper: build gyration result from equal-mass positions.
-    fn gyration_from_positions(positions: &[nalgebra::Vector3<f64>]) -> GyrationResult {
-        let n = positions.len() as f64;
-        let com: nalgebra::Vector3<f64> = positions.iter().sum::<nalgebra::Vector3<f64>>() / n;
-
-        let mut tensor = Matrix3::<f64>::zeros();
-        for p in positions {
-            let r = p - com;
-            tensor += r * r.transpose();
-        }
-        tensor /= n;
-        decompose_tensor(tensor)
+    /// Helper: build gyration tensor from equal-mass positions.
+    fn gyration_from_positions(positions: &[nalgebra::Vector3<f64>]) -> GyrationTensor {
+        GyrationTensor::from_equal_mass_positions(positions).unwrap()
     }
 
     #[test]
@@ -568,7 +520,7 @@ frequency: !Every 50
         let total_mass: f64 = masses.iter().sum();
         let com = (masses[0] * positions[0] + masses[1] * positions[1]) / total_mass;
 
-        let mut tensor = Matrix3::<f64>::zeros();
+        let mut tensor = nalgebra::Matrix3::<f64>::zeros();
         for (p, &m) in positions.iter().zip(masses.iter()) {
             let r = p - com;
             for i in 0..3 {

@@ -16,18 +16,29 @@ blocks:
     rotate: true
     directions: xyz
     offset: null
+    min_distance: null
 cell: !Sphere
-  radius: 48.42312196335266
+  radius: 51.240616156114996
 energy_change:
-  drift: 8.640199666842818e-12
-  final: -1038.4991093934436
-  initial: -1074.3396364243306
+  drift: 2.262368070660159e-11
+  final: -1020.9081480087555
+  initial: -1024.504198322701
+energy:
+  externalpressure:
+    pressure_kj_mol_A3: 0.00016899207088419543
+    thermal_energy: 2.4789570295566996
+energy_timers:
+  celloverlap: '21.84 (energy: 21.32, update: 0.52)'
+  nonbonded: '75.04 (energy: 34.59, update: 40.45)'
+  intramolecular: '1.66 (energy: 1.16, update: 0.5)'
+  externalpressure: '1.46 (energy: 0.95, update: 0.51)'
 propagate:
   repeat: 25000
   seed: !Fixed 42
   collections:
   - !Deterministic
     repeat: 1
+    elapsed_seconds: 19.303347695
     moves:
     - !TranslateMolecule
       molecule: polymer
@@ -37,17 +48,17 @@ propagate:
       repeat: 8
       statistics:
         num_trials: 200000
-        num_accepted: 114780
+        num_accepted: 115468
         mean_square_displacement:
-          avg: 14.425706345218243
+          avg: 14.497405167253536
           n: 200000
         timer:
           accumulated:
             secs: 0
             nanos: 0
         info: {}
-        energy_change_sum: -180.31976320765253
-        acceptance_ratio: 0.5739
+        energy_change_sum: 129.8295170809025
+        acceptance_ratio: 0.57734
     - !RotateMolecule
       molecule: polymer
       max_displacement: 1.0
@@ -55,17 +66,17 @@ propagate:
       repeat: 8
       statistics:
         num_trials: 200000
-        num_accepted: 156836
+        num_accepted: 157423
         mean_square_displacement:
-          avg: 0.23513176826475388
+          avg: 0.23621073623171288
           n: 200000
         timer:
           accumulated:
             secs: 0
             nanos: 0
         info: {}
-        energy_change_sum: 90.57155895079183
-        acceptance_ratio: 0.78418
+        energy_change_sum: 56.29405199230672
+        acceptance_ratio: 0.787115
     - !PivotMove
       molecule: polymer
       max_displacement: 3.0
@@ -73,17 +84,17 @@ propagate:
       repeat: 24
       statistics:
         num_trials: 600000
-        num_accepted: 482762
+        num_accepted: 483676
         mean_square_displacement:
-          avg: 2.246516788270071
+          avg: 2.251812079950058
           n: 600000
         timer:
           accumulated:
             secs: 0
             nanos: 0
         info: {}
-        energy_change_sum: -133.50967650487263
-        acceptance_ratio: 0.8046033333333333
+        energy_change_sum: -186.5091194277737
+        acceptance_ratio: 0.8061266666666667
     - !TranslateAtom
       atom: null
       molecule: polymer
@@ -92,17 +103,17 @@ propagate:
       repeat: 32
       statistics:
         num_trials: 800000
-        num_accepted: 216561
+        num_accepted: 215899
         mean_square_displacement:
-          avg: 3.5535518461612665
+          avg: 3.548190069640715
           n: 800000
         timer:
           accumulated:
             secs: 0
             nanos: 0
         info: {}
-        energy_change_sum: 331.2197896397445
-        acceptance_ratio: 0.27070125
+        energy_change_sum: -218.67641833976845
+        acceptance_ratio: 0.26987375
     - !TranslateAtom
       atom: null
       molecule: counterion
@@ -111,17 +122,17 @@ propagate:
       repeat: 32
       statistics:
         num_trials: 800000
-        num_accepted: 183772
+        num_accepted: 184592
         mean_square_displacement:
-          avg: 221.863183865901
+          avg: 224.42161397205825
           n: 800000
         timer:
           accumulated:
             secs: 0
             nanos: 0
         info: {}
-        energy_change_sum: -66.03168865818222
-        acceptance_ratio: 0.229715
+        energy_change_sum: 210.39667929811415
+        acceptance_ratio: 0.23074
     - !VolumeMove
       volume_displacement: 2.0
       method: Isotropic
@@ -129,33 +140,33 @@ propagate:
       repeat: 1
       statistics:
         num_trials: 25000
-        num_accepted: 3256
+        num_accepted: 3224
         mean_square_displacement:
-          avg: 886345500.2892063
+          avg: 879113217.3949859
           n: 25000
         timer:
           accumulated:
             secs: 0
             nanos: 0
         info: {}
-        energy_change_sum: -6.089693188950719
-        acceptance_ratio: 0.13024
+        energy_change_sum: 12.261339710141783
+        acceptance_ratio: 0.12896
   criterion: MetropolisHastings
 analysis:
 - collectivevariable:
     property: Volume
     num_samples: 15000
-    mean: 535445.2465276873
-    rms: 541818.3461713397
+    mean: 540293.7026751495
+    rms: 547120.606704024
 - polymershape:
-    Rg: 6.816126267971434
-    Re: 15.981455112902811
-    Re2/Rg2: 5.497400586996166
-    asphericity: 34.57075199675545
-    acylindricity: 5.850232914415007
-    relative_shape_anisotropy: 0.551857546875836
-    prolateness: 0.7569235611128731
-    Cl: 0.6405633319350289
-    Cp: 0.2781913007339227
-    Cs: 0.08124536733104688
+    Rg: 6.8003874515896845
+    Re: 15.92744772714011
+    Re2/Rg2: 5.485611693669562
+    asphericity: 34.355597132489116
+    acylindricity: 5.861240849357434
+    relative_shape_anisotropy: 0.550117066502826
+    prolateness: 0.7522561492708381
+    Cl: 0.6383891336195044
+    Cp: 0.2803458669316227
+    Cs: 0.08126499944888771
     num_samples: 120000

@@ -19,7 +19,6 @@
 //! where N is the number of independently translatable entities.
 
 use crate::cell::Shape;
-use crate::change::GroupChange;
 use crate::{Change, Context};
 use serde::{Deserialize, Serialize};
 
@@ -132,12 +131,9 @@ impl ExternalPressure {
         match change {
             Change::Everything | Change::Volume(..) => self.compute(context),
             // N changes when particles are added/removed (GCMC)
-            Change::SingleGroup(_, GroupChange::Resize(_)) => self.compute(context),
+            Change::SingleGroup(_, gc) if gc.is_resize() => self.compute(context),
             Change::Groups(changes) => {
-                if changes
-                    .iter()
-                    .any(|(_, gc)| matches!(gc, GroupChange::Resize(_)))
-                {
+                if changes.iter().any(|(_, gc)| gc.is_resize()) {
                     self.compute(context)
                 } else {
                     0.0

@@ -35,6 +35,7 @@ pub mod chemistry;
 pub mod cli;
 pub mod dimension;
 pub mod energy;
+pub(crate) mod geometry;
 #[cfg(feature = "gpu")]
 pub mod gpu;
 pub mod group;

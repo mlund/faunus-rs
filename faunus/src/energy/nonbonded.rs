@@ -357,12 +357,7 @@ impl<P: IsotropicTwobodyEnergy> EnergyChange for NonbondedMatrix<P> {
                 Change::SingleGroup(group_index, group_change) => {
                     self.single_group_change_soa(&soa, groups, *group_index, group_change)
                 }
-                Change::Groups(vec) => vec
-                    .iter()
-                    .map(|(group_index, group_change)| {
-                        self.single_group_change_soa(&soa, groups, *group_index, group_change)
-                    })
-                    .sum(),
+                Change::Groups(vec) => self.multi_group_change_soa(&soa, groups, vec),
                 Change::None => 0.0,
             };
         }
@@ -372,10 +367,7 @@ impl<P: IsotropicTwobodyEnergy> EnergyChange for NonbondedMatrix<P> {
             Change::SingleGroup(group_index, group_change) => {
                 self.single_group_change(context, *group_index, group_change)
             }
-            Change::Groups(vec) => vec
-                .iter()
-                .map(|(group, change)| self.single_group_change(context, *group, change))
-                .sum(),
+            Change::Groups(vec) => self.multi_group_change(context, vec),
             Change::None => 0.0,
         }
     }
@@ -416,12 +408,12 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
         change: &GroupChange,
     ) -> f64 {
         match change {
-            GroupChange::RigidBody => {
+            // ResizeExcludeIntra skips self-energy like RigidBody because
+            // intramolecular contributions are absorbed into the equilibrium constant
+            GroupChange::RigidBody | GroupChange::ResizeExcludeIntra(_) => {
                 self.group_with_other_groups(context, &context.groups()[group_index])
             }
             GroupChange::Resize(_) | GroupChange::UpdateIdentity(_) => {
-                // Unlike RigidBody, the active particle set changed so intra-group
-                // interactions must also be recomputed
                 let group = &context.groups()[group_index];
                 self.group_with_other_groups(context, group)
                     + self.group_with_itself(context, group)
@@ -435,6 +427,62 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
             }
             GroupChange::None => 0.0,
         }
+    }
+
+    /// Energy for multiple simultaneous group changes, avoiding double-counted cross-terms.
+    ///
+    /// For each changed group: energy with unchanged groups + self-energy.
+    /// Cross-terms between changed groups are added once.
+    fn multi_group_change(&self, context: &impl Context, changes: &[(usize, GroupChange)]) -> f64 {
+        // Typically 2–4 entries; stack array avoids heap allocation on the hot path
+        let mut changed_indices = [0usize; 8];
+        let mut n_changed = 0;
+        for (gi, gc) in changes {
+            if gc.is_whole_group() {
+                debug_assert!(
+                    n_changed < changed_indices.len(),
+                    "too many whole-group changes"
+                );
+                changed_indices[n_changed] = *gi;
+                n_changed += 1;
+            }
+        }
+        let changed_indices = &changed_indices[..n_changed];
+
+        let groups = context.groups();
+        let mut energy = 0.0;
+
+        for (gi, gc) in changes {
+            let group = &groups[*gi];
+            if gc.is_whole_group() {
+                // Interaction with unchanged groups only
+                energy += groups
+                    .iter()
+                    .filter(|gj| {
+                        gj.index() != group.index() && !changed_indices.contains(&gj.index())
+                    })
+                    .map(|gj| self.group_with_group(context, group, gj))
+                    .sum::<f64>();
+                if gc.internal_change() {
+                    energy += self.group_with_itself(context, group);
+                }
+            } else {
+                energy += self.single_group_change(context, *gi, gc);
+            }
+        }
+        // Add cross-terms between changed groups exactly once
+        for (i, (gi, _)) in changes.iter().enumerate() {
+            if !changed_indices.contains(gi) {
+                continue;
+            }
+            for (gj, _) in &changes[i + 1..] {
+                if !changed_indices.contains(gj) {
+                    continue;
+                }
+                energy += self.group_with_group(context, &groups[*gi], &groups[*gj]);
+            }
+        }
+        energy
     }
 }
 
@@ -873,7 +921,9 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
     ) -> f64 {
         let group = &groups[group_index];
         match change {
-            GroupChange::RigidBody => self.inter_group_energy_all_soa(soa, groups, group),
+            GroupChange::RigidBody | GroupChange::ResizeExcludeIntra(_) => {
+                self.inter_group_energy_all_soa(soa, groups, group)
+            }
             GroupChange::Resize(_) | GroupChange::UpdateIdentity(_) => {
                 self.inter_group_energy_all_soa(soa, groups, group)
                     + self.group_with_itself_soa(soa, group)
@@ -888,6 +938,61 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
                 .sum(),
             GroupChange::None => 0.0,
         }
+    }
+
+    /// Energy for multiple simultaneous group changes (SoA), avoiding double-counted cross-terms.
+    fn multi_group_change_soa(
+        &self,
+        soa: &SoaSlices<'_, impl SimulationCell>,
+        groups: &[Group],
+        changes: &[(usize, GroupChange)],
+    ) -> f64 {
+        // Typically 2–4 entries; stack array avoids heap allocation on the hot path
+        let mut changed_indices = [0usize; 8];
+        let mut n_changed = 0;
+        for (gi, gc) in changes {
+            if gc.is_whole_group() {
+                debug_assert!(
+                    n_changed < changed_indices.len(),
+                    "too many whole-group changes"
+                );
+                changed_indices[n_changed] = *gi;
+                n_changed += 1;
+            }
+        }
+        let changed_indices = &changed_indices[..n_changed];
+
+        let mut energy = 0.0;
+        for (gi, gc) in changes {
+            let group = &groups[*gi];
+            if gc.is_whole_group() {
+                energy += groups
+                    .iter()
+                    .filter(|gj| {
+                        gj.index() != group.index() && !changed_indices.contains(&gj.index())
+                    })
+                    .map(|gj| self.group_pair_energy_soa(soa, group, gj))
+                    .sum::<f64>();
+                if gc.internal_change() {
+                    energy += self.group_with_itself_soa(soa, group);
+                }
+            } else {
+                energy += self.single_group_change_soa(soa, groups, *gi, gc);
+            }
+        }
+        // Cross-terms between changed groups, counted once
+        for (i, (gi, _)) in changes.iter().enumerate() {
+            if !changed_indices.contains(gi) {
+                continue;
+            }
+            for (gj, _) in &changes[i + 1..] {
+                if !changed_indices.contains(gj) {
+                    continue;
+                }
+                energy += self.group_pair_energy_soa(soa, &groups[*gi], &groups[*gj]);
+            }
+        }
+        energy
     }
 
     /// Inter-group energy of an entire group with all other groups.
@@ -1649,13 +1754,14 @@ mod tests {
         let expected = nonbonded.group_with_other_groups(&system, &system.groups()[1]);
         assert_approx_eq!(f64, nonbonded.energy(&system, &change), expected);
 
-        // change multiple rigid groups
+        // change multiple rigid groups — cross-term group0↔group1 counted once, not twice
         let change = Change::Groups(vec![
             (0, GroupChange::RigidBody),
             (1, GroupChange::RigidBody),
         ]);
         let expected = nonbonded.group_with_other_groups(&system, &system.groups()[0])
-            + nonbonded.group_with_other_groups(&system, &system.groups()[1]);
+            + nonbonded.group_with_other_groups(&system, &system.groups()[1])
+            - nonbonded.group_with_group(&system, &system.groups()[0], &system.groups()[1]);
         assert_approx_eq!(f64, nonbonded.energy(&system, &change), expected);
 
         // change several particles within a single group
