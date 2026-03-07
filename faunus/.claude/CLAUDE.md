@@ -1,0 +1,5 @@
+- Keep commit and PR messages short and concise. No (co-)authorship msg.
+- Write and review adhering to idiomatic rust and avoid code duplication.
+- Code comments should focus on *why*
+- Prefer "deep module" design
+- docs/ and docs.rs documentation should be precise and brief; use "https://doi.org/..." for hyperlinked references.
