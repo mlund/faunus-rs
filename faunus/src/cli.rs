@@ -103,6 +103,12 @@ fn write_mc_output<T: Context + WithCell<SimCell = crate::cell::Cell> + 'static>
         ("drift".to_string(), drift),
     ]);
     write_yaml(&energy_summary, output, Some("energy_change"))?;
+    let energy_info = mc.context().hamiltonian().info_to_yaml();
+    if let Some(map) = energy_info.as_mapping() {
+        if !map.is_empty() {
+            write_yaml(&energy_info, output, Some("energy"))?;
+        }
+    }
     write_yaml(
         &mc.context().hamiltonian().timing_to_yaml(),
         output,

@@ -25,6 +25,7 @@ pub mod exclusions;
 mod external_pressure;
 mod hamiltonian;
 mod nonbonded;
+mod polymer_depletion;
 mod sasa;
 
 pub use bonded::{IntermolecularBonded, IntramolecularBonded};
@@ -37,6 +38,7 @@ pub use external_pressure::{ExternalPressure, Pressure};
 pub use hamiltonian::{EnergyChange, Hamiltonian};
 pub use nonbonded::PbcParams;
 pub use nonbonded::{NonbondedMatrix, NonbondedMatrixSplined};
+pub use polymer_depletion::{PolymerDepletion, PolymerDepletionBuilder};
 pub use sasa::{SasaEnergy, SasaEnergyBuilder};
 
 // Re-export spline types from interatomic for convenience

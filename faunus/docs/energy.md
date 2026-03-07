@@ -396,3 +396,57 @@ When `com` is `true`, the expression is evaluated once per group at the mass cen
 position with the net charge (sum of atom charges).
 When `false` (default), the expression is evaluated and summed over all active particles
 in each matching group.
+
+## Polymer Depletion Many-Body Interaction
+
+The `polymer_depletion` energy term implements the Forsman & Woodward many-body
+Hamiltonian for colloids immersed in an ideal polymer fluid
+([Forsman & Woodward, Soft Matter, 2012, 8, 2121](https://doi.org/10.1039/c2sm06737d)).
+
+Rigid macromolecules of arbitrary shape are treated as neutral spheres using
+their center of mass and bounding sphere radius. The polymers are modelled
+implicitly via an effective potential that captures many-body depletion effects
+through pairwise sums, at O(N_c²) computational cost.
+
+The free energy change due to inserting N_c colloids into a polymer reservoir is:
+
+$$\frac{\beta\,\Delta\omega}{4\pi\rho_P^*} \approx
+  \frac{N_c}{\kappa^{3/2}} \left(\sigma + \sigma^2 + \frac{\sigma^3}{3}\right)
+  - \frac{\sigma^2 e^{2\sigma}}{\kappa^{3/2}}
+    \sum_{i=1}^{N_c}
+    \frac{\displaystyle\sum_{j \neq i} k_0(\lambda R_{ij})}
+         {1 + \tfrac{1}{2}(e^{2\sigma} - 1)\displaystyle\sum_{j \neq i} k_0(\lambda R_{ij})}$$
+
+where $\sigma = \sqrt{\kappa}\,R_c / R_g$, $\lambda = \sqrt{\kappa}/R_g$,
+$k_0(x) = e^{-x}/x$, $\rho_P^* = \rho_P R_g^3$ is the reduced polymer
+reservoir density, $\kappa = n + 1$ is the Schulz–Flory order ($n = 0$ for
+equilibrium polymers), $R_c$ is the colloid (bounding sphere) radius, and
+$R_g$ is the polymer radius of gyration.
+
+### Applicability
+
+- Ideal (non-interacting) polymers under theta conditions
+- Colloid radius $R_c \gtrsim 10$ bond lengths (to avoid curvature artefacts)
+- Size ratio $q = R_g/R_c$ arbitrary; best tested for $q \sim 0.25$–$2$
+- $\kappa = 1$ gives equilibrium (living) polymers; $\kappa \gtrsim 5$ approaches
+  monodisperse limit
+
+### YAML configuration
+
+```yaml
+energy:
+  polymer_depletion:
+    polymer_rg: 10.0
+    polymer_density: 0.5
+    kappa: 1.0
+    molecules: [Colloid]
+```
+
+| Key                | Required | Default | Description                                           |
+|--------------------|----------|---------|-------------------------------------------------------|
+| `polymer_rg`       | yes      |         | Polymer radius of gyration $R_g$ (Å)                  |
+| `polymer_density`  | yes      |         | Reduced reservoir density $\rho_P^*$ (dimensionless)  |
+| `kappa`            | no       | `1.0`   | Schulz–Flory order $\kappa = n + 1$                   |
+| `molecules`        | yes      |         | Molecule types treated as colloids                    |
+| `colloid_radius`   | no       |         | Fixed $R_c$ (Å); default: bounding sphere radius      |
+| `colloid_radius_scaling` | no | `1.0`  | Scaling factor for the effective colloid radius        |

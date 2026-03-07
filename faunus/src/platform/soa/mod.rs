@@ -14,7 +14,7 @@ use crate::{
     WithHamiltonian, WithTopology,
 };
 
-use interatomic::coulomb::DebyeLength;
+use interatomic::coulomb::{DebyeLength, Temperature};
 use rand::rngs::ThreadRng;
 use serde::Serialize;
 
@@ -113,6 +113,17 @@ impl SoaPlatform {
                 let ext = builder.build()?;
                 platform.hamiltonian_mut().push(ext.into());
             }
+        }
+        if let Some(pm_builder) = &hamiltonian_builder.polymer_depletion {
+            let temperature = medium.as_ref().map(|m| m.temperature()).ok_or_else(|| {
+                anyhow::anyhow!(
+                    "Medium with temperature required for polymer_depletion energy term"
+                )
+            })?;
+            let thermal_energy =
+                crate::energy::ExternalPressure::thermal_energy_from_temperature(temperature);
+            let pm = pm_builder.build(&platform, thermal_energy)?;
+            platform.hamiltonian_mut().push(pm.into());
         }
         // Ewald reciprocal term needs particles in place
         if let Some(ewald_builder) = &hamiltonian_builder.ewald {

@@ -43,6 +43,7 @@ use super::constrain::ConstrainBuilder;
 use super::custom_external::CustomExternalBuilder;
 use super::ewald::EwaldBuilder;
 use super::external_pressure::Pressure;
+use super::polymer_depletion::PolymerDepletionBuilder;
 use super::sasa::SasaEnergyBuilder;
 use interatomic::twobody::{GridType, SplineConfig};
 
@@ -404,6 +405,9 @@ pub struct HamiltonianBuilder {
 
     /// Ewald reciprocal-space energy configuration.
     pub ewald: Option<EwaldBuilder>,
+
+    /// Polymer depletion many-body interaction.
+    pub polymer_depletion: Option<PolymerDepletionBuilder>,
 }
 
 impl HamiltonianBuilder {

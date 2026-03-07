@@ -258,6 +258,22 @@ impl Hamiltonian {
             .for_each(|term| term.discard_backup());
     }
 
+    /// Per-term information as a YAML mapping (term name → info).
+    ///
+    /// Only includes terms that provide information via `EnergyTerm::to_yaml()`.
+    pub fn info_to_yaml(&self) -> serde_yaml::Value {
+        let map: serde_yaml::Mapping = self
+            .energy_terms
+            .iter()
+            .filter_map(|term| {
+                let name = crate::Info::short_name(term)?;
+                let info = term.to_yaml()?;
+                Some((serde_yaml::Value::String(name.to_string()), info))
+            })
+            .collect();
+        serde_yaml::Value::Mapping(map)
+    }
+
     /// Per-term energy timing as a YAML-serializable map (term name → percentage of total).
     ///
     /// Reports both `energy()` and `update()` time per term.

@@ -5,6 +5,7 @@ use super::{
     ewald::EwaldReciprocalEnergy,
     external_pressure::ExternalPressure,
     nonbonded::{NonbondedMatrix, NonbondedMatrixSplined, NonbondedTerm},
+    polymer_depletion::PolymerDepletion,
     sasa::SasaEnergy,
     CellOverlap, EnergyChange,
 };
@@ -32,6 +33,8 @@ pub enum EnergyTerm {
     CustomExternal(CustomExternal),
     /// Ewald reciprocal-space electrostatic energy.
     EwaldReciprocal(Box<EwaldReciprocalEnergy>),
+    /// Polymer depletion many-body interaction.
+    PolymerDepletion(PolymerDepletion),
 }
 
 /// Dispatch a no-arg method to stateful energy terms; stateless terms are no-ops.
@@ -44,6 +47,7 @@ macro_rules! dispatch_stateful {
             EnergyTerm::NonbondedMatrix(x) => x.$method(),
             EnergyTerm::NonbondedMatrixSplined(x) => x.$method(),
             EnergyTerm::EwaldReciprocal(x) => x.$method(),
+            EnergyTerm::PolymerDepletion(x) => x.$method(),
             EnergyTerm::IntramolecularBonded(_)
             | EnergyTerm::CellOverlap(_)
             | EnergyTerm::Constrain(_)
@@ -68,6 +72,7 @@ impl EnergyTerm {
             Self::IntermolecularBonded(x) => x.update(context, change),
             Self::SasaEnergy(x) => x.update(context, change),
             Self::EwaldReciprocal(x) => x.update(context, change),
+            Self::PolymerDepletion(x) => x.update(context, change),
             Self::IntramolecularBonded(_)
             | Self::CellOverlap(_)
             | Self::Constrain(_)
@@ -84,6 +89,7 @@ impl EnergyTerm {
         match self {
             Self::IntermolecularBonded(x) => x.save_backup(change),
             Self::SasaEnergy(x) => x.save_backup(),
+            Self::PolymerDepletion(x) => x.save_backup(),
             Self::NonbondedMatrix(x) => x.save_backup(change),
             Self::NonbondedMatrixSplined(x) => x.save_backup(change),
             Self::EwaldReciprocal(x) => x.save_backup(change, context),
@@ -116,6 +122,23 @@ impl EnergyTerm {
         }
     }
 
+    /// Optional per-term information as YAML, for output reporting.
+    pub fn to_yaml(&self) -> Option<serde_yaml::Value> {
+        match self {
+            Self::PolymerDepletion(x) => Some(x.to_yaml()),
+            Self::NonbondedMatrix(_)
+            | Self::NonbondedMatrixSplined(_)
+            | Self::IntramolecularBonded(_)
+            | Self::IntermolecularBonded(_)
+            | Self::SasaEnergy(_)
+            | Self::CellOverlap(_)
+            | Self::Constrain(_)
+            | Self::ExternalPressure(_)
+            | Self::CustomExternal(_)
+            | Self::EwaldReciprocal(_) => None,
+        }
+    }
+
     /// Nonbonded energy between two sets of atom indices; `None` for non-nonbonded terms.
     pub fn nonbonded_energy_between_atoms(
         &self,
@@ -145,6 +168,7 @@ impl crate::Info for EnergyTerm {
             Self::ExternalPressure(_) => "externalpressure",
             Self::CustomExternal(_) => "customexternal",
             Self::EwaldReciprocal(_) => "ewald_reciprocal",
+            Self::PolymerDepletion(_) => "polymer_depletion",
         })
     }
 }
@@ -164,6 +188,7 @@ impl EnergyChange for EnergyTerm {
             Self::ExternalPressure(x) => x.energy(context, change),
             Self::CustomExternal(x) => x.energy(context, change),
             Self::EwaldReciprocal(x) => x.energy(context, change),
+            Self::PolymerDepletion(x) => x.energy(context, change),
         }
     }
 }
@@ -177,5 +202,11 @@ impl From<SasaEnergy> for EnergyTerm {
 impl From<Constrain> for EnergyTerm {
     fn from(constrain: Constrain) -> Self {
         Self::Constrain(constrain)
+    }
+}
+
+impl From<PolymerDepletion> for EnergyTerm {
+    fn from(pm: PolymerDepletion) -> Self {
+        Self::PolymerDepletion(pm)
     }
 }
