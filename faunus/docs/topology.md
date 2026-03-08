@@ -294,7 +294,7 @@ Blocks specify how many copies of each molecule to create and how to initialize 
 | `!FixedCOM`      | `{filename: mol.xyz, position: [0, 0, 0]}`           | Place at specific position                     |
 | `!FromFile`      | `structure.xyz`                                      | Read all positions from file                   |
 | `!Manual`        | `[[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]`                | Explicit coordinates for all atoms             |
-| `!RandomWalk`    | `{bond_length: 3.8}`                                 | Random walk chain from random origin           |
+| `!RandomWalk`    | `{bond_length: 3.8}`                                 | Self-avoiding walk; respects cell boundaries   |
 | `!GridCOM`       | `{filename: mol.xyz, rotate: true}`                  | Simple cubic grid; cuboidal cells only         |
 
 The `directions` field controls which axes are randomized: `xyz` (default), `xy`, `xz`, `yz`, `x`, `y`, or `z`.

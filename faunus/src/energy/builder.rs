@@ -253,10 +253,30 @@ pub struct PairPotentialBuilder(
 );
 
 impl PairPotentialBuilder {
-    /// Insert pairs from `other` that are not already present (input overrides include).
+    /// Merge pairs from an included file. Pair-specific interactions from the
+    /// input take precedence, but `Default` lists are concatenated so that
+    /// include-provided defaults (e.g. AshbaughHatch) combine with input
+    /// defaults (e.g. Coulomb).
     fn merge_from(&mut self, other: Self) {
         for (key, value) in other.0 {
-            self.0.entry(key).or_insert(value);
+            match key {
+                DefaultOrPair::Default => {
+                    let defaults = self.0.entry(DefaultOrPair::Default).or_default();
+                    for interaction in value {
+                        let disc = std::mem::discriminant(&interaction);
+                        if defaults.iter().any(|d| std::mem::discriminant(d) == disc) {
+                            log::warn!(
+                                "Duplicate default nonbonded interaction '{interaction:?}' from include file — skipping"
+                            );
+                        } else {
+                            defaults.push(interaction);
+                        }
+                    }
+                }
+                pair => {
+                    self.0.entry(pair).or_insert(value);
+                }
+            }
         }
     }
 
@@ -1085,5 +1105,48 @@ mod tests {
         // new key inserted from include
         assert_eq!(base.0[&pair_ab], interaction3);
         assert_eq!(base.0.len(), 2);
+    }
+
+    #[test]
+    fn test_pairpot_merge_from_default() {
+        let default_key = DefaultOrPair::Default;
+        let pair_aa = DefaultOrPair::Pair(UnorderedPair("A".into(), "A".into()));
+
+        let coulomb =
+            PairInteraction::CoulombPlain(interatomic::coulomb::pairwise::Plain::new(40.0, None));
+        let lj = PairInteraction::LennardJones(DirectOrMixing::Direct(LennardJones::new(1.0, 3.0)));
+        let kh = PairInteraction::KimHummer(DirectOrMixing::Direct(KimHummer::new(0.1, 5.0)));
+
+        // Input has Coulomb as default + pair-specific
+        let mut base = PairPotentialBuilder(HashMap::from([
+            (default_key.clone(), vec![coulomb.clone()]),
+            (pair_aa.clone(), vec![kh.clone()]),
+        ]));
+        // Include has LJ as default — different variant, should be merged
+        let other = PairPotentialBuilder(HashMap::from([(default_key.clone(), vec![lj.clone()])]));
+
+        base.merge_from(other);
+
+        // Different variants are concatenated
+        assert_eq!(base.0[&default_key], vec![coulomb, lj]);
+        // Pair-specific unchanged
+        assert_eq!(base.0[&pair_aa], vec![kh]);
+    }
+
+    #[test]
+    fn test_pairpot_merge_from_default_duplicate_skipped() {
+        let default_key = DefaultOrPair::Default;
+
+        let kh1 = PairInteraction::KimHummer(DirectOrMixing::Direct(KimHummer::new(-0.5, 6.0)));
+        let kh2 = PairInteraction::KimHummer(DirectOrMixing::Direct(KimHummer::new(0.3, 8.0)));
+
+        let mut base =
+            PairPotentialBuilder(HashMap::from([(default_key.clone(), vec![kh1.clone()])]));
+        let other = PairPotentialBuilder(HashMap::from([(default_key.clone(), vec![kh2])]));
+
+        base.merge_from(other);
+
+        // Same variant from include is skipped
+        assert_eq!(base.0[&default_key], vec![kh1]);
     }
 }

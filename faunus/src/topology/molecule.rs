@@ -230,6 +230,8 @@ impl MoleculeKind {
                 self.atoms.len(),
                 self.bonds.len()
             );
+            // Clear fasta so post-expansion validation doesn't reject the populated atoms
+            self.fasta = None;
         }
         Ok(())
     }

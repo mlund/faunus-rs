@@ -68,16 +68,22 @@ on top of a shared Coulomb term.
 Nonbonded pair definitions can be provided in an included force field file
 instead of being inlined in the input. The top-level `include` list is scanned
 for files containing an `energy` section, and any `nonbonded` pairs found there
-are merged into the input — entries in the input file take precedence.
+are merged into the input.
+Pair-specific entries in the input take precedence over includes.
+`default` lists are concatenated — e.g. an include providing `!AshbaughHatch`
+and the input providing `!Coulomb` yields both as defaults.
+Duplicate potential types (same variant) from includes are skipped with a warning.
 
 ```yaml
 # assets/forcefield.yaml
 energy:
   nonbonded:
+    default:
+      - !AshbaughHatch {mixing: arithmetic, cutoff: 20.0}
     [A, A]:
       - !KimHummer {sigma: 5.0, epsilon: -0.18}
 
-# input.yaml
+# input.yaml — gets both AshbaughHatch (from include) and Coulomb as defaults
 include: [assets/forcefield.yaml]
 system:
   energy:

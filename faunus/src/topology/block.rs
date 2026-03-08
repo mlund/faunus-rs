@@ -386,10 +386,13 @@ impl InsertionPolicy {
         Ok(all_positions)
     }
 
-    /// Generate positions as a random walk from a random origin.
+    /// Generate positions as a self-avoiding random walk from a random origin.
     ///
     /// Each molecule starts at a random point inside the cell, then each
     /// subsequent atom is placed `bond_length` away in a random direction.
+    /// Steps that would place an atom outside the cell or closer than
+    /// `bond_length` to any earlier bead in the same chain are rejected
+    /// and retried with a new random direction.
     fn generate_random_walk(
         molecule_kind: &MoleculeKind,
         num_molecules: usize,
@@ -399,13 +402,29 @@ impl InsertionPolicy {
         directions: &Dimension,
     ) -> anyhow::Result<Vec<Point>> {
         let n_atoms = molecule_kind.atom_indices().len();
+        let max_attempts = 1000 * n_atoms;
+        let min_sq = bond_length * bond_length;
         let mut all_positions = Vec::with_capacity(n_atoms * num_molecules);
 
         for _ in 0..num_molecules {
+            let chain_start = all_positions.len();
             let mut pos = directions.filter(cell.get_point_inside(rng));
             all_positions.push(pos);
             for _ in 1..n_atoms {
-                pos += transform::random_unit_vector(rng) * bond_length;
+                pos = (0..max_attempts)
+                    .map(|_| pos + transform::random_unit_vector(rng) * bond_length)
+                    .find(|candidate| {
+                        cell.is_inside(candidate)
+                            // Exclude last element (bonded neighbor at exactly bond_length)
+                            && !all_positions[chain_start..all_positions.len() - 1]
+                                .iter()
+                                .any(|p| (candidate - p).norm_squared() < min_sq)
+                    })
+                    .ok_or_else(|| {
+                        anyhow::anyhow!(
+                            "RandomWalk: failed to place bead after {max_attempts} attempts"
+                        )
+                    })?;
                 all_positions.push(pos);
             }
         }
