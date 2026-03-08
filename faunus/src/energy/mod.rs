@@ -25,6 +25,8 @@ pub mod exclusions;
 mod external_pressure;
 mod hamiltonian;
 mod nonbonded;
+#[cfg(feature = "gpu")]
+pub(crate) mod nonbonded_kernel;
 mod polymer_depletion;
 mod sasa;
 

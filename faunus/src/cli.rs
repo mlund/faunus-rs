@@ -60,7 +60,11 @@ pub fn do_main() -> Result<()> {
         unsafe {
             std::env::set_var(
                 DEFAULT_FILTER_ENV,
-                if args.verbose { "Debug" } else { "Info" },
+                if args.verbose {
+                    "Debug"
+                } else {
+                    "Info,cubecl_wgpu=warn"
+                },
             )
         };
     }

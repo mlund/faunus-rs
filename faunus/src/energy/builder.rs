@@ -361,6 +361,9 @@ pub struct SplineOptions {
     /// Shift energy to zero at cutoff (default: true).
     #[serde(default = "default_shift_energy")]
     pub shift_energy: bool,
+    /// Shift force to zero at cutoff (default: false).
+    #[serde(default = "default_shift_force")]
+    pub shift_force: bool,
     /// Build a cell list for spatial acceleration (default: true).
     #[serde(default = "default_cell_list")]
     pub cell_list: bool,
@@ -381,6 +384,10 @@ const fn default_shift_energy() -> bool {
     true
 }
 
+const fn default_shift_force() -> bool {
+    false
+}
+
 impl SplineOptions {
     /// Convert to interatomic's SplineConfig.
     pub fn to_spline_config(&self) -> SplineConfig {
@@ -388,6 +395,7 @@ impl SplineOptions {
             n_points: self.n_points,
             grid_type: self.grid_type,
             shift_energy: self.shift_energy,
+            shift_force: self.shift_force,
             ..Default::default()
         }
     }

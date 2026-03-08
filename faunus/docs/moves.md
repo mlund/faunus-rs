@@ -543,7 +543,8 @@ Key        | Required | Description
 
 ## Langevin Dynamics
 
-GPU-accelerated rigid-body Langevin dynamics using the BAOAB splitting scheme.
+Rigid-body Langevin dynamics using the BAOAB splitting scheme, accelerated via
+[CubeCL](https://github.com/tracel-ai/cubecl) (wgpu, CUDA, or CPU backends).
 Molecules are treated as rigid bodies with translational and rotational degrees of freedom,
 integrated with per-body friction and stochastic forces at the target temperature.
 Requires the `gpu` cargo feature (`cargo run --features gpu`).
@@ -551,10 +552,10 @@ Requires the `gpu` cargo feature (`cargo run --features gpu`).
 Langevin dynamics is placed as a collection entry alongside Monte Carlo moves,
 enabling hybrid MC/LD schemes where MC sweeps alternate with LD blocks within
 each propagation cycle. On each MC→LD transition, atom positions, centers of mass,
-and rigid-body orientations are uploaded to the GPU; after the LD block, updated
-positions and orientations are downloaded back.
+and rigid-body orientations are uploaded to the compute device; after the LD block,
+updated positions and orientations are downloaded back.
 
-Pair interactions are evaluated on the GPU using cubic spline interpolation of the
+Pair interactions are evaluated on-device using cubic spline interpolation of the
 tabulated pair potentials (see `energy.spline` in [Energy](energy.md)).
 
 ### Theory
@@ -671,7 +672,7 @@ from the equipartition theorem:
 - Molecules must have `degrees_of_freedom: Rigid` and `has_com: true` in the topology.
 - The simulation cell must be bounded (cuboid).
 - Velocities are initialized from the Maxwell–Boltzmann distribution on the first call
-  and persist on the GPU across subsequent LD blocks.
+  and persist on the compute device across subsequent LD blocks.
 - MC rotation moves (`!RotateMolecule`) automatically track rigid-body orientation,
-  which is transferred to the GPU at each LD block start.
-- Energy splines must be configured (`energy.spline`) to provide GPU-evaluated pair potentials.
+  which is transferred to the device at each LD block start.
+- Energy splines must be configured (`energy.spline`) to provide on-device pair potentials.

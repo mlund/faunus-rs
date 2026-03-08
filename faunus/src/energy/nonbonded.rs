@@ -581,6 +581,21 @@ impl NonbondedMatrix<SplinedPotential> {
         let source = nonbonded.get_potentials();
         let shape = source.raw_dim();
 
+        // Warn if all potentials are negligible at half the cutoff, indicating
+        // grid points are wasted on a long flat tail (risk of spline ringing).
+        let half_rsq = (cutoff * 0.5) * (cutoff * 0.5);
+        let max_energy_at_half = source
+            .iter()
+            .map(|p| p.isotropic_twobody_energy(half_rsq).abs())
+            .fold(0.0f64, f64::max);
+        if max_energy_at_half < 1e-6 {
+            log::warn!(
+                "All pair potentials are < 1e-6 kJ/mol at r = {:.1} Å (half the spline cutoff). \
+                 Consider reducing the spline cutoff to avoid wasting grid resolution on a flat tail.",
+                cutoff * 0.5
+            );
+        }
+
         let potentials = Array2::from_shape_fn(shape, |(i, j)| {
             let potential = source.get((i, j)).expect("Index should be valid");
             SplinedPotential::with_cutoff(potential, cutoff, config.clone())

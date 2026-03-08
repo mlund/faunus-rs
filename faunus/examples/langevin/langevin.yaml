@@ -46,8 +46,8 @@ system:
       default:
         - !Coulomb {cutoff: 200}
         - !WeeksChandlerAndersen {mixing: LB}
-    spline:             # tabulate potentials for GPU evaluation
-      cutoff: 200.0
+    spline:
+      cutoff: 80.0
       n_points: 2000
 
 analysis:
@@ -63,10 +63,10 @@ propagate:
   criterion: Metropolis
   repeat: 100
   collections:
-   #- !Stochastic
-   #  repeat: 10
-   #  moves:
-   #    - !TranslateMolecule {molecule: CPPM, dp: 40.0, repeat: 100}
+    - !Stochastic
+      repeat: 10
+      moves:
+        - !TranslateMolecule {molecule: CPPM, dp: 40.0, repeat: 100}
     - !LangevinDynamics
       timestep: 0.1      # ps
       friction: 5.0      # 1/ps

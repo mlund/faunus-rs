@@ -304,6 +304,7 @@ energy:
 | `n_points`         | no       | `2000`       | Number of spline grid points             |
 | `grid_type`        | no       | `PowerLaw2`  | Grid spacing strategy (see below)        |
 | `shift_energy`     | no       | `true`       | Shift energy to zero at cutoff           |
+| `shift_force`      | no       | `false`      | Shift force to zero at cutoff            |
 | `cell_list`        | no       | `true`       | Use cell list for spatial acceleration   |
 | `bounding_spheres` | no       | `true`       | Use bounding-sphere culling of distant group pairs |
 
