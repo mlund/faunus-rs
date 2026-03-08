@@ -33,9 +33,16 @@ fn mulhilo(a: u32, b: u32, lo: &mut u32, hi: &mut u32) {
 /// One Philox round: apply S-box permutation with the given key.
 #[cube]
 fn philox_round(
-    c0: u32, c1: u32, c2: u32, c3: u32,
-    k0: u32, k1: u32,
-    o0: &mut u32, o1: &mut u32, o2: &mut u32, o3: &mut u32,
+    c0: u32,
+    c1: u32,
+    c2: u32,
+    c3: u32,
+    k0: u32,
+    k1: u32,
+    o0: &mut u32,
+    o1: &mut u32,
+    o2: &mut u32,
+    o3: &mut u32,
 ) {
     let mut m0_lo = 0u32;
     let mut m0_hi = 0u32;
@@ -52,9 +59,16 @@ fn philox_round(
 /// Philox 4x32-10: full 10-round permutation.
 #[cube]
 fn philox4x32(
-    c0: u32, c1: u32, c2: u32, c3: u32,
-    k0: u32, k1: u32,
-    o0: &mut u32, o1: &mut u32, o2: &mut u32, o3: &mut u32,
+    c0: u32,
+    c1: u32,
+    c2: u32,
+    c3: u32,
+    k0: u32,
+    k1: u32,
+    o0: &mut u32,
+    o1: &mut u32,
+    o2: &mut u32,
+    o3: &mut u32,
 ) {
     let mut r0 = c0;
     let mut r1 = c1;
@@ -99,14 +113,31 @@ fn box_muller(u0: u32, u1: u32, g0: &mut f32, g1: &mut f32) {
 /// Generate 4 Gaussian random numbers for molecule `mol_id` at step `step`.
 #[cube]
 fn gaussian4(
-    mol_id: u32, step: u32, seed: u32, stream: u32,
-    g0: &mut f32, g1: &mut f32, g2: &mut f32, g3: &mut f32,
+    mol_id: u32,
+    step: u32,
+    seed: u32,
+    stream: u32,
+    g0: &mut f32,
+    g1: &mut f32,
+    g2: &mut f32,
+    g3: &mut f32,
 ) {
     let mut r0 = 0u32;
     let mut r1 = 0u32;
     let mut r2 = 0u32;
     let mut r3 = 0u32;
-    philox4x32(mol_id, step, stream, 0u32, seed, 0x12345678u32, &mut r0, &mut r1, &mut r2, &mut r3);
+    philox4x32(
+        mol_id,
+        step,
+        stream,
+        0u32,
+        seed,
+        0x12345678u32,
+        &mut r0,
+        &mut r1,
+        &mut r2,
+        &mut r3,
+    );
     box_muller(r0, r1, g0, g1);
     box_muller(r2, r3, g2, g3);
 }
@@ -117,9 +148,16 @@ fn gaussian4(
 
 #[cube]
 fn quat_rotate(
-    qx: f32, qy: f32, qz: f32, qw: f32,
-    vx: f32, vy: f32, vz: f32,
-    out_x: &mut f32, out_y: &mut f32, out_z: &mut f32,
+    qx: f32,
+    qy: f32,
+    qz: f32,
+    qw: f32,
+    vx: f32,
+    vy: f32,
+    vz: f32,
+    out_x: &mut f32,
+    out_y: &mut f32,
+    out_z: &mut f32,
 ) {
     let tx = 2.0f32 * (qy * vz - qz * vy);
     let ty = 2.0f32 * (qz * vx - qx * vz);
@@ -131,18 +169,34 @@ fn quat_rotate(
 
 #[cube]
 fn quat_rotate_inv(
-    qx: f32, qy: f32, qz: f32, qw: f32,
-    vx: f32, vy: f32, vz: f32,
-    out_x: &mut f32, out_y: &mut f32, out_z: &mut f32,
+    qx: f32,
+    qy: f32,
+    qz: f32,
+    qw: f32,
+    vx: f32,
+    vy: f32,
+    vz: f32,
+    out_x: &mut f32,
+    out_y: &mut f32,
+    out_z: &mut f32,
 ) {
     quat_rotate(-qx, -qy, -qz, qw, vx, vy, vz, out_x, out_y, out_z);
 }
 
 #[cube]
 fn quat_mul(
-    qx: f32, qy: f32, qz: f32, qw: f32,
-    px: f32, py: f32, pz: f32, pw: f32,
-    out_x: &mut f32, out_y: &mut f32, out_z: &mut f32, out_w: &mut f32,
+    qx: f32,
+    qy: f32,
+    qz: f32,
+    qw: f32,
+    px: f32,
+    py: f32,
+    pz: f32,
+    pw: f32,
+    out_x: &mut f32,
+    out_y: &mut f32,
+    out_z: &mut f32,
+    out_w: &mut f32,
 ) {
     *out_x = qw * px + qx * pw + qy * pz - qz * py;
     *out_y = qw * py - qx * pz + qy * pw + qz * px;
@@ -152,8 +206,14 @@ fn quat_mul(
 
 #[cube]
 fn quat_normalize(
-    x: f32, y: f32, z: f32, w: f32,
-    ox: &mut f32, oy: &mut f32, oz: &mut f32, ow: &mut f32,
+    x: f32,
+    y: f32,
+    z: f32,
+    w: f32,
+    ox: &mut f32,
+    oy: &mut f32,
+    oz: &mut f32,
+    ow: &mut f32,
 ) {
     let len = f32::sqrt(x * x + y * y + z * z + w * w);
     let inv = 1.0f32 / len;
@@ -232,7 +292,9 @@ pub fn baoab_step(
         let mut tb_x = 0.0f32;
         let mut tb_y = 0.0f32;
         let mut tb_z = 0.0f32;
-        quat_rotate_inv(qx, qy, qz, qw, taux, tauy, tauz, &mut tb_x, &mut tb_y, &mut tb_z);
+        quat_rotate_inv(
+            qx, qy, qz, qw, taux, tauy, tauz, &mut tb_x, &mut tb_y, &mut tb_z,
+        );
         ox += half_dt * inv_ix * tb_x * KJ_MOL_TO_INTERNAL;
         oy += half_dt * inv_iy * tb_y * KJ_MOL_TO_INTERNAL;
         oz += half_dt * inv_iz * tb_z * KJ_MOL_TO_INTERNAL;
@@ -248,7 +310,20 @@ pub fn baoab_step(
         let mut dqy = 0.0f32;
         let mut dqz = 0.0f32;
         let mut dqw = 0.0f32;
-        quat_mul(qx, qy, qz, qw, ox * s, oy * s, oz * s, 0.0f32, &mut dqx, &mut dqy, &mut dqz, &mut dqw);
+        quat_mul(
+            qx,
+            qy,
+            qz,
+            qw,
+            ox * s,
+            oy * s,
+            oz * s,
+            0.0f32,
+            &mut dqx,
+            &mut dqy,
+            &mut dqz,
+            &mut dqw,
+        );
         qx += dqx;
         qy += dqy;
         qz += dqz;
@@ -272,12 +347,16 @@ pub fn baoab_step(
         let mut n1 = 0.0f32;
         let mut n2 = 0.0f32;
         let mut n3 = 0.0f32;
-        gaussian4(m_u32, rng_step, rng_seed, 0u32, &mut n0, &mut n1, &mut n2, &mut n3);
+        gaussian4(
+            m_u32, rng_step, rng_seed, 0u32, &mut n0, &mut n1, &mut n2, &mut n3,
+        );
         let mut nr0 = 0.0f32;
         let mut nr1 = 0.0f32;
         let mut nr2 = 0.0f32;
         let mut nr3 = 0.0f32;
-        gaussian4(m_u32, rng_step, rng_seed, 1u32, &mut nr0, &mut nr1, &mut nr2, &mut nr3);
+        gaussian4(
+            m_u32, rng_step, rng_seed, 1u32, &mut nr0, &mut nr1, &mut nr2, &mut nr3,
+        );
 
         let sigma_trans = f32::sqrt(kt * inv_mass * KJ_MOL_TO_INTERNAL);
         vx = a * vx + b * sigma_trans * n0;
@@ -300,7 +379,20 @@ pub fn baoab_step(
         let mut dqy2 = 0.0f32;
         let mut dqz2 = 0.0f32;
         let mut dqw2 = 0.0f32;
-        quat_mul(qx, qy, qz, qw, ox * s, oy * s, oz * s, 0.0f32, &mut dqx2, &mut dqy2, &mut dqz2, &mut dqw2);
+        quat_mul(
+            qx,
+            qy,
+            qz,
+            qw,
+            ox * s,
+            oy * s,
+            oz * s,
+            0.0f32,
+            &mut dqx2,
+            &mut dqy2,
+            &mut dqz2,
+            &mut dqw2,
+        );
         qx += dqx2;
         qy += dqy2;
         qz += dqz2;
@@ -379,9 +471,16 @@ pub fn half_kick(
         let mut tb_y = 0.0f32;
         let mut tb_z = 0.0f32;
         quat_rotate_inv(
-            qx, qy, qz, qw,
-            torques_buf[m4], torques_buf[m4 + 1], torques_buf[m4 + 2],
-            &mut tb_x, &mut tb_y, &mut tb_z,
+            qx,
+            qy,
+            qz,
+            qw,
+            torques_buf[m4],
+            torques_buf[m4 + 1],
+            torques_buf[m4 + 2],
+            &mut tb_x,
+            &mut tb_y,
+            &mut tb_z,
         );
         ox += half_dt * inv_ix * tb_x * KJ_MOL_TO_INTERNAL;
         oy += half_dt * inv_iy * tb_y * KJ_MOL_TO_INTERNAL;
@@ -447,11 +546,16 @@ pub fn reconstruct_positions(
         let mut rot_y = 0.0f32;
         let mut rot_z = 0.0f32;
         quat_rotate(
-            qx, qy, qz, qw,
+            qx,
+            qy,
+            qz,
+            qw,
             ref_positions[i4],
             ref_positions[i4 + 1],
             ref_positions[i4 + 2],
-            &mut rot_x, &mut rot_y, &mut rot_z,
+            &mut rot_x,
+            &mut rot_y,
+            &mut rot_z,
         );
 
         let atom_type_w = positions[i4 + 3];

@@ -4,9 +4,10 @@
 //! This enables SIMD batch evaluation without sync overhead.
 
 use crate::{
+    cell::PbcParams,
     cell::{BoundaryConditions, Cell},
     change::Change,
-    energy::{builder::HamiltonianBuilder, Hamiltonian, PbcParams},
+    energy::{builder::HamiltonianBuilder, Hamiltonian},
     group::{GroupCollection, GroupLists, GroupSize},
     topology::Topology,
     Context, Group, Particle, ParticleSystem, Point, PointParticle, UnitQuaternion, WithCell,
@@ -220,7 +221,7 @@ impl SoaPlatform {
             self.x.len(),
             active_indices,
         );
-        log::info!(
+        log::trace!(
             "Built cell list with cutoff={cutoff:.1} Å for {} active particles",
             self.num_active_particles()
         );
@@ -393,15 +394,15 @@ impl ParticleSystem for SoaPlatform {
         self.atom_kinds[i] as usize
     }
 
-    fn positions_soa(&self) -> Option<(&[f64], &[f64], &[f64])> {
-        Some((&self.x, &self.y, &self.z))
+    fn positions_soa(&self) -> (&[f64], &[f64], &[f64]) {
+        (&self.x, &self.y, &self.z)
     }
 
-    fn atom_kinds_u32(&self) -> Option<&[u32]> {
-        Some(&self.atom_kinds)
+    fn atom_kinds_u32(&self) -> &[u32] {
+        &self.atom_kinds
     }
 
-    fn pbc_params(&self) -> Option<crate::energy::PbcParams> {
+    fn pbc_params(&self) -> Option<crate::cell::PbcParams> {
         self.pbc_params
     }
 

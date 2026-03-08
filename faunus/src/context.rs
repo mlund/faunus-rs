@@ -119,18 +119,14 @@ pub trait ParticleSystem: GroupCollection + WithCell + WithTopology {
     /// ```
     fn get_atomkind(&self, i: usize) -> usize;
 
-    /// Optional SoA position arrays for SIMD batch evaluation.
-    fn positions_soa(&self) -> Option<(&[f64], &[f64], &[f64])> {
-        None
-    }
+    /// SoA position arrays for batch evaluation.
+    fn positions_soa(&self) -> (&[f64], &[f64], &[f64]);
 
-    /// Optional contiguous atom kind array (u32 for SIMD gather).
-    fn atom_kinds_u32(&self) -> Option<&[u32]> {
-        None
-    }
+    /// Contiguous atom kind array (u32 for SIMD gather).
+    fn atom_kinds_u32(&self) -> &[u32];
 
     /// Optional cached PBC parameters for branchless minimum image distance.
-    fn pbc_params(&self) -> Option<crate::energy::PbcParams> {
+    fn pbc_params(&self) -> Option<crate::cell::PbcParams> {
         None
     }
 

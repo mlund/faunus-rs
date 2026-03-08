@@ -44,7 +44,13 @@ const WORKGROUP_SIZE: u32 = 64;
 
 /// GPU spline data extracted from the Hamiltonian: (atom_type_ids, mol_ids, params, coeffs, n_types).
 #[cfg(feature = "gpu")]
-type SplineData = (Option<Vec<u32>>, Option<Vec<u32>>, Option<Vec<f32>>, Option<Vec<f32>>, u32);
+type SplineData = (
+    Option<Vec<u32>>,
+    Option<Vec<u32>>,
+    Option<Vec<f32>>,
+    Option<Vec<f32>>,
+    u32,
+);
 
 /// Callback computing per-molecule COM forces and torques from atom positions.
 #[cfg(feature = "gpu")]
@@ -236,18 +242,10 @@ impl<R: Runtime> LangevinGpu<R> {
             &data.spline_params,
             &data.spline_coeffs,
         ) {
-            self.atom_type_ids = self
-                .client
-                .create_from_slice(bytemuck::cast_slice(types));
-            self.mol_ids = self
-                .client
-                .create_from_slice(bytemuck::cast_slice(mol_ids));
-            self.spline_params = self
-                .client
-                .create_from_slice(bytemuck::cast_slice(params));
-            self.spline_coeffs = self
-                .client
-                .create_from_slice(bytemuck::cast_slice(coeffs));
+            self.atom_type_ids = self.client.create_from_slice(bytemuck::cast_slice(types));
+            self.mol_ids = self.client.create_from_slice(bytemuck::cast_slice(mol_ids));
+            self.spline_params = self.client.create_from_slice(bytemuck::cast_slice(params));
+            self.spline_coeffs = self.client.create_from_slice(bytemuck::cast_slice(coeffs));
             self.n_atom_types = data.n_atom_types;
             self.has_gpu_forces = true;
             log::info!(
@@ -286,11 +284,7 @@ impl<R: Runtime> LangevinGpu<R> {
     }
 
     /// Run `steps` BAOAB steps with CPU-computed forces from a callback.
-    fn run_steps_with_cpu_forces(
-        &mut self,
-        steps: usize,
-        compute_forces: ForceCallback<'_>,
-    ) {
+    fn run_steps_with_cpu_forces(&mut self, steps: usize, compute_forces: ForceCallback<'_>) {
         self.log_first_step();
 
         let positions = self.download_positions();
@@ -316,9 +310,7 @@ impl<R: Runtime> LangevinGpu<R> {
         self.com_forces = self
             .client
             .create_from_slice(bytemuck::cast_slice(com_forces));
-        self.torques = self
-            .client
-            .create_from_slice(bytemuck::cast_slice(torques));
+        self.torques = self.client.create_from_slice(bytemuck::cast_slice(torques));
     }
 
     // ========================================================================
@@ -348,11 +340,7 @@ impl<R: Runtime> LangevinGpu<R> {
                     self.spline_coeffs.size() as usize / 4,
                     1,
                 ),
-                ArrayArg::from_raw_parts::<f32>(
-                    &self.atom_forces,
-                    self.n_atoms as usize * 4,
-                    1,
-                ),
+                ArrayArg::from_raw_parts::<f32>(&self.atom_forces, self.n_atoms as usize * 4, 1),
                 ScalarArg::new(self.n_atoms),
                 ScalarArg::new(self.n_atom_types),
                 ScalarArg::new(self.box_length),
@@ -372,11 +360,7 @@ impl<R: Runtime> LangevinGpu<R> {
                 &self.client,
                 count,
                 dim,
-                ArrayArg::from_raw_parts::<f32>(
-                    &self.atom_forces,
-                    self.n_atoms as usize * 4,
-                    1,
-                ),
+                ArrayArg::from_raw_parts::<f32>(&self.atom_forces, self.n_atoms as usize * 4, 1),
                 ArrayArg::from_raw_parts::<f32>(&self.positions, self.n_atoms as usize * 4, 1),
                 ArrayArg::from_raw_parts::<f32>(
                     &self.com_positions,
@@ -388,11 +372,7 @@ impl<R: Runtime> LangevinGpu<R> {
                     self.n_molecules as usize + 1,
                     1,
                 ),
-                ArrayArg::from_raw_parts::<f32>(
-                    &self.com_forces,
-                    self.n_molecules as usize * 4,
-                    1,
-                ),
+                ArrayArg::from_raw_parts::<f32>(&self.com_forces, self.n_molecules as usize * 4, 1),
                 ArrayArg::from_raw_parts::<f32>(&self.torques, self.n_molecules as usize * 4, 1),
                 ScalarArg::new(self.n_molecules),
                 ScalarArg::new(self.box_length),
@@ -431,11 +411,7 @@ impl<R: Runtime> LangevinGpu<R> {
                     self.n_molecules as usize * 4,
                     1,
                 ),
-                ArrayArg::from_raw_parts::<f32>(
-                    &self.com_forces,
-                    self.n_molecules as usize * 4,
-                    1,
-                ),
+                ArrayArg::from_raw_parts::<f32>(&self.com_forces, self.n_molecules as usize * 4, 1),
                 ArrayArg::from_raw_parts::<f32>(&self.torques, self.n_molecules as usize * 4, 1),
                 ArrayArg::from_raw_parts::<f32>(&self.mol_masses, self.n_molecules as usize, 1),
                 ArrayArg::from_raw_parts::<f32>(
@@ -474,11 +450,7 @@ impl<R: Runtime> LangevinGpu<R> {
                     self.n_molecules as usize * 4,
                     1,
                 ),
-                ArrayArg::from_raw_parts::<f32>(
-                    &self.ref_positions,
-                    self.n_atoms as usize * 4,
-                    1,
-                ),
+                ArrayArg::from_raw_parts::<f32>(&self.ref_positions, self.n_atoms as usize * 4, 1),
                 ArrayArg::from_raw_parts::<f32>(&self.positions, self.n_atoms as usize * 4, 1),
                 ArrayArg::from_raw_parts::<u32>(
                     &self.mol_atom_offsets,
@@ -511,11 +483,7 @@ impl<R: Runtime> LangevinGpu<R> {
                     self.n_molecules as usize * 4,
                     1,
                 ),
-                ArrayArg::from_raw_parts::<f32>(
-                    &self.com_forces,
-                    self.n_molecules as usize * 4,
-                    1,
-                ),
+                ArrayArg::from_raw_parts::<f32>(&self.com_forces, self.n_molecules as usize * 4, 1),
                 ArrayArg::from_raw_parts::<f32>(&self.torques, self.n_molecules as usize * 4, 1),
                 ArrayArg::from_raw_parts::<f32>(
                     &self.quaternions,
@@ -683,16 +651,15 @@ impl LangevinRunner {
         if gpu.has_gpu_forces {
             gpu.run_steps(steps);
         } else {
-            let mut force_callback =
-                |positions: &[[f32; 4]]| -> (Vec<[f32; 4]>, Vec<[f32; 4]>) {
-                    Self::write_positions(context, positions);
-                    let n_groups = context.groups().len();
-                    for g in 0..n_groups {
-                        context.update_mass_center(g);
-                    }
-                    let forces = context.hamiltonian().forces(context);
-                    reduce_forces_to_com(context, &forces)
-                };
+            let mut force_callback = |positions: &[[f32; 4]]| -> (Vec<[f32; 4]>, Vec<[f32; 4]>) {
+                Self::write_positions(context, positions);
+                let n_groups = context.groups().len();
+                for g in 0..n_groups {
+                    context.update_mass_center(g);
+                }
+                let forces = context.hamiltonian().forces(context);
+                reduce_forces_to_com(context, &forces)
+            };
             gpu.run_steps_with_cpu_forces(steps, &mut force_callback);
         }
 
@@ -914,9 +881,7 @@ impl LangevinRunner {
     /// Returns `(atom_type_ids, mol_ids, spline_params, spline_coeffs, n_atom_types)`.
     /// If no splined nonbonded term exists, returns None and forces fall back to CPU.
     #[cfg(feature = "gpu")]
-    fn extract_spline_data<T: Context>(
-        context: &T,
-    ) -> SplineData {
+    fn extract_spline_data<T: Context>(context: &T) -> SplineData {
         let hamiltonian = context.hamiltonian();
         let nonbonded = hamiltonian
             .energy_terms()
@@ -942,12 +907,7 @@ impl LangevinRunner {
         let spline_coeffs =
             crate::energy::nonbonded_kernel::repack_spline_coeffs(&spline_data.coefficients);
 
-        let n = context.num_particles();
-        let atom_type_ids: Vec<u32> = if let Some(kinds) = context.atom_kinds_u32() {
-            kinds.to_vec()
-        } else {
-            (0..n).map(|i| context.get_atomkind(i) as u32).collect()
-        };
+        let atom_type_ids: Vec<u32> = context.atom_kinds_u32().to_vec();
 
         // Rigid-body atoms within the same molecule must not interact via nonbonded forces
         let mol_ids: Vec<u32> = context
@@ -1056,23 +1016,13 @@ fn gpu_to_quat(q: &[f32; 4]) -> crate::UnitQuaternion {
 fn pack_positions_f32<T: Context>(context: &T) -> Vec<f32> {
     let n = context.num_particles();
     let mut positions = Vec::with_capacity(n * 4);
-    if let (Some((x, y, z)), Some(atom_kinds)) = (context.positions_soa(), context.atom_kinds_u32())
-    {
-        for i in 0..n {
-            positions.push(x[i] as f32);
-            positions.push(y[i] as f32);
-            positions.push(z[i] as f32);
-            positions.push(f32::from_bits(atom_kinds[i]));
-        }
-    } else {
-        for i in 0..n {
-            let pos = context.position(i);
-            let kind = context.get_atomkind(i);
-            positions.push(pos.x as f32);
-            positions.push(pos.y as f32);
-            positions.push(pos.z as f32);
-            positions.push(f32::from_bits(kind as u32));
-        }
+    let (x, y, z) = context.positions_soa();
+    let atom_kinds = context.atom_kinds_u32();
+    for i in 0..n {
+        positions.push(x[i] as f32);
+        positions.push(y[i] as f32);
+        positions.push(z[i] as f32);
+        positions.push(f32::from_bits(atom_kinds[i]));
     }
     positions
 }

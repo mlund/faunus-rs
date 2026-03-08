@@ -35,6 +35,7 @@ mod cylinder;
 mod endless;
 mod hexagonal_prism;
 //pub(crate) mod lumol;
+mod pbc_params;
 mod slit;
 mod sphere;
 
@@ -46,6 +47,7 @@ pub use cylinder::Cylinder;
 use dyn_clone::DynClone;
 pub use endless::Endless;
 pub use hexagonal_prism::HexagonalPrism;
+pub(crate) use pbc_params::PbcParams;
 use rand::rngs::ThreadRng;
 use serde::{Deserialize, Serialize};
 pub use slit::Slit;

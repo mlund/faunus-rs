@@ -38,7 +38,6 @@ pub use energyterm::EnergyTerm;
 pub use ewald::{EwaldBuilder, EwaldReciprocalEnergy};
 pub use external_pressure::{ExternalPressure, Pressure};
 pub use hamiltonian::{EnergyChange, Hamiltonian};
-pub use nonbonded::PbcParams;
 pub use nonbonded::{NonbondedMatrix, NonbondedMatrixSplined};
 pub use polymer_depletion::{PolymerDepletion, PolymerDepletionBuilder};
 pub use sasa::{SasaEnergy, SasaEnergyBuilder};

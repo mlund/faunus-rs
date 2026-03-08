@@ -4,7 +4,7 @@ use super::{
     custom_external::CustomExternal,
     ewald::EwaldReciprocalEnergy,
     external_pressure::ExternalPressure,
-    nonbonded::{NonbondedMatrix, NonbondedMatrixSplined, NonbondedTerm},
+    nonbonded::{NonbondedMatrix, NonbondedMatrixSplined},
     polymer_depletion::PolymerDepletion,
     sasa::SasaEnergy,
     CellOverlap, EnergyChange,
