@@ -14,7 +14,7 @@
 
 //! Handling of groups of particles
 
-use crate::{Particle, Point, UnitQuaternion, topology::Topology};
+use crate::{topology::Topology, Particle, Point, UnitQuaternion};
 use serde::{Deserialize, Serialize};
 
 /// Group of particles.
@@ -759,28 +759,41 @@ mod tests {
         let mut group = Group::new(7, 0, 20..23);
         assert_eq!(group.len(), 3);
         let indices = group
-            .select(&ParticleSelection::RelIndex(vec![0, 1, 2]), context.topology_ref())
+            .select(
+                &ParticleSelection::RelIndex(vec![0, 1, 2]),
+                context.topology_ref(),
+            )
             .unwrap();
         assert_eq!(indices, vec![20, 21, 22]);
 
         // Absolute selection
         let indices = group
-            .select(&ParticleSelection::AbsIndex(vec![20, 21, 22]), context.topology_ref())
+            .select(
+                &ParticleSelection::AbsIndex(vec![20, 21, 22]),
+                context.topology_ref(),
+            )
             .unwrap();
         assert_eq!(indices, vec![20, 21, 22]);
 
         // Select all
-        let indices = group.select(&ParticleSelection::All, context.topology_ref()).unwrap();
+        let indices = group
+            .select(&ParticleSelection::All, context.topology_ref())
+            .unwrap();
         assert_eq!(indices, vec![20, 21, 22]);
 
         // Out of range selection
         assert!(group
-            .select(&ParticleSelection::RelIndex(vec![1, 2, 3]), context.topology_ref())
+            .select(
+                &ParticleSelection::RelIndex(vec![1, 2, 3]),
+                context.topology_ref()
+            )
             .is_err());
 
         // Test partial selection
         group.resize(GroupSize::Shrink(1)).unwrap();
-        let indices = group.select(&ParticleSelection::Active, context.topology_ref()).unwrap();
+        let indices = group
+            .select(&ParticleSelection::Active, context.topology_ref())
+            .unwrap();
         assert_eq!(indices, vec![20, 21]);
         let indices = group
             .select(&ParticleSelection::Inactive, context.topology_ref())
@@ -803,12 +816,16 @@ mod tests {
         let expected1 = vec![8, 9, 10];
 
         assert_eq!(
-            group.select(&ParticleSelection::ById(0), context.topology_ref()).unwrap(),
+            group
+                .select(&ParticleSelection::ById(0), context.topology_ref())
+                .unwrap(),
             expected0
         );
 
         assert_eq!(
-            group.select(&ParticleSelection::ById(1), context.topology_ref()).unwrap(),
+            group
+                .select(&ParticleSelection::ById(1), context.topology_ref())
+                .unwrap(),
             expected1
         );
 
@@ -816,7 +833,9 @@ mod tests {
         let expected_active: Vec<usize> = vec![];
 
         assert_eq!(
-            group.select(&ParticleSelection::ById(2), context.topology_ref()).unwrap(),
+            group
+                .select(&ParticleSelection::ById(2), context.topology_ref())
+                .unwrap(),
             expected_active
         );
     }

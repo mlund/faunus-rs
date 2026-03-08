@@ -30,6 +30,7 @@ pub mod collective_variable;
 pub use self::change::{Change, GroupChange};
 pub mod analysis;
 pub mod auxiliary;
+pub mod backend;
 pub mod chemistry;
 #[cfg(feature = "cli")]
 pub mod cli;
@@ -39,7 +40,6 @@ pub(crate) mod geometry;
 pub mod group;
 pub(crate) mod histogram;
 pub mod montecarlo;
-pub mod backend;
 pub mod propagate;
 pub mod selection;
 pub mod simulation;

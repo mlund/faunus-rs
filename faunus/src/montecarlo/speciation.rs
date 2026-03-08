@@ -695,8 +695,8 @@ impl<T: Context> MoveProposal<T> for SpeciationMove {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::group::GroupCollection;
     use crate::backend::Backend;
+    use crate::group::GroupCollection;
     use crate::propagate::MoveProposal;
     use crate::WithCell;
     use float_cmp::assert_approx_eq;
@@ -995,11 +995,8 @@ mod tests {
         let mut rng = rand::thread_rng();
         for _ in 0..20 {
             if let Some(proposed) = mv.propose_move(&context, &mut rng) {
-                let bias = MoveProposal::<Backend>::bias(
-                    &mv,
-                    &proposed.change,
-                    &NewOld::from(0.0, 0.0),
-                );
+                let bias =
+                    MoveProposal::<Backend>::bias(&mv, &proposed.change, &NewOld::from(0.0, 0.0));
                 assert!(matches!(bias, crate::montecarlo::Bias::Energy(_)));
                 return;
             }
@@ -1010,8 +1007,7 @@ mod tests {
     #[test]
     fn bias_returns_none_without_propose() {
         let mv = make_move("= M", 10.0);
-        let bias =
-            MoveProposal::<Backend>::bias(&mv, &Change::Everything, &NewOld::from(0.0, 0.0));
+        let bias = MoveProposal::<Backend>::bias(&mv, &Change::Everything, &NewOld::from(0.0, 0.0));
         assert!(matches!(bias, crate::montecarlo::Bias::None));
     }
 

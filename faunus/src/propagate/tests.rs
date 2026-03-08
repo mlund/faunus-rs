@@ -1,7 +1,7 @@
 use super::builder::{CollectionBuilder, MoveCollectionBuilder, Seed};
 use super::Propagate;
-use crate::montecarlo::AcceptanceCriterion;
 use crate::backend::Backend;
+use crate::montecarlo::AcceptanceCriterion;
 use std::path::Path;
 
 #[test]

@@ -1,6 +1,6 @@
 use criterion::{criterion_group, criterion_main, Criterion};
-use faunus::montecarlo::MarkovChain;
 use faunus::backend::Backend;
+use faunus::montecarlo::MarkovChain;
 use std::io::Write;
 use std::path::Path;
 

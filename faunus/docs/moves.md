@@ -557,6 +557,8 @@ updated positions and orientations are downloaded back.
 
 Pair interactions are evaluated on-device using cubic spline interpolation of the
 tabulated pair potentials (see `energy.spline` in [Energy](energy.md)).
+Intramolecular bonded forces (harmonic bonds, harmonic angles, and periodic/harmonic
+dihedrals) are also computed on-device when present in the topology.
 
 ### Theory
 

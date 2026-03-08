@@ -226,9 +226,9 @@ mod tests {
 #[cfg(test)]
 mod integration_tests {
     use super::*;
+    use crate::backend::Backend;
     use crate::context::WithTopology;
     use crate::group::GroupCollection;
-    use crate::backend::Backend;
     use std::path::Path;
 
     fn make_context() -> Backend {

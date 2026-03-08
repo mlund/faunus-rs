@@ -95,6 +95,12 @@ struct LangevinUploadData {
     spline_coeffs: Option<Vec<f32>>,
     /// Number of atom types (matrix dimension for spline_params).
     n_atom_types: u32,
+    /// CSR bond data.
+    bond_data: Option<crate::energy::bonded::kernel::CsrData>,
+    /// CSR angle data.
+    angle_data: Option<crate::energy::bonded::kernel::CsrData>,
+    /// CSR dihedral data.
+    dihedral_data: Option<crate::energy::bonded::kernel::CsrData>,
 }
 
 /// CubeCL-based Langevin dynamics pipeline, generic over runtime backend.
@@ -124,6 +130,21 @@ struct LangevinGpu<R: Runtime> {
     spline_coeffs: Handle,
     n_atom_types: u32,
     has_gpu_forces: bool,
+
+    // Bonded force CSR buffers — separate from nonbonded because bonded
+    // kernels accumulate (`+=`) on top of pair forces already in atom_forces.
+    bond_offsets: Handle,
+    bond_atoms: Handle,
+    bond_params: Handle,
+    has_bonds: bool,
+    angle_offsets: Handle,
+    angle_atoms: Handle,
+    angle_params: Handle,
+    has_angles: bool,
+    dihedral_offsets: Handle,
+    dihedral_atoms: Handle,
+    dihedral_params: Handle,
+    has_dihedrals: bool,
 
     n_atoms: u32,
     n_molecules: u32,
@@ -176,6 +197,17 @@ impl<R: Runtime> LangevinGpu<R> {
         let spline_params = client.empty(4);
         let spline_coeffs = client.empty(4);
 
+        // Minimal placeholders — real CSR data is uploaded later if bonded terms exist
+        let bond_offsets = client.empty(4);
+        let bond_atoms = client.empty(4);
+        let bond_params = client.empty(4);
+        let angle_offsets = client.empty(4);
+        let angle_atoms = client.empty(4);
+        let angle_params = client.empty(4);
+        let dihedral_offsets = client.empty(4);
+        let dihedral_atoms = client.empty(4);
+        let dihedral_params = client.empty(4);
+
         Self {
             client,
             config,
@@ -197,6 +229,18 @@ impl<R: Runtime> LangevinGpu<R> {
             spline_coeffs,
             n_atom_types: 0,
             has_gpu_forces: false,
+            bond_offsets,
+            bond_atoms,
+            bond_params,
+            has_bonds: false,
+            angle_offsets,
+            angle_atoms,
+            angle_params,
+            has_angles: false,
+            dihedral_offsets,
+            dihedral_atoms,
+            dihedral_params,
+            has_dihedrals: false,
             n_atoms,
             n_molecules,
             box_length,
@@ -255,6 +299,36 @@ impl<R: Runtime> LangevinGpu<R> {
                 coeffs.len() / 8,
             );
         }
+
+        // Upload bonded CSR data
+        let upload_csr = |client: &ComputeClient<R>,
+                          data: &crate::energy::bonded::kernel::CsrData| {
+            (
+                client.create_from_slice(bytemuck::cast_slice(&data.offsets)),
+                client.create_from_slice(bytemuck::cast_slice(&data.atoms)),
+                client.create_from_slice(bytemuck::cast_slice(&data.params)),
+            )
+        };
+        if let Some(csr) = &data.bond_data {
+            (self.bond_offsets, self.bond_atoms, self.bond_params) = upload_csr(&self.client, csr);
+            self.has_bonds = true;
+            log::info!("On-device bond forces: {} entries", csr.atoms.len());
+        }
+        if let Some(csr) = &data.angle_data {
+            (self.angle_offsets, self.angle_atoms, self.angle_params) =
+                upload_csr(&self.client, csr);
+            self.has_angles = true;
+            log::info!("On-device angle forces: {} entries", csr.atoms.len() / 2);
+        }
+        if let Some(csr) = &data.dihedral_data {
+            (
+                self.dihedral_offsets,
+                self.dihedral_atoms,
+                self.dihedral_params,
+            ) = upload_csr(&self.client, csr);
+            self.has_dihedrals = true;
+            log::info!("On-device dihedral forces: {} entries", csr.atoms.len() / 3);
+        }
     }
 
     /// Run `steps` BAOAB steps with on-device force computation.
@@ -265,7 +339,10 @@ impl<R: Runtime> LangevinGpu<R> {
         assert!(self.has_gpu_forces, "on-device forces not initialized");
         self.log_first_step();
 
+        // Nonbonded writes atom_forces (=), then bonded accumulates (+=),
+        // then reduce sums per-atom forces into per-molecule COM forces and torques.
         self.dispatch_pair_forces();
+        self.dispatch_bonded_forces();
         self.dispatch_reduce();
 
         for _ in 0..steps {
@@ -273,6 +350,7 @@ impl<R: Runtime> LangevinGpu<R> {
             self.dispatch_reconstruct();
 
             self.dispatch_pair_forces();
+            self.dispatch_bonded_forces();
             self.dispatch_reduce();
 
             self.dispatch_half_kick();
@@ -348,6 +426,105 @@ impl<R: Runtime> LangevinGpu<R> {
             )
         }
         .expect("pair_forces launch failed");
+    }
+
+    /// Dispatch bond, angle, and dihedral force kernels.
+    ///
+    /// Must run after `dispatch_pair_forces` because the bonded kernels
+    /// accumulate (`+=`) into the same `atom_forces` buffer that the
+    /// nonbonded kernel initializes (`=`).
+    fn dispatch_bonded_forces(&self) {
+        let inv_box = 1.0f32 / self.box_length;
+        // CubeCount isn't Copy, so we recreate per-launch
+        let atom_count = || CubeCount::Static(self.n_atoms.div_ceil(WORKGROUP_SIZE), 1, 1);
+        let dim = || CubeDim::new_1d(WORKGROUP_SIZE);
+
+        if self.has_bonds {
+            let n_bond_atoms = self.bond_atoms.size() as usize / 4;
+            let n_params = self.bond_params.size() as usize / 4;
+            unsafe {
+                crate::energy::bonded::kernel::bond_forces_kernel::launch_unchecked::<R>(
+                    &self.client,
+                    atom_count(),
+                    dim(),
+                    ArrayArg::from_raw_parts::<f32>(&self.positions, self.n_atoms as usize * 4, 1),
+                    ArrayArg::from_raw_parts::<u32>(
+                        &self.bond_offsets,
+                        self.n_atoms as usize + 1,
+                        1,
+                    ),
+                    ArrayArg::from_raw_parts::<u32>(&self.bond_atoms, n_bond_atoms, 1),
+                    ArrayArg::from_raw_parts::<f32>(&self.bond_params, n_params, 1),
+                    ArrayArg::from_raw_parts::<f32>(
+                        &self.atom_forces,
+                        self.n_atoms as usize * 4,
+                        1,
+                    ),
+                    ScalarArg::new(self.n_atoms),
+                    ScalarArg::new(self.box_length),
+                    ScalarArg::new(inv_box),
+                )
+            }
+            .expect("bond_forces launch failed");
+        }
+
+        if self.has_angles {
+            let n_atoms_idx = self.angle_atoms.size() as usize / 4;
+            let n_params = self.angle_params.size() as usize / 4;
+            unsafe {
+                crate::energy::bonded::kernel::angle_forces_kernel::launch_unchecked::<R>(
+                    &self.client,
+                    atom_count(),
+                    dim(),
+                    ArrayArg::from_raw_parts::<f32>(&self.positions, self.n_atoms as usize * 4, 1),
+                    ArrayArg::from_raw_parts::<u32>(
+                        &self.angle_offsets,
+                        self.n_atoms as usize + 1,
+                        1,
+                    ),
+                    ArrayArg::from_raw_parts::<u32>(&self.angle_atoms, n_atoms_idx, 1),
+                    ArrayArg::from_raw_parts::<f32>(&self.angle_params, n_params, 1),
+                    ArrayArg::from_raw_parts::<f32>(
+                        &self.atom_forces,
+                        self.n_atoms as usize * 4,
+                        1,
+                    ),
+                    ScalarArg::new(self.n_atoms),
+                    ScalarArg::new(self.box_length),
+                    ScalarArg::new(inv_box),
+                )
+            }
+            .expect("angle_forces launch failed");
+        }
+
+        if self.has_dihedrals {
+            let n_atoms_idx = self.dihedral_atoms.size() as usize / 4;
+            let n_params = self.dihedral_params.size() as usize / 4;
+            unsafe {
+                crate::energy::bonded::kernel::dihedral_forces_kernel::launch_unchecked::<R>(
+                    &self.client,
+                    atom_count(),
+                    dim(),
+                    ArrayArg::from_raw_parts::<f32>(&self.positions, self.n_atoms as usize * 4, 1),
+                    ArrayArg::from_raw_parts::<u32>(
+                        &self.dihedral_offsets,
+                        self.n_atoms as usize + 1,
+                        1,
+                    ),
+                    ArrayArg::from_raw_parts::<u32>(&self.dihedral_atoms, n_atoms_idx, 1),
+                    ArrayArg::from_raw_parts::<f32>(&self.dihedral_params, n_params, 1),
+                    ArrayArg::from_raw_parts::<f32>(
+                        &self.atom_forces,
+                        self.n_atoms as usize * 4,
+                        1,
+                    ),
+                    ScalarArg::new(self.n_atoms),
+                    ScalarArg::new(self.box_length),
+                    ScalarArg::new(inv_box),
+                )
+            }
+            .expect("dihedral_forces launch failed");
+        }
     }
 
     fn dispatch_reduce(&self) {
@@ -760,6 +937,9 @@ impl LangevinRunner {
         let (atom_type_ids, mol_ids, spline_params, spline_coeffs, n_atom_types) =
             Self::extract_spline_data(context);
 
+        // Extract bonded topology into CSR layout for on-device bonded forces
+        let (bond_data, angle_data, dihedral_data) = Self::extract_bonded_data(context);
+
         // COM positions, reference-frame coordinates, and molecule->atom offsets
         let mut com_positions = Vec::with_capacity(n_mol * 4);
         let mut ref_positions = Vec::with_capacity(n * 4);
@@ -872,6 +1052,9 @@ impl LangevinRunner {
             spline_params,
             spline_coeffs,
             n_atom_types,
+            bond_data,
+            angle_data,
+            dihedral_data,
         });
         Ok(())
     }
@@ -925,6 +1108,36 @@ impl LangevinRunner {
             Some(spline_coeffs),
             n_atom_types,
         )
+    }
+
+    /// Extract bonded topology (bonds, angles, dihedrals) into CSR layout.
+    ///
+    /// Returns `None` for each interaction type that has no entries.
+    #[cfg(feature = "gpu")]
+    fn extract_bonded_data<T: Context>(
+        context: &T,
+    ) -> (
+        Option<crate::energy::bonded::kernel::CsrData>,
+        Option<crate::energy::bonded::kernel::CsrData>,
+        Option<crate::energy::bonded::kernel::CsrData>,
+    ) {
+        use crate::energy::bonded::kernel;
+        let topology = context.topology();
+        let groups = context.groups();
+
+        let to_option = |csr: kernel::CsrData| {
+            if csr.is_empty() {
+                None
+            } else {
+                Some(csr)
+            }
+        };
+        let bonds = to_option(kernel::repack_bonds(&topology, groups));
+        let angles = to_option(kernel::repack_angles(&topology, groups));
+        let dihedrals = to_option(kernel::repack_dihedrals(&topology, groups));
+
+        drop(topology);
+        (bonds, angles, dihedrals)
     }
 
     /// Upload positions, COM, and quaternions from context to device.

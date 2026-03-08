@@ -756,10 +756,10 @@ resolution: 0.5
 #[cfg(test)]
 mod integration_tests {
     use super::*;
+    use crate::backend::Backend;
     use crate::cell::Shape;
     use crate::context::{WithCell, WithTopology};
     use crate::group::GroupCollection;
-    use crate::backend::Backend;
     use std::path::Path;
 
     fn make_context() -> Backend {

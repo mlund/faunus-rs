@@ -193,7 +193,7 @@ impl SasaEnergy {
 
 #[cfg(test)]
 mod tests_sasaenergy {
-    use crate::{energy::EnergyChange, backend::Backend, WithHamiltonian};
+    use crate::{backend::Backend, energy::EnergyChange, WithHamiltonian};
     use float_cmp::assert_approx_eq;
 
     #[test]

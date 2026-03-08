@@ -249,9 +249,9 @@ mod tests {
 #[cfg(test)]
 mod integration_tests {
     use super::*;
+    use crate::backend::Backend;
     use crate::cell::Shape;
     use crate::group::GroupCollection;
-    use crate::backend::Backend;
     use crate::{WithCell, WithTopology};
     use float_cmp::assert_approx_eq;
     use std::path::Path;

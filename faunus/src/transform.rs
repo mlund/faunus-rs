@@ -110,26 +110,28 @@ impl Transform {
         use crate::group::GroupSize;
         let needs_mass_center_update = match self {
             Self::Translate(displacement) => {
-                let indices =
-                    context.groups()[group_index].select(&ParticleSelection::Active, context.topology_ref())?;
+                let indices = context.groups()[group_index]
+                    .select(&ParticleSelection::Active, context.topology_ref())?;
                 context.translate_particles(&indices, displacement);
                 true
             }
             Self::PartialTranslate(displacement, selection) => {
-                let indices = context.groups()[group_index].select(selection, context.topology_ref())?;
+                let indices =
+                    context.groups()[group_index].select(selection, context.topology_ref())?;
                 context.translate_particles(&indices, displacement);
                 true
             }
             Self::Rotate(quaternion) => {
-                let indices =
-                    context.groups()[group_index].select(&ParticleSelection::Active, context.topology_ref())?;
+                let indices = context.groups()[group_index]
+                    .select(&ParticleSelection::Active, context.topology_ref())?;
                 let center = context.mass_center(&indices);
                 context.rotate_particles(&indices, quaternion, Some(-center));
                 context.groups_mut()[group_index].rotate_by(quaternion);
                 true
             }
             Self::PartialRotate(center, quaternion, selection) => {
-                let indices = context.groups()[group_index].select(selection, context.topology_ref())?;
+                let indices =
+                    context.groups()[group_index].select(selection, context.topology_ref())?;
                 context.rotate_particles(&indices, quaternion, Some(-*center));
                 true
             }
@@ -166,9 +168,8 @@ impl Transform {
         context: &mut impl crate::Context,
     ) -> anyhow::Result<()> {
         let indices = match self {
-            Self::Translate(_) | Self::Rotate(_) => {
-                context.groups()[group_index].select(&ParticleSelection::Active, context.topology_ref())?
-            }
+            Self::Translate(_) | Self::Rotate(_) => context.groups()[group_index]
+                .select(&ParticleSelection::Active, context.topology_ref())?,
             Self::PartialTranslate(_, selection) | Self::PartialRotate(_, _, selection) => {
                 context.groups()[group_index].select(selection, context.topology_ref())?
             }
@@ -281,8 +282,8 @@ mod tests {
 
     #[test]
     fn rotate_updates_group_quaternion() {
-        use crate::group::GroupCollection;
         use crate::backend::Backend;
+        use crate::group::GroupCollection;
         let mut rng = rand::thread_rng();
         let mut context = Backend::new(
             "tests/files/topology_pass.yaml",
@@ -316,8 +317,8 @@ mod tests {
 
     #[test]
     fn partial_rotate_does_not_update_quaternion() {
-        use crate::group::{GroupCollection, ParticleSelection};
         use crate::backend::Backend;
+        use crate::group::{GroupCollection, ParticleSelection};
         let mut rng = rand::thread_rng();
         let mut context = Backend::new(
             "tests/files/topology_pass.yaml",

@@ -51,10 +51,13 @@ use std::ops::Range;
 use std::path::{Path, PathBuf};
 
 pub use atom::{set_missing_epsilon, AtomKind, AtomKindBuilder, CombinationRule};
+pub(crate) use bond::BondKind;
 pub use bond::{Bond, BondGraph};
 pub use dihedral::Dihedral;
+pub(crate) use dihedral::DihedralKind;
 pub use topology::{FindByName, Topology};
 pub use torsion::Torsion;
+pub(crate) use torsion::TorsionKind;
 
 pub(crate) use chain::Chain;
 pub(crate) use residue::Residue;

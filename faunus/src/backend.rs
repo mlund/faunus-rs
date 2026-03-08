@@ -172,8 +172,7 @@ impl Backend {
                 )
                 .alpha()
             };
-            let ewald =
-                crate::energy::EwaldReciprocalEnergy::new(ewald_builder, &backend, medium)?;
+            let ewald = crate::energy::EwaldReciprocalEnergy::new(ewald_builder, &backend, medium)?;
             if ewald.alpha() != initial_alpha {
                 backend.hamiltonian_mut().rebuild_nonbonded(
                     &hamiltonian_builder,

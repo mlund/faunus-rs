@@ -14,8 +14,8 @@
 
 use crate::{
     analysis,
-    montecarlo::{gibbs::GibbsEnsemble, MarkovChain},
     backend::Backend,
+    montecarlo::{gibbs::GibbsEnsemble, MarkovChain},
     simulation::{self, box_prefixed_path, write_yaml, Simulation},
     Context,
 };

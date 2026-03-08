@@ -2,8 +2,8 @@
 
 use crate::{
     analysis,
-    montecarlo::{gibbs::GibbsEnsemble, MarkovChain},
     backend::Backend,
+    montecarlo::{gibbs::GibbsEnsemble, MarkovChain},
     propagate::{self, Propagate},
     state::State,
 };
@@ -29,9 +29,7 @@ pub enum Simulation {
 
 /// Build a MarkovChain from an input file, context, and thermal energy,
 /// optionally restoring from a state checkpoint.
-pub fn build_markov_chain<
-    T: crate::Context + 'static,
->(
+pub fn build_markov_chain<T: crate::Context + 'static>(
     input: &Path,
     context: T,
     kt: f64,

@@ -14,7 +14,7 @@
 
 //! # Energy calculation and Hamiltonian
 
-mod bonded;
+pub(crate) mod bonded;
 pub(crate) mod builder;
 mod celloverlap;
 mod constrain;

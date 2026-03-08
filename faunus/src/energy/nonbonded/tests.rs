@@ -4,11 +4,11 @@ use float_cmp::assert_approx_eq;
 use interatomic::twobody::{IsotropicTwobodyEnergy, SplineConfig};
 
 use crate::{
+    backend::Backend,
     cell::{Cell, Cuboid, SimulationCell},
     energy::{builder::HamiltonianBuilder, Hamiltonian},
     group::{GroupCollection, GroupSize},
     montecarlo::NewOld,
-    backend::Backend,
     topology::Topology,
     Change, Context, Group, GroupChange,
 };
