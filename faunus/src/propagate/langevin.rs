@@ -81,9 +81,20 @@ impl LangevinRunner {
             Self::upload_context_state(context, self.gpu_state.as_ref().unwrap());
         }
         let gpu_ld = self.gpu_state.as_mut().unwrap();
+        let steps = self.config.steps;
 
-        // Run LD steps on GPU
-        gpu_ld.run_steps(self.config.steps);
+        // Run BAOAB with CPU-computed forces from the Hamiltonian.
+        // GPU handles integration (BAOAB, reconstruct); CPU handles forces.
+        gpu_ld.run_steps_with_cpu_forces(steps, |positions| {
+            Self::write_positions(context, positions)
+                .expect("Failed to write GPU positions to context");
+            let n_groups = context.groups().len();
+            for g in 0..n_groups {
+                context.update_mass_center(g);
+            }
+            let forces = context.hamiltonian().forces(context);
+            reduce_forces_to_com(context, &forces)
+        });
 
         // LD → MC: download positions and write back to context
         let positions = gpu_ld.download_positions();
@@ -467,6 +478,55 @@ fn pack_com_and_quaternions<T: Context>(context: &T) -> (Vec<f32>, Vec<f32>) {
         quaternions.extend_from_slice(&quat_to_gpu(group.quaternion()));
     }
     (com_positions, quaternions)
+}
+
+/// Reduce per-atom forces to per-molecule COM forces and torques.
+///
+/// Replicates the GPU `force_reduce.wgsl` computation on CPU:
+/// - COM force = sum of atomic forces in each molecule
+/// - Torque = sum of (lever_arm × force) with PBC-aware lever arms
+///
+/// Returns `(com_forces, torques)` in GPU vec4 layout `[x, y, z, 0]`.
+#[cfg(feature = "gpu")]
+fn reduce_forces_to_com<T: Context>(
+    context: &T,
+    forces: &[crate::Point],
+) -> (Vec<[f32; 4]>, Vec<[f32; 4]>) {
+    let groups = context.groups();
+    let cell = context.cell();
+    let mut com_forces = Vec::with_capacity(groups.len());
+    let mut torques = Vec::with_capacity(groups.len());
+
+    for group in groups {
+        let com = group
+            .mass_center()
+            .copied()
+            .unwrap_or_else(|| context.mass_center(&group.iter_active().collect::<Vec<_>>()));
+        let mut f_total = crate::Point::zeros();
+        let mut tau_total = crate::Point::zeros();
+
+        for i in group.iter_active() {
+            let f = if i < forces.len() {
+                forces[i]
+            } else {
+                crate::Point::zeros()
+            };
+            f_total += f;
+            // PBC-aware lever arm: minimum image of (r_i - r_com)
+            let lever = cell.distance(&context.position(i), &com);
+            tau_total += lever.cross(&f);
+        }
+
+        com_forces.push([f_total.x as f32, f_total.y as f32, f_total.z as f32, 0.0]);
+        torques.push([
+            tau_total.x as f32,
+            tau_total.y as f32,
+            tau_total.z as f32,
+            0.0,
+        ]);
+    }
+
+    (com_forces, torques)
 }
 
 #[cfg(test)]

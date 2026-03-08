@@ -553,8 +553,6 @@ impl LangevinGpu {
     pub fn run_steps(&mut self, steps: usize) {
         let device = &self.gpu.device;
         let queue = &self.gpu.queue;
-        let wg_atoms = self.n_atoms.div_ceil(64);
-        let wg_mols = self.n_molecules.div_ceil(64);
 
         let fu = ForceUniforms {
             n_atoms: self.n_atoms,
@@ -565,17 +563,7 @@ impl LangevinGpu {
         let reduce_push = [self.n_molecules, self.box_length.to_bits()];
         let reconstruct_push = [self.n_atoms, self.n_molecules];
 
-        if self.step_counter == 0 {
-            log::info!(
-                "GPU Langevin: box_length={}, dt={}, friction={}, kT={}, n_mol={}, n_atoms={}",
-                self.box_length,
-                self.config.timestep,
-                self.config.friction,
-                self.kt,
-                self.n_molecules,
-                self.n_atoms
-            );
-        }
+        self.log_first_step();
 
         // Initial force computation at current positions
         {
@@ -587,16 +575,7 @@ impl LangevinGpu {
             queue.submit(Some(encoder.finish()));
         }
 
-        let mut lu = LangevinUniforms {
-            n_molecules: self.n_molecules,
-            dt: self.config.timestep as f32,
-            friction: self.config.friction as f32,
-            kt: self.kt,
-            rng_seed: 0xDEAD_BEEF,
-            rng_step: 0,
-            box_length: self.box_length,
-            _pad: 0,
-        };
+        let mut lu = self.langevin_uniforms();
 
         for _ in 0..steps {
             lu.rng_step = self.step_counter;
@@ -605,42 +584,137 @@ impl LangevinGpu {
                 label: Some("baoab_step"),
             });
 
-            // B-A-O-A: opening half-kick + drift + thermostat + drift
-            {
-                let mut pass = encoder.begin_compute_pass(&Default::default());
-                pass.set_pipeline(&self.langevin_pipeline);
-                pass.set_bind_group(0, &self.langevin_bind_group, &[]);
-                pass.set_push_constants(0, bytemuck::bytes_of(&lu));
-                pass.dispatch_workgroups(wg_mols, 1, 1);
-            }
-
-            // Reconstruct atom positions from COM + quaternion
-            {
-                let mut pass = encoder.begin_compute_pass(&Default::default());
-                pass.set_pipeline(&self.reconstruct_pipeline);
-                pass.set_bind_group(0, &self.reconstruct_bind_group, &[]);
-                pass.set_push_constants(0, bytemuck::cast_slice(&reconstruct_push));
-                pass.dispatch_workgroups(wg_atoms, 1, 1);
-            }
+            Self::encode_baoab(&mut encoder, self, &lu);
+            Self::encode_reconstruct(&mut encoder, self, &reconstruct_push);
 
             // Forces at new positions
             Self::encode_forces(&mut encoder, self, &fu);
             Self::encode_reduce(&mut encoder, self, &reduce_push);
 
-            // Closing B: half-kick with new forces
-            {
-                let mut pass = encoder.begin_compute_pass(&Default::default());
-                pass.set_pipeline(&self.half_kick_pipeline);
-                pass.set_bind_group(0, &self.langevin_bind_group, &[]);
-                pass.set_push_constants(0, bytemuck::bytes_of(&lu));
-                pass.dispatch_workgroups(wg_mols, 1, 1);
-            }
+            Self::encode_half_kick(&mut encoder, self, &lu);
 
             queue.submit(Some(encoder.finish()));
             self.step_counter += 1;
         }
 
         device.poll(wgpu::Maintain::Wait);
+    }
+
+    /// Run `steps` BAOAB steps with CPU-computed forces from a callback.
+    ///
+    /// The callback receives atom positions and must return per-molecule
+    /// COM forces and torques as `(Vec<[f32; 4]>, Vec<[f32; 4]>)`.
+    pub fn run_steps_with_cpu_forces(
+        &mut self,
+        steps: usize,
+        mut compute_forces: impl FnMut(&[[f32; 4]]) -> (Vec<[f32; 4]>, Vec<[f32; 4]>),
+    ) {
+        let reconstruct_push = [self.n_atoms, self.n_molecules];
+
+        self.log_first_step();
+
+        // Initial forces at current positions
+        let positions = self.download_positions();
+        let (com_forces, torques) = compute_forces(&positions);
+        self.upload_com_forces_torques(&com_forces, &torques);
+
+        let mut lu = self.langevin_uniforms();
+
+        for _ in 0..steps {
+            lu.rng_step = self.step_counter;
+            let device = &self.gpu.device;
+            let queue = &self.gpu.queue;
+
+            // B-A-O-A + reconstruct on GPU
+            {
+                let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("baoab_reconstruct"),
+                });
+                Self::encode_baoab(&mut encoder, self, &lu);
+                Self::encode_reconstruct(&mut encoder, self, &reconstruct_push);
+                queue.submit(Some(encoder.finish()));
+                device.poll(wgpu::Maintain::Wait);
+            }
+
+            // CPU: download positions → compute forces → upload
+            let positions = self.download_positions();
+            let (com_forces, torques) = compute_forces(&positions);
+            self.upload_com_forces_torques(&com_forces, &torques);
+
+            // Closing half-kick on GPU
+            {
+                let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("half_kick"),
+                });
+                Self::encode_half_kick(&mut encoder, self, &lu);
+                queue.submit(Some(encoder.finish()));
+            }
+
+            self.step_counter += 1;
+        }
+
+        self.gpu.device.poll(wgpu::Maintain::Wait);
+    }
+
+    /// Upload per-molecule COM forces and torques to GPU buffers.
+    pub fn upload_com_forces_torques(&self, com_forces: &[[f32; 4]], torques: &[[f32; 4]]) {
+        let q = &self.gpu.queue;
+        q.write_buffer(&self.com_forces, 0, bytemuck::cast_slice(com_forces));
+        q.write_buffer(&self.torques, 0, bytemuck::cast_slice(torques));
+    }
+
+    fn langevin_uniforms(&self) -> LangevinUniforms {
+        LangevinUniforms {
+            n_molecules: self.n_molecules,
+            dt: self.config.timestep as f32,
+            friction: self.config.friction as f32,
+            kt: self.kt,
+            rng_seed: 0xDEAD_BEEF,
+            rng_step: 0,
+            box_length: self.box_length,
+            _pad: 0,
+        }
+    }
+
+    fn log_first_step(&self) {
+        if self.step_counter == 0 {
+            log::info!(
+                "GPU Langevin: box_length={}, dt={}, friction={}, kT={}, n_mol={}, n_atoms={}",
+                self.box_length,
+                self.config.timestep,
+                self.config.friction,
+                self.kt,
+                self.n_molecules,
+                self.n_atoms
+            );
+        }
+    }
+
+    fn encode_baoab(encoder: &mut wgpu::CommandEncoder, s: &Self, lu: &LangevinUniforms) {
+        let wg_mols = s.n_molecules.div_ceil(64);
+        let mut pass = encoder.begin_compute_pass(&Default::default());
+        pass.set_pipeline(&s.langevin_pipeline);
+        pass.set_bind_group(0, &s.langevin_bind_group, &[]);
+        pass.set_push_constants(0, bytemuck::bytes_of(lu));
+        pass.dispatch_workgroups(wg_mols, 1, 1);
+    }
+
+    fn encode_reconstruct(encoder: &mut wgpu::CommandEncoder, s: &Self, push: &[u32; 2]) {
+        let wg_atoms = s.n_atoms.div_ceil(64);
+        let mut pass = encoder.begin_compute_pass(&Default::default());
+        pass.set_pipeline(&s.reconstruct_pipeline);
+        pass.set_bind_group(0, &s.reconstruct_bind_group, &[]);
+        pass.set_push_constants(0, bytemuck::cast_slice(push));
+        pass.dispatch_workgroups(wg_atoms, 1, 1);
+    }
+
+    fn encode_half_kick(encoder: &mut wgpu::CommandEncoder, s: &Self, lu: &LangevinUniforms) {
+        let wg_mols = s.n_molecules.div_ceil(64);
+        let mut pass = encoder.begin_compute_pass(&Default::default());
+        pass.set_pipeline(&s.half_kick_pipeline);
+        pass.set_bind_group(0, &s.langevin_bind_group, &[]);
+        pass.set_push_constants(0, bytemuck::bytes_of(lu));
+        pass.dispatch_workgroups(wg_mols, 1, 1);
     }
 
     fn readback(&self, buffer: &wgpu::Buffer, count: usize) -> Vec<f32> {
