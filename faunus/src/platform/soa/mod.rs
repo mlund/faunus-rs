@@ -357,8 +357,25 @@ impl GroupCollection for SoaPlatform {
     }
 
     fn resize_group(&mut self, group_index: usize, status: GroupSize) -> anyhow::Result<()> {
+        let old_active: Vec<usize> = self.groups[group_index].iter_active().collect();
         self.groups[group_index].resize(status)?;
         self.group_lists.update_group(&self.groups[group_index]);
+        let new_active: Vec<usize> = self.groups[group_index].iter_active().collect();
+
+        if let Some(cl) = &mut self.cell_list {
+            // Remove particles that were active but are no longer
+            for &i in &old_active {
+                if !new_active.contains(&i) {
+                    cl.remove_particle(i);
+                }
+            }
+            // Add particles that are newly active
+            for &i in &new_active {
+                if !old_active.contains(&i) {
+                    cl.add_particle(i, &Point::new(self.x[i], self.y[i], self.z[i]));
+                }
+            }
+        }
         Ok(())
     }
 }
