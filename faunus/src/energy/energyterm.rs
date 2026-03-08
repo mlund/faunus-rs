@@ -139,6 +139,26 @@ impl EnergyTerm {
         }
     }
 
+    /// Compute per-atom forces contributed by this term.
+    ///
+    /// Returns a dense vector indexed by absolute particle index.
+    /// Terms that do not contribute forces return an empty vector.
+    pub(crate) fn forces(&self, context: &impl Context) -> Vec<crate::Point> {
+        match self {
+            Self::NonbondedMatrix(x) => x.forces(context),
+            Self::NonbondedMatrixSplined(x) => x.forces(context),
+            Self::IntramolecularBonded(_)
+            | Self::IntermolecularBonded(_)
+            | Self::SasaEnergy(_)
+            | Self::CellOverlap(_)
+            | Self::Constrain(_)
+            | Self::ExternalPressure(_)
+            | Self::CustomExternal(_)
+            | Self::EwaldReciprocal(_)
+            | Self::PolymerDepletion(_) => Vec::new(),
+        }
+    }
+
     /// Nonbonded energy between two sets of atom indices; `None` for non-nonbonded terms.
     pub fn nonbonded_energy_between_atoms(
         &self,

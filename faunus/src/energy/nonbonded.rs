@@ -646,15 +646,22 @@ impl PbcParams {
         })
     }
 
+    /// Branchless minimum image displacement vector from point i to point j.
+    #[inline(always)]
+    fn distance_vector(&self, xi: f64, yi: f64, zi: f64, xj: f64, yj: f64, zj: f64) -> [f64; 3] {
+        let mut dx = xj - xi;
+        dx -= self.box_len[0] * (dx * self.inv_box_len[0]).round();
+        let mut dy = yj - yi;
+        dy -= self.box_len[1] * (dy * self.inv_box_len[1]).round();
+        let mut dz = zj - zi;
+        dz -= self.box_len[2] * (dz * self.inv_box_len[2]).round();
+        [dx, dy, dz]
+    }
+
     /// Branchless minimum image distance squared between two points.
     #[inline(always)]
     fn distance_squared(&self, xi: f64, yi: f64, zi: f64, xj: f64, yj: f64, zj: f64) -> f64 {
-        let mut dx = xi - xj;
-        dx -= self.box_len[0] * (dx * self.inv_box_len[0]).round();
-        let mut dy = yi - yj;
-        dy -= self.box_len[1] * (dy * self.inv_box_len[1]).round();
-        let mut dz = zi - zj;
-        dz -= self.box_len[2] * (dz * self.inv_box_len[2]).round();
+        let [dx, dy, dz] = self.distance_vector(xi, yi, zi, xj, yj, zj);
         dx.mul_add(dx, dy.mul_add(dy, dz * dz))
     }
 }
@@ -766,6 +773,34 @@ impl<'a, C: SimulationCell> SoaSlices<'a, C> {
                 *self.z.get_unchecked(j),
             );
             self.cell.distance_squared(&pi, &pj)
+        }
+    }
+
+    /// Minimum image displacement vector from `(xi, yi, zi)` to particle `j`.
+    ///
+    /// # Safety
+    /// `j` must be in bounds for `self.x`, `self.y`, `self.z`.
+    #[inline(always)]
+    unsafe fn distance_vector_to(&self, xi: f64, yi: f64, zi: f64, j: usize) -> [f64; 3] {
+        if let Some(pbc) = &self.pbc {
+            pbc.distance_vector(
+                xi,
+                yi,
+                zi,
+                *self.x.get_unchecked(j),
+                *self.y.get_unchecked(j),
+                *self.z.get_unchecked(j),
+            )
+        } else {
+            // cell.distance(pi, pj) = pi - pj; negate to get i→j like PBC path
+            let pi = crate::Point::new(xi, yi, zi);
+            let pj = crate::Point::new(
+                *self.x.get_unchecked(j),
+                *self.y.get_unchecked(j),
+                *self.z.get_unchecked(j),
+            );
+            let d = self.cell.distance(&pj, &pi);
+            [d.x, d.y, d.z]
         }
     }
 }
@@ -1092,9 +1127,172 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
             ..Default::default()
         });
     }
-}
 
-impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
+    /// Compute per-atom nonbonded forces for all active particles using SoA arrays.
+    ///
+    /// For each unique pair (i, j), evaluates `-dU/d(r²)` from the pair potential
+    /// and accumulates the force vector on both atoms (Newton's third law).
+    fn accumulate_forces_soa(
+        &self,
+        soa: &SoaSlices<'_, impl SimulationCell>,
+        groups: &[Group],
+        forces: &mut [[f64; 3]],
+    ) {
+        for (gi, group_i) in groups.iter().enumerate() {
+            // Inter-group pairs (gi < gj)
+            for group_j in groups.iter().skip(gi + 1) {
+                if self.groups_beyond_cutoff(group_i, group_j, soa.pbc.as_ref()) {
+                    continue;
+                }
+                for i in group_i.iter_active() {
+                    self.accumulate_particle_forces_soa(soa, i, group_j.iter_active(), forces);
+                }
+            }
+            // Intra-group pairs (i < j)
+            let active = group_i.iter_active();
+            for i in active.clone() {
+                self.accumulate_particle_forces_soa(soa, i, (i + 1)..active.end, forces);
+            }
+        }
+    }
+
+    /// Accumulate forces on atom `i` from interactions with `targets`, applying Newton's third law.
+    ///
+    /// # Safety invariants (upheld by callers)
+    /// - `i` and all `targets` values are in bounds for SoA arrays and `forces`
+    #[inline]
+    fn accumulate_particle_forces_soa(
+        &self,
+        soa: &SoaSlices<'_, impl SimulationCell>,
+        i: usize,
+        targets: impl Iterator<Item = usize>,
+        forces: &mut [[f64; 3]],
+    ) {
+        debug_assert!(i < soa.x.len());
+        // SAFETY: i is a valid particle index from an active group range.
+        let (xi, yi, zi, kind_i) = unsafe {
+            (
+                *soa.x.get_unchecked(i),
+                *soa.y.get_unchecked(i),
+                *soa.z.get_unchecked(i),
+                *soa.atom_kinds.get_unchecked(i) as usize,
+            )
+        };
+        let excl_row = self.exclusions.row(i);
+
+        for j in targets {
+            debug_assert!(j < soa.x.len());
+            unsafe {
+                if *excl_row.get_unchecked(j) == 0 {
+                    continue;
+                }
+                let dr = soa.distance_vector_to(xi, yi, zi, j);
+                let rsq = dr[0].mul_add(dr[0], dr[1].mul_add(dr[1], dr[2] * dr[2]));
+                let kind_j = *soa.atom_kinds.get_unchecked(j) as usize;
+                let f_mag = self.potentials.uget((kind_i, kind_j)).isotropic_twobody_force(rsq);
+                if f_mag == 0.0 {
+                    continue;
+                }
+                // f_mag = -dU/d(r²); force on i: F_i = -2·f_mag·dr (dr points i→j)
+                let scale = -2.0 * f_mag;
+                let fx = scale * dr[0];
+                let fy = scale * dr[1];
+                let fz = scale * dr[2];
+                forces[i][0] += fx;
+                forces[i][1] += fy;
+                forces[i][2] += fz;
+                forces[j][0] -= fx;
+                forces[j][1] -= fy;
+                forces[j][2] -= fz;
+            }
+        }
+    }
+
+    /// Compute all nonbonded forces on active particles.
+    ///
+    /// Returns a dense array indexed by absolute particle index.
+    /// Inactive particles have zero force.
+    pub(super) fn forces(&self, context: &impl Context) -> Vec<crate::Point> {
+        let n = context.groups().iter().map(|g| g.start() + g.capacity()).max().unwrap_or(0);
+        let mut forces = vec![[0.0f64; 3]; n];
+
+        if let (Some((x, y, z)), Some(atom_kinds)) =
+            (context.positions_soa(), context.atom_kinds_u32())
+        {
+            let cell = context.cell();
+            let pbc = context
+                .pbc_params()
+                .or_else(|| PbcParams::try_from_cell(cell));
+            let soa = SoaSlices {
+                x,
+                y,
+                z,
+                atom_kinds,
+                pbc,
+                cell,
+                cell_list: context.cell_list(),
+            };
+            self.accumulate_forces_soa(&soa, context.groups(), &mut forces);
+        } else {
+            // Scalar fallback
+            for (gi, group_i) in context.groups().iter().enumerate() {
+                for group_j in context.groups().iter().skip(gi + 1) {
+                    if self.groups_beyond_cutoff(group_i, group_j, None) {
+                        continue;
+                    }
+                    for i in group_i.iter_active() {
+                        for j in group_j.iter_active() {
+                            self.accumulate_pair_force(context, i, j, &mut forces);
+                        }
+                    }
+                }
+                let active = group_i.iter_active();
+                for i in active.clone() {
+                    for j in (i + 1)..active.end {
+                        self.accumulate_pair_force(context, i, j, &mut forces);
+                    }
+                }
+            }
+        }
+        forces.into_iter().map(|[x, y, z]| crate::Point::new(x, y, z)).collect()
+    }
+
+    /// Accumulate force between particles i and j (scalar path).
+    #[inline]
+    fn accumulate_pair_force(
+        &self,
+        context: &impl Context,
+        i: usize,
+        j: usize,
+        forces: &mut [[f64; 3]],
+    ) {
+        if self.exclusions.get((i, j)) == 0 {
+            return;
+        }
+        // get_distance(i,j) returns pi - pj (from j to i)
+        let dr = context.get_distance(i, j);
+        let rsq = dr.norm_squared();
+        let f_mag = self
+            .potentials
+            .get((context.get_atomkind(i), context.get_atomkind(j)))
+            .expect("Atom kinds should exist in the nonbonded matrix.")
+            .isotropic_twobody_force(rsq);
+        if f_mag == 0.0 {
+            return;
+        }
+        // f_mag = -dU/d(r²); dr points j→i; force on i: F_i = 2·f_mag·dr
+        let scale = 2.0 * f_mag;
+        let fx = scale * dr.x;
+        let fy = scale * dr.y;
+        let fz = scale * dr.z;
+        forces[i][0] += fx;
+        forces[i][1] += fy;
+        forces[i][2] += fz;
+        forces[j][0] -= fx;
+        forces[j][1] -= fy;
+        forces[j][2] -= fz;
+    }
+
     /// Backup cache state before a move. Invalidates for topology-changing moves.
     pub(super) fn save_backup(&mut self, change: &Change) {
         match change {
@@ -2010,5 +2208,157 @@ mod tests {
             error_high,
             error_fast
         );
+    }
+
+    /// Verify nonbonded forces against analytical pair forces.
+    #[test]
+    fn test_nonbonded_forces() {
+        use crate::context::ParticleSystem;
+        let (system, nonbonded) = get_test_matrix();
+
+        let forces = nonbonded.forces(&system);
+
+        // Newton's third law: total force on the system must be zero
+        let total: crate::Point = forces.iter().sum();
+        assert!(
+            total.norm() < 1e-8,
+            "Total force should be zero (Newton III), got {total:?}"
+        );
+
+        // Verify force on particle 0 against sum of analytical pair forces.
+        let mut expected_force = crate::Point::zeros();
+        for group in system.groups() {
+            for j in group.iter_active() {
+                if j == 0 {
+                    continue;
+                }
+                if nonbonded.exclusions.get((0, j)) == 0 {
+                    continue;
+                }
+                let dr = system.get_distance(0, j); // p0 - pj (from j to 0)
+                let rsq = dr.norm_squared();
+                let potential = nonbonded
+                    .potentials
+                    .get((system.get_atomkind(0), system.get_atomkind(j)))
+                    .unwrap();
+                let f_mag = potential.isotropic_twobody_force(rsq);
+                expected_force += dr * (2.0 * f_mag);
+            }
+        }
+
+        let computed = forces[0];
+        let diff = (computed - expected_force).norm();
+        assert!(
+            diff < 1e-10,
+            "Force on particle 0 mismatch: computed={computed:?}, expected={expected_force:?}, diff={diff}"
+        );
+    }
+
+    /// Verify what `isotropic_twobody_force(r²)` returns by comparing with
+    /// numerical derivatives in both r and r² spaces.
+    #[test]
+    fn test_force_convention() {
+        use interatomic::twobody::LennardJones;
+        let lj = LennardJones::new(1.0, 1.0);
+
+        for r in [0.9, 1.0, 1.1, 1.5, 2.0] {
+            let rsq = r * r;
+            let f = lj.isotropic_twobody_force(rsq);
+
+            // Numerical -dU/dr
+            let eps = 1e-7;
+            let neg_dudr =
+                -(lj.isotropic_twobody_energy((r + eps).powi(2))
+                    - lj.isotropic_twobody_energy((r - eps).powi(2)))
+                    / (2.0 * eps);
+
+            // Numerical -dU/d(r²)
+            let neg_dudrsq = -(lj.isotropic_twobody_energy(rsq + eps)
+                - lj.isotropic_twobody_energy(rsq - eps))
+                / (2.0 * eps);
+
+            // f should match -dU/d(r²), not -dU/dr
+            let ratio_rsq = f / neg_dudrsq;
+            let ratio_r = f / neg_dudr;
+
+            assert!(
+                (ratio_rsq - 1.0).abs() < 1e-4,
+                "r={r}: f/(-dU/d(r²))={ratio_rsq} (expected 1.0)"
+            );
+            // -dU/dr = 2r * (-dU/d(r²)), so f/(-dU/dr) = 1/(2r)
+            assert!(
+                (ratio_r - 1.0 / (2.0 * r)).abs() < 1e-4,
+                "r={r}: f/(-dU/dr)={ratio_r} (expected {})",
+                1.0 / (2.0 * r)
+            );
+        }
+    }
+
+    /// Verify force vectors against energy finite differences.
+    ///
+    /// p0 = (0,0,0), p1 = (r,0,0). Displace p0 along x and compute F = -∂U/∂x₀.
+    #[test]
+    fn test_force_vector_vs_energy_gradient() {
+        use interatomic::twobody::LennardJones;
+        let lj = LennardJones::new(1.0, 1.0);
+
+        for r in [0.95, 1.0, 1.5, 2.0] {
+            let rsq = r * r;
+            let f_mag = lj.isotropic_twobody_force(rsq); // = -dU/d(r²)
+
+            // Our formula: F_on_0 = 2 * f_mag * (p0 - p1)
+            // p0 - p1 = (0,0,0) - (r,0,0) = (-r, 0, 0)
+            let our_force_x = 2.0 * f_mag * (-r);
+
+            // Numerical: F_x = -[U(x₀+ε) - U(x₀-ε)] / (2ε)
+            // x₀ = 0, x₁ = r. When x₀ → +ε, distance = r-ε. When x₀ → -ε, distance = r+ε.
+            let eps = 1e-7;
+            let u_at_x0_plus = lj.isotropic_twobody_energy((r - eps).powi(2)); // closer
+            let u_at_x0_minus = lj.isotropic_twobody_energy((r + eps).powi(2)); // farther
+            let numerical_force_x = -(u_at_x0_plus - u_at_x0_minus) / (2.0 * eps);
+
+            let rel_err = ((our_force_x - numerical_force_x) / numerical_force_x).abs();
+            assert!(
+                rel_err < 1e-4,
+                "r={r}: our={our_force_x:.8}, numerical={numerical_force_x:.8}, rel_err={rel_err}"
+            );
+        }
+    }
+
+    /// Verify that splined forces closely match analytical forces.
+    #[test]
+    fn test_splined_forces_match_analytical() {
+        let (system, nonbonded) = get_test_matrix();
+        let splined = NonbondedMatrixSplined::from(&nonbonded);
+
+        let analytical_forces = nonbonded.forces(&system);
+        let splined_forces = splined.forces(&system);
+
+        assert_eq!(analytical_forces.len(), splined_forces.len());
+
+        for (i, (a, s)) in analytical_forces.iter().zip(splined_forces.iter()).enumerate() {
+            let diff = (a - s).norm();
+            let magnitude = a.norm().max(1e-10);
+            assert!(
+                diff / magnitude < 1e-2,
+                "Force mismatch on particle {i}: analytical={a:?}, splined={s:?}, rel_err={}",
+                diff / magnitude
+            );
+        }
+    }
+
+    /// Verify Hamiltonian::forces() dispatches to nonbonded term.
+    #[test]
+    fn test_hamiltonian_forces() {
+        let (system, nonbonded) = get_test_matrix();
+        let hamiltonian = Hamiltonian::from(vec![nonbonded.clone().into()]);
+
+        let term_forces = nonbonded.forces(&system);
+        let ham_forces = hamiltonian.forces(&system);
+
+        assert_eq!(term_forces.len(), ham_forces.len());
+        for (t, h) in term_forces.iter().zip(ham_forces.iter()) {
+            assert!((t - h).norm() < 1e-12);
+        }
     }
 }

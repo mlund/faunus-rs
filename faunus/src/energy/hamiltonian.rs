@@ -213,6 +213,33 @@ impl Hamiltonian {
             .collect()
     }
 
+    /// Compute per-atom forces from all energy terms.
+    ///
+    /// Returns a dense vector indexed by absolute particle index, with contributions
+    /// from all force-providing terms summed together.
+    pub fn forces(&self, context: &impl Context) -> Vec<crate::Point> {
+        let mut result: Option<Vec<crate::Point>> = None;
+        for term in &self.energy_terms {
+            let term_forces = term.forces(context);
+            if term_forces.is_empty() {
+                continue;
+            }
+            match &mut result {
+                None => result = Some(term_forces),
+                Some(acc) => {
+                    // Extend if a later term has more particles
+                    if term_forces.len() > acc.len() {
+                        acc.resize(term_forces.len(), crate::Point::zeros());
+                    }
+                    for (a, f) in acc.iter_mut().zip(term_forces.iter()) {
+                        *a += f;
+                    }
+                }
+            }
+        }
+        result.unwrap_or_default()
+    }
+
     /// Update internal state due to a change in the system.
     ///
     /// After a system change, the internal state of the energy terms may need to be updated.

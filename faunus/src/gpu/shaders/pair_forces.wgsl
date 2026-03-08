@@ -36,7 +36,7 @@ struct ForceUniforms {
 
 var<push_constant> pc: ForceUniforms;
 
-// Evaluate spline force magnitude: -dU/dr (scalar, positive = repulsive)
+// Evaluate spline force: -dU/d(r²) (positive = repulsive at short range)
 fn spline_force(type_i: u32, type_j: u32, r: f32) -> f32 {
     let pair_idx = type_i * pc.n_atom_types + type_j;
     let params = spline_params[pair_idx];
@@ -93,8 +93,8 @@ fn compute_forces(@builtin(global_invocation_id) gid: vec3<u32>) {
             let r = sqrt(r_sq);
             let type_j = atom_type_ids[j];
             let f_mag = spline_force(type_i, type_j, r);
-            // f_mag = -dU/dr (positive = repulsive); dr points i→j, so negate
-            force -= (f_mag / r) * dr;
+            // f_mag = -dU/d(r²); force on i = -2·f_mag·dr (dr points i→j)
+            force -= (2.0 * f_mag) * dr;
         }
     }
 
