@@ -312,7 +312,7 @@ mod tests {
     use std::path::Path;
 
     use super::*;
-    use crate::platform::soa::SoaPlatform;
+    use crate::backend::Backend;
 
     #[test]
     fn test_translate_molecule_parse() {
@@ -339,7 +339,7 @@ mod tests {
     #[test]
     fn test_translate_molecule_finalize() {
         let mut rng = rand::thread_rng();
-        let context = SoaPlatform::new(
+        let context = Backend::new(
             "tests/files/topology_pass.yaml",
             Some(Path::new("tests/files/structure.xyz")),
             &mut rng,
@@ -361,7 +361,7 @@ mod tests {
     #[test]
     fn test_translate_atom_finalize() {
         let mut rng = rand::thread_rng();
-        let context = SoaPlatform::new(
+        let context = Backend::new(
             "tests/files/topology_pass.yaml",
             Some(Path::new("tests/files/structure.xyz")),
             &mut rng,
@@ -383,7 +383,7 @@ mod tests {
     #[test]
     fn test_translate_atom_selections() {
         let mut rng = rand::thread_rng();
-        let context = SoaPlatform::new(
+        let context = Backend::new(
             "tests/files/topology_pass.yaml",
             Some(Path::new("tests/files/structure.xyz")),
             &mut rng,

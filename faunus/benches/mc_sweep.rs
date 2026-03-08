@@ -1,6 +1,6 @@
 use criterion::{criterion_group, criterion_main, Criterion};
 use faunus::montecarlo::MarkovChain;
-use faunus::platform::soa::SoaPlatform;
+use faunus::backend::Backend;
 use std::io::Write;
 use std::path::Path;
 
@@ -78,11 +78,11 @@ fn write_tmp_yaml(yaml: &str) -> tempfile::NamedTempFile {
     tmp
 }
 
-fn build_mc(n_molecules: usize) -> MarkovChain<SoaPlatform> {
+fn build_mc(n_molecules: usize) -> MarkovChain<Backend> {
     let yaml = yaml_config(n_molecules);
     let tmp = write_tmp_yaml(&yaml);
-    let context = SoaPlatform::new(tmp.path(), None, &mut rand::thread_rng()).unwrap();
-    let medium = faunus::platform::get_medium(tmp.path()).unwrap();
+    let context = Backend::new(tmp.path(), None, &mut rand::thread_rng()).unwrap();
+    let medium = faunus::backend::get_medium(tmp.path()).unwrap();
     let kt = faunus::simulation::thermal_energy(&medium);
     faunus::simulation::build_markov_chain(tmp.path(), context, kt, None).unwrap()
 }

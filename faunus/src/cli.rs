@@ -15,9 +15,9 @@
 use crate::{
     analysis,
     montecarlo::{gibbs::GibbsEnsemble, MarkovChain},
-    platform::soa::SoaPlatform,
+    backend::Backend,
     simulation::{self, box_prefixed_path, write_yaml, Simulation},
-    Context, WithCell,
+    Context,
 };
 use anyhow::Result;
 use clap::{Parser, Subcommand};
@@ -89,7 +89,7 @@ pub fn do_main() -> Result<()> {
 
 /// Write per-box YAML output: medium, blocks, cell, energy, propagate, analysis.
 /// Returns `(final_energy, drift)`.
-fn write_mc_output<T: Context + WithCell<SimCell = crate::cell::Cell> + 'static>(
+fn write_mc_output<T: Context + 'static>(
     mc: &MarkovChain<T>,
     medium: &interatomic::coulomb::Medium,
     initial_energy: f64,
@@ -127,7 +127,7 @@ fn write_mc_output<T: Context + WithCell<SimCell = crate::cell::Cell> + 'static>
     Ok((final_energy, drift))
 }
 
-fn run_single_box<T: Context + WithCell<SimCell = crate::cell::Cell> + 'static>(
+fn run_single_box<T: Context + 'static>(
     mut mc: MarkovChain<T>,
     medium: &interatomic::coulomb::Medium,
     state: Option<&std::path::Path>,
@@ -172,7 +172,7 @@ fn run_single_box<T: Context + WithCell<SimCell = crate::cell::Cell> + 'static>(
 }
 
 fn run_gibbs(
-    mut ensemble: GibbsEnsemble<SoaPlatform>,
+    mut ensemble: GibbsEnsemble<Backend>,
     medium: &interatomic::coulomb::Medium,
     state: Option<&std::path::Path>,
     output_path: &std::path::Path,

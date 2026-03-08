@@ -193,12 +193,12 @@ impl SasaEnergy {
 
 #[cfg(test)]
 mod tests_sasaenergy {
-    use crate::{energy::EnergyChange, platform::soa::SoaPlatform, WithHamiltonian};
+    use crate::{energy::EnergyChange, backend::Backend, WithHamiltonian};
     use float_cmp::assert_approx_eq;
 
     #[test]
     fn test_sasa() {
-        let context = SoaPlatform::new(
+        let context = Backend::new(
             "tests/files/sasa_interactions.yaml",
             None,
             &mut rand::thread_rng(),
@@ -214,7 +214,7 @@ mod tests_sasaenergy {
 
     #[test]
     fn test_sasa_offset() {
-        let context = SoaPlatform::new(
+        let context = Backend::new(
             "tests/files/sasa_interactions_offset.yaml",
             None,
             &mut rand::thread_rng(),

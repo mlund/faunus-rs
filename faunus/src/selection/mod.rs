@@ -228,12 +228,12 @@ mod integration_tests {
     use super::*;
     use crate::context::WithTopology;
     use crate::group::GroupCollection;
-    use crate::platform::soa::SoaPlatform;
+    use crate::backend::Backend;
     use std::path::Path;
 
-    fn make_context() -> SoaPlatform {
+    fn make_context() -> Backend {
         let mut rng = rand::thread_rng();
-        SoaPlatform::new(
+        Backend::new(
             "tests/files/topology_pass.yaml",
             Some(Path::new("tests/files/structure.xyz")),
             &mut rng,

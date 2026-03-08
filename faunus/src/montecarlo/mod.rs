@@ -88,7 +88,7 @@ fn random_atom(
         .groups()
         .get(group_index)
         .expect("Group should exist.")
-        .select(&select, context)
+        .select(&select, context.topology_ref())
         .expect("Selection should be successful.")
         .iter()
         .copied()
@@ -394,7 +394,7 @@ impl<T: Context + 'static> MarkovChain<T> {
     }
 }
 
-impl<T: Context + crate::WithCell<SimCell = crate::cell::Cell> + 'static> MarkovChain<T> {
+impl<T: Context + 'static> MarkovChain<T> {
     /// Extract the current simulation state for checkpointing.
     pub fn save_state(&self) -> State {
         let context = &self.context;
@@ -531,13 +531,13 @@ pub fn entropy_bias(n: NewOld<usize>, volume: NewOld<f64>) -> f64 {
 mod tests {
 
     use super::*;
-    use crate::platform::soa::SoaPlatform;
+    use crate::backend::Backend;
     use float_cmp::assert_approx_eq;
 
     #[test]
     fn translate_molecules_simulation() {
         let mut rng = rand::thread_rng();
-        let context = SoaPlatform::new(
+        let context = Backend::new(
             "tests/files/translate_molecules_simulation.yaml",
             None,
             &mut rng,

@@ -696,16 +696,16 @@ impl<T: Context> MoveProposal<T> for SpeciationMove {
 mod tests {
     use super::*;
     use crate::group::GroupCollection;
-    use crate::platform::soa::SoaPlatform;
+    use crate::backend::Backend;
     use crate::propagate::MoveProposal;
     use crate::WithCell;
     use float_cmp::assert_approx_eq;
 
     const TEST_YAML: &str = "tests/files/speciation_test.yaml";
 
-    fn make_context() -> SoaPlatform {
+    fn make_context() -> Backend {
         let mut rng = rand::thread_rng();
-        SoaPlatform::new(TEST_YAML, None, &mut rng).unwrap()
+        Backend::new(TEST_YAML, None, &mut rng).unwrap()
     }
 
     fn make_move(reaction: &str, k: f64) -> SpeciationMove {
@@ -995,7 +995,7 @@ mod tests {
         let mut rng = rand::thread_rng();
         for _ in 0..20 {
             if let Some(proposed) = mv.propose_move(&context, &mut rng) {
-                let bias = MoveProposal::<SoaPlatform>::bias(
+                let bias = MoveProposal::<Backend>::bias(
                     &mv,
                     &proposed.change,
                     &NewOld::from(0.0, 0.0),
@@ -1011,7 +1011,7 @@ mod tests {
     fn bias_returns_none_without_propose() {
         let mv = make_move("= M", 10.0);
         let bias =
-            MoveProposal::<SoaPlatform>::bias(&mv, &Change::Everything, &NewOld::from(0.0, 0.0));
+            MoveProposal::<Backend>::bias(&mv, &Change::Everything, &NewOld::from(0.0, 0.0));
         assert!(matches!(bias, crate::montecarlo::Bias::None));
     }
 
@@ -1024,7 +1024,7 @@ mod tests {
         use crate::propagate::Propagate;
 
         let mut rng = rand::thread_rng();
-        let context = SoaPlatform::new(TEST_YAML, None, &mut rng).unwrap();
+        let context = Backend::new(TEST_YAML, None, &mut rng).unwrap();
         let propagate = Propagate::from_file(TEST_YAML, &context).unwrap();
 
         let kt = ExternalPressure::thermal_energy_from_temperature(298.15);
@@ -1122,7 +1122,7 @@ propagate:
     }
 
     /// Count active molecules of each phosphate species (mol_id 0..4).
-    fn count_phosphate_species(context: &SoaPlatform) -> [usize; 4] {
+    fn count_phosphate_species(context: &Backend) -> [usize; 4] {
         let gl = context.group_lists();
         [0, 1, 2, 3].map(|id| {
             gl.find_molecules(id, GroupSize::Full)
@@ -1148,7 +1148,7 @@ propagate:
             let path = tmp.path();
 
             let mut rng = rand::thread_rng();
-            let context = SoaPlatform::new(path, None, &mut rng).unwrap();
+            let context = Backend::new(path, None, &mut rng).unwrap();
             let propagate = Propagate::from_file(path, &context).unwrap();
             let kt = ExternalPressure::thermal_energy_from_temperature(298.15);
             let mut mc =

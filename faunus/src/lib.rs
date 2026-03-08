@@ -39,7 +39,7 @@ pub(crate) mod geometry;
 pub mod group;
 pub(crate) mod histogram;
 pub mod montecarlo;
-pub mod platform;
+pub mod backend;
 pub mod propagate;
 pub mod selection;
 pub mod simulation;

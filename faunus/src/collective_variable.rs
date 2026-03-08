@@ -759,12 +759,12 @@ mod integration_tests {
     use crate::cell::Shape;
     use crate::context::{WithCell, WithTopology};
     use crate::group::GroupCollection;
-    use crate::platform::soa::SoaPlatform;
+    use crate::backend::Backend;
     use std::path::Path;
 
-    fn make_context() -> SoaPlatform {
+    fn make_context() -> Backend {
         let mut rng = rand::thread_rng();
-        SoaPlatform::new(
+        Backend::new(
             "tests/files/topology_pass.yaml",
             Some(Path::new("tests/files/structure.xyz")),
             &mut rng,
@@ -781,7 +781,7 @@ mod integration_tests {
     }
 
     /// Find a molecule kind that has exactly one group instance in the test context.
-    fn single_group_selection(ctx: &SoaPlatform) -> Option<(Selection, usize)> {
+    fn single_group_selection(ctx: &Backend) -> Option<(Selection, usize)> {
         ctx.topology_ref().moleculekinds().iter().find_map(|mk| {
             let sel = Selection::parse(&format!("molecule {}", mk.name())).ok()?;
             let groups = sel.resolve_groups(ctx.topology_ref(), ctx.groups());
@@ -887,7 +887,7 @@ mod integration_tests {
     fn count_cv_with_active_inactive_groups() {
         // Uses speciation test topology with active/inactive groups
         let mut rng = rand::thread_rng();
-        let ctx = SoaPlatform::new("tests/files/speciation_test.yaml", None, &mut rng).unwrap();
+        let ctx = Backend::new("tests/files/speciation_test.yaml", None, &mut rng).unwrap();
         let sel = Selection::parse("molecule M").unwrap();
         let mut b = builder(Property::Count);
         b.selection = Some(sel);

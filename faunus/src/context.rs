@@ -1,4 +1,4 @@
-use crate::cell::{BoundaryConditions, SimulationCell};
+use crate::cell::BoundaryConditions;
 use crate::energy::Hamiltonian;
 use crate::group::GroupCollection;
 use crate::Point;
@@ -44,11 +44,10 @@ pub trait Context: ParticleSystem + WithHamiltonian + Clone + std::fmt::Debug {
 
 /// A trait for objects that have a simulation cell.
 pub trait WithCell {
-    type SimCell: SimulationCell;
     /// Get reference to simulation cell.
-    fn cell(&self) -> &Self::SimCell;
+    fn cell(&self) -> &crate::cell::Cell;
     /// Get mutable reference to simulation cell.
-    fn cell_mut(&mut self) -> &mut Self::SimCell;
+    fn cell_mut(&mut self) -> &mut crate::cell::Cell;
 }
 
 /// A trait for objects that have a topology.

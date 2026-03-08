@@ -1,4 +1,4 @@
-//! SoA (Structure-of-Arrays) platform for SIMD-friendly memory layout.
+//! SoA (Structure-of-Arrays) backend with SIMD-friendly memory layout.
 //!
 //! Positions are stored as separate x, y, z vectors for cache-friendly access.
 //! This enables SIMD batch evaluation without sync overhead.
@@ -20,6 +20,19 @@ use serde::Serialize;
 
 use std::{cell::RefCell, path::Path, sync::Arc};
 
+/// Extract medium from system/medium in YAML file
+pub fn get_medium(path: impl AsRef<Path>) -> anyhow::Result<interatomic::coulomb::Medium> {
+    let file = std::fs::File::open(&path)
+        .map_err(|err| anyhow::anyhow!("Could not open {:?}: {}", path.as_ref(), err))?;
+    serde_yaml::from_reader(file)
+        .ok()
+        .and_then(|s: serde_yaml::Value| {
+            let val = s.get("system")?.get("medium")?;
+            serde_yaml::from_value(val.clone()).ok()
+        })
+        .ok_or_else(|| anyhow::anyhow!("Could not find `system/medium` in input file"))
+}
+
 /// Backup for undo on MC reject.
 #[derive(Clone, Debug)]
 struct SoaBackup {
@@ -36,9 +49,9 @@ struct SoaBackup {
     cell_list_clone: Option<crate::celllist::CellList>,
 }
 
-/// Platform with SoA position layout for SIMD-friendly access.
+/// Simulation backend with SoA position layout for SIMD-friendly access.
 #[derive(Clone, Debug, Serialize)]
-pub struct SoaPlatform {
+pub struct Backend {
     topology: Arc<Topology>,
     /// Separate x, y, z arrays for SIMD-friendly access
     #[serde(skip)]
@@ -67,7 +80,7 @@ pub struct SoaPlatform {
     cell_list: Option<crate::celllist::CellList>,
 }
 
-impl SoaPlatform {
+impl Backend {
     /// Build from raw parts (topology, cell, hamiltonian) for testing.
     pub(crate) fn from_raw_parts(
         topology: Arc<Topology>,
@@ -81,7 +94,7 @@ impl SoaPlatform {
         }
         let group_lists = GroupLists::new(topology.moleculekinds().len());
         let pbc_params = PbcParams::try_from_cell(&cell);
-        let mut platform = Self {
+        let mut backend = Self {
             topology: topology.clone(),
             x: Vec::new(),
             y: Vec::new(),
@@ -95,9 +108,9 @@ impl SoaPlatform {
             backup: None,
             cell_list: None,
         };
-        topology.insert_groups(&mut platform, structure, rng)?;
-        platform.update(&Change::Everything)?;
-        Ok(platform)
+        topology.insert_groups(&mut backend, structure, rng)?;
+        backend.update(&Change::Everything)?;
+        Ok(backend)
     }
 
     /// Build from a YAML input file.
@@ -106,14 +119,14 @@ impl SoaPlatform {
         structure_file: Option<&Path>,
         rng: &mut ThreadRng,
     ) -> anyhow::Result<Self> {
-        let medium = Some(super::get_medium(&yaml_file)?);
+        let medium = Some(get_medium(&yaml_file)?);
         let topology = Topology::from_file(&yaml_file)?;
         let hamiltonian_builder = HamiltonianBuilder::from_file(&yaml_file)?;
         hamiltonian_builder.validate(topology.atomkinds())?;
         let cell = Cell::from_file(&yaml_file)?;
         let hamiltonian = Hamiltonian::new(&hamiltonian_builder, &topology, medium.clone())?;
 
-        let mut platform = Self::from_raw_parts(
+        let mut backend = Self::from_raw_parts(
             Arc::new(topology),
             cell,
             RefCell::new(hamiltonian),
@@ -124,14 +137,14 @@ impl SoaPlatform {
         // Build constrain and custom external terms
         if let Some(constrain_builders) = &hamiltonian_builder.constrain {
             for builder in constrain_builders {
-                let constrain = builder.build(&platform)?;
-                platform.hamiltonian_mut().push(constrain.into());
+                let constrain = builder.build(&backend)?;
+                backend.hamiltonian_mut().push(constrain.into());
             }
         }
         if let Some(ext_builders) = &hamiltonian_builder.customexternal {
             for builder in ext_builders {
                 let ext = builder.build()?;
-                platform.hamiltonian_mut().push(ext.into());
+                backend.hamiltonian_mut().push(ext.into());
             }
         }
         if let Some(pm_builder) = &hamiltonian_builder.polymer_depletion {
@@ -142,8 +155,8 @@ impl SoaPlatform {
             })?;
             let thermal_energy =
                 crate::energy::ExternalPressure::thermal_energy_from_temperature(temperature);
-            let pm = pm_builder.build(&platform, thermal_energy)?;
-            platform.hamiltonian_mut().push(pm.into());
+            let pm = pm_builder.build(&backend, thermal_energy)?;
+            backend.hamiltonian_mut().push(pm.into());
         }
         // Ewald reciprocal term needs particles in place
         if let Some(ewald_builder) = &hamiltonian_builder.ewald {
@@ -160,27 +173,27 @@ impl SoaPlatform {
                 .alpha()
             };
             let ewald =
-                crate::energy::EwaldReciprocalEnergy::new(ewald_builder, &platform, medium)?;
+                crate::energy::EwaldReciprocalEnergy::new(ewald_builder, &backend, medium)?;
             if ewald.alpha() != initial_alpha {
-                platform.hamiltonian_mut().rebuild_nonbonded(
+                backend.hamiltonian_mut().rebuild_nonbonded(
                     &hamiltonian_builder,
-                    platform.topology_ref(),
+                    backend.topology_ref(),
                     Some(medium.clone()),
                     ewald.real_space_scheme(),
                 )?;
             }
-            platform.hamiltonian_mut().push(ewald.into());
+            backend.hamiltonian_mut().push(ewald.into());
         }
-        platform.update(&Change::Everything)?;
+        backend.update(&Change::Everything)?;
 
         // Build cell list if configured and cell is orthorhombic
         if let Some(spline_opts) = &hamiltonian_builder.spline {
             if spline_opts.cell_list {
-                platform.build_cell_list(spline_opts.cutoff);
+                backend.build_cell_list(spline_opts.cutoff);
             }
         }
 
-        Ok(platform)
+        Ok(backend)
     }
 
     /// Update cell list assignments for moved particles, tracking changes in backup.
@@ -229,20 +242,19 @@ impl SoaPlatform {
     }
 }
 
-impl crate::WithCell for SoaPlatform {
-    type SimCell = crate::cell::Cell;
+impl crate::WithCell for Backend {
     #[inline(always)]
-    fn cell(&self) -> &Self::SimCell {
+    fn cell(&self) -> &Cell {
         &self.cell
     }
     /// Returns mutable cell reference and invalidates cached `pbc_params`.
-    fn cell_mut(&mut self) -> &mut Self::SimCell {
+    fn cell_mut(&mut self) -> &mut Cell {
         self.pbc_params = None;
         &mut self.cell
     }
 }
 
-impl crate::WithTopology for SoaPlatform {
+impl crate::WithTopology for Backend {
     fn topology(&self) -> std::sync::Arc<crate::topology::Topology> {
         self.topology.clone()
     }
@@ -251,7 +263,7 @@ impl crate::WithTopology for SoaPlatform {
     }
 }
 
-impl crate::WithHamiltonian for SoaPlatform {
+impl crate::WithHamiltonian for Backend {
     fn hamiltonian(&self) -> std::cell::Ref<'_, crate::energy::Hamiltonian> {
         self.hamiltonian.borrow()
     }
@@ -260,7 +272,7 @@ impl crate::WithHamiltonian for SoaPlatform {
     }
 }
 
-impl GroupCollection for SoaPlatform {
+impl GroupCollection for Backend {
     fn groups(&self) -> &[Group] {
         &self.groups
     }
@@ -319,7 +331,10 @@ impl GroupCollection for SoaPlatform {
     fn update_mass_center(&mut self, group_index: usize) {
         let group = &self.groups[group_index];
         let indices = group
-            .select(&crate::group::ParticleSelection::Active, self)
+            .select(
+                &crate::group::ParticleSelection::Active,
+                self.topology_ref(),
+            )
             .unwrap();
         if !indices.is_empty() && self.topology().moleculekinds()[group.molecule()].has_com() {
             let com = self.mass_center(&indices);
@@ -338,7 +353,7 @@ impl GroupCollection for SoaPlatform {
 
     fn add_group(&mut self, molecule: usize, particles: &[Particle]) -> anyhow::Result<&mut Group> {
         if particles.is_empty() {
-            anyhow::bail!("Cannot create empty group on SoaPlatform");
+            anyhow::bail!("Cannot create empty group");
         }
         let start = self.x.len();
         for p in particles {
@@ -381,7 +396,7 @@ impl GroupCollection for SoaPlatform {
     }
 }
 
-impl ParticleSystem for SoaPlatform {
+impl ParticleSystem for Backend {
     #[inline(always)]
     fn get_distance(&self, i: usize, j: usize) -> Point {
         let pi = Point::new(self.x[i], self.y[i], self.z[i]);
@@ -535,7 +550,7 @@ impl ParticleSystem for SoaPlatform {
     }
 }
 
-impl Context for SoaPlatform {
+impl Context for Backend {
     fn save_particle_backup(&mut self, group_index: usize, indices: &[usize]) {
         assert!(self.backup.is_none(), "backup already exists");
         let particles = indices
@@ -657,7 +672,7 @@ mod tests {
     fn soa_energy_and_mass_center() {
         let yaml = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("tests/files/gibbs_ensemble/input.yaml");
-        let ctx = SoaPlatform::new(&yaml, None, &mut rand::thread_rng()).unwrap();
+        let ctx = Backend::new(&yaml, None, &mut rand::thread_rng()).unwrap();
 
         let e_total = ctx.hamiltonian().energy(&ctx, &crate::Change::Everything);
         assert!(e_total.is_finite(), "Energy should be finite");
@@ -708,7 +723,7 @@ mod tests {
     fn set_positions_preserves_atom_kinds() {
         let yaml = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("tests/files/gibbs_ensemble/input.yaml");
-        let mut ctx = SoaPlatform::new(&yaml, None, &mut rand::thread_rng()).unwrap();
+        let mut ctx = Backend::new(&yaml, None, &mut rand::thread_rng()).unwrap();
 
         let group = &ctx.groups()[0];
         let indices: Vec<usize> = group.iter_active().collect();
@@ -737,7 +752,7 @@ mod tests {
         let yaml = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("tests/files/gibbs_ensemble/input.yaml");
 
-        let ctx = SoaPlatform::new(&yaml, None, &mut rand::thread_rng()).unwrap();
+        let ctx = Backend::new(&yaml, None, &mut rand::thread_rng()).unwrap();
         assert!(
             ctx.cell_list.is_some(),
             "Cell list should be built for splined input"
@@ -771,7 +786,7 @@ mod tests {
     /// Verify backup/undo restores group quaternion after rotation.
     #[test]
     fn backup_undo_restores_quaternion() {
-        let mut context = SoaPlatform::new(
+        let mut context = Backend::new(
             "tests/files/topology_pass.yaml",
             Some(std::path::Path::new("tests/files/structure.xyz")),
             &mut rand::thread_rng(),

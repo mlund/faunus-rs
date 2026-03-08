@@ -3,7 +3,7 @@
 use crate::{
     analysis,
     montecarlo::{gibbs::GibbsEnsemble, MarkovChain},
-    platform::soa::SoaPlatform,
+    backend::Backend,
     propagate::{self, Propagate},
     state::State,
 };
@@ -22,15 +22,15 @@ pub fn thermal_energy(medium: &interatomic::coulomb::Medium) -> f64 {
 #[allow(clippy::large_enum_variant)]
 pub enum Simulation {
     /// Standard single-box simulation.
-    SingleBox(MarkovChain<SoaPlatform>),
+    SingleBox(MarkovChain<Backend>),
     /// Two coupled boxes for Gibbs ensemble MC.
-    Gibbs(Box<GibbsEnsemble<SoaPlatform>>),
+    Gibbs(Box<GibbsEnsemble<Backend>>),
 }
 
 /// Build a MarkovChain from an input file, context, and thermal energy,
 /// optionally restoring from a state checkpoint.
 pub fn build_markov_chain<
-    T: crate::Context + crate::WithCell<SimCell = crate::cell::Cell> + 'static,
+    T: crate::Context + 'static,
 >(
     input: &Path,
     context: T,
@@ -57,7 +57,7 @@ impl Simulation {
         input: &Path,
         state: Option<&Path>,
     ) -> Result<(Self, interatomic::coulomb::Medium)> {
-        let medium = crate::platform::get_medium(input)?;
+        let medium = crate::backend::get_medium(input)?;
         let kt = thermal_energy(&medium);
 
         if let Some(gibbs_cfg) = propagate::gibbs_config_from_file(input)? {
@@ -65,7 +65,7 @@ impl Simulation {
             return Ok((sim, medium));
         }
 
-        let context = SoaPlatform::new(input, None, &mut rand::thread_rng())?;
+        let context = Backend::new(input, None, &mut rand::thread_rng())?;
         let mc = build_markov_chain(input, context, kt, state)?;
         Ok((Self::SingleBox(mc), medium))
     }
@@ -77,7 +77,7 @@ impl Simulation {
         kt: f64,
         gibbs_cfg: crate::montecarlo::gibbs::GibbsConfig,
     ) -> Result<Self> {
-        let context0 = SoaPlatform::new(input, None, &mut rand::thread_rng())?;
+        let context0 = Backend::new(input, None, &mut rand::thread_rng())?;
         let context1 = context0.clone();
 
         let inter_moves: Vec<_> = gibbs_cfg

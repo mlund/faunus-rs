@@ -8,7 +8,7 @@ use crate::{
     energy::{builder::HamiltonianBuilder, Hamiltonian},
     group::{GroupCollection, GroupSize},
     montecarlo::NewOld,
-    platform::soa::SoaPlatform,
+    backend::Backend,
     topology::Topology,
     Change, Context, Group, GroupChange,
 };
@@ -127,7 +127,7 @@ fn assert_part_part(
 }
 
 /// Get nonbonded matrix for testing.
-fn get_test_matrix() -> (SoaPlatform, NonbondedMatrix) {
+fn get_test_matrix() -> (Backend, NonbondedMatrix) {
     let file = "tests/files/nonbonded_interactions.yaml";
     let topology = Topology::from_file(file).unwrap();
     let builder = HamiltonianBuilder::from_file(file)
@@ -144,7 +144,7 @@ fn get_test_matrix() -> (SoaPlatform, NonbondedMatrix) {
     let nonbonded = NonbondedMatrix::new(&builder, &topology, Some(medium), false).unwrap();
 
     let mut rng = rand::thread_rng();
-    let system = SoaPlatform::from_raw_parts(
+    let system = Backend::from_raw_parts(
         Arc::new(topology),
         Cell::Cuboid(Cuboid::cubic(20.0)),
         RefCell::new(Hamiltonian::from(vec![nonbonded.clone().into()])),
@@ -597,7 +597,7 @@ fn test_nonbonded_matrix_energy() {
 // ====== NonbondedMatrixSplined tests ======
 
 /// Get splined nonbonded matrix for testing.
-fn get_test_splined_matrix() -> (SoaPlatform, NonbondedMatrix, NonbondedMatrixSplined) {
+fn get_test_splined_matrix() -> (Backend, NonbondedMatrix, NonbondedMatrixSplined) {
     let (system, nonbonded) = get_test_matrix();
     let cutoff = 15.0; // Use a cutoff that covers all test distances
     let splined = NonbondedMatrixSplined::from_nonbonded(&nonbonded, cutoff, None);

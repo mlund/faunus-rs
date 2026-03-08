@@ -414,13 +414,13 @@ impl<T: Context + Send + 'static> GibbsEnsemble<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::platform::soa::SoaPlatform;
+    use crate::backend::Backend;
     use crate::WithCell;
 
     #[test]
     fn gibbs_volume_exchange_conserves_total_volume() {
         let mut rng = rand::thread_rng();
-        let context = SoaPlatform::new(
+        let context = Backend::new(
             "tests/files/translate_molecules_simulation.yaml",
             None,
             &mut rng,

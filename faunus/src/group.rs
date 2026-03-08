@@ -14,7 +14,7 @@
 
 //! Handling of groups of particles
 
-use crate::{Context, Particle, Point, UnitQuaternion};
+use crate::{Particle, Point, UnitQuaternion, topology::Topology};
 use serde::{Deserialize, Serialize};
 
 /// Group of particles.
@@ -246,19 +246,19 @@ impl Group {
     pub fn select(
         &self,
         selection: &ParticleSelection,
-        context: &impl Context,
+        topology: &Topology,
     ) -> anyhow::Result<Vec<usize>> {
         let to_abs = |i: usize| i + self.iter_all().start;
         let indices: Vec<usize> = match selection {
-            crate::group::ParticleSelection::AbsIndex(indices) => indices.clone(),
-            crate::group::ParticleSelection::RelIndex(indices_rel) => {
+            ParticleSelection::AbsIndex(indices) => indices.clone(),
+            ParticleSelection::RelIndex(indices_rel) => {
                 indices_rel.iter().map(|i| to_abs(*i)).collect()
             }
-            crate::group::ParticleSelection::All => return Ok(self.iter_all().collect()),
-            crate::group::ParticleSelection::Active => return Ok(self.iter_active().collect()),
-            crate::group::ParticleSelection::Inactive => return Ok(self.iter_inactive().collect()),
-            crate::group::ParticleSelection::ById(id) => {
-                return Ok(self.select_by_id(context, self.iter_active(), *id))
+            ParticleSelection::All => return Ok(self.iter_all().collect()),
+            ParticleSelection::Active => return Ok(self.iter_active().collect()),
+            ParticleSelection::Inactive => return Ok(self.iter_inactive().collect()),
+            ParticleSelection::ById(id) => {
+                return Ok(self.select_by_id(topology, self.iter_active(), *id))
             }
         };
         if indices.iter().all(|i| self.contains(*i)) {
@@ -274,11 +274,11 @@ impl Group {
     /// Select particle indices based on the indices of atom kinds.
     fn select_by_id(
         &self,
-        context: &impl Context,
+        topology: &Topology,
         absolute_indices: std::ops::Range<usize>,
         id: usize,
     ) -> Vec<usize> {
-        let atom_indices = context.topology_ref().moleculekinds()[self.molecule].atom_indices();
+        let atom_indices = topology.moleculekinds()[self.molecule].atom_indices();
 
         atom_indices
             .iter()
@@ -673,7 +673,8 @@ impl GroupLists {
 mod tests {
     use std::path::Path;
 
-    use crate::platform::soa::SoaPlatform;
+    use crate::backend::Backend;
+    use crate::WithTopology;
 
     use super::*;
 
@@ -692,7 +693,7 @@ mod tests {
         };
 
         let mut rng = rand::thread_rng();
-        let context = SoaPlatform::new(
+        let context = Backend::new(
             "tests/files/topology_pass.yaml",
             Some(Path::new("tests/files/structure.xyz")),
             &mut rng,
@@ -758,31 +759,31 @@ mod tests {
         let mut group = Group::new(7, 0, 20..23);
         assert_eq!(group.len(), 3);
         let indices = group
-            .select(&ParticleSelection::RelIndex(vec![0, 1, 2]), &context)
+            .select(&ParticleSelection::RelIndex(vec![0, 1, 2]), context.topology_ref())
             .unwrap();
         assert_eq!(indices, vec![20, 21, 22]);
 
         // Absolute selection
         let indices = group
-            .select(&ParticleSelection::AbsIndex(vec![20, 21, 22]), &context)
+            .select(&ParticleSelection::AbsIndex(vec![20, 21, 22]), context.topology_ref())
             .unwrap();
         assert_eq!(indices, vec![20, 21, 22]);
 
         // Select all
-        let indices = group.select(&ParticleSelection::All, &context).unwrap();
+        let indices = group.select(&ParticleSelection::All, context.topology_ref()).unwrap();
         assert_eq!(indices, vec![20, 21, 22]);
 
         // Out of range selection
         assert!(group
-            .select(&ParticleSelection::RelIndex(vec![1, 2, 3]), &context)
+            .select(&ParticleSelection::RelIndex(vec![1, 2, 3]), context.topology_ref())
             .is_err());
 
         // Test partial selection
         group.resize(GroupSize::Shrink(1)).unwrap();
-        let indices = group.select(&ParticleSelection::Active, &context).unwrap();
+        let indices = group.select(&ParticleSelection::Active, context.topology_ref()).unwrap();
         assert_eq!(indices, vec![20, 21]);
         let indices = group
-            .select(&ParticleSelection::Inactive, &context)
+            .select(&ParticleSelection::Inactive, context.topology_ref())
             .unwrap();
         assert_eq!(indices, vec![22]);
     }
@@ -790,7 +791,7 @@ mod tests {
     #[test]
     fn test_group_select_by_id() {
         let mut rng = rand::thread_rng();
-        let context = SoaPlatform::new(
+        let context = Backend::new(
             "tests/files/topology_pass.yaml",
             Some(Path::new("tests/files/structure.xyz")),
             &mut rng,
@@ -802,12 +803,12 @@ mod tests {
         let expected1 = vec![8, 9, 10];
 
         assert_eq!(
-            group.select(&ParticleSelection::ById(0), &context).unwrap(),
+            group.select(&ParticleSelection::ById(0), context.topology_ref()).unwrap(),
             expected0
         );
 
         assert_eq!(
-            group.select(&ParticleSelection::ById(1), &context).unwrap(),
+            group.select(&ParticleSelection::ById(1), context.topology_ref()).unwrap(),
             expected1
         );
 
@@ -815,7 +816,7 @@ mod tests {
         let expected_active: Vec<usize> = vec![];
 
         assert_eq!(
-            group.select(&ParticleSelection::ById(2), &context).unwrap(),
+            group.select(&ParticleSelection::ById(2), context.topology_ref()).unwrap(),
             expected_active
         );
     }
@@ -878,7 +879,7 @@ mod tests {
     #[test]
     fn test_group_selections() {
         let mut rng = rand::thread_rng();
-        let context = SoaPlatform::new(
+        let context = Backend::new(
             "tests/files/topology_pass.yaml",
             Some(Path::new("tests/files/structure.xyz")),
             &mut rng,
