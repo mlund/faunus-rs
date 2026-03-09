@@ -85,10 +85,16 @@ fn add_atoms_to_frame(ctx: &(impl WithCell + WithTopology + GroupCollection), fr
     let to_atomkind = |i: usize| &topology.atomkinds()[i];
     ctx.groups().iter().for_each(|group| {
         let molecule = &topology.moleculekinds()[group.molecule()];
-        let atoms = molecule.atom_indices().iter().cloned().map(to_atomkind);
-        for (i, atom) in atoms.enumerate() {
+        let n_atoms = if molecule.atomic() {
+            group.capacity()
+        } else {
+            molecule.atom_indices().len()
+        };
+        for i in 0..n_atoms {
+            let topo_i = molecule.topology_index(i);
+            let atom = to_atomkind(molecule.atom_indices()[topo_i]);
             frame.add_atom(
-                &atom.to_chem_atom(molecule.atom_names()[i].as_deref()),
+                &atom.to_chem_atom(molecule.atom_names().get(topo_i).and_then(|n| n.as_deref())),
                 (*particles[i + group.start()].pos()).into(),
                 None,
             );

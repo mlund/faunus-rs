@@ -51,12 +51,15 @@ use std::ops::Range;
 use std::path::{Path, PathBuf};
 
 pub use atom::{set_missing_epsilon, AtomKind, AtomKindBuilder, CombinationRule};
+#[allow(unused_imports)]
 pub(crate) use bond::BondKind;
 pub use bond::{Bond, BondGraph};
 pub use dihedral::Dihedral;
+#[allow(unused_imports)]
 pub(crate) use dihedral::DihedralKind;
 pub use topology::{FindByName, Topology};
 pub use torsion::Torsion;
+#[allow(unused_imports)]
 pub(crate) use torsion::TorsionKind;
 
 pub(crate) use chain::Chain;
@@ -293,6 +296,7 @@ pub(crate) enum DegreesOfFreedom {
 
 impl DegreesOfFreedom {
     /// True if the molecule is a rigid body (COM + quaternion integration).
+    #[allow(dead_code)]
     pub(crate) const fn is_rigid(self) -> bool {
         matches!(self, Self::Rigid | Self::RigidAlchemical)
     }

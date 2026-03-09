@@ -1,0 +1,43 @@
+# Ideal gas GCMC with atomic mega-group: all atoms pooled into a single group.
+# Same physics as gcmc_ideal_gas but with `atomic: true`.
+#
+# Expected analysis:
+#   count("molecule particle") = K*V = 0.01 * 1000 = 10
+
+atoms:
+  - {name: X, mass: 1.0, sigma: 1.0}
+
+molecules:
+  - name: particle
+    atoms: [X]
+    atomic: true
+
+system:
+  cell: !Cuboid [10.0, 10.0, 10.0]
+  medium:
+    permittivity: !Vacuum
+    temperature: 298.15
+  energy: {}
+  blocks:
+    - molecule: particle
+      N: 30
+      active: 10
+      insert: !RandomAtomPos {}
+
+analysis:
+  - !CollectiveVariable
+    property: count
+    selection: "molecule particle"
+    frequency: !Every 1
+
+propagate:
+  seed: !Fixed 42
+  criterion: Metropolis
+  repeat: 5000
+  collections:
+    - !Deterministic
+      moves:
+        - !SpeciationMove
+          temperature: 298.15
+          reactions:
+            - ["= particle", !K 0.01]

@@ -47,8 +47,10 @@ const WORKGROUP_SIZE: u32 = 64;
 /// Atom mass from topology, falling back to 1.0 for out-of-range indices.
 #[cfg(feature = "gpu")]
 fn atom_mass(topology: &Topology, atom_indices: &[usize], idx: usize) -> f32 {
+    // For atomic mega-groups, all atoms share the same kind (index 0)
     atom_indices
         .get(idx)
+        .or_else(|| atom_indices.first())
         .map(|&ai| topology.atomkinds()[ai].mass() as f32)
         .unwrap_or(1.0)
 }

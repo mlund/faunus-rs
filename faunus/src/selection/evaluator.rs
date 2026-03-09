@@ -31,20 +31,21 @@ impl<'a> AtomContext<'a> {
         runtime_atom_id: Option<usize>,
     ) -> Self {
         let rel_idx = abs_idx - group.start();
-        let atom_kind_id = runtime_atom_id.unwrap_or(mol_kind.atom_indices()[rel_idx]);
+        let topo_rel = mol_kind.topology_index(rel_idx);
+        let atom_kind_id = runtime_atom_id.unwrap_or(mol_kind.atom_indices()[topo_rel]);
         let atom_kind = &topology.atomkinds()[atom_kind_id];
         let atom_name = mol_kind
             .atom_names()
-            .get(rel_idx)
+            .get(topo_rel)
             .and_then(|n| n.as_deref());
         let residue = mol_kind
             .residues()
             .iter()
-            .find(|r| r.range().contains(&rel_idx));
+            .find(|r| r.range().contains(&topo_rel));
         let chain = mol_kind
             .chains()
             .iter()
-            .find(|c| c.range().contains(&rel_idx));
+            .find(|c| c.range().contains(&topo_rel));
         Self {
             atom_kind,
             atom_name,

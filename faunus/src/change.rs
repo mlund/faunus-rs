@@ -52,6 +52,9 @@ pub enum GroupChange {
     ResizeExcludeIntra(GroupSize),
     /// The identity of a set of particles has changed (relative indices)
     UpdateIdentity(Vec<usize>),
+    /// Resize an atomic group and report the affected relative indices.
+    /// Used for GCMC on atomic mega-groups where only the inserted/deleted atoms changed.
+    ResizePartial(GroupSize, Vec<usize>),
     /// Nothing has changed
     None,
 }
@@ -59,11 +62,12 @@ pub enum GroupChange {
 impl GroupChange {
     /// Whether intramolecular energy must be recomputed.
     /// Returns `false` for `RigidBody` (no internal change), `ResizeExcludeIntra`
-    /// (intra energy absorbed into K), and `None` (no change at all).
+    /// (intra energy absorbed into K), `ResizePartial` (atomic groups have no bonds),
+    /// and `None` (no change at all).
     pub const fn internal_change(&self) -> bool {
         !matches!(
             self,
-            Self::RigidBody | Self::ResizeExcludeIntra(_) | Self::None
+            Self::RigidBody | Self::ResizeExcludeIntra(_) | Self::ResizePartial(_, _) | Self::None
         )
     }
 
@@ -80,6 +84,22 @@ impl GroupChange {
 
     /// True for any resize operation (with or without intramolecular energy).
     pub const fn is_resize(&self) -> bool {
-        matches!(self, Self::Resize(_) | Self::ResizeExcludeIntra(_))
+        matches!(
+            self,
+            Self::Resize(_) | Self::ResizeExcludeIntra(_) | Self::ResizePartial(_, _)
+        )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn resize_partial_semantics() {
+        let gc = GroupChange::ResizePartial(GroupSize::Expand(1), vec![5]);
+        assert!(!gc.internal_change(), "atomic groups have no bonds");
+        assert!(!gc.is_whole_group(), "only one atom changed");
+        assert!(gc.is_resize(), "it is a resize operation");
     }
 }

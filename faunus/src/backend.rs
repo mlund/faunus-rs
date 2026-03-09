@@ -195,6 +195,11 @@ impl Backend {
         Ok(backend)
     }
 
+    /// Update cell list assignment for a single moved particle.
+    fn update_cell_list_particle(&mut self, i: usize) {
+        self.update_cell_list_particles(&[i]);
+    }
+
     /// Update cell list assignments for moved particles, tracking changes in backup.
     fn update_cell_list_particles(&mut self, indices: &[usize]) {
         if let (Some(cl), Some(backup)) = (&mut self.cell_list, &mut self.backup) {
@@ -311,6 +316,7 @@ impl GroupCollection for Backend {
             self.y[i] = pos.y;
             self.z[i] = pos.z;
             self.atom_kinds[i] = src.atom_id() as u32;
+            self.update_cell_list_particle(i);
         }
         Ok(())
     }
@@ -324,6 +330,7 @@ impl GroupCollection for Backend {
             self.x[i] = pos.x;
             self.y[i] = pos.y;
             self.z[i] = pos.z;
+            self.update_cell_list_particle(i);
         }
     }
 

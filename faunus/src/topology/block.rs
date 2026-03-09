@@ -559,16 +559,27 @@ impl MoleculeBlock {
             particles
         };
 
-        // create groups and populate them with particles
-        for i in 0..self.num_molecules {
-            let particles = make_particles();
+        if molecule.atomic() {
+            // Atomic molecule: pool all atoms into a single group
+            let particles: Vec<_> = (0..self.num_molecules)
+                .flat_map(|_| make_particles())
+                .collect();
             let group_index = context.add_group(molecule.id(), &particles)?.index();
-            context.update_mass_center(group_index);
-
-            // deactivate the groups that should not be active
-            if let BlockActivationStatus::Partial(x) = self.active {
-                if i >= x {
-                    context.resize_group(group_index, GroupSize::Empty).unwrap();
+            if let BlockActivationStatus::Partial(active) = self.active {
+                context
+                    .resize_group(group_index, GroupSize::Partial(active))
+                    .unwrap();
+            }
+        } else {
+            // Standard: one group per molecule
+            for i in 0..self.num_molecules {
+                let particles = make_particles();
+                let group_index = context.add_group(molecule.id(), &particles)?.index();
+                context.update_mass_center(group_index);
+                if let BlockActivationStatus::Partial(x) = self.active {
+                    if i >= x {
+                        context.resize_group(group_index, GroupSize::Empty).unwrap();
+                    }
                 }
             }
         }
@@ -603,5 +614,70 @@ impl MoleculeBlock {
             }
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::backend::Backend;
+    use crate::group::GroupCollection;
+
+    fn backend_from_str(yaml: &str) -> Backend {
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(tmp.path(), yaml).unwrap();
+        let mut rng = rand::thread_rng();
+        Backend::new(tmp.path(), None, &mut rng).unwrap()
+    }
+
+    #[test]
+    fn atomic_block_creates_single_group() {
+        let ctx = backend_from_str(
+            r#"
+atoms:
+  - {name: X, mass: 1.0, sigma: 1.0}
+molecules:
+  - name: particle
+    atoms: [X]
+    atomic: true
+system:
+  cell: !Cuboid [10.0, 10.0, 10.0]
+  medium: {permittivity: !Vacuum, temperature: 300.0}
+  energy: {}
+  blocks:
+    - molecule: particle
+      N: 20
+      active: 8
+      insert: !RandomAtomPos {}
+propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
+"#,
+        );
+        assert_eq!(ctx.groups().len(), 1);
+        assert_eq!(ctx.groups()[0].capacity(), 20);
+        assert_eq!(ctx.groups()[0].len(), 8);
+    }
+
+    #[test]
+    fn non_atomic_block_creates_many_groups() {
+        let ctx = backend_from_str(
+            r#"
+atoms:
+  - {name: X, mass: 1.0, sigma: 1.0}
+molecules:
+  - name: particle
+    atoms: [X]
+system:
+  cell: !Cuboid [10.0, 10.0, 10.0]
+  medium: {permittivity: !Vacuum, temperature: 300.0}
+  energy: {}
+  blocks:
+    - molecule: particle
+      N: 20
+      active: 8
+      insert: !RandomAtomPos {}
+propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
+"#,
+        );
+        assert_eq!(ctx.groups().len(), 20);
+        assert_eq!(ctx.groups()[0].capacity(), 1);
     }
 }

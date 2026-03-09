@@ -662,7 +662,8 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
                 self.inter_group_energy_all_soa(soa, groups, group)
                     + self.group_with_itself_soa(soa, group)
             }
-            GroupChange::PartialUpdate(indices) => indices
+            // ResizePartial reuses the PartialUpdate path for O(N) per affected atom
+            GroupChange::PartialUpdate(indices) | GroupChange::ResizePartial(_, indices) => indices
                 .iter()
                 .map(|&rel_idx| {
                     group.to_absolute_index(rel_idx).map_or(0.0, |abs_i| {

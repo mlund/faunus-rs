@@ -79,6 +79,7 @@ molecules:
 | `chains`              | no       | `[]`    | Protein chains                                   |
 | `activity`            | no       |         | Activity for GCMC fugacity (molar)               |
 | `has_com`             | no       | `true`  | Whether center-of-mass makes sense               |
+| `atomic`              | no       | `false` | Pool all instances into a single group (see below)|
 | `custom`              | no       | `{}`    | Arbitrary key-value properties                   |
 
 ### FASTA Sequence
@@ -147,6 +148,29 @@ system:
 | `Frozen`           | All degrees of freedom are frozen                    |
 | `Rigid`            | Rigid body — only translations and rotations         |
 | `RigidAlchemical`  | Rigid body with free alchemical degrees of freedom   |
+
+### Atomic Molecules
+
+Setting `atomic: true` pools all instances of a single-atom molecule into one group
+instead of creating one group per atom.
+This reduces per-group overhead and enables O(1) group-pair iteration for the energy.
+The molecule must have exactly one atom type and no bonds.
+
+```yaml
+molecules:
+  - name: Na
+    atoms: [Na]
+    atomic: true
+  - name: Cl
+    atoms: [Cl]
+    atomic: true
+```
+
+When `atomic: true`:
+- `has_com` is forced to `false` (no center-of-mass).
+- GCMC inserts/deletes individual atoms within the group via expand/shrink.
+- `TranslateAtom` works as usual; `TranslateMolecule` is not allowed.
+- The `N` field in `blocks` sets the group capacity (maximum atom count).
 
 ### Bonds
 

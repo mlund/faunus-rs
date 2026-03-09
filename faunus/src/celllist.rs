@@ -104,8 +104,12 @@ impl CellList {
     }
 
     /// Update a particle's cell assignment after it moved.
+    /// Silently skips particles not yet in the cell list (sentinel value).
     pub fn update_particle(&mut self, particle: usize, new_pos: &Point) {
-        let old_cell = self.particle_cell[particle];
+        let old_cell = *self.particle_cell.get(particle).unwrap_or(&usize::MAX);
+        if old_cell == usize::MAX {
+            return;
+        }
         let new_cell = self.cell_index_for(new_pos);
         if old_cell != new_cell {
             self.remove_from_cell(particle, old_cell);
@@ -222,13 +226,17 @@ impl CellList {
     }
 
     /// Update a particle's cell with change tracking.
+    /// Silently skips particles not yet in the cell list (sentinel value).
     pub fn update_particle_tracked(
         &mut self,
         particle: usize,
         new_pos: &Point,
         backup: &mut CellListBackup,
     ) {
-        let old_cell = self.particle_cell[particle];
+        let old_cell = *self.particle_cell.get(particle).unwrap_or(&usize::MAX);
+        if old_cell == usize::MAX {
+            return;
+        }
         let new_cell = self.cell_index_for(new_pos);
         if old_cell != new_cell {
             backup.moved.push((particle, old_cell));

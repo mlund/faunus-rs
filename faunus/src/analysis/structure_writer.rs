@@ -56,8 +56,13 @@ impl StructureWriter {
 
         for group in context.groups().iter() {
             let molecule = &topology.moleculekinds()[group.molecule()];
-            for i in 0..molecule.atom_indices().len() {
-                names.push(molecule.resolved_atom_name(i, topology.atomkinds()).to_string());
+            for i in 0..group.capacity() {
+                let topo_i = molecule.topology_index(i);
+                names.push(
+                    molecule
+                        .resolved_atom_name(topo_i, topology.atomkinds())
+                        .to_string(),
+                );
                 positions.push(particles[i + group.start()].pos);
             }
         }
@@ -127,8 +132,14 @@ impl<T: Context> Analyze<T> for StructureWriter {
             let psf_path = base.with_extension("psf");
             psf::write_psf(&psf_path, &topology, context.groups())?;
             let tcl_path = base.with_extension("tcl");
-            let psf_name = psf_path.file_name().and_then(|n| n.to_str()).unwrap_or("traj.psf");
-            let traj_name = base.file_name().and_then(|n| n.to_str()).unwrap_or(&self.output_file);
+            let psf_name = psf_path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("traj.psf");
+            let traj_name = base
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or(&self.output_file);
             psf::write_vmd_script(&tcl_path, &topology, psf_name, traj_name)?;
             log::info!("VMD visualization: vmd -e {}", tcl_path.display());
         }

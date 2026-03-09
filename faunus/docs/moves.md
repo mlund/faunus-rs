@@ -80,7 +80,7 @@ with magnitude uniformly sampled in $[-\text{dp}, +\text{dp}]$.
 
 Key          | Required | Default | Description
 ------------ | -------- | ------- | -------------------------------------------
-`molecule`   | yes      |         | Name of the molecule type
+`molecule`   | yes      |         | Name of the molecule type (not allowed for `atomic` molecules)
 `dp`         | yes      |         | Maximum displacement (Angstrom)
 `weight`     | yes      |         | Selection weight
 `repeat`     | no       | 1       | Repetitions per selection
@@ -361,13 +361,18 @@ second reaction is unity, giving equal populations of H₂PO₄⁻ and HPO₄²�
 
 ### GCMC example
 
+For single-atom species, `atomic: true` pools all instances into one group,
+reducing overhead from N groups to 1.
+
 ```yaml
 molecules:
   - name: Na+
     atoms: [Na]
+    atomic: true
     activity: 0.030           # molar GCMC fugacity
   - name: Cl-
     atoms: [Cl]
+    atomic: true
     activity: 0.030
 
 system:

@@ -80,6 +80,12 @@ impl TranslateMolecule {
     /// Validate and finalize the move.
     pub(crate) fn finalize(&mut self, context: &impl Context) -> anyhow::Result<()> {
         self.molecule_id = find_molecule_id(context, &self.molecule_name, "TranslateMolecule")?;
+        if context.topology_ref().moleculekinds()[self.molecule_id].atomic() {
+            anyhow::bail!(
+                "TranslateMolecule cannot be used with atomic molecule '{}'; use TranslateAtom instead",
+                self.molecule_name
+            );
+        }
         Ok(())
     }
 }

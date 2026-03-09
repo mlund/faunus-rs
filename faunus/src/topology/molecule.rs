@@ -170,8 +170,22 @@ impl MoleculeKind {
             .unwrap_or_else(|| atomkinds[self.atom_indices[i]].name())
     }
 
+    /// Map a group-relative index to the topology-level index.
+    /// Atomic mega-groups have one topology entry shared by all particles.
+    pub const fn topology_index(&self, relative_index: usize) -> usize {
+        if self.atomic {
+            0
+        } else {
+            relative_index
+        }
+    }
+
     pub const fn has_com(&self) -> bool {
         self.has_com
+    }
+
+    pub(crate) fn set_has_com(&mut self, has_com: bool) {
+        self.has_com = has_com;
     }
 
     pub const fn activity(&self) -> Option<f64> {
@@ -366,6 +380,17 @@ fn validate_molecule(molecule: &MoleculeKind) -> Result<(), ValidationError> {
         return Err(ValidationError::new("").with_message(
             "the number of atom names does not match the number of atoms in a molecule".into(),
         ));
+    }
+
+    if molecule.atomic {
+        if n_atoms != 1 {
+            return Err(ValidationError::new("")
+                .with_message("atomic molecule must have exactly one atom type".into()));
+        }
+        if molecule.has_bonded_potentials() {
+            return Err(ValidationError::new("")
+                .with_message("atomic molecule must not have bonded potentials".into()));
+        }
     }
 
     Ok(())
@@ -593,6 +618,50 @@ mod tests {
             .unwrap();
 
         assert!(molecule.validate().is_err());
+    }
+
+    #[test]
+    fn atomic_rejects_multi_atom() {
+        let molecule = MoleculeKindBuilder::default()
+            .name("bad")
+            .atoms(vec!["A".into(), "B".into()])
+            .atom_indices(vec![0, 1])
+            .atom_names(vec![None, None])
+            .atomic(true)
+            .build()
+            .unwrap();
+        assert!(molecule.validate().is_err());
+    }
+
+    #[test]
+    fn atomic_rejects_bonds() {
+        let molecule = MoleculeKindBuilder::default()
+            .name("bad")
+            .atoms(vec!["A".into()])
+            .atom_indices(vec![0])
+            .atom_names(vec![None])
+            .atomic(true)
+            .bonds(vec![Bond::new(
+                [0, 0],
+                BondKind::Unspecified,
+                BondOrder::Unspecified,
+            )])
+            .build()
+            .unwrap();
+        assert!(molecule.validate().is_err());
+    }
+
+    #[test]
+    fn atomic_accepts_single_atom() {
+        let molecule = MoleculeKindBuilder::default()
+            .name("ok")
+            .atoms(vec!["X".into()])
+            .atom_indices(vec![0])
+            .atom_names(vec![None])
+            .atomic(true)
+            .build()
+            .unwrap();
+        assert!(molecule.validate().is_ok());
     }
 
     #[test]

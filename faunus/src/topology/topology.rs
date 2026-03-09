@@ -300,6 +300,11 @@ impl Topology {
             // validate the molecule
             molecule.validate()?;
 
+            // atomic molecules are independent particles with no COM
+            if molecule.atomic() {
+                molecule.set_has_com(false);
+            }
+
             // set index
             molecule.set_id(i);
 

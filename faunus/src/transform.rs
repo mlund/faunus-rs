@@ -66,6 +66,13 @@ pub enum SpeciationAction {
         abs_index: usize,
         new_atom_id: usize,
     },
+    /// Activate a single atom in an atomic mega-group
+    ActivateAtom { group_index: usize, position: Point },
+    /// Deactivate a single atom in an atomic mega-group by swapping it to end of active range
+    DeactivateAtom {
+        group_index: usize,
+        abs_index: usize,
+    },
 }
 
 /// This describes a transformation on a set of particles or a group.
@@ -214,6 +221,31 @@ impl Transform {
                             let mut p = context.particle(*abs_index);
                             p.atom_id = *new_atom_id;
                             context.set_particles([*abs_index], [&p].into_iter())?;
+                        }
+                        SpeciationAction::ActivateAtom {
+                            group_index,
+                            position,
+                        } => {
+                            // Place atom at the first inactive slot and expand by one
+                            let group = &context.groups()[*group_index];
+                            let slot = group.start() + group.len();
+                            context.set_positions(slot..slot + 1, [position].into_iter());
+                            Self::Expand(1).on_group(*group_index, context)?;
+                        }
+                        SpeciationAction::DeactivateAtom {
+                            group_index,
+                            abs_index,
+                        } => {
+                            // Swap with last active to keep active atoms contiguous, then shrink
+                            let group = &context.groups()[*group_index];
+                            let last_active = group.start() + group.len() - 1;
+                            if *abs_index != last_active {
+                                let p_last = context.particle(last_active);
+                                let p_target = context.particle(*abs_index);
+                                context.set_particles([*abs_index], [&p_last].into_iter())?;
+                                context.set_particles([last_active], [&p_target].into_iter())?;
+                            }
+                            Self::Contract(1).on_group(*group_index, context)?;
                         }
                     }
                 }

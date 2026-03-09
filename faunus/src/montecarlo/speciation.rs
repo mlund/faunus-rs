@@ -143,6 +143,18 @@ impl crate::Info for SpeciationMove {
     }
 }
 
+/// Find the single mega-group index for an atomic molecule kind.
+/// Checks Partial first since atomic mega-groups are typically partially filled.
+fn find_atomic_group(context: &impl Context, mol_id: usize) -> Option<usize> {
+    let gl = context.group_lists();
+    gl.find_molecules(mol_id, GroupSize::Partial(0))
+        .into_iter()
+        .chain(gl.find_molecules(mol_id, GroupSize::Full))
+        .chain(gl.find_molecules(mol_id, GroupSize::Empty))
+        .flat_map(|s| s.iter().copied())
+        .next()
+}
+
 /// Generate a random point inside the cell using rejection sampling.
 ///
 /// Uses `bounding_box` + `is_inside` so that any `RngCore` can be used
@@ -500,51 +512,90 @@ impl SpeciationMove {
         for op in ops {
             match op {
                 ReactionOp::DeactivateMolecule(mol_id) => {
-                    let full_groups = context
-                        .group_lists()
-                        .find_molecules(*mol_id, GroupSize::Full)?;
-                    if full_groups.is_empty() {
-                        return None;
+                    let molecule = &context.topology_ref().moleculekinds()[*mol_id];
+                    if molecule.atomic() {
+                        // Atomic: pick a random active atom from the mega-group
+                        let group_index = find_atomic_group(context, *mol_id)?;
+                        let group = &context.groups()[group_index];
+                        let n_old = group.len();
+                        if n_old == 0 {
+                            return None;
+                        }
+                        let rel_idx = rng.gen_range(0..n_old);
+                        let abs_idx = group.to_absolute_index(rel_idx).unwrap();
+                        ln_bias -= entropy_bias(NewOld::from(n_old - 1, n_old), vol);
+                        actions.push(SpeciationAction::DeactivateAtom {
+                            group_index,
+                            abs_index: abs_idx,
+                        });
+                        group_changes.push((
+                            group_index,
+                            GroupChange::ResizePartial(GroupSize::Shrink(1), vec![rel_idx]),
+                        ));
+                    } else {
+                        let full_groups = context
+                            .group_lists()
+                            .find_molecules(*mol_id, GroupSize::Full)?;
+                        if full_groups.is_empty() {
+                            return None;
+                        }
+                        let &group_index = full_groups.iter().choose(rng)?;
+                        let n_old = full_groups.len();
+                        let n_new = n_old - 1;
+                        ln_bias -= entropy_bias(NewOld::from(n_new, n_old), vol);
+                        actions.push(SpeciationAction::DeactivateGroup(group_index));
+                        group_changes.push((group_index, GroupChange::Resize(GroupSize::Empty)));
                     }
-                    let &group_index = full_groups.iter().choose(rng)?;
-                    let n_old = full_groups.len();
-                    let n_new = n_old - 1;
-                    ln_bias -= entropy_bias(NewOld::from(n_new, n_old), vol);
-
-                    actions.push(SpeciationAction::DeactivateGroup(group_index));
-                    group_changes.push((group_index, GroupChange::Resize(GroupSize::Empty)));
                 }
                 ReactionOp::ActivateMolecule(mol_id) => {
-                    let empty_groups = context
-                        .group_lists()
-                        .find_molecules(*mol_id, GroupSize::Empty)?;
-                    if empty_groups.is_empty() {
-                        return None;
+                    let molecule = &context.topology_ref().moleculekinds()[*mol_id];
+                    if molecule.atomic() {
+                        // Atomic: activate one atom in the mega-group if capacity allows
+                        let group_index = find_atomic_group(context, *mol_id)?;
+                        let group = &context.groups()[group_index];
+                        let n_old = group.len();
+                        if n_old >= group.capacity() {
+                            return None;
+                        }
+                        let rel_idx = n_old; // newly activated slot
+                        ln_bias -= entropy_bias(NewOld::from(n_old + 1, n_old), vol);
+                        let position = random_point_inside(context.cell(), rng);
+                        actions.push(SpeciationAction::ActivateAtom {
+                            group_index,
+                            position,
+                        });
+                        group_changes.push((
+                            group_index,
+                            GroupChange::ResizePartial(GroupSize::Expand(1), vec![rel_idx]),
+                        ));
+                    } else {
+                        let empty_groups = context
+                            .group_lists()
+                            .find_molecules(*mol_id, GroupSize::Empty)?;
+                        if empty_groups.is_empty() {
+                            return None;
+                        }
+                        let &group_index = empty_groups.iter().choose(rng)?;
+
+                        // Count current active groups
+                        let n_old = context
+                            .group_lists()
+                            .find_molecules(*mol_id, GroupSize::Full)
+                            .map_or(0, |gs| gs.len());
+                        let n_new = n_old + 1;
+                        ln_bias -= entropy_bias(NewOld::from(n_new, n_old), vol);
+
+                        let random_pos = random_point_inside(context.cell(), rng);
+                        let group = &context.groups()[group_index];
+                        let num_atoms = group.capacity();
+                        let positions = vec![random_pos; num_atoms];
+
+                        actions.push(SpeciationAction::ActivateGroup {
+                            group_index,
+                            positions,
+                        });
+                        group_changes.push((group_index, GroupChange::Resize(GroupSize::Full)));
                     }
-                    let &group_index = empty_groups.iter().choose(rng)?;
-
-                    // Count current active groups
-                    let n_old = context
-                        .group_lists()
-                        .find_molecules(*mol_id, GroupSize::Full)
-                        .map_or(0, |gs| gs.len());
-                    let n_new = n_old + 1;
-                    ln_bias -= entropy_bias(NewOld::from(n_new, n_old), vol);
-
-                    // Generate random position from bounding box via rejection sampling
-                    let random_pos = random_point_inside(context.cell(), rng);
-                    let group = &context.groups()[group_index];
-                    let num_atoms = group.capacity();
-
-                    // Place all atoms of the molecule at the random position
-                    // (for multi-atom molecules, a proper conformational sampling would be needed)
-                    let positions = vec![random_pos; num_atoms];
-
-                    actions.push(SpeciationAction::ActivateGroup {
-                        group_index,
-                        positions,
-                    });
-                    group_changes.push((group_index, GroupChange::Resize(GroupSize::Full)));
                 }
                 ReactionOp::SwapMolecule {
                     from_mol_id,
@@ -601,17 +652,23 @@ impl SpeciationMove {
                     to_id,
                     molecule_id,
                 } => {
-                    let full_groups = context
-                        .group_lists()
-                        .find_molecules(*molecule_id, GroupSize::Full)?;
-                    if full_groups.is_empty() {
+                    // Collect groups: full + partial (atomic mega-groups are partial)
+                    let gl = context.group_lists();
+                    let full = gl.find_molecules(*molecule_id, GroupSize::Full);
+                    let partial = gl.find_molecules(*molecule_id, GroupSize::Partial(0));
+                    let group_indices: Vec<usize> = full
+                        .into_iter()
+                        .chain(partial)
+                        .flat_map(|s| s.iter().copied())
+                        .collect();
+                    if group_indices.is_empty() {
                         return None;
                     }
 
                     // Count atoms of each type for combinatorial factor
                     let (mut n_from, mut n_to) = (0usize, 0usize);
                     let mut from_atoms: Vec<(usize, usize)> = Vec::new();
-                    for &gi in full_groups {
+                    for &gi in &group_indices {
                         for i in context.groups()[gi].iter_active() {
                             let kind = context.get_atomkind(i);
                             if kind == *from_id {

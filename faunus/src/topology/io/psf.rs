@@ -73,12 +73,19 @@ fn write_atoms(
             resid_counter += 1;
         }
 
-        for (i, &atom_idx) in mol.atom_indices().iter().enumerate() {
+        let n_atoms = if mol.atomic() {
+            group.capacity()
+        } else {
+            mol.atom_indices().len()
+        };
+        for i in 0..n_atoms {
+            let topo_i = mol.topology_index(i);
             atom_index += 1;
+            let atom_idx = mol.atom_indices()[topo_i];
             let atom_kind = &atomkinds[atom_idx];
-            let atom_name = mol.resolved_atom_name(i, atomkinds);
+            let atom_name = mol.resolved_atom_name(topo_i, atomkinds);
             let (resname, resid) =
-                resolve_residue(mol, i, &mut residue_cursor, &mut resid_counter);
+                resolve_residue(mol, topo_i, &mut residue_cursor, &mut resid_counter);
 
             // CHARMM EXT format: (I10,1X,A8,1X,A8,1X,A8,1X,A8,1X,A4,1X,2G14.6,I8)
             writeln!(

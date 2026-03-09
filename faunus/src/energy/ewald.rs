@@ -280,7 +280,9 @@ impl EwaldReciprocalEnergy {
     fn affected_indices(group: &crate::group::Group, gc: &GroupChange) -> Vec<usize> {
         match gc {
             GroupChange::RigidBody => group.iter_active().collect(),
-            GroupChange::PartialUpdate(rel) | GroupChange::UpdateIdentity(rel) => {
+            GroupChange::PartialUpdate(rel)
+            | GroupChange::UpdateIdentity(rel)
+            | GroupChange::ResizePartial(_, rel) => {
                 let offset = group.iter_active().next().unwrap_or(0);
                 rel.iter().map(|&ri| offset + ri).collect()
             }
