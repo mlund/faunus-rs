@@ -165,8 +165,15 @@ pub trait Analyze<T: Context>: Debug + Info {
         Ok(())
     }
 
-    /// Flush output stream, if any, ensuring that all intermediately buffered contents reach their destination.
-    fn flush(&mut self) {}
+    /// Write accumulated results to disk.
+    ///
+    /// Called once at end of simulation. Analyses that append per-sample
+    /// (e.g. energy time series) need only flush; analyses that rewrite
+    /// an entire file (e.g. RDF, binned averages) should do the write here
+    /// instead of in `sample()`.
+    fn write_to_disk(&mut self) -> Result<()> {
+        Ok(())
+    }
 
     /// Return a YAML representation of the analysis results, if any.
     fn to_yaml(&self) -> Option<serde_yaml::Value> {
@@ -211,7 +218,7 @@ impl<T: Context> Analyze<T> for AnalysisCollection<T> {
     fn finalize(&mut self, context: &T) -> Result<()> {
         self.iter_mut().try_for_each(|a| a.finalize(context))
     }
-    fn flush(&mut self) {
-        self.iter_mut().for_each(|a| a.flush())
+    fn write_to_disk(&mut self) -> Result<()> {
+        self.iter_mut().try_for_each(|a| a.write_to_disk())
     }
 }

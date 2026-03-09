@@ -93,7 +93,7 @@ impl MeanAlongCoordinate {
         (index as f64 + 0.5) * self.resolution
     }
 
-    /// Write current averages to file, recreating it each time (same pattern as RDF).
+    /// Write current averages to file, recreating it each time.
     fn write_output(&self) -> Result<()> {
         if self.bins.is_empty() {
             return Ok(());
@@ -137,7 +137,6 @@ impl<T: Context> Analyze<T> for MeanAlongCoordinate {
         self.cv_mean.add(cv_value);
         let idx = self.bin_index(coord_value);
         self.bins.entry(idx).or_default().add(cv_value);
-        self.write_output()?;
         Ok(())
     }
 
@@ -145,8 +144,8 @@ impl<T: Context> Analyze<T> for MeanAlongCoordinate {
         self.cv_mean.len() as usize
     }
 
-    fn flush(&mut self) {
-        let _ = self.write_output();
+    fn write_to_disk(&mut self) -> Result<()> {
+        self.write_output()
     }
 
     fn to_yaml(&self) -> Option<serde_yaml::Value> {

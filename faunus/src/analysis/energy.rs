@@ -138,10 +138,6 @@ impl<T: Context> Analyze<T> for EnergyAnalysis {
         self.num_samples
     }
 
-    fn flush(&mut self) {
-        let _ = self.stream.flush();
-    }
-
     fn to_yaml(&self) -> Option<serde_yaml::Value> {
         if self.num_samples == 0 {
             return None;

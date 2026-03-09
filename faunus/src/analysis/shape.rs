@@ -249,12 +249,6 @@ impl<T: Context> Analyze<T> for ShapeAnalysis {
         self.num_samples
     }
 
-    fn flush(&mut self) {
-        if let Some(ref mut stream) = self.stream {
-            let _ = stream.flush();
-        }
-    }
-
     fn to_yaml(&self) -> Option<serde_yaml::Value> {
         if self.num_samples == 0 {
             return None;

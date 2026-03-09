@@ -337,12 +337,6 @@ impl<T: Context> Analyze<T> for VirtualTranslate {
         self.num_samples
     }
 
-    fn flush(&mut self) {
-        if let Some(ref mut stream) = self.stream {
-            let _ = stream.flush();
-        }
-    }
-
     fn to_yaml(&self) -> Option<serde_yaml::Value> {
         let mut map = serde_yaml::Mapping::new();
         map.insert(

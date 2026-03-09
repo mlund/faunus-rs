@@ -256,7 +256,6 @@ impl<T: Context> Analyze<T> for RadialDistribution {
             self.volume_sum += self.dimension.effective_volume(bbox);
         }
         self.num_samples += 1;
-        self.write_gr()?;
         Ok(())
     }
 
@@ -264,8 +263,8 @@ impl<T: Context> Analyze<T> for RadialDistribution {
         self.num_samples
     }
 
-    fn flush(&mut self) {
-        let _ = self.write_gr();
+    fn write_to_disk(&mut self) -> Result<()> {
+        self.write_gr()
     }
 
     fn to_yaml(&self) -> Option<serde_yaml::Value> {

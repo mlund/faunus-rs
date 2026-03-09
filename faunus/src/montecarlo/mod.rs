@@ -361,9 +361,11 @@ impl<T: Context + 'static> MarkovChain<T> {
         &self.analyses
     }
 
-    /// Run end-of-simulation analyses (e.g. `Trajectory` with `frequency: End`).
+    /// Run end-of-simulation analyses (e.g. `Trajectory` with `frequency: End`)
+    /// and write accumulated results to disk.
     pub fn finalize_analyses(&mut self) -> Result<()> {
-        self.analyses.finalize(&self.context)
+        self.analyses.finalize(&self.context)?;
+        self.analyses.write_to_disk()
     }
 
     /// Run up to `n` propagation cycles (intra-box steps for Gibbs ensemble).
