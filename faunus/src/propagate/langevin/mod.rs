@@ -26,6 +26,11 @@ mod kernels;
 #[cfg(feature = "gpu")]
 use crate::cell::{BoundaryConditions, Shape};
 #[cfg(feature = "gpu")]
+use crate::energy::nonbonded_kernel::{
+    build_cell_list, build_neighbor_cell_table, compute_n_cells_1d,
+    max_cutoff_from_spline_params,
+};
+#[cfg(feature = "gpu")]
 use crate::topology::{DegreesOfFreedom, Topology};
 use crate::Context;
 #[cfg(feature = "gpu")]
@@ -81,6 +86,13 @@ pub struct LangevinConfig {
     pub steps: usize,
     /// Temperature in Kelvin
     pub temperature: f64,
+    /// Cell list rebuild interval (steps). Default: 20.
+    #[serde(default = "default_cell_list_rebuild")]
+    pub cell_list_rebuild: u32,
+}
+
+fn default_cell_list_rebuild() -> u32 {
+    20
 }
 
 /// Pre-computed data for initial state upload.
@@ -185,6 +197,14 @@ struct LangevinGpu<R: Runtime> {
     has_flexible: bool,
     has_rigid: bool,
 
+    // Cell list CSR for O(n·k) neighbor iteration
+    cell_offsets: Handle,
+    cell_atoms: Handle,
+    neighbor_cells: Handle,
+    n_cells_1d: u32,
+    /// Cached max cutoff from spline params (constant, avoids GPU readback)
+    max_cutoff: f32,
+
     // Host-side copies of constant buffers (avoids GPU readbacks in download_temperature)
     mol_is_rigid_host: Vec<u32>,
     mol_masses_host: Vec<f32>,
@@ -265,6 +285,11 @@ impl<R: Runtime> LangevinGpu<R> {
         let atom_masses_buf = client.empty(n_atoms as usize * 4);
         let atom_is_flexible = client.empty(n_atoms as usize * 4);
 
+        // Cell list placeholders (real data uploaded after spline params are available)
+        let cell_offsets = client.empty(4);
+        let cell_atoms = client.empty(4);
+        let neighbor_cells = client.empty(4);
+
         Self {
             client,
             config,
@@ -306,6 +331,11 @@ impl<R: Runtime> LangevinGpu<R> {
             atom_is_flexible,
             has_flexible: false,
             has_rigid: true,
+            cell_offsets,
+            cell_atoms,
+            neighbor_cells,
+            n_cells_1d: 1,
+            max_cutoff: 0.0,
             mol_is_rigid_host: Vec::new(),
             mol_masses_host: Vec::new(),
             mol_inertia_host: Vec::new(),
@@ -362,11 +392,23 @@ impl<R: Runtime> LangevinGpu<R> {
             self.spline_coeffs = self.client.create_from_slice(bytemuck::cast_slice(coeffs));
             self.n_atom_types = data.n_atom_types;
             self.has_gpu_forces = true;
+
+            // Neighbor table is constant (depends only on grid size), so built once here.
+            // The per-step cell_offsets/cell_atoms CSR is rebuilt in rebuild_cell_list().
+            self.max_cutoff = max_cutoff_from_spline_params(params);
+            self.n_cells_1d = compute_n_cells_1d(self.box_length, self.max_cutoff);
+            let nb_table = build_neighbor_cell_table(self.n_cells_1d);
+            self.neighbor_cells = self
+                .client
+                .create_from_slice(bytemuck::cast_slice(&nb_table));
             log::info!(
-                "On-device forces enabled: {} atom types, {} spline params, {} spline coeffs",
+                "On-device forces enabled: {} atom types, {} spline params, {} spline coeffs, \
+                 cell grid {}³ (cutoff={:.2})",
                 data.n_atom_types,
                 params.len() / 8,
                 coeffs.len() / 8,
+                self.n_cells_1d,
+                self.max_cutoff,
             );
         }
 
@@ -445,6 +487,18 @@ impl<R: Runtime> LangevinGpu<R> {
         self.atom_is_flexible_host = data.atom_is_flexible;
     }
 
+    /// Download positions and rebuild the cell list CSR on CPU, then upload.
+    fn rebuild_cell_list(&mut self) {
+        let positions = self.download_positions();
+        let (offsets, atoms) = build_cell_list(&positions, self.box_length, self.n_cells_1d);
+        self.cell_offsets = self
+            .client
+            .create_from_slice(bytemuck::cast_slice(&offsets));
+        self.cell_atoms = self
+            .client
+            .create_from_slice(bytemuck::cast_slice(&atoms));
+    }
+
     /// Run `steps` BAOAB steps with on-device force computation.
     ///
     /// Forces, reduction, integration, and reconstruction all run on the compute
@@ -453,17 +507,24 @@ impl<R: Runtime> LangevinGpu<R> {
     fn run_steps(&mut self, steps: usize) {
         assert!(self.has_gpu_forces, "on-device forces not initialized");
         self.log_first_step();
+        let rebuild_interval = self.config.cell_list_rebuild;
 
-        // Nonbonded writes atom_forces (=), then bonded accumulates (+=),
-        // then reduce sums rigid per-atom forces into per-molecule COM forces and torques.
+        // Initial cell list required before first force evaluation
+        self.rebuild_cell_list();
         self.dispatch_pair_forces();
         self.dispatch_bonded_forces();
         self.dispatch_reduce();
 
-        for _ in 0..steps {
+        for step in 0..steps as u32 {
             self.dispatch_baoab();
             self.dispatch_baoab_atoms();
             self.dispatch_reconstruct();
+
+            // Periodic rebuild keeps cell list valid as particles diffuse;
+            // costs one GPU sync per rebuild (~0.1ms) vs force computation
+            if rebuild_interval > 0 && (step + 1) % rebuild_interval == 0 {
+                self.rebuild_cell_list();
+            }
 
             self.dispatch_pair_forces();
             self.dispatch_bonded_forces();
@@ -521,6 +582,7 @@ impl<R: Runtime> LangevinGpu<R> {
         let inv_box = 1.0f32 / self.box_length;
         // CubeCL requires non-zero array length; clamp to 1 when CSR is empty
         let n_excl_atoms = (self.excl_atoms.size() as usize / 4).max(1);
+        let n3 = (self.n_cells_1d * self.n_cells_1d * self.n_cells_1d) as usize;
 
         unsafe {
             crate::energy::nonbonded_kernel::pair_forces_kernel::launch_unchecked::<R>(
@@ -543,11 +605,19 @@ impl<R: Runtime> LangevinGpu<R> {
                 ArrayArg::from_raw_parts::<u32>(&self.excl_offsets, self.n_atoms as usize + 1, 1),
                 ArrayArg::from_raw_parts::<u32>(&self.excl_atoms, n_excl_atoms, 1),
                 ArrayArg::from_raw_parts::<u32>(&self.mol_is_rigid, self.n_molecules as usize, 1),
+                ArrayArg::from_raw_parts::<u32>(&self.cell_offsets, n3 + 1, 1),
+                ArrayArg::from_raw_parts::<u32>(
+                    &self.cell_atoms,
+                    self.n_atoms as usize,
+                    1,
+                ),
+                ArrayArg::from_raw_parts::<u32>(&self.neighbor_cells, n3 * 27, 1),
                 ArrayArg::from_raw_parts::<f32>(&self.atom_forces, self.n_atoms as usize * 4, 1),
                 ScalarArg::new(self.n_atoms),
                 ScalarArg::new(self.n_atom_types),
                 ScalarArg::new(self.box_length),
                 ScalarArg::new(inv_box),
+                ScalarArg::new(self.n_cells_1d),
             )
         }
         .expect("pair_forces launch failed");
@@ -1477,7 +1547,9 @@ impl LangevinRunner {
         (bonds, angles, dihedrals)
     }
 
-    /// Upload positions, COM, and quaternions from context to device.
+    /// Upload positions, COM, quaternions, and box length from context to device.
+    ///
+    /// Box length must be synced because NPT volume moves can change it between LD blocks.
     #[cfg(feature = "gpu")]
     fn upload_context_state<T: Context>(
         context: &T,
@@ -1486,6 +1558,29 @@ impl LangevinRunner {
         let positions = pack_positions_f32(context);
         let (com_positions, quaternions) = pack_com_and_quaternions(context);
         gpu.upload_positions_com_quaternions(&positions, &com_positions, &quaternions);
+
+        // Sync box length (may have changed via NPT volume moves)
+        if let Some(bb) = context.cell().bounding_box() {
+            let new_box = bb.x as f32;
+            if (new_box - gpu.box_length).abs() > f32::EPSILON {
+                gpu.box_length = new_box;
+                if gpu.has_gpu_forces {
+                    let new_n = compute_n_cells_1d(gpu.box_length, gpu.max_cutoff);
+                    if new_n != gpu.n_cells_1d {
+                        gpu.n_cells_1d = new_n;
+                        let nb_table = build_neighbor_cell_table(gpu.n_cells_1d);
+                        gpu.neighbor_cells = gpu
+                            .client
+                            .create_from_slice(bytemuck::cast_slice(&nb_table));
+                    }
+                    log::debug!(
+                        "Box length changed to {:.4}, cell grid {}³",
+                        gpu.box_length,
+                        gpu.n_cells_1d,
+                    );
+                }
+            }
+        }
     }
 
     #[cfg(feature = "gpu")]
@@ -1508,6 +1603,10 @@ impl LangevinRunner {
         map.insert("friction".into(), self.config.friction.into());
         map.insert("steps".into(), self.config.steps.into());
         map.insert("temperature".into(), self.config.temperature.into());
+        map.insert(
+            "cell_list_rebuild".into(),
+            self.config.cell_list_rebuild.into(),
+        );
         map.insert(
             "elapsed_seconds".into(),
             serde_yaml::Value::Number(serde_yaml::Number::from(self.elapsed.as_secs_f64())),

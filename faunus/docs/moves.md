@@ -562,6 +562,10 @@ updated positions and orientations are downloaded back.
 
 Pair interactions are evaluated on-device using cubic spline interpolation of the
 tabulated pair potentials (see `energy.spline` in [Energy](energy.md)).
+A cell list reduces pairwise force evaluation from $O(n^2)$ to $O(n \cdot k)$
+where $k$ is the number of atoms in neighboring cells.
+The cell list is built on the CPU from periodically downloaded positions
+and uploaded as a CSR structure; the rebuild interval is configurable.
 Intramolecular bonded forces (harmonic bonds, harmonic angles, and periodic/harmonic
 dihedrals) are also computed on-device when present in the topology.
 
@@ -651,12 +655,13 @@ propagate:
 
 ### Options
 
-Key           | Required | Default | Description
-------------- | -------- | ------- | -------------------------------------------
-`timestep`    | yes      |         | Integration timestep (ps)
-`friction`    | yes      |         | Friction coefficient (1/ps)
-`steps`       | yes      |         | Number of LD steps per block
-`temperature` | yes      |         | Target temperature (K)
+Key                  | Required | Default | Description
+-------------------- | -------- | ------- | -------------------------------------------
+`timestep`           | yes      |         | Integration timestep (ps)
+`friction`           | yes      |         | Friction coefficient (1/ps)
+`steps`              | yes      |         | Number of LD steps per block
+`temperature`        | yes      |         | Target temperature (K)
+`cell_list_rebuild`  | no       | 20      | Cell list rebuild interval (steps; 0 = only at start)
 
 ### Output
 
