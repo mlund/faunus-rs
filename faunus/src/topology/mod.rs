@@ -74,7 +74,7 @@ pub(crate) use self::block::{InsertionPolicy, MoleculeBlock};
 pub use self::molecule::{MoleculeKind, MoleculeKindBuilder};
 
 /// Trait implemented by collections of atoms that should not overlap (e.g., residues, chains).
-pub(super) trait IndexRange {
+pub(crate) trait IndexRange {
     /// Get the indices of atoms in the collection.
     fn range(&self) -> Range<usize>;
 
@@ -214,7 +214,7 @@ fn collections_validate() {
 }
 
 /// Trait implemented by collections where atoms are provided as indices (e.g., bonds, torsions, dihedrals)
-pub(super) trait Indexed {
+pub(crate) trait Indexed {
     /// Get indices of atoms forming the collection.
     fn index(&self) -> &[usize];
 

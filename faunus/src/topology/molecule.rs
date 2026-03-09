@@ -161,6 +161,15 @@ impl MoleculeKind {
         !self.bonds.is_empty() || !self.torsions.is_empty() || !self.dihedrals.is_empty()
     }
 
+    /// Resolve the effective name for atom at relative index `i`.
+    ///
+    /// Returns the molecule-level override if set, otherwise falls back to the atom kind name.
+    pub fn resolved_atom_name<'a>(&'a self, i: usize, atomkinds: &'a [super::AtomKind]) -> &'a str {
+        self.atom_names[i]
+            .as_deref()
+            .unwrap_or_else(|| atomkinds[self.atom_indices[i]].name())
+    }
+
     pub const fn has_com(&self) -> bool {
         self.has_com
     }

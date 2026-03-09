@@ -1,9 +1,10 @@
 use super::{Analyze, Frequency};
 use crate::cell::Shape;
-use crate::topology::io::{self, StructureData};
+use crate::topology::io::{self, psf, StructureData};
 use crate::Context;
 use derive_builder::Builder;
 use serde::{Deserialize, Serialize};
+use std::path::Path;
 
 /// Writes structure of the system in the specified format during the simulation.
 #[derive(Debug, Builder)]
@@ -55,11 +56,8 @@ impl StructureWriter {
 
         for group in context.groups().iter() {
             let molecule = &topology.moleculekinds()[group.molecule()];
-            for (i, &atom_idx) in molecule.atom_indices().iter().enumerate() {
-                let atom_name = molecule.atom_names()[i]
-                    .as_deref()
-                    .unwrap_or_else(|| topology.atomkinds()[atom_idx].name());
-                names.push(atom_name.to_string());
+            for i in 0..molecule.atom_indices().len() {
+                names.push(molecule.resolved_atom_name(i, topology.atomkinds()).to_string());
                 positions.push(particles[i + group.start()].pos);
             }
         }
@@ -122,6 +120,17 @@ impl<T: Context> Analyze<T> for StructureWriter {
     fn finalize(&mut self, context: &T) -> anyhow::Result<()> {
         if self.frequency.should_perform_at_end() {
             self.write_frame(context, self.num_samples)?;
+        }
+        if self.num_samples > 0 {
+            let base = Path::new(&self.output_file);
+            let topology = context.topology();
+            let psf_path = base.with_extension("psf");
+            psf::write_psf(&psf_path, &topology, context.groups())?;
+            let tcl_path = base.with_extension("tcl");
+            let psf_name = psf_path.file_name().and_then(|n| n.to_str()).unwrap_or("traj.psf");
+            let traj_name = base.file_name().and_then(|n| n.to_str()).unwrap_or(&self.output_file);
+            psf::write_vmd_script(&tcl_path, &topology, psf_name, traj_name)?;
+            log::info!("VMD visualization: vmd -e {}", tcl_path.display());
         }
         Ok(())
     }

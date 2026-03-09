@@ -19,6 +19,7 @@
 
 #[cfg(feature = "chemfiles")]
 mod chemfiles_io;
+pub(crate) mod psf;
 mod xtc;
 mod xyz;
 

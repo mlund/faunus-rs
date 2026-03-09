@@ -156,6 +156,49 @@ Selections resolve at the atom level, so atom-type filters
 When both selections resolve to the same atoms, self-pairs and
 duplicates are automatically excluded.
 
+## Trajectory
+
+Writes particle coordinates to a trajectory file at each sampled step.
+The format is auto-detected from the file extension (`.xyz`, `.xtc`, or
+other formats via the `chemfiles` feature).
+
+On finalization a companion PSF topology file and a VMD scene script are
+written alongside the trajectory. The PSF contains atoms, bonds, angles,
+and dihedrals; the Tcl script loads the PSF and trajectory, sets VDW radii
+from sigma values, and draws the periodic box.
+
+### Example
+
+```yaml
+analysis:
+  - !Trajectory
+    file: traj.xtc
+    frequency: !Every 100
+```
+
+After the simulation, visualize with:
+
+```sh
+vmd -e traj.tcl
+```
+
+### Options
+
+Key         | Required | Default | Description
+----------- | -------- | ------- | -------------------------------------------
+`file`      | yes      |         | Output file path (`.xyz`, `.xtc`, etc.)
+`frequency` | yes      |         | Sample frequency, e.g. `!Every 100` or `!End`
+
+### Output files
+
+Given `file: traj.xtc`, the following files are produced:
+
+File        | Description
+----------- | -------------------------------------------
+`traj.xtc`  | Trajectory (coordinates per frame)
+`traj.psf`  | X-PLOR PSF topology (atoms, bonds, angles, dihedrals, charges, masses)
+`traj.tcl`  | VMD scene script (`vmd -e traj.tcl` loads everything)
+
 ## Radial Distribution Function
 
 Computes the radial distribution function g(r) for pairs of particles or
