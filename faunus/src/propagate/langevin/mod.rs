@@ -12,19 +12,21 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
-//! Rigid-body Langevin dynamics via CubeCL.
+//! Mixed rigid-body + per-atom Langevin dynamics via CubeCL.
 //!
 //! Orchestrates the BAOAB integration pipeline on the compute device:
-//! 1. Compute per-atom pairwise forces (spline kernel)
-//! 2. Reduce to per-molecule COM forces and torques
-//! 3. BAOAB integrator step
-//! 4. Reconstruct atom positions from COM + quaternion
+//! 1. Compute per-atom pairwise and bonded forces
+//! 2. Reduce rigid-molecule forces to COM forces and torques
+//! 3. BAOAB integrator: rigid (COM+quaternion) and flexible (per-atom) paths
+//! 4. Reconstruct rigid-body atom positions from COM + quaternion
 
 #[cfg(feature = "gpu")]
 mod kernels;
 
 #[cfg(feature = "gpu")]
 use crate::cell::{BoundaryConditions, Shape};
+#[cfg(feature = "gpu")]
+use crate::topology::{DegreesOfFreedom, Topology};
 use crate::Context;
 #[cfg(feature = "gpu")]
 use average::Estimate;
@@ -41,6 +43,15 @@ use std::marker::PhantomData;
 
 #[cfg(feature = "gpu")]
 const WORKGROUP_SIZE: u32 = 64;
+
+/// Atom mass from topology, falling back to 1.0 for out-of-range indices.
+#[cfg(feature = "gpu")]
+fn atom_mass(topology: &Topology, atom_indices: &[usize], idx: usize) -> f32 {
+    atom_indices
+        .get(idx)
+        .map(|&ai| topology.atomkinds()[ai].mass() as f32)
+        .unwrap_or(1.0)
+}
 
 /// GPU spline data extracted from the Hamiltonian: (atom_type_ids, mol_ids, params, coeffs, n_types).
 #[cfg(feature = "gpu")]
@@ -101,6 +112,16 @@ struct LangevinUploadData {
     angle_data: Option<crate::energy::bonded::kernel::CsrData>,
     /// CSR dihedral data.
     dihedral_data: Option<crate::energy::bonded::kernel::CsrData>,
+    /// Per-molecule flag: 1 = rigid-body integration, 0 = per-atom or frozen.
+    mol_is_rigid: Vec<u32>,
+    /// Per-atom velocities for flexible atoms (stride 3: vx, vy, vz).
+    atom_velocities: Vec<f32>,
+    /// Per-atom masses for flexible integration.
+    atom_masses: Vec<f32>,
+    /// Per-atom flag: 1 = flexible (per-atom BAOAB), 0 = rigid or frozen.
+    atom_is_flexible: Vec<u32>,
+    /// Whether any flexible atoms exist.
+    has_flexible: bool,
 }
 
 /// CubeCL-based Langevin dynamics pipeline, generic over runtime backend.
@@ -146,6 +167,21 @@ struct LangevinGpu<R: Runtime> {
     dihedral_params: Handle,
     has_dihedrals: bool,
 
+    // Per-atom flexible integration buffers
+    mol_is_rigid: Handle,
+    atom_velocities: Handle,
+    atom_masses_buf: Handle,
+    atom_is_flexible: Handle,
+    has_flexible: bool,
+    has_rigid: bool,
+
+    // Host-side copies of constant buffers (avoids GPU readbacks in download_temperature)
+    mol_is_rigid_host: Vec<u32>,
+    mol_masses_host: Vec<f32>,
+    mol_inertia_host: Vec<f32>,
+    atom_masses_host: Vec<f32>,
+    atom_is_flexible_host: Vec<u32>,
+
     n_atoms: u32,
     n_molecules: u32,
     box_length: f32,
@@ -161,6 +197,7 @@ impl<R: Runtime> std::fmt::Debug for LangevinGpu<R> {
             .field("n_atoms", &self.n_atoms)
             .field("n_molecules", &self.n_molecules)
             .field("has_gpu_forces", &self.has_gpu_forces)
+            .field("has_flexible", &self.has_flexible)
             .field("config", &self.config)
             .finish_non_exhaustive()
     }
@@ -208,6 +245,12 @@ impl<R: Runtime> LangevinGpu<R> {
         let dihedral_atoms = client.empty(4);
         let dihedral_params = client.empty(4);
 
+        // Placeholders for flexible integration buffers
+        let mol_is_rigid = client.empty(n_molecules as usize * 4);
+        let atom_velocities = client.empty(n_atoms as usize * 3 * 4);
+        let atom_masses_buf = client.empty(n_atoms as usize * 4);
+        let atom_is_flexible = client.empty(n_atoms as usize * 4);
+
         Self {
             client,
             config,
@@ -241,6 +284,17 @@ impl<R: Runtime> LangevinGpu<R> {
             dihedral_atoms,
             dihedral_params,
             has_dihedrals: false,
+            mol_is_rigid,
+            atom_velocities,
+            atom_masses_buf,
+            atom_is_flexible,
+            has_flexible: false,
+            has_rigid: true,
+            mol_is_rigid_host: Vec::new(),
+            mol_masses_host: Vec::new(),
+            mol_inertia_host: Vec::new(),
+            atom_masses_host: Vec::new(),
+            atom_is_flexible_host: Vec::new(),
             n_atoms,
             n_molecules,
             box_length,
@@ -250,7 +304,7 @@ impl<R: Runtime> LangevinGpu<R> {
         }
     }
 
-    fn upload_state(&mut self, data: &LangevinUploadData) {
+    fn upload_state(&mut self, data: LangevinUploadData) {
         self.positions = self
             .client
             .create_from_slice(bytemuck::cast_slice(&data.positions));
@@ -329,24 +383,59 @@ impl<R: Runtime> LangevinGpu<R> {
             self.has_dihedrals = true;
             log::info!("On-device dihedral forces: {} entries", csr.atoms.len() / 3);
         }
+
+        // Upload rigid/flexible classification and per-atom integration buffers
+        self.mol_is_rigid = self
+            .client
+            .create_from_slice(bytemuck::cast_slice(&data.mol_is_rigid));
+        self.atom_is_flexible = self
+            .client
+            .create_from_slice(bytemuck::cast_slice(&data.atom_is_flexible));
+        self.atom_masses_buf = self
+            .client
+            .create_from_slice(bytemuck::cast_slice(&data.atom_masses));
+        self.atom_velocities = self
+            .client
+            .create_from_slice(bytemuck::cast_slice(&data.atom_velocities));
+        self.has_flexible = data.has_flexible;
+
+        let n_rigid = data.mol_is_rigid.iter().filter(|&&r| r != 0).count();
+        self.has_rigid = n_rigid > 0;
+
+        let n_flex_atoms = data.atom_is_flexible.iter().filter(|&&f| f != 0).count();
+        let n_mol = data.mol_is_rigid.len();
+        log::info!(
+            "Molecule classification: {n_rigid} rigid, {} flexible/frozen ({n_flex_atoms} flexible atoms)",
+            n_mol - n_rigid,
+        );
+
+        // Cache constant buffers on host to avoid GPU readbacks in download_temperature.
+        // Moved (not cloned) since upload_state consumes the data.
+        self.mol_is_rigid_host = data.mol_is_rigid;
+        self.mol_masses_host = data.mol_masses;
+        self.mol_inertia_host = data.mol_inertia;
+        self.atom_masses_host = data.atom_masses;
+        self.atom_is_flexible_host = data.atom_is_flexible;
     }
 
     /// Run `steps` BAOAB steps with on-device force computation.
     ///
     /// Forces, reduction, integration, and reconstruction all run on the compute
     /// device without any host readback during the integration loop.
+    /// Rigid and flexible integration paths operate on disjoint atom ranges.
     fn run_steps(&mut self, steps: usize) {
         assert!(self.has_gpu_forces, "on-device forces not initialized");
         self.log_first_step();
 
         // Nonbonded writes atom_forces (=), then bonded accumulates (+=),
-        // then reduce sums per-atom forces into per-molecule COM forces and torques.
+        // then reduce sums rigid per-atom forces into per-molecule COM forces and torques.
         self.dispatch_pair_forces();
         self.dispatch_bonded_forces();
         self.dispatch_reduce();
 
         for _ in 0..steps {
             self.dispatch_baoab();
+            self.dispatch_baoab_atoms();
             self.dispatch_reconstruct();
 
             self.dispatch_pair_forces();
@@ -354,6 +443,7 @@ impl<R: Runtime> LangevinGpu<R> {
             self.dispatch_reduce();
 
             self.dispatch_half_kick();
+            self.dispatch_half_kick_atoms();
             self.step_counter += 1;
         }
 
@@ -362,6 +452,9 @@ impl<R: Runtime> LangevinGpu<R> {
     }
 
     /// Run `steps` BAOAB steps with CPU-computed forces from a callback.
+    ///
+    /// CPU forces path provides COM forces/torques directly; flexible atoms
+    /// are not supported in this path (requires on-device forces).
     fn run_steps_with_cpu_forces(&mut self, steps: usize, compute_forces: ForceCallback<'_>) {
         self.log_first_step();
 
@@ -551,6 +644,7 @@ impl<R: Runtime> LangevinGpu<R> {
                 ),
                 ArrayArg::from_raw_parts::<f32>(&self.com_forces, self.n_molecules as usize * 4, 1),
                 ArrayArg::from_raw_parts::<f32>(&self.torques, self.n_molecules as usize * 4, 1),
+                ArrayArg::from_raw_parts::<u32>(&self.mol_is_rigid, self.n_molecules as usize, 1),
                 ScalarArg::new(self.n_molecules),
                 ScalarArg::new(self.box_length),
                 ScalarArg::new(inv_box),
@@ -560,6 +654,9 @@ impl<R: Runtime> LangevinGpu<R> {
     }
 
     fn dispatch_baoab(&self) {
+        if !self.has_rigid {
+            return;
+        }
         let count = CubeCount::Static(self.n_molecules.div_ceil(WORKGROUP_SIZE), 1, 1);
         let dim = CubeDim::new_1d(WORKGROUP_SIZE);
 
@@ -596,6 +693,7 @@ impl<R: Runtime> LangevinGpu<R> {
                     self.n_molecules as usize * 4,
                     1,
                 ),
+                ArrayArg::from_raw_parts::<u32>(&self.mol_is_rigid, self.n_molecules as usize, 1),
                 ScalarArg::new(self.n_molecules),
                 ScalarArg::new(self.config.timestep as f32),
                 ScalarArg::new(self.config.friction as f32),
@@ -609,6 +707,9 @@ impl<R: Runtime> LangevinGpu<R> {
     }
 
     fn dispatch_reconstruct(&self) {
+        if !self.has_rigid {
+            return;
+        }
         let count = CubeCount::Static(self.n_atoms.div_ceil(WORKGROUP_SIZE), 1, 1);
         let dim = CubeDim::new_1d(WORKGROUP_SIZE);
 
@@ -634,6 +735,7 @@ impl<R: Runtime> LangevinGpu<R> {
                     self.n_molecules as usize + 1,
                     1,
                 ),
+                ArrayArg::from_raw_parts::<u32>(&self.mol_is_rigid, self.n_molecules as usize, 1),
                 ScalarArg::new(self.n_atoms),
                 ScalarArg::new(self.n_molecules),
             )
@@ -642,6 +744,9 @@ impl<R: Runtime> LangevinGpu<R> {
     }
 
     fn dispatch_half_kick(&self) {
+        if !self.has_rigid {
+            return;
+        }
         let count = CubeCount::Static(self.n_molecules.div_ceil(WORKGROUP_SIZE), 1, 1);
         let dim = CubeDim::new_1d(WORKGROUP_SIZE);
 
@@ -673,11 +778,74 @@ impl<R: Runtime> LangevinGpu<R> {
                     self.n_molecules as usize * 4,
                     1,
                 ),
+                ArrayArg::from_raw_parts::<u32>(&self.mol_is_rigid, self.n_molecules as usize, 1),
                 ScalarArg::new(self.n_molecules),
                 ScalarArg::new(self.config.timestep as f32),
             )
         }
         .expect("half_kick launch failed");
+    }
+
+    /// Dispatch per-atom BAOAB step for flexible atoms.
+    fn dispatch_baoab_atoms(&self) {
+        if !self.has_flexible {
+            return;
+        }
+        let count = CubeCount::Static(self.n_atoms.div_ceil(WORKGROUP_SIZE), 1, 1);
+        let dim = CubeDim::new_1d(WORKGROUP_SIZE);
+
+        unsafe {
+            kernels::baoab_atom_step::launch_unchecked::<R>(
+                &self.client,
+                count,
+                dim,
+                ArrayArg::from_raw_parts::<f32>(&self.positions, self.n_atoms as usize * 4, 1),
+                ArrayArg::from_raw_parts::<f32>(
+                    &self.atom_velocities,
+                    self.n_atoms as usize * 3,
+                    1,
+                ),
+                ArrayArg::from_raw_parts::<f32>(&self.atom_forces, self.n_atoms as usize * 4, 1),
+                ArrayArg::from_raw_parts::<f32>(&self.atom_masses_buf, self.n_atoms as usize, 1),
+                ArrayArg::from_raw_parts::<u32>(&self.atom_is_flexible, self.n_atoms as usize, 1),
+                ScalarArg::new(self.n_atoms),
+                ScalarArg::new(self.config.timestep as f32),
+                ScalarArg::new(self.config.friction as f32),
+                ScalarArg::new(self.kt),
+                ScalarArg::new(0xDEAD_BEEFu32),
+                ScalarArg::new(self.step_counter),
+                ScalarArg::new(self.box_length),
+            )
+        }
+        .expect("baoab_atom_step launch failed");
+    }
+
+    /// Dispatch closing B half-kick for flexible atoms.
+    fn dispatch_half_kick_atoms(&self) {
+        if !self.has_flexible {
+            return;
+        }
+        let count = CubeCount::Static(self.n_atoms.div_ceil(WORKGROUP_SIZE), 1, 1);
+        let dim = CubeDim::new_1d(WORKGROUP_SIZE);
+
+        unsafe {
+            kernels::half_kick_atoms::launch_unchecked::<R>(
+                &self.client,
+                count,
+                dim,
+                ArrayArg::from_raw_parts::<f32>(
+                    &self.atom_velocities,
+                    self.n_atoms as usize * 3,
+                    1,
+                ),
+                ArrayArg::from_raw_parts::<f32>(&self.atom_forces, self.n_atoms as usize * 4, 1),
+                ArrayArg::from_raw_parts::<f32>(&self.atom_masses_buf, self.n_atoms as usize, 1),
+                ArrayArg::from_raw_parts::<u32>(&self.atom_is_flexible, self.n_atoms as usize, 1),
+                ScalarArg::new(self.n_atoms),
+                ScalarArg::new(self.config.timestep as f32),
+            )
+        }
+        .expect("half_kick_atoms launch failed");
     }
 
     // ========================================================================
@@ -724,32 +892,73 @@ impl<R: Runtime> LangevinGpu<R> {
             .create_from_slice(bytemuck::cast_slice(quaternions));
     }
 
+    /// Compute translational and rotational temperatures from device velocities.
+    ///
+    /// Uses host-cached copies of constant buffers (masses, inertia, flags)
+    /// to avoid unnecessary GPU readbacks — only velocities are downloaded.
     fn download_temperature(&self) -> (f32, f32) {
         let n = self.n_molecules as usize;
+
+        // Only download velocities (which change every step)
         let vel = self.readback_vec4(&self.com_velocities, n);
         let omega = self.readback_vec4(&self.angular_velocities, n);
-        let masses = self.readback_f32(&self.mol_masses, n);
-        let inertia = self.readback_vec4(&self.mol_inertia, n);
 
-        let ke_trans: f32 = vel
+        // Rigid-body translational + rotational KE from host-cached constants
+        let mut ke_trans: f32 = 0.0;
+        let mut dof_trans: f32 = 0.0;
+        let mut ke_rot: f32 = 0.0;
+        let mut dof_rot: f32 = 0.0;
+        for ((((&is_rigid, &mass), &v), &w), inertia) in self
+            .mol_is_rigid_host
             .iter()
-            .zip(&masses)
-            .map(|([vx, vy, vz, _], m)| 0.5 * m * (vx * vx + vy * vy + vz * vz))
-            .sum();
+            .zip(&self.mol_masses_host)
+            .zip(&vel)
+            .zip(&omega)
+            .zip(self.mol_inertia_host.chunks_exact(4))
+        {
+            if is_rigid != 0 {
+                let [vx, vy, vz, _] = v;
+                ke_trans += 0.5 * mass * (vx * vx + vy * vy + vz * vz);
+                dof_trans += 3.0;
 
-        let ke_rot: f32 = omega
-            .iter()
-            .zip(&inertia)
-            .map(|([wx, wy, wz, _], [ix, iy, iz, _])| {
-                0.5 * (ix * wx * wx + iy * wy * wy + iz * wz * wz)
-            })
-            .sum();
+                let [wx, wy, wz, _] = w;
+                ke_rot +=
+                    0.5 * (inertia[0] * wx * wx + inertia[1] * wy * wy + inertia[2] * wz * wz);
+                dof_rot += 3.0;
+            }
+        }
+
+        // Flexible per-atom translational KE
+        if self.has_flexible {
+            let n_at = self.n_atoms as usize;
+            let atom_vel = self.readback_f32(&self.atom_velocities, n_at * 3);
+
+            for ((&is_flex, &mass), v) in self
+                .atom_is_flexible_host
+                .iter()
+                .zip(&self.atom_masses_host)
+                .zip(atom_vel.chunks_exact(3))
+            {
+                if is_flex != 0 {
+                    let (vx, vy, vz) = (v[0], v[1], v[2]);
+                    ke_trans += 0.5 * mass * (vx * vx + vy * vy + vz * vz);
+                    dof_trans += 3.0;
+                }
+            }
+        }
 
         const R_KJ_PER_MOL_K: f32 = physical_constants::MOLAR_GAS_CONSTANT as f32 * 1e-3;
         const KJ_MOL_TO_INTERNAL: f32 = 100.0;
-        let dof = 3.0 * n as f32;
-        let t_trans = 2.0 * ke_trans / (KJ_MOL_TO_INTERNAL * dof * R_KJ_PER_MOL_K);
-        let t_rot = 2.0 * ke_rot / (KJ_MOL_TO_INTERNAL * dof * R_KJ_PER_MOL_K);
+        let t_trans = if dof_trans > 0.0 {
+            2.0 * ke_trans / (KJ_MOL_TO_INTERNAL * dof_trans * R_KJ_PER_MOL_K)
+        } else {
+            0.0
+        };
+        let t_rot = if dof_rot > 0.0 {
+            2.0 * ke_rot / (KJ_MOL_TO_INTERNAL * dof_rot * R_KJ_PER_MOL_K)
+        } else {
+            0.0
+        };
         (t_trans, t_rot)
     }
 
@@ -869,10 +1078,13 @@ impl LangevinRunner {
 
         Self::write_positions(context, &positions);
 
-        // LD->MC: download quaternions and write to groups
+        // LD->MC: download quaternions and write to rigid groups only
         let gpu_quats = gpu.download_quaternions();
-        for (group, q) in context.groups_mut().iter_mut().zip(&gpu_quats) {
-            group.set_quaternion(gpu_to_quat(q));
+        let mol_is_rigid = &gpu.mol_is_rigid_host;
+        for (i, (group, q)) in context.groups_mut().iter_mut().zip(&gpu_quats).enumerate() {
+            if mol_is_rigid[i] != 0 {
+                group.set_quaternion(gpu_to_quat(q));
+            }
         }
 
         // Recompute mass centers for all groups
@@ -976,11 +1188,7 @@ impl LangevinRunner {
             let mut iyy = 0.0f64;
             let mut izz = 0.0f64;
             for idx in 0..group.len() {
-                let m = if idx < atom_indices.len() {
-                    topology.atomkinds()[atom_indices[idx]].mass()
-                } else {
-                    1.0
-                };
+                let m = atom_mass(&topology, atom_indices, idx) as f64;
                 total_mass += m;
                 let rx = ref_positions[ref_offset] as f64;
                 let ry = ref_positions[ref_offset + 1] as f64;
@@ -1000,44 +1208,98 @@ impl LangevinRunner {
             .flat_map(|g| quat_to_gpu(g.quaternion()))
             .collect();
 
+        // Classify molecules: Rigid|RigidAlchemical → rigid, Free → per-atom, Frozen → skip
+        let mol_is_rigid: Vec<u32> = groups
+            .iter()
+            .map(|g| {
+                u32::from(
+                    topology.moleculekinds()[g.molecule()]
+                        .degrees_of_freedom()
+                        .is_rigid(),
+                )
+            })
+            .collect();
+
+        // Per-atom flexible flag and masses (Free molecules get flexible atoms)
+        let mut atom_is_flexible = Vec::with_capacity(n);
+        let mut atom_masses_vec = Vec::with_capacity(n);
+        for group in groups {
+            let mol_kind = &topology.moleculekinds()[group.molecule()];
+            let is_free = u32::from(matches!(
+                mol_kind.degrees_of_freedom(),
+                DegreesOfFreedom::Free
+            ));
+            let atom_indices = mol_kind.atom_indices();
+            for idx in 0..group.len() {
+                atom_is_flexible.push(is_free);
+                atom_masses_vec.push(atom_mass(&topology, atom_indices, idx));
+            }
+        }
+        let has_flexible = atom_is_flexible.iter().any(|&f| f != 0);
+
         // Maxwell-Boltzmann velocities: sigma = sqrt(kT * 100 / M) in A/ps
         let kt = gpu.kt as f64;
         let conv = 100.0; // kJ/mol -> amu*A^2/ps^2
         let mut rng = rand::thread_rng();
-        let gauss = |rng: &mut rand::rngs::ThreadRng| -> f64 {
+        // Generate a single MB velocity component: v ~ N(0, sqrt(kT*conv/mass))
+        let mut mb_velocity = |mass: f64| -> f32 {
             let u1: f64 = rng.gen::<f64>().max(1e-30);
             let u2: f64 = rng.gen();
-            (-2.0 * u1.ln()).sqrt() * (std::f64::consts::TAU * u2).cos()
+            let gauss = (-2.0 * u1.ln()).sqrt() * (std::f64::consts::TAU * u2).cos();
+            let sigma = if mass > 0.0 {
+                ((kt * conv) / mass).sqrt()
+            } else {
+                0.0
+            };
+            (sigma * gauss) as f32
         };
 
+        // Rigid COM velocities (zeros for non-rigid)
         let mut com_velocities = Vec::with_capacity(n_mol * 4);
-        for &mass in &mol_masses {
-            let sigma = ((kt * conv) / mass as f64).sqrt();
-            com_velocities.push((sigma * gauss(&mut rng)) as f32);
-            com_velocities.push((sigma * gauss(&mut rng)) as f32);
-            com_velocities.push((sigma * gauss(&mut rng)) as f32);
+        for (&is_rigid, &mass) in mol_is_rigid.iter().zip(&mol_masses) {
+            if is_rigid != 0 {
+                com_velocities.extend_from_slice(&[
+                    mb_velocity(mass as f64),
+                    mb_velocity(mass as f64),
+                    mb_velocity(mass as f64),
+                ]);
+            } else {
+                com_velocities.extend_from_slice(&[0.0, 0.0, 0.0]);
+            }
             com_velocities.push(0.0f32);
         }
 
         let mut angular_velocities = Vec::with_capacity(n_mol * 4);
-        for m_idx in 0..n_mol {
-            let sigma_from_inertia = |i: f64| -> f64 {
-                if i > 0.0 {
-                    ((kt * conv) / i).sqrt()
-                } else {
-                    0.0
-                }
-            };
-            let sx = sigma_from_inertia(mol_inertia[m_idx * 4] as f64);
-            let sy = sigma_from_inertia(mol_inertia[m_idx * 4 + 1] as f64);
-            let sz = sigma_from_inertia(mol_inertia[m_idx * 4 + 2] as f64);
-            angular_velocities.push((sx * gauss(&mut rng)) as f32);
-            angular_velocities.push((sy * gauss(&mut rng)) as f32);
-            angular_velocities.push((sz * gauss(&mut rng)) as f32);
+        for (m_idx, &is_rigid) in mol_is_rigid.iter().enumerate() {
+            if is_rigid != 0 {
+                let base = m_idx * 4;
+                angular_velocities.extend_from_slice(&[
+                    mb_velocity(mol_inertia[base] as f64),
+                    mb_velocity(mol_inertia[base + 1] as f64),
+                    mb_velocity(mol_inertia[base + 2] as f64),
+                ]);
+            } else {
+                angular_velocities.extend_from_slice(&[0.0, 0.0, 0.0]);
+            }
             angular_velocities.push(0.0f32);
         }
 
-        gpu.upload_state(&LangevinUploadData {
+        // Per-atom velocities (Maxwell-Boltzmann for flexible, zeros for rigid/frozen)
+        let mut atom_velocities = Vec::with_capacity(n * 3);
+        for (&is_flex, &mass) in atom_is_flexible.iter().zip(&atom_masses_vec) {
+            if is_flex != 0 {
+                let m = mass as f64;
+                atom_velocities.extend_from_slice(&[
+                    mb_velocity(m),
+                    mb_velocity(m),
+                    mb_velocity(m),
+                ]);
+            } else {
+                atom_velocities.extend_from_slice(&[0.0, 0.0, 0.0]);
+            }
+        }
+
+        gpu.upload_state(LangevinUploadData {
             positions,
             ref_positions,
             com_positions,
@@ -1055,6 +1317,11 @@ impl LangevinRunner {
             bond_data,
             angle_data,
             dihedral_data,
+            mol_is_rigid,
+            atom_velocities,
+            atom_masses: atom_masses_vec,
+            atom_is_flexible,
+            has_flexible,
         });
         Ok(())
     }

@@ -1,7 +1,8 @@
-//! CubeCL kernels for rigid-body Langevin (BAOAB) integration.
+//! CubeCL kernels for mixed rigid-body + per-atom Langevin (BAOAB) integration.
 //!
 //! Contains the integrator steps (baoab_step, half_kick), position reconstruction,
-//! and atom→COM force/torque reduction. Uses Philox 4x32-10 counter-based RNG.
+//! atom→COM force/torque reduction, and per-atom flexible integration kernels.
+//! Uses Philox 4x32-10 counter-based RNG.
 
 use cubecl::prelude::*;
 
@@ -233,6 +234,9 @@ fn safe_inv(v: f32) -> f32 {
 // ============================================================================
 
 /// Full BAOAB step: B(half-kick) -> A(drift) -> O(thermostat) -> A(drift).
+///
+/// Only integrates rigid molecules (`mol_is_rigid[m] != 0`); flexible
+/// molecules are handled by [`baoab_atom_step`].
 #[cube(launch_unchecked)]
 #[allow(clippy::too_many_arguments)]
 pub fn baoab_step(
@@ -244,6 +248,7 @@ pub fn baoab_step(
     torques_buf: &Array<f32>,
     mol_masses: &Array<f32>,
     mol_inertia: &Array<f32>,
+    mol_is_rigid: &Array<u32>,
     n_molecules: u32,
     dt: f32,
     friction: f32,
@@ -253,7 +258,7 @@ pub fn baoab_step(
     box_length: f32,
 ) {
     let m = ABSOLUTE_POS;
-    if m < n_molecules as usize {
+    if m < n_molecules as usize && mol_is_rigid[m] != 0u32 {
         let half_dt = 0.5f32 * dt;
         let m4 = m * 4;
 
@@ -429,6 +434,8 @@ pub fn baoab_step(
 }
 
 /// Closing B half-kick using forces at the new positions.
+///
+/// Only integrates rigid molecules (`mol_is_rigid[m] != 0`).
 #[cube(launch_unchecked)]
 pub fn half_kick(
     com_velocities: &mut Array<f32>,
@@ -438,11 +445,12 @@ pub fn half_kick(
     quaternions: &Array<f32>,
     mol_masses: &Array<f32>,
     mol_inertia: &Array<f32>,
+    mol_is_rigid: &Array<u32>,
     n_molecules: u32,
     dt: f32,
 ) {
     let m = ABSOLUTE_POS;
-    if m < n_molecules as usize {
+    if m < n_molecules as usize && mol_is_rigid[m] != 0u32 {
         let half_dt = 0.5f32 * dt;
         let m4 = m * 4;
 
@@ -521,6 +529,9 @@ fn find_molecule(mol_atom_offsets: &Array<u32>, atom_idx: u32, n_molecules: usiz
 }
 
 /// Reconstruct atom positions from COM positions and quaternion rotations.
+///
+/// Only reconstructs atoms belonging to rigid molecules (`mol_is_rigid[m] != 0`);
+/// flexible atoms are integrated directly in [`baoab_atom_step`].
 #[cube(launch_unchecked)]
 pub fn reconstruct_positions(
     com_positions: &Array<f32>,
@@ -528,41 +539,44 @@ pub fn reconstruct_positions(
     ref_positions: &Array<f32>,
     positions: &mut Array<f32>,
     mol_atom_offsets: &Array<u32>,
+    mol_is_rigid: &Array<u32>,
     n_atoms: u32,
     n_molecules: u32,
 ) {
     let i = ABSOLUTE_POS;
     if i < n_atoms as usize {
         let m = find_molecule(mol_atom_offsets, i as u32, n_molecules as usize);
-        let m4 = m * 4;
-        let i4 = i * 4;
+        if mol_is_rigid[m] != 0u32 {
+            let m4 = m * 4;
+            let i4 = i * 4;
 
-        let qx = quaternions[m4];
-        let qy = quaternions[m4 + 1];
-        let qz = quaternions[m4 + 2];
-        let qw = quaternions[m4 + 3];
+            let qx = quaternions[m4];
+            let qy = quaternions[m4 + 1];
+            let qz = quaternions[m4 + 2];
+            let qw = quaternions[m4 + 3];
 
-        let mut rot_x = 0.0f32;
-        let mut rot_y = 0.0f32;
-        let mut rot_z = 0.0f32;
-        quat_rotate(
-            qx,
-            qy,
-            qz,
-            qw,
-            ref_positions[i4],
-            ref_positions[i4 + 1],
-            ref_positions[i4 + 2],
-            &mut rot_x,
-            &mut rot_y,
-            &mut rot_z,
-        );
+            let mut rot_x = 0.0f32;
+            let mut rot_y = 0.0f32;
+            let mut rot_z = 0.0f32;
+            quat_rotate(
+                qx,
+                qy,
+                qz,
+                qw,
+                ref_positions[i4],
+                ref_positions[i4 + 1],
+                ref_positions[i4 + 2],
+                &mut rot_x,
+                &mut rot_y,
+                &mut rot_z,
+            );
 
-        let atom_type_w = positions[i4 + 3];
-        positions[i4] = com_positions[m4] + rot_x;
-        positions[i4 + 1] = com_positions[m4 + 1] + rot_y;
-        positions[i4 + 2] = com_positions[m4 + 2] + rot_z;
-        positions[i4 + 3] = atom_type_w;
+            let atom_type_w = positions[i4 + 3];
+            positions[i4] = com_positions[m4] + rot_x;
+            positions[i4 + 1] = com_positions[m4 + 1] + rot_y;
+            positions[i4 + 2] = com_positions[m4 + 2] + rot_z;
+            positions[i4 + 3] = atom_type_w;
+        }
     }
 }
 
@@ -574,6 +588,8 @@ pub fn reconstruct_positions(
 ///
 /// Each thread processes one molecule, using `mol_atom_offsets` to determine
 /// which atoms belong to it. PBC minimum image applied for lever arms.
+/// Only reduces for rigid molecules (`mol_is_rigid[m] != 0`); flexible
+/// molecules get zeros (their forces stay in the per-atom buffer).
 #[cube(launch_unchecked)]
 pub fn reduce_forces_kernel(
     forces: &Array<f32>,
@@ -582,58 +598,191 @@ pub fn reduce_forces_kernel(
     mol_atom_offsets: &Array<u32>,
     com_forces: &mut Array<f32>,
     torques: &mut Array<f32>,
+    mol_is_rigid: &Array<u32>,
     n_molecules: u32,
     box_length: f32,
     inv_box: f32,
 ) {
     let m = ABSOLUTE_POS;
     if m < n_molecules as usize {
-        let start = mol_atom_offsets[m] as usize;
-        let end = mol_atom_offsets[m + 1] as usize;
         let m4 = m * 4;
-        let cx = com_positions[m4];
-        let cy = com_positions[m4 + 1];
-        let cz = com_positions[m4 + 2];
+        if mol_is_rigid[m] == 0u32 {
+            // Flexible molecule — forces stay per-atom, zero out COM/torques
+            com_forces[m4] = 0.0;
+            com_forces[m4 + 1] = 0.0;
+            com_forces[m4 + 2] = 0.0;
+            com_forces[m4 + 3] = 0.0;
+            torques[m4] = 0.0;
+            torques[m4 + 1] = 0.0;
+            torques[m4 + 2] = 0.0;
+            torques[m4 + 3] = 0.0;
+        } else {
+            let start = mol_atom_offsets[m] as usize;
+            let end = mol_atom_offsets[m + 1] as usize;
+            let cx = com_positions[m4];
+            let cy = com_positions[m4 + 1];
+            let cz = com_positions[m4 + 2];
 
-        let mut fx_sum = 0.0f32;
-        let mut fy_sum = 0.0f32;
-        let mut fz_sum = 0.0f32;
-        let mut tx_sum = 0.0f32;
-        let mut ty_sum = 0.0f32;
-        let mut tz_sum = 0.0f32;
+            let mut fx_sum = 0.0f32;
+            let mut fy_sum = 0.0f32;
+            let mut fz_sum = 0.0f32;
+            let mut tx_sum = 0.0f32;
+            let mut ty_sum = 0.0f32;
+            let mut tz_sum = 0.0f32;
 
-        for a in start..end {
-            let a4 = a * 4;
-            let fi_x = forces[a4];
-            let fi_y = forces[a4 + 1];
-            let fi_z = forces[a4 + 2];
+            for a in start..end {
+                let a4 = a * 4;
+                let fi_x = forces[a4];
+                let fi_y = forces[a4 + 1];
+                let fi_z = forces[a4 + 2];
 
-            fx_sum += fi_x;
-            fy_sum += fi_y;
-            fz_sum += fi_z;
+                fx_sum += fi_x;
+                fy_sum += fi_y;
+                fz_sum += fi_z;
 
-            // PBC-aware lever arm: r_atom - r_com
-            let mut lx = positions[a4] - cx;
-            let mut ly = positions[a4 + 1] - cy;
-            let mut lz = positions[a4 + 2] - cz;
-            lx -= box_length * f32::round(lx * inv_box);
-            ly -= box_length * f32::round(ly * inv_box);
-            lz -= box_length * f32::round(lz * inv_box);
+                // PBC-aware lever arm: r_atom - r_com
+                let mut lx = positions[a4] - cx;
+                let mut ly = positions[a4 + 1] - cy;
+                let mut lz = positions[a4 + 2] - cz;
+                lx -= box_length * f32::round(lx * inv_box);
+                ly -= box_length * f32::round(ly * inv_box);
+                lz -= box_length * f32::round(lz * inv_box);
 
-            // torque = lever x force
-            tx_sum += ly * fi_z - lz * fi_y;
-            ty_sum += lz * fi_x - lx * fi_z;
-            tz_sum += lx * fi_y - ly * fi_x;
+                // torque = lever x force
+                tx_sum += ly * fi_z - lz * fi_y;
+                ty_sum += lz * fi_x - lx * fi_z;
+                tz_sum += lx * fi_y - ly * fi_x;
+            }
+
+            com_forces[m4] = fx_sum;
+            com_forces[m4 + 1] = fy_sum;
+            com_forces[m4 + 2] = fz_sum;
+            com_forces[m4 + 3] = 0.0;
+
+            torques[m4] = tx_sum;
+            torques[m4 + 1] = ty_sum;
+            torques[m4 + 2] = tz_sum;
+            torques[m4 + 3] = 0.0;
         }
+    }
+}
 
-        com_forces[m4] = fx_sum;
-        com_forces[m4 + 1] = fy_sum;
-        com_forces[m4 + 2] = fz_sum;
-        com_forces[m4 + 3] = 0.0;
+// ============================================================================
+// Per-atom BAOAB kernels for flexible molecules
+// ============================================================================
 
-        torques[m4] = tx_sum;
-        torques[m4 + 1] = ty_sum;
-        torques[m4 + 2] = tz_sum;
-        torques[m4 + 3] = 0.0;
+/// Full per-atom BAOAB step: B(half-kick) -> A(drift) -> O(thermostat) -> A(drift).
+///
+/// Integrates flexible atoms (`atom_is_flexible[i] != 0`); rigid atoms are
+/// handled by [`baoab_step`] + [`reconstruct_positions`].
+#[cube(launch_unchecked)]
+#[allow(clippy::too_many_arguments)]
+pub fn baoab_atom_step(
+    positions: &mut Array<f32>,
+    atom_velocities: &mut Array<f32>,
+    atom_forces: &Array<f32>,
+    atom_masses: &Array<f32>,
+    atom_is_flexible: &Array<u32>,
+    n_atoms: u32,
+    dt: f32,
+    friction: f32,
+    kt: f32,
+    rng_seed: u32,
+    rng_step: u32,
+    box_length: f32,
+) {
+    let i = ABSOLUTE_POS;
+    if i < n_atoms as usize && atom_is_flexible[i] != 0u32 {
+        let half_dt = 0.5f32 * dt;
+        let i4 = i * 4;
+        let i3 = i * 3;
+
+        let mass = atom_masses[i];
+        let inv_mass = 1.0f32 / mass;
+
+        let mut rx = positions[i4];
+        let mut ry = positions[i4 + 1];
+        let mut rz = positions[i4 + 2];
+        let mut vx = atom_velocities[i3];
+        let mut vy = atom_velocities[i3 + 1];
+        let mut vz = atom_velocities[i3 + 2];
+        let fx = atom_forces[i4];
+        let fy = atom_forces[i4 + 1];
+        let fz = atom_forces[i4 + 2];
+
+        // B step: half-kick
+        let kick = half_dt * inv_mass * KJ_MOL_TO_INTERNAL;
+        vx += kick * fx;
+        vy += kick * fy;
+        vz += kick * fz;
+
+        // A step: half-drift
+        rx += half_dt * vx;
+        ry += half_dt * vy;
+        rz += half_dt * vz;
+
+        // O step: Ornstein-Uhlenbeck thermostat
+        let a = f32::exp(-friction * dt);
+        let b = f32::sqrt(1.0f32 - a * a);
+        let sigma = f32::sqrt(kt * inv_mass * KJ_MOL_TO_INTERNAL);
+
+        let i_u32 = i as u32;
+        let mut n0 = 0.0f32;
+        let mut n1 = 0.0f32;
+        let mut n2 = 0.0f32;
+        let mut n3 = 0.0f32;
+        // stream=2 avoids collision with rigid-body streams 0,1
+        gaussian4(
+            i_u32, rng_step, rng_seed, 2u32, &mut n0, &mut n1, &mut n2, &mut n3,
+        );
+
+        vx = a * vx + b * sigma * n0;
+        vy = a * vy + b * sigma * n1;
+        vz = a * vz + b * sigma * n2;
+
+        // A step: second half-drift
+        rx += half_dt * vx;
+        ry += half_dt * vy;
+        rz += half_dt * vz;
+
+        // PBC wrap
+        let inv_box = 1.0f32 / box_length;
+        rx -= box_length * f32::round(rx * inv_box);
+        ry -= box_length * f32::round(ry * inv_box);
+        rz -= box_length * f32::round(rz * inv_box);
+
+        let atom_type_w = positions[i4 + 3];
+        positions[i4] = rx;
+        positions[i4 + 1] = ry;
+        positions[i4 + 2] = rz;
+        positions[i4 + 3] = atom_type_w;
+        atom_velocities[i3] = vx;
+        atom_velocities[i3 + 1] = vy;
+        atom_velocities[i3 + 2] = vz;
+    }
+}
+
+/// Closing B half-kick for flexible atoms using forces at the new positions.
+#[cube(launch_unchecked)]
+pub fn half_kick_atoms(
+    atom_velocities: &mut Array<f32>,
+    atom_forces: &Array<f32>,
+    atom_masses: &Array<f32>,
+    atom_is_flexible: &Array<u32>,
+    n_atoms: u32,
+    dt: f32,
+) {
+    let i = ABSOLUTE_POS;
+    if i < n_atoms as usize && atom_is_flexible[i] != 0u32 {
+        let half_dt = 0.5f32 * dt;
+        let i4 = i * 4;
+        let i3 = i * 3;
+
+        let inv_mass = 1.0f32 / atom_masses[i];
+        let kick = half_dt * inv_mass * KJ_MOL_TO_INTERNAL;
+
+        atom_velocities[i3] += kick * atom_forces[i4];
+        atom_velocities[i3 + 1] += kick * atom_forces[i4 + 1];
+        atom_velocities[i3 + 2] += kick * atom_forces[i4 + 2];
     }
 }

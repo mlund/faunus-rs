@@ -291,6 +291,13 @@ pub(crate) enum DegreesOfFreedom {
     RigidAlchemical,
 }
 
+impl DegreesOfFreedom {
+    /// True if the molecule is a rigid body (COM + quaternion integration).
+    pub(crate) const fn is_rigid(self) -> bool {
+        matches!(self, Self::Rigid | Self::RigidAlchemical)
+    }
+}
+
 /// Fields of the topology related to specific molecular system.
 #[derive(Debug, Clone, Serialize, Deserialize, Default, Validate)]
 pub(crate) struct System {

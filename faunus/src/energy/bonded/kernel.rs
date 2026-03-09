@@ -516,6 +516,7 @@ const RAD_PER_DEG_SQ: f64 = (180.0 / std::f64::consts::PI) * (180.0 / std::f64::
 /// Build CSR bond data from topology for the bond forces kernel.
 ///
 /// Each bond creates two directed entries (one per endpoint).
+/// Includes both intra-molecular and intermolecular bonds.
 /// Only harmonic bonds are supported.
 pub fn repack_bonds(topology: &Topology, groups: &[Group]) -> CsrData {
     let n_atoms: usize = groups.iter().map(|g| g.capacity()).sum();
@@ -541,6 +542,21 @@ pub fn repack_bonds(topology: &Topology, groups: &[Group]) -> CsrData {
         }
     }
 
+    // Intermolecular bonds use absolute atom indices
+    for bond in topology.intermolecular().bonds() {
+        let BondKind::Harmonic(h) = bond.kind() else {
+            continue;
+        };
+        let [i_abs, j_abs] = *bond.index();
+        if i_abs >= n_atoms || j_abs >= n_atoms {
+            continue;
+        }
+        let k = h.spring_constant() as f32;
+        let req = h.eq_distance() as f32;
+        edges[i_abs].push((j_abs as u32, k, req));
+        edges[j_abs].push((i_abs as u32, k, req));
+    }
+
     let mut offsets = Vec::with_capacity(n_atoms + 1);
     let mut atoms = Vec::new();
     let mut params = Vec::new();
@@ -563,6 +579,7 @@ pub fn repack_bonds(topology: &Topology, groups: &[Group]) -> CsrData {
 /// Build CSR angle data from topology for the angle forces kernel.
 ///
 /// Each angle creates three entries (one per participating atom).
+/// Includes both intra-molecular and intermolecular torsions (angles).
 /// Spring constant is converted to radian units.
 pub fn repack_angles(topology: &Topology, groups: &[Group]) -> CsrData {
     let n_atoms: usize = groups.iter().map(|g| g.capacity()).sum();
@@ -593,6 +610,23 @@ pub fn repack_angles(topology: &Topology, groups: &[Group]) -> CsrData {
         }
     }
 
+    // Intermolecular torsions (angles) use absolute atom indices
+    for torsion in topology.intermolecular().torsions() {
+        let TorsionKind::Harmonic(h) = torsion.kind() else {
+            continue;
+        };
+        let [a, b, c] = *torsion.index();
+        if a >= n_atoms || b >= n_atoms || c >= n_atoms {
+            continue;
+        }
+        let k_eff = (h.spring_constant() * RAD_PER_DEG_SQ) as f32;
+        let theta_eq_rad = h.eq_angle().to_radians() as f32;
+
+        entries[a].push((b as u32, c as u32, 0.0, k_eff, theta_eq_rad));
+        entries[b].push((a as u32, c as u32, 1.0, k_eff, theta_eq_rad));
+        entries[c].push((a as u32, b as u32, 2.0, k_eff, theta_eq_rad));
+    }
+
     let mut offsets = Vec::with_capacity(n_atoms + 1);
     let mut atoms = Vec::new();
     let mut params = Vec::new();
@@ -619,11 +653,67 @@ pub fn repack_angles(topology: &Topology, groups: &[Group]) -> CsrData {
 /// Build CSR dihedral data from topology for the dihedral forces kernel.
 ///
 /// Each dihedral creates four entries (one per atom).
+/// Includes both intra-molecular and intermolecular dihedrals.
 /// Supports harmonic and periodic dihedral types.
 pub fn repack_dihedrals(topology: &Topology, groups: &[Group]) -> CsrData {
     let n_atoms: usize = groups.iter().map(|g| g.capacity()).sum();
     type DihedralEntry = (u32, u32, u32, [f32; 8]); // (other1, other2, other3, params)
     let mut entries: Vec<Vec<DihedralEntry>> = vec![Vec::new(); n_atoms];
+
+    /// Convert a dihedral to base_params, returning None for unsupported types.
+    fn dihedral_base_params(kind: &DihedralKind) -> Option<[f32; 8]> {
+        match kind {
+            DihedralKind::ProperHarmonic(h) | DihedralKind::ImproperHarmonic(h) => {
+                let k_eff = (h.spring_constant() * RAD_PER_DEG_SQ) as f32;
+                let phi_eq = h.eq_angle().to_radians() as f32;
+                Some([
+                    0.0,
+                    DIHEDRAL_TYPE_HARMONIC as f32,
+                    k_eff,
+                    phi_eq,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                ])
+            }
+            DihedralKind::ProperPeriodic(p) | DihedralKind::ImproperPeriodic(p) => {
+                let k = p.spring_constant() as f32;
+                let phi0 = p.phase_angle().to_radians() as f32;
+                let n = p.periodicity() as f32;
+                Some([
+                    0.0,
+                    DIHEDRAL_TYPE_PERIODIC as f32,
+                    k,
+                    phi0,
+                    n,
+                    0.0,
+                    0.0,
+                    0.0,
+                ])
+            }
+            DihedralKind::Unspecified => None,
+        }
+    }
+
+    /// Add four CSR entries for a dihedral with absolute atom indices.
+    fn push_dihedral_entries(
+        entries: &mut [Vec<DihedralEntry>],
+        abs: [u32; 4],
+        base_params: [f32; 8],
+    ) {
+        for role in 0u32..4 {
+            let others: [u32; 3] = match role {
+                0 => [abs[1], abs[2], abs[3]],
+                1 => [abs[0], abs[2], abs[3]],
+                2 => [abs[0], abs[1], abs[3]],
+                _ => [abs[0], abs[1], abs[2]],
+            };
+            let mut p = base_params;
+            p[0] = role as f32;
+            entries[abs[role as usize] as usize].push((others[0], others[1], others[2], p));
+        }
+    }
 
     for group in groups {
         let molecule = &topology.moleculekinds()[group.molecule()];
@@ -632,54 +722,22 @@ pub fn repack_dihedrals(topology: &Topology, groups: &[Group]) -> CsrData {
             if [i0, i1, i2, i3].iter().any(|&idx| idx >= group.len()) {
                 continue;
             }
-            let abs: [u32; 4] = [i0, i1, i2, i3].map(|i| (group.start() + i) as u32);
-
-            // Proper and improper variants share the same force formula
-            let base_params = match dihedral.kind() {
-                DihedralKind::ProperHarmonic(h) | DihedralKind::ImproperHarmonic(h) => {
-                    let k_eff = (h.spring_constant() * RAD_PER_DEG_SQ) as f32;
-                    let phi_eq = h.eq_angle().to_radians() as f32;
-                    [
-                        0.0,
-                        DIHEDRAL_TYPE_HARMONIC as f32,
-                        k_eff,
-                        phi_eq,
-                        0.0,
-                        0.0,
-                        0.0,
-                        0.0,
-                    ]
-                }
-                DihedralKind::ProperPeriodic(p) | DihedralKind::ImproperPeriodic(p) => {
-                    let k = p.spring_constant() as f32;
-                    let phi0 = p.phase_angle().to_radians() as f32;
-                    let n = p.periodicity() as f32;
-                    [
-                        0.0,
-                        DIHEDRAL_TYPE_PERIODIC as f32,
-                        k,
-                        phi0,
-                        n,
-                        0.0,
-                        0.0,
-                        0.0,
-                    ]
-                }
-                DihedralKind::Unspecified => continue,
-            };
-
-            // Four entries per dihedral so each atom's thread sees it
-            for role in 0u32..4 {
-                let others: [u32; 3] = match role {
-                    0 => [abs[1], abs[2], abs[3]],
-                    1 => [abs[0], abs[2], abs[3]],
-                    2 => [abs[0], abs[1], abs[3]],
-                    _ => [abs[0], abs[1], abs[2]],
-                };
-                let mut p = base_params;
-                p[0] = role as f32;
-                entries[abs[role as usize] as usize].push((others[0], others[1], others[2], p));
+            let abs = [i0, i1, i2, i3].map(|i| (group.start() + i) as u32);
+            if let Some(base_params) = dihedral_base_params(dihedral.kind()) {
+                push_dihedral_entries(&mut entries, abs, base_params);
             }
+        }
+    }
+
+    // Intermolecular dihedrals use absolute atom indices
+    for dihedral in topology.intermolecular().dihedrals() {
+        let [i0, i1, i2, i3] = *dihedral.index();
+        if [i0, i1, i2, i3].iter().any(|&idx| idx >= n_atoms) {
+            continue;
+        }
+        let abs = [i0 as u32, i1 as u32, i2 as u32, i3 as u32];
+        if let Some(base_params) = dihedral_base_params(dihedral.kind()) {
+            push_dihedral_entries(&mut entries, abs, base_params);
         }
     }
 
