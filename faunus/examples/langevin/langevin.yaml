@@ -1,6 +1,10 @@
-# 100 rigid CPPM molecules in a cuboidal box with GPU Langevin dynamics.
-# Each molecule has 67 atoms (charged patchy particle).
+# Mixed rigid + flexible Langevin dynamics example.
+# 20 rigid CPPM particles (q=-8 each), 1 flexible 20-mer chain (q=-20), 180 Na+ counter ions.
 # Requires the `gpu` cargo feature: cargo run --features gpu -- run -i langevin.yaml
+#
+# Workflow:
+# 1. Equilibrate with MC only (comment out LangevinDynamics) -> save eq_state.yaml
+# 2. Switch to LD only (comment out Stochastic MC block, load eq_state.yaml)
 
 atoms:
   - name: PP     # positive patch
@@ -8,7 +12,7 @@ atoms:
     charge: 1.0
     sigma: 4.0
     epsilon: 0.5
-  - name: NP     # negative patch
+  - name: NP     # negative patch / chain monomer
     mass: 1.0
     charge: -1.0
     sigma: 4.0
@@ -18,12 +22,51 @@ atoms:
     charge: 0.0
     sigma: 40.0
     epsilon: 0.5
+  - name: Na     # counter ion
+    mass: 22.99
+    charge: 1.0
+    sigma: 3.33
+    epsilon: 0.01
+  - name: MM     # negative monomer
+    mass: 22.0
+    charge: -1.0
+    sigma: 4.0
+    epsilon: 0.5
 
 molecules:
   - name: CPPM
     degrees_of_freedom: Rigid
     has_com: true
     from_structure: "../twobody/cppm-p18.xyz"
+
+  - name: Chain20
+    degrees_of_freedom: Free
+    excluded_neighbours: 1
+    atoms: [MM, MM, MM, MM, MM, MM, MM, MM, MM, MM,
+            MM, MM, MM, MM, MM, MM, MM, MM, MM, MM]
+    bonds:
+      - {index: [0, 1],   kind: !Harmonic {k: 40.0, req: 5.0}}
+      - {index: [1, 2],   kind: !Harmonic {k: 40.0, req: 5.0}}
+      - {index: [2, 3],   kind: !Harmonic {k: 40.0, req: 5.0}}
+      - {index: [3, 4],   kind: !Harmonic {k: 40.0, req: 5.0}}
+      - {index: [4, 5],   kind: !Harmonic {k: 40.0, req: 5.0}}
+      - {index: [5, 6],   kind: !Harmonic {k: 40.0, req: 5.0}}
+      - {index: [6, 7],   kind: !Harmonic {k: 40.0, req: 5.0}}
+      - {index: [7, 8],   kind: !Harmonic {k: 40.0, req: 5.0}}
+      - {index: [8, 9],   kind: !Harmonic {k: 40.0, req: 5.0}}
+      - {index: [9, 10],  kind: !Harmonic {k: 40.0, req: 5.0}}
+      - {index: [10, 11], kind: !Harmonic {k: 40.0, req: 5.0}}
+      - {index: [11, 12], kind: !Harmonic {k: 40.0, req: 5.0}}
+      - {index: [12, 13], kind: !Harmonic {k: 40.0, req: 5.0}}
+      - {index: [13, 14], kind: !Harmonic {k: 40.0, req: 5.0}}
+      - {index: [14, 15], kind: !Harmonic {k: 40.0, req: 5.0}}
+      - {index: [15, 16], kind: !Harmonic {k: 40.0, req: 5.0}}
+      - {index: [16, 17], kind: !Harmonic {k: 40.0, req: 5.0}}
+      - {index: [17, 18], kind: !Harmonic {k: 40.0, req: 5.0}}
+      - {index: [18, 19], kind: !Harmonic {k: 40.0, req: 5.0}}
+
+  - name: Na
+    atoms: [Na]
 
 system:
   cell: !Cuboid [292.4, 292.4, 292.4]
@@ -40,6 +83,12 @@ system:
           filename: "../twobody/cppm-p18.xyz",
           rotate: true,
         }
+    - molecule: Chain20
+      N: 1
+      insert: !RandomWalk {bond_length: 5.0}
+    - molecule: Na
+      N: 180
+      insert: !RandomAtomPos {}
 
   energy:
     nonbonded:
@@ -54,21 +103,28 @@ analysis:
   - !Trajectory
     file: "traj.xtc"
     frequency: !Every 1
-  - !Trajectory         # final configuration for visualization/restart
+  - !Trajectory
     file: "confout.xyz"
     frequency: !End
 
 propagate:
   seed: Hardware
   criterion: Metropolis
-  repeat: 100
+  repeat: 1000
   collections:
-    - !Stochastic
-      repeat: 10
-      moves:
-        - !TranslateMolecule {molecule: CPPM, dp: 40.0, repeat: 100}
+    # MC equilibration — comment out for LD-only production
+#   - !Stochastic
+#     repeat: 10
+#     moves:
+#       - !TranslateMolecule {molecule: CPPM, dp: 50.0, repeat: 10}
+#       - !RotateMolecule {molecule: CPPM, dp: 0.5, repeat: 10}
+#       - !TranslateMolecule {molecule: Chain20, dp: 50.0, repeat: 10}
+#       - !RotateMolecule {molecule: Chain20, dp: 0.5, repeat: 10}
+#       - !PivotMove {molecule: Chain20, dp: 0.5, repeat: 20}
+#       - !TranslateMolecule {molecule: Na, dp: 10.0, repeat: 20}
+    # LD production — comment out Stochastic block above for LD-only
     - !LangevinDynamics
-      timestep: 0.1      # ps
+      timestep: 0.06      # ps
       friction: 5.0      # 1/ps
       steps: 10          # LD steps per sweep
       temperature: 298.15

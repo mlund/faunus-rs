@@ -135,4 +135,72 @@ mod tests {
             }
         }
     }
+
+    /// Verify the GPU exclusion CSR against the CPU ExclusionMatrix.
+    ///
+    /// Rigid molecules must produce empty CSR rows (kernel handles them via
+    /// `mol_is_rigid`), while flexible molecules must match the CPU exclusions.
+    /// Verify the GPU exclusion CSR against the CPU ExclusionMatrix.
+    ///
+    /// Rigid molecules must produce empty CSR rows (kernel handles them via
+    /// `mol_is_rigid`), while flexible molecules must match the CPU exclusions.
+    #[test]
+    #[cfg(feature = "gpu")]
+    fn repack_exclusions_matches_cpu_matrix() {
+        use crate::group::Group;
+        use std::collections::HashSet;
+
+        let topology = Topology::from_file("tests/files/topology_pass.yaml").unwrap();
+
+        // Build groups from topology blocks (mirroring Backend initialization)
+        let mut groups = Vec::new();
+        let mut offset = 0usize;
+        for block in topology.blocks() {
+            let mol_idx = block.molecule_index();
+            let n_atoms = topology.moleculekinds()[mol_idx].atoms().len();
+            for _ in 0..block.num_molecules() {
+                groups.push(Group::new(groups.len(), mol_idx, offset..offset + n_atoms));
+                offset += n_atoms;
+            }
+        }
+
+        let (offsets, atoms) = crate::energy::bonded::kernel::repack_exclusions(&topology, &groups);
+
+        let n: usize = groups.iter().map(|g| g.capacity()).sum();
+        assert_eq!(offsets.len(), n + 1);
+
+        let excl = ExclusionMatrix::from_topology(&topology);
+
+        for i in 0..n {
+            let csr_neighbors: HashSet<u32> = atoms[offsets[i] as usize..offsets[i + 1] as usize]
+                .iter()
+                .copied()
+                .collect();
+
+            let group = groups
+                .iter()
+                .find(|g: &&Group| i >= g.start() && i < g.start() + g.capacity())
+                .unwrap();
+            let mol = &topology.moleculekinds()[group.molecule()];
+
+            if mol.degrees_of_freedom().is_rigid() {
+                assert!(
+                    csr_neighbors.is_empty(),
+                    "rigid atom {i} should have empty CSR row"
+                );
+            } else {
+                for j in 0..n {
+                    if i == j {
+                        continue;
+                    }
+                    let cpu_excluded = excl.get((i, j)) == 0;
+                    let csr_excluded = csr_neighbors.contains(&(j as u32));
+                    assert_eq!(
+                        cpu_excluded, csr_excluded,
+                        "mismatch at ({i}, {j}): cpu={cpu_excluded}, csr={csr_excluded}"
+                    );
+                }
+            }
+        }
+    }
 }

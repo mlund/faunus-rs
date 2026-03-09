@@ -762,6 +762,44 @@ pub fn repack_dihedrals(topology: &Topology, groups: &[Group]) -> CsrData {
     }
 }
 
+/// Build per-atom exclusion CSR for the nonbonded kernel.
+///
+/// For flexible molecules, converts topology exclusion pairs to absolute indices.
+/// Rigid molecules get empty rows (handled by `mol_is_rigid` in the kernel).
+/// Returns `(offsets, atoms)` where `offsets[i]..offsets[i+1]` indexes into `atoms`.
+pub fn repack_exclusions(topology: &Topology, groups: &[Group]) -> (Vec<u32>, Vec<u32>) {
+    let n_atoms: usize = groups.iter().map(|g| g.capacity()).sum();
+    let mut per_atom: Vec<Vec<u32>> = vec![Vec::new(); n_atoms];
+
+    for group in groups {
+        let molecule = &topology.moleculekinds()[group.molecule()];
+        // Rigid bodies skip all intra-mol NB in the kernel via mol_is_rigid,
+        // so we only need exclusion CSR entries for flexible molecules.
+        if molecule.degrees_of_freedom().is_rigid() {
+            continue;
+        }
+        for pair in molecule.exclusions() {
+            let (a, b) = pair.into_ordered_tuple();
+            if a >= group.len() || b >= group.len() {
+                continue;
+            }
+            let a_abs = (group.start() + a) as u32;
+            let b_abs = (group.start() + b) as u32;
+            per_atom[a_abs as usize].push(b_abs);
+            per_atom[b_abs as usize].push(a_abs);
+        }
+    }
+
+    let mut offsets = Vec::with_capacity(n_atoms + 1);
+    let mut atoms = Vec::new();
+    offsets.push(0u32);
+    for neighbors in &per_atom {
+        atoms.extend_from_slice(neighbors);
+        offsets.push(atoms.len() as u32);
+    }
+    (offsets, atoms)
+}
+
 // ============================================================
 // Host-side force computation (reference / CPU fallback)
 // ============================================================

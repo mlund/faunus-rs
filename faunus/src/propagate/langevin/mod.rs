@@ -112,6 +112,10 @@ struct LangevinUploadData {
     angle_data: Option<crate::energy::bonded::kernel::CsrData>,
     /// CSR dihedral data.
     dihedral_data: Option<crate::energy::bonded::kernel::CsrData>,
+    /// Per-atom exclusion CSR offsets for intra-molecular NB skip.
+    excl_offsets: Vec<u32>,
+    /// Per-atom exclusion CSR neighbor indices.
+    excl_atoms: Vec<u32>,
     /// Per-molecule flag: 1 = rigid-body integration, 0 = per-atom or frozen.
     mol_is_rigid: Vec<u32>,
     /// Per-atom velocities for flexible atoms (stride 3: vx, vy, vz).
@@ -166,6 +170,10 @@ struct LangevinGpu<R: Runtime> {
     dihedral_atoms: Handle,
     dihedral_params: Handle,
     has_dihedrals: bool,
+
+    // Exclusion CSR for intra-molecular NB pairs in flexible molecules
+    excl_offsets: Handle,
+    excl_atoms: Handle,
 
     // Per-atom flexible integration buffers
     mol_is_rigid: Handle,
@@ -245,6 +253,10 @@ impl<R: Runtime> LangevinGpu<R> {
         let dihedral_atoms = client.empty(4);
         let dihedral_params = client.empty(4);
 
+        // Exclusion CSR placeholders (real data uploaded if flexible molecules exist)
+        let excl_offsets = client.empty((n_atoms as usize + 1) * 4);
+        let excl_atoms = client.empty(4);
+
         // Placeholders for flexible integration buffers
         let mol_is_rigid = client.empty(n_molecules as usize * 4);
         let atom_velocities = client.empty(n_atoms as usize * 3 * 4);
@@ -284,6 +296,8 @@ impl<R: Runtime> LangevinGpu<R> {
             dihedral_atoms,
             dihedral_params,
             has_dihedrals: false,
+            excl_offsets,
+            excl_atoms,
             mol_is_rigid,
             atom_velocities,
             atom_masses_buf,
@@ -382,6 +396,17 @@ impl<R: Runtime> LangevinGpu<R> {
             ) = upload_csr(&self.client, csr);
             self.has_dihedrals = true;
             log::info!("On-device dihedral forces: {} entries", csr.atoms.len() / 3);
+        }
+
+        // Upload exclusion CSR for intra-molecular NB pairs
+        self.excl_offsets = self
+            .client
+            .create_from_slice(bytemuck::cast_slice(&data.excl_offsets));
+        if !data.excl_atoms.is_empty() {
+            self.excl_atoms = self
+                .client
+                .create_from_slice(bytemuck::cast_slice(&data.excl_atoms));
+            log::info!("On-device exclusion CSR: {} entries", data.excl_atoms.len());
         }
 
         // Upload rigid/flexible classification and per-atom integration buffers
@@ -492,6 +517,8 @@ impl<R: Runtime> LangevinGpu<R> {
         let count = CubeCount::Static(self.n_atoms.div_ceil(WORKGROUP_SIZE), 1, 1);
         let dim = CubeDim::new_1d(WORKGROUP_SIZE);
         let inv_box = 1.0f32 / self.box_length;
+        // CubeCL requires non-zero array length; clamp to 1 when CSR is empty
+        let n_excl_atoms = (self.excl_atoms.size() as usize / 4).max(1);
 
         unsafe {
             crate::energy::nonbonded_kernel::pair_forces_kernel::launch_unchecked::<R>(
@@ -511,6 +538,9 @@ impl<R: Runtime> LangevinGpu<R> {
                     self.spline_coeffs.size() as usize / 4,
                     1,
                 ),
+                ArrayArg::from_raw_parts::<u32>(&self.excl_offsets, self.n_atoms as usize + 1, 1),
+                ArrayArg::from_raw_parts::<u32>(&self.excl_atoms, n_excl_atoms, 1),
+                ArrayArg::from_raw_parts::<u32>(&self.mol_is_rigid, self.n_molecules as usize, 1),
                 ArrayArg::from_raw_parts::<f32>(&self.atom_forces, self.n_atoms as usize * 4, 1),
                 ScalarArg::new(self.n_atoms),
                 ScalarArg::new(self.n_atom_types),
@@ -1152,6 +1182,10 @@ impl LangevinRunner {
         // Extract bonded topology into CSR layout for on-device bonded forces
         let (bond_data, angle_data, dihedral_data) = Self::extract_bonded_data(context);
 
+        // Exclusion CSR for intra-molecular NB pairs in flexible molecules
+        let (excl_offsets, excl_atoms) =
+            crate::energy::bonded::kernel::repack_exclusions(&context.topology(), context.groups());
+
         // COM positions, reference-frame coordinates, and molecule->atom offsets
         let mut com_positions = Vec::with_capacity(n_mol * 4);
         let mut ref_positions = Vec::with_capacity(n * 4);
@@ -1237,6 +1271,38 @@ impl LangevinRunner {
         }
         let has_flexible = atom_is_flexible.iter().any(|&f| f != 0);
 
+        // Warn if timestep exceeds harmonic stability limit for flexible atoms
+        if let (true, Some(bonds)) = (has_flexible, &bond_data) {
+            let min_mass = atom_masses_vec
+                .iter()
+                .zip(&atom_is_flexible)
+                .filter(|(_, &f)| f != 0)
+                .map(|(&m, _)| m)
+                .reduce(f32::min)
+                .unwrap_or(1.0);
+            let k_max = bonds
+                .params
+                .chunks(2)
+                .map(|kv| kv[0])
+                .reduce(f32::max)
+                .unwrap_or(0.0);
+            if k_max > 0.0 && min_mass > 0.0 {
+                // Leapfrog stability: dt < 2/omega where omega = sqrt(k*conv/m)
+                let conv = 100.0_f64; // kJ/mol → amu·Å²/ps²
+                let dt_max = 2.0 / (k_max as f64 * conv / min_mass as f64).sqrt();
+                if gpu.config.timestep > dt_max {
+                    log::warn!(
+                        "Timestep {:.4} ps exceeds harmonic stability limit {:.4} ps \
+                         (k_max={:.1} kJ/mol/Å², m_min={:.2} amu). Reduce dt or increase mass.",
+                        gpu.config.timestep,
+                        dt_max,
+                        k_max,
+                        min_mass,
+                    );
+                }
+            }
+        }
+
         // Maxwell-Boltzmann velocities: sigma = sqrt(kT * 100 / M) in A/ps
         let kt = gpu.kt as f64;
         let conv = 100.0; // kJ/mol -> amu*A^2/ps^2
@@ -1317,6 +1383,8 @@ impl LangevinRunner {
             bond_data,
             angle_data,
             dihedral_data,
+            excl_offsets,
+            excl_atoms,
             mol_is_rigid,
             atom_velocities,
             atom_masses: atom_masses_vec,

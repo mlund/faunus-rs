@@ -2,8 +2,10 @@
 //!
 //! Each thread computes the total force on one atom by looping over all other
 //! atoms. This avoids atomic accumulation at the cost of evaluating each pair
-//! twice (no Newton's 3rd law). For rigid-body Langevin dynamics where intra-
-//! molecular forces cancel in the COM reduction, this is acceptable.
+//! twice (no Newton's 3rd law). Intra-molecular handling differs by molecule
+//! type: rigid bodies skip all intra-molecular pairs (internal distances are
+//! constant), while flexible molecules skip only topology-excluded pairs
+//! (e.g. directly bonded neighbors) via a per-atom exclusion CSR.
 
 use cubecl::prelude::*;
 
@@ -55,17 +57,43 @@ fn spline_force(
     }
 }
 
+/// Check whether atom pair (i, j) is in the exclusion CSR list.
+/// Returns 1 if excluded, 0 otherwise.
+///
+/// Uses u32 instead of bool because CubeCL's `#[cube]` expander cannot
+/// return native `bool` from branching expressions. Linear scan is fine
+/// since lists are short (typically 1–3 entries for `excluded_neighbours=1`).
+#[cube]
+fn is_excluded(i: u32, j: u32, excl_offsets: &Array<u32>, excl_atoms: &Array<u32>) -> u32 {
+    let start = excl_offsets[i as usize] as usize;
+    let end = excl_offsets[i as usize + 1] as usize;
+    let mut found = 0u32;
+    for k in start..end {
+        if excl_atoms[k] == j {
+            found = 1u32;
+        }
+    }
+    found
+}
+
 /// Compute per-atom pairwise nonbonded forces using PowerLaw2 spline lookup.
 ///
-/// Each thread handles one atom `i`, looping over all atoms `j` in other molecules.
+/// Each thread handles one atom `i`, looping over all atoms `j`.
+/// Intra-molecular pairs are handled per molecule type:
+/// - Rigid molecules: skip all intra-molecular pairs (via `mol_is_rigid`)
+/// - Flexible molecules: compute unless the pair is in the exclusion CSR
 /// PBC minimum image convention applied. Output forces in `[fx, fy, fz, 0]` layout.
 #[cube(launch_unchecked)]
+#[allow(clippy::too_many_arguments)]
 pub fn pair_forces_kernel(
     positions: &Array<f32>,
     atom_types: &Array<u32>,
     mol_ids: &Array<u32>,
     spline_params: &Array<f32>,
     spline_coeffs: &Array<f32>,
+    excl_offsets: &Array<u32>,
+    excl_atoms: &Array<u32>,
+    mol_is_rigid: &Array<u32>,
     forces: &mut Array<f32>,
     n_atoms: u32,
     n_atom_types: u32,
@@ -80,41 +108,57 @@ pub fn pair_forces_kernel(
         let zi = positions[i4 + 2];
         let kind_i = atom_types[i];
         let mol_i = mol_ids[i];
+        // Hoist rigid flag to avoid repeated array read in the inner loop
+        let rigid_i = mol_is_rigid[mol_i as usize];
 
         let mut fx = 0.0f32;
         let mut fy = 0.0f32;
         let mut fz = 0.0f32;
 
         for j in 0..n_atoms as usize {
-            // Skip self and intra-molecular pairs (rigid bodies)
-            if j != i && mol_ids[j] != mol_i {
-                let j4 = j * 4;
-                let mut dx = xi - positions[j4];
-                let mut dy = yi - positions[j4 + 1];
-                let mut dz = zi - positions[j4 + 2];
-                dx -= box_length * f32::round(dx * inv_box);
-                dy -= box_length * f32::round(dy * inv_box);
-                dz -= box_length * f32::round(dz * inv_box);
+            if j != i {
+                // Rigid: all intra-mol distances are constant, so NB forces
+                // cancel in the COM reduction and can be skipped entirely.
+                // Flexible: intra-mol NB forces are physical (e.g. WCA between
+                // non-bonded monomers), skip only topology-excluded pairs.
+                let mut skip = 0u32;
+                if mol_ids[j] == mol_i {
+                    if rigid_i != 0u32 {
+                        skip = 1u32;
+                    } else {
+                        skip = is_excluded(i as u32, j as u32, excl_offsets, excl_atoms);
+                    }
+                }
 
-                let rsq = dx * dx + dy * dy + dz * dz;
-                let kind_j = atom_types[j];
+                if skip == 0u32 {
+                    let j4 = j * 4;
+                    let mut dx = xi - positions[j4];
+                    let mut dy = yi - positions[j4 + 1];
+                    let mut dz = zi - positions[j4 + 2];
+                    dx -= box_length * f32::round(dx * inv_box);
+                    dy -= box_length * f32::round(dy * inv_box);
+                    dz -= box_length * f32::round(dz * inv_box);
 
-                let mut f_mag = 0.0f32;
-                spline_force(
-                    rsq,
-                    kind_i,
-                    kind_j,
-                    n_atom_types,
-                    spline_params,
-                    spline_coeffs,
-                    &mut f_mag,
-                );
+                    let rsq = dx * dx + dy * dy + dz * dz;
+                    let kind_j = atom_types[j];
 
-                // f_mag = -dU/d(r^2); dr = ri - rj (j->i); F_i = 2*f_mag*dr
-                let scale = 2.0 * f_mag;
-                fx += scale * dx;
-                fy += scale * dy;
-                fz += scale * dz;
+                    let mut f_mag = 0.0f32;
+                    spline_force(
+                        rsq,
+                        kind_i,
+                        kind_j,
+                        n_atom_types,
+                        spline_params,
+                        spline_coeffs,
+                        &mut f_mag,
+                    );
+
+                    // f_mag = -dU/d(r^2); dr = ri - rj (j->i); F_i = 2*f_mag*dr
+                    let scale = 2.0 * f_mag;
+                    fx += scale * dx;
+                    fy += scale * dy;
+                    fz += scale * dz;
+                }
             }
         }
 
