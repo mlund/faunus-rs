@@ -17,7 +17,7 @@ use crate::{
     backend::Backend,
     montecarlo::{gibbs::GibbsEnsemble, MarkovChain},
     simulation::{self, box_prefixed_path, write_yaml, Simulation},
-    Context,
+    Context, ParticleSystem,
 };
 use anyhow::Result;
 use clap::{Parser, Subcommand};
@@ -87,6 +87,17 @@ pub fn do_main() -> Result<()> {
     Ok(())
 }
 
+/// Sum of charges of all active particles in the system.
+fn net_charge(context: &impl ParticleSystem) -> f64 {
+    let atomkinds = context.topology_ref().atomkinds();
+    context
+        .groups()
+        .iter()
+        .flat_map(|g| g.iter_active())
+        .map(|i| atomkinds[context.get_atomkind(i)].charge())
+        .sum()
+}
+
 /// Write per-box YAML output: medium, blocks, cell, energy, propagate, analysis.
 /// Returns `(final_energy, drift)`.
 fn write_mc_output<T: Context + 'static>(
@@ -139,6 +150,7 @@ fn run_single_box<T: Context + 'static>(
 
     let initial_energy = mc.system_energy();
     log::info!("Initial energy = {initial_energy:.2} kJ/mol");
+    log::info!("Net charge = {:.4e} e", net_charge(mc.context()));
 
     let pb = ProgressBar::new(mc.propagation().max_repeats() as u64);
     for (i, step) in mc.iter().enumerate() {
@@ -157,6 +169,7 @@ fn run_single_box<T: Context + 'static>(
         drift
     };
     log::info!("Final energy = {final_energy:.2} kJ/mol");
+    log::info!("Net charge = {:.4e} e", net_charge(mc.context()));
     if relative_drift > 1e-9 {
         log::warn!("Energy drift: {drift:.2e} kJ/mol (relative: {relative_drift:.2e}) ⚠️");
     } else {
@@ -182,8 +195,10 @@ fn run_gibbs(
     log::info!("Thermal energy: {thermal_energy:.2} kJ/mol");
 
     let initial_energies: [f64; 2] = std::array::from_fn(|i| {
-        let e = ensemble.boxes()[i].system_energy();
-        log::info!("Box {i}: initial energy = {e:.2} kJ/mol");
+        let mc = &ensemble.boxes()[i];
+        let e = mc.system_energy();
+        let q = net_charge(mc.context());
+        log::info!("Box {i}: initial energy = {e:.2} kJ/mol, net charge = {q:.4e} e");
         e
     });
 
@@ -217,7 +232,8 @@ fn run_gibbs(
         let box_output = box_prefixed_path(output_path, i);
         let mut f = std::fs::File::create(&box_output)?;
         let (final_energy, drift) = write_mc_output(mc, medium, init_e, &mut f)?;
-        log::info!("Box {i}: final energy = {final_energy:.2} kJ/mol, drift = {drift:.2e}");
+        let q = net_charge(mc.context());
+        log::info!("Box {i}: final energy = {final_energy:.2} kJ/mol, drift = {drift:.2e}, net charge = {q:.4e} e");
     }
 
     // write inter-box move summary to the main output file
