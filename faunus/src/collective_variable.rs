@@ -15,8 +15,10 @@
 //! Collective variables for enhanced sampling, constraints, and analysis.
 //!
 //! A collective variable (CV) maps the simulation state to a single scalar value.
-//! Multiple CVs can be composed into multidimensional coordinates by consumers
-//! (e.g. Penalty, Constrain, Analysis) holding `Vec<Box<dyn CollectiveVariable<T>>>`.
+//! The [`CollectiveVariable`] struct pairs an [`AxisDescriptor`] (range, resolution)
+//! with a [`CvKind`] discriminant that holds resolved data for evaluation.
+//!
+//! To add a new CV, add a single entry to the [`define_cv_kinds!`] invocation.
 //!
 //! The [`Dimension`] enum controls projection of vector quantities onto axes,
 //! and the [`Selection`] language targets atoms or groups.
@@ -26,7 +28,6 @@ use crate::dimension::Dimension;
 use crate::selection::Selection;
 use crate::Context;
 use anyhow::{bail, Result};
-use dyn_clone::DynClone;
 use serde::{Deserialize, Serialize};
 
 /// Metadata for one axis of a collective variable.
@@ -46,52 +47,242 @@ impl AxisDescriptor {
     }
 }
 
-/// A scalar observable of the simulation state.
+// ---------------------------------------------------------------------------
+// Macro: co-locates Property variant, CvKind variant, build, and evaluate
+// ---------------------------------------------------------------------------
+
+/// Generates [`Property`] (YAML enum), [`CvKind`] (resolved data),
+/// and the [`from_builder`](CvKind::from_builder)/[`evaluate`](CvKind::evaluate) match arms.
 ///
-/// Each CV is 1D. Consumers compose multi-dimensional coordinates
-/// by holding `Vec<Box<dyn CollectiveVariable<T>>>`.
-pub trait CollectiveVariable<T: Context>: std::fmt::Debug + crate::Info + DynClone {
-    fn evaluate(&self, context: &T) -> f64;
-    fn axis(&self) -> &AxisDescriptor;
-    fn in_range(&self, value: f64) -> bool {
-        self.axis().in_range(value)
+/// Each entry defines one collective variable:
+/// ```text
+/// PropertyName => VariantName(field: Type, ...) {
+///     build(builder, context) { ... -> Result<CvKind> }
+///     eval(context) { ... -> f64 }    // fields from the variant are in scope
+/// }
+/// ```
+macro_rules! define_cv_kinds {
+    ($(
+        $(#[$meta:meta])*
+        $prop:ident => $variant:ident $(( $($field:ident : $ty:ty),* $(,)? ))? {
+            build($builder:ident, $bctx:ident) $build_body:block
+            eval($ectx:ident) $eval_body:block
+        }
+    )*) => {
+        /// Supported collective variable properties (YAML `property:` field).
+        ///
+        /// The variant determines which builder fields are required;
+        /// see [`CollectiveVariableBuilder`].
+        #[derive(Debug, Clone, Serialize, Deserialize)]
+        #[serde(rename_all = "snake_case")]
+        pub enum Property {
+            $( $(#[$meta])* $prop, )*
+        }
+
+        /// Resolved data for each CV type.
+        #[derive(Debug, Clone)]
+        enum CvKind {
+            $( $variant $({ $($field: $ty),* })?, )*
+        }
+
+        impl CvKind {
+            fn from_builder(
+                builder: &CollectiveVariableBuilder,
+                context: &impl Context,
+            ) -> Result<Self> {
+                #[allow(unused_variables)]
+                match &builder.property {
+                    $( Property::$prop => {
+                        let $builder = builder;
+                        let $bctx = context;
+                        $build_body
+                    } )*
+                }
+            }
+
+            fn evaluate(&self, context: &impl Context) -> f64 {
+                match self {
+                    $( Self::$variant $({ $($field),* })? => {
+                        #[allow(unused_variables)]
+                        let $ectx = context;
+                        $eval_body
+                    } )*
+                }
+            }
+        }
+    };
+}
+
+// ---------------------------------------------------------------------------
+// CV definitions — add new CVs here
+// ---------------------------------------------------------------------------
+
+define_cv_kinds! {
+    Volume => Volume {
+        build(b, _c) {
+            reject_selection(b)?;
+            Ok(CvKind::Volume)
+        }
+        eval(c) {
+            c.cell().volume().unwrap_or(f64::INFINITY)
+        }
+    }
+
+    BoxLength => BoxLength(component: usize) {
+        build(b, _c) {
+            reject_selection(b)?;
+            Ok(CvKind::BoxLength {
+                component: single_component(&b.dimension)?,
+            })
+        }
+        eval(c) {
+            c.cell()
+                .bounding_box()
+                .map(|bb| 2.0 * bb[*component])
+                .unwrap_or(f64::INFINITY)
+        }
+    }
+
+    AtomPosition => AtomPosition(dimension: Dimension, index: usize) {
+        build(b, c) {
+            Ok(CvKind::AtomPosition {
+                dimension: b.dimension,
+                index: resolve_one_atom(b, c)?,
+            })
+        }
+        eval(c) {
+            dimension.filter(c.position(*index)).norm()
+        }
+    }
+
+    Size => Size(group: usize) {
+        build(b, c) {
+            Ok(CvKind::Size {
+                group: resolve_one_group(b, c)?,
+            })
+        }
+        eval(c) {
+            c.groups()[*group].len() as f64
+        }
+    }
+
+    EndToEnd => EndToEnd(dimension: Dimension, group: usize) {
+        build(b, c) {
+            Ok(CvKind::EndToEnd {
+                dimension: b.dimension,
+                group: resolve_one_group(b, c)?,
+            })
+        }
+        eval(c) {
+            let g = &c.groups()[*group];
+            let active = g.iter_active();
+            let first = active.start;
+            let last = active.end.saturating_sub(1);
+            if first >= active.end {
+                return 0.0;
+            }
+            dimension.filter(c.get_distance(first, last)).norm()
+        }
+    }
+
+    MassCenterPosition => MassCenterPosition(dimension: Dimension, group: usize) {
+        build(b, c) {
+            Ok(CvKind::MassCenterPosition {
+                dimension: b.dimension,
+                group: resolve_one_group(b, c)?,
+            })
+        }
+        eval(c) {
+            c.groups()[*group]
+                .mass_center()
+                .map(|com| dimension.filter(*com).norm())
+                .unwrap_or(0.0)
+        }
+    }
+
+    MassCenterSeparation => MassCenterSeparation(
+        dimension: Dimension, group1: usize, group2: usize,
+    ) {
+        build(b, c) {
+            let (group1, group2) = resolve_two_groups(b, c)?;
+            Ok(CvKind::MassCenterSeparation {
+                dimension: b.dimension,
+                group1,
+                group2,
+            })
+        }
+        eval(c) {
+            let groups = c.groups();
+            match (groups[*group1].mass_center(), groups[*group2].mass_center()) {
+                (Some(a), Some(b)) => dimension.filter(c.cell().distance(a, b)).norm(),
+                _ => 0.0,
+            }
+        }
+    }
+
+    /// Number of active atoms matching a selection (re-resolves each evaluation).
+    Count => Count(selection: Selection) {
+        build(b, _c) {
+            Ok(CvKind::Count {
+                selection: require_selection(b)?,
+            })
+        }
+        eval(c) {
+            selection
+                .resolve_atoms_live(c.topology_ref(), c.groups(), &|i| c.get_atomkind(i))
+                .len() as f64
+        }
+    }
+
+    /// Sum of charges of active atoms matching a selection (re-resolves each evaluation).
+    Charge => Charge(selection: Selection) {
+        build(b, _c) {
+            Ok(CvKind::Charge {
+                selection: require_selection(b)?,
+            })
+        }
+        eval(c) {
+            let indices = selection.resolve_atoms_live(
+                c.topology_ref(),
+                c.groups(),
+                &|i| c.get_atomkind(i),
+            );
+            let atomkinds = c.topology_ref().atomkinds();
+            indices
+                .iter()
+                .map(|&i| atomkinds[c.get_atomkind(i)].charge())
+                .sum()
+        }
     }
 }
 
-// Enables `Box<dyn CollectiveVariable<T>>` cloning, needed for
-// future Penalty/Constrain energy terms where EnergyTerm derives Clone.
-dyn_clone::clone_trait_object!(<T> CollectiveVariable<T> where T: Context);
-
 // ---------------------------------------------------------------------------
-// Property enum
+// CollectiveVariable — public wrapper
 // ---------------------------------------------------------------------------
 
-/// Supported collective variable properties.
-///
-/// The variant determines which builder fields are required:
-/// - No selection: `Volume`, `BoxLength`
-/// - One atom (`selection`): `AtomPosition`
-/// - One group (`selection`): `Size`, `EndToEnd`, `MassCenterPosition`
-/// - Two groups (`selection` + `selection2`): `MassCenterSeparation`
-/// - Any selection (`selection`): `Count` — re-resolves each evaluation
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum Property {
-    Volume,
-    BoxLength,
-    AtomPosition,
-    Size,
-    EndToEnd,
-    MassCenterPosition,
-    MassCenterSeparation,
-    /// Number of active atoms matching a selection (re-resolves each evaluation).
-    Count,
-    /// Sum of charges of active atoms matching a selection (re-resolves each evaluation).
-    Charge,
+/// A scalar observable of the simulation state.
+#[derive(Debug, Clone)]
+pub struct CollectiveVariable {
+    axis: AxisDescriptor,
+    kind: CvKind,
+}
+
+impl CollectiveVariable {
+    pub fn evaluate(&self, context: &impl Context) -> f64 {
+        self.kind.evaluate(context)
+    }
+
+    pub fn axis(&self) -> &AxisDescriptor {
+        &self.axis
+    }
+
+    pub fn in_range(&self, value: f64) -> bool {
+        self.axis.in_range(value)
+    }
 }
 
 // ---------------------------------------------------------------------------
-// Builder
+// Builder (YAML deserialization)
 // ---------------------------------------------------------------------------
 
 fn default_range() -> (f64, f64) {
@@ -132,12 +323,18 @@ impl Default for CollectiveVariableBuilder {
 }
 
 impl CollectiveVariableBuilder {
-    /// Resolve selections and construct a type-erased CV.
-    ///
-    /// Takes `context` (not just topology) because selection resolution
-    /// needs live group state to determine which groups are active.
-    pub fn build<T: Context>(&self, context: &T) -> Result<Box<dyn CollectiveVariable<T>>> {
-        self.build_concrete(context).map(|cv| cv.into_boxed())
+    /// Resolve selections and construct a [`CollectiveVariable`].
+    pub fn build(&self, context: &impl Context) -> Result<CollectiveVariable> {
+        let axis = AxisDescriptor {
+            name: format!("{:?}", self.property),
+            min: self.range.0,
+            max: self.range.1,
+            resolution: self.resolution,
+        };
+        Ok(CollectiveVariable {
+            kind: CvKind::from_builder(self, context)?,
+            axis,
+        })
     }
 }
 
@@ -222,372 +419,11 @@ fn resolve_two_groups<T: Context>(
     Ok((group1, indices2[0]))
 }
 
-// ---------------------------------------------------------------------------
-// Concrete CV types (private; users see Box<dyn CollectiveVariable<T>>)
-// ---------------------------------------------------------------------------
-
-#[derive(Debug, Clone)]
-pub(crate) struct VolumeCV {
-    pub(crate) axis: AxisDescriptor,
-}
-
-impl crate::Info for VolumeCV {
-    fn short_name(&self) -> Option<&'static str> {
-        Some("volume")
-    }
-    fn long_name(&self) -> Option<&'static str> {
-        Some("Simulation cell volume")
-    }
-}
-
-impl<T: Context> CollectiveVariable<T> for VolumeCV {
-    fn evaluate(&self, context: &T) -> f64 {
-        context.cell().volume().unwrap_or(f64::INFINITY)
-    }
-    fn axis(&self) -> &AxisDescriptor {
-        &self.axis
-    }
-}
-
-#[derive(Debug, Clone)]
-pub(crate) struct BoxLengthCV {
-    /// Index into `bounding_box()` Point: 0=x, 1=y, 2=z.
-    component: usize,
-    axis: AxisDescriptor,
-}
-
-impl crate::Info for BoxLengthCV {
-    fn short_name(&self) -> Option<&'static str> {
-        Some("box_length")
-    }
-    fn long_name(&self) -> Option<&'static str> {
-        Some("Simulation cell side length")
-    }
-}
-
-impl<T: Context> CollectiveVariable<T> for BoxLengthCV {
-    fn evaluate(&self, context: &T) -> f64 {
-        context
-            .cell()
-            .bounding_box()
-            .map(|bb| 2.0 * bb[self.component]) // bounding_box returns half-widths
-            .unwrap_or(f64::INFINITY)
-    }
-    fn axis(&self) -> &AxisDescriptor {
-        &self.axis
-    }
-}
-
-#[derive(Debug, Clone)]
-pub(crate) struct AtomPositionCV {
-    dimension: Dimension,
-    index: usize,
-    axis: AxisDescriptor,
-}
-
-impl crate::Info for AtomPositionCV {
-    fn short_name(&self) -> Option<&'static str> {
-        Some("atom_position")
-    }
-    fn long_name(&self) -> Option<&'static str> {
-        Some("Atom position projected onto dimension")
-    }
-}
-
-impl<T: Context> CollectiveVariable<T> for AtomPositionCV {
-    fn evaluate(&self, context: &T) -> f64 {
-        let pos = context.position(self.index);
-        self.dimension.filter(pos).norm()
-    }
-    fn axis(&self) -> &AxisDescriptor {
-        &self.axis
-    }
-}
-
-/// Discriminant for [`GroupCV`] — all share the same resolved fields.
-#[derive(Debug, Clone)]
-pub(crate) enum GroupProperty {
-    Size,
-    EndToEnd,
-    MassCenterPosition,
-}
-
-#[derive(Debug, Clone)]
-pub(crate) struct GroupCV {
-    property: GroupProperty,
-    dimension: Dimension,
-    group: usize,
-    axis: AxisDescriptor,
-}
-
-impl crate::Info for GroupCV {
-    fn short_name(&self) -> Option<&'static str> {
-        match self.property {
-            GroupProperty::Size => Some("size"),
-            GroupProperty::EndToEnd => Some("end_to_end"),
-            GroupProperty::MassCenterPosition => Some("mass_center_position"),
-        }
-    }
-    fn long_name(&self) -> Option<&'static str> {
-        match self.property {
-            GroupProperty::Size => Some("Number of active particles in group"),
-            GroupProperty::EndToEnd => Some("End-to-end distance of a molecular group"),
-            GroupProperty::MassCenterPosition => Some("Mass center position of a molecular group"),
-        }
-    }
-}
-
-impl<T: Context> CollectiveVariable<T> for GroupCV {
-    fn evaluate(&self, context: &T) -> f64 {
-        match self.property {
-            GroupProperty::Size => context.groups()[self.group].len() as f64,
-            GroupProperty::EndToEnd => {
-                let group = &context.groups()[self.group];
-                let active = group.iter_active();
-                let first = active.start;
-                let last = active.end.saturating_sub(1);
-                if first >= active.end {
-                    return 0.0;
-                }
-                let dist = context.get_distance(first, last);
-                self.dimension.filter(dist).norm()
-            }
-            GroupProperty::MassCenterPosition => context.groups()[self.group]
-                .mass_center()
-                .map(|com| self.dimension.filter(*com).norm())
-                .unwrap_or(0.0),
-        }
-    }
-    fn axis(&self) -> &AxisDescriptor {
-        &self.axis
-    }
-}
-
-#[derive(Debug, Clone)]
-pub(crate) struct MassCenterSeparationCV {
-    dimension: Dimension,
-    group1: usize,
-    group2: usize,
-    axis: AxisDescriptor,
-}
-
-impl crate::Info for MassCenterSeparationCV {
-    fn short_name(&self) -> Option<&'static str> {
-        Some("mass_center_separation")
-    }
-    fn long_name(&self) -> Option<&'static str> {
-        Some("Distance between two group mass centers")
-    }
-}
-
-impl<T: Context> CollectiveVariable<T> for MassCenterSeparationCV {
-    fn evaluate(&self, context: &T) -> f64 {
-        let groups = context.groups();
-        let com1 = groups[self.group1].mass_center();
-        let com2 = groups[self.group2].mass_center();
-        match (com1, com2) {
-            (Some(a), Some(b)) => {
-                let dist = context.cell().distance(a, b);
-                self.dimension.filter(dist).norm()
-            }
-            _ => 0.0,
-        }
-    }
-    fn axis(&self) -> &AxisDescriptor {
-        &self.axis
-    }
-}
-
-/// What to reduce over matched atoms.
-#[derive(Debug, Clone, Copy)]
-pub(crate) enum SelectionReduce {
-    /// Count matched atoms.
-    Count,
-    /// Sum charges of matched atoms.
-    Charge,
-}
-
-/// Reduces active atoms matching a selection to a scalar.
-///
-/// Re-resolves atom types live because speciation moves change atom identities.
-#[derive(Debug, Clone)]
-pub(crate) struct SelectionCV {
-    reduce: SelectionReduce,
-    selection: Selection,
-    axis: AxisDescriptor,
-}
-
-impl crate::Info for SelectionCV {
-    fn short_name(&self) -> Option<&'static str> {
-        match self.reduce {
-            SelectionReduce::Count => Some("count"),
-            SelectionReduce::Charge => Some("charge"),
-        }
-    }
-    fn long_name(&self) -> Option<&'static str> {
-        match self.reduce {
-            SelectionReduce::Count => Some("Number of active atoms matching selection"),
-            SelectionReduce::Charge => Some("Sum of charges of active atoms matching selection"),
-        }
-    }
-}
-
-impl<T: Context> CollectiveVariable<T> for SelectionCV {
-    fn evaluate(&self, context: &T) -> f64 {
-        let indices =
-            self.selection
-                .resolve_atoms_live(context.topology_ref(), context.groups(), &|i| {
-                    context.get_atomkind(i)
-                });
-        match self.reduce {
-            SelectionReduce::Count => indices.len() as f64,
-            SelectionReduce::Charge => {
-                let atomkinds = context.topology_ref().atomkinds();
-                indices
-                    .iter()
-                    .map(|&i| atomkinds[context.get_atomkind(i)].charge())
-                    .sum()
-            }
-        }
-    }
-    fn axis(&self) -> &AxisDescriptor {
-        &self.axis
-    }
-}
-
-// ---------------------------------------------------------------------------
-// ConcreteCollectiveVariable — non-generic wrapper for energy terms
-// ---------------------------------------------------------------------------
-
-/// Energy terms like `Constrain` need to store a CV without a generic type
-/// parameter because `EnergyTerm` is a concrete enum. This wraps each CV
-/// type so it can be held directly.
-#[derive(Debug, Clone)]
-pub(crate) enum ConcreteCollectiveVariable {
-    Volume(VolumeCV),
-    BoxLength(BoxLengthCV),
-    AtomPosition(AtomPositionCV),
-    Group(GroupCV),
-    MassCenterSeparation(MassCenterSeparationCV),
-    Selection(SelectionCV),
-}
-
-impl ConcreteCollectiveVariable {
-    /// Convert into a type-erased trait object.
-    fn into_boxed<T: Context>(self) -> Box<dyn CollectiveVariable<T>> {
-        match self {
-            Self::Volume(cv) => Box::new(cv),
-            Self::BoxLength(cv) => Box::new(cv),
-            Self::AtomPosition(cv) => Box::new(cv),
-            Self::Group(cv) => Box::new(cv),
-            Self::MassCenterSeparation(cv) => Box::new(cv),
-            Self::Selection(cv) => Box::new(cv),
-        }
-    }
-
-    pub fn evaluate(&self, context: &impl Context) -> f64 {
-        match self {
-            Self::Volume(cv) => cv.evaluate(context),
-            Self::BoxLength(cv) => cv.evaluate(context),
-            Self::AtomPosition(cv) => cv.evaluate(context),
-            Self::Group(cv) => cv.evaluate(context),
-            Self::MassCenterSeparation(cv) => cv.evaluate(context),
-            Self::Selection(cv) => cv.evaluate(context),
-        }
-    }
-
-    pub const fn axis(&self) -> &AxisDescriptor {
-        match self {
-            Self::Volume(cv) => &cv.axis,
-            Self::BoxLength(cv) => &cv.axis,
-            Self::AtomPosition(cv) => &cv.axis,
-            Self::Group(cv) => &cv.axis,
-            Self::MassCenterSeparation(cv) => &cv.axis,
-            Self::Selection(cv) => &cv.axis,
-        }
-    }
-}
-
-impl CollectiveVariableBuilder {
-    /// Resolve selections and construct a [`ConcreteCollectiveVariable`].
-    ///
-    /// This is the primary construction method. [`build`](Self::build) delegates
-    /// here and wraps the result into a trait object.
-    pub(crate) fn build_concrete(
-        &self,
-        context: &impl Context,
-    ) -> Result<ConcreteCollectiveVariable> {
-        let axis = AxisDescriptor {
-            name: format!("{:?}", self.property),
-            min: self.range.0,
-            max: self.range.1,
-            resolution: self.resolution,
-        };
-
-        match &self.property {
-            Property::Volume => {
-                reject_selection(self)?;
-                Ok(ConcreteCollectiveVariable::Volume(VolumeCV { axis }))
-            }
-            Property::BoxLength => {
-                reject_selection(self)?;
-                let component = single_component(&self.dimension)?;
-                Ok(ConcreteCollectiveVariable::BoxLength(BoxLengthCV {
-                    component,
-                    axis,
-                }))
-            }
-            Property::AtomPosition => {
-                let index = resolve_one_atom(self, context)?;
-                Ok(ConcreteCollectiveVariable::AtomPosition(AtomPositionCV {
-                    dimension: self.dimension,
-                    index,
-                    axis,
-                }))
-            }
-            Property::Size | Property::EndToEnd | Property::MassCenterPosition => {
-                let group = resolve_one_group(self, context)?;
-                let property = match self.property {
-                    Property::Size => GroupProperty::Size,
-                    Property::EndToEnd => GroupProperty::EndToEnd,
-                    Property::MassCenterPosition => GroupProperty::MassCenterPosition,
-                    _ => unreachable!(),
-                };
-                Ok(ConcreteCollectiveVariable::Group(GroupCV {
-                    property,
-                    dimension: self.dimension,
-                    group,
-                    axis,
-                }))
-            }
-            Property::MassCenterSeparation => {
-                let (group1, group2) = resolve_two_groups(self, context)?;
-                Ok(ConcreteCollectiveVariable::MassCenterSeparation(
-                    MassCenterSeparationCV {
-                        dimension: self.dimension,
-                        group1,
-                        group2,
-                        axis,
-                    },
-                ))
-            }
-            Property::Count | Property::Charge => {
-                let reduce = match self.property {
-                    Property::Count => SelectionReduce::Count,
-                    Property::Charge => SelectionReduce::Charge,
-                    _ => unreachable!(),
-                };
-                let selection = self.selection.clone().ok_or_else(|| {
-                    anyhow::anyhow!("{:?} requires a 'selection' field", self.property)
-                })?;
-                Ok(ConcreteCollectiveVariable::Selection(SelectionCV {
-                    reduce,
-                    selection,
-                    axis,
-                }))
-            }
-        }
-    }
+fn require_selection(builder: &CollectiveVariableBuilder) -> Result<Selection> {
+    builder
+        .selection
+        .clone()
+        .ok_or_else(|| anyhow::anyhow!("{:?} requires a 'selection' field", builder.property))
 }
 
 // ---------------------------------------------------------------------------
@@ -885,7 +721,6 @@ mod integration_tests {
 
     #[test]
     fn count_cv_with_active_inactive_groups() {
-        // Uses speciation test topology with active/inactive groups
         let mut rng = rand::thread_rng();
         let ctx = Backend::new("tests/files/speciation_test.yaml", None, &mut rng).unwrap();
         let sel = Selection::parse("molecule M").unwrap();

@@ -17,7 +17,7 @@
 //! Supports hard constraints (infinite energy outside range) and
 //! soft harmonic constraints (quadratic penalty around equilibrium).
 
-use crate::collective_variable::{CollectiveVariableBuilder, ConcreteCollectiveVariable};
+use crate::collective_variable::{CollectiveVariable, CollectiveVariableBuilder};
 use crate::{Change, Context};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
@@ -50,7 +50,7 @@ pub struct ConstrainBuilder {
 impl ConstrainBuilder {
     /// Build a [`Constrain`] energy term by resolving selections against the context.
     pub fn build(&self, context: &impl Context) -> Result<Constrain> {
-        let cv = self.cv.build_concrete(context)?;
+        let cv = self.cv.build(context)?;
         Ok(Constrain {
             cv,
             harmonic: self.harmonic.clone(),
@@ -65,7 +65,7 @@ impl ConstrainBuilder {
 /// - **Soft harmonic constraint**: returns `0.5 * k * (eq - value)²`.
 #[derive(Debug, Clone)]
 pub struct Constrain {
-    cv: ConcreteCollectiveVariable,
+    cv: CollectiveVariable,
     harmonic: Option<HarmonicConstraint>,
 }
 

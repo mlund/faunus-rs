@@ -19,7 +19,7 @@
 //! property value is accumulated into a per-bin running mean.
 
 use super::{Analyze, Frequency};
-use crate::collective_variable::{CollectiveVariableBuilder, ConcreteCollectiveVariable};
+use crate::collective_variable::{CollectiveVariable, CollectiveVariableBuilder};
 use crate::Context;
 use anyhow::Result;
 use average::{Estimate, Mean};
@@ -45,8 +45,8 @@ pub struct MeanAlongCoordinateBuilder {
 
 impl MeanAlongCoordinateBuilder {
     pub fn build(&self, context: &impl Context) -> Result<MeanAlongCoordinate> {
-        let cv = self.cv.build_concrete(context)?;
-        let coordinate = self.coordinate.build_concrete(context)?;
+        let cv = self.cv.build(context)?;
+        let coordinate = self.coordinate.build(context)?;
         let resolution = coordinate
             .axis()
             .resolution
@@ -71,8 +71,8 @@ impl MeanAlongCoordinateBuilder {
 /// Uses a [`BTreeMap`] for automatic ordering and no range requirement.
 #[derive(Debug)]
 pub struct MeanAlongCoordinate {
-    cv: ConcreteCollectiveVariable,
-    coordinate: ConcreteCollectiveVariable,
+    cv: CollectiveVariable,
+    coordinate: CollectiveVariable,
     resolution: f64,
     bins: BTreeMap<i64, Mean>,
     cv_mean: Mean,

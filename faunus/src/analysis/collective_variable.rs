@@ -18,7 +18,7 @@
 //! average, and optionally streams `{step, value, average}` to a file.
 
 use super::{Analyze, Frequency};
-use crate::collective_variable::{CollectiveVariableBuilder, ConcreteCollectiveVariable};
+use crate::collective_variable::{CollectiveVariable, CollectiveVariableBuilder};
 use crate::Context;
 use anyhow::Result;
 use average::{Estimate, Mean};
@@ -45,7 +45,7 @@ pub struct CollectiveVariableAnalysisBuilder {
 impl CollectiveVariableAnalysisBuilder {
     /// Resolve selections against live context and open the output file, if any.
     pub fn build(&self, context: &impl Context) -> Result<CollectiveVariableAnalysis> {
-        let cv = self.cv.build_concrete(context)?;
+        let cv = self.cv.build(context)?;
 
         let stream = if let Some(path) = &self.file {
             let mut stream = crate::auxiliary::open_compressed(path)?;
@@ -72,7 +72,7 @@ impl CollectiveVariableAnalysisBuilder {
 /// output file, mirroring the C++ Faunus `FileReactionCoordinate` analysis.
 #[derive(Debug)]
 pub struct CollectiveVariableAnalysis {
-    cv: ConcreteCollectiveVariable,
+    cv: CollectiveVariable,
     #[debug(skip)]
     stream: Option<Box<dyn Write + Send>>,
     frequency: Frequency,
