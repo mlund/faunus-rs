@@ -415,9 +415,9 @@ Hamiltonian for colloids immersed in an ideal polymer fluid
 Rigid macromolecules of arbitrary shape are treated as neutral spheres using
 their center of mass and bounding sphere radius. The polymers are modelled
 implicitly via an effective potential that captures many-body depletion effects
-through pairwise sums, at O(N_c²) computational cost.
+through pairwise sums, at $O(N_c^2)$ computational cost.
 
-The free energy change due to inserting N_c colloids into a polymer reservoir is:
+The free energy change $\beta\Delta\omega$ ($\beta = 1/k_BT$) due to inserting $N_c$ colloids into a polymer reservoir is:
 
 $$\frac{\beta\,\Delta\omega}{4\pi\rho_P^*} \approx
   \frac{N_c}{\kappa^{3/2}} \left(\sigma + \sigma^2 + \frac{\sigma^3}{3}\right)
@@ -426,10 +426,12 @@ $$\frac{\beta\,\Delta\omega}{4\pi\rho_P^*} \approx
     \frac{\displaystyle\sum_{j \neq i} k_0(\lambda R_{ij})}
          {1 + \tfrac{1}{2}(e^{2\sigma} - 1)\displaystyle\sum_{j \neq i} k_0(\lambda R_{ij})}$$
 
-where $\sigma = \sqrt{\kappa}\,R_c / R_g$, $\lambda = \sqrt{\kappa}/R_g$,
+where $R_{ij}$ is the center-to-center distance between colloids $i$ and $j$,
+$\sigma = \sqrt{\kappa}\,R_c / R_g$, $\lambda = \sqrt{\kappa}/R_g$,
 $k_0(x) = e^{-x}/x$, $\rho_P^* = \rho_P R_g^3$ is the reduced polymer
-reservoir density, $\kappa = n + 1$ is the Schulz–Flory order ($n = 0$ for
-equilibrium polymers), $R_c$ is the colloid (bounding sphere) radius, and
+reservoir number density, $\kappa = n + 1$ with $n$ being the Schulz–Flory
+distribution order ($n = 0$ for equilibrium polymers),
+$R_c$ is the colloid (bounding sphere) radius, and
 $R_g$ is the polymer radius of gyration.
 
 ### Applicability
