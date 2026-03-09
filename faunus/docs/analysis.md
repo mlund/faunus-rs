@@ -259,3 +259,42 @@ Key                        | Required | Default               | Description
 `use_com`                  | no       | `false`               | Use center-of-mass distances instead of atom-atom
 `exclude_intramolecular`   | no       | `true` (atom-atom)    | Skip pairs within the same molecule (atom-atom only)
 `dimension`                | no       | `xyz`                 | Dimension for distance projection and normalization (`x`, `y`, `z`, `xy`, …)
+
+## Mean Along Coordinate
+
+Computes the average of one collective variable (CV1) binned along another (CV2).
+CV2 is discretised into uniform bins of width `resolution`; no range is required
+since bins are created on demand using a sorted map.
+The output file contains columns for the bin center, running mean of CV1, and sample count per bin.
+The file is rewritten at each sample so partial results survive crashes.
+
+### Example
+
+Average charge of GLU residue as a function of distance from a protein:
+
+```yaml
+analysis:
+  - !MeanAlongCoordinate
+    property: charge
+    selection: "molecule GLU"
+    coordinate:
+      property: mass_center_separation
+      selection: "molecule GLU"
+      selection2: "molecule protein"
+      resolution: 0.5
+    file: charge_vs_dist.dat
+    frequency: !Every 100
+```
+
+### Options
+
+Key           | Required | Default | Description
+------------- | -------- | ------- | -------------------------------------------
+`property`    | yes      |         | CV1 type to average (see [Supported properties](#supported-properties))
+`selection`   | depends  |         | Selection for CV1
+`coordinate`  | yes      |         | CV2 block (must include `resolution`)
+`file`        | yes      |         | Output file path (`.gz` for gzip)
+`frequency`   | yes      |         | Sample frequency, e.g. `!Every 100`
+
+The `coordinate` block accepts all [collective variable](#collective-variable) fields
+(`property`, `selection`, `dimension`, etc.) plus a required `resolution` for the bin width.

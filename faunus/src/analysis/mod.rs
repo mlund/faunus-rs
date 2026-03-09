@@ -25,6 +25,7 @@ use std::path::Path;
 mod collective_variable;
 mod distance;
 mod energy;
+mod mean_along_coordinate;
 mod radial_distribution;
 mod shape;
 mod structure_writer;
@@ -32,6 +33,7 @@ mod virtual_translate;
 pub use collective_variable::{CollectiveVariableAnalysis, CollectiveVariableAnalysisBuilder};
 pub use distance::{MassCenterDistance, MassCenterDistanceBuilder};
 pub use energy::{EnergyAnalysis, EnergyAnalysisBuilder};
+pub use mean_along_coordinate::{MeanAlongCoordinate, MeanAlongCoordinateBuilder};
 pub use radial_distribution::{RadialDistribution, RadialDistributionBuilder};
 pub use shape::{ShapeAnalysis, ShapeAnalysisBuilder};
 pub use structure_writer::{StructureWriter, StructureWriterBuilder};
@@ -105,6 +107,8 @@ pub enum AnalysisBuilder {
     RadialDistribution(RadialDistributionBuilder),
     /// Energy time series (total or partial)
     Energy(EnergyAnalysisBuilder),
+    /// Mean of one CV binned along another
+    MeanAlongCoordinate(MeanAlongCoordinateBuilder),
 }
 
 impl AnalysisBuilder {
@@ -119,6 +123,7 @@ impl AnalysisBuilder {
             Self::PolymerShape(builder) => Box::new(builder.build(context)?),
             Self::RadialDistribution(builder) => Box::new(builder.build(context)?),
             Self::Energy(builder) => Box::new(builder.build(context)?),
+            Self::MeanAlongCoordinate(builder) => Box::new(builder.build(context)?),
         })
     }
 }
