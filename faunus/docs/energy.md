@@ -201,7 +201,7 @@ The Ewald method splits long-range electrostatic (or Yukawa) interactions into
 a short-range real-space sum and a long-range reciprocal-space sum,
 plus a self-energy correction:
 
-$$U = U_\text{real} + U_\text{recip} + U_\text{self}$$
+$$U = U_\text{real} + U_\text{recip} + U_\text{self} + U_\text{bg}$$
 
 The reciprocal-space contribution is
 
@@ -215,9 +215,28 @@ Debye screening parameter ($\kappa = 0$ for unscreened Coulomb).
 For screened electrostatics ($\kappa > 0$), the method generalises to Yukawa Ewald summation
 ([Salin & Caillol, 2000](https://doi.org/10.1063/1.1326477)).
 
-The self-energy correction removes spurious self-interaction:
+### Self-energy and electroneutrality corrections
 
-$$U_\text{self} = -\frac{\alpha}{\sqrt{\pi}} \sum_j q_j^2$$
+The self-energy correction removes spurious self-interaction from the real-space sum.
+For non-neutral systems ($Q = \sum_j q_j \neq 0$), additional corrections are needed
+because the $\mathbf{k}=0$ term is excluded from the reciprocal sum.
+The treatment differs between Coulomb and Yukawa:
+
+**Coulomb** ($\kappa = 0$): The divergent $\mathbf{k}=0$ term is cancelled by a
+uniform neutralizing background charge, leaving a finite correction
+([Frenkel & Smit](https://doi.org/10.1016/B978-0-12-267351-1.X5000-7), Eq. 12.1.25):
+
+$$U_\text{self} = -\frac{\alpha}{\sqrt{\pi}} \sum_j q_j^2, \quad
+  U_\text{bg} = -\frac{\pi Q^2}{2V\alpha^2}$$
+
+**Yukawa** ($\kappa > 0$): The $\mathbf{k}=0$ term is finite due to screening
+and is included explicitly instead of a neutralizing background:
+
+$$U_\text{self} = \left(-\frac{\alpha}{\sqrt{\pi}} e^{-\kappa^2/4\alpha^2}
+  + \frac{\kappa}{2}\operatorname{erfc}\!\frac{\kappa}{2\alpha}\right) \sum_j q_j^2, \quad
+  U_{k=0} = \frac{2\pi}{V} \frac{e^{-\kappa^2/4\alpha^2}}{\kappa^2} Q^2$$
+
+Both $U_\text{bg}$ and $U_{k=0}$ vanish for electroneutral systems.
 
 ### How accuracy controls parameters
 
@@ -231,11 +250,12 @@ $$\alpha = \frac{\sqrt{-\ln \varepsilon}}{r_c}, \quad
 
 where $r_c$ is the real-space cutoff and $L_\text{max}$ is the largest box side length.
 Higher accuracy (smaller $\varepsilon$) increases both $\alpha$ and the number of
-k-vectors. For Yukawa ($\kappa > 0$), the optimal $\alpha$ is independent of $\kappa$
-([Salin & Caillol, 2000](https://doi.org/10.1063/1.1326477), Eq. 3.3),
-so the same parameters are used for both Coulomb and Yukawa.
-The screening makes both real- and reciprocal-space sums converge faster,
-so Coulomb-derived parameters are conservative for Yukawa.
+k-vectors. For Yukawa ($\kappa > 0$), the tighter Pålsson–Tornberg bound
+([arXiv:1911.04875](https://arxiv.org/abs/1911.04875)) is used instead,
+yielding a smaller $\alpha$ and fewer k-vectors than the Coulomb estimate.
+When $2\kappa r_c \geq -\ln\varepsilon$, the screening is strong enough that
+the real-space sum alone achieves the target accuracy and the reciprocal sum
+is skipped entirely.
 
 ### YAML configuration
 
