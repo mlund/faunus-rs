@@ -14,6 +14,7 @@ for convergence checking, and for post-processing of time/step series data.
 If `file` is given, each sampled step writes a line with columns
 `step`, `value`, and `running_average`.
 The file may be gzip-compressed by using a `.gz` extension.
+If no file is given, only the mean and RMS are written to `output.yaml`.
 
 ### Example
 
@@ -23,7 +24,6 @@ analysis:
     property: mass_center_position
     selection: "molecule protein"
     dimension: z
-    range: [-50.0, 50.0]
     file: cv.dat
     frequency: !Every 100
 ```
@@ -33,7 +33,6 @@ analysis:
 Key          | Required | Default | Description
 ------------ | -------- | ------- | -------------------------------------------
 `property`   | yes      |         | CV type (see table below)
-`range`      | yes      |         | Allowed `[min, max]` interval
 `frequency`  | yes      |         | Sample frequency, e.g. `!Every 100`
 `dimension`  | no       | `xyz`   | Axis projection (`x`, `y`, `z`, `xy`, …)
 `selection`  | depends  |         | Selection expression for one atom or group
