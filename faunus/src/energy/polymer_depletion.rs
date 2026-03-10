@@ -35,12 +35,36 @@ struct ColloidInfo {
     radius: f64,
 }
 
+/// Robin boundary condition amplitude suppression factor f(σ, h̃) = h̃ / ((1+σ) + h̃).
+///
+/// Modifies the Dirichlet monopole amplitude A_D to A_R = A_D · f,
+/// where h̃ = R_c / b is the dimensionless inverse extrapolation length.
+/// Returns 1.0 (Dirichlet limit) when h̃ is None (infinite).
+///
+/// - h̃ > 0: depletion (f ∈ (0,1), weaker than Dirichlet)
+/// - h̃ = 0: Neumann / neutral (f = 0, no polymer-mediated interaction)
+/// - -(1+σ) < h̃ < 0: adsorption (f < 0, sign-inverted interactions)
+/// - h̃ ≤ -(1+σ): divergent; monopole approximation breaks down
+#[inline]
+fn robin_f(sigma: f64, h_tilde: Option<f64>) -> f64 {
+    match h_tilde {
+        Some(ht) => ht / ((1.0 + sigma) + ht),
+        None => 1.0,
+    }
+}
+
 /// Many-body polymer depletion interaction for colloids in an ideal polymer
 /// fluid.
 ///
 /// Implements the Hamiltonian of
 /// [Forsman & Woodward, Soft Matter, 2012, 8, 2121](https://doi.org/10.1039/c2sm06737d)
-/// (eq 17). Rigid macromolecules are treated as neutral spheres via their
+/// (eq 17), generalised with Robin boundary conditions for tunable
+/// polymer-surface affinity. The Robin parameter h̃ = R_c / b interpolates
+/// between full depletion (h̃ → ∞, Dirichlet) and neutral adsorption
+/// (h̃ = 0, Neumann). The single-particle insertion term scales as f(σ,h̃)
+/// and the many-body pairwise term as f², where f = h̃/((1+σ)+h̃).
+///
+/// Rigid macromolecules are treated as neutral spheres via their
 /// center of mass and bounding sphere radius. The potential decomposes into
 /// pairwise sums at O(N_c²) cost.
 #[derive(Debug, Clone)]
@@ -59,6 +83,8 @@ pub struct PolymerDepletion {
     fixed_radius: Option<f64>,
     /// Multiplicative scaling of the effective colloid radius
     radius_scaling: f64,
+    /// Dimensionless Robin BC parameter h̃ = R_c / b; None means Dirichlet (h̃ → ∞)
+    h_tilde: Option<f64>,
     /// Thermal energy kT (kJ/mol)
     thermal_energy: f64,
     /// Cached colloid positions and radii
@@ -88,13 +114,14 @@ impl PolymerDepletion {
         let mut energy = 0.0;
         for (i, ci) in colloids.iter().enumerate() {
             let sigma = lambda * ci.radius;
+            let f = robin_f(sigma, self.h_tilde);
 
             let sigma2 = sigma.powi(2);
 
-            // Single-particle insertion term (positive, unfavorable)
-            energy += kappa_inv_3_2 * (sigma + sigma2 + sigma2 * sigma / 3.0);
+            // Single-particle insertion term (positive, unfavorable), scaled by f
+            energy += f * kappa_inv_3_2 * (sigma + sigma2 + sigma2 * sigma / 3.0);
 
-            // Many-body pairwise sum (negative, attractive depletion)
+            // Many-body pairwise sum (negative, attractive depletion), scaled by f²
             let k0_sum: f64 = colloids
                 .iter()
                 .enumerate()
@@ -104,7 +131,7 @@ impl PolymerDepletion {
 
             let e2s = (2.0 * sigma).exp();
             let denom = 1.0 + (e2s - 1.0) * k0_sum / 2.0;
-            energy -= sigma2 * e2s * kappa_inv_3_2 * k0_sum / denom;
+            energy -= f * f * sigma2 * e2s * kappa_inv_3_2 * k0_sum / denom;
         }
 
         prefactor * energy
@@ -229,6 +256,9 @@ impl PolymerDepletion {
         if let Some(r) = self.fixed_radius {
             map.insert("colloid_radius".into(), r.into());
         }
+        if let Some(ht) = self.h_tilde {
+            map.insert("h_tilde".into(), ht.into());
+        }
 
         let colloids: Vec<serde_yaml::Value> = self
             .colloids
@@ -271,9 +301,10 @@ impl PolymerDepletion {
             .enumerate()
             .map(|(i, ci)| {
                 let sigma = lambda * ci.radius;
+                let f = robin_f(sigma, self.h_tilde);
                 let sigma2 = sigma.powi(2);
                 let e2s = (2.0 * sigma).exp();
-                let a = sigma2 * e2s * kappa_inv_3_2;
+                let a = f * f * sigma2 * e2s * kappa_inv_3_2;
                 let k0_sum: f64 = colloids
                     .iter()
                     .enumerate()
@@ -341,6 +372,13 @@ pub struct PolymerDepletionBuilder {
     /// Scaling factor for the effective colloid radius (default: 1.0)
     #[serde(default = "default_one")]
     pub colloid_radius_scaling: f64,
+    /// Dimensionless Robin BC parameter h̃ = R_c / b, where b is the de Gennes
+    /// extrapolation length. Controls polymer-surface affinity: large values give
+    /// full depletion (Dirichlet limit); small positive values weaken it; omit for
+    /// the original non-adsorbing model. Negative values model polymer adsorption
+    /// onto the colloid surface.
+    #[serde(default, alias = "h̃")]
+    pub h_tilde: Option<f64>,
 }
 
 fn default_kappa() -> f64 {
@@ -376,6 +414,18 @@ impl PolymerDepletionBuilder {
             })
             .collect::<anyhow::Result<Vec<_>>>()?;
 
+        // Validate Robin BC parameter: h̃ > -(1+σ) required for convergence
+        if let Some(ht) = self.h_tilde {
+            let lambda = self.kappa.sqrt() / self.polymer_rg;
+            let rc = self.colloid_radius.unwrap_or(0.0) * self.colloid_radius_scaling;
+            let sigma = lambda * rc;
+            anyhow::ensure!(
+                ht > -(1.0 + sigma),
+                "h_tilde ({ht}) must be > -(1+σ) = {}, otherwise the monopole diverges",
+                -(1.0 + sigma)
+            );
+        }
+
         let mut pm = PolymerDepletion {
             rg: self.polymer_rg,
             rho_star: self.polymer_density,
@@ -384,6 +434,7 @@ impl PolymerDepletionBuilder {
             colloid_molecule_names: self.molecules.clone(),
             fixed_radius: self.colloid_radius,
             radius_scaling: self.colloid_radius_scaling,
+            h_tilde: self.h_tilde,
             thermal_energy,
             colloids: Vec::new(),
             cached_energy: 0.0,
@@ -398,10 +449,11 @@ impl PolymerDepletionBuilder {
         pm.cached_energy = beta_energy * pm.thermal_energy;
 
         log::info!(
-            "Polymer depletion energy: R_g={}, rho*={}, kappa={}, {} colloid type(s), initial energy={:.4} kJ/mol",
+            "Polymer depletion energy: R_g={}, rho*={}, kappa={}, h_tilde={}, {} colloid type(s), initial energy={:.4} kJ/mol",
             self.polymer_rg,
             self.polymer_density,
             self.kappa,
+            self.h_tilde.map_or("inf".to_string(), |h| format!("{h}")),
             self.molecules.len(),
             pm.cached_energy
         );
@@ -423,6 +475,17 @@ mod tests {
         rc: f64,
         colloids: Vec<ColloidInfo>,
     ) -> PolymerDepletion {
+        make_test_instance_robin(rg, rho_star, kappa, rc, None, colloids)
+    }
+
+    fn make_test_instance_robin(
+        rg: f64,
+        rho_star: f64,
+        kappa: f64,
+        rc: f64,
+        h_tilde: Option<f64>,
+        colloids: Vec<ColloidInfo>,
+    ) -> PolymerDepletion {
         PolymerDepletion {
             rg,
             rho_star,
@@ -431,6 +494,7 @@ mod tests {
             colloid_molecule_names: vec!["Test".to_string()],
             fixed_radius: Some(rc),
             radius_scaling: 1.0,
+            h_tilde,
             thermal_energy: 1.0,
             colloids,
             cached_energy: 0.0,
@@ -689,5 +753,158 @@ molecules: [Colloid]
 
         let pm = make_test_instance(rg, rho_star, kappa, rc, colloids.clone());
         assert_forces_match_finite_differences(&pm, &colloids);
+    }
+
+    #[test]
+    fn test_robin_f_limits() {
+        // Dirichlet limit: h_tilde = None -> f = 1
+        assert_approx_eq!(f64, robin_f(1.0, None), 1.0);
+        // Neumann limit: h_tilde = 0 -> f = 0
+        assert_approx_eq!(f64, robin_f(1.0, Some(0.0)), 0.0);
+        // Large h_tilde -> f ~ 1
+        assert_approx_eq!(f64, robin_f(1.0, Some(1e6)), 1.0, epsilon = 1e-5);
+        // Analytical check: f(σ=1, h̃=3) = 3 / (2 + 3) = 0.6
+        assert_approx_eq!(f64, robin_f(1.0, Some(3.0)), 0.6);
+        // Protein limit σ→0: f -> h̃/(1+h̃)
+        assert_approx_eq!(f64, robin_f(1e-10, Some(1.0)), 0.5, epsilon = 1e-9);
+    }
+
+    #[test]
+    fn test_robin_none_matches_dirichlet() {
+        // Energy with h_tilde=None must match the original Dirichlet model exactly
+        let (rg, rho_star, kappa, rc) = (10.0, 0.5, 1.0, 5.0);
+        let colloids = vec![
+            ColloidInfo {
+                group_index: 0,
+                com: Point::new(0.0, 0.0, 0.0),
+                radius: rc,
+            },
+            ColloidInfo {
+                group_index: 1,
+                com: Point::new(15.0, 0.0, 0.0),
+                radius: rc,
+            },
+        ];
+        let pm_dirichlet = make_test_instance(rg, rho_star, kappa, rc, colloids.clone());
+        let pm_robin_none =
+            make_test_instance_robin(rg, rho_star, kappa, rc, None, colloids.clone());
+        let cell = crate::cell::Endless;
+        assert_approx_eq!(
+            f64,
+            pm_dirichlet.compute_beta_energy(&colloids, &cell),
+            pm_robin_none.compute_beta_energy(&colloids, &cell),
+            epsilon = 1e-15
+        );
+    }
+
+    #[test]
+    fn test_robin_suppresses_energy() {
+        // Finite h_tilde must reduce the magnitude of both insertion and pair terms
+        let (rg, rho_star, kappa, rc) = (10.0, 0.5, 1.0, 5.0);
+        let colloids = vec![
+            ColloidInfo {
+                group_index: 0,
+                com: Point::new(0.0, 0.0, 0.0),
+                radius: rc,
+            },
+            ColloidInfo {
+                group_index: 1,
+                com: Point::new(15.0, 0.0, 0.0),
+                radius: rc,
+            },
+        ];
+        let cell = crate::cell::Endless;
+        let e_dirichlet = make_test_instance(rg, rho_star, kappa, rc, colloids.clone())
+            .compute_beta_energy(&colloids, &cell);
+        let e_robin =
+            make_test_instance_robin(rg, rho_star, kappa, rc, Some(3.0), colloids.clone())
+                .compute_beta_energy(&colloids, &cell);
+        // Robin energy should be smaller in magnitude (closer to zero)
+        assert!(
+            e_robin.abs() < e_dirichlet.abs(),
+            "Robin energy {e_robin} should be smaller than Dirichlet {e_dirichlet}"
+        );
+        assert!(
+            e_robin > 0.0,
+            "Robin energy should remain positive (insertion dominates)"
+        );
+    }
+
+    #[test]
+    fn test_robin_analytical_single_particle() {
+        // Single colloid: energy = 4π·ρ*·κ^{-3/2}·f·(σ + σ² + σ³/3)
+        let (rg, rho_star, kappa, rc) = (10.0, 0.5, 1.0, 5.0);
+        let ht = 3.0;
+        let pm = make_test_instance_robin(
+            rg,
+            rho_star,
+            kappa,
+            rc,
+            Some(ht),
+            vec![ColloidInfo {
+                group_index: 0,
+                com: Point::new(0.0, 0.0, 0.0),
+                radius: rc,
+            }],
+        );
+        let cell = crate::cell::Endless;
+        let beta_e = pm.compute_beta_energy(&pm.colloids, &cell);
+
+        let lambda = kappa.sqrt() / rg;
+        let sigma = lambda * rc;
+        let f = ht / ((1.0 + sigma) + ht);
+        let expected = 4.0
+            * PI
+            * rho_star
+            * kappa.powf(-1.5)
+            * f
+            * (sigma + sigma * sigma + sigma.powi(3) / 3.0);
+        assert_approx_eq!(f64, beta_e, expected, epsilon = 1e-12);
+    }
+
+    #[test]
+    fn test_robin_forces_vs_finite_difference() {
+        let (rg, rho_star, kappa, rc) = (10.0, 0.5, 1.0, 5.0);
+        let colloids = vec![
+            ColloidInfo {
+                group_index: 0,
+                com: Point::new(0.0, 0.0, 0.0),
+                radius: rc,
+            },
+            ColloidInfo {
+                group_index: 1,
+                com: Point::new(15.0, 0.0, 0.0),
+                radius: rc,
+            },
+            ColloidInfo {
+                group_index: 2,
+                com: Point::new(5.0, 12.0, 3.0),
+                radius: rc,
+            },
+        ];
+        let pm = make_test_instance_robin(rg, rho_star, kappa, rc, Some(3.0), colloids.clone());
+        assert_forces_match_finite_differences(&pm, &colloids);
+    }
+
+    #[test]
+    fn test_robin_yaml_roundtrip() {
+        let yaml = r#"
+polymer_rg: 10.0
+polymer_density: 0.5
+kappa: 2.0
+molecules: [Colloid]
+h_tilde: 5.0
+"#;
+        let builder: PolymerDepletionBuilder = serde_yaml::from_str(yaml).unwrap();
+        assert_approx_eq!(f64, builder.h_tilde.unwrap(), 5.0);
+
+        // Without h_tilde -> None (Dirichlet)
+        let yaml2 = r#"
+polymer_rg: 10.0
+polymer_density: 0.5
+molecules: [Colloid]
+"#;
+        let builder2: PolymerDepletionBuilder = serde_yaml::from_str(yaml2).unwrap();
+        assert!(builder2.h_tilde.is_none());
     }
 }

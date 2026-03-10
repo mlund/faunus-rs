@@ -537,7 +537,8 @@ energy:
 
 The `polymer_depletion` energy term implements the Forsman & Woodward many-body
 Hamiltonian for colloids immersed in an ideal polymer fluid
-([Forsman & Woodward, Soft Matter, 2012, 8, 2121](https://doi.org/10.1039/c2sm06737d)).
+([Forsman & Woodward, Soft Matter, 2012, 8, 2121](https://doi.org/10.1039/c2sm06737d)),
+generalised with Robin boundary conditions for tunable polymer–surface affinity.
 
 Rigid macromolecules of arbitrary shape are treated as neutral spheres using
 their center of mass and bounding sphere radius. The polymers are modelled
@@ -547,8 +548,8 @@ through pairwise sums, at $O(N_c^2)$ computational cost.
 The free energy change $\beta\Delta\omega$ ($\beta = 1/k_BT$) due to inserting $N_c$ colloids into a polymer reservoir is:
 
 $$\frac{\beta\,\Delta\omega}{4\pi\rho_P^*} \approx
-  \frac{N_c}{\kappa^{3/2}} \left(\sigma + \sigma^2 + \frac{\sigma^3}{3}\right)
-  - \frac{\sigma^2 e^{2\sigma}}{\kappa^{3/2}}
+  \frac{f \cdot N_c}{\kappa^{3/2}} \left(\sigma + \sigma^2 + \frac{\sigma^3}{3}\right)
+  - \frac{f^2 \cdot \sigma^2 e^{2\sigma}}{\kappa^{3/2}}
     \sum_{i=1}^{N_c}
     \frac{\displaystyle\sum_{j \neq i} k_0(\lambda R_{ij})}
          {1 + \tfrac{1}{2}(e^{2\sigma} - 1)\displaystyle\sum_{j \neq i} k_0(\lambda R_{ij})}$$
@@ -560,6 +561,28 @@ reservoir number density, $\kappa = n + 1$ with $n$ being the Schulz–Flory
 distribution order ($n = 0$ for equilibrium polymers),
 $R_c$ is the colloid (bounding sphere) radius, and
 $R_g$ is the polymer radius of gyration.
+
+### Robin boundary condition
+
+The original Forsman–Woodward model assumes non-adsorbing colloid surfaces
+(Dirichlet boundary condition, $\hat{g} = 0$ at the surface).
+The Robin BC generalises this using the
+[de Gennes extrapolation length](https://doi.org/10.1021/ma00115a001)
+$b = 1/h$, replacing the Dirichlet monopole amplitude $A_D = \sigma e^\sigma$
+with $A_R = A_D \cdot f$, where
+
+$$f(\sigma, \tilde{h}) = \frac{\tilde{h}}{(1 + \sigma) + \tilde{h}}$$
+
+and $\tilde{h} = R_c / b$ is the dimensionless Robin parameter.
+The single-particle insertion term scales as $f$ and the many-body pairwise
+term as $f^2$; this asymmetry is not reproducible by an effective radius.
+
+| $\tilde{h}$ | Boundary condition | Physical interpretation |
+|---|---|---|
+| omitted | Dirichlet ($f=1$) | Full depletion; original model |
+| large positive | near-Dirichlet | Weakly reduced depletion |
+| $0$ | Neumann ($f=0$) | Neutral surface; no polymer-mediated interaction |
+| $> -(1+\sigma)$ and $< 0$ | Adsorption ($f<0$) | Polymer accumulates at surface; interactions sign-inverted |
 
 ### Applicability
 
@@ -578,6 +601,7 @@ energy:
     polymer_density: 0.5
     kappa: 1.0
     molecules: [Colloid]
+    h_tilde: 5.0  # optional; omit for full depletion (Dirichlet)
 ```
 
 | Key                | Required | Default | Description                                           |
@@ -588,3 +612,4 @@ energy:
 | `molecules`        | yes      |         | Molecule types treated as colloids                    |
 | `colloid_radius`   | no       |         | Fixed $R_c$ (Å); default: bounding sphere radius      |
 | `colloid_radius_scaling` | no | `1.0`  | Scaling factor for the effective colloid radius        |
+| `h_tilde` / `h̃`  | no       |         | Robin BC parameter $\tilde{h} = R_c/b$; omit for Dirichlet |
