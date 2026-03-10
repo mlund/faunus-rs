@@ -835,6 +835,61 @@ fn half_kick_exact_impulse() {
     );
 }
 
+/// Single-atom rigid molecules avoid spline/bonded complexity while exercising
+/// the core BAOAB integrator and thermostat.
+fn make_free_particles(n: usize, mass: f32, kt: f32) -> LangevinUploadData {
+    let mol_is_rigid = vec![1u32; n];
+    let mol_masses = vec![mass; n];
+    // Zero inertia is safe: `safe_inv(0)` returns 0 in the kernel,
+    // so angular noise vanishes for point particles.
+    let mol_inertia = vec![0.0f32; n * 4];
+    let atom_is_flexible = vec![0u32; n];
+    let atom_masses = vec![mass; n];
+
+    let (com_velocities, angular_velocities, atom_velocities) = generate_mb_velocities(
+        kt as f64,
+        &mol_is_rigid,
+        &mol_masses,
+        &mol_inertia,
+        &atom_is_flexible,
+        &atom_masses,
+    );
+
+    let positions = vec![0.0f32; n * 4];
+    let ref_positions = vec![0.0f32; n * 4];
+    let com_positions = vec![0.0f32; n * 4];
+    let mol_atom_offsets: Vec<u32> = (0..=n as u32).collect();
+    let quaternions: Vec<f32> = (0..n).flat_map(|_| [0.0, 0.0, 0.0, 1.0]).collect();
+    let excl_offsets = vec![0u32; n + 1];
+
+    LangevinUploadData {
+        positions,
+        ref_positions,
+        com_positions,
+        mol_atom_offsets,
+        mol_masses,
+        mol_inertia,
+        quaternions,
+        com_velocities,
+        angular_velocities,
+        atom_type_ids: None,
+        mol_ids: None,
+        spline_params: None,
+        spline_coeffs: None,
+        n_atom_types: 0,
+        bond_data: None,
+        angle_data: None,
+        dihedral_data: None,
+        excl_offsets,
+        excl_atoms: Vec::new(),
+        mol_is_rigid,
+        atom_velocities,
+        atom_masses,
+        atom_is_flexible,
+        has_flexible: false,
+    }
+}
+
 /// Per-atom half-kick: same physics as rigid half-kick but different kernel.
 #[test]
 fn half_kick_atoms_exact_impulse() {
@@ -887,5 +942,200 @@ fn half_kick_atoms_exact_impulse() {
         "vz={}, expected={}",
         result[2],
         kick * force[2]
+    );
+}
+
+// ============================================================================
+// End-to-end physics regression tests (BAOAB integrator + thermostat)
+// ============================================================================
+
+/// Shared fixture for physics regression tests.
+struct PhysicsTestSetup {
+    gpu: LangevinGpu<cubecl::wgpu::WgpuRuntime>,
+    n: usize,
+    mass: f32,
+    kt: f32,
+    friction: f64,
+    dt: f64,
+}
+
+impl PhysicsTestSetup {
+    /// N=200 argon-like particles at 300K with standard LD parameters.
+    fn new() -> Self {
+        let n = 200;
+        let mass = 39.948f32; // argon
+        let temperature = 300.0;
+        let friction = 10.0;
+        let dt = 0.002;
+        // Large box to avoid PBC artifacts in free-particle tests
+        let box_length = 1000.0f32;
+        let kt = (physical_constants::MOLAR_GAS_CONSTANT * 1e-3 * temperature) as f32;
+
+        let client = test_client();
+        let config = LangevinConfig {
+            timestep: dt,
+            friction,
+            steps: 0,
+            temperature,
+            cell_list_rebuild: 0,
+        };
+        let data = make_free_particles(n, mass, kt);
+        let mut gpu = LangevinGpu::new(client, config, n as u32, n as u32, box_length, kt);
+        gpu.upload_state(data);
+        Self {
+            gpu,
+            n,
+            mass,
+            kt,
+            friction,
+            dt,
+        }
+    }
+}
+
+/// Force callback for free particles (pure thermostat-driven diffusion).
+fn zero_forces(n: usize) -> impl FnMut(&[[f32; 4]]) -> (Vec<[f32; 4]>, Vec<[f32; 4]>) {
+    move |_| (vec![[0.0f32; 4]; n], vec![[0.0f32; 4]; n])
+}
+
+/// Isotropic harmonic trap F=-k·r confines particles for equipartition tests.
+fn harmonic_forces(k: f32) -> impl FnMut(&[[f32; 4]]) -> (Vec<[f32; 4]>, Vec<[f32; 4]>) {
+    move |positions| {
+        let forces: Vec<[f32; 4]> = positions
+            .iter()
+            .map(|p| [-k * p[0], -k * p[1], -k * p[2], 0.0])
+            .collect();
+        let torques = vec![[0.0f32; 4]; positions.len()];
+        (forces, torques)
+    }
+}
+
+/// Einstein relation: MSD(t) = 6·D·t where D = kT·conv/(m·γ).
+/// Verifies that the thermostat produces correct diffusive transport.
+#[test]
+fn free_particle_diffusion() {
+    let PhysicsTestSetup {
+        mut gpu,
+        n,
+        mass,
+        kt,
+        friction,
+        dt,
+    } = PhysicsTestSetup::new();
+    let total_steps = 2000;
+
+    let initial_pos = gpu.download_positions();
+    gpu.run_steps_with_cpu_forces(total_steps, &mut zero_forces(n));
+    let pos = gpu.download_positions();
+
+    let msd: f32 = initial_pos
+        .iter()
+        .zip(pos.iter())
+        .map(|(a, b)| {
+            let dx = b[0] - a[0];
+            let dy = b[1] - a[1];
+            let dz = b[2] - a[2];
+            dx * dx + dy * dy + dz * dz
+        })
+        .sum::<f32>()
+        / n as f32;
+
+    let t = total_steps as f64 * dt;
+    let d = kt as f64 * 100.0 / (mass as f64 * friction); // 100 = kJ/mol → amu·Å²/ps²
+    let expected_msd = 6.0 * d * t;
+    let ratio = msd as f64 / expected_msd;
+    assert!(
+        (0.5..=1.8).contains(&ratio),
+        "MSD={msd:.2}, expected={expected_msd:.2}, ratio={ratio:.3}"
+    );
+}
+
+/// Equipartition: ⟨x²⟩ = kT/k for a harmonic oscillator.
+/// Verifies that the thermostat samples the correct Boltzmann distribution.
+#[test]
+fn harmonic_oscillator_position_variance() {
+    let PhysicsTestSetup { mut gpu, n, kt, .. } = PhysicsTestSetup::new();
+    let k_spring = 1.0f32; // kJ/mol/Å²
+    let mut force_fn = harmonic_forces(k_spring);
+
+    gpu.run_steps_with_cpu_forces(1000, &mut force_fn);
+
+    // Sample in blocks to decorrelate snapshots
+    let n_blocks = 10;
+    let mut sum_x2 = 0.0f64;
+    for _ in 0..n_blocks {
+        gpu.run_steps_with_cpu_forces(500, &mut force_fn);
+        for p in &gpu.download_positions() {
+            sum_x2 += (p[0] as f64).powi(2);
+        }
+    }
+
+    let var_x = sum_x2 / (n_blocks * n) as f64;
+    let expected_var = kt as f64 / k_spring as f64;
+    let ratio = var_x / expected_var;
+    assert!(
+        (0.5..=1.8).contains(&ratio),
+        "⟨x²⟩={var_x:.3}, expected={expected_var:.3}, ratio={ratio:.3}"
+    );
+}
+
+/// Verifies that the O-step thermostat drives translational kinetic energy to kT.
+#[test]
+fn temperature_equilibrium() {
+    let PhysicsTestSetup { mut gpu, .. } = PhysicsTestSetup::new();
+    // Harmonic trap prevents unbounded drift that would make KE sampling noisy
+    let mut force_fn = harmonic_forces(1.0);
+
+    gpu.run_steps_with_cpu_forces(2000, &mut force_fn);
+
+    let (t_trans, _) = gpu.download_temperature();
+    let ratio = t_trans as f64 / 300.0;
+    assert!(
+        (0.7..=1.3).contains(&ratio),
+        "T_trans={t_trans:.1}K, expected≈300K, ratio={ratio:.3}"
+    );
+}
+
+/// C_v(t)/C_v(0) = exp(-γt) for free Brownian particles.
+/// Verifies that the friction coefficient is correctly applied in the O-step.
+#[test]
+fn velocity_autocorrelation_decay() {
+    let PhysicsTestSetup {
+        mut gpu,
+        n,
+        friction,
+        dt,
+        ..
+    } = PhysicsTestSetup::new();
+    // 50 steps × 0.002 ps = 0.1 ps → exactly one friction time (1/γ)
+    let steps_per_block = 50;
+
+    gpu.run_steps_with_cpu_forces(1000, &mut zero_forces(n));
+
+    let v0 = gpu.download_com_velocities();
+    let cv0: f64 = v0
+        .iter()
+        .map(|v| (v[0] as f64).powi(2) + (v[1] as f64).powi(2) + (v[2] as f64).powi(2))
+        .sum::<f64>()
+        / n as f64;
+
+    // Run one block and check decay at t=0.1ps (γ=10 → exp(-1) ≈ 0.368)
+    gpu.run_steps_with_cpu_forces(steps_per_block, &mut zero_forces(n));
+    let vt = gpu.download_com_velocities();
+    let cv: f64 = v0
+        .iter()
+        .zip(vt.iter())
+        .map(|(a, b)| {
+            a[0] as f64 * b[0] as f64 + a[1] as f64 * b[1] as f64 + a[2] as f64 * b[2] as f64
+        })
+        .sum::<f64>()
+        / n as f64;
+
+    let t = steps_per_block as f64 * dt;
+    let ratio = cv / cv0;
+    let expected = (-friction * t).exp();
+    assert!(
+        (0.15..=0.65).contains(&ratio),
+        "C_v(t)/C_v(0)={ratio:.3}, expected≈{expected:.3} at t={t}ps"
     );
 }

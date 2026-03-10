@@ -907,6 +907,11 @@ impl<R: Runtime> LangevinGpu<R> {
         self.readback_vec4(&self.positions, self.n_atoms as usize)
     }
 
+    #[cfg(test)]
+    pub(super) fn download_com_velocities(&self) -> Vec<[f32; 4]> {
+        self.readback_vec4(&self.com_velocities, self.n_molecules as usize)
+    }
+
     pub(super) fn download_quaternions(&self) -> Vec<[f32; 4]> {
         self.readback_vec4(&self.quaternions, self.n_molecules as usize)
     }
