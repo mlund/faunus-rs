@@ -15,6 +15,7 @@
 //! Monte Carlo moves and MD propagators.
 
 mod builder;
+#[cfg(feature = "gpu")]
 mod langevin;
 mod moveproposal;
 mod moverunner;
@@ -22,14 +23,16 @@ mod moverunner;
 mod tests;
 
 pub use builder::MoveBuilder;
+#[cfg(feature = "gpu")]
 pub use langevin::{LangevinConfig, LangevinRunner};
 pub(crate) use moveproposal::{default_repeat, default_weight, tagged_yaml};
 pub use moveproposal::{Displacement, MoveProposal, MoveTarget, ProposedMove};
 pub use moverunner::MoveRunner;
 
+#[cfg(feature = "gpu")]
+use crate::energy::EnergyChange;
 use crate::{
     analysis::{AnalysisCollection, Analyze},
-    energy::EnergyChange,
     montecarlo::AcceptanceCriterion,
     Context,
 };
@@ -117,6 +120,7 @@ impl<T: Context> MoveCollection<T> {
 #[derive(Debug)]
 pub enum PropagationBlock<T: Context> {
     MonteCarlo(MoveCollection<T>),
+    #[cfg(feature = "gpu")]
     LangevinDynamics(Box<LangevinRunner>),
 }
 
@@ -125,6 +129,7 @@ impl<T: Context> PropagationBlock<T> {
     pub fn elapsed(&self) -> std::time::Duration {
         match self {
             Self::MonteCarlo(mc) => mc.elapsed,
+            #[cfg(feature = "gpu")]
             Self::LangevinDynamics(ld) => ld.elapsed,
         }
     }
@@ -143,6 +148,7 @@ impl<T: Context> PropagationBlock<T> {
             Self::MonteCarlo(mc) => {
                 mc.propagate(context, criterion, thermal_energy, step, rng, analyses)
             }
+            #[cfg(feature = "gpu")]
             Self::LangevinDynamics(ld) => {
                 let energy_before = context
                     .hamiltonian()
@@ -160,6 +166,7 @@ impl<T: Context> PropagationBlock<T> {
         };
         match self {
             Self::MonteCarlo(mc) => mc.elapsed += t0.elapsed(),
+            #[cfg(feature = "gpu")]
             Self::LangevinDynamics(ld) => ld.elapsed += t0.elapsed(),
         }
         result
@@ -169,6 +176,7 @@ impl<T: Context> PropagationBlock<T> {
     pub fn moves(&self) -> &[MoveRunner<T>] {
         match self {
             Self::MonteCarlo(mc) => mc.moves(),
+            #[cfg(feature = "gpu")]
             Self::LangevinDynamics(_) => &[],
         }
     }
@@ -176,6 +184,7 @@ impl<T: Context> PropagationBlock<T> {
     pub fn repeat(&self) -> usize {
         match self {
             Self::MonteCarlo(mc) => mc.repeat(),
+            #[cfg(feature = "gpu")]
             Self::LangevinDynamics(ld) => ld.config.steps,
         }
     }
@@ -183,6 +192,7 @@ impl<T: Context> PropagationBlock<T> {
     fn to_yaml(&self) -> serde_yaml::Value {
         match self {
             Self::MonteCarlo(mc) => mc.to_yaml(),
+            #[cfg(feature = "gpu")]
             Self::LangevinDynamics(ld) => ld.to_yaml(),
         }
     }
@@ -278,7 +288,8 @@ impl<T: Context> Propagate<T> {
                     .moves()
                     .iter()
                     .map(|m| m.statistics().energy_change_sum)
-                    .sum(),
+                    .sum::<f64>(),
+                #[cfg(feature = "gpu")]
                 PropagationBlock::LangevinDynamics(ld) => ld.energy_change_sum,
             })
             .sum()

@@ -29,6 +29,7 @@ moves:
 }
 
 #[test]
+#[cfg(feature = "gpu")]
 fn langevin_config_parse() {
     let yaml = "!LangevinDynamics
 timestep: 0.002

@@ -12,11 +12,10 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
+#[cfg(feature = "gpu")]
+use super::langevin::{LangevinConfig, LangevinRunner};
 use super::{
-    langevin::{LangevinConfig, LangevinRunner},
-    moveproposal::default_repeat,
-    moverunner::MoveRunner,
-    MoveCollection, PropagationBlock,
+    moveproposal::default_repeat, moverunner::MoveRunner, MoveCollection, PropagationBlock,
 };
 use crate::{montecarlo::AcceptanceCriterion, Context};
 use serde::{Deserialize, Serialize};
@@ -81,12 +80,14 @@ impl CollectionBuilder {
 pub(super) enum MoveCollectionBuilder {
     Stochastic(CollectionBuilder),
     Deterministic(CollectionBuilder),
+    #[cfg(feature = "gpu")]
     LangevinDynamics(LangevinConfig),
 }
 
 impl MoveCollectionBuilder {
     pub(super) fn build<T: Context>(self, context: &T) -> anyhow::Result<PropagationBlock<T>> {
         let (strategy, builder) = match self {
+            #[cfg(feature = "gpu")]
             Self::LangevinDynamics(config) => {
                 return Ok(PropagationBlock::LangevinDynamics(Box::new(
                     LangevinRunner::new(config),
