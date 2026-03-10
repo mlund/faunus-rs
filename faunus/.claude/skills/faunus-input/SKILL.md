@@ -1,5 +1,5 @@
 ---
-name: faunus-yaml
+name: faunus-input
 description: Create, validate, and explain Faunus YAML input files for molecular simulation. Use when setting up systems, configuring energy terms, MC moves, or analysis.
 ---
 
@@ -9,24 +9,8 @@ Always read relevant example files when generating new configs to ensure accurac
 
 **Valid example input files** (read these for reference):
 
-Examples — full simulation setups:
-- `examples/calvados3/input.yaml` — coarse-grained protein with include files
-- `examples/kimhummer/input.yaml` — Kim-Hummer coarse-grained model
-- `examples/langevin/langevin.yaml` — Langevin dynamics
-- `examples/langevin/equilibrate.yaml` — equilibration workflow
-- `examples/sticks/input.yaml` — rigid stick molecules
-- `examples/twobody/twobody.yaml` — two-body interaction analysis
-- `examples/protein_ions/input.yaml` — protein with ions in spherical cell
-
-Regression tests — compact, well-tested inputs:
-- `tests/files/gcmc_ideal_gas/input.yaml` — ideal gas GCMC
-- `tests/files/gcmc_swap/input.yaml` — atom swap + GCMC
-- `tests/files/gibbs_ensemble/input.yaml` — Gibbs ensemble
-- `tests/files/npt_polymers/input.yaml` — NPT polymer simulation
-- `tests/files/npt_water/input.yaml` — NPT water
-- `tests/files/npt_water_ewald/input.yaml` — NPT water with Ewald summation
-- `tests/files/titration/input.yaml` — protein titration with salt
-- `tests/files/titration_implicit/input.yaml` — implicit proton titration
+All examples and regression tests use `input.yaml` as the main input file.
+Find them with: `examples/*/input.yaml` and `tests/files/*/input.yaml`.
 
 Unit test topologies — partial configs for specific features:
 - `tests/files/speciation_test.yaml` — speciation move setup

@@ -3,4 +3,4 @@
 
 cd examples/langevin
 cp eq_state.yaml state.yaml
-cargo run --release --features gpu -- run --input langevin.yaml --state state.yaml
+cargo run --release --features gpu -- run --input input.yaml --state state.yaml
