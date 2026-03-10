@@ -12,7 +12,8 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
-//! Group-based collective variables: Size, EndToEnd, MassCenterPosition, MassCenterSeparation.
+//! Group-based collective variables: Size, EndToEnd, GyrationRadius, DipoleMoment,
+//! MassCenterPosition, MassCenterSeparation.
 //!
 //! These CVs resolve group indices at build time and evaluate against those fixed indices.
 
@@ -22,6 +23,8 @@ use super::{
 };
 use crate::cell::BoundaryConditions;
 use crate::dimension::Dimension;
+use crate::geometry::{self, GyrationTensor};
+use crate::group::GroupCollection;
 use crate::selection::Selection;
 use anyhow::{bail, Result};
 use serde::{Deserialize, Serialize};
@@ -84,6 +87,116 @@ impl_single_group_with_dim_builder!(EndToEnd, "end_to_end", |dimension, group| E
     dimension,
     group
 });
+
+// ---------------------------------------------------------------------------
+// GyrationRadius
+// ---------------------------------------------------------------------------
+
+/// Radius of gyration of a molecular group.
+///
+/// With default dimension (`XYZ`), returns Rg = sqrt(trace(S)).
+/// With a single axis (e.g. `X`), returns sqrt(Sxx) — the mass-weighted
+/// spread along that axis.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GyrationRadius {
+    dimension: Dimension,
+    group: usize,
+}
+
+impl GyrationRadius {
+    /// Compute mass-weighted gyration tensor for the group.
+    fn gyration_tensor(&self, context: &dyn EvalContext) -> Option<GyrationTensor> {
+        let group = &context.groups()[self.group];
+        let com = group.mass_center()?;
+        if group.len() < 2 {
+            return None;
+        }
+        let atomkinds = context.topology_ref().atomkinds();
+        let positions_masses = group.iter_active().map(|i| {
+            let pos = GroupCollection::position(context, i);
+            let mass = atomkinds[context.get_atomkind(i)].mass();
+            (pos, mass)
+        });
+        GyrationTensor::from_positions_masses_com(positions_masses, com, context.cell())
+    }
+}
+
+#[typetag::serde(name = "gyration_radius")]
+impl CvKind for GyrationRadius {
+    fn evaluate(&self, context: &dyn EvalContext) -> f64 {
+        self.gyration_tensor(context)
+            .map(|gt| {
+                let diag = crate::Point::new(gt.tensor[(0, 0)], gt.tensor[(1, 1)], gt.tensor[(2, 2)]);
+                self.dimension.filter(diag).iter().sum::<f64>().sqrt()
+            })
+            .unwrap_or(0.0)
+    }
+
+    fn name(&self) -> &'static str {
+        "GyrationRadius"
+    }
+}
+
+impl_single_group_with_dim_builder!(
+    GyrationRadius,
+    "gyration_radius",
+    |dimension, group| GyrationRadius { dimension, group }
+);
+
+// ---------------------------------------------------------------------------
+// DipoleMoment
+// ---------------------------------------------------------------------------
+
+/// Electric dipole moment of a molecular group.
+///
+/// Computed as **μ** = Σ qᵢ · (**rᵢ** − **r_cm**) with PBC-aware distances.
+/// With default dimension (`xyz`), returns |**μ**|; with a single axis, returns
+/// the signed component along that axis.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DipoleMoment {
+    dimension: Dimension,
+    group: usize,
+}
+
+impl DipoleMoment {
+    fn compute(&self, context: &dyn EvalContext) -> Option<crate::Point> {
+        let group = &context.groups()[self.group];
+        let com = group.mass_center()?;
+        let atomkinds = context.topology_ref().atomkinds();
+        let charges_positions = group.iter_active().map(|i| {
+            let charge = atomkinds[context.get_atomkind(i)].charge();
+            (charge, GroupCollection::position(context, i))
+        });
+        Some(geometry::dipole_moment(charges_positions, com, context.cell()))
+    }
+}
+
+#[typetag::serde(name = "dipole_moment")]
+impl CvKind for DipoleMoment {
+    fn evaluate(&self, context: &dyn EvalContext) -> f64 {
+        self.compute(context)
+            .map(|mu| {
+                let filtered = self.dimension.filter(mu);
+                if self.dimension.ndim() == 1 {
+                    // Single axis: return signed component
+                    filtered.x + filtered.y + filtered.z
+                } else {
+                    filtered.norm()
+                }
+            })
+            .unwrap_or(0.0)
+    }
+
+    fn name(&self) -> &'static str {
+        "DipoleMoment"
+    }
+}
+
+impl_single_group_with_dim_builder!(
+    DipoleMoment,
+    "dipole_moment",
+    |dimension, group| DipoleMoment { dimension, group }
+);
 
 // ---------------------------------------------------------------------------
 // MassCenterPosition

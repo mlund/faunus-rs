@@ -45,13 +45,15 @@ Key          | Required | Default | Description
 
 Property                 | Selection       | Description
 ------------------------ | --------------- | -------------------------------------------
-`volume`                 | none            | Simulation cell volume
-`box_length`             | none            | Cell side length along `dimension`
+`volume`                 | none            | Cell measure via `dimension`: volume (`xyz`), cross-section area (`xy`), or length (`z`). Areas are derived from true volume, giving e.g. πr² for cylinders
 `atom_position`          | one atom        | Atom position projected onto `dimension`
 `count`                  | atoms or groups | Number of active atoms matching selection
+`molarity`               | atoms or groups | Molar concentration (mol/L) of matching atoms
 `charge`                 | atoms or groups | Sum of charges of active atoms matching selection
 `size`                   | one group       | Number of active particles in a group
 `end_to_end`             | one group       | End-to-end distance of a molecular group
+`gyration_radius`        | one group       | Radius of gyration (default `xyz` = full Rg; single axis gives spread along it)
+`dipole_moment`          | one group       | Electric dipole moment (default `xyz` = magnitude; single axis gives signed component)
 `mass_center_position`   | one group       | Mass center position along `dimension`
 `mass_center_separation` | two groups      | Distance between two group mass centers
 

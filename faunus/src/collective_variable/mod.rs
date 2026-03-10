@@ -31,9 +31,11 @@ use serde::{Deserialize, Serialize};
 
 // Re-export CV types for convenience
 pub use atom::AtomPosition;
-pub use cell::{BoxLength, Volume};
-pub use dynamic::{Charge, Count};
-pub use group::{EndToEnd, MassCenterPosition, MassCenterSeparation, Size};
+pub use cell::Volume;
+pub use dynamic::{Charge, Count, Molarity};
+pub use group::{
+    DipoleMoment, EndToEnd, GyrationRadius, MassCenterPosition, MassCenterSeparation, Size,
+};
 
 /// Metadata for one axis of a collective variable.
 #[derive(Debug, Clone, Serialize, Deserialize)]

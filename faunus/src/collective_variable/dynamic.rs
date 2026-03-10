@@ -12,13 +12,14 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
-//! Dynamic selection collective variables: Count, Charge.
+//! Dynamic selection collective variables: Count, Concentration, Charge.
 //!
 //! These CVs re-resolve selections at each evaluation, allowing them to track
 //! changing particle counts (e.g., grand canonical ensemble).
 //! They are self-building since no build-time resolution is needed.
 
 use super::{impl_self_building_cv, CvKind, EvalContext};
+use crate::cell::Shape;
 use crate::selection::Selection;
 use serde::{Deserialize, Serialize};
 
@@ -48,6 +49,39 @@ impl CvKind for Count {
 }
 
 impl_self_building_cv!(Count, "count");
+
+// ---------------------------------------------------------------------------
+// Concentration (self-building)
+// ---------------------------------------------------------------------------
+
+/// Molar concentration (mol/L) of active atoms matching a selection.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Molarity {
+    pub selection: Selection,
+}
+
+/// Molar (mol/L) to number density (1/ų): N_A × 10⁻²⁷.
+const MOLAR_TO_INV_ANGSTROM3: f64 = physical_constants::AVOGADRO_CONSTANT * 1e-27;
+
+#[typetag::serde(name = "molarity")]
+impl CvKind for Molarity {
+    fn evaluate(&self, context: &dyn EvalContext) -> f64 {
+        let n = self
+            .selection
+            .resolve_atoms_live(context.topology_ref(), context.groups(), &|i| {
+                context.get_atomkind(i)
+            })
+            .len() as f64;
+        let volume = context.cell().volume().unwrap_or(f64::INFINITY);
+        n / (volume * MOLAR_TO_INV_ANGSTROM3)
+    }
+
+    fn name(&self) -> &'static str {
+        "Molarity"
+    }
+}
+
+impl_self_building_cv!(Molarity, "molarity");
 
 // ---------------------------------------------------------------------------
 // Charge (self-building)

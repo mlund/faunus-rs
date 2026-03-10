@@ -112,6 +112,20 @@ impl Dimension {
         }
     }
 
+    /// Return the complementary dimension (axes not in `self`).
+    pub const fn complement(&self) -> Self {
+        match self {
+            Self::None => Self::XYZ,
+            Self::X => Self::YZ,
+            Self::Y => Self::XZ,
+            Self::Z => Self::XY,
+            Self::XY => Self::Z,
+            Self::XZ => Self::Y,
+            Self::YZ => Self::X,
+            Self::XYZ => Self::None,
+        }
+    }
+
     /// Effective "volume" (volume, area, or length) projected from a 3D bounding box.
     pub fn effective_volume(&self, bbox: Point) -> f64 {
         match self {

@@ -1,8 +1,24 @@
-//! Gyration tensor decomposition and molecular overlay via principal-axis alignment.
+//! Gyration tensor, dipole moment, and molecular overlay via principal-axis alignment.
 
 use crate::{cell::SimulationCell, Point};
 use nalgebra::{Matrix3, Rotation3, SymmetricEigen};
 use rand::Rng;
+
+/// Compute the electric dipole moment of a charge distribution relative to a reference point.
+///
+/// Uses minimum-image distances to handle periodic boundary conditions:
+/// **μ** = Σ qᵢ · (**rᵢ** − **r_ref**).
+pub(crate) fn dipole_moment(
+    charges_positions: impl IntoIterator<Item = (f64, Point)>,
+    reference: &Point,
+    cell: &impl SimulationCell,
+) -> Point {
+    charges_positions
+        .into_iter()
+        .fold(Point::zeros(), |mu, (q, pos)| {
+            mu + q * cell.distance(&pos, reference)
+        })
+}
 
 /// Mass-weighted gyration tensor with eigendecomposition.
 ///
@@ -179,6 +195,33 @@ mod tests {
     use crate::cell::{BoundaryConditions, Shape};
     use approx::assert_relative_eq;
     use nalgebra::Vector3;
+
+    #[test]
+    fn dipole_moment_simple() {
+        let cell = crate::cell::Endless;
+        let origin = Point::zeros();
+        // Two opposite charges along x: μ = q·d x̂
+        let charges_positions = vec![(1.0, Point::new(1.0, 0.0, 0.0)), (-1.0, Point::new(-1.0, 0.0, 0.0))];
+        let mu = super::dipole_moment(charges_positions, &origin, &cell);
+        assert_relative_eq!(mu.x, 2.0, epsilon = 1e-10);
+        assert_relative_eq!(mu.y, 0.0, epsilon = 1e-10);
+        assert_relative_eq!(mu.z, 0.0, epsilon = 1e-10);
+    }
+
+    #[test]
+    fn dipole_moment_neutral_symmetric() {
+        let cell = crate::cell::Endless;
+        let origin = Point::zeros();
+        // Symmetric arrangement: dipole moment should be zero
+        let charges_positions = vec![
+            (1.0, Point::new(1.0, 0.0, 0.0)),
+            (1.0, Point::new(-1.0, 0.0, 0.0)),
+            (-1.0, Point::new(0.0, 1.0, 0.0)),
+            (-1.0, Point::new(0.0, -1.0, 0.0)),
+        ];
+        let mu = super::dipole_moment(charges_positions, &origin, &cell);
+        assert_relative_eq!(mu.norm(), 0.0, epsilon = 1e-10);
+    }
 
     #[test]
     fn collinear_rod_eigenvalues() {
