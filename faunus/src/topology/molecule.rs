@@ -118,6 +118,13 @@ pub struct MoleculeKind {
     #[serde(default)]
     #[getter(skip)]
     atomic: bool,
+    /// Opt in to Coulomb correction for excluded pairs.
+    /// Needed because the splined nonbonded potential bundles SR + Coulomb,
+    /// so exclusions skip both — but charge titration and alchemical moves
+    /// require Coulomb between bonded neighbors whose charges can change.
+    #[serde(default)]
+    #[getter(skip)]
+    keep_excluded_coulomb: bool,
     /// Map of custom properties.
     #[serde(default)]
     custom: HashMap<String, Value>,
@@ -194,6 +201,10 @@ impl MoleculeKind {
 
     pub const fn atomic(&self) -> bool {
         self.atomic
+    }
+
+    pub const fn keep_excluded_coulomb(&self) -> bool {
+        self.keep_excluded_coulomb
     }
 
     pub const fn bond_graph(&self) -> &BondGraph {
@@ -276,11 +287,13 @@ impl MoleculeKind {
 
     /// Build the bond graph and generate nonbonded exclusions from it.
     ///
-    /// Rigid molecules exclude all internal pairs since intramolecular
-    /// distances are constant and the energy offset is meaningless.
+    /// Rigid (and RigidAlchemical) molecules exclude all internal pairs since
+    /// intramolecular distances are constant and the SR energy offset is
+    /// meaningless. For RigidAlchemical, the `ExcludedCoulomb` term adds
+    /// back the charge-dependent part when `keep_excluded_coulomb` is set.
     pub(super) fn finalize_bonds(&mut self) {
         self.bond_graph = BondGraph::from_bonds(&self.bonds, self.atoms.len());
-        if self.degrees_of_freedom == DegreesOfFreedom::Rigid {
+        if self.degrees_of_freedom.is_rigid() {
             let n = self.atoms.len();
             for i in 0..n {
                 for j in (i + 1)..n {

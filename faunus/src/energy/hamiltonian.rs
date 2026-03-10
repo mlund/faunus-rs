@@ -72,8 +72,25 @@ impl Hamiltonian {
                 nonbonded_matrix,
                 builder,
                 topology,
-                medium,
+                medium.clone(),
             )?);
+
+            // Splined nonbonded skips excluded pairs entirely (SR + Coulomb).
+            // For titration/alchemical moves, we need the Coulomb part back.
+            let any_keep = topology
+                .moleculekinds()
+                .iter()
+                .any(|m| m.keep_excluded_coulomb());
+            if any_keep && nonbonded_matrix.has_coulomb() {
+                let term = super::excluded_coulomb::ExcludedCoulomb::new(
+                    nonbonded_matrix,
+                    topology,
+                    medium.clone(),
+                    builder.combine_with_default,
+                )?;
+                hamiltonian.push(term.into());
+                log::info!("Added excluded-pair Coulomb correction");
+            }
         }
 
         if topology

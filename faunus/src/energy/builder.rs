@@ -101,6 +101,18 @@ pub enum PairInteraction {
 }
 
 impl PairInteraction {
+    /// True if this variant is an electrostatic interaction.
+    pub fn is_coulomb(&self) -> bool {
+        matches!(
+            self,
+            Self::CoulombEwald(_)
+                | Self::CoulombRealSpaceEwald(_)
+                | Self::CoulombPlain(_)
+                | Self::CoulombReactionField(_)
+                | Self::CoulombFanourgakis(_)
+        )
+    }
+
     /// Convert to a boxed `IsotropicTwobodyEnergy` trait object for a given pair of atom types.
     ///
     /// ## Notes
@@ -288,6 +300,50 @@ impl PairPotentialBuilder {
             .push(interaction);
     }
 
+    /// Collect matching interactions for an atom pair, applying `combine_with_default`
+    /// logic and an optional filter predicate.
+    fn collect_interactions(
+        &self,
+        atom1: &AtomKind,
+        atom2: &AtomKind,
+        medium: Option<interatomic::coulomb::Medium>,
+        combine_with_default: bool,
+        filter: impl Fn(&PairInteraction) -> bool,
+    ) -> anyhow::Result<Option<Box<dyn IsotropicTwobodyEnergy>>> {
+        let key = DefaultOrPair::Pair(UnorderedPair(
+            atom1.name().to_owned(),
+            atom2.name().to_owned(),
+        ));
+        let pair = self.0.get(&key);
+        let default = self.0.get(&DefaultOrPair::Default);
+
+        let interactions: Vec<&PairInteraction> = if combine_with_default {
+            default
+                .into_iter()
+                .chain(pair)
+                .flat_map(|v| v.iter())
+                .filter(|i| filter(i))
+                .collect()
+        } else {
+            pair.or(default)
+                .map(|v| v.iter().filter(|i| filter(i)).collect())
+                .unwrap_or_default()
+        };
+
+        if interactions.is_empty() {
+            return Ok(None);
+        }
+
+        let total: Box<dyn IsotropicTwobodyEnergy> = interactions
+            .into_iter()
+            .map(|interact| interact.to_boxed(atom1, atom2, medium.clone()))
+            .collect::<anyhow::Result<Vec<_>>>()?
+            .into_iter()
+            .sum();
+
+        Ok(Some(total))
+    }
+
     /// Get interactions for a specific pair of atoms and collect them into a single `IsotropicTwobodyEnergy` trait object.
     /// If this pair of atoms has no explicitly defined interactions, get interactions for Default.
     /// If Default is not defined or no interactions have been found, return `NoInteraction` structure and log a warning.
@@ -301,42 +357,37 @@ impl PairPotentialBuilder {
         medium: Option<interatomic::coulomb::Medium>,
         combine_with_default: bool,
     ) -> anyhow::Result<Box<dyn IsotropicTwobodyEnergy>> {
-        let key = DefaultOrPair::Pair(UnorderedPair(
-            atom1.name().to_owned(),
-            atom2.name().to_owned(),
-        ));
-        let pair = self.0.get(&key);
-        let default = self.0.get(&DefaultOrPair::Default);
+        self.collect_interactions(atom1, atom2, medium, combine_with_default, |_| true)
+            .map(|opt| {
+                opt.unwrap_or_else(|| {
+                    log::warn!(
+                        "No nonbonded interaction defined for '{} <-> {}'.",
+                        atom1.name(),
+                        atom2.name()
+                    );
+                    Box::from(NoInteraction)
+                })
+            })
+    }
 
-        let interactions: Vec<&PairInteraction> = if combine_with_default {
-            default
-                .into_iter()
-                .chain(pair)
-                .flat_map(|v| v.iter())
-                .collect()
-        } else {
-            pair.or(default)
-                .map(|v| v.iter().collect())
-                .unwrap_or_default()
-        };
+    /// Get only the Coulomb part of the interaction for a given atom pair.
+    /// Needed separately from `get_interaction()` because excluded-pair
+    /// corrections must evaluate Coulomb without the short-range component.
+    ///
+    /// Returns `None` if no Coulomb interaction is configured.
+    pub(crate) fn get_coulomb_interaction(
+        &self,
+        atom1: &AtomKind,
+        atom2: &AtomKind,
+        medium: Option<interatomic::coulomb::Medium>,
+        combine_with_default: bool,
+    ) -> anyhow::Result<Option<Box<dyn IsotropicTwobodyEnergy>>> {
+        self.collect_interactions(atom1, atom2, medium, combine_with_default, PairInteraction::is_coulomb)
+    }
 
-        if interactions.is_empty() {
-            log::warn!(
-                "No nonbonded interaction defined for '{} <-> {}'.",
-                atom1.name(),
-                atom2.name()
-            );
-            return Ok(Box::from(NoInteraction));
-        }
-
-        let total_interaction: Box<dyn IsotropicTwobodyEnergy> = interactions
-            .iter()
-            .map(|interact| interact.to_boxed(atom1, atom2, medium.clone()))
-            .collect::<anyhow::Result<Vec<_>>>()?
-            .into_iter()
-            .sum();
-
-        Ok(total_interaction)
+    /// True if any configured interaction is a Coulomb variant.
+    pub(crate) fn has_coulomb(&self) -> bool {
+        self.0.values().flatten().any(|i| i.is_coulomb())
     }
 }
 

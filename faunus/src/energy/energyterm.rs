@@ -3,6 +3,7 @@ use super::{
     constrain::Constrain,
     custom_external::CustomExternal,
     ewald::EwaldReciprocalEnergy,
+    excluded_coulomb::ExcludedCoulomb,
     external_pressure::ExternalPressure,
     nonbonded::{NonbondedMatrix, NonbondedMatrixSplined},
     polymer_depletion::PolymerDepletion,
@@ -35,6 +36,8 @@ pub enum EnergyTerm {
     EwaldReciprocal(Box<EwaldReciprocalEnergy>),
     /// Polymer depletion many-body interaction.
     PolymerDepletion(PolymerDepletion),
+    /// Coulomb correction for excluded (bonded) pairs.
+    ExcludedCoulomb(ExcludedCoulomb),
 }
 
 /// Dispatch a no-arg method to stateful energy terms; stateless terms are no-ops.
@@ -52,7 +55,8 @@ macro_rules! dispatch_stateful {
             | EnergyTerm::CellOverlap(_)
             | EnergyTerm::Constrain(_)
             | EnergyTerm::ExternalPressure(_)
-            | EnergyTerm::CustomExternal(_) => {}
+            | EnergyTerm::CustomExternal(_)
+            | EnergyTerm::ExcludedCoulomb(_) => {}
         }
     };
 }
@@ -77,7 +81,8 @@ impl EnergyTerm {
             | Self::CellOverlap(_)
             | Self::Constrain(_)
             | Self::ExternalPressure(_)
-            | Self::CustomExternal(_) => Ok(()),
+            | Self::CustomExternal(_)
+            | Self::ExcludedCoulomb(_) => Ok(()),
         }
     }
 
@@ -97,7 +102,8 @@ impl EnergyTerm {
             | Self::CellOverlap(_)
             | Self::Constrain(_)
             | Self::ExternalPressure(_)
-            | Self::CustomExternal(_) => {}
+            | Self::CustomExternal(_)
+            | Self::ExcludedCoulomb(_) => {}
         }
     }
 
@@ -135,7 +141,8 @@ impl EnergyTerm {
             | Self::IntramolecularBonded(_)
             | Self::IntermolecularBonded(_)
             | Self::CellOverlap(_)
-            | Self::Constrain(_) => None,
+            | Self::Constrain(_)
+            | Self::ExcludedCoulomb(_) => None,
         }
     }
 
@@ -155,7 +162,8 @@ impl EnergyTerm {
             | Self::ExternalPressure(_)
             | Self::CustomExternal(_)
             | Self::EwaldReciprocal(_)
-            | Self::PolymerDepletion(_) => Vec::new(),
+            | Self::PolymerDepletion(_)
+            | Self::ExcludedCoulomb(_) => Vec::new(),
         }
     }
 
@@ -189,6 +197,7 @@ impl crate::Info for EnergyTerm {
             Self::CustomExternal(_) => "customexternal",
             Self::EwaldReciprocal(_) => "ewald_reciprocal",
             Self::PolymerDepletion(_) => "polymer_depletion",
+            Self::ExcludedCoulomb(_) => "excluded_coulomb",
         })
     }
 }
@@ -209,6 +218,7 @@ impl EnergyChange for EnergyTerm {
             Self::CustomExternal(x) => x.energy(context, change),
             Self::EwaldReciprocal(x) => x.energy(context, change),
             Self::PolymerDepletion(x) => x.energy(context, change),
+            Self::ExcludedCoulomb(x) => x.energy(context, change),
         }
     }
 }

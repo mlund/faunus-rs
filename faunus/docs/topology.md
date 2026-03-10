@@ -73,6 +73,7 @@ molecules:
 | `dihedrals`           | no       | `[]`    | Four-body dihedral potentials                    |
 | `excluded_neighbours` | no       | 0       | Exclude nonbonded interactions within _n_ bonds  |
 | `exclusions`          | no       | `[]`    | Manual atom pair exclusions, e.g. `[[0, 4]]`     |
+| `keep_excluded_coulomb` | no     | `false` | Add back Coulomb for excluded pairs (see [energy](energy.md#excluded-pair-coulomb-correction)) |
 | `degrees_of_freedom`  | no       | `Free`  | See below                                        |
 | `atom_names`          | no       | `[]`    | Per-atom names (use `null` to skip)              |
 | `residues`            | no       | `[]`    | Protein residues                                 |
@@ -146,8 +147,8 @@ system:
 |--------------------|------------------------------------------------------|
 | `Free`             | All degrees of freedom are active (default)          |
 | `Frozen`           | All degrees of freedom are frozen                    |
-| `Rigid`            | Rigid body — only translations and rotations         |
-| `RigidAlchemical`  | Rigid body with free alchemical degrees of freedom   |
+| `Rigid`            | Rigid body — only translations and rotations; all intra-molecular nonbonded pairs excluded |
+| `RigidAlchemical`  | Like `Rigid` but with free alchemical degrees of freedom (charges, etc.); use with `keep_excluded_coulomb` for titration |
 
 ### Atomic Molecules
 

@@ -735,13 +735,10 @@ mod tests {
             &torsions,
             &dihedrals,
             1,
-            &HashSet::from([
-                UnorderedPair(0, 1),
-                UnorderedPair(1, 2),
-                UnorderedPair(2, 3),
-                UnorderedPair(0, 4),
-                UnorderedPair(5, 6),
-            ]),
+            // RigidAlchemical excludes all intra-molecular pairs (distances are fixed)
+            &(0..7)
+                .flat_map(|i| ((i + 1)..7).map(move |j| UnorderedPair(i, j)))
+                .collect(),
             DegreesOfFreedom::RigidAlchemical,
             &names,
             &residues,

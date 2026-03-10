@@ -338,6 +338,38 @@ Available grid types:
 | `PowerLaw(p)`  | Power-law with custom exponent $p$                       |
 | `InverseRsq`   | Uniform in $1/r^2$ — dense at short range               |
 
+## Excluded-Pair Coulomb Correction
+
+Excluded pairs (from `excluded_neighbours` or `exclusions`) skip all nonbonded
+interactions, including Coulomb. For charge titration or alchemical MC moves
+where charges change, the Coulomb contribution between excluded neighbors
+must still be evaluated.
+
+Setting `keep_excluded_coulomb: true` on a molecule adds a correction term that
+evaluates Coulomb for all excluded pairs in that molecule:
+
+$$E_\text{correction} = \sum_{\text{excluded } (i,j)} U_\text{Coulomb}(r_{ij})$$
+
+The Coulomb scheme and parameters are taken from the nonbonded configuration.
+The term is automatically added to the Hamiltonian when at least one molecule
+opts in and a Coulomb interaction is configured.
+
+For `Rigid` and `RigidAlchemical` molecules, all intra-molecular pairs are
+excluded (distances are constant). The correction adds back the
+charge-dependent Coulomb part that varies under alchemical moves.
+
+### YAML configuration
+
+```yaml
+molecules:
+  - name: peptide
+    atoms: [A, B, C]
+    excluded_neighbours: 1
+    keep_excluded_coulomb: true
+```
+
+No additional `energy:` section is needed — the term is created automatically.
+
 ## Bonded Interactions
 
 Bonded energy terms are automatically added to the Hamiltonian based on the

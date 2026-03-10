@@ -94,33 +94,18 @@ mod tests {
         assert_eq!(exclusions.ncols, num_particles);
         assert_eq!(exclusions.data.len(), num_particles * num_particles);
 
-        let expected_exclusions = [
-            (0, 1),
-            (2, 3),
-            (1, 2),
-            (0, 4),
-            (5, 6),
-            (7, 8),
-            (9, 10),
-            (8, 9),
-            (7, 11),
-            (12, 13),
-            (14, 15),
-            (16, 17),
-            (15, 16),
-            (14, 18),
-            (19, 20),
-            (192, 193),
-            (193, 194),
-            (194, 195),
-            (192, 196),
-            (197, 198),
-            (199, 200),
-            (200, 201),
-            (201, 202),
-            (199, 203),
-            (204, 205),
-        ];
+        // MOL (RigidAlchemical, 7 atoms) excludes all intra-molecular pairs.
+        // MOL2 (Free, 3 atoms, no bonds) has no exclusions.
+        // Blocks: 3×MOL @0, 50×MOL2 @21, 6×MOL2 @171, 1×MOL2 @189, 2×MOL @192, 5×MOL2 @206
+        let mol_offsets = [0, 7, 14, 192, 199]; // start of each MOL instance
+        let mut expected_exclusions = Vec::new();
+        for &offset in &mol_offsets {
+            for i in 0..7 {
+                for j in (i + 1)..7 {
+                    expected_exclusions.push((offset + i, offset + j));
+                }
+            }
+        }
 
         for i in 0..num_particles {
             for j in 0..num_particles {

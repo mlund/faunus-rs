@@ -21,6 +21,7 @@ mod constrain;
 mod custom_external;
 mod energyterm;
 pub(crate) mod ewald;
+mod excluded_coulomb;
 pub mod exclusions;
 mod external_pressure;
 mod hamiltonian;
