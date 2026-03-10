@@ -23,7 +23,6 @@ use serde_yaml::Value;
 use std::path::Path;
 
 mod collective_variable;
-mod distance;
 mod energy;
 mod mean_along_coordinate;
 mod radial_distribution;
@@ -31,7 +30,6 @@ mod shape;
 mod structure_writer;
 mod virtual_translate;
 pub use collective_variable::{CollectiveVariableAnalysis, CollectiveVariableAnalysisBuilder};
-pub use distance::{MassCenterDistance, MassCenterDistanceBuilder};
 pub use energy::{EnergyAnalysis, EnergyAnalysisBuilder};
 pub use mean_along_coordinate::{MeanAlongCoordinate, MeanAlongCoordinateBuilder};
 pub use radial_distribution::{RadialDistribution, RadialDistributionBuilder};
@@ -92,8 +90,6 @@ impl Frequency {
 /// Helper to deserialize analysis input and create a boxed `Analyze` object.
 #[derive(Clone, Deserialize)]
 pub enum AnalysisBuilder {
-    /// Mass center distance analysis
-    MassCenterDistance(MassCenterDistanceBuilder),
     /// Structure writer
     #[serde(rename = "Trajectory")]
     StructureWriter(StructureWriterBuilder),
@@ -116,7 +112,6 @@ impl AnalysisBuilder {
     #[must_use = "this returns a Result that should be handled"]
     pub fn build<T: Context>(&self, context: &T) -> Result<Box<dyn Analyze<T> + Send>> {
         Ok(match self {
-            Self::MassCenterDistance(builder) => Box::new(builder.build()?),
             Self::StructureWriter(builder) => Box::new(builder.build()?),
             Self::VirtualTranslate(builder) => Box::new(builder.build()?),
             Self::CollectiveVariable(builder) => Box::new(builder.build(context)?),

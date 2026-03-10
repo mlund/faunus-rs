@@ -79,8 +79,10 @@ system:
         # !WeeksChandlerAndersen {mixing: LB}
 
 analysis:
-  - !MassCenterDistance
-    selections: ["molecule MOL1", "molecule MOL2"]
+  - !CollectiveVariable
+    property: mass_center_separation
+    selection: "molecule MOL1"
+    selection2: "molecule MOL2"
     file: "com_distance.dat.gz"
     frequency: !Every 10
   - !Trajectory

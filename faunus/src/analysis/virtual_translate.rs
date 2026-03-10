@@ -327,7 +327,7 @@ impl<T: Context> Analyze<T> for VirtualTranslate {
             self.num_samples += 1;
         }
         // Always write to stream to stay synchronized with other analyses
-        // (e.g. MassCenterDistance) that sample at the same frequency.
+        // that sample at the same frequency.
         self.write_to_stream(step, energy_change)?;
 
         Ok(())
