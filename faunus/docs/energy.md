@@ -426,6 +426,47 @@ position with the net charge (sum of atom charges).
 When `false` (default), the expression is evaluated and summed over all active particles
 in each matching group.
 
+## Constrain
+
+Constrains a collective variable to a specified range.
+Two modes are supported:
+
+- **Hard constraint** (default): returns infinite energy if the CV value falls
+  outside `[min, max]`, otherwise zero.
+- **Harmonic constraint**: applies a quadratic penalty
+  $\frac{1}{2} k (x_\text{eq} - x)^2$ around an equilibrium value.
+
+### YAML configuration
+
+```yaml
+energy:
+  constrain:
+    - property: volume
+      range: [1000.0, 5000.0]
+    - property: mass_center_position
+      selection: "molecule protein"
+      dimension: z
+      range: [-50.0, 50.0]
+      harmonic: # optional
+        force_constant: 100.0
+        equilibrium: 0.0
+```
+
+| Key              | Required | Default | Description                                    |
+|------------------|----------|---------|------------------------------------------------|
+| `property`       | yes      |         | CV type (see [collective variables](analysis.md#supported-properties)) |
+| `range`          | no       | `[-∞, ∞]` | Allowed `[min, max]` interval               |
+| `harmonic`       | no       |         | Harmonic restraint parameters (see below)      |
+| `dimension`      | no       | `xyz`   | Axis projection (`x`, `y`, `z`, `xy`, …)      |
+| `selection`      | depends  |         | Selection expression for one atom or group     |
+
+#### Harmonic parameters
+
+| Key              | Required | Description                      |
+|------------------|----------|----------------------------------|
+| `force_constant` | yes      | Spring constant $k$ (kJ/mol/unit²) |
+| `equilibrium`    | yes      | Target value $x_\text{eq}$       |
+
 ## Polymer Depletion Many-Body Interaction
 
 The `polymer_depletion` energy term implements the Forsman & Woodward many-body
