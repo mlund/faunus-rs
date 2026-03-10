@@ -426,6 +426,40 @@ position with the net charge (sum of atom charges).
 When `false` (default), the expression is evaluated and summed over all active particles
 in each matching group.
 
+## Solvent Accessible Surface Area (SASA)
+
+Computes an implicit solvation energy based on the solvent-accessible surface area
+of each particle, using Voronoi tessellation (via `voronota-ltr`).
+The energy is summed over all active particles:
+
+$$U = \sum_i \gamma_i \, A_i$$
+
+where $\gamma_i$ is the surface tension and $A_i$ is the solvent-accessible
+surface area of particle $i$.
+Surface tensions are defined per atom type via the `hydrophobicity` field
+in the [topology](topology.md#atoms).
+
+### YAML configuration
+
+```yaml
+atoms:
+  - {name: A, sigma: 3.0, hydrophobicity: !SurfaceTension 0.9}
+  - {name: B, sigma: 4.0, hydrophobicity: !SurfaceTension 1.5}
+
+system:
+  energy:
+    sasa:
+      probe_radius: 1.4
+```
+
+| Key                | Required | Default | Description                                           |
+|--------------------|----------|---------|-------------------------------------------------------|
+| `probe_radius`     | yes      |         | Probe radius (Å) for the tessellation                 |
+| `energy_offset`    | no       |         | Constant energy shift (kJ/mol)                        |
+| `offset_from_first`| no       | `false` | Set offset so that the first configuration has zero energy |
+
+Particle radii are taken from `sigma / 2` of the atom type definition.
+
 ## Constrain
 
 Constrains a collective variable to a specified range.

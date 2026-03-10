@@ -261,6 +261,41 @@ Key                        | Required | Default               | Description
 `exclude_intramolecular`   | no       | `true` (atom-atom)    | Skip pairs within the same molecule (atom-atom only)
 `dimension`                | no       | `xyz`                 | Dimension for distance projection and normalization (`x`, `y`, `z`, `xy`, …)
 
+## Virtual Translate
+
+Performs a virtual displacement of a single molecule and measures the
+mean force by Widom perturbation
+([Widom, 1963](https://doi.org/10.1063/1.1734110)):
+
+$$f = \frac{k_BT \ln\langle e^{-\Delta U / k_BT}\rangle}{\delta L}$$
+
+where $\Delta U$ is the energy change due to the displacement $\delta L$.
+If `file` is given, each sampled step writes columns
+`step`, `dL`, `dU/kT`, and `<force>/kT/Å`.
+
+### Example
+
+```yaml
+analysis:
+  - !VirtualTranslate
+    selection: "molecule protein"
+    dL: 0.01
+    directions: !z
+    file: force.dat
+    frequency: !Every 10
+```
+
+### Options
+
+Key           | Required | Default  | Description
+------------- | -------- | -------- | -------------------------------------------
+`selection`   | yes      |          | Selection matching exactly one molecule
+`dL`          | yes      |          | Displacement magnitude (Å)
+`directions`  | no       | `z`      | Displacement direction (`x`, `y`, `z`, `xy`, …)
+`temperature` | no       | `298.15` | Temperature (K) for kT conversion
+`file`        | no       |          | Output file path (`.gz` for gzip)
+`frequency`   | yes      |          | Sample frequency, e.g. `!Every 10`
+
 ## Mean Along Coordinate
 
 Computes the average of one collective variable (CV1) binned along another (CV2).
