@@ -35,12 +35,22 @@ use crate::{
 
 use super::{builder::HamiltonianBuilder, exclusions::ExclusionMatrix, EnergyChange};
 
+/// Sort a molecule-type pair into canonical `[min, max]` order for symmetric lookup.
+#[inline(always)]
+const fn canonical_mol_pair(a: usize, b: usize) -> [usize; 2] {
+    if a <= b { [a, b] } else { [b, a] }
+}
+
 /// Energy term for computing nonbonded interactions
 /// using a matrix of `IsotropicTwobodyEnergy` trait objects.
 ///
 /// The type parameter `P` determines the potential type:
 /// - [`ArcPotential`] for dynamic dispatch (default)
 /// - [`SplinedPotential`] for pre-tabulated spline evaluation
+///
+/// Entire molecule-type pairs can be excluded via [`Self::exclude_molecule_pair`],
+/// skipping all inter-group interactions between those molecule kinds.
+/// This is used automatically when [`Tabulated6D`] handles the same pairs.
 #[derive(Debug)]
 pub struct NonbondedMatrix<P = ArcPotential> {
     /// Matrix of pair potentials based on atom type ids.
@@ -53,6 +63,9 @@ pub struct NonbondedMatrix<P = ArcPotential> {
     cutoff: Option<f64>,
     /// Enable bounding-sphere culling of distant group pairs.
     use_bounding_spheres: bool,
+    /// Molecule-type pairs excluded from nonbonded evaluation (e.g. handled by Tabulated6D).
+    /// Each entry is a sorted `[mol_a, mol_b]` pair of molecule kind indices.
+    molecule_pair_exclusions: Vec<[usize; 2]>,
 }
 
 impl<P: Clone> Clone for NonbondedMatrix<P> {
@@ -63,6 +76,7 @@ impl<P: Clone> Clone for NonbondedMatrix<P> {
             cache: RwLock::new(self.cache.read().unwrap().clone()),
             cutoff: self.cutoff,
             use_bounding_spheres: self.use_bounding_spheres,
+            molecule_pair_exclusions: self.molecule_pair_exclusions.clone(),
         }
     }
 }
@@ -366,6 +380,41 @@ impl<P> NonbondedMatrix<P> {
     pub(crate) fn set_bounding_spheres(&mut self, enabled: bool) {
         self.use_bounding_spheres = enabled;
     }
+
+    /// Get the list of excluded molecule-type pairs.
+    #[must_use]
+    pub(crate) fn molecule_pair_exclusions(&self) -> &[[usize; 2]] {
+        &self.molecule_pair_exclusions
+    }
+
+    /// Whether any molecule-type pairs are excluded.
+    #[inline(always)]
+    pub(crate) fn has_molecule_pair_exclusions(&self) -> bool {
+        !self.molecule_pair_exclusions.is_empty()
+    }
+
+    /// Exclude a molecule-type pair from nonbonded evaluation.
+    ///
+    /// All inter-group interactions between groups of these two molecule kinds
+    /// will be skipped. Use when the pair is handled by another energy term
+    /// (e.g. [`Tabulated6D`]).
+    pub(crate) fn exclude_molecule_pair(&mut self, mol_a: usize, mol_b: usize) {
+        let pair = canonical_mol_pair(mol_a, mol_b);
+        if !self.molecule_pair_exclusions.contains(&pair) {
+            self.molecule_pair_exclusions.push(pair);
+        }
+    }
+
+    /// Check if a molecule-type pair is excluded from nonbonded evaluation.
+    #[inline(always)]
+    fn is_molecule_pair_excluded(&self, mol_a: usize, mol_b: usize) -> bool {
+        // Fast path: most simulations have no molecule-pair exclusions
+        if !self.has_molecule_pair_exclusions() {
+            return false;
+        }
+        self.molecule_pair_exclusions
+            .contains(&canonical_mol_pair(mol_a, mol_b))
+    }
 }
 
 impl NonbondedMatrix {
@@ -426,6 +475,7 @@ impl NonbondedMatrix {
             cache: RwLock::new(None),
             cutoff: None,
             use_bounding_spheres: true,
+            molecule_pair_exclusions: Vec::new(),
         })
     }
 
@@ -489,6 +539,7 @@ impl NonbondedMatrix<SplinedPotential> {
             cache: RwLock::new(None),
             cutoff: Some(cutoff),
             use_bounding_spheres: true,
+            molecule_pair_exclusions: nonbonded.molecule_pair_exclusions.clone(),
         }
     }
 }
@@ -615,7 +666,8 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
                     .iter()
                     .skip(gi + 1)
                     .filter(|group_j| {
-                        !self.groups_beyond_cutoff(group_i, group_j, soa.pbc.as_ref())
+                        !self.is_molecule_pair_excluded(group_i.molecule(), group_j.molecule())
+                            && !self.groups_beyond_cutoff(group_i, group_j, soa.pbc.as_ref())
                     })
                     .flat_map(|group_j| {
                         group_i
@@ -640,6 +692,7 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
         groups
             .iter()
             .filter(|gj| gj.index() != own_group.index())
+            .filter(|gj| !self.is_molecule_pair_excluded(own_group.molecule(), gj.molecule()))
             .filter(|gj| !self.groups_beyond_cutoff(own_group, gj, soa.pbc.as_ref()))
             .map(|gj| self.particle_energy_soa(soa, i, gj.iter_active()))
             .sum()
@@ -741,19 +794,24 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
         groups: &[Group],
         group: &Group,
     ) -> f64 {
-        if let Some(cl) = soa.cell_list {
-            let own_range = group.iter_active();
-            return group
-                .iter_active()
-                .map(|i| {
-                    self.particle_energy_soa(
-                        soa,
-                        i,
-                        cl.neighbors(i)
-                            .filter(move |&j| j < own_range.start || j >= own_range.end),
-                    )
-                })
-                .sum();
+        // Cell list iterates spatial neighbors without group ownership info,
+        // so it cannot skip excluded molecule-type pairs. Fall back to
+        // group-based iteration where the exclusion check is applied per pair.
+        if !self.has_molecule_pair_exclusions() {
+            if let Some(cl) = soa.cell_list {
+                let own_range = group.iter_active();
+                return group
+                    .iter_active()
+                    .map(|i| {
+                        self.particle_energy_soa(
+                            soa,
+                            i,
+                            cl.neighbors(i)
+                                .filter(move |&j| j < own_range.start || j >= own_range.end),
+                        )
+                    })
+                    .sum();
+            }
         }
         group
             .iter_active()
@@ -773,12 +831,15 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
         abs_i: usize,
         own_group: &Group,
     ) -> f64 {
-        if let Some(cl) = soa.cell_list {
-            return self.particle_energy_soa(
-                soa,
-                abs_i,
-                cl.neighbors(abs_i).filter(move |&j| j != abs_i),
-            );
+        // Cell list lacks group ownership, so cannot enforce molecule-pair exclusions
+        if !self.has_molecule_pair_exclusions() {
+            if let Some(cl) = soa.cell_list {
+                return self.particle_energy_soa(
+                    soa,
+                    abs_i,
+                    cl.neighbors(abs_i).filter(move |&j| j != abs_i),
+                );
+            }
         }
         // Fallback: inter-group + intra-group
         self.inter_group_energy_soa(soa, groups, abs_i, own_group)
@@ -793,6 +854,9 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
         group_i: &Group,
         group_j: &Group,
     ) -> f64 {
+        if self.is_molecule_pair_excluded(group_i.molecule(), group_j.molecule()) {
+            return 0.0;
+        }
         if self.groups_beyond_cutoff(group_i, group_j, soa.pbc.as_ref()) {
             return 0.0;
         }
@@ -836,6 +900,9 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
         for (gi, group_i) in groups.iter().enumerate() {
             // Inter-group pairs (gi < gj)
             for group_j in groups.iter().skip(gi + 1) {
+                if self.is_molecule_pair_excluded(group_i.molecule(), group_j.molecule()) {
+                    continue;
+                }
                 if self.groups_beyond_cutoff(group_i, group_j, soa.pbc.as_ref()) {
                     continue;
                 }

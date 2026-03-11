@@ -649,3 +649,10 @@ table with Duello. Reversed pairs are detected automatically.
 Pairs not covered by any table entry contribute zero energy.
 Separations beyond the table range return zero; separations below the
 minimum return infinite energy (hard wall).
+
+### Automatic nonbonded exclusion
+
+When `tabulated6d` is active, molecule-type pairs covered by table entries are
+automatically excluded from the `nonbonded` energy term.
+This prevents double-counting when mixing tabulated rigid-body interactions with
+atom-level nonbonded potentials for other molecule types.

@@ -126,6 +126,25 @@ impl EnergyTerm {
         dispatch_stateful!(self, discard_backup);
     }
 
+    /// Exclude a molecule-type pair from the nonbonded energy term.
+    pub(crate) fn exclude_molecule_pair(&mut self, mol_a: usize, mol_b: usize) {
+        match self {
+            Self::NonbondedMatrix(x) => x.exclude_molecule_pair(mol_a, mol_b),
+            Self::NonbondedMatrixSplined(x) => x.exclude_molecule_pair(mol_a, mol_b),
+            _ => {}
+        }
+    }
+
+    /// Get molecule-type pairs excluded from nonbonded, if applicable.
+    #[must_use]
+    pub(crate) fn molecule_pair_exclusions(&self) -> Option<&[[usize; 2]]> {
+        match self {
+            Self::NonbondedMatrix(x) => Some(x.molecule_pair_exclusions()),
+            Self::NonbondedMatrixSplined(x) => Some(x.molecule_pair_exclusions()),
+            _ => None,
+        }
+    }
+
     /// Invalidate any internal energy caches (e.g. after Langevin dynamics
     /// has moved all molecules, making the pairwise cache stale).
     #[cfg_attr(not(feature = "gpu"), allow(dead_code))]

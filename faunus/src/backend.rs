@@ -160,6 +160,18 @@ impl Backend {
         }
         if let Some(tab_builder) = &hamiltonian_builder.tabulated6d {
             let tab = tab_builder.build(&backend)?;
+            // Prevent double-counting: 6D tables replace atom-level nonbonded
+            // for the covered molecule pairs.
+            for (mol_a, mol_b) in tab.molecule_pairs() {
+                backend
+                    .hamiltonian_mut()
+                    .exclude_nonbonded_molecule_pair(mol_a, mol_b);
+                log::info!(
+                    "Excluded molecule pair ({}, {}) from nonbonded (handled by tabulated6d)",
+                    mol_a,
+                    mol_b
+                );
+            }
             backend.hamiltonian_mut().push(tab.into());
         }
         // Ewald reciprocal term needs particles in place

@@ -193,16 +193,30 @@ impl Hamiltonian {
         let new_term = Self::build_nonbonded_term(&pairpot_builder, builder, topology, medium)?;
 
         for term in &mut self.energy_terms {
-            if matches!(
-                term,
-                EnergyTerm::NonbondedMatrix(_) | EnergyTerm::NonbondedMatrixSplined(_)
-            ) {
+            // Ewald rebuild replaces the entire nonbonded term; carry over
+            // molecule-pair exclusions so tabulated6d pairs stay excluded.
+            if let Some(old) = term.molecule_pair_exclusions() {
+                let old = old.to_vec();
                 *term = new_term;
+                for [a, b] in old {
+                    term.exclude_molecule_pair(a, b);
+                }
                 log::info!("Rebuilt nonbonded interactions with optimized Ewald real-space scheme");
                 return Ok(());
             }
         }
         Ok(())
+    }
+
+    /// Exclude a molecule-type pair from the nonbonded energy term.
+    ///
+    /// All inter-group interactions between groups of these two molecule kinds
+    /// will be skipped by the nonbonded term. Use when the pair is handled by
+    /// another energy term (e.g. [`Tabulated6D`]).
+    pub(crate) fn exclude_nonbonded_molecule_pair(&mut self, mol_a: usize, mol_b: usize) {
+        self.energy_terms
+            .iter_mut()
+            .for_each(|t| t.exclude_molecule_pair(mol_a, mol_b));
     }
 
     /// Invalidate all nonbonded energy caches.

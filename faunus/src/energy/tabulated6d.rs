@@ -23,6 +23,8 @@ struct Entry {
 ///
 /// Uses pre-computed energy tables over (R, ω, θ₁φ₁, θ₂φ₂) for rigid-body
 /// pairs. Each entry maps a pair of molecule types to a binary table file.
+/// Covered molecule-type pairs are automatically excluded from the nonbonded
+/// energy term to prevent double-counting.
 ///
 /// The cache uses `RwLock` for lazy initialization from `energy(&self)`;
 /// mutating methods (`undo`, `save_backup`, etc.) use `get_mut()` since
@@ -108,6 +110,11 @@ impl Tabulated6DBuilder {
 }
 
 impl Tabulated6D {
+    /// Molecule-type index pairs covered by this term.
+    pub(crate) fn molecule_pairs(&self) -> impl Iterator<Item = (usize, usize)> + '_ {
+        self.entries.iter().map(|e| (e.mol_id_a, e.mol_id_b))
+    }
+
     /// Find the table entry for a pair of molecule IDs (order-independent).
     fn find_entry(&self, mol_a: usize, mol_b: usize) -> Option<(&Entry, bool)> {
         self.entries.iter().find_map(|e| {
