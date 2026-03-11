@@ -30,6 +30,7 @@ mod nonbonded;
 pub(crate) mod nonbonded_kernel;
 mod polymer_depletion;
 mod sasa;
+mod tabulated6d;
 
 pub use bonded::{IntermolecularBonded, IntramolecularBonded};
 pub use celloverlap::CellOverlap;
@@ -42,6 +43,7 @@ pub use hamiltonian::{EnergyChange, Hamiltonian};
 pub use nonbonded::{NonbondedMatrix, NonbondedMatrixSplined};
 pub use polymer_depletion::{PolymerDepletion, PolymerDepletionBuilder};
 pub use sasa::{SasaEnergy, SasaEnergyBuilder};
+pub use tabulated6d::{Tabulated6D, Tabulated6DBuilder};
 
 // Re-export spline types from interatomic for convenience
 pub use interatomic::twobody::{GridType, SplineConfig};

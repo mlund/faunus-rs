@@ -14,7 +14,7 @@
 
 //! Implementation of the Nonbonded energy terms.
 
-mod cache;
+pub(crate) mod cache;
 #[cfg(test)]
 mod tests;
 

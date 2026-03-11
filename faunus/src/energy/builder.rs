@@ -45,6 +45,7 @@ use super::ewald::EwaldBuilder;
 use super::external_pressure::Pressure;
 use super::polymer_depletion::PolymerDepletionBuilder;
 use super::sasa::SasaEnergyBuilder;
+use super::tabulated6d::Tabulated6DBuilder;
 use interatomic::twobody::{GridType, SplineConfig};
 
 /// Specifies whether the parameters for the interaction are
@@ -382,7 +383,13 @@ impl PairPotentialBuilder {
         medium: Option<interatomic::coulomb::Medium>,
         combine_with_default: bool,
     ) -> anyhow::Result<Option<Box<dyn IsotropicTwobodyEnergy>>> {
-        self.collect_interactions(atom1, atom2, medium, combine_with_default, PairInteraction::is_coulomb)
+        self.collect_interactions(
+            atom1,
+            atom2,
+            medium,
+            combine_with_default,
+            PairInteraction::is_coulomb,
+        )
     }
 
     /// True if any configured interaction is a Coulomb variant.
@@ -487,6 +494,9 @@ pub struct HamiltonianBuilder {
 
     /// Polymer depletion many-body interaction.
     pub polymer_depletion: Option<PolymerDepletionBuilder>,
+
+    /// Tabulated 6D rigid molecule-molecule energy tables.
+    pub tabulated6d: Option<Tabulated6DBuilder>,
 }
 
 impl HamiltonianBuilder {

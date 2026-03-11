@@ -55,7 +55,7 @@ pub struct Group {
     range: std::ops::Range<usize>,
     /// Size status
     size_status: GroupSize,
-    /// Rigid-body orientation for MC↔LD state transfer (transient, not serialized)
+    /// Rigid-body orientation, persisted in state files for restart consistency
     quaternion: UnitQuaternion,
 }
 

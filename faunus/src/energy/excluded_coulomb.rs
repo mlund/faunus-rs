@@ -201,7 +201,9 @@ system:
             .per_term_energies(&system, &Change::Everything);
 
         // Term should not be present when keep_excluded_coulomb is false
-        let excl = per_term.iter().find(|(name, _)| *name == "excluded_coulomb");
+        let excl = per_term
+            .iter()
+            .find(|(name, _)| *name == "excluded_coulomb");
         assert!(excl.is_none());
     }
 }

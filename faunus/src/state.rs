@@ -14,7 +14,7 @@
 
 //! Save and load simulation state for checkpointing and resuming simulations.
 
-use crate::{cell::Cell, group::GroupSize, Particle};
+use crate::{cell::Cell, group::GroupSize, Particle, UnitQuaternion};
 use anyhow::Context;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
@@ -29,6 +29,10 @@ pub struct GroupState {
     pub molecule: usize,
     pub capacity: usize,
     pub size: GroupSize,
+    /// Rigid-body orientation needed by LD and 6D tabulated energies.
+    /// Defaults to identity for backward compatibility with pre-quaternion state files.
+    #[serde(default = "UnitQuaternion::identity")]
+    pub quaternion: UnitQuaternion,
 }
 
 /// Checkpoint of the simulation state.

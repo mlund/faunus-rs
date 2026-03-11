@@ -3,13 +3,15 @@
 /// Stores E(i,j) for all group pairs so that `group_energies[m]` (the total
 /// inter-group energy of group m) can be returned in O(1) instead of O(N_groups).
 /// On accept, symmetric delta propagation keeps all entries consistent in O(N_groups).
+///
+/// Visible to `crate::energy` so that `Tabulated6D` can reuse the same cache logic.
 #[derive(Debug, Clone, Default)]
-pub(super) struct GroupEnergyCache {
+pub(in crate::energy) struct GroupEnergyCache {
     /// `pairwise[i * n + j]` = nonbonded energy between groups i and j
-    pub(super) pairwise: Vec<f64>,
+    pub(in crate::energy) pairwise: Vec<f64>,
     /// `group_energies[i]` = Σ_j pairwise[i * n + j]
-    pub(super) group_energies: Vec<f64>,
-    pub(super) n_groups: usize,
+    pub(in crate::energy) group_energies: Vec<f64>,
+    pub(in crate::energy) n_groups: usize,
     // Backup buffers live inline so save_backup() reuses capacity instead of
     // allocating new Vecs on every MC step.
     backup_row: Vec<f64>,
@@ -19,7 +21,11 @@ pub(super) struct GroupEnergyCache {
 }
 
 impl GroupEnergyCache {
-    pub(super) fn new(pairwise: Vec<f64>, group_energies: Vec<f64>, n_groups: usize) -> Self {
+    pub(in crate::energy) fn new(
+        pairwise: Vec<f64>,
+        group_energies: Vec<f64>,
+        n_groups: usize,
+    ) -> Self {
         Self {
             pairwise,
             group_energies,
@@ -28,7 +34,7 @@ impl GroupEnergyCache {
         }
     }
 
-    pub(super) fn save_backup(&mut self, group_index: usize) {
+    pub(in crate::energy) fn save_backup(&mut self, group_index: usize) {
         let n = self.n_groups;
         let row_start = group_index * n;
         self.backup_row.clear();
@@ -42,7 +48,7 @@ impl GroupEnergyCache {
     }
 
     /// Restore both row and column of the moved group to keep the matrix symmetric.
-    pub(super) fn undo(&mut self) {
+    pub(in crate::energy) fn undo(&mut self) {
         if self.has_backup {
             let m = self.backup_group_index;
             let n = self.n_groups;
@@ -56,7 +62,7 @@ impl GroupEnergyCache {
         }
     }
 
-    pub(super) fn discard_backup(&mut self) {
+    pub(in crate::energy) fn discard_backup(&mut self) {
         self.has_backup = false;
     }
 }

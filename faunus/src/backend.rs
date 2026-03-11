@@ -158,6 +158,10 @@ impl Backend {
             let pm = pm_builder.build(&backend, thermal_energy)?;
             backend.hamiltonian_mut().push(pm.into());
         }
+        if let Some(tab_builder) = &hamiltonian_builder.tabulated6d {
+            let tab = tab_builder.build(&backend)?;
+            backend.hamiltonian_mut().push(tab.into());
+        }
         // Ewald reciprocal term needs particles in place
         if let Some(ewald_builder) = &hamiltonian_builder.ewald {
             let medium = medium

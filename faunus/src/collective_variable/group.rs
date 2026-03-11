@@ -126,7 +126,8 @@ impl CvKind for GyrationRadius {
     fn evaluate(&self, context: &dyn EvalContext) -> f64 {
         self.gyration_tensor(context)
             .map(|gt| {
-                let diag = crate::Point::new(gt.tensor[(0, 0)], gt.tensor[(1, 1)], gt.tensor[(2, 2)]);
+                let diag =
+                    crate::Point::new(gt.tensor[(0, 0)], gt.tensor[(1, 1)], gt.tensor[(2, 2)]);
                 self.dimension.filter(diag).iter().sum::<f64>().sqrt()
             })
             .unwrap_or(0.0)
@@ -137,11 +138,9 @@ impl CvKind for GyrationRadius {
     }
 }
 
-impl_single_group_with_dim_builder!(
-    GyrationRadius,
-    "gyration_radius",
-    |dimension, group| GyrationRadius { dimension, group }
-);
+impl_single_group_with_dim_builder!(GyrationRadius, "gyration_radius", |dimension, group| {
+    GyrationRadius { dimension, group }
+});
 
 // ---------------------------------------------------------------------------
 // DipoleMoment
@@ -167,7 +166,11 @@ impl DipoleMoment {
             let charge = atomkinds[context.get_atomkind(i)].charge();
             (charge, GroupCollection::position(context, i))
         });
-        Some(geometry::dipole_moment(charges_positions, com, context.cell()))
+        Some(geometry::dipole_moment(
+            charges_positions,
+            com,
+            context.cell(),
+        ))
     }
 }
 
@@ -192,11 +195,9 @@ impl CvKind for DipoleMoment {
     }
 }
 
-impl_single_group_with_dim_builder!(
-    DipoleMoment,
-    "dipole_moment",
-    |dimension, group| DipoleMoment { dimension, group }
-);
+impl_single_group_with_dim_builder!(DipoleMoment, "dipole_moment", |dimension, group| {
+    DipoleMoment { dimension, group }
+});
 
 // ---------------------------------------------------------------------------
 // MassCenterPosition

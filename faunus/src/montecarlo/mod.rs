@@ -410,6 +410,7 @@ impl<T: Context + 'static> MarkovChain<T> {
                     molecule: g.molecule(),
                     capacity: g.capacity(),
                     size: g.size(),
+                    quaternion: *g.quaternion(),
                 })
                 .collect(),
             step: self.step,
@@ -482,6 +483,9 @@ impl<T: Context + 'static> MarkovChain<T> {
         *self.context.cell_mut() = state.cell;
         for (i, gs) in state.groups.iter().enumerate() {
             self.context.resize_group(i, gs.size)?;
+            // Restore orientation so that LD and 6D tabulated energies
+            // remain consistent with atom positions across restarts.
+            self.context.groups_mut()[i].set_quaternion(gs.quaternion);
         }
         for i in 0..num_groups {
             self.context.update_mass_center(i);

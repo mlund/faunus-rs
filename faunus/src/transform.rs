@@ -50,6 +50,33 @@ pub fn random_quaternion(rng: &mut (impl Rng + ?Sized), max_angle: f64) -> (Unit
     (UnitQuaternion::from_axis_angle(&axis, angle), angle)
 }
 
+/// Uniformly random rotation quaternion (Haar measure on SO(3)).
+///
+/// Uses Marsaglia's rejection method to sample a point uniformly on the
+/// 4D unit sphere, which is equivalent to uniform rotation sampling.
+/// See K. Shoemake, "Uniform random rotations", Graphics Gems III (1992).
+pub fn random_rotation(rng: &mut (impl Rng + ?Sized)) -> UnitQuaternion {
+    // Two pairs of uniform deviates, each rejected to lie inside the unit disk
+    let (s1, x1, y1) = loop {
+        let x = 2.0 * rng.r#gen::<f64>() - 1.0;
+        let y = 2.0 * rng.r#gen::<f64>() - 1.0;
+        let s = x * x + y * y;
+        if s < 1.0 {
+            break (s, x, y);
+        }
+    };
+    let (s2, x2, y2) = loop {
+        let x = 2.0 * rng.r#gen::<f64>() - 1.0;
+        let y = 2.0 * rng.r#gen::<f64>() - 1.0;
+        let s = x * x + y * y;
+        if s < 1.0 {
+            break (s, x, y);
+        }
+    };
+    let factor = ((1.0 - s1) / s2).sqrt();
+    UnitQuaternion::new_normalize(nalgebra::Quaternion::new(x1, y1, x2 * factor, y2 * factor))
+}
+
 /// A single group-level action for speciation (reaction ensemble) moves.
 #[derive(Clone, Debug)]
 pub enum SpeciationAction {
@@ -258,38 +285,23 @@ impl Transform {
     }
 }
 
-/// Rotate a collection of points by a random angle in random direction.
-///
-/// The optional `center` of rotation is subtracted before rotation,
-/// and added again after.
-pub(crate) fn rotate_random<'a>(
-    positions: impl IntoIterator<Item = &'a mut Point>,
-    center: &Point,
-    rng: &mut ThreadRng,
-) {
-    let angle = rng.gen_range(0.0..2.0 * std::f64::consts::PI);
-    rotate_random_angle(positions, center, rng, angle);
-}
-
-/// Rotate a collection of points by a given angle around a random axis.
-pub(crate) fn rotate_random_angle<'a>(
-    positions: impl IntoIterator<Item = &'a mut Point>,
-    center: &Point,
-    rng: &mut ThreadRng,
-    angle: f64,
-) {
-    let axis = crate::transform::random_unit_vector(rng);
-    let matrix = nalgebra::Rotation3::new(axis * angle);
-    let rotate = |pos: &mut Point| *pos = matrix * (*pos - center) + center;
-    positions.into_iter().for_each(rotate);
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use float_cmp::assert_approx_eq;
 
-    // test random unit vector generation
+    fn rotate_random<'a>(
+        positions: impl IntoIterator<Item = &'a mut Point>,
+        center: &Point,
+        rng: &mut rand::rngs::ThreadRng,
+    ) {
+        let angle = rng.gen_range(0.0..2.0 * std::f64::consts::PI);
+        let axis = random_unit_vector(rng);
+        let matrix = nalgebra::Rotation3::new(axis * angle);
+        let rotate = |pos: &mut Point| *pos = matrix * (*pos - center) + center;
+        positions.into_iter().for_each(rotate);
+    }
+
     #[test]
     fn test_random_unit_vector() {
         let n = 5000;

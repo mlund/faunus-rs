@@ -201,7 +201,10 @@ mod tests {
         let cell = crate::cell::Endless;
         let origin = Point::zeros();
         // Two opposite charges along x: μ = q·d x̂
-        let charges_positions = vec![(1.0, Point::new(1.0, 0.0, 0.0)), (-1.0, Point::new(-1.0, 0.0, 0.0))];
+        let charges_positions = vec![
+            (1.0, Point::new(1.0, 0.0, 0.0)),
+            (-1.0, Point::new(-1.0, 0.0, 0.0)),
+        ];
         let mu = super::dipole_moment(charges_positions, &origin, &cell);
         assert_relative_eq!(mu.x, 2.0, epsilon = 1e-10);
         assert_relative_eq!(mu.y, 0.0, epsilon = 1e-10);
