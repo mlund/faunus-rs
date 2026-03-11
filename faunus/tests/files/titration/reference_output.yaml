@@ -29,19 +29,19 @@ blocks:
 cell: !Sphere
   radius: 50.0
 energy_change:
-  drift: 1.0480505352461478e-13
-  final: -13.475385455192631
-  initial: -6.948560709555825
+  drift: 2.255973186038318e-13
+  final: -5.901857134517385
+  initial: -13.475385455192631
 energy_timers:
-  celloverlap: '19.95 (energy: 19.36, update: 0.59)'
-  nonbonded: '80.06 (energy: 79.44, update: 0.62)'
+  celloverlap: '22.04 (energy: 21.38, update: 0.66)'
+  nonbonded: '77.96000000000001 (energy: 77.26, update: 0.7)'
 propagate:
   repeat: 2000
   seed: !Fixed 42
   collections:
   - !Deterministic
     repeat: 1
-    elapsed_seconds: 0.562530547
+    elapsed_seconds: 0.279141024
     moves:
     - !SpeciationMove
       reactions:
@@ -58,23 +58,23 @@ propagate:
       - - ⚛HCYS = Na+ + ⚛CYS + ~H+
         - !pK 8.55
       - - = Na+ + Cl-
-        - !K 1.0
+        - !dG 0.0
       temperature: 298.0
       weight: 1.0
       repeat: 50
       statistics:
         num_trials: 100000
-        num_accepted: 17657
+        num_accepted: 17660
         mean_square_displacement:
           avg: 0.0
-          n: 82343
+          n: 82340
         timer:
           accumulated:
             secs: 0
             nanos: 0
         info: {}
-        energy_change_sum: -3.928698600243143
-        acceptance_ratio: 0.17657
+        energy_change_sum: -51.38485978489492
+        acceptance_ratio: 0.1766
     - !TranslateAtom
       atom: Na
       molecule: Na+
@@ -83,17 +83,17 @@ propagate:
       repeat: 1
       statistics:
         num_trials: 2000
-        num_accepted: 1157
+        num_accepted: 1088
         mean_square_displacement:
-          avg: 325.0948567450118
+          avg: 297.1689284912562
           n: 2000
         timer:
           accumulated:
             secs: 0
             nanos: 0
         info: {}
-        energy_change_sum: 6.057442060763445
-        acceptance_ratio: 0.5785
+        energy_change_sum: 49.56200721244133
+        acceptance_ratio: 0.544
     - !TranslateAtom
       atom: Cl
       molecule: Cl-
@@ -102,31 +102,31 @@ propagate:
       repeat: 1
       statistics:
         num_trials: 2000
-        num_accepted: 1068
+        num_accepted: 1104
         mean_square_displacement:
-          avg: 300.3983966689457
+          avg: 303.92205623249646
           n: 2000
         timer:
           accumulated:
             secs: 0
             nanos: 0
         info: {}
-        energy_change_sum: -8.655568206157213
-        acceptance_ratio: 0.534
+        energy_change_sum: 9.396380893128612
+        acceptance_ratio: 0.552
   criterion: MetropolisHastings
 analysis:
 - collectivevariable:
     property: Count
     num_samples: 6000
-    mean: 0.9979999999999991
-    rms: 0.9989994994993737
+    mean: 0.9990000000000004
+    rms: 0.9994998749374612
 - collectivevariable:
     property: Count
     num_samples: 6000
-    mean: 0.1999999999999999
-    rms: 0.4472135954999578
+    mean: 0.22200000000000022
+    rms: 0.4711687595755901
 - collectivevariable:
     property: Count
     num_samples: 6000
-    mean: 0.04600000000000011
-    rms: 0.2144761058952724
+    mean: 0.05699999999999994
+    rms: 0.23874672772626632
