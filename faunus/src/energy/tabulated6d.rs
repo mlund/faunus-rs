@@ -93,6 +93,9 @@ impl Tabulated6DBuilder {
                 let table = Table6DFlat::<f16>::load(&eb.file).map_err(|e| {
                     anyhow::anyhow!("Failed to load table '{}': {}", eb.file.display(), e)
                 })?;
+                table.validate_metadata().map_err(|e| {
+                    anyhow::anyhow!("Invalid table '{}': {}", eb.file.display(), e)
+                })?;
                 log::info!(
                     "Loaded 6D table for ({}, {}): {} R-bins, {} omega-bins, {} vertices",
                     &eb.molecules[0],
@@ -160,7 +163,7 @@ impl Tabulated6D {
         let sep = context.cell().distance(com_a, com_b);
         let r = sep.norm();
         if r > entry.table.rmax {
-            return 0.0;
+            return entry.table.tail_energy(r);
         }
         if r < entry.table.rmin {
             return f64::INFINITY;

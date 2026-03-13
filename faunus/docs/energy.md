@@ -650,8 +650,22 @@ energy:
 Molecule pair order in the table must match the order used when generating the
 table with Duello. Reversed pairs are detected automatically.
 Pairs not covered by any table entry contribute zero energy.
-Separations beyond the table range return zero; separations below the
-minimum return infinite energy (hard wall).
+Separations below the table minimum return infinite energy (hard wall).
+
+### Tail correction
+
+Beyond the table's maximum distance $R_\text{max}$, the energy is extrapolated
+using a sum of screened multipole terms stored in the table metadata:
+
+$$u_\text{tail}(R) = \frac{e^2}{4\pi\varepsilon_0\varepsilon_r} \sum_i \frac{C_i \, e^{-\kappa_i R}}{R^{p_i}}$$
+
+where $C_i$ is a dimensionless coefficient (charge product $z_1 z_2$ for ion-ion,
+fitted for higher-order terms), $\kappa_i$ is the screening parameter, and $p_i$
+is the power of $R$ in the denominator ($p=1$ for ion-ion, $p=4$ for ion-dipole).
+The Coulomb prefactor $e^2/(4\pi\varepsilon_0\varepsilon_r)$ is stored once in
+the table metadata.
+If no tail correction metadata is present, separations beyond the table range
+return zero.
 
 A `medium` with `temperature` is required so that the inverse thermal energy
 $\beta = 1/k_BT$ can be computed for the Boltzmann-weighted interpolation.
