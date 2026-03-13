@@ -51,5 +51,8 @@ pub mod transform;
 mod particle;
 pub use particle::{Particle, PointParticle};
 
+/// Re-export interatomic to avoid diamond dependency conflicts in downstream crates.
+pub use interatomic;
+
 mod context;
 pub use context::*;
