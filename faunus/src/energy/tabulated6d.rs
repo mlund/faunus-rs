@@ -26,11 +26,16 @@ struct Entry {
 /// Covered molecule-type pairs are automatically excluded from the nonbonded
 /// energy term to prevent double-counting.
 ///
+/// Angular interpolation uses Boltzmann-weighted barycentric averaging to
+/// avoid Jensen's inequality bias at repulsive contacts.
+///
 /// The cache uses `RwLock` for lazy initialization from `energy(&self)`;
 /// mutating methods (`undo`, `save_backup`, etc.) use `get_mut()` since
 /// they receive `&mut self` from the `dispatch_stateful!` macro.
 pub struct Tabulated6D {
     entries: Vec<Entry>,
+    /// Inverse thermal energy 1/kT in mol/kJ for Boltzmann-weighted interpolation.
+    beta: f64,
     cache: RwLock<Option<GroupEnergyCache>>,
 }
 
@@ -38,6 +43,7 @@ impl Clone for Tabulated6D {
     fn clone(&self) -> Self {
         Self {
             entries: self.entries.clone(),
+            beta: self.beta,
             cache: RwLock::new(self.cache.read().expect("cache lock poisoned").clone()),
         }
     }
@@ -63,7 +69,7 @@ pub struct Tabulated6DEntryBuilder {
 pub struct Tabulated6DBuilder(pub Vec<Tabulated6DEntryBuilder>);
 
 impl Tabulated6DBuilder {
-    pub fn build(&self, context: &impl Context) -> anyhow::Result<Tabulated6D> {
+    pub fn build(&self, context: &impl Context, beta: f64) -> anyhow::Result<Tabulated6D> {
         let topology = context.topology();
         let entries = self
             .0
@@ -102,8 +108,14 @@ impl Tabulated6DBuilder {
             })
             .collect::<anyhow::Result<Vec<_>>>()?;
 
+        log::info!(
+            "Tabulated6D: beta = {:.6} mol/kJ (kT = {:.4} kJ/mol)",
+            beta,
+            1.0 / beta
+        );
         Ok(Tabulated6D {
             entries,
+            beta,
             cache: RwLock::new(None),
         })
     }
@@ -161,7 +173,9 @@ impl Tabulated6D {
         };
 
         let (_r_val, omega, dir_a, dir_b) = icotable::inverse_orient(&oriented_sep, q_a, q_b);
-        entry.table.lookup(r, omega, &dir_a, &dir_b)
+        entry
+            .table
+            .lookup_boltzmann(r, omega, &dir_a, &dir_b, self.beta)
     }
 
     fn total_energy(&self, context: &impl Context) -> f64 {

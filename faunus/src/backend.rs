@@ -14,7 +14,7 @@ use crate::{
     WithHamiltonian, WithTopology,
 };
 
-use interatomic::coulomb::{DebyeLength, Temperature};
+use interatomic::coulomb::DebyeLength;
 use rand::rngs::ThreadRng;
 use serde::Serialize;
 
@@ -147,19 +147,22 @@ impl Backend {
                 backend.hamiltonian_mut().push(ext.into());
             }
         }
-        if let Some(pm_builder) = &hamiltonian_builder.polymer_depletion {
-            let temperature = medium.as_ref().map(|m| m.temperature()).ok_or_else(|| {
-                anyhow::anyhow!(
-                    "Medium with temperature required for polymer_depletion energy term"
-                )
+        // Several energy terms need kT for unit conversion or Boltzmann weighting
+        let require_thermal_energy = |term: &str| -> anyhow::Result<f64> {
+            let m = medium.as_ref().ok_or_else(|| {
+                anyhow::anyhow!("Medium with temperature required for {term} energy term")
             })?;
-            let thermal_energy =
-                crate::energy::ExternalPressure::thermal_energy_from_temperature(temperature);
+            Ok(crate::simulation::thermal_energy(m))
+        };
+        if let Some(pm_builder) = &hamiltonian_builder.polymer_depletion {
+            let thermal_energy = require_thermal_energy("polymer_depletion")?;
             let pm = pm_builder.build(&backend, thermal_energy)?;
             backend.hamiltonian_mut().push(pm.into());
         }
         if let Some(tab_builder) = &hamiltonian_builder.tabulated6d {
-            let tab = tab_builder.build(&backend)?;
+            // Duello tables store energies in kJ/mol; beta converts to Boltzmann weights
+            let thermal_energy = require_thermal_energy("tabulated6d")?;
+            let tab = tab_builder.build(&backend, 1.0 / thermal_energy)?;
             // Prevent double-counting: 6D tables replace atom-level nonbonded
             // for the covered molecule pairs.
             for (mol_a, mol_b) in tab.molecule_pairs() {
