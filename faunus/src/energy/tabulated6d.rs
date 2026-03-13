@@ -6,17 +6,18 @@
 use super::nonbonded::cache::GroupEnergyCache;
 use crate::cell::BoundaryConditions;
 use crate::{Change, Context, GroupChange};
-use icotable::Table6DFlat;
+use icotable::{f16, Table6DFlat};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use std::sync::RwLock;
+use std::sync::{Arc, RwLock};
 
 /// A single molecule-pair table entry.
 #[derive(Clone)]
 struct Entry {
     mol_id_a: usize,
     mol_id_b: usize,
-    table: Table6DFlat<f32>,
+    /// Shared via `Arc` so cloning (e.g. VirtualTranslate) is O(1).
+    table: Arc<Table6DFlat<f16>>,
 }
 
 /// Tabulated 6D molecule-molecule energy term.
@@ -89,7 +90,7 @@ impl Tabulated6DBuilder {
                 };
                 let mol_id_a = resolve(&eb.molecules[0])?;
                 let mol_id_b = resolve(&eb.molecules[1])?;
-                let table = Table6DFlat::<f32>::load(&eb.file).map_err(|e| {
+                let table = Table6DFlat::<f16>::load(&eb.file).map_err(|e| {
                     anyhow::anyhow!("Failed to load table '{}': {}", eb.file.display(), e)
                 })?;
                 log::info!(
@@ -103,7 +104,7 @@ impl Tabulated6DBuilder {
                 Ok(Entry {
                     mol_id_a,
                     mol_id_b,
-                    table,
+                    table: Arc::new(table),
                 })
             })
             .collect::<anyhow::Result<Vec<_>>>()?;
