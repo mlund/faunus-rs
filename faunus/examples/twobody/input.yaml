@@ -76,36 +76,36 @@ system:
         range: [0.0, 100.0]
     nonbonded:
       default:
-        - !Coulomb {cutoff: 200}
+        - !Coulomb {cutoff: 2000}
         - !WeeksChandlerAndersen {mixing: LB}
-    spline:
-      cutoff: 200.0
-      n_points: 2000
+   #spline:
+   #  cutoff: 200.0
+   #  n_points: 2000
 
-analysis: []
-# - !CollectiveVariable
-#   property: mass_center_separation
-#   selection: "molecule MOL1"
-#   selection2: "molecule MOL2"
-#   file: "com_distance.dat.gz"
-#   frequency: !Every 10
-# - !VirtualTranslate
-#   selection: "molecule MOL2"
-#   dL: -0.01 # minus to not push against hard constraints
-#   directions: !z
-#   file: "vt.dat.gz"
-#   temperature: 298.15
-#   frequency: !Every 10
-# - !RadialDistribution
-#   selections: ["molecule MOL1", "molecule MOL2"]
-#   use_com: true
-#   dimension: z
-#   file: "rdf_z.dat"
-#   dr: 0.5
-#   frequency: !Every 10
-# - !Trajectory
-#   file: "traj.xtc"
-#   frequency: !Every 1000
+analysis:
+  - !CollectiveVariable
+    property: mass_center_separation
+    selection: "molecule MOL1"
+    selection2: "molecule MOL2"
+    file: "com_distance.dat.gz"
+    frequency: !Every 10
+  - !VirtualTranslate
+    selection: "molecule MOL2"
+    dL: -0.01 # minus to not push against hard constraints
+    directions: !z
+    file: "vt.dat.gz"
+    temperature: 298.15
+    frequency: !Every 10
+  - !RadialDistribution
+    selections: ["molecule MOL1", "molecule MOL2"]
+    use_com: true
+    dimension: z
+    file: "rdf_z.dat"
+    dr: 0.5
+    frequency: !Every 10
+  - !Trajectory
+    file: "traj.xtc"
+    frequency: !Every 1000
 
 propagate:
   seed: Hardware
