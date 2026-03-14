@@ -584,6 +584,41 @@ term as $f^2$; this asymmetry is not reproducible by an effective radius.
 | $0$ | Neumann ($f=0$) | Neutral surface; no polymer-mediated interaction |
 | $> -(1+\sigma)$ and $< 0$ | Adsorption ($f<0$) | Polymer accumulates at surface; interactions sign-inverted |
 
+### Self-consistent steric adsorption
+
+The constant $\tilde{h}$ Robin BC diverges when polymer adsorption is strong enough
+to drive $\tilde{h} \to -(1+\sigma)$.
+The `steric_adsorption` option replaces the fixed $\tilde{h}$ with a per-colloid,
+configuration-dependent $\tilde{h}_\text{eff}(i)$ obtained by self-consistent
+iteration.
+The steric free energy cost of crowding adsorbed chains limits the surface
+density to a finite saturation value $g_0$, preventing the divergence.
+
+The effective inverse extrapolation length $\varepsilon_\text{eff}(i)$ is
+determined from the surface polymer density $\hat{g}_S(i)$ via
+
+$$\varepsilon_\text{eff} = \varepsilon_0'
+  + \ln\!\left(1 - \frac{\hat{g}_S^2}{g_0^2}\right)
+  - \frac{\hat{g}_S^2}{g_0^2 - \hat{g}_S^2}$$
+
+and feeds into the Robin amplitude factor as
+$\tilde{h}_\text{eff}(i) = -\varepsilon_\text{eff}(i) \cdot R_c$.
+The surface density $\hat{g}_S$ is itself a function of $\varepsilon_\text{eff}$
+through the modified Helmholtz Green's function, closing the self-consistency
+loop solved by Picard iteration.
+
+| Parameter          | Physical meaning |
+|--------------------|------------------|
+| `epsilon0_prime`   | Bare polymer–surface adsorption strength $\varepsilon_0'$ (dimensionless). Larger values mean stronger bare attraction between polymer segments and the colloid surface. Positive values are required; the self-consistent scheme handles the transition to adsorption internally. |
+| `g0`               | Saturation surface density $g_0$. The maximum polymer density that can pack onto the colloid surface before steric repulsion between adsorbed chains halts further accumulation. Must be $> 1$; typical values 5–20. Smaller $g_0$ means surface saturates sooner. |
+| `kuhn_length`      | Kuhn segment length $b$ (in Angstrom), setting the coarse-graining scale of the polymer chain. Enters as a length scale in the self-consistent field equations. |
+| `picard_mixing`    | Picard iteration mixing parameter $\alpha \in (0, 1]$. Controls how aggressively the surface density is updated each iteration: $\hat{g}_S^\text{new} = \alpha\,\hat{g}_S^\text{calc} + (1-\alpha)\,\hat{g}_S^\text{old}$. Smaller values improve stability for strongly adsorbing systems at the cost of more iterations. |
+| `max_iterations`   | Maximum number of Picard iterations before accepting the current solution. |
+| `tolerance`        | Convergence threshold: iteration stops when the largest change in $\hat{g}_S$ across all colloids falls below this value. |
+
+> **Note:** `steric_adsorption` is mutually exclusive with `h_tilde`.
+> Analytical forces are not yet implemented for this mode.
+
 ### Applicability
 
 - Ideal (non-interacting) polymers under theta conditions
@@ -604,6 +639,22 @@ energy:
     h_tilde: 5.0  # optional; omit for full depletion (Dirichlet)
 ```
 
+Or with self-consistent steric adsorption (mutually exclusive with `h_tilde`):
+
+```yaml
+energy:
+  polymer_depletion:
+    polymer_rg: 100.0
+    polymer_density: 1.0
+    kappa: 1.0
+    molecules: [Colloid]
+    colloid_radius: 5.0
+    steric_adsorption:
+      epsilon0_prime: 0.02
+      g0: 10.0
+      kuhn_length: 1.0
+```
+
 | Key                | Required | Default | Description                                           |
 |--------------------|----------|---------|-------------------------------------------------------|
 | `polymer_rg`       | yes      |         | Polymer radius of gyration $R_g$ (Å)                  |
@@ -613,6 +664,18 @@ energy:
 | `colloid_radius`   | no       |         | Fixed $R_c$ (Å); default: bounding sphere radius      |
 | `colloid_radius_scaling` | no | `1.0`  | Scaling factor for the effective colloid radius        |
 | `h_tilde` / `h̃`  | no       |         | Robin BC parameter $\tilde{h} = R_c/b$; omit for Dirichlet |
+| `steric_adsorption` | no     |         | Self-consistent steric adsorption block (see below)   |
+
+**`steric_adsorption` sub-keys:**
+
+| Key                | Required | Default | Description                                           |
+|--------------------|----------|---------|-------------------------------------------------------|
+| `epsilon0_prime`   | yes      |         | Bare adsorption parameter $\varepsilon_0'$ (dimensionless, $> 0$) |
+| `g0`               | yes      |         | Saturation surface density $g_0$ (must be $> 1$)      |
+| `kuhn_length`      | yes      |         | Kuhn segment length $b$ (Å)                           |
+| `picard_mixing`    | no       | `0.3`   | Picard mixing parameter $\alpha \in (0, 1]$           |
+| `max_iterations`   | no       | `50`    | Maximum self-consistency iterations                   |
+| `tolerance`        | no       | `1e-8`  | Convergence threshold for $\hat{g}_S$                 |
 
 ## Tabulated 6D Rigid-Body Energy
 

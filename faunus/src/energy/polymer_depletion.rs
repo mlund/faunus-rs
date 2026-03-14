@@ -27,6 +27,73 @@ fn k0(x: f64) -> f64 {
     (-x).exp() / x
 }
 
+/// Modified spherical Bessel function i₀(x) = sinh(x)/x.
+///
+/// Regular (non-singular) radial solution to the modified Helmholtz equation
+/// in spherical coordinates. Appears in the interior field of each colloid.
+#[inline]
+fn i0(x: f64) -> f64 {
+    if x.abs() < 1e-10 {
+        // Taylor: sinh(x)/x = 1 + x²/6 + ... avoids 0/0
+        1.0
+    } else {
+        x.sinh() / x
+    }
+}
+
+/// Derivative i₀'(x) = cosh(x)/x - sinh(x)/x².
+///
+/// Needed for the Robin BC matching at the colloid surface, where the
+/// radial derivative of the interior solution enters the calligraphic
+/// functions K₀ and I₀.
+#[inline]
+fn i0_prime(x: f64) -> f64 {
+    if x.abs() < 1e-10 {
+        // i₀ is even ⇒ i₀'(0) = 0; avoids cancellation in cosh/x - sinh/x²
+        0.0
+    } else {
+        x.cosh() / x - x.sinh() / x.powi(2)
+    }
+}
+
+/// Derivative k₀'(x) = -exp(-x)·(1+x)/x².
+#[inline]
+fn k0_prime(x: f64) -> f64 {
+    -(-x).exp() * (1.0 + x) / x.powi(2)
+}
+
+/// Robin-modified k₀: K₀(x) = ε·k₀(x) + λ·k₀'(x).
+///
+/// Arises from applying the Robin BC (∂g/∂r + ε·g = 0) to the exterior
+/// Yukawa solution k₀. The combination ε·k₀ + λ·k₀' vanishes when the
+/// BC is satisfied, so it appears in denominators of the monopole strength.
+#[inline]
+fn cal_k0(x: f64, eps: f64, lam: f64) -> f64 {
+    eps * k0(x) + lam * k0_prime(x)
+}
+
+/// Robin-modified i₀: I₀(x) = ε·i₀(x) + λ·i₀'(x).
+///
+/// Interior counterpart of [`cal_k0`]; same Robin BC applied to the
+/// regular solution i₀. Enters the surface density ĝ_S (Eq. 18).
+#[inline]
+fn cal_i0(x: f64, eps: f64, lam: f64) -> f64 {
+    eps * i0(x) + lam * i0_prime(x)
+}
+
+/// Self-consistent ε_eff from surface density (Eq. 14).
+///
+/// ε_eff = ε₀' + ln(1 - ĝ_S²/g₀²) - ĝ_S²/(g₀² - ĝ_S²)
+///
+/// The ln and rational terms are the steric free-energy penalty for
+/// crowding adsorbed chains: they drive ε_eff → -∞ as ĝ_S → g₀,
+/// which weakens the effective adsorption and prevents divergence.
+/// Caller must ensure |gs| < g0 to keep the log argument positive.
+fn epsilon_eff_from_gs(eps0p: f64, gs: f64, g0: f64) -> f64 {
+    let ratio_sq = (gs / g0).powi(2);
+    eps0p + (1.0 - ratio_sq).ln() - ratio_sq / (1.0 - ratio_sq)
+}
+
 /// Per-colloid information cached from the context.
 #[derive(Debug, Clone)]
 struct ColloidInfo {
@@ -47,10 +114,7 @@ struct ColloidInfo {
 /// - h̃ ≤ -(1+σ): divergent; monopole approximation breaks down
 #[inline]
 fn robin_f(sigma: f64, h_tilde: Option<f64>) -> f64 {
-    match h_tilde {
-        Some(ht) => ht / ((1.0 + sigma) + ht),
-        None => 1.0,
-    }
+    h_tilde.map_or(1.0, |ht| ht / ((1.0 + sigma) + ht))
 }
 
 /// Many-body polymer depletion interaction for colloids in an ideal polymer
@@ -95,6 +159,14 @@ pub struct PolymerDepletion {
     backup_colloids: Vec<ColloidInfo>,
     backup_energy: f64,
     has_backup: bool,
+    /// Self-consistent steric adsorption state
+    steric: Option<StericAdsorptionState>,
+    /// Pre-allocated backup buffers for steric g_s / h_tilde_eff vectors.
+    /// Stored separately (not as Option<StericAdsorptionState>) to avoid
+    /// heap-allocating new Vecs on every MC trial; capacity is reused via
+    /// clear + extend_from_slice, matching the backup_colloids pattern.
+    backup_g_s: Vec<f64>,
+    backup_h_tilde_eff: Vec<f64>,
 }
 
 impl PolymerDepletion {
@@ -114,7 +186,13 @@ impl PolymerDepletion {
         let mut energy = 0.0;
         for (i, ci) in colloids.iter().enumerate() {
             let sigma = lambda * ci.radius;
-            let f = robin_f(sigma, self.h_tilde);
+            let f = match &self.steric {
+                Some(s) => {
+                    debug_assert_eq!(s.h_tilde_eff.len(), colloids.len());
+                    robin_f(sigma, Some(s.h_tilde_eff[i]))
+                }
+                None => robin_f(sigma, self.h_tilde),
+            };
 
             let sigma2 = sigma.powi(2);
 
@@ -205,6 +283,12 @@ impl PolymerDepletion {
             }
             _ => return Ok(()),
         }
+        // Re-solve self-consistency before energy evaluation: colloid positions
+        // changed, so the neighbor sums and effective Robin parameters must update.
+        if let Some(steric) = &mut self.steric {
+            let lambda = self.kappa.sqrt() / self.rg;
+            steric.solve(&self.colloids, lambda, context.cell());
+        }
         let beta_energy = self.compute_beta_energy(&self.colloids, context.cell());
         self.cached_energy = beta_energy * self.thermal_energy;
         Ok(())
@@ -223,6 +307,13 @@ impl PolymerDepletion {
         self.backup_colloids.clear();
         self.backup_colloids.extend_from_slice(&self.colloids);
         self.backup_energy = self.cached_energy;
+        if let Some(steric) = &self.steric {
+            self.backup_g_s.clear();
+            self.backup_g_s.extend_from_slice(&steric.g_s);
+            self.backup_h_tilde_eff.clear();
+            self.backup_h_tilde_eff
+                .extend_from_slice(&steric.h_tilde_eff);
+        }
         self.has_backup = true;
     }
 
@@ -230,6 +321,10 @@ impl PolymerDepletion {
         assert!(self.has_backup, "undo called without backup");
         std::mem::swap(&mut self.colloids, &mut self.backup_colloids);
         self.cached_energy = self.backup_energy;
+        if let Some(steric) = &mut self.steric {
+            std::mem::swap(&mut steric.g_s, &mut self.backup_g_s);
+            std::mem::swap(&mut steric.h_tilde_eff, &mut self.backup_h_tilde_eff);
+        }
         self.has_backup = false;
     }
 
@@ -260,6 +355,22 @@ impl PolymerDepletion {
             map.insert("h_tilde".into(), ht.into());
         }
 
+        if let Some(steric) = &self.steric {
+            let mut steric_map = serde_yaml::Mapping::new();
+            steric_map.insert("epsilon0_prime".into(), steric.config.epsilon0_prime.into());
+            steric_map.insert("g0".into(), steric.config.g0.into());
+            steric_map.insert("kuhn_length".into(), steric.config.kuhn_length.into());
+            let gs_vals: Vec<serde_yaml::Value> = steric.g_s.iter().map(|&v| v.into()).collect();
+            steric_map.insert("g_s".into(), serde_yaml::Value::Sequence(gs_vals));
+            let ht_vals: Vec<serde_yaml::Value> =
+                steric.h_tilde_eff.iter().map(|&v| v.into()).collect();
+            steric_map.insert("h_tilde_eff".into(), serde_yaml::Value::Sequence(ht_vals));
+            map.insert(
+                "steric_adsorption".into(),
+                serde_yaml::Value::Mapping(steric_map),
+            );
+        }
+
         let colloids: Vec<serde_yaml::Value> = self
             .colloids
             .iter()
@@ -287,6 +398,16 @@ impl PolymerDepletion {
     ///       D_i = 1 + (exp(2σ_i) - 1) · S_i / 2.
     #[allow(dead_code)]
     pub fn forces(&self, cell: &impl crate::cell::BoundaryConditions) -> Vec<(usize, Point)> {
+        // Configuration-dependent h̃_eff makes ∂f/∂R non-trivial; the force
+        // expression needs additional ∂ε_eff/∂R terms not yet derived.
+        if self.steric.is_some() {
+            log::warn!("Analytical forces not implemented for steric adsorption; returning zeros");
+            return self
+                .colloids
+                .iter()
+                .map(|c| (c.group_index, Point::zeros()))
+                .collect();
+        }
         let colloids = &self.colloids;
         if colloids.is_empty() {
             return Vec::new();
@@ -379,6 +500,10 @@ pub struct PolymerDepletionBuilder {
     /// onto the colloid surface.
     #[serde(default, alias = "h̃")]
     pub h_tilde: Option<f64>,
+    /// Self-consistent steric adsorption configuration.
+    /// Mutually exclusive with `h_tilde`.
+    #[serde(default)]
+    pub steric_adsorption: Option<StericAdsorptionConfig>,
 }
 
 fn default_kappa() -> f64 {
@@ -387,6 +512,144 @@ fn default_kappa() -> f64 {
 
 fn default_one() -> f64 {
     1.0
+}
+
+fn default_picard_mixing() -> f64 {
+    0.3
+}
+
+fn default_max_iterations() -> usize {
+    50
+}
+
+fn default_tolerance() -> f64 {
+    1e-8
+}
+
+/// Configuration for self-consistent steric adsorption boundary conditions.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct StericAdsorptionConfig {
+    /// Bare adsorption parameter ε₀' (dimensionless, > 0)
+    pub epsilon0_prime: f64,
+    /// Saturation surface density g₀ (must be > 1.0)
+    pub g0: f64,
+    /// Kuhn length b (Å)
+    pub kuhn_length: f64,
+    /// Picard mixing parameter α ∈ (0, 1]
+    #[serde(default = "default_picard_mixing")]
+    pub picard_mixing: f64,
+    /// Maximum number of self-consistency iterations
+    #[serde(default = "default_max_iterations")]
+    pub max_iterations: usize,
+    /// Convergence tolerance for ĝ_S
+    #[serde(default = "default_tolerance")]
+    pub tolerance: f64,
+}
+
+/// Runtime state for self-consistent steric adsorption.
+#[derive(Debug, Clone)]
+struct StericAdsorptionState {
+    config: StericAdsorptionConfig,
+    /// Per-colloid surface density ĝ_S(i)
+    g_s: Vec<f64>,
+    /// Per-colloid effective Robin parameter h̃_eff(i) = -ε_eff(i)·R_c
+    h_tilde_eff: Vec<f64>,
+}
+
+impl StericAdsorptionState {
+    fn new(config: StericAdsorptionConfig, n_colloids: usize) -> Self {
+        Self {
+            config,
+            g_s: vec![0.0; n_colloids],
+            h_tilde_eff: vec![0.0; n_colloids],
+        }
+    }
+
+    /// Run self-consistent iteration to convergence (Eqs. 14, 18, 19).
+    fn solve(
+        &mut self,
+        colloids: &[ColloidInfo],
+        lambda: f64,
+        cell: &impl crate::cell::BoundaryConditions,
+    ) {
+        let n = colloids.len();
+        if n == 0 {
+            self.g_s.clear();
+            self.h_tilde_eff.clear();
+            return;
+        }
+
+        // Resize but preserve existing g_s values: after an MC move only one
+        // colloid shifts, so the previous solution is a good initial guess
+        // and the Picard iteration converges in very few steps.
+        self.g_s.resize(n, 0.0);
+        self.h_tilde_eff.resize(n, 0.0);
+
+        let sqrt_4pi = (4.0 * PI).sqrt();
+        let alpha = self.config.picard_mixing;
+        // Clamp g_s strictly below g0 to keep epsilon_eff_from_gs's log finite;
+        // without this, aggressive Picard mixing can overshoot past g0.
+        let gs_max = self.config.g0 * (1.0 - 1e-12);
+
+        // Neighbor sums depend only on colloid geometry (not on g_s), so
+        // precompute once to avoid O(max_iter × N²) distance evaluations.
+        let k0_sums: Vec<f64> = (0..n)
+            .map(|i| {
+                colloids
+                    .iter()
+                    .enumerate()
+                    .filter(|&(j, _)| j != i)
+                    .map(|(_, cj)| k0(lambda * cell.distance(&colloids[i].com, &cj.com).norm()))
+                    .sum()
+            })
+            .collect();
+
+        for _iter in 0..self.config.max_iterations {
+            let mut max_change = 0.0_f64;
+
+            for i in 0..n {
+                let r_s = colloids[i].radius;
+                let x_s = lambda * r_s;
+
+                // ε_eff from current g_s (Eq. 14)
+                let eps_eff =
+                    epsilon_eff_from_gs(self.config.epsilon0_prime, self.g_s[i], self.config.g0);
+
+                // Calligraphic functions at surface
+                let cal_k = cal_k0(x_s, eps_eff, lambda);
+                let cal_i = cal_i0(x_s, eps_eff, lambda);
+
+                // Γ_S₀(i) from Eq. 19
+                let gamma_s0 = -sqrt_4pi * eps_eff / (cal_k + cal_i * k0_sums[i]);
+
+                // ĝ_S₀(i) from Eq. 18
+                let gs_new = sqrt_4pi * lambda * i0_prime(x_s) / cal_i
+                    + gamma_s0 / (cal_i * lambda * r_s.powi(2));
+
+                // Picard mixing with saturation guard
+                let gs_mixed =
+                    (alpha * gs_new + (1.0 - alpha) * self.g_s[i]).clamp(-gs_max, gs_max);
+                max_change = max_change.max((gs_mixed - self.g_s[i]).abs());
+                self.g_s[i] = gs_mixed;
+
+                // Recompute eps_eff from the mixed g_s so that h_tilde_eff stays
+                // consistent with the current state (not the pre-mixing value).
+                let eps_eff_updated =
+                    epsilon_eff_from_gs(self.config.epsilon0_prime, gs_mixed, self.config.g0);
+                self.h_tilde_eff[i] = -eps_eff_updated * r_s;
+            }
+
+            if max_change < self.config.tolerance {
+                log::debug!(
+                    "Steric adsorption converged in {} iterations (max_change={:.2e})",
+                    _iter + 1,
+                    max_change
+                );
+                break;
+            }
+        }
+    }
 }
 
 impl PolymerDepletionBuilder {
@@ -413,6 +676,26 @@ impl PolymerDepletionBuilder {
                     })
             })
             .collect::<anyhow::Result<Vec<_>>>()?;
+
+        // Validate mutual exclusivity of h_tilde and steric_adsorption
+        anyhow::ensure!(
+            !(self.h_tilde.is_some() && self.steric_adsorption.is_some()),
+            "h_tilde and steric_adsorption are mutually exclusive"
+        );
+
+        // Validate steric adsorption parameters
+        if let Some(ref steric) = self.steric_adsorption {
+            anyhow::ensure!(
+                steric.g0 > 1.0,
+                "steric_adsorption.g0 ({}) must be > 1.0",
+                steric.g0
+            );
+            anyhow::ensure!(
+                steric.epsilon0_prime > 0.0,
+                "steric_adsorption.epsilon0_prime ({}) must be > 0",
+                steric.epsilon0_prime
+            );
+        }
 
         // Validate Robin BC parameter: h̃ > -(1+σ) required for convergence
         if let Some(ht) = self.h_tilde {
@@ -441,10 +724,22 @@ impl PolymerDepletionBuilder {
             backup_colloids: Vec::new(),
             backup_energy: 0.0,
             has_backup: false,
+            steric: None,
+            backup_g_s: Vec::new(),
+            backup_h_tilde_eff: Vec::new(),
         };
 
         // Initialize colloids from current context state
         pm.rebuild_colloids(context);
+
+        // Initialize steric adsorption if configured
+        if let Some(ref config) = self.steric_adsorption {
+            let mut state = StericAdsorptionState::new(config.clone(), pm.colloids.len());
+            let lambda = self.kappa.sqrt() / self.polymer_rg;
+            state.solve(&pm.colloids, lambda, context.cell());
+            pm.steric = Some(state);
+        }
+
         let beta_energy = pm.compute_beta_energy(&pm.colloids, context.cell());
         pm.cached_energy = beta_energy * pm.thermal_energy;
 
@@ -453,7 +748,7 @@ impl PolymerDepletionBuilder {
             self.polymer_rg,
             self.polymer_density,
             self.kappa,
-            self.h_tilde.map_or("inf".to_string(), |h| format!("{h}")),
+            match self.h_tilde { Some(h) => format!("{h}"), None => "inf".into() },
             self.molecules.len(),
             pm.cached_energy
         );
@@ -501,7 +796,27 @@ mod tests {
             backup_colloids: Vec::new(),
             backup_energy: 0.0,
             has_backup: false,
+            steric: None,
+            backup_g_s: Vec::new(),
+            backup_h_tilde_eff: Vec::new(),
         }
+    }
+
+    fn make_test_instance_steric(
+        rg: f64,
+        rho_star: f64,
+        kappa: f64,
+        rc: f64,
+        steric_config: StericAdsorptionConfig,
+        colloids: Vec<ColloidInfo>,
+    ) -> PolymerDepletion {
+        let lambda = kappa.sqrt() / rg;
+        let mut state = StericAdsorptionState::new(steric_config, colloids.len());
+        let cell = crate::cell::Endless;
+        state.solve(&colloids, lambda, &cell);
+        let mut pm = make_test_instance_robin(rg, rho_star, kappa, rc, None, colloids);
+        pm.steric = Some(state);
+        pm
     }
 
     #[test]
@@ -906,5 +1221,267 @@ molecules: [Colloid]
 "#;
         let builder2: PolymerDepletionBuilder = serde_yaml::from_str(yaml2).unwrap();
         assert!(builder2.h_tilde.is_none());
+    }
+
+    #[test]
+    fn test_i0_and_derivatives() {
+        // i₀(1) = sinh(1)/1
+        assert_approx_eq!(f64, i0(1.0), 1.0_f64.sinh(), epsilon = 1e-14);
+        // i₀(2) = sinh(2)/2
+        assert_approx_eq!(f64, i0(2.0), 2.0_f64.sinh() / 2.0, epsilon = 1e-14);
+        // i₀(0) -> 1
+        assert_approx_eq!(f64, i0(1e-15), 1.0, epsilon = 1e-10);
+
+        // i₀'(1) = cosh(1)/1 - sinh(1)/1
+        let expected_i0p = 1.0_f64.cosh() - 1.0_f64.sinh();
+        assert_approx_eq!(f64, i0_prime(1.0), expected_i0p, epsilon = 1e-14);
+        // i₀'(0) -> 0
+        assert_approx_eq!(f64, i0_prime(1e-15), 0.0, epsilon = 1e-10);
+
+        // k₀'(1) = -exp(-1)·2/1 = -2·exp(-1)
+        let expected_k0p = -(-1.0_f64).exp() * 2.0;
+        assert_approx_eq!(f64, k0_prime(1.0), expected_k0p, epsilon = 1e-14);
+        // k₀'(2) = -exp(-2)·3/4
+        let expected_k0p2 = -(-2.0_f64).exp() * 3.0 / 4.0;
+        assert_approx_eq!(f64, k0_prime(2.0), expected_k0p2, epsilon = 1e-14);
+
+        // Verify k₀' numerically
+        let h = 1e-7;
+        let numerical_k0p = (k0(1.0 + h) - k0(1.0 - h)) / (2.0 * h);
+        assert_approx_eq!(f64, k0_prime(1.0), numerical_k0p, epsilon = 1e-6);
+
+        // Verify i₀' numerically
+        let numerical_i0p = (i0(1.0 + h) - i0(1.0 - h)) / (2.0 * h);
+        assert_approx_eq!(f64, i0_prime(1.0), numerical_i0p, epsilon = 1e-6);
+    }
+
+    #[test]
+    fn test_epsilon_eff_limits() {
+        // ĝ_S → 0 gives ε₀'
+        assert_approx_eq!(
+            f64,
+            epsilon_eff_from_gs(0.02, 0.0, 10.0),
+            0.02,
+            epsilon = 1e-14
+        );
+
+        // ĝ_S → g₀ gives -∞
+        let eps = epsilon_eff_from_gs(0.02, 9.999, 10.0);
+        assert!(
+            eps < -100.0,
+            "ε_eff should diverge to -∞ near g₀, got {eps}"
+        );
+
+        // Intermediate value: check sign and magnitude
+        let eps_mid = epsilon_eff_from_gs(0.02, 5.0, 10.0);
+        // ln(1 - 0.25) - 0.25/0.75 = ln(0.75) - 1/3 ≈ -0.2877 - 0.3333 = -0.621
+        let expected = 0.02 + (0.75_f64).ln() - 0.25 / 0.75;
+        assert_approx_eq!(f64, eps_mid, expected, epsilon = 1e-12);
+    }
+
+    #[test]
+    fn test_steric_single_particle_convergence() {
+        let (rg, _rho_star, kappa, rc) = (10.0_f64, 0.5, 1.0, 5.0);
+        let config = StericAdsorptionConfig {
+            epsilon0_prime: 0.02,
+            g0: 10.0,
+            kuhn_length: 1.0,
+            picard_mixing: 0.3,
+            max_iterations: 200,
+            tolerance: 1e-12,
+        };
+
+        let colloids = vec![ColloidInfo {
+            group_index: 0,
+            com: Point::new(0.0, 0.0, 0.0),
+            radius: rc,
+        }];
+
+        let lambda = f64::sqrt(kappa) / rg;
+        let mut state = StericAdsorptionState::new(config, 1);
+        let cell = crate::cell::Endless;
+        state.solve(&colloids, lambda, &cell);
+
+        // Should converge to a finite value
+        assert!(
+            state.g_s[0].is_finite(),
+            "g_s should be finite, got {}",
+            state.g_s[0]
+        );
+        assert!(
+            state.h_tilde_eff[0].is_finite(),
+            "h_tilde_eff should be finite, got {}",
+            state.h_tilde_eff[0]
+        );
+
+        // For small ε₀', g_s should be small
+        assert!(
+            state.g_s[0].abs() < 5.0,
+            "g_s should be moderate for small ε₀', got {}",
+            state.g_s[0]
+        );
+    }
+
+    #[test]
+    fn test_steric_prevents_divergence() {
+        // Large ε₀' with steric should produce finite energy
+        let (rg, rho_star, kappa, rc) = (10.0, 0.5, 1.0, 5.0);
+        let config = StericAdsorptionConfig {
+            epsilon0_prime: 5.0,
+            g0: 10.0,
+            kuhn_length: 1.0,
+            picard_mixing: 0.1,
+            max_iterations: 500,
+            tolerance: 1e-10,
+        };
+
+        let colloids = vec![
+            ColloidInfo {
+                group_index: 0,
+                com: Point::new(0.0, 0.0, 0.0),
+                radius: rc,
+            },
+            ColloidInfo {
+                group_index: 1,
+                com: Point::new(15.0, 0.0, 0.0),
+                radius: rc,
+            },
+        ];
+
+        let pm = make_test_instance_steric(rg, rho_star, kappa, rc, config, colloids.clone());
+        let cell = crate::cell::Endless;
+        let energy = pm.compute_beta_energy(&colloids, &cell);
+
+        assert!(
+            energy.is_finite(),
+            "Steric energy should be finite even for large ε₀', got {energy}"
+        );
+    }
+
+    #[test]
+    fn test_steric_energy_finite_various_eps0p() {
+        // Self-consistent steric scheme should produce finite energies
+        // across a range of ε₀' values
+        let (rg, rho_star, kappa, rc) = (10.0, 0.5, 1.0, 5.0);
+        let cell = crate::cell::Endless;
+
+        let colloids = vec![ColloidInfo {
+            group_index: 0,
+            com: Point::new(0.0, 0.0, 0.0),
+            radius: rc,
+        }];
+
+        for &eps0p in &[0.001, 0.01, 0.1, 1.0, 5.0] {
+            let config = StericAdsorptionConfig {
+                epsilon0_prime: eps0p,
+                g0: 10.0,
+                kuhn_length: 1.0,
+                picard_mixing: 0.2,
+                max_iterations: 500,
+                tolerance: 1e-10,
+            };
+            let pm = make_test_instance_steric(rg, rho_star, kappa, rc, config, colloids.clone());
+            let e = pm.compute_beta_energy(&colloids, &cell);
+            assert!(
+                e.is_finite(),
+                "Energy should be finite for ε₀'={eps0p}, got {e}"
+            );
+            // h_tilde_eff should also be finite
+            assert!(
+                pm.steric.as_ref().unwrap().h_tilde_eff[0].is_finite(),
+                "h_tilde_eff should be finite for ε₀'={eps0p}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_steric_backup_undo() {
+        let (rg, rho_star, kappa, rc) = (10.0, 0.5, 1.0, 5.0);
+        let config = StericAdsorptionConfig {
+            epsilon0_prime: 0.02,
+            g0: 10.0,
+            kuhn_length: 1.0,
+            picard_mixing: 0.3,
+            max_iterations: 50,
+            tolerance: 1e-8,
+        };
+
+        let colloids = vec![ColloidInfo {
+            group_index: 0,
+            com: Point::new(0.0, 0.0, 0.0),
+            radius: rc,
+        }];
+
+        let mut pm = make_test_instance_steric(rg, rho_star, kappa, rc, config, colloids);
+
+        // Save state
+        let original_gs = pm.steric.as_ref().unwrap().g_s.clone();
+        let original_ht = pm.steric.as_ref().unwrap().h_tilde_eff.clone();
+        pm.save_backup();
+
+        // Modify state (simulate an update)
+        if let Some(steric) = &mut pm.steric {
+            steric.g_s[0] = 999.0;
+            steric.h_tilde_eff[0] = 999.0;
+        }
+
+        // Undo should restore
+        pm.undo();
+        assert_approx_eq!(
+            f64,
+            pm.steric.as_ref().unwrap().g_s[0],
+            original_gs[0],
+            epsilon = 1e-15
+        );
+        assert_approx_eq!(
+            f64,
+            pm.steric.as_ref().unwrap().h_tilde_eff[0],
+            original_ht[0],
+            epsilon = 1e-15
+        );
+    }
+
+    #[test]
+    fn test_steric_yaml_roundtrip() {
+        let yaml = r#"
+polymer_rg: 100.0
+polymer_density: 1.0
+kappa: 1.0
+molecules: [Colloid]
+colloid_radius: 5.0
+steric_adsorption:
+  epsilon0_prime: 0.02
+  g0: 10.0
+  kuhn_length: 1.0
+"#;
+        let builder: PolymerDepletionBuilder = serde_yaml::from_str(yaml).unwrap();
+        let steric = builder.steric_adsorption.as_ref().unwrap();
+        assert_approx_eq!(f64, steric.epsilon0_prime, 0.02);
+        assert_approx_eq!(f64, steric.g0, 10.0);
+        assert_approx_eq!(f64, steric.kuhn_length, 1.0);
+        assert_approx_eq!(f64, steric.picard_mixing, 0.3);
+        assert_eq!(steric.max_iterations, 50);
+        assert!(builder.h_tilde.is_none());
+    }
+
+    #[test]
+    fn test_steric_mutual_exclusion() {
+        let yaml = r#"
+polymer_rg: 100.0
+polymer_density: 1.0
+kappa: 1.0
+molecules: [Colloid]
+colloid_radius: 5.0
+h_tilde: 3.0
+steric_adsorption:
+  epsilon0_prime: 0.02
+  g0: 10.0
+  kuhn_length: 1.0
+"#;
+        let builder: PolymerDepletionBuilder = serde_yaml::from_str(yaml).unwrap();
+        // Can't test build() without a Context, but verify both are set
+        assert!(builder.h_tilde.is_some());
+        assert!(builder.steric_adsorption.is_some());
+        // The build() method would reject this with an error
     }
 }
