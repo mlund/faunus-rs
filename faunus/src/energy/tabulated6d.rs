@@ -6,10 +6,98 @@
 use super::nonbonded::cache::GroupEnergyCache;
 use crate::cell::BoundaryConditions;
 use crate::{Change, Context, GroupChange};
-use icotable::{f16, Table6DFlat};
+use icotable::{f16, Table6DAdaptive, Table6DFlat, Vector3};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
+
+/// Wrapper supporting both flat (legacy) and adaptive table formats.
+/// Adaptive tables use per-slab resolution tiers (repulsive/scalar/nearest/interpolated)
+/// to reduce storage and lookup cost, especially at short range (overlap) and long range
+/// (smooth angular surface).
+#[derive(Clone, Debug)]
+enum TableKind {
+    Flat(Table6DFlat<f16>),
+    Adaptive(Table6DAdaptive<f32>),
+}
+
+impl TableKind {
+    /// Load a table file, trying adaptive format first, then flat.
+    /// Both formats use bincode serialization, so the wrong format will fail
+    /// deserialization cleanly and we fall back to the other.
+    fn load(path: &std::path::Path) -> anyhow::Result<Self> {
+        match Table6DAdaptive::<f32>::load(path) {
+            Ok(t) => Ok(Self::Adaptive(t)),
+            Err(_) => Ok(Self::Flat(Table6DFlat::<f16>::load(path)?)),
+        }
+    }
+
+    fn rmin(&self) -> f64 {
+        match self {
+            Self::Flat(t) => t.rmin,
+            Self::Adaptive(t) => t.rmin,
+        }
+    }
+
+    fn rmax(&self) -> f64 {
+        match self {
+            Self::Flat(t) => t.rmax,
+            Self::Adaptive(t) => t.rmax,
+        }
+    }
+
+    fn tail_energy(&self, r: f64) -> f64 {
+        match self {
+            Self::Flat(t) => t.tail_energy(r),
+            Self::Adaptive(t) => t.tail_energy(r),
+        }
+    }
+
+    fn validate_metadata(&self) -> anyhow::Result<()> {
+        match self {
+            Self::Flat(t) => t.validate_metadata(),
+            Self::Adaptive(t) => t.validate_metadata(),
+        }
+    }
+
+    fn lookup_boltzmann(
+        &self,
+        r: f64,
+        omega: f64,
+        dir_a: &Vector3,
+        dir_b: &Vector3,
+        beta: f64,
+    ) -> f64 {
+        match self {
+            Self::Flat(t) => t.lookup_boltzmann(r, omega, dir_a, dir_b, beta),
+            Self::Adaptive(t) => t.lookup_boltzmann(r, omega, dir_a, dir_b, beta),
+        }
+    }
+
+    /// Temperature (K) used when generating the table, if stored in metadata.
+    fn generation_temperature(&self) -> Option<f64> {
+        match self {
+            Self::Flat(t) => t.metadata.as_ref().and_then(|m| m.temperature),
+            Self::Adaptive(t) => t.metadata.as_ref().and_then(|m| m.temperature),
+        }
+    }
+
+    /// Summary string for logging.
+    fn summary(&self) -> String {
+        match self {
+            Self::Flat(t) => format!(
+                "{} R-bins, {} omega-bins, {} vertices (flat)",
+                t.n_r, t.n_omega, t.n_vertices
+            ),
+            Self::Adaptive(t) => format!(
+                "{} R-bins, {} omega-bins, {} levels (adaptive)",
+                t.n_r,
+                t.n_omega,
+                t.levels.len()
+            ),
+        }
+    }
+}
 
 /// A single molecule-pair table entry.
 #[derive(Clone)]
@@ -17,7 +105,7 @@ struct Entry {
     mol_id_a: usize,
     mol_id_b: usize,
     /// Shared via `Arc` so cloning (e.g. VirtualTranslate) is O(1).
-    table: Arc<Table6DFlat<f16>>,
+    table: Arc<TableKind>,
 }
 
 /// Tabulated 6D molecule-molecule energy term.
@@ -90,19 +178,33 @@ impl Tabulated6DBuilder {
                 };
                 let mol_id_a = resolve(&eb.molecules[0])?;
                 let mol_id_b = resolve(&eb.molecules[1])?;
-                let table = Table6DFlat::<f16>::load(&eb.file).map_err(|e| {
+                let table = TableKind::load(&eb.file).map_err(|e| {
                     anyhow::anyhow!("Failed to load table '{}': {}", eb.file.display(), e)
                 })?;
-                table.validate_metadata().map_err(|e| {
-                    anyhow::anyhow!("Invalid table '{}': {}", eb.file.display(), e)
-                })?;
+                table
+                    .validate_metadata()
+                    .map_err(|e| anyhow::anyhow!("Invalid table '{}': {}", eb.file.display(), e))?;
+                // Adaptive tables classify repulsive slabs using the generation
+                // temperature. At lower simulation temperatures, energy differences
+                // matter more and the repulsive/non-repulsive boundary becomes
+                // more critical for correct Metropolis acceptance.
+                if let Some(table_temp) = table.generation_temperature() {
+                    let sim_temp = 1.0 / (beta * physical_constants::MOLAR_GAS_CONSTANT * 1e-3);
+                    if sim_temp < table_temp * 0.95 {
+                        log::warn!(
+                            "Table '{}' was generated at {:.1} K but simulation runs at {:.1} K. \
+                             Repulsive slab classification may be too aggressive at lower temperature.",
+                            eb.file.display(),
+                            table_temp,
+                            sim_temp,
+                        );
+                    }
+                }
                 log::info!(
-                    "Loaded 6D table for ({}, {}): {} R-bins, {} omega-bins, {} vertices",
+                    "Loaded 6D table for ({}, {}): {}",
                     &eb.molecules[0],
                     &eb.molecules[1],
-                    table.n_r,
-                    table.n_omega,
-                    table.n_vertices,
+                    table.summary(),
                 );
                 Ok(Entry {
                     mol_id_a,
@@ -162,10 +264,10 @@ impl Tabulated6D {
 
         let sep = context.cell().distance(com_a, com_b);
         let r = sep.norm();
-        if r > entry.table.rmax {
+        if r > entry.table.rmax() {
             return entry.table.tail_energy(r);
         }
-        if r < entry.table.rmin {
+        if r < entry.table.rmin() {
             return f64::INFINITY;
         }
 

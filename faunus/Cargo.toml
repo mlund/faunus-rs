@@ -65,6 +65,9 @@ chemfiles = ["dep:chemfiles"]
 cli = ["dep:clap", "dep:pretty_env_logger", "dep:indicatif"]
 gpu = ["dep:cubecl", "dep:bytemuck"]
 
+[patch."https://github.com/mlund/icotable.git"]
+icotable = { path = "../../icotable" }
+
 [profile.release]
 lto = "thin"
 

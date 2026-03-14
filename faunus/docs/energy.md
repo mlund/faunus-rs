@@ -631,6 +631,22 @@ This interpolates $\exp(-\beta U)$ rather than $U$ directly, avoiding Jensen's
 inequality bias that would otherwise overestimate repulsive energies at contact.
 A pairwise group energy cache gives O(1) lookups for single rigid-body MC moves.
 
+### Table formats
+
+Two binary table formats are supported and auto-detected at load time:
+
+- **Flat** (legacy): uniform angular resolution across all separations.
+  Uses `f16` storage.
+- **Adaptive**: per-slab angular resolution that adjusts with separation.
+  At short range where molecules overlap, slabs with negligible Boltzmann
+  weights (exp(−βU) ≈ 0) store no angular data. At long range where the
+  energy surface is smooth, slabs are collapsed to a single scalar value
+  or use nearest-vertex lookup instead of full interpolation.
+  This reduces both file size and lookup cost.
+  Adaptive tables are temperature-dependent: the repulsive slab classification
+  uses the temperature from table generation. A warning is emitted if the
+  simulation temperature is significantly lower than the generation temperature.
+
 ### YAML configuration
 
 ```yaml
@@ -666,6 +682,10 @@ The Coulomb prefactor $e^2/(4\pi\varepsilon_0\varepsilon_r)$ is stored once in
 the table metadata.
 If no tail correction metadata is present, separations beyond the table range
 return zero.
+
+If the table covers a sufficiently large range (so that the energy is
+negligible at $R_\text{max}$), the tail correction is not needed and
+can be omitted.
 
 A `medium` with `temperature` is required so that the inverse thermal energy
 $\beta = 1/k_BT$ can be computed for the Boltzmann-weighted interpolation.
