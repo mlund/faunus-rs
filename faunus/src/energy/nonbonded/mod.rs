@@ -38,7 +38,11 @@ use super::{builder::HamiltonianBuilder, exclusions::ExclusionMatrix, EnergyChan
 /// Sort a molecule-type pair into canonical `[min, max]` order for symmetric lookup.
 #[inline(always)]
 const fn canonical_mol_pair(a: usize, b: usize) -> [usize; 2] {
-    if a <= b { [a, b] } else { [b, a] }
+    if a <= b {
+        [a, b]
+    } else {
+        [b, a]
+    }
 }
 
 /// Energy term for computing nonbonded interactions

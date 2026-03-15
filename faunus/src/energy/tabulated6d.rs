@@ -127,8 +127,9 @@ pub struct Tabulated6D {
     /// Inverse thermal energy 1/kT in mol/kJ for Boltzmann-weighted interpolation.
     beta: f64,
     cache: RwLock<Option<GroupEnergyCache>>,
-    /// Welford online stats for |e_forward - e_reverse| in self-interaction lookups.
-    /// Tracks (count, mean, M2) for stddev = sqrt(M2 / count).
+    /// Tracks |exp(-βU_fwd) - exp(-βU_rev)| for self-interaction lookups.
+    /// Quantifies interpolation-induced swap asymmetry; should decrease
+    /// with higher angular table resolution.
     swap_stats: Cell<(usize, f64, f64)>,
 }
 
@@ -298,7 +299,9 @@ impl Tabulated6D {
             return e_forward;
         }
 
-        // Self-interaction: average both perspectives for physical symmetry
+        // Self-interaction: the two perspectives are physically degenerate
+        // but land on different angular grid points, so interpolation gives
+        // different values. Averaging restores exchange symmetry.
         let (_r, omega2, dir_a2, dir_b2) =
             icotable::inverse_orient(&(-oriented_sep), q_b, q_a);
         let e_reverse =
@@ -306,7 +309,8 @@ impl Tabulated6D {
                 .table
                 .lookup_boltzmann(r, omega2, &dir_a2, &dir_b2, self.beta);
 
-        // Track swap asymmetry in Boltzmann space: |exp(-βU_fwd) - exp(-βU_rev)|
+        // Boltzmann weights flatten repulsive states, isolating the
+        // interpolation error at thermally accessible configurations.
         let bf = (-self.beta * e_forward).exp();
         let br = (-self.beta * e_reverse).exp();
         if bf.is_finite() && br.is_finite() {
