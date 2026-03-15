@@ -9,6 +9,7 @@ use crate::{Change, Context, GroupChange};
 use icotable::{f16, Table6DAdaptive, Table6DFlat, Vector3};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+use std::cell::Cell;
 use std::sync::{Arc, RwLock};
 
 /// Wrapper supporting both flat (legacy) and adaptive table formats.
@@ -126,6 +127,9 @@ pub struct Tabulated6D {
     /// Inverse thermal energy 1/kT in mol/kJ for Boltzmann-weighted interpolation.
     beta: f64,
     cache: RwLock<Option<GroupEnergyCache>>,
+    /// Welford online stats for |e_forward - e_reverse| in self-interaction lookups.
+    /// Tracks (count, mean, M2) for stddev = sqrt(M2 / count).
+    swap_stats: Cell<(usize, f64, f64)>,
 }
 
 impl Clone for Tabulated6D {
@@ -134,6 +138,7 @@ impl Clone for Tabulated6D {
             entries: self.entries.clone(),
             beta: self.beta,
             cache: RwLock::new(self.cache.read().expect("cache lock poisoned").clone()),
+            swap_stats: self.swap_stats.clone(),
         }
     }
 }
@@ -223,6 +228,7 @@ impl Tabulated6DBuilder {
             entries,
             beta,
             cache: RwLock::new(None),
+            swap_stats: Cell::new((0, 0.0, 0.0)),
         })
     }
 }
@@ -247,6 +253,10 @@ impl Tabulated6D {
     }
 
     /// Energy between two groups via 6D table lookup.
+    ///
+    /// For self-interaction tables (mol_a == mol_b), the lookup is averaged
+    /// over both A/B assignments because `inverse_orient` is asymmetric:
+    /// swapping the reference molecule produces different 6D coordinates.
     fn pair_energy(&self, context: &impl Context, gi: usize, gj: usize) -> f64 {
         let groups = context.groups();
         let ga = &groups[gi];
@@ -278,10 +288,32 @@ impl Tabulated6D {
             (ga.quaternion(), gb.quaternion(), sep)
         };
 
-        let (_r_val, omega, dir_a, dir_b) = icotable::inverse_orient(&oriented_sep, q_a, q_b);
-        entry
-            .table
-            .lookup_boltzmann(r, omega, &dir_a, &dir_b, self.beta)
+        let (_r, omega, dir_a, dir_b) = icotable::inverse_orient(&oriented_sep, q_a, q_b);
+        let e_forward =
+            entry
+                .table
+                .lookup_boltzmann(r, omega, &dir_a, &dir_b, self.beta);
+
+        if entry.mol_id_a != entry.mol_id_b {
+            return e_forward;
+        }
+
+        // Self-interaction: average both perspectives for physical symmetry
+        let (_r, omega2, dir_a2, dir_b2) =
+            icotable::inverse_orient(&(-oriented_sep), q_b, q_a);
+        let e_reverse =
+            entry
+                .table
+                .lookup_boltzmann(r, omega2, &dir_a2, &dir_b2, self.beta);
+
+        // Track swap asymmetry in Boltzmann space: |exp(-βU_fwd) - exp(-βU_rev)|
+        let bf = (-self.beta * e_forward).exp();
+        let br = (-self.beta * e_reverse).exp();
+        if bf.is_finite() && br.is_finite() {
+            self.welford_update((bf - br).abs());
+        }
+
+        0.5 * (e_forward + e_reverse)
     }
 
     fn total_energy(&self, context: &impl Context) -> f64 {
@@ -365,6 +397,26 @@ impl Tabulated6D {
         if let Some(c) = self.cache.get_mut().expect("cache lock poisoned").as_mut() {
             c.discard_backup();
         }
+    }
+
+    /// Welford online update of (count, mean, M2) statistics.
+    fn welford_update(&self, value: f64) {
+        let (n, mean, m2) = self.swap_stats.get();
+        let n = n + 1;
+        let delta = value - mean;
+        let new_mean = mean + delta / n as f64;
+        let new_m2 = m2 + delta * (value - new_mean);
+        self.swap_stats.set((n, new_mean, new_m2));
+    }
+
+    pub(crate) fn to_yaml(&self) -> serde_yaml::Value {
+        let (n, mean, m2) = self.swap_stats.get();
+        let stddev = if n > 1 { (m2 / n as f64).sqrt() } else { 0.0 };
+        let mut map = serde_yaml::Mapping::new();
+        map.insert("boltzmann_swap_asymmetry_samples".into(), (n as u64).into());
+        map.insert("boltzmann_swap_asymmetry_mean".into(), mean.into());
+        map.insert("boltzmann_swap_asymmetry_stddev".into(), stddev.into());
+        serde_yaml::Value::Mapping(map)
     }
 }
 

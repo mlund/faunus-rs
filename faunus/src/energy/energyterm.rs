@@ -170,8 +170,8 @@ impl EnergyTerm {
             | Self::IntermolecularBonded(_)
             | Self::CellOverlap(_)
             | Self::Constrain(_)
-            | Self::ExcludedCoulomb(_)
-            | Self::Tabulated6D(_) => None,
+            | Self::ExcludedCoulomb(_) => None,
+            Self::Tabulated6D(x) => Some(x.to_yaml()),
         }
     }
 
