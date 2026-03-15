@@ -359,7 +359,6 @@ impl PolymerDepletion {
             let mut steric_map = serde_yaml::Mapping::new();
             steric_map.insert("epsilon0_prime".into(), steric.config.epsilon0_prime.into());
             steric_map.insert("g0".into(), steric.config.g0.into());
-            steric_map.insert("kuhn_length".into(), steric.config.kuhn_length.into());
             let gs_vals: Vec<serde_yaml::Value> = steric.g_s.iter().map(|&v| v.into()).collect();
             steric_map.insert("g_s".into(), serde_yaml::Value::Sequence(gs_vals));
             let ht_vals: Vec<serde_yaml::Value> =
@@ -534,8 +533,6 @@ pub struct StericAdsorptionConfig {
     pub epsilon0_prime: f64,
     /// Saturation surface density g₀ (must be > 1.0)
     pub g0: f64,
-    /// Kuhn length b (Å)
-    pub kuhn_length: f64,
     /// Picard mixing parameter α ∈ (0, 1]
     #[serde(default = "default_picard_mixing")]
     pub picard_mixing: f64,
@@ -1285,7 +1282,6 @@ molecules: [Colloid]
         let config = StericAdsorptionConfig {
             epsilon0_prime: 0.02,
             g0: 10.0,
-            kuhn_length: 1.0,
             picard_mixing: 0.3,
             max_iterations: 200,
             tolerance: 1e-12,
@@ -1329,7 +1325,6 @@ molecules: [Colloid]
         let config = StericAdsorptionConfig {
             epsilon0_prime: 5.0,
             g0: 10.0,
-            kuhn_length: 1.0,
             picard_mixing: 0.1,
             max_iterations: 500,
             tolerance: 1e-10,
@@ -1375,7 +1370,6 @@ molecules: [Colloid]
             let config = StericAdsorptionConfig {
                 epsilon0_prime: eps0p,
                 g0: 10.0,
-                kuhn_length: 1.0,
                 picard_mixing: 0.2,
                 max_iterations: 500,
                 tolerance: 1e-10,
@@ -1400,7 +1394,6 @@ molecules: [Colloid]
         let config = StericAdsorptionConfig {
             epsilon0_prime: 0.02,
             g0: 10.0,
-            kuhn_length: 1.0,
             picard_mixing: 0.3,
             max_iterations: 50,
             tolerance: 1e-8,
@@ -1452,13 +1445,11 @@ colloid_radius: 5.0
 steric_adsorption:
   epsilon0_prime: 0.02
   g0: 10.0
-  kuhn_length: 1.0
 "#;
         let builder: PolymerDepletionBuilder = serde_yaml::from_str(yaml).unwrap();
         let steric = builder.steric_adsorption.as_ref().unwrap();
         assert_approx_eq!(f64, steric.epsilon0_prime, 0.02);
         assert_approx_eq!(f64, steric.g0, 10.0);
-        assert_approx_eq!(f64, steric.kuhn_length, 1.0);
         assert_approx_eq!(f64, steric.picard_mixing, 0.3);
         assert_eq!(steric.max_iterations, 50);
         assert!(builder.h_tilde.is_none());
@@ -1476,7 +1467,6 @@ h_tilde: 3.0
 steric_adsorption:
   epsilon0_prime: 0.02
   g0: 10.0
-  kuhn_length: 1.0
 "#;
         let builder: PolymerDepletionBuilder = serde_yaml::from_str(yaml).unwrap();
         // Can't test build() without a Context, but verify both are set
