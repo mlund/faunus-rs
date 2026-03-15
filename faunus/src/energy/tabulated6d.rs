@@ -116,9 +116,8 @@ struct Entry {
     mol_id_b: usize,
     /// Shared via `Arc` so cloning (e.g. VirtualTranslate) is O(1).
     table: Arc<TableKind>,
-    /// Cached from metadata at load time to avoid repeated Option/enum
-    /// indirection on every pair_energy call in the hot path.
-    is_symmetric: bool,
+    /// Pre-symmetrized table or user opted into single lookup.
+    skip_swap_averaging: bool,
 }
 
 /// Tabulated 6D molecule-molecule energy term.
@@ -140,8 +139,7 @@ pub struct Tabulated6D {
     beta: f64,
     cache: RwLock<Option<GroupEnergyCache>>,
     /// Tracks |exp(-βU_fwd) - exp(-βU_rev)| for self-interaction lookups.
-    /// Quantifies interpolation-induced swap asymmetry; should decrease
-    /// with higher angular table resolution.
+    /// Only accumulated when double-lookup is active.
     swap_stats: Cell<(usize, f64, f64)>,
 }
 
@@ -168,6 +166,11 @@ impl std::fmt::Debug for Tabulated6D {
 pub struct Tabulated6DEntryBuilder {
     pub molecules: [String; 2],
     pub file: PathBuf,
+    /// Skip the second (swapped) lookup for this homo-dimer table.
+    /// Halves per-pair cost at the expense of a small energy drift
+    /// from interpolation asymmetry.
+    #[serde(default)]
+    pub single_lookup: bool,
 }
 
 /// Deserializable builder for the full Tabulated6D term.
@@ -229,11 +232,18 @@ impl Tabulated6DBuilder {
                     table.summary(),
                     sym_info,
                 );
-                let is_symmetric = *table.point_group() == PointGroup::Exchange;
+                let skip_swap_averaging = eb.single_lookup
+                    || *table.point_group() == PointGroup::Exchange;
+                if eb.single_lookup && mol_id_a == mol_id_b {
+                    log::info!(
+                        "  Single-lookup enabled for ({}, {}): ~2x faster, small energy drift expected",
+                        &eb.molecules[0], &eb.molecules[1],
+                    );
+                }
                 Ok(Entry {
                     mol_id_a,
                     mol_id_b,
-                    is_symmetric,
+                    skip_swap_averaging,
                     table: Arc::new(table),
                 })
             })
@@ -274,9 +284,10 @@ impl Tabulated6D {
 
     /// Energy between two groups via 6D table lookup.
     ///
-    /// For self-interaction tables (mol_a == mol_b), the lookup is averaged
-    /// over both A/B assignments because `inverse_orient` is asymmetric:
-    /// swapping the reference molecule produces different 6D coordinates.
+    /// For self-interaction tables (mol_a == mol_b), the lookup is by default
+    /// averaged over both A/B perspectives because `inverse_orient` maps
+    /// the swapped pair to different angular grid points. With `single_lookup`
+    /// enabled, only one perspective is used (2x faster, small energy drift).
     fn pair_energy(&self, context: &impl Context, gi: usize, gj: usize) -> f64 {
         let groups = context.groups();
         let ga = &groups[gi];
@@ -314,14 +325,13 @@ impl Tabulated6D {
                 .table
                 .lookup_boltzmann(r, omega, &dir_a, &dir_b, self.beta);
 
-        // Hetero-dimer or pre-symmetrized homo-dimer: single lookup suffices
-        if entry.mol_id_a != entry.mol_id_b || entry.is_symmetric {
+        // Hetero-dimer, pre-symmetrized, or user opted into single lookup
+        if entry.mol_id_a != entry.mol_id_b || entry.skip_swap_averaging {
             return e_forward;
         }
 
-        // Self-interaction with non-symmetric table: the two perspectives are
-        // physically degenerate but land on different angular grid points, so
-        // interpolation gives different values. Averaging restores exchange symmetry.
+        // Self-interaction: average both perspectives to restore exchange
+        // symmetry broken by interpolation on different angular grid points.
         let (_r, omega2, dir_a2, dir_b2) =
             icotable::inverse_orient(&(-oriented_sep), q_b, q_a);
         let e_reverse =
@@ -329,8 +339,8 @@ impl Tabulated6D {
                 .table
                 .lookup_boltzmann(r, omega2, &dir_a2, &dir_b2, self.beta);
 
-        // Boltzmann weights flatten repulsive states, isolating the
-        // interpolation error at thermally accessible configurations.
+        // Track asymmetry in Boltzmann space: repulsive states (exp≈0)
+        // contribute negligibly, isolating the error at accessible configurations.
         let bf = (-self.beta * e_forward).exp();
         let br = (-self.beta * e_reverse).exp();
         if bf.is_finite() && br.is_finite() {

@@ -720,10 +720,17 @@ energy:
       file: table_AB.bin
 ```
 
-| Key         | Required | Description                                              |
-|-------------|----------|----------------------------------------------------------|
-| `molecules` | yes      | Ordered pair of molecule type names                      |
-| `file`      | yes      | Path to binary table file (`.gz` suffix enables gzip)    |
+| Key             | Required | Default | Description                                     |
+|-----------------|----------|---------|-------------------------------------------------|
+| `molecules`     | yes      |         | Ordered pair of molecule type names              |
+| `file`          | yes      |         | Path to binary table file (`.gz` enables gzip)   |
+| `single_lookup` | no       | `false` | Skip swap averaging for homo-dimers (~2× faster) |
+
+For homo-dimer entries (identical molecules), the energy is by default averaged
+over both A↔B perspectives to eliminate interpolation asymmetry.
+Setting `single_lookup: true` uses only one perspective, halving the lookup
+cost at the expense of a small energy drift. The drift decreases with angular
+resolution and is negligible at `n_div ≥ 3`.
 
 Molecule pair order in the table must match the order used when generating the
 table with Duello. Reversed pairs are detected automatically.
