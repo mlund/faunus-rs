@@ -611,7 +611,7 @@ loop solved by Picard iteration.
 |--------------------|------------------|
 | `epsilon0_prime`   | Bare polymer–surface adsorption strength $\varepsilon_0'$ (dimensionless). Larger values mean stronger bare attraction between polymer segments and the colloid surface. Positive values are required; the self-consistent scheme handles the transition to adsorption internally. |
 | `g0`               | Saturation surface density $g_0$. The maximum polymer density that can pack onto the colloid surface before steric repulsion between adsorbed chains halts further accumulation. Must be $> 1$; typical values 5–20. Smaller $g_0$ means surface saturates sooner. |
-| `kuhn_length`      | Kuhn segment length $b$ (in Angstrom), setting the coarse-graining scale of the polymer chain. Enters as a length scale in the self-consistent field equations. |
+
 | `picard_mixing`    | Picard iteration mixing parameter $\alpha \in (0, 1]$. Controls how aggressively the surface density is updated each iteration: $\hat{g}_S^\text{new} = \alpha\,\hat{g}_S^\text{calc} + (1-\alpha)\,\hat{g}_S^\text{old}$. Smaller values improve stability for strongly adsorbing systems at the cost of more iterations. |
 | `max_iterations`   | Maximum number of Picard iterations before accepting the current solution. |
 | `tolerance`        | Convergence threshold: iteration stops when the largest change in $\hat{g}_S$ across all colloids falls below this value. |
@@ -652,7 +652,6 @@ energy:
     steric_adsorption:
       epsilon0_prime: 0.02
       g0: 10.0
-      kuhn_length: 1.0
 ```
 
 | Key                | Required | Default | Description                                           |
@@ -672,7 +671,7 @@ energy:
 |--------------------|----------|---------|-------------------------------------------------------|
 | `epsilon0_prime`   | yes      |         | Bare adsorption parameter $\varepsilon_0'$ (dimensionless, $> 0$) |
 | `g0`               | yes      |         | Saturation surface density $g_0$ (must be $> 1$)      |
-| `kuhn_length`      | yes      |         | Kuhn segment length $b$ (Å)                           |
+
 | `picard_mixing`    | no       | `0.3`   | Picard mixing parameter $\alpha \in (0, 1]$           |
 | `max_iterations`   | no       | `50`    | Maximum self-consistency iterations                   |
 | `tolerance`        | no       | `1e-8`  | Convergence threshold for $\hat{g}_S$                 |
