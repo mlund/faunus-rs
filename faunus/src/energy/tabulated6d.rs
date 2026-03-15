@@ -6,7 +6,7 @@
 use super::nonbonded::cache::GroupEnergyCache;
 use crate::cell::BoundaryConditions;
 use crate::{Change, Context, GroupChange};
-use icotable::{f16, Table6DAdaptive, Table6DFlat, Vector3};
+use icotable::{f16, PointGroup, Table6DAdaptive, Table6DFlat, Vector3};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::cell::Cell;
@@ -75,12 +75,21 @@ impl TableKind {
         }
     }
 
+    fn metadata(&self) -> Option<&icotable::TableMetadata> {
+        match self {
+            Self::Flat(t) => t.metadata.as_ref(),
+            Self::Adaptive(t) => t.metadata.as_ref(),
+        }
+    }
+
     /// Temperature (K) used when generating the table, if stored in metadata.
     fn generation_temperature(&self) -> Option<f64> {
-        match self {
-            Self::Flat(t) => t.metadata.as_ref().and_then(|m| m.temperature),
-            Self::Adaptive(t) => t.metadata.as_ref().and_then(|m| m.temperature),
-        }
+        self.metadata().and_then(|m| m.temperature)
+    }
+
+    fn point_group(&self) -> &PointGroup {
+        self.metadata()
+            .map_or(&PointGroup::Asymmetric, |m| &m.point_group)
     }
 
     /// Summary string for logging.
@@ -107,6 +116,9 @@ struct Entry {
     mol_id_b: usize,
     /// Shared via `Arc` so cloning (e.g. VirtualTranslate) is O(1).
     table: Arc<TableKind>,
+    /// Cached from metadata at load time to avoid repeated Option/enum
+    /// indirection on every pair_energy call in the hot path.
+    is_symmetric: bool,
 }
 
 /// Tabulated 6D molecule-molecule energy term.
@@ -206,15 +218,22 @@ impl Tabulated6DBuilder {
                         );
                     }
                 }
+                let sym_info = match table.point_group() {
+                    PointGroup::Exchange => ", exchange-symmetric",
+                    PointGroup::Asymmetric => "",
+                };
                 log::info!(
-                    "Loaded 6D table for ({}, {}): {}",
+                    "Loaded 6D table for ({}, {}): {}{}",
                     &eb.molecules[0],
                     &eb.molecules[1],
                     table.summary(),
+                    sym_info,
                 );
+                let is_symmetric = *table.point_group() == PointGroup::Exchange;
                 Ok(Entry {
                     mol_id_a,
                     mol_id_b,
+                    is_symmetric,
                     table: Arc::new(table),
                 })
             })
@@ -295,13 +314,14 @@ impl Tabulated6D {
                 .table
                 .lookup_boltzmann(r, omega, &dir_a, &dir_b, self.beta);
 
-        if entry.mol_id_a != entry.mol_id_b {
+        // Hetero-dimer or pre-symmetrized homo-dimer: single lookup suffices
+        if entry.mol_id_a != entry.mol_id_b || entry.is_symmetric {
             return e_forward;
         }
 
-        // Self-interaction: the two perspectives are physically degenerate
-        // but land on different angular grid points, so interpolation gives
-        // different values. Averaging restores exchange symmetry.
+        // Self-interaction with non-symmetric table: the two perspectives are
+        // physically degenerate but land on different angular grid points, so
+        // interpolation gives different values. Averaging restores exchange symmetry.
         let (_r, omega2, dir_a2, dir_b2) =
             icotable::inverse_orient(&(-oriented_sep), q_b, q_a);
         let e_reverse =
