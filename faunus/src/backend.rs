@@ -808,6 +808,88 @@ mod tests {
         }
     }
 
+    /// Verify apply_particles_and_groups roundtrip: save → perturb → restore → compare.
+    #[test]
+    fn apply_particles_and_groups_roundtrip() {
+        let mut ctx = Backend::new(
+            "tests/files/translate_molecules_simulation.yaml",
+            None,
+            &mut rand::thread_rng(),
+        )
+        .unwrap();
+
+        // Snapshot original state
+        let original_particles = ctx.get_all_particles();
+        let original_energy = ctx.hamiltonian().energy(&ctx, &crate::Change::Everything);
+        let original_sizes: Vec<crate::group::GroupSize> = ctx
+            .groups()
+            .iter()
+            .map(|g| crate::group::GroupSize::from_count(g.len(), g.capacity()))
+            .collect();
+        let original_quaternions: Vec<crate::UnitQuaternion> =
+            ctx.groups().iter().map(|g| *g.quaternion()).collect();
+        let original_coms: Vec<Option<Point>> = ctx
+            .groups()
+            .iter()
+            .map(|g| g.mass_center().copied())
+            .collect();
+
+        assert!(
+            original_energy.abs() > 1e-6,
+            "Test requires nonzero initial energy"
+        );
+
+        // Perturb: collapse all positions to origin so energy changes drastically
+        let n = ctx.num_particles();
+        let perturbed: Vec<crate::Particle> = (0..n)
+            .map(|i| crate::Particle::new(ctx.particle(i).atom_id, Point::zeros()))
+            .collect();
+        ctx.set_particles(0..n, perturbed.iter()).unwrap();
+        ctx.update(&crate::Change::Everything).unwrap();
+
+        // Sanity check: collapsing to origin must produce a different energy
+        let perturbed_energy = ctx.hamiltonian().energy(&ctx, &crate::Change::Everything);
+        assert_ne!(
+            perturbed_energy, original_energy,
+            "Perturbation should change energy"
+        );
+
+        // Restore via apply_particles_and_groups
+        ctx.apply_particles_and_groups(&original_particles, &original_sizes, &original_quaternions)
+            .unwrap();
+        ctx.update(&crate::Change::Everything).unwrap();
+
+        // Verify positions restored
+        for (i, orig) in original_particles.iter().enumerate() {
+            let restored = ctx.particle(i);
+            assert!(
+                (restored.pos - orig.pos).norm() < 1e-14,
+                "Position mismatch at particle {i}"
+            );
+            assert_eq!(restored.atom_id, orig.atom_id, "atom_id mismatch at {i}");
+        }
+
+        // Verify mass centers restored
+        for (i, orig_com) in original_coms.iter().enumerate() {
+            let restored_com = ctx.groups()[i].mass_center().copied();
+            match (orig_com, restored_com) {
+                (Some(a), Some(b)) => assert!(
+                    (a - b).norm() < 1e-12,
+                    "COM mismatch at group {i}: {a:?} vs {b:?}"
+                ),
+                (None, None) => {}
+                _ => panic!("COM presence mismatch at group {i}"),
+            }
+        }
+
+        // Verify energy restored
+        let restored_energy = ctx.hamiltonian().energy(&ctx, &crate::Change::Everything);
+        assert!(
+            (restored_energy - original_energy).abs() < 1e-10,
+            "Energy not restored: {original_energy} vs {restored_energy}"
+        );
+    }
+
     /// Verify backup/undo restores group quaternion after rotation.
     #[test]
     fn backup_undo_restores_quaternion() {

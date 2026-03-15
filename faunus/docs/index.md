@@ -15,10 +15,15 @@ geometry:
   length: [100.0, 100.0, 100.0]
 ```
 
+## Subcommands
+
+- `faunus run -i input.yaml` — run a simulation
+- `faunus rerun -i input.yaml --traj traj.xtc` — replay a trajectory through a different Hamiltonian (see [Rerun](analysis.md#rerun))
+
 ## Sections
 
 - [Topology](topology.md) — atoms, molecules, and chemical reactions
 - [Energy](energy.md) — Hamiltonian and energy terms
 - [Moves](moves.md) — Monte Carlo moves and propagation
-- [Analysis](analysis.md) — runtime analysis and output
+- [Analysis](analysis.md) — runtime analysis, output, and trajectory rerun
 - [Selection Language](selection_language.md) — VMD-like atom selection expressions

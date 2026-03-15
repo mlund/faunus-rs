@@ -1,6 +1,6 @@
 use super::{Analyze, Frequency};
 use crate::cell::Shape;
-use crate::topology::io::{self, psf, StructureData};
+use crate::topology::io::{self, frame_state::FrameStateWriter, psf, StructureData};
 use crate::Context;
 use derive_builder::Builder;
 use serde::{Deserialize, Serialize};
@@ -15,10 +15,18 @@ pub struct StructureWriter {
     output_file: String,
     /// Sample frequency.
     frequency: Frequency,
+    /// Write a `.aux` frame state file alongside the trajectory.
+    #[builder_field_attr(serde(default))]
+    #[builder(default)]
+    save_frame_state: bool,
     /// Counter for the number of samples taken.
     #[builder(setter(skip))]
     #[builder_field_attr(serde(skip_deserializing))]
     num_samples: usize,
+    /// Lazy-opened so the header can capture group topology from the first frame.
+    #[builder(setter(skip))]
+    #[builder_field_attr(serde(skip))]
+    frame_state_writer: Option<FrameStateWriter>,
 }
 
 impl<T: Context> From<StructureWriter> for Box<dyn Analyze<T>> {
@@ -32,7 +40,9 @@ impl StructureWriter {
         Self {
             output_file: output_file.to_owned(),
             frequency,
+            save_frame_state: false,
             num_samples: 0,
+            frame_state_writer: None,
         }
     }
 }
@@ -109,6 +119,35 @@ impl StructureWriter {
 
         let append = self.num_samples > 0;
         io::write_structure_frame(&self.output_file, &data, append)?;
+
+        // Write frame state alongside the trajectory frame
+        if self.save_frame_state {
+            if self.frame_state_writer.is_none() {
+                let aux_path = io::frame_state::aux_path_from_traj(Path::new(&self.output_file));
+                let groups: Vec<(u32, u32)> = context
+                    .groups()
+                    .iter()
+                    .map(|g| (g.molecule() as u32, g.capacity() as u32))
+                    .collect();
+                let n_particles = context.num_particles() as u32;
+                let w = FrameStateWriter::create(&aux_path, &groups, n_particles)?;
+                log::info!("Writing frame state to {}", aux_path.display());
+                self.frame_state_writer = Some(w);
+            }
+            let writer = self.frame_state_writer.as_mut().unwrap();
+            let groups = context.groups();
+            let quaternions: Vec<_> = groups.iter().map(|g| *g.quaternion()).collect();
+            let mass_centers: Vec<_> = groups
+                .iter()
+                .map(|g| g.mass_center().copied().unwrap_or_default())
+                .collect();
+            let group_sizes: Vec<u32> = groups.iter().map(|g| g.len() as u32).collect();
+            let atom_ids: Vec<u32> = (0..context.num_particles())
+                .map(|i| context.get_atomkind(i) as u32)
+                .collect();
+            writer.write_frame(&quaternions, &mass_centers, &group_sizes, &atom_ids)?;
+        }
+
         self.num_samples += 1;
         Ok(())
     }
@@ -148,6 +187,9 @@ impl<T: Context> Analyze<T> for StructureWriter {
 
     fn frequency(&self) -> Frequency {
         self.frequency
+    }
+    fn set_frequency(&mut self, freq: Frequency) {
+        self.frequency = freq;
     }
 
     fn num_samples(&self) -> usize {

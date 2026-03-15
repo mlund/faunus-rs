@@ -40,17 +40,16 @@ impl StructureIO for XtcFormat {
 
         let mut writer = molly::XTCWriter::new(file);
 
-        // Convert Å → nm (Gromacs convention)
-        const ANGSTROM_TO_NM: f32 = 0.1;
+        use super::ANGSTROM_TO_NM;
 
         let positions: Vec<f32> = data
             .positions
             .iter()
             .flat_map(|p| {
                 [
-                    p.x as f32 * ANGSTROM_TO_NM,
-                    p.y as f32 * ANGSTROM_TO_NM,
-                    p.z as f32 * ANGSTROM_TO_NM,
+                    (p.x * ANGSTROM_TO_NM) as f32,
+                    (p.y * ANGSTROM_TO_NM) as f32,
+                    (p.z * ANGSTROM_TO_NM) as f32,
                 ]
             })
             .collect();
@@ -59,15 +58,15 @@ impl StructureIO for XtcFormat {
         #[allow(clippy::option_if_let_else)]
         let boxvec = if let Some(b) = &data.box_lengths {
             molly::BoxVec::from_cols_array(&[
-                b.x as f32 * ANGSTROM_TO_NM,
+                (b.x * ANGSTROM_TO_NM) as f32,
                 0.0,
                 0.0,
                 0.0,
-                b.y as f32 * ANGSTROM_TO_NM,
+                (b.y * ANGSTROM_TO_NM) as f32,
                 0.0,
                 0.0,
                 0.0,
-                b.z as f32 * ANGSTROM_TO_NM,
+                (b.z * ANGSTROM_TO_NM) as f32,
             ])
         } else {
             molly::BoxVec::ZERO

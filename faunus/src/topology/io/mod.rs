@@ -19,12 +19,19 @@
 
 #[cfg(feature = "chemfiles")]
 mod chemfiles_io;
+pub mod frame_state;
 pub(crate) mod psf;
 mod xtc;
 mod xyz;
 
 use crate::Point;
 use std::path::Path;
+
+/// Conversion factor from nanometers to ångströms (Gromacs XTC convention).
+pub const NM_TO_ANGSTROM: f64 = 10.0;
+
+/// Conversion factor from ångströms to nanometers (Gromacs XTC convention).
+pub const ANGSTROM_TO_NM: f64 = 0.1;
 
 /// Format-agnostic in-memory representation of a structure frame.
 #[derive(Debug, Default)]

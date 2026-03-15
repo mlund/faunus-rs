@@ -175,6 +175,7 @@ analysis:
   - !Trajectory
     file: traj.xtc
     frequency: !Every 100
+    save_frame_state: true
 ```
 
 After the simulation, visualize with:
@@ -185,10 +186,11 @@ vmd -e traj.tcl
 
 ### Options
 
-Key         | Required | Default | Description
------------ | -------- | ------- | -------------------------------------------
-`file`      | yes      |         | Output file path (`.xyz`, `.xtc`, etc.)
-`frequency` | yes      |         | Sample frequency, e.g. `!Every 100` or `!End`
+Key                | Required | Default | Description
+------------------ | -------- | ------- | -------------------------------------------
+`file`             | yes      |         | Output file path (`.xyz`, `.xtc`, etc.)
+`frequency`        | yes      |         | Sample frequency, e.g. `!Every 100` or `!End`
+`save_frame_state` | no       | `false` | Write a binary `.aux` file alongside the trajectory (see [Rerun](#rerun))
 
 ### Output files
 
@@ -199,6 +201,17 @@ File        | Description
 `traj.xtc`  | Trajectory (coordinates per frame)
 `traj.psf`  | X-PLOR PSF topology (atoms, bonds, angles, dihedrals, charges, masses)
 `traj.tcl`  | VMD scene script (`vmd -e traj.tcl` loads everything)
+`traj.aux`  | Frame state file (only when `save_frame_state: true`)
+
+### Frame state file (`.aux`)
+
+XTC stores only atom positions. Rigid-body simulations also need
+quaternions, mass centers, and group sizes (for GC moves); swap moves change
+`atom_id`. When `save_frame_state: true`, a binary `.aux` file is written
+alongside each XTC frame, storing this per-frame microstate data.
+
+The `.aux` file is required by `faunus rerun` (see [Rerun](#rerun)) to fully
+reconstruct the simulation state from each trajectory frame.
 
 ## Radial Distribution Function
 
@@ -334,3 +347,61 @@ Key           | Required | Default | Description
 
 The `coordinate` block accepts all [collective variable](#collective-variable) fields
 (`property`, `selection`, `dimension`, etc.) plus a required `resolution` for the bin width.
+
+## Rerun
+
+The `rerun` subcommand replays a trajectory through a (possibly different) Hamiltonian,
+running the analysis pipeline on each frame. This decouples analysis from propagation,
+enabling e.g. comparison of explicit nonbonded energies against tabulated 6D potentials
+for the same configurations.
+
+The input YAML provides the Hamiltonian and analysis configuration;
+the `propagate:` section is ignored. All analysis frequencies are overridden to
+sample every frame.
+
+### Usage
+
+```sh
+faunus rerun -i input.yaml --traj traj.xtc [--aux traj.aux]
+```
+
+Flag      | Required | Default                    | Description
+--------- | -------- | -------------------------- | -------------------------------------------
+`-i`      | yes      |                            | Input YAML with Hamiltonian + analysis config
+`--traj`  | yes      |                            | XTC trajectory file
+`--aux`   | no       | `traj.aux` (from `--traj`) | Frame state file
+
+### Requirements
+
+The trajectory must have been produced with `save_frame_state: true` on the
+[Trajectory](#trajectory) analysis, so that a matching `.aux` file exists.
+The `.aux` file header must match the topology in the rerun input (same number
+of groups, particles, and molecule types).
+
+### Example workflow
+
+1. Run the original simulation with frame state output:
+
+    ```yaml
+    analysis:
+      - !Trajectory
+        file: traj.xtc
+        frequency: !Every 100
+        save_frame_state: true
+      - !RadialDistribution
+        selections: ["molecule A", "molecule B"]
+        file: rdf_explicit.dat
+        dr: 0.1
+        frequency: !Every 100
+    ```
+
+2. Rerun with a different Hamiltonian (e.g. 6D tabulated potential):
+
+    ```sh
+    faunus rerun -i input_6dtable.yaml --traj traj.xtc -o output_rerun.yaml
+    ```
+
+    where `input_6dtable.yaml` uses the same topology but a different energy section,
+    and defines the desired analysis objects (e.g. RDF, energy time series).
+
+3. Compare the RDFs from the original and rerun outputs.

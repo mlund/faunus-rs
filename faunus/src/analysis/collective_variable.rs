@@ -101,6 +101,9 @@ impl<T: Context> Analyze<T> for CollectiveVariableAnalysis {
     fn frequency(&self) -> Frequency {
         self.frequency
     }
+    fn set_frequency(&mut self, freq: Frequency) {
+        self.frequency = freq;
+    }
 
     fn sample(&mut self, context: &T, step: usize) -> Result<()> {
         if !self.frequency.should_perform(step) {

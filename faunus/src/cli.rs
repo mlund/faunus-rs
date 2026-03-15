@@ -13,11 +13,14 @@
 // limitations under the license.
 
 use crate::{
-    analysis,
+    analysis::{self, AnalysisCollectionExt, Analyze, Frequency},
     backend::Backend,
+    energy::EnergyChange,
+    group::GroupCollection,
     montecarlo::{gibbs::GibbsEnsemble, MarkovChain},
     simulation::{self, box_prefixed_path, write_yaml, Simulation},
-    Context, ParticleSystem,
+    topology::io::frame_state::{self, FrameStateReader},
+    Change, Context, Particle, ParticleSystem, Point, WithHamiltonian,
 };
 use anyhow::Result;
 use clap::{Parser, Subcommand};
@@ -36,6 +39,19 @@ enum Commands {
         /// State file for saving and restoring simulation state
         #[clap(long, short = 's')]
         state: Option<PathBuf>,
+    },
+    /// Replay a trajectory through a (possibly different) Hamiltonian
+    #[clap(arg_required_else_help = true)]
+    Rerun {
+        /// Input file in YAML format (Hamiltonian + analysis config)
+        #[clap(long, short = 'i')]
+        input: PathBuf,
+        /// XTC trajectory file
+        #[clap(long)]
+        traj: PathBuf,
+        /// Frame state file (default: derived from --traj by replacing extension with .aux)
+        #[clap(long)]
+        aux: Option<PathBuf>,
     },
 }
 
@@ -82,6 +98,10 @@ pub fn do_main() -> Result<()> {
                     run_gibbs(*ensemble, &medium, state.as_deref(), &args.output)?;
                 }
             }
+        }
+        Commands::Rerun { input, traj, aux } => {
+            let mut yaml_output = std::fs::File::create(&args.output)?;
+            run_rerun(&input, &traj, aux.as_deref(), &mut yaml_output)?;
         }
     }
     Ok(())
@@ -179,6 +199,161 @@ fn run_single_box<T: Context + 'static>(
     if let Some(state_path) = state {
         mc.save_state().to_file(state_path)?;
         log::info!("Saved simulation state to {}", state_path.display());
+    }
+
+    Ok(())
+}
+
+/// Validate that the aux file header matches the context topology.
+fn validate_aux_header(
+    header: &frame_state::FrameStateHeader,
+    context: &Backend,
+) -> Result<()> {
+    let groups = context.groups();
+    if header.n_groups as usize != groups.len() {
+        anyhow::bail!(
+            "Frame state group count ({}) doesn't match context ({})",
+            header.n_groups,
+            groups.len()
+        );
+    }
+    if header.n_particles as usize != context.num_particles() {
+        anyhow::bail!(
+            "Frame state particle count ({}) doesn't match context ({})",
+            header.n_particles,
+            context.num_particles()
+        );
+    }
+    for (i, (&(mol_id, capacity), group)) in header.groups.iter().zip(groups).enumerate() {
+        if mol_id as usize != group.molecule() || capacity as usize != group.capacity() {
+            anyhow::bail!(
+                "Frame state group {i} topology mismatch: aux=({mol_id}, {capacity}), \
+                 context=({}, {})",
+                group.molecule(),
+                group.capacity()
+            );
+        }
+    }
+    Ok(())
+}
+
+/// Load a single frame's state into the context from XTC positions + aux data.
+fn load_frame_into_context(
+    context: &mut Backend,
+    particles: &[Particle],
+    frame_state: &frame_state::FrameStateFrame,
+) -> Result<()> {
+    use crate::group::GroupSize;
+
+    let sizes: Vec<GroupSize> = frame_state
+        .group_sizes
+        .iter()
+        .zip(context.groups().iter())
+        .map(|(&size, g)| GroupSize::from_count(size as usize, g.capacity()))
+        .collect();
+
+    context.apply_particles_and_groups(particles, &sizes, &frame_state.quaternions)?;
+    context.update(&Change::Everything)?;
+    Ok(())
+}
+
+/// Replay a trajectory through a (possibly different) Hamiltonian, running
+/// analyses on each frame.
+fn run_rerun(
+    input: &std::path::Path,
+    traj_path: &std::path::Path,
+    aux_path: Option<&std::path::Path>,
+    yaml_output: &mut std::fs::File,
+) -> Result<()> {
+    use crate::topology::io::NM_TO_ANGSTROM;
+
+    let (mut context, mut analyses, medium) = simulation::build_context_and_analyses(input)?;
+    log::info!("{}", medium);
+    log::info!("Thermal energy: {:.2} kJ/mol", simulation::thermal_energy(&medium));
+
+    // Every frame must be sampled since we can't skip frames in the XTC/aux pair
+    analyses.override_frequencies(Frequency::Every(1));
+
+    let aux = aux_path
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| frame_state::aux_path_from_traj(traj_path));
+    let mut aux_reader = FrameStateReader::open(&aux)?;
+
+    validate_aux_header(aux_reader.header(), &context)?;
+
+    let mut xtc_reader = molly::XTCReader::open(traj_path)
+        .map_err(|e| anyhow::anyhow!("Cannot open XTC file {}: {e}", traj_path.display()))?;
+    let mut frame = molly::Frame::default();
+
+    let n_particles = context.num_particles();
+    let mut frame_index = 0usize;
+    // Pre-allocate and reuse across frames to avoid per-frame heap allocation
+    let mut particles = Vec::with_capacity(n_particles);
+    let mut aux_frame = frame_state::FrameStateFrame::default();
+
+    log::info!("Replaying trajectory: {}", traj_path.display());
+
+    loop {
+        match xtc_reader.read_frame(&mut frame) {
+            Ok(()) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => break,
+            Err(e) => return Err(anyhow::anyhow!("Error reading XTC frame {frame_index}: {e}")),
+        }
+
+        if frame.natoms() != n_particles {
+            anyhow::bail!(
+                "XTC frame {frame_index} has {} atoms, expected {n_particles}",
+                frame.natoms()
+            );
+        }
+
+        if !aux_reader.read_frame_into(&mut aux_frame)? {
+            anyhow::bail!("Aux file ended before XTC at frame {frame_index}");
+        }
+
+        // XTC stores positions in nm with corner at origin; Faunus uses Å with
+        // center at origin. Column-major layout: [c0x, c0y, c0z, c1x, ...].
+        let cols = frame.boxvec.to_cols_array();
+        let box_half = Point::new(
+            cols[0] as f64 * NM_TO_ANGSTROM * 0.5,
+            cols[4] as f64 * NM_TO_ANGSTROM * 0.5,
+            cols[8] as f64 * NM_TO_ANGSTROM * 0.5,
+        );
+
+        particles.clear();
+        particles.extend((0..n_particles).map(|i| {
+            let pos = Point::new(
+                frame.positions[3 * i] as f64 * NM_TO_ANGSTROM - box_half.x,
+                frame.positions[3 * i + 1] as f64 * NM_TO_ANGSTROM - box_half.y,
+                frame.positions[3 * i + 2] as f64 * NM_TO_ANGSTROM - box_half.z,
+            );
+            Particle::new(aux_frame.atom_ids[i] as usize, pos)
+        }));
+
+        load_frame_into_context(&mut context, &particles, &aux_frame)?;
+        analyses.sample(&context, frame_index)?;
+        frame_index += 1;
+    }
+
+    log::info!("Processed {frame_index} frames");
+
+    analyses.finalize(&context)?;
+    analyses.write_to_disk()?;
+
+    write_yaml(&medium, yaml_output, Some("medium"))?;
+
+    let energy = context
+        .hamiltonian()
+        .energy(&context, &Change::Everything);
+    let energy_summary = std::collections::BTreeMap::from([
+        ("last_frame_energy".to_string(), energy),
+        ("frames".to_string(), frame_index as f64),
+    ]);
+    write_yaml(&energy_summary, yaml_output, Some("rerun"))?;
+
+    let analysis_yaml = analysis::analyses_to_yaml(&analyses);
+    if !analysis_yaml.is_empty() {
+        write_yaml(&analysis_yaml, yaml_output, Some("analysis"))?;
     }
 
     Ok(())

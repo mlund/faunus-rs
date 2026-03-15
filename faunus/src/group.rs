@@ -96,6 +96,22 @@ pub enum GroupSize {
     Shrink(usize),
 }
 
+impl GroupSize {
+    /// Create a `GroupSize` from an active count and a group capacity.
+    ///
+    /// Normalizes to `Full`/`Empty` at the boundaries so that downstream code
+    /// (e.g. `GroupLists`) classifies groups consistently.
+    pub fn from_count(active: usize, capacity: usize) -> Self {
+        if active == capacity {
+            Self::Full
+        } else if active == 0 {
+            Self::Empty
+        } else {
+            Self::Partial(active)
+        }
+    }
+}
+
 /// Enum for selecting a subset of particles in a group
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum ParticleSelection {
@@ -511,6 +527,31 @@ pub trait GroupCollection {
         let indices_iter = pairs.iter().map(|&(i, _)| i);
         self.set_particles(indices_iter, particles.iter())
             .expect("set_particles failed in default set_positions impl");
+    }
+
+    /// Apply particles, group sizes, and quaternions, then recompute mass centers.
+    ///
+    /// Shared by checkpoint restore and trajectory replay. Does not call
+    /// `Context::update` — the caller must do so to rebuild energy caches
+    /// and cell lists after the bulk state change.
+    fn apply_particles_and_groups(
+        &mut self,
+        particles: &[Particle],
+        sizes: &[GroupSize],
+        quaternions: &[crate::UnitQuaternion],
+    ) -> anyhow::Result<()>
+    where
+        Self: Sized,
+    {
+        self.set_particles(0..particles.len(), particles.iter())?;
+        for (i, (&size, &q)) in sizes.iter().zip(quaternions.iter()).enumerate() {
+            self.resize_group(i, size)?;
+            self.groups_mut()[i].set_quaternion(q);
+        }
+        for i in 0..sizes.len() {
+            self.update_mass_center(i);
+        }
+        Ok(())
     }
 }
 

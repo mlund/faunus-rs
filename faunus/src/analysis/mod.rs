@@ -174,6 +174,9 @@ pub trait Analyze<T: Context>: Debug + Info {
     fn to_yaml(&self) -> Option<serde_yaml::Value> {
         None
     }
+
+    /// Override the sampling frequency. Used by `rerun` to sample every frame.
+    fn set_frequency(&mut self, _freq: Frequency) {}
 }
 
 /// Collect YAML results from all analyses, keyed by short name.
@@ -196,6 +199,18 @@ impl<T: Context> crate::Info for AnalysisCollection<T> {
     }
     fn long_name(&self) -> Option<&'static str> {
         Some("Collection of analysis objects")
+    }
+}
+
+/// Extension trait for [`AnalysisCollection`].
+pub trait AnalysisCollectionExt<T: Context> {
+    /// Override sampling frequency on all analyses. Used by `rerun` to sample every frame.
+    fn override_frequencies(&mut self, freq: Frequency);
+}
+
+impl<T: Context> AnalysisCollectionExt<T> for AnalysisCollection<T> {
+    fn override_frequencies(&mut self, freq: Frequency) {
+        self.iter_mut().for_each(|a| a.set_frequency(freq));
     }
 }
 

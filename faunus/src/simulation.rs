@@ -1,7 +1,7 @@
 //! Simulation runners for single-box and Gibbs ensemble simulations.
 
 use crate::{
-    analysis,
+    analysis::{self, AnalysisCollection},
     backend::Backend,
     montecarlo::{gibbs::GibbsEnsemble, MarkovChain},
     propagate::{self, Propagate},
@@ -44,6 +44,17 @@ pub fn build_markov_chain<T: crate::Context + 'static>(
         }
     }
     Ok(mc)
+}
+
+/// Build a context and analysis collection from an input YAML file,
+/// without constructing a `Propagate`. Used by `rerun`.
+pub fn build_context_and_analyses(
+    input: &Path,
+) -> Result<(Backend, AnalysisCollection<Backend>, interatomic::coulomb::Medium)> {
+    let medium = crate::backend::get_medium(input)?;
+    let context = Backend::new(input, None, &mut rand::thread_rng())?;
+    let analyses = analysis::from_file(input, &context)?;
+    Ok((context, analyses, medium))
 }
 
 impl Simulation {

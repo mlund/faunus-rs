@@ -478,18 +478,11 @@ impl<T: Context + 'static> MarkovChain<T> {
             }
         }
 
-        self.context
-            .set_particles(0..num_particles, state.particles.iter())?;
         *self.context.cell_mut() = state.cell;
-        for (i, gs) in state.groups.iter().enumerate() {
-            self.context.resize_group(i, gs.size)?;
-            // Restore orientation so that LD and 6D tabulated energies
-            // remain consistent with atom positions across restarts.
-            self.context.groups_mut()[i].set_quaternion(gs.quaternion);
-        }
-        for i in 0..num_groups {
-            self.context.update_mass_center(i);
-        }
+        let sizes: Vec<_> = state.groups.iter().map(|gs| gs.size).collect();
+        let quaternions: Vec<_> = state.groups.iter().map(|gs| gs.quaternion).collect();
+        self.context
+            .apply_particles_and_groups(&state.particles, &sizes, &quaternions)?;
         self.context.update(&crate::Change::Everything)?;
 
         self.step = state.step;
