@@ -7,7 +7,6 @@
 //! balance, consistent with ESPResSo's reaction ensemble implementation.
 
 use crate::chemistry::reaction::{Direction, Participant, Reaction};
-use crate::energy::ExternalPressure;
 use crate::group::GroupSize;
 use crate::montecarlo::{entropy_bias, NewOld};
 use crate::propagate::{
@@ -39,13 +38,13 @@ pub enum EquilibriumConstant {
 }
 
 impl EquilibriumConstant {
-    /// Convert to K. The `kt` parameter (kJ/mol) is needed for the `dG` variant.
-    fn to_k(&self, kt: f64) -> f64 {
+    /// Convert to K. The `rt` parameter (kJ/mol) is needed for the `dG` variant.
+    fn to_k(&self, rt: f64) -> f64 {
         match self {
             Self::K(k) => *k,
             Self::LnK(ln_k) => ln_k.exp(),
             Self::Pk(pk) => 10.0_f64.powf(-pk),
-            Self::DeltaG(dg) => (-dg / kt).exp(),
+            Self::DeltaG(dg) => (-dg / rt).exp(),
         }
     }
 }
@@ -313,7 +312,7 @@ impl SpeciationMove {
             self.temperature > 0.0,
             "SpeciationMove: temperature must be positive"
         );
-        self.thermal_energy = ExternalPressure::thermal_energy_from_temperature(self.temperature);
+        self.thermal_energy = crate::R_IN_KJ_PER_MOL * self.temperature;
 
         let topology = context.topology();
         self.resolved.clear();
@@ -759,6 +758,7 @@ mod tests {
     use float_cmp::assert_approx_eq;
 
     const TEST_YAML: &str = "tests/files/speciation_test.yaml";
+    const RT: f64 = crate::R_IN_KJ_PER_MOL * 298.15;
 
     fn make_context() -> Backend {
         let mut rng = rand::thread_rng();
@@ -800,10 +800,10 @@ mod tests {
         let config: ReactionConfig = serde_yaml::from_str(r#"["= Na+ + Cl-", !dG 0.0]"#).unwrap();
         assert!((config.1.to_k(2.479) - 1.0).abs() < 1e-10);
 
-        let kt = 2.479;
+        let rt = 2.479;
         let config: ReactionConfig =
-            serde_yaml::from_str(&format!(r#"["= M", !dG {}]"#, -kt * 10.0_f64.ln())).unwrap();
-        assert!((config.1.to_k(kt) - 10.0).abs() < 1e-10);
+            serde_yaml::from_str(&format!(r#"["= M", !dG {}]"#, -rt * 10.0_f64.ln())).unwrap();
+        assert!((config.1.to_k(rt) - 10.0).abs() < 1e-10);
     }
 
     #[test]
@@ -887,8 +887,8 @@ mod tests {
         let context = make_context();
         let mut mv = make_move("= M", 1.0);
         mv.finalize(&context).unwrap();
-        let expected_kt = ExternalPressure::thermal_energy_from_temperature(298.15);
-        assert_approx_eq!(f64, mv.thermal_energy, expected_kt, epsilon = 1e-10);
+        let expected_rt = RT;
+        assert_approx_eq!(f64, mv.thermal_energy, expected_rt, epsilon = 1e-10);
     }
 
     // --- Feasibility (try_build_actions) ---
@@ -1080,9 +1080,9 @@ mod tests {
         let context = Backend::new(TEST_YAML, None, &mut rng).unwrap();
         let propagate = Propagate::from_file(TEST_YAML, &context).unwrap();
 
-        let kt = ExternalPressure::thermal_energy_from_temperature(298.15);
+        let rt = RT;
         let mut mc =
-            MarkovChain::new(context, propagate, kt, AnalysisCollection::default()).unwrap();
+            MarkovChain::new(context, propagate, rt, AnalysisCollection::default()).unwrap();
 
         let initial_energy = mc.system_energy();
 
@@ -1203,9 +1203,9 @@ propagate:
             let mut rng = rand::thread_rng();
             let context = Backend::new(path, None, &mut rng).unwrap();
             let propagate = Propagate::from_file(path, &context).unwrap();
-            let kt = ExternalPressure::thermal_energy_from_temperature(298.15);
+            let rt = RT;
             let mut mc =
-                MarkovChain::new(context, propagate, kt, AnalysisCollection::default()).unwrap();
+                MarkovChain::new(context, propagate, rt, AnalysisCollection::default()).unwrap();
 
             let mut sums = [0.0_f64; 4];
             let mut n_samples = 0usize;

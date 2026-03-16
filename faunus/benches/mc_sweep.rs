@@ -1,6 +1,7 @@
 use criterion::{criterion_group, criterion_main, Criterion};
 use faunus::backend::Backend;
 use faunus::montecarlo::MarkovChain;
+use interatomic::coulomb::Temperature;
 use std::io::Write;
 use std::path::Path;
 
@@ -83,8 +84,8 @@ fn build_mc(n_molecules: usize) -> MarkovChain<Backend> {
     let tmp = write_tmp_yaml(&yaml);
     let context = Backend::new(tmp.path(), None, &mut rand::thread_rng()).unwrap();
     let medium = faunus::backend::get_medium(tmp.path()).unwrap();
-    let kt = faunus::simulation::thermal_energy(&medium);
-    faunus::simulation::build_markov_chain(tmp.path(), context, kt, None).unwrap()
+    let rt = faunus::R_IN_KJ_PER_MOL * medium.temperature();
+    faunus::simulation::build_markov_chain(tmp.path(), context, rt, None).unwrap()
 }
 
 /// Single MC move benchmarks for 20 CPPM molecules

@@ -14,7 +14,6 @@ use crate::{
     WithHamiltonian, WithTopology,
 };
 
-use interatomic::coulomb::DebyeLength;
 use rand::rngs::ThreadRng;
 use serde::Serialize;
 
@@ -134,74 +133,9 @@ impl Backend {
             rng,
         )?;
 
-        // Build constrain and custom external terms
-        if let Some(constrain_builders) = &hamiltonian_builder.constrain {
-            for builder in constrain_builders {
-                let constrain = builder.build(&backend)?;
-                backend.hamiltonian_mut().push(constrain.into());
-            }
-        }
-        if let Some(ext_builders) = &hamiltonian_builder.customexternal {
-            for builder in ext_builders {
-                let ext = builder.build()?;
-                backend.hamiltonian_mut().push(ext.into());
-            }
-        }
-        // Several energy terms need kT for unit conversion or Boltzmann weighting
-        let require_thermal_energy = |term: &str| -> anyhow::Result<f64> {
-            let m = medium.as_ref().ok_or_else(|| {
-                anyhow::anyhow!("Medium with temperature required for {term} energy term")
-            })?;
-            Ok(crate::simulation::thermal_energy(m))
-        };
-        if let Some(pm_builder) = &hamiltonian_builder.polymer_depletion {
-            let thermal_energy = require_thermal_energy("polymer_depletion")?;
-            let pm = pm_builder.build(&backend, thermal_energy)?;
-            backend.hamiltonian_mut().push(pm.into());
-        }
-        if let Some(tab_builder) = &hamiltonian_builder.tabulated6d {
-            // Duello tables store energies in kJ/mol; beta converts to Boltzmann weights
-            let thermal_energy = require_thermal_energy("tabulated6d")?;
-            let tab = tab_builder.build(&backend, 1.0 / thermal_energy)?;
-            // Prevent double-counting: 6D tables replace atom-level nonbonded
-            // for the covered molecule pairs.
-            for (mol_a, mol_b) in tab.molecule_pairs() {
-                backend
-                    .hamiltonian_mut()
-                    .exclude_nonbonded_molecule_pair(mol_a, mol_b);
-                log::info!(
-                    "Excluded molecule pair ({}, {}) from nonbonded (handled by tabulated6d)",
-                    mol_a,
-                    mol_b
-                );
-            }
-            backend.hamiltonian_mut().push(tab.into());
-        }
-        // Ewald reciprocal term needs particles in place
-        if let Some(ewald_builder) = &hamiltonian_builder.ewald {
-            let medium = medium
-                .as_ref()
-                .ok_or_else(|| anyhow::anyhow!("Ewald requires a medium with permittivity"))?;
-            let initial_alpha = {
-                let debye_length = medium.debye_length();
-                interatomic::coulomb::pairwise::RealSpaceEwald::new(
-                    ewald_builder.cutoff,
-                    ewald_builder.accuracy,
-                    debye_length,
-                )
-                .alpha()
-            };
-            let ewald = crate::energy::EwaldReciprocalEnergy::new(ewald_builder, &backend, medium)?;
-            if ewald.alpha() != initial_alpha {
-                backend.hamiltonian_mut().rebuild_nonbonded(
-                    &hamiltonian_builder,
-                    backend.topology_ref(),
-                    Some(medium.clone()),
-                    ewald.real_space_scheme(),
-                )?;
-            }
-            backend.hamiltonian_mut().push(ewald.into());
-        }
+        backend
+            .hamiltonian_mut()
+            .finalize(&hamiltonian_builder, &backend, medium.as_ref())?;
         backend.update(&Change::Everything)?;
 
         // Build cell list if configured and cell is orthorhombic

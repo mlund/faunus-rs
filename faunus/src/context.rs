@@ -75,18 +75,6 @@ pub trait WithHamiltonian: GroupCollection {
     fn hamiltonian_mut(&self) -> RefMut<'_, Hamiltonian>;
 }
 
-/// A trait for objects that have a temperature
-pub trait WithTemperature {
-    /// Get the temperature in K.
-    fn temperature(&self) -> f64;
-    /// Set the temperature in K.
-    fn set_temperature(&mut self, _temperature: f64) -> anyhow::Result<()> {
-        Err(anyhow::anyhow!(
-            "Setting the temperature is not implemented"
-        ))
-    }
-}
-
 /// A trait for objects which contains groups of particles with defined topology in defined cell.
 pub trait ParticleSystem: GroupCollection + WithCell + WithTopology {
     /// Optional cell list for spatial acceleration of pair interactions.

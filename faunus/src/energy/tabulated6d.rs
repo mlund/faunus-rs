@@ -8,8 +8,8 @@ use crate::cell::BoundaryConditions;
 use crate::{Change, Context, GroupChange};
 use icotable::{f16, PointGroup, Table6DAdaptive, Table6DFlat, Vector3};
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
 use std::cell::Cell;
+use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 
 /// Wrapper supporting both flat (legacy) and adaptive table formats.
@@ -210,7 +210,7 @@ impl Tabulated6DBuilder {
                 // matter more and the repulsive/non-repulsive boundary becomes
                 // more critical for correct Metropolis acceptance.
                 if let Some(table_temp) = table.generation_temperature() {
-                    let sim_temp = 1.0 / (beta * physical_constants::MOLAR_GAS_CONSTANT * 1e-3);
+                    let sim_temp = 1.0 / (beta * crate::R_IN_KJ_PER_MOL);
                     if sim_temp < table_temp * 0.95 {
                         log::warn!(
                             "Table '{}' was generated at {:.1} K but simulation runs at {:.1} K. \
@@ -320,10 +320,9 @@ impl Tabulated6D {
         };
 
         let (_r, omega, dir_a, dir_b) = icotable::inverse_orient(&oriented_sep, q_a, q_b);
-        let e_forward =
-            entry
-                .table
-                .lookup_boltzmann(r, omega, &dir_a, &dir_b, self.beta);
+        let e_forward = entry
+            .table
+            .lookup_boltzmann(r, omega, &dir_a, &dir_b, self.beta);
 
         // Hetero-dimer, pre-symmetrized, or user opted into single lookup
         if entry.mol_id_a != entry.mol_id_b || entry.skip_swap_averaging {
@@ -332,12 +331,10 @@ impl Tabulated6D {
 
         // Self-interaction: average both perspectives to restore exchange
         // symmetry broken by interpolation on different angular grid points.
-        let (_r, omega2, dir_a2, dir_b2) =
-            icotable::inverse_orient(&(-oriented_sep), q_b, q_a);
-        let e_reverse =
-            entry
-                .table
-                .lookup_boltzmann(r, omega2, &dir_a2, &dir_b2, self.beta);
+        let (_r, omega2, dir_a2, dir_b2) = icotable::inverse_orient(&(-oriented_sep), q_b, q_a);
+        let e_reverse = entry
+            .table
+            .lookup_boltzmann(r, omega2, &dir_a2, &dir_b2, self.beta);
 
         // Track asymmetry in Boltzmann space: repulsive states (exp≈0)
         // contribute negligibly, isolating the error at accessible configurations.

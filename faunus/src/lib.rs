@@ -16,6 +16,9 @@ use crate::group::Group;
 
 use topology::Topology;
 
+/// Molar gas constant in kJ/(mol·K).
+pub const R_IN_KJ_PER_MOL: f64 = physical_constants::MOLAR_GAS_CONSTANT * 1e-3;
+
 pub type Point = nalgebra::Vector3<f64>;
 pub type UnitQuaternion = nalgebra::UnitQuaternion<f64>;
 pub type PositionVec = Vec<Point>;

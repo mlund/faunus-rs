@@ -231,10 +231,8 @@ impl VirtualTranslate {
         let new_energy = context.hamiltonian().energy(context, &change); // kJ/mol
         context.translate_particles(&particle_indices, &(-displacement_vector));
 
-        // Convert kJ/mol → kT using kT = R·T
-        const KILO_JOULE_PER_JOULE: f64 = 1e-3;
-        let k_t = physical_constants::MOLAR_GAS_CONSTANT * KILO_JOULE_PER_JOULE * self.temperature;
-        let delta_u = (new_energy - old_energy) / k_t;
+        let rt = crate::R_IN_KJ_PER_MOL * self.temperature;
+        let delta_u = (new_energy - old_energy) / rt;
 
         Ok(delta_u)
     }

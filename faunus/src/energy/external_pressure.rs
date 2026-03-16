@@ -24,9 +24,6 @@ use serde::{Deserialize, Serialize};
 
 use super::EnergyTerm;
 
-/// Molar gas constant in kJ/(mol·K). The factor 1e-3 converts from J to kJ.
-const R_KJ_PER_MOL_K: f64 = physical_constants::MOLAR_GAS_CONSTANT * 1e-3;
-
 /// Pa → kJ/(mol·Å³). Derives from PV having units J when P is in Pa and V in m³;
 /// multiplying by N_A gives kJ/mol·m³, then 1e-30 m³/ų and 1e-3 kJ/J yield the 1e-33.
 const PA_TO_INTERNAL: f64 = physical_constants::AVOGADRO_CONSTANT * 1e-33;
@@ -86,11 +83,6 @@ impl ExternalPressure {
             pressure: pressure_internal,
             thermal_energy,
         }
-    }
-
-    /// Compute thermal energy kT in kJ/mol from temperature in Kelvin.
-    pub fn thermal_energy_from_temperature(temperature: f64) -> f64 {
-        R_KJ_PER_MOL_K * temperature
     }
 
     /// Count independently translatable entities N for the NPT partition function.
@@ -165,53 +157,53 @@ mod tests {
 
     #[test]
     fn pressure_pascal_conversion() {
-        let kt = 2.4789; // kJ/mol at ~298 K
+        let rt = 2.4789; // kJ/mol at ~298 K
         let p = Pressure::Pa(101325.0);
-        let internal = p.to_internal(kt);
+        let internal = p.to_internal(rt);
         assert_approx_eq!(f64, internal, 101325.0 * PA_TO_INTERNAL, epsilon = 1e-15);
     }
 
     #[test]
     fn pressure_atm_conversion() {
-        let kt = 2.4789;
+        let rt = 2.4789;
         let p_pa = Pressure::Pa(101325.0);
         let p_atm = Pressure::Atm(1.0);
         assert_approx_eq!(
             f64,
-            p_atm.to_internal(kt),
-            p_pa.to_internal(kt),
+            p_atm.to_internal(rt),
+            p_pa.to_internal(rt),
             epsilon = 1e-15
         );
     }
 
     #[test]
     fn pressure_bar_conversion() {
-        let kt = 2.4789;
+        let rt = 2.4789;
         let p_pa = Pressure::Pa(1e5);
         let p_bar = Pressure::Bar(1.0);
         assert_approx_eq!(
             f64,
-            p_bar.to_internal(kt),
-            p_pa.to_internal(kt),
+            p_bar.to_internal(rt),
+            p_pa.to_internal(rt),
             epsilon = 1e-15
         );
     }
 
     #[test]
     fn pressure_kt_conversion() {
-        let kt = 2.4789;
+        let rt = 2.4789;
         let p = Pressure::Kt(0.5);
-        assert_approx_eq!(f64, p.to_internal(kt), 0.5 * kt, epsilon = 1e-15);
+        assert_approx_eq!(f64, p.to_internal(rt), 0.5 * rt, epsilon = 1e-15);
     }
 
     #[test]
     fn pressure_millimolar_conversion() {
-        let kt = 2.4789;
+        let rt = 2.4789;
         let p = Pressure::MilliMolar(1.0);
         assert_approx_eq!(
             f64,
-            p.to_internal(kt),
-            MILLIMOLAR_TO_ANGSTROM3 * kt,
+            p.to_internal(rt),
+            MILLIMOLAR_TO_ANGSTROM3 * rt,
             epsilon = 1e-20
         );
     }
@@ -238,12 +230,6 @@ mod tests {
         let p: Pressure = serde_yaml::from_str(yaml).unwrap();
         assert!(matches!(p, Pressure::MilliMolar(v) if (v - 10.0).abs() < f64::EPSILON));
     }
-
-    #[test]
-    fn thermal_energy_from_temperature() {
-        let kt = ExternalPressure::thermal_energy_from_temperature(298.15);
-        assert_approx_eq!(f64, kt, R_KJ_PER_MOL_K * 298.15, epsilon = 1e-10);
-    }
 }
 
 #[cfg(test)]
@@ -266,9 +252,9 @@ mod integration_tests {
         )
         .unwrap();
 
-        let kt = ExternalPressure::thermal_energy_from_temperature(298.15);
+        let rt = crate::R_IN_KJ_PER_MOL * 298.15;
         let pressure = Pressure::Atm(1.0);
-        let ep = ExternalPressure::new(&pressure, kt);
+        let ep = ExternalPressure::new(&pressure, rt);
 
         let volume = context.cell().volume().unwrap();
         assert!(volume > 0.0);
@@ -288,7 +274,7 @@ mod integration_tests {
             })
             .sum();
 
-        let expected = ep.pressure * volume - (n as f64 + 1.0) * kt * volume.ln();
+        let expected = ep.pressure * volume - (n as f64 + 1.0) * rt * volume.ln();
         let energy = ep.energy(&context, &Change::Everything);
         assert_approx_eq!(f64, energy, expected, epsilon = 1e-10);
 

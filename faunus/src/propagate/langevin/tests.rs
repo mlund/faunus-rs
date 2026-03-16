@@ -64,7 +64,7 @@ fn quaternion_90_degree_rotations() {
 
 /// Helper: compute expected T from ½mv² = ½·dof·kB·T.
 fn expected_temperature(kinetic_energy: f32, dof: f32) -> f32 {
-    const R_KJ_PER_MOL_K: f32 = physical_constants::MOLAR_GAS_CONSTANT as f32 * 1e-3;
+    const R_KJ_PER_MOL_K: f32 = crate::R_IN_KJ_PER_MOL as f32;
     const KJ_MOL_TO_INTERNAL: f32 = 100.0;
     2.0 * kinetic_energy / (KJ_MOL_TO_INTERNAL * dof * R_KJ_PER_MOL_K)
 }
@@ -969,7 +969,7 @@ impl PhysicsTestSetup {
         let dt = 0.002;
         // Large box to avoid PBC artifacts in free-particle tests
         let box_length = 1000.0f32;
-        let kt = (physical_constants::MOLAR_GAS_CONSTANT * 1e-3 * temperature) as f32;
+        let kt = (crate::R_IN_KJ_PER_MOL * temperature) as f32;
 
         let client = test_client();
         let config = LangevinConfig {

@@ -183,7 +183,7 @@ impl LangevinRunner {
             .cell()
             .bounding_box()
             .ok_or_else(|| anyhow::anyhow!("LangevinDynamics requires a bounded cell"))?;
-        let kt = (physical_constants::MOLAR_GAS_CONSTANT * 1e-3 * config.temperature) as f32;
+        let kt = (crate::R_IN_KJ_PER_MOL * config.temperature) as f32;
 
         let device = cubecl::wgpu::WgpuDevice::DefaultDevice;
         let client = cubecl::wgpu::WgpuRuntime::client(&device);

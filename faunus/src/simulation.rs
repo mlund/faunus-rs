@@ -8,15 +8,9 @@ use crate::{
     state::State,
 };
 use anyhow::Result;
+use interatomic::coulomb::Temperature;
 use rand::SeedableRng;
 use std::path::Path;
-
-/// Thermal energy kT in kJ/mol from a medium's temperature.
-pub fn thermal_energy(medium: &interatomic::coulomb::Medium) -> f64 {
-    use interatomic::coulomb::Temperature;
-    const KILO_JOULE_PER_JOULE: f64 = 1e-3;
-    physical_constants::MOLAR_GAS_CONSTANT * KILO_JOULE_PER_JOULE * medium.temperature()
-}
 
 /// Top-level simulation driver.
 #[allow(clippy::large_enum_variant)]
@@ -32,12 +26,12 @@ pub enum Simulation {
 pub fn build_markov_chain<T: crate::Context + 'static>(
     input: &Path,
     context: T,
-    kt: f64,
+    rt: f64,
     state: Option<&Path>,
 ) -> Result<MarkovChain<T>> {
     let propagate = Propagate::from_file(input, &context)?;
     let analyses = analysis::from_file(input, &context)?;
-    let mut mc = MarkovChain::new(context, propagate, kt, analyses)?;
+    let mut mc = MarkovChain::new(context, propagate, rt, analyses)?;
     if let Some(state_path) = state {
         if state_path.exists() {
             mc.load_state(State::from_file(state_path)?)?;
@@ -50,7 +44,11 @@ pub fn build_markov_chain<T: crate::Context + 'static>(
 /// without constructing a `Propagate`. Used by `rerun`.
 pub fn build_context_and_analyses(
     input: &Path,
-) -> Result<(Backend, AnalysisCollection<Backend>, interatomic::coulomb::Medium)> {
+) -> Result<(
+    Backend,
+    AnalysisCollection<Backend>,
+    interatomic::coulomb::Medium,
+)> {
     let medium = crate::backend::get_medium(input)?;
     let context = Backend::new(input, None, &mut rand::thread_rng())?;
     let analyses = analysis::from_file(input, &context)?;
@@ -67,15 +65,15 @@ impl Simulation {
         state: Option<&Path>,
     ) -> Result<(Self, interatomic::coulomb::Medium)> {
         let medium = crate::backend::get_medium(input)?;
-        let kt = thermal_energy(&medium);
+        let rt = crate::R_IN_KJ_PER_MOL * medium.temperature();
 
         if let Some(gibbs_cfg) = propagate::gibbs_config_from_file(input)? {
-            let sim = Self::build_gibbs(input, state, kt, gibbs_cfg)?;
+            let sim = Self::build_gibbs(input, state, rt, gibbs_cfg)?;
             return Ok((sim, medium));
         }
 
         let context = Backend::new(input, None, &mut rand::thread_rng())?;
-        let mc = build_markov_chain(input, context, kt, state)?;
+        let mc = build_markov_chain(input, context, rt, state)?;
         Ok((Self::SingleBox(mc), medium))
     }
 
@@ -83,7 +81,7 @@ impl Simulation {
     fn build_gibbs(
         input: &Path,
         state: Option<&Path>,
-        kt: f64,
+        rt: f64,
         gibbs_cfg: crate::montecarlo::gibbs::GibbsConfig,
     ) -> Result<Self> {
         let context0 = Backend::new(input, None, &mut rand::thread_rng())?;
@@ -95,8 +93,8 @@ impl Simulation {
             .map(|b| b.build(&context0))
             .collect::<Result<_>>()?;
 
-        let mut mc0 = build_markov_chain(input, context0, kt, None)?;
-        let mut mc1 = build_markov_chain(input, context1, kt, None)?;
+        let mut mc0 = build_markov_chain(input, context0, rt, None)?;
+        let mut mc1 = build_markov_chain(input, context1, rt, None)?;
         // give box 1 a distinct seed so intra-box trajectories diverge
         mc1.propagation_mut().reseed(0x000D_EADB_EEFC_AFE1);
 
@@ -125,7 +123,7 @@ impl Simulation {
             inter_moves,
             gibbs_cfg.intra_steps,
             max_sweeps,
-            kt,
+            rt,
             rng,
         );
 

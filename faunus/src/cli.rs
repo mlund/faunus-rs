@@ -25,8 +25,14 @@ use crate::{
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use indicatif::ProgressBar;
+use interatomic::coulomb::Temperature;
 use pretty_env_logger::env_logger::DEFAULT_FILTER_ENV;
 use std::path::PathBuf;
+
+/// Thermal energy kT in kJ/mol.
+fn thermal_energy(medium: &interatomic::coulomb::Medium) -> f64 {
+    crate::R_IN_KJ_PER_MOL * medium.temperature()
+}
 
 #[derive(Debug, Subcommand)]
 enum Commands {
@@ -164,7 +170,7 @@ fn run_single_box<T: Context + 'static>(
     state: Option<&std::path::Path>,
     yaml_output: &mut std::fs::File,
 ) -> Result<()> {
-    let thermal_energy = simulation::thermal_energy(medium);
+    let thermal_energy = thermal_energy(medium);
     log::info!("{}", medium);
     log::info!("Thermal energy: {thermal_energy:.2} kJ/mol");
 
@@ -205,10 +211,7 @@ fn run_single_box<T: Context + 'static>(
 }
 
 /// Validate that the aux file header matches the context topology.
-fn validate_aux_header(
-    header: &frame_state::FrameStateHeader,
-    context: &Backend,
-) -> Result<()> {
+fn validate_aux_header(header: &frame_state::FrameStateHeader, context: &Backend) -> Result<()> {
     let groups = context.groups();
     if header.n_groups as usize != groups.len() {
         anyhow::bail!(
@@ -269,7 +272,7 @@ fn run_rerun(
 
     let (mut context, mut analyses, medium) = simulation::build_context_and_analyses(input)?;
     log::info!("{}", medium);
-    log::info!("Thermal energy: {:.2} kJ/mol", simulation::thermal_energy(&medium));
+    log::info!("Thermal energy: {:.2} kJ/mol", thermal_energy(&medium));
 
     // Every frame must be sampled since we can't skip frames in the XTC/aux pair
     analyses.override_frequencies(Frequency::Every(1));
@@ -297,7 +300,11 @@ fn run_rerun(
         match xtc_reader.read_frame(&mut frame) {
             Ok(()) => {}
             Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => break,
-            Err(e) => return Err(anyhow::anyhow!("Error reading XTC frame {frame_index}: {e}")),
+            Err(e) => {
+                return Err(anyhow::anyhow!(
+                    "Error reading XTC frame {frame_index}: {e}"
+                ))
+            }
         }
 
         if frame.natoms() != n_particles {
@@ -342,9 +349,7 @@ fn run_rerun(
 
     write_yaml(&medium, yaml_output, Some("medium"))?;
 
-    let energy = context
-        .hamiltonian()
-        .energy(&context, &Change::Everything);
+    let energy = context.hamiltonian().energy(&context, &Change::Everything);
     let energy_summary = std::collections::BTreeMap::from([
         ("last_frame_energy".to_string(), energy),
         ("frames".to_string(), frame_index as f64),
@@ -365,7 +370,7 @@ fn run_gibbs(
     state: Option<&std::path::Path>,
     output_path: &std::path::Path,
 ) -> Result<()> {
-    let thermal_energy = simulation::thermal_energy(medium);
+    let thermal_energy = thermal_energy(medium);
     log::info!("{}", medium);
     log::info!("Thermal energy: {thermal_energy:.2} kJ/mol");
 

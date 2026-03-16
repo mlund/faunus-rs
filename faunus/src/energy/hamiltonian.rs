@@ -114,8 +114,8 @@ impl Hamiltonian {
             let temperature = temperature.ok_or_else(|| {
                 anyhow::anyhow!("Medium with temperature required for isobaric energy term")
             })?;
-            let thermal_energy = ExternalPressure::thermal_energy_from_temperature(temperature);
-            hamiltonian.push(ExternalPressure::new(pressure, thermal_energy).into());
+            let rt = crate::R_IN_KJ_PER_MOL * temperature;
+            hamiltonian.push(ExternalPressure::new(pressure, rt).into());
         }
 
         Ok(hamiltonian)
@@ -375,6 +375,75 @@ impl Hamiltonian {
             })
             .collect();
         serde_yaml::Value::Mapping(map)
+    }
+    /// Add energy terms that require a live Context (particles already placed).
+    ///
+    /// Must be called after `Hamiltonian::new()` and particle insertion.
+    pub(crate) fn finalize(
+        &mut self,
+        builder: &HamiltonianBuilder,
+        context: &impl Context,
+        medium: Option<&interatomic::coulomb::Medium>,
+    ) -> anyhow::Result<()> {
+        if let Some(constrain_builders) = &builder.constrain {
+            for cb in constrain_builders {
+                self.push(cb.build(context)?.into());
+            }
+        }
+        if let Some(ext_builders) = &builder.customexternal {
+            for eb in ext_builders {
+                self.push(eb.build()?.into());
+            }
+        }
+
+        let require_thermal_energy = |term: &str| -> anyhow::Result<f64> {
+            let m = medium.ok_or_else(|| {
+                anyhow::anyhow!("Medium with temperature required for {term} energy term")
+            })?;
+            Ok(crate::R_IN_KJ_PER_MOL * m.temperature())
+        };
+
+        if let Some(pm_builder) = &builder.polymer_depletion {
+            let thermal_energy = require_thermal_energy("polymer_depletion")?;
+            self.push(pm_builder.build(context, thermal_energy)?.into());
+        }
+        if let Some(tab_builder) = &builder.tabulated6d {
+            let thermal_energy = require_thermal_energy("tabulated6d")?;
+            let tab = tab_builder.build(context, 1.0 / thermal_energy)?;
+            for (mol_a, mol_b) in tab.molecule_pairs() {
+                self.exclude_nonbonded_molecule_pair(mol_a, mol_b);
+                log::info!(
+                    "Excluded molecule pair ({}, {}) from nonbonded (handled by tabulated6d)",
+                    mol_a,
+                    mol_b
+                );
+            }
+            self.push(tab.into());
+        }
+        if let Some(ewald_builder) = &builder.ewald {
+            let medium = medium
+                .ok_or_else(|| anyhow::anyhow!("Ewald requires a medium with permittivity"))?;
+            let initial_alpha = {
+                let debye_length = medium.debye_length();
+                interatomic::coulomb::pairwise::RealSpaceEwald::new(
+                    ewald_builder.cutoff,
+                    ewald_builder.accuracy,
+                    debye_length,
+                )
+                .alpha()
+            };
+            let ewald = super::EwaldReciprocalEnergy::new(ewald_builder, context, medium)?;
+            if ewald.alpha() != initial_alpha {
+                self.rebuild_nonbonded(
+                    builder,
+                    context.topology_ref(),
+                    Some(medium.clone()),
+                    ewald.real_space_scheme(),
+                )?;
+            }
+            self.push(ewald.into());
+        }
+        Ok(())
     }
 }
 

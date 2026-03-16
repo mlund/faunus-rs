@@ -188,7 +188,7 @@ pub(super) fn compute_temperature(
         }
     }
 
-    const R_KJ_PER_MOL_K: f32 = physical_constants::MOLAR_GAS_CONSTANT as f32 * 1e-3;
+    const R_KJ_PER_MOL_K: f32 = crate::R_IN_KJ_PER_MOL as f32;
     const KJ_MOL_TO_INTERNAL: f32 = 100.0;
     let t_trans = if dof_trans > 0.0 {
         2.0 * ke_trans / (KJ_MOL_TO_INTERNAL * dof_trans * R_KJ_PER_MOL_K)
