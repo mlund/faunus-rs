@@ -4,6 +4,28 @@ Analysis objects sample the system at a given frequency during a simulation
 and optionally write results to output files.
 They are defined in the `analysis` section of the YAML input.
 
+### Output file formats
+
+The column-data format is inferred from the file extension:
+
+Extension     | Format
+------------- | -------------------------------------------
+`.dat`        | Space-separated; header prefixed with `# `
+`.csv`        | Comma-separated; plain header row (column labels)
+
+Both formats support transparent gzip compression by appending `.gz`
+(e.g. `energy.dat.gz`, `rdf.csv.gz`).
+
+Loading CSV output in Python:
+
+```python
+import numpy as np
+data = np.loadtxt("data.csv.gz", delimiter=",", skiprows=1)
+
+import pandas as pd
+data = pd.read_csv("data.csv.gz").to_numpy()
+```
+
 ## Collective Variable
 
 Monitors a collective variable (CV) over the course of a simulation,
@@ -13,7 +35,6 @@ for convergence checking, and for post-processing of time/step series data.
 
 If `file` is given, each sampled step writes a line with columns
 `step`, `value`, and `running_average`.
-The file may be gzip-compressed by using a `.gz` extension.
 If no file is given, only the mean and RMS are written to `output.yaml`.
 
 ### Example
@@ -38,7 +59,7 @@ Key          | Required | Default | Description
 `selection`  | depends  |         | Selection expression for one atom or group
 `selection2` | depends  |         | Second selection (for two-group properties)
 `resolution` | no       |         | Bin width (only used by Penalty)
-`file`       | no       |         | Output file path; omit to only track the mean
+`file`       | no       |         | Output file path (see [Output file formats](#output-file-formats)); omit to only track the mean
 
 ### Supported properties
 
@@ -86,7 +107,6 @@ The reported ratio `⟨Re²⟩/⟨Rg²⟩` equals 6 for ideal Gaussian chains
 If `file` is given (single-molecule selection only), each sampled step writes a line with
 columns `step`, `Rg`, and the upper triangle of the gyration tensor
 (`Sxx Sxy Sxz Syy Syz Szz`).
-The file may be gzip-compressed by using a `.gz` extension.
 
 ### Example
 
@@ -103,7 +123,7 @@ analysis:
 Key          | Required | Default | Description
 ------------ | -------- | ------- | -------------------------------------------
 `selection`  | yes      |         | Selection expression for molecule group(s)
-`file`       | no       |         | Streaming output file (single molecule only)
+`file`       | no       |         | Streaming output file, single molecule only (see [Output file formats](#output-file-formats))
 `frequency`  | yes      |         | Sample frequency, e.g. `!Every 100`
 
 ## Energy
@@ -116,8 +136,6 @@ Two modes are supported:
 - **Partial**: writes the nonbonded energy between two sets of atoms
   selected with VMD-like expressions.
   Output columns: `step energy running_average`.
-
-The file may be gzip-compressed by using a `.gz` extension.
 
 ### Examples
 
@@ -145,7 +163,7 @@ analysis:
 
 Key            | Required | Default | Description
 -------------- | -------- | ------- | -------------------------------------------
-`file`         | yes      |         | Output file path (`.gz` for gzip)
+`file`         | yes      |         | Output file path (see [Output file formats](#output-file-formats))
 `frequency`    | yes      |         | Sample frequency, e.g. `!Every 100`
 `selections`   | no       |         | Pair of selection expressions for partial nonbonded energy
 
@@ -266,7 +284,7 @@ analysis:
 Key                        | Required | Default               | Description
 -------------------------- | -------- | --------------------- | -------------------------------------------
 `selections`               | yes      |                       | Pair of selection expressions, e.g. `["atomtype Na", "atomtype Cl"]`
-`file`                     | yes      |                       | Output file path (`.gz` for gzip)
+`file`                     | yes      |                       | Output file path (see [Output file formats](#output-file-formats))
 `dr`                       | yes      |                       | Bin width in distance units
 `frequency`                | yes      |                       | Sample frequency, e.g. `!Every 100`
 `max_r`                    | no       | half shortest box dim | Maximum distance for histogram
@@ -306,7 +324,7 @@ Key           | Required | Default  | Description
 `dL`          | yes      |          | Displacement magnitude (Å)
 `directions`  | no       | `z`      | Displacement direction (`x`, `y`, `z`, `xy`, …)
 `temperature` | no       | `298.15` | Temperature (K) for kT conversion
-`file`        | no       |          | Output file path (`.gz` for gzip)
+`file`        | no       |          | Output file path (see [Output file formats](#output-file-formats))
 `frequency`   | yes      |          | Sample frequency, e.g. `!Every 10`
 
 ## Mean Along Coordinate
@@ -342,7 +360,7 @@ Key           | Required | Default | Description
 `property`    | yes      |         | CV1 type to average (see [Supported properties](#supported-properties))
 `selection`   | depends  |         | Selection for CV1
 `coordinate`  | yes      |         | CV2 block (must include `resolution`)
-`file`        | yes      |         | Output file path (`.gz` for gzip)
+`file`        | yes      |         | Output file path (see [Output file formats](#output-file-formats))
 `frequency`   | yes      |         | Sample frequency, e.g. `!Every 100`
 
 The `coordinate` block accepts all [collective variable](#collective-variable) fields

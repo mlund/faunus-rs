@@ -19,6 +19,7 @@
 //! property value is accumulated into a per-bin running mean.
 
 use super::{Analyze, Frequency};
+use crate::auxiliary::ColumnWriter;
 use crate::collective_variable::{CollectiveVariable, CollectiveVariableBuilder};
 use crate::Context;
 use anyhow::Result;
@@ -26,7 +27,6 @@ use average::{Estimate, Mean};
 use derive_more::Debug;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-use std::io::Write;
 use std::path::PathBuf;
 
 /// YAML builder for [`MeanAlongCoordinate`].
@@ -98,15 +98,19 @@ impl MeanAlongCoordinate {
         if self.bins.is_empty() {
             return Ok(());
         }
-        let mut stream = crate::auxiliary::open_compressed(&self.output_file)?;
         let cv_name = &self.cv.axis().name;
         let coord_name = &self.coordinate.axis().name;
-        writeln!(stream, "# {coord_name} mean({cv_name}) count")?;
+        let mean_col = format!("mean({cv_name})");
+        let mut stream = ColumnWriter::open(&self.output_file, &[coord_name, &mean_col, "count"])?;
         for (&idx, mean) in &self.bins {
             let center = self.bin_center(idx);
             let avg = mean.mean();
             let count = mean.len();
-            writeln!(stream, "{center:.6} {avg:.6} {count}")?;
+            stream.write_row(&[
+                &format_args!("{center:.6}"),
+                &format_args!("{avg:.6}"),
+                &count,
+            ])?;
         }
         stream.flush()?;
         Ok(())

@@ -5,13 +5,14 @@
 //! - **Partial**: writes the nonbonded energy between two VMD-like selections.
 
 use super::{Analyze, Frequency};
+use crate::auxiliary::ColumnWriter;
 use crate::selection::Selection;
 use crate::Context;
 use anyhow::Result;
 use average::{Estimate, Mean};
 use derive_more::Debug;
 use serde::Deserialize;
-use std::io::Write;
+use std::fmt::Display;
 use std::path::PathBuf;
 
 /// YAML builder for [`EnergyAnalysis`].
@@ -37,7 +38,7 @@ enum EnergyMode {
 pub struct EnergyAnalysis {
     mode: EnergyMode,
     #[debug(skip)]
-    stream: Box<dyn Write + Send>,
+    stream: ColumnWriter,
     frequency: Frequency,
     mean: Mean,
     num_samples: usize,
@@ -45,9 +46,7 @@ pub struct EnergyAnalysis {
 
 impl EnergyAnalysisBuilder {
     pub fn build(&self, context: &impl Context) -> Result<EnergyAnalysis> {
-        let mut stream = crate::auxiliary::open_compressed(&self.file)?;
-
-        let mode = if let Some((sel1, sel2)) = &self.selections {
+        let (stream, mode) = if let Some((sel1, sel2)) = &self.selections {
             let topology = context.topology_ref();
             let groups = context.groups();
             for sel in [sel1, sel2] {
@@ -55,22 +54,20 @@ impl EnergyAnalysisBuilder {
                     anyhow::bail!("Energy: selection '{}' resolves to no atoms", sel.source());
                 }
             }
-            writeln!(stream, "# step energy average")?;
-            EnergyMode::Partial(sel1.clone(), sel2.clone())
+            let stream = ColumnWriter::open(&self.file, &["step", "energy", "average"])?;
+            (stream, EnergyMode::Partial(sel1.clone(), sel2.clone()))
         } else {
-            // Write header from current hamiltonian terms.
             let hamiltonian = context.hamiltonian();
             let names: Vec<&str> = hamiltonian
                 .energy_terms()
                 .iter()
                 .filter_map(crate::Info::short_name)
                 .collect();
-            write!(stream, "# step")?;
-            for name in &names {
-                write!(stream, " {name}")?;
-            }
-            writeln!(stream, " total")?;
-            EnergyMode::Total
+            let mut cols: Vec<&str> = vec!["step"];
+            cols.extend(&names);
+            cols.push("total");
+            let stream = ColumnWriter::open(&self.file, &cols)?;
+            (stream, EnergyMode::Total)
         };
 
         Ok(EnergyAnalysis {
@@ -110,11 +107,12 @@ impl<T: Context> Analyze<T> for EnergyAnalysis {
                 let terms = hamiltonian.per_term_energies(context, &crate::Change::Everything);
                 let total: f64 = terms.iter().map(|(_, e)| *e).sum();
                 self.mean.add(total);
-                write!(self.stream, "{step}")?;
-                for (.., energy) in &terms {
-                    write!(self.stream, " {energy:.6}")?;
-                }
-                writeln!(self.stream, " {total:.6}")?;
+                let formatted: Vec<_> = terms.iter().map(|(_, e)| format!("{e:.6}")).collect();
+                let total_str = format!("{total:.6}");
+                let mut row: Vec<&dyn Display> = vec![&step];
+                row.extend(formatted.iter().map(|s| s as &dyn Display));
+                row.push(&total_str);
+                self.stream.write_row(&row)?;
             }
             EnergyMode::Partial(sel1, sel2) => {
                 // Re-resolve each sample since group membership can change (GC ensemble)
@@ -130,7 +128,12 @@ impl<T: Context> Analyze<T> for EnergyAnalysis {
                     .filter_map(|term| term.nonbonded_energy_between_atoms(context, &a1, &a2))
                     .sum();
                 self.mean.add(energy);
-                writeln!(self.stream, "{step} {energy:.6} {:.6}", self.mean.mean())?;
+                let mean = self.mean.mean();
+                self.stream.write_row(&[
+                    &step,
+                    &format_args!("{energy:.6}"),
+                    &format_args!("{mean:.6}"),
+                ])?;
             }
         }
         self.num_samples += 1;

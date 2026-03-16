@@ -27,6 +27,7 @@
 //! displacement magnitude.
 
 use super::{Analyze, Frequency};
+use crate::auxiliary::ColumnWriter;
 use crate::change::{Change, GroupChange};
 use crate::dimension::Dimension;
 use crate::energy::EnergyChange;
@@ -37,7 +38,6 @@ use average::{Estimate, Mean};
 use derive_builder::Builder;
 use derive_more::Debug;
 use serde::{Deserialize, Serialize};
-use std::io::Write;
 use std::path::PathBuf;
 
 /// Virtual translate move analysis.
@@ -80,7 +80,7 @@ pub struct VirtualTranslate {
     #[builder(setter(skip))]
     #[builder_field_attr(serde(skip))]
     #[debug(skip)]
-    stream: Option<Box<dyn Write + Send>>,
+    stream: Option<ColumnWriter>,
 
     /// Sample frequency
     frequency: Frequency,
@@ -157,9 +157,10 @@ impl VirtualTranslateBuilder {
         let unit_direction = dimension_to_unit_vector(&directions)?;
 
         let stream = if let Some(path) = self.output_file.as_ref().and_then(|p| p.as_ref()) {
-            let mut stream = crate::auxiliary::open_compressed(path)?;
-            writeln!(stream, "# step dL/Å dU/kT <force>/kT/Å")?;
-            Some(stream)
+            Some(ColumnWriter::open(
+                path,
+                &["step", "dL/Å", "dU/kT", "<force>/kT/Å"],
+            )?)
         } else {
             None
         };
@@ -267,16 +268,16 @@ impl VirtualTranslate {
     /// was skipped due to overflow. This ensures the output file has one row
     /// per sampled step, staying in sync with other analyses at the same frequency.
     fn write_to_stream(&mut self, step: usize, energy_change: f64) -> Result<()> {
-        // Bind values before mutable borrow of self.stream
         let mean_force = self.mean_force();
         let displacement = self.displacement;
 
         if let Some(ref mut stream) = self.stream {
-            writeln!(
-                stream,
-                "{} {:.3e} {:.6e} {:.6e}",
-                step, displacement, energy_change, mean_force
-            )?;
+            stream.write_row(&[
+                &step,
+                &format_args!("{displacement:.3e}"),
+                &format_args!("{energy_change:.6e}"),
+                &format_args!("{mean_force:.6e}"),
+            ])?;
         }
         Ok(())
     }

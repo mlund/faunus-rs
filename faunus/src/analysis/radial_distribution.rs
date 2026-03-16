@@ -4,6 +4,7 @@
 //! with minimum image convention for periodic boundary conditions.
 
 use super::{Analyze, Frequency};
+use crate::auxiliary::ColumnWriter;
 use crate::cell::{BoundaryConditions, Shape};
 use crate::dimension::Dimension;
 use crate::histogram::Histogram;
@@ -12,7 +13,6 @@ use crate::Context;
 use anyhow::Result;
 use derive_more::Debug;
 use serde::{Deserialize, Serialize};
-use std::io::Write;
 use std::path::PathBuf;
 
 /// YAML builder for [`RadialDistribution`].
@@ -60,7 +60,7 @@ impl RadialDistributionBuilder {
         let exclude_intramolecular = !self.use_com && self.exclude_intramolecular.unwrap_or(true);
 
         let histogram = Histogram::new(0.0, max_r, self.dr);
-        let stream = crate::auxiliary::open_compressed(&self.file)?;
+        let stream = ColumnWriter::open(&self.file, &["r", "g(r)"])?;
 
         Ok(RadialDistribution {
             selections: self.selections.clone(),
@@ -94,7 +94,7 @@ pub struct RadialDistribution {
     dimension: Dimension,
     output_file: PathBuf,
     #[debug(skip)]
-    stream: Box<dyn Write + Send>,
+    stream: ColumnWriter,
     frequency: Frequency,
 }
 
@@ -213,15 +213,15 @@ impl RadialDistribution {
         let n_pairs_avg = self.pair_count_sum / self.num_samples as f64;
         let dr = self.histogram.bin_width();
 
-        self.stream = crate::auxiliary::open_compressed(&self.output_file)?;
-        writeln!(self.stream, "# r g(r)")?;
+        self.stream = ColumnWriter::open(&self.output_file, &["r", "g(r)"])?;
         for (r, count) in self.histogram.iter() {
             let r_inner = r - dr / 2.0;
             let r_outer = r + dr / 2.0;
             let shell_volume = self.dimension.shell_volume(r_inner, r_outer);
             let ideal = n_pairs_avg * self.num_samples as f64 * shell_volume / v_avg;
             let gr = if ideal > 0.0 { count / ideal } else { 0.0 };
-            writeln!(self.stream, "{:.6} {:.6}", r, gr)?;
+            self.stream
+                .write_row(&[&format_args!("{r:.6}"), &format_args!("{gr:.6}")])?;
         }
         self.stream.flush()?;
         Ok(())
@@ -292,6 +292,7 @@ mod tests {
     use super::*;
     use crate::analysis::AnalysisBuilder;
     use approx::assert_relative_eq;
+    use std::path::Path;
 
     #[test]
     fn deserialize_atom_atom() {
@@ -360,7 +361,7 @@ frequency: !Every 50
             exclude_intramolecular: false,
             dimension,
             output_file: PathBuf::from("/dev/null"),
-            stream: Box::new(std::io::sink()),
+            stream: ColumnWriter::open(Path::new("/dev/null"), &["r", "g(r)"]).unwrap(),
             frequency: Frequency::Every(1),
         };
         for i in 0..rdf.histogram.num_bins() {

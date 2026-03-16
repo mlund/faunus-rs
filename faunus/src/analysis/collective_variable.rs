@@ -18,13 +18,13 @@
 //! average, and optionally streams `{step, value, average}` to a file.
 
 use super::{Analyze, Frequency};
+use crate::auxiliary::ColumnWriter;
 use crate::collective_variable::{CollectiveVariable, CollectiveVariableBuilder};
 use crate::Context;
 use anyhow::Result;
 use average::{Estimate, Mean};
 use derive_more::Debug;
 use serde::{Deserialize, Serialize};
-use std::io::Write;
 use std::path::PathBuf;
 
 /// YAML builder for [`CollectiveVariableAnalysis`].
@@ -48,9 +48,7 @@ impl CollectiveVariableAnalysisBuilder {
         let cv = self.cv.build(context)?;
 
         let stream = if let Some(path) = &self.file {
-            let mut stream = crate::auxiliary::open_compressed(path)?;
-            writeln!(stream, "# step value average")?;
-            Some(stream)
+            Some(ColumnWriter::open(path, &["step", "value", "average"])?)
         } else {
             None
         };
@@ -74,7 +72,7 @@ impl CollectiveVariableAnalysisBuilder {
 pub struct CollectiveVariableAnalysis {
     cv: CollectiveVariable,
     #[debug(skip)]
-    stream: Option<Box<dyn Write + Send>>,
+    stream: Option<ColumnWriter>,
     frequency: Frequency,
     mean: Mean,
     mean_squared: Mean,
@@ -115,7 +113,12 @@ impl<T: Context> Analyze<T> for CollectiveVariableAnalysis {
         self.num_samples += 1;
 
         if let Some(ref mut stream) = self.stream {
-            writeln!(stream, "{} {:.6} {:.6}", step, value, self.mean.mean())?;
+            let mean = self.mean.mean();
+            stream.write_row(&[
+                &step,
+                &format_args!("{value:.6}"),
+                &format_args!("{mean:.6}"),
+            ])?;
         }
         Ok(())
     }

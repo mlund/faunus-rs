@@ -18,19 +18,182 @@ use crate::{cell::SimulationCell, Point};
 use flate2::write::GzEncoder;
 use flate2::Compression;
 use nalgebra::Vector3;
+use std::fmt::Display;
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::Path;
 
-/// If the output file has a `.gz` extension, return a `GzEncoder` wrapped around the file
-pub fn open_compressed(path: &PathBuf) -> anyhow::Result<Box<dyn Write + Send>> {
+/// If the output file has a `.gz` extension, return a `GzEncoder` wrapped around the file.
+fn open_compressed(path: &Path) -> anyhow::Result<Box<dyn Write + Send>> {
     let file = std::fs::File::create(path)
-        .map_err(|err| anyhow::anyhow!("Error creating file {:?}: {}", path, err))?;
-    let writer: Box<dyn Write + Send> = if path.extension().unwrap_or_default() == "gz" {
-        Box::new(GzEncoder::new(file, Compression::default()))
+        .map_err(|err| anyhow::anyhow!("Error creating file {path:?}: {err}"))?;
+    if path.extension().unwrap_or_default() == "gz" {
+        Ok(Box::new(GzEncoder::new(file, Compression::default())))
     } else {
-        Box::new(file)
-    };
-    Ok(writer)
+        Ok(Box::new(file))
+    }
+}
+
+/// Column-data file format, inferred from file extension.
+#[derive(Clone, Copy, Default, Debug, PartialEq, Eq)]
+pub enum ColumnFormat {
+    /// Space-separated with `# ` header prefix (`.dat`).
+    #[default]
+    Whitespace,
+    /// Comma-separated, plain header row (`.csv`).
+    Csv,
+}
+
+impl ColumnFormat {
+    /// Infer format from path: `.csv` (or `.csv.gz`) → Csv, else Whitespace.
+    pub fn from_path(path: &Path) -> Self {
+        let stem = if path.extension().unwrap_or_default() == "gz" {
+            path.file_stem().map(Path::new)
+        } else {
+            Some(path)
+        };
+        match stem.and_then(|p| p.extension()).and_then(|e| e.to_str()) {
+            Some("csv") => Self::Csv,
+            _ => Self::Whitespace,
+        }
+    }
+
+    fn separator(self) -> &'static str {
+        match self {
+            Self::Whitespace => " ",
+            Self::Csv => ",",
+        }
+    }
+
+    fn comment_prefix(self) -> &'static str {
+        match self {
+            Self::Whitespace => "# ",
+            Self::Csv => "",
+        }
+    }
+}
+
+/// Format-aware writer for column data (.dat, .csv, optionally gzip-compressed).
+///
+/// Writes a header row on construction and provides [`write_row`](Self::write_row)
+/// for appending data rows with the correct separator.
+pub struct ColumnWriter {
+    inner: Box<dyn Write + Send>,
+    sep: &'static str,
+}
+
+impl std::fmt::Debug for ColumnWriter {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ColumnWriter").finish_non_exhaustive()
+    }
+}
+
+impl ColumnWriter {
+    /// Open a file, infer the format from its extension, and write the header.
+    pub fn open(path: &Path, columns: &[&str]) -> anyhow::Result<Self> {
+        let inner = open_compressed(path)?;
+        let format = ColumnFormat::from_path(path);
+        Self::new(inner, format, columns)
+    }
+
+    /// Wrap an existing writer, write the header row.
+    pub fn new(
+        mut inner: Box<dyn Write + Send>,
+        format: ColumnFormat,
+        columns: &[&str],
+    ) -> anyhow::Result<Self> {
+        let sep = format.separator();
+        write!(inner, "{}", format.comment_prefix())?;
+        for (i, col) in columns.iter().enumerate() {
+            if i > 0 {
+                write!(inner, "{sep}")?;
+            }
+            write!(inner, "{col}")?;
+        }
+        writeln!(inner)?;
+        Ok(Self { inner, sep })
+    }
+
+    /// Write a row of values using the format's separator.
+    pub fn write_row(&mut self, values: &[&dyn Display]) -> std::io::Result<()> {
+        for (i, val) in values.iter().enumerate() {
+            if i > 0 {
+                write!(self.inner, "{}", self.sep)?;
+            }
+            write!(self.inner, "{val}")?;
+        }
+        writeln!(self.inner)
+    }
+
+    pub fn flush(&mut self) -> std::io::Result<()> {
+        self.inner.flush()
+    }
+}
+
+#[cfg(test)]
+mod column_writer_tests {
+    use super::*;
+
+    #[test]
+    fn format_from_extension() {
+        assert_eq!(
+            ColumnFormat::from_path(Path::new("out.dat")),
+            ColumnFormat::Whitespace
+        );
+        assert_eq!(
+            ColumnFormat::from_path(Path::new("out.dat.gz")),
+            ColumnFormat::Whitespace
+        );
+        assert_eq!(
+            ColumnFormat::from_path(Path::new("out.csv")),
+            ColumnFormat::Csv
+        );
+        assert_eq!(
+            ColumnFormat::from_path(Path::new("out.csv.gz")),
+            ColumnFormat::Csv
+        );
+        assert_eq!(
+            ColumnFormat::from_path(Path::new("out.txt")),
+            ColumnFormat::Whitespace
+        );
+    }
+
+    fn collect_output(
+        format: ColumnFormat,
+        columns: &[&str],
+    ) -> (ColumnWriter, std::sync::Arc<std::sync::Mutex<Vec<u8>>>) {
+        let buf = std::sync::Arc::new(std::sync::Mutex::new(Vec::<u8>::new()));
+        let shared = buf.clone();
+
+        /// Wrapper to make `Arc<Mutex<Vec<u8>>>` implement `Write`.
+        struct SharedBuf(std::sync::Arc<std::sync::Mutex<Vec<u8>>>);
+        impl Write for SharedBuf {
+            fn write(&mut self, data: &[u8]) -> std::io::Result<usize> {
+                self.0.lock().unwrap().write(data)
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+
+        let writer = ColumnWriter::new(Box::new(SharedBuf(buf)), format, columns).unwrap();
+        (writer, shared)
+    }
+
+    #[test]
+    fn whitespace_output() {
+        let (mut w, buf) = collect_output(ColumnFormat::Whitespace, &["x", "y"]);
+        w.write_row(&[&1, &format_args!("{:.2}", 3.14)]).unwrap();
+        let bytes = buf.lock().unwrap();
+        assert_eq!(String::from_utf8_lossy(&bytes), "# x y\n1 3.14\n");
+    }
+
+    #[test]
+    fn csv_output() {
+        let (mut w, buf) = collect_output(ColumnFormat::Csv, &["x", "y"]);
+        w.write_row(&[&1, &format_args!("{:.2}", 3.14)]).unwrap();
+        let bytes = buf.lock().unwrap();
+        assert_eq!(String::from_utf8_lossy(&bytes), "x,y\n1,3.14\n");
+    }
 }
 
 /// Calculate center of mass of a collection of points with masses.

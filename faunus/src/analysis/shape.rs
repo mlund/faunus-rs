@@ -19,6 +19,7 @@
 //! averages in YAML output.
 
 use super::{Analyze, Frequency};
+use crate::auxiliary::ColumnWriter;
 use crate::cell::BoundaryConditions;
 use crate::geometry::GyrationTensor;
 use crate::particle::PointParticle;
@@ -28,7 +29,6 @@ use anyhow::Result;
 use average::{Estimate, Mean};
 use derive_more::Debug;
 use serde::{Deserialize, Serialize};
-use std::io::Write;
 use std::path::PathBuf;
 
 /// YAML builder for [`ShapeAnalysis`].
@@ -61,9 +61,10 @@ impl ShapeAnalysisBuilder {
                     group_indices.len()
                 );
             }
-            let mut stream = crate::auxiliary::open_compressed(path)?;
-            writeln!(stream, "# step Rg Sxx Sxy Sxz Syy Syz Szz")?;
-            Some(stream)
+            Some(ColumnWriter::open(
+                path,
+                &["step", "Rg", "Sxx", "Sxy", "Sxz", "Syy", "Syz", "Szz"],
+            )?)
         } else {
             None
         };
@@ -92,7 +93,7 @@ impl ShapeAnalysisBuilder {
 pub struct ShapeAnalysis {
     selection: Selection,
     #[debug(skip)]
-    stream: Option<Box<dyn Write + Send>>,
+    stream: Option<ColumnWriter>,
     frequency: Frequency,
     num_samples: usize,
     gyration_radius_squared: Mean,
@@ -229,18 +230,17 @@ impl<T: Context> Analyze<T> for ShapeAnalysis {
 
             if let Some(ref mut stream) = self.stream {
                 let s = &result.tensor;
-                writeln!(
-                    stream,
-                    "{} {:.6} {:.6} {:.6} {:.6} {:.6} {:.6} {:.6}",
-                    step,
-                    result.rg_squared.sqrt(),
-                    s[(0, 0)],
-                    s[(0, 1)],
-                    s[(0, 2)],
-                    s[(1, 1)],
-                    s[(1, 2)],
-                    s[(2, 2)]
-                )?;
+                let rg = result.rg_squared.sqrt();
+                stream.write_row(&[
+                    &step,
+                    &format_args!("{rg:.6}"),
+                    &format_args!("{:.6}", s[(0, 0)]),
+                    &format_args!("{:.6}", s[(0, 1)]),
+                    &format_args!("{:.6}", s[(0, 2)]),
+                    &format_args!("{:.6}", s[(1, 1)]),
+                    &format_args!("{:.6}", s[(1, 2)]),
+                    &format_args!("{:.6}", s[(2, 2)]),
+                ])?;
             }
 
             self.num_samples += 1;
