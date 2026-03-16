@@ -2,7 +2,30 @@
 
 Analysis objects sample the system at a given frequency during a simulation
 and optionally write results to output files.
-They are defined in the `analysis` section of the YAML input.
+They are defined in the `analysis` section of the YAML input:
+
+```yaml
+analysis:
+  - !Energy
+    file: energy.csv.gz
+    frequency: !Every 100
+  - !RadialDistribution
+    selections: ["atomtype Na", "atomtype Cl"]
+    file: rdf.dat
+    dr: 0.1
+    frequency: !End
+```
+
+### Sampling frequency
+
+Each analysis requires a `frequency` field controlling when it is evaluated.
+
+Frequency         | Description
+----------------- | -------------------------------------------
+`!Every N`        | Every N steps
+`!Once N`         | Once at step N
+`!End`            | Once after the last step
+`!Probability P`  | Each step with probability P (0–1)
 
 ### Output file formats
 
