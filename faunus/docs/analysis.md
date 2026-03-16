@@ -34,10 +34,10 @@ The column-data format is inferred from the file extension:
 Extension     | Format
 ------------- | -------------------------------------------
 `.dat`        | Space-separated; header prefixed with `# `
-`.csv`        | Comma-separated; plain header row (column labels)
+`.csv`/`.tsv` | Comma/Tab-separated; plain header row (column labels)
 
 Both formats support transparent gzip compression by appending `.gz`
-(e.g. `energy.dat.gz`, `rdf.csv.gz`).
+(e.g. `energy.dat.gz`).
 
 Loading CSV output in Python:
 

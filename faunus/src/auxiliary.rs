@@ -41,6 +41,8 @@ pub enum ColumnFormat {
     Whitespace,
     /// Comma-separated, plain header row (`.csv`).
     Csv,
+    /// Tab-separated, plain header row (`.tsv`).
+    Tsv,
 }
 
 impl ColumnFormat {
@@ -53,21 +55,23 @@ impl ColumnFormat {
         };
         match stem.and_then(|p| p.extension()).and_then(|e| e.to_str()) {
             Some("csv") => Self::Csv,
+            Some("tsv") => Self::Tsv,
             _ => Self::Whitespace,
         }
     }
 
-    fn separator(self) -> &'static str {
+    const fn separator(self) -> &'static str {
         match self {
             Self::Whitespace => " ",
             Self::Csv => ",",
+            Self::Tsv => "\t",
         }
     }
 
-    fn comment_prefix(self) -> &'static str {
+    const fn comment_prefix(self) -> &'static str {
         match self {
             Self::Whitespace => "# ",
-            Self::Csv => "",
+            Self::Csv | Self::Tsv => "",
         }
     }
 }
