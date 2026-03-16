@@ -65,9 +65,8 @@ molecules:
 | Key                   | Required | Default | Description                                      |
 |-----------------------|----------|---------|--------------------------------------------------|
 | `name`                | yes      |         | Unique molecule type name                        |
-| `atoms`               | no       | `[]`    | List of atom type names                          |
-| `from_structure`      | no       |         | Load atoms from a structure file (XYZ, PDB, etc.)|
-| `fasta`               | no       |         | Build from FASTA sequence (see below)            |
+| `atoms`               | no       | `[]`    | List of atom type names (omit if using `from_structure`) |
+| `from_structure`      | no       |         | Structure source: file path, inline positions, or FASTA (see below) |
 | `bonds`               | no       | `[]`    | Intramolecular bonds                             |
 | `torsions`            | no       | `[]`    | Three-body angle potentials                      |
 | `dihedrals`           | no       | `[]`    | Four-body dihedral potentials                    |
@@ -83,28 +82,44 @@ molecules:
 | `atomic`              | no       | `false` | Pool all instances into a single group (see below)|
 | `custom`              | no       | `{}`    | Arbitrary key-value properties                   |
 
-### FASTA Sequence
+### Structure Sources (`from_structure`)
 
-Linear, flexible peptides can be built from a [FASTA](https://doi.org/10.1073/pnas.85.8.2444) sequence string.
+The `from_structure` field accepts three formats:
+
+**File path** — load atom names and reference positions from a structure file (XYZ, PDB, etc.):
+```yaml
+molecules:
+  - name: MOL1
+    from_structure: "cppm-p18.xyz"
+```
+
+**Inline positions** — define atoms and coordinates directly (one atom per entry):
+```yaml
+molecules:
+  - name: water
+    from_structure:
+      - OW: [0.0, 0.0, 0.0]
+      - HW: [0.58, 0.76, 0.0]
+      - HW: [-0.58, 0.76, 0.0]
+```
+
+**FASTA sequence** — build a linear peptide from a
+[FASTA](https://doi.org/10.1073/pnas.85.8.2444) sequence with harmonic bonds
+(provides atom names and bonds, but no reference positions — use `!RandomWalk` for insertion):
+```yaml
+molecules:
+  - name: peptide
+    from_structure: {sequence: "nAGGKRc", k: 80.33, req: 3.8}
+    excluded_neighbours: 1
+```
+
 Each letter is mapped to a three-letter atom type name following
 [IUPAC-IUB conventions](https://doi.org/10.1111/j.1432-1033.1984.tb07877.x),
 and consecutive residues are connected by harmonic bonds.
 The atom types must be defined in the `atoms` section (or an included force field file).
 
-```yaml
-molecules:
-  - name: peptide
-    fasta:
-      sequence: "nAGGKRc"
-      k: 80.33       # harmonic bond force constant (kJ/mol/Å²)
-      req: 3.8       # equilibrium bond distance (Å)
-    excluded_neighbours: 1
-```
-
-Uppercase letters follow the standard
-[IUPAC one-letter codes](https://doi.org/10.1111/j.1432-1033.1984.tb07877.x)
-for the 20 amino acids.
-In addition, the following Faunus-specific lowercase codes are supported:
+Uppercase letters follow the standard one-letter codes for the 20 amino acids.
+Additional lowercase codes:
 
 | FASTA letter | Atom type | Description |
 |:------------:|-----------|-------------|
@@ -113,7 +128,6 @@ In addition, the following Faunus-specific lowercase codes are supported:
 | `a`          | ANK       | Ankyrin repeat |
 
 Whitespace in the sequence is ignored and `*` terminates parsing.
-The `fasta` field is mutually exclusive with `atoms` and `from_structure`.
 
 If `sequence` ends with `.fasta`, it is read as a [FASTA file](https://doi.org/10.1073/pnas.85.8.2444)
 where header lines (`>`) and comment lines (`;`) are skipped:
@@ -121,7 +135,7 @@ where header lines (`>`) and comment lines (`;`) are skipped:
 ```yaml
 molecules:
   - name: my_protein
-    fasta: {sequence: "my_protein.fasta", k: 80.33, req: 3.8}
+    from_structure: {sequence: "my_protein.fasta", k: 80.33, req: 3.8}
 ```
 
 For the [CALVADOS](https://doi.org/10.1073/pnas.2111696119) coarse-grained model,
@@ -131,7 +145,7 @@ use `k: 80.33` and `req: 3.8` together with the `calvados3.yaml` force field:
 include: [calvados3.yaml]
 molecules:
   - name: histatin5
-    fasta: {sequence: "DSHAKRHHGYKRKFHEKHHSHRGY", k: 80.33, req: 3.8}
+    from_structure: {sequence: "DSHAKRHHGYKRKFHEKHHSHRGY", k: 80.33, req: 3.8}
     excluded_neighbours: 1
 system:
   cell: !Cuboid [200.0, 200.0, 200.0]
@@ -274,7 +288,7 @@ system:
   cell: !Cuboid [30.0, 30.0, 30.0]
 
   blocks:
-    - {molecule: water, N: 256, insert: !RandomCOM {filename: water.xyz, rotate: true}}
+    - {molecule: water, N: 256, insert: !RandomCOM {rotate: true}}
     - {molecule: Na, N: 10, insert: !RandomAtomPos {}}
 ```
 
@@ -314,15 +328,16 @@ Blocks specify how many copies of each molecule to create and how to initialize 
 
 | Policy           | Example                                              | Description                                    |
 |------------------|------------------------------------------------------|------------------------------------------------|
-| `!RandomCOM`     | `{filename: mol.xyz, rotate: true, min_distance: 2.0}` | Random center-of-mass placement              |
+| `!RandomCOM`     | `{rotate: true, min_distance: 2.0}`                  | Random center-of-mass placement                |
 | `!RandomAtomPos` | `{directions: xy}`                                   | Random position per atom                       |
-| `!FixedCOM`      | `{filename: mol.xyz, position: [0, 0, 0]}`           | Place at specific position                     |
+| `!FixedCOM`      | `{position: [0, 0, 0]}`                              | Place at specific position                     |
 | `!FromFile`      | `structure.xyz`                                      | Read all positions from file                   |
 | `!Manual`        | `[[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]`                | Explicit coordinates for all atoms             |
 | `!RandomWalk`    | `{bond_length: 3.8}`                                 | Self-avoiding walk; respects cell boundaries   |
-| `!GridCOM`       | `{filename: mol.xyz, rotate: true}`                  | Simple cubic grid; cuboidal cells only         |
+| `!GridCOM`       | `{rotate: true}`                                     | Simple cubic grid; cuboidal cells only         |
 
 The `directions` field controls which axes are randomized: `xyz` (default), `xy`, `xz`, `yz`, `x`, `y`, or `z`.
+`!RandomCOM`, `!FixedCOM`, and `!GridCOM` use reference positions from the molecule's `from_structure` field.
 The optional `min_distance` field (Å) in `!RandomCOM` uses bounding sphere rejection to avoid molecular overlaps in dense systems.
 `!GridCOM` places molecules on a simple cubic lattice with auto-calculated spacing; requires `!Cuboid` or `!Slit` cells.
 

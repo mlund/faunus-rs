@@ -812,10 +812,6 @@ mod tests {
             50,
             BlockActivationStatus::Partial(30),
             Some(&InsertionPolicy::RandomCOM {
-                filename: InputPath::new(
-                    "mol2.xyz".to_owned().into(),
-                    "tests/files/topology_pass.yaml",
-                ),
                 rotate: false,
                 directions: Dimension::default(),
                 offset: None,
@@ -830,10 +826,6 @@ mod tests {
             6,
             BlockActivationStatus::All,
             Some(&InsertionPolicy::RandomCOM {
-                filename: InputPath::new(
-                    "mol2.xyz".to_owned().into(),
-                    "tests/files/topology_pass.yaml",
-                ),
                 rotate: true,
                 directions: Dimension::X,
                 offset: None,

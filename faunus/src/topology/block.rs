@@ -19,8 +19,7 @@
 use std::iter::zip;
 use std::{cmp::Ordering, path::Path};
 
-use super::structure;
-use super::{molecule::MoleculeKind, AtomKind, InputPath};
+use super::{molecule::MoleculeKind, structure, AtomKind, InputPath};
 use crate::dimension::Dimension;
 use crate::transform;
 use crate::{cell::SimulationCell, group::GroupSize, Context, Particle, Point, UnitQuaternion};
@@ -49,11 +48,8 @@ pub enum InsertionPolicy {
         #[serde(default)]
         directions: Dimension,
     },
-    /// Read the structure of the molecule. Then place all molecules of the block
-    /// to random positions in the simulation cell.
+    /// Place molecules at random positions using reference positions from the molecule.
     RandomCOM {
-        /// File containing the structure of the molecule.
-        filename: InputPath,
         #[serde(default)]
         /// Rotate the molecule randomly; default is false.
         rotate: bool,
@@ -66,9 +62,8 @@ pub enum InsertionPolicy {
         /// Uses rejection sampling to avoid overlaps in dense systems.
         min_distance: Option<f64>,
     },
+    /// Place a single molecule at a fixed position using reference positions from the molecule.
     FixedCOM {
-        /// File containing the structure of the molecule.
-        filename: InputPath,
         /// Mass center position.
         position: Point,
         /// Rotate the molecule randomly; default is false.
@@ -87,10 +82,9 @@ pub enum InsertionPolicy {
         /// Random directions for placing the chain center.
         directions: Dimension,
     },
-    /// Place molecules on a simple cubic grid. Requires a cuboidal cell.
+    /// Place molecules on a simple cubic grid using reference positions from the molecule.
+    /// Requires a cuboidal cell.
     GridCOM {
-        /// File containing the structure of the molecule.
-        filename: InputPath,
         #[serde(default)]
         /// Rotate each molecule randomly; default is false.
         rotate: bool,
@@ -122,7 +116,6 @@ impl InsertionPolicy {
             )),
 
             Self::RandomCOM {
-                filename,
                 rotate,
                 directions,
                 offset,
@@ -133,25 +126,14 @@ impl InsertionPolicy {
                 number,
                 cell,
                 rng,
-                filename,
                 *rotate,
                 directions,
                 offset,
                 *min_distance,
             ),
-            Self::FixedCOM {
-                filename,
-                position,
-                rotate,
-            } => Self::generate_fixed_com(
-                molecule_kind,
-                atoms,
-                number,
-                cell,
-                filename,
-                *rotate,
-                position,
-            ),
+            Self::FixedCOM { position, rotate } => {
+                Self::generate_fixed_com(molecule_kind, atoms, number, cell, *rotate, position)
+            }
 
             Self::Manual(positions) => Ok((
                 positions.to_owned(),
@@ -173,46 +155,36 @@ impl InsertionPolicy {
                 Ok((pos, vec![UnitQuaternion::identity(); number]))
             }
 
-            Self::GridCOM { filename, rotate } => {
-                Self::generate_grid_com(molecule_kind, atoms, number, cell, rng, filename, *rotate)
+            Self::GridCOM { rotate } => {
+                Self::generate_grid_com(molecule_kind, atoms, number, cell, rng, *rotate)
             }
         }
     }
 
-    /// Read molecule positions from file and translate COM to origin (0,0,0)
-    fn load_positions_to_origin(
-        filename: &InputPath,
+    /// Center molecule's reference positions at the origin (COM = 0).
+    fn centered_reference_positions(
         molecule_kind: &MoleculeKind,
         atoms: &[AtomKind],
-        cell: Option<&impl SimulationCell>,
-    ) -> anyhow::Result<Vec<Point>> {
-        // read coordinates of the molecule from input file
-        let mut ref_positions =
-            structure::positions_from_structure_file(filename.path().unwrap(), cell)?;
-
-        // get the center of mass of the molecule
+    ) -> Vec<Point> {
+        let mut positions = molecule_kind.reference_positions().to_vec();
         let com = crate::auxiliary::mass_center(
-            &ref_positions,
+            &positions,
             &molecule_kind
                 .atom_indices()
                 .iter()
                 .map(|index| atoms[*index].mass())
                 .collect::<Vec<_>>(),
         );
-
-        // get positions relative to the center of mass
-        ref_positions.iter_mut().for_each(|pos| *pos -= com);
-        Ok(ref_positions)
+        positions.iter_mut().for_each(|pos| *pos -= com);
+        positions
     }
 
     /// Generate positions using the insertion policy FixedCOM.
-    #[allow(clippy::too_many_arguments)]
     fn generate_fixed_com(
         molecule_kind: &MoleculeKind,
         atoms: &[AtomKind],
         num_molecules: usize,
         cell: &impl SimulationCell,
-        filename: &InputPath,
         rotate: bool,
         position: &Point,
     ) -> anyhow::Result<(Vec<Point>, Vec<UnitQuaternion>)> {
@@ -225,7 +197,6 @@ impl InsertionPolicy {
             num_molecules,
             cell,
             &mut rand::thread_rng(),
-            filename,
             rotate,
             &Dimension::None, // no random directions
             &Some(*position),
@@ -245,7 +216,6 @@ impl InsertionPolicy {
         num_molecules: usize,
         cell: &impl SimulationCell,
         rng: &mut ThreadRng,
-        filename: &InputPath,
         rotate: bool,
         directions: &Dimension,
         offset: &Option<Point>,
@@ -253,8 +223,7 @@ impl InsertionPolicy {
     ) -> anyhow::Result<(Vec<Point>, Vec<UnitQuaternion>)> {
         const MAX_ATTEMPTS: usize = 1_000_000;
 
-        let centered_positions =
-            Self::load_positions_to_origin(filename, molecule_kind, atoms, Some(cell))?;
+        let centered_positions = Self::centered_reference_positions(molecule_kind, atoms);
 
         let bounding_radius = centered_positions
             .iter()
@@ -351,15 +320,13 @@ impl InsertionPolicy {
         num_molecules: usize,
         cell: &impl SimulationCell,
         rng: &mut ThreadRng,
-        filename: &InputPath,
         rotate: bool,
     ) -> anyhow::Result<(Vec<Point>, Vec<UnitQuaternion>)> {
         let box_lengths = cell
             .bounding_box()
             .ok_or_else(|| anyhow::anyhow!("GridCOM requires a cell with a bounding box"))?;
 
-        let centered_positions =
-            Self::load_positions_to_origin(filename, molecule_kind, atoms, Some(cell))?;
+        let centered_positions = Self::centered_reference_positions(molecule_kind, atoms);
 
         let n_per_axis = (num_molecules as f64).cbrt().ceil() as usize;
         let spacing = Point::new(
@@ -449,12 +416,8 @@ impl InsertionPolicy {
     /// Finalize path to the provided structure file (if it is provided) treating it either as an absolute path
     /// (if it is absolute) or as a path relative to `filename`.
     pub(super) fn finalize_path(&mut self, filename: impl AsRef<Path>) {
-        match self {
-            Self::FromFile(x) => x.finalize(filename),
-            Self::RandomCOM { filename: x, .. } => x.finalize(filename),
-            Self::FixedCOM { filename: x, .. } => x.finalize(filename),
-            Self::GridCOM { filename: x, .. } => x.finalize(filename),
-            Self::RandomAtomPos { .. } | Self::Manual(_) | Self::RandomWalk { .. } => (),
+        if let Self::FromFile(x) = self {
+            x.finalize(filename);
         }
     }
 }

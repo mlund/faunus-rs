@@ -12,7 +12,7 @@ atoms:
 
 molecules:
   - name: water
-    atoms: [OW, HW, HW]
+    from_structure: "water.xyz"
     exclusions: [[0, 1], [0, 2], [1, 2]]
     has_com: true
 
@@ -26,10 +26,7 @@ system:
     - molecule: water
       N: 128
       insert:
-        !RandomCOM {
-          filename: "water.xyz",
-          rotate: true,
-        }
+        !RandomCOM { rotate: true }
 
   energy:
     nonbonded:

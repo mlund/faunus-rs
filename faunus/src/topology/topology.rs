@@ -289,10 +289,7 @@ impl Topology {
     /// set indices of atom kinds forming each molecule.
     pub fn finalize_molecules(&mut self) -> anyhow::Result<()> {
         for (i, molecule) in self.moleculekinds.iter_mut().enumerate() {
-            molecule.expand_fasta()?;
-            if molecule.atom_names().is_empty() {
-                molecule.set_names_from_structure()?;
-            }
+            molecule.expand_structure()?;
             if molecule.atom_names().is_empty() {
                 molecule.empty_atom_names();
             }
@@ -349,6 +346,24 @@ impl Topology {
                 if positions.len() != block.num_atoms(&self.moleculekinds) {
                     anyhow::bail!(
                         "the number of manually provided positions does not match the number of atoms",
+                    );
+                }
+            }
+
+            // COM-based policies require the molecule to have reference positions
+            if matches!(
+                block.insert_policy(),
+                Some(
+                    InsertionPolicy::RandomCOM { .. }
+                        | InsertionPolicy::FixedCOM { .. }
+                        | InsertionPolicy::GridCOM { .. }
+                )
+            ) {
+                let mol = &self.moleculekinds[index];
+                if mol.reference_positions().is_empty() {
+                    anyhow::bail!(
+                        "molecule '{}' needs `from_structure` with positions for COM-based insertion",
+                        mol.name()
                     );
                 }
             }

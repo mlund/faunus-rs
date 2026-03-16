@@ -80,7 +80,6 @@ system:
       N: 20
       insert:
         !RandomCOM {
-          filename: "../twobody/cppm-p18.xyz",
           rotate: true,
         }
     - molecule: Chain20

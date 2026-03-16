@@ -12,7 +12,6 @@ blocks:
   N: 8
   active: null
   insert: !RandomCOM
-    filename: polymer.xyz
     rotate: true
     directions: xyz
     offset: null

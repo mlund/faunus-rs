@@ -21,10 +21,23 @@ use serde::{Deserialize, Serialize};
 use unordered_pair::UnorderedPair;
 
 use crate::topology::{Chain, DegreesOfFreedom, Residue, Value};
+use crate::Point;
 use validator::{Validate, ValidationError};
 
 use super::bond::BondKind;
 use super::{Bond, BondGraph, CustomProperty, Dihedral, IndexRange, Indexed, Torsion};
+
+/// Source of molecular structure: atom names, reference positions, and/or bonds.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(untagged)]
+enum StructureSource {
+    /// Path to a structure file (xyz, pdb, etc.)
+    File(PathBuf),
+    /// Inline list of named positions, e.g. `[{OW: [0,0,0]}, {HW: [1,0,0]}]`
+    Inline(Vec<HashMap<String, Point>>),
+    /// FASTA sequence with harmonic bond parameters
+    Fasta(FastaStructure),
+}
 
 /// FASTA sequence with harmonic bond parameters for building linear, flexible peptides.
 ///
@@ -128,24 +141,26 @@ pub struct MoleculeKind {
     /// Map of custom properties.
     #[serde(default)]
     custom: HashMap<String, Value>,
-    /// Construct molecule from existing structure file (xyz, pdb, etc.)
+    /// Source of molecular structure: file path, inline positions, or FASTA sequence.
     #[serde(default)]
     #[builder(setter(strip_option, custom), default)]
-    from_structure: Option<PathBuf>,
-    /// Build linear peptide from FASTA sequence with automatic harmonic bonds.
-    #[serde(default)]
-    #[builder(setter(strip_option), default)]
-    fasta: Option<FastaStructure>,
+    from_structure: Option<StructureSource>,
+    /// Reference positions extracted from `from_structure` during finalization.
+    #[serde(skip)]
+    #[builder(default)]
+    #[getter(skip)]
+    reference_positions: Vec<Point>,
 }
 
 impl MoleculeKindBuilder {
-    /// Populate `atoms` from structure file.
+    /// Populate `atoms` and `reference_positions` from structure file.
     ///
     /// # Panics
     /// Panics if the file doesn't exist or is of unknown format.
     pub fn from_structure(&mut self, filename: impl AsRef<Path>) -> &mut Self {
         let data = super::io::read_structure(&filename).unwrap();
         log::debug!("Loaded {} atoms from structure file", data.names.len());
+        self.reference_positions = Some(data.positions);
         self.atoms(data.names)
     }
 }
@@ -211,62 +226,79 @@ impl MoleculeKind {
         &self.bond_graph
     }
 
-    /// Set atom names from optional structure file.
-    ///
-    /// Returns error if file is specified and cannot be loaded.
-    pub fn set_names_from_structure(&mut self) -> anyhow::Result<()> {
-        if let Some(filename) = &self.from_structure {
-            let data = super::io::read_structure(filename)?;
-            self.atoms = data.names;
-            log::debug!(
-                "Set {} atom names from {}",
-                self.atoms.len(),
-                filename.display()
-            );
-        }
-        Ok(())
+    /// Reference positions from `from_structure` (file or inline), COM-unshifted.
+    pub fn reference_positions(&self) -> &[Point] {
+        &self.reference_positions
     }
 
-    /// Expand FASTA sequence into atom names and harmonic bonds.
+    /// Expand `from_structure` into atom names, reference positions, and/or bonds.
     ///
-    /// If `sequence` ends with `.fasta`, it is treated as a file path and the
-    /// sequence is read from the file (headers and comments are skipped).
-    /// Otherwise it is parsed as an inline FASTA string.
-    ///
-    /// Each letter is converted to a three-letter residue name (atom type).
-    /// Consecutive residues are connected by harmonic bonds with the given `k` and `req`.
-    pub(crate) fn expand_fasta(&mut self) -> anyhow::Result<()> {
-        if let Some(fasta) = &self.fasta {
-            let path = std::path::Path::new(&fasta.sequence);
-            let names = if path
-                .extension()
-                .is_some_and(|e| e.eq_ignore_ascii_case("fasta"))
-            {
-                log::info!("Reading FASTA sequence from '{}'", path.display());
-                let file_sequence = super::residue::read_fasta_file(path)?;
-                super::residue::fasta_to_residue_names(&file_sequence)?
-            } else {
-                super::residue::fasta_to_residue_names(&fasta.sequence)?
-            };
-            if names.is_empty() {
-                anyhow::bail!("molecule '{}': FASTA sequence is empty", self.name);
+    /// - `File`: reads atom names and positions from a structure file.
+    /// - `Inline`: extracts atom names and positions from inline entries.
+    /// - `Fasta`: expands a FASTA sequence into atom names and harmonic bonds.
+    pub(crate) fn expand_structure(&mut self) -> anyhow::Result<()> {
+        let source = match self.from_structure.take() {
+            Some(s) => s,
+            None => return Ok(()),
+        };
+        match source {
+            StructureSource::File(path) => {
+                let data = super::io::read_structure(&path)?;
+                self.atoms = data.names;
+                self.reference_positions = data.positions;
+                log::debug!("Set {} atoms from {}", self.atoms.len(), path.display());
             }
-            let harmonic = interatomic::twobody::Harmonic::new(fasta.k, fasta.req);
-            let bond_kind = BondKind::Harmonic(harmonic);
-            for i in 1..names.len() {
-                self.bonds
-                    .push(Bond::new([i - 1, i], bond_kind.clone(), Default::default()));
+            StructureSource::Inline(entries) => {
+                for mut entry in entries {
+                    anyhow::ensure!(
+                        entry.len() == 1,
+                        "molecule '{}': each inline position entry must have exactly one atom",
+                        self.name
+                    );
+                    let (name, pos) = entry.drain().next().expect("validated len == 1");
+                    self.atoms.push(name);
+                    self.reference_positions.push(pos);
+                }
+                log::debug!("Set {} atoms from inline positions", self.atoms.len());
             }
-            self.atoms = names.into_iter().map(String::from).collect();
-            log::debug!(
-                "FASTA expanded '{}' into {} atoms and {} bonds",
-                self.name,
-                self.atoms.len(),
-                self.bonds.len()
-            );
-            // Clear fasta so post-expansion validation doesn't reject the populated atoms
-            self.fasta = None;
+            StructureSource::Fasta(fasta) => {
+                let path = std::path::Path::new(&fasta.sequence);
+                let names = if path
+                    .extension()
+                    .is_some_and(|e| e.eq_ignore_ascii_case("fasta"))
+                {
+                    log::info!("Reading FASTA sequence from '{}'", path.display());
+                    let file_sequence = super::residue::read_fasta_file(path)?;
+                    super::residue::fasta_to_residue_names(&file_sequence)?
+                } else {
+                    super::residue::fasta_to_residue_names(&fasta.sequence)?
+                };
+                if names.is_empty() {
+                    anyhow::bail!("molecule '{}': FASTA sequence is empty", self.name);
+                }
+                let harmonic = interatomic::twobody::Harmonic::new(fasta.k, fasta.req);
+                let bond_kind = BondKind::Harmonic(harmonic);
+                for i in 1..names.len() {
+                    self.bonds
+                        .push(Bond::new([i - 1, i], bond_kind.clone(), Default::default()));
+                }
+                self.atoms = names.into_iter().map(String::from).collect();
+                log::debug!(
+                    "FASTA expanded '{}' into {} atoms and {} bonds",
+                    self.name,
+                    self.atoms.len(),
+                    self.bonds.len()
+                );
+            }
         }
+        anyhow::ensure!(
+            self.reference_positions.is_empty()
+                || self.reference_positions.len() == self.atoms.len(),
+            "molecule '{}': {} reference positions but {} atoms",
+            self.name,
+            self.reference_positions.len(),
+            self.atoms.len()
+        );
         Ok(())
     }
 
@@ -318,16 +350,6 @@ impl MoleculeKind {
 }
 
 fn validate_molecule(molecule: &MoleculeKind) -> Result<(), ValidationError> {
-    // fasta is mutually exclusive with from_structure and atoms
-    if molecule.fasta.is_some() && molecule.from_structure.is_some() {
-        return Err(ValidationError::new("")
-            .with_message("`fasta` and `from_structure` are mutually exclusive".into()));
-    }
-    if molecule.fasta.is_some() && !molecule.atoms.is_empty() {
-        return Err(ValidationError::new("")
-            .with_message("`fasta` and `atoms` are mutually exclusive".into()));
-    }
-
     let n_atoms = molecule.atoms.len();
 
     // bonds must only exist between defined atoms
@@ -597,40 +619,18 @@ mod tests {
 
     #[test]
     fn fasta_expands_atoms_and_bonds() {
-        let mut molecule = MoleculeKindBuilder::default()
-            .name("peptide")
-            .fasta(FastaStructure {
-                sequence: "nAGKc".to_string(),
-                k: 80.33,
-                req: 3.8,
-            })
-            .build()
-            .unwrap();
-
-        molecule.expand_fasta().unwrap();
+        let yaml = r#"
+            name: peptide
+            from_structure: {sequence: "nAGKc", k: 80.33, req: 3.8}
+        "#;
+        let mut molecule: MoleculeKind = serde_yaml::from_str(yaml).unwrap();
+        molecule.expand_structure().unwrap();
 
         assert_eq!(molecule.atoms, ["NTR", "ALA", "GLY", "LYS", "CTR"]);
         assert_eq!(molecule.bonds.len(), 4);
-        // verify bond indices are sequential
         for (i, bond) in molecule.bonds.iter().enumerate() {
             assert_eq!(*bond.index(), [i, i + 1]);
         }
-    }
-
-    #[test]
-    fn fasta_rejects_with_atoms() {
-        let molecule = MoleculeKindBuilder::default()
-            .name("bad")
-            .atoms(vec!["ALA".into()])
-            .fasta(FastaStructure {
-                sequence: "AG".to_string(),
-                k: 1.0,
-                req: 1.0,
-            })
-            .build()
-            .unwrap();
-
-        assert!(molecule.validate().is_err());
     }
 
     #[test]
@@ -690,5 +690,22 @@ mod tests {
             molecule.atoms.as_slice(),
             ["OW".to_owned(), "OW".to_owned(), "X".to_owned()]
         );
+        assert_eq!(molecule.reference_positions.len(), 3);
+    }
+
+    #[test]
+    fn inline_structure_expands() {
+        let yaml = r#"
+            name: water
+            from_structure:
+              - OW: [0.0, 0.0, 0.0]
+              - HW: [0.58, 0.76, 0.0]
+              - HW: [-0.58, 0.76, 0.0]
+        "#;
+        let mut molecule: MoleculeKind = serde_yaml::from_str(yaml).unwrap();
+        molecule.expand_structure().unwrap();
+
+        assert_eq!(molecule.atoms, ["OW", "HW", "HW"]);
+        assert_eq!(molecule.reference_positions.len(), 3);
     }
 }

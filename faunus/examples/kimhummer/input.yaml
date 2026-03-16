@@ -25,7 +25,6 @@ system:
       N: 1
       insert:
         !RandomCOM {
-          filename: "../calvados3/4lzt.xyz",
           rotate: true,
           directions: none,
           offset: [0.0, 0.0, 0.0],
@@ -34,7 +33,6 @@ system:
       N: 1
       insert:
         !RandomCOM {
-          filename: "../calvados3/4lzt.xyz",
           rotate: true,
           directions: none,
           offset: [0.0, 0.0, 40.0],

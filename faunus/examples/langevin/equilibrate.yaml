@@ -31,7 +31,7 @@ system:
     - molecule: CPPM
       N: 20
       insert:
-        !RandomCOM { filename: "../twobody/cppm-p18.xyz", rotate: true }
+        !RandomCOM { rotate: true }
   energy:
     nonbonded:
       default:

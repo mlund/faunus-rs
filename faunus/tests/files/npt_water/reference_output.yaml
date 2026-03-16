@@ -7,7 +7,6 @@ blocks:
   N: 128
   active: null
   insert: !RandomCOM
-    filename: water.xyz
     rotate: true
     directions: xyz
     offset: null

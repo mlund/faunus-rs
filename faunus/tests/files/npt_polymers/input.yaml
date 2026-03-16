@@ -12,7 +12,7 @@ molecules:
   - name: counterion
     atoms: [Cl]
   - name: polymer
-    atoms: [MM, MM, MM, MM]
+    from_structure: "polymer.xyz"
     bonds:
       - {index: [0, 1], kind: !Harmonic {k: 0.27583, req: 0.0}}
       - {index: [1, 2], kind: !Harmonic {k: 0.27583, req: 0.0}}
@@ -32,10 +32,7 @@ system:
     - molecule: polymer
       N: 8
       insert:
-        !RandomCOM {
-          filename: "polymer.xyz",
-          rotate: true,
-        }
+        !RandomCOM { rotate: true }
 
   energy:
     nonbonded:

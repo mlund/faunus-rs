@@ -35,7 +35,6 @@ system:
       insert:
         # Place in the middle of the box
         !RandomCOM {
-          filename: "4lzt.xyz",
           rotate: true,
           directions: none,
           offset: [0.0, 0.0, 0.0],
@@ -45,7 +44,6 @@ system:
       insert:
         # Place along z-axis
         !RandomCOM {
-          filename: "4lzt.xyz",
           rotate: true,
           directions: none,
           offset: [0.0, 0.0, 40.0],

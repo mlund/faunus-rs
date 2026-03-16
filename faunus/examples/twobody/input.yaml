@@ -50,67 +50,41 @@ system:
     - molecule: MOL1
       N: 1
       insert:
-        # Place in the middle of the box
         !RandomCOM {
-          filename: "cppm-p18.xyz",
           rotate: true,
-          directions: none,
-          offset: [0.0, 0.0, 0.0],
+          min_distance: 40.0,
+          directions: xyz,
         }
     - molecule: MOL2
-      N: 1
+      N: 2
       insert:
-        # Place along z-axis
         !RandomCOM {
-          filename: "cppm-p18.xyz",
           rotate: true,
-          directions: none,
-          offset: [0.0, 0.0, 42.0],
+          min_distance: 40.0,
+          directions: xyz,
         }
 
   energy:
-    constrain:
-      - property: mass_center_position
-        selection: "molecule MOL2"
-        dimension: z
-        range: [0.0, 100.0]
     nonbonded:
       default:
         - !Coulomb {cutoff: 2000}
         - !WeeksChandlerAndersen {mixing: LB}
-   #spline:
-   #  cutoff: 200.0
-   #  n_points: 2000
+    #spline:
+    #  cutoff: 200.0
+    #  n_points: 2000
 
 analysis:
-  - !CollectiveVariable
-    property: mass_center_separation
-    selection: "molecule MOL1"
-    selection2: "molecule MOL2"
-    file: "com_distance.dat.gz"
-    frequency: !Every 10
-  - !VirtualTranslate
-    selection: "molecule MOL2"
-    dL: -0.01 # minus to not push against hard constraints
-    directions: !z
-    file: "vt.dat.gz"
-    temperature: 298.15
-    frequency: !Every 10
   - !RadialDistribution
     selections: ["molecule MOL1", "molecule MOL2"]
     use_com: true
-    dimension: z
     file: "rdf_z.dat"
     dr: 0.5
     frequency: !Every 10
-  - !Trajectory
-    file: "traj.xtc"
-    frequency: !Every 1000
 
 propagate:
   seed: Hardware
   criterion: Metropolis
-  repeat: 500000
+  repeat: 5000000
   collections:
     - !Stochastic
       moves:
@@ -125,8 +99,12 @@ propagate:
             weight: 1.0,
           }
         - !TranslateMolecule {
-            molecule: MOL2,
-            dp: 10.0,
+            molecule: MOL1,
+            dp: 20.0,
             weight: 1.0,
-            directions: !z,
+          }
+        - !TranslateMolecule {
+            molecule: MOL2,
+            dp: 20.0,
+            weight: 1.0,
           }
