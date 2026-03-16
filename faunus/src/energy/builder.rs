@@ -67,6 +67,75 @@ pub enum DirectOrMixing<T: IsotropicTwobodyEnergy> {
     Direct(T),
 }
 
+/// Construct a potential from mixed atom parameters.
+pub(crate) trait FromMixing: IsotropicTwobodyEnergy + Clone + 'static {
+    fn from_mixing(combined: &AtomKind, cutoff: Option<f64>) -> anyhow::Result<Self>;
+}
+
+impl FromMixing for KimHummer {
+    fn from_mixing(combined: &AtomKind, _cutoff: Option<f64>) -> anyhow::Result<Self> {
+        Ok(Self::new(
+            combined.epsilon().context("Epsilons not defined!")?,
+            combined.sigma().context("Sigmas not defined!")?,
+        ))
+    }
+}
+
+impl FromMixing for LennardJones {
+    fn from_mixing(combined: &AtomKind, _cutoff: Option<f64>) -> anyhow::Result<Self> {
+        Ok(Self::new(
+            combined.epsilon().context("Epsilons not defined!")?,
+            combined.sigma().context("Sigmas not defined!")?,
+        ))
+    }
+}
+
+impl FromMixing for WeeksChandlerAndersen {
+    fn from_mixing(combined: &AtomKind, _cutoff: Option<f64>) -> anyhow::Result<Self> {
+        Ok(Self::new(
+            combined.epsilon().context("Epsilons not defined!")?,
+            combined.sigma().context("Sigmas not defined!")?,
+        ))
+    }
+}
+
+impl FromMixing for HardSphere {
+    fn from_mixing(combined: &AtomKind, _cutoff: Option<f64>) -> anyhow::Result<Self> {
+        Ok(Self::new(combined.sigma().context("Sigmas not defined!")?))
+    }
+}
+
+impl FromMixing for AshbaughHatch {
+    fn from_mixing(combined: &AtomKind, cutoff: Option<f64>) -> anyhow::Result<Self> {
+        let lj = LennardJones::new(
+            combined.epsilon().context("Epsilons not defined!")?,
+            combined.sigma().context("Sigmas not defined!")?,
+        );
+        Ok(Self::new(
+            lj,
+            combined.lambda().context("No lambda defined!")?,
+            cutoff.context("Cutoff undefined!")?,
+        ))
+    }
+}
+
+impl<T: FromMixing> DirectOrMixing<T> {
+    /// Convert to a boxed trait object, applying mixing rules if needed.
+    fn to_boxed(
+        &self,
+        atom1: &AtomKind,
+        atom2: &AtomKind,
+    ) -> anyhow::Result<Box<dyn IsotropicTwobodyEnergy>> {
+        match self {
+            Self::Direct(inner) => Ok(Box::new(inner.clone())),
+            Self::Mixing { mixing, cutoff, .. } => {
+                let combined = AtomKind::combine(*mixing, atom1, atom2);
+                Ok(Box::new(T::from_mixing(&combined, *cutoff)?))
+            }
+        }
+    }
+}
+
 /// Types of pair interactions
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 #[serde(deny_unknown_fields)]
@@ -128,82 +197,11 @@ impl PairInteraction {
         let charge_product = mixed.charge();
 
         match self {
-            Self::KimHummer(x) => match x {
-                DirectOrMixing::Direct(inner) => Ok(Box::new(inner.clone())),
-                DirectOrMixing::Mixing {
-                    mixing: rule,
-                    cutoff: _,
-                    _phantom: _,
-                } => {
-                    let combined = AtomKind::combine(*rule, atom1, atom2);
-                    Ok(Box::new(KimHummer::new(
-                        combined.epsilon().context("Epsilons not defined!")?,
-                        combined.sigma().context("Sigmas not defined!")?,
-                    )))
-                }
-            },
-            Self::LennardJones(x) => match x {
-                DirectOrMixing::Direct(inner) => Ok(Box::new(inner.clone())),
-                DirectOrMixing::Mixing {
-                    mixing: rule,
-                    cutoff: _,
-                    _phantom: _,
-                } => {
-                    let combined = AtomKind::combine(*rule, atom1, atom2);
-                    Ok(Box::new(LennardJones::new(
-                        combined.epsilon().context("Epsilons not defined!")?,
-                        combined.sigma().context("Sigmas not defined!")?,
-                    )))
-                }
-            },
-            Self::WeeksChandlerAndersen(x) => match x {
-                DirectOrMixing::Direct(inner) => Ok(Box::new(inner.clone())),
-                DirectOrMixing::Mixing {
-                    mixing: rule,
-                    cutoff: _,
-                    _phantom: _,
-                } => {
-                    let combined = AtomKind::combine(*rule, atom1, atom2);
-                    Ok(Box::new(WeeksChandlerAndersen::new(
-                        combined.epsilon().context("Epsilons not defined!")?,
-                        combined.sigma().context("Sigmas not defined!")?,
-                    )))
-                }
-            },
-            Self::AshbaughHatch(x) => match x {
-                DirectOrMixing::Direct(inner) => Ok(Box::new(inner.clone())),
-                DirectOrMixing::Mixing {
-                    mixing,
-                    cutoff,
-                    _phantom,
-                } => {
-                    let combined = AtomKind::combine(*mixing, atom1, atom2);
-                    let lj = LennardJones::new(
-                        combined.epsilon().context("Epsilons not defined!")?,
-                        combined.sigma().context("Sigmas not defined!")?,
-                    );
-                    let ah = AshbaughHatch::new(
-                        lj,
-                        combined.lambda().context("No lambda defined!")?,
-                        cutoff.context("Cutoff undefined!")?,
-                    );
-                    log::trace!("{}-{}: {}", atom1.name(), atom2.name(), ah);
-                    Ok(Box::new(ah))
-                }
-            },
-            Self::HardSphere(x) => match x {
-                DirectOrMixing::Direct(inner) => Ok(Box::new(inner.clone())),
-                DirectOrMixing::Mixing {
-                    mixing,
-                    cutoff: _,
-                    _phantom,
-                } => {
-                    let combined = AtomKind::combine(*mixing, atom1, atom2);
-                    Ok(Box::new(HardSphere::new(
-                        combined.sigma().context("Sigmas not defined!")?,
-                    )))
-                }
-            },
+            Self::KimHummer(x) => x.to_boxed(atom1, atom2),
+            Self::LennardJones(x) => x.to_boxed(atom1, atom2),
+            Self::WeeksChandlerAndersen(x) => x.to_boxed(atom1, atom2),
+            Self::AshbaughHatch(x) => x.to_boxed(atom1, atom2),
+            Self::HardSphere(x) => x.to_boxed(atom1, atom2),
             Self::CoulombPlain(scheme) => {
                 Self::make_coulomb(charge_product, medium.unwrap(), scheme.clone())
             }
