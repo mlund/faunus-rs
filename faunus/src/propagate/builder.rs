@@ -15,10 +15,28 @@
 #[cfg(feature = "gpu")]
 use super::langevin::{LangevinConfig, LangevinRunner};
 use super::{
-    moveproposal::default_repeat, moverunner::MoveRunner, MoveCollection, PropagationBlock,
+    moveproposal::default_repeat, moverunner::MoveRunner, MoveCollection, MoveProposal,
+    PropagationBlock,
 };
 use crate::{montecarlo::AcceptanceCriterion, Context};
 use serde::{Deserialize, Serialize};
+
+/// Shared contract for MC moves: all have `weight`, `repeat`, and `finalize`.
+/// Enforces at compile time what was previously an implicit field-name convention
+/// relied upon by a macro.
+pub(crate) trait BuildableMove<T: Context>:
+    MoveProposal<T> + Send + Sized + 'static
+{
+    fn finalize(&mut self, context: &T) -> anyhow::Result<()>;
+    fn weight(&self) -> f64;
+    fn repeat(&self) -> usize;
+
+    fn into_runner(mut self, context: &T) -> anyhow::Result<MoveRunner<T>> {
+        self.finalize(context)?;
+        let (w, r) = (self.weight(), self.repeat());
+        Ok(MoveRunner::new(Box::new(self), w, r))
+    }
+}
 
 /// All possible supported moves (used for YAML deserialization).
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -35,23 +53,15 @@ pub enum MoveBuilder {
 impl MoveBuilder {
     /// Finalize and validate the inner move, then wrap it in a `MoveRunner`.
     pub fn build<T: Context>(self, context: &T) -> anyhow::Result<MoveRunner<T>> {
-        macro_rules! build_move {
-            ($m:expr) => {{
-                let mut m = $m;
-                m.finalize(context)?;
-                let (w, r) = (m.weight, m.repeat);
-                MoveRunner::new(Box::new(m), w, r)
-            }};
+        match self {
+            Self::TranslateMolecule(m) => m.into_runner(context),
+            Self::TranslateAtom(m) => m.into_runner(context),
+            Self::RotateMolecule(m) => m.into_runner(context),
+            Self::VolumeMove(m) => m.into_runner(context),
+            Self::PivotMove(m) => m.into_runner(context),
+            Self::CrankshaftMove(m) => m.into_runner(context),
+            Self::SpeciationMove(m) => m.into_runner(context),
         }
-        Ok(match self {
-            Self::TranslateMolecule(m) => build_move!(m),
-            Self::TranslateAtom(m) => build_move!(m),
-            Self::RotateMolecule(m) => build_move!(m),
-            Self::VolumeMove(m) => build_move!(m),
-            Self::PivotMove(m) => build_move!(m),
-            Self::CrankshaftMove(m) => build_move!(m),
-            Self::SpeciationMove(m) => build_move!(m),
-        })
     }
 }
 

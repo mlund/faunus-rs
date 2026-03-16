@@ -92,19 +92,20 @@ impl LangevinRunner {
         &mut self,
         context: &mut T,
     ) -> anyhow::Result<()> {
-        let first_call = self.gpu.is_none();
-        if first_call {
-            self.gpu = Some(Self::init_gpu(context, &self.config)?);
-            Self::upload_full_state(context, self.gpu.as_mut().unwrap())?;
+        // Bind locally before storing to avoid unwrap() on the just-assigned Option
+        if self.gpu.is_none() {
+            let mut gpu = Self::init_gpu(context, &self.config)?;
+            Self::upload_full_state(context, &mut gpu)?;
+            self.gpu = Some(gpu);
         } else {
             Self::upload_context_state(context, self.gpu.as_mut().unwrap());
         }
-
+        // Safe: always Some after the branch above
         let gpu = self.gpu.as_mut().unwrap();
         let steps = self.config.steps;
 
         if gpu.has_gpu_forces {
-            gpu.run_steps(steps);
+            gpu.run_steps(steps)?;
         } else {
             let mut force_callback = |positions: &[[f32; 4]]| -> (Vec<[f32; 4]>, Vec<[f32; 4]>) {
                 Self::write_positions(context, positions);
@@ -115,7 +116,7 @@ impl LangevinRunner {
                 let forces = context.hamiltonian().forces(context);
                 reduce_forces_to_com(context, &forces)
             };
-            gpu.run_steps_with_cpu_forces(steps, &mut force_callback);
+            gpu.run_steps_with_cpu_forces(steps, &mut force_callback)?;
         }
 
         // LD -> MC: download positions and write back to context

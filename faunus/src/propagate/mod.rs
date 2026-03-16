@@ -22,6 +22,7 @@ mod moverunner;
 #[cfg(test)]
 mod tests;
 
+pub(crate) use builder::BuildableMove;
 pub use builder::MoveBuilder;
 #[cfg(feature = "gpu")]
 pub use langevin::{LangevinConfig, LangevinRunner};

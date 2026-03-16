@@ -44,6 +44,27 @@ pub use speciation::SpeciationMove;
 pub use translate::*;
 pub use volume::VolumeMove;
 
+/// Implement `BuildableMove` for types with `weight`, `repeat` fields and a `finalize` method.
+macro_rules! impl_buildable_move {
+    ($($ty:ty),+ $(,)?) => {$(
+        impl<T: Context> crate::propagate::BuildableMove<T> for $ty {
+            fn finalize(&mut self, context: &T) -> anyhow::Result<()> { self.finalize(context) }
+            fn weight(&self) -> f64 { self.weight }
+            fn repeat(&self) -> usize { self.repeat }
+        }
+    )+};
+}
+
+impl_buildable_move!(
+    TranslateMolecule,
+    TranslateAtom,
+    RotateMolecule,
+    VolumeMove,
+    PivotMove,
+    CrankshaftMove,
+    SpeciationMove,
+);
+
 /// Look up a molecule kind by name and return its id.
 fn find_molecule_id(
     context: &impl Context,

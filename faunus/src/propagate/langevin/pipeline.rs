@@ -441,21 +441,21 @@ impl<R: Runtime> LangevinGpu<R> {
     /// Forces, reduction, integration, and reconstruction all run on the compute
     /// device without any host readback during the integration loop.
     /// Rigid and flexible integration paths operate on disjoint atom ranges.
-    pub(super) fn run_steps(&mut self, steps: usize) {
-        assert!(self.has_gpu_forces, "on-device forces not initialized");
+    pub(super) fn run_steps(&mut self, steps: usize) -> anyhow::Result<()> {
+        anyhow::ensure!(self.has_gpu_forces, "on-device forces not initialized");
         self.log_first_step();
         let rebuild_interval = self.config.cell_list_rebuild;
 
         // Initial cell list required before first force evaluation
         self.rebuild_cell_list();
-        self.dispatch_pair_forces();
-        self.dispatch_bonded_forces();
-        self.dispatch_reduce();
+        self.dispatch_pair_forces()?;
+        self.dispatch_bonded_forces()?;
+        self.dispatch_reduce()?;
 
         for step in 0..steps as u32 {
-            self.dispatch_baoab();
-            self.dispatch_baoab_atoms();
-            self.dispatch_reconstruct();
+            self.dispatch_baoab()?;
+            self.dispatch_baoab_atoms()?;
+            self.dispatch_reconstruct()?;
 
             // Periodic rebuild keeps cell list valid as particles diffuse;
             // costs one GPU sync per rebuild (~0.1ms) vs force computation
@@ -463,17 +463,18 @@ impl<R: Runtime> LangevinGpu<R> {
                 self.rebuild_cell_list();
             }
 
-            self.dispatch_pair_forces();
-            self.dispatch_bonded_forces();
-            self.dispatch_reduce();
+            self.dispatch_pair_forces()?;
+            self.dispatch_bonded_forces()?;
+            self.dispatch_reduce()?;
 
-            self.dispatch_half_kick();
-            self.dispatch_half_kick_atoms();
+            self.dispatch_half_kick()?;
+            self.dispatch_half_kick_atoms()?;
             self.step_counter += 1;
         }
 
         // Sync to ensure all work is complete
         let _ = self.client.read_one(self.com_forces.clone());
+        Ok(())
     }
 
     /// Run `steps` BAOAB steps with CPU-computed forces from a callback.
@@ -484,7 +485,7 @@ impl<R: Runtime> LangevinGpu<R> {
         &mut self,
         steps: usize,
         compute_forces: ForceCallback<'_>,
-    ) {
+    ) -> anyhow::Result<()> {
         self.log_first_step();
 
         let positions = self.download_positions();
@@ -492,18 +493,19 @@ impl<R: Runtime> LangevinGpu<R> {
         self.upload_com_forces_torques(&com_forces, &torques);
 
         for _ in 0..steps {
-            self.dispatch_baoab();
-            self.dispatch_reconstruct();
+            self.dispatch_baoab()?;
+            self.dispatch_reconstruct()?;
 
             let positions = self.download_positions();
             let (com_forces, torques) = compute_forces(&positions);
             self.upload_com_forces_torques(&com_forces, &torques);
 
-            self.dispatch_half_kick();
+            self.dispatch_half_kick()?;
             self.step_counter += 1;
         }
 
         let _ = self.client.read_one(self.com_forces.clone());
+        Ok(())
     }
 
     fn upload_com_forces_torques(&mut self, com_forces: &[[f32; 4]], torques: &[[f32; 4]]) {
@@ -517,7 +519,7 @@ impl<R: Runtime> LangevinGpu<R> {
     // Kernel dispatch helpers
     // ========================================================================
 
-    fn dispatch_pair_forces(&self) {
+    fn dispatch_pair_forces(&self) -> anyhow::Result<()> {
         let count = CubeCount::Static(self.n_atoms.div_ceil(WORKGROUP_SIZE), 1, 1);
         let dim = CubeDim::new_1d(WORKGROUP_SIZE);
         let inv_box = 1.0f32 / self.box_length;
@@ -556,8 +558,8 @@ impl<R: Runtime> LangevinGpu<R> {
                 ScalarArg::new(inv_box),
                 ScalarArg::new(self.n_cells_1d),
             )
-        }
-        .expect("pair_forces launch failed");
+        }?;
+        Ok(())
     }
 
     /// Dispatch bond, angle, and dihedral force kernels.
@@ -565,7 +567,7 @@ impl<R: Runtime> LangevinGpu<R> {
     /// Must run after `dispatch_pair_forces` because the bonded kernels
     /// accumulate (`+=`) into the same `atom_forces` buffer that the
     /// nonbonded kernel initializes (`=`).
-    fn dispatch_bonded_forces(&self) {
+    fn dispatch_bonded_forces(&self) -> anyhow::Result<()> {
         let inv_box = 1.0f32 / self.box_length;
         // CubeCount isn't Copy, so we recreate per-launch
         let atom_count = || CubeCount::Static(self.n_atoms.div_ceil(WORKGROUP_SIZE), 1, 1);
@@ -596,8 +598,7 @@ impl<R: Runtime> LangevinGpu<R> {
                     ScalarArg::new(self.box_length),
                     ScalarArg::new(inv_box),
                 )
-            }
-            .expect("bond_forces launch failed");
+            }?;
         }
 
         if self.has_angles {
@@ -625,8 +626,7 @@ impl<R: Runtime> LangevinGpu<R> {
                     ScalarArg::new(self.box_length),
                     ScalarArg::new(inv_box),
                 )
-            }
-            .expect("angle_forces launch failed");
+            }?;
         }
 
         if self.has_dihedrals {
@@ -654,12 +654,12 @@ impl<R: Runtime> LangevinGpu<R> {
                     ScalarArg::new(self.box_length),
                     ScalarArg::new(inv_box),
                 )
-            }
-            .expect("dihedral_forces launch failed");
+            }?;
         }
+        Ok(())
     }
 
-    fn dispatch_reduce(&self) {
+    fn dispatch_reduce(&self) -> anyhow::Result<()> {
         let count = CubeCount::Static(self.n_molecules.div_ceil(WORKGROUP_SIZE), 1, 1);
         let dim = CubeDim::new_1d(WORKGROUP_SIZE);
         let inv_box = 1.0f32 / self.box_length;
@@ -688,13 +688,13 @@ impl<R: Runtime> LangevinGpu<R> {
                 ScalarArg::new(self.box_length),
                 ScalarArg::new(inv_box),
             )
-        }
-        .expect("reduce_forces launch failed");
+        }?;
+        Ok(())
     }
 
-    fn dispatch_baoab(&self) {
+    fn dispatch_baoab(&self) -> anyhow::Result<()> {
         if !self.has_rigid {
-            return;
+            return Ok(());
         }
         let count = CubeCount::Static(self.n_molecules.div_ceil(WORKGROUP_SIZE), 1, 1);
         let dim = CubeDim::new_1d(WORKGROUP_SIZE);
@@ -741,13 +741,13 @@ impl<R: Runtime> LangevinGpu<R> {
                 ScalarArg::new(self.step_counter),
                 ScalarArg::new(self.box_length),
             )
-        }
-        .expect("baoab launch failed");
+        }?;
+        Ok(())
     }
 
-    fn dispatch_reconstruct(&self) {
+    fn dispatch_reconstruct(&self) -> anyhow::Result<()> {
         if !self.has_rigid {
-            return;
+            return Ok(());
         }
         let count = CubeCount::Static(self.n_atoms.div_ceil(WORKGROUP_SIZE), 1, 1);
         let dim = CubeDim::new_1d(WORKGROUP_SIZE);
@@ -778,13 +778,13 @@ impl<R: Runtime> LangevinGpu<R> {
                 ScalarArg::new(self.n_atoms),
                 ScalarArg::new(self.n_molecules),
             )
-        }
-        .expect("reconstruct launch failed");
+        }?;
+        Ok(())
     }
 
-    fn dispatch_half_kick(&self) {
+    fn dispatch_half_kick(&self) -> anyhow::Result<()> {
         if !self.has_rigid {
-            return;
+            return Ok(());
         }
         let count = CubeCount::Static(self.n_molecules.div_ceil(WORKGROUP_SIZE), 1, 1);
         let dim = CubeDim::new_1d(WORKGROUP_SIZE);
@@ -821,14 +821,14 @@ impl<R: Runtime> LangevinGpu<R> {
                 ScalarArg::new(self.n_molecules),
                 ScalarArg::new(self.config.timestep as f32),
             )
-        }
-        .expect("half_kick launch failed");
+        }?;
+        Ok(())
     }
 
     /// Dispatch per-atom BAOAB step for flexible atoms.
-    fn dispatch_baoab_atoms(&self) {
+    fn dispatch_baoab_atoms(&self) -> anyhow::Result<()> {
         if !self.has_flexible {
-            return;
+            return Ok(());
         }
         let count = CubeCount::Static(self.n_atoms.div_ceil(WORKGROUP_SIZE), 1, 1);
         let dim = CubeDim::new_1d(WORKGROUP_SIZE);
@@ -855,14 +855,14 @@ impl<R: Runtime> LangevinGpu<R> {
                 ScalarArg::new(self.step_counter),
                 ScalarArg::new(self.box_length),
             )
-        }
-        .expect("baoab_atom_step launch failed");
+        }?;
+        Ok(())
     }
 
     /// Dispatch closing B half-kick for flexible atoms.
-    fn dispatch_half_kick_atoms(&self) {
+    fn dispatch_half_kick_atoms(&self) -> anyhow::Result<()> {
         if !self.has_flexible {
-            return;
+            return Ok(());
         }
         let count = CubeCount::Static(self.n_atoms.div_ceil(WORKGROUP_SIZE), 1, 1);
         let dim = CubeDim::new_1d(WORKGROUP_SIZE);
@@ -883,8 +883,8 @@ impl<R: Runtime> LangevinGpu<R> {
                 ScalarArg::new(self.n_atoms),
                 ScalarArg::new(self.config.timestep as f32),
             )
-        }
-        .expect("half_kick_atoms launch failed");
+        }?;
+        Ok(())
     }
 
     // ========================================================================
