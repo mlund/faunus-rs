@@ -28,6 +28,7 @@ mod hamiltonian;
 mod nonbonded;
 #[cfg(feature = "gpu")]
 pub(crate) mod nonbonded_kernel;
+mod pairpot;
 mod polymer_depletion;
 mod sasa;
 mod tabulated6d;
@@ -41,6 +42,7 @@ pub use ewald::{EwaldBuilder, EwaldReciprocalEnergy};
 pub use external_pressure::{ExternalPressure, Pressure};
 pub use hamiltonian::{EnergyChange, Hamiltonian};
 pub use nonbonded::{NonbondedMatrix, NonbondedMatrixSplined};
+pub use pairpot::PairPot;
 pub use polymer_depletion::{PolymerDepletion, PolymerDepletionBuilder};
 pub use sasa::{SasaEnergy, SasaEnergyBuilder};
 pub use tabulated6d::{Tabulated6D, Tabulated6DBuilder};

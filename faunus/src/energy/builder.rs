@@ -26,10 +26,12 @@ use anyhow::Context as AnyhowContext;
 #[cfg(test)]
 use interatomic::coulomb::permittivity::VACUUM as VACUUM_PERMITTIVITY;
 use interatomic::coulomb::{permittivity::RelativePermittivity, DebyeLength};
+#[cfg(test)]
+use interatomic::twobody::NoInteraction;
 use interatomic::{
     twobody::{
         AshbaughHatch, CustomPotential, HardSphere, IonIon, IsotropicTwobodyEnergy, KimHummer,
-        LennardJones, NoInteraction, WeeksChandlerAndersen,
+        LennardJones, WeeksChandlerAndersen,
     },
     CombinationRule,
 };
@@ -47,6 +49,30 @@ use super::polymer_depletion::PolymerDepletionBuilder;
 use super::sasa::SasaEnergyBuilder;
 use super::tabulated6d::Tabulated6DBuilder;
 use interatomic::twobody::{GridType, SplineConfig};
+
+/// Bounds required for a coulomb scheme to be used with `IonIon` and `Box<dyn>`.
+trait CoulombScheme:
+    interatomic::coulomb::pairwise::MultipoleEnergy
+    + Clone
+    + Debug
+    + PartialEq
+    + 'static
+    + Sync
+    + Display
+    + Send
+{
+}
+impl<T> CoulombScheme for T where
+    T: interatomic::coulomb::pairwise::MultipoleEnergy
+        + Clone
+        + Debug
+        + PartialEq
+        + 'static
+        + Sync
+        + Display
+        + Send
+{
+}
 
 /// Specifies whether the parameters for the interaction are
 /// directly provided or should be calculated using a combination rule.
@@ -122,19 +148,24 @@ impl FromMixing for AshbaughHatch {
 }
 
 impl<T: FromMixing> DirectOrMixing<T> {
+    /// Resolve to a concrete instance, applying mixing rules if needed.
+    fn to_concrete(&self, atom1: &AtomKind, atom2: &AtomKind) -> anyhow::Result<T> {
+        match self {
+            Self::Direct(inner) => Ok(inner.clone()),
+            Self::Mixing { mixing, cutoff, .. } => {
+                let combined = AtomKind::combine(*mixing, atom1, atom2);
+                T::from_mixing(&combined, *cutoff)
+            }
+        }
+    }
+
     /// Convert to a boxed trait object, applying mixing rules if needed.
     fn to_boxed(
         &self,
         atom1: &AtomKind,
         atom2: &AtomKind,
     ) -> anyhow::Result<Box<dyn IsotropicTwobodyEnergy>> {
-        match self {
-            Self::Direct(inner) => Ok(Box::new(inner.clone())),
-            Self::Mixing { mixing, cutoff, .. } => {
-                let combined = AtomKind::combine(*mixing, atom1, atom2);
-                Ok(Box::new(T::from_mixing(&combined, *cutoff)?))
-            }
-        }
+        Ok(Box::new(self.to_concrete(atom1, atom2)?))
     }
 }
 
@@ -222,26 +253,14 @@ impl PairInteraction {
             Self::CustomPotential(custom) => Ok(Box::new(custom.as_ref().clone())),
         }
     }
-    /// Helper to create a coulombic interaction with a generic scheme
-    fn make_coulomb<
-        T: interatomic::coulomb::pairwise::MultipoleEnergy
-            + Clone
-            + Debug
-            + std::cmp::PartialEq
-            + 'static
-            + Sync
-            + Display
-            + Send,
-    >(
+    /// Create an `IonIon<T>` from a scheme and medium, applying permittivity and Debye length.
+    fn make_ionion<T: CoulombScheme>(
         charge_product: f64,
         medium: interatomic::coulomb::Medium,
         scheme: T,
-    ) -> anyhow::Result<Box<dyn IsotropicTwobodyEnergy>> {
+    ) -> IonIon<T> {
         let mut ionion = IonIon::new(charge_product, medium.clone().into(), scheme);
-
         ionion.set_permittivity(medium.permittivity()).unwrap();
-
-        // If the medium has a Debye length AND it is not already set in the ion-ion potential, try to set it.
         if let Some(e) = medium
             .debye_length()
             .take_if(|_| ionion.debye_length().is_none())
@@ -253,7 +272,76 @@ impl PairInteraction {
             )
         };
         log::debug!("{}", &ionion);
-        Ok(Box::new(ionion))
+        ionion
+    }
+
+    /// Helper to create a boxed coulombic interaction with a generic scheme.
+    fn make_coulomb<T: CoulombScheme>(
+        charge_product: f64,
+        medium: interatomic::coulomb::Medium,
+        scheme: T,
+    ) -> anyhow::Result<Box<dyn IsotropicTwobodyEnergy>> {
+        Ok(Box::new(Self::make_ionion(charge_product, medium, scheme)))
+    }
+
+    /// Classify a non-Coulomb interaction into a [`ShortRange`] variant.
+    pub(crate) fn to_short_range(
+        &self,
+        atom1: &AtomKind,
+        atom2: &AtomKind,
+    ) -> anyhow::Result<super::pairpot::ShortRange> {
+        use super::pairpot::ShortRange;
+        match self {
+            Self::LennardJones(x) => Ok(ShortRange::LennardJones(x.to_concrete(atom1, atom2)?)),
+            Self::WeeksChandlerAndersen(x) => Ok(ShortRange::Wca(x.to_concrete(atom1, atom2)?)),
+            Self::AshbaughHatch(x) => Ok(ShortRange::AshbaughHatch(x.to_concrete(atom1, atom2)?)),
+            Self::KimHummer(x) => Ok(ShortRange::KimHummer(x.to_concrete(atom1, atom2)?)),
+            Self::HardSphere(x) => Ok(ShortRange::HardSphere(x.to_concrete(atom1, atom2)?)),
+            Self::CustomPotential(custom) => Ok(ShortRange::Dynamic(
+                interatomic::twobody::ArcPotential::new(custom.as_ref().clone()),
+            )),
+            _ => unreachable!("Coulomb variants should use to_coulomb()"),
+        }
+    }
+
+    /// Classify a Coulomb interaction into a [`Coulomb`] variant.
+    pub(crate) fn to_coulomb(
+        &self,
+        atom1: &AtomKind,
+        atom2: &AtomKind,
+        medium: interatomic::coulomb::Medium,
+    ) -> anyhow::Result<super::pairpot::Coulomb> {
+        use super::pairpot::Coulomb;
+        let mixed = AtomKind::combine(CombinationRule::Arithmetic, atom1, atom2);
+        let charge_product = mixed.charge();
+        match self {
+            Self::CoulombPlain(scheme) => Ok(Coulomb::Plain(Self::make_ionion(
+                charge_product,
+                medium,
+                scheme.clone(),
+            ))),
+            Self::CoulombRealSpaceEwald(scheme) => Ok(Coulomb::RealSpaceEwald(Self::make_ionion(
+                charge_product,
+                medium,
+                scheme.clone(),
+            ))),
+            Self::CoulombEwald(scheme) => Ok(Coulomb::Ewald(Self::make_ionion(
+                charge_product,
+                medium,
+                scheme.clone(),
+            ))),
+            Self::CoulombReactionField(scheme) => Ok(Coulomb::ReactionField(Self::make_ionion(
+                charge_product,
+                medium,
+                scheme.clone(),
+            ))),
+            Self::CoulombFanourgakis(scheme) => Ok(Coulomb::Fanourgakis(Self::make_ionion(
+                charge_product,
+                medium,
+                scheme.clone(),
+            ))),
+            _ => unreachable!("Non-Coulomb variants should use to_short_range()"),
+        }
     }
 }
 
@@ -301,16 +389,15 @@ impl PairPotentialBuilder {
             .push(interaction);
     }
 
-    /// Collect matching interactions for an atom pair, applying `combine_with_default`
+    /// Resolve applicable interactions for an atom pair, applying `combine_with_default`
     /// logic and an optional filter predicate.
-    fn collect_interactions(
-        &self,
+    fn resolve_interactions<'a>(
+        &'a self,
         atom1: &AtomKind,
         atom2: &AtomKind,
-        medium: Option<interatomic::coulomb::Medium>,
         combine_with_default: bool,
         filter: impl Fn(&PairInteraction) -> bool,
-    ) -> anyhow::Result<Option<Box<dyn IsotropicTwobodyEnergy>>> {
+    ) -> Vec<&'a PairInteraction> {
         let key = DefaultOrPair::Pair(UnorderedPair(
             atom1.name().to_owned(),
             atom2.name().to_owned(),
@@ -318,7 +405,7 @@ impl PairPotentialBuilder {
         let pair = self.0.get(&key);
         let default = self.0.get(&DefaultOrPair::Default);
 
-        let interactions: Vec<&PairInteraction> = if combine_with_default {
+        if combine_with_default {
             default
                 .into_iter()
                 .chain(pair)
@@ -329,19 +416,28 @@ impl PairPotentialBuilder {
             pair.or(default)
                 .map(|v| v.iter().filter(|i| filter(i)).collect())
                 .unwrap_or_default()
-        };
+        }
+    }
 
+    /// Collect matching interactions into a summed trait object.
+    fn collect_interactions(
+        &self,
+        atom1: &AtomKind,
+        atom2: &AtomKind,
+        medium: Option<interatomic::coulomb::Medium>,
+        combine_with_default: bool,
+        filter: impl Fn(&PairInteraction) -> bool,
+    ) -> anyhow::Result<Option<Box<dyn IsotropicTwobodyEnergy>>> {
+        let interactions = self.resolve_interactions(atom1, atom2, combine_with_default, filter);
         if interactions.is_empty() {
             return Ok(None);
         }
-
         let total: Box<dyn IsotropicTwobodyEnergy> = interactions
             .into_iter()
             .map(|interact| interact.to_boxed(atom1, atom2, medium.clone()))
             .collect::<anyhow::Result<Vec<_>>>()?
             .into_iter()
             .sum();
-
         Ok(Some(total))
     }
 
@@ -351,6 +447,7 @@ impl PairPotentialBuilder {
     ///
     /// When `combine_with_default` is true, pair-specific interactions are combined with
     /// default interactions rather than replacing them.
+    #[cfg(test)]
     pub(crate) fn get_interaction(
         &self,
         atom1: &AtomKind,
@@ -390,6 +487,80 @@ impl PairPotentialBuilder {
             combine_with_default,
             PairInteraction::is_coulomb,
         )
+    }
+
+    /// Build a [`PairPot`] for a given atom pair, classifying short-range and
+    /// Coulomb components into enum variants for inline dispatch.
+    pub(crate) fn get_pair_pot(
+        &self,
+        atom1: &AtomKind,
+        atom2: &AtomKind,
+        medium: Option<interatomic::coulomb::Medium>,
+        combine_with_default: bool,
+    ) -> anyhow::Result<super::pairpot::PairPot> {
+        use super::pairpot::{Coulomb, PairPot, ShortRange};
+
+        let sr_list =
+            self.resolve_interactions(atom1, atom2, combine_with_default, |i| !i.is_coulomb());
+        let coul_list = self.resolve_interactions(
+            atom1,
+            atom2,
+            combine_with_default,
+            PairInteraction::is_coulomb,
+        );
+
+        if sr_list.is_empty() && coul_list.is_empty() {
+            log::warn!(
+                "No nonbonded interaction defined for '{} <-> {}'.",
+                atom1.name(),
+                atom2.name()
+            );
+            return Ok(PairPot::default());
+        }
+
+        // Classify short-range: single known type → typed variant; else Dynamic
+        let short_range = match sr_list.as_slice() {
+            [] => ShortRange::None,
+            [single] => single.to_short_range(atom1, atom2)?,
+            _ => {
+                let total = self
+                    .collect_interactions(
+                        atom1,
+                        atom2,
+                        medium.clone(),
+                        combine_with_default,
+                        |i| !i.is_coulomb(),
+                    )?
+                    .unwrap();
+                ShortRange::Dynamic(interatomic::twobody::ArcPotential(total.into()))
+            }
+        };
+
+        // Classify Coulomb: single known type → typed variant; else Dynamic
+        let coulomb = match coul_list.as_slice() {
+            [] => Coulomb::None,
+            [single] => single.to_coulomb(
+                atom1,
+                atom2,
+                medium
+                    .clone()
+                    .expect("Medium required for Coulomb interactions"),
+            )?,
+            _ => {
+                let total = self
+                    .collect_interactions(
+                        atom1,
+                        atom2,
+                        medium,
+                        combine_with_default,
+                        PairInteraction::is_coulomb,
+                    )?
+                    .unwrap();
+                Coulomb::Dynamic(interatomic::twobody::ArcPotential(total.into()))
+            }
+        };
+
+        Ok(PairPot::from_parts(short_range, coulomb))
     }
 
     /// True if any configured interaction is a Coulomb variant.

@@ -18,10 +18,9 @@ pub(crate) mod cache;
 #[cfg(test)]
 mod tests;
 
+use super::pairpot::PairPot;
 use cache::GroupEnergyCache;
-use interatomic::twobody::{
-    ArcPotential, IsotropicTwobodyEnergy, NoInteraction, SplineConfig, SplinedPotential,
-};
+use interatomic::twobody::{IsotropicTwobodyEnergy, SplineConfig, SplinedPotential};
 use ndarray::Array2;
 use std::path::Path;
 use std::sync::RwLock;
@@ -56,7 +55,7 @@ const fn canonical_mol_pair(a: usize, b: usize) -> [usize; 2] {
 /// skipping all inter-group interactions between those molecule kinds.
 /// This is used automatically when [`Tabulated6D`] handles the same pairs.
 #[derive(Debug)]
-pub struct NonbondedMatrix<P = ArcPotential> {
+pub struct NonbondedMatrix<P = PairPot> {
     /// Matrix of pair potentials based on atom type ids.
     pub(super) potentials: Array2<P>,
     /// Matrix of excluded interactions.
@@ -443,7 +442,7 @@ impl NonbondedMatrix {
         )
     }
 
-    /// Create a new NonbondedReference structure wrapped in an EnergyTerm enum.
+    /// Create a new NonbondedMatrix using enum-dispatched [`PairPot`] potentials.
     #[allow(clippy::new_ret_no_self)]
     pub(super) fn new(
         pairpot_builder: &PairPotentialBuilder,
@@ -454,20 +453,17 @@ impl NonbondedMatrix {
         let atoms = topology.atomkinds();
         let n_atom_types = atoms.len();
 
-        let mut potentials: Array2<ArcPotential> = Array2::from_elem(
-            (n_atom_types, n_atom_types),
-            ArcPotential::new(NoInteraction),
-        );
+        let mut potentials: Array2<PairPot> =
+            Array2::from_elem((n_atom_types, n_atom_types), PairPot::default());
 
         for i in 0..n_atom_types {
             for j in 0..n_atom_types {
-                let interaction = pairpot_builder.get_interaction(
+                potentials[(i, j)] = pairpot_builder.get_pair_pot(
                     &atoms[i],
                     &atoms[j],
                     medium.clone(),
                     combine_with_default,
                 )?;
-                potentials[(i, j)] = ArcPotential(interaction.into());
             }
         }
 
@@ -481,11 +477,6 @@ impl NonbondedMatrix {
             use_bounding_spheres: true,
             molecule_pair_exclusions: Vec::new(),
         })
-    }
-
-    /// Get mutable reference to pair potentials matrix.
-    pub const fn get_potentials_mut(&mut self) -> &mut Array2<ArcPotential> {
-        &mut self.potentials
     }
 }
 
