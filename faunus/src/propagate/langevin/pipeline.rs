@@ -25,15 +25,6 @@ use std::marker::PhantomData;
 
 pub(super) const WORKGROUP_SIZE: u32 = 64;
 
-/// GPU spline data extracted from the Hamiltonian for on-device force computation.
-pub(super) struct GpuSplineUpload {
-    pub(super) atom_type_ids: Option<Vec<u32>>,
-    pub(super) mol_ids: Option<Vec<u32>>,
-    pub(super) params: Option<Vec<f32>>,
-    pub(super) coeffs: Option<Vec<f32>>,
-    pub(super) n_atom_types: u32,
-}
-
 /// Callback computing per-molecule COM forces and torques from atom positions.
 pub(super) type ForceCallback<'a> =
     &'a mut dyn FnMut(&[[f32; 4]]) -> (Vec<[f32; 4]>, Vec<[f32; 4]>);

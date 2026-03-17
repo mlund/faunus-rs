@@ -45,7 +45,7 @@ use std::path::Path;
 
 /// A collection of moves with a selection strategy and repeat count.
 #[derive(Debug)]
-pub struct MoveCollection<T: Context> {
+pub(crate) struct MoveCollection<T: Context> {
     strategy: SelectionStrategy,
     repeat: usize,
     moves: Vec<MoveRunner<T>>,
@@ -89,11 +89,12 @@ impl<T: Context> MoveCollection<T> {
         Ok(())
     }
 
-    pub fn moves(&self) -> &[MoveRunner<T>] {
+    fn moves(&self) -> &[MoveRunner<T>] {
         &self.moves
     }
 
-    pub const fn repeat(&self) -> usize {
+    #[cfg(test)]
+    fn repeat(&self) -> usize {
         self.repeat
     }
 
@@ -119,7 +120,7 @@ impl<T: Context> MoveCollection<T> {
 
 /// A single block in the propagation loop: either MC moves or Langevin dynamics.
 #[derive(Debug)]
-pub enum PropagationBlock<T: Context> {
+pub(crate) enum PropagationBlock<T: Context> {
     MonteCarlo(MoveCollection<T>),
     #[cfg(feature = "gpu")]
     LangevinDynamics(Box<LangevinRunner>),
@@ -127,11 +128,12 @@ pub enum PropagationBlock<T: Context> {
 
 impl<T: Context> PropagationBlock<T> {
     /// Cumulative wall-clock time spent in this block.
-    pub fn elapsed(&self) -> std::time::Duration {
+    #[cfg(test)]
+    pub(crate) fn elapsed(&self) -> std::time::Duration {
         match self {
             Self::MonteCarlo(mc) => mc.elapsed,
             #[cfg(feature = "gpu")]
-            Self::LangevinDynamics(ld) => ld.elapsed,
+            Self::LangevinDynamics(ld) => ld.elapsed(),
         }
     }
 
@@ -158,23 +160,24 @@ impl<T: Context> PropagationBlock<T> {
                 let energy_after = context
                     .hamiltonian()
                     .energy(context, &crate::Change::Everything);
-                ld.energy_change_sum += energy_after - energy_before;
+                ld.add_energy_change(energy_after - energy_before);
                 // Sample analyses after positions are written back to context
                 analyses.sample(context, *step)?;
-                *step += ld.config.steps;
+                *step += ld.steps();
                 Ok(())
             }
         };
         match self {
             Self::MonteCarlo(mc) => mc.elapsed += t0.elapsed(),
             #[cfg(feature = "gpu")]
-            Self::LangevinDynamics(ld) => ld.elapsed += t0.elapsed(),
+            Self::LangevinDynamics(ld) => ld.add_elapsed(t0.elapsed()),
         }
         result
     }
 
     /// Access the MC moves in this block (empty slice for LD blocks).
-    pub fn moves(&self) -> &[MoveRunner<T>] {
+    #[cfg(test)]
+    pub(crate) fn moves(&self) -> &[MoveRunner<T>] {
         match self {
             Self::MonteCarlo(mc) => mc.moves(),
             #[cfg(feature = "gpu")]
@@ -182,11 +185,12 @@ impl<T: Context> PropagationBlock<T> {
         }
     }
 
-    pub fn repeat(&self) -> usize {
+    #[cfg(test)]
+    pub(crate) fn repeat(&self) -> usize {
         match self {
             Self::MonteCarlo(mc) => mc.repeat(),
             #[cfg(feature = "gpu")]
-            Self::LangevinDynamics(ld) => ld.config.steps,
+            Self::LangevinDynamics(ld) => ld.steps(),
         }
     }
 
@@ -206,7 +210,7 @@ pub struct Propagate<T: Context> {
     max_repeats: usize,
     current_repeat: usize,
     seed: Seed,
-    rng: Option<StdRng>,
+    rng: StdRng,
     blocks: Vec<PropagationBlock<T>>,
     criterion: AcceptanceCriterion,
 }
@@ -232,9 +236,7 @@ impl<T: Context> Propagate<T> {
                 &self.criterion,
                 thermal_energy,
                 step,
-                self.rng
-                    .as_mut()
-                    .expect("Random number generator should already be seeded."),
+                &mut self.rng,
                 analyses,
             )?;
         }
@@ -262,8 +264,8 @@ impl<T: Context> Propagate<T> {
             .collect::<anyhow::Result<Vec<_>>>()?;
 
         let rng = match builder.seed {
-            Seed::Hardware => Some(rand::SeedableRng::from_entropy()),
-            Seed::Fixed(x) => Some(rand::SeedableRng::seed_from_u64(x as u64)),
+            Seed::Hardware => rand::SeedableRng::from_entropy(),
+            Seed::Fixed(x) => rand::SeedableRng::seed_from_u64(x as u64),
         };
 
         Ok(Self {
@@ -276,7 +278,8 @@ impl<T: Context> Propagate<T> {
         })
     }
 
-    pub fn blocks(&self) -> &[PropagationBlock<T>] {
+    #[cfg(test)]
+    pub(crate) fn blocks(&self) -> &[PropagationBlock<T>] {
         &self.blocks
     }
 
@@ -291,7 +294,7 @@ impl<T: Context> Propagate<T> {
                     .map(|m| m.statistics().energy_change_sum)
                     .sum::<f64>(),
                 #[cfg(feature = "gpu")]
-                PropagationBlock::LangevinDynamics(ld) => ld.energy_change_sum,
+                PropagationBlock::LangevinDynamics(ld) => ld.energy_change_sum(),
             })
             .sum()
     }
@@ -303,7 +306,7 @@ impl<T: Context> Propagate<T> {
     /// Replace the internal RNG with one seeded from `seed`.
     /// Used to give each Gibbs box a unique seed.
     pub fn reseed(&mut self, seed: u64) {
-        self.rng = Some(rand::SeedableRng::seed_from_u64(seed));
+        self.rng = rand::SeedableRng::seed_from_u64(seed);
     }
 
     /// Serialize the propagate state to a YAML value.

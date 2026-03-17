@@ -65,10 +65,10 @@ fn default_cell_list_rebuild() -> u32 {
 /// Rigid-body Langevin dynamics runner (CubeCL compute backend).
 #[derive(Debug)]
 pub struct LangevinRunner {
-    pub(crate) config: LangevinConfig,
-    pub(in crate::propagate) elapsed: std::time::Duration,
+    config: LangevinConfig,
+    elapsed: std::time::Duration,
     /// Accumulated energy change across all LD blocks (for drift tracking).
-    pub(in crate::propagate) energy_change_sum: f64,
+    energy_change_sum: f64,
     /// Running average of translational temperature (K) across LD blocks.
     t_trans: Variance,
     /// Running average of rotational temperature (K) across LD blocks.
@@ -77,6 +77,26 @@ pub struct LangevinRunner {
 }
 
 impl LangevinRunner {
+    pub(in crate::propagate) fn steps(&self) -> usize {
+        self.config.steps
+    }
+
+    pub(in crate::propagate) fn elapsed(&self) -> std::time::Duration {
+        self.elapsed
+    }
+
+    pub(in crate::propagate) fn energy_change_sum(&self) -> f64 {
+        self.energy_change_sum
+    }
+
+    pub(in crate::propagate) fn add_elapsed(&mut self, duration: std::time::Duration) {
+        self.elapsed += duration;
+    }
+
+    pub(in crate::propagate) fn add_energy_change(&mut self, delta: f64) {
+        self.energy_change_sum += delta;
+    }
+
     pub fn new(config: LangevinConfig) -> Self {
         Self {
             config,
@@ -214,10 +234,10 @@ impl LangevinRunner {
         let positions = pack_positions_f32(context);
 
         // Extract spline data for on-device force computation if available
-        let spline = Self::extract_spline_data(context);
+        let spline = extract_spline_data(context);
 
         // Extract bonded topology into CSR layout for on-device bonded forces
-        let (bond_data, angle_data, dihedral_data) = Self::extract_bonded_data(context);
+        let (bond_data, angle_data, dihedral_data) = extract_bonded_data(context);
 
         // Exclusion CSR for intra-molecular NB pairs in flexible molecules
         let (excl_offsets, excl_atoms) =
@@ -345,91 +365,6 @@ impl LangevinRunner {
             has_flexible,
         });
         Ok(())
-    }
-
-    /// Extract spline data from the Hamiltonian for on-device force computation.
-    ///
-    /// Returns `(atom_type_ids, mol_ids, spline_params, spline_coeffs, n_atom_types)`.
-    /// If no splined nonbonded term exists, returns None and forces fall back to CPU.
-    fn extract_spline_data<T: Context>(context: &T) -> GpuSplineUpload {
-        let hamiltonian = context.hamiltonian();
-        let nonbonded = hamiltonian
-            .energy_terms()
-            .iter()
-            .find_map(|term| match term {
-                crate::energy::EnergyTerm::NonbondedMatrixSplined(nb) => Some(nb),
-                _ => None,
-            });
-
-        let Some(nb) = nonbonded else {
-            log::info!("No splined nonbonded term found; using CPU forces");
-            return GpuSplineUpload {
-                atom_type_ids: None,
-                mol_ids: None,
-                params: None,
-                coeffs: None,
-                n_atom_types: 0,
-            };
-        };
-
-        let n_atom_types = context.topology().atomkinds().len() as u32;
-
-        let spline_data =
-            interatomic::gpu::GpuSplineData::<interatomic::gpu::PowerLaw2>::from_potentials(
-                nb.get_potentials().iter(),
-            );
-        let spline_params =
-            crate::energy::nonbonded_kernel::repack_spline_params(&spline_data.params);
-        let spline_coeffs =
-            crate::energy::nonbonded_kernel::repack_spline_coeffs(&spline_data.coefficients);
-
-        let atom_type_ids: Vec<u32> = context.atom_kinds_u32().to_vec();
-
-        // Rigid-body atoms within the same molecule must not interact via nonbonded forces
-        let mol_ids: Vec<u32> = context
-            .groups()
-            .iter()
-            .enumerate()
-            .flat_map(|(mol_idx, g)| std::iter::repeat_n(mol_idx as u32, g.capacity()))
-            .collect();
-
-        drop(hamiltonian);
-        GpuSplineUpload {
-            atom_type_ids: Some(atom_type_ids),
-            mol_ids: Some(mol_ids),
-            params: Some(spline_params),
-            coeffs: Some(spline_coeffs),
-            n_atom_types,
-        }
-    }
-
-    /// Extract bonded topology (bonds, angles, dihedrals) into CSR layout.
-    ///
-    /// Returns `None` for each interaction type that has no entries.
-    fn extract_bonded_data<T: Context>(
-        context: &T,
-    ) -> (
-        Option<crate::energy::bonded::kernel::CsrData>,
-        Option<crate::energy::bonded::kernel::CsrData>,
-        Option<crate::energy::bonded::kernel::CsrData>,
-    ) {
-        use crate::energy::bonded::kernel;
-        let topology = context.topology();
-        let groups = context.groups();
-
-        let to_option = |csr: kernel::CsrData| {
-            if csr.is_empty() {
-                None
-            } else {
-                Some(csr)
-            }
-        };
-        let bonds = to_option(kernel::repack_bonds(&topology, groups));
-        let angles = to_option(kernel::repack_angles(&topology, groups));
-        let dihedrals = to_option(kernel::repack_dihedrals(&topology, groups));
-
-        drop(topology);
-        (bonds, angles, dihedrals)
     }
 
     /// Upload positions, COM, quaternions, and box length from context to device.
