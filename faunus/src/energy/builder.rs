@@ -730,10 +730,11 @@ impl HamiltonianBuilder {
         if let Some(pairpot_builder) = &self.pairpot_builder {
             for pair in pairpot_builder.0.keys() {
                 if let DefaultOrPair::Pair(UnorderedPair(x, y)) = pair {
-                    if !atom_kinds.iter().any(|atom| atom.name() == x)
-                        || !atom_kinds.iter().any(|atom| atom.name() == y)
-                    {
-                        anyhow::bail!("Atom kind specified in `nonbonded` does not exist.")
+                    for name in [x, y] {
+                        anyhow::ensure!(
+                            atom_kinds.iter().any(|atom| atom.name() == name),
+                            "Atom kind '{name}' specified in `nonbonded` does not exist."
+                        );
                     }
                 }
             }
@@ -935,14 +936,14 @@ mod tests {
         let error = builder.validate(&atoms).unwrap_err();
         assert_eq!(
             &error.to_string(),
-            "Atom kind specified in `nonbonded` does not exist."
+            "Atom kind 'HW' specified in `nonbonded` does not exist."
         );
 
         let atoms = [atom_hw.clone()];
         let error = builder.validate(&atoms).unwrap_err();
         assert_eq!(
             &error.to_string(),
-            "Atom kind specified in `nonbonded` does not exist."
+            "Atom kind 'OW' specified in `nonbonded` does not exist."
         );
     }
 

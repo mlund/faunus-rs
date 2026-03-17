@@ -434,6 +434,7 @@ impl NonbondedMatrix {
         medium: Option<interatomic::coulomb::Medium>,
     ) -> anyhow::Result<Self> {
         let builder = HamiltonianBuilder::from_file(file)?;
+        builder.validate(topology.atomkinds())?;
         Self::new(
             &builder.pairpot_builder.unwrap(),
             topology,
