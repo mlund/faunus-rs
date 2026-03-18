@@ -59,6 +59,22 @@ enum Commands {
         #[clap(long)]
         aux: Option<PathBuf>,
     },
+    /// Multi-walker umbrella sampling with free-energy stitching
+    #[clap(arg_required_else_help = true)]
+    Umbrella {
+        /// Input file in YAML format
+        #[clap(long, short = 'i')]
+        input: PathBuf,
+        /// Directory for per-window state files
+        #[clap(long, short = 's', default_value = "umbrella_states")]
+        state_dir: PathBuf,
+        /// PMF output file
+        #[clap(long, short = 'o', default_value = "pmf.csv")]
+        pmf_output: PathBuf,
+        /// Max parallel threads (0 = all cores)
+        #[clap(long, short = 'j', default_value = "0")]
+        threads: usize,
+    },
 }
 
 #[derive(Parser)]
@@ -108,6 +124,14 @@ pub fn do_main() -> Result<()> {
         Commands::Rerun { input, traj, aux } => {
             let mut yaml_output = std::fs::File::create(&args.output)?;
             run_rerun(&input, &traj, aux.as_deref(), &mut yaml_output)?;
+        }
+        Commands::Umbrella {
+            input,
+            state_dir,
+            pmf_output,
+            threads,
+        } => {
+            crate::umbrella::run(&input, &state_dir, &pmf_output, threads)?;
         }
     }
     Ok(())

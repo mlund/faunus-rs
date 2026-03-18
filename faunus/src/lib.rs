@@ -47,6 +47,8 @@ pub mod propagate;
 pub mod selection;
 pub mod simulation;
 pub mod state;
+#[cfg(feature = "cli")]
+pub mod umbrella;
 pub mod time;
 pub mod topology;
 pub mod transform;

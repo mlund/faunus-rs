@@ -170,6 +170,23 @@ impl Hamiltonian {
         self.update_timers.push(Cell::new(Duration::ZERO));
     }
 
+    /// Inserts an energy term at the front for early rejection of infinite energy.
+    pub(crate) fn push_front(&mut self, term: EnergyTerm) {
+        self.energy_terms.insert(0, term);
+        self.energy_timers.insert(0, Cell::new(Duration::ZERO));
+        self.update_timers.insert(0, Cell::new(Duration::ZERO));
+    }
+
+    /// Removes the first energy term. Returns `None` if empty.
+    pub(crate) fn pop_front(&mut self) -> Option<EnergyTerm> {
+        if self.energy_terms.is_empty() {
+            return None;
+        }
+        self.energy_timers.remove(0);
+        self.update_timers.remove(0);
+        Some(self.energy_terms.remove(0))
+    }
+
     /// Access the individual energy terms.
     pub fn energy_terms(&self) -> &[EnergyTerm] {
         &self.energy_terms

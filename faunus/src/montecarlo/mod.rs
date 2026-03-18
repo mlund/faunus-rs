@@ -369,6 +369,11 @@ impl<T: Context + 'static> MarkovChain<T> {
         &mut self.context
     }
 
+    /// Consume the MarkovChain, returning the owned context.
+    pub fn into_context(self) -> T {
+        self.context
+    }
+
     pub const fn propagation(&self) -> &Propagate<T> {
         &self.propagate
     }

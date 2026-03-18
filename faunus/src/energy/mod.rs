@@ -35,7 +35,7 @@ mod tabulated6d;
 
 pub use bonded::{IntermolecularBonded, IntramolecularBonded};
 pub use celloverlap::CellOverlap;
-pub use constrain::{Constrain, ConstrainBuilder};
+pub use constrain::{Constrain, ConstrainBuilder, HarmonicConstraint};
 pub use custom_external::{CustomExternal, CustomExternalBuilder};
 pub use energyterm::EnergyTerm;
 pub use ewald::{EwaldBuilder, EwaldReciprocalEnergy};
