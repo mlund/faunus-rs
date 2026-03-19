@@ -1,0 +1,24 @@
+[workspace]
+resolver = "2"
+members = [
+    "faunus",
+    "duello",
+    "icotable",
+    "coulomb",
+    "interatomic",
+    "cgkitten",
+]
+
+# Redirect git dependencies to local workspace checkouts
+[patch."https://github.com/mlund/faunus-rs.git"]
+faunus = { path = "faunus" }
+
+[patch."https://github.com/mlund/interatomic.git"]
+interatomic = { path = "interatomic" }
+
+[patch."https://github.com/mlund/icotable.git"]
+icotable = { path = "icotable" }
+
+# Redirect crates.io dependencies to local workspace checkouts
+[patch.crates-io]
+coulomb = { path = "coulomb" }

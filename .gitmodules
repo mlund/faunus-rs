@@ -1,0 +1,15 @@
+[submodule "duello"]
+	path = duello
+	url = git@github.com:mlund/duello.git
+[submodule "icotable"]
+	path = icotable
+	url = git@github.com:mlund/icotable.git
+[submodule "coulomb"]
+	path = coulomb
+	url = git@github.com:mlund/coulomb.git
+[submodule "interatomic"]
+	path = interatomic
+	url = git@github.com:mlund/interatomic.git
+[submodule "cgkitten"]
+	path = cgkitten
+	url = git@github.com:mlund/cgkitten.git
