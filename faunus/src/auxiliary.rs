@@ -80,7 +80,7 @@ impl ColumnFormat {
 ///
 /// Writes a header row on construction and provides [`write_row`](Self::write_row)
 /// for appending data rows with the correct separator.
-pub struct ColumnWriter {
+pub(crate) struct ColumnWriter {
     inner: Box<dyn Write + Send>,
     sep: &'static str,
 }
@@ -93,14 +93,14 @@ impl std::fmt::Debug for ColumnWriter {
 
 impl ColumnWriter {
     /// Open a file, infer the format from its extension, and write the header.
-    pub fn open(path: &Path, columns: &[&str]) -> anyhow::Result<Self> {
+    pub(crate) fn open(path: &Path, columns: &[&str]) -> anyhow::Result<Self> {
         let inner = open_compressed(path)?;
         let format = ColumnFormat::from_path(path);
         Self::new(inner, format, columns)
     }
 
     /// Wrap an existing writer, write the header row.
-    pub fn new(
+    pub(crate) fn new(
         mut inner: Box<dyn Write + Send>,
         format: ColumnFormat,
         columns: &[&str],
@@ -118,7 +118,7 @@ impl ColumnWriter {
     }
 
     /// Write a row of values using the format's separator.
-    pub fn write_row(&mut self, values: &[&dyn Display]) -> std::io::Result<()> {
+    pub(crate) fn write_row(&mut self, values: &[&dyn Display]) -> std::io::Result<()> {
         for (i, val) in values.iter().enumerate() {
             if i > 0 {
                 write!(self.inner, "{}", self.sep)?;
@@ -128,7 +128,7 @@ impl ColumnWriter {
         writeln!(self.inner)
     }
 
-    pub fn flush(&mut self) -> std::io::Result<()> {
+    pub(crate) fn flush(&mut self) -> std::io::Result<()> {
         self.inner.flush()
     }
 }

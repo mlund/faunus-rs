@@ -22,35 +22,36 @@ energy_change:
   final: 0.0
   initial: 0.0
 energy_timers:
-  celloverlap: '100 (energy: 68.81, update: 31.19)'
+  celloverlap: '100 (energy: 68.47, update: 31.53)'
 propagate:
   repeat: 100
   seed: !Fixed 42
   collections:
   - !Deterministic
     repeat: 1
-    elapsed_seconds: 0.019740874
+    elapsed_seconds: 0.021100539
     moves:
     - !TranslateAtom
       atom: null
       molecule: Ion
       max_displacement: 2.0
       preferential:
-        reference: Macromolecule
-        metric: BoundingSphere
+        reference: molecule Macromolecule
         exponent: 2.0
         offset: 1.0
-        sum_bias: -0.16839621234870597
+        sum_bias: -0.14406128935594129
         mean_bias:
-          avg: 0.0024522067967860635
+          avg: 0.003125395187348858
           n: 2000
+        bounding_radii:
+        - 1.7763568394002505e-15
       weight: 1.0
       repeat: 20
       statistics:
         num_trials: 2000
-        num_accepted: 1997
+        num_accepted: 1999
         mean_square_displacement:
-          avg: 1.3118697827212153
+          avg: 1.3115538937436981
           n: 2000
         timer:
           accumulated:
@@ -58,7 +59,7 @@ propagate:
             nanos: 0
         info: {}
         energy_change_sum: 0.0
-        acceptance_ratio: 0.9985
+        acceptance_ratio: 0.9995
   criterion: MetropolisHastings
 analysis:
 - energy:

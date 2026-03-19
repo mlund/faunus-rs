@@ -108,7 +108,7 @@ Key            | Required | Default | Description
 
 ### Preferential Sampling
 
-Biases atom selection toward a reference molecule using distance-dependent weights,
+Biases atom selection toward reference group(s) using distance-dependent weights,
 with a corresponding acceptance correction to maintain detailed balance.
 Useful in dilute solutions where standard MC wastes most trial moves on bulk
 particles far from the solute
@@ -116,12 +116,12 @@ particles far from the solute
 [Allen & Tildesley, 2017](https://doi.org/10.1093/oso/9780198803195.001.0001), §9.3.1).
 
 Each candidate atom receives weight $W'(r) = (r + \text{offset})^{-\nu}$
-where $r$ is the distance to the reference molecule measured by the chosen metric.
+where $r$ is the nearest bounding-sphere distance across all matching reference groups.
 The acceptance criterion includes a correction $\ln(W_\text{new} / W_\text{old})$
 where $W = \sum_j W'(r_j)$ is the normalization sum over all candidates.
 
-Best combined with a `!Deterministic` block so that the reference molecule
-moves first (updating its position), followed by the biased atom moves:
+Must be placed in a `!Deterministic` block so that reference groups move first
+(updating their positions), followed by the biased atom moves:
 
 ```yaml
 - !Deterministic
@@ -133,17 +133,27 @@ moves first (updating its position), followed by the biased atom moves:
         dp: 0.5
         repeat: 100
         preferential:
-          reference: Protein
+          reference: "molecule Protein"
           exponent: 2
           offset: 1.0
 ```
 
-Key         | Required | Default          | Description
------------ | -------- | ---------------- | -------------------------------------------
-`reference` | yes      |                  | Name of the reference molecule
-`metric`    | no       | `BoundingSphere` | Distance metric (`BoundingSphere` or `MassCenter`)
-`exponent`  | no       | 2                | Exponent $\nu$ in the weight function
-`offset`    | no       | 1.0              | Offset (Angstrom) to avoid singularity at $r = 0$
+Multiple reference groups can be selected; the distance is always to the nearest one:
+
+```yaml
+        preferential:
+          reference: "molecule Protein1 or molecule Protein2"
+```
+
+The `reference` field uses the [selection language](selection.md),
+e.g. `"molecule Protein"`, `"protein"`, or boolean combinations.
+
+Key         | Required | Default | Description
+----------- | -------- | ------- | -------------------------------------------
+`reference` | yes      |         | Selection expression for reference group(s)
+`exponent`  | no       | 2       | Exponent $\nu$ in the weight function
+`offset`    | no       | 1.0     | Offset (Angstrom) to avoid singularity at $r = 0$
+`file`      | no       |         | Path to write selection-distance histogram (.dat/.csv)
 
 ## Rotate Molecule
 

@@ -14,27 +14,21 @@
 
 //! Preferential sampling for distance-biased atom selection.
 //!
-//! Biases particle selection toward a reference molecule using distance-dependent weights,
+//! Biases particle selection toward reference group(s) using distance-dependent weights,
 //! with a corresponding acceptance correction to maintain detailed balance.
 //! See [Owicki & Scheraga, 1977](https://doi.org/10.1016/0009-2614(77)85051-3)
 //! and [Allen & Tildesley, 2017](https://doi.org/10.1093/oso/9780198803195.001.0001) §9.3.1, eqns 9.42–9.44.
 
+use crate::auxiliary::ColumnWriter;
 use crate::cell::BoundaryConditions;
+use crate::histogram::Histogram;
+use crate::selection::{Selection, SelectionCache};
 use crate::{Context, Point};
 use average::{Estimate, Mean};
+use log::{debug, warn};
 use rand::prelude::*;
 use serde::{Deserialize, Serialize};
-
-/// How to measure distance between an atom and the reference group.
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
-pub enum DistanceMetric {
-    /// Surface-to-surface distance to the reference bounding sphere.
-    /// `d = max(0, |pos - cm_ref| - R_ref)`
-    #[default]
-    BoundingSphere,
-    /// Distance to the reference mass center.
-    MassCenter,
-}
+use std::path::{Path, PathBuf};
 
 fn default_exponent() -> f64 {
     2.0
@@ -46,9 +40,9 @@ fn default_offset() -> f64 {
 
 /// Distance-biased atom selection with detailed-balance correction.
 ///
-/// Biases selection toward a reference group using weight `W'(r) = (r + offset)^{-ν}`,
-/// where `r` is measured by the configured [`DistanceMetric`]. The acceptance criterion
-/// must include `ln(W_new / W_old)` to maintain detailed balance
+/// Biases selection toward reference group(s) using weight `W'(r) = (r + offset)^{-ν}`,
+/// where `r` is the nearest bounding-sphere distance across all matching reference groups.
+/// The acceptance criterion includes `ln(W_new / W_old)` to maintain detailed balance
 /// ([Allen & Tildesley, 2017](https://doi.org/10.1093/oso/9780198803195.001.0001), eqn 9.44).
 ///
 /// Weights are cached and incrementally updated: only the previously moved atom's
@@ -56,13 +50,8 @@ fn default_offset() -> f64 {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PreferentialSampling {
-    /// Reference molecule name (resolved to id during finalize)
-    reference: String,
-    #[serde(skip)]
-    reference_id: Option<usize>,
-    /// Distance metric
-    #[serde(default)]
-    metric: DistanceMetric,
+    /// Selection expression for reference groups (e.g. "molecule Protein")
+    reference: Selection,
     /// Exponent ν in W'(r) = (r + offset)^{-ν}
     #[serde(default = "default_exponent")]
     exponent: f64,
@@ -87,16 +76,44 @@ pub struct PreferentialSampling {
     /// Running mean of |ln(W_new / W_old)| — diagnostic for bias correction magnitude
     #[serde(skip_deserializing)]
     mean_bias: Mean,
+    /// Optional output file for the selection-distance histogram.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    file: Option<PathBuf>,
+    /// Cached reference group indices with generation tracking for GCMC compatibility.
+    #[serde(skip)]
+    ref_cache: SelectionCache,
+    /// Cached (mass_center, bounding_radius) per reference group.
+    #[serde(skip)]
+    ref_geometries: Vec<(Point, f64)>,
+    /// Bounding radii (Å) of reference groups, written to output YAML.
+    #[serde(skip_deserializing, skip_serializing_if = "Vec::is_empty")]
+    bounding_radii: Vec<f64>,
+    /// Histogram of selection distances; only allocated when `file` is set.
+    #[serde(skip)]
+    distance_histogram: Option<Histogram>,
 }
 
 impl PreferentialSampling {
-    /// Resolve reference molecule name to id.
+    /// Resolve the selection, prime the geometry cache, and validate.
     pub fn finalize(&mut self, context: &impl Context) -> anyhow::Result<()> {
-        self.reference_id = Some(super::find_molecule_id(
-            context,
-            &self.reference,
-            "PreferentialSampling",
-        )?);
+        self.refresh_ref_geometries(context);
+        anyhow::ensure!(
+            !self.ref_geometries.is_empty(),
+            "PreferentialSampling: selection '{}' matched no groups with valid mass centers",
+            self.reference
+        );
+        for (i, &(_, radius)) in self.ref_geometries.iter().enumerate() {
+            if radius < f64::EPSILON {
+                warn!(
+                    "PreferentialSampling: reference group {} has zero bounding radius \
+                     (single atom?); bounding-sphere distance reduces to mass-center distance",
+                    i
+                );
+            }
+        }
+        if self.file.is_some() {
+            self.distance_histogram = Some(Histogram::new(0.0, 200.0, 0.5));
+        }
         Ok(())
     }
 
@@ -105,44 +122,56 @@ impl PreferentialSampling {
         (r + self.offset).powf(-self.exponent)
     }
 
-    /// Distance from a point to the reference, given its mass center and bounding radius.
-    fn distance_with_metric(
-        &self,
-        pos: &Point,
-        ref_cm: &Point,
-        ref_radius: f64,
-        context: &impl Context,
-    ) -> f64 {
-        let dist = context.cell().distance(pos, ref_cm).norm();
-        match self.metric {
-            DistanceMetric::BoundingSphere => (dist - ref_radius).max(0.0),
-            DistanceMetric::MassCenter => dist,
+    /// Refresh cached (mass_center, bounding_radius) from current group state.
+    /// Called once per `rebuild_weights()` — stable within a `!Deterministic` block.
+    fn refresh_ref_geometries(&mut self, context: &impl Context) {
+        let generation = context.group_lists().generation();
+        let ref_indices = self.ref_cache.get_or_resolve(generation, || {
+            let resolved = self
+                .reference
+                .resolve_groups(context.topology_ref(), context.groups());
+            debug!(
+                "PreferentialSampling: resolved '{}' → {} group(s): {:?}",
+                self.reference,
+                resolved.len(),
+                resolved
+            );
+            resolved
+        });
+        let groups = context.groups();
+        self.ref_geometries.clear();
+        self.bounding_radii.clear();
+        for &gi in ref_indices {
+            let g = &groups[gi];
+            if let Some(&cm) = g.mass_center() {
+                let radius = g.bounding_radius().unwrap_or(0.0);
+                debug!(
+                    "  group[{gi}]: center=({:.2}, {:.2}, {:.2}), radius={radius:.2}",
+                    cm.x, cm.y, cm.z
+                );
+                self.ref_geometries.push((cm, radius));
+                self.bounding_radii.push(radius);
+            }
         }
     }
 
-    /// Look up the reference group's mass center and bounding radius.
-    fn reference_geometry(&self, context: &impl Context) -> (Point, f64) {
-        let ref_id = self.reference_id.expect("not finalized");
-        let groups = context.groups();
-        let ref_group = groups
+    /// Nearest bounding-sphere distance from a point to any reference group.
+    fn distance_to_nearest_reference(&self, pos: &Point, cell: &impl BoundaryConditions) -> f64 {
+        self.ref_geometries
             .iter()
-            .find(|g| g.molecule() == ref_id && !g.is_empty())
-            .expect("reference group should exist and be non-empty");
-        let cm = *ref_group
-            .mass_center()
-            .expect("reference group should have mass center");
-        let radius = ref_group.bounding_radius().unwrap_or(0.0);
-        (cm, radius)
+            .map(|(cm, radius)| (cell.distance(pos, cm).norm() - radius).max(0.0))
+            .reduce(f64::min)
+            .unwrap_or(f64::INFINITY)
     }
 
     /// Rebuild all weights from scratch.
     fn rebuild_weights(&mut self, candidates: &[usize], context: &impl Context) {
-        let (ref_cm, ref_radius) = self.reference_geometry(context);
+        self.refresh_ref_geometries(context);
         self.weights = candidates
             .iter()
             .map(|&atom| {
                 let pos = context.position(atom);
-                let r = self.distance_with_metric(&pos, &ref_cm, ref_radius, context);
+                let r = self.distance_to_nearest_reference(&pos, context.cell());
                 self.weight(r)
             })
             .collect();
@@ -150,7 +179,7 @@ impl PreferentialSampling {
         self.dirty_index = None;
     }
 
-    /// Select a candidate atom weighted by distance to the reference.
+    /// Select a candidate atom weighted by distance to the nearest reference.
     ///
     /// On first call, builds the full weight vector. On subsequent calls within
     /// the same repeat block, only updates the previously moved atom's weight.
@@ -166,9 +195,8 @@ impl PreferentialSampling {
         // Incremental update: only recompute the dirty atom's weight
         if let Some(dirty) = self.dirty_index {
             if dirty < self.weights.len() && self.weights.len() == candidates.len() {
-                let (ref_cm, ref_radius) = self.reference_geometry(context);
                 let pos = context.position(candidates[dirty]);
-                let r = self.distance_with_metric(&pos, &ref_cm, ref_radius, context);
+                let r = self.distance_to_nearest_reference(&pos, context.cell());
                 let new_w = self.weight(r);
                 self.w_total += new_w - self.weights[dirty];
                 self.weights[dirty] = new_w;
@@ -183,17 +211,27 @@ impl PreferentialSampling {
         // Weighted random selection via cumulative distribution
         let threshold = rng.r#gen::<f64>() * self.w_total;
         let mut cumulative = 0.0;
-        for (i, &w) in self.weights.iter().enumerate() {
-            cumulative += w;
-            if cumulative >= threshold {
-                self.dirty_index = Some(i);
-                return Some(candidates[i]);
+        let selected_idx = 'select: {
+            for (i, &w) in self.weights.iter().enumerate() {
+                cumulative += w;
+                if cumulative >= threshold {
+                    break 'select i;
+                }
             }
+            // Rounding fallback
+            candidates.len() - 1
+        };
+        self.dirty_index = Some(selected_idx);
+
+        // Record distance from the cached weight (avoids recomputing distance)
+        if let Some(ref mut hist) = self.distance_histogram {
+            let w = self.weights[selected_idx];
+            // Invert W'(r) = (r + offset)^{-ν} → r = w^{-1/ν} - offset
+            let r = w.powf(-1.0 / self.exponent) - self.offset;
+            hist.add(r);
         }
-        // Rounding fallback
-        let last = candidates.len() - 1;
-        self.dirty_index = Some(last);
-        Some(candidates[last])
+
+        Some(candidates[selected_idx])
     }
 
     /// Compute the acceptance bias for a moved atom.
@@ -201,9 +239,8 @@ impl PreferentialSampling {
     /// Called after atom selection but before the move is applied.
     /// Uses the known displacement to predict the new position.
     pub fn compute_bias(&mut self, old_pos: &Point, new_pos: &Point, context: &impl Context) {
-        let (ref_cm, ref_radius) = self.reference_geometry(context);
-        let r_old = self.distance_with_metric(old_pos, &ref_cm, ref_radius, context);
-        let r_new = self.distance_with_metric(new_pos, &ref_cm, ref_radius, context);
+        let r_old = self.distance_to_nearest_reference(old_pos, context.cell());
+        let r_new = self.distance_to_nearest_reference(new_pos, context.cell());
         let w_atom_old = self.weight(r_old);
         let w_atom_new = self.weight(r_new);
         let w_new = self.w_total - w_atom_old + w_atom_new;
@@ -216,6 +253,28 @@ impl PreferentialSampling {
     pub fn ln_bias(&self) -> f64 {
         self.ln_bias
     }
+
+    /// Write the distance histogram to the given file path.
+    fn write_histogram(histogram: &Histogram, path: &Path) -> anyhow::Result<()> {
+        let mut writer = ColumnWriter::open(path, &["distance", "count"])?;
+        for (center, count) in histogram.iter() {
+            if count > 0.0 {
+                writer.write_row(&[&format!("{center:.4}"), &format!("{count:.0}")])?;
+            }
+        }
+        writer.flush()?;
+        Ok(())
+    }
+}
+
+impl Drop for PreferentialSampling {
+    fn drop(&mut self) {
+        if let (Some(hist), Some(path)) = (&self.distance_histogram, &self.file) {
+            if let Err(e) = Self::write_histogram(hist, path) {
+                warn!("PreferentialSampling: failed to write histogram: {e}");
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -225,9 +284,7 @@ mod tests {
 
     fn make_sampler(exponent: f64, offset: f64) -> PreferentialSampling {
         PreferentialSampling {
-            reference: String::new(),
-            reference_id: None,
-            metric: DistanceMetric::BoundingSphere,
+            reference: Selection::parse("all").unwrap(),
             exponent,
             offset,
             weights: Vec::new(),
@@ -236,6 +293,11 @@ mod tests {
             dirty_index: None,
             sum_bias: 0.0,
             mean_bias: Mean::new(),
+            file: None,
+            ref_cache: SelectionCache::default(),
+            ref_geometries: Vec::new(),
+            bounding_radii: Vec::new(),
+            distance_histogram: None,
         }
     }
 
@@ -377,5 +439,41 @@ mod tests {
         // Moving away: bias < 0 (easier accept). Moving closer: bias > 0 (harder accept).
         assert!(bias_fwd < 0.0);
         assert!(bias_rev > 0.0);
+    }
+
+    /// Nearest-reference distance picks the closest among multiple reference groups.
+    #[test]
+    fn nearest_reference_distance() {
+        use crate::cell::{BoundaryConditions, Cuboid};
+        use nalgebra::Vector3;
+
+        let mut ps = make_sampler(2.0, 1.0);
+        // Two reference groups: one at (10,0,0) R=2, one at (20,0,0) R=3
+        ps.ref_geometries = vec![
+            (Point::from(Vector3::new(10.0, 0.0, 0.0)), 2.0),
+            (Point::from(Vector3::new(20.0, 0.0, 0.0)), 3.0),
+        ];
+
+        let cell = Cuboid::new(100.0, 100.0, 100.0);
+
+        // Helper: compute nearest bounding-sphere distance manually
+        let nearest = |pos: &Point| -> f64 {
+            ps.ref_geometries
+                .iter()
+                .map(|(cm, r)| (cell.distance(pos, cm).norm() - r).max(0.0))
+                .fold(f64::INFINITY, f64::min)
+        };
+
+        // Atom at origin: d1 = 10-2 = 8, d2 = 20-3 = 17 → nearest = 8
+        let pos = Point::from(Vector3::new(0.0, 0.0, 0.0));
+        assert_approx_eq!(f64, nearest(&pos), 8.0, epsilon = 1e-10);
+
+        // Atom at (18,0,0): d1 = 8-2 = 6, d2 = max(0, 2-3) = 0 → nearest = 0
+        let pos2 = Point::from(Vector3::new(18.0, 0.0, 0.0));
+        assert_approx_eq!(f64, nearest(&pos2), 0.0, epsilon = 1e-10);
+
+        // Atom at (15,0,0): d1 = 5-2 = 3, d2 = 5-3 = 2 → nearest = 2
+        let pos3 = Point::from(Vector3::new(15.0, 0.0, 0.0));
+        assert_approx_eq!(f64, nearest(&pos3), 2.0, epsilon = 1e-10);
     }
 }

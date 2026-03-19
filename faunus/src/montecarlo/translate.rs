@@ -196,6 +196,11 @@ impl TranslateAtom {
         }
     }
 
+    /// Whether this move uses preferential sampling.
+    pub(crate) fn has_preferential(&self) -> bool {
+        self.preferential.is_some()
+    }
+
     /// Pick a random group index matching the molecule/selection filter.
     fn pick_group(&self, context: &impl Context, rng: &mut (impl Rng + ?Sized)) -> Option<usize> {
         match self.molecule_id {
@@ -293,22 +298,17 @@ impl TranslateAtom {
 }
 
 impl<T: Context> MoveProposal<T> for TranslateAtom {
+    #[allow(clippy::unnecessary_unwrap)] // split borrow: pick_group borrows self, then pref
     fn propose_move(&mut self, context: &T, rng: &mut dyn RngCore) -> Option<ProposedMove> {
-        let (group, absolute_atom) = if let Some(ref mut pref) = self.preferential {
-            let group = match self.molecule_id {
-                Some(m) => random_group(context, rng, m)?,
-                None => context
-                    .select(&self.select_molecule_ids)
-                    .iter()
-                    .copied()
-                    .choose(rng)?,
-            };
+        let (group, absolute_atom) = if self.preferential.is_some() {
+            let group = self.pick_group(context, rng)?;
             let select = self
                 .atom_id
                 .map_or(ParticleSelection::Active, ParticleSelection::ById);
             let candidates = context.groups()[group]
                 .select(&select, context.topology_ref())
                 .expect("Selection should be successful.");
+            let pref = self.preferential.as_mut().unwrap();
             let atom = pref.weighted_select(context, &candidates, rng)?;
             (group, atom)
         } else {

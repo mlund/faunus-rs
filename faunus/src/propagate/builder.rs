@@ -103,7 +103,20 @@ impl MoveCollectionBuilder {
                     LangevinRunner::new(config),
                 )));
             }
-            Self::Stochastic(b) => (SelectionStrategy::Stochastic, b),
+            Self::Stochastic(b) => {
+                // Preferential sampling needs reference positions stable within the block
+                let has_preferential = b
+                    .moves
+                    .iter()
+                    .any(|m| matches!(m, MoveBuilder::TranslateAtom(ta) if ta.has_preferential()));
+                if has_preferential {
+                    anyhow::bail!(
+                        "PreferentialSampling requires a !Deterministic block \
+                         so that reference groups move before biased atom moves"
+                    );
+                }
+                (SelectionStrategy::Stochastic, b)
+            }
             Self::Deterministic(b) => (SelectionStrategy::Deterministic, b),
         };
         let (repeat, moves) = builder.build_moves(context)?;

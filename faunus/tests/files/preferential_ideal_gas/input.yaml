@@ -59,7 +59,6 @@ propagate:
           dp: 2.0
           repeat: 20
           preferential:
-            reference: Macromolecule
-            metric: BoundingSphere
+            reference: "molecule Macromolecule"
             exponent: 2
             offset: 1.0
