@@ -12,8 +12,10 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
-use super::{find_molecule_id, random_atom, random_group};
+use super::preferential::PreferentialSampling;
+use super::{find_molecule_id, random_atom, random_group, Bias};
 use crate::group::*;
+use crate::montecarlo::NewOld;
 use crate::propagate::{tagged_yaml, Displacement, MoveProposal, MoveTarget, ProposedMove};
 use crate::transform::{random_displacement, random_unit_vector, Transform};
 use crate::{Change, Context, GroupChange};
@@ -151,6 +153,9 @@ pub struct TranslateAtom {
     #[serde(skip)]
     #[serde(default = "default_select_molecule_ids")]
     select_molecule_ids: GroupSelection,
+    /// Optional preferential sampling bias toward a reference molecule.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    preferential: Option<PreferentialSampling>,
 }
 
 // TODO different default option might be better (we want any group that is not empty)
@@ -187,28 +192,29 @@ impl TranslateAtom {
             weight,
             repeat,
             select_molecule_ids: GroupSelection::Size(GroupSize::Full),
+            preferential: None,
         }
     }
 
-    /// Returns group id and absolute index of an atom to act on.
-    /// If no atom could be selected, returns None.
+    /// Pick a random group index matching the molecule/selection filter.
+    fn pick_group(&self, context: &impl Context, rng: &mut (impl Rng + ?Sized)) -> Option<usize> {
+        match self.molecule_id {
+            Some(m) => random_group(context, rng, m),
+            None => context
+                .select(&self.select_molecule_ids)
+                .iter()
+                .copied()
+                .choose(rng),
+        }
+    }
+
+    /// Returns group id and absolute index of a uniformly chosen atom.
     fn get_group_atom(
         &self,
         context: &impl Context,
         rng: &mut (impl Rng + ?Sized),
     ) -> Option<(usize, usize)> {
-        let group = match self.molecule_id {
-            Some(m) => random_group(context, rng, m)?,
-            // if molecule is not specified, we choose from all molecules containing
-            // at least one of the requested atoms
-            // todo! what if the target atom becomes deactivated?
-            None => context
-                .select(&self.select_molecule_ids)
-                .iter()
-                .copied()
-                .choose(rng)?,
-        };
-
+        let group = self.pick_group(context, rng)?;
         Some((group, random_atom(context, rng, group, self.atom_id)?))
     }
 
@@ -278,19 +284,49 @@ impl TranslateAtom {
             _ => (),
         }
 
+        if let Some(ref mut pref) = self.preferential {
+            pref.finalize(context)?;
+        }
+
         Ok(())
     }
 }
 
 impl<T: Context> MoveProposal<T> for TranslateAtom {
     fn propose_move(&mut self, context: &T, rng: &mut dyn RngCore) -> Option<ProposedMove> {
-        let (group, absolute_atom) = std::iter::repeat_with(|| self.get_group_atom(context, rng))
-            .flatten()
-            .next()
-            .unwrap();
+        let (group, absolute_atom) = if let Some(ref mut pref) = self.preferential {
+            let group = match self.molecule_id {
+                Some(m) => random_group(context, rng, m)?,
+                None => context
+                    .select(&self.select_molecule_ids)
+                    .iter()
+                    .copied()
+                    .choose(rng)?,
+            };
+            let select = self
+                .atom_id
+                .map_or(ParticleSelection::Active, ParticleSelection::ById);
+            let candidates = context.groups()[group]
+                .select(&select, context.topology_ref())
+                .expect("Selection should be successful.");
+            let atom = pref.weighted_select(context, &candidates, rng)?;
+            (group, atom)
+        } else {
+            std::iter::repeat_with(|| self.get_group_atom(context, rng))
+                .flatten()
+                .next()
+                .unwrap()
+        };
 
         let displacement =
             random_unit_vector(rng) * random_displacement(rng, self.max_displacement);
+
+        // Pre-compute preferential bias before the move is applied
+        if let Some(ref mut pref) = self.preferential {
+            let old_pos = context.position(absolute_atom);
+            let new_pos = old_pos + displacement;
+            pref.compute_bias(&old_pos, &new_pos, context);
+        }
 
         let relative_atom = context.groups()[group]
             .to_relative_index(absolute_atom)
@@ -305,6 +341,13 @@ impl<T: Context> MoveProposal<T> for TranslateAtom {
             ),
             target: MoveTarget::Group(group),
         })
+    }
+
+    fn bias(&self, _change: &Change, _energies: &NewOld<f64>) -> Bias {
+        match &self.preferential {
+            Some(pref) => Bias::Dimensionless(pref.ln_bias()),
+            None => Bias::None,
+        }
     }
 
     fn to_yaml(&self) -> Option<serde_yaml::Value> {

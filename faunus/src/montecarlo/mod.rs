@@ -32,6 +32,7 @@ use std::{cmp::Ordering, ops::Neg};
 mod crankshaft;
 pub mod gibbs;
 mod pivot;
+pub mod preferential;
 mod rotate;
 pub mod speciation;
 mod translate;
@@ -121,12 +122,26 @@ fn random_atom(
 /// Some moves may need to add additional bias not captured by the Hamiltonian.
 #[derive(Clone, Copy, Debug)]
 pub enum Bias {
-    /// Custom bias to be added to the energy
+    /// Custom bias to be added to the energy (in energy units, e.g. kJ/mol)
     Energy(f64),
+    /// Dimensionless bias (in units of kT); multiplied by thermal energy before adding to ΔU
+    Dimensionless(f64),
     /// Force acceptance of the move regardless of energy change
     ForceAccept,
     /// No bias
     None,
+}
+
+impl Bias {
+    /// Convert bias to energy units. Returns `None` for `ForceAccept`.
+    fn to_energy(self, thermal_energy: f64) -> Option<f64> {
+        match self {
+            Self::Energy(bias) => Some(bias),
+            Self::Dimensionless(bias) => Some(bias * thermal_energy),
+            Self::None => Some(0.0),
+            Self::ForceAccept => None,
+        }
+    }
 }
 
 /// Named helper struct to handle `new`, `old` pairs.
@@ -250,12 +265,10 @@ impl AcceptanceCriterion {
                     return true;
                 }
 
-                let du = energy.difference()
-                    + match bias {
-                        Bias::Energy(bias) => bias,
-                        Bias::None => 0.0,
-                        Bias::ForceAccept => return true,
-                    };
+                let Some(bias_energy) = bias.to_energy(thermal_energy) else {
+                    return true; // ForceAccept
+                };
+                let du = energy.difference() + bias_energy;
                 // Reject if du is NaN (e.g. from inf - inf during hard-sphere overlap)
                 if du.is_nan() {
                     return false;
@@ -268,13 +281,10 @@ impl AcceptanceCriterion {
                 if energy.old.is_infinite() && energy.new.is_finite() {
                     return true;
                 }
-                energy.difference()
-                    + match bias {
-                        Bias::Energy(bias) => bias,
-                        Bias::None => 0.0,
-                        Bias::ForceAccept => return true,
-                    }
-                    <= 0.0
+                let Some(bias_energy) = bias.to_energy(thermal_energy) else {
+                    return true; // ForceAccept
+                };
+                energy.difference() + bias_energy <= 0.0
             }
         }
     }

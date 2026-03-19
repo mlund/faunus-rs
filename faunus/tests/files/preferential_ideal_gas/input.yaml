@@ -1,0 +1,65 @@
+# Preferential sampling regression test: non-interacting particles
+# with distance-biased selection toward a reference molecule.
+#
+# Setup:
+#   - One frozen "Solute" molecule at the origin (reference for biasing)
+#   - 20 atomic "Ion" particles distributed in a 50 Å cuboid
+#   - No energy terms → all moves have ΔU = 0
+#
+# Preferential sampling selects ions with weight W'(r) = (r + 1)^{-2},
+# where r is the BoundingSphere distance to the solute. Ions closer to
+# the solute are selected more often, but the acceptance correction
+# ln(W_new/W_old) ensures detailed balance: the equilibrium distribution
+# is uniform (ideal gas), regardless of the biased selection.
+#
+# Since ΔU = 0, the acceptance probability reduces to:
+#   acc = min(1, exp(-ln(W_new/W_old))) = min(1, W_old/W_new)
+#
+# This test verifies that the preferential selection + bias correction
+# code path runs correctly and produces deterministic, reproducible output.
+
+atoms:
+  - {name: Solute, mass: 100.0, sigma: 10.0}
+  - {name: Ion, mass: 1.0, sigma: 1.0}
+
+molecules:
+  - name: Macromolecule
+    atoms: [Solute]
+    has_com: true
+  - name: Ion
+    atoms: [Ion]
+    atomic: true
+
+system:
+  cell: !Cuboid [50.0, 50.0, 50.0]
+  medium:
+    permittivity: !Vacuum
+    temperature: 300.0
+  energy: {}
+  blocks:
+    - molecule: Macromolecule
+      N: 1
+      insert: !RandomAtomPos {}
+    - molecule: Ion
+      N: 20
+      insert: !RandomAtomPos {}
+
+analysis:
+  - !Energy {file: energy.dat, frequency: !Every 10}
+
+propagate:
+  seed: !Fixed 42
+  criterion: Metropolis
+  repeat: 100
+  collections:
+    - !Deterministic
+      moves:
+        - !TranslateAtom
+          molecule: Ion
+          dp: 2.0
+          repeat: 20
+          preferential:
+            reference: Macromolecule
+            metric: BoundingSphere
+            exponent: 2
+            offset: 1.0

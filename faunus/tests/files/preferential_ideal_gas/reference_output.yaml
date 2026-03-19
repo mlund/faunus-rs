@@ -1,0 +1,66 @@
+medium:
+  permittivity: Vacuum
+  salt: null
+  temperature: 300.0
+blocks:
+- molecule: Macromolecule
+  N: 1
+  active: null
+  insert: !RandomAtomPos
+    directions: xyz
+- molecule: Ion
+  N: 20
+  active: null
+  insert: !RandomAtomPos
+    directions: xyz
+cell: !Cuboid
+- 50.0
+- 50.0
+- 50.0
+energy_change:
+  drift: 0.0
+  final: 0.0
+  initial: 0.0
+energy_timers:
+  celloverlap: '100 (energy: 68.81, update: 31.19)'
+propagate:
+  repeat: 100
+  seed: !Fixed 42
+  collections:
+  - !Deterministic
+    repeat: 1
+    elapsed_seconds: 0.019740874
+    moves:
+    - !TranslateAtom
+      atom: null
+      molecule: Ion
+      max_displacement: 2.0
+      preferential:
+        reference: Macromolecule
+        metric: BoundingSphere
+        exponent: 2.0
+        offset: 1.0
+        sum_bias: -0.16839621234870597
+        mean_bias:
+          avg: 0.0024522067967860635
+          n: 2000
+      weight: 1.0
+      repeat: 20
+      statistics:
+        num_trials: 2000
+        num_accepted: 1997
+        mean_square_displacement:
+          avg: 1.3118697827212153
+          n: 2000
+        timer:
+          accumulated:
+            secs: 0
+            nanos: 0
+        info: {}
+        energy_change_sum: 0.0
+        acceptance_ratio: 0.9985
+  criterion: MetropolisHastings
+analysis:
+- energy:
+    num_samples: 10
+    mean: 0.0

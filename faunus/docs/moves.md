@@ -97,13 +97,53 @@ If `atom` is specified, only atoms of that type are selected.
 - !TranslateAtom { molecule: Water, atom: O, dp: 0.2, weight: 1.0, repeat: 5 }
 ```
 
-Key        | Required | Default | Description
----------- | -------- | ------- | -------------------------------------------
-`dp`       | yes      |         | Maximum displacement (Angstrom)
-`weight`   | yes      |         | Selection weight
-`molecule` | no       |         | Restrict to this molecule type
-`atom`     | no       |         | Restrict to this atom type
-`repeat`   | no       | 1       | Repetitions per selection
+Key            | Required | Default | Description
+-------------- | -------- | ------- | -------------------------------------------
+`dp`           | yes      |         | Maximum displacement (Angstrom)
+`weight`       | yes      |         | Selection weight
+`molecule`     | no       |         | Restrict to this molecule type
+`atom`         | no       |         | Restrict to this atom type
+`repeat`       | no       | 1       | Repetitions per selection
+`preferential` | no       |         | Preferential sampling settings (see below)
+
+### Preferential Sampling
+
+Biases atom selection toward a reference molecule using distance-dependent weights,
+with a corresponding acceptance correction to maintain detailed balance.
+Useful in dilute solutions where standard MC wastes most trial moves on bulk
+particles far from the solute
+([Owicki & Scheraga, 1977](https://doi.org/10.1016/0009-2614(77)85051-3);
+[Allen & Tildesley, 2017](https://doi.org/10.1093/oso/9780198803195.001.0001), §9.3.1).
+
+Each candidate atom receives weight $W'(r) = (r + \text{offset})^{-\nu}$
+where $r$ is the distance to the reference molecule measured by the chosen metric.
+The acceptance criterion includes a correction $\ln(W_\text{new} / W_\text{old})$
+where $W = \sum_j W'(r_j)$ is the normalization sum over all candidates.
+
+Best combined with a `!Deterministic` block so that the reference molecule
+moves first (updating its position), followed by the biased atom moves:
+
+```yaml
+- !Deterministic
+  moves:
+    - !TranslateMolecule { molecule: Protein, dp: 0.5 }
+    - !RotateMolecule { molecule: Protein, dp: 0.5 }
+    - !TranslateAtom
+        molecule: Na
+        dp: 0.5
+        repeat: 100
+        preferential:
+          reference: Protein
+          exponent: 2
+          offset: 1.0
+```
+
+Key         | Required | Default          | Description
+----------- | -------- | ---------------- | -------------------------------------------
+`reference` | yes      |                  | Name of the reference molecule
+`metric`    | no       | `BoundingSphere` | Distance metric (`BoundingSphere` or `MassCenter`)
+`exponent`  | no       | 2                | Exponent $\nu$ in the weight function
+`offset`    | no       | 1.0              | Offset (Angstrom) to avoid singularity at $r = 0$
 
 ## Rotate Molecule
 
