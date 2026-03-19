@@ -27,7 +27,8 @@ use crate::{
     energy::{ConstrainBuilder, EnergyTerm, HarmonicConstraint},
     montecarlo::MarkovChain,
     propagate::Propagate,
-    simulation, state::State,
+    simulation,
+    state::State,
     WithHamiltonian,
 };
 use anyhow::Result;
@@ -125,7 +126,10 @@ fn overlap_ratio_offsets(results: &[WindowResult], kt: f64) -> Vec<f64> {
         let delta = if overlap_lo >= overlap_hi {
             log::warn!(
                 "Windows {} and {} have no overlap ({:.2}..{:.2}), PMF discontinuous",
-                i, i + 1, overlap_lo, overlap_hi
+                i,
+                i + 1,
+                overlap_lo,
+                overlap_hi
             );
             f64::NAN
         } else {
@@ -136,7 +140,10 @@ fn overlap_ratio_offsets(results: &[WindowResult], kt: f64) -> Vec<f64> {
             } else {
                 log::warn!(
                     "Windows {}-{}: zero overlap counts (f_i={:.4}, f_next={:.4})",
-                    i, i + 1, f_i, f_next
+                    i,
+                    i + 1,
+                    f_i,
+                    f_next
                 );
                 f64::NAN
             }
@@ -216,7 +223,11 @@ fn build_pmf(results: &[WindowResult], kt: f64, bin_width: f64) -> Vec<PmfPoint>
                 let n = entries[0].1;
                 kt / n.sqrt()
             };
-            PmfPoint { cv, f: mean, stderr }
+            PmfPoint {
+                cv,
+                f: mean,
+                stderr,
+            }
         })
         .collect();
 
@@ -289,7 +300,8 @@ fn run_window(
         mc.load_state(state)?;
         context = mc.into_context();
         params.multi_progress.println(format!(
-            "Window {window_index}: restored state from {}", state_path.display()
+            "Window {window_index}: restored state from {}",
+            state_path.display()
         ))?;
     }
 
@@ -353,7 +365,8 @@ fn run_window(
         // and invalidate BAR overlap fractions during production
         context.hamiltonian_mut().pop_front();
         params.multi_progress.println(format!(
-            "Window {window_index}: saved state to {}", state_path.display()
+            "Window {window_index}: saved state to {}",
+            state_path.display()
         ))?;
     }
 
@@ -403,7 +416,11 @@ fn run_window(
         ("drift".to_string(), drift),
     ]);
     simulation::write_yaml(&energy_summary, &mut yaml_output, Some("energy_change"))?;
-    simulation::write_yaml(&mc.propagation().to_yaml(), &mut yaml_output, Some("propagate"))?;
+    simulation::write_yaml(
+        &mc.propagation().to_yaml(),
+        &mut yaml_output,
+        Some("propagate"),
+    )?;
     let analysis_yaml = analysis::analyses_to_yaml(mc.analyses());
     if !analysis_yaml.is_empty() {
         simulation::write_yaml(&analysis_yaml, &mut yaml_output, Some("analysis"))?;
@@ -420,11 +437,7 @@ fn run_window(
         cv_max = cv_samples.iter().copied().reduce(f64::max).unwrap_or(f64::NAN),
     ))?;
 
-    Ok(WindowResult {
-        lo,
-        hi,
-        cv_samples,
-    })
+    Ok(WindowResult { lo, hi, cv_samples })
 }
 
 // ---------------------------------------------------------------------------
@@ -461,9 +474,18 @@ pub fn run(input: &Path, state_dir: &Path, output: &Path, max_threads: usize) ->
     let multi_progress = MultiProgress::new();
 
     multi_progress.suspend(|| {
-        log::info!("Umbrella sampling: {n_windows} windows, width={:.1}, spacing={:.1}",
-            config.windows.width, config.windows.spacing);
-        log::info!("Window centers: {:?}", centers.iter().map(|c| format!("{c:.1}")).collect::<Vec<_>>());
+        log::info!(
+            "Umbrella sampling: {n_windows} windows, width={:.1}, spacing={:.1}",
+            config.windows.width,
+            config.windows.spacing
+        );
+        log::info!(
+            "Window centers: {:?}",
+            centers
+                .iter()
+                .map(|c| format!("{c:.1}"))
+                .collect::<Vec<_>>()
+        );
     });
 
     std::fs::create_dir_all(state_dir)?;
@@ -529,7 +551,10 @@ pub fn run(input: &Path, state_dir: &Path, output: &Path, max_threads: usize) ->
 
             handles
                 .into_iter()
-                .map(|h| h.join().map_err(|_| anyhow::anyhow!("window thread panicked"))?)
+                .map(|h| {
+                    h.join()
+                        .map_err(|_| anyhow::anyhow!("window thread panicked"))?
+                })
                 .collect()
         });
 
@@ -548,7 +573,11 @@ pub fn run(input: &Path, state_dir: &Path, output: &Path, max_threads: usize) ->
     // Write PMF output
     let mut writer = ColumnWriter::open(output, &["cv", "pmf_kT", "stderr_kT"])?;
     for p in &pmf {
-        writer.write_row(&[&format!("{:.4}", p.cv), &format!("{:.6}", p.f / rt), &format!("{:.6}", p.stderr / rt)])?;
+        writer.write_row(&[
+            &format!("{:.4}", p.cv),
+            &format!("{:.6}", p.f / rt),
+            &format!("{:.6}", p.stderr / rt),
+        ])?;
     }
     log::info!("Wrote PMF ({} bins) to {}", pmf.len(), output.display());
 
