@@ -34,6 +34,16 @@ Then build the entire workspace:
 cargo build
 ```
 
+## Pushing over SSH
+
+Submodule URLs use HTTPS so that cloning works without authentication.
+To push over SSH, add this to your `~/.gitconfig`:
+
+```ini
+[url "git@github.com:"]
+    pushInsteadOf = https://github.com/
+```
+
 ## Why a workspace?
 
 The crates in this workspace depend on each other.
