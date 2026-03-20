@@ -339,6 +339,45 @@ mod integration_tests {
     }
 
     #[test]
+    fn select_by_index() {
+        let ctx = make_context();
+        let sel = Selection::parse("index 0").unwrap();
+        let atoms = sel.resolve_atoms(ctx.topology_ref(), ctx.groups());
+        assert_eq!(atoms, vec![0]);
+    }
+
+    #[test]
+    fn select_by_group() {
+        let ctx = make_context();
+        let sel = Selection::parse("group 0").unwrap();
+        let atoms = sel.resolve_atoms(ctx.topology_ref(), ctx.groups());
+        // Should return all active atoms in group 0
+        let g0 = &ctx.groups()[0];
+        let expected: Vec<usize> = g0.iter_active().collect();
+        assert_eq!(atoms, expected);
+    }
+
+    #[test]
+    fn select_by_group_range() {
+        let ctx = make_context();
+        let all_groups: Vec<usize> = ctx
+            .groups()
+            .iter()
+            .filter(|g| !g.is_empty())
+            .map(|g| g.index())
+            .collect();
+        if all_groups.len() >= 2 {
+            let last = *all_groups.last().unwrap() as i32;
+            let sel_str = format!("group 0 to {last}");
+            let sel = Selection::parse(&sel_str).unwrap();
+            let atoms = sel.resolve_atoms(ctx.topology_ref(), ctx.groups());
+            let all_sel = Selection::parse("all").unwrap();
+            let all_atoms = all_sel.resolve_atoms(ctx.topology_ref(), ctx.groups());
+            assert_eq!(atoms, all_atoms);
+        }
+    }
+
+    #[test]
     fn select_by_atomid_range() {
         let ctx = make_context();
         let sel = Selection::parse("atomid 0 to 0").unwrap();

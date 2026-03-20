@@ -22,6 +22,10 @@ pub enum Expr {
     Atomtype(Vec<GlobPattern>),
     /// Match atom kind id (inclusive ranges).
     Atomid(Vec<(i32, i32)>),
+    /// Match absolute atom index (inclusive ranges).
+    Index(Vec<(i32, i32)>),
+    /// Match group index (inclusive ranges).
+    Group(Vec<(i32, i32)>),
     /// Match molecule kind name (`MoleculeKind.name`).
     Molecule(Vec<GlobPattern>),
     /// Protein residues.

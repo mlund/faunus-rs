@@ -11,6 +11,8 @@ use super::expr::Expr;
 
 /// Per-atom context gathered during evaluation.
 struct AtomContext<'a> {
+    abs_idx: usize,
+    group_index: usize,
     atom_kind: &'a AtomKind,
     atom_name: Option<&'a str>,
     residue: Option<&'a Residue>,
@@ -47,6 +49,8 @@ impl<'a> AtomContext<'a> {
             .iter()
             .find(|c| c.range().contains(&topo_rel));
         Self {
+            abs_idx,
+            group_index: group.index(),
             atom_kind,
             atom_name,
             residue,
@@ -67,6 +71,12 @@ impl<'a> AtomContext<'a> {
     }
 }
 
+/// Check if `value` falls within any of the inclusive `(lo, hi)` ranges.
+fn in_ranges(value: usize, ranges: &[(i32, i32)]) -> bool {
+    let v = value as i32;
+    ranges.iter().any(|(lo, hi)| v >= *lo && v <= *hi)
+}
+
 impl Expr {
     /// Evaluate whether a single atom matches this expression.
     fn matches(&self, ctx: &AtomContext) -> bool {
@@ -77,12 +87,9 @@ impl Expr {
             Self::Resname(patterns) => ctx
                 .residue
                 .is_some_and(|r| patterns.iter().any(|p| p.matches(r.name()))),
-            Self::Resid(ranges) => ctx.residue.is_some_and(|r| {
-                r.number().is_some_and(|num| {
-                    let num = num as i32;
-                    ranges.iter().any(|(lo, hi)| num >= *lo && num <= *hi)
-                })
-            }),
+            Self::Resid(ranges) => ctx
+                .residue
+                .is_some_and(|r| r.number().is_some_and(|n| in_ranges(n, ranges))),
             Self::Name(patterns) => ctx
                 .atom_name
                 .is_some_and(|name| patterns.iter().any(|p| p.matches(name))),
@@ -91,10 +98,9 @@ impl Expr {
                 .element()
                 .is_some_and(|elem| patterns.iter().any(|p| p.matches(elem))),
             Self::Atomtype(patterns) => patterns.iter().any(|p| p.matches(ctx.atom_kind.name())),
-            Self::Atomid(ranges) => {
-                let id = ctx.atom_kind.id() as i32;
-                ranges.iter().any(|(lo, hi)| id >= *lo && id <= *hi)
-            }
+            Self::Atomid(ranges) => in_ranges(ctx.atom_kind.id(), ranges),
+            Self::Index(ranges) => in_ranges(ctx.abs_idx, ranges),
+            Self::Group(ranges) => in_ranges(ctx.group_index, ranges),
             Self::Molecule(patterns) => patterns.iter().any(|p| p.matches(ctx.mol_kind.name())),
             Self::Protein => ctx.residue_or_atomtype_in(PROTEIN_RESIDUES),
             Self::Backbone => ctx.residue.is_some_and(|r| {

@@ -29,6 +29,8 @@ Keyword              | Aliases                       | Description
 `element`            | `elem`                        | Chemical element symbol
 `atomtype`           | `type`                        | Force-field atom type name
 `atomid`             |                               | Atom kind id (ranges with `to` or `:`)
+`index`              |                               | Absolute atom index (ranges with `to` or `:`)
+`group`              |                               | Group index (ranges with `to` or `:`)
 `molecule`           |                               | Molecule kind name
 
 #### Glob patterns
@@ -44,13 +46,15 @@ Examples: `atomtype C*`, `name "C[AB]"`, `resname A??`.
 
 #### Numeric ranges
 
-`resid` and `atomid` accept single values, `to` ranges, or colon ranges:
+`resid`, `atomid`, `index`, and `group` accept single values, `to` ranges, or colon ranges:
 
 ```text
 resid 42
 resid 10 to 20
 resid 10:20
 atomid 0 to 5
+index 0 to 99
+group 3
 ```
 
 ### Standalone keywords

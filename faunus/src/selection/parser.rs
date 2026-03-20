@@ -96,6 +96,8 @@ impl<'a> Parser<'a> {
             Some(Token::Molecule) => self.parse_pattern_keyword("molecule", Expr::Molecule),
             Some(Token::Resid) => self.parse_range_keyword("resid", Expr::Resid),
             Some(Token::Atomid) => self.parse_range_keyword("atomid", Expr::Atomid),
+            Some(Token::Index) => self.parse_range_keyword("index", Expr::Index),
+            Some(Token::Group) => self.parse_range_keyword("group", Expr::Group),
             Some(Token::Protein) => self.advance_and_ok(Expr::Protein),
             Some(Token::Backbone) => self.advance_and_ok(Expr::Backbone),
             Some(Token::Sidechain) => self.advance_and_ok(Expr::Sidechain),
@@ -312,6 +314,18 @@ mod tests {
     fn parse_atomid_range() {
         let expr = parse("atomid 0 to 5").unwrap();
         assert!(matches!(expr, Expr::Atomid(ref ranges) if ranges == &[(0, 5)]));
+    }
+
+    #[test]
+    fn parse_index_range() {
+        let expr = parse("index 0 to 10").unwrap();
+        assert!(matches!(expr, Expr::Index(ref ranges) if ranges == &[(0, 10)]));
+    }
+
+    #[test]
+    fn parse_group_single() {
+        let expr = parse("group 3").unwrap();
+        assert!(matches!(expr, Expr::Group(ref ranges) if ranges == &[(3, 3)]));
     }
 
     #[test]

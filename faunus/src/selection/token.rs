@@ -16,6 +16,8 @@ pub enum Token {
     Element,
     Atomtype,
     Atomid,
+    Index,
+    Group,
     Molecule,
     Protein,
     Backbone,
@@ -54,6 +56,8 @@ fn ident_to_token(ident: String) -> Token {
         "element" | "elem" => Token::Element,
         "atomtype" | "type" => Token::Atomtype,
         "atomid" => Token::Atomid,
+        "index" => Token::Index,
+        "group" => Token::Group,
         "molecule" => Token::Molecule,
         "protein" => Token::Protein,
         "backbone" => Token::Backbone,
@@ -268,6 +272,17 @@ mod tests {
 
         let tokens = tokenize("atomid 0 to 5").unwrap();
         assert_eq!(tokens[0].0, Token::Atomid);
+    }
+
+    #[test]
+    fn tokenize_index_and_group() {
+        let tokens = tokenize("index 5").unwrap();
+        assert_eq!(tokens[0].0, Token::Index);
+        assert_eq!(tokens[1].0, Token::Number(5));
+
+        let tokens = tokenize("group 8").unwrap();
+        assert_eq!(tokens[0].0, Token::Group);
+        assert_eq!(tokens[1].0, Token::Number(8));
     }
 
     #[test]
