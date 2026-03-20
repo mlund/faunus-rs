@@ -3,19 +3,19 @@
 
 //! Recursive descent parser for the selection language.
 
-use super::expr::Expr;
+use super::evaluator::Expr;
 use super::glob::GlobPattern;
 use super::token::Token;
 use super::SelectionError;
 
 /// Parser state.
-pub struct Parser<'a> {
+pub(super) struct Parser<'a> {
     tokens: &'a [(Token, usize)],
     pos: usize,
 }
 
 impl<'a> Parser<'a> {
-    pub const fn new(tokens: &'a [(Token, usize)]) -> Self {
+    pub(super) const fn new(tokens: &'a [(Token, usize)]) -> Self {
         Self { tokens, pos: 0 }
     }
 
@@ -38,7 +38,7 @@ impl<'a> Parser<'a> {
     }
 
     /// Parse the full token stream into an expression.
-    pub fn parse(&mut self) -> Result<Expr, SelectionError> {
+    pub(super) fn parse(&mut self) -> Result<Expr, SelectionError> {
         if self.tokens.is_empty() {
             return Err(SelectionError {
                 message: "Empty selection".to_string(),

@@ -19,7 +19,6 @@
 
 mod constants;
 mod evaluator;
-mod expr;
 mod glob;
 mod parser;
 mod token;
@@ -94,7 +93,7 @@ impl SelectionCache {
 #[derive(Debug, Clone)]
 pub struct Selection {
     source: String,
-    expr: expr::Expr,
+    expr: evaluator::Expr,
 }
 
 impl Selection {

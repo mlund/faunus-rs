@@ -90,7 +90,7 @@ const fn is_ident_char(c: char, in_bracket: bool) -> bool {
 }
 
 /// Tokenize input string.
-pub fn tokenize(input: &str) -> Result<Vec<(Token, usize)>, SelectionError> {
+pub(super) fn tokenize(input: &str) -> Result<Vec<(Token, usize)>, SelectionError> {
     let mut tokens = Vec::new();
     let mut chars = input.char_indices().peekable();
 

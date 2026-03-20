@@ -1,13 +1,71 @@
 // Copyright (c) 2026 Kliment Olechnovic and Mikael Lund
 // SPDX-License-Identifier: Apache-2.0
 
-//! Evaluator: resolve selection expressions against topology and groups.
+//! AST and evaluator for the selection language.
 
 use crate::group::Group;
 use crate::topology::{AtomKind, Chain, IndexRange, MoleculeKind, Residue, Topology};
 
-use super::constants::*;
-use super::expr::Expr;
+use super::constants::{
+    ACIDIC_RESIDUES, AROMATIC_RESIDUES, BACKBONE_ATOMS, BASIC_RESIDUES, DNA_RESIDUES,
+    HYDROPHOBIC_RESIDUES, POLAR_RESIDUES, PROTEIN_RESIDUES, RNA_RESIDUES,
+};
+use super::glob::GlobPattern;
+
+/// Expression AST node for the selection language.
+#[derive(Debug, Clone)]
+pub(super) enum Expr {
+    /// Match chain/segment identifier.
+    Chain(Vec<GlobPattern>),
+    /// Match residue name.
+    Resname(Vec<GlobPattern>),
+    /// Match residue number (inclusive ranges).
+    Resid(Vec<(i32, i32)>),
+    /// Match per-instance atom name (`MoleculeKind.atom_names`).
+    Name(Vec<GlobPattern>),
+    /// Match chemical element symbol (`AtomKind.element`).
+    Element(Vec<GlobPattern>),
+    /// Match force-field atom type name (`AtomKind.name`).
+    Atomtype(Vec<GlobPattern>),
+    /// Match atom kind id (inclusive ranges).
+    Atomid(Vec<(i32, i32)>),
+    /// Match absolute atom index (inclusive ranges).
+    Index(Vec<(i32, i32)>),
+    /// Match group index (inclusive ranges).
+    Group(Vec<(i32, i32)>),
+    /// Match molecule kind name (`MoleculeKind.name`).
+    Molecule(Vec<GlobPattern>),
+    /// Protein residues.
+    Protein,
+    /// Backbone atoms in protein residues.
+    Backbone,
+    /// Sidechain atoms in protein residues.
+    Sidechain,
+    /// Nucleic acid residues (DNA/RNA).
+    Nucleic,
+    /// Hydrophobic residues.
+    Hydrophobic,
+    /// Aromatic residues.
+    Aromatic,
+    /// Acidic (negatively charged) residues.
+    Acidic,
+    /// Basic (positively charged) residues.
+    Basic,
+    /// Polar (uncharged) residues.
+    Polar,
+    /// Charged residues (acidic or basic).
+    Charged,
+    /// Select all atoms.
+    All,
+    /// Select no atoms.
+    None,
+    /// Boolean AND.
+    And(Box<Self>, Box<Self>),
+    /// Boolean OR.
+    Or(Box<Self>, Box<Self>),
+    /// Boolean NOT.
+    Not(Box<Self>),
+}
 
 /// Per-atom context gathered during evaluation.
 struct AtomContext<'a> {
@@ -58,15 +116,13 @@ impl<'a> AtomContext<'a> {
             mol_kind,
         }
     }
-}
 
-impl<'a> AtomContext<'a> {
     /// Check if the residue name (or atom type as fallback) is in the given list.
     /// Allows coarse-grained models without residue info to use residue-category keywords.
     fn residue_or_atomtype_in(&self, names: &[&str]) -> bool {
         self.residue.map_or_else(
             || names.contains(&self.atom_kind.name()),
-            |r| resname_in(r.name(), names),
+            |r| names.contains(&r.name()),
         )
     }
 }
@@ -104,13 +160,13 @@ impl Expr {
             Self::Molecule(patterns) => patterns.iter().any(|p| p.matches(ctx.mol_kind.name())),
             Self::Protein => ctx.residue_or_atomtype_in(PROTEIN_RESIDUES),
             Self::Backbone => ctx.residue.is_some_and(|r| {
-                resname_in(r.name(), PROTEIN_RESIDUES)
+                PROTEIN_RESIDUES.contains(&r.name())
                     && ctx
                         .atom_name
                         .is_some_and(|name| BACKBONE_ATOMS.contains(&name))
             }),
             Self::Sidechain => ctx.residue.is_some_and(|r| {
-                resname_in(r.name(), PROTEIN_RESIDUES)
+                PROTEIN_RESIDUES.contains(&r.name())
                     && ctx
                         .atom_name
                         .is_none_or(|name| !BACKBONE_ATOMS.contains(&name))
@@ -140,12 +196,12 @@ impl Expr {
 ///
 /// Uses the static topology atom kinds. For runtime-aware resolution
 /// (e.g. after atom-type swaps), use [`resolve_atoms_live`].
-pub fn resolve_atoms(expr: &Expr, topology: &Topology, groups: &[Group]) -> Vec<usize> {
+pub(super) fn resolve_atoms(expr: &Expr, topology: &Topology, groups: &[Group]) -> Vec<usize> {
     resolve_atoms_impl(expr, topology, groups, &|_| None)
 }
 
 /// Like [`resolve_atoms`], but reads atom kinds from live particle data.
-pub fn resolve_atoms_live(
+pub(super) fn resolve_atoms_live(
     expr: &Expr,
     topology: &Topology,
     groups: &[Group],
@@ -186,12 +242,12 @@ fn resolve_atoms_impl(
 ///
 /// Uses the static topology atom kinds. For runtime-aware resolution
 /// (e.g. after atom-type swaps), use [`resolve_groups_live`].
-pub fn resolve_groups(expr: &Expr, topology: &Topology, groups: &[Group]) -> Vec<usize> {
+pub(super) fn resolve_groups(expr: &Expr, topology: &Topology, groups: &[Group]) -> Vec<usize> {
     resolve_groups_impl(expr, topology, groups, &|_| None)
 }
 
 /// Like [`resolve_groups`], but reads atom kinds from live particle data.
-pub fn resolve_groups_live(
+pub(super) fn resolve_groups_live(
     expr: &Expr,
     topology: &Topology,
     groups: &[Group],

@@ -35,8 +35,3 @@ pub const BASIC_RESIDUES: &[&str] = &["ARG", "LYS", "HIS", "HIE", "HID", "HIP", 
 
 /// Polar (uncharged) residues.
 pub const POLAR_RESIDUES: &[&str] = &["SER", "THR", "ASN", "GLN", "CYS", "CYX", "TYR"];
-
-/// Check if residue name is in a set.
-pub fn resname_in(resname: &str, set: &[&str]) -> bool {
-    set.contains(&resname)
-}
