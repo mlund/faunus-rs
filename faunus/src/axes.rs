@@ -16,10 +16,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::Point;
 
-/// Represents dimensions in which operations/calculations are performed.
+/// Selects which spatial axes (x, y, z) are active for projections and measures.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
-pub enum Dimension {
+pub enum Axes {
     /// No dimension
     None,
     /// X axis
@@ -39,8 +39,8 @@ pub enum Dimension {
     XYZ,
 }
 
-impl From<[bool; 3]> for Dimension {
-    /// Convert 3-member boolean array to Dimension enum.
+impl From<[bool; 3]> for Axes {
+    /// Convert 3-member boolean array to Axes enum.
     fn from(arr: [bool; 3]) -> Self {
         match arr {
             [false, false, false] => Self::None,
@@ -55,40 +55,40 @@ impl From<[bool; 3]> for Dimension {
     }
 }
 
-impl From<Dimension> for [bool; 3] {
-    /// Convert Dimension to a 3-member boolean array.
-    fn from(dim: Dimension) -> Self {
+impl From<Axes> for [bool; 3] {
+    /// Convert Axes to a 3-member boolean array.
+    fn from(dim: Axes) -> Self {
         match dim {
-            Dimension::None => [false, false, false],
-            Dimension::X => [true, false, false],
-            Dimension::Y => [false, true, false],
-            Dimension::Z => [false, false, true],
-            Dimension::XY => [true, true, false],
-            Dimension::XZ => [true, false, true],
-            Dimension::YZ => [false, true, true],
-            Dimension::XYZ => [true, true, true],
+            Axes::None => [false, false, false],
+            Axes::X => [true, false, false],
+            Axes::Y => [false, true, false],
+            Axes::Z => [false, false, true],
+            Axes::XY => [true, true, false],
+            Axes::XZ => [true, false, true],
+            Axes::YZ => [false, true, true],
+            Axes::XYZ => [true, true, true],
         }
     }
 }
 
-impl Dimension {
-    /// Return `true` if Dimension contains x-dimension.
+impl Axes {
+    /// Return `true` if the x-axis is active.
     pub const fn is_x(&self) -> bool {
         matches!(self, Self::X | Self::XY | Self::XZ | Self::XYZ)
     }
 
-    /// Return `true` if Dimension contains y-dimension.
+    /// Return `true` if the y-axis is active.
     pub const fn is_y(&self) -> bool {
         matches!(self, Self::Y | Self::XY | Self::YZ | Self::XYZ)
     }
 
-    /// Return `true` if Dimension contains z-dimension.
+    /// Return `true` if the z-axis is active.
     pub const fn is_z(&self) -> bool {
         matches!(self, Self::Z | Self::XZ | Self::YZ | Self::XYZ)
     }
 
     /// Number of active dimensions (0–3).
-    pub const fn ndim(&self) -> usize {
+    pub const fn dimension(&self) -> usize {
         match self {
             Self::None => 0,
             Self::X | Self::Y | Self::Z => 1,
@@ -102,9 +102,9 @@ impl Dimension {
     /// - 3D: spherical shell volume 4/3 π (r₂³ − r₁³)
     /// - 2D: ring area π (r₂² − r₁²)
     /// - 1D: line segment 2 (r₂ − r₁), factor 2 for ±r degeneracy
-    pub fn shell_volume(&self, r_inner: f64, r_outer: f64) -> f64 {
+    pub fn shell_measure(&self, r_inner: f64, r_outer: f64) -> f64 {
         use std::f64::consts::PI;
-        match self.ndim() {
+        match self.dimension() {
             3 => (4.0 / 3.0) * PI * (r_outer.powi(3) - r_inner.powi(3)),
             2 => PI * (r_outer.powi(2) - r_inner.powi(2)),
             1 => 2.0 * (r_outer - r_inner), // ±r degeneracy
@@ -127,7 +127,7 @@ impl Dimension {
     }
 
     /// Effective "volume" (volume, area, or length) projected from a 3D bounding box.
-    pub fn effective_volume(&self, bbox: Point) -> f64 {
+    pub fn measure_of(&self, bbox: Point) -> f64 {
         match self {
             Self::XYZ => bbox.x * bbox.y * bbox.z,
             Self::XY => bbox.x * bbox.y,
@@ -140,9 +140,8 @@ impl Dimension {
         }
     }
 
-    /// Apply Dimension as a filter for Point. Creates a copy of the Point with
-    /// dimensions that do not match the Dimension set to 0.
-    pub fn filter(&self, point: Point) -> Point {
+    /// Project a point onto the active axes, zeroing inactive components.
+    pub fn project(&self, point: Point) -> Point {
         let x = if self.is_x() { point[0] } else { 0.0 };
         let y = if self.is_y() { point[1] } else { 0.0 };
         let z = if self.is_z() { point[2] } else { 0.0 };

@@ -15,8 +15,8 @@
 //! Cell geometry collective variable: Volume.
 
 use super::{CvKind, CvKindBuilder, EvalContext};
+use crate::axes::Axes;
 use crate::cell::Shape;
-use crate::dimension::Dimension;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
@@ -31,7 +31,7 @@ use serde::{Deserialize, Serialize};
 ///   For a cylinder with `xy`, this gives πr² (not the bounding rectangle).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Volume {
-    dimension: Dimension,
+    dimension: Axes,
 }
 
 /// Compute the effective measure (volume, area, or length) for the given dimension.
@@ -40,16 +40,16 @@ pub struct Volume {
 /// - 2D (e.g. `XY`): volume divided by the orthogonal bounding-box length,
 ///   giving geometry-correct areas (e.g. πr² for a cylinder cross-section)
 /// - 1D (e.g. `Z`): bounding-box length along that axis
-fn effective_measure(cell: &crate::cell::Cell, dimension: Dimension) -> Option<f64> {
-    match dimension.ndim() {
+fn effective_measure(cell: &crate::cell::Cell, dimension: Axes) -> Option<f64> {
+    match dimension.dimension() {
         3 => cell.volume(),
         2 => {
             let volume = cell.volume()?;
             let bb = cell.bounding_box()?;
-            let orthogonal_length = dimension.complement().effective_volume(bb);
+            let orthogonal_length = dimension.complement().measure_of(bb);
             (orthogonal_length > 0.0).then(|| volume / orthogonal_length)
         }
-        1 => cell.bounding_box().map(|bb| dimension.effective_volume(bb)),
+        1 => cell.bounding_box().map(|bb| dimension.measure_of(bb)),
         _ => None,
     }
 }
@@ -69,7 +69,7 @@ impl CvKind for Volume {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VolumeBuilder {
     #[serde(default)]
-    pub dimension: Dimension,
+    pub dimension: Axes,
 }
 
 #[typetag::serde(name = "volume")]

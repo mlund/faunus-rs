@@ -33,11 +33,11 @@ pub mod collective_variable;
 pub use self::change::{Change, GroupChange};
 pub mod analysis;
 pub mod auxiliary;
+pub mod axes;
 pub mod backend;
 pub mod chemistry;
 #[cfg(feature = "cli")]
 pub mod cli;
-pub mod dimension;
 pub mod energy;
 pub(crate) mod geometry;
 pub mod group;

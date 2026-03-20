@@ -28,8 +28,8 @@
 
 use super::{Analyze, Frequency};
 use crate::auxiliary::ColumnWriter;
+use crate::axes::Axes;
 use crate::change::{Change, GroupChange};
-use crate::dimension::Dimension;
 use crate::energy::EnergyChange;
 use crate::selection::{Selection, SelectionCache};
 use crate::{Context, Point};
@@ -64,7 +64,7 @@ pub struct VirtualTranslate {
     /// Displacement directions. Defaults to z-axis.
     #[allow(dead_code)]
     #[builder_field_attr(serde(default = "default_directions"))]
-    directions: Dimension,
+    directions: Axes,
 
     /// Normalized displacement direction
     #[builder(setter(skip))]
@@ -114,17 +114,17 @@ const fn default_temperature() -> Option<f64> {
 
 /// Default displacement directions (z-axis).
 /// Returns `Option` because derive_builder wraps fields in `Option`.
-const fn default_directions() -> Option<Dimension> {
-    Some(Dimension::Z)
+const fn default_directions() -> Option<Axes> {
+    Some(Axes::Z)
 }
 
-/// Convert Dimension to a normalized direction vector so that
+/// Convert Axes to a normalized direction vector so that
 /// the displacement magnitude is controlled solely by `dL`.
-fn dimension_to_unit_vector(dim: &Dimension) -> Result<Point> {
-    if *dim == Dimension::None {
+fn axes_to_unit_vector(dim: &Axes) -> Result<Point> {
+    if *dim == Axes::None {
         anyhow::bail!("Direction cannot be 'None'");
     }
-    let dir_vec = dim.filter(Point::new(1.0, 1.0, 1.0));
+    let dir_vec = dim.project(Point::new(1.0, 1.0, 1.0));
     let norm = dir_vec.norm();
     if norm < 1e-10 {
         anyhow::bail!("Direction vector cannot be zero");
@@ -151,10 +151,10 @@ impl VirtualTranslateBuilder {
         self.validate()?;
 
         let displacement = self.displacement.unwrap();
-        let directions = self.directions.unwrap_or(Dimension::Z);
+        let directions = self.directions.unwrap_or(Axes::Z);
         let temperature = self.temperature.unwrap_or(298.15);
 
-        let unit_direction = dimension_to_unit_vector(&directions)?;
+        let unit_direction = axes_to_unit_vector(&directions)?;
 
         let stream = if let Some(path) = self.output_file.as_ref().and_then(|p| p.as_ref()) {
             Some(ColumnWriter::open(
@@ -421,43 +421,18 @@ mod tests {
     }
 
     #[test]
-    fn test_dimension_to_unit_vector() {
-        assert_point_approx_eq!(
-            dimension_to_unit_vector(&Dimension::Z).unwrap(),
-            0.0,
-            0.0,
-            1.0
-        );
-        assert_point_approx_eq!(
-            dimension_to_unit_vector(&Dimension::X).unwrap(),
-            1.0,
-            0.0,
-            0.0
-        );
-        assert_point_approx_eq!(
-            dimension_to_unit_vector(&Dimension::Y).unwrap(),
-            0.0,
-            1.0,
-            0.0
-        );
+    fn test_axes_to_unit_vector() {
+        assert_point_approx_eq!(axes_to_unit_vector(&Axes::Z).unwrap(), 0.0, 0.0, 1.0);
+        assert_point_approx_eq!(axes_to_unit_vector(&Axes::X).unwrap(), 1.0, 0.0, 0.0);
+        assert_point_approx_eq!(axes_to_unit_vector(&Axes::Y).unwrap(), 0.0, 1.0, 0.0);
 
         let s2 = 1.0 / 2.0_f64.sqrt();
-        assert_point_approx_eq!(
-            dimension_to_unit_vector(&Dimension::XY).unwrap(),
-            s2,
-            s2,
-            0.0
-        );
+        assert_point_approx_eq!(axes_to_unit_vector(&Axes::XY).unwrap(), s2, s2, 0.0);
 
         let s3 = 1.0 / 3.0_f64.sqrt();
-        assert_point_approx_eq!(
-            dimension_to_unit_vector(&Dimension::XYZ).unwrap(),
-            s3,
-            s3,
-            s3
-        );
+        assert_point_approx_eq!(axes_to_unit_vector(&Axes::XYZ).unwrap(), s3, s3, s3);
 
-        assert!(dimension_to_unit_vector(&Dimension::None).is_err());
+        assert!(axes_to_unit_vector(&Axes::None).is_err());
     }
 
     #[test]
@@ -471,7 +446,7 @@ mod tests {
         assert_approx_eq!(f64, vt.displacement, 0.01);
         assert_eq!(vt.selection.source(), "molecule MOL");
         assert_approx_eq!(f64, vt.temperature, 298.15);
-        assert_eq!(vt.directions, Dimension::Z);
+        assert_eq!(vt.directions, Axes::Z);
         assert_eq!(vt.num_samples, 0);
     }
 
@@ -512,11 +487,11 @@ mod tests {
             .displacement(0.05)
             .frequency(Frequency::Every(5))
             .temperature(310.0)
-            .directions(Dimension::X)
+            .directions(Axes::X)
             .build()
             .unwrap();
         assert_approx_eq!(f64, vt.temperature, 310.0);
-        assert_eq!(vt.directions, Dimension::X);
+        assert_eq!(vt.directions, Axes::X);
         assert_point_approx_eq!(vt.unit_direction, 1.0, 0.0, 0.0);
     }
 
@@ -621,14 +596,14 @@ mod tests {
         let vt = deserialize_vt_builder(&yaml, 0).build().unwrap();
         assert_eq!(vt.selection.source(), "molecule MOL");
         assert_approx_eq!(f64, vt.displacement, 0.01);
-        assert_eq!(vt.directions, Dimension::Z);
+        assert_eq!(vt.directions, Axes::Z);
         assert_approx_eq!(f64, vt.temperature, 298.15);
         assert!(matches!(vt.frequency, Frequency::Every(10)));
 
         // Second: x-direction with default temperature
         let vt = deserialize_vt_builder(&yaml, 1).build().unwrap();
         assert_approx_eq!(f64, vt.displacement, 0.05);
-        assert_eq!(vt.directions, Dimension::X);
+        assert_eq!(vt.directions, Axes::X);
         assert_approx_eq!(f64, vt.temperature, 298.15);
         assert!(matches!(vt.frequency, Frequency::Every(5)));
     }
@@ -652,7 +627,7 @@ mod tests {
   frequency: !Every 1
 "#;
         let vt = deserialize_vt_builder(yaml, 0).build().unwrap();
-        assert_eq!(vt.directions, Dimension::Z);
+        assert_eq!(vt.directions, Axes::Z);
     }
 
     #[test]
@@ -669,7 +644,7 @@ frequency: !Every 5
         let roundtrip: VirtualTranslateBuilder = serde_yaml::from_str(&serialized).unwrap();
         let vt = roundtrip.build().unwrap();
         assert_approx_eq!(f64, vt.displacement, 0.05);
-        assert_eq!(vt.directions, Dimension::X);
+        assert_eq!(vt.directions, Axes::X);
         assert_approx_eq!(f64, vt.temperature, 310.0);
     }
 }

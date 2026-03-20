@@ -457,7 +457,7 @@ impl<'de> Deserialize<'de> for InputPath {
 #[cfg(test)]
 mod tests {
     use self::block::BlockActivationStatus;
-    use crate::dimension::Dimension;
+    use crate::axes::Axes;
     use crate::topology::atom::Hydrophobicity;
     use crate::topology::bond::{BondKind, BondOrder};
     use crate::topology::dihedral::DihedralKind;
@@ -813,7 +813,7 @@ mod tests {
             BlockActivationStatus::Partial(30),
             Some(&InsertionPolicy::RandomCOM {
                 rotate: false,
-                directions: Dimension::default(),
+                directions: Axes::default(),
                 offset: None,
                 min_distance: None,
             }),
@@ -827,7 +827,7 @@ mod tests {
             BlockActivationStatus::All,
             Some(&InsertionPolicy::RandomCOM {
                 rotate: true,
-                directions: Dimension::X,
+                directions: Axes::X,
                 offset: None,
                 min_distance: None,
             }),
@@ -853,7 +853,7 @@ mod tests {
             2,
             BlockActivationStatus::All,
             Some(&InsertionPolicy::RandomAtomPos {
-                directions: Dimension::XY,
+                directions: Axes::XY,
             }),
         );
 

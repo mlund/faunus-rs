@@ -314,7 +314,7 @@ Key                        | Required | Default               | Description
 `max_r`                    | no       | half shortest box dim | Maximum distance for histogram
 `use_com`                  | no       | `false`               | Use center-of-mass distances instead of atom-atom
 `exclude_intramolecular`   | no       | `true` (atom-atom)    | Skip pairs within the same molecule (atom-atom only)
-`dimension`                | no       | `xyz`                 | Dimension for distance projection and normalization (`x`, `y`, `z`, `xy`, …)
+`dimension`                | no       | `xyz`                 | Axes for distance projection and normalization (`x`, `y`, `z`, `xy`, …)
 
 ## Virtual Translate
 

@@ -20,7 +20,7 @@ use std::iter::zip;
 use std::{cmp::Ordering, path::Path};
 
 use super::{molecule::MoleculeKind, structure, AtomKind, InputPath};
-use crate::dimension::Dimension;
+use crate::axes::Axes;
 use crate::transform;
 use crate::{cell::SimulationCell, group::GroupSize, Context, Particle, Point, UnitQuaternion};
 use rand::rngs::ThreadRng;
@@ -46,7 +46,7 @@ pub enum InsertionPolicy {
     /// Place the atoms of each molecule of the block to random positions in the simulation cell.
     RandomAtomPos {
         #[serde(default)]
-        directions: Dimension,
+        directions: Axes,
     },
     /// Place molecules at random positions using reference positions from the molecule.
     RandomCOM {
@@ -55,7 +55,7 @@ pub enum InsertionPolicy {
         rotate: bool,
         #[serde(default)]
         /// Random directions to place the molecule.
-        directions: Dimension,
+        directions: Axes,
         /// Optional offset vector to add to the molecule _after_ random COM has been chosen.
         offset: Option<Point>,
         /// Optional minimum distance (Å) between bounding spheres of placed molecules.
@@ -80,7 +80,7 @@ pub enum InsertionPolicy {
         bond_length: f64,
         #[serde(default)]
         /// Random directions for placing the chain center.
-        directions: Dimension,
+        directions: Axes,
     },
     /// Place molecules on a simple cubic grid using reference positions from the molecule.
     /// Requires a cuboidal cell.
@@ -110,7 +110,7 @@ impl InsertionPolicy {
 
             Self::RandomAtomPos { directions } => Ok((
                 (0..(molecule_kind.atom_indices().len() * number))
-                    .map(|_| directions.filter(cell.get_point_inside(rng)))
+                    .map(|_| directions.project(cell.get_point_inside(rng)))
                     .collect(),
                 vec![UnitQuaternion::identity(); number],
             )),
@@ -198,7 +198,7 @@ impl InsertionPolicy {
             cell,
             &mut rand::thread_rng(),
             rotate,
-            &Dimension::None, // no random directions
+            &Axes::None, // no random directions
             &Some(*position),
             None,
         )
@@ -217,7 +217,7 @@ impl InsertionPolicy {
         cell: &impl SimulationCell,
         rng: &mut ThreadRng,
         rotate: bool,
-        directions: &Dimension,
+        directions: &Axes,
         offset: &Option<Point>,
         min_distance: Option<f64>,
     ) -> anyhow::Result<(Vec<Point>, Vec<UnitQuaternion>)> {
@@ -232,7 +232,7 @@ impl InsertionPolicy {
 
         let mut gen_pos = || {
             let new_com =
-                directions.filter(cell.get_point_inside(rng)) + offset.unwrap_or(Point::zeros());
+                directions.project(cell.get_point_inside(rng)) + offset.unwrap_or(Point::zeros());
             let (positions, q) =
                 Self::place_molecule_at(&centered_positions, &new_com, rotate, cell, rng);
             (new_com, positions, q)
@@ -381,7 +381,7 @@ impl InsertionPolicy {
         cell: &impl SimulationCell,
         rng: &mut ThreadRng,
         bond_length: f64,
-        directions: &Dimension,
+        directions: &Axes,
     ) -> anyhow::Result<Vec<Point>> {
         let n_atoms = molecule_kind.atom_indices().len();
         let max_attempts = 1000 * n_atoms;
@@ -390,7 +390,7 @@ impl InsertionPolicy {
 
         for _ in 0..num_molecules {
             let chain_start = all_positions.len();
-            let mut pos = directions.filter(cell.get_point_inside(rng));
+            let mut pos = directions.project(cell.get_point_inside(rng));
             all_positions.push(pos);
             for _ in 1..n_atoms {
                 pos = (0..max_attempts)

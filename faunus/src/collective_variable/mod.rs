@@ -277,7 +277,7 @@ macro_rules! impl_single_group_builder {
 ///
 /// # Example
 /// ```ignore
-/// pub struct EndToEnd { projection: Dimension, group: usize }
+/// pub struct EndToEnd { projection: Axes, group: usize }
 ///
 /// impl_single_group_with_dim_builder!(EndToEnd, "end_to_end",
 ///     |projection, group| EndToEnd { projection, group });
@@ -297,7 +297,7 @@ macro_rules! impl_single_group_with_dim_builder {
             pub struct [<$cv Builder>] {
                 pub selection: $crate::selection::Selection,
                 #[serde(default, alias = "dimension")]
-                pub projection: $crate::dimension::Dimension,
+                pub projection: $crate::axes::Axes,
             }
 
             #[typetag::serde(name = $name)]
@@ -338,7 +338,7 @@ macro_rules! impl_single_group_with_dim_builder {
 ///
 /// # Example
 /// ```ignore
-/// pub struct AtomPosition { projection: Dimension, index: usize }
+/// pub struct AtomPosition { projection: Axes, index: usize }
 ///
 /// impl_single_atom_with_dim_builder!(AtomPosition, "atom_position",
 ///     |projection, index| AtomPosition { projection, index });
@@ -352,7 +352,7 @@ macro_rules! impl_single_atom_with_dim_builder {
             pub struct [<$cv Builder>] {
                 pub selection: $crate::selection::Selection,
                 #[serde(default, alias = "dimension")]
-                pub projection: $crate::dimension::Dimension,
+                pub projection: $crate::axes::Axes,
             }
 
             #[typetag::serde(name = $name)]
@@ -388,7 +388,7 @@ macro_rules! impl_single_atom_with_dim_builder {
 ///
 /// # Example
 /// ```ignore
-/// pub struct MassCenterSeparation { projection: Dimension, group1: usize, group2: usize }
+/// pub struct MassCenterSeparation { projection: Axes, group1: usize, group2: usize }
 ///
 /// impl_two_group_with_dim_builder!(MassCenterSeparation, "mass_center_separation",
 ///     |projection, group1, group2| MassCenterSeparation { projection, group1, group2 });
@@ -409,7 +409,7 @@ macro_rules! impl_two_group_with_dim_builder {
                 pub selection: $crate::selection::Selection,
                 pub selection2: $crate::selection::Selection,
                 #[serde(default, alias = "dimension")]
-                pub projection: $crate::dimension::Dimension,
+                pub projection: $crate::axes::Axes,
             }
 
             #[typetag::serde(name = $name)]

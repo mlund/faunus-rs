@@ -15,7 +15,7 @@
 //! Single-atom collective variables: AtomPosition.
 
 use super::{impl_single_atom_with_dim_builder, CvKind, EvalContext};
-use crate::dimension::Dimension;
+use crate::axes::Axes;
 use crate::group::GroupCollection;
 use serde::{Deserialize, Serialize};
 
@@ -27,7 +27,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AtomPosition {
     #[serde(alias = "dimension")]
-    projection: Dimension,
+    projection: Axes,
     index: usize,
 }
 
@@ -35,7 +35,7 @@ pub struct AtomPosition {
 impl CvKind for AtomPosition {
     fn evaluate(&self, context: &dyn EvalContext) -> f64 {
         self.projection
-            .filter(GroupCollection::position(context, self.index))
+            .project(GroupCollection::position(context, self.index))
             .norm()
     }
 

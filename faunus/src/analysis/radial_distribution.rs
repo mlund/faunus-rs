@@ -5,8 +5,8 @@
 
 use super::{Analyze, Frequency};
 use crate::auxiliary::ColumnWriter;
+use crate::axes::Axes;
 use crate::cell::{BoundaryConditions, Shape};
-use crate::dimension::Dimension;
 use crate::histogram::Histogram;
 use crate::selection::{Selection, SelectionCache};
 use crate::Context;
@@ -35,7 +35,7 @@ pub struct RadialDistributionBuilder {
     exclude_intramolecular: Option<bool>,
     /// Dimensionality for shell normalization. Default: XYZ (3D spherical shells).
     #[serde(default)]
-    dimension: Dimension,
+    dimension: Axes,
     /// Sampling frequency.
     frequency: Frequency,
 }
@@ -91,7 +91,7 @@ pub struct RadialDistribution {
     num_samples: usize,
     use_com: bool,
     exclude_intramolecular: bool,
-    dimension: Dimension,
+    dimension: Axes,
     output_file: PathBuf,
     #[debug(skip)]
     stream: ColumnWriter,
@@ -109,7 +109,7 @@ fn collect_pair_distances(
     mut get_pos: impl FnMut(usize) -> Option<crate::Point>,
     mut skip: impl FnMut(usize, usize) -> bool,
     cell: &impl BoundaryConditions,
-    dimension: Dimension,
+    dimension: Axes,
     histogram: &mut Histogram,
 ) -> f64 {
     let mut pair_count = 0u64;
@@ -123,7 +123,7 @@ fn collect_pair_distances(
             }
             let Some(pos_j) = get_pos(j) else { continue };
             // Project displacement onto active dimensions before computing distance
-            histogram.add(dimension.filter(cell.distance(&pos_i, &pos_j)).norm());
+            histogram.add(dimension.project(cell.distance(&pos_i, &pos_j)).norm());
             pair_count += 1;
         }
     }
@@ -217,7 +217,7 @@ impl RadialDistribution {
         for (r, count) in self.histogram.iter() {
             let r_inner = r - dr / 2.0;
             let r_outer = r + dr / 2.0;
-            let shell_volume = self.dimension.shell_volume(r_inner, r_outer);
+            let shell_volume = self.dimension.shell_measure(r_inner, r_outer);
             let ideal = n_pairs_avg * self.num_samples as f64 * shell_volume / v_avg;
             let gr = if ideal > 0.0 { count / ideal } else { 0.0 };
             self.stream
@@ -256,7 +256,7 @@ impl<T: Context> Analyze<T> for RadialDistribution {
         };
         self.pair_count_sum += pairs;
         if let Some(bbox) = context.cell().bounding_box() {
-            self.volume_sum += self.dimension.effective_volume(bbox);
+            self.volume_sum += self.dimension.measure_of(bbox);
         }
         self.num_samples += 1;
         Ok(())
@@ -341,7 +341,7 @@ frequency: !Every 50
     }
 
     /// Verify normalization: fill histogram with ideal-gas counts → g(r) ≈ 1.
-    fn check_normalization(dimension: Dimension) {
+    fn check_normalization(dimension: Axes) {
         let dr = 0.5;
         let num_samples = 10usize;
         let n_pairs = 100.0;
@@ -368,7 +368,7 @@ frequency: !Every 50
             let r = rdf.histogram.bin_center(i);
             let r_inner = r - dr / 2.0;
             let r_outer = r + dr / 2.0;
-            let shell_vol = dimension.shell_volume(r_inner, r_outer);
+            let shell_vol = dimension.shell_measure(r_inner, r_outer);
             let ideal_count = n_pairs * num_samples as f64 * shell_vol / volume;
             for _ in 0..ideal_count.round() as usize {
                 rdf.histogram.add(r);
@@ -379,16 +379,16 @@ frequency: !Every 50
 
     #[test]
     fn normalization_uniform_gas_3d() {
-        check_normalization(Dimension::XYZ);
+        check_normalization(Axes::XYZ);
     }
 
     #[test]
     fn normalization_uniform_gas_2d() {
-        check_normalization(Dimension::XY);
+        check_normalization(Axes::XY);
     }
 
     #[test]
     fn normalization_uniform_gas_1d() {
-        check_normalization(Dimension::Z);
+        check_normalization(Axes::Z);
     }
 }

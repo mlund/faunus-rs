@@ -47,7 +47,7 @@ pub struct TranslateMolecule {
     pub(crate) repeat: usize,
     /// Move directions
     #[serde(default)]
-    directions: crate::dimension::Dimension,
+    directions: crate::axes::Axes,
 }
 
 impl crate::Info for TranslateMolecule {
@@ -66,7 +66,7 @@ impl TranslateMolecule {
         molecule_id: usize,
         max_displacement: f64,
         weight: f64,
-        directions: crate::dimension::Dimension,
+        directions: crate::axes::Axes,
         repeat: usize,
     ) -> Self {
         Self {
@@ -97,7 +97,7 @@ impl<T: Context> MoveProposal<T> for TranslateMolecule {
         let group_index = random_group(context, rng, self.molecule_id)?;
         let displacement = self
             .directions
-            .filter(random_unit_vector(rng) * random_displacement(rng, self.max_displacement));
+            .project(random_unit_vector(rng) * random_displacement(rng, self.max_displacement));
         Some(ProposedMove {
             change: Change::SingleGroup(group_index, GroupChange::RigidBody),
             displacement: Displacement::Distance(displacement),
@@ -395,8 +395,7 @@ mod tests {
         )
         .unwrap();
 
-        let mut propagator =
-            TranslateMolecule::new("MOL2", 0, 0.5, 4.0, crate::dimension::Dimension::XYZ, 1);
+        let mut propagator = TranslateMolecule::new("MOL2", 0, 0.5, 4.0, crate::axes::Axes::XYZ, 1);
 
         propagator.finalize(&context).unwrap();
 
