@@ -511,7 +511,7 @@ energy:
       range: [1000.0, 5000.0]
     - property: mass_center_position
       selection: "molecule protein"
-      dimension: z
+      projection: z
       range: [-50.0, 50.0]
       harmonic: # optional
         force_constant: 100.0
@@ -523,7 +523,7 @@ energy:
 | `property`       | yes      |         | CV type (see [collective variables](analysis.md#supported-properties)) |
 | `range`          | no       | `[-∞, ∞]` | Allowed `[min, max]` interval               |
 | `harmonic`       | no       |         | Harmonic restraint parameters (see below)      |
-| `dimension`      | no       | `xyz`   | Axis projection (`x`, `y`, `z`, `xy`, …)      |
+| `projection`     | no       | `xyz`   | Axis projection (`x`, `y`, `z`, `xy`, …); alias: `dimension` |
 | `selection`      | depends  |         | Selection expression for one atom or group     |
 
 #### Harmonic parameters

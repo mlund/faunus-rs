@@ -73,7 +73,8 @@ impl_single_group_builder!(Size, "size", |group| Size { group });
 /// Distance between first and last active atoms of a group.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EndToEnd {
-    dimension: Dimension,
+    #[serde(alias = "dimension")]
+    projection: Dimension,
     group: usize,
 }
 
@@ -87,7 +88,7 @@ impl CvKind for EndToEnd {
         if first >= active.end {
             return 0.0;
         }
-        self.dimension
+        self.projection
             .filter(context.get_distance(first, last))
             .norm()
     }
@@ -97,8 +98,8 @@ impl CvKind for EndToEnd {
     }
 }
 
-impl_single_group_with_dim_builder!(EndToEnd, "end_to_end", |dimension, group| EndToEnd {
-    dimension,
+impl_single_group_with_dim_builder!(EndToEnd, "end_to_end", |projection, group| EndToEnd {
+    projection,
     group
 });
 
@@ -108,12 +109,13 @@ impl_single_group_with_dim_builder!(EndToEnd, "end_to_end", |dimension, group| E
 
 /// Radius of gyration of a molecular group.
 ///
-/// With default dimension (`XYZ`), returns Rg = sqrt(trace(S)).
+/// With default projection (`XYZ`), returns Rg = sqrt(trace(S)).
 /// With a single axis (e.g. `X`), returns sqrt(Sxx) — the mass-weighted
 /// spread along that axis.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GyrationRadius {
-    dimension: Dimension,
+    #[serde(alias = "dimension")]
+    projection: Dimension,
     group: usize,
 }
 
@@ -142,7 +144,7 @@ impl CvKind for GyrationRadius {
             .map(|gt| {
                 let diag =
                     crate::Point::new(gt.tensor[(0, 0)], gt.tensor[(1, 1)], gt.tensor[(2, 2)]);
-                self.dimension.filter(diag).iter().sum::<f64>().sqrt()
+                self.projection.filter(diag).iter().sum::<f64>().sqrt()
             })
             .unwrap_or(0.0)
     }
@@ -155,7 +157,7 @@ impl CvKind for GyrationRadius {
 impl_single_group_with_dim_builder!(
     GyrationRadius,
     "gyration_radius",
-    |dimension, group| { GyrationRadius { dimension, group } },
+    |projection, group| { GyrationRadius { projection, group } },
     requires_com
 );
 
@@ -166,11 +168,12 @@ impl_single_group_with_dim_builder!(
 /// Electric dipole moment of a molecular group.
 ///
 /// Computed as **μ** = Σ qᵢ · (**rᵢ** − **r_cm**) with PBC-aware distances.
-/// With default dimension (`xyz`), returns |**μ**|; with a single axis, returns
+/// With default projection (`xyz`), returns |**μ**|; with a single axis, returns
 /// the signed component along that axis.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DipoleMoment {
-    dimension: Dimension,
+    #[serde(alias = "dimension")]
+    projection: Dimension,
     group: usize,
 }
 
@@ -179,8 +182,8 @@ impl CvKind for DipoleMoment {
     fn evaluate(&self, context: &dyn EvalContext) -> f64 {
         group_dipole_moment(self.group, context)
             .map(|mu| {
-                let filtered = self.dimension.filter(mu);
-                if self.dimension.ndim() == 1 {
+                let filtered = self.projection.filter(mu);
+                if self.projection.ndim() == 1 {
                     // Single axis: return signed component
                     filtered.x + filtered.y + filtered.z
                 } else {
@@ -198,7 +201,7 @@ impl CvKind for DipoleMoment {
 impl_single_group_with_dim_builder!(
     DipoleMoment,
     "dipole_moment",
-    |dimension, group| { DipoleMoment { dimension, group } },
+    |projection, group| { DipoleMoment { projection, group } },
     requires_com
 );
 
@@ -209,7 +212,8 @@ impl_single_group_with_dim_builder!(
 /// Position of the mass center of a group.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MassCenterPosition {
-    dimension: Dimension,
+    #[serde(alias = "dimension")]
+    projection: Dimension,
     group: usize,
 }
 
@@ -218,7 +222,7 @@ impl CvKind for MassCenterPosition {
     fn evaluate(&self, context: &dyn EvalContext) -> f64 {
         context.groups()[self.group]
             .mass_center()
-            .map(|com| self.dimension.filter(*com).norm())
+            .map(|com| self.projection.filter(*com).norm())
             .unwrap_or(0.0)
     }
 
@@ -230,7 +234,7 @@ impl CvKind for MassCenterPosition {
 impl_single_group_with_dim_builder!(
     MassCenterPosition,
     "mass_center_position",
-    |dimension, group| MassCenterPosition { dimension, group },
+    |projection, group| MassCenterPosition { projection, group },
     requires_com
 );
 
@@ -241,7 +245,8 @@ impl_single_group_with_dim_builder!(
 /// Distance between mass centers of two groups.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MassCenterSeparation {
-    dimension: Dimension,
+    #[serde(alias = "dimension")]
+    projection: Dimension,
     group1: usize,
     group2: usize,
 }
@@ -254,7 +259,7 @@ impl CvKind for MassCenterSeparation {
             groups[self.group1].mass_center(),
             groups[self.group2].mass_center(),
         ) {
-            (Some(a), Some(b)) => self.dimension.filter(context.cell().distance(a, b)).norm(),
+            (Some(a), Some(b)) => self.projection.filter(context.cell().distance(a, b)).norm(),
             _ => 0.0,
         }
     }
@@ -267,8 +272,8 @@ impl CvKind for MassCenterSeparation {
 impl_two_group_with_dim_builder!(
     MassCenterSeparation,
     "mass_center_separation",
-    |dimension, group1, group2| MassCenterSeparation {
-        dimension,
+    |projection, group1, group2| MassCenterSeparation {
+        projection,
         group1,
         group2
     },
@@ -286,7 +291,8 @@ impl_two_group_with_dim_builder!(
 /// With a single axis, normalizes then returns the component-wise product.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DipoleProduct {
-    dimension: Dimension,
+    #[serde(alias = "dimension")]
+    projection: Dimension,
     group1: usize,
     group2: usize,
 }
@@ -301,8 +307,8 @@ impl CvKind for DipoleProduct {
             (Some(mu1), Some(mu2)) => {
                 // Filter before normalizing so single-axis mode compares
                 // only the selected component(s)
-                let a = self.dimension.filter(mu1);
-                let b = self.dimension.filter(mu2);
+                let a = self.projection.filter(mu1);
+                let b = self.projection.filter(mu2);
                 let norm_a = a.norm();
                 let norm_b = b.norm();
                 // Guard against zero-magnitude dipoles (e.g. net-neutral group)
@@ -324,8 +330,8 @@ impl CvKind for DipoleProduct {
 impl_two_group_with_dim_builder!(
     DipoleProduct,
     "dipole_product",
-    |dimension, group1, group2| DipoleProduct {
-        dimension,
+    |projection, group1, group2| DipoleProduct {
+        projection,
         group1,
         group2
     },
@@ -371,7 +377,7 @@ mod tests {
         let ctx = make_context();
         let (g, _) = mol2_group_indices(&ctx);
         let cv = DipoleProduct {
-            dimension: Dimension::default(),
+            projection: Dimension::default(),
             group1: g,
             group2: g,
         };
@@ -388,7 +394,7 @@ mod tests {
         let ctx = make_context();
         let (g1, g2) = mol2_group_indices(&ctx);
         let cv = DipoleProduct {
-            dimension: Dimension::default(),
+            projection: Dimension::default(),
             group1: g1,
             group2: g2,
         };
@@ -404,7 +410,7 @@ mod tests {
         let ctx = make_context();
         // MOL groups (index 0) have has_com: false
         let cv = DipoleProduct {
-            dimension: Dimension::default(),
+            projection: Dimension::default(),
             group1: 0,
             group2: 0,
         };
@@ -414,7 +420,7 @@ mod tests {
     #[test]
     fn dipole_product_serde_roundtrip() {
         let cv = DipoleProduct {
-            dimension: Dimension::default(),
+            projection: Dimension::default(),
             group1: 0,
             group2: 1,
         };

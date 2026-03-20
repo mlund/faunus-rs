@@ -67,7 +67,7 @@ analysis:
   - !CollectiveVariable
     property: mass_center_position
     selection: "molecule protein"
-    dimension: z
+    projection: z
     file: cv.dat
     frequency: !Every 100
 ```
@@ -78,7 +78,7 @@ Key          | Required | Default | Description
 ------------ | -------- | ------- | -------------------------------------------
 `property`   | yes      |         | CV type (see table below)
 `frequency`  | yes      |         | Sample frequency, e.g. `!Every 100`
-`dimension`  | no       | `xyz`   | Axis projection (`x`, `y`, `z`, `xy`, …)
+`projection` | no       | `xyz`   | Axis projection (`x`, `y`, `z`, `xy`, …); alias: `dimension`
 `selection`  | depends  |         | Selection expression for one atom or group
 `selection2` | depends  |         | Second selection (for two-group properties)
 `resolution` | no       |         | Bin width (only used by Penalty)
@@ -88,8 +88,8 @@ Key          | Required | Default | Description
 
 Property                 | Selection       | Description
 ------------------------ | --------------- | -------------------------------------------
-`volume`                 | none            | Cell measure via `dimension`: volume (`xyz`), cross-section area (`xy`), or length (`z`). Areas are derived from true volume, giving e.g. πr² for cylinders
-`atom_position`          | one atom        | Atom position projected onto `dimension`
+`volume`                 | none            | Cell measure via `dimension`: volume (`xyz`), area (`xy`), or length (`z`). Note: `volume` uses `dimension`, not `projection`
+`atom_position`          | one atom        | Atom position projected onto `projection`
 `count`                  | atoms or groups | Number of active atoms matching selection
 `molarity`               | atoms or groups | Molar concentration (mol/L) of matching atoms
 `charge`                 | atoms or groups | Sum of charges of active atoms matching selection
@@ -97,9 +97,9 @@ Property                 | Selection       | Description
 `end_to_end`             | one group       | End-to-end distance of a molecular group
 `gyration_radius`        | one group       | Radius of gyration (default `xyz` = full Rg; single axis gives spread along it)
 `dipole_moment`          | one group       | Electric dipole moment (default `xyz` = magnitude; single axis gives signed component)
-`mass_center_position`   | one group       | Mass center position along `dimension`
+`mass_center_position`   | one group       | Mass center position along `projection`
 `mass_center_separation` | two groups      | Distance between two group mass centers
-`dipole_product`         | two groups      | Normalized dipole dot product μ̂₁·μ̂₂ = cos(θ) (default `xyz` = full 3D; `dimension` projects dipoles before comparing)
+`dipole_product`         | two groups      | Normalized dipole dot product μ̂₁·μ̂₂ = cos(θ) (default `xyz` = full 3D; `projection` filters dipoles before comparing)
 
 ## Polymer Shape
 

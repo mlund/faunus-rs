@@ -26,14 +26,15 @@ use serde::{Deserialize, Serialize};
 /// Position of a single atom, optionally projected onto an axis.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AtomPosition {
-    dimension: Dimension,
+    #[serde(alias = "dimension")]
+    projection: Dimension,
     index: usize,
 }
 
 #[typetag::serde(name = "atom_position")]
 impl CvKind for AtomPosition {
     fn evaluate(&self, context: &dyn EvalContext) -> f64 {
-        self.dimension
+        self.projection
             .filter(GroupCollection::position(context, self.index))
             .norm()
     }
@@ -43,6 +44,6 @@ impl CvKind for AtomPosition {
     }
 }
 
-impl_single_atom_with_dim_builder!(AtomPosition, "atom_position", |dimension, index| {
-    AtomPosition { dimension, index }
+impl_single_atom_with_dim_builder!(AtomPosition, "atom_position", |projection, index| {
+    AtomPosition { projection, index }
 });

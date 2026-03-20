@@ -271,16 +271,16 @@ macro_rules! impl_single_group_builder {
     };
 }
 
-/// Defines a builder that resolves a single group selection with dimension.
+/// Defines a builder that resolves a single group selection with projection.
 ///
-/// Generates `{Name}Builder` struct with `selection` and `dimension` fields.
+/// Generates `{Name}Builder` struct with `selection` and `projection` fields.
 ///
 /// # Example
 /// ```ignore
-/// pub struct EndToEnd { dimension: Dimension, group: usize }
+/// pub struct EndToEnd { projection: Dimension, group: usize }
 ///
 /// impl_single_group_with_dim_builder!(EndToEnd, "end_to_end",
-///     |dimension, group| EndToEnd { dimension, group });
+///     |projection, group| EndToEnd { projection, group });
 /// ```
 #[macro_export]
 macro_rules! impl_single_group_with_dim_builder {
@@ -296,8 +296,8 @@ macro_rules! impl_single_group_with_dim_builder {
             #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
             pub struct [<$cv Builder>] {
                 pub selection: $crate::selection::Selection,
-                #[serde(default)]
-                pub dimension: $crate::dimension::Dimension,
+                #[serde(default, alias = "dimension")]
+                pub projection: $crate::dimension::Dimension,
             }
 
             #[typetag::serde(name = $name)]
@@ -323,7 +323,7 @@ macro_rules! impl_single_group_with_dim_builder {
                             indices[0], context, stringify!($cv)
                         )?;
                     }
-                    let $dim = self.dimension;
+                    let $dim = self.projection;
                     let $group = indices[0];
                     Ok(Box::new($construct))
                 }
@@ -332,16 +332,16 @@ macro_rules! impl_single_group_with_dim_builder {
     };
 }
 
-/// Defines a builder that resolves a single atom selection with dimension.
+/// Defines a builder that resolves a single atom selection with projection.
 ///
-/// Generates `{Name}Builder` struct with `selection` and `dimension` fields.
+/// Generates `{Name}Builder` struct with `selection` and `projection` fields.
 ///
 /// # Example
 /// ```ignore
-/// pub struct AtomPosition { dimension: Dimension, index: usize }
+/// pub struct AtomPosition { projection: Dimension, index: usize }
 ///
 /// impl_single_atom_with_dim_builder!(AtomPosition, "atom_position",
-///     |dimension, index| AtomPosition { dimension, index });
+///     |projection, index| AtomPosition { projection, index });
 /// ```
 #[macro_export]
 macro_rules! impl_single_atom_with_dim_builder {
@@ -351,8 +351,8 @@ macro_rules! impl_single_atom_with_dim_builder {
             #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
             pub struct [<$cv Builder>] {
                 pub selection: $crate::selection::Selection,
-                #[serde(default)]
-                pub dimension: $crate::dimension::Dimension,
+                #[serde(default, alias = "dimension")]
+                pub projection: $crate::dimension::Dimension,
             }
 
             #[typetag::serde(name = $name)]
@@ -373,7 +373,7 @@ macro_rules! impl_single_atom_with_dim_builder {
                             indices.len()
                         );
                     }
-                    let $dim = self.dimension;
+                    let $dim = self.projection;
                     let $index = indices[0];
                     Ok(Box::new($construct))
                 }
@@ -382,16 +382,16 @@ macro_rules! impl_single_atom_with_dim_builder {
     };
 }
 
-/// Defines a builder that resolves two group selections with dimension.
+/// Defines a builder that resolves two group selections with projection.
 ///
-/// Generates `{Name}Builder` struct with `selection`, `selection2`, and `dimension` fields.
+/// Generates `{Name}Builder` struct with `selection`, `selection2`, and `projection` fields.
 ///
 /// # Example
 /// ```ignore
-/// pub struct MassCenterSeparation { dimension: Dimension, group1: usize, group2: usize }
+/// pub struct MassCenterSeparation { projection: Dimension, group1: usize, group2: usize }
 ///
 /// impl_two_group_with_dim_builder!(MassCenterSeparation, "mass_center_separation",
-///     |dimension, group1, group2| MassCenterSeparation { dimension, group1, group2 });
+///     |projection, group1, group2| MassCenterSeparation { projection, group1, group2 });
 /// ```
 #[macro_export]
 macro_rules! impl_two_group_with_dim_builder {
@@ -408,8 +408,8 @@ macro_rules! impl_two_group_with_dim_builder {
             pub struct [<$cv Builder>] {
                 pub selection: $crate::selection::Selection,
                 pub selection2: $crate::selection::Selection,
-                #[serde(default)]
-                pub dimension: $crate::dimension::Dimension,
+                #[serde(default, alias = "dimension")]
+                pub projection: $crate::dimension::Dimension,
             }
 
             #[typetag::serde(name = $name)]
@@ -450,7 +450,7 @@ macro_rules! impl_two_group_with_dim_builder {
                             indices2[0], context, stringify!($cv)
                         )?;
                     }
-                    let $dim = self.dimension;
+                    let $dim = self.projection;
                     let $g1 = indices1[0];
                     let $g2 = indices2[0];
                     Ok(Box::new($construct))
