@@ -28,9 +28,10 @@ pub fn build_markov_chain<T: crate::Context + 'static>(
     context: T,
     rt: f64,
     state: Option<&Path>,
+    medium: Option<&interatomic::coulomb::Medium>,
 ) -> Result<MarkovChain<T>> {
     let propagate = Propagate::from_file(input, &context)?;
-    let analyses = analysis::from_file(input, &context)?;
+    let analyses = analysis::from_file(input, &context, medium)?;
     let mut mc = MarkovChain::new(context, propagate, rt, analyses)?;
     if let Some(state_path) = state {
         if state_path.exists() {
@@ -51,7 +52,7 @@ pub fn build_context_and_analyses(
 )> {
     let medium = crate::backend::get_medium(input)?;
     let context = Backend::new(input, None, &mut rand::thread_rng())?;
-    let analyses = analysis::from_file(input, &context)?;
+    let analyses = analysis::from_file(input, &context, Some(&medium))?;
     Ok((context, analyses, medium))
 }
 
@@ -68,12 +69,12 @@ impl Simulation {
         let rt = crate::R_IN_KJ_PER_MOL * medium.temperature();
 
         if let Some(gibbs_cfg) = propagate::gibbs_config_from_file(input)? {
-            let sim = Self::build_gibbs(input, state, rt, gibbs_cfg)?;
+            let sim = Self::build_gibbs(input, state, rt, gibbs_cfg, &medium)?;
             return Ok((sim, medium));
         }
 
         let context = Backend::new(input, None, &mut rand::thread_rng())?;
-        let mc = build_markov_chain(input, context, rt, state)?;
+        let mc = build_markov_chain(input, context, rt, state, Some(&medium))?;
         Ok((Self::SingleBox(mc), medium))
     }
 
@@ -83,6 +84,7 @@ impl Simulation {
         state: Option<&Path>,
         rt: f64,
         gibbs_cfg: crate::montecarlo::gibbs::GibbsConfig,
+        medium: &interatomic::coulomb::Medium,
     ) -> Result<Self> {
         let context0 = Backend::new(input, None, &mut rand::thread_rng())?;
         let context1 = context0.clone();
@@ -93,8 +95,8 @@ impl Simulation {
             .map(|b| b.build(&context0))
             .collect::<Result<_>>()?;
 
-        let mut mc0 = build_markov_chain(input, context0, rt, None)?;
-        let mut mc1 = build_markov_chain(input, context1, rt, None)?;
+        let mut mc0 = build_markov_chain(input, context0, rt, None, Some(medium))?;
+        let mut mc1 = build_markov_chain(input, context1, rt, None, Some(medium))?;
         // give box 1 a distinct seed so intra-box trajectories diverge
         mc1.propagation_mut().reseed(0x000D_EADB_EEFC_AFE1);
 

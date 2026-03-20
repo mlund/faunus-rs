@@ -1,0 +1,106 @@
+medium:
+  permittivity: Water
+  salt: null
+  temperature: 298.15
+blocks:
+- molecule: cation
+  'N': 75
+  active: null
+  insert: !RandomAtomPos
+    directions: xyz
+- molecule: anion
+  'N': 75
+  active: null
+  insert: !RandomAtomPos
+    directions: xyz
+cell: !Cuboid
+- 50.0
+- 50.0
+- 50.0
+energy_change:
+  drift: 2.3305801732931286e-12
+  final: -222.5623600859476
+  initial: -232.20915951005009
+energy_timers:
+  celloverlap: '4.9 (energy: 3.25, update: 1.65)'
+  nonbonded: '95.10000000000001 (energy: 93.31, update: 1.79)'
+propagate:
+  repeat: 5000
+  seed: !Fixed 42
+  collections:
+  - !Deterministic
+    repeat: 1
+    elapsed_seconds: 0.224638813
+    moves:
+    - !TranslateAtom
+      atom: null
+      molecule: cation
+      max_displacement: 40.0
+      weight: 1.0
+      repeat: 1
+      statistics:
+        num_trials: 5000
+        num_accepted: 2586
+        mean_square_displacement:
+          avg: 228.78080369898365
+          'n': 5000
+        timer:
+          accumulated:
+            secs: 0
+            nanos: 0
+        info: {}
+        energy_change_sum: 152.98398790613354
+        acceptance_ratio: 0.5172
+    - !TranslateAtom
+      atom: null
+      molecule: anion
+      max_displacement: 40.0
+      weight: 1.0
+      repeat: 1
+      statistics:
+        num_trials: 5000
+        num_accepted: 2533
+        mean_square_displacement:
+          avg: 234.59131418285006
+          'n': 5000
+        timer:
+          accumulated:
+            secs: 0
+            nanos: 0
+        info: {}
+        energy_change_sum: -143.33718848203338
+        acceptance_ratio: 0.5066
+  criterion: MetropolisHastings
+analysis:
+- scaled_widom_insertion:
+    atom: Na
+    num_samples: 2000
+    excess_chemical_potential (kT):
+      short_range:
+        mean: 0.16281844652207741
+        error: 0.0019214664128036688
+      electrostatic:
+        mean: -0.3915426436653476
+        error: 0.0037298665863595756
+      total:
+        mean: -0.22872419714326922
+        error: 0.004176210576266493
+    unscaled_widom (kT):
+      mean: -0.2563778430129623
+      error: 0.006726191478827048
+- scaled_widom_insertion:
+    atom: Cl
+    num_samples: 2000
+    excess_chemical_potential (kT):
+      short_range:
+        mean: 0.16281844652207741
+        error: 0.0019214664128036688
+      electrostatic:
+        mean: -0.3910895837721519
+        error: 0.0035989779705580325
+      total:
+        mean: -0.22827113725007478
+        error: 0.003965886555873747
+    unscaled_widom (kT):
+      mean: -0.2562841876773589
+      error: 0.0063913951124897304

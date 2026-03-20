@@ -39,3 +39,4 @@ regression_test!(titration_implicit);
 regression_test!(titration);
 regression_test!(molswap_phosphate);
 regression_test!(preferential_ideal_gas);
+regression_test!(widom_1_1_electrolyte);

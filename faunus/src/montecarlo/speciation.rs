@@ -142,28 +142,8 @@ impl crate::Info for SpeciationMove {
     }
 }
 
-/// Generate a random point inside the cell using rejection sampling.
-///
-/// Uses `bounding_box` + `is_inside` so that any `RngCore` can be used
-/// (the `Shape::get_point_inside` API requires `ThreadRng`).
-pub(super) fn random_point_inside(
-    cell: &impl crate::cell::Shape,
-    rng: &mut dyn RngCore,
-) -> crate::Point {
-    let bbox = cell
-        .bounding_box()
-        .expect("Cell must have a bounding box for GCMC insertion");
-    loop {
-        let point = crate::Point::new(
-            rng.gen_range(-bbox.x..bbox.x),
-            rng.gen_range(-bbox.y..bbox.y),
-            rng.gen_range(-bbox.z..bbox.z),
-        );
-        if cell.is_inside(&point) {
-            return point;
-        }
-    }
-}
+/// Re-export for local callers.
+pub(super) use crate::cell::random_point_inside;
 
 /// Look up the activity of an implicit species by name.
 ///

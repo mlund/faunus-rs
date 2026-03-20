@@ -28,7 +28,7 @@ mod hamiltonian;
 mod nonbonded;
 #[cfg(feature = "gpu")]
 pub(crate) mod nonbonded_kernel;
-mod pairpot;
+pub(crate) mod pairpot;
 mod polymer_depletion;
 mod sasa;
 mod tabulated6d;

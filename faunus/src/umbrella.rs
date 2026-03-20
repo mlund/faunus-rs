@@ -379,7 +379,7 @@ fn run_window(
 
     // Production phase: hard-wall only, collect CV samples
     let propagate = Propagate::from_file(input, &context)?;
-    let analyses = analysis::from_file(input, &context)?;
+    let analyses = analysis::from_file(input, &context, Some(params.medium))?;
     let mut mc = MarkovChain::new(context, propagate, rt, analyses)?;
 
     let cv = hard_wall_cv.build(mc.context())?;

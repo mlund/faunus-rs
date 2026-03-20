@@ -315,6 +315,47 @@ Key                        | Required | Default               | Description
 `exclude_intramolecular`   | no       | `true` (atom-atom)    | Skip pairs within the same molecule (atom-atom only)
 `dimension`                | no       | `xyz`                 | Axes for distance projection and normalization (`x`, `y`, `z`, `xy`, …)
 
+## Widom Insertion
+
+Measures the excess chemical potential of a single ion species using the scaled
+Widom method ([Svensson & Woodward, 1988](https://doi.org/10.1080/00268978800100203)).
+A ghost particle is inserted at random positions; charge scaling maintains
+electroneutrality in the finite periodic box, correcting the Coulombic size error
+inherent in naive single-ion Widom insertion.
+
+The excess chemical potential is decomposed into short-range and electrostatic
+contributions. The electrostatic part is evaluated by numerical integration over
+a charging parameter λ ∈ [0, 1]. Results are block-averaged with standard error
+of the mean reported.
+
+Pair interactions for the ghost particle are defined directly in the analysis
+block using the same syntax as `energy.nonbonded.default`, allowing arbitrary
+short-range potentials (WCA, LJ, HardSphere, etc.) beyond the primitive model.
+
+### Example
+
+```yaml
+analysis:
+  - !ScaledWidomInsertion
+    atom: Na
+    insertions: 20
+    lambda_points: 11
+    frequency: !Every 10
+    default:
+      - !Coulomb { cutoff: 1000.0 }
+      - !WCA { mixing: arithmetic }
+```
+
+### Options
+
+Key              | Required | Default | Description
+---------------- | -------- | ------- | -------------------------------------------
+`atom`           | yes      |         | Ghost atom type (must exist in topology)
+`insertions`     | no       | `10`    | Number of ghost insertions per sample
+`lambda_points`  | no       | `11`    | Quadrature points for charge scaling (odd recommended)
+`default`        | yes      |         | Pair interactions (same syntax as `nonbonded.default`)
+`frequency`      | yes      |         | Sample frequency, e.g. `!Every 10`
+
 ## Virtual Translate
 
 Performs a virtual displacement of a single molecule and measures the

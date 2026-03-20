@@ -48,7 +48,7 @@ use dyn_clone::DynClone;
 pub use endless::Endless;
 pub use hexagonal_prism::HexagonalPrism;
 pub(crate) use pbc_params::PbcParams;
-use rand::rngs::ThreadRng;
+use rand::{rngs::ThreadRng, Rng};
 use serde::{Deserialize, Serialize};
 pub use slit::Slit;
 pub use sphere::Sphere;
@@ -101,6 +101,26 @@ pub trait Shape {
 }
 
 dyn_clone::clone_trait_object!(SimulationCell);
+
+/// Generate a random point inside a cell using rejection sampling with any RNG.
+///
+/// Unlike [`Shape::get_point_inside`] which requires `ThreadRng`, this accepts
+/// any `Rng` for deterministic seeded sampling.
+pub fn random_point_inside(cell: &impl Shape, rng: &mut (impl Rng + ?Sized)) -> Point {
+    let bbox = cell
+        .bounding_box()
+        .expect("Cell must have a bounding box for random point generation");
+    loop {
+        let point = Point::new(
+            rng.gen_range(-bbox.x..bbox.x),
+            rng.gen_range(-bbox.y..bbox.y),
+            rng.gen_range(-bbox.z..bbox.z),
+        );
+        if cell.is_inside(&point) {
+            return point;
+        }
+    }
+}
 
 /// Periodic boundary conditions in various directions
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]

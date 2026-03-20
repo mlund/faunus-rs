@@ -293,7 +293,7 @@ frequency: !Every 10
   frequency: !Every 1
 "#;
         let builders: Vec<crate::analysis::AnalysisBuilder> = serde_yml::from_str(yaml).unwrap();
-        let analysis = builders[0].build(&ctx).unwrap();
+        let analysis = builders[0].build(&ctx, None).unwrap();
         assert_eq!(analysis.short_name(), Some("collectivevariable"));
     }
 }

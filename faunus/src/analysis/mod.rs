@@ -26,6 +26,7 @@ mod collective_variable;
 mod energy;
 mod mean_along_coordinate;
 mod radial_distribution;
+mod scaled_widom_insertion;
 mod shape;
 mod structure_writer;
 mod virtual_translate;
@@ -33,6 +34,7 @@ pub use collective_variable::{CollectiveVariableAnalysis, CollectiveVariableAnal
 pub use energy::{EnergyAnalysis, EnergyAnalysisBuilder};
 pub use mean_along_coordinate::{MeanAlongCoordinate, MeanAlongCoordinateBuilder};
 pub use radial_distribution::{RadialDistribution, RadialDistributionBuilder};
+pub use scaled_widom_insertion::{ScaledWidomInsertion, ScaledWidomInsertionBuilder};
 pub use shape::{ShapeAnalysis, ShapeAnalysisBuilder};
 pub use structure_writer::{StructureWriter, StructureWriterBuilder};
 pub use virtual_translate::{VirtualTranslate, VirtualTranslateBuilder};
@@ -105,12 +107,18 @@ pub enum AnalysisBuilder {
     Energy(EnergyAnalysisBuilder),
     /// Mean of one CV binned along another
     MeanAlongCoordinate(MeanAlongCoordinateBuilder),
+    /// Scaled Widom insertion for single-ion chemical potential
+    ScaledWidomInsertion(ScaledWidomInsertionBuilder),
 }
 
 impl AnalysisBuilder {
     /// Build analysis object
     #[must_use = "this returns a Result that should be handled"]
-    pub fn build<T: Context>(&self, context: &T) -> Result<Box<dyn Analyze<T> + Send>> {
+    pub fn build<T: Context>(
+        &self,
+        context: &T,
+        medium: Option<&interatomic::coulomb::Medium>,
+    ) -> Result<Box<dyn Analyze<T> + Send>> {
         Ok(match self {
             Self::StructureWriter(builder) => Box::new(builder.build()?),
             Self::VirtualTranslate(builder) => Box::new(builder.build()?),
@@ -119,6 +127,7 @@ impl AnalysisBuilder {
             Self::RadialDistribution(builder) => Box::new(builder.build(context)?),
             Self::Energy(builder) => Box::new(builder.build(context)?),
             Self::MeanAlongCoordinate(builder) => Box::new(builder.build(context)?),
+            Self::ScaledWidomInsertion(builder) => Box::new(builder.build(context, medium)?),
         })
     }
 }
@@ -128,7 +137,11 @@ pub type AnalysisCollection<T> = Vec<Box<dyn Analyze<T> + Send>>;
 
 /// Create analysis collection from yaml file containing a list of analysis objects under an "analysis" key.
 #[must_use = "this returns a Result that should be handled"]
-pub fn from_file<T: Context>(path: &Path, context: &T) -> Result<AnalysisCollection<T>> {
+pub fn from_file<T: Context>(
+    path: &Path,
+    context: &T,
+    medium: Option<&interatomic::coulomb::Medium>,
+) -> Result<AnalysisCollection<T>> {
     let yaml = std::fs::read_to_string(path)
         .map_err(|err| anyhow::anyhow!("Error reading file {:?}: {}", &path, err))?;
     let value = serde_yml::from_str::<Value>(&yaml)?
@@ -137,7 +150,7 @@ pub fn from_file<T: Context>(path: &Path, context: &T) -> Result<AnalysisCollect
         .clone();
     serde_yml::from_value::<Vec<AnalysisBuilder>>(value)?
         .into_iter()
-        .map(|builder| builder.build(context))
+        .map(|builder| builder.build(context, medium))
         .collect()
 }
 

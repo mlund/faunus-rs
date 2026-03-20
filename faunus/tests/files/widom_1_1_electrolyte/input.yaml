@@ -1,0 +1,61 @@
+atoms:
+  - { name: Na, charge: 1.0, sigma: 4.25, epsilon: 0.01, mass: 23.0 }
+  - { name: Cl, charge: -1.0, sigma: 4.25, epsilon: 0.01, mass: 35.5 }
+
+molecules:
+  - name: cation
+    atoms: [Na]
+    atomic: true
+  - name: anion
+    atoms: [Cl]
+    atomic: true
+
+system:
+  cell: !Cuboid [50.0, 50.0, 50.0]
+  medium:
+    permittivity: !Water
+    temperature: 298.15
+  energy:
+    nonbonded:
+      default:
+        - !Coulomb { cutoff: 1000.0 }
+        - !WCA { mixing: arithmetic }
+  blocks:
+    - molecule: cation
+      N: 75
+      insert: !RandomAtomPos {}
+    - molecule: anion
+      N: 75
+      insert: !RandomAtomPos {}
+
+analysis:
+  - !ScaledWidomInsertion
+    atom: Na
+    insertions: 20
+    lambda_points: 11
+    frequency: !Every 5
+    default:
+      - !Coulomb { cutoff: 1000.0 }
+      - !WCA { mixing: arithmetic }
+  - !ScaledWidomInsertion
+    atom: Cl
+    insertions: 20
+    lambda_points: 11
+    frequency: !Every 5
+    default:
+      - !Coulomb { cutoff: 1000.0 }
+      - !WCA { mixing: arithmetic }
+
+propagate:
+  seed: !Fixed 42
+  criterion: Metropolis
+  repeat: 5000
+  collections:
+    - !Deterministic
+      moves:
+        - !TranslateAtom
+          molecule: cation
+          dp: 40.0
+        - !TranslateAtom
+          molecule: anion
+          dp: 40.0

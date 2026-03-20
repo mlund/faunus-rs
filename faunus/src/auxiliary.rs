@@ -12,7 +12,7 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
-//! Implementation of auxiliary functions for computing various properties.
+//! Auxiliary functions for I/O, geometry, and numerical integration.
 
 use crate::{cell::SimulationCell, Point};
 use flate2::write::GzEncoder;
@@ -133,6 +133,89 @@ impl ColumnWriter {
     }
 }
 
+/// Composite Simpson's rule over `n` equally spaced points on [0, 1].
+///
+/// Uses Simpson's 1/3 for odd `n`; for even `n`, applies Simpson's 3/8 on the
+/// last 3 intervals. Returns 0 for fewer than 2 points.
+pub(crate) fn simpson_integrate(values: &[f64]) -> f64 {
+    let n = values.len();
+    if n < 2 {
+        return 0.0;
+    }
+    let h = 1.0 / (n - 1) as f64;
+    if n == 2 {
+        return h * (values[0] + values[1]) / 2.0;
+    }
+    if n == 3 {
+        return h / 3.0 * (values[0] + 4.0 * values[1] + values[2]);
+    }
+
+    if n % 2 == 1 {
+        let mut sum = values[0] + values[n - 1];
+        for i in (1..n - 1).step_by(2) {
+            sum += 4.0 * values[i];
+        }
+        for i in (2..n - 1).step_by(2) {
+            sum += 2.0 * values[i];
+        }
+        sum * h / 3.0
+    } else {
+        // Simpson's 1/3 requires odd point count; split even n into
+        // an odd-length 1/3 block plus a 4-point 3/8 tail to avoid
+        // the double-counting that a trapezoidal correction would cause.
+        let m = n - 3;
+        let mut sum = values[0] + values[m - 1];
+        for i in (1..m - 1).step_by(2) {
+            sum += 4.0 * values[i];
+        }
+        for i in (2..m - 1).step_by(2) {
+            sum += 2.0 * values[i];
+        }
+        let result_13 = sum * h / 3.0;
+        let result_38 = 3.0 * h / 8.0
+            * (values[n - 4] + 3.0 * values[n - 3] + 3.0 * values[n - 2] + values[n - 1]);
+        result_13 + result_38
+    }
+}
+
+/// Running block average with mean and standard error of the mean.
+///
+/// Wraps [`average::Variance`] with convenience methods for reporting.
+/// Each call to [`add`](Self::add) represents one block measurement.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct BlockAverage(average::Variance);
+
+use average::Estimate as _;
+
+impl BlockAverage {
+    pub fn new() -> Self {
+        Self(average::Variance::new())
+    }
+
+    /// Record a per-block value.
+    pub fn add(&mut self, value: f64) {
+        self.0.add(value);
+    }
+
+    /// Mean over all blocks.
+    pub fn mean(&self) -> f64 {
+        self.0.mean()
+    }
+
+    /// Standard error of the mean (SEM = σ / √n).
+    pub fn error(&self) -> f64 {
+        self.0.error()
+    }
+
+    /// Serialize as YAML mapping `{ mean: ..., error: ... }`.
+    pub fn to_yaml(&self) -> Option<serde_yml::Value> {
+        let mut m = serde_yml::Mapping::new();
+        m.insert("mean".into(), serde_yml::to_value(self.mean()).ok()?);
+        m.insert("error".into(), serde_yml::to_value(self.error()).ok()?);
+        Some(serde_yml::Value::Mapping(m))
+    }
+}
+
 #[cfg(test)]
 mod column_writer_tests {
     use super::*;
@@ -197,6 +280,65 @@ mod column_writer_tests {
         w.write_row(&[&1, &format_args!("{:.2}", 3.14)]).unwrap();
         let bytes = buf.lock().unwrap();
         assert_eq!(String::from_utf8_lossy(&bytes), "x,y\n1,3.14\n");
+    }
+}
+
+#[cfg(test)]
+mod simpson_tests {
+    use super::simpson_integrate;
+
+    #[test]
+    fn linear_odd() {
+        let values: Vec<f64> = (0..11).map(|i| i as f64 / 10.0).collect();
+        assert!((simpson_integrate(&values) - 0.5).abs() < 1e-14);
+    }
+
+    #[test]
+    fn quadratic_odd() {
+        let n = 11;
+        let values: Vec<f64> = (0..n)
+            .map(|i| {
+                let x = i as f64 / (n - 1) as f64;
+                x * x
+            })
+            .collect();
+        assert!((simpson_integrate(&values) - 1.0 / 3.0).abs() < 1e-14);
+    }
+
+    #[test]
+    fn two_points() {
+        assert!((simpson_integrate(&[0.0, 1.0]) - 0.5).abs() < 1e-14);
+    }
+
+    #[test]
+    fn single_point() {
+        assert_eq!(simpson_integrate(&[1.0]), 0.0);
+    }
+
+    #[test]
+    fn linear_even() {
+        let n = 10;
+        let values: Vec<f64> = (0..n).map(|i| i as f64 / (n - 1) as f64).collect();
+        assert!((simpson_integrate(&values) - 0.5).abs() < 1e-14);
+    }
+
+    #[test]
+    fn quadratic_even() {
+        let n = 10;
+        let values: Vec<f64> = (0..n)
+            .map(|i| {
+                let x = i as f64 / (n - 1) as f64;
+                x * x
+            })
+            .collect();
+        assert!((simpson_integrate(&values) - 1.0 / 3.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn four_points() {
+        let n = 4;
+        let values: Vec<f64> = (0..n).map(|i| i as f64 / (n - 1) as f64).collect();
+        assert!((simpson_integrate(&values) - 0.5).abs() < 1e-14);
     }
 }
 

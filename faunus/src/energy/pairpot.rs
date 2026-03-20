@@ -144,6 +144,18 @@ impl Cutoff for PairPot {
 
 // ─── IsotropicTwobodyEnergy ───────────────────────────────────────────────────
 
+impl IsotropicTwobodyEnergy for ShortRange {
+    #[inline(always)]
+    fn isotropic_twobody_energy(&self, distance_squared: f64) -> f64 {
+        dispatch_short_range!(self, isotropic_twobody_energy, 0.0, distance_squared)
+    }
+
+    #[inline(always)]
+    fn isotropic_twobody_force(&self, distance_squared: f64) -> f64 {
+        dispatch_short_range!(self, isotropic_twobody_force, 0.0, distance_squared)
+    }
+}
+
 impl IsotropicTwobodyEnergy for PairPot {
     #[inline(always)]
     fn isotropic_twobody_energy(&self, distance_squared: f64) -> f64 {
