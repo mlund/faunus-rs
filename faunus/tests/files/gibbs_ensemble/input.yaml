@@ -44,5 +44,5 @@ propagate:
   gibbs:
     intra_steps: 1
     moves:
-      - !GibbsVolumeExchange {dV: 10}
+      - !GibbsVolumeExchange {dV: 0.5}
       - !GibbsParticleTransfer {molecule: molecule1}

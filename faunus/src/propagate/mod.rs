@@ -331,7 +331,7 @@ impl<T: Context> Propagate<T> {
 }
 
 /// Parse the optional `propagate.gibbs` section from an input YAML file.
-pub fn gibbs_config_from_file(
+pub(crate) fn gibbs_config_from_file(
     filename: impl AsRef<Path>,
 ) -> anyhow::Result<Option<crate::montecarlo::gibbs::GibbsConfig>> {
     let yaml = std::fs::read_to_string(filename)?;

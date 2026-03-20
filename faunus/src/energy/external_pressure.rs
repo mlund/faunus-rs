@@ -85,35 +85,13 @@ impl ExternalPressure {
         }
     }
 
-    /// Count independently translatable entities N for the NPT partition function.
-    ///
-    /// Atomic groups contribute each particle separately because they lack
-    /// internal structure; molecular groups contribute 1 because the molecule
-    /// translates as a rigid unit.
-    fn count_entities(context: &impl Context) -> usize {
-        let topology = context.topology_ref();
-        let mol_kinds = topology.moleculekinds();
-        context
-            .groups()
-            .iter()
-            .filter(|g| !g.is_empty())
-            .map(|g| {
-                if mol_kinds[g.molecule()].len() == 1 {
-                    g.len()
-                } else {
-                    1
-                }
-            })
-            .sum()
-    }
-
     /// Compute the isobaric energy: `P·V - (N+1)·kT·ln(V)`.
     fn compute(&self, context: &impl Context) -> f64 {
         let volume = match context.cell().volume() {
             Some(v) if v > 0.0 => v,
             _ => return 0.0,
         };
-        let n = Self::count_entities(context) as f64;
+        let n = context.num_active_mass_centers() as f64;
         self.pressure
             .mul_add(volume, -((n + 1.0) * self.thermal_energy * volume.ln()))
     }
@@ -236,9 +214,8 @@ mod tests {
 mod integration_tests {
     use super::*;
     use crate::backend::Backend;
-    use crate::cell::Shape;
-    use crate::group::GroupCollection;
-    use crate::{WithCell, WithTopology};
+    use crate::context::ParticleSystem;
+    use crate::WithCell;
     use float_cmp::assert_approx_eq;
     use std::path::Path;
 
@@ -259,20 +236,7 @@ mod integration_tests {
         let volume = context.cell().volume().unwrap();
         assert!(volume > 0.0);
 
-        let topology = context.topology_ref();
-        let mol_kinds = topology.moleculekinds();
-        let n: usize = context
-            .groups()
-            .iter()
-            .filter(|g| !g.is_empty())
-            .map(|g| {
-                if mol_kinds[g.molecule()].len() == 1 {
-                    g.len()
-                } else {
-                    1
-                }
-            })
-            .sum();
+        let n = context.num_active_mass_centers();
 
         let expected = ep.pressure * volume - (n as f64 + 1.0) * rt * volume.ln();
         let energy = ep.energy(&context, &Change::Everything);

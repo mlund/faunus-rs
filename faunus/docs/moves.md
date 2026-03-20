@@ -536,7 +536,7 @@ propagate:
   gibbs:
     intra_steps: 1
     moves:
-      - !GibbsVolumeExchange { dV: 10 }
+      - !GibbsVolumeExchange { dV: 0.3 }
       - !GibbsParticleTransfer { molecule: LJ }
 ```
 
@@ -547,12 +547,24 @@ Key            | Required | Default | Description
 
 ### Gibbs Volume Exchange
 
-Proposes a linear volume transfer $\Delta V$ between the two boxes:
-$V_1' = V_1 + \Delta V$, $V_2' = V_2 - \Delta V$,
-where $\Delta V \in [-\text{dV}/2, +\text{dV}/2]$.
+Exchanges volume between two boxes while conserving total volume $V_1 + V_2$.
 Both boxes are isotropically rescaled and all particle positions scale with the box.
+$N$ counts independently translatable mass centers: one per molecular group,
+one per active atom in atomic groups.
 
-Acceptance includes the ideal-gas entropy bias:
+**Logarithmic** (default) — displaces in $\ln(V_1/V_2)$ space
+([Frenkel & Smit, Sec. 8.3.2](https://doi.org/10.1016/B978-012267351-1/50006-7)):
+
+$$
+\operatorname{acc} = \min\!\bigl(1,\;
+  \exp\bigl[-\beta(\Delta U_1 + \Delta U_2)
+  + (N_1{+}1) \ln(V_1'/V_1) + (N_2{+}1) \ln(V_2'/V_2)\bigr]\bigr)
+$$
+
+The $(N{+}1)$ factor comes from the Jacobian of the $\ln V$ transformation.
+
+**Linear** (opt-in) — direct $\delta V$ transfer
+([Allen & Tildesley, Eq. 9.75](https://doi.org/10.1093/oso/9780198803195.001.0001)):
 
 $$
 \operatorname{acc} = \min\!\bigl(1,\;
@@ -561,12 +573,14 @@ $$
 $$
 
 ```yaml
-- !GibbsVolumeExchange { dV: 10 }
+- !GibbsVolumeExchange { dV: 10 }                     # default: Logarithmic
+- !GibbsVolumeExchange { dV: 10, method: Linear }     # opt-in linear
 ```
 
-Key  | Required | Description
----- | -------- | -------------------------------------------
-`dV` | yes      | Maximum volume displacement (linear scale)
+Key      | Required | Default        | Description
+-------- | -------- | -------------- | -------------------------------------------
+`dV`     | yes      |                | Volume displacement parameter
+`method` | no       | `Logarithmic`  | Displacement method: `Logarithmic` or `Linear`
 
 ### Gibbs Particle Transfer
 

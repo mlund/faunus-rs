@@ -2,7 +2,8 @@
 //!
 //! Two simulation boxes exchange volume and particles while running
 //! independent intra-box MC in parallel via `std::thread::scope`.
-//! Reference: Panagiotopoulos, Mol. Phys. 61, 813 (1987), doi:10.1080/00268978700101491.
+//! Reference: Panagiotopoulos, Mol. Phys. 61, 813 (1987),
+//! [doi:10.1080/00268978700101491](https://doi.org/10.1080/00268978700101491).
 
 use super::{MarkovChain, MoveStatistics};
 use crate::cell::{Shape, VolumeScalePolicy};
@@ -14,11 +15,11 @@ use crate::{Change, Context};
 use anyhow::Result;
 use rand::prelude::*;
 use rand::rngs::StdRng;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 
 /// Inter-box move operating on two simulation contexts simultaneously.
-pub trait GibbsMove<T: Context>: Debug + Send {
+pub(crate) trait GibbsMove<T: Context>: Debug + Send {
     fn perform(
         &mut self,
         c0: &mut T,
@@ -31,24 +32,40 @@ pub trait GibbsMove<T: Context>: Debug + Send {
 }
 
 // ---------------------------------------------------------------------------
+// Volume displacement method
+// ---------------------------------------------------------------------------
+
+/// How to propose volume changes between two Gibbs ensemble boxes.
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize)]
+pub(crate) enum VolumeDisplacementMethod {
+    /// ln(V₁/V₂) space — Frenkel & Smit, Sec. 8.3.2.
+    /// Bias includes (N+1) from the Jacobian of the ln(V) transformation.
+    #[default]
+    Logarithmic,
+    /// Direct linear volume transfer δV — Allen & Tildesley, Eq. 9.75.
+    Linear,
+}
+
+// ---------------------------------------------------------------------------
 // Volume exchange
 // ---------------------------------------------------------------------------
 
 /// Exchange volume between two Gibbs ensemble boxes.
 ///
-/// Proposes ΔV uniformly in `[-dV/2, dV/2]`, grows one box and shrinks the
-/// other by the same amount.  Acceptance includes the ideal-gas entropy bias
-/// `N₁·ln(V₁'/V₁) + N₂·ln(V₂'/V₂)`.
+/// Default: logarithmic displacement in ln(V₁/V₂) space (Frenkel & Smit, Sec. 8.3.2).
+/// Optional: linear displacement δV (Allen & Tildesley, Eq. 9.75).
 #[derive(Debug)]
-pub struct GibbsVolumeExchange {
+struct GibbsVolumeExchange {
     dv: f64,
+    method: VolumeDisplacementMethod,
     statistics: MoveStatistics,
 }
 
 impl GibbsVolumeExchange {
-    pub fn new(dv: f64) -> Self {
+    fn new(dv: f64, method: VolumeDisplacementMethod) -> Self {
         Self {
             dv,
+            method,
             statistics: MoveStatistics::default(),
         }
     }
@@ -72,17 +89,39 @@ impl<T: Context> GibbsMove<T> for GibbsVolumeExchange {
             .cell()
             .volume()
             .ok_or_else(|| anyhow::anyhow!("box 1 has no volume"))?;
-        let dv = (rng.r#gen::<f64>() - 0.5) * self.dv;
-        let v0_new = v0 + dv;
-        let v1_new = v1 - dv;
 
+        // N = translatable mass centers (not atoms) for the V^N partition function factor
+        let n0 = c0.num_active_mass_centers() as f64;
+        let n1 = c1.num_active_mass_centers() as f64;
+
+        let (v0_new, v1_new, bias, displacement) = match self.method {
+            VolumeDisplacementMethod::Logarithmic => {
+                // Displace in ln(V₁/V₂) space to avoid sampling issues near V→0.
+                // V_tot is conserved by construction: V₁' + V₂' = V_tot.
+                let v_tot = v0 + v1;
+                let f = ((v0 / v1).ln() + (rng.r#gen::<f64>() - 0.5) * self.dv).exp();
+                let v0_new = v_tot / (1.0 / f + 1.0);
+                let v1_new = v_tot - v0_new;
+                let ln_ratio = (v0_new / v0).ln();
+                // (N+1): the +1 comes from the Jacobian d(lnV)/dV = 1/V
+                let bias = (n0 + 1.0) * ln_ratio + (n1 + 1.0) * (v1_new / v1).ln();
+                (v0_new, v1_new, bias, ln_ratio)
+            }
+            VolumeDisplacementMethod::Linear => {
+                let dv = (rng.r#gen::<f64>() - 0.5) * self.dv;
+                let v0_new = v0 + dv;
+                let v1_new = v1 - dv;
+                // No Jacobian correction needed for linear displacement
+                let bias = n0 * (v0_new / v0).ln() + n1 * (v1_new / v1).ln();
+                (v0_new, v1_new, bias, dv)
+            }
+        };
+
+        // Reject unphysical volumes (floor avoids numerical issues with ln)
         if v0_new < 1.0 || v1_new < 1.0 {
             self.statistics.reject();
             return Ok(());
         }
-
-        let n0 = c0.num_active_particles() as f64;
-        let n1 = c1.num_active_particles() as f64;
 
         let old_energy_0 = c0.hamiltonian().energy(c0, &Change::Everything);
         let old_energy_1 = c1.hamiltonian().energy(c1, &Change::Everything);
@@ -97,12 +136,11 @@ impl<T: Context> GibbsMove<T> for GibbsVolumeExchange {
         let new_energy_1 = c1.hamiltonian().energy(c1, &Change::Everything);
 
         let du = (new_energy_0 - old_energy_0) + (new_energy_1 - old_energy_1);
-        let bias = n0 * (v0_new / v0).ln() + n1 * (v1_new / v1).ln();
         let exponent = -du / thermal_energy + bias;
 
         if rng.r#gen::<f64>() < f64::exp(exponent) {
             self.statistics
-                .accept(du, crate::propagate::Displacement::Custom(dv));
+                .accept(du, crate::propagate::Displacement::Custom(displacement));
             c0.discard_backup();
             c1.discard_backup();
         } else {
@@ -116,6 +154,7 @@ impl<T: Context> GibbsMove<T> for GibbsVolumeExchange {
     fn to_yaml(&self) -> Option<serde_yaml::Value> {
         let mut map = serde_yaml::Mapping::new();
         map.insert("dV".into(), self.dv.into());
+        map.insert("method".into(), serde_yaml::to_value(self.method).ok()?);
         map.insert(
             "statistics".into(),
             serde_yaml::to_value(&self.statistics).ok()?,
@@ -132,16 +171,16 @@ impl<T: Context> GibbsMove<T> for GibbsVolumeExchange {
 ///
 /// Picks a random direction, deactivates a molecule in the source box and
 /// activates an empty slot in the target box at a random position.
-/// Acceptance follows Panagiotopoulos Eq. 8.
+/// Acceptance follows [Panagiotopoulos Eq. 8](https://doi.org/10.1080/00268978700101491).
 #[derive(Debug)]
-pub struct GibbsParticleTransfer {
+struct GibbsParticleTransfer {
     molecule_id: usize,
-    molecule_name: String,
+    molecule_name: String, // kept for YAML output without topology access
     statistics: MoveStatistics,
 }
 
 impl GibbsParticleTransfer {
-    pub fn new(molecule_id: usize, molecule_name: String) -> Self {
+    fn new(molecule_id: usize, molecule_name: String) -> Self {
         Self {
             molecule_id,
             molecule_name,
@@ -205,6 +244,7 @@ impl GibbsParticleTransfer {
         let com = src.mass_center(&src_indices);
 
         // shift positions to a random position in target cell
+        // thread_rng required by Shape::get_point_inside signature
         let shift = tgt.cell().get_point_inside(&mut rand::thread_rng()) - com;
         let positions: Vec<_> = src_indices
             .iter()
@@ -277,10 +317,12 @@ impl<T: Context> GibbsMove<T> for GibbsParticleTransfer {
 
 /// Deserialization helper for Gibbs inter-box moves.
 #[derive(Clone, Debug, Deserialize)]
-pub enum GibbsMoveBuilder {
+pub(crate) enum GibbsMoveBuilder {
     GibbsVolumeExchange {
         #[serde(alias = "dV")]
         dv: f64,
+        #[serde(default)]
+        method: VolumeDisplacementMethod,
     },
     GibbsParticleTransfer {
         molecule: String,
@@ -289,11 +331,11 @@ pub enum GibbsMoveBuilder {
 
 impl GibbsMoveBuilder {
     /// Build a concrete `GibbsMove` from the deserialized config.
-    pub fn build<T: Context + 'static>(self, context: &T) -> Result<Box<dyn GibbsMove<T>>> {
+    pub(crate) fn build<T: Context + 'static>(self, context: &T) -> Result<Box<dyn GibbsMove<T>>> {
         Ok(match self {
-            Self::GibbsVolumeExchange { dv } => {
+            Self::GibbsVolumeExchange { dv, method } => {
                 anyhow::ensure!(dv > 0.0, "GibbsVolumeExchange: dV must be positive");
-                Box::new(GibbsVolumeExchange::new(dv))
+                Box::new(GibbsVolumeExchange::new(dv, method))
             }
             Self::GibbsParticleTransfer { molecule } => {
                 let molecule_id = crate::montecarlo::find_molecule_id(
@@ -301,6 +343,15 @@ impl GibbsMoveBuilder {
                     &molecule,
                     "GibbsParticleTransfer",
                 )?;
+                // Atomic groups pool particles into a single group, breaking
+                // the 1-group-per-molecule assumption of activate/deactivate transfer.
+                let mol_kind = &context.topology_ref().moleculekinds()[molecule_id];
+                anyhow::ensure!(
+                    !mol_kind.atomic(),
+                    "GibbsParticleTransfer: atomic molecule kind '{}' not supported; \
+                     use non-atomic single-atom molecules instead",
+                    molecule
+                );
                 Box::new(GibbsParticleTransfer::new(molecule_id, molecule))
             }
         })
@@ -310,11 +361,11 @@ impl GibbsMoveBuilder {
 /// Top-level Gibbs ensemble configuration parsed from `propagate.gibbs`.
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct GibbsConfig {
+pub(crate) struct GibbsConfig {
     /// Number of intra-box propagation cycles between inter-box moves.
-    pub intra_steps: usize,
+    pub(crate) intra_steps: usize,
     /// Inter-box moves to perform each Gibbs sweep.
-    pub moves: Vec<GibbsMoveBuilder>,
+    pub(crate) moves: Vec<GibbsMoveBuilder>,
 }
 
 // ---------------------------------------------------------------------------
@@ -343,7 +394,7 @@ impl<T: Context> Debug for GibbsEnsemble<T> {
 }
 
 impl<T: Context + Send + 'static> GibbsEnsemble<T> {
-    pub fn new(
+    pub(crate) fn new(
         boxes: [MarkovChain<T>; 2],
         inter_moves: Vec<Box<dyn GibbsMove<T>>>,
         intra_steps: usize,
@@ -417,8 +468,7 @@ mod tests {
     use crate::backend::Backend;
     use crate::WithCell;
 
-    #[test]
-    fn gibbs_volume_exchange_conserves_total_volume() {
+    fn make_contexts() -> (Backend, Backend) {
         let mut rng = rand::thread_rng();
         let context = Backend::new(
             "tests/files/translate_molecules_simulation.yaml",
@@ -426,13 +476,14 @@ mod tests {
             &mut rng,
         )
         .unwrap();
+        (context.clone(), context)
+    }
 
-        let mut c0 = context.clone();
-        let mut c1 = context;
-
+    fn assert_volume_conserved(method: VolumeDisplacementMethod) {
+        let (mut c0, mut c1) = make_contexts();
         let total_before = c0.cell().volume().unwrap() + c1.cell().volume().unwrap();
 
-        let mut ve = GibbsVolumeExchange::new(5.0);
+        let mut ve = GibbsVolumeExchange::new(5.0, method);
         let mut rng = StdRng::seed_from_u64(42);
 
         for _ in 0..100 {
@@ -448,10 +499,31 @@ mod tests {
     }
 
     #[test]
-    fn gibbs_move_builder_volume_yaml() {
+    fn volume_exchange_conserves_total_volume_logarithmic() {
+        assert_volume_conserved(VolumeDisplacementMethod::Logarithmic);
+    }
+
+    #[test]
+    fn volume_exchange_conserves_total_volume_linear() {
+        assert_volume_conserved(VolumeDisplacementMethod::Linear);
+    }
+
+    #[test]
+    fn gibbs_move_builder_volume_yaml_default() {
         let yaml = "!GibbsVolumeExchange { dV: 10.0 }";
         let builder: GibbsMoveBuilder = serde_yaml::from_str(yaml).unwrap();
-        assert!(matches!(builder, GibbsMoveBuilder::GibbsVolumeExchange { dv } if dv == 10.0));
+        assert!(
+            matches!(builder, GibbsMoveBuilder::GibbsVolumeExchange { dv, .. } if dv == 10.0)
+        );
+    }
+
+    #[test]
+    fn gibbs_move_builder_volume_yaml_linear() {
+        let yaml = "!GibbsVolumeExchange { dV: 10.0, method: Linear }";
+        let builder: GibbsMoveBuilder = serde_yaml::from_str(yaml).unwrap();
+        assert!(
+            matches!(builder, GibbsMoveBuilder::GibbsVolumeExchange { dv, method: VolumeDisplacementMethod::Linear } if dv == 10.0)
+        );
     }
 
     #[test]
