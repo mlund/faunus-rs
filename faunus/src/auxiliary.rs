@@ -269,17 +269,17 @@ mod column_writer_tests {
     #[test]
     fn whitespace_output() {
         let (mut w, buf) = collect_output(ColumnFormat::Whitespace, &["x", "y"]);
-        w.write_row(&[&1, &format_args!("{:.2}", 3.14)]).unwrap();
+        w.write_row(&[&1, &format_args!("{:.2}", 3.15)]).unwrap();
         let bytes = buf.lock().unwrap();
-        assert_eq!(String::from_utf8_lossy(&bytes), "# x y\n1 3.14\n");
+        assert_eq!(String::from_utf8_lossy(&bytes), "# x y\n1 3.15\n");
     }
 
     #[test]
     fn csv_output() {
         let (mut w, buf) = collect_output(ColumnFormat::Csv, &["x", "y"]);
-        w.write_row(&[&1, &format_args!("{:.2}", 3.14)]).unwrap();
+        w.write_row(&[&1, &format_args!("{:.2}", 3.15)]).unwrap();
         let bytes = buf.lock().unwrap();
-        assert_eq!(String::from_utf8_lossy(&bytes), "x,y\n1,3.14\n");
+        assert_eq!(String::from_utf8_lossy(&bytes), "x,y\n1,3.15\n");
     }
 }
 

@@ -22,3 +22,6 @@ icotable = { path = "icotable" }
 # Redirect crates.io dependencies to local workspace checkouts
 [patch.crates-io]
 coulomb = { path = "coulomb" }
+
+[profile.release]
+strip = true

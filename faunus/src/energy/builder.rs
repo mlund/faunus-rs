@@ -96,7 +96,7 @@ pub enum DirectOrMixing<T: IsotropicTwobodyEnergy> {
 /// Construct a potential from combined atom parameters, factoring out the
 /// per-type mixing logic that was previously duplicated across five
 /// `PairInteraction::to_boxed` match arms.
-pub(crate) trait FromMixing: IsotropicTwobodyEnergy + Clone + 'static {
+pub trait FromMixing: IsotropicTwobodyEnergy + Clone + 'static {
     fn from_mixing(combined: &AtomKind, cutoff: Option<f64>) -> anyhow::Result<Self>;
 }
 

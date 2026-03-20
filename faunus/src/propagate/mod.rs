@@ -127,15 +127,6 @@ pub(crate) enum PropagationBlock<T: Context> {
 }
 
 impl<T: Context> PropagationBlock<T> {
-    /// Cumulative wall-clock time spent in this block.
-    #[cfg(test)]
-    pub(crate) fn elapsed(&self) -> std::time::Duration {
-        match self {
-            Self::MonteCarlo(mc) => mc.elapsed,
-            #[cfg(feature = "gpu")]
-            Self::LangevinDynamics(ld) => ld.elapsed(),
-        }
-    }
 
     pub(crate) fn propagate(
         &mut self,

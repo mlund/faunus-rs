@@ -85,7 +85,7 @@ fn build_mc(n_molecules: usize) -> MarkovChain<Backend> {
     let context = Backend::new(tmp.path(), None, &mut rand::thread_rng()).unwrap();
     let medium = faunus::backend::get_medium(tmp.path()).unwrap();
     let rt = faunus::R_IN_KJ_PER_MOL * medium.temperature();
-    faunus::simulation::build_markov_chain(tmp.path(), context, rt, None).unwrap()
+    faunus::simulation::build_markov_chain(tmp.path(), context, rt, None, Some(&medium)).unwrap()
 }
 
 /// Single MC move benchmarks for 20 CPPM molecules
