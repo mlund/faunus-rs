@@ -429,7 +429,35 @@ pub trait GroupCollection {
     }
 
     /// Get group lists of the system.
+    ///
+    /// Prefer the delegating helpers (`find_molecules`, `find_atomic_group`, etc.)
+    /// over calling this directly.
     fn group_lists(&self) -> &GroupLists;
+
+    /// Returns indices of all groups matching given molecule id and size.
+    fn find_molecules(&self, molecule_id: usize, size: GroupSize) -> Option<&[usize]> {
+        self.group_lists().find_molecules(molecule_id, size)
+    }
+
+    /// Find the single mega-group index for an atomic molecule kind.
+    fn find_atomic_group(&self, molecule_id: usize) -> Option<usize> {
+        self.group_lists().find_atomic_group(molecule_id)
+    }
+
+    /// Count groups matching given molecule id and size.
+    fn count_molecules(&self, molecule_id: usize, size: GroupSize) -> usize {
+        self.group_lists().count_molecules(molecule_id, size)
+    }
+
+    /// Count non-empty groups (full + partial) for a molecule kind.
+    fn count_nonempty(&self, molecule_id: usize) -> usize {
+        self.group_lists().count_nonempty(molecule_id)
+    }
+
+    /// Monotonically increasing counter, bumped when group lists change.
+    fn group_lists_generation(&self) -> u64 {
+        self.group_lists().generation()
+    }
 
     /// Get the number of particles in the system.
     fn num_particles(&self) -> usize {
@@ -460,11 +488,10 @@ pub trait GroupCollection {
                 .collect(),
             GroupSelection::All => (0..self.groups().len()).collect(),
             GroupSelection::ByMoleculeId(i) => self
-                .group_lists()
-                .get_full_groups(*i)
-                .iter()
-                .cloned()
-                .chain(self.group_lists().get_partial_groups(*i).iter().cloned())
+                .find_molecules(*i, GroupSize::Full)
+                .into_iter()
+                .chain(self.find_molecules(*i, GroupSize::Partial(0)))
+                .flat_map(|s| s.iter().copied())
                 .collect::<Vec<usize>>(),
             GroupSelection::ByMoleculeIds(vec) => {
                 let mut vector = vec
@@ -600,7 +627,7 @@ impl GroupLists {
 
     /// Monotonically increasing counter, bumped when group lists change.
     /// Consumers can compare against a stored generation to detect staleness.
-    pub fn generation(&self) -> u64 {
+    pub(crate) fn generation(&self) -> u64 {
         self.generation
     }
 
@@ -650,30 +677,14 @@ impl GroupLists {
         }
     }
 
-    /// Get all full groups with the given molecule ID.
-    pub(crate) fn get_full_groups(&self, id: usize) -> &[usize] {
-        &self.full[id]
-    }
-
-    /// Get all partial groups with the given molecule ID.
-    pub(crate) fn get_partial_groups(&self, id: usize) -> &[usize] {
-        &self.partial[id]
-    }
-
-    /// Get all empty groups with the given molecule ID.
-    #[allow(dead_code)]
-    pub(crate) fn get_empty_groups(&self, id: usize) -> &[usize] {
-        &self.empty[id]
-    }
-
     /// Count groups matching given molecule id and size.
-    pub fn count_molecules(&self, molecule_id: usize, size: GroupSize) -> usize {
+    pub(crate) fn count_molecules(&self, molecule_id: usize, size: GroupSize) -> usize {
         self.find_molecules(molecule_id, size)
             .map_or(0, |s| s.len())
     }
 
     /// Count non-empty groups (full + partial) for a molecule kind.
-    pub fn count_nonempty(&self, molecule_id: usize) -> usize {
+    pub(crate) fn count_nonempty(&self, molecule_id: usize) -> usize {
         self.count_molecules(molecule_id, GroupSize::Full)
             + self.count_molecules(molecule_id, GroupSize::Partial(0))
     }
@@ -681,7 +692,7 @@ impl GroupLists {
     /// Find the single mega-group index for an atomic molecule kind.
     ///
     /// Checks partial first since atomic mega-groups are typically partially filled.
-    pub fn find_atomic_group(&self, molecule_id: usize) -> Option<usize> {
+    pub(crate) fn find_atomic_group(&self, molecule_id: usize) -> Option<usize> {
         self.find_molecules(molecule_id, GroupSize::Partial(0))
             .into_iter()
             .chain(self.find_molecules(molecule_id, GroupSize::Full))
@@ -693,7 +704,7 @@ impl GroupLists {
     /// Returns indices of all groups matching given molecule id and size.
     ///
     /// The lookup complexity is O(1).
-    pub fn find_molecules(&self, molecule_id: usize, size: GroupSize) -> Option<&[usize]> {
+    pub(crate) fn find_molecules(&self, molecule_id: usize, size: GroupSize) -> Option<&[usize]> {
         let indices = match size {
             GroupSize::Full => self.full.get(molecule_id),
             GroupSize::Partial(_) => self.partial.get(molecule_id),
@@ -798,6 +809,7 @@ mod tests {
         assert_eq!(group.len(), 10);
         assert_eq!(group.iter_active(), 0..10);
         assert_eq!(group.size(), GroupSize::Full);
+        assert!(group.is_full());
 
         // Test fully deactivate group
         let result = group.resize(GroupSize::Empty);
@@ -963,6 +975,58 @@ mod tests {
         assert!(group_lists.full[0].contains(&1));
         assert!(!group_lists.full[1].contains(&2));
         assert!(group_lists.partial[1].contains(&2));
+
+        // count_molecules: mol 0 has 1 full (group2), 0 partial, 1 empty (group1)
+        assert_eq!(group_lists.count_molecules(0, GroupSize::Full), 1);
+        assert_eq!(group_lists.count_molecules(0, GroupSize::Partial(0)), 0);
+        assert_eq!(group_lists.count_molecules(0, GroupSize::Empty), 1);
+        // mol 1 has 0 full, 1 partial (group3), 0 empty
+        assert_eq!(group_lists.count_molecules(1, GroupSize::Full), 0);
+        assert_eq!(group_lists.count_molecules(1, GroupSize::Partial(0)), 1);
+
+        // count_nonempty: mol 0 = 1 full + 0 partial = 1; mol 1 = 0 + 1 = 1
+        assert_eq!(group_lists.count_nonempty(0), 1);
+        assert_eq!(group_lists.count_nonempty(1), 1);
+
+        // find_atomic_group: mol 0 has partial=[] then full=[1] then empty=[0] → first is 1
+        assert_eq!(group_lists.find_atomic_group(0), Some(1));
+        // mol 1 has partial=[2] → first is 2
+        assert_eq!(group_lists.find_atomic_group(1), Some(2));
+        // mol 2 has nothing
+        assert_eq!(group_lists.find_atomic_group(2), None);
+    }
+
+    /// Verify that GroupCollection trait methods delegate consistently to GroupLists.
+    #[test]
+    fn test_group_collection_trait_methods() {
+        let mut rng = rand::thread_rng();
+        let context = Backend::new(
+            "tests/files/topology_pass.yaml",
+            Some(Path::new("tests/files/structure.xyz")),
+            &mut rng,
+        )
+        .unwrap();
+        let gl = context.group_lists();
+
+        // Trait methods should return the same results as GroupLists methods
+        for mol_id in 0..context.topology_ref().moleculekinds().len() {
+            for size in [GroupSize::Full, GroupSize::Partial(0), GroupSize::Empty] {
+                assert_eq!(
+                    context.find_molecules(mol_id, size),
+                    gl.find_molecules(mol_id, size)
+                );
+            }
+            assert_eq!(
+                context.find_atomic_group(mol_id),
+                gl.find_atomic_group(mol_id)
+            );
+            assert_eq!(
+                context.count_molecules(mol_id, GroupSize::Full),
+                gl.count_molecules(mol_id, GroupSize::Full)
+            );
+            assert_eq!(context.count_nonempty(mol_id), gl.count_nonempty(mol_id));
+        }
+        assert_eq!(context.group_lists_generation(), gl.generation());
     }
 
     #[test]

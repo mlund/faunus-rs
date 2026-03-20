@@ -104,7 +104,7 @@ fn affected_groups(
     if matches!(change, Change::None) {
         return vec![];
     }
-    let gen = context.group_lists().generation();
+    let gen = context.group_lists_generation();
     let mut cache = cache.borrow_mut();
     let get_kind = |i| context.get_atomkind(i);
     let selected = cache.get_or_resolve(gen, || {

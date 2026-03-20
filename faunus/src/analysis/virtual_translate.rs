@@ -298,7 +298,7 @@ impl<T: Context> Analyze<T> for VirtualTranslate {
             return Ok(());
         }
 
-        let gen = context.group_lists().generation();
+        let gen = context.group_lists_generation();
         let selection = &self.selection;
         let get_kind = |i| context.get_atomkind(i);
         let active_groups = self.group_cache.get_or_resolve(gen, || {

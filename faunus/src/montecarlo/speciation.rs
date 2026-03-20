@@ -420,14 +420,8 @@ impl SpeciationMove {
 
         // Validate that required groups exist
         let has_any_groups = |mol_id: usize| -> bool {
-            context
-                .group_lists()
-                .find_molecules(mol_id, GroupSize::Full)
-                .is_some()
-                || context
-                    .group_lists()
-                    .find_molecules(mol_id, GroupSize::Empty)
-                    .is_some()
+            context.find_molecules(mol_id, GroupSize::Full).is_some()
+                || context.find_molecules(mol_id, GroupSize::Empty).is_some()
         };
         for resolved in &self.resolved {
             for op in resolved
@@ -447,7 +441,6 @@ impl SpeciationMove {
                     ReactionOp::SwapAtom { molecule_id, .. } => {
                         let name = topology.moleculekinds()[*molecule_id].name();
                         let has_full = context
-                            .group_lists()
                             .find_molecules(*molecule_id, GroupSize::Full)
                             .is_some();
                         anyhow::ensure!(
@@ -505,7 +498,7 @@ impl SpeciationMove {
                     let molecule = &context.topology_ref().moleculekinds()[*mol_id];
                     if molecule.atomic() {
                         // Atomic: pick a random active atom from the mega-group
-                        let group_index = context.group_lists().find_atomic_group(*mol_id)?;
+                        let group_index = context.find_atomic_group(*mol_id)?;
                         let group = &context.groups()[group_index];
                         let n_old = group.len();
                         if n_old == 0 {
@@ -523,9 +516,7 @@ impl SpeciationMove {
                             GroupChange::ResizePartial(GroupSize::Shrink(1), vec![rel_idx]),
                         ));
                     } else {
-                        let full_groups = context
-                            .group_lists()
-                            .find_molecules(*mol_id, GroupSize::Full)?;
+                        let full_groups = context.find_molecules(*mol_id, GroupSize::Full)?;
                         if full_groups.is_empty() {
                             return None;
                         }
@@ -541,7 +532,7 @@ impl SpeciationMove {
                     let molecule = &context.topology_ref().moleculekinds()[*mol_id];
                     if molecule.atomic() {
                         // Atomic: activate one atom in the mega-group if capacity allows
-                        let group_index = context.group_lists().find_atomic_group(*mol_id)?;
+                        let group_index = context.find_atomic_group(*mol_id)?;
                         let group = &context.groups()[group_index];
                         let n_old = group.len();
                         if group.is_full() {
@@ -559,18 +550,14 @@ impl SpeciationMove {
                             GroupChange::ResizePartial(GroupSize::Expand(1), vec![rel_idx]),
                         ));
                     } else {
-                        let empty_groups = context
-                            .group_lists()
-                            .find_molecules(*mol_id, GroupSize::Empty)?;
+                        let empty_groups = context.find_molecules(*mol_id, GroupSize::Empty)?;
                         if empty_groups.is_empty() {
                             return None;
                         }
                         let &group_index = empty_groups.iter().choose(rng)?;
 
                         // Count current active groups
-                        let n_old = context
-                            .group_lists()
-                            .count_molecules(*mol_id, GroupSize::Full);
+                        let n_old = context.count_molecules(*mol_id, GroupSize::Full);
                         let n_new = n_old + 1;
                         ln_bias -= entropy_bias(NewOld::from(n_new, n_old), vol);
 
@@ -591,9 +578,7 @@ impl SpeciationMove {
                     to_mol_id,
                 } => {
                     // Find a full group of the source molecule
-                    let full_groups = context
-                        .group_lists()
-                        .find_molecules(*from_mol_id, GroupSize::Full)?;
+                    let full_groups = context.find_molecules(*from_mol_id, GroupSize::Full)?;
                     if full_groups.is_empty() {
                         return None;
                     }
@@ -601,16 +586,12 @@ impl SpeciationMove {
                     let n_from = full_groups.len();
 
                     // Find an empty group of the target molecule
-                    let empty_groups = context
-                        .group_lists()
-                        .find_molecules(*to_mol_id, GroupSize::Empty)?;
+                    let empty_groups = context.find_molecules(*to_mol_id, GroupSize::Empty)?;
                     if empty_groups.is_empty() {
                         return None;
                     }
                     let &to_group = empty_groups.iter().choose(rng)?;
-                    let n_to = context
-                        .group_lists()
-                        .count_molecules(*to_mol_id, GroupSize::Full);
+                    let n_to = context.count_molecules(*to_mol_id, GroupSize::Full);
 
                     // Combinatorial bias: N_from / (N_to + 1)
                     ln_bias += (n_from as f64).ln() - ((n_to + 1) as f64).ln();
@@ -641,9 +622,8 @@ impl SpeciationMove {
                     molecule_id,
                 } => {
                     // Collect groups: full + partial (atomic mega-groups are partial)
-                    let gl = context.group_lists();
-                    let full = gl.find_molecules(*molecule_id, GroupSize::Full);
-                    let partial = gl.find_molecules(*molecule_id, GroupSize::Partial(0));
+                    let full = context.find_molecules(*molecule_id, GroupSize::Full);
+                    let partial = context.find_molecules(*molecule_id, GroupSize::Partial(0));
                     let group_indices: Vec<usize> = full
                         .into_iter()
                         .chain(partial)
@@ -915,7 +895,6 @@ mod tests {
         // Activate all M groups so none are empty
         let mol_id = 0;
         let empty_groups: Vec<usize> = context
-            .group_lists()
             .find_molecules(mol_id, GroupSize::Empty)
             .map(|gs| gs.to_vec())
             .unwrap_or_default();
@@ -942,7 +921,6 @@ mod tests {
         // Deactivate all M groups so none are full
         let mol_id = 0;
         let full_groups: Vec<usize> = context
-            .group_lists()
             .find_molecules(mol_id, GroupSize::Full)
             .map(|gs| gs.to_vec())
             .unwrap_or_default();
@@ -1165,8 +1143,7 @@ propagate:
 
     /// Count active molecules of each phosphate species (mol_id 0..4).
     fn count_phosphate_species(context: &Backend) -> [usize; 4] {
-        let gl = context.group_lists();
-        [0, 1, 2, 3].map(|id| gl.count_molecules(id, GroupSize::Full))
+        [0, 1, 2, 3].map(|id| context.count_molecules(id, GroupSize::Full))
     }
 
     #[test]

@@ -42,7 +42,7 @@ pub(crate) trait BuildableMove<T: Context>:
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum MoveBuilder {
     TranslateMolecule(crate::montecarlo::TranslateMolecule),
-    TranslateAtom(crate::montecarlo::TranslateAtom),
+    TranslateAtom(Box<crate::montecarlo::TranslateAtom>),
     RotateMolecule(crate::montecarlo::RotateMolecule),
     VolumeMove(crate::montecarlo::VolumeMove),
     PivotMove(crate::montecarlo::PivotMove),
@@ -55,7 +55,7 @@ impl MoveBuilder {
     pub fn build<T: Context>(self, context: &T) -> anyhow::Result<MoveRunner<T>> {
         match self {
             Self::TranslateMolecule(m) => m.into_runner(context),
-            Self::TranslateAtom(m) => m.into_runner(context),
+            Self::TranslateAtom(m) => (*m).into_runner(context),
             Self::RotateMolecule(m) => m.into_runner(context),
             Self::VolumeMove(m) => m.into_runner(context),
             Self::PivotMove(m) => m.into_runner(context),

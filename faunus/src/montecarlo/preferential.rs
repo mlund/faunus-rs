@@ -125,7 +125,7 @@ impl PreferentialSampling {
     /// Refresh cached (mass_center, bounding_radius) from current group state.
     /// Called once per `rebuild_weights()` — stable within a `!Deterministic` block.
     fn refresh_ref_geometries(&mut self, context: &impl Context) {
-        let generation = context.group_lists().generation();
+        let generation = context.group_lists_generation();
         let ref_indices = self.ref_cache.get_or_resolve(generation, || {
             let resolved = self
                 .reference

@@ -144,7 +144,7 @@ impl RadialDistribution {
     fn sample_atom_atom(&mut self, context: &impl Context) -> f64 {
         let topology = context.topology_ref();
         let groups = context.groups();
-        let gen = context.group_lists().generation();
+        let gen = context.group_lists_generation();
         let same = self.same_selection();
         let exclude = self.exclude_intramolecular;
 
@@ -180,7 +180,7 @@ impl RadialDistribution {
     fn sample_com_com(&mut self, context: &impl Context) -> f64 {
         let topology = context.topology_ref();
         let groups = context.groups();
-        let gen = context.group_lists().generation();
+        let gen = context.group_lists_generation();
         let same = self.same_selection();
 
         let (sel0, sel1) = (&self.selections.0, &self.selections.1);

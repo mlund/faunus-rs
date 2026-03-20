@@ -234,11 +234,9 @@ impl GibbsParticleTransfer {
         rng: &mut StdRng,
     ) -> Result<()> {
         let src_group = src
-            .group_lists()
             .find_molecules(self.molecule_id, GroupSize::Full)
             .and_then(|gs| gs.iter().copied().choose(rng));
         let tgt_group = tgt
-            .group_lists()
             .find_molecules(self.molecule_id, GroupSize::Empty)
             .and_then(|gs| gs.iter().copied().choose(rng));
 
@@ -313,8 +311,8 @@ impl GibbsParticleTransfer {
         thermal_energy: f64,
         rng: &mut StdRng,
     ) -> Result<()> {
-        let src_gi = src.group_lists().find_atomic_group(self.molecule_id);
-        let tgt_gi = tgt.group_lists().find_atomic_group(self.molecule_id);
+        let src_gi = src.find_atomic_group(self.molecule_id);
+        let tgt_gi = tgt.find_atomic_group(self.molecule_id);
 
         let (Some(src_gi), Some(tgt_gi)) = (src_gi, tgt_gi) else {
             self.statistics.reject();

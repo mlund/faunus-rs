@@ -105,12 +105,11 @@ pub trait ParticleSystem: GroupCollection + WithCell + WithTopology {
     /// For molecular groups, N = number of non-empty groups.
     fn count_active_molecules(&self, molecule_id: usize) -> usize {
         if self.topology_ref().moleculekinds()[molecule_id].atomic() {
-            self.group_lists()
-                .find_atomic_group(molecule_id)
+            self.find_atomic_group(molecule_id)
                 .map(|gi| self.groups()[gi].len())
                 .unwrap_or(0)
         } else {
-            self.group_lists().count_nonempty(molecule_id)
+            self.count_nonempty(molecule_id)
         }
     }
 
