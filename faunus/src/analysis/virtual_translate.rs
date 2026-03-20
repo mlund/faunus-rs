@@ -300,7 +300,7 @@ impl<T: Context> Analyze<T> for VirtualTranslate {
 
         let gen = context.group_lists_generation();
         let selection = &self.selection;
-        let get_kind = |i| context.get_atomkind(i);
+        let get_kind = |i| context.atom_kind(i);
         let active_groups = self.group_cache.get_or_resolve(gen, || {
             selection.resolve_groups_live(context.topology_ref(), context.groups(), &get_kind)
         });

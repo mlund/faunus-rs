@@ -124,30 +124,24 @@ impl SasaEnergy {
 
     /// Update internal state, considering all particles (expensive)
     fn update_all(&mut self, context: &impl Context) -> anyhow::Result<()> {
-        let particles = context.get_active_particles();
-        let positions = particles.iter().map(|p| -> &Point { &p.pos });
+        let topology = context.topology();
+        let atomkinds = topology.atomkinds();
 
-        let radii = particles.iter().map(|p| {
-            context.topology().atomkinds()[p.atom_id]
-                .sigma()
-                .map(|sigma| sigma / 2.0)
-                .unwrap_or(0.0)
-        });
-        self.balls = Self::make_balls(positions, radii);
+        self.balls.clear();
+        self.tensions.clear();
+        for group in context.groups() {
+            for i in group.iter_active() {
+                let pos = context.position(i);
+                let ak = &atomkinds[context.atom_kind(i)];
+                let radius = ak.sigma().map(|s| s / 2.0).unwrap_or(0.0);
+                self.balls.push(Ball::new(pos.x, pos.y, pos.z, radius));
+                self.tensions.push(ak.surface_tension().unwrap_or(0.0));
+            }
+        }
         self.tessellation = compute_tessellation(&self.balls, self.probe_radius, None, None);
-        self.tensions = particles
-            .iter()
-            .map(|p| {
-                context.topology().atomkinds()[p.atom_id]
-                    .surface_tension()
-                    .unwrap_or(0.0)
-            })
-            .collect();
 
         // Set energy offset from the first configuration if requested and only if not already set.
-        // This is useful for the SASA energy to be zero for the first configuration, e.g. when
-        // molecules are not in contact and fully exposed to the solvent.
-        if self.offset_from_first && self.energy_offset.is_none() && !particles.is_empty() {
+        if self.offset_from_first && self.energy_offset.is_none() && !self.balls.is_empty() {
             let energy = self.energy(context, &Change::Everything);
             self.energy_offset = Some(-energy);
             log::info!(

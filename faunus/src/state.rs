@@ -56,7 +56,9 @@ impl State {
     /// Capture the current simulation state for checkpointing.
     pub fn save(context: &(impl GroupCollection + WithCell), step: usize) -> Self {
         State {
-            particles: context.get_all_particles(),
+            particles: (0..context.num_particles())
+                .map(|i| Particle::new(context.atom_kind(i), context.position(i)))
+                .collect(),
             cell: context.cell().clone(),
             groups: context
                 .groups()
@@ -97,7 +99,7 @@ impl State {
 
         // Warn about atom_id changes (expected after atom swap reactions)
         for (i, state_p) in self.particles.iter().enumerate() {
-            let ctx_id = context.particle(i).atom_id;
+            let ctx_id = context.atom_kind(i);
             if state_p.atom_id != ctx_id {
                 log::warn!(
                     "Particle {} atom_id differs: state has {}, topology has {} (atom swap?)",

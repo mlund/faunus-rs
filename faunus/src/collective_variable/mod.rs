@@ -75,7 +75,6 @@ pub trait EvalContext:
     crate::group::GroupCollection + crate::context::WithCell + crate::context::WithTopology
 {
     fn get_distance(&self, i: usize, j: usize) -> crate::Point;
-    fn get_atomkind(&self, index: usize) -> usize;
 }
 
 /// A scalar observable of the simulation state.
@@ -163,10 +162,6 @@ where
 {
     fn get_distance(&self, i: usize, j: usize) -> crate::Point {
         <T as crate::context::ParticleSystem>::get_distance(self, i, j)
-    }
-
-    fn get_atomkind(&self, index: usize) -> usize {
-        <T as crate::context::ParticleSystem>::get_atomkind(self, index)
     }
 }
 

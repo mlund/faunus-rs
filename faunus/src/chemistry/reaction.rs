@@ -98,7 +98,10 @@ pub struct Reaction {
 
 /// Repeat a reaction participant, e.g. "2A" -> ["A", "A"]
 fn repeat_participant(participant: &str) -> Vec<String> {
-    let digit_end = participant.len() - participant.trim_start_matches(|c: char| c.is_ascii_digit()).len();
+    let digit_end = participant.len()
+        - participant
+            .trim_start_matches(|c: char| c.is_ascii_digit())
+            .len();
     if digit_end == 0 {
         return vec![participant.to_string()];
     }

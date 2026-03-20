@@ -38,7 +38,7 @@ impl CvKind for Count {
     fn evaluate(&self, context: &dyn EvalContext) -> f64 {
         self.selection
             .resolve_atoms_live(context.topology_ref(), context.groups(), &|i| {
-                context.get_atomkind(i)
+                context.atom_kind(i)
             })
             .len() as f64
     }
@@ -69,7 +69,7 @@ impl CvKind for Molarity {
         let n = self
             .selection
             .resolve_atoms_live(context.topology_ref(), context.groups(), &|i| {
-                context.get_atomkind(i)
+                context.atom_kind(i)
             })
             .len() as f64;
         let volume = context.cell().volume().unwrap_or(f64::INFINITY);
@@ -99,12 +99,12 @@ impl CvKind for Charge {
         let indices =
             self.selection
                 .resolve_atoms_live(context.topology_ref(), context.groups(), &|i| {
-                    context.get_atomkind(i)
+                    context.atom_kind(i)
                 });
         let atomkinds = context.topology_ref().atomkinds();
         indices
             .iter()
-            .map(|&i| atomkinds[context.get_atomkind(i)].charge())
+            .map(|&i| atomkinds[context.atom_kind(i)].charge())
             .sum()
     }
 

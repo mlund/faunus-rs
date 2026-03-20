@@ -110,7 +110,7 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
         self.exclusions.get((i, j)) as f64
             * self
                 .potentials
-                .get((context.get_atomkind(i), context.get_atomkind(j)))
+                .get((context.atom_kind(i), context.atom_kind(j)))
                 .expect("Atom kinds should exist in the nonbonded matrix.")
                 .isotropic_twobody_energy(distance_squared)
     }

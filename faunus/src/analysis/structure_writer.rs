@@ -59,10 +59,10 @@ impl crate::Info for StructureWriter {
 impl StructureWriter {
     fn write_frame<T: Context>(&mut self, context: &T, step: usize) -> anyhow::Result<()> {
         let topology = context.topology();
-        let particles = context.get_all_particles();
+        let num_particles = context.num_particles();
 
-        let mut names = Vec::with_capacity(particles.len());
-        let mut positions = Vec::with_capacity(particles.len());
+        let mut names = Vec::with_capacity(num_particles);
+        let mut positions = Vec::with_capacity(num_particles);
 
         for group in context.groups().iter() {
             let molecule = &topology.moleculekinds()[group.molecule()];
@@ -73,7 +73,7 @@ impl StructureWriter {
                         .resolved_atom_name(topo_i, topology.atomkinds())
                         .to_string(),
                 );
-                positions.push(particles[i + group.start()].pos);
+                positions.push(context.position(i + group.start()));
             }
         }
 
@@ -143,7 +143,7 @@ impl StructureWriter {
                 .collect();
             let group_sizes: Vec<u32> = groups.iter().map(|g| g.len() as u32).collect();
             let atom_ids: Vec<u32> = (0..context.num_particles())
-                .map(|i| context.get_atomkind(i) as u32)
+                .map(|i| context.atom_kind(i) as u32)
                 .collect();
             writer.write_frame(&quaternions, &mass_centers, &group_sizes, &atom_ids)?;
         }

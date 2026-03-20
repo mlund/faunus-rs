@@ -118,7 +118,7 @@ impl<T: Context> Analyze<T> for EnergyAnalysis {
                 // Re-resolve each sample since group membership can change (GC ensemble)
                 let topology = context.topology_ref();
                 let groups = context.groups();
-                let get_kind = |i| context.get_atomkind(i);
+                let get_kind = |i| context.atom_kind(i);
                 let a1 = sel1.resolve_atoms_live(topology, groups, &get_kind);
                 let a2 = sel2.resolve_atoms_live(topology, groups, &get_kind);
                 let hamiltonian = context.hamiltonian();

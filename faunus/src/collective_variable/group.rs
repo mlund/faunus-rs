@@ -33,7 +33,7 @@ fn group_dipole_moment(group_index: usize, context: &dyn EvalContext) -> Option<
     let com = group.mass_center()?;
     let atomkinds = context.topology_ref().atomkinds();
     let charges_positions = group.iter_active().map(|i| {
-        let charge = atomkinds[context.get_atomkind(i)].charge();
+        let charge = atomkinds[context.atom_kind(i)].charge();
         (charge, GroupCollection::position(context, i))
     });
     Some(geometry::dipole_moment(
@@ -130,7 +130,7 @@ impl GyrationRadius {
         let atomkinds = context.topology_ref().atomkinds();
         let positions_masses = group.iter_active().map(|i| {
             let pos = GroupCollection::position(context, i);
-            let mass = atomkinds[context.get_atomkind(i)].mass();
+            let mass = atomkinds[context.atom_kind(i)].mass();
             (pos, mass)
         });
         GyrationTensor::from_positions_masses_com(positions_masses, com, context.cell())

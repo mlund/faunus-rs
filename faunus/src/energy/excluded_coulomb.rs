@@ -73,8 +73,8 @@ impl ExcludedCoulomb {
                 let abs_i = group.start() + i;
                 let abs_j = group.start() + j;
                 let dist_sq = context.get_distance_squared(abs_i, abs_j);
-                let kind_i = context.get_atomkind(abs_i);
-                let kind_j = context.get_atomkind(abs_j);
+                let kind_i = context.atom_kind(abs_i);
+                let kind_j = context.atom_kind(abs_j);
                 self.potentials[(kind_i, kind_j)].isotropic_twobody_energy(dist_sq)
             })
             .sum()

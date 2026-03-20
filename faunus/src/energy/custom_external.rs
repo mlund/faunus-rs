@@ -106,7 +106,7 @@ fn affected_groups(
     }
     let gen = context.group_lists_generation();
     let mut cache = cache.borrow_mut();
-    let get_kind = |i| context.get_atomkind(i);
+    let get_kind = |i| context.atom_kind(i);
     let selected = cache.get_or_resolve(gen, || {
         selection.resolve_groups_live(context.topology_ref(), context.groups(), &get_kind)
     });
@@ -185,7 +185,7 @@ impl CustomExternal {
             if let Some(&com) = group.mass_center() {
                 let net_charge: f64 = group
                     .iter_active()
-                    .map(|i| atomkinds[context.get_atomkind(i)].charge())
+                    .map(|i| atomkinds[context.atom_kind(i)].charge())
                     .sum();
                 self.eval_at(net_charge, com.x, com.y, com.z)
             } else {
@@ -196,7 +196,7 @@ impl CustomExternal {
                 .iter_active()
                 .map(|i| {
                     let pos = context.position(i);
-                    let q = atomkinds[context.get_atomkind(i)].charge();
+                    let q = atomkinds[context.atom_kind(i)].charge();
                     self.eval_at(q, pos.x, pos.y, pos.z)
                 })
                 .sum()

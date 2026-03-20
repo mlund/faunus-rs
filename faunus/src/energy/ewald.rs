@@ -187,7 +187,7 @@ impl EwaldReciprocalEnergy {
         let mut charges = vec![0.0; n];
         for group in context.groups() {
             for i in group.iter_active() {
-                charges[i] = atomkinds[context.get_atomkind(i)].charge();
+                charges[i] = atomkinds[context.atom_kind(i)].charge();
             }
         }
         charges

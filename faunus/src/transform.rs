@@ -245,9 +245,7 @@ impl Transform {
                             abs_index,
                             new_atom_id,
                         } => {
-                            let mut p = context.particle(*abs_index);
-                            p.atom_id = *new_atom_id;
-                            context.set_particles([*abs_index], [&p].into_iter())?;
+                            context.set_atom_kind(*abs_index, *new_atom_id);
                         }
                         SpeciationAction::ActivateAtom {
                             group_index,
@@ -267,10 +265,7 @@ impl Transform {
                             let group = &context.groups()[*group_index];
                             let last_active = group.start() + group.len() - 1;
                             if *abs_index != last_active {
-                                let p_last = context.particle(last_active);
-                                let p_target = context.particle(*abs_index);
-                                context.set_particles([*abs_index], [&p_last].into_iter())?;
-                                context.set_particles([last_active], [&p_target].into_iter())?;
+                                context.swap_particles(*abs_index, last_active);
                             }
                             Self::Contract(1).on_group(*group_index, context)?;
                         }

@@ -10,8 +10,7 @@ use crate::{
     energy::{builder::HamiltonianBuilder, Hamiltonian},
     group::{GroupCollection, GroupLists, GroupSize},
     topology::Topology,
-    Context, Group, Particle, ParticleSystem, Point, PointParticle, UnitQuaternion, WithCell,
-    WithHamiltonian, WithTopology,
+    Context, Group, ParticleSystem, Point, UnitQuaternion, WithCell, WithHamiltonian, WithTopology,
 };
 
 use rand::rngs::ThreadRng;
@@ -238,16 +237,27 @@ impl GroupCollection for Backend {
         &mut self.groups
     }
 
-    fn particle(&self, index: usize) -> Particle {
-        Particle::new(
-            self.atom_kinds[index] as usize,
-            Point::new(self.x[index], self.y[index], self.z[index]),
-        )
-    }
-
     #[inline(always)]
     fn position(&self, index: usize) -> Point {
         Point::new(self.x[index], self.y[index], self.z[index])
+    }
+
+    #[inline(always)]
+    fn atom_kind(&self, index: usize) -> usize {
+        self.atom_kinds[index] as usize
+    }
+
+    fn set_atom_kind(&mut self, index: usize, atom_id: usize) {
+        debug_assert!(atom_id <= u32::MAX as usize, "atom_id overflows u32");
+        self.atom_kinds[index] = atom_id as u32;
+    }
+
+    fn swap_particles(&mut self, i: usize, j: usize) {
+        self.x.swap(i, j);
+        self.y.swap(i, j);
+        self.z.swap(i, j);
+        self.atom_kinds.swap(i, j);
+        self.update_cell_list_particles(&[i, j]);
     }
 
     fn num_particles(&self) -> usize {
@@ -256,22 +266,6 @@ impl GroupCollection for Backend {
 
     fn group_lists(&self) -> &GroupLists {
         &self.group_lists
-    }
-
-    fn set_particles<'b>(
-        &mut self,
-        indices: impl IntoIterator<Item = usize>,
-        source: impl IntoIterator<Item = &'b Particle> + Clone,
-    ) -> anyhow::Result<()> {
-        for (src, i) in source.into_iter().zip(indices.into_iter()) {
-            let pos = src.pos();
-            self.x[i] = pos.x;
-            self.y[i] = pos.y;
-            self.z[i] = pos.z;
-            self.atom_kinds[i] = src.atom_id() as u32;
-            self.update_cell_list_particle(i);
-        }
-        Ok(())
     }
 
     fn set_positions<'a>(
@@ -310,19 +304,31 @@ impl GroupCollection for Backend {
         }
     }
 
-    fn add_group(&mut self, molecule: usize, particles: &[Particle]) -> anyhow::Result<&mut Group> {
-        if particles.is_empty() {
+    fn add_group(
+        &mut self,
+        molecule: usize,
+        positions: &[Point],
+        atom_ids: &[usize],
+    ) -> anyhow::Result<&mut Group> {
+        if positions.is_empty() {
             anyhow::bail!("Cannot create empty group");
         }
+        if positions.len() != atom_ids.len() {
+            anyhow::bail!(
+                "positions length ({}) != atom_ids length ({})",
+                positions.len(),
+                atom_ids.len()
+            );
+        }
         let start = self.x.len();
-        for p in particles {
-            let pos = p.pos();
+        for (pos, &aid) in positions.iter().zip(atom_ids) {
             self.x.push(pos.x);
             self.y.push(pos.y);
             self.z.push(pos.z);
-            self.atom_kinds.push(p.atom_id() as u32);
+            debug_assert!(aid <= u32::MAX as usize, "atom_id overflows u32");
+            self.atom_kinds.push(aid as u32);
         }
-        let range = start..start + particles.len();
+        let range = start..start + positions.len();
         self.groups
             .push(Group::new(self.groups.len(), molecule, range));
 
@@ -361,11 +367,6 @@ impl ParticleSystem for Backend {
         let pi = Point::new(self.x[i], self.y[i], self.z[i]);
         let pj = Point::new(self.x[j], self.y[j], self.z[j]);
         self.cell().distance(&pi, &pj)
-    }
-
-    #[inline(always)]
-    fn get_atomkind(&self, i: usize) -> usize {
-        self.atom_kinds[i] as usize
     }
 
     fn positions_soa(&self) -> (&[f64], &[f64], &[f64]) {
@@ -665,7 +666,7 @@ mod tests {
             let topology = ctx.topology();
             let masses: Vec<f64> = indices
                 .iter()
-                .map(|&i| topology.atomkinds()[ctx.get_atomkind(i)].mass())
+                .map(|&i| topology.atomkinds()[ctx.atom_kind(i)].mass())
                 .collect();
             let com_aux = crate::auxiliary::mass_center_pbc(&positions, &masses, ctx.cell(), None);
             let err = (com_trait - com_aux).norm();
@@ -753,7 +754,9 @@ mod tests {
         .unwrap();
 
         // Snapshot original state
-        let original_particles = ctx.get_all_particles();
+        let original_particles: Vec<crate::Particle> = (0..ctx.num_particles())
+            .map(|i| crate::Particle::new(ctx.atom_kind(i), ctx.position(i)))
+            .collect();
         let original_energy = ctx.hamiltonian().energy(&ctx, &crate::Change::Everything);
         let original_sizes: Vec<crate::group::GroupSize> = ctx
             .groups()
@@ -775,10 +778,8 @@ mod tests {
 
         // Perturb: collapse all positions to origin so energy changes drastically
         let n = ctx.num_particles();
-        let perturbed: Vec<crate::Particle> = (0..n)
-            .map(|i| crate::Particle::new(ctx.particle(i).atom_id, Point::zeros()))
-            .collect();
-        ctx.set_particles(0..n, perturbed.iter()).unwrap();
+        let zeros: Vec<Point> = vec![Point::zeros(); n];
+        ctx.set_positions(0..n, zeros.iter());
         ctx.update(&crate::Change::Everything).unwrap();
 
         // Sanity check: collapsing to origin must produce a different energy
@@ -795,12 +796,12 @@ mod tests {
 
         // Verify positions restored
         for (i, orig) in original_particles.iter().enumerate() {
-            let restored = ctx.particle(i);
+            let restored_pos = ctx.position(i);
             assert!(
-                (restored.pos - orig.pos).norm() < 1e-14,
+                (restored_pos - orig.pos).norm() < 1e-14,
                 "Position mismatch at particle {i}"
             );
-            assert_eq!(restored.atom_id, orig.atom_id, "atom_id mismatch at {i}");
+            assert_eq!(ctx.atom_kind(i), orig.atom_id, "atom_id mismatch at {i}");
         }
 
         // Verify mass centers restored
@@ -856,5 +857,100 @@ mod tests {
                 .angle_to(&crate::UnitQuaternion::identity())
                 < 1e-12
         );
+    }
+
+    /// Verify position() and atom_kind() return correct values after add_group.
+    #[test]
+    fn test_position_and_atom_kind() {
+        let yaml = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/files/gibbs_ensemble/input.yaml");
+        let ctx = Backend::new(&yaml, None, &mut rand::thread_rng()).unwrap();
+        for group in ctx.groups() {
+            for i in group.iter_active() {
+                let pos = ctx.position(i);
+                assert!(pos.x.is_finite() && pos.y.is_finite() && pos.z.is_finite());
+                let kind = ctx.atom_kind(i);
+                assert!(kind < ctx.topology().atomkinds().len());
+            }
+        }
+    }
+
+    /// Verify set_positions updates coordinates without changing atom kinds.
+    #[test]
+    fn test_set_positions_roundtrip() {
+        let yaml = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/files/gibbs_ensemble/input.yaml");
+        let mut ctx = Backend::new(&yaml, None, &mut rand::thread_rng()).unwrap();
+        let group = &ctx.groups()[0];
+        let indices: Vec<usize> = group.iter_active().collect();
+        let original_kinds: Vec<usize> = indices.iter().map(|&i| ctx.atom_kind(i)).collect();
+        let new_positions: Vec<Point> = indices
+            .iter()
+            .enumerate()
+            .map(|(j, _)| Point::new(j as f64, j as f64 * 2.0, j as f64 * 3.0))
+            .collect();
+        ctx.set_positions(indices.clone(), new_positions.iter());
+        for (j, &i) in indices.iter().enumerate() {
+            assert_eq!(ctx.position(i), new_positions[j]);
+            assert_eq!(ctx.atom_kind(i), original_kinds[j]);
+        }
+    }
+
+    /// Verify add_group stores positions and atom_ids correctly.
+    #[test]
+    fn test_add_group_preserves_data() {
+        let yaml = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/files/gibbs_ensemble/input.yaml");
+        let mut ctx = Backend::new(&yaml, None, &mut rand::thread_rng()).unwrap();
+        let n_before = ctx.num_particles();
+        let mol_id = ctx.groups()[0].molecule();
+        let topo_atom_ids: Vec<usize> = ctx.topology().moleculekinds()[mol_id]
+            .atom_indices()
+            .to_vec();
+        let positions: Vec<Point> = topo_atom_ids
+            .iter()
+            .enumerate()
+            .map(|(j, _)| Point::new(j as f64, j as f64 * 2.0, j as f64 * 3.0))
+            .collect();
+        let group = ctx.add_group(mol_id, &positions, &topo_atom_ids).unwrap();
+        assert_eq!(group.capacity(), positions.len());
+        assert_eq!(group.len(), positions.len());
+        let start = group.start();
+        assert_eq!(start, n_before);
+        for (j, &expected_kind) in topo_atom_ids.iter().enumerate() {
+            assert_eq!(ctx.position(start + j), positions[j]);
+            assert_eq!(ctx.atom_kind(start + j), expected_kind);
+        }
+    }
+
+    /// Verify swap_particles exchanges all fields.
+    #[test]
+    fn test_swap_particles() {
+        let yaml = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/files/gibbs_ensemble/input.yaml");
+        let mut ctx = Backend::new(&yaml, None, &mut rand::thread_rng()).unwrap();
+        let (i, j) = (0, 1);
+        let pos_i = ctx.position(i);
+        let pos_j = ctx.position(j);
+        let kind_i = ctx.atom_kind(i);
+        let kind_j = ctx.atom_kind(j);
+        ctx.swap_particles(i, j);
+        assert_eq!(ctx.position(i), pos_j);
+        assert_eq!(ctx.position(j), pos_i);
+        assert_eq!(ctx.atom_kind(i), kind_j);
+        assert_eq!(ctx.atom_kind(j), kind_i);
+    }
+
+    /// Verify set_atom_kind updates kind without changing position.
+    #[test]
+    fn test_set_atom_kind() {
+        let yaml = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/files/gibbs_ensemble/input.yaml");
+        let mut ctx = Backend::new(&yaml, None, &mut rand::thread_rng()).unwrap();
+        let pos_before = ctx.position(0);
+        let new_kind = (ctx.atom_kind(0) + 1) % ctx.topology().atomkinds().len();
+        ctx.set_atom_kind(0, new_kind);
+        assert_eq!(ctx.atom_kind(0), new_kind);
+        assert_eq!(ctx.position(0), pos_before);
     }
 }

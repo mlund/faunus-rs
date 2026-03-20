@@ -277,7 +277,7 @@ fn overlay_swap_positions(
     let source_masses: Vec<(crate::Point, f64)> = source_indices
         .clone()
         .map(|i| {
-            let mass = atomkinds[context.get_atomkind(i)].mass();
+            let mass = atomkinds[context.atom_kind(i)].mass();
             (context.position(i), mass)
         })
         .collect();
@@ -638,7 +638,7 @@ impl SpeciationMove {
                     let mut from_atoms: Vec<(usize, usize)> = Vec::new();
                     for &gi in &group_indices {
                         for i in context.groups()[gi].iter_active() {
-                            let kind = context.get_atomkind(i);
+                            let kind = context.atom_kind(i);
                             if kind == *from_id {
                                 n_from += 1;
                                 from_atoms.push((gi, i));
@@ -752,8 +752,7 @@ mod tests {
 
     #[test]
     fn reaction_config_yaml_pk() {
-        let config: ReactionConfig =
-            serde_yml::from_str(r#"["⚛HA = ⚛A + ~H+", !pK 4.0]"#).unwrap();
+        let config: ReactionConfig = serde_yml::from_str(r#"["⚛HA = ⚛A + ~H+", !pK 4.0]"#).unwrap();
         assert!((config.1.to_k(1.0) - 1e-4).abs() < 1e-14);
     }
 

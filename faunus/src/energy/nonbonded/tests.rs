@@ -845,7 +845,7 @@ fn test_nonbonded_forces() {
             let rsq = dr.norm_squared();
             let potential = nonbonded
                 .potentials
-                .get((system.get_atomkind(0), system.get_atomkind(j)))
+                .get((system.atom_kind(0), system.atom_kind(j)))
                 .unwrap();
             let f_mag = potential.isotropic_twobody_force(rsq);
             expected_force += dr * (2.0 * f_mag);

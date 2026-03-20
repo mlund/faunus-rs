@@ -134,14 +134,6 @@ pub trait ParticleSystem: GroupCollection + WithCell + WithTopology {
         self.get_distance(i, j).norm_squared()
     }
 
-    /// Get index of the atom kind of the particle with the given index.
-    ///
-    /// ## Example implementation
-    /// ```ignore
-    /// self.particle(i).atom_id
-    /// ```
-    fn get_atomkind(&self, i: usize) -> usize;
-
     /// SoA position arrays for batch evaluation.
     fn positions_soa(&self) -> (&[f64], &[f64], &[f64]);
 
@@ -191,11 +183,11 @@ pub trait ParticleSystem: GroupCollection + WithCell + WithTopology {
         let topology = self.topology_ref();
         let atomkinds = topology.atomkinds();
         let ref_pos = self.position(indices[0]);
-        let first_mass = atomkinds[self.get_atomkind(indices[0])].mass();
+        let first_mass = atomkinds[self.atom_kind(indices[0])].mass();
         let mut total_mass = first_mass;
         let mut com = ref_pos * first_mass;
         for &i in &indices[1..] {
-            let mass = atomkinds[self.get_atomkind(i)].mass();
+            let mass = atomkinds[self.atom_kind(i)].mass();
             let unwrapped = ref_pos + self.cell().distance(&self.position(i), &ref_pos);
             com += unwrapped * mass;
             total_mass += mass;

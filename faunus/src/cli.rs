@@ -144,7 +144,7 @@ fn net_charge(context: &impl ParticleSystem) -> f64 {
         .groups()
         .iter()
         .flat_map(|g| g.iter_active())
-        .map(|i| atomkinds[context.get_atomkind(i)].charge())
+        .map(|i| atomkinds[context.atom_kind(i)].charge())
         .sum()
 }
 

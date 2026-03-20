@@ -22,7 +22,6 @@ use super::{Analyze, Frequency};
 use crate::auxiliary::ColumnWriter;
 use crate::cell::BoundaryConditions;
 use crate::geometry::GyrationTensor;
-use crate::particle::PointParticle;
 use crate::selection::Selection;
 use crate::Context;
 use anyhow::Result;
@@ -119,10 +118,9 @@ fn gyration_tensor(group: &crate::group::Group, context: &impl Context) -> Optio
     }
     let topology = context.topology_ref();
     let atomkinds = topology.atomkinds();
-    let positions_masses = group.iter_active().map(|i| {
-        let particle = context.particle(i);
-        (*particle.pos(), atomkinds[particle.atom_id()].mass())
-    });
+    let positions_masses = group
+        .iter_active()
+        .map(|i| (context.position(i), atomkinds[context.atom_kind(i)].mass()));
     GyrationTensor::from_positions_masses_com(positions_masses, com, context.cell())
 }
 
@@ -194,7 +192,7 @@ impl<T: Context> Analyze<T> for ShapeAnalysis {
 
         let topology = context.topology_ref();
         let groups = context.groups();
-        let get_kind = |i| context.get_atomkind(i);
+        let get_kind = |i| context.atom_kind(i);
         let group_indices = self
             .selection
             .resolve_groups_live(topology, groups, &get_kind);

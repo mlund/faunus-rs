@@ -400,8 +400,13 @@ impl Group {
 /// Each group has a unique index in a global list of groups, and a unique range of indices in a
 /// global particle list.
 pub trait GroupCollection {
-    /// Add a group to the system based on an molecule id and a set of particles given by an iterator.
-    fn add_group(&mut self, molecule: usize, particles: &[Particle]) -> anyhow::Result<&mut Group>;
+    /// Add a group to the system based on a molecule id, positions, and atom kind indices.
+    fn add_group(
+        &mut self,
+        molecule: usize,
+        positions: &[Point],
+        atom_ids: &[usize],
+    ) -> anyhow::Result<&mut Group>;
 
     /// Update mass center for a given group, respecting PBC if appropriate.
     fn update_mass_center(&mut self, group_index: usize);
@@ -420,13 +425,17 @@ pub trait GroupCollection {
     /// Mutable access to all groups (e.g. for quaternion or mass center updates).
     fn groups_mut(&mut self) -> &mut [Group];
 
-    /// Copy of i'th particle in the system.
-    fn particle(&self, index: usize) -> Particle;
-
     /// Position of the i'th particle in the system.
-    fn position(&self, index: usize) -> Point {
-        self.particle(index).pos
-    }
+    fn position(&self, index: usize) -> Point;
+
+    /// Atom kind index of the i'th particle.
+    fn atom_kind(&self, index: usize) -> usize;
+
+    /// Set atom kind index of the i'th particle.
+    fn set_atom_kind(&mut self, index: usize, atom_id: usize);
+
+    /// Swap all SoA fields (position, atom kind) between two particle indices.
+    fn swap_particles(&mut self, i: usize, j: usize);
 
     /// Get group lists of the system.
     ///
@@ -504,62 +513,13 @@ pub trait GroupCollection {
         }
     }
 
-    /// Extract copy of particles with given indices
-    ///
-    /// This can potentially be an expensive operation as it involves copying the particles
-    /// from the underlying storage model.
-    fn get_particles(&self, indices: impl IntoIterator<Item = usize>) -> Vec<Particle>
-    where
-        Self: Sized,
-    {
-        indices.into_iter().map(|i| self.particle(i)).collect()
-    }
-
-    /// Extract copy of all particles in the system (both active and inactive).
-    fn get_all_particles(&self) -> Vec<Particle> {
-        (0..self.num_particles())
-            .map(|i| self.particle(i))
-            .collect()
-    }
-
-    /// Extract copy of active particles in the system.
-    fn get_active_particles(&self) -> Vec<Particle> {
-        self.groups()
-            .iter()
-            .flat_map(|group| group.iter_active())
-            .map(|index| self.particle(index))
-            .collect()
-    }
-
-    /// Set particles for a given group.
-    fn set_particles<'a>(
-        &mut self,
-        indices: impl IntoIterator<Item = usize>,
-        source: impl IntoIterator<Item = &'a Particle> + Clone,
-    ) -> anyhow::Result<()>
-    where
-        Self: Sized;
-
     /// Update only positions (not atom kinds) for the given indices.
     fn set_positions<'a>(
         &mut self,
         indices: impl IntoIterator<Item = usize>,
         positions: impl IntoIterator<Item = &'a Point>,
     ) where
-        Self: Sized,
-    {
-        let pairs: Vec<(usize, Point)> = indices
-            .into_iter()
-            .zip(positions.into_iter().copied())
-            .collect();
-        let particles: Vec<Particle> = pairs
-            .iter()
-            .map(|&(i, pos)| Particle::new(self.particle(i).atom_id, pos))
-            .collect();
-        let indices_iter = pairs.iter().map(|&(i, _)| i);
-        self.set_particles(indices_iter, particles.iter())
-            .expect("set_particles failed in default set_positions impl");
-    }
+        Self: Sized;
 
     /// Apply particles, group sizes, and quaternions, then recompute mass centers.
     ///
@@ -575,7 +535,10 @@ pub trait GroupCollection {
     where
         Self: Sized,
     {
-        self.set_particles(0..particles.len(), particles.iter())?;
+        self.set_positions(0..particles.len(), particles.iter().map(|p| &p.pos));
+        for (i, p) in particles.iter().enumerate() {
+            self.set_atom_kind(i, p.atom_id);
+        }
         for (i, (&size, &q)) in sizes.iter().zip(quaternions.iter()).enumerate() {
             self.resize_group(i, size)?;
             self.groups_mut()[i].set_quaternion(q);

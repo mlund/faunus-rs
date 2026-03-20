@@ -149,7 +149,7 @@ impl RadialDistribution {
         let exclude = self.exclude_intramolecular;
 
         let (sel0, sel1) = (&self.selections.0, &self.selections.1);
-        let get_kind = |i| context.get_atomkind(i);
+        let get_kind = |i| context.atom_kind(i);
         let atoms1 = self
             .caches
             .0
@@ -184,7 +184,7 @@ impl RadialDistribution {
         let same = self.same_selection();
 
         let (sel0, sel1) = (&self.selections.0, &self.selections.1);
-        let get_kind = |i| context.get_atomkind(i);
+        let get_kind = |i| context.atom_kind(i);
         let gi1 = self.caches.0.get_or_resolve(gen, || {
             sel0.resolve_groups_live(topology, groups, &get_kind)
         });

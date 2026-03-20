@@ -22,7 +22,7 @@ use std::{cmp::Ordering, path::Path};
 use super::{molecule::MoleculeKind, structure, AtomKind, InputPath};
 use crate::axes::Axes;
 use crate::transform;
-use crate::{cell::SimulationCell, group::GroupSize, Context, Particle, Point, UnitQuaternion};
+use crate::{cell::SimulationCell, group::GroupSize, Context, Point, UnitQuaternion};
 use rand::rngs::ThreadRng;
 use serde::{Deserialize, Serialize};
 use validator::{Validate, ValidationError};
@@ -524,28 +524,34 @@ impl MoleculeBlock {
         };
         let mut positions = positions_vec.into_iter();
 
-        // Make particles for a single molecule
-        let mut make_particles = || {
-            let particles: Vec<_> = zip(
+        // Collect positions and atom_ids for a single molecule
+        let mut make_mol_data = || {
+            let (atom_ids, mol_positions): (Vec<usize>, Vec<Point>) = zip(
                 molecule.atom_indices(),
                 positions.by_ref().take(n_particles),
             )
-            .map(|(atom_id, position)| Particle::new(*atom_id, position))
-            .collect();
+            .map(|(&atom_id, position)| (atom_id, position))
+            .unzip();
             log::debug!(
                 "Generated {} particles for molecule '{}'",
-                particles.len(),
+                mol_positions.len(),
                 molecule.name()
             );
-            particles
+            (mol_positions, atom_ids)
         };
 
         if molecule.atomic() {
             // Atomic molecule: pool all atoms into a single group (quaternion meaningless)
-            let particles: Vec<_> = (0..self.num_molecules)
-                .flat_map(|_| make_particles())
-                .collect();
-            let group_index = context.add_group(molecule.id(), &particles)?.index();
+            let mut flat_pos = Vec::with_capacity(self.num_molecules * n_particles);
+            let mut flat_ids = Vec::with_capacity(self.num_molecules * n_particles);
+            for _ in 0..self.num_molecules {
+                let (pos, ids) = make_mol_data();
+                flat_pos.extend(pos);
+                flat_ids.extend(ids);
+            }
+            let group_index = context
+                .add_group(molecule.id(), &flat_pos, &flat_ids)?
+                .index();
             if let BlockActivationStatus::Partial(active) = self.active {
                 context
                     .resize_group(group_index, GroupSize::Partial(active))
@@ -554,8 +560,10 @@ impl MoleculeBlock {
         } else {
             // Standard: one group per molecule
             for (i, q) in quaternions.into_iter().enumerate() {
-                let particles = make_particles();
-                let group_index = context.add_group(molecule.id(), &particles)?.index();
+                let (mol_positions, atom_ids) = make_mol_data();
+                let group_index = context
+                    .add_group(molecule.id(), &mol_positions, &atom_ids)?
+                    .index();
                 // Sync quaternion with the rotation applied during placement so that
                 // LD and 6D tabulated energies see the correct orientation from the start.
                 context.groups_mut()[group_index].set_quaternion(q);

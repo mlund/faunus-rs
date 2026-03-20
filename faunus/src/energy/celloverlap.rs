@@ -33,9 +33,10 @@ impl CellOverlap {
         if matches!(change, Change::None) || cell.pbc() == PeriodicDirections::PeriodicXYZ {
             0.0
         } else if context
-            .get_active_particles()
+            .groups()
             .iter()
-            .any(|particle| cell.is_outside(&particle.pos))
+            .flat_map(|g| g.iter_active())
+            .any(|i| cell.is_outside(&context.position(i)))
         {
             f64::INFINITY // ensure MC rejection
         } else {
@@ -47,5 +48,46 @@ impl CellOverlap {
 impl From<CellOverlap> for EnergyTerm {
     fn from(celloverlap: CellOverlap) -> Self {
         Self::CellOverlap(celloverlap)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{backend::Backend, group::GroupCollection, Point};
+
+    /// Verify CellOverlap returns infinity when a particle is outside the cell.
+    #[test]
+    fn celloverlap_detects_outside() {
+        // Slit cell has open z-boundary — particles outside z should trigger infinity
+        let yaml = r#"
+atoms:
+  - {name: X, mass: 1.0, sigma: 1.0}
+molecules:
+  - name: particle
+    atoms: [X]
+    atomic: true
+system:
+  cell: !Slit [10.0, 10.0, 10.0]
+  medium: {permittivity: !Vacuum, temperature: 300.0}
+  energy: {celloverlap: {}}
+  blocks:
+    - molecule: particle
+      N: 1
+      insert: !RandomAtomPos {}
+propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
+"#;
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(tmp.path(), yaml).unwrap();
+        let mut ctx = Backend::new(tmp.path(), None, &mut rand::thread_rng()).unwrap();
+
+        // Place particle well inside the cell
+        ctx.set_positions(0..1, [Point::new(0.0, 0.0, 0.0)].iter());
+        let overlap = CellOverlap;
+        assert_eq!(overlap.energy(&ctx, &Change::Everything), 0.0);
+
+        // Place particle outside the slit z-boundary
+        ctx.set_positions(0..1, [Point::new(0.0, 0.0, 100.0)].iter());
+        assert_eq!(overlap.energy(&ctx, &Change::Everything), f64::INFINITY);
     }
 }
