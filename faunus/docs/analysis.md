@@ -137,7 +137,7 @@ columns `step`, `Rg`, and the upper triangle of the gyration tensor
 analysis:
   - !PolymerShape
     selection: "molecule polymer"
-    file: shape.dat.gz
+    file: shape.csv.gz
     frequency: !Every 100
 ```
 
@@ -166,18 +166,18 @@ Two modes are supported:
 analysis:
   # Total energy with per-term breakdown
   - !Energy
-    file: energy.dat.gz
+    file: energy.csv.gz
     frequency: !Every 100
 
   # Nonbonded energy between two molecules
   - !Energy
-    file: mol1_mol2_energy.dat.gz
+    file: mol1_mol2_energy.csv.gz
     frequency: !Every 100
     selections: ["molecule MOL1", "molecule MOL2"]
 
   # Nonbonded energy between hydrophobic atoms in two molecules
   - !Energy
-    file: hydrophobic_energy.dat.gz
+    file: hydrophobic_energy.csv.gz
     frequency: !Every 100
     selections: ["hydrophobic and molecule MOL1", "hydrophobic and molecule MOL2"]
 ```
