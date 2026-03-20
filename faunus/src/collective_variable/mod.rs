@@ -34,7 +34,8 @@ pub use atom::AtomPosition;
 pub use cell::Volume;
 pub use dynamic::{Charge, Count, Molarity};
 pub use group::{
-    DipoleMoment, EndToEnd, GyrationRadius, MassCenterPosition, MassCenterSeparation, Size,
+    DipoleMoment, DipoleProduct, EndToEnd, GyrationRadius, MassCenterPosition,
+    MassCenterSeparation, Size,
 };
 
 /// Metadata for one axis of a collective variable.
@@ -169,6 +170,26 @@ where
     }
 }
 
+/// Check that a resolved group has COM tracking enabled.
+///
+/// Used by CV builder macros to reject atomic groups at build time.
+pub fn require_group_com(
+    group_index: usize,
+    context: &dyn EvalContext,
+    cv_name: &str,
+) -> Result<()> {
+    let group = &context.groups()[group_index];
+    let mol_kind = &context.topology_ref().moleculekinds()[group.molecule()];
+    if !mol_kind.has_com() {
+        anyhow::bail!(
+            "{cv_name}: group '{}' (molecule '{}') has no center of mass",
+            group_index,
+            mol_kind.name()
+        );
+    }
+    Ok(())
+}
+
 // ---------------------------------------------------------------------------
 // Macros for reducing boilerplate
 // ---------------------------------------------------------------------------
@@ -263,7 +284,13 @@ macro_rules! impl_single_group_builder {
 /// ```
 #[macro_export]
 macro_rules! impl_single_group_with_dim_builder {
+    ($cv:ident, $name:literal, |$dim:ident, $group:ident| $construct:expr, requires_com) => {
+        $crate::impl_single_group_with_dim_builder!(@inner $cv, $name, |$dim, $group| $construct, true);
+    };
     ($cv:ident, $name:literal, |$dim:ident, $group:ident| $construct:expr) => {
+        $crate::impl_single_group_with_dim_builder!(@inner $cv, $name, |$dim, $group| $construct, false);
+    };
+    (@inner $cv:ident, $name:literal, |$dim:ident, $group:ident| $construct:expr, $check_com:expr) => {
         ::paste::paste! {
             #[doc = "Builder for " $cv " CV."]
             #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -290,6 +317,11 @@ macro_rules! impl_single_group_with_dim_builder {
                             self.selection,
                             indices.len()
                         );
+                    }
+                    if $check_com {
+                        $crate::collective_variable::require_group_com(
+                            indices[0], context, stringify!($cv)
+                        )?;
                     }
                     let $dim = self.dimension;
                     let $group = indices[0];
@@ -350,11 +382,90 @@ macro_rules! impl_single_atom_with_dim_builder {
     };
 }
 
+/// Defines a builder that resolves two group selections with dimension.
+///
+/// Generates `{Name}Builder` struct with `selection`, `selection2`, and `dimension` fields.
+///
+/// # Example
+/// ```ignore
+/// pub struct MassCenterSeparation { dimension: Dimension, group1: usize, group2: usize }
+///
+/// impl_two_group_with_dim_builder!(MassCenterSeparation, "mass_center_separation",
+///     |dimension, group1, group2| MassCenterSeparation { dimension, group1, group2 });
+/// ```
+#[macro_export]
+macro_rules! impl_two_group_with_dim_builder {
+    ($cv:ident, $name:literal, |$dim:ident, $g1:ident, $g2:ident| $construct:expr, requires_com) => {
+        $crate::impl_two_group_with_dim_builder!(@inner $cv, $name, |$dim, $g1, $g2| $construct, true);
+    };
+    ($cv:ident, $name:literal, |$dim:ident, $g1:ident, $g2:ident| $construct:expr) => {
+        $crate::impl_two_group_with_dim_builder!(@inner $cv, $name, |$dim, $g1, $g2| $construct, false);
+    };
+    (@inner $cv:ident, $name:literal, |$dim:ident, $g1:ident, $g2:ident| $construct:expr, $check_com:expr) => {
+        ::paste::paste! {
+            #[doc = "Builder for " $cv " CV."]
+            #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+            pub struct [<$cv Builder>] {
+                pub selection: $crate::selection::Selection,
+                pub selection2: $crate::selection::Selection,
+                #[serde(default)]
+                pub dimension: $crate::dimension::Dimension,
+            }
+
+            #[typetag::serde(name = $name)]
+            impl $crate::collective_variable::CvKindBuilder for [<$cv Builder>] {
+                fn build(
+                    &self,
+                    context: &dyn $crate::collective_variable::EvalContext,
+                ) -> anyhow::Result<Box<dyn $crate::collective_variable::CvKind>> {
+                    let indices1 = self.selection.resolve_groups(
+                        context.topology_ref(),
+                        context.groups(),
+                    );
+                    if indices1.len() != 1 {
+                        anyhow::bail!(
+                            "{}: selection '{}' must match exactly one group, found {}",
+                            stringify!($cv),
+                            self.selection,
+                            indices1.len()
+                        );
+                    }
+                    let indices2 = self.selection2.resolve_groups(
+                        context.topology_ref(),
+                        context.groups(),
+                    );
+                    if indices2.len() != 1 {
+                        anyhow::bail!(
+                            "{}: selection2 '{}' must match exactly one group, found {}",
+                            stringify!($cv),
+                            self.selection2,
+                            indices2.len()
+                        );
+                    }
+                    if $check_com {
+                        $crate::collective_variable::require_group_com(
+                            indices1[0], context, stringify!($cv)
+                        )?;
+                        $crate::collective_variable::require_group_com(
+                            indices2[0], context, stringify!($cv)
+                        )?;
+                    }
+                    let $dim = self.dimension;
+                    let $g1 = indices1[0];
+                    let $g2 = indices2[0];
+                    Ok(Box::new($construct))
+                }
+            }
+        }
+    };
+}
+
 // Re-export for use in submodules
 pub use impl_self_building_cv;
 pub use impl_single_atom_with_dim_builder;
 pub use impl_single_group_builder;
 pub use impl_single_group_with_dim_builder;
+pub use impl_two_group_with_dim_builder;
 
 // ---------------------------------------------------------------------------
 // Tests

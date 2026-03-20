@@ -99,6 +99,7 @@ Property                 | Selection       | Description
 `dipole_moment`          | one group       | Electric dipole moment (default `xyz` = magnitude; single axis gives signed component)
 `mass_center_position`   | one group       | Mass center position along `dimension`
 `mass_center_separation` | two groups      | Distance between two group mass centers
+`dipole_product`         | two groups      | Normalized dipole dot product μ̂₁·μ̂₂ = cos(θ) (default `xyz` = full 3D; `dimension` projects dipoles before comparing)
 
 ## Polymer Shape
 

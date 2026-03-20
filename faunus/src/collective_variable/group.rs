@@ -13,21 +13,35 @@
 // limitations under the license.
 
 //! Group-based collective variables: Size, EndToEnd, GyrationRadius, DipoleMoment,
-//! MassCenterPosition, MassCenterSeparation.
+//! DipoleProduct, MassCenterPosition, MassCenterSeparation.
 //!
 //! These CVs resolve group indices at build time and evaluate against those fixed indices.
 
 use super::{
-    impl_single_group_builder, impl_single_group_with_dim_builder, CvKind, CvKindBuilder,
-    EvalContext,
+    impl_single_group_builder, impl_single_group_with_dim_builder, impl_two_group_with_dim_builder,
+    CvKind, EvalContext,
 };
 use crate::cell::BoundaryConditions;
 use crate::dimension::Dimension;
 use crate::geometry::{self, GyrationTensor};
 use crate::group::GroupCollection;
-use crate::selection::Selection;
-use anyhow::{bail, Result};
 use serde::{Deserialize, Serialize};
+
+/// Compute the dipole moment vector of a group, PBC-aware relative to its COM.
+fn group_dipole_moment(group_index: usize, context: &dyn EvalContext) -> Option<crate::Point> {
+    let group = &context.groups()[group_index];
+    let com = group.mass_center()?;
+    let atomkinds = context.topology_ref().atomkinds();
+    let charges_positions = group.iter_active().map(|i| {
+        let charge = atomkinds[context.get_atomkind(i)].charge();
+        (charge, GroupCollection::position(context, i))
+    });
+    Some(geometry::dipole_moment(
+        charges_positions,
+        com,
+        context.cell(),
+    ))
+}
 
 // ---------------------------------------------------------------------------
 // Size
@@ -138,9 +152,12 @@ impl CvKind for GyrationRadius {
     }
 }
 
-impl_single_group_with_dim_builder!(GyrationRadius, "gyration_radius", |dimension, group| {
-    GyrationRadius { dimension, group }
-});
+impl_single_group_with_dim_builder!(
+    GyrationRadius,
+    "gyration_radius",
+    |dimension, group| { GyrationRadius { dimension, group } },
+    requires_com
+);
 
 // ---------------------------------------------------------------------------
 // DipoleMoment
@@ -157,27 +174,10 @@ pub struct DipoleMoment {
     group: usize,
 }
 
-impl DipoleMoment {
-    fn compute(&self, context: &dyn EvalContext) -> Option<crate::Point> {
-        let group = &context.groups()[self.group];
-        let com = group.mass_center()?;
-        let atomkinds = context.topology_ref().atomkinds();
-        let charges_positions = group.iter_active().map(|i| {
-            let charge = atomkinds[context.get_atomkind(i)].charge();
-            (charge, GroupCollection::position(context, i))
-        });
-        Some(geometry::dipole_moment(
-            charges_positions,
-            com,
-            context.cell(),
-        ))
-    }
-}
-
 #[typetag::serde(name = "dipole_moment")]
 impl CvKind for DipoleMoment {
     fn evaluate(&self, context: &dyn EvalContext) -> f64 {
-        self.compute(context)
+        group_dipole_moment(self.group, context)
             .map(|mu| {
                 let filtered = self.dimension.filter(mu);
                 if self.dimension.ndim() == 1 {
@@ -195,9 +195,12 @@ impl CvKind for DipoleMoment {
     }
 }
 
-impl_single_group_with_dim_builder!(DipoleMoment, "dipole_moment", |dimension, group| {
-    DipoleMoment { dimension, group }
-});
+impl_single_group_with_dim_builder!(
+    DipoleMoment,
+    "dipole_moment",
+    |dimension, group| { DipoleMoment { dimension, group } },
+    requires_com
+);
 
 // ---------------------------------------------------------------------------
 // MassCenterPosition
@@ -227,11 +230,12 @@ impl CvKind for MassCenterPosition {
 impl_single_group_with_dim_builder!(
     MassCenterPosition,
     "mass_center_position",
-    |dimension, group| MassCenterPosition { dimension, group }
+    |dimension, group| MassCenterPosition { dimension, group },
+    requires_com
 );
 
 // ---------------------------------------------------------------------------
-// MassCenterSeparation (two groups - manual impl)
+// MassCenterSeparation (two groups)
 // ---------------------------------------------------------------------------
 
 /// Distance between mass centers of two groups.
@@ -260,44 +264,161 @@ impl CvKind for MassCenterSeparation {
     }
 }
 
-/// Builder for MassCenterSeparation CV (two selections).
+impl_two_group_with_dim_builder!(
+    MassCenterSeparation,
+    "mass_center_separation",
+    |dimension, group1, group2| MassCenterSeparation {
+        dimension,
+        group1,
+        group2
+    },
+    requires_com
+);
+
+// ---------------------------------------------------------------------------
+// DipoleProduct (two groups)
+// ---------------------------------------------------------------------------
+
+/// Scalar product of normalized dipole moment vectors: **μ̂₁ · μ̂₂** = cos(θ).
+///
+/// Tracks orientational correlations between molecular dipoles.
+/// Returns values in \[−1, 1\]; +1 = parallel, −1 = antiparallel.
+/// With a single axis, normalizes then returns the component-wise product.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MassCenterSeparationBuilder {
-    pub selection: Selection,
-    pub selection2: Selection,
-    #[serde(default)]
-    pub dimension: Dimension,
+pub struct DipoleProduct {
+    dimension: Dimension,
+    group1: usize,
+    group2: usize,
 }
 
-#[typetag::serde(name = "mass_center_separation")]
-impl CvKindBuilder for MassCenterSeparationBuilder {
-    fn build(&self, context: &dyn EvalContext) -> Result<Box<dyn CvKind>> {
-        let indices1 = self
-            .selection
-            .resolve_groups(context.topology_ref(), context.groups());
-        if indices1.len() != 1 {
-            bail!(
-                "MassCenterSeparation: selection '{}' must match exactly one group, found {}",
-                self.selection,
-                indices1.len()
-            );
+#[typetag::serde(name = "dipole_product")]
+impl CvKind for DipoleProduct {
+    fn evaluate(&self, context: &dyn EvalContext) -> f64 {
+        match (
+            group_dipole_moment(self.group1, context),
+            group_dipole_moment(self.group2, context),
+        ) {
+            (Some(mu1), Some(mu2)) => {
+                // Filter before normalizing so single-axis mode compares
+                // only the selected component(s)
+                let a = self.dimension.filter(mu1);
+                let b = self.dimension.filter(mu2);
+                let norm_a = a.norm();
+                let norm_b = b.norm();
+                // Guard against zero-magnitude dipoles (e.g. net-neutral group)
+                if norm_a > 0.0 && norm_b > 0.0 {
+                    a.dot(&b) / (norm_a * norm_b)
+                } else {
+                    0.0
+                }
+            }
+            _ => 0.0,
         }
+    }
 
-        let indices2 = self
-            .selection2
-            .resolve_groups(context.topology_ref(), context.groups());
-        if indices2.len() != 1 {
-            bail!(
-                "MassCenterSeparation: selection2 '{}' must match exactly one group, found {}",
-                self.selection2,
-                indices2.len()
-            );
-        }
+    fn name(&self) -> &'static str {
+        "DipoleProduct"
+    }
+}
 
-        Ok(Box::new(MassCenterSeparation {
-            dimension: self.dimension,
-            group1: indices1[0],
-            group2: indices2[0],
-        }))
+impl_two_group_with_dim_builder!(
+    DipoleProduct,
+    "dipole_product",
+    |dimension, group1, group2| DipoleProduct {
+        dimension,
+        group1,
+        group2
+    },
+    requires_com
+);
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::backend::Backend;
+    use crate::context::WithTopology;
+    use std::path::Path;
+
+    fn make_context() -> Backend {
+        let mut rng = rand::thread_rng();
+        Backend::new(
+            "tests/files/topology_pass.yaml",
+            Some(Path::new("tests/files/structure.xyz")),
+            &mut rng,
+        )
+        .unwrap()
+    }
+
+    /// Find the first two MOL2 group indices (they have COM enabled).
+    fn mol2_group_indices(ctx: &Backend) -> (usize, usize) {
+        let topo = ctx.topology_ref();
+        let groups = ctx.groups();
+        let mol2_id = topo
+            .moleculekinds()
+            .iter()
+            .position(|m| m.name() == "MOL2")
+            .expect("MOL2 not found");
+        let mut indices = groups
+            .iter()
+            .enumerate()
+            .filter(|(_, g)| g.molecule() == mol2_id)
+            .map(|(i, _)| i);
+        (indices.next().unwrap(), indices.next().unwrap())
+    }
+
+    #[test]
+    fn dipole_product_same_group() {
+        let ctx = make_context();
+        let (g, _) = mol2_group_indices(&ctx);
+        let cv = DipoleProduct {
+            dimension: Dimension::default(),
+            group1: g,
+            group2: g,
+        };
+        // Same group → μ̂·μ̂ = cos(0) = 1
+        let value = cv.evaluate(&ctx);
+        assert!(
+            (value - 1.0).abs() < 1e-10,
+            "μ̂·μ̂ should be 1.0, got {value}"
+        );
+    }
+
+    #[test]
+    fn dipole_product_in_range() {
+        let ctx = make_context();
+        let (g1, g2) = mol2_group_indices(&ctx);
+        let cv = DipoleProduct {
+            dimension: Dimension::default(),
+            group1: g1,
+            group2: g2,
+        };
+        let value = cv.evaluate(&ctx);
+        assert!(
+            (-1.0 - 1e-10..=1.0 + 1e-10).contains(&value),
+            "normalized dot product must be in [-1, 1], got {value}"
+        );
+    }
+
+    #[test]
+    fn dipole_product_no_com_returns_zero() {
+        let ctx = make_context();
+        // MOL groups (index 0) have has_com: false
+        let cv = DipoleProduct {
+            dimension: Dimension::default(),
+            group1: 0,
+            group2: 0,
+        };
+        assert_eq!(cv.evaluate(&ctx), 0.0);
+    }
+
+    #[test]
+    fn dipole_product_serde_roundtrip() {
+        let cv = DipoleProduct {
+            dimension: Dimension::default(),
+            group1: 0,
+            group2: 1,
+        };
+        let yaml = serde_yaml::to_string(&cv as &dyn CvKind).unwrap();
+        let _: Box<dyn CvKind> = serde_yaml::from_str(&yaml).unwrap();
     }
 }
