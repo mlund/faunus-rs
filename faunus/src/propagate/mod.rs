@@ -98,22 +98,22 @@ impl<T: Context> MoveCollection<T> {
         self.repeat
     }
 
-    fn to_yaml(&self) -> serde_yaml::Value {
+    fn to_yaml(&self) -> serde_yml::Value {
         let tag = match self.strategy {
             SelectionStrategy::Stochastic => "Stochastic",
             SelectionStrategy::Deterministic => "Deterministic",
         };
-        let mut map = serde_yaml::Mapping::new();
+        let mut map = serde_yml::Mapping::new();
         map.insert("repeat".into(), self.repeat.into());
         map.insert(
             "elapsed_seconds".into(),
-            serde_yaml::Value::Number(serde_yaml::Number::from(self.elapsed.as_secs_f64())),
+            serde_yml::Value::Number(serde_yml::Number::from(self.elapsed.as_secs_f64())),
         );
         let moves: Vec<_> = self.moves.iter().filter_map(|m| m.to_yaml()).collect();
-        map.insert("moves".into(), serde_yaml::Value::Sequence(moves));
-        serde_yaml::Value::Tagged(Box::new(serde_yaml::value::TaggedValue {
-            tag: serde_yaml::value::Tag::new(tag),
-            value: serde_yaml::Value::Mapping(map),
+        map.insert("moves".into(), serde_yml::Value::Sequence(moves));
+        serde_yml::Value::Tagged(Box::new(serde_yml::value::TaggedValue {
+            tag: serde_yml::value::Tag::new(tag),
+            value: serde_yml::Value::Mapping(map),
         }))
     }
 }
@@ -194,7 +194,7 @@ impl<T: Context> PropagationBlock<T> {
         }
     }
 
-    fn to_yaml(&self) -> serde_yaml::Value {
+    fn to_yaml(&self) -> serde_yml::Value {
         match self {
             Self::MonteCarlo(mc) => mc.to_yaml(),
             #[cfg(feature = "gpu")]
@@ -248,14 +248,14 @@ impl<T: Context> Propagate<T> {
     /// Build a `Propagate<T>` from an input YAML file.
     pub fn from_file(filename: impl AsRef<Path>, context: &T) -> anyhow::Result<Self> {
         let yaml = std::fs::read_to_string(filename)?;
-        let full: serde_yaml::Value = serde_yaml::from_str(&yaml)?;
+        let full: serde_yml::Value = serde_yml::from_str(&yaml)?;
 
         let current = full
             .get("propagate")
             .ok_or_else(|| anyhow::anyhow!("Could not find `propagate` in the YAML file."))?;
 
         let builder: PropagateBuilder =
-            serde_yaml::from_value(current.clone()).map_err(anyhow::Error::msg)?;
+            serde_yml::from_value(current.clone()).map_err(anyhow::Error::msg)?;
 
         let blocks = builder
             .move_collections
@@ -310,23 +310,23 @@ impl<T: Context> Propagate<T> {
     }
 
     /// Serialize the propagate state to a YAML value.
-    pub fn to_yaml(&self) -> serde_yaml::Value {
-        let mut map = serde_yaml::Mapping::new();
+    pub fn to_yaml(&self) -> serde_yml::Value {
+        let mut map = serde_yml::Mapping::new();
         map.insert("repeat".into(), self.max_repeats.into());
         map.insert(
             "seed".into(),
-            serde_yaml::to_value(&self.seed).unwrap_or_default(),
+            serde_yml::to_value(&self.seed).unwrap_or_default(),
         );
         let collections: Vec<_> = self.blocks.iter().map(|b| b.to_yaml()).collect();
         map.insert(
             "collections".into(),
-            serde_yaml::Value::Sequence(collections),
+            serde_yml::Value::Sequence(collections),
         );
         map.insert(
             "criterion".into(),
-            serde_yaml::to_value(self.criterion).unwrap_or_default(),
+            serde_yml::to_value(self.criterion).unwrap_or_default(),
         );
-        serde_yaml::Value::Mapping(map)
+        serde_yml::Value::Mapping(map)
     }
 }
 
@@ -335,10 +335,10 @@ pub(crate) fn gibbs_config_from_file(
     filename: impl AsRef<Path>,
 ) -> anyhow::Result<Option<crate::montecarlo::gibbs::GibbsConfig>> {
     let yaml = std::fs::read_to_string(filename)?;
-    let full: serde_yaml::Value = serde_yaml::from_str(&yaml)?;
+    let full: serde_yml::Value = serde_yml::from_str(&yaml)?;
     let Some(gibbs_value) = full.get("propagate").and_then(|p| p.get("gibbs")) else {
         return Ok(None);
     };
-    let config = serde_yaml::from_value(gibbs_value.clone())?;
+    let config = serde_yml::from_value(gibbs_value.clone())?;
     Ok(Some(config))
 }

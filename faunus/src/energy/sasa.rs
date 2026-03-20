@@ -181,13 +181,13 @@ impl SasaEnergy {
     }
 
     /// Report SASA parameters as YAML.
-    pub(super) fn to_yaml(&self) -> serde_yaml::Value {
-        let mut map = serde_yaml::Mapping::new();
+    pub(super) fn to_yaml(&self) -> serde_yml::Value {
+        let mut map = serde_yml::Mapping::new();
         map.insert("probe_radius".into(), self.probe_radius.into());
         if let Some(offset) = self.energy_offset {
             map.insert("energy_offset".into(), offset.into());
         }
-        serde_yaml::Value::Mapping(map)
+        serde_yml::Value::Mapping(map)
     }
 }
 

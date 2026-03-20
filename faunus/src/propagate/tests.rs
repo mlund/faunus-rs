@@ -7,11 +7,11 @@ use std::path::Path;
 #[test]
 fn seed_parse() {
     let string = "!Fixed 49786352";
-    let seed: Seed = serde_yaml::from_str(string).unwrap();
+    let seed: Seed = serde_yml::from_str(string).unwrap();
     assert!(matches!(seed, Seed::Fixed(49786352)));
 
     let string = "Hardware";
-    let seed: Seed = serde_yaml::from_str(string).unwrap();
+    let seed: Seed = serde_yml::from_str(string).unwrap();
     assert!(matches!(seed, Seed::Hardware));
 }
 
@@ -23,7 +23,7 @@ moves:
    - !TranslateMolecule { molecule: Protein, dp: 0.6, weight: 2.0 }
    - !TranslateMolecule { molecule: Lipid, dp: 0.5, weight: 0.5 }";
 
-    let collection: CollectionBuilder = serde_yaml::from_str(string).unwrap();
+    let collection: CollectionBuilder = serde_yml::from_str(string).unwrap();
     assert_eq!(collection.repeat, 20);
     assert_eq!(collection.moves.len(), 3);
 }
@@ -36,7 +36,7 @@ timestep: 0.002
 friction: 1.0
 steps: 500
 temperature: 300.0";
-    let builder: MoveCollectionBuilder = serde_yaml::from_str(yaml).unwrap();
+    let builder: MoveCollectionBuilder = serde_yml::from_str(yaml).unwrap();
     assert!(matches!(
         builder,
         MoveCollectionBuilder::LangevinDynamics(_)
@@ -56,7 +56,7 @@ moves:
    - !TranslateMolecule { molecule: Protein, dp: 0.6, weight: 2.0 }
    - !TranslateMolecule { molecule: Lipid, dp: 0.5, weight: 0.5 }";
 
-    let collection: CollectionBuilder = serde_yaml::from_str(string).unwrap();
+    let collection: CollectionBuilder = serde_yml::from_str(string).unwrap();
     assert_eq!(collection.repeat, 10);
     assert_eq!(collection.moves.len(), 3);
 }

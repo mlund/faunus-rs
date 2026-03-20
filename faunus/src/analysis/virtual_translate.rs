@@ -339,25 +339,25 @@ impl<T: Context> Analyze<T> for VirtualTranslate {
         self.num_samples
     }
 
-    fn to_yaml(&self) -> Option<serde_yaml::Value> {
-        let mut map = serde_yaml::Mapping::new();
+    fn to_yaml(&self) -> Option<serde_yml::Value> {
+        let mut map = serde_yml::Mapping::new();
         map.insert(
             "displacement".into(),
-            serde_yaml::to_value(self.displacement).ok()?,
+            serde_yml::to_value(self.displacement).ok()?,
         );
         map.insert(
             "num_samples".into(),
-            serde_yaml::Value::Number(self.num_samples.into()),
+            serde_yml::Value::Number(self.num_samples.into()),
         );
         map.insert(
             "mean_force".into(),
-            serde_yaml::to_value(self.mean_force()).ok()?,
+            serde_yml::to_value(self.mean_force()).ok()?,
         );
         map.insert(
             "mean_free_energy".into(),
-            serde_yaml::to_value(self.mean_free_energy()).ok()?,
+            serde_yml::to_value(self.mean_free_energy()).ok()?,
         );
-        Some(serde_yaml::Value::Mapping(map))
+        Some(serde_yml::Value::Mapping(map))
     }
 }
 
@@ -413,7 +413,7 @@ mod tests {
 
     /// Deserialize YAML into AnalysisBuilder list and extract the VirtualTranslateBuilder at `index`.
     fn deserialize_vt_builder(yaml: &str, index: usize) -> VirtualTranslateBuilder {
-        let builders: Vec<AnalysisBuilder> = serde_yaml::from_str(yaml).unwrap();
+        let builders: Vec<AnalysisBuilder> = serde_yml::from_str(yaml).unwrap();
         match &builders[index] {
             AnalysisBuilder::VirtualTranslate(b) => b.clone(),
             _ => panic!("expected VirtualTranslate variant"),
@@ -639,9 +639,9 @@ directions: !x
 temperature: 310.0
 frequency: !Every 5
 "#;
-        let builder: VirtualTranslateBuilder = serde_yaml::from_str(yaml).unwrap();
-        let serialized = serde_yaml::to_string(&builder).unwrap();
-        let roundtrip: VirtualTranslateBuilder = serde_yaml::from_str(&serialized).unwrap();
+        let builder: VirtualTranslateBuilder = serde_yml::from_str(yaml).unwrap();
+        let serialized = serde_yml::to_string(&builder).unwrap();
+        let roundtrip: VirtualTranslateBuilder = serde_yml::from_str(&serialized).unwrap();
         let vt = roundtrip.build().unwrap();
         assert_approx_eq!(f64, vt.displacement, 0.05);
         assert_eq!(vt.directions, Axes::X);

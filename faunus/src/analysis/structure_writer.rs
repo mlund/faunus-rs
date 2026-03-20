@@ -196,17 +196,17 @@ impl<T: Context> Analyze<T> for StructureWriter {
         self.num_samples
     }
 
-    fn to_yaml(&self) -> Option<serde_yaml::Value> {
-        let mut map = serde_yaml::Mapping::new();
+    fn to_yaml(&self) -> Option<serde_yml::Value> {
+        let mut map = serde_yml::Mapping::new();
         map.insert(
             "file".into(),
-            serde_yaml::Value::String(self.output_file.clone()),
+            serde_yml::Value::String(self.output_file.clone()),
         );
         map.insert(
             "num_samples".into(),
-            serde_yaml::Value::Number(self.num_samples.into()),
+            serde_yml::Value::Number(self.num_samples.into()),
         );
-        Some(serde_yaml::Value::Mapping(map))
+        Some(serde_yml::Value::Mapping(map))
     }
 }
 
@@ -218,7 +218,7 @@ mod tests {
     #[test]
     fn deserialize_trajectory_builders() {
         let yaml = std::fs::read_to_string("tests/files/trajectory_xyz.yaml").unwrap();
-        let builders: Vec<AnalysisBuilder> = serde_yaml::from_str(&yaml).unwrap();
+        let builders: Vec<AnalysisBuilder> = serde_yml::from_str(&yaml).unwrap();
         assert_eq!(builders.len(), 2);
 
         // Verify first entry: xyz trajectory

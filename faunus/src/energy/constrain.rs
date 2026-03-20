@@ -97,7 +97,7 @@ mod tests {
 property: volume
 range: [1000.0, 5000.0]
 "#;
-        let builder: ConstrainBuilder = serde_yaml::from_str(yaml).unwrap();
+        let builder: ConstrainBuilder = serde_yml::from_str(yaml).unwrap();
         assert!(builder.harmonic.is_none());
         assert_eq!(builder.cv.range, (1000.0, 5000.0));
     }
@@ -111,7 +111,7 @@ harmonic:
   force_constant: 100.0
   equilibrium: 3000.0
 "#;
-        let builder: ConstrainBuilder = serde_yaml::from_str(yaml).unwrap();
+        let builder: ConstrainBuilder = serde_yml::from_str(yaml).unwrap();
         let h = builder.harmonic.unwrap();
         assert!((h.force_constant - 100.0).abs() < 1e-10);
         assert!((h.equilibrium - 3000.0).abs() < 1e-10);
@@ -128,7 +128,7 @@ harmonic:
     force_constant: 100.0
     equilibrium: 3000.0
 "#;
-        let builders: Vec<ConstrainBuilder> = serde_yaml::from_str(yaml).unwrap();
+        let builders: Vec<ConstrainBuilder> = serde_yml::from_str(yaml).unwrap();
         assert_eq!(builders.len(), 2);
         assert!(builders[0].harmonic.is_none());
         assert!(builders[1].harmonic.is_some());
@@ -157,7 +157,7 @@ mod integration_tests {
     fn hard_constraint_volume_in_range() {
         let ctx = make_context();
         let volume = ctx.cell().volume().unwrap();
-        let builder: ConstrainBuilder = serde_yaml::from_str(&format!(
+        let builder: ConstrainBuilder = serde_yml::from_str(&format!(
             "property: volume\nrange: [{}, {}]",
             volume - 1.0,
             volume + 1.0
@@ -172,7 +172,7 @@ mod integration_tests {
     fn hard_constraint_volume_out_of_range() {
         let ctx = make_context();
         let builder: ConstrainBuilder =
-            serde_yaml::from_str("property: volume\nrange: [0.0, 1.0]").unwrap();
+            serde_yml::from_str("property: volume\nrange: [0.0, 1.0]").unwrap();
         let constrain = builder.build(&ctx).unwrap();
         let energy = constrain.energy(&ctx, &Change::Everything);
         assert_eq!(energy, f64::INFINITY);
@@ -187,7 +187,7 @@ mod integration_tests {
         let yaml = format!(
             "property: volume\nrange: [0.0, 1e10]\nharmonic:\n  force_constant: {k}\n  equilibrium: {eq}"
         );
-        let builder: ConstrainBuilder = serde_yaml::from_str(&yaml).unwrap();
+        let builder: ConstrainBuilder = serde_yml::from_str(&yaml).unwrap();
         let constrain = builder.build(&ctx).unwrap();
         let energy = constrain.energy(&ctx, &Change::Everything);
         let expected = 0.5 * k * (eq - volume) * (eq - volume);
@@ -198,7 +198,7 @@ mod integration_tests {
     fn no_energy_on_no_change() {
         let ctx = make_context();
         let builder: ConstrainBuilder =
-            serde_yaml::from_str("property: volume\nrange: [0.0, 1.0]").unwrap();
+            serde_yml::from_str("property: volume\nrange: [0.0, 1.0]").unwrap();
         let constrain = builder.build(&ctx).unwrap();
         // Even though volume is out of range, Change::None returns 0
         assert_eq!(constrain.energy(&ctx, &Change::None), 0.0);

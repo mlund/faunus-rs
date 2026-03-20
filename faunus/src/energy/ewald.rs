@@ -374,15 +374,15 @@ impl EwaldReciprocalEnergy {
     }
 
     /// Report Ewald parameters as YAML.
-    pub(super) fn to_yaml(&self) -> serde_yaml::Value {
-        let mut map = serde_yaml::Mapping::new();
+    pub(super) fn to_yaml(&self) -> serde_yml::Value {
+        let mut map = serde_yml::Mapping::new();
         map.insert("alpha".into(), self.ewald.alpha().into());
         map.insert("n_max".into(), (self.ewald.n_max() as u64).into());
         map.insert(
             "k_vectors".into(),
             (self.ewald.num_k_vectors() as u64).into(),
         );
-        serde_yaml::Value::Mapping(map)
+        serde_yml::Value::Mapping(map)
     }
 }
 

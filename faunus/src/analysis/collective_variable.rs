@@ -127,22 +127,22 @@ impl<T: Context> Analyze<T> for CollectiveVariableAnalysis {
         self.num_samples
     }
 
-    fn to_yaml(&self) -> Option<serde_yaml::Value> {
-        let mut map = serde_yaml::Mapping::new();
+    fn to_yaml(&self) -> Option<serde_yml::Value> {
+        let mut map = serde_yml::Mapping::new();
         map.insert(
             "property".into(),
-            serde_yaml::Value::String(self.cv.axis().name.clone()),
+            serde_yml::Value::String(self.cv.axis().name.clone()),
         );
         map.insert(
             "num_samples".into(),
-            serde_yaml::Value::Number(self.num_samples.into()),
+            serde_yml::Value::Number(self.num_samples.into()),
         );
-        map.insert("mean".into(), serde_yaml::to_value(self.mean.mean()).ok()?);
+        map.insert("mean".into(), serde_yml::to_value(self.mean.mean()).ok()?);
         map.insert(
             "rms".into(),
-            serde_yaml::to_value(self.mean_squared.mean().sqrt()).ok()?,
+            serde_yml::to_value(self.mean_squared.mean().sqrt()).ok()?,
         );
-        Some(serde_yaml::Value::Mapping(map))
+        Some(serde_yml::Value::Mapping(map))
     }
 }
 
@@ -158,7 +158,7 @@ property: volume
 range: [1000.0, 5000.0]
 frequency: !Every 100
 "#;
-        let builder: CollectiveVariableAnalysisBuilder = serde_yaml::from_str(yaml).unwrap();
+        let builder: CollectiveVariableAnalysisBuilder = serde_yml::from_str(yaml).unwrap();
         assert_eq!(builder.cv.range, (1000.0, 5000.0));
         assert!(builder.file.is_none());
         assert!(matches!(builder.frequency, Frequency::Every(100)));
@@ -172,7 +172,7 @@ range: [1000.0, 5000.0]
 file: rc.dat
 frequency: !Every 50
 "#;
-        let builder: CollectiveVariableAnalysisBuilder = serde_yaml::from_str(yaml).unwrap();
+        let builder: CollectiveVariableAnalysisBuilder = serde_yml::from_str(yaml).unwrap();
         assert_eq!(builder.file.as_ref().unwrap().to_str().unwrap(), "rc.dat");
     }
 
@@ -183,10 +183,10 @@ property: volume
 range: [1000.0, 5000.0]
 frequency: !Every 100
 "#;
-        let builder: CollectiveVariableAnalysisBuilder = serde_yaml::from_str(yaml).unwrap();
-        let serialized = serde_yaml::to_string(&builder).unwrap();
+        let builder: CollectiveVariableAnalysisBuilder = serde_yml::from_str(yaml).unwrap();
+        let serialized = serde_yml::to_string(&builder).unwrap();
         let roundtrip: CollectiveVariableAnalysisBuilder =
-            serde_yaml::from_str(&serialized).unwrap();
+            serde_yml::from_str(&serialized).unwrap();
         assert_eq!(roundtrip.cv.range, (1000.0, 5000.0));
         assert!(matches!(roundtrip.frequency, Frequency::Every(100)));
     }
@@ -197,7 +197,7 @@ frequency: !Every 100
 property: volume
 range: [1000.0, 5000.0]
 "#;
-        let result = serde_yaml::from_str::<CollectiveVariableAnalysisBuilder>(yaml);
+        let result = serde_yml::from_str::<CollectiveVariableAnalysisBuilder>(yaml);
         assert!(result.is_err());
     }
 
@@ -209,7 +209,7 @@ range: [1000.0, 5000.0]
   range: [1000.0, 5000.0]
   frequency: !Every 100
 "#;
-        let builders: Vec<AnalysisBuilder> = serde_yaml::from_str(yaml).unwrap();
+        let builders: Vec<AnalysisBuilder> = serde_yml::from_str(yaml).unwrap();
         assert!(matches!(
             builders[0],
             AnalysisBuilder::CollectiveVariable(_)
@@ -244,7 +244,7 @@ property: volume
 range: [0.0, 1e10]
 frequency: !Every 1
 "#;
-        let builder: CollectiveVariableAnalysisBuilder = serde_yaml::from_str(yaml).unwrap();
+        let builder: CollectiveVariableAnalysisBuilder = serde_yml::from_str(yaml).unwrap();
         let mut analysis = builder.build(&ctx).unwrap();
 
         assert_eq!(Analyze::<Backend>::num_samples(&analysis), 0);
@@ -267,7 +267,7 @@ property: volume
 range: [0.0, 1e10]
 frequency: !Every 10
 "#;
-        let builder: CollectiveVariableAnalysisBuilder = serde_yaml::from_str(yaml).unwrap();
+        let builder: CollectiveVariableAnalysisBuilder = serde_yml::from_str(yaml).unwrap();
         let mut analysis = builder.build(&ctx).unwrap();
 
         // Step 1 should not sample (not multiple of 10)
@@ -292,7 +292,7 @@ frequency: !Every 10
   range: [0.0, 1e10]
   frequency: !Every 1
 "#;
-        let builders: Vec<crate::analysis::AnalysisBuilder> = serde_yaml::from_str(yaml).unwrap();
+        let builders: Vec<crate::analysis::AnalysisBuilder> = serde_yml::from_str(yaml).unwrap();
         let analysis = builders[0].build(&ctx).unwrap();
         assert_eq!(analysis.short_name(), Some("collectivevariable"));
     }

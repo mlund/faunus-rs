@@ -427,7 +427,7 @@ mod tests {
             group1: 0,
             group2: 1,
         };
-        let yaml = serde_yaml::to_string(&cv as &dyn CvKind).unwrap();
-        let _: Box<dyn CvKind> = serde_yaml::from_str(&yaml).unwrap();
+        let yaml = serde_yml::to_string(&cv as &dyn CvKind).unwrap();
+        let _: Box<dyn CvKind> = serde_yml::from_str(&yaml).unwrap();
     }
 }

@@ -144,23 +144,23 @@ impl<T: Context> Analyze<T> for EnergyAnalysis {
         self.num_samples
     }
 
-    fn to_yaml(&self) -> Option<serde_yaml::Value> {
+    fn to_yaml(&self) -> Option<serde_yml::Value> {
         if self.num_samples == 0 {
             return None;
         }
-        let mut map = serde_yaml::Mapping::new();
+        let mut map = serde_yml::Mapping::new();
         map.insert(
             "num_samples".into(),
-            serde_yaml::Value::Number(self.num_samples.into()),
+            serde_yml::Value::Number(self.num_samples.into()),
         );
-        map.insert("mean".into(), serde_yaml::to_value(self.mean.mean()).ok()?);
+        map.insert("mean".into(), serde_yml::to_value(self.mean.mean()).ok()?);
         if let EnergyMode::Partial(sel1, sel2) = &self.mode {
             map.insert(
                 "selections".into(),
-                serde_yaml::to_value([sel1.source(), sel2.source()]).ok()?,
+                serde_yml::to_value([sel1.source(), sel2.source()]).ok()?,
             );
         }
-        Some(serde_yaml::Value::Mapping(map))
+        Some(serde_yml::Value::Mapping(map))
     }
 }
 
@@ -184,7 +184,7 @@ mod tests {
 file: energy.dat
 frequency: !Every 100
 "#;
-        let builder: EnergyAnalysisBuilder = serde_yaml::from_str(yaml).unwrap();
+        let builder: EnergyAnalysisBuilder = serde_yml::from_str(yaml).unwrap();
         assert!(builder.selections.is_none());
         assert!(matches!(builder.frequency, Frequency::Every(100)));
     }
@@ -196,7 +196,7 @@ file: partial.dat
 frequency: !Every 50
 selections: ["molecule water", "atomtype Na"]
 "#;
-        let builder: EnergyAnalysisBuilder = serde_yaml::from_str(yaml).unwrap();
+        let builder: EnergyAnalysisBuilder = serde_yml::from_str(yaml).unwrap();
         assert!(builder.selections.is_some());
         let (sel1, sel2) = builder.selections.unwrap();
         assert_eq!(sel1.source(), "molecule water");
@@ -210,7 +210,7 @@ selections: ["molecule water", "atomtype Na"]
   file: energy.dat
   frequency: !Every 100
 "#;
-        let builders: Vec<AnalysisBuilder> = serde_yaml::from_str(yaml).unwrap();
+        let builders: Vec<AnalysisBuilder> = serde_yml::from_str(yaml).unwrap();
         assert!(matches!(builders[0], AnalysisBuilder::Energy(_)));
     }
 
@@ -222,7 +222,7 @@ selections: ["molecule water", "atomtype Na"]
   frequency: !Every 50
   selections: ["all", "all"]
 "#;
-        let builders: Vec<AnalysisBuilder> = serde_yaml::from_str(yaml).unwrap();
+        let builders: Vec<AnalysisBuilder> = serde_yml::from_str(yaml).unwrap();
         assert!(matches!(builders[0], AnalysisBuilder::Energy(_)));
     }
 }
@@ -252,7 +252,7 @@ mod integration_tests {
 file: /dev/null
 frequency: !Every 1
 "#;
-        let builder: EnergyAnalysisBuilder = serde_yaml::from_str(yaml).unwrap();
+        let builder: EnergyAnalysisBuilder = serde_yml::from_str(yaml).unwrap();
         let mut analysis = builder.build(&ctx).unwrap();
 
         assert_eq!(Analyze::<Backend>::num_samples(&analysis), 0);
@@ -273,7 +273,7 @@ file: /dev/null
 frequency: !Every 1
 selections: ["all", "all"]
 "#;
-        let builder: EnergyAnalysisBuilder = serde_yaml::from_str(yaml).unwrap();
+        let builder: EnergyAnalysisBuilder = serde_yml::from_str(yaml).unwrap();
         let mut analysis = builder.build(&ctx).unwrap();
 
         analysis.sample(&ctx, 1).unwrap();

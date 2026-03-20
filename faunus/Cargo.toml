@@ -11,40 +11,38 @@ required-features = ["cli"]
 [lib]
 
 [dependencies]
-log = "0.4"
-serde = { version = "1.0", features = ["derive", "rc"] }
 anyhow = "1.0"
-itertools = "0.10"
-nalgebra = { version = "0.34.1", features = ["serde-serialize"] }
-interatomic = { git = "https://github.com/mlund/interatomic.git", features=["serde", "custom", "gpu"] }
-rand = "0.8"
-average = { version = "0.13", features = ["std", "serde1"] }
-serde_yaml = "0.9"
-validator = { version = "0.20", features = ["derive"] }
+average = { version = "0.13", default-features = false, features = ["std", "serde1"] }
 derive-getters = "0.3.0"
-unordered-pair = { version = "0.2.4", features = ["serde"] }
-serde_with = "3.8.1"
-dyn-clone = "1.0.17"
-typetag = "0.2"
-paste = "1.0"
-ndarray = { version = "0.15.6", features = ["serde"] }
 derive_builder = "0.20.0"
-voronota-ltr = "0.1"
-flate2 = "1.0.35"
-derive_more = {version = "1.0.0", features = ["debug"]}
-molly = "0.5"
-physical_constants = "0.5.0"
+derive_more = { version = "1.0.0", default-features = false, features = ["debug"] }
+dyn-clone = "1.0.17"
 exmex = "0.20"
+flate2 = "1.0.35"
 icotable = { git = "https://github.com/mlund/icotable.git" }
+interatomic = { git = "https://github.com/mlund/interatomic.git", features = ["serde", "custom", "gpu"] }
+itertools = "0.10"
+log = "0.4"
+molly = "0.5"
+nalgebra = { version = "0.34.1", features = ["serde-serialize"] }
+ndarray = { version = "0.15.6", features = ["serde"] }
+paste = "1.0"
+physical_constants = "0.5.0"
+rand = "0.8"
+serde = { version = "1.0", features = ["derive", "rc"] }
+serde_with = "3.8.1"
+serde_yml = "0.0.12"
+typetag = "0.2"
+unordered-pair = { version = "0.2.4", features = ["serde"] }
+validator = { version = "0.20", features = ["derive"] }
+voronota-ltr = { version = "0.1", default-features = false }
 
 # CLI-only dependencies
-clap = { version = "4.0", features = ["derive"], optional = true }
-pretty_env_logger = { version = "0.5", optional = true }
-indicatif = { version = "*", optional = true }
-
-# GPU dependencies
-cubecl = { version = "0.9", features = ["wgpu", "cpu"], optional = true }
 bytemuck = { version = "1", features = ["derive"], optional = true }
+clap = { version = "4.0", features = ["derive"], optional = true }
+cubecl = { version = "0.9", features = ["wgpu", "cpu"], optional = true }
+indicatif = { version = "*", optional = true }
+pretty_env_logger = { version = "0.5", optional = true }
 
 [dev-dependencies]
 approx = "0.5"
@@ -60,9 +58,6 @@ harness = false
 default = ["cli"]
 cli = ["dep:clap", "dep:pretty_env_logger", "dep:indicatif"]
 gpu = ["dep:cubecl", "dep:bytemuck"]
-
-#[patch."https://github.com/mlund/icotable.git"]
-#icotable = { path = "../../icotable" }
 
 #[profile.release]
 #lto = "thin"

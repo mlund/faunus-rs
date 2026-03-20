@@ -143,7 +143,7 @@ pub(super) struct PropagateBuilder {
     /// Present so `deny_unknown_fields` accepts the `gibbs` key; parsed separately.
     #[serde(default)]
     #[allow(dead_code)]
-    gibbs: Option<serde_yaml::Value>,
+    gibbs: Option<serde_yml::Value>,
 }
 
 /// Seed used for selecting stochastic moves.

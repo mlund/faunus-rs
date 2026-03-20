@@ -1,13 +1,13 @@
 //! Shared utilities for integration tests.
 //!
-//! Provides a recursive YAML comparator that walks two `serde_yaml::Value`
+//! Provides a recursive YAML comparator that walks two `serde_yml::Value`
 //! trees and reports all mismatches with their full dotted path, plus helpers
 //! for running the `faunus` CLI binary.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use serde_yaml::Value;
+use serde_yml::Value;
 
 /// Path to the compiled `faunus` binary.
 pub fn faunus_binary() -> PathBuf {
@@ -83,12 +83,12 @@ pub fn run_regression(dir: &Path) {
 
     run_faunus(&input, &tmp_state, &tmp_output);
 
-    let actual: Value = serde_yaml::from_str(
+    let actual: Value = serde_yml::from_str(
         &std::fs::read_to_string(&tmp_output).expect("failed to read output.yaml"),
     )
     .expect("failed to parse output.yaml");
 
-    let reference: Value = serde_yaml::from_str(
+    let reference: Value = serde_yml::from_str(
         &std::fs::read_to_string(&reference_output).expect("failed to read reference_output.yaml"),
     )
     .expect("failed to parse reference_output.yaml");
@@ -214,8 +214,8 @@ fn compare_recursive(
 }
 
 fn compare_numbers(
-    a: &serde_yaml::Number,
-    b: &serde_yaml::Number,
+    a: &serde_yml::Number,
+    b: &serde_yml::Number,
     path: &str,
     tol: f64,
     diffs: &mut Vec<String>,
@@ -258,8 +258,8 @@ fn is_ignored(key: &Value, ignored_keys: &[&str]) -> bool {
 }
 
 fn compare_mappings(
-    a: &serde_yaml::Mapping,
-    b: &serde_yaml::Mapping,
+    a: &serde_yml::Mapping,
+    b: &serde_yml::Mapping,
     path: &str,
     tol: f64,
     ignored_keys: &[&str],
@@ -307,14 +307,14 @@ mod tests {
     #[test]
     fn identical_values_produce_no_diffs() {
         let yaml = "a: 1\nb: 2.5\nc: hello";
-        let v: Value = serde_yaml::from_str(yaml).unwrap();
+        let v: Value = serde_yml::from_str(yaml).unwrap();
         assert!(compare_yaml(&v, &v, 1e-10, &[]).is_empty());
     }
 
     #[test]
     fn integer_mismatch_reported() {
-        let a: Value = serde_yaml::from_str("x: 1").unwrap();
-        let b: Value = serde_yaml::from_str("x: 2").unwrap();
+        let a: Value = serde_yml::from_str("x: 1").unwrap();
+        let b: Value = serde_yml::from_str("x: 2").unwrap();
         let diffs = compare_yaml(&a, &b, 1e-10, &[]);
         assert_eq!(diffs.len(), 1);
         assert!(diffs[0].contains("integer mismatch"));
@@ -322,15 +322,15 @@ mod tests {
 
     #[test]
     fn float_within_tolerance() {
-        let a: Value = serde_yaml::from_str("x: 1.0000000001").unwrap();
-        let b: Value = serde_yaml::from_str("x: 1.0000000002").unwrap();
+        let a: Value = serde_yml::from_str("x: 1.0000000001").unwrap();
+        let b: Value = serde_yml::from_str("x: 1.0000000002").unwrap();
         assert!(compare_yaml(&a, &b, 1e-9, &[]).is_empty());
     }
 
     #[test]
     fn float_outside_tolerance() {
-        let a: Value = serde_yaml::from_str("x: 1.0").unwrap();
-        let b: Value = serde_yaml::from_str("x: 2.0").unwrap();
+        let a: Value = serde_yml::from_str("x: 1.0").unwrap();
+        let b: Value = serde_yml::from_str("x: 2.0").unwrap();
         let diffs = compare_yaml(&a, &b, 1e-10, &[]);
         assert_eq!(diffs.len(), 1);
         assert!(diffs[0].contains("float mismatch"));
@@ -338,15 +338,15 @@ mod tests {
 
     #[test]
     fn ignored_keys_are_skipped() {
-        let a: Value = serde_yaml::from_str("x: 1\ntimer: 99").unwrap();
-        let b: Value = serde_yaml::from_str("x: 1\ntimer: 0").unwrap();
+        let a: Value = serde_yml::from_str("x: 1\ntimer: 99").unwrap();
+        let b: Value = serde_yml::from_str("x: 1\ntimer: 0").unwrap();
         assert!(compare_yaml(&a, &b, 1e-10, &["timer"]).is_empty());
     }
 
     #[test]
     fn missing_key_reported() {
-        let a: Value = serde_yaml::from_str("x: 1\ny: 2").unwrap();
-        let b: Value = serde_yaml::from_str("x: 1").unwrap();
+        let a: Value = serde_yml::from_str("x: 1\ny: 2").unwrap();
+        let b: Value = serde_yml::from_str("x: 1").unwrap();
         let diffs = compare_yaml(&a, &b, 1e-10, &[]);
         assert_eq!(diffs.len(), 1);
         assert!(diffs[0].contains("missing in actual"));
@@ -354,8 +354,8 @@ mod tests {
 
     #[test]
     fn extra_key_reported() {
-        let a: Value = serde_yaml::from_str("x: 1").unwrap();
-        let b: Value = serde_yaml::from_str("x: 1\ny: 2").unwrap();
+        let a: Value = serde_yml::from_str("x: 1").unwrap();
+        let b: Value = serde_yml::from_str("x: 1\ny: 2").unwrap();
         let diffs = compare_yaml(&a, &b, 1e-10, &[]);
         assert_eq!(diffs.len(), 1);
         assert!(diffs[0].contains("unexpected key"));
@@ -363,8 +363,8 @@ mod tests {
 
     #[test]
     fn sequence_length_mismatch() {
-        let a: Value = serde_yaml::from_str("x: [1, 2]").unwrap();
-        let b: Value = serde_yaml::from_str("x: [1]").unwrap();
+        let a: Value = serde_yml::from_str("x: [1, 2]").unwrap();
+        let b: Value = serde_yml::from_str("x: [1]").unwrap();
         let diffs = compare_yaml(&a, &b, 1e-10, &[]);
         assert_eq!(diffs.len(), 1);
         assert!(diffs[0].contains("sequence length"));
@@ -372,8 +372,8 @@ mod tests {
 
     #[test]
     fn nested_path_reported() {
-        let a: Value = serde_yaml::from_str("a:\n  b:\n    c: 1").unwrap();
-        let b: Value = serde_yaml::from_str("a:\n  b:\n    c: 2").unwrap();
+        let a: Value = serde_yml::from_str("a:\n  b:\n    c: 1").unwrap();
+        let b: Value = serde_yml::from_str("a:\n  b:\n    c: 2").unwrap();
         let diffs = compare_yaml(&a, &b, 1e-10, &[]);
         assert_eq!(diffs.len(), 1);
         assert!(diffs[0].contains("a.b.c"));
@@ -381,15 +381,15 @@ mod tests {
 
     #[test]
     fn tagged_values_compared() {
-        let a: Value = serde_yaml::from_str("!Foo\nx: 1").unwrap();
-        let b: Value = serde_yaml::from_str("!Foo\nx: 1").unwrap();
+        let a: Value = serde_yml::from_str("!Foo\nx: 1").unwrap();
+        let b: Value = serde_yml::from_str("!Foo\nx: 1").unwrap();
         assert!(compare_yaml(&a, &b, 1e-10, &[]).is_empty());
     }
 
     #[test]
     fn tagged_mismatch_reported() {
-        let a: Value = serde_yaml::from_str("!Foo\nx: 1").unwrap();
-        let b: Value = serde_yaml::from_str("!Bar\nx: 1").unwrap();
+        let a: Value = serde_yml::from_str("!Foo\nx: 1").unwrap();
+        let b: Value = serde_yml::from_str("!Bar\nx: 1").unwrap();
         let diffs = compare_yaml(&a, &b, 1e-10, &[]);
         assert_eq!(diffs.len(), 1);
         assert!(diffs[0].contains("tag mismatch"));

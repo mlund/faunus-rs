@@ -623,7 +623,7 @@ mod tests {
             name: peptide
             from_structure: {sequence: "nAGKc", k: 80.33, req: 3.8}
         "#;
-        let mut molecule: MoleculeKind = serde_yaml::from_str(yaml).unwrap();
+        let mut molecule: MoleculeKind = serde_yml::from_str(yaml).unwrap();
         molecule.expand_structure().unwrap();
 
         assert_eq!(molecule.atoms, ["NTR", "ALA", "GLY", "LYS", "CTR"]);
@@ -702,7 +702,7 @@ mod tests {
               - HW: [0.58, 0.76, 0.0]
               - HW: [-0.58, 0.76, 0.0]
         "#;
-        let mut molecule: MoleculeKind = serde_yaml::from_str(yaml).unwrap();
+        let mut molecule: MoleculeKind = serde_yml::from_str(yaml).unwrap();
         molecule.expand_structure().unwrap();
 
         assert_eq!(molecule.atoms, ["OW", "HW", "HW"]);

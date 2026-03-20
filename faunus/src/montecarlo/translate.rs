@@ -106,7 +106,7 @@ impl<T: Context> MoveProposal<T> for TranslateMolecule {
         })
     }
 
-    fn to_yaml(&self) -> Option<serde_yaml::Value> {
+    fn to_yaml(&self) -> Option<serde_yml::Value> {
         tagged_yaml("TranslateMolecule", self)
     }
 }
@@ -350,7 +350,7 @@ impl<T: Context> MoveProposal<T> for TranslateAtom {
         }
     }
 
-    fn to_yaml(&self) -> Option<serde_yaml::Value> {
+    fn to_yaml(&self) -> Option<serde_yml::Value> {
         tagged_yaml("TranslateAtom", self)
     }
 }
@@ -366,7 +366,7 @@ mod tests {
     #[test]
     fn test_translate_molecule_parse() {
         let string = "{ molecule: Water, dp: 0.5, weight: 0.7 }";
-        let translate: TranslateMolecule = serde_yaml::from_str(string).unwrap();
+        let translate: TranslateMolecule = serde_yml::from_str(string).unwrap();
 
         assert_eq!(translate.molecule_name, "Water");
         assert_eq!(translate.max_displacement, 0.5);
@@ -376,7 +376,7 @@ mod tests {
     #[test]
     fn test_translate_atom_parse() {
         let string = "{ atom: O, dp: 0.1, weight: 1.0, repeat: 4}";
-        let translate: TranslateAtom = serde_yaml::from_str(string).unwrap();
+        let translate: TranslateAtom = serde_yml::from_str(string).unwrap();
 
         assert_eq!(translate.molecule_name, None);
         assert_eq!(translate.atom_name.unwrap(), "O");

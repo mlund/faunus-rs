@@ -440,14 +440,14 @@ impl Tabulated6D {
         self.swap_stats.set((n, new_mean, new_m2));
     }
 
-    pub(crate) fn to_yaml(&self) -> serde_yaml::Value {
+    pub(crate) fn to_yaml(&self) -> serde_yml::Value {
         let (n, mean, m2) = self.swap_stats.get();
         let stddev = if n > 1 { (m2 / n as f64).sqrt() } else { 0.0 };
-        let mut map = serde_yaml::Mapping::new();
+        let mut map = serde_yml::Mapping::new();
         map.insert("boltzmann_swap_asymmetry_samples".into(), (n as u64).into());
         map.insert("boltzmann_swap_asymmetry_mean".into(), mean.into());
         map.insert("boltzmann_swap_asymmetry_stddev".into(), stddev.into());
-        serde_yaml::Value::Mapping(map)
+        serde_yml::Value::Mapping(map)
     }
 }
 

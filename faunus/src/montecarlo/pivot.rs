@@ -103,7 +103,7 @@ impl<T: Context> MoveProposal<T> for PivotMove {
         })
     }
 
-    fn to_yaml(&self) -> Option<serde_yaml::Value> {
+    fn to_yaml(&self) -> Option<serde_yml::Value> {
         tagged_yaml("PivotMove", self)
     }
 }
@@ -124,7 +124,7 @@ mod tests {
     #[test]
     fn yaml_parsing() {
         let yaml = "!PivotMove {molecule: Polymer, dp: 1.5, weight: 2.0}";
-        let pivot: PivotMove = serde_yaml::from_str(yaml).unwrap();
+        let pivot: PivotMove = serde_yml::from_str(yaml).unwrap();
         assert_eq!(pivot.molecule_name, "Polymer");
         assert_eq!(pivot.max_displacement, 1.5);
         assert_eq!(pivot.weight, 2.0);
@@ -135,6 +135,6 @@ mod tests {
     #[test]
     fn yaml_unknown_field_rejected() {
         let yaml = "!PivotMove {molecule: Polymer, dp: 1.5, weight: 2.0, unknown: 42}";
-        assert!(serde_yaml::from_str::<PivotMove>(yaml).is_err());
+        assert!(serde_yml::from_str::<PivotMove>(yaml).is_err());
     }
 }

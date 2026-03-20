@@ -23,11 +23,11 @@ use std::{cell::RefCell, path::Path, sync::Arc};
 pub fn get_medium(path: impl AsRef<Path>) -> anyhow::Result<interatomic::coulomb::Medium> {
     let file = std::fs::File::open(&path)
         .map_err(|err| anyhow::anyhow!("Could not open {:?}: {}", path.as_ref(), err))?;
-    serde_yaml::from_reader(file)
+    serde_yml::from_reader(file)
         .ok()
-        .and_then(|s: serde_yaml::Value| {
+        .and_then(|s: serde_yml::Value| {
             let val = s.get("system")?.get("medium")?;
-            serde_yaml::from_value(val.clone()).ok()
+            serde_yml::from_value(val.clone()).ok()
         })
         .ok_or_else(|| anyhow::anyhow!("Could not find `system/medium` in input file"))
 }

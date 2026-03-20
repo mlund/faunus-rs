@@ -336,30 +336,30 @@ impl Hamiltonian {
     /// Per-term information as a YAML mapping (term name → info).
     ///
     /// Only includes terms that provide information via `EnergyTerm::to_yaml()`.
-    pub fn info_to_yaml(&self) -> serde_yaml::Value {
-        let map: serde_yaml::Mapping = self
+    pub fn info_to_yaml(&self) -> serde_yml::Value {
+        let map: serde_yml::Mapping = self
             .energy_terms
             .iter()
             .filter_map(|term| {
                 let name = crate::Info::short_name(term)?;
                 let info = term.to_yaml()?;
-                Some((serde_yaml::Value::String(name.to_string()), info))
+                Some((serde_yml::Value::String(name.to_string()), info))
             })
             .collect();
-        serde_yaml::Value::Mapping(map)
+        serde_yml::Value::Mapping(map)
     }
 
     /// Per-term energy timing as a YAML-serializable map (term name → percentage of total).
     ///
     /// Reports both `energy()` and `update()` time per term.
-    pub fn timing_to_yaml(&self) -> serde_yaml::Value {
+    pub fn timing_to_yaml(&self) -> serde_yml::Value {
         let total: f64 = self
             .energy_timers
             .iter()
             .chain(self.update_timers.iter())
             .map(|t| t.get().as_secs_f64())
             .sum();
-        let map: serde_yaml::Mapping = self
+        let map: serde_yml::Mapping = self
             .energy_terms
             .iter()
             .zip(self.energy_timers.iter())
@@ -386,12 +386,12 @@ impl Hamiltonian {
                     format!("{combined}")
                 };
                 Some((
-                    serde_yaml::Value::String(name.to_string()),
-                    serde_yaml::Value::String(label),
+                    serde_yml::Value::String(name.to_string()),
+                    serde_yml::Value::String(label),
                 ))
             })
             .collect();
-        serde_yaml::Value::Mapping(map)
+        serde_yml::Value::Mapping(map)
     }
     /// Add energy terms that require a live Context (particles already placed).
     ///

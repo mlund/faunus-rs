@@ -19,7 +19,7 @@ use anyhow::Result;
 use core::fmt::Debug;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
-use serde_yaml::Value;
+use serde_yml::Value;
 use std::path::Path;
 
 mod collective_variable;
@@ -131,11 +131,11 @@ pub type AnalysisCollection<T> = Vec<Box<dyn Analyze<T> + Send>>;
 pub fn from_file<T: Context>(path: &Path, context: &T) -> Result<AnalysisCollection<T>> {
     let yaml = std::fs::read_to_string(path)
         .map_err(|err| anyhow::anyhow!("Error reading file {:?}: {}", &path, err))?;
-    let value = serde_yaml::from_str::<Value>(&yaml)?
+    let value = serde_yml::from_str::<Value>(&yaml)?
         .get("analysis")
         .ok_or_else(|| anyhow::anyhow!("No 'analysis' key found in input yaml file."))?
         .clone();
-    serde_yaml::from_value::<Vec<AnalysisBuilder>>(value)?
+    serde_yml::from_value::<Vec<AnalysisBuilder>>(value)?
         .into_iter()
         .map(|builder| builder.build(context))
         .collect()
@@ -171,7 +171,7 @@ pub trait Analyze<T: Context>: Debug + Info {
     }
 
     /// Return a YAML representation of the analysis results, if any.
-    fn to_yaml(&self) -> Option<serde_yaml::Value> {
+    fn to_yaml(&self) -> Option<serde_yml::Value> {
         None
     }
 
@@ -180,15 +180,15 @@ pub trait Analyze<T: Context>: Debug + Info {
 }
 
 /// Collect YAML results from all analyses, keyed by short name.
-pub fn analyses_to_yaml<T: Context>(analyses: &AnalysisCollection<T>) -> Vec<serde_yaml::Value> {
+pub fn analyses_to_yaml<T: Context>(analyses: &AnalysisCollection<T>) -> Vec<serde_yml::Value> {
     analyses
         .iter()
         .filter_map(|a| {
             let yaml = a.to_yaml()?;
             let name = a.short_name().unwrap_or("unknown");
-            let mut map = serde_yaml::Mapping::new();
-            map.insert(serde_yaml::Value::String(name.to_string()), yaml);
-            Some(serde_yaml::Value::Mapping(map))
+            let mut map = serde_yml::Mapping::new();
+            map.insert(serde_yml::Value::String(name.to_string()), yaml);
+            Some(serde_yml::Value::Mapping(map))
         })
         .collect()
 }

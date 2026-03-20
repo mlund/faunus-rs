@@ -712,7 +712,7 @@ impl<T: Context> MoveProposal<T> for SpeciationMove {
         }
     }
 
-    fn to_yaml(&self) -> Option<serde_yaml::Value> {
+    fn to_yaml(&self) -> Option<serde_yml::Value> {
         tagged_yaml("SpeciationMove", self)
     }
 }
@@ -735,7 +735,7 @@ mod tests {
     }
 
     fn make_move(reaction: &str, k: f64) -> SpeciationMove {
-        serde_yaml::from_str(&format!(
+        serde_yml::from_str(&format!(
             "temperature: 298.15\nreactions:\n  - [\"{reaction}\", !K {k}]"
         ))
         .unwrap()
@@ -745,7 +745,7 @@ mod tests {
 
     #[test]
     fn reaction_config_yaml_k() {
-        let config: ReactionConfig = serde_yaml::from_str(r#"["= NaCl", !K 100.0]"#).unwrap();
+        let config: ReactionConfig = serde_yml::from_str(r#"["= NaCl", !K 100.0]"#).unwrap();
         assert_eq!(config.0, "= NaCl");
         assert!((config.1.to_k(1.0) - 100.0).abs() < 1e-10);
     }
@@ -753,25 +753,25 @@ mod tests {
     #[test]
     fn reaction_config_yaml_pk() {
         let config: ReactionConfig =
-            serde_yaml::from_str(r#"["⚛HA = ⚛A + ~H+", !pK 4.0]"#).unwrap();
+            serde_yml::from_str(r#"["⚛HA = ⚛A + ~H+", !pK 4.0]"#).unwrap();
         assert!((config.1.to_k(1.0) - 1e-4).abs() < 1e-14);
     }
 
     #[test]
     fn reaction_config_yaml_lnk() {
-        let config: ReactionConfig = serde_yaml::from_str(r#"["= M", !lnK -2.302585]"#).unwrap();
+        let config: ReactionConfig = serde_yml::from_str(r#"["= M", !lnK -2.302585]"#).unwrap();
         assert!((config.1.to_k(1.0) - 0.1).abs() < 1e-5);
     }
 
     #[test]
     fn reaction_config_yaml_dg() {
         // dG = 0 => K = 1; dG = -kT·ln(10) => K = 10
-        let config: ReactionConfig = serde_yaml::from_str(r#"["= Na+ + Cl-", !dG 0.0]"#).unwrap();
+        let config: ReactionConfig = serde_yml::from_str(r#"["= Na+ + Cl-", !dG 0.0]"#).unwrap();
         assert!((config.1.to_k(2.479) - 1.0).abs() < 1e-10);
 
         let rt = 2.479;
         let config: ReactionConfig =
-            serde_yaml::from_str(&format!(r#"["= M", !dG {}]"#, -rt * 10.0_f64.ln())).unwrap();
+            serde_yml::from_str(&format!(r#"["= M", !dG {}]"#, -rt * 10.0_f64.ln())).unwrap();
         assert!((config.1.to_k(rt) - 10.0).abs() < 1e-10);
     }
 
@@ -779,7 +779,7 @@ mod tests {
     fn speciation_move_yaml() {
         let yaml =
             "temperature: 298.15\nreactions:\n  - [\"= M\", !K 10.0]\n  - [\"⚛A = ⚛B\", !pK 0.0]";
-        let mv: SpeciationMove = serde_yaml::from_str(yaml).unwrap();
+        let mv: SpeciationMove = serde_yml::from_str(yaml).unwrap();
         assert_eq!(mv.temperature, 298.15);
         assert_eq!(mv.reactions.len(), 2);
     }
@@ -787,7 +787,7 @@ mod tests {
     #[test]
     fn unknown_field_rejected() {
         let yaml = r#"{ temperature: 300.0, reactions: [], bogus: 42 }"#;
-        assert!(serde_yaml::from_str::<SpeciationMove>(yaml).is_err());
+        assert!(serde_yml::from_str::<SpeciationMove>(yaml).is_err());
     }
 
     // --- Finalize / reaction resolution ---
@@ -1001,7 +1001,7 @@ mod tests {
     fn propose_move_returns_none_when_empty() {
         let context = make_context();
         let mut mv: SpeciationMove =
-            serde_yaml::from_str("temperature: 298.15\nreactions: []").unwrap();
+            serde_yml::from_str("temperature: 298.15\nreactions: []").unwrap();
         mv.finalize(&context).unwrap();
 
         let mut rng = rand::thread_rng();

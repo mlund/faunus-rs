@@ -75,15 +75,15 @@ pub trait MoveProposal<T: Context>: Debug + Info {
     }
 
     /// Serialize the move-specific fields to a tagged YAML value.
-    fn to_yaml(&self) -> Option<serde_yaml::Value>;
+    fn to_yaml(&self) -> Option<serde_yml::Value>;
 }
 
 /// Wrap a serializable value in a YAML tag.
-pub(crate) fn tagged_yaml(tag: &str, value: &impl Serialize) -> Option<serde_yaml::Value> {
-    let value = serde_yaml::to_value(value).ok()?;
-    Some(serde_yaml::Value::Tagged(Box::new(
-        serde_yaml::value::TaggedValue {
-            tag: serde_yaml::value::Tag::new(tag),
+pub(crate) fn tagged_yaml(tag: &str, value: &impl Serialize) -> Option<serde_yml::Value> {
+    let value = serde_yml::to_value(value).ok()?;
+    Some(serde_yml::Value::Tagged(Box::new(
+        serde_yml::value::TaggedValue {
+            tag: serde_yml::value::Tag::new(tag),
             value,
         },
     )))

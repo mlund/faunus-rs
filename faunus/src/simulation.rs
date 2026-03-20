@@ -158,11 +158,11 @@ pub(crate) fn write_yaml<T: serde::Serialize>(
         Some(key) => {
             let mut wrapper = std::collections::BTreeMap::new();
             wrapper.insert(key.to_string(), data);
-            let yaml = serde_yaml::to_string(&wrapper)?;
+            let yaml = serde_yml::to_string(&wrapper)?;
             output.write_all(yaml.as_bytes())?;
         }
         None => {
-            let yaml = serde_yaml::to_string(data)?;
+            let yaml = serde_yml::to_string(data)?;
             output.write_all(yaml.as_bytes())?;
         }
     }

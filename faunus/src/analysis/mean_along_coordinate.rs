@@ -155,36 +155,36 @@ impl<T: Context> Analyze<T> for MeanAlongCoordinate {
         self.write_output()
     }
 
-    fn to_yaml(&self) -> Option<serde_yaml::Value> {
+    fn to_yaml(&self) -> Option<serde_yml::Value> {
         if self.bins.is_empty() {
             return None;
         }
-        let mut map = serde_yaml::Mapping::new();
+        let mut map = serde_yml::Mapping::new();
         map.insert(
             "property".into(),
-            serde_yaml::Value::String(self.cv.axis().name.clone()),
+            serde_yml::Value::String(self.cv.axis().name.clone()),
         );
         map.insert(
             "mean_property".into(),
-            serde_yaml::to_value(self.cv_mean.mean()).ok()?,
+            serde_yml::to_value(self.cv_mean.mean()).ok()?,
         );
         map.insert(
             "coordinate".into(),
-            serde_yaml::Value::String(self.coordinate.axis().name.clone()),
+            serde_yml::Value::String(self.coordinate.axis().name.clone()),
         );
         map.insert(
             "mean_coordinate".into(),
-            serde_yaml::to_value(self.coord_mean.mean()).ok()?,
+            serde_yml::to_value(self.coord_mean.mean()).ok()?,
         );
         map.insert(
             "num_samples".into(),
-            serde_yaml::Value::Number((self.cv_mean.len() as usize).into()),
+            serde_yml::Value::Number((self.cv_mean.len() as usize).into()),
         );
         map.insert(
             "num_bins".into(),
-            serde_yaml::Value::Number(self.bins.len().into()),
+            serde_yml::Value::Number(self.bins.len().into()),
         );
-        Some(serde_yaml::Value::Mapping(map))
+        Some(serde_yml::Value::Mapping(map))
     }
 }
 
@@ -203,7 +203,7 @@ coordinate:
 file: test.dat
 frequency: !Every 100
 "#;
-        let builder: MeanAlongCoordinateBuilder = serde_yaml::from_str(yaml).unwrap();
+        let builder: MeanAlongCoordinateBuilder = serde_yml::from_str(yaml).unwrap();
         assert_eq!(builder.coordinate.resolution, Some(0.5));
         assert_eq!(builder.file.to_str().unwrap(), "test.dat");
     }
@@ -219,7 +219,7 @@ frequency: !Every 100
   file: test.dat
   frequency: !Every 100
 "#;
-        let builders: Vec<AnalysisBuilder> = serde_yaml::from_str(yaml).unwrap();
+        let builders: Vec<AnalysisBuilder> = serde_yml::from_str(yaml).unwrap();
         assert!(matches!(
             builders[0],
             AnalysisBuilder::MeanAlongCoordinate(_)
@@ -272,7 +272,7 @@ coordinate:
 file: /tmp/faunus_test_mean_along.dat
 frequency: !Every 1
 "#;
-        let builder: MeanAlongCoordinateBuilder = serde_yaml::from_str(yaml).unwrap();
+        let builder: MeanAlongCoordinateBuilder = serde_yml::from_str(yaml).unwrap();
         let mut analysis = builder.build(&ctx).unwrap();
 
         assert_eq!(Analyze::<Backend>::num_samples(&analysis), 0);
@@ -297,7 +297,7 @@ coordinate:
 file: /tmp/faunus_test_mean_along_fail.dat
 frequency: !Every 1
 "#;
-        let builder: MeanAlongCoordinateBuilder = serde_yaml::from_str(yaml).unwrap();
+        let builder: MeanAlongCoordinateBuilder = serde_yml::from_str(yaml).unwrap();
         assert!(builder.build(&ctx).is_err());
     }
 }

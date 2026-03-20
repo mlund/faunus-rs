@@ -47,11 +47,11 @@ fn test_nonbonded_matrix_new() {
         .pairpot_builder
         .unwrap();
     let medium: Option<interatomic::coulomb::Medium> =
-        serde_yaml::from_reader(std::fs::File::open(file).unwrap())
+        serde_yml::from_reader(std::fs::File::open(file).unwrap())
             .ok()
-            .and_then(|s: serde_yaml::Value| {
+            .and_then(|s: serde_yml::Value| {
                 let medium = s.get("system")?.get("medium")?;
-                serde_yaml::from_value(medium.clone()).ok()
+                serde_yml::from_value(medium.clone()).ok()
             });
 
     let nonbonded = NonbondedMatrix::new(&pairpot_builder, &topology, medium, false).unwrap();

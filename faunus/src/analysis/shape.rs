@@ -252,51 +252,51 @@ impl<T: Context> Analyze<T> for ShapeAnalysis {
         self.num_samples
     }
 
-    fn to_yaml(&self) -> Option<serde_yaml::Value> {
+    fn to_yaml(&self) -> Option<serde_yml::Value> {
         if self.num_samples == 0 {
             return None;
         }
-        let mut map = serde_yaml::Mapping::new();
+        let mut map = serde_yml::Mapping::new();
         let rg2 = self.gyration_radius_squared.mean();
         let re2 = self.end_to_end_squared.mean();
 
-        map.insert("Rg".into(), serde_yaml::to_value(rg2.sqrt()).ok()?);
-        map.insert("Re".into(), serde_yaml::to_value(re2.sqrt()).ok()?);
-        map.insert("Re2/Rg2".into(), serde_yaml::to_value(re2 / rg2).ok()?);
+        map.insert("Rg".into(), serde_yml::to_value(rg2.sqrt()).ok()?);
+        map.insert("Re".into(), serde_yml::to_value(re2.sqrt()).ok()?);
+        map.insert("Re2/Rg2".into(), serde_yml::to_value(re2 / rg2).ok()?);
         map.insert(
             "asphericity".into(),
-            serde_yaml::to_value(self.asphericity.mean()).ok()?,
+            serde_yml::to_value(self.asphericity.mean()).ok()?,
         );
         map.insert(
             "acylindricity".into(),
-            serde_yaml::to_value(self.acylindricity.mean()).ok()?,
+            serde_yml::to_value(self.acylindricity.mean()).ok()?,
         );
         map.insert(
             "relative_shape_anisotropy".into(),
-            serde_yaml::to_value(self.relative_shape_anisotropy.mean()).ok()?,
+            serde_yml::to_value(self.relative_shape_anisotropy.mean()).ok()?,
         );
         map.insert(
             "prolateness".into(),
-            serde_yaml::to_value(self.prolateness.mean()).ok()?,
+            serde_yml::to_value(self.prolateness.mean()).ok()?,
         );
         map.insert(
             "Cl".into(),
-            serde_yaml::to_value(self.westin_cl.mean()).ok()?,
+            serde_yml::to_value(self.westin_cl.mean()).ok()?,
         );
         map.insert(
             "Cp".into(),
-            serde_yaml::to_value(self.westin_cp.mean()).ok()?,
+            serde_yml::to_value(self.westin_cp.mean()).ok()?,
         );
         map.insert(
             "Cs".into(),
-            serde_yaml::to_value(self.westin_cs.mean()).ok()?,
+            serde_yml::to_value(self.westin_cs.mean()).ok()?,
         );
         map.insert(
             "num_samples".into(),
-            serde_yaml::Value::Number(self.num_samples.into()),
+            serde_yml::Value::Number(self.num_samples.into()),
         );
 
-        Some(serde_yaml::Value::Mapping(map))
+        Some(serde_yml::Value::Mapping(map))
     }
 }
 
@@ -313,7 +313,7 @@ mod tests {
 selection: "molecule polymer"
 frequency: !Every 100
 "#;
-        let builder: ShapeAnalysisBuilder = serde_yaml::from_str(yaml).unwrap();
+        let builder: ShapeAnalysisBuilder = serde_yml::from_str(yaml).unwrap();
         assert!(builder.file.is_none());
         assert!(matches!(builder.frequency, Frequency::Every(100)));
     }
@@ -325,7 +325,7 @@ selection: "molecule polymer"
 file: shape.dat.gz
 frequency: !Every 50
 "#;
-        let builder: ShapeAnalysisBuilder = serde_yaml::from_str(yaml).unwrap();
+        let builder: ShapeAnalysisBuilder = serde_yml::from_str(yaml).unwrap();
         assert_eq!(
             builder.file.as_ref().unwrap().to_str().unwrap(),
             "shape.dat.gz"
@@ -339,7 +339,7 @@ frequency: !Every 50
   selection: "molecule polymer"
   frequency: !Every 100
 "#;
-        let builders: Vec<AnalysisBuilder> = serde_yaml::from_str(yaml).unwrap();
+        let builders: Vec<AnalysisBuilder> = serde_yml::from_str(yaml).unwrap();
         assert!(matches!(builders[0], AnalysisBuilder::PolymerShape(_)));
     }
 

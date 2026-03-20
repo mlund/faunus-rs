@@ -87,7 +87,7 @@ impl Topology {
     pub fn from_file_partial(path: impl AsRef<Path>) -> anyhow::Result<Self> {
         let yaml = std::fs::read_to_string(&path)
             .map_err(|err| anyhow::anyhow!("Error reading file {:?}: {}", path.as_ref(), err))?;
-        let mut topology: Self = serde_yaml::from_str(&yaml)?;
+        let mut topology: Self = serde_yml::from_str(&yaml)?;
         for file in topology.include.iter_mut() {
             file.finalize(&path);
         }
@@ -101,7 +101,7 @@ impl Topology {
     pub fn from_file(path: impl AsRef<Path>) -> anyhow::Result<Self> {
         let yaml = std::fs::read_to_string(&path)
             .map_err(|err| anyhow::anyhow!("Error loading file {:?}: {}", &path.as_ref(), err))?;
-        let mut topology: Self = serde_yaml::from_str(&yaml)?;
+        let mut topology: Self = serde_yml::from_str(&yaml)?;
 
         if topology.system.is_empty() {
             anyhow::bail!("missing or empty field `system`");

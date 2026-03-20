@@ -51,7 +51,7 @@ pub(crate) trait GibbsMove<T: Context>: Debug + Send {
         rng: &mut StdRng,
     ) -> Result<()>;
 
-    fn to_yaml(&self) -> Option<serde_yaml::Value>;
+    fn to_yaml(&self) -> Option<serde_yml::Value>;
 }
 
 // ---------------------------------------------------------------------------
@@ -172,13 +172,13 @@ impl<T: Context> GibbsMove<T> for GibbsVolumeExchange {
         )
     }
 
-    fn to_yaml(&self) -> Option<serde_yaml::Value> {
-        let mut map = serde_yaml::Mapping::new();
+    fn to_yaml(&self) -> Option<serde_yml::Value> {
+        let mut map = serde_yml::Mapping::new();
         map.insert("dV".into(), self.dv.into());
-        map.insert("method".into(), serde_yaml::to_value(self.method).ok()?);
+        map.insert("method".into(), serde_yml::to_value(self.method).ok()?);
         map.insert(
             "statistics".into(),
-            serde_yaml::to_value(&self.statistics).ok()?,
+            serde_yml::to_value(&self.statistics).ok()?,
         );
         tagged_yaml("GibbsVolumeExchange", &map)
     }
@@ -401,12 +401,12 @@ impl<T: Context> GibbsMove<T> for GibbsParticleTransfer {
         }
     }
 
-    fn to_yaml(&self) -> Option<serde_yaml::Value> {
-        let mut map = serde_yaml::Mapping::new();
+    fn to_yaml(&self) -> Option<serde_yml::Value> {
+        let mut map = serde_yml::Mapping::new();
         map.insert("molecule".into(), self.molecule_name.clone().into());
         map.insert(
             "statistics".into(),
-            serde_yaml::to_value(&self.statistics).ok()?,
+            serde_yml::to_value(&self.statistics).ok()?,
         );
         tagged_yaml("GibbsParticleTransfer", &map)
     }
@@ -546,7 +546,7 @@ impl<T: Context + Send + 'static> GibbsEnsemble<T> {
     }
 
     /// Serialize inter-box move results to YAML.
-    pub fn inter_moves_to_yaml(&self) -> Vec<serde_yaml::Value> {
+    pub fn inter_moves_to_yaml(&self) -> Vec<serde_yml::Value> {
         self.inter_moves
             .iter()
             .filter_map(|m| m.to_yaml())
@@ -603,14 +603,14 @@ mod tests {
     #[test]
     fn gibbs_move_builder_volume_yaml_default() {
         let yaml = "!GibbsVolumeExchange { dV: 10.0 }";
-        let builder: GibbsMoveBuilder = serde_yaml::from_str(yaml).unwrap();
+        let builder: GibbsMoveBuilder = serde_yml::from_str(yaml).unwrap();
         assert!(matches!(builder, GibbsMoveBuilder::GibbsVolumeExchange { dv, .. } if dv == 10.0));
     }
 
     #[test]
     fn gibbs_move_builder_volume_yaml_linear() {
         let yaml = "!GibbsVolumeExchange { dV: 10.0, method: Linear }";
-        let builder: GibbsMoveBuilder = serde_yaml::from_str(yaml).unwrap();
+        let builder: GibbsMoveBuilder = serde_yml::from_str(yaml).unwrap();
         assert!(
             matches!(builder, GibbsMoveBuilder::GibbsVolumeExchange { dv, method: VolumeDisplacementMethod::Linear } if dv == 10.0)
         );
@@ -619,7 +619,7 @@ mod tests {
     #[test]
     fn gibbs_move_builder_transfer_yaml() {
         let yaml = "!GibbsParticleTransfer { molecule: LJ }";
-        let builder: GibbsMoveBuilder = serde_yaml::from_str(yaml).unwrap();
+        let builder: GibbsMoveBuilder = serde_yml::from_str(yaml).unwrap();
         assert!(
             matches!(builder, GibbsMoveBuilder::GibbsParticleTransfer { molecule } if molecule == "LJ")
         );
@@ -633,7 +633,7 @@ moves:
   - !GibbsVolumeExchange { dV: 10 }
   - !GibbsParticleTransfer { molecule: LJ }
 ";
-        let config: GibbsConfig = serde_yaml::from_str(yaml).unwrap();
+        let config: GibbsConfig = serde_yml::from_str(yaml).unwrap();
         assert_eq!(config.intra_steps, 100);
         assert_eq!(config.moves.len(), 2);
     }

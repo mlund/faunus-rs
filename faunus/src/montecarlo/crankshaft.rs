@@ -120,7 +120,7 @@ impl<T: Context> MoveProposal<T> for CrankshaftMove {
         })
     }
 
-    fn to_yaml(&self) -> Option<serde_yaml::Value> {
+    fn to_yaml(&self) -> Option<serde_yml::Value> {
         tagged_yaml("CrankshaftMove", self)
     }
 }
@@ -141,7 +141,7 @@ mod tests {
     #[test]
     fn yaml_parsing() {
         let yaml = "!CrankshaftMove {molecule: Peptide, dp: 0.5, weight: 1.0}";
-        let m: CrankshaftMove = serde_yaml::from_str(yaml).unwrap();
+        let m: CrankshaftMove = serde_yml::from_str(yaml).unwrap();
         assert_eq!(m.molecule_name, "Peptide");
         assert_eq!(m.max_displacement, 0.5);
         assert_eq!(m.weight, 1.0);
@@ -153,6 +153,6 @@ mod tests {
     #[test]
     fn yaml_unknown_field_rejected() {
         let yaml = "!CrankshaftMove {molecule: Peptide, dp: 0.5, weight: 1.0, unknown: 42}";
-        assert!(serde_yaml::from_str::<CrankshaftMove>(yaml).is_err());
+        assert!(serde_yml::from_str::<CrankshaftMove>(yaml).is_err());
     }
 }

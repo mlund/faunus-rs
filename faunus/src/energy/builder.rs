@@ -685,7 +685,7 @@ impl HamiltonianBuilder {
     pub(crate) fn from_file(path: impl AsRef<Path>) -> anyhow::Result<Self> {
         let yaml = std::fs::read_to_string(&path)
             .map_err(|err| anyhow::anyhow!("Error reading file {:?}: {}", &path.as_ref(), err))?;
-        let full: serde_yaml::Value = serde_yaml::from_str(&yaml)?;
+        let full: serde_yml::Value = serde_yml::from_str(&yaml)?;
 
         let mut current = &full;
         for key in ["system", "energy"] {
@@ -696,7 +696,7 @@ impl HamiltonianBuilder {
         }
 
         let mut builder: Self =
-            serde_yaml::from_value(current.clone()).map_err(anyhow::Error::msg)?;
+            serde_yml::from_value(current.clone()).map_err(anyhow::Error::msg)?;
 
         // Merge nonbonded from included files (input overrides)
         if let Some(includes) = full.get("include").and_then(|v| v.as_sequence()) {
@@ -707,9 +707,9 @@ impl HamiltonianBuilder {
                     let inc_yaml = std::fs::read_to_string(&inc_path).map_err(|err| {
                         anyhow::anyhow!("Error reading include {:?}: {}", &inc_path, err)
                     })?;
-                    let inc_full: serde_yaml::Value = serde_yaml::from_str(&inc_yaml)?;
+                    let inc_full: serde_yml::Value = serde_yml::from_str(&inc_yaml)?;
                     if let Some(energy_val) = inc_full.get("energy") {
-                        let inc_builder: Self = serde_yaml::from_value(energy_val.clone())
+                        let inc_builder: Self = serde_yml::from_value(energy_val.clone())
                             .map_err(anyhow::Error::msg)?;
                         if let Some(inc_pairpot) = inc_builder.pairpot_builder {
                             builder

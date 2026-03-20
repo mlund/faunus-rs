@@ -212,12 +212,12 @@ impl CustomExternal {
     }
 
     /// Report custom external parameters as YAML.
-    pub(super) fn to_yaml(&self) -> serde_yaml::Value {
-        let mut map = serde_yaml::Mapping::new();
+    pub(super) fn to_yaml(&self) -> serde_yml::Value {
+        let mut map = serde_yml::Mapping::new();
         map.insert("function".into(), self.function.clone().into());
         map.insert("com".into(), self.com.into());
         map.insert("selection".into(), self.selection.to_string().into());
-        serde_yaml::Value::Mapping(map)
+        serde_yml::Value::Mapping(map)
     }
 }
 
@@ -239,7 +239,7 @@ function: "0.5 * k * (x^2 + y^2 + z^2)"
 constants:
   k: 100.0
 "#;
-        let builder: CustomExternalBuilder = serde_yaml::from_str(yaml).unwrap();
+        let builder: CustomExternalBuilder = serde_yml::from_str(yaml).unwrap();
         assert!(builder.build().is_ok());
         assert!(!builder.com);
     }
@@ -251,7 +251,7 @@ selection: "all"
 function: "q * 0.1 * z"
 com: true
 "#;
-        let builder: CustomExternalBuilder = serde_yaml::from_str(yaml).unwrap();
+        let builder: CustomExternalBuilder = serde_yml::from_str(yaml).unwrap();
         let ext = builder.build().unwrap();
         assert!(ext.com);
     }
@@ -264,7 +264,7 @@ function: "a * x + b"
 constants:
   a: 1.0
 "#;
-        let builder: CustomExternalBuilder = serde_yaml::from_str(yaml).unwrap();
+        let builder: CustomExternalBuilder = serde_yml::from_str(yaml).unwrap();
         let err = builder.build().unwrap_err();
         assert!(err.to_string().contains("unresolved variables"));
         assert!(err.to_string().contains("b"));
@@ -287,7 +287,7 @@ constants:
 selection: "all"
 function: "0.5 * (x^2 + y^2 + z^2)"
 "#;
-        let builder: CustomExternalBuilder = serde_yaml::from_str(yaml).unwrap();
+        let builder: CustomExternalBuilder = serde_yml::from_str(yaml).unwrap();
         let ext = builder.build().unwrap();
         let energy = ext.eval_at(0.0, 1.0, 2.0, 3.0);
         assert!((energy - 7.0).abs() < 1e-10); // 0.5 * (1 + 4 + 9) = 7
@@ -299,7 +299,7 @@ function: "0.5 * (x^2 + y^2 + z^2)"
 selection: "all"
 function: "q * z"
 "#;
-        let builder: CustomExternalBuilder = serde_yaml::from_str(yaml).unwrap();
+        let builder: CustomExternalBuilder = serde_yml::from_str(yaml).unwrap();
         let ext = builder.build().unwrap();
         let energy = ext.eval_at(2.0, 0.0, 0.0, 3.0);
         assert!((energy - 6.0).abs() < 1e-10); // 2.0 * 3.0 = 6
@@ -314,7 +314,7 @@ function: "q * z"
   function: "q * z"
   com: true
 "#;
-        let builders: Vec<CustomExternalBuilder> = serde_yaml::from_str(yaml).unwrap();
+        let builders: Vec<CustomExternalBuilder> = serde_yml::from_str(yaml).unwrap();
         assert_eq!(builders.len(), 2);
         assert!(!builders[0].com);
         assert!(builders[1].com);
@@ -344,7 +344,7 @@ mod integration_tests {
 selection: "all"
 function: "0 * x"
 "#;
-        let builder: CustomExternalBuilder = serde_yaml::from_str(yaml).unwrap();
+        let builder: CustomExternalBuilder = serde_yml::from_str(yaml).unwrap();
         let ext = builder.build().unwrap();
         let energy = ext.energy(&ctx, &Change::Everything);
         assert!((energy).abs() < 1e-10);
@@ -357,7 +357,7 @@ function: "0 * x"
 selection: "all"
 function: "0.5 * (x^2 + y^2 + z^2)"
 "#;
-        let builder: CustomExternalBuilder = serde_yaml::from_str(yaml).unwrap();
+        let builder: CustomExternalBuilder = serde_yml::from_str(yaml).unwrap();
         let ext = builder.build().unwrap();
         let energy = ext.energy(&ctx, &Change::Everything);
         // With particles at various positions, energy should be > 0
@@ -371,7 +371,7 @@ function: "0.5 * (x^2 + y^2 + z^2)"
 selection: "all"
 function: "100 * (x^2 + y^2 + z^2)"
 "#;
-        let builder: CustomExternalBuilder = serde_yaml::from_str(yaml).unwrap();
+        let builder: CustomExternalBuilder = serde_yml::from_str(yaml).unwrap();
         let ext = builder.build().unwrap();
         assert_eq!(ext.energy(&ctx, &Change::None), 0.0);
     }
@@ -383,7 +383,7 @@ function: "100 * (x^2 + y^2 + z^2)"
 selection: "all"
 function: "0.5 * (x^2 + y^2 + z^2)"
 "#;
-        let builder: CustomExternalBuilder = serde_yaml::from_str(yaml).unwrap();
+        let builder: CustomExternalBuilder = serde_yml::from_str(yaml).unwrap();
         let ext = builder.build().unwrap();
 
         // Energy for single group change should equal energy_for_group
@@ -401,7 +401,7 @@ selection: "all"
 function: "x^2 + y^2 + z^2"
 com: true
 "#;
-        let builder: CustomExternalBuilder = serde_yaml::from_str(yaml).unwrap();
+        let builder: CustomExternalBuilder = serde_yml::from_str(yaml).unwrap();
         let ext = builder.build().unwrap();
         let energy = ext.energy(&ctx, &Change::Everything);
         // With com mode, should get energy from mass centers

@@ -270,20 +270,20 @@ impl<T: Context> Analyze<T> for RadialDistribution {
         self.write_gr()
     }
 
-    fn to_yaml(&self) -> Option<serde_yaml::Value> {
+    fn to_yaml(&self) -> Option<serde_yml::Value> {
         if self.num_samples == 0 {
             return None;
         }
-        let mut map = serde_yaml::Mapping::new();
+        let mut map = serde_yml::Mapping::new();
         map.insert(
             "num_samples".into(),
-            serde_yaml::Value::Number(self.num_samples.into()),
+            serde_yml::Value::Number(self.num_samples.into()),
         );
         map.insert(
             "num_bins".into(),
-            serde_yaml::Value::Number(self.histogram.num_bins().into()),
+            serde_yml::Value::Number(self.histogram.num_bins().into()),
         );
-        Some(serde_yaml::Value::Mapping(map))
+        Some(serde_yml::Value::Mapping(map))
     }
 }
 
@@ -302,7 +302,7 @@ file: rdf.dat
 dr: 0.1
 frequency: !Every 100
 "#;
-        let builder: RadialDistributionBuilder = serde_yaml::from_str(yaml).unwrap();
+        let builder: RadialDistributionBuilder = serde_yml::from_str(yaml).unwrap();
         assert!(!builder.use_com);
         assert!(builder.max_r.is_none());
         assert!(builder.exclude_intramolecular.is_none());
@@ -319,7 +319,7 @@ dr: 0.5
 max_r: 30.0
 frequency: !Every 50
 "#;
-        let builder: RadialDistributionBuilder = serde_yaml::from_str(yaml).unwrap();
+        let builder: RadialDistributionBuilder = serde_yml::from_str(yaml).unwrap();
         assert!(builder.use_com);
         assert_relative_eq!(builder.max_r.unwrap(), 30.0);
     }
@@ -333,7 +333,7 @@ frequency: !Every 50
   dr: 0.1
   frequency: !Every 100
 "#;
-        let builders: Vec<AnalysisBuilder> = serde_yaml::from_str(yaml).unwrap();
+        let builders: Vec<AnalysisBuilder> = serde_yml::from_str(yaml).unwrap();
         assert!(matches!(
             builders[0],
             AnalysisBuilder::RadialDistribution(_)

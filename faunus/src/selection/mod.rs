@@ -209,15 +209,15 @@ mod tests {
 
     #[test]
     fn serde_roundtrip() {
-        let yaml = serde_yaml::to_string(&Selection::parse("molecule water").unwrap()).unwrap();
+        let yaml = serde_yml::to_string(&Selection::parse("molecule water").unwrap()).unwrap();
         assert_eq!(yaml.trim(), "molecule water");
-        let sel: Selection = serde_yaml::from_str(&yaml).unwrap();
+        let sel: Selection = serde_yml::from_str(&yaml).unwrap();
         assert_eq!(sel.source(), "molecule water");
     }
 
     #[test]
     fn serde_invalid_input() {
-        let result: Result<Selection, _> = serde_yaml::from_str("''");
+        let result: Result<Selection, _> = serde_yml::from_str("''");
         assert!(result.is_err());
     }
 }

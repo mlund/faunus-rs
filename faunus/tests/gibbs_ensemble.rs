@@ -13,10 +13,10 @@ const RHO_GAS: f64 = 0.148;
 const RHO_LIQUID: f64 = 0.526;
 
 /// Extract cell volume from per-box output YAML (!Cuboid [Lx, Ly, Lz]).
-fn cell_volume(yaml: &serde_yaml::Value) -> f64 {
+fn cell_volume(yaml: &serde_yml::Value) -> f64 {
     let cell = &yaml["cell"];
     let dims = match cell {
-        serde_yaml::Value::Tagged(t) => &t.value,
+        serde_yml::Value::Tagged(t) => &t.value,
         other => other,
     };
     dims.as_sequence()
@@ -70,11 +70,11 @@ fn run_gibbs_test(test_dir: &Path, atomic: bool) {
     common::run_faunus(&input, &state, &output);
 
     // --- per-box output files ---
-    let box0_yaml: serde_yaml::Value = serde_yaml::from_str(
+    let box0_yaml: serde_yml::Value = serde_yml::from_str(
         &std::fs::read_to_string(tmp.path().join("box0_output.yaml")).expect("read box0"),
     )
     .expect("parse box0");
-    let box1_yaml: serde_yaml::Value = serde_yaml::from_str(
+    let box1_yaml: serde_yml::Value = serde_yml::from_str(
         &std::fs::read_to_string(tmp.path().join("box1_output.yaml")).expect("read box1"),
     )
     .expect("parse box1");

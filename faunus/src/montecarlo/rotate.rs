@@ -64,7 +64,7 @@ impl<T: Context> MoveProposal<T> for RotateMolecule {
         })
     }
 
-    fn to_yaml(&self) -> Option<serde_yaml::Value> {
+    fn to_yaml(&self) -> Option<serde_yml::Value> {
         tagged_yaml("RotateMolecule", self)
     }
 }

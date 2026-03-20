@@ -445,11 +445,11 @@ fn run_window(
 /// Parse the `umbrella:` section from a YAML input file.
 fn parse_config(input: &Path) -> Result<UmbrellaConfig> {
     let yaml = std::fs::read_to_string(input)?;
-    let value: serde_yaml::Value = serde_yaml::from_str(&yaml)?;
+    let value: serde_yml::Value = serde_yml::from_str(&yaml)?;
     let umbrella_value = value
         .get("umbrella")
         .ok_or_else(|| anyhow::anyhow!("Missing `umbrella:` section in input file"))?;
-    let config: UmbrellaConfig = serde_yaml::from_value(umbrella_value.clone())?;
+    let config: UmbrellaConfig = serde_yml::from_value(umbrella_value.clone())?;
     Ok(config)
 }
 

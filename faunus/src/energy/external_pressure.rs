@@ -114,11 +114,11 @@ impl ExternalPressure {
     }
 
     /// Report pressure parameters as YAML.
-    pub(super) fn to_yaml(&self) -> serde_yaml::Value {
-        let mut map = serde_yaml::Mapping::new();
+    pub(super) fn to_yaml(&self) -> serde_yml::Value {
+        let mut map = serde_yml::Mapping::new();
         map.insert("pressure_kj_mol_A3".into(), self.pressure.into());
         map.insert("thermal_energy".into(), self.thermal_energy.into());
-        serde_yaml::Value::Mapping(map)
+        serde_yml::Value::Mapping(map)
     }
 }
 
@@ -189,23 +189,23 @@ mod tests {
     #[test]
     fn pressure_yaml_roundtrip() {
         let yaml = "!atm 1.0";
-        let p: Pressure = serde_yaml::from_str(yaml).unwrap();
+        let p: Pressure = serde_yml::from_str(yaml).unwrap();
         assert!(matches!(p, Pressure::Atm(v) if (v - 1.0).abs() < f64::EPSILON));
 
         let yaml = "!bar 2.5";
-        let p: Pressure = serde_yaml::from_str(yaml).unwrap();
+        let p: Pressure = serde_yml::from_str(yaml).unwrap();
         assert!(matches!(p, Pressure::Bar(v) if (v - 2.5).abs() < f64::EPSILON));
 
         let yaml = "!Pa 101325.0";
-        let p: Pressure = serde_yaml::from_str(yaml).unwrap();
+        let p: Pressure = serde_yml::from_str(yaml).unwrap();
         assert!(matches!(p, Pressure::Pa(v) if (v - 101325.0).abs() < f64::EPSILON));
 
         let yaml = "!kT 0.1";
-        let p: Pressure = serde_yaml::from_str(yaml).unwrap();
+        let p: Pressure = serde_yml::from_str(yaml).unwrap();
         assert!(matches!(p, Pressure::Kt(v) if (v - 0.1).abs() < f64::EPSILON));
 
         let yaml = "!mM 10.0";
-        let p: Pressure = serde_yaml::from_str(yaml).unwrap();
+        let p: Pressure = serde_yml::from_str(yaml).unwrap();
         assert!(matches!(p, Pressure::MilliMolar(v) if (v - 10.0).abs() < f64::EPSILON));
     }
 }

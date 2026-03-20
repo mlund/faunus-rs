@@ -415,8 +415,8 @@ impl LangevinRunner {
         context.set_positions(0..points.len(), points.iter());
     }
 
-    pub(in crate::propagate) fn to_yaml(&self) -> serde_yaml::Value {
-        let mut map = serde_yaml::Mapping::new();
+    pub(in crate::propagate) fn to_yaml(&self) -> serde_yml::Value {
+        let mut map = serde_yml::Mapping::new();
         map.insert("timestep".into(), self.config.timestep.into());
         map.insert("friction".into(), self.config.friction.into());
         map.insert("steps".into(), self.config.steps.into());
@@ -427,10 +427,10 @@ impl LangevinRunner {
         );
         map.insert(
             "elapsed_seconds".into(),
-            serde_yaml::Value::Number(serde_yaml::Number::from(self.elapsed.as_secs_f64())),
+            serde_yml::Value::Number(serde_yml::Number::from(self.elapsed.as_secs_f64())),
         );
         if !self.t_trans.is_empty() {
-            let mut temp_map = serde_yaml::Mapping::new();
+            let mut temp_map = serde_yml::Mapping::new();
             temp_map.insert(
                 "translational".into(),
                 format!(
@@ -451,12 +451,12 @@ impl LangevinRunner {
             );
             map.insert(
                 "measured_temperature".into(),
-                serde_yaml::Value::Mapping(temp_map),
+                serde_yml::Value::Mapping(temp_map),
             );
         }
-        serde_yaml::Value::Tagged(Box::new(serde_yaml::value::TaggedValue {
-            tag: serde_yaml::value::Tag::new("LangevinDynamics"),
-            value: serde_yaml::Value::Mapping(map),
+        serde_yml::Value::Tagged(Box::new(serde_yml::value::TaggedValue {
+            tag: serde_yml::value::Tag::new("LangevinDynamics"),
+            value: serde_yml::Value::Mapping(map),
         }))
     }
 }
