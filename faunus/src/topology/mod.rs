@@ -35,8 +35,6 @@ mod atom;
 pub(crate) mod block;
 mod bond;
 mod chain;
-#[cfg(feature = "chemfiles")]
-pub mod chemfiles_interface;
 mod dihedral;
 pub(crate) mod io;
 mod molecule;

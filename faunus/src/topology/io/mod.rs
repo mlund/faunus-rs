@@ -15,10 +15,7 @@
 //! Format-agnostic structure file I/O.
 //!
 //! XYZ format is always available natively. XTC (Gromacs) is handled by the `molly` crate.
-//! Other formats require the `chemfiles` feature.
 
-#[cfg(feature = "chemfiles")]
-mod chemfiles_io;
 pub mod frame_state;
 pub(crate) mod psf;
 mod xtc;
@@ -56,15 +53,11 @@ pub trait StructureIO: std::fmt::Debug {
 }
 
 /// Return a reader/writer for the given file path based on its extension.
-/// XYZ is always available. Other formats require the `chemfiles` feature.
 pub fn format_for_path(path: &Path) -> anyhow::Result<Box<dyn StructureIO>> {
     match path.extension().and_then(|e| e.to_str()) {
         Some("xyz") => Ok(Box::new(xyz::XyzFormat)),
         Some("xtc") => Ok(Box::new(xtc::XtcFormat)),
-        #[cfg(feature = "chemfiles")]
-        Some(_) => Ok(Box::new(chemfiles_io::ChemfilesFormat)),
-        #[cfg(not(feature = "chemfiles"))]
-        Some(ext) => anyhow::bail!("Format '.{ext}' requires the `chemfiles` feature"),
+        Some(ext) => anyhow::bail!("Unsupported format '.{ext}'"),
         None => anyhow::bail!("Cannot determine format: no file extension"),
     }
 }
@@ -103,15 +96,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(feature = "chemfiles"))]
-    fn format_for_pdb_without_chemfiles() {
-        let err = format_for_path(Path::new("test.pdb")).unwrap_err();
-        assert!(err.to_string().contains("chemfiles"));
-    }
-
-    #[test]
-    #[cfg(feature = "chemfiles")]
-    fn format_for_pdb_with_chemfiles() {
-        assert!(format_for_path(Path::new("test.pdb")).is_ok());
+    fn format_for_unsupported_extension() {
+        assert!(format_for_path(Path::new("test.pdb")).is_err());
     }
 }

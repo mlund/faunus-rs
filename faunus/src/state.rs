@@ -109,12 +109,7 @@ impl State {
         }
 
         // Catch molecule reordering or resized molecule definitions
-        for (i, (gs, group)) in self
-            .groups
-            .iter()
-            .zip(context.groups().iter())
-            .enumerate()
-        {
+        for (i, (gs, group)) in self.groups.iter().zip(context.groups().iter()).enumerate() {
             if gs.molecule != group.molecule() {
                 anyhow::bail!(
                     "Group {} molecule mismatch: state has {}, topology has {}",

@@ -202,8 +202,7 @@ duplicates are automatically excluded.
 ## Trajectory
 
 Writes particle coordinates to a trajectory file at each sampled step.
-The format is auto-detected from the file extension (`.xyz`, `.xtc`, or
-other formats via the `chemfiles` feature).
+The format is auto-detected from the file extension (`.xyz` or `.xtc`).
 
 On finalization a companion PSF topology file and a VMD scene script are
 written alongside the trajectory. The PSF contains atoms, bonds, angles,
