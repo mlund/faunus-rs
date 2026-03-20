@@ -18,9 +18,7 @@ itertools = "0.10"
 nalgebra = { version = "0.34.1", features = ["serde-serialize"] }
 interatomic = { git = "https://github.com/mlund/interatomic.git", features=["serde", "custom", "gpu"] }
 rand = "0.8"
-num = "0.4"
 average = { version = "0.13", features = ["std", "serde1"] }
-regex = "1.8.4"
 serde_yaml = "0.9"
 validator = { version = "0.20", features = ["derive"] }
 derive-getters = "0.3.0"

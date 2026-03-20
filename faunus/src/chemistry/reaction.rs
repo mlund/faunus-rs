@@ -27,10 +27,7 @@
 //! Atomic      | `⚛Pb ⇄ ⚛Au`            | Mark with `⚛` or `.`
 
 use anyhow::Result;
-use num::traits::Inv;
-use regex::Regex;
 use serde::{Deserialize, Serialize};
-use std::sync::LazyLock;
 
 /// Participant in a reaction
 ///
@@ -100,23 +97,14 @@ pub struct Reaction {
 }
 
 /// Repeat a reaction participant, e.g. "2A" -> ["A", "A"]
-static PARTICIPANT_RE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"^(?P<number>\d+)(?P<remaining>.*)").unwrap());
-
 fn repeat_participant(participant: &str) -> Vec<String> {
-    PARTICIPANT_RE.captures(participant).map_or_else(
-        || vec![participant.to_string()],
-        |captured| {
-            let n: usize = captured
-                .name("number")
-                .unwrap()
-                .as_str()
-                .parse::<usize>()
-                .unwrap_or(1);
-            let remaining = captured.name("remaining").unwrap().as_str().trim();
-            vec![remaining.to_string(); n]
-        },
-    )
+    let digit_end = participant.len() - participant.trim_start_matches(|c: char| c.is_ascii_digit()).len();
+    if digit_end == 0 {
+        return vec![participant.to_string()];
+    }
+    let n: usize = participant[..digit_end].parse().unwrap_or(1);
+    let remaining = participant[digit_end..].trim();
+    vec![remaining.to_string(); n]
 }
 
 fn parse_side(side: &str) -> Result<Vec<Participant>> {
@@ -207,7 +195,7 @@ impl Reaction {
     pub fn equilibrium_const(&self) -> f64 {
         match self.direction {
             Direction::Forward => self.equilibrium_const,
-            Direction::Backward => self.equilibrium_const.inv(),
+            Direction::Backward => self.equilibrium_const.recip(),
         }
     }
     /// Get the reactants and products of the reaction in the current direction
