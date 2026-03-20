@@ -355,9 +355,7 @@ fn run_window(
         }
 
         // Persist post-drive state so restarts skip directly to production
-        let mut state = mc.save_state();
-        state.step = 0;
-        state.to_file(&state_path)?;
+        mc.save_state().with_step(0).to_file(&state_path)?;
 
         context = mc.into_context();
 

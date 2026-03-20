@@ -18,7 +18,7 @@ use crate::analysis::{AnalysisCollection, Analyze};
 use crate::energy::EnergyChange;
 use crate::group::*;
 use crate::propagate::{Displacement, Propagate};
-use crate::state::{GroupState, State};
+use crate::state::State;
 use crate::{time::Timer, Context};
 use anyhow::Result;
 use average::{Estimate, Mean};
@@ -435,94 +435,12 @@ impl<T: Context + 'static> MarkovChain<T> {
 impl<T: Context + 'static> MarkovChain<T> {
     /// Extract the current simulation state for checkpointing.
     pub fn save_state(&self) -> State {
-        let context = &self.context;
-        State {
-            particles: context.get_all_particles(),
-            cell: context.cell().clone(),
-            groups: context
-                .groups()
-                .iter()
-                .map(|g| GroupState {
-                    molecule: g.molecule(),
-                    capacity: g.capacity(),
-                    size: g.size(),
-                    quaternion: *g.quaternion(),
-                })
-                .collect(),
-            step: self.step,
-        }
+        State::save(&self.context, self.step)
     }
 
     /// Restore simulation state from a checkpoint.
-    ///
-    /// Validates topology compatibility before modifying any state,
-    /// so a mismatched state file is rejected cleanly.
     pub fn load_state(&mut self, state: State) -> Result<()> {
-        let num_particles = self.context.num_particles();
-        let num_groups = self.context.groups().len();
-
-        if state.particles.len() != num_particles {
-            anyhow::bail!(
-                "Particle count mismatch: state has {}, context has {}",
-                state.particles.len(),
-                num_particles
-            );
-        }
-        if state.groups.len() != num_groups {
-            anyhow::bail!(
-                "Group count mismatch: state has {}, context has {}",
-                state.groups.len(),
-                num_groups
-            );
-        }
-
-        // Warn about atom_id changes (expected after atom swap reactions)
-        for (i, state_p) in state.particles.iter().enumerate() {
-            let ctx_id = self.context.particle(i).atom_id;
-            if state_p.atom_id != ctx_id {
-                log::warn!(
-                    "Particle {} atom_id differs: state has {}, topology has {} (atom swap?)",
-                    i,
-                    state_p.atom_id,
-                    ctx_id
-                );
-            }
-        }
-
-        // Catch molecule reordering or resized molecule definitions
-        for (i, (gs, group)) in state
-            .groups
-            .iter()
-            .zip(self.context.groups().iter())
-            .enumerate()
-        {
-            if gs.molecule != group.molecule() {
-                anyhow::bail!(
-                    "Group {} molecule mismatch: state has {}, topology has {}",
-                    i,
-                    gs.molecule,
-                    group.molecule()
-                );
-            }
-            if gs.capacity != group.capacity() {
-                anyhow::bail!(
-                    "Group {} capacity mismatch: state has {}, topology has {}",
-                    i,
-                    gs.capacity,
-                    group.capacity()
-                );
-            }
-        }
-
-        *self.context.cell_mut() = state.cell;
-        let sizes: Vec<_> = state.groups.iter().map(|gs| gs.size).collect();
-        let quaternions: Vec<_> = state.groups.iter().map(|gs| gs.quaternion).collect();
-        self.context
-            .apply_particles_and_groups(&state.particles, &sizes, &quaternions)?;
-        self.context.update(&crate::Change::Everything)?;
-
-        self.step = state.step;
-        log::info!("Restored simulation state");
+        self.step = state.load(&mut self.context)?;
         Ok(())
     }
 }
