@@ -243,6 +243,11 @@ impl Group {
         self.num_active == 0
     }
 
+    /// True if all particle slots are active
+    pub fn is_full(&self) -> bool {
+        self.num_active == self.range.len()
+    }
+
     /// Absolute indices of active particles in main particle vector
     pub const fn iter_active(&self) -> std::ops::Range<usize> {
         std::ops::Range {
@@ -659,6 +664,30 @@ impl GroupLists {
     #[allow(dead_code)]
     pub(crate) fn get_empty_groups(&self, id: usize) -> &[usize] {
         &self.empty[id]
+    }
+
+    /// Count groups matching given molecule id and size.
+    pub fn count_molecules(&self, molecule_id: usize, size: GroupSize) -> usize {
+        self.find_molecules(molecule_id, size)
+            .map_or(0, |s| s.len())
+    }
+
+    /// Count non-empty groups (full + partial) for a molecule kind.
+    pub fn count_nonempty(&self, molecule_id: usize) -> usize {
+        self.count_molecules(molecule_id, GroupSize::Full)
+            + self.count_molecules(molecule_id, GroupSize::Partial(0))
+    }
+
+    /// Find the single mega-group index for an atomic molecule kind.
+    ///
+    /// Checks partial first since atomic mega-groups are typically partially filled.
+    pub fn find_atomic_group(&self, molecule_id: usize) -> Option<usize> {
+        self.find_molecules(molecule_id, GroupSize::Partial(0))
+            .into_iter()
+            .chain(self.find_molecules(molecule_id, GroupSize::Full))
+            .chain(self.find_molecules(molecule_id, GroupSize::Empty))
+            .flat_map(|s| s.iter().copied())
+            .next()
     }
 
     /// Returns indices of all groups matching given molecule id and size.

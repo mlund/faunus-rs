@@ -5,7 +5,7 @@
 //! Reference: Panagiotopoulos, Mol. Phys. 61, 813 (1987),
 //! [doi:10.1080/00268978700101491](https://doi.org/10.1080/00268978700101491).
 
-use super::speciation::{find_atomic_group, random_point_inside};
+use super::speciation::random_point_inside;
 use super::{MarkovChain, MoveStatistics};
 use crate::cell::{Shape, VolumeScalePolicy};
 use crate::energy::EnergyChange;
@@ -209,27 +209,6 @@ impl GibbsParticleTransfer {
         }
     }
 
-    /// Count active molecules of the tracked type.
-    ///
-    /// For atomic mega-groups, N = number of active atoms in the mega-group.
-    /// For molecular groups, N = number of non-empty groups.
-    fn count_active_molecules(context: &impl Context, molecule_id: usize) -> usize {
-        if context.topology_ref().moleculekinds()[molecule_id].atomic() {
-            find_atomic_group(context, molecule_id)
-                .map(|gi| context.groups()[gi].len())
-                .unwrap_or(0)
-        } else {
-            let gl = context.group_lists();
-            let full = gl
-                .find_molecules(molecule_id, GroupSize::Full)
-                .map_or(0, |s| s.len());
-            let partial = gl
-                .find_molecules(molecule_id, GroupSize::Partial(0))
-                .map_or(0, |s| s.len());
-            full + partial
-        }
-    }
-
     /// Transfer one molecule/atom from `src` to `tgt`.
     fn transfer(
         &mut self,
@@ -268,8 +247,8 @@ impl GibbsParticleTransfer {
             return Ok(());
         };
 
-        let n_src = Self::count_active_molecules(src, self.molecule_id) as f64;
-        let n_tgt = Self::count_active_molecules(tgt, self.molecule_id) as f64;
+        let n_src = src.count_active_molecules(self.molecule_id) as f64;
+        let n_tgt = tgt.count_active_molecules(self.molecule_id) as f64;
         let v_src = src
             .cell()
             .volume()
@@ -334,8 +313,8 @@ impl GibbsParticleTransfer {
         thermal_energy: f64,
         rng: &mut StdRng,
     ) -> Result<()> {
-        let src_gi = find_atomic_group(src, self.molecule_id);
-        let tgt_gi = find_atomic_group(tgt, self.molecule_id);
+        let src_gi = src.group_lists().find_atomic_group(self.molecule_id);
+        let tgt_gi = tgt.group_lists().find_atomic_group(self.molecule_id);
 
         let (Some(src_gi), Some(tgt_gi)) = (src_gi, tgt_gi) else {
             self.statistics.reject();
@@ -346,8 +325,8 @@ impl GibbsParticleTransfer {
         let tgt_group = &tgt.groups()[tgt_gi];
         let n_tgt = tgt_group.len();
 
-        // Reject if source is empty or target is at capacity
-        if n_src == 0 || n_tgt >= tgt_group.capacity() {
+        // Reject if source is empty or target is full
+        if n_src == 0 || tgt_group.is_full() {
             self.statistics.reject();
             return Ok(());
         }
@@ -627,9 +606,7 @@ mod tests {
     fn gibbs_move_builder_volume_yaml_default() {
         let yaml = "!GibbsVolumeExchange { dV: 10.0 }";
         let builder: GibbsMoveBuilder = serde_yaml::from_str(yaml).unwrap();
-        assert!(
-            matches!(builder, GibbsMoveBuilder::GibbsVolumeExchange { dv, .. } if dv == 10.0)
-        );
+        assert!(matches!(builder, GibbsMoveBuilder::GibbsVolumeExchange { dv, .. } if dv == 10.0));
     }
 
     #[test]

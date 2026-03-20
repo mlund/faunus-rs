@@ -142,23 +142,14 @@ impl crate::Info for SpeciationMove {
     }
 }
 
-/// Find the single mega-group index for an atomic molecule kind.
-/// Checks Partial first since atomic mega-groups are typically partially filled.
-pub(super) fn find_atomic_group(context: &impl Context, mol_id: usize) -> Option<usize> {
-    let gl = context.group_lists();
-    gl.find_molecules(mol_id, GroupSize::Partial(0))
-        .into_iter()
-        .chain(gl.find_molecules(mol_id, GroupSize::Full))
-        .chain(gl.find_molecules(mol_id, GroupSize::Empty))
-        .flat_map(|s| s.iter().copied())
-        .next()
-}
-
 /// Generate a random point inside the cell using rejection sampling.
 ///
 /// Uses `bounding_box` + `is_inside` so that any `RngCore` can be used
 /// (the `Shape::get_point_inside` API requires `ThreadRng`).
-pub(super) fn random_point_inside(cell: &impl crate::cell::Shape, rng: &mut dyn RngCore) -> crate::Point {
+pub(super) fn random_point_inside(
+    cell: &impl crate::cell::Shape,
+    rng: &mut dyn RngCore,
+) -> crate::Point {
     let bbox = cell
         .bounding_box()
         .expect("Cell must have a bounding box for GCMC insertion");
@@ -514,7 +505,7 @@ impl SpeciationMove {
                     let molecule = &context.topology_ref().moleculekinds()[*mol_id];
                     if molecule.atomic() {
                         // Atomic: pick a random active atom from the mega-group
-                        let group_index = find_atomic_group(context, *mol_id)?;
+                        let group_index = context.group_lists().find_atomic_group(*mol_id)?;
                         let group = &context.groups()[group_index];
                         let n_old = group.len();
                         if n_old == 0 {
@@ -550,10 +541,10 @@ impl SpeciationMove {
                     let molecule = &context.topology_ref().moleculekinds()[*mol_id];
                     if molecule.atomic() {
                         // Atomic: activate one atom in the mega-group if capacity allows
-                        let group_index = find_atomic_group(context, *mol_id)?;
+                        let group_index = context.group_lists().find_atomic_group(*mol_id)?;
                         let group = &context.groups()[group_index];
                         let n_old = group.len();
-                        if n_old >= group.capacity() {
+                        if group.is_full() {
                             return None;
                         }
                         let rel_idx = n_old; // newly activated slot
@@ -579,8 +570,7 @@ impl SpeciationMove {
                         // Count current active groups
                         let n_old = context
                             .group_lists()
-                            .find_molecules(*mol_id, GroupSize::Full)
-                            .map_or(0, |gs| gs.len());
+                            .count_molecules(*mol_id, GroupSize::Full);
                         let n_new = n_old + 1;
                         ln_bias -= entropy_bias(NewOld::from(n_new, n_old), vol);
 
@@ -620,8 +610,7 @@ impl SpeciationMove {
                     let &to_group = empty_groups.iter().choose(rng)?;
                     let n_to = context
                         .group_lists()
-                        .find_molecules(*to_mol_id, GroupSize::Full)
-                        .map_or(0, |gs| gs.len());
+                        .count_molecules(*to_mol_id, GroupSize::Full);
 
                     // Combinatorial bias: N_from / (N_to + 1)
                     ln_bias += (n_from as f64).ln() - ((n_to + 1) as f64).ln();
@@ -1177,10 +1166,7 @@ propagate:
     /// Count active molecules of each phosphate species (mol_id 0..4).
     fn count_phosphate_species(context: &Backend) -> [usize; 4] {
         let gl = context.group_lists();
-        [0, 1, 2, 3].map(|id| {
-            gl.find_molecules(id, GroupSize::Full)
-                .map_or(0, |g| g.len())
-        })
+        [0, 1, 2, 3].map(|id| gl.count_molecules(id, GroupSize::Full))
     }
 
     #[test]
