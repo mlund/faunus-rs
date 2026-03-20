@@ -18,12 +18,12 @@
 //! where charge scaling maintains electroneutrality in the finite periodic box.
 
 use super::{Analyze, Frequency};
+use crate::auxiliary::BlockAverage;
 use crate::cell::BoundaryConditions;
 use crate::energy::builder::PairInteraction;
 use crate::energy::pairpot::ShortRange;
 use crate::topology::AtomKind;
 use crate::Context;
-use crate::auxiliary::BlockAverage;
 use anyhow::Result;
 use derive_builder::Builder;
 use derive_more::Debug;
@@ -150,7 +150,6 @@ pub struct ScaledWidomInsertion {
     coulomb_prefactor: f64,
 
     // --- per-block accumulators (reset each sample call) ---
-
     /// Σ β·ΔU_el(λ_k)·exp(−β·ΔU(λ_k)) per λ-point (numerator of I(λ))
     #[builder(setter(skip))]
     #[builder_field_attr(serde(skip))]
@@ -299,9 +298,9 @@ fn build_sr_for_pair(
                 .into_iter()
                 .reduce(|a, b| Box::new(interatomic::twobody::Combined::new(a, b)))
                 .unwrap();
-            Ok(ShortRange::Dynamic(interatomic::twobody::ArcPotential::new(
-                sum,
-            )))
+            Ok(ShortRange::Dynamic(
+                interatomic::twobody::ArcPotential::new(sum),
+            ))
         }
     }
 }

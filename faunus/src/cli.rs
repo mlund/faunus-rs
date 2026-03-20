@@ -75,6 +75,22 @@ enum Commands {
         #[clap(long, short = 'j', default_value = "0")]
         threads: usize,
     },
+    /// Wang-Landau flat-histogram sampling
+    #[clap(arg_required_else_help = true)]
+    WangLandau {
+        /// Input file in YAML format
+        #[clap(long, short = 'i')]
+        input: PathBuf,
+        /// Directory for walker and histogram state files
+        #[clap(long, short = 's', default_value = "wl_states")]
+        state_dir: PathBuf,
+        /// Free energy output file
+        #[clap(long, short = 'o', default_value = "free_energy.csv")]
+        output: PathBuf,
+        /// Max parallel threads (0 = all cores)
+        #[clap(long, short = 'j', default_value = "0")]
+        threads: usize,
+    },
 }
 
 #[derive(Parser)]
@@ -132,6 +148,14 @@ pub fn do_main() -> Result<()> {
             threads,
         } => {
             crate::umbrella::run(&input, &state_dir, &pmf_output, threads)?;
+        }
+        Commands::WangLandau {
+            input,
+            state_dir,
+            output,
+            threads,
+        } => {
+            crate::wang_landau::run(&input, &state_dir, &output, threads)?;
         }
     }
     Ok(())

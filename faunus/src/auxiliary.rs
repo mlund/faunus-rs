@@ -22,6 +22,30 @@ use std::fmt::Display;
 use std::io::Write;
 use std::path::Path;
 
+/// Parse a named section from a YAML input file into a typed config struct.
+pub(crate) fn parse_yaml_section<T: serde::de::DeserializeOwned>(
+    input: &Path,
+    key: &str,
+) -> anyhow::Result<T> {
+    let yaml = std::fs::read_to_string(input)?;
+    let value: serde_yml::Value = serde_yml::from_str(&yaml)?;
+    let section = value
+        .get(key)
+        .ok_or_else(|| anyhow::anyhow!("Missing `{key}:` section in input file"))?;
+    Ok(serde_yml::from_value(section.clone())?)
+}
+
+/// Resolve max thread count: 0 means use all available cores.
+pub(crate) fn resolve_thread_count(max_threads: usize) -> usize {
+    if max_threads == 0 {
+        std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(1)
+    } else {
+        max_threads
+    }
+}
+
 /// If the output file has a `.gz` extension, return a `GzEncoder` wrapped around the file.
 fn open_compressed(path: &Path) -> anyhow::Result<Box<dyn Write + Send>> {
     let file = std::fs::File::create(path)

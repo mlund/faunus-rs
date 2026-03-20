@@ -89,7 +89,7 @@ Key          | Required | Default | Description
 Property                 | Selection       | Description
 ------------------------ | --------------- | -------------------------------------------
 `volume`                 | none            | Cell measure via `dimension`: volume (`xyz`), area (`xy`), or length (`z`). Note: `volume` uses `dimension`, not `projection`
-`atom_position`          | one atom        | Atom position projected onto `projection`
+`atom_position`          | one atom        | Signed component for single axis (`x`,`y`,`z`); Euclidean norm for multi-axis (`xy` etc.)
 `count`                  | atoms or groups | Number of active atoms matching selection
 `molarity`               | atoms or groups | Molar concentration (mol/L) of matching atoms
 `charge`                 | atoms or groups | Sum of charges of active atoms matching selection

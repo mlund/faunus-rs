@@ -444,13 +444,7 @@ fn run_window(
 
 /// Parse the `umbrella:` section from a YAML input file.
 fn parse_config(input: &Path) -> Result<UmbrellaConfig> {
-    let yaml = std::fs::read_to_string(input)?;
-    let value: serde_yml::Value = serde_yml::from_str(&yaml)?;
-    let umbrella_value = value
-        .get("umbrella")
-        .ok_or_else(|| anyhow::anyhow!("Missing `umbrella:` section in input file"))?;
-    let config: UmbrellaConfig = serde_yml::from_value(umbrella_value.clone())?;
-    Ok(config)
+    crate::auxiliary::parse_yaml_section(input, "umbrella")
 }
 
 /// Run multi-walker umbrella sampling with BAR stitching.
@@ -491,13 +485,7 @@ pub fn run(input: &Path, state_dir: &Path, output: &Path, max_threads: usize) ->
     // Build once; cloned per window to avoid redundant YAML parsing + Hamiltonian construction
     let base_context = Backend::new(input, None, &mut rand::thread_rng())?;
 
-    let n_threads = if max_threads == 0 {
-        std::thread::available_parallelism()
-            .map(|n| n.get())
-            .unwrap_or(1)
-    } else {
-        max_threads
-    };
+    let n_threads = crate::auxiliary::resolve_thread_count(max_threads);
 
     // Process in batches so N_windows > N_cores doesn't over-subscribe the machine
     let mut all_results: Vec<WindowResult> = Vec::with_capacity(n_windows);

@@ -17,7 +17,7 @@ derive-getters = "0.3.0"
 derive_builder = "0.20.0"
 derive_more = { version = "1.0.0", default-features = false, features = ["debug"] }
 dyn-clone = "1.0.17"
-exmex = "0.20"
+exmex = { version = "0.20", features = ["value"] }
 flate2 = "1.0.35"
 icotable = { git = "https://github.com/mlund/icotable.git" }
 interatomic = { git = "https://github.com/mlund/interatomic.git", features = ["serde", "custom", "gpu"] }
@@ -59,6 +59,6 @@ default = ["cli"]
 cli = ["dep:clap", "dep:pretty_env_logger", "dep:indicatif"]
 gpu = ["dep:cubecl", "dep:bytemuck"]
 
-#[profile.release]
 #lto = "thin"
+
 

@@ -24,6 +24,9 @@ use serde::{Deserialize, Serialize};
 // ---------------------------------------------------------------------------
 
 /// Position of a single atom, optionally projected onto an axis.
+///
+/// For single-axis projections (x, y, z) returns the signed component;
+/// for multi-axis (xy, xz, yz, xyz) returns the Euclidean norm.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AtomPosition {
     #[serde(alias = "dimension")]
@@ -34,9 +37,13 @@ pub struct AtomPosition {
 #[typetag::serde(name = "atom_position")]
 impl CvKind for AtomPosition {
     fn evaluate(&self, context: &dyn EvalContext) -> f64 {
-        self.projection
-            .project(GroupCollection::position(context, self.index))
-            .norm()
+        let pos = GroupCollection::position(context, self.index);
+        match self.projection {
+            Axes::X => pos.x,
+            Axes::Y => pos.y,
+            Axes::Z => pos.z,
+            other => other.project(pos).norm(),
+        }
     }
 
     fn name(&self) -> &'static str {

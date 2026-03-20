@@ -24,4 +24,4 @@ icotable = { path = "icotable" }
 coulomb = { path = "coulomb" }
 
 [profile.release]
-strip = true
+#strip = true

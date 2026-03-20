@@ -127,7 +127,6 @@ pub(crate) enum PropagationBlock<T: Context> {
 }
 
 impl<T: Context> PropagationBlock<T> {
-
     pub(crate) fn propagate(
         &mut self,
         context: &mut T,
@@ -292,6 +291,11 @@ impl<T: Context> Propagate<T> {
 
     pub const fn max_repeats(&self) -> usize {
         self.max_repeats
+    }
+
+    /// Remove the repeat limit so `propagate()` never returns `false`.
+    pub fn set_unlimited_repeats(&mut self) {
+        self.max_repeats = usize::MAX;
     }
 
     /// Replace the internal RNG with one seeded from `seed`.

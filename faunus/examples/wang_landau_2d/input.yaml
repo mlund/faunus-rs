@@ -1,0 +1,79 @@
+# Wang-Landau 2D example: single particle on a piecewise energy surface.
+#
+# Reproduces the "Example2D" potential from Frenkel & Smit
+#
+# The energy landscape is:
+#
+#   u(x,y) = m(x) × s(x,y)
+#
+# where s(x,y) = 1 + sin(2π·x) + cos(2π·y) and m(x) is a staircase:
+#   1 for x ∈ [-2.00, -1.25]
+#   2 for x ∈ [-1.25, -0.25]
+#   3 for x ∈ [-0.25,  0.75]
+#   4 for x ∈ [ 0.75,  1.75]
+#   5 for x ∈ [ 1.75,  2.00]
+#
+# TAU = 2π is a built-in exmex constant.
+#
+# Run: faunus wang-landau -i input.yaml -o free_energy.csv -j 4
+
+atoms:
+  - name: A
+    mass: 1.0
+
+molecules:
+  - name: particle
+    atoms: [A]
+
+system:
+  cell: !Cuboid [4, 4, 4]
+  medium:
+    permittivity: !Vacuum
+    temperature: 300
+
+  blocks:
+    - molecule: particle
+      N: 1
+      insert: !RandomAtomPos {}
+
+  energy:
+    customexternal:
+      - selection: "all"
+        function: >-
+          (5 if x >= 1.75
+          else 4 if x >= 0.75
+          else 3 if x >= -0.25
+          else 2 if x >= -1.25
+          else 1)
+          * (1 + sin(TAU * x) + cos(TAU * y))
+
+wang_landau:
+  coordinate:
+    property: atom_position
+    selection: "atomtype A"
+    dimension: x
+    range: [-2.0, 2.0]
+    resolution: 0.05
+  coordinate2:
+    property: atom_position
+    selection: "atomtype A"
+    dimension: y
+    range: [-2.0, 2.0]
+    resolution: 0.05
+  flatness_threshold: 0.8
+  min_flatness: 20
+  min_ln_f: 1.0e-6
+  steps_per_check: 100000
+
+propagate:
+  seed: !Fixed 42
+  criterion: Metropolis
+  repeat: 1
+  collections:
+    - !Deterministic
+      moves:
+        - !TranslateAtom
+          molecule: particle
+          dp: 2.0
+
+analysis: []

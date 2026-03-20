@@ -6,6 +6,7 @@ use super::{
     excluded_coulomb::ExcludedCoulomb,
     external_pressure::ExternalPressure,
     nonbonded::{NonbondedMatrix, NonbondedMatrixSplined},
+    penalty::Penalty,
     polymer_depletion::PolymerDepletion,
     sasa::SasaEnergy,
     tabulated6d::Tabulated6D,
@@ -41,6 +42,8 @@ pub enum EnergyTerm {
     ExcludedCoulomb(ExcludedCoulomb),
     /// Tabulated 6D rigid molecule-molecule energy.
     Tabulated6D(Tabulated6D),
+    /// Flat-histogram bias penalty on collective variable(s).
+    Penalty(Penalty),
 }
 
 /// Dispatch a no-arg method to stateful energy terms; stateless terms are no-ops.
@@ -60,7 +63,8 @@ macro_rules! dispatch_stateful {
             | EnergyTerm::Constrain(_)
             | EnergyTerm::ExternalPressure(_)
             | EnergyTerm::CustomExternal(_)
-            | EnergyTerm::ExcludedCoulomb(_) => {}
+            | EnergyTerm::ExcludedCoulomb(_)
+            | EnergyTerm::Penalty(_) => {}
         }
     };
 }
@@ -90,7 +94,8 @@ impl EnergyTerm {
             | Self::Constrain(_)
             | Self::ExternalPressure(_)
             | Self::CustomExternal(_)
-            | Self::ExcludedCoulomb(_) => Ok(()),
+            | Self::ExcludedCoulomb(_)
+            | Self::Penalty(_) => Ok(()),
         }
     }
 
@@ -112,7 +117,8 @@ impl EnergyTerm {
             | Self::Constrain(_)
             | Self::ExternalPressure(_)
             | Self::CustomExternal(_)
-            | Self::ExcludedCoulomb(_) => {}
+            | Self::ExcludedCoulomb(_)
+            | Self::Penalty(_) => {}
         }
     }
 
@@ -170,7 +176,8 @@ impl EnergyTerm {
             | Self::IntermolecularBonded(_)
             | Self::CellOverlap(_)
             | Self::Constrain(_)
-            | Self::ExcludedCoulomb(_) => None,
+            | Self::ExcludedCoulomb(_)
+            | Self::Penalty(_) => None,
             Self::Tabulated6D(x) => Some(x.to_yaml()),
         }
     }
@@ -193,7 +200,8 @@ impl EnergyTerm {
             | Self::EwaldReciprocal(_)
             | Self::PolymerDepletion(_)
             | Self::ExcludedCoulomb(_)
-            | Self::Tabulated6D(_) => Vec::new(),
+            | Self::Tabulated6D(_)
+            | Self::Penalty(_) => Vec::new(),
         }
     }
 
@@ -229,6 +237,7 @@ impl crate::Info for EnergyTerm {
             Self::PolymerDepletion(_) => "polymer_depletion",
             Self::ExcludedCoulomb(_) => "excluded_coulomb",
             Self::Tabulated6D(_) => "tabulated6d",
+            Self::Penalty(_) => "penalty",
         })
     }
 }
@@ -251,6 +260,7 @@ impl EnergyChange for EnergyTerm {
             Self::PolymerDepletion(x) => x.energy(context, change),
             Self::ExcludedCoulomb(x) => x.energy(context, change),
             Self::Tabulated6D(x) => x.energy(context, change),
+            Self::Penalty(x) => x.energy(context, change),
         }
     }
 }
@@ -276,5 +286,11 @@ impl From<PolymerDepletion> for EnergyTerm {
 impl From<Tabulated6D> for EnergyTerm {
     fn from(t: Tabulated6D) -> Self {
         Self::Tabulated6D(t)
+    }
+}
+
+impl From<Penalty> for EnergyTerm {
+    fn from(p: Penalty) -> Self {
+        Self::Penalty(p)
     }
 }

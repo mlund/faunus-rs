@@ -39,6 +39,7 @@ pub mod chemistry;
 #[cfg(feature = "cli")]
 pub mod cli;
 pub mod energy;
+pub(crate) mod flat_histogram;
 pub(crate) mod geometry;
 pub mod group;
 pub(crate) mod histogram;
@@ -52,6 +53,8 @@ pub mod topology;
 pub mod transform;
 #[cfg(feature = "cli")]
 pub mod umbrella;
+#[cfg(feature = "cli")]
+pub mod wang_landau;
 
 mod particle;
 pub use particle::{Particle, PointParticle};

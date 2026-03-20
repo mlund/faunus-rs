@@ -21,7 +21,7 @@
 use crate::change::GroupChange;
 use crate::selection::{Selection, SelectionCache};
 use crate::{Change, Context};
-use exmex::{Express, FlatEx};
+use exmex::{Express, FlatEx, FlatExVal, Val};
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -53,11 +53,22 @@ impl CustomExternalBuilder {
     pub fn build(&self) -> anyhow::Result<CustomExternal> {
         let substituted = substitute_constants(&self.function, &self.constants);
 
-        let expression: FlatEx<f64> = FlatEx::parse(&substituted)
-            .map_err(|e| anyhow::anyhow!("expression parse error: {e}"))?;
+        // FlatExVal supports if/else conditionals but has ~8× overhead from Val
+        // enum dispatch and heap allocation. Use fast FlatEx<f64> when possible.
+        let has_conditionals = substituted.contains(" if ") || substituted.contains(" else ");
+        let (expression, var_names) = if has_conditionals {
+            let expr: FlatExVal<i32, f64> = exmex::parse_val(&substituted)
+                .map_err(|e| anyhow::anyhow!("expression parse error: {e}"))?;
+            let names = expr.var_names().to_vec();
+            (Expression::Val(expr), names)
+        } else {
+            let expr: FlatEx<f64> = FlatEx::parse(&substituted)
+                .map_err(|e| anyhow::anyhow!("expression parse error: {e}"))?;
+            let names = expr.var_names().to_vec();
+            (Expression::Float(expr), names)
+        };
 
         let allowed = ["q", "x", "y", "z"];
-        let var_names = expression.var_names();
         let bad_vars: Vec<_> = var_names
             .iter()
             .filter(|v| !allowed.contains(&v.as_str()))
@@ -77,7 +88,6 @@ impl CustomExternalBuilder {
             self.selection
         );
 
-        // Map each exmex variable slot to its index in [q, x, y, z]
         let var_indices: Vec<usize> = var_names
             .iter()
             .map(|name| allowed.iter().position(|&a| a == name).unwrap())
@@ -128,30 +138,66 @@ fn affected_groups(
     }
 }
 
-/// Substitute named constants into an expression string.
+/// Substitute named constants into an expression string using word-boundary matching.
 ///
-/// Sorts by name length (longest first) to avoid substring collisions,
-/// following the same pattern as `interatomic::twobody::custom`.
+/// Only replaces occurrences where the constant name is not part of a longer
+/// identifier (e.g. constant `c` won't clobber `cos` or `rc`).
 fn substitute_constants(expression: &str, constants: &HashMap<String, f64>) -> String {
     let mut sorted: Vec<_> = constants.iter().collect();
     sorted.sort_by_key(|(name, _)| std::cmp::Reverse(name.len()));
 
     let mut result = expression.to_string();
     for (name, value) in sorted {
-        result = result.replace(name.as_str(), &format!("({value:.17})"));
+        result = replace_whole_word(&result, name, &format!("({value:.17})"));
     }
     result
+}
+
+/// Replace all whole-word occurrences of `word` in `text` with `replacement`.
+///
+/// A match is "whole word" when the characters immediately before and after
+/// are not alphanumeric or underscore (i.e. not part of an identifier).
+fn replace_whole_word(text: &str, word: &str, replacement: &str) -> String {
+    fn is_ident_char(c: char) -> bool {
+        c.is_alphanumeric() || c == '_'
+    }
+    let mut result = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(pos) = rest.find(word) {
+        let before_ok = pos == 0 || !rest[..pos].ends_with(is_ident_char);
+        let end = pos + word.len();
+        let after_ok = end >= rest.len() || !rest[end..].starts_with(is_ident_char);
+        result.push_str(&rest[..pos]);
+        if before_ok && after_ok {
+            result.push_str(replacement);
+        } else {
+            result.push_str(word);
+        }
+        rest = &rest[end..];
+    }
+    result.push_str(rest);
+    result
+}
+
+/// Compiled expression: `FlatEx<f64>` for pure arithmetic (fast),
+/// `FlatExVal` when conditionals (`if`/`else`) are present.
+/// Always stored behind `Arc`, so the large enum size is irrelevant.
+#[derive(Debug, Clone)]
+#[allow(clippy::large_enum_variant)]
+enum Expression {
+    Float(FlatEx<f64>),
+    Val(FlatExVal<i32, f64>),
 }
 
 /// Custom external potential energy term.
 ///
 /// Evaluates a mathematical expression at each selected particle position
 /// (or molecular mass center). The expression can use any subset of
-/// `q` (charge), `x`, `y`, `z` (position).
+/// `q` (charge), `x`, `y`, `z` (position). Supports Python-style
+/// conditionals via exmex's `value` feature (e.g. `1.0 if x > 0 else 2.0`).
 #[derive(Debug, Clone)]
 pub struct CustomExternal {
-    /// Arc avoids copying ~19KB FlatEx on clone.
-    expression: Arc<FlatEx<f64>>,
+    expression: Arc<Expression>,
     /// Original function string for reporting.
     function: String,
     /// Maps each exmex variable slot to index in [q, x, y, z].
@@ -166,13 +212,25 @@ impl CustomExternal {
     /// Evaluate the expression for a single point with given charge and position.
     fn eval_at(&self, q: f64, x: f64, y: f64, z: f64) -> f64 {
         let all = [q, x, y, z];
-        let mut vals = [0.0_f64; 4];
-        for (i, &vi) in self.var_indices.iter().enumerate() {
-            vals[i] = all[vi];
+        let n = self.var_indices.len();
+        match self.expression.as_ref() {
+            Expression::Float(expr) => {
+                let mut vals = [0.0_f64; 4];
+                for (i, &vi) in self.var_indices.iter().enumerate() {
+                    vals[i] = all[vi];
+                }
+                expr.eval(&vals[..n]).unwrap_or(f64::NAN)
+            }
+            Expression::Val(expr) => {
+                let mut vals: [Val<i32, f64>; 4] = Default::default();
+                for (i, &vi) in self.var_indices.iter().enumerate() {
+                    vals[i] = Val::Float(all[vi]);
+                }
+                expr.eval(&vals[..n])
+                    .and_then(|v| v.to_float())
+                    .unwrap_or(f64::NAN)
+            }
         }
-        self.expression
-            .eval(&vals[..self.var_indices.len()])
-            .unwrap_or(f64::NAN)
     }
 
     /// Sum external potential over all active particles in a group.
@@ -276,9 +334,21 @@ constants:
         constants.insert("sigma".to_string(), 2.0);
         constants.insert("sig".to_string(), 999.0);
         let result = substitute_constants("sigma + sig", &constants);
-        // "sigma" (longer) should be substituted first
         assert!(!result.contains("sigma"));
         assert!(result.contains("999"));
+    }
+
+    #[test]
+    fn constant_substitution_word_boundary() {
+        // Single-letter constant `c` must not clobber `cos` or `rc`
+        let mut constants = HashMap::new();
+        constants.insert("c".to_string(), 3.0);
+        let result = substitute_constants("c * cos(x) + c", &constants);
+        assert!(result.contains("cos"), "cos was clobbered: {result}");
+        assert!(
+            !result.contains(" c "),
+            "standalone c not replaced: {result}"
+        );
     }
 
     #[test]
@@ -291,6 +361,34 @@ function: "0.5 * (x^2 + y^2 + z^2)"
         let ext = builder.build().unwrap();
         let energy = ext.eval_at(0.0, 1.0, 2.0, 3.0);
         assert!((energy - 7.0).abs() < 1e-10); // 0.5 * (1 + 4 + 9) = 7
+    }
+
+    #[test]
+    fn eval_conditional_expression() {
+        let yaml = r#"
+selection: "all"
+function: "10.0 if x > 0 else -5.0"
+"#;
+        let builder: CustomExternalBuilder = serde_yml::from_str(yaml).unwrap();
+        let ext = builder.build().unwrap();
+        assert!((ext.eval_at(0.0, 1.0, 0.0, 0.0) - 10.0).abs() < 1e-10);
+        assert!((ext.eval_at(0.0, -1.0, 0.0, 0.0) - (-5.0)).abs() < 1e-10);
+    }
+
+    #[test]
+    fn eval_chained_conditional_with_trig() {
+        // Example2D from Frenkel & Smit: piecewise staircase × sinusoidal modulation
+        let yaml = r#"
+selection: "all"
+function: "(1 if x < -1.25 else 2 if x < -0.25 else 3 if x < 0.75 else 4 if x < 1.75 else 5) * (1 + sin(TAU * x) + cos(TAU * y))"
+"#;
+        let builder: CustomExternalBuilder = serde_yml::from_str(yaml).unwrap();
+        let ext = builder.build().unwrap();
+        // q=0, x, y, z=0; eval_at(q,x,y,z)
+        assert!((ext.eval_at(0.0, 0.0, 0.0, 0.0) - 6.0).abs() < 1e-10); // 3*(1+0+1)
+        assert!((ext.eval_at(0.0, -1.0, 0.0, 0.0) - 4.0).abs() < 1e-10); // 2*(1+0+1)
+        assert!((ext.eval_at(0.0, 1.0, 0.0, 0.0) - 8.0).abs() < 1e-10); // 4*(1+0+1)
+        assert!((ext.eval_at(0.0, 0.0, 0.5, 0.0) - 0.0).abs() < 1e-10); // 3*(1+0-1)
     }
 
     #[test]
