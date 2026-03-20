@@ -5,18 +5,41 @@
 //! Reference: Panagiotopoulos, Mol. Phys. 61, 813 (1987),
 //! [doi:10.1080/00268978700101491](https://doi.org/10.1080/00268978700101491).
 
+use super::speciation::{find_atomic_group, random_point_inside};
 use super::{MarkovChain, MoveStatistics};
 use crate::cell::{Shape, VolumeScalePolicy};
 use crate::energy::EnergyChange;
 use crate::group::GroupSize;
 use crate::propagate::tagged_yaml;
-use crate::transform::Transform;
+use crate::transform::{SpeciationAction, Transform};
 use crate::{Change, Context};
 use anyhow::Result;
 use rand::prelude::*;
 use rand::rngs::StdRng;
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
+
+/// Metropolis accept/reject for two-context Gibbs moves.
+fn accept_or_reject(
+    a: &mut impl Context,
+    b: &mut impl Context,
+    du: f64,
+    exponent: f64,
+    displacement: crate::propagate::Displacement,
+    statistics: &mut MoveStatistics,
+    rng: &mut StdRng,
+) -> Result<()> {
+    if rng.r#gen::<f64>() < exponent.exp() {
+        statistics.accept(du, displacement);
+        a.discard_backup();
+        b.discard_backup();
+    } else {
+        statistics.reject();
+        a.undo()?;
+        b.undo()?;
+    }
+    Ok(())
+}
 
 /// Inter-box move operating on two simulation contexts simultaneously.
 pub(crate) trait GibbsMove<T: Context>: Debug + Send {
@@ -138,17 +161,15 @@ impl<T: Context> GibbsMove<T> for GibbsVolumeExchange {
         let du = (new_energy_0 - old_energy_0) + (new_energy_1 - old_energy_1);
         let exponent = -du / thermal_energy + bias;
 
-        if rng.r#gen::<f64>() < f64::exp(exponent) {
-            self.statistics
-                .accept(du, crate::propagate::Displacement::Custom(displacement));
-            c0.discard_backup();
-            c1.discard_backup();
-        } else {
-            self.statistics.reject();
-            c0.undo()?;
-            c1.undo()?;
-        }
-        Ok(())
+        accept_or_reject(
+            c0,
+            c1,
+            du,
+            exponent,
+            crate::propagate::Displacement::Custom(displacement),
+            &mut self.statistics,
+            rng,
+        )
     }
 
     fn to_yaml(&self) -> Option<serde_yaml::Value> {
@@ -188,20 +209,45 @@ impl GibbsParticleTransfer {
         }
     }
 
-    /// Count active (Full + Partial) groups of the tracked molecule type.
+    /// Count active molecules of the tracked type.
+    ///
+    /// For atomic mega-groups, N = number of active atoms in the mega-group.
+    /// For molecular groups, N = number of non-empty groups.
     fn count_active_molecules(context: &impl Context, molecule_id: usize) -> usize {
-        let gl = context.group_lists();
-        let full = gl
-            .find_molecules(molecule_id, GroupSize::Full)
-            .map_or(0, |s| s.len());
-        let partial = gl
-            .find_molecules(molecule_id, GroupSize::Partial(0))
-            .map_or(0, |s| s.len());
-        full + partial
+        if context.topology_ref().moleculekinds()[molecule_id].atomic() {
+            find_atomic_group(context, molecule_id)
+                .map(|gi| context.groups()[gi].len())
+                .unwrap_or(0)
+        } else {
+            let gl = context.group_lists();
+            let full = gl
+                .find_molecules(molecule_id, GroupSize::Full)
+                .map_or(0, |s| s.len());
+            let partial = gl
+                .find_molecules(molecule_id, GroupSize::Partial(0))
+                .map_or(0, |s| s.len());
+            full + partial
+        }
     }
 
-    /// Transfer one molecule from `src` to `tgt`.
+    /// Transfer one molecule/atom from `src` to `tgt`.
     fn transfer(
+        &mut self,
+        src: &mut impl Context,
+        tgt: &mut impl Context,
+        thermal_energy: f64,
+        rng: &mut StdRng,
+    ) -> Result<()> {
+        let is_atomic = src.topology_ref().moleculekinds()[self.molecule_id].atomic();
+        if is_atomic {
+            self.transfer_atomic(src, tgt, thermal_energy, rng)
+        } else {
+            self.transfer_molecular(src, tgt, thermal_energy, rng)
+        }
+    }
+
+    /// Transfer a molecular group from `src` to `tgt`.
+    fn transfer_molecular(
         &mut self,
         src: &mut impl Context,
         tgt: &mut impl Context,
@@ -269,17 +315,95 @@ impl GibbsParticleTransfer {
         let bias = (v_tgt * n_src / (v_src * (n_tgt + 1.0))).ln();
         let exponent = -du / thermal_energy + bias;
 
-        if rng.r#gen::<f64>() < f64::exp(exponent) {
-            self.statistics
-                .accept(du, crate::propagate::Displacement::None);
-            src.discard_backup();
-            tgt.discard_backup();
-        } else {
+        accept_or_reject(
+            src,
+            tgt,
+            du,
+            exponent,
+            crate::propagate::Displacement::None,
+            &mut self.statistics,
+            rng,
+        )
+    }
+
+    /// Transfer a single atom between atomic mega-groups in `src` and `tgt`.
+    fn transfer_atomic(
+        &mut self,
+        src: &mut impl Context,
+        tgt: &mut impl Context,
+        thermal_energy: f64,
+        rng: &mut StdRng,
+    ) -> Result<()> {
+        let src_gi = find_atomic_group(src, self.molecule_id);
+        let tgt_gi = find_atomic_group(tgt, self.molecule_id);
+
+        let (Some(src_gi), Some(tgt_gi)) = (src_gi, tgt_gi) else {
             self.statistics.reject();
-            src.undo()?;
-            tgt.undo()?;
+            return Ok(());
+        };
+
+        let n_src = src.groups()[src_gi].len();
+        let tgt_group = &tgt.groups()[tgt_gi];
+        let n_tgt = tgt_group.len();
+
+        // Reject if source is empty or target is at capacity
+        if n_src == 0 || n_tgt >= tgt_group.capacity() {
+            self.statistics.reject();
+            return Ok(());
         }
-        Ok(())
+
+        let v_src = src
+            .cell()
+            .volume()
+            .ok_or_else(|| anyhow::anyhow!("source has no volume"))?;
+        let v_tgt = tgt
+            .cell()
+            .volume()
+            .ok_or_else(|| anyhow::anyhow!("target has no volume"))?;
+
+        let old_e_src = src.hamiltonian().energy(src, &Change::Everything);
+        let old_e_tgt = tgt.hamiltonian().energy(tgt, &Change::Everything);
+
+        src.save_system_backup();
+        tgt.save_system_backup();
+
+        // Pick random active atom in source, random position in target
+        let rel_idx = rng.gen_range(0..n_src);
+        let abs_idx = src.groups()[src_gi].to_absolute_index(rel_idx)?;
+        let position = random_point_inside(tgt.cell(), rng);
+
+        Transform::Speciation(vec![SpeciationAction::DeactivateAtom {
+            group_index: src_gi,
+            abs_index: abs_idx,
+        }])
+        .on_system(src)?;
+
+        Transform::Speciation(vec![SpeciationAction::ActivateAtom {
+            group_index: tgt_gi,
+            position,
+        }])
+        .on_system(tgt)?;
+
+        src.update_with_backup(&Change::Everything)?;
+        tgt.update_with_backup(&Change::Everything)?;
+
+        let new_e_src = src.hamiltonian().energy(src, &Change::Everything);
+        let new_e_tgt = tgt.hamiltonian().energy(tgt, &Change::Everything);
+
+        let du = (new_e_src - old_e_src) + (new_e_tgt - old_e_tgt);
+        // Panagiotopoulos Eq. 8: same formula, N counts atoms for atomic groups
+        let bias = (v_tgt * n_src as f64 / (v_src * (n_tgt as f64 + 1.0))).ln();
+        let exponent = -du / thermal_energy + bias;
+
+        accept_or_reject(
+            src,
+            tgt,
+            du,
+            exponent,
+            crate::propagate::Displacement::None,
+            &mut self.statistics,
+            rng,
+        )
     }
 }
 
@@ -343,15 +467,6 @@ impl GibbsMoveBuilder {
                     &molecule,
                     "GibbsParticleTransfer",
                 )?;
-                // Atomic groups pool particles into a single group, breaking
-                // the 1-group-per-molecule assumption of activate/deactivate transfer.
-                let mol_kind = &context.topology_ref().moleculekinds()[molecule_id];
-                anyhow::ensure!(
-                    !mol_kind.atomic(),
-                    "GibbsParticleTransfer: atomic molecule kind '{}' not supported; \
-                     use non-atomic single-atom molecules instead",
-                    molecule
-                );
                 Box::new(GibbsParticleTransfer::new(molecule_id, molecule))
             }
         })

@@ -586,9 +586,11 @@ Key      | Required | Default        | Description
 
 Transfers a molecule from one box to the other.
 A random direction is chosen (box 0 → 1 or box 1 → 0).
-A full group is deactivated in the source box, and an empty group
-is activated at a random position in the target box.
-If no suitable group exists in either box, the move is rejected.
+Both molecular and atomic molecule kinds are supported:
+for molecular groups, a full group is deactivated/activated;
+for atomic groups, a single atom is removed/inserted via the
+speciation expand/shrink mechanism.
+If no suitable slot exists in either box, the move is rejected.
 
 Acceptance follows Panagiotopoulos Eq. 8:
 

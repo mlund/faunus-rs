@@ -7,14 +7,10 @@
 #[allow(dead_code)]
 mod common;
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 const RHO_GAS: f64 = 0.148;
 const RHO_LIQUID: f64 = 0.526;
-
-fn dir() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/files/gibbs_ensemble")
-}
 
 /// Extract cell volume from per-box output YAML (!Cuboid [Lx, Ly, Lz]).
 fn cell_volume(yaml: &serde_yaml::Value) -> f64 {
@@ -39,18 +35,33 @@ fn count_active_groups(state_path: &Path) -> usize {
         .count()
 }
 
-/// Run the Gibbs ensemble and check conservation laws and phase separation.
-#[test]
-#[ignore]
-fn regression() {
-    let input = dir().join("input.yaml");
+/// Count active atoms in atomic mega-groups from a state file.
+///
+/// Atomic groups use `size: !Partial N` where N is the active atom count.
+/// In a Gibbs ensemble, mega-groups are never completely Full (particles
+/// are split between two boxes), so only Partial sizes need counting.
+fn count_active_atoms(state_path: &Path) -> usize {
+    std::fs::read_to_string(state_path)
+        .expect("read state file")
+        .lines()
+        .filter_map(|line| {
+            line.trim()
+                .strip_prefix("size: !Partial ")
+                .and_then(|rest| rest.trim().parse::<usize>().ok())
+        })
+        .sum()
+}
+
+/// Run a Gibbs ensemble test and check conservation laws and phase separation.
+fn run_gibbs_test(test_dir: &Path, atomic: bool) {
+    let input = test_dir.join("input.yaml");
     let tmp = tempfile::tempdir().expect("failed to create temp dir");
     let output = tmp.path().join("output.yaml");
     let state = tmp.path().join("state.yaml");
 
     // copy pre-equilibrated per-box state files into temp dir
     for name in ["box0_state.yaml", "box1_state.yaml"] {
-        let src = dir().join(name);
+        let src = test_dir.join(name);
         if src.exists() {
             std::fs::copy(&src, tmp.path().join(name)).expect("copy state file");
         }
@@ -80,8 +91,17 @@ fn regression() {
     );
 
     // --- particle counts from state files ---
-    let n0 = count_active_groups(&tmp.path().join("box0_state.yaml"));
-    let n1 = count_active_groups(&tmp.path().join("box1_state.yaml"));
+    let (n0, n1) = if atomic {
+        (
+            count_active_atoms(&tmp.path().join("box0_state.yaml")),
+            count_active_atoms(&tmp.path().join("box1_state.yaml")),
+        )
+    } else {
+        (
+            count_active_groups(&tmp.path().join("box0_state.yaml")),
+            count_active_groups(&tmp.path().join("box1_state.yaml")),
+        )
+    };
     let n_total = n0 + n1;
 
     assert_eq!(n_total, 600, "Total particles not conserved: {n_total}");
@@ -112,4 +132,20 @@ fn regression() {
         (rho_high - RHO_LIQUID).abs() < liquid_tol,
         "Liquid density {rho_high:.3} too far from reference {RHO_LIQUID} (tol={liquid_tol})"
     );
+}
+
+/// Run the Gibbs ensemble and check conservation laws and phase separation.
+#[test]
+#[ignore]
+fn regression() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/files/gibbs_ensemble");
+    run_gibbs_test(&dir, false);
+}
+
+/// Same test but with atomic groups.
+#[test]
+#[ignore]
+fn regression_atomic() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/files/gibbs_ensemble_atomic");
+    run_gibbs_test(&dir, true);
 }

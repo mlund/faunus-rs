@@ -144,7 +144,7 @@ impl crate::Info for SpeciationMove {
 
 /// Find the single mega-group index for an atomic molecule kind.
 /// Checks Partial first since atomic mega-groups are typically partially filled.
-fn find_atomic_group(context: &impl Context, mol_id: usize) -> Option<usize> {
+pub(super) fn find_atomic_group(context: &impl Context, mol_id: usize) -> Option<usize> {
     let gl = context.group_lists();
     gl.find_molecules(mol_id, GroupSize::Partial(0))
         .into_iter()
@@ -158,7 +158,7 @@ fn find_atomic_group(context: &impl Context, mol_id: usize) -> Option<usize> {
 ///
 /// Uses `bounding_box` + `is_inside` so that any `RngCore` can be used
 /// (the `Shape::get_point_inside` API requires `ThreadRng`).
-fn random_point_inside(cell: &impl crate::cell::Shape, rng: &mut dyn RngCore) -> crate::Point {
+pub(super) fn random_point_inside(cell: &impl crate::cell::Shape, rng: &mut dyn RngCore) -> crate::Point {
     let bbox = cell
         .bounding_box()
         .expect("Cell must have a bounding box for GCMC insertion");

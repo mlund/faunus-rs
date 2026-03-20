@@ -1,0 +1,49 @@
+# Gibbs ensemble LJ fluid with atomic groups
+# Same system as gibbs_ensemble but using atomic: true
+# Reference: Panagiotopoulos, Mol. Phys. 61, 813 (1987), doi:10/cvzgw9
+
+atoms:
+  - name: LJ
+    mass: 1.0
+    sigma: 1.0
+    epsilon: 1.9832  # 2.479 kJ/mol / 1.25
+
+molecules:
+  - name: molecule1
+    atoms: [LJ]
+    atomic: true
+
+system:
+  cell: !Cuboid [10, 10, 10]
+  medium:
+    temperature: 298.15
+    permittivity: !Vacuum
+  energy:
+    nonbonded:
+      default:
+        - !LennardJones {mixing: LB}
+    spline:
+      cutoff: 20.0
+      n_points: 2000
+
+  blocks:
+    - molecule: molecule1
+      N: 600
+      active: 300
+      insert: !RandomAtomPos {}
+
+analysis: []
+
+propagate:
+  seed: !Fixed 42
+  criterion: Metropolis
+  repeat: 5000
+  collections:
+    - !Stochastic
+      moves:
+        - !TranslateAtom {molecule: molecule1, dp: 0.3, repeat: 100}
+  gibbs:
+    intra_steps: 1
+    moves:
+      - !GibbsVolumeExchange {dV: 0.5}
+      - !GibbsParticleTransfer {molecule: molecule1}
