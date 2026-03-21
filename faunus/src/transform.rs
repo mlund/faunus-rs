@@ -386,7 +386,7 @@ mod tests {
             Point::new(9.3, 10.1, 17.2),
         ];
         let masses = [1.46, 2.23, 10.73];
-        let com = crate::auxiliary::mass_center(&positions, &masses);
+        let com = crate::geometry::mass_center(&positions, &masses);
 
         let mut rng = rand::thread_rng();
         for _ in 0..100 {
@@ -398,7 +398,7 @@ mod tests {
                 assert_ne!(original, new);
             }
 
-            let com_rotated = crate::auxiliary::mass_center(&cloned, &masses);
+            let com_rotated = crate::geometry::mass_center(&cloned, &masses);
             assert_approx_eq!(f64, com.x, com_rotated.x);
             assert_approx_eq!(f64, com.y, com_rotated.y);
             assert_approx_eq!(f64, com.z, com_rotated.z);

@@ -388,13 +388,13 @@ impl ParticleSystem for Backend {
     #[inline(always)]
     fn get_angle(&self, indices: &[usize; 3]) -> f64 {
         let [p1, p2, p3] = indices.map(|i| self.position(i));
-        crate::auxiliary::angle_points(&p1, &p2, &p3, self.cell())
+        crate::geometry::angle_points(&p1, &p2, &p3, self.cell())
     }
 
     #[inline(always)]
     fn get_dihedral_angle(&self, indices: &[usize; 4]) -> f64 {
         let [p1, p2, p3, p4] = indices.map(|i| self.position(i));
-        crate::auxiliary::dihedral_points(&p1, &p2, &p3, &p4, self.cell())
+        crate::geometry::dihedral_points(&p1, &p2, &p3, &p4, self.cell())
     }
 
     fn scale_volume_and_positions(
@@ -655,7 +655,7 @@ mod tests {
             );
         }
 
-        // Verify mass_center matches auxiliary::mass_center_pbc
+        // Verify mass_center matches geometry::mass_center_pbc
         for group in ctx.groups() {
             if group.is_empty() {
                 continue;
@@ -668,7 +668,7 @@ mod tests {
                 .iter()
                 .map(|&i| topology.atomkinds()[ctx.atom_kind(i)].mass())
                 .collect();
-            let com_aux = crate::auxiliary::mass_center_pbc(&positions, &masses, ctx.cell(), None);
+            let com_aux = crate::geometry::mass_center_pbc(&positions, &masses, ctx.cell(), None);
             let err = (com_trait - com_aux).norm();
             assert!(
                 err < 1e-10,

@@ -167,7 +167,7 @@ impl InsertionPolicy {
         atoms: &[AtomKind],
     ) -> Vec<Point> {
         let mut positions = molecule_kind.reference_positions().to_vec();
-        let com = crate::auxiliary::mass_center(
+        let com = crate::geometry::mass_center(
             &positions,
             &molecule_kind
                 .atom_indices()

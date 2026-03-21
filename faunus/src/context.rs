@@ -152,7 +152,7 @@ pub trait ParticleSystem: GroupCollection + WithCell + WithTopology {
     /// ## Example implementation
     /// ```ignore
     /// let [p1, p2, p3] = indices.map(|i| self.position(i));
-    /// crate::auxiliary::angle_points(p1, p2, p3, self.cell())
+    /// crate::geometry::angle_points(p1, p2, p3, self.cell())
     /// ```
     fn get_angle(&self, indices: &[usize; 3]) -> f64;
 
@@ -171,7 +171,7 @@ pub trait ParticleSystem: GroupCollection + WithCell + WithTopology {
     /// ## Example implementation
     /// ```ignore
     /// let [p1, p2, p3, p4] = indices.map(|i| self.position(i));
-    /// crate::auxiliary::dihedral_points(p1, p2, p3, p4, self.cell())
+    /// crate::geometry::dihedral_points(p1, p2, p3, p4, self.cell())
     /// ```
     fn get_dihedral_angle(&self, indices: &[usize; 4]) -> f64;
 
