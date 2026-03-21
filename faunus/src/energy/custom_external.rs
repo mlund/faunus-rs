@@ -51,6 +51,24 @@ impl CustomExternalBuilder {
     /// Substitutes user constants into the expression string, parses with exmex,
     /// and validates that only `q`, `x`, `y`, `z` remain as variables.
     pub fn build(&self) -> anyhow::Result<CustomExternal> {
+        // Try preset name first (pure Rust, no parsing overhead)
+        if let Some(preset) = find_preset(&self.function) {
+            log::info!(
+                "Custom external potential: preset '{}' (com={}, selection='{}')",
+                self.function,
+                self.com,
+                self.selection
+            );
+            return Ok(CustomExternal {
+                expression: Arc::new(Expression::Preset(preset)),
+                function: self.function.clone(),
+                var_indices: vec![0, 1, 2, 3], // q, x, y, z — all passed to preset
+                selection: self.selection.clone(),
+                com: self.com,
+                group_cache: RefCell::default(),
+            });
+        }
+
         let substituted = substitute_constants(&self.function, &self.constants);
 
         // FlatExVal supports if/else conditionals but has ~8× overhead from Val
@@ -179,14 +197,46 @@ fn replace_whole_word(text: &str, word: &str, replacement: &str) -> String {
     result
 }
 
+/// Preset potential functions implemented in pure Rust for performance.
+/// Avoids the overhead of expression parsing and Val enum dispatch.
+type PresetFn = fn(q: f64, x: f64, y: f64, z: f64) -> f64;
+
 /// Compiled expression: `FlatEx<f64>` for pure arithmetic (fast),
-/// `FlatExVal` when conditionals (`if`/`else`) are present.
+/// `FlatExVal` when conditionals (`if`/`else`) are present,
+/// or a hardcoded `Preset` for known analytical surfaces.
 /// Always stored behind `Arc`, so the large enum size is irrelevant.
 #[derive(Debug, Clone)]
 #[allow(clippy::large_enum_variant)]
 enum Expression {
     Float(FlatEx<f64>),
     Val(FlatExVal<i32, f64>),
+    Preset(PresetFn),
+}
+
+/// Look up a preset potential by name.
+fn find_preset(name: &str) -> Option<PresetFn> {
+    match name {
+        // Piecewise 2D surface from Frenkel & Smit, Ch. 7.
+        // u(x,y) = m(x) × (1 + sin(2πx) + cos(2πy))
+        // where m(x) is a staircase: 1,2,3,4,5 across five x-regions.
+        "staircase-sincos" => Some(|_q, x, y, _z| {
+            use std::f64::consts::TAU;
+            let s = 1.0 + (TAU * x).sin() + (TAU * y).cos();
+            let m = if x >= 1.75 {
+                5.0
+            } else if x >= 0.75 {
+                4.0
+            } else if x >= -0.25 {
+                3.0
+            } else if x >= -1.25 {
+                2.0
+            } else {
+                1.0
+            };
+            m * s
+        }),
+        _ => None,
+    }
 }
 
 /// Custom external potential energy term.
@@ -214,6 +264,7 @@ impl CustomExternal {
         let all = [q, x, y, z];
         let n = self.var_indices.len();
         match self.expression.as_ref() {
+            Expression::Preset(f) => f(q, x, y, z),
             Expression::Float(expr) => {
                 let mut vals = [0.0_f64; 4];
                 for (i, &vi) in self.var_indices.iter().enumerate() {
@@ -377,18 +428,37 @@ function: "10.0 if x > 0 else -5.0"
 
     #[test]
     fn eval_chained_conditional_with_trig() {
-        // Example2D from Frenkel & Smit: piecewise staircase × sinusoidal modulation
         let yaml = r#"
 selection: "all"
 function: "(1 if x < -1.25 else 2 if x < -0.25 else 3 if x < 0.75 else 4 if x < 1.75 else 5) * (1 + sin(TAU * x) + cos(TAU * y))"
 "#;
         let builder: CustomExternalBuilder = serde_yml::from_str(yaml).unwrap();
         let ext = builder.build().unwrap();
-        // q=0, x, y, z=0; eval_at(q,x,y,z)
         assert!((ext.eval_at(0.0, 0.0, 0.0, 0.0) - 6.0).abs() < 1e-10); // 3*(1+0+1)
         assert!((ext.eval_at(0.0, -1.0, 0.0, 0.0) - 4.0).abs() < 1e-10); // 2*(1+0+1)
         assert!((ext.eval_at(0.0, 1.0, 0.0, 0.0) - 8.0).abs() < 1e-10); // 4*(1+0+1)
         assert!((ext.eval_at(0.0, 0.0, 0.5, 0.0) - 0.0).abs() < 1e-10); // 3*(1+0-1)
+    }
+
+    #[test]
+    fn eval_preset_matches_conditional() {
+        // Preset must produce identical values to the if/else expression
+        let preset_yaml = "selection: \"all\"\nfunction: staircase-sincos\n";
+        let expr_yaml = r#"
+selection: "all"
+function: "(1 if x < -1.25 else 2 if x < -0.25 else 3 if x < 0.75 else 4 if x < 1.75 else 5) * (1 + sin(TAU * x) + cos(TAU * y))"
+"#;
+        let preset: CustomExternalBuilder = serde_yml::from_str(preset_yaml).unwrap();
+        let expr: CustomExternalBuilder = serde_yml::from_str(expr_yaml).unwrap();
+        let p = preset.build().unwrap();
+        let e = expr.build().unwrap();
+        for &x in &[-1.9, -1.0, 0.0, 0.5, 1.0, 1.5, 1.9] {
+            for &y in &[-1.5, 0.0, 0.5, 1.5] {
+                let ep = p.eval_at(0.0, x, y, 0.0);
+                let ee = e.eval_at(0.0, x, y, 0.0);
+                assert!((ep - ee).abs() < 1e-10, "mismatch at x={x}, y={y}");
+            }
+        }
     }
 
     #[test]

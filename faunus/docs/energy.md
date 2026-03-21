@@ -431,25 +431,49 @@ The expression can use any subset of:
 | `z`      | z-coordinate (Å)        |
 
 Standard math operators (`+`, `-`, `*`, `/`, `^`) and functions
-(`sin`, `cos`, `exp`, `ln`, `sqrt`, `abs`, etc.) are supported via [exmex](https://docs.rs/exmex).
+(`sin`, `cos`, `exp`, `ln`, `sqrt`, `abs`, `signum`, `floor`, etc.) are supported
+via [exmex](https://docs.rs/exmex). Built-in constants `PI`, `TAU` (=2π), and `π` are available.
+
+Python-style conditionals are supported:
+```
+"1.0 if x > 0 else -1.0"
+"(3 if x < 0.5 else 5) * sin(TAU * y)"
+```
+
+Named constants use word-boundary matching, so single-letter names like `c` won't
+collide with function names like `cos`.
+
+### Preset potentials
+
+The `function` field can also name a built-in potential, bypassing the expression
+parser for better performance:
+
+| Preset              | Description |
+|---------------------|-------------|
+| `staircase-sincos`  | Piecewise 2D staircase × sinusoidal surface (Frenkel & Smit) |
 
 ### YAML configuration
 
 ```yaml
 energy:
   customexternal:
+    # Expression with named constants
     - selection: "molecule water"
       com: true
       constants: { radius: 15, k: 100 }
       function: "0.5 * k * (x^2 + y^2 + z^2 - radius^2)"
-    - selection: "atomtype Na"
-      function: "q * 0.1 * z"
+    # Expression with conditional
+    - selection: "all"
+      function: "10.0 if x > 0 else -5.0"
+    # Built-in preset
+    - selection: "all"
+      function: staircase-sincos
 ```
 
 | Key         | Required | Default | Description                                      |
 |-------------|----------|---------|--------------------------------------------------|
 | `selection` | yes      |         | Selection expression for atoms/molecules         |
-| `function`  | yes      |         | Math expression for the potential (kJ/mol)       |
+| `function`  | yes      |         | Math expression, conditional, or preset name     |
 | `com`       | no       | `false` | Evaluate at molecular mass center                |
 | `constants` | no       | `{}`    | Named constants substituted before parsing       |
 
