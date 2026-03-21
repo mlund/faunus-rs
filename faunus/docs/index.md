@@ -20,6 +20,7 @@ geometry:
 - `faunus run -i input.yaml` — run a simulation
 - `faunus rerun -i input.yaml --traj traj.xtc` — replay a trajectory through a different Hamiltonian (see [Rerun](analysis.md#rerun))
 - `faunus umbrella -i input.yaml` — multi-walker umbrella sampling (see [Umbrella Sampling](umbrella.md))
+- `faunus wang-landau -i input.yaml` — flat-histogram free energy estimation (see [Wang-Landau](wang_landau.md))
 
 ## Sections
 
@@ -27,5 +28,6 @@ geometry:
 - [Energy](energy.md) — Hamiltonian and energy terms
 - [Moves](moves.md) — Monte Carlo moves and propagation
 - [Analysis](analysis.md) — runtime analysis, output, and trajectory rerun
+- [Wang-Landau](wang_landau.md) — flat-histogram free energy sampling
 - [Umbrella Sampling](umbrella.md) — windowed free-energy calculations
 - [Selection Language](selection_language.md) — VMD-like atom selection expressions
