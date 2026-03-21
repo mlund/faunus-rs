@@ -145,22 +145,20 @@ impl RadialDistribution {
 
     /// Sample atom-atom RDF, returning the number of pairs evaluated.
     fn sample_atom_atom_weighted(&mut self, context: &impl Context, weight: f64) -> f64 {
-        let topology = context.topology_ref();
         let groups = context.groups();
         let gen = context.group_lists_generation();
         let same = self.same_selection();
         let exclude = self.exclude_intramolecular;
 
         let (sel0, sel1) = (&self.selections.0, &self.selections.1);
-        let get_kind = |i| context.atom_kind(i);
         let atoms1 = self
             .caches
             .0
-            .get_or_resolve(gen, || sel0.resolve_atoms_live(topology, groups, &get_kind));
+            .get_or_resolve(gen, || context.resolve_atoms_live(sel0));
         let atoms2 = self
             .caches
             .1
-            .get_or_resolve(gen, || sel1.resolve_atoms_live(topology, groups, &get_kind));
+            .get_or_resolve(gen, || context.resolve_atoms_live(sel1));
 
         collect_pair_distances(
             atoms1,
@@ -182,19 +180,19 @@ impl RadialDistribution {
 
     /// Sample COM-COM RDF, returning the number of pairs evaluated.
     fn sample_com_com_weighted(&mut self, context: &impl Context, weight: f64) -> f64 {
-        let topology = context.topology_ref();
         let groups = context.groups();
         let gen = context.group_lists_generation();
         let same = self.same_selection();
 
         let (sel0, sel1) = (&self.selections.0, &self.selections.1);
-        let get_kind = |i| context.atom_kind(i);
-        let gi1 = self.caches.0.get_or_resolve(gen, || {
-            sel0.resolve_groups_live(topology, groups, &get_kind)
-        });
-        let gi2 = self.caches.1.get_or_resolve(gen, || {
-            sel1.resolve_groups_live(topology, groups, &get_kind)
-        });
+        let gi1 = self
+            .caches
+            .0
+            .get_or_resolve(gen, || context.resolve_groups_live(sel0));
+        let gi2 = self
+            .caches
+            .1
+            .get_or_resolve(gen, || context.resolve_groups_live(sel1));
 
         collect_pair_distances(
             gi1,

@@ -113,6 +113,26 @@ pub trait ParticleSystem: GroupCollection + WithCell + WithTopology {
         }
     }
 
+    /// Mass of the i-th particle's atom type.
+    fn atom_mass(&self, index: usize) -> f64 {
+        self.topology_ref().atomkinds()[self.atom_kind(index)].mass()
+    }
+
+    /// Charge of the i-th particle's atom type.
+    fn atom_charge(&self, index: usize) -> f64 {
+        self.topology_ref().atomkinds()[self.atom_kind(index)].charge()
+    }
+
+    /// Resolve a selection to active atom indices using live atom kinds.
+    fn resolve_atoms_live(&self, selection: &crate::selection::Selection) -> Vec<usize> {
+        selection.resolve_atoms_live(self.topology_ref(), self.groups(), &|i| self.atom_kind(i))
+    }
+
+    /// Resolve a selection to group indices using live atom kinds.
+    fn resolve_groups_live(&self, selection: &crate::selection::Selection) -> Vec<usize> {
+        selection.resolve_groups_live(self.topology_ref(), self.groups(), &|i| self.atom_kind(i))
+    }
+
     /// Optional cell list for spatial acceleration of pair interactions.
     fn cell_list(&self) -> Option<&crate::celllist::CellList> {
         None
@@ -180,14 +200,12 @@ pub trait ParticleSystem: GroupCollection + WithCell + WithTopology {
         if indices.is_empty() {
             return Point::zeros();
         }
-        let topology = self.topology_ref();
-        let atomkinds = topology.atomkinds();
         let ref_pos = self.position(indices[0]);
-        let first_mass = atomkinds[self.atom_kind(indices[0])].mass();
+        let first_mass = self.atom_mass(indices[0]);
         let mut total_mass = first_mass;
         let mut com = ref_pos * first_mass;
         for &i in &indices[1..] {
-            let mass = atomkinds[self.atom_kind(i)].mass();
+            let mass = self.atom_mass(i);
             let unwrapped = ref_pos + self.cell().distance(&self.position(i), &ref_pos);
             com += unwrapped * mass;
             total_mass += mass;

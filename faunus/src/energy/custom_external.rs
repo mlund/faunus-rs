@@ -134,10 +134,7 @@ fn affected_groups(
     }
     let gen = context.group_lists_generation();
     let mut cache = cache.borrow_mut();
-    let get_kind = |i| context.atom_kind(i);
-    let selected = cache.get_or_resolve(gen, || {
-        selection.resolve_groups_live(context.topology_ref(), context.groups(), &get_kind)
-    });
+    let selected = cache.get_or_resolve(gen, || context.resolve_groups_live(selection));
     match change {
         Change::Everything | Change::Volume(..) => selected.to_vec(),
         Change::SingleGroup(gi, gc) => {

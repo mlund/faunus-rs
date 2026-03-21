@@ -163,12 +163,11 @@ pub fn do_main() -> Result<()> {
 
 /// Sum of charges of all active particles in the system.
 fn net_charge(context: &impl ParticleSystem) -> f64 {
-    let atomkinds = context.topology_ref().atomkinds();
     context
         .groups()
         .iter()
         .flat_map(|g| g.iter_active())
-        .map(|i| atomkinds[context.atom_kind(i)].charge())
+        .map(|i| context.atom_charge(i))
         .sum()
 }
 

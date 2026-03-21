@@ -115,11 +115,9 @@ fn gyration_tensor(group: &crate::group::Group, context: &impl Context) -> Optio
     if group.len() < 2 {
         return None;
     }
-    let topology = context.topology_ref();
-    let atomkinds = topology.atomkinds();
     let positions_masses = group
         .iter_active()
-        .map(|i| (context.position(i), atomkinds[context.atom_kind(i)].mass()));
+        .map(|i| (context.position(i), context.atom_mass(i)));
     GyrationTensor::from_positions_masses_com(positions_masses, com, context.cell())
 }
 
@@ -193,15 +191,10 @@ impl<T: Context> Analyze<T> for ShapeAnalysis {
             return Ok(());
         }
 
-        let topology = context.topology_ref();
-        let groups = context.groups();
-        let get_kind = |i| context.atom_kind(i);
-        let group_indices = self
-            .selection
-            .resolve_groups_live(topology, groups, &get_kind);
+        let group_indices = context.resolve_groups_live(&self.selection);
 
         for &gi in &group_indices {
-            let group = &groups[gi];
+            let group = &context.groups()[gi];
             let Some(result) = gyration_tensor(group, context) else {
                 continue;
             };
