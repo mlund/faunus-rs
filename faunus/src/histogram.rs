@@ -14,16 +14,16 @@ impl Histogram {
     ///
     /// The effective upper bound is `min + num_bins * bin_width`, which may be
     /// slightly less than `max` to avoid a partial trailing bin.
-    pub fn new(min: f64, max: f64, bin_width: f64) -> Self {
-        assert!(max > min, "max must be greater than min");
-        assert!(bin_width > 0.0, "bin_width must be positive");
+    pub fn new(min: f64, max: f64, bin_width: f64) -> anyhow::Result<Self> {
+        anyhow::ensure!(max > min, "max must be greater than min");
+        anyhow::ensure!(bin_width > 0.0, "bin_width must be positive");
         let num_bins = ((max - min) / bin_width) as usize;
-        assert!(num_bins > 0, "range too small for given bin_width");
-        Self {
+        anyhow::ensure!(num_bins > 0, "range too small for given bin_width");
+        Ok(Self {
             min,
             bin_width,
             bins: vec![0.0; num_bins],
-        }
+        })
     }
 
     /// Increment the bin corresponding to `value`. Out-of-range values are silently ignored.
@@ -96,7 +96,7 @@ mod tests {
 
     #[test]
     fn basic_binning() {
-        let mut h = Histogram::new(0.0, 10.0, 1.0);
+        let mut h = Histogram::new(0.0, 10.0, 1.0).unwrap();
         assert_eq!(h.num_bins(), 10);
         assert_relative_eq!(h.bin_center(0), 0.5);
         assert_relative_eq!(h.bin_center(9), 9.5);
@@ -110,7 +110,7 @@ mod tests {
 
     #[test]
     fn out_of_range_ignored() {
-        let mut h = Histogram::new(0.0, 10.0, 1.0);
+        let mut h = Histogram::new(0.0, 10.0, 1.0).unwrap();
         h.add(-0.1);
         h.add(10.0);
         h.add(100.0);
@@ -121,7 +121,7 @@ mod tests {
     #[test]
     fn partial_last_bin_excluded() {
         // 10.5 / 2.0 = 5.25 → 5 full bins, effective max = 10.0
-        let h = Histogram::new(0.0, 10.5, 2.0);
+        let h = Histogram::new(0.0, 10.5, 2.0).unwrap();
         assert_eq!(h.num_bins(), 5);
         // Value at 10.0 is at bin boundary of the 6th (non-existent) bin
         let mut h2 = h.clone();
@@ -132,7 +132,7 @@ mod tests {
 
     #[test]
     fn clear_resets() {
-        let mut h = Histogram::new(0.0, 10.0, 1.0);
+        let mut h = Histogram::new(0.0, 10.0, 1.0).unwrap();
         h.add(3.0);
         h.add(7.0);
         h.clear();
@@ -142,7 +142,7 @@ mod tests {
 
     #[test]
     fn add_weighted() {
-        let mut h = Histogram::new(0.0, 10.0, 1.0);
+        let mut h = Histogram::new(0.0, 10.0, 1.0).unwrap();
         h.add_weighted(0.5, 2.5);
         h.add_weighted(0.9, 1.0);
         assert_relative_eq!(h.count(0), 3.5);
@@ -155,7 +155,7 @@ mod tests {
 
     #[test]
     fn boundary_values() {
-        let mut h = Histogram::new(1.0, 3.0, 0.5);
+        let mut h = Histogram::new(1.0, 3.0, 0.5).unwrap();
         assert_eq!(h.num_bins(), 4);
         // Exactly at min → bin 0
         h.add(1.0);

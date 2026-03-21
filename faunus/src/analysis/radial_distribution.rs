@@ -59,7 +59,7 @@ impl RadialDistributionBuilder {
         }
         let exclude_intramolecular = !self.use_com && self.exclude_intramolecular.unwrap_or(true);
 
-        let histogram = Histogram::new(0.0, max_r, self.dr);
+        let histogram = Histogram::new(0.0, max_r, self.dr)?;
         let stream = ColumnWriter::open(&self.file, &["r", "g(r)"])?;
 
         Ok(RadialDistribution {
@@ -364,7 +364,7 @@ frequency: !Every 50
                 Selection::parse("all").unwrap(),
             ),
             caches: Default::default(),
-            histogram: Histogram::new(0.0, 5.0, dr),
+            histogram: Histogram::new(0.0, 5.0, dr).unwrap(),
             volume_sum: volume * num_samples as f64,
             pair_count_sum: n_pairs * num_samples as f64,
             num_samples,

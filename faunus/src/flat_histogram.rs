@@ -47,27 +47,27 @@ impl GridDim {
     }
 
     /// Build a 1D grid from range and resolution.
-    pub fn new_1d(min: f64, max: f64, resolution: f64) -> Self {
-        assert!(max > min && resolution > 0.0);
+    pub fn new_1d(min: f64, max: f64, resolution: f64) -> Result<Self> {
+        anyhow::ensure!(max > min && resolution > 0.0, "require max > min and resolution > 0");
         let n = ((max - min) / resolution) as usize;
-        assert!(n > 0, "range too small for given resolution");
-        Self::One {
+        anyhow::ensure!(n > 0, "range too small for given resolution");
+        Ok(Self::One {
             n,
             min,
             width: resolution,
-        }
+        })
     }
 
     /// Build a 2D grid from ranges and resolutions.
-    pub fn new_2d(min: [f64; 2], max: [f64; 2], resolution: [f64; 2]) -> Self {
+    pub fn new_2d(min: [f64; 2], max: [f64; 2], resolution: [f64; 2]) -> Result<Self> {
         let n0 = ((max[0] - min[0]) / resolution[0]) as usize;
         let n1 = ((max[1] - min[1]) / resolution[1]) as usize;
-        assert!(n0 > 0 && n1 > 0, "range too small for given resolution");
-        Self::Two {
+        anyhow::ensure!(n0 > 0 && n1 > 0, "range too small for given resolution");
+        Ok(Self::Two {
             n: [n0, n1],
             min,
             width: resolution,
-        }
+        })
     }
 }
 
@@ -300,7 +300,7 @@ mod tests {
 
     #[test]
     fn bin_index_1d() {
-        let state = FlatHistogramState::new(GridDim::new_1d(0.0, 10.0, 1.0), 0.8, 20, 1e-6, 1.0, 1);
+        let state = FlatHistogramState::new(GridDim::new_1d(0.0, 10.0, 1.0).unwrap(), 0.8, 20, 1e-6, 1.0, 1);
         assert_eq!(state.bin_index(&[0.5]), Some(0));
         assert_eq!(state.bin_index(&[9.5]), Some(9));
         assert_eq!(state.bin_index(&[-0.1]), None);
@@ -310,7 +310,7 @@ mod tests {
     #[test]
     fn bin_index_2d() {
         let state = FlatHistogramState::new(
-            GridDim::new_2d([0.0, 0.0], [4.0, 6.0], [2.0, 3.0]),
+            GridDim::new_2d([0.0, 0.0], [4.0, 6.0], [2.0, 3.0]).unwrap(),
             0.8,
             20,
             1e-6,
@@ -328,7 +328,7 @@ mod tests {
     #[test]
     fn update_increments_histogram_and_ln_g() {
         let mut state =
-            FlatHistogramState::new(GridDim::new_1d(0.0, 10.0, 1.0), 0.8, 20, 1e-6, 1.0, 1);
+            FlatHistogramState::new(GridDim::new_1d(0.0, 10.0, 1.0).unwrap(), 0.8, 20, 1e-6, 1.0, 1);
         state.update(3);
         assert_relative_eq!(state.histogram[3], 1.0);
         assert_relative_eq!(state.ln_g[3], 1.0);
@@ -341,7 +341,7 @@ mod tests {
     #[test]
     fn flatness_ratio_calculation() {
         let mut state =
-            FlatHistogramState::new(GridDim::new_1d(0.0, 4.0, 1.0), 0.8, 20, 1e-6, 1.0, 1);
+            FlatHistogramState::new(GridDim::new_1d(0.0, 4.0, 1.0).unwrap(), 0.8, 20, 1e-6, 1.0, 1);
         // Empty histogram → ratio = 0
         assert_relative_eq!(state.flatness_ratio(), 0.0);
 
@@ -361,7 +361,7 @@ mod tests {
     #[test]
     fn check_and_reduce_exponential() {
         let mut state =
-            FlatHistogramState::new(GridDim::new_1d(0.0, 4.0, 1.0), 0.8, 20, 1e-6, 1.0, 1);
+            FlatHistogramState::new(GridDim::new_1d(0.0, 4.0, 1.0).unwrap(), 0.8, 20, 1e-6, 1.0, 1);
         // Not flat → no reduction (min/mean = 1/10 = 0.1 < 0.8)
         state.histogram = vec![1.0, 10.0, 10.0, 10.0];
         assert!(!state.check_and_reduce());
@@ -379,7 +379,7 @@ mod tests {
     #[test]
     fn switch_to_1_over_t() {
         let mut state =
-            FlatHistogramState::new(GridDim::new_1d(0.0, 4.0, 1.0), 0.8, 2, 1e-6, 1.0, 1);
+            FlatHistogramState::new(GridDim::new_1d(0.0, 4.0, 1.0).unwrap(), 0.8, 2, 1e-6, 1.0, 1);
         // Two flatness checks → switch to 1/t
         state.histogram = vec![10.0; 4];
         state.check_and_reduce(); // num_flatness=1, ln_f=0.5
@@ -393,7 +393,7 @@ mod tests {
     #[test]
     fn convergence_detection() {
         let mut state =
-            FlatHistogramState::new(GridDim::new_1d(0.0, 4.0, 1.0), 0.8, 20, 0.1, 0.05, 1);
+            FlatHistogramState::new(GridDim::new_1d(0.0, 4.0, 1.0).unwrap(), 0.8, 20, 0.1, 0.05, 1);
         // ln_f starts at 0.05 < min_ln_f=0.1 → converged on first flat check
         state.histogram = vec![10.0; 4];
         state.check_and_reduce();
@@ -403,7 +403,7 @@ mod tests {
     #[test]
     fn checkpoint_roundtrip() {
         let mut state =
-            FlatHistogramState::new(GridDim::new_1d(0.0, 10.0, 1.0), 0.8, 20, 1e-6, 1.0, 1);
+            FlatHistogramState::new(GridDim::new_1d(0.0, 10.0, 1.0).unwrap(), 0.8, 20, 1e-6, 1.0, 1);
         state.update(3);
         state.update(7);
 

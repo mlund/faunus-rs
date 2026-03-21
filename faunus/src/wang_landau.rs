@@ -116,9 +116,9 @@ pub fn run(input: &Path, state_dir: &Path, output: &Path, max_threads: usize) ->
     let dim = if let Some(ref cv2_builder) = config.coordinate2 {
         let resolution2 = cv2_builder.resolution.unwrap_or(1.0);
         let (min2, max2) = cv2_builder.range;
-        GridDim::new_2d([min1, min2], [max1, max2], [resolution1, resolution2])
+        GridDim::new_2d([min1, min2], [max1, max2], [resolution1, resolution2])?
     } else {
-        GridDim::new_1d(min1, max1, resolution1)
+        GridDim::new_1d(min1, max1, resolution1)?
     };
 
     log::info!(

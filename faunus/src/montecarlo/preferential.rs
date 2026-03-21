@@ -112,7 +112,7 @@ impl PreferentialSampling {
             }
         }
         if self.file.is_some() {
-            self.distance_histogram = Some(Histogram::new(0.0, 200.0, 0.5));
+            self.distance_histogram = Some(Histogram::new(0.0, 200.0, 0.5)?);
         }
         Ok(())
     }
