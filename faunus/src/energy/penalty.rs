@@ -18,9 +18,11 @@
 //! returning `ln g(bin) × kT` as a bias energy. Out-of-range CV values
 //! produce infinite energy for early rejection.
 
-use crate::collective_variable::CollectiveVariable;
+use crate::collective_variable::{CollectiveVariable, CollectiveVariableBuilder};
 use crate::flat_histogram::FlatHistogramState;
 use crate::{Change, Context};
+use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 
 /// Flat-histogram bias that enters the Hamiltonian as `ln g(CV) × kT`.
@@ -80,5 +82,47 @@ impl Penalty {
         let v1 = self.cv.evaluate(context);
         let v2 = self.cv2.as_ref().map_or(0.0, |cv| cv.evaluate(context));
         [v1, v2]
+    }
+}
+
+/// Builder for deserializing a static `Penalty` from the `energy.penalty` YAML section.
+///
+/// Loads a converged `FlatHistogramState` from a checkpoint file and uses the
+/// stored `ln g` as a fixed bias. Useful for production runs after Wang-Landau
+/// convergence, where the bias flattens the free energy surface and observables
+/// are recovered via reweighting.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PenaltyBuilder {
+    /// Path to a `FlatHistogramState` checkpoint (e.g. `wl_states/histogram.yaml`).
+    pub file: PathBuf,
+    /// Primary collective variable.
+    pub coordinate: CollectiveVariableBuilder,
+    /// Optional second CV for 2D penalty surfaces.
+    pub coordinate2: Option<CollectiveVariableBuilder>,
+}
+
+impl PenaltyBuilder {
+    /// Build a static [`Penalty`] by loading the checkpoint and resolving CVs.
+    pub fn build(&self, context: &impl Context, thermal_energy: f64) -> anyhow::Result<Penalty> {
+        let state = FlatHistogramState::from_file(&self.file)?;
+        log::info!(
+            "Loaded penalty from '{}': {} bins, Δg={:.1} kT",
+            self.file.display(),
+            state.dim().num_bins(),
+            state.ln_g_range(),
+        );
+        let cv = self.coordinate.build(context)?;
+        let cv2 = self
+            .coordinate2
+            .as_ref()
+            .map(|b| b.build(context))
+            .transpose()?;
+        Ok(Penalty::new(
+            cv,
+            cv2,
+            Arc::new(RwLock::new(state)),
+            thermal_energy,
+        ))
     }
 }

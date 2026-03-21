@@ -402,6 +402,18 @@ impl Hamiltonian {
         context: &impl Context,
         medium: Option<&interatomic::coulomb::Medium>,
     ) -> anyhow::Result<()> {
+        let require_thermal_energy = |term: &str| -> anyhow::Result<f64> {
+            let m = medium.ok_or_else(|| {
+                anyhow::anyhow!("Medium with temperature required for {term} energy term")
+            })?;
+            Ok(crate::R_IN_KJ_PER_MOL * m.temperature())
+        };
+
+        if let Some(penalty_builder) = &builder.penalty {
+            let thermal_energy = require_thermal_energy("penalty")?;
+            // Front placement: out-of-range CVs short-circuit before expensive terms
+            self.push_front(penalty_builder.build(context, thermal_energy)?.into());
+        }
         if let Some(constrain_builders) = &builder.constrain {
             for cb in constrain_builders {
                 self.push(cb.build(context)?.into());
@@ -412,13 +424,6 @@ impl Hamiltonian {
                 self.push(eb.build()?.into());
             }
         }
-
-        let require_thermal_energy = |term: &str| -> anyhow::Result<f64> {
-            let m = medium.ok_or_else(|| {
-                anyhow::anyhow!("Medium with temperature required for {term} energy term")
-            })?;
-            Ok(crate::R_IN_KJ_PER_MOL * m.temperature())
-        };
 
         if let Some(pm_builder) = &builder.polymer_depletion {
             let thermal_energy = require_thermal_energy("polymer_depletion")?;

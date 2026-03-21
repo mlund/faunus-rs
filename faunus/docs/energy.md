@@ -482,6 +482,42 @@ position with the net charge (sum of atom charges).
 When `false` (default), the expression is evaluated and summed over all active particles
 in each matching group.
 
+## Penalty (Flat-Histogram Bias)
+
+Applies a static bias potential loaded from a converged [Wang-Landau](wang_landau.md)
+checkpoint. The bias energy is $\ln g(\text{bin}) \times k_BT$, which flattens the
+free energy surface along the collective variable(s). Ensemble averages under
+the biased distribution are recovered via reweighting by $1/g(\text{bin})$.
+
+### YAML configuration
+
+```yaml
+energy:
+  penalty:
+    file: wl_states/histogram.yaml
+    coordinate:
+      property: atom_position
+      selection: "atomtype A"
+      dimension: x
+      range: [-2.0, 2.0]
+      resolution: 0.1
+    coordinate2:  # optional, for 2D
+      property: atom_position
+      selection: "atomtype A"
+      dimension: y
+      range: [-2.0, 2.0]
+      resolution: 0.1
+```
+
+| Key           | Required | Description                                                    |
+|---------------|----------|----------------------------------------------------------------|
+| `file`        | yes      | Path to `FlatHistogramState` checkpoint (e.g. from Wang-Landau)|
+| `coordinate`  | yes      | Primary collective variable (see [analysis](analysis.md))      |
+| `coordinate2` | no       | Second CV for 2D surfaces                                      |
+
+The penalty is placed at the front of the Hamiltonian so that out-of-range
+CV values return infinite energy, short-circuiting expensive downstream terms.
+
 ## Solvent Accessible Surface Area (SASA)
 
 Computes an implicit solvation energy based on the solvent-accessible surface area

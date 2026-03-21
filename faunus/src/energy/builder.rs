@@ -45,6 +45,7 @@ use super::constrain::ConstrainBuilder;
 use super::custom_external::CustomExternalBuilder;
 use super::ewald::EwaldBuilder;
 use super::external_pressure::Pressure;
+use super::penalty::PenaltyBuilder;
 use super::polymer_depletion::PolymerDepletionBuilder;
 use super::sasa::SasaEnergyBuilder;
 use super::tabulated6d::Tabulated6DBuilder;
@@ -668,6 +669,9 @@ pub struct HamiltonianBuilder {
 
     /// Tabulated 6D rigid molecule-molecule energy tables.
     pub tabulated6d: Option<Tabulated6DBuilder>,
+
+    /// Static flat-histogram bias loaded from a Wang-Landau checkpoint.
+    pub penalty: Option<PenaltyBuilder>,
 }
 
 impl HamiltonianBuilder {
