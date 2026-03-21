@@ -222,6 +222,10 @@ fn run_single_box<T: Context + 'static>(
     log::info!("{}", medium);
     log::info!("Thermal energy: {thermal_energy:.2} kJ/mol");
 
+    if mc.context().hamiltonian().penalty().is_some() {
+        log::info!("Penalty bias active: analysis averages are biased (use rerun for reweighting)");
+    }
+
     let initial_energy = mc.system_energy();
     log::info!("Initial energy = {initial_energy:.2} kJ/mol");
     log::info!("Net charge = {:.4e} e", net_charge(mc.context()));
@@ -342,6 +346,25 @@ fn run_rerun(
     let mut particles = Vec::with_capacity(n_particles);
     let mut aux_frame = frame_state::FrameStateFrame::default();
 
+    // Detect penalty bias for reweighting
+    let weight_source = if let Some(penalty) = context.hamiltonian().penalty() {
+        let inv_kt = 1.0 / thermal_energy(&medium);
+        let state = penalty.state();
+        let state_guard = state.read().expect("poisoned lock");
+        log::info!(
+            "Reweighting enabled: penalty bias detected (\u{0394}g={:.1} kT)",
+            state_guard.ln_g_range()
+        );
+        drop(state_guard);
+        // Clone is cheap (state is behind Arc) and avoids borrowing from context
+        analysis::reweight::WeightSource::Penalty {
+            penalty: penalty.clone(),
+            inv_thermal_energy: inv_kt,
+        }
+    } else {
+        analysis::reweight::WeightSource::Uniform
+    };
+
     log::info!("Replaying trajectory: {}", traj_path.display());
 
     loop {
@@ -386,7 +409,8 @@ fn run_rerun(
         }));
 
         load_frame_into_context(&mut context, &particles, &aux_frame)?;
-        analyses.sample(&context, frame_index)?;
+        let w = weight_source.weight(&context);
+        analyses.sample_weighted(&context, frame_index, w)?;
         frame_index += 1;
     }
 

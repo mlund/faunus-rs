@@ -19,11 +19,10 @@
 //! property value is accumulated into a per-bin running mean.
 
 use super::{Analyze, Frequency};
-use crate::auxiliary::ColumnWriter;
+use crate::auxiliary::{ColumnWriter, WeightedMean};
 use crate::collective_variable::{CollectiveVariable, CollectiveVariableBuilder};
 use crate::Context;
 use anyhow::Result;
-use average::{Estimate, Mean};
 use derive_more::Debug;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -58,8 +57,8 @@ impl MeanAlongCoordinateBuilder {
             coordinate,
             resolution,
             bins: BTreeMap::new(),
-            cv_mean: Mean::new(),
-            coord_mean: Mean::new(),
+            cv_mean: WeightedMean::new(),
+            coord_mean: WeightedMean::new(),
             output_file: self.file.clone(),
             frequency: self.frequency,
         })
@@ -74,9 +73,9 @@ pub struct MeanAlongCoordinate {
     cv: CollectiveVariable,
     coordinate: CollectiveVariable,
     resolution: f64,
-    bins: BTreeMap<i64, Mean>,
-    cv_mean: Mean,
-    coord_mean: Mean,
+    bins: BTreeMap<i64, WeightedMean>,
+    cv_mean: WeightedMean,
+    coord_mean: WeightedMean,
     #[debug(skip)]
     output_file: PathBuf,
     frequency: Frequency,
@@ -102,10 +101,10 @@ impl MeanAlongCoordinate {
         let coord_name = &self.coordinate.axis().name;
         let mean_col = format!("mean({cv_name})");
         let mut stream = ColumnWriter::open(&self.output_file, &[coord_name, &mean_col, "count"])?;
-        for (&idx, mean) in &self.bins {
+        for (&idx, wm) in &self.bins {
             let center = self.bin_center(idx);
-            let avg = mean.mean();
-            let count = mean.len();
+            let avg = wm.mean();
+            let count = wm.len();
             stream.write_row(&[
                 &format_args!("{center:.6}"),
                 &format_args!("{avg:.6}"),
@@ -135,15 +134,19 @@ impl<T: Context> Analyze<T> for MeanAlongCoordinate {
     }
 
     fn sample(&mut self, context: &T, step: usize) -> Result<()> {
+        self.sample_weighted(context, step, 1.0)
+    }
+
+    fn sample_weighted(&mut self, context: &T, step: usize, weight: f64) -> Result<()> {
         if !self.frequency.should_perform(step) {
             return Ok(());
         }
         let coord_value = self.coordinate.evaluate(context);
         let cv_value = self.cv.evaluate(context);
-        self.coord_mean.add(coord_value);
-        self.cv_mean.add(cv_value);
+        self.coord_mean.add(coord_value, weight);
+        self.cv_mean.add(cv_value, weight);
         let idx = self.bin_index(coord_value);
-        self.bins.entry(idx).or_default().add(cv_value);
+        self.bins.entry(idx).or_default().add(cv_value, weight);
         Ok(())
     }
 

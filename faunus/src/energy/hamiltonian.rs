@@ -192,6 +192,14 @@ impl Hamiltonian {
         &self.energy_terms
     }
 
+    /// Return a reference to the Penalty term, if present.
+    pub(crate) fn penalty(&self) -> Option<&super::penalty::Penalty> {
+        self.energy_terms.iter().find_map(|t| match t {
+            EnergyTerm::Penalty(p) => Some(p),
+            _ => None,
+        })
+    }
+
     /// Replace the nonbonded energy term with a rebuilt version using an updated real-space scheme.
     ///
     /// Called after Ewald optimization changes α, requiring a new pair matrix and splines.

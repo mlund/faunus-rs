@@ -19,13 +19,12 @@
 //! averages in YAML output.
 
 use super::{Analyze, Frequency};
-use crate::auxiliary::ColumnWriter;
+use crate::auxiliary::{ColumnWriter, WeightedMean};
 use crate::cell::BoundaryConditions;
 use crate::geometry::GyrationTensor;
 use crate::selection::Selection;
 use crate::Context;
 use anyhow::Result;
-use average::{Estimate, Mean};
 use derive_more::Debug;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -73,16 +72,16 @@ impl ShapeAnalysisBuilder {
             stream,
             frequency: self.frequency,
             num_samples: 0,
-            gyration_radius_squared: Mean::new(),
-            gyration_radius: Mean::new(),
-            end_to_end_squared: Mean::new(),
-            asphericity: Mean::new(),
-            acylindricity: Mean::new(),
-            relative_shape_anisotropy: Mean::new(),
-            prolateness: Mean::new(),
-            westin_cl: Mean::new(),
-            westin_cp: Mean::new(),
-            westin_cs: Mean::new(),
+            gyration_radius_squared: WeightedMean::new(),
+            gyration_radius: WeightedMean::new(),
+            end_to_end_squared: WeightedMean::new(),
+            asphericity: WeightedMean::new(),
+            acylindricity: WeightedMean::new(),
+            relative_shape_anisotropy: WeightedMean::new(),
+            prolateness: WeightedMean::new(),
+            westin_cl: WeightedMean::new(),
+            westin_cp: WeightedMean::new(),
+            westin_cs: WeightedMean::new(),
         })
     }
 }
@@ -95,16 +94,16 @@ pub struct ShapeAnalysis {
     stream: Option<ColumnWriter>,
     frequency: Frequency,
     num_samples: usize,
-    gyration_radius_squared: Mean,
-    gyration_radius: Mean,
-    end_to_end_squared: Mean,
-    asphericity: Mean,
-    acylindricity: Mean,
-    relative_shape_anisotropy: Mean,
-    prolateness: Mean,
-    westin_cl: Mean,
-    westin_cp: Mean,
-    westin_cs: Mean,
+    gyration_radius_squared: WeightedMean,
+    gyration_radius: WeightedMean,
+    end_to_end_squared: WeightedMean,
+    asphericity: WeightedMean,
+    acylindricity: WeightedMean,
+    relative_shape_anisotropy: WeightedMean,
+    prolateness: WeightedMean,
+    westin_cl: WeightedMean,
+    westin_cp: WeightedMean,
+    westin_cs: WeightedMean,
 }
 
 /// Minimum Rg² to guard against division by zero.
@@ -186,6 +185,10 @@ impl<T: Context> Analyze<T> for ShapeAnalysis {
     }
 
     fn sample(&mut self, context: &T, step: usize) -> Result<()> {
+        self.sample_weighted(context, step, 1.0)
+    }
+
+    fn sample_weighted(&mut self, context: &T, step: usize, weight: f64) -> Result<()> {
         if !self.frequency.should_perform(step) {
             return Ok(());
         }
@@ -203,8 +206,8 @@ impl<T: Context> Analyze<T> for ShapeAnalysis {
                 continue;
             };
 
-            self.gyration_radius_squared.add(result.rg_squared);
-            self.gyration_radius.add(result.rg_squared.sqrt());
+            self.gyration_radius_squared.add(result.rg_squared, weight);
+            self.gyration_radius.add(result.rg_squared.sqrt(), weight);
 
             let first = group.iter_active().next().unwrap();
             let last = group.iter_active().last().unwrap();
@@ -212,18 +215,18 @@ impl<T: Context> Analyze<T> for ShapeAnalysis {
                 let re2 = context
                     .cell()
                     .distance_squared(&context.position(first), &context.position(last));
-                self.end_to_end_squared.add(re2);
+                self.end_to_end_squared.add(re2, weight);
             }
 
             if let Some(desc) = compute_descriptors(&result.eigenvalues, result.rg_squared) {
-                self.asphericity.add(desc.asphericity);
-                self.acylindricity.add(desc.acylindricity);
+                self.asphericity.add(desc.asphericity, weight);
+                self.acylindricity.add(desc.acylindricity, weight);
                 self.relative_shape_anisotropy
-                    .add(desc.relative_shape_anisotropy);
-                self.prolateness.add(desc.prolateness);
-                self.westin_cl.add(desc.westin_cl);
-                self.westin_cp.add(desc.westin_cp);
-                self.westin_cs.add(desc.westin_cs);
+                    .add(desc.relative_shape_anisotropy, weight);
+                self.prolateness.add(desc.prolateness, weight);
+                self.westin_cl.add(desc.westin_cl, weight);
+                self.westin_cp.add(desc.westin_cp, weight);
+                self.westin_cs.add(desc.westin_cs, weight);
             }
 
             if let Some(ref mut stream) = self.stream {

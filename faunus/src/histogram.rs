@@ -33,6 +33,13 @@ impl Histogram {
         }
     }
 
+    /// Add a weighted count to the bin corresponding to `value`. Out-of-range values are silently ignored.
+    pub fn add_weighted(&mut self, value: f64, weight: f64) {
+        if let Some(bin) = self.bin_index(value) {
+            self.bins[bin] += weight;
+        }
+    }
+
     /// Number of bins.
     pub const fn num_bins(&self) -> usize {
         self.bins.len()
@@ -131,6 +138,19 @@ mod tests {
         h.clear();
         let total: f64 = h.iter().map(|(_, c)| c).sum();
         assert_relative_eq!(total, 0.0);
+    }
+
+    #[test]
+    fn add_weighted() {
+        let mut h = Histogram::new(0.0, 10.0, 1.0);
+        h.add_weighted(0.5, 2.5);
+        h.add_weighted(0.9, 1.0);
+        assert_relative_eq!(h.count(0), 3.5);
+
+        // Out of range ignored
+        h.add_weighted(-1.0, 10.0);
+        h.add_weighted(10.0, 10.0);
+        assert_relative_eq!(h.iter().map(|(_, c)| c).sum::<f64>(), 3.5);
     }
 
     #[test]

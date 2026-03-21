@@ -27,14 +27,13 @@
 //! displacement magnitude.
 
 use super::{Analyze, Frequency};
-use crate::auxiliary::ColumnWriter;
+use crate::auxiliary::{ColumnWriter, WeightedMean};
 use crate::axes::Axes;
 use crate::change::{Change, GroupChange};
 use crate::energy::EnergyChange;
 use crate::selection::{Selection, SelectionCache};
 use crate::{Context, Point};
 use anyhow::Result;
-use average::{Estimate, Mean};
 use derive_builder::Builder;
 use derive_more::Debug;
 use serde::{Deserialize, Serialize};
@@ -88,7 +87,7 @@ pub struct VirtualTranslate {
     /// Running average of exp(-dU/kT)
     #[builder(setter(skip))]
     #[builder_field_attr(serde(skip))]
-    mean_exp_energy: Mean,
+    mean_exp_energy: WeightedMean,
 
     /// Number of samples taken
     #[builder(setter(skip))]
@@ -173,7 +172,7 @@ impl VirtualTranslateBuilder {
             output_file: self.output_file.as_ref().and_then(|p| p.clone()),
             stream,
             frequency: self.frequency.unwrap(),
-            mean_exp_energy: Mean::new(),
+            mean_exp_energy: WeightedMean::new(),
             num_samples: 0,
             group_cache: SelectionCache::default(),
             temperature,
@@ -243,7 +242,7 @@ impl VirtualTranslate {
     /// `false` if it was skipped due to extreme energy values that would
     /// cause overflow in `exp()`. Skipped samples are still written to
     /// the output stream to keep it synchronized with other analyses.
-    fn collect_widom_average(&mut self, energy_change: f64) -> bool {
+    fn collect_widom_average(&mut self, energy_change: f64, weight: f64) -> bool {
         if energy_change < -(f64::MAX_EXP as f64) {
             log::warn!(
                 "VirtualTranslate: skipping Widom average due to too negative energy; consider decreasing dL"
@@ -256,7 +255,7 @@ impl VirtualTranslate {
             );
             return false;
         }
-        self.mean_exp_energy.add((-energy_change).exp());
+        self.mean_exp_energy.add((-energy_change).exp(), weight);
         true
     }
 
@@ -290,6 +289,10 @@ impl<T: Context> Analyze<T> for VirtualTranslate {
     }
 
     fn sample(&mut self, context: &T, step: usize) -> Result<()> {
+        self.sample_weighted(context, step, 1.0)
+    }
+
+    fn sample_weighted(&mut self, context: &T, step: usize, weight: f64) -> Result<()> {
         if !self.frequency.should_perform(step) {
             return Ok(());
         }
@@ -319,17 +322,12 @@ impl<T: Context> Analyze<T> for VirtualTranslate {
 
         let group_index = active_groups[0];
 
-        // Clone context because `Analyze::sample` receives `&T` but perturbation
-        // needs `&mut T` to translate particles. The perturbation is virtual
-        // (translate + restore), so the clone is discarded unchanged.
         let mut trial_context = context.clone();
         let energy_change = self.perturb(&mut trial_context, group_index)?;
 
-        if self.collect_widom_average(energy_change) {
+        if self.collect_widom_average(energy_change, weight) {
             self.num_samples += 1;
         }
-        // Always write to stream to stay synchronized with other analyses
-        // that sample at the same frequency.
         self.write_to_stream(step, energy_change)?;
 
         Ok(())
@@ -500,11 +498,11 @@ mod tests {
         let mut vt = build_vt(0.1);
 
         // Zero energy change → exp(0) = 1.0
-        assert!(vt.collect_widom_average(0.0));
+        assert!(vt.collect_widom_average(0.0, 1.0));
         assert_approx_eq!(f64, vt.mean_exp_energy.mean(), 1.0);
 
         // Positive energy change → exp(-dU) < 1
-        assert!(vt.collect_widom_average(1.0));
+        assert!(vt.collect_widom_average(1.0, 1.0));
         let expected = (1.0 + (-1.0_f64).exp()) / 2.0;
         assert_approx_eq!(f64, vt.mean_exp_energy.mean(), expected, epsilon = 1e-12);
     }
@@ -514,11 +512,11 @@ mod tests {
         let mut vt = build_vt(0.1);
 
         // Too negative energy → would overflow exp()
-        assert!(!vt.collect_widom_average(-(f64::MAX_EXP as f64 + 1.0)));
+        assert!(!vt.collect_widom_average(-(f64::MAX_EXP as f64 + 1.0), 1.0));
         assert!(vt.mean_exp_energy.is_empty());
 
         // Too positive energy → exp(-dU) underflows
-        assert!(!vt.collect_widom_average(f64::MAX_EXP as f64 + 1.0));
+        assert!(!vt.collect_widom_average(f64::MAX_EXP as f64 + 1.0, 1.0));
         assert!(vt.mean_exp_energy.is_empty());
     }
 
@@ -528,8 +526,8 @@ mod tests {
 
         // Add samples with zero energy change → exp(0) = 1.0
         // mean = 1.0, free_energy = -ln(1.0) = 0.0
-        vt.collect_widom_average(0.0);
-        vt.collect_widom_average(0.0);
+        vt.collect_widom_average(0.0, 1.0);
+        vt.collect_widom_average(0.0, 1.0);
         assert_approx_eq!(f64, vt.mean_free_energy(), 0.0);
         assert_approx_eq!(f64, vt.mean_force(), 0.0);
     }
@@ -542,7 +540,7 @@ mod tests {
         // exp(-2.0) ≈ 0.1353
         // free_energy = -ln(exp(-2.0)) = 2.0
         // force = -free_energy / dL = -2.0 / 0.1 = -20.0
-        vt.collect_widom_average(2.0);
+        vt.collect_widom_average(2.0, 1.0);
         assert_approx_eq!(f64, vt.mean_free_energy(), 2.0, epsilon = 1e-12);
         assert_approx_eq!(f64, vt.mean_force(), -20.0, epsilon = 1e-10);
     }
@@ -581,7 +579,7 @@ mod tests {
     #[test]
     fn display_with_samples() {
         let mut vt = build_vt(0.1);
-        vt.collect_widom_average(0.0);
+        vt.collect_widom_average(0.0, 1.0);
         vt.num_samples = 1;
         let output = format!("{vt}");
         assert!(output.contains("Samples:     1"));

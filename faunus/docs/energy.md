@@ -486,8 +486,12 @@ in each matching group.
 
 Applies a static bias potential loaded from a converged [Wang-Landau](wang_landau.md)
 checkpoint. The bias energy is $\ln g(\text{bin}) \times k_BT$, which flattens the
-free energy surface along the collective variable(s). Ensemble averages under
-the biased distribution are recovered via reweighting by $1/g(\text{bin})$.
+free energy surface along the collective variable(s).
+
+During biased sampling, analysis averages are incorrect.
+Use [`faunus rerun`](analysis.md#rerun) to replay the trajectory:
+when a penalty term is detected, rerun automatically reweights all analyses
+by $w = \exp(-\ln g(\text{bin}))$, recovering the correct ensemble averages.
 
 ### YAML configuration
 

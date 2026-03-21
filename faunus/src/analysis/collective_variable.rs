@@ -18,11 +18,10 @@
 //! average, and optionally streams `{step, value, average}` to a file.
 
 use super::{Analyze, Frequency};
-use crate::auxiliary::ColumnWriter;
+use crate::auxiliary::{ColumnWriter, WeightedMean};
 use crate::collective_variable::{CollectiveVariable, CollectiveVariableBuilder};
 use crate::Context;
 use anyhow::Result;
-use average::{Estimate, Mean};
 use derive_more::Debug;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -57,8 +56,8 @@ impl CollectiveVariableAnalysisBuilder {
             cv,
             stream,
             frequency: self.frequency,
-            mean: Mean::new(),
-            mean_squared: Mean::new(),
+            mean: WeightedMean::new(),
+            mean_squared: WeightedMean::new(),
             num_samples: 0,
         })
     }
@@ -74,8 +73,8 @@ pub struct CollectiveVariableAnalysis {
     #[debug(skip)]
     stream: Option<ColumnWriter>,
     frequency: Frequency,
-    mean: Mean,
-    mean_squared: Mean,
+    mean: WeightedMean,
+    mean_squared: WeightedMean,
     num_samples: usize,
 }
 
@@ -104,12 +103,16 @@ impl<T: Context> Analyze<T> for CollectiveVariableAnalysis {
     }
 
     fn sample(&mut self, context: &T, step: usize) -> Result<()> {
+        self.sample_weighted(context, step, 1.0)
+    }
+
+    fn sample_weighted(&mut self, context: &T, step: usize, weight: f64) -> Result<()> {
         if !self.frequency.should_perform(step) {
             return Ok(());
         }
         let value = self.cv.evaluate(context);
-        self.mean.add(value);
-        self.mean_squared.add(value * value);
+        self.mean.add(value, weight);
+        self.mean_squared.add(value * value, weight);
         self.num_samples += 1;
 
         if let Some(ref mut stream) = self.stream {

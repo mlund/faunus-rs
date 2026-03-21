@@ -26,6 +26,7 @@ mod collective_variable;
 mod energy;
 mod mean_along_coordinate;
 mod radial_distribution;
+pub(crate) mod reweight;
 mod scaled_widom_insertion;
 mod shape;
 mod structure_writer;
@@ -164,6 +165,12 @@ pub trait Analyze<T: Context>: Debug + Info {
     /// Sample system.
     fn sample(&mut self, context: &T, step: usize) -> Result<()>;
 
+    /// Sample with a reweighting factor. Default ignores the weight and delegates to `sample`.
+    fn sample_weighted(&mut self, context: &T, step: usize, weight: f64) -> Result<()> {
+        let _ = weight;
+        self.sample(context, step)
+    }
+
     /// Total number of samples which is the sum of successful calls to `sample()`.
     fn num_samples(&self) -> usize;
 
@@ -230,6 +237,10 @@ impl<T: Context> AnalysisCollectionExt<T> for AnalysisCollection<T> {
 impl<T: Context> Analyze<T> for AnalysisCollection<T> {
     fn sample(&mut self, context: &T, step: usize) -> Result<()> {
         self.iter_mut().try_for_each(|a| a.sample(context, step))
+    }
+    fn sample_weighted(&mut self, context: &T, step: usize, weight: f64) -> Result<()> {
+        self.iter_mut()
+            .try_for_each(|a| a.sample_weighted(context, step, weight))
     }
     /// Summed number of samples for all analysis objects
     fn num_samples(&self) -> usize {

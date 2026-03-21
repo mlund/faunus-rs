@@ -81,6 +81,19 @@ cv1,cv2,free_energy_kT
 2.05,1005.0,3.421
 ```
 
+## Production run with reweighting
+
+After convergence, the density of states can be used as a static bias to
+flatten the free energy surface during a production MC run.
+Analysis averages collected under the bias are incorrect;
+use [`faunus rerun`](analysis.md#rerun) to replay the trajectory with the
+penalty term — reweighting by $w = 1/g(\text{bin})$ is applied automatically.
+
+1. Add the converged checkpoint as a [`penalty`](energy.md#penalty-flat-histogram-bias)
+   energy term and run a standard MC simulation with trajectory output.
+2. Rerun the trajectory with the same input (including the penalty term)
+   to obtain reweighted analysis results.
+
 ## Reference
 
 - Chevallier & Cazals, _J. Comput. Phys._ **410**, 109366 (2020).

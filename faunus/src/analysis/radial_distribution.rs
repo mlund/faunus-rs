@@ -111,6 +111,7 @@ fn collect_pair_distances(
     cell: &impl BoundaryConditions,
     dimension: Axes,
     histogram: &mut Histogram,
+    weight: f64,
 ) -> f64 {
     let mut pair_count = 0u64;
     for (idx_i, &i) in indices1.iter().enumerate() {
@@ -122,8 +123,10 @@ fn collect_pair_distances(
                 continue;
             }
             let Some(pos_j) = get_pos(j) else { continue };
-            // Project displacement onto active dimensions before computing distance
-            histogram.add(dimension.project(cell.distance(&pos_i, &pos_j)).norm());
+            histogram.add_weighted(
+                dimension.project(cell.distance(&pos_i, &pos_j)).norm(),
+                weight,
+            );
             pair_count += 1;
         }
     }
@@ -141,7 +144,7 @@ impl RadialDistribution {
     }
 
     /// Sample atom-atom RDF, returning the number of pairs evaluated.
-    fn sample_atom_atom(&mut self, context: &impl Context) -> f64 {
+    fn sample_atom_atom_weighted(&mut self, context: &impl Context, weight: f64) -> f64 {
         let topology = context.topology_ref();
         let groups = context.groups();
         let gen = context.group_lists_generation();
@@ -173,11 +176,12 @@ impl RadialDistribution {
             context.cell(),
             self.dimension,
             &mut self.histogram,
+            weight,
         )
     }
 
     /// Sample COM-COM RDF, returning the number of pairs evaluated.
-    fn sample_com_com(&mut self, context: &impl Context) -> f64 {
+    fn sample_com_com_weighted(&mut self, context: &impl Context, weight: f64) -> f64 {
         let topology = context.topology_ref();
         let groups = context.groups();
         let gen = context.group_lists_generation();
@@ -201,6 +205,7 @@ impl RadialDistribution {
             context.cell(),
             self.dimension,
             &mut self.histogram,
+            weight,
         )
     }
 
@@ -246,17 +251,23 @@ impl<T: Context> Analyze<T> for RadialDistribution {
     }
 
     fn sample(&mut self, context: &T, step: usize) -> Result<()> {
+        self.sample_weighted(context, step, 1.0)
+    }
+
+    fn sample_weighted(&mut self, context: &T, step: usize, weight: f64) -> Result<()> {
         if !self.frequency.should_perform(step) {
             return Ok(());
         }
         let pairs = if self.use_com {
-            self.sample_com_com(context)
+            self.sample_com_com_weighted(context, weight)
         } else {
-            self.sample_atom_atom(context)
+            self.sample_atom_atom_weighted(context, weight)
         };
-        self.pair_count_sum += pairs;
+        // Weight the normalization sums so that g(r) = weighted_counts / weighted_ideal,
+        // which cancels correctly when all weights are 1.0.
+        self.pair_count_sum += pairs * weight;
         if let Some(bbox) = context.cell().bounding_box() {
-            self.volume_sum += self.dimension.measure_of(bbox);
+            self.volume_sum += self.dimension.measure_of(bbox) * weight;
         }
         self.num_samples += 1;
         Ok(())

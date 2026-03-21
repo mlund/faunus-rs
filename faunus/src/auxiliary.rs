@@ -202,6 +202,58 @@ pub(crate) fn simpson_integrate(values: &[f64]) -> f64 {
     }
 }
 
+/// Incremental weighted mean using West's algorithm.
+///
+/// When all weights are 1.0, reduces to Welford's unweighted mean.
+/// See [West (1979)](https://doi.org/10.1145/359146.359153).
+#[derive(Clone, Debug, Default)]
+pub(crate) struct WeightedMean {
+    sum_w: f64,
+    mean: f64,
+    count: u64,
+}
+
+impl WeightedMean {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Add a value with the given weight. Zero-weight samples are ignored.
+    pub fn add(&mut self, value: f64, weight: f64) {
+        if weight == 0.0 {
+            return;
+        }
+        self.sum_w += weight;
+        self.mean += weight * (value - self.mean) / self.sum_w;
+        self.count += 1;
+    }
+
+    /// Current weighted mean, or NaN if no samples have been added.
+    pub fn mean(&self) -> f64 {
+        if self.count == 0 {
+            f64::NAN
+        } else {
+            self.mean
+        }
+    }
+
+    /// Whether no values have been added.
+    pub fn is_empty(&self) -> bool {
+        self.count == 0
+    }
+
+    /// Number of values added.
+    pub fn len(&self) -> u64 {
+        self.count
+    }
+
+    /// Sum of all weights.
+    #[allow(dead_code)]
+    pub fn sum_weights(&self) -> f64 {
+        self.sum_w
+    }
+}
+
 /// Running block average with mean and standard error of the mean.
 ///
 /// Wraps [`average::Variance`] with convenience methods for reporting.
@@ -304,6 +356,41 @@ mod column_writer_tests {
         w.write_row(&[&1, &format_args!("{:.2}", 3.15)]).unwrap();
         let bytes = buf.lock().unwrap();
         assert_eq!(String::from_utf8_lossy(&bytes), "x,y\n1,3.15\n");
+    }
+}
+
+#[cfg(test)]
+mod weighted_mean_tests {
+    use super::WeightedMean;
+    use approx::assert_relative_eq;
+
+    #[test]
+    fn uniform_weights_match_simple_mean() {
+        let mut wm = WeightedMean::new();
+        let values = [1.0, 2.0, 3.0, 4.0, 5.0];
+        for &v in &values {
+            wm.add(v, 1.0);
+        }
+        assert_relative_eq!(wm.mean(), 3.0);
+        assert_eq!(wm.len(), 5);
+    }
+
+    #[test]
+    fn weighted_mean() {
+        let mut wm = WeightedMean::new();
+        // weight 3 on value 2, weight 1 on value 6 → mean = (6+6)/4 = 3.0
+        wm.add(2.0, 3.0);
+        wm.add(6.0, 1.0);
+        assert_relative_eq!(wm.mean(), 3.0);
+        assert_eq!(wm.len(), 2);
+        assert_relative_eq!(wm.sum_weights(), 4.0);
+    }
+
+    #[test]
+    fn single_value() {
+        let mut wm = WeightedMean::new();
+        wm.add(42.0, 0.5);
+        assert_relative_eq!(wm.mean(), 42.0);
     }
 }
 

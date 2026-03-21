@@ -5,11 +5,10 @@
 //! - **Partial**: writes the nonbonded energy between two VMD-like selections.
 
 use super::{Analyze, Frequency};
-use crate::auxiliary::ColumnWriter;
+use crate::auxiliary::{ColumnWriter, WeightedMean};
 use crate::selection::Selection;
 use crate::Context;
 use anyhow::Result;
-use average::{Estimate, Mean};
 use derive_more::Debug;
 use serde::Deserialize;
 use std::fmt::Display;
@@ -40,7 +39,7 @@ pub struct EnergyAnalysis {
     #[debug(skip)]
     stream: ColumnWriter,
     frequency: Frequency,
-    mean: Mean,
+    mean: WeightedMean,
     num_samples: usize,
 }
 
@@ -74,7 +73,7 @@ impl EnergyAnalysisBuilder {
             mode,
             stream,
             frequency: self.frequency,
-            mean: Mean::new(),
+            mean: WeightedMean::new(),
             num_samples: 0,
         })
     }
@@ -98,6 +97,10 @@ impl<T: Context> Analyze<T> for EnergyAnalysis {
     }
 
     fn sample(&mut self, context: &T, step: usize) -> Result<()> {
+        self.sample_weighted(context, step, 1.0)
+    }
+
+    fn sample_weighted(&mut self, context: &T, step: usize, weight: f64) -> Result<()> {
         if !self.frequency.should_perform(step) {
             return Ok(());
         }
@@ -106,7 +109,7 @@ impl<T: Context> Analyze<T> for EnergyAnalysis {
                 let hamiltonian = context.hamiltonian();
                 let terms = hamiltonian.per_term_energies(context, &crate::Change::Everything);
                 let total: f64 = terms.iter().map(|(_, e)| *e).sum();
-                self.mean.add(total);
+                self.mean.add(total, weight);
                 let formatted: Vec<_> = terms.iter().map(|(_, e)| format!("{e:.6}")).collect();
                 let total_str = format!("{total:.6}");
                 let mut row: Vec<&dyn Display> = vec![&step];
@@ -115,7 +118,6 @@ impl<T: Context> Analyze<T> for EnergyAnalysis {
                 self.stream.write_row(&row)?;
             }
             EnergyMode::Partial(sel1, sel2) => {
-                // Re-resolve each sample since group membership can change (GC ensemble)
                 let topology = context.topology_ref();
                 let groups = context.groups();
                 let get_kind = |i| context.atom_kind(i);
@@ -127,7 +129,7 @@ impl<T: Context> Analyze<T> for EnergyAnalysis {
                     .iter()
                     .filter_map(|term| term.nonbonded_energy_between_atoms(context, &a1, &a2))
                     .sum();
-                self.mean.add(energy);
+                self.mean.add(energy, weight);
                 let mean = self.mean.mean();
                 self.stream.write_row(&[
                     &step,

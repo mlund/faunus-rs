@@ -77,6 +77,11 @@ impl Penalty {
         }
     }
 
+    /// Access the shared flat-histogram state (for reweighting diagnostics).
+    pub fn state(&self) -> &Arc<RwLock<FlatHistogramState>> {
+        &self.state
+    }
+
     /// Evaluate CV value(s) into a slice suitable for `bin_index`.
     fn eval_cv(&self, context: &impl Context) -> [f64; 2] {
         let v1 = self.cv.evaluate(context);

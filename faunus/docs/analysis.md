@@ -441,6 +441,20 @@ The input YAML provides the Hamiltonian and analysis configuration;
 the `propagate:` section is ignored. All analysis frequencies are overridden to
 sample every frame.
 
+### Reweighting biased trajectories
+
+If the Hamiltonian contains a [`penalty`](energy.md#penalty-flat-histogram-bias) term
+(from a converged Wang-Landau run), rerun automatically reweights all analyses by
+$w = \exp(-\ln g(\text{bin}))$, recovering correct ensemble averages from the
+biased trajectory. This is logged at startup:
+
+```
+Reweighting enabled: penalty bias detected (Δg=X.X kT)
+```
+
+No special configuration is needed — include the same `energy.penalty` section
+used during the biased simulation.
+
 ### Usage
 
 ```sh
