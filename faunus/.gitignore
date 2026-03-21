@@ -20,8 +20,17 @@ Cargo.lock
 
 *~
 *.dat
-*.dat.gz
+*.gz
+*.yaml
+*.yml
+*.txt
 *.xyz
+*.csv
+*.pdf
+*.json
+*.tcl
+*.psf
+*.bak
 scene.vmd
 output.*
 .DS_Store
