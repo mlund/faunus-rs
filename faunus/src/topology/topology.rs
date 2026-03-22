@@ -288,7 +288,7 @@ impl Topology {
     /// Set ids for molecule kinds in the topology, validate the molecules and
     /// set indices of atom kinds forming each molecule.
     pub fn finalize_molecules(&mut self) -> anyhow::Result<()> {
-        use super::molecule::GroupSemantics;
+        use super::molecule::GroupKind;
         for (i, molecule) in self.moleculekinds.iter_mut().enumerate() {
             molecule.expand_structure()?;
             if molecule.atom_names().is_empty() {
@@ -310,7 +310,7 @@ impl Topology {
                 .collect::<Result<Vec<_>, _>>()?;
             molecule.set_atom_indices(indices);
 
-            // Determine group semantics from atom flags and YAML `atomic` field
+            // Upgrade to Reservoir if the molecule's atom has `reservoir: true`
             let has_reservoir_atom = molecule
                 .atom_indices()
                 .iter()
@@ -321,10 +321,7 @@ impl Topology {
                     "reservoir molecule '{}' must have exactly one atom",
                     molecule.name()
                 );
-                molecule.set_group_semantics(GroupSemantics::Reservoir);
-            }
-            if molecule.serde_atomic() && molecule.group_semantics() == GroupSemantics::Molecular {
-                molecule.set_group_semantics(GroupSemantics::Atomic);
+                molecule.set_group_kind(GroupKind::Reservoir);
             }
 
             // Validation (checks the serde `atomic` bool and structure)

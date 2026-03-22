@@ -655,7 +655,7 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
     #[test]
     fn reservoir_block_creates_single_group() {
         use crate::context::WithTopology;
-        use crate::topology::GroupSemantics;
+        use crate::topology::GroupKind;
         let ctx = backend_from_str(
             r#"
 atoms:
@@ -680,7 +680,7 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
         assert_eq!(ctx.groups()[0].len(), 150);
         // Molecule detected as reservoir
         let mol = &ctx.topology_ref().moleculekinds()[0];
-        assert_eq!(mol.group_semantics(), GroupSemantics::Reservoir);
+        assert_eq!(mol.group_kind(), GroupKind::Reservoir);
         assert!(mol.atomic());
         assert!(!mol.has_com());
         assert!(mol.is_reservoir());

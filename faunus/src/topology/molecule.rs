@@ -17,7 +17,7 @@ use std::path::{Path, PathBuf};
 
 use derive_builder::Builder;
 use derive_getters::Getters;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use unordered_pair::UnorderedPair;
 
 use crate::topology::{Chain, DegreesOfFreedom, Residue, Value};
@@ -59,7 +59,7 @@ pub struct FastaStructure {
 
 /// How a molecule's particles are organized into groups.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum GroupSemantics {
+pub enum GroupKind {
     /// One group per molecule, has COM.
     #[default]
     Molecular,
@@ -67,6 +67,24 @@ pub enum GroupSemantics {
     Atomic,
     /// Like Atomic but implicit: no volume factor in entropy bias, not in cell.
     Reservoir,
+}
+
+fn deserialize_atomic<'de, D: Deserializer<'de>>(deserializer: D) -> Result<GroupKind, D::Error> {
+    Ok(if bool::deserialize(deserializer)? {
+        GroupKind::Atomic
+    } else {
+        GroupKind::Molecular
+    })
+}
+
+fn serialize_atomic<S: Serializer>(
+    group_kind: &GroupKind,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    serializer.serialize_bool(matches!(
+        group_kind,
+        GroupKind::Atomic | GroupKind::Reservoir
+    ))
 }
 
 /// Description of molecule properties.
@@ -132,7 +150,7 @@ pub struct MoleculeKind {
     #[getter(skip)]
     bond_graph: BondGraph,
     /// YAML override for center-of-mass tracking (molecular groups only).
-    /// Superseded by `group_semantics` for Atomic/Reservoir; use `has_com()` accessor.
+    /// Superseded by `group_kind` for Atomic/Reservoir; use `has_com()` accessor.
     #[serde(default = "default_true")]
     #[getter(skip)]
     has_com: bool,
@@ -140,17 +158,17 @@ pub struct MoleculeKind {
     #[serde(default)]
     #[getter(skip)]
     activity: Option<f64>,
-    /// YAML input for `atomic: true`. Consumed during finalization to set `group_semantics`;
-    /// use `atomic()` or `group_semantics()` accessors instead of reading this field.
-    #[serde(default)]
-    #[getter(skip)]
-    atomic: bool,
-    /// How this molecule's particles are organized (Molecular, Atomic, or Reservoir).
-    /// Set during topology finalization from `atomic` and atom-level `reservoir` flags.
-    #[serde(skip)]
+    /// How this molecule's particles are organized.
+    /// Deserialized from YAML `atomic: true/false`; reservoir detection upgrades during finalization.
+    #[serde(
+        default,
+        rename = "atomic",
+        deserialize_with = "deserialize_atomic",
+        serialize_with = "serialize_atomic"
+    )]
     #[getter(skip)]
     #[builder(default)]
-    group_semantics: GroupSemantics,
+    group_kind: GroupKind,
     /// Opt in to Coulomb correction for excluded pairs.
     /// Needed because the splined nonbonded potential bundles SR + Coulomb,
     /// so exclusions skip both — but charge titration and alchemical moves
@@ -215,9 +233,9 @@ impl MoleculeKind {
     /// Map a group-relative index to the topology-level index.
     /// Atomic/reservoir mega-groups have one topology entry shared by all particles.
     pub const fn topology_index(&self, relative_index: usize) -> usize {
-        match self.group_semantics {
-            GroupSemantics::Molecular => relative_index,
-            GroupSemantics::Atomic | GroupSemantics::Reservoir => 0,
+        match self.group_kind {
+            GroupKind::Molecular => relative_index,
+            GroupKind::Atomic | GroupKind::Reservoir => 0,
         }
     }
 
@@ -226,19 +244,14 @@ impl MoleculeKind {
     /// False for Atomic/Reservoir groups (overrides YAML `has_com`),
     /// otherwise uses the YAML-provided value (default true).
     pub const fn has_com(&self) -> bool {
-        match self.group_semantics {
-            GroupSemantics::Atomic | GroupSemantics::Reservoir => false,
-            GroupSemantics::Molecular => self.has_com,
+        match self.group_kind {
+            GroupKind::Atomic | GroupKind::Reservoir => false,
+            GroupKind::Molecular => self.has_com,
         }
     }
 
-    /// Raw YAML `atomic` flag (before semantics resolution).
-    pub(super) const fn serde_atomic(&self) -> bool {
-        self.atomic
-    }
-
-    pub(super) fn set_group_semantics(&mut self, semantics: GroupSemantics) {
-        self.group_semantics = semantics;
+    pub(super) fn set_group_kind(&mut self, group_kind: GroupKind) {
+        self.group_kind = group_kind;
     }
 
     pub const fn activity(&self) -> Option<f64> {
@@ -246,18 +259,15 @@ impl MoleculeKind {
     }
 
     pub const fn atomic(&self) -> bool {
-        matches!(
-            self.group_semantics,
-            GroupSemantics::Atomic | GroupSemantics::Reservoir
-        )
+        matches!(self.group_kind, GroupKind::Atomic | GroupKind::Reservoir)
     }
 
-    pub const fn group_semantics(&self) -> GroupSemantics {
-        self.group_semantics
+    pub const fn group_kind(&self) -> GroupKind {
+        self.group_kind
     }
 
     pub const fn is_reservoir(&self) -> bool {
-        matches!(self.group_semantics, GroupSemantics::Reservoir)
+        matches!(self.group_kind, GroupKind::Reservoir)
     }
 
     pub const fn keep_excluded_coulomb(&self) -> bool {
@@ -459,7 +469,7 @@ fn validate_molecule(molecule: &MoleculeKind) -> Result<(), ValidationError> {
         ));
     }
 
-    if molecule.atomic {
+    if molecule.group_kind != GroupKind::Molecular {
         if n_atoms != 1 {
             return Err(ValidationError::new("")
                 .with_message("atomic molecule must have exactly one atom type".into()));
@@ -682,7 +692,7 @@ mod tests {
             .atoms(vec!["A".into(), "B".into()])
             .atom_indices(vec![0, 1])
             .atom_names(vec![None, None])
-            .atomic(true)
+            .group_kind(GroupKind::Atomic)
             .build()
             .unwrap();
         assert!(molecule.validate().is_err());
@@ -695,7 +705,7 @@ mod tests {
             .atoms(vec!["A".into()])
             .atom_indices(vec![0])
             .atom_names(vec![None])
-            .atomic(true)
+            .group_kind(GroupKind::Atomic)
             .bonds(vec![Bond::new(
                 [0, 0],
                 BondKind::Unspecified,
@@ -713,7 +723,7 @@ mod tests {
             .atoms(vec!["X".into()])
             .atom_indices(vec![0])
             .atom_names(vec![None])
-            .atomic(true)
+            .group_kind(GroupKind::Atomic)
             .build()
             .unwrap();
         assert!(molecule.validate().is_ok());

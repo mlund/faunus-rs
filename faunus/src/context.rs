@@ -82,15 +82,15 @@ pub trait ParticleSystem: GroupCollection + WithCell + WithTopology {
     /// Atomic groups contribute each active atom; molecular groups contribute one.
     /// This is the correct N for the V^N partition function factor.
     fn num_active_mass_centers(&self) -> usize {
-        use crate::topology::GroupSemantics;
+        use crate::topology::GroupKind;
         let mol_kinds = self.topology_ref().moleculekinds();
         self.groups()
             .iter()
             .filter(|g| !g.is_empty())
-            .map(|g| match mol_kinds[g.molecule()].group_semantics() {
-                GroupSemantics::Reservoir => 0,
-                GroupSemantics::Atomic => g.len(),
-                GroupSemantics::Molecular => 1,
+            .map(|g| match mol_kinds[g.molecule()].group_kind() {
+                GroupKind::Reservoir => 0,
+                GroupKind::Atomic => g.len(),
+                GroupKind::Molecular => 1,
             })
             .sum()
     }

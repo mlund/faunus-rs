@@ -72,7 +72,7 @@ use serde::{Deserialize, Serialize};
 use serde::{Deserializer, Serializer};
 
 pub(crate) use self::block::{InsertionPolicy, MoleculeBlock};
-pub use self::molecule::{GroupSemantics, MoleculeKind, MoleculeKindBuilder};
+pub use self::molecule::{GroupKind, MoleculeKind, MoleculeKindBuilder};
 
 /// Trait implemented by collections of atoms that should not overlap (e.g., residues, chains).
 pub(crate) trait IndexRange {
