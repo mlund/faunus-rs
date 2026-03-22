@@ -84,12 +84,6 @@ struct ResolvedReaction {
 /// Result of building speciation actions: (actions, group changes, ln_bias).
 type ActionBuild = (Vec<SpeciationAction>, Vec<(usize, GroupChange)>, f64);
 
-/// Trial state stored between `propose_move` and `bias`.
-#[derive(Clone, Debug)]
-struct TrialState {
-    ln_bias: f64,
-}
-
 /// Reaction ensemble Monte Carlo move.
 ///
 /// Supports molecular insertion/deletion and atom-type swaps.
@@ -122,9 +116,9 @@ pub struct SpeciationMove {
     /// Resolved reactions with topology IDs (populated in finalize).
     #[serde(skip)]
     resolved: Vec<ResolvedReaction>,
-    /// Trial state for current move (between propose and bias).
+    /// Entropy bias from the last `propose_move`, consumed by `bias`.
     #[serde(skip)]
-    trial_state: Option<TrialState>,
+    trial_ln_bias: Option<f64>,
 }
 
 impl crate::Info for SpeciationMove {
@@ -706,7 +700,7 @@ impl<T: Context> MoveProposal<T> for SpeciationMove {
             return None;
         }
 
-        self.trial_state = Some(TrialState { ln_bias });
+        self.trial_ln_bias = Some(ln_bias);
 
         Some(ProposedMove {
             change: Change::Groups(group_changes),
@@ -717,8 +711,8 @@ impl<T: Context> MoveProposal<T> for SpeciationMove {
     }
 
     fn bias(&self, _change: &Change, _energies: &NewOld<f64>) -> crate::montecarlo::Bias {
-        if let Some(trial) = &self.trial_state {
-            crate::montecarlo::Bias::Energy(-self.thermal_energy * trial.ln_bias)
+        if let Some(ln_bias) = self.trial_ln_bias {
+            crate::montecarlo::Bias::Energy(-self.thermal_energy * ln_bias)
         } else {
             crate::montecarlo::Bias::None
         }
@@ -1001,7 +995,7 @@ mod tests {
             if let Some(proposed) = mv.propose_move(&context, &mut rng) {
                 assert!(matches!(proposed.target, MoveTarget::System));
                 assert!(matches!(proposed.transform, Transform::Speciation(_)));
-                assert!(mv.trial_state.is_some());
+                assert!(mv.trial_ln_bias.is_some());
                 return;
             }
         }
