@@ -4,12 +4,12 @@ medium:
   temperature: 300.0
 blocks:
 - molecule: Macromolecule
-  N: 1
+  'N': 1
   active: null
   insert: !RandomAtomPos
     directions: xyz
 - molecule: Ion
-  N: 20
+  'N': 20
   active: null
   insert: !RandomAtomPos
     directions: xyz
@@ -22,14 +22,14 @@ energy_change:
   final: 0.0
   initial: 0.0
 energy_timers:
-  celloverlap: '100 (energy: 68.47, update: 31.53)'
+  celloverlap: '100 (energy: 66.73, update: 33.27)'
 propagate:
   repeat: 100
   seed: !Fixed 42
   collections:
   - !Deterministic
     repeat: 1
-    elapsed_seconds: 0.021100539
+    elapsed_seconds: 0.001678325
     moves:
     - !TranslateAtom
       atom: null
@@ -39,27 +39,27 @@ propagate:
         reference: molecule Macromolecule
         exponent: 2.0
         offset: 1.0
-        sum_bias: -0.14406128935594129
+        sum_bias: 0.10641667237255886
         mean_bias:
-          avg: 0.003125395187348858
-          n: 2000
+          avg: 0.0070433933075422514
+          'n': 2000
         bounding_radii:
         - 1.7763568394002505e-15
       weight: 1.0
       repeat: 20
       statistics:
         num_trials: 2000
-        num_accepted: 1999
+        num_accepted: 1998
         mean_square_displacement:
-          avg: 1.3115538937436981
-          n: 2000
+          avg: 1.3118339606256835
+          'n': 2000
         timer:
           accumulated:
             secs: 0
             nanos: 0
         info: {}
         energy_change_sum: 0.0
-        acceptance_ratio: 0.9995
+        acceptance_ratio: 0.999
   criterion: MetropolisHastings
 analysis:
 - energy:

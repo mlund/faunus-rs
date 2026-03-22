@@ -56,6 +56,10 @@ pub struct AtomKind {
     #[serde(default)]
     #[builder(setter(strip_option), default)]
     activity: Option<f64>,
+    /// Reservoir counter atom — molecules using this become implicit reservoirs.
+    /// Unlike `activity` (infinite bath at fixed μ), reservoirs have a finite, fluctuating count.
+    #[serde(default)]
+    reservoir: bool,
     /// Map of custom properties.
     #[serde(default)]
     custom: std::collections::HashMap<String, Value>,
@@ -84,6 +88,10 @@ impl AtomKind {
 
     pub const fn activity(&self) -> Option<f64> {
         self.activity
+    }
+
+    pub const fn is_reservoir(&self) -> bool {
+        self.reservoir
     }
 
     /// Get the optional Ashbaugh-Hatch scaling factor, λ.

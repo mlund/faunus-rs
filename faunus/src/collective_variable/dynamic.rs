@@ -60,9 +60,6 @@ pub struct Molarity {
     pub selection: Selection,
 }
 
-/// Molar (mol/L) to number density (1/ų): N_A × 10⁻²⁷.
-const MOLAR_TO_INV_ANGSTROM3: f64 = physical_constants::AVOGADRO_CONSTANT * 1e-27;
-
 #[typetag::serde(name = "molarity")]
 impl CvKind for Molarity {
     fn evaluate(&self, context: &dyn EvalContext) -> f64 {
@@ -73,7 +70,7 @@ impl CvKind for Molarity {
             })
             .len() as f64;
         let volume = context.cell().volume().unwrap_or(f64::INFINITY);
-        n / (volume * MOLAR_TO_INV_ANGSTROM3)
+        n / (volume * crate::MOLAR_TO_INV_ANGSTROM3)
     }
 
     fn name(&self) -> &'static str {

@@ -288,24 +288,16 @@ impl Topology {
     /// Set ids for molecule kinds in the topology, validate the molecules and
     /// set indices of atom kinds forming each molecule.
     pub fn finalize_molecules(&mut self) -> anyhow::Result<()> {
+        use super::molecule::GroupSemantics;
         for (i, molecule) in self.moleculekinds.iter_mut().enumerate() {
             molecule.expand_structure()?;
             if molecule.atom_names().is_empty() {
                 molecule.empty_atom_names();
             }
 
-            // validate the molecule
-            molecule.validate()?;
-
-            // atomic molecules are independent particles with no COM
-            if molecule.atomic() {
-                molecule.set_has_com(false);
-            }
-
-            // set index
             molecule.set_id(i);
 
-            // set atom indices
+            // Resolve atom indices before validation so semantics can be determined
             let indices = molecule
                 .atoms()
                 .iter()
@@ -317,6 +309,34 @@ impl Topology {
                 })
                 .collect::<Result<Vec<_>, _>>()?;
             molecule.set_atom_indices(indices);
+
+            // Determine group semantics from atom flags and YAML `atomic` field
+            let has_reservoir_atom = molecule
+                .atom_indices()
+                .iter()
+                .any(|&id| self.atomkinds[id].is_reservoir());
+            if has_reservoir_atom {
+                anyhow::ensure!(
+                    molecule.atoms().len() == 1,
+                    "reservoir molecule '{}' must have exactly one atom",
+                    molecule.name()
+                );
+                molecule.set_group_semantics(GroupSemantics::Reservoir);
+            }
+            if molecule.serde_atomic() && molecule.group_semantics() == GroupSemantics::Molecular {
+                molecule.set_group_semantics(GroupSemantics::Atomic);
+            }
+
+            // Validation (checks the serde `atomic` bool and structure)
+            molecule.validate()?;
+
+            // Reservoir molecules cannot have activity (different semantics)
+            if molecule.is_reservoir() && molecule.activity().is_some() {
+                anyhow::bail!(
+                    "reservoir molecule '{}' cannot have activity",
+                    molecule.name()
+                );
+            }
 
             // expand exclusions (must be done after validation - the bonds must be valid)
             molecule.finalize_bonds();
@@ -340,6 +360,13 @@ impl Topology {
                 .position(|x| x.name() == block.molecule())
                 .ok_or_else(|| anyhow::Error::msg("undefined molecule kind in a block"))?;
             block.set_molecule_id(index);
+
+            // Reservoir blocks default to RandomAtomPos (they need no spatial structure)
+            if self.moleculekinds[index].is_reservoir() && block.insert_policy().is_none() {
+                block.set_insert_policy(InsertionPolicy::RandomAtomPos {
+                    directions: Default::default(),
+                });
+            }
 
             // check that if positions are provided manually, they are consistent with the topology
             if let Some(InsertionPolicy::Manual(positions)) = block.insert_policy() {

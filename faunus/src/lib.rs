@@ -19,6 +19,9 @@ use topology::Topology;
 /// Molar gas constant in kJ/(mol·K).
 pub const R_IN_KJ_PER_MOL: f64 = physical_constants::MOLAR_GAS_CONSTANT * 1e-3;
 
+/// 1 M standard-state concentration in 1/ų: N_A · 10⁻²⁷.
+pub const MOLAR_TO_INV_ANGSTROM3: f64 = physical_constants::AVOGADRO_CONSTANT * 1e-27;
+
 pub type Point = nalgebra::Vector3<f64>;
 pub type UnitQuaternion = nalgebra::UnitQuaternion<f64>;
 pub type PositionVec = Vec<Point>;

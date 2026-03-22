@@ -585,6 +585,10 @@ impl MoleculeBlock {
         self.num_molecules * molecules[self.molecule_id].atom_indices().len()
     }
 
+    pub(super) fn set_insert_policy(&mut self, policy: InsertionPolicy) {
+        self.insert = Some(policy);
+    }
+
     /// Set id (kind) of the molecules in the block.
     pub(super) const fn set_molecule_id(&mut self, molecule_id: usize) {
         self.molecule_id = molecule_id;
@@ -646,6 +650,102 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
         assert_eq!(ctx.groups().len(), 1);
         assert_eq!(ctx.groups()[0].capacity(), 20);
         assert_eq!(ctx.groups()[0].len(), 8);
+    }
+
+    #[test]
+    fn reservoir_block_creates_single_group() {
+        use crate::context::WithTopology;
+        use crate::topology::GroupSemantics;
+        let ctx = backend_from_str(
+            r#"
+atoms:
+  - {name: _res, mass: 0.0, reservoir: true}
+molecules:
+  - name: solid
+    atoms: [_res]
+system:
+  cell: !Cuboid [10.0, 10.0, 10.0]
+  medium: {permittivity: !Vacuum, temperature: 300.0}
+  energy: {}
+  blocks:
+    - molecule: solid
+      N: 200
+      active: 150
+propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
+"#,
+        );
+        // Single atomic mega-group
+        assert_eq!(ctx.groups().len(), 1);
+        assert_eq!(ctx.groups()[0].capacity(), 200);
+        assert_eq!(ctx.groups()[0].len(), 150);
+        // Molecule detected as reservoir
+        let mol = &ctx.topology_ref().moleculekinds()[0];
+        assert_eq!(mol.group_semantics(), GroupSemantics::Reservoir);
+        assert!(mol.atomic());
+        assert!(!mol.has_com());
+        assert!(mol.is_reservoir());
+    }
+
+    #[test]
+    fn reservoir_with_activity_fails() {
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(
+            tmp.path(),
+            r#"
+atoms:
+  - {name: _res, mass: 0.0, reservoir: true}
+molecules:
+  - name: solid
+    atoms: [_res]
+    activity: 1.0
+system:
+  cell: !Cuboid [10.0, 10.0, 10.0]
+  medium: {permittivity: !Vacuum, temperature: 300.0}
+  energy: {}
+  blocks:
+    - molecule: solid
+      N: 10
+propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
+"#,
+        )
+        .unwrap();
+        let mut rng = rand::thread_rng();
+        let result = Backend::new(tmp.path(), None, &mut rng);
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("reservoir"), "unexpected error: {err}");
+    }
+
+    #[test]
+    fn reservoir_excluded_from_mass_centers() {
+        use crate::context::ParticleSystem;
+        let ctx = backend_from_str(
+            r#"
+atoms:
+  - {name: _res, mass: 0.0, reservoir: true}
+  - {name: X, mass: 1.0, sigma: 1.0}
+molecules:
+  - name: solid
+    atoms: [_res]
+  - name: particle
+    atoms: [X]
+    atomic: true
+system:
+  cell: !Cuboid [10.0, 10.0, 10.0]
+  medium: {permittivity: !Vacuum, temperature: 300.0}
+  energy: {}
+  blocks:
+    - molecule: solid
+      N: 100
+      active: 50
+    - molecule: particle
+      N: 10
+      insert: !RandomAtomPos {}
+propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
+"#,
+        );
+        // Reservoir (50 active) should NOT count; 10 atoms should
+        assert_eq!(ctx.num_active_mass_centers(), 10);
     }
 
     #[test]

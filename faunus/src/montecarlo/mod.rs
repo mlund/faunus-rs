@@ -26,7 +26,6 @@ use log;
 use rand::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::ops::Div;
 use std::{cmp::Ordering, ops::Neg};
 
 mod crankshaft;
@@ -445,7 +444,11 @@ impl<T: Context + 'static> MarkovChain<T> {
     }
 }
 
-/// Entropy bias due to a change in number of particles
+/// Entropy bias due to a change in number of particles.
+///
+/// Uses a 1 M standard state so that equilibrium constants from `!K` and `!pK`
+/// are in molar units, matching C++ Faunus and standard chemistry conventions.
+/// The concentration is `N / (V · c₀)` where `c₀ = N_A · 10⁻²⁷` 1/(Å³·M).
 ///
 /// See:
 /// - <https://en.wikipedia.org/wiki/Entropy_(statistical_thermodynamics)#Entropy_of_mixing>
@@ -456,11 +459,8 @@ impl<T: Context + 'static> MarkovChain<T> {
 /// use faunus::montecarlo::*;
 /// let vol = NewOld::from(1.0, 1.0);
 /// assert_eq!(entropy_bias(NewOld::from(0, 0), vol.clone()), 0.0);
-/// assert_eq!(entropy_bias(NewOld::from(2, 1), vol.clone()), f64::ln(2.0));
-/// assert_eq!(entropy_bias(NewOld::from(1, 2), vol.clone()), f64::ln(0.5));
+/// // With V = 1/c₀ (one standard-state volume), N/V/c₀ = N, so bias = ln(N)
 /// ~~~
-///
-/// Note that the volume unit should match so that n/V matches the unit of the chemical potential
 pub fn entropy_bias(n: NewOld<usize>, volume: NewOld<f64>) -> f64 {
     let dn = n.difference();
     match dn.cmp(&0) {
@@ -470,13 +470,19 @@ pub fn entropy_bias(n: NewOld<usize>, volume: NewOld<f64>) -> f64 {
             }
             0.0
         }
-        Ordering::Greater => (0..dn)
-            .map(|i| f64::from(n.old as i32 + i + 1).div(volume.new).ln())
-            .sum(),
-        Ordering::Less => (0..-dn)
-            .map(|i| f64::from(n.old as i32 - i).div(volume.old).ln())
-            .sum::<f64>()
-            .neg(),
+        Ordering::Greater => {
+            let denom = volume.new * crate::MOLAR_TO_INV_ANGSTROM3;
+            (0..dn)
+                .map(|i| (f64::from(n.old as i32 + i + 1) / denom).ln())
+                .sum()
+        }
+        Ordering::Less => {
+            let denom = volume.old * crate::MOLAR_TO_INV_ANGSTROM3;
+            (0..-dn)
+                .map(|i| (f64::from(n.old as i32 - i) / denom).ln())
+                .sum::<f64>()
+                .neg()
+        }
     }
 }
 

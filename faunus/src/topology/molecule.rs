@@ -57,6 +57,18 @@ pub struct FastaStructure {
     pub req: f64,
 }
 
+/// How a molecule's particles are organized into groups.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum GroupSemantics {
+    /// One group per molecule, has COM.
+    #[default]
+    Molecular,
+    /// Mega-group of independent atoms, no COM.
+    Atomic,
+    /// Like Atomic but implicit: no volume factor in entropy bias, not in cell.
+    Reservoir,
+}
+
 /// Description of molecule properties.
 ///
 /// Molecule is a collection of atoms that can (but not do not have to be) connected by bonds.
@@ -119,7 +131,8 @@ pub struct MoleculeKind {
     #[builder(default)]
     #[getter(skip)]
     bond_graph: BondGraph,
-    /// Does it make sense to calculate center of mass for the molecule?
+    /// YAML override for center-of-mass tracking (molecular groups only).
+    /// Superseded by `group_semantics` for Atomic/Reservoir; use `has_com()` accessor.
     #[serde(default = "default_true")]
     #[getter(skip)]
     has_com: bool,
@@ -127,10 +140,17 @@ pub struct MoleculeKind {
     #[serde(default)]
     #[getter(skip)]
     activity: Option<f64>,
-    /// Single-atom molecules pooled in one expandable group
+    /// YAML input for `atomic: true`. Consumed during finalization to set `group_semantics`;
+    /// use `atomic()` or `group_semantics()` accessors instead of reading this field.
     #[serde(default)]
     #[getter(skip)]
     atomic: bool,
+    /// How this molecule's particles are organized (Molecular, Atomic, or Reservoir).
+    /// Set during topology finalization from `atomic` and atom-level `reservoir` flags.
+    #[serde(skip)]
+    #[getter(skip)]
+    #[builder(default)]
+    group_semantics: GroupSemantics,
     /// Opt in to Coulomb correction for excluded pairs.
     /// Needed because the splined nonbonded potential bundles SR + Coulomb,
     /// so exclusions skip both — but charge titration and alchemical moves
@@ -193,21 +213,32 @@ impl MoleculeKind {
     }
 
     /// Map a group-relative index to the topology-level index.
-    /// Atomic mega-groups have one topology entry shared by all particles.
+    /// Atomic/reservoir mega-groups have one topology entry shared by all particles.
     pub const fn topology_index(&self, relative_index: usize) -> usize {
-        if self.atomic {
-            0
-        } else {
-            relative_index
+        match self.group_semantics {
+            GroupSemantics::Molecular => relative_index,
+            GroupSemantics::Atomic | GroupSemantics::Reservoir => 0,
         }
     }
 
+    /// Whether center-of-mass tracking makes sense.
+    ///
+    /// False for Atomic/Reservoir groups (overrides YAML `has_com`),
+    /// otherwise uses the YAML-provided value (default true).
     pub const fn has_com(&self) -> bool {
-        self.has_com
+        match self.group_semantics {
+            GroupSemantics::Atomic | GroupSemantics::Reservoir => false,
+            GroupSemantics::Molecular => self.has_com,
+        }
     }
 
-    pub(crate) fn set_has_com(&mut self, has_com: bool) {
-        self.has_com = has_com;
+    /// Raw YAML `atomic` flag (before semantics resolution).
+    pub(super) const fn serde_atomic(&self) -> bool {
+        self.atomic
+    }
+
+    pub(super) fn set_group_semantics(&mut self, semantics: GroupSemantics) {
+        self.group_semantics = semantics;
     }
 
     pub const fn activity(&self) -> Option<f64> {
@@ -215,7 +246,18 @@ impl MoleculeKind {
     }
 
     pub const fn atomic(&self) -> bool {
-        self.atomic
+        matches!(
+            self.group_semantics,
+            GroupSemantics::Atomic | GroupSemantics::Reservoir
+        )
+    }
+
+    pub const fn group_semantics(&self) -> GroupSemantics {
+        self.group_semantics
+    }
+
+    pub const fn is_reservoir(&self) -> bool {
+        matches!(self.group_semantics, GroupSemantics::Reservoir)
     }
 
     pub const fn keep_excluded_coulomb(&self) -> bool {

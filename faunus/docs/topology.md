@@ -34,6 +34,7 @@ atoms:
 | `epsilon` / `ε` / `eps` | no |      | Lennard-Jones well depth (kJ/mol)        |
 | `hydrophobicity` | no       |         | See below                                |
 | `activity`       | no       |         | Activity for implicit species (molar)    |
+| `reservoir`      | no       | `false` | Reservoir counter atom (see [Implicit Reservoirs](#implicit-reservoirs)) |
 | `custom`         | no       | `{}`    | Arbitrary key-value properties           |
 
 ### Hydrophobicity
@@ -79,7 +80,7 @@ molecules:
 | `chains`              | no       | `[]`    | Protein chains                                   |
 | `activity`            | no       |         | Activity for GCMC fugacity (molar)               |
 | `has_com`             | no       | `true`  | Whether center-of-mass makes sense               |
-| `atomic`              | no       | `false` | Pool all instances into a single group (see below)|
+| `atomic`              | no       | `false` | Pool all instances into a single group (see below). Auto-set for reservoir atoms |
 | `custom`              | no       | `{}`    | Arbitrary key-value properties                   |
 
 ### Structure Sources (`from_structure`)
@@ -364,6 +365,44 @@ Definitions in later files take precedence; definitions in the main file take pr
 ```yaml
 include: [forcefield.yaml, overrides.yaml]
 ```
+
+### Implicit Reservoirs
+
+Reservoir counter atoms (`reservoir: true`) represent a finite amount of substance in another phase
+(e.g., a solid) that is never spatially represented in the simulation cell.
+A molecule containing a reservoir atom automatically becomes an atomic mega-group
+whose active count tracks the reservoir size.
+
+This is distinct from `activity` (infinite bath at fixed chemical potential).
+Reservoirs have a finite, fluctuating count driven by speciation reactions,
+and the entropy bias is excluded entirely (solid activity = 1).
+A molecule cannot have both `reservoir` and `activity`.
+State persistence is automatic via group sizes.
+
+**Example: Ca(OH)₂ solubility** ($K_{sp} = 10^{-5.19}$):
+
+```yaml
+atoms:
+  - {name: ca(oh)₂, mass: 0.0,  reservoir: true} # <-- this is a reservoir!
+  - {name: ca²⁺,    mass: 40.0, charge: 2.0}
+  - {name: oh⁻,     mass: 17.0, charge: -1.0}
+molecules:
+  - {name: Ca(OH)₂, atoms: [ca(oh)₂]} # auto implicit; never in simulation cell
+  - {name: Ca²⁺,    atoms: [ca²⁺], atomic: true}
+  - {name: OH⁻,     atoms: [oh⁻],  atomic: true}
+system:
+  blocks:
+    - {molecule: Ca(OH)₂, N: 400} # finite reservoir; solid phase
+    - {molecule: Ca²⁺, N: 800, active: 0, insert: !RandomAtomPos {}}
+    - {molecule: OH⁻,  N: 800, active: 0, insert: !RandomAtomPos {}}
+```
+
+With the [speciation move](moves.md#speciation-move-reaction-ensemble):
+```yaml
+reactions:
+  - ["Ca(OH)₂ = Ca²⁺ + OH⁻ + OH⁻", !pK 5.19]
+```
+At equilibrium: $[Ca^{2+}] \approx 0.012\;\text{M}$, $[OH^-] \approx 0.023\;\text{M}$.
 
 ## Chemical Reactions
 

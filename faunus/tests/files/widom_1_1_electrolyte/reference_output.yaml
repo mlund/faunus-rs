@@ -18,19 +18,19 @@ cell: !Cuboid
 - 50.0
 - 50.0
 energy_change:
-  drift: 2.3305801732931286e-12
-  final: -222.5623600859476
-  initial: -232.20915951005009
+  drift: 2.2168933355715126e-12
+  final: -243.41791139269253
+  initial: -238.69027657055494
 energy_timers:
-  celloverlap: '4.9 (energy: 3.25, update: 1.65)'
-  nonbonded: '95.10000000000001 (energy: 93.31, update: 1.79)'
+  celloverlap: '4.17 (energy: 2.79, update: 1.38)'
+  nonbonded: '95.83 (energy: 94.14, update: 1.69)'
 propagate:
   repeat: 5000
   seed: !Fixed 42
   collections:
   - !Deterministic
     repeat: 1
-    elapsed_seconds: 0.224638813
+    elapsed_seconds: 0.149421281
     moves:
     - !TranslateAtom
       atom: null
@@ -40,17 +40,17 @@ propagate:
       repeat: 1
       statistics:
         num_trials: 5000
-        num_accepted: 2586
+        num_accepted: 2600
         mean_square_displacement:
-          avg: 228.78080369898365
+          avg: 233.4194816517213
           'n': 5000
         timer:
           accumulated:
             secs: 0
             nanos: 0
         info: {}
-        energy_change_sum: 152.98398790613354
-        acceptance_ratio: 0.5172
+        energy_change_sum: -34.2047759651875
+        acceptance_ratio: 0.52
     - !TranslateAtom
       atom: null
       molecule: anion
@@ -59,17 +59,17 @@ propagate:
       repeat: 1
       statistics:
         num_trials: 5000
-        num_accepted: 2533
+        num_accepted: 2610
         mean_square_displacement:
-          avg: 234.59131418285006
+          avg: 245.96996679658997
           'n': 5000
         timer:
           accumulated:
             secs: 0
             nanos: 0
         info: {}
-        energy_change_sum: -143.33718848203338
-        acceptance_ratio: 0.5066
+        energy_change_sum: 29.477141143047703
+        acceptance_ratio: 0.522
   criterion: MetropolisHastings
 analysis:
 - scaled_widom_insertion:
@@ -77,30 +77,30 @@ analysis:
     num_samples: 2000
     excess_chemical_potential (kT):
       short_range:
-        mean: 0.16281844652207741
-        error: 0.0019214664128036688
+        mean: 0.16635787998231966
+        error: 0.0019519009732220415
       electrostatic:
-        mean: -0.3915426436653476
-        error: 0.0037298665863595756
+        mean: -0.3909681972062212
+        error: 0.0035552498295763108
       total:
-        mean: -0.22872419714326922
-        error: 0.004176210576266493
+        mean: -0.22461031722390137
+        error: 0.003984473110054983
     unscaled_widom (kT):
-      mean: -0.2563778430129623
-      error: 0.006726191478827048
+      mean: -0.25261321127438613
+      error: 0.0064075881265661765
 - scaled_widom_insertion:
     atom: Cl
     num_samples: 2000
     excess_chemical_potential (kT):
       short_range:
-        mean: 0.16281844652207741
-        error: 0.0019214664128036688
+        mean: 0.16635787998231966
+        error: 0.0019519009732220415
       electrostatic:
-        mean: -0.3910895837721519
-        error: 0.0035989779705580325
+        mean: -0.38230290985674975
+        error: 0.003536461929935465
       total:
-        mean: -0.22827113725007478
-        error: 0.003965886555873747
+        mean: -0.2159450298744304
+        error: 0.003971073378255991
     unscaled_widom (kT):
-      mean: -0.2562841876773589
-      error: 0.0063913951124897304
+      mean: -0.23904051645600036
+      error: 0.006409645141507882

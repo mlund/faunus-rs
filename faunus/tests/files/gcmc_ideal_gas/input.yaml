@@ -1,11 +1,11 @@
 # Ideal gas GCMC: non-interacting particles with speciation move.
-# Acceptance follows Smith & Triska (1994) with V^Δν · ∏[N!/(N+ν)!] factors,
-# consistent with ESPResSo's reaction ensemble.
+# Acceptance follows Smith & Triska (1994) with (V·c₀)^Δν · ∏[N!/(N+ν)!] factors
+# where c₀ = N_A·10⁻²⁷ is the 1 M standard state in 1/ų.
 #
 # Reaction "= particle" inserts/deletes single-atom molecules.
 #
 # Expected analysis:
-#   count("molecule particle") = K*V = 0.01 * 1000 = 10
+#   count("molecule particle") = K·V·c₀ = 16.6054 * 1000 * 6.022e-4 = 10
 
 atoms:
   - {name: X, mass: 1.0, sigma: 1.0}
@@ -42,4 +42,4 @@ propagate:
         - !SpeciationMove
           temperature: 298.15
           reactions:
-            - ["= particle", !K 0.01]
+            - ["= particle", !K 16.6053906717]

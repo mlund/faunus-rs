@@ -107,61 +107,161 @@ groups:
 - molecule: 0
   capacity: 1
   size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
 - molecule: 0
   capacity: 1
   size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
 - molecule: 0
   capacity: 1
   size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
 - molecule: 0
   capacity: 1
   size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
 - molecule: 0
   capacity: 1
   size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
 - molecule: 0
   capacity: 1
   size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
 - molecule: 0
   capacity: 1
   size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
 - molecule: 0
   capacity: 1
   size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
 - molecule: 0
   capacity: 1
   size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
 - molecule: 0
   capacity: 1
   size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
 - molecule: 0
   capacity: 1
   size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
 - molecule: 0
   capacity: 1
   size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
 - molecule: 0
   capacity: 1
   size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
 - molecule: 0
   capacity: 1
   size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
 - molecule: 0
   capacity: 1
   size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
 - molecule: 0
   capacity: 1
   size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
 - molecule: 0
   capacity: 1
   size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
 - molecule: 0
   capacity: 1
   size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
 - molecule: 0
   capacity: 1
   size: Full
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
 - molecule: 0
   capacity: 1
   size: Full
-step: 65000
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+step: 80000

@@ -157,4 +157,9 @@ groups:
 - molecule: 0
   capacity: 30
   size: !Partial 10
-step: 5000
+  quaternion:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+step: 20000

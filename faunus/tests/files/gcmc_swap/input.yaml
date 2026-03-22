@@ -6,7 +6,7 @@
 # - Reaction "= M" inserts/deletes single-atom molecules (ideal gas GCMC)
 #
 # Expected analysis:
-#   count("molecule M")  = K*V = 0.01 * 1000 = 10
+#   count("molecule M")  = K·V·c₀ = 16.6054 * 1000 * 6.022e-4 = 10
 #   count("atomtype A")  = <N_M> + 8*2/(1+K) = 10 + 4 = 14
 
 atoms:
@@ -56,4 +56,4 @@ propagate:
           temperature: 298.15
           reactions:
             - ["⚛A = ⚛B", !K 3.0]
-            - ["= M", !K 0.01]
+            - ["= M", !K 16.6053906717]

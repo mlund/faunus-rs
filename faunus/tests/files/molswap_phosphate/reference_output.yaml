@@ -4,22 +4,22 @@ medium:
   temperature: 298.15
 blocks:
 - molecule: H₃PO₄
-  N: 20
+  'N': 20
   active: 0
   insert: !RandomAtomPos
     directions: xyz
 - molecule: H₂PO₄⁻
-  N: 20
+  'N': 20
   active: null
   insert: !RandomAtomPos
     directions: xyz
 - molecule: HPO₄²⁻
-  N: 20
+  'N': 20
   active: 0
   insert: !RandomAtomPos
     directions: xyz
 - molecule: PO₄³⁻
-  N: 20
+  'N': 20
   active: 0
   insert: !RandomAtomPos
     directions: xyz
@@ -32,14 +32,14 @@ energy_change:
   final: 0.0
   initial: 0.0
 energy_timers:
-  celloverlap: '100 (energy: 69.84, update: 30.16)'
+  celloverlap: '100 (energy: 66.32, update: 33.68)'
 propagate:
   repeat: 5000
   seed: !Fixed 42
   collections:
   - !Deterministic
     repeat: 1
-    elapsed_seconds: 1.6500698599999999
+    elapsed_seconds: 0.151805117
     moves:
     - !SpeciationMove
       reactions:
@@ -57,7 +57,7 @@ propagate:
         num_accepted: 1466
         mean_square_displacement:
           avg: 0.0
-          n: 3534
+          'n': 3534
         timer:
           accumulated:
             secs: 0

@@ -4,7 +4,7 @@ medium:
   temperature: 298.0
 blocks:
 - molecule: protein
-  N: 1
+  'N': 1
   active: null
   insert: !Manual
   - - 0.0
@@ -17,31 +17,31 @@ blocks:
     - 5.0
     - 0.0
 - molecule: Na+
-  N: 30
+  'N': 30
   active: 10
   insert: !RandomAtomPos
     directions: xyz
 - molecule: Cl-
-  N: 30
+  'N': 30
   active: 10
   insert: !RandomAtomPos
     directions: xyz
 cell: !Sphere
   radius: 50.0
 energy_change:
-  drift: 2.255973186038318e-13
-  final: -5.901857134517385
-  initial: -13.475385455192631
+  drift: 1.4210854715202004e-13
+  final: -0.5652656261180198
+  initial: -16.603079763136073
 energy_timers:
-  celloverlap: '22.04 (energy: 21.38, update: 0.66)'
-  nonbonded: '77.96000000000001 (energy: 77.26, update: 0.7)'
+  celloverlap: '11.99 (energy: 11.16, update: 0.83)'
+  nonbonded: '88.01 (energy: 87.11, update: 0.9)'
 propagate:
   repeat: 2000
   seed: !Fixed 42
   collections:
   - !Deterministic
     repeat: 1
-    elapsed_seconds: 0.279141024
+    elapsed_seconds: 0.251746655
     moves:
     - !SpeciationMove
       reactions:
@@ -64,17 +64,17 @@ propagate:
       repeat: 50
       statistics:
         num_trials: 100000
-        num_accepted: 17660
+        num_accepted: 17920
         mean_square_displacement:
           avg: 0.0
-          n: 82340
+          'n': 82080
         timer:
           accumulated:
             secs: 0
             nanos: 0
         info: {}
-        energy_change_sum: -51.38485978489492
-        acceptance_ratio: 0.1766
+        energy_change_sum: -29.097536805421363
+        acceptance_ratio: 0.1792
     - !TranslateAtom
       atom: Na
       molecule: Na+
@@ -83,17 +83,17 @@ propagate:
       repeat: 1
       statistics:
         num_trials: 2000
-        num_accepted: 1088
+        num_accepted: 1087
         mean_square_displacement:
-          avg: 297.1689284912562
-          n: 2000
+          avg: 296.9450216539076
+          'n': 2000
         timer:
           accumulated:
             secs: 0
             nanos: 0
         info: {}
-        energy_change_sum: 49.56200721244133
-        acceptance_ratio: 0.544
+        energy_change_sum: -7.380845428615212
+        acceptance_ratio: 0.5435
     - !TranslateAtom
       atom: Cl
       molecule: Cl-
@@ -102,31 +102,31 @@ propagate:
       repeat: 1
       statistics:
         num_trials: 2000
-        num_accepted: 1104
+        num_accepted: 1120
         mean_square_displacement:
-          avg: 303.92205623249646
-          n: 2000
+          avg: 298.98767957077746
+          'n': 2000
         timer:
           accumulated:
             secs: 0
             nanos: 0
         info: {}
-        energy_change_sum: 9.396380893128612
-        acceptance_ratio: 0.552
+        energy_change_sum: 52.51619637105477
+        acceptance_ratio: 0.56
   criterion: MetropolisHastings
 analysis:
 - collectivevariable:
     property: Count
     num_samples: 6000
-    mean: 0.9990000000000004
-    rms: 0.9994998749374612
+    mean: 0.9979999999999982
+    rms: 0.9989994994993733
 - collectivevariable:
     property: Count
     num_samples: 6000
-    mean: 0.22200000000000022
-    rms: 0.4711687595755901
+    mean: 0.21599999999999925
+    rms: 0.4647580015448892
 - collectivevariable:
     property: Count
     num_samples: 6000
-    mean: 0.05699999999999994
-    rms: 0.23874672772626632
+    mean: 0.04699999999999993
+    rms: 0.21679483388678783

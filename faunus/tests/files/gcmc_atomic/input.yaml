@@ -2,7 +2,7 @@
 # Same physics as gcmc_ideal_gas but with `atomic: true`.
 #
 # Expected analysis:
-#   count("molecule particle") = K*V = 0.01 * 1000 = 10
+#   count("molecule particle") = K·V·c₀ = 16.6054 * 1000 * 6.022e-4 = 10
 
 atoms:
   - {name: X, mass: 1.0, sigma: 1.0}
@@ -40,4 +40,4 @@ propagate:
         - !SpeciationMove
           temperature: 298.15
           reactions:
-            - ["= particle", !K 0.01]
+            - ["= particle", !K 16.6053906717]

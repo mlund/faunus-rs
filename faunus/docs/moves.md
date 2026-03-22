@@ -323,6 +323,11 @@ $$
 with the sign matching the direction of the stoichiometric change
 ([doi:10/fqcpg3](https://doi.org/10/fqcpg3)).
 
+[Reservoir molecules](topology.md#implicit-reservoirs) participate as regular
+`Participant::Molecule` in reactions (no `~` prefix needed).
+The volume factor $V$ is replaced by unity for reservoir species,
+since they exist outside the simulation cell.
+
 ### Atom-type swaps
 
 For reactions that swap atom types within a molecule (e.g. $A \rightleftharpoons B$

@@ -18,9 +18,6 @@ use crate::{cell::Shape, Change, Context, GroupChange};
 use rand::prelude::*;
 use serde::{Deserialize, Serialize};
 
-/// Conversion from molar (mol/L) to number density (1/Å³).
-const MOLAR_TO_INV_ANGSTROM3: f64 = physical_constants::AVOGADRO_CONSTANT * 1e-27;
-
 /// Equilibrium constant in different representations.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum EquilibriumConstant {
@@ -319,13 +316,17 @@ impl SpeciationMove {
                 })
                 .collect::<anyhow::Result<_>>()?;
 
-            // Detect molecular swaps: paired reactant/product molecules with equal atom count
+            // Detect molecular swaps: paired reactant/product molecules with equal atom count.
+            // Reservoir molecules are excluded — they live in a different phase and use
+            // atomic mega-groups incompatible with the swap overlay logic.
             let mut swap_reactants: Vec<usize> = Vec::new();
             let mut swap_products: Vec<usize> = Vec::new();
             for (ri, &from_id) in reactant_mols.iter().enumerate() {
                 for (pi, &to_id) in product_mols.iter().enumerate() {
                     if !swap_products.contains(&pi)
                         && from_id != to_id
+                        && !topology.moleculekinds()[from_id].is_reservoir()
+                        && !topology.moleculekinds()[to_id].is_reservoir()
                         && topology.moleculekinds()[from_id].atom_indices().len()
                             == topology.moleculekinds()[to_id].atom_indices().len()
                     {
@@ -363,11 +364,11 @@ impl SpeciationMove {
             forward_ops.extend(swap_fwd);
             backward_ops.extend(swap_bwd);
 
-            // Fold activities into effective K:
+            // Fold activities into effective K (all in molar):
             // - Implicit species: consumed reactants increase K_eff, produced products decrease it
             // - Molecular fugacities (insert/delete only): sign is reversed, compensating for
-            //   entropy_bias using N/V instead of N/(V·z). Swap molecules are excluded since
-            //   total molecule count is conserved.
+            //   entropy_bias using N/(V·c₀) instead of N/(V·c₀·z). Swap molecules are excluded
+            //   since total molecule count is conserved.
             let mut effective_ln_k = k.ln();
             for (participants, sign) in [(reactants, 1.0_f64), (products, -1.0_f64)] {
                 for p in participants {
@@ -384,8 +385,7 @@ impl SpeciationMove {
                 for (idx, &id) in mol_ids.iter().enumerate() {
                     if !swapped.contains(&idx) {
                         if let Some(activity) = topology.moleculekinds()[id].activity() {
-                            let z = activity * MOLAR_TO_INV_ANGSTROM3;
-                            effective_ln_k -= sign * z.ln();
+                            effective_ln_k -= sign * activity.ln();
                         }
                     }
                 }
@@ -453,6 +453,23 @@ impl SpeciationMove {
         Ok(())
     }
 
+    /// Look up the running count offset for a molecule id (0 if unseen).
+    fn get_offset(offsets: &[(usize, i32)], mol_id: usize) -> i32 {
+        offsets
+            .iter()
+            .find(|(id, _)| *id == mol_id)
+            .map_or(0, |(_, v)| *v)
+    }
+
+    /// Increment the running count offset for a molecule id.
+    fn add_offset(offsets: &mut Vec<(usize, i32)>, mol_id: usize, delta: i32) {
+        if let Some(entry) = offsets.iter_mut().find(|(id, _)| *id == mol_id) {
+            entry.1 += delta;
+        } else {
+            offsets.push((mol_id, delta));
+        }
+    }
+
     /// Try to build speciation actions for the current direction of a resolved reaction.
     fn try_build_actions(
         &self,
@@ -472,21 +489,30 @@ impl SpeciationMove {
         let mut group_changes = Vec::new();
         let mut ln_bias = ln_k;
 
+        // Track pending count changes so that repeated ops on the same species
+        // (e.g. "Ca(OH)₂ = Ca²⁺ + OH⁻ + OH⁻") use incremental N values,
+        // matching the Smith & Triska ∏[N!/(N+ν)!] factor.
+        // Stack-allocated; typical reactions have ≤ 5 ops.
+        let mut count_offsets: Vec<(usize, i32)> = Vec::with_capacity(ops.len());
+
         for op in ops {
             match op {
                 ReactionOp::DeactivateMolecule(mol_id) => {
                     let molecule = &context.topology_ref().moleculekinds()[*mol_id];
+                    let offset = Self::get_offset(&count_offsets, *mol_id);
                     if molecule.atomic() {
-                        // Atomic: pick a random active atom from the mega-group
                         let group_index = context.find_atomic_group(*mol_id)?;
                         let group = &context.groups()[group_index];
-                        let n_old = group.len();
+                        let n_old = (group.len() as i32 + offset).max(0) as usize;
                         if n_old == 0 {
                             return None;
                         }
                         let rel_idx = rng.gen_range(0..n_old);
                         let abs_idx = group.to_absolute_index(rel_idx).unwrap();
-                        ln_bias -= entropy_bias(NewOld::from(n_old - 1, n_old), vol);
+                        if !molecule.is_reservoir() {
+                            ln_bias -= entropy_bias(NewOld::from(n_old - 1, n_old), vol);
+                        }
+                        Self::add_offset(&mut count_offsets, *mol_id, -1);
                         actions.push(SpeciationAction::DeactivateAtom {
                             group_index,
                             abs_index: abs_idx,
@@ -501,25 +527,29 @@ impl SpeciationMove {
                             return None;
                         }
                         let &group_index = full_groups.iter().choose(rng)?;
-                        let n_old = full_groups.len();
-                        let n_new = n_old - 1;
+                        let n_old = (full_groups.len() as i32 + offset).max(0) as usize;
+                        let n_new = n_old.saturating_sub(1);
                         ln_bias -= entropy_bias(NewOld::from(n_new, n_old), vol);
+                        Self::add_offset(&mut count_offsets, *mol_id, -1);
                         actions.push(SpeciationAction::DeactivateGroup(group_index));
                         group_changes.push((group_index, GroupChange::Resize(GroupSize::Empty)));
                     }
                 }
                 ReactionOp::ActivateMolecule(mol_id) => {
                     let molecule = &context.topology_ref().moleculekinds()[*mol_id];
+                    let offset = Self::get_offset(&count_offsets, *mol_id);
                     if molecule.atomic() {
-                        // Atomic: activate one atom in the mega-group if capacity allows
                         let group_index = context.find_atomic_group(*mol_id)?;
                         let group = &context.groups()[group_index];
-                        let n_old = group.len();
-                        if group.is_full() {
+                        let n_old = (group.len() as i32 + offset).max(0) as usize;
+                        if n_old >= group.capacity() {
                             return None;
                         }
                         let rel_idx = n_old; // newly activated slot
-                        ln_bias -= entropy_bias(NewOld::from(n_old + 1, n_old), vol);
+                        if !molecule.is_reservoir() {
+                            ln_bias -= entropy_bias(NewOld::from(n_old + 1, n_old), vol);
+                        }
+                        Self::add_offset(&mut count_offsets, *mol_id, 1);
                         let position = random_point_inside(context.cell(), rng);
                         actions.push(SpeciationAction::ActivateAtom {
                             group_index,
@@ -536,10 +566,12 @@ impl SpeciationMove {
                         }
                         let &group_index = empty_groups.iter().choose(rng)?;
 
-                        // Count current active groups
-                        let n_old = context.count_molecules(*mol_id, GroupSize::Full);
+                        let n_old = (context.count_molecules(*mol_id, GroupSize::Full) as i32
+                            + offset)
+                            .max(0) as usize;
                         let n_new = n_old + 1;
                         ln_bias -= entropy_bias(NewOld::from(n_new, n_old), vol);
+                        Self::add_offset(&mut count_offsets, *mol_id, 1);
 
                         let random_pos = random_point_inside(context.cell(), rng);
                         let group = &context.groups()[group_index];

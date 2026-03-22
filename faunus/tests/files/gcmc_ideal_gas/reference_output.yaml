@@ -4,7 +4,7 @@ medium:
   temperature: 298.15
 blocks:
 - molecule: particle
-  N: 30
+  'N': 30
   active: 10
   insert: !RandomAtomPos
     directions: xyz
@@ -17,39 +17,39 @@ energy_change:
   final: 0.0
   initial: 0.0
 energy_timers:
-  celloverlap: '100 (energy: 67.54, update: 32.46)'
+  celloverlap: '100 (energy: 66.76, update: 33.24)'
 propagate:
   repeat: 5000
   seed: !Fixed 42
   collections:
   - !Deterministic
     repeat: 1
-    elapsed_seconds: 0.017524296
+    elapsed_seconds: 0.017103099
     moves:
     - !SpeciationMove
       reactions:
       - - = particle
-        - !K 0.01
+        - !K 16.6053906717
       temperature: 298.15
       weight: 1.0
       repeat: 1
       statistics:
         num_trials: 5000
-        num_accepted: 4355
+        num_accepted: 4351
         mean_square_displacement:
           avg: 0.0
-          n: 645
+          'n': 649
         timer:
           accumulated:
             secs: 0
             nanos: 0
         info: {}
         energy_change_sum: 0.0
-        acceptance_ratio: 0.871
+        acceptance_ratio: 0.8702
   criterion: MetropolisHastings
 analysis:
 - collectivevariable:
     property: Count
     num_samples: 5000
-    mean: 10.211000000000032
-    rms: 10.70206522125518
+    mean: 10.167800000000037
+    rms: 10.664717530248984
