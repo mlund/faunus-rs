@@ -18,7 +18,7 @@
 //! where charge scaling maintains electroneutrality in the finite periodic box.
 
 use super::{Analyze, Frequency};
-use crate::auxiliary::BlockAverage;
+use crate::auxiliary::{BlockAverage, MappingExt};
 use crate::cell::BoundaryConditions;
 use crate::energy::builder::PairInteraction;
 use crate::energy::pairpot::ShortRange;
@@ -339,11 +339,7 @@ impl<T: Context> Analyze<T> for ScaledWidomInsertion {
         self.frequency = freq;
     }
 
-    fn sample(&mut self, context: &T, step: usize) -> Result<()> {
-        if !self.frequency.should_perform(step) {
-            return Ok(());
-        }
-
+    fn perform_sample(&mut self, context: &T, _step: usize, _weight: f64) -> Result<()> {
         // N_T enters the charge scaling factor 1 − λz_α/(z_β N_T)
         let n_total: usize = context.groups().iter().map(|g| g.len()).sum();
         let n_total_f = n_total as f64;
@@ -434,11 +430,8 @@ impl<T: Context> Analyze<T> for ScaledWidomInsertion {
             return None;
         }
         let mut map = serde_yml::Mapping::new();
-        map.insert("atom".into(), serde_yml::Value::String(self.atom.clone()));
-        map.insert(
-            "num_samples".into(),
-            serde_yml::Value::Number(self.num_samples.into()),
-        );
+        map.try_insert("atom", &self.atom)?;
+        map.try_insert("num_samples", self.num_samples)?;
         let mut excess = serde_yml::Mapping::new();
         excess.insert("short_range".into(), self.mu_sr.to_yaml()?);
         excess.insert("electrostatic".into(), self.mu_el.to_yaml()?);
@@ -447,9 +440,7 @@ impl<T: Context> Analyze<T> for ScaledWidomInsertion {
             "excess_chemical_potential (kT)".into(),
             serde_yml::Value::Mapping(excess),
         );
-
         map.insert("unscaled_widom (kT)".into(), self.mu_unscaled.to_yaml()?);
-
         Some(serde_yml::Value::Mapping(map))
     }
 }

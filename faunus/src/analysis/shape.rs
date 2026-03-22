@@ -19,7 +19,7 @@
 //! averages in YAML output.
 
 use super::{Analyze, Frequency};
-use crate::auxiliary::{ColumnWriter, WeightedMean};
+use crate::auxiliary::{ColumnWriter, MappingExt, WeightedMean};
 use crate::cell::BoundaryConditions;
 use crate::geometry::GyrationTensor;
 use crate::selection::Selection;
@@ -182,15 +182,7 @@ impl<T: Context> Analyze<T> for ShapeAnalysis {
         self.frequency = freq;
     }
 
-    fn sample(&mut self, context: &T, step: usize) -> Result<()> {
-        self.sample_weighted(context, step, 1.0)
-    }
-
-    fn sample_weighted(&mut self, context: &T, step: usize, weight: f64) -> Result<()> {
-        if !self.frequency.should_perform(step) {
-            return Ok(());
-        }
-
+    fn perform_sample(&mut self, context: &T, step: usize, weight: f64) -> Result<()> {
         let group_indices = context.resolve_groups_live(&self.selection);
 
         for &gi in &group_indices {
@@ -254,41 +246,20 @@ impl<T: Context> Analyze<T> for ShapeAnalysis {
         let rg2 = self.gyration_radius_squared.mean();
         let re2 = self.end_to_end_squared.mean();
 
-        map.insert("Rg".into(), serde_yml::to_value(rg2.sqrt()).ok()?);
-        map.insert("Re".into(), serde_yml::to_value(re2.sqrt()).ok()?);
-        map.insert("Re2/Rg2".into(), serde_yml::to_value(re2 / rg2).ok()?);
-        map.insert(
-            "asphericity".into(),
-            serde_yml::to_value(self.asphericity.mean()).ok()?,
-        );
-        map.insert(
-            "acylindricity".into(),
-            serde_yml::to_value(self.acylindricity.mean()).ok()?,
-        );
-        map.insert(
-            "relative_shape_anisotropy".into(),
-            serde_yml::to_value(self.relative_shape_anisotropy.mean()).ok()?,
-        );
-        map.insert(
-            "prolateness".into(),
-            serde_yml::to_value(self.prolateness.mean()).ok()?,
-        );
-        map.insert(
-            "Cl".into(),
-            serde_yml::to_value(self.westin_cl.mean()).ok()?,
-        );
-        map.insert(
-            "Cp".into(),
-            serde_yml::to_value(self.westin_cp.mean()).ok()?,
-        );
-        map.insert(
-            "Cs".into(),
-            serde_yml::to_value(self.westin_cs.mean()).ok()?,
-        );
-        map.insert(
-            "num_samples".into(),
-            serde_yml::Value::Number(self.num_samples.into()),
-        );
+        map.try_insert("Rg", rg2.sqrt())?;
+        map.try_insert("Re", re2.sqrt())?;
+        map.try_insert("Re2/Rg2", re2 / rg2)?;
+        map.try_insert("asphericity", self.asphericity.mean())?;
+        map.try_insert("acylindricity", self.acylindricity.mean())?;
+        map.try_insert(
+            "relative_shape_anisotropy",
+            self.relative_shape_anisotropy.mean(),
+        )?;
+        map.try_insert("prolateness", self.prolateness.mean())?;
+        map.try_insert("Cl", self.westin_cl.mean())?;
+        map.try_insert("Cp", self.westin_cp.mean())?;
+        map.try_insert("Cs", self.westin_cs.mean())?;
+        map.try_insert("num_samples", self.num_samples)?;
 
         Some(serde_yml::Value::Mapping(map))
     }

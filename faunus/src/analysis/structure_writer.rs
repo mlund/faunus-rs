@@ -1,4 +1,5 @@
 use super::{Analyze, Frequency};
+use crate::auxiliary::MappingExt;
 use crate::cell::Shape;
 use crate::topology::io::{self, frame_state::FrameStateWriter, psf, StructureData};
 use crate::Context;
@@ -154,11 +155,8 @@ impl StructureWriter {
 }
 
 impl<T: Context> Analyze<T> for StructureWriter {
-    fn sample(&mut self, context: &T, step: usize) -> anyhow::Result<()> {
-        if self.frequency.should_perform(step) {
-            self.write_frame(context, step)?;
-        }
-        Ok(())
+    fn perform_sample(&mut self, context: &T, step: usize, _weight: f64) -> anyhow::Result<()> {
+        self.write_frame(context, step)
     }
 
     fn finalize(&mut self, context: &T) -> anyhow::Result<()> {
@@ -198,14 +196,8 @@ impl<T: Context> Analyze<T> for StructureWriter {
 
     fn to_yaml(&self) -> Option<serde_yml::Value> {
         let mut map = serde_yml::Mapping::new();
-        map.insert(
-            "file".into(),
-            serde_yml::Value::String(self.output_file.clone()),
-        );
-        map.insert(
-            "num_samples".into(),
-            serde_yml::Value::Number(self.num_samples.into()),
-        );
+        map.try_insert("file", &self.output_file)?;
+        map.try_insert("num_samples", self.num_samples)?;
         Some(serde_yml::Value::Mapping(map))
     }
 }

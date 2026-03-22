@@ -19,7 +19,7 @@
 //! property value is accumulated into a per-bin running mean.
 
 use super::{Analyze, Frequency};
-use crate::auxiliary::{ColumnWriter, WeightedMean};
+use crate::auxiliary::{ColumnWriter, MappingExt, WeightedMean};
 use crate::collective_variable::{CollectiveVariable, CollectiveVariableBuilder};
 use crate::Context;
 use anyhow::Result;
@@ -133,14 +133,7 @@ impl<T: Context> Analyze<T> for MeanAlongCoordinate {
         self.frequency = freq;
     }
 
-    fn sample(&mut self, context: &T, step: usize) -> Result<()> {
-        self.sample_weighted(context, step, 1.0)
-    }
-
-    fn sample_weighted(&mut self, context: &T, step: usize, weight: f64) -> Result<()> {
-        if !self.frequency.should_perform(step) {
-            return Ok(());
-        }
+    fn perform_sample(&mut self, context: &T, _step: usize, weight: f64) -> Result<()> {
         let coord_value = self.coordinate.evaluate(context);
         let cv_value = self.cv.evaluate(context);
         self.coord_mean.add(coord_value, weight);
@@ -163,30 +156,12 @@ impl<T: Context> Analyze<T> for MeanAlongCoordinate {
             return None;
         }
         let mut map = serde_yml::Mapping::new();
-        map.insert(
-            "property".into(),
-            serde_yml::Value::String(self.cv.axis().name.clone()),
-        );
-        map.insert(
-            "mean_property".into(),
-            serde_yml::to_value(self.cv_mean.mean()).ok()?,
-        );
-        map.insert(
-            "coordinate".into(),
-            serde_yml::Value::String(self.coordinate.axis().name.clone()),
-        );
-        map.insert(
-            "mean_coordinate".into(),
-            serde_yml::to_value(self.coord_mean.mean()).ok()?,
-        );
-        map.insert(
-            "num_samples".into(),
-            serde_yml::Value::Number((self.cv_mean.len() as usize).into()),
-        );
-        map.insert(
-            "num_bins".into(),
-            serde_yml::Value::Number(self.bins.len().into()),
-        );
+        map.try_insert("property", &self.cv.axis().name)?;
+        map.try_insert("mean_property", self.cv_mean.mean())?;
+        map.try_insert("coordinate", &self.coordinate.axis().name)?;
+        map.try_insert("mean_coordinate", self.coord_mean.mean())?;
+        map.try_insert("num_samples", self.cv_mean.len() as usize)?;
+        map.try_insert("num_bins", self.bins.len())?;
         Some(serde_yml::Value::Mapping(map))
     }
 }

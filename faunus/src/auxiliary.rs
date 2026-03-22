@@ -284,9 +284,22 @@ impl BlockAverage {
     /// Serialize as YAML mapping `{ mean: ..., error: ... }`.
     pub fn to_yaml(&self) -> Option<serde_yml::Value> {
         let mut m = serde_yml::Mapping::new();
-        m.insert("mean".into(), serde_yml::to_value(self.mean()).ok()?);
-        m.insert("error".into(), serde_yml::to_value(self.error()).ok()?);
+        m.try_insert("mean", self.mean())?;
+        m.try_insert("error", self.error())?;
         Some(serde_yml::Value::Mapping(m))
+    }
+}
+
+/// Extension trait to reduce YAML mapping construction boilerplate.
+pub(crate) trait MappingExt {
+    /// Insert a serializable value, returning `None` if serialization fails.
+    fn try_insert(&mut self, key: &str, value: impl serde::Serialize) -> Option<()>;
+}
+
+impl MappingExt for serde_yml::Mapping {
+    fn try_insert(&mut self, key: &str, value: impl serde::Serialize) -> Option<()> {
+        self.insert(key.into(), serde_yml::to_value(value).ok()?);
+        Some(())
     }
 }
 

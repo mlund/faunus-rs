@@ -4,7 +4,7 @@
 //! with minimum image convention for periodic boundary conditions.
 
 use super::{Analyze, Frequency};
-use crate::auxiliary::ColumnWriter;
+use crate::auxiliary::{ColumnWriter, MappingExt};
 use crate::axes::Axes;
 use crate::cell::{BoundaryConditions, Shape};
 use crate::histogram::Histogram;
@@ -248,14 +248,8 @@ impl<T: Context> Analyze<T> for RadialDistribution {
         self.frequency = freq;
     }
 
-    fn sample(&mut self, context: &T, step: usize) -> Result<()> {
-        self.sample_weighted(context, step, 1.0)
-    }
-
-    fn sample_weighted(&mut self, context: &T, step: usize, weight: f64) -> Result<()> {
-        if !self.frequency.should_perform(step) {
-            return Ok(());
-        }
+    fn perform_sample(&mut self, context: &T, step: usize, weight: f64) -> Result<()> {
+        let _ = step;
         let pairs = if self.use_com {
             self.sample_com_com_weighted(context, weight)
         } else {
@@ -284,14 +278,8 @@ impl<T: Context> Analyze<T> for RadialDistribution {
             return None;
         }
         let mut map = serde_yml::Mapping::new();
-        map.insert(
-            "num_samples".into(),
-            serde_yml::Value::Number(self.num_samples.into()),
-        );
-        map.insert(
-            "num_bins".into(),
-            serde_yml::Value::Number(self.histogram.num_bins().into()),
-        );
+        map.try_insert("num_samples", self.num_samples)?;
+        map.try_insert("num_bins", self.histogram.num_bins())?;
         Some(serde_yml::Value::Mapping(map))
     }
 }

@@ -18,7 +18,7 @@
 //! average, and optionally streams `{step, value, average}` to a file.
 
 use super::{Analyze, Frequency};
-use crate::auxiliary::{ColumnWriter, WeightedMean};
+use crate::auxiliary::{ColumnWriter, MappingExt, WeightedMean};
 use crate::collective_variable::{CollectiveVariable, CollectiveVariableBuilder};
 use crate::Context;
 use anyhow::Result;
@@ -102,14 +102,7 @@ impl<T: Context> Analyze<T> for CollectiveVariableAnalysis {
         self.frequency = freq;
     }
 
-    fn sample(&mut self, context: &T, step: usize) -> Result<()> {
-        self.sample_weighted(context, step, 1.0)
-    }
-
-    fn sample_weighted(&mut self, context: &T, step: usize, weight: f64) -> Result<()> {
-        if !self.frequency.should_perform(step) {
-            return Ok(());
-        }
+    fn perform_sample(&mut self, context: &T, step: usize, weight: f64) -> Result<()> {
         let value = self.cv.evaluate(context);
         self.mean.add(value, weight);
         self.mean_squared.add(value * value, weight);
@@ -132,19 +125,10 @@ impl<T: Context> Analyze<T> for CollectiveVariableAnalysis {
 
     fn to_yaml(&self) -> Option<serde_yml::Value> {
         let mut map = serde_yml::Mapping::new();
-        map.insert(
-            "property".into(),
-            serde_yml::Value::String(self.cv.axis().name.clone()),
-        );
-        map.insert(
-            "num_samples".into(),
-            serde_yml::Value::Number(self.num_samples.into()),
-        );
-        map.insert("mean".into(), serde_yml::to_value(self.mean.mean()).ok()?);
-        map.insert(
-            "rms".into(),
-            serde_yml::to_value(self.mean_squared.mean().sqrt()).ok()?,
-        );
+        map.try_insert("property", &self.cv.axis().name)?;
+        map.try_insert("num_samples", self.num_samples)?;
+        map.try_insert("mean", self.mean.mean())?;
+        map.try_insert("rms", self.mean_squared.mean().sqrt())?;
         Some(serde_yml::Value::Mapping(map))
     }
 }

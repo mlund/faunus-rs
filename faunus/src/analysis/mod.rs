@@ -162,13 +162,21 @@ pub trait Analyze<T: Context>: Debug + Info {
     /// This is the frequency at which the analysis should be performed.
     fn frequency(&self) -> Frequency;
 
-    /// Sample system.
-    fn sample(&mut self, context: &T, step: usize) -> Result<()>;
+    /// Perform the actual sampling logic. Called only when the frequency check passes.
+    fn perform_sample(&mut self, context: &T, step: usize, weight: f64) -> Result<()>;
 
-    /// Sample with a reweighting factor. Default ignores the weight and delegates to `sample`.
+    /// Sample system. Checks frequency, then delegates to `perform_sample` with weight 1.
+    fn sample(&mut self, context: &T, step: usize) -> Result<()> {
+        self.sample_weighted(context, step, 1.0)
+    }
+
+    /// Sample with a reweighting factor. Checks frequency, then delegates to `perform_sample`.
     fn sample_weighted(&mut self, context: &T, step: usize, weight: f64) -> Result<()> {
-        let _ = weight;
-        self.sample(context, step)
+        if self.frequency().should_perform(step) {
+            self.perform_sample(context, step, weight)
+        } else {
+            Ok(())
+        }
     }
 
     /// Total number of samples which is the sum of successful calls to `sample()`.
@@ -235,6 +243,10 @@ impl<T: Context> AnalysisCollectionExt<T> for AnalysisCollection<T> {
 }
 
 impl<T: Context> Analyze<T> for AnalysisCollection<T> {
+    fn perform_sample(&mut self, context: &T, step: usize, weight: f64) -> Result<()> {
+        self.iter_mut()
+            .try_for_each(|a| a.sample_weighted(context, step, weight))
+    }
     fn sample(&mut self, context: &T, step: usize) -> Result<()> {
         self.iter_mut().try_for_each(|a| a.sample(context, step))
     }

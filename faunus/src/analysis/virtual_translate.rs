@@ -27,7 +27,7 @@
 //! displacement magnitude.
 
 use super::{Analyze, Frequency};
-use crate::auxiliary::{ColumnWriter, WeightedMean};
+use crate::auxiliary::{ColumnWriter, MappingExt, WeightedMean};
 use crate::axes::Axes;
 use crate::change::{Change, GroupChange};
 use crate::energy::EnergyChange;
@@ -288,24 +288,16 @@ impl<T: Context> Analyze<T> for VirtualTranslate {
         self.frequency = freq;
     }
 
-    fn sample(&mut self, context: &T, step: usize) -> Result<()> {
-        self.sample_weighted(context, step, 1.0)
-    }
-
-    fn sample_weighted(&mut self, context: &T, step: usize, weight: f64) -> Result<()> {
-        if !self.frequency.should_perform(step) {
-            return Ok(());
-        }
-
+    fn perform_sample(&mut self, context: &T, step: usize, weight: f64) -> Result<()> {
         if self.displacement.abs() < f64::EPSILON {
             return Ok(());
         }
 
         let gen = context.group_lists_generation();
         let selection = &self.selection;
-        let active_groups = self.group_cache.get_or_resolve(gen, || {
-            context.resolve_groups_live(selection)
-        });
+        let active_groups = self
+            .group_cache
+            .get_or_resolve(gen, || context.resolve_groups_live(selection));
 
         if active_groups.is_empty() {
             return Ok(());
@@ -338,22 +330,10 @@ impl<T: Context> Analyze<T> for VirtualTranslate {
 
     fn to_yaml(&self) -> Option<serde_yml::Value> {
         let mut map = serde_yml::Mapping::new();
-        map.insert(
-            "displacement".into(),
-            serde_yml::to_value(self.displacement).ok()?,
-        );
-        map.insert(
-            "num_samples".into(),
-            serde_yml::Value::Number(self.num_samples.into()),
-        );
-        map.insert(
-            "mean_force".into(),
-            serde_yml::to_value(self.mean_force()).ok()?,
-        );
-        map.insert(
-            "mean_free_energy".into(),
-            serde_yml::to_value(self.mean_free_energy()).ok()?,
-        );
+        map.try_insert("displacement", self.displacement)?;
+        map.try_insert("num_samples", self.num_samples)?;
+        map.try_insert("mean_force", self.mean_force())?;
+        map.try_insert("mean_free_energy", self.mean_free_energy())?;
         Some(serde_yml::Value::Mapping(map))
     }
 }
