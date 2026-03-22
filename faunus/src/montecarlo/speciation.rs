@@ -29,19 +29,19 @@ pub enum EquilibriumConstant {
     /// Negative log₁₀ of K, i.e. `K = 10⁻ᵖᴷ`.
     #[serde(rename = "pK")]
     Pk(f64),
-    /// Molar free energy in kJ/mol; `K = exp(-ΔG / kT)`.
-    #[serde(rename = "dG")]
+    /// Molar free energy in kJ/mol; `K = exp(-ΔG / RT)`.
+    #[serde(rename = "dG", alias = "ΔG")]
     DeltaG(f64),
 }
 
 impl EquilibriumConstant {
     /// Convert to K. The `rt` parameter (kJ/mol) is needed for the `dG` variant.
-    fn to_k(&self, rt: f64) -> f64 {
+    fn to_k(&self, thermal_energy: f64) -> f64 {
         match self {
             Self::K(k) => *k,
             Self::LnK(ln_k) => ln_k.exp(),
             Self::Pk(pk) => 10.0_f64.powf(-pk),
-            Self::DeltaG(dg) => (-dg / rt).exp(),
+            Self::DeltaG(dg) => (-dg / thermal_energy).exp(),
         }
     }
 }
