@@ -14,7 +14,10 @@
 
 //! Handling of groups of particles
 
-use crate::{topology::Topology, Particle, Point, UnitQuaternion};
+use crate::{
+    topology::{GroupKind, Topology},
+    Particle, Point, UnitQuaternion,
+};
 use serde::{Deserialize, Serialize};
 
 /// Group of particles.
@@ -461,6 +464,20 @@ pub trait GroupCollection {
     /// Count non-empty groups (full + partial) for a molecule kind.
     fn count_nonempty(&self, molecule_id: usize) -> usize {
         self.group_lists().count_nonempty(molecule_id)
+    }
+
+    /// Count active particles for a molecule kind.
+    ///
+    /// For atomic/reservoir mega-groups, returns the number of active atoms in the group.
+    /// For molecular groups, returns the number of non-empty groups.
+    fn count_active(&self, molecule_id: usize, group_kind: GroupKind) -> usize {
+        match group_kind {
+            GroupKind::Atomic | GroupKind::Reservoir => self
+                .find_atomic_group(molecule_id)
+                .map(|gi| self.groups()[gi].len())
+                .unwrap_or(0),
+            GroupKind::Molecular => self.count_nonempty(molecule_id),
+        }
     }
 
     /// Monotonically increasing counter, bumped when group lists change.

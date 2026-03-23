@@ -571,18 +571,17 @@ impl SpeciationMove {
         }
     }
 
-    /// Effective particle count, combining context state with pending offsets.
+    /// Group population for a molecule kind, combining context state with pending offsets.
+    ///
+    /// Unlike `count_active_molecules` (which excludes reservoirs), this returns the
+    /// actual population needed for bookkeeping: bounds checks and random index selection.
     /// Clamped to 0 to guard against underflow when multiple deactivations precede activations.
     fn effective_count(mol_id: usize, offset: i32, context: &impl Context) -> usize {
-        let molecule = &context.topology_ref().moleculekinds()[mol_id];
-        let base = if molecule.atomic() {
-            context
-                .find_atomic_group(mol_id)
-                .map(|gi| context.groups()[gi].len())
-                .unwrap_or(0)
-        } else {
-            context.count_molecules(mol_id, GroupSize::Full)
-        };
+        // Use `count_active` (not `count_active_molecules`) because reservoirs need
+        // a real head-count for bounds checks and random index selection even though
+        // they are excluded from physical counts.
+        let group_kind = context.topology_ref().moleculekinds()[mol_id].group_kind();
+        let base = context.count_active(mol_id, group_kind);
         (base as i32 + offset).max(0) as usize
     }
 

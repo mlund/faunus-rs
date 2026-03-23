@@ -80,32 +80,30 @@ pub trait ParticleSystem: GroupCollection + WithCell + WithTopology {
     /// Count independently translatable entities (mass centers).
     ///
     /// Atomic groups contribute each active atom; molecular groups contribute one.
+    /// Reservoir groups are excluded (handled by `count_active_molecules`).
     /// This is the correct N for the V^N partition function factor.
     fn num_active_mass_centers(&self) -> usize {
-        use crate::topology::GroupKind;
-        let mol_kinds = self.topology_ref().moleculekinds();
-        self.groups()
+        self.topology_ref()
+            .moleculekinds()
             .iter()
-            .filter(|g| !g.is_empty())
-            .map(|g| match mol_kinds[g.molecule()].group_kind() {
-                GroupKind::Reservoir => 0,
-                GroupKind::Atomic => g.len(),
-                GroupKind::Molecular => 1,
-            })
+            .enumerate()
+            .map(|(id, _)| self.count_active_molecules(id))
             .sum()
     }
 
-    /// Count active molecules of a given kind.
+    /// Count active molecules of a given kind (excluding reservoir).
     ///
     /// For atomic mega-groups, N = number of active atoms.
     /// For molecular groups, N = number of non-empty groups.
+    /// Reservoir groups always return 0 since they are outside the simulation box.
     fn count_active_molecules(&self, molecule_id: usize) -> usize {
-        if self.topology_ref().moleculekinds()[molecule_id].atomic() {
-            self.find_atomic_group(molecule_id)
-                .map(|gi| self.groups()[gi].len())
-                .unwrap_or(0)
+        let kind = &self.topology_ref().moleculekinds()[molecule_id];
+        if kind.is_reservoir() {
+            // Reservoir particles live outside the simulation box and must not
+            // contribute to physical counts like the V^N partition function factor.
+            0
         } else {
-            self.count_nonempty(molecule_id)
+            self.count_active(molecule_id, kind.group_kind())
         }
     }
 
