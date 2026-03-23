@@ -25,6 +25,7 @@ use crate::{
     backend::Backend,
     collective_variable::CollectiveVariableBuilder,
     energy::{ConstrainBuilder, EnergyTerm, HarmonicConstraint},
+    histogram::Histogram,
     montecarlo::MarkovChain,
     propagate::Propagate,
     simulation,
@@ -98,21 +99,12 @@ impl WindowGrid {
 struct WindowResult {
     lo: f64,
     hi: f64,
-    cv_samples: Vec<f64>,
+    histogram: Histogram,
 }
 
 // ---------------------------------------------------------------------------
 // Overlap-ratio stitching
 // ---------------------------------------------------------------------------
-
-/// Count fraction of `samples` falling inside `[lo, hi]`.
-fn fraction_in_range(samples: &[f64], lo: f64, hi: f64) -> f64 {
-    if samples.is_empty() {
-        return 0.0;
-    }
-    let count = samples.iter().filter(|&&v| v >= lo && v <= hi).count();
-    count as f64 / samples.len() as f64
-}
 
 /// Compute free-energy offsets between adjacent windows from overlap fractions.
 /// Returns per-window offset in kJ/mol (first window = 0).
@@ -133,8 +125,8 @@ fn overlap_ratio_offsets(results: &[WindowResult], kt: f64) -> Vec<f64> {
             );
             f64::NAN
         } else {
-            let f_i = fraction_in_range(&cur.cv_samples, overlap_lo, overlap_hi);
-            let f_next = fraction_in_range(&next.cv_samples, overlap_lo, overlap_hi);
+            let f_i = cur.histogram.fraction_in_range(overlap_lo, overlap_hi);
+            let f_next = next.histogram.fraction_in_range(overlap_lo, overlap_hi);
             if f_i > 0.0 && f_next > 0.0 {
                 -kt * (f_i / f_next).ln()
             } else {
@@ -160,8 +152,8 @@ struct PmfPoint {
     stderr: f64,
 }
 
-/// Build fine-grained PMF by histogramming each window's CV samples and
-/// shifting by the overlap-ratio offset. Within each window: F(r) = −kT ln ρ(r) + C_i.
+/// Build fine-grained PMF from per-window histograms and overlap-ratio offsets.
+/// Within each window: F(r) = −kT ln ρ(r) + C_i.
 /// Error bars from weighted variance across contributing windows.
 fn build_pmf(results: &[WindowResult], kt: f64, bin_width: f64) -> Vec<PmfPoint> {
     if results.is_empty() {
@@ -179,24 +171,23 @@ fn build_pmf(results: &[WindowResult], kt: f64, bin_width: f64) -> Vec<PmfPoint>
     let mut bin_entries: Vec<Vec<(f64, f64)>> = vec![Vec::new(); n_bins];
 
     for (win, &offset) in results.iter().zip(&offsets) {
-        if win.cv_samples.is_empty() || offset.is_nan() {
+        let n_total = win.histogram.total_count();
+        if n_total == 0.0 || offset.is_nan() {
             continue;
         }
-        let mut counts = vec![0usize; n_bins];
-        for &v in &win.cv_samples {
-            let idx = ((v - global_lo) / bin_width) as usize;
-            if idx < n_bins {
-                counts[idx] += 1;
-            }
-        }
-        let n_total = win.cv_samples.len() as f64;
-        for (idx, &count) in counts.iter().enumerate() {
-            if count == 0 {
+        // Map local histogram bins to global grid
+        let bin_offset = ((win.lo - global_lo) / bin_width).round() as usize;
+        for i in 0..win.histogram.num_bins() {
+            let count = win.histogram.count(i);
+            if count == 0.0 {
                 continue;
             }
-            let density = count as f64 / (n_total * bin_width);
-            let f_local = -kt * density.ln() + offset;
-            bin_entries[idx].push((f_local, count as f64));
+            let global_idx = bin_offset + i;
+            if global_idx < n_bins {
+                let density = count / (n_total * bin_width);
+                let f_local = -kt * density.ln() + offset;
+                bin_entries[global_idx].push((f_local, count));
+            }
         }
     }
 
@@ -251,6 +242,10 @@ fn window_output_path(state_dir: &Path, index: usize) -> PathBuf {
     state_dir.join(format!("window{index}_output.yaml"))
 }
 
+fn window_cv_path(state_dir: &Path, index: usize) -> PathBuf {
+    state_dir.join(format!("window{index}_histogram.yaml"))
+}
+
 // ---------------------------------------------------------------------------
 // Per-window worker
 // ---------------------------------------------------------------------------
@@ -260,6 +255,7 @@ struct WindowParams<'a> {
     input: &'a Path,
     state_dir: &'a Path,
     half_width: f64,
+    bin_width: f64,
     drive_k: f64,
     cv_builder: &'a CollectiveVariableBuilder,
     medium: &'a interatomic::coulomb::Medium,
@@ -377,65 +373,86 @@ fn run_window(
     let hard_wall_term = EnergyTerm::from(hard_wall_builder.build(&context)?);
     context.hamiltonian_mut().push_front(hard_wall_term);
 
-    // Production phase: hard-wall only, collect CV samples
+    // Persisted histogram lets us extend sampling across restarts without
+    // re-running already completed production steps
+    let cv_path = window_cv_path(params.state_dir, window_index);
+    let mut histogram = if cv_path.exists() {
+        let file = std::fs::File::open(&cv_path)?;
+        let loaded: Histogram = serde_yml::from_reader(file)?;
+        params.multi_progress.println(format!(
+            "Window {window_index}: extending from {} existing counts",
+            loaded.total_count() as u64
+        ))?;
+        loaded
+    } else {
+        Histogram::new(lo, hi, params.bin_width)?
+    };
+
+    // Production phase: hard-wall only, collect CV samples.
+    // Each run appends max_repeats new samples so users can extend sampling
+    // by simply rerunning without editing the input file.
     let propagate = Propagate::from_file(input, &context)?;
-    let analyses = analysis::from_file(input, &context, Some(params.medium))?;
-    let mut mc = MarkovChain::new(context, propagate, rt, analyses)?;
+    let max_repeats = propagate.max_repeats();
+    // Block ensures `mc` (which owns `context`) is dropped before we serialize
+    // the histogram and return the result.
+    {
+        let analyses = analysis::from_file(input, &context, Some(params.medium))?;
+        let mut mc = MarkovChain::new(context, propagate, rt, analyses)?;
 
-    let cv = hard_wall_cv.build(mc.context())?;
-    let mut cv_samples = Vec::new();
-    let initial_energy = mc.system_energy();
-    let max_repeats = mc.propagation().max_repeats();
+        let cv = hard_wall_cv.build(mc.context())?;
+        let initial_energy = mc.system_energy();
 
-    pb.set_length(max_repeats as u64);
-    pb.set_position(0);
-    pb.set_prefix(format!("W{window_index:>2} prod "));
-    pb.set_message("");
-    // Sample CV after each propagation cycle; run_n_steps(1) avoids the
-    // borrow conflict between mc.iter() and mc.context()
-    for i in 0..max_repeats {
-        mc.run_n_steps(1)?;
-        cv_samples.push(cv.evaluate(mc.context()));
-        pb.set_position(i as u64 + 1);
+        pb.set_length(max_repeats as u64);
+        pb.set_position(0);
+        pb.set_prefix(format!("W{window_index:>2} prod "));
+        pb.set_message("");
+        // Sample CV after each propagation cycle; run_n_steps(1) avoids the
+        // borrow conflict between mc.iter() and mc.context()
+        for i in 0..max_repeats {
+            mc.run_n_steps(1)?;
+            histogram.add(cv.evaluate(mc.context()));
+            pb.set_position(i as u64 + 1);
+        }
+        pb.finish_and_clear();
+
+        mc.finalize_analyses()?;
+
+        // Write per-window output
+        let output_path = window_output_path(params.state_dir, window_index);
+        let mut yaml_output = std::fs::File::create(&output_path)?;
+        simulation::write_yaml(params.medium, &mut yaml_output, Some("medium"))?;
+        let final_energy = mc.system_energy();
+        let drift = mc.energy_drift(initial_energy);
+        let energy_summary = std::collections::BTreeMap::from([
+            ("initial".to_string(), initial_energy),
+            ("final".to_string(), final_energy),
+            ("drift".to_string(), drift),
+        ]);
+        simulation::write_yaml(&energy_summary, &mut yaml_output, Some("energy_change"))?;
+        simulation::write_yaml(
+            &mc.propagation().to_yaml(),
+            &mut yaml_output,
+            Some("propagate"),
+        )?;
+        let analysis_yaml = analysis::analyses_to_yaml(mc.analyses());
+        if !analysis_yaml.is_empty() {
+            simulation::write_yaml(&analysis_yaml, &mut yaml_output, Some("analysis"))?;
+        }
+
+        // Save final state
+        let state = mc.save_state();
+        state.to_file(&state_path)?;
     }
-    pb.finish_and_clear();
 
-    mc.finalize_analyses()?;
-
-    // Write per-window output
-    let output_path = window_output_path(params.state_dir, window_index);
-    let mut yaml_output = std::fs::File::create(&output_path)?;
-    simulation::write_yaml(params.medium, &mut yaml_output, Some("medium"))?;
-    let final_energy = mc.system_energy();
-    let drift = mc.energy_drift(initial_energy);
-    let energy_summary = std::collections::BTreeMap::from([
-        ("initial".to_string(), initial_energy),
-        ("final".to_string(), final_energy),
-        ("drift".to_string(), drift),
-    ]);
-    simulation::write_yaml(&energy_summary, &mut yaml_output, Some("energy_change"))?;
-    simulation::write_yaml(
-        &mc.propagation().to_yaml(),
-        &mut yaml_output,
-        Some("propagate"),
-    )?;
-    let analysis_yaml = analysis::analyses_to_yaml(mc.analyses());
-    if !analysis_yaml.is_empty() {
-        simulation::write_yaml(&analysis_yaml, &mut yaml_output, Some("analysis"))?;
-    }
-
-    // Save final state
-    let state = mc.save_state();
-    state.to_file(&state_path)?;
+    let file = std::fs::File::create(&cv_path)?;
+    serde_yml::to_writer(file, &histogram)?;
 
     params.multi_progress.println(format!(
-        "Window {window_index} (center={center:.1}): {n_samples} samples, CV range [{cv_min:.2}, {cv_max:.2}]",
-        n_samples = cv_samples.len(),
-        cv_min = cv_samples.iter().copied().reduce(f64::min).unwrap_or(f64::NAN),
-        cv_max = cv_samples.iter().copied().reduce(f64::max).unwrap_or(f64::NAN),
+        "Window {window_index} (center={center:.1}): {} counts",
+        histogram.total_count() as u64,
     ))?;
 
-    Ok(WindowResult { lo, hi, cv_samples })
+    Ok(WindowResult { lo, hi, histogram })
 }
 
 // ---------------------------------------------------------------------------
@@ -506,6 +523,7 @@ pub fn run(input: &Path, state_dir: &Path, output: &Path, max_threads: usize) ->
             input,
             state_dir,
             half_width,
+            bin_width: config.windows.bin_width,
             drive_k: config.drive.force_constant,
             cv_builder: &config.cv,
             medium: &medium,
@@ -607,20 +625,21 @@ mod tests {
         assert!((centers[0] - 5.0).abs() < 1e-10);
     }
 
+    /// Helper to build a `WindowResult` from raw samples.
+    fn window_result(lo: f64, hi: f64, bin_width: f64, samples: &[f64]) -> WindowResult {
+        let mut histogram = Histogram::new(lo, hi, bin_width).unwrap();
+        for &v in samples {
+            histogram.add(v);
+        }
+        WindowResult { lo, hi, histogram }
+    }
+
     #[test]
     fn overlap_ratio_offsets_symmetric() {
         // Two windows with equal overlap fractions → ΔF = 0
         let results = vec![
-            WindowResult {
-                lo: 0.0,
-                hi: 10.0,
-                cv_samples: vec![3.0, 5.0, 7.0, 8.5, 9.0],
-            },
-            WindowResult {
-                lo: 8.0,
-                hi: 18.0,
-                cv_samples: vec![8.5, 9.0, 11.0, 13.0, 15.0],
-            },
+            window_result(0.0, 10.0, 1.0, &[3.0, 5.0, 7.0, 8.5, 9.0]),
+            window_result(8.0, 18.0, 1.0, &[8.5, 9.0, 11.0, 13.0, 15.0]),
         ];
         let offsets = overlap_ratio_offsets(&results, 1.0);
         assert_eq!(offsets.len(), 2);
@@ -634,16 +653,8 @@ mod tests {
     fn overlap_ratio_offsets_known_ratio() {
         // f_i = 1/4, f_next = 3/4 → ΔF = -ln(1/3) = ln(3)
         let results = vec![
-            WindowResult {
-                lo: 0.0,
-                hi: 10.0,
-                cv_samples: vec![2.0, 4.0, 6.0, 9.0], // 1 in [8,10]
-            },
-            WindowResult {
-                lo: 8.0,
-                hi: 18.0,
-                cv_samples: vec![8.5, 9.0, 9.5, 15.0], // 3 in [8,10]
-            },
+            window_result(0.0, 10.0, 1.0, &[2.0, 4.0, 6.0, 9.0]),
+            window_result(8.0, 18.0, 1.0, &[8.5, 9.0, 9.5, 15.0]),
         ];
         let offsets = overlap_ratio_offsets(&results, 1.0);
         let expected = -(1.0_f64 / 3.0).ln(); // ln(3)
@@ -654,17 +665,11 @@ mod tests {
     fn build_pmf_produces_bins() {
         // Uniform samples in two overlapping windows → flat PMF
         let n = 10000;
+        let samples_a: Vec<f64> = (0..n).map(|i| i as f64 / n as f64 * 10.0).collect();
+        let samples_b: Vec<f64> = (0..n).map(|i| 8.0 + i as f64 / n as f64 * 10.0).collect();
         let results = vec![
-            WindowResult {
-                lo: 0.0,
-                hi: 10.0,
-                cv_samples: (0..n).map(|i| i as f64 / n as f64 * 10.0).collect(),
-            },
-            WindowResult {
-                lo: 8.0,
-                hi: 18.0,
-                cv_samples: (0..n).map(|i| 8.0 + i as f64 / n as f64 * 10.0).collect(),
-            },
+            window_result(0.0, 10.0, 1.0, &samples_a),
+            window_result(8.0, 18.0, 1.0, &samples_b),
         ];
         let pmf = build_pmf(&results, 1.0, 1.0);
         // Should have bins from 0 to 18
@@ -672,20 +677,5 @@ mod tests {
         // PMF should be approximately flat (uniform → constant −kT ln ρ)
         let max_f = pmf.iter().map(|p| p.f).fold(0.0_f64, f64::max);
         assert!(max_f < 0.5, "PMF not flat for uniform data: max={max_f}");
-    }
-
-    #[test]
-    fn fraction_in_range_empty() {
-        assert_eq!(fraction_in_range(&[], 0.0, 1.0), 0.0);
-    }
-
-    #[test]
-    fn fraction_in_range_all() {
-        assert!((fraction_in_range(&[0.5, 0.7], 0.0, 1.0) - 1.0).abs() < 1e-10);
-    }
-
-    #[test]
-    fn fraction_in_range_partial() {
-        assert!((fraction_in_range(&[0.5, 1.5, 2.5], 0.0, 1.0) - 1.0 / 3.0).abs() < 1e-10);
     }
 }

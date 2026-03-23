@@ -2,7 +2,7 @@
 ///
 /// Bins span `[min, min + num_bins * bin_width)` where `num_bins = floor((max - min) / bin_width)`.
 /// Partial trailing bins are excluded to keep all bins the same width.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Histogram {
     min: f64,
     bin_width: f64,
@@ -63,6 +63,39 @@ impl Histogram {
             .map(|(i, &count)| (self.bin_center(i), count))
     }
 
+    /// Sum of all bin counts.
+    pub fn total_count(&self) -> f64 {
+        self.bins.iter().sum()
+    }
+
+    /// Fraction of counts in bins whose centers fall within `[lo, hi]`.
+    pub fn fraction_in_range(&self, lo: f64, hi: f64) -> f64 {
+        let total = self.total_count();
+        if total == 0.0 {
+            return 0.0;
+        }
+        let count: f64 = self
+            .iter()
+            .filter_map(|(center, c)| (center >= lo && center <= hi).then_some(c))
+            .sum();
+        count / total
+    }
+
+    /// Element-wise add bins from another histogram with the same shape.
+    #[allow(dead_code)]
+    pub fn merge(&mut self, other: &Histogram) -> anyhow::Result<()> {
+        anyhow::ensure!(
+            self.bins.len() == other.bins.len()
+                && (self.min - other.min).abs() < 1e-12
+                && (self.bin_width - other.bin_width).abs() < 1e-12,
+            "Cannot merge histograms with different shapes"
+        );
+        for (a, b) in self.bins.iter_mut().zip(&other.bins) {
+            *a += b;
+        }
+        Ok(())
+    }
+
     /// Reset all bins to zero.
     #[allow(dead_code)]
     pub fn clear(&mut self) {
@@ -83,7 +116,6 @@ impl Histogram {
     }
 
     /// Direct read access to the count in the i-th bin.
-    #[allow(dead_code)]
     pub fn count(&self, i: usize) -> f64 {
         self.bins[i]
     }
@@ -166,5 +198,62 @@ mod tests {
         // Exactly at effective max → out of range
         h.add(3.0);
         assert_relative_eq!(h.count(3), 1.0);
+    }
+
+    #[test]
+    fn total_count() {
+        let mut h = Histogram::new(0.0, 10.0, 1.0).unwrap();
+        assert_relative_eq!(h.total_count(), 0.0);
+        h.add(1.0);
+        h.add(5.0);
+        h.add(9.0);
+        assert_relative_eq!(h.total_count(), 3.0);
+    }
+
+    #[test]
+    fn fraction_in_range_partial() {
+        let mut h = Histogram::new(0.0, 10.0, 1.0).unwrap();
+        // bin centers: 0.5, 1.5, ..., 9.5
+        h.add(0.5); // center 0.5
+        h.add(5.5); // center 5.5
+        h.add(9.5); // center 9.5
+                    // Range [0,2] covers bin center 0.5 and 1.5; only 0.5 has a count
+        assert_relative_eq!(h.fraction_in_range(0.0, 2.0), 1.0 / 3.0);
+        assert_relative_eq!(h.fraction_in_range(0.0, 10.0), 1.0);
+    }
+
+    #[test]
+    fn fraction_in_range_empty_histogram() {
+        let h = Histogram::new(0.0, 10.0, 1.0).unwrap();
+        assert_relative_eq!(h.fraction_in_range(0.0, 10.0), 0.0);
+    }
+
+    #[test]
+    fn merge_histograms() {
+        let mut a = Histogram::new(0.0, 10.0, 1.0).unwrap();
+        let mut b = Histogram::new(0.0, 10.0, 1.0).unwrap();
+        a.add(1.0);
+        a.add(5.0);
+        b.add(1.0);
+        b.add(9.0);
+        a.merge(&b).unwrap();
+        assert_relative_eq!(a.count(1), 2.0);
+        assert_relative_eq!(a.count(5), 1.0);
+        assert_relative_eq!(a.count(9), 1.0);
+        assert_relative_eq!(a.total_count(), 4.0);
+    }
+
+    #[test]
+    fn serde_roundtrip() {
+        let mut h = Histogram::new(0.0, 10.0, 2.5).unwrap();
+        h.add(1.0);
+        h.add(5.0);
+        let yaml = serde_yml::to_string(&h).unwrap();
+        let h2: Histogram = serde_yml::from_str(&yaml).unwrap();
+        assert_eq!(h2.num_bins(), h.num_bins());
+        assert_relative_eq!(h2.total_count(), h.total_count());
+        for i in 0..h.num_bins() {
+            assert_relative_eq!(h2.count(i), h.count(i));
+        }
     }
 }

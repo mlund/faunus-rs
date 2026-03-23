@@ -14,10 +14,11 @@
 
 //! Auxiliary functions for I/O and numerical integration.
 
+use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
 use flate2::Compression;
 use std::fmt::Display;
-use std::io::Write;
+use std::io::{BufRead, Write};
 use std::path::Path;
 
 /// Parse a named section from a YAML input file into a typed config struct.
@@ -52,6 +53,17 @@ fn open_compressed(path: &Path) -> anyhow::Result<Box<dyn Write + Send>> {
         Ok(Box::new(GzEncoder::new(file, Compression::default())))
     } else {
         Ok(Box::new(file))
+    }
+}
+
+/// Open a file for reading, transparently decompressing `.gz`.
+fn open_read_compressed(path: &Path) -> anyhow::Result<Box<dyn BufRead + Send>> {
+    let file = std::fs::File::open(path)
+        .map_err(|err| anyhow::anyhow!("Error opening file {path:?}: {err}"))?;
+    if path.extension().unwrap_or_default() == "gz" {
+        Ok(Box::new(std::io::BufReader::new(GzDecoder::new(file))))
+    } else {
+        Ok(Box::new(std::io::BufReader::new(file)))
     }
 }
 
@@ -152,6 +164,46 @@ impl ColumnWriter {
 
     pub(crate) fn flush(&mut self) -> std::io::Result<()> {
         self.inner.flush()
+    }
+}
+
+/// Reader for single-column numeric data files (.csv, .csv.gz, .dat, .dat.gz).
+///
+/// Skips header lines (starting with `#` or non-numeric) and parses one `f64` per row.
+#[allow(dead_code)]
+pub(crate) struct ColumnReader {
+    inner: Box<dyn BufRead + Send>,
+    format: ColumnFormat,
+}
+
+#[allow(dead_code)]
+impl ColumnReader {
+    pub(crate) fn open(path: &Path) -> anyhow::Result<Self> {
+        let inner = open_read_compressed(path)?;
+        let format = ColumnFormat::from_path(path);
+        Ok(Self { inner, format })
+    }
+}
+
+impl TryFrom<ColumnReader> for Vec<f64> {
+    type Error = anyhow::Error;
+
+    fn try_from(reader: ColumnReader) -> anyhow::Result<Self> {
+        let sep = reader.format.separator();
+        let mut values = Vec::new();
+        for line in reader.inner.lines() {
+            let line = line?;
+            let trimmed = line.trim();
+            if trimmed.is_empty() || trimmed.starts_with('#') {
+                continue;
+            }
+            // Take first column only
+            let field = trimmed.split(sep).next().unwrap_or(trimmed);
+            if let Ok(v) = field.parse::<f64>() {
+                values.push(v);
+            }
+        }
+        Ok(values)
     }
 }
 
@@ -367,6 +419,34 @@ mod column_writer_tests {
         w.write_row(&[&1, &format_args!("{:.2}", 3.15)]).unwrap();
         let bytes = buf.lock().unwrap();
         assert_eq!(String::from_utf8_lossy(&bytes), "x,y\n1,3.15\n");
+    }
+
+    #[test]
+    fn column_reader_roundtrip_csv_gz() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("data.csv.gz");
+        let values = vec![1.5, 2.7, 3.15];
+
+        let mut w = ColumnWriter::open(&path, &["cv"]).unwrap();
+        for &v in &values {
+            w.write_row(&[&v]).unwrap();
+        }
+        drop(w);
+
+        let reader = ColumnReader::open(&path).unwrap();
+        let loaded: Vec<f64> = reader.try_into().unwrap();
+        assert_eq!(loaded, values);
+    }
+
+    #[test]
+    fn column_reader_skips_comments() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("data.dat");
+        std::fs::write(&path, "# header\n1.0\n2.0\n").unwrap();
+
+        let reader = ColumnReader::open(&path).unwrap();
+        let loaded: Vec<f64> = reader.try_into().unwrap();
+        assert_eq!(loaded, vec![1.0, 2.0]);
     }
 }
 
