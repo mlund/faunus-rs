@@ -27,6 +27,7 @@ mod energy;
 mod mean_along_coordinate;
 mod radial_distribution;
 pub(crate) mod reweight;
+mod rotational_diffusion;
 mod scaled_widom_insertion;
 mod shape;
 mod structure_writer;
@@ -35,6 +36,7 @@ pub use collective_variable::{CollectiveVariableAnalysis, CollectiveVariableAnal
 pub use energy::{EnergyAnalysis, EnergyAnalysisBuilder};
 pub use mean_along_coordinate::{MeanAlongCoordinate, MeanAlongCoordinateBuilder};
 pub use radial_distribution::{RadialDistribution, RadialDistributionBuilder};
+pub use rotational_diffusion::{RotationalDiffusion, RotationalDiffusionBuilder};
 pub use scaled_widom_insertion::{ScaledWidomInsertion, ScaledWidomInsertionBuilder};
 pub use shape::{ShapeAnalysis, ShapeAnalysisBuilder};
 pub use structure_writer::{StructureWriter, StructureWriterBuilder};
@@ -110,6 +112,8 @@ pub enum AnalysisBuilder {
     MeanAlongCoordinate(MeanAlongCoordinateBuilder),
     /// Scaled Widom insertion for single-ion chemical potential
     ScaledWidomInsertion(ScaledWidomInsertionBuilder),
+    /// Rotational diffusion via quaternion covariance matrix
+    RotationalDiffusion(RotationalDiffusionBuilder),
 }
 
 impl AnalysisBuilder {
@@ -129,6 +133,7 @@ impl AnalysisBuilder {
             Self::Energy(builder) => Box::new(builder.build(context)?),
             Self::MeanAlongCoordinate(builder) => Box::new(builder.build(context)?),
             Self::ScaledWidomInsertion(builder) => Box::new(builder.build(context, medium)?),
+            Self::RotationalDiffusion(builder) => Box::new(builder.build(context)?),
         })
     }
 }

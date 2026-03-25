@@ -430,6 +430,56 @@ Key           | Required | Default | Description
 The `coordinate` block accepts all [collective variable](#collective-variable) fields
 (`property`, `selection`, `dimension`, etc.) plus a required `resolution` for the bin width.
 
+## Rotational Diffusion
+
+Estimates the anisotropic rotational diffusion tensor from the quaternion
+covariance matrix Q̃(τ) of molecular orientations
+([Favro 1960](https://doi.org/10.1103/PhysRev.119.53);
+[Holtbrügge & Schäfer 2025](https://doi.org/10.1101/2025.05.27.656261)).
+
+For each lag τ (in snapshot units), the body-frame reorientation quaternion
+q(t,τ) = q(t)·q⁻¹(t+τ) is computed, and its vector components form the 3×3
+covariance matrix Q̃_ij(τ) = ⟨q_i·q_j⟩. In the principal coordinate system,
+Q̃ is diagonal and follows the Favro model:
+
+Q_ii(τ) = ¼(1 + exp(−(D_j+D_k)τ) − exp(−(D_i+D_j)τ) − exp(−(D_i+D_k)τ))
+
+where D_x, D_y, D_z are the principal rotational diffusion coefficients
+(rad²/snapshot). Correlations are averaged over all molecules matching the
+selection, exploiting ensemble averaging.
+
+The selection must resolve to molecular groups (not atomic) that carry
+rigid-body quaternion state.
+
+### Example
+
+```yaml
+analysis:
+  - !RotationalDiffusion
+    selection: "molecule Water"
+    file: rotdiff.dat.gz
+    frequency: !Every 100
+    max_lag: 1000
+```
+
+### Options
+
+Key          | Required | Default | Description
+------------ | -------- | ------- | -------------------------------------------
+`selection`  | yes      |         | Selection for molecular group(s) to track
+`file`       | no       |         | Streaming output file (see [Output file formats](#output-file-formats))
+`frequency`  | yes      |         | Sample frequency, e.g. `!Every 100`
+`max_lag`    | no       | `1000`  | Max lag in snapshots; actual time window = max_lag × frequency
+
+The `max_lag` should be large enough for Q̃_ii(τ) to approach its plateau at ¼.
+A warning is emitted if convergence is not reached.
+
+### Output
+
+The YAML output includes the covariance matrix at log-spaced lags,
+time-dependent diffusion coefficients D_x(τ), D_y(τ), D_z(τ) from
+eigenvalue decomposition, and an isotropic estimate from the trace.
+
 ## Rerun
 
 The `rerun` subcommand replays a trajectory through a (possibly different) Hamiltonian,
