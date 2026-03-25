@@ -252,6 +252,63 @@ pub(crate) fn simpson_integrate(values: &[f64]) -> f64 {
     }
 }
 
+/// Fit isotropic rotational diffusion coefficient from the trace of Q̃(τ).
+///
+/// Minimizes the sum of squared residuals between the observed trace values
+/// and the Favro isotropic model `Tr(Q̃(τ)) = ¾(1 - exp(-2Dτ))`.
+/// Uses Newton–Raphson iteration on the single parameter D.
+///
+/// The factor 2D (not 6D) follows from Favro Eq. 9 with D_x = D_y = D_z = D:
+/// each diagonal element is `Q_ii = ¼(1 - exp(-2Dτ))`, so `Tr = ¾(1 - exp(-2Dτ))`.
+///
+/// Returns `None` if the input is empty or the fit fails to converge.
+///
+/// See [Favro (1960)](https://doi.org/10.1103/PhysRev.119.53), Eq. 9.
+pub(crate) fn fit_isotropic_d_rot(lags: &[f64], trace: &[f64]) -> Option<f64> {
+    if lags.is_empty() || lags.len() != trace.len() {
+        return None;
+    }
+
+    // Initial guess from the last data point: Tr = ¾(1 - exp(-2Dτ)) → D = -ln(1 - 4/3 Tr) / (2τ)
+    let last = lags.len() - 1;
+    let arg = 1.0 - 4.0 / 3.0 * trace[last];
+    let mut d = if arg > 0.0 {
+        -arg.ln() / (2.0 * lags[last])
+    } else {
+        0.01 // trace ≥ ¾ means fully decorrelated; use a safe default for Newton iteration
+    };
+
+    // Newton–Raphson: minimize Σ (model(τ) - data(τ))²
+    // model(τ) = ¾(1 - exp(-2Dτ))
+    // ∂model/∂D = ¾ · 2τ · exp(-2Dτ) = 1.5τ · exp(-2Dτ)
+    // ∂²model/∂D² = -¾ · 4τ² · exp(-2Dτ) = -3τ² · exp(-2Dτ)
+    for _ in 0..50 {
+        let mut gradient = 0.0;
+        let mut hessian = 0.0;
+        for (&tau, &tr) in lags.iter().zip(trace.iter()) {
+            let e = (-2.0 * d * tau).exp();
+            let model = 0.75 * (1.0 - e);
+            let residual = model - tr;
+            let dm = 1.5 * tau * e;
+            let d2m = -3.0 * tau * tau * e;
+            gradient += 2.0 * residual * dm;
+            hessian += 2.0 * (dm * dm + residual * d2m);
+        }
+        if hessian.abs() < 1e-30 {
+            break;
+        }
+        let step = gradient / hessian;
+        d -= step;
+        if d < 0.0 {
+            d = 1e-10;
+        }
+        if step.abs() < 1e-12 * d.abs() {
+            return Some(d);
+        }
+    }
+    None // did not converge within iteration limit
+}
+
 /// Incremental weighted mean using West's algorithm.
 ///
 /// When all weights are 1.0, reduces to Welford's unweighted mean.
@@ -447,6 +504,46 @@ mod column_writer_tests {
         let reader = ColumnReader::open(&path).unwrap();
         let loaded: Vec<f64> = reader.try_into().unwrap();
         assert_eq!(loaded, vec![1.0, 2.0]);
+    }
+}
+
+#[cfg(test)]
+mod fit_d_rot_tests {
+    use super::fit_isotropic_d_rot;
+
+    #[test]
+    fn recovers_known_d() {
+        let d_true = 0.05;
+        let lags: Vec<f64> = (1..=100).map(|i| i as f64).collect();
+        let trace: Vec<f64> = lags
+            .iter()
+            .map(|&tau| 0.75 * (1.0 - (-2.0 * d_true * tau).exp()))
+            .collect();
+        let d_fit = fit_isotropic_d_rot(&lags, &trace).unwrap();
+        assert!(
+            (d_fit - d_true).abs() < 1e-10,
+            "d_fit={d_fit}, expected={d_true}"
+        );
+    }
+
+    #[test]
+    fn recovers_small_d() {
+        let d_true = 0.001;
+        let lags: Vec<f64> = (1..=500).map(|i| i as f64).collect();
+        let trace: Vec<f64> = lags
+            .iter()
+            .map(|&tau| 0.75 * (1.0 - (-2.0 * d_true * tau).exp()))
+            .collect();
+        let d_fit = fit_isotropic_d_rot(&lags, &trace).unwrap();
+        assert!(
+            (d_fit - d_true).abs() / d_true < 1e-8,
+            "d_fit={d_fit}, expected={d_true}"
+        );
+    }
+
+    #[test]
+    fn empty_input_returns_none() {
+        assert!(fit_isotropic_d_rot(&[], &[]).is_none());
     }
 }
 
