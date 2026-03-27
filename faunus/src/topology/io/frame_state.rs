@@ -53,6 +53,7 @@ pub struct FrameStateReader {
 
 impl FrameStateReader {
     /// Open a frame state file and read its header.
+    #[cfg(feature = "cli")]
     pub fn open(path: impl AsRef<Path>) -> Result<Self> {
         let file = std::fs::File::open(path.as_ref()).with_context(|| {
             format!("Cannot open frame state file: {}", path.as_ref().display())
@@ -63,10 +64,12 @@ impl FrameStateReader {
     }
 
     /// Reference to the parsed header.
+    #[cfg(feature = "cli")]
     pub fn header(&self) -> &FrameStateHeader {
         &self.header
     }
 
+    #[cfg(feature = "cli")]
     fn read_header(reader: &mut BufReader<std::fs::File>) -> Result<FrameStateHeader> {
         let n_groups = read_u32(reader)?;
         let n_particles = read_u32(reader)?;

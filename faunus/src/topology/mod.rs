@@ -36,7 +36,7 @@ pub(crate) mod block;
 mod bond;
 mod chain;
 mod dihedral;
-pub(crate) mod io;
+pub mod io;
 mod molecule;
 mod residue;
 mod structure;
