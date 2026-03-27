@@ -387,9 +387,36 @@ Key           | Required | Default  | Description
 `selection`   | yes      |          | Selection matching exactly one molecule
 `dL`          | yes      |          | Displacement magnitude (Å)
 `directions`  | no       | `z`      | Displacement direction (`x`, `y`, `z`, `xy`, …)
-`temperature` | no       | `298.15` | Temperature (K) for kT conversion
 `file`        | no       |          | Output file path (see [Output file formats](#output-file-formats))
 `frequency`   | yes      |          | Sample frequency, e.g. `!Every 10`
+
+## Virtual Volume Move
+
+Performs a virtual volume perturbation and measures the excess pressure
+by Widom perturbation ([Nezbeda & Kolafa, 1991](https://doi.org/10.1063/1.472721)):
+
+$$P_{\text{ex}} = \frac{k_BT \ln\langle e^{-\Delta U / k_BT}\rangle}{\delta V}$$
+
+where $\Delta U$ is the energy change due to the volume displacement $\delta V$.
+All particle positions are scaled according to the chosen `method`.
+
+### Example
+
+```yaml
+analysis:
+  - !VirtualVolumeMove
+    dV: 0.2
+    method: Isotropic
+    frequency: !Every 10
+```
+
+### Options
+
+Key           | Required | Default      | Description
+------------- | -------- | ------------ | -------------------------------------------
+`dV`          | yes      |              | Volume displacement (ų)
+`method`      | no       | `Isotropic`  | Scaling policy: `Isotropic`, `ScaleZ`, `ScaleXY`
+`frequency`   | yes      |              | Sample frequency, e.g. `!Every 10`
 
 ## Mean Along Coordinate
 

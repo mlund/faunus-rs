@@ -17,6 +17,7 @@
 use crate::{Context, Info};
 use anyhow::Result;
 use core::fmt::Debug;
+use interatomic::coulomb::Temperature;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use serde_yml::Value;
@@ -31,6 +32,8 @@ mod scaled_widom_insertion;
 mod shape;
 mod structure_writer;
 mod virtual_translate;
+mod virtual_volume_move;
+mod widom;
 pub use collective_variable::{CollectiveVariableAnalysis, CollectiveVariableAnalysisBuilder};
 pub use energy::{EnergyAnalysis, EnergyAnalysisBuilder};
 pub use mean_along_coordinate::{MeanAlongCoordinate, MeanAlongCoordinateBuilder};
@@ -39,6 +42,7 @@ pub use scaled_widom_insertion::{ScaledWidomInsertion, ScaledWidomInsertionBuild
 pub use shape::{ShapeAnalysis, ShapeAnalysisBuilder};
 pub use structure_writer::{StructureWriter, StructureWriterBuilder};
 pub use virtual_translate::{VirtualTranslate, VirtualTranslateBuilder};
+pub use virtual_volume_move::{VirtualVolumeMove, VirtualVolumeMoveBuilder};
 
 /// Frequency of analysis.
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
@@ -110,6 +114,8 @@ pub enum AnalysisBuilder {
     MeanAlongCoordinate(MeanAlongCoordinateBuilder),
     /// Scaled Widom insertion for single-ion chemical potential
     ScaledWidomInsertion(ScaledWidomInsertionBuilder),
+    /// Virtual volume move for excess pressure measurement
+    VirtualVolumeMove(VirtualVolumeMoveBuilder),
 }
 
 impl AnalysisBuilder {
@@ -120,15 +126,19 @@ impl AnalysisBuilder {
         context: &T,
         medium: Option<&interatomic::coulomb::Medium>,
     ) -> Result<Box<dyn Analyze<T> + Send>> {
+        let rt = medium
+            .map(|m| crate::R_IN_KJ_PER_MOL * m.temperature())
+            .unwrap_or(crate::R_IN_KJ_PER_MOL * 298.15);
         Ok(match self {
             Self::StructureWriter(builder) => Box::new(builder.build()?),
-            Self::VirtualTranslate(builder) => Box::new(builder.build()?),
+            Self::VirtualTranslate(builder) => Box::new(builder.build(rt)?),
             Self::CollectiveVariable(builder) => Box::new(builder.build(context)?),
             Self::PolymerShape(builder) => Box::new(builder.build(context)?),
             Self::RadialDistribution(builder) => Box::new(builder.build(context)?),
             Self::Energy(builder) => Box::new(builder.build(context)?),
             Self::MeanAlongCoordinate(builder) => Box::new(builder.build(context)?),
             Self::ScaledWidomInsertion(builder) => Box::new(builder.build(context, medium)?),
+            Self::VirtualVolumeMove(builder) => Box::new(builder.build(rt)?),
         })
     }
 }

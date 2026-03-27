@@ -288,6 +288,7 @@ impl WeightedMean {
     }
 
     /// Whether no values have been added.
+    #[allow(dead_code)]
     pub fn is_empty(&self) -> bool {
         self.count == 0
     }

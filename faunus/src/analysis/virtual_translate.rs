@@ -26,8 +26,9 @@
 //! where `dU` is the energy change due to the perturbation and `dL` is the
 //! displacement magnitude.
 
+use super::widom::WidomAccumulator;
 use super::{Analyze, Frequency};
-use crate::auxiliary::{ColumnWriter, MappingExt, WeightedMean};
+use crate::auxiliary::{ColumnWriter, MappingExt};
 use crate::axes::Axes;
 use crate::change::{Change, GroupChange};
 use crate::energy::EnergyChange;
@@ -84,31 +85,20 @@ pub struct VirtualTranslate {
     /// Sample frequency
     frequency: Frequency,
 
-    /// Running average of exp(-dU/kT)
+    /// Widom exponential average accumulator (log-sum-exp)
     #[builder(setter(skip))]
     #[builder_field_attr(serde(skip))]
-    mean_exp_energy: WeightedMean,
-
-    /// Number of samples taken
-    #[builder(setter(skip))]
-    #[builder_field_attr(serde(skip_deserializing))]
-    num_samples: usize,
+    widom: WidomAccumulator,
 
     /// Cached resolved group indices to avoid re-resolution when N hasn't changed.
     #[builder(setter(skip))]
     #[builder_field_attr(serde(skip))]
     group_cache: SelectionCache,
 
-    /// Temperature in Kelvin (needed to convert energy to kT).
-    /// Default is 298.15 K if not specified.
-    #[builder_field_attr(serde(default = "default_temperature"))]
-    temperature: f64,
-}
-
-/// Default temperature in Kelvin (298.15 K = 25°C).
-/// Returns `Option` because derive_builder wraps fields in `Option`.
-const fn default_temperature() -> Option<f64> {
-    Some(298.15)
+    /// Thermal energy R*T in kJ/mol.
+    #[builder(setter(skip))]
+    #[builder_field_attr(serde(skip))]
+    thermal_energy: f64,
 }
 
 /// Default displacement directions (z-axis).
@@ -145,13 +135,14 @@ impl VirtualTranslateBuilder {
         Ok(())
     }
 
-    /// Build the VirtualTranslate analysis
-    pub fn build(&self) -> Result<VirtualTranslate> {
+    /// Build the VirtualTranslate analysis.
+    ///
+    /// `thermal_energy` is R*T in kJ/mol, typically from `Medium::temperature()`.
+    pub fn build(&self, thermal_energy: f64) -> Result<VirtualTranslate> {
         self.validate()?;
 
         let displacement = self.displacement.unwrap();
         let directions = self.directions.unwrap_or(Axes::Z);
-        let temperature = self.temperature.unwrap_or(298.15);
 
         let unit_direction = axes_to_unit_vector(&directions)?;
 
@@ -172,10 +163,9 @@ impl VirtualTranslateBuilder {
             output_file: self.output_file.as_ref().and_then(|p| p.clone()),
             stream,
             frequency: self.frequency.unwrap(),
-            mean_exp_energy: WeightedMean::new(),
-            num_samples: 0,
+            widom: WidomAccumulator::new(),
             group_cache: SelectionCache::default(),
-            temperature,
+            thermal_energy,
         })
     }
 }
@@ -195,24 +185,10 @@ impl crate::Info for VirtualTranslate {
 }
 
 impl VirtualTranslate {
-    /// Calculate the mean free energy from the Widom average
-    /// Returns -ln(<exp(-dU/kT)>) in units of kT
-    fn mean_free_energy(&self) -> f64 {
-        let mean = self.mean_exp_energy.mean();
-        if !mean.is_finite() || mean <= 0.0 {
-            log::warn!(
-                "VirtualTranslate: invalid Widom average <exp(-dU/kT)> = {}; returning +inf free energy",
-                mean
-            );
-            return f64::INFINITY;
-        }
-        -mean.ln()
-    }
-
     /// Calculate the mean force in units of kT/Å
     fn mean_force(&self) -> f64 {
         if self.displacement.abs() > f64::EPSILON {
-            -self.mean_free_energy() / self.displacement
+            -self.widom.mean_free_energy() / self.displacement
         } else {
             0.0
         }
@@ -230,33 +206,7 @@ impl VirtualTranslate {
         let new_energy = context.hamiltonian().energy(context, &change); // kJ/mol
         context.translate_particles(&particle_indices, &(-displacement_vector));
 
-        let rt = crate::R_IN_KJ_PER_MOL * self.temperature;
-        let delta_u = (new_energy - old_energy) / rt;
-
-        Ok(delta_u)
-    }
-
-    /// Add exp(-dU) to the Widom average, with overflow protection.
-    ///
-    /// Returns `true` if the sample was added to the running average,
-    /// `false` if it was skipped due to extreme energy values that would
-    /// cause overflow in `exp()`. Skipped samples are still written to
-    /// the output stream to keep it synchronized with other analyses.
-    fn collect_widom_average(&mut self, energy_change: f64, weight: f64) -> bool {
-        if energy_change < -(f64::MAX_EXP as f64) {
-            log::warn!(
-                "VirtualTranslate: skipping Widom average due to too negative energy; consider decreasing dL"
-            );
-            return false;
-        }
-        if energy_change > f64::MAX_EXP as f64 {
-            log::warn!(
-                "VirtualTranslate: skipping Widom average due to too positive energy; consider decreasing dL"
-            );
-            return false;
-        }
-        self.mean_exp_energy.add((-energy_change).exp(), weight);
-        true
+        Ok((new_energy - old_energy) / self.thermal_energy)
     }
 
     /// Write data to the output stream.
@@ -316,24 +266,22 @@ impl<T: Context> Analyze<T> for VirtualTranslate {
         let mut trial_context = context.clone();
         let energy_change = self.perturb(&mut trial_context, group_index)?;
 
-        if self.collect_widom_average(energy_change, weight) {
-            self.num_samples += 1;
-        }
+        self.widom.collect(energy_change, weight);
         self.write_to_stream(step, energy_change)?;
 
         Ok(())
     }
 
     fn num_samples(&self) -> usize {
-        self.num_samples
+        self.widom.len()
     }
 
     fn to_yaml(&self) -> Option<serde_yml::Value> {
         let mut map = serde_yml::Mapping::new();
         map.try_insert("displacement", self.displacement)?;
-        map.try_insert("num_samples", self.num_samples)?;
+        map.try_insert("num_samples", self.widom.len())?;
         map.try_insert("mean_force", self.mean_force())?;
-        map.try_insert("mean_free_energy", self.mean_free_energy())?;
+        map.try_insert("mean_free_energy", self.widom.mean_free_energy())?;
         Some(serde_yml::Value::Mapping(map))
     }
 }
@@ -354,8 +302,8 @@ impl std::fmt::Display for VirtualTranslate {
             "  Direction:   [{:.3}, {:.3}, {:.3}]",
             self.unit_direction.x, self.unit_direction.y, self.unit_direction.z
         )?;
-        writeln!(f, "  Samples:     {}", self.num_samples)?;
-        if !self.mean_exp_energy.is_empty() {
+        writeln!(f, "  Samples:     {}", self.widom.len())?;
+        if !self.widom.is_empty() {
             writeln!(f, "  <force>:     {:.6} kT/Å", self.mean_force())?;
         }
         Ok(())
@@ -368,6 +316,8 @@ mod tests {
     use crate::analysis::AnalysisBuilder;
     use crate::Info;
     use float_cmp::assert_approx_eq;
+
+    const RT_298: f64 = crate::R_IN_KJ_PER_MOL * 298.15;
 
     /// Assert approximate equality of a Point's x, y, z components.
     macro_rules! assert_point_approx_eq {
@@ -384,7 +334,7 @@ mod tests {
             .selection(Selection::parse("molecule MOL").unwrap())
             .displacement(displacement)
             .frequency(Frequency::Every(1))
-            .build()
+            .build(RT_298)
             .unwrap()
     }
 
@@ -418,13 +368,13 @@ mod tests {
             .selection(Selection::parse("molecule MOL").unwrap())
             .displacement(0.01)
             .frequency(Frequency::Every(10))
-            .build()
+            .build(RT_298)
             .unwrap();
         assert_approx_eq!(f64, vt.displacement, 0.01);
         assert_eq!(vt.selection.source(), "molecule MOL");
-        assert_approx_eq!(f64, vt.temperature, 298.15);
+        assert_approx_eq!(f64, vt.thermal_energy, RT_298);
         assert_eq!(vt.directions, Axes::Z);
-        assert_eq!(vt.num_samples, 0);
+        assert_eq!(vt.widom.len(), 0);
     }
 
     #[test]
@@ -432,7 +382,7 @@ mod tests {
         let result = VirtualTranslateBuilder::default()
             .displacement(0.01)
             .frequency(Frequency::Every(10))
-            .build();
+            .build(RT_298);
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("selection"));
     }
@@ -442,7 +392,7 @@ mod tests {
         let result = VirtualTranslateBuilder::default()
             .selection(Selection::parse("molecule MOL").unwrap())
             .frequency(Frequency::Every(10))
-            .build();
+            .build(RT_298);
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("dL"));
     }
@@ -452,83 +402,48 @@ mod tests {
         let result = VirtualTranslateBuilder::default()
             .selection(Selection::parse("molecule MOL").unwrap())
             .displacement(0.01)
-            .build();
+            .build(RT_298);
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("frequency"));
     }
 
     #[test]
-    fn build_with_custom_temperature_and_direction() {
+    fn build_with_custom_direction() {
+        let rt_310 = crate::R_IN_KJ_PER_MOL * 310.0;
         let vt = VirtualTranslateBuilder::default()
             .selection(Selection::parse("molecule MOL").unwrap())
             .displacement(0.05)
             .frequency(Frequency::Every(5))
-            .temperature(310.0)
             .directions(Axes::X)
-            .build()
+            .build(rt_310)
             .unwrap();
-        assert_approx_eq!(f64, vt.temperature, 310.0);
+        assert_approx_eq!(f64, vt.thermal_energy, rt_310);
         assert_eq!(vt.directions, Axes::X);
         assert_point_approx_eq!(vt.unit_direction, 1.0, 0.0, 0.0);
     }
 
     #[test]
-    fn collect_widom_average_normal() {
-        let mut vt = build_vt(0.1);
-
-        // Zero energy change → exp(0) = 1.0
-        assert!(vt.collect_widom_average(0.0, 1.0));
-        assert_approx_eq!(f64, vt.mean_exp_energy.mean(), 1.0);
-
-        // Positive energy change → exp(-dU) < 1
-        assert!(vt.collect_widom_average(1.0, 1.0));
-        let expected = (1.0 + (-1.0_f64).exp()) / 2.0;
-        assert_approx_eq!(f64, vt.mean_exp_energy.mean(), expected, epsilon = 1e-12);
-    }
-
-    #[test]
-    fn collect_widom_average_overflow_protection() {
-        let mut vt = build_vt(0.1);
-
-        // Too negative energy → would overflow exp()
-        assert!(!vt.collect_widom_average(-(f64::MAX_EXP as f64 + 1.0), 1.0));
-        assert!(vt.mean_exp_energy.is_empty());
-
-        // Too positive energy → exp(-dU) underflows
-        assert!(!vt.collect_widom_average(f64::MAX_EXP as f64 + 1.0, 1.0));
-        assert!(vt.mean_exp_energy.is_empty());
-    }
-
-    #[test]
     fn mean_free_energy_and_force() {
         let mut vt = build_vt(0.5);
-
-        // Add samples with zero energy change → exp(0) = 1.0
-        // mean = 1.0, free_energy = -ln(1.0) = 0.0
-        vt.collect_widom_average(0.0, 1.0);
-        vt.collect_widom_average(0.0, 1.0);
-        assert_approx_eq!(f64, vt.mean_free_energy(), 0.0);
+        vt.widom.collect(0.0, 1.0);
+        vt.widom.collect(0.0, 1.0);
+        assert_approx_eq!(f64, vt.widom.mean_free_energy(), 0.0);
         assert_approx_eq!(f64, vt.mean_force(), 0.0);
     }
 
     #[test]
     fn mean_free_energy_with_nonzero_energy() {
         let mut vt = build_vt(0.1);
-
-        // Add single sample with energy_change = 2.0
-        // exp(-2.0) ≈ 0.1353
-        // free_energy = -ln(exp(-2.0)) = 2.0
-        // force = -free_energy / dL = -2.0 / 0.1 = -20.0
-        vt.collect_widom_average(2.0, 1.0);
-        assert_approx_eq!(f64, vt.mean_free_energy(), 2.0, epsilon = 1e-12);
+        // free_energy = -ln(exp(-2.0)) = 2.0, force = -2.0/0.1 = -20.0
+        vt.widom.collect(2.0, 1.0);
+        assert_approx_eq!(f64, vt.widom.mean_free_energy(), 2.0, epsilon = 1e-12);
         assert_approx_eq!(f64, vt.mean_force(), -20.0, epsilon = 1e-10);
     }
 
     #[test]
     fn mean_free_energy_empty_returns_infinity() {
         let vt = build_vt(0.1);
-        // No samples → mean is NaN → should return +inf
-        assert!(vt.mean_free_energy().is_infinite());
+        assert!(vt.widom.mean_free_energy().is_infinite());
     }
 
     #[test]
@@ -558,8 +473,7 @@ mod tests {
     #[test]
     fn display_with_samples() {
         let mut vt = build_vt(0.1);
-        vt.collect_widom_average(0.0, 1.0);
-        vt.num_samples = 1;
+        vt.widom.collect(0.0, 1.0);
         let output = format!("{vt}");
         assert!(output.contains("Samples:     1"));
         assert!(output.contains("<force>"));
@@ -569,19 +483,15 @@ mod tests {
     fn deserialize_virtual_translate_builders() {
         let yaml = std::fs::read_to_string("tests/files/virtual_translate.yaml").unwrap();
 
-        // First: z-direction with explicit temperature
-        let vt = deserialize_vt_builder(&yaml, 0).build().unwrap();
+        let vt = deserialize_vt_builder(&yaml, 0).build(RT_298).unwrap();
         assert_eq!(vt.selection.source(), "molecule MOL");
         assert_approx_eq!(f64, vt.displacement, 0.01);
         assert_eq!(vt.directions, Axes::Z);
-        assert_approx_eq!(f64, vt.temperature, 298.15);
         assert!(matches!(vt.frequency, Frequency::Every(10)));
 
-        // Second: x-direction with default temperature
-        let vt = deserialize_vt_builder(&yaml, 1).build().unwrap();
+        let vt = deserialize_vt_builder(&yaml, 1).build(RT_298).unwrap();
         assert_approx_eq!(f64, vt.displacement, 0.05);
         assert_eq!(vt.directions, Axes::X);
-        assert_approx_eq!(f64, vt.temperature, 298.15);
         assert!(matches!(vt.frequency, Frequency::Every(5)));
     }
 
@@ -592,7 +502,7 @@ mod tests {
   selection: "molecule MOL"
   frequency: !Every 10
 "#;
-        assert!(deserialize_vt_builder(yaml, 0).build().is_err());
+        assert!(deserialize_vt_builder(yaml, 0).build(RT_298).is_err());
     }
 
     #[test]
@@ -603,7 +513,7 @@ mod tests {
   dL: 0.1
   frequency: !Every 1
 "#;
-        let vt = deserialize_vt_builder(yaml, 0).build().unwrap();
+        let vt = deserialize_vt_builder(yaml, 0).build(RT_298).unwrap();
         assert_eq!(vt.directions, Axes::Z);
     }
 
@@ -613,15 +523,13 @@ mod tests {
 selection: "molecule MOL"
 dL: 0.05
 directions: !x
-temperature: 310.0
 frequency: !Every 5
 "#;
         let builder: VirtualTranslateBuilder = serde_yml::from_str(yaml).unwrap();
         let serialized = serde_yml::to_string(&builder).unwrap();
         let roundtrip: VirtualTranslateBuilder = serde_yml::from_str(&serialized).unwrap();
-        let vt = roundtrip.build().unwrap();
+        let vt = roundtrip.build(RT_298).unwrap();
         assert_approx_eq!(f64, vt.displacement, 0.05);
         assert_eq!(vt.directions, Axes::X);
-        assert_approx_eq!(f64, vt.temperature, 310.0);
     }
 }

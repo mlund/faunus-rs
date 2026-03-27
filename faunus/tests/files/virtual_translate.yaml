@@ -2,7 +2,6 @@
   selection: "molecule MOL"
   dL: 0.01
   directions: !z
-  temperature: 298.15
   frequency: !Every 10
 - !VirtualTranslate
   selection: "molecule MOL"
