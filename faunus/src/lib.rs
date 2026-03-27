@@ -45,7 +45,7 @@ pub mod energy;
 pub(crate) mod flat_histogram;
 pub(crate) mod geometry;
 pub mod group;
-pub(crate) mod histogram;
+pub mod histogram;
 pub mod montecarlo;
 pub mod propagate;
 pub mod selection;

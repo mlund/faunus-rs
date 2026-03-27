@@ -26,7 +26,7 @@ mod collective_variable;
 mod energy;
 mod mean_along_coordinate;
 mod radial_distribution;
-pub(crate) mod reweight;
+pub mod reweight;
 mod scaled_widom_insertion;
 mod shape;
 mod structure_writer;

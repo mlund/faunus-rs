@@ -8,7 +8,7 @@ use crate::energy::penalty::Penalty;
 use crate::{Change, Context};
 
 /// Source of per-frame reweighting factors.
-pub(crate) enum WeightSource {
+pub enum WeightSource {
     /// No reweighting (w = 1).
     Uniform,
     /// WL unbiasing: w = exp(-penalty_energy / kT).

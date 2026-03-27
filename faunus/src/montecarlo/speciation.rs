@@ -592,7 +592,7 @@ impl SpeciationMove {
         to_mol_id: usize,
         context: &impl Context,
         rng: &mut dyn RngCore,
-    ) -> Option<(Vec<SpeciationAction>, Vec<(usize, GroupChange)>, f64)> {
+    ) -> Option<ActionBuild> {
         let full = context.find_molecules(from_mol_id, GroupSize::Full)?;
         if full.is_empty() {
             return None;

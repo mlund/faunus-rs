@@ -178,7 +178,7 @@ impl Hamiltonian {
     }
 
     /// Removes the first energy term. Returns `None` if empty.
-    pub(crate) fn pop_front(&mut self) -> Option<EnergyTerm> {
+    pub fn pop_front(&mut self) -> Option<EnergyTerm> {
         if self.energy_terms.is_empty() {
             return None;
         }
@@ -193,7 +193,7 @@ impl Hamiltonian {
     }
 
     /// Return a reference to the Penalty term, if present.
-    pub(crate) fn penalty(&self) -> Option<&super::penalty::Penalty> {
+    pub fn penalty(&self) -> Option<&super::penalty::Penalty> {
         self.energy_terms.iter().find_map(|t| match t {
             EnergyTerm::Penalty(p) => Some(p),
             _ => None,

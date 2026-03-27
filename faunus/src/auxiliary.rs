@@ -22,7 +22,7 @@ use std::io::{BufRead, Write};
 use std::path::Path;
 
 /// Parse a named section from a YAML input file into a typed config struct.
-pub(crate) fn parse_yaml_section<T: serde::de::DeserializeOwned>(
+pub fn parse_yaml_section<T: serde::de::DeserializeOwned>(
     input: &Path,
     key: &str,
 ) -> anyhow::Result<T> {
@@ -35,7 +35,7 @@ pub(crate) fn parse_yaml_section<T: serde::de::DeserializeOwned>(
 }
 
 /// Resolve max thread count: 0 means use all available cores.
-pub(crate) fn resolve_thread_count(max_threads: usize) -> usize {
+pub fn resolve_thread_count(max_threads: usize) -> usize {
     if max_threads == 0 {
         std::thread::available_parallelism()
             .map(|n| n.get())

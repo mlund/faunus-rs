@@ -150,7 +150,7 @@ pub(crate) fn box_prefixed_path(path: &Path, box_index: usize) -> std::path::Pat
 }
 
 /// Serialize data to a YAML file under an optional key.
-pub(crate) fn write_yaml<T: serde::Serialize>(
+pub fn write_yaml<T: serde::Serialize>(
     data: &T,
     output: &mut std::fs::File,
     key: Option<&str>,
