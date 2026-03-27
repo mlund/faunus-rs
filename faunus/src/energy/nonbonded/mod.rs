@@ -53,7 +53,7 @@ const fn canonical_mol_pair(a: usize, b: usize) -> [usize; 2] {
 ///
 /// Entire molecule-type pairs can be excluded via [`Self::exclude_molecule_pair`],
 /// skipping all inter-group interactions between those molecule kinds.
-/// This is used automatically when [`Tabulated6D`] handles the same pairs.
+/// This is used automatically when [`TabulatedEnergy`] handles the same pairs.
 #[derive(Debug)]
 pub struct NonbondedMatrix<P = PairPot> {
     /// Matrix of pair potentials based on atom type ids.
@@ -66,7 +66,7 @@ pub struct NonbondedMatrix<P = PairPot> {
     cutoff: Option<f64>,
     /// Enable bounding-sphere culling of distant group pairs.
     use_bounding_spheres: bool,
-    /// Molecule-type pairs excluded from nonbonded evaluation (e.g. handled by Tabulated6D).
+    /// Molecule-type pairs excluded from nonbonded evaluation (e.g. handled by TabulatedEnergy).
     /// Each entry is a sorted `[mol_a, mol_b]` pair of molecule kind indices.
     molecule_pair_exclusions: Vec<[usize; 2]>,
 }
@@ -400,7 +400,7 @@ impl<P> NonbondedMatrix<P> {
     ///
     /// All inter-group interactions between groups of these two molecule kinds
     /// will be skipped. Use when the pair is handled by another energy term
-    /// (e.g. [`Tabulated6D`]).
+    /// (e.g. [`TabulatedEnergy`]).
     pub(crate) fn exclude_molecule_pair(&mut self, mol_a: usize, mol_b: usize) {
         let pair = canonical_mol_pair(mol_a, mol_b);
         if !self.molecule_pair_exclusions.contains(&pair) {

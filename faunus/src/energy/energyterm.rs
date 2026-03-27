@@ -9,7 +9,7 @@ use super::{
     penalty::Penalty,
     polymer_depletion::PolymerDepletion,
     sasa::SasaEnergy,
-    tabulated6d::Tabulated6D,
+    tabulated::TabulatedEnergy,
     CellOverlap, EnergyChange,
 };
 use crate::{Change, Context};
@@ -40,8 +40,8 @@ pub enum EnergyTerm {
     PolymerDepletion(PolymerDepletion),
     /// Coulomb correction for excluded (bonded) pairs.
     ExcludedCoulomb(ExcludedCoulomb),
-    /// Tabulated 6D rigid molecule-molecule energy.
-    Tabulated6D(Tabulated6D),
+    /// Tabulated rigid-body energy (6D molecule-molecule and 3D molecule-atom).
+    Tabulated(TabulatedEnergy),
     /// Flat-histogram bias penalty on collective variable(s).
     Penalty(Penalty),
 }
@@ -57,7 +57,7 @@ macro_rules! dispatch_stateful {
             EnergyTerm::NonbondedMatrixSplined(x) => x.$method(),
             EnergyTerm::EwaldReciprocal(x) => x.$method(),
             EnergyTerm::PolymerDepletion(x) => x.$method(),
-            EnergyTerm::Tabulated6D(x) => x.$method(),
+            EnergyTerm::Tabulated(x) => x.$method(),
             EnergyTerm::IntramolecularBonded(_)
             | EnergyTerm::CellOverlap(_)
             | EnergyTerm::Constrain(_)
@@ -85,7 +85,7 @@ impl EnergyTerm {
             Self::SasaEnergy(x) => x.update(context, change),
             Self::EwaldReciprocal(x) => x.update(context, change),
             Self::PolymerDepletion(x) => x.update(context, change),
-            Self::Tabulated6D(x) => {
+            Self::Tabulated(x) => {
                 x.update_cache(context, change); // mirrors NonbondedMatrix pattern
                 Ok(())
             }
@@ -111,7 +111,7 @@ impl EnergyTerm {
             Self::NonbondedMatrix(x) => x.save_backup(change),
             Self::NonbondedMatrixSplined(x) => x.save_backup(change),
             Self::EwaldReciprocal(x) => x.save_backup(change, context),
-            Self::Tabulated6D(x) => x.save_backup(change),
+            Self::Tabulated(x) => x.save_backup(change),
             Self::IntramolecularBonded(_)
             | Self::CellOverlap(_)
             | Self::Constrain(_)
@@ -178,7 +178,7 @@ impl EnergyTerm {
             | Self::Constrain(_)
             | Self::ExcludedCoulomb(_)
             | Self::Penalty(_) => None,
-            Self::Tabulated6D(x) => Some(x.to_yaml()),
+            Self::Tabulated(x) => Some(x.to_yaml()),
         }
     }
 
@@ -200,7 +200,7 @@ impl EnergyTerm {
             | Self::EwaldReciprocal(_)
             | Self::PolymerDepletion(_)
             | Self::ExcludedCoulomb(_)
-            | Self::Tabulated6D(_)
+            | Self::Tabulated(_)
             | Self::Penalty(_) => Vec::new(),
         }
     }
@@ -236,7 +236,7 @@ impl crate::Info for EnergyTerm {
             Self::EwaldReciprocal(_) => "ewald_reciprocal",
             Self::PolymerDepletion(_) => "polymer_depletion",
             Self::ExcludedCoulomb(_) => "excluded_coulomb",
-            Self::Tabulated6D(_) => "tabulated6d",
+            Self::Tabulated(_) => "tabulated",
             Self::Penalty(_) => "penalty",
         })
     }
@@ -259,7 +259,7 @@ impl EnergyChange for EnergyTerm {
             Self::EwaldReciprocal(x) => x.energy(context, change),
             Self::PolymerDepletion(x) => x.energy(context, change),
             Self::ExcludedCoulomb(x) => x.energy(context, change),
-            Self::Tabulated6D(x) => x.energy(context, change),
+            Self::Tabulated(x) => x.energy(context, change),
             Self::Penalty(x) => x.energy(context, change),
         }
     }
@@ -283,9 +283,9 @@ impl From<PolymerDepletion> for EnergyTerm {
     }
 }
 
-impl From<Tabulated6D> for EnergyTerm {
-    fn from(t: Tabulated6D) -> Self {
-        Self::Tabulated6D(t)
+impl From<TabulatedEnergy> for EnergyTerm {
+    fn from(t: TabulatedEnergy) -> Self {
+        Self::Tabulated(t)
     }
 }
 

@@ -48,7 +48,7 @@ use super::external_pressure::Pressure;
 use super::penalty::PenaltyBuilder;
 use super::polymer_depletion::PolymerDepletionBuilder;
 use super::sasa::SasaEnergyBuilder;
-use super::tabulated6d::Tabulated6DBuilder;
+use super::tabulated::{Tabulated3DBuilder, Tabulated6DBuilder};
 use interatomic::twobody::{GridType, SplineConfig};
 
 /// Bounds required for a coulomb scheme to be used with `IonIon` and `Box<dyn>`.
@@ -669,6 +669,9 @@ pub struct HamiltonianBuilder {
 
     /// Tabulated 6D rigid molecule-molecule energy tables.
     pub tabulated6d: Option<Tabulated6DBuilder>,
+
+    /// Tabulated 3D rigid molecule-atom energy tables.
+    pub tabulated3d: Option<Tabulated3DBuilder>,
 
     /// Static flat-histogram bias loaded from a Wang-Landau checkpoint.
     pub penalty: Option<PenaltyBuilder>,

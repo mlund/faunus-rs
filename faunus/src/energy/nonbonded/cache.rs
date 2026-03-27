@@ -4,7 +4,7 @@
 /// inter-group energy of group m) can be returned in O(1) instead of O(N_groups).
 /// On accept, symmetric delta propagation keeps all entries consistent in O(N_groups).
 ///
-/// Visible to `crate::energy` so that `Tabulated6D` can reuse the same cache logic.
+/// Visible to `crate::energy` so that `TabulatedEnergy` can reuse the same cache logic.
 #[derive(Debug, Clone, Default)]
 pub(in crate::energy) struct GroupEnergyCache {
     /// `pairwise[i * n + j]` = nonbonded energy between groups i and j

@@ -32,7 +32,7 @@ pub(crate) mod pairpot;
 pub(crate) mod penalty;
 mod polymer_depletion;
 mod sasa;
-mod tabulated6d;
+mod tabulated;
 
 pub use bonded::{IntermolecularBonded, IntramolecularBonded};
 pub use celloverlap::CellOverlap;
@@ -47,7 +47,7 @@ pub use pairpot::PairPot;
 pub use penalty::{Penalty, PenaltyBuilder};
 pub use polymer_depletion::{PolymerDepletion, PolymerDepletionBuilder};
 pub use sasa::{SasaEnergy, SasaEnergyBuilder};
-pub use tabulated6d::{Tabulated6D, Tabulated6DBuilder};
+pub use tabulated::{Tabulated3DBuilder, Tabulated6DBuilder, TabulatedEnergy};
 
 // Re-export spline types from interatomic for convenience
 pub use interatomic::twobody::{GridType, SplineConfig};

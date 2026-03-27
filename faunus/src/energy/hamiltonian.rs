@@ -219,7 +219,7 @@ impl Hamiltonian {
 
         for term in &mut self.energy_terms {
             // Ewald rebuild replaces the entire nonbonded term; carry over
-            // molecule-pair exclusions so tabulated6d pairs stay excluded.
+            // molecule-pair exclusions so tabulated pairs stay excluded.
             if let Some(old) = term.molecule_pair_exclusions() {
                 let old = old.to_vec();
                 *term = new_term;
@@ -237,7 +237,7 @@ impl Hamiltonian {
     ///
     /// All inter-group interactions between groups of these two molecule kinds
     /// will be skipped by the nonbonded term. Use when the pair is handled by
-    /// another energy term (e.g. [`Tabulated6D`]).
+    /// another energy term (e.g. [`TabulatedEnergy`]).
     pub(crate) fn exclude_nonbonded_molecule_pair(&mut self, mol_a: usize, mol_b: usize) {
         self.energy_terms
             .iter_mut()
@@ -437,13 +437,22 @@ impl Hamiltonian {
             let thermal_energy = require_thermal_energy("polymer_depletion")?;
             self.push(pm_builder.build(context, thermal_energy)?.into());
         }
-        if let Some(tab_builder) = &builder.tabulated6d {
-            let thermal_energy = require_thermal_energy("tabulated6d")?;
-            let tab = tab_builder.build(context, 1.0 / thermal_energy)?;
+        // Build tabulated energy entries (6D molecule-molecule and 3D molecule-atom)
+        if builder.tabulated6d.is_some() || builder.tabulated3d.is_some() {
+            let inv_thermal_energy = 1.0 / require_thermal_energy("tabulated")?;
+            let topology = context.topology();
+            let mut tab_entries = Vec::new();
+            if let Some(tab6d) = &builder.tabulated6d {
+                tab_entries.extend(tab6d.build_entries(&topology, inv_thermal_energy)?);
+            }
+            if let Some(tab3d) = &builder.tabulated3d {
+                tab_entries.extend(tab3d.build_entries(&topology, inv_thermal_energy)?);
+            }
+            let tab = super::TabulatedEnergy::new(tab_entries, inv_thermal_energy);
             for (mol_a, mol_b) in tab.molecule_pairs() {
                 self.exclude_nonbonded_molecule_pair(mol_a, mol_b);
                 log::info!(
-                    "Excluded molecule pair ({}, {}) from nonbonded (handled by tabulated6d)",
+                    "Excluded molecule pair ({}, {}) from nonbonded (handled by tabulated energy)",
                     mol_a,
                     mol_b
                 );
