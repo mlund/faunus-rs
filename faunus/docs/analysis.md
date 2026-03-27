@@ -393,7 +393,7 @@ Key           | Required | Default  | Description
 ## Virtual Volume Move
 
 Performs a virtual volume perturbation and measures the excess pressure
-by Widom perturbation ([Nezbeda & Kolafa, 1991](https://doi.org/10.1063/1.472721)):
+by Widom perturbation ([doi:10.1063/1.472721](https://doi.org/10.1063/1.472721)):
 
 $$P_{\text{ex}} = \frac{k_BT \ln\langle e^{-\Delta U / k_BT}\rangle}{\delta V}$$
 
