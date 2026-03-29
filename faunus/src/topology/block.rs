@@ -356,6 +356,9 @@ impl InsertionPolicy {
             }
         }
 
+        use rand::seq::SliceRandom;
+        grid_points.shuffle(rng);
+
         let mut all_positions = Vec::with_capacity(num_molecules * centered_positions.len());
         let mut quaternions = Vec::with_capacity(num_molecules);
 
