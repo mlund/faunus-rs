@@ -217,6 +217,10 @@ analysis:
     file: traj.xtc
     frequency: !Every 100
     save_frame_state: true
+  - !Trajectory
+    file: protein.xyz
+    frequency: !Every 100
+    selection: "protein"
 ```
 
 After the simulation, visualize with:
@@ -231,7 +235,8 @@ Key                | Required | Default | Description
 ------------------ | -------- | ------- | -------------------------------------------
 `file`             | yes      |         | Output file path (`.xyz`, `.xtc`, etc.)
 `frequency`        | yes      |         | Sample frequency, e.g. `!Every 100` or `!End`
-`save_frame_state` | no       | `false` | Write a binary `.aux` file alongside the trajectory (see [Rerun](#rerun))
+`selection`        | no       |         | VMD-like molecule selection, e.g. `"molecule protein"`. Writes only matching groups.
+`save_frame_state` | no       | `false` | Write a binary `.aux` file alongside the trajectory (see [Rerun](#rerun)). Cannot be combined with `selection`.
 
 ### Output files
 

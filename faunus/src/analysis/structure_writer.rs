@@ -1,15 +1,17 @@
 use super::{Analyze, Frequency};
 use crate::auxiliary::MappingExt;
 use crate::cell::Shape;
+use crate::selection::{Selection, SelectionCache};
 use crate::topology::io::{self, frame_state::FrameStateWriter, psf, StructureData};
 use crate::Context;
 use derive_builder::Builder;
 use serde::{Deserialize, Serialize};
+use std::borrow::Cow;
 use std::path::Path;
 
 /// Writes structure of the system in the specified format during the simulation.
 #[derive(Debug, Builder)]
-#[builder(derive(Deserialize, Serialize))]
+#[builder(derive(Deserialize, Serialize), build_fn(validate = "Self::validate"))]
 pub struct StructureWriter {
     /// Output file name (xyz, pdb, etc.)
     #[builder_field_attr(serde(rename = "file"))]
@@ -20,6 +22,11 @@ pub struct StructureWriter {
     #[builder_field_attr(serde(default))]
     #[builder(default)]
     save_frame_state: bool,
+    /// Optional molecule selection filter (VMD-like expression).
+    #[builder_field_attr(serde(default))]
+    #[builder(setter(strip_option), default)]
+    // strip_option: avoid double-Option in builder serde
+    selection: Option<Selection>,
     /// Counter for the number of samples taken.
     #[builder(setter(skip))]
     #[builder_field_attr(serde(skip_deserializing))]
@@ -28,6 +35,21 @@ pub struct StructureWriter {
     #[builder(setter(skip))]
     #[builder_field_attr(serde(skip))]
     frame_state_writer: Option<FrameStateWriter>,
+    /// Cached resolved group indices for selection.
+    #[builder(setter(skip))]
+    #[builder_field_attr(serde(skip))]
+    group_cache: SelectionCache,
+}
+
+impl StructureWriterBuilder {
+    fn validate(&self) -> Result<(), String> {
+        // Frame state (.aux) encodes full-system group topology; a filtered
+        // selection would produce a mismatch during rerun deserialization.
+        if self.save_frame_state == Some(true) && self.selection.is_some() {
+            return Err("save_frame_state cannot be combined with selection".into());
+        }
+        Ok(())
+    }
 }
 
 impl<T: Context> From<StructureWriter> for Box<dyn Analyze<T>> {
@@ -42,8 +64,10 @@ impl StructureWriter {
             output_file: output_file.to_owned(),
             frequency,
             save_frame_state: false,
+            selection: None,
             num_samples: 0,
             frame_state_writer: None,
+            group_cache: SelectionCache::default(),
         }
     }
 }
@@ -58,15 +82,36 @@ impl crate::Info for StructureWriter {
 }
 
 impl StructureWriter {
+    /// Resolve selected group indices, using cache to avoid re-resolution.
+    fn selected_group_indices<T: Context>(&mut self, context: &T) -> Cow<'_, [usize]> {
+        match &self.selection {
+            Some(sel) => {
+                let gen = context.group_lists_generation();
+                Cow::Borrowed(
+                    self.group_cache
+                        .get_or_resolve(gen, || context.resolve_groups_live(sel)),
+                )
+            }
+            None => Cow::Owned((0..context.groups().len()).collect()),
+        }
+    }
+
     fn write_frame<T: Context>(&mut self, context: &T, step: usize) -> anyhow::Result<()> {
         let topology = context.topology();
-        let num_particles = context.num_particles();
+        let all_groups = context.groups();
+        let group_indices = self.selected_group_indices(context);
 
+        let num_particles: usize = group_indices
+            .iter()
+            .map(|&i| all_groups[i].capacity())
+            .sum();
         let mut names = Vec::with_capacity(num_particles);
         let mut positions = Vec::with_capacity(num_particles);
 
-        for group in context.groups().iter() {
+        for &gi in group_indices.iter() {
+            let group = &all_groups[gi];
             let molecule = &topology.moleculekinds()[group.molecule()];
+            // capacity() not len(): XTC requires fixed particle count per frame
             for i in 0..group.capacity() {
                 let topo_i = molecule.topology_index(i);
                 names.push(
@@ -164,10 +209,17 @@ impl<T: Context> Analyze<T> for StructureWriter {
             self.write_frame(context, self.num_samples)?;
         }
         if self.num_samples > 0 {
+            // into_owned() releases the borrow on self.group_cache so self.output_file is accessible
+            let group_indices = self.selected_group_indices(context).into_owned();
             let base = Path::new(&self.output_file);
             let topology = context.topology();
+            let all_groups = context.groups();
+            let filtered: Vec<_> = group_indices
+                .iter()
+                .map(|&i| all_groups[i].clone())
+                .collect();
             let psf_path = base.with_extension("psf");
-            psf::write_psf(&psf_path, &topology, context.groups())?;
+            psf::write_psf(&psf_path, &topology, &filtered)?;
             let tcl_path = base.with_extension("tcl");
             let psf_name = psf_path
                 .file_name()
@@ -211,7 +263,7 @@ mod tests {
     fn deserialize_trajectory_builders() {
         let yaml = std::fs::read_to_string("tests/files/trajectory_xyz.yaml").unwrap();
         let builders: Vec<AnalysisBuilder> = serde_yml::from_str(&yaml).unwrap();
-        assert_eq!(builders.len(), 2);
+        assert_eq!(builders.len(), 3);
 
         // Verify first entry: xyz trajectory
         let AnalysisBuilder::StructureWriter(ref b) = builders[0] else {
@@ -220,6 +272,7 @@ mod tests {
         let writer = b.build().unwrap();
         assert_eq!(writer.output_file, "traj.xyz");
         assert!(matches!(writer.frequency, Frequency::Every(100)));
+        assert!(writer.selection.is_none());
 
         // Verify second entry: xtc trajectory
         let AnalysisBuilder::StructureWriter(ref b) = builders[1] else {
@@ -228,5 +281,16 @@ mod tests {
         let writer = b.build().unwrap();
         assert_eq!(writer.output_file, "traj.xtc");
         assert!(matches!(writer.frequency, Frequency::Every(50)));
+        assert!(writer.selection.is_none());
+
+        // Verify third entry: xyz with selection filter
+        let AnalysisBuilder::StructureWriter(ref b) = builders[2] else {
+            panic!("expected StructureWriter variant");
+        };
+        let writer = b.build().unwrap();
+        assert_eq!(writer.output_file, "selected.xyz");
+        assert!(matches!(writer.frequency, Frequency::Every(10)));
+        assert!(writer.selection.is_some());
+        assert_eq!(writer.selection.unwrap().source(), "molecule water");
     }
 }

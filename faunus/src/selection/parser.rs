@@ -144,6 +144,19 @@ impl<'a> Parser<'a> {
         Ok(inner)
     }
 
+    /// Hint appended to "requires at least one argument" when the next token
+    /// is a standalone keyword (e.g. `molecule protein` → suggest just `protein`).
+    fn standalone_keyword_hint(&self) -> String {
+        self.peek()
+            .and_then(Token::as_standalone_keyword)
+            .map(|kw| {
+                format!(
+                    "; did you mean just `{kw}`? It is a standalone keyword, not a name argument"
+                )
+            })
+            .unwrap_or_default()
+    }
+
     fn parse_pattern_keyword(
         &mut self,
         name: &str,
@@ -154,7 +167,10 @@ impl<'a> Parser<'a> {
         let patterns = self.parse_patterns();
         if patterns.is_empty() {
             return Err(SelectionError {
-                message: format!("{name} requires at least one argument"),
+                message: format!(
+                    "{name} requires at least one argument{}",
+                    self.standalone_keyword_hint()
+                ),
                 position: pos,
             });
         }
@@ -171,7 +187,10 @@ impl<'a> Parser<'a> {
         let ranges = self.parse_ranges()?;
         if ranges.is_empty() {
             return Err(SelectionError {
-                message: format!("{name} requires at least one argument"),
+                message: format!(
+                    "{name} requires at least one argument{}",
+                    self.standalone_keyword_hint()
+                ),
                 position: pos,
             });
         }
@@ -338,6 +357,16 @@ mod tests {
         assert!(parse("chain").is_err());
         assert!(parse("resname").is_err());
         assert!(parse("resid").is_err());
+    }
+
+    #[test]
+    fn parse_molecule_standalone_keyword_hint() {
+        let err = parse("molecule protein").unwrap_err();
+        assert!(
+            err.message.contains("did you mean just `protein`"),
+            "expected hint about standalone keyword, got: {}",
+            err.message
+        );
     }
 
     #[test]

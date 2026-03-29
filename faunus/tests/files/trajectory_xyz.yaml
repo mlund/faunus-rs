@@ -4,3 +4,7 @@
 - !Trajectory
   file: "traj.xtc"
   frequency: !Every 50
+- !Trajectory
+  file: "selected.xyz"
+  frequency: !Every 10
+  selection: "molecule water"

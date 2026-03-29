@@ -46,6 +46,29 @@ pub enum Token {
     Colon,
 }
 
+impl Token {
+    /// If this token is a standalone selection keyword (e.g. `protein`, `backbone`),
+    /// return its name. Used for diagnostics when a keyword is mistakenly used as
+    /// an argument to `molecule` or similar.
+    pub(super) fn as_standalone_keyword(&self) -> Option<&'static str> {
+        match self {
+            Self::Protein => Some("protein"),
+            Self::Backbone => Some("backbone"),
+            Self::Sidechain => Some("sidechain"),
+            Self::Nucleic => Some("nucleic"),
+            Self::Hydrophobic => Some("hydrophobic"),
+            Self::Aromatic => Some("aromatic"),
+            Self::Acidic => Some("acidic"),
+            Self::Basic => Some("basic"),
+            Self::Polar => Some("polar"),
+            Self::Charged => Some("charged"),
+            Self::All => Some("all"),
+            Self::None => Some("none"),
+            _ => None,
+        }
+    }
+}
+
 /// Convert identifier string to keyword token or leave as identifier.
 fn ident_to_token(ident: String) -> Token {
     match ident.to_lowercase().as_str() {
