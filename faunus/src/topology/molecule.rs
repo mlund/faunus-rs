@@ -296,7 +296,18 @@ impl MoleculeKind {
         match source {
             StructureSource::File(path) => {
                 let data = super::io::read_structure(&path)?;
-                self.atoms = data.names;
+                if self.atoms.is_empty() {
+                    self.atoms = data.names;
+                } else {
+                    anyhow::ensure!(
+                        self.atoms.len() == data.names.len(),
+                        "molecule '{}': `atoms` has {} entries but '{}' has {}",
+                        self.name,
+                        self.atoms.len(),
+                        path.display(),
+                        data.names.len()
+                    );
+                }
                 self.reference_positions = data.positions;
                 log::debug!("Set {} atoms from {}", self.atoms.len(), path.display());
             }

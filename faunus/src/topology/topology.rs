@@ -305,7 +305,15 @@ impl Topology {
                     self.atomkinds
                         .iter()
                         .position(|x| x.name() == atom)
-                        .ok_or_else(|| anyhow::Error::msg("undefined atom kind in a molecule"))
+                        .ok_or_else(|| {
+                            anyhow::anyhow!(
+                                "molecule '{}' references undefined atom kind '{}'. \
+                                 If using `from_structure`, atom names are read from the \
+                                 structure file unless overridden with an explicit `atoms` list.",
+                                molecule.name(),
+                                atom
+                            )
+                        })
                 })
                 .collect::<Result<Vec<_>, _>>()?;
             molecule.set_atom_indices(indices);
