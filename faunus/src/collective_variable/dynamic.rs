@@ -48,7 +48,10 @@ impl CvKind for Count {
     }
 }
 
-impl_self_building_cv!(Count, "count");
+impl_self_building_cv!(Count, "count", |s| Some(format!(
+    "selection: {}",
+    s.selection
+)));
 
 // ---------------------------------------------------------------------------
 // Concentration (self-building)
@@ -78,7 +81,10 @@ impl CvKind for Molarity {
     }
 }
 
-impl_self_building_cv!(Molarity, "molarity");
+impl_self_building_cv!(Molarity, "molarity", |s| Some(format!(
+    "selection: {}",
+    s.selection
+)));
 
 // ---------------------------------------------------------------------------
 // Charge (self-building)
@@ -110,4 +116,7 @@ impl CvKind for Charge {
     }
 }
 
-impl_self_building_cv!(Charge, "charge");
+impl_self_building_cv!(Charge, "charge", |s| Some(format!(
+    "selection: {}",
+    s.selection
+)));

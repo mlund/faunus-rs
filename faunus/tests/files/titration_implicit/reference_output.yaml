@@ -17,14 +17,14 @@ energy_change:
   final: 0.0
   initial: 0.0
 energy_timers:
-  celloverlap: '100 (energy: 67.04, update: 32.96)'
+  celloverlap: '100 (energy: 70.84, update: 29.16)'
 propagate:
   repeat: 5000
   seed: !Fixed 42
   collections:
   - !Deterministic
     repeat: 1
-    elapsed_seconds: 0.008029006
+    elapsed_seconds: 0.092293449
     moves:
     - !SpeciationMove
       reactions:
@@ -50,6 +50,7 @@ propagate:
 analysis:
 - collectivevariable:
     property: Count
+    description: 'selection: atomtype A'
     num_samples: 5000
     mean: 9.814999999999992
     rms: 10.05889655976241

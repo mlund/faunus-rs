@@ -22,14 +22,14 @@ energy_change:
   final: 0.0
   initial: 0.0
 energy_timers:
-  celloverlap: '100 (energy: 68.95, update: 31.05)'
+  celloverlap: '100 (energy: 72.08, update: 27.92)'
 propagate:
   repeat: 5000
   seed: !Fixed 42
   collections:
   - !Deterministic
     repeat: 1
-    elapsed_seconds: 0.021059774
+    elapsed_seconds: 0.18473822
     moves:
     - !SpeciationMove
       reactions:
@@ -42,26 +42,28 @@ propagate:
       repeat: 1
       statistics:
         num_trials: 5000
-        num_accepted: 4128
+        num_accepted: 4130
         mean_square_displacement:
           avg: 0.0
-          'n': 872
+          'n': 870
         timer:
           accumulated:
             secs: 0
             nanos: 0
         info: {}
         energy_change_sum: 0.0
-        acceptance_ratio: 0.8256
+        acceptance_ratio: 0.826
   criterion: MetropolisHastings
 analysis:
 - collectivevariable:
     property: Count
+    description: 'selection: molecule M'
     num_samples: 5000
-    mean: 10.212399999999995
-    rms: 10.76315938746612
+    mean: 10.186199999999978
+    rms: 10.727506700067824
 - collectivevariable:
     property: Count
+    description: 'selection: atomtype A'
     num_samples: 5000
-    mean: 14.335800000000024
-    rms: 14.853639284700574
+    mean: 14.29859999999999
+    rms: 14.811475281010997

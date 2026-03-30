@@ -32,14 +32,14 @@ energy_change:
   final: 0.0
   initial: 0.0
 energy_timers:
-  celloverlap: '100 (energy: 66.32, update: 33.68)'
+  celloverlap: '100 (energy: 73.11, update: 26.89)'
 propagate:
   repeat: 5000
   seed: !Fixed 42
   collections:
   - !Deterministic
     repeat: 1
-    elapsed_seconds: 0.151805117
+    elapsed_seconds: 0.923775362
     moves:
     - !SpeciationMove
       reactions:
@@ -69,11 +69,13 @@ propagate:
 analysis:
 - collectivevariable:
     property: Count
+    description: 'selection: molecule ''H₂PO₄⁻'''
     num_samples: 5000
     mean: 50.069000000000045
     rms: 51.05002448579223
 - collectivevariable:
     property: Count
+    description: 'selection: molecule ''HPO₄²⁻'''
     num_samples: 5000
     mean: 49.930999999999955
     rms: 50.91468354021262

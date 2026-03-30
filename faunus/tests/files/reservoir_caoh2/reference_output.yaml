@@ -1,0 +1,72 @@
+medium:
+  permittivity: Vacuum
+  salt: null
+  temperature: 298.15
+blocks:
+- molecule: Ca(OH)₂
+  'N': 400
+  active: null
+  insert: !RandomAtomPos
+    directions: xyz
+- molecule: Ca²⁺
+  'N': 800
+  active: 0
+  insert: !RandomAtomPos
+    directions: xyz
+- molecule: OH⁻
+  'N': 800
+  active: 0
+  insert: !RandomAtomPos
+    directions: xyz
+cell: !Cuboid
+- 300.0
+- 300.0
+- 300.0
+energy_change:
+  drift: 0.0
+  final: 0.0
+  initial: 0.0
+energy_timers:
+  celloverlap: '100 (energy: 74.48, update: 25.52)'
+propagate:
+  repeat: 30000
+  seed: !Fixed 42
+  collections:
+  - !Deterministic
+    repeat: 1
+    elapsed_seconds: 21.895735852
+    moves:
+    - !SpeciationMove
+      reactions:
+      - - Ca(OH)₂ = Ca²⁺ + OH⁻ + OH⁻
+        - !pK 5.19
+      temperature: 298.15
+      weight: 1.0
+      repeat: 1
+      statistics:
+        num_trials: 30000
+        num_accepted: 28576
+        mean_square_displacement:
+          avg: 0.0
+          'n': 1424
+        timer:
+          accumulated:
+            secs: 0
+            nanos: 0
+        info: {}
+        energy_change_sum: 0.0
+        acceptance_ratio: 0.9525333333333333
+  criterion: MetropolisHastings
+analysis:
+- collectivevariable:
+    property: Molarity
+    description: 'selection: molecule ''Ca²⁺'''
+    num_samples: 30000
+    mean: 0.011721187662061374
+    rms: 0.01173029772359688
+- collectivevariable:
+    property: Molarity
+    description: 'selection: molecule ''OH⁻'''
+    num_samples: 30000
+    mean: 0.023442375324122747
+    rms: 0.02346059544719376

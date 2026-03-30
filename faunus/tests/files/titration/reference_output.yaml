@@ -29,19 +29,19 @@ blocks:
 cell: !Sphere
   radius: 50.0
 energy_change:
-  drift: 1.4210854715202004e-13
-  final: -0.5652656261180198
-  initial: -16.603079763136073
+  drift: 7.105427357601002e-15
+  final: -16.52216396226802
+  initial: -0.5652656261180198
 energy_timers:
-  celloverlap: '11.99 (energy: 11.16, update: 0.83)'
-  nonbonded: '88.01 (energy: 87.11, update: 0.9)'
+  celloverlap: '19.34 (energy: 19.31, update: 0.03)'
+  nonbonded: '80.66000000000001 (energy: 80.62, update: 0.04)'
 propagate:
   repeat: 2000
   seed: !Fixed 42
   collections:
   - !Deterministic
     repeat: 1
-    elapsed_seconds: 0.251746655
+    elapsed_seconds: 6.907944766
     moves:
     - !SpeciationMove
       reactions:
@@ -64,17 +64,17 @@ propagate:
       repeat: 50
       statistics:
         num_trials: 100000
-        num_accepted: 17920
+        num_accepted: 17648
         mean_square_displacement:
           avg: 0.0
-          'n': 82080
+          'n': 82352
         timer:
           accumulated:
             secs: 0
             nanos: 0
         info: {}
-        energy_change_sum: -29.097536805421363
-        acceptance_ratio: 0.1792
+        energy_change_sum: -9.388442527837562
+        acceptance_ratio: 0.17648
     - !TranslateAtom
       atom: Na
       molecule: Na+
@@ -83,17 +83,17 @@ propagate:
       repeat: 1
       statistics:
         num_trials: 2000
-        num_accepted: 1087
+        num_accepted: 1088
         mean_square_displacement:
-          avg: 296.9450216539076
+          avg: 313.19433816208874
           'n': 2000
         timer:
           accumulated:
             secs: 0
             nanos: 0
         info: {}
-        energy_change_sum: -7.380845428615212
-        acceptance_ratio: 0.5435
+        energy_change_sum: -5.397940893277223
+        acceptance_ratio: 0.544
     - !TranslateAtom
       atom: Cl
       molecule: Cl-
@@ -102,31 +102,34 @@ propagate:
       repeat: 1
       statistics:
         num_trials: 2000
-        num_accepted: 1120
+        num_accepted: 1050
         mean_square_displacement:
-          avg: 298.98767957077746
+          avg: 291.888920190625
           'n': 2000
         timer:
           accumulated:
             secs: 0
             nanos: 0
         info: {}
-        energy_change_sum: 52.51619637105477
-        acceptance_ratio: 0.56
+        energy_change_sum: -1.170514915035223
+        acceptance_ratio: 0.525
   criterion: MetropolisHastings
 analysis:
 - collectivevariable:
     property: Count
+    description: 'selection: atomtype GLU'
     num_samples: 6000
-    mean: 0.9979999999999982
-    rms: 0.9989994994993733
+    mean: 0.9980000000000017
+    rms: 0.9989994994993749
 - collectivevariable:
     property: Count
+    description: 'selection: atomtype HHIS'
     num_samples: 6000
-    mean: 0.21599999999999925
-    rms: 0.4647580015448892
+    mean: 0.23099999999999984
+    rms: 0.4806245936279165
 - collectivevariable:
     property: Count
+    description: 'selection: atomtype CYS'
     num_samples: 6000
-    mean: 0.04699999999999993
-    rms: 0.21679483388678783
+    mean: 0.052500000000000234
+    rms: 0.22912878474779252

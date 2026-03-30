@@ -86,12 +86,19 @@ pub struct CollectiveVariable {
     axis: AxisDescriptor,
     #[serde(flatten)]
     kind: Box<dyn CvKind>,
+    /// Human-readable description of selections/projection (populated at build time).
+    #[serde(skip)]
+    description: Option<String>,
 }
 
 impl CollectiveVariable {
     /// Create a new collective variable from a kind and axis descriptor.
     pub fn new(kind: Box<dyn CvKind>, axis: AxisDescriptor) -> Self {
-        Self { axis, kind }
+        Self {
+            axis,
+            kind,
+            description: None,
+        }
     }
 
     pub fn evaluate(&self, context: &dyn EvalContext) -> f64 {
@@ -104,6 +111,10 @@ impl CollectiveVariable {
 
     pub fn in_range(&self, value: f64) -> bool {
         self.axis.in_range(value)
+    }
+
+    pub fn description(&self) -> Option<&str> {
+        self.description.as_deref()
     }
 }
 
@@ -132,6 +143,7 @@ pub struct CollectiveVariableBuilder {
 impl CollectiveVariableBuilder {
     /// Resolve selections and construct a [`CollectiveVariable`].
     pub fn build(&self, context: &impl Context) -> Result<CollectiveVariable> {
+        let description = self.kind_builder.description();
         let kind = self.kind_builder.build(context)?;
         let axis = AxisDescriptor {
             name: kind.name().to_string(),
@@ -139,7 +151,11 @@ impl CollectiveVariableBuilder {
             max: self.range.1,
             resolution: self.resolution,
         };
-        Ok(CollectiveVariable { axis, kind })
+        Ok(CollectiveVariable {
+            axis,
+            kind,
+            description,
+        })
     }
 }
 
@@ -148,6 +164,11 @@ impl CollectiveVariableBuilder {
 pub trait CvKindBuilder: Send + Sync + std::fmt::Debug + dyn_clone::DynClone {
     /// Build the CV kind by resolving selections against context.
     fn build(&self, context: &dyn EvalContext) -> Result<Box<dyn CvKind>>;
+
+    /// Human-readable description of what this CV operates on (selections, projection, etc.).
+    fn description(&self) -> Option<String> {
+        None
+    }
 }
 
 dyn_clone::clone_trait_object!(CvKindBuilder);
@@ -216,6 +237,21 @@ macro_rules! impl_self_building_cv {
             }
         }
     };
+    ($ty:ty, $name:literal, |$s:ident| $desc:expr) => {
+        #[typetag::serde(name = $name)]
+        impl $crate::collective_variable::CvKindBuilder for $ty {
+            fn build(
+                &self,
+                _context: &dyn $crate::collective_variable::EvalContext,
+            ) -> anyhow::Result<Box<dyn $crate::collective_variable::CvKind>> {
+                Ok(Box::new(self.clone()))
+            }
+            fn description(&self) -> Option<String> {
+                let $s = self;
+                $desc
+            }
+        }
+    };
 }
 
 /// Defines a builder that resolves a single group selection.
@@ -260,6 +296,9 @@ macro_rules! impl_single_group_builder {
                     }
                     let $group = indices[0];
                     Ok(Box::new($construct))
+                }
+                fn description(&self) -> Option<String> {
+                    Some(format!("selection: {}", self.selection))
                 }
             }
         }
@@ -322,6 +361,9 @@ macro_rules! impl_single_group_with_dim_builder {
                     let $group = indices[0];
                     Ok(Box::new($construct))
                 }
+                fn description(&self) -> Option<String> {
+                    Some(format!("selection: {}, projection: {:?}", self.selection, self.projection))
+                }
             }
         }
     };
@@ -371,6 +413,9 @@ macro_rules! impl_single_atom_with_dim_builder {
                     let $dim = self.projection;
                     let $index = indices[0];
                     Ok(Box::new($construct))
+                }
+                fn description(&self) -> Option<String> {
+                    Some(format!("selection: {}, projection: {:?}", self.selection, self.projection))
                 }
             }
         }
@@ -449,6 +494,12 @@ macro_rules! impl_two_group_with_dim_builder {
                     let $g1 = indices1[0];
                     let $g2 = indices2[0];
                     Ok(Box::new($construct))
+                }
+                fn description(&self) -> Option<String> {
+                    Some(format!(
+                        "selection: {}, selection2: {}, projection: {:?}",
+                        self.selection, self.selection2, self.projection
+                    ))
                 }
             }
         }

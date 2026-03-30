@@ -126,6 +126,9 @@ impl<T: Context> Analyze<T> for CollectiveVariableAnalysis {
     fn to_yaml(&self) -> Option<serde_yml::Value> {
         let mut map = serde_yml::Mapping::new();
         map.try_insert("property", &self.cv.axis().name)?;
+        if let Some(desc) = self.cv.description() {
+            map.try_insert("description", desc)?;
+        }
         map.try_insert("num_samples", self.num_samples)?;
         map.try_insert("mean", self.mean.mean())?;
         map.try_insert("rms", self.mean_squared.mean().sqrt())?;
