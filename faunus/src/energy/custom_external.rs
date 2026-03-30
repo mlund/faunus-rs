@@ -65,7 +65,7 @@ impl CustomExternalBuilder {
                 var_indices: vec![0, 1, 2, 3], // q, x, y, z — all passed to preset
                 selection: self.selection.clone(),
                 com: self.com,
-                group_cache: RefCell::default(),
+                selection_cache: RefCell::default(),
             });
         }
 
@@ -117,19 +117,21 @@ impl CustomExternalBuilder {
             var_indices,
             selection: self.selection.clone(),
             com: self.com,
-            group_cache: RefCell::default(),
+            selection_cache: RefCell::default(),
         })
     }
 }
 
-/// Return group indices affected by a change that also match a cached selection.
+/// Return indices affected by a change that match a cached selection.
 ///
-/// Used only in COM mode (`com: true`).
-fn affected_groups(
+/// `by_atoms=true` resolves to matching atom indices (per-atom mode);
+/// `by_atoms=false` resolves to matching group indices (COM mode).
+fn affected(
     change: &Change,
     cache: &RefCell<SelectionCache>,
     selection: &Selection,
     context: &impl Context,
+    by_atoms: bool,
 ) -> Vec<usize> {
     if matches!(change, Change::None) {
         return vec![];
@@ -137,56 +139,19 @@ fn affected_groups(
     let gen = context.group_lists_generation();
     let mut cache = cache.borrow_mut();
     let selected = cache.get_or_resolve(gen, || {
-        let groups = context.resolve_groups_live(selection);
-        if groups.is_empty() {
+        let v = if by_atoms {
+            context.resolve_atoms_live(selection)
+        } else {
+            context.resolve_groups_live(selection)
+        };
+        if v.is_empty() {
+            let kind = if by_atoms { "atoms" } else { "groups" };
             log::warn!(
-                "customexternal: selection '{}' matched no groups — energy will always be zero",
+                "customexternal: selection '{}' matched no {kind} — energy will always be zero",
                 selection
             );
         }
-        groups
-    });
-    match change {
-        Change::Everything | Change::Volume(..) => selected.to_vec(),
-        Change::SingleGroup(gi, gc) => {
-            if !matches!(gc, GroupChange::None) && selected.contains(gi) {
-                vec![*gi]
-            } else {
-                vec![]
-            }
-        }
-        Change::Groups(changes) => changes
-            .iter()
-            .filter(|(_, gc)| !matches!(gc, GroupChange::None))
-            .filter_map(|(gi, _)| selected.contains(gi).then_some(*gi))
-            .collect(),
-        Change::None => unreachable!(),
-    }
-}
-
-/// Return atom indices affected by a change that also match a cached selection.
-///
-/// Used in per-atom mode (`com: false`).
-fn affected_atoms(
-    change: &Change,
-    cache: &RefCell<SelectionCache>,
-    selection: &Selection,
-    context: &impl Context,
-) -> Vec<usize> {
-    if matches!(change, Change::None) {
-        return vec![];
-    }
-    let gen = context.group_lists_generation();
-    let mut cache = cache.borrow_mut();
-    let selected = cache.get_or_resolve(gen, || {
-        let atoms = context.resolve_atoms_live(selection);
-        if atoms.is_empty() {
-            log::warn!(
-                "customexternal: selection '{}' matched no atoms — energy will always be zero",
-                selection
-            );
-        }
-        atoms
+        v
     });
     match change {
         Change::Everything | Change::Volume(..) => selected.to_vec(),
@@ -194,23 +159,40 @@ fn affected_atoms(
             if matches!(gc, GroupChange::None) {
                 return vec![];
             }
-            let group = &context.groups()[*gi];
-            selected
-                .iter()
-                .filter(|&&ai| group.contains(ai))
-                .copied()
-                .collect()
+            if by_atoms {
+                let group = &context.groups()[*gi];
+                selected
+                    .iter()
+                    .filter(|&&ai| group.contains(ai))
+                    .copied()
+                    .collect()
+            } else if selected.contains(gi) {
+                vec![*gi]
+            } else {
+                vec![]
+            }
         }
         Change::Groups(changes) => {
-            let groups = context.groups();
-            changes
-                .iter()
-                .filter(|(_, gc)| !matches!(gc, GroupChange::None))
-                .flat_map(|(gi, _)| {
-                    let group = &groups[*gi];
-                    selected.iter().filter(move |&&ai| group.contains(ai)).copied()
-                })
-                .collect()
+            if by_atoms {
+                let groups = context.groups();
+                changes
+                    .iter()
+                    .filter(|(_, gc)| !matches!(gc, GroupChange::None))
+                    .flat_map(|(gi, _)| {
+                        let group = &groups[*gi];
+                        selected
+                            .iter()
+                            .filter(move |&&ai| group.contains(ai))
+                            .copied()
+                    })
+                    .collect()
+            } else {
+                changes
+                    .iter()
+                    .filter(|(_, gc)| !matches!(gc, GroupChange::None))
+                    .filter_map(|(gi, _)| selected.contains(gi).then_some(*gi))
+                    .collect()
+            }
         }
         Change::None => unreachable!(),
     }
@@ -315,7 +297,7 @@ pub struct CustomExternal {
     selection: Selection,
     com: bool,
     /// RefCell because energy() takes &self
-    group_cache: RefCell<SelectionCache>,
+    selection_cache: RefCell<SelectionCache>,
 }
 
 impl CustomExternal {
@@ -370,13 +352,20 @@ impl CustomExternal {
 
     /// Compute energy for a given change.
     pub fn energy(&self, context: &impl Context, change: &Change) -> f64 {
+        let indices = affected(
+            change,
+            &self.selection_cache,
+            &self.selection,
+            context,
+            !self.com,
+        );
         if self.com {
-            affected_groups(change, &self.group_cache, &self.selection, context)
+            indices
                 .iter()
                 .map(|&gi| self.energy_for_com(context, gi))
                 .sum()
         } else {
-            affected_atoms(change, &self.group_cache, &self.selection, context)
+            indices
                 .iter()
                 .map(|&ai| self.energy_for_atom(context, ai))
                 .sum()
@@ -617,12 +606,14 @@ function: "0.5 * (x^2 + y^2 + z^2)"
         let builder: CustomExternalBuilder = serde_yml::from_str(yaml).unwrap();
         let ext = builder.build().unwrap();
 
-        // Energy for moving one group matches its contribution in a full evaluation
+        // Sum of per-group energies must equal the full evaluation
         let total = ext.energy(&ctx, &Change::Everything);
-        let change = Change::SingleGroup(0, GroupChange::RigidBody);
-        let partial = ext.energy(&ctx, &change);
-        // group 0 atoms are a subset, so partial ≤ total
-        assert!(partial > 0.0 && partial <= total + 1e-10);
+        use crate::group::GroupCollection;
+        let n_groups = ctx.groups().len();
+        let sum_partials: f64 = (0..n_groups)
+            .map(|gi| ext.energy(&ctx, &Change::SingleGroup(gi, GroupChange::RigidBody)))
+            .sum();
+        assert!((sum_partials - total).abs() < 1e-10);
     }
 
     #[test]

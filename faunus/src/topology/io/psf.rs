@@ -103,6 +103,8 @@ fn write_atoms(
         } else {
             mol.atom_indices().len()
         };
+        // mol.name() is constant for all atoms in this group
+        let mol_name_ascii = to_ascii(mol.name());
         for i in 0..n_atoms {
             let topo_i = mol.topology_index(i);
             atom_index += 1;
@@ -118,7 +120,7 @@ fn write_atoms(
                 w,
                 "{:>10} {:<8.8} {:<8} {:<8.8} {:<8.8} {:<4.4} {:>14.6} {:>14.4} {:>8}",
                 atom_index,
-                to_ascii(mol.name()),
+                mol_name_ascii,
                 resid,
                 to_ascii(resname),
                 to_ascii(atom_name),

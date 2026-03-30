@@ -477,10 +477,9 @@ energy:
 | `com`       | no       | `false` | Evaluate at molecular mass center                |
 | `constants` | no       | `{}`    | Named constants substituted before parsing       |
 
-When `com` is `true`, the expression is evaluated once per group at the mass center
-position with the net charge (sum of atom charges).
-When `false` (default), the expression is evaluated and summed over all active particles
-in each matching group.
+When `com` is `true`, the expression is evaluated once per matching group at the mass
+center position, with `q` set to the net group charge.
+When `false` (default), the expression is evaluated at each matching atom position.
 
 ## Penalty (Flat-Histogram Bias)
 
