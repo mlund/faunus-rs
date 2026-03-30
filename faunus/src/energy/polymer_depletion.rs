@@ -162,7 +162,7 @@ pub struct PolymerDepletion {
     /// Self-consistent steric adsorption state
     steric: Option<StericAdsorptionState>,
     /// Pre-allocated backup buffers for steric g_s / h_tilde_eff vectors.
-    /// Stored separately (not as Option<StericAdsorptionState>) to avoid
+    /// Stored separately (not as `Option<StericAdsorptionState>`) to avoid
     /// heap-allocating new Vecs on every MC trial; capacity is reused via
     /// clear + extend_from_slice, matching the backup_colloids pattern.
     backup_g_s: Vec<f64>,

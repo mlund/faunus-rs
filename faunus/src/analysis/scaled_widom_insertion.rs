@@ -104,7 +104,7 @@ pub struct ScaledWidomInsertion {
     #[builder_field_attr(serde(default = "default_insertions"))]
     insertions: usize,
 
-    /// Number of lambda quadrature points on [0,1]
+    /// Number of lambda quadrature points on \[0,1\]
     #[builder_field_attr(serde(default = "default_lambda_points"))]
     lambda_points: usize,
 

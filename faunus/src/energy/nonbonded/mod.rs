@@ -48,12 +48,12 @@ const fn canonical_mol_pair(a: usize, b: usize) -> [usize; 2] {
 /// using a matrix of `IsotropicTwobodyEnergy` trait objects.
 ///
 /// The type parameter `P` determines the potential type:
-/// - [`ArcPotential`] for dynamic dispatch (default)
-/// - [`SplinedPotential`] for pre-tabulated spline evaluation
+/// - `ArcPotential` for dynamic dispatch (default)
+/// - `SplinedPotential` for pre-tabulated spline evaluation
 ///
-/// Entire molecule-type pairs can be excluded via [`Self::exclude_molecule_pair`],
+/// Entire molecule-type pairs can be excluded via `exclude_molecule_pair`,
 /// skipping all inter-group interactions between those molecule kinds.
-/// This is used automatically when [`TabulatedEnergy`] handles the same pairs.
+/// This is used automatically when [`super::tabulated::TabulatedEnergy`] handles the same pairs.
 #[derive(Debug)]
 pub struct NonbondedMatrix<P = PairPot> {
     /// Matrix of pair potentials based on atom type ids.
