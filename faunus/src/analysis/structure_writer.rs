@@ -4,9 +4,11 @@ use crate::cell::Shape;
 use crate::selection::{Selection, SelectionCache};
 use crate::topology::io::{self, frame_state::FrameStateWriter, psf, StructureData};
 use crate::Context;
+use anyhow::Context as _;
 use derive_builder::Builder;
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
+use std::io::{BufWriter, Write};
 use std::path::Path;
 
 /// Writes structure of the system in the specified format during the simulation.
@@ -39,6 +41,10 @@ pub struct StructureWriter {
     #[builder(setter(skip))]
     #[builder_field_attr(serde(skip))]
     group_cache: SelectionCache,
+    /// Per-frame group sizes for VMD visibility of inactive groups.
+    #[builder(setter(skip))]
+    #[builder_field_attr(serde(skip))]
+    sizes_writer: Option<BufWriter<std::fs::File>>,
 }
 
 impl StructureWriterBuilder {
@@ -68,6 +74,7 @@ impl StructureWriter {
             num_samples: 0,
             frame_state_writer: None,
             group_cache: SelectionCache::default(),
+            sizes_writer: None,
         }
     }
 }
@@ -99,7 +106,7 @@ impl StructureWriter {
     fn write_frame<T: Context>(&mut self, context: &T, step: usize) -> anyhow::Result<()> {
         let topology = context.topology();
         let all_groups = context.groups();
-        let group_indices = self.selected_group_indices(context);
+        let group_indices = self.selected_group_indices(context).into_owned();
 
         let num_particles: usize = group_indices
             .iter()
@@ -194,6 +201,41 @@ impl StructureWriter {
             writer.write_frame(&quaternions, &mass_centers, &group_sizes, &atom_ids)?;
         }
 
+        // Collect group sizes before releasing the borrow on self
+        let sizes_line: String = group_indices
+            .iter()
+            .map(|&gi| all_groups[gi].len().to_string())
+            .collect::<Vec<_>>()
+            .join(" ");
+
+        // Write per-frame group sizes for VMD visibility of inactive groups
+        if self.sizes_writer.is_none() {
+            let sizes_path = Path::new(&self.output_file).with_extension("sizes.dat");
+            let mut w = BufWriter::new(
+                std::fs::File::create(&sizes_path)
+                    .with_context(|| format!("Cannot create '{}'", sizes_path.display()))?,
+            );
+            writeln!(w, "# Faunus group sizes")?;
+            let mut start = 0usize;
+            for &gi in group_indices.iter() {
+                let g = &all_groups[gi];
+                let mol_name = psf::to_ascii(topology.moleculekinds()[g.molecule()].name());
+                writeln!(
+                    w,
+                    "# {:>5} {:<16} {:>6} {:>8}",
+                    gi,
+                    mol_name,
+                    start,
+                    g.capacity()
+                )?;
+                start += g.capacity();
+            }
+            self.sizes_writer = Some(w);
+        }
+        if let Some(w) = self.sizes_writer.as_mut() {
+            writeln!(w, "{sizes_line}")?;
+        }
+
         self.num_samples += 1;
         Ok(())
     }
@@ -229,8 +271,31 @@ impl<T: Context> Analyze<T> for StructureWriter {
                 .file_name()
                 .and_then(|n| n.to_str())
                 .unwrap_or(&self.output_file);
-            psf::write_vmd_script(&tcl_path, &topology, psf_name, traj_name)?;
-            log::info!("VMD visualization: vmd -e {}", tcl_path.display());
+            let sizes_file = self.sizes_writer.as_ref().map(|_| {
+                Path::new(&self.output_file)
+                    .with_extension("sizes.dat")
+                    .file_name()
+                    .unwrap()
+                    .to_str()
+                    .unwrap()
+                    .to_owned()
+            });
+            psf::write_vmd_script(
+                &tcl_path,
+                &topology,
+                &filtered,
+                psf_name,
+                traj_name,
+                sizes_file.as_deref(),
+            )?;
+            if sizes_file.is_some() {
+                log::info!(
+                    "VMD visualization (with per-frame group visibility): vmd -e {}",
+                    tcl_path.display()
+                );
+            } else {
+                log::info!("VMD visualization: vmd -e {}", tcl_path.display());
+            }
         }
         Ok(())
     }
