@@ -36,7 +36,7 @@ const fn default_max_lag() -> usize {
 /// Number of upper-triangle elements in a 3×3 symmetric matrix.
 const UPPER_TRIANGLE: usize = 6;
 
-/// Geometric ratio for log-spaced lag selection (~5 lags per decade).
+/// Geometric ratio for log-spaced lag selection (~13 lags per decade).
 const LOG_LAG_RATIO: f64 = 1.2;
 
 /// Minimum Tr(Q̃) at max_lag to consider the correlation converged.
