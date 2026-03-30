@@ -13,7 +13,7 @@ pub enum WeightSource {
     Uniform,
     /// WL unbiasing: w = exp(-penalty_energy / kT).
     Penalty {
-        penalty: Penalty,
+        penalty: Box<Penalty>,
         inv_thermal_energy: f64,
     },
 }

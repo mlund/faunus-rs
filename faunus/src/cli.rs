@@ -357,7 +357,7 @@ fn run_rerun(
         drop(state_guard);
         // Clone is cheap (state is behind Arc) and avoids borrowing from context
         analysis::reweight::WeightSource::Penalty {
-            penalty: penalty.clone(),
+            penalty: Box::new(penalty.clone()),
             inv_thermal_energy: inv_kt,
         }
     } else {
