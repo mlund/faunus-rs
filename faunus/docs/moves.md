@@ -198,13 +198,17 @@ Key        | Required | Default | Description
 
 ## Crankshaft Move
 
-Picks a random proper dihedral in the molecule and rotates the smaller sub-tree
-around the middle bond vector (the dihedral axis) by an angle uniformly sampled
-in $[-\text{dp}, +\text{dp}]$ (radians).
-This preserves bond lengths and angles by construction and is well suited
-for sampling internal degrees of freedom in peptides and other molecules with
-defined dihedral angles.
-Molecules without proper dihedrals are skipped.
+Picks a random bond axis in the molecule and rotates the smaller sub-tree
+around it by an angle uniformly sampled in $[-\text{dp}, +\text{dp}]$ (radians).
+When proper dihedrals are defined, only their middle bonds are used as axes;
+otherwise all bonds serve as candidate axes (e.g. FASTA chains with only
+harmonic bonds).
+
+Because rotation is constrained to a single bond axis (1-DOF), crankshaft
+preserves bond lengths and bond angles by construction. This makes it
+complementary to [`PivotMove`](#pivot-move), which applies a full 3D rotation
+(3-DOF) and can change bond angles at the pivot. For models without angle
+potentials, `PivotMove` alone is typically sufficient.
 
 ```yaml
 - !CrankshaftMove { molecule: Peptide, dp: 0.5, weight: 1.0 }

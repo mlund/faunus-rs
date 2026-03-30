@@ -68,6 +68,14 @@ impl CrankshaftMove {
             .filter(|d| !d.is_improper())
             .map(|d| [d.index()[1], d.index()[2]])
             .collect();
+        // Fall back to all bonds when no proper dihedrals exist (e.g. FASTA chains)
+        if self.dihedral_bonds.is_empty() {
+            self.dihedral_bonds = mol_kind
+                .bonds()
+                .iter()
+                .map(|b| [b.index()[0], b.index()[1]])
+                .collect();
+        }
         self.dihedral_bonds.sort_unstable();
         self.dihedral_bonds.dedup();
         Ok(())
