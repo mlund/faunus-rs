@@ -339,7 +339,7 @@ impl MoleculeKind {
                 if names.is_empty() {
                     anyhow::bail!("molecule '{}': FASTA sequence is empty", self.name);
                 }
-                let harmonic = interatomic::twobody::Harmonic::new(fasta.k, fasta.req);
+                let harmonic = interatomic::twobody::Harmonic::new(fasta.req, fasta.k);
                 let bond_kind = BondKind::Harmonic(harmonic);
                 for i in 1..names.len() {
                     self.bonds
@@ -702,6 +702,17 @@ mod tests {
         assert_eq!(molecule.bonds.len(), 4);
         for (i, bond) in molecule.bonds.iter().enumerate() {
             assert_eq!(*bond.index(), [i, i + 1]);
+            match bond.kind() {
+                BondKind::Harmonic(h) => {
+                    assert_eq!(h.eq_distance(), 3.8, "eq_distance must match FASTA req");
+                    assert_eq!(
+                        h.spring_constant(),
+                        80.33,
+                        "spring_constant must match FASTA k"
+                    );
+                }
+                other => panic!("Expected Harmonic bond, got {other:?}"),
+            }
         }
     }
 
