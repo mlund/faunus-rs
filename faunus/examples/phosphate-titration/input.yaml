@@ -1,0 +1,95 @@
+# Phosphate titration in a spherical cell.
+#
+# One phosphate molecule undergoes 3-step protonation via molecular swap:
+#   H₃PO₄(0) ⇌ H₂PO₄⁻(-1) ⇌ HPO₄²⁻(-2) ⇌ PO₄³⁻(-3)
+#
+# The sphere radius gives ~10 mM phosphate concentration.
+# Charges are smeared on oxygens; all four species share the same geometry.
+
+atoms:
+  - {name: P,  mass: 31.0, σ: 3.5, ε: 0.8368, charge: 0.0,   hydrophobicity: !Lambda 0.0}
+  - {name: O0, mass: 16.0, σ: 2.8, ε: 0.8368, charge: 0.0,   hydrophobicity: !Lambda 0.0}  # H₃PO₄
+  - {name: O1, mass: 16.0, σ: 2.8, ε: 0.8368, charge: -0.25, hydrophobicity: !Lambda 0.0}  # H₂PO₄⁻
+  - {name: O2, mass: 16.0, σ: 2.8, ε: 0.8368, charge: -0.5,  hydrophobicity: !Lambda 0.0}  # HPO₄²⁻
+  - {name: O3, mass: 16.0, σ: 2.8, ε: 0.8368, charge: -0.75, hydrophobicity: !Lambda 0.0}  # PO₄³⁻
+  - {name: H+, mass: 1.0,  σ: 1.0, ε: 0.8368, hydrophobicity: !Lambda 0.0, activity: 1.0e-7}  # pH 7
+
+molecules:
+  - name: H₃PO₄
+    from_structure: "phosphate.xyz"
+    atoms: [P, O0, O0, O0, O0]
+    exclusions: [[0,1],[0,2],[0,3],[0,4],[1,2],[1,3],[1,4],[2,3],[2,4],[3,4]]
+  - name: H₂PO₄⁻
+    from_structure: "phosphate.xyz"
+    atoms: [P, O1, O1, O1, O1]
+    exclusions: [[0,1],[0,2],[0,3],[0,4],[1,2],[1,3],[1,4],[2,3],[2,4],[3,4]]
+  - name: HPO₄²⁻
+    from_structure: "phosphate.xyz"
+    atoms: [P, O2, O2, O2, O2]
+    exclusions: [[0,1],[0,2],[0,3],[0,4],[1,2],[1,3],[1,4],[2,3],[2,4],[3,4]]
+  - name: PO₄³⁻
+    from_structure: "phosphate.xyz"
+    atoms: [P, O3, O3, O3, O3]
+    exclusions: [[0,1],[0,2],[0,3],[0,4],[1,2],[1,3],[1,4],[2,3],[2,4],[3,4]]
+
+system:
+  cell: !Sphere {radius: 26.8}  # V ≈ 80,600 Å³ → ~10 mM for one molecule
+
+  medium:
+    permittivity: !Water
+    temperature: 298.15
+
+  blocks:
+    # One active phosphate (H₂PO₄⁻); N=1 per species for full titration range
+    - molecule: H₃PO₄
+      N: 1
+      active: 0
+      insert: !FixedCOM {position: [0.0, 0.0, 0.0]}
+    - molecule: H₂PO₄⁻
+      N: 1
+      active: 1
+      insert: !FixedCOM {position: [0.0, 0.0, 0.0]}
+    - molecule: HPO₄²⁻
+      N: 1
+      active: 0
+      insert: !FixedCOM {position: [0.0, 0.0, 0.0]}
+    - molecule: PO₄³⁻
+      N: 1
+      active: 0
+      insert: !FixedCOM {position: [0.0, 0.0, 0.0]}
+
+  energy:
+    combine_with_default: false  # no nonbonded — ideal titration
+
+analysis:
+  - !CollectiveVariable
+    property: count
+    selection: "molecule 'H₃PO₄'"
+    frequency: !Every 1
+  - !CollectiveVariable
+    property: count
+    selection: "molecule 'H₂PO₄⁻'"
+    frequency: !Every 1
+  - !CollectiveVariable
+    property: count
+    selection: "molecule 'HPO₄²⁻'"
+    frequency: !Every 1
+  - !CollectiveVariable
+    property: count
+    selection: "molecule 'PO₄³⁻'"
+    frequency: !Every 1
+
+propagate:
+  seed: Hardware
+  criterion: Metropolis
+  repeat: 500
+  collections:
+    - !Stochastic
+      repeat: 10
+      moves:
+        - !SpeciationMove
+          temperature: 298.15
+          reactions:
+            - ["H₃PO₄ = H₂PO₄⁻ + ~H+", !pK 2.15]
+            - ["H₂PO₄⁻ = HPO₄²⁻ + ~H+", !pK 7.20]
+            - ["HPO₄²⁻ = PO₄³⁻ + ~H+", !pK 12.35]
