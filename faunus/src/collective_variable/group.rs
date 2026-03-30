@@ -28,7 +28,10 @@ use crate::group::GroupCollection;
 use serde::{Deserialize, Serialize};
 
 /// Compute the dipole moment vector of a group, PBC-aware relative to its COM.
-fn group_dipole_moment(group_index: usize, context: &dyn EvalContext) -> Option<crate::Point> {
+pub(crate) fn group_dipole_moment(
+    group_index: usize,
+    context: &dyn EvalContext,
+) -> Option<crate::Point> {
     let group = &context.groups()[group_index];
     let com = group.mass_center()?;
     let atomkinds = context.topology_ref().atomkinds();

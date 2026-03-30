@@ -23,7 +23,7 @@
 mod atom;
 mod cell;
 mod dynamic;
-mod group;
+pub(crate) mod group;
 
 use crate::Context;
 use anyhow::Result;

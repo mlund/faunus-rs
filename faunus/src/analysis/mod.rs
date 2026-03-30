@@ -26,6 +26,7 @@ use std::path::Path;
 mod collective_variable;
 mod energy;
 mod mean_along_coordinate;
+mod multipole;
 mod radial_distribution;
 pub mod reweight;
 mod rotational_diffusion;
@@ -120,6 +121,8 @@ pub enum AnalysisBuilder {
     VirtualVolumeMove(VirtualVolumeMoveBuilder),
     /// Rotational diffusion via quaternion covariance matrix
     RotationalDiffusion(RotationalDiffusionBuilder),
+    /// Per-group charge and dipole moment analysis
+    Multipole(multipole::MultipoleAnalysisBuilder),
 }
 
 impl AnalysisBuilder {
@@ -144,6 +147,7 @@ impl AnalysisBuilder {
             Self::ScaledWidomInsertion(builder) => Box::new(builder.build(context, medium)?),
             Self::VirtualVolumeMove(builder) => Box::new(builder.build(rt)?),
             Self::RotationalDiffusion(builder) => Box::new(builder.build(context)?),
+            Self::Multipole(builder) => Box::new(builder.build(context)?),
         })
     }
 }

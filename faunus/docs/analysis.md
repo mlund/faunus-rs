@@ -89,7 +89,7 @@ Key          | Required | Default | Description
 Property                 | Selection       | Description
 ------------------------ | --------------- | -------------------------------------------
 `volume`                 | none            | Cell measure via `dimension`: volume (`xyz`), area (`xy`), or length (`z`). Note: `volume` uses `dimension`, not `projection`
-`atom_position`          | one atom        | Signed component for single axis (`x`,`y`,`z`); Euclidean norm for multi-axis (`xy` etc.)
+`atom_position`          | one atom        | Signed component for single axis (`x`,`y`,`z`); Euclidean norm for multi-axis (`xy` etc.). Selection resolved live each evaluation — works with speciation/GCMC where the matching atom changes. Returns NaN if selection matches ≠ 1 atom. Use `atomtype` (not `name`) for atoms defined via explicit `atoms:` lists
 `count`                  | atoms or groups | Molecule instances for Molecular groups; atom count for Atomic/Reservoir groups
 `molarity`               | atoms or groups | Molar concentration (mol/L); molecule-based for Molecular groups, atom-based for Atomic/Reservoir
 `charge`                 | atoms or groups | Sum of charges of active atoms matching selection
@@ -149,6 +149,37 @@ Key          | Required | Default | Description
 `selection`  | yes      |         | Selection expression for molecule group(s)
 `file`       | no       |         | Streaming output file, single molecule only (see [Output file formats](#output-file-formats))
 `frequency`  | yes      |         | Sample frequency, e.g. `!Every 100`
+
+## Multipole
+
+Per-group charge and dipole moment analysis, averaged over all groups
+matching a selection. Useful for tracking titration state and charge
+fluctuations.
+
+Reports:
+- **⟨Z⟩ ± σ** — mean net charge and standard deviation
+- **capacitance** C = ⟨Z²⟩ − ⟨Z⟩² — charge variance
+- **⟨|μ|⟩ ± σ** — mean dipole moment magnitude (eÅ)
+
+The dipole moment is computed relative to each group's center of mass
+with periodic boundary conditions applied.
+Handles atom-type swaps (titration) and GCMC (only active groups contribute).
+
+### Example
+
+```yaml
+analysis:
+  - !Multipole
+    selection: "molecule peptide"
+    frequency: !Every 10
+```
+
+### Options
+
+Key          | Required | Default | Description
+------------ | -------- | ------- | -------------------------------------------
+`selection`  | yes      |         | Selection expression for molecule group(s)
+`frequency`  | yes      |         | Sample frequency
 
 ## Energy
 
