@@ -281,8 +281,7 @@ pub fn write_vmd_script(
     writeln!(w, "mol modstyle 0 top VDW 1.0 12.0")?;
     writeln!(w, "pbc box")?;
 
-    // Collect atom kind indices actually present in the output groups
-    let present: std::collections::HashSet<usize> = groups
+    let present: std::collections::BTreeSet<usize> = groups
         .iter()
         .flat_map(|g| {
             let mol = &topology.moleculekinds()[g.molecule()];
@@ -344,8 +343,6 @@ fn write_vmd_visibility_callback(w: &mut impl Write, sizes_file: &str) -> anyhow
     }
     writeln!(w)?;
 
-    // The proc and trace must be written with care: Tcl braces that look
-    // like Rust raw-string terminators need r##"..."## delimiters.
     writeln!(w, "proc faunus_update_visibility {{args}} {{")?;
     for line in [
         r#"    global vmd_frame group_info frame_data default_radii"#,
@@ -363,7 +360,10 @@ fn write_vmd_visibility_callback(w: &mut impl Write, sizes_file: &str) -> anyhow
     }
     writeln!(w, "    foreach {{start cap}} $group_info {{")?;
     writeln!(w, "        set active [lindex $sizes $gi]")?;
-    writeln!(w, "        for {{set i $active}} {{$i < $cap}} {{incr i}} {{")?;
+    writeln!(
+        w,
+        "        for {{set i $active}} {{$i < $cap}} {{incr i}} {{"
+    )?;
     writeln!(w, "            lset radii [expr {{$start + $i}}] 0.0")?;
     writeln!(w, "        }}")?;
     writeln!(w, "        incr gi")?;
@@ -378,7 +378,10 @@ fn write_vmd_visibility_callback(w: &mut impl Write, sizes_file: &str) -> anyhow
     writeln!(w, "}}")?;
     writeln!(w)?;
     writeln!(w, "if {{[llength $frame_data] > 0}} {{")?;
-    writeln!(w, "    trace variable vmd_frame(0) w faunus_update_visibility")?;
+    writeln!(
+        w,
+        "    trace variable vmd_frame(0) w faunus_update_visibility"
+    )?;
     writeln!(w, "    faunus_update_visibility")?;
     writeln!(w, "}}")?;
     Ok(())

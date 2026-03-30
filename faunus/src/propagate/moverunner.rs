@@ -89,7 +89,8 @@ impl<T: Context> MoveRunner<T> {
             let energy = NewOld::<f64>::from(new_energy, old_energy);
             let bias = self.inner.bias(&proposed.change, &energy);
 
-            if criterion.accept(energy, bias, thermal_energy, rng) {
+            let accepted = criterion.accept(energy, bias, thermal_energy, rng);
+            if accepted {
                 self.statistics
                     .accept(energy.difference(), proposed.displacement);
                 context.discard_backup();
@@ -97,6 +98,7 @@ impl<T: Context> MoveRunner<T> {
                 self.statistics.reject();
                 context.undo()?;
             }
+            self.inner.on_trial_outcome(accepted);
         }
 
         *step += self.inner.step_by();

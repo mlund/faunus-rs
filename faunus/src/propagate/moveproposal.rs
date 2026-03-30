@@ -74,6 +74,10 @@ pub trait MoveProposal<T: Context>: Debug + Info {
         1
     }
 
+    /// Called after a trial move is accepted or rejected.
+    /// Override to track per-sub-move statistics (e.g. per-reaction in speciation).
+    fn on_trial_outcome(&mut self, _accepted: bool) {}
+
     /// Serialize the move-specific fields to a tagged YAML value.
     fn to_yaml(&self) -> Option<serde_yml::Value>;
 }

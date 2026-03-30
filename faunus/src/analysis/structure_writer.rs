@@ -201,15 +201,12 @@ impl StructureWriter {
             writer.write_frame(&quaternions, &mass_centers, &group_sizes, &atom_ids)?;
         }
 
-        // Collect group sizes before releasing the borrow on self
-        let sizes_line: String = group_indices
+        // Write per-frame group sizes for VMD visibility of inactive groups.
+        // Only create the file when at least one group has inactive atoms.
+        let any_inactive = group_indices
             .iter()
-            .map(|&gi| all_groups[gi].len().to_string())
-            .collect::<Vec<_>>()
-            .join(" ");
-
-        // Write per-frame group sizes for VMD visibility of inactive groups
-        if self.sizes_writer.is_none() {
+            .any(|&gi| all_groups[gi].len() != all_groups[gi].capacity());
+        if any_inactive && self.sizes_writer.is_none() {
             let sizes_path = Path::new(&self.output_file).with_extension("sizes.dat");
             let mut w = BufWriter::new(
                 std::fs::File::create(&sizes_path)
@@ -233,7 +230,13 @@ impl StructureWriter {
             self.sizes_writer = Some(w);
         }
         if let Some(w) = self.sizes_writer.as_mut() {
-            writeln!(w, "{sizes_line}")?;
+            for (i, &gi) in group_indices.iter().enumerate() {
+                if i > 0 {
+                    write!(w, " ")?;
+                }
+                write!(w, "{}", all_groups[gi].len())?;
+            }
+            writeln!(w)?;
         }
 
         self.num_samples += 1;
@@ -271,13 +274,13 @@ impl<T: Context> Analyze<T> for StructureWriter {
                 .file_name()
                 .and_then(|n| n.to_str())
                 .unwrap_or(&self.output_file);
-            let sizes_file = self.sizes_writer.as_ref().map(|_| {
+            let sizes_file = self.sizes_writer.is_some().then(|| {
                 Path::new(&self.output_file)
                     .with_extension("sizes.dat")
                     .file_name()
-                    .unwrap()
+                    .expect("trajectory path has no filename")
                     .to_str()
-                    .unwrap()
+                    .expect("non-UTF-8 path")
                     .to_owned()
             });
             psf::write_vmd_script(

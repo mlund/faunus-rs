@@ -8,7 +8,7 @@
 
 use crate::chemistry::reaction::{Direction, Participant, Reaction};
 use crate::group::GroupSize;
-use crate::montecarlo::{entropy_bias, NewOld};
+use crate::montecarlo::{entropy_bias, MoveStatistics, NewOld};
 use crate::propagate::{
     default_repeat, default_weight, tagged_yaml, Displacement, MoveProposal, MoveTarget,
     ProposedMove,
@@ -119,6 +119,12 @@ pub struct SpeciationMove {
     /// Entropy bias from the last `propose_move`, consumed by `bias`.
     #[serde(skip)]
     trial_ln_bias: Option<f64>,
+    /// Index of the reaction selected in the last `propose_move`.
+    #[serde(skip)]
+    trial_reaction_index: Option<usize>,
+    /// Per-reaction acceptance statistics.
+    #[serde(skip)]
+    reaction_statistics: Vec<MoveStatistics>,
 }
 
 impl crate::Info for SpeciationMove {
@@ -443,6 +449,7 @@ impl SpeciationMove {
             .collect::<anyhow::Result<_>>()?;
 
         validate_reaction_groups(&self.resolved, context, &topology)?;
+        self.reaction_statistics = vec![MoveStatistics::default(); self.resolved.len()];
 
         log::info!(
             "SpeciationMove: {} reactions, kT = {:.4} kJ/mol",
@@ -769,7 +776,8 @@ impl<T: Context> MoveProposal<T> for SpeciationMove {
         }
 
         // Pick random reaction and direction
-        let resolved = self.resolved.choose(rng)?;
+        let reaction_index = rng.gen_range(0..self.resolved.len());
+        let resolved = &self.resolved[reaction_index];
         let direction = if rng.r#gen::<bool>() {
             Direction::Forward
         } else {
@@ -784,6 +792,7 @@ impl<T: Context> MoveProposal<T> for SpeciationMove {
         }
 
         self.trial_ln_bias = Some(ln_bias);
+        self.trial_reaction_index = Some(reaction_index);
 
         Some(ProposedMove {
             change: Change::Groups(group_changes),
@@ -801,8 +810,41 @@ impl<T: Context> MoveProposal<T> for SpeciationMove {
         }
     }
 
+    fn on_trial_outcome(&mut self, accepted: bool) {
+        if let Some(i) = self.trial_reaction_index.take() {
+            if accepted {
+                self.reaction_statistics[i].accept(0.0, Displacement::None);
+            } else {
+                self.reaction_statistics[i].reject();
+            }
+        }
+    }
+
     fn to_yaml(&self) -> Option<serde_yml::Value> {
-        tagged_yaml("SpeciationMove", self)
+        let mut value = tagged_yaml("SpeciationMove", self)?;
+        // Append per-reaction acceptance ratios
+        if let serde_yml::Value::Tagged(ref mut tagged) = value {
+            if let serde_yml::Value::Mapping(ref mut map) = tagged.value {
+                let per_reaction: Vec<serde_yml::Value> = self
+                    .reactions
+                    .iter()
+                    .zip(self.reaction_statistics.iter())
+                    .map(|(config, stats)| {
+                        serde_yml::Value::Mapping(serde_yml::Mapping::from_iter([
+                            ("reaction".into(), config.0.clone().into()),
+                            ("accepted".into(), stats.num_accepted.into()),
+                            ("trials".into(), stats.num_trials.into()),
+                            (
+                                "acceptance_ratio".into(),
+                                format!("{:.4}", stats.acceptance_ratio()).into(),
+                            ),
+                        ]))
+                    })
+                    .collect();
+                map.insert("per_reaction".into(), per_reaction.into());
+            }
+        }
+        Some(value)
     }
 }
 
