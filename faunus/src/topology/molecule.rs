@@ -346,6 +346,7 @@ impl MoleculeKind {
                         .push(Bond::new([i - 1, i], bond_kind.clone(), Default::default()));
                 }
                 self.atoms = names.into_iter().map(String::from).collect();
+                self.atom_names = self.atoms.iter().cloned().map(Some).collect();
                 log::debug!(
                     "FASTA expanded '{}' into {} atoms and {} bonds",
                     self.name,
@@ -690,6 +691,14 @@ mod tests {
         molecule.expand_structure().unwrap();
 
         assert_eq!(molecule.atoms, ["NTR", "ALA", "GLY", "LYS", "CTR"]);
+        // atom_names mirror atom types so `name NTR` selectors work
+        assert_eq!(
+            molecule.atom_names,
+            ["NTR", "ALA", "GLY", "LYS", "CTR"]
+                .iter()
+                .map(|s| Some(s.to_string()))
+                .collect::<Vec<_>>()
+        );
         assert_eq!(molecule.bonds.len(), 4);
         for (i, bond) in molecule.bonds.iter().enumerate() {
             assert_eq!(*bond.index(), [i, i + 1]);

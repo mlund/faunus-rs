@@ -26,6 +26,31 @@ use anyhow::Context;
 use std::io::{BufWriter, Write};
 use std::path::Path;
 
+/// Map a string to ASCII-only by transliterating common sub/superscript characters.
+///
+/// PSF parsers (VMD, NAMD) require ASCII in name fields; molecule names often
+/// contain Unicode sub/superscripts (e.g. "H₂PO₄⁻" → "H2PO4-").
+fn to_ascii(s: &str) -> String {
+    s.chars()
+        .filter_map(|c| match c {
+            c if c.is_ascii() => Some(c),
+            '₀' | '⁰' => Some('0'),
+            '₁' | '¹' => Some('1'),
+            '₂' | '²' => Some('2'),
+            '₃' | '³' => Some('3'),
+            '₄' | '⁴' => Some('4'),
+            '₅' | '⁵' => Some('5'),
+            '₆' | '⁶' => Some('6'),
+            '₇' | '⁷' => Some('7'),
+            '₈' | '⁸' => Some('8'),
+            '₉' | '⁹' => Some('9'),
+            '⁻' => Some('-'),
+            '⁺' => Some('+'),
+            _ => None,
+        })
+        .collect()
+}
+
 /// Write a PSF file from the current topology and group layout.
 pub fn write_psf(path: &Path, topology: &Topology, groups: &[Group]) -> anyhow::Result<()> {
     let file = std::fs::File::create(path)
@@ -88,14 +113,15 @@ fn write_atoms(
                 resolve_residue(mol, topo_i, &mut residue_cursor, &mut resid_counter);
 
             // CHARMM EXT format: (I10,1X,A8,1X,A8,1X,A8,1X,A8,1X,A4,1X,2G14.6,I8)
+            // Molecule/residue names are ASCII-filtered so VMD's PSF parser accepts them.
             writeln!(
                 w,
                 "{:>10} {:<8.8} {:<8} {:<8.8} {:<8.8} {:<4.4} {:>14.6} {:>14.4} {:>8}",
                 atom_index,
-                mol.name(),
+                to_ascii(mol.name()),
                 resid,
-                resname,
-                atom_name,
+                to_ascii(resname),
+                to_ascii(atom_name),
                 atom_kind.name(),
                 atom_kind.charge(),
                 atom_kind.mass(),

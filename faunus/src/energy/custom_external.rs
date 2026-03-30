@@ -134,7 +134,16 @@ fn affected_groups(
     }
     let gen = context.group_lists_generation();
     let mut cache = cache.borrow_mut();
-    let selected = cache.get_or_resolve(gen, || context.resolve_groups_live(selection));
+    let selected = cache.get_or_resolve(gen, || {
+        let groups = context.resolve_groups_live(selection);
+        if groups.is_empty() {
+            log::warn!(
+                "customexternal: selection '{}' matched no groups — energy will always be zero",
+                selection
+            );
+        }
+        groups
+    });
     match change {
         Change::Everything | Change::Volume(..) => selected.to_vec(),
         Change::SingleGroup(gi, gc) => {

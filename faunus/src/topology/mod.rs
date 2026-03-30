@@ -908,7 +908,7 @@ mod tests {
             => "molecules have non-unique names";
         read_topology_fail_nonexistent_atom:
             "tests/files/topology_nonexistent_atom.yaml"
-            => "undefined atom kind in a molecule";
+            => "references undefined atom kind";
         read_topology_fail_nonexistent_molecule:
             "tests/files/topology_nonexistent_molecule.yaml"
             => "undefined molecule kind in a block";
