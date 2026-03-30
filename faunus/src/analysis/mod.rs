@@ -28,6 +28,7 @@ mod energy;
 mod mean_along_coordinate;
 mod radial_distribution;
 pub mod reweight;
+mod rotational_diffusion;
 mod scaled_widom_insertion;
 mod shape;
 mod structure_writer;
@@ -38,6 +39,7 @@ pub use collective_variable::{CollectiveVariableAnalysis, CollectiveVariableAnal
 pub use energy::{EnergyAnalysis, EnergyAnalysisBuilder};
 pub use mean_along_coordinate::{MeanAlongCoordinate, MeanAlongCoordinateBuilder};
 pub use radial_distribution::{RadialDistribution, RadialDistributionBuilder};
+pub use rotational_diffusion::{RotationalDiffusion, RotationalDiffusionBuilder};
 pub use scaled_widom_insertion::{ScaledWidomInsertion, ScaledWidomInsertionBuilder};
 pub use shape::{ShapeAnalysis, ShapeAnalysisBuilder};
 pub use structure_writer::{StructureWriter, StructureWriterBuilder};
@@ -116,6 +118,8 @@ pub enum AnalysisBuilder {
     ScaledWidomInsertion(ScaledWidomInsertionBuilder),
     /// Virtual volume move for excess pressure measurement
     VirtualVolumeMove(VirtualVolumeMoveBuilder),
+    /// Rotational diffusion via quaternion covariance matrix
+    RotationalDiffusion(RotationalDiffusionBuilder),
 }
 
 impl AnalysisBuilder {
@@ -139,6 +143,7 @@ impl AnalysisBuilder {
             Self::MeanAlongCoordinate(builder) => Box::new(builder.build(context)?),
             Self::ScaledWidomInsertion(builder) => Box::new(builder.build(context, medium)?),
             Self::VirtualVolumeMove(builder) => Box::new(builder.build(rt)?),
+            Self::RotationalDiffusion(builder) => Box::new(builder.build(context)?),
         })
     }
 }
