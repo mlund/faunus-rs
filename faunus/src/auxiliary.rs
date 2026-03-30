@@ -265,7 +265,7 @@ pub(crate) fn simpson_integrate(values: &[f64]) -> f64 {
 ///
 /// See [Favro (1960)](https://doi.org/10.1103/PhysRev.119.53), Eq. 9.
 pub(crate) fn fit_isotropic_d_rot(lags: &[f64], trace: &[f64]) -> Option<f64> {
-    if lags.is_empty() || lags.len() != trace.len() {
+    if lags.is_empty() || lags.len() != trace.len() || lags.iter().any(|&t| t <= 0.0) {
         return None;
     }
 

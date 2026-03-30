@@ -256,7 +256,8 @@ impl<T: Context> Analyze<T> for RotationalDiffusion {
             .get_or_resolve(gen, || context.resolve_groups_live(&self.selection))
             .to_vec();
 
-        self.snapshots.retain(|gi, _| group_indices.contains(gi));
+        let active: std::collections::HashSet<usize> = group_indices.iter().copied().collect();
+        self.snapshots.retain(|gi, _| active.contains(gi));
 
         let max_lag = self.max_lag();
         for &gi in &group_indices {
@@ -278,7 +279,7 @@ impl<T: Context> Analyze<T> for RotationalDiffusion {
                 continue;
             }
             let q_current_inv = buf[n - 1].inverse();
-            for (&lag, &cov_idx) in &self.lag_to_index {
+            for (cov_idx, &lag) in self.log_lags.iter().enumerate() {
                 if lag >= n {
                     continue;
                 }
@@ -387,11 +388,13 @@ impl<T: Context> Analyze<T> for RotationalDiffusion {
         if let Some(d_iso) = crate::auxiliary::fit_isotropic_d_rot(&fit_lags, &fit_trace) {
             map.try_insert("d_rot_isotropic", d_iso)?;
         }
-        if let Some(&tr) = fit_trace.last() {
+        if let (Some(&tr), Some(&lag)) = (fit_trace.last(), fit_lags.last()) {
             if tr < TRACE_CONVERGENCE_THRESHOLD {
                 map.try_insert(
                     "warning",
-                    "Tr(Q) below convergence threshold at max_lag; consider increasing max_lag",
+                    format!(
+                        "Tr(Q) below convergence threshold at largest sampled lag ({lag}); consider increasing max_lag"
+                    ),
                 )?;
             }
         }
