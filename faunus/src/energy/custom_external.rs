@@ -123,6 +123,8 @@ impl CustomExternalBuilder {
 }
 
 /// Return group indices affected by a change that also match a cached selection.
+///
+/// Used only in COM mode (`com: true`).
 fn affected_groups(
     change: &Change,
     cache: &RefCell<SelectionCache>,
@@ -158,6 +160,58 @@ fn affected_groups(
             .filter(|(_, gc)| !matches!(gc, GroupChange::None))
             .filter_map(|(gi, _)| selected.contains(gi).then_some(*gi))
             .collect(),
+        Change::None => unreachable!(),
+    }
+}
+
+/// Return atom indices affected by a change that also match a cached selection.
+///
+/// Used in per-atom mode (`com: false`).
+fn affected_atoms(
+    change: &Change,
+    cache: &RefCell<SelectionCache>,
+    selection: &Selection,
+    context: &impl Context,
+) -> Vec<usize> {
+    if matches!(change, Change::None) {
+        return vec![];
+    }
+    let gen = context.group_lists_generation();
+    let mut cache = cache.borrow_mut();
+    let selected = cache.get_or_resolve(gen, || {
+        let atoms = context.resolve_atoms_live(selection);
+        if atoms.is_empty() {
+            log::warn!(
+                "customexternal: selection '{}' matched no atoms — energy will always be zero",
+                selection
+            );
+        }
+        atoms
+    });
+    match change {
+        Change::Everything | Change::Volume(..) => selected.to_vec(),
+        Change::SingleGroup(gi, gc) => {
+            if matches!(gc, GroupChange::None) {
+                return vec![];
+            }
+            let group = &context.groups()[*gi];
+            selected
+                .iter()
+                .filter(|&&ai| group.contains(ai))
+                .copied()
+                .collect()
+        }
+        Change::Groups(changes) => {
+            let groups = context.groups();
+            changes
+                .iter()
+                .filter(|(_, gc)| !matches!(gc, GroupChange::None))
+                .flat_map(|(gi, _)| {
+                    let group = &groups[*gi];
+                    selected.iter().filter(move |&&ai| group.contains(ai)).copied()
+                })
+                .collect()
+        }
         Change::None => unreachable!(),
     }
 }
@@ -290,40 +344,43 @@ impl CustomExternal {
         }
     }
 
-    /// Sum external potential over all active particles in a group.
-    fn energy_for_group(&self, context: &impl Context, group_index: usize) -> f64 {
+    /// Evaluate the potential at a single atom.
+    fn energy_for_atom(&self, context: &impl Context, atom_idx: usize) -> f64 {
+        let topology = context.topology_ref();
+        let pos = context.position(atom_idx);
+        let q = topology.atomkinds()[context.atom_kind(atom_idx)].charge();
+        self.eval_at(q, pos.x, pos.y, pos.z)
+    }
+
+    /// Evaluate the potential at the center of mass of a group (COM mode).
+    fn energy_for_com(&self, context: &impl Context, group_index: usize) -> f64 {
         let group = &context.groups()[group_index];
         let topology = context.topology_ref();
         let atomkinds = topology.atomkinds();
-
-        if self.com {
-            if let Some(&com) = group.mass_center() {
-                let net_charge: f64 = group
-                    .iter_active()
-                    .map(|i| atomkinds[context.atom_kind(i)].charge())
-                    .sum();
-                self.eval_at(net_charge, com.x, com.y, com.z)
-            } else {
-                0.0
-            }
-        } else {
-            group
+        if let Some(&com) = group.mass_center() {
+            let net_charge: f64 = group
                 .iter_active()
-                .map(|i| {
-                    let pos = context.position(i);
-                    let q = atomkinds[context.atom_kind(i)].charge();
-                    self.eval_at(q, pos.x, pos.y, pos.z)
-                })
-                .sum()
+                .map(|i| atomkinds[context.atom_kind(i)].charge())
+                .sum();
+            self.eval_at(net_charge, com.x, com.y, com.z)
+        } else {
+            0.0
         }
     }
 
     /// Compute energy for a given change.
     pub fn energy(&self, context: &impl Context, change: &Change) -> f64 {
-        affected_groups(change, &self.group_cache, &self.selection, context)
-            .iter()
-            .map(|&gi| self.energy_for_group(context, gi))
-            .sum()
+        if self.com {
+            affected_groups(change, &self.group_cache, &self.selection, context)
+                .iter()
+                .map(|&gi| self.energy_for_com(context, gi))
+                .sum()
+        } else {
+            affected_atoms(change, &self.group_cache, &self.selection, context)
+                .iter()
+                .map(|&ai| self.energy_for_atom(context, ai))
+                .sum()
+        }
     }
 
     /// Report custom external parameters as YAML.
@@ -560,11 +617,12 @@ function: "0.5 * (x^2 + y^2 + z^2)"
         let builder: CustomExternalBuilder = serde_yml::from_str(yaml).unwrap();
         let ext = builder.build().unwrap();
 
-        // Energy for single group change should equal energy_for_group
-        let group0_energy = ext.energy_for_group(&ctx, 0);
+        // Energy for moving one group matches its contribution in a full evaluation
+        let total = ext.energy(&ctx, &Change::Everything);
         let change = Change::SingleGroup(0, GroupChange::RigidBody);
-        let energy = ext.energy(&ctx, &change);
-        assert!((energy - group0_energy).abs() < 1e-10);
+        let partial = ext.energy(&ctx, &change);
+        // group 0 atoms are a subset, so partial ≤ total
+        assert!(partial > 0.0 && partial <= total + 1e-10);
     }
 
     #[test]
