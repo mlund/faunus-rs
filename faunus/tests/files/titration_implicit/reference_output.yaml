@@ -17,14 +17,14 @@ energy_change:
   final: 0.0
   initial: 0.0
 energy_timers:
-  celloverlap: '100 (energy: 70.84, update: 29.16)'
+  celloverlap: '100 (energy: 72.13, update: 27.87)'
 propagate:
   repeat: 5000
   seed: !Fixed 42
   collections:
   - !Deterministic
     repeat: 1
-    elapsed_seconds: 0.092293449
+    elapsed_seconds: 0.0751594
     moves:
     - !SpeciationMove
       reactions:

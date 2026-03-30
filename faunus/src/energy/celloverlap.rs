@@ -47,7 +47,11 @@ impl CellOverlap {
             Change::SingleGroup(gi, _) => context.groups()[*gi].iter_active().any(is_outside),
             Change::None => false,
         };
-        if outside { f64::INFINITY } else { 0.0 }
+        if outside {
+            f64::INFINITY
+        } else {
+            0.0
+        }
     }
 }
 
@@ -95,7 +99,10 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
     #[test]
     fn celloverlap_detects_outside() {
         let mut ctx = make_context();
-        ctx.set_positions(0..2, [Point::new(0.0, 0.0, 0.0), Point::new(0.0, 0.0, 0.0)].iter());
+        ctx.set_positions(
+            0..2,
+            [Point::new(0.0, 0.0, 0.0), Point::new(0.0, 0.0, 0.0)].iter(),
+        );
         let overlap = CellOverlap;
         assert_eq!(overlap.energy(&ctx, &Change::Everything), 0.0);
 

@@ -21,13 +21,31 @@
 use super::{impl_self_building_cv, CvKind, EvalContext};
 use crate::cell::Shape;
 use crate::selection::Selection;
+use crate::topology::GroupKind;
 use serde::{Deserialize, Serialize};
+
+/// Count matching entities using the same convention as speciation and `count_active`:
+/// one COM per Molecular group, atom count for Atomic/Reservoir groups.
+fn count_by_group_kind(selection: &Selection, context: &dyn EvalContext) -> f64 {
+    let topology = context.topology_ref();
+    let groups = context.groups();
+    selection
+        .resolve_groups_live(topology, groups, &|i| context.atom_kind(i))
+        .iter()
+        .map(
+            |&gi| match topology.moleculekinds()[groups[gi].molecule()].group_kind() {
+                GroupKind::Molecular => 1.0,
+                GroupKind::Atomic | GroupKind::Reservoir => groups[gi].len() as f64,
+            },
+        )
+        .sum()
+}
 
 // ---------------------------------------------------------------------------
 // Count (self-building)
 // ---------------------------------------------------------------------------
 
-/// Number of active atoms matching a selection (re-resolves each evaluation).
+/// Number of active entities matching a selection.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Count {
     pub selection: Selection,
@@ -36,11 +54,7 @@ pub struct Count {
 #[typetag::serde(name = "count")]
 impl CvKind for Count {
     fn evaluate(&self, context: &dyn EvalContext) -> f64 {
-        self.selection
-            .resolve_atoms_live(context.topology_ref(), context.groups(), &|i| {
-                context.atom_kind(i)
-            })
-            .len() as f64
+        count_by_group_kind(&self.selection, context)
     }
 
     fn name(&self) -> &'static str {
@@ -57,7 +71,7 @@ impl_self_building_cv!(Count, "count", |s| Some(format!(
 // Concentration (self-building)
 // ---------------------------------------------------------------------------
 
-/// Molar concentration (mol/L) of active atoms matching a selection.
+/// Molar concentration (mol/L) of active entities matching a selection.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Molarity {
     pub selection: Selection,
@@ -66,14 +80,8 @@ pub struct Molarity {
 #[typetag::serde(name = "molarity")]
 impl CvKind for Molarity {
     fn evaluate(&self, context: &dyn EvalContext) -> f64 {
-        let n = self
-            .selection
-            .resolve_atoms_live(context.topology_ref(), context.groups(), &|i| {
-                context.atom_kind(i)
-            })
-            .len() as f64;
         let volume = context.cell().volume().unwrap_or(f64::INFINITY);
-        n / (volume * crate::MOLAR_TO_INV_ANGSTROM3)
+        count_by_group_kind(&self.selection, context) / (volume * crate::MOLAR_TO_INV_ANGSTROM3)
     }
 
     fn name(&self) -> &'static str {
@@ -99,15 +107,11 @@ pub struct Charge {
 #[typetag::serde(name = "charge")]
 impl CvKind for Charge {
     fn evaluate(&self, context: &dyn EvalContext) -> f64 {
-        let indices =
-            self.selection
-                .resolve_atoms_live(context.topology_ref(), context.groups(), &|i| {
-                    context.atom_kind(i)
-                });
-        let atomkinds = context.topology_ref().atomkinds();
-        indices
+        let topology = context.topology_ref();
+        self.selection
+            .resolve_atoms_live(topology, context.groups(), &|i| context.atom_kind(i))
             .iter()
-            .map(|&i| atomkinds[context.atom_kind(i)].charge())
+            .map(|&i| topology.atomkinds()[context.atom_kind(i)].charge())
             .sum()
     }
 

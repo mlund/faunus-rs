@@ -90,8 +90,8 @@ Property                 | Selection       | Description
 ------------------------ | --------------- | -------------------------------------------
 `volume`                 | none            | Cell measure via `dimension`: volume (`xyz`), area (`xy`), or length (`z`). Note: `volume` uses `dimension`, not `projection`
 `atom_position`          | one atom        | Signed component for single axis (`x`,`y`,`z`); Euclidean norm for multi-axis (`xy` etc.)
-`count`                  | atoms or groups | Number of active atoms matching selection
-`molarity`               | atoms or groups | Molar concentration (mol/L) of matching atoms
+`count`                  | atoms or groups | Molecule instances for Molecular groups; atom count for Atomic/Reservoir groups
+`molarity`               | atoms or groups | Molar concentration (mol/L); molecule-based for Molecular groups, atom-based for Atomic/Reservoir
 `charge`                 | atoms or groups | Sum of charges of active atoms matching selection
 `size`                   | one group       | Number of active particles in a group
 `end_to_end`             | one group       | End-to-end distance of a molecular group
