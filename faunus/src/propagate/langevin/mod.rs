@@ -81,10 +81,6 @@ impl LangevinRunner {
         self.config.steps
     }
 
-    pub(in crate::propagate) fn elapsed(&self) -> std::time::Duration {
-        self.elapsed
-    }
-
     pub(in crate::propagate) fn energy_change_sum(&self) -> f64 {
         self.energy_change_sum
     }
@@ -112,13 +108,12 @@ impl LangevinRunner {
         &mut self,
         context: &mut T,
     ) -> anyhow::Result<()> {
-        // Bind locally before storing to avoid unwrap() on the just-assigned Option
-        if self.gpu.is_none() {
+        if let Some(gpu) = &mut self.gpu {
+            Self::upload_context_state(context, gpu);
+        } else {
             let mut gpu = Self::init_gpu(context, &self.config)?;
             Self::upload_full_state(context, &mut gpu)?;
             self.gpu = Some(gpu);
-        } else {
-            Self::upload_context_state(context, self.gpu.as_mut().unwrap());
         }
         // Safe: always Some after the branch above
         let gpu = self.gpu.as_mut().unwrap();
