@@ -97,11 +97,11 @@ impl State {
             );
         }
 
-        // Warn about atom_id changes (expected after atom swap reactions)
+        // Expected after atom swap reactions (titration); not actionable at warn level
         for (i, state_p) in self.particles.iter().enumerate() {
             let ctx_id = context.atom_kind(i);
             if state_p.atom_id != ctx_id {
-                log::warn!(
+                log::debug!(
                     "Particle {} atom_id differs: state has {}, topology has {} (atom swap?)",
                     i,
                     state_p.atom_id,

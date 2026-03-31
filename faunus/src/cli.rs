@@ -68,6 +68,10 @@ enum Commands {
         /// Directory for per-window state files
         #[clap(long, short = 's', default_value = "umbrella_states")]
         state_dir: PathBuf,
+        /// Common starting state for all windows (seed for the drive phase;
+        /// ignored for windows that already have a per-window state)
+        #[clap(long)]
+        state: Option<PathBuf>,
         /// PMF output file
         #[clap(long, short = 'o', default_value = "pmf.csv")]
         pmf_output: PathBuf,
@@ -144,10 +148,11 @@ pub fn do_main() -> Result<()> {
         Commands::Umbrella {
             input,
             state_dir,
+            state,
             pmf_output,
             threads,
         } => {
-            crate::umbrella::run(&input, &state_dir, &pmf_output, threads)?;
+            crate::umbrella::run(&input, &state_dir, state.as_deref(), &pmf_output, threads)?;
         }
         Commands::WangLandau {
             input,

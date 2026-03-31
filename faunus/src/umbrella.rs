@@ -465,7 +465,13 @@ fn parse_config(input: &Path) -> Result<UmbrellaConfig> {
 }
 
 /// Run multi-walker umbrella sampling with BAR stitching.
-pub fn run(input: &Path, state_dir: &Path, output: &Path, max_threads: usize) -> Result<()> {
+pub fn run(
+    input: &Path,
+    state_dir: &Path,
+    common_state: Option<&Path>,
+    output: &Path,
+    max_threads: usize,
+) -> Result<()> {
     use interatomic::coulomb::Temperature;
 
     let config = parse_config(input)?;
@@ -497,10 +503,27 @@ pub fn run(input: &Path, state_dir: &Path, output: &Path, max_threads: usize) ->
         );
     });
 
-    std::fs::create_dir_all(state_dir)?;
+    std::fs::create_dir_all(state_dir).map_err(|e| {
+        anyhow::anyhow!(
+            "Cannot create state directory '{}': {e}. \
+             Note: use --state-dir for the directory and --state for a common state file.",
+            state_dir.display()
+        )
+    })?;
 
-    // Build once; cloned per window to avoid redundant YAML parsing + Hamiltonian construction
-    let base_context = Backend::new(input, None, &mut rand::thread_rng())?;
+    // Build once; cloned per window to avoid redundant YAML parsing + Hamiltonian construction.
+    let mut base_context = Backend::new(input, None, &mut rand::thread_rng())?;
+
+    // Load common state file to seed all windows that don't yet have a per-window state
+    if let Some(state_path) = common_state {
+        let state = State::from_file(state_path)?;
+        let propagate = Propagate::from_file(input, &base_context)?;
+        let analyses = AnalysisCollection::default();
+        let mut mc = MarkovChain::new(base_context, propagate, rt, analyses)?;
+        mc.load_state(state)?;
+        base_context = mc.into_context();
+        log::info!("Loaded common state from {}", state_path.display());
+    }
 
     let n_threads = crate::auxiliary::resolve_thread_count(max_threads);
 
