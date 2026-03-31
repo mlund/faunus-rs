@@ -407,10 +407,18 @@ impl PairPotentialBuilder {
         let default = self.0.get(&DefaultOrPair::Default);
 
         if combine_with_default {
+            // Pair-specific overrides default by interaction type (discriminant);
+            // default interactions of other types are inherited.
+            let pair_discs: std::collections::HashSet<_> = pair
+                .into_iter()
+                .flat_map(|v| v.iter())
+                .map(std::mem::discriminant)
+                .collect();
             default
                 .into_iter()
-                .chain(pair)
                 .flat_map(|v| v.iter())
+                .filter(|i| !pair_discs.contains(&std::mem::discriminant(i)))
+                .chain(pair.into_iter().flat_map(|v| v.iter()))
                 .filter(|i| filter(i))
                 .collect()
         } else {
@@ -631,6 +639,58 @@ impl SplineOptions {
     }
 }
 
+/// Policy for how pair-specific nonbonded interactions relate to `default`.
+///
+/// Accepts both enum names (`extend`, `override`) and boolean values
+/// (`true` = extend, `false` = override) for backwards compatibility
+/// with `combine_with_default`.
+#[derive(Default, Clone, Debug, Serialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum DefaultPolicy {
+    /// Pair-specific replaces all defaults for that pair.
+    #[default]
+    Override,
+    /// Pair inherits defaults; same interaction type overridden, others kept.
+    Extend,
+}
+
+impl<'de> Deserialize<'de> for DefaultPolicy {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct Visitor;
+        impl<'de> de::Visitor<'de> for Visitor {
+            type Value = DefaultPolicy;
+            fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                f.write_str("\"extend\", \"override\", true, or false")
+            }
+            fn visit_bool<E: de::Error>(self, v: bool) -> Result<DefaultPolicy, E> {
+                Ok(if v {
+                    DefaultPolicy::Extend
+                } else {
+                    DefaultPolicy::Override
+                })
+            }
+            fn visit_str<E: de::Error>(self, v: &str) -> Result<DefaultPolicy, E> {
+                match v {
+                    "extend" => Ok(DefaultPolicy::Extend),
+                    "override" => Ok(DefaultPolicy::Override),
+                    _ => Err(E::unknown_variant(v, &["extend", "override"])),
+                }
+            }
+        }
+        deserializer.deserialize_any(Visitor)
+    }
+}
+
+impl DefaultPolicy {
+    /// Whether pair-specific entries extend defaults (vs replacing them).
+    pub(crate) fn extends_default(&self) -> bool {
+        matches!(self, Self::Extend)
+    }
+}
+
 /// Structure used for (de)serializing the Hamiltonian of the system.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct HamiltonianBuilder {
@@ -638,11 +698,13 @@ pub struct HamiltonianBuilder {
     #[serde(rename = "nonbonded")]
     pub pairpot_builder: Option<PairPotentialBuilder>,
 
-    /// When true, pair-specific interactions are combined with `default`
-    /// rather than replacing it. Useful for adding per-pair short-range
-    /// potentials on top of a shared Coulomb interaction.
-    #[serde(default)]
-    pub combine_with_default: bool,
+    /// How pair-specific interactions relate to the `default` entry.
+    /// - `override` (default): pair-specific replaces all defaults for that pair
+    /// - `extend`: pair inherits defaults; same interaction type overridden, others kept
+    ///
+    /// `combine_with_default: true/false` is accepted as an alias for backwards compatibility.
+    #[serde(default, alias = "combine_with_default")]
+    pub default_policy: DefaultPolicy,
 
     /// Optional spline configuration for nonbonded interactions.
     /// When present, `NonbondedMatrixSplined` is used instead of `NonbondedMatrix`.

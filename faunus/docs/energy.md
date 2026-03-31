@@ -56,12 +56,17 @@ energy:
 |--------------------------|----------|---------|------------------------------------------------------|
 | `default`                | no       |         | List of pair potentials applied to all atom pairs     |
 | `[atom1, atom2]`         | no       |         | Override for a specific pair (order does not matter)  |
-| `combine_with_default`   | no       | `false` | Pair-specific entries extend `default` instead of replacing it |
+| `default_policy`         | no       | `override` | How pair-specific entries relate to `default` (see below) |
 
-By default, a pair-specific entry replaces the `default` entirely.
-When `combine_with_default` is `true`, pair-specific potentials are _added_ to the
-default interactions, which is useful for layering per-pair short-range potentials
-on top of a shared Coulomb term.
+`default_policy` controls how pair-specific entries interact with `default`:
+
+- **`override`** (default): a pair-specific entry replaces `default` entirely for that pair.
+- **`extend`**: pair-specific entries are merged with `default` **by interaction type**.
+  If both define the same type (e.g. AshbaughHatch), the pair-specific version
+  replaces the default for that type; other default types (e.g. Coulomb) are inherited.
+
+`combine_with_default: true/false` is accepted as a backwards-compatible alias
+for `extend`/`override`.
 
 ### Loading nonbonded from include files
 
@@ -87,7 +92,7 @@ energy:
 include: [assets/forcefield.yaml]
 system:
   energy:
-    combine_with_default: true
+    default_policy: extend
     nonbonded:
       default:
         - !Coulomb {cutoff: 40.0}

@@ -439,7 +439,7 @@ impl NonbondedMatrix {
             &builder.pairpot_builder.unwrap(),
             topology,
             medium,
-            builder.combine_with_default,
+            builder.default_policy.extends_default(),
         )
     }
 

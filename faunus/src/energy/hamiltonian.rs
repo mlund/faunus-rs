@@ -86,7 +86,7 @@ impl Hamiltonian {
                     nonbonded_matrix,
                     topology,
                     medium.clone(),
-                    builder.combine_with_default,
+                    builder.default_policy.extends_default(),
                 )?;
                 hamiltonian.push(term.into());
                 log::info!("Added excluded-pair Coulomb correction");
@@ -132,7 +132,7 @@ impl Hamiltonian {
             pairpot_builder,
             topology,
             medium,
-            builder.combine_with_default,
+            builder.default_policy.extends_default(),
         )?;
         if let Some(spline_opts) = &builder.spline {
             let config = spline_opts.to_spline_config();
