@@ -45,6 +45,10 @@ pub struct StructureWriter {
     #[builder(setter(skip))]
     #[builder_field_attr(serde(skip))]
     sizes_writer: Option<BufWriter<std::fs::File>>,
+    /// Per-frame atom charges for VMD charge coloring of titration swaps.
+    #[builder(setter(skip))]
+    #[builder_field_attr(serde(skip))]
+    charges_writer: Option<BufWriter<std::fs::File>>,
 }
 
 impl StructureWriterBuilder {
@@ -75,6 +79,7 @@ impl StructureWriter {
             frame_state_writer: None,
             group_cache: SelectionCache::default(),
             sizes_writer: None,
+            charges_writer: None,
         }
     }
 }
@@ -239,6 +244,31 @@ impl StructureWriter {
             writeln!(w)?;
         }
 
+        // Per-frame charges for VMD coloring of titration and speciation swaps.
+        // Always written — the file is small and atom types can change at any time.
+        if self.charges_writer.is_none() {
+            let charges_path = Path::new(&self.output_file).with_extension("charges.dat");
+            self.charges_writer = Some(BufWriter::new(
+                std::fs::File::create(&charges_path)
+                    .with_context(|| format!("Cannot create '{}'", charges_path.display()))?,
+            ));
+        }
+        if let Some(w) = self.charges_writer.as_mut() {
+            let atomkinds = topology.atomkinds();
+            let mut first = true;
+            for &gi in group_indices.iter() {
+                let g = &all_groups[gi];
+                for i in g.start()..g.start() + g.capacity() {
+                    if !first {
+                        write!(w, " ")?;
+                    }
+                    write!(w, "{:.4}", atomkinds[context.atom_kind(i)].charge())?;
+                    first = false;
+                }
+            }
+            writeln!(w)?;
+        }
+
         self.num_samples += 1;
         Ok(())
     }
@@ -274,15 +304,19 @@ impl<T: Context> Analyze<T> for StructureWriter {
                 .file_name()
                 .and_then(|n| n.to_str())
                 .unwrap_or(&self.output_file);
-            let sizes_file = self.sizes_writer.is_some().then(|| {
-                Path::new(&self.output_file)
-                    .with_extension("sizes.dat")
-                    .file_name()
-                    .expect("trajectory path has no filename")
-                    .to_str()
-                    .expect("non-UTF-8 path")
-                    .to_owned()
-            });
+            let companion_file = |ext: &str, writer: &Option<BufWriter<std::fs::File>>| {
+                writer.is_some().then(|| {
+                    Path::new(&self.output_file)
+                        .with_extension(ext)
+                        .file_name()
+                        .expect("trajectory path has no filename")
+                        .to_str()
+                        .expect("non-UTF-8 path")
+                        .to_owned()
+                })
+            };
+            let sizes_file = companion_file("sizes.dat", &self.sizes_writer);
+            let charges_file = companion_file("charges.dat", &self.charges_writer);
             psf::write_vmd_script(
                 &tcl_path,
                 &topology,
@@ -290,6 +324,7 @@ impl<T: Context> Analyze<T> for StructureWriter {
                 psf_name,
                 traj_name,
                 sizes_file.as_deref(),
+                charges_file.as_deref(),
             )?;
             if sizes_file.is_some() {
                 log::info!(

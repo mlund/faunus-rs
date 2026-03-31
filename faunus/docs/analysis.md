@@ -238,7 +238,15 @@ The format is auto-detected from the file extension (`.xyz` or `.xtc`).
 On finalization a companion PSF topology file and a VMD scene script are
 written alongside the trajectory. The PSF contains atoms, bonds, angles,
 and dihedrals; the Tcl script loads the PSF and trajectory, sets VDW radii
-from sigma values, and draws the periodic box.
+from sigma values, colors by charge, and draws the periodic box.
+
+For speciation/GCMC/titration simulations, two additional companion files
+enable per-frame visualization updates in VMD:
+- **`.sizes.dat`** — per-frame group active counts (written when any group
+  has inactive atoms). The VMD script hides inactive atoms (radius = 0).
+- **`.charges.dat`** — per-frame atom charges (always written). The VMD
+  script updates charges each frame so that atom-type swaps from titration
+  and speciation are reflected in the charge coloring.
 
 ### Example
 
@@ -273,12 +281,14 @@ Key                | Required | Default | Description
 
 Given `file: traj.xtc`, the following files are produced:
 
-File        | Description
------------ | -------------------------------------------
-`traj.xtc`  | Trajectory (coordinates per frame)
-`traj.psf`  | X-PLOR PSF topology (atoms, bonds, angles, dihedrals, charges, masses)
-`traj.tcl`  | VMD scene script (`vmd -e traj.tcl` loads everything)
-`traj.aux`  | Frame state file (only when `save_frame_state: true`)
+File               | Description
+------------------ | -------------------------------------------
+`traj.xtc`         | Trajectory (coordinates per frame)
+`traj.psf`         | X-PLOR PSF topology (atoms, bonds, angles, dihedrals, charges, masses)
+`traj.tcl`         | VMD scene script (`vmd -e traj.tcl` loads everything)
+`traj.charges.dat` | Per-frame atom charges (always written)
+`traj.sizes.dat`   | Per-frame group active counts (only when groups have inactive atoms)
+`traj.aux`         | Frame state file (only when `save_frame_state: true`)
 
 ### Frame state file (`.aux`)
 
