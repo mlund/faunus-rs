@@ -690,7 +690,7 @@ impl HamiltonianBuilder {
     ///
     /// Nonbonded pairs from `include` files are merged in; the input file takes precedence.
     pub(crate) fn from_file(path: impl AsRef<Path>) -> anyhow::Result<Self> {
-        let yaml = std::fs::read_to_string(&path)
+        let yaml = crate::auxiliary::read_yaml(&path)
             .map_err(|err| anyhow::anyhow!("Error reading file {:?}: {}", &path.as_ref(), err))?;
         let full: serde_yml::Value = serde_yml::from_str(&yaml)?;
 
@@ -711,7 +711,7 @@ impl HamiltonianBuilder {
             for entry in includes {
                 if let Some(rel) = entry.as_str() {
                     let inc_path = parent_dir.join(rel);
-                    let inc_yaml = std::fs::read_to_string(&inc_path).map_err(|err| {
+                    let inc_yaml = crate::auxiliary::read_yaml(&inc_path).map_err(|err| {
                         anyhow::anyhow!("Error reading include {:?}: {}", &inc_path, err)
                     })?;
                     let inc_full: serde_yml::Value = serde_yml::from_str(&inc_yaml)?;

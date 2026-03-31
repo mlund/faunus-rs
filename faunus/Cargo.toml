@@ -23,6 +23,7 @@ icotable = { git = "https://github.com/mlund/icotable.git" }
 interatomic = { git = "https://github.com/mlund/interatomic.git", features = ["serde", "custom", "gpu"] }
 itertools = "0.10"
 log = "0.4"
+minijinja = { version = "2.18", default-features = false, features = ["builtins", "loop_controls", "serde"] }
 molly = "0.5"
 nalgebra = { version = "0.34.1", features = ["serde-serialize"] }
 ndarray = { version = "0.15.6", features = ["serde"] }

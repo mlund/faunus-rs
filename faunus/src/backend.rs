@@ -20,11 +20,10 @@ use std::{cell::RefCell, path::Path, sync::Arc};
 
 /// Extract medium from system/medium in YAML file
 pub fn get_medium(path: impl AsRef<Path>) -> anyhow::Result<interatomic::coulomb::Medium> {
-    let file = std::fs::File::open(&path)
-        .map_err(|err| anyhow::anyhow!("Could not open {:?}: {}", path.as_ref(), err))?;
-    serde_yml::from_reader(file)
+    let yaml = crate::auxiliary::read_yaml(&path)?;
+    serde_yml::from_str::<serde_yml::Value>(&yaml)
         .ok()
-        .and_then(|s: serde_yml::Value| {
+        .and_then(|s| {
             let val = s.get("system")?.get("medium")?;
             serde_yml::from_value(val.clone()).ok()
         })

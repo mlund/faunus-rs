@@ -206,7 +206,7 @@ pub enum Cell {
 impl Cell {
     /// Get simulation cell from a Faunus configuration file.
     pub(crate) fn from_file(path: impl AsRef<Path>) -> anyhow::Result<Self> {
-        let yaml = std::fs::read_to_string(&path)
+        let yaml = crate::auxiliary::read_yaml(&path)
             .map_err(|err| anyhow::anyhow!("Error reading file {:?}: {}", path.as_ref(), err))?;
         let full: serde_yml::Value = serde_yml::from_str(&yaml)?;
 

@@ -237,7 +237,7 @@ impl<T: Context> Propagate<T> {
 
     /// Build a `Propagate<T>` from an input YAML file.
     pub fn from_file(filename: impl AsRef<Path>, context: &T) -> anyhow::Result<Self> {
-        let yaml = std::fs::read_to_string(filename)?;
+        let yaml = crate::auxiliary::read_yaml(filename)?;
         let full: serde_yml::Value = serde_yml::from_str(&yaml)?;
 
         let current = full
@@ -329,7 +329,7 @@ impl<T: Context> Propagate<T> {
 pub(crate) fn gibbs_config_from_file(
     filename: impl AsRef<Path>,
 ) -> anyhow::Result<Option<crate::montecarlo::gibbs::GibbsConfig>> {
-    let yaml = std::fs::read_to_string(filename)?;
+    let yaml = crate::auxiliary::read_yaml(filename)?;
     let full: serde_yml::Value = serde_yml::from_str(&yaml)?;
     let Some(gibbs_value) = full.get("propagate").and_then(|p| p.get("gibbs")) else {
         return Ok(None);

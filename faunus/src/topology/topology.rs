@@ -85,7 +85,7 @@ impl Topology {
     /// Create partial topology without system. Used for topology includes.
     #[must_use = "this returns a Result that should be handled"]
     pub fn from_file_partial(path: impl AsRef<Path>) -> anyhow::Result<Self> {
-        let yaml = std::fs::read_to_string(&path)
+        let yaml = crate::auxiliary::read_yaml(&path)
             .map_err(|err| anyhow::anyhow!("Error reading file {:?}: {}", path.as_ref(), err))?;
         let mut topology: Self = serde_yml::from_str(&yaml)?;
         for file in topology.include.iter_mut() {
@@ -99,7 +99,7 @@ impl Topology {
     /// Parse a yaml file as Topology which *must* include a system.
     #[must_use = "this returns a Result that should be handled"]
     pub fn from_file(path: impl AsRef<Path>) -> anyhow::Result<Self> {
-        let yaml = std::fs::read_to_string(&path)
+        let yaml = crate::auxiliary::read_yaml(&path)
             .map_err(|err| anyhow::anyhow!("Error loading file {:?}: {}", &path.as_ref(), err))?;
         let mut topology: Self = serde_yml::from_str(&yaml)?;
 

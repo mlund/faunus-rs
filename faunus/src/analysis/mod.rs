@@ -162,7 +162,7 @@ pub fn from_file<T: Context>(
     context: &T,
     medium: Option<&interatomic::coulomb::Medium>,
 ) -> Result<AnalysisCollection<T>> {
-    let yaml = std::fs::read_to_string(path)
+    let yaml = crate::auxiliary::read_yaml(path)
         .map_err(|err| anyhow::anyhow!("Error reading file {:?}: {}", &path, err))?;
     let value = serde_yml::from_str::<Value>(&yaml)?
         .get("analysis")

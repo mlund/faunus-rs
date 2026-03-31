@@ -21,12 +21,33 @@ use std::fmt::Display;
 use std::io::{BufRead, Write};
 use std::path::Path;
 
+/// Read a YAML file, applying Jinja2 template rendering if the file
+/// contains template syntax (`{%` or `{#`).
+///
+/// Plain YAML files (no template tags) pass through unchanged.
+/// See [minijinja](https://docs.rs/minijinja) for the template language.
+pub fn read_yaml(path: impl AsRef<Path>) -> anyhow::Result<String> {
+    use anyhow::Context;
+    let path = path.as_ref();
+    let raw = std::fs::read_to_string(path)
+        .with_context(|| format!("Cannot read '{}'", path.display()))?;
+    // Only invoke the template engine when template tags are present
+    if raw.contains("{%") || raw.contains("{#") {
+        let env = minijinja::Environment::new();
+        env.render_str(&raw, minijinja::context! {}).map_err(|err| {
+            anyhow::anyhow!("Template error in '{}': {err:#}", path.display())
+        })
+    } else {
+        Ok(raw)
+    }
+}
+
 /// Parse a named section from a YAML input file into a typed config struct.
 pub fn parse_yaml_section<T: serde::de::DeserializeOwned>(
     input: &Path,
     key: &str,
 ) -> anyhow::Result<T> {
-    let yaml = std::fs::read_to_string(input)?;
+    let yaml = read_yaml(input)?;
     let value: serde_yml::Value = serde_yml::from_str(&yaml)?;
     let section = value
         .get(key)
@@ -639,5 +660,87 @@ mod simpson_tests {
         let n = 4;
         let values: Vec<f64> = (0..n).map(|i| i as f64 / (n - 1) as f64).collect();
         assert!((simpson_integrate(&values) - 0.5).abs() < 1e-14);
+    }
+
+    // --- read_yaml template tests ---
+
+    fn write_temp(name: &str, content: &str) -> std::path::PathBuf {
+        let path = std::env::temp_dir().join(format!("faunus_test_{name}.yaml"));
+        std::fs::write(&path, content).unwrap();
+        path
+    }
+
+    #[test]
+    fn read_yaml_plain_passthrough() {
+        let path = write_temp("plain", "key: value\nlist: [1, 2, 3]");
+        let result = super::read_yaml(&path).unwrap();
+        assert_eq!(result, "key: value\nlist: [1, 2, 3]");
+        std::fs::remove_file(path).ok();
+    }
+
+    #[test]
+    fn read_yaml_template_for_loop() {
+        let path = write_temp(
+            "loop",
+            "items:\n{% for i in range(3) %}\n  - {{ i }}\n{% endfor %}",
+        );
+        let result = super::read_yaml(&path).unwrap();
+        assert!(result.contains("- 0"));
+        assert!(result.contains("- 1"));
+        assert!(result.contains("- 2"));
+        std::fs::remove_file(path).ok();
+    }
+
+    #[test]
+    fn read_yaml_template_variables() {
+        let path = write_temp("vars", "{% set x = 42 %}\nvalue: {{ x }}");
+        let result = super::read_yaml(&path).unwrap();
+        assert!(result.contains("value: 42"));
+        std::fs::remove_file(path).ok();
+    }
+
+    #[test]
+    fn read_yaml_template_math() {
+        let path = write_temp("math", "{% set a = 3.8 %}{% set b = 5.0 %}\nσ: {{ (a + b) / 2 }}");
+        let result = super::read_yaml(&path).unwrap();
+        assert!(result.contains("σ: 4.4"));
+        std::fs::remove_file(path).ok();
+    }
+
+    #[test]
+    fn read_yaml_template_comment_only() {
+        let path = write_temp("comment", "{# This is a comment #}\nplain: yaml");
+        let result = super::read_yaml(&path).unwrap();
+        assert!(result.contains("plain: yaml"));
+        assert!(!result.contains("comment"));
+        std::fs::remove_file(path).ok();
+    }
+
+    #[test]
+    fn read_yaml_syntax_error_reports_file() {
+        let path = write_temp("bad", "{% for %}");
+        let err = super::read_yaml(&path).unwrap_err();
+        let msg = format!("{err}");
+        assert!(msg.contains("Template error"), "missing prefix: {msg}");
+        assert!(msg.contains("faunus_test_bad"), "missing filename: {msg}");
+        std::fs::remove_file(path).ok();
+    }
+
+    #[test]
+    fn read_yaml_missing_file() {
+        let err = super::read_yaml("/nonexistent/file.yaml").unwrap_err();
+        assert!(format!("{err}").contains("Cannot read"));
+    }
+
+    #[test]
+    fn read_yaml_yaml_tags_preserved() {
+        let path = write_temp(
+            "tags",
+            "{% set v = 1.0 %}\natom: {σ: {{ v }}, hydrophobicity: !Lambda 0.0}",
+        );
+        let result = super::read_yaml(&path).unwrap();
+        assert!(result.contains("!Lambda 0.0"), "YAML tag lost: {result}");
+        assert!(result.contains("σ: 1.0"), "variable not rendered: {result}");
+        std::fs::remove_file(path).ok();
     }
 }
