@@ -128,6 +128,11 @@ The reported ratio `⟨Re²⟩/⟨Rg²⟩` equals 6 for ideal Gaussian chains
 | Westin planar (disc-like)     | `Cp = 2(λ₂ − λ₁) / Rg²`                                | [Westin 2002](https://doi.org/10.1016/S1361-8415(02)00053-1) |
 | Westin spherical              | `Cs = 3λ₁ / Rg²`  (Cl + Cp + Cs = 1)                   | [Westin 2002](https://doi.org/10.1016/S1361-8415(02)00053-1) |
 
+Mean gyration tensor components (`Sxx`, `Sxy`, `Sxz`, `Syy`, `Syz`, `Szz`) are
+reported in the YAML output. The ratio `⟨Szz⟩ / ⟨Rg²⟩` indicates orientation
+relative to the z-axis: ~0 for flat objects lying in the xy-plane, ~1/3 for
+isotropic, ~1 for rod-like objects aligned with z.
+
 If `file` is given (single-molecule selection only), each sampled step writes a line with
 columns `step`, `Rg`, and the upper triangle of the gyration tensor
 (`Sxx Sxy Sxz Syy Syz Szz`).

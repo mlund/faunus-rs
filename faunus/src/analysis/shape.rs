@@ -82,6 +82,12 @@ impl ShapeAnalysisBuilder {
             westin_cl: WeightedMean::new(),
             westin_cp: WeightedMean::new(),
             westin_cs: WeightedMean::new(),
+            tensor_xx: WeightedMean::new(),
+            tensor_xy: WeightedMean::new(),
+            tensor_xz: WeightedMean::new(),
+            tensor_yy: WeightedMean::new(),
+            tensor_yz: WeightedMean::new(),
+            tensor_zz: WeightedMean::new(),
         })
     }
 }
@@ -104,6 +110,12 @@ pub struct ShapeAnalysis {
     westin_cl: WeightedMean,
     westin_cp: WeightedMean,
     westin_cs: WeightedMean,
+    tensor_xx: WeightedMean,
+    tensor_xy: WeightedMean,
+    tensor_xz: WeightedMean,
+    tensor_yy: WeightedMean,
+    tensor_yz: WeightedMean,
+    tensor_zz: WeightedMean,
 }
 
 /// Minimum Rg² to guard against division by zero.
@@ -203,6 +215,14 @@ impl<T: Context> Analyze<T> for ShapeAnalysis {
                 self.end_to_end_squared.add(re2, weight);
             }
 
+            let s = &result.tensor;
+            self.tensor_xx.add(s[(0, 0)], weight);
+            self.tensor_xy.add(s[(0, 1)], weight);
+            self.tensor_xz.add(s[(0, 2)], weight);
+            self.tensor_yy.add(s[(1, 1)], weight);
+            self.tensor_yz.add(s[(1, 2)], weight);
+            self.tensor_zz.add(s[(2, 2)], weight);
+
             if let Some(desc) = compute_descriptors(&result.eigenvalues, result.rg_squared) {
                 self.asphericity.add(desc.asphericity, weight);
                 self.acylindricity.add(desc.acylindricity, weight);
@@ -259,6 +279,12 @@ impl<T: Context> Analyze<T> for ShapeAnalysis {
         map.try_insert("Cl", self.westin_cl.mean())?;
         map.try_insert("Cp", self.westin_cp.mean())?;
         map.try_insert("Cs", self.westin_cs.mean())?;
+        map.try_insert("Sxx", self.tensor_xx.mean())?;
+        map.try_insert("Sxy", self.tensor_xy.mean())?;
+        map.try_insert("Sxz", self.tensor_xz.mean())?;
+        map.try_insert("Syy", self.tensor_yy.mean())?;
+        map.try_insert("Syz", self.tensor_yz.mean())?;
+        map.try_insert("Szz", self.tensor_zz.mean())?;
         map.try_insert("num_samples", self.num_samples)?;
 
         Some(serde_yml::Value::Mapping(map))
