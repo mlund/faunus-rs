@@ -1,6 +1,7 @@
 use super::{
     bonded::{IntermolecularBonded, IntramolecularBonded},
     constrain::Constrain,
+    contact_tessellation::ContactTessellationEnergy,
     custom_external::CustomExternal,
     ewald::EwaldReciprocalEnergy,
     excluded_coulomb::ExcludedCoulomb,
@@ -44,6 +45,8 @@ pub enum EnergyTerm {
     Tabulated(TabulatedEnergy),
     /// Flat-histogram bias penalty on collective variable(s).
     Penalty(Penalty),
+    /// Contact tessellation energy between rigid bodies.
+    ContactTessellation(ContactTessellationEnergy),
 }
 
 /// Dispatch a no-arg method to stateful energy terms; stateless terms are no-ops.
@@ -53,6 +56,7 @@ macro_rules! dispatch_stateful {
         match $self {
             EnergyTerm::IntermolecularBonded(x) => x.$method(),
             EnergyTerm::SasaEnergy(x) => x.$method(),
+            EnergyTerm::ContactTessellation(x) => x.$method(),
             EnergyTerm::NonbondedMatrix(x) => x.$method(),
             EnergyTerm::NonbondedMatrixSplined(x) => x.$method(),
             EnergyTerm::EwaldReciprocal(x) => x.$method(),
@@ -89,6 +93,7 @@ impl EnergyTerm {
                 x.update_cache(context, change); // mirrors NonbondedMatrix pattern
                 Ok(())
             }
+            Self::ContactTessellation(x) => x.update(context, change),
             Self::IntramolecularBonded(_)
             | Self::CellOverlap(_)
             | Self::Constrain(_)
@@ -112,6 +117,7 @@ impl EnergyTerm {
             Self::NonbondedMatrixSplined(x) => x.save_backup(change),
             Self::EwaldReciprocal(x) => x.save_backup(change, context),
             Self::Tabulated(x) => x.save_backup(change),
+            Self::ContactTessellation(x) => x.save_backup(change),
             Self::IntramolecularBonded(_)
             | Self::CellOverlap(_)
             | Self::Constrain(_)
@@ -170,6 +176,7 @@ impl EnergyTerm {
             Self::ExternalPressure(x) => Some(x.to_yaml()),
             Self::CustomExternal(x) => Some(x.to_yaml()),
             Self::SasaEnergy(x) => Some(x.to_yaml()),
+            Self::ContactTessellation(x) => Some(x.to_yaml()),
             Self::NonbondedMatrix(_)
             | Self::NonbondedMatrixSplined(_)
             | Self::IntramolecularBonded(_)
@@ -193,6 +200,7 @@ impl EnergyTerm {
             Self::IntramolecularBonded(_)
             | Self::IntermolecularBonded(_)
             | Self::SasaEnergy(_)
+            | Self::ContactTessellation(_)
             | Self::CellOverlap(_)
             | Self::Constrain(_)
             | Self::ExternalPressure(_)
@@ -238,6 +246,7 @@ impl crate::Info for EnergyTerm {
             Self::ExcludedCoulomb(_) => "excluded_coulomb",
             Self::Tabulated(_) => "tabulated",
             Self::Penalty(_) => "penalty",
+            Self::ContactTessellation(_) => "contact_tessellation",
         })
     }
 }
@@ -261,6 +270,7 @@ impl EnergyChange for EnergyTerm {
             Self::ExcludedCoulomb(x) => x.energy(context, change),
             Self::Tabulated(x) => x.energy(context, change),
             Self::Penalty(x) => x.energy(context, change),
+            Self::ContactTessellation(x) => x.energy(context, change),
         }
     }
 }
@@ -292,5 +302,11 @@ impl From<TabulatedEnergy> for EnergyTerm {
 impl From<Penalty> for EnergyTerm {
     fn from(p: Penalty) -> Self {
         Self::Penalty(p)
+    }
+}
+
+impl From<ContactTessellationEnergy> for EnergyTerm {
+    fn from(ct: ContactTessellationEnergy) -> Self {
+        Self::ContactTessellation(ct)
     }
 }

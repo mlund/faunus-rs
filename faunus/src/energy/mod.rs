@@ -18,6 +18,7 @@ pub(crate) mod bonded;
 pub(crate) mod builder;
 mod celloverlap;
 mod constrain;
+mod contact_tessellation;
 mod custom_external;
 mod energyterm;
 pub(crate) mod ewald;

@@ -36,7 +36,7 @@ serde_yml = "0.0.12"
 typetag = "0.2"
 unordered-pair = { version = "0.2.4", features = ["serde"] }
 validator = { version = "0.20", features = ["derive"] }
-voronota-ltr = { version = "0.1", default-features = false }
+voronota-ltr = { path = "../../voronota-ltr", default-features = false }
 
 # CLI-only dependencies
 bytemuck = { version = "1", features = ["derive"], optional = true }

@@ -437,6 +437,12 @@ impl Hamiltonian {
             let thermal_energy = require_thermal_energy("polymer_depletion")?;
             self.push(pm_builder.build(context, thermal_energy)?.into());
         }
+        if let Some(ct_builder) = &builder.contact_tessellation {
+            let ct = super::contact_tessellation::ContactTessellationEnergy::from_builder(
+                ct_builder, context,
+            )?;
+            self.push(ct.into());
+        }
         // Build tabulated energy entries (6D molecule-molecule and 3D molecule-atom)
         if builder.tabulated6d.is_some() || builder.tabulated3d.is_some() {
             let inv_thermal_energy = 1.0 / require_thermal_energy("tabulated")?;

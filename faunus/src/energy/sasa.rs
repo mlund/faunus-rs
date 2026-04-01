@@ -68,7 +68,7 @@ impl SasaEnergy {
         offset_from_first: bool,
     ) -> Self {
         let balls = Self::make_balls(positions, radii);
-        let tessellation = compute_tessellation(&balls, probe_radius, None, None);
+        let tessellation = compute_tessellation(&balls, probe_radius, None, None, false);
         Self {
             probe_radius,
             balls,
@@ -96,7 +96,7 @@ impl SasaEnergy {
             ball.y = pos.y;
             ball.z = pos.z;
         });
-        self.tessellation = compute_tessellation(&self.balls, self.probe_radius, None, None);
+        self.tessellation = compute_tessellation(&self.balls, self.probe_radius, None, None, false);
     }
 
     /// Calculate the surface energy based in the available surface area (kJ/mol)
@@ -138,7 +138,7 @@ impl SasaEnergy {
                 self.tensions.push(ak.surface_tension().unwrap_or(0.0));
             }
         }
-        self.tessellation = compute_tessellation(&self.balls, self.probe_radius, None, None);
+        self.tessellation = compute_tessellation(&self.balls, self.probe_radius, None, None, false);
 
         // Set energy offset from the first configuration if requested and only if not already set.
         if self.offset_from_first && self.energy_offset.is_none() && !self.balls.is_empty() {

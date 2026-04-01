@@ -42,6 +42,7 @@ use serde::{
 use unordered_pair::UnorderedPair;
 
 use super::constrain::ConstrainBuilder;
+use super::contact_tessellation::ContactTessellationEnergyBuilder;
 use super::custom_external::CustomExternalBuilder;
 use super::ewald::EwaldBuilder;
 use super::external_pressure::Pressure;
@@ -713,6 +714,9 @@ pub struct HamiltonianBuilder {
 
     /// Solvent Accessible Surface Area (SASA) energy term.
     pub sasa: Option<SasaEnergyBuilder>,
+
+    /// Contact tessellation energy between rigid bodies.
+    pub contact_tessellation: Option<ContactTessellationEnergyBuilder>,
 
     /// Collective variable constraints (hard or harmonic).
     pub constrain: Option<Vec<ConstrainBuilder>>,

@@ -1,0 +1,33 @@
+# Test configuration for contact tessellation energy.
+# Two molecules of 2 atoms each, placed so that atoms 1 and 2 have
+# inter-body contact. Reference energy computed via standalone voronota-ltr.
+atoms:
+  - {name: A, mass: 1.0, sigma: 3.0, hydrophobicity: !SurfaceTension -0.5}
+  - {name: B, mass: 1.0, sigma: 4.0, hydrophobicity: !SurfaceTension -0.8}
+
+molecules:
+  - name: MOL1
+    atoms: [A, A]
+  - name: MOL2
+    atoms: [B, B]
+
+system:
+  medium:
+    temperature: 300.0
+    permittivity: !Vacuum
+
+  energy:
+    contact_tessellation:
+      probe_radius: 1.4
+
+  blocks:
+    - molecule: MOL1
+      N: 1
+      insert: !Manual
+        - [0.0, 0.0, 0.0]
+        - [1.0, 0.0, 0.0]
+    - molecule: MOL2
+      N: 1
+      insert: !Manual
+        - [4.0, 0.0, 0.0]
+        - [5.0, 0.0, 0.0]
