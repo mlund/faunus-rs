@@ -593,7 +593,7 @@ where $A_{ab}$ is the radical tessellation contact area between atoms $a$ and $b
 belonging to different rigid bodies, $s$ is an optional scaling factor, and the
 combining rule for the surface tension is:
 
-$$\gamma_{ab} = \begin{cases} \sqrt{\gamma_a \, \gamma_b} & \text{if } \operatorname{sign}(\gamma_a) = \operatorname{sign}(\gamma_b) \\ 0 & \text{otherwise}\end{cases}$$
+$$\gamma_{ab} = \begin{cases} \operatorname{sign}(\gamma_a) \sqrt{|\gamma_a \, \gamma_b|} & \text{if } \operatorname{sign}(\gamma_a) = \operatorname{sign}(\gamma_b) \\ 0 & \text{otherwise}\end{cases}$$
 
 Negative surface tensions give attractive interactions (e.g. hydrophobic burial);
 positive values give repulsive contacts. Contacts between atoms with opposite
