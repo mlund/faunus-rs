@@ -584,15 +584,14 @@ Particle radii are taken from `sigma / 2` of the atom type definition.
 
 Computes the contact energy between rigid bodies using radical (power) tessellation.
 For each pair of nearby rigid bodies, the atoms of both bodies are tessellated together
-and only inter-body contact areas are extracted. Each contact area is scaled by a
-geometric-mean surface tension:
+and only inter-body contact areas are extracted. The energy is a sum over all
+inter-body contacts:
 
-$$E = s \sum_{i<j} \sum_{\text{contacts}} \gamma_{ab} \; A_{ab}$$
+$$E = s \sum_{\text{contacts}} \gamma_{ab} \; A_{ab}$$
 
 where $A_{ab}$ is the radical tessellation contact area between atoms $a$ and $b$
-belonging to different rigid bodies, and $s$ is an optional scaling factor.
-
-The combining rule is:
+belonging to different rigid bodies, $s$ is an optional scaling factor, and the
+combining rule for the surface tension is:
 
 $$\gamma_{ab} = \begin{cases} \sqrt{\gamma_a \, \gamma_b} & \text{if } \operatorname{sign}(\gamma_a) = \operatorname{sign}(\gamma_b) \\ 0 & \text{otherwise}\end{cases}$$
 
@@ -630,9 +629,10 @@ system:
 
 Particle radii are taken from `sigma / 2` of the atom type.
 Surface tensions are set via the `hydrophobicity: !SurfaceTension <value>` field.
-The combining rule is geometric mean: $\gamma_{ab} = \sqrt{\gamma_a \gamma_b}$.
-The bounding sphere cutoff automatically includes $2 \times$ `probe_radius` to account
+The bounding sphere cutoff automatically includes the probe diameter to account
 for the expanded tessellation radii.
+
+---
 
 ## Constrain
 
