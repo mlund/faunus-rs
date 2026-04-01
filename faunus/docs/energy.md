@@ -110,7 +110,7 @@ or generated from atom properties (`sigma`, `epsilon`) via a combination rule.
 | `!WeeksChandlerAndersen`   | `!WCA`  | `sigma`/`σ`, `epsilon`/`eps`/`ε` |
 | `!HardSphere`              |         | (mixing only)                  |
 | `!KimHummer`               | `!KH`   | `sigma`/`σ`, `epsilon`/`eps`/`ε` |
-| `!AshbaughHatch`           |         | (mixing only, requires `cutoff`) |
+| `!AshbaughHatch`           | `!AH`   | (mixing only, requires `cutoff`); or `wca: true` for purely repulsive |
 | `!CustomPotential`         |         | `function`, `cutoff`, `constants` |
 
 When using a combination rule, specify `mixing` instead of explicit parameters:
@@ -119,6 +119,26 @@ When using a combination rule, specify `mixing` instead of explicit parameters:
 - !LennardJones {mixing: LorentzBerthelot}
 - !AshbaughHatch {mixing: arithmetic, cutoff: 20.0}
 ```
+
+#### Ashbaugh-Hatch WCA mode
+
+Setting `wca: true` on `!AshbaughHatch` makes the potential purely repulsive
+(Weeks-Chandler-Andersen). This automatically sets λ=1 and cutoff=σ·2^(1/6),
+ignoring any explicit `lambda` or `cutoff` values:
+
+```yaml
+# Purely repulsive pair via wca flag (preferred)
+[INO, ALA]:
+  - !AshbaughHatch {epsilon: 0.8368, sigma: 5.62, wca: true}
+
+# Equivalent manual specification
+[INO, ALA]:
+  - !AshbaughHatch {epsilon: 0.8368, sigma: 5.62, lambda: 1.0, cutoff: 6.3082}
+```
+
+> **Note:** `lambda: 0` does NOT give WCA — it produces a flat step function
+> of height ε. Use `wca: true` or `lambda: 1` with cutoff=σ·2^(1/6) for
+> true repulsive excluded volume.
 
 Available combination rules:
 

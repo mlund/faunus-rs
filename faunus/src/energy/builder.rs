@@ -175,6 +175,7 @@ impl<T: FromMixing> DirectOrMixing<T> {
 #[serde(deny_unknown_fields)]
 pub enum PairInteraction {
     /// Ashbaugh-Hatch potential.
+    #[serde(alias = "AH")]
     AshbaughHatch(DirectOrMixing<AshbaughHatch>),
     /// Kim-Hummer coarse-grained protein potential.
     #[serde(alias = "KH")]

@@ -191,6 +191,70 @@ system:
         assert_approx_eq!(f64, excl_energy, expected, epsilon = 1e-10);
     }
 
+    /// Screened Coulomb (!Coulomb with salt) + AH + default_policy: extend
+    /// must still add the ExcludedCoulomb correction term.
+    #[test]
+    fn excluded_coulomb_with_screened_coulomb_and_ah() {
+        let distance = 10.0;
+        let yaml = format!(
+            r#"
+atoms:
+  - {{name: A, charge: 1.0, mass: 1.0, sigma: 4.0, epsilon: 0.8, hydrophobicity: !Lambda 0.5}}
+
+molecules:
+  - name: dimer
+    atoms: [A, A]
+    keep_excluded_coulomb: true
+    excluded_neighbours: 1
+    bonds:
+      - {{index: [0, 1], kind: !Harmonic {{k: 1.0, req: {distance}}}}}
+
+system:
+  medium:
+    permittivity: !Water
+    temperature: 298.15
+    salt: [!NaCl, 0.15]
+  cell: !Cuboid [100.0, 100.0, 100.0]
+  blocks:
+    - molecule: dimer
+      N: 1
+      insert: !Manual
+        - [0.0, 0.0, 0.0]
+        - [{distance}, 0.0, 0.0]
+  energy:
+    default_policy: extend
+    nonbonded:
+      default:
+        - !Coulomb {{cutoff: 50.0}}
+        - !AshbaughHatch {{mixing: arithmetic, cutoff: 20.0}}
+"#
+        );
+
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("input.yaml");
+        std::fs::write(&file, yaml).unwrap();
+
+        let mut rng = rand::thread_rng();
+        let system = Backend::new(&file, None, &mut rng).unwrap();
+
+        let per_term = system
+            .hamiltonian()
+            .per_term_energies(&system, &Change::Everything);
+        let excl_energy = per_term
+            .iter()
+            .find(|(name, _)| *name == "excluded_coulomb")
+            .map(|(_, e)| *e);
+
+        assert!(
+            excl_energy.is_some(),
+            "ExcludedCoulomb term must be present when keep_excluded_coulomb is true"
+        );
+        assert!(
+            excl_energy.unwrap().abs() > 1e-10,
+            "ExcludedCoulomb energy must be non-zero for charged excluded pair"
+        );
+    }
+
     /// Default `keep_excluded_coulomb: false` produces zero correction.
     #[test]
     fn excluded_coulomb_default_off() {
