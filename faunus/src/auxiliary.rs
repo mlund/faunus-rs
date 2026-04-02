@@ -24,6 +24,9 @@ use std::path::Path;
 /// Read a YAML file, applying Jinja2 template rendering if the file
 /// contains template syntax (`{%` or `{#`).
 ///
+/// Top-level keys prefixed with `_` are silently removed, allowing
+/// sections to be temporarily disabled (e.g. `_umbrella:` instead of `umbrella:`).
+///
 /// Plain YAML files (no template tags) pass through unchanged.
 /// See [minijinja](https://docs.rs/minijinja) for the template language.
 pub fn read_yaml(path: impl AsRef<Path>) -> anyhow::Result<String> {
@@ -32,14 +35,34 @@ pub fn read_yaml(path: impl AsRef<Path>) -> anyhow::Result<String> {
     let raw = std::fs::read_to_string(path)
         .with_context(|| format!("Cannot read '{}'", path.display()))?;
     // Only invoke the template engine when template tags are present
-    if raw.contains("{%") || raw.contains("{#") {
+    let yaml = if raw.contains("{%") || raw.contains("{#") {
         let env = minijinja::Environment::new();
-        env.render_str(&raw, minijinja::context! {}).map_err(|err| {
-            anyhow::anyhow!("Template error in '{}': {err:#}", path.display())
-        })
+        env.render_str(&raw, minijinja::context! {})
+            .map_err(|err| anyhow::anyhow!("Template error in '{}': {err:#}", path.display()))?
     } else {
-        Ok(raw)
+        raw
+    };
+    strip_underscore_keys(&yaml)
+}
+
+/// Remove top-level YAML keys that start with `_`.
+fn strip_underscore_keys(yaml: &str) -> anyhow::Result<String> {
+    let mut value: serde_yml::Value = serde_yml::from_str(yaml)?;
+    if let serde_yml::Value::Mapping(ref mut map) = value {
+        let disabled: Vec<_> = map
+            .keys()
+            .filter(|k| k.as_str().is_some_and(|s| s.starts_with('_')))
+            .cloned()
+            .collect();
+        if disabled.is_empty() {
+            return Ok(yaml.to_string());
+        }
+        for key in &disabled {
+            log::info!("Ignoring disabled section `{}`", key.as_str().unwrap());
+            map.remove(key);
+        }
     }
+    Ok(serde_yml::to_string(&value)?)
 }
 
 /// Parse a named section from a YAML input file into a typed config struct.
@@ -702,7 +725,10 @@ mod simpson_tests {
 
     #[test]
     fn read_yaml_template_math() {
-        let path = write_temp("math", "{% set a = 3.8 %}{% set b = 5.0 %}\nσ: {{ (a + b) / 2 }}");
+        let path = write_temp(
+            "math",
+            "{% set a = 3.8 %}{% set b = 5.0 %}\nσ: {{ (a + b) / 2 }}",
+        );
         let result = super::read_yaml(&path).unwrap();
         assert!(result.contains("σ: 4.4"));
         std::fs::remove_file(path).ok();

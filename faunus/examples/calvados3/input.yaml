@@ -23,7 +23,7 @@ molecules:
     from_structure: "4lzt.xyz"
 
 system:
-  cell: !Sphere {radius: 100.0}
+  cell: !Cylinder {radius: 50.0, height: 200.0}
   medium:
     permittivity: !Water
     temperature: 298.15
@@ -46,7 +46,7 @@ system:
         !RandomCOM {
           rotate: true,
           directions: none,
-          offset: [0.0, 0.0, 40.0],
+          offset: [0.0, 0.0, 50.0],
         }
 
   energy:
@@ -54,33 +54,54 @@ system:
     nonbonded:
       default:
         - !Coulomb {cutoff: 1000}
-    spline:
-      cutoff: 250.0
-      n_points: 2000
-
 
 analysis:
-  - !CollectiveVariable
-    property: mass_center_separation
-    selection: "molecule MOL1"
-    selection2: "molecule MOL2"
-    file: "com_distance.dat.gz"
-    frequency: !Every 10
   - !Energy
-    file: "energy.dat.gz"
+    file: "energy.csv.gz"
     frequency: !Every 100
-  - !Energy
-    file: "hydrophobic_energy.dat.gz"
-    frequency: !Every 100
-    selections: ["hydrophobic and molecule MOL1", "hydrophobic and molecule MOL2"]
   - !Trajectory
     file: "traj.xyz"
     frequency: !Every 100
+  - !RadialDistribution
+    selections: ["molecule MOL1", "molecule MOL2"]
+    file: rdf.csv
+    dr: 0.5
+    use_com: true
+    dimension: z
+    frequency: !Every 10
+
+
+wang_landau:
+  coordinate:
+    property: mass_center_separation
+    selection: "molecule MOL1"
+    selection2: "molecule MOL2"
+    projection: z
+    range: [26.0, 50.0]
+    resolution: 0.5
+  flatness_threshold: 0.8
+  min_flatness: 10
+  min_ln_f: 0.01
+  steps_per_check: 100
+
+umbrella:
+  cv:
+    property: mass_center_separation
+    selection: "molecule MOL1"
+    selection2: "molecule MOL2"
+    projection: z
+  windows:
+    range: [24.0, 50.0]
+    width: 8.0
+    spacing: 4.0
+    bin_width: 0.5
+  drive:
+    force_constant: 0.5
 
 propagate:
   seed: Hardware
   criterion: Metropolis
-  repeat: 50000
+  repeat: 200000
   collections:
     - !Stochastic
       moves:
@@ -91,7 +112,7 @@ propagate:
           }
         - !RotateMolecule {
             molecule: MOL2,
-            dp: 2.0,
+            dp: 1.0,
             weight: 1.0,
           }
         - !TranslateMolecule {
