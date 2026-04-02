@@ -49,6 +49,8 @@ import pandas as pd
 data = pd.read_csv("data.csv.gz").to_numpy()
 ```
 
+---
+
 ## Collective Variable
 
 Monitors a collective variable (CV) over the course of a simulation,
@@ -100,6 +102,8 @@ Property                 | Selection       | Description
 `mass_center_position`   | one group       | Mass center position along `projection`
 `mass_center_separation` | two groups      | Distance between two group mass centers
 `dipole_product`         | two groups      | Normalized dipole dot product μ̂₁·μ̂₂ = cos(θ) (default `xyz` = full 3D; `projection` filters dipoles before comparing)
+
+---
 
 ## Polymer Shape
 
@@ -155,6 +159,8 @@ Key          | Required | Default | Description
 `file`       | no       |         | Streaming output file, single molecule only (see [Output file formats](#output-file-formats))
 `frequency`  | yes      |         | Sample frequency, e.g. `!Every 100`
 
+---
+
 ## Multipole
 
 Per-group charge and dipole moment analysis, averaged over all groups
@@ -185,6 +191,8 @@ Key          | Required | Default | Description
 ------------ | -------- | ------- | -------------------------------------------
 `selection`  | yes      |         | Selection expression for molecule group(s)
 `frequency`  | yes      |         | Sample frequency
+
+---
 
 ## Energy
 
@@ -234,6 +242,8 @@ Selections resolve at the atom level, so atom-type filters
 (e.g. `hydrophobic and molecule MOL1`) work correctly.
 When both selections resolve to the same atoms, self-pairs and
 duplicates are automatically excluded.
+
+---
 
 ## Trajectory
 
@@ -305,6 +315,8 @@ alongside each XTC frame, storing this per-frame microstate data.
 The `.aux` file is required by `faunus rerun` (see [Rerun](#rerun)) to fully
 reconstruct the simulation state from each trajectory frame.
 
+---
+
 ## Radial Distribution Function
 
 Computes the radial distribution function g(r) for pairs of particles or
@@ -366,6 +378,8 @@ Key                        | Required | Default               | Description
 `exclude_intramolecular`   | no       | `true` (atom-atom)    | Skip pairs within the same molecule (atom-atom only)
 `dimension`                | no       | `xyz`                 | Axes for distance projection and normalization (`x`, `y`, `z`, `xy`, …)
 
+---
+
 ## Widom Insertion
 
 Measures the excess chemical potential of a single ion species using the scaled
@@ -407,6 +421,8 @@ Key              | Required | Default | Description
 `default`        | yes      |         | Pair interactions (same syntax as `nonbonded.default`)
 `frequency`      | yes      |         | Sample frequency, e.g. `!Every 10`
 
+---
+
 ## Virtual Translate
 
 Performs a virtual displacement of a single molecule and measures the
@@ -441,6 +457,8 @@ Key           | Required | Default  | Description
 `file`        | no       |          | Output file path (see [Output file formats](#output-file-formats))
 `frequency`   | yes      |          | Sample frequency, e.g. `!Every 10`
 
+---
+
 ## Virtual Volume Move
 
 Performs a virtual volume perturbation and measures the excess pressure
@@ -468,6 +486,8 @@ Key           | Required | Default      | Description
 `dV`          | yes      |              | Volume displacement (ų)
 `method`      | no       | `Isotropic`  | Scaling policy: `Isotropic`, `ScaleZ`, `ScaleXY`
 `frequency`   | yes      |              | Sample frequency, e.g. `!Every 10`
+
+---
 
 ## Mean Along Coordinate
 
@@ -507,6 +527,8 @@ Key           | Required | Default | Description
 
 The `coordinate` block accepts all [collective variable](#collective-variable) fields
 (`property`, `selection`, `dimension`, etc.) plus a required `resolution` for the bin width.
+
+---
 
 ## Rotational Diffusion
 
@@ -557,6 +579,8 @@ A warning is emitted if convergence is not reached.
 The YAML output includes the covariance matrix at log-spaced lags,
 time-dependent diffusion coefficients D_x(τ), D_y(τ), D_z(τ) from
 eigenvalue decomposition, and an isotropic estimate from the trace.
+
+---
 
 ## Rerun
 

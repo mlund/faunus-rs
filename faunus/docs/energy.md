@@ -3,12 +3,14 @@
 The Hamiltonian is the sum of all energy terms acting on the system.
 Energy terms are defined in the `energy` section of the YAML input.
 
+---
+
 ## External Pressure (Isobaric)
 
-The `pressure` energy term adds an external pressure contribution for the NPT ensemble:
+The `pressure` energy term adds an external pressure contribution for the _NPT_ ensemble:
 
 $$
-E = PV - (N + 1) k_BT \ln V
+U = PV - (N + 1) k_BT \ln V
 $$
 
 where $P$ is the external pressure, $V$ is the volume, $k_BT$ is the thermal energy,
@@ -31,6 +33,8 @@ Supported pressure units (YAML tags):
 | `!Pa`  | Pascal                        |
 | `!kT`  | $k_BT/\text{Å}^3$            |
 | `!mM`  | millimolar (ideal gas)        |
+
+--- 
 
 ## Nonbonded Interactions
 
@@ -123,17 +127,13 @@ When using a combination rule, specify `mixing` instead of explicit parameters:
 #### Ashbaugh-Hatch WCA mode
 
 Setting `wca: true` on `!AshbaughHatch` makes the potential purely repulsive
-(Weeks-Chandler-Andersen). This automatically sets λ=1 and cutoff=σ·2^(1/6),
+(Weeks-Chandler-Andersen) by setting λ=1 and cutoff=σ·2^(1/6),
 ignoring any explicit `lambda` or `cutoff` values:
 
 ```yaml
-# Purely repulsive pair via wca flag (preferred)
-[INO, ALA]:
+# Purely repulsive pair via wca flag
+[ARG, ALA]:
   - !AshbaughHatch {epsilon: 0.8368, sigma: 5.62, wca: true}
-
-# Equivalent manual specification
-[INO, ALA]:
-  - !AshbaughHatch {epsilon: 0.8368, sigma: 5.62, lambda: 1.0, cutoff: 6.3082}
 ```
 
 > **Note:** `lambda: 0` does NOT give WCA — it produces a flat step function
@@ -219,6 +219,8 @@ Electrostatic potentials combine atom charges with a coulombic scheme.
 | `!Ewald`          | `alpha`, `cutoff`                          |
 | `!ReactionField`  | `epsr_in`, `epsr_out`, `cutoff`, `shift`   |
 | `!Fanourgakis`    | `cutoff`                                   |
+
+---
 
 ## Ewald Summation
 
@@ -363,6 +365,8 @@ Available grid types:
 | `PowerLaw(p)`  | Power-law with custom exponent $p$                       |
 | `InverseRsq`   | Uniform in $1/r^2$ — dense at short range               |
 
+---
+
 ## Excluded-Pair Coulomb Correction
 
 Excluded pairs (from `excluded_neighbours` or `exclusions`) skip all nonbonded
@@ -394,6 +398,8 @@ molecules:
 ```
 
 No additional `energy:` section is needed — the term is created automatically.
+
+---
 
 ## Bonded Interactions
 
@@ -437,6 +443,8 @@ No explicit `energy:` configuration is needed.
 | `!ImproperPeriodic`| $k \bigl[1 + \cos(n\phi - \phi_0)\bigr]$                |
 
 See [Topology — Bonds, Torsions, Dihedrals](topology.md#bonds) for YAML syntax, parameters, and units.
+
+---
 
 ## Custom External Potential
 
@@ -506,6 +514,8 @@ When `com` is `true`, the expression is evaluated once per matching group at the
 center position, with `q` set to the net group charge.
 When `false` (default), the expression is evaluated at each matching atom position.
 
+---
+
 ## Penalty (Flat-Histogram Bias)
 
 Applies a static bias potential loaded from a converged [Wang-Landau](wang_landau.md)
@@ -546,6 +556,8 @@ energy:
 The penalty is placed at the front of the Hamiltonian so that out-of-range
 CV values return infinite energy, short-circuiting expensive downstream terms.
 
+---
+
 ## Solvent Accessible Surface Area (SASA)
 
 Computes an implicit solvation energy based on the solvent-accessible surface area
@@ -580,6 +592,8 @@ system:
 
 Particle radii are taken from `sigma / 2` of the atom type definition.
 
+---
+
 ## Contact Tessellation Energy
 
 Computes the contact energy between rigid bodies using radical (power) tessellation.
@@ -587,19 +601,19 @@ For each pair of nearby rigid bodies, the atoms of both bodies are tessellated t
 and only inter-body contact areas are extracted. The energy is a sum over all
 inter-body contacts:
 
-$$E = s \sum_{\text{contacts}} \gamma_{ab} \; A_{ab}$$
+$$U = s \sum_{\text{contacts}} \gamma_{ij} \; A_{ij}$$
 
-where $A_{ab}$ is the radical tessellation contact area between atoms $a$ and $b$
+where $A_{ij}$ is the radical tessellation contact area between atoms $a$ and $b$
 belonging to different rigid bodies, $s$ is an optional scaling factor, and the
-combining rule for the surface tension is:
+combination rule for the surface tension is:
 
-$$\gamma_{ab} = \begin{cases} \operatorname{sign}(\gamma_a) \sqrt{|\gamma_a \, \gamma_b|} & \text{if } \operatorname{sign}(\gamma_a) = \operatorname{sign}(\gamma_b) \\ 0 & \text{otherwise}\end{cases}$$
+$$\gamma_{ij} = \begin{cases} \operatorname{sign}(\gamma_i) \sqrt{|\gamma_i \, \gamma_j|} & \text{if } \operatorname{sign}(\gamma_i) = \operatorname{sign}(\gamma_j) \\ 0 & \text{otherwise}\end{cases}$$
 
-Negative surface tensions give attractive interactions (e.g. hydrophobic burial);
+Negative surface tensions give attractive interactions;
 positive values give repulsive contacts. Contacts between atoms with opposite
 signs (e.g. hydrophobic-hydrophilic) contribute zero energy.
 
-Body pairs beyond bounding-sphere contact range are skipped automatically.
+Body pairs beyond bounding-sphere contact range are skipped.
 Only pairs involving the moved body are recomputed each Monte Carlo step,
 giving $O(N)$ scaling in the number of bodies. Periodic boundary conditions
 are supported for orthorhombic (cuboid) cells.
@@ -618,8 +632,7 @@ atoms:
 
 system:
   energy:
-    contact_tessellation:
-      probe_radius: 1.4
+    contact_tessellation: { probe_radius: 1.4 }
 ```
 
 | Key              | Required | Default | Description                                         |
@@ -628,7 +641,7 @@ system:
 | `scaling`        | no       | `1.0`   | Global multiplicative scaling of the contact energy |
 
 Particle radii are taken from `sigma / 2` of the atom type.
-Surface tensions are set via the `hydrophobicity: !SurfaceTension <value>` field.
+Atom surface tensions are set via the `hydrophobicity: !SurfaceTension <value>` field.
 The bounding sphere cutoff automatically includes the probe diameter to account
 for the expanded tessellation radii.
 
@@ -818,6 +831,8 @@ energy:
 | `max_iterations`   | no       | `50`    | Maximum self-consistency iterations                   |
 | `tolerance`        | no       | `1e-8`  | Convergence threshold for $\hat{g}_S$                 |
 
+---
+
 ## Tabulated 6D Rigid-Body Energy
 
 The `tabulated6d` energy term loads pre-computed energy tables for pairs of rigid
@@ -907,6 +922,8 @@ When `tabulated6d` or `tabulated3d` is active, molecule-type pairs covered by ta
 automatically excluded from the `nonbonded` energy term.
 This prevents double-counting when mixing tabulated rigid-body interactions with
 atom-level nonbonded potentials for other molecule types.
+
+---
 
 ## Tabulated 3D Molecule-Atom Energy
 

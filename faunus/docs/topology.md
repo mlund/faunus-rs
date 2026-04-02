@@ -4,6 +4,8 @@ The topology defines the static structure of the simulation system: atom types, 
 bonds, and how molecules are placed in the simulation cell.
 It does not include dynamic state such as positions or velocities.
 
+---
+
 ## Atoms
 
 Atom types define properties shared by all atoms of the same kind.
@@ -276,6 +278,8 @@ chains:
 
 Ranges are half-open intervals `[start, end)`. Residues and chains must not overlap.
 
+---
+
 ## System
 
 The `system` section defines the simulation cell, molecule blocks, and optionally intermolecular bonded interactions.
@@ -357,6 +361,8 @@ system:
       - {index: [1, 35, 75, 128], kind: !ProperHarmonic {k: 27.5, aeq: 105.0}}
 ```
 
+---
+
 ## Including Files
 
 Topology files can include other YAML files. Paths are relative to the including file.
@@ -403,6 +409,8 @@ reactions:
   - ["Ca(OH)₂ = Ca²⁺ + OH⁻ + OH⁻", !pK 5.19]
 ```
 At equilibrium: $[Ca^{2+}] \approx 0.012\;\text{M}$, $[OH^-] \approx 0.023\;\text{M}$.
+
+---
 
 ## Chemical Reactions
 

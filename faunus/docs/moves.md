@@ -86,6 +86,8 @@ Key          | Required | Default | Description
 `repeat`     | no       | 1       | Repetitions per selection
 `directions` | no       | `xyz`   | Active directions (`x`, `y`, `z`, `xy`, `xz`, `yz`, `xyz`)
 
+---
+
 ## Translate Atom
 
 Picks a random atom and translates it by a random displacement.
@@ -155,6 +157,8 @@ Key         | Required | Default | Description
 `offset`    | no       | 1.0     | Offset (Angstrom) to avoid singularity at $r = 0$
 `file`      | no       |         | Path to write selection-distance histogram (.dat/.csv)
 
+---
+
 ## Rotate Molecule
 
 Picks a random molecule of the given type and rotates it around a random axis
@@ -170,6 +174,8 @@ Key        | Required | Default | Description
 `dp`       | yes      |         | Maximum angular displacement (radians)
 `weight`   | yes      |         | Selection weight
 `repeat`   | no       | 1       | Repetitions per selection
+
+---
 
 ## Pivot Move
 
@@ -196,6 +202,8 @@ Key        | Required | Default | Description
 `weight`   | yes      |         | Selection weight
 `repeat`   | no       | 1       | Repetitions per selection
 
+---
+
 ## Crankshaft Move
 
 Picks a random bond axis in the molecule and rotates the smaller sub-tree
@@ -221,9 +229,11 @@ Key        | Required | Default | Description
 `weight`   | yes      |         | Selection weight
 `repeat`   | no       | 1       | Repetitions per selection
 
-## Volume Move (NPT)
+---
 
-Proposes isotropic or anisotropic volume changes for the NPT ensemble.
+## Volume Move (_NPT_)
+
+Proposes isotropic or anisotropic volume changes for sampling the _NPT_ ensemble.
 The volume is sampled logarithmically:
 
 $$
@@ -240,14 +250,11 @@ which contributes $PV - (N+1) k_BT \ln V$.
 
 ```yaml
 energy:
-  isobaric:
-    P/atm: 1.0
+  pressure: !atm 1.0
 
 propagate:
-  repeat: 10000
   collections:
     - !Stochastic
-      repeat: 100
       moves:
         - !TranslateMolecule { molecule: Water, dp: 0.5, weight: 1.0 }
         - !VolumeMove { dV: 0.04, weight: 0.5 }
@@ -270,12 +277,6 @@ Policy       | Description
 `ScaleZ`     | Scale along the z-axis only
 `ScaleXY`    | Scale the xy-plane only
 `IsochoricZ` | Scale z and xy at constant total volume
-
-### Anisotropic example
-
-```yaml
-- !VolumeMove { dV: 0.05, method: ScaleZ, weight: 0.5, repeat: 2 }
-```
 
 ---
 

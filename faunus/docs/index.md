@@ -32,12 +32,12 @@ geometry:
 - [Umbrella Sampling](umbrella.md) — windowed free-energy calculations
 - [Selection Language](selection_language.md) — VMD-like atom selection expressions
 
+---
+
 ## Template Support
 
 YAML input files can use [MiniJinja](https://docs.rs/minijinja) (Jinja2-compatible)
-templates for variables, loops, and expressions. Template rendering is triggered
-automatically when the file contains `{%` or `{#` tags; plain YAML files pass
-through unchanged.
+templates for variables, loops, and expressions.
 
 ### Variables and expressions
 
