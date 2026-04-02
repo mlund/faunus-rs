@@ -700,10 +700,10 @@ their center of mass and bounding sphere radius. The polymers are modelled
 implicitly via an effective potential that captures many-body depletion effects
 through pairwise sums, at $O(N_c^2)$ computational cost.
 
-The free energy change due to inserting $N_c$ colloids into a polymer reservoir is:
+The free energy change, $\Delta \omega$, due to inserting $N_c$ colloids into a polymer reservoir is:
 
-$$\Delta w \approx
-  \frac{i4\pi\rho_P^* \cdot f \cdot N_c}{k_B T\kappa^{3/2}} \left(\sigma + \sigma^2 + \frac{\sigma^3}{3}\right)
+$$\frac{\beta \Delta\omega}{4\pi\rho_P^*} \approx
+  \frac{f \cdot N_c}{\kappa^{3/2}} \left(\sigma + \sigma^2 + \frac{\sigma^3}{3}\right)
   - \frac{f^2 \cdot \sigma^2 e^{2\sigma}}{\kappa^{3/2}}
     \sum_{i=1}^{N_c}
     \frac{\displaystyle\sum_{j \neq i} k_0(\lambda R_{ij})}
