@@ -1,0 +1,31 @@
+# Two-molecule SASA test: exercises incremental update path.
+# MOL1 at origin, MOL2 nearby so SAS areas are mutually reduced.
+atoms:
+  - {name: A, mass: 1.0, sigma: 3.0, hydrophobicity: !Gamma 0.9}
+  - {name: B, mass: 1.0, sigma: 4.0, hydrophobicity: !Gamma 1.5}
+
+molecules:
+  - name: MOL1
+    atoms: [A, B]
+  - name: MOL2
+    atoms: [A, B]
+
+system:
+  medium:
+    temperature: 300.0
+    permittivity: !Vacuum
+
+  energy:
+    sasa: {probe_radius: 1.4}
+
+  blocks:
+    - molecule: MOL1
+      N: 1
+      insert: !Manual
+        - [0.0, 0.0, 0.0]
+        - [0.0, 0.0, 3.5]
+    - molecule: MOL2
+      N: 1
+      insert: !Manual
+        - [5.0, 0.0, 0.0]
+        - [5.0, 0.0, 3.5]

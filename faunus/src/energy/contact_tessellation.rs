@@ -19,7 +19,7 @@
 //! geometric-mean surface tension: `γ_ab = sqrt(γ_a × γ_b)` when both signs agree,
 //! zero otherwise.
 
-use crate::cell::{BoundaryConditions, Shape};
+use crate::cell::BoundaryConditions;
 use crate::group::Group;
 use crate::topology::AtomKind;
 use crate::{Change, Context};
@@ -27,6 +27,7 @@ use derive_builder::Builder;
 use serde::{Deserialize, Serialize};
 use voronota_ltr::{compute_contacts_only, Ball, PeriodicBox};
 
+use super::make_periodic_box;
 use super::nonbonded::cache::GroupEnergyCache;
 
 /// Precomputed `γ_ab` matrix indexed by atom kind pairs.
@@ -43,9 +44,9 @@ impl GammaMatrix {
         let n_kinds = atomkinds.len();
         let mut data = vec![0.0; n_kinds * n_kinds];
         for (i, aki) in atomkinds.iter().enumerate() {
-            let gamma_i = aki.surface_tension().unwrap_or(0.0);
+            let gamma_i = aki.gamma().unwrap_or(0.0);
             for (j, akj) in atomkinds.iter().enumerate() {
-                let gamma_j = akj.surface_tension().unwrap_or(0.0);
+                let gamma_j = akj.gamma().unwrap_or(0.0);
                 data[i * n_kinds + j] = combine_gamma(gamma_i, gamma_j);
             }
         }
@@ -68,19 +69,6 @@ fn combine_gamma(ga: f64, gb: f64) -> f64 {
     } else {
         product.sqrt().copysign(ga)
     }
-}
-
-/// Convert a simulation cell to a voronota-ltr `PeriodicBox`.
-/// Returns `None` for non-periodic cells.
-fn make_periodic_box(cell: &crate::cell::Cell) -> Option<PeriodicBox> {
-    cell.pbc()
-        .is_some()
-        .then(|| cell.bounding_box())
-        .flatten()
-        .map(|bb| {
-            let h = bb / 2.0;
-            PeriodicBox::from_corners((-h.x, -h.y, -h.z), (h.x, h.y, h.z))
-        })
 }
 
 /// Check if two groups are beyond contact range using bounding spheres.

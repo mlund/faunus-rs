@@ -603,7 +603,7 @@ mod tests {
             Some("O"),
             Some(3.4),
             Some(1.8),
-            Some(Hydrophobicity::SurfaceTension(1.0)),
+            Some(Hydrophobicity::Gamma(1.0)),
             &HashMap::new(),
         );
 

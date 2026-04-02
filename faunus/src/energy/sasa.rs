@@ -12,169 +12,249 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
-//! # Energy due to solvent-accessible surface area and atomic-level tensions.
+//! # Energy due to solvent-accessible surface area and atomic-level surface energy densities.
 
-use crate::Point;
-use crate::{Change, Context};
+use crate::{Change, Context, GroupChange};
 use derive_builder::Builder;
 use serde::{Deserialize, Serialize};
-use voronota_ltr::{compute_tessellation, Ball, TessellationResult};
+use std::ops::Range;
+use voronota_ltr::{Ball, PeriodicBox, UpdateableTessellation};
 
-#[derive(Clone, Debug)]
-struct SasaBackup {
-    balls: Vec<Ball>,
-    tessellation: TessellationResult,
-    tensions: Vec<f64>,
-}
-
-#[derive(Debug, Clone, Builder)]
+#[derive(Clone, Builder)]
 #[builder(derive(Deserialize, Serialize, Debug))]
 #[builder_struct_attr(serde(deny_unknown_fields))]
 pub struct SasaEnergy {
-    /// Probe radius for the tessellation
     probe_radius: f64,
-    /// Input balls for tessellation
+    #[builder(default = None, setter(strip_option))]
+    energy_offset: Option<f64>,
+    #[builder(default = "false")]
+    offset_from_first: bool,
     #[builder_field_attr(serde(skip))]
     #[builder(default)]
     balls: Vec<Ball>,
-    /// Voronoi tessellation of the particles
     #[builder_field_attr(serde(skip))]
-    #[builder(default)]
-    tessellation: TessellationResult,
-    /// Surface tension for each particle
-    #[builder_field_attr(serde(skip_serializing))]
     #[builder(default)]
     tensions: Vec<f64>,
-    /// Optionally shift calculated energy by this value (kJ/mol)
-    #[builder(default = None, setter(strip_option))]
-    energy_offset: Option<f64>,
-    /// Set offset from first SASA energy calculation event
-    #[builder(default = "false")]
-    offset_from_first: bool,
-    /// Backup for undo on MC reject
+    /// Incremental tessellation avoids full recomputation when only a subset of atoms move.
+    #[builder_field_attr(serde(skip))]
+    #[builder(setter(skip), default = "UpdateableTessellation::with_backup()")]
+    tess: UpdateableTessellation,
+    /// Flat ball array is partitioned by group; ranges enable O(1) group→ball lookup.
     #[builder_field_attr(serde(skip))]
     #[builder(default)]
-    backup: Option<SasaBackup>,
+    group_ball_ranges: Vec<Range<usize>>,
+    #[builder_field_attr(serde(skip))]
+    #[builder(default)]
+    periodic_box: Option<PeriodicBox>,
+    /// Inline backup buffers reused across MC steps to avoid per-step allocation.
+    #[builder_field_attr(serde(skip))]
+    #[builder(default)]
+    backup_ids: Vec<usize>,
+    #[builder_field_attr(serde(skip))]
+    #[builder(default)]
+    backup_balls: Vec<Ball>,
+    /// Full-state backup for resize/everything changes that alter the ball count.
+    #[builder_field_attr(serde(skip))]
+    #[builder(default)]
+    backup_tensions: Vec<f64>,
+    #[builder_field_attr(serde(skip))]
+    #[builder(default)]
+    backup_ranges: Vec<Range<usize>>,
+    #[builder_field_attr(serde(skip))]
+    #[builder(default = "false")]
+    has_backup: bool,
+    #[builder_field_attr(serde(skip))]
+    #[builder(default = "false")]
+    is_full_backup: bool,
+}
+
+impl std::fmt::Debug for SasaEnergy {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SasaEnergy")
+            .field("probe_radius", &self.probe_radius)
+            .field("energy_offset", &self.energy_offset)
+            .field("num_balls", &self.balls.len())
+            .finish()
+    }
 }
 
 impl SasaEnergy {
-    /// Create from positions, radii, and tensions
-    pub fn new<'a>(
-        probe_radius: f64,
-        positions: impl IntoIterator<Item = &'a Point>,
-        radii: impl IntoIterator<Item = f64>,
-        tensions: impl IntoIterator<Item = f64>,
-        energy_offset: Option<f64>,
-        offset_from_first: bool,
-    ) -> Self {
-        let balls = Self::make_balls(positions, radii);
-        let tessellation = compute_tessellation(&balls, probe_radius, None, None, false);
-        Self {
-            probe_radius,
-            balls,
-            tessellation,
-            tensions: tensions.into_iter().collect(),
-            energy_offset,
-            offset_from_first,
-            backup: None,
-        }
-    }
-
-    fn make_balls<'a>(
-        positions: impl IntoIterator<Item = &'a Point>,
-        radii: impl IntoIterator<Item = f64>,
-    ) -> Vec<Ball> {
-        std::iter::zip(positions, radii)
-            .map(|(pos, radius)| Ball::new(pos.x, pos.y, pos.z, radius))
-            .collect()
-    }
-
-    /// Update positions only; radii and tensions are left unchanged.
-    pub fn update_positions<'a>(&mut self, positions: impl IntoIterator<Item = &'a Point>) {
-        std::iter::zip(positions, self.balls.iter_mut()).for_each(|(pos, ball)| {
-            ball.x = pos.x;
-            ball.y = pos.y;
-            ball.z = pos.z;
-        });
-        self.tessellation = compute_tessellation(&self.balls, self.probe_radius, None, None, false);
-    }
-
-    /// Calculate the surface energy based in the available surface area (kJ/mol)
-    pub fn energy(&self, _context: &impl Context, _change: &Change) -> f64 {
-        // TODO: calculate only for changed positions
-        self.tensions
+    /// Sum of γ_i × A_i over all particles (without offset).
+    fn raw_energy(&self) -> f64 {
+        self.tess
+            .result()
+            .cells
             .iter()
-            .zip(self.tessellation.cells.iter())
-            .map(|(tension, cell)| tension * cell.sas_area)
-            .sum::<f64>()
-            + self.energy_offset.unwrap_or(0.0)
+            .map(|cell| self.tensions[cell.index] * cell.sas_area)
+            .sum()
     }
-}
 
-impl SasaEnergy {
-    /// Update internal state related to given change
-    /// TODO: Implement partial updates
-    pub(super) fn update(&mut self, context: &impl Context, change: &Change) -> anyhow::Result<()> {
-        // TODO: Update only the positions that have changed
-        match change {
-            Change::Everything => self.update_all(context),
-            _ => self.update_all(context),
+    pub fn energy(&self, _context: &impl Context, _change: &Change) -> f64 {
+        self.raw_energy() + self.energy_offset.unwrap_or(0.0)
+    }
+
+    /// Free function to avoid borrowing `self`, allowing callers to pass `&mut self.backup_ids`.
+    fn append_ball_ids(
+        ranges: &[Range<usize>],
+        k: usize,
+        group_change: &GroupChange,
+        out: &mut Vec<usize>,
+    ) {
+        match group_change {
+            GroupChange::PartialUpdate(relative_indices) => {
+                let offset = ranges[k].start;
+                out.extend(relative_indices.iter().map(|&i| offset + i));
+            }
+            _ => out.extend(ranges[k].clone()),
         }
     }
 
-    /// Update internal state, considering all particles (expensive)
-    fn update_all(&mut self, context: &impl Context) -> anyhow::Result<()> {
+    /// Copy positions from context into `self.balls` for balls in group `k`.
+    fn sync_balls(&mut self, context: &impl Context, k: usize, ball_ids: &[usize]) {
+        let group = &context.groups()[k];
+        let range_start = self.group_ball_ranges[k].start;
+        for &ball_id in ball_ids {
+            // iter_active() returns Range<usize>, so nth() is O(1)
+            let atom_index = group.iter_active().nth(ball_id - range_start).unwrap();
+            let pos = context.position(atom_index);
+            self.balls[ball_id].x = pos.x;
+            self.balls[ball_id].y = pos.y;
+            self.balls[ball_id].z = pos.z;
+        }
+    }
+
+    pub(super) fn update(&mut self, context: &impl Context, change: &Change) -> anyhow::Result<()> {
+        match change {
+            // GCMC resize changes the ball count, invalidating all ranges and the tessellation.
+            Change::SingleGroup(_, gc) if gc.is_resize() => self.rebuild_all(context),
+            Change::SingleGroup(k, gc) => {
+                let mut changed = Vec::new();
+                Self::append_ball_ids(&self.group_ball_ranges, *k, gc, &mut changed);
+                self.sync_balls(context, *k, &changed);
+                self.tess.update_with_changed(&self.balls, &changed);
+            }
+            Change::Groups(changes) if changes.iter().any(|(_, gc)| gc.is_resize()) => {
+                self.rebuild_all(context);
+            }
+            Change::Groups(changes) => {
+                let mut all_changed = Vec::new();
+                for (k, gc) in changes {
+                    let start = all_changed.len();
+                    Self::append_ball_ids(&self.group_ball_ranges, *k, gc, &mut all_changed);
+                    self.sync_balls(context, *k, &all_changed[start..]);
+                }
+                self.tess.update_with_changed(&self.balls, &all_changed);
+            }
+            Change::Everything | Change::Volume(..) => self.rebuild_all(context),
+            Change::None => {}
+        }
+        Ok(())
+    }
+
+    fn rebuild_all(&mut self, context: &impl Context) {
+        self.periodic_box = super::make_periodic_box(context.cell());
         let topology = context.topology();
         let atomkinds = topology.atomkinds();
 
         self.balls.clear();
         self.tensions.clear();
+        self.group_ball_ranges.clear();
+
         for group in context.groups() {
+            let start = self.balls.len();
             for i in group.iter_active() {
                 let pos = context.position(i);
                 let ak = &atomkinds[context.atom_kind(i)];
                 let radius = ak.sigma().map(|s| s / 2.0).unwrap_or(0.0);
                 self.balls.push(Ball::new(pos.x, pos.y, pos.z, radius));
-                self.tensions.push(ak.surface_tension().unwrap_or(0.0));
+                self.tensions.push(ak.gamma().unwrap_or(0.0));
             }
+            self.group_ball_ranges.push(start..self.balls.len());
         }
-        self.tessellation = compute_tessellation(&self.balls, self.probe_radius, None, None, false);
 
-        // Set energy offset from the first configuration if requested and only if not already set.
+        self.tess
+            .init(&self.balls, self.probe_radius, self.periodic_box.as_ref());
+
         if self.offset_from_first && self.energy_offset.is_none() && !self.balls.is_empty() {
-            let energy = self.energy(context, &Change::Everything);
+            let energy = self.raw_energy();
             self.energy_offset = Some(-energy);
             log::info!(
                 "SASA energy offset set from first configuration = {:.2} kJ/mol",
-                self.energy_offset.unwrap()
+                -energy
             );
         }
-        Ok(())
     }
 }
 
 impl SasaEnergy {
-    pub(super) fn save_backup(&mut self) {
-        assert!(self.backup.is_none(), "backup already exists");
-        self.backup = Some(SasaBackup {
-            balls: self.balls.clone(),
-            tessellation: self.tessellation.clone(),
-            tensions: self.tensions.clone(),
-        });
+    /// Save ball positions for later undo. The tessellation snapshots its own state
+    /// automatically inside each `update_with_changed` / `init` call.
+    pub(super) fn save_backup(&mut self, change: &Change) {
+        assert!(!self.has_backup, "backup already exists");
+        self.backup_ids.clear();
+        self.backup_balls.clear();
+
+        let needs_full = match change {
+            Change::SingleGroup(_, gc) => gc.is_resize(),
+            Change::Groups(changes) => changes.iter().any(|(_, gc)| gc.is_resize()),
+            Change::Everything | Change::Volume(..) => true,
+            Change::None => false,
+        };
+
+        if needs_full {
+            // Resize changes ball count — must snapshot entire state
+            self.backup_balls.extend_from_slice(&self.balls);
+            self.backup_tensions.clear();
+            self.backup_tensions.extend_from_slice(&self.tensions);
+            self.backup_ranges.clear();
+            self.backup_ranges
+                .extend_from_slice(&self.group_ball_ranges);
+            self.is_full_backup = true;
+        } else {
+            match change {
+                Change::SingleGroup(k, gc) => {
+                    Self::append_ball_ids(&self.group_ball_ranges, *k, gc, &mut self.backup_ids);
+                }
+                Change::Groups(changes) => {
+                    for (k, gc) in changes {
+                        Self::append_ball_ids(
+                            &self.group_ball_ranges,
+                            *k,
+                            gc,
+                            &mut self.backup_ids,
+                        );
+                    }
+                }
+                _ => {}
+            }
+            self.backup_balls
+                .extend(self.backup_ids.iter().map(|&i| self.balls[i]));
+            self.is_full_backup = false;
+        }
+        self.has_backup = true;
     }
 
     pub(super) fn undo(&mut self) {
-        let backup = self.backup.take().expect("undo called without backup");
-        self.balls = backup.balls;
-        self.tessellation = backup.tessellation;
-        self.tensions = backup.tensions;
+        assert!(self.has_backup, "undo called without backup");
+        if self.is_full_backup {
+            // Swap is O(1) — the old (post-resize) state lands in the backup buffers
+            // and will be overwritten on the next save_backup call.
+            std::mem::swap(&mut self.balls, &mut self.backup_balls);
+            std::mem::swap(&mut self.tensions, &mut self.backup_tensions);
+            std::mem::swap(&mut self.group_ball_ranges, &mut self.backup_ranges);
+        } else {
+            for (&ball_id, &saved) in self.backup_ids.iter().zip(self.backup_balls.iter()) {
+                self.balls[ball_id] = saved;
+            }
+        }
+        self.tess.restore();
+        self.has_backup = false;
     }
 
     pub(super) fn discard_backup(&mut self) {
-        self.backup = None;
+        self.has_backup = false;
     }
 
-    /// Report SASA parameters as YAML.
     pub(super) fn to_yaml(&self) -> serde_yml::Value {
         let mut map = serde_yml::Mapping::new();
         map.insert("probe_radius".into(), self.probe_radius.into());
@@ -204,6 +284,22 @@ mod tests_sasaenergy {
             .energy(&context, &crate::Change::Everything);
 
         assert_approx_eq!(f64, energy, 248.32404971035157);
+    }
+
+    #[test]
+    fn test_sasa_two_molecules() {
+        let context = Backend::new(
+            "tests/files/sasa_two_molecules.yaml",
+            None,
+            &mut rand::thread_rng(),
+        )
+        .unwrap();
+
+        let energy = context
+            .hamiltonian()
+            .energy(&context, &crate::Change::Everything);
+
+        assert_approx_eq!(f64, energy, 426.55735495276531);
     }
 
     #[test]

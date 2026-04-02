@@ -26,7 +26,7 @@ pub enum EnergyTerm {
     /// Intermolecular bonded interactions.
     IntermolecularBonded(IntermolecularBonded),
     /// Solvent accessible surface area energy.
-    SasaEnergy(SasaEnergy),
+    SasaEnergy(Box<SasaEnergy>),
     /// Cell overlap energy.
     CellOverlap(CellOverlap),
     /// Collective variable constraint.
@@ -111,7 +111,7 @@ impl EnergyTerm {
     pub(crate) fn save_backup(&mut self, change: &Change, context: &impl Context) {
         match self {
             Self::IntermolecularBonded(x) => x.save_backup(change),
-            Self::SasaEnergy(x) => x.save_backup(),
+            Self::SasaEnergy(x) => x.save_backup(change),
             Self::PolymerDepletion(x) => x.save_backup(),
             Self::NonbondedMatrix(x) => x.save_backup(change),
             Self::NonbondedMatrixSplined(x) => x.save_backup(change),
@@ -277,7 +277,7 @@ impl EnergyChange for EnergyTerm {
 
 impl From<SasaEnergy> for EnergyTerm {
     fn from(sasa: SasaEnergy) -> Self {
-        Self::SasaEnergy(sasa)
+        Self::SasaEnergy(Box::new(sasa))
     }
 }
 

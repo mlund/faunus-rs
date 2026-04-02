@@ -107,12 +107,12 @@ impl AtomKind {
         self.hydrophobicity = Some(Hydrophobicity::Lambda(lambda));
     }
 
-    /// Get optional surface tension (kJ/mol/Å²)
-    pub fn surface_tension(&self) -> Option<f64> {
-        self.hydrophobicity.and_then(|h| match h {
-            Hydrophobicity::SurfaceTension(tension) => Some(tension),
+    /// Get optional surface energy density, γ (kJ/mol/Å²)
+    pub const fn gamma(&self) -> Option<f64> {
+        match self.hydrophobicity {
+            Some(Hydrophobicity::Gamma(gamma)) => Some(gamma),
             _ => None,
-        })
+        }
     }
 
     /// Get the particle diameter
@@ -222,8 +222,9 @@ pub enum Hydrophobicity {
     Hydrophobic,
     /// Item is hydrophilic
     Hydrophilic,
-    /// Surface tension (kJ/mol/Å²)
-    SurfaceTension(f64),
+    /// Surface energy density, γ (kJ/mol/Å²)
+    #[serde(alias = "γ", alias = "SurfaceTension")]
+    Gamma(f64),
     /// Ashbaugh-Hatch scaling factor
     #[serde(alias = "λ")]
     Lambda(f64),

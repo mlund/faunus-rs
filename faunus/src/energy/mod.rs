@@ -52,3 +52,18 @@ pub use tabulated::{Tabulated3DBuilder, Tabulated6DBuilder, TabulatedEnergy};
 
 // Re-export spline types from interatomic for convenience
 pub use interatomic::twobody::{GridType, SplineConfig};
+
+use crate::cell::{BoundaryConditions, Shape};
+
+/// Convert a simulation cell to a voronota-ltr `PeriodicBox`.
+/// Returns `None` for non-periodic cells.
+pub(crate) fn make_periodic_box(cell: &crate::cell::Cell) -> Option<voronota_ltr::PeriodicBox> {
+    cell.pbc()
+        .is_some()
+        .then(|| cell.bounding_box())
+        .flatten()
+        .map(|bb| {
+            let h = bb / 2.0;
+            voronota_ltr::PeriodicBox::from_corners((-h.x, -h.y, -h.z), (h.x, h.y, h.z))
+        })
+}

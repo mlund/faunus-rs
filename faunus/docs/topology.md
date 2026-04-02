@@ -45,7 +45,7 @@ atoms:
 |----------------------|------------------------------|----------------------------------|
 | `Hydrophobic`        | `hydrophobicity: Hydrophobic`| Flag as hydrophobic              |
 | `Hydrophilic`        | `hydrophobicity: Hydrophilic`| Flag as hydrophilic              |
-| `!SurfaceTension`    | `!SurfaceTension 1.0`       | Surface tension (kJ/mol/Å²)     |
+| `!Gamma` / `!γ` / `!SurfaceTension` | `!Gamma 1.0` | Surface energy density, γ (kJ/mol/Å²) |
 | `!Lambda` / `!λ`     | `!Lambda 0.5`               | Ashbaugh-Hatch scaling factor    |
 
 ---

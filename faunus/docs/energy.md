@@ -566,17 +566,30 @@ The energy is summed over all active particles:
 
 $$U = \sum_i \gamma_i \, A_i$$
 
-where $\gamma_i$ is the surface tension and $A_i$ is the solvent-accessible
-surface area of particle $i$.
-Surface tensions are defined per atom type via the `hydrophobicity` field
+where $\gamma_i$ is the surface energy density (kJ/mol/Å²) and $A_i$ is the
+solvent-accessible surface area of particle $i$.
+An isolated particle has maximal SAS area, $4\pi (r_i + r_\text{probe})^2$.
+Neighboring particles reduce the exposed area through mutual occlusion.
+Positive $\gamma$ means exposed surface is energetically costly — the particle is
+hydrophobic and burial is favorable.
+Negative $\gamma$ means solvent exposure is favorable.
+
+This differs from the [contact tessellation](#contact-tessellation-energy) energy
+which sums over inter-body _contact_ areas rather than per-atom _exposed_ areas.
+
+Surface energy densities are set per atom type via the `hydrophobicity` field
 in the [topology](topology.md#atoms).
+The tessellation is updated incrementally: when a single group moves,
+only the moved atoms and their spatial neighbors are re-tessellated.
+This works for both rigid-body and flexible (polymer) moves.
+Periodic boundary conditions are supported for orthorhombic cells.
 
 ### YAML configuration
 
 ```yaml
 atoms:
-  - {name: A, sigma: 3.0, hydrophobicity: !SurfaceTension 0.9}
-  - {name: B, sigma: 4.0, hydrophobicity: !SurfaceTension 1.5}
+  - {name: A, sigma: 3.0, hydrophobicity: !Gamma 0.9}
+  - {name: B, sigma: 4.0, hydrophobicity: !Gamma 1.5}
 
 system:
   energy:
@@ -591,6 +604,7 @@ system:
 | `offset_from_first`| no       | `false` | Set offset so that the first configuration has zero energy |
 
 Particle radii are taken from `sigma / 2` of the atom type definition.
+`!SurfaceTension` is accepted as an alias for `!Gamma`.
 
 ---
 
@@ -605,13 +619,17 @@ $$U = s \sum_{\text{contacts}} \gamma_{ij} \; A_{ij}$$
 
 where $A_{ij}$ is the radical tessellation contact area between atoms $a$ and $b$
 belonging to different rigid bodies, $s$ is an optional scaling factor, and the
-combination rule for the surface tension is:
+combining rule for the surface energy density is:
 
 $$\gamma_{ij} = \begin{cases} \operatorname{sign}(\gamma_i) \sqrt{|\gamma_i \, \gamma_j|} & \text{if } \operatorname{sign}(\gamma_i) = \operatorname{sign}(\gamma_j) \\ 0 & \text{otherwise}\end{cases}$$
 
-Negative surface tensions give attractive interactions;
-positive values give repulsive contacts. Contacts between atoms with opposite
-signs (e.g. hydrophobic-hydrophilic) contribute zero energy.
+Negative $\gamma$ gives attractive contacts (favoring inter-body burial);
+positive values give repulsive contacts. Atoms with opposite signs
+(e.g. hydrophobic vs. hydrophilic) contribute zero energy.
+
+This differs from the [SASA](#solvent-accessible-surface-area-sasa) energy where
+$\gamma_i$ multiplies the _exposed_ area of each atom directly — here,
+$\gamma_{ij}$ multiplies the _contact_ area between atom pairs from different bodies.
 
 Body pairs beyond bounding-sphere contact range are skipped.
 Only pairs involving the moved body are recomputed each Monte Carlo step,
@@ -627,8 +645,8 @@ are supported for orthorhombic (cuboid) cells.
 
 ```yaml
 atoms:
-  - {name: ALA, sigma: 5.0, hydrophobicity: !SurfaceTension -0.5}
-  - {name: ARG, sigma: 6.0, hydrophobicity: !SurfaceTension  0.3}
+  - {name: ALA, sigma: 5.0, hydrophobicity: !Gamma -0.5}
+  - {name: ARG, sigma: 6.0, hydrophobicity: !Gamma  0.3}
 
 system:
   energy:
@@ -641,7 +659,7 @@ system:
 | `scaling`        | no       | `1.0`   | Global multiplicative scaling of the contact energy |
 
 Particle radii are taken from `sigma / 2` of the atom type.
-Atom surface tensions are set via the `hydrophobicity: !SurfaceTension <value>` field.
+Surface energy densities are set via `hydrophobicity: !Gamma <value>` (`!SurfaceTension` is accepted as alias).
 The bounding sphere cutoff automatically includes the probe diameter to account
 for the expanded tessellation radii.
 
