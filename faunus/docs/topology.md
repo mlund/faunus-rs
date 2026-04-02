@@ -48,6 +48,8 @@ atoms:
 | `!SurfaceTension`    | `!SurfaceTension 1.0`       | Surface tension (kJ/mol/Å²)     |
 | `!Lambda` / `!λ`     | `!Lambda 0.5`               | Ashbaugh-Hatch scaling factor    |
 
+---
+
 ## Molecules
 
 A molecule is a collection of atoms, optionally connected by bonds, torsions, and dihedrals.
@@ -87,7 +89,7 @@ molecules:
 
 ### Structure Sources (`from_structure`)
 
-The `from_structure` field accepts three formats:
+The `from_structure` field accepts multiple formats:
 
 **File path** — load atom names and reference positions from a structure file (XYZ, PDB, etc.):
 ```yaml
@@ -124,15 +126,15 @@ The atom types must be defined in the `atoms` section (or an included force fiel
 Uppercase letters follow the standard one-letter codes for the 20 amino acids.
 Additional lowercase codes:
 
-| FASTA letter | Atom type | Description |
-|:------------:|-----------|-------------|
-| `n`          | NTR       | N-terminus  |
-| `c`          | CTR       | C-terminus  |
-| `a`          | ANK       | Ankyrin repeat |
+| FASTA letter | Atom type | Description        |
+|:------------:|-----------|--------------------|
+| `n`          | NTR       | N-terminus         |
+| `c`          | CTR       | C-terminus         |
+| `a`          | ANK       | Used for anchoring |
 
 Whitespace in the sequence is ignored and `*` terminates parsing.
 
-If `sequence` ends with `.fasta`, it is read as a [FASTA file](https://doi.org/10.1073/pnas.85.8.2444)
+If `sequence` ends with `.fasta`, it is read as a FASTA file
 where header lines (`>`) and comment lines (`;`) are skipped:
 
 ```yaml
@@ -151,7 +153,6 @@ molecules:
     from_structure: {sequence: "DSHAKRHHGYKRKFHEKHHSHRGY", k: 80.33, req: 3.8}
     excluded_neighbours: 1
 system:
-  cell: !Cuboid [200.0, 200.0, 200.0]
   blocks:
     - molecule: histatin5
       N: 1
