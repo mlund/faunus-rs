@@ -52,7 +52,8 @@ pub fn parse_yaml_section<T: serde::de::DeserializeOwned>(
     let section = value
         .get(key)
         .ok_or_else(|| anyhow::anyhow!("Missing `{key}:` section in input file"))?;
-    Ok(serde_yml::from_value(section.clone())?)
+    serde_yml::from_value(section.clone())
+        .map_err(|e| anyhow::anyhow!("Error parsing `{key}:` section: {e}"))
 }
 
 /// Resolve max thread count: 0 means use all available cores.
