@@ -86,7 +86,6 @@ impl Hamiltonian {
                     nonbonded_matrix,
                     topology,
                     medium.clone(),
-                    builder.default_policy.extends_default(),
                 )?;
                 hamiltonian.push(term.into());
                 log::info!("Added excluded-pair Coulomb correction");
@@ -128,12 +127,7 @@ impl Hamiltonian {
         topology: &Topology,
         medium: Option<interatomic::coulomb::Medium>,
     ) -> anyhow::Result<EnergyTerm> {
-        let nonbonded = NonbondedMatrix::new(
-            pairpot_builder,
-            topology,
-            medium,
-            builder.default_policy.extends_default(),
-        )?;
+        let nonbonded = NonbondedMatrix::new(pairpot_builder, topology, medium)?;
         if let Some(spline_opts) = &builder.spline {
             let config = spline_opts.to_spline_config();
             let mut splined = NonbondedMatrixSplined::from_nonbonded(

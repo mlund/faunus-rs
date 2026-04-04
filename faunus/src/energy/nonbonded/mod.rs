@@ -435,12 +435,7 @@ impl NonbondedMatrix {
     ) -> anyhow::Result<Self> {
         let builder = HamiltonianBuilder::from_file(file)?;
         builder.validate(topology.atomkinds())?;
-        Self::new(
-            &builder.pairpot_builder.unwrap(),
-            topology,
-            medium,
-            builder.default_policy.extends_default(),
-        )
+        Self::new(&builder.pairpot_builder.unwrap(), topology, medium)
     }
 
     /// Create a new NonbondedMatrix using enum-dispatched [`PairPot`] potentials.
@@ -449,7 +444,6 @@ impl NonbondedMatrix {
         pairpot_builder: &PairPotentialBuilder,
         topology: &Topology,
         medium: Option<interatomic::coulomb::Medium>,
-        combine_with_default: bool,
     ) -> anyhow::Result<Self> {
         let atoms = topology.atomkinds();
         let n_atom_types = atoms.len();
@@ -459,12 +453,8 @@ impl NonbondedMatrix {
 
         for i in 0..n_atom_types {
             for j in 0..n_atom_types {
-                potentials[(i, j)] = pairpot_builder.get_pair_pot(
-                    &atoms[i],
-                    &atoms[j],
-                    medium.clone(),
-                    combine_with_default,
-                )?;
+                potentials[(i, j)] =
+                    pairpot_builder.get_pair_pot(&atoms[i], &atoms[j], medium.clone())?;
             }
         }
 
@@ -497,7 +487,7 @@ impl NonbondedMatrix<SplinedPotential> {
     ///
     /// # Example
     /// ```ignore
-    /// let nonbonded = NonbondedMatrix::new(&builder, &topology, medium, false)?;
+    /// let nonbonded = NonbondedMatrix::new(&builder, &topology, medium)?;
     /// let splined = NonbondedMatrixSplined::from_nonbonded(&nonbonded, 12.0, None);
     /// ```
     pub fn from_nonbonded(

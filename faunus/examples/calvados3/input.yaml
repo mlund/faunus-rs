@@ -50,7 +50,6 @@ system:
         }
 
   energy:
-    combine_with_default: true
     nonbonded:
       default:
         - !Coulomb {cutoff: 1000}

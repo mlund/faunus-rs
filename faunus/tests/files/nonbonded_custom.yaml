@@ -18,10 +18,11 @@ system:
           function: "eps*(sigma/r)^2"
           cutoff: 14.0
           constants: { eps: 0.5, sigma: 3.4 }
-      [A, A]:
-        - !CustomPotential
-          function: "1/r"
-          cutoff: 10.0
+      replace:
+        [A, A]:
+          - !CustomPotential
+            function: "1/r"
+            cutoff: 10.0
 
   blocks:
     - molecule: MOL

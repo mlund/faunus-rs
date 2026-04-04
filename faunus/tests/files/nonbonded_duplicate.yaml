@@ -14,10 +14,11 @@ system:
     nonbonded:
       default:
         - !LennardJones {sigma: 6.0, eps: 1.5}
-      [OW, HW]:
-        - !WCA {sigma: 3.0, eps: 1.5}
-      [HW, OW]:
-        - !HardSphere {mixing: arithmetic}
+      replace:
+        [OW, HW]:
+          - !WCA {sigma: 3.0, eps: 1.5}
+        [HW, OW]:
+          - !HardSphere {mixing: arithmetic}
 
   blocks:
     - {molecule: MOL, N: 3}

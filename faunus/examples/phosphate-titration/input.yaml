@@ -58,8 +58,7 @@ system:
       active: 0
       insert: !FixedCOM {position: [0.0, 0.0, 0.0]}
 
-  energy:
-    combine_with_default: false  # no nonbonded — ideal titration
+  energy: {}
 
 analysis:
   - !CollectiveVariable

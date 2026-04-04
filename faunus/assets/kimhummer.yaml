@@ -35,423 +35,424 @@ atoms:
   - {name: VAL, charge: 0.0, mass: 99.13, sigma: 5.9}
 energy:
   nonbonded:
-    [ALA, ALA]:
-      - !KimHummer {sigma: 5.0, epsilon: -0.1785}
-    [ALA, ARG]:
-      - !KimHummer {sigma: 5.85, epsilon: 0.1745}
-    [ALA, ASN]:
-      - !KimHummer {sigma: 5.35, epsilon: 0.1705}
-    [ALA, ASP]:
-      - !KimHummer {sigma: 5.3, epsilon: 0.2261}
-    [ALA, CYS]:
-      - !KimHummer {sigma: 5.25, epsilon: -0.5156}
-    [ALA, GLN]:
-      - !KimHummer {sigma: 5.5, epsilon: 0.1507}
-    [ALA, GLU]:
-      - !KimHummer {sigma: 5.45, epsilon: 0.3014}
-    [ALA, GLY]:
-      - !KimHummer {sigma: 4.75, epsilon: -0.0159}
-    [ALA, HIS]:
-      - !KimHummer {sigma: 5.55, epsilon: -0.0555}
-    [ALA, ILE]:
-      - !KimHummer {sigma: 5.6, epsilon: -0.9161}
-    [ALA, LEU]:
-      - !KimHummer {sigma: 5.6, epsilon: -1.0470}
-    [ALA, LYS]:
-      - !KimHummer {sigma: 5.7, epsilon: 0.3807}
-    [ALA, MET]:
-      - !KimHummer {sigma: 5.6, epsilon: -0.6623}
-    [ALA, PHE]:
-      - !KimHummer {sigma: 5.7, epsilon: -1.0074}
-    [ALA, PRO]:
-      - !KimHummer {sigma: 5.3, epsilon: 0.0952}
-    [ALA, SER]:
-      - !KimHummer {sigma: 5.1, epsilon: 0.1031}
-    [ALA, THR]:
-      - !KimHummer {sigma: 5.3, epsilon: -0.0198}
-    [ALA, TRP]:
-      - !KimHummer {sigma: 5.9, epsilon: -0.6147}
-    [ALA, TYR]:
-      - !KimHummer {sigma: 5.75, epsilon: -0.4323}
-    [ALA, VAL]:
-      - !KimHummer {sigma: 5.45, epsilon: -0.7020}
-    [ARG, ARG]:
-      - !KimHummer {sigma: 6.7, epsilon: 0.2856}
-    [ARG, ASN]:
-      - !KimHummer {sigma: 6.2, epsilon: 0.2499}
-    [ARG, ASP]:
-      - !KimHummer {sigma: 6.15, epsilon: -0.0079}
-    [ARG, CYS]:
-      - !KimHummer {sigma: 6.1, epsilon: -0.1190}
-    [ARG, GLN]:
-      - !KimHummer {sigma: 6.35, epsilon: 0.1864}
-    [ARG, GLU]:
-      - !KimHummer {sigma: 6.3, epsilon: 0.0000}
-    [ARG, GLY]:
-      - !KimHummer {sigma: 5.6, epsilon: 0.2181}
-    [ARG, HIS]:
-      - !KimHummer {sigma: 6.4, epsilon: 0.0436}
-    [ARG, ILE]:
-      - !KimHummer {sigma: 6.45, epsilon: -0.5394}
-    [ARG, LEU]:
-      - !KimHummer {sigma: 6.45, epsilon: -0.6980}
-    [ARG, LYS]:
-      - !KimHummer {sigma: 6.55, epsilon: 0.6663}
-    [ARG, MET]:
-      - !KimHummer {sigma: 6.45, epsilon: -0.3371}
-    [ARG, PHE]:
-      - !KimHummer {sigma: 6.55, epsilon: -0.6782}
-    [ARG, PRO]:
-      - !KimHummer {sigma: 6.15, epsilon: 0.2261}
-    [ARG, SER]:
-      - !KimHummer {sigma: 5.95, epsilon: 0.2578}
-    [ARG, THR]:
-      - !KimHummer {sigma: 6.15, epsilon: 0.1467}
-    [ARG, TRP]:
-      - !KimHummer {sigma: 6.75, epsilon: -0.4521}
-    [ARG, TYR]:
-      - !KimHummer {sigma: 6.6, epsilon: -0.3530}
-    [ARG, VAL]:
-      - !KimHummer {sigma: 6.3, epsilon: -0.3173}
-    [ASN, ASN]:
-      - !KimHummer {sigma: 5.7, epsilon: 0.2340}
-    [ASN, ASP]:
-      - !KimHummer {sigma: 5.65, epsilon: 0.2340}
-    [ASN, CYS]:
-      - !KimHummer {sigma: 5.6, epsilon: -0.1269}
-    [ASN, GLN]:
-      - !KimHummer {sigma: 5.85, epsilon: 0.2221}
-    [ASN, GLU]:
-      - !KimHummer {sigma: 5.8, epsilon: 0.3014}
-    [ASN, GLY]:
-      - !KimHummer {sigma: 5.1, epsilon: 0.2102}
-    [ASN, HIS]:
-      - !KimHummer {sigma: 5.9, epsilon: 0.0754}
-    [ASN, ILE]:
-      - !KimHummer {sigma: 5.95, epsilon: -0.3847}
-    [ASN, LEU]:
-      - !KimHummer {sigma: 5.95, epsilon: -0.5830}
-    [ASN, LYS]:
-      - !KimHummer {sigma: 6.05, epsilon: 0.4204}
-    [ASN, MET]:
-      - !KimHummer {sigma: 5.95, epsilon: -0.2697}
-    [ASN, PHE]:
-      - !KimHummer {sigma: 6.05, epsilon: -0.5870}
-    [ASN, PRO]:
-      - !KimHummer {sigma: 5.65, epsilon: 0.2935}
-    [ASN, SER]:
-      - !KimHummer {sigma: 5.45, epsilon: 0.2737}
-    [ASN, THR]:
-      - !KimHummer {sigma: 5.65, epsilon: 0.1547}
-    [ASN, TRP]:
-      - !KimHummer {sigma: 6.25, epsilon: -0.3173}
-    [ASN, TYR]:
-      - !KimHummer {sigma: 6.1, epsilon: -0.1943}
-    [ASN, VAL]:
-      - !KimHummer {sigma: 5.8, epsilon: -0.2221}
-    [ASP, ASP]:
-      - !KimHummer {sigma: 5.6, epsilon: 0.4204}
-    [ASP, CYS]:
-      - !KimHummer {sigma: 5.55, epsilon: -0.0555}
-    [ASP, GLN]:
-      - !KimHummer {sigma: 5.8, epsilon: 0.3212}
-    [ASP, GLU]:
-      - !KimHummer {sigma: 5.75, epsilon: 0.4957}
-    [ASP, GLY]:
-      - !KimHummer {sigma: 5.05, epsilon: 0.2697}
-    [ASP, HIS]:
-      - !KimHummer {sigma: 5.85, epsilon: -0.0198}
-    [ASP, ILE]:
-      - !KimHummer {sigma: 5.9, epsilon: -0.3569}
-    [ASP, LEU]:
-      - !KimHummer {sigma: 5.9, epsilon: -0.4482}
-    [ASP, LYS]:
-      - !KimHummer {sigma: 6.0, epsilon: 0.2340}
-    [ASP, MET]:
-      - !KimHummer {sigma: 5.9, epsilon: -0.1190}
-    [ASP, PHE]:
-      - !KimHummer {sigma: 6.0, epsilon: -0.4799}
-    [ASP, PRO]:
-      - !KimHummer {sigma: 5.6, epsilon: 0.3728}
-    [ASP, SER]:
-      - !KimHummer {sigma: 5.4, epsilon: 0.2538}
-    [ASP, THR]:
-      - !KimHummer {sigma: 5.6, epsilon: 0.1864}
-    [ASP, TRP]:
-      - !KimHummer {sigma: 6.2, epsilon: -0.2261}
-    [ASP, TYR]:
-      - !KimHummer {sigma: 6.05, epsilon: -0.1943}
-    [ASP, VAL]:
-      - !KimHummer {sigma: 5.75, epsilon: -0.0833}
-    [CYS, CYS]:
-      - !KimHummer {sigma: 5.5, epsilon: -1.2572}
-    [CYS, GLN]:
-      - !KimHummer {sigma: 5.75, epsilon: -0.2300}
-    [CYS, GLU]:
-      - !KimHummer {sigma: 5.7, epsilon: 0.0000}
-    [CYS, GLY]:
-      - !KimHummer {sigma: 5.0, epsilon: -0.3530}
-    [CYS, HIS]:
-      - !KimHummer {sigma: 5.8, epsilon: -0.5275}
-    [CYS, ILE]:
-      - !KimHummer {sigma: 5.85, epsilon: -1.2810}
-    [CYS, LEU]:
-      - !KimHummer {sigma: 5.85, epsilon: -1.4119}
-    [CYS, LYS]:
-      - !KimHummer {sigma: 5.95, epsilon: 0.1269}
-    [CYS, MET]:
-      - !KimHummer {sigma: 5.85, epsilon: -1.0788}
-    [CYS, PHE]:
-      - !KimHummer {sigma: 5.95, epsilon: -1.4000}
-    [CYS, PRO]:
-      - !KimHummer {sigma: 5.55, epsilon: -0.3173}
-    [CYS, SER]:
-      - !KimHummer {sigma: 5.35, epsilon: -0.2340}
-    [CYS, THR]:
-      - !KimHummer {sigma: 5.55, epsilon: -0.3331}
-    [CYS, TRP]:
-      - !KimHummer {sigma: 6.15, epsilon: -1.0629}
-    [CYS, TYR]:
-      - !KimHummer {sigma: 6.0, epsilon: -0.7496}
-    [CYS, VAL]:
-      - !KimHummer {sigma: 5.7, epsilon: -1.0669}
-    [GLN, GLN]:
-      - !KimHummer {sigma: 6.0, epsilon: 0.2895}
-    [GLN, GLU]:
-      - !KimHummer {sigma: 5.95, epsilon: 0.3371}
-    [GLN, GLY]:
-      - !KimHummer {sigma: 5.25, epsilon: 0.2419}
-    [GLN, HIS]:
-      - !KimHummer {sigma: 6.05, epsilon: 0.1150}
-    [GLN, ILE]:
-      - !KimHummer {sigma: 6.1, epsilon: -0.5552}
-    [GLN, LEU]:
-      - !KimHummer {sigma: 6.1, epsilon: -0.7020}
-    [GLN, LYS]:
-      - !KimHummer {sigma: 6.2, epsilon: 0.3887}
-    [GLN, MET]:
-      - !KimHummer {sigma: 6.1, epsilon: -0.4085}
-    [GLN, PHE]:
-      - !KimHummer {sigma: 6.2, epsilon: -0.7258}
-    [GLN, PRO]:
-      - !KimHummer {sigma: 5.8, epsilon: 0.2142}
-    [GLN, SER]:
-      - !KimHummer {sigma: 5.6, epsilon: 0.3093}
-    [GLN, THR]:
-      - !KimHummer {sigma: 5.8, epsilon: 0.1467}
-    [GLN, TRP]:
-      - !KimHummer {sigma: 6.4, epsilon: -0.3331}
-    [GLN, TYR]:
-      - !KimHummer {sigma: 6.25, epsilon: -0.2776}
-    [GLN, VAL]:
-      - !KimHummer {sigma: 5.95, epsilon: -0.3173}
-    [GLU, GLU]:
-      - !KimHummer {sigma: 5.9, epsilon: 0.5394}
-    [GLU, GLY]:
-      - !KimHummer {sigma: 5.2, epsilon: 0.4164}
-    [GLU, HIS]:
-      - !KimHummer {sigma: 6.0, epsilon: 0.0476}
-    [GLU, ILE]:
-      - !KimHummer {sigma: 6.05, epsilon: -0.3966}
-    [GLU, LEU]:
-      - !KimHummer {sigma: 6.05, epsilon: -0.5235}
-    [GLU, LYS]:
-      - !KimHummer {sigma: 6.15, epsilon: 0.1864}
-    [GLU, MET]:
-      - !KimHummer {sigma: 6.05, epsilon: -0.2459}
-    [GLU, PHE]:
-      - !KimHummer {sigma: 6.15, epsilon: -0.5116}
-    [GLU, PRO]:
-      - !KimHummer {sigma: 5.75, epsilon: 0.4006}
-    [GLU, SER]:
-      - !KimHummer {sigma: 5.55, epsilon: 0.3133}
-    [GLU, THR]:
-      - !KimHummer {sigma: 5.75, epsilon: 0.2102}
-    [GLU, TRP]:
-      - !KimHummer {sigma: 6.35, epsilon: -0.2856}
-    [GLU, TYR]:
-      - !KimHummer {sigma: 6.2, epsilon: -0.2062}
-    [GLU, VAL]:
-      - !KimHummer {sigma: 5.9, epsilon: -0.1586}
-    [GLY, GLY]:
-      - !KimHummer {sigma: 4.5, epsilon: 0.0119}
-    [GLY, HIS]:
-      - !KimHummer {sigma: 5.3, epsilon: 0.0476}
-    [GLY, ILE]:
-      - !KimHummer {sigma: 5.35, epsilon: -0.5989}
-    [GLY, LEU]:
-      - !KimHummer {sigma: 5.35, epsilon: -0.7496}
-    [GLY, LYS]:
-      - !KimHummer {sigma: 5.45, epsilon: 0.4442}
-    [GLY, MET]:
-      - !KimHummer {sigma: 5.35, epsilon: -0.4442}
-    [GLY, PHE]:
-      - !KimHummer {sigma: 5.45, epsilon: -0.7377}
-    [GLY, PRO]:
-      - !KimHummer {sigma: 5.05, epsilon: 0.1586}
-    [GLY, SER]:
-      - !KimHummer {sigma: 4.85, epsilon: 0.1785}
-    [GLY, THR]:
-      - !KimHummer {sigma: 5.05, epsilon: 0.0754}
-    [GLY, TRP]:
-      - !KimHummer {sigma: 5.65, epsilon: -0.4561}
-    [GLY, TYR]:
-      - !KimHummer {sigma: 5.5, epsilon: -0.2935}
-    [GLY, VAL]:
-      - !KimHummer {sigma: 5.2, epsilon: -0.4402}
-    [HIS, HIS]:
-      - !KimHummer {sigma: 6.1, epsilon: -0.3093}
-    [HIS, ILE]:
-      - !KimHummer {sigma: 6.15, epsilon: -0.7416}
-    [HIS, LEU]:
-      - !KimHummer {sigma: 6.15, epsilon: -0.9003}
-    [HIS, LYS]:
-      - !KimHummer {sigma: 6.25, epsilon: 0.3649}
-    [HIS, MET]:
-      - !KimHummer {sigma: 6.15, epsilon: -0.6782}
-    [HIS, PHE]:
-      - !KimHummer {sigma: 6.25, epsilon: -0.9915}
-    [HIS, PRO]:
-      - !KimHummer {sigma: 5.85, epsilon: 0.0079}
-    [HIS, SER]:
-      - !KimHummer {sigma: 5.65, epsilon: 0.0635}
-    [HIS, THR]:
-      - !KimHummer {sigma: 5.85, epsilon: -0.0595}
-    [HIS, TRP]:
-      - !KimHummer {sigma: 6.45, epsilon: -0.6782}
-    [HIS, TYR]:
-      - !KimHummer {sigma: 6.3, epsilon: -0.4957}
-    [HIS, VAL]:
-      - !KimHummer {sigma: 6.0, epsilon: -0.5195}
-    [ILE, ILE]:
-      - !KimHummer {sigma: 6.2, epsilon: -1.6935}
-    [ILE, LEU]:
-      - !KimHummer {sigma: 6.2, epsilon: -1.8918}
-    [ILE, LYS]:
-      - !KimHummer {sigma: 6.3, epsilon: -0.2935}
-    [ILE, MET]:
-      - !KimHummer {sigma: 6.2, epsilon: -1.4872}
-    [ILE, PHE]:
-      - !KimHummer {sigma: 6.3, epsilon: -1.8125}
-    [ILE, PRO]:
-      - !KimHummer {sigma: 5.9, epsilon: -0.5909}
-    [ILE, SER]:
-      - !KimHummer {sigma: 5.7, epsilon: -0.4957}
-    [ILE, THR]:
-      - !KimHummer {sigma: 5.9, epsilon: -0.6980}
-    [ILE, TRP]:
-      - !KimHummer {sigma: 6.5, epsilon: -1.3921}
-    [ILE, TYR]:
-      - !KimHummer {sigma: 6.35, epsilon: -1.1819}
-    [ILE, VAL]:
-      - !KimHummer {sigma: 6.05, epsilon: -1.4991}
-    [LEU, LEU]:
-      - !KimHummer {sigma: 6.2, epsilon: -2.0227}
-    [LEU, LYS]:
-      - !KimHummer {sigma: 6.3, epsilon: -0.4363}
-    [LEU, MET]:
-      - !KimHummer {sigma: 6.2, epsilon: -1.6419}
-    [LEU, PHE]:
-      - !KimHummer {sigma: 6.3, epsilon: -1.9870}
-    [LEU, PRO]:
-      - !KimHummer {sigma: 5.9, epsilon: -0.7654}
-    [LEU, SER]:
-      - !KimHummer {sigma: 5.7, epsilon: -0.6544}
-    [LEU, THR]:
-      - !KimHummer {sigma: 5.9, epsilon: -0.8210}
-    [LEU, TRP]:
-      - !KimHummer {sigma: 6.5, epsilon: -1.5348}
-    [LEU, TYR]:
-      - !KimHummer {sigma: 6.35, epsilon: -1.3484}
-    [LEU, VAL]:
-      - !KimHummer {sigma: 6.05, epsilon: -1.6697}
-    [LYS, LYS]:
-      - !KimHummer {sigma: 6.4, epsilon: 0.8527}
-    [LYS, MET]:
-      - !KimHummer {sigma: 6.3, epsilon: -0.0833}
-    [LYS, PHE]:
-      - !KimHummer {sigma: 6.4, epsilon: -0.4323}
-    [LYS, PRO]:
-      - !KimHummer {sigma: 6.0, epsilon: 0.5156}
-    [LYS, SER]:
-      - !KimHummer {sigma: 5.8, epsilon: 0.4839}
-    [LYS, THR]:
-      - !KimHummer {sigma: 6.0, epsilon: 0.3807}
-    [LYS, TRP]:
-      - !KimHummer {sigma: 6.6, epsilon: -0.1666}
-    [LYS, TYR]:
-      - !KimHummer {sigma: 6.45, epsilon: -0.1309}
-    [LYS, VAL]:
-      - !KimHummer {sigma: 6.15, epsilon: -0.0873}
-    [MET, MET]:
-      - !KimHummer {sigma: 6.2, epsilon: -1.2652}
-    [MET, PHE]:
-      - !KimHummer {sigma: 6.3, epsilon: -1.7014}
-    [MET, PRO]:
-      - !KimHummer {sigma: 5.9, epsilon: -0.4680}
-    [MET, SER]:
-      - !KimHummer {sigma: 5.7, epsilon: -0.3014}
-    [MET, THR]:
-      - !KimHummer {sigma: 5.9, epsilon: -0.4918}
-    [MET, TRP]:
-      - !KimHummer {sigma: 6.5, epsilon: -1.3008}
-    [MET, TYR]:
-      - !KimHummer {sigma: 6.35, epsilon: -1.0470}
-    [MET, VAL]:
-      - !KimHummer {sigma: 6.05, epsilon: -1.2096}
-    [PHE, PHE]:
-      - !KimHummer {sigma: 6.4, epsilon: -1.9790}
-    [PHE, PRO]:
-      - !KimHummer {sigma: 6.0, epsilon: -0.7853}
-    [PHE, SER]:
-      - !KimHummer {sigma: 5.8, epsilon: -0.6940}
-    [PHE, THR]:
-      - !KimHummer {sigma: 6.0, epsilon: -0.7972}
-    [PHE, TRP]:
-      - !KimHummer {sigma: 6.6, epsilon: -1.5428}
-    [PHE, TYR]:
-      - !KimHummer {sigma: 6.45, epsilon: -1.3445}
-    [PHE, VAL]:
-      - !KimHummer {sigma: 6.15, epsilon: -1.5943}
-    [PRO, PRO]:
-      - !KimHummer {sigma: 5.6, epsilon: 0.2062}
-    [PRO, SER]:
-      - !KimHummer {sigma: 5.4, epsilon: 0.2776}
-    [PRO, THR]:
-      - !KimHummer {sigma: 5.6, epsilon: 0.1467}
-    [PRO, TRP]:
-      - !KimHummer {sigma: 6.2, epsilon: -0.5790}
-    [PRO, TYR]:
-      - !KimHummer {sigma: 6.05, epsilon: -0.3649}
-    [PRO, VAL]:
-      - !KimHummer {sigma: 5.75, epsilon: -0.4164}
-    [SER, SER]:
-      - !KimHummer {sigma: 5.2, epsilon: 0.2380}
-    [SER, THR]:
-      - !KimHummer {sigma: 5.4, epsilon: 0.1229}
-    [SER, TRP]:
-      - !KimHummer {sigma: 6.0, epsilon: -0.2856}
-    [SER, TYR]:
-      - !KimHummer {sigma: 5.85, epsilon: -0.2023}
-    [SER, VAL]:
-      - !KimHummer {sigma: 5.55, epsilon: -0.3093}
-    [THR, THR]:
-      - !KimHummer {sigma: 5.6, epsilon: 0.0595}
-    [THR, TRP]:
-      - !KimHummer {sigma: 6.2, epsilon: -0.3768}
-    [THR, TYR]:
-      - !KimHummer {sigma: 6.05, epsilon: -0.2935}
-    [THR, VAL]:
-      - !KimHummer {sigma: 5.75, epsilon: -0.4720}
-    [TRP, TRP]:
-      - !KimHummer {sigma: 6.8, epsilon: -1.1065}
-    [TRP, TYR]:
-      - !KimHummer {sigma: 6.65, epsilon: -0.9479}
-    [TRP, VAL]:
-      - !KimHummer {sigma: 6.35, epsilon: -1.1541}
-    [TYR, TYR]:
-      - !KimHummer {sigma: 6.5, epsilon: -0.7535}
-    [TYR, VAL]:
-      - !KimHummer {sigma: 6.2, epsilon: -0.9320}
-    [VAL, VAL]:
-      - !KimHummer {sigma: 5.9, epsilon: -1.2889}
+    replace:
+      [ALA, ALA]:
+        - !KimHummer {sigma: 5.0, epsilon: -0.1785}
+      [ALA, ARG]:
+        - !KimHummer {sigma: 5.85, epsilon: 0.1745}
+      [ALA, ASN]:
+        - !KimHummer {sigma: 5.35, epsilon: 0.1705}
+      [ALA, ASP]:
+        - !KimHummer {sigma: 5.3, epsilon: 0.2261}
+      [ALA, CYS]:
+        - !KimHummer {sigma: 5.25, epsilon: -0.5156}
+      [ALA, GLN]:
+        - !KimHummer {sigma: 5.5, epsilon: 0.1507}
+      [ALA, GLU]:
+        - !KimHummer {sigma: 5.45, epsilon: 0.3014}
+      [ALA, GLY]:
+        - !KimHummer {sigma: 4.75, epsilon: -0.0159}
+      [ALA, HIS]:
+        - !KimHummer {sigma: 5.55, epsilon: -0.0555}
+      [ALA, ILE]:
+        - !KimHummer {sigma: 5.6, epsilon: -0.9161}
+      [ALA, LEU]:
+        - !KimHummer {sigma: 5.6, epsilon: -1.0470}
+      [ALA, LYS]:
+        - !KimHummer {sigma: 5.7, epsilon: 0.3807}
+      [ALA, MET]:
+        - !KimHummer {sigma: 5.6, epsilon: -0.6623}
+      [ALA, PHE]:
+        - !KimHummer {sigma: 5.7, epsilon: -1.0074}
+      [ALA, PRO]:
+        - !KimHummer {sigma: 5.3, epsilon: 0.0952}
+      [ALA, SER]:
+        - !KimHummer {sigma: 5.1, epsilon: 0.1031}
+      [ALA, THR]:
+        - !KimHummer {sigma: 5.3, epsilon: -0.0198}
+      [ALA, TRP]:
+        - !KimHummer {sigma: 5.9, epsilon: -0.6147}
+      [ALA, TYR]:
+        - !KimHummer {sigma: 5.75, epsilon: -0.4323}
+      [ALA, VAL]:
+        - !KimHummer {sigma: 5.45, epsilon: -0.7020}
+      [ARG, ARG]:
+        - !KimHummer {sigma: 6.7, epsilon: 0.2856}
+      [ARG, ASN]:
+        - !KimHummer {sigma: 6.2, epsilon: 0.2499}
+      [ARG, ASP]:
+        - !KimHummer {sigma: 6.15, epsilon: -0.0079}
+      [ARG, CYS]:
+        - !KimHummer {sigma: 6.1, epsilon: -0.1190}
+      [ARG, GLN]:
+        - !KimHummer {sigma: 6.35, epsilon: 0.1864}
+      [ARG, GLU]:
+        - !KimHummer {sigma: 6.3, epsilon: 0.0000}
+      [ARG, GLY]:
+        - !KimHummer {sigma: 5.6, epsilon: 0.2181}
+      [ARG, HIS]:
+        - !KimHummer {sigma: 6.4, epsilon: 0.0436}
+      [ARG, ILE]:
+        - !KimHummer {sigma: 6.45, epsilon: -0.5394}
+      [ARG, LEU]:
+        - !KimHummer {sigma: 6.45, epsilon: -0.6980}
+      [ARG, LYS]:
+        - !KimHummer {sigma: 6.55, epsilon: 0.6663}
+      [ARG, MET]:
+        - !KimHummer {sigma: 6.45, epsilon: -0.3371}
+      [ARG, PHE]:
+        - !KimHummer {sigma: 6.55, epsilon: -0.6782}
+      [ARG, PRO]:
+        - !KimHummer {sigma: 6.15, epsilon: 0.2261}
+      [ARG, SER]:
+        - !KimHummer {sigma: 5.95, epsilon: 0.2578}
+      [ARG, THR]:
+        - !KimHummer {sigma: 6.15, epsilon: 0.1467}
+      [ARG, TRP]:
+        - !KimHummer {sigma: 6.75, epsilon: -0.4521}
+      [ARG, TYR]:
+        - !KimHummer {sigma: 6.6, epsilon: -0.3530}
+      [ARG, VAL]:
+        - !KimHummer {sigma: 6.3, epsilon: -0.3173}
+      [ASN, ASN]:
+        - !KimHummer {sigma: 5.7, epsilon: 0.2340}
+      [ASN, ASP]:
+        - !KimHummer {sigma: 5.65, epsilon: 0.2340}
+      [ASN, CYS]:
+        - !KimHummer {sigma: 5.6, epsilon: -0.1269}
+      [ASN, GLN]:
+        - !KimHummer {sigma: 5.85, epsilon: 0.2221}
+      [ASN, GLU]:
+        - !KimHummer {sigma: 5.8, epsilon: 0.3014}
+      [ASN, GLY]:
+        - !KimHummer {sigma: 5.1, epsilon: 0.2102}
+      [ASN, HIS]:
+        - !KimHummer {sigma: 5.9, epsilon: 0.0754}
+      [ASN, ILE]:
+        - !KimHummer {sigma: 5.95, epsilon: -0.3847}
+      [ASN, LEU]:
+        - !KimHummer {sigma: 5.95, epsilon: -0.5830}
+      [ASN, LYS]:
+        - !KimHummer {sigma: 6.05, epsilon: 0.4204}
+      [ASN, MET]:
+        - !KimHummer {sigma: 5.95, epsilon: -0.2697}
+      [ASN, PHE]:
+        - !KimHummer {sigma: 6.05, epsilon: -0.5870}
+      [ASN, PRO]:
+        - !KimHummer {sigma: 5.65, epsilon: 0.2935}
+      [ASN, SER]:
+        - !KimHummer {sigma: 5.45, epsilon: 0.2737}
+      [ASN, THR]:
+        - !KimHummer {sigma: 5.65, epsilon: 0.1547}
+      [ASN, TRP]:
+        - !KimHummer {sigma: 6.25, epsilon: -0.3173}
+      [ASN, TYR]:
+        - !KimHummer {sigma: 6.1, epsilon: -0.1943}
+      [ASN, VAL]:
+        - !KimHummer {sigma: 5.8, epsilon: -0.2221}
+      [ASP, ASP]:
+        - !KimHummer {sigma: 5.6, epsilon: 0.4204}
+      [ASP, CYS]:
+        - !KimHummer {sigma: 5.55, epsilon: -0.0555}
+      [ASP, GLN]:
+        - !KimHummer {sigma: 5.8, epsilon: 0.3212}
+      [ASP, GLU]:
+        - !KimHummer {sigma: 5.75, epsilon: 0.4957}
+      [ASP, GLY]:
+        - !KimHummer {sigma: 5.05, epsilon: 0.2697}
+      [ASP, HIS]:
+        - !KimHummer {sigma: 5.85, epsilon: -0.0198}
+      [ASP, ILE]:
+        - !KimHummer {sigma: 5.9, epsilon: -0.3569}
+      [ASP, LEU]:
+        - !KimHummer {sigma: 5.9, epsilon: -0.4482}
+      [ASP, LYS]:
+        - !KimHummer {sigma: 6.0, epsilon: 0.2340}
+      [ASP, MET]:
+        - !KimHummer {sigma: 5.9, epsilon: -0.1190}
+      [ASP, PHE]:
+        - !KimHummer {sigma: 6.0, epsilon: -0.4799}
+      [ASP, PRO]:
+        - !KimHummer {sigma: 5.6, epsilon: 0.3728}
+      [ASP, SER]:
+        - !KimHummer {sigma: 5.4, epsilon: 0.2538}
+      [ASP, THR]:
+        - !KimHummer {sigma: 5.6, epsilon: 0.1864}
+      [ASP, TRP]:
+        - !KimHummer {sigma: 6.2, epsilon: -0.2261}
+      [ASP, TYR]:
+        - !KimHummer {sigma: 6.05, epsilon: -0.1943}
+      [ASP, VAL]:
+        - !KimHummer {sigma: 5.75, epsilon: -0.0833}
+      [CYS, CYS]:
+        - !KimHummer {sigma: 5.5, epsilon: -1.2572}
+      [CYS, GLN]:
+        - !KimHummer {sigma: 5.75, epsilon: -0.2300}
+      [CYS, GLU]:
+        - !KimHummer {sigma: 5.7, epsilon: 0.0000}
+      [CYS, GLY]:
+        - !KimHummer {sigma: 5.0, epsilon: -0.3530}
+      [CYS, HIS]:
+        - !KimHummer {sigma: 5.8, epsilon: -0.5275}
+      [CYS, ILE]:
+        - !KimHummer {sigma: 5.85, epsilon: -1.2810}
+      [CYS, LEU]:
+        - !KimHummer {sigma: 5.85, epsilon: -1.4119}
+      [CYS, LYS]:
+        - !KimHummer {sigma: 5.95, epsilon: 0.1269}
+      [CYS, MET]:
+        - !KimHummer {sigma: 5.85, epsilon: -1.0788}
+      [CYS, PHE]:
+        - !KimHummer {sigma: 5.95, epsilon: -1.4000}
+      [CYS, PRO]:
+        - !KimHummer {sigma: 5.55, epsilon: -0.3173}
+      [CYS, SER]:
+        - !KimHummer {sigma: 5.35, epsilon: -0.2340}
+      [CYS, THR]:
+        - !KimHummer {sigma: 5.55, epsilon: -0.3331}
+      [CYS, TRP]:
+        - !KimHummer {sigma: 6.15, epsilon: -1.0629}
+      [CYS, TYR]:
+        - !KimHummer {sigma: 6.0, epsilon: -0.7496}
+      [CYS, VAL]:
+        - !KimHummer {sigma: 5.7, epsilon: -1.0669}
+      [GLN, GLN]:
+        - !KimHummer {sigma: 6.0, epsilon: 0.2895}
+      [GLN, GLU]:
+        - !KimHummer {sigma: 5.95, epsilon: 0.3371}
+      [GLN, GLY]:
+        - !KimHummer {sigma: 5.25, epsilon: 0.2419}
+      [GLN, HIS]:
+        - !KimHummer {sigma: 6.05, epsilon: 0.1150}
+      [GLN, ILE]:
+        - !KimHummer {sigma: 6.1, epsilon: -0.5552}
+      [GLN, LEU]:
+        - !KimHummer {sigma: 6.1, epsilon: -0.7020}
+      [GLN, LYS]:
+        - !KimHummer {sigma: 6.2, epsilon: 0.3887}
+      [GLN, MET]:
+        - !KimHummer {sigma: 6.1, epsilon: -0.4085}
+      [GLN, PHE]:
+        - !KimHummer {sigma: 6.2, epsilon: -0.7258}
+      [GLN, PRO]:
+        - !KimHummer {sigma: 5.8, epsilon: 0.2142}
+      [GLN, SER]:
+        - !KimHummer {sigma: 5.6, epsilon: 0.3093}
+      [GLN, THR]:
+        - !KimHummer {sigma: 5.8, epsilon: 0.1467}
+      [GLN, TRP]:
+        - !KimHummer {sigma: 6.4, epsilon: -0.3331}
+      [GLN, TYR]:
+        - !KimHummer {sigma: 6.25, epsilon: -0.2776}
+      [GLN, VAL]:
+        - !KimHummer {sigma: 5.95, epsilon: -0.3173}
+      [GLU, GLU]:
+        - !KimHummer {sigma: 5.9, epsilon: 0.5394}
+      [GLU, GLY]:
+        - !KimHummer {sigma: 5.2, epsilon: 0.4164}
+      [GLU, HIS]:
+        - !KimHummer {sigma: 6.0, epsilon: 0.0476}
+      [GLU, ILE]:
+        - !KimHummer {sigma: 6.05, epsilon: -0.3966}
+      [GLU, LEU]:
+        - !KimHummer {sigma: 6.05, epsilon: -0.5235}
+      [GLU, LYS]:
+        - !KimHummer {sigma: 6.15, epsilon: 0.1864}
+      [GLU, MET]:
+        - !KimHummer {sigma: 6.05, epsilon: -0.2459}
+      [GLU, PHE]:
+        - !KimHummer {sigma: 6.15, epsilon: -0.5116}
+      [GLU, PRO]:
+        - !KimHummer {sigma: 5.75, epsilon: 0.4006}
+      [GLU, SER]:
+        - !KimHummer {sigma: 5.55, epsilon: 0.3133}
+      [GLU, THR]:
+        - !KimHummer {sigma: 5.75, epsilon: 0.2102}
+      [GLU, TRP]:
+        - !KimHummer {sigma: 6.35, epsilon: -0.2856}
+      [GLU, TYR]:
+        - !KimHummer {sigma: 6.2, epsilon: -0.2062}
+      [GLU, VAL]:
+        - !KimHummer {sigma: 5.9, epsilon: -0.1586}
+      [GLY, GLY]:
+        - !KimHummer {sigma: 4.5, epsilon: 0.0119}
+      [GLY, HIS]:
+        - !KimHummer {sigma: 5.3, epsilon: 0.0476}
+      [GLY, ILE]:
+        - !KimHummer {sigma: 5.35, epsilon: -0.5989}
+      [GLY, LEU]:
+        - !KimHummer {sigma: 5.35, epsilon: -0.7496}
+      [GLY, LYS]:
+        - !KimHummer {sigma: 5.45, epsilon: 0.4442}
+      [GLY, MET]:
+        - !KimHummer {sigma: 5.35, epsilon: -0.4442}
+      [GLY, PHE]:
+        - !KimHummer {sigma: 5.45, epsilon: -0.7377}
+      [GLY, PRO]:
+        - !KimHummer {sigma: 5.05, epsilon: 0.1586}
+      [GLY, SER]:
+        - !KimHummer {sigma: 4.85, epsilon: 0.1785}
+      [GLY, THR]:
+        - !KimHummer {sigma: 5.05, epsilon: 0.0754}
+      [GLY, TRP]:
+        - !KimHummer {sigma: 5.65, epsilon: -0.4561}
+      [GLY, TYR]:
+        - !KimHummer {sigma: 5.5, epsilon: -0.2935}
+      [GLY, VAL]:
+        - !KimHummer {sigma: 5.2, epsilon: -0.4402}
+      [HIS, HIS]:
+        - !KimHummer {sigma: 6.1, epsilon: -0.3093}
+      [HIS, ILE]:
+        - !KimHummer {sigma: 6.15, epsilon: -0.7416}
+      [HIS, LEU]:
+        - !KimHummer {sigma: 6.15, epsilon: -0.9003}
+      [HIS, LYS]:
+        - !KimHummer {sigma: 6.25, epsilon: 0.3649}
+      [HIS, MET]:
+        - !KimHummer {sigma: 6.15, epsilon: -0.6782}
+      [HIS, PHE]:
+        - !KimHummer {sigma: 6.25, epsilon: -0.9915}
+      [HIS, PRO]:
+        - !KimHummer {sigma: 5.85, epsilon: 0.0079}
+      [HIS, SER]:
+        - !KimHummer {sigma: 5.65, epsilon: 0.0635}
+      [HIS, THR]:
+        - !KimHummer {sigma: 5.85, epsilon: -0.0595}
+      [HIS, TRP]:
+        - !KimHummer {sigma: 6.45, epsilon: -0.6782}
+      [HIS, TYR]:
+        - !KimHummer {sigma: 6.3, epsilon: -0.4957}
+      [HIS, VAL]:
+        - !KimHummer {sigma: 6.0, epsilon: -0.5195}
+      [ILE, ILE]:
+        - !KimHummer {sigma: 6.2, epsilon: -1.6935}
+      [ILE, LEU]:
+        - !KimHummer {sigma: 6.2, epsilon: -1.8918}
+      [ILE, LYS]:
+        - !KimHummer {sigma: 6.3, epsilon: -0.2935}
+      [ILE, MET]:
+        - !KimHummer {sigma: 6.2, epsilon: -1.4872}
+      [ILE, PHE]:
+        - !KimHummer {sigma: 6.3, epsilon: -1.8125}
+      [ILE, PRO]:
+        - !KimHummer {sigma: 5.9, epsilon: -0.5909}
+      [ILE, SER]:
+        - !KimHummer {sigma: 5.7, epsilon: -0.4957}
+      [ILE, THR]:
+        - !KimHummer {sigma: 5.9, epsilon: -0.6980}
+      [ILE, TRP]:
+        - !KimHummer {sigma: 6.5, epsilon: -1.3921}
+      [ILE, TYR]:
+        - !KimHummer {sigma: 6.35, epsilon: -1.1819}
+      [ILE, VAL]:
+        - !KimHummer {sigma: 6.05, epsilon: -1.4991}
+      [LEU, LEU]:
+        - !KimHummer {sigma: 6.2, epsilon: -2.0227}
+      [LEU, LYS]:
+        - !KimHummer {sigma: 6.3, epsilon: -0.4363}
+      [LEU, MET]:
+        - !KimHummer {sigma: 6.2, epsilon: -1.6419}
+      [LEU, PHE]:
+        - !KimHummer {sigma: 6.3, epsilon: -1.9870}
+      [LEU, PRO]:
+        - !KimHummer {sigma: 5.9, epsilon: -0.7654}
+      [LEU, SER]:
+        - !KimHummer {sigma: 5.7, epsilon: -0.6544}
+      [LEU, THR]:
+        - !KimHummer {sigma: 5.9, epsilon: -0.8210}
+      [LEU, TRP]:
+        - !KimHummer {sigma: 6.5, epsilon: -1.5348}
+      [LEU, TYR]:
+        - !KimHummer {sigma: 6.35, epsilon: -1.3484}
+      [LEU, VAL]:
+        - !KimHummer {sigma: 6.05, epsilon: -1.6697}
+      [LYS, LYS]:
+        - !KimHummer {sigma: 6.4, epsilon: 0.8527}
+      [LYS, MET]:
+        - !KimHummer {sigma: 6.3, epsilon: -0.0833}
+      [LYS, PHE]:
+        - !KimHummer {sigma: 6.4, epsilon: -0.4323}
+      [LYS, PRO]:
+        - !KimHummer {sigma: 6.0, epsilon: 0.5156}
+      [LYS, SER]:
+        - !KimHummer {sigma: 5.8, epsilon: 0.4839}
+      [LYS, THR]:
+        - !KimHummer {sigma: 6.0, epsilon: 0.3807}
+      [LYS, TRP]:
+        - !KimHummer {sigma: 6.6, epsilon: -0.1666}
+      [LYS, TYR]:
+        - !KimHummer {sigma: 6.45, epsilon: -0.1309}
+      [LYS, VAL]:
+        - !KimHummer {sigma: 6.15, epsilon: -0.0873}
+      [MET, MET]:
+        - !KimHummer {sigma: 6.2, epsilon: -1.2652}
+      [MET, PHE]:
+        - !KimHummer {sigma: 6.3, epsilon: -1.7014}
+      [MET, PRO]:
+        - !KimHummer {sigma: 5.9, epsilon: -0.4680}
+      [MET, SER]:
+        - !KimHummer {sigma: 5.7, epsilon: -0.3014}
+      [MET, THR]:
+        - !KimHummer {sigma: 5.9, epsilon: -0.4918}
+      [MET, TRP]:
+        - !KimHummer {sigma: 6.5, epsilon: -1.3008}
+      [MET, TYR]:
+        - !KimHummer {sigma: 6.35, epsilon: -1.0470}
+      [MET, VAL]:
+        - !KimHummer {sigma: 6.05, epsilon: -1.2096}
+      [PHE, PHE]:
+        - !KimHummer {sigma: 6.4, epsilon: -1.9790}
+      [PHE, PRO]:
+        - !KimHummer {sigma: 6.0, epsilon: -0.7853}
+      [PHE, SER]:
+        - !KimHummer {sigma: 5.8, epsilon: -0.6940}
+      [PHE, THR]:
+        - !KimHummer {sigma: 6.0, epsilon: -0.7972}
+      [PHE, TRP]:
+        - !KimHummer {sigma: 6.6, epsilon: -1.5428}
+      [PHE, TYR]:
+        - !KimHummer {sigma: 6.45, epsilon: -1.3445}
+      [PHE, VAL]:
+        - !KimHummer {sigma: 6.15, epsilon: -1.5943}
+      [PRO, PRO]:
+        - !KimHummer {sigma: 5.6, epsilon: 0.2062}
+      [PRO, SER]:
+        - !KimHummer {sigma: 5.4, epsilon: 0.2776}
+      [PRO, THR]:
+        - !KimHummer {sigma: 5.6, epsilon: 0.1467}
+      [PRO, TRP]:
+        - !KimHummer {sigma: 6.2, epsilon: -0.5790}
+      [PRO, TYR]:
+        - !KimHummer {sigma: 6.05, epsilon: -0.3649}
+      [PRO, VAL]:
+        - !KimHummer {sigma: 5.75, epsilon: -0.4164}
+      [SER, SER]:
+        - !KimHummer {sigma: 5.2, epsilon: 0.2380}
+      [SER, THR]:
+        - !KimHummer {sigma: 5.4, epsilon: 0.1229}
+      [SER, TRP]:
+        - !KimHummer {sigma: 6.0, epsilon: -0.2856}
+      [SER, TYR]:
+        - !KimHummer {sigma: 5.85, epsilon: -0.2023}
+      [SER, VAL]:
+        - !KimHummer {sigma: 5.55, epsilon: -0.3093}
+      [THR, THR]:
+        - !KimHummer {sigma: 5.6, epsilon: 0.0595}
+      [THR, TRP]:
+        - !KimHummer {sigma: 6.2, epsilon: -0.3768}
+      [THR, TYR]:
+        - !KimHummer {sigma: 6.05, epsilon: -0.2935}
+      [THR, VAL]:
+        - !KimHummer {sigma: 5.75, epsilon: -0.4720}
+      [TRP, TRP]:
+        - !KimHummer {sigma: 6.8, epsilon: -1.1065}
+      [TRP, TYR]:
+        - !KimHummer {sigma: 6.65, epsilon: -0.9479}
+      [TRP, VAL]:
+        - !KimHummer {sigma: 6.35, epsilon: -1.1541}
+      [TYR, TYR]:
+        - !KimHummer {sigma: 6.5, epsilon: -0.7535}
+      [TYR, VAL]:
+        - !KimHummer {sigma: 6.2, epsilon: -0.9320}
+      [VAL, VAL]:
+        - !KimHummer {sigma: 5.9, epsilon: -1.2889}

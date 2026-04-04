@@ -29,7 +29,6 @@ impl ExcludedCoulomb {
         pairpot_builder: &PairPotentialBuilder,
         topology: &Topology,
         medium: Option<interatomic::coulomb::Medium>,
-        combine_with_default: bool,
     ) -> anyhow::Result<Self> {
         let atoms = topology.atomkinds();
         let n = atoms.len();
@@ -40,12 +39,9 @@ impl ExcludedCoulomb {
 
         for i in 0..n {
             for j in i..n {
-                if let Some(pot) = pairpot_builder.get_coulomb_interaction(
-                    &atoms[i],
-                    &atoms[j],
-                    medium.clone(),
-                    combine_with_default,
-                )? {
+                if let Some(pot) =
+                    pairpot_builder.get_coulomb_interaction(&atoms[i], &atoms[j], medium.clone())?
+                {
                     let arc = ArcPotential(pot.into());
                     potentials[(i, j)] = arc.clone();
                     potentials[(j, i)] = arc;
@@ -191,8 +187,8 @@ system:
         assert_approx_eq!(f64, excl_energy, expected, epsilon = 1e-10);
     }
 
-    /// Screened Coulomb (!Coulomb with salt) + AH + default_policy: extend
-    /// must still add the ExcludedCoulomb correction term.
+    /// Screened Coulomb (!Coulomb with salt) + AH must still add
+    /// the ExcludedCoulomb correction term.
     #[test]
     fn excluded_coulomb_with_screened_coulomb_and_ah() {
         let distance = 10.0;
@@ -222,7 +218,6 @@ system:
         - [0.0, 0.0, 0.0]
         - [{distance}, 0.0, 0.0]
   energy:
-    default_policy: extend
     nonbonded:
       default:
         - !Coulomb {{cutoff: 50.0}}

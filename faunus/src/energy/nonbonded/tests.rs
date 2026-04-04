@@ -54,7 +54,7 @@ fn test_nonbonded_matrix_new() {
                 serde_yml::from_value(medium.clone()).ok()
             });
 
-    let nonbonded = NonbondedMatrix::new(&pairpot_builder, &topology, medium, false).unwrap();
+    let nonbonded = NonbondedMatrix::new(&pairpot_builder, &topology, medium).unwrap();
 
     assert_eq!(
         nonbonded.potentials.len(),
@@ -141,7 +141,7 @@ fn get_test_matrix() -> (Backend, NonbondedMatrix) {
         None,
     );
 
-    let nonbonded = NonbondedMatrix::new(&builder, &topology, Some(medium), false).unwrap();
+    let nonbonded = NonbondedMatrix::new(&builder, &topology, Some(medium)).unwrap();
 
     let mut rng = rand::thread_rng();
     let system = Backend::from_raw_parts(

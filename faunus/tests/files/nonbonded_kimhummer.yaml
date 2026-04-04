@@ -17,10 +17,11 @@ system:
       default:
         - !KimHummer
           mixing: LorentzBerthelot
-      [A, A]:
-        - !KimHummer {sigma: 6.0, epsilon: -0.5}
-      [B, B]:
-        - !KimHummer {σ: 8.0, ε: 0.3}
+      replace:
+        [A, A]:
+          - !KimHummer {sigma: 6.0, epsilon: -0.5}
+        [B, B]:
+          - !KimHummer {σ: 8.0, ε: 0.3}
 
   blocks:
     - molecule: MOL

@@ -51,37 +51,35 @@ energy:
     default:
       - !LennardJones {mixing: LorentzBerthelot}
       - !Coulomb {cutoff: 12.0}
-    [Na, Cl]:
-      - !LennardJones {σ: 3.2, ε: 1.5}
-      - !Coulomb {cutoff: 12.0}
+    replace:
+      [Na, Cl]:
+        - !LennardJones {σ: 3.2, ε: 1.5}
+        - !Coulomb {cutoff: 12.0}
 ```
 
-| Key                      | Required | Default | Description                                          |
-|--------------------------|----------|---------|------------------------------------------------------|
-| `default`                | no       |         | List of pair potentials applied to all atom pairs     |
-| `[atom1, atom2]`         | no       |         | Override for a specific pair (order does not matter)  |
-| `default_policy`         | no       | `override` | How pair-specific entries relate to `default` (see below) |
+Three sub-sections control how interactions are assigned to atom pairs:
 
-`default_policy` controls how pair-specific entries interact with `default`:
+| Key                      | Description                                          |
+|--------------------------|------------------------------------------------------|
+| `default`                | List of pair potentials applied to all atom pairs     |
+| `replace: [a, b]: [...]` | Completely replaces `default` for that pair           |
+| `append: [a, b]: [...]`  | Merges with `default` by interaction type             |
 
-- **`override`** (default): a pair-specific entry replaces `default` entirely for that pair.
-- **`extend`**: pair-specific entries are merged with `default` **by interaction type**.
-  If both define the same type (e.g. AshbaughHatch), the pair-specific version
-  replaces the default for that type; other default types (e.g. Coulomb) are inherited.
+**`replace`** pairs get only what is listed — no default inheritance.
 
-`combine_with_default: true/false` is accepted as a backwards-compatible alias
-for `extend`/`override`.
+**`append`** pairs inherit `default`, but if both define the same interaction type
+(e.g. AshbaughHatch), the append entry replaces that type; other default types
+(e.g. Coulomb) are kept.
+
+A pair may not appear in both `replace` and `append`.
 
 ### Loading nonbonded from include files
 
-Nonbonded pair definitions can be provided in an included force field file
-instead of being inlined in the input. The top-level `include` list is scanned
-for files containing an `energy` section, and any `nonbonded` pairs found there
-are merged into the input.
-Pair-specific entries in the input take precedence over includes.
-`default` lists are concatenated — e.g. an include providing `!AshbaughHatch`
-and the input providing `!Coulomb` yields both as defaults.
-Duplicate potential types (same variant) from includes are skipped with a warning.
+Nonbonded definitions can be provided in an included force field file.
+The top-level `include` list is scanned for files with an `energy` section,
+and any `nonbonded` entries are merged into the input.
+`replace`/`append` entries in the input take precedence over includes.
+`default` lists are concatenated; duplicate types from includes are skipped with a warning.
 
 ```yaml
 # assets/forcefield.yaml
@@ -89,14 +87,14 @@ energy:
   nonbonded:
     default:
       - !AshbaughHatch {mixing: arithmetic, cutoff: 20.0}
-    [A, A]:
-      - !KimHummer {sigma: 5.0, epsilon: -0.18}
+    replace:
+      [A, A]:
+        - !KimHummer {sigma: 5.0, epsilon: -0.18}
 
 # input.yaml — gets both AshbaughHatch (from include) and Coulomb as defaults
 include: [assets/forcefield.yaml]
 system:
   energy:
-    default_policy: extend
     nonbonded:
       default:
         - !Coulomb {cutoff: 40.0}
@@ -292,7 +290,6 @@ energy term. No manual `!Ewald` entry is needed in the nonbonded list.
 
 ```yaml
 energy:
-  combine_with_default: true
   nonbonded:
     default:
       - !LennardJones {mixing: LB}

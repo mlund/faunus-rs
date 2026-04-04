@@ -32,7 +32,6 @@ system:
     nonbonded:
       default:
         - !LennardJones {mixing: LB}
-    combine_with_default: true
     spline:
       cutoff: 14.0
       shift_energy: false

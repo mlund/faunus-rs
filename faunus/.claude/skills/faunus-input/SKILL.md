@@ -55,5 +55,5 @@ See `reference.md` in this skill directory for the full specification of all sec
 ## Key Tips
 
 - Use `spline` tabulation for performance; add `bounding_spheres: true` for rigid molecules
-- Use `combine_with_default: true` when include files provide default nonbonded terms
+- Use `replace:` for pairs that fully override `default`; `append:` for pairs that extend it
 - `!Stochastic` collections for mixed molecule types; `!Deterministic` with `repeat` for sweeps
