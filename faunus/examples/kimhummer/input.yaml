@@ -38,13 +38,7 @@ system:
           offset: [0.0, 0.0, 40.0],
         }
 
-  energy:
-    nonbonded:
-      default:
-        - !Coulomb {cutoff: 40.0}
-    spline:
-      cutoff: 40.0
-      n_points: 2000
+  energy: {}
 
 analysis:
   - !Energy

@@ -11,7 +11,6 @@
 #   Miyazawa & Jernigan, https://doi.org/10.1006/jmbi.1996.0114
 #   Parameters from complexespp: https://github.com/bio-phys/complexespp
 
-version: 0.1.0
 atoms:
   - {name: ALA, charge: 0.0, mass: 71.07, sigma: 5.0}
   - {name: ARG, charge: 1.0, mass: 156.19, sigma: 6.7}
@@ -35,7 +34,9 @@ atoms:
   - {name: VAL, charge: 0.0, mass: 99.13, sigma: 5.9}
 energy:
   nonbonded:
-    replace:
+    default:
+      - !Coulomb {cutoff: 1000}
+    append:
       [ALA, ALA]:
         - !KimHummer {sigma: 5.0, epsilon: -0.1785}
       [ALA, ARG]:
