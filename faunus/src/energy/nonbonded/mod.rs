@@ -438,6 +438,17 @@ impl NonbondedMatrix {
         Self::new(&builder.pairpot_builder.unwrap(), topology, medium)
     }
 
+    /// Create from a YAML string and a topology (no filesystem access).
+    pub fn from_str(
+        yaml: &str,
+        topology: &Topology,
+        medium: Option<interatomic::coulomb::Medium>,
+    ) -> anyhow::Result<Self> {
+        let builder = HamiltonianBuilder::from_str(yaml)?;
+        builder.validate(topology.atomkinds())?;
+        Self::new(&builder.pairpot_builder.unwrap(), topology, medium)
+    }
+
     /// Create a new NonbondedMatrix using enum-dispatched [`PairPot`] potentials.
     #[allow(clippy::new_ret_no_self)]
     pub(super) fn new(

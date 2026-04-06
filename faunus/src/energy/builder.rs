@@ -719,6 +719,25 @@ impl HamiltonianBuilder {
         Ok(builder)
     }
 
+    /// Parse a Hamiltonian from a YAML string with `system.energy` or `energy` structure.
+    ///
+    /// Does not support `include` file merging.
+    pub fn from_str(yaml: &str) -> anyhow::Result<Self> {
+        let full: serde_yml::Value = serde_yml::from_str(yaml)?;
+        // Try navigating system.energy first, then fall back to energy
+        let current = if let Some(system) = full.get("system") {
+            system
+                .get("energy")
+                .ok_or_else(|| anyhow::anyhow!("Could not find `energy` in `system`"))?
+        } else if let Some(energy) = full.get("energy") {
+            energy
+        } else {
+            anyhow::bail!("Could not find `system.energy` or `energy` in the YAML string")
+        };
+        let builder: Self = serde_yml::from_value(current.clone()).map_err(anyhow::Error::msg)?;
+        Ok(builder)
+    }
+
     /// Check that all atom kinds referred to in the pair potentials exist.
     pub(crate) fn validate(&self, atom_kinds: &[AtomKind]) -> anyhow::Result<()> {
         if let Some(pb) = &self.pairpot_builder {
