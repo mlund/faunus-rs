@@ -1,2 +1,9 @@
 Cargo.lock
 target/
+*.md
+*.csv
+*.xtc
+*.pdb
+*.xyz
+*.yaml
+
