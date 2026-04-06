@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "faunus",
     "duello",
+    "duello-web",
     "icotable",
     "coulomb",
     "interatomic",
@@ -18,6 +19,9 @@ interatomic = { path = "interatomic" }
 
 [patch."https://github.com/mlund/icotable.git"]
 icotable = { path = "icotable" }
+
+[patch."https://github.com/mlund/duello.git"]
+duello = { path = "duello" }
 
 # Redirect crates.io dependencies to local workspace checkouts
 [patch.crates-io]
