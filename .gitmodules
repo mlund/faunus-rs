@@ -13,3 +13,6 @@
 [submodule "cgkitten"]
 	path = cgkitten
 	url = https://github.com/mlund/cgkitten.git
+[submodule "duello-web"]
+	path = duello-web
+	url = https://github.com/mlund/duello-web.git
