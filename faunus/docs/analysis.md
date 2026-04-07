@@ -171,10 +171,26 @@ Reports:
 - **⟨Z⟩ ± σ** — mean net charge and standard deviation
 - **capacitance** C = ⟨Z²⟩ − ⟨Z⟩² — charge variance
 - **⟨|μ|⟩ ± σ** — mean dipole moment magnitude (eÅ)
+- **per-atom ⟨q⟩ and ⟨q²⟩−⟨q⟩²** — for atoms with fluctuating charge (e.g. from titration or atom swaps)
 
 The dipole moment is computed relative to each group's center of mass
 with periodic boundary conditions applied.
 Handles atom-type swaps (titration) and GCMC (only active groups contribute).
+
+Per-atom charge statistics are reported in `output.yaml` as an `atoms` list,
+including only atoms whose charge variance is nonzero:
+
+```yaml
+multipole:
+  selection: molecule MOL1
+  num_samples: 2000
+  charge: '4.7785 ± 2.2373'
+  capacitance: 5.005
+  dipole_moment: '141.6532 ± 23.8816'
+  atoms:
+    - {index: 1, name: NP, ⟨q⟩: -0.52, ⟨q²⟩-⟨q⟩²: 0.2496}
+    - {index: 6, name: NP, ⟨q⟩: -0.48, ⟨q²⟩-⟨q⟩²: 0.2496}
+```
 
 ### Example
 
