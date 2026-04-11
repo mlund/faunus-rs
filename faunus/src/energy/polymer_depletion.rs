@@ -89,7 +89,9 @@ fn cal_i0(x: f64, eps: f64, lam: f64) -> f64 {
 /// continuum parametrization used by the Huy-BC model.
 #[inline]
 fn beta_delta_mu(g0: f64) -> f64 {
-    (1.0 - 1.0 / g0.powi(2)).ln() - 2.0 / (g0.powi(2) - 1.0)
+    let g0_sq = g0.powi(2);
+    // Use ln_1p for better accuracy when 1/g0² is small.
+    (-1.0 / g0_sq).ln_1p() - 2.0 / (g0_sq - 1.0)
 }
 
 /// Self-consistent ε_eff from surface density (Eq. 14).
@@ -102,9 +104,10 @@ fn beta_delta_mu(g0: f64) -> f64 {
 /// renormalizing shift βδμ matches the thesis/manuscript form of the
 /// steric adsorption boundary condition.
 /// Caller must ensure |gs| < g0 to keep the log argument positive.
-fn epsilon_eff_from_gs(eps0p: f64, gs: f64, g0: f64) -> f64 {
+#[inline]
+fn epsilon_eff_from_gs(eps0p: f64, gs: f64, g0: f64, delta_mu: f64) -> f64 {
     let ratio_sq = (gs / g0).powi(2);
-    eps0p + (1.0 - ratio_sq).ln() - 2.0 * ratio_sq / (1.0 - ratio_sq) - beta_delta_mu(g0)
+    eps0p + (1.0 - ratio_sq).ln() - 2.0 * ratio_sq / (1.0 - ratio_sq) - delta_mu
 }
 
 /// Per-colloid information cached from the context.
@@ -598,6 +601,9 @@ impl StericAdsorptionState {
 
         let sqrt_4pi = (4.0 * PI).sqrt();
         let alpha = self.config.picard_mixing;
+        // The renormalizing shift depends only on g0, so compute it once per solve
+        // instead of inside the per-particle Picard updates.
+        let delta_mu = beta_delta_mu(self.config.g0);
         // Clamp g_s strictly below g0 to keep epsilon_eff_from_gs's log finite;
         // without this, aggressive Picard mixing can overshoot past g0.
         let gs_max = self.config.g0 * (1.0 - 1e-12);
@@ -623,8 +629,12 @@ impl StericAdsorptionState {
                 let x_s = lambda * r_s;
 
                 // ε_eff from current g_s (Eq. 14)
-                let eps_eff =
-                    epsilon_eff_from_gs(self.config.epsilon0_prime, self.g_s[i], self.config.g0);
+                let eps_eff = epsilon_eff_from_gs(
+                    self.config.epsilon0_prime,
+                    self.g_s[i],
+                    self.config.g0,
+                    delta_mu,
+                );
 
                 // Calligraphic functions at surface
                 let cal_k = cal_k0(x_s, eps_eff, lambda);
@@ -645,8 +655,12 @@ impl StericAdsorptionState {
 
                 // Recompute eps_eff from the mixed g_s so that h_tilde_eff stays
                 // consistent with the current state (not the pre-mixing value).
-                let eps_eff_updated =
-                    epsilon_eff_from_gs(self.config.epsilon0_prime, gs_mixed, self.config.g0);
+                let eps_eff_updated = epsilon_eff_from_gs(
+                    self.config.epsilon0_prime,
+                    gs_mixed,
+                    self.config.g0,
+                    delta_mu,
+                );
                 self.h_tilde_eff[i] = -eps_eff_updated * r_s;
             }
 
@@ -1267,24 +1281,26 @@ molecules: [Colloid]
 
     #[test]
     fn test_epsilon_eff_limits() {
+        let delta_mu = beta_delta_mu(10.0);
+
         // ĝ_S → 0 gives ε₀' - βδμ
         assert_approx_eq!(
             f64,
-            epsilon_eff_from_gs(0.02, 0.0, 10.0),
-            0.02 - beta_delta_mu(10.0),
+            epsilon_eff_from_gs(0.02, 0.0, 10.0, delta_mu),
+            0.02 - delta_mu,
             epsilon = 1e-14
         );
 
         // ĝ_S → g₀ gives -∞
-        let eps = epsilon_eff_from_gs(0.02, 9.999, 10.0);
+        let eps = epsilon_eff_from_gs(0.02, 9.999, 10.0, delta_mu);
         assert!(
             eps < -100.0,
             "ε_eff should diverge to -∞ near g₀, got {eps}"
         );
 
         // Intermediate value: check sign and magnitude
-        let eps_mid = epsilon_eff_from_gs(0.02, 5.0, 10.0);
-        let expected = 0.02 + (0.75_f64).ln() - 2.0 * 0.25 / 0.75 - beta_delta_mu(10.0);
+        let eps_mid = epsilon_eff_from_gs(0.02, 5.0, 10.0, delta_mu);
+        let expected = 0.02 + (0.75_f64).ln() - 2.0 * 0.25 / 0.75 - delta_mu;
         assert_approx_eq!(f64, eps_mid, expected, epsilon = 1e-12);
     }
 
