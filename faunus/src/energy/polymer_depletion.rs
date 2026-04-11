@@ -81,17 +81,30 @@ fn cal_i0(x: f64, eps: f64, lam: f64) -> f64 {
     eps * i0(x) + lam * i0_prime(x)
 }
 
+/// Renormalizing surface chemical-potential shift from the steric adsorption model.
+///
+/// βδμ = ln(1 - 1/g₀²) - 2/(g₀² - 1)
+///
+/// This offset ensures zero excess adsorption at ε₀' = 0 in the reduced
+/// continuum parametrization used by the Huy-BC model.
+#[inline]
+fn beta_delta_mu(g0: f64) -> f64 {
+    (1.0 - 1.0 / g0.powi(2)).ln() - 2.0 / (g0.powi(2) - 1.0)
+}
+
 /// Self-consistent ε_eff from surface density (Eq. 14).
 ///
-/// ε_eff = ε₀' + ln(1 - ĝ_S²/g₀²) - ĝ_S²/(g₀² - ĝ_S²)
+/// ε_eff = ε₀' + ln(1 - ĝ_S²/g₀²) - 2ĝ_S²/(g₀² - ĝ_S²) - βδμ
 ///
 /// The ln and rational terms are the steric free-energy penalty for
 /// crowding adsorbed chains: they drive ε_eff → -∞ as ĝ_S → g₀,
-/// which weakens the effective adsorption and prevents divergence.
+/// which weakens the effective adsorption and prevents divergence. The
+/// renormalizing shift βδμ matches the thesis/manuscript form of the
+/// steric adsorption boundary condition.
 /// Caller must ensure |gs| < g0 to keep the log argument positive.
 fn epsilon_eff_from_gs(eps0p: f64, gs: f64, g0: f64) -> f64 {
     let ratio_sq = (gs / g0).powi(2);
-    eps0p + (1.0 - ratio_sq).ln() - ratio_sq / (1.0 - ratio_sq)
+    eps0p + (1.0 - ratio_sq).ln() - 2.0 * ratio_sq / (1.0 - ratio_sq) - beta_delta_mu(g0)
 }
 
 /// Per-colloid information cached from the context.
@@ -1254,11 +1267,11 @@ molecules: [Colloid]
 
     #[test]
     fn test_epsilon_eff_limits() {
-        // ĝ_S → 0 gives ε₀'
+        // ĝ_S → 0 gives ε₀' - βδμ
         assert_approx_eq!(
             f64,
             epsilon_eff_from_gs(0.02, 0.0, 10.0),
-            0.02,
+            0.02 - beta_delta_mu(10.0),
             epsilon = 1e-14
         );
 
@@ -1271,8 +1284,7 @@ molecules: [Colloid]
 
         // Intermediate value: check sign and magnitude
         let eps_mid = epsilon_eff_from_gs(0.02, 5.0, 10.0);
-        // ln(1 - 0.25) - 0.25/0.75 = ln(0.75) - 1/3 ≈ -0.2877 - 0.3333 = -0.621
-        let expected = 0.02 + (0.75_f64).ln() - 0.25 / 0.75;
+        let expected = 0.02 + (0.75_f64).ln() - 2.0 * 0.25 / 0.75 - beta_delta_mu(10.0);
         assert_approx_eq!(f64, eps_mid, expected, epsilon = 1e-12);
     }
 

@@ -769,13 +769,20 @@ determined from the surface polymer density $\hat{g}_S(i)$ via
 
 $$\varepsilon_\text{eff} = \varepsilon_0'
   + \ln\!\left(1 - \frac{\hat{g}_S^2}{g_0^2}\right)
-  - \frac{\hat{g}_S^2}{g_0^2 - \hat{g}_S^2}$$
+  - \frac{2\hat{g}_S^2}{g_0^2 - \hat{g}_S^2}
+  - \beta\delta\mu$$
+
+with the renormalizing shift
+
+$$\beta\delta\mu = \ln\!\left(1 - \frac{1}{g_0^2}\right) - \frac{2}{g_0^2 - 1}$$
 
 and feeds into the Robin amplitude factor as
 $\tilde{h}_\text{eff}(i) = -\varepsilon_\text{eff}(i) \cdot R_c$.
 The surface density $\hat{g}_S$ is itself a function of $\varepsilon_\text{eff}$
 through the modified Helmholtz Green's function, closing the self-consistency
-loop solved by Picard iteration.
+loop solved by Picard iteration. The shift $\beta\delta\mu$ enforces zero
+excess adsorption in the reduced continuum parametrization when
+$\varepsilon_0' = 0$.
 
 | Parameter          | Physical meaning |
 |--------------------|------------------|
