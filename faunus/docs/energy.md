@@ -732,6 +732,11 @@ distribution order ($n = 0$ for equilibrium polymers),
 $R_c$ is the colloid (bounding sphere) radius, and
 $R_g$ is the polymer radius of gyration.
 
+Here `polymer_rg` and `colloid_radius` are given in Å, `polymer_density`
+is the dimensionless reduced reservoir density $\rho_P^*$, and the
+resulting Faunus energy contribution is reported in `kJ/mol`, like other
+energy terms.
+
 ### Robin boundary condition
 
 The original Forsman–Woodward model assumes non-adsorbing colloid surfaces
@@ -769,13 +774,20 @@ determined from the surface polymer density $\hat{g}_S(i)$ via
 
 $$\varepsilon_\text{eff} = \varepsilon_0'
   + \ln\!\left(1 - \frac{\hat{g}_S^2}{g_0^2}\right)
-  - \frac{\hat{g}_S^2}{g_0^2 - \hat{g}_S^2}$$
+  - \frac{2\hat{g}_S^2}{g_0^2 - \hat{g}_S^2}
+  - \beta\delta\mu$$
+
+with the renormalizing shift
+
+$$\beta\delta\mu = \ln\!\left(1 - \frac{1}{g_0^2}\right) - \frac{2}{g_0^2 - 1}$$
 
 and feeds into the Robin amplitude factor as
 $\tilde{h}_\text{eff}(i) = -\varepsilon_\text{eff}(i) \cdot R_c$.
 The surface density $\hat{g}_S$ is itself a function of $\varepsilon_\text{eff}$
 through the modified Helmholtz Green's function, closing the self-consistency
-loop solved by Picard iteration.
+loop solved by Picard iteration. The shift $\beta\delta\mu$ enforces zero
+excess adsorption in the reduced continuum parametrization when
+$\varepsilon_0' = 0$.
 
 | Parameter          | Physical meaning |
 |--------------------|------------------|
