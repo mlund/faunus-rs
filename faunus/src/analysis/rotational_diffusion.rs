@@ -435,13 +435,13 @@ mod tests {
             }
         }
 
-        for lag_idx in 0..5 {
-            assert_approx_eq!(f64, covariance[lag_idx][0].mean(), 0.0, epsilon = 1e-14);
-            assert_approx_eq!(f64, covariance[lag_idx][3].mean(), 0.0, epsilon = 1e-14);
-            assert_approx_eq!(f64, covariance[lag_idx][5].mean(), 0.0, epsilon = 1e-14);
+        for lag_covariance in covariance.iter().take(5) {
+            assert_approx_eq!(f64, lag_covariance[0].mean(), 0.0, epsilon = 1e-14);
+            assert_approx_eq!(f64, lag_covariance[3].mean(), 0.0, epsilon = 1e-14);
+            assert_approx_eq!(f64, lag_covariance[5].mean(), 0.0, epsilon = 1e-14);
             assert_approx_eq!(
                 f64,
-                covariance[lag_idx][0].sample_variance(),
+                lag_covariance[0].sample_variance(),
                 0.0,
                 epsilon = 1e-14
             );
@@ -530,10 +530,9 @@ mod tests {
 
         // Trace should increase monotonically toward 0.75
         let mut prev_trace = 0.0;
-        for lag_idx in 0..max_lag {
-            let trace = covariance[lag_idx][0].mean()
-                + covariance[lag_idx][3].mean()
-                + covariance[lag_idx][5].mean();
+        for lag_covariance in covariance.iter().take(max_lag) {
+            let trace =
+                lag_covariance[0].mean() + lag_covariance[3].mean() + lag_covariance[5].mean();
             assert!(trace >= prev_trace - 1e-6, "trace should increase with lag");
             assert!(trace <= 0.76, "trace should not exceed 3/4");
             prev_trace = trace;

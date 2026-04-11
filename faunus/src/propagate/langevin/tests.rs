@@ -348,11 +348,11 @@ fn langevin_runner_to_yaml_without_temperature() {
     if let serde_yml::Value::Tagged(tagged) = &yaml {
         assert_eq!(tagged.tag.to_string(), "!LangevinDynamics");
         if let serde_yml::Value::Mapping(map) = &tagged.value {
-            assert!(map.contains_key(&serde_yml::Value::from("timestep")));
-            assert!(map.contains_key(&serde_yml::Value::from("friction")));
-            assert!(map.contains_key(&serde_yml::Value::from("steps")));
-            assert!(map.contains_key(&serde_yml::Value::from("temperature")));
-            assert!(!map.contains_key(&serde_yml::Value::from("measured_temperature")));
+            assert!(map.contains_key(serde_yml::Value::from("timestep")));
+            assert!(map.contains_key(serde_yml::Value::from("friction")));
+            assert!(map.contains_key(serde_yml::Value::from("steps")));
+            assert!(map.contains_key(serde_yml::Value::from("temperature")));
+            assert!(!map.contains_key(serde_yml::Value::from("measured_temperature")));
         } else {
             panic!("expected mapping");
         }
@@ -376,11 +376,11 @@ fn langevin_runner_to_yaml_with_temperature() {
     runner.t_rot.add(290.0);
     runner.t_rot.add(310.0);
 
-    let yaml = runner.to_yaml();
+        let yaml = runner.to_yaml();
     if let serde_yml::Value::Tagged(tagged) = &yaml {
         if let serde_yml::Value::Mapping(map) = &tagged.value {
             assert!(
-                map.contains_key(&serde_yml::Value::from("measured_temperature")),
+                map.contains_key(serde_yml::Value::from("measured_temperature")),
                 "should include measured_temperature after adding samples"
             );
         } else {
@@ -994,12 +994,14 @@ impl PhysicsTestSetup {
 }
 
 /// Force callback for free particles (pure thermostat-driven diffusion).
-fn zero_forces(n: usize) -> impl FnMut(&[[f32; 4]]) -> (Vec<[f32; 4]>, Vec<[f32; 4]>) {
+type ForceResult = (Vec<[f32; 4]>, Vec<[f32; 4]>);
+
+fn zero_forces(n: usize) -> impl FnMut(&[[f32; 4]]) -> ForceResult {
     move |_| (vec![[0.0f32; 4]; n], vec![[0.0f32; 4]; n])
 }
 
 /// Isotropic harmonic trap F=-k·r confines particles for equipartition tests.
-fn harmonic_forces(k: f32) -> impl FnMut(&[[f32; 4]]) -> (Vec<[f32; 4]>, Vec<[f32; 4]>) {
+fn harmonic_forces(k: f32) -> impl FnMut(&[[f32; 4]]) -> ForceResult {
     move |positions| {
         let forces: Vec<[f32; 4]> = positions
             .iter()
@@ -1025,7 +1027,8 @@ fn free_particle_diffusion() {
     let total_steps = 2000;
 
     let initial_pos = gpu.download_positions();
-    gpu.run_steps_with_cpu_forces(total_steps, &mut zero_forces(n));
+    gpu.run_steps_with_cpu_forces(total_steps, &mut zero_forces(n))
+        .unwrap();
     let pos = gpu.download_positions();
 
     let msd: f32 = initial_pos
@@ -1058,13 +1061,13 @@ fn harmonic_oscillator_position_variance() {
     let k_spring = 1.0f32; // kJ/mol/Å²
     let mut force_fn = harmonic_forces(k_spring);
 
-    gpu.run_steps_with_cpu_forces(1000, &mut force_fn);
+    gpu.run_steps_with_cpu_forces(1000, &mut force_fn).unwrap();
 
     // Sample in blocks to decorrelate snapshots
     let n_blocks = 10;
     let mut sum_x2 = 0.0f64;
     for _ in 0..n_blocks {
-        gpu.run_steps_with_cpu_forces(500, &mut force_fn);
+        gpu.run_steps_with_cpu_forces(500, &mut force_fn).unwrap();
         for p in &gpu.download_positions() {
             sum_x2 += (p[0] as f64).powi(2);
         }
@@ -1086,7 +1089,7 @@ fn temperature_equilibrium() {
     // Harmonic trap prevents unbounded drift that would make KE sampling noisy
     let mut force_fn = harmonic_forces(1.0);
 
-    gpu.run_steps_with_cpu_forces(2000, &mut force_fn);
+    gpu.run_steps_with_cpu_forces(2000, &mut force_fn).unwrap();
 
     let (t_trans, _) = gpu.download_temperature();
     let ratio = t_trans as f64 / 300.0;
@@ -1110,7 +1113,8 @@ fn velocity_autocorrelation_decay() {
     // 50 steps × 0.002 ps = 0.1 ps → exactly one friction time (1/γ)
     let steps_per_block = 50;
 
-    gpu.run_steps_with_cpu_forces(1000, &mut zero_forces(n));
+    gpu.run_steps_with_cpu_forces(1000, &mut zero_forces(n))
+        .unwrap();
 
     let v0 = gpu.download_com_velocities();
     let cv0: f64 = v0
@@ -1120,7 +1124,8 @@ fn velocity_autocorrelation_decay() {
         / n as f64;
 
     // Run one block and check decay at t=0.1ps (γ=10 → exp(-1) ≈ 0.368)
-    gpu.run_steps_with_cpu_forces(steps_per_block, &mut zero_forces(n));
+    gpu.run_steps_with_cpu_forces(steps_per_block, &mut zero_forces(n))
+        .unwrap();
     let vt = gpu.download_com_velocities();
     let cv: f64 = v0
         .iter()

@@ -299,7 +299,7 @@ mod tests_sasaenergy {
             .hamiltonian()
             .energy(&context, &crate::Change::Everything);
 
-        assert_approx_eq!(f64, energy, 426.55735495276531);
+        assert_approx_eq!(f64, energy, 426.557_354_952_765_3);
     }
 
     #[test]
