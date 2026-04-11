@@ -1022,8 +1022,12 @@ mod tests {
 
     #[test]
     fn angle_force_sum_zero() {
-        let (fa, fb, fc) =
-            angle_forces_reference([1.5, 2.3, -0.7], [0.0, 0.0, 0.0], [-1.2, 0.8, 1.4], 3.14);
+        let (fa, fb, fc) = angle_forces_reference(
+            [1.5, 2.3, -0.7],
+            [0.0, 0.0, 0.0],
+            [-1.2, 0.8, 1.4],
+            std::f64::consts::PI,
+        );
         for k in 0..3 {
             assert_approx_eq!(f64, fa[k] + fb[k] + fc[k], 0.0, epsilon = 1e-6);
         }
