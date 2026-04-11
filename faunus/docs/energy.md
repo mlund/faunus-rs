@@ -732,11 +732,10 @@ distribution order ($n = 0$ for equilibrium polymers),
 $R_c$ is the colloid (bounding sphere) radius, and
 $R_g$ is the polymer radius of gyration.
 
-For end users, the important units are:
-
-- `polymer_rg` and `colloid_radius` are given in Å.
-- `polymer_density` is the reduced reservoir density $\rho_P^*$ and is therefore dimensionless.
-- The resulting Faunus energy contribution is reported in `kJ/mol`, like other energy terms.
+Here `polymer_rg` and `colloid_radius` are given in Å, `polymer_density`
+is the dimensionless reduced reservoir density $\rho_P^*$, and the
+resulting Faunus energy contribution is reported in `kJ/mol`, like other
+energy terms.
 
 ### Robin boundary condition
 
