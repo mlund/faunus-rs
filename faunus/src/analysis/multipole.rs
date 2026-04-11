@@ -8,6 +8,7 @@
 use super::{Analyze, Frequency};
 use crate::auxiliary::{MappingExt, WeightedMean};
 use crate::selection::Selection;
+use crate::topology::GroupKind;
 use crate::Context;
 use anyhow::Result;
 use derive_more::Debug;
@@ -30,6 +31,7 @@ pub struct MultipoleAnalysisBuilder {
 
 impl MultipoleAnalysisBuilder {
     pub fn build(&self, context: &impl Context) -> Result<MultipoleAnalysis> {
+        let topology = context.topology_ref();
         let groups = context.resolve_groups_live(&self.selection);
         if groups.is_empty() {
             anyhow::bail!(
@@ -37,6 +39,17 @@ impl MultipoleAnalysisBuilder {
                 self.selection.source()
             );
         }
+        let molecule_kinds: std::collections::BTreeSet<_> = groups
+            .iter()
+            .map(|&gi| context.groups()[gi].molecule())
+            .collect();
+        if molecule_kinds.len() > 1 {
+            anyhow::bail!(
+                "Multipole: selection '{}' matched multiple molecule kinds; per-atom analysis requires a single molecule kind",
+                self.selection.source()
+            );
+        }
+        let molecule_kind = *molecule_kinds.iter().next().unwrap();
         log::info!(
             "Multipole: selection '{}' matched {} groups",
             self.selection.source(),
@@ -51,7 +64,9 @@ impl MultipoleAnalysisBuilder {
             dipole_scalar: WeightedMean::new(),
             dipole_squared: WeightedMean::new(),
             per_atom: Vec::new(),
-            molecule_kind: None,
+            molecule_kind: Some(molecule_kind),
+            track_per_atom: topology.moleculekinds()[molecule_kind].group_kind()
+                == GroupKind::Molecular,
         })
     }
 }
@@ -69,8 +84,10 @@ pub struct MultipoleAnalysis {
     /// Per-atom charge stats, lazy-initialized on first sample.
     /// Stored because `to_yaml()` has no access to topology.
     per_atom: Vec<PerAtomCharge>,
-    /// Molecule kind for per-atom tracking; set on first sample.
+    /// Molecule kind validated at build time.
     molecule_kind: Option<usize>,
+    /// True only for single-kind molecular selections.
+    track_per_atom: bool,
 }
 
 impl crate::Info for MultipoleAnalysis {
@@ -99,9 +116,8 @@ impl<T: Context> Analyze<T> for MultipoleAnalysis {
             let group = &context.groups()[gi];
             let mol = group.molecule();
 
-            // Lazy-init per-atom accumulators from the first group's molecule kind
-            if self.molecule_kind.is_none() {
-                self.molecule_kind = Some(mol);
+            // Lazy-init per-atom accumulators from the validated molecular kind.
+            if self.track_per_atom && self.per_atom.is_empty() {
                 let molkind = &moleculekinds[mol];
                 self.per_atom = (0..molkind.atoms().len())
                     .map(|i| PerAtomCharge {
@@ -112,15 +128,19 @@ impl<T: Context> Analyze<T> for MultipoleAnalysis {
                     .collect();
             }
 
-            let track_per_atom = self.molecule_kind.is_some_and(|m| m == mol);
+            let track_per_atom = self.track_per_atom
+                && self.molecule_kind.is_some_and(|m| m == mol)
+                && group.capacity() == self.per_atom.len();
             let mut z = 0.0;
             for i in group.iter_active() {
                 let q = atomkinds[context.atom_kind(i)].charge();
                 z += q;
                 if track_per_atom {
                     let rel = i - group.start();
-                    self.per_atom[rel].q.add(q, weight);
-                    self.per_atom[rel].q_squared.add(q * q, weight);
+                    if let Some(per_atom) = self.per_atom.get_mut(rel) {
+                        per_atom.q.add(q, weight);
+                        per_atom.q_squared.add(q * q, weight);
+                    }
                 }
             }
             self.charge.add(z, weight);
@@ -186,5 +206,141 @@ impl<T: Context> Analyze<T> for MultipoleAnalysis {
         }
 
         Some(serde_yml::Value::Mapping(map))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::analysis::Analyze;
+    use crate::backend::Backend;
+    use crate::group::GroupCollection;
+    use tempfile::NamedTempFile;
+
+    fn backend_from_str(yaml: &str) -> Backend {
+        let tmp = NamedTempFile::new().unwrap();
+        std::fs::write(tmp.path(), yaml).unwrap();
+        let mut rng = rand::thread_rng();
+        Backend::new(tmp.path(), None, &mut rng).unwrap()
+    }
+
+    #[test]
+    fn per_atom_stats_are_reported_for_single_molecular_kind() {
+        let mut ctx = backend_from_str(
+            r#"
+atoms:
+  - {name: A0, mass: 1.0, charge: 0.0, sigma: 1.0}
+  - {name: A1, mass: 1.0, charge: 1.0, sigma: 1.0}
+molecules:
+  - name: MOL
+    atoms: [A0]
+system:
+  cell: !Cuboid [10.0, 10.0, 10.0]
+  medium: {permittivity: !Vacuum, temperature: 300.0}
+  energy: {}
+  blocks:
+    - molecule: MOL
+      N: 1
+      insert: !Manual [[0.0, 0.0, 0.0]]
+propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
+"#,
+        );
+        let builder = MultipoleAnalysisBuilder {
+            selection: Selection::parse("all").unwrap(),
+            frequency: Frequency::Every(1),
+        };
+        let mut analysis = builder.build(&ctx).unwrap();
+
+        analysis.sample(&ctx, 0).unwrap();
+        ctx.set_atom_kind(0, 1);
+        analysis.sample(&ctx, 1).unwrap();
+
+        let yaml = Analyze::<Backend>::to_yaml(&analysis).unwrap();
+        let atoms = yaml
+            .get("atoms")
+            .and_then(serde_yml::Value::as_sequence)
+            .unwrap();
+        assert_eq!(atoms.len(), 1);
+        assert_eq!(
+            atoms[0].get("index").and_then(serde_yml::Value::as_u64),
+            Some(0)
+        );
+        assert_eq!(
+            atoms[0].get("name").and_then(serde_yml::Value::as_str),
+            Some("A0")
+        );
+    }
+
+    #[test]
+    fn build_fails_for_mixed_molecule_kinds() {
+        let ctx = backend_from_str(
+            r#"
+atoms:
+  - {name: A, mass: 1.0, sigma: 1.0}
+  - {name: B, mass: 1.0, sigma: 1.0}
+molecules:
+  - name: MOL
+    atoms: [A]
+  - name: ATOM
+    atoms: [B]
+    atomic: true
+system:
+  cell: !Cuboid [10.0, 10.0, 10.0]
+  medium: {permittivity: !Vacuum, temperature: 300.0}
+  energy: {}
+  blocks:
+    - molecule: MOL
+      N: 1
+      insert: !Manual [[0.0, 0.0, 0.0]]
+    - molecule: ATOM
+      N: 2
+      insert: !RandomAtomPos {}
+propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
+"#,
+        );
+        let builder = MultipoleAnalysisBuilder {
+            selection: Selection::parse("all").unwrap(),
+            frequency: Frequency::Every(1),
+        };
+
+        let err = builder.build(&ctx).unwrap_err().to_string();
+        assert!(
+            err.contains("matched multiple molecule kinds"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn atomic_group_does_not_emit_per_atom_stats() {
+        let ctx = backend_from_str(
+            r#"
+atoms:
+  - {name: X, mass: 1.0, charge: 1.0, sigma: 1.0}
+molecules:
+  - name: particle
+    atoms: [X]
+    atomic: true
+system:
+  cell: !Cuboid [10.0, 10.0, 10.0]
+  medium: {permittivity: !Vacuum, temperature: 300.0}
+  energy: {}
+  blocks:
+    - molecule: particle
+      N: 20
+      active: 8
+      insert: !RandomAtomPos {}
+propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
+"#,
+        );
+        let builder = MultipoleAnalysisBuilder {
+            selection: Selection::parse("all").unwrap(),
+            frequency: Frequency::Every(1),
+        };
+        let mut analysis = builder.build(&ctx).unwrap();
+
+        analysis.sample(&ctx, 0).unwrap();
+
+        let yaml = Analyze::<Backend>::to_yaml(&analysis).unwrap();
+        assert!(yaml.get("atoms").is_none());
     }
 }

@@ -177,8 +177,11 @@ The dipole moment is computed relative to each group's center of mass
 with periodic boundary conditions applied.
 Handles atom-type swaps (titration) and GCMC (only active groups contribute).
 
-Per-atom charge statistics are reported in `output.yaml` as an `atoms` list,
-including only atoms whose charge variance is nonzero:
+Per-atom charge statistics are reported in `output.yaml` as an `atoms` list
+only when the selection resolves to a single molecular molecule kind.
+Selections matching multiple molecule kinds are rejected, and atomic/reservoir
+groups do not emit per-atom output. The list includes only atoms whose charge
+variance is nonzero:
 
 ```yaml
 multipole:
