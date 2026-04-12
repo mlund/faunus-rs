@@ -1,7 +1,11 @@
 # Faunus User Guide
 
-Faunus is a molecular simulation framework written in Rust.
-This guide covers the YAML input format and the methodology behind the simulations.
+Faunus is a flexible molecular simulation framework written in Rust.
+This guide covers the YAML input format and methodology.
+
+!!! note
+    The text is partly extracted from the code using LLM assistance, and may contain inaccuracies.
+    Please report issues on [Github](https://github.com/mlund/faunus-rs/issues).
 
 ## Getting started
 
