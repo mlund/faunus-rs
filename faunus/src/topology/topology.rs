@@ -260,7 +260,12 @@ impl Topology {
                 block.insert_block(context, &[], rng)?;
             } else {
                 let Some(ref positions) = positions else {
-                    anyhow::bail!("block requires structure that wasn't provided")
+                    anyhow::bail!(
+                        "block for molecule '{}' has no `insert:` policy and no top-level structure file was provided; \
+                         add an `insert:` policy (e.g. `!RandomAtomPos {{}}`, `!RandomCOM {{}}`, `!FixedCOM {{}}`, or `!Manual [...]`) \
+                         to the block, or supply a structure file",
+                        block.molecule()
+                    )
                 };
                 let atoms_in_block = block.num_atoms(self.moleculekinds());
                 let positions = match positions.get(curr_start..(curr_start + atoms_in_block)) {
