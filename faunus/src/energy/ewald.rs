@@ -286,6 +286,10 @@ impl EwaldReciprocalEnergy {
                 let offset = group.iter_active().next().unwrap_or(0);
                 rel.iter().map(|&ri| offset + ri).collect()
             }
+            GroupChange::AtomicShrink { rel, .. } => {
+                let offset = group.iter_active().next().unwrap_or(group.start());
+                vec![offset + rel]
+            }
             GroupChange::None | GroupChange::Resize(_) | GroupChange::ResizeExcludeIntra(_) => {
                 Vec::new()
             }

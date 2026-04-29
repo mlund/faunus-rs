@@ -17,40 +17,45 @@ energy_change:
   final: 0.0
   initial: 0.0
 energy_timers:
-  celloverlap: '100 (energy: 70.05, update: 29.95)'
+  celloverlap: '100 (energy: 66.57, update: 33.43)'
 propagate:
   repeat: 5000
   seed: !Fixed 42
   collections:
   - !Deterministic
     repeat: 1
-    elapsed_seconds: 0.147312115
+    elapsed_seconds: 0.005999952
     moves:
     - !SpeciationMove
       reactions:
       - - = particle
         - !K 16.6053906717
       temperature: 298.15
+      per_reaction:
+      - reaction: = particle
+        accepted: 4364
+        trials: 5000
+        acceptance_ratio: '0.8728'
       weight: 1.0
       repeat: 1
       statistics:
         num_trials: 5000
-        num_accepted: 4370
+        num_accepted: 4364
         mean_square_displacement:
           avg: 0.0
-          'n': 630
+          'n': 636
         timer:
           accumulated:
             secs: 0
             nanos: 0
         info: {}
         energy_change_sum: 0.0
-        acceptance_ratio: 0.874
+        acceptance_ratio: 0.8728
   criterion: MetropolisHastings
 analysis:
 - collectivevariable:
     property: Count
     description: 'selection: molecule particle'
     num_samples: 5000
-    mean: 10.520000000000008
-    rms: 11.080018050526816
+    mean: 9.39219999999999
+    rms: 9.871119490716332

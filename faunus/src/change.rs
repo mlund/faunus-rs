@@ -55,6 +55,22 @@ pub enum GroupChange {
     /// Resize an atomic group and report the affected relative indices.
     /// Used for GCMC on atomic mega-groups where only the inserted/deleted atoms changed.
     ResizePartial(GroupSize, Vec<usize>),
+    /// Deactivate a single atom in an atomic mega-group, where the chosen
+    /// atom is at relative slot `rel` in the pre-shrink state of size
+    /// `n_old`. The transform implements this as swap-and-pop: slot `rel`
+    /// is swapped with the last active slot (`n_old - 1`) before the size
+    /// shrinks by one. Carrying `n_old` lets the energy code recognise the
+    /// post-transform state (`groups[gi].len() < n_old`) and treat the
+    /// removed atom's contribution as zero — without this, reading
+    /// `soa[start + rel]` in the new state returns the *swap-target's*
+    /// data and corrupts the energy delta.
+    AtomicShrink {
+        /// Relative slot of the atom being deactivated, in the pre-shrink frame.
+        rel: usize,
+        /// Active count before the shrink. Used to distinguish pre- vs.
+        /// post-transform state from the same change description.
+        n_old: usize,
+    },
     /// Nothing has changed
     None,
 }
@@ -62,12 +78,16 @@ pub enum GroupChange {
 impl GroupChange {
     /// Whether intramolecular energy must be recomputed.
     /// Returns `false` for `RigidBody` (no internal change), `ResizeExcludeIntra`
-    /// (intra energy absorbed into K), `ResizePartial` (atomic groups have no bonds),
-    /// and `None` (no change at all).
+    /// (intra energy absorbed into K), `ResizePartial` / `AtomicShrink`
+    /// (atomic groups have no bonds), and `None` (no change at all).
     pub const fn internal_change(&self) -> bool {
         !matches!(
             self,
-            Self::RigidBody | Self::ResizeExcludeIntra(_) | Self::ResizePartial(_, _) | Self::None
+            Self::RigidBody
+                | Self::ResizeExcludeIntra(_)
+                | Self::ResizePartial(_, _)
+                | Self::AtomicShrink { .. }
+                | Self::None
         )
     }
 
@@ -86,7 +106,10 @@ impl GroupChange {
     pub const fn is_resize(&self) -> bool {
         matches!(
             self,
-            Self::Resize(_) | Self::ResizeExcludeIntra(_) | Self::ResizePartial(_, _)
+            Self::Resize(_)
+                | Self::ResizeExcludeIntra(_)
+                | Self::ResizePartial(_, _)
+                | Self::AtomicShrink { .. }
         )
     }
 }

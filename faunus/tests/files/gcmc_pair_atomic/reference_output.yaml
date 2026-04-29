@@ -18,19 +18,19 @@ cell: !Cuboid
 - 40.0
 - 40.0
 energy_change:
-  drift: 18.78819247051885
-  final: -203.52378590944556
-  initial: -165.23454883478632
+  drift: 1.4432899320127035e-14
+  final: -1.9606794556729374
+  initial: -1.05124906661712
 energy_timers:
-  celloverlap: '0.34 (energy: 0.23, update: 0.11)'
-  nonbonded: '99.67 (energy: 99.55, update: 0.12)'
+  celloverlap: '14 (energy: 9.33, update: 4.67)'
+  nonbonded: '86 (energy: 81.07, update: 4.93)'
 propagate:
   repeat: 500
   seed: !Fixed 42
   collections:
   - !Stochastic
     repeat: 1
-    elapsed_seconds: 0.001006178
+    elapsed_seconds: 0.000607797
     moves:
     - !TranslateAtom
       atom: Na
@@ -39,18 +39,18 @@ propagate:
       weight: 1.0
       repeat: 1
       statistics:
-        num_trials: 239
-        num_accepted: 148
+        num_trials: 247
+        num_accepted: 219
         mean_square_displacement:
-          avg: 3.9431360448873134
-          'n': 239
+          avg: 6.719455962759185
+          'n': 247
         timer:
           accumulated:
             secs: 0
             nanos: 0
         info: {}
-        energy_change_sum: 5.814454630929866
-        acceptance_ratio: 0.6192468619246861
+        energy_change_sum: 11.251828960385879
+        acceptance_ratio: 0.8866396761133604
     - !TranslateAtom
       atom: Cl
       molecule: anion
@@ -58,21 +58,21 @@ propagate:
       weight: 1.0
       repeat: 1
       statistics:
-        num_trials: 261
-        num_accepted: 155
+        num_trials: 253
+        num_accepted: 224
         mean_square_displacement:
-          avg: 4.055509069995829
-          'n': 261
+          avg: 7.099552470055855
+          'n': 253
         timer:
           accumulated:
             secs: 0
             nanos: 0
         info: {}
-        energy_change_sum: -1.9443994498655428
-        acceptance_ratio: 0.5938697318007663
+        energy_change_sum: 10.131732398986255
+        acceptance_ratio: 0.8853754940711462
   - !Deterministic
     repeat: 1
-    elapsed_seconds: 0.046632418
+    elapsed_seconds: 0.006411252
     moves:
     - !SpeciationMove
       reactions:
@@ -81,38 +81,38 @@ propagate:
       temperature: 298.15
       per_reaction:
       - reaction: = cation + anion
-        accepted: 8
-        trials: 2500
-        acceptance_ratio: '0.0032'
+        accepted: 1414
+        trials: 2468
+        acceptance_ratio: '0.5729'
       weight: 1.0
       repeat: 5
       statistics:
         num_trials: 2500
-        num_accepted: 8
+        num_accepted: 1414
         mean_square_displacement:
           avg: 0.0
-          'n': 2492
+          'n': 1086
         timer:
           accumulated:
             secs: 0
             nanos: 0
         info: {}
-        energy_change_sum: -23.371099785204706
-        acceptance_ratio: 0.0032
+        energy_change_sum: -22.292991748427937
+        acceptance_ratio: 0.5656
   criterion: MetropolisHastings
 analysis:
 - energy:
     num_samples: 20
-    mean: -180.81192510111018
+    mean: -2.390033380279571
 - collectivevariable:
     property: Count
     description: 'selection: atomtype Na'
     num_samples: 20
-    mean: 39.199999999999996
-    rms: 39.250477704099346
+    mean: 1.9
+    rms: 2.0976176963403033
 - collectivevariable:
     property: Count
     description: 'selection: atomtype Cl'
     num_samples: 20
-    mean: 39.199999999999996
-    rms: 39.250477704099346
+    mean: 1.9
+    rms: 2.0976176963403033

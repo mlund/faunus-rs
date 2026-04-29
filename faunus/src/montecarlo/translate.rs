@@ -312,10 +312,14 @@ impl<T: Context> MoveProposal<T> for TranslateAtom {
             let atom = pref.weighted_select(context, &candidates, rng)?;
             (group, atom)
         } else {
-            std::iter::repeat_with(|| self.get_group_atom(context, rng))
-                .flatten()
-                .next()
-                .unwrap()
+            // Bounded retries: GCMC may leave the eligible groups empty
+            // (count fluctuates to zero). Spinning forever in that case
+            // hangs the run; reporting `None` lets the runner count this
+            // attempt as rejected and continue. 16 is enough to survive
+            // multi-group selection where the first few picks miss; an
+            // empty system fails fast.
+            const MAX_RETRIES: usize = 16;
+            (0..MAX_RETRIES).find_map(|_| self.get_group_atom(context, rng))?
         };
 
         let displacement =

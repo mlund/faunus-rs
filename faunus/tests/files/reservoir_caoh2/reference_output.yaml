@@ -27,46 +27,51 @@ energy_change:
   final: 0.0
   initial: 0.0
 energy_timers:
-  celloverlap: '100 (energy: 74.48, update: 25.52)'
+  celloverlap: '100 (energy: 66.82, update: 33.18)'
 propagate:
   repeat: 30000
   seed: !Fixed 42
   collections:
   - !Deterministic
     repeat: 1
-    elapsed_seconds: 21.895735852
+    elapsed_seconds: 1.417057585
     moves:
     - !SpeciationMove
       reactions:
       - - Ca(OH)₂ = Ca²⁺ + OH⁻ + OH⁻
         - !pK 5.19
       temperature: 298.15
+      per_reaction:
+      - reaction: Ca(OH)₂ = Ca²⁺ + OH⁻ + OH⁻
+        accepted: 28446
+        trials: 30000
+        acceptance_ratio: '0.9482'
       weight: 1.0
       repeat: 1
       statistics:
         num_trials: 30000
-        num_accepted: 28576
+        num_accepted: 28446
         mean_square_displacement:
           avg: 0.0
-          'n': 1424
+          'n': 1554
         timer:
           accumulated:
             secs: 0
             nanos: 0
         info: {}
         energy_change_sum: 0.0
-        acceptance_ratio: 0.9525333333333333
+        acceptance_ratio: 0.9482
   criterion: MetropolisHastings
 analysis:
 - collectivevariable:
     property: Molarity
     description: 'selection: molecule ''Ca²⁺'''
     num_samples: 30000
-    mean: 0.011721187662061374
-    rms: 0.01173029772359688
+    mean: 0.01175631318845267
+    rms: 0.011768195746419635
 - collectivevariable:
     property: Molarity
     description: 'selection: molecule ''OH⁻'''
     num_samples: 30000
-    mean: 0.023442375324122747
-    rms: 0.02346059544719376
+    mean: 0.02351262637690534
+    rms: 0.02353639149283927

@@ -474,14 +474,14 @@ impl SpeciationMove {
             if n_old == 0 {
                 return None;
             }
-            // Always remove the last active atom: indistinguishable particles in
-            // an atomic mega-group give the same configuration regardless of
-            // which slot is vacated, and this avoids the swap-and-pop in
-            // `Transform::DeactivateAtom`. Without it, `multi_group_change_soa`
-            // (and `single_group_change_soa`) would read the swapped-in atom's
-            // pair contributions in the new state instead of treating the
-            // chosen atom as gone, leaking ~one pair-energy per accepted move.
-            let rel = n_old - 1;
+            // Pick a random slot for deactivation. The transform's swap-and-pop
+            // (in `Transform::DeactivateAtom`) keeps the active range contiguous
+            // by swapping the chosen atom with the last active slot before
+            // shrinking. The change variant carries the pre-shrink size `n_old`
+            // so the energy code can distinguish pre- vs. post-transform state
+            // (`groups[gi].len() < n_old` means post) — required because the
+            // swap leaves a *different* atom at slot `rel` in the new state.
+            let rel = rng.gen_range(0..n_old);
             let abs = context.groups()[gi].to_absolute_index(rel).unwrap();
             // Reservoirs have zero entropy bias (solid activity = 1; C++ `implicit` convention)
             let bias = if molecule.is_reservoir() {
@@ -494,10 +494,7 @@ impl SpeciationMove {
                     group_index: gi,
                     abs_index: abs,
                 },
-                (
-                    gi,
-                    GroupChange::ResizePartial(GroupSize::Shrink(1), vec![rel]),
-                ),
+                (gi, GroupChange::AtomicShrink { rel, n_old }),
                 bias,
             ))
         } else {

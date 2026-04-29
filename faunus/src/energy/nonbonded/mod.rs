@@ -721,6 +721,14 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
                     })
                 })
                 .sum(),
+            // See `GroupChange::AtomicShrink` doc for the swap-and-pop rationale.
+            GroupChange::AtomicShrink { rel, n_old } => {
+                if group.len() != *n_old {
+                    return 0.0;
+                }
+                let abs_i = group.start() + rel;
+                self.particle_energy_all_soa(soa, groups, abs_i, group)
+            }
             GroupChange::None => 0.0,
         }
     }
@@ -824,6 +832,23 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
                             group.iter_active().filter(|j| !earlier.contains(j)),
                         );
                     }
+                }
+                GroupChange::AtomicShrink { rel, n_old } => {
+                    // See `GroupChange::AtomicShrink` doc for the swap-and-pop rationale.
+                    if group.len() != *n_old {
+                        continue;
+                    }
+                    let abs_i = group.start() + rel;
+                    for gk in unchanged_groups() {
+                        if self.is_molecule_pair_excluded(group.molecule(), gk.molecule()) {
+                            continue;
+                        }
+                        if self.groups_beyond_cutoff(group, gk, soa.pbc.as_ref()) {
+                            continue;
+                        }
+                        energy += self.particle_energy_soa(soa, abs_i, gk.iter_active());
+                    }
+                    energy += self.particle_energy_soa(soa, abs_i, group.iter_active());
                 }
                 _ => unreachable!("matched all GroupChange variants above"),
             }
