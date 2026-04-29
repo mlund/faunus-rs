@@ -36,9 +36,28 @@ pub fn read_yaml(path: impl AsRef<Path>) -> anyhow::Result<String> {
         .with_context(|| format!("Cannot read '{}'", path.display()))?;
     // Only invoke the template engine when template tags are present
     let yaml = if raw.contains("{%") || raw.contains("{#") {
-        let env = minijinja::Environment::new();
+        let mut env = minijinja::Environment::new();
+        // Strict mode fails fast on undefined variables with the variable name
+        // and line, instead of silently producing `undefined` values that
+        // explode later in arithmetic with confusing messages like
+        // "tried to use * operator on unsupported types number and undefined".
+        env.set_undefined_behavior(minijinja::UndefinedBehavior::Strict);
         env.render_str(&raw, minijinja::context! {})
-            .map_err(|err| anyhow::anyhow!("Template error in '{}': {err:#}", path.display()))?
+            .map_err(|err| {
+                let mut msg = format!("Template error in '{}': {err:#}", path.display());
+                // Strict mode catches plain undefined accesses with `UndefinedError`;
+                // arithmetic/coercion on undefined surfaces as `InvalidOperation`
+                // with the literal type "undefined" in the message. Match either.
+                let touches_undefined = err.kind() == minijinja::ErrorKind::UndefinedError
+                    || err.to_string().contains("undefined");
+                if touches_undefined {
+                    msg.push_str(
+                        "\nhint: faunus renders templates with no external context. \
+                     Set defaults inline, e.g. `{% set var = var | default(value) %}`.",
+                    );
+                }
+                anyhow::anyhow!(msg)
+            })?
     } else {
         raw
     };
