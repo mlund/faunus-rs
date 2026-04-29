@@ -759,7 +759,6 @@ impl HamiltonianBuilder {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use crate::topology::AtomKindBuilder;
@@ -822,9 +821,9 @@ mod tests {
                     cutoff: None,
                     _phantom: Default::default()
                 }),
-                PairInteraction::CoulombEwald(
-                    interatomic::coulomb::pairwise::EwaldTruncated::new(11.0, 0.1)
-                ),
+                PairInteraction::CoulombEwald(interatomic::coulomb::pairwise::EwaldTruncated::new(
+                    11.0, 0.1
+                )),
             ]
         );
     }

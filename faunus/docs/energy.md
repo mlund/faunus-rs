@@ -708,7 +708,7 @@ energy:
 The `polymer_depletion` energy term implements the Forsman & Woodward many-body
 Hamiltonian for colloids immersed in an ideal polymer fluid
 ([DOI](https://doi.org/10.1039/c2sm06737d)),
-generalised with Robin boundary conditions for tunable polymer–surface affinity.
+generalised with tunable polymer–surface affinity.
 
 Rigid macromolecules of arbitrary shape are treated as neutral spheres using
 their center of mass and bounding sphere radius. The polymers are modelled
@@ -761,7 +761,8 @@ term as $f^2$; this asymmetry is not reproducible by an effective radius.
 
 ### Self-consistent steric adsorption
 
-The constant $\tilde{h}$ Robin BC diverges when polymer adsorption is strong enough
+The constant $\tilde{h}$ [Robin BC](https://en.wikipedia.org/wiki/Robin_boundary_condition)
+diverges when polymer adsorption is strong enough
 to drive $\tilde{h} \to -(1+\sigma)$.
 The `steric_adsorption` option replaces the fixed $\tilde{h}$ with a per-colloid,
 configuration-dependent $\tilde{h}_\text{eff}(i)$ obtained by self-consistent
