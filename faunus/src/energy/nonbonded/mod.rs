@@ -725,58 +725,124 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
         }
     }
 
-    /// Energy for multiple simultaneous group changes (SoA), avoiding double-counted cross-terms.
+    /// Energy for multiple simultaneous group changes (SoA), counting every
+    /// pair of changed groups exactly once regardless of change kind.
+    ///
+    /// The energy framework calls this in the old and new states and
+    /// subtracts; we just need to return a value `Q` such that
+    /// `Q_new - Q_old = ΔU`. The simplest such `Q` for multi-change moves is
+    ///
+    ///   Σ_{changed gi}  per-change-contrib(gi)
+    /// + Σ_{i<j, both changed}  group_pair_energy_soa(gi, gj)
+    ///
+    /// The per-change contribution mirrors `single_group_change_soa` but
+    /// only sums against *unchanged* groups (cross-terms between changed
+    /// groups are handled exactly once in the second sum). The naive
+    /// implementation — letting `single_group_change_soa` iterate all
+    /// other groups — double-counts the cross-term between two partial
+    /// changes (the original bug).
     fn multi_group_change_soa(
         &self,
         soa: &SoaSlices<'_, impl SimulationCell>,
         groups: &[Group],
         changes: &[(usize, GroupChange)],
     ) -> f64 {
-        // Typically 2–4 entries; stack array avoids heap allocation on the hot path
-        let mut changed_indices = [0usize; 8];
+        // Indices of every group carrying a non-None change.
+        // Typically 2–4 entries; stack array avoids heap allocation on the hot path.
+        let mut changed_set = [0usize; 8];
         let mut n_changed = 0;
         for (gi, gc) in changes {
-            if gc.is_whole_group() {
-                debug_assert!(
-                    n_changed < changed_indices.len(),
-                    "too many whole-group changes"
-                );
-                changed_indices[n_changed] = *gi;
+            if !matches!(gc, GroupChange::None) {
+                debug_assert!(n_changed < changed_set.len(), "too many group changes");
+                changed_set[n_changed] = *gi;
                 n_changed += 1;
             }
         }
-        let changed_indices = &changed_indices[..n_changed];
+        let changed_set = &changed_set[..n_changed];
 
         let mut energy = 0.0;
+
+        // Phase 1: each change vs. unchanged groups, plus own-group intra.
         for (gi, gc) in changes {
             let group = &groups[*gi];
-            if gc.is_whole_group() {
-                energy += groups
+            let unchanged_groups = || {
+                groups
                     .iter()
-                    .filter(|gj| {
-                        gj.index() != group.index() && !changed_indices.contains(&gj.index())
-                    })
-                    .map(|gj| self.group_pair_energy_soa(soa, group, gj))
-                    .sum::<f64>();
-                if gc.internal_change() {
-                    energy += self.group_with_itself_soa(soa, group);
+                    .filter(move |gk| gk.index() != *gi && !changed_set.contains(&gk.index()))
+            };
+            match gc {
+                GroupChange::None => continue,
+                gc if gc.is_whole_group() => {
+                    energy += unchanged_groups()
+                        .map(|gk| self.group_pair_energy_soa(soa, group, gk))
+                        .sum::<f64>();
+                    if gc.internal_change() {
+                        energy += self.group_with_itself_soa(soa, group);
+                    }
                 }
-            } else {
-                energy += self.single_group_change_soa(soa, groups, *gi, gc);
+                GroupChange::PartialUpdate(rel) | GroupChange::ResizePartial(_, rel) => {
+                    // Resolve affected absolute indices once; we reuse this list
+                    // to deduplicate intra pairs when multiple affected atoms
+                    // share the same group.
+                    let mut affected_abs = [0usize; 8];
+                    let mut n_affected = 0;
+                    for &r in rel {
+                        if let Ok(abs) = group.to_absolute_index(r) {
+                            debug_assert!(n_affected < affected_abs.len());
+                            affected_abs[n_affected] = abs;
+                            n_affected += 1;
+                        }
+                    }
+                    let affected_abs = &affected_abs[..n_affected];
+
+                    // Cross with each valid unchanged group: outer-loop the
+                    // group filters (per-pair exclusion / cutoff), inner-loop
+                    // the affected atoms — the filters depend only on the
+                    // group pair, not on which affected atom we're at.
+                    for gk in unchanged_groups() {
+                        if self.is_molecule_pair_excluded(group.molecule(), gk.molecule()) {
+                            continue;
+                        }
+                        if self.groups_beyond_cutoff(group, gk, soa.pbc.as_ref()) {
+                            continue;
+                        }
+                        for &abs_i in affected_abs {
+                            energy += self.particle_energy_soa(soa, abs_i, gk.iter_active());
+                        }
+                    }
+
+                    // Intra: pair each `abs_i` with every active atom in its
+                    // own group *except* affected atoms processed earlier, so
+                    // each affected-affected pair within the group is counted
+                    // exactly once. The exclusion-matrix diagonal handles the
+                    // self pair.
+                    for (k, &abs_i) in affected_abs.iter().enumerate() {
+                        let earlier = &affected_abs[..k];
+                        energy += self.particle_energy_soa(
+                            soa,
+                            abs_i,
+                            group.iter_active().filter(|j| !earlier.contains(j)),
+                        );
+                    }
+                }
+                _ => unreachable!("matched all GroupChange variants above"),
             }
         }
-        // Cross-terms between changed groups, counted once
-        for (i, (gi, _)) in changes.iter().enumerate() {
-            if !changed_indices.contains(gi) {
+
+        // Phase 2: cross-term between each unique pair of changed groups.
+        // `group_pair_energy_soa` already applies exclusion + cutoff filters.
+        for (i, (gi, gci)) in changes.iter().enumerate() {
+            if matches!(gci, GroupChange::None) {
                 continue;
             }
-            for (gj, _) in &changes[i + 1..] {
-                if !changed_indices.contains(gj) {
+            for (gj, gcj) in &changes[i + 1..] {
+                if matches!(gcj, GroupChange::None) {
                     continue;
                 }
                 energy += self.group_pair_energy_soa(soa, &groups[*gi], &groups[*gj]);
             }
         }
+
         energy
     }
 

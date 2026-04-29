@@ -575,17 +575,23 @@ fn test_nonbonded_matrix_energy() {
         + nonbonded.particle_with_all(&system, 4, &system.groups()[1]);
     assert_approx_eq!(f64, nonbonded.energy(&system, &change), expected);
 
-    // change several particles in multiple groups
+    // change several particles in multiple groups.
+    //
+    // Affected atoms: 1 (g0), 3 (g1), 4 (g1). g2 has no active particles in
+    // this fixture, so every pair in `total_nonbonded` involves at least one
+    // atom in a changed group — `multi_group_change_soa` must therefore
+    // return `total_nonbonded` exactly once per pair, with no double-counting
+    // of the cross terms (1,3), (1,4), or the intra pair (3,4).
     let change = Change::Groups(vec![
         (0, GroupChange::PartialUpdate(vec![1])),
         (1, GroupChange::PartialUpdate(vec![0, 1])),
     ]);
-    let expected = nonbonded.particle_with_all(&system, 3, &system.groups()[1])
-        + nonbonded.particle_with_all(&system, 4, &system.groups()[1])
-        + nonbonded.particle_with_all(&system, 1, &system.groups()[0]);
+    let expected = nonbonded.total_nonbonded(&system);
     assert_approx_eq!(f64, nonbonded.energy(&system, &change), expected);
 
-    // change several particles in multiple groups, some of which are inactive
+    // Same affected atoms via a different relative-index spelling: g0 rel 2
+    // and g2 rel 0 both point to inactive particles (silently ignored), and
+    // g1 already covered. Result must match the previous case.
     let change = Change::Groups(vec![
         (0, GroupChange::PartialUpdate(vec![1, 2])),
         (1, GroupChange::PartialUpdate(vec![0, 1])),

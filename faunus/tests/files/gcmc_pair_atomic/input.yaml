@@ -1,0 +1,73 @@
+# Pair-insertion GCMC across two atomic mega-groups.
+# Regression for the `multi_group_change_soa` bug where a `= cation + anion`
+# reaction on `atomic: true` participants double-counted the Na↔Cl
+# cross-pair, producing tens of kJ/mol of energy drift per accepted
+# insertion. The setup is deliberately small (40 Å cuboid, ~30 ions per
+# species) to keep the run fast while still exercising both Coulomb and
+# WCA contributions to the cross-term.
+
+atoms:
+  - {name: Na, mass: 23.0, charge:  1.0, sigma: 4.0, epsilon: 0.5}
+  - {name: Cl, mass: 35.5, charge: -1.0, sigma: 4.0, epsilon: 0.5}
+
+molecules:
+  - name: cation
+    atoms: [Na]
+    atomic: true
+    activity: 0.05
+  - name: anion
+    atoms: [Cl]
+    atomic: true
+    activity: 0.05
+
+system:
+  cell: !Cuboid [40.0, 40.0, 40.0]
+  medium:
+    permittivity: !Fixed 78.7
+    temperature: 298.15
+
+  blocks:
+    - molecule: cation
+      N: 120
+      active: 30
+      insert: !RandomAtomPos {}
+    - molecule: anion
+      N: 120
+      active: 30
+      insert: !RandomAtomPos {}
+
+  energy:
+    nonbonded:
+      default:
+        - !Coulomb {cutoff: 20.0}
+        - !WeeksChandlerAndersen {mixing: LB}
+
+analysis:
+  - !Energy
+    file: energy.dat
+    frequency: !Every 50
+  - !CollectiveVariable
+    property: count
+    selection: "atomtype Na"
+    frequency: !Every 50
+  - !CollectiveVariable
+    property: count
+    selection: "atomtype Cl"
+    frequency: !Every 50
+
+propagate:
+  seed: !Fixed 42
+  criterion: Metropolis
+  repeat: 500
+  collections:
+    - !Stochastic
+      moves:
+        - !TranslateAtom {molecule: cation, atom: Na, dp: 5.0}
+        - !TranslateAtom {molecule: anion,  atom: Cl, dp: 5.0}
+    - !Deterministic
+      moves:
+        - !SpeciationMove
+          temperature: 298.15
+          repeat: 5
+          reactions:
+            - ["= cation + anion", !dG 0.0]

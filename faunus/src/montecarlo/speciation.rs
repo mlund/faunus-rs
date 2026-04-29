@@ -474,7 +474,14 @@ impl SpeciationMove {
             if n_old == 0 {
                 return None;
             }
-            let rel = rng.gen_range(0..n_old);
+            // Always remove the last active atom: indistinguishable particles in
+            // an atomic mega-group give the same configuration regardless of
+            // which slot is vacated, and this avoids the swap-and-pop in
+            // `Transform::DeactivateAtom`. Without it, `multi_group_change_soa`
+            // (and `single_group_change_soa`) would read the swapped-in atom's
+            // pair contributions in the new state instead of treating the
+            // chosen atom as gone, leaking ~one pair-energy per accepted move.
+            let rel = n_old - 1;
             let abs = context.groups()[gi].to_absolute_index(rel).unwrap();
             // Reservoirs have zero entropy bias (solid activity = 1; C++ `implicit` convention)
             let bias = if molecule.is_reservoir() {

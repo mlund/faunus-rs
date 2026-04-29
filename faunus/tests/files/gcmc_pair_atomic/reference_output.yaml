@@ -1,0 +1,118 @@
+medium:
+  permittivity: !Fixed 78.7
+  salt: null
+  temperature: 298.15
+blocks:
+- molecule: cation
+  'N': 120
+  active: 30
+  insert: !RandomAtomPos
+    directions: xyz
+- molecule: anion
+  'N': 120
+  active: 30
+  insert: !RandomAtomPos
+    directions: xyz
+cell: !Cuboid
+- 40.0
+- 40.0
+- 40.0
+energy_change:
+  drift: 18.78819247051885
+  final: -203.52378590944556
+  initial: -165.23454883478632
+energy_timers:
+  celloverlap: '0.34 (energy: 0.23, update: 0.11)'
+  nonbonded: '99.67 (energy: 99.55, update: 0.12)'
+propagate:
+  repeat: 500
+  seed: !Fixed 42
+  collections:
+  - !Stochastic
+    repeat: 1
+    elapsed_seconds: 0.001006178
+    moves:
+    - !TranslateAtom
+      atom: Na
+      molecule: cation
+      max_displacement: 5.0
+      weight: 1.0
+      repeat: 1
+      statistics:
+        num_trials: 239
+        num_accepted: 148
+        mean_square_displacement:
+          avg: 3.9431360448873134
+          'n': 239
+        timer:
+          accumulated:
+            secs: 0
+            nanos: 0
+        info: {}
+        energy_change_sum: 5.814454630929866
+        acceptance_ratio: 0.6192468619246861
+    - !TranslateAtom
+      atom: Cl
+      molecule: anion
+      max_displacement: 5.0
+      weight: 1.0
+      repeat: 1
+      statistics:
+        num_trials: 261
+        num_accepted: 155
+        mean_square_displacement:
+          avg: 4.055509069995829
+          'n': 261
+        timer:
+          accumulated:
+            secs: 0
+            nanos: 0
+        info: {}
+        energy_change_sum: -1.9443994498655428
+        acceptance_ratio: 0.5938697318007663
+  - !Deterministic
+    repeat: 1
+    elapsed_seconds: 0.046632418
+    moves:
+    - !SpeciationMove
+      reactions:
+      - - = cation + anion
+        - !dG 0.0
+      temperature: 298.15
+      per_reaction:
+      - reaction: = cation + anion
+        accepted: 8
+        trials: 2500
+        acceptance_ratio: '0.0032'
+      weight: 1.0
+      repeat: 5
+      statistics:
+        num_trials: 2500
+        num_accepted: 8
+        mean_square_displacement:
+          avg: 0.0
+          'n': 2492
+        timer:
+          accumulated:
+            secs: 0
+            nanos: 0
+        info: {}
+        energy_change_sum: -23.371099785204706
+        acceptance_ratio: 0.0032
+  criterion: MetropolisHastings
+analysis:
+- energy:
+    num_samples: 20
+    mean: -180.81192510111018
+- collectivevariable:
+    property: Count
+    description: 'selection: atomtype Na'
+    num_samples: 20
+    mean: 39.199999999999996
+    rms: 39.250477704099346
+- collectivevariable:
+    property: Count
+    description: 'selection: atomtype Cl'
+    num_samples: 20
+    mean: 39.199999999999996
+    rms: 39.250477704099346
