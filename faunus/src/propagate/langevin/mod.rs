@@ -120,7 +120,24 @@ impl LangevinRunner {
         let steps = self.config.steps;
 
         if gpu.has_gpu_forces {
-            gpu.run_steps(steps)?;
+            // GPU computes pair + bonded forces. CPU-only force terms
+            // (e.g. CustomPair) are summed each step into the COM force/torque
+            // overlay buffer. When no such terms are present, no callback is
+            // passed and the GPU loop runs without host round-trips.
+            if context.hamiltonian().has_ld_overlay_forces() {
+                let mut overlay = |positions: &[[f32; 4]]| -> (Vec<[f32; 4]>, Vec<[f32; 4]>) {
+                    Self::write_positions(context, positions);
+                    let n_groups = context.groups().len();
+                    for g in 0..n_groups {
+                        context.update_mass_center(g);
+                    }
+                    let forces = context.hamiltonian().ld_overlay_forces(context);
+                    reduce_forces_to_com(context, &forces)
+                };
+                gpu.run_steps(steps, Some(&mut overlay))?;
+            } else {
+                gpu.run_steps(steps, None)?;
+            }
         } else {
             let mut force_callback = |positions: &[[f32; 4]]| -> (Vec<[f32; 4]>, Vec<[f32; 4]>) {
                 Self::write_positions(context, positions);

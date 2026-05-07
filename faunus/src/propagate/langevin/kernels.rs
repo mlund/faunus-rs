@@ -667,6 +667,32 @@ pub fn reduce_forces_kernel(
     }
 }
 
+/// Accumulate CPU-supplied per-molecule forces and torques onto the device buffers.
+///
+/// Used for energy terms whose forces are not (yet) computed on-device — currently
+/// `CustomPair` and any other CPU-only `Hamiltonian` overlay term. Runs after
+/// `reduce_forces_kernel` so it adds to, rather than overwrites, the reduced
+/// nonbonded + bonded contributions.
+#[cube(launch_unchecked)]
+pub fn add_extra_com_forces_kernel(
+    extra_com_forces: &Array<f32>,
+    extra_torques: &Array<f32>,
+    com_forces: &mut Array<f32>,
+    torques: &mut Array<f32>,
+    n_molecules: u32,
+) {
+    let m = ABSOLUTE_POS;
+    if m < n_molecules as usize {
+        let m4 = m * 4;
+        com_forces[m4] += extra_com_forces[m4];
+        com_forces[m4 + 1] += extra_com_forces[m4 + 1];
+        com_forces[m4 + 2] += extra_com_forces[m4 + 2];
+        torques[m4] += extra_torques[m4];
+        torques[m4 + 1] += extra_torques[m4 + 1];
+        torques[m4 + 2] += extra_torques[m4 + 2];
+    }
+}
+
 // ============================================================================
 // Per-atom BAOAB kernels for flexible molecules
 // ============================================================================

@@ -88,6 +88,10 @@ pub(super) struct LangevinGpu<R: Runtime> {
     angular_velocities: Handle,
     com_forces: Handle,
     torques: Handle,
+    /// CPU-supplied per-molecule force/torque overlay added after the reduce
+    /// kernel, for terms not yet on-device (e.g. `CustomPair`).
+    extra_com_forces: Handle,
+    extra_torques: Handle,
     ref_positions: Handle,
     mol_masses: Handle,
     mol_inertia: Handle,
@@ -182,6 +186,8 @@ impl<R: Runtime> LangevinGpu<R> {
         let angular_velocities = client.empty(n_molecules as usize * vec4_bytes);
         let com_forces = client.empty(n_molecules as usize * vec4_bytes);
         let torques = client.empty(n_molecules as usize * vec4_bytes);
+        let extra_com_forces = client.empty(n_molecules as usize * vec4_bytes);
+        let extra_torques = client.empty(n_molecules as usize * vec4_bytes);
         let ref_positions = client.empty(n_atoms as usize * vec4_bytes);
         let mol_masses = client.empty(n_molecules as usize * 4);
         let mol_inertia = client.empty(n_molecules as usize * vec4_bytes);
@@ -230,6 +236,8 @@ impl<R: Runtime> LangevinGpu<R> {
             angular_velocities,
             com_forces,
             torques,
+            extra_com_forces,
+            extra_torques,
             ref_positions,
             mol_masses,
             mol_inertia,
@@ -430,9 +438,17 @@ impl<R: Runtime> LangevinGpu<R> {
     /// Run `steps` BAOAB steps with on-device force computation.
     ///
     /// Forces, reduction, integration, and reconstruction all run on the compute
-    /// device without any host readback during the integration loop.
+    /// device. When `overlay` is `Some`, after each reduce step its callback is
+    /// invoked with the current atom positions and returns extra per-molecule
+    /// COM forces and torques (e.g. from `CustomPair`); these are uploaded and
+    /// added on top of the GPU-reduced nonbonded + bonded contributions.
+    ///
     /// Rigid and flexible integration paths operate on disjoint atom ranges.
-    pub(super) fn run_steps(&mut self, steps: usize) -> anyhow::Result<()> {
+    pub(super) fn run_steps(
+        &mut self,
+        steps: usize,
+        mut overlay: Option<ForceCallback<'_>>,
+    ) -> anyhow::Result<()> {
         anyhow::ensure!(self.has_gpu_forces, "on-device forces not initialized");
         self.log_first_step();
         let rebuild_interval = self.config.cell_list_rebuild;
@@ -442,6 +458,12 @@ impl<R: Runtime> LangevinGpu<R> {
         self.dispatch_pair_forces()?;
         self.dispatch_bonded_forces()?;
         self.dispatch_reduce()?;
+        if let Some(cb) = overlay.as_deref_mut() {
+            let positions = self.download_positions();
+            let (extra_com, extra_tau) = cb(&positions);
+            self.upload_extra_com_forces_torques(&extra_com, &extra_tau);
+            self.dispatch_add_extra_com_forces()?;
+        }
 
         for step in 0..steps as u32 {
             self.dispatch_baoab()?;
@@ -457,6 +479,12 @@ impl<R: Runtime> LangevinGpu<R> {
             self.dispatch_pair_forces()?;
             self.dispatch_bonded_forces()?;
             self.dispatch_reduce()?;
+            if let Some(cb) = overlay.as_deref_mut() {
+                let positions = self.download_positions();
+                let (extra_com, extra_tau) = cb(&positions);
+                self.upload_extra_com_forces_torques(&extra_com, &extra_tau);
+                self.dispatch_add_extra_com_forces()?;
+            }
 
             self.dispatch_half_kick()?;
             self.dispatch_half_kick_atoms()?;
@@ -504,6 +532,47 @@ impl<R: Runtime> LangevinGpu<R> {
             .client
             .create_from_slice(bytemuck::cast_slice(com_forces));
         self.torques = self.client.create_from_slice(bytemuck::cast_slice(torques));
+    }
+
+    /// Upload CPU-computed COM-force / torque overlay to be added on top of
+    /// the GPU-reduced nonbonded + bonded contributions.
+    fn upload_extra_com_forces_torques(
+        &mut self,
+        com_forces: &[[f32; 4]],
+        torques: &[[f32; 4]],
+    ) {
+        self.extra_com_forces = self
+            .client
+            .create_from_slice(bytemuck::cast_slice(com_forces));
+        self.extra_torques = self.client.create_from_slice(bytemuck::cast_slice(torques));
+    }
+
+    /// Add `extra_com_forces` / `extra_torques` to `com_forces` / `torques`.
+    /// Must run after `dispatch_reduce` so the overlay isn't clobbered.
+    fn dispatch_add_extra_com_forces(&self) -> anyhow::Result<()> {
+        let count = CubeCount::Static(self.n_molecules.div_ceil(WORKGROUP_SIZE), 1, 1);
+        let dim = CubeDim::new_1d(WORKGROUP_SIZE);
+        unsafe {
+            kernels::add_extra_com_forces_kernel::launch_unchecked::<R>(
+                &self.client,
+                count,
+                dim,
+                ArrayArg::from_raw_parts::<f32>(
+                    &self.extra_com_forces,
+                    self.n_molecules as usize * 4,
+                    1,
+                ),
+                ArrayArg::from_raw_parts::<f32>(
+                    &self.extra_torques,
+                    self.n_molecules as usize * 4,
+                    1,
+                ),
+                ArrayArg::from_raw_parts::<f32>(&self.com_forces, self.n_molecules as usize * 4, 1),
+                ArrayArg::from_raw_parts::<f32>(&self.torques, self.n_molecules as usize * 4, 1),
+                ScalarArg::new(self.n_molecules),
+            )
+        }?;
+        Ok(())
     }
 
     // ========================================================================

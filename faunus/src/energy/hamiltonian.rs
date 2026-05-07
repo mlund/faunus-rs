@@ -268,8 +268,33 @@ impl Hamiltonian {
     /// Returns a dense vector indexed by absolute particle index, with contributions
     /// from all force-providing terms summed together.
     pub fn forces(&self, context: &impl Context) -> Vec<crate::Point> {
+        self.forces_filtered(context, |_| true)
+    }
+
+    /// True if any energy term contributes forces that the GPU Langevin pipeline
+    /// does *not* compute on-device. Caller uses this to decide whether to plumb
+    /// a CPU-overlay callback into the GPU run loop.
+    #[cfg_attr(not(feature = "gpu"), allow(dead_code))]
+    pub(crate) fn has_ld_overlay_forces(&self) -> bool {
+        self.energy_terms
+            .iter()
+            .any(|t| !t.handled_by_gpu_ld() && t.contributes_force())
+    }
+
+    /// Per-atom forces from terms not handled by the on-device LD pipeline.
+    /// Summed for overlay accumulation onto the GPU's reduced COM forces/torques.
+    #[cfg_attr(not(feature = "gpu"), allow(dead_code))]
+    pub(crate) fn ld_overlay_forces(&self, context: &impl Context) -> Vec<crate::Point> {
+        self.forces_filtered(context, |t| !t.handled_by_gpu_ld())
+    }
+
+    fn forces_filtered(
+        &self,
+        context: &impl Context,
+        keep: impl Fn(&EnergyTerm) -> bool,
+    ) -> Vec<crate::Point> {
         let mut result: Option<Vec<crate::Point>> = None;
-        for term in &self.energy_terms {
+        for term in self.energy_terms.iter().filter(|t| keep(t)) {
             let term_forces = term.forces(context);
             if term_forces.is_empty() {
                 continue;

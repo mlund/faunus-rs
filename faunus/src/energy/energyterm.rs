@@ -221,6 +221,31 @@ impl EnergyTerm {
         }
     }
 
+    /// True when the GPU Langevin pipeline computes this term's forces on-device,
+    /// so the host must not recompute and double-count them in the overlay path.
+    /// Currently the on-device pipeline handles nonbonded pair forces and the
+    /// bonded kernels (bonds/angles/dihedrals are computed inside the GPU loop
+    /// even though their CPU `forces()` arms return empty today).
+    pub(crate) fn handled_by_gpu_ld(&self) -> bool {
+        matches!(
+            self,
+            Self::NonbondedMatrix(_)
+                | Self::NonbondedMatrixSplined(_)
+                | Self::IntramolecularBonded(_)
+                | Self::IntermolecularBonded(_)
+        )
+    }
+
+    /// True for variants whose `forces()` arm returns a non-empty vector.
+    /// Used by the GPU LD pre-flight to decide whether to plumb an overlay
+    /// callback. Keep in sync with the `forces()` match arms above.
+    pub(crate) fn contributes_force(&self) -> bool {
+        matches!(
+            self,
+            Self::NonbondedMatrix(_) | Self::NonbondedMatrixSplined(_) | Self::CustomPair(_)
+        )
+    }
+
     /// Nonbonded energy between two sets of atom indices; `None` for non-nonbonded terms.
     pub fn nonbonded_energy_between_atoms(
         &self,
