@@ -426,6 +426,11 @@ impl Hamiltonian {
                 self.push(eb.build()?.into());
             }
         }
+        if let Some(pair_builders) = &builder.custompair {
+            for pb in pair_builders {
+                self.push(pb.build(context)?.into());
+            }
+        }
 
         if let Some(pm_builder) = &builder.polymer_depletion {
             let thermal_energy = require_thermal_energy("polymer_depletion")?;

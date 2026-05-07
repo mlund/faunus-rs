@@ -24,6 +24,7 @@ analysis: [...]                 # optional: output and sampling
 |-------|--------------|---------------|
 | Atoms, molecules, bonds | `docs/topology.md` | `tests/files/topology_pass.yaml`, `tests/files/bonded_interactions.yaml` |
 | Pair potentials, Ewald, SASA | `docs/energy.md` | `tests/files/nonbonded_interactions.yaml`, `tests/files/npt_water_ewald/input.yaml` |
+| Custom external / pair-COM bias (MC + LD) | `docs/energy.md#custom-external-potential`, `docs/energy.md#custom-pair-potential-com-com` | — |
 | MC moves, Langevin, Gibbs | `docs/moves.md` | `examples/langevin/input.yaml`, `tests/files/gibbs_ensemble/input.yaml` |
 | Trajectory, RDF, energy output | `docs/analysis.md` | `examples/twobody/input.yaml`, `examples/calvados3/input.yaml` |
 | Selection expressions | `docs/selection_language.md` | used in analysis and constraints |

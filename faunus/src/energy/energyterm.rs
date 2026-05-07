@@ -3,6 +3,7 @@ use super::{
     constrain::Constrain,
     contact_tessellation::ContactTessellationEnergy,
     custom_external::CustomExternal,
+    custom_pair::CustomPair,
     ewald::EwaldReciprocalEnergy,
     excluded_coulomb::ExcludedCoulomb,
     external_pressure::ExternalPressure,
@@ -35,6 +36,8 @@ pub enum EnergyTerm {
     ExternalPressure(ExternalPressure),
     /// Custom external potential from math expression.
     CustomExternal(CustomExternal),
+    /// User-defined energy/force between two rigid-body centers of mass.
+    CustomPair(CustomPair),
     /// Ewald reciprocal-space electrostatic energy.
     EwaldReciprocal(Box<EwaldReciprocalEnergy>),
     /// Polymer depletion many-body interaction.
@@ -67,6 +70,7 @@ macro_rules! dispatch_stateful {
             | EnergyTerm::Constrain(_)
             | EnergyTerm::ExternalPressure(_)
             | EnergyTerm::CustomExternal(_)
+            | EnergyTerm::CustomPair(_)
             | EnergyTerm::ExcludedCoulomb(_)
             | EnergyTerm::Penalty(_) => {}
         }
@@ -99,6 +103,7 @@ impl EnergyTerm {
             | Self::Constrain(_)
             | Self::ExternalPressure(_)
             | Self::CustomExternal(_)
+            | Self::CustomPair(_)
             | Self::ExcludedCoulomb(_)
             | Self::Penalty(_) => Ok(()),
         }
@@ -123,6 +128,7 @@ impl EnergyTerm {
             | Self::Constrain(_)
             | Self::ExternalPressure(_)
             | Self::CustomExternal(_)
+            | Self::CustomPair(_)
             | Self::ExcludedCoulomb(_)
             | Self::Penalty(_) => {}
         }
@@ -175,6 +181,7 @@ impl EnergyTerm {
             Self::EwaldReciprocal(x) => Some(x.to_yaml()),
             Self::ExternalPressure(x) => Some(x.to_yaml()),
             Self::CustomExternal(x) => Some(x.to_yaml()),
+            Self::CustomPair(x) => Some(x.to_yaml()),
             Self::SasaEnergy(x) => Some(x.to_yaml()),
             Self::ContactTessellation(x) => Some(x.to_yaml()),
             Self::NonbondedMatrix(_)
@@ -197,6 +204,7 @@ impl EnergyTerm {
         match self {
             Self::NonbondedMatrix(x) => x.forces(context),
             Self::NonbondedMatrixSplined(x) => x.forces(context),
+            Self::CustomPair(x) => x.forces(context),
             Self::IntramolecularBonded(_)
             | Self::IntermolecularBonded(_)
             | Self::SasaEnergy(_)
@@ -241,6 +249,7 @@ impl crate::Info for EnergyTerm {
             Self::Constrain(_) => "constrain",
             Self::ExternalPressure(_) => "externalpressure",
             Self::CustomExternal(_) => "customexternal",
+            Self::CustomPair(_) => "custompair",
             Self::EwaldReciprocal(_) => "ewald_reciprocal",
             Self::PolymerDepletion(_) => "polymer_depletion",
             Self::ExcludedCoulomb(_) => "excluded_coulomb",
@@ -265,6 +274,7 @@ impl EnergyChange for EnergyTerm {
             Self::Constrain(x) => x.energy(context, change),
             Self::ExternalPressure(x) => x.energy(context, change),
             Self::CustomExternal(x) => x.energy(context, change),
+            Self::CustomPair(x) => x.energy(context, change),
             Self::EwaldReciprocal(x) => x.energy(context, change),
             Self::PolymerDepletion(x) => x.energy(context, change),
             Self::ExcludedCoulomb(x) => x.energy(context, change),

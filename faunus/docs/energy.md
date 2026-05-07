@@ -513,6 +513,70 @@ When `false` (default), the expression is evaluated at each matching atom positi
 
 ---
 
+## Custom Pair Potential (COM-COM)
+
+The `custompair` energy term applies a user-defined potential `U(r)` between the
+centres of mass of *two* rigid-body selections. Unlike `customexternal`, it
+contributes both **energy** (consumed by Metropolis MC) and **forces**
+(consumed by Langevin dynamics), distributed to each rigid body's atoms by mass
+fraction so the COM force is exact and the torque about the COM is zero.
+
+Typical uses: harmonic biasing for umbrella sampling along a separation
+coordinate, constant-force pulling (steered MD), flat-bottom restraints, or any
+custom `U(r)` between two rigid molecules.
+
+### Variables
+
+The expression may use any subset of:
+
+| Variable | Description                                                      |
+|----------|------------------------------------------------------------------|
+| `r`      | distance between the two COMs (Å), minimum-image                |
+| `dx`     | signed x-component of (com1 − com2) under PBC                   |
+| `dy`     | signed y-component of (com1 − com2) under PBC                   |
+| `dz`     | signed z-component of (com1 − com2) under PBC                   |
+
+The same expression syntax as [`customexternal`](#custom-external-potential)
+applies (operators, math functions, Python-style conditionals, named constants).
+
+### YAML configuration
+
+```yaml
+energy:
+  custompair:
+    # Harmonic restraint at fixed COM-COM distance (umbrella window)
+    - selection1: "molecule protein0"
+      selection2: "molecule protein1"
+      function: "0.5 * k * (r - r0)^2"
+      constants: { k: 100.0, r0: 30.0 }
+    # Constant pulling force along the COM-COM axis (steered MD)
+    - selection1: "molecule protein0"
+      selection2: "molecule protein1"
+      function: "f0 * r"
+      constants: { f0: 50.0 }
+```
+
+| Key           | Required | Default     | Description                                          |
+|---------------|----------|-------------|------------------------------------------------------|
+| `selection1`  | yes      |             | Selection that must resolve to one Rigid molecule    |
+| `selection2`  | yes      |             | Same, distinct from `selection1`                     |
+| `function`    | yes      |             | Math expression in `r`, `dx`, `dy`, `dz`             |
+| `constants`   | no       | `{}`        | Named constants substituted before parsing           |
+| `gradient_h`  | no       | `1e-5`      | Step (Å) for central-difference dU/dr in forces      |
+
+### Notes
+
+- Both selections must each resolve to **exactly one** group whose underlying
+  molecule has `degrees_of_freedom: Rigid`. Selections matching free-ion clouds,
+  partial rigid bodies, or zero/multiple groups are rejected at build time.
+- Force on each COM is `−(dU/dr)·d̂_ab`, where `d̂_ab = (com1−com2)/r`.
+  `dU/dr` is computed by central difference on the parsed expression — no
+  analytic derivative required.
+- The same YAML block is consumed identically by MC (energy) and LD (forces),
+  so pure-MC, pure-LD, and hybrid runs all see a consistent bias.
+
+---
+
 ## Penalty (Flat-Histogram Bias)
 
 Applies a static bias potential loaded from a converged [Wang-Landau](wang_landau.md)

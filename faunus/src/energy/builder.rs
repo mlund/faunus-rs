@@ -41,6 +41,7 @@ use unordered_pair::UnorderedPair;
 use super::constrain::ConstrainBuilder;
 use super::contact_tessellation::ContactTessellationEnergyBuilder;
 use super::custom_external::CustomExternalBuilder;
+use super::custom_pair::CustomPairBuilder;
 use super::ewald::EwaldBuilder;
 use super::external_pressure::Pressure;
 use super::penalty::PenaltyBuilder;
@@ -647,6 +648,9 @@ pub struct HamiltonianBuilder {
 
     /// Custom external potentials from math expressions.
     pub customexternal: Option<Vec<CustomExternalBuilder>>,
+
+    /// User-defined energy/force between two rigid-body centers of mass.
+    pub custompair: Option<Vec<CustomPairBuilder>>,
 
     /// Ewald reciprocal-space energy configuration.
     pub ewald: Option<EwaldBuilder>,
