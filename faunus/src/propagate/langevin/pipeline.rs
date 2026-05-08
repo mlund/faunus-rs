@@ -89,7 +89,7 @@ pub(super) struct LangevinGpu<R: Runtime> {
     com_forces: Handle,
     torques: Handle,
     /// CPU-supplied per-molecule force/torque overlay added after the reduce
-    /// kernel, for terms not yet on-device (e.g. `CustomPair`).
+    /// kernel, for energy terms whose forces are not computed on-device.
     extra_com_forces: Handle,
     extra_torques: Handle,
     ref_positions: Handle,
@@ -440,8 +440,8 @@ impl<R: Runtime> LangevinGpu<R> {
     /// Forces, reduction, integration, and reconstruction all run on the compute
     /// device. When `overlay` is `Some`, after each reduce step its callback is
     /// invoked with the current atom positions and returns extra per-molecule
-    /// COM forces and torques (e.g. from `CustomPair`); these are uploaded and
-    /// added on top of the GPU-reduced nonbonded + bonded contributions.
+    /// COM forces and torques; these are uploaded and added on top of the
+    /// GPU-reduced nonbonded + bonded contributions.
     ///
     /// Rigid and flexible integration paths operate on disjoint atom ranges.
     pub(super) fn run_steps(
