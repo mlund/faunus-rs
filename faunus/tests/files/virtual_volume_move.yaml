@@ -6,3 +6,7 @@
   dV: 1.0
   method: ScaleZ
   frequency: !Every 5
+- !VirtualVolumeMove
+  dV: 0.5
+  frequency: !Every 10
+  equilibration: 500
