@@ -122,12 +122,9 @@ fn axes_to_unit_vector(dim: &Axes) -> Result<Point> {
 }
 
 impl VirtualTranslateBuilder {
-    /// derive_builder wraps each field in `Option`, so the auto-generated
-    /// `output_file` is `Option<Option<PathBuf>>`: outer = "field was set",
-    /// inner = the user-supplied path (or `None` for no file output).
     pub fn apply_output_dir(&mut self, dir: &std::path::Path) -> Result<()> {
-        if let Some(Some(p)) = self.output_file.as_mut() {
-            crate::analysis::prefix_in_place(p, dir)?;
+        if let Some(path) = self.output_file.as_mut().and_then(Option::as_mut) {
+            crate::analysis::prefix_in_place(path, dir)?;
         }
         Ok(())
     }
@@ -219,16 +216,13 @@ impl VirtualTranslate {
         Ok((new_energy - old_energy) / self.thermal_energy)
     }
 
-    /// Write data to the output stream.
-    ///
-    /// Called for every sampled step, including those where the Widom average
-    /// was skipped due to overflow. This ensures the output file has one row
-    /// per sampled step, staying in sync with other analyses at the same frequency.
+    /// One row per sampled step, keeping the file in sync with other analyses
+    /// at the same frequency.
     fn write_to_stream(&mut self, step: usize, energy_change: f64) -> Result<()> {
         let mean_force = self.mean_force();
         let displacement = self.displacement;
 
-        if let Some(ref mut stream) = self.stream {
+        if let Some(stream) = self.stream.as_mut() {
             stream.write_row(&[
                 &step,
                 &format_args!("{displacement:.3e}"),
