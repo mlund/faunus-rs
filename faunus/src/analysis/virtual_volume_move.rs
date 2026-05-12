@@ -23,7 +23,7 @@
 
 use super::widom::WidomAccumulator;
 use super::{Analyze, Frequency};
-use crate::auxiliary::MappingExt;
+use crate::auxiliary::{ColumnWriter, MappingExt};
 use crate::cell::{Shape, VolumeScalePolicy};
 use crate::change::Change;
 use crate::energy::EnergyChange;
@@ -32,6 +32,7 @@ use anyhow::Result;
 use derive_builder::Builder;
 use derive_more::Debug;
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 
 /// Virtual volume move analysis for excess pressure measurement.
 ///
@@ -52,6 +53,17 @@ pub struct VirtualVolumeMove {
     /// Volume scaling policy
     #[builder_field_attr(serde(default))]
     method: VolumeScalePolicy,
+
+    /// Output file for streaming results
+    #[allow(dead_code)]
+    #[builder_field_attr(serde(rename = "file"))]
+    output_file: Option<PathBuf>,
+
+    /// Stream object for output
+    #[builder(setter(skip))]
+    #[builder_field_attr(serde(skip))]
+    #[debug(skip)]
+    stream: Option<ColumnWriter>,
 
     /// Sample frequency
     frequency: Frequency,
@@ -84,9 +96,17 @@ impl VirtualVolumeMoveBuilder {
     pub fn build(&self, thermal_energy: f64) -> Result<VirtualVolumeMove> {
         self.validate()?;
 
+        let output_file = self.output_file.clone().flatten();
+        let stream = output_file
+            .as_deref()
+            .map(|p| ColumnWriter::open(p, &["step", "dV/Å³", "dU/kT", "<Pex>/kT/Å³"]))
+            .transpose()?;
+
         Ok(VirtualVolumeMove {
             volume_displacement: self.volume_displacement.unwrap(),
             method: self.method.unwrap_or_default(),
+            output_file,
+            stream,
             frequency: self.frequency.unwrap(),
             widom: WidomAccumulator::new(),
             thermal_energy,
@@ -151,6 +171,24 @@ impl VirtualVolumeMove {
 
         Ok((new_energy - old_energy) / self.thermal_energy)
     }
+
+    /// One row per sampled step, including steps where the Widom average was
+    /// skipped due to overflow — keeps the file in sync with other analyses at
+    /// the same frequency.
+    fn write_to_stream(&mut self, step: usize, energy_change: f64) -> Result<()> {
+        let mean_pressure = self.mean_pressure();
+        let dv = self.volume_displacement;
+
+        if let Some(stream) = self.stream.as_mut() {
+            stream.write_row(&[
+                &step,
+                &format_args!("{dv:.3e}"),
+                &format_args!("{energy_change:.6e}"),
+                &format_args!("{mean_pressure:.6e}"),
+            ])?;
+        }
+        Ok(())
+    }
 }
 
 impl<T: Context> Analyze<T> for VirtualVolumeMove {
@@ -161,7 +199,7 @@ impl<T: Context> Analyze<T> for VirtualVolumeMove {
         self.frequency = freq;
     }
 
-    fn perform_sample(&mut self, context: &T, _step: usize, weight: f64) -> Result<()> {
+    fn perform_sample(&mut self, context: &T, step: usize, weight: f64) -> Result<()> {
         if self.volume_displacement.abs() < f64::EPSILON {
             return Ok(());
         }
@@ -171,6 +209,7 @@ impl<T: Context> Analyze<T> for VirtualVolumeMove {
         let energy_change = self.perturb(&mut trial_context, old_energy)?;
 
         self.widom.collect(energy_change, weight);
+        self.write_to_stream(step, energy_change)?;
 
         Ok(())
     }

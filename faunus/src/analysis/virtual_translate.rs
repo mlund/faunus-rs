@@ -209,16 +209,14 @@ impl VirtualTranslate {
         Ok((new_energy - old_energy) / self.thermal_energy)
     }
 
-    /// Write data to the output stream.
-    ///
-    /// Called for every sampled step, including those where the Widom average
-    /// was skipped due to overflow. This ensures the output file has one row
-    /// per sampled step, staying in sync with other analyses at the same frequency.
+    /// One row per sampled step, including steps where the Widom average was
+    /// skipped due to overflow — keeps the file in sync with other analyses at
+    /// the same frequency.
     fn write_to_stream(&mut self, step: usize, energy_change: f64) -> Result<()> {
         let mean_force = self.mean_force();
         let displacement = self.displacement;
 
-        if let Some(ref mut stream) = self.stream {
+        if let Some(stream) = self.stream.as_mut() {
             stream.write_row(&[
                 &step,
                 &format_args!("{displacement:.3e}"),
