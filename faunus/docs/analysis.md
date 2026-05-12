@@ -487,6 +487,8 @@ $$P_{\text{ex}} = \frac{k_BT \ln\langle e^{-\Delta U / k_BT}\rangle}{\delta V}$$
 
 where $\Delta U$ is the energy change due to the volume displacement $\delta V$.
 All particle positions are scaled according to the chosen `method`.
+If `file` is given, each sampled step writes columns
+`step`, `dV/Å³`, `dU/kT`, and `<Pex>/kT/Å³`.
 
 ### Example
 
@@ -495,6 +497,7 @@ analysis:
   - !VirtualVolumeMove
     dV: 0.2
     method: Isotropic
+    file: pressure.csv
     frequency: !Every 10
 ```
 
@@ -504,6 +507,7 @@ Key           | Required | Default      | Description
 ------------- | -------- | ------------ | -------------------------------------------
 `dV`          | yes      |              | Volume displacement (ų)
 `method`      | no       | `Isotropic`  | Scaling policy: `Isotropic`, `ScaleZ`, `ScaleXY`
+`file`        | no       |              | Output file path (see [Output file formats](#output-file-formats))
 `frequency`   | yes      |              | Sample frequency, e.g. `!Every 10`
 
 ---
