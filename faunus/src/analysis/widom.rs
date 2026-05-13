@@ -34,10 +34,15 @@ pub(crate) struct WidomAccumulator {
     shift: f64,
     /// Σ w_i
     sum_weights: f64,
-    /// Number of samples collected.
+    /// Number of samples in the current block (reset by end_block).
     count: u64,
+    /// Overall log-sum-exp state mirroring the block fields but never reset.
+    total_log_sum: f64,
+    total_shift: f64,
+    total_sum_weights: f64,
+    /// Total samples across all blocks (never reset).
+    total_count: u64,
     /// Between-block error estimation for the free energy.
-    #[allow(dead_code)]
     free_energy: BlockAverage,
 }
 
@@ -56,48 +61,79 @@ impl WidomAccumulator {
         }
         let x = -energy_change; // we accumulate exp(x) = exp(-dU)
 
-        if self.count == 0 {
-            self.shift = x;
-            self.log_sum = weight.ln();
-        } else if x > self.shift {
-            // Rescale existing sum so all exponents remain ≤ 0, preventing overflow
-            self.log_sum += self.shift - x;
-            self.shift = x;
-            self.log_sum = ln_add_exp(self.log_sum, weight.ln());
-        } else {
-            self.log_sum = ln_add_exp(self.log_sum, (x - self.shift) + weight.ln());
-        }
-
-        self.sum_weights += weight;
-        self.count += 1;
+        Self::accumulate(
+            x,
+            weight,
+            &mut self.count,
+            &mut self.shift,
+            &mut self.log_sum,
+            &mut self.sum_weights,
+        );
+        Self::accumulate(
+            x,
+            weight,
+            &mut self.total_count,
+            &mut self.total_shift,
+            &mut self.total_log_sum,
+            &mut self.total_sum_weights,
+        );
     }
 
-    /// Mean free energy `-ln(<exp(-dU/kT)>)` in units of kT.
+    fn accumulate(
+        x: f64,
+        weight: f64,
+        count: &mut u64,
+        shift: &mut f64,
+        log_sum: &mut f64,
+        sum_weights: &mut f64,
+    ) {
+        if *count == 0 {
+            *shift = x;
+            *log_sum = weight.ln();
+        } else if x > *shift {
+            // Rescale existing sum so all exponents remain ≤ 0, preventing overflow
+            *log_sum += *shift - x;
+            *shift = x;
+            *log_sum = ln_add_exp(*log_sum, weight.ln());
+        } else {
+            *log_sum = ln_add_exp(*log_sum, (x - *shift) + weight.ln());
+        }
+        *sum_weights += weight;
+        *count += 1;
+    }
+
+    /// Mean free energy `-ln(<exp(-dU/kT)>)` over all collected samples in units of kT.
     pub fn mean_free_energy(&self) -> f64 {
-        if self.count == 0 || self.sum_weights <= 0.0 {
+        if self.total_count == 0 || self.total_sum_weights <= 0.0 {
             return f64::INFINITY;
         }
         // F = -ln(Σ w_i exp(-dU_i) / Σ w_i)
         //   = -(shift + log_sum - ln(sum_weights))
-        -(self.shift + self.log_sum - self.sum_weights.ln())
+        -(self.total_shift + self.total_log_sum - self.total_sum_weights.ln())
     }
 
     /// Whether any samples have been collected.
     pub fn is_empty(&self) -> bool {
-        self.count == 0
+        self.total_count == 0
     }
 
-    /// Number of samples collected.
+    /// Total number of samples collected across all blocks.
     pub fn len(&self) -> usize {
-        self.count as usize
+        self.total_count as usize
+    }
+
+    fn block_mean_free_energy(&self) -> f64 {
+        if self.count == 0 || self.sum_weights <= 0.0 {
+            return f64::INFINITY;
+        }
+        -(self.shift + self.log_sum - self.sum_weights.ln())
     }
 
     /// Finalize the current block: push its free energy into the block average,
     /// then reset the within-block accumulator for the next block.
-    #[allow(dead_code)]
     pub fn end_block(&mut self) {
         if self.count > 0 {
-            self.free_energy.add(self.mean_free_energy());
+            self.free_energy.add(self.block_mean_free_energy());
             self.log_sum = 0.0;
             self.shift = 0.0;
             self.sum_weights = 0.0;
@@ -106,9 +142,18 @@ impl WidomAccumulator {
     }
 
     /// Standard error of the mean free energy across blocks.
-    #[allow(dead_code)]
     pub fn free_energy_error(&self) -> f64 {
         self.free_energy.error()
+    }
+
+    /// Sample standard deviation of the free energy across blocks.
+    pub fn free_energy_stddev(&self) -> f64 {
+        self.free_energy.stddev()
+    }
+
+    /// Number of completed blocks.
+    pub fn n_blocks(&self) -> u64 {
+        self.free_energy.n()
     }
 }
 
@@ -209,8 +254,10 @@ mod tests {
         assert_approx_eq!(f64, acc.free_energy.mean(), 1.0, epsilon = 1e-12);
         assert!(acc.free_energy_error() > 0.0);
 
-        // After end_block, within-block accumulator is reset
-        assert!(acc.is_empty());
+        // Total accumulator is never reset: 2 samples, overall mean = -ln((1 + exp(-2)) / 2)
+        assert_eq!(acc.len(), 2);
+        let expected = -((1.0 + (-2.0_f64).exp()) / 2.0).ln();
+        assert_approx_eq!(f64, acc.mean_free_energy(), expected, epsilon = 1e-12);
     }
 
     #[test]

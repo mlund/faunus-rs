@@ -455,6 +455,16 @@ impl BlockAverage {
         self.0.error()
     }
 
+    /// Sample standard deviation across blocks (σ).
+    pub fn stddev(&self) -> f64 {
+        self.0.sample_variance().sqrt()
+    }
+
+    /// Number of blocks recorded.
+    pub fn n(&self) -> u64 {
+        self.0.len()
+    }
+
     /// Serialize as YAML mapping `{ mean: ..., error: ... }`.
     pub fn to_yaml(&self) -> Option<serde_yml::Value> {
         let mut m = serde_yml::Mapping::new();
