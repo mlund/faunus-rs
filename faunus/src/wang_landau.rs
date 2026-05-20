@@ -93,6 +93,12 @@ fn walker_state_path(state_dir: &Path, index: usize) -> PathBuf {
     state_dir.join(format!("walker{index}_state.yaml"))
 }
 
+/// Per-walker analysis output directory. Parallel walkers each write to
+/// their own subdir so analyses with a `file:` field cannot race (issue #32).
+fn walker_output_dir(state_dir: &Path, index: usize) -> PathBuf {
+    state_dir.join(format!("walker{index}"))
+}
+
 fn histogram_path(state_dir: &Path) -> PathBuf {
     state_dir.join("histogram.yaml")
 }
@@ -218,7 +224,13 @@ pub fn run(input: &Path, state_dir: &Path, output: &Path, max_threads: usize) ->
                     // WL controls its own loop; disable the YAML repeat limit
                     let mut propagate = Propagate::from_file(input_ref, &ctx)?;
                     propagate.set_unlimited_repeats();
-                    let analyses = analysis::from_file(input_ref, &ctx, Some(medium_ref))?;
+                    let out_dir = walker_output_dir(state_dir_ref, i);
+                    let analyses = analysis::from_file_creating_dir(
+                        input_ref,
+                        &ctx,
+                        Some(medium_ref),
+                        &out_dir,
+                    )?;
                     let mut mc = MarkovChain::new(ctx, propagate, rt, analyses)?;
 
                     let mut iteration = 0u32;

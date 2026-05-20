@@ -246,6 +246,13 @@ fn window_cv_path(state_dir: &Path, index: usize) -> PathBuf {
     state_dir.join(format!("window{index}_histogram.yaml"))
 }
 
+/// Per-window analysis output directory. Each window's `Trajectory`,
+/// `Energy`, RDF, etc. files land here, so parallel windows cannot race
+/// on a single shared path (issue #32).
+fn window_output_dir(state_dir: &Path, index: usize) -> PathBuf {
+    state_dir.join(format!("window{index}"))
+}
+
 // ---------------------------------------------------------------------------
 // Per-window worker
 // ---------------------------------------------------------------------------
@@ -396,7 +403,9 @@ fn run_window(
     // Block ensures `mc` (which owns `context`) is dropped before we serialize
     // the histogram and return the result.
     {
-        let analyses = analysis::from_file(input, &context, Some(params.medium))?;
+        let out_dir = window_output_dir(params.state_dir, window_index);
+        let analyses =
+            analysis::from_file_creating_dir(input, &context, Some(params.medium), &out_dir)?;
         let mut mc = MarkovChain::new(context, propagate, rt, analyses)?;
 
         let cv = hard_wall_cv.build(mc.context())?;

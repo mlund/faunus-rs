@@ -41,6 +41,10 @@ pub struct RadialDistributionBuilder {
 }
 
 impl RadialDistributionBuilder {
+    pub fn apply_output_dir(&mut self, dir: &std::path::Path) -> Result<()> {
+        crate::analysis::prefix_in_place(&mut self.file, dir)
+    }
+
     pub fn build(&self, context: &impl Context) -> Result<RadialDistribution> {
         let cell = context.cell();
         let max_r = match self.max_r {

@@ -122,6 +122,16 @@ fn axes_to_unit_vector(dim: &Axes) -> Result<Point> {
 }
 
 impl VirtualTranslateBuilder {
+    /// derive_builder wraps each field in `Option`, so the auto-generated
+    /// `output_file` is `Option<Option<PathBuf>>`: outer = "field was set",
+    /// inner = the user-supplied path (or `None` for no file output).
+    pub fn apply_output_dir(&mut self, dir: &std::path::Path) -> Result<()> {
+        if let Some(Some(p)) = self.output_file.as_mut() {
+            crate::analysis::prefix_in_place(p, dir)?;
+        }
+        Ok(())
+    }
+
     fn validate(&self) -> Result<()> {
         if self.selection.is_none() {
             anyhow::bail!("Missing required field 'selection' for VirtualTranslate analysis");

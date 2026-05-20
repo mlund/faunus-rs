@@ -204,6 +204,11 @@ pub struct ScaledWidomInsertion {
 }
 
 impl ScaledWidomInsertionBuilder {
+    /// No-op: this analysis writes its result via YAML, not a `file:` field.
+    pub fn apply_output_dir(&mut self, _dir: &std::path::Path) -> Result<()> {
+        Ok(())
+    }
+
     /// Build analysis from the builder, resolving atom types against topology.
     pub fn build(
         &self,
