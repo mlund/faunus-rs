@@ -125,15 +125,25 @@ pub enum AnalysisBuilder {
     Multipole(multipole::MultipoleAnalysisBuilder),
 }
 
-/// Prefix `dir` onto a relative output path; reject absolute paths.
+/// Prefix `dir` onto a relative output path that stays within `dir`.
 ///
 /// Per-window/per-walker/per-box drivers (umbrella, Wang-Landau, Gibbs)
 /// route every analysis output through this so files cannot land in the
-/// same place across parallel workers.
+/// same place across parallel workers. A leading `/`, a drive prefix, or a
+/// `..` component would let the joined path escape `dir` and reintroduce the
+/// cross-worker collision, so such paths are rejected.
 pub(crate) fn prefix_in_place(p: &mut PathBuf, dir: &Path) -> Result<()> {
-    if p.is_absolute() {
+    use std::path::Component;
+    let escapes = p.components().any(|c| {
+        matches!(
+            c,
+            Component::Prefix(_) | Component::RootDir | Component::ParentDir
+        )
+    });
+    if escapes {
         anyhow::bail!(
-            "Output path {p:?} is absolute; per-window/per-box output requires relative paths"
+            "Output path {p:?} must be relative and stay within the run directory \
+             (no absolute path, drive prefix, or `..`)"
         );
     }
     *p = dir.join(&*p);
@@ -407,14 +417,19 @@ mod tests {
     fn prefix_in_place_joins_relative() {
         let mut p = PathBuf::from("traj.xtc");
         prefix_in_place(&mut p, Path::new("window0")).unwrap();
-        assert_eq!(p, PathBuf::from("window0/traj.xtc"));
+        assert_eq!(p, Path::new("window0").join("traj.xtc"));
     }
 
     #[test]
     fn prefix_in_place_rejects_absolute() {
         let mut p = PathBuf::from("/tmp/traj.xtc");
-        let err = prefix_in_place(&mut p, Path::new("window0")).unwrap_err();
-        assert!(err.to_string().contains("absolute"));
+        assert!(prefix_in_place(&mut p, Path::new("window0")).is_err());
+    }
+
+    #[test]
+    fn prefix_in_place_rejects_parent_escape() {
+        let mut p = PathBuf::from("../shared/traj.xtc");
+        assert!(prefix_in_place(&mut p, Path::new("window0")).is_err());
     }
 
     #[test]
@@ -428,14 +443,14 @@ mod tests {
     fn prefix_opt_joins_some() {
         let mut p = Some(PathBuf::from("cv.dat"));
         prefix_opt(&mut p, Path::new("window0")).unwrap();
-        assert_eq!(p, Some(PathBuf::from("window0/cv.dat")));
+        assert_eq!(p, Some(Path::new("window0").join("cv.dat")));
     }
 
     #[test]
     fn prefix_string_joins_relative() {
         let mut s = String::from("traj.xtc");
         prefix_string(&mut s, Path::new("window0")).unwrap();
-        assert_eq!(s, "window0/traj.xtc");
+        assert_eq!(PathBuf::from(s), Path::new("window0").join("traj.xtc"));
     }
 
     #[test]
@@ -460,7 +475,7 @@ mod tests {
         let AnalysisBuilder::CollectiveVariable(b) = &builders[0] else {
             panic!("expected CollectiveVariable variant");
         };
-        assert_eq!(b.file, Some(PathBuf::from("window7/cv.dat")));
+        assert_eq!(b.file, Some(Path::new("window7").join("cv.dat")));
     }
 
     #[test]
@@ -471,9 +486,6 @@ mod tests {
   frequency: !Every 5
 ";
         let mut builders: Vec<AnalysisBuilder> = serde_yml::from_str(yaml).unwrap();
-        let err = builders[0]
-            .apply_output_dir(Path::new("window0"))
-            .unwrap_err();
-        assert!(err.to_string().contains("absolute"));
+        assert!(builders[0].apply_output_dir(Path::new("window0")).is_err());
     }
 }
