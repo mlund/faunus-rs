@@ -68,6 +68,11 @@ pub struct VirtualVolumeMove {
 }
 
 impl VirtualVolumeMoveBuilder {
+    /// No-op: this analysis writes its result via YAML, not a `file:` field.
+    pub fn apply_output_dir(&mut self, _dir: &std::path::Path) -> Result<()> {
+        Ok(())
+    }
+
     fn validate(&self) -> Result<()> {
         if self.volume_displacement.is_none() {
             anyhow::bail!("Missing required field 'dV' for VirtualVolumeMove analysis");

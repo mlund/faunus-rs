@@ -39,6 +39,10 @@ pub struct ShapeAnalysisBuilder {
 }
 
 impl ShapeAnalysisBuilder {
+    pub fn apply_output_dir(&mut self, dir: &std::path::Path) -> Result<()> {
+        crate::analysis::prefix_opt(&mut self.file, dir)
+    }
+
     pub fn build(&self, context: &impl Context) -> Result<ShapeAnalysis> {
         let topology = context.topology_ref();
         let groups = context.groups();

@@ -21,7 +21,7 @@ use interatomic::coulomb::Temperature;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use serde_yml::Value;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 mod collective_variable;
 mod energy;
@@ -125,7 +125,70 @@ pub enum AnalysisBuilder {
     Multipole(multipole::MultipoleAnalysisBuilder),
 }
 
+/// Prefix `dir` onto a relative output path that stays within `dir`.
+///
+/// Per-window/per-walker/per-box drivers (umbrella, Wang-Landau, Gibbs)
+/// route every analysis output through this so files cannot land in the
+/// same place across parallel workers. A leading `/`, a drive prefix, or a
+/// `..` component would let the joined path escape `dir` and reintroduce the
+/// cross-worker collision, so such paths are rejected.
+pub(crate) fn prefix_in_place(p: &mut PathBuf, dir: &Path) -> Result<()> {
+    use std::path::Component;
+    let escapes = p.components().any(|c| {
+        matches!(
+            c,
+            Component::Prefix(_) | Component::RootDir | Component::ParentDir
+        )
+    });
+    if escapes {
+        anyhow::bail!(
+            "Output path {p:?} must be relative and stay within the run directory \
+             (no absolute path, drive prefix, or `..`)"
+        );
+    }
+    *p = dir.join(&*p);
+    Ok(())
+}
+
+/// As [`prefix_in_place`], for builders that store an optional path.
+pub(crate) fn prefix_opt(p: &mut Option<PathBuf>, dir: &Path) -> Result<()> {
+    if let Some(inner) = p {
+        prefix_in_place(inner, dir)?;
+    }
+    Ok(())
+}
+
+/// As [`prefix_in_place`], for the `String` path that [`StructureWriter`]
+/// stores (kept as `String` for direct use by the XTC writer).
+pub(crate) fn prefix_string(s: &mut String, dir: &Path) -> Result<()> {
+    let mut path = PathBuf::from(std::mem::take(s));
+    prefix_in_place(&mut path, dir)?;
+    *s = path
+        .into_os_string()
+        .into_string()
+        .map_err(|os| anyhow::anyhow!("Non-UTF-8 path after prefix: {os:?}"))?;
+    Ok(())
+}
+
 impl AnalysisBuilder {
+    /// Prepend `dir` to every output path on this builder, in place.
+    /// Returns an error if any path is absolute.
+    pub fn apply_output_dir(&mut self, dir: &Path) -> Result<()> {
+        match self {
+            Self::StructureWriter(b) => b.apply_output_dir(dir),
+            Self::VirtualTranslate(b) => b.apply_output_dir(dir),
+            Self::CollectiveVariable(b) => b.apply_output_dir(dir),
+            Self::PolymerShape(b) => b.apply_output_dir(dir),
+            Self::RadialDistribution(b) => b.apply_output_dir(dir),
+            Self::Energy(b) => b.apply_output_dir(dir),
+            Self::MeanAlongCoordinate(b) => b.apply_output_dir(dir),
+            Self::ScaledWidomInsertion(b) => b.apply_output_dir(dir),
+            Self::VirtualVolumeMove(b) => b.apply_output_dir(dir),
+            Self::RotationalDiffusion(b) => b.apply_output_dir(dir),
+            Self::Multipole(b) => b.apply_output_dir(dir),
+        }
+    }
+
     /// Build analysis object
     #[must_use = "this returns a Result that should be handled"]
     pub fn build<T: Context>(
@@ -162,13 +225,45 @@ pub fn from_file<T: Context>(
     context: &T,
     medium: Option<&interatomic::coulomb::Medium>,
 ) -> Result<AnalysisCollection<T>> {
+    from_file_in_dir(path, context, medium, None)
+}
+
+/// As [`from_file`], but creates `output_dir` and prefixes every output
+/// path with it before any file is opened. Used by parallel drivers
+/// (umbrella, Wang-Landau, Gibbs) to keep per-worker outputs apart.
+#[must_use = "this returns a Result that should be handled"]
+pub fn from_file_creating_dir<T: Context>(
+    path: &Path,
+    context: &T,
+    medium: Option<&interatomic::coulomb::Medium>,
+    output_dir: &Path,
+) -> Result<AnalysisCollection<T>> {
+    std::fs::create_dir_all(output_dir)?;
+    from_file_in_dir(path, context, medium, Some(output_dir))
+}
+
+/// As [`from_file`], but additionally prefixes every output path with
+/// `output_dir` (when supplied) before any file is opened.
+#[must_use = "this returns a Result that should be handled"]
+pub fn from_file_in_dir<T: Context>(
+    path: &Path,
+    context: &T,
+    medium: Option<&interatomic::coulomb::Medium>,
+    output_dir: Option<&Path>,
+) -> Result<AnalysisCollection<T>> {
     let yaml = crate::auxiliary::read_yaml(path)
         .map_err(|err| anyhow::anyhow!("Error reading file {:?}: {}", &path, err))?;
     let value = serde_yml::from_str::<Value>(&yaml)?
         .get("analysis")
         .ok_or_else(|| anyhow::anyhow!("No 'analysis' key found in input yaml file."))?
         .clone();
-    serde_yml::from_value::<Vec<AnalysisBuilder>>(value)?
+    let mut builders = serde_yml::from_value::<Vec<AnalysisBuilder>>(value)?;
+    if let Some(dir) = output_dir {
+        for b in &mut builders {
+            b.apply_output_dir(dir)?;
+        }
+    }
+    builders
         .into_iter()
         .map(|builder| builder.build(context, medium))
         .collect()
@@ -285,5 +380,112 @@ impl<T: Context> Analyze<T> for AnalysisCollection<T> {
     }
     fn write_to_disk(&mut self) -> Result<()> {
         self.iter_mut().try_for_each(|a| a.write_to_disk())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const YAML_WITH_FILES: &str = r#"
+- !Trajectory
+  file: traj.xtc
+  frequency: !Every 10
+- !Energy
+  file: energy.dat
+  frequency: !Every 5
+- !RadialDistribution
+  selections: ["atomtype Na", "atomtype Cl"]
+  file: rdf.dat
+  dr: 0.1
+  frequency: !Every 100
+- !CollectiveVariable
+  property: volume
+  range: [1000.0, 5000.0]
+  file: cv.dat
+  frequency: !Every 1
+- !MeanAlongCoordinate
+  property: volume
+  coordinate:
+    property: volume
+    resolution: 0.5
+  file: mean.dat
+  frequency: !Every 1
+"#;
+
+    #[test]
+    fn prefix_in_place_joins_relative() {
+        let mut p = PathBuf::from("traj.xtc");
+        prefix_in_place(&mut p, Path::new("window0")).unwrap();
+        assert_eq!(p, Path::new("window0").join("traj.xtc"));
+    }
+
+    #[test]
+    fn prefix_in_place_rejects_absolute() {
+        let mut p = PathBuf::from("/tmp/traj.xtc");
+        assert!(prefix_in_place(&mut p, Path::new("window0")).is_err());
+    }
+
+    #[test]
+    fn prefix_in_place_rejects_parent_escape() {
+        let mut p = PathBuf::from("../shared/traj.xtc");
+        assert!(prefix_in_place(&mut p, Path::new("window0")).is_err());
+    }
+
+    #[test]
+    fn prefix_opt_skips_none() {
+        let mut p: Option<PathBuf> = None;
+        prefix_opt(&mut p, Path::new("window0")).unwrap();
+        assert!(p.is_none());
+    }
+
+    #[test]
+    fn prefix_opt_joins_some() {
+        let mut p = Some(PathBuf::from("cv.dat"));
+        prefix_opt(&mut p, Path::new("window0")).unwrap();
+        assert_eq!(p, Some(Path::new("window0").join("cv.dat")));
+    }
+
+    #[test]
+    fn prefix_string_joins_relative() {
+        let mut s = String::from("traj.xtc");
+        prefix_string(&mut s, Path::new("window0")).unwrap();
+        assert_eq!(PathBuf::from(s), Path::new("window0").join("traj.xtc"));
+    }
+
+    #[test]
+    fn apply_output_dir_succeeds_for_every_file_bearing_variant() {
+        let mut builders: Vec<AnalysisBuilder> = serde_yml::from_str(YAML_WITH_FILES).unwrap();
+        for b in &mut builders {
+            b.apply_output_dir(Path::new("window7")).unwrap();
+        }
+    }
+
+    #[test]
+    fn apply_output_dir_publicly_observable_via_collective_variable() {
+        let yaml = r#"
+- !CollectiveVariable
+  property: volume
+  range: [1000.0, 5000.0]
+  file: cv.dat
+  frequency: !Every 1
+"#;
+        let mut builders: Vec<AnalysisBuilder> = serde_yml::from_str(yaml).unwrap();
+        builders[0].apply_output_dir(Path::new("window7")).unwrap();
+        let AnalysisBuilder::CollectiveVariable(b) = &builders[0] else {
+            panic!("expected CollectiveVariable variant");
+        };
+        assert_eq!(b.file, Some(Path::new("window7").join("cv.dat")));
+    }
+
+    #[test]
+    fn apply_output_dir_rejects_absolute_path() {
+        let yaml = "
+- !Energy
+  file: /tmp/energy.dat
+  frequency: !Every 5
+";
+        let mut builders: Vec<AnalysisBuilder> = serde_yml::from_str(yaml).unwrap();
+        assert!(builders[0].apply_output_dir(Path::new("window0")).is_err());
     }
 }
