@@ -579,7 +579,8 @@ pub struct GroupLists {
     full: Vec<Vec<usize>>,
     partial: Vec<Vec<usize>>,
     empty: Vec<Vec<usize>>,
-    /// Monotonically increasing counter, bumped when lists change.
+    /// Monotonically increasing counter, bumped when the lists change or a
+    /// partial group's active count changes (see [`update_group`](Self::update_group)).
     generation: u64,
 }
 
@@ -605,7 +606,8 @@ impl GroupLists {
         }
     }
 
-    /// Monotonically increasing counter, bumped when group lists change.
+    /// Monotonically increasing counter, bumped when the group lists change or a
+    /// partial group's active count changes within the partial range.
     /// Consumers can compare against a stored generation to detect staleness.
     pub(crate) fn generation(&self) -> u64 {
         self.generation
@@ -641,10 +643,15 @@ impl GroupLists {
             Some((list, index, size)) => {
                 // we can't use just `==` because GroupSize::Partial must match any GroupSize::Partial
                 match (group.size(), size) {
-                    (GroupSize::Empty, GroupSize::Empty) => (),
-                    (GroupSize::Partial(_), GroupSize::Partial(_)) => (),
-                    (GroupSize::Full, GroupSize::Full) => (),
-                    // update is needed only if the current group size does not match the previous one
+                    // Empty (0 active) and Full (capacity active) have a fixed active
+                    // count, so remaining in the same category means nothing changed.
+                    (GroupSize::Empty, GroupSize::Empty) | (GroupSize::Full, GroupSize::Full) => (),
+                    // The group stays in the partial list, but its active count may have
+                    // changed within the partial range (e.g. a Grand Canonical insert or
+                    // delete). Bump the generation so generation-keyed consumers — notably
+                    // atom-level `SelectionCache`s — re-resolve. See issue #34.
+                    (GroupSize::Partial(_), GroupSize::Partial(_)) => self.generation += 1,
+                    // size category changed: move the group to the correct list
                     _ => {
                         list.swap_remove(index);
                         // add_group already bumps generation
@@ -974,6 +981,43 @@ mod tests {
         assert_eq!(group_lists.find_atomic_group(1), Some(2));
         // mol 2 has nothing
         assert_eq!(group_lists.find_atomic_group(2), None);
+    }
+
+    /// Active-count changes within the partial range must bump the generation so
+    /// generation-keyed caches (e.g. atom-level `SelectionCache`) re-resolve in a
+    /// Grand Canonical simulation. Regression test for issue #34.
+    #[test]
+    fn test_partial_resize_bumps_generation() {
+        let mut group_lists = GroupLists::new(1);
+        let mut group = Group::new(0, 0, 0..10); // created Full (10 active)
+        group_lists.add_group(&group);
+
+        group.resize(GroupSize::Partial(5)).unwrap();
+        group_lists.update_group(&group); // Full→Partial: bumps
+        let gen = group_lists.generation();
+
+        // Shrink within the partial range: must bump.
+        group.resize(GroupSize::Partial(3)).unwrap();
+        group_lists.update_group(&group);
+        assert_eq!(
+            group_lists.generation(),
+            gen + 1,
+            "Partial→Partial active-count change must bump generation"
+        );
+
+        // Grow within the partial range: must bump again.
+        group.resize(GroupSize::Partial(7)).unwrap();
+        group_lists.update_group(&group);
+        assert_eq!(group_lists.generation(), gen + 2);
+
+        // Empty→Empty and Full→Full have fixed active counts and must NOT bump.
+        let mut empty = Group::new(1, 0, 10..20);
+        empty.resize(GroupSize::Empty).unwrap();
+        group_lists.add_group(&empty); // adds to empty list (bumps once)
+        let gen = group_lists.generation();
+        empty.resize(GroupSize::Empty).unwrap();
+        group_lists.update_group(&empty); // Empty→Empty: no bump
+        assert_eq!(group_lists.generation(), gen);
     }
 
     /// Verify that GroupCollection trait methods delegate consistently to GroupLists.
