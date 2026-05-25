@@ -23,7 +23,7 @@
 
 use super::widom::WidomAccumulator;
 use super::{Analyze, Frequency};
-use crate::auxiliary::MappingExt;
+use crate::auxiliary::{ColumnWriter, MappingExt};
 use crate::cell::{Shape, VolumeScalePolicy};
 use crate::change::Change;
 use crate::energy::EnergyChange;
@@ -32,6 +32,7 @@ use anyhow::Result;
 use derive_builder::Builder;
 use derive_more::Debug;
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 
 /// Virtual volume move analysis for excess pressure measurement.
 ///
@@ -53,6 +54,17 @@ pub struct VirtualVolumeMove {
     #[builder_field_attr(serde(default))]
     method: VolumeScalePolicy,
 
+    /// Output file for streaming results
+    #[allow(dead_code)]
+    #[builder_field_attr(serde(rename = "file"))]
+    output_file: Option<PathBuf>,
+
+    /// Stream object for output
+    #[builder(setter(skip))]
+    #[builder_field_attr(serde(skip))]
+    #[debug(skip)]
+    stream: Option<ColumnWriter>,
+
     /// Sample frequency
     frequency: Frequency,
 
@@ -68,8 +80,10 @@ pub struct VirtualVolumeMove {
 }
 
 impl VirtualVolumeMoveBuilder {
-    /// No-op: this analysis writes its result via YAML, not a `file:` field.
-    pub fn apply_output_dir(&mut self, _dir: &std::path::Path) -> Result<()> {
+    pub fn apply_output_dir(&mut self, dir: &std::path::Path) -> Result<()> {
+        if let Some(path) = self.output_file.as_mut().and_then(Option::as_mut) {
+            crate::analysis::prefix_in_place(path, dir)?;
+        }
         Ok(())
     }
 
@@ -89,9 +103,17 @@ impl VirtualVolumeMoveBuilder {
     pub fn build(&self, thermal_energy: f64) -> Result<VirtualVolumeMove> {
         self.validate()?;
 
+        let output_file = self.output_file.clone().flatten();
+        let stream = output_file
+            .as_deref()
+            .map(|p| ColumnWriter::open(p, &["step", "dV/Å³", "dU/kT", "<Pex>/kT/Å³"]))
+            .transpose()?;
+
         Ok(VirtualVolumeMove {
             volume_displacement: self.volume_displacement.unwrap(),
             method: self.method.unwrap_or_default(),
+            output_file,
+            stream,
             frequency: self.frequency.unwrap(),
             widom: WidomAccumulator::new(),
             thermal_energy,
@@ -156,6 +178,23 @@ impl VirtualVolumeMove {
 
         Ok((new_energy - old_energy) / self.thermal_energy)
     }
+
+    /// One row per sampled step, keeping the file in sync with other analyses
+    /// at the same frequency.
+    fn write_to_stream(&mut self, step: usize, energy_change: f64) -> Result<()> {
+        let mean_pressure = self.mean_pressure();
+        let dv = self.volume_displacement;
+
+        if let Some(stream) = self.stream.as_mut() {
+            stream.write_row(&[
+                &step,
+                &format_args!("{dv:.3e}"),
+                &format_args!("{energy_change:.6e}"),
+                &format_args!("{mean_pressure:.6e}"),
+            ])?;
+        }
+        Ok(())
+    }
 }
 
 impl<T: Context> Analyze<T> for VirtualVolumeMove {
@@ -166,7 +205,7 @@ impl<T: Context> Analyze<T> for VirtualVolumeMove {
         self.frequency = freq;
     }
 
-    fn perform_sample(&mut self, context: &T, _step: usize, weight: f64) -> Result<()> {
+    fn perform_sample(&mut self, context: &T, step: usize, weight: f64) -> Result<()> {
         if self.volume_displacement.abs() < f64::EPSILON {
             return Ok(());
         }
@@ -176,6 +215,7 @@ impl<T: Context> Analyze<T> for VirtualVolumeMove {
         let energy_change = self.perturb(&mut trial_context, old_energy)?;
 
         self.widom.collect(energy_change, weight);
+        self.write_to_stream(step, energy_change)?;
 
         Ok(())
     }
@@ -242,6 +282,46 @@ mod tests {
             AnalysisBuilder::VirtualVolumeMove(b) => b.clone(),
             _ => panic!("expected VirtualVolumeMove variant"),
         }
+    }
+
+    #[test]
+    fn apply_output_dir_prefixes_file() {
+        let yaml = "
+- !VirtualVolumeMove
+  dV: 0.2
+  file: pressure.csv
+  frequency: !Every 10
+";
+        let mut builders: Vec<AnalysisBuilder> = serde_yml::from_str(yaml).unwrap();
+        builders[0]
+            .apply_output_dir(std::path::Path::new("box0"))
+            .unwrap();
+        let AnalysisBuilder::VirtualVolumeMove(b) = &builders[0] else {
+            panic!("expected VirtualVolumeMove variant");
+        };
+        assert_eq!(
+            b.output_file.clone().flatten(),
+            Some(std::path::Path::new("box0").join("pressure.csv"))
+        );
+    }
+
+    #[test]
+    fn file_output_writes_header_and_row() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("pressure.csv");
+        let mut vvm = VirtualVolumeMoveBuilder::default()
+            .volume_displacement(0.2)
+            .output_file(Some(path.clone()))
+            .frequency(Frequency::Every(1))
+            .build(RT_298)
+            .unwrap();
+        vvm.write_to_stream(0, -1.5).unwrap();
+        drop(vvm);
+
+        let contents = std::fs::read_to_string(&path).unwrap();
+        let lines: Vec<&str> = contents.lines().collect();
+        assert!(lines[0].contains("step"), "header missing: {contents:?}");
+        assert_eq!(lines.len(), 2, "expected header + 1 row: {contents:?}");
     }
 
     #[test]
