@@ -339,8 +339,13 @@ impl GroupCollection for Backend {
     fn resize_group(&mut self, group_index: usize, status: GroupSize) -> anyhow::Result<()> {
         let old_active: Vec<usize> = self.groups[group_index].iter_active().collect();
         self.groups[group_index].resize(status)?;
-        self.group_lists.update_group(&self.groups[group_index]);
         let new_active: Vec<usize> = self.groups[group_index].iter_active().collect();
+        // Reconcile the group lists (and bump `generation`) only when the active
+        // set actually changed; a no-op resize (e.g. an MC restore re-applying the
+        // same size) must not invalidate generation-keyed caches. See issue #34.
+        if old_active.len() != new_active.len() {
+            self.group_lists.update_group(&self.groups[group_index]);
+        }
 
         if let Some(cl) = &mut self.cell_list {
             // Remove particles that were active but are no longer
@@ -597,8 +602,13 @@ impl Context for Backend {
             self.groups[group_idx].set_quaternion(q);
         }
         for (group_idx, size) in backup.group_sizes {
+            let old_len = self.groups[group_idx].len();
             self.groups[group_idx].resize(size)?;
-            self.group_lists.update_group(&self.groups[group_idx]);
+            // Skip groups whose active count is unchanged so an undo doesn't churn
+            // `generation` for groups the move never resized. See issue #34.
+            if self.groups[group_idx].len() != old_len {
+                self.group_lists.update_group(&self.groups[group_idx]);
+            }
         }
         if let Some(cell_list_backup) = backup.cell_list_backup {
             if let Some(cl) = &mut self.cell_list {

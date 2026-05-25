@@ -42,6 +42,10 @@ pub struct CollectiveVariableAnalysisBuilder {
 }
 
 impl CollectiveVariableAnalysisBuilder {
+    pub fn apply_output_dir(&mut self, dir: &std::path::Path) -> Result<()> {
+        crate::analysis::prefix_opt(&mut self.file, dir)
+    }
+
     /// Resolve selections against live context and open the output file, if any.
     pub fn build(&self, context: &impl Context) -> Result<CollectiveVariableAnalysis> {
         let cv = self.cv.build(context)?;

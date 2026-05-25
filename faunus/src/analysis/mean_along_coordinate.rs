@@ -43,6 +43,10 @@ pub struct MeanAlongCoordinateBuilder {
 }
 
 impl MeanAlongCoordinateBuilder {
+    pub fn apply_output_dir(&mut self, dir: &std::path::Path) -> Result<()> {
+        crate::analysis::prefix_in_place(&mut self.file, dir)
+    }
+
     pub fn build(&self, context: &impl Context) -> Result<MeanAlongCoordinate> {
         let cv = self.cv.build(context)?;
         let coordinate = self.coordinate.build(context)?;

@@ -177,6 +177,26 @@ The dipole moment is computed relative to each group's center of mass
 with periodic boundary conditions applied.
 Handles atom-type swaps (titration) and GCMC (only active groups contribute).
 
+### Selection resolves group-wise
+
+The selection picks **whole groups** that contain at least one active
+matching atom — not just the matched atoms themselves. So an atom-level
+selection like `atomtype CA` pulls in every group that has an active CA
+atom and accumulates the full group's charge and dipole moment. This is
+the same `resolve_groups_live` behavior used elsewhere in faunus, and it
+makes it easy to address molecules whose name varies (e.g. across
+protonation states) via a stable marker atom that they all share:
+
+```yaml
+- !Multipole
+  selection: "atomtype INO"   # picks every phytate, regardless of protonation state
+  frequency: !Every 10
+```
+
+By contrast, `!CollectiveVariable property: charge` sums the charge of
+**only the matched atoms**, not their parent groups — see [Supported
+properties](#supported-properties).
+
 Per-atom charge statistics are reported in `output.yaml` as an `atoms` list
 only when the selection resolves to a single molecular molecule kind.
 Selections matching multiple molecule kinds are rejected, and atomic/reservoir
@@ -487,6 +507,8 @@ $$P_{\text{ex}} = \frac{k_BT \ln\langle e^{-\Delta U / k_BT}\rangle}{\delta V}$$
 
 where $\Delta U$ is the energy change due to the volume displacement $\delta V$.
 All particle positions are scaled according to the chosen `method`.
+If `file` is given, each sampled step writes columns
+`step`, `dV/Å³`, `dU/kT`, and `<Pex>/kT/Å³`.
 
 ### Example
 
@@ -495,6 +517,7 @@ analysis:
   - !VirtualVolumeMove
     dV: 0.2
     method: Isotropic
+    file: pressure.csv
     frequency: !Every 10
 ```
 
@@ -504,6 +527,7 @@ Key           | Required | Default      | Description
 ------------- | -------- | ------------ | -------------------------------------------
 `dV`          | yes      |              | Volume displacement (ų)
 `method`      | no       | `Isotropic`  | Scaling policy: `Isotropic`, `ScaleZ`, `ScaleXY`
+`file`        | no       |              | Output file path (see [Output file formats](#output-file-formats))
 `frequency`   | yes      |              | Sample frequency, e.g. `!Every 10`
 
 ---

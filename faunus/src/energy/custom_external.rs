@@ -27,6 +27,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use super::expr_helpers::substitute_constants;
 use super::EnergyTerm;
 
 /// Builder for deserializing a `CustomExternal` entry from YAML.
@@ -196,47 +197,6 @@ fn affected(
         }
         Change::None => unreachable!(),
     }
-}
-
-/// Substitute named constants into an expression string using word-boundary matching.
-///
-/// Only replaces occurrences where the constant name is not part of a longer
-/// identifier (e.g. constant `c` won't clobber `cos` or `rc`).
-fn substitute_constants(expression: &str, constants: &HashMap<String, f64>) -> String {
-    let mut sorted: Vec<_> = constants.iter().collect();
-    sorted.sort_by_key(|(name, _)| std::cmp::Reverse(name.len()));
-
-    let mut result = expression.to_string();
-    for (name, value) in sorted {
-        result = replace_whole_word(&result, name, &format!("({value:.17})"));
-    }
-    result
-}
-
-/// Replace all whole-word occurrences of `word` in `text` with `replacement`.
-///
-/// A match is "whole word" when the characters immediately before and after
-/// are not alphanumeric or underscore (i.e. not part of an identifier).
-fn replace_whole_word(text: &str, word: &str, replacement: &str) -> String {
-    fn is_ident_char(c: char) -> bool {
-        c.is_alphanumeric() || c == '_'
-    }
-    let mut result = String::with_capacity(text.len());
-    let mut rest = text;
-    while let Some(pos) = rest.find(word) {
-        let before_ok = pos == 0 || !rest[..pos].ends_with(is_ident_char);
-        let end = pos + word.len();
-        let after_ok = end >= rest.len() || !rest[end..].starts_with(is_ident_char);
-        result.push_str(&rest[..pos]);
-        if before_ok && after_ok {
-            result.push_str(replacement);
-        } else {
-            result.push_str(word);
-        }
-        rest = &rest[end..];
-    }
-    result.push_str(rest);
-    result
 }
 
 /// Preset potential functions implemented in pure Rust for performance.
@@ -429,29 +389,6 @@ constants:
         let err = builder.build().unwrap_err();
         assert!(err.to_string().contains("unresolved variables"));
         assert!(err.to_string().contains("b"));
-    }
-
-    #[test]
-    fn constant_substitution() {
-        let mut constants = HashMap::new();
-        constants.insert("sigma".to_string(), 2.0);
-        constants.insert("sig".to_string(), 999.0);
-        let result = substitute_constants("sigma + sig", &constants);
-        assert!(!result.contains("sigma"));
-        assert!(result.contains("999"));
-    }
-
-    #[test]
-    fn constant_substitution_word_boundary() {
-        // Single-letter constant `c` must not clobber `cos` or `rc`
-        let mut constants = HashMap::new();
-        constants.insert("c".to_string(), 3.0);
-        let result = substitute_constants("c * cos(x) + c", &constants);
-        assert!(result.contains("cos"), "cos was clobbered: {result}");
-        assert!(
-            !result.contains(" c "),
-            "standalone c not replaced: {result}"
-        );
     }
 
     #[test]

@@ -29,9 +29,13 @@ pub fn build_markov_chain<T: crate::Context + 'static>(
     rt: f64,
     state: Option<&Path>,
     medium: Option<&interatomic::coulomb::Medium>,
+    output_dir: Option<&Path>,
 ) -> Result<MarkovChain<T>> {
     let propagate = Propagate::from_file(input, &context)?;
-    let analyses = analysis::from_file(input, &context, medium)?;
+    let analyses = match output_dir {
+        Some(dir) => analysis::from_file_creating_dir(input, &context, medium, dir)?,
+        None => analysis::from_file(input, &context, medium)?,
+    };
     let mut mc = MarkovChain::new(context, propagate, rt, analyses)?;
     if let Some(state_path) = state {
         if state_path.exists() {
@@ -74,7 +78,7 @@ impl Simulation {
         }
 
         let context = Backend::new(input, None, &mut rand::thread_rng())?;
-        let mc = build_markov_chain(input, context, rt, state, Some(&medium))?;
+        let mc = build_markov_chain(input, context, rt, state, Some(&medium), None)?;
         Ok((Self::SingleBox(mc), medium))
     }
 
@@ -95,8 +99,17 @@ impl Simulation {
             .map(|b| b.build(&context0))
             .collect::<Result<_>>()?;
 
-        let mut mc0 = build_markov_chain(input, context0, rt, None, Some(medium))?;
-        let mut mc1 = build_markov_chain(input, context1, rt, None, Some(medium))?;
+        // Per-box analyses share their `file:` paths and would race under
+        // parallel intra-box MC; route each box's outputs into its own
+        // subdirectory, anchored the same way `box_prefixed_path` anchors
+        // per-box state files.
+        let anchor = state
+            .and_then(|p| p.parent())
+            .unwrap_or_else(|| Path::new("."));
+        let out_dir0 = anchor.join("box0");
+        let out_dir1 = anchor.join("box1");
+        let mut mc0 = build_markov_chain(input, context0, rt, None, Some(medium), Some(&out_dir0))?;
+        let mut mc1 = build_markov_chain(input, context1, rt, None, Some(medium), Some(&out_dir1))?;
         // give box 1 a distinct seed so intra-box trajectories diverge
         mc1.propagation_mut().reseed(0x000D_EADB_EEFC_AFE1);
 

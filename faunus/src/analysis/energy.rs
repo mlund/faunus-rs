@@ -44,6 +44,10 @@ pub struct EnergyAnalysis {
 }
 
 impl EnergyAnalysisBuilder {
+    pub fn apply_output_dir(&mut self, dir: &std::path::Path) -> Result<()> {
+        crate::analysis::prefix_in_place(&mut self.file, dir)
+    }
+
     pub fn build(&self, context: &impl Context) -> Result<EnergyAnalysis> {
         let (stream, mode) = if let Some((sel1, sel2)) = &self.selections {
             let topology = context.topology_ref();

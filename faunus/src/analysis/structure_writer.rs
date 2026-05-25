@@ -60,6 +60,17 @@ impl StructureWriterBuilder {
         }
         Ok(())
     }
+
+    /// Prepend `dir` to the trajectory filename. Companion files
+    /// (`.sizes.dat`, `.charges.dat`, `.psf`, `.tcl`, `.aux`) inherit the
+    /// directory automatically through the `with_extension` calls in
+    /// `write_frame` / `finalize`.
+    pub fn apply_output_dir(&mut self, dir: &Path) -> anyhow::Result<()> {
+        if let Some(s) = self.output_file.as_mut() {
+            crate::analysis::prefix_string(s, dir)?;
+        }
+        Ok(())
+    }
 }
 
 impl<T: Context> From<StructureWriter> for Box<dyn Analyze<T>> {
