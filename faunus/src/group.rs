@@ -579,7 +579,8 @@ pub struct GroupLists {
     full: Vec<Vec<usize>>,
     partial: Vec<Vec<usize>>,
     empty: Vec<Vec<usize>>,
-    /// Monotonically increasing counter, bumped when lists change.
+    /// Monotonically increasing counter, bumped when the lists change or a
+    /// partial group's active count changes (see [`update_group`](Self::update_group)).
     generation: u64,
 }
 
@@ -605,7 +606,8 @@ impl GroupLists {
         }
     }
 
-    /// Monotonically increasing counter, bumped when group lists change.
+    /// Monotonically increasing counter, bumped when the group lists change or a
+    /// partial group's active count changes within the partial range.
     /// Consumers can compare against a stored generation to detect staleness.
     pub(crate) fn generation(&self) -> u64 {
         self.generation
