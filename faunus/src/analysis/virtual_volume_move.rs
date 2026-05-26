@@ -23,7 +23,7 @@
 
 use super::widom::WidomAccumulator;
 use super::{Analyze, Frequency};
-use crate::auxiliary::{ColumnWriter, MappingExt};
+use crate::auxiliary::{BlockSummary, ColumnWriter, MappingExt};
 use crate::cell::{Shape, VolumeScalePolicy};
 use crate::change::Change;
 use crate::energy::EnergyChange;
@@ -100,8 +100,11 @@ impl VirtualVolumeMoveBuilder {
     }
 
     fn validate(&self) -> Result<()> {
-        if self.volume_displacement.is_none() {
-            anyhow::bail!("Missing required field 'dV' for VirtualVolumeMove analysis");
+        let dv = self.volume_displacement.ok_or_else(|| {
+            anyhow::anyhow!("Missing required field 'dV' for VirtualVolumeMove analysis")
+        })?;
+        if dv.abs() < f64::EPSILON {
+            anyhow::bail!("VirtualVolumeMove: 'dV' must be non-zero, got {dv}");
         }
         if self.frequency.is_none() {
             anyhow::bail!("Missing required field 'frequency' for VirtualVolumeMove analysis");
@@ -153,13 +156,9 @@ impl crate::Info for VirtualVolumeMove {
 }
 
 impl VirtualVolumeMove {
-    /// Mean excess pressure in kT/Å³.
+    /// Mean excess pressure in kT/Å³. `dV ≠ 0` is enforced at build time.
     fn mean_pressure(&self) -> f64 {
-        if self.volume_displacement.abs() > f64::EPSILON {
-            -self.widom.mean_free_energy() / self.volume_displacement
-        } else {
-            0.0
-        }
+        -self.widom.mean_free_energy() / self.volume_displacement
     }
 
     /// kT/Å³ → Pascal. Linear, so applies equally to means and errors
@@ -175,14 +174,12 @@ impl VirtualVolumeMove {
     }
 
     /// Sample standard deviation of pressure across blocks in kT/Å³.
-    ///
-    /// Returns `None` until at least two blocks have been completed.
+    /// `None` until at least two blocks have been completed.
     fn pressure_stddev(&self) -> Option<f64> {
-        if self.widom.free_energy().n() >= 2 {
-            Some(self.widom.free_energy().stddev() / self.volume_displacement.abs())
-        } else {
-            None
+        if self.widom.free_energy().n() < 2 {
+            return None;
         }
+        Some(self.widom.free_energy().stddev() / self.volume_displacement.abs())
     }
 
     /// Perform the virtual volume perturbation and return the energy change in kT.
@@ -232,10 +229,6 @@ impl<T: Context> Analyze<T> for VirtualVolumeMove {
     }
 
     fn perform_sample(&mut self, context: &T, step: usize, weight: f64) -> Result<()> {
-        if self.volume_displacement.abs() < f64::EPSILON {
-            return Ok(());
-        }
-
         let old_energy = context.hamiltonian().energy(context, &Change::Everything);
         let mut trial_context = context.clone();
         let energy_change = self.perturb(&mut trial_context, old_energy)?;
@@ -258,16 +251,23 @@ impl<T: Context> Analyze<T> for VirtualVolumeMove {
         map.try_insert("num_samples", self.widom.len())?;
         map.try_insert("mean_free_energy", self.widom.mean_free_energy())?;
 
-        // Pressure = -F / dV; variance scales by c² so error scales by |c|.
-        let fe = self.widom.free_energy();
-        let s_kt = -1.0 / self.volume_displacement;
+        // Mean comes from the total accumulator (finite from sample 1);
+        // error comes from the block aggregator (NaN until ≥ 1 block
+        // closes, ~0 with 1 block, real SEM with ≥ 2). dV ≠ 0 is
+        // enforced at build time.
+        let mean_kt = self.mean_pressure();
+        let err_kt = self.widom.free_energy().error() / self.volume_displacement.abs();
         let pex_units = [
-            ("Pex (kT/Å³)", s_kt),
-            ("Pex (Pa)", self.to_pascal(s_kt)),
-            ("Pex (mM)", self.to_millimolar(s_kt)),
+            ("Pex (kT/Å³)", mean_kt, err_kt),
+            ("Pex (Pa)", self.to_pascal(mean_kt), self.to_pascal(err_kt)),
+            (
+                "Pex (mM)",
+                self.to_millimolar(mean_kt),
+                self.to_millimolar(err_kt),
+            ),
         ];
-        for (key, scale) in pex_units {
-            map.try_insert(key, fe * scale)?;
+        for (key, m, e) in pex_units {
+            map.try_insert(key, BlockSummary { mean: m, error: e })?;
         }
 
         Some(serde_yml::Value::Mapping(map))
@@ -432,9 +432,13 @@ mod tests {
     }
 
     #[test]
-    fn mean_pressure_zero_dv() {
-        let vvm = build_vvm(0.0);
-        assert_approx_eq!(f64, vvm.mean_pressure(), 0.0);
+    fn build_rejects_zero_dv() {
+        let result = VirtualVolumeMoveBuilder::default()
+            .volume_displacement(0.0)
+            .frequency(Frequency::Every(1))
+            .build(RT_298);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("dV"));
     }
 
     #[test]
