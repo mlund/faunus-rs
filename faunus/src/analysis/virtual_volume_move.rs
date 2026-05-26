@@ -70,7 +70,6 @@ pub struct VirtualVolumeMove {
     frequency: Frequency,
 
     /// Number of samples per block for variance estimation.
-    #[allow(dead_code)]
     #[builder_field_attr(serde(default = "serde_default_block_size"))]
     block_size: usize,
 
@@ -86,12 +85,10 @@ pub struct VirtualVolumeMove {
     thermal_energy: f64,
 }
 
-fn default_block_size() -> usize {
-    100
-}
+const DEFAULT_BLOCK_SIZE: usize = 100;
 
 fn serde_default_block_size() -> Option<usize> {
-    Some(default_block_size())
+    Some(DEFAULT_BLOCK_SIZE)
 }
 
 impl VirtualVolumeMoveBuilder {
@@ -124,7 +121,7 @@ impl VirtualVolumeMoveBuilder {
             .map(|p| ColumnWriter::open(p, &["step", "dV/Å³", "dU/kT", "<Pex>/kT/Å³"]))
             .transpose()?;
 
-        let block_size = self.block_size.unwrap_or_else(default_block_size);
+        let block_size = self.block_size.unwrap_or(DEFAULT_BLOCK_SIZE);
         let block_size_nz = NonZeroUsize::new(block_size)
             .ok_or_else(|| anyhow::anyhow!("VirtualVolumeMove: 'block_size' must be > 0, got 0"))?;
 
@@ -165,16 +162,14 @@ impl VirtualVolumeMove {
         }
     }
 
-    /// Linear unit conversion from kT/Å³ to Pascal. Applies equally to a
-    /// pressure mean and a pressure error (Var(cX) = c²Var(X)).
-    ///
-    /// P\[Pa\] = P\[kT/ų\] · kT\[J\] / (1 ų in m³).
+    /// kT/Å³ → Pascal. Linear, so applies equally to means and errors
+    /// (Var(cX) = c²Var(X)).
     fn to_pascal(&self, p_kt_per_a3: f64) -> f64 {
         p_kt_per_a3 * self.thermal_energy * 1e6 / crate::MOLAR_TO_INV_ANGSTROM3
     }
 
-    /// Linear unit conversion from kT/Å³ to millimolar (mM). Exploits
-    /// P = c·kT, so c\[1/ų\] = P\[kT/ų\]. Applies equally to means and errors.
+    /// kT/Å³ → millimolar. Linear, so applies equally to means and errors.
+    /// Exploits P = c·kT, so c[1/Å³] = P[kT/Å³].
     fn to_millimolar(&self, p_kt_per_a3: f64) -> f64 {
         p_kt_per_a3 * 1e3 / crate::MOLAR_TO_INV_ANGSTROM3
     }
@@ -259,17 +254,21 @@ impl<T: Context> Analyze<T> for VirtualVolumeMove {
         let mut map = serde_yml::Mapping::new();
         map.try_insert("dV", self.volume_displacement)?;
         map.try_insert("method", format!("{:?}", self.method))?;
+        map.try_insert("block_size", self.block_size)?;
         map.try_insert("num_samples", self.widom.len())?;
         map.try_insert("mean_free_energy", self.widom.mean_free_energy())?;
 
-        // Pressure = -F / dV. Per-unit `{mean, error}` mappings come from
-        // multiplying the free-energy BlockAverage by the pressure-unit
-        // scale; variance scales by c² so the error scales by |c|.
+        // Pressure = -F / dV; variance scales by c² so error scales by |c|.
         let fe = self.widom.free_energy();
         let s_kt = -1.0 / self.volume_displacement;
-        map.try_insert("Pex (kT/Å³)", fe * s_kt)?;
-        map.try_insert("Pex (Pa)", fe * self.to_pascal(s_kt))?;
-        map.try_insert("Pex (mM)", fe * self.to_millimolar(s_kt))?;
+        let pex_units = [
+            ("Pex (kT/Å³)", s_kt),
+            ("Pex (Pa)", self.to_pascal(s_kt)),
+            ("Pex (mM)", self.to_millimolar(s_kt)),
+        ];
+        for (key, scale) in pex_units {
+            map.try_insert(key, fe * scale)?;
+        }
 
         Some(serde_yml::Value::Mapping(map))
     }

@@ -20,6 +20,43 @@
 use crate::auxiliary::BlockAverage;
 use std::num::NonZeroUsize;
 
+/// Single log-sum-exp accumulator state: tracks `ln(Σ w_i · exp(x_i - shift))`
+/// with `shift = max(x_i)` to keep all exponents ≤ 0.
+#[derive(Clone, Debug, Default)]
+struct LogSumExp {
+    log_sum: f64,
+    shift: f64,
+    sum_weights: f64,
+    count: u64,
+}
+
+impl LogSumExp {
+    /// Add a `(x = -dU, weight)` sample, rescaling on a new maximum to avoid overflow.
+    fn accumulate(&mut self, x: f64, weight: f64) {
+        if self.count == 0 {
+            self.shift = x;
+            self.log_sum = weight.ln();
+        } else if x > self.shift {
+            self.log_sum += self.shift - x;
+            self.shift = x;
+            self.log_sum = ln_add_exp(self.log_sum, weight.ln());
+        } else {
+            self.log_sum = ln_add_exp(self.log_sum, (x - self.shift) + weight.ln());
+        }
+        self.sum_weights += weight;
+        self.count += 1;
+    }
+
+    /// `F = -ln(Σ w·exp(-dU) / Σ w)`. `+∞` for an empty state.
+    fn free_energy(&self) -> f64 {
+        if self.count == 0 || self.sum_weights <= 0.0 {
+            f64::INFINITY
+        } else {
+            -(self.shift + self.log_sum - self.sum_weights.ln())
+        }
+    }
+}
+
 /// Numerically stable accumulator for the Widom exponential average `<exp(-dU/kT)>`.
 ///
 /// Uses the log-sum-exp trick (cf. `duello::diffusion::zwanzig`) so that
@@ -33,31 +70,27 @@ use std::num::NonZeroUsize;
 /// have to track block boundaries.
 #[derive(Clone, Debug, Default)]
 pub(crate) struct WidomAccumulator {
-    /// ln(Σ w_i · exp(-dU_i - shift)), where shift keeps exponents ≤ 0.
-    log_sum: f64,
-    /// max(-dU_i) seen so far.
-    shift: f64,
-    /// Σ w_i
-    sum_weights: f64,
-    /// Number of samples in the current block (reset by end_block).
-    count: u64,
-    /// Overall log-sum-exp state mirroring the block fields but never reset.
-    total_log_sum: f64,
-    total_shift: f64,
-    total_sum_weights: f64,
-    /// Total samples across all blocks (never reset).
-    total_count: u64,
-    /// Between-block error estimation for the free energy.
+    /// Samples in the current (open) block; reset by [`end_block`](Self::end_block).
+    open: LogSumExp,
+    /// Running aggregate of all closed blocks, each folded in as a single
+    /// `(weight = block.sum_weights, x = -block.free_energy)` point. This
+    /// is mathematically equivalent to a per-sample running total at far
+    /// lower cost: `collect` updates only `open`; `closed` advances once
+    /// per block boundary.
+    closed: LogSumExp,
+    /// Raw count of `collect` calls, kept separately because `closed.count`
+    /// counts blocks (merged points), not original samples.
+    n_samples: u64,
+    /// Mean ± SEM of per-block free energies for block-error estimation.
     free_energy: BlockAverage,
-    /// If set, `collect` auto-finalizes a block every `block_size` samples.
     block_size: Option<NonZeroUsize>,
 }
 
 impl WidomAccumulator {
-    /// Enable automatic block segmentation: `collect` will finalize a block
+    /// Enable automatic block segmentation: `collect` finalizes a block
     /// every `block_size` samples. `NonZeroUsize` makes a zero block size
-    /// unrepresentable (which would otherwise turn every sample into its own
-    /// block and skew SEM/stddev).
+    /// unrepresentable — otherwise every sample would become its own block
+    /// and skew SEM/stddev.
     pub fn with_block_size(mut self, block_size: NonZeroUsize) -> Self {
         self.block_size = Some(block_size);
         self
@@ -71,92 +104,52 @@ impl WidomAccumulator {
         if weight == 0.0 {
             return;
         }
-        let x = -energy_change; // we accumulate exp(x) = exp(-dU)
-
-        Self::accumulate(
-            x,
-            weight,
-            &mut self.count,
-            &mut self.shift,
-            &mut self.log_sum,
-            &mut self.sum_weights,
-        );
-        Self::accumulate(
-            x,
-            weight,
-            &mut self.total_count,
-            &mut self.total_shift,
-            &mut self.total_log_sum,
-            &mut self.total_sum_weights,
-        );
-
+        self.open.accumulate(-energy_change, weight);
+        self.n_samples += 1;
         if let Some(n) = self.block_size {
-            if self.count >= n.get() as u64 {
+            if self.open.count >= n.get() as u64 {
                 self.end_block();
             }
         }
     }
 
-    fn accumulate(
-        x: f64,
-        weight: f64,
-        count: &mut u64,
-        shift: &mut f64,
-        log_sum: &mut f64,
-        sum_weights: &mut f64,
-    ) {
-        if *count == 0 {
-            *shift = x;
-            *log_sum = weight.ln();
-        } else if x > *shift {
-            // Rescale existing sum so all exponents remain ≤ 0, preventing overflow
-            *log_sum += *shift - x;
-            *shift = x;
-            *log_sum = ln_add_exp(*log_sum, weight.ln());
-        } else {
-            *log_sum = ln_add_exp(*log_sum, (x - *shift) + weight.ln());
-        }
-        *sum_weights += weight;
-        *count += 1;
-    }
-
-    /// Mean free energy `-ln(<exp(-dU/kT)>)` over all collected samples in units of kT.
+    /// Mean free energy `-ln(<exp(-dU/kT)>)` over all collected samples in kT.
     pub fn mean_free_energy(&self) -> f64 {
-        if self.total_count == 0 || self.total_sum_weights <= 0.0 {
+        if self.n_samples == 0 {
             return f64::INFINITY;
         }
-        // F = -ln(Σ w_i exp(-dU_i) / Σ w_i)
-        //   = -(shift + log_sum - ln(sum_weights))
-        -(self.total_shift + self.total_log_sum - self.total_sum_weights.ln())
+        if self.open.count == 0 {
+            return self.closed.free_energy();
+        }
+        // Merge the open block into a transient copy of `closed` as one
+        // (weight, x) point; mathematically exact since
+        // `Σ_i w_i exp(-dU_i) = W_open · exp(-F_open) + closed contributions`.
+        let mut combined = self.closed.clone();
+        combined.accumulate(-self.open.free_energy(), self.open.sum_weights);
+        combined.free_energy()
     }
 
     /// Whether any samples have been collected.
     pub fn is_empty(&self) -> bool {
-        self.total_count == 0
+        self.n_samples == 0
     }
 
-    /// Total number of samples collected across all blocks.
+    /// Total samples collected across all blocks.
     pub fn len(&self) -> usize {
-        self.total_count as usize
+        self.n_samples as usize
     }
 
-    fn block_mean_free_energy(&self) -> f64 {
-        if self.count == 0 || self.sum_weights <= 0.0 {
-            return f64::INFINITY;
-        }
-        -(self.shift + self.log_sum - self.sum_weights.ln())
-    }
-
-    /// Finalize the current block: push its free energy into the block average,
-    /// then reset the within-block accumulator for the next block.
+    /// Finalize the current block: push its free energy into the block
+    /// average and fold it into the running `closed` aggregate, then reset
+    /// the within-block state for the next block.
     pub fn end_block(&mut self) {
-        if self.count > 0 {
-            self.free_energy.add(self.block_mean_free_energy());
-            self.log_sum = 0.0;
-            self.shift = 0.0;
-            self.sum_weights = 0.0;
-            self.count = 0;
+        if self.open.count == 0 {
+            return;
         }
+        let f_open = self.open.free_energy();
+        self.free_energy.add(f_open);
+        self.closed.accumulate(-f_open, self.open.sum_weights);
+        self.open = LogSumExp::default();
     }
 
     /// Borrow the per-block free-energy aggregator. Callers can read

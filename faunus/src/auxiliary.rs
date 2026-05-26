@@ -490,9 +490,18 @@ impl BlockAverage {
         self.0.len()
     }
 
+    /// Snapshot of mean ± SEM in the same `{mean, error}` shape used
+    /// throughout YAML output. Scaled views go through `&self * scale`.
+    pub fn summary(&self) -> BlockSummary {
+        BlockSummary {
+            mean: self.mean(),
+            error: self.error(),
+        }
+    }
+
     /// Serialize as YAML mapping `{ mean, error }` via [`BlockSummary`].
     pub fn to_yaml(&self) -> Option<serde_yml::Value> {
-        serde_yml::to_value(self * 1.0).ok()
+        serde_yml::to_value(self.summary()).ok()
     }
 }
 
