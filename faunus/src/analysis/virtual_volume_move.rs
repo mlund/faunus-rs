@@ -183,17 +183,6 @@ impl VirtualVolumeMove {
         }
     }
 
-    /// Standard error of the mean pressure across blocks in kT/Å³ (SEM = σ/√n).
-    ///
-    /// Returns `None` until at least two blocks have been completed.
-    fn pressure_sem(&self) -> Option<f64> {
-        if self.widom.n_blocks() >= 2 {
-            Some(self.widom.free_energy_error() / self.volume_displacement.abs())
-        } else {
-            None
-        }
-    }
-
     /// Convert pressure from kT/Å³ to millimolar (mM).
     ///
     /// Exploits P = c·kT, so c\[1/ų\] = P\[kT/ų\].
@@ -278,15 +267,11 @@ impl<T: Context> Analyze<T> for VirtualVolumeMove {
         map.try_insert("Pex/Pa", self.pressure_to_pa(p))?;
         map.try_insert("Pex/mM", self.pressure_to_mm(p))?;
 
-        if let Some(s) = self.pressure_stddev() {
-            map.try_insert("Pex_std/kT/Å³", s)?;
-            map.try_insert("Pex_std/Pa", self.pressure_to_pa(s))?;
-            map.try_insert("Pex_std/mM", self.pressure_to_mm(s))?;
-        }
-        if let Some(e) = self.pressure_sem() {
-            map.try_insert("Pex_sem/kT/Å³", e)?;
-            map.try_insert("Pex_sem/Pa", self.pressure_to_pa(e))?;
-            map.try_insert("Pex_sem/mM", self.pressure_to_mm(e))?;
+        // Per-block free-energy statistics in the same `{mean, error}` shape
+        // that `ScaledWidomInsertion` uses for its `mu_*` fields. Scale by
+        // `1/|dV|` for pressure error/SEM if needed.
+        if let Some(fe) = self.widom.free_energy_to_yaml() {
+            map.insert("free_energy_blocks (kT)".into(), fe);
         }
 
         Some(serde_yml::Value::Mapping(map))

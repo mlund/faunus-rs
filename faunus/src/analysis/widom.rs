@@ -159,11 +159,6 @@ impl WidomAccumulator {
         }
     }
 
-    /// Standard error of the mean free energy across blocks.
-    pub fn free_energy_error(&self) -> f64 {
-        self.free_energy.error()
-    }
-
     /// Sample standard deviation of the free energy across blocks.
     pub fn free_energy_stddev(&self) -> f64 {
         self.free_energy.stddev()
@@ -172,6 +167,16 @@ impl WidomAccumulator {
     /// Number of completed blocks.
     pub fn n_blocks(&self) -> u64 {
         self.free_energy.n()
+    }
+
+    /// YAML view of the per-block free-energy statistics
+    /// (`{ mean, error }`, matching the shape `ScaledWidomInsertion` uses
+    /// for its `mu_*` averages). Returns `None` if no block has closed yet.
+    pub fn free_energy_to_yaml(&self) -> Option<serde_yml::Value> {
+        if self.n_blocks() == 0 {
+            return None;
+        }
+        self.free_energy.to_yaml()
     }
 }
 
@@ -270,7 +275,7 @@ mod tests {
 
         // Block mean ≈ 1.0, error > 0
         assert_approx_eq!(f64, acc.free_energy.mean(), 1.0, epsilon = 1e-12);
-        assert!(acc.free_energy_error() > 0.0);
+        assert!(acc.free_energy_stddev() > 0.0);
 
         // Total accumulator is never reset: 2 samples, overall mean = -ln((1 + exp(-2)) / 2)
         assert_eq!(acc.len(), 2);
@@ -293,7 +298,7 @@ mod tests {
         // Total accumulator still reflects all 4 samples.
         assert_eq!(acc.len(), 4);
         // Distinct per-block free energies (0, 2) → between-block variance > 0.
-        assert!(acc.free_energy_error() > 0.0);
+        assert!(acc.free_energy_stddev() > 0.0);
     }
 
     #[test]
