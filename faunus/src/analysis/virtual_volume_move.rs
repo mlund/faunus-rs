@@ -32,6 +32,7 @@ use anyhow::Result;
 use derive_builder::Builder;
 use derive_more::Debug;
 use serde::{Deserialize, Serialize};
+use std::num::NonZeroUsize;
 use std::path::PathBuf;
 
 /// Virtual volume move analysis for excess pressure measurement.
@@ -69,18 +70,15 @@ pub struct VirtualVolumeMove {
     frequency: Frequency,
 
     /// Number of samples per block for variance estimation.
+    #[allow(dead_code)]
     #[builder_field_attr(serde(default = "serde_default_block_size"))]
     block_size: usize,
 
-    /// Widom exponential average accumulator (log-sum-exp)
+    /// Widom exponential average accumulator (log-sum-exp). Drives block
+    /// segmentation internally via [`WidomAccumulator::with_block_size`].
     #[builder(setter(skip))]
     #[builder_field_attr(serde(skip))]
     widom: WidomAccumulator,
-
-    /// Samples collected in the current (incomplete) block.
-    #[builder(setter(skip))]
-    #[builder_field_attr(serde(skip))]
-    samples_in_block: usize,
 
     /// Thermal energy R*T in kJ/mol.
     #[builder(setter(skip))]
@@ -126,15 +124,18 @@ impl VirtualVolumeMoveBuilder {
             .map(|p| ColumnWriter::open(p, &["step", "dV/Å³", "dU/kT", "<Pex>/kT/Å³"]))
             .transpose()?;
 
+        let block_size = self.block_size.unwrap_or_else(default_block_size);
+        let block_size_nz = NonZeroUsize::new(block_size)
+            .ok_or_else(|| anyhow::anyhow!("VirtualVolumeMove: 'block_size' must be > 0, got 0"))?;
+
         Ok(VirtualVolumeMove {
             volume_displacement: self.volume_displacement.unwrap(),
             method: self.method.unwrap_or_default(),
             output_file,
             stream,
             frequency: self.frequency.unwrap(),
-            block_size: self.block_size.unwrap_or_else(default_block_size),
-            widom: WidomAccumulator::new(),
-            samples_in_block: 0,
+            block_size,
+            widom: WidomAccumulator::default().with_block_size(block_size_nz),
             thermal_energy,
         })
     }
@@ -256,11 +257,6 @@ impl<T: Context> Analyze<T> for VirtualVolumeMove {
         let energy_change = self.perturb(&mut trial_context, old_energy)?;
 
         self.widom.collect(energy_change, weight);
-        self.samples_in_block += 1;
-        if self.samples_in_block >= self.block_size {
-            self.widom.end_block();
-            self.samples_in_block = 0;
-        }
         self.write_to_stream(step, energy_change)?;
 
         Ok(())
@@ -412,6 +408,19 @@ mod tests {
             .build(RT_298);
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("frequency"));
+    }
+
+    #[test]
+    fn build_rejects_zero_block_size() {
+        let yaml = "
+- !VirtualVolumeMove
+  dV: 0.5
+  frequency: !Every 1
+  block_size: 0
+";
+        let result = deserialize_vvm_builder(yaml, 0).build(RT_298);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("block_size"));
     }
 
     #[test]
