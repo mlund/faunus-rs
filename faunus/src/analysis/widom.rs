@@ -159,24 +159,11 @@ impl WidomAccumulator {
         }
     }
 
-    /// Sample standard deviation of the free energy across blocks.
-    pub fn free_energy_stddev(&self) -> f64 {
-        self.free_energy.stddev()
-    }
-
-    /// Number of completed blocks.
-    pub fn n_blocks(&self) -> u64 {
-        self.free_energy.n()
-    }
-
-    /// YAML view of the per-block free-energy statistics
-    /// (`{ mean, error }`, matching the shape `ScaledWidomInsertion` uses
-    /// for its `mu_*` averages). Returns `None` if no block has closed yet.
-    pub fn free_energy_to_yaml(&self) -> Option<serde_yml::Value> {
-        if self.n_blocks() == 0 {
-            return None;
-        }
-        self.free_energy.to_yaml()
+    /// Borrow the per-block free-energy aggregator. Callers can read
+    /// `mean()`, `error()`, `stddev()`, `n()`, or scale to a derived
+    /// quantity via `&BlockAverage * scale` → `BlockSummary`.
+    pub fn free_energy(&self) -> &BlockAverage {
+        &self.free_energy
     }
 }
 
@@ -274,8 +261,8 @@ mod tests {
         acc.end_block();
 
         // Block mean ≈ 1.0, error > 0
-        assert_approx_eq!(f64, acc.free_energy.mean(), 1.0, epsilon = 1e-12);
-        assert!(acc.free_energy_stddev() > 0.0);
+        assert_approx_eq!(f64, acc.free_energy().mean(), 1.0, epsilon = 1e-12);
+        assert!(acc.free_energy().stddev() > 0.0);
 
         // Total accumulator is never reset: 2 samples, overall mean = -ln((1 + exp(-2)) / 2)
         assert_eq!(acc.len(), 2);
@@ -290,15 +277,15 @@ mod tests {
         // Block 1: free_energy = 0
         acc.collect(0.0, 1.0);
         acc.collect(0.0, 1.0);
-        assert_eq!(acc.n_blocks(), 1);
+        assert_eq!(acc.free_energy().n(), 1);
         // Block 2: free_energy = 2
         acc.collect(2.0, 1.0);
         acc.collect(2.0, 1.0);
-        assert_eq!(acc.n_blocks(), 2);
+        assert_eq!(acc.free_energy().n(), 2);
         // Total accumulator still reflects all 4 samples.
         assert_eq!(acc.len(), 4);
         // Distinct per-block free energies (0, 2) → between-block variance > 0.
-        assert!(acc.free_energy_stddev() > 0.0);
+        assert!(acc.free_energy().stddev() > 0.0);
     }
 
     #[test]

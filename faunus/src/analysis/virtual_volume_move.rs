@@ -165,29 +165,29 @@ impl VirtualVolumeMove {
         }
     }
 
-    /// Convert pressure from kT/Å³ to Pascal.
+    /// Linear unit conversion from kT/Å³ to Pascal. Applies equally to a
+    /// pressure mean and a pressure error (Var(cX) = c²Var(X)).
     ///
     /// P\[Pa\] = P\[kT/ų\] · kT\[J\] / (1 ų in m³).
-    fn pressure_to_pa(&self, p_kt_per_a3: f64) -> f64 {
+    fn to_pascal(&self, p_kt_per_a3: f64) -> f64 {
         p_kt_per_a3 * self.thermal_energy * 1e6 / crate::MOLAR_TO_INV_ANGSTROM3
+    }
+
+    /// Linear unit conversion from kT/Å³ to millimolar (mM). Exploits
+    /// P = c·kT, so c\[1/ų\] = P\[kT/ų\]. Applies equally to means and errors.
+    fn to_millimolar(&self, p_kt_per_a3: f64) -> f64 {
+        p_kt_per_a3 * 1e3 / crate::MOLAR_TO_INV_ANGSTROM3
     }
 
     /// Sample standard deviation of pressure across blocks in kT/Å³.
     ///
     /// Returns `None` until at least two blocks have been completed.
     fn pressure_stddev(&self) -> Option<f64> {
-        if self.widom.n_blocks() >= 2 {
-            Some(self.widom.free_energy_stddev() / self.volume_displacement.abs())
+        if self.widom.free_energy().n() >= 2 {
+            Some(self.widom.free_energy().stddev() / self.volume_displacement.abs())
         } else {
             None
         }
-    }
-
-    /// Convert pressure from kT/Å³ to millimolar (mM).
-    ///
-    /// Exploits P = c·kT, so c\[1/ų\] = P\[kT/ų\].
-    fn pressure_to_mm(&self, p_kt_per_a3: f64) -> f64 {
-        p_kt_per_a3 * 1e3 / crate::MOLAR_TO_INV_ANGSTROM3
     }
 
     /// Perform the virtual volume perturbation and return the energy change in kT.
@@ -262,17 +262,14 @@ impl<T: Context> Analyze<T> for VirtualVolumeMove {
         map.try_insert("num_samples", self.widom.len())?;
         map.try_insert("mean_free_energy", self.widom.mean_free_energy())?;
 
-        let p = self.mean_pressure();
-        map.try_insert("Pex/kT/Å³", p)?;
-        map.try_insert("Pex/Pa", self.pressure_to_pa(p))?;
-        map.try_insert("Pex/mM", self.pressure_to_mm(p))?;
-
-        // Per-block free-energy statistics in the same `{mean, error}` shape
-        // that `ScaledWidomInsertion` uses for its `mu_*` fields. Scale by
-        // `1/|dV|` for pressure error/SEM if needed.
-        if let Some(fe) = self.widom.free_energy_to_yaml() {
-            map.insert("free_energy_blocks (kT)".into(), fe);
-        }
+        // Pressure = -F / dV. Per-unit `{mean, error}` mappings come from
+        // multiplying the free-energy BlockAverage by the pressure-unit
+        // scale; variance scales by c² so the error scales by |c|.
+        let fe = self.widom.free_energy();
+        let s_kt = -1.0 / self.volume_displacement;
+        map.try_insert("Pex (kT/Å³)", fe * s_kt)?;
+        map.try_insert("Pex (Pa)", fe * self.to_pascal(s_kt))?;
+        map.try_insert("Pex (mM)", fe * self.to_millimolar(s_kt))?;
 
         Some(serde_yml::Value::Mapping(map))
     }
@@ -445,13 +442,12 @@ mod tests {
     fn pressure_unit_conversions() {
         let vvm = build_vvm(1.0);
         // 1 kT/ų at 298.15 K
-        let p_pa = vvm.pressure_to_pa(1.0);
-        let p_mm = vvm.pressure_to_mm(1.0);
-        // kT at 298.15 K ≈ 4.116e-21 J, 1 ų = 1e-30 m³
-        // P ≈ 4.116e-21 / 1e-30 ≈ 4.116e9 Pa
-        assert!(p_pa > 4.0e9 && p_pa < 4.2e9);
-        // c = 1/ų → mol/L = 1/(N_A * 1e-27) ≈ 1.66e3 mol/L → 1.66e6 mM
-        assert!(p_mm > 1.6e6 && p_mm < 1.7e6);
+        let p_pa = vvm.to_pascal(1.0);
+        let p_mm = vvm.to_millimolar(1.0);
+        // kT(298.15 K) ≈ 4.116e-21 J, 1 ų = 1e-30 m³ → 1 kT/ų ≈ 4.116e9 Pa
+        assert_approx_eq!(f64, p_pa, 4.116e9, epsilon = 5.0e6);
+        // 1 1/ų = 1/(N_A · 1e-27 L) ≈ 1.66e3 mol/L = 1.66e6 mM
+        assert_approx_eq!(f64, p_mm, 1.66e6, epsilon = 1.0e4);
     }
 
     #[test]
@@ -534,8 +530,35 @@ mod tests {
             vvm.widom.collect(2.0, 1.0);
             vvm.widom.end_block();
         }
-        assert!(vvm.widom.n_blocks() >= 2);
+        assert!(vvm.widom.free_energy().n() >= 2);
         assert!(vvm.pressure_stddev().is_some());
+    }
+
+    #[test]
+    fn to_yaml_emits_pex_mapping_per_unit() {
+        let mut vvm = VirtualVolumeMoveBuilder::default()
+            .volume_displacement(0.5)
+            .frequency(Frequency::Every(1))
+            .build(RT_298)
+            .unwrap();
+        // Close two distinct blocks so the BlockAverage has finite mean and SEM.
+        vvm.widom.collect(0.0, 1.0);
+        vvm.widom.end_block();
+        vvm.widom.collect(2.0, 1.0);
+        vvm.widom.end_block();
+
+        let yaml = <VirtualVolumeMove as Analyze<crate::backend::Backend>>::to_yaml(&vvm)
+            .expect("to_yaml returns Some");
+        let map = yaml.as_mapping().expect("top-level mapping");
+
+        for key in ["Pex (kT/Å³)", "Pex (Pa)", "Pex (mM)"] {
+            let entry = map.get(key).unwrap_or_else(|| panic!("missing {key}"));
+            let parsed: crate::auxiliary::BlockSummary =
+                serde_yml::from_value(entry.clone()).expect("entry parses as BlockSummary");
+            assert!(parsed.mean.is_finite(), "{key} mean must be finite");
+            assert!(parsed.error.is_finite(), "{key} error must be finite");
+            assert!(parsed.error >= 0.0, "{key} error must be non-negative");
+        }
     }
 
     #[test]
