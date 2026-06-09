@@ -24,6 +24,7 @@ use serde_yml::Value;
 use std::path::{Path, PathBuf};
 
 mod collective_variable;
+mod double_layer_pressure;
 mod energy;
 mod mean_along_coordinate;
 mod multipole;
@@ -37,6 +38,7 @@ mod virtual_translate;
 mod virtual_volume_move;
 mod widom;
 pub use collective_variable::{CollectiveVariableAnalysis, CollectiveVariableAnalysisBuilder};
+pub use double_layer_pressure::{DoubleLayerPressure, DoubleLayerPressureBuilder};
 pub use energy::{EnergyAnalysis, EnergyAnalysisBuilder};
 pub use mean_along_coordinate::{MeanAlongCoordinate, MeanAlongCoordinateBuilder};
 pub use radial_distribution::{RadialDistribution, RadialDistributionBuilder};
@@ -123,6 +125,8 @@ pub enum AnalysisBuilder {
     RotationalDiffusion(RotationalDiffusionBuilder),
     /// Per-group charge and dipole moment analysis
     Multipole(multipole::MultipoleAnalysisBuilder),
+    /// Osmotic pressure between two charged planes (Guldbrand midplane method)
+    DoubleLayerPressure(DoubleLayerPressureBuilder),
 }
 
 /// Prefix `dir` onto a relative output path that stays within `dir`.
@@ -186,6 +190,7 @@ impl AnalysisBuilder {
             Self::VirtualVolumeMove(b) => b.apply_output_dir(dir),
             Self::RotationalDiffusion(b) => b.apply_output_dir(dir),
             Self::Multipole(b) => b.apply_output_dir(dir),
+            Self::DoubleLayerPressure(b) => b.apply_output_dir(dir),
         }
     }
 
@@ -211,6 +216,7 @@ impl AnalysisBuilder {
             Self::VirtualVolumeMove(builder) => Box::new(builder.build(rt)?),
             Self::RotationalDiffusion(builder) => Box::new(builder.build(context)?),
             Self::Multipole(builder) => Box::new(builder.build(context)?),
+            Self::DoubleLayerPressure(builder) => Box::new(builder.build(context, medium)?),
         })
     }
 }

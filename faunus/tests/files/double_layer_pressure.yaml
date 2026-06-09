@@ -1,0 +1,9 @@
+# Fixtures for the DoubleLayerPressure analysis (Guldbrand midplane osmotic pressure).
+- !DoubleLayerPressure
+  selection: "atomtype Na Ca"   # mono- and divalent counterions (mixture)
+  midplane_halfwidth: 2.0       # half-width (Å) of the midplane density window
+  file: pressure.csv
+  frequency: !Every 10
+- !DoubleLayerPressure
+  selection: "atomtype Na"
+  frequency: !Every 5

@@ -532,6 +532,53 @@ Key           | Required | Default      | Description
 
 ---
 
+## Double Layer Pressure
+
+Osmotic (disjoining) pressure between two uniformly charged planes with explicit
+point-charge counterions, by the midplane method of Guldbrand, Jönsson, Wennerström &
+Linse ([doi:10.1063/1.446912](https://doi.org/10.1063/1.446912)):
+
+$$P_\text{osm} = k_BT\sum_i C_i(0) \;+\; \frac{F_z^{AB}}{\text{area}}$$
+
+The first term is the entropic (repulsive) contribution from the ion concentration at the
+midplane; the second is the cross-midplane electrostatic force, whose ion–ion correlation
+part gives the attractive, van-der-Waals-like force that dominates for divalent ions (and
+that mean-field Poisson–Boltzmann misses). The constant wall (Maxwell stress) contribution
+reduces to $-\sigma^2/2\varepsilon_r\varepsilon_0$, with the surface charge density
+$\sigma$ fixed by electroneutrality from the counterion charges.
+
+This analysis is **hardcoded to a [`Slit`](#) geometry** (periodic in XY, walls at
+$z=\pm L_z/2$, so the **midplane is $z=0$**) and to **electrostatics only** — it suits the
+primitive-model double layer with point-charge counterions. Mixtures of valencies need
+nothing special: select all counterions (e.g. `"atomtype Na Ca"`) and the $q_iq_j$ product
+carries the charges. Results are block-averaged and reported as mean ± standard error.
+
+### Example
+
+```yaml
+analysis:
+  - !DoubleLayerPressure
+    selection: "atomtype Na Ca"   # mono- + divalent counterions
+    midplane_halfwidth: 2.0       # optional half-width (Å) of the midplane density window
+    file: pressure.csv
+    frequency: !Every 10
+```
+
+### Options
+
+Key                  | Required | Default | Description
+-------------------- | -------- | ------- | -------------------------------------------
+`selection`          | yes      |         | Mobile counterions (sets electroneutral $\sigma$ and the Coulomb prefactor comes from the medium)
+`midplane_halfwidth` | no       | `2.0`   | Half-width (Å) of the slab centred on the midplane used to estimate $C_i(0)$; a sampling parameter — check convergence
+`file`               | no       |         | Output file path (see [Output file formats](#output-file-formats))
+`frequency`          | yes      |         | Sample frequency, e.g. `!Every 10`
+
+`output.yaml` reports `{mean, error}` for `rho_mid/Å⁻³`, `p_ideal/mM`, `p_corr/mM`,
+`p_osm/mM` (plus `p_osm/Pa`). If `file` is given, each sampled step writes columns
+`step`, `rho_mid/Å⁻³`, `p_ideal/mM`, `p_corr/mM`, `p_osm/mM`.
+
+---
+
 ## Mean Along Coordinate
 
 Computes the average of one collective variable (CV1) binned along another (CV2).
