@@ -293,7 +293,6 @@ mod tests {
     use super::*;
     use crate::analysis::AnalysisBuilder;
     use approx::assert_relative_eq;
-    use std::path::Path;
 
     #[test]
     fn deserialize_atom_atom() {
@@ -348,6 +347,10 @@ frequency: !Every 50
         let n_pairs = 100.0;
         let volume = 100.0;
 
+        // Portable scratch sink (no hardcoded `/dev/null`, which is absent on Windows).
+        let tmp = tempfile::tempdir().unwrap();
+        let sink = tmp.path().join("gr.dat");
+
         let mut rdf = RadialDistribution {
             selections: (
                 Selection::parse("all").unwrap(),
@@ -361,8 +364,8 @@ frequency: !Every 50
             use_com: false,
             exclude_intramolecular: false,
             dimension,
-            output_file: PathBuf::from("/dev/null"),
-            stream: ColumnWriter::open(Path::new("/dev/null"), &["r", "g(r)"]).unwrap(),
+            output_file: sink.clone(),
+            stream: ColumnWriter::open(&sink, &["r", "g(r)"]).unwrap(),
             frequency: Frequency::Every(1),
         };
         for i in 0..rdf.histogram.num_bins() {
