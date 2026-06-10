@@ -570,12 +570,22 @@ Key                  | Required | Default | Description
 -------------------- | -------- | ------- | -------------------------------------------
 `selection`          | yes      |         | Mobile counterions (sets electroneutral $\sigma$ and the Coulomb prefactor comes from the medium)
 `midplane_halfwidth` | no       | `2.0`   | Half-width (Å) of the slab centred on the midplane used to estimate $C_i(0)$; a sampling parameter — check convergence
+`density_bins`       | no       | `50`    | Number of $z$-bins for the $\sigma_\text{ion}(z)$ profile driving the self-consistent long-range correction $F_\text{iPB}$
 `file`               | no       |         | Output file path (see [Output file formats](#output-file-formats))
 `frequency`          | yes      |         | Sample frequency, e.g. `!Every 10`
 
+The minimum-image `F_ii` and the finite-sheet `F_iw` are reconciled by a self-consistent
+long-range correction `F_iPB`: the `(∞ − finite-sheet)` cross-force of the neutral
+laterally-averaged charge `σ(z) = σ_ion(z) − σ·δ(z±L_z/2)`, accumulated from a
+charge-weighted profile (so mono/divalent mixtures need no special handling) and added to
+`p_corr`/`p_osm` at report time. For best results, equilibrate first and start production
+from a state file (`-s`), and check convergence in `density_bins` and the lateral box.
+
 `output.yaml` reports `{mean, error}` for `rho_mid/Å⁻³`, `p_ideal/mM`, `p_corr/mM`,
-`p_osm/mM` (plus `p_osm/Pa`). If `file` is given, each sampled step writes columns
-`step`, `rho_mid/Å⁻³`, `p_ideal/mM`, `p_corr/mM`, `p_osm/mM`.
+`p_osm/mM` (the last two include `F_iPB`), plus `F_iPB/mM` and `p_osm/Pa`. If `file` is
+given, each sampled step writes columns `step`, `rho_mid/Å⁻³`, `p_ideal/mM`, `p_corr/mM`,
+`p_osm/mM` (the per-step `p_corr`/`p_osm` are the explicit terms *without* `F_iPB`, which
+is a run-averaged constant).
 
 ---
 

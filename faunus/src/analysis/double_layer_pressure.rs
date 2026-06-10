@@ -57,6 +57,10 @@ pub struct DoubleLayerPressureBuilder {
     /// extrapolation of the windows `w` and `2w` to ρ(0)). Default 2.0.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     midplane_halfwidth: Option<f64>,
+    /// Number of z-bins for the laterally-averaged charge profile that drives the
+    /// self-consistent long-range correction `F_iPB`. Default 50.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    density_bins: Option<usize>,
     /// Output file path.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     file: Option<PathBuf>,
@@ -106,6 +110,11 @@ impl DoubleLayerPressureBuilder {
             anyhow::bail!("DoubleLayerPressure: midplane_halfwidth must be positive");
         }
 
+        let density_bins = self.density_bins.unwrap_or(50);
+        if density_bins == 0 {
+            anyhow::bail!("DoubleLayerPressure: density_bins must be positive");
+        }
+
         // Surface charge per wall from electroneutrality: two walls neutralize the ions,
         // so |σ| = Σ q_ion / (2·area).
         let ion_charge: f64 = context
@@ -143,6 +152,8 @@ impl DoubleLayerPressureBuilder {
             sigma,
             half_box,
             half_gap,
+            density: vec![0.0; density_bins],
+            density_samples: 0,
             rho_mid: BlockAverage::new(),
             p_ideal: BlockAverage::new(),
             p_corr: BlockAverage::new(),
@@ -174,6 +185,11 @@ pub struct DoubleLayerPressure {
     half_box: f64,
     /// Half-gap Lz/2 (walls at ±half_gap; the gap Lz = 2·half_gap), Å.
     half_gap: f64,
+    /// Accumulated counterion charge per z-bin (summed over samples) → the σ_ion(z)
+    /// profile for the self-consistent `F_iPB` long-range correction.
+    density: Vec<f64>,
+    /// Number of samples accumulated into `density`.
+    density_samples: usize,
     /// Ion number density at the midplane, Å⁻³.
     rho_mid: BlockAverage,
     /// Entropic term kT·ρ(0), kJ/mol·Å⁻³.
@@ -225,7 +241,9 @@ fn midplane_count(positions: &[Point], slab: f64) -> usize {
 fn contact_density(positions: &[Point], w: f64, area: f64) -> f64 {
     let rho_inner = midplane_count(positions, w) as f64 / (2.0 * w * area);
     let rho_outer = midplane_count(positions, 2.0 * w) as f64 / (4.0 * w * area);
-    2.0 * rho_inner - rho_outer
+    // Density is physical (≥0); the extrapolation can dip slightly negative on a fully
+    // depleted midplane (e.g. strongly-bound divalent ions), so clamp it.
+    (2.0 * rho_inner - rho_outer).max(0.0)
 }
 
 /// Guldbrand Eq. 9 geometric factor for a uniformly charged **square** sheet of
@@ -271,24 +289,65 @@ impl DoubleLayerPressure {
         p * 1e6 / crate::MOLAR_TO_INV_ANGSTROM3
     }
 
-    /// `{mean, error}` mapping for a block average, converted to mM.
-    fn block_mm_yaml(&self, b: &BlockAverage) -> Option<serde_yml::Value> {
+    /// `{mean, error}` mapping for a block average plus a constant `offset`, converted to mM.
+    fn block_mm_yaml(&self, b: &BlockAverage, offset: f64) -> Option<serde_yml::Value> {
         let mut m = serde_yml::Mapping::new();
-        m.try_insert("mean", self.to_mm(b.mean()))?;
+        m.try_insert("mean", self.to_mm(b.mean() + offset))?;
         m.try_insert("error", self.to_mm(b.error()))?;
         Some(serde_yml::Value::Mapping(m))
+    }
+
+    /// Self-consistent long-range correction `F_iPB` (Guldbrand), as a pressure
+    /// (kJ/mol·Å⁻³). It is the `(∞ − finite-sheet)` cross-midplane force of the **neutral**
+    /// laterally-averaged charge `σ(z) = σ_ion(z) − σ·δ(z±half_gap)` — the charge beyond the
+    /// minimum-image box that `F_ii`/`F_iw` miss. Reconciles the min-image ion–ion sum with
+    /// the sheet-based wall term, so the mean field cancels and only the correlation remains.
+    /// Uses the accumulated `σ_ion(z)` profile (mixture-aware via per-atom charge).
+    fn fipb_pressure(&self) -> f64 {
+        if self.density_samples == 0 {
+            return 0.0;
+        }
+        let n = self.density.len();
+        let dz = 2.0 * self.half_gap / n as f64;
+        let norm = self.density_samples as f64 * dz * self.area;
+        let lambda: Vec<f64> = self.density.iter().map(|s| s / norm).collect();
+        let z = |k: usize| -self.half_gap + (k as f64 + 0.5) * dz;
+        let tail = |d: f64| std::f64::consts::PI - finite_sheet_g(d, self.half_box);
+
+        // ion–ion across the midplane (below × above)
+        let mut sum = 0.0;
+        for a in 0..n {
+            if z(a) >= 0.0 {
+                continue;
+            }
+            for b in 0..n {
+                if z(b) < 0.0 {
+                    continue;
+                }
+                sum += lambda[a] * lambda[b] * tail(z(b) - z(a)) * dz * dz;
+            }
+        }
+        // each ion ↔ its opposite wall (distance half_gap + |z|)
+        for k in 0..n {
+            sum -= self.sigma * lambda[k] * tail(self.half_gap + z(k).abs()) * dz;
+        }
+        // wall ↔ wall (two sheets a full gap apart)
+        sum += self.sigma * self.sigma * tail(2.0 * self.half_gap);
+        2.0 * self.prefactor * sum
     }
 
     /// Build the YAML results mapping (inherent so it is callable without choosing a
     /// `Context` type; the [`Analyze`] trait method delegates here).
     fn report(&self) -> Option<serde_yml::Value> {
+        let fipb = self.fipb_pressure();
         let mut map = serde_yml::Mapping::new();
         map.try_insert("num_samples", self.num_samples)?;
         map.insert("rho_mid/Å⁻³".into(), self.rho_mid.to_yaml()?);
-        map.insert("p_ideal/mM".into(), self.block_mm_yaml(&self.p_ideal)?);
-        map.insert("p_corr/mM".into(), self.block_mm_yaml(&self.p_corr)?);
-        map.insert("p_osm/mM".into(), self.block_mm_yaml(&self.p_osm)?);
-        map.try_insert("p_osm/Pa", self.to_pa(self.p_osm.mean()))?;
+        map.insert("p_ideal/mM".into(), self.block_mm_yaml(&self.p_ideal, 0.0)?);
+        map.insert("p_corr/mM".into(), self.block_mm_yaml(&self.p_corr, fipb)?);
+        map.insert("p_osm/mM".into(), self.block_mm_yaml(&self.p_osm, fipb)?);
+        map.try_insert("F_iPB/mM", self.to_mm(fipb))?;
+        map.try_insert("p_osm/Pa", self.to_pa(self.p_osm.mean() + fipb))?;
         Some(serde_yml::Value::Mapping(map))
     }
 }
@@ -339,6 +398,16 @@ impl<T: Context> Analyze<T> for DoubleLayerPressure {
         self.p_osm.add(p_osm);
         self.num_samples += 1;
 
+        // Accumulate the laterally-averaged counterion charge profile σ_ion(z) (each ion
+        // weighted by its own charge → mixture-aware) for the F_iPB correction at report time.
+        let n = self.density.len();
+        let dz = 2.0 * self.half_gap / n as f64;
+        for (p, &q) in positions.iter().zip(&charges) {
+            let k = ((p.z + self.half_gap) / dz).floor().clamp(0.0, (n - 1) as f64) as usize;
+            self.density[k] += q;
+        }
+        self.density_samples += 1;
+
         let (ideal_mm, corr_mm, osm_mm) =
             (self.to_mm(p_ideal), self.to_mm(p_corr), self.to_mm(p_osm));
         if let Some(stream) = self.stream.as_mut() {
@@ -373,7 +442,8 @@ impl std::fmt::Display for DoubleLayerPressure {
         writeln!(f, "Double Layer Pressure Analysis:")?;
         writeln!(f, "  Samples:   {}", self.num_samples)?;
         if self.num_samples > 0 {
-            writeln!(f, "  <P_osm>:   {:.4} mM", self.to_mm(self.p_osm.mean()))?;
+            let p_osm = self.p_osm.mean() + self.fipb_pressure();
+            writeln!(f, "  <P_osm>:   {:.4} mM", self.to_mm(p_osm))?;
         }
         Ok(())
     }
@@ -470,6 +540,8 @@ mod tests {
             sigma: 0.0,
             half_box: 1.0,
             half_gap: 1.0,
+            density: vec![0.0; 20],
+            density_samples: 0,
             rho_mid: BlockAverage::new(),
             p_ideal: BlockAverage::new(),
             p_corr: BlockAverage::new(),
@@ -501,6 +573,34 @@ mod tests {
         let osm = &yaml["p_osm/mM"];
         assert!(osm.get("mean").is_some());
         assert!(osm.get("error").is_some());
+        assert!(yaml.get("F_iPB/mM").is_some());
+    }
+
+    #[test]
+    fn fipb_zero_without_samples() {
+        let a = dummy(crate::R_IN_KJ_PER_MOL * 298.15);
+        assert_eq!(a.fipb_pressure(), 0.0);
+    }
+
+    #[test]
+    fn fipb_vanishes_for_infinite_sheet() {
+        // tail(d) = π − g(d, b) → 0 as b → ∞, so the long-range correction vanishes.
+        let mut a = dummy(crate::R_IN_KJ_PER_MOL * 298.15);
+        a.sigma = 0.01;
+        a.half_box = 1e7;
+        a.density = vec![1.0; 20];
+        a.density_samples = 1;
+        assert!(a.fipb_pressure().abs() < 1e-3, "fipb = {}", a.fipb_pressure());
+    }
+
+    #[test]
+    fn fipb_nonzero_for_finite_box() {
+        let mut a = dummy(crate::R_IN_KJ_PER_MOL * 298.15);
+        a.sigma = 0.01;
+        a.half_box = 5.0;
+        a.density = vec![1.0; 20];
+        a.density_samples = 1;
+        assert!(a.fipb_pressure().abs() > 1e-9, "fipb = {}", a.fipb_pressure());
     }
 
     #[test]
