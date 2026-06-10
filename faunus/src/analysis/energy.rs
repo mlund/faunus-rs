@@ -238,11 +238,13 @@ mod integration_tests {
     #[ignore = "topology_pass.yaml uses unimplemented Morse potential"]
     fn build_and_sample_total() {
         let ctx = make_context();
-        let yaml = r#"
-file: /dev/null
-frequency: !Every 1
-"#;
-        let builder: EnergyAnalysisBuilder = serde_yml::from_str(yaml).unwrap();
+        let tmp = tempfile::tempdir().unwrap();
+        let sink = tmp.path().join("energy.dat");
+        let yaml = format!(
+            "file: {}\nfrequency: !Every 1\n",
+            sink.to_string_lossy().replace('\\', "/")
+        );
+        let builder: EnergyAnalysisBuilder = serde_yml::from_str(&yaml).unwrap();
         let mut analysis = builder.build(&ctx).unwrap();
 
         assert_eq!(Analyze::<Backend>::num_samples(&analysis), 0);
@@ -258,12 +260,13 @@ frequency: !Every 1
     #[ignore = "topology_pass.yaml uses unimplemented Morse potential"]
     fn build_and_sample_partial() {
         let ctx = make_context();
-        let yaml = r#"
-file: /dev/null
-frequency: !Every 1
-selections: ["all", "all"]
-"#;
-        let builder: EnergyAnalysisBuilder = serde_yml::from_str(yaml).unwrap();
+        let tmp = tempfile::tempdir().unwrap();
+        let sink = tmp.path().join("energy.dat");
+        let yaml = format!(
+            "file: {}\nfrequency: !Every 1\nselections: [\"all\", \"all\"]\n",
+            sink.to_string_lossy().replace('\\', "/")
+        );
+        let builder: EnergyAnalysisBuilder = serde_yml::from_str(&yaml).unwrap();
         let mut analysis = builder.build(&ctx).unwrap();
 
         analysis.sample(&ctx, 1).unwrap();
