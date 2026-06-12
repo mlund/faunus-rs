@@ -1,83 +1,45 @@
-{# =====================================================================
-   Electric double layer: osmotic pressure between two uniformly charged
-   planes with explicit point-charge counterions (Guldbrand, Jönsson,
-   Wennerström & Linse, J. Chem. Phys. 80, 2221 (1984)).
-   Rendered by Faunus' built-in minijinja (no external step).
+{# Electric double layer (Guldbrand, Jönsson, Wennerström & Linse,
+   J. Chem. Phys. 80, 2221 (1984)): osmotic pressure between two uniformly
+   charged planes with explicit point-charge counterions. Set the composition
+   with n_mono / n_di (pure monovalent, pure divalent, or a mixture) and sweep
+   the plate separation with lz. Method: see docs/analysis.md (DoubleLayerPressure). #}
+{%- set sigma  = sigma  | default(0.014006) %}   {# |σ| e/Å² (0.2244 C/m²) #}
+{%- set n_mono = n_mono | default(180) %}        {# monovalent (+1) counterions #}
+{%- set n_di   = n_di   | default(0) %}          {# divalent (+2) counterions #}
+{%- set lz     = lz     | default(21.0) %}       {# plate separation D (Å) #}
+{%- set eps_r  = eps_r  | default(78.05) %}      {# ε_r·T = 2.327e4 K at 298.15 K #}
+{%- set sweeps = sweeps | default(20000) %}
+{%- set seed   = seed   | default(42) %}
+{%- set ntot   = n_mono + n_di %}
+{%- set side   = ((n_mono + 2 * n_di) / (2.0 * sigma)) ** 0.5 %}
+{%- set c_wall = -4.0 * 1389.3545764438197 / eps_r * sigma %}
+{%- set dp     = (lz / 4.0) | round(2) %}
+{%- set nm_lo = (n_mono / 2) | int %}{% set nd_lo = (n_di / 2) | int %}{% set nlo = nm_lo + nd_lo %}
 
-   Geometry (Slit, centered at origin):
-        z = -Lz/2 .......... z = 0 .......... z = +Lz/2
-        charged wall         MIDPLANE         charged wall
-        (smeared, ext.)      (hard wall)      (smeared, ext.)
-   Plate separation D = Lz. The midplane (z=0) is an electrically transparent
-   hard wall (Guldbrand Fig. 1c): counterions are split into a lower half
-   (z<0) and an upper half (z>0) BY INDEX and held on their side by a step
-   barrier. Both smeared walls act on every ion through the finite charged
-   SQUARE-sheet potential (the integral of Guldbrand Eq. 9) — its confinement
-   decays toward the midplane (unlike an infinite sheet, which would either
-   over-confine or cancel), giving the correct midplane density. Point charges
-   only (no hard core), plain real-space Coulomb, NO Ewald, NO cutoff.
-
-   Pressure via the !DoubleLayerPressure analysis (Guldbrand Eq. 5):
-        P = kT * Σ_i C_i(0) + F_z^AB / area
-   with the wall term in the analysis using the SAME finite sheet (Eq. 9).
-
-   >>> Sweep separation D by editing `lz`, and the mono↔di composition by
-       editing `n_mono` / `n_di`. The lateral box is DERIVED from the target
-       surface charge `sigma` and the ion count, exactly as in Guldbrand.
-   ===================================================================== #}
-{%- set sigma       = sigma       | default(0.014006) %}  {# |σ| e/Å²  (0.2244 C/m²) #}
-{%- set n_mono      = n_mono      | default(180) %}        {# monovalent (+1) counterions #}
-{%- set n_di        = n_di        | default(0) %}          {# divalent  (+2) counterions #}
-{%- set lz          = lz          | default(21.0) %}       {# plate separation D (Å) #}
-{%- set eps_r       = eps_r       | default(78.05) %}      {# ε_r·T = 2.327e4 K at 298.15 K #}
-{%- set temperature = temperature | default(298.15) %}
-{%- set sweeps      = sweeps      | default(20000) %}      {# MC sweeps (each = `ntot` trial moves) #}
-{%- set seed        = seed        | default(42) %}
-
-{%- set ncharge     = n_mono + 2 * n_di %}
-{%- set area        = ncharge / (2.0 * sigma) %}
-{%- set side        = area ** 0.5 %}
-{%- set cutoff      = side * 10.0 %}                       {# >> box: full minimum-image ion-ion #}
-{%- set halflz      = lz / 2.0 %}
-{%- set half_box    = side / 2.0 %}                        {# square charged-sheet half-width b #}
-{%- set pref        = 1389.3545764438197 / eps_r %}        {# TO_CHEMISTRY_UNIT/ε_r, kJ·Å/mol #}
-{%- set c_wall      = -4.0 * pref * sigma %}               {# prefactor of the Eq.9 wall potential #}
-{%- set nm_lo = (n_mono / 2) | int %}{% set nm_up = n_mono - nm_lo %}
-{%- set nd_lo = (n_di / 2) | int %}{% set nd_up = n_di - nd_lo %}
-{%- set nlo = nm_lo + nd_lo %}{% set ntot = n_mono + n_di %}
-
-# Auto-rendered: D={{ lz }} A, n_mono={{ n_mono }}, n_di={{ n_di }},
-# sigma={{ sigma }} e/A^2 ({{ (sigma * 16.0218) | round(4) }} C/m^2),
-# box = {{ side | round(2) }} x {{ side | round(2) }} x {{ lz }} A, eps_r={{ eps_r }}.
-# Halves (lower-first by index): lower = index 0:{{ nlo - 1 }}, upper = index {{ nlo }}:{{ ntot - 1 }}.
+# Guldbrand double layer: n_mono={{ n_mono }}, n_di={{ n_di }}, D={{ lz }} Å, σ={{ sigma }} e/Å², box={{ side | round(2) }}² Å.
 
 atoms:
-  - { name: Mono, charge: 1.0, sigma: 0.0, mass: 23.0 }
-  - { name: Di,   charge: 2.0, sigma: 0.0, mass: 40.0 }
+  - { name: Na, charge: 1.0, sigma: 0.0, mass: 23.0 }
+  - { name: Ca, charge: 2.0, sigma: 0.0, mass: 40.0 }
 
 molecules:
-  - { name: mono, atoms: [Mono], atomic: true }
-  - { name: di,   atoms: [Di],   atomic: true }
+  - { name: mono, atoms: [Na], atomic: true }
+  - { name: di,   atoms: [Ca], atomic: true }
 
 system:
   cell: !Slit [{{ side }}, {{ side }}, {{ lz }}]
   medium:
     permittivity: !Fixed {{ eps_r }}
-    temperature: {{ temperature }}
+    temperature: 298.15
 
   energy:
     nonbonded:
       default:
-        - !Coulomb { cutoff: {{ cutoff | round(3) }} }   # plain real-space Coulomb, NO Ewald, NO hard core
-
+        - !Coulomb { cutoff: {{ (side * 10.0) | round(3) }} }
     customexternal:
-      # Smeared finite charged walls: the on-axis charged-SQUARE potential
-      #   I(d,b) = 2b·asinh(b/√(b²+d²)) − d·atan(b²/(d·√(2b²+d²)))   [integral of Eq. 9]
-      # summed over BOTH walls (distance to lower wall = z+hg, to upper wall = hg−z),
-      # times c·q with c = −4·prefactor·|σ|. Applied to every ion.
+      # Smeared charged walls (finite charged-square sheet, Guldbrand Eq. 9).
       - selection: "all"
-        constants: { c: {{ c_wall }}, b: {{ half_box }}, hg: {{ halflz }} }
-        # folded (>-) block scalar: newlines fold to spaces -> one expression for exmex
+        constants: { c: {{ c_wall }}, b: {{ side / 2.0 }}, hg: {{ lz / 2.0 }} }
         function: >-
           c * q * (
           2*b*asinh(b/sqrt(b*b+(z+hg)*(z+hg)))
@@ -85,49 +47,41 @@ system:
           + 2*b*asinh(b/sqrt(b*b+(hg-z)*(hg-z)))
           - (hg-z)*atan(b*b/((hg-z)*sqrt(2*b*b+(hg-z)*(hg-z))))
           )
-      # Midplane hard wall (Guldbrand Fig. 1c): keep each index-half on its own side.
-      - selection: "index 0:{{ nlo - 1 }}"
-        function: "1000000.0 if z > 0 else 0.0"
-      - selection: "index {{ nlo }}:{{ ntot - 1 }}"
-        function: "1000000.0 if z < 0 else 0.0"
+      # Transparent midplane hard wall: hold each index-half on its side.
+      - { selection: "index 0:{{ nlo - 1 }}",         function: "1000000.0 if z > 0 else 0.0" }
+      - { selection: "index {{ nlo }}:{{ ntot - 1 }}", function: "1000000.0 if z < 0 else 0.0" }
 
   blocks:
-    # Lower-first so the two index ranges above are contiguous. RandomAtomPos with
-    # directions: xy starts every ion in the z=0 plane; barriers+walls sort them.
+    # Lower half first (indices 0..{{ nlo - 1 }}), then upper, so the two index
+    # ranges are contiguous; RandomAtomPos (xy) starts ions at z=0 to be sorted.
 {%- if nm_lo > 0 %}
     - { molecule: mono, N: {{ nm_lo }}, insert: !RandomAtomPos { directions: xy } }
 {%- endif %}
 {%- if nd_lo > 0 %}
     - { molecule: di,   N: {{ nd_lo }}, insert: !RandomAtomPos { directions: xy } }
 {%- endif %}
-{%- if nm_up > 0 %}
-    - { molecule: mono, N: {{ nm_up }}, insert: !RandomAtomPos { directions: xy } }
+{%- if n_mono - nm_lo > 0 %}
+    - { molecule: mono, N: {{ n_mono - nm_lo }}, insert: !RandomAtomPos { directions: xy } }
 {%- endif %}
-{%- if nd_up > 0 %}
-    - { molecule: di,   N: {{ nd_up }}, insert: !RandomAtomPos { directions: xy } }
+{%- if n_di - nd_lo > 0 %}
+    - { molecule: di,   N: {{ n_di - nd_lo }}, insert: !RandomAtomPos { directions: xy } }
 {%- endif %}
 
 propagate:
   seed: !Fixed {{ seed }}
   criterion: Metropolis
-  repeat: {{ sweeps }}                # outer loop = MC sweeps
+  repeat: {{ sweeps }}
   collections:
     - !Stochastic
-      repeat: {{ ntot }}             # one sweep = ntot weighted single-particle moves
+      repeat: {{ ntot }}
       moves:
 {%- if n_mono > 0 %}
-        - !TranslateAtom { molecule: mono, dp: {{ (lz / 4.0) | round(2) }}, weight: {{ n_mono }} }
+        - !TranslateAtom { molecule: mono, dp: {{ dp }}, weight: {{ n_mono }} }
 {%- endif %}
 {%- if n_di > 0 %}
-        - !TranslateAtom { molecule: di,   dp: {{ (lz / 4.0) | round(2) }}, weight: {{ n_di }} }
+        - !TranslateAtom { molecule: di,   dp: {{ dp }}, weight: {{ n_di }} }
 {%- endif %}
 
 analysis:
-  # The analysis step counter counts TRIAL MOVES (sweeps × ntot), so sample once per
-  # sweep (every `ntot` moves) for decorrelated samples and honest error bars.
-  - !DoubleLayerPressure
-    selection: "atomtype Mono Di"
-    file: pressure.csv
-    frequency: !Every {{ ntot }}
-
+  - !DoubleLayerPressure { selection: "atomtype Na Ca", file: pressure.csv, frequency: !Every {{ ntot }} }
   - !Energy { file: energy.dat, frequency: !Every {{ 100 * ntot }} }

@@ -535,23 +535,22 @@ Key           | Required | Default      | Description
 ## Double Layer Pressure
 
 Osmotic (disjoining) pressure between two uniformly charged planes with explicit
-point-charge counterions, by the midplane method of Guldbrand, Jönsson, Wennerström &
-Linse ([doi:10.1063/1.446912](https://doi.org/10.1063/1.446912)):
+point-charge counterions, by the midplane method of Guldbrand et al.
+([doi:10.1063/1.446912](https://doi.org/10.1063/1.446912)):
 
 $$P_\text{osm} = k_BT\sum_i C_i(0) \;+\; \frac{F_z^{AB}}{\text{area}}$$
 
 The first term is the entropic (repulsive) contribution from the ion concentration at the
-midplane; the second is the cross-midplane electrostatic force, whose ion–ion correlation
-part gives the attractive, van-der-Waals-like force that dominates for divalent ions (and
-that mean-field Poisson–Boltzmann misses). The constant wall (Maxwell stress) contribution
-reduces to $-\sigma^2/2\varepsilon_r\varepsilon_0$, with the surface charge density
-$\sigma$ fixed by electroneutrality from the counterion charges.
+midplane; the second is the cross-midplane electrostatic force. Its ion–ion correlation part
+is the attractive, van-der-Waals-like force that dominates for divalent ions and that
+mean-field Poisson–Boltzmann misses. The surface charge density $\sigma$ is set by
+electroneutrality from the counterion charges — you do not specify it.
 
-This analysis is **hardcoded to a [`Slit`](#) geometry** (periodic in XY, walls at
-$z=\pm L_z/2$, so the **midplane is $z=0$**) and to **electrostatics only** — it suits the
-primitive-model double layer with point-charge counterions. Mixtures of valencies need
-nothing special: select all counterions (e.g. `"atomtype Na Ca"`) and the $q_iq_j$ product
-carries the charges. Results are block-averaged and reported as mean ± standard error.
+The analysis is **hardcoded to a `Slit` cell** (periodic in *xy*, walls at $z=\pm L_z/2$, so
+the **midplane is $z=0$**) and to **electrostatics only**; it suits the primitive-model
+double layer with point-charge counterions. Valency **mixtures need nothing special** —
+select all the counterions (e.g. `"atomtype Na Ca"`) and report. Results are block-averaged
+and reported as mean ± standard error.
 
 ### Example
 
@@ -559,33 +558,31 @@ carries the charges. Results are block-averaged and reported as mean ± standard
 analysis:
   - !DoubleLayerPressure
     selection: "atomtype Na Ca"   # mono- + divalent counterions
-    midplane_halfwidth: 2.0       # optional half-width (Å) of the midplane density window
     file: pressure.csv
     frequency: !Every 10
 ```
 
 ### Options
 
-Key                  | Required | Default | Description
--------------------- | -------- | ------- | -------------------------------------------
-`selection`          | yes      |         | Mobile counterions (sets electroneutral $\sigma$ and the Coulomb prefactor comes from the medium)
-`midplane_halfwidth` | no       | `2.0`   | Half-width (Å) of the slab centred on the midplane used to estimate $C_i(0)$; a sampling parameter — check convergence
-`density_bins`       | no       | `50`    | Number of $z$-bins for the $\sigma_\text{ion}(z)$ profile driving the self-consistent long-range correction $F_\text{iPB}$
-`file`               | no       |         | Output file path (see [Output file formats](#output-file-formats))
-`frequency`          | yes      |         | Sample frequency, e.g. `!Every 10`
+Key                  | Required | Default  | Description
+-------------------- | -------- | -------- | -------------------------------------------
+`selection`          | yes      |          | Mobile counterions; sets the electroneutral surface charge $\sigma$ (the Coulomb prefactor comes from the medium)
+`midplane_halfwidth` | no       | `gap/12` | Half-width (Å) of the midplane density sampling window. The default scales with the plate separation and is usually fine; treat it as a convergence parameter
+`density_bins`       | no       | `50`     | Resolution of the internal charge profile used by the long-range correction; increase and re-check if results drift
+`file`               | no       |          | Output file path (see [Output file formats](#output-file-formats))
+`frequency`          | yes      |          | Sample frequency, e.g. `!Every 10`
 
-The minimum-image `F_ii` and the finite-sheet `F_iw` are reconciled by a self-consistent
-long-range correction `F_iPB`: the `(∞ − finite-sheet)` cross-force of the neutral
-laterally-averaged charge `σ(z) = σ_ion(z) − σ·δ(z±L_z/2)`, accumulated from a
-charge-weighted profile (so mono/divalent mixtures need no special handling) and added to
-`p_corr`/`p_osm` at report time. For best results, equilibrate first and start production
-from a state file (`-s`), and check convergence in `density_bins` and the lateral box.
+A **long-range correction** for the finite lateral box, reported as `F_iPB`, is computed and
+added to the pressure automatically — it needs no configuration and handles valency
+mixtures. For reliable numbers, **equilibrate first and start production from a state file**
+(`-s`), and confirm the result is stable against `density_bins` and the lateral box size.
 
-`output.yaml` reports `{mean, error}` for `rho_mid/Å⁻³`, `p_ideal/mM`, `p_corr/mM`,
-`p_osm/mM` (the last two include `F_iPB`), plus `F_iPB/mM` and `p_osm/Pa`. If `file` is
-given, each sampled step writes columns `step`, `rho_mid/Å⁻³`, `p_ideal/mM`, `p_corr/mM`,
-`p_osm/mM` (the per-step `p_corr`/`p_osm` are the explicit terms *without* `F_iPB`, which
-is a run-averaged constant).
+`output.yaml` reports `{mean, error}` for the midplane density `rho_mid/Å⁻³` and the
+pressures `p_ideal/mM` (entropic), `p_corr/mM` (electrostatic), and `p_osm/mM` (total — the
+number you usually want), plus `F_iPB/mM` and `p_osm/Pa`; the `p_corr` and `p_osm` means
+include `F_iPB`. With `file` set, each sampled step writes `step`, `rho_mid/Å⁻³`,
+`p_ideal/mM`, `p_corr/mM`, `p_osm/mM` — there the per-step `p_corr`/`p_osm` columns exclude
+`F_iPB` (a run-averaged constant folded into the final means only).
 
 ---
 

@@ -53,8 +53,9 @@ use std::path::PathBuf;
 pub struct DoubleLayerPressureBuilder {
     /// Selection of the mobile counterions (e.g. `"atomtype Na Ca"`).
     selection: Selection,
-    /// Inner half-width `w` (Å) of the midplane contact-density estimator (Richardson
-    /// extrapolation of the windows `w` and `2w` to ρ(0)). Default 2.0.
+    /// Half-width `w` (Å) of the inner midplane density window; ρ(0) is found from the
+    /// even-profile quadratic extrapolation `(4·ρ̄(w) − ρ̄(2w))/3` of the windows `w` and
+    /// `2w`. Defaults to `gap/12` so `2w` stays inside the flat midplane region.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     midplane_halfwidth: Option<f64>,
     /// Number of z-bins for the laterally-averaged charge profile that drives the
@@ -105,7 +106,10 @@ impl DoubleLayerPressureBuilder {
             anyhow::bail!("DoubleLayerPressure: non-positive lateral area");
         }
 
-        let midplane_halfwidth = self.midplane_halfwidth.unwrap_or(2.0);
+        // The quadratic extrapolation holds only where the profile is still parabolic (near
+        // the midplane minimum); beyond that the outer window `2w` would catch the rising wall
+        // layer and bias ρ(0), so scale the default to the gap: bbox.z/12 = half_gap/6 ⇒ 2w = half_gap/3.
+        let midplane_halfwidth = self.midplane_halfwidth.unwrap_or(bbox.z / 12.0);
         if midplane_halfwidth <= 0.0 {
             anyhow::bail!("DoubleLayerPressure: midplane_halfwidth must be positive");
         }
@@ -176,8 +180,8 @@ pub struct DoubleLayerPressure {
     prefactor: f64,
     /// Lateral area Lx·Ly in Å².
     area: f64,
-    /// Inner half-width `w` (Å) of the midplane contact-density estimator; the contact
-    /// value ρ(0) is Richardson-extrapolated from the nested windows `w` and `2w`.
+    /// Half-width `w` (Å) of the inner midplane density window; ρ(0) is the even-profile
+    /// quadratic extrapolation `(4·ρ̄(w) − ρ̄(2w))/3` of the nested windows `w` and `2w`.
     midplane_halfwidth: f64,
     /// Surface charge density magnitude |σ| per wall, e·Å⁻² (from electroneutrality).
     sigma: f64,
@@ -233,17 +237,19 @@ fn midplane_count(positions: &[Point], slab: f64) -> usize {
     positions.iter().filter(|p| p.z.abs() < slab).count()
 }
 
-/// Midplane CONTACT number density ρ(0) (Å⁻³), matching Guldbrand's `C_i(0)`.
+/// Midplane number density ρ(0) (Å⁻³), matching Guldbrand's `C_i(0)`.
 ///
-/// A single symmetric window over-estimates the contact value because the profile
-/// rises off the depleted midplane. Richardson extrapolation of two nested windows,
-/// `2·ρ(|z|<w) − ρ(|z|<2w)`, cancels the leading linear bias and converges to ρ(0).
-fn contact_density(positions: &[Point], w: f64, area: f64) -> f64 {
-    let rho_inner = midplane_count(positions, w) as f64 / (2.0 * w * area);
-    let rho_outer = midplane_count(positions, 2.0 * w) as f64 / (4.0 * w * area);
-    // Density is physical (≥0); the extrapolation can dip slightly negative on a fully
-    // depleted midplane (e.g. strongly-bound divalent ions), so clamp it.
-    (2.0 * rho_inner - rho_outer).max(0.0)
+/// The profile is EVEN about the midplane (a symmetric minimum, dρ/dz = 0 at z = 0), so a
+/// symmetric window average carries a QUADRATIC bias: `ρ̄(|z|<w) = ρ(0) + ρ″·w²/6`. The
+/// two-window quadratic extrapolation `(4·ρ̄(w) − ρ̄(2w)) / 3` cancels it and is exact for a
+/// parabolic profile. (A linear `2·ρ̄(w) − ρ̄(2w)` is correct only for a one-sided contact
+/// ramp; on a symmetric minimum it under-counts by ρ″·w²/3 — the bug it replaces.) Keep `w`
+/// well inside the flat midplane region so `2w` does not reach the rising wall layer.
+fn midplane_density(positions: &[Point], w: f64, area: f64) -> f64 {
+    let rho_w = midplane_count(positions, w) as f64 / (2.0 * w * area);
+    let rho_2w = midplane_count(positions, 2.0 * w) as f64 / (4.0 * w * area);
+    // ρ(0) ≥ 0; sampling noise can push the extrapolation slightly negative, so guard it.
+    ((4.0 * rho_w - rho_2w) / 3.0).max(0.0)
 }
 
 /// Guldbrand Eq. 9 geometric factor for a uniformly charged **square** sheet of
@@ -377,7 +383,7 @@ impl<T: Context> Analyze<T> for DoubleLayerPressure {
         let positions: Vec<Point> = ions.iter().map(|&i| context.position(i)).collect();
         let charges: Vec<f64> = ions.iter().map(|&i| context.atom_charge(i)).collect();
 
-        let rho = contact_density(&positions, self.midplane_halfwidth, self.area);
+        let rho = midplane_density(&positions, self.midplane_halfwidth, self.area);
         let fz = cross_force_z(&positions, &charges, context.cell());
         let wall = wall_cross_raw(
             &positions,
@@ -508,25 +514,49 @@ mod tests {
     }
 
     #[test]
-    fn contact_density_richardson_extrapolation() {
-        // 10 ions in |z|<w, 20 more in w<|z|<2w; area=2, w=1.
-        // rho_inner = 10/(2*1*2)=2.5, rho_outer = 30/(4*1*2)=3.75 → 2*2.5-3.75 = 1.25.
+    fn midplane_density_quadratic_extrapolation() {
+        // 10 ions in |z|<w, 20 more in w<|z|<2w; area=2, w=1 ⇒ N(w)=10, N(2w)=30.
+        // (8·N(w) − N(2w))/(12·w·area) = (80−30)/24 = 2.0833…
         let mut positions = vec![Point::new(0.0, 0.0, 0.5); 10];
         positions.extend(vec![Point::new(0.0, 0.0, 1.5); 20]);
-        let rho = contact_density(&positions, 1.0, 2.0);
-        assert!((rho - 1.25).abs() < 1e-12, "rho = {rho}");
+        let rho = midplane_density(&positions, 1.0, 2.0);
+        assert!((rho - 50.0 / 24.0).abs() < 1e-12, "rho = {rho}");
     }
 
     #[test]
-    fn contact_density_uniform_profile_unbiased() {
-        // A flat profile (same density in both windows) extrapolates to itself.
+    fn midplane_density_uniform_profile_unbiased() {
+        // A flat profile (same density in both windows) extrapolates to itself:
+        // (4·ρ − ρ)/3 = ρ.
         let positions: Vec<Point> = (-50..=50).map(|i| Point::new(0.0, 0.0, i as f64 * 0.1)).collect();
         let area = 1.0;
         let w = 2.0;
         let n_in = midplane_count(&positions, w) as f64;
         let uniform = n_in / (2.0 * w * area);
-        let rho = contact_density(&positions, w, area);
+        let rho = midplane_density(&positions, w, area);
         assert!((rho - uniform).abs() < 0.2, "rho = {rho}, uniform ≈ {uniform}");
+    }
+
+    #[test]
+    fn midplane_density_recovers_parabolic_minimum() {
+        // Even, symmetric-minimum profile ρ(z) = a + b·z² (the midplane shape). Lay down
+        // `c·ρ(z)` ions per slice of width dz (c large enough to resolve the curvature) and
+        // check the quadratic estimator returns ρ(0)=a — the property the old linear
+        // estimator failed (on a convex minimum it under-counts to a − 2b·w²/3).
+        let (a, b, w) = (2.0_f64, 0.5_f64, 1.0_f64);
+        let (c, dz) = (100.0_f64, 0.005_f64);
+        let area = c / dz; // so N(w)/(2w·area) recovers ρ̄(w)
+        let mut positions = Vec::new();
+        let mut z = -2.0 * w;
+        while z <= 2.0 * w {
+            for _ in 0..((a + b * z * z) * c).round() as usize {
+                positions.push(Point::new(0.0, 0.0, z));
+            }
+            z += dz;
+        }
+        // Quadratic extrapolation recovers ρ(0)=a; the old linear `2ρ̄(w)−ρ̄(2w)` would
+        // land near a − 2b·w²/3 = 1.667 on this convex profile.
+        let rho = midplane_density(&positions, w, area);
+        assert!((rho - a).abs() < 0.02, "rho = {rho}, expected a = {a}");
     }
 
     /// Construct an analysis directly for testing the reporting helpers.
