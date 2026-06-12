@@ -1,41 +1,43 @@
-{# Electric double layer (Guldbrand, Jönsson, Wennerström & Linse,
-   J. Chem. Phys. 80, 2221 (1984)): osmotic pressure between two uniformly
-   charged planes with explicit point-charge counterions. Set the composition
-   with n_mono / n_di (pure monovalent, pure divalent, or a mixture) and sweep
-   the plate separation with lz. Method: see docs/analysis.md (DoubleLayerPressure). #}
+{# Electric double layer (Guldbrand, Jönsson, Wennerström & Linse, J. Chem. Phys. 80,
+   2221 (1984)): osmotic pressure between two uniformly charged planes. Uses Guldbrand's
+   parameters — σ=0.2244 C/m², 80 counterions, T=298 K (ε_r·T=2.327×10⁴), 2a=21 Å, and the
+   electrically-transparent midplane wall of their Fig. 1c. The mono/divalent composition is
+   set THERMODYNAMICALLY by a 2 Na⁺ ⇌ Ca²⁺ swap of free energy `dG` (kJ/mol): high dG → 80
+   monovalent; low dG → 40 divalent (charge-conserving, so σ is unchanged); between → mixtures.
+   Each species has a lower/upper group pinned to its side of the midplane, so the swap keeps
+   each half neutral. Method: see docs/analysis.md (DoubleLayerPressure).
+   For the divalent attraction set lz=12 and a low dG. #}
 {%- set sigma  = sigma  | default(0.014006) %}   {# |σ| e/Å² (0.2244 C/m²) #}
-{%- set n_mono = n_mono | default(180) %}        {# monovalent (+1) counterions #}
-{%- set n_di   = n_di   | default(0) %}          {# divalent (+2) counterions #}
-{%- set lz     = lz     | default(21.0) %}       {# plate separation D (Å) #}
+{%- set n_ions = n_ions | default(80) %}         {# total counterion charge (multiple of 4) #}
+{%- set lz     = lz     | default(21.0) %}       {# plate separation 2a (Å) #}
+{%- set dG     = dG     | default(20.0) %}       {# 2Na⁺⇌Ca²⁺ free energy (kJ/mol); high → mono #}
 {%- set eps_r  = eps_r  | default(78.05) %}      {# ε_r·T = 2.327e4 K at 298.15 K #}
 {%- set sweeps = sweeps | default(20000) %}
 {%- set seed   = seed   | default(42) %}
-{%- set ntot   = n_mono + n_di %}
-{%- set side   = ((n_mono + 2 * n_di) / (2.0 * sigma)) ** 0.5 %}
+{%- set k        = (n_ions / 2) | int %}
+{%- set ca_slots = (n_ions / 4) | int %}
+{%- set side   = (n_ions / (2.0 * sigma)) ** 0.5 %}
 {%- set c_wall = -4.0 * 1389.3545764438197 / eps_r * sigma %}
 {%- set dp     = (lz / 4.0) | round(2) %}
-{%- set nm_lo = (n_mono / 2) | int %}{% set nd_lo = (n_di / 2) | int %}{% set nlo = nm_lo + nd_lo %}
 
-# Guldbrand double layer: n_mono={{ n_mono }}, n_di={{ n_di }}, D={{ lz }} Å, σ={{ sigma }} e/Å², box={{ side | round(2) }}² Å.
+# Guldbrand double layer: {{ n_ions }} counterions, 2a={{ lz }} Å, σ={{ sigma }} e/Å², box={{ side | round(2) }}² Å, dG={{ dG }} kJ/mol.
 
 atoms:
   - { name: Na, charge: 1.0, sigma: 0.0, mass: 23.0 }
   - { name: Ca, charge: 2.0, sigma: 0.0, mass: 40.0 }
-
 molecules:
-  - { name: mono, atoms: [Na], atomic: true }
-  - { name: di,   atoms: [Ca], atomic: true }
+  - { name: na_lo, atoms: [Na] }
+  - { name: na_up, atoms: [Na] }
+  - { name: ca_lo, atoms: [Ca] }
+  - { name: ca_up, atoms: [Ca] }
 
 system:
   cell: !Slit [{{ side }}, {{ side }}, {{ lz }}]
-  medium:
-    permittivity: !Fixed {{ eps_r }}
-    temperature: 298.15
-
+  medium: { permittivity: !Fixed {{ eps_r }}, temperature: 298.15 }
   energy:
     nonbonded:
       default:
-        - !Coulomb { cutoff: {{ (side * 10.0) | round(3) }} }
+        - !Coulomb { cutoff: {{ (side * 10.0) | round(3) }} }   # full minimum-image, no Ewald
     customexternal:
       # Smeared charged walls (finite charged-square sheet, Guldbrand Eq. 9).
       - selection: "all"
@@ -47,25 +49,15 @@ system:
           + 2*b*asinh(b/sqrt(b*b+(hg-z)*(hg-z)))
           - (hg-z)*atan(b*b/((hg-z)*sqrt(2*b*b+(hg-z)*(hg-z))))
           )
-      # Transparent midplane hard wall: hold each index-half on its side.
-      - { selection: "index 0:{{ nlo - 1 }}",         function: "1000000.0 if z > 0 else 0.0" }
-      - { selection: "index {{ nlo }}:{{ ntot - 1 }}", function: "1000000.0 if z < 0 else 0.0" }
+      # Transparent midplane wall: hold each half's groups on its side.
+      - { selection: "molecule na_lo ca_lo", function: "1000000.0 if z > 0 else 0.0" }
+      - { selection: "molecule na_up ca_up", function: "1000000.0 if z < 0 else 0.0" }
 
   blocks:
-    # Lower half first (indices 0..{{ nlo - 1 }}), then upper, so the two index
-    # ranges are contiguous; RandomAtomPos (xy) starts ions at z=0 to be sorted.
-{%- if nm_lo > 0 %}
-    - { molecule: mono, N: {{ nm_lo }}, insert: !RandomAtomPos { directions: xy } }
-{%- endif %}
-{%- if nd_lo > 0 %}
-    - { molecule: di,   N: {{ nd_lo }}, insert: !RandomAtomPos { directions: xy } }
-{%- endif %}
-{%- if n_mono - nm_lo > 0 %}
-    - { molecule: mono, N: {{ n_mono - nm_lo }}, insert: !RandomAtomPos { directions: xy } }
-{%- endif %}
-{%- if n_di - nd_lo > 0 %}
-    - { molecule: di,   N: {{ n_di - nd_lo }}, insert: !RandomAtomPos { directions: xy } }
-{%- endif %}
+    - { molecule: na_lo, N: {{ k }},        active: {{ k }}, insert: !RandomAtomPos { directions: xy } }
+    - { molecule: na_up, N: {{ k }},        active: {{ k }}, insert: !RandomAtomPos { directions: xy } }
+    - { molecule: ca_lo, N: {{ ca_slots }}, active: 0,       insert: !RandomAtomPos { directions: xy } }
+    - { molecule: ca_up, N: {{ ca_slots }}, active: 0,       insert: !RandomAtomPos { directions: xy } }
 
 propagate:
   seed: !Fixed {{ seed }}
@@ -73,15 +65,23 @@ propagate:
   repeat: {{ sweeps }}
   collections:
     - !Stochastic
-      repeat: {{ ntot }}
+      repeat: {{ n_ions }}
       moves:
-{%- if n_mono > 0 %}
-        - !TranslateAtom { molecule: mono, dp: {{ dp }}, weight: {{ n_mono }} }
-{%- endif %}
-{%- if n_di > 0 %}
-        - !TranslateAtom { molecule: di,   dp: {{ dp }}, weight: {{ n_di }} }
-{%- endif %}
+        - !TranslateMolecule { molecule: na_lo, dp: {{ dp }}, weight: {{ k }} }
+        - !TranslateMolecule { molecule: na_up, dp: {{ dp }}, weight: {{ k }} }
+        - !TranslateMolecule { molecule: ca_lo, dp: {{ dp }}, weight: {{ ca_slots }} }
+        - !TranslateMolecule { molecule: ca_up, dp: {{ dp }}, weight: {{ ca_slots }} }
+        # 2 Na⁺ ⇌ Ca²⁺ per half (charge-conserving); dG sets the composition.
+        - !SpeciationMove
+          temperature: 298.15
+          weight: {{ (n_ions / 10) | int }}
+          reactions:
+            - ["na_lo + na_lo = ca_lo", !dG {{ dG }}]
+            - ["na_up + na_up = ca_up", !dG {{ dG }}]
 
 analysis:
-  - !DoubleLayerPressure { selection: "atomtype Na Ca", file: pressure.csv, frequency: !Every {{ ntot }} }
-  - !Energy { file: energy.dat, frequency: !Every {{ 100 * ntot }} }
+  - !DoubleLayerPressure { selection: "atomtype Na Ca", file: pressure.csv, frequency: !Every {{ n_ions }} }
+  # Composition vs. dG: molar concentration of the +1 (Na⁺) and +2 (Ca²⁺) ions.
+  - !CollectiveVariable { property: molarity, selection: "atomtype Na", file: molarity_na.dat, frequency: !Every {{ n_ions }} }
+  - !CollectiveVariable { property: molarity, selection: "atomtype Ca", file: molarity_ca.dat, frequency: !Every {{ n_ions }} }
+  - !Energy { file: energy.dat, frequency: !Every {{ 100 * n_ions }} }
