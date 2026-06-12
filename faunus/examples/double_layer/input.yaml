@@ -20,8 +20,6 @@
 {%- set c_wall   = -4.0 * 1389.3545764438197 / eps_r * sigma %}   {# Eq. 9 wall-potential prefactor: -4·(Coulomb prefactor)·σ #}
 {%- set dp       = (lz / 4.0) | round(2) %}
 
-# Guldbrand double layer: total charge {{ total_charge }}, 2a={{ lz }} Å, σ={{ sigma }} e/Å², box={{ side | round(2) }}² Å, dG={{ dG }} kJ/mol.
-
 atoms:
   - { name: Na, charge: 1.0, sigma: 0.0, mass: 23.0 }
   - { name: Ca, charge: 2.0, sigma: 0.0, mass: 40.0 }
@@ -81,7 +79,6 @@ propagate:
 
 analysis:
   - !DoubleLayerPressure { selection: "atomtype Na Ca", file: pressure.csv, frequency: !Every {{ total_charge }} }
-  # Composition vs. dG: molar concentration of the +1 (Na⁺) and +2 (Ca²⁺) ions.
   - !CollectiveVariable { property: molarity, selection: "atomtype Na", file: molarity_na.dat, frequency: !Every {{ total_charge }} }
   - !CollectiveVariable { property: molarity, selection: "atomtype Ca", file: molarity_ca.dat, frequency: !Every {{ total_charge }} }
   - !Energy { file: energy.dat, frequency: !Every {{ 100 * total_charge }} }
