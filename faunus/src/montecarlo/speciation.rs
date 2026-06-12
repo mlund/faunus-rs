@@ -176,6 +176,22 @@ fn find_molecule_index(name: &str, topology: &crate::topology::Topology) -> anyh
         .ok_or_else(|| anyhow::anyhow!("Unknown molecule '{name}' in reaction"))
 }
 
+/// Pick a group from `groups`, skipping any already `claimed` by an earlier op in the same
+/// reaction. When nothing is claimed (the usual single-op case) this draws exactly like the
+/// plain `iter().choose` it replaces — same RNG consumption, so existing trajectories are
+/// byte-for-byte unchanged; the filter only engages for coefficient-≥2 ops.
+fn choose_unclaimed(groups: &[usize], claimed: &[usize], rng: &mut dyn RngCore) -> Option<usize> {
+    if claimed.is_empty() {
+        groups.iter().copied().choose(rng)
+    } else {
+        groups
+            .iter()
+            .copied()
+            .filter(|g| !claimed.contains(g))
+            .choose(rng)
+    }
+}
+
 /// Extract atom participants as (atom_kind_index, name) pairs.
 fn extract_atom_participants<'a>(
     participants: &'a [Participant],
@@ -306,14 +322,19 @@ fn resolve_reaction(
     let product_mols = mol_ids(products)?;
 
     // Equal-size reactant/product pairs are swaps (position overlay, no insert/delete).
-    // Reservoirs are excluded: they use atomic mega-groups, not individual molecular groups,
-    // so the swap overlay logic cannot apply.
+    // The overlay is only valid for a genuine 1:1 exchange, so the kind must appear exactly
+    // once on each side: a coefficient >1 (e.g. `2 Na = Ca`) is a count-changing insertion-
+    // deletion, not a position-preserving swap. Reservoirs are excluded: they use atomic
+    // mega-groups, not individual molecular groups, so the swap overlay cannot apply.
+    let multiplicity = |v: &[usize], id: usize| v.iter().filter(|&&x| x == id).count();
     let mut swap_reactants: Vec<usize> = Vec::new();
     let mut swap_products: Vec<usize> = Vec::new();
     for (ri, &from_id) in reactant_mols.iter().enumerate() {
         for (pi, &to_id) in product_mols.iter().enumerate() {
             if !swap_products.contains(&pi)
                 && from_id != to_id
+                && multiplicity(&reactant_mols, from_id) == 1
+                && multiplicity(&product_mols, to_id) == 1
                 && !topology.moleculekinds()[from_id].is_reservoir()
                 && !topology.moleculekinds()[to_id].is_reservoir()
                 && topology.moleculekinds()[from_id].atom_indices().len()
@@ -467,6 +488,7 @@ impl SpeciationMove {
         vol: NewOld<f64>,
         context: &impl Context,
         rng: &mut dyn RngCore,
+        claimed: &[usize],
     ) -> Option<(SpeciationAction, (usize, GroupChange), f64)> {
         let molecule = &context.topology_ref().moleculekinds()[mol_id];
         if molecule.atomic() {
@@ -498,11 +520,11 @@ impl SpeciationMove {
                 bias,
             ))
         } else {
+            // Exclude groups already claimed by earlier ops in this reaction, so a
+            // coefficient-2 deletion (e.g. `2 Na = Ca`) empties two DISTINCT groups
+            // rather than the same one twice (which would leave charge unbalanced).
             let full = context.find_molecules(mol_id, GroupSize::Full)?;
-            if full.is_empty() {
-                return None;
-            }
-            let &gi = full.iter().choose(rng)?;
+            let gi = choose_unclaimed(full, claimed, rng)?;
             let bias = entropy_bias(NewOld::from(n_old.saturating_sub(1), n_old), vol);
             Some((
                 SpeciationAction::DeactivateGroup(gi),
@@ -520,6 +542,7 @@ impl SpeciationMove {
         vol: NewOld<f64>,
         context: &impl Context,
         rng: &mut dyn RngCore,
+        claimed: &[usize],
     ) -> Option<(SpeciationAction, (usize, GroupChange), f64)> {
         let molecule = &context.topology_ref().moleculekinds()[mol_id];
         if molecule.atomic() {
@@ -546,11 +569,10 @@ impl SpeciationMove {
                 bias,
             ))
         } else {
+            // Exclude groups already claimed by earlier ops in this reaction (distinct
+            // groups for a coefficient-2 insertion).
             let empty = context.find_molecules(mol_id, GroupSize::Empty)?;
-            if empty.is_empty() {
-                return None;
-            }
-            let &gi = empty.iter().choose(rng)?;
+            let gi = choose_unclaimed(empty, claimed, rng)?;
             let bias = entropy_bias(NewOld::from(n_old + 1, n_old), vol);
             let pos = random_point_inside(context.cell(), rng);
             let positions = vec![pos; context.groups()[gi].capacity()];
@@ -603,19 +625,16 @@ impl SpeciationMove {
         to_mol_id: usize,
         context: &impl Context,
         rng: &mut dyn RngCore,
+        claimed: &[usize],
     ) -> Option<ActionBuild> {
+        // Pick unclaimed source/target groups (counts stay the full available totals so the
+        // N_from/(N_to+1) detailed-balance factor is unaffected).
         let full = context.find_molecules(from_mol_id, GroupSize::Full)?;
-        if full.is_empty() {
-            return None;
-        }
-        let &from_gi = full.iter().choose(rng)?;
         let n_from = full.len();
+        let from_gi = choose_unclaimed(full, claimed, rng)?;
 
         let empty = context.find_molecules(to_mol_id, GroupSize::Empty)?;
-        if empty.is_empty() {
-            return None;
-        }
-        let &to_gi = empty.iter().choose(rng)?;
+        let to_gi = choose_unclaimed(empty, claimed, rng)?;
         let n_to = context.count_molecules(to_mol_id, GroupSize::Full);
 
         // N_from / (N_to + 1) combinatorial factor for detailed balance
@@ -719,6 +738,11 @@ impl SpeciationMove {
         // Without this, both OH⁻ activations would use the same N, giving (N+1)² instead of (N+1)(N+2).
         let mut offsets: Vec<(usize, i32)> = Vec::with_capacity(ops.len());
 
+        // Group indices already selected by earlier ops in THIS reaction. Non-atomic
+        // selection skips these so repeated ops on one kind (e.g. `2 Na = Ca`) hit distinct
+        // groups; atomic mega-groups reuse the same group (coordinated via `offsets` instead).
+        let mut claimed: Vec<usize> = Vec::new();
+
         for op in ops {
             match op {
                 ReactionOp::DeactivateMolecule(mol_id) => {
@@ -727,8 +751,9 @@ impl SpeciationMove {
                         Self::get_offset(&offsets, *mol_id),
                         context,
                     );
-                    let (a, c, b) = Self::deactivate_one(*mol_id, n, vol, context, rng)?;
+                    let (a, c, b) = Self::deactivate_one(*mol_id, n, vol, context, rng, &claimed)?;
                     ln_bias -= b;
+                    claimed.push(c.0);
                     actions.push(a);
                     group_changes.push(c);
                     Self::add_offset(&mut offsets, *mol_id, -1);
@@ -739,8 +764,9 @@ impl SpeciationMove {
                         Self::get_offset(&offsets, *mol_id),
                         context,
                     );
-                    let (a, c, b) = Self::activate_one(*mol_id, n, vol, context, rng)?;
+                    let (a, c, b) = Self::activate_one(*mol_id, n, vol, context, rng, &claimed)?;
                     ln_bias -= b;
+                    claimed.push(c.0);
                     actions.push(a);
                     group_changes.push(c);
                     Self::add_offset(&mut offsets, *mol_id, 1);
@@ -750,8 +776,9 @@ impl SpeciationMove {
                     to_mol_id,
                 } => {
                     let (a, c, b) =
-                        Self::swap_molecule_one(*from_mol_id, *to_mol_id, context, rng)?;
+                        Self::swap_molecule_one(*from_mol_id, *to_mol_id, context, rng, &claimed)?;
                     ln_bias += b;
+                    claimed.extend(c.iter().map(|(gi, _)| *gi));
                     actions.extend(a);
                     group_changes.extend(c);
                 }
@@ -1196,6 +1223,105 @@ mod tests {
             drift < 1e-6,
             "Energy drift {drift:.6e} exceeds tolerance for speciation"
         );
+    }
+
+    /// Charge-conserving 2:1 ion exchange `2 Na⁺ ⇌ Ca²⁺` with explicit Coulomb energy.
+    /// Exercises the coefficient-2 reactant path (insertion/deletion of two distinct Na
+    /// groups + one Ca) and checks the incremental energy stays consistent with a full
+    /// recompute — the regression that the swap-overlay/duplicate-group bugs would break.
+    fn charge_swap_yaml(atomic: bool) -> String {
+        let flag = if atomic { "\n    atomic: true" } else { "" };
+        format!(
+            r#"atoms:
+  - {{name: Na, mass: 23.0, charge: 1.0, sigma: 4.0}}
+  - {{name: Ca, mass: 40.0, charge: 2.0, sigma: 4.0}}
+molecules:
+  - name: na
+    atoms: [Na]{flag}
+  - name: ca
+    atoms: [Ca]{flag}
+system:
+  cell: !Cuboid [30.0, 30.0, 30.0]
+  medium:
+    permittivity: !Fixed 78.0
+    temperature: 298.15
+  energy:
+    nonbonded:
+      default:
+        - !Coulomb {{cutoff: 14.0}}
+  blocks:
+    - molecule: na
+      N: 20
+      active: 20
+      insert: !RandomAtomPos {{}}
+    - molecule: ca
+      N: 10
+      active: 0
+      insert: !RandomAtomPos {{}}
+propagate:
+  seed: !Fixed 42
+  criterion: Metropolis
+  repeat: 2000
+  collections:
+    - !Stochastic
+      moves:
+        - !SpeciationMove
+          temperature: 298.15
+          reactions:
+            - ["na + na = ca", !dG 0.0]
+"#
+        )
+    }
+
+    /// Run the `2 Na = Ca` system and return (energy drift, active Na count, active Ca count).
+    /// Molecule ids: 0 = na, 1 = ca (declaration order).
+    fn run_charge_swap(atomic: bool) -> (f64, usize, usize) {
+        use crate::analysis::AnalysisCollection;
+        use crate::montecarlo::MarkovChain;
+        use crate::propagate::Propagate;
+
+        let yaml = charge_swap_yaml(atomic);
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(tmp.path(), yaml.as_bytes()).unwrap();
+        let path = tmp.path().to_str().unwrap();
+        let mut rng = rand::thread_rng();
+        let context = Backend::new(path, None, &mut rng).unwrap();
+        let propagate = Propagate::from_file(path, &context).unwrap();
+        let mut mc =
+            MarkovChain::new(context, propagate, RT, AnalysisCollection::default()).unwrap();
+        let initial_energy = mc.system_energy();
+        for step in mc.iter() {
+            step.unwrap();
+        }
+        let drift = mc.energy_drift(initial_energy);
+        let n_na = mc.context().count_molecules(0, GroupSize::Full);
+        let n_ca = mc.context().count_molecules(1, GroupSize::Full);
+        (drift, n_na, n_ca)
+    }
+
+    /// `2 Na⁺ ⇌ Ca²⁺` on individual (non-atomic) single-atom groups: the coefficient-2
+    /// reactant deletes two DISTINCT groups, so the cross-term between the two removed Na
+    /// (and the inserted Ca) is handled by the multi-group energy path. Verifies BOTH charge
+    /// conservation (each Ca consumes exactly two Na, so Na + 2·Ca stays at the initial total
+    /// charge of 20) and energy consistency (incremental vs. full recompute).
+    #[test]
+    fn charge_conserving_swap() {
+        let (drift, n_na, n_ca) = run_charge_swap(false);
+        assert!(n_ca > 0, "reaction never fired (no Ca formed)");
+        assert_eq!(n_na + 2 * n_ca, 20, "charge not conserved: {n_na} Na + {n_ca} Ca");
+        assert!(drift < 1e-6, "energy drift {drift:.6e} for 2 Na = Ca");
+    }
+
+    /// Same reaction on an ATOMIC mega-group is NOT yet supported with explicit energy:
+    /// the two same-group deletions become two change-entries sharing one group, which the
+    /// `multi_group_change_soa` path double-counts as a self-pair (large drift). Tracked
+    /// for a follow-up energy-framework fix (batch same-mega-group changes into one entry).
+    /// Until then, use non-atomic single-atom molecules for coefficient-≥2 ion exchange.
+    #[test]
+    #[ignore = "atomic mega-group multi-change energy double-counts; use non-atomic molecules"]
+    fn charge_conserving_swap_atomic_drifts() {
+        let (drift, _, _) = run_charge_swap(true);
+        assert!(drift > 1.0, "atomic drift unexpectedly small");
     }
 
     // --- Molecular swap: phosphate titration at different pH ---

@@ -23,7 +23,7 @@
 
 use super::widom::WidomAccumulator;
 use super::{Analyze, Frequency};
-use crate::auxiliary::{ColumnWriter, MappingExt};
+use crate::auxiliary::{BlockSummary, ColumnWriter, MappingExt};
 use crate::cell::{Shape, VolumeScalePolicy};
 use crate::change::Change;
 use crate::energy::EnergyChange;
@@ -32,6 +32,7 @@ use anyhow::Result;
 use derive_builder::Builder;
 use derive_more::Debug;
 use serde::{Deserialize, Serialize};
+use std::num::NonZeroUsize;
 use std::path::PathBuf;
 
 /// Virtual volume move analysis for excess pressure measurement.
@@ -68,7 +69,12 @@ pub struct VirtualVolumeMove {
     /// Sample frequency
     frequency: Frequency,
 
-    /// Widom exponential average accumulator (log-sum-exp)
+    /// Number of samples per block for variance estimation.
+    #[builder_field_attr(serde(default = "serde_default_block_size"))]
+    block_size: usize,
+
+    /// Widom exponential average accumulator (log-sum-exp). Drives block
+    /// segmentation internally via [`WidomAccumulator::with_block_size`].
     #[builder(setter(skip))]
     #[builder_field_attr(serde(skip))]
     widom: WidomAccumulator,
@@ -77,6 +83,12 @@ pub struct VirtualVolumeMove {
     #[builder(setter(skip))]
     #[builder_field_attr(serde(skip))]
     thermal_energy: f64,
+}
+
+const DEFAULT_BLOCK_SIZE: usize = 100;
+
+fn serde_default_block_size() -> Option<usize> {
+    Some(DEFAULT_BLOCK_SIZE)
 }
 
 impl VirtualVolumeMoveBuilder {
@@ -88,8 +100,11 @@ impl VirtualVolumeMoveBuilder {
     }
 
     fn validate(&self) -> Result<()> {
-        if self.volume_displacement.is_none() {
-            anyhow::bail!("Missing required field 'dV' for VirtualVolumeMove analysis");
+        let dv = self.volume_displacement.ok_or_else(|| {
+            anyhow::anyhow!("Missing required field 'dV' for VirtualVolumeMove analysis")
+        })?;
+        if dv.abs() < f64::EPSILON {
+            anyhow::bail!("VirtualVolumeMove: 'dV' must be non-zero, got {dv}");
         }
         if self.frequency.is_none() {
             anyhow::bail!("Missing required field 'frequency' for VirtualVolumeMove analysis");
@@ -109,13 +124,18 @@ impl VirtualVolumeMoveBuilder {
             .map(|p| ColumnWriter::open(p, &["step", "dV/Å³", "dU/kT", "<Pex>/kT/Å³"]))
             .transpose()?;
 
+        let block_size = self.block_size.unwrap_or(DEFAULT_BLOCK_SIZE);
+        let block_size_nz = NonZeroUsize::new(block_size)
+            .ok_or_else(|| anyhow::anyhow!("VirtualVolumeMove: 'block_size' must be > 0, got 0"))?;
+
         Ok(VirtualVolumeMove {
             volume_displacement: self.volume_displacement.unwrap(),
             method: self.method.unwrap_or_default(),
             output_file,
             stream,
             frequency: self.frequency.unwrap(),
-            widom: WidomAccumulator::new(),
+            block_size,
+            widom: WidomAccumulator::default().with_block_size(block_size_nz),
             thermal_energy,
         })
     }
@@ -136,27 +156,30 @@ impl crate::Info for VirtualVolumeMove {
 }
 
 impl VirtualVolumeMove {
-    /// Mean excess pressure in kT/Å³.
+    /// Mean excess pressure in kT/Å³. `dV ≠ 0` is enforced at build time.
     fn mean_pressure(&self) -> f64 {
-        if self.volume_displacement.abs() > f64::EPSILON {
-            -self.widom.mean_free_energy() / self.volume_displacement
-        } else {
-            0.0
-        }
+        -self.widom.mean_free_energy() / self.volume_displacement
     }
 
-    /// Convert pressure from kT/Å³ to Pascal.
-    ///
-    /// P\[Pa\] = P\[kT/ų\] · kT\[J\] / (1 ų in m³).
-    fn pressure_to_pa(&self, p_kt_per_a3: f64) -> f64 {
+    /// kT/Å³ → Pascal. Linear, so applies equally to means and errors
+    /// (Var(cX) = c²Var(X)).
+    fn to_pascal(&self, p_kt_per_a3: f64) -> f64 {
         p_kt_per_a3 * self.thermal_energy * 1e6 / crate::MOLAR_TO_INV_ANGSTROM3
     }
 
-    /// Convert pressure from kT/Å³ to millimolar (mM).
-    ///
-    /// Exploits P = c·kT, so c\[1/ų\] = P\[kT/ų\].
-    fn pressure_to_mm(&self, p_kt_per_a3: f64) -> f64 {
+    /// kT/Å³ → millimolar. Linear, so applies equally to means and errors.
+    /// Exploits P = c·kT, so c[1/Å³] = P[kT/Å³].
+    fn to_millimolar(&self, p_kt_per_a3: f64) -> f64 {
         p_kt_per_a3 * 1e3 / crate::MOLAR_TO_INV_ANGSTROM3
+    }
+
+    /// Sample standard deviation of pressure across blocks in kT/Å³.
+    /// `None` until at least two blocks have been completed.
+    fn pressure_stddev(&self) -> Option<f64> {
+        if self.widom.free_energy().n() < 2 {
+            return None;
+        }
+        Some(self.widom.free_energy().stddev() / self.volume_displacement.abs())
     }
 
     /// Perform the virtual volume perturbation and return the energy change in kT.
@@ -206,10 +229,6 @@ impl<T: Context> Analyze<T> for VirtualVolumeMove {
     }
 
     fn perform_sample(&mut self, context: &T, step: usize, weight: f64) -> Result<()> {
-        if self.volume_displacement.abs() < f64::EPSILON {
-            return Ok(());
-        }
-
         let old_energy = context.hamiltonian().energy(context, &Change::Everything);
         let mut trial_context = context.clone();
         let energy_change = self.perturb(&mut trial_context, old_energy)?;
@@ -228,13 +247,28 @@ impl<T: Context> Analyze<T> for VirtualVolumeMove {
         let mut map = serde_yml::Mapping::new();
         map.try_insert("dV", self.volume_displacement)?;
         map.try_insert("method", format!("{:?}", self.method))?;
+        map.try_insert("block_size", self.block_size)?;
         map.try_insert("num_samples", self.widom.len())?;
         map.try_insert("mean_free_energy", self.widom.mean_free_energy())?;
 
-        let p = self.mean_pressure();
-        map.try_insert("Pex/kT/Å³", p)?;
-        map.try_insert("Pex/Pa", self.pressure_to_pa(p))?;
-        map.try_insert("Pex/mM", self.pressure_to_mm(p))?;
+        // Mean comes from the total accumulator (finite from sample 1);
+        // error comes from the block aggregator (NaN until ≥ 1 block
+        // closes, ~0 with 1 block, real SEM with ≥ 2). dV ≠ 0 is
+        // enforced at build time.
+        let mean_kt = self.mean_pressure();
+        let err_kt = self.widom.free_energy().error() / self.volume_displacement.abs();
+        let pex_units = [
+            ("Pex (kT/Å³)", mean_kt, err_kt),
+            ("Pex (Pa)", self.to_pascal(mean_kt), self.to_pascal(err_kt)),
+            (
+                "Pex (mM)",
+                self.to_millimolar(mean_kt),
+                self.to_millimolar(err_kt),
+            ),
+        ];
+        for (key, m, e) in pex_units {
+            map.try_insert(key, BlockSummary { mean: m, error: e })?;
+        }
 
         Some(serde_yml::Value::Mapping(map))
     }
@@ -254,6 +288,9 @@ impl std::fmt::Display for VirtualVolumeMove {
         writeln!(f, "  Samples:     {}", self.widom.len())?;
         if !self.widom.is_empty() {
             writeln!(f, "  <Pex>:       {:.6} kT/ų", self.mean_pressure())?;
+        }
+        if let Some(s) = self.pressure_stddev() {
+            writeln!(f, "  std(Pex):    {:.6} kT/ų", s)?;
         }
         Ok(())
     }
@@ -355,6 +392,19 @@ mod tests {
     }
 
     #[test]
+    fn build_rejects_zero_block_size() {
+        let yaml = "
+- !VirtualVolumeMove
+  dV: 0.5
+  frequency: !Every 1
+  block_size: 0
+";
+        let result = deserialize_vvm_builder(yaml, 0).build(RT_298);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("block_size"));
+    }
+
+    #[test]
     fn build_with_custom_method() {
         let vvm = VirtualVolumeMoveBuilder::default()
             .volume_displacement(1.0)
@@ -382,22 +432,25 @@ mod tests {
     }
 
     #[test]
-    fn mean_pressure_zero_dv() {
-        let vvm = build_vvm(0.0);
-        assert_approx_eq!(f64, vvm.mean_pressure(), 0.0);
+    fn build_rejects_zero_dv() {
+        let result = VirtualVolumeMoveBuilder::default()
+            .volume_displacement(0.0)
+            .frequency(Frequency::Every(1))
+            .build(RT_298);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("dV"));
     }
 
     #[test]
     fn pressure_unit_conversions() {
         let vvm = build_vvm(1.0);
         // 1 kT/ų at 298.15 K
-        let p_pa = vvm.pressure_to_pa(1.0);
-        let p_mm = vvm.pressure_to_mm(1.0);
-        // kT at 298.15 K ≈ 4.116e-21 J, 1 ų = 1e-30 m³
-        // P ≈ 4.116e-21 / 1e-30 ≈ 4.116e9 Pa
-        assert!(p_pa > 4.0e9 && p_pa < 4.2e9);
-        // c = 1/ų → mol/L = 1/(N_A * 1e-27) ≈ 1.66e3 mol/L → 1.66e6 mM
-        assert!(p_mm > 1.6e6 && p_mm < 1.7e6);
+        let p_pa = vvm.to_pascal(1.0);
+        let p_mm = vvm.to_millimolar(1.0);
+        // kT(298.15 K) ≈ 4.116e-21 J, 1 ų = 1e-30 m³ → 1 kT/ų ≈ 4.116e9 Pa
+        assert_approx_eq!(f64, p_pa, 4.116e9, epsilon = 5.0e6);
+        // 1 1/ų = 1/(N_A · 1e-27 L) ≈ 1.66e3 mol/L = 1.66e6 mM
+        assert_approx_eq!(f64, p_mm, 1.66e6, epsilon = 1.0e4);
     }
 
     #[test]
@@ -439,6 +492,99 @@ mod tests {
         assert_approx_eq!(f64, vvm.volume_displacement, 1.0);
         assert_eq!(vvm.method, VolumeScalePolicy::ScaleZ);
         assert!(matches!(vvm.frequency, Frequency::Every(5)));
+    }
+
+    #[test]
+    fn pressure_stddev_no_blocks() {
+        let mut vvm = build_vvm(0.5);
+        vvm.widom.collect(1.0, 1.0);
+        assert!(vvm.pressure_stddev().is_none());
+    }
+
+    #[test]
+    fn pressure_stddev_with_two_blocks() {
+        let mut vvm = build_vvm(0.5);
+        // Block 1: dU = 0 → free_energy = 0
+        vvm.widom.collect(0.0, 1.0);
+        vvm.widom.end_block();
+        // Block 2: dU = 2 → free_energy = 2
+        vvm.widom.collect(2.0, 1.0);
+        vvm.widom.end_block();
+        // stddev of [0, 2] = 1.414..., Pex_std = 1.414... / 0.5 ≈ 2.828
+        let s = vvm.pressure_stddev().expect("two blocks should yield Some");
+        assert!(s > 2.0 && s < 4.0);
+    }
+
+    #[test]
+    fn pressure_stddev_via_perform_sample() {
+        // Uses build_vvm which sets block_size = 100 (default).
+        // We need to drive 200 samples through perform_sample without a real Context,
+        // so instead wire up end_block directly via the public API.
+        let mut vvm = VirtualVolumeMoveBuilder::default()
+            .volume_displacement(1.0)
+            .frequency(Frequency::Every(1))
+            .block_size(2)
+            .build(RT_298)
+            .unwrap();
+        assert_eq!(vvm.block_size, 2);
+        // Manually simulate what perform_sample does after perturb():
+        for _ in 0..2 {
+            vvm.widom.collect(0.0, 1.0);
+            vvm.widom.collect(2.0, 1.0);
+            vvm.widom.end_block();
+        }
+        assert!(vvm.widom.free_energy().n() >= 2);
+        assert!(vvm.pressure_stddev().is_some());
+    }
+
+    #[test]
+    fn to_yaml_emits_pex_mapping_per_unit() {
+        let mut vvm = VirtualVolumeMoveBuilder::default()
+            .volume_displacement(0.5)
+            .frequency(Frequency::Every(1))
+            .build(RT_298)
+            .unwrap();
+        // Close two distinct blocks so the BlockAverage has finite mean and SEM.
+        vvm.widom.collect(0.0, 1.0);
+        vvm.widom.end_block();
+        vvm.widom.collect(2.0, 1.0);
+        vvm.widom.end_block();
+
+        let yaml = <VirtualVolumeMove as Analyze<crate::backend::Backend>>::to_yaml(&vvm)
+            .expect("to_yaml returns Some");
+        let map = yaml.as_mapping().expect("top-level mapping");
+
+        for key in ["Pex (kT/Å³)", "Pex (Pa)", "Pex (mM)"] {
+            let entry = map.get(key).unwrap_or_else(|| panic!("missing {key}"));
+            let parsed: crate::auxiliary::BlockSummary =
+                serde_yml::from_value(entry.clone()).expect("entry parses as BlockSummary");
+            assert!(parsed.mean.is_finite(), "{key} mean must be finite");
+            assert!(parsed.error.is_finite(), "{key} error must be finite");
+            assert!(parsed.error >= 0.0, "{key} error must be non-negative");
+        }
+    }
+
+    #[test]
+    fn deserialize_custom_block_size() {
+        let yaml = r#"
+- !VirtualVolumeMove
+  dV: 0.5
+  frequency: !Every 10
+  block_size: 50
+"#;
+        let vvm = deserialize_vvm_builder(yaml, 0).build(RT_298).unwrap();
+        assert_eq!(vvm.block_size, 50);
+    }
+
+    #[test]
+    fn deserialize_default_block_size() {
+        let yaml = r#"
+- !VirtualVolumeMove
+  dV: 0.5
+  frequency: !Every 10
+"#;
+        let vvm = deserialize_vvm_builder(yaml, 0).build(RT_298).unwrap();
+        assert_eq!(vvm.block_size, 100);
     }
 
     #[test]

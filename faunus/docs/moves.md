@@ -355,11 +355,19 @@ consistent with
 ### Molecular swaps
 
 When a reaction has exactly one molecular reactant and one molecular product
-with the same number of atoms (e.g. $A \rightleftharpoons B + \text{implicit}$),
+(each with multiplicity one) of the same atom count
+(e.g. $A \rightleftharpoons B + \text{implicit}$),
 the move is automatically detected as a molecular swap.
 A full group of the source type is deactivated and an empty group of the
 target type is activated with positions transferred via
 [gyration tensor](https://doi.org/10.1002/jcc.21776) principal-axis alignment.
+
+A species appearing with a coefficient greater than one (e.g. $2A \rightleftharpoons B$)
+is **not** a swap: it is handled as insertion/deletion of the individual molecules,
+conserving charge across the whole reaction. Such charge-conserving exchanges — for
+example $2\,\mathrm{Na}^+ \rightleftharpoons \mathrm{Ca}^{2+}$ — must use **non-atomic**
+single-atom molecules (one group per ion); `atomic: true` mega-groups are not yet
+supported for coefficient-≥2 deletion together with explicit pair energy.
 
 The acceptance is:
 

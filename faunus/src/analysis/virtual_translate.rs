@@ -170,7 +170,7 @@ impl VirtualTranslateBuilder {
             output_file: self.output_file.as_ref().and_then(|p| p.clone()),
             stream,
             frequency: self.frequency.unwrap(),
-            widom: WidomAccumulator::new(),
+            widom: WidomAccumulator::default(),
             group_cache: SelectionCache::default(),
             thermal_energy,
         })

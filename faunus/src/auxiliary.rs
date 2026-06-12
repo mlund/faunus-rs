@@ -17,8 +17,10 @@
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
 use flate2::Compression;
+use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 use std::io::{BufRead, Write};
+use std::ops::Mul;
 use std::path::Path;
 
 /// Read a YAML file, applying Jinja2 template rendering if the file
@@ -426,6 +428,18 @@ impl WeightedMean {
     }
 }
 
+/// Mean ± SEM snapshot of a block-averaged scalar; canonical YAML shape.
+///
+/// Produced by `&BlockAverage * scale` (mean is scaled signed, error
+/// scaled by `|scale|` since `Var(cX) = c² Var(X)`). Derives `Serialize`
+/// and `Deserialize`, so the `{ mean, error }` mappings in `output.yaml`
+/// round-trip back into a `BlockSummary` for free.
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
+pub(crate) struct BlockSummary {
+    pub mean: f64,
+    pub error: f64,
+}
+
 /// Running block average with mean and standard error of the mean.
 ///
 /// Wraps [`average::Variance`] with convenience methods for reporting.
@@ -434,6 +448,17 @@ impl WeightedMean {
 pub(crate) struct BlockAverage(average::Variance);
 
 use average::Estimate as _;
+
+impl Mul<f64> for &BlockAverage {
+    type Output = BlockSummary;
+
+    fn mul(self, scale: f64) -> BlockSummary {
+        BlockSummary {
+            mean: self.mean() * scale,
+            error: self.error() * scale.abs(),
+        }
+    }
+}
 
 impl BlockAverage {
     pub fn new() -> Self {
@@ -455,12 +480,28 @@ impl BlockAverage {
         self.0.error()
     }
 
-    /// Serialize as YAML mapping `{ mean: ..., error: ... }`.
+    /// Sample standard deviation across blocks (σ).
+    pub fn stddev(&self) -> f64 {
+        self.0.sample_variance().sqrt()
+    }
+
+    /// Number of blocks recorded.
+    pub fn n(&self) -> u64 {
+        self.0.len()
+    }
+
+    /// Snapshot of mean ± SEM in the same `{mean, error}` shape used
+    /// throughout YAML output. Scaled views go through `&self * scale`.
+    pub fn summary(&self) -> BlockSummary {
+        BlockSummary {
+            mean: self.mean(),
+            error: self.error(),
+        }
+    }
+
+    /// Serialize as YAML mapping `{ mean, error }` via [`BlockSummary`].
     pub fn to_yaml(&self) -> Option<serde_yml::Value> {
-        let mut m = serde_yml::Mapping::new();
-        m.try_insert("mean", self.mean())?;
-        m.try_insert("error", self.error())?;
-        Some(serde_yml::Value::Mapping(m))
+        serde_yml::to_value(self.summary()).ok()
     }
 }
 
@@ -644,6 +685,40 @@ mod weighted_mean_tests {
         let mut wm = WeightedMean::new();
         wm.add(42.0, 0.5);
         assert_relative_eq!(wm.mean(), 42.0);
+    }
+}
+
+#[cfg(test)]
+mod block_tests {
+    use super::{BlockAverage, BlockSummary};
+    use approx::assert_relative_eq;
+
+    #[test]
+    fn block_summary_serde_roundtrip() {
+        let original = BlockSummary {
+            mean: -0.0615,
+            error: 0.0013,
+        };
+        let yaml = serde_yml::to_string(&original).unwrap();
+        let parsed: BlockSummary = serde_yml::from_str(&yaml).unwrap();
+        assert_relative_eq!(parsed.mean, original.mean);
+        assert_relative_eq!(parsed.error, original.error);
+    }
+
+    #[test]
+    fn block_average_mul_scales_mean_signed_error_absolute() {
+        let mut b = BlockAverage::new();
+        b.add(1.0);
+        b.add(3.0);
+        let base = &b * 1.0;
+        let scaled = &b * -2.0;
+        // mean: signed scaling
+        assert_relative_eq!(scaled.mean, base.mean * -2.0);
+        // error: absolute scaling (variance scales by c²)
+        assert_relative_eq!(scaled.error, base.error * 2.0);
+        // The unscaled-by-1 form matches direct accessors
+        assert_relative_eq!(base.mean, b.mean());
+        assert_relative_eq!(base.error, b.error());
     }
 }
 
