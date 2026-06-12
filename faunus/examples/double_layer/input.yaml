@@ -1,26 +1,26 @@
 {# Electric double layer (Guldbrand, Jönsson, Wennerström & Linse, J. Chem. Phys. 80,
    2221 (1984)): osmotic pressure between two uniformly charged planes. Uses Guldbrand's
-   parameters — σ=0.2244 C/m², 80 counterions, T=298 K (ε_r·T=2.327×10⁴), 2a=21 Å, and the
-   electrically-transparent midplane wall of their Fig. 1c. The mono/divalent composition is
-   set THERMODYNAMICALLY by a 2 Na⁺ ⇌ Ca²⁺ swap of free energy `dG` (kJ/mol): high dG → 80
-   monovalent; low dG → 40 divalent (charge-conserving, so σ is unchanged); between → mixtures.
-   Each species has a lower/upper group pinned to its side of the midplane, so the swap keeps
-   each half neutral. Method: see docs/analysis.md (DoubleLayerPressure).
-   For the divalent attraction set lz=12 and a low dG. #}
-{%- set sigma  = sigma  | default(0.014006) %}   {# |σ| e/Å² (0.2244 C/m²) #}
-{%- set n_ions = n_ions | default(80) %}         {# total counterion charge (multiple of 4) #}
-{%- set lz     = lz     | default(21.0) %}       {# plate separation 2a (Å) #}
-{%- set dG     = dG     | default(20.0) %}       {# 2Na⁺⇌Ca²⁺ free energy (kJ/mol); high → mono #}
-{%- set eps_r  = eps_r  | default(78.05) %}      {# ε_r·T = 2.327e4 K at 298.15 K #}
-{%- set sweeps = sweeps | default(20000) %}
-{%- set seed   = seed   | default(42) %}
-{%- set k        = (n_ions / 2) | int %}
-{%- set ca_slots = (n_ions / 4) | int %}
-{%- set side   = (n_ions / (2.0 * sigma)) ** 0.5 %}
-{%- set c_wall = -4.0 * 1389.3545764438197 / eps_r * sigma %}
-{%- set dp     = (lz / 4.0) | round(2) %}
+   parameters — σ=0.2244 C/m², 80 elementary charges of counterions, T=298 K
+   (ε_r·T=2.327×10⁴), 2a=21 Å, and the electrically-transparent midplane wall of their
+   Fig. 1c. The mono/divalent composition is set THERMODYNAMICALLY by a 2 Na⁺ ⇌ Ca²⁺ swap of
+   free energy `dG` (kJ/mol): high dG → 80 monovalent; low dG → 40 divalent (charge-conserving,
+   so σ is unchanged); between → mixtures. Each species has a lower/upper group pinned to its
+   side of the midplane, so the swap keeps each half neutral.
+   Method: see docs/analysis.md (DoubleLayerPressure). For the divalent attraction set lz=12
+   and a low dG. Parameters below are edited in place — faunus renders with no external context. #}
+{%- set sigma        = sigma        | default(0.014006) %}   {# |σ| e/Å² (0.2244 C/m²) #}
+{%- set total_charge = total_charge | default(80) %}         {# total counterion charge (multiple of 4) #}
+{%- set lz           = lz           | default(21.0) %}       {# plate separation 2a (Å) #}
+{%- set dG           = dG           | default(20.0) %}       {# 2Na⁺⇌Ca²⁺ free energy (kJ/mol); high → mono #}
+{%- set eps_r        = eps_r        | default(78.05) %}      {# ε_r·T = 2.327e4 K at 298.15 K #}
+{%- set sweeps       = sweeps       | default(20000) %}      {# MC sweeps per run (use two runs: equilibrate, then sample) #}
+{%- set k        = (total_charge / 2) | int %}              {# Na⁺ per half (= Ca²⁺ slots ×2) #}
+{%- set ca_slots = (total_charge / 4) | int %}              {# max Ca²⁺ per half #}
+{%- set side     = (total_charge / (2.0 * sigma)) ** 0.5 %} {# square box from electroneutrality 2σ·area = total_charge #}
+{%- set c_wall   = -4.0 * 1389.3545764438197 / eps_r * sigma %}   {# Eq. 9 wall-potential prefactor: -4·(Coulomb prefactor)·σ #}
+{%- set dp       = (lz / 4.0) | round(2) %}
 
-# Guldbrand double layer: {{ n_ions }} counterions, 2a={{ lz }} Å, σ={{ sigma }} e/Å², box={{ side | round(2) }}² Å, dG={{ dG }} kJ/mol.
+# Guldbrand double layer: total charge {{ total_charge }}, 2a={{ lz }} Å, σ={{ sigma }} e/Å², box={{ side | round(2) }}² Å, dG={{ dG }} kJ/mol.
 
 atoms:
   - { name: Na, charge: 1.0, sigma: 0.0, mass: 23.0 }
@@ -60,12 +60,12 @@ system:
     - { molecule: ca_up, N: {{ ca_slots }}, active: 0,       insert: !RandomAtomPos { directions: xy } }
 
 propagate:
-  seed: !Fixed {{ seed }}
+  seed: !Fixed 42
   criterion: Metropolis
   repeat: {{ sweeps }}
   collections:
     - !Stochastic
-      repeat: {{ n_ions }}
+      repeat: {{ total_charge }}      # trial moves per sweep
       moves:
         - !TranslateMolecule { molecule: na_lo, dp: {{ dp }}, weight: {{ k }} }
         - !TranslateMolecule { molecule: na_up, dp: {{ dp }}, weight: {{ k }} }
@@ -74,14 +74,14 @@ propagate:
         # 2 Na⁺ ⇌ Ca²⁺ per half (charge-conserving); dG sets the composition.
         - !SpeciationMove
           temperature: 298.15
-          weight: {{ (n_ions / 10) | int }}
+          weight: {{ (total_charge / 10) | int }}
           reactions:
             - ["na_lo + na_lo = ca_lo", !dG {{ dG }}]
             - ["na_up + na_up = ca_up", !dG {{ dG }}]
 
 analysis:
-  - !DoubleLayerPressure { selection: "atomtype Na Ca", file: pressure.csv, frequency: !Every {{ n_ions }} }
+  - !DoubleLayerPressure { selection: "atomtype Na Ca", file: pressure.csv, frequency: !Every {{ total_charge }} }
   # Composition vs. dG: molar concentration of the +1 (Na⁺) and +2 (Ca²⁺) ions.
-  - !CollectiveVariable { property: molarity, selection: "atomtype Na", file: molarity_na.dat, frequency: !Every {{ n_ions }} }
-  - !CollectiveVariable { property: molarity, selection: "atomtype Ca", file: molarity_ca.dat, frequency: !Every {{ n_ions }} }
-  - !Energy { file: energy.dat, frequency: !Every {{ 100 * n_ions }} }
+  - !CollectiveVariable { property: molarity, selection: "atomtype Na", file: molarity_na.dat, frequency: !Every {{ total_charge }} }
+  - !CollectiveVariable { property: molarity, selection: "atomtype Ca", file: molarity_ca.dat, frequency: !Every {{ total_charge }} }
+  - !Energy { file: energy.dat, frequency: !Every {{ 100 * total_charge }} }
