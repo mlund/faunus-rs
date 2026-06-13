@@ -335,14 +335,14 @@ impl eframe::App for App {
                 .on_hover_text("Two uniformly charged walls with explicit point-charge counterions; the mono/divalent mix is set by the swap free energy dG.");
             egui::Grid::new("input_grid").num_columns(2).show(ui, |ui| {
                 let mut changed = false;
-                changed |= input_field(ui, "σ surface charge [e/Å²]", &mut self.inputs.sigma, 0.0001, 0.0001..=0.1,
-                    "Surface charge density of each wall (0.014006 e/Å² = Guldbrand's 0.2244 C/m²).");
-                changed |= input_field(ui, "x–y length [Å]", &mut self.inputs.lxy, 0.5, 10.0..=300.0,
-                    "Lateral box side (periodic). With σ it fixes the ion count via electroneutrality.");
-                changed |= input_field(ui, "z length (2a) [Å]", &mut self.inputs.lz, 0.5, 4.0..=60.0,
-                    "Plate separation. Guldbrand: 21 Å (monovalent), 12 Å (divalent attraction).");
-                changed |= input_field(ui, "dG (2Na⁺⇌Ca²⁺) [kJ/mol]", &mut self.inputs.dg, 0.5, -60.0..=60.0,
-                    "Free energy of the charge-conserving swap. High → Na⁺; low → Ca²⁺; between → mixtures.");
+                changed |= input_field(ui, "surface charge [e/A^2]", &mut self.inputs.sigma, 0.0001, 0.0001..=0.1,
+                    "Surface charge density of each wall (0.014006 e/A^2 = Guldbrand's 0.2244 C/m^2).");
+                changed |= input_field(ui, "x-y length [A]", &mut self.inputs.lxy, 0.5, 10.0..=300.0,
+                    "Lateral box side (periodic). With the surface charge it fixes the ion count via electroneutrality.");
+                changed |= input_field(ui, "z length / 2a [A]", &mut self.inputs.lz, 0.5, 4.0..=60.0,
+                    "Plate separation. Guldbrand: 21 A (monovalent), 12 A (divalent attraction).");
+                changed |= input_field(ui, "dG (2 Na+ <-> Ca2+) [kJ/mol]", &mut self.inputs.dg, 0.5, -60.0..=60.0,
+                    "Free energy of the charge-conserving swap. High -> Na+; low -> Ca2+; between -> mixtures.");
                 changed |= input_field(ui, "number of sweeps", &mut self.inputs.n_sweeps, 500.0, 1000..=2_000_000,
                     "MC sweeps (1 sweep = one move per ion). The first 20% are equilibration, not sampled.");
                 if changed {
@@ -353,14 +353,14 @@ impl eframe::App for App {
             ui.separator();
             ui.horizontal(|ui| {
                 ui.label(format!("total charge = {}", d.total_charge))
-                    .on_hover_text("Total counterion charge = number of Na⁺ (or twice the number of Ca²⁺). 80 for the Guldbrand default.");
+                    .on_hover_text("Total counterion charge = number of Na+ (or twice the number of Ca2+). 80 for the Guldbrand default.");
                 ui.separator();
-                ui.label(format!("σ_eff = {:.5} e/Å²", d.sigma_eff))
+                ui.label(format!("sigma_eff = {:.5} e/A^2", d.sigma_eff))
                     .on_hover_text("Effective surface charge after rounding the ion count to a multiple of 4 (keeps the cell electroneutral).");
             });
 
             ui.horizontal(|ui| {
-                let label = if self.running { "⏸ Stop" } else { "▶ Start" };
+                let label = if self.running { "Stop" } else { "Start" };
                 if ui
                     .button(label)
                     .on_hover_text("Start/resume or pause the simulation. Editing an input and pressing Start rebuilds.")
@@ -395,11 +395,11 @@ impl eframe::App for App {
                         let txt = report
                             .as_ref()
                             .and_then(|r| stat(r, key))
-                            .map_or_else(|| "—".to_owned(), |(m, e)| format!("{m:.1} ± {e:.1} mM"));
+                            .map_or_else(|| "-".to_owned(), |(m, e)| format!("{m:.1} +/- {e:.1} mM"));
                         ui.label(txt);
                         ui.end_row();
                     };
-                    prow(ui, "p_ideal", "p_ideal/mM", "Entropic term kT·Σ C_i(0) — the midplane ion concentration.");
+                    prow(ui, "p_ideal", "p_ideal/mM", "Entropic term kT * sum C_i(0): the midplane ion concentration.");
                     prow(ui, "p_corr", "p_corr/mM", "Configurational (electrostatic) term; its correlation part is the attraction.");
                     prow(ui, "p_osm (total)", "p_osm/mM", "Total osmotic/disjoining pressure. Positive = repulsive, negative = attractive.");
                     ui.end_row();
@@ -408,21 +408,21 @@ impl eframe::App for App {
                         ui.label(format!("{:.1} mM", sim.molarity_mm(count_sum)));
                         ui.end_row();
                     };
-                    mrow(ui, "⟨molarity⟩ Na⁺ (+1)", sim.count_na_sum, "Mean concentration of monovalent ions.");
-                    mrow(ui, "⟨molarity⟩ Ca²⁺ (+2)", sim.count_ca_sum, "Mean concentration of divalent ions.");
+                    mrow(ui, "<molarity> Na+ (+1)", sim.count_na_sum, "Mean concentration of monovalent ions.");
+                    mrow(ui, "<molarity> Ca2+ (+2)", sim.count_ca_sum, "Mean concentration of divalent ions.");
                 });
 
                 ui.separator();
-                ui.label("Density profiles ρ(z) [mM]")
-                    .on_hover_text("Time-averaged ion number density across the gap; midplane at z=0, walls at z=±L_z/2.");
+                ui.label("Density profiles rho(z) [mM]")
+                    .on_hover_text("Time-averaged ion number density across the gap; midplane at z=0, walls at z=+/-Lz/2.");
                 Plot::new("density")
                     .legend(Legend::default())
-                    .x_axis_label("z [Å]")
-                    .y_axis_label("ρ [mM]")
+                    .x_axis_label("z [A]")
+                    .y_axis_label("rho [mM]")
                     .height(320.0)
                     .show(ui, |plot| {
-                        plot.line(Line::new(PlotPoints::from(sim.profile(&sim.rho_na))).name("Na⁺ (+1)"));
-                        plot.line(Line::new(PlotPoints::from(sim.profile(&sim.rho_ca))).name("Ca²⁺ (+2)"));
+                        plot.line(Line::new(PlotPoints::from(sim.profile(&sim.rho_na))).name("Na+ (+1)"));
+                        plot.line(Line::new(PlotPoints::from(sim.profile(&sim.rho_ca))).name("Ca2+ (+2)"));
                     });
             } else {
                 ui.label("Set the inputs above and press Start.");
