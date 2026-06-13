@@ -8,7 +8,6 @@ members = [
     "coulomb",
     "interatomic",
     "cgkitten",
-    "double-layer-gui",
 ]
 
 # Redirect git dependencies to local workspace checkouts
