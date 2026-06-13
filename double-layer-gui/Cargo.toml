@@ -1,0 +1,14 @@
+[package]
+name = "double-layer-gui"
+version = "0.1.0"
+edition = "2021"
+description = "Native egui app for the Guldbrand electric double-layer simulation (faunus)"
+
+[dependencies]
+faunus = { path = "../faunus", default-features = false }
+eframe = "0.29"
+egui_plot = "0.29"
+rand = "0.8"
+anyhow = "1.0"
+serde_yml = "0.0.12"
+tempfile = "3"
