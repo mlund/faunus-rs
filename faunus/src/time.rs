@@ -18,6 +18,14 @@ use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 use std::time::Duration;
 
+/// Monotonic `Instant` that also works on `wasm32-unknown-unknown`, where
+/// `std::time::Instant::now()` panics. `web-time` reads the browser clock there and
+/// re-exports `std::time::Instant` on every other target.
+#[cfg(not(target_arch = "wasm32"))]
+pub use std::time::Instant;
+#[cfg(target_arch = "wasm32")]
+pub use web_time::Instant;
+
 /// Helper class to keep track of time spent in a Monte Carlo move
 ///
 /// The reported time is the accumulated time spent between multiple calls to `start` and `stop`.
@@ -26,7 +34,7 @@ pub struct Timer {
     /// Start time
     #[serde(skip_serializing)]
     #[serde(skip_deserializing)]
-    start: Option<std::time::Instant>,
+    start: Option<Instant>,
     /// Accumulated time
     #[serde(skip_deserializing)]
     accumulated: Duration,
@@ -35,7 +43,7 @@ pub struct Timer {
 impl Timer {
     /// Start the timer
     pub fn start(&mut self) {
-        self.start = Some(std::time::Instant::now());
+        self.start = Some(Instant::now());
     }
 
     /// Stop the timer and accumulate the time. Errors if the timer was not started.

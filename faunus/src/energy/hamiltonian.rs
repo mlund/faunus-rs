@@ -9,7 +9,8 @@ use crate::{topology::Topology, Change, Context};
 use interatomic::coulomb::{DebyeLength, Temperature};
 use std::cell::Cell;
 use std::path::Path;
-use std::time::{Duration, Instant};
+use crate::time::Instant;
+use std::time::Duration;
 
 /// Trait implemented by structures that can compute
 /// and return an energy relevant to some change in the system.

@@ -208,7 +208,12 @@ impl Cell {
     pub(crate) fn from_file(path: impl AsRef<Path>) -> anyhow::Result<Self> {
         let yaml = crate::auxiliary::read_yaml(&path)
             .map_err(|err| anyhow::anyhow!("Error reading file {:?}: {}", path.as_ref(), err))?;
-        let full: serde_yml::Value = serde_yml::from_str(&yaml)?;
+        Self::from_str(&yaml)
+    }
+
+    /// Get simulation cell from a YAML string (the `system/cell` section).
+    pub(crate) fn from_str(yaml: &str) -> anyhow::Result<Self> {
+        let full: serde_yml::Value = serde_yml::from_str(yaml)?;
 
         let system = full
             .get("system")

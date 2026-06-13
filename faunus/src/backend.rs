@@ -21,7 +21,12 @@ use std::{cell::RefCell, path::Path, sync::Arc};
 /// Extract medium from system/medium in YAML file
 pub fn get_medium(path: impl AsRef<Path>) -> anyhow::Result<interatomic::coulomb::Medium> {
     let yaml = crate::auxiliary::read_yaml(&path)?;
-    serde_yml::from_str::<serde_yml::Value>(&yaml)
+    get_medium_str(&yaml)
+}
+
+/// Extract medium from the `system/medium` section of a YAML string.
+pub fn get_medium_str(yaml: &str) -> anyhow::Result<interatomic::coulomb::Medium> {
+    serde_yml::from_str::<serde_yml::Value>(yaml)
         .ok()
         .and_then(|s| {
             let val = s.get("system")?.get("medium")?;
@@ -119,8 +124,52 @@ impl Backend {
         let medium = Some(get_medium(&yaml_file)?);
         let topology = Topology::from_file(&yaml_file)?;
         let hamiltonian_builder = HamiltonianBuilder::from_file(&yaml_file)?;
-        hamiltonian_builder.validate(topology.atomkinds())?;
         let cell = Cell::from_file(&yaml_file)?;
+        Self::assemble(
+            medium,
+            topology,
+            hamiltonian_builder,
+            cell,
+            structure_file,
+            rng,
+        )
+    }
+
+    /// Build from a self-contained YAML string (no filesystem access).
+    ///
+    /// Mirrors [`new`](Self::new) but parses every section from memory, so it works on
+    /// targets without a filesystem (e.g. `wasm32-unknown-unknown`). The input must be
+    /// fully self-contained: no `include` directives and no external structure files.
+    pub fn from_yaml_str(
+        yaml: &str,
+        structure_file: Option<&Path>,
+        rng: &mut ThreadRng,
+    ) -> anyhow::Result<Self> {
+        let medium = Some(get_medium_str(yaml)?);
+        let topology = Topology::from_str(yaml)?;
+        let hamiltonian_builder = HamiltonianBuilder::from_str(yaml)?;
+        let cell = Cell::from_str(yaml)?;
+        Self::assemble(
+            medium,
+            topology,
+            hamiltonian_builder,
+            cell,
+            structure_file,
+            rng,
+        )
+    }
+
+    /// Assemble a backend from already-parsed sections. Shared by [`new`](Self::new) and
+    /// [`from_yaml_str`](Self::from_yaml_str).
+    fn assemble(
+        medium: Option<interatomic::coulomb::Medium>,
+        topology: Topology,
+        hamiltonian_builder: HamiltonianBuilder,
+        cell: Cell,
+        structure_file: Option<&Path>,
+        rng: &mut ThreadRng,
+    ) -> anyhow::Result<Self> {
+        hamiltonian_builder.validate(topology.atomkinds())?;
         let hamiltonian = Hamiltonian::new(&hamiltonian_builder, &topology, medium.clone())?;
 
         let mut backend = Self::from_raw_parts(

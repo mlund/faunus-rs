@@ -136,7 +136,7 @@ impl<T: Context> PropagationBlock<T> {
         rng: &mut impl Rng,
         analyses: &mut AnalysisCollection<T>,
     ) -> anyhow::Result<()> {
-        let t0 = std::time::Instant::now();
+        let t0 = crate::time::Instant::now();
         let result = match self {
             Self::MonteCarlo(mc) => {
                 mc.propagate(context, criterion, thermal_energy, step, rng, analyses)
@@ -238,7 +238,12 @@ impl<T: Context> Propagate<T> {
     /// Build a `Propagate<T>` from an input YAML file.
     pub fn from_file(filename: impl AsRef<Path>, context: &T) -> anyhow::Result<Self> {
         let yaml = crate::auxiliary::read_yaml(filename)?;
-        let full: serde_yml::Value = serde_yml::from_str(&yaml)?;
+        Self::from_str(&yaml, context)
+    }
+
+    /// Build a `Propagate<T>` from an input YAML string (the `propagate` section).
+    pub fn from_str(yaml: &str, context: &T) -> anyhow::Result<Self> {
+        let full: serde_yml::Value = serde_yml::from_str(yaml)?;
 
         let current = full
             .get("propagate")

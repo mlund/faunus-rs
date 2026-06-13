@@ -11,4 +11,10 @@ egui_plot = "0.29"
 rand = "0.8"
 anyhow = "1.0"
 serde_yml = "0.0.12"
-tempfile = "3"
+
+# Browser (WASM) target: getrandom needs the `js` backend to compile, and the eframe
+# web entry point needs the canvas/spawn_local bindings. (web-time lives in faunus.)
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+getrandom = { version = "0.2", features = ["js"] }
+wasm-bindgen-futures = "0.4"
+web-sys = { version = "0.3", features = ["Document", "Window", "HtmlCanvasElement"] }

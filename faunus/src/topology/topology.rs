@@ -113,7 +113,28 @@ impl Topology {
     pub fn from_file(path: impl AsRef<Path>) -> anyhow::Result<Self> {
         let yaml = crate::auxiliary::read_yaml(&path)
             .map_err(|err| anyhow::anyhow!("Error loading file {:?}: {}", &path.as_ref(), err))?;
-        let mut topology: Self = serde_yml::from_str(&yaml)?;
+        Self::from_yaml_with_base(&yaml, Some(path.as_ref()))
+    }
+
+    /// Parse a fully self-contained YAML string as a Topology which *must* include a system.
+    ///
+    /// Unlike [`from_str_partial`](Self::from_str_partial), this runs the full finalization
+    /// and validation pipeline so the result is ready to drive a simulation. With no base
+    /// directory there is nothing to resolve external references against, so `include`
+    /// directives are rejected; the input must be self-contained. Used by in-memory/WASM hosts.
+    // Not `FromStr`: this parses a YAML *document* (a section + finalization), not a
+    // `Topology`'s own representation, and mirrors the sibling `from_file` / `from_str_partial`.
+    #[allow(clippy::should_implement_trait)]
+    pub fn from_str(yaml: &str) -> anyhow::Result<Self> {
+        Self::from_yaml_with_base(yaml, None)
+    }
+
+    /// Shared body for [`from_file`](Self::from_file) and [`from_str`](Self::from_str).
+    /// `base` is the file relative paths (includes, structures) resolve against, or `None`
+    /// for string input (which forbids `include`s and resolves any block structure files
+    /// against the current directory).
+    fn from_yaml_with_base(yaml: &str, base: Option<&Path>) -> anyhow::Result<Self> {
+        let mut topology: Self = serde_yml::from_str(yaml)?;
 
         if topology.system.is_empty() {
             anyhow::bail!("missing or empty field `system`");
@@ -122,16 +143,27 @@ impl Topology {
             anyhow::bail!("missing or empty field `blocks`");
         }
 
+        let base: &Path = match base {
+            Some(path) => path,
+            None => {
+                anyhow::ensure!(
+                    topology.include.is_empty(),
+                    "`from_str` does not support `include` directives; supply a self-contained YAML"
+                );
+                Path::new(".")
+            }
+        };
+
         // finalize includes
         for file in topology.include.iter_mut() {
-            file.finalize(&path);
+            file.finalize(base);
         }
 
         let includes = std::mem::take(&mut topology.include);
         topology.include_topologies(includes)?;
         topology.finalize_atoms()?;
         topology.finalize_molecules()?;
-        topology.finalize_blocks(&path)?;
+        topology.finalize_blocks(base)?;
         topology.validate_intermolecular()?;
         topology.validate()?;
         Ok(topology)

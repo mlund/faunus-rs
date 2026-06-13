@@ -9,7 +9,7 @@
 use eframe::egui;
 use egui_plot::{Legend, Line, Plot, PlotPoints};
 use faunus::analysis::{Analyze, DoubleLayerPressure, DoubleLayerPressureBuilder};
-use faunus::backend::{get_medium, Backend};
+use faunus::backend::{get_medium_str, Backend};
 use faunus::histogram::Histogram;
 use faunus::montecarlo::MarkovChain;
 use faunus::propagate::Propagate;
@@ -158,15 +158,14 @@ struct Sim {
 
 impl Sim {
     fn build(inp: &Inputs, d: &Derived) -> anyhow::Result<Self> {
+        // wasm32 has no working std::fs, so build straight from the in-memory YAML
+        // string instead of round-tripping through a temp file.
         let yaml = make_yaml(inp, d);
-        let tmp = tempfile::NamedTempFile::new()?;
-        std::fs::write(tmp.path(), yaml.as_bytes())?;
-        let path = tmp.path();
         let mut rng = rand::thread_rng();
-        let context = Backend::new(path, None, &mut rng)?;
-        let medium = get_medium(path)?;
+        let context = Backend::from_yaml_str(&yaml, None, &mut rng)?;
+        let medium = get_medium_str(&yaml)?;
         let rt = R_IN_KJ_PER_MOL * TEMPERATURE;
-        let propagate = Propagate::from_file(path, &context)?;
+        let propagate = Propagate::from_str(&yaml, &context)?;
         let mc = MarkovChain::new(context, propagate, rt, vec![])?;
 
         let builder: DoubleLayerPressureBuilder =
@@ -473,6 +472,7 @@ mod tests {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn main() -> eframe::Result<()> {
     let options = eframe::NativeOptions::default();
     eframe::run_native(
@@ -480,4 +480,27 @@ fn main() -> eframe::Result<()> {
         options,
         Box::new(|_cc| Ok(Box::new(App::default()))),
     )
+}
+
+// Browser entry: eframe drives the `<canvas id="the_canvas_id">` declared in index.html.
+#[cfg(target_arch = "wasm32")]
+fn main() {
+    use eframe::wasm_bindgen::JsCast as _;
+
+    let canvas = web_sys::window()
+        .and_then(|w| w.document())
+        .and_then(|d| d.get_element_by_id("the_canvas_id"))
+        .and_then(|e| e.dyn_into::<web_sys::HtmlCanvasElement>().ok())
+        .expect("missing <canvas id=\"the_canvas_id\"> in index.html");
+
+    wasm_bindgen_futures::spawn_local(async move {
+        eframe::WebRunner::new()
+            .start(
+                canvas,
+                eframe::WebOptions::default(),
+                Box::new(|_cc| Ok(Box::new(App::default()))),
+            )
+            .await
+            .expect("failed to start eframe");
+    });
 }
