@@ -408,8 +408,8 @@ impl eframe::App for App {
                         ui.label(format!("{:.1} mM", sim.molarity_mm(count_sum)));
                         ui.end_row();
                     };
-                    mrow(ui, "<molarity> Na+ (+1)", sim.count_na_sum, "Mean concentration of monovalent ions.");
-                    mrow(ui, "<molarity> Ca2+ (+2)", sim.count_ca_sum, "Mean concentration of divalent ions.");
+                    mrow(ui, "[Na+]", sim.count_na_sum, "Mean concentration of monovalent (+1) ions.");
+                    mrow(ui, "[Ca2+]", sim.count_ca_sum, "Mean concentration of divalent (+2) ions.");
                 });
 
                 ui.separator();
