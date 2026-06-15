@@ -87,24 +87,30 @@ impl ElectricPotentialProfileBuilder {
         if self.resolution <= 0.0 {
             anyhow::bail!("resolution must be positive");
         }
-        let medium = medium.ok_or_else(|| {
-            anyhow::anyhow!("a medium is required for the Bjerrum and Debye lengths")
-        })?;
-        let debye_length = medium.debye_length().ok_or_else(|| {
-            anyhow::anyhow!("the screened potential requires finite ionic strength (salt)")
-        })?;
+        let medium =
+            medium.ok_or_else(|| anyhow::anyhow!("a medium is required for the Bjerrum length"))?;
+        let bjerrum_length = medium.bjerrum_length();
+        // Salt present ⇒ screened (Yukawa) kernel; salt-free ⇒ bare-Coulomb (Greberg/Åkesson).
+        let debye_length = medium.debye_length();
+        let kernel = match debye_length {
+            Some(length) => SlabKernel::screened(bjerrum_length, 1.0 / length),
+            None => SlabKernel::unscreened(bjerrum_length),
+        };
 
-        let kernel = SlabKernel::screened(medium.bjerrum_length(), 1.0 / debye_length);
         let mut grid = SlabGrid::from_cell(context.cell(), self.resolution, kernel)?;
         if self.finite_box_correction {
             // The correction handles a thin box exactly, so the infinite-plane warning is moot.
-            grid = grid.with_finite_box_correction();
-        } else if grid.is_laterally_thin(debye_length) {
-            log::warn!(
-                "electric potential profile: lateral box spans only {:.1} Debye lengths; the \
-                 infinite-plane approximation assumes many more (enable finite_box_correction)",
-                grid.lateral_debye_lengths(debye_length),
-            );
+            grid = grid.with_finite_box_correction()?;
+        } else if let Some(length) = debye_length {
+            // The infinite-plane caveat only applies to the screened kernel; the unscreened one
+            // is the exact 1-D Poisson Green's function.
+            if grid.is_laterally_thin(length) {
+                log::warn!(
+                    "electric potential profile: lateral box spans only {:.1} Debye lengths; the \
+                     infinite-plane approximation assumes many more (enable finite_box_correction)",
+                    grid.lateral_debye_lengths(length),
+                );
+            }
         }
         let n_bins = grid.n_bins();
 
@@ -112,7 +118,7 @@ impl ElectricPotentialProfileBuilder {
             selection: self.selection.clone(),
             grid,
             millivolt_per_kt: kt_per_charge_in_millivolt(medium.temperature()),
-            bjerrum_length: medium.bjerrum_length(),
+            bjerrum_length,
             debye_length,
             slab_charge_density: new_accumulators(n_bins),
             potential: new_accumulators(n_bins),
@@ -143,8 +149,8 @@ pub struct ElectricPotentialProfile {
     millivolt_per_kt: f64,
     /// Bjerrum length (Å), reported for reference.
     bjerrum_length: f64,
-    /// Debye length (Å), reported for reference.
-    debye_length: f64,
+    /// Debye length (Å), reported for reference; `None` for the unscreened (bare-Coulomb) kernel.
+    debye_length: Option<f64>,
     /// Per-slab areal charge density σ(z) (e·Å⁻²): mean and error across samples.
     slab_charge_density: Vec<BlockAverage>,
     /// Per-slab potential φ(z) (kT/e): mean and error across samples.
@@ -204,7 +210,9 @@ impl ElectricPotentialProfile {
         let mut map = serde_yml::Mapping::new();
         map.try_insert("num_samples", self.num_samples)?;
         map.try_insert("bjerrum_length/Å", self.bjerrum_length)?;
-        map.try_insert("debye_length/Å", self.debye_length)?;
+        if let Some(debye_length) = self.debye_length {
+            map.try_insert("debye_length/Å", debye_length)?;
+        }
         map.try_insert("num_bins", n)?;
         map.try_insert("potential_lower_wall/mV", lower)?;
         map.try_insert("potential_upper_wall/mV", upper)?;
@@ -336,9 +344,12 @@ mod tests {
     fn dummy(output_file: &str) -> ElectricPotentialProfile {
         let kernel = SlabKernel::screened(7.0, 0.1);
         // 10 Å cube ⇒ half-length 5, 10 bins at Δz = 1.
-        let grid =
-            SlabGrid::from_cell(&crate::cell::Cell::Cuboid(crate::cell::Cuboid::new(10.0, 10.0, 10.0)), 1.0, kernel)
-                .unwrap();
+        let grid = SlabGrid::from_cell(
+            &crate::cell::Cell::Cuboid(crate::cell::Cuboid::new(10.0, 10.0, 10.0)),
+            1.0,
+            kernel,
+        )
+        .unwrap();
         let n = grid.n_bins();
         assert_eq!(n, 10);
         ElectricPotentialProfile {
@@ -346,7 +357,7 @@ mod tests {
             grid,
             millivolt_per_kt: 25.7,
             bjerrum_length: 7.0,
-            debye_length: 10.0,
+            debye_length: Some(10.0),
             slab_charge_density: new_accumulators(n),
             potential: new_accumulators(n),
             num_samples: 0,

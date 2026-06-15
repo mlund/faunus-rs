@@ -597,13 +597,23 @@ $$\varphi(z) = \frac{2\pi\,l_B}{\kappa}\sum_{z'} \sigma(z')\,e^{-\kappa\,|z-z'|}
 
 where $\sigma(z')$ is the average charge per unit area in the slab at $z'$, $l_B$ the Bjerrum
 length, and $1/\kappa$ the Debye length — both taken from the medium. Because screening keeps
-the sum convergent, no infinite-plane correction term is needed (unlike the unscreened case).
-The walls are assumed neutral; only the explicit ions contribute.
+the sum convergent, no infinite-plane correction term is needed. The walls are assumed
+neutral; only the explicit ions contribute.
+
+**Without salt** (no Debye length) the kernel falls back automatically to **bare Coulomb**,
+the unscreened limit $\kappa\to0$. The plane potential is then the one-dimensional Poisson
+Green's function
+
+$$\varphi(z) = -2\pi\,l_B\sum_{z'}\sigma(z')\,|z-z'|,$$
+
+which is finite and physical only for an **electroneutral** slab (the linear background
+cancels when $\sum_{z'}\sigma(z')=0$).
 
 The cell geometry is detected automatically: a **cuboid or slit must have a square base**
 ($L_x = L_y$), and a **cylinder** uses its circular cross-section. The exponential treatment
 assumes each charged plane is effectively infinite, which holds only when the lateral box
-size is **much larger than the Debye length** — a warning is printed otherwise.
+size is **much larger than the Debye length** — a warning is printed otherwise (screened
+kernel only).
 
 ### Finite-box correction (optional)
 
@@ -631,6 +641,18 @@ $$\varphi_\text{ext}(z) = \frac{2\pi\,l_B}{\kappa}\,e^{-\kappa\sqrt{R^2 + z^2}}.
 Both vanish as the cross-section grows ($\varphi_\text{ext}\to0$ for $\kappa a\gg1$), so the
 correction matters only for thin boxes. Enable it only when the simulation itself does **not**
 already apply such an external correction, otherwise the far field is subtracted twice.
+
+For the **unscreened** (bare-Coulomb) kernel the correction reduces to Greberg's original
+square-base form,
+
+$$\varphi_\text{ext}(z) = -2\pi\,l_B\,|z| - l_B\,u_\text{box}(z),
+\qquad
+u_\text{box}(z) = 8a\,\ln\!\frac{\sqrt{2a^2+z^2}+a}{\sqrt{a^2+z^2}}
+   - 2z\left(\frac{\pi}{2} + \arcsin\frac{a^4 - z^4 - 2a^2z^2}{(a^2+z^2)^2}\right),$$
+
+recovered from the screened form as $\kappa\to0$ once the regularizing constant $2\pi l_B/\kappa$
+is removed. Because Greberg's construction models a square minimum-image box, the unscreened
+correction is **only defined for a square base**; enabling it for a cylinder is an error.
 
 ### Example
 
