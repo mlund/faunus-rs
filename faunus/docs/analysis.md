@@ -605,6 +605,33 @@ The cell geometry is detected automatically: a **cuboid or slit must have a squa
 assumes each charged plane is effectively infinite, which holds only when the lateral box
 size is **much larger than the Debye length** — a warning is printed otherwise.
 
+### Finite-box correction (optional)
+
+For a box that is *not* much larger than the Debye length, set `finite_box_correction: true`.
+The infinite-plane potential is then replaced by that of the *finite* minimum-image
+cross-section, valid at any box size:
+
+$$\varphi_\text{box}(z) = \varphi_\infty(z) - \varphi_\text{ext}(z),
+\qquad \varphi_\infty(z) = \frac{2\pi\,l_B}{\kappa}\,e^{-\kappa|z|},$$
+
+where $\varphi_\text{ext}$ is the contribution of the charge *outside* the cross-section. This
+is the screened (Yukawa) analogue of the finite-box correction of Greberg et al.,
+[doi:10/dhb9mj](https://doi.org/10/dhb9mj); screening makes every term finite, so the
+divergent and linear pieces of the bare-Coulomb construction cancel before quadrature. For a
+**square base** of half-width $a$ ($L_x = 2a$),
+
+$$\varphi_\text{ext}(z) = \frac{8\,l_B}{\kappa}\int_0^{\pi/4}
+   \exp\!\Big(\!-\kappa\sqrt{a^2/\cos^2\theta + z^2}\,\Big)\,\mathrm{d}\theta,$$
+
+a smooth integral evaluated by quadrature; for a **disk** of radius $R$ (cylinder) it has the
+closed form
+
+$$\varphi_\text{ext}(z) = \frac{2\pi\,l_B}{\kappa}\,e^{-\kappa\sqrt{R^2 + z^2}}.$$
+
+Both vanish as the cross-section grows ($\varphi_\text{ext}\to0$ for $\kappa a\gg1$), so the
+correction matters only for thin boxes. Enable it only when the simulation itself does **not**
+already apply such an external correction, otherwise the far field is subtracted twice.
+
 ### Example
 
 ```yaml
@@ -619,12 +646,13 @@ analysis:
 
 ### Options
 
-Key          | Required | Default           | Description
------------- | -------- | ----------------- | -------------------------------------------
-`selection`  | no       | `all`             | Atoms whose charge contributes to the profile
-`resolution` | no       | `0.5`             | Slab thickness Δz (Å) along the $z$-axis
-`file`       | no       | `potential.csv`   | Output file path (see [Output file formats](#output-file-formats))
-`frequency`  | yes      |                   | Sample frequency, e.g. `!Every 10`
+Key                    | Required | Default         | Description
+---------------------- | -------- | --------------- | -------------------------------------------
+`selection`            | no       | `all`           | Atoms whose charge contributes to the profile
+`resolution`           | no       | `0.5`           | Slab thickness Δz (Å) along the $z$-axis
+`finite_box_correction`| no       | `false`         | Report the finite-box (Greberg) potential instead of the infinite-plane one
+`file`                 | no       | `potential.csv` | Output file path (see [Output file formats](#output-file-formats))
+`frequency`            | yes      |                 | Sample frequency, e.g. `!Every 10`
 
 The output file contains, per slab: the position `z/Å`, the slab charge density (per area
 `e·Å⁻²` and per volume `e·Å⁻³`), the potential `potential/mV` with its statistical error

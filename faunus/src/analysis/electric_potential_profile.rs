@@ -57,6 +57,12 @@ pub struct ElectricPotentialProfileBuilder {
     /// Bin width Δz along z (Å). Defaults to 0.5 Å.
     #[serde(default = "default_resolution")]
     resolution: f64,
+    /// Restore the finite-box (Greberg) correction: report φ_box = φ_∞ − φ_ext, the potential
+    /// of the finite minimum-image cross-section instead of an infinite plane. Enable when the
+    /// box is not much larger than the Debye length and the simulation has no Åkesson external
+    /// term. Defaults to `false` (infinite-plane kernel).
+    #[serde(default)]
+    finite_box_correction: bool,
     /// Output column file (use a `.csv` extension for comma-separated values).
     #[serde(default = "default_file")]
     file: PathBuf,
@@ -89,11 +95,14 @@ impl ElectricPotentialProfileBuilder {
         })?;
 
         let kernel = SlabKernel::screened(medium.bjerrum_length(), 1.0 / debye_length);
-        let grid = SlabGrid::from_cell(context.cell(), self.resolution, kernel)?;
-        if grid.is_laterally_thin(debye_length) {
+        let mut grid = SlabGrid::from_cell(context.cell(), self.resolution, kernel)?;
+        if self.finite_box_correction {
+            // The correction handles a thin box exactly, so the infinite-plane warning is moot.
+            grid = grid.with_finite_box_correction();
+        } else if grid.is_laterally_thin(debye_length) {
             log::warn!(
-                "electric potential profile: lateral box spans only {:.1} Debye lengths; \
-                 the infinite-plane approximation assumes many more",
+                "electric potential profile: lateral box spans only {:.1} Debye lengths; the \
+                 infinite-plane approximation assumes many more (enable finite_box_correction)",
                 grid.lateral_debye_lengths(debye_length),
             );
         }
@@ -453,7 +462,22 @@ mod tests {
                 assert_eq!(b.selection.source(), "all");
                 assert_eq!(b.resolution, 0.5);
                 assert_eq!(b.file, PathBuf::from("potential.csv"));
+                assert!(!b.finite_box_correction);
             }
+            _ => panic!("expected ElectricPotentialProfile variant"),
+        }
+    }
+
+    #[test]
+    fn deserialize_finite_box_correction_flag() {
+        let yaml = r#"
+- !ElectricPotentialProfile
+  frequency: !Every 10
+  finite_box_correction: true
+"#;
+        let builders: Vec<AnalysisBuilder> = serde_yml::from_str(yaml).unwrap();
+        match &builders[0] {
+            AnalysisBuilder::ElectricPotentialProfile(b) => assert!(b.finite_box_correction),
             _ => panic!("expected ElectricPotentialProfile variant"),
         }
     }

@@ -36,16 +36,36 @@ const MIN_LATERAL_DEBYE_LENGTHS: f64 = 3.0;
 /// Relative tolerance for the square-base requirement `Lx == Ly`.
 const SQUARE_TOLERANCE: f64 = 1e-6;
 
-/// Lateral area, smallest lateral dimension, and half the z-length of a slab cell.
+/// Lateral cross-section shape of a slab cell, which sets the finite-box correction form.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum LateralShape {
+    /// Square base of half-width `a` (cuboid / slit).
+    Square,
+    /// Disk of radius `R` (cylinder).
+    Disk,
+}
+
+/// Slab dimensions detected from a simulation cell (private; built only by [`SlabGrid::from_cell`]).
+struct SlabDimensions {
+    /// Lateral cross-sectional area (Å²).
+    area: f64,
+    /// Smallest lateral box dimension (Å) — the full width `2a` or the diameter `2R`.
+    lateral_extent: f64,
+    /// Half the box length along z (Å); the slab spans `[−half_length_z, +half_length_z]`.
+    half_length_z: f64,
+    shape: LateralShape,
+}
+
+/// Detect the slab dimensions and lateral shape of `cell`.
 ///
 /// The screened-slab reduction assumes lateral homogeneity, so the cross-section must be a
 /// square cuboid/slit (`Lx = Ly`) or a cylinder (a disk, where `Lx = Ly` holds by
 /// construction). Other cells cannot be laterally averaged this way and are rejected.
-fn slab_dimensions(cell: &Cell) -> Result<(f64, f64, f64)> {
+fn slab_dimensions(cell: &Cell) -> Result<SlabDimensions> {
     let bbox = cell
         .bounding_box()
         .ok_or_else(|| anyhow::anyhow!("a finite cell is required (got an endless cell)"))?;
-    let (area, lateral_extent) = match cell {
+    let (area, lateral_extent, shape) = match cell {
         Cell::Cuboid(_) | Cell::Slit(_) => {
             if (bbox.x - bbox.y).abs() > SQUARE_TOLERANCE * bbox.x.max(bbox.y) {
                 anyhow::bail!(
@@ -54,18 +74,23 @@ fn slab_dimensions(cell: &Cell) -> Result<(f64, f64, f64)> {
                     bbox.y
                 );
             }
-            (bbox.x * bbox.y, bbox.x.min(bbox.y))
+            (bbox.x * bbox.y, bbox.x.min(bbox.y), LateralShape::Square)
         }
         // The bounding box of a cylinder is (2R, 2R, height), so the disk area is π·R².
         Cell::Cylinder(_) => {
             let radius = 0.5 * bbox.x;
-            (PI * radius * radius, bbox.x)
+            (PI * radius * radius, bbox.x, LateralShape::Disk)
         }
         other => anyhow::bail!(
             "only cuboid, slit, and cylinder cells are supported; got {other:?}"
         ),
     };
-    Ok((area, lateral_extent, 0.5 * bbox.z))
+    Ok(SlabDimensions {
+        area,
+        lateral_extent,
+        half_length_z: 0.5 * bbox.z,
+        shape,
+    })
 }
 
 /// Per-slab Green's function: the potential at axial separation `dz` from a plane of unit
@@ -76,10 +101,11 @@ pub(crate) enum SlabKernel {
     Screened { prefactor: f64, kappa: f64 },
     // Extension point for a future bare-Coulomb Åkesson kernel:
     //   `Akesson { bjerrum_length, half_box }` returning `l_B·φ_slab(|dz|, a)` with the
-    //   −2π·z infinite-slab correction and the finite square-sheet geometry factor
+    //   −2π·|z| infinite-slab term and the finite square-sheet geometry factor
     //   (`finite_sheet_g` in `analysis::double_layer_pressure`). Add the variant plus an
     //   arm in `potential`, and route it through the generic O(n²) path of
-    //   `SlabGrid::potential_profile`.
+    //   `SlabGrid::potential_profile`. (For the *screened* case the finite-box analogue is
+    //   already implemented as [`SlabGrid::with_finite_box_correction`].)
 }
 
 impl SlabKernel {
@@ -114,7 +140,11 @@ pub(crate) struct SlabGrid {
     n_bins: usize,
     area: f64,
     lateral_extent: f64,
+    shape: LateralShape,
     kernel: SlabKernel,
+    /// Finite-box correction φ_ext sampled at slab separations `0, Δz, 2Δz, …`, present only
+    /// when the correction is enabled (see [`with_finite_box_correction`](Self::with_finite_box_correction)).
+    correction: Option<Vec<f64>>,
 }
 
 impl SlabGrid {
@@ -122,7 +152,12 @@ impl SlabGrid {
     ///
     /// Fails for cells that cannot be laterally averaged (see [`slab_dimensions`]).
     pub(crate) fn from_cell(cell: &Cell, resolution: f64, kernel: SlabKernel) -> Result<Self> {
-        let (area, lateral_extent, half_length_z) = slab_dimensions(cell)?;
+        let SlabDimensions {
+            area,
+            lateral_extent,
+            half_length_z,
+            shape,
+        } = slab_dimensions(cell)?;
         // Pick the bin count tiling the slab closest to `resolution`, but never zero bins.
         let n_bins = ((2.0 * half_length_z / resolution).round() as usize).max(1);
         Ok(Self {
@@ -131,8 +166,21 @@ impl SlabGrid {
             n_bins,
             area,
             lateral_extent,
+            shape,
             kernel,
+            correction: None,
         })
+    }
+
+    /// Enable the finite-box correction: the profile then reports φ_box = φ_∞ − φ_ext, the
+    /// potential of the finite minimum-image cross-section (square base or disk) rather than
+    /// of an infinite plane. Use when the simulation has no Åkesson external term of its own.
+    pub(crate) fn with_finite_box_correction(mut self) -> Self {
+        let table = (0..self.n_bins)
+            .map(|k| self.finite_box_correction(k as f64 * self.bin_width))
+            .collect();
+        self.correction = Some(table);
+        self
     }
 
     pub(crate) fn n_bins(&self) -> usize {
@@ -178,9 +226,49 @@ impl SlabGrid {
     /// overflow). A non-separable kernel would instead use the direct O(n²) sum.
     pub(crate) fn potential_profile(&self, slab_charges: &[f64]) -> Vec<f64> {
         debug_assert_eq!(slab_charges.len(), self.n_bins);
-        match self.kernel {
+        let mut phi = match self.kernel {
             SlabKernel::Screened { prefactor, kappa } => {
                 self.screened_profile(slab_charges, prefactor, kappa)
+            }
+        };
+        // Subtract the finite-box correction φ_box = φ_∞ − φ_ext, when enabled. The correction
+        // kernel is not separable, so this is a direct O(n²) convolution over the cached table.
+        if let Some(table) = &self.correction {
+            for (i, phi_i) in phi.iter_mut().enumerate() {
+                // φ_ext depends only on slab separation, so index the table by |i − j|.
+                let exterior: f64 = slab_charges
+                    .iter()
+                    .enumerate()
+                    .map(|(j, &charge)| charge / self.area * table[i.abs_diff(j)])
+                    .sum();
+                *phi_i -= exterior;
+            }
+        }
+        phi
+    }
+
+    /// Finite-box external correction φ_ext at axial separation `dz`, per unit areal charge.
+    ///
+    /// It is the potential of the charge *outside* the finite cross-section: `φ_∞ − φ_box`.
+    /// For a square base of half-width `a` it is the smooth Greberg quadrature (the `4/π`
+    /// and the `π/4` domain factor cancel, leaving `prefactor · ∫₀¹`); for a disk of radius
+    /// `R` it is the closed form `prefactor · e^(−κ√(R²+dz²))`.
+    fn finite_box_correction(&self, dz: f64) -> f64 {
+        let SlabKernel::Screened { prefactor, kappa } = self.kernel;
+        let half_extent = 0.5 * self.lateral_extent;
+        match self.shape {
+            LateralShape::Disk => {
+                prefactor * (-kappa * (half_extent * half_extent + dz * dz).sqrt()).exp()
+            }
+            LateralShape::Square => {
+                const SAMPLES: usize = 65; // odd ⇒ pure Simpson 1/3 over [0, π/4]
+                let mut samples = [0.0; SAMPLES];
+                for (k, sample) in samples.iter_mut().enumerate() {
+                    let theta = std::f64::consts::FRAC_PI_4 * k as f64 / (SAMPLES - 1) as f64;
+                    let edge = half_extent / theta.cos();
+                    *sample = (-kappa * (edge * edge + dz * dz).sqrt()).exp();
+                }
+                prefactor * crate::auxiliary::simpson_integrate(&samples)
             }
         }
     }
@@ -348,6 +436,90 @@ mod tests {
         charges[n / 2 + 2] = -1.0; // mirror of n/2−3 about the centre
         let phi = grid.potential_profile(&charges);
         assert!((phi[n / 2 - 1] + phi[n / 2]).abs() < 1e-12); // antisymmetric about the centre
+    }
+
+    #[test]
+    fn finite_box_correction_square_matches_exterior_integral() {
+        // Validate the Greberg quadrature φ_ext = φ_∞ − φ_box against a brute-force 2-D
+        // integral of the screened kernel over the square base [−a, a]².
+        let (bjerrum, kappa, a, dz) = (7.0, 0.1, 10.0, 2.0);
+        let grid = SlabGrid::from_cell(
+            &Cell::Cuboid(Cuboid::new(2.0 * a, 2.0 * a, 100.0)),
+            1.0,
+            SlabKernel::screened(bjerrum, kappa),
+        )
+        .unwrap();
+        let prefactor = 2.0 * PI * bjerrum / kappa;
+        let m = 800;
+        let h = 2.0 * a / m as f64;
+        let mut sum = 0.0;
+        for ix in 0..m {
+            let x = -a + (ix as f64 + 0.5) * h;
+            for iy in 0..m {
+                let y = -a + (iy as f64 + 0.5) * h;
+                let r = (x * x + y * y + dz * dz).sqrt();
+                sum += (-kappa * r).exp() / r;
+            }
+        }
+        let phi_box = bjerrum * sum * h * h;
+        let expected = prefactor * (-kappa * dz).exp() - phi_box;
+        let got = grid.finite_box_correction(dz);
+        assert!((got - expected).abs() / expected < 1e-2, "got {got} vs {expected}");
+    }
+
+    #[test]
+    fn finite_box_correction_disk_matches_radial_integral() {
+        // Disk closed form φ_ext = prefactor·e^(−κ√(R²+dz²)) vs a direct radial integral.
+        let (bjerrum, kappa, radius, dz) = (7.0, 0.1, 10.0, 2.0);
+        let grid = SlabGrid::from_cell(
+            &Cell::Cylinder(Cylinder::new(radius, 100.0)),
+            1.0,
+            SlabKernel::screened(bjerrum, kappa),
+        )
+        .unwrap();
+        let prefactor = 2.0 * PI * bjerrum / kappa;
+        let m = 4000;
+        let h = radius / m as f64;
+        let mut sum = 0.0;
+        for k in 0..m {
+            let s = (k as f64 + 0.5) * h;
+            let r = (s * s + dz * dz).sqrt();
+            sum += (-kappa * r).exp() / r * 2.0 * PI * s;
+        }
+        let phi_disk = bjerrum * sum * h;
+        let expected = prefactor * (-kappa * dz).exp() - phi_disk;
+        let got = grid.finite_box_correction(dz);
+        assert!((got - expected).abs() / expected < 1e-3, "got {got} vs {expected}");
+    }
+
+    #[test]
+    fn finite_box_correction_vanishes_for_large_box() {
+        // κ·a = 30 ⇒ the exterior charge is exponentially negligible.
+        let grid = SlabGrid::from_cell(
+            &Cell::Cuboid(Cuboid::new(600.0, 600.0, 100.0)),
+            1.0,
+            SlabKernel::screened(7.0, 0.1),
+        )
+        .unwrap();
+        assert!(grid.finite_box_correction(0.0) < 1e-6);
+    }
+
+    #[test]
+    fn correction_lowers_potential_of_positive_charges() {
+        // φ_box = φ_∞ − φ_ext with φ_ext > 0, so a positive charge profile drops everywhere.
+        let base = SlabGrid::from_cell(
+            &Cell::Cuboid(Cuboid::new(30.0, 30.0, 60.0)),
+            1.0,
+            SlabKernel::screened(7.0, 0.1),
+        )
+        .unwrap();
+        let corrected = base.clone().with_finite_box_correction();
+        let charges = vec![1.0; base.n_bins()];
+        let phi = base.potential_profile(&charges);
+        let phi_box = corrected.potential_profile(&charges);
+        for (uncorrected, boxed) in phi.iter().zip(&phi_box) {
+            assert!(*boxed < *uncorrected && *boxed > 0.0, "{boxed} vs {uncorrected}");
+        }
     }
 
     #[test]
