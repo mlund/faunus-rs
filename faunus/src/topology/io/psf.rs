@@ -281,6 +281,7 @@ pub fn write_vmd_script(
     writeln!(w, "mol load psf {psf_file} {traj_ext} {trajectory_file}")?;
     writeln!(w, "mol modstyle 0 top VDW 1.0 12.0")?;
     writeln!(w, "mol modcolor 0 top Charge")?;
+    writeln!(w, "package require pbctools")?;
     writeln!(w, "pbc box")?;
 
     let present: std::collections::BTreeSet<usize> = groups
@@ -412,14 +413,15 @@ fn write_vmd_charges_callback(w: &mut impl Write, charges_file: &str) -> anyhow:
     }
     writeln!(w, "close $_fp")?;
     writeln!(w)?;
+    // Persistent selection avoids create/delete on every frame, which segfaults VMD 1.9.3
+    writeln!(w, r#"set _charge_sel [atomselect top "all"]"#)?;
+    writeln!(w)?;
     writeln!(w, "proc faunus_update_charges {{args}} {{")?;
-    writeln!(w, "    global vmd_frame charge_data")?;
+    writeln!(w, "    global vmd_frame charge_data _charge_sel")?;
     writeln!(w, "    set f $vmd_frame(0)")?;
     writeln!(w, "    if {{$f >= [llength $charge_data]}} return")?;
-    writeln!(w, "    set charges [lindex $charge_data $f]")?;
-    writeln!(w, r#"    set _all [atomselect top "all"]"#)?;
-    writeln!(w, "    $_all set charge $charges")?;
-    writeln!(w, "    $_all delete")?;
+    writeln!(w, "    $_charge_sel frame $f")?;
+    writeln!(w, "    $_charge_sel set charge [lindex $charge_data $f]")?;
     writeln!(w, "}}")?;
     writeln!(w)?;
     writeln!(w, "if {{[llength $charge_data] > 0}} {{")?;
@@ -509,6 +511,7 @@ system:
         std::fs::remove_file(&tcl_path).ok();
 
         assert!(content.contains("mol load psf traj.psf xtc traj.xtc"));
+        assert!(content.contains("package require pbctools"));
         assert!(content.contains("pbc box"));
         // A has sigma=4.0, so radius=2.0
         assert!(content.contains("type A"));
