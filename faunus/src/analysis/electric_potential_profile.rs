@@ -200,7 +200,18 @@ impl ElectricPotentialProfile {
         let n = self.grid.n_bins();
         let lower = self.potential_millivolt(0);
         let upper = self.potential_millivolt(n - 1);
-        let midplane = self.potential_millivolt(n / 2);
+        // The midplane (z=0) falls between the two central bins when n_bins is
+        // even, so average them; a single central bin is exact when odd.
+        let midplane = if n % 2 == 0 {
+            let below = self.potential_millivolt(n / 2 - 1);
+            let above = self.potential_millivolt(n / 2);
+            BlockSummary {
+                mean: 0.5 * (below.mean + above.mean),
+                error: 0.5 * below.error.hypot(above.error),
+            }
+        } else {
+            self.potential_millivolt(n / 2)
+        };
         // Drop = wall − midplane; treat the two as independent for the error estimate.
         let drop = |wall: &BlockSummary| BlockSummary {
             mean: wall.mean - midplane.mean,
@@ -261,7 +272,7 @@ impl crate::Info for ElectricPotentialProfile {
         Some("electricpotentialprofile")
     }
     fn long_name(&self) -> Option<&'static str> {
-        Some("Electric potential profile along z (screened slab)")
+        Some("Electric potential profile along z (slab geometry)")
     }
     fn citation(&self) -> Option<&'static str> {
         Some("doi:10/dhb9mj")
