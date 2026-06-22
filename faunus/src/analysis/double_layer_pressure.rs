@@ -39,13 +39,13 @@
 use super::{Analyze, Frequency};
 use crate::auxiliary::{BlockAverage, ColumnWriter, MappingExt};
 use crate::cell::{BoundaryConditions, Shape};
+use crate::energy::slab_potential::square_sheet_factor;
 use crate::selection::Selection;
 use crate::{Context, Point};
 use anyhow::Result;
 use derive_more::Debug;
 use interatomic::coulomb::Temperature;
 use serde::{Deserialize, Serialize};
-use std::f64::consts::FRAC_PI_2;
 use std::path::PathBuf;
 
 /// YAML builder for [`DoubleLayerPressure`].
@@ -96,7 +96,9 @@ impl DoubleLayerPressureBuilder {
         // wall/midplane assumptions, so guard on the boundary conditions.
         let pbc = context.cell().pbc();
         if pbc != crate::cell::PeriodicDirections::PeriodicXY {
-            anyhow::bail!("DoubleLayerPressure requires a Slit cell (periodic in XY only); got {pbc:?}");
+            anyhow::bail!(
+                "DoubleLayerPressure requires a Slit cell (periodic in XY only); got {pbc:?}"
+            );
         }
         let bbox = context.cell().bounding_box().ok_or_else(|| {
             anyhow::anyhow!("DoubleLayerPressure requires a Slit cell with a finite bounding box")
@@ -215,8 +217,12 @@ pub struct DoubleLayerPressure {
 /// the upper half (`z ≥ 0`): `Σ_{i: z_i<0} Σ_{j: z_j≥0} q_i q_j (z_j − z_i) / r_ij³`,
 /// with `r_ij` the minimum-image distance. Positive = repulsion (pushing the halves apart).
 fn cross_force_z(positions: &[Point], charges: &[f64], cell: &impl BoundaryConditions) -> f64 {
-    let below: Vec<usize> = (0..positions.len()).filter(|&i| positions[i].z < 0.0).collect();
-    let above: Vec<usize> = (0..positions.len()).filter(|&i| positions[i].z >= 0.0).collect();
+    let below: Vec<usize> = (0..positions.len())
+        .filter(|&i| positions[i].z < 0.0)
+        .collect();
+    let above: Vec<usize> = (0..positions.len())
+        .filter(|&i| positions[i].z >= 0.0)
+        .collect();
     let mut fz = 0.0;
     for &a in &below {
         for &b in &above {
@@ -252,16 +258,6 @@ fn midplane_density(positions: &[Point], w: f64, area: f64) -> f64 {
     ((4.0 * rho_w - rho_2w) / 3.0).max(0.0)
 }
 
-/// Guldbrand Eq. 9 geometric factor for a uniformly charged **square** sheet of
-/// half-width `b`, on the axis at perpendicular distance `x`:
-/// `arcsin[(b⁴ − x⁴ − 2b²x²)/(b²+x²)²] + π/2`. It is `π` at contact (`x=0`,
-/// the infinite-sheet limit) and decays to `0` as `x → ∞`.
-fn finite_sheet_g(x: f64, b: f64) -> f64 {
-    let (b2, x2) = (b * b, x * x);
-    let ratio = (b2 * b2 - x2 * x2 - 2.0 * b2 * x2) / (b2 + x2).powi(2);
-    ratio.clamp(-1.0, 1.0).asin() + FRAC_PI_2
-}
-
 /// Wall contribution to the cross-midplane force (without the Coulomb prefactor),
 /// using the finite charged sheet (Eq. 9) so it cancels the finite-box ion–ion sum
 /// consistently. Each ion is attracted to the OPPOSITE wall (distance `half_gap+|z|`);
@@ -277,10 +273,10 @@ fn wall_cross_raw(
     let ion_wall: f64 = positions
         .iter()
         .zip(charges)
-        .map(|(p, &q)| -2.0 * sigma * q * finite_sheet_g(half_gap + p.z.abs(), half_box))
+        .map(|(p, &q)| -2.0 * sigma * q * square_sheet_factor(half_gap + p.z.abs(), half_box))
         .sum();
     // wall–wall: two sheets a full gap (2·half_gap) apart.
-    let wall_wall = 2.0 * sigma * sigma * area * finite_sheet_g(2.0 * half_gap, half_box);
+    let wall_wall = 2.0 * sigma * sigma * area * square_sheet_factor(2.0 * half_gap, half_box);
     ion_wall + wall_wall
 }
 
@@ -318,7 +314,7 @@ impl DoubleLayerPressure {
         let norm = self.density_samples as f64 * dz * self.area;
         let lambda: Vec<f64> = self.density.iter().map(|s| s / norm).collect();
         let z = |k: usize| -self.half_gap + (k as f64 + 0.5) * dz;
-        let tail = |d: f64| std::f64::consts::PI - finite_sheet_g(d, self.half_box);
+        let tail = |d: f64| std::f64::consts::PI - square_sheet_factor(d, self.half_box);
 
         // ion–ion across the midplane (below × above)
         let mut sum = 0.0;
@@ -409,7 +405,9 @@ impl<T: Context> Analyze<T> for DoubleLayerPressure {
         let n = self.density.len();
         let dz = 2.0 * self.half_gap / n as f64;
         for (p, &q) in positions.iter().zip(&charges) {
-            let k = ((p.z + self.half_gap) / dz).floor().clamp(0.0, (n - 1) as f64) as usize;
+            let k = ((p.z + self.half_gap) / dz)
+                .floor()
+                .clamp(0.0, (n - 1) as f64) as usize;
             self.density[k] += q;
         }
         self.density_samples += 1;
@@ -493,13 +491,19 @@ mod tests {
     fn cross_force_uses_minimum_image_in_xy() {
         // Two charges separated by 90 Å in x in a 100 Å box ⇒ min-image image is 10 Å.
         let cell = Slit::new(100.0, 100.0, 100.0);
-        let positions = [Point::new(-45.0, 0.0, -0.0001), Point::new(45.0, 0.0, 0.0001)];
+        let positions = [
+            Point::new(-45.0, 0.0, -0.0001),
+            Point::new(45.0, 0.0, 0.0001),
+        ];
         let charges = [1.0, 1.0];
         let d = 0.0002_f64; // tiny z separation
         let r2 = 10.0_f64 * 10.0 + d * d;
         let expected = 1.0 * 1.0 * d * r2.powf(-1.5);
         let fz = cross_force_z(&positions, &charges, &cell);
-        assert!((fz - expected).abs() < 1e-9, "fz = {fz}, expected = {expected}");
+        assert!(
+            (fz - expected).abs() < 1e-9,
+            "fz = {fz}, expected = {expected}"
+        );
     }
 
     #[test]
@@ -527,13 +531,18 @@ mod tests {
     fn midplane_density_uniform_profile_unbiased() {
         // A flat profile (same density in both windows) extrapolates to itself:
         // (4·ρ − ρ)/3 = ρ.
-        let positions: Vec<Point> = (-50..=50).map(|i| Point::new(0.0, 0.0, i as f64 * 0.1)).collect();
+        let positions: Vec<Point> = (-50..=50)
+            .map(|i| Point::new(0.0, 0.0, i as f64 * 0.1))
+            .collect();
         let area = 1.0;
         let w = 2.0;
         let n_in = midplane_count(&positions, w) as f64;
         let uniform = n_in / (2.0 * w * area);
         let rho = midplane_density(&positions, w, area);
-        assert!((rho - uniform).abs() < 0.2, "rho = {rho}, uniform ≈ {uniform}");
+        assert!(
+            (rho - uniform).abs() < 0.2,
+            "rho = {rho}, uniform ≈ {uniform}"
+        );
     }
 
     #[test]
@@ -620,7 +629,11 @@ mod tests {
         a.half_box = 1e7;
         a.density = vec![1.0; 20];
         a.density_samples = 1;
-        assert!(a.fipb_pressure().abs() < 1e-3, "fipb = {}", a.fipb_pressure());
+        assert!(
+            a.fipb_pressure().abs() < 1e-3,
+            "fipb = {}",
+            a.fipb_pressure()
+        );
     }
 
     #[test]
@@ -630,7 +643,11 @@ mod tests {
         a.half_box = 5.0;
         a.density = vec![1.0; 20];
         a.density_samples = 1;
-        assert!(a.fipb_pressure().abs() > 1e-9, "fipb = {}", a.fipb_pressure());
+        assert!(
+            a.fipb_pressure().abs() > 1e-9,
+            "fipb = {}",
+            a.fipb_pressure()
+        );
     }
 
     #[test]

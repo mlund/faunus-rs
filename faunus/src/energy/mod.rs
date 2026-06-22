@@ -35,6 +35,7 @@ pub(crate) mod pairpot;
 pub(crate) mod penalty;
 mod polymer_depletion;
 mod sasa;
+pub(crate) mod slab_potential;
 mod tabulated;
 
 pub use bonded::{IntermolecularBonded, IntramolecularBonded};

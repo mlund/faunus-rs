@@ -25,6 +25,7 @@ use std::path::{Path, PathBuf};
 
 mod collective_variable;
 mod double_layer_pressure;
+mod electric_potential_profile;
 mod energy;
 mod mean_along_coordinate;
 mod multipole;
@@ -39,6 +40,7 @@ mod virtual_volume_move;
 mod widom;
 pub use collective_variable::{CollectiveVariableAnalysis, CollectiveVariableAnalysisBuilder};
 pub use double_layer_pressure::{DoubleLayerPressure, DoubleLayerPressureBuilder};
+pub use electric_potential_profile::{ElectricPotentialProfile, ElectricPotentialProfileBuilder};
 pub use energy::{EnergyAnalysis, EnergyAnalysisBuilder};
 pub use mean_along_coordinate::{MeanAlongCoordinate, MeanAlongCoordinateBuilder};
 pub use radial_distribution::{RadialDistribution, RadialDistributionBuilder};
@@ -127,6 +129,8 @@ pub enum AnalysisBuilder {
     Multipole(multipole::MultipoleAnalysisBuilder),
     /// Osmotic pressure between two charged planes (Guldbrand midplane method)
     DoubleLayerPressure(DoubleLayerPressureBuilder),
+    /// Electric potential profile φ(z) along z (screened slab)
+    ElectricPotentialProfile(ElectricPotentialProfileBuilder),
 }
 
 /// Prefix `dir` onto a relative output path that stays within `dir`.
@@ -191,6 +195,7 @@ impl AnalysisBuilder {
             Self::RotationalDiffusion(b) => b.apply_output_dir(dir),
             Self::Multipole(b) => b.apply_output_dir(dir),
             Self::DoubleLayerPressure(b) => b.apply_output_dir(dir),
+            Self::ElectricPotentialProfile(b) => b.apply_output_dir(dir),
         }
     }
 
@@ -217,6 +222,7 @@ impl AnalysisBuilder {
             Self::RotationalDiffusion(builder) => Box::new(builder.build(context)?),
             Self::Multipole(builder) => Box::new(builder.build(context)?),
             Self::DoubleLayerPressure(builder) => Box::new(builder.build(context, medium)?),
+            Self::ElectricPotentialProfile(builder) => Box::new(builder.build(context, medium)?),
         })
     }
 }
