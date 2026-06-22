@@ -5,11 +5,11 @@ use super::{
     nonbonded::{NonbondedMatrix, NonbondedMatrixSplined},
     CellOverlap, EnergyTerm,
 };
+use crate::time::Instant;
 use crate::{topology::Topology, Change, Context};
 use interatomic::coulomb::{DebyeLength, Temperature};
 use std::cell::Cell;
 use std::path::Path;
-use crate::time::Instant;
 use std::time::Duration;
 
 /// Trait implemented by structures that can compute
@@ -128,7 +128,7 @@ impl Hamiltonian {
         topology: &Topology,
         medium: Option<interatomic::coulomb::Medium>,
     ) -> anyhow::Result<EnergyTerm> {
-        let nonbonded = NonbondedMatrix::new(pairpot_builder, topology, medium)?;
+        let mut nonbonded = NonbondedMatrix::new(pairpot_builder, topology, medium)?;
         if let Some(spline_opts) = &builder.spline {
             let config = spline_opts.to_spline_config();
             let mut splined = NonbondedMatrixSplined::from_nonbonded(
@@ -144,6 +144,14 @@ impl Hamiltonian {
             );
             Ok(splined.into())
         } else {
+            if let Some(cutoff) = builder.cutoff {
+                nonbonded.set_cutoff(cutoff);
+                nonbonded.set_bounding_spheres(builder.bounding_spheres);
+                log::info!(
+                    "Group-to-group cutoff culling enabled (cutoff={cutoff}, bounding_spheres={})",
+                    builder.bounding_spheres
+                );
+            }
             Ok(nonbonded.into())
         }
     }

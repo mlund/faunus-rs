@@ -633,6 +633,17 @@ pub struct HamiltonianBuilder {
     /// When present, `NonbondedMatrixSplined` is used instead of `NonbondedMatrix`.
     pub spline: Option<SplineOptions>,
 
+    /// Optional global cutoff (Å) for group-to-group bounding-sphere culling of
+    /// the (non-splined) nonbonded matrix. Must be ≥ the largest per-pair
+    /// potential cutoff to remain exact. Ignored when `spline` is set (the
+    /// spline carries its own cutoff).
+    pub cutoff: Option<f64>,
+
+    /// Enable bounding-sphere culling for the non-splined matrix (default: true).
+    /// Only has an effect together with `cutoff`.
+    #[serde(default = "default_bounding_spheres")]
+    pub bounding_spheres: bool,
+
     /// Solvent Accessible Surface Area (SASA) energy term.
     pub sasa: Option<SasaEnergyBuilder>,
 

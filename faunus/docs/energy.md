@@ -101,6 +101,41 @@ system:
     spline: {cutoff: 40.0}
 ```
 
+### Group-to-group cutoff
+
+For molecular systems, distant group (molecule) pairs can be skipped using
+bounding-sphere culling — a group pair is ignored when its center-of-mass
+separation exceeds `cutoff + R_i + R_j`, where `R_i`/`R_j` are the groups'
+bounding radii (max distance from the mass center to any member particle).
+This accelerates the energy without changing it, and — unlike
+[spline tabulation](#spline-tabulation) — leaves the pair potentials **exact**
+(no tabulation, no energy shift).
+
+Add `cutoff` and `bounding_spheres` alongside `nonbonded`:
+
+```yaml
+energy:
+  cutoff: 50              # group-to-group cutoff (Å)
+  bounding_spheres: true
+  nonbonded:
+    default:
+      - !Fanourgakis {cutoff: 50}
+      - !AshbaughHatch {mixing: arithmetic, cutoff: 20.0}
+```
+
+| Key                | Required | Default | Description                                        |
+|--------------------|----------|---------|----------------------------------------------------|
+| `cutoff`           | no       | none    | Group-to-group cutoff (Å); no culling if unset     |
+| `bounding_spheres` | no       | `true`  | Enable bounding-sphere culling (needs `cutoff`)    |
+
+> **Correctness:** `cutoff` must be **≥ the largest per-pair potential cutoff**
+> (here the 50 Å electrostatics), since a culled group pair skips *all* of its
+> atom–atom interactions. A smaller value silently drops interactions still
+> within range. The culling requires `has_com: true` on the molecule.
+>
+> These keys apply only when no `spline` section is present. A spline carries
+> its own `cutoff`/`bounding_spheres`, and these are ignored in that case.
+
 ### Short-range potentials
 
 Each potential is specified as a YAML tag. Parameters can be given directly

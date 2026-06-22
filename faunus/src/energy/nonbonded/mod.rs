@@ -384,6 +384,16 @@ impl<P> NonbondedMatrix<P> {
         self.use_bounding_spheres = enabled;
     }
 
+    /// Set the global interaction cutoff used for group-to-group culling.
+    ///
+    /// Culling only fires when both this cutoff is set and bounding spheres are
+    /// enabled. To stay exact, the cutoff must be ≥ the largest per-pair
+    /// potential cutoff, since a culled group pair skips *all* of its atom-atom
+    /// interactions.
+    pub(crate) fn set_cutoff(&mut self, cutoff: f64) {
+        self.cutoff = Some(cutoff);
+    }
+
     /// Get the list of excluded molecule-type pairs.
     #[must_use]
     pub(crate) fn molecule_pair_exclusions(&self) -> &[[usize; 2]] {
