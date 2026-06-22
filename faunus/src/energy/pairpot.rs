@@ -77,6 +77,27 @@ impl PairPot {
             coulomb,
         }
     }
+
+    /// Largest separation at which either component still contributes energy.
+    ///
+    /// This is the smallest group-to-group cutoff that keeps bounding-sphere
+    /// culling exact. Note this is the *longer* of the two component ranges,
+    /// unlike [`Cutoff::cutoff`] which returns the shorter (limiting) one.
+    /// Returns infinity for unbounded potentials (bare Lennard-Jones, or
+    /// Coulomb without a cutoff), which cannot be culled without error.
+    pub(crate) fn max_cutoff(&self) -> f64 {
+        // An absent component has zero range, but its `cutoff()` reports
+        // infinity (it never limits the pair), so handle `None` explicitly.
+        let short_range = match self.short_range {
+            ShortRange::None => 0.0,
+            _ => self.short_range.cutoff(),
+        };
+        let coulomb = match self.coulomb {
+            Coulomb::None => 0.0,
+            _ => self.coulomb.cutoff(),
+        };
+        short_range.max(coulomb)
+    }
 }
 
 // ─── Dispatch helpers ─────────────────────────────────────────────────────────

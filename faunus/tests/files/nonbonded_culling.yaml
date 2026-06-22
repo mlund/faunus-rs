@@ -1,0 +1,31 @@
+# Fixture for group-to-group cutoff culling tests.
+# Bounded Coulomb (cutoff 6) so the longest pair range is finite; molecules
+# carry a center of mass so bounding-sphere culling can engage.
+atoms:
+  - {name: A, charge: 1.0, mass: 1.0}
+  - {name: B, charge: -1.0, mass: 1.0}
+
+molecules:
+  - name: MOL
+    atoms: [A, B]
+    has_com: true
+
+system:
+  medium:
+    permittivity: !Vacuum
+    temperature: 298.15
+  energy:
+    nonbonded:
+      default:
+        - !CoulombPlain {cutoff: 6.0}
+
+  blocks:
+    - molecule: MOL
+      N: 3
+      insert: !Manual
+        - [0.0, 0.0, 0.0]    # MOL0 / A  — COM ≈ (0.5,0,0)
+        - [1.0, 0.0, 0.0]    # MOL0 / B
+        - [4.0, 0.0, 0.0]    # MOL1 / A  — COM ≈ (4.5,0,0), close to MOL0
+        - [5.0, 0.0, 0.0]    # MOL1 / B
+        - [20.0, 0.0, 0.0]   # MOL2 / A  — COM ≈ (20.5,0,0), far from both
+        - [21.0, 0.0, 0.0]   # MOL2 / B
