@@ -976,3 +976,96 @@ fn test_hamiltonian_forces() {
         assert!((t - h).norm() < 1e-12);
     }
 }
+
+// ====== Group-to-group cutoff culling ======
+
+/// Build a small COM-bearing system with bounded Coulomb for culling tests.
+fn culling_system() -> (Backend, NonbondedMatrix) {
+    let file = "tests/files/nonbonded_culling.yaml";
+    let topology = Topology::from_file(file).unwrap();
+    let builder = HamiltonianBuilder::from_file(file)
+        .unwrap()
+        .pairpot_builder
+        .unwrap();
+    let medium = interatomic::coulomb::Medium::new(
+        298.15,
+        interatomic::coulomb::permittivity::Permittivity::Vacuum,
+        None,
+    );
+    let nonbonded = NonbondedMatrix::new(&builder, &topology, Some(medium)).unwrap();
+
+    let mut rng = rand::thread_rng();
+    let system = Backend::from_raw_parts(
+        Arc::new(topology),
+        Cell::Cuboid(Cuboid::cubic(60.0)),
+        RefCell::new(Hamiltonian::from(vec![nonbonded.clone().into()])),
+        None,
+        &mut rng,
+    )
+    .unwrap();
+
+    (system, nonbonded)
+}
+
+#[test]
+fn cutoff_culling_is_lossless_and_gated() {
+    let (system, base) = culling_system();
+    assert_approx_eq!(f64, base.required_cull_cutoff(), 6.0);
+
+    // Culling acts in the full-energy (SoA) path, so evaluate via `energy`.
+    let everything = Change::Everything;
+    let baseline = base.energy(&system, &everything);
+
+    // A cutoff at the longest pair range only culls pairs that contribute zero.
+    let mut safe = base.clone();
+    safe.set_cutoff(6.0);
+    assert_approx_eq!(f64, safe.energy(&system, &everything), baseline);
+
+    // A too-short cutoff drops genuinely in-range interactions — proves culling
+    // is active and that the build-time guard against it is meaningful.
+    let mut too_short = base.clone();
+    too_short.set_cutoff(2.0);
+    assert!((too_short.energy(&system, &everything) - baseline).abs() > 1e-6);
+
+    // bounding_spheres = false makes any cutoff inert.
+    let mut disabled = base.clone();
+    disabled.set_cutoff(2.0);
+    disabled.set_bounding_spheres(false);
+    assert_approx_eq!(f64, disabled.energy(&system, &everything), baseline);
+}
+
+#[test]
+fn cutoff_validation_rejects_too_short() {
+    let file = "tests/files/nonbonded_culling.yaml";
+    let topology = Topology::from_file(file).unwrap();
+    let mut builder = HamiltonianBuilder::from_file(file).unwrap();
+    let medium = interatomic::coulomb::Medium::new(
+        298.15,
+        interatomic::coulomb::permittivity::Permittivity::Vacuum,
+        None,
+    );
+
+    // Longest pair range is 6 Å; a 3 Å group cutoff would silently drop interactions.
+    builder.cutoff = Some(3.0);
+    assert!(Hamiltonian::new(&builder, &topology, Some(medium.clone())).is_err());
+
+    // Exactly at the required range is accepted.
+    builder.cutoff = Some(6.0);
+    assert!(Hamiltonian::new(&builder, &topology, Some(medium)).is_ok());
+}
+
+#[test]
+fn cutoff_validation_rejects_unbounded_potential() {
+    // Bare Lennard-Jones has infinite range, so no finite group cutoff is safe.
+    let file = "tests/files/nonbonded_interactions.yaml";
+    let topology = Topology::from_file(file).unwrap();
+    let mut builder = HamiltonianBuilder::from_file(file).unwrap();
+    let medium = interatomic::coulomb::Medium::new(
+        298.15,
+        interatomic::coulomb::permittivity::Permittivity::Vacuum,
+        None,
+    );
+
+    builder.cutoff = Some(50.0);
+    assert!(Hamiltonian::new(&builder, &topology, Some(medium)).is_err());
+}

@@ -128,10 +128,15 @@ energy:
 | `cutoff`           | no       | none    | Group-to-group cutoff (Å); no culling if unset     |
 | `bounding_spheres` | no       | `true`  | Enable bounding-sphere culling (needs `cutoff`)    |
 
-> **Correctness:** `cutoff` must be **≥ the largest per-pair potential cutoff**
+> **Correctness:** `cutoff` must be **≥ the longest per-pair potential range**
 > (here the 50 Å electrostatics), since a culled group pair skips *all* of its
-> atom–atom interactions. A smaller value silently drops interactions still
-> within range. The culling requires `has_com: true` on the molecule.
+> atom–atom interactions. This is checked at startup: a shorter cutoff, or any
+> unbounded potential (e.g. Lennard-Jones or Coulomb without a cutoff), is
+> rejected with an error rather than silently dropping interactions.
+>
+> Culling needs a center of mass, so it only applies to molecules with
+> `has_com: true`, and is skipped on non-orthorhombic cells (where the
+> minimum-image distance between centers is unavailable) to keep energies exact.
 >
 > These keys apply only when no `spline` section is present. A spline carries
 > its own `cutoff`/`bounding_spheres`, and these are ignored in that case.

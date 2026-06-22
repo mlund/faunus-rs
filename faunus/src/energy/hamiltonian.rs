@@ -145,12 +145,38 @@ impl Hamiltonian {
             Ok(splined.into())
         } else {
             if let Some(cutoff) = builder.cutoff {
-                nonbonded.set_cutoff(cutoff);
-                nonbonded.set_bounding_spheres(builder.bounding_spheres);
-                log::info!(
-                    "Group-to-group cutoff culling enabled (cutoff={cutoff}, bounding_spheres={})",
-                    builder.bounding_spheres
+                // The documented exactness condition, enforced rather than trusted:
+                // a culled group pair drops *all* its atom-atom terms, so the cutoff
+                // must reach past the longest-ranged pair potential.
+                let required = nonbonded.required_cull_cutoff();
+                anyhow::ensure!(
+                    required.is_finite(),
+                    "energy.cutoff is set but a pair potential has unbounded range \
+                     (e.g. Lennard-Jones or Coulomb without a cutoff); group-to-group \
+                     culling cannot be exact. Remove energy.cutoff or give every \
+                     potential a cutoff."
                 );
+                anyhow::ensure!(
+                    cutoff >= required,
+                    "energy.cutoff ({cutoff} Å) is shorter than the longest pair-potential \
+                     range ({required} Å); culling would drop interactions still in range. \
+                     Use a cutoff of at least {required} Å."
+                );
+
+                if !builder.bounding_spheres {
+                    log::warn!(
+                        "energy.cutoff ({cutoff} Å) is set but bounding_spheres is false; \
+                         no group-to-group culling will be applied."
+                    );
+                } else if topology.moleculekinds().iter().any(|m| m.has_com()) {
+                    nonbonded.set_cutoff(cutoff);
+                    log::info!("Group-to-group cutoff culling enabled (cutoff = {cutoff} Å)");
+                } else {
+                    log::warn!(
+                        "energy.cutoff ({cutoff} Å) is set but no molecule has has_com: true; \
+                         group-to-group culling will not be applied."
+                    );
+                }
             }
             Ok(nonbonded.into())
         }

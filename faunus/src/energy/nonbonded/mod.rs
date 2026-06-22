@@ -387,9 +387,8 @@ impl<P> NonbondedMatrix<P> {
     /// Set the global interaction cutoff used for group-to-group culling.
     ///
     /// Culling only fires when both this cutoff is set and bounding spheres are
-    /// enabled. To stay exact, the cutoff must be ≥ the largest per-pair
-    /// potential cutoff, since a culled group pair skips *all* of its atom-atom
-    /// interactions.
+    /// enabled. To stay exact, the cutoff must be ≥ [`Self::required_cull_cutoff`],
+    /// since a culled group pair skips *all* of its atom-atom interactions.
     pub(crate) fn set_cutoff(&mut self, cutoff: f64) {
         self.cutoff = Some(cutoff);
     }
@@ -431,6 +430,16 @@ impl<P> NonbondedMatrix<P> {
 }
 
 impl NonbondedMatrix {
+    /// Smallest group-to-group cutoff that keeps culling exact: the longest
+    /// interaction range over every atom-type pair. Infinite if any pair
+    /// potential is unbounded (e.g. bare Lennard-Jones or un-cutoff Coulomb).
+    pub(crate) fn required_cull_cutoff(&self) -> f64 {
+        self.potentials
+            .iter()
+            .map(PairPot::max_cutoff)
+            .fold(0.0, f64::max)
+    }
+
     /// Create from YAML file and a topology
     ///
     /// Can be used to generate a new `EnergyTerm` with:
@@ -593,11 +602,10 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
         let threshold_sq = threshold * threshold;
         let dist_sq = match pbc {
             Some(pbc) => pbc.distance_squared(com_i.x, com_i.y, com_i.z, com_j.x, com_j.y, com_j.z),
-            None => {
-                // Non-orthorhombic fallback (rare)
-                let d = com_i - com_j;
-                d.x * d.x + d.y * d.y + d.z * d.z
-            }
+            // Without minimum-image support (non-orthorhombic cells) a plain
+            // COM difference can exceed the true wrapped distance, which would
+            // cull genuinely interacting pairs. Skip culling to stay exact.
+            None => return false,
         };
         dist_sq > threshold_sq
     }
