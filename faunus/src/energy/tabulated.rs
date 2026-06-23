@@ -8,29 +8,65 @@ use super::nonbonded::cache::GroupEnergyCache;
 use crate::cell::BoundaryConditions;
 use crate::{Change, Context, GroupChange};
 use anyhow::Context as _;
+use icotable::lookup::{Lookup3D, Lookup6D, TabulatedInteraction};
 use icotable::{f16, PointGroup, Table3DAdaptive, Table6DAdaptive, Table6DFlat, Vector3};
 use serde::{Deserialize, Serialize};
 use std::cell::Cell;
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 
-/// Wrapper supporting flat 6D (legacy), adaptive 6D, and adaptive 3D table formats.
+/// The two 6D table formats (flat is legacy, adaptive is current) behind a single
+/// [`Lookup6D`] type, so the energy code is agnostic to the storage format.
 #[derive(Clone, Debug)]
-enum TableKind {
-    Flat6D(Table6DFlat<f16>),
-    Adaptive6D(Table6DAdaptive<f32>),
-    Adaptive3D(Table3DAdaptive<f32>),
+enum Table6D {
+    Flat(Table6DFlat<f16>),
+    Adaptive(Table6DAdaptive<f32>),
 }
 
-/// Dispatch a method or field access across all `TableKind` variants.
-macro_rules! dispatch_table {
-    ($self:expr, |$t:ident| $body:expr) => {
-        match $self {
-            TableKind::Flat6D($t) => $body,
-            TableKind::Adaptive6D($t) => $body,
-            TableKind::Adaptive3D($t) => $body,
+impl TabulatedInteraction for Table6D {
+    fn r_range(&self) -> (f64, f64) {
+        match self {
+            Self::Flat(t) => t.r_range(),
+            Self::Adaptive(t) => t.r_range(),
         }
-    };
+    }
+    fn metadata(&self) -> Option<&icotable::TableMetadata> {
+        match self {
+            Self::Flat(t) => t.metadata(),
+            Self::Adaptive(t) => t.metadata(),
+        }
+    }
+}
+
+impl Lookup6D for Table6D {
+    fn lookup(&self, r: f64, omega: f64, dir_a: &Vector3, dir_b: &Vector3, beta: Option<f64>) -> f64 {
+        match self {
+            Self::Flat(t) => t.lookup(r, omega, dir_a, dir_b, beta),
+            Self::Adaptive(t) => t.lookup(r, omega, dir_a, dir_b, beta),
+        }
+    }
+}
+
+/// A loaded table, split by dimensionality (6D molecule-molecule vs 3D molecule-atom).
+#[derive(Clone, Debug)]
+enum TableKind {
+    SixD(Table6D),
+    ThreeD(Table3DAdaptive<f32>),
+}
+
+impl TabulatedInteraction for TableKind {
+    fn r_range(&self) -> (f64, f64) {
+        match self {
+            Self::SixD(t) => t.r_range(),
+            Self::ThreeD(t) => t.r_range(),
+        }
+    }
+    fn metadata(&self) -> Option<&icotable::TableMetadata> {
+        match self {
+            Self::SixD(t) => t.metadata(),
+            Self::ThreeD(t) => t.metadata(),
+        }
+    }
 }
 
 impl TableKind {
@@ -38,62 +74,22 @@ impl TableKind {
     /// flat is legacy and only attempted as fallback.
     fn load_6d(path: &std::path::Path) -> anyhow::Result<Self> {
         match Table6DAdaptive::<f32>::load(path) {
-            Ok(t) => Ok(Self::Adaptive6D(t)),
-            Err(_) => Ok(Self::Flat6D(Table6DFlat::<f16>::load(path)?)),
+            Ok(t) => Ok(Self::SixD(Table6D::Adaptive(t))),
+            Err(_) => Ok(Self::SixD(Table6D::Flat(Table6DFlat::<f16>::load(path)?))),
         }
     }
 
     /// Load a 3D adaptive table file.
     fn load_3d(path: &std::path::Path) -> anyhow::Result<Self> {
-        Ok(Self::Adaptive3D(Table3DAdaptive::<f32>::load(path)?))
-    }
-
-    fn is_3d(&self) -> bool {
-        matches!(self, Self::Adaptive3D(_))
-    }
-
-    fn rmin(&self) -> f64 {
-        dispatch_table!(self, |t| t.rmin)
-    }
-
-    fn rmax(&self) -> f64 {
-        dispatch_table!(self, |t| t.rmax)
-    }
-
-    fn tail_energy(&self, r: f64) -> f64 {
-        dispatch_table!(self, |t| t.tail_energy(r))
+        Ok(Self::ThreeD(Table3DAdaptive::<f32>::load(path)?))
     }
 
     fn validate_metadata(&self) -> anyhow::Result<()> {
-        dispatch_table!(self, |t| t.validate_metadata())
-    }
-
-    /// 6D Boltzmann-weighted lookup. Panics if called on a 3D table.
-    fn lookup_boltzmann_6d(
-        &self,
-        r: f64,
-        omega: f64,
-        dir_a: &Vector3,
-        dir_b: &Vector3,
-        inv_thermal_energy: f64,
-    ) -> f64 {
         match self {
-            Self::Flat6D(t) => t.lookup_boltzmann(r, omega, dir_a, dir_b, inv_thermal_energy),
-            Self::Adaptive6D(t) => t.lookup_boltzmann(r, omega, dir_a, dir_b, inv_thermal_energy),
-            Self::Adaptive3D(_) => unreachable!("6D lookup on 3D table"),
+            Self::SixD(Table6D::Flat(t)) => t.validate_metadata(),
+            Self::SixD(Table6D::Adaptive(t)) => t.validate_metadata(),
+            Self::ThreeD(t) => t.validate_metadata(),
         }
-    }
-
-    /// 3D Boltzmann-weighted lookup. Panics if called on a 6D table.
-    fn lookup_boltzmann_3d(&self, r: f64, dir: &Vector3, inv_thermal_energy: f64) -> f64 {
-        match self {
-            Self::Adaptive3D(t) => t.lookup_boltzmann(r, dir, inv_thermal_energy),
-            _ => unreachable!("3D lookup on 6D table"),
-        }
-    }
-
-    fn metadata(&self) -> Option<&icotable::TableMetadata> {
-        dispatch_table!(self, |t| t.metadata.as_ref())
     }
 
     /// Temperature (K) used when generating the table, if stored in metadata.
@@ -109,17 +105,17 @@ impl TableKind {
     /// Summary string for logging.
     fn summary(&self) -> String {
         match self {
-            Self::Flat6D(t) => format!(
+            Self::SixD(Table6D::Flat(t)) => format!(
                 "{} R-bins, {} omega-bins, {} vertices (flat 6D)",
                 t.n_r, t.n_omega, t.n_vertices
             ),
-            Self::Adaptive6D(t) => format!(
+            Self::SixD(Table6D::Adaptive(t)) => format!(
                 "{} R-bins, {} omega-bins, {} levels (adaptive 6D)",
                 t.n_r,
                 t.n_omega,
                 t.levels.len()
             ),
-            Self::Adaptive3D(t) => {
+            Self::ThreeD(t) => {
                 format!("{} R-bins, {} levels (adaptive 3D)", t.n_r, t.levels.len())
             }
         }
@@ -392,23 +388,24 @@ impl TabulatedEnergy {
 
         let sep = context.cell().distance(com_a, com_b);
         let r = sep.norm();
-        if r > entry.table.rmax() {
+        let (rmin, rmax) = entry.table.r_range();
+        if r > rmax {
             return entry.table.tail_energy(r);
         }
-        if r < entry.table.rmin() {
+        if r < rmin {
             return f64::INFINITY;
         }
 
-        if entry.table.is_3d() {
-            return self.pair_energy_3d(entry, swapped, &sep, r, ga, gb);
+        match &*entry.table {
+            TableKind::SixD(table) => self.pair_energy_6d(entry, table, swapped, &sep, r, ga, gb),
+            TableKind::ThreeD(table) => self.pair_energy_3d(table, swapped, &sep, r, ga, gb),
         }
-        self.pair_energy_6d(entry, swapped, &sep, r, ga, gb)
     }
 
     /// 3D lookup: rigid molecule orientation + separation direction.
     fn pair_energy_3d(
         &self,
-        entry: &Entry,
+        table: &Table3DAdaptive<f32>,
         swapped: bool,
         sep: &crate::Point,
         r: f64,
@@ -423,15 +420,14 @@ impl TabulatedEnergy {
         let dir = rigid_group
             .quaternion()
             .inverse_transform_vector(&(oriented_sep / r));
-        entry
-            .table
-            .lookup_boltzmann_3d(r, &dir, self.inv_thermal_energy)
+        table.lookup(r, &dir, Some(self.inv_thermal_energy))
     }
 
     /// 6D lookup: two rigid molecule orientations + separation.
     fn pair_energy_6d(
         &self,
         entry: &Entry,
+        table: &Table6D,
         swapped: bool,
         sep: &crate::Point,
         r: f64,
@@ -447,10 +443,7 @@ impl TabulatedEnergy {
         };
 
         let (_r, omega, dir_a, dir_b) = icotable::inverse_orient(&oriented_sep, q_a, q_b);
-        let e_forward =
-            entry
-                .table
-                .lookup_boltzmann_6d(r, omega, &dir_a, &dir_b, self.inv_thermal_energy);
+        let e_forward = table.lookup(r, omega, &dir_a, &dir_b, Some(self.inv_thermal_energy));
 
         // Hetero-dimer, pre-symmetrized, or user opted into single lookup
         if entry.mol_id_a != entry.mol_id_b || entry.skip_swap_averaging {
@@ -460,10 +453,7 @@ impl TabulatedEnergy {
         // Self-interaction: average both perspectives to restore exchange
         // symmetry broken by interpolation on different angular grid points.
         let (_r, omega2, dir_a2, dir_b2) = icotable::inverse_orient(&(-oriented_sep), q_b, q_a);
-        let e_reverse =
-            entry
-                .table
-                .lookup_boltzmann_6d(r, omega2, &dir_a2, &dir_b2, self.inv_thermal_energy);
+        let e_reverse = table.lookup(r, omega2, &dir_a2, &dir_b2, Some(self.inv_thermal_energy));
 
         // Track asymmetry in Boltzmann space: repulsive states (exp≈0)
         // contribute negligibly, isolating the interpolation error at
