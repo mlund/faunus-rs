@@ -47,6 +47,32 @@ impl Lookup6D for Table6D {
     }
 }
 
+impl Table6D {
+    /// Validate the table's stored metadata (delegates to the active format).
+    fn validate_metadata(&self) -> anyhow::Result<()> {
+        match self {
+            Self::Flat(t) => t.validate_metadata(),
+            Self::Adaptive(t) => t.validate_metadata(),
+        }
+    }
+
+    /// One-line summary for logging.
+    fn summary(&self) -> String {
+        match self {
+            Self::Flat(t) => format!(
+                "{} R-bins, {} omega-bins, {} vertices (flat 6D)",
+                t.n_r, t.n_omega, t.n_vertices
+            ),
+            Self::Adaptive(t) => format!(
+                "{} R-bins, {} omega-bins, {} levels (adaptive 6D)",
+                t.n_r,
+                t.n_omega,
+                t.levels.len()
+            ),
+        }
+    }
+}
+
 /// A loaded table, split by dimensionality (6D molecule-molecule vs 3D molecule-atom).
 #[derive(Clone, Debug)]
 enum TableKind {
@@ -86,8 +112,7 @@ impl TableKind {
 
     fn validate_metadata(&self) -> anyhow::Result<()> {
         match self {
-            Self::SixD(Table6D::Flat(t)) => t.validate_metadata(),
-            Self::SixD(Table6D::Adaptive(t)) => t.validate_metadata(),
+            Self::SixD(t) => t.validate_metadata(),
             Self::ThreeD(t) => t.validate_metadata(),
         }
     }
@@ -105,16 +130,7 @@ impl TableKind {
     /// Summary string for logging.
     fn summary(&self) -> String {
         match self {
-            Self::SixD(Table6D::Flat(t)) => format!(
-                "{} R-bins, {} omega-bins, {} vertices (flat 6D)",
-                t.n_r, t.n_omega, t.n_vertices
-            ),
-            Self::SixD(Table6D::Adaptive(t)) => format!(
-                "{} R-bins, {} omega-bins, {} levels (adaptive 6D)",
-                t.n_r,
-                t.n_omega,
-                t.levels.len()
-            ),
+            Self::SixD(t) => t.summary(),
             Self::ThreeD(t) => {
                 format!("{} R-bins, {} levels (adaptive 3D)", t.n_r, t.levels.len())
             }
@@ -424,6 +440,8 @@ impl TabulatedEnergy {
     }
 
     /// 6D lookup: two rigid molecule orientations + separation.
+    // `table` is pre-matched from `entry` by the caller to avoid re-dispatching.
+    #[allow(clippy::too_many_arguments)]
     fn pair_energy_6d(
         &self,
         entry: &Entry,
