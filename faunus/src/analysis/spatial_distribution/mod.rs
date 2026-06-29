@@ -11,7 +11,7 @@ use super::{Analyze, Frequency};
 use crate::auxiliary::MappingExt;
 use crate::cell::{BoundaryConditions, Shape};
 use crate::group::Group;
-use crate::selection::{Selection, SelectionCache};
+use crate::selection::Selection;
 use crate::{Context, Point};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
@@ -95,8 +95,6 @@ impl SpatialDistributionBuilder {
         Ok(SpatialDistribution {
             reference: self.reference.clone(),
             selection: self.selection.clone(),
-            reference_cache: SelectionCache::default(),
-            target_cache: SelectionCache::default(),
             file: self.file.clone(),
             grid: grid.clone(),
             counts: vec![0.0; grid.num_voxels()],
@@ -114,8 +112,6 @@ impl SpatialDistributionBuilder {
 pub struct SpatialDistribution {
     reference: Selection,
     selection: Selection,
-    reference_cache: SelectionCache,
-    target_cache: SelectionCache,
     file: PathBuf,
     grid: Grid,
     counts: Vec<f64>,
@@ -253,15 +249,11 @@ impl<T: Context> Analyze<T> for SpatialDistribution {
     }
 
     fn perform_sample(&mut self, context: &T, _step: usize, weight: f64) -> Result<()> {
-        let generation = context.group_lists_generation();
-        let reference_groups = self
-            .reference_cache
-            .get_or_resolve(generation, || context.resolve_groups_live(&self.reference))
-            .to_vec();
-        let target_atoms = self
-            .target_cache
-            .get_or_resolve(generation, || context.resolve_atoms_live(&self.selection))
-            .to_vec();
+        let reference_groups = context.resolve_groups_live(&self.reference);
+        if !reference_groups.is_empty() {
+            validate_reference_groups(context, &reference_groups, self.reference.source())?;
+        }
+        let target_atoms = context.resolve_atoms_live(&self.selection);
 
         let owners = atom_owners(context.groups(), context.num_particles());
         let volume = context.cell().volume();
@@ -337,6 +329,7 @@ mod tests {
     use crate::backend::Backend;
     use crate::group::GroupCollection;
     use crate::UnitQuaternion;
+    use crate::WithTopology;
     use approx::assert_relative_eq;
     use nalgebra::Vector3;
 
@@ -345,6 +338,7 @@ mod tests {
 atoms:
   - {name: R, mass: 1.0, charge: 0.0}
   - {name: Na, mass: 1.0, charge: 1.0}
+  - {name: Cl, mass: 1.0, charge: -1.0}
 molecules:
   - name: REF
     degrees_of_freedom: Rigid
@@ -546,12 +540,39 @@ frequency: !Every 1
     }
 
     #[test]
+    fn atomtype_selection_is_resolved_after_atom_kind_changes() {
+        let mut context = test_context();
+        let builder: SpatialDistributionBuilder = serde_yml::from_str(
+            r#"
+reference: "molecule REF"
+selection: "atomtype Na"
+resolution: 1.0
+padding: 3.0
+bulk_normalize: false
+frequency: !Every 1
+"#,
+        )
+        .unwrap();
+        let mut sdf = builder.build(&context).unwrap();
+        sdf.perform_sample(&context, 0, 1.0).unwrap();
+
+        let cl_id = context
+            .topology_ref()
+            .atomkinds()
+            .iter()
+            .position(|kind| kind.name() == "Cl")
+            .unwrap();
+        context.set_atom_kind(2, cl_id);
+        sdf.perform_sample(&context, 1, 1.0).unwrap();
+
+        assert_relative_eq!(sdf.counts.iter().sum::<f64>(), 3.0);
+    }
+
+    #[test]
     fn bulk_normalized_uniform_counts_are_one() {
         let mut sdf = SpatialDistribution {
             reference: Selection::parse("molecule REF").unwrap(),
             selection: Selection::parse("atomtype Na").unwrap(),
-            reference_cache: SelectionCache::default(),
-            target_cache: SelectionCache::default(),
             file: PathBuf::from("spatial.dx"),
             grid: Grid::from_points(&[Point::new(0.25, 0.25, 0.25)], 1.0, 0.25).unwrap(),
             counts: vec![0.0; 1],

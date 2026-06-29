@@ -47,7 +47,11 @@ pub(super) fn write_to(
     let [nx, ny, nz] = grid.dims();
     writeln!(out, "# Faunus spatial distribution function ({label})")?;
     writeln!(out, "object 1 class gridpositions counts {nx} {ny} {nz}")?;
-    write_point(out, "origin", grid.origin())?;
+    write_point(
+        out,
+        "origin",
+        grid.origin() + Point::repeat(0.5 * grid.spacing()),
+    )?;
     write_point(out, "delta", Point::new(grid.spacing(), 0.0, 0.0))?;
     write_point(out, "delta", Point::new(0.0, grid.spacing(), 0.0))?;
     write_point(out, "delta", Point::new(0.0, 0.0, grid.spacing()))?;
@@ -83,7 +87,7 @@ mod tests {
         write_to(&mut bytes, &grid, &values, "relative_density").unwrap();
         let text = String::from_utf8(bytes).unwrap();
         assert!(text.contains("object 1 class gridpositions counts 1 1 1"));
-        assert!(text.contains("origin 0.00000000 0.00000000 0.00000000"));
+        assert!(text.contains("origin 0.25000000 0.25000000 0.25000000"));
         assert!(text.contains("delta 0.50000000 0.00000000 0.00000000"));
         assert!(text.contains("object 3 class array type double rank 0 items 1 data follows"));
         assert!(text.contains(" 0.00000000e0\n"));
