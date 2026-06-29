@@ -32,7 +32,7 @@ physical_constants = "0.5.0"
 rand = "0.8"
 serde = { version = "1.0", features = ["derive", "rc"] }
 serde_with = "3.8.1"
-serde_yml = "0.0.12"
+serde_yml = { version = "0.10.4", package = "yaml_serde" }
 typetag = "0.2"
 unordered-pair = { version = "0.2.4", features = ["serde"] }
 validator = { version = "0.20", features = ["derive"] }
