@@ -81,7 +81,7 @@ mod tests {
 
     #[test]
     fn writes_header_and_x_fastest_data_order() {
-        let grid = Grid::from_points(&[Point::new(0.25, 0.25, 0.25)], 0.5, 0.25).unwrap();
+        let grid = Grid::from_points(&[Point::new(0.25, 0.25, 0.25)], 0.5, 0.0).unwrap();
         let values: Vec<f64> = (0..grid.num_voxels()).map(|i| i as f64).collect();
         let mut bytes = Vec::new();
         write_to(&mut bytes, &grid, &values, "relative_density").unwrap();

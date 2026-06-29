@@ -38,21 +38,22 @@ impl Grid {
         lower -= Point::repeat(padding);
         upper += Point::repeat(padding);
 
-        let origin = Point::new(
-            (lower.x / spacing).floor() * spacing,
-            (lower.y / spacing).floor() * spacing,
-            (lower.z / spacing).floor() * spacing,
-        );
-        let high = Point::new(
-            (upper.x / spacing).ceil() * spacing,
-            (upper.y / spacing).ceil() * spacing,
-            (upper.z / spacing).ceil() * spacing,
-        );
+        let low = [
+            (lower.x / spacing).floor(),
+            (lower.y / spacing).floor(),
+            (lower.z / spacing).floor(),
+        ];
+        let high = [
+            (upper.x / spacing).floor(),
+            (upper.y / spacing).floor(),
+            (upper.z / spacing).floor(),
+        ];
 
+        let origin = Point::new(low[0] * spacing, low[1] * spacing, low[2] * spacing);
         let dims = [
-            ((high.x - origin.x) / spacing).ceil() as usize,
-            ((high.y - origin.y) / spacing).ceil() as usize,
-            ((high.z - origin.z) / spacing).ceil() as usize,
+            (high[0] - low[0] + 1.0) as usize,
+            (high[1] - low[1] + 1.0) as usize,
+            (high[2] - low[2] + 1.0) as usize,
         ];
         anyhow::ensure!(
             dims.iter().all(|&n| n > 0),
@@ -127,18 +128,28 @@ mod tests {
         assert_relative_eq!(grid.origin().x, -2.0);
         assert_relative_eq!(grid.origin().y, -1.0);
         assert_relative_eq!(grid.origin().z, 0.0);
-        assert_eq!(grid.dims(), [5, 5, 4]);
+        assert_eq!(grid.dims(), [5, 5, 5]);
         assert_relative_eq!(grid.voxel_volume(), 1.0);
     }
 
     #[test]
-    fn indexing_is_x_fastest_and_half_open() {
+    fn indexing_is_x_fastest_and_includes_padded_upper_bound() {
         let grid = Grid::from_points(&[Point::zeros()], 1.0, 1.0).unwrap();
-        assert_eq!(grid.dims(), [2, 2, 2]);
+        assert_eq!(grid.dims(), [3, 3, 3]);
         assert_eq!(grid.index_of(&Point::new(-1.0, -1.0, -1.0)), Some(0));
         assert_eq!(grid.index_of(&Point::new(0.1, -1.0, -1.0)), Some(1));
-        assert_eq!(grid.index_of(&Point::new(-1.0, 0.1, -1.0)), Some(2));
-        assert_eq!(grid.index_of(&Point::new(-1.0, -1.0, 0.1)), Some(4));
-        assert_eq!(grid.index_of(&Point::new(1.0, 0.0, 0.0)), None);
+        assert_eq!(grid.index_of(&Point::new(-1.0, 0.1, -1.0)), Some(3));
+        assert_eq!(grid.index_of(&Point::new(-1.0, -1.0, 0.1)), Some(9));
+        assert_eq!(grid.index_of(&Point::new(1.0, 0.0, 0.0)), Some(14));
+        assert_eq!(grid.index_of(&Point::new(2.0, 0.0, 0.0)), None);
+    }
+
+    #[test]
+    fn exact_max_bound_is_representable_with_zero_padding() {
+        let grid =
+            Grid::from_points(&[Point::zeros(), Point::new(1.0, 0.0, 0.0)], 1.0, 0.0).unwrap();
+        assert_eq!(grid.dims(), [2, 1, 1]);
+        assert_eq!(grid.index_of(&Point::zeros()), Some(0));
+        assert_eq!(grid.index_of(&Point::new(1.0, 0.0, 0.0)), Some(1));
     }
 }
