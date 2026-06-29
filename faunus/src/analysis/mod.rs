@@ -34,6 +34,7 @@ pub mod reweight;
 mod rotational_diffusion;
 mod scaled_widom_insertion;
 mod shape;
+mod spatial_distribution;
 mod structure_writer;
 mod virtual_translate;
 mod virtual_volume_move;
@@ -47,6 +48,7 @@ pub use radial_distribution::{RadialDistribution, RadialDistributionBuilder};
 pub use rotational_diffusion::{RotationalDiffusion, RotationalDiffusionBuilder};
 pub use scaled_widom_insertion::{ScaledWidomInsertion, ScaledWidomInsertionBuilder};
 pub use shape::{ShapeAnalysis, ShapeAnalysisBuilder};
+pub use spatial_distribution::{SpatialDistribution, SpatialDistributionBuilder};
 pub use structure_writer::{StructureWriter, StructureWriterBuilder};
 pub use virtual_translate::{VirtualTranslate, VirtualTranslateBuilder};
 pub use virtual_volume_move::{VirtualVolumeMove, VirtualVolumeMoveBuilder};
@@ -115,6 +117,8 @@ pub enum AnalysisBuilder {
     PolymerShape(ShapeAnalysisBuilder),
     /// Radial distribution function g(r)
     RadialDistribution(RadialDistributionBuilder),
+    /// Spatial distribution function on a body-fixed grid
+    SpatialDistribution(SpatialDistributionBuilder),
     /// Energy time series (total or partial)
     Energy(EnergyAnalysisBuilder),
     /// Mean of one CV binned along another
@@ -188,6 +192,7 @@ impl AnalysisBuilder {
             Self::CollectiveVariable(b) => b.apply_output_dir(dir),
             Self::PolymerShape(b) => b.apply_output_dir(dir),
             Self::RadialDistribution(b) => b.apply_output_dir(dir),
+            Self::SpatialDistribution(b) => b.apply_output_dir(dir),
             Self::Energy(b) => b.apply_output_dir(dir),
             Self::MeanAlongCoordinate(b) => b.apply_output_dir(dir),
             Self::ScaledWidomInsertion(b) => b.apply_output_dir(dir),
@@ -215,6 +220,7 @@ impl AnalysisBuilder {
             Self::CollectiveVariable(builder) => Box::new(builder.build(context)?),
             Self::PolymerShape(builder) => Box::new(builder.build(context)?),
             Self::RadialDistribution(builder) => Box::new(builder.build(context)?),
+            Self::SpatialDistribution(builder) => Box::new(builder.build(context)?),
             Self::Energy(builder) => Box::new(builder.build(context)?),
             Self::MeanAlongCoordinate(builder) => Box::new(builder.build(context)?),
             Self::ScaledWidomInsertion(builder) => Box::new(builder.build(context, medium)?),
@@ -410,6 +416,11 @@ mod tests {
   selections: ["atomtype Na", "atomtype Cl"]
   file: rdf.dat
   dr: 0.1
+  frequency: !Every 100
+- !SpatialDistribution
+  reference: "all"
+  selection: "atomtype Na"
+  file: spatial.dx
   frequency: !Every 100
 - !CollectiveVariable
   property: volume

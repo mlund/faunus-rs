@@ -370,6 +370,12 @@ mod tests {
     }
 
     #[test]
+    fn parse_quoted_molecule_keyword_name() {
+        let expr = parse("molecule \"protein\"").unwrap();
+        assert!(matches!(expr, Expr::Molecule(_)));
+    }
+
+    #[test]
     fn parse_missing_paren() {
         assert!(parse("(chain A").is_err());
     }

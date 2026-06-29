@@ -33,6 +33,11 @@ Keyword              | Aliases                       | Description
 `group`              |                               | Group index (ranges with `to` or `:`)
 `molecule`           |                               | Molecule kind name
 
+If a molecule kind has the same name as a reserved selection keyword, quote the
+name in selection expressions. For example, a molecule named `protein` must be
+selected as `molecule "protein"`; unquoted `molecule protein` treats `protein`
+as the built-in protein selector.
+
 #### Glob patterns
 
 Name arguments support glob wildcards:

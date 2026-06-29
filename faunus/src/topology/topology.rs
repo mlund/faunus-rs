@@ -345,6 +345,14 @@ impl Topology {
             }
 
             molecule.set_id(i);
+            if let Some(keyword) = crate::selection::reserved_keyword_name(molecule.name()) {
+                let name = molecule.name();
+                log::warn!(
+                    "Molecule kind '{name}' matches reserved selection keyword `{keyword}`; \
+                     unquoted selections like `molecule {name}` are parsed as selection syntax. \
+                     Quote the molecule name in selection fields, e.g. `reference: 'molecule \"{name}\"'`."
+                );
+            }
 
             // Resolve atom indices before validation so semantics can be determined
             let indices = molecule
