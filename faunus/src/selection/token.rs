@@ -71,7 +71,14 @@ impl Token {
 
 /// Convert identifier string to keyword token or leave as identifier.
 fn ident_to_token(ident: String) -> Token {
-    match ident.to_lowercase().as_str() {
+    match keyword_token(ident.to_lowercase().as_str()) {
+        Some(token) => token,
+        None => Token::Ident(ident),
+    }
+}
+
+fn keyword_token(ident: &str) -> Option<Token> {
+    Some(match ident {
         "chain" | "segid" => Token::Chain,
         "resname" | "resn" => Token::Resname,
         "resid" | "resi" | "resseq" | "resnum" => Token::Resid,
@@ -98,7 +105,40 @@ fn ident_to_token(ident: String) -> Token {
         "or" | "||" => Token::Or,
         "not" | "!" => Token::Not,
         "to" => Token::To,
-        _ => Token::Ident(ident),
+        _ => return None,
+    })
+}
+
+/// Return the canonical reserved selection keyword matching `name`, if any.
+pub(super) fn reserved_keyword_name(name: &str) -> Option<&'static str> {
+    match keyword_token(name.to_lowercase().as_str())? {
+        Token::Chain => Some("chain"),
+        Token::Resname => Some("resname"),
+        Token::Resid => Some("resid"),
+        Token::Name => Some("name"),
+        Token::Element => Some("element"),
+        Token::Atomtype => Some("atomtype"),
+        Token::Atomid => Some("atomid"),
+        Token::Index => Some("index"),
+        Token::Group => Some("group"),
+        Token::Molecule => Some("molecule"),
+        Token::Protein => Some("protein"),
+        Token::Backbone => Some("backbone"),
+        Token::Sidechain => Some("sidechain"),
+        Token::Nucleic => Some("nucleic"),
+        Token::Hydrophobic => Some("hydrophobic"),
+        Token::Aromatic => Some("aromatic"),
+        Token::Acidic => Some("acidic"),
+        Token::Basic => Some("basic"),
+        Token::Polar => Some("polar"),
+        Token::Charged => Some("charged"),
+        Token::All => Some("all"),
+        Token::None => Some("none"),
+        Token::And => Some("and"),
+        Token::Or => Some("or"),
+        Token::Not => Some("not"),
+        Token::To => Some("to"),
+        Token::Ident(_) | Token::Number(_) | Token::LParen | Token::RParen | Token::Colon => None,
     }
 }
 
@@ -319,5 +359,14 @@ mod tests {
     fn tokenize_quoted() {
         let tokens = tokenize("name \"CA\"").unwrap();
         assert!(matches!(tokens[1].0, Token::Ident(ref s) if s == "CA"));
+    }
+
+    #[test]
+    fn reserved_keyword_names_match_tokenizer_aliases() {
+        assert_eq!(reserved_keyword_name("protein"), Some("protein"));
+        assert_eq!(reserved_keyword_name("Protein"), Some("protein"));
+        assert_eq!(reserved_keyword_name("type"), Some("atomtype"));
+        assert_eq!(reserved_keyword_name("everything"), Some("all"));
+        assert_eq!(reserved_keyword_name("water"), None);
     }
 }

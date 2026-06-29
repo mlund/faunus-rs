@@ -29,7 +29,8 @@ Frequency         | Description
 
 ### Output file formats
 
-The column-data format is inferred from the file extension:
+Most analysis files are column data. For those files, the format is inferred
+from the file extension:
 
 Extension     | Format
 ------------- | -------------------------------------------
@@ -38,6 +39,8 @@ Extension     | Format
 
 Both formats support transparent gzip compression by appending `.gz`
 (e.g. `energy.dat.gz`).
+
+Grid-based analyses document their own file format.
 
 Loading CSV output in Python:
 
@@ -416,6 +419,66 @@ Key                        | Required | Default               | Description
 `use_com`                  | no       | `false`               | Use center-of-mass distances instead of atom-atom
 `exclude_intramolecular`   | no       | `true` (atom-atom)    | Skip pairs within the same molecule (atom-atom only)
 `dimension`                | no       | `xyz`                 | Axes for distance projection and normalization (`x`, `y`, `z`, `xy`, …)
+
+---
+
+## Spatial Distribution Function
+
+Computes the spatial distribution function (SDF) of an atom selection around a
+rigid molecular reference selection. The result is a scalar grid in the
+reference molecule body frame, averaged over all matching reference molecules
+and all sampled frames.
+
+This is useful for mapping ions or solvent around rigid macromolecules in a
+periodic box. Target positions are measured from each reference center using
+minimum-image periodic displacements and then rotated by the inverse reference
+quaternion before binning.
+
+The reference selection must match rigid molecular groups. Flexible reference
+molecules are not supported by this analysis.
+
+### Example
+
+```yaml
+analysis:
+  - !SpatialDistribution
+    reference: "molecule Macro"
+    selection: "atomtype Na"
+    frequency: !Every 100
+```
+
+### Options
+
+Key                 | Required | Default      | Description
+------------------- | -------- | ------------ | -------------------------------------------
+`reference`         | yes      |              | Molecular group selection defining the body-fixed frame
+`selection`         | yes      |              | Atom selection accumulated on the grid
+`frequency`         | yes      |              | Sample frequency, e.g. `!Every 100`
+`file`              | no       | `spatial.dx` | OpenDX output grid
+`resolution`        | no       | `1.0`        | Cubic grid spacing in Å
+`padding`           | no       | `8.0`        | Extra grid extent around the reference molecule in Å
+`bulk_normalize`    | no       | `true`       | Normalize by bulk density to produce dimensionless relative density
+`exclude_reference` | no       | `true`       | Skip target atoms belonging to the current reference group
+
+The grid bounds are determined from the body-frame coordinates of the active
+reference molecule(s), rounded to the grid spacing and expanded by `padding`.
+The output is written once at the end of the run.
+
+### Normalization
+
+With the default `bulk_normalize: true`, grid values are normalized by the
+instantaneous bulk density of the target selection. A homogeneous ideal gas
+therefore gives SDF ≈ 1. The normalization uses the instantaneous target count,
+reference count, and cell volume at each sample, so it works with GCMC where
+particle numbers fluctuate.
+
+Set `bulk_normalize: false` to write molar concentration in mol/L instead of
+relative density.
+
+### Output
+
+The output file is an OpenDX scalar grid suitable for visualization in VMD and
+PyMOL. Grid coordinates are in the reference body frame, not the lab frame.
 
 ---
 

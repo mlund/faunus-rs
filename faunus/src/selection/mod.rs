@@ -26,6 +26,11 @@ mod token;
 use crate::group::{Group, GroupSelection};
 use crate::topology::Topology;
 
+/// Return the canonical reserved selection keyword matching `name`, if any.
+pub(crate) fn reserved_keyword_name(name: &str) -> Option<&'static str> {
+    token::reserved_keyword_name(name)
+}
+
 /// Selection parsing error.
 #[derive(Debug, Clone)]
 pub struct SelectionError {
