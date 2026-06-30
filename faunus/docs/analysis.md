@@ -455,14 +455,17 @@ Key                 | Required | Default      | Description
 `selection`         | yes      |              | Atom selection accumulated on the grid
 `frequency`         | yes      |              | Sample frequency, e.g. `!Every 100`
 `file`              | no       | `spatial.dx` | OpenDX output grid
+`reference_file`    | no       |              | Optional XYZ structure of the reference molecule, for visualizing the density around it
 `resolution`        | no       | `1.0`        | Cubic grid spacing in Å
-`padding`           | no       | `8.0`        | Extra grid extent around the reference molecule in Å
+`padding`           | no       | `8.0`        | Margin in Å added on every side of the reference molecule's bounding box
 `bulk_normalize`    | no       | `true`       | Normalize by bulk density to produce dimensionless relative density
 `exclude_reference` | no       | `true`       | Skip target atoms belonging to the current reference group
 
-The grid bounds are determined from the body-frame coordinates of the active
-reference molecule(s), rounded to the grid spacing and expanded by `padding`.
-The output is written once at the end of the run.
+The grid is the axis-aligned bounding box of the active reference molecule(s) in
+the body frame, rounded to the grid spacing and enlarged by `padding` on every
+side. Set `reference_file` to also write the reference molecule itself (in the
+same body frame) so it can be overlaid on the density. Output is written once at
+the end of the run.
 
 ### Normalization
 

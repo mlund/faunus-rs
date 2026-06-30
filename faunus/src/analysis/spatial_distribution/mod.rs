@@ -12,6 +12,7 @@ use crate::auxiliary::MappingExt;
 use crate::cell::{BoundaryConditions, Shape};
 use crate::group::Group;
 use crate::selection::Selection;
+use crate::topology::io::{self, StructureData};
 use crate::{Context, Point};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
@@ -35,6 +36,7 @@ const fn default_true() -> bool {
 
 /// YAML builder for [`SpatialDistribution`].
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct SpatialDistributionBuilder {
     /// Molecular group selection defining the reference frame.
     reference: Selection,
@@ -43,10 +45,14 @@ pub struct SpatialDistributionBuilder {
     /// Output file path.
     #[serde(default = "default_file")]
     file: PathBuf,
+    /// Optional structure file (xyz) for the reference molecule, written once in
+    /// the body frame so the density grid can be visualized around it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    reference_file: Option<PathBuf>,
     /// Cubic grid spacing in Å.
     #[serde(default = "default_resolution")]
     resolution: f64,
-    /// Extra grid extent around the reference molecule in Å.
+    /// Padding in Å added on every side of the reference molecule's bounding box.
     #[serde(default = "default_padding")]
     padding: f64,
     /// Normalize by instantaneous bulk density to produce dimensionless SDF.
@@ -61,7 +67,11 @@ pub struct SpatialDistributionBuilder {
 
 impl SpatialDistributionBuilder {
     pub fn apply_output_dir(&mut self, dir: &std::path::Path) -> Result<()> {
-        crate::analysis::prefix_in_place(&mut self.file, dir)
+        crate::analysis::prefix_in_place(&mut self.file, dir)?;
+        if let Some(reference_file) = self.reference_file.as_mut() {
+            crate::analysis::prefix_in_place(reference_file, dir)?;
+        }
+        Ok(())
     }
 
     pub fn build(&self, context: &impl Context) -> Result<SpatialDistribution> {
@@ -92,10 +102,17 @@ impl SpatialDistributionBuilder {
         let grid = Grid::from_points(&reference_points, self.resolution, self.padding)?;
         validate_grid_extent(context, &grid)?;
 
+        let reference_structure = self
+            .reference_file
+            .as_ref()
+            .map(|file| capture_reference_structure(context, reference_groups[0], file.clone()))
+            .transpose()?;
+
         Ok(SpatialDistribution {
             reference: self.reference.clone(),
             selection: self.selection.clone(),
             file: self.file.clone(),
+            reference_structure,
             grid: grid.clone(),
             counts: vec![0.0; grid.num_voxels()],
             normalization: Normalization::default(),
@@ -113,6 +130,8 @@ pub struct SpatialDistribution {
     reference: Selection,
     selection: Selection,
     file: PathBuf,
+    /// Reference molecule snapshot in the body frame, written once for visualization.
+    reference_structure: Option<ReferenceStructure>,
     grid: Grid,
     counts: Vec<f64>,
     normalization: Normalization,
@@ -157,6 +176,63 @@ fn validate_reference_groups(
         );
     }
     Ok(first_molecule)
+}
+
+/// A single reference molecule frozen in the body frame.
+///
+/// The rigid reference geometry is constant, so the snapshot is captured once at
+/// build time and written verbatim, letting the density grid be drawn around it.
+#[derive(Debug)]
+struct ReferenceStructure {
+    file: PathBuf,
+    names: Vec<String>,
+    positions: Vec<Point>,
+}
+
+impl ReferenceStructure {
+    fn write(&self) -> Result<()> {
+        let data = StructureData {
+            names: self.names.clone(),
+            positions: self.positions.clone(),
+            comment: Some("Faunus SDF reference molecule (body frame)".to_owned()),
+            ..Default::default()
+        };
+        io::write_structure_frame(&self.file, &data, false)
+    }
+}
+
+fn capture_reference_structure(
+    context: &impl Context,
+    reference_group: usize,
+    file: PathBuf,
+) -> Result<ReferenceStructure> {
+    let topology = context.topology_ref();
+    let group = &context.groups()[reference_group];
+    let molecule = &topology.moleculekinds()[group.molecule()];
+    let center = group.mass_center().ok_or_else(|| {
+        anyhow::anyhow!("SpatialDistribution: reference group {reference_group} has no mass center")
+    })?;
+
+    let mut names = Vec::new();
+    let mut positions = Vec::new();
+    for atom_index in group.iter_active() {
+        let relative_index = atom_index - group.start();
+        let topology_index = molecule.topology_index(relative_index);
+        names.push(
+            molecule
+                .resolved_atom_name(topology_index, topology.atomkinds())
+                .to_owned(),
+        );
+        let displacement = context
+            .cell()
+            .distance(&context.position(atom_index), center);
+        positions.push(frame::to_body_frame(&displacement, group.quaternion()));
+    }
+    Ok(ReferenceStructure {
+        file,
+        names,
+        positions,
+    })
 }
 
 fn reference_body_points(context: &impl Context, reference_groups: &[usize]) -> Result<Vec<Point>> {
@@ -301,7 +377,11 @@ impl<T: Context> Analyze<T> for SpatialDistribution {
             return Ok(());
         }
         let values = self.normalized_values();
-        opendx::write(&self.file, &self.grid, &values, self.scale.unit_label())
+        opendx::write(&self.file, &self.grid, &values, self.scale.unit_label())?;
+        if let Some(reference_structure) = &self.reference_structure {
+            reference_structure.write()?;
+        }
+        Ok(())
     }
 
     fn to_yaml(&self) -> Option<serde_yml::Value> {
@@ -318,6 +398,12 @@ impl<T: Context> Analyze<T> for SpatialDistribution {
             self.normalization.reference_observations(),
         )?;
         map.try_insert("file", self.file.display().to_string())?;
+        if let Some(reference_structure) = &self.reference_structure {
+            map.try_insert(
+                "reference_file",
+                reference_structure.file.display().to_string(),
+            )?;
+        }
         Some(serde_yml::Value::Mapping(map))
     }
 }
@@ -569,11 +655,52 @@ frequency: !Every 1
     }
 
     #[test]
+    fn unknown_field_is_rejected() {
+        let yaml = r#"
+reference: "molecule REF"
+selection: "atomtype Na"
+frequency: !Every 100
+typo_field: 1.0
+"#;
+        assert!(serde_yml::from_str::<SpatialDistributionBuilder>(yaml).is_err());
+    }
+
+    #[test]
+    fn reference_file_writes_body_frame_structure() {
+        let context = test_context();
+        let tmp = tempfile::tempdir().unwrap();
+        let mut builder: SpatialDistributionBuilder = serde_yml::from_str(
+            r#"
+reference: "molecule REF"
+selection: "atomtype Na"
+reference_file: reference.xyz
+resolution: 1.0
+padding: 3.0
+bulk_normalize: false
+frequency: !Every 1
+"#,
+        )
+        .unwrap();
+        builder.apply_output_dir(tmp.path()).unwrap();
+        let mut sdf = builder.build(&context).unwrap();
+        sdf.perform_sample(&context, 0, 1.0).unwrap();
+        Analyze::<Backend>::write_to_disk(&mut sdf).unwrap();
+
+        let structure = io::read_structure(&tmp.path().join("reference.xyz")).unwrap();
+        assert_eq!(structure.names, ["R", "R"]);
+        // REF sits at the origin with identity orientation, so body-frame
+        // positions equal the molecule's internal geometry.
+        assert_relative_eq!(structure.positions[0].x, -1.0);
+        assert_relative_eq!(structure.positions[1].x, 1.0);
+    }
+
+    #[test]
     fn bulk_normalized_uniform_counts_are_one() {
         let mut sdf = SpatialDistribution {
             reference: Selection::parse("molecule REF").unwrap(),
             selection: Selection::parse("atomtype Na").unwrap(),
             file: PathBuf::from("spatial.dx"),
+            reference_structure: None,
             grid: Grid::from_points(&[Point::new(0.25, 0.25, 0.25)], 1.0, 0.25).unwrap(),
             counts: vec![0.0; 1],
             normalization: Normalization::default(),
