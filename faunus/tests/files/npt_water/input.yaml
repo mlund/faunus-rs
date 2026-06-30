@@ -12,7 +12,11 @@ atoms:
 
 molecules:
   - name: water
-    from_structure: "water.xyz"
+    # Structure inlined so the test is self-contained (no external .xyz).
+    from_structure:
+      - OW: [2.30, 6.28, 1.13]
+      - HW: [1.37, 6.26, 1.50]
+      - HW: [2.31, 5.89, 0.21]
     exclusions: [[0, 1], [0, 2], [1, 2]]
     has_com: true
 

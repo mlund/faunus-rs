@@ -288,13 +288,20 @@ impl MoleculeKind {
     /// - `File`: reads atom names and positions from a structure file.
     /// - `Inline`: extracts atom names and positions from inline entries.
     /// - `Fasta`: expands a FASTA sequence into atom names and harmonic bonds.
-    pub(crate) fn expand_structure(&mut self) -> anyhow::Result<()> {
+    pub(crate) fn expand_structure(&mut self, base_dir: &Path) -> anyhow::Result<()> {
         let source = match self.from_structure.take() {
             Some(s) => s,
             None => return Ok(()),
         };
         match source {
             StructureSource::File(path) => {
+                // Resolve relative structure files against the input file's
+                // directory, so an input works regardless of the current dir.
+                let path = if path.is_relative() {
+                    base_dir.join(path)
+                } else {
+                    path
+                };
                 let data = super::io::read_structure(&path)?;
                 if self.atoms.is_empty() {
                     self.atoms = data.names;
@@ -688,7 +695,7 @@ mod tests {
             from_structure: {sequence: "nAGKc", k: 80.33, req: 3.8}
         "#;
         let mut molecule: MoleculeKind = serde_yml::from_str(yaml).unwrap();
-        molecule.expand_structure().unwrap();
+        molecule.expand_structure(Path::new(".")).unwrap();
 
         assert_eq!(molecule.atoms, ["NTR", "ALA", "GLY", "LYS", "CTR"]);
         // atom_names mirror atom types so `name NTR` selectors work
@@ -786,9 +793,26 @@ mod tests {
               - HW: [-0.58, 0.76, 0.0]
         "#;
         let mut molecule: MoleculeKind = serde_yml::from_str(yaml).unwrap();
-        molecule.expand_structure().unwrap();
+        molecule.expand_structure(Path::new(".")).unwrap();
 
         assert_eq!(molecule.atoms, ["OW", "HW", "HW"]);
         assert_eq!(molecule.reference_positions.len(), 3);
+    }
+
+    #[test]
+    fn file_structure_resolves_against_base_dir() {
+        // A relative `from_structure` file must resolve against the input file's
+        // directory, not the current directory.
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("mol.xyz"),
+            "2\n\nA 0.0 0.0 0.0\nB 1.0 0.0 0.0\n",
+        )
+        .unwrap();
+        let yaml = "name: m\nfrom_structure: mol.xyz\n";
+        let mut molecule: MoleculeKind = serde_yml::from_str(yaml).unwrap();
+        molecule.expand_structure(dir.path()).unwrap();
+        assert_eq!(molecule.atoms, ["A", "B"]);
+        assert_eq!(molecule.reference_positions.len(), 2);
     }
 }

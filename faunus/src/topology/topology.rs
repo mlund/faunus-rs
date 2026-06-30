@@ -162,7 +162,7 @@ impl Topology {
         let includes = std::mem::take(&mut topology.include);
         topology.include_topologies(includes)?;
         topology.finalize_atoms()?;
-        topology.finalize_molecules()?;
+        topology.finalize_molecules(base)?;
         topology.finalize_blocks(base)?;
         topology.validate_intermolecular()?;
         topology.validate()?;
@@ -336,10 +336,12 @@ impl Topology {
 
     /// Set ids for molecule kinds in the topology, validate the molecules and
     /// set indices of atom kinds forming each molecule.
-    pub fn finalize_molecules(&mut self) -> anyhow::Result<()> {
+    pub fn finalize_molecules(&mut self, base: &Path) -> anyhow::Result<()> {
         use super::molecule::GroupKind;
+        // `base` is the input file; structure files resolve against its directory.
+        let base_dir = base.parent().unwrap_or_else(|| Path::new("."));
         for (i, molecule) in self.moleculekinds.iter_mut().enumerate() {
-            molecule.expand_structure()?;
+            molecule.expand_structure(base_dir)?;
             if molecule.atom_names().is_empty() {
                 molecule.empty_atom_names();
             }

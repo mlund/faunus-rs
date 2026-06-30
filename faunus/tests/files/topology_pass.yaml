@@ -42,9 +42,9 @@ molecules:
       point: [1.4, 2.2, -0.71]
     has_com: false
   - name: MOL2
-    from_structure: "tests/files/mol2.xyz"
+    from_structure: "mol2.xyz"
   - name: MOL3
-    from_structure: "tests/files/mol2.xyz"
+    from_structure: "mol2.xyz"
 
 propagate:
   seed: Hardware
