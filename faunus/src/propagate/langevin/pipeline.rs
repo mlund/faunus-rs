@@ -536,11 +536,7 @@ impl<R: Runtime> LangevinGpu<R> {
 
     /// Upload CPU-computed COM-force / torque overlay to be added on top of
     /// the GPU-reduced nonbonded + bonded contributions.
-    fn upload_extra_com_forces_torques(
-        &mut self,
-        com_forces: &[[f32; 4]],
-        torques: &[[f32; 4]],
-    ) {
+    fn upload_extra_com_forces_torques(&mut self, com_forces: &[[f32; 4]], torques: &[[f32; 4]]) {
         self.extra_com_forces = self
             .client
             .create_from_slice(bytemuck::cast_slice(com_forces));

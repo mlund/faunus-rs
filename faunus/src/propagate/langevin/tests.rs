@@ -376,7 +376,7 @@ fn langevin_runner_to_yaml_with_temperature() {
     runner.t_rot.add(290.0);
     runner.t_rot.add(310.0);
 
-        let yaml = runner.to_yaml();
+    let yaml = runner.to_yaml();
     if let serde_yml::Value::Tagged(tagged) = &yaml {
         if let serde_yml::Value::Mapping(map) = &tagged.value {
             assert!(

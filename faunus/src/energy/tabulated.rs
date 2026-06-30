@@ -39,7 +39,14 @@ impl TabulatedInteraction for Table6D {
 }
 
 impl Lookup6D for Table6D {
-    fn lookup(&self, r: f64, omega: f64, dir_a: &Vector3, dir_b: &Vector3, beta: Option<f64>) -> f64 {
+    fn lookup(
+        &self,
+        r: f64,
+        omega: f64,
+        dir_a: &Vector3,
+        dir_b: &Vector3,
+        beta: Option<f64>,
+    ) -> f64 {
         match self {
             Self::Flat(t) => t.lookup(r, omega, dir_a, dir_b, beta),
             Self::Adaptive(t) => t.lookup(r, omega, dir_a, dir_b, beta),

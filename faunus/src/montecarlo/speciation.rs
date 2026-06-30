@@ -1308,7 +1308,11 @@ propagate:
     fn charge_conserving_swap() {
         let (drift, n_na, n_ca) = run_charge_swap(false);
         assert!(n_ca > 0, "reaction never fired (no Ca formed)");
-        assert_eq!(n_na + 2 * n_ca, 20, "charge not conserved: {n_na} Na + {n_ca} Ca");
+        assert_eq!(
+            n_na + 2 * n_ca,
+            20,
+            "charge not conserved: {n_na} Na + {n_ca} Ca"
+        );
         assert!(drift < 1e-6, "energy drift {drift:.6e} for 2 Na = Ca");
     }
 
