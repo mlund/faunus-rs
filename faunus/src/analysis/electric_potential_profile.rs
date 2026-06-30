@@ -50,6 +50,7 @@ fn default_file() -> PathBuf {
 
 /// YAML builder for [`ElectricPotentialProfile`].
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ElectricPotentialProfileBuilder {
     /// Atoms whose charge contributes to the profile. Defaults to all atoms.
     #[serde(default = "all_atoms")]

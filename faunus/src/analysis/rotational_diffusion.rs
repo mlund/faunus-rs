@@ -45,6 +45,7 @@ const TRACE_CONVERGENCE_THRESHOLD: f64 = 0.15;
 
 /// YAML builder for [`RotationalDiffusion`].
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct RotationalDiffusionBuilder {
     pub selection: Selection,
     #[serde(skip_serializing_if = "Option::is_none")]

@@ -50,6 +50,7 @@ use std::path::PathBuf;
 
 /// YAML builder for [`DoubleLayerPressure`].
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct DoubleLayerPressureBuilder {
     /// Selection of the mobile counterions (e.g. `"atomtype Na Ca"`).
     selection: Selection,

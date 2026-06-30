@@ -96,6 +96,7 @@ fn default_lambda_points() -> Option<usize> {
 /// Reference: [Svensson & Woodward, Mol. Phys. 64:2, 247-259 (1988)](https://doi.org/10.1080/00268978800100203)
 #[derive(Debug, Builder)]
 #[builder(build_fn(skip), derive(Deserialize, Serialize))]
+#[builder_struct_attr(serde(deny_unknown_fields))]
 pub struct ScaledWidomInsertion {
     /// Ghost atom type name
     atom: String,

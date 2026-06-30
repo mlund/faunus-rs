@@ -24,6 +24,7 @@ struct PerAtomCharge {
 
 /// YAML builder for [`MultipoleAnalysis`].
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct MultipoleAnalysisBuilder {
     pub selection: Selection,
     pub frequency: Frequency,

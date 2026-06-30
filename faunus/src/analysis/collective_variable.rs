@@ -34,6 +34,8 @@ use std::path::PathBuf;
 /// [`ConstrainBuilder`](crate::energy::ConstrainBuilder).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CollectiveVariableAnalysisBuilder {
+    // No `deny_unknown_fields`: serde forbids combining it with `flatten`, since
+    // unrecognized keys are delegated to the flattened `cv` rather than rejected.
     #[serde(flatten)]
     pub cv: CollectiveVariableBuilder,
     #[serde(skip_serializing_if = "Option::is_none")]

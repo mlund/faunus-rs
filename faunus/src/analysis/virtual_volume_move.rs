@@ -46,6 +46,7 @@ use std::path::PathBuf;
 /// All particle positions are scaled according to the chosen `method`.
 #[derive(Debug, Builder)]
 #[builder(build_fn(skip), derive(Deserialize, Serialize))]
+#[builder_struct_attr(serde(deny_unknown_fields))]
 pub struct VirtualVolumeMove {
     /// Volume displacement in Angstrom^3
     #[builder_field_attr(serde(rename = "dV"))]

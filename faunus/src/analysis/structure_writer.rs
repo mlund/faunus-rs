@@ -14,6 +14,7 @@ use std::path::Path;
 /// Writes structure of the system in the specified format during the simulation.
 #[derive(Debug, Builder)]
 #[builder(derive(Deserialize, Serialize), build_fn(validate = "Self::validate"))]
+#[builder_struct_attr(serde(deny_unknown_fields))]
 pub struct StructureWriter {
     /// Output file name (xyz, pdb, etc.)
     #[builder_field_attr(serde(rename = "file"))]
@@ -372,6 +373,13 @@ impl<T: Context> Analyze<T> for StructureWriter {
 mod tests {
     use super::*;
     use crate::analysis::AnalysisBuilder;
+
+    #[test]
+    fn unknown_field_is_rejected() {
+        // Confirms the `builder_struct_attr` passthrough reaches the generated builder.
+        let yaml = "file: traj.xyz\nfrequency: !Every 100\nfile_typo: foo.xyz\n";
+        assert!(serde_yml::from_str::<StructureWriterBuilder>(yaml).is_err());
+    }
 
     #[test]
     fn deserialize_trajectory_builders() {

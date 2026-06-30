@@ -35,6 +35,8 @@ use std::path::PathBuf;
 /// must include a `resolution` field.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MeanAlongCoordinateBuilder {
+    // No `deny_unknown_fields`: serde forbids combining it with `flatten`, since
+    // unrecognized keys are delegated to the flattened `cv` rather than rejected.
     #[serde(flatten)]
     pub cv: CollectiveVariableBuilder,
     pub coordinate: CollectiveVariableBuilder,

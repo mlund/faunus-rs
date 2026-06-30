@@ -31,6 +31,7 @@ use std::path::PathBuf;
 
 /// YAML builder for [`ShapeAnalysis`].
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ShapeAnalysisBuilder {
     pub selection: Selection,
     #[serde(skip_serializing_if = "Option::is_none")]

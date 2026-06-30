@@ -16,6 +16,7 @@ use std::path::PathBuf;
 
 /// YAML builder for [`EnergyAnalysis`].
 #[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct EnergyAnalysisBuilder {
     file: PathBuf,
     frequency: Frequency,

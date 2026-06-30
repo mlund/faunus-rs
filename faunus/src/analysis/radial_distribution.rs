@@ -17,6 +17,7 @@ use std::path::PathBuf;
 
 /// YAML builder for [`RadialDistribution`].
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct RadialDistributionBuilder {
     /// Pair of selection expressions.
     selections: (Selection, Selection),
@@ -307,6 +308,20 @@ frequency: !Every 100
         assert!(builder.max_r.is_none());
         assert!(builder.exclude_intramolecular.is_none());
         assert!(matches!(builder.frequency, Frequency::Every(100)));
+    }
+
+    #[test]
+    fn unknown_field_is_rejected() {
+        // All required fields present, so the only deserialization failure is the
+        // unknown `dr_typo` key — this genuinely guards `deny_unknown_fields`.
+        let yaml = r#"
+selections: ["atomtype Na", "atomtype Cl"]
+file: rdf.dat
+dr: 0.1
+frequency: !Every 100
+dr_typo: 0.1
+"#;
+        assert!(serde_yml::from_str::<RadialDistributionBuilder>(yaml).is_err());
     }
 
     #[test]

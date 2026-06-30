@@ -53,6 +53,7 @@ use std::path::PathBuf;
 /// - Exactly one active molecule matching the selection must exist in the system.
 #[derive(Debug, Builder)]
 #[builder(build_fn(skip), derive(Deserialize, Serialize))]
+#[builder_struct_attr(serde(deny_unknown_fields))]
 pub struct VirtualTranslate {
     /// Selection expression for the molecule to translate
     selection: Selection,
