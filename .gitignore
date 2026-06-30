@@ -6,4 +6,5 @@ target/
 *.pdb
 *.xyz
 *.yaml
+.DS_Store
 
