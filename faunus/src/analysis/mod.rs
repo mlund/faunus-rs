@@ -275,7 +275,7 @@ pub fn from_file_in_dir<T: Context>(
         .get("analysis")
         .ok_or_else(|| anyhow::anyhow!("No 'analysis' key found in input yaml file."))?
         .clone();
-    let mut builders = serde_yml::from_value::<Vec<AnalysisBuilder>>(value)?;
+    let mut builders = crate::auxiliary::from_tagged_list::<AnalysisBuilder>("analysis", &value)?;
     if let Some(dir) = output_dir {
         for b in &mut builders {
             b.apply_output_dir(dir)?;

@@ -96,8 +96,52 @@ pub fn parse_yaml_section<T: serde::de::DeserializeOwned>(
     let section = value
         .get(key)
         .ok_or_else(|| anyhow::anyhow!("Missing `{key}:` section in input file"))?;
-    serde_yml::from_value(section.clone())
-        .map_err(|e| anyhow::anyhow!("Error parsing `{key}:` section: {e}"))
+    from_section_value(key, section)
+}
+
+/// Deserialize a section's already-extracted [`Value`](serde_yml::Value),
+/// labeling any error with the section name so the user knows where to look.
+///
+/// The location is gone once the document is a parsed `Value`, so the section
+/// name is the best anchor we can attach without re-parsing from the source.
+/// `section` is the dotted path to the section (e.g. `system/medium`), not a
+/// single literal key, so the message reads as a location rather than a key.
+pub fn from_section_value<T: serde::de::DeserializeOwned>(
+    section: &str,
+    value: &serde_yml::Value,
+) -> anyhow::Result<T> {
+    serde_yml::from_value(value.clone()).map_err(|e| anyhow::anyhow!("in `{section}` section: {e}"))
+}
+
+/// Deserialize a YAML sequence of (typically tagged) entries one at a time so an
+/// error names the offending entry by 1-based index and YAML tag, e.g.
+/// `in `analysis` entry 1 (!RadialDistribution): unknown field ...`.
+///
+/// A null section (the key present with no value) yields an empty list, matching
+/// how `from_value::<Vec<_>>` treats `Null`.
+pub fn from_tagged_list<T: serde::de::DeserializeOwned>(
+    section: &str,
+    value: &serde_yml::Value,
+) -> anyhow::Result<Vec<T>> {
+    if value.is_null() {
+        return Ok(Vec::new());
+    }
+    let seq = value
+        .as_sequence()
+        .ok_or_else(|| anyhow::anyhow!("`{section}` must be a list"))?;
+    seq.iter()
+        .enumerate()
+        .map(|(index, entry)| {
+            serde_yml::from_value::<T>(entry.clone()).map_err(|e| {
+                // `Tag`'s Display renders as `!Name`; untagged entries get no suffix.
+                let tag = match entry {
+                    serde_yml::Value::Tagged(tagged) => format!(" ({})", tagged.tag),
+                    _ => String::new(),
+                };
+                anyhow::anyhow!("in `{section}` entry {}{}: {e}", index + 1, tag)
+            })
+        })
+        .collect()
 }
 
 /// Resolve max thread count: 0 means use all available cores.
@@ -515,6 +559,65 @@ impl MappingExt for serde_yml::Mapping {
     fn try_insert(&mut self, key: &str, value: impl serde::Serialize) -> Option<()> {
         self.insert(key.into(), serde_yml::to_value(value).ok()?);
         Some(())
+    }
+}
+
+#[cfg(test)]
+mod section_parse_tests {
+    use super::*;
+    use serde::Deserialize;
+
+    #[derive(Debug, Deserialize)]
+    #[serde(deny_unknown_fields)]
+    struct Widget {
+        #[allow(dead_code)]
+        name: String,
+    }
+
+    #[derive(Debug, Deserialize)]
+    #[allow(dead_code)]
+    enum Item {
+        Widget(Widget),
+    }
+
+    #[test]
+    fn tagged_list_error_names_entry_and_tag() {
+        let value: serde_yml::Value =
+            serde_yml::from_str("- !Widget {name: a}\n- !Widget {name: b, oops: 1}\n").unwrap();
+        let err = from_tagged_list::<Item>("things", &value)
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("entry 2"), "{err}");
+        assert!(err.contains("!Widget"), "{err}");
+        assert!(err.contains("oops"), "{err}");
+    }
+
+    #[test]
+    fn tagged_list_requires_sequence() {
+        let value: serde_yml::Value = serde_yml::from_str("name: a").unwrap();
+        let err = from_tagged_list::<Item>("things", &value)
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("must be a list"), "{err}");
+    }
+
+    #[test]
+    fn tagged_list_null_is_empty() {
+        // A present-but-null section must behave like an empty list, not an error.
+        let value: serde_yml::Value = serde_yml::from_str("~").unwrap();
+        assert!(from_tagged_list::<Item>("things", &value)
+            .unwrap()
+            .is_empty());
+    }
+
+    #[test]
+    fn section_value_error_names_section() {
+        let value: serde_yml::Value = serde_yml::from_str("name: a\noops: 1").unwrap();
+        let err = from_section_value::<Widget>("system/widget", &value)
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("`system/widget` section"), "{err}");
+        assert!(err.contains("oops"), "{err}");
     }
 }
 

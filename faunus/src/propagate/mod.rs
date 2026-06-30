@@ -249,8 +249,7 @@ impl<T: Context> Propagate<T> {
             .get("propagate")
             .ok_or_else(|| anyhow::anyhow!("Could not find `propagate` in the YAML file."))?;
 
-        let builder: PropagateBuilder =
-            serde_yml::from_value(current.clone()).map_err(anyhow::Error::msg)?;
+        let builder: PropagateBuilder = crate::auxiliary::from_section_value("propagate", current)?;
 
         let blocks = builder
             .move_collections
@@ -339,6 +338,6 @@ pub(crate) fn gibbs_config_from_file(
     let Some(gibbs_value) = full.get("propagate").and_then(|p| p.get("gibbs")) else {
         return Ok(None);
     };
-    let config = serde_yml::from_value(gibbs_value.clone())?;
+    let config = crate::auxiliary::from_section_value("propagate/gibbs", gibbs_value)?;
     Ok(Some(config))
 }

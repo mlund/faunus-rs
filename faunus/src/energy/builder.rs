@@ -704,8 +704,7 @@ impl HamiltonianBuilder {
             }
         }
 
-        let mut builder: Self =
-            serde_yml::from_value(current.clone()).map_err(anyhow::Error::msg)?;
+        let mut builder: Self = crate::auxiliary::from_section_value("system/energy", current)?;
 
         // Merge nonbonded from included files (input overrides)
         if let Some(includes) = full.get("include").and_then(|v| v.as_sequence()) {
@@ -718,8 +717,9 @@ impl HamiltonianBuilder {
                     })?;
                     let inc_full: serde_yml::Value = serde_yml::from_str(&inc_yaml)?;
                     if let Some(energy_val) = inc_full.get("energy") {
-                        let inc_builder: Self = serde_yml::from_value(energy_val.clone())
-                            .map_err(anyhow::Error::msg)?;
+                        let inc_builder: Self =
+                            crate::auxiliary::from_section_value("energy", energy_val)?;
+                        // include files carry `energy:` at top level, so the bare label is correct here
                         if let Some(inc_pairpot) = inc_builder.pairpot_builder {
                             builder
                                 .pairpot_builder
@@ -847,7 +847,10 @@ mod tests {
     fn hamiltonian_deserialization_fail_duplicate() {
         let error =
             HamiltonianBuilder::from_file("tests/files/nonbonded_duplicate.yaml").unwrap_err();
-        assert_eq!(&error.to_string(), "invalid entry: found duplicate key");
+        assert_eq!(
+            &error.to_string(),
+            "in `system/energy` section: invalid entry: found duplicate key"
+        );
     }
 
     #[test]

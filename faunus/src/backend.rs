@@ -26,13 +26,14 @@ pub fn get_medium(path: impl AsRef<Path>) -> anyhow::Result<interatomic::coulomb
 
 /// Extract medium from the `system/medium` section of a YAML string.
 pub fn get_medium_str(yaml: &str) -> anyhow::Result<interatomic::coulomb::Medium> {
-    serde_yml::from_str::<serde_yml::Value>(yaml)
-        .ok()
-        .and_then(|s| {
-            let val = s.get("system")?.get("medium")?;
-            serde_yml::from_value(val.clone()).ok()
-        })
-        .ok_or_else(|| anyhow::anyhow!("Could not find `system/medium` in input file"))
+    let value = serde_yml::from_str::<serde_yml::Value>(yaml)?;
+    // Keep "not found" distinct from "found but invalid" so a bad field in an
+    // existing section is reported as a parse error, not a missing section.
+    let medium = value
+        .get("system")
+        .and_then(|system| system.get("medium"))
+        .ok_or_else(|| anyhow::anyhow!("Could not find `system/medium` in input file"))?;
+    crate::auxiliary::from_section_value("system/medium", medium)
 }
 
 /// Backup for undo on MC reject.

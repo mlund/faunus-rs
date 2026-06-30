@@ -223,7 +223,7 @@ impl Cell {
             log::warn!("No cell defined for the system. Using Endless cell.");
             return Ok(Self::Endless(Endless));
         };
-        let cell = serde_yml::from_value(value.clone()).map_err(anyhow::Error::msg)?;
+        let cell = crate::auxiliary::from_section_value("system/cell", value)?;
         Ok(cell)
     }
 }

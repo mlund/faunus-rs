@@ -16,7 +16,10 @@ use faunus::cli::do_main;
 
 fn main() {
     if let Err(err) = do_main() {
-        eprintln!("Error: {}", &err);
+        // `{:#}` appends the anyhow source chain, so context added via
+        // `.context()` (file read, templating, includes) is shown alongside the
+        // underlying cause instead of only the outermost message.
+        eprintln!("Error: {:#}", &err);
         std::process::exit(1);
     }
 }
