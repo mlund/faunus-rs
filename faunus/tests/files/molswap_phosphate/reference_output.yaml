@@ -4,22 +4,22 @@ medium:
   temperature: 298.15
 blocks:
 - molecule: H₃PO₄
-  'N': 20
+  N: 20
   active: 0
   insert: !RandomAtomPos
     directions: xyz
 - molecule: H₂PO₄⁻
-  'N': 20
+  N: 20
   active: null
   insert: !RandomAtomPos
     directions: xyz
 - molecule: HPO₄²⁻
-  'N': 20
+  N: 20
   active: 0
   insert: !RandomAtomPos
     directions: xyz
 - molecule: PO₄³⁻
-  'N': 20
+  N: 20
   active: 0
   insert: !RandomAtomPos
     directions: xyz
@@ -32,14 +32,14 @@ energy_change:
   final: 0.0
   initial: 0.0
 energy_timers:
-  celloverlap: '100 (energy: 69.87, update: 30.13)'
+  celloverlap: '100 (energy: 67.04, update: 32.96)'
 propagate:
   repeat: 5000
   seed: !Fixed 42
   collections:
   - !Deterministic
     repeat: 1
-    elapsed_seconds: 0.680954922
+    elapsed_seconds: 0.068754524
     moves:
     - !SpeciationMove
       reactions:
@@ -50,32 +50,45 @@ propagate:
       - - HPO₄²⁻ = PO₄³⁻ + ~H+
         - !pK 12.35
       temperature: 298.15
+      per_reaction:
+      - reaction: H₃PO₄ = H₂PO₄⁻ + ~H+
+        accepted: 0
+        trials: 776
+        acceptance_ratio: '0.0000'
+      - reaction: H₂PO₄⁻ = HPO₄²⁻ + ~H+
+        accepted: 1359
+        trials: 1682
+        acceptance_ratio: '0.8080'
+      - reaction: HPO₄²⁻ = PO₄³⁻ + ~H+
+        accepted: 0
+        trials: 854
+        acceptance_ratio: '0.0000'
       weight: 1.0
       repeat: 1
       statistics:
         num_trials: 5000
-        num_accepted: 1466
+        num_accepted: 1359
         mean_square_displacement:
           avg: 0.0
-          'n': 3534
+          n: 3641
         timer:
           accumulated:
             secs: 0
             nanos: 0
         info: {}
         energy_change_sum: 0.0
-        acceptance_ratio: 0.2932
+        acceptance_ratio: 0.2718
   criterion: MetropolisHastings
 analysis:
 - collectivevariable:
     property: Count
     description: 'selection: molecule ''H₂PO₄⁻'''
     num_samples: 5000
-    mean: 10.013800000000005
-    rms: 10.210004897158457
+    mean: 10.350799999999978
+    rms: 10.569427609856643
 - collectivevariable:
     property: Count
     description: 'selection: molecule ''HPO₄²⁻'''
     num_samples: 5000
-    mean: 9.986199999999995
-    rms: 10.182936708042524
+    mean: 9.649200000000022
+    rms: 9.883359752634737

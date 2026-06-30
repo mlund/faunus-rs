@@ -4,7 +4,7 @@ medium:
   temperature: 298.0
 blocks:
 - molecule: protein
-  'N': 1
+  N: 1
   active: null
   insert: !Manual
   - - 0.0
@@ -17,31 +17,31 @@ blocks:
     - 5.0
     - 0.0
 - molecule: Na+
-  'N': 30
+  N: 30
   active: 10
   insert: !RandomAtomPos
     directions: xyz
 - molecule: Cl-
-  'N': 30
+  N: 30
   active: 10
   insert: !RandomAtomPos
     directions: xyz
 cell: !Sphere
   radius: 50.0
 energy_change:
-  drift: 9.237055564881302e-14
-  final: -11.954982728368714
-  initial: -16.52216396226802
+  drift: 2.1316282072803006e-14
+  final: -7.440514707568557
+  initial: -12.508348774890969
 energy_timers:
-  celloverlap: '2.37 (energy: 2.33, update: 0.04)'
-  nonbonded: '97.63000000000001 (energy: 97.59, update: 0.04)'
+  celloverlap: '2.41 (energy: 1.71, update: 0.7)'
+  nonbonded: '97.59 (energy: 96.87, update: 0.72)'
 propagate:
   repeat: 2000
   seed: !Fixed 42
   collections:
   - !Deterministic
     repeat: 1
-    elapsed_seconds: 6.600054072
+    elapsed_seconds: 0.241642688
     moves:
     - !SpeciationMove
       reactions:
@@ -60,21 +60,50 @@ propagate:
       - - = Na+ + Cl-
         - !dG 0.0
       temperature: 298.0
+      per_reaction:
+      - reaction: ⚛HGLU + Cl- = ⚛GLU + ~H+
+        accepted: 15
+        trials: 7064
+        acceptance_ratio: '0.0021'
+      - reaction: ⚛HGLU = Na+ + ⚛GLU + ~H+
+        accepted: 19
+        trials: 7099
+        acceptance_ratio: '0.0027'
+      - reaction: ⚛HHIS + Cl- = ⚛HIS + ~H+
+        accepted: 3015
+        trials: 7121
+        acceptance_ratio: '0.4234'
+      - reaction: ⚛HHIS = Na+ + ⚛HIS + ~H+
+        accepted: 3001
+        trials: 7108
+        acceptance_ratio: '0.4222'
+      - reaction: ⚛HCYS + Cl- = ⚛CYS + ~H+
+        accepted: 660
+        trials: 7226
+        acceptance_ratio: '0.0913'
+      - reaction: ⚛HCYS = Na+ + ⚛CYS + ~H+
+        accepted: 744
+        trials: 7153
+        acceptance_ratio: '0.1040'
+      - reaction: = Na+ + Cl-
+        accepted: 10090
+        trials: 14213
+        acceptance_ratio: '0.7099'
       weight: 1.0
       repeat: 50
       statistics:
         num_trials: 100000
-        num_accepted: 17690
+        num_accepted: 17544
         mean_square_displacement:
           avg: 0.0
-          'n': 82310
+          n: 82456
         timer:
           accumulated:
             secs: 0
             nanos: 0
         info: {}
-        energy_change_sum: 9.951751361661344
-        acceptance_ratio: 0.1769
+        energy_change_sum: -21.455942323093335
+        acceptance_ratio: 0.17544
     - !TranslateAtom
       atom: Na
       molecule: Na+
@@ -83,17 +112,17 @@ propagate:
       repeat: 1
       statistics:
         num_trials: 2000
-        num_accepted: 1077
+        num_accepted: 1136
         mean_square_displacement:
-          avg: 291.3916956192943
-          'n': 2000
+          avg: 327.3223964294548
+          n: 2000
         timer:
           accumulated:
             secs: 0
             nanos: 0
         info: {}
-        energy_change_sum: -8.591849351670524
-        acceptance_ratio: 0.5385
+        energy_change_sum: -2.9149376126581323
+        acceptance_ratio: 0.568
     - !TranslateAtom
       atom: Cl
       molecule: Cl-
@@ -102,34 +131,34 @@ propagate:
       repeat: 1
       statistics:
         num_trials: 2000
-        num_accepted: 1086
+        num_accepted: 1120
         mean_square_displacement:
-          avg: 305.3935829216347
-          'n': 2000
+          avg: 314.5951505083631
+          n: 2000
         timer:
           accumulated:
             secs: 0
             nanos: 0
         info: {}
-        energy_change_sum: 3.207279223908394
-        acceptance_ratio: 0.543
+        energy_change_sum: 29.4387140030739
+        acceptance_ratio: 0.56
   criterion: MetropolisHastings
 analysis:
 - collectivevariable:
     property: Count
     description: 'selection: atomtype GLU'
     num_samples: 6000
-    mean: 0.9990000000000007
-    rms: 0.9994998749374613
+    mean: 1.0
+    rms: 1.0
 - collectivevariable:
     property: Count
     description: 'selection: atomtype HHIS'
     num_samples: 6000
-    mean: 0.2365000000000004
-    rms: 0.4863126566315136
+    mean: 0.21200000000000016
+    rms: 0.4604345773288537
 - collectivevariable:
     property: Count
     description: 'selection: atomtype CYS'
     num_samples: 6000
-    mean: 0.049500000000000016
-    rms: 0.22248595461286994
+    mean: 0.04599999999999997
+    rms: 0.2144761058952721

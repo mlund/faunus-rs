@@ -4,12 +4,12 @@ medium:
   temperature: 298.15
 blocks:
 - molecule: cation
-  'N': 75
+  N: 75
   active: null
   insert: !RandomAtomPos
     directions: xyz
 - molecule: anion
-  'N': 75
+  N: 75
   active: null
   insert: !RandomAtomPos
     directions: xyz
@@ -22,15 +22,15 @@ energy_change:
   final: -219.6929032321027
   initial: -243.41791139269253
 energy_timers:
-  celloverlap: '0.2 (energy: 0.14, update: 0.06)'
-  nonbonded: '99.8 (energy: 99.67, update: 0.13)'
+  celloverlap: '4.91 (energy: 3.27, update: 1.64)'
+  nonbonded: '95.08 (energy: 93.33, update: 1.75)'
 propagate:
   repeat: 5000
   seed: !Fixed 42
   collections:
   - !Deterministic
     repeat: 1
-    elapsed_seconds: 5.398677592
+    elapsed_seconds: 0.129259619
     moves:
     - !TranslateAtom
       atom: null
@@ -43,7 +43,7 @@ propagate:
         num_accepted: 2581
         mean_square_displacement:
           avg: 242.54362650518704
-          'n': 5000
+          n: 5000
         timer:
           accumulated:
             secs: 0
@@ -62,7 +62,7 @@ propagate:
         num_accepted: 2550
         mean_square_displacement:
           avg: 236.1977781007635
-          'n': 5000
+          n: 5000
         timer:
           accumulated:
             secs: 0

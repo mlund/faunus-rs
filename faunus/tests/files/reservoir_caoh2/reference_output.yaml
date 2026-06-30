@@ -4,17 +4,17 @@ medium:
   temperature: 298.15
 blocks:
 - molecule: Ca(OH)₂
-  'N': 400
+  N: 400
   active: null
   insert: !RandomAtomPos
     directions: xyz
 - molecule: Ca²⁺
-  'N': 800
+  N: 800
   active: 0
   insert: !RandomAtomPos
     directions: xyz
 - molecule: OH⁻
-  'N': 800
+  N: 800
   active: 0
   insert: !RandomAtomPos
     directions: xyz
@@ -27,14 +27,14 @@ energy_change:
   final: 0.0
   initial: 0.0
 energy_timers:
-  celloverlap: '100 (energy: 66.82, update: 33.18)'
+  celloverlap: '100 (energy: 67.41, update: 32.59)'
 propagate:
   repeat: 30000
   seed: !Fixed 42
   collections:
   - !Deterministic
     repeat: 1
-    elapsed_seconds: 1.417057585
+    elapsed_seconds: 1.494548709
     moves:
     - !SpeciationMove
       reactions:
@@ -53,7 +53,7 @@ propagate:
         num_accepted: 28446
         mean_square_displacement:
           avg: 0.0
-          'n': 1554
+          n: 1554
         timer:
           accumulated:
             secs: 0

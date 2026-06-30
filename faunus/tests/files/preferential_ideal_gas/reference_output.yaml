@@ -4,12 +4,12 @@ medium:
   temperature: 300.0
 blocks:
 - molecule: Macromolecule
-  'N': 1
+  N: 1
   active: null
   insert: !RandomAtomPos
     directions: xyz
 - molecule: Ion
-  'N': 20
+  N: 20
   active: null
   insert: !RandomAtomPos
     directions: xyz
@@ -22,14 +22,14 @@ energy_change:
   final: 0.0
   initial: 0.0
 energy_timers:
-  celloverlap: '100 (energy: 72.49, update: 27.51)'
+  celloverlap: '100 (energy: 65.55, update: 34.45)'
 propagate:
   repeat: 100
   seed: !Fixed 42
   collections:
   - !Deterministic
     repeat: 1
-    elapsed_seconds: 0.03499637
+    elapsed_seconds: 0.001191626
     moves:
     - !TranslateAtom
       atom: null
@@ -42,7 +42,7 @@ propagate:
         sum_bias: 1.4097939766196979
         mean_bias:
           avg: 0.008723992599096021
-          'n': 2000
+          n: 2000
         bounding_radii:
         - 1.7763568394002505e-15
       weight: 1.0
@@ -52,7 +52,7 @@ propagate:
         num_accepted: 1991
         mean_square_displacement:
           avg: 1.3030142377147396
-          'n': 2000
+          n: 2000
         timer:
           accumulated:
             secs: 0

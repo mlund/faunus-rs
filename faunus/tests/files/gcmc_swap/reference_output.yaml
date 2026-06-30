@@ -4,12 +4,12 @@ medium:
   temperature: 298.15
 blocks:
 - molecule: M
-  'N': 20
+  N: 20
   active: 10
   insert: !RandomAtomPos
     directions: xyz
 - molecule: AB
-  'N': 8
+  N: 8
   active: null
   insert: !RandomAtomPos
     directions: xyz
@@ -22,14 +22,14 @@ energy_change:
   final: 0.0
   initial: 0.0
 energy_timers:
-  celloverlap: '100 (energy: 65.9, update: 34.1)'
+  celloverlap: '100 (energy: 66.79, update: 33.21)'
 propagate:
   repeat: 5000
   seed: !Fixed 42
   collections:
   - !Deterministic
     repeat: 1
-    elapsed_seconds: 0.017454893
+    elapsed_seconds: 0.014154925
     moves:
     - !SpeciationMove
       reactions:
@@ -40,39 +40,39 @@ propagate:
       temperature: 298.15
       per_reaction:
       - reaction: ⚛A = ⚛B
-        accepted: 1956
-        trials: 2511
-        acceptance_ratio: '0.7790'
+        accepted: 1959
+        trials: 2516
+        acceptance_ratio: '0.7786'
       - reaction: = M
-        accepted: 2189
-        trials: 2476
-        acceptance_ratio: '0.8841'
+        accepted: 2185
+        trials: 2471
+        acceptance_ratio: '0.8843'
       weight: 1.0
       repeat: 1
       statistics:
         num_trials: 5000
-        num_accepted: 4145
+        num_accepted: 4144
         mean_square_displacement:
           avg: 0.0
-          'n': 855
+          n: 856
         timer:
           accumulated:
             secs: 0
             nanos: 0
         info: {}
         energy_change_sum: 0.0
-        acceptance_ratio: 0.829
+        acceptance_ratio: 0.8288
   criterion: MetropolisHastings
 analysis:
 - collectivevariable:
     property: Count
     description: 'selection: molecule M'
     num_samples: 5000
-    mean: 10.06979999999996
-    rms: 10.563171872122481
+    mean: 10.07459999999998
+    rms: 10.566730809479356
 - collectivevariable:
     property: Count
     description: 'selection: atomtype A'
     num_samples: 5000
-    mean: 13.752000000000017
-    rms: 14.199253501504916
+    mean: 13.754600000000003
+    rms: 14.201232340892096

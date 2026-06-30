@@ -4,7 +4,7 @@ medium:
   temperature: 298.15
 blocks:
 - molecule: particle
-  'N': 30
+  N: 30
   active: 10
   insert: !RandomAtomPos
     directions: xyz
@@ -17,14 +17,14 @@ energy_change:
   final: 0.0
   initial: 0.0
 energy_timers:
-  celloverlap: '100 (energy: 66.57, update: 33.43)'
+  celloverlap: '100 (energy: 67.37, update: 32.63)'
 propagate:
   repeat: 5000
   seed: !Fixed 42
   collections:
   - !Deterministic
     repeat: 1
-    elapsed_seconds: 0.005999952
+    elapsed_seconds: 0.006488784
     moves:
     - !SpeciationMove
       reactions:
@@ -43,7 +43,7 @@ propagate:
         num_accepted: 4364
         mean_square_displacement:
           avg: 0.0
-          'n': 636
+          n: 636
         timer:
           accumulated:
             secs: 0
@@ -57,5 +57,5 @@ analysis:
     property: Count
     description: 'selection: molecule particle'
     num_samples: 5000
-    mean: 9.39219999999999
-    rms: 9.871119490716332
+    mean: 9.386799999999985
+    rms: 9.86748194829866
