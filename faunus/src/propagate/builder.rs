@@ -48,6 +48,7 @@ pub enum MoveBuilder {
     PivotMove(crate::montecarlo::PivotMove),
     CrankshaftMove(crate::montecarlo::CrankshaftMove),
     SpeciationMove(crate::montecarlo::SpeciationMove),
+    ClusterMove(crate::montecarlo::ClusterMove),
 }
 
 impl MoveBuilder {
@@ -61,6 +62,7 @@ impl MoveBuilder {
             Self::PivotMove(m) => m.into_runner(context),
             Self::CrankshaftMove(m) => m.into_runner(context),
             Self::SpeciationMove(m) => m.into_runner(context),
+            Self::ClusterMove(m) => m.into_runner(context),
         }
     }
 }

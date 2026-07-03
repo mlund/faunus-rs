@@ -149,6 +149,13 @@ pub enum Transform {
     Speciation(Vec<SpeciationAction>),
     /// No operation
     None,
+    /// Translate and optionally rotate a set of groups as a rigid cluster.
+    /// `rotation` is `Some((cluster_com, quaternion))` for roto-translation, `None` for translation only.
+    ClusterTransform {
+        groups: Vec<usize>,
+        translation: Point,
+        rotation: Option<(Point, UnitQuaternion)>,
+    },
 }
 
 impl Transform {
@@ -290,6 +297,22 @@ impl Transform {
                             Self::Contract(1).on_group(*group_index, context)?;
                         }
                     }
+                }
+            }
+            Self::ClusterTransform {
+                groups,
+                translation,
+                rotation,
+            } => {
+                for &gi in groups {
+                    if let Some((pivot, q)) = rotation {
+                        let indices = context.groups()[gi]
+                            .select(&ParticleSelection::Active, context.topology_ref())?;
+                        context.rotate_particles(&indices, q, Some(-*pivot));
+                        context.groups_mut()[gi].rotate_by(q);
+                        context.update_mass_center(gi);
+                    }
+                    Self::Translate(*translation).on_group(gi, context)?;
                 }
             }
             _ => {
