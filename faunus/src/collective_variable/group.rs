@@ -27,6 +27,25 @@ use crate::geometry::{self, GyrationTensor};
 use crate::group::GroupCollection;
 use serde::{Deserialize, Serialize};
 
+/// Compute the primitive quadrupole tensor of a group, PBC-aware relative to its COM.
+pub(crate) fn group_quadrupole_moment(
+    group_index: usize,
+    context: &dyn EvalContext,
+) -> Option<nalgebra::Matrix3<f64>> {
+    let group = &context.groups()[group_index];
+    let com = group.mass_center()?;
+    let atomkinds = context.topology_ref().atomkinds();
+    let charges_positions = group.iter_active().map(|i| {
+        let charge = atomkinds[context.atom_kind(i)].charge();
+        (charge, GroupCollection::position(context, i))
+    });
+    Some(geometry::quadrupole_moment(
+        charges_positions,
+        com,
+        context.cell(),
+    ))
+}
+
 /// Compute the dipole moment vector of a group, PBC-aware relative to its COM.
 pub(crate) fn group_dipole_moment(
     group_index: usize,
