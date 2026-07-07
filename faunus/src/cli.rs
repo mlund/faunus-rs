@@ -127,6 +127,11 @@ pub fn do_main() -> Result<()> {
         };
     }
     pretty_env_logger::init();
+    log::info!(
+        "faunus {} (git {})",
+        env!("CARGO_PKG_VERSION"),
+        git_revision()
+    );
 
     match args.command {
         Commands::Run { input, state } => {
@@ -176,7 +181,28 @@ fn net_charge(context: &impl ParticleSystem) -> f64 {
         .sum()
 }
 
-/// Write per-box YAML output: medium, blocks, cell, energy, propagate, analysis.
+/// Git revision the binary was built from, e.g. `v0.2.0-3-gabc123def-dirty`.
+///
+/// Falls back to "unknown" when built outside a git checkout (source archive or
+/// published crate), where vergen emits its idempotent placeholder.
+fn git_revision() -> &'static str {
+    match env!("VERGEN_GIT_DESCRIBE") {
+        "VERGEN_IDEMPOTENT_OUTPUT" => "unknown",
+        revision => revision,
+    }
+}
+
+/// Write a `version` block recording the faunus version and git revision the
+/// binary was built from, aiding reproducibility of the results below it.
+fn write_version(output: &mut std::fs::File) -> Result<()> {
+    let version = std::collections::BTreeMap::from([
+        ("faunus", env!("CARGO_PKG_VERSION")),
+        ("git_revision", git_revision()),
+    ]);
+    write_yaml(&version, output, Some("version"))
+}
+
+/// Write per-box YAML output: version, medium, blocks, cell, energy, propagate, analysis.
 /// Returns `(final_energy, drift)`.
 fn write_mc_output<T: Context + 'static>(
     mc: &MarkovChain<T>,
@@ -184,6 +210,7 @@ fn write_mc_output<T: Context + 'static>(
     initial_energy: f64,
     output: &mut std::fs::File,
 ) -> Result<(f64, f64)> {
+    write_version(output)?;
     write_yaml(medium, output, Some("medium"))?;
     write_yaml(&mc.context().topology().blocks(), output, Some("blocks"))?;
     write_yaml(&mc.context().cell(), output, Some("cell"))?;
