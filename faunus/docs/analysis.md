@@ -249,6 +249,68 @@ Key          | Required | Default | Description
 
 ---
 
+## Multipole Distribution
+
+This analysis decomposes the electrostatic interaction between two molecular species into
+ion–ion, ion–dipole, dipole–dipole, and ion–quadrupole terms, each averaged as a function of
+the center-of-mass separation _R_. Comparing their sum with the exact Coulomb energy shows how
+far a multipole expansion reproduces the true interaction, and how the molecules' mutual
+orientation changes with distance. Each species may contain many molecules: every frame the
+analysis averages over all distinct pairs, so it characterises a whole solution of _N_ macroions,
+not just an isolated pair.
+
+Each molecule is reduced to a net charge, a dipole moment, and a traceless quadrupole moment
+about its center of mass, with periodic boundaries applied. The pair energy at separation
+_R_ = **r**ₐ − **r**_b is
+
+$$
+u = \frac{q_a q_b}{R} + \frac{q_a(\boldsymbol{\mu}_b\cdot\boldsymbol{R}) - q_b(\boldsymbol{\mu}_a\cdot\boldsymbol{R})}{R^3} + \frac{\boldsymbol{\mu}_a\cdot\boldsymbol{\mu}_b}{R^3} - \frac{3(\boldsymbol{\mu}_a\cdot\boldsymbol{R})(\boldsymbol{\mu}_b\cdot\boldsymbol{R})}{R^5} + \frac{q_a\,\boldsymbol{R}^{\!\top}\boldsymbol{\Theta}_b\,\boldsymbol{R} + q_b\,\boldsymbol{R}^{\!\top}\boldsymbol{\Theta}_a\,\boldsymbol{R}}{R^5}
+$$
+
+Each term is thermally averaged over orientations and co-solute configurations. Energies are
+reported in **kJ/mol**: the geometric factors above carry the Bjerrum length and _RT_ of the
+[medium](topology.md). The exact energy is the explicit sum over atomic charges,
+$u_\text{exact} = \sum_i^a\sum_j^b q_i q_j / |\boldsymbol{r}_i-\boldsymbol{r}_j|$.
+
+Alongside the energies, five orientational measures are accumulated (column name in
+parentheses):
+
+- **⟨μ̂ₐ·μ̂_b⟩** (`mucorr`) ∈ [−1, 1] — mean cosine between the dipole directions: +1 parallel, −1 antiparallel, 0 uncorrelated.
+- **⟨P₂⟩** = ⟨(3cos²θ − 1)/2⟩ (`p2`) ∈ [−0.5, 1] — nematic-like alignment, blind to dipole sign: +1 collinear (parallel or antiparallel), 0 random, −0.5 mutually perpendicular.
+- **longitudinal projection** ⟨(μ̂ₐ·R̂)(μ̂_b·R̂)⟩ (`long`) ∈ [−1, 1] — orientation relative to the separation axis: near +1 both point along **R** (head-to-tail, end-on), near 0 both lie perpendicular to it (side-by-side, broadside).
+- **Kirkwood factor** g_K(R) = 1 + (1/N)⟨Σ μ̂ᵢ·μ̂ⱼ⟩ (`gK`) — the running dipole-correlation integral: g_K > 1 signals net parallel ordering of the surrounding dipoles, g_K < 1 net antiparallel ordering. It applies when both selections are the same species; for two different species the bare cumulative sum is reported, without the +1.
+- **quadrupole correlation** — the tensor overlap ⟨**Θ**ₐ:**Θ**_b⟩ (`quadcorr`) and its normalized form ⟨**Θ̂**ₐ:**Θ̂**_b⟩ (`quadcorr_norm`) ∈ [−1, 1]: +1 identically oriented quadrupoles, −1 maximally anti-aligned, 0 uncorrelated.
+
+Both selections must resolve to molecules with a center of mass. Results are written to a CSV
+file, one row per distance bin, with columns
+`R,exact,tot,ii,id,dd,iq,mucorr,p2,long,gK,quadcorr,quadcorr_norm`.
+
+### Example
+
+```yaml
+analysis:
+  - !MultipoleDistribution
+    selections: ["molecule protein", "molecule protein"]
+    dr: 2.0
+    frequency: !Every 100
+```
+
+The output defaults to `multipole_dist.csv`; set `file` to override it.
+
+### Options
+
+Key           | Required | Default              | Description
+------------- | -------- | -------------------- | ----------------------------------------
+`selections`  | yes      |                      | Two selection expressions, _a_ and _b_
+`file`        | no       | `multipole_dist.csv` | Output CSV file
+`dr`          | no       | 1.0                  | Distance resolution along _R_ (Å)
+`max_r`       | no       | half box             | Maximum separation (Å)
+`frequency`   | yes      |                      | Sample frequency
+
+A medium is required for the Bjerrum length.
+
+---
+
 ## Energy
 
 Streams energy values to a file at each sampled step.
