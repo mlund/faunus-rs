@@ -1,8 +1,9 @@
-//! Multipole analysis: per-group charge statistics and dipole moment.
+//! Multipole analysis: per-group charge, dipole, and quadrupole statistics.
 //!
 //! Computes mean charge ⟨Z⟩, charge capacitance C = ⟨Z²⟩ − ⟨Z⟩²,
-//! and mean dipole moment magnitude ⟨|μ|⟩ averaged over all groups
-//! matching a selection. Handles atom-type swaps (titration) and
+//! mean dipole moment magnitude ⟨|μ|⟩, and the traceless quadrupole tensor
+//! ⟨Θ_αβ⟩ (PBC-aware, relative to COM) averaged over all groups matching a
+//! selection. Handles atom-type swaps (titration) and
 //! GCMC (only active groups contribute).
 
 use super::{Analyze, Frequency};
@@ -69,6 +70,10 @@ impl MultipoleAnalysisBuilder {
             charge_squared: WeightedMean::new(),
             dipole_scalar: WeightedMean::new(),
             dipole_squared: WeightedMean::new(),
+            quadrupole: Default::default(),
+            quadrupole_squared: Default::default(),
+            quadrupole_norm: WeightedMean::new(),
+            quadrupole_norm_squared: WeightedMean::new(),
             per_atom: Vec::new(),
             molecule_kind: Some(molecule_kind),
             track_per_atom: topology.moleculekinds()[molecule_kind].group_kind()
@@ -77,7 +82,7 @@ impl MultipoleAnalysisBuilder {
     }
 }
 
-/// Per-group charge and dipole moment analysis.
+/// Per-group charge, dipole, and quadrupole analysis.
 #[derive(Debug)]
 pub struct MultipoleAnalysis {
     selection: Selection,
@@ -87,6 +92,12 @@ pub struct MultipoleAnalysis {
     charge_squared: WeightedMean,
     dipole_scalar: WeightedMean,
     dipole_squared: WeightedMean,
+    /// Traceless quadrupole tensor components [xx, xy, xz, yy, yz, zz].
+    quadrupole: [WeightedMean; 6],
+    quadrupole_squared: [WeightedMean; 6],
+    /// Frobenius norm |Θ|_F = sqrt(Σ Θ_αβ²).
+    quadrupole_norm: WeightedMean,
+    quadrupole_norm_squared: WeightedMean,
     /// Per-atom charge stats, lazy-initialized on first sample.
     /// Stored because `to_yaml()` has no access to topology.
     per_atom: Vec<PerAtomCharge>,
@@ -101,7 +112,7 @@ impl crate::Info for MultipoleAnalysis {
         Some("multipole")
     }
     fn long_name(&self) -> Option<&'static str> {
-        Some("Per-group charge and dipole moment analysis")
+        Some("Per-group charge, dipole, and quadrupole analysis")
     }
 }
 
@@ -157,6 +168,28 @@ impl<T: Context> Analyze<T> for MultipoleAnalysis {
                 self.dipole_scalar.add(mu_norm, weight);
                 self.dipole_squared.add(mu_norm * mu_norm, weight);
             }
+
+            if let Some(qt) =
+                crate::collective_variable::group::group_quadrupole_moment(gi, context)
+            {
+                let comps = [
+                    qt[(0, 0)],
+                    qt[(0, 1)],
+                    qt[(0, 2)],
+                    qt[(1, 1)],
+                    qt[(1, 2)],
+                    qt[(2, 2)],
+                ];
+                for (acc, &v) in self.quadrupole.iter_mut().zip(&comps) {
+                    acc.add(v, weight);
+                }
+                for (acc, &v) in self.quadrupole_squared.iter_mut().zip(&comps) {
+                    acc.add(v * v, weight);
+                }
+                let norm = qt.norm();
+                self.quadrupole_norm.add(norm, weight);
+                self.quadrupole_norm_squared.add(norm * norm, weight);
+            }
         }
 
         self.num_samples += 1;
@@ -186,6 +219,33 @@ impl<T: Context> Analyze<T> for MultipoleAnalysis {
         map.try_insert("charge", format!("{z_mean:.4} ± {z_std:.4}"))?;
         map.try_insert("capacitance", capacitance)?;
         map.try_insert("dipole_moment", format!("{mu_mean:.4} ± {mu_std:.4}"))?;
+
+        let qnorm_mean = self.quadrupole_norm.mean();
+        let qnorm_std = (self.quadrupole_norm_squared.mean() - qnorm_mean * qnorm_mean)
+            .max(0.0)
+            .sqrt();
+        map.try_insert(
+            "quadrupole_moment",
+            format!("{qnorm_mean:.4} ± {qnorm_std:.4}"),
+        )?;
+
+        // Two flat lists (order [xx, xy, xz, yy, yz, zz]) rather than per-component
+        // strings, so the tensor loads straight into e.g. a NumPy array.
+        let (values, errors): (Vec<f64>, Vec<f64>) = self
+            .quadrupole
+            .iter()
+            .zip(&self.quadrupole_squared)
+            .map(|(mean_acc, sq_acc)| {
+                let mean = mean_acc.mean();
+                let std = (sq_acc.mean() - mean * mean).max(0.0).sqrt();
+                (mean, std)
+            })
+            .unzip();
+        let mut qt_map = serde_yml::Mapping::new();
+        qt_map.try_insert("order", ["xx", "xy", "xz", "yy", "yz", "zz"])?;
+        qt_map.try_insert("values", values)?;
+        qt_map.try_insert("errors", errors)?;
+        map.try_insert("quadrupole_tensor", serde_yml::Value::Mapping(qt_map))?;
 
         if !self.per_atom.is_empty() {
             let atoms: Vec<serde_yml::Value> = self
@@ -314,6 +374,61 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
             err.contains("matched multiple molecule kinds"),
             "unexpected error: {err}"
         );
+    }
+
+    #[test]
+    fn quadrupole_tensor_components_match_analytical() {
+        // Two +q charges at ±(d, d, 0) with d = 2, COM at the origin. The
+        // primitive tensor is 2q·[[d², d², 0], [d², d², 0], [0, 0, 0]] with
+        // trace 4qd², so the traceless Θ = ½(3Q − tr(Q)I) is (order
+        // [xx, xy, xz, yy, yz, zz]): [4, 12, 0, 4, 0, −8]. A like-charge,
+        // off-axis placement pins the diagonal, an off-diagonal, and the sign —
+        // unlike an antisymmetric pair, whose tensor vanishes for any impl.
+        let ctx = backend_from_str(
+            r#"
+atoms:
+  - {name: P, mass: 1.0, charge: 1.0, sigma: 1.0}
+molecules:
+  - name: PAIR
+    atoms: [P, P]
+system:
+  cell: !Cuboid [100.0, 100.0, 100.0]
+  medium: {permittivity: !Vacuum, temperature: 300.0}
+  energy: {}
+  blocks:
+    - molecule: PAIR
+      N: 1
+      insert: !Manual [[2.0, 2.0, 0.0], [-2.0, -2.0, 0.0]]
+propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
+"#,
+        );
+        let builder = MultipoleAnalysisBuilder {
+            selection: Selection::parse("all").unwrap(),
+            frequency: Frequency::Every(1),
+        };
+        let mut analysis = builder.build(&ctx).unwrap();
+        analysis.sample(&ctx, 0).unwrap();
+
+        let yaml = Analyze::<Backend>::to_yaml(&analysis).unwrap();
+        let qt = yaml.get("quadrupole_tensor").unwrap();
+        let values: Vec<f64> = qt
+            .get("values")
+            .and_then(|v| v.as_sequence())
+            .unwrap()
+            .iter()
+            .map(|v| v.as_f64().unwrap())
+            .collect();
+        let expected = [4.0, 12.0, 0.0, 4.0, 0.0, -8.0];
+        for (got, want) in values.iter().zip(&expected) {
+            assert!((got - want).abs() < 1e-9, "got {got}, expected {want}");
+        }
+        // Θ must be traceless: xx + yy + zz = 0.
+        assert!((values[0] + values[3] + values[5]).abs() < 1e-9);
+
+        // Frobenius norm counts off-diagonals twice: √(4²+4²+8² + 2·12²) = √384.
+        let norm_str = yaml.get("quadrupole_moment").unwrap().as_str().unwrap();
+        let norm: f64 = norm_str.split('±').next().unwrap().trim().parse().unwrap();
+        assert!((norm - 384.0_f64.sqrt()).abs() < 1e-3, "norm = {norm}");
     }
 
     #[test]

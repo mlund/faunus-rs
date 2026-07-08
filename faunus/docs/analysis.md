@@ -166,7 +166,7 @@ Key          | Required | Default | Description
 
 ## Multipole
 
-Per-group charge and dipole moment analysis, averaged over all groups
+Per-group charge, dipole, and quadrupole analysis, averaged over all groups
 matching a selection. Useful for tracking titration state and charge
 fluctuations.
 
@@ -174,11 +174,19 @@ Reports:
 - **⟨Z⟩ ± σ** — mean net charge and standard deviation
 - **capacitance** C = ⟨Z²⟩ − ⟨Z⟩² — charge variance
 - **⟨|μ|⟩ ± σ** — mean dipole moment magnitude (eÅ)
+- **⟨|Θ|⟩ ± σ** — mean quadrupole magnitude (Frobenius norm, eÅ²)
+- **quadrupole tensor** — mean and standard deviation (σ) of the six independent components
 - **per-atom ⟨q⟩ and ⟨q²⟩−⟨q⟩²** — for atoms with fluctuating charge (e.g. from titration or atom swaps)
 
-The dipole moment is computed relative to each group's center of mass
-with periodic boundary conditions applied.
+The dipole and quadrupole moments are computed relative to each group's
+center of mass with periodic boundary conditions applied.
 Handles atom-type swaps (titration) and GCMC (only active groups contribute).
+
+The reported quadrupole is the **traceless** form
+Θ_αβ = ½ Σ qᵢ (3 dᵢ_α dᵢ_β − dᵢ² δ_αβ) (Buckingham convention). The isotropic
+part dropped here does not affect the far-field potential, and removing it makes
+the moment vanish for isotropic charge distributions, so the values compare
+directly with experiment and literature.
 
 ### Selection resolves group-wise
 
@@ -213,6 +221,11 @@ multipole:
   charge: '4.7785 ± 2.2373'
   capacitance: 5.005
   dipole_moment: '141.6532 ± 23.8816'
+  quadrupole_moment: '312.4187 ± 45.1902'
+  quadrupole_tensor:            # order [xx, xy, xz, yy, yz, zz], loads straight into NumPy
+    order: [xx, xy, xz, yy, yz, zz]
+    values: [180.21, 12.03, -4.11, -95.44, 8.90, -84.77]
+    errors: [22.14, 3.02, 1.88, 15.30, 2.71, 11.05]
   atoms:
     - {index: 1, name: NP, ⟨q⟩: -0.52, ⟨q²⟩-⟨q⟩²: 0.2496}
     - {index: 6, name: NP, ⟨q⟩: -0.48, ⟨q²⟩-⟨q⟩²: 0.2496}
