@@ -29,7 +29,7 @@ use super::{Analyze, Frequency};
 use crate::auxiliary::{ColumnFormat, ColumnWriter, MappingExt, WeightedMean};
 use crate::cell::{BoundaryConditions, Shape};
 use crate::selection::{Selection, SelectionCache};
-use crate::Context;
+use crate::{Context, Point};
 use anyhow::Result;
 use derive_more::Debug;
 use nalgebra::Matrix3;
@@ -182,10 +182,16 @@ impl MultipoleDistributionBuilder {
 
         // Self- vs cross-correlation is decided by the resolved group set, not the raw selection
         // string, so two equivalent expressions for one species are still treated as a
-        // self-correlation (and keep the +1 Kirkwood baseline).
+        // self-correlation (and keep the +1 Kirkwood baseline). When both sets are empty — e.g. a
+        // GCMC run that starts with none of either species present — the sets carry no information,
+        // so fall back to comparing the selection strings.
         resolved[0].sort_unstable();
         resolved[1].sort_unstable();
-        let same_selection = resolved[0] == resolved[1];
+        let same_selection = if resolved[0].is_empty() && resolved[1].is_empty() {
+            self.selections.0.source() == self.selections.1.source()
+        } else {
+            resolved[0] == resolved[1]
+        };
         Ok(MultipoleDistribution {
             selections: self.selections.clone(),
             caches: Default::default(),
@@ -206,34 +212,33 @@ impl MultipoleDistributionBuilder {
 /// Reduced electrostatic representation of a single group, precomputed once per frame.
 struct GroupMoments {
     charge: f64,
-    com: crate::Point,
+    com: Point,
     /// Full dipole vector μ = Σ qᵢ(rᵢ − com), PBC-aware.
-    dipole: crate::Point,
+    dipole: Point,
     /// Traceless quadrupole Θ, PBC-aware.
     quadrupole: Matrix3<f64>,
     /// Per-atom (charge, displacement-from-COM), minimum-image. Cached so the exact energy uses
     /// the same periodic image as the multipole moments, and so each group is traversed once.
-    atoms: Vec<(f64, crate::Point)>,
+    atoms: Vec<(f64, Point)>,
 }
 
 impl GroupMoments {
     fn from_group(group_index: usize, context: &impl Context) -> Option<Self> {
-        let com = *context.groups()[group_index].mass_center()?;
+        let group = &context.groups()[group_index];
+        let com = *group.mass_center()?;
         let atomkinds = context.topology_ref().atomkinds();
         let cell = context.cell();
         // One pass builds the (charge, displacement) list; the moments are then derived from it,
         // matching geometry::{dipole_moment, quadrupole_moment} without three separate traversals.
-        let atoms: Vec<(f64, crate::Point)> = context.groups()[group_index]
+        let atoms: Vec<(f64, Point)> = group
             .iter_active()
             .map(|i| {
                 let charge = atomkinds[context.atom_kind(i)].charge();
                 (charge, cell.distance(&context.position(i), &com))
             })
             .collect();
-        let charge = atoms.iter().map(|(q, _)| q).sum();
-        let dipole = atoms
-            .iter()
-            .fold(crate::Point::zeros(), |mu, (q, d)| mu + *q * d);
+        let charge = atoms.iter().map(|&(q, _)| q).sum();
+        let dipole = atoms.iter().fold(Point::zeros(), |mu, (q, d)| mu + *q * d);
         let primitive = atoms
             .iter()
             .fold(Matrix3::zeros(), |acc, (q, d)| acc + *q * d * d.transpose());
@@ -254,7 +259,7 @@ impl GroupMoments {
 /// `separation` is the minimum-image COM–COM vector. This places both groups in the *same*
 /// periodic image the multipole expansion uses, so the exact-vs-expansion comparison is not
 /// contaminated by per-atom image flips near the box edge.
-fn exact_energy(a: &GroupMoments, b: &GroupMoments, separation: &crate::Point) -> f64 {
+fn exact_energy(a: &GroupMoments, b: &GroupMoments, separation: &Point) -> f64 {
     let mut energy = 0.0;
     for (charge_i, d_i) in &a.atoms {
         if *charge_i == 0.0 {
@@ -1088,5 +1093,21 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
             .build(&ctx, Some(&medium))
             .unwrap();
         assert!(!cross_corr.same_selection);
+    }
+
+    #[test]
+    fn empty_selections_fall_back_to_string_comparison() {
+        // Both selections match nothing (as a GCMC run starting empty would): the resolved sets
+        // carry no information, so self/cross falls back to the selection strings.
+        let ctx = backend_from_str(TWO_IONS);
+        let medium = get_medium_str(TWO_IONS).unwrap();
+        let cross = builder("molecule GHOST_A", "molecule GHOST_B", 50.0)
+            .build(&ctx, Some(&medium))
+            .unwrap();
+        assert!(!cross.same_selection);
+        let self_corr = builder("molecule GHOST_A", "molecule GHOST_A", 50.0)
+            .build(&ctx, Some(&medium))
+            .unwrap();
+        assert!(self_corr.same_selection);
     }
 }
