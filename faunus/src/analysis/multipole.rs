@@ -82,7 +82,7 @@ impl MultipoleAnalysisBuilder {
     }
 }
 
-/// Per-group charge and dipole moment analysis.
+/// Per-group charge, dipole, and quadrupole analysis.
 #[derive(Debug)]
 pub struct MultipoleAnalysis {
     selection: Selection,
@@ -112,7 +112,7 @@ impl crate::Info for MultipoleAnalysis {
         Some("multipole")
     }
     fn long_name(&self) -> Option<&'static str> {
-        Some("Per-group charge and dipole moment analysis")
+        Some("Per-group charge, dipole, and quadrupole analysis")
     }
 }
 

@@ -175,7 +175,7 @@ Reports:
 - **capacitance** C = ⟨Z²⟩ − ⟨Z⟩² — charge variance
 - **⟨|μ|⟩ ± σ** — mean dipole moment magnitude (eÅ)
 - **⟨|Θ|⟩ ± σ** — mean quadrupole magnitude (Frobenius norm, eÅ²)
-- **quadrupole tensor** — mean and error of the six independent components
+- **quadrupole tensor** — mean and standard deviation (σ) of the six independent components
 - **per-atom ⟨q⟩ and ⟨q²⟩−⟨q⟩²** — for atoms with fluctuating charge (e.g. from titration or atom swaps)
 
 The dipole and quadrupole moments are computed relative to each group's
