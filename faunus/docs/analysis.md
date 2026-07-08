@@ -256,8 +256,9 @@ ion–ion, ion–dipole, dipole–dipole, and ion–quadrupole terms, each avera
 the center-of-mass separation _R_. Comparing their sum with the exact Coulomb energy shows how
 far a multipole expansion reproduces the true interaction, and how the molecules' mutual
 orientation changes with distance. Each species may contain many molecules: every frame the
-analysis averages over all distinct pairs, so it characterises a whole solution of _N_ macroions,
-not just an isolated pair.
+analysis averages over all molecule pairs — all pairs of distinct molecules when the two
+selections name the same species, or all cross pairs when they name different species — so it
+characterises a whole solution of _N_ macroions, not just an isolated pair.
 
 Each molecule is reduced to a net charge, a dipole moment, and a traceless quadrupole moment
 about its center of mass, with periodic boundaries applied. The pair energy at separation
@@ -278,7 +279,7 @@ parentheses):
 - **⟨μ̂ₐ·μ̂_b⟩** (`mucorr`) ∈ [−1, 1] — mean cosine between the dipole directions: +1 parallel, −1 antiparallel, 0 uncorrelated.
 - **⟨P₂⟩** = ⟨(3cos²θ − 1)/2⟩ (`p2`) ∈ [−0.5, 1] — nematic-like alignment, blind to dipole sign: +1 collinear (parallel or antiparallel), 0 random, −0.5 mutually perpendicular.
 - **longitudinal projection** ⟨(μ̂ₐ·R̂)(μ̂_b·R̂)⟩ (`long`) ∈ [−1, 1] — orientation relative to the separation axis: near +1 both point along **R** (head-to-tail, end-on), near 0 both lie perpendicular to it (side-by-side, broadside).
-- **Kirkwood factor** g_K(R) = 1 + (1/N)⟨Σ μ̂ᵢ·μ̂ⱼ⟩ (`gK`) — the running dipole-correlation integral: g_K > 1 signals net parallel ordering of the surrounding dipoles, g_K < 1 net antiparallel ordering. It applies when both selections are the same species; for two different species the bare cumulative sum is reported, without the +1.
+- **Kirkwood factor** g_K(R) = 1 + (1/N)⟨Σ μ̂ᵢ·μ̂ⱼ⟩ (`gK`) — the running dipole-correlation integral, where N counts the reference molecules that carry a dipole (apolar molecules are excluded from the normalization): g_K > 1 signals net parallel ordering of the surrounding dipoles, g_K < 1 net antiparallel ordering. It applies when both selections are the same species; for two different species the bare cumulative sum is reported, without the +1.
 - **quadrupole correlation** — the tensor overlap ⟨**Θ**ₐ:**Θ**_b⟩ (`quadcorr`) and its normalized form ⟨**Θ̂**ₐ:**Θ̂**_b⟩ (`quadcorr_norm`) ∈ [−1, 1]: +1 identically oriented quadrupoles, −1 maximally anti-aligned, 0 uncorrelated.
 
 Both selections must resolve to molecules with a center of mass. Results are written to a CSV
