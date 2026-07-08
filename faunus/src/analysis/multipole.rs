@@ -1,9 +1,9 @@
 //! Multipole analysis: per-group charge, dipole, and quadrupole statistics.
 //!
 //! Computes mean charge ⟨Z⟩, charge capacitance C = ⟨Z²⟩ − ⟨Z⟩²,
-//! mean dipole moment magnitude ⟨|μ|⟩, and the primitive quadrupole tensor
-//! ⟨Q_αβ⟩ = ⟨Σ qᵢ rᵢ_α rᵢ_β⟩ (PBC-aware, relative to COM) averaged over
-//! all groups matching a selection. Handles atom-type swaps (titration) and
+//! mean dipole moment magnitude ⟨|μ|⟩, and the traceless quadrupole tensor
+//! ⟨Θ_αβ⟩ (PBC-aware, relative to COM) averaged over all groups matching a
+//! selection. Handles atom-type swaps (titration) and
 //! GCMC (only active groups contribute).
 
 use super::{Analyze, Frequency};
@@ -92,10 +92,10 @@ pub struct MultipoleAnalysis {
     charge_squared: WeightedMean,
     dipole_scalar: WeightedMean,
     dipole_squared: WeightedMean,
-    /// Primitive quadrupole tensor components [xx, xy, xz, yy, yz, zz].
+    /// Traceless quadrupole tensor components [xx, xy, xz, yy, yz, zz].
     quadrupole: [WeightedMean; 6],
     quadrupole_squared: [WeightedMean; 6],
-    /// Frobenius norm |Q|_F = sqrt(Σ Q_αβ²).
+    /// Frobenius norm |Θ|_F = sqrt(Σ Θ_αβ²).
     quadrupole_norm: WeightedMean,
     quadrupole_norm_squared: WeightedMean,
     /// Per-atom charge stats, lazy-initialized on first sample.
@@ -221,20 +221,30 @@ impl<T: Context> Analyze<T> for MultipoleAnalysis {
         map.try_insert("dipole_moment", format!("{mu_mean:.4} ± {mu_std:.4}"))?;
 
         let qnorm_mean = self.quadrupole_norm.mean();
-        let qnorm_std =
-            (self.quadrupole_norm_squared.mean() - qnorm_mean * qnorm_mean).max(0.0).sqrt();
-        map.try_insert("quadrupole_moment", format!("{qnorm_mean:.4} ± {qnorm_std:.4}"))?;
+        let qnorm_std = (self.quadrupole_norm_squared.mean() - qnorm_mean * qnorm_mean)
+            .max(0.0)
+            .sqrt();
+        map.try_insert(
+            "quadrupole_moment",
+            format!("{qnorm_mean:.4} ± {qnorm_std:.4}"),
+        )?;
 
-        const LABELS: [&str; 6] = ["xx", "xy", "xz", "yy", "yz", "zz"];
-        let mut qt_map = serde_yml::Mapping::new();
-        for (label, (mean_acc, sq_acc)) in LABELS
+        // Two flat lists (order [xx, xy, xz, yy, yz, zz]) rather than per-component
+        // strings, so the tensor loads straight into e.g. a NumPy array.
+        let (values, errors): (Vec<f64>, Vec<f64>) = self
+            .quadrupole
             .iter()
-            .zip(self.quadrupole.iter().zip(&self.quadrupole_squared))
-        {
-            let mean = mean_acc.mean();
-            let std = (sq_acc.mean() - mean * mean).max(0.0).sqrt();
-            qt_map.try_insert(*label, format!("{mean:.4} ± {std:.4}"))?;
-        }
+            .zip(&self.quadrupole_squared)
+            .map(|(mean_acc, sq_acc)| {
+                let mean = mean_acc.mean();
+                let std = (sq_acc.mean() - mean * mean).max(0.0).sqrt();
+                (mean, std)
+            })
+            .unzip();
+        let mut qt_map = serde_yml::Mapping::new();
+        qt_map.try_insert("order", ["xx", "xy", "xz", "yy", "yz", "zz"])?;
+        qt_map.try_insert("values", values)?;
+        qt_map.try_insert("errors", errors)?;
         map.try_insert("quadrupole_tensor", serde_yml::Value::Mapping(qt_map))?;
 
         if !self.per_atom.is_empty() {
@@ -368,24 +378,27 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
 
     #[test]
     fn quadrupole_tensor_components_match_analytical() {
-        // Two charges ±q at ±r on the x-axis. COM is at origin, so
-        // Q_αβ = Σ qᵢ rᵢ_α rᵢ_β cancels for opposite charges → all zero.
+        // Two +q charges at ±(d, d, 0) with d = 2, COM at the origin. The
+        // primitive tensor is 2q·[[d², d², 0], [d², d², 0], [0, 0, 0]] with
+        // trace 4qd², so the traceless Θ = ½(3Q − tr(Q)I) is (order
+        // [xx, xy, xz, yy, yz, zz]): [4, 12, 0, 4, 0, −8]. A like-charge,
+        // off-axis placement pins the diagonal, an off-diagonal, and the sign —
+        // unlike an antisymmetric pair, whose tensor vanishes for any impl.
         let ctx = backend_from_str(
             r#"
 atoms:
   - {name: P, mass: 1.0, charge: 1.0, sigma: 1.0}
-  - {name: M, mass: 1.0, charge: -1.0, sigma: 1.0}
 molecules:
-  - name: DIPOLE
-    atoms: [P, M]
+  - name: PAIR
+    atoms: [P, P]
 system:
   cell: !Cuboid [100.0, 100.0, 100.0]
   medium: {permittivity: !Vacuum, temperature: 300.0}
   energy: {}
   blocks:
-    - molecule: DIPOLE
+    - molecule: PAIR
       N: 1
-      insert: !Manual [[2.0, 0.0, 0.0], [-2.0, 0.0, 0.0]]
+      insert: !Manual [[2.0, 2.0, 0.0], [-2.0, -2.0, 0.0]]
 propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
 "#,
         );
@@ -398,11 +411,24 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
 
         let yaml = Analyze::<Backend>::to_yaml(&analysis).unwrap();
         let qt = yaml.get("quadrupole_tensor").unwrap();
-        for label in ["xx", "xy", "xz", "yy", "yz", "zz"] {
-            let s = qt.get(label).and_then(|v| v.as_str()).unwrap();
-            let mean: f64 = s.split('±').next().unwrap().trim().parse().unwrap();
-            assert!(mean.abs() < 1e-10, "{label} = {mean}, expected ~0");
+        let values: Vec<f64> = qt
+            .get("values")
+            .and_then(|v| v.as_sequence())
+            .unwrap()
+            .iter()
+            .map(|v| v.as_f64().unwrap())
+            .collect();
+        let expected = [4.0, 12.0, 0.0, 4.0, 0.0, -8.0];
+        for (got, want) in values.iter().zip(&expected) {
+            assert!((got - want).abs() < 1e-9, "got {got}, expected {want}");
         }
+        // Θ must be traceless: xx + yy + zz = 0.
+        assert!((values[0] + values[3] + values[5]).abs() < 1e-9);
+
+        // Frobenius norm counts off-diagonals twice: √(4²+4²+8² + 2·12²) = √384.
+        let norm_str = yaml.get("quadrupole_moment").unwrap().as_str().unwrap();
+        let norm: f64 = norm_str.split('±').next().unwrap().trim().parse().unwrap();
+        assert!((norm - 384.0_f64.sqrt()).abs() < 1e-3, "norm = {norm}");
     }
 
     #[test]

@@ -27,7 +27,7 @@ use crate::geometry::{self, GyrationTensor};
 use crate::group::GroupCollection;
 use serde::{Deserialize, Serialize};
 
-/// Compute the primitive quadrupole tensor of a group, PBC-aware relative to its COM.
+/// Compute the traceless quadrupole tensor of a group, PBC-aware relative to its COM.
 pub(crate) fn group_quadrupole_moment(
     group_index: usize,
     context: &dyn EvalContext,

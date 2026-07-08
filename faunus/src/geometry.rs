@@ -20,22 +20,24 @@ pub(crate) fn dipole_moment(
         })
 }
 
-/// Compute the primitive quadrupole tensor of a charge distribution relative to a reference point.
+/// Compute the traceless quadrupole tensor of a charge distribution relative to a reference point.
 ///
-/// **Q_αβ** = Σ qᵢ (rᵢ − r_ref)_α (rᵢ − r_ref)_β,
-/// using minimum-image distances. To obtain the traceless form:
-/// Θ_αβ = (3 Q_αβ − tr(**Q**) δ_αβ) / 2.
+/// **Θ**_αβ = ½ Σ qᵢ (3 dᵢ_α dᵢ_β − dᵢ² δ_αβ),  dᵢ = rᵢ − r_ref  (Buckingham convention),
+/// using minimum-image distances. The traceless form is reported because the isotropic
+/// part Σ qᵢ dᵢ² does not contribute to the far-field potential and would otherwise
+/// register a spurious moment for isotropic charge distributions.
 pub(crate) fn quadrupole_moment(
     charges_positions: impl IntoIterator<Item = (f64, Point)>,
     reference: &Point,
     cell: &impl SimulationCell,
 ) -> Matrix3<f64> {
-    charges_positions
+    let primitive = charges_positions
         .into_iter()
         .fold(Matrix3::zeros(), |q, (charge, pos)| {
-            let r = cell.distance(&pos, reference);
-            q + charge * r * r.transpose()
-        })
+            let d = cell.distance(&pos, reference);
+            q + charge * d * d.transpose()
+        });
+    0.5 * (3.0 * primitive - primitive.trace() * Matrix3::identity())
 }
 
 /// Mass-weighted gyration tensor with eigendecomposition.
