@@ -40,6 +40,7 @@ mod structure_writer;
 mod virtual_translate;
 mod virtual_volume_move;
 mod widom;
+mod widom_rotation;
 pub use collective_variable::{CollectiveVariableAnalysis, CollectiveVariableAnalysisBuilder};
 pub use double_layer_pressure::{DoubleLayerPressure, DoubleLayerPressureBuilder};
 pub use electric_potential_profile::{ElectricPotentialProfile, ElectricPotentialProfileBuilder};
@@ -54,6 +55,7 @@ pub use spatial_distribution::{SpatialDistribution, SpatialDistributionBuilder};
 pub use structure_writer::{StructureWriter, StructureWriterBuilder};
 pub use virtual_translate::{VirtualTranslate, VirtualTranslateBuilder};
 pub use virtual_volume_move::{VirtualVolumeMove, VirtualVolumeMoveBuilder};
+pub use widom_rotation::{WidomRotation, WidomRotationBuilder};
 
 /// Frequency of analysis.
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
@@ -139,6 +141,8 @@ pub enum AnalysisBuilder {
     DoubleLayerPressure(DoubleLayerPressureBuilder),
     /// Electric potential profile φ(z) along z (screened slab)
     ElectricPotentialProfile(ElectricPotentialProfileBuilder),
+    /// Widom rotational perturbation about the center of mass
+    WidomRotation(WidomRotationBuilder),
 }
 
 /// Prefix `dir` onto a relative output path that stays within `dir`.
@@ -206,6 +210,7 @@ impl AnalysisBuilder {
             Self::MultipoleDistribution(b) => b.apply_output_dir(dir),
             Self::DoubleLayerPressure(b) => b.apply_output_dir(dir),
             Self::ElectricPotentialProfile(b) => b.apply_output_dir(dir),
+            Self::WidomRotation(b) => b.apply_output_dir(dir),
         }
     }
 
@@ -235,6 +240,7 @@ impl AnalysisBuilder {
             Self::MultipoleDistribution(builder) => Box::new(builder.build(context, medium)?),
             Self::DoubleLayerPressure(builder) => Box::new(builder.build(context, medium)?),
             Self::ElectricPotentialProfile(builder) => Box::new(builder.build(context, medium)?),
+            Self::WidomRotation(builder) => Box::new(builder.build(context, rt)?),
         })
     }
 }

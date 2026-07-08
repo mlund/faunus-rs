@@ -114,7 +114,7 @@ Computes size and shape anisotropy descriptors from the mass-weighted gyration t
 ([doi:10/d6ff](https://doi.org/10/d6ff)).
 For each matching group the 3×3 symmetric gyration tensor is built as
 `S_ij = (1/M) Σ m_k r_i r_j`, where `r` is the PBC-aware displacement from the
-centre of mass. Eigenvalue decomposition yields the principal moments
+center of mass. Eigenvalue decomposition yields the principal moments
 `λ₁ ≤ λ₂ ≤ λ₃` from which the following descriptors are derived.
 
 Following [IUPAC 2014](https://doi.org/10.1515/pac-2013-0201) nomenclature,
@@ -917,6 +917,82 @@ A warning is emitted if convergence is not reached.
 The YAML output includes the covariance matrix at log-spaced lags,
 time-dependent diffusion coefficients D_x(τ), D_y(τ), D_z(τ) from
 eigenvalue decomposition, and an isotropic estimate from the trace.
+
+---
+
+## Widom Rotation
+
+Measures how the surroundings restrict a molecule's orientation. For each
+snapshot a molecule is held at its center of mass and rigidly turned to `M` trial
+orientations spread evenly over all rotations
+([Alexa 2022](https://doi.org/10.1109/CVPR52688.2022.00811)). Only its
+interaction with the rest of the system is evaluated, using the run's own energy
+function. Turning a molecule about its center of mass leaves its internal
+geometry unchanged, so its internal energy plays no part.
+
+From the trial energies `u(Ω)` the analysis reports, by Widom perturbation
+([Widom 1963](https://doi.org/10.1063/1.1734110)):
+
+$$W = -k_BT \ln\left\langle \frac{1}{M}\sum_k e^{-u_k/k_BT}\right\rangle$$
+
+the orientation-averaged free energy `W`, the mean interaction, the orientational
+entropy (the order parameter–free energy link of
+[Akke et al. 1993](https://doi.org/10.1021/ja00074a073)), and the effective
+number of accessible orientations `N_eff`. For each
+requested molecular vector it also reports the Lipari–Szabo order parameter
+([Lipari & Szabo 1982](https://doi.org/10.1021/ja00381a009)):
+
+$$S^2 = \frac{3}{2}\sum_{\alpha\beta}\langle v_\alpha v_\beta\rangle^2 - \frac{1}{2}$$
+
+where `S²=1` means the vector is fully locked and `S²=0` means it is free. A
+vector is given as a pair of atoms (`!pair [i, j]`), a gyration principal axis
+(`!axis 0|1|2`), or an explicit direction in the molecule's reference frame
+(`!body [x, y, z]`). Optionally, the analysis also reports the mean torque and
+the librational stiffness of the orientational cage.
+
+The analysis reports one set of numbers per run; for a spatial profile, run
+separate [umbrella](umbrella.md) windows and combine them afterwards. With
+implicit solvent the reported energies are free energies relative to pure
+solvent, not mechanical energies.
+
+The selection must resolve to molecular groups (not atomic) of a single kind.
+
+### Example
+
+```yaml
+analysis:
+  - !WidomRotation
+    selection: "molecule phytate"
+    orientations: 500
+    vectors:
+      - !pair [0, 5]
+      - !axis 2
+      - !body [0.0, 0.0, 1.0]
+    torque: true
+    stiffness: true
+    file: widomrot.csv.gz
+    frequency: !Every 100
+```
+
+### Options
+
+Key            | Required | Default | Description
+-------------- | -------- | ------- | -------------------------------------------
+`selection`    | yes      |         | Selection for molecular group(s) of one kind
+`orientations` | yes      |         | Number of trial orientations `M` (typically 100–1000)
+`vectors`      | no       | `[]`    | Vectors for `S²`: `!pair [i,j]`, `!axis 0\|1\|2`, or `!body [x,y,z]`
+`torque`       | no       | `false` | Also measure the mean torque
+`dtheta`       | no       | `0.01`  | Rotation step for the torque (rad)
+`stiffness`    | no       | `false` | Also measure the librational stiffness
+`file`         | no       |         | Streaming output file (see [Output file formats](#output-file-formats))
+`frequency`    | yes      |         | Sample frequency, e.g. `!Every 100`
+
+### Output
+
+The YAML output includes `W` (kJ/mol), the mean interaction, the orientational
+entropy, `N_eff`, and the per-vector and mean `S²`, each with a statistical
+error. Torque and stiffness are added when enabled. If `file` is given, each
+sampled step writes columns `step`, `W/kJ/mol`, `mean_S2`, and `N_eff`.
 
 ---
 
