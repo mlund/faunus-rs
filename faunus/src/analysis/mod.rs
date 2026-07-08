@@ -29,6 +29,7 @@ mod electric_potential_profile;
 mod energy;
 mod mean_along_coordinate;
 mod multipole;
+mod multipole_distribution;
 mod radial_distribution;
 pub mod reweight;
 mod rotational_diffusion;
@@ -44,6 +45,7 @@ pub use double_layer_pressure::{DoubleLayerPressure, DoubleLayerPressureBuilder}
 pub use electric_potential_profile::{ElectricPotentialProfile, ElectricPotentialProfileBuilder};
 pub use energy::{EnergyAnalysis, EnergyAnalysisBuilder};
 pub use mean_along_coordinate::{MeanAlongCoordinate, MeanAlongCoordinateBuilder};
+pub use multipole_distribution::{MultipoleDistribution, MultipoleDistributionBuilder};
 pub use radial_distribution::{RadialDistribution, RadialDistributionBuilder};
 pub use rotational_diffusion::{RotationalDiffusion, RotationalDiffusionBuilder};
 pub use scaled_widom_insertion::{ScaledWidomInsertion, ScaledWidomInsertionBuilder};
@@ -131,6 +133,8 @@ pub enum AnalysisBuilder {
     RotationalDiffusion(RotationalDiffusionBuilder),
     /// Per-group charge and dipole moment analysis
     Multipole(multipole::MultipoleAnalysisBuilder),
+    /// Multipolar decomposition and orientational correlations vs. COM separation
+    MultipoleDistribution(MultipoleDistributionBuilder),
     /// Osmotic pressure between two charged planes (Guldbrand midplane method)
     DoubleLayerPressure(DoubleLayerPressureBuilder),
     /// Electric potential profile φ(z) along z (screened slab)
@@ -199,6 +203,7 @@ impl AnalysisBuilder {
             Self::VirtualVolumeMove(b) => b.apply_output_dir(dir),
             Self::RotationalDiffusion(b) => b.apply_output_dir(dir),
             Self::Multipole(b) => b.apply_output_dir(dir),
+            Self::MultipoleDistribution(b) => b.apply_output_dir(dir),
             Self::DoubleLayerPressure(b) => b.apply_output_dir(dir),
             Self::ElectricPotentialProfile(b) => b.apply_output_dir(dir),
         }
@@ -227,6 +232,7 @@ impl AnalysisBuilder {
             Self::VirtualVolumeMove(builder) => Box::new(builder.build(rt)?),
             Self::RotationalDiffusion(builder) => Box::new(builder.build(context)?),
             Self::Multipole(builder) => Box::new(builder.build(context)?),
+            Self::MultipoleDistribution(builder) => Box::new(builder.build(context, medium)?),
             Self::DoubleLayerPressure(builder) => Box::new(builder.build(context, medium)?),
             Self::ElectricPotentialProfile(builder) => Box::new(builder.build(context, medium)?),
         })
