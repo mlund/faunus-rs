@@ -117,12 +117,17 @@ pub trait ParticleSystem: GroupCollection + WithCell + WithTopology {
         self.topology_ref().atomkinds()[self.atom_kind(index)].charge()
     }
 
-    /// Resolve a selection to active atom indices.
+    /// Resolve a selection to active atom indices, using each atom's current kind.
+    ///
+    /// Resolution is always against runtime kinds — there is no template-based variant — so a
+    /// titration or speciation swap is reflected immediately.
     fn resolve_atoms(&self, selection: &crate::selection::Selection) -> Vec<usize> {
         selection.resolve_atoms(self.topology_ref(), self.groups(), &|i| self.atom_kind(i))
     }
 
-    /// Resolve a selection to group indices.
+    /// Resolve a selection to group indices, using each atom's current kind.
+    ///
+    /// See [`resolve_atoms`](Self::resolve_atoms).
     fn resolve_groups(&self, selection: &crate::selection::Selection) -> Vec<usize> {
         selection.resolve_groups(self.topology_ref(), self.groups(), &|i| self.atom_kind(i))
     }

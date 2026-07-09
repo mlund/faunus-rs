@@ -124,18 +124,18 @@ struct AtomContext<'a> {
 impl<'a> AtomContext<'a> {
     /// Build context for an atom at `abs_idx` within `group`.
     ///
-    /// `atom_kind_id` is the atom's *current* kind, which a titration or speciation swap can
-    /// move away from the molecule template's.
+    /// `atom_kind_index` indexes `topology.atomkinds()` and is the atom's *current* kind, which a
+    /// titration or speciation swap can move away from the molecule template's.
     fn new(
         abs_idx: usize,
         group: &Group,
         mol_kind: &'a MoleculeKind,
         topology: &'a Topology,
-        atom_kind_id: usize,
+        atom_kind_index: usize,
     ) -> Self {
         let rel_idx = abs_idx - group.start();
         let topo_rel = mol_kind.topology_index(rel_idx);
-        let atom_kind = &topology.atomkinds()[atom_kind_id];
+        let atom_kind = &topology.atomkinds()[atom_kind_index];
         let atom_name = mol_kind
             .atom_names()
             .get(topo_rel)
