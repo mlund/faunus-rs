@@ -14,6 +14,7 @@
 
 //! # Support for Monte Carlo sampling
 
+use crate::analysis::AnalysisCollectionExt;
 use crate::analysis::{AnalysisCollection, Analyze};
 use crate::energy::EnergyChange;
 use crate::group::*;

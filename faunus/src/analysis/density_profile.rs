@@ -22,7 +22,7 @@
 //! An insertion or deletion therefore only changes the count of the configuration it occurs in,
 //! leaving the mean equal to the grand-canonical ⟨N(z)⟩ when the particle number fluctuates.
 
-use super::{Analyze, Frequency};
+use super::{Analyze, Frequency, Sampling};
 use crate::auxiliary::{BlockAverage, BlockSummary, ColumnWriter, MappingExt};
 use crate::cell::Shape;
 use crate::group::GroupSize;
@@ -80,9 +80,8 @@ impl DensityProfileBuilder {
             masses: new_accumulators(n_bins),
             total_count: BlockAverage::new(),
             warned_volume_change: false,
-            num_samples: 0,
             output_file: self.file.clone(),
-            frequency: self.frequency,
+            sampling: Sampling::new(self.frequency),
         })
     }
 
@@ -134,10 +133,10 @@ pub struct DensityProfile {
     /// Total number of selected particles, reported as a consistency check.
     total_count: BlockAverage,
     warned_volume_change: bool,
-    num_samples: usize,
     #[debug(skip)]
     output_file: PathBuf,
-    frequency: Frequency,
+    /// Frequency and frame count, owned by the framework.
+    sampling: Sampling,
 }
 
 impl DensityProfile {
@@ -188,11 +187,11 @@ impl DensityProfile {
     /// Build the YAML results mapping (inherent so it is callable without choosing a
     /// `Context` type; the [`Analyze`] trait method delegates here).
     fn report(&self) -> Option<serde_yml::Value> {
-        if self.num_samples == 0 {
+        if self.sampling.num_samples() == 0 {
             return None;
         }
         let mut map = serde_yml::Mapping::new();
-        map.try_insert("num_samples", self.num_samples)?;
+        map.try_insert("num_samples", self.sampling.num_samples())?;
         map.try_insert("num_bins", self.grid.n_bins())?;
         map.try_insert("bin_width/Å", self.grid.bin_width())?;
         map.try_insert("area/Å²", self.grid.area())?;
@@ -261,11 +260,11 @@ impl crate::Info for DensityProfile {
 }
 
 impl<T: Context> Analyze<T> for DensityProfile {
-    fn frequency(&self) -> Frequency {
-        self.frequency
+    fn sampling(&self) -> &Sampling {
+        &self.sampling
     }
-    fn set_frequency(&mut self, freq: Frequency) {
-        self.frequency = freq;
+    fn sampling_mut(&mut self) -> &mut Sampling {
+        &mut self.sampling
     }
 
     fn perform_sample(&mut self, context: &T, _step: usize, _weight: f64) -> Result<()> {
@@ -278,16 +277,11 @@ impl<T: Context> Analyze<T> for DensityProfile {
         for (accumulator, &mass) in self.masses.iter_mut().zip(&masses) {
             accumulator.add(mass);
         }
-        self.num_samples += 1;
         Ok(())
     }
 
-    fn num_samples(&self) -> usize {
-        self.num_samples
-    }
-
     fn write_to_disk(&mut self) -> Result<()> {
-        if self.num_samples == 0 {
+        if self.sampling.num_samples() == 0 {
             return Ok(());
         }
         self.write_profile()

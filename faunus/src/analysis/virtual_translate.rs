@@ -27,7 +27,7 @@
 //! displacement magnitude.
 
 use super::widom::WidomAccumulator;
-use super::{Analyze, Frequency};
+use super::{Analyze, Sampling};
 use crate::auxiliary::{ColumnWriter, MappingExt};
 use crate::axes::Axes;
 use crate::change::{Change, GroupChange};
@@ -83,8 +83,10 @@ pub struct VirtualTranslate {
     #[debug(skip)]
     stream: Option<ColumnWriter>,
 
-    /// Sample frequency
-    frequency: Frequency,
+    /// Frequency and frame count, owned by the framework. Deserialized from `frequency`.
+    #[builder(setter(name = "frequency", into))]
+    #[builder_field_attr(serde(rename = "frequency"))]
+    sampling: Sampling,
 
     /// Widom exponential average accumulator (log-sum-exp)
     #[builder(setter(skip))]
@@ -137,7 +139,7 @@ impl VirtualTranslateBuilder {
         if self.displacement.is_none() {
             anyhow::bail!("Missing required field 'dL' for VirtualTranslate analysis");
         }
-        if self.frequency.is_none() {
+        if self.sampling.is_none() {
             anyhow::bail!("Missing required field 'frequency' for VirtualTranslate analysis");
         }
         Ok(())
@@ -170,7 +172,7 @@ impl VirtualTranslateBuilder {
             unit_direction,
             output_file: self.output_file.as_ref().and_then(|p| p.clone()),
             stream,
-            frequency: self.frequency.unwrap(),
+            sampling: self.sampling.unwrap(),
             widom: WidomAccumulator::default(),
             group_cache: None,
             thermal_energy,
@@ -236,11 +238,11 @@ impl VirtualTranslate {
 }
 
 impl<T: Context> Analyze<T> for VirtualTranslate {
-    fn frequency(&self) -> Frequency {
-        self.frequency
+    fn sampling(&self) -> &Sampling {
+        &self.sampling
     }
-    fn set_frequency(&mut self, freq: Frequency) {
-        self.frequency = freq;
+    fn sampling_mut(&mut self) -> &mut Sampling {
+        &mut self.sampling
     }
 
     fn perform_sample(&mut self, context: &T, step: usize, weight: f64) -> Result<()> {
@@ -278,10 +280,6 @@ impl<T: Context> Analyze<T> for VirtualTranslate {
         Ok(())
     }
 
-    fn num_samples(&self) -> usize {
-        self.widom.len()
-    }
-
     fn results(&self) -> Option<serde_yml::Value> {
         let mut map = serde_yml::Mapping::new();
         map.try_insert("displacement", self.displacement)?;
@@ -296,6 +294,7 @@ impl<T: Context> Analyze<T> for VirtualTranslate {
 mod tests {
     use super::*;
     use crate::analysis::AnalysisBuilder;
+    use crate::analysis::Frequency;
     use crate::Info;
     use float_cmp::assert_approx_eq;
 
@@ -450,12 +449,12 @@ mod tests {
         assert_eq!(vt.selection.source(), "molecule MOL");
         assert_approx_eq!(f64, vt.displacement, 0.01);
         assert_eq!(vt.directions, Axes::Z);
-        assert!(matches!(vt.frequency, Frequency::Every(10)));
+        assert!(matches!(vt.sampling.frequency(), Frequency::Every(10)));
 
         let vt = deserialize_vt_builder(&yaml, 1).build(RT_298).unwrap();
         assert_approx_eq!(f64, vt.displacement, 0.05);
         assert_eq!(vt.directions, Axes::X);
-        assert!(matches!(vt.frequency, Frequency::Every(5)));
+        assert!(matches!(vt.sampling.frequency(), Frequency::Every(5)));
     }
 
     #[test]

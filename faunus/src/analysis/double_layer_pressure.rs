@@ -36,7 +36,7 @@
 //! interactions are not part of the cross-midplane stress as long as ions do not
 //! overlap the midplane.
 
-use super::{Analyze, Frequency};
+use super::{Analyze, Frequency, Sampling};
 use crate::auxiliary::{BlockAverage, ColumnWriter, MappingExt};
 use crate::cell::{BoundaryConditions, Shape};
 use crate::energy::slab_potential::square_sheet_factor;
@@ -165,9 +165,8 @@ impl DoubleLayerPressureBuilder {
             p_ideal: BlockAverage::new(),
             p_corr: BlockAverage::new(),
             p_osm: BlockAverage::new(),
-            num_samples: 0,
             stream,
-            frequency: self.frequency,
+            sampling: Sampling::new(self.frequency),
         })
     }
 }
@@ -205,13 +204,12 @@ pub struct DoubleLayerPressure {
     p_corr: BlockAverage,
     /// Total osmotic pressure, kJ/mol·Å⁻³.
     p_osm: BlockAverage,
-    /// Number of samples taken.
-    num_samples: usize,
     /// Optional streaming output.
     #[debug(skip)]
     stream: Option<ColumnWriter>,
     /// Sampling frequency.
-    frequency: Frequency,
+    /// Frequency and frame count, owned by the framework.
+    sampling: Sampling,
 }
 
 /// Net `z`-force (without the Coulomb prefactor) that the lower half (`z < 0`) exerts on
@@ -344,7 +342,7 @@ impl DoubleLayerPressure {
     fn report(&self) -> Option<serde_yml::Value> {
         let fipb = self.fipb_pressure();
         let mut map = serde_yml::Mapping::new();
-        map.try_insert("num_samples", self.num_samples)?;
+        map.try_insert("num_samples", self.sampling.num_samples())?;
         map.insert("rho_mid/Å⁻³".into(), self.rho_mid.to_yaml()?);
         map.insert("p_ideal/mM".into(), self.block_mm_yaml(&self.p_ideal, 0.0)?);
         map.insert("p_corr/mM".into(), self.block_mm_yaml(&self.p_corr, fipb)?);
@@ -368,11 +366,11 @@ impl crate::Info for DoubleLayerPressure {
 }
 
 impl<T: Context> Analyze<T> for DoubleLayerPressure {
-    fn frequency(&self) -> Frequency {
-        self.frequency
+    fn sampling(&self) -> &Sampling {
+        &self.sampling
     }
-    fn set_frequency(&mut self, freq: Frequency) {
-        self.frequency = freq;
+    fn sampling_mut(&mut self) -> &mut Sampling {
+        &mut self.sampling
     }
 
     fn perform_sample(&mut self, context: &T, step: usize, _weight: f64) -> Result<()> {
@@ -399,7 +397,6 @@ impl<T: Context> Analyze<T> for DoubleLayerPressure {
         self.p_ideal.add(p_ideal);
         self.p_corr.add(p_corr);
         self.p_osm.add(p_osm);
-        self.num_samples += 1;
 
         // Accumulate the laterally-averaged counterion charge profile σ_ion(z) (each ion
         // weighted by its own charge → mixture-aware) for the F_iPB correction at report time.
@@ -425,10 +422,6 @@ impl<T: Context> Analyze<T> for DoubleLayerPressure {
             ])?;
         }
         Ok(())
-    }
-
-    fn num_samples(&self) -> usize {
-        self.num_samples
     }
 
     fn results(&self) -> Option<serde_yml::Value> {
@@ -568,9 +561,8 @@ mod tests {
             p_ideal: BlockAverage::new(),
             p_corr: BlockAverage::new(),
             p_osm: BlockAverage::new(),
-            num_samples: 0,
             stream: None,
-            frequency: Frequency::Every(1),
+            sampling: Sampling::new(Frequency::Every(1)),
         }
     }
 
@@ -590,7 +582,7 @@ mod tests {
         let mut a = dummy(crate::R_IN_KJ_PER_MOL * 298.15);
         a.p_osm.add(1.0);
         a.p_osm.add(3.0);
-        a.num_samples = 2;
+        a.sampling.set_num_samples(2);
         let yaml = a.report().unwrap();
         let osm = &yaml["p_osm/mM"];
         assert!(osm.get("mean").is_some());

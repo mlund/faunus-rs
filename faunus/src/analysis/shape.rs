@@ -18,7 +18,7 @@
 //! gyration tensor, streaming per-step data to an optional file and reporting
 //! averages in YAML output.
 
-use super::{Analyze, Frequency};
+use super::{Analyze, Frequency, Sampling};
 use crate::auxiliary::{ColumnWriter, MappingExt, WeightedMean};
 use crate::cell::BoundaryConditions;
 use crate::geometry::GyrationTensor;
@@ -77,8 +77,7 @@ impl ShapeAnalysisBuilder {
         Ok(ShapeAnalysis {
             selection: self.selection.clone(),
             stream,
-            frequency: self.frequency,
-            num_samples: 0,
+            sampling: Sampling::new(self.frequency),
             num_groups_sampled: 0,
             gyration_radius_squared: WeightedMean::new(),
             gyration_radius: WeightedMean::new(),
@@ -106,9 +105,8 @@ pub struct ShapeAnalysis {
     selection: Selection,
     #[debug(skip)]
     stream: Option<ColumnWriter>,
-    frequency: Frequency,
-    /// Frames sampled.
-    num_samples: usize,
+    /// Frequency and frame count, owned by the framework.
+    sampling: Sampling,
     /// Gyration tensors accumulated, one per matching molecule per frame. This, not `num_samples`,
     /// is the count behind every mean below.
     num_groups_sampled: usize,
@@ -199,11 +197,11 @@ impl crate::Info for ShapeAnalysis {
 }
 
 impl<T: Context> Analyze<T> for ShapeAnalysis {
-    fn frequency(&self) -> Frequency {
-        self.frequency
+    fn sampling(&self) -> &Sampling {
+        &self.sampling
     }
-    fn set_frequency(&mut self, freq: Frequency) {
-        self.frequency = freq;
+    fn sampling_mut(&mut self) -> &mut Sampling {
+        &mut self.sampling
     }
 
     fn perform_sample(&mut self, context: &T, step: usize, weight: f64) -> Result<()> {
@@ -263,12 +261,7 @@ impl<T: Context> Analyze<T> for ShapeAnalysis {
 
             self.num_groups_sampled += 1;
         }
-        self.num_samples += 1;
         Ok(())
-    }
-
-    fn num_samples(&self) -> usize {
-        self.num_samples
     }
 
     fn results(&self) -> Option<serde_yml::Value> {
@@ -299,7 +292,7 @@ impl<T: Context> Analyze<T> for ShapeAnalysis {
         map.try_insert("Syy", self.tensor_yy.mean())?;
         map.try_insert("Syz", self.tensor_yz.mean())?;
         map.try_insert("Szz", self.tensor_zz.mean())?;
-        map.try_insert("num_samples", self.num_samples)?;
+        map.try_insert("num_samples", self.sampling.num_samples())?;
         map.try_insert("num_groups_sampled", self.num_groups_sampled)?;
 
         Some(serde_yml::Value::Mapping(map))

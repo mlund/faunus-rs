@@ -17,7 +17,7 @@
 //! Implements the method of [Svensson & Woodward (1988)](https://doi.org/10.1080/00268978800100203)
 //! where charge scaling maintains electroneutrality in the finite periodic box.
 
-use super::{Analyze, Frequency};
+use super::{Analyze, Sampling};
 use crate::auxiliary::{BlockAverage, MappingExt};
 use crate::cell::BoundaryConditions;
 use crate::energy::builder::PairInteraction;
@@ -113,8 +113,10 @@ pub struct ScaledWidomInsertion {
     #[allow(dead_code)] // consumed at build time; kept for struct completeness
     default: Vec<PairInteraction>,
 
-    /// Sample frequency
-    frequency: Frequency,
+    /// Frequency and frame count, owned by the framework. Deserialized from `frequency`.
+    #[builder(setter(name = "frequency", into))]
+    #[builder_field_attr(serde(rename = "frequency"))]
+    sampling: Sampling,
 
     // --- constructed at build time ---
     #[builder(setter(skip))]
@@ -193,10 +195,6 @@ pub struct ScaledWidomInsertion {
     #[builder_field_attr(serde(skip))]
     mu_unscaled: BlockAverage,
 
-    #[builder(setter(skip))]
-    #[builder_field_attr(serde(skip))]
-    num_samples: usize,
-
     /// Seeded RNG for deterministic ghost insertion positions
     #[builder(setter(skip))]
     #[builder_field_attr(serde(skip))]
@@ -220,8 +218,8 @@ impl ScaledWidomInsertionBuilder {
             .atom
             .as_deref()
             .ok_or_else(|| anyhow::anyhow!("ScaledWidomInsertion: missing 'atom' field"))?;
-        let frequency = self
-            .frequency
+        let sampling = self
+            .sampling
             .ok_or_else(|| anyhow::anyhow!("ScaledWidomInsertion: missing 'frequency' field"))?;
         let insertions = self.insertions.unwrap_or(10);
         let lambda_points = self.lambda_points.unwrap_or(11);
@@ -260,7 +258,7 @@ impl ScaledWidomInsertionBuilder {
             insertions,
             lambda_points,
             default: interactions.clone(),
-            frequency,
+            sampling,
             ghost_charge,
             lambda_inv: 1.0 / (lambda_points - 1).max(1) as f64,
             beta,
@@ -277,7 +275,6 @@ impl ScaledWidomInsertionBuilder {
             mu_el: BlockAverage::new(),
             mu_total: BlockAverage::new(),
             mu_unscaled: BlockAverage::new(),
-            num_samples: 0,
             rng: rand::rngs::StdRng::seed_from_u64(0xB0BA_CAFE_F00D),
         })
     }
@@ -337,12 +334,11 @@ impl crate::Info for ScaledWidomInsertion {
 }
 
 impl<T: Context> Analyze<T> for ScaledWidomInsertion {
-    fn frequency(&self) -> Frequency {
-        self.frequency
+    fn sampling(&self) -> &Sampling {
+        &self.sampling
     }
-
-    fn set_frequency(&mut self, freq: Frequency) {
-        self.frequency = freq;
+    fn sampling_mut(&mut self) -> &mut Sampling {
+        &mut self.sampling
     }
 
     fn perform_sample(&mut self, context: &T, _step: usize, _weight: f64) -> Result<()> {
@@ -422,22 +418,17 @@ impl<T: Context> Analyze<T> for ScaledWidomInsertion {
         self.mu_el.add(mu_el_block);
         self.mu_total.add(mu_total_block);
         self.mu_unscaled.add(mu_unscaled_block);
-        self.num_samples += 1;
 
         Ok(())
     }
 
-    fn num_samples(&self) -> usize {
-        self.num_samples
-    }
-
     fn results(&self) -> Option<serde_yml::Value> {
-        if self.num_samples == 0 {
+        if self.sampling.num_samples() == 0 {
             return None;
         }
         let mut map = serde_yml::Mapping::new();
         map.try_insert("atom", &self.atom)?;
-        map.try_insert("num_samples", self.num_samples)?;
+        map.try_insert("num_samples", self.sampling.num_samples())?;
         let mut excess = serde_yml::Mapping::new();
         excess.insert("short_range".into(), self.mu_sr.to_yaml()?);
         excess.insert("electrostatic".into(), self.mu_el.to_yaml()?);
@@ -454,6 +445,7 @@ impl<T: Context> Analyze<T> for ScaledWidomInsertion {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::analysis::Frequency;
 
     #[test]
     fn deserialize_builder() {
@@ -483,7 +475,7 @@ default:
             insertions: 10,
             lambda_points: 11,
             default: vec![],
-            frequency: Frequency::Every(10),
+            sampling: Sampling::new(Frequency::Every(10)),
             ghost_charge: 1.0,
             lambda_inv: 0.1,
             beta: 1.0,
@@ -500,7 +492,6 @@ default:
             mu_el: BlockAverage::new(),
             mu_total: BlockAverage::new(),
             mu_unscaled: BlockAverage::new(),
-            num_samples: 0,
             rng: rand::rngs::StdRng::seed_from_u64(0),
         };
         use crate::Info;

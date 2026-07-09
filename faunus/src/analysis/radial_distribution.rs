@@ -3,7 +3,7 @@
 //! Supports atom-atom and center-of-mass (COM-COM) pair distributions
 //! with minimum image convention for periodic boundary conditions.
 
-use super::{Analyze, Frequency};
+use super::{Analyze, Frequency, Sampling};
 use crate::auxiliary::{ColumnWriter, MappingExt};
 use crate::axes::Axes;
 use crate::cell::{BoundaryConditions, Shape};
@@ -75,13 +75,12 @@ impl RadialDistributionBuilder {
             histogram,
             volume_sum: 0.0,
             pair_count_sum: 0.0,
-            num_samples: 0,
             use_com: self.use_com,
             exclude_intramolecular,
             dimension: self.dimension,
             output_file: self.file.clone(),
             stream,
-            frequency: self.frequency,
+            sampling: Sampling::new(self.frequency),
         })
     }
 }
@@ -95,14 +94,14 @@ pub struct RadialDistribution {
     volume_sum: f64,
     /// Accumulated pair count across all frames (for GC ensemble correctness).
     pair_count_sum: f64,
-    num_samples: usize,
     use_com: bool,
     exclude_intramolecular: bool,
     dimension: Axes,
     output_file: PathBuf,
     #[debug(skip)]
     stream: ColumnWriter,
-    frequency: Frequency,
+    /// Frequency and frame count, owned by the framework.
+    sampling: Sampling,
 }
 
 /// Iterate unique pairs from two index lists, deduplicating when `same` is true,
@@ -200,11 +199,12 @@ impl RadialDistribution {
 
     /// Write the normalized g(r) to the output file.
     fn write_gr(&mut self) -> Result<()> {
-        if self.num_samples == 0 || self.pair_count_sum == 0.0 || self.volume_sum == 0.0 {
+        if self.sampling.num_samples() == 0 || self.pair_count_sum == 0.0 || self.volume_sum == 0.0
+        {
             return Ok(());
         }
-        let v_avg = self.volume_sum / self.num_samples as f64;
-        let n_pairs_avg = self.pair_count_sum / self.num_samples as f64;
+        let v_avg = self.volume_sum / self.sampling.num_samples() as f64;
+        let n_pairs_avg = self.pair_count_sum / self.sampling.num_samples() as f64;
         let dr = self.histogram.bin_width();
 
         self.stream = ColumnWriter::open(&self.output_file, &["r", "g(r)"])?;
@@ -212,7 +212,7 @@ impl RadialDistribution {
             let r_inner = r - dr / 2.0;
             let r_outer = r + dr / 2.0;
             let shell_volume = self.dimension.shell_measure(r_inner, r_outer);
-            let ideal = n_pairs_avg * self.num_samples as f64 * shell_volume / v_avg;
+            let ideal = n_pairs_avg * self.sampling.num_samples() as f64 * shell_volume / v_avg;
             let gr = if ideal > 0.0 { count / ideal } else { 0.0 };
             self.stream
                 .write_row(&[&format_args!("{r:.6}"), &format_args!("{gr:.6}")])?;
@@ -232,11 +232,11 @@ impl crate::Info for RadialDistribution {
 }
 
 impl<T: Context> Analyze<T> for RadialDistribution {
-    fn frequency(&self) -> Frequency {
-        self.frequency
+    fn sampling(&self) -> &Sampling {
+        &self.sampling
     }
-    fn set_frequency(&mut self, freq: Frequency) {
-        self.frequency = freq;
+    fn sampling_mut(&mut self) -> &mut Sampling {
+        &mut self.sampling
     }
 
     fn perform_sample(&mut self, context: &T, step: usize, weight: f64) -> Result<()> {
@@ -252,12 +252,7 @@ impl<T: Context> Analyze<T> for RadialDistribution {
         if let Some(bbox) = context.cell().bounding_box() {
             self.volume_sum += self.dimension.measure_of(bbox) * weight;
         }
-        self.num_samples += 1;
         Ok(())
-    }
-
-    fn num_samples(&self) -> usize {
-        self.num_samples
     }
 
     fn write_to_disk(&mut self) -> Result<()> {
@@ -265,11 +260,11 @@ impl<T: Context> Analyze<T> for RadialDistribution {
     }
 
     fn results(&self) -> Option<serde_yml::Value> {
-        if self.num_samples == 0 {
+        if self.sampling.num_samples() == 0 {
             return None;
         }
         let mut map = serde_yml::Mapping::new();
-        map.try_insert("num_samples", self.num_samples)?;
+        map.try_insert("num_samples", self.sampling.num_samples())?;
         map.try_insert("num_bins", self.histogram.num_bins())?;
         Some(serde_yml::Value::Mapping(map))
     }
@@ -360,14 +355,14 @@ frequency: !Every 50
             histogram: Histogram::new(0.0, 5.0, dr).unwrap(),
             volume_sum: volume * num_samples as f64,
             pair_count_sum: n_pairs * num_samples as f64,
-            num_samples,
             use_com: false,
             exclude_intramolecular: false,
             dimension,
             output_file: sink.clone(),
             stream: ColumnWriter::open(&sink, &["r", "g(r)"]).unwrap(),
-            frequency: Frequency::Every(1),
+            sampling: Sampling::new(Frequency::Every(1)),
         };
+        rdf.sampling.set_num_samples(num_samples);
         for i in 0..rdf.histogram.num_bins() {
             let r = rdf.histogram.bin_center(i);
             let r_inner = r - dr / 2.0;

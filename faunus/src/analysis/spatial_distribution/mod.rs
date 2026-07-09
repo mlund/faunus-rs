@@ -7,7 +7,7 @@ mod opendx;
 
 use self::grid::Grid;
 use self::normalize::{Normalization, OutputScale};
-use super::{Analyze, Frequency};
+use super::{Analyze, Frequency, Sampling};
 use crate::auxiliary::MappingExt;
 use crate::cell::{BoundaryConditions, Shape};
 use crate::group::Group;
@@ -116,10 +116,9 @@ impl SpatialDistributionBuilder {
             grid: grid.clone(),
             counts: vec![0.0; grid.num_voxels()],
             normalization: Normalization::default(),
-            num_samples: 0,
             scale: OutputScale::from_bulk_normalize(self.bulk_normalize),
             exclude_reference: self.exclude_reference,
-            frequency: self.frequency,
+            sampling: Sampling::new(self.frequency),
         })
     }
 }
@@ -135,10 +134,10 @@ pub struct SpatialDistribution {
     grid: Grid,
     counts: Vec<f64>,
     normalization: Normalization,
-    num_samples: usize,
     scale: OutputScale,
     exclude_reference: bool,
-    frequency: Frequency,
+    /// Frequency and frame count, owned by the framework.
+    sampling: Sampling,
 }
 
 fn validate_reference_groups(
@@ -316,12 +315,11 @@ impl crate::Info for SpatialDistribution {
 }
 
 impl<T: Context> Analyze<T> for SpatialDistribution {
-    fn frequency(&self) -> Frequency {
-        self.frequency
+    fn sampling(&self) -> &Sampling {
+        &self.sampling
     }
-
-    fn set_frequency(&mut self, freq: Frequency) {
-        self.frequency = freq;
+    fn sampling_mut(&mut self) -> &mut Sampling {
+        &mut self.sampling
     }
 
     fn perform_sample(&mut self, context: &T, _step: usize, weight: f64) -> Result<()> {
@@ -364,16 +362,11 @@ impl<T: Context> Analyze<T> for SpatialDistribution {
             }
         }
 
-        self.num_samples += 1;
         Ok(())
     }
 
-    fn num_samples(&self) -> usize {
-        self.num_samples
-    }
-
     fn write_to_disk(&mut self) -> Result<()> {
-        if self.num_samples == 0 {
+        if self.sampling.num_samples() == 0 {
             return Ok(());
         }
         let values = self.normalized_values();
@@ -385,11 +378,11 @@ impl<T: Context> Analyze<T> for SpatialDistribution {
     }
 
     fn results(&self) -> Option<serde_yml::Value> {
-        if self.num_samples == 0 {
+        if self.sampling.num_samples() == 0 {
             return None;
         }
         let mut map = serde_yml::Mapping::new();
-        map.try_insert("num_samples", self.num_samples)?;
+        map.try_insert("num_samples", self.sampling.num_samples())?;
         map.try_insert("grid", self.grid.dims())?;
         map.try_insert("resolution", self.grid.spacing())?;
         map.try_insert("bulk_normalize", self.scale == OutputScale::RelativeBulk)?;
@@ -570,7 +563,7 @@ frequency: !Every 1
         .unwrap();
         builder.apply_output_dir(tmp.path()).unwrap();
         let mut sdf = builder.build(&context).unwrap();
-        sdf.perform_sample(&context, 0, 1.0).unwrap();
+        Analyze::<Backend>::sample_now(&mut sdf, &context, 0, 1.0).unwrap();
 
         let idx_direct = sdf.grid.index_of(&Point::new(2.0, 0.0, 0.0)).unwrap();
         assert_relative_eq!(sdf.counts[idx_direct], 1.0);
@@ -596,7 +589,7 @@ frequency: !Every 1
         )
         .unwrap();
         let mut sdf = builder.build(&context).unwrap();
-        sdf.perform_sample(&context, 0, 1.0).unwrap();
+        Analyze::<Backend>::sample_now(&mut sdf, &context, 0, 1.0).unwrap();
 
         let body =
             frame::to_body_frame(&Point::new(2.0, 0.0, 0.0), context.groups()[0].quaternion());
@@ -621,7 +614,7 @@ frequency: !Every 1
         )
         .unwrap();
         let mut sdf = builder.build(&context).unwrap();
-        sdf.perform_sample(&context, 0, 1.0).unwrap();
+        Analyze::<Backend>::sample_now(&mut sdf, &context, 0, 1.0).unwrap();
         assert_relative_eq!(sdf.counts.iter().sum::<f64>(), 2.0);
     }
 
@@ -640,7 +633,7 @@ frequency: !Every 1
         )
         .unwrap();
         let mut sdf = builder.build(&context).unwrap();
-        sdf.perform_sample(&context, 0, 1.0).unwrap();
+        Analyze::<Backend>::sample_now(&mut sdf, &context, 0, 1.0).unwrap();
 
         let cl_id = context
             .topology_ref()
@@ -649,7 +642,7 @@ frequency: !Every 1
             .position(|kind| kind.name() == "Cl")
             .unwrap();
         context.set_atom_kind(2, cl_id);
-        sdf.perform_sample(&context, 1, 1.0).unwrap();
+        Analyze::<Backend>::sample_now(&mut sdf, &context, 1, 1.0).unwrap();
 
         assert_relative_eq!(sdf.counts.iter().sum::<f64>(), 3.0);
     }
@@ -683,7 +676,7 @@ frequency: !Every 1
         .unwrap();
         builder.apply_output_dir(tmp.path()).unwrap();
         let mut sdf = builder.build(&context).unwrap();
-        sdf.perform_sample(&context, 0, 1.0).unwrap();
+        Analyze::<Backend>::sample_now(&mut sdf, &context, 0, 1.0).unwrap();
         Analyze::<Backend>::write_to_disk(&mut sdf).unwrap();
 
         let structure = io::read_structure(&tmp.path().join("reference.xyz")).unwrap();
@@ -704,10 +697,9 @@ frequency: !Every 1
             grid: Grid::from_points(&[Point::new(0.25, 0.25, 0.25)], 1.0, 0.25).unwrap(),
             counts: vec![0.0; 1],
             normalization: Normalization::default(),
-            num_samples: 1,
             scale: OutputScale::RelativeBulk,
             exclude_reference: true,
-            frequency: Frequency::Every(1),
+            sampling: Sampling::new(Frequency::Every(1)),
         };
         sdf.normalization
             .observe_reference(1.0, 8, Some(8.0), OutputScale::RelativeBulk)

@@ -18,7 +18,7 @@
 //! CV2 is discretised into uniform bins of width `resolution`, and the
 //! property value is accumulated into a per-bin running mean.
 
-use super::{Analyze, Frequency};
+use super::{Analyze, Frequency, Sampling};
 use crate::auxiliary::{ColumnWriter, MappingExt, WeightedMean};
 use crate::collective_variable::{CollectiveVariable, CollectiveVariableBuilder};
 use crate::Context;
@@ -66,7 +66,7 @@ impl MeanAlongCoordinateBuilder {
             cv_mean: WeightedMean::new(),
             coord_mean: WeightedMean::new(),
             output_file: self.file.clone(),
-            frequency: self.frequency,
+            sampling: Sampling::new(self.frequency),
         })
     }
 }
@@ -84,7 +84,8 @@ pub struct MeanAlongCoordinate {
     coord_mean: WeightedMean,
     #[debug(skip)]
     output_file: PathBuf,
-    frequency: Frequency,
+    /// Frequency and frame count, owned by the framework.
+    sampling: Sampling,
 }
 
 impl MeanAlongCoordinate {
@@ -132,11 +133,11 @@ impl crate::Info for MeanAlongCoordinate {
 }
 
 impl<T: Context> Analyze<T> for MeanAlongCoordinate {
-    fn frequency(&self) -> Frequency {
-        self.frequency
+    fn sampling(&self) -> &Sampling {
+        &self.sampling
     }
-    fn set_frequency(&mut self, freq: Frequency) {
-        self.frequency = freq;
+    fn sampling_mut(&mut self) -> &mut Sampling {
+        &mut self.sampling
     }
 
     fn perform_sample(&mut self, context: &T, _step: usize, weight: f64) -> Result<()> {
@@ -147,10 +148,6 @@ impl<T: Context> Analyze<T> for MeanAlongCoordinate {
         let idx = self.bin_index(coord_value);
         self.bins.entry(idx).or_default().add(cv_value, weight);
         Ok(())
-    }
-
-    fn num_samples(&self) -> usize {
-        self.cv_mean.len() as usize
     }
 
     fn write_to_disk(&mut self) -> Result<()> {

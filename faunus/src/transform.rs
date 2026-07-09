@@ -267,7 +267,7 @@ impl Transform {
                             // Place atom at the first inactive slot and expand by one
                             let group = &context.groups()[*group_index];
                             let slot = group.start() + group.len();
-                            context.set_positions(slot..slot + 1, [position].into_iter());
+                            context.set_positions(slot..slot + 1, [position]);
                             Self::Expand(1).on_group(*group_index, context)?;
                         }
                         SpeciationAction::DeactivateAtom {

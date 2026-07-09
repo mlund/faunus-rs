@@ -46,7 +46,7 @@
 //! separate umbrella windows and combine them afterwards.
 
 use super::widom::WidomAccumulator;
-use super::{Analyze, Frequency};
+use super::{Analyze, Frequency, Sampling};
 use crate::auxiliary::{BlockAverage, BlockSummary, ColumnWriter, MappingExt};
 use crate::cell::BoundaryConditions;
 use crate::change::{Change, GroupChange};
@@ -259,8 +259,7 @@ impl WidomRotationBuilder {
             stiffness: self
                 .stiffness
                 .then(|| std::array::from_fn(|_| BlockAverage::new())),
-            frequency: self.frequency,
-            num_samples: 0,
+            sampling: Sampling::new(self.frequency),
             num_blocks: 0,
             stream,
         })
@@ -312,9 +311,8 @@ pub struct WidomRotation {
     torque: Option<TorqueProbe>,
     /// Principal librational stiffnesses (kJ/mol/rad²), ascending.
     stiffness: Option<[BlockAverage; 3]>,
-    frequency: Frequency,
-    /// Frames sampled.
-    num_samples: usize,
+    /// Frequency and frame count, owned by the framework.
+    sampling: Sampling,
     /// Molecule scans, one per matching molecule per frame. Each is an independent block, so this
     /// is the count behind every reported error bar.
     num_blocks: usize,
@@ -523,11 +521,11 @@ impl crate::Info for WidomRotation {
 }
 
 impl<T: Context> Analyze<T> for WidomRotation {
-    fn frequency(&self) -> Frequency {
-        self.frequency
+    fn sampling(&self) -> &Sampling {
+        &self.sampling
     }
-    fn set_frequency(&mut self, freq: Frequency) {
-        self.frequency = freq;
+    fn sampling_mut(&mut self) -> &mut Sampling {
+        &mut self.sampling
     }
 
     fn perform_sample(&mut self, context: &T, step: usize, _weight: f64) -> Result<()> {
@@ -553,7 +551,6 @@ impl<T: Context> Analyze<T> for WidomRotation {
             // Each molecule-scan is one independent block.
             self.num_blocks += 1;
         }
-        self.num_samples += 1;
 
         if let Some(stream) = self.stream.as_mut() {
             let w = self.widom.mean_free_energy() * self.thermal_energy;
@@ -567,17 +564,13 @@ impl<T: Context> Analyze<T> for WidomRotation {
         Ok(())
     }
 
-    fn num_samples(&self) -> usize {
-        self.num_samples
-    }
-
     fn results(&self) -> Option<serde_yml::Value> {
         // A frame in which no molecule matched leaves every block empty.
         if self.num_blocks == 0 {
             return None;
         }
         let mut map = serde_yml::Mapping::new();
-        map.try_insert("num_samples", self.num_samples)?;
+        map.try_insert("num_samples", self.sampling.num_samples())?;
         map.try_insert("num_blocks", self.num_blocks)?;
         // Pooled log-sum-exp estimate (matches the module formula and the CSV),
         // with the block-to-block standard error.

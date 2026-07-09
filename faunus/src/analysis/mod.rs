@@ -93,6 +93,65 @@ impl Frequency {
     }
 }
 
+/// Sampling state every analysis carries: when to sample, and how often it has.
+///
+/// Owned by the framework. `num_samples` counts *frames* and is incremented once per successful
+/// `perform_sample`, so it cannot drift into meaning something else per analysis.
+#[derive(Clone, Copy, Debug)]
+pub struct Sampling {
+    frequency: Frequency,
+    num_samples: usize,
+}
+
+impl From<Frequency> for Sampling {
+    fn from(frequency: Frequency) -> Self {
+        Self::new(frequency)
+    }
+}
+
+/// On the wire a `Sampling` *is* its frequency; the sample count is runtime state.
+impl Serialize for Sampling {
+    fn serialize<S: serde::Serializer>(
+        &self,
+        serializer: S,
+    ) -> std::result::Result<S::Ok, S::Error> {
+        self.frequency.serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for Sampling {
+    fn deserialize<D: serde::Deserializer<'de>>(
+        deserializer: D,
+    ) -> std::result::Result<Self, D::Error> {
+        Frequency::deserialize(deserializer).map(Self::new)
+    }
+}
+
+impl Sampling {
+    pub const fn new(frequency: Frequency) -> Self {
+        Self {
+            frequency,
+            num_samples: 0,
+        }
+    }
+    pub const fn frequency(&self) -> Frequency {
+        self.frequency
+    }
+    pub const fn set_frequency(&mut self, frequency: Frequency) {
+        self.frequency = frequency;
+    }
+    /// Frames sampled so far.
+    pub const fn num_samples(&self) -> usize {
+        self.num_samples
+    }
+
+    /// Fake a sample count so a unit test can exercise reporting without driving a whole run.
+    #[cfg(test)]
+    pub const fn set_num_samples(&mut self, num_samples: usize) {
+        self.num_samples = num_samples;
+    }
+}
+
 /// Helper to deserialize analysis input and create a boxed `Analyze` object.
 #[derive(Clone, Deserialize)]
 pub enum AnalysisBuilder {
@@ -291,12 +350,13 @@ pub fn from_file_in_dir<T: Context>(
 
 /// Interface for system analysis.
 pub trait Analyze<T: Context>: Debug + Info {
-    /// Get analysis frequency
-    ///
-    /// This is the frequency at which the analysis should be performed.
-    fn frequency(&self) -> Frequency;
+    /// The analysis' sampling state. The only bookkeeping an implementation must store.
+    fn sampling(&self) -> &Sampling;
+    /// Mutable access, so the framework can count a sample.
+    fn sampling_mut(&mut self) -> &mut Sampling;
 
-    /// Perform the actual sampling logic. Called only when the frequency check passes.
+    /// Perform the actual sampling logic. Called only when the frequency check passes, and never
+    /// responsible for counting itself.
     fn perform_sample(&mut self, context: &T, step: usize, weight: f64) -> Result<()>;
 
     /// Sample system. Checks frequency, then delegates to `perform_sample` with weight 1.
@@ -307,14 +367,27 @@ pub trait Analyze<T: Context>: Debug + Info {
     /// Sample with a reweighting factor. Checks frequency, then delegates to `perform_sample`.
     fn sample_weighted(&mut self, context: &T, step: usize, weight: f64) -> Result<()> {
         if self.frequency().should_perform(step) {
-            self.perform_sample(context, step, weight)
-        } else {
-            Ok(())
+            self.sample_now(context, step, weight)?;
         }
+        Ok(())
     }
 
-    /// Total number of samples which is the sum of successful calls to `sample()`.
-    fn num_samples(&self) -> usize;
+    /// Sample unconditionally and count the frame. Not meant to be overridden.
+    fn sample_now(&mut self, context: &T, step: usize, weight: f64) -> Result<()> {
+        self.perform_sample(context, step, weight)?;
+        self.sampling_mut().num_samples += 1;
+        Ok(())
+    }
+
+    /// Sampling frequency.
+    fn frequency(&self) -> Frequency {
+        self.sampling().frequency()
+    }
+
+    /// Frames sampled so far.
+    fn num_samples(&self) -> usize {
+        self.sampling().num_samples()
+    }
 
     /// Called once after the simulation ends, at the final `step`.
     ///
@@ -322,7 +395,7 @@ pub trait Analyze<T: Context>: Debug + Info {
     /// this to honour `End` at all, and exactly one of them did.
     fn finalize(&mut self, context: &T, step: usize) -> Result<()> {
         if self.frequency().should_perform_at_end() {
-            self.perform_sample(context, step, 1.0)?;
+            self.sample_now(context, step, 1.0)?;
         }
         Ok(())
     }
@@ -356,7 +429,9 @@ pub trait Analyze<T: Context>: Debug + Info {
     }
 
     /// Override the sampling frequency. Used by `rerun` to sample every frame.
-    fn set_frequency(&mut self, _freq: Frequency) {}
+    fn set_frequency(&mut self, frequency: Frequency) {
+        self.sampling_mut().set_frequency(frequency);
+    }
 }
 
 /// Collect YAML results from all analyses, keyed by short name.
@@ -383,21 +458,22 @@ impl<T: Context> crate::Info for AnalysisCollection<T> {
 }
 
 /// Extension trait for [`AnalysisCollection`].
+/// A collection of analyses is not itself an analysis: it has no frequency and no sample count of
+/// its own. It only fans out.
 pub trait AnalysisCollectionExt<T: Context> {
     /// Override sampling frequency on all analyses. Used by `rerun` to sample every frame.
     fn override_frequencies(&mut self, freq: Frequency);
+    fn sample(&mut self, context: &T, step: usize) -> Result<()>;
+    fn sample_weighted(&mut self, context: &T, step: usize, weight: f64) -> Result<()>;
+    fn finalize(&mut self, context: &T, step: usize) -> Result<()>;
+    fn write_to_disk(&mut self) -> Result<()>;
+    /// Summed frames across all analyses. Comparable now that every analysis counts frames.
+    fn num_samples(&self) -> usize;
 }
 
 impl<T: Context> AnalysisCollectionExt<T> for AnalysisCollection<T> {
     fn override_frequencies(&mut self, freq: Frequency) {
         self.iter_mut().for_each(|a| a.set_frequency(freq));
-    }
-}
-
-impl<T: Context> Analyze<T> for AnalysisCollection<T> {
-    fn perform_sample(&mut self, context: &T, step: usize, weight: f64) -> Result<()> {
-        self.iter_mut()
-            .try_for_each(|a| a.sample_weighted(context, step, weight))
     }
     fn sample(&mut self, context: &T, step: usize) -> Result<()> {
         self.iter_mut().try_for_each(|a| a.sample(context, step))
@@ -406,18 +482,14 @@ impl<T: Context> Analyze<T> for AnalysisCollection<T> {
         self.iter_mut()
             .try_for_each(|a| a.sample_weighted(context, step, weight))
     }
-    /// Summed number of samples for all analysis objects
-    fn num_samples(&self) -> usize {
-        self.iter().map(|a| a.num_samples()).sum()
-    }
-    fn frequency(&self) -> Frequency {
-        Frequency::Every(1)
-    }
     fn finalize(&mut self, context: &T, step: usize) -> Result<()> {
         self.iter_mut().try_for_each(|a| a.finalize(context, step))
     }
     fn write_to_disk(&mut self) -> Result<()> {
         self.iter_mut().try_for_each(|a| a.write_to_disk())
+    }
+    fn num_samples(&self) -> usize {
+        self.iter().map(|a| a.num_samples()).sum()
     }
 }
 
@@ -546,16 +618,14 @@ mod framework_characterization {
     /// The smallest possible analysis: counts calls, nothing else.
     #[derive(Debug)]
     struct Counter {
-        frequency: Frequency,
-        num_samples: usize,
+        sampling: Sampling,
         finalized: bool,
     }
 
     impl Counter {
         fn new(frequency: Frequency) -> Self {
             Self {
-                frequency,
-                num_samples: 0,
+                sampling: Sampling::new(frequency),
                 finalized: false,
             }
         }
@@ -571,20 +641,19 @@ mod framework_characterization {
     }
 
     impl<T: Context> Analyze<T> for Counter {
-        fn frequency(&self) -> Frequency {
-            self.frequency
+        fn sampling(&self) -> &Sampling {
+            &self.sampling
+        }
+        fn sampling_mut(&mut self) -> &mut Sampling {
+            &mut self.sampling
         }
         fn perform_sample(&mut self, _context: &T, _step: usize, _weight: f64) -> Result<()> {
-            self.num_samples += 1;
             Ok(())
-        }
-        fn num_samples(&self) -> usize {
-            self.num_samples
         }
         fn finalize(&mut self, context: &T, step: usize) -> Result<()> {
             self.finalized = true;
-            if self.frequency.should_perform_at_end() {
-                self.perform_sample(context, step, 1.0)?;
+            if self.sampling.frequency().should_perform_at_end() {
+                self.sample_now(context, step, 1.0)?;
             }
             Ok(())
         }

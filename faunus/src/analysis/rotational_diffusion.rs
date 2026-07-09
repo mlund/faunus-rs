@@ -18,7 +18,7 @@
 //! using the method of [Favro (1960)](https://doi.org/10.1103/PhysRev.119.53)
 //! and [Holtbrügge & Schäfer (2025)](https://doi.org/10.1101/2025.05.27.656261).
 
-use super::{Analyze, Frequency};
+use super::{Analyze, Frequency, Sampling};
 use crate::auxiliary::{ColumnWriter, MappingExt};
 use crate::selection::{CachedSelection, Selection};
 use crate::Context;
@@ -111,8 +111,7 @@ impl RotationalDiffusionBuilder {
 
         Ok(RotationalDiffusion {
             selection: CachedSelection::groups(self.selection.clone()),
-            frequency: self.frequency,
-            num_samples: 0,
+            sampling: Sampling::new(self.frequency),
             snapshots: HashMap::new(),
             covariance: (0..num_lags)
                 .map(|_| std::array::from_fn(|_| Variance::new()))
@@ -136,8 +135,8 @@ impl RotationalDiffusionBuilder {
 #[derive(Debug)]
 pub struct RotationalDiffusion {
     selection: CachedSelection,
-    frequency: Frequency,
-    num_samples: usize,
+    /// Frequency and frame count, owned by the framework.
+    sampling: Sampling,
     /// Per-group quaternion ring buffers, keyed by group index.
     snapshots: HashMap<usize, VecDeque<crate::UnitQuaternion>>,
     /// Q̃_ij(τ) and Ṽ_ij(τ) accumulators at log-spaced lags, shared across all molecules.
@@ -245,12 +244,11 @@ impl crate::Info for RotationalDiffusion {
 }
 
 impl<T: Context> Analyze<T> for RotationalDiffusion {
-    fn frequency(&self) -> Frequency {
-        self.frequency
+    fn sampling(&self) -> &Sampling {
+        &self.sampling
     }
-
-    fn set_frequency(&mut self, freq: Frequency) {
-        self.frequency = freq;
+    fn sampling_mut(&mut self) -> &mut Sampling {
+        &mut self.sampling
     }
 
     fn perform_sample(&mut self, context: &T, step: usize, _weight: f64) -> Result<()> {
@@ -312,20 +310,15 @@ impl<T: Context> Analyze<T> for RotationalDiffusion {
             writer.write_row(&refs)?;
         }
 
-        self.num_samples += 1;
         Ok(())
     }
 
-    fn num_samples(&self) -> usize {
-        self.num_samples
-    }
-
     fn results(&self) -> Option<serde_yml::Value> {
-        if self.num_samples == 0 {
+        if self.sampling.num_samples() == 0 {
             return None;
         }
         let mut map = serde_yml::Mapping::new();
-        map.try_insert("num_samples", self.num_samples)?;
+        map.try_insert("num_samples", self.sampling.num_samples())?;
 
         let mut cov_list = Vec::new();
         for (lag, c) in self.valid_lags() {

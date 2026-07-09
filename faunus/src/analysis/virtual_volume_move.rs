@@ -22,7 +22,7 @@
 //! ```
 
 use super::widom::WidomAccumulator;
-use super::{Analyze, Frequency};
+use super::{Analyze, Sampling};
 use crate::auxiliary::{BlockSummary, ColumnWriter, MappingExt};
 use crate::cell::{Shape, VolumeScalePolicy};
 use crate::change::Change;
@@ -67,8 +67,10 @@ pub struct VirtualVolumeMove {
     #[debug(skip)]
     stream: Option<ColumnWriter>,
 
-    /// Sample frequency
-    frequency: Frequency,
+    /// Frequency and frame count, owned by the framework. Deserialized from `frequency`.
+    #[builder(setter(name = "frequency", into))]
+    #[builder_field_attr(serde(rename = "frequency"))]
+    sampling: Sampling,
 
     /// Number of samples per block for variance estimation.
     #[builder_field_attr(serde(default = "serde_default_block_size"))]
@@ -107,7 +109,7 @@ impl VirtualVolumeMoveBuilder {
         if dv.abs() < f64::EPSILON {
             anyhow::bail!("VirtualVolumeMove: 'dV' must be non-zero, got {dv}");
         }
-        if self.frequency.is_none() {
+        if self.sampling.is_none() {
             anyhow::bail!("Missing required field 'frequency' for VirtualVolumeMove analysis");
         }
         Ok(())
@@ -134,7 +136,7 @@ impl VirtualVolumeMoveBuilder {
             method: self.method.unwrap_or_default(),
             output_file,
             stream,
-            frequency: self.frequency.unwrap(),
+            sampling: self.sampling.unwrap(),
             block_size,
             widom: WidomAccumulator::default().with_block_size(block_size_nz),
             thermal_energy,
@@ -213,11 +215,11 @@ impl VirtualVolumeMove {
 }
 
 impl<T: Context> Analyze<T> for VirtualVolumeMove {
-    fn frequency(&self) -> Frequency {
-        self.frequency
+    fn sampling(&self) -> &Sampling {
+        &self.sampling
     }
-    fn set_frequency(&mut self, freq: Frequency) {
-        self.frequency = freq;
+    fn sampling_mut(&mut self) -> &mut Sampling {
+        &mut self.sampling
     }
 
     fn perform_sample(&mut self, context: &T, step: usize, weight: f64) -> Result<()> {
@@ -229,10 +231,6 @@ impl<T: Context> Analyze<T> for VirtualVolumeMove {
         self.write_to_stream(step, energy_change)?;
 
         Ok(())
-    }
-
-    fn num_samples(&self) -> usize {
-        self.widom.len()
     }
 
     fn results(&self) -> Option<serde_yml::Value> {
@@ -270,6 +268,7 @@ impl<T: Context> Analyze<T> for VirtualVolumeMove {
 mod tests {
     use super::*;
     use crate::analysis::AnalysisBuilder;
+    use crate::analysis::Frequency;
     use crate::Info;
     use float_cmp::assert_approx_eq;
 
@@ -438,12 +437,12 @@ mod tests {
         let vvm = deserialize_vvm_builder(&yaml, 0).build(RT_298).unwrap();
         assert_approx_eq!(f64, vvm.volume_displacement, 0.5);
         assert_eq!(vvm.method, VolumeScalePolicy::Isotropic);
-        assert!(matches!(vvm.frequency, Frequency::Every(10)));
+        assert!(matches!(vvm.sampling.frequency(), Frequency::Every(10)));
 
         let vvm = deserialize_vvm_builder(&yaml, 1).build(RT_298).unwrap();
         assert_approx_eq!(f64, vvm.volume_displacement, 1.0);
         assert_eq!(vvm.method, VolumeScalePolicy::ScaleZ);
-        assert!(matches!(vvm.frequency, Frequency::Every(5)));
+        assert!(matches!(vvm.sampling.frequency(), Frequency::Every(5)));
     }
 
     #[test]
@@ -480,6 +479,8 @@ mod tests {
         vvm.widom.end_block();
         vvm.widom.collect(2.0, 1.0);
         vvm.widom.end_block();
+        // The accumulator is driven directly here, so tell the framework two frames were sampled.
+        vvm.sampling.set_num_samples(2);
 
         let yaml = <VirtualVolumeMove as Analyze<crate::backend::Backend>>::to_yaml(&vvm)
             .expect("to_yaml returns Some");
