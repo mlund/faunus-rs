@@ -675,18 +675,21 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
         mv.finalize(&context).unwrap();
         let proposed = propose(mv, &context);
 
-        let Change::SingleGroup(group, GroupChange::RigidBody) = proposed.change else {
-            panic!("expected SingleGroup/RigidBody, got {:?}", proposed.change);
-        };
-        let Transform::Translate(shift) = proposed.transform else {
+        let Change::SingleGroup(group, GroupChange::RigidBody) = proposed.change() else {
             panic!(
-                "expected Transform::Translate, got {:?}",
-                proposed.transform
+                "expected SingleGroup/RigidBody, got {:?}",
+                proposed.change()
             );
         };
-        assert!(matches!(proposed.target, MoveTarget::Group(g) if g == group));
+        let Transform::Translate(shift) = proposed.transform() else {
+            panic!(
+                "expected Transform::Translate, got {:?}",
+                proposed.transform()
+            );
+        };
+        assert!(matches!(proposed.target(), MoveTarget::Group(g) if g == group));
         // The reported displacement is exactly the shift the transform applies.
-        let Displacement::Distance(reported) = proposed.displacement else {
+        let Displacement::Distance(reported) = proposed.displacement() else {
             panic!("expected Displacement::Distance");
         };
         assert_eq!(reported, shift);
@@ -701,42 +704,45 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
         let proposed = propose(mv, &context);
 
         assert!(matches!(
-            proposed.change,
+            proposed.change(),
             Change::SingleGroup(_, GroupChange::RigidBody)
         ));
-        assert!(matches!(proposed.transform, Transform::Rotate(_)));
-        assert!(matches!(proposed.displacement, Displacement::Angle(_)));
+        assert!(matches!(proposed.transform(), Transform::Rotate(_)));
+        assert!(matches!(proposed.displacement(), Displacement::Angle(_)));
     }
 
-    /// `TranslateAtom` puts a **relative** index in the change and the **absolute** one in the
-    /// transform. That is correct, and now says so in the types: the two vectors no longer have
-    /// the same element type, so they cannot be swapped by accident.
+    /// `TranslateAtom` used to carry a relative index in the change and the absolute one in the
+    /// transform, hand-converted between them. The typed constructor takes the relative index once
+    /// and builds both sides from it, so a `ProposedMove` no longer mentions absolute indices at
+    /// all. `Group::select` resolves `Relative` to the same particles the old `Absolute` named.
     #[test]
-    fn translate_atom_uses_distinct_index_spaces_on_each_side() {
+    fn translate_atom_carries_relative_indices_on_both_sides() {
         let context = context();
         let mut mv: TranslateAtom = serde_yml::from_str("{atom: B, dp: 0.3}").unwrap();
         mv.finalize(&context).unwrap();
         let proposed = propose(mv, &context);
 
-        let Change::SingleGroup(group, GroupChange::PartialUpdate(relative)) = &proposed.change
+        let Change::SingleGroup(group, GroupChange::PartialUpdate(relative)) = &proposed.change()
         else {
-            panic!("expected PartialUpdate, got {:?}", proposed.change);
+            panic!("expected PartialUpdate, got {:?}", proposed.change());
         };
-        let Transform::PartialTranslate(_, ParticleSelection::Absolute(absolute)) =
-            &proposed.transform
+        let Transform::PartialTranslate(_, ParticleSelection::Relative(moved)) =
+            proposed.transform()
         else {
-            panic!("expected PartialTranslate/Absolute");
+            panic!("expected PartialTranslate/Relative");
         };
-        assert_eq!(relative.len(), 1);
-        assert_eq!(absolute.len(), 1);
-        // Different numbers, same particle: `relative` is group-local, `absolute` is global.
-        let group = &context.groups()[*group];
-        assert_eq!(group.to_absolute(relative[0]).unwrap(), absolute[0]);
-        assert_ne!(
-            relative[0].get(),
-            absolute[0].get(),
-            "fixture must have a nonzero group start"
+        assert_eq!(
+            relative, moved,
+            "both sides carry the same relative indices"
         );
+        assert_eq!(relative.len(), 1);
+
+        // The particle actually addressed is still the right one, in a group that does not start
+        // at 0 — so the two spaces genuinely differ here.
+        let group = &context.groups()[*group];
+        assert_ne!(group.start(), 0, "fixture must have a nonzero group start");
+        let absolute = group.to_absolute(relative[0]).unwrap();
+        assert_ne!(relative[0].get(), absolute.get());
     }
 
     /// Pivot and crankshaft agree: both spaces are *relative*, so their two vectors are equal.
@@ -750,12 +756,12 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
         crank.finalize(&context).unwrap();
 
         for proposed in [propose(pivot, &context), propose(crank, &context)] {
-            let Change::SingleGroup(_, GroupChange::PartialUpdate(changed)) = &proposed.change
+            let Change::SingleGroup(_, GroupChange::PartialUpdate(changed)) = &proposed.change()
             else {
-                panic!("expected PartialUpdate, got {:?}", proposed.change);
+                panic!("expected PartialUpdate, got {:?}", proposed.change());
             };
             let Transform::PartialRotate(_, _, ParticleSelection::Relative(rotated)) =
-                &proposed.transform
+                &proposed.transform()
             else {
                 panic!("expected PartialRotate/Relative");
             };
@@ -775,16 +781,17 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
         mv.finalize(&context).unwrap();
         let proposed = propose(mv, &context);
 
-        let Change::Volume(change_policy, volumes) = proposed.change else {
-            panic!("expected Change::Volume, got {:?}", proposed.change);
+        let Change::Volume(change_policy, volumes) = proposed.change() else {
+            panic!("expected Change::Volume, got {:?}", proposed.change());
         };
-        let Transform::VolumeScale(transform_policy, new_volume) = proposed.transform else {
+        let Transform::VolumeScale(transform_policy, new_volume) = proposed.transform() else {
             panic!("expected Transform::VolumeScale");
         };
-        // The policy and the new volume are duplicated across the two fields, by hand.
+        // The policy and the new volume now come from one constructor argument, so they cannot
+        // disagree across the two fields.
         assert_eq!(change_policy, transform_policy);
-        assert_eq!(volumes.new, new_volume);
-        assert!(matches!(proposed.target, MoveTarget::System));
+        assert_eq!(volumes.new, *new_volume);
+        assert!(matches!(proposed.target(), MoveTarget::System));
     }
 }
 
@@ -848,14 +855,14 @@ reactions:
             .find_map(|seed| {
                 let mut rng = StdRng::seed_from_u64(seed);
                 let proposed = speciation.propose_move(&context, &mut rng)?;
-                match &proposed.change {
+                match &proposed.change() {
                     Change::Groups(changes) if changes.first()?.0 != 0 => Some(proposed),
                     _ => None,
                 }
             })
             .expect("a swap on a group with a non-zero start");
 
-        let Change::Groups(changes) = &proposal.change else {
+        let Change::Groups(changes) = &proposal.change() else {
             unreachable!()
         };
         let (group_index, GroupChange::UpdateIdentity(indices)) = &changes[0] else {

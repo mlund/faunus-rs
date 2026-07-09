@@ -102,6 +102,19 @@ pub enum SpeciationAction {
     },
 }
 
+impl SpeciationAction {
+    /// The group this action touches.
+    pub const fn group_index(&self) -> usize {
+        match self {
+            Self::ActivateGroup { group_index, .. }
+            | Self::SwapAtomKind { group_index, .. }
+            | Self::ActivateAtom { group_index, .. }
+            | Self::DeactivateAtom { group_index, .. } => *group_index,
+            Self::DeactivateGroup(group_index) => *group_index,
+        }
+    }
+}
+
 /// This describes a transformation on a set of particles or a group.
 ///
 /// For example, a translation by a vector, a rotation by an angle and axis,

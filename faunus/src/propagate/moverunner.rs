@@ -79,20 +79,20 @@ impl<T: Context> MoveRunner<T> {
                 continue;
             };
 
-            let old_energy = context.hamiltonian().energy(context, &proposed.change);
+            let old_energy = context.hamiltonian().energy(context, proposed.change());
             // Save energy term backups while context still has old positions
-            context.save_energy_backups(&proposed.change);
+            context.save_energy_backups(proposed.change());
             proposed.apply_with_backup(context)?;
-            context.update(&proposed.change)?;
-            let new_energy = context.hamiltonian().energy(context, &proposed.change);
+            context.update(proposed.change())?;
+            let new_energy = context.hamiltonian().energy(context, proposed.change());
 
             let energy = NewOld::<f64>::from(new_energy, old_energy);
-            let bias = self.inner.bias(&proposed.change, &energy);
+            let bias = self.inner.bias(proposed.change(), &energy);
 
             let accepted = criterion.accept(energy, bias, thermal_energy, rng);
             if accepted {
                 self.statistics
-                    .accept(energy.difference(), proposed.displacement);
+                    .accept(energy.difference(), proposed.displacement().clone());
                 context.discard_backup();
             } else {
                 self.statistics.reject();

@@ -14,9 +14,8 @@
 
 use crate::cell::{Shape, VolumeScalePolicy};
 use crate::montecarlo::NewOld;
-use crate::propagate::{tagged_yaml, Displacement, MoveProposal, MoveTarget, ProposedMove};
-use crate::transform::Transform;
-use crate::{Change, Context};
+use crate::propagate::{tagged_yaml, MoveProposal, ProposedMove};
+use crate::Context;
 use rand::prelude::*;
 use serde::{Deserialize, Serialize};
 
@@ -88,12 +87,10 @@ impl<T: Context> MoveProposal<T> for VolumeMove {
             (rng.r#gen::<f64>() - 0.5).mul_add(self.volume_displacement, old_volume.ln());
         let new_volume = ln_new_volume.exp();
 
-        Some(ProposedMove {
-            change: Change::Volume(self.method, NewOld::from(new_volume, old_volume)),
-            displacement: Displacement::Custom(new_volume - old_volume),
-            transform: Transform::VolumeScale(self.method, new_volume),
-            target: MoveTarget::System,
-        })
+        Some(ProposedMove::scale_volume(
+            self.method,
+            NewOld::from(new_volume, old_volume),
+        ))
     }
 
     fn to_yaml(&self) -> Option<serde_yml::Value> {

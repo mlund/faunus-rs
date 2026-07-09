@@ -12,12 +12,12 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
-use crate::group::{ParticleSelection, RelIndex};
+use crate::group::RelIndex;
 use crate::montecarlo;
-use crate::propagate::{tagged_yaml, Displacement, MoveProposal, MoveTarget, ProposedMove};
+use crate::propagate::{tagged_yaml, MoveProposal, ProposedMove};
 use crate::topology::BondGraph;
-use crate::transform::{random_displacement, Transform};
-use crate::{Change, Context, GroupChange};
+use crate::transform::random_displacement;
+use crate::Context;
 use nalgebra::UnitVector3;
 use rand::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -115,19 +115,13 @@ impl<T: Context> MoveProposal<T> for CrankshaftMove {
         let angle = random_displacement(rng, self.max_displacement);
         let quaternion = crate::UnitQuaternion::from_axis_angle(&uaxis, angle);
 
-        Some(ProposedMove {
-            change: Change::SingleGroup(
-                group_index,
-                GroupChange::PartialUpdate(rotated_rel.clone()),
-            ),
-            displacement: Displacement::Angle(angle),
-            transform: Transform::PartialRotate(
-                pivot_pos,
-                quaternion,
-                ParticleSelection::Relative(rotated_rel),
-            ),
-            target: MoveTarget::Group(group_index),
-        })
+        Some(ProposedMove::rotate_atoms(
+            group_index,
+            rotated_rel,
+            pivot_pos,
+            quaternion,
+            angle,
+        ))
     }
 
     fn to_yaml(&self) -> Option<serde_yml::Value> {

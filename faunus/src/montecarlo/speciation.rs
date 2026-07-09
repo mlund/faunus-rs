@@ -10,10 +10,9 @@ use crate::chemistry::reaction::{Direction, Participant, Reaction};
 use crate::group::{AbsIndex, GroupSize, RelIndex};
 use crate::montecarlo::{entropy_bias, MoveStatistics, NewOld};
 use crate::propagate::{
-    default_repeat, default_weight, tagged_yaml, Displacement, MoveProposal, MoveTarget,
-    ProposedMove,
+    default_repeat, default_weight, tagged_yaml, Displacement, MoveProposal, ProposedMove,
 };
-use crate::transform::{SpeciationAction, Transform};
+use crate::transform::SpeciationAction;
 use crate::{cell::Shape, Change, Context, GroupChange};
 use rand::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -831,12 +830,7 @@ impl<T: Context> MoveProposal<T> for SpeciationMove {
         self.trial_ln_bias = Some(ln_bias);
         self.trial_reaction_index = Some(reaction_index);
 
-        Some(ProposedMove {
-            change: Change::Groups(group_changes),
-            displacement: Displacement::None,
-            transform: Transform::Speciation(actions),
-            target: MoveTarget::System,
-        })
+        Some(ProposedMove::speciation(actions, group_changes))
     }
 
     fn bias(&self, _change: &Change, _energies: &NewOld<f64>) -> crate::montecarlo::Bias {
@@ -891,6 +885,7 @@ mod tests {
     use crate::backend::Backend;
     use crate::group::GroupCollection;
     use crate::propagate::MoveProposal;
+    use crate::Change;
     use crate::WithCell;
     use float_cmp::assert_approx_eq;
 
@@ -1155,8 +1150,14 @@ mod tests {
         // Try multiple times since direction is random and might fail
         for _ in 0..20 {
             if let Some(proposed) = mv.propose_move(&context, &mut rng) {
-                assert!(matches!(proposed.target, MoveTarget::System));
-                assert!(matches!(proposed.transform, Transform::Speciation(_)));
+                assert!(matches!(
+                    proposed.target(),
+                    crate::propagate::MoveTarget::System
+                ));
+                assert!(matches!(
+                    proposed.transform(),
+                    crate::transform::Transform::Speciation(_)
+                ));
                 assert!(mv.trial_ln_bias.is_some());
                 return;
             }
@@ -1187,7 +1188,7 @@ mod tests {
         for _ in 0..20 {
             if let Some(proposed) = mv.propose_move(&context, &mut rng) {
                 let bias =
-                    MoveProposal::<Backend>::bias(&mv, &proposed.change, &NewOld::from(0.0, 0.0));
+                    MoveProposal::<Backend>::bias(&mv, &proposed.change(), &NewOld::from(0.0, 0.0));
                 assert!(matches!(bias, crate::montecarlo::Bias::Energy(_)));
                 return;
             }
