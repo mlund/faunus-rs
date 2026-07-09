@@ -161,8 +161,8 @@ impl MultipoleDistributionBuilder {
         // The analysis is defined on molecular COM separations, so every resolved group must
         // carry a center of mass; atomic/reservoir groups do not and are rejected here.
         let mut resolved = [
-            context.resolve_groups_live(&self.selections.0),
-            context.resolve_groups_live(&self.selections.1),
+            context.resolve_groups(&self.selections.0),
+            context.resolve_groups(&self.selections.1),
         ];
         for (which, selection, groups) in [
             ("first", &self.selections.0, &resolved[0]),

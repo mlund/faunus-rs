@@ -30,7 +30,7 @@ fn count_by_group_kind(selection: &Selection, context: &dyn EvalContext) -> f64 
     let topology = context.topology_ref();
     let groups = context.groups();
     selection
-        .resolve_groups_live(topology, groups, &|i| context.atom_kind(i))
+        .resolve_groups(topology, groups, &|i| context.atom_kind(i))
         .iter()
         .map(
             |&gi| match topology.moleculekinds()[groups[gi].molecule()].group_kind() {
@@ -109,7 +109,7 @@ impl CvKind for Charge {
     fn evaluate(&self, context: &dyn EvalContext) -> f64 {
         let topology = context.topology_ref();
         self.selection
-            .resolve_atoms_live(topology, context.groups(), &|i| context.atom_kind(i))
+            .resolve_atoms(topology, context.groups(), &|i| context.atom_kind(i))
             .iter()
             .map(|&i| topology.atomkinds()[context.atom_kind(i)].charge())
             .sum()

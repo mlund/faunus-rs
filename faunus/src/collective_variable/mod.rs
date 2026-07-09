@@ -285,6 +285,7 @@ macro_rules! impl_single_group_builder {
                     let indices = self.selection.resolve_groups(
                         context.topology_ref(),
                         context.groups(),
+                        &|i| context.atom_kind(i),
                     );
                     if indices.len() != 1 {
                         anyhow::bail!(
@@ -343,6 +344,7 @@ macro_rules! impl_single_group_with_dim_builder {
                     let indices = self.selection.resolve_groups(
                         context.topology_ref(),
                         context.groups(),
+                        &|i| context.atom_kind(i),
                     );
                     if indices.len() != 1 {
                         anyhow::bail!(
@@ -401,6 +403,7 @@ macro_rules! impl_single_atom_with_dim_builder {
                     let indices = self.selection.resolve_atoms(
                         context.topology_ref(),
                         context.groups(),
+                        &|i| context.atom_kind(i),
                     );
                     if indices.len() != 1 {
                         anyhow::bail!(
@@ -461,6 +464,7 @@ macro_rules! impl_two_group_with_dim_builder {
                     let indices1 = self.selection.resolve_groups(
                         context.topology_ref(),
                         context.groups(),
+                        &|i| context.atom_kind(i),
                     );
                     if indices1.len() != 1 {
                         anyhow::bail!(
@@ -473,6 +477,7 @@ macro_rules! impl_two_group_with_dim_builder {
                     let indices2 = self.selection2.resolve_groups(
                         context.topology_ref(),
                         context.groups(),
+                        &|i| context.atom_kind(i),
                     );
                     if indices2.len() != 1 {
                         anyhow::bail!(

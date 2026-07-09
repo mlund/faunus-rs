@@ -210,7 +210,7 @@ impl WidomRotationBuilder {
             );
         }
 
-        let groups = context.resolve_groups_live(&self.selection);
+        let groups = context.resolve_groups(&self.selection);
         anyhow::ensure!(
             !groups.is_empty(),
             "WidomRotation: selection '{}' matched no groups",
@@ -904,7 +904,7 @@ propagate: {{seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}}
         let ctx = dimer_backend(r#"customexternal: [{selection: "all", function: "q * z"}]"#);
         let mut analysis = builder(true, true).build(&ctx, RT_300).unwrap();
 
-        let gi = ctx.resolve_groups_live(analysis.selection.selection())[0];
+        let gi = ctx.resolve_groups(analysis.selection.selection())[0];
         let indices: Vec<usize> = ctx.groups()[gi].iter_active().collect();
         let quaternion_before = *ctx.groups()[gi].quaternion();
         let com_before = ctx.mass_center(&indices);
@@ -997,7 +997,7 @@ propagate: {{seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}}
         // cache-correctness guardrail for the rotate/restore loop.
         let ctx = dimer_backend(r#"customexternal: [{selection: "all", function: "q * z"}]"#);
         let mut trial = ctx.clone();
-        let gi = ctx.resolve_groups_live(&Selection::parse("molecule DIMER").unwrap())[0];
+        let gi = ctx.resolve_groups(&Selection::parse("molecule DIMER").unwrap())[0];
         let indices: Vec<usize> = ctx.groups()[gi].iter_active().collect();
         let com = ctx.mass_center(&indices);
 

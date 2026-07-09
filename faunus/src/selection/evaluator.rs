@@ -124,19 +124,18 @@ struct AtomContext<'a> {
 impl<'a> AtomContext<'a> {
     /// Build context for an atom at `abs_idx` within `group`.
     ///
-    /// `runtime_atom_id` overrides the topology template's atom kind,
-    /// reflecting runtime changes like atom-type swaps.
+    /// `atom_kind_index` indexes `topology.atomkinds()` and is the atom's *current* kind, which a
+    /// titration or speciation swap can move away from the molecule template's.
     fn new(
         abs_idx: usize,
         group: &Group,
         mol_kind: &'a MoleculeKind,
         topology: &'a Topology,
-        runtime_atom_id: Option<usize>,
+        atom_kind_index: usize,
     ) -> Self {
         let rel_idx = abs_idx - group.start();
         let topo_rel = mol_kind.topology_index(rel_idx);
-        let atom_kind_id = runtime_atom_id.unwrap_or(mol_kind.atom_indices()[topo_rel]);
-        let atom_kind = &topology.atomkinds()[atom_kind_id];
+        let atom_kind = &topology.atomkinds()[atom_kind_index];
         let atom_name = mol_kind
             .atom_names()
             .get(topo_rel)
@@ -237,27 +236,11 @@ impl Expr {
 
 /// Resolve an expression to absolute particle indices (sorted, deduplicated).
 ///
-/// Uses the static topology atom kinds. For runtime-aware resolution
-/// (e.g. after atom-type swaps), use [`resolve_atoms_live`].
-pub(super) fn resolve_atoms(expr: &Expr, topology: &Topology, groups: &[Group]) -> Vec<usize> {
-    resolve_atoms_impl(expr, topology, groups, &|_| None)
-}
-
-/// Like [`resolve_atoms`], but reads atom kinds from live particle data.
-pub(super) fn resolve_atoms_live(
+pub(super) fn resolve_atoms(
     expr: &Expr,
     topology: &Topology,
     groups: &[Group],
     get_atom_kind: &dyn Fn(usize) -> usize,
-) -> Vec<usize> {
-    resolve_atoms_impl(expr, topology, groups, &|idx| Some(get_atom_kind(idx)))
-}
-
-fn resolve_atoms_impl(
-    expr: &Expr,
-    topology: &Topology,
-    groups: &[Group],
-    get_runtime_atom_id: &dyn Fn(usize) -> Option<usize>,
 ) -> Vec<usize> {
     let mut result: Vec<usize> = groups
         .iter()
@@ -270,7 +253,7 @@ fn resolve_atoms_impl(
                     group,
                     mol_kind,
                     topology,
-                    get_runtime_atom_id(abs_idx),
+                    get_atom_kind(abs_idx),
                 ))
             })
         })
@@ -283,27 +266,11 @@ fn resolve_atoms_impl(
 
 /// Resolve an expression to group indices where ANY active atom matches.
 ///
-/// Uses the static topology atom kinds. For runtime-aware resolution
-/// (e.g. after atom-type swaps), use [`resolve_groups_live`].
-pub(super) fn resolve_groups(expr: &Expr, topology: &Topology, groups: &[Group]) -> Vec<usize> {
-    resolve_groups_impl(expr, topology, groups, &|_| None)
-}
-
-/// Like [`resolve_groups`], but reads atom kinds from live particle data.
-pub(super) fn resolve_groups_live(
+pub(super) fn resolve_groups(
     expr: &Expr,
     topology: &Topology,
     groups: &[Group],
     get_atom_kind: &dyn Fn(usize) -> usize,
-) -> Vec<usize> {
-    resolve_groups_impl(expr, topology, groups, &|idx| Some(get_atom_kind(idx)))
-}
-
-fn resolve_groups_impl(
-    expr: &Expr,
-    topology: &Topology,
-    groups: &[Group],
-    get_runtime_atom_id: &dyn Fn(usize) -> Option<usize>,
 ) -> Vec<usize> {
     groups
         .iter()
@@ -317,7 +284,7 @@ fn resolve_groups_impl(
                     group,
                     mol_kind,
                     topology,
-                    get_runtime_atom_id(abs_idx),
+                    get_atom_kind(abs_idx),
                 ))
             })
         })

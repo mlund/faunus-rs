@@ -108,7 +108,7 @@ fn resolve_unique_rigid_group(
     selection: &Selection,
     label: &str,
 ) -> anyhow::Result<usize> {
-    let groups = context.resolve_groups_live(selection);
+    let groups = context.resolve_groups(selection);
     if groups.len() != 1 {
         anyhow::bail!(
             "custompair: {label} '{selection}' must resolve to exactly one group, got {} ({:?})",

@@ -23,7 +23,7 @@ mod glob;
 mod parser;
 mod token;
 
-use crate::group::{Group, GroupSelection};
+use crate::group::Group;
 use crate::topology::Topology;
 
 /// Return the canonical reserved selection keyword matching `name`, if any.
@@ -140,8 +140,8 @@ impl CachedSelection {
         let generation = self.selection.generation(context);
         if self.generation != Some(generation) {
             self.indices = match self.target {
-                Target::Atoms => context.resolve_atoms_live(&self.selection),
-                Target::Groups => context.resolve_groups_live(&self.selection),
+                Target::Atoms => context.resolve_atoms(&self.selection),
+                Target::Groups => context.resolve_groups(&self.selection),
             };
             self.generation = Some(generation);
         }
@@ -213,55 +213,33 @@ impl Selection {
 
     /// Resolve to absolute particle indices (sorted, deduplicated).
     ///
-    /// Iterates all active particles in all non-empty groups and returns
-    /// the absolute indices of those matching the expression.
-    /// Uses static topology atom kinds; see [`resolve_atoms_live`](Self::resolve_atoms_live)
-    /// for runtime-aware resolution after atom-type swaps.
-    pub fn resolve_atoms(&self, topology: &Topology, groups: &[Group]) -> Vec<usize> {
-        evaluator::resolve_atoms(&self.expr, topology, groups)
-    }
-
-    /// Like [`resolve_atoms`](Self::resolve_atoms), but reads atom kinds from
-    /// live particle data via `get_atom_kind(abs_index) -> atom_kind_id`.
-    pub fn resolve_atoms_live(
-        &self,
-        topology: &Topology,
-        groups: &[Group],
-        get_atom_kind: &dyn Fn(usize) -> usize,
-    ) -> Vec<usize> {
-        evaluator::resolve_atoms_live(&self.expr, topology, groups, get_atom_kind)
-    }
-
-    /// Resolve to group indices where ANY active atom matches.
+    /// Iterates all active particles in all non-empty groups and returns the absolute indices of
+    /// those matching the expression.
     ///
-    /// Returns the index of each non-empty group that contains at least
-    /// one active atom matching the expression. This naturally gives
-    /// molecule-level selection.
-    /// Uses static topology atom kinds; see [`resolve_groups_live`](Self::resolve_groups_live)
-    /// for runtime-aware resolution after atom-type swaps.
-    pub fn resolve_groups(&self, topology: &Topology, groups: &[Group]) -> Vec<usize> {
-        evaluator::resolve_groups(&self.expr, topology, groups)
-    }
-
-    /// Like [`resolve_groups`](Self::resolve_groups), but reads atom kinds from
-    /// live particle data via `get_atom_kind(abs_index) -> atom_kind_id`.
-    pub fn resolve_groups_live(
+    /// `get_atom_kind(abs_index)` returns the atom's *current* kind as an index into
+    /// [`Topology::atomkinds`], which a titration or speciation swap can move away from the
+    /// molecule template's. Note this is the position in that slice, not `AtomKind::id()` — the
+    /// two happen to coincide, but the `atomid` selection keyword matches on the latter.
+    pub fn resolve_atoms(
         &self,
         topology: &Topology,
         groups: &[Group],
         get_atom_kind: &dyn Fn(usize) -> usize,
     ) -> Vec<usize> {
-        evaluator::resolve_groups_live(&self.expr, topology, groups, get_atom_kind)
+        evaluator::resolve_atoms(&self.expr, topology, groups, get_atom_kind)
     }
 
-    /// Convert resolved groups to a `GroupSelection` for use with existing code.
-    pub fn to_group_selection(&self, topology: &Topology, groups: &[Group]) -> GroupSelection {
-        let indices = self.resolve_groups(topology, groups);
-        match indices.len() {
-            0 => GroupSelection::Index(vec![]),
-            1 => GroupSelection::Single(indices[0]),
-            _ => GroupSelection::Index(indices),
-        }
+    /// Resolve to the index of each non-empty group holding at least one matching active atom,
+    /// which naturally gives molecule-level selection.
+    ///
+    /// See [`resolve_atoms`](Self::resolve_atoms) for `get_atom_kind`.
+    pub fn resolve_groups(
+        &self,
+        topology: &Topology,
+        groups: &[Group],
+        get_atom_kind: &dyn Fn(usize) -> usize,
+    ) -> Vec<usize> {
+        evaluator::resolve_groups(&self.expr, topology, groups, get_atom_kind)
     }
 }
 
@@ -371,6 +349,7 @@ mod integration_tests {
     use crate::backend::Backend;
     use crate::context::WithTopology;
     use crate::group::GroupCollection;
+    use crate::group::GroupSelection;
     use std::path::Path;
 
     fn make_context() -> Backend {
@@ -387,7 +366,7 @@ mod integration_tests {
     fn select_all_atoms() {
         let ctx = make_context();
         let sel = Selection::parse("all").unwrap();
-        let atoms = sel.resolve_atoms(ctx.topology_ref(), ctx.groups());
+        let atoms = sel.resolve_atoms(ctx.topology_ref(), ctx.groups(), &|i| ctx.atom_kind(i));
         // Should return all active particles
         let expected_count: usize = ctx.groups().iter().map(|g| g.len()).sum();
         assert_eq!(atoms.len(), expected_count);
@@ -397,7 +376,7 @@ mod integration_tests {
     fn select_none_atoms() {
         let ctx = make_context();
         let sel = Selection::parse("none").unwrap();
-        let atoms = sel.resolve_atoms(ctx.topology_ref(), ctx.groups());
+        let atoms = sel.resolve_atoms(ctx.topology_ref(), ctx.groups(), &|i| ctx.atom_kind(i));
         assert!(atoms.is_empty());
     }
 
@@ -405,7 +384,7 @@ mod integration_tests {
     fn select_all_groups() {
         let ctx = make_context();
         let sel = Selection::parse("all").unwrap();
-        let groups = sel.resolve_groups(ctx.topology_ref(), ctx.groups());
+        let groups = sel.resolve_groups(ctx.topology_ref(), ctx.groups(), &|i| ctx.atom_kind(i));
         // Should return all non-empty groups
         let expected_count = ctx.groups().iter().filter(|g| !g.is_empty()).count();
         assert_eq!(groups.len(), expected_count);
@@ -415,7 +394,7 @@ mod integration_tests {
     fn select_none_groups() {
         let ctx = make_context();
         let sel = Selection::parse("none").unwrap();
-        let groups = sel.resolve_groups(ctx.topology_ref(), ctx.groups());
+        let groups = sel.resolve_groups(ctx.topology_ref(), ctx.groups(), &|i| ctx.atom_kind(i));
         assert!(groups.is_empty());
     }
 
@@ -426,7 +405,8 @@ mod integration_tests {
         let mol_name = ctx.topology_ref().moleculekinds()[0].name();
         let sel_str = format!("molecule {mol_name}");
         let sel = Selection::parse(&sel_str).unwrap();
-        let group_indices = sel.resolve_groups(ctx.topology_ref(), ctx.groups());
+        let group_indices =
+            sel.resolve_groups(ctx.topology_ref(), ctx.groups(), &|i| ctx.atom_kind(i));
 
         // All returned groups should have the correct molecule kind
         let mol_id = ctx.topology_ref().moleculekinds()[0].id();
@@ -445,7 +425,7 @@ mod integration_tests {
         let atom_name = ctx.topology_ref().atomkinds()[0].name().to_string();
         let sel_str = format!("atomtype {atom_name}");
         let sel = Selection::parse(&sel_str).unwrap();
-        let atoms = sel.resolve_atoms(ctx.topology_ref(), ctx.groups());
+        let atoms = sel.resolve_atoms(ctx.topology_ref(), ctx.groups(), &|i| ctx.atom_kind(i));
         // All returned atoms should have atomkind id 0
         assert!(!atoms.is_empty());
     }
@@ -456,12 +436,12 @@ mod integration_tests {
         let mol_name = ctx.topology_ref().moleculekinds()[0].name().to_string();
         let sel1 = Selection::parse(&format!("molecule {mol_name}")).unwrap();
         let sel2 = Selection::parse(&format!("not molecule {mol_name}")).unwrap();
-        let atoms1 = sel1.resolve_atoms(ctx.topology_ref(), ctx.groups());
-        let atoms2 = sel2.resolve_atoms(ctx.topology_ref(), ctx.groups());
+        let atoms1 = sel1.resolve_atoms(ctx.topology_ref(), ctx.groups(), &|i| ctx.atom_kind(i));
+        let atoms2 = sel2.resolve_atoms(ctx.topology_ref(), ctx.groups(), &|i| ctx.atom_kind(i));
 
         // Together they should cover all active atoms
         let all = Selection::parse("all").unwrap();
-        let all_atoms = all.resolve_atoms(ctx.topology_ref(), ctx.groups());
+        let all_atoms = all.resolve_atoms(ctx.topology_ref(), ctx.groups(), &|i| ctx.atom_kind(i));
         assert_eq!(atoms1.len() + atoms2.len(), all_atoms.len());
 
         // No overlap
@@ -471,20 +451,10 @@ mod integration_tests {
     }
 
     #[test]
-    fn to_group_selection_single() {
-        let ctx = make_context();
-        // Select a molecule that has exactly one group instance
-        // First molecule kind, check how many groups it has
-        let sel = Selection::parse("all").unwrap();
-        let gs = sel.to_group_selection(ctx.topology_ref(), ctx.groups());
-        assert!(matches!(gs, GroupSelection::Index(_)));
-    }
-
-    #[test]
     fn select_by_index() {
         let ctx = make_context();
         let sel = Selection::parse("index 0").unwrap();
-        let atoms = sel.resolve_atoms(ctx.topology_ref(), ctx.groups());
+        let atoms = sel.resolve_atoms(ctx.topology_ref(), ctx.groups(), &|i| ctx.atom_kind(i));
         assert_eq!(atoms, vec![0]);
     }
 
@@ -492,7 +462,7 @@ mod integration_tests {
     fn select_by_group() {
         let ctx = make_context();
         let sel = Selection::parse("group 0").unwrap();
-        let atoms = sel.resolve_atoms(ctx.topology_ref(), ctx.groups());
+        let atoms = sel.resolve_atoms(ctx.topology_ref(), ctx.groups(), &|i| ctx.atom_kind(i));
         // Should return all active atoms in group 0
         let g0 = &ctx.groups()[0];
         let expected: Vec<usize> = g0.iter_active().collect();
@@ -512,9 +482,10 @@ mod integration_tests {
             let last = *all_groups.last().unwrap() as i32;
             let sel_str = format!("group 0 to {last}");
             let sel = Selection::parse(&sel_str).unwrap();
-            let atoms = sel.resolve_atoms(ctx.topology_ref(), ctx.groups());
+            let atoms = sel.resolve_atoms(ctx.topology_ref(), ctx.groups(), &|i| ctx.atom_kind(i));
             let all_sel = Selection::parse("all").unwrap();
-            let all_atoms = all_sel.resolve_atoms(ctx.topology_ref(), ctx.groups());
+            let all_atoms =
+                all_sel.resolve_atoms(ctx.topology_ref(), ctx.groups(), &|i| ctx.atom_kind(i));
             assert_eq!(atoms, all_atoms);
         }
     }
@@ -523,7 +494,7 @@ mod integration_tests {
     fn select_by_atomid_range() {
         let ctx = make_context();
         let sel = Selection::parse("atomid 0 to 0").unwrap();
-        let atoms = sel.resolve_atoms(ctx.topology_ref(), ctx.groups());
+        let atoms = sel.resolve_atoms(ctx.topology_ref(), ctx.groups(), &|i| ctx.atom_kind(i));
         // Should select only atoms with atomkind id 0
         assert!(!atoms.is_empty());
     }

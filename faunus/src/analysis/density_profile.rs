@@ -100,7 +100,7 @@ impl DensityProfileBuilder {
         let topology = context.topology();
         let matches_atomic_group = self
             .selection
-            .resolve_groups(&topology, &groups)
+            .resolve_groups(&topology, &groups, &|i| context.atom_kind(i))
             .into_iter()
             .any(|index| !topology.moleculekinds()[groups[index].molecule()].has_com());
         if matches_atomic_group {
@@ -550,7 +550,7 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
         let yaml = ATOMIC_GAS.replace("N: 2", "N: 2\n      active: 0");
         let context = backend_from_str(&yaml);
         let selection = Selection::parse("molecule GAS").unwrap();
-        assert!(context.resolve_groups_live(&selection).is_empty());
+        assert!(context.resolve_groups(&selection).is_empty());
         let error = builder("molecule GAS", true).build(&context).unwrap_err();
         assert!(error.to_string().contains("center of mass"), "{error}");
     }
