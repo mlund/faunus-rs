@@ -747,12 +747,16 @@ fn test_min_group_distance() {
     let cell = Cuboid::cubic(20.0);
 
     let mut g1 = Group::new(0, 0, 0..3);
-    g1.set_mass_center(crate::Point::new(0.0, 0.0, 0.0));
-    g1.set_bounding_radius(1.0);
+    g1.set_geometry(Some(crate::group::GroupGeometry {
+        mass_center: crate::Point::new(0.0, 0.0, 0.0),
+        bounding_radius: 1.0,
+    }));
 
     let mut g2 = Group::new(1, 0, 3..6);
-    g2.set_mass_center(crate::Point::new(5.0, 0.0, 0.0));
-    g2.set_bounding_radius(1.5);
+    g2.set_geometry(Some(crate::group::GroupGeometry {
+        mass_center: crate::Point::new(5.0, 0.0, 0.0),
+        bounding_radius: 1.5,
+    }));
 
     // COM distance = 5.0, sum of radii = 2.5, min distance = 2.5
     let d = min_group_distance(&g1, &g2, &cell).unwrap();
@@ -760,15 +764,19 @@ fn test_min_group_distance() {
 
     // Overlapping spheres → 0
     let mut g3 = Group::new(2, 0, 6..9);
-    g3.set_mass_center(crate::Point::new(1.0, 0.0, 0.0));
-    g3.set_bounding_radius(2.0);
+    g3.set_geometry(Some(crate::group::GroupGeometry {
+        mass_center: crate::Point::new(1.0, 0.0, 0.0),
+        bounding_radius: 2.0,
+    }));
     let d = min_group_distance(&g1, &g3, &cell).unwrap();
     assert_approx_eq!(f64, d, 0.0);
 
     // PBC wrapping: groups near opposite edges
     let mut g4 = Group::new(3, 0, 9..12);
-    g4.set_mass_center(crate::Point::new(9.0, 0.0, 0.0));
-    g4.set_bounding_radius(0.5);
+    g4.set_geometry(Some(crate::group::GroupGeometry {
+        mass_center: crate::Point::new(9.0, 0.0, 0.0),
+        bounding_radius: 0.5,
+    }));
     // COM distance via PBC = 20 - 9 = 11, but PBC gives min image = 9
     // Actually: g1 at 0, g4 at 9 → distance via PBC in [-10,10] box: 9.0
     let d = min_group_distance(&g1, &g4, &cell).unwrap();

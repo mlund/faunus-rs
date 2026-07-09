@@ -48,37 +48,104 @@ impl std::fmt::Display for SelectionError {
 
 impl std::error::Error for SelectionError {}
 
-/// Caches resolved selection indices, invalidated when `GroupLists` generation changes.
+/// A snapshot of everything a selection's outcome can depend on.
 ///
-/// Use `get_or_resolve()` to lazily re-resolve only when the group composition
-/// has actually changed (e.g. after Grand Canonical insert/delete moves).
-#[derive(Debug, Clone)]
-pub struct SelectionCache {
-    indices: Vec<usize>,
-    generation: u64,
+/// `groups` counts changes to group composition (insertions, deletions, resizes); `atom_kinds`
+/// counts in-place changes of atom identity (titration and speciation swaps).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Generation {
+    /// Group composition, from `GroupCollection::group_lists_generation`.
+    pub groups: u64,
+    /// Atom identities, from `GroupCollection::atom_kinds_generation`.
+    pub atom_kinds: u64,
 }
 
-impl Default for SelectionCache {
-    fn default() -> Self {
-        Self {
-            indices: Vec::new(),
-            generation: u64::MAX,
+/// What a [`CachedSelection`] resolves to.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Target {
+    Atoms,
+    Groups,
+}
+
+/// A selection together with its resolved indices, re-resolved only when the system has changed
+/// in a way this particular selection can see.
+///
+/// The cache key is derived internally, so a consumer cannot supply a key that misses a change.
+/// This matters: an atom-kind swap leaves group composition untouched, and a cache keyed on
+/// composition alone would keep serving the pre-swap atoms of an `atomtype` selection forever.
+#[derive(Debug, Clone)]
+pub struct CachedSelection {
+    selection: Selection,
+    target: Target,
+    indices: Vec<usize>,
+    /// `None` until first resolved.
+    generation: Option<Generation>,
+}
+
+impl CachedSelection {
+    /// Resolve to the absolute indices of matching atoms.
+    pub fn atoms(selection: Selection) -> Self {
+        Self::new(selection, Target::Atoms)
+    }
+
+    /// Resolve to the indices of groups holding at least one matching atom.
+    pub fn groups(selection: Selection) -> Self {
+        Self::new(selection, Target::Groups)
+    }
+
+    /// Groups when `com` acts on molecular mass centers, atoms otherwise.
+    ///
+    /// The `com` flag of an analysis or energy term decides both what it iterates over and what it
+    /// must resolve to; deriving one from the other here keeps the two from drifting apart.
+    pub fn for_com(selection: Selection, com: bool) -> Self {
+        if com {
+            Self::groups(selection)
+        } else {
+            Self::atoms(selection)
         }
     }
-}
 
-impl SelectionCache {
-    /// Return cached indices, or re-resolve if the generation has changed.
-    pub fn get_or_resolve(
-        &mut self,
-        generation: u64,
-        resolve: impl FnOnce() -> Vec<usize>,
-    ) -> &[usize] {
-        if self.generation != generation {
-            self.indices = resolve();
-            self.generation = generation;
+    fn new(selection: Selection, target: Target) -> Self {
+        Self {
+            selection,
+            target,
+            indices: Vec::new(),
+            generation: None,
         }
-        &self.indices
+    }
+
+    /// The underlying selection, for logging and reporting.
+    pub fn selection(&self) -> &Selection {
+        &self.selection
+    }
+
+    /// Whether [`resolve`](Self::resolve) yields atom indices rather than group indices.
+    pub fn targets_atoms(&self) -> bool {
+        self.target == Target::Atoms
+    }
+
+    /// Currently matching indices, re-resolved only if the system has changed relevantly.
+    pub fn resolve(&mut self, context: &impl crate::ParticleSystem) -> &[usize] {
+        self.resolve_with_selection(context).1
+    }
+
+    /// Like [`resolve`](Self::resolve), but also hands back the selection.
+    ///
+    /// A caller that must report on an empty result would otherwise need a second `resolve` just
+    /// to borrow the selection again — wasteful on the energy hot path.
+    pub fn resolve_with_selection(
+        &mut self,
+        context: &impl crate::ParticleSystem,
+    ) -> (&Selection, &[usize]) {
+        let generation = self.selection.generation(context);
+        if self.generation != Some(generation) {
+            self.indices = match self.target {
+                Target::Atoms => context.resolve_atoms_live(&self.selection),
+                Target::Groups => context.resolve_groups_live(&self.selection),
+            };
+            self.generation = Some(generation);
+        }
+        (&self.selection, &self.indices)
     }
 }
 
@@ -99,9 +166,31 @@ impl SelectionCache {
 pub struct Selection {
     source: String,
     expr: evaluator::Expr,
+    /// Whether a titration or speciation swap can change what this selection matches.
+    depends_on_atom_kind: bool,
 }
 
 impl Selection {
+    /// Whether an in-place change of an atom's kind can change what this selection matches.
+    pub fn depends_on_atom_kind(&self) -> bool {
+        self.depends_on_atom_kind
+    }
+
+    /// The state this selection's outcome depends on, used as a cache key by [`CachedSelection`].
+    ///
+    /// Selections that cannot see atom identities ignore that counter, so a titration move does
+    /// not force, say, `molecule water` to be re-resolved on every energy evaluation.
+    fn generation(&self, context: &impl crate::ParticleSystem) -> Generation {
+        Generation {
+            groups: context.group_lists_generation(),
+            atom_kinds: if self.depends_on_atom_kind {
+                context.atom_kinds_generation()
+            } else {
+                0
+            },
+        }
+    }
+
     /// Parse a VMD-like selection expression.
     ///
     /// # Errors
@@ -111,6 +200,7 @@ impl Selection {
         let mut parser = parser::Parser::new(&tokens);
         let expr = parser.parse()?;
         Ok(Self {
+            depends_on_atom_kind: expr.depends_on_atom_kind(),
             source: input.to_string(),
             expr,
         })
@@ -192,6 +282,54 @@ impl<'de> serde::Deserialize<'de> for Selection {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let s = String::deserialize(deserializer)?;
         Self::parse(&s).map_err(serde::de::Error::custom)
+    }
+}
+
+#[cfg(test)]
+mod atom_kind_dependence_tests {
+    use super::*;
+
+    fn depends(expression: &str) -> bool {
+        Selection::parse(expression).unwrap().depends_on_atom_kind()
+    }
+
+    #[test]
+    fn selections_reading_the_atom_kind_are_flagged() {
+        for expression in [
+            "atomtype Na",
+            "element H",
+            "atomid 0 to 2",
+            "charged",
+            "acidic",
+        ] {
+            assert!(depends(expression), "{expression} reads the atom kind");
+        }
+    }
+
+    #[test]
+    fn selections_reading_only_static_topology_are_not_flagged() {
+        // `name` resolves against the molecule template, not the atom kind, and
+        // `backbone`/`sidechain` derive from the residue plus that name — a swap changes none.
+        for expression in [
+            "molecule water",
+            "resid 1 to 5",
+            "name CA",
+            "backbone",
+            "sidechain",
+            "index 0",
+            "all",
+            "none",
+        ] {
+            assert!(!depends(expression), "{expression} ignores the atom kind");
+        }
+    }
+
+    #[test]
+    fn dependence_propagates_through_boolean_operators() {
+        assert!(depends("molecule water and atomtype OW"));
+        assert!(depends("not element H"));
+        assert!(depends("resid 1 or charged"));
+        assert!(!depends("molecule water and not name CA"));
     }
 }
 

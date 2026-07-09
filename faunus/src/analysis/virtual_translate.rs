@@ -32,7 +32,7 @@ use crate::auxiliary::{ColumnWriter, MappingExt};
 use crate::axes::Axes;
 use crate::change::{Change, GroupChange};
 use crate::energy::EnergyChange;
-use crate::selection::{Selection, SelectionCache};
+use crate::selection::{CachedSelection, Selection};
 use crate::{Context, Point};
 use anyhow::Result;
 use derive_builder::Builder;
@@ -91,10 +91,10 @@ pub struct VirtualTranslate {
     #[builder_field_attr(serde(skip))]
     widom: WidomAccumulator,
 
-    /// Cached resolved group indices to avoid re-resolution when N hasn't changed.
+    /// Resolved group indices, built from `selection` on first use.
     #[builder(setter(skip))]
     #[builder_field_attr(serde(skip))]
-    group_cache: SelectionCache,
+    group_cache: Option<CachedSelection>,
 
     /// Thermal energy R*T in kJ/mol.
     #[builder(setter(skip))]
@@ -172,7 +172,7 @@ impl VirtualTranslateBuilder {
             stream,
             frequency: self.frequency.unwrap(),
             widom: WidomAccumulator::default(),
-            group_cache: SelectionCache::default(),
+            group_cache: None,
             thermal_energy,
         })
     }
@@ -248,11 +248,12 @@ impl<T: Context> Analyze<T> for VirtualTranslate {
             return Ok(());
         }
 
-        let gen = context.group_lists_generation();
+        // Disjoint field borrows: `selection` is read while `group_cache` is filled.
         let selection = &self.selection;
-        let active_groups = self
+        let cache = self
             .group_cache
-            .get_or_resolve(gen, || context.resolve_groups_live(selection));
+            .get_or_insert_with(|| CachedSelection::groups(selection.clone()));
+        let active_groups = cache.resolve(context);
 
         if active_groups.is_empty() {
             return Ok(());

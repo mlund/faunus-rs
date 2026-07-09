@@ -41,17 +41,14 @@ use serde::{Deserialize, Serialize};
 /// assert_eq!(group.capacity(), 3);
 /// assert_eq!(group.size(), GroupSize::Partial(2));
 /// ~~~
-
 #[derive(Debug, PartialEq, Clone)]
 pub struct Group {
     /// Index of the molecule kind forming the group (immutable).
     molecule: usize,
     /// Index of the group in the main group vector (immutable and unique).
     index: usize,
-    /// Optional mass center
-    mass_center: Option<Point>,
-    /// Max distance from mass center to any active particle (for spatial culling)
-    bounding_radius: Option<f64>,
+    /// Mass center and bounding radius; `None` for groups that have no mass center.
+    geometry: Option<GroupGeometry>,
     /// Number of active particles
     num_active: usize,
     /// Absolute indices in main particle vector (active and inactive; immutable and unique)
@@ -67,14 +64,26 @@ impl Default for Group {
         Self {
             molecule: 0,
             index: 0,
-            mass_center: None,
-            bounding_radius: None,
+            geometry: None,
             num_active: 0,
             range: 0..0,
             size_status: GroupSize::default(),
             quaternion: UnitQuaternion::identity(),
         }
     }
+}
+
+/// Geometric summary of a group's active particles, derived from their positions and masses.
+///
+/// The two quantities are computed together and are meaningless apart — the radius is measured
+/// *from* the mass center — so they are stored, backed up, and restored as one value. A group
+/// without a mass center (an atomic mega-group) has no geometry at all.
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub struct GroupGeometry {
+    /// Center of mass, respecting periodic boundaries.
+    pub mass_center: Point,
+    /// Max distance from the mass center to any active particle, for spatial culling.
+    pub bounding_radius: f64,
 }
 
 /// Activation status of a group of particles
@@ -228,7 +237,10 @@ impl Group {
 
     /// Get the center of mass of the group.
     pub const fn mass_center(&self) -> Option<&Point> {
-        self.mass_center.as_ref()
+        match &self.geometry {
+            Some(geometry) => Some(&geometry.mass_center),
+            None => None,
+        }
     }
 
     /// Maximum number of particles (active plus inactive)
@@ -367,19 +379,25 @@ impl Group {
         self.range.clone().skip(self.num_active)
     }
 
-    /// Set mass center
-    pub const fn set_mass_center(&mut self, mass_center: Point) {
-        self.mass_center = Some(mass_center);
-    }
-
     /// Get bounding radius (max distance from mass center to any active particle).
     pub const fn bounding_radius(&self) -> Option<f64> {
-        self.bounding_radius
+        match &self.geometry {
+            Some(geometry) => Some(geometry.bounding_radius),
+            None => None,
+        }
     }
 
-    /// Set bounding radius.
-    pub const fn set_bounding_radius(&mut self, radius: f64) {
-        self.bounding_radius = Some(radius);
+    /// Mass center and bounding radius together, as they are always derived together.
+    pub const fn geometry(&self) -> Option<GroupGeometry> {
+        self.geometry
+    }
+
+    /// Set — or clear — the derived geometry.
+    ///
+    /// Taking an `Option` is what lets a rejected move restore a group that had no geometry
+    /// before it ran.
+    pub const fn set_geometry(&mut self, geometry: Option<GroupGeometry>) {
+        self.geometry = geometry;
     }
 
     /// Rigid-body orientation quaternion (for MC↔LD state transfer).
@@ -434,8 +452,42 @@ pub trait GroupCollection {
     /// Atom kind index of the i'th particle.
     fn atom_kind(&self, index: usize) -> usize;
 
-    /// Set atom kind index of the i'th particle.
+    /// Set atom kind index of the i'th particle, keeping derived state consistent.
+    ///
+    /// A kind change invalidates selections that match on atom identity, and — when the mass
+    /// differs — the owning group's mass center and bounding radius. Implementations must
+    /// maintain both, so that callers never have to remember to.
     fn set_atom_kind(&mut self, index: usize, atom_id: usize);
+
+    /// Set atom kind index without refreshing the owning group's geometry.
+    ///
+    /// Only for bulk restores that recompute every group's geometry afterwards; a per-particle
+    /// refresh would then be quadratic. Like [`set_atom_kind`](Self::set_atom_kind), it bumps the
+    /// atom-kind generation when — and only when — the kind actually changes.
+    fn set_atom_kind_unchecked(&mut self, index: usize, atom_id: usize);
+
+    /// Counter bumped whenever any particle's atom kind changes.
+    ///
+    /// Together with [`group_lists_generation`](Self::group_lists_generation) this is everything a
+    /// selection's outcome can depend on.
+    fn atom_kinds_generation(&self) -> u64;
+
+    /// Index of the group owning particle `index`, if any.
+    ///
+    /// Groups occupy disjoint, ascending, contiguous particle ranges, so this is a binary search.
+    fn group_of_particle(&self, index: usize) -> Option<usize> {
+        let groups = self.groups();
+        let found = groups.binary_search_by(|group| {
+            if index < group.start() {
+                std::cmp::Ordering::Greater
+            } else if group.contains(index) {
+                std::cmp::Ordering::Equal
+            } else {
+                std::cmp::Ordering::Less
+            }
+        });
+        found.ok().map(|position| groups[position].index())
+    }
 
     /// Swap all SoA fields (position, atom kind) between two particle indices.
     fn swap_particles(&mut self, i: usize, j: usize);
@@ -554,7 +606,8 @@ pub trait GroupCollection {
     {
         self.set_positions(0..particles.len(), particles.iter().map(|p| &p.pos));
         for (i, p) in particles.iter().enumerate() {
-            self.set_atom_kind(i, p.atom_id);
+            // Every group's geometry is recomputed below, so skip the per-particle refresh.
+            self.set_atom_kind_unchecked(i, p.atom_id);
         }
         for (i, (&size, &q)) in sizes.iter().zip(quaternions.iter()).enumerate() {
             self.resize_group(i, size)?;
@@ -752,8 +805,7 @@ mod tests {
         let mut group = Group {
             molecule: 20,
             index: 2,
-            mass_center: None,
-            bounding_radius: None,
+            geometry: None,
             num_active: 6,
             range: 0..10,
             size_status: GroupSize::Partial(6),
@@ -914,8 +966,7 @@ mod tests {
         let group = Group {
             molecule: 20,
             index: 2,
-            mass_center: None,
-            bounding_radius: None,
+            geometry: None,
             num_active: 6,
             range: 10..27,
             size_status: GroupSize::Partial(6),

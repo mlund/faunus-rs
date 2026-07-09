@@ -103,6 +103,8 @@ pub fn run_regression(dir: &Path) {
             "acceptance_ratio",
             "elapsed_seconds",
             "energy_timers",
+            // Changes with every release and every commit, so it can never match a fixture.
+            "version",
         ],
     );
 }

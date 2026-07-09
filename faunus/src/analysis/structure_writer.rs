@@ -1,7 +1,7 @@
 use super::{Analyze, Frequency};
 use crate::auxiliary::MappingExt;
 use crate::cell::Shape;
-use crate::selection::{Selection, SelectionCache};
+use crate::selection::{CachedSelection, Selection};
 use crate::topology::io::{self, frame_state::FrameStateWriter, psf, StructureData};
 use crate::Context;
 use anyhow::Context as _;
@@ -38,10 +38,10 @@ pub struct StructureWriter {
     #[builder(setter(skip))]
     #[builder_field_attr(serde(skip))]
     frame_state_writer: Option<FrameStateWriter>,
-    /// Cached resolved group indices for selection.
+    /// Resolved group indices, built from `selection` on first use.
     #[builder(setter(skip))]
     #[builder_field_attr(serde(skip))]
-    group_cache: SelectionCache,
+    group_cache: Option<CachedSelection>,
     /// Per-frame group sizes for VMD visibility of inactive groups.
     #[builder(setter(skip))]
     #[builder_field_attr(serde(skip))]
@@ -89,7 +89,7 @@ impl StructureWriter {
             selection: None,
             num_samples: 0,
             frame_state_writer: None,
-            group_cache: SelectionCache::default(),
+            group_cache: None,
             sizes_writer: None,
             charges_writer: None,
         }
@@ -108,15 +108,13 @@ impl crate::Info for StructureWriter {
 impl StructureWriter {
     /// Resolve selected group indices, using cache to avoid re-resolution.
     fn selected_group_indices<T: Context>(&mut self, context: &T) -> Cow<'_, [usize]> {
-        match &self.selection {
-            Some(sel) => {
-                let gen = context.group_lists_generation();
-                Cow::Borrowed(
-                    self.group_cache
-                        .get_or_resolve(gen, || context.resolve_groups_live(sel)),
-                )
+        // Disjoint field borrows: `selection` is read while `group_cache` is filled.
+        match (&self.selection, &mut self.group_cache) {
+            (Some(selection), cache) => {
+                let cache = cache.get_or_insert_with(|| CachedSelection::groups(selection.clone()));
+                Cow::Borrowed(cache.resolve(context))
             }
-            None => Cow::Owned((0..context.groups().len()).collect()),
+            (None, _) => Cow::Owned((0..context.groups().len()).collect()),
         }
     }
 

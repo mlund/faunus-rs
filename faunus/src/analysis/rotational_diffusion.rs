@@ -20,7 +20,7 @@
 
 use super::{Analyze, Frequency};
 use crate::auxiliary::{ColumnWriter, MappingExt};
-use crate::selection::{Selection, SelectionCache};
+use crate::selection::{CachedSelection, Selection};
 use crate::Context;
 use anyhow::Result;
 use average::{Estimate, Variance};
@@ -108,7 +108,7 @@ impl RotationalDiffusionBuilder {
         let num_lags = log_lags.len();
 
         Ok(RotationalDiffusion {
-            selection: self.selection.clone(),
+            selection: CachedSelection::groups(self.selection.clone()),
             frequency: self.frequency,
             num_samples: 0,
             snapshots: HashMap::new(),
@@ -116,7 +116,6 @@ impl RotationalDiffusionBuilder {
                 .map(|_| std::array::from_fn(|_| Variance::new()))
                 .collect(),
             lag_to_index,
-            group_cache: SelectionCache::default(),
             writer,
             log_lags,
         })
@@ -134,7 +133,7 @@ impl RotationalDiffusionBuilder {
 /// [Holtbrügge & Schäfer (2025)](https://doi.org/10.1101/2025.05.27.656261).
 #[derive(Debug)]
 pub struct RotationalDiffusion {
-    selection: Selection,
+    selection: CachedSelection,
     frequency: Frequency,
     num_samples: usize,
     /// Per-group quaternion ring buffers, keyed by group index.
@@ -144,7 +143,6 @@ pub struct RotationalDiffusion {
     covariance: Vec<[Variance; UPPER_TRIANGLE]>,
     /// Reverse lookup: lag value → index into `covariance`. Only log-spaced lags have entries.
     lag_to_index: HashMap<usize, usize>,
-    group_cache: SelectionCache,
     #[debug(skip)]
     writer: Option<ColumnWriter>,
     log_lags: Vec<usize>,
@@ -254,12 +252,8 @@ impl<T: Context> Analyze<T> for RotationalDiffusion {
     }
 
     fn perform_sample(&mut self, context: &T, step: usize, _weight: f64) -> Result<()> {
-        let gen = context.group_lists_generation();
-        // Must copy: the borrow from `get_or_resolve` conflicts with `self.snapshots` mutation
-        let group_indices = self
-            .group_cache
-            .get_or_resolve(gen, || context.resolve_groups_live(&self.selection))
-            .to_vec();
+        // Must copy: the borrow from `resolve` conflicts with `self.snapshots` mutation
+        let group_indices = self.selection.resolve(context).to_vec();
 
         let active: std::collections::HashSet<usize> = group_indices.iter().copied().collect();
         self.snapshots.retain(|gi, _| active.contains(gi));
