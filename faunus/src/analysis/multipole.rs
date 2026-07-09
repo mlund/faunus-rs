@@ -39,7 +39,7 @@ impl MultipoleAnalysisBuilder {
 
     pub fn build(&self, context: &impl Context) -> Result<MultipoleAnalysis> {
         let topology = context.topology_ref();
-        let groups = context.resolve_groups_live(&self.selection);
+        let groups = context.resolve_groups(&self.selection);
         if groups.is_empty() {
             anyhow::bail!(
                 "Multipole: selection '{}' matched no groups",
@@ -129,7 +129,7 @@ impl<T: Context> Analyze<T> for MultipoleAnalysis {
         let atomkinds = topology.atomkinds();
         let moleculekinds = topology.moleculekinds();
 
-        for &gi in &context.resolve_groups_live(&self.selection) {
+        for &gi in &context.resolve_groups(&self.selection) {
             let group = &context.groups()[gi];
             let mol = group.molecule();
 

@@ -292,7 +292,7 @@ impl<T: Context> Analyze<T> for ElectricPotentialProfile {
         // Instantaneous total charge per slab. Only currently-active atoms are resolved, so
         // a fluctuating particle number (GCMC) is handled automatically.
         let mut slab_charge = vec![0.0; self.grid.n_bins()];
-        for index in context.resolve_atoms_live(&self.selection) {
+        for index in context.resolve_atoms(&self.selection) {
             let bin = self.grid.bin_index(context.position(index).z);
             slab_charge[bin] += context.atom_charge(index);
         }

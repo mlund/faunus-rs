@@ -47,7 +47,9 @@ impl ShapeAnalysisBuilder {
     pub fn build(&self, context: &impl Context) -> Result<ShapeAnalysis> {
         let topology = context.topology_ref();
         let groups = context.groups();
-        let group_indices = self.selection.resolve_groups(topology, groups);
+        let group_indices = self
+            .selection
+            .resolve_groups(topology, groups, &|i| context.atom_kind(i));
         if group_indices.is_empty() {
             anyhow::bail!(
                 "ShapeAnalysis: selection '{}' matched no groups",
@@ -200,7 +202,7 @@ impl<T: Context> Analyze<T> for ShapeAnalysis {
     }
 
     fn perform_sample(&mut self, context: &T, step: usize, weight: f64) -> Result<()> {
-        let group_indices = context.resolve_groups_live(&self.selection);
+        let group_indices = context.resolve_groups(&self.selection);
 
         for &gi in &group_indices {
             let group = &context.groups()[gi];

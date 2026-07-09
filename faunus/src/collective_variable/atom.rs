@@ -40,7 +40,7 @@ impl CvKind for AtomPosition {
     fn evaluate(&self, context: &dyn EvalContext) -> f64 {
         let indices =
             self.selection
-                .resolve_atoms_live(context.topology_ref(), context.groups(), &|i| {
+                .resolve_atoms(context.topology_ref(), context.groups(), &|i| {
                     context.atom_kind(i)
                 });
         if indices.len() != 1 {
@@ -73,7 +73,7 @@ impl CvKindBuilder for AtomPositionBuilder {
     fn build(&self, context: &dyn EvalContext) -> anyhow::Result<Box<dyn CvKind>> {
         let indices =
             self.selection
-                .resolve_atoms_live(context.topology_ref(), context.groups(), &|i| {
+                .resolve_atoms(context.topology_ref(), context.groups(), &|i| {
                     context.atom_kind(i)
                 });
         // Warn rather than error: speciation/GCMC can change the active count later

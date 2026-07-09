@@ -117,14 +117,14 @@ pub trait ParticleSystem: GroupCollection + WithCell + WithTopology {
         self.topology_ref().atomkinds()[self.atom_kind(index)].charge()
     }
 
-    /// Resolve a selection to active atom indices using live atom kinds.
-    fn resolve_atoms_live(&self, selection: &crate::selection::Selection) -> Vec<usize> {
-        selection.resolve_atoms_live(self.topology_ref(), self.groups(), &|i| self.atom_kind(i))
+    /// Resolve a selection to active atom indices.
+    fn resolve_atoms(&self, selection: &crate::selection::Selection) -> Vec<usize> {
+        selection.resolve_atoms(self.topology_ref(), self.groups(), &|i| self.atom_kind(i))
     }
 
-    /// Resolve a selection to group indices using live atom kinds.
-    fn resolve_groups_live(&self, selection: &crate::selection::Selection) -> Vec<usize> {
-        selection.resolve_groups_live(self.topology_ref(), self.groups(), &|i| self.atom_kind(i))
+    /// Resolve a selection to group indices.
+    fn resolve_groups(&self, selection: &crate::selection::Selection) -> Vec<usize> {
+        selection.resolve_groups(self.topology_ref(), self.groups(), &|i| self.atom_kind(i))
     }
 
     /// Optional cell list for spatial acceleration of pair interactions.
