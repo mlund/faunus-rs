@@ -28,7 +28,7 @@
 use super::{Analyze, Frequency, Sampling};
 use crate::auxiliary::{BlockAverage, BlockSummary, ColumnWriter, MappingExt};
 use crate::energy::slab_potential::{SlabGrid, SlabKernel};
-use crate::selection::Selection;
+use crate::selection::{CachedSelection, Selection};
 use crate::Context;
 use anyhow::Result;
 use derive_more::Debug;
@@ -116,7 +116,7 @@ impl ElectricPotentialProfileBuilder {
         let n_bins = grid.n_bins();
 
         Ok(ElectricPotentialProfile {
-            selection: self.selection.clone(),
+            selection: CachedSelection::atoms(self.selection.clone()),
             grid,
             millivolt_per_kt: kt_per_charge_in_millivolt(medium.temperature()),
             bjerrum_length,
@@ -142,7 +142,7 @@ fn new_accumulators(n: usize) -> Vec<BlockAverage> {
 #[derive(Debug)]
 pub struct ElectricPotentialProfile {
     /// Atoms whose charge contributes to the profile.
-    selection: Selection,
+    selection: CachedSelection,
     /// z-grid and screened kernel doing the convolution.
     grid: SlabGrid,
     /// Conversion factor from potential in kT/e to millivolts.
@@ -290,7 +290,7 @@ impl<T: Context> Analyze<T> for ElectricPotentialProfile {
         // Instantaneous total charge per slab. Only currently-active atoms are resolved, so
         // a fluctuating particle number (GCMC) is handled automatically.
         let mut slab_charge = vec![0.0; self.grid.n_bins()];
-        for index in context.resolve_atoms(&self.selection) {
+        for index in self.selection.resolve(context).to_vec() {
             let bin = self.grid.bin_index(context.position(index).z);
             slab_charge[bin] += context.atom_charge(index);
         }
@@ -343,7 +343,7 @@ mod tests {
         let n = grid.n_bins();
         assert_eq!(n, 10);
         ElectricPotentialProfile {
-            selection: all_atoms(),
+            selection: CachedSelection::atoms(all_atoms()),
             grid,
             millivolt_per_kt: 25.7,
             bjerrum_length: 7.0,

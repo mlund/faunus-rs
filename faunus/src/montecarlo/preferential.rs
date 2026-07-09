@@ -96,6 +96,8 @@ pub struct PreferentialSampling {
 impl PreferentialSampling {
     /// Resolve the selection, prime the geometry cache, and validate.
     pub fn finalize(&mut self, context: &impl Context) -> anyhow::Result<()> {
+        // Built here, not on first use: the reference selection is known as soon as the move is.
+        self.ref_cache = Some(CachedSelection::groups(self.reference.clone()));
         self.refresh_ref_geometries(context);
         anyhow::ensure!(
             !self.ref_geometries.is_empty(),
@@ -125,15 +127,13 @@ impl PreferentialSampling {
     /// Refresh cached (mass_center, bounding_radius) from current group state.
     /// Called once per `rebuild_weights()` — stable within a `!Deterministic` block.
     fn refresh_ref_geometries(&mut self, context: &impl Context) {
-        // Disjoint field borrows: `reference` is read while `ref_cache` is filled.
-        let reference = &self.reference;
         let ref_indices = self
             .ref_cache
-            .get_or_insert_with(|| CachedSelection::groups(reference.clone()))
+            .as_mut()
+            .expect("finalize() builds the reference cache before any sampling")
             .resolve(context);
         debug!(
-            "PreferentialSampling: '{}' → {} group(s): {:?}",
-            reference,
+            "PreferentialSampling: {} group(s): {:?}",
             ref_indices.len(),
             ref_indices
         );

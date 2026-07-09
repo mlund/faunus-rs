@@ -33,7 +33,7 @@ pub use moverunner::MoveRunner;
 #[cfg(feature = "gpu")]
 use crate::energy::EnergyChange;
 use crate::{
-    analysis::{AnalysisCollection, AnalysisCollectionExt, Analyze},
+    analysis::{AnalysisCollection, AnalysisCollectionExt},
     montecarlo::AcceptanceCriterion,
     Context,
 };

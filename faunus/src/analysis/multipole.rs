@@ -8,7 +8,7 @@
 
 use super::{Analyze, Frequency, Sampling};
 use crate::auxiliary::{MappingExt, WeightedMean};
-use crate::selection::Selection;
+use crate::selection::{CachedSelection, Selection};
 use crate::topology::GroupKind;
 use crate::Context;
 use anyhow::Result;
@@ -63,7 +63,7 @@ impl MultipoleAnalysisBuilder {
             groups.len()
         );
         Ok(MultipoleAnalysis {
-            selection: self.selection.clone(),
+            selection: CachedSelection::groups(self.selection.clone()),
             sampling: Sampling::new(self.frequency),
             charge: WeightedMean::new(),
             charge_squared: WeightedMean::new(),
@@ -84,7 +84,7 @@ impl MultipoleAnalysisBuilder {
 /// Per-group charge, dipole, and quadrupole analysis.
 #[derive(Debug)]
 pub struct MultipoleAnalysis {
-    selection: Selection,
+    selection: CachedSelection,
     /// Frequency and frame count, owned by the framework.
     sampling: Sampling,
     charge: WeightedMean,
@@ -128,7 +128,7 @@ impl<T: Context> Analyze<T> for MultipoleAnalysis {
         let atomkinds = topology.atomkinds();
         let moleculekinds = topology.moleculekinds();
 
-        for &gi in &context.resolve_groups(&self.selection) {
+        for &gi in &self.selection.resolve(context).to_vec() {
             let group = &context.groups()[gi];
             let mol = group.molecule();
 
@@ -208,7 +208,7 @@ impl<T: Context> Analyze<T> for MultipoleAnalysis {
         let mu_var = (self.dipole_squared.mean() - mu_mean * mu_mean).max(0.0);
         let mu_std = mu_var.sqrt();
 
-        map.try_insert("selection", self.selection.source())?;
+        map.try_insert("selection", self.selection.selection().source())?;
         map.try_insert("num_samples", self.sampling.num_samples())?;
         map.try_insert("charge", format!("{z_mean:.4} ± {z_std:.4}"))?;
         map.try_insert("capacitance", capacitance)?;

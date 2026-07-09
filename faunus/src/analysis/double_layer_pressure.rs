@@ -40,7 +40,7 @@ use super::{Analyze, Frequency, Sampling};
 use crate::auxiliary::{BlockAverage, ColumnWriter, MappingExt};
 use crate::cell::{BoundaryConditions, Shape};
 use crate::energy::slab_potential::square_sheet_factor;
-use crate::selection::Selection;
+use crate::selection::{CachedSelection, Selection};
 use crate::{Context, Point};
 use anyhow::Result;
 use derive_more::Debug;
@@ -151,7 +151,7 @@ impl DoubleLayerPressureBuilder {
             .transpose()?;
 
         Ok(DoubleLayerPressure {
-            selection: self.selection.clone(),
+            selection: CachedSelection::atoms(self.selection.clone()),
             thermal_energy,
             prefactor,
             area,
@@ -175,7 +175,7 @@ impl DoubleLayerPressureBuilder {
 #[derive(Debug)]
 pub struct DoubleLayerPressure {
     /// Mobile counterion selection.
-    selection: Selection,
+    selection: CachedSelection,
     /// Thermal energy R*T in kJ/mol.
     thermal_energy: f64,
     /// Coulomb prefactor in kJ/mol·Å (energy of `q_i q_j / r`).
@@ -374,7 +374,7 @@ impl<T: Context> Analyze<T> for DoubleLayerPressure {
     }
 
     fn perform_sample(&mut self, context: &T, step: usize, _weight: f64) -> Result<()> {
-        let ions = context.resolve_atoms(&self.selection);
+        let ions = self.selection.resolve(context).to_vec();
         let positions: Vec<Point> = ions.iter().map(|&i| context.position(i)).collect();
         let charges: Vec<f64> = ions.iter().map(|&i| context.atom_charge(i)).collect();
 
@@ -547,7 +547,7 @@ mod tests {
     /// Construct an analysis directly for testing the reporting helpers.
     fn dummy(thermal_energy: f64) -> DoubleLayerPressure {
         DoubleLayerPressure {
-            selection: Selection::parse("all").unwrap(),
+            selection: CachedSelection::atoms(Selection::parse("all").unwrap()),
             thermal_energy,
             prefactor: 1.0,
             area: 1.0,

@@ -13,7 +13,10 @@ use std::path::Path;
 
 /// Writes structure of the system in the specified format during the simulation.
 #[derive(Debug, Builder)]
-#[builder(derive(Deserialize, Serialize), build_fn(validate = "Self::validate"))]
+#[builder(
+    derive(Deserialize, Serialize),
+    build_fn(private, name = "build_without_cache", validate = "Self::validate")
+)]
 #[builder_struct_attr(serde(deny_unknown_fields))]
 pub struct StructureWriter {
     /// Output file name (xyz, pdb, etc.)
@@ -51,6 +54,16 @@ pub struct StructureWriter {
 }
 
 impl StructureWriterBuilder {
+    /// Build the writer with its selection cache already in place.
+    ///
+    /// `derive_builder`'s generated constructor cannot fill a field derived from another, so the
+    /// cache is attached here rather than on first use.
+    pub fn build(&self) -> Result<StructureWriter, StructureWriterBuilderError> {
+        let mut writer = self.build_without_cache()?;
+        writer.group_cache = writer.selection.clone().map(CachedSelection::groups);
+        Ok(writer)
+    }
+
     fn validate(&self) -> Result<(), String> {
         // Frame state (.aux) encodes full-system group topology; a filtered
         // selection would produce a mismatch during rerun deserialization.
@@ -99,13 +112,9 @@ impl crate::Info for StructureWriter {
 impl StructureWriter {
     /// Resolve selected group indices, using cache to avoid re-resolution.
     fn selected_group_indices<T: Context>(&mut self, context: &T) -> Cow<'_, [usize]> {
-        // Disjoint field borrows: `selection` is read while `group_cache` is filled.
-        match (&self.selection, &mut self.group_cache) {
-            (Some(selection), cache) => {
-                let cache = cache.get_or_insert_with(|| CachedSelection::groups(selection.clone()));
-                Cow::Borrowed(cache.resolve(context))
-            }
-            (None, _) => Cow::Owned((0..context.groups().len()).collect()),
+        match &mut self.group_cache {
+            Some(cache) => Cow::Borrowed(cache.resolve(context)),
+            None => Cow::Owned((0..context.groups().len()).collect()),
         }
     }
 

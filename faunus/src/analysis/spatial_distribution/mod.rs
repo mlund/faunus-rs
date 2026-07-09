@@ -11,7 +11,7 @@ use super::{Analyze, Frequency, Sampling};
 use crate::auxiliary::MappingExt;
 use crate::cell::{BoundaryConditions, Shape};
 use crate::group::Group;
-use crate::selection::Selection;
+use crate::selection::{CachedSelection, Selection};
 use crate::topology::io::{self, StructureData};
 use crate::{Context, Point};
 use anyhow::Result;
@@ -109,8 +109,8 @@ impl SpatialDistributionBuilder {
             .transpose()?;
 
         Ok(SpatialDistribution {
-            reference: self.reference.clone(),
-            selection: self.selection.clone(),
+            reference: CachedSelection::groups(self.reference.clone()),
+            selection: CachedSelection::atoms(self.selection.clone()),
             file: self.file.clone(),
             reference_structure,
             grid: grid.clone(),
@@ -126,8 +126,8 @@ impl SpatialDistributionBuilder {
 /// Spatial distribution function analysis.
 #[derive(Debug)]
 pub struct SpatialDistribution {
-    reference: Selection,
-    selection: Selection,
+    reference: CachedSelection,
+    selection: CachedSelection,
     file: PathBuf,
     /// Reference molecule snapshot in the body frame, written once for visualization.
     reference_structure: Option<ReferenceStructure>,
@@ -323,11 +323,12 @@ impl<T: Context> Analyze<T> for SpatialDistribution {
     }
 
     fn perform_sample(&mut self, context: &T, _step: usize, weight: f64) -> Result<()> {
-        let reference_groups = context.resolve_groups(&self.reference);
+        let reference_groups = self.reference.resolve(context).to_vec();
         if !reference_groups.is_empty() {
-            validate_reference_groups(context, &reference_groups, self.reference.source())?;
+            let source = self.reference.selection().source().to_string();
+            validate_reference_groups(context, &reference_groups, &source)?;
         }
-        let target_atoms = context.resolve_atoms(&self.selection);
+        let target_atoms = self.selection.resolve(context).to_vec();
 
         let owners = atom_owners(context.groups(), context.num_particles());
         let volume = context.cell().volume();
@@ -690,8 +691,8 @@ frequency: !Every 1
     #[test]
     fn bulk_normalized_uniform_counts_are_one() {
         let mut sdf = SpatialDistribution {
-            reference: Selection::parse("molecule REF").unwrap(),
-            selection: Selection::parse("atomtype Na").unwrap(),
+            reference: CachedSelection::groups(Selection::parse("molecule REF").unwrap()),
+            selection: CachedSelection::atoms(Selection::parse("atomtype Na").unwrap()),
             file: PathBuf::from("spatial.dx"),
             reference_structure: None,
             grid: Grid::from_points(&[Point::new(0.25, 0.25, 0.25)], 1.0, 0.25).unwrap(),

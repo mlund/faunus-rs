@@ -13,7 +13,7 @@
 // limitations under the license.
 
 use crate::{
-    analysis::{self, AnalysisCollectionExt, Analyze, Frequency},
+    analysis::{self, AnalysisCollectionExt, Frequency},
     backend::Backend,
     energy::EnergyChange,
     group::GroupCollection,

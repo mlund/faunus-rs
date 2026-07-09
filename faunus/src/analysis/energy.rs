@@ -6,7 +6,7 @@
 
 use super::{Analyze, Frequency, Sampling};
 use crate::auxiliary::{ColumnWriter, MappingExt, WeightedMean};
-use crate::selection::Selection;
+use crate::selection::{CachedSelection, Selection};
 use crate::Context;
 use anyhow::Result;
 use derive_more::Debug;
@@ -30,7 +30,7 @@ enum EnergyMode {
     /// Per-term breakdown + total.
     Total,
     /// Nonbonded energy between two selections.
-    Partial(Selection, Selection),
+    Partial(Box<(CachedSelection, CachedSelection)>),
 }
 
 /// Streams energy values to an output file.
@@ -62,7 +62,13 @@ impl EnergyAnalysisBuilder {
                 }
             }
             let stream = ColumnWriter::open(&self.file, &["step", "energy", "average"])?;
-            (stream, EnergyMode::Partial(sel1.clone(), sel2.clone()))
+            (
+                stream,
+                EnergyMode::Partial(Box::new((
+                    CachedSelection::atoms(sel1.clone()),
+                    CachedSelection::atoms(sel2.clone()),
+                ))),
+            )
         } else {
             let hamiltonian = context.hamiltonian();
             let names: Vec<&str> = hamiltonian
@@ -104,6 +110,14 @@ impl<T: Context> Analyze<T> for EnergyAnalysis {
     }
 
     fn perform_sample(&mut self, context: &T, step: usize, weight: f64) -> Result<()> {
+        // Resolving needs `&mut` on the caches, so do it before borrowing the rest of `self`.
+        let partial_atoms = match &mut self.mode {
+            EnergyMode::Partial(pair) => Some((
+                pair.0.resolve(context).to_vec(),
+                pair.1.resolve(context).to_vec(),
+            )),
+            EnergyMode::Total => None,
+        };
         match &self.mode {
             EnergyMode::Total => {
                 let hamiltonian = context.hamiltonian();
@@ -117,9 +131,8 @@ impl<T: Context> Analyze<T> for EnergyAnalysis {
                 row.push(&total_str);
                 self.stream.write_row(&row)?;
             }
-            EnergyMode::Partial(sel1, sel2) => {
-                let a1 = context.resolve_atoms(sel1);
-                let a2 = context.resolve_atoms(sel2);
+            EnergyMode::Partial(..) => {
+                let (a1, a2) = partial_atoms.expect("resolved above for the Partial mode");
                 let hamiltonian = context.hamiltonian();
                 let energy: f64 = hamiltonian
                     .energy_terms()
@@ -145,8 +158,11 @@ impl<T: Context> Analyze<T> for EnergyAnalysis {
         let mut map = serde_yml::Mapping::new();
         map.try_insert("num_samples", self.sampling.num_samples())?;
         map.try_insert("mean", self.mean.mean())?;
-        if let EnergyMode::Partial(sel1, sel2) = &self.mode {
-            map.try_insert("selections", [sel1.source(), sel2.source()])?;
+        if let EnergyMode::Partial(pair) = &self.mode {
+            map.try_insert(
+                "selections",
+                [pair.0.selection().source(), pair.1.selection().source()],
+            )?;
         }
         Some(serde_yml::Value::Mapping(map))
     }
@@ -156,7 +172,12 @@ impl std::fmt::Debug for EnergyMode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Total => write!(f, "Total"),
-            Self::Partial(s1, s2) => write!(f, "Partial({:?}, {:?})", s1.source(), s2.source()),
+            Self::Partial(pair) => write!(
+                f,
+                "Partial({:?}, {:?})",
+                pair.0.selection().source(),
+                pair.1.selection().source()
+            ),
         }
     }
 }

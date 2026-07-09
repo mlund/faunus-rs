@@ -93,10 +93,10 @@ pub struct VirtualTranslate {
     #[builder_field_attr(serde(skip))]
     widom: WidomAccumulator,
 
-    /// Resolved group indices, built from `selection` on first use.
+    /// The selection, its resolved groups, and its cache key. Built with the analysis.
     #[builder(setter(skip))]
     #[builder_field_attr(serde(skip))]
-    group_cache: Option<CachedSelection>,
+    group_cache: CachedSelection,
 
     /// Thermal energy R*T in kJ/mol.
     #[builder(setter(skip))]
@@ -174,7 +174,7 @@ impl VirtualTranslateBuilder {
             stream,
             sampling: self.sampling.unwrap(),
             widom: WidomAccumulator::default(),
-            group_cache: None,
+            group_cache: CachedSelection::groups(self.selection.as_ref().unwrap().clone()),
             thermal_energy,
         })
     }
@@ -250,12 +250,7 @@ impl<T: Context> Analyze<T> for VirtualTranslate {
             return Ok(());
         }
 
-        // Disjoint field borrows: `selection` is read while `group_cache` is filled.
-        let selection = &self.selection;
-        let cache = self
-            .group_cache
-            .get_or_insert_with(|| CachedSelection::groups(selection.clone()));
-        let active_groups = cache.resolve(context);
+        let active_groups = self.group_cache.resolve(context);
 
         if active_groups.is_empty() {
             return Ok(());
