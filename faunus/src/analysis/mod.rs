@@ -530,3 +530,170 @@ mod tests {
         assert!(builders[0].apply_output_dir(Path::new("window0")).is_err());
     }
 }
+
+/// Pins the framework behaviour Tier 2 is about to change: which `Frequency` variants actually
+/// sample, who owns `num_samples`, and what `to_yaml` emits before any sample has been taken.
+///
+/// Several assertions here record *bugs*. They are written down so the fix shows up as a
+/// deliberate flip in the diff rather than as a test invented to match new code.
+#[cfg(test)]
+mod framework_characterization {
+    use super::*;
+    use crate::backend::Backend;
+
+    /// The smallest possible analysis: counts calls, nothing else.
+    #[derive(Debug)]
+    struct Counter {
+        frequency: Frequency,
+        num_samples: usize,
+        finalized: bool,
+    }
+
+    impl Counter {
+        fn new(frequency: Frequency) -> Self {
+            Self {
+                frequency,
+                num_samples: 0,
+                finalized: false,
+            }
+        }
+    }
+
+    impl crate::Info for Counter {
+        fn short_name(&self) -> Option<&'static str> {
+            Some("counter")
+        }
+        fn long_name(&self) -> Option<&'static str> {
+            Some("counter")
+        }
+    }
+
+    impl<T: Context> Analyze<T> for Counter {
+        fn frequency(&self) -> Frequency {
+            self.frequency
+        }
+        fn perform_sample(&mut self, _context: &T, _step: usize, _weight: f64) -> Result<()> {
+            self.num_samples += 1;
+            Ok(())
+        }
+        fn num_samples(&self) -> usize {
+            self.num_samples
+        }
+        fn finalize(&mut self, _context: &T) -> Result<()> {
+            self.finalized = true;
+            Ok(())
+        }
+    }
+
+    fn context() -> Backend {
+        let yaml = r#"
+atoms:
+  - {name: A, mass: 1.0, charge: 0.0, sigma: 1.0}
+molecules:
+  - name: MOL
+    atoms: [A]
+system:
+  cell: !Cuboid [20.0, 20.0, 20.0]
+  medium: {permittivity: !Vacuum, temperature: 300.0}
+  energy: {}
+  blocks:
+    - molecule: MOL
+      N: 2
+      insert: !Manual [[0.0, 0.0, 0.0], [5.0, 0.0, 0.0]]
+propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
+"#;
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(tmp.path(), yaml).unwrap();
+        Backend::new(tmp.path(), None, &mut rand::thread_rng()).unwrap()
+    }
+
+    fn sample_over_steps(frequency: Frequency, steps: usize) -> usize {
+        let context = context();
+        let mut counter = Counter::new(frequency);
+        for step in 0..steps {
+            Analyze::sample(&mut counter, &context, step).unwrap();
+        }
+        Analyze::<Backend>::num_samples(&counter)
+    }
+
+    #[test]
+    fn every_and_once_gate_exactly() {
+        assert_eq!(sample_over_steps(Frequency::Every(1), 10), 10);
+        assert_eq!(sample_over_steps(Frequency::Every(3), 10), 4); // steps 0,3,6,9
+        assert_eq!(sample_over_steps(Frequency::Once(4), 10), 1);
+        assert_eq!(sample_over_steps(Frequency::Once(99), 10), 0);
+    }
+
+    /// BUG, pinned: `Probability` never samples. `should_perform` returns false for it and
+    /// `should_perform_randomly` is called from nowhere in the whole crate.
+    #[test]
+    fn probability_frequency_never_samples() {
+        assert_eq!(sample_over_steps(Frequency::Probability(1.0), 100), 0);
+        assert!(!Frequency::Probability(1.0).should_perform(0));
+    }
+
+    /// BUG, pinned: `End` never samples during the run, and the default `finalize` does nothing
+    /// about it. Only `structure_writer` overrides `finalize` to honour it.
+    #[test]
+    fn end_frequency_never_samples_and_the_default_finalize_ignores_it() {
+        let context = context();
+        let mut counter = Counter::new(Frequency::End);
+        for step in 0..10 {
+            Analyze::sample(&mut counter, &context, step).unwrap();
+        }
+        assert_eq!(Analyze::<Backend>::num_samples(&counter), 0);
+
+        Analyze::finalize(&mut counter, &context).unwrap();
+        assert!(counter.finalized, "finalize ran");
+        assert_eq!(
+            Analyze::<Backend>::num_samples(&counter),
+            0,
+            "but it sampled nothing"
+        );
+        assert!(Frequency::End.should_perform_at_end());
+    }
+
+    /// BUG, pinned: three analyses skip the `num_samples == 0` guard and put `.inf` / `.nan` into
+    /// `output.yaml`. Their accumulators are honest — `WidomAccumulator::mean_free_energy` returns
+    /// `INFINITY` with no samples — but `to_yaml` publishes it.
+    #[test]
+    fn zero_sample_yaml_emits_non_finite_numbers() {
+        let builder: crate::analysis::VirtualVolumeMoveBuilder =
+            serde_yml::from_str("{dV: 0.5, method: Isotropic, frequency: !Every 10}").unwrap();
+        let analysis = builder.build(2.5).unwrap();
+        assert_eq!(Analyze::<Backend>::num_samples(&analysis), 0);
+
+        let yaml =
+            Analyze::<Backend>::to_yaml(&analysis).expect("emits a mapping despite 0 samples");
+        let non_finite = yaml
+            .as_mapping()
+            .unwrap()
+            .iter()
+            .filter_map(|(key, value)| {
+                let number = value.as_f64()?;
+                (!number.is_finite()).then(|| key.as_str().unwrap_or("?").to_string())
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            non_finite,
+            vec!["mean_free_energy"],
+            "published as +inf with zero samples (WidomAccumulator::mean_free_energy)"
+        );
+    }
+
+    /// `num_samples` means *frames* in most analyses but *group·frames* in `shape` and
+    /// `widom_rotation`, and `AnalysisCollection::num_samples()` sums them regardless.
+    #[test]
+    fn collection_num_samples_sums_incomparable_counters() {
+        let context = context();
+        let mut collection: AnalysisCollection<Backend> = vec![
+            Box::new(Counter::new(Frequency::Every(1))),
+            Box::new(Counter::new(Frequency::Every(1))),
+        ];
+        for step in 0..5 {
+            collection.sample(&context, step).unwrap();
+        }
+        // Two analyses, five frames each: the sum is 10, not 5.
+        assert_eq!(collection.num_samples(), 10);
+    }
+}
