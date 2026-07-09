@@ -63,7 +63,9 @@ impl RotationalDiffusionBuilder {
     pub fn build(&self, context: &impl Context) -> Result<RotationalDiffusion> {
         let topology = context.topology_ref();
         let groups = context.groups();
-        let group_indices = self.selection.resolve_groups(topology, groups);
+        let group_indices = self
+            .selection
+            .resolve_groups(topology, groups, &|i| context.atom_kind(i));
         if group_indices.is_empty() {
             anyhow::bail!(
                 "RotationalDiffusion: selection '{}' matched no groups",

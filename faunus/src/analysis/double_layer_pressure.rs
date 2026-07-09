@@ -125,7 +125,7 @@ impl DoubleLayerPressureBuilder {
         // Surface charge per wall from electroneutrality: two walls neutralize the ions,
         // so |σ| = Σ q_ion / (2·area).
         let ion_charge: f64 = context
-            .resolve_atoms_live(&self.selection)
+            .resolve_atoms(&self.selection)
             .iter()
             .map(|&i| context.atom_charge(i))
             .sum();
@@ -376,7 +376,7 @@ impl<T: Context> Analyze<T> for DoubleLayerPressure {
     }
 
     fn perform_sample(&mut self, context: &T, step: usize, _weight: f64) -> Result<()> {
-        let ions = context.resolve_atoms_live(&self.selection);
+        let ions = context.resolve_atoms(&self.selection);
         let positions: Vec<Point> = ions.iter().map(|&i| context.position(i)).collect();
         let charges: Vec<f64> = ions.iter().map(|&i| context.atom_charge(i)).collect();
 

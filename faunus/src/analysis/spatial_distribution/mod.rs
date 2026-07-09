@@ -90,7 +90,7 @@ impl SpatialDistributionBuilder {
             );
         }
 
-        let reference_groups = context.resolve_groups_live(&self.reference);
+        let reference_groups = context.resolve_groups(&self.reference);
         anyhow::ensure!(
             !reference_groups.is_empty(),
             "SpatialDistribution: reference selection '{}' matched no active groups",
@@ -325,11 +325,11 @@ impl<T: Context> Analyze<T> for SpatialDistribution {
     }
 
     fn perform_sample(&mut self, context: &T, _step: usize, weight: f64) -> Result<()> {
-        let reference_groups = context.resolve_groups_live(&self.reference);
+        let reference_groups = context.resolve_groups(&self.reference);
         if !reference_groups.is_empty() {
             validate_reference_groups(context, &reference_groups, self.reference.source())?;
         }
-        let target_atoms = context.resolve_atoms_live(&self.selection);
+        let target_atoms = context.resolve_atoms(&self.selection);
 
         let owners = atom_owners(context.groups(), context.num_particles());
         let volume = context.cell().volume();

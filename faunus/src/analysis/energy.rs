@@ -54,7 +54,10 @@ impl EnergyAnalysisBuilder {
             let topology = context.topology_ref();
             let groups = context.groups();
             for sel in [sel1, sel2] {
-                if sel.resolve_atoms(topology, groups).is_empty() {
+                if sel
+                    .resolve_atoms(topology, groups, &|i| context.atom_kind(i))
+                    .is_empty()
+                {
                     anyhow::bail!("Energy: selection '{}' resolves to no atoms", sel.source());
                 }
             }
@@ -116,8 +119,8 @@ impl<T: Context> Analyze<T> for EnergyAnalysis {
                 self.stream.write_row(&row)?;
             }
             EnergyMode::Partial(sel1, sel2) => {
-                let a1 = context.resolve_atoms_live(sel1);
-                let a2 = context.resolve_atoms_live(sel2);
+                let a1 = context.resolve_atoms(sel1);
+                let a2 = context.resolve_atoms(sel2);
                 let hamiltonian = context.hamiltonian();
                 let energy: f64 = hamiltonian
                     .energy_terms()
