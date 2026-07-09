@@ -374,7 +374,7 @@ impl<T: Context> Analyze<T> for DoubleLayerPressure {
     }
 
     fn perform_sample(&mut self, context: &T, step: usize, _weight: f64) -> Result<()> {
-        let ions = self.selection.resolve(context).to_vec();
+        let ions = self.selection.resolve(context);
         let positions: Vec<Point> = ions.iter().map(|&i| context.position(i)).collect();
         let charges: Vec<f64> = ions.iter().map(|&i| context.atom_charge(i)).collect();
 

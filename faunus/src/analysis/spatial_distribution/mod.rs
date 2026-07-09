@@ -325,8 +325,8 @@ impl<T: Context> Analyze<T> for SpatialDistribution {
     fn perform_sample(&mut self, context: &T, _step: usize, weight: f64) -> Result<()> {
         let reference_groups = self.reference.resolve(context).to_vec();
         if !reference_groups.is_empty() {
-            let source = self.reference.selection().source().to_string();
-            validate_reference_groups(context, &reference_groups, &source)?;
+            let source = self.reference.selection().source();
+            validate_reference_groups(context, &reference_groups, source)?;
         }
         let target_atoms = self.selection.resolve(context).to_vec();
 

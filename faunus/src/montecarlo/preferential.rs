@@ -133,7 +133,8 @@ impl PreferentialSampling {
             .expect("finalize() builds the reference cache before any sampling")
             .resolve(context);
         debug!(
-            "PreferentialSampling: {} group(s): {:?}",
+            "PreferentialSampling: '{}' → {} group(s): {:?}",
+            self.reference,
             ref_indices.len(),
             ref_indices
         );
