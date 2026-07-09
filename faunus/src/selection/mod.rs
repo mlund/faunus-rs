@@ -214,8 +214,12 @@ impl Selection {
     /// Resolve to absolute particle indices (sorted, deduplicated).
     ///
     /// Iterates all active particles in all non-empty groups and returns the absolute indices of
-    /// those matching the expression. `get_atom_kind(abs_index)` supplies each atom's *current*
-    /// kind, which a titration or speciation swap can move away from the molecule template's.
+    /// those matching the expression.
+    ///
+    /// `get_atom_kind(abs_index)` returns the atom's *current* kind as an index into
+    /// [`Topology::atomkinds`], which a titration or speciation swap can move away from the
+    /// molecule template's. Note this is the position in that slice, not `AtomKind::id()` — the
+    /// two happen to coincide, but the `atomid` selection keyword matches on the latter.
     pub fn resolve_atoms(
         &self,
         topology: &Topology,
