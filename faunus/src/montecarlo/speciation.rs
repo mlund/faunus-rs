@@ -7,7 +7,7 @@
 //! balance, consistent with ESPResSo's reaction ensemble implementation.
 
 use crate::chemistry::reaction::{Direction, Participant, Reaction};
-use crate::group::GroupSize;
+use crate::group::{AbsIndex, GroupSize, RelIndex};
 use crate::montecarlo::{entropy_bias, MoveStatistics, NewOld};
 use crate::propagate::{
     default_repeat, default_weight, tagged_yaml, Displacement, MoveProposal, MoveTarget,
@@ -503,8 +503,8 @@ impl SpeciationMove {
             // so the energy code can distinguish pre- vs. post-transform state
             // (`groups[gi].len() < n_old` means post) — required because the
             // swap leaves a *different* atom at slot `rel` in the new state.
-            let rel = rng.gen_range(0..n_old);
-            let abs = context.groups()[gi].to_absolute_index(rel).unwrap();
+            let rel = RelIndex::new(rng.gen_range(0..n_old));
+            let abs = context.groups()[gi].to_absolute(rel).unwrap().get();
             // Reservoirs have zero entropy bias (solid activity = 1; C++ `implicit` convention)
             let bias = if molecule.is_reservoir() {
                 0.0
@@ -564,7 +564,7 @@ impl SpeciationMove {
                 },
                 (
                     gi,
-                    GroupChange::ResizePartial(GroupSize::Expand(1), vec![n_old]),
+                    GroupChange::ResizePartial(GroupSize::Expand(1), vec![RelIndex::new(n_old)]),
                 ),
                 bias,
             ))
@@ -707,7 +707,7 @@ impl SpeciationMove {
         // `GroupChange` is group-relative — `energy/ewald.rs` reconstructs the global index as
         // `group.start() + rel`. Emitting the absolute index here would point Ewald at a different
         // particle for any group that does not start at 0.
-        let rel = context.groups()[gi].to_relative_index(abs).ok()?;
+        let rel = context.groups()[gi].to_relative(AbsIndex::new(abs)).ok()?;
 
         Some((
             SpeciationAction::SwapAtomKind {

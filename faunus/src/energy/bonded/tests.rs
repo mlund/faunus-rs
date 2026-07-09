@@ -6,7 +6,7 @@ use crate::{
     backend::Backend,
     cell::{Cell, Cuboid},
     energy::Hamiltonian,
-    group::{GroupCollection, GroupSize},
+    group::{GroupCollection, GroupSize, RelIndex},
     montecarlo::NewOld,
     topology::Topology,
     GroupChange,
@@ -114,14 +114,20 @@ fn test_intramolecular_energy() {
     assert_approx_eq!(f64, bonded.energy(&system, &change), 0.0);
 
     // change several particles within a single group
-    let change = Change::SingleGroup(1, GroupChange::PartialUpdate(vec![1, 2]));
+    let change = Change::SingleGroup(
+        1,
+        GroupChange::PartialUpdate(vec![RelIndex::new(1), RelIndex::new(2)]),
+    );
     let expected = bonded.one_group(&system, &system.groups()[1]);
     assert_approx_eq!(f64, bonded.energy(&system, &change), expected);
 
     // change several particles in multiple groups
     let change = Change::Groups(vec![
-        (0, GroupChange::PartialUpdate(vec![1])),
-        (1, GroupChange::PartialUpdate(vec![0, 2])),
+        (0, GroupChange::PartialUpdate(vec![RelIndex::new(1)])),
+        (
+            1,
+            GroupChange::PartialUpdate(vec![RelIndex::new(0), RelIndex::new(2)]),
+        ),
     ]);
     let expected = bonded.multiple_groups(&system, &[0, 1]);
     assert_approx_eq!(f64, bonded.energy(&system, &change), expected);
@@ -186,13 +192,16 @@ fn test_intermolecular_update() {
     assert_eq!(bonded.particles_status, expected_status);
 
     // irrelevant single group change
-    let change = Change::SingleGroup(2, GroupChange::PartialUpdate(vec![0, 1, 3]));
+    let change = Change::SingleGroup(
+        2,
+        GroupChange::PartialUpdate(vec![RelIndex::new(0), RelIndex::new(1), RelIndex::new(3)]),
+    );
     bonded.update(&system, &change).unwrap();
     assert_eq!(bonded.particles_status, expected_status);
 
     // irrelevant changes in multiple groups
     let change = Change::Groups(vec![
-        (0, GroupChange::PartialUpdate(vec![2])),
+        (0, GroupChange::PartialUpdate(vec![RelIndex::new(2)])),
         (2, GroupChange::RigidBody),
     ]);
     bonded.update(&system, &change).unwrap();
@@ -250,7 +259,10 @@ fn test_intermolecular_energy() {
     let expected = 4349.90721737715;
     assert_approx_eq!(f64, bonded.energy(&system, &change), expected);
 
-    let change = Change::SingleGroup(1, GroupChange::PartialUpdate(vec![0, 2]));
+    let change = Change::SingleGroup(
+        1,
+        GroupChange::PartialUpdate(vec![RelIndex::new(0), RelIndex::new(2)]),
+    );
     assert_approx_eq!(f64, bonded.energy(&system, &change), expected);
 
     // resize group
@@ -274,6 +286,7 @@ mod change_gating_characterization {
     use crate::backend::Backend;
     use crate::energy::bonded::IntramolecularBonded;
     use crate::energy::EnergyChange;
+    use crate::group::RelIndex;
     use crate::{Change, GroupChange};
 
     /// A 4-mer whose last bond is stretched 1 Å beyond `req`, so the bonded energy is non-zero.
@@ -310,7 +323,7 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
         let term = IntramolecularBonded::default();
         let energy = term.energy(
             &context,
-            &Change::SingleGroup(0, GroupChange::PartialUpdate(vec![3])),
+            &Change::SingleGroup(0, GroupChange::PartialUpdate(vec![RelIndex::new(3)])),
         );
         // One bond stretched by 1 Å: ½·k·Δ² = ½·100·1² = 50 kJ/mol.
         assert!((energy - 50.0).abs() < 1e-9, "bonded energy = {energy}");
@@ -329,6 +342,6 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
         // And that is exactly the label a rigid translate/rotate legitimately uses — which is why
         // the pairing, not the label, has to be constrained.
         assert!(!GroupChange::RigidBody.internal_change());
-        assert!(GroupChange::PartialUpdate(vec![3]).internal_change());
+        assert!(GroupChange::PartialUpdate(vec![RelIndex::new(3)]).internal_change());
     }
 }

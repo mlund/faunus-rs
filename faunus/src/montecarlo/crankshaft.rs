@@ -12,7 +12,7 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
-use crate::group::ParticleSelection;
+use crate::group::{ParticleSelection, RelIndex};
 use crate::montecarlo;
 use crate::propagate::{tagged_yaml, Displacement, MoveProposal, MoveTarget, ProposedMove};
 use crate::topology::BondGraph;
@@ -99,11 +99,13 @@ impl<T: Context> MoveProposal<T> for CrankshaftMove {
 
         let side_a = self.bond_graph.connected_from(i, j);
         let side_b = self.bond_graph.connected_from(j, i);
-        let (pivot_rel, dir_rel, rotated_rel) = if side_a.len() <= side_b.len() {
+        let (pivot_rel, dir_rel, rotated) = if side_a.len() <= side_b.len() {
             (j, i, side_a)
         } else {
             (i, j, side_b)
         };
+        // The bond graph speaks in group-relative offsets.
+        let rotated_rel: Vec<RelIndex> = rotated.into_iter().map(RelIndex::new).collect();
 
         let group_start = group.start();
         let pivot_pos = context.position(group_start + pivot_rel);
@@ -122,7 +124,7 @@ impl<T: Context> MoveProposal<T> for CrankshaftMove {
             transform: Transform::PartialRotate(
                 pivot_pos,
                 quaternion,
-                ParticleSelection::RelIndex(rotated_rel),
+                ParticleSelection::Relative(rotated_rel),
             ),
             target: MoveTarget::Group(group_index),
         })

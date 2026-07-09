@@ -332,8 +332,9 @@ impl<T: Context> MoveProposal<T> for TranslateAtom {
             pref.compute_bias(&old_pos, &new_pos, context);
         }
 
+        let absolute_atom = AbsIndex::new(absolute_atom);
         let relative_atom = context.groups()[group]
-            .to_relative_index(absolute_atom)
+            .to_relative(absolute_atom)
             .expect("Atom should be part of the group.");
 
         Some(ProposedMove {
@@ -341,7 +342,7 @@ impl<T: Context> MoveProposal<T> for TranslateAtom {
             displacement: Displacement::Distance(displacement),
             transform: Transform::PartialTranslate(
                 displacement,
-                ParticleSelection::AbsIndex(vec![absolute_atom]),
+                ParticleSelection::Absolute(vec![absolute_atom]),
             ),
             target: MoveTarget::Group(group),
         })
@@ -457,7 +458,9 @@ mod tests {
                 Change::SingleGroup(group, group_change) => {
                     assert_eq!(group, expected_groups[i]);
                     match group_change {
-                        GroupChange::PartialUpdate(x) => assert_eq!(x[0], expected_indices[i]),
+                        GroupChange::PartialUpdate(x) => {
+                            assert_eq!(x[0].get(), expected_indices[i])
+                        }
                         _ => panic!("Invalid Group Change."),
                     }
                 }
@@ -478,7 +481,9 @@ mod tests {
                 Change::SingleGroup(group, group_change) => {
                     assert_eq!(group, expected_groups[i]);
                     match group_change {
-                        GroupChange::PartialUpdate(x) => assert_eq!(x[0], expected_indices[i]),
+                        GroupChange::PartialUpdate(x) => {
+                            assert_eq!(x[0].get(), expected_indices[i])
+                        }
                         _ => panic!("Invalid Group Change."),
                     }
                 }
@@ -499,7 +504,9 @@ mod tests {
                 Change::SingleGroup(group, group_change) => {
                     assert_eq!(group, expected_groups[i]);
                     match group_change {
-                        GroupChange::PartialUpdate(x) => assert_eq!(x[0], expected_indices[i]),
+                        GroupChange::PartialUpdate(x) => {
+                            assert_eq!(x[0].get(), expected_indices[i])
+                        }
                         _ => panic!("Invalid Group Change."),
                     }
                 }
@@ -524,7 +531,9 @@ mod tests {
                 Change::SingleGroup(group, group_change) => {
                     assert_eq!(group, expected_groups[i]);
                     match group_change {
-                        GroupChange::PartialUpdate(x) => assert_eq!(x[0], expected_indices[i]),
+                        GroupChange::PartialUpdate(x) => {
+                            assert_eq!(x[0].get(), expected_indices[i])
+                        }
                         _ => panic!("Invalid Group Change."),
                     }
                 }

@@ -7,7 +7,7 @@ use crate::{
     backend::Backend,
     cell::{Cell, Cuboid, SimulationCell},
     energy::{builder::HamiltonianBuilder, Hamiltonian},
-    group::{GroupCollection, GroupSize},
+    group::{GroupCollection, GroupSize, RelIndex},
     montecarlo::NewOld,
     topology::Topology,
     Change, Context, Group, GroupChange,
@@ -570,7 +570,10 @@ fn test_nonbonded_matrix_energy() {
     assert_approx_eq!(f64, nonbonded.energy(&system, &change), expected);
 
     // change several particles within a single group
-    let change = Change::SingleGroup(1, GroupChange::PartialUpdate(vec![0, 1]));
+    let change = Change::SingleGroup(
+        1,
+        GroupChange::PartialUpdate(vec![RelIndex::new(0), RelIndex::new(1)]),
+    );
     let expected = nonbonded.particle_with_all(&system, 3, &system.groups()[1])
         + nonbonded.particle_with_all(&system, 4, &system.groups()[1]);
     assert_approx_eq!(f64, nonbonded.energy(&system, &change), expected);
@@ -583,8 +586,11 @@ fn test_nonbonded_matrix_energy() {
     // return `total_nonbonded` exactly once per pair, with no double-counting
     // of the cross terms (1,3), (1,4), or the intra pair (3,4).
     let change = Change::Groups(vec![
-        (0, GroupChange::PartialUpdate(vec![1])),
-        (1, GroupChange::PartialUpdate(vec![0, 1])),
+        (0, GroupChange::PartialUpdate(vec![RelIndex::new(1)])),
+        (
+            1,
+            GroupChange::PartialUpdate(vec![RelIndex::new(0), RelIndex::new(1)]),
+        ),
     ]);
     let expected = nonbonded.total_nonbonded(&system);
     assert_approx_eq!(f64, nonbonded.energy(&system, &change), expected);
@@ -593,9 +599,15 @@ fn test_nonbonded_matrix_energy() {
     // and g2 rel 0 both point to inactive particles (silently ignored), and
     // g1 already covered. Result must match the previous case.
     let change = Change::Groups(vec![
-        (0, GroupChange::PartialUpdate(vec![1, 2])),
-        (1, GroupChange::PartialUpdate(vec![0, 1])),
-        (2, GroupChange::PartialUpdate(vec![0])),
+        (
+            0,
+            GroupChange::PartialUpdate(vec![RelIndex::new(1), RelIndex::new(2)]),
+        ),
+        (
+            1,
+            GroupChange::PartialUpdate(vec![RelIndex::new(0), RelIndex::new(1)]),
+        ),
+        (2, GroupChange::PartialUpdate(vec![RelIndex::new(0)])),
     ]);
     assert_approx_eq!(f64, nonbonded.energy(&system, &change), expected);
 }
@@ -729,7 +741,10 @@ fn test_nonbonded_matrix_splined_energy_changes() {
     );
 
     // Test partial update
-    let change = Change::SingleGroup(1, GroupChange::PartialUpdate(vec![0, 1]));
+    let change = Change::SingleGroup(
+        1,
+        GroupChange::PartialUpdate(vec![RelIndex::new(0), RelIndex::new(1)]),
+    );
     let analytical = nonbonded.energy(&system, &change);
     let splined_energy = splined.energy(&system, &change);
     let relative_error = ((analytical - splined_energy) / analytical).abs();

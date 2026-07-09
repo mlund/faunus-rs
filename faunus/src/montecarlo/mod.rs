@@ -708,10 +708,11 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
         assert!(matches!(proposed.displacement, Displacement::Angle(_)));
     }
 
-    /// The hazard, pinned. `TranslateAtom` puts a **relative** index in the change and the
-    /// **absolute** one in the transform. Both are bare `usize`, so nothing catches a swap.
+    /// `TranslateAtom` puts a **relative** index in the change and the **absolute** one in the
+    /// transform. That is correct, and now says so in the types: the two vectors no longer have
+    /// the same element type, so they cannot be swapped by accident.
     #[test]
-    fn translate_atom_mixes_relative_and_absolute_indices() {
+    fn translate_atom_uses_distinct_index_spaces_on_each_side() {
         let context = context();
         let mut mv: TranslateAtom = serde_yml::from_str("{atom: B, dp: 0.3}").unwrap();
         mv.finalize(&context).unwrap();
@@ -721,18 +722,19 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
         else {
             panic!("expected PartialUpdate, got {:?}", proposed.change);
         };
-        let Transform::PartialTranslate(_, ParticleSelection::AbsIndex(absolute)) =
+        let Transform::PartialTranslate(_, ParticleSelection::Absolute(absolute)) =
             &proposed.transform
         else {
-            panic!("expected PartialTranslate/AbsIndex");
+            panic!("expected PartialTranslate/Absolute");
         };
         assert_eq!(relative.len(), 1);
         assert_eq!(absolute.len(), 1);
         // Different numbers, same particle: `relative` is group-local, `absolute` is global.
         let group = &context.groups()[*group];
-        assert_eq!(group.to_absolute_index(relative[0]).unwrap(), absolute[0]);
+        assert_eq!(group.to_absolute(relative[0]).unwrap(), absolute[0]);
         assert_ne!(
-            relative[0], absolute[0],
+            relative[0].get(),
+            absolute[0].get(),
             "fixture must have a nonzero group start"
         );
     }
@@ -752,10 +754,10 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
             else {
                 panic!("expected PartialUpdate, got {:?}", proposed.change);
             };
-            let Transform::PartialRotate(_, _, ParticleSelection::RelIndex(rotated)) =
+            let Transform::PartialRotate(_, _, ParticleSelection::Relative(rotated)) =
                 &proposed.transform
             else {
-                panic!("expected PartialRotate/RelIndex");
+                panic!("expected PartialRotate/Relative");
             };
             assert_eq!(
                 changed, rotated,
@@ -871,12 +873,13 @@ reactions:
             "fixture must exercise a non-zero group start"
         );
         assert_eq!(
-            indices[0], 0,
+            indices[0].get(),
+            0,
             "UpdateIdentity carries a group-relative index"
         );
 
         // Which is exactly what Ewald reconstructs back to the right particle.
-        let reconstructed = group.start() + indices[0];
+        let reconstructed = group.start() + indices[0].get();
         assert!(group.contains(reconstructed));
         assert_eq!(reconstructed, group.start());
     }

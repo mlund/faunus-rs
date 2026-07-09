@@ -12,7 +12,7 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
-use crate::group::ParticleSelection;
+use crate::group::{ParticleSelection, RelIndex};
 use crate::montecarlo;
 use crate::propagate::{tagged_yaml, Displacement, MoveProposal, MoveTarget, ProposedMove};
 use crate::topology::BondGraph;
@@ -79,11 +79,15 @@ impl<T: Context> MoveProposal<T> for PivotMove {
 
         let side_a = self.bond_graph.connected_from(direction, pivot_rel);
         let side_b = self.bond_graph.connected_from(pivot_rel, direction);
-        let rotated_rel = if side_a.len() <= side_b.len() {
+        // The bond graph speaks in group-relative offsets.
+        let rotated_rel: Vec<RelIndex> = if side_a.len() <= side_b.len() {
             side_a
         } else {
             side_b
-        };
+        }
+        .into_iter()
+        .map(RelIndex::new)
+        .collect();
 
         let pivot_pos = context.position(group.start() + pivot_rel);
         let (quaternion, angle) = random_quaternion(rng, self.max_displacement);
@@ -97,7 +101,7 @@ impl<T: Context> MoveProposal<T> for PivotMove {
             transform: Transform::PartialRotate(
                 pivot_pos,
                 quaternion,
-                ParticleSelection::RelIndex(rotated_rel),
+                ParticleSelection::Relative(rotated_rel),
             ),
             target: MoveTarget::Group(group_index),
         })

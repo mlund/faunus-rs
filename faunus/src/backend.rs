@@ -953,8 +953,10 @@ mod tests {
             if ctx.groups()[gi].is_empty() {
                 continue;
             }
-            let change_partial =
-                crate::Change::SingleGroup(gi, crate::GroupChange::PartialUpdate(vec![0]));
+            let change_partial = crate::Change::SingleGroup(
+                gi,
+                crate::GroupChange::PartialUpdate(vec![crate::group::RelIndex::new(0)]),
+            );
             let e_partial = ctx.hamiltonian().energy(&ctx, &change_partial);
             assert!(
                 e_partial.is_finite(),

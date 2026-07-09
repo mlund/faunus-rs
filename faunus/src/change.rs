@@ -12,6 +12,7 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
+use crate::group::RelIndex;
 use serde::{Deserialize, Serialize};
 
 use crate::{cell, group::GroupSize, montecarlo::NewOld};
@@ -43,18 +44,18 @@ pub enum Change {
 pub enum GroupChange {
     /// Rigid body update where *all* particles are e.g. rotated or translated with *no* internal energy change
     RigidBody,
-    /// Update by relative indices, assuming that the internal energy changes (relative indices)
-    PartialUpdate(Vec<usize>),
+    /// Update by relative indices, assuming that the internal energy changes
+    PartialUpdate(Vec<RelIndex>),
     /// Resize group
     Resize(GroupSize),
     /// Resize group, excluding intramolecular energy (used for molecular swaps where
     /// intramolecular contributions are absorbed into the equilibrium constant)
     ResizeExcludeIntra(GroupSize),
-    /// The identity of a set of particles has changed (relative indices)
-    UpdateIdentity(Vec<usize>),
+    /// The identity of a set of particles has changed
+    UpdateIdentity(Vec<RelIndex>),
     /// Resize an atomic group and report the affected relative indices.
     /// Used for GCMC on atomic mega-groups where only the inserted/deleted atoms changed.
-    ResizePartial(GroupSize, Vec<usize>),
+    ResizePartial(GroupSize, Vec<RelIndex>),
     /// Deactivate a single atom in an atomic mega-group, where the chosen
     /// atom is at relative slot `rel` in the pre-shrink state of size
     /// `n_old`. The transform implements this as swap-and-pop: slot `rel`
@@ -66,7 +67,7 @@ pub enum GroupChange {
     /// data and corrupts the energy delta.
     AtomicShrink {
         /// Relative slot of the atom being deactivated, in the pre-shrink frame.
-        rel: usize,
+        rel: RelIndex,
         /// Active count before the shrink. Used to distinguish pre- vs.
         /// post-transform state from the same change description.
         n_old: usize,
@@ -120,7 +121,7 @@ mod tests {
 
     #[test]
     fn resize_partial_semantics() {
-        let gc = GroupChange::ResizePartial(GroupSize::Expand(1), vec![5]);
+        let gc = GroupChange::ResizePartial(GroupSize::Expand(1), vec![RelIndex::new(5)]);
         assert!(!gc.internal_change(), "atomic groups have no bonds");
         assert!(!gc.is_whole_group(), "only one atom changed");
         assert!(gc.is_resize(), "it is a resize operation");

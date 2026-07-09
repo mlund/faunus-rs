@@ -73,6 +73,56 @@ impl Default for Group {
     }
 }
 
+/// Index into the global particle array.
+///
+/// Distinct from [`RelIndex`] on purpose: the two are freely interchangeable as `usize`, and mixing
+/// them silently addresses the wrong particle. There is deliberately no `From<usize>` — an implicit
+/// `.into()` at a call site would let a raw integer become whichever space the callee happens to
+/// want, which is the mistake these types exist to prevent. Convert between the spaces through
+/// [`Group::to_absolute`] / [`Group::to_relative`], which need the group and can fail.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct AbsIndex(usize);
+
+/// Index of a particle within its group, counted from the group's first particle.
+///
+/// See [`AbsIndex`] for why there is no `From<usize>`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct RelIndex(usize);
+
+impl AbsIndex {
+    pub const fn new(index: usize) -> Self {
+        Self(index)
+    }
+    /// The raw index, for addressing the particle arrays.
+    pub const fn get(self) -> usize {
+        self.0
+    }
+}
+
+impl RelIndex {
+    pub const fn new(index: usize) -> Self {
+        Self(index)
+    }
+    /// The raw offset from the group's first particle.
+    pub const fn get(self) -> usize {
+        self.0
+    }
+}
+
+impl std::fmt::Display for AbsIndex {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+impl std::fmt::Display for RelIndex {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
 /// Geometric summary of a group's active particles, derived from their positions and masses.
 ///
 /// The two quantities are computed together and are meaningless apart — the radius is measured
@@ -133,10 +183,10 @@ pub enum ParticleSelection {
     Active,
     /// Inactive particles.
     Inactive,
-    /// Specific indices (relative indices).
-    RelIndex(Vec<usize>),
-    /// Specific indices (absolute indices).
-    AbsIndex(Vec<usize>),
+    /// Specific particles, addressed within the group.
+    Relative(Vec<RelIndex>),
+    /// Specific particles, addressed in the global particle array.
+    Absolute(Vec<AbsIndex>),
     /// All active particles with given atom id.
     ById(usize),
 }
@@ -284,10 +334,10 @@ impl Group {
         selection: &ParticleSelection,
         topology: &Topology,
     ) -> anyhow::Result<Vec<usize>> {
-        let to_abs = |i: usize| i + self.iter_all().start;
+        let to_abs = |i: RelIndex| i.get() + self.iter_all().start;
         let indices: Vec<usize> = match selection {
-            ParticleSelection::AbsIndex(indices) => indices.clone(),
-            ParticleSelection::RelIndex(indices_rel) => {
+            ParticleSelection::Absolute(indices) => indices.iter().map(|i| i.get()).collect(),
+            ParticleSelection::Relative(indices_rel) => {
                 indices_rel.iter().map(|i| to_abs(*i)).collect()
             }
             ParticleSelection::All => return Ok(self.iter_all().collect()),
@@ -340,15 +390,15 @@ impl Group {
     /// # Errors
     /// Returns an error if the index points to an inactive particle.
     #[must_use = "this returns a Result that should be handled"]
-    pub fn to_absolute_index(&self, index: usize) -> anyhow::Result<usize> {
-        if index >= self.num_active {
+    pub fn to_absolute(&self, index: RelIndex) -> anyhow::Result<AbsIndex> {
+        if index.get() >= self.num_active {
             anyhow::bail!(
                 "Index {} out of range ({} active particles)",
                 index,
                 self.num_active
             )
         } else {
-            Ok(self.range.start + index)
+            Ok(AbsIndex::new(self.range.start + index.get()))
         }
     }
 
@@ -357,9 +407,9 @@ impl Group {
     /// # Errors
     /// Returns an error if the absolute index is not inside the group.
     #[must_use = "this returns a Result that should be handled"]
-    pub fn to_relative_index(&self, index: usize) -> anyhow::Result<usize> {
-        match self.range.clone().position(|i| i == index) {
-            Some(relative) => Ok(relative),
+    pub fn to_relative(&self, index: AbsIndex) -> anyhow::Result<RelIndex> {
+        match self.range.clone().position(|i| i == index.get()) {
+            Some(relative) => Ok(RelIndex::new(relative)),
             None => anyhow::bail!(
                 "Absolute index {} not inside group (range {:?})",
                 index,
@@ -809,38 +859,38 @@ mod index_space_characterization {
     #[test]
     fn relative_and_absolute_round_trip_over_active_particles() {
         let group = partially_active_group();
-        for relative in 0..6 {
-            let absolute = group.to_absolute_index(relative).unwrap();
-            assert_eq!(absolute, 10 + relative);
-            assert_eq!(group.to_relative_index(absolute).unwrap(), relative);
+        for relative in (0..6).map(RelIndex::new) {
+            let absolute = group.to_absolute(relative).unwrap();
+            assert_eq!(absolute.get(), 10 + relative.get());
+            assert_eq!(group.to_relative(absolute).unwrap(), relative);
         }
     }
 
     #[test]
-    fn to_absolute_index_rejects_inactive_particles() {
+    fn to_absolute_rejects_inactive_particles() {
         let group = partially_active_group();
         // Relative 6 exists in the capacity but is inactive.
-        assert!(group.to_absolute_index(6).is_err());
-        assert!(group.to_absolute_index(10).is_err());
+        assert!(group.to_absolute(RelIndex::new(6)).is_err());
+        assert!(group.to_absolute(RelIndex::new(10)).is_err());
     }
 
     /// The asymmetry: `to_relative_index` validates against the *full* range, so it happily maps an
     /// inactive particle to a relative index that `to_absolute_index` then refuses. A future
     /// `RelIndex` newtype must either preserve this or narrow it deliberately.
     #[test]
-    fn to_relative_index_accepts_inactive_particles_that_to_absolute_index_rejects() {
+    fn to_relative_accepts_inactive_particles_that_to_absolute_rejects() {
         let group = partially_active_group();
-        let inactive_absolute = 17;
-        let relative = group.to_relative_index(inactive_absolute).unwrap();
-        assert_eq!(relative, 7);
-        assert!(group.to_absolute_index(relative).is_err());
+        let inactive_absolute = AbsIndex::new(17);
+        let relative = group.to_relative(inactive_absolute).unwrap();
+        assert_eq!(relative.get(), 7);
+        assert!(group.to_absolute(relative).is_err());
     }
 
     #[test]
-    fn to_relative_index_rejects_indices_outside_the_group() {
+    fn to_relative_rejects_indices_outside_the_group() {
         let group = partially_active_group();
-        assert!(group.to_relative_index(9).is_err());
-        assert!(group.to_relative_index(20).is_err());
+        assert!(group.to_relative(AbsIndex::new(9)).is_err());
+        assert!(group.to_relative(AbsIndex::new(20)).is_err());
     }
 }
 
@@ -935,7 +985,11 @@ mod tests {
         assert_eq!(group.len(), 3);
         let indices = group
             .select(
-                &ParticleSelection::RelIndex(vec![0, 1, 2]),
+                &ParticleSelection::Relative(vec![
+                    RelIndex::new(0),
+                    RelIndex::new(1),
+                    RelIndex::new(2),
+                ]),
                 context.topology_ref(),
             )
             .unwrap();
@@ -944,7 +998,11 @@ mod tests {
         // Absolute selection
         let indices = group
             .select(
-                &ParticleSelection::AbsIndex(vec![20, 21, 22]),
+                &ParticleSelection::Absolute(vec![
+                    AbsIndex::new(20),
+                    AbsIndex::new(21),
+                    AbsIndex::new(22),
+                ]),
                 context.topology_ref(),
             )
             .unwrap();
@@ -959,7 +1017,11 @@ mod tests {
         // Out of range selection
         assert!(group
             .select(
-                &ParticleSelection::RelIndex(vec![1, 2, 3]),
+                &ParticleSelection::Relative(vec![
+                    RelIndex::new(1),
+                    RelIndex::new(2),
+                    RelIndex::new(3)
+                ]),
                 context.topology_ref()
             )
             .is_err());
@@ -1027,8 +1089,8 @@ mod tests {
             ..Default::default()
         };
 
-        assert_eq!(group.to_absolute_index(4).unwrap(), 14);
-        assert_eq!(group.to_relative_index(21).unwrap(), 11);
+        assert_eq!(group.to_absolute(RelIndex::new(4)).unwrap().get(), 14);
+        assert_eq!(group.to_relative(AbsIndex::new(21)).unwrap().get(), 11);
     }
 
     #[test]
