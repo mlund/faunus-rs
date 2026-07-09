@@ -58,6 +58,7 @@ pub mod transform;
 pub mod umbrella;
 #[cfg(feature = "cli")]
 pub mod wang_landau;
+pub(crate) mod z_grid;
 
 mod particle;
 pub use particle::{Particle, PointParticle};

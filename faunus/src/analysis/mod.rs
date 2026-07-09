@@ -24,6 +24,7 @@ use serde_yml::Value;
 use std::path::{Path, PathBuf};
 
 mod collective_variable;
+mod density_profile;
 mod double_layer_pressure;
 mod electric_potential_profile;
 mod energy;
@@ -42,6 +43,7 @@ mod virtual_volume_move;
 mod widom;
 mod widom_rotation;
 pub use collective_variable::{CollectiveVariableAnalysis, CollectiveVariableAnalysisBuilder};
+pub use density_profile::{DensityProfile, DensityProfileBuilder};
 pub use double_layer_pressure::{DoubleLayerPressure, DoubleLayerPressureBuilder};
 pub use electric_potential_profile::{ElectricPotentialProfile, ElectricPotentialProfileBuilder};
 pub use energy::{EnergyAnalysis, EnergyAnalysisBuilder};
@@ -141,6 +143,8 @@ pub enum AnalysisBuilder {
     DoubleLayerPressure(DoubleLayerPressureBuilder),
     /// Electric potential profile φ(z) along z (screened slab)
     ElectricPotentialProfile(ElectricPotentialProfileBuilder),
+    /// Density profile ρ(z) of a selected species along z
+    DensityProfile(DensityProfileBuilder),
     /// Widom rotational perturbation about the center of mass
     WidomRotation(WidomRotationBuilder),
 }
@@ -210,6 +214,7 @@ impl AnalysisBuilder {
             Self::MultipoleDistribution(b) => b.apply_output_dir(dir),
             Self::DoubleLayerPressure(b) => b.apply_output_dir(dir),
             Self::ElectricPotentialProfile(b) => b.apply_output_dir(dir),
+            Self::DensityProfile(b) => b.apply_output_dir(dir),
             Self::WidomRotation(b) => b.apply_output_dir(dir),
         }
     }
@@ -240,6 +245,7 @@ impl AnalysisBuilder {
             Self::MultipoleDistribution(builder) => Box::new(builder.build(context, medium)?),
             Self::DoubleLayerPressure(builder) => Box::new(builder.build(context, medium)?),
             Self::ElectricPotentialProfile(builder) => Box::new(builder.build(context, medium)?),
+            Self::DensityProfile(builder) => Box::new(builder.build(context)?),
             Self::WidomRotation(builder) => Box::new(builder.build(context, rt)?),
         })
     }

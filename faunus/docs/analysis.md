@@ -827,6 +827,76 @@ file** (`-s`).
 
 ---
 
+## Density Profile
+
+Average density of a chosen species along the $z$-axis. The cell is cut into slabs of equal
+thickness $\Delta z$, and the density in the slab centred at $z$ is the mean number of
+particles it holds divided by its volume,
+
+$$\rho(z) = \frac{\langle N(z)\rangle}{A\,\Delta z},$$
+
+where $A$ is the cross-sectional area of the cell. Use it to measure how a species distributes
+itself between a wall and the bulk: ion layering at a charged surface, adsorption in a slit
+pore, or the density of a fluid along a cylindrical channel.
+
+By default each selected **atom** counts towards the slab holding it. Set `use_com: true` to
+count each selected **molecule** in the slab holding its centre of mass instead, which profiles
+whole molecules rather than their individual atoms. Molecules declared `atomic` have no centre
+of mass, so selecting one with `use_com` is an error.
+
+Every configuration contributes its own count, which is then averaged. The profile therefore
+stays correct when particles are created and destroyed: $\langle N(z)\rangle$ is the mean
+occupancy of the slab in the grand canonical ensemble. Particles absent from a configuration do
+not count.
+
+The cell must have the same cross-section at every height — a cuboid, slit, cylinder, or
+hexagonal prism — since a slab volume is otherwise undefined. Spherical and unbounded cells are
+rejected. The slabs are laid out once at the start of the run and keep their size, so the
+profile is meaningful only at constant volume; rescaling the cell later triggers a warning.
+
+### Example
+
+Sodium and chloride profiles across a slit, plus the profile of whole water molecules:
+
+```yaml
+analysis:
+  - !DensityProfile
+    selection: "atomtype Na"
+    file: density_na.csv
+    frequency: !Every 10
+  - !DensityProfile
+    selection: "atomtype Cl"
+    file: density_cl.csv
+    frequency: !Every 10
+  - !DensityProfile
+    selection: "molecule water"
+    file: density_water.csv
+    use_com: true          # bin mass centres, not individual atoms
+    resolution: 0.5        # slab thickness Δz in Å (default: 1.0)
+    frequency: !Every 10
+```
+
+Each block profiles one species and writes one file; add a block per species.
+
+### Options
+
+Key          | Required | Default | Description
+------------ | -------- | ------- | -----------------------------------------------------------
+`selection`  | yes      |         | Atoms, or molecules when `use_com` is set, whose density is profiled
+`file`       | yes      |         | Output file path (see [Output file formats](#output-file-formats))
+`use_com`    | no       | `false` | Bin the centre of mass of each selected molecule instead of each atom
+`resolution` | no       | `1.0`   | Slab thickness Δz (Å) along the $z$-axis
+`frequency`  | yes      |         | Sample frequency, e.g. `!Every 10`
+
+The output file gives, per slab, its centre `z/Å` followed by three equivalent measures of the
+same density, each with its statistical error: the number density `density/Å⁻³`, the molar
+concentration `molarity/mol·L⁻¹`, and the mass density `mass_density/g·mL⁻¹`. `output.yaml`
+additionally reports the slab layout and the mean total number of selected particles,
+`mean_count`, as mean ± error — a useful check, since summing $\rho(z)\,A\,\Delta z$ over all
+slabs must return it.
+
+---
+
 ## Mean Along Coordinate
 
 Computes the average of one collective variable (CV1) binned along another (CV2).

@@ -27,6 +27,7 @@
 //! and the potential convolution live here so both consumers reuse the same physics.
 
 use crate::cell::{Cell, Shape};
+use crate::z_grid::ZGrid;
 use anyhow::Result;
 use std::f64::consts::PI;
 
@@ -45,27 +46,17 @@ enum LateralShape {
     Disk,
 }
 
-/// Slab dimensions detected from a simulation cell (private; built only by [`SlabGrid::from_cell`]).
-struct SlabDimensions {
-    /// Lateral cross-sectional area (Å²).
-    area: f64,
-    /// Smallest lateral box dimension (Å) — the full width `2a` or the diameter `2R`.
-    lateral_extent: f64,
-    /// Half the box length along z (Å); the slab spans `[−half_length_z, +half_length_z]`.
-    half_length_z: f64,
-    shape: LateralShape,
-}
-
-/// Detect the slab dimensions and lateral shape of `cell`.
+/// Detect the lateral shape of `cell` and its smallest lateral dimension (Å) — the full width
+/// `2a` of a square base or the diameter `2R` of a disk.
 ///
-/// The screened-slab reduction assumes lateral homogeneity, so the cross-section must be a
-/// square cuboid/slit (`Lx = Ly`) or a cylinder (a disk, where `Lx = Ly` holds by
-/// construction). Other cells cannot be laterally averaged this way and are rejected.
-fn slab_dimensions(cell: &Cell) -> Result<SlabDimensions> {
+/// This is a stricter requirement than the [`ZGrid`] cross-section: the finite-box correction is
+/// derived for a square base or a disk only, and the square-base branch additionally needs
+/// `Lx = Ly` because the correction is parameterised by a single half-width.
+fn lateral_shape(cell: &Cell) -> Result<(f64, LateralShape)> {
     let bbox = cell
         .bounding_box()
         .ok_or_else(|| anyhow::anyhow!("a finite cell is required (got an endless cell)"))?;
-    let (area, lateral_extent, shape) = match cell {
+    match cell {
         Cell::Cuboid(_) | Cell::Slit(_) => {
             if (bbox.x - bbox.y).abs() > SQUARE_TOLERANCE * bbox.x.max(bbox.y) {
                 anyhow::bail!(
@@ -74,23 +65,14 @@ fn slab_dimensions(cell: &Cell) -> Result<SlabDimensions> {
                     bbox.y
                 );
             }
-            (bbox.x * bbox.y, bbox.x.min(bbox.y), LateralShape::Square)
+            Ok((bbox.x.min(bbox.y), LateralShape::Square))
         }
-        // The bounding box of a cylinder is (2R, 2R, height), so the disk area is π·R².
-        Cell::Cylinder(_) => {
-            let radius = 0.5 * bbox.x;
-            (PI * radius * radius, bbox.x, LateralShape::Disk)
-        }
+        // The bounding box of a cylinder is (2R, 2R, height), so `bbox.x` is the diameter.
+        Cell::Cylinder(_) => Ok((bbox.x, LateralShape::Disk)),
         other => {
             anyhow::bail!("only cuboid, slit, and cylinder cells are supported; got {other:?}")
         }
-    };
-    Ok(SlabDimensions {
-        area,
-        lateral_extent,
-        half_length_z: 0.5 * bbox.z,
-        shape,
-    })
+    }
 }
 
 /// Geometry factor of a uniformly charged **square** sheet of half-width `b`, on the axis at
@@ -139,15 +121,12 @@ impl SlabKernel {
     }
 }
 
-/// Uniform z-grid over `[−half_length_z, +half_length_z]` plus the slab kernel: turns
-/// per-slab charges into a laterally-averaged potential profile. Detecting the slab geometry,
-/// validating it, and the screened convolution all live behind this one type.
+/// A [`ZGrid`] plus the slab kernel: turns per-slab charges into a laterally-averaged potential
+/// profile. Detecting the slab geometry, validating it, and the screened convolution all live
+/// behind this one type.
 #[derive(Clone, Debug)]
 pub(crate) struct SlabGrid {
-    half_length_z: f64,
-    bin_width: f64,
-    n_bins: usize,
-    area: f64,
+    grid: ZGrid,
     lateral_extent: f64,
     shape: LateralShape,
     kernel: SlabKernel,
@@ -159,21 +138,11 @@ pub(crate) struct SlabGrid {
 impl SlabGrid {
     /// Detect the slab geometry from `cell` and lay out a z-grid of spacing ≈ `resolution`.
     ///
-    /// Fails for cells that cannot be laterally averaged (see [`slab_dimensions`]).
+    /// Fails for cells that cannot be laterally averaged (see [`lateral_shape`]).
     pub(crate) fn from_cell(cell: &Cell, resolution: f64, kernel: SlabKernel) -> Result<Self> {
-        let SlabDimensions {
-            area,
-            lateral_extent,
-            half_length_z,
-            shape,
-        } = slab_dimensions(cell)?;
-        // Pick the bin count tiling the slab closest to `resolution`, but never zero bins.
-        let n_bins = ((2.0 * half_length_z / resolution).round() as usize).max(1);
+        let (lateral_extent, shape) = lateral_shape(cell)?;
         Ok(Self {
-            half_length_z,
-            bin_width: 2.0 * half_length_z / n_bins as f64,
-            n_bins,
-            area,
+            grid: ZGrid::from_cell(cell, resolution)?,
             lateral_extent,
             shape,
             kernel,
@@ -196,24 +165,24 @@ impl SlabGrid {
                 "the unscreened (Greberg) finite-box correction requires a square base, not a cylinder"
             );
         }
-        let table = (0..self.n_bins)
-            .map(|k| self.finite_box_correction(k as f64 * self.bin_width))
+        let table = (0..self.n_bins())
+            .map(|k| self.finite_box_correction(k as f64 * self.bin_width()))
             .collect();
         self.correction = Some(table);
         Ok(self)
     }
 
     pub(crate) fn n_bins(&self) -> usize {
-        self.n_bins
+        self.grid.n_bins()
     }
 
     pub(crate) fn bin_width(&self) -> f64 {
-        self.bin_width
+        self.grid.bin_width()
     }
 
     /// Lateral cross-sectional area (Å²).
     pub(crate) fn area(&self) -> f64 {
-        self.area
+        self.grid.area()
     }
 
     /// Smallest lateral box dimension expressed in Debye lengths. The infinite-plane kernel
@@ -229,13 +198,12 @@ impl SlabGrid {
 
     /// z at the centre of bin `index`.
     pub(crate) fn bin_center(&self, index: usize) -> f64 {
-        -self.half_length_z + (index as f64 + 0.5) * self.bin_width
+        self.grid.bin_center(index)
     }
 
     /// Bin holding axial position `z`, clamped to the grid so boundary positions fold in.
     pub(crate) fn bin_index(&self, z: f64) -> usize {
-        let raw = ((z + self.half_length_z) / self.bin_width).floor();
-        raw.clamp(0.0, (self.n_bins - 1) as f64) as usize
+        self.grid.bin_index(z)
     }
 
     /// Potential profile φ(zᵢ) from per-slab total charges `slab_charges[j] = Qⱼ`.
@@ -245,7 +213,7 @@ impl SlabGrid {
     /// giving an O(n) evaluation whose every factor is `e^(−κ·Δz) < 1` (so it cannot
     /// overflow). A non-separable kernel would instead use the direct O(n²) sum.
     pub(crate) fn potential_profile(&self, slab_charges: &[f64]) -> Vec<f64> {
-        debug_assert_eq!(slab_charges.len(), self.n_bins);
+        debug_assert_eq!(slab_charges.len(), self.n_bins());
         let mut phi = match self.kernel {
             // Separable exponential ⇒ O(n) recurrence.
             SlabKernel::Screened { prefactor, kappa } => {
@@ -262,7 +230,7 @@ impl SlabGrid {
                 let exterior: f64 = slab_charges
                     .iter()
                     .enumerate()
-                    .map(|(j, &charge)| charge / self.area * table[i.abs_diff(j)])
+                    .map(|(j, &charge)| charge / self.area() * table[i.abs_diff(j)])
                     .sum();
                 *phi_i -= exterior;
             }
@@ -310,9 +278,9 @@ impl SlabGrid {
     /// single output buffer: fill it with the backward sum, then fold in the forward sum and
     /// scale. Every factor is `decay < 1`, so it cannot overflow.
     fn screened_profile(&self, slab_charges: &[f64], prefactor: f64, kappa: f64) -> Vec<f64> {
-        let n = self.n_bins;
-        let decay = (-kappa * self.bin_width).exp();
-        let sigma = |i: usize| slab_charges[i] / self.area; // areal density of slab i
+        let n = self.n_bins();
+        let decay = (-kappa * self.bin_width()).exp();
+        let sigma = |i: usize| slab_charges[i] / self.area(); // areal density of slab i
 
         let mut phi = vec![0.0; n];
         // phi[i] ← backward sum Σ_{j>i} σⱼ·decay^(j−i); phi[n−1] stays 0 (no j > n−1).
@@ -333,11 +301,11 @@ impl SlabGrid {
     /// Direct O(n²) convolution using the kernel: the evaluator for non-separable kernels
     /// (the unscreened one) and the correctness baseline the screened fast path is tested against.
     pub(crate) fn direct_profile(&self, slab_charges: &[f64]) -> Vec<f64> {
-        (0..self.n_bins)
+        (0..self.n_bins())
             .map(|i| {
-                (0..self.n_bins)
+                (0..self.n_bins())
                     .map(|j| {
-                        let sigma = slab_charges[j] / self.area;
+                        let sigma = slab_charges[j] / self.area();
                         sigma
                             * self
                                 .kernel
