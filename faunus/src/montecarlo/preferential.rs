@@ -22,7 +22,7 @@
 use crate::auxiliary::ColumnWriter;
 use crate::cell::BoundaryConditions;
 use crate::histogram::Histogram;
-use crate::selection::{Selection, SelectionCache};
+use crate::selection::{CachedSelection, Selection};
 use crate::{Context, Point};
 use average::{Estimate, Mean};
 use log::{debug, warn};
@@ -79,9 +79,9 @@ pub struct PreferentialSampling {
     /// Optional output file for the selection-distance histogram.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     file: Option<PathBuf>,
-    /// Cached reference group indices with generation tracking for GCMC compatibility.
+    /// Resolved reference group indices, built from `reference` on first use.
     #[serde(skip)]
-    ref_cache: SelectionCache,
+    ref_cache: Option<CachedSelection>,
     /// Cached (mass_center, bounding_radius) per reference group.
     #[serde(skip)]
     ref_geometries: Vec<(Point, f64)>,
@@ -125,19 +125,18 @@ impl PreferentialSampling {
     /// Refresh cached (mass_center, bounding_radius) from current group state.
     /// Called once per `rebuild_weights()` — stable within a `!Deterministic` block.
     fn refresh_ref_geometries(&mut self, context: &impl Context) {
-        let generation = context.group_lists_generation();
-        let ref_indices = self.ref_cache.get_or_resolve(generation, || {
-            let resolved = self
-                .reference
-                .resolve_groups(context.topology_ref(), context.groups());
-            debug!(
-                "PreferentialSampling: resolved '{}' → {} group(s): {:?}",
-                self.reference,
-                resolved.len(),
-                resolved
-            );
-            resolved
-        });
+        // Disjoint field borrows: `reference` is read while `ref_cache` is filled.
+        let reference = &self.reference;
+        let ref_indices = self
+            .ref_cache
+            .get_or_insert_with(|| CachedSelection::groups(reference.clone()))
+            .resolve(context);
+        debug!(
+            "PreferentialSampling: '{}' → {} group(s): {:?}",
+            reference,
+            ref_indices.len(),
+            ref_indices
+        );
         let groups = context.groups();
         self.ref_geometries.clear();
         self.bounding_radii.clear();
@@ -294,7 +293,7 @@ mod tests {
             sum_bias: 0.0,
             mean_bias: Mean::new(),
             file: None,
-            ref_cache: SelectionCache::default(),
+            ref_cache: None,
             ref_geometries: Vec::new(),
             bounding_radii: Vec::new(),
             distance_histogram: None,

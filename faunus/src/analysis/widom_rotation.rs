@@ -52,7 +52,7 @@ use crate::cell::BoundaryConditions;
 use crate::change::{Change, GroupChange};
 use crate::energy::EnergyChange;
 use crate::geometry::GyrationTensor;
-use crate::selection::{Selection, SelectionCache};
+use crate::selection::{CachedSelection, Selection};
 use crate::{Context, Point, UnitQuaternion};
 use anyhow::Result;
 use derive_more::Debug;
@@ -242,7 +242,7 @@ impl WidomRotationBuilder {
             .transpose()?;
 
         Ok(WidomRotation {
-            selection: self.selection.clone(),
+            selection: CachedSelection::groups(self.selection.clone()),
             quaternions: super_fibonacci(self.orientations),
             vectors: self.vectors.clone(),
             thermal_energy,
@@ -259,7 +259,6 @@ impl WidomRotationBuilder {
             stiffness: self
                 .stiffness
                 .then(|| std::array::from_fn(|_| BlockAverage::new())),
-            group_cache: SelectionCache::default(),
             frequency: self.frequency,
             num_samples: 0,
             stream,
@@ -296,7 +295,7 @@ struct TorqueProbe {
 /// Widom rotational perturbation analysis. See the module documentation.
 #[derive(Debug)]
 pub struct WidomRotation {
-    selection: Selection,
+    selection: CachedSelection,
     quaternions: Vec<UnitQuaternion>,
     vectors: Vec<VectorSpec>,
     thermal_energy: f64,
@@ -312,7 +311,6 @@ pub struct WidomRotation {
     torque: Option<TorqueProbe>,
     /// Principal librational stiffnesses (kJ/mol/rad²), ascending.
     stiffness: Option<[BlockAverage; 3]>,
-    group_cache: SelectionCache,
     frequency: Frequency,
     num_samples: usize,
     #[debug(skip)]
@@ -533,11 +531,7 @@ impl<T: Context> Analyze<T> for WidomRotation {
     }
 
     fn perform_sample(&mut self, context: &T, step: usize, _weight: f64) -> Result<()> {
-        let generation = context.group_lists_generation();
-        let groups = self
-            .group_cache
-            .get_or_resolve(generation, || context.resolve_groups_live(&self.selection))
-            .to_vec();
+        let groups = self.selection.resolve(context).to_vec();
         if groups.is_empty() {
             return Ok(()); // e.g. all molecules removed under GCMC
         }
@@ -649,7 +643,7 @@ impl<T: Context> Analyze<T> for WidomRotation {
 impl std::fmt::Display for WidomRotation {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "Widom Rotation Analysis:")?;
-        writeln!(f, "  Selection:    {}", self.selection)?;
+        writeln!(f, "  Selection:    {}", self.selection.selection())?;
         writeln!(f, "  Orientations: {}", self.quaternions.len())?;
         writeln!(f, "  Vectors:      {}", self.vectors.len())?;
         writeln!(f, "  Samples:      {}", self.num_samples)?;
@@ -910,7 +904,7 @@ propagate: {{seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}}
         let ctx = dimer_backend(r#"customexternal: [{selection: "all", function: "q * z"}]"#);
         let mut analysis = builder(true, true).build(&ctx, RT_300).unwrap();
 
-        let gi = ctx.resolve_groups_live(&analysis.selection)[0];
+        let gi = ctx.resolve_groups_live(analysis.selection.selection())[0];
         let indices: Vec<usize> = ctx.groups()[gi].iter_active().collect();
         let quaternion_before = *ctx.groups()[gi].quaternion();
         let com_before = ctx.mass_center(&indices);

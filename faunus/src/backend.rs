@@ -8,7 +8,7 @@ use crate::{
     cell::{BoundaryConditions, Cell},
     change::Change,
     energy::{builder::HamiltonianBuilder, Hamiltonian},
-    group::{GroupCollection, GroupLists, GroupSize},
+    group::{GroupCollection, GroupGeometry, GroupLists, GroupSize},
     topology::Topology,
     Context, Group, ParticleSystem, Point, UnitQuaternion, WithCell, WithHamiltonian, WithTopology,
 };
@@ -41,8 +41,8 @@ pub fn get_medium_str(yaml: &str) -> anyhow::Result<interatomic::coulomb::Medium
 struct SoaBackup {
     /// (index, x, y, z, atom_kind) tuples for changed particles
     particles: Vec<(usize, f64, f64, f64, u32)>,
-    mass_centers: Vec<(usize, Option<Point>)>,
-    bounding_radii: Vec<(usize, Option<f64>)>,
+    /// Derived geometry per group; `None` records a group that had none, so undo can restore that.
+    geometries: Vec<(usize, Option<GroupGeometry>)>,
     quaternions: Vec<(usize, UnitQuaternion)>,
     group_sizes: Vec<(usize, GroupSize)>,
     cell: Option<Cell>,
@@ -66,6 +66,9 @@ pub struct Backend {
     /// Contiguous atom type array (u32 for SIMD gather)
     #[serde(skip)]
     atom_kinds: Vec<u32>,
+    /// Bumped on every atom-kind change, so selections matching on atom identity re-resolve.
+    #[serde(skip)]
+    atom_kinds_generation: u64,
     #[serde(skip)]
     groups: Vec<Group>,
     #[serde(skip)]
@@ -103,6 +106,7 @@ impl Backend {
             y: Vec::new(),
             z: Vec::new(),
             atom_kinds: Vec::new(),
+            atom_kinds_generation: 0,
             groups: Vec::new(),
             group_lists,
             cell,
@@ -297,15 +301,41 @@ impl GroupCollection for Backend {
     }
 
     fn set_atom_kind(&mut self, index: usize, atom_id: usize) {
+        let previous = self.atom_kinds[index] as usize;
+        self.set_atom_kind_unchecked(index, atom_id);
+        // A mass-weighted center only moves if the mass changed; a pure charge swap, which is the
+        // common titration, leaves the geometry alone and must not pay for a recompute.
+        let kinds = self.topology_ref().atomkinds();
+        let mass_changed = kinds[previous].mass() != kinds[atom_id].mass();
+        if previous != atom_id && mass_changed {
+            if let Some(group_index) = self.group_of_particle(index) {
+                self.update_mass_center(group_index);
+            }
+        }
+    }
+
+    fn set_atom_kind_unchecked(&mut self, index: usize, atom_id: usize) {
         debug_assert!(atom_id <= u32::MAX as usize, "atom_id overflows u32");
+        if self.atom_kinds[index] == atom_id as u32 {
+            return; // a no-op must not invalidate any selection cache
+        }
         self.atom_kinds[index] = atom_id as u32;
+        self.atom_kinds_generation += 1;
+    }
+
+    fn atom_kinds_generation(&self) -> u64 {
+        self.atom_kinds_generation
     }
 
     fn swap_particles(&mut self, i: usize, j: usize) {
         self.x.swap(i, j);
         self.y.swap(i, j);
         self.z.swap(i, j);
-        self.atom_kinds.swap(i, j);
+        if self.atom_kinds[i] != self.atom_kinds[j] {
+            // Which index holds which kind changed, so kind-based selections are stale.
+            self.atom_kinds.swap(i, j);
+            self.atom_kinds_generation += 1;
+        }
         self.update_cell_list_particles(&[i, j]);
     }
 
@@ -339,17 +369,19 @@ impl GroupCollection for Backend {
             )
             .unwrap();
         if !indices.is_empty() && self.topology().moleculekinds()[group.molecule()].has_com() {
-            let com = self.mass_center(&indices);
-            self.groups[group_index].set_mass_center(com);
+            let mass_center = self.mass_center(&indices);
             // Bounding radius: max PBC distance from COM to any active particle
-            let radius = indices
+            let bounding_radius = indices
                 .iter()
                 .map(|&i| {
                     let pos = Point::new(self.x[i], self.y[i], self.z[i]);
-                    self.cell.distance(&pos, &com).norm()
+                    self.cell.distance(&pos, &mass_center).norm()
                 })
                 .fold(0.0_f64, f64::max);
-            self.groups[group_index].set_bounding_radius(radius);
+            self.groups[group_index].set_geometry(Some(GroupGeometry {
+                mass_center,
+                bounding_radius,
+            }));
         }
     }
 
@@ -572,15 +604,13 @@ impl Context for Backend {
             .map(|&i| (i, self.x[i], self.y[i], self.z[i], self.atom_kinds[i]))
             .collect();
         let group = &self.groups[group_index];
-        let mass_center = group.mass_center().cloned();
-        let bounding_radius = group.bounding_radius();
+        let geometry = group.geometry();
         let quaternion = *group.quaternion();
         let group_size = group.size();
         let cell_list_backup = self.cell_list.as_ref().map(|cl| cl.begin_changes());
         self.backup = Some(SoaBackup {
             particles,
-            mass_centers: vec![(group_index, mass_center)],
-            bounding_radii: vec![(group_index, bounding_radius)],
+            geometries: vec![(group_index, geometry)],
             quaternions: vec![(group_index, quaternion)],
             group_sizes: vec![(group_index, group_size)],
             cell: None,
@@ -594,17 +624,11 @@ impl Context for Backend {
         let particles = (0..self.x.len())
             .map(|i| (i, self.x[i], self.y[i], self.z[i], self.atom_kinds[i]))
             .collect();
-        let mass_centers = self
+        let geometries = self
             .groups
             .iter()
             .enumerate()
-            .map(|(i, g)| (i, g.mass_center().cloned()))
-            .collect();
-        let bounding_radii = self
-            .groups
-            .iter()
-            .enumerate()
-            .map(|(i, g)| (i, g.bounding_radius()))
+            .map(|(i, g)| (i, g.geometry()))
             .collect();
         let quaternions = self
             .groups
@@ -620,8 +644,7 @@ impl Context for Backend {
             .collect();
         self.backup = Some(SoaBackup {
             particles,
-            mass_centers,
-            bounding_radii,
+            geometries,
             quaternions,
             group_sizes,
             cell: Some(self.cell.clone()),
@@ -636,17 +659,17 @@ impl Context for Backend {
             self.x[i] = bx;
             self.y[i] = by;
             self.z[i] = bz;
-            self.atom_kinds[i] = kind;
-        }
-        for (group_idx, old_com) in backup.mass_centers {
-            if let Some(com) = old_com {
-                self.groups[group_idx].set_mass_center(com);
+            if self.atom_kinds[i] != kind {
+                self.atom_kinds[i] = kind;
+                // Undoing a swap is itself a kind change; selection caches must see it. Skipped
+                // when nothing changed so a rejected translate never invalidates them.
+                self.atom_kinds_generation += 1;
             }
         }
-        for (group_idx, old_radius) in backup.bounding_radii {
-            if let Some(r) = old_radius {
-                self.groups[group_idx].set_bounding_radius(r);
-            }
+        // Restored unconditionally: a group that had no geometry before the move must not keep the
+        // one the rejected move computed for it.
+        for (group_idx, old_geometry) in backup.geometries {
+            self.groups[group_idx].set_geometry(old_geometry);
         }
         for (group_idx, q) in backup.quaternions {
             self.groups[group_idx].set_quaternion(q);
@@ -678,6 +701,151 @@ impl Context for Backend {
     fn discard_backup(&mut self) {
         self.backup = None;
         self.hamiltonian_mut().discard_backup();
+    }
+}
+
+#[cfg(test)]
+mod invariant_tests {
+    use super::*;
+    use crate::transform::Transform;
+
+    /// A dimer with a light and a heavy atom, plus a second dimer that starts out empty.
+    const DIMER: &str = r#"
+atoms:
+  - {name: A, mass: 3.0, charge: 0.0, sigma: 1.0}
+  - {name: B, mass: 1.0, charge: 0.0, sigma: 1.0}
+  - {name: C, mass: 1.0, charge: 5.0, sigma: 1.0}
+molecules:
+  - name: DIMER
+    atoms: [A, B]
+system:
+  cell: !Cuboid [20.0, 20.0, 20.0]
+  medium: {permittivity: !Vacuum, temperature: 300.0}
+  energy: {}
+  blocks:
+    - molecule: DIMER
+      N: 2
+      active: 1
+      insert: !Manual [[0.0, 0.0, -2.0], [0.0, 0.0, 2.0], [5.0, 0.0, -2.0], [5.0, 0.0, 2.0]]
+propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
+"#;
+
+    fn backend() -> Backend {
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(tmp.path(), DIMER).unwrap();
+        Backend::new(tmp.path(), None, &mut rand::thread_rng()).unwrap()
+    }
+
+    #[test]
+    fn a_no_op_kind_change_invalidates_nothing() {
+        let mut context = backend();
+        let before = context.atom_kinds_generation();
+        context.set_atom_kind(0, context.atom_kind(0));
+        assert_eq!(context.atom_kinds_generation(), before);
+    }
+
+    #[test]
+    fn an_equal_mass_kind_change_bumps_the_counter_but_leaves_the_geometry() {
+        let mut context = backend();
+        let generation = context.atom_kinds_generation();
+        let geometry = context.groups()[0].geometry();
+        // B (mass 1) → C (mass 1): only the charge differs, the common titration.
+        context.set_atom_kind(1, 2);
+        assert_eq!(context.atom_kinds_generation(), generation + 1);
+        assert_eq!(context.groups()[0].geometry(), geometry);
+    }
+
+    #[test]
+    fn a_mass_changing_kind_change_moves_the_center_and_radius() {
+        let mut context = backend();
+        let before = context.groups()[0].geometry().unwrap();
+        // A (mass 3) at z=−2, B (mass 1) at z=+2 ⇒ center at z = −1.
+        assert!((before.mass_center.z + 1.0).abs() < 1e-12);
+        // Turn B into a second A (mass 1 → 3); the center moves to z = 0.
+        context.set_atom_kind(1, 0);
+        let after = context.groups()[0].geometry().unwrap();
+        assert!(after.mass_center.z.abs() < 1e-12, "{:?}", after.mass_center);
+        // Both atoms are now 2 Å from the center, up from 1 and 3.
+        assert!((after.bounding_radius - 2.0).abs() < 1e-12);
+        assert!(after.bounding_radius != before.bounding_radius);
+    }
+
+    /// The cache key must notice a swap for kind-based selections, and ignore it otherwise — an
+    /// `atomtype` selection re-resolving on every titration step is correct; `molecule X` doing so
+    /// would be wasted work on the energy hot path.
+    #[test]
+    fn only_kind_dependent_selections_re_resolve_after_a_swap() {
+        use crate::selection::{CachedSelection, Selection};
+        let mut context = backend();
+        let mut by_kind = CachedSelection::atoms(Selection::parse("atomtype B").unwrap());
+        let mut by_molecule = CachedSelection::atoms(Selection::parse("molecule DIMER").unwrap());
+        assert_eq!(by_kind.resolve(&context), &[1]);
+        let molecule_atoms = by_molecule.resolve(&context).to_vec();
+
+        // B → A: nothing is of kind B any more, but the molecule still holds the same atoms.
+        context.set_atom_kind(1, 0);
+        assert!(
+            by_kind.resolve(&context).is_empty(),
+            "an atomtype selection must follow the swap"
+        );
+        assert_eq!(by_molecule.resolve(&context), molecule_atoms.as_slice());
+    }
+
+    #[test]
+    fn group_of_particle_finds_the_owning_group() {
+        let context = backend();
+        assert_eq!(context.group_of_particle(0), Some(0));
+        assert_eq!(context.group_of_particle(1), Some(0));
+        assert_eq!(context.group_of_particle(2), Some(1));
+        assert_eq!(context.group_of_particle(3), Some(1));
+        assert_eq!(context.group_of_particle(4), None);
+    }
+
+    /// A mass-changing swap now moves the group's geometry, so a rejected one must put it back.
+    #[test]
+    fn undo_restores_geometry_after_a_mass_changing_swap() {
+        let mut context = backend();
+        let before = context.groups()[0].geometry().unwrap();
+
+        context.save_particle_backup(0, &[0, 1]);
+        context.set_atom_kind(1, 0); // mass 1 → 3, moves the center
+        assert!(context.groups()[0].geometry().unwrap() != before);
+
+        context.undo().unwrap();
+        assert_eq!(context.groups()[0].geometry().unwrap(), before);
+    }
+
+    #[test]
+    fn undo_of_a_kind_swap_bumps_the_counter_again() {
+        let mut context = backend();
+        context.save_particle_backup(0, &[0, 1]);
+        let before = context.atom_kinds_generation();
+        context.set_atom_kind(1, 0);
+        assert!(context.atom_kinds_generation() > before);
+
+        context.undo().unwrap();
+        assert_eq!(context.atom_kind(1), 1, "kind restored");
+        assert!(
+            context.atom_kinds_generation() > before,
+            "undoing a swap is itself a kind change and must invalidate caches"
+        );
+    }
+
+    /// Defensive: no current path takes a group's geometry from `None` to `Some`, because
+    /// insertion computes it while the group is still full (`topology/block.rs`). Should one ever
+    /// appear, `undo` must clear the geometry again rather than keep what the rejected move
+    /// computed — `nonbonded` culls on it.
+    #[test]
+    fn undo_can_clear_a_geometry_the_move_created() {
+        let mut context = backend();
+        context.groups_mut()[1].set_geometry(None);
+
+        context.save_particle_backup(1, &[2, 3]);
+        Transform::Activate.on_group(1, &mut context).unwrap();
+        assert!(context.groups()[1].geometry().is_some());
+
+        context.undo().unwrap();
+        assert!(context.groups()[1].geometry().is_none());
     }
 }
 

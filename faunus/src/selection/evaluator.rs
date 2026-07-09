@@ -67,6 +67,49 @@ pub(super) enum Expr {
     Not(Box<Self>),
 }
 
+impl Expr {
+    /// Whether the outcome can change when an atom's kind changes, as a titration or speciation
+    /// move does.
+    ///
+    /// A selection that cannot must never be re-resolved on a kind swap, or every energy
+    /// evaluation during titration would pay for it. The residue-category keywords count as
+    /// dependent because they fall back to the atom-type name whenever a model carries no residue
+    /// records (see [`AtomContext::residue_or_atomtype_in`]).
+    pub(super) fn depends_on_atom_kind(&self) -> bool {
+        match self {
+            // Read `atom_kind` directly.
+            Self::Element(_) | Self::Atomtype(_) | Self::Atomid(_) => true,
+            // Read the residue name, falling back to the atom-type name in residue-less models.
+            Self::Protein
+            | Self::Nucleic
+            | Self::Hydrophobic
+            | Self::Aromatic
+            | Self::Acidic
+            | Self::Basic
+            | Self::Polar
+            | Self::Charged => true,
+            // Read only the molecule template: its residues, chains, and atom names. `name` is an
+            // atom's template name, not its kind, and `backbone`/`sidechain` derive from the
+            // residue plus that name — none of which a kind swap can change.
+            Self::Chain(_)
+            | Self::Resname(_)
+            | Self::Resid(_)
+            | Self::Name(_)
+            | Self::Backbone
+            | Self::Sidechain
+            | Self::Index(_)
+            | Self::Group(_)
+            | Self::Molecule(_)
+            | Self::All
+            | Self::None => false,
+            Self::And(a, b) | Self::Or(a, b) => {
+                a.depends_on_atom_kind() || b.depends_on_atom_kind()
+            }
+            Self::Not(inner) => inner.depends_on_atom_kind(),
+        }
+    }
+}
+
 /// Per-atom context gathered during evaluation.
 struct AtomContext<'a> {
     abs_idx: usize,

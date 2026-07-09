@@ -26,7 +26,7 @@ use super::{Analyze, Frequency};
 use crate::auxiliary::{BlockAverage, BlockSummary, ColumnWriter, MappingExt};
 use crate::cell::Shape;
 use crate::group::GroupSize;
-use crate::selection::Selection;
+use crate::selection::{CachedSelection, Selection};
 use crate::z_grid::ZGrid;
 use crate::Context;
 use anyhow::Result;
@@ -73,7 +73,7 @@ impl DensityProfileBuilder {
         }
         let n_bins = grid.n_bins();
         Ok(DensityProfile {
-            selection: self.selection.clone(),
+            selection: CachedSelection::for_com(self.selection.clone(), self.use_com),
             grid,
             use_com: self.use_com,
             counts: new_accumulators(n_bins),
@@ -122,7 +122,7 @@ fn new_accumulators(n: usize) -> Vec<BlockAverage> {
 #[derive(Debug)]
 pub struct DensityProfile {
     /// Atoms, or molecules when `use_com` is set, whose density is profiled.
-    selection: Selection,
+    selection: CachedSelection,
     /// Slab layout along z.
     grid: ZGrid,
     /// Bin molecular mass centres rather than individual atoms.
@@ -142,35 +142,27 @@ pub struct DensityProfile {
 
 impl DensityProfile {
     /// Instantaneous count and mass per slab for the current configuration.
-    ///
-    /// The selection is resolved afresh every sample. Caching it is unsound here: a speciation
-    /// or titration move swaps an atom's kind without changing any group's active count, so no
-    /// cheap counter marks a kind-based selection as stale.
-    fn tally(&self, context: &impl Context) -> Result<(Vec<f64>, Vec<f64>)> {
+    fn tally(&mut self, context: &impl Context) -> Result<(Vec<f64>, Vec<f64>)> {
         let mut counts = vec![0.0; self.grid.n_bins()];
         let mut masses = vec![0.0; self.grid.n_bins()];
+        let grid = &self.grid;
         let mut add = |z: f64, mass: f64| {
-            let bin = self.grid.bin_index(z);
+            let bin = grid.bin_index(z);
             counts[bin] += 1.0;
             masses[bin] += mass;
         };
+        let indices = self.selection.resolve(context).to_vec();
         if self.use_com {
-            let topology = context.topology();
-            let mut active = Vec::new();
-            for group_index in context.resolve_groups_live(&self.selection) {
+            for group_index in indices {
                 let group = &context.groups()[group_index];
-                if !topology.moleculekinds()[group.molecule()].has_com() {
-                    anyhow::bail!("DensityProfile: group {group_index} has no center of mass");
-                }
-                // Recomputed rather than read from the group: the cached center is not refreshed
-                // when a speciation move swaps an atom kind, and a change of mass moves it.
-                active.clear();
-                active.extend(group.iter_active());
-                let mass = active.iter().map(|&i| context.atom_mass(i)).sum();
-                add(context.mass_center(&active).z, mass);
+                let mass_center = group.mass_center().ok_or_else(|| {
+                    anyhow::anyhow!("DensityProfile: group {group_index} has no center of mass")
+                })?;
+                let mass = group.iter_active().map(|i| context.atom_mass(i)).sum();
+                add(mass_center.z, mass);
             }
         } else {
-            for index in context.resolve_atoms_live(&self.selection) {
+            for index in indices {
                 add(context.position(index).z, context.atom_mass(index));
             }
         }
@@ -315,7 +307,7 @@ impl<T: Context> From<DensityProfile> for Box<dyn Analyze<T>> {
 impl std::fmt::Display for DensityProfile {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "Density Profile:")?;
-        writeln!(f, "  Selection: {}", self.selection)?;
+        writeln!(f, "  Selection: {}", self.selection.selection())?;
         writeln!(f, "  Samples:   {}", self.num_samples)?;
         writeln!(f, "  Bins:      {}", self.grid.n_bins())?;
         Ok(())

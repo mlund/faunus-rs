@@ -19,7 +19,7 @@
 //! are available in the expression (evaluated in alphabetical order per exmex convention).
 
 use crate::change::GroupChange;
-use crate::selection::{Selection, SelectionCache};
+use crate::selection::{CachedSelection, Selection};
 use crate::{Change, Context};
 use exmex::{Express, FlatEx, FlatExVal, Val};
 use serde::{Deserialize, Serialize};
@@ -64,9 +64,9 @@ impl CustomExternalBuilder {
                 expression: Arc::new(Expression::Preset(preset)),
                 function: self.function.clone(),
                 var_indices: vec![0, 1, 2, 3], // q, x, y, z — all passed to preset
-                selection: self.selection.clone(),
                 com: self.com,
-                selection_cache: RefCell::default(),
+                selection_cache: RefCell::new(self.cached_selection()),
+                warned_empty: std::cell::Cell::new(false),
             });
         }
 
@@ -116,44 +116,40 @@ impl CustomExternalBuilder {
             expression: Arc::new(expression),
             function: self.function.clone(),
             var_indices,
-            selection: self.selection.clone(),
             com: self.com,
-            selection_cache: RefCell::default(),
+            selection_cache: RefCell::new(self.cached_selection()),
+            warned_empty: std::cell::Cell::new(false),
         })
+    }
+
+    fn cached_selection(&self) -> CachedSelection {
+        CachedSelection::for_com(self.selection.clone(), self.com)
     }
 }
 
 /// Return indices affected by a change that match a cached selection.
 ///
-/// `by_atoms=true` resolves to matching atom indices (per-atom mode);
-/// `by_atoms=false` resolves to matching group indices (COM mode).
+/// Whether the indices are atoms or groups follows from how `cache` was constructed, so the two
+/// cannot disagree.
 fn affected(
     change: &Change,
-    cache: &RefCell<SelectionCache>,
-    selection: &Selection,
+    cache: &RefCell<CachedSelection>,
     context: &impl Context,
-    by_atoms: bool,
+    warned_empty: &std::cell::Cell<bool>,
 ) -> Vec<usize> {
     if matches!(change, Change::None) {
         return vec![];
     }
-    let gen = context.group_lists_generation();
     let mut cache = cache.borrow_mut();
-    let selected = cache.get_or_resolve(gen, || {
-        let v = if by_atoms {
-            context.resolve_atoms_live(selection)
-        } else {
-            context.resolve_groups_live(selection)
-        };
-        if v.is_empty() {
-            let kind = if by_atoms { "atoms" } else { "groups" };
-            log::warn!(
-                "customexternal: selection '{}' matched no {kind} — energy will always be zero",
-                selection
-            );
-        }
-        v
-    });
+    let by_atoms = cache.targets_atoms();
+    if cache.resolve(context).is_empty() && !warned_empty.replace(true) {
+        let kind = if by_atoms { "atoms" } else { "groups" };
+        log::warn!(
+            "customexternal: selection '{}' matched no {kind} — energy will always be zero",
+            cache.selection()
+        );
+    }
+    let selected = cache.resolve(context); // cheap: the generation is unchanged
     match change {
         Change::Everything | Change::Volume(..) => selected.to_vec(),
         Change::SingleGroup(gi, gc) => {
@@ -254,10 +250,12 @@ pub struct CustomExternal {
     function: String,
     /// Maps each exmex variable slot to index in [q, x, y, z].
     var_indices: Vec<usize>,
-    selection: Selection,
     com: bool,
-    /// RefCell because energy() takes &self
-    selection_cache: RefCell<SelectionCache>,
+    /// Owns the selection, its resolved indices, and its cache key. RefCell because energy()
+    /// takes &self.
+    selection_cache: RefCell<CachedSelection>,
+    /// Guards the "matched nothing" warning, which can only be discovered once a context exists.
+    warned_empty: std::cell::Cell<bool>,
 }
 
 impl CustomExternal {
@@ -312,13 +310,7 @@ impl CustomExternal {
 
     /// Compute energy for a given change.
     pub fn energy(&self, context: &impl Context, change: &Change) -> f64 {
-        let indices = affected(
-            change,
-            &self.selection_cache,
-            &self.selection,
-            context,
-            !self.com,
-        );
+        let indices = affected(change, &self.selection_cache, context, &self.warned_empty);
         if self.com {
             indices
                 .iter()
@@ -337,7 +329,8 @@ impl CustomExternal {
         let mut map = serde_yml::Mapping::new();
         map.insert("function".into(), self.function.clone().into());
         map.insert("com".into(), self.com.into());
-        map.insert("selection".into(), self.selection.to_string().into());
+        let selection = self.selection_cache.borrow().selection().to_string();
+        map.insert("selection".into(), selection.into());
         serde_yml::Value::Mapping(map)
     }
 }
@@ -492,6 +485,51 @@ mod integration_tests {
             &mut rng,
         )
         .unwrap()
+    }
+
+    /// A titration or speciation move swaps an atom's kind in place, leaving every group's active
+    /// count — and hence the group-list generation — untouched. An energy term selecting on atom
+    /// type must still follow the swap, or it silently keeps scoring the pre-swap system while the
+    /// drift check compares one stale energy against another and reports no problem.
+    #[test]
+    fn atom_kind_swap_changes_the_selected_set() {
+        use crate::group::GroupCollection;
+        use crate::WithTopology;
+        let mut context = make_context();
+        let yaml = r#"
+selection: "atomtype HW"
+function: "z"
+"#;
+        let builder: CustomExternalBuilder = serde_yml::from_str(yaml).unwrap();
+        let term = builder.build().unwrap();
+        let before = term.energy(&context, &Change::Everything);
+
+        let kinds = context.topology().atomkinds().to_vec();
+        let hydrogen = kinds.iter().position(|k| k.name() == "HW").unwrap();
+        let oxygen = kinds.iter().position(|k| k.name() == "OW").unwrap();
+        let atom = (0..context.num_particles())
+            .find(|&i| context.atom_kind(i) == oxygen)
+            .expect("an OW atom");
+        // A non-zero z, else the swap could not change the energy at all.
+        assert!(context.position(atom).z.abs() > 1e-9);
+
+        context.set_atom_kind(atom, hydrogen);
+        let after = term.energy(&context, &Change::Everything);
+
+        // The swapped atom now matches `atomtype HW` and must contribute.
+        assert!(
+            (after - before).abs() > 1e-9,
+            "energy unchanged after swap: {before} -> {after}"
+        );
+        // The only trustworthy oracle: a term built fresh against the post-swap system.
+        let fresh = builder
+            .build()
+            .unwrap()
+            .energy(&context, &Change::Everything);
+        assert!(
+            (after - fresh).abs() < 1e-12,
+            "cached term {after} disagrees with a freshly built one {fresh}"
+        );
     }
 
     #[test]

@@ -8,7 +8,7 @@ use crate::auxiliary::{ColumnWriter, MappingExt};
 use crate::axes::Axes;
 use crate::cell::{BoundaryConditions, Shape};
 use crate::histogram::Histogram;
-use crate::selection::{Selection, SelectionCache};
+use crate::selection::{CachedSelection, Selection};
 use crate::Context;
 use anyhow::Result;
 use derive_more::Debug;
@@ -68,8 +68,10 @@ impl RadialDistributionBuilder {
         let stream = ColumnWriter::open(&self.file, &["r", "g(r)"])?;
 
         Ok(RadialDistribution {
-            selections: self.selections.clone(),
-            caches: Default::default(),
+            selections: (
+                CachedSelection::for_com(self.selections.0.clone(), self.use_com),
+                CachedSelection::for_com(self.selections.1.clone(), self.use_com),
+            ),
             histogram,
             volume_sum: 0.0,
             pair_count_sum: 0.0,
@@ -87,8 +89,8 @@ impl RadialDistributionBuilder {
 /// Radial distribution function analysis.
 #[derive(Debug)]
 pub struct RadialDistribution {
-    selections: (Selection, Selection),
-    caches: (SelectionCache, SelectionCache),
+    /// Target (atoms vs. groups) is fixed by `use_com` at build time.
+    selections: (CachedSelection, CachedSelection),
     histogram: Histogram,
     volume_sum: f64,
     /// Accumulated pair count across all frames (for GC ensemble correctness).
@@ -140,7 +142,7 @@ fn collect_pair_distances(
 
 impl RadialDistribution {
     fn same_selection(&self) -> bool {
-        self.selections.0.source() == self.selections.1.source()
+        self.selections.0.selection().source() == self.selections.1.selection().source()
     }
 
     /// Find which group index an atom belongs to.
@@ -151,19 +153,11 @@ impl RadialDistribution {
     /// Sample atom-atom RDF, returning the number of pairs evaluated.
     fn sample_atom_atom_weighted(&mut self, context: &impl Context, weight: f64) -> f64 {
         let groups = context.groups();
-        let gen = context.group_lists_generation();
         let same = self.same_selection();
         let exclude = self.exclude_intramolecular;
 
-        let (sel0, sel1) = (&self.selections.0, &self.selections.1);
-        let atoms1 = self
-            .caches
-            .0
-            .get_or_resolve(gen, || context.resolve_atoms_live(sel0));
-        let atoms2 = self
-            .caches
-            .1
-            .get_or_resolve(gen, || context.resolve_atoms_live(sel1));
+        let atoms1 = self.selections.0.resolve(context);
+        let atoms2 = self.selections.1.resolve(context);
 
         collect_pair_distances(
             atoms1,
@@ -186,18 +180,10 @@ impl RadialDistribution {
     /// Sample COM-COM RDF, returning the number of pairs evaluated.
     fn sample_com_com_weighted(&mut self, context: &impl Context, weight: f64) -> f64 {
         let groups = context.groups();
-        let gen = context.group_lists_generation();
         let same = self.same_selection();
 
-        let (sel0, sel1) = (&self.selections.0, &self.selections.1);
-        let gi1 = self
-            .caches
-            .0
-            .get_or_resolve(gen, || context.resolve_groups_live(sel0));
-        let gi2 = self
-            .caches
-            .1
-            .get_or_resolve(gen, || context.resolve_groups_live(sel1));
+        let gi1 = self.selections.0.resolve(context);
+        let gi2 = self.selections.1.resolve(context);
 
         collect_pair_distances(
             gi1,
@@ -368,10 +354,9 @@ frequency: !Every 50
 
         let mut rdf = RadialDistribution {
             selections: (
-                Selection::parse("all").unwrap(),
-                Selection::parse("all").unwrap(),
+                CachedSelection::atoms(Selection::parse("all").unwrap()),
+                CachedSelection::atoms(Selection::parse("all").unwrap()),
             ),
-            caches: Default::default(),
             histogram: Histogram::new(0.0, 5.0, dr).unwrap(),
             volume_sum: volume * num_samples as f64,
             pair_count_sum: n_pairs * num_samples as f64,

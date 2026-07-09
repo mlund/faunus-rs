@@ -28,7 +28,7 @@
 use super::{Analyze, Frequency};
 use crate::auxiliary::{ColumnFormat, ColumnWriter, MappingExt, WeightedMean};
 use crate::cell::{BoundaryConditions, Shape};
-use crate::selection::{Selection, SelectionCache};
+use crate::selection::{CachedSelection, Selection};
 use crate::{Context, Point};
 use anyhow::Result;
 use derive_more::Debug;
@@ -193,8 +193,10 @@ impl MultipoleDistributionBuilder {
             resolved[0] == resolved[1]
         };
         Ok(MultipoleDistribution {
-            selections: self.selections.clone(),
-            caches: Default::default(),
+            selections: (
+                CachedSelection::groups(self.selections.0.clone()),
+                CachedSelection::groups(self.selections.1.clone()),
+            ),
             resolution: self.dr,
             max_r,
             bjerrum_length,
@@ -322,9 +324,8 @@ struct Row {
 /// Multipolar decomposition and orientational correlations vs. COM separation.
 #[derive(Debug)]
 pub struct MultipoleDistribution {
-    selections: (Selection, Selection),
     #[debug(skip)]
-    caches: (SelectionCache, SelectionCache),
+    selections: (CachedSelection, CachedSelection),
     resolution: f64,
     max_r: f64,
     bjerrum_length: f64,
@@ -419,14 +420,7 @@ impl<T: Context> Analyze<T> for MultipoleDistribution {
     }
 
     fn perform_sample(&mut self, context: &T, _step: usize, weight: f64) -> Result<()> {
-        let generation = context.group_lists_generation();
-        let g1: Vec<usize> = self
-            .caches
-            .0
-            .get_or_resolve(generation, || {
-                context.resolve_groups_live(&self.selections.0)
-            })
-            .to_vec();
+        let g1: Vec<usize> = self.selections.0.resolve(context).to_vec();
         let moments1: Vec<(usize, GroupMoments)> = g1
             .iter()
             .filter_map(|&gi| Some((gi, GroupMoments::from_group(gi, context)?)))
@@ -434,13 +428,7 @@ impl<T: Context> Analyze<T> for MultipoleDistribution {
         let moments2: Option<Vec<(usize, GroupMoments)>> = if self.same_selection {
             None
         } else {
-            let g2: Vec<usize> = self
-                .caches
-                .1
-                .get_or_resolve(generation, || {
-                    context.resolve_groups_live(&self.selections.1)
-                })
-                .to_vec();
+            let g2: Vec<usize> = self.selections.1.resolve(context).to_vec();
             Some(
                 g2.iter()
                     .filter_map(|&gi| Some((gi, GroupMoments::from_group(gi, context)?)))
@@ -996,10 +984,9 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
 
         let analysis = MultipoleDistribution {
             selections: (
-                Selection::parse("molecule A").unwrap(),
-                Selection::parse("molecule A").unwrap(),
+                CachedSelection::groups(Selection::parse("molecule A").unwrap()),
+                CachedSelection::groups(Selection::parse("molecule A").unwrap()),
             ),
-            caches: Default::default(),
             resolution: 1.0,
             max_r: 100.0,
             bjerrum_length: 7.0,
@@ -1025,10 +1012,9 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
         bins.insert(1, bin);
         let analysis = MultipoleDistribution {
             selections: (
-                Selection::parse("molecule A").unwrap(),
-                Selection::parse("molecule B").unwrap(),
+                CachedSelection::groups(Selection::parse("molecule A").unwrap()),
+                CachedSelection::groups(Selection::parse("molecule B").unwrap()),
             ),
-            caches: Default::default(),
             resolution: 1.0,
             max_r: 100.0,
             bjerrum_length: 7.0,
