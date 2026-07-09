@@ -261,6 +261,7 @@ impl WidomRotationBuilder {
                 .then(|| std::array::from_fn(|_| BlockAverage::new())),
             frequency: self.frequency,
             num_samples: 0,
+            num_blocks: 0,
             stream,
         })
     }
@@ -312,7 +313,11 @@ pub struct WidomRotation {
     /// Principal librational stiffnesses (kJ/mol/rad²), ascending.
     stiffness: Option<[BlockAverage; 3]>,
     frequency: Frequency,
+    /// Frames sampled.
     num_samples: usize,
+    /// Molecule scans, one per matching molecule per frame. Each is an independent block, so this
+    /// is the count behind every reported error bar.
+    num_blocks: usize,
     #[debug(skip)]
     stream: Option<ColumnWriter>,
 }
@@ -545,10 +550,10 @@ impl<T: Context> Analyze<T> for WidomRotation {
             let energies = self.scan_energies(&mut trial, gi, &indices, &com);
             self.accumulate(&energies, &references);
             self.accumulate_torque(&mut trial, gi, &indices, &com, reference_energy);
-            // Each molecule-scan is one independent block, so count them here to
-            // match the block count behind every reported error bar.
-            self.num_samples += 1;
+            // Each molecule-scan is one independent block.
+            self.num_blocks += 1;
         }
+        self.num_samples += 1;
 
         if let Some(stream) = self.stream.as_mut() {
             let w = self.widom.mean_free_energy() * self.thermal_energy;
@@ -567,11 +572,13 @@ impl<T: Context> Analyze<T> for WidomRotation {
     }
 
     fn results(&self) -> Option<serde_yml::Value> {
-        if self.num_samples == 0 {
+        // A frame in which no molecule matched leaves every block empty.
+        if self.num_blocks == 0 {
             return None;
         }
         let mut map = serde_yml::Mapping::new();
         map.try_insert("num_samples", self.num_samples)?;
+        map.try_insert("num_blocks", self.num_blocks)?;
         // Pooled log-sum-exp estimate (matches the module formula and the CSV),
         // with the block-to-block standard error.
         map.try_insert(

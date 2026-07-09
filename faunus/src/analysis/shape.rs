@@ -79,6 +79,7 @@ impl ShapeAnalysisBuilder {
             stream,
             frequency: self.frequency,
             num_samples: 0,
+            num_groups_sampled: 0,
             gyration_radius_squared: WeightedMean::new(),
             gyration_radius: WeightedMean::new(),
             end_to_end_squared: WeightedMean::new(),
@@ -106,7 +107,11 @@ pub struct ShapeAnalysis {
     #[debug(skip)]
     stream: Option<ColumnWriter>,
     frequency: Frequency,
+    /// Frames sampled.
     num_samples: usize,
+    /// Gyration tensors accumulated, one per matching molecule per frame. This, not `num_samples`,
+    /// is the count behind every mean below.
+    num_groups_sampled: usize,
     gyration_radius_squared: WeightedMean,
     gyration_radius: WeightedMean,
     end_to_end_squared: WeightedMean,
@@ -256,8 +261,9 @@ impl<T: Context> Analyze<T> for ShapeAnalysis {
                 ])?;
             }
 
-            self.num_samples += 1;
+            self.num_groups_sampled += 1;
         }
+        self.num_samples += 1;
         Ok(())
     }
 
@@ -266,7 +272,8 @@ impl<T: Context> Analyze<T> for ShapeAnalysis {
     }
 
     fn results(&self) -> Option<serde_yml::Value> {
-        if self.num_samples == 0 {
+        // A frame in which no molecule matched leaves every accumulator empty.
+        if self.num_groups_sampled == 0 {
             return None;
         }
         let mut map = serde_yml::Mapping::new();
@@ -293,6 +300,7 @@ impl<T: Context> Analyze<T> for ShapeAnalysis {
         map.try_insert("Syz", self.tensor_yz.mean())?;
         map.try_insert("Szz", self.tensor_zz.mean())?;
         map.try_insert("num_samples", self.num_samples)?;
+        map.try_insert("num_groups_sampled", self.num_groups_sampled)?;
 
         Some(serde_yml::Value::Mapping(map))
     }
@@ -529,5 +537,53 @@ frequency: !Every 50
         let rg2_weighted = tensor.trace();
         // With unequal masses, COM shifts toward heavier particle → smaller Rg²
         assert!(rg2_weighted < equal.rg_squared);
+    }
+}
+
+#[cfg(test)]
+mod counter_semantics {
+    use super::*;
+    use crate::backend::Backend;
+
+    /// Two polymers, so a frame contributes one sample but two gyration tensors.
+    const TWO_POLYMERS: &str = r#"
+atoms:
+  - {name: A, mass: 1.0, charge: 0.0, sigma: 1.0}
+molecules:
+  - name: POLY
+    atoms: [A, A, A]
+system:
+  cell: !Cuboid [30.0, 30.0, 30.0]
+  medium: {permittivity: !Vacuum, temperature: 300.0}
+  energy: {}
+  blocks:
+    - molecule: POLY
+      N: 2
+      insert: !Manual [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [2.0, 0.0, 0.0],
+                       [8.0, 0.0, 0.0], [9.0, 0.0, 0.0], [10.0, 0.0, 0.0]]
+propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
+"#;
+
+    /// `num_samples` counts frames everywhere. The per-molecule tally, which is the count behind
+    /// every reported mean, is published separately as `num_groups_sampled`.
+    #[test]
+    fn num_samples_counts_frames_not_molecules() {
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(tmp.path(), TWO_POLYMERS).unwrap();
+        let context = Backend::new(tmp.path(), None, &mut rand::thread_rng()).unwrap();
+
+        let builder: ShapeAnalysisBuilder =
+            serde_yml::from_str("{selection: \"molecule POLY\", frequency: !Every 1}").unwrap();
+        let mut analysis = builder.build(&context).unwrap();
+
+        for step in 0..3 {
+            analysis.sample(&context, step).unwrap();
+        }
+        assert_eq!(Analyze::<Backend>::num_samples(&analysis), 3, "frames");
+        assert_eq!(analysis.num_groups_sampled, 6, "3 frames x 2 molecules");
+
+        let yaml = Analyze::<Backend>::to_yaml(&analysis).unwrap();
+        assert_eq!(yaml["num_samples"].as_u64(), Some(3));
+        assert_eq!(yaml["num_groups_sampled"].as_u64(), Some(6));
     }
 }

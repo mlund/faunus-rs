@@ -174,4 +174,5 @@ analysis:
     Syy: 15.525166489598886
     Syz: -0.04500065164870563
     Szz: 15.420189592414186
-    num_samples: 120000
+    num_samples: 15000
+    num_groups_sampled: 120000
