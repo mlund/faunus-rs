@@ -436,24 +436,6 @@ impl<T: Context> Analyze<T> for DoubleLayerPressure {
     }
 }
 
-impl<T: Context> From<DoubleLayerPressure> for Box<dyn Analyze<T>> {
-    fn from(analysis: DoubleLayerPressure) -> Self {
-        Box::new(analysis)
-    }
-}
-
-impl std::fmt::Display for DoubleLayerPressure {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(f, "Double Layer Pressure Analysis:")?;
-        writeln!(f, "  Samples:   {}", self.num_samples)?;
-        if self.num_samples > 0 {
-            let p_osm = self.p_osm.mean() + self.fipb_pressure();
-            writeln!(f, "  <P_osm>:   {:.4} mM", self.to_mm(p_osm))?;
-        }
-        Ok(())
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

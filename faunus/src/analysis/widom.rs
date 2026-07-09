@@ -129,7 +129,8 @@ impl WidomAccumulator {
         combined.free_energy()
     }
 
-    /// Whether any samples have been collected.
+    /// Whether any samples have been collected. Only the unit tests need this.
+    #[cfg(test)]
     pub fn is_empty(&self) -> bool {
         self.n_samples == 0
     }

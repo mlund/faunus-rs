@@ -174,15 +174,6 @@ impl VirtualVolumeMove {
         p_kt_per_a3 * 1e3 / crate::MOLAR_TO_INV_ANGSTROM3
     }
 
-    /// Sample standard deviation of pressure across blocks in kT/Å³.
-    /// `None` until at least two blocks have been completed.
-    fn pressure_stddev(&self) -> Option<f64> {
-        if self.widom.free_energy().n() < 2 {
-            return None;
-        }
-        Some(self.widom.free_energy().stddev() / self.volume_displacement.abs())
-    }
-
     /// Perform the virtual volume perturbation and return the energy change in kT.
     ///
     /// `old_energy` is pre-computed on the original (immutable) context to avoid
@@ -272,28 +263,6 @@ impl<T: Context> Analyze<T> for VirtualVolumeMove {
         }
 
         Some(serde_yml::Value::Mapping(map))
-    }
-}
-
-impl<T: Context> From<VirtualVolumeMove> for Box<dyn Analyze<T>> {
-    fn from(analysis: VirtualVolumeMove) -> Self {
-        Box::new(analysis)
-    }
-}
-
-impl std::fmt::Display for VirtualVolumeMove {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(f, "Virtual Volume Move Analysis:")?;
-        writeln!(f, "  dV:          {} ų", self.volume_displacement)?;
-        writeln!(f, "  Method:      {:?}", self.method)?;
-        writeln!(f, "  Samples:     {}", self.widom.len())?;
-        if !self.widom.is_empty() {
-            writeln!(f, "  <Pex>:       {:.6} kT/ų", self.mean_pressure())?;
-        }
-        if let Some(s) = self.pressure_stddev() {
-            writeln!(f, "  std(Pex):    {:.6} kT/ų", s)?;
-        }
-        Ok(())
     }
 }
 
@@ -463,24 +432,6 @@ mod tests {
     }
 
     #[test]
-    fn display_without_samples() {
-        let vvm = build_vvm(0.5);
-        let output = format!("{vvm}");
-        assert!(output.contains("0.5"));
-        assert!(output.contains("Samples:     0"));
-        assert!(!output.contains("<Pex>"));
-    }
-
-    #[test]
-    fn display_with_samples() {
-        let mut vvm = build_vvm(0.5);
-        vvm.widom.collect(0.0, 1.0);
-        let output = format!("{vvm}");
-        assert!(output.contains("Samples:     1"));
-        assert!(output.contains("<Pex>"));
-    }
-
-    #[test]
     fn deserialize_virtual_volume_move_builders() {
         let yaml = std::fs::read_to_string("tests/files/virtual_volume_move.yaml").unwrap();
 
@@ -493,27 +444,6 @@ mod tests {
         assert_approx_eq!(f64, vvm.volume_displacement, 1.0);
         assert_eq!(vvm.method, VolumeScalePolicy::ScaleZ);
         assert!(matches!(vvm.frequency, Frequency::Every(5)));
-    }
-
-    #[test]
-    fn pressure_stddev_no_blocks() {
-        let mut vvm = build_vvm(0.5);
-        vvm.widom.collect(1.0, 1.0);
-        assert!(vvm.pressure_stddev().is_none());
-    }
-
-    #[test]
-    fn pressure_stddev_with_two_blocks() {
-        let mut vvm = build_vvm(0.5);
-        // Block 1: dU = 0 → free_energy = 0
-        vvm.widom.collect(0.0, 1.0);
-        vvm.widom.end_block();
-        // Block 2: dU = 2 → free_energy = 2
-        vvm.widom.collect(2.0, 1.0);
-        vvm.widom.end_block();
-        // stddev of [0, 2] = 1.414..., Pex_std = 1.414... / 0.5 ≈ 2.828
-        let s = vvm.pressure_stddev().expect("two blocks should yield Some");
-        assert!(s > 2.0 && s < 4.0);
     }
 
     #[test]
@@ -535,7 +465,7 @@ mod tests {
             vvm.widom.end_block();
         }
         assert!(vvm.widom.free_energy().n() >= 2);
-        assert!(vvm.pressure_stddev().is_some());
+        assert!(vvm.widom.free_energy().stddev().is_finite());
     }
 
     #[test]

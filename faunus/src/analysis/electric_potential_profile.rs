@@ -332,21 +332,6 @@ impl<T: Context> Analyze<T> for ElectricPotentialProfile {
     }
 }
 
-impl<T: Context> From<ElectricPotentialProfile> for Box<dyn Analyze<T>> {
-    fn from(analysis: ElectricPotentialProfile) -> Self {
-        Box::new(analysis)
-    }
-}
-
-impl std::fmt::Display for ElectricPotentialProfile {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(f, "Electric Potential Profile:")?;
-        writeln!(f, "  Samples:  {}", self.num_samples)?;
-        writeln!(f, "  Bins:     {}", self.grid.n_bins())?;
-        Ok(())
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

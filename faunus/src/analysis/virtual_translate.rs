@@ -292,30 +292,6 @@ impl<T: Context> Analyze<T> for VirtualTranslate {
     }
 }
 
-impl<T: Context> From<VirtualTranslate> for Box<dyn Analyze<T>> {
-    fn from(analysis: VirtualTranslate) -> Self {
-        Box::new(analysis)
-    }
-}
-
-impl std::fmt::Display for VirtualTranslate {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(f, "Virtual Translate Analysis:")?;
-        writeln!(f, "  Selection:   {}", self.selection)?;
-        writeln!(f, "  dL:          {} Å", self.displacement)?;
-        writeln!(
-            f,
-            "  Direction:   [{:.3}, {:.3}, {:.3}]",
-            self.unit_direction.x, self.unit_direction.y, self.unit_direction.z
-        )?;
-        writeln!(f, "  Samples:     {}", self.widom.len())?;
-        if !self.widom.is_empty() {
-            writeln!(f, "  <force>:     {:.6} kT/Å", self.mean_force())?;
-        }
-        Ok(())
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -464,25 +440,6 @@ mod tests {
         assert_eq!(vt.short_name(), Some("virtualtranslate"));
         assert!(vt.long_name().unwrap().contains("force measurement"));
         assert!(vt.citation().unwrap().starts_with("doi:"));
-    }
-
-    #[test]
-    fn display_without_samples() {
-        let vt = build_vt(0.01);
-        let output = format!("{vt}");
-        assert!(output.contains("molecule MOL"));
-        assert!(output.contains("0.01"));
-        assert!(output.contains("Samples:     0"));
-        assert!(!output.contains("<force>"));
-    }
-
-    #[test]
-    fn display_with_samples() {
-        let mut vt = build_vt(0.1);
-        vt.widom.collect(0.0, 1.0);
-        let output = format!("{vt}");
-        assert!(output.contains("Samples:     1"));
-        assert!(output.contains("<force>"));
     }
 
     #[test]

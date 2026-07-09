@@ -74,12 +74,6 @@ impl StructureWriterBuilder {
     }
 }
 
-impl<T: Context> From<StructureWriter> for Box<dyn Analyze<T>> {
-    fn from(analysis: StructureWriter) -> Self {
-        Box::new(analysis)
-    }
-}
-
 impl StructureWriter {
     pub fn new(output_file: &str, frequency: Frequency) -> Self {
         Self {

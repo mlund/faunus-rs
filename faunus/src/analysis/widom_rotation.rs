@@ -503,11 +503,6 @@ impl WidomRotation {
             accumulator.collect(energy - reference_energy, 1.0);
         }
     }
-
-    /// Mean order parameter averaged over all vectors.
-    fn mean_s2(&self) -> f64 {
-        self.mean_order.mean()
-    }
 }
 
 impl crate::Info for WidomRotation {
@@ -637,20 +632,6 @@ impl<T: Context> Analyze<T> for WidomRotation {
             );
         }
         Some(serde_yml::Value::Mapping(map))
-    }
-}
-
-impl std::fmt::Display for WidomRotation {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(f, "Widom Rotation Analysis:")?;
-        writeln!(f, "  Selection:    {}", self.selection.selection())?;
-        writeln!(f, "  Orientations: {}", self.quaternions.len())?;
-        writeln!(f, "  Vectors:      {}", self.vectors.len())?;
-        writeln!(f, "  Samples:      {}", self.num_samples)?;
-        if self.num_samples > 0 && !self.vectors.is_empty() {
-            writeln!(f, "  mean S²:      {:.4}", self.mean_s2())?;
-        }
-        Ok(())
     }
 }
 

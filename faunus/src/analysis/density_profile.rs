@@ -298,22 +298,6 @@ impl<T: Context> Analyze<T> for DensityProfile {
     }
 }
 
-impl<T: Context> From<DensityProfile> for Box<dyn Analyze<T>> {
-    fn from(analysis: DensityProfile) -> Self {
-        Box::new(analysis)
-    }
-}
-
-impl std::fmt::Display for DensityProfile {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(f, "Density Profile:")?;
-        writeln!(f, "  Selection: {}", self.selection.selection())?;
-        writeln!(f, "  Samples:   {}", self.num_samples)?;
-        writeln!(f, "  Bins:      {}", self.grid.n_bins())?;
-        Ok(())
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
