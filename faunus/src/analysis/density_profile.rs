@@ -155,13 +155,19 @@ impl DensityProfile {
             masses[bin] += mass;
         };
         if self.use_com {
+            let topology = context.topology();
+            let mut active = Vec::new();
             for group_index in context.resolve_groups_live(&self.selection) {
                 let group = &context.groups()[group_index];
-                let mass_center = group.mass_center().ok_or_else(|| {
-                    anyhow::anyhow!("DensityProfile: group {group_index} has no center of mass")
-                })?;
-                let mass = group.iter_active().map(|i| context.atom_mass(i)).sum();
-                add(mass_center.z, mass);
+                if !topology.moleculekinds()[group.molecule()].has_com() {
+                    anyhow::bail!("DensityProfile: group {group_index} has no center of mass");
+                }
+                // Recomputed rather than read from the group: the cached center is not refreshed
+                // when a speciation move swaps an atom kind, and a change of mass moves it.
+                active.clear();
+                active.extend(group.iter_active());
+                let mass = active.iter().map(|&i| context.atom_mass(i)).sum();
+                add(context.mass_center(&active).z, mass);
             }
         } else {
             for index in context.resolve_atoms_live(&self.selection) {
@@ -512,6 +518,26 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
         analysis.sample(&context, 1).unwrap();
         assert_relative_eq!(analysis.counts[3].mean(), 0.5);
         assert_relative_eq!(analysis.total_count.mean(), 0.5);
+    }
+
+    /// A titration swap can change an atom's mass, which moves the molecule's mass centre. The
+    /// centre cached on the group is not refreshed by such a swap, so it must be recomputed.
+    #[test]
+    fn a_mass_changing_atom_kind_swap_moves_the_mass_center() {
+        use crate::group::GroupCollection;
+        let mut context = backend_from_str(DIMER);
+        let mut analysis = builder("molecule DIMER", true).build(&context).unwrap();
+        analysis.sample(&context, 0).unwrap();
+        // A (mass 3) at z=−2, B (mass 1) at z=+2 ⇒ centre at z=−1, bin 4.
+        assert_eq!(occupied(&analysis), vec![(4, 1.0)]);
+
+        // Turn B into a second A (mass 1 → 3); the centre moves to z = 0, bin 5.
+        context.set_atom_kind(1, 0);
+        analysis.sample(&context, 1).unwrap();
+        assert_relative_eq!(analysis.counts[4].mean(), 0.5);
+        assert_relative_eq!(analysis.counts[5].mean(), 0.5);
+        // The mass follows the new kinds too: 3 + 3 = 6.
+        assert_relative_eq!(analysis.masses[5].mean(), 3.0); // 6.0 in one of two samples
     }
 
     #[test]

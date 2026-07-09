@@ -53,6 +53,14 @@ impl ZGrid {
             anyhow::bail!("a finite cell is required");
         };
         let length_z = bbox.z;
+        // Cell side lengths are not validated on input, so a nonsensical box would otherwise
+        // divide by zero here and silently poison every bin with NaN.
+        if length_z <= 0.0 || volume <= 0.0 || !length_z.is_finite() || !volume.is_finite() {
+            anyhow::bail!(
+                "a cell with positive volume and z-length is required; \
+                 got volume = {volume}, Lz = {length_z}"
+            );
+        }
         // The cross-section is the same at every height, so the volume fixes it exactly. Taking
         // it from the bounding box instead would overestimate a cylinder or a hexagonal prism.
         let area = volume / length_z;
@@ -147,6 +155,18 @@ mod tests {
     fn non_prismatic_and_endless_cells_are_rejected() {
         assert!(ZGrid::from_cell(&Cell::Sphere(Sphere::new(10.0)), 1.0).is_err());
         assert!(ZGrid::from_cell(&Cell::Endless(Endless::default()), 1.0).is_err());
+    }
+
+    /// Cell side lengths are not validated on input, so a degenerate box reaches this far.
+    #[test]
+    fn degenerate_cells_are_rejected() {
+        for (a, b, c) in [(10.0, 10.0, 0.0), (10.0, 10.0, -5.0), (0.0, 10.0, 10.0)] {
+            let cell = Cell::Cuboid(Cuboid::new(a, b, c));
+            assert!(
+                ZGrid::from_cell(&cell, 1.0).is_err(),
+                "accepted a cuboid of {a}x{b}x{c}"
+            );
+        }
     }
 
     #[test]
