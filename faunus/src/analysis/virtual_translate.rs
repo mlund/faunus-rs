@@ -282,7 +282,7 @@ impl<T: Context> Analyze<T> for VirtualTranslate {
         self.widom.len()
     }
 
-    fn to_yaml(&self) -> Option<serde_yml::Value> {
+    fn results(&self) -> Option<serde_yml::Value> {
         let mut map = serde_yml::Mapping::new();
         map.try_insert("displacement", self.displacement)?;
         map.try_insert("num_samples", self.widom.len())?;

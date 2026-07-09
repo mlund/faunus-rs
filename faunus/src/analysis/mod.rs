@@ -348,9 +348,22 @@ pub trait Analyze<T: Context>: Debug + Info {
         Ok(())
     }
 
-    /// Return a YAML representation of the analysis results, if any.
-    fn to_yaml(&self) -> Option<serde_yml::Value> {
+    /// Build the results mapping. Called only when at least one sample was taken, so an
+    /// implementation never has to guard against dividing by zero or publishing a mean of nothing.
+    fn results(&self) -> Option<serde_yml::Value> {
         None
+    }
+
+    /// Results for `output.yaml`, or `None` when nothing was sampled.
+    ///
+    /// Analyses used to guard this themselves and three of them forgot, publishing `.inf` and
+    /// `.nan` — an empty [`WidomAccumulator`](crate::analysis::widom::WidomAccumulator) reports a
+    /// free energy of `+inf`, and an empty `WeightedMean` reports `NaN`. The guard lives here now.
+    fn to_yaml(&self) -> Option<serde_yml::Value> {
+        if self.num_samples() == 0 {
+            return None;
+        }
+        self.results()
     }
 
     /// Override the sampling frequency. Used by `rerun` to sample every frame.
@@ -653,32 +666,32 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
         assert!(Frequency::End.should_perform_at_end());
     }
 
-    /// BUG, pinned: three analyses skip the `num_samples == 0` guard and put `.inf` / `.nan` into
-    /// `output.yaml`. Their accumulators are honest — `WidomAccumulator::mean_free_energy` returns
-    /// `INFINITY` with no samples — but `to_yaml` publishes it.
+    /// Was a bug: three analyses skipped the `num_samples == 0` guard and published `.inf`/`.nan`
+    /// (`WidomAccumulator::mean_free_energy` is `+inf` with no samples). The guard now lives in the
+    /// framework's `to_yaml`, so `results()` is only ever called with something to report.
     #[test]
-    fn zero_sample_yaml_emits_non_finite_numbers() {
+    fn zero_sample_yaml_is_omitted_rather_than_non_finite() {
         let builder: crate::analysis::VirtualVolumeMoveBuilder =
             serde_yml::from_str("{dV: 0.5, method: Isotropic, frequency: !Every 10}").unwrap();
         let analysis = builder.build(2.5).unwrap();
         assert_eq!(Analyze::<Backend>::num_samples(&analysis), 0);
+        assert!(Analyze::<Backend>::to_yaml(&analysis).is_none());
 
-        let yaml =
-            Analyze::<Backend>::to_yaml(&analysis).expect("emits a mapping despite 0 samples");
-        let non_finite = yaml
+        // The accumulator itself is unchanged: it still honestly reports +inf for nothing.
+        let raw = Analyze::<Backend>::results(&analysis).expect("results() still builds a mapping");
+        assert!(raw
             .as_mapping()
             .unwrap()
-            .iter()
-            .filter_map(|(key, value)| {
-                let number = value.as_f64()?;
-                (!number.is_finite()).then(|| key.as_str().unwrap_or("?").to_string())
-            })
-            .collect::<Vec<_>>();
-        assert_eq!(
-            non_finite,
-            vec!["mean_free_energy"],
-            "published as +inf with zero samples (WidomAccumulator::mean_free_energy)"
-        );
+            .values()
+            .any(|value| value.as_f64().is_some_and(|n| !n.is_finite())));
+    }
+
+    /// Every analysis that reports something must be silent before its first sample.
+    #[test]
+    fn no_analysis_reports_before_its_first_sample() {
+        let counter = Counter::new(Frequency::Every(1));
+        assert_eq!(Analyze::<Backend>::num_samples(&counter), 0);
+        assert!(Analyze::<Backend>::to_yaml(&counter).is_none());
     }
 
     /// `num_samples` means *frames* in most analyses but *group·frames* in `shape` and

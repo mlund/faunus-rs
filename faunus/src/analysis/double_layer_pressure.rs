@@ -431,7 +431,7 @@ impl<T: Context> Analyze<T> for DoubleLayerPressure {
         self.num_samples
     }
 
-    fn to_yaml(&self) -> Option<serde_yml::Value> {
+    fn results(&self) -> Option<serde_yml::Value> {
         self.report()
     }
 }

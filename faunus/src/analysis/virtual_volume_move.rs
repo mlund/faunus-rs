@@ -235,7 +235,7 @@ impl<T: Context> Analyze<T> for VirtualVolumeMove {
         self.widom.len()
     }
 
-    fn to_yaml(&self) -> Option<serde_yml::Value> {
+    fn results(&self) -> Option<serde_yml::Value> {
         let mut map = serde_yml::Mapping::new();
         map.try_insert("dV", self.volume_displacement)?;
         map.try_insert("method", format!("{:?}", self.method))?;

@@ -353,7 +353,7 @@ impl<T: Context> Analyze<T> for StructureWriter {
         self.num_samples
     }
 
-    fn to_yaml(&self) -> Option<serde_yml::Value> {
+    fn results(&self) -> Option<serde_yml::Value> {
         let mut map = serde_yml::Mapping::new();
         map.try_insert("file", &self.output_file)?;
         map.try_insert("num_samples", self.num_samples)?;

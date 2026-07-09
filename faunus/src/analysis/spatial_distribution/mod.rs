@@ -384,7 +384,7 @@ impl<T: Context> Analyze<T> for SpatialDistribution {
         Ok(())
     }
 
-    fn to_yaml(&self) -> Option<serde_yml::Value> {
+    fn results(&self) -> Option<serde_yml::Value> {
         if self.num_samples == 0 {
             return None;
         }

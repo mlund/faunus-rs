@@ -431,7 +431,7 @@ impl<T: Context> Analyze<T> for ScaledWidomInsertion {
         self.num_samples
     }
 
-    fn to_yaml(&self) -> Option<serde_yml::Value> {
+    fn results(&self) -> Option<serde_yml::Value> {
         if self.num_samples == 0 {
             return None;
         }

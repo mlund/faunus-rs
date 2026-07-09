@@ -293,7 +293,7 @@ impl<T: Context> Analyze<T> for DensityProfile {
         self.write_profile()
     }
 
-    fn to_yaml(&self) -> Option<serde_yml::Value> {
+    fn results(&self) -> Option<serde_yml::Value> {
         self.report()
     }
 }

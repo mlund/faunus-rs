@@ -157,7 +157,7 @@ impl<T: Context> Analyze<T> for MeanAlongCoordinate {
         self.write_output()
     }
 
-    fn to_yaml(&self) -> Option<serde_yml::Value> {
+    fn results(&self) -> Option<serde_yml::Value> {
         if self.bins.is_empty() {
             return None;
         }
