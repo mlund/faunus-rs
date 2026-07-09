@@ -399,7 +399,7 @@ impl<T: Context + 'static> MarkovChain<T> {
     /// Run end-of-simulation analyses (e.g. `Trajectory` with `frequency: End`)
     /// and write accumulated results to disk.
     pub fn finalize_analyses(&mut self) -> Result<()> {
-        self.analyses.finalize(&self.context)?;
+        self.analyses.finalize(&self.context, self.step)?;
         self.analyses.write_to_disk()
     }
 

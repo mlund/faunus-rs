@@ -447,7 +447,7 @@ fn run_rerun(
 
     log::info!("Processed {frame_index} frames");
 
-    analyses.finalize(&context)?;
+    analyses.finalize(&context, frame_index)?;
     analyses.write_to_disk()?;
 
     write_yaml(&medium, yaml_output, Some("medium"))?;

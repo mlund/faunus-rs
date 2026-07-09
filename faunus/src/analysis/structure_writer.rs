@@ -283,9 +283,10 @@ impl<T: Context> Analyze<T> for StructureWriter {
         self.write_frame(context, step)
     }
 
-    fn finalize(&mut self, context: &T) -> anyhow::Result<()> {
+    fn finalize(&mut self, context: &T, step: usize) -> anyhow::Result<()> {
+        // Writes the frame *and* counts it, like every other End-frequency analysis now does.
         if self.frequency.should_perform_at_end() {
-            self.write_frame(context, self.num_samples)?;
+            self.perform_sample(context, step, 1.0)?;
         }
         if self.num_samples > 0 {
             // into_owned() releases the borrow on self.group_cache so self.output_file is accessible

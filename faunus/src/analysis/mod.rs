@@ -18,7 +18,6 @@ use crate::{Context, Info};
 use anyhow::Result;
 use core::fmt::Debug;
 use interatomic::coulomb::Temperature;
-use rand::Rng;
 use serde::{Deserialize, Serialize};
 use serde_yml::Value;
 use std::path::{Path, PathBuf};
@@ -64,8 +63,6 @@ pub use widom_rotation::{WidomRotation, WidomRotationBuilder};
 pub enum Frequency {
     /// Every `n` steps
     Every(usize),
-    /// With probability `p` regardless of number of affected molecules or atoms
-    Probability(f64),
     /// Once at step `n`
     Once(usize),
     /// Once at the very last step
@@ -75,8 +72,7 @@ pub enum Frequency {
 impl Frequency {
     /// Check if action, typically a move or analysis, should be performed at given step.
     ///
-    /// This handles `Every(n)` and `Once(n)` variants. For `Probability` use
-    /// [`should_perform_randomly`](Self::should_perform_randomly), and for `End` use
+    /// Handles `Every(n)` and `Once(n)`. `End` samples once from `finalize` instead; see
     /// [`should_perform_at_end`](Self::should_perform_at_end).
     #[must_use]
     #[allow(clippy::manual_is_multiple_of)] // is_multiple_of is not const
@@ -84,7 +80,7 @@ impl Frequency {
         match self {
             Self::Every(n) => step % *n == 0,
             Self::Once(n) => step == *n,
-            Self::Probability(_) | Self::End => false,
+            Self::End => false,
         }
     }
 
@@ -94,18 +90,6 @@ impl Frequency {
     #[must_use]
     pub const fn should_perform_at_end(&self) -> bool {
         matches!(self, Self::End)
-    }
-
-    /// Check if action should be performed based on probability.
-    ///
-    /// For `Probability(p)`, returns `true` with probability `p`.
-    /// Returns `false` for all other variants.
-    #[must_use]
-    pub fn should_perform_randomly(&self, rng: &mut impl Rng) -> bool {
-        match self {
-            Self::Probability(p) => rng.gen_bool(*p),
-            _ => false,
-        }
     }
 }
 
@@ -332,9 +316,14 @@ pub trait Analyze<T: Context>: Debug + Info {
     /// Total number of samples which is the sum of successful calls to `sample()`.
     fn num_samples(&self) -> usize;
 
-    /// Called once after the simulation ends for `End`-frequency work.
-    fn finalize(&mut self, context: &T) -> Result<()> {
-        let _ = context;
+    /// Called once after the simulation ends, at the final `step`.
+    ///
+    /// The default samples once when the frequency is `End`. Analyses used to have to override
+    /// this to honour `End` at all, and exactly one of them did.
+    fn finalize(&mut self, context: &T, step: usize) -> Result<()> {
+        if self.frequency().should_perform_at_end() {
+            self.perform_sample(context, step, 1.0)?;
+        }
         Ok(())
     }
 
@@ -424,8 +413,8 @@ impl<T: Context> Analyze<T> for AnalysisCollection<T> {
     fn frequency(&self) -> Frequency {
         Frequency::Every(1)
     }
-    fn finalize(&mut self, context: &T) -> Result<()> {
-        self.iter_mut().try_for_each(|a| a.finalize(context))
+    fn finalize(&mut self, context: &T, step: usize) -> Result<()> {
+        self.iter_mut().try_for_each(|a| a.finalize(context, step))
     }
     fn write_to_disk(&mut self) -> Result<()> {
         self.iter_mut().try_for_each(|a| a.write_to_disk())
@@ -592,8 +581,11 @@ mod framework_characterization {
         fn num_samples(&self) -> usize {
             self.num_samples
         }
-        fn finalize(&mut self, _context: &T) -> Result<()> {
+        fn finalize(&mut self, context: &T, step: usize) -> Result<()> {
             self.finalized = true;
+            if self.frequency.should_perform_at_end() {
+                self.perform_sample(context, step, 1.0)?;
+            }
             Ok(())
         }
     }
@@ -637,33 +629,46 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
         assert_eq!(sample_over_steps(Frequency::Once(99), 10), 0);
     }
 
-    /// BUG, pinned: `Probability` never samples. `should_perform` returns false for it and
-    /// `should_perform_randomly` is called from nowhere in the whole crate.
+    /// `Frequency::Probability` is gone. It never sampled anything — `should_perform` returned
+    /// false for it and `should_perform_randomly` was called from nowhere — so a YAML file that
+    /// asked for it got silence. It is now a parse error instead.
     #[test]
-    fn probability_frequency_never_samples() {
-        assert_eq!(sample_over_steps(Frequency::Probability(1.0), 100), 0);
-        assert!(!Frequency::Probability(1.0).should_perform(0));
+    fn probability_frequency_no_longer_parses() {
+        assert!(serde_yml::from_str::<Frequency>("!Probability 1.0").is_err());
+        assert!(serde_yml::from_str::<Frequency>("!Every 10").is_ok());
+        assert!(serde_yml::from_str::<Frequency>("!End").is_ok());
     }
 
-    /// BUG, pinned: `End` never samples during the run, and the default `finalize` does nothing
-    /// about it. Only `structure_writer` overrides `finalize` to honour it.
+    /// Was a bug: `End` never sampled during the run and the default `finalize` ignored it, so
+    /// only `structure_writer` honoured it. The default now samples once at the final step.
     #[test]
-    fn end_frequency_never_samples_and_the_default_finalize_ignores_it() {
+    fn end_frequency_samples_exactly_once_from_finalize() {
         let context = context();
         let mut counter = Counter::new(Frequency::End);
         for step in 0..10 {
             Analyze::sample(&mut counter, &context, step).unwrap();
         }
-        assert_eq!(Analyze::<Backend>::num_samples(&counter), 0);
-
-        Analyze::finalize(&mut counter, &context).unwrap();
-        assert!(counter.finalized, "finalize ran");
         assert_eq!(
             Analyze::<Backend>::num_samples(&counter),
             0,
-            "but it sampled nothing"
+            "End does not sample during the run"
         );
+
+        Analyze::finalize(&mut counter, &context, 9).unwrap();
+        assert_eq!(Analyze::<Backend>::num_samples(&counter), 1);
         assert!(Frequency::End.should_perform_at_end());
+    }
+
+    /// ...and a normal frequency must not sample an extra time at the end.
+    #[test]
+    fn finalize_does_not_double_sample_a_periodic_analysis() {
+        let context = context();
+        let mut counter = Counter::new(Frequency::Every(1));
+        for step in 0..3 {
+            Analyze::sample(&mut counter, &context, step).unwrap();
+        }
+        Analyze::finalize(&mut counter, &context, 2).unwrap();
+        assert_eq!(Analyze::<Backend>::num_samples(&counter), 3);
     }
 
     /// Was a bug: three analyses skipped the `num_samples == 0` guard and published `.inf`/`.nan`

@@ -25,7 +25,8 @@ Frequency         | Description
 `!Every N`        | Every N steps
 `!Once N`         | Once at step N
 `!End`            | Once after the last step
-`!Probability P`  | Each step with probability P (0–1)
+
+`!End` works for every analysis, not just `!Trajectory`.
 
 ### Output file formats
 
