@@ -935,12 +935,23 @@ From the trial energies `u(Ω)` the analysis reports, by Widom perturbation
 
 $$W = -k_BT \ln\left\langle \frac{1}{M}\sum_k e^{-u_k/k_BT}\right\rangle$$
 
-the orientation-averaged free energy `W`, the mean interaction, the orientational
-entropy (the order parameter–free energy link of
-[Akke et al. 1993](https://doi.org/10.1021/ja00074a073)), and the effective
-number of accessible orientations `N_eff`. For each
-requested molecular vector it also reports the Lipari–Szabo order parameter
-([Lipari & Szabo 1982](https://doi.org/10.1021/ja00381a009)):
+the orientation-averaged free energy `W`, the mean interaction, and the effective
+number of accessible orientations `N_eff`. The analysis also reports how strongly
+the surroundings restrict the molecule, as an entropy relative to free rotation:
+
+$$S_\text{orient}/R = -\sum_k w_k \ln (M w_k)$$
+
+where `w_k` is the Boltzmann weight of trial orientation `k`. The entropy follows
+directly from the sampled orientations and assumes nothing about the shape of the
+orientational well. It is dimensionless and never positive; zero means the
+molecule rotates freely. That restricting a molecule's orientation carries a free
+energy cost is the idea of
+[Akke et al. 1993](https://doi.org/10.1021/ja00074a073). Together with `W` and the
+mean interaction, the entropy splits the free energy into energetic and entropic
+parts.
+
+For each requested molecular vector the analysis also reports the Lipari–Szabo
+order parameter ([Lipari & Szabo 1982](https://doi.org/10.1021/ja00381a009)):
 
 $$S^2 = \frac{3}{2}\sum_{\alpha\beta}\langle v_\alpha v_\beta\rangle^2 - \frac{1}{2}$$
 
@@ -989,10 +1000,14 @@ Key            | Required | Default | Description
 
 ### Output
 
-The YAML output includes `W` (kJ/mol), the mean interaction, the orientational
-entropy, `N_eff`, and the per-vector and mean `S²`, each with a statistical
-error. Torque and stiffness are added when enabled. If `file` is given, each
-sampled step writes columns `step`, `W/kJ/mol`, `mean_S2`, and `N_eff`.
+The YAML output includes `W`, the mean interaction, the orientational entropy,
+`N_eff`, and the per-vector and mean `S²`, each with a statistical error. Torque
+and stiffness are added when enabled. If `file` is given, each sampled step writes
+columns `step`, `W/kJ/mol`, `mean_S2`, and `N_eff`.
+
+`W`, the mean interaction, and the stiffness are in kJ/mol, the torque is in kT
+per radian, and the entropy and `S²` are dimensionless. Each output key names its
+own unit.
 
 ---
 

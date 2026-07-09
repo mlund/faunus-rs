@@ -24,12 +24,20 @@
 //! which we reduce to:
 //! - the orientationally-averaged one-body potential of mean force
 //!   `W = -RT·ln⟨M⁻¹ Σ exp(-u/RT)⟩` (compare with an umbrella profile);
-//! - the mean interaction energy and orientational configurational entropy —
-//!   the order-parameter/free-energy connection of
-//!   [Akke et al. (1993)](https://doi.org/10.1021/ja00074a073);
+//! - the mean interaction energy `⟨u⟩`;
+//! - the orientational entropy relative to a free rotor,
+//!   `S_orient/R = -Σₖ wₖ ln(M wₖ)`, taken straight from the Boltzmann weights
+//!   `wₖ` of the trial orientations. This is the exact SO(3) entropy, with no
+//!   model for the shape of the well; the restriction-of-order/free-energy
+//!   connection is due to [Akke et al. (1993)](https://doi.org/10.1021/ja00074a073),
+//!   whose per-vector `S² → entropy` mapping we do *not* use. Together with `W`
+//!   and `⟨u⟩` it forms an `F = U - TS` decomposition;
 //! - the Lipari–Szabo generalized order parameter `S²` for chosen molecular
 //!   vectors ([Lipari & Szabo (1982)](https://doi.org/10.1021/ja00381a009));
 //! - optionally the mean torque and the librational stiffness of the cage.
+//!
+//! `W`, `⟨u⟩` and the stiffness are in kJ/mol; the entropy is dimensionless
+//! (`≤ 0`, zero for a free rotor) and the torque is in kT per radian.
 //!
 //! With implicit solvent these energies are potentials of mean force (free
 //! energies relative to pure solvent), not mechanical energies.
@@ -67,7 +75,9 @@ const VARIANCE_EPSILON: f64 = 1e-12;
 /// Low-discrepancy set of `n` orientations sampled uniformly on SO(3).
 ///
 /// Deterministic super-Fibonacci spiral of unit quaternions with equal weights,
-/// so `M⁻¹ Σ f(Ωₖ)` is an unbiased estimate of the Haar average of `f`.
+/// so `M⁻¹ Σ f(Ωₖ)` approaches the Haar average of `f`. Being quasi-random rather
+/// than random, it converges faster than plain Monte Carlo but carries a
+/// discrepancy-bounded error rather than a statistical one.
 /// See [Alexa (2022)](https://doi.org/10.1109/CVPR52688.2022.00811).
 fn super_fibonacci(n: usize) -> Vec<UnitQuaternion> {
     use std::f64::consts::TAU;
@@ -111,7 +121,13 @@ impl VectorSpec {
 
     /// Lab-frame reference direction (unit) for group `gi` at its current
     /// orientation. Each trial orientation later rotates this rigidly.
-    fn reference<T: Context>(&self, gi: usize, indices: &[usize], context: &T) -> Result<Point> {
+    fn reference<T: Context>(
+        &self,
+        gi: usize,
+        indices: &[usize],
+        com: &Point,
+        context: &T,
+    ) -> Result<Point> {
         let dir = match self {
             Self::Pair([i, j]) => {
                 let (a, b) = (indices[*i], indices[*j]);
@@ -120,14 +136,12 @@ impl VectorSpec {
                     .distance(&context.position(a), &context.position(b))
             }
             Self::Axis(axis) => {
-                let group = &context.groups()[gi];
-                let com = group.mass_center().copied().unwrap_or_else(Point::zeros);
                 let positions_masses = indices
                     .iter()
                     .map(|&i| (context.position(i), context.atom_mass(i)));
                 let tensor = GyrationTensor::from_positions_masses_com(
                     positions_masses,
-                    &com,
+                    com,
                     context.cell(),
                 )
                 .ok_or_else(|| anyhow::anyhow!("cannot form gyration tensor for axis vector"))?;
@@ -449,21 +463,23 @@ impl WidomRotation {
             let theta = (q * mean.inverse()).scaled_axis();
             covariance += w * (theta * theta.transpose());
         }
-        let mut constants: Vec<f64> = covariance
+        // Sort softest first so a given accumulator always tracks the same
+        // principal axis; roundoff can make a vanishing variance slightly negative.
+        let mut variances: Vec<f64> = covariance
             .symmetric_eigen()
             .eigenvalues
             .iter()
-            .map(|&var| {
-                if var > VARIANCE_EPSILON {
-                    thermal_energy / var
-                } else {
-                    f64::NAN
-                }
-            })
+            .copied()
             .collect();
-        constants.sort_by(f64::total_cmp);
-        for (accumulator, &k) in stiffness.iter_mut().zip(&constants) {
-            accumulator.add(k);
+        variances.sort_by(|a, b| b.total_cmp(a));
+        for (accumulator, &variance) in stiffness.iter_mut().zip(&variances) {
+            // A vanishing variance means the cloud is degenerate along this libration
+            // axis and the stiffness diverges. Skip that axis alone — dropping the
+            // snapshot would discard the well-defined axes, and recording a non-finite
+            // value would poison the block average for good.
+            if variance.is_finite() && variance > VARIANCE_EPSILON {
+                accumulator.add(thermal_energy / variance);
+            }
         }
     }
 
@@ -533,7 +549,7 @@ impl<T: Context> Analyze<T> for WidomRotation {
             let references = self
                 .vectors
                 .iter()
-                .map(|v| v.reference(gi, &indices, context))
+                .map(|v| v.reference(gi, &indices, &com, context))
                 .collect::<Result<Vec<_>>>()?;
 
             let reference_energy = group_energy_kt(&trial, gi, self.thermal_energy);
@@ -609,9 +625,17 @@ impl<T: Context> Analyze<T> for WidomRotation {
         }
 
         if let Some(stiffness) = &self.stiffness {
+            // An axis that was degenerate in every snapshot has no samples; report it
+            // as null rather than letting an empty average read as zero stiffness,
+            // which would claim free rotation about an axis that is in fact locked.
             let values: Vec<serde_yml::Value> = stiffness
                 .iter()
-                .filter_map(|accumulator| serde_yml::to_value(accumulator.summary()).ok())
+                .map(|accumulator| match accumulator.n() {
+                    0 => serde_yml::Value::Null,
+                    _ => {
+                        serde_yml::to_value(accumulator.summary()).unwrap_or(serde_yml::Value::Null)
+                    }
+                })
                 .collect();
             map.insert(
                 "stiffness/kJ_per_mol_per_rad2".into(),
@@ -685,6 +709,62 @@ mod tests {
         single[7] = 1.0;
         let locked = order_parameter(&quaternions, &single, &reference);
         assert_approx_eq!(f64, locked, 1.0, epsilon = 1e-10);
+    }
+
+    /// A fully collapsed cloud has zero librational variance about every axis, so
+    /// every stiffness diverges and nothing may be recorded.
+    #[test]
+    fn stiffness_skips_fully_degenerate_orientation_cloud() {
+        let mut stiffness = std::array::from_fn(|_| BlockAverage::new());
+        let identical = vec![UnitQuaternion::identity(); 4];
+        let weights = vec![0.25; 4];
+
+        WidomRotation::accumulate_stiffness(&mut stiffness, &identical, &weights, 4.0, 2.5);
+
+        for accumulator in &stiffness {
+            assert_eq!(
+                accumulator.n(),
+                0,
+                "diverging stiffness must not be recorded"
+            );
+        }
+    }
+
+    /// A cloud that librates only within a plane is degenerate about the plane
+    /// normal alone. The two well-defined axes must still be recorded.
+    #[test]
+    fn stiffness_skips_only_the_degenerate_axis() {
+        let mut stiffness = std::array::from_fn(|_| BlockAverage::new());
+        let angle = 0.1;
+        let planar: Vec<UnitQuaternion> = [
+            Vector3::x_axis(),
+            Vector3::x_axis(),
+            Vector3::y_axis(),
+            Vector3::y_axis(),
+        ]
+        .iter()
+        .zip([angle, -angle, angle, -angle])
+        .map(|(axis, a)| UnitQuaternion::from_axis_angle(axis, a))
+        .chain(std::iter::once(UnitQuaternion::identity()))
+        .collect();
+        let weights = vec![0.2; 5];
+        let thermal_energy = 2.5;
+
+        WidomRotation::accumulate_stiffness(&mut stiffness, &planar, &weights, 5.0, thermal_energy);
+
+        // Softest first: the two in-plane axes carry the samples, the collapsed
+        // out-of-plane axis carries none.
+        let variance = 0.4 * angle * angle;
+        for accumulator in &stiffness[..2] {
+            assert_eq!(accumulator.n(), 1);
+            assert_approx_eq!(
+                f64,
+                accumulator.mean(),
+                thermal_energy / variance,
+                epsilon = 1e-6
+            );
+        }
+        assert_eq!(stiffness[2].n(), 0, "degenerate axis must not be recorded");
     }
 
     #[test]
