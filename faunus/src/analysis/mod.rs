@@ -751,13 +751,10 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
         assert_eq!(Analyze::<Backend>::num_samples(&analysis), 0);
         assert!(Analyze::<Backend>::to_yaml(&analysis).is_none());
 
-        // The accumulator itself is unchanged: it still honestly reports +inf for nothing.
-        let raw = Analyze::<Backend>::results(&analysis).expect("results() still builds a mapping");
-        assert!(raw
-            .as_mapping()
-            .unwrap()
-            .values()
-            .any(|value| value.as_f64().is_some_and(|n| !n.is_finite())));
+        // The framework's frame-count guard is not sufficient on its own: an analysis whose
+        // `perform_sample` can return early counts a frame without feeding its accumulator, so it
+        // also guards `results()` on the accumulator. Both layers must agree on "nothing to say".
+        assert!(Analyze::<Backend>::results(&analysis).is_none());
     }
 
     /// Every analysis that reports something must be silent before its first sample.

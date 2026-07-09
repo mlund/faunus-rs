@@ -163,7 +163,7 @@ impl<T: Context> Analyze<T> for MeanAlongCoordinate {
         map.try_insert("mean_property", self.cv_mean.mean())?;
         map.try_insert("coordinate", &self.coordinate.axis().name)?;
         map.try_insert("mean_coordinate", self.coord_mean.mean())?;
-        map.try_insert("num_samples", self.cv_mean.len() as usize)?;
+        map.try_insert("num_samples", self.sampling.num_samples())?;
         map.try_insert("num_bins", self.bins.len())?;
         Some(serde_yml::Value::Mapping(map))
     }

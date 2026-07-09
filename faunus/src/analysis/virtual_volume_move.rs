@@ -234,11 +234,15 @@ impl<T: Context> Analyze<T> for VirtualVolumeMove {
     }
 
     fn results(&self) -> Option<serde_yml::Value> {
+        if self.widom.is_empty() {
+            return None;
+        }
         let mut map = serde_yml::Mapping::new();
         map.try_insert("dV", self.volume_displacement)?;
         map.try_insert("method", format!("{:?}", self.method))?;
         map.try_insert("block_size", self.block_size)?;
-        map.try_insert("num_samples", self.widom.len())?;
+        map.try_insert("num_samples", self.sampling.num_samples())?;
+        map.try_insert("num_perturbations", self.widom.len())?;
         map.try_insert("mean_free_energy", self.widom.mean_free_energy())?;
 
         // Mean comes from the total accumulator (finite from sample 1);

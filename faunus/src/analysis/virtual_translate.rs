@@ -281,9 +281,15 @@ impl<T: Context> Analyze<T> for VirtualTranslate {
     }
 
     fn results(&self) -> Option<serde_yml::Value> {
+        // A frame is counted even when `perform_sample` returns early, so the framework's
+        // frame-count guard is not enough: key on the accumulator that feeds every number below.
+        if self.widom.is_empty() {
+            return None;
+        }
         let mut map = serde_yml::Mapping::new();
         map.try_insert("displacement", self.displacement)?;
-        map.try_insert("num_samples", self.widom.len())?;
+        map.try_insert("num_samples", self.sampling.num_samples())?;
+        map.try_insert("num_perturbations", self.widom.len())?;
         map.try_insert("mean_force", self.mean_force())?;
         map.try_insert("mean_free_energy", self.widom.mean_free_energy())?;
         Some(serde_yml::Value::Mapping(map))
@@ -317,6 +323,21 @@ mod tests {
             .frequency(Frequency::Every(1))
             .build(RT_298)
             .unwrap()
+    }
+
+    /// A frame can be counted without contributing: `perform_sample` returns early when the
+    /// displacement is zero or nothing matches the selection. Reporting must key on the
+    /// accumulator, not the frame counter, or an empty Widom average (+inf) reaches output.yaml.
+    #[test]
+    fn counted_but_uncollected_frames_do_not_publish_infinities() {
+        let mut vt = build_vt(0.0); // zero displacement: perform_sample early-returns
+        vt.sampling.set_num_samples(5); // ...yet five frames were counted
+
+        assert!(vt.widom.is_empty());
+        assert!(
+            <VirtualTranslate as Analyze<crate::backend::Backend>>::to_yaml(&vt).is_none(),
+            "an empty accumulator must not be reported"
+        );
     }
 
     /// Deserialize YAML into AnalysisBuilder list and extract the VirtualTranslateBuilder at `index`.
