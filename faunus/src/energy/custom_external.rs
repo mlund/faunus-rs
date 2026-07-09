@@ -142,14 +142,13 @@ fn affected(
     }
     let mut cache = cache.borrow_mut();
     let by_atoms = cache.targets_atoms();
-    if cache.resolve(context).is_empty() && !warned_empty.replace(true) {
+    let (selection, selected) = cache.resolve_with_selection(context);
+    if selected.is_empty() && !warned_empty.replace(true) {
         let kind = if by_atoms { "atoms" } else { "groups" };
         log::warn!(
-            "customexternal: selection '{}' matched no {kind} — energy will always be zero",
-            cache.selection()
+            "customexternal: selection '{selection}' matched no {kind} — energy will always be zero"
         );
     }
-    let selected = cache.resolve(context); // cheap: the generation is unchanged
     match change {
         Change::Everything | Change::Volume(..) => selected.to_vec(),
         Change::SingleGroup(gi, gc) => {

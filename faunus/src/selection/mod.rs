@@ -126,6 +126,17 @@ impl CachedSelection {
 
     /// Currently matching indices, re-resolved only if the system has changed relevantly.
     pub fn resolve(&mut self, context: &impl crate::ParticleSystem) -> &[usize] {
+        self.resolve_with_selection(context).1
+    }
+
+    /// Like [`resolve`](Self::resolve), but also hands back the selection.
+    ///
+    /// A caller that must report on an empty result would otherwise need a second `resolve` just
+    /// to borrow the selection again — wasteful on the energy hot path.
+    pub fn resolve_with_selection(
+        &mut self,
+        context: &impl crate::ParticleSystem,
+    ) -> (&Selection, &[usize]) {
         let generation = self.selection.generation(context);
         if self.generation != Some(generation) {
             self.indices = match self.target {
@@ -134,7 +145,7 @@ impl CachedSelection {
             };
             self.generation = Some(generation);
         }
-        &self.indices
+        (&self.selection, &self.indices)
     }
 }
 

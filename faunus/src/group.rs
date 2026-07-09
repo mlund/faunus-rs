@@ -462,7 +462,8 @@ pub trait GroupCollection {
     /// Set atom kind index without refreshing the owning group's geometry.
     ///
     /// Only for bulk restores that recompute every group's geometry afterwards; a per-particle
-    /// refresh would then be quadratic. Still bumps the atom-kind generation.
+    /// refresh would then be quadratic. Like [`set_atom_kind`](Self::set_atom_kind), it bumps the
+    /// atom-kind generation when — and only when — the kind actually changes.
     fn set_atom_kind_unchecked(&mut self, index: usize, atom_id: usize);
 
     /// Counter bumped whenever any particle's atom kind changes.
