@@ -609,3 +609,179 @@ mod tests {
         assert_approx_eq!(f64, pos(7).z, pos(8).z, epsilon = 0.0000001);
     }
 }
+
+/// Pins the pairing between each move's `Change` and the `Transform` it applies.
+///
+/// `ProposedMove` today carries the two as independent public fields, and nothing checks that they
+/// agree: `transform` drives the mutation, `change` drives which energy terms recompute. These
+/// tests record the pairing every move currently produces, so the upcoming typed constructors can
+/// be shown to reproduce it exactly.
+#[cfg(test)]
+mod proposal_characterization {
+    use super::*;
+    use crate::backend::Backend;
+    use crate::group::ParticleSelection;
+    use crate::propagate::{Displacement, MoveProposal, MoveTarget, ProposedMove};
+    use crate::transform::Transform;
+    use crate::{Change, GroupChange};
+    use rand::{rngs::StdRng, SeedableRng};
+
+    /// A bonded 4-mer (for pivot/crankshaft) plus a monatomic species (for translate/rotate).
+    const SYSTEM: &str = r#"
+atoms:
+  - {name: A, mass: 1.0, charge: 0.0, sigma: 1.0}
+  - {name: B, mass: 1.0, charge: 0.0, sigma: 1.0}
+molecules:
+  - name: POLY
+    atoms: [A, A, A, A]
+    bonds:
+      - {index: [0, 1], kind: !Harmonic {k: 100.0, req: 1.0}}
+      - {index: [1, 2], kind: !Harmonic {k: 100.0, req: 1.0}}
+      - {index: [2, 3], kind: !Harmonic {k: 100.0, req: 1.0}}
+  - name: MOL
+    atoms: [B]
+system:
+  cell: !Cuboid [30.0, 30.0, 30.0]
+  medium: {permittivity: !Vacuum, temperature: 300.0}
+  energy: {}
+  blocks:
+    - molecule: POLY
+      N: 1
+      insert: !Manual [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [2.0, 0.0, 0.0], [3.0, 0.0, 0.0]]
+    - molecule: MOL
+      N: 2
+      insert: !Manual [[8.0, 0.0, 0.0], [-8.0, 0.0, 0.0]]
+propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
+"#;
+
+    fn context() -> Backend {
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(tmp.path(), SYSTEM).unwrap();
+        Backend::new(tmp.path(), None, &mut rand::thread_rng()).unwrap()
+    }
+
+    fn rng() -> StdRng {
+        StdRng::seed_from_u64(0xFA_u64)
+    }
+
+    fn propose<M: MoveProposal<Backend>>(mut mv: M, context: &Backend) -> ProposedMove {
+        mv.propose_move(context, &mut rng()).expect("a move")
+    }
+
+    #[test]
+    fn translate_molecule_pairs_rigid_body_with_translate() {
+        let context = context();
+        let mut mv: TranslateMolecule = serde_yml::from_str("{molecule: MOL, dp: 0.5}").unwrap();
+        mv.finalize(&context).unwrap();
+        let proposed = propose(mv, &context);
+
+        let Change::SingleGroup(group, GroupChange::RigidBody) = proposed.change else {
+            panic!("expected SingleGroup/RigidBody, got {:?}", proposed.change);
+        };
+        let Transform::Translate(shift) = proposed.transform else {
+            panic!(
+                "expected Transform::Translate, got {:?}",
+                proposed.transform
+            );
+        };
+        assert!(matches!(proposed.target, MoveTarget::Group(g) if g == group));
+        // The reported displacement is exactly the shift the transform applies.
+        let Displacement::Distance(reported) = proposed.displacement else {
+            panic!("expected Displacement::Distance");
+        };
+        assert_eq!(reported, shift);
+        assert!(shift.norm() <= 0.5);
+    }
+
+    #[test]
+    fn rotate_molecule_pairs_rigid_body_with_rotate() {
+        let context = context();
+        let mut mv: RotateMolecule = serde_yml::from_str("{molecule: MOL, dp: 0.5}").unwrap();
+        mv.finalize(&context).unwrap();
+        let proposed = propose(mv, &context);
+
+        assert!(matches!(
+            proposed.change,
+            Change::SingleGroup(_, GroupChange::RigidBody)
+        ));
+        assert!(matches!(proposed.transform, Transform::Rotate(_)));
+        assert!(matches!(proposed.displacement, Displacement::Angle(_)));
+    }
+
+    /// The hazard, pinned. `TranslateAtom` puts a **relative** index in the change and the
+    /// **absolute** one in the transform. Both are bare `usize`, so nothing catches a swap.
+    #[test]
+    fn translate_atom_mixes_relative_and_absolute_indices() {
+        let context = context();
+        let mut mv: TranslateAtom = serde_yml::from_str("{atom: B, dp: 0.3}").unwrap();
+        mv.finalize(&context).unwrap();
+        let proposed = propose(mv, &context);
+
+        let Change::SingleGroup(group, GroupChange::PartialUpdate(relative)) = &proposed.change
+        else {
+            panic!("expected PartialUpdate, got {:?}", proposed.change);
+        };
+        let Transform::PartialTranslate(_, ParticleSelection::AbsIndex(absolute)) =
+            &proposed.transform
+        else {
+            panic!("expected PartialTranslate/AbsIndex");
+        };
+        assert_eq!(relative.len(), 1);
+        assert_eq!(absolute.len(), 1);
+        // Different numbers, same particle: `relative` is group-local, `absolute` is global.
+        let group = &context.groups()[*group];
+        assert_eq!(group.to_absolute_index(relative[0]).unwrap(), absolute[0]);
+        assert_ne!(
+            relative[0], absolute[0],
+            "fixture must have a nonzero group start"
+        );
+    }
+
+    /// Pivot and crankshaft agree: both spaces are *relative*, so their two vectors are equal.
+    #[test]
+    fn pivot_and_crankshaft_use_relative_indices_on_both_sides() {
+        let context = context();
+
+        let mut pivot: PivotMove = serde_yml::from_str("{molecule: POLY, dp: 0.5}").unwrap();
+        pivot.finalize(&context).unwrap();
+        let mut crank: CrankshaftMove = serde_yml::from_str("{molecule: POLY, dp: 0.5}").unwrap();
+        crank.finalize(&context).unwrap();
+
+        for proposed in [propose(pivot, &context), propose(crank, &context)] {
+            let Change::SingleGroup(_, GroupChange::PartialUpdate(changed)) = &proposed.change
+            else {
+                panic!("expected PartialUpdate, got {:?}", proposed.change);
+            };
+            let Transform::PartialRotate(_, _, ParticleSelection::RelIndex(rotated)) =
+                &proposed.transform
+            else {
+                panic!("expected PartialRotate/RelIndex");
+            };
+            assert_eq!(
+                changed, rotated,
+                "both sides carry the same relative indices"
+            );
+            assert!(!changed.is_empty());
+        }
+    }
+
+    #[test]
+    fn volume_move_pairs_volume_change_with_volume_scale() {
+        let context = context();
+        let mut mv: VolumeMove =
+            serde_yml::from_str("{dV: 0.1, method: Isotropic, repeat: 1}").unwrap();
+        mv.finalize(&context).unwrap();
+        let proposed = propose(mv, &context);
+
+        let Change::Volume(change_policy, volumes) = proposed.change else {
+            panic!("expected Change::Volume, got {:?}", proposed.change);
+        };
+        let Transform::VolumeScale(transform_policy, new_volume) = proposed.transform else {
+            panic!("expected Transform::VolumeScale");
+        };
+        // The policy and the new volume are duplicated across the two fields, by hand.
+        assert_eq!(change_policy, transform_policy);
+        assert_eq!(volumes.new, new_volume);
+        assert!(matches!(proposed.target, MoveTarget::System));
+    }
+}

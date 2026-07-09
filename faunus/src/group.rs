@@ -790,6 +790,60 @@ impl GroupLists {
     }
 }
 
+/// Pins today's behaviour of the two index spaces before they gain distinct types.
+///
+/// Relative indices count *active* particles from the group's start; absolute indices address the
+/// global particle array. The two conversions are deliberately not inverses of each other over the
+/// whole group, and the tests below record exactly where they part company.
+#[cfg(test)]
+mod index_space_characterization {
+    use super::*;
+
+    /// Six active particles at absolute 10..16, four inactive at 16..20.
+    fn partially_active_group() -> Group {
+        let mut group = Group::new(0, 0, 10..20);
+        group.resize(GroupSize::Partial(6)).unwrap();
+        group
+    }
+
+    #[test]
+    fn relative_and_absolute_round_trip_over_active_particles() {
+        let group = partially_active_group();
+        for relative in 0..6 {
+            let absolute = group.to_absolute_index(relative).unwrap();
+            assert_eq!(absolute, 10 + relative);
+            assert_eq!(group.to_relative_index(absolute).unwrap(), relative);
+        }
+    }
+
+    #[test]
+    fn to_absolute_index_rejects_inactive_particles() {
+        let group = partially_active_group();
+        // Relative 6 exists in the capacity but is inactive.
+        assert!(group.to_absolute_index(6).is_err());
+        assert!(group.to_absolute_index(10).is_err());
+    }
+
+    /// The asymmetry: `to_relative_index` validates against the *full* range, so it happily maps an
+    /// inactive particle to a relative index that `to_absolute_index` then refuses. A future
+    /// `RelIndex` newtype must either preserve this or narrow it deliberately.
+    #[test]
+    fn to_relative_index_accepts_inactive_particles_that_to_absolute_index_rejects() {
+        let group = partially_active_group();
+        let inactive_absolute = 17;
+        let relative = group.to_relative_index(inactive_absolute).unwrap();
+        assert_eq!(relative, 7);
+        assert!(group.to_absolute_index(relative).is_err());
+    }
+
+    #[test]
+    fn to_relative_index_rejects_indices_outside_the_group() {
+        let group = partially_active_group();
+        assert!(group.to_relative_index(9).is_err());
+        assert!(group.to_relative_index(20).is_err());
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::path::Path;
