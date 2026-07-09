@@ -703,13 +703,19 @@ impl SpeciationMove {
         // N_from / (N_to + 1) for detailed balance (ESPResSo convention)
         let ln_bias = (n_from as f64).ln() - ((n_to + 1) as f64).ln();
 
+        // `SwapAtomKind` addresses the global particle array, but every index-carrying
+        // `GroupChange` is group-relative — `energy/ewald.rs` reconstructs the global index as
+        // `group.start() + rel`. Emitting the absolute index here would point Ewald at a different
+        // particle for any group that does not start at 0.
+        let rel = context.groups()[gi].to_relative_index(abs).ok()?;
+
         Some((
             SpeciationAction::SwapAtomKind {
                 group_index: gi,
                 abs_index: abs,
                 new_atom_id: to_id,
             },
-            (gi, GroupChange::UpdateIdentity(vec![abs])),
+            (gi, GroupChange::UpdateIdentity(vec![rel])),
             ln_bias,
         ))
     }

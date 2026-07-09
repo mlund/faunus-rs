@@ -785,3 +785,99 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
         assert!(matches!(proposed.target, MoveTarget::System));
     }
 }
+
+/// Locks the index space of `GroupChange::UpdateIdentity`.
+///
+/// Every index-carrying `GroupChange` is group-relative, and `energy/ewald.rs::affected_indices`
+/// reconstructs the global index as `group.start() + rel`. `speciation.rs` used to emit the
+/// *absolute* index here — the same value it hands to `set_atom_kind` — which pointed Ewald at a
+/// different particle for any group not starting at 0. Latent only because nothing in the tree runs
+/// Ewald together with a speciation swap.
+#[cfg(test)]
+mod update_identity_index_space {
+    use crate::backend::Backend;
+    use crate::group::GroupCollection;
+    use crate::propagate::MoveProposal;
+    use crate::{Change, GroupChange};
+    use rand::{rngs::StdRng, SeedableRng};
+
+    /// Twenty single-atom `site` molecules, so group `i` owns exactly particle `i`:
+    /// the relative index is always 0 while the absolute index equals the group index.
+    const TITRATION: &str = r#"
+atoms:
+  - {name: HA, mass: 1.0, sigma: 1.0}
+  - {name: A, mass: 1.0, sigma: 1.0}
+  - {name: "H+", mass: 1.0, activity: 1.0e-4}
+molecules:
+  - name: site
+    atoms: [HA]
+system:
+  cell: !Cuboid [20.0, 20.0, 20.0]
+  medium: {permittivity: !Vacuum, temperature: 298.15}
+  energy: {}
+  blocks:
+    - molecule: site
+      N: 20
+      active: 20
+      insert: !RandomAtomPos {}
+propagate:
+  seed: !Fixed 42
+  criterion: Metropolis
+  repeat: 0
+  collections: []
+"#;
+
+    #[test]
+    fn speciation_emits_a_relative_index_as_ewald_expects() {
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(tmp.path(), TITRATION).unwrap();
+        let context = Backend::new(tmp.path(), None, &mut rand::thread_rng()).unwrap();
+
+        let yaml = r#"
+temperature: 298.15
+reactions:
+  - ["⚛HA = ⚛A + ~H+", !pK 4.0]
+"#;
+        let mut speciation: super::speciation::SpeciationMove = serde_yml::from_str(yaml).unwrap();
+        speciation.finalize(&context).unwrap();
+
+        // Find a proposal that touches a group other than 0, where the two spaces differ.
+        let proposal = (0..64u64)
+            .find_map(|seed| {
+                let mut rng = StdRng::seed_from_u64(seed);
+                let proposed = speciation.propose_move(&context, &mut rng)?;
+                match &proposed.change {
+                    Change::Groups(changes) if changes.first()?.0 != 0 => Some(proposed),
+                    _ => None,
+                }
+            })
+            .expect("a swap on a group with a non-zero start");
+
+        let Change::Groups(changes) = &proposal.change else {
+            unreachable!()
+        };
+        let (group_index, GroupChange::UpdateIdentity(indices)) = &changes[0] else {
+            panic!("expected UpdateIdentity, got {:?}", changes[0]);
+        };
+        let group = &context.groups()[*group_index];
+
+        // Every `site` holds one atom, so the relative index can only be 0 while the absolute
+        // index equals the group's start — the two differ for every group but the first.
+        assert_eq!(group.iter_active().count(), 1);
+        assert_eq!(indices.len(), 1);
+        assert_ne!(
+            group.start(),
+            0,
+            "fixture must exercise a non-zero group start"
+        );
+        assert_eq!(
+            indices[0], 0,
+            "UpdateIdentity carries a group-relative index"
+        );
+
+        // Which is exactly what Ewald reconstructs back to the right particle.
+        let reconstructed = group.start() + indices[0];
+        assert!(group.contains(reconstructed));
+        assert_eq!(reconstructed, group.start());
+    }
+}
