@@ -1,4 +1,10 @@
 use super::*;
+use rand::{rngs::StdRng, SeedableRng};
+
+/// Seeded generator so the statistical assertions below cannot flake.
+fn test_rng() -> StdRng {
+    StdRng::seed_from_u64(0xFA11_5EED)
+}
 
 // ============================================================================
 // Quaternion roundtrip tests
@@ -411,8 +417,15 @@ fn mb_velocities_rigid_com_statistics() {
     let mol_is_rigid = vec![1u32; n_mol];
     let mol_masses = vec![mass; n_mol];
     let mol_inertia = vec![0.0f32; n_mol * 4]; // not used for COM
-    let (com_vel, _, _) =
-        generate_mb_velocities(kt, &mol_is_rigid, &mol_masses, &mol_inertia, &[], &[]);
+    let (com_vel, _, _) = generate_mb_velocities(
+        kt,
+        &mol_is_rigid,
+        &mol_masses,
+        &mol_inertia,
+        &[],
+        &[],
+        &mut test_rng(),
+    );
 
     // Extract vx components (stride 4, offset 0)
     let vx: Vec<f64> = com_vel.iter().step_by(4).map(|&v| v as f64).collect();
@@ -445,6 +458,7 @@ fn mb_velocities_nonrigid_are_zero() {
         &[1.0, 1.0, 1.0, 0.0, 2.0, 2.0, 2.0, 0.0],
         &[],
         &[],
+        &mut test_rng(),
     );
     assert!(
         com_vel.iter().all(|&v| v == 0.0),
@@ -465,8 +479,15 @@ fn mb_velocities_flexible_atom_statistics() {
 
     let atom_is_flexible = vec![1u32; n_atoms];
     let atom_masses = vec![mass; n_atoms];
-    let (_, _, atom_vel) =
-        generate_mb_velocities(kt, &[], &[], &[], &atom_is_flexible, &atom_masses);
+    let (_, _, atom_vel) = generate_mb_velocities(
+        kt,
+        &[],
+        &[],
+        &[],
+        &atom_is_flexible,
+        &atom_masses,
+        &mut test_rng(),
+    );
 
     // Extract vx components (stride 3, offset 0)
     let vx: Vec<f64> = atom_vel.iter().step_by(3).map(|&v| v as f64).collect();
@@ -491,8 +512,15 @@ fn mb_velocities_flexible_atom_statistics() {
 /// Frozen flexible atoms (flag=0) should get zero velocities.
 #[test]
 fn mb_velocities_frozen_atoms_are_zero() {
-    let (_, _, atom_vel) =
-        generate_mb_velocities(2.494, &[], &[], &[], &[0, 0, 0], &[12.0, 14.0, 16.0]);
+    let (_, _, atom_vel) = generate_mb_velocities(
+        2.494,
+        &[],
+        &[],
+        &[],
+        &[0, 0, 0],
+        &[12.0, 14.0, 16.0],
+        &mut test_rng(),
+    );
     assert!(
         atom_vel.iter().all(|&v| v == 0.0),
         "frozen atom velocities should be zero"
@@ -513,8 +541,15 @@ fn mb_velocities_angular_variance_scales_with_inertia() {
         .flat_map(|_| [inertia_x, inertia_y, 1.0, 0.0])
         .collect();
 
-    let (_, ang_vel, _) =
-        generate_mb_velocities(kt, &mol_is_rigid, &mol_masses, &mol_inertia, &[], &[]);
+    let (_, ang_vel, _) = generate_mb_velocities(
+        kt,
+        &mol_is_rigid,
+        &mol_masses,
+        &mol_inertia,
+        &[],
+        &[],
+        &mut test_rng(),
+    );
 
     // omega_x variance should be ~10× omega_y variance
     let ox: Vec<f64> = ang_vel.chunks(4).map(|c| c[0] as f64).collect();
@@ -541,6 +576,7 @@ fn mb_velocities_w_components_are_zero() {
         &[1.0, 2.0, 3.0, 0.0, 4.0, 5.0, 6.0, 0.0, 1.0, 1.0, 1.0, 0.0],
         &[1, 0],
         &[12.0, 14.0],
+        &mut test_rng(),
     );
 
     for (i, chunk) in com_vel.chunks(4).enumerate() {
@@ -559,8 +595,15 @@ fn mb_velocities_increase_with_temperature() {
     let mol_inertia = vec![0.0f32; 4000];
 
     let rms = |kt: f64| -> f64 {
-        let (com_vel, _, _) =
-            generate_mb_velocities(kt, &mol_is_rigid, &mol_masses, &mol_inertia, &[], &[]);
+        let (com_vel, _, _) = generate_mb_velocities(
+            kt,
+            &mol_is_rigid,
+            &mol_masses,
+            &mol_inertia,
+            &[],
+            &[],
+            &mut test_rng(),
+        );
         let sum_sq: f64 = com_vel
             .chunks(4)
             .map(|c| (c[0] as f64).powi(2))
@@ -837,7 +880,7 @@ fn half_kick_exact_impulse() {
 
 /// Single-atom rigid molecules avoid spline/bonded complexity while exercising
 /// the core BAOAB integrator and thermostat.
-fn make_free_particles(n: usize, mass: f32, kt: f32) -> LangevinUploadData {
+fn make_free_particles(n: usize, mass: f32, kt: f32, rng: &mut impl Rng) -> LangevinUploadData {
     let mol_is_rigid = vec![1u32; n];
     let mol_masses = vec![mass; n];
     // Zero inertia is safe: `safe_inv(0)` returns 0 in the kernel,
@@ -853,6 +896,7 @@ fn make_free_particles(n: usize, mass: f32, kt: f32) -> LangevinUploadData {
         &mol_inertia,
         &atom_is_flexible,
         &atom_masses,
+        rng,
     );
 
     let positions = vec![0.0f32; n * 4];
@@ -961,7 +1005,12 @@ struct PhysicsTestSetup {
 
 impl PhysicsTestSetup {
     /// N=200 argon-like particles at 300K with standard LD parameters.
-    fn new() -> Self {
+    ///
+    /// `seed` fixes both the initial velocities and the thermostat's noise, so a
+    /// run is reproducible. Each physics test below passes a different one: the
+    /// assertions are statistical, and a single realization could in principle
+    /// satisfy them while a regression is present.
+    fn with_seed(seed: u64) -> Self {
         let n = 200;
         let mass = 39.948f32; // argon
         let temperature = 300.0;
@@ -979,8 +1028,16 @@ impl PhysicsTestSetup {
             temperature,
             cell_list_rebuild: 0,
         };
-        let data = make_free_particles(n, mass, kt);
-        let mut gpu = LangevinGpu::new(client, config, n as u32, n as u32, box_length, kt);
+        let data = make_free_particles(n, mass, kt, &mut StdRng::seed_from_u64(seed));
+        let mut gpu = LangevinGpu::new(
+            client,
+            config,
+            n as u32,
+            n as u32,
+            box_length,
+            kt,
+            seed as u32,
+        );
         gpu.upload_state(data);
         Self {
             gpu,
@@ -1023,7 +1080,7 @@ fn free_particle_diffusion() {
         kt,
         friction,
         dt,
-    } = PhysicsTestSetup::new();
+    } = PhysicsTestSetup::with_seed(0x0000_0001);
     let total_steps = 2000;
 
     let initial_pos = gpu.download_positions();
@@ -1057,7 +1114,7 @@ fn free_particle_diffusion() {
 /// Verifies that the thermostat samples the correct Boltzmann distribution.
 #[test]
 fn harmonic_oscillator_position_variance() {
-    let PhysicsTestSetup { mut gpu, n, kt, .. } = PhysicsTestSetup::new();
+    let PhysicsTestSetup { mut gpu, n, kt, .. } = PhysicsTestSetup::with_seed(0x0000_0002);
     let k_spring = 1.0f32; // kJ/mol/Å²
     let mut force_fn = harmonic_forces(k_spring);
 
@@ -1085,7 +1142,7 @@ fn harmonic_oscillator_position_variance() {
 /// Verifies that the O-step thermostat drives translational kinetic energy to kT.
 #[test]
 fn temperature_equilibrium() {
-    let PhysicsTestSetup { mut gpu, .. } = PhysicsTestSetup::new();
+    let PhysicsTestSetup { mut gpu, .. } = PhysicsTestSetup::with_seed(0x0000_0003);
     // Harmonic trap prevents unbounded drift that would make KE sampling noisy
     let mut force_fn = harmonic_forces(1.0);
 
@@ -1109,7 +1166,7 @@ fn velocity_autocorrelation_decay() {
         friction,
         dt,
         ..
-    } = PhysicsTestSetup::new();
+    } = PhysicsTestSetup::with_seed(0x0000_0004);
     // 50 steps × 0.002 ps = 0.1 ps → exactly one friction time (1/γ)
     let steps_per_block = 50;
 
@@ -1142,5 +1199,81 @@ fn velocity_autocorrelation_decay() {
     assert!(
         (0.15..=0.65).contains(&ratio),
         "C_v(t)/C_v(0)={ratio:.3}, expected≈{expected:.3} at t={t}ps"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Reproducibility: a fixed `propagate.seed` must pin a Langevin run.
+// ---------------------------------------------------------------------------
+
+/// Initial Maxwell-Boltzmann velocities must come from the run's generator.
+#[test]
+fn mb_velocities_follow_the_seed() {
+    let draw = |seed: u64| {
+        let mut rng = StdRng::seed_from_u64(seed);
+        generate_mb_velocities(
+            2.494,
+            &[1, 1, 1],
+            &[18.0, 44.0, 28.0],
+            &[1.0; 12],
+            &[1, 1],
+            &[12.0, 14.0],
+            &mut rng,
+        )
+    };
+
+    assert_eq!(draw(7), draw(7), "same seed gave different velocities");
+    assert_ne!(
+        draw(7),
+        draw(8),
+        "velocities ignore the seed, so they are drawn from somewhere else"
+    );
+}
+
+/// Run free particles under the thermostat alone and return their positions.
+///
+/// The initial velocities are held fixed, so the only remaining source of
+/// randomness is the Philox key driving the O-step noise.
+fn thermostat_positions(rng_seed: u32) -> Vec<[f32; 4]> {
+    let (n, mass, temperature) = (32usize, 39.948f32, 300.0);
+    let kt = (crate::R_IN_KJ_PER_MOL * temperature) as f32;
+    let config = LangevinConfig {
+        timestep: 0.002,
+        friction: 10.0,
+        steps: 0,
+        temperature,
+        cell_list_rebuild: 0,
+    };
+    let data = make_free_particles(n, mass, kt, &mut test_rng());
+    let mut gpu = LangevinGpu::new(
+        test_client(),
+        config,
+        n as u32,
+        n as u32,
+        1000.0,
+        kt,
+        rng_seed,
+    );
+    gpu.upload_state(data);
+    gpu.run_steps_with_cpu_forces(50, &mut zero_forces(n))
+        .unwrap();
+    gpu.download_positions()
+}
+
+/// The thermostat noise must follow the seed, not a hardcoded constant.
+///
+/// Identical initial velocities are used for every run, so a difference in the
+/// final positions can only come from the O-step's random forces.
+#[test]
+fn thermostat_noise_follows_the_seed() {
+    assert_eq!(
+        thermostat_positions(7),
+        thermostat_positions(7),
+        "same Philox key gave different trajectories"
+    );
+    assert_ne!(
+        thermostat_positions(7),
+        thermostat_positions(8),
+        "thermostat noise ignores its key, so every run shares one noise stream"
     );
 }

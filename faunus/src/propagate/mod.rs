@@ -148,7 +148,7 @@ impl<T: Context> PropagationBlock<T> {
                 let energy_before = context
                     .hamiltonian()
                     .energy(context, &crate::Change::Everything);
-                ld.propagate(context)?;
+                ld.propagate(context, rng)?;
                 let energy_after = context
                     .hamiltonian()
                     .energy(context, &crate::Change::Everything);

@@ -152,6 +152,8 @@ pub(super) struct LangevinGpu<R: Runtime> {
     pub(super) n_molecules: u32,
     pub(super) box_length: f32,
     pub(super) kt: f32,
+    /// Philox key for the thermostat noise, drawn from the run's seeded RNG.
+    rng_seed: u32,
     step_counter: u32,
     _runtime: PhantomData<R>,
 }
@@ -176,6 +178,7 @@ impl<R: Runtime> LangevinGpu<R> {
         n_molecules: u32,
         box_length: f32,
         kt: f32,
+        rng_seed: u32,
     ) -> Self {
         let vec4_bytes = 16usize;
 
@@ -283,6 +286,7 @@ impl<R: Runtime> LangevinGpu<R> {
             n_molecules,
             box_length,
             kt,
+            rng_seed,
             step_counter: 0,
             _runtime: PhantomData,
         }
@@ -793,7 +797,7 @@ impl<R: Runtime> LangevinGpu<R> {
                 ScalarArg::new(self.config.timestep as f32),
                 ScalarArg::new(self.config.friction as f32),
                 ScalarArg::new(self.kt),
-                ScalarArg::new(0xDEAD_BEEFu32),
+                ScalarArg::new(self.rng_seed),
                 ScalarArg::new(self.step_counter),
                 ScalarArg::new(self.box_length),
             )
@@ -907,7 +911,7 @@ impl<R: Runtime> LangevinGpu<R> {
                 ScalarArg::new(self.config.timestep as f32),
                 ScalarArg::new(self.config.friction as f32),
                 ScalarArg::new(self.kt),
-                ScalarArg::new(0xDEAD_BEEFu32),
+                ScalarArg::new(self.rng_seed),
                 ScalarArg::new(self.step_counter),
                 ScalarArg::new(self.box_length),
             )

@@ -78,9 +78,9 @@ pub(super) fn generate_mb_velocities(
     mol_inertia: &[f32],
     atom_is_flexible: &[u32],
     atom_masses: &[f32],
+    rng: &mut impl Rng,
 ) -> (Vec<f32>, Vec<f32>, Vec<f32>) {
     let conv = 100.0_f64; // kJ/mol → amu·Å²/ps²
-    let mut rng = rand::thread_rng();
     let mut mb_velocity = |mass: f64| -> f32 {
         let u1: f64 = rng.gen::<f64>().max(1e-30);
         let u2: f64 = rng.gen();

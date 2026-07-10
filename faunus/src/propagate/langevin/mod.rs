@@ -35,6 +35,7 @@ use crate::topology::DegreesOfFreedom;
 use crate::Context;
 use average::{Estimate, Variance};
 use cubecl::prelude::*;
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 
 /// Configuration for Langevin dynamics propagation.
@@ -104,15 +105,24 @@ impl LangevinRunner {
         }
     }
 
+    /// Run one block of Langevin dynamics.
+    ///
+    /// `rng` is the run's seeded generator, shared with the Monte Carlo moves.
+    /// The first call draws from it twice — once for the thermostat's Philox key
+    /// and once per velocity degree of freedom — so in a hybrid MC+LD input the
+    /// moves after the first LD block sample from an offset stream. That is
+    /// intended: every stream must follow `propagate.seed`, and before this the
+    /// two draws came from a thread-local generator that no seed could reach.
     pub(in crate::propagate) fn propagate<T: Context>(
         &mut self,
         context: &mut T,
+        rng: &mut impl Rng,
     ) -> anyhow::Result<()> {
         if let Some(gpu) = &mut self.gpu {
             Self::upload_context_state(context, gpu);
         } else {
-            let mut gpu = Self::init_gpu(context, &self.config)?;
-            Self::upload_full_state(context, &mut gpu)?;
+            let mut gpu = Self::init_gpu(context, &self.config, rng)?;
+            Self::upload_full_state(context, &mut gpu, rng)?;
             self.gpu = Some(gpu);
         }
         // Safe: always Some after the branch above
@@ -209,6 +219,7 @@ impl LangevinRunner {
     fn init_gpu<T: Context>(
         context: &T,
         config: &LangevinConfig,
+        rng: &mut impl Rng,
     ) -> anyhow::Result<LangevinGpu<cubecl::wgpu::WgpuRuntime>> {
         let n_atoms = context.num_particles() as u32;
         let n_molecules = context.groups().len() as u32;
@@ -229,6 +240,7 @@ impl LangevinRunner {
             n_molecules,
             box_length.x as f32,
             kt,
+            rng.r#gen(),
         ))
     }
 
@@ -236,6 +248,7 @@ impl LangevinRunner {
     fn upload_full_state<T: Context>(
         context: &T,
         gpu: &mut LangevinGpu<cubecl::wgpu::WgpuRuntime>,
+        rng: &mut impl Rng,
     ) -> anyhow::Result<()> {
         let n = context.num_particles();
         let groups = context.groups();
@@ -348,6 +361,7 @@ impl LangevinRunner {
             &mol_inertia,
             &atom_is_flexible,
             &atom_masses_vec,
+            rng,
         );
 
         gpu.upload_state(LangevinUploadData {
