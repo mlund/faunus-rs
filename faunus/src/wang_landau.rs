@@ -29,7 +29,7 @@ use crate::{
     montecarlo::MarkovChain,
     propagate::Propagate,
     state::State,
-    WithHamiltonian,
+    context::WithHamiltonianMut,
 };
 use anyhow::Result;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};

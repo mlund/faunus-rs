@@ -10,7 +10,8 @@ use crate::{
     energy::{builder::HamiltonianBuilder, Hamiltonian},
     group::{GroupCollection, GroupGeometry, GroupLists, GroupSize},
     topology::Topology,
-    Context, Group, ParticleSystem, Point, UnitQuaternion, WithCell, WithHamiltonian, WithTopology,
+    context::WithHamiltonianMut, Context, Group, ParticleSystem, Point, UnitQuaternion, WithCell,
+    WithTopology,
 };
 
 use rand::rngs::ThreadRng;
@@ -256,6 +257,9 @@ impl crate::WithCell for Backend {
     fn cell(&self) -> &Cell {
         &self.cell
     }
+}
+
+impl crate::context::WithCellMut for Backend {
     /// Returns mutable cell reference and invalidates cached `pbc_params`.
     fn cell_mut(&mut self) -> &mut Cell {
         self.pbc_params = None;
@@ -276,6 +280,9 @@ impl crate::WithHamiltonian for Backend {
     fn hamiltonian(&self) -> std::cell::Ref<'_, crate::energy::Hamiltonian> {
         self.hamiltonian.borrow()
     }
+}
+
+impl crate::context::WithHamiltonianMut for Backend {
     fn hamiltonian_mut(&self) -> std::cell::RefMut<'_, crate::energy::Hamiltonian> {
         self.hamiltonian.borrow_mut()
     }
@@ -853,6 +860,7 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
 mod tests {
     use super::*;
     use crate::energy::EnergyChange;
+    use crate::WithHamiltonian;
 
     /// Verify total energy equals sum of per-group energies, and mass_center matches auxiliary.
     #[test]

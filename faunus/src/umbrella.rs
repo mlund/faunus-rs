@@ -30,7 +30,7 @@ use crate::{
     propagate::Propagate,
     simulation,
     state::State,
-    WithHamiltonian,
+    context::WithHamiltonianMut,
 };
 use anyhow::Result;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};

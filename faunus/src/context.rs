@@ -9,7 +9,9 @@ use std::{
 };
 
 /// Context stores the state of a single simulation system.
-pub trait Context: ParticleSystem + WithHamiltonian + Clone + std::fmt::Debug {
+pub trait Context:
+    ParticleSystem + WithHamiltonianMut + WithCellMut + Clone + std::fmt::Debug
+{
     /// Update internal state after a change (e.g. reciprocal-space energy for Ewald).
     fn update(&mut self, change: &Change) -> anyhow::Result<()> {
         self.hamiltonian_mut().update(self, change)?;
@@ -46,6 +48,13 @@ pub trait Context: ParticleSystem + WithHamiltonian + Clone + std::fmt::Debug {
 pub trait WithCell {
     /// Get reference to simulation cell.
     fn cell(&self) -> &crate::cell::Cell;
+}
+
+/// Mutable access to the simulation cell.
+///
+/// Kept apart from [`WithCell`] so that an observer bound to the read half cannot resize the
+/// box. The single production caller restores a saved state (`state.rs`).
+pub trait WithCellMut: WithCell {
     /// Get mutable reference to simulation cell.
     fn cell_mut(&mut self) -> &mut crate::cell::Cell;
 }
@@ -68,7 +77,15 @@ pub trait WithHamiltonian: GroupCollection {
     ///
     /// Hamiltonian must be stored as `RefCell<Hamiltonian>`.
     fn hamiltonian(&self) -> Ref<'_, Hamiltonian>;
+}
 
+/// Mutable access to the Hamiltonian, through a *shared* reference.
+///
+/// The `&self` receiver is unavoidable — the Hamiltonian lives behind a `RefCell` because energy
+/// terms update their caches while the rest of the system is borrowed immutably. It is also why
+/// this must stay off the observer and perturber views: anything holding a plain `&Context` could
+/// otherwise rewrite the shared physics. Only the framework may reach it.
+pub trait WithHamiltonianMut: WithHamiltonian {
     /// Mutable reference to Hamiltonian.
     ///
     /// Hamiltonian must be stored as `RefCell<Hamiltonian>`.
