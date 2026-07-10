@@ -29,3 +29,9 @@ coulomb = { path = "coulomb" }
 
 [profile.release]
 #strip = true
+
+# Unoptimised float code dominates `cargo test`: the rotational-diffusion and
+# molecule-swap tests account for nearly all of an 8.5 s run. Optimising the
+# test profile takes that to 0.5 s and keeps debug assertions enabled.
+[profile.test]
+opt-level = 2
