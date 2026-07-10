@@ -108,9 +108,10 @@ impl Target for Groups {
 /// composition alone would keep serving the pre-swap atoms of an `atomtype` selection forever.
 ///
 /// The target is part of the type, so the indices it yields cannot be spent in the wrong space.
-/// `CachedSelection::<Groups>::resolve` yields `GroupIndex`, which `group()` accepts and
-/// `position()` — expecting an `AbsIndex` — rejects at compile time. See
-/// `resolved_group_indices_address_the_group_array`.
+/// `CachedSelection::<Groups>::resolve` yields `GroupIndex`, which `group()` accepts. Passing it to
+/// `position()`, which indexes the particle array by `usize`, is a type error: `GroupIndex` has no
+/// conversion to `usize` other than the explicit `get()`, so reaching into the wrong array is a
+/// visible act rather than a silent one. See `resolved_group_indices_address_the_group_array`.
 #[derive(Debug, Clone)]
 pub struct CachedSelection<T: Target> {
     selection: Selection,

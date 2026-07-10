@@ -1241,9 +1241,10 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
         Backend::new(tmp.path(), None, &mut rand::thread_rng()).unwrap()
     }
 
-    /// A group selection resolves into the group array, not the particle array. `position()` takes
-    /// an `AbsIndex` and so will not accept these indices — the property the type split buys, and
-    /// the reason `CachedSelection` is generic over its target.
+    /// A group selection resolves into the group array, not the particle array. `group()` takes the
+    /// resolved `GroupIndex` directly, while `position()` indexes particles by `usize` and rejects
+    /// it — the property the type split buys, and the reason `CachedSelection` is generic over its
+    /// target.
     #[test]
     fn resolved_group_indices_address_the_group_array() {
         let context = backend();
