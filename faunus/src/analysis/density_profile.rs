@@ -25,8 +25,8 @@
 use super::{Analyze, Frequency, Sampling};
 use crate::auxiliary::{BlockAverage, BlockSummary, ColumnWriter, MappingExt};
 use crate::cell::Shape;
-use crate::group::GroupSize;
-use crate::selection::{ComSelection, Selection};
+use crate::selection::{first_unsupported_group, ComSelection, Selection};
+use crate::topology::MoleculeKind;
 use crate::z_grid::ZGrid;
 use crate::Context;
 use anyhow::Result;
@@ -85,25 +85,12 @@ impl DensityProfileBuilder {
     }
 
     /// Reject a `use_com` selection that can match a group without a mass centre.
-    ///
-    /// A selection matches only the atoms that are present, so a species that starts out empty —
-    /// a grand-canonical reservoir, say — would slip past a check made against the initial
-    /// state and abort the run once its first particle appears. Testing against a fully
-    /// populated copy of the groups catches it now instead.
     fn reject_selections_without_mass_center(&self, context: &impl Context) -> Result<()> {
-        let mut groups = context.groups().to_vec();
-        for group in &mut groups {
-            group.resize(GroupSize::Full)?;
-        }
-        let topology = context.topology();
-        let matches_atomic_group = self
-            .selection
-            .resolve_groups(&topology, &groups, &|i| context.atom_kind(i))
-            .into_iter()
-            .any(|index| !topology.moleculekinds()[groups[index].molecule()].has_com());
-        if matches_atomic_group {
+        if let Some(group) =
+            first_unsupported_group(context, &self.selection, MoleculeKind::has_com)?
+        {
             anyhow::bail!(
-                "DensityProfile: selection '{}' matches a group without a center of mass \
+                "DensityProfile: selection '{}' matches group {group} without a center of mass \
                  (atomic groups are not supported with use_com)",
                 self.selection.source()
             );

@@ -23,8 +23,8 @@ mod glob;
 mod parser;
 mod token;
 
-use crate::group::{AbsIndex, Group, GroupIndex};
-use crate::topology::Topology;
+use crate::group::{AbsIndex, Group, GroupIndex, GroupSize};
+use crate::topology::{MoleculeKind, Topology};
 
 /// Return the canonical reserved selection keyword matching `name`, if any.
 pub(crate) fn reserved_keyword_name(name: &str) -> Option<&'static str> {
@@ -224,6 +224,31 @@ impl ComSelection {
             Self::Groups(cache) => cache.selection(),
         }
     }
+}
+
+/// The first group a selection can ever match whose molecule kind fails `supported`.
+///
+/// Analyses that need a mass centre, a rigid-body orientation, or any other molecular property
+/// must refuse a selection naming a species that lacks it. Resolution here runs against a fully
+/// populated copy of the groups, because a selection matches only the atoms that are *present*: a
+/// species that starts out empty — a grand-canonical reservoir, say — slips past a check made
+/// against the initial configuration and aborts the run once its first particle appears.
+pub(crate) fn first_unsupported_group(
+    context: &impl crate::ParticleSystem,
+    selection: &Selection,
+    supported: impl Fn(&MoleculeKind) -> bool,
+) -> anyhow::Result<Option<GroupIndex>> {
+    let mut groups = context.groups().to_vec();
+    for group in &mut groups {
+        group.resize(GroupSize::Full)?;
+    }
+    let topology = context.topology_ref();
+    let kinds = topology.moleculekinds();
+    Ok(selection
+        .resolve_groups(topology, &groups, &|index| context.atom_kind(index))
+        .into_iter()
+        .find(|&index| !supported(&kinds[groups[index].molecule()]))
+        .map(GroupIndex::new))
 }
 
 /// A parsed VMD-like atom selection expression.

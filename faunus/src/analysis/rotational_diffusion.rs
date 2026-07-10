@@ -21,7 +21,7 @@
 use super::{Analyze, Frequency, Sampling};
 use crate::auxiliary::{ColumnWriter, MappingExt};
 use crate::group::GroupIndex;
-use crate::selection::{CachedSelection, Groups, Selection};
+use crate::selection::{first_unsupported_group, CachedSelection, Groups, Selection};
 use crate::Context;
 use anyhow::Result;
 use average::{Estimate, Variance};
@@ -63,28 +63,25 @@ impl RotationalDiffusionBuilder {
 
     pub fn build(&self, context: &impl Context) -> Result<RotationalDiffusion> {
         let topology = context.topology_ref();
-        let groups = context.groups();
+        if let Some(group) =
+            first_unsupported_group(context, &self.selection, |kind| !kind.atomic())?
+        {
+            let molecule = context.groups()[group.get()].molecule();
+            anyhow::bail!(
+                "RotationalDiffusion: selection '{}' matched atomic group {group} (molecule '{}'); \
+                 only molecular groups with rigid-body orientation are supported",
+                self.selection.source(),
+                topology.moleculekinds()[molecule].name()
+            );
+        }
         let group_indices = self
             .selection
-            .resolve_groups(topology, groups, &|i| context.atom_kind(i));
+            .resolve_groups(topology, context.groups(), &|i| context.atom_kind(i));
         if group_indices.is_empty() {
             anyhow::bail!(
                 "RotationalDiffusion: selection '{}' matched no groups",
                 self.selection.source()
             );
-        }
-
-        for &gi in &group_indices {
-            let mol_id = groups[gi].molecule();
-            if topology.moleculekinds()[mol_id].atomic() {
-                anyhow::bail!(
-                    "RotationalDiffusion: selection '{}' matched atomic group {} (molecule '{}'); \
-                     only molecular groups with rigid-body orientation are supported",
-                    self.selection.source(),
-                    gi,
-                    topology.moleculekinds()[mol_id].name()
-                );
-            }
         }
 
         anyhow::ensure!(self.max_lag > 0, "RotationalDiffusion: max_lag must be > 0");
@@ -450,16 +447,25 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
     fn atomic_group_is_rejected() {
         let context = backend_from_str(DIMER_AND_EMPTY_GAS);
         let error = builder("molecule GAS").build(&context).unwrap_err();
-        assert!(error.to_string().contains("matched no groups"), "{error}");
+        assert!(error.to_string().contains("matched atomic group"), "{error}");
     }
 
-    /// Characterizes the hole shared with `DensityProfile::use_com`: the atomic species matches
-    /// nothing while it is empty, so `all` slips past the guard and would take the orientation of
-    /// an atomic group once a grand-canonical insertion fills it.
+    /// The atomic species matches nothing while it is empty, so the rejection above must be
+    /// decided from the topology rather than from the initial configuration — otherwise a
+    /// grand-canonical insertion would later hand `all` the orientation of an atomic group.
     #[test]
-    fn an_atomic_species_that_starts_out_empty_slips_past_the_guard() {
+    fn an_atomic_species_that_starts_out_empty_is_rejected() {
         let context = backend_from_str(DIMER_AND_EMPTY_GAS);
-        assert!(builder("all").build(&context).is_ok());
+        let error = builder("all").build(&context).unwrap_err();
+        assert!(error.to_string().contains("matched atomic group"), "{error}");
+    }
+
+    /// A selection that names no group at all is still reported as such.
+    #[test]
+    fn a_selection_matching_nothing_is_rejected() {
+        let context = backend_from_str(DIMER_AND_EMPTY_GAS);
+        let error = builder("resid 42").build(&context).unwrap_err();
+        assert!(error.to_string().contains("matched no groups"), "{error}");
     }
 
     #[test]

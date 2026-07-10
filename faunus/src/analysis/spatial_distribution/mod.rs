@@ -12,7 +12,7 @@ use crate::auxiliary::MappingExt;
 use crate::cell::{BoundaryConditions, Shape};
 use crate::group::Group;
 use crate::group::{AbsIndex, GroupIndex};
-use crate::selection::{Atoms, CachedSelection, Groups, Selection};
+use crate::selection::{first_unsupported_group, Atoms, CachedSelection, Groups, Selection};
 use crate::topology::io::{self, StructureData};
 use crate::{Context, Point};
 use anyhow::Result;
@@ -91,6 +91,14 @@ impl SpatialDistributionBuilder {
             );
         }
 
+        if let Some(group) =
+            first_unsupported_group(context, &self.reference, |kind| !kind.atomic())?
+        {
+            anyhow::bail!(
+                "SpatialDistribution: reference selection '{}' matched atomic group {group}",
+                self.reference.source()
+            );
+        }
         let reference_groups: Vec<GroupIndex> = context
             .resolve_groups(&self.reference)
             .into_iter()
