@@ -175,3 +175,106 @@ fn progress_reports_every_step() {
     assert!(totals.iter().all(|&t| t == total), "total must not change");
     assert_eq!(steps, (1..=total).collect::<Vec<_>>());
 }
+
+/// A tiny self-contained system. `trajectory` is the analysis output path; when it equals the
+/// replayed trajectory, `replay` must refuse (issue #60). `with_moves` adds a propagate section
+/// so the input can also generate a trajectory.
+fn trajectory_input(trajectory: &Path, with_moves: bool) -> String {
+    let propagate = if with_moves {
+        "
+propagate:
+  seed: !Fixed 42
+  criterion: Metropolis
+  repeat: 20
+  collections:
+    - !Deterministic
+      moves:
+        - !TranslateMolecule {molecule: particle, dp: 1.0, repeat: 1}"
+    } else {
+        ""
+    };
+    format!(
+        "
+atoms:
+  - {{name: X, mass: 1.0, sigma: 2.0, epsilon: 0.5}}
+molecules:
+  - name: particle
+    atoms: [X]
+system:
+  cell: !Cuboid [20.0, 20.0, 20.0]
+  medium: {{permittivity: !Vacuum, temperature: 298.15}}
+  energy: {{}}
+  blocks:
+    - {{molecule: particle, N: 4, insert: !RandomAtomPos {{}}}}
+analysis:
+  - !Trajectory {{file: \"{}\", save_frame_state: true, frequency: !Every 5}}{}",
+        trajectory.display(),
+        propagate,
+    )
+}
+
+/// A rerun whose analysis writes the very trajectory it replays truncates that file mid-read,
+/// so `replay` rejects it up front rather than silently processing a single frame (issue #60).
+#[test]
+fn replay_rejects_an_analysis_that_writes_the_replayed_trajectory() {
+    let temp = tempfile::tempdir().expect("temp dir");
+    let trajectory = temp.path().join("traj.xtc");
+    let input = temp.path().join("input.yaml");
+    std::fs::write(&input, trajectory_input(&trajectory, false)).expect("write input");
+
+    // The collision is caught before any frame is read, so the trajectory need not even exist.
+    match faunus::replay(&input, &trajectory, None) {
+        Err(Error::Input(message)) => assert!(
+            message.contains("traj.xtc"),
+            "error should name the trajectory: {message}"
+        ),
+        other => panic!("expected Error::Input naming the collision, got {other:?}"),
+    }
+}
+
+/// A rerun whose analyses write elsewhere replays every frame — the collision guard does not
+/// reject a legitimate rerun.
+#[test]
+fn replay_processes_every_frame_without_a_collision() {
+    let temp = tempfile::tempdir().expect("temp dir");
+    let trajectory = temp.path().join("traj.xtc");
+
+    // Generate a short trajectory (with its .aux) by running the input that writes it.
+    let generator = temp.path().join("generate.yaml");
+    std::fs::write(&generator, trajectory_input(&trajectory, true)).expect("write generator");
+    Simulation::from_file(&generator, None)
+        .expect("load generator")
+        .run()
+        .expect("generate trajectory");
+    assert!(trajectory.exists(), "generator wrote no trajectory");
+
+    // Replay it through an input whose only analysis writes no files at all.
+    let rerun = temp.path().join("rerun.yaml");
+    std::fs::write(
+        &rerun,
+        "
+atoms:
+  - {name: X, mass: 1.0, sigma: 2.0, epsilon: 0.5}
+molecules:
+  - name: particle
+    atoms: [X]
+system:
+  cell: !Cuboid [20.0, 20.0, 20.0]
+  medium: {permittivity: !Vacuum, temperature: 298.15}
+  energy: {}
+  blocks:
+    - {molecule: particle, N: 4, insert: !RandomAtomPos {}}
+analysis:
+  - !CollectiveVariable {property: volume, frequency: !Every 1}",
+    )
+    .expect("write rerun input");
+
+    let output = faunus::replay(&rerun, &trajectory, None).expect("replay should succeed");
+    let frames = parse(output.to_yaml())["rerun"]["frames"]
+        .as_f64()
+        .expect("rerun block reports a frame count");
+    assert!(
+        frames >= 2.0,
+        "expected several frames replayed, got {frames}"
+    );
+}
