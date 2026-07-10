@@ -15,12 +15,13 @@
 use crate::{
     analysis::{self, AnalysisCollectionExt, Frequency},
     backend::Backend,
+    context::PerturbContext,
     energy::EnergyChange,
-    group::GroupCollection,
+    group::{GroupCollection, GroupCollectionMut},
     montecarlo::{gibbs::GibbsEnsemble, MarkovChain},
     simulation::{self, box_prefixed_path, write_yaml, Simulation},
     topology::io::frame_state::{self, FrameStateReader},
-    Change, Context, Particle, ParticleSystem, Point, WithHamiltonian,
+    Change, Context, ObserveContext, Particle, Point, WithHamiltonian,
 };
 use anyhow::Result;
 use clap::{Parser, Subcommand};
@@ -172,7 +173,7 @@ pub fn do_main() -> Result<()> {
 }
 
 /// Sum of charges of all active particles in the system.
-fn net_charge(context: &impl ParticleSystem) -> f64 {
+fn net_charge(context: &impl ObserveContext) -> f64 {
     context
         .groups()
         .iter()

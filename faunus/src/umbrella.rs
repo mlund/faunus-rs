@@ -24,13 +24,13 @@ use crate::{
     auxiliary::ColumnWriter,
     backend::Backend,
     collective_variable::CollectiveVariableBuilder,
+    context::WithHamiltonianMut,
     energy::{ConstrainBuilder, EnergyTerm, HarmonicConstraint},
     histogram::Histogram,
     montecarlo::MarkovChain,
     propagate::Propagate,
     simulation,
     state::State,
-    WithHamiltonian,
 };
 use anyhow::Result;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};

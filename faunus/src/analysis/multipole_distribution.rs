@@ -29,7 +29,8 @@ use super::{Analyze, Frequency, Sampling};
 use crate::auxiliary::{ColumnFormat, ColumnWriter, MappingExt, WeightedMean};
 use crate::cell::{BoundaryConditions, Shape};
 use crate::selection::{CachedSelection, Groups, Selection};
-use crate::{Context, Point};
+use crate::ObserveContext;
+use crate::Point;
 use anyhow::Result;
 use derive_more::Debug;
 use nalgebra::Matrix3;
@@ -129,7 +130,7 @@ impl MultipoleDistributionBuilder {
 
     pub fn build(
         &self,
-        context: &impl Context,
+        context: &impl ObserveContext,
         medium: Option<&Medium>,
     ) -> Result<MultipoleDistribution> {
         if self.dr <= 0.0 {
@@ -224,7 +225,7 @@ struct GroupMoments {
 }
 
 impl GroupMoments {
-    fn from_group(group_index: usize, context: &impl Context) -> Option<Self> {
+    fn from_group(group_index: usize, context: &impl ObserveContext) -> Option<Self> {
         let group = &context.groups()[group_index];
         let com = *group.mass_center()?;
         let atomkinds = context.topology_ref().atomkinds();
@@ -410,7 +411,7 @@ impl crate::Info for MultipoleDistribution {
     }
 }
 
-impl<T: Context> Analyze<T> for MultipoleDistribution {
+impl<T: ObserveContext> Analyze<T> for MultipoleDistribution {
     fn sampling(&self) -> &Sampling {
         &self.sampling
     }

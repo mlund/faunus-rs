@@ -14,13 +14,14 @@
 
 //! Dihedral angles
 
+use crate::ObserveContext;
 use derive_getters::Getters;
 use interatomic::fourbody::{FourbodyAngleEnergy, HarmonicDihedral, PeriodicDihedral};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
+use crate::group::Group;
 use crate::group::{AbsIndex, RelIndex};
-use crate::{group::Group, Context};
 
 use super::Indexed;
 
@@ -105,7 +106,7 @@ impl Dihedral {
 
     /// Calculate energy of a dihedral in a specific group.
     /// Returns 0.0 if any of the interacting particles is inactive.
-    pub fn energy(&self, context: &impl Context, group: &Group) -> f64 {
+    pub(crate) fn energy(&self, context: &impl ObserveContext, group: &Group) -> f64 {
         let indices = match self
             .index
             .map(|rel| group.to_absolute(RelIndex::new(rel)).map(AbsIndex::get))
@@ -122,7 +123,7 @@ impl Dihedral {
     /// Returns 0.0 if any of the interacting particles is inactive.
     pub fn energy_intermolecular(
         &self,
-        context: &impl Context,
+        context: &impl ObserveContext,
         term: &crate::energy::IntermolecularBonded,
     ) -> f64 {
         if self.index.iter().any(|&i| !term.is_active(i)) {

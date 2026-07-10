@@ -21,7 +21,8 @@
 use crate::change::GroupChange;
 use crate::group::{AbsIndex, GroupIndex};
 use crate::selection::{Atoms, CachedSelection, ComSelection, Groups, Selection, Target};
-use crate::{Change, Context};
+use crate::Change;
+use crate::ObserveContext;
 use exmex::{Express, FlatEx, FlatExVal, Val};
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
@@ -158,7 +159,7 @@ impl ExternalTarget for Groups {
 fn affected<T: ExternalTarget>(
     change: &Change,
     cache: &mut CachedSelection<T>,
-    context: &impl Context,
+    context: &impl ObserveContext,
     warned_empty: &std::cell::Cell<bool>,
 ) -> Vec<T::Index> {
     if matches!(change, Change::None) {
@@ -286,7 +287,7 @@ impl CustomExternal {
     }
 
     /// Evaluate the potential at a single atom.
-    fn energy_for_atom(&self, context: &impl Context, atom_idx: usize) -> f64 {
+    fn energy_for_atom(&self, context: &impl ObserveContext, atom_idx: usize) -> f64 {
         let topology = context.topology_ref();
         let pos = context.position(atom_idx);
         let q = topology.atomkinds()[context.atom_kind(atom_idx)].charge();
@@ -294,7 +295,7 @@ impl CustomExternal {
     }
 
     /// Evaluate the potential at the center of mass of a group (COM mode).
-    fn energy_for_com(&self, context: &impl Context, group_index: GroupIndex) -> f64 {
+    fn energy_for_com(&self, context: &impl ObserveContext, group_index: GroupIndex) -> f64 {
         let group = context.group(group_index);
         let topology = context.topology_ref();
         let atomkinds = topology.atomkinds();
@@ -310,7 +311,7 @@ impl CustomExternal {
     }
 
     /// Compute energy for a given change.
-    pub fn energy(&self, context: &impl Context, change: &Change) -> f64 {
+    pub(crate) fn energy(&self, context: &impl ObserveContext, change: &Change) -> f64 {
         match &mut *self.selection_cache.borrow_mut() {
             ComSelection::Atoms(cache) => affected(change, cache, context, &self.warned_empty)
                 .into_iter()
@@ -492,7 +493,7 @@ mod integration_tests {
     /// drift check compares one stale energy against another and reports no problem.
     #[test]
     fn atom_kind_swap_changes_the_selected_set() {
-        use crate::group::GroupCollection;
+        use crate::group::{GroupCollection, GroupCollectionMut};
         use crate::WithTopology;
         let mut context = make_context();
         let yaml = r#"

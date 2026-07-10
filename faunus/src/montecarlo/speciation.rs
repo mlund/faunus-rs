@@ -13,7 +13,8 @@ use crate::propagate::{
     default_repeat, default_weight, tagged_yaml, Displacement, MoveProposal, ProposedMove,
 };
 use crate::transform::SpeciationAction;
-use crate::{cell::Shape, Change, Context, GroupChange};
+use crate::ObserveContext;
+use crate::{cell::Shape, Change, GroupChange};
 use rand::prelude::*;
 use serde::{Deserialize, Serialize};
 
@@ -260,7 +261,7 @@ fn resolve_atom_swaps(
 fn overlay_swap_positions(
     source_indices: impl Iterator<Item = usize> + Clone,
     target_group: &crate::group::Group,
-    context: &impl Context,
+    context: &impl ObserveContext,
     rng: &mut dyn RngCore,
 ) -> Vec<crate::Point> {
     let topology = context.topology();
@@ -408,7 +409,7 @@ fn resolve_reaction(
 /// Validate that the context has groups for every molecule referenced by resolved reactions.
 fn validate_reaction_groups(
     resolved: &[ResolvedReaction],
-    context: &impl Context,
+    context: &impl ObserveContext,
     topology: &crate::topology::Topology,
 ) -> anyhow::Result<()> {
     let has_any = |mol_id: usize| -> bool {
@@ -454,7 +455,7 @@ fn validate_reaction_groups(
 
 impl SpeciationMove {
     /// Resolve reaction strings to topology IDs and validate.
-    pub(crate) fn finalize(&mut self, context: &impl Context) -> anyhow::Result<()> {
+    pub(crate) fn finalize(&mut self, context: &impl ObserveContext) -> anyhow::Result<()> {
         anyhow::ensure!(
             self.temperature > 0.0,
             "SpeciationMove: temperature must be positive"
@@ -485,7 +486,7 @@ impl SpeciationMove {
         mol_id: usize,
         n_old: usize,
         vol: NewOld<f64>,
-        context: &impl Context,
+        context: &impl ObserveContext,
         rng: &mut dyn RngCore,
         claimed: &[usize],
     ) -> Option<(SpeciationAction, (usize, GroupChange), f64)> {
@@ -539,7 +540,7 @@ impl SpeciationMove {
         mol_id: usize,
         n_old: usize,
         vol: NewOld<f64>,
-        context: &impl Context,
+        context: &impl ObserveContext,
         rng: &mut dyn RngCore,
         claimed: &[usize],
     ) -> Option<(SpeciationAction, (usize, GroupChange), f64)> {
@@ -608,7 +609,7 @@ impl SpeciationMove {
     /// Unlike `count_active_molecules` (which excludes reservoirs), this returns the
     /// actual population needed for bookkeeping: bounds checks and random index selection.
     /// Clamped to 0 to guard against underflow when multiple deactivations precede activations.
-    fn effective_count(mol_id: usize, offset: i32, context: &impl Context) -> usize {
+    fn effective_count(mol_id: usize, offset: i32, context: &impl ObserveContext) -> usize {
         // Use `count_active` (not `count_active_molecules`) because reservoirs need
         // a real head-count for bounds checks and random index selection even though
         // they are excluded from physical counts.
@@ -622,7 +623,7 @@ impl SpeciationMove {
     fn swap_molecule_one(
         from_mol_id: usize,
         to_mol_id: usize,
-        context: &impl Context,
+        context: &impl ObserveContext,
         rng: &mut dyn RngCore,
         claimed: &[usize],
     ) -> Option<ActionBuild> {
@@ -667,7 +668,7 @@ impl SpeciationMove {
         from_id: usize,
         to_id: usize,
         molecule_id: usize,
-        context: &impl Context,
+        context: &impl ObserveContext,
         rng: &mut dyn RngCore,
     ) -> Option<(SpeciationAction, (usize, GroupChange), f64)> {
         // Full + partial groups (atomic mega-groups appear as partial)
@@ -724,7 +725,7 @@ impl SpeciationMove {
         &self,
         resolved: &ResolvedReaction,
         direction: Direction,
-        context: &impl Context,
+        context: &impl ObserveContext,
         rng: &mut dyn RngCore,
     ) -> Option<ActionBuild> {
         let (ops, ln_k) = match direction {
@@ -805,7 +806,7 @@ impl SpeciationMove {
     }
 }
 
-impl<T: Context> MoveProposal<T> for SpeciationMove {
+impl<T: ObserveContext> MoveProposal<T> for SpeciationMove {
     fn propose_move(&mut self, context: &T, rng: &mut dyn RngCore) -> Option<ProposedMove> {
         if self.resolved.is_empty() {
             return None;
@@ -886,7 +887,7 @@ mod tests {
     use crate::group::GroupCollection;
     use crate::propagate::MoveProposal;
     use crate::Change;
-    use crate::WithCell;
+    use crate::WithSimulationCell;
     use float_cmp::assert_approx_eq;
 
     const TEST_YAML: &str = "tests/files/speciation_test.yaml";

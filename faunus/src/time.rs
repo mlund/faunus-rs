@@ -40,6 +40,8 @@ pub struct Timer {
     accumulated: Duration,
 }
 
+// Only `start` is wired up; the rest await the timing report of issue #54.
+#[allow(dead_code)]
 impl Timer {
     /// Start the timer
     pub fn start(&mut self) {

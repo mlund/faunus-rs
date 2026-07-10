@@ -20,10 +20,10 @@ use crate::energy::EnergyChange;
 use crate::group::*;
 use crate::propagate::{Displacement, Propagate};
 use crate::state::State;
+use crate::ObserveContext;
 use crate::{time::Timer, Context};
 use anyhow::Result;
 use average::{Estimate, Mean};
-use log;
 use rand::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -35,6 +35,7 @@ mod pivot;
 pub mod preferential;
 mod rotate;
 pub mod speciation;
+mod template;
 mod translate;
 mod volume;
 
@@ -68,7 +69,7 @@ impl_buildable_move!(
 
 /// Look up a molecule kind by name and return its id.
 fn find_molecule_id(
-    context: &impl Context,
+    context: &impl ObserveContext,
     molecule_name: &str,
     move_name: &str,
 ) -> anyhow::Result<usize> {
@@ -88,7 +89,7 @@ fn find_molecule_id(
 
 /// Pick a random group index of the specified molecule type.
 fn random_group(
-    context: &impl Context,
+    context: &impl ObserveContext,
     rng: &mut (impl Rng + ?Sized),
     molecule_id: usize,
 ) -> Option<usize> {
@@ -99,7 +100,7 @@ fn random_group(
 /// Pick a random atom from the specified group.
 /// Returns an absolute index of the atom.
 fn random_atom(
-    context: &impl Context,
+    context: &impl ObserveContext,
     rng: &mut (impl Rng + ?Sized),
     group_index: usize,
     atom_id: Option<usize>,
@@ -127,6 +128,8 @@ pub enum Bias {
     /// Dimensionless bias (in units of kT); multiplied by thermal energy before adding to ΔU
     Dimensionless(f64),
     /// Force acceptance of the move regardless of energy change
+    // Nothing constructs it yet; the acceptance path already honours it. See issue #54.
+    #[allow(dead_code)]
     ForceAccept,
     /// No bias
     None,
@@ -423,10 +426,13 @@ impl<T: Context + 'static> MarkovChain<T> {
     ///
     /// This is used to normalize the energy change when determining the acceptance probability.
     /// Must match the unit of the energy.
+    // Seeds of the planned public MC interface; see issue #54.
+    #[allow(dead_code)]
     pub const fn set_thermal_energy(&mut self, thermal_energy: f64) {
         self.thermal_energy = thermal_energy;
     }
     /// Append an analysis to the back of the collection.
+    #[allow(dead_code)]
     pub fn add_analysis(&mut self, analysis: Box<dyn Analyze<T> + Send>) {
         self.analyses.push(analysis)
     }
@@ -455,13 +461,8 @@ impl<T: Context + 'static> MarkovChain<T> {
 /// - <https://en.wikipedia.org/wiki/Entropy_(statistical_thermodynamics)#Entropy_of_mixing>
 /// - <https://doi.org/10/fqcpg3>
 ///
-/// # Examples
-/// ~~~
-/// use faunus::montecarlo::*;
-/// let vol = NewOld::from(1.0, 1.0);
-/// assert_eq!(entropy_bias(NewOld::from(0, 0), vol.clone()), 0.0);
-/// // With V = 1/c₀ (one standard-state volume), N/V/c₀ = N, so bias = ln(N)
-/// ~~~
+/// An unchanged particle count carries no bias; with `V = 1/c₀` (one standard-state volume),
+/// `N/V/c₀ = N` and the bias is `ln(N)`. See `entropy_bias_is_zero_when_nothing_changes`.
 pub fn entropy_bias(n: NewOld<usize>, volume: NewOld<f64>) -> f64 {
     let dn = n.difference();
     match dn.cmp(&0) {
@@ -493,6 +494,13 @@ mod tests {
     use super::*;
     use crate::backend::Backend;
     use float_cmp::assert_approx_eq;
+
+    /// Was the `entropy_bias` doc example, before `montecarlo` became crate-private.
+    #[test]
+    fn entropy_bias_is_zero_when_nothing_changes() {
+        let volume = NewOld::from(1.0, 1.0);
+        assert_eq!(entropy_bias(NewOld::from(0, 0), volume), 0.0);
+    }
 
     #[test]
     fn translate_molecules_simulation() {

@@ -22,7 +22,7 @@ use super::{Analyze, Frequency, Sampling};
 use crate::auxiliary::{ColumnWriter, MappingExt};
 use crate::group::GroupIndex;
 use crate::selection::{first_unsupported_group, CachedSelection, Groups, Selection};
-use crate::Context;
+use crate::ObserveContext;
 use anyhow::Result;
 use average::{Estimate, Variance};
 use derive_more::Debug;
@@ -61,7 +61,7 @@ impl RotationalDiffusionBuilder {
         crate::analysis::prefix_opt(&mut self.file, dir)
     }
 
-    pub fn build(&self, context: &impl Context) -> Result<RotationalDiffusion> {
+    pub fn build(&self, context: &impl ObserveContext) -> Result<RotationalDiffusion> {
         let topology = context.topology_ref();
         if let Some(group) =
             first_unsupported_group(context, &self.selection, |kind| !kind.atomic())?
@@ -241,7 +241,7 @@ impl crate::Info for RotationalDiffusion {
     }
 }
 
-impl<T: Context> Analyze<T> for RotationalDiffusion {
+impl<T: ObserveContext> Analyze<T> for RotationalDiffusion {
     fn sampling(&self) -> &Sampling {
         &self.sampling
     }

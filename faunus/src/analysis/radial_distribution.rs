@@ -9,7 +9,7 @@ use crate::axes::Axes;
 use crate::cell::{BoundaryConditions, Shape};
 use crate::histogram::Histogram;
 use crate::selection::{Atoms, CachedSelection, Groups, Selection};
-use crate::Context;
+use crate::ObserveContext;
 use anyhow::Result;
 use derive_more::Debug;
 use serde::{Deserialize, Serialize};
@@ -46,7 +46,7 @@ impl RadialDistributionBuilder {
         crate::analysis::prefix_in_place(&mut self.file, dir)
     }
 
-    pub fn build(&self, context: &impl Context) -> Result<RadialDistribution> {
+    pub fn build(&self, context: &impl ObserveContext) -> Result<RadialDistribution> {
         let cell = context.cell();
         let max_r = match self.max_r {
             Some(r) => r,
@@ -190,7 +190,7 @@ impl RadialDistribution {
     ///
     /// Which index space the histogram is built from follows from the selection pair, so the
     /// atom-atom and mass-centre paths cannot be reached with the wrong indices.
-    fn sample_weighted_pairs(&mut self, context: &impl Context, weight: f64) -> f64 {
+    fn sample_weighted_pairs(&mut self, context: &impl ObserveContext, weight: f64) -> f64 {
         let groups = context.groups();
         let same = self.same_selection();
         let exclude = self.exclude_intramolecular;
@@ -261,7 +261,7 @@ impl crate::Info for RadialDistribution {
     }
 }
 
-impl<T: Context> Analyze<T> for RadialDistribution {
+impl<T: ObserveContext> Analyze<T> for RadialDistribution {
     fn sampling(&self) -> &Sampling {
         &self.sampling
     }

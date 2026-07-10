@@ -15,6 +15,7 @@
 use crate::cell::VolumeScalePolicy;
 use crate::group::{ParticleSelection, RelIndex};
 use crate::transform::SpeciationAction;
+use crate::ObserveContext;
 use crate::{
     montecarlo::{Bias, NewOld},
     transform::Transform,
@@ -56,48 +57,10 @@ pub enum MoveTarget {
 /// it builds. [`Self::speciation`] is the one exception — its `GroupChange`s encode physics the
 /// transform does not carry — and it is checked in debug builds instead.
 ///
-/// Constructing and inspecting a move goes through the constructors and accessors:
-///
-/// ```
-/// use faunus::propagate::ProposedMove;
-/// use faunus::{Change, GroupChange, Point};
-///
-/// let proposed = ProposedMove::translate_group(0, Point::new(0.1, 0.0, 0.0));
-/// assert!(matches!(
-///     proposed.change(),
-///     Change::SingleGroup(0, GroupChange::RigidBody)
-/// ));
-/// ```
-///
-/// The same code fails to compile if it reaches for the field instead — the only difference from
-/// the example above, so the failure can only be the privacy of `change`:
-///
-/// ```compile_fail
-/// use faunus::propagate::ProposedMove;
-/// use faunus::{Change, GroupChange, Point};
-///
-/// let proposed = ProposedMove::translate_group(0, Point::new(0.1, 0.0, 0.0));
-/// assert!(matches!(
-///     proposed.change,
-///     Change::SingleGroup(0, GroupChange::RigidBody)
-/// ));
-/// ```
-///
-/// and a mismatched pairing cannot be written at all, because there is no struct literal to write:
-///
-/// ```compile_fail
-/// use faunus::propagate::{Displacement, MoveTarget, ProposedMove};
-/// use faunus::transform::Transform;
-/// use faunus::{Change, GroupChange, UnitQuaternion};
-///
-/// // A partial rotation announced as `RigidBody` would silently drop the bonded ΔU.
-/// let _ = ProposedMove {
-///     change: Change::SingleGroup(0, GroupChange::RigidBody),
-///     transform: Transform::Rotate(UnitQuaternion::identity()),
-///     displacement: Displacement::Angle(0.1),
-///     target: MoveTarget::Group(0),
-/// };
-/// ```
+/// Constructing and inspecting a move goes through the constructors and the accessors — see
+/// `translate_group_announces_a_rigid_body_change`. A mismatched pairing cannot be written at all:
+/// the fields are private, so there is no struct literal in which to announce `RigidBody` while
+/// supplying a `PartialRotate`.
 #[derive(Clone, Debug)]
 pub struct ProposedMove {
     change: Change,
@@ -191,10 +154,12 @@ impl ProposedMove {
         &self.displacement
     }
 
+    #[allow(dead_code)] // asserted by the move-proposal tests
     pub fn transform(&self) -> &Transform {
         &self.transform
     }
 
+    #[allow(dead_code)] // asserted by the move-proposal tests
     pub fn target(&self) -> &MoveTarget {
         &self.target
     }
@@ -220,7 +185,7 @@ fn speciation_changes_match_actions(
 }
 
 /// Narrow trait for the unique logic of each Monte Carlo move.
-pub trait MoveProposal<T: Context>: Debug + Info {
+pub trait MoveProposal<T: ObserveContext>: Debug + Info {
     /// Describe a move without applying it; context is read-only.
     fn propose_move(&mut self, context: &T, rng: &mut dyn RngCore) -> Option<ProposedMove>;
 
@@ -290,6 +255,16 @@ impl TryFrom<Displacement> for f64 {
 mod pairing_tests {
     use super::*;
     use crate::group::GroupSize;
+
+    /// Was the `ProposedMove` doc example, before `propagate` became crate-private.
+    #[test]
+    fn translate_group_announces_a_rigid_body_change() {
+        let proposed = ProposedMove::translate_group(0, crate::Point::new(0.1, 0.0, 0.0));
+        assert!(matches!(
+            proposed.change(),
+            Change::SingleGroup(0, GroupChange::RigidBody)
+        ));
+    }
 
     #[test]
     fn translate_atoms_reports_exactly_the_relative_indices_it_moves() {

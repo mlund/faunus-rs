@@ -6,7 +6,8 @@
 
 use super::nonbonded::cache::GroupEnergyCache;
 use crate::cell::BoundaryConditions;
-use crate::{Change, Context, GroupChange};
+use crate::ObserveContext;
+use crate::{Change, GroupChange};
 use anyhow::Context as _;
 use icotable::lookup::{Lookup3D, Lookup6D, TabulatedInteraction};
 use icotable::{f16, PointGroup, Table3DAdaptive, Table6DAdaptive, Table6DFlat, Vector3};
@@ -396,7 +397,7 @@ impl TabulatedEnergy {
     ///
     /// For 3D tables, only one perspective is used (molecule→atom direction
     /// in the molecule's body frame).
-    fn pair_energy(&self, context: &impl Context, gi: usize, gj: usize) -> f64 {
+    fn pair_energy(&self, context: &impl ObserveContext, gi: usize, gj: usize) -> f64 {
         let groups = context.groups();
         let ga = &groups[gi];
         let gb = &groups[gj];
@@ -492,7 +493,7 @@ impl TabulatedEnergy {
         0.5 * (e_forward + e_reverse)
     }
 
-    fn total_energy(&self, context: &impl Context) -> f64 {
+    fn total_energy(&self, context: &impl ObserveContext) -> f64 {
         let n = context.groups().len();
         let mut sum = 0.0;
         for i in 0..n {
@@ -505,7 +506,7 @@ impl TabulatedEnergy {
 
     /// Lazily initialize cache on first RigidBody query.
     /// Uses `RwLock` (not `get_mut`) because `energy()` only has `&self`.
-    fn ensure_cache(&self, context: &impl Context) {
+    fn ensure_cache(&self, context: &impl ObserveContext) {
         let needs_init = self.cache.read().expect("cache lock poisoned").is_none();
         if needs_init {
             let n = context.groups().len();
@@ -525,7 +526,7 @@ impl TabulatedEnergy {
         }
     }
 
-    pub(crate) fn update_cache(&mut self, context: &impl Context, change: &Change) {
+    pub(crate) fn update_cache(&mut self, context: &impl ObserveContext, change: &Change) {
         let &Change::SingleGroup(gi, GroupChange::RigidBody) = change else {
             return;
         };
@@ -596,7 +597,7 @@ impl TabulatedEnergy {
 }
 
 impl super::EnergyChange for TabulatedEnergy {
-    fn energy(&self, context: &impl Context, change: &Change) -> f64 {
+    fn energy(&self, context: &impl ObserveContext, change: &Change) -> f64 {
         match change {
             Change::None => 0.0,
             Change::Everything | Change::Volume(_, _) => self.total_energy(context),

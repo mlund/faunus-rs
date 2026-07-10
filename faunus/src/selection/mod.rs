@@ -6,16 +6,9 @@
 //! Supports boolean expressions with `and`, `or`, `not`, parentheses,
 //! and keywords like `chain`, `resname`, `resid`, `name`, `molecule`, etc.
 //!
-//! # Examples
-//!
-//! ```
-//! use faunus::selection::Selection;
-//!
-//! let sel = Selection::parse("protein and backbone").unwrap();
-//! let sel = Selection::parse("molecule water").unwrap();
-//! let sel = Selection::parse("resid 10 to 20 and chain A").unwrap();
-//! let sel = Selection::parse("atomtype CA or atomtype CB").unwrap();
-//! ```
+//! Selections are written as strings and parsed by [`Selection::parse`], for example
+//! `protein and backbone`, `resid 10 to 20 and chain A`, or `atomtype CA or atomtype CB`.
+//! See `parses_the_selection_language` for the full set exercised by the tests.
 
 mod constants;
 mod evaluator;
@@ -74,7 +67,7 @@ pub trait Target: sealed::Sealed + std::fmt::Debug + Clone {
     type Index: Copy + Clone + std::fmt::Debug + PartialEq;
 
     #[doc(hidden)]
-    fn resolve(context: &impl crate::ParticleSystem, selection: &Selection) -> Vec<Self::Index>;
+    fn resolve(context: &impl crate::ObserveContext, selection: &Selection) -> Vec<Self::Index>;
 }
 
 /// Resolves to the absolute indices of matching atoms.
@@ -87,7 +80,7 @@ pub struct Groups;
 
 impl Target for Atoms {
     type Index = AbsIndex;
-    fn resolve(context: &impl crate::ParticleSystem, selection: &Selection) -> Vec<AbsIndex> {
+    fn resolve(context: &impl crate::ObserveContext, selection: &Selection) -> Vec<AbsIndex> {
         context
             .resolve_atoms(selection)
             .into_iter()
@@ -98,7 +91,7 @@ impl Target for Atoms {
 
 impl Target for Groups {
     type Index = GroupIndex;
-    fn resolve(context: &impl crate::ParticleSystem, selection: &Selection) -> Vec<GroupIndex> {
+    fn resolve(context: &impl crate::ObserveContext, selection: &Selection) -> Vec<GroupIndex> {
         context
             .resolve_groups(selection)
             .into_iter()
@@ -114,28 +107,11 @@ impl Target for Groups {
 /// This matters: an atom-kind swap leaves group composition untouched, and a cache keyed on
 /// composition alone would keep serving the pre-swap atoms of an `atomtype` selection forever.
 ///
-/// The target is part of the type, so the indices it yields cannot be spent in the wrong space:
-///
-/// ```compile_fail
-/// # use faunus::selection::{CachedSelection, Selection};
-/// # use faunus::group::GroupCollection;
-/// # fn demo(context: &impl faunus::ParticleSystem) {
-/// let mut groups = CachedSelection::groups(Selection::parse("molecule water").unwrap());
-/// // Group indices are not particle indices.
-/// let _ = context.position(groups.resolve(context)[0]);
-/// # }
-/// ```
-///
-/// The same code against the group array compiles:
-///
-/// ```
-/// # use faunus::selection::{CachedSelection, Selection};
-/// # use faunus::group::GroupCollection;
-/// # fn demo(context: &impl faunus::ParticleSystem) {
-/// let mut groups = CachedSelection::groups(Selection::parse("molecule water").unwrap());
-/// let _ = context.group(groups.resolve(context)[0]);
-/// # }
-/// ```
+/// The target is part of the type, so the indices it yields cannot be spent in the wrong space.
+/// `CachedSelection::<Groups>::resolve` yields `GroupIndex`, which `group()` accepts. Passing it to
+/// `position()`, which indexes the particle array by `usize`, is a type error: `GroupIndex` has no
+/// conversion to `usize` other than the explicit `get()`, so reaching into the wrong array is a
+/// visible act rather than a silent one. See `resolved_group_indices_address_the_group_array`.
 #[derive(Debug, Clone)]
 pub struct CachedSelection<T: Target> {
     selection: Selection,
@@ -173,7 +149,7 @@ impl<T: Target> CachedSelection<T> {
     }
 
     /// Currently matching indices, re-resolved only if the system has changed relevantly.
-    pub fn resolve(&mut self, context: &impl crate::ParticleSystem) -> &[T::Index] {
+    pub fn resolve(&mut self, context: &impl crate::ObserveContext) -> &[T::Index] {
         self.resolve_with_selection(context).1
     }
 
@@ -183,7 +159,7 @@ impl<T: Target> CachedSelection<T> {
     /// to borrow the selection again — wasteful on the energy hot path.
     pub fn resolve_with_selection(
         &mut self,
-        context: &impl crate::ParticleSystem,
+        context: &impl crate::ObserveContext,
     ) -> (&Selection, &[T::Index]) {
         let generation = self.selection.generation(context);
         if self.generation != Some(generation) {
@@ -238,7 +214,7 @@ impl ComSelection {
 /// reservoir, for instance — therefore matches nothing, passes a check made against the initial
 /// configuration, and breaks the run much later, once its first particle is inserted.
 pub(crate) fn first_unsupported_group(
-    context: &impl crate::ParticleSystem,
+    context: &impl crate::ObserveContext,
     selection: &Selection,
     supported: impl Fn(&MoleculeKind) -> bool,
 ) -> anyhow::Result<Option<GroupIndex>> {
@@ -259,15 +235,6 @@ pub(crate) fn first_unsupported_group(
 ///
 /// Parses from a string, then resolves against topology and groups
 /// to produce atom indices or group indices.
-///
-/// # Examples
-///
-/// ```
-/// use faunus::selection::Selection;
-///
-/// let sel = Selection::parse("molecule water").unwrap();
-/// let sel = Selection::parse("name CA and chain A").unwrap();
-/// ```
 #[derive(Debug, Clone)]
 pub struct Selection {
     source: String,
@@ -286,7 +253,7 @@ impl Selection {
     ///
     /// Selections that cannot see atom identities ignore that counter, so a titration move does
     /// not force, say, `molecule water` to be re-resolved on every energy evaluation.
-    fn generation(&self, context: &impl crate::ParticleSystem) -> Generation {
+    fn generation(&self, context: &impl crate::ObserveContext) -> Generation {
         Generation {
             groups: context.group_lists_generation(),
             atom_kinds: if self.depends_on_atom_kind {
@@ -425,6 +392,21 @@ mod tests {
     fn parse_and_display() {
         let sel = Selection::parse("protein and backbone").unwrap();
         assert_eq!(sel.to_string(), "protein and backbone");
+    }
+
+    /// Was the module doc example, before `selection` became crate-private and rustdoc stopped
+    /// compiling it.
+    #[test]
+    fn parses_the_selection_language() {
+        for expression in [
+            "protein and backbone",
+            "molecule water",
+            "resid 10 to 20 and chain A",
+            "atomtype CA or atomtype CB",
+            "name CA and chain A",
+        ] {
+            assert!(Selection::parse(expression).is_ok(), "{expression}");
+        }
     }
 
     #[test]

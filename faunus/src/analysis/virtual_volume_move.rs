@@ -26,8 +26,8 @@ use super::{Analyze, Sampling};
 use crate::auxiliary::{BlockSummary, ColumnWriter, MappingExt};
 use crate::cell::{Shape, VolumeScalePolicy};
 use crate::change::Change;
+use crate::context::PerturbContext;
 use crate::energy::EnergyChange;
-use crate::Context;
 use anyhow::Result;
 use derive_builder::Builder;
 use derive_more::Debug;
@@ -180,7 +180,7 @@ impl VirtualVolumeMove {
     ///
     /// `old_energy` is pre-computed on the original (immutable) context to avoid
     /// a redundant energy evaluation on the clone before mutation.
-    fn perturb<T: Context>(&self, context: &mut T, old_energy: f64) -> Result<f64> {
+    fn perturb<T: PerturbContext>(&self, context: &mut T, old_energy: f64) -> Result<f64> {
         let old_volume = context
             .cell()
             .volume()
@@ -214,7 +214,7 @@ impl VirtualVolumeMove {
     }
 }
 
-impl<T: Context> Analyze<T> for VirtualVolumeMove {
+impl<T: PerturbContext> Analyze<T> for VirtualVolumeMove {
     fn sampling(&self) -> &Sampling {
         &self.sampling
     }

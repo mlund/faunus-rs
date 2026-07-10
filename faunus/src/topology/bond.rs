@@ -14,6 +14,7 @@
 
 //! Bonds between atoms
 
+use crate::ObserveContext;
 use std::collections::{HashSet, VecDeque};
 
 use derive_getters::Getters;
@@ -23,8 +24,8 @@ use serde::{Deserialize, Serialize};
 use unordered_pair::UnorderedPair;
 use validator::Validate;
 
+use crate::group::Group;
 use crate::group::{AbsIndex, RelIndex};
-use crate::{group::Group, Context};
 
 use super::Indexed;
 
@@ -137,7 +138,7 @@ impl Bond {
 
     /// Calculate energy of a bond in a specific group.
     /// Returns 0.0 if any of the bonded particles is inactive.
-    pub fn energy(&self, context: &impl Context, group: &Group) -> f64 {
+    pub(crate) fn energy(&self, context: &impl ObserveContext, group: &Group) -> f64 {
         let to_abs_index = |i: usize| group.to_absolute(RelIndex::new(i)).map(AbsIndex::get);
         let [Ok(i), Ok(j)] = self.index.map(to_abs_index) else {
             return 0.0;
@@ -151,7 +152,7 @@ impl Bond {
     /// Returns 0.0 if any of the bonded particles is inactive.
     pub fn energy_intermolecular(
         &self,
-        context: &impl Context,
+        context: &impl ObserveContext,
         term: &crate::energy::IntermolecularBonded,
     ) -> f64 {
         // one or both particles are inactive

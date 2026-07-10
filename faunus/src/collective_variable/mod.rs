@@ -25,18 +25,10 @@ mod cell;
 mod dynamic;
 pub(crate) mod group;
 
-use crate::Context;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
 // Re-export CV types for convenience
-pub use atom::AtomPosition;
-pub use cell::Volume;
-pub use dynamic::{Charge, Count, Molarity};
-pub use group::{
-    DipoleMoment, DipoleProduct, EndToEnd, GyrationRadius, MassCenterPosition,
-    MassCenterSeparation, Size,
-};
 
 /// Metadata for one axis of a collective variable.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -72,7 +64,7 @@ dyn_clone::clone_trait_object!(CvKind);
 
 /// Minimal context trait for CV evaluation (object-safe subset of Context).
 pub trait EvalContext:
-    crate::group::GroupCollection + crate::context::WithCell + crate::context::WithTopology
+    crate::group::GroupCollection + crate::context::WithSimulationCell + crate::context::WithTopology
 {
     fn get_distance(&self, i: usize, j: usize) -> crate::Point;
 }
@@ -142,7 +134,7 @@ pub struct CollectiveVariableBuilder {
 
 impl CollectiveVariableBuilder {
     /// Resolve selections and construct a [`CollectiveVariable`].
-    pub fn build(&self, context: &impl Context) -> Result<CollectiveVariable> {
+    pub fn build(&self, context: &impl crate::ObserveContext) -> Result<CollectiveVariable> {
         let description = self.kind_builder.description();
         let kind = self.kind_builder.build(context)?;
         let axis = AxisDescriptor {
@@ -173,16 +165,11 @@ pub trait CvKindBuilder: Send + Sync + std::fmt::Debug + dyn_clone::DynClone {
 
 dyn_clone::clone_trait_object!(CvKindBuilder);
 
-// Blanket impl: any Context that implements the required traits also implements EvalContext
-impl<T> EvalContext for T
-where
-    T: crate::group::GroupCollection
-        + crate::context::WithCell
-        + crate::context::WithTopology
-        + crate::context::ParticleSystem,
-{
+// Blanket impl: every observable context is an EvalContext. The supertraits above are exactly
+// `ObserveContext`'s own, restated so `dyn EvalContext` stays object-safe.
+impl<T: crate::context::ObserveContext> EvalContext for T {
     fn get_distance(&self, i: usize, j: usize) -> crate::Point {
-        <T as crate::context::ParticleSystem>::get_distance(self, i, j)
+        <T as crate::context::ObserveContext>::get_distance(self, i, j)
     }
 }
 
@@ -512,11 +499,10 @@ macro_rules! impl_two_group_with_dim_builder {
 }
 
 // Re-export for use in submodules
-pub use impl_self_building_cv;
-pub use impl_single_atom_with_dim_builder;
-pub use impl_single_group_builder;
-pub use impl_single_group_with_dim_builder;
-pub use impl_two_group_with_dim_builder;
+pub(crate) use impl_self_building_cv;
+pub(crate) use impl_single_group_builder;
+pub(crate) use impl_single_group_with_dim_builder;
+pub(crate) use impl_two_group_with_dim_builder;
 
 // ---------------------------------------------------------------------------
 // Tests

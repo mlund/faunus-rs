@@ -8,14 +8,19 @@ use std::{
     sync::Arc,
 };
 
-/// Context stores the state of a single simulation system.
-pub trait Context: ParticleSystem + WithHamiltonian + Clone + std::fmt::Debug {
-    /// Update internal state after a change (e.g. reciprocal-space energy for Ewald).
-    fn update(&mut self, change: &Change) -> anyhow::Result<()> {
-        self.hamiltonian_mut().update(self, change)?;
-        Ok(())
-    }
-
+/// Full control over a simulation system: the view the framework itself holds.
+///
+/// Moves, analyses and energy terms are deliberately bound to the narrower [`ObserveContext`] or
+/// [`PerturbContext`] instead, so the machinery below — backups, `undo`, direct mutation — is
+/// unreachable from them. Every field of the implementing type is private, so this trait list *is*
+/// the mutation surface.
+pub trait Context:
+    PerturbContext
+    + crate::group::GroupCollectionMut
+    + WithHamiltonianMut
+    + WithSimulationCellMut
+    + std::fmt::Debug
+{
     /// Save energy term backups before a move is applied.
     ///
     /// Call before `apply_with_backup` so Ewald can snapshot old positions.
@@ -43,9 +48,16 @@ pub trait Context: ParticleSystem + WithHamiltonian + Clone + std::fmt::Debug {
 }
 
 /// A trait for objects that have a simulation cell.
-pub trait WithCell {
+pub trait WithSimulationCell {
     /// Get reference to simulation cell.
     fn cell(&self) -> &crate::cell::Cell;
+}
+
+/// Mutable access to the simulation cell.
+///
+/// Kept apart from [`WithSimulationCell`] so that an observer bound to the read half cannot resize the
+/// box. The single production caller restores a saved state (`state.rs`).
+pub trait WithSimulationCellMut: WithSimulationCell {
     /// Get mutable reference to simulation cell.
     fn cell_mut(&mut self) -> &mut crate::cell::Cell;
 }
@@ -68,7 +80,15 @@ pub trait WithHamiltonian: GroupCollection {
     ///
     /// Hamiltonian must be stored as `RefCell<Hamiltonian>`.
     fn hamiltonian(&self) -> Ref<'_, Hamiltonian>;
+}
 
+/// Mutable access to the Hamiltonian, through a *shared* reference.
+///
+/// The `&self` receiver is unavoidable — the Hamiltonian lives behind a `RefCell` because energy
+/// terms update their caches while the rest of the system is borrowed immutably. It is also why
+/// this must stay off the observer and perturber views: anything holding a plain `&Context` could
+/// otherwise rewrite the shared physics. Only the framework may reach it.
+pub trait WithHamiltonianMut: WithHamiltonian {
     /// Mutable reference to Hamiltonian.
     ///
     /// Hamiltonian must be stored as `RefCell<Hamiltonian>`.
@@ -76,7 +96,7 @@ pub trait WithHamiltonian: GroupCollection {
 }
 
 /// A trait for objects which contains groups of particles with defined topology in defined cell.
-pub trait ParticleSystem: GroupCollection + WithCell + WithTopology {
+pub trait ObserveContext: GroupCollection + WithSimulationCell + WithTopology {
     /// Count independently translatable entities (mass centers).
     ///
     /// Atomic groups contribute each active atom; molecular groups contribute one.
@@ -213,6 +233,23 @@ pub trait ParticleSystem: GroupCollection + WithCell + WithTopology {
         self.cell().boundary(&mut com);
         com
     }
+}
+
+/// A system that can be cloned and perturbed, for analyses that need a trial move.
+///
+/// This is the whole of what a virtual move requires: displace particles, rotate them, rescale the
+/// volume, and rebuild the energy caches afterwards. Everything else — backups, `undo`, group
+/// resizing, atom-kind swaps — stays on [`Context`], so an analysis cannot desynchronise energy
+/// caches it does not own.
+///
+/// [`hamiltonian`](WithHamiltonian::hamiltonian) is reachable here, but `hamiltonian_mut` is not.
+/// That is why [`update`](Self::update) is a *required* method rather than a provided one: its
+/// natural body would call `hamiltonian_mut`, which would hand the mutation back.
+pub trait PerturbContext: ObserveContext + WithHamiltonian + Clone {
+    /// Update internal state after a change (e.g. reciprocal-space energy for Ewald).
+    ///
+    /// Implementors reach their own Hamiltonian directly; there is no shared default body.
+    fn update(&mut self, change: &Change) -> anyhow::Result<()>;
 
     /// Scale all particle positions and cell volume to a new volume.
     ///

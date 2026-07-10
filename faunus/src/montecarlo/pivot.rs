@@ -17,7 +17,7 @@ use crate::montecarlo;
 use crate::propagate::{tagged_yaml, MoveProposal, ProposedMove};
 use crate::topology::BondGraph;
 use crate::transform::random_quaternion;
-use crate::Context;
+use crate::ObserveContext;
 use rand::prelude::*;
 use serde::{Deserialize, Serialize};
 
@@ -52,7 +52,7 @@ pub struct PivotMove {
 
 impl PivotMove {
     /// Validate and finalize the move.
-    pub(crate) fn finalize(&mut self, context: &impl Context) -> anyhow::Result<()> {
+    pub(crate) fn finalize(&mut self, context: &impl ObserveContext) -> anyhow::Result<()> {
         self.molecule_id = montecarlo::find_molecule_id(context, &self.molecule_name, "PivotMove")?;
         self.bond_graph = context.topology().moleculekinds()[self.molecule_id]
             .bond_graph()
@@ -61,7 +61,7 @@ impl PivotMove {
     }
 }
 
-impl<T: Context> MoveProposal<T> for PivotMove {
+impl<T: ObserveContext> MoveProposal<T> for PivotMove {
     fn propose_move(&mut self, context: &T, rng: &mut dyn RngCore) -> Option<ProposedMove> {
         if self.bond_graph.is_empty() {
             return None;

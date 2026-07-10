@@ -16,7 +16,7 @@
 
 use crate::{
     cell::Cell,
-    context::WithCell,
+    context::WithSimulationCell,
     group::{GroupCollection, GroupSize},
     Particle, UnitQuaternion,
 };
@@ -54,7 +54,7 @@ pub struct State {
 
 impl State {
     /// Capture the current simulation state for checkpointing.
-    pub fn save(context: &(impl GroupCollection + WithCell), step: usize) -> Self {
+    pub fn save(context: &(impl GroupCollection + WithSimulationCell), step: usize) -> Self {
         State {
             particles: (0..context.num_particles())
                 .map(|i| Particle::new(context.atom_kind(i), context.position(i)))

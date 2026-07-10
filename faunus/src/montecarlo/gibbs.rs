@@ -558,7 +558,7 @@ impl<T: Context + Send + 'static> GibbsEnsemble<T> {
 mod tests {
     use super::*;
     use crate::backend::Backend;
-    use crate::WithCell;
+    use crate::WithSimulationCell;
 
     fn make_contexts() -> (Backend, Backend) {
         let mut rng = rand::thread_rng();

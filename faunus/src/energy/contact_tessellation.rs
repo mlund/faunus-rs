@@ -22,7 +22,8 @@
 use crate::cell::BoundaryConditions;
 use crate::group::Group;
 use crate::topology::AtomKind;
-use crate::{Change, Context};
+use crate::Change;
+use crate::ObserveContext;
 use derive_builder::Builder;
 use serde::{Deserialize, Serialize};
 use voronota_ltr::{compute_contacts_only, Ball, PeriodicBox};
@@ -103,7 +104,7 @@ fn groups_beyond_cutoff(
 
 /// Append balls and atom kind indices for a group's active atoms.
 fn append_group_balls(
-    context: &impl Context,
+    context: &impl ObserveContext,
     group: &Group,
     atomkinds: &[AtomKind],
     balls: &mut Vec<Ball>,
@@ -120,7 +121,7 @@ fn append_group_balls(
 
 /// Compute contact energy for a single body pair (unscaled).
 fn pair_contact_energy(
-    context: &impl Context,
+    context: &impl ObserveContext,
     gi: &Group,
     gj: &Group,
     gamma: &GammaMatrix,
@@ -151,7 +152,7 @@ fn pair_contact_energy(
 
 /// Compute all pairwise energies and group energy sums.
 fn compute_all_pairwise(
-    context: &impl Context,
+    context: &impl ObserveContext,
     groups: &[Group],
     probe_radius: f64,
     scaling: f64,
@@ -227,7 +228,7 @@ impl ContactTessellationEnergy {
     /// Construct from builder and live context.
     pub(super) fn from_builder(
         builder: &ContactTessellationEnergyBuilder,
-        context: &impl Context,
+        context: &impl ObserveContext,
     ) -> anyhow::Result<Self> {
         let probe_radius = builder
             .probe_radius
@@ -271,7 +272,7 @@ impl ContactTessellationEnergy {
         })
     }
 
-    fn recompute_group_row(&mut self, context: &impl Context, k: usize) {
+    fn recompute_group_row(&mut self, context: &impl ObserveContext, k: usize) {
         let groups = context.groups();
         let n_groups = self.cache.n_groups;
 
@@ -320,7 +321,7 @@ impl ContactTessellationEnergy {
         }
     }
 
-    fn rebuild_all(&mut self, context: &impl Context) {
+    fn rebuild_all(&mut self, context: &impl ObserveContext) {
         let (pairwise, group_energies) = compute_all_pairwise(
             context,
             context.groups(),
@@ -335,7 +336,7 @@ impl ContactTessellationEnergy {
         self.cache.n_groups = context.groups().len();
     }
 
-    pub(super) fn energy(&self, _context: &impl Context, change: &Change) -> f64 {
+    pub(super) fn energy(&self, _context: &impl ObserveContext, change: &Change) -> f64 {
         match change {
             Change::Everything | Change::Volume(..) => {
                 // Each pair counted in both group_energies[i] and [j], so halve
@@ -368,7 +369,11 @@ impl ContactTessellationEnergy {
         }
     }
 
-    pub(super) fn update(&mut self, context: &impl Context, change: &Change) -> anyhow::Result<()> {
+    pub(super) fn update(
+        &mut self,
+        context: &impl ObserveContext,
+        change: &Change,
+    ) -> anyhow::Result<()> {
         match change {
             Change::Everything | Change::Volume(..) => {
                 // Volume change may alter periodic box dimensions

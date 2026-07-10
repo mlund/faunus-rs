@@ -7,10 +7,10 @@ use crate::{
     backend::Backend,
     cell::{Cell, Cuboid, SimulationCell},
     energy::{builder::HamiltonianBuilder, Hamiltonian},
-    group::{GroupCollection, GroupSize, RelIndex},
+    group::{GroupCollection, GroupCollectionMut, GroupSize, RelIndex},
     montecarlo::NewOld,
     topology::Topology,
-    Change, Context, Group, GroupChange,
+    Change, Group, GroupChange,
 };
 
 use super::*;
@@ -113,7 +113,7 @@ fn test_nonbonded_matrix_new() {
 
 /// Assert particle-particle interaction energy.
 fn assert_part_part(
-    system: &impl Context,
+    system: &impl ObserveContext,
     nonbonded: &NonbondedMatrix,
     i: usize,
     j: usize,
@@ -848,7 +848,7 @@ fn test_nonbonded_matrix_splined_with_config() {
 /// Verify nonbonded forces against analytical pair forces.
 #[test]
 fn test_nonbonded_forces() {
-    use crate::context::ParticleSystem;
+    use crate::context::ObserveContext;
     let (system, nonbonded) = get_test_matrix();
 
     let forces = nonbonded.forces(&system);

@@ -55,6 +55,7 @@ impl<T: Context> MoveRunner<T> {
         self.weight
     }
 
+    #[allow(dead_code)] // read by tests
     pub const fn repeat(&self) -> usize {
         self.repeat
     }

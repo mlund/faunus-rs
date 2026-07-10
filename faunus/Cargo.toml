@@ -56,13 +56,8 @@ vergen-gitcl = "1"
 
 [dev-dependencies]
 approx = "0.5"
-criterion = "0.5"
 float-cmp = "0.9"
 tempfile = "3"
-
-[[bench]]
-name = "mc_sweep"
-harness = false
 
 [features]
 default = ["cli"]

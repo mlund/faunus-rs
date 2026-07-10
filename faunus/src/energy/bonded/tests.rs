@@ -6,7 +6,7 @@ use crate::{
     backend::Backend,
     cell::{Cell, Cuboid},
     energy::Hamiltonian,
-    group::{GroupCollection, GroupSize, RelIndex},
+    group::{GroupCollection, GroupCollectionMut, GroupSize, RelIndex},
     montecarlo::NewOld,
     topology::Topology,
     GroupChange,

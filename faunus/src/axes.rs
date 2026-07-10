@@ -17,6 +17,8 @@ use serde::{Deserialize, Serialize};
 use crate::Point;
 
 /// Selects which spatial axes (x, y, z) are active for projections and measures.
+// The variant names are the axis labels users write in YAML; renaming them would break input files.
+#[allow(clippy::upper_case_acronyms)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum Axes {

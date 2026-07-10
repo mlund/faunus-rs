@@ -20,7 +20,7 @@
 use super::{Analyze, Frequency, Sampling};
 use crate::auxiliary::{ColumnWriter, MappingExt, WeightedMean};
 use crate::collective_variable::{CollectiveVariable, CollectiveVariableBuilder};
-use crate::Context;
+use crate::ObserveContext;
 use anyhow::Result;
 use derive_more::Debug;
 use serde::{Deserialize, Serialize};
@@ -49,7 +49,7 @@ impl CollectiveVariableAnalysisBuilder {
     }
 
     /// Resolve selections against live context and open the output file, if any.
-    pub fn build(&self, context: &impl Context) -> Result<CollectiveVariableAnalysis> {
+    pub fn build(&self, context: &impl ObserveContext) -> Result<CollectiveVariableAnalysis> {
         let cv = self.cv.build(context)?;
 
         let stream = if let Some(path) = &self.file {
@@ -85,6 +85,7 @@ pub struct CollectiveVariableAnalysis {
 
 impl CollectiveVariableAnalysis {
     /// Running mean of all sampled CV values (Welford's algorithm via `average` crate).
+    #[allow(dead_code)] // read by tests
     pub fn mean(&self) -> f64 {
         self.mean.mean()
     }
@@ -99,7 +100,7 @@ impl crate::Info for CollectiveVariableAnalysis {
     }
 }
 
-impl<T: Context> Analyze<T> for CollectiveVariableAnalysis {
+impl<T: ObserveContext> Analyze<T> for CollectiveVariableAnalysis {
     fn sampling(&self) -> &Sampling {
         &self.sampling
     }
@@ -213,7 +214,7 @@ mod integration_tests {
     use crate::analysis::Analyze;
     use crate::backend::Backend;
     use crate::cell::Shape;
-    use crate::context::WithCell;
+    use crate::context::WithSimulationCell;
     use std::path::Path;
 
     fn make_context() -> Backend {

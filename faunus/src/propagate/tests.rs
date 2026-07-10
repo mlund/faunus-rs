@@ -1,4 +1,6 @@
-use super::builder::{CollectionBuilder, MoveCollectionBuilder, Seed};
+#[cfg(feature = "gpu")]
+use super::builder::MoveCollectionBuilder;
+use super::builder::{CollectionBuilder, Seed};
 use super::Propagate;
 use crate::backend::Backend;
 use crate::montecarlo::AcceptanceCriterion;

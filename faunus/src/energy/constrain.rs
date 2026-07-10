@@ -18,7 +18,8 @@
 //! soft harmonic constraints (quadratic penalty around equilibrium).
 
 use crate::collective_variable::{CollectiveVariable, CollectiveVariableBuilder};
-use crate::{Change, Context};
+use crate::Change;
+use crate::ObserveContext;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
@@ -49,7 +50,7 @@ pub struct ConstrainBuilder {
 
 impl ConstrainBuilder {
     /// Build a [`Constrain`] energy term by resolving selections against the context.
-    pub fn build(&self, context: &impl Context) -> Result<Constrain> {
+    pub(crate) fn build(&self, context: &impl ObserveContext) -> Result<Constrain> {
         let cv = self.cv.build(context)?;
         Ok(Constrain {
             cv,
@@ -70,7 +71,7 @@ pub struct Constrain {
 }
 
 impl Constrain {
-    pub fn energy(&self, context: &impl Context, change: &Change) -> f64 {
+    pub(crate) fn energy(&self, context: &impl ObserveContext, change: &Change) -> f64 {
         if matches!(change, Change::None) {
             return 0.0;
         }
@@ -140,7 +141,7 @@ mod integration_tests {
     use super::*;
     use crate::backend::Backend;
     use crate::cell::Shape;
-    use crate::context::WithCell;
+    use crate::context::WithSimulationCell;
     use std::path::Path;
 
     fn make_context() -> Backend {

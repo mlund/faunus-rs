@@ -23,11 +23,13 @@ mod moverunner;
 mod tests;
 
 pub(crate) use builder::BuildableMove;
-pub use builder::MoveBuilder;
 #[cfg(feature = "gpu")]
-pub use langevin::{LangevinConfig, LangevinRunner};
+pub(crate) use langevin::LangevinRunner;
+/// Only the move tests name the target directly; production code goes through `ProposedMove`.
+#[cfg(test)]
+pub(crate) use moveproposal::MoveTarget;
 pub(crate) use moveproposal::{default_repeat, default_weight, tagged_yaml};
-pub use moveproposal::{Displacement, MoveProposal, MoveTarget, ProposedMove};
+pub use moveproposal::{Displacement, MoveProposal, ProposedMove};
 pub use moverunner::MoveRunner;
 
 #[cfg(feature = "gpu")]

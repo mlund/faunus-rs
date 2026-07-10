@@ -20,7 +20,8 @@
 
 use crate::collective_variable::{CollectiveVariable, CollectiveVariableBuilder};
 use crate::flat_histogram::FlatHistogramState;
-use crate::{Change, Context};
+use crate::Change;
+use crate::ObserveContext;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
@@ -56,7 +57,7 @@ impl Penalty {
     }
 
     /// Compute bias energy: `ln_g(bin) * kT`, or infinity if out of range.
-    pub fn energy(&self, context: &impl Context, change: &Change) -> f64 {
+    pub(crate) fn energy(&self, context: &impl ObserveContext, change: &Change) -> f64 {
         if matches!(change, Change::None) {
             return 0.0;
         }
@@ -69,7 +70,7 @@ impl Penalty {
     }
 
     /// Evaluate CV(s) and update the shared histogram + density of states.
-    pub fn update(&self, context: &impl Context) {
+    pub(crate) fn update(&self, context: &impl ObserveContext) {
         let cv = self.eval_cv(context);
         let mut state = self.state.write().expect("poisoned lock");
         if let Some(bin) = state.bin_index(&cv) {
@@ -83,7 +84,7 @@ impl Penalty {
     }
 
     /// Evaluate CV value(s) into a slice suitable for `bin_index`.
-    fn eval_cv(&self, context: &impl Context) -> [f64; 2] {
+    fn eval_cv(&self, context: &impl ObserveContext) -> [f64; 2] {
         let v1 = self.cv.evaluate(context);
         let v2 = self.cv2.as_ref().map_or(0.0, |cv| cv.evaluate(context));
         [v1, v2]
@@ -109,7 +110,11 @@ pub struct PenaltyBuilder {
 
 impl PenaltyBuilder {
     /// Build a static [`Penalty`] by loading the checkpoint and resolving CVs.
-    pub fn build(&self, context: &impl Context, thermal_energy: f64) -> anyhow::Result<Penalty> {
+    pub fn build(
+        &self,
+        context: &impl ObserveContext,
+        thermal_energy: f64,
+    ) -> anyhow::Result<Penalty> {
         let state = FlatHistogramState::from_file(&self.file)?;
         log::info!(
             "Loaded penalty from '{}': {} bins, Δg={:.1} kT",

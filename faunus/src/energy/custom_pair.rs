@@ -25,6 +25,7 @@
 //! (`degrees_of_freedom: Rigid`); other selection patterns are rejected
 //! at build time.
 
+use crate::ObserveContext;
 use exmex::{Express, FlatEx, FlatExVal, Val};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -32,7 +33,7 @@ use std::sync::Arc;
 
 use crate::cell::BoundaryConditions;
 use crate::selection::Selection;
-use crate::{Change, Context};
+use crate::Change;
 
 use super::expr_helpers::substitute_constants;
 use super::EnergyTerm;
@@ -69,7 +70,7 @@ const fn default_gradient_h() -> f64 {
 }
 
 impl CustomPairBuilder {
-    pub(crate) fn build(&self, context: &impl Context) -> anyhow::Result<CustomPair> {
+    pub(crate) fn build(&self, context: &impl ObserveContext) -> anyhow::Result<CustomPair> {
         let group1 = resolve_unique_rigid_group(context, &self.selection1, "selection1")?;
         let group2 = resolve_unique_rigid_group(context, &self.selection2, "selection2")?;
         if group1 == group2 {
@@ -104,7 +105,7 @@ impl CustomPairBuilder {
 
 /// Resolve a selection to exactly one rigid-body group, or fail.
 fn resolve_unique_rigid_group(
-    context: &impl Context,
+    context: &impl ObserveContext,
     selection: &Selection,
     label: &str,
 ) -> anyhow::Result<usize> {
@@ -194,7 +195,7 @@ pub struct CustomPair {
 impl CustomPair {
     /// Energy U = f(dx, dy, dz, r) at the current COM-COM separation.
     /// MC consumes this; LD never calls it (uses `forces()` instead).
-    pub(crate) fn energy(&self, context: &impl Context, change: &Change) -> f64 {
+    pub(crate) fn energy(&self, context: &impl ObserveContext, change: &Change) -> f64 {
         if matches!(change, Change::None) {
             return 0.0;
         }
@@ -208,7 +209,7 @@ impl CustomPair {
     /// Per-atom forces from this term, indexed by absolute particle index.
     /// Mass-weighted distribution gives the rigid-body integrator pure translation
     /// (zero torque about each COM) — see distribute_force().
-    pub(crate) fn forces(&self, context: &impl Context) -> Vec<crate::Point> {
+    pub(crate) fn forces(&self, context: &impl ObserveContext) -> Vec<crate::Point> {
         let n_atoms = context
             .groups()
             .iter()
@@ -237,7 +238,7 @@ impl CustomPair {
     }
 
     /// Minimum-image vector com1 − com2 and its norm.
-    fn com_separation(&self, context: &impl Context) -> (crate::Point, f64) {
+    fn com_separation(&self, context: &impl ObserveContext) -> (crate::Point, f64) {
         let com1 = group_com(context, self.group1);
         let com2 = group_com(context, self.group2);
         let d = context.cell().distance(&com1, &com2);
@@ -283,7 +284,7 @@ impl CustomPair {
 }
 
 /// Mass-weighted COM of a group (uses the cached COM if available).
-fn group_com(context: &impl Context, group_idx: usize) -> crate::Point {
+fn group_com(context: &impl ObserveContext, group_idx: usize) -> crate::Point {
     if let Some(&com) = context.groups()[group_idx].mass_center() {
         return com;
     }
@@ -297,7 +298,7 @@ fn group_com(context: &impl Context, group_idx: usize) -> crate::Point {
 /// Σ(rᵢ−r_com)×Fᵢ = (1/M)[Σmᵢ(rᵢ−r_com)]×F_com = 0 by definition of the COM.
 /// The rigid integrator therefore sees pure translation with zero spurious torque.
 fn distribute_force(
-    context: &impl Context,
+    context: &impl ObserveContext,
     group_idx: usize,
     f_com: crate::Point,
     forces: &mut [crate::Point],

@@ -15,7 +15,7 @@
 use crate::montecarlo;
 use crate::propagate::{tagged_yaml, MoveProposal, ProposedMove};
 use crate::transform::random_quaternion;
-use crate::Context;
+use crate::ObserveContext;
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
 
@@ -45,14 +45,14 @@ pub struct RotateMolecule {
 
 impl RotateMolecule {
     /// Validate and finalize the move.
-    pub(crate) fn finalize(&mut self, context: &impl Context) -> anyhow::Result<()> {
+    pub(crate) fn finalize(&mut self, context: &impl ObserveContext) -> anyhow::Result<()> {
         self.molecule_id =
             montecarlo::find_molecule_id(context, &self.molecule_name, "RotateMolecule")?;
         Ok(())
     }
 }
 
-impl<T: Context> MoveProposal<T> for RotateMolecule {
+impl<T: ObserveContext> MoveProposal<T> for RotateMolecule {
     fn propose_move(&mut self, context: &T, rng: &mut dyn RngCore) -> Option<ProposedMove> {
         let group_index = montecarlo::random_group(context, rng, self.molecule_id)?;
         let (quaternion, angle) = random_quaternion(rng, self.max_displacement);

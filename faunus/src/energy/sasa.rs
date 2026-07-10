@@ -14,7 +14,8 @@
 
 //! # Energy due to solvent-accessible surface area and atomic-level surface energy densities.
 
-use crate::{Change, Context, GroupChange};
+use crate::ObserveContext;
+use crate::{Change, GroupChange};
 use derive_builder::Builder;
 use serde::{Deserialize, Serialize};
 use std::ops::Range;
@@ -89,7 +90,7 @@ impl SasaEnergy {
             .sum()
     }
 
-    pub fn energy(&self, _context: &impl Context, _change: &Change) -> f64 {
+    pub(crate) fn energy(&self, _context: &impl ObserveContext, _change: &Change) -> f64 {
         self.raw_energy() + self.energy_offset.unwrap_or(0.0)
     }
 
@@ -110,7 +111,7 @@ impl SasaEnergy {
     }
 
     /// Copy positions from context into `self.balls` for balls in group `k`.
-    fn sync_balls(&mut self, context: &impl Context, k: usize, ball_ids: &[usize]) {
+    fn sync_balls(&mut self, context: &impl ObserveContext, k: usize, ball_ids: &[usize]) {
         let group = &context.groups()[k];
         let range_start = self.group_ball_ranges[k].start;
         for &ball_id in ball_ids {
@@ -123,7 +124,11 @@ impl SasaEnergy {
         }
     }
 
-    pub(super) fn update(&mut self, context: &impl Context, change: &Change) -> anyhow::Result<()> {
+    pub(super) fn update(
+        &mut self,
+        context: &impl ObserveContext,
+        change: &Change,
+    ) -> anyhow::Result<()> {
         match change {
             // GCMC resize changes the ball count, invalidating all ranges and the tessellation.
             Change::SingleGroup(_, gc) if gc.is_resize() => self.rebuild_all(context),
@@ -151,7 +156,7 @@ impl SasaEnergy {
         Ok(())
     }
 
-    fn rebuild_all(&mut self, context: &impl Context) {
+    fn rebuild_all(&mut self, context: &impl ObserveContext) {
         self.periodic_box = super::make_periodic_box(context.cell());
         let topology = context.topology();
         let atomkinds = topology.atomkinds();

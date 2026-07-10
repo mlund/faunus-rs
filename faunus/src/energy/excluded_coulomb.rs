@@ -5,10 +5,11 @@
 //! molecules that opt in via `keep_excluded_coulomb: true`, enabling charge
 //! titration and alchemical moves on molecules with exclusions.
 
+use crate::ObserveContext;
 use interatomic::twobody::{ArcPotential, IsotropicTwobodyEnergy};
 use ndarray::Array2;
 
-use crate::{group::Group, topology::Topology, Change, Context};
+use crate::{group::Group, topology::Topology, Change};
 
 use super::{builder::PairPotentialBuilder, EnergyChange, EnergyTerm};
 
@@ -53,7 +54,7 @@ impl ExcludedCoulomb {
     }
 
     /// Coulomb energy for excluded pairs in a single group.
-    fn one_group(&self, context: &impl Context, group: &Group) -> f64 {
+    fn one_group(&self, context: &impl ObserveContext, group: &Group) -> f64 {
         let topology = context.topology_ref();
         let molecule = &topology.moleculekinds()[group.molecule()];
 
@@ -78,7 +79,7 @@ impl ExcludedCoulomb {
 }
 
 impl EnergyChange for ExcludedCoulomb {
-    fn energy(&self, context: &impl Context, change: &Change) -> f64 {
+    fn energy(&self, context: &impl ObserveContext, change: &Change) -> f64 {
         match change {
             Change::Everything | Change::Volume(_, _) => context
                 .groups()

@@ -10,7 +10,7 @@ use super::{Analyze, Frequency, Sampling};
 use crate::auxiliary::{MappingExt, WeightedMean};
 use crate::selection::{CachedSelection, Groups, Selection};
 use crate::topology::GroupKind;
-use crate::Context;
+use crate::ObserveContext;
 use anyhow::Result;
 use derive_more::Debug;
 use serde::{Deserialize, Serialize};
@@ -37,7 +37,7 @@ impl MultipoleAnalysisBuilder {
         Ok(())
     }
 
-    pub fn build(&self, context: &impl Context) -> Result<MultipoleAnalysis> {
+    pub fn build(&self, context: &impl ObserveContext) -> Result<MultipoleAnalysis> {
         let topology = context.topology_ref();
         let groups = context.resolve_groups(&self.selection);
         if groups.is_empty() {
@@ -115,7 +115,7 @@ impl crate::Info for MultipoleAnalysis {
     }
 }
 
-impl<T: Context> Analyze<T> for MultipoleAnalysis {
+impl<T: ObserveContext> Analyze<T> for MultipoleAnalysis {
     fn sampling(&self) -> &Sampling {
         &self.sampling
     }
@@ -276,7 +276,7 @@ mod tests {
     use super::*;
     use crate::analysis::Analyze;
     use crate::backend::Backend;
-    use crate::group::GroupCollection;
+    use crate::group::GroupCollectionMut;
     use tempfile::NamedTempFile;
 
     fn backend_from_str(yaml: &str) -> Backend {

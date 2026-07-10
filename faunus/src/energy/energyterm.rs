@@ -14,7 +14,8 @@ use super::{
     tabulated::TabulatedEnergy,
     CellOverlap, EnergyChange,
 };
-use crate::{Change, Context};
+use crate::Change;
+use crate::ObserveContext;
 
 #[derive(Debug, Clone)]
 pub enum EnergyTerm {
@@ -79,7 +80,11 @@ macro_rules! dispatch_stateful {
 
 impl EnergyTerm {
     /// Update internal state due to a change in the system.
-    pub fn update(&mut self, context: &impl Context, change: &Change) -> anyhow::Result<()> {
+    pub(crate) fn update(
+        &mut self,
+        context: &impl ObserveContext,
+        change: &Change,
+    ) -> anyhow::Result<()> {
         match self {
             Self::NonbondedMatrix(x) => {
                 x.update_cache(context, change);
@@ -111,9 +116,9 @@ impl EnergyTerm {
 
     /// Save internal state for later undo. Stateless terms are no-ops.
     ///
-    /// Context is passed so that terms like Ewald can snapshot positions
+    /// The context is passed so that terms like Ewald can snapshot positions
     /// of affected particles before the move is applied.
-    pub(crate) fn save_backup(&mut self, change: &Change, context: &impl Context) {
+    pub(crate) fn save_backup(&mut self, change: &Change, context: &impl ObserveContext) {
         match self {
             Self::IntermolecularBonded(x) => x.save_backup(change),
             Self::SasaEnergy(x) => x.save_backup(change),
@@ -200,7 +205,7 @@ impl EnergyTerm {
     ///
     /// Returns a dense vector indexed by absolute particle index.
     /// Terms that do not contribute forces return an empty vector.
-    pub(crate) fn forces(&self, context: &impl Context) -> Vec<crate::Point> {
+    pub(crate) fn forces(&self, context: &impl ObserveContext) -> Vec<crate::Point> {
         match self {
             Self::NonbondedMatrix(x) => x.forces(context),
             Self::NonbondedMatrixSplined(x) => x.forces(context),
@@ -246,11 +251,11 @@ impl EnergyTerm {
     }
 
     /// Nonbonded energy between two sets of atom indices; `None` for non-nonbonded terms.
-    pub fn nonbonded_energy_between_atoms(
+    pub(crate) fn nonbonded_energy_between_atoms(
         &self,
-        context: &impl Context,
-        atoms1: &[usize],
-        atoms2: &[usize],
+        context: &impl ObserveContext,
+        atoms1: &[crate::group::AbsIndex],
+        atoms2: &[crate::group::AbsIndex],
     ) -> Option<f64> {
         match self {
             Self::NonbondedMatrix(nb) => Some(nb.indices_with_indices(context, atoms1, atoms2)),
@@ -287,7 +292,7 @@ impl crate::Info for EnergyTerm {
 impl EnergyChange for EnergyTerm {
     /// Compute the energy of the EnergyTerm relevant to the change in the system.
     /// The energy is returned in the units of kJ/mol.
-    fn energy(&self, context: &impl Context, change: &Change) -> f64 {
+    fn energy(&self, context: &impl ObserveContext, change: &Change) -> f64 {
         match self {
             Self::NonbondedMatrix(x) => x.energy(context, change),
             Self::NonbondedMatrixSplined(x) => x.energy(context, change),

@@ -7,10 +7,11 @@ use crate::{
     cell::PbcParams,
     cell::{BoundaryConditions, Cell},
     change::Change,
+    context::{PerturbContext, WithHamiltonianMut},
     energy::{builder::HamiltonianBuilder, Hamiltonian},
-    group::{GroupCollection, GroupGeometry, GroupLists, GroupSize},
+    group::{GroupCollection, GroupCollectionMut, GroupGeometry, GroupLists, GroupSize},
     topology::Topology,
-    Context, Group, ParticleSystem, Point, UnitQuaternion, WithCell, WithHamiltonian, WithTopology,
+    Context, Group, ObserveContext, Point, UnitQuaternion, WithSimulationCell, WithTopology,
 };
 
 use rand::rngs::ThreadRng;
@@ -145,6 +146,8 @@ impl Backend {
     /// Mirrors [`new`](Self::new) but parses every section from memory, so it works on
     /// targets without a filesystem (e.g. `wasm32-unknown-unknown`). The input must be
     /// fully self-contained: no `include` directives and no external structure files.
+    // Building a system from a string is part of the planned public interface; see issue #54.
+    #[allow(dead_code)]
     pub fn from_yaml_str(
         yaml: &str,
         structure_file: Option<&Path>,
@@ -251,11 +254,14 @@ impl Backend {
     }
 }
 
-impl crate::WithCell for Backend {
+impl crate::WithSimulationCell for Backend {
     #[inline(always)]
     fn cell(&self) -> &Cell {
         &self.cell
     }
+}
+
+impl crate::context::WithSimulationCellMut for Backend {
     /// Returns mutable cell reference and invalidates cached `pbc_params`.
     fn cell_mut(&mut self) -> &mut Cell {
         self.pbc_params = None;
@@ -276,6 +282,9 @@ impl crate::WithHamiltonian for Backend {
     fn hamiltonian(&self) -> std::cell::Ref<'_, crate::energy::Hamiltonian> {
         self.hamiltonian.borrow()
     }
+}
+
+impl crate::context::WithHamiltonianMut for Backend {
     fn hamiltonian_mut(&self) -> std::cell::RefMut<'_, crate::energy::Hamiltonian> {
         self.hamiltonian.borrow_mut()
     }
@@ -286,10 +295,6 @@ impl GroupCollection for Backend {
         &self.groups
     }
 
-    fn groups_mut(&mut self) -> &mut [Group] {
-        &mut self.groups
-    }
-
     #[inline(always)]
     fn position(&self, index: usize) -> Point {
         Point::new(self.x[index], self.y[index], self.z[index])
@@ -298,6 +303,24 @@ impl GroupCollection for Backend {
     #[inline(always)]
     fn atom_kind(&self, index: usize) -> usize {
         self.atom_kinds[index] as usize
+    }
+
+    fn atom_kinds_generation(&self) -> u64 {
+        self.atom_kinds_generation
+    }
+
+    fn num_particles(&self) -> usize {
+        self.x.len()
+    }
+
+    fn group_lists(&self) -> &GroupLists {
+        &self.group_lists
+    }
+}
+
+impl GroupCollectionMut for Backend {
+    fn groups_mut(&mut self) -> &mut [Group] {
+        &mut self.groups
     }
 
     fn set_atom_kind(&mut self, index: usize, atom_id: usize) {
@@ -323,10 +346,6 @@ impl GroupCollection for Backend {
         self.atom_kinds_generation += 1;
     }
 
-    fn atom_kinds_generation(&self) -> u64 {
-        self.atom_kinds_generation
-    }
-
     fn swap_particles(&mut self, i: usize, j: usize) {
         self.x.swap(i, j);
         self.y.swap(i, j);
@@ -337,14 +356,6 @@ impl GroupCollection for Backend {
             self.atom_kinds_generation += 1;
         }
         self.update_cell_list_particles(&[i, j]);
-    }
-
-    fn num_particles(&self) -> usize {
-        self.x.len()
-    }
-
-    fn group_lists(&self) -> &GroupLists {
-        &self.group_lists
     }
 
     fn set_positions<'a>(
@@ -447,7 +458,7 @@ impl GroupCollection for Backend {
     }
 }
 
-impl ParticleSystem for Backend {
+impl ObserveContext for Backend {
     #[inline(always)]
     fn get_distance(&self, i: usize, j: usize) -> Point {
         let pi = Point::new(self.x[i], self.y[i], self.z[i]);
@@ -481,6 +492,16 @@ impl ParticleSystem for Backend {
     fn get_dihedral_angle(&self, indices: &[usize; 4]) -> f64 {
         let [p1, p2, p3, p4] = indices.map(|i| self.position(i));
         crate::geometry::dihedral_points(&p1, &p2, &p3, &p4, self.cell())
+    }
+}
+
+impl crate::context::PerturbContext for Backend {
+    /// Reaches the `RefCell` directly rather than through `hamiltonian_mut`, which
+    /// `PerturbContext` deliberately does not expose. Both borrows of `self` are shared, so the
+    /// borrow checker is satisfied and no energy term re-borrows the Hamiltonian from `update`.
+    fn update(&mut self, change: &Change) -> anyhow::Result<()> {
+        self.hamiltonian.borrow_mut().update(self, change)?;
+        Ok(())
     }
 
     fn scale_volume_and_positions(
@@ -853,6 +874,7 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
 mod tests {
     use super::*;
     use crate::energy::EnergyChange;
+    use crate::WithHamiltonian;
 
     /// Verify total energy equals sum of per-group energies, and mass_center matches auxiliary.
     #[test]
@@ -1217,6 +1239,19 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
         let tmp = tempfile::NamedTempFile::new().unwrap();
         std::fs::write(tmp.path(), TWO_DIMERS).unwrap();
         Backend::new(tmp.path(), None, &mut rand::thread_rng()).unwrap()
+    }
+
+    /// A group selection resolves into the group array, not the particle array. `group()` takes the
+    /// resolved `GroupIndex` directly, while `position()` indexes particles by `usize` and rejects
+    /// it — the property the type split buys, and the reason `CachedSelection` is generic over its
+    /// target.
+    #[test]
+    fn resolved_group_indices_address_the_group_array() {
+        let context = backend();
+        let mut groups = CachedSelection::groups(Selection::parse("molecule DIMER").unwrap());
+        let resolved = groups.resolve(&context);
+        assert_eq!(resolved.len(), 2);
+        assert_eq!(context.group(resolved[0]).molecule(), 0);
     }
 
     /// Strip the index space, so a resolved slice can be compared with the uncached `Vec<usize>`.

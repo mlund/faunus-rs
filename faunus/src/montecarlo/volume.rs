@@ -15,7 +15,7 @@
 use crate::cell::{Shape, VolumeScalePolicy};
 use crate::montecarlo::NewOld;
 use crate::propagate::{tagged_yaml, MoveProposal, ProposedMove};
-use crate::Context;
+use crate::ObserveContext;
 use rand::prelude::*;
 use serde::{Deserialize, Serialize};
 
@@ -55,7 +55,7 @@ impl crate::Info for VolumeMove {
 
 impl VolumeMove {
     /// Validate and finalize the move.
-    pub(crate) fn finalize(&mut self, context: &impl Context) -> anyhow::Result<()> {
+    pub(crate) fn finalize(&mut self, context: &impl ObserveContext) -> anyhow::Result<()> {
         if self.volume_displacement <= 0.0 {
             anyhow::bail!(
                 "VolumeMove: volume displacement (dV) must be positive, got {}",
@@ -76,7 +76,7 @@ impl VolumeMove {
     }
 }
 
-impl<T: Context> MoveProposal<T> for VolumeMove {
+impl<T: ObserveContext> MoveProposal<T> for VolumeMove {
     fn propose_move(&mut self, context: &T, rng: &mut dyn RngCore) -> Option<ProposedMove> {
         let old_volume = context.cell().volume()?;
         if old_volume.is_infinite() {

@@ -19,7 +19,8 @@
 //! where N is the number of independently translatable entities.
 
 use crate::cell::Shape;
-use crate::{Change, Context};
+use crate::Change;
+use crate::ObserveContext;
 use serde::{Deserialize, Serialize};
 
 use super::EnergyTerm;
@@ -86,7 +87,7 @@ impl ExternalPressure {
     }
 
     /// Compute the isobaric energy: `P·V - (N+1)·kT·ln(V)`.
-    fn compute(&self, context: &impl Context) -> f64 {
+    fn compute(&self, context: &impl ObserveContext) -> f64 {
         let volume = match context.cell().volume() {
             Some(v) if v > 0.0 => v,
             _ => return 0.0,
@@ -97,7 +98,7 @@ impl ExternalPressure {
     }
 
     /// Compute energy for a given change.
-    pub fn energy(&self, context: &impl Context, change: &Change) -> f64 {
+    pub(crate) fn energy(&self, context: &impl ObserveContext, change: &Change) -> f64 {
         match change {
             Change::Everything | Change::Volume(..) => self.compute(context),
             // N changes when particles are added/removed (GCMC)
@@ -210,8 +211,8 @@ mod tests {
 mod integration_tests {
     use super::*;
     use crate::backend::Backend;
-    use crate::context::ParticleSystem;
-    use crate::WithCell;
+    use crate::context::ObserveContext;
+    use crate::WithSimulationCell;
     use float_cmp::assert_approx_eq;
     use std::path::Path;
 
