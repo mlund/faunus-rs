@@ -447,7 +447,9 @@ fn run_rerun(
 
     log::info!("Processed {frame_index} frames");
 
-    analyses.finalize(&context, frame_index)?;
+    // `frame_index` counts frames, so the last one carries step `frame_index - 1`, matching
+    // what the Monte Carlo loop passes.
+    analyses.finalize(&context, frame_index.saturating_sub(1))?;
     analyses.write_to_disk()?;
 
     write_yaml(&medium, yaml_output, Some("medium"))?;

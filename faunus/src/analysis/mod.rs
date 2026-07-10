@@ -467,7 +467,8 @@ pub trait AnalysisCollectionExt<T: Context> {
     fn sample_weighted(&mut self, context: &T, step: usize, weight: f64) -> Result<()>;
     fn finalize(&mut self, context: &T, step: usize) -> Result<()>;
     fn write_to_disk(&mut self) -> Result<()>;
-    /// Summed frames across all analyses. Comparable now that every analysis counts frames.
+    /// Frames sampled, summed over the analyses — so an analysis that samples every frame
+    /// contributes the frame count once. Not the number of frames in the run.
     fn num_samples(&self) -> usize;
 }
 

@@ -26,8 +26,6 @@ Frequency         | Description
 `!Once N`         | Once at step N
 `!End`            | Once after the last step
 
-`!End` works for every analysis, not just `!Trajectory`.
-
 In `output.yaml` every analysis reports `num_samples`, the number of frames it sampled. Analyses
 that loop over molecules also report how many molecules they accumulated: `num_groups_sampled` for
 Polymer Shape, `num_blocks` for Widom Rotation. Those counts, not `num_samples`, sit behind the
