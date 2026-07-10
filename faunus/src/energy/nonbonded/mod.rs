@@ -29,6 +29,7 @@ use std::sync::RwLock;
 use crate::{
     cell::{PbcParams, SimulationCell},
     energy::{builder::PairPotentialBuilder, EnergyTerm},
+    group::AbsIndex,
     topology::Topology,
     Change, Group, GroupChange,
 };
@@ -216,8 +217,8 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
     pub(super) fn indices_with_indices(
         &self,
         context: &impl ObserveContext,
-        indices1: &[usize],
-        indices2: &[usize],
+        indices1: &[AbsIndex],
+        indices2: &[AbsIndex],
     ) -> f64 {
         let same = indices1 == indices2;
         indices1
@@ -227,7 +228,7 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
                 let others = if same { &indices2[idx + 1..] } else { indices2 };
                 others
                     .iter()
-                    .map(|&j| self.particle_with_particle(context, i, j))
+                    .map(|&j| self.particle_with_particle(context, i.get(), j.get()))
                     .sum::<f64>()
             })
             .sum()

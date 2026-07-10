@@ -250,8 +250,8 @@ impl EnergyTerm {
     pub fn nonbonded_energy_between_atoms(
         &self,
         context: &impl ObserveContext,
-        atoms1: &[usize],
-        atoms2: &[usize],
+        atoms1: &[crate::group::AbsIndex],
+        atoms2: &[crate::group::AbsIndex],
     ) -> Option<f64> {
         match self {
             Self::NonbondedMatrix(nb) => Some(nb.indices_with_indices(context, atoms1, atoms2)),
