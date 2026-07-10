@@ -55,7 +55,11 @@ pub fn build_context_and_analyses(
     interatomic::coulomb::Medium,
 )> {
     let medium = crate::backend::get_medium(input)?;
-    let context = Backend::new(input, None, &mut crate::propagate::setup_rng_from_file(input)?)?;
+    let context = Backend::new(
+        input,
+        None,
+        &mut crate::propagate::setup_rng_from_file(input)?,
+    )?;
     let analyses = analysis::from_file(input, &context, Some(&medium))?;
     Ok((context, analyses, medium))
 }
@@ -77,7 +81,11 @@ impl Simulation {
             return Ok((sim, medium));
         }
 
-        let context = Backend::new(input, None, &mut crate::propagate::setup_rng_from_file(input)?)?;
+        let context = Backend::new(
+            input,
+            None,
+            &mut crate::propagate::setup_rng_from_file(input)?,
+        )?;
         let mc = build_markov_chain(input, context, rt, state, Some(&medium), None)?;
         Ok((Self::SingleBox(mc), medium))
     }

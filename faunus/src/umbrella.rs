@@ -521,7 +521,11 @@ pub fn run(
     })?;
 
     // Build once; cloned per window to avoid redundant YAML parsing + Hamiltonian construction.
-    let mut base_context = Backend::new(input, None, &mut crate::propagate::setup_rng_from_file(input)?)?;
+    let mut base_context = Backend::new(
+        input,
+        None,
+        &mut crate::propagate::setup_rng_from_file(input)?,
+    )?;
 
     // Load common state file to seed all windows that don't yet have a per-window state
     if let Some(state_path) = common_state {

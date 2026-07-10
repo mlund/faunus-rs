@@ -29,7 +29,6 @@ mod expr_helpers;
 mod external_pressure;
 mod hamiltonian;
 mod nonbonded;
-pub(crate) mod square_matrix;
 #[cfg(feature = "gpu")]
 pub(crate) mod nonbonded_kernel;
 pub(crate) mod pairpot;
@@ -37,6 +36,7 @@ pub(crate) mod penalty;
 mod polymer_depletion;
 mod sasa;
 pub(crate) mod slab_potential;
+pub(crate) mod square_matrix;
 mod tabulated;
 mod template;
 

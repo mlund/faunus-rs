@@ -45,7 +45,10 @@ fn run_with_seed(fixture: &str, seed: u32, preload: &[(String, String)]) -> Stat
         .filter(|path| is_state_file(path))
         .map(|path| {
             let name = path.file_name().unwrap().to_string_lossy().into_owned();
-            (name, std::fs::read_to_string(&path).expect("read state file"))
+            (
+                name,
+                std::fs::read_to_string(&path).expect("read state file"),
+            )
         })
         .collect();
     states.sort();
