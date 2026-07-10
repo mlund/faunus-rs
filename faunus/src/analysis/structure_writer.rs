@@ -4,7 +4,7 @@ use crate::cell::Shape;
 use crate::group::GroupIndex;
 use crate::selection::{CachedSelection, Groups, Selection};
 use crate::topology::io::{self, frame_state::FrameStateWriter, psf, StructureData};
-use crate::Context;
+use crate::ObserveContext;
 use anyhow::Context as _;
 use derive_builder::Builder;
 use serde::{Deserialize, Serialize};
@@ -112,14 +112,14 @@ impl crate::Info for StructureWriter {
 
 impl StructureWriter {
     /// Resolve selected group indices, using cache to avoid re-resolution.
-    fn selected_group_indices<T: Context>(&mut self, context: &T) -> Cow<'_, [GroupIndex]> {
+    fn selected_group_indices<T: ObserveContext>(&mut self, context: &T) -> Cow<'_, [GroupIndex]> {
         match &mut self.group_cache {
             Some(cache) => Cow::Borrowed(cache.resolve(context)),
             None => Cow::Owned((0..context.groups().len()).map(GroupIndex::new).collect()),
         }
     }
 
-    fn write_frame<T: Context>(&mut self, context: &T, step: usize) -> anyhow::Result<()> {
+    fn write_frame<T: ObserveContext>(&mut self, context: &T, step: usize) -> anyhow::Result<()> {
         let topology = context.topology();
         let all_groups = context.groups();
         let group_indices = self.selected_group_indices(context).into_owned();
@@ -284,7 +284,7 @@ impl StructureWriter {
     }
 }
 
-impl<T: Context> Analyze<T> for StructureWriter {
+impl<T: ObserveContext> Analyze<T> for StructureWriter {
     fn sampling(&self) -> &Sampling {
         &self.sampling
     }

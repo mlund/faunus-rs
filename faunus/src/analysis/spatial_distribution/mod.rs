@@ -14,7 +14,8 @@ use crate::group::Group;
 use crate::group::{AbsIndex, GroupIndex};
 use crate::selection::{first_unsupported_group, Atoms, CachedSelection, Groups, Selection};
 use crate::topology::io::{self, StructureData};
-use crate::{Context, Point};
+use crate::ObserveContext;
+use crate::Point;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -75,7 +76,7 @@ impl SpatialDistributionBuilder {
         Ok(())
     }
 
-    pub fn build(&self, context: &impl Context) -> Result<SpatialDistribution> {
+    pub fn build(&self, context: &impl ObserveContext) -> Result<SpatialDistribution> {
         anyhow::ensure!(
             self.resolution > 0.0,
             "SpatialDistribution: resolution must be positive"
@@ -156,7 +157,7 @@ pub struct SpatialDistribution {
 }
 
 fn validate_reference_groups(
-    context: &impl Context,
+    context: &impl ObserveContext,
     reference_groups: &[GroupIndex],
     source: &str,
 ) -> Result<usize> {
@@ -216,7 +217,7 @@ impl ReferenceStructure {
 }
 
 fn capture_reference_structure(
-    context: &impl Context,
+    context: &impl ObserveContext,
     reference_group: usize,
     file: PathBuf,
 ) -> Result<ReferenceStructure> {
@@ -250,7 +251,7 @@ fn capture_reference_structure(
 }
 
 fn reference_body_points(
-    context: &impl Context,
+    context: &impl ObserveContext,
     reference_groups: &[GroupIndex],
 ) -> Result<Vec<Point>> {
     let mut points = Vec::new();
@@ -269,7 +270,7 @@ fn reference_body_points(
     Ok(points)
 }
 
-fn validate_grid_extent(context: &impl Context, grid: &Grid) -> Result<()> {
+fn validate_grid_extent(context: &impl ObserveContext, grid: &Grid) -> Result<()> {
     if let Some(box_lengths) = context.cell().bounding_box() {
         let extent = grid.extent();
         anyhow::ensure!(
@@ -332,7 +333,7 @@ impl crate::Info for SpatialDistribution {
     }
 }
 
-impl<T: Context> Analyze<T> for SpatialDistribution {
+impl<T: ObserveContext> Analyze<T> for SpatialDistribution {
     fn sampling(&self) -> &Sampling {
         &self.sampling
     }

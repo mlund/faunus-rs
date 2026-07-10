@@ -5,7 +5,8 @@
 //! reweighted by `w = exp(-ln g(bin))`.
 
 use crate::energy::penalty::Penalty;
-use crate::{Change, Context};
+use crate::Change;
+use crate::ObserveContext;
 
 /// Source of per-frame reweighting factors.
 pub enum WeightSource {
@@ -20,7 +21,7 @@ pub enum WeightSource {
 
 impl WeightSource {
     /// Compute the reweighting factor for the current configuration.
-    pub fn weight(&self, context: &impl Context) -> f64 {
+    pub fn weight(&self, context: &impl ObserveContext) -> f64 {
         match self {
             Self::Uniform => 1.0,
             Self::Penalty {

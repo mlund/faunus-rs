@@ -21,7 +21,7 @@
 use super::{Analyze, Frequency, Sampling};
 use crate::auxiliary::{ColumnWriter, MappingExt, WeightedMean};
 use crate::collective_variable::{CollectiveVariable, CollectiveVariableBuilder};
-use crate::Context;
+use crate::ObserveContext;
 use anyhow::Result;
 use derive_more::Debug;
 use serde::{Deserialize, Serialize};
@@ -49,7 +49,7 @@ impl MeanAlongCoordinateBuilder {
         crate::analysis::prefix_in_place(&mut self.file, dir)
     }
 
-    pub fn build(&self, context: &impl Context) -> Result<MeanAlongCoordinate> {
+    pub fn build(&self, context: &impl ObserveContext) -> Result<MeanAlongCoordinate> {
         let cv = self.cv.build(context)?;
         let coordinate = self.coordinate.build(context)?;
         let resolution = coordinate
@@ -132,7 +132,7 @@ impl crate::Info for MeanAlongCoordinate {
     }
 }
 
-impl<T: Context> Analyze<T> for MeanAlongCoordinate {
+impl<T: ObserveContext> Analyze<T> for MeanAlongCoordinate {
     fn sampling(&self) -> &Sampling {
         &self.sampling
     }

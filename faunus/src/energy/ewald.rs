@@ -27,7 +27,8 @@
 
 use crate::cell::Shape;
 use crate::change::GroupChange;
-use crate::{Change, Context};
+use crate::Change;
+use crate::ObserveContext;
 use interatomic::coulomb::reciprocal::{EwaldPolicy, EwaldReciprocal};
 use interatomic::coulomb::DebyeLength;
 use serde::{Deserialize, Serialize};
@@ -110,7 +111,7 @@ impl EwaldReciprocalEnergy {
     /// Create from builder, context, and medium.
     pub fn new(
         builder: &EwaldBuilder,
-        context: &impl Context,
+        context: &impl ObserveContext,
         medium: &interatomic::coulomb::Medium,
     ) -> anyhow::Result<Self> {
         let box_length = Self::box_length_from_context(context)?;
@@ -163,7 +164,7 @@ impl EwaldReciprocalEnergy {
         self.ewald.real_space_scheme()
     }
 
-    fn box_length_from_context(context: &impl Context) -> anyhow::Result<[f64; 3]> {
+    fn box_length_from_context(context: &impl ObserveContext) -> anyhow::Result<[f64; 3]> {
         let bb = context
             .cell()
             .bounding_box()
@@ -172,7 +173,7 @@ impl EwaldReciprocalEnergy {
     }
 
     /// Re-extract charges and resize position buffers to match.
-    fn refresh_charges(&mut self, context: &impl Context) {
+    fn refresh_charges(&mut self, context: &impl ObserveContext) {
         self.charges = Self::extract_charges(context);
         let n = self.charges.len();
         self.pos_buf.0.resize(n, 0.0);
@@ -180,7 +181,7 @@ impl EwaldReciprocalEnergy {
         self.pos_buf.2.resize(n, 0.0);
     }
 
-    fn extract_charges(context: &impl Context) -> Vec<f64> {
+    fn extract_charges(context: &impl ObserveContext) -> Vec<f64> {
         let topology = context.topology_ref();
         let atomkinds = topology.atomkinds();
         let n = context.groups().iter().map(|g| g.capacity()).sum();
@@ -194,11 +195,11 @@ impl EwaldReciprocalEnergy {
     }
 
     /// Full recompute of structure factors and cached energy.
-    fn full_update(&mut self, context: &impl Context) {
+    fn full_update(&mut self, context: &impl ObserveContext) {
         self.full_update_impl(context, false);
     }
 
-    fn full_update_impl(&mut self, context: &impl Context, optimize: bool) {
+    fn full_update_impl(&mut self, context: &impl ObserveContext, optimize: bool) {
         self.fill_positions(context);
         let (x, y, z) = &self.pos_buf;
         self.ewald
@@ -207,7 +208,7 @@ impl EwaldReciprocalEnergy {
     }
 
     /// Full recompute with new box dimensions (volume change).
-    fn full_update_with_box(&mut self, context: &impl Context) -> anyhow::Result<()> {
+    fn full_update_with_box(&mut self, context: &impl ObserveContext) -> anyhow::Result<()> {
         let box_length = Self::box_length_from_context(context)?;
         self.fill_positions(context);
         let (x, y, z) = &self.pos_buf;
@@ -223,7 +224,7 @@ impl EwaldReciprocalEnergy {
     }
 
     /// Fill pre-allocated position buffers from the current context.
-    fn fill_positions(&mut self, context: &impl Context) {
+    fn fill_positions(&mut self, context: &impl ObserveContext) {
         let (x, y, z) = &mut self.pos_buf;
         x.iter_mut().for_each(|v| *v = 0.0);
         y.iter_mut().for_each(|v| *v = 0.0);
@@ -239,7 +240,7 @@ impl EwaldReciprocalEnergy {
     }
 
     /// Compute energy relevant to a change.
-    pub fn energy(&self, _context: &impl Context, change: &Change) -> f64 {
+    pub fn energy(&self, _context: &impl ObserveContext, change: &Change) -> f64 {
         match change {
             Change::None => 0.0,
             _ => self.cached_energy,
@@ -250,7 +251,11 @@ impl EwaldReciprocalEnergy {
     ///
     /// For single-group moves, uses O(M·N_k) incremental structure factor
     /// updates via `update_particle` (Nymand & Linse, JCP 112, 6152, 2000).
-    pub(super) fn update(&mut self, context: &impl Context, change: &Change) -> anyhow::Result<()> {
+    pub(super) fn update(
+        &mut self,
+        context: &impl ObserveContext,
+        change: &Change,
+    ) -> anyhow::Result<()> {
         match change {
             Change::None => {}
             Change::Volume(..) | Change::Everything => {
@@ -302,7 +307,7 @@ impl EwaldReciprocalEnergy {
     /// call `update_particle` for each affected charged particle.
     fn incremental_update(
         &mut self,
-        context: &impl Context,
+        context: &impl ObserveContext,
         group_index: usize,
         group_change: &GroupChange,
     ) {
@@ -333,7 +338,7 @@ impl EwaldReciprocalEnergy {
     }
 
     /// Save state for later undo. Context has OLD positions (called before move).
-    pub(super) fn save_backup(&mut self, change: &Change, context: &impl Context) {
+    pub(super) fn save_backup(&mut self, change: &Change, context: &impl ObserveContext) {
         let old_positions = self.collect_affected_positions(change, context);
         self.backup = Some(EwaldBackup {
             ewald: self.ewald.clone(),
@@ -346,7 +351,7 @@ impl EwaldReciprocalEnergy {
     fn collect_affected_positions(
         &self,
         change: &Change,
-        context: &impl Context,
+        context: &impl ObserveContext,
     ) -> Vec<(usize, [f64; 3])> {
         match change {
             Change::SingleGroup(gi, gc) => {

@@ -31,9 +31,10 @@ use super::{Analyze, Sampling};
 use crate::auxiliary::{ColumnWriter, MappingExt};
 use crate::axes::Axes;
 use crate::change::{Change, GroupChange};
+use crate::context::PerturbContext;
 use crate::energy::EnergyChange;
 use crate::selection::{CachedSelection, Groups, Selection};
-use crate::{Context, Point};
+use crate::Point;
 use anyhow::Result;
 use derive_builder::Builder;
 use derive_more::Debug;
@@ -205,7 +206,7 @@ impl VirtualTranslate {
     }
 
     /// Perform the virtual perturbation and return the energy change in kT
-    fn perturb<T: Context>(&self, context: &mut T, group_index: usize) -> Result<f64> {
+    fn perturb<T: PerturbContext>(&self, context: &mut T, group_index: usize) -> Result<f64> {
         let displacement_vector = self.displacement * self.unit_direction;
         let change = Change::SingleGroup(group_index, GroupChange::RigidBody);
 
@@ -237,7 +238,7 @@ impl VirtualTranslate {
     }
 }
 
-impl<T: Context> Analyze<T> for VirtualTranslate {
+impl<T: PerturbContext> Analyze<T> for VirtualTranslate {
     fn sampling(&self) -> &Sampling {
         &self.sampling
     }

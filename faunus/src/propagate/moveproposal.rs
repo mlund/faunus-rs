@@ -15,6 +15,7 @@
 use crate::cell::VolumeScalePolicy;
 use crate::group::{ParticleSelection, RelIndex};
 use crate::transform::SpeciationAction;
+use crate::ObserveContext;
 use crate::{
     montecarlo::{Bias, NewOld},
     transform::Transform,
@@ -220,7 +221,7 @@ fn speciation_changes_match_actions(
 }
 
 /// Narrow trait for the unique logic of each Monte Carlo move.
-pub trait MoveProposal<T: Context>: Debug + Info {
+pub trait MoveProposal<T: ObserveContext>: Debug + Info {
     /// Describe a move without applying it; context is read-only.
     fn propose_move(&mut self, context: &T, rng: &mut dyn RngCore) -> Option<ProposedMove>;
 

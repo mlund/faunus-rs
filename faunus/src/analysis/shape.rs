@@ -23,7 +23,7 @@ use crate::auxiliary::{ColumnWriter, MappingExt, WeightedMean};
 use crate::cell::BoundaryConditions;
 use crate::geometry::GyrationTensor;
 use crate::selection::{CachedSelection, Groups, Selection};
-use crate::Context;
+use crate::ObserveContext;
 use anyhow::Result;
 use derive_more::Debug;
 use serde::{Deserialize, Serialize};
@@ -44,7 +44,7 @@ impl ShapeAnalysisBuilder {
         crate::analysis::prefix_opt(&mut self.file, dir)
     }
 
-    pub fn build(&self, context: &impl Context) -> Result<ShapeAnalysis> {
+    pub fn build(&self, context: &impl ObserveContext) -> Result<ShapeAnalysis> {
         let topology = context.topology_ref();
         let groups = context.groups();
         let group_indices = self
@@ -132,7 +132,10 @@ pub struct ShapeAnalysis {
 const RG2_EPSILON: f64 = 1e-20;
 
 /// Compute the mass-weighted gyration tensor for a group of particles.
-fn gyration_tensor(group: &crate::group::Group, context: &impl Context) -> Option<GyrationTensor> {
+fn gyration_tensor(
+    group: &crate::group::Group,
+    context: &impl ObserveContext,
+) -> Option<GyrationTensor> {
     let com = group.mass_center()?;
     if group.len() < 2 {
         return None;
@@ -196,7 +199,7 @@ impl crate::Info for ShapeAnalysis {
     }
 }
 
-impl<T: Context> Analyze<T> for ShapeAnalysis {
+impl<T: ObserveContext> Analyze<T> for ShapeAnalysis {
     fn sampling(&self) -> &Sampling {
         &self.sampling
     }

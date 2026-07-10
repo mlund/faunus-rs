@@ -41,7 +41,8 @@ use crate::auxiliary::{BlockAverage, ColumnWriter, MappingExt};
 use crate::cell::{BoundaryConditions, Shape};
 use crate::energy::slab_potential::square_sheet_factor;
 use crate::selection::{Atoms, CachedSelection, Selection};
-use crate::{Context, Point};
+use crate::ObserveContext;
+use crate::Point;
 use anyhow::Result;
 use derive_more::Debug;
 use interatomic::coulomb::Temperature;
@@ -81,7 +82,7 @@ impl DoubleLayerPressureBuilder {
     /// from electroneutrality, and `medium` for the thermal energy and permittivity.
     pub fn build(
         &self,
-        context: &impl Context,
+        context: &impl ObserveContext,
         medium: Option<&interatomic::coulomb::Medium>,
     ) -> Result<DoubleLayerPressure> {
         let thermal_energy = medium
@@ -365,7 +366,7 @@ impl crate::Info for DoubleLayerPressure {
     }
 }
 
-impl<T: Context> Analyze<T> for DoubleLayerPressure {
+impl<T: ObserveContext> Analyze<T> for DoubleLayerPressure {
     fn sampling(&self) -> &Sampling {
         &self.sampling
     }

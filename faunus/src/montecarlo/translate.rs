@@ -18,7 +18,8 @@ use crate::group::*;
 use crate::montecarlo::NewOld;
 use crate::propagate::{tagged_yaml, MoveProposal, ProposedMove};
 use crate::transform::{random_displacement, random_unit_vector};
-use crate::{Change, Context};
+use crate::Change;
+use crate::ObserveContext;
 
 use rand::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -80,7 +81,7 @@ impl TranslateMolecule {
     }
 
     /// Validate and finalize the move.
-    pub(crate) fn finalize(&mut self, context: &impl Context) -> anyhow::Result<()> {
+    pub(crate) fn finalize(&mut self, context: &impl ObserveContext) -> anyhow::Result<()> {
         self.molecule_id = find_molecule_id(context, &self.molecule_name, "TranslateMolecule")?;
         if context.topology_ref().moleculekinds()[self.molecule_id].atomic() {
             anyhow::bail!(
@@ -92,7 +93,7 @@ impl TranslateMolecule {
     }
 }
 
-impl<T: Context> MoveProposal<T> for TranslateMolecule {
+impl<T: ObserveContext> MoveProposal<T> for TranslateMolecule {
     fn propose_move(&mut self, context: &T, rng: &mut dyn RngCore) -> Option<ProposedMove> {
         let group_index = random_group(context, rng, self.molecule_id)?;
         let displacement = self
@@ -197,7 +198,11 @@ impl TranslateAtom {
     }
 
     /// Pick a random group index matching the molecule/selection filter.
-    fn pick_group(&self, context: &impl Context, rng: &mut (impl Rng + ?Sized)) -> Option<usize> {
+    fn pick_group(
+        &self,
+        context: &impl ObserveContext,
+        rng: &mut (impl Rng + ?Sized),
+    ) -> Option<usize> {
         match self.molecule_id {
             Some(m) => random_group(context, rng, m),
             None => context
@@ -211,7 +216,7 @@ impl TranslateAtom {
     /// Returns group id and absolute index of a uniformly chosen atom.
     fn get_group_atom(
         &self,
-        context: &impl Context,
+        context: &impl ObserveContext,
         rng: &mut (impl Rng + ?Sized),
     ) -> Option<(usize, usize)> {
         let group = self.pick_group(context, rng)?;
@@ -219,7 +224,7 @@ impl TranslateAtom {
     }
 
     /// Validate and finalize the move.
-    pub(crate) fn finalize(&mut self, context: &impl Context) -> anyhow::Result<()> {
+    pub(crate) fn finalize(&mut self, context: &impl ObserveContext) -> anyhow::Result<()> {
         if let Some(molecule_name) = &self.molecule_name {
             self.molecule_id = Some(
                 context
@@ -292,7 +297,7 @@ impl TranslateAtom {
     }
 }
 
-impl<T: Context> MoveProposal<T> for TranslateAtom {
+impl<T: ObserveContext> MoveProposal<T> for TranslateAtom {
     #[allow(clippy::unnecessary_unwrap)] // split borrow: pick_group borrows self, then pref
     fn propose_move(&mut self, context: &T, rng: &mut dyn RngCore) -> Option<ProposedMove> {
         let (group, absolute_atom) = if self.preferential.is_some() {

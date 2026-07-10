@@ -10,7 +10,7 @@ use crate::{
     group::{GroupCollection, GroupCollectionMut, GroupSize, RelIndex},
     montecarlo::NewOld,
     topology::Topology,
-    Change, Context, Group, GroupChange,
+    Change, Group, GroupChange,
 };
 
 use super::*;
@@ -113,7 +113,7 @@ fn test_nonbonded_matrix_new() {
 
 /// Assert particle-particle interaction energy.
 fn assert_part_part(
-    system: &impl Context,
+    system: &impl ObserveContext,
     nonbonded: &NonbondedMatrix,
     i: usize,
     j: usize,

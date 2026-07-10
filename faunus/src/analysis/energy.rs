@@ -7,7 +7,8 @@
 use super::{Analyze, Frequency, Sampling};
 use crate::auxiliary::{ColumnWriter, MappingExt, WeightedMean};
 use crate::selection::{Atoms, CachedSelection, Selection};
-use crate::Context;
+use crate::ObserveContext;
+use crate::WithHamiltonian;
 use anyhow::Result;
 use derive_more::Debug;
 use serde::Deserialize;
@@ -49,7 +50,10 @@ impl EnergyAnalysisBuilder {
         crate::analysis::prefix_in_place(&mut self.file, dir)
     }
 
-    pub fn build(&self, context: &impl Context) -> Result<EnergyAnalysis> {
+    pub fn build(
+        &self,
+        context: &(impl ObserveContext + WithHamiltonian),
+    ) -> Result<EnergyAnalysis> {
         let (stream, mode) = if let Some((sel1, sel2)) = &self.selections {
             let topology = context.topology_ref();
             let groups = context.groups();
@@ -101,7 +105,7 @@ impl crate::Info for EnergyAnalysis {
     }
 }
 
-impl<T: Context> Analyze<T> for EnergyAnalysis {
+impl<T: ObserveContext + WithHamiltonian> Analyze<T> for EnergyAnalysis {
     fn sampling(&self) -> &Sampling {
         &self.sampling
     }

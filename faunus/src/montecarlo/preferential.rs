@@ -23,7 +23,8 @@ use crate::auxiliary::ColumnWriter;
 use crate::cell::BoundaryConditions;
 use crate::histogram::Histogram;
 use crate::selection::{CachedSelection, Groups, Selection};
-use crate::{Context, Point};
+use crate::ObserveContext;
+use crate::Point;
 use average::{Estimate, Mean};
 use log::{debug, warn};
 use rand::prelude::*;
@@ -95,7 +96,7 @@ pub struct PreferentialSampling {
 
 impl PreferentialSampling {
     /// Resolve the selection, prime the geometry cache, and validate.
-    pub fn finalize(&mut self, context: &impl Context) -> anyhow::Result<()> {
+    pub fn finalize(&mut self, context: &impl ObserveContext) -> anyhow::Result<()> {
         // Built here, not on first use: the reference selection is known as soon as the move is.
         self.ref_cache = Some(CachedSelection::groups(self.reference.clone()));
         self.refresh_ref_geometries(context);
@@ -126,7 +127,7 @@ impl PreferentialSampling {
 
     /// Refresh cached (mass_center, bounding_radius) from current group state.
     /// Called once per `rebuild_weights()` — stable within a `!Deterministic` block.
-    fn refresh_ref_geometries(&mut self, context: &impl Context) {
+    fn refresh_ref_geometries(&mut self, context: &impl ObserveContext) {
         let ref_indices = self
             .ref_cache
             .as_mut()
@@ -165,7 +166,7 @@ impl PreferentialSampling {
     }
 
     /// Rebuild all weights from scratch.
-    fn rebuild_weights(&mut self, candidates: &[usize], context: &impl Context) {
+    fn rebuild_weights(&mut self, candidates: &[usize], context: &impl ObserveContext) {
         self.refresh_ref_geometries(context);
         self.weights = candidates
             .iter()
@@ -185,7 +186,7 @@ impl PreferentialSampling {
     /// the same repeat block, only updates the previously moved atom's weight.
     pub fn weighted_select(
         &mut self,
-        context: &impl Context,
+        context: &impl ObserveContext,
         candidates: &[usize],
         rng: &mut dyn RngCore,
     ) -> Option<usize> {
@@ -238,7 +239,12 @@ impl PreferentialSampling {
     ///
     /// Called after atom selection but before the move is applied.
     /// Uses the known displacement to predict the new position.
-    pub fn compute_bias(&mut self, old_pos: &Point, new_pos: &Point, context: &impl Context) {
+    pub fn compute_bias(
+        &mut self,
+        old_pos: &Point,
+        new_pos: &Point,
+        context: &impl ObserveContext,
+    ) {
         let r_old = self.distance_to_nearest_reference(old_pos, context.cell());
         let r_new = self.distance_to_nearest_reference(new_pos, context.cell());
         let w_atom_old = self.weight(r_old);

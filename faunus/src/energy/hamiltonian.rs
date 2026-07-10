@@ -6,7 +6,8 @@ use super::{
     CellOverlap, EnergyTerm,
 };
 use crate::time::Instant;
-use crate::{topology::Topology, Change, Context};
+use crate::ObserveContext;
+use crate::{topology::Topology, Change};
 use interatomic::coulomb::{DebyeLength, Temperature};
 use std::cell::Cell;
 use std::path::Path;
@@ -16,7 +17,7 @@ use std::time::Duration;
 /// and return an energy relevant to some change in the system.
 pub trait EnergyChange {
     /// Compute the energy associated with some change in the system.
-    fn energy(&self, context: &impl Context, change: &Change) -> f64;
+    fn energy(&self, context: &impl ObserveContext, change: &Change) -> f64;
 }
 
 /// Collection of energy terms.
@@ -286,7 +287,7 @@ impl Hamiltonian {
     /// Compute each term's energy, returning `(name, energy)` pairs.
     pub fn per_term_energies(
         &self,
-        context: &impl Context,
+        context: &impl ObserveContext,
         change: &Change,
     ) -> Vec<(&'static str, f64)> {
         self.energy_terms
@@ -302,7 +303,7 @@ impl Hamiltonian {
     ///
     /// Returns a dense vector indexed by absolute particle index, with contributions
     /// from all force-providing terms summed together.
-    pub fn forces(&self, context: &impl Context) -> Vec<crate::Point> {
+    pub fn forces(&self, context: &impl ObserveContext) -> Vec<crate::Point> {
         self.forces_filtered(context, |_| true)
     }
 
@@ -319,13 +320,13 @@ impl Hamiltonian {
     /// Per-atom forces from terms not handled by the on-device LD pipeline.
     /// Summed for overlay accumulation onto the GPU's reduced COM forces/torques.
     #[cfg_attr(not(feature = "gpu"), allow(dead_code))]
-    pub(crate) fn ld_overlay_forces(&self, context: &impl Context) -> Vec<crate::Point> {
+    pub(crate) fn ld_overlay_forces(&self, context: &impl ObserveContext) -> Vec<crate::Point> {
         self.forces_filtered(context, |t| !t.handled_by_gpu_ld())
     }
 
     fn forces_filtered(
         &self,
-        context: &impl Context,
+        context: &impl ObserveContext,
         keep: impl Fn(&EnergyTerm) -> bool,
     ) -> Vec<crate::Point> {
         let mut result: Option<Vec<crate::Point>> = None;
@@ -354,7 +355,11 @@ impl Hamiltonian {
     ///
     /// After a system change, the internal state of the energy terms may need to be updated.
     /// For example, in Ewald summation, the reciprocal space energy needs to be updated.
-    pub(crate) fn update(&mut self, context: &impl Context, change: &Change) -> anyhow::Result<()> {
+    pub(crate) fn update(
+        &mut self,
+        context: &impl ObserveContext,
+        change: &Change,
+    ) -> anyhow::Result<()> {
         for (term, timer) in self.energy_terms.iter_mut().zip(self.update_timers.iter()) {
             let start = Instant::now();
             term.update(context, change)?;
@@ -367,7 +372,7 @@ impl Hamiltonian {
     ///
     /// Call before applying a move so that terms like Ewald can snapshot
     /// positions of affected particles in their pre-move state.
-    pub(crate) fn save_backups(&mut self, change: &Change, context: &impl Context) {
+    pub(crate) fn save_backups(&mut self, change: &Change, context: &impl ObserveContext) {
         self.energy_terms
             .iter_mut()
             .for_each(|term| term.save_backup(change, context));
@@ -376,7 +381,7 @@ impl Hamiltonian {
     /// Update with backup for later undo on MC reject.
     pub(crate) fn update_with_backup(
         &mut self,
-        context: &impl Context,
+        context: &impl ObserveContext,
         change: &Change,
     ) -> anyhow::Result<()> {
         self.save_backups(change, context);
@@ -455,13 +460,13 @@ impl Hamiltonian {
             .collect();
         serde_yml::Value::Mapping(map)
     }
-    /// Add energy terms that require a live Context (particles already placed).
+    /// Add energy terms that require a live context (particles already placed).
     ///
     /// Must be called after `Hamiltonian::new()` and particle insertion.
     pub(crate) fn finalize(
         &mut self,
         builder: &HamiltonianBuilder,
-        context: &impl Context,
+        context: &impl ObserveContext,
         medium: Option<&interatomic::coulomb::Medium>,
     ) -> anyhow::Result<()> {
         let require_thermal_energy = |term: &str| -> anyhow::Result<f64> {
@@ -566,7 +571,7 @@ impl<T: Into<Vec<EnergyTerm>>> From<T> for Hamiltonian {
 impl EnergyChange for Hamiltonian {
     /// Compute the energy of the Hamiltonian associated with a change in the system.
     /// The energy is returned in the units of kJ/mol.
-    fn energy(&self, context: &impl Context, change: &Change) -> f64 {
+    fn energy(&self, context: &impl ObserveContext, change: &Change) -> f64 {
         let mut sum: f64 = 0.0;
         for (term, timer) in self.energy_terms.iter().zip(self.energy_timers.iter()) {
             let start = Instant::now();

@@ -19,6 +19,7 @@ pub(crate) mod cache;
 mod tests;
 
 use super::pairpot::PairPot;
+use crate::ObserveContext;
 use cache::GroupEnergyCache;
 use interatomic::twobody::{IsotropicTwobodyEnergy, SplineConfig, SplinedPotential};
 use ndarray::Array2;
@@ -29,7 +30,7 @@ use crate::{
     cell::{PbcParams, SimulationCell},
     energy::{builder::PairPotentialBuilder, EnergyTerm},
     topology::Topology,
-    Change, Context, Group, GroupChange,
+    Change, Group, GroupChange,
 };
 
 use super::{builder::HamiltonianBuilder, exclusions::ExclusionMatrix, EnergyChange};
@@ -98,14 +99,19 @@ pub type NonbondedMatrixSplined = NonbondedMatrix<SplinedPotential>;
 
 // ─── Reference (scalar) implementations ──────────────────────────────────────
 //
-// These methods use the Context trait for per-pair distance/atom-kind lookups.
+// These methods use the ObserveContext trait for per-pair distance/atom-kind lookups.
 // They serve as ground-truth reference for tests and for `indices_with_indices`
 // (called from EnergyTerm). The production hot path uses the SoA methods below.
 
 impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
     /// Energy between two particles given by absolute indices.
     #[inline(always)]
-    pub(super) fn particle_with_particle(&self, context: &impl Context, i: usize, j: usize) -> f64 {
+    pub(super) fn particle_with_particle(
+        &self,
+        context: &impl ObserveContext,
+        i: usize,
+        j: usize,
+    ) -> f64 {
         let distance_squared = context.get_distance_squared(i, j);
         self.exclusions.get((i, j)) as f64
             * self
@@ -118,7 +124,7 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
     /// Energy of particle `i` with all other particles in `group` (self-avoiding).
     #[inline(always)]
     #[allow(dead_code)]
-    fn particle_with_group(&self, context: &impl Context, i: usize, group: &Group) -> f64 {
+    fn particle_with_group(&self, context: &impl ObserveContext, i: usize, group: &Group) -> f64 {
         group
             .iter_active()
             .filter(|j| *j != i)
@@ -129,7 +135,12 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
     /// Energy of particle `i` with all other groups.
     #[inline(always)]
     #[allow(dead_code)]
-    fn particle_with_other_groups(&self, context: &impl Context, i: usize, group: &Group) -> f64 {
+    fn particle_with_other_groups(
+        &self,
+        context: &impl ObserveContext,
+        i: usize,
+        group: &Group,
+    ) -> f64 {
         context
             .groups()
             .iter()
@@ -141,7 +152,7 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
     /// Energy of particle `i` with all other particles.
     #[inline(always)]
     #[allow(dead_code)]
-    fn particle_with_all(&self, context: &impl Context, i: usize, group: &Group) -> f64 {
+    fn particle_with_all(&self, context: &impl ObserveContext, i: usize, group: &Group) -> f64 {
         self.particle_with_other_groups(context, i, group)
             + self.particle_with_group(context, i, group)
     }
@@ -149,7 +160,12 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
     /// Energy between two groups (no self-avoidance check — groups must differ).
     #[inline(always)]
     #[allow(dead_code)]
-    fn group_with_group(&self, context: &impl Context, group1: &Group, group2: &Group) -> f64 {
+    fn group_with_group(
+        &self,
+        context: &impl ObserveContext,
+        group1: &Group,
+        group2: &Group,
+    ) -> f64 {
         group1
             .iter_active()
             .flat_map(|i| {
@@ -163,7 +179,7 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
     /// Intra-group energy (unique pairs only).
     #[inline(always)]
     #[allow(dead_code)]
-    fn group_with_itself(&self, context: &impl Context, group: &Group) -> f64 {
+    fn group_with_itself(&self, context: &impl ObserveContext, group: &Group) -> f64 {
         group
             .iter_active()
             .enumerate()
@@ -179,7 +195,7 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
     /// Energy of a group with all other groups.
     #[inline(always)]
     #[allow(dead_code)]
-    fn group_with_other_groups(&self, context: &impl Context, group: &Group) -> f64 {
+    fn group_with_other_groups(&self, context: &impl ObserveContext, group: &Group) -> f64 {
         group
             .iter_active()
             .map(|i| self.particle_with_other_groups(context, i, group))
@@ -189,7 +205,7 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
     /// Energy of a group with all particles (inter + intra).
     #[inline(always)]
     #[allow(dead_code)]
-    fn group_with_all(&self, context: &impl Context, group: &Group) -> f64 {
+    fn group_with_all(&self, context: &impl ObserveContext, group: &Group) -> f64 {
         self.group_with_other_groups(context, group) + self.group_with_itself(context, group)
     }
 
@@ -199,7 +215,7 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
     /// Otherwise, all cross-pairs are included.
     pub(super) fn indices_with_indices(
         &self,
-        context: &impl Context,
+        context: &impl ObserveContext,
         indices1: &[usize],
         indices2: &[usize],
     ) -> f64 {
@@ -219,7 +235,7 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
 
     /// Total nonbonded energy (reference implementation for tests).
     #[allow(dead_code)]
-    fn total_nonbonded(&self, context: &impl Context) -> f64 {
+    fn total_nonbonded(&self, context: &impl ObserveContext) -> f64 {
         context
             .groups()
             .iter()
@@ -252,8 +268,10 @@ struct SoaSlices<'a, C: SimulationCell> {
     cell_list: Option<&'a crate::celllist::CellList>,
 }
 
-/// Build SoA slices from a Context, extracting all arrays.
-fn soa_from_context<'a>(context: &'a impl Context) -> SoaSlices<'a, impl SimulationCell + 'a> {
+/// Build SoA slices from an observable context, extracting all arrays.
+fn soa_from_context<'a>(
+    context: &'a impl ObserveContext,
+) -> SoaSlices<'a, impl SimulationCell + 'a> {
     let (x, y, z) = context.positions_soa();
     let atom_kinds = context.atom_kinds_u32();
     let cell = context.cell();
@@ -346,7 +364,7 @@ unsafe fn read_particle(
 }
 
 impl<P: IsotropicTwobodyEnergy> EnergyChange for NonbondedMatrix<P> {
-    fn energy(&self, context: &impl Context, change: &Change) -> f64 {
+    fn energy(&self, context: &impl ObserveContext, change: &Change) -> f64 {
         // O(1) cache hit for rigid body moves (the MC hot path)
         if let Change::SingleGroup(gi, GroupChange::RigidBody) = change {
             if let Some(ref cache) = *self.cache.read().unwrap() {
@@ -1076,7 +1094,7 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
     ///
     /// Returns a dense array indexed by absolute particle index.
     /// Inactive particles have zero force.
-    pub(super) fn forces(&self, context: &impl Context) -> Vec<crate::Point> {
+    pub(super) fn forces(&self, context: &impl ObserveContext) -> Vec<crate::Point> {
         let n = context
             .groups()
             .iter()
@@ -1111,7 +1129,7 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
     }
 
     /// Recompute the moved group's cache row with new positions (accept/reject agnostic).
-    pub(super) fn update_cache(&mut self, context: &impl Context, change: &Change) {
+    pub(super) fn update_cache(&mut self, context: &impl ObserveContext, change: &Change) {
         let group_index = match change {
             Change::SingleGroup(gi, GroupChange::RigidBody | GroupChange::PartialUpdate(_)) => gi,
             _ => return,

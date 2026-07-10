@@ -23,7 +23,7 @@ use crate::cell::BoundaryConditions;
 use crate::energy::builder::PairInteraction;
 use crate::energy::pairpot::ShortRange;
 use crate::topology::AtomKind;
-use crate::Context;
+use crate::ObserveContext;
 use anyhow::Result;
 use derive_builder::Builder;
 use derive_more::Debug;
@@ -211,7 +211,7 @@ impl ScaledWidomInsertionBuilder {
     /// Build analysis from the builder, resolving atom types against topology.
     pub fn build(
         &self,
-        context: &impl Context,
+        context: &impl ObserveContext,
         medium: Option<&interatomic::coulomb::Medium>,
     ) -> Result<ScaledWidomInsertion> {
         let atom_name = self
@@ -333,7 +333,7 @@ impl crate::Info for ScaledWidomInsertion {
     }
 }
 
-impl<T: Context> Analyze<T> for ScaledWidomInsertion {
+impl<T: ObserveContext> Analyze<T> for ScaledWidomInsertion {
     fn sampling(&self) -> &Sampling {
         &self.sampling
     }

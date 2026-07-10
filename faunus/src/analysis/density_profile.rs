@@ -28,7 +28,7 @@ use crate::cell::Shape;
 use crate::selection::{first_unsupported_group, ComSelection, Selection};
 use crate::topology::MoleculeKind;
 use crate::z_grid::ZGrid;
-use crate::Context;
+use crate::ObserveContext;
 use anyhow::Result;
 use derive_more::Debug;
 use serde::{Deserialize, Serialize};
@@ -66,7 +66,7 @@ impl DensityProfileBuilder {
     }
 
     /// Build the analysis, taking the slab layout from the cell of `context`.
-    pub fn build(&self, context: &impl Context) -> Result<DensityProfile> {
+    pub fn build(&self, context: &impl ObserveContext) -> Result<DensityProfile> {
         let grid = ZGrid::from_cell(context.cell(), self.resolution)?;
         if self.use_com {
             self.reject_selections_without_mass_center(context)?;
@@ -85,7 +85,7 @@ impl DensityProfileBuilder {
     }
 
     /// Reject a `use_com` selection that can match a group without a mass centre.
-    fn reject_selections_without_mass_center(&self, context: &impl Context) -> Result<()> {
+    fn reject_selections_without_mass_center(&self, context: &impl ObserveContext) -> Result<()> {
         if let Some(group) =
             first_unsupported_group(context, &self.selection, MoleculeKind::has_com)?
         {
@@ -125,7 +125,7 @@ pub struct DensityProfile {
 
 impl DensityProfile {
     /// Instantaneous count and mass per slab for the current configuration.
-    fn tally(&mut self, context: &impl Context) -> Result<(Vec<f64>, Vec<f64>)> {
+    fn tally(&mut self, context: &impl ObserveContext) -> Result<(Vec<f64>, Vec<f64>)> {
         let mut counts = vec![0.0; self.grid.n_bins()];
         let mut masses = vec![0.0; self.grid.n_bins()];
         let grid = &self.grid;
@@ -218,7 +218,7 @@ impl DensityProfile {
     }
 
     /// Warn once if the cell has changed size, which the fixed slab layout cannot follow.
-    fn check_volume(&mut self, context: &impl Context) {
+    fn check_volume(&mut self, context: &impl ObserveContext) {
         if self.warned_volume_change {
             return;
         }
@@ -246,7 +246,7 @@ impl crate::Info for DensityProfile {
     }
 }
 
-impl<T: Context> Analyze<T> for DensityProfile {
+impl<T: ObserveContext> Analyze<T> for DensityProfile {
     fn sampling(&self) -> &Sampling {
         &self.sampling
     }

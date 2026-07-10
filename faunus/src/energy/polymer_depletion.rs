@@ -17,7 +17,8 @@
 //! Implements the Forsman & Woodward many-body Hamiltonian for colloids in an
 //! ideal polymer fluid. See [`PolymerDepletion`] for details.
 
-use crate::{Change, Context, Point};
+use crate::ObserveContext;
+use crate::{Change, Point};
 use serde::{Deserialize, Serialize};
 use std::f64::consts::PI;
 
@@ -232,7 +233,7 @@ impl PolymerDepletion {
     }
 
     /// Rebuild the colloid list from the current context, reusing existing capacity.
-    fn rebuild_colloids(&mut self, context: &impl Context) {
+    fn rebuild_colloids(&mut self, context: &impl ObserveContext) {
         self.colloids.clear();
         for (gi, g) in context.groups().iter().enumerate() {
             if !self.colloid_molecule_ids.contains(&g.molecule()) {
@@ -251,7 +252,7 @@ impl PolymerDepletion {
     }
 
     /// Update a single colloid's COM and radius from the context.
-    fn update_single_colloid(&mut self, group_index: usize, context: &impl Context) {
+    fn update_single_colloid(&mut self, group_index: usize, context: &impl ObserveContext) {
         let groups = context.groups();
         if let Some(colloid) = self
             .colloids
@@ -282,7 +283,11 @@ impl PolymerDepletion {
     }
 
     /// Update internal state after a system change.
-    pub(super) fn update(&mut self, context: &impl Context, change: &Change) -> anyhow::Result<()> {
+    pub(super) fn update(
+        &mut self,
+        context: &impl ObserveContext,
+        change: &Change,
+    ) -> anyhow::Result<()> {
         match change {
             Change::SingleGroup(gi, _) if self.change_involves_colloids(change) => {
                 self.update_single_colloid(*gi, context);
@@ -311,7 +316,7 @@ impl PolymerDepletion {
     }
 
     /// Compute the energy relevant to a change (kJ/mol).
-    pub fn energy(&self, _context: &impl Context, change: &Change) -> f64 {
+    pub fn energy(&self, _context: &impl ObserveContext, change: &Change) -> f64 {
         if !self.change_involves_colloids(change) {
             return 0.0;
         }
@@ -680,7 +685,7 @@ impl PolymerDepletionBuilder {
     /// Build a [`PolymerDepletion`] energy term, resolving molecule names from the context.
     pub fn build(
         &self,
-        context: &impl Context,
+        context: &impl ObserveContext,
         thermal_energy: f64,
     ) -> anyhow::Result<PolymerDepletion> {
         let topology = context.topology();

@@ -29,7 +29,7 @@ use super::{Analyze, Frequency, Sampling};
 use crate::auxiliary::{BlockAverage, BlockSummary, ColumnWriter, MappingExt};
 use crate::energy::slab_potential::{SlabGrid, SlabKernel};
 use crate::selection::{Atoms, CachedSelection, Selection};
-use crate::Context;
+use crate::ObserveContext;
 use anyhow::Result;
 use derive_more::Debug;
 use interatomic::coulomb::{DebyeLength, Medium, Temperature};
@@ -82,7 +82,7 @@ impl ElectricPotentialProfileBuilder {
     /// Debye screening length; the screened kernel is undefined without finite ionic strength.
     pub fn build(
         &self,
-        context: &impl Context,
+        context: &impl ObserveContext,
         medium: Option<&Medium>,
     ) -> Result<ElectricPotentialProfile> {
         if self.resolution <= 0.0 {
@@ -278,7 +278,7 @@ impl crate::Info for ElectricPotentialProfile {
     }
 }
 
-impl<T: Context> Analyze<T> for ElectricPotentialProfile {
+impl<T: ObserveContext> Analyze<T> for ElectricPotentialProfile {
     fn sampling(&self) -> &Sampling {
         &self.sampling
     }

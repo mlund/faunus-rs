@@ -14,12 +14,13 @@
 
 //! Implementation of the Nonbonded energy terms.
 
+use crate::ObserveContext;
 use std::fmt::Debug;
 
 use crate::{
     cell::{BoundaryConditions, PeriodicDirections, Shape},
     energy::EnergyTerm,
-    Change, Context,
+    Change,
 };
 
 /// Returns infinite energy if particles are outside the simulation cell boundaries; zero otherwise.
@@ -27,7 +28,7 @@ use crate::{
 pub struct CellOverlap;
 
 impl CellOverlap {
-    pub fn energy(&self, context: &impl Context, change: &Change) -> f64 {
+    pub fn energy(&self, context: &impl ObserveContext, change: &Change) -> f64 {
         let cell = context.cell();
         if matches!(change, Change::None) || cell.pbc() == PeriodicDirections::PeriodicXYZ {
             return 0.0;

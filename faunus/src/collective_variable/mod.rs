@@ -25,7 +25,6 @@ mod cell;
 mod dynamic;
 pub(crate) mod group;
 
-use crate::Context;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
@@ -142,7 +141,7 @@ pub struct CollectiveVariableBuilder {
 
 impl CollectiveVariableBuilder {
     /// Resolve selections and construct a [`CollectiveVariable`].
-    pub fn build(&self, context: &impl Context) -> Result<CollectiveVariable> {
+    pub fn build(&self, context: &impl crate::ObserveContext) -> Result<CollectiveVariable> {
         let description = self.kind_builder.description();
         let kind = self.kind_builder.build(context)?;
         let axis = AxisDescriptor {
@@ -173,14 +172,9 @@ pub trait CvKindBuilder: Send + Sync + std::fmt::Debug + dyn_clone::DynClone {
 
 dyn_clone::clone_trait_object!(CvKindBuilder);
 
-// Blanket impl: any Context that implements the required traits also implements EvalContext
-impl<T> EvalContext for T
-where
-    T: crate::group::GroupCollection
-        + crate::context::WithSimulationCell
-        + crate::context::WithTopology
-        + crate::context::ObserveContext,
-{
+// Blanket impl: every observable context is an EvalContext. The supertraits above are exactly
+// `ObserveContext`'s own, restated so `dyn EvalContext` stays object-safe.
+impl<T: crate::context::ObserveContext> EvalContext for T {
     fn get_distance(&self, i: usize, j: usize) -> crate::Point {
         <T as crate::context::ObserveContext>::get_distance(self, i, j)
     }

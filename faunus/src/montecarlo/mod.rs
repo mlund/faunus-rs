@@ -20,6 +20,7 @@ use crate::energy::EnergyChange;
 use crate::group::*;
 use crate::propagate::{Displacement, Propagate};
 use crate::state::State;
+use crate::ObserveContext;
 use crate::{time::Timer, Context};
 use anyhow::Result;
 use average::{Estimate, Mean};
@@ -68,7 +69,7 @@ impl_buildable_move!(
 
 /// Look up a molecule kind by name and return its id.
 fn find_molecule_id(
-    context: &impl Context,
+    context: &impl ObserveContext,
     molecule_name: &str,
     move_name: &str,
 ) -> anyhow::Result<usize> {
@@ -88,7 +89,7 @@ fn find_molecule_id(
 
 /// Pick a random group index of the specified molecule type.
 fn random_group(
-    context: &impl Context,
+    context: &impl ObserveContext,
     rng: &mut (impl Rng + ?Sized),
     molecule_id: usize,
 ) -> Option<usize> {
@@ -99,7 +100,7 @@ fn random_group(
 /// Pick a random atom from the specified group.
 /// Returns an absolute index of the atom.
 fn random_atom(
-    context: &impl Context,
+    context: &impl ObserveContext,
     rng: &mut (impl Rng + ?Sized),
     group_index: usize,
     atom_id: Option<usize>,

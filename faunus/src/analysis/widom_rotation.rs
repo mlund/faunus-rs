@@ -50,10 +50,13 @@ use super::{Analyze, Frequency, Sampling};
 use crate::auxiliary::{BlockAverage, BlockSummary, ColumnWriter, MappingExt};
 use crate::cell::BoundaryConditions;
 use crate::change::{Change, GroupChange};
+use crate::context::PerturbContext;
 use crate::energy::EnergyChange;
 use crate::geometry::GyrationTensor;
 use crate::selection::{CachedSelection, Groups, Selection};
-use crate::{Context, Point, UnitQuaternion};
+use crate::ObserveContext;
+use crate::WithHamiltonian;
+use crate::{Point, UnitQuaternion};
 use anyhow::Result;
 use derive_more::Debug;
 use nalgebra::{Matrix3, Matrix4, Quaternion, Vector3};
@@ -121,7 +124,7 @@ impl VectorSpec {
 
     /// Lab-frame reference direction (unit) for group `gi` at its current
     /// orientation. Each trial orientation later rotates this rigidly.
-    fn reference<T: Context>(
+    fn reference<T: ObserveContext>(
         &self,
         gi: usize,
         indices: &[usize],
@@ -198,7 +201,11 @@ impl WidomRotationBuilder {
     }
 
     /// `thermal_energy` is `R·T` in kJ/mol.
-    pub fn build(&self, context: &impl Context, thermal_energy: f64) -> Result<WidomRotation> {
+    pub fn build(
+        &self,
+        context: &impl ObserveContext,
+        thermal_energy: f64,
+    ) -> Result<WidomRotation> {
         anyhow::ensure!(
             self.orientations > 0,
             "WidomRotation: 'orientations' must be > 0"
@@ -324,7 +331,11 @@ pub struct WidomRotation {
 ///
 /// A rigid-body change excludes the rotation-invariant intramolecular energy, so
 /// this is exactly the interaction with the rest of the system.
-fn group_energy_kt<T: Context>(context: &T, gi: usize, thermal_energy: f64) -> f64 {
+fn group_energy_kt<T: ObserveContext + WithHamiltonian>(
+    context: &T,
+    gi: usize,
+    thermal_energy: f64,
+) -> f64 {
     let change = Change::SingleGroup(gi, GroupChange::RigidBody);
     context.hamiltonian().energy(context, &change) / thermal_energy
 }
@@ -334,7 +345,7 @@ impl WidomRotation {
     /// per-orientation energies in kT. `trial` is left unchanged (each rotation
     /// is immediately inverted); the carried quaternion is never touched because
     /// we rotate positions only, about the invariant center of mass.
-    fn scan_energies<T: Context>(
+    fn scan_energies<T: PerturbContext + WithHamiltonian>(
         &self,
         trial: &mut T,
         gi: usize,
@@ -486,7 +497,7 @@ impl WidomRotation {
 
     /// Mean torque about each lab axis via a small virtual rotation, analogous to
     /// the virtual-translate force. Positions-only, so the quaternion is safe.
-    fn accumulate_torque<T: Context>(
+    fn accumulate_torque<T: PerturbContext + WithHamiltonian>(
         &mut self,
         trial: &mut T,
         gi: usize,
@@ -520,7 +531,7 @@ impl crate::Info for WidomRotation {
     }
 }
 
-impl<T: Context> Analyze<T> for WidomRotation {
+impl<T: PerturbContext> Analyze<T> for WidomRotation {
     fn sampling(&self) -> &Sampling {
         &self.sampling
     }

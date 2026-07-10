@@ -17,10 +17,11 @@
 #[cfg(feature = "gpu")]
 pub(crate) mod kernel;
 
+use crate::ObserveContext;
 use crate::{
     group::Group,
     topology::{block::BlockActivationStatus, Topology},
-    Change, Context,
+    Change,
 };
 
 use super::{EnergyChange, EnergyTerm};
@@ -32,7 +33,7 @@ pub struct IntramolecularBonded {}
 impl EnergyChange for IntramolecularBonded {
     /// Compute the energy associated with the intramolecular
     /// bonded interactions relevant to some change in the system.
-    fn energy(&self, context: &impl Context, change: &Change) -> f64 {
+    fn energy(&self, context: &impl ObserveContext, change: &Change) -> f64 {
         match change {
             Change::Everything | Change::Volume(_, _) => self.all_groups(context),
             Change::None => 0.0,
@@ -55,7 +56,7 @@ impl EnergyChange for IntramolecularBonded {
 impl IntramolecularBonded {
     /// Calculate energy of all active bonded interactions of the specified groups.
     #[inline(always)]
-    fn multiple_groups(&self, context: &impl Context, groups: &[usize]) -> f64 {
+    fn multiple_groups(&self, context: &impl ObserveContext, groups: &[usize]) -> f64 {
         groups
             .iter()
             .map(|&id| self.one_group(context, &context.groups()[id]))
@@ -64,7 +65,7 @@ impl IntramolecularBonded {
 
     /// Calculate energy of all active bonded interactions of all groups.
     #[inline(always)]
-    fn all_groups(&self, context: &impl Context) -> f64 {
+    fn all_groups(&self, context: &impl ObserveContext) -> f64 {
         context
             .groups()
             .iter()
@@ -73,7 +74,7 @@ impl IntramolecularBonded {
     }
 
     /// Calculate energy of all active bonded interactions of target group.
-    fn one_group(&self, context: &impl Context, group: &Group) -> f64 {
+    fn one_group(&self, context: &impl ObserveContext, group: &Group) -> f64 {
         let topology = context.topology_ref();
         let molecule = &topology.moleculekinds()[group.molecule()];
 
@@ -121,7 +122,7 @@ pub struct IntermolecularBonded {
 impl EnergyChange for IntermolecularBonded {
     /// Compute the energy associated with the intermolecular
     /// bonded interactions relevant to some change in the system.
-    fn energy(&self, context: &impl Context, change: &Change) -> f64 {
+    fn energy(&self, context: &impl ObserveContext, change: &Change) -> f64 {
         match change {
             Change::None => 0.0,
             _ => {
@@ -183,7 +184,11 @@ impl IntermolecularBonded {
     // Currently this updates the entire group upon any change in the size of the group.
     // However, `change` contains information about the number of (de)activated particles in the group.
     // We should probably use this information to only update the relevant part of the group.
-    pub(super) fn update(&mut self, context: &impl Context, change: &Change) -> anyhow::Result<()> {
+    pub(super) fn update(
+        &mut self,
+        context: &impl ObserveContext,
+        change: &Change,
+    ) -> anyhow::Result<()> {
         match change {
             Change::SingleGroup(i, gc) if gc.is_resize() => {
                 self.update_status_one_group(&context.groups()[*i])
@@ -218,7 +223,7 @@ impl IntermolecularBonded {
     }
 
     /// Update the status of particles from multiple groups.
-    fn update_status_multiple_groups(&mut self, context: &impl Context, groups: &[usize]) {
+    fn update_status_multiple_groups(&mut self, context: &impl ObserveContext, groups: &[usize]) {
         groups
             .iter()
             .map(|&i| &context.groups()[i])
@@ -226,7 +231,7 @@ impl IntermolecularBonded {
     }
 
     /// Update the status of particles from all groups.
-    fn update_status_all(&mut self, context: &impl Context) {
+    fn update_status_all(&mut self, context: &impl ObserveContext) {
         context
             .groups()
             .iter()

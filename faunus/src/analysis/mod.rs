@@ -14,6 +14,7 @@
 
 //! # System analysis and reporting
 
+use crate::ObserveContext;
 use crate::{Context, Info};
 use anyhow::Result;
 use core::fmt::Debug;
@@ -349,7 +350,7 @@ pub fn from_file_in_dir<T: Context>(
 }
 
 /// Interface for system analysis.
-pub trait Analyze<T: Context>: Debug + Info {
+pub trait Analyze<T: ObserveContext>: Debug + Info {
     /// The analysis' sampling state. The only bookkeeping an implementation must store.
     fn sampling(&self) -> &Sampling;
     /// Mutable access, so the framework can count a sample.
@@ -641,7 +642,7 @@ mod framework_characterization {
         }
     }
 
-    impl<T: Context> Analyze<T> for Counter {
+    impl<T: ObserveContext> Analyze<T> for Counter {
         fn sampling(&self) -> &Sampling {
             &self.sampling
         }
