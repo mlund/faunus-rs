@@ -1,4 +1,6 @@
-Cargo.lock
+# Cargo.lock is tracked: the workspace ships binaries, and the regression
+# fixtures compare at 1e-8, so a dependency bump must be a reviewable commit
+# rather than a silent re-resolve.
 target/
 *.md
 *.csv
