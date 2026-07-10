@@ -107,7 +107,7 @@ impl Shape for HexagonalPrism {
     }
 
     /// Random point via rejection sampling in the bounding box (~75% acceptance)
-    fn get_point_inside(&self, rng: &mut rand::prelude::ThreadRng) -> Point {
+    fn get_point_inside<R: Rng + ?Sized>(&self, rng: &mut R) -> Point {
         loop {
             let point = Point::new(
                 rng.gen_range(-self.half_box_x..self.half_box_x),

@@ -147,11 +147,22 @@ pub(super) struct PropagateBuilder {
 }
 
 /// Seed used for selecting stochastic moves.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub(crate) enum Seed {
     #[default]
     Hardware,
     Fixed(usize),
+}
+
+impl Seed {
+    /// The master generator for a run. Every other stream is derived from this
+    /// one so that a single `seed` reproduces the whole simulation.
+    pub(crate) fn build_rng(self) -> rand::rngs::StdRng {
+        match self {
+            Self::Hardware => rand::SeedableRng::from_entropy(),
+            Self::Fixed(x) => rand::SeedableRng::seed_from_u64(x as u64),
+        }
+    }
 }
 
 /// How moves in a collection are selected during propagation.

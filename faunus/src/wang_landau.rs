@@ -161,7 +161,7 @@ pub fn run(input: &Path, state_dir: &Path, output: &Path, max_threads: usize) ->
     };
 
     // Build base context once
-    let base_context = Backend::new(input, None, &mut rand::thread_rng())?;
+    let base_context = Backend::new(input, None, &mut crate::propagate::setup_rng_from_file(input)?)?;
 
     // Verify CVs resolve against the base context (catches selection errors early)
     config.coordinate.build(&base_context)?;

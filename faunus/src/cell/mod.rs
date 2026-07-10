@@ -44,11 +44,10 @@ use std::path::Path;
 use crate::Point;
 pub use cuboid::Cuboid;
 pub use cylinder::Cylinder;
-use dyn_clone::DynClone;
 pub use endless::Endless;
 pub use hexagonal_prism::HexagonalPrism;
 pub(crate) use pbc_params::PbcParams;
-use rand::{rngs::ThreadRng, Rng};
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 pub use slit::Slit;
 pub use sphere::Sphere;
@@ -56,10 +55,7 @@ pub use sphere::Sphere;
 /// Final interface for a unit cell used to describe the geometry of a simulation system.
 ///
 /// It is a combination of a [`Shape`], [`BoundaryConditions`] and [`VolumeScale`].
-pub trait SimulationCell:
-    Shape + BoundaryConditions + VolumeScale + DynClone + std::fmt::Debug
-{
-}
+pub trait SimulationCell: Shape + BoundaryConditions + VolumeScale + std::fmt::Debug {}
 
 /// Orthorhombic supercell expansion for I/O formats that require cuboid boxes.
 pub struct OrthorhombicExpansion {
@@ -91,7 +87,7 @@ pub trait Shape {
     /// Bounding box of the shape centered at `center()`
     fn bounding_box(&self) -> Option<Point>;
     /// Generate a random point positioned inside the boundaries of the shape
-    fn get_point_inside(&self, rng: &mut ThreadRng) -> Point;
+    fn get_point_inside<R: Rng + ?Sized>(&self, rng: &mut R) -> Point;
     /// Orthorhombic supercell expansion needed for I/O of non-orthorhombic cells.
     ///
     /// Returns `None` for cells whose bounding box is already orthorhombic.
@@ -100,12 +96,12 @@ pub trait Shape {
     }
 }
 
-dyn_clone::clone_trait_object!(SimulationCell);
-
 /// Generate a random point inside a cell using rejection sampling with any RNG.
 ///
-/// Unlike [`Shape::get_point_inside`] which requires `ThreadRng`, this accepts
-/// any `Rng` for deterministic seeded sampling.
+/// Duplicates [`Shape::get_point_inside`], but draws from twice the bounding box
+/// in each direction and so rejects most candidates. Retained because the
+/// insertion moves calling it are pinned by committed regression fixtures that
+/// would shift with any change to the draw sequence; see issue #58.
 pub fn random_point_inside(cell: &impl Shape, rng: &mut (impl Rng + ?Sized)) -> Point {
     let bbox = cell
         .bounding_box()
@@ -228,19 +224,6 @@ impl Cell {
     }
 }
 
-impl From<Cell> for Box<dyn SimulationCell> {
-    fn from(cell: Cell) -> Self {
-        match cell {
-            Cell::Cuboid(c) => Box::new(c),
-            Cell::Cylinder(c) => Box::new(c),
-            Cell::Endless(c) => Box::new(c),
-            Cell::HexagonalPrism(c) => Box::new(c),
-            Cell::Slit(c) => Box::new(c),
-            Cell::Sphere(c) => Box::new(c),
-        }
-    }
-}
-
 impl TryFrom<Cell> for Cuboid {
     type Error = anyhow::Error;
     fn try_from(cell: Cell) -> Result<Self, Self::Error> {
@@ -327,7 +310,7 @@ impl Shape for Cell {
     }
 
     #[inline]
-    fn get_point_inside(&self, rng: &mut ThreadRng) -> Point {
+    fn get_point_inside<R: Rng + ?Sized>(&self, rng: &mut R) -> Point {
         match self {
             Self::Cuboid(s) => s.get_point_inside(rng),
             Self::Cylinder(s) => s.get_point_inside(rng),

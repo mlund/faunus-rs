@@ -74,7 +74,7 @@ impl Shape for Cuboid {
     fn bounding_box(&self) -> Option<Point> {
         Some(self.cell)
     }
-    fn get_point_inside(&self, rng: &mut rand::prelude::ThreadRng) -> Point {
+    fn get_point_inside<R: Rng + ?Sized>(&self, rng: &mut R) -> Point {
         Point::new(
             rng.gen_range(-self.half_cell.x..self.half_cell.x),
             rng.gen_range(-self.half_cell.y..self.half_cell.y),

@@ -14,7 +14,7 @@ use crate::{
     Context, Group, ObserveContext, Point, UnitQuaternion, WithSimulationCell, WithTopology,
 };
 
-use rand::rngs::ThreadRng;
+use rand::Rng;
 use serde::Serialize;
 
 use std::{cell::RefCell, path::Path, sync::Arc};
@@ -94,7 +94,7 @@ impl Backend {
         cell: Cell,
         hamiltonian: RefCell<Hamiltonian>,
         structure: Option<&Path>,
-        rng: &mut ThreadRng,
+        rng: &mut impl Rng,
     ) -> anyhow::Result<Self> {
         if topology.system.is_empty() {
             anyhow::bail!("Topology doesn't contain a system");
@@ -125,7 +125,7 @@ impl Backend {
     pub fn new(
         yaml_file: impl AsRef<Path>,
         structure_file: Option<&Path>,
-        rng: &mut ThreadRng,
+        rng: &mut impl Rng,
     ) -> anyhow::Result<Self> {
         let medium = Some(get_medium(&yaml_file)?);
         let topology = Topology::from_file(&yaml_file)?;
@@ -151,7 +151,7 @@ impl Backend {
     pub fn from_yaml_str(
         yaml: &str,
         structure_file: Option<&Path>,
-        rng: &mut ThreadRng,
+        rng: &mut impl Rng,
     ) -> anyhow::Result<Self> {
         let medium = Some(get_medium_str(yaml)?);
         let topology = Topology::from_str(yaml)?;
@@ -175,7 +175,7 @@ impl Backend {
         hamiltonian_builder: HamiltonianBuilder,
         cell: Cell,
         structure_file: Option<&Path>,
-        rng: &mut ThreadRng,
+        rng: &mut impl Rng,
     ) -> anyhow::Result<Self> {
         hamiltonian_builder.validate(topology.atomkinds())?;
         let hamiltonian = Hamiltonian::new(&hamiltonian_builder, &topology, medium.clone())?;

@@ -304,7 +304,7 @@ mod tests {
     fn rotate_random<'a>(
         positions: impl IntoIterator<Item = &'a mut Point>,
         center: &Point,
-        rng: &mut rand::rngs::ThreadRng,
+        rng: &mut impl Rng,
     ) {
         let angle = rng.gen_range(0.0..2.0 * std::f64::consts::PI);
         let axis = random_unit_vector(rng);

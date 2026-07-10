@@ -1,0 +1,33 @@
+# Ideal-gas single box used only to pin down reproducibility of the starting
+# coordinates. `insert: !RandomAtomPos` must draw from `propagate.seed`, not
+# from a thread-local generator, or two seeded runs diverge from step zero.
+
+atoms:
+  - {name: X, mass: 1.0, sigma: 1.0}
+
+molecules:
+  - name: particle
+    atoms: [X]
+
+system:
+  cell: !Cuboid [10.0, 10.0, 10.0]
+  medium:
+    permittivity: !Vacuum
+    temperature: 298.15
+  energy: {}
+  blocks:
+    - molecule: particle
+      N: 20
+      active: 20
+      insert: !RandomAtomPos {}
+
+analysis: []
+
+propagate:
+  seed: !Fixed 7
+  criterion: Metropolis
+  repeat: 50
+  collections:
+    - !Stochastic
+      moves:
+        - !TranslateMolecule {molecule: particle, dp: 0.5, repeat: 5}

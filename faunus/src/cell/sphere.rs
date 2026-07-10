@@ -64,7 +64,7 @@ impl Shape for Sphere {
         Some(Point::from_element(2.0 * self.radius))
     }
     /// Get random point located inside the Sphere.
-    fn get_point_inside(&self, rng: &mut rand::prelude::ThreadRng) -> Point {
+    fn get_point_inside<R: Rng + ?Sized>(&self, rng: &mut R) -> Point {
         let r2 = self.radius * self.radius;
         let d = 2.0 * self.radius;
         let mut point;

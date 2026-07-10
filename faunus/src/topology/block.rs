@@ -16,6 +16,7 @@
 //! a) the `MoleculeBlock` structure which is used to define the topology of the system,
 //! b) the `InsertionPolicy` used to specify the construction of the molecule blocks.
 
+use rand::Rng;
 use std::iter::zip;
 use std::{cmp::Ordering, path::Path};
 
@@ -23,7 +24,6 @@ use super::{molecule::MoleculeKind, structure, AtomKind, InputPath};
 use crate::axes::Axes;
 use crate::transform;
 use crate::{cell::SimulationCell, group::GroupSize, Context, Point, UnitQuaternion};
-use rand::rngs::ThreadRng;
 use serde::{Deserialize, Serialize};
 use validator::{Validate, ValidationError};
 
@@ -99,7 +99,7 @@ impl InsertionPolicy {
         molecule_kind: &MoleculeKind,
         number: usize,
         cell: &impl SimulationCell,
-        rng: &mut ThreadRng,
+        rng: &mut impl Rng,
     ) -> anyhow::Result<(Vec<Point>, Vec<UnitQuaternion>)> {
         match self {
             Self::FromFile(filename) => {
@@ -132,7 +132,7 @@ impl InsertionPolicy {
                 *min_distance,
             ),
             Self::FixedCOM { position, rotate } => {
-                Self::generate_fixed_com(molecule_kind, atoms, number, cell, *rotate, position)
+                Self::generate_fixed_com(molecule_kind, atoms, number, cell, rng, *rotate, position)
             }
 
             Self::Manual(positions) => Ok((
@@ -185,6 +185,7 @@ impl InsertionPolicy {
         atoms: &[AtomKind],
         num_molecules: usize,
         cell: &impl SimulationCell,
+        rng: &mut impl Rng,
         rotate: bool,
         position: &Point,
     ) -> anyhow::Result<(Vec<Point>, Vec<UnitQuaternion>)> {
@@ -196,7 +197,7 @@ impl InsertionPolicy {
             atoms,
             num_molecules,
             cell,
-            &mut rand::thread_rng(),
+            rng,
             rotate,
             &Axes::None, // no random directions
             &Some(*position),
@@ -215,7 +216,7 @@ impl InsertionPolicy {
         atoms: &[AtomKind],
         num_molecules: usize,
         cell: &impl SimulationCell,
-        rng: &mut ThreadRng,
+        rng: &mut impl Rng,
         rotate: bool,
         directions: &Axes,
         offset: &Option<Point>,
@@ -293,7 +294,7 @@ impl InsertionPolicy {
         com: &Point,
         rotate: bool,
         cell: &impl SimulationCell,
-        rng: &mut ThreadRng,
+        rng: &mut impl Rng,
     ) -> (Vec<Point>, UnitQuaternion) {
         let mut positions: Vec<_> = centered_positions.iter().map(|pos| pos + com).collect();
         let quaternion = if rotate {
@@ -319,7 +320,7 @@ impl InsertionPolicy {
         atoms: &[AtomKind],
         num_molecules: usize,
         cell: &impl SimulationCell,
-        rng: &mut ThreadRng,
+        rng: &mut impl Rng,
         rotate: bool,
     ) -> anyhow::Result<(Vec<Point>, Vec<UnitQuaternion>)> {
         let box_lengths = cell
@@ -382,7 +383,7 @@ impl InsertionPolicy {
         molecule_kind: &MoleculeKind,
         num_molecules: usize,
         cell: &impl SimulationCell,
-        rng: &mut ThreadRng,
+        rng: &mut impl Rng,
         bond_length: f64,
         directions: &Axes,
     ) -> anyhow::Result<Vec<Point>> {
@@ -498,7 +499,7 @@ impl MoleculeBlock {
         &self,
         context: &mut impl Context,
         external_positions: &[Point],
-        rng: &mut ThreadRng,
+        rng: &mut impl Rng,
     ) -> anyhow::Result<()> {
         let topology = context.topology();
         let molecule = &topology.moleculekinds()[self.molecule_id];

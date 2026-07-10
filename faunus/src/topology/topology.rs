@@ -14,7 +14,7 @@
 
 //! Topology struct
 
-use rand::rngs::ThreadRng;
+use rand::Rng;
 use std::fmt::Debug;
 use std::path::Path;
 
@@ -277,7 +277,7 @@ impl Topology {
         &self,
         context: &mut impl Context,
         structure: Option<impl AsRef<Path>>,
-        rng: &mut ThreadRng,
+        rng: &mut impl Rng,
     ) -> anyhow::Result<()> {
         // current index of the coordinate in the external structure file to use
         let mut curr_start = 0;

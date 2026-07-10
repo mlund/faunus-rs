@@ -18,6 +18,7 @@ use crate::{
     cell::{BoundaryConditions, Shape, VolumeScale, VolumeScalePolicy},
     Point,
 };
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 
 use super::SimulationCell;
@@ -36,7 +37,7 @@ impl Shape for Endless {
     fn bounding_box(&self) -> Option<Point> {
         None
     }
-    fn get_point_inside(&self, _rng: &mut rand::prelude::ThreadRng) -> Point {
+    fn get_point_inside<R: Rng + ?Sized>(&self, _rng: &mut R) -> Point {
         todo!("Implement get_point_inside for endless box");
     }
 }

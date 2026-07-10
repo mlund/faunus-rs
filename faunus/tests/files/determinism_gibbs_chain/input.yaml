@@ -1,0 +1,38 @@
+# Gibbs ensemble with no inter-box moves, used to isolate the per-box Markov
+# chains. Restored from identical state files, the starting coordinates are
+# fixed and the inter-box stream is absent, so each box's state can only depend
+# on the seed of its own chain. That is what catches a box seeded from a
+# hardcoded constant, whose trajectory would otherwise be the same for every seed.
+
+atoms:
+  - {name: X, mass: 1.0, sigma: 1.0}
+
+molecules:
+  - name: particle
+    atoms: [X]
+
+system:
+  cell: !Cuboid [10.0, 10.0, 10.0]
+  medium:
+    permittivity: !Vacuum
+    temperature: 298.15
+  energy: {}
+  blocks:
+    - molecule: particle
+      N: 40
+      active: 20
+      insert: !RandomAtomPos {}
+
+analysis: []
+
+propagate:
+  seed: !Fixed 7
+  criterion: Metropolis
+  repeat: 50
+  collections:
+    - !Stochastic
+      moves:
+        - !TranslateMolecule {molecule: particle, dp: 0.5, repeat: 5}
+  gibbs:
+    intra_steps: 1
+    moves: []

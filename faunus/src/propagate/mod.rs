@@ -42,7 +42,7 @@ use crate::{
 use builder::{PropagateBuilder, Seed, SelectionStrategy};
 use rand::prelude::SliceRandom;
 use rand::rngs::StdRng;
-use rand::Rng;
+use rand::{Rng, SeedableRng};
 use std::path::Path;
 
 /// A collection of moves with a selection strategy and repeat count.
@@ -259,10 +259,7 @@ impl<T: Context> Propagate<T> {
             .map(|c| c.build(context))
             .collect::<anyhow::Result<Vec<_>>>()?;
 
-        let rng = match builder.seed {
-            Seed::Hardware => rand::SeedableRng::from_entropy(),
-            Seed::Fixed(x) => rand::SeedableRng::seed_from_u64(x as u64),
-        };
+        let rng = builder.seed.build_rng();
 
         Ok(Self {
             max_repeats: builder.max_repeats,
@@ -316,7 +313,7 @@ impl<T: Context> Propagate<T> {
         map.insert("repeat".into(), self.max_repeats.into());
         map.insert(
             "seed".into(),
-            serde_yml::to_value(&self.seed).unwrap_or_default(),
+            serde_yml::to_value(self.seed).unwrap_or_default(),
         );
         let collections: Vec<_> = self.blocks.iter().map(|b| b.to_yaml()).collect();
         map.insert(
@@ -329,6 +326,27 @@ impl<T: Context> Propagate<T> {
         );
         serde_yml::Value::Mapping(map)
     }
+}
+
+/// Parse the optional `propagate.seed` field, defaulting to hardware entropy.
+pub(crate) fn seed_from_file(filename: impl AsRef<Path>) -> anyhow::Result<Seed> {
+    let yaml = crate::auxiliary::read_yaml(filename)?;
+    let full: serde_yml::Value = serde_yml::from_str(&yaml)?;
+    match full.get("propagate").and_then(|p| p.get("seed")) {
+        Some(value) => crate::auxiliary::from_section_value("propagate/seed", value),
+        None => Ok(Seed::default()),
+    }
+}
+
+/// Random number generator for building the initial configuration.
+///
+/// Derived from `propagate.seed` so that `insert:` policies place particles
+/// reproducibly; without it a fixed seed would pin only the Markov chain and
+/// not the coordinates it starts from. Deliberately a *derived* stream rather
+/// than `seed.build_rng()` itself, which the Markov chain already consumes from
+/// scratch — sharing it would replay the same draws as coordinates.
+pub(crate) fn setup_rng_from_file(filename: impl AsRef<Path>) -> anyhow::Result<StdRng> {
+    Ok(StdRng::from_rng(seed_from_file(filename)?.build_rng())?)
 }
 
 /// Parse the optional `propagate.gibbs` section from an input YAML file.

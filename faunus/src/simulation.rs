@@ -9,7 +9,7 @@ use crate::{
 };
 use anyhow::Result;
 use interatomic::coulomb::Temperature;
-use rand::SeedableRng;
+use rand::{Rng, SeedableRng};
 use std::path::Path;
 
 /// Top-level simulation driver.
@@ -55,7 +55,7 @@ pub fn build_context_and_analyses(
     interatomic::coulomb::Medium,
 )> {
     let medium = crate::backend::get_medium(input)?;
-    let context = Backend::new(input, None, &mut rand::thread_rng())?;
+    let context = Backend::new(input, None, &mut crate::propagate::setup_rng_from_file(input)?)?;
     let analyses = analysis::from_file(input, &context, Some(&medium))?;
     Ok((context, analyses, medium))
 }
@@ -77,7 +77,7 @@ impl Simulation {
             return Ok((sim, medium));
         }
 
-        let context = Backend::new(input, None, &mut rand::thread_rng())?;
+        let context = Backend::new(input, None, &mut crate::propagate::setup_rng_from_file(input)?)?;
         let mc = build_markov_chain(input, context, rt, state, Some(&medium), None)?;
         Ok((Self::SingleBox(mc), medium))
     }
@@ -90,7 +90,11 @@ impl Simulation {
         gibbs_cfg: crate::montecarlo::gibbs::GibbsConfig,
         medium: &interatomic::coulomb::Medium,
     ) -> Result<Self> {
-        let context0 = Backend::new(input, None, &mut rand::thread_rng())?;
+        // One master stream for the ensemble: initial coordinates, box 1's chain
+        // and the inter-box moves all draw from it, so `propagate.seed` pins the
+        // whole run. Box 0 keeps the chain `Propagate` seeds from the same value.
+        let mut setup_rng = propagate::setup_rng_from_file(input)?;
+        let context0 = Backend::new(input, None, &mut setup_rng)?;
         let context1 = context0.clone();
 
         let inter_moves: Vec<_> = gibbs_cfg
@@ -110,8 +114,10 @@ impl Simulation {
         let out_dir1 = anchor.join("box1");
         let mut mc0 = build_markov_chain(input, context0, rt, None, Some(medium), Some(&out_dir0))?;
         let mut mc1 = build_markov_chain(input, context1, rt, None, Some(medium), Some(&out_dir1))?;
-        // give box 1 a distinct seed so intra-box trajectories diverge
-        mc1.propagation_mut().reseed(0x000D_EADB_EEFC_AFE1);
+        // Give box 1 a distinct seed so intra-box trajectories diverge. Drawing it
+        // from the master stream keeps box 1 responsive to `propagate.seed`; a
+        // hardcoded constant would give it the same chain for every input.
+        mc1.propagation_mut().reseed(setup_rng.gen());
 
         let max_sweeps = mc0.propagation().max_repeats() / gibbs_cfg.intra_steps.max(1);
         log::info!(
@@ -132,7 +138,7 @@ impl Simulation {
             }
         }
 
-        let rng = rand::rngs::StdRng::from_entropy();
+        let rng = rand::rngs::StdRng::from_rng(&mut setup_rng)?;
         let ensemble = GibbsEnsemble::new(
             [mc0, mc1],
             inter_moves,

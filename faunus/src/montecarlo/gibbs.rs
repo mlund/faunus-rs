@@ -267,8 +267,7 @@ impl GibbsParticleTransfer {
         let com = src.mass_center(&src_indices);
 
         // shift positions to a random position in target cell
-        // thread_rng required by Shape::get_point_inside signature
-        let shift = tgt.cell().get_point_inside(&mut rand::thread_rng()) - com;
+        let shift = tgt.cell().get_point_inside(rng) - com;
         let positions: Vec<_> = src_indices
             .iter()
             .map(|&i| src.position(i) + shift)
