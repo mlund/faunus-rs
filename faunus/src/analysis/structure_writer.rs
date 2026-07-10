@@ -297,6 +297,16 @@ impl<T: ObserveContext> Analyze<T> for StructureWriter {
         self.write_frame(context, step)
     }
 
+    fn trajectory_outputs(&self) -> Vec<std::path::PathBuf> {
+        let trajectory = std::path::PathBuf::from(&self.output_file);
+        if self.save_frame_state {
+            let aux = crate::topology::io::frame_state::aux_path_from_traj(&trajectory);
+            vec![trajectory, aux]
+        } else {
+            vec![trajectory]
+        }
+    }
+
     fn finalize(&mut self, context: &T, step: usize) -> anyhow::Result<()> {
         // Writes the frame *and* counts it, like every other End-frequency analysis now does.
         if self.sampling.frequency().should_perform_at_end() {

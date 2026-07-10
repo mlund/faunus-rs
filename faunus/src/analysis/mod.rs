@@ -414,6 +414,15 @@ pub trait Analyze<T: ObserveContext>: Debug + Info {
         Ok(())
     }
 
+    /// Files this analysis writes that must not alias a trajectory being replayed.
+    ///
+    /// A `rerun` reads a trajectory while its analyses sample it. An analysis whose `file:` points
+    /// at that same trajectory (or its `.aux`) would truncate it mid-read (issue #60). Only
+    /// trajectory writers report anything here; every other analysis keeps the empty default.
+    fn trajectory_outputs(&self) -> Vec<std::path::PathBuf> {
+        Vec::new()
+    }
+
     /// Build the results mapping. Called only when at least one sample was taken, so an
     /// implementation never has to guard against dividing by zero or publishing a mean of nothing.
     fn results(&self) -> Option<serde_yml::Value> {

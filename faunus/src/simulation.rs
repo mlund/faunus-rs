@@ -54,6 +54,18 @@ fn run_failed(error: anyhow::Error) -> Error {
     Error::Run(error.into())
 }
 
+/// Whether two paths denote the same file. Canonicalizes where the files exist (resolving `..`
+/// and symlinks) and falls back to lexical absolutization where they do not, so a relative
+/// `traj.xtc` and an absolute one under the same directory still compare equal.
+fn same_file(a: &Path, b: &Path) -> bool {
+    let resolve = |path: &Path| {
+        std::fs::canonicalize(path)
+            .or_else(|_| std::path::absolute(path))
+            .unwrap_or_else(|_| path.to_path_buf())
+    };
+    resolve(a) == resolve(b)
+}
+
 /// Serialize data as a YAML document, optionally nested under a single key.
 fn yaml_block<T: serde::Serialize>(data: &T, key: Option<&str>) -> anyhow::Result<String> {
     Ok(match key {
@@ -714,6 +726,21 @@ pub fn replay(input: &Path, traj: &Path, aux: Option<&Path>) -> Result<Simulatio
     let aux = aux
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|| frame_state::aux_path_from_traj(traj));
+
+    // An analysis pointed at the trajectory being replayed would truncate it mid-read, silently
+    // yielding one frame instead of many (issue #60). Refuse before opening the readers.
+    for analysis in &analyses {
+        for written in analysis.trajectory_outputs() {
+            if same_file(&written, traj) || same_file(&written, &aux) {
+                return Err(Error::Input(format!(
+                    "analysis writes {}, which is the trajectory being replayed; \
+                     change the analysis `file:` or drop it from the rerun input",
+                    written.display()
+                )));
+            }
+        }
+    }
+
     let mut aux_reader = FrameStateReader::open(&aux)?;
 
     validate_aux_header(aux_reader.header(), &context)?;
