@@ -1,0 +1,12 @@
+{
+  "name": "faunus-docs-check",
+  "private": true,
+  "type": "module",
+  "description": "Check that the built documentation renders its math in a real browser.",
+  "scripts": {
+    "check": "node check-math.mjs ../../site"
+  },
+  "dependencies": {
+    "puppeteer": "25.3.0"
+  }
+}
