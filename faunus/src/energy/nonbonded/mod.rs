@@ -22,7 +22,6 @@ use super::pairpot::PairPot;
 use crate::ObserveContext;
 use cache::GroupEnergyCache;
 use interatomic::twobody::{IsotropicTwobodyEnergy, SplineConfig, SplinedPotential};
-use ndarray::Array2;
 use std::path::Path;
 use std::sync::RwLock;
 
@@ -34,7 +33,10 @@ use crate::{
     Change, Group, GroupChange,
 };
 
-use super::{builder::HamiltonianBuilder, exclusions::ExclusionMatrix, EnergyChange};
+use super::{
+    builder::HamiltonianBuilder, exclusions::ExclusionMatrix, square_matrix::SquareMatrix,
+    EnergyChange,
+};
 
 /// Sort a molecule-type pair into canonical `[min, max]` order for symmetric lookup.
 #[inline(always)]
@@ -59,7 +61,7 @@ const fn canonical_mol_pair(a: usize, b: usize) -> [usize; 2] {
 #[derive(Debug)]
 pub struct NonbondedMatrix<P = PairPot> {
     /// Matrix of pair potentials based on atom type ids.
-    pub(super) potentials: Array2<P>,
+    pub(super) potentials: SquareMatrix<P>,
     /// Matrix of excluded interactions.
     pub(super) exclusions: ExclusionMatrix,
     /// Pairwise inter-group energy cache for O(1) old-energy lookup in MC moves.
@@ -394,7 +396,7 @@ impl<P: IsotropicTwobodyEnergy> EnergyChange for NonbondedMatrix<P> {
 
 impl<P> NonbondedMatrix<P> {
     /// Get square matrix of pair potentials for all atom type combinations.
-    pub const fn get_potentials(&self) -> &Array2<P> {
+    pub(crate) const fn get_potentials(&self) -> &SquareMatrix<P> {
         &self.potentials
     }
 
@@ -497,8 +499,7 @@ impl NonbondedMatrix {
         let atoms = topology.atomkinds();
         let n_atom_types = atoms.len();
 
-        let mut potentials: Array2<PairPot> =
-            Array2::from_elem((n_atom_types, n_atom_types), PairPot::default());
+        let mut potentials = SquareMatrix::from_element(n_atom_types, PairPot::default());
 
         for i in 0..n_atom_types {
             for j in 0..n_atom_types {
@@ -546,7 +547,6 @@ impl NonbondedMatrix<SplinedPotential> {
     ) -> Self {
         let config = config.unwrap_or_default();
         let source = nonbonded.get_potentials();
-        let shape = source.raw_dim();
 
         // Warn if all potentials are negligible at half the cutoff, indicating
         // grid points are wasted on a long flat tail (risk of spline ringing).
@@ -563,7 +563,7 @@ impl NonbondedMatrix<SplinedPotential> {
             );
         }
 
-        let potentials = Array2::from_shape_fn(shape, |(i, j)| {
+        let potentials = SquareMatrix::from_fn(source.order(), |i, j| {
             let potential = source.get((i, j)).expect("Index should be valid");
             SplinedPotential::with_cutoff(potential, cutoff, config.clone())
         });

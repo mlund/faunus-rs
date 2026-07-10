@@ -56,10 +56,7 @@ fn test_nonbonded_matrix_new() {
 
     let nonbonded = NonbondedMatrix::new(&pairpot_builder, &topology, medium).unwrap();
 
-    assert_eq!(
-        nonbonded.potentials.len(),
-        topology.atomkinds().len() * topology.atomkinds().len()
-    );
+    assert_eq!(nonbonded.potentials.order(), topology.atomkinds().len());
 
     for i in 0..topology.atomkinds().len() {
         for j in (i + 1)..topology.atomkinds().len() {
@@ -628,8 +625,8 @@ fn test_nonbonded_matrix_splined_new() {
 
     // Check that the splined matrix has the same dimensions as the original
     assert_eq!(
-        splined.get_potentials().raw_dim(),
-        nonbonded.get_potentials().raw_dim()
+        splined.get_potentials().order(),
+        nonbonded.get_potentials().order()
     );
 }
 

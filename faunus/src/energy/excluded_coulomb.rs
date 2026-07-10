@@ -7,11 +7,12 @@
 
 use crate::ObserveContext;
 use interatomic::twobody::{ArcPotential, IsotropicTwobodyEnergy};
-use ndarray::Array2;
 
 use crate::{group::Group, topology::Topology, Change};
 
-use super::{builder::PairPotentialBuilder, EnergyChange, EnergyTerm};
+use super::{
+    builder::PairPotentialBuilder, square_matrix::SquareMatrix, EnergyChange, EnergyTerm,
+};
 
 /// Evaluates analytical Coulomb for excluded pairs in opted-in molecules.
 ///
@@ -21,7 +22,7 @@ use super::{builder::PairPotentialBuilder, EnergyChange, EnergyTerm};
 #[derive(Debug, Clone)]
 pub struct ExcludedCoulomb {
     /// Coulomb-only potentials indexed by atom-kind pair.
-    potentials: Array2<ArcPotential>,
+    potentials: SquareMatrix<ArcPotential>,
 }
 
 impl ExcludedCoulomb {
@@ -33,10 +34,8 @@ impl ExcludedCoulomb {
     ) -> anyhow::Result<Self> {
         let atoms = topology.atomkinds();
         let n = atoms.len();
-        let mut potentials = Array2::from_elem(
-            (n, n),
-            ArcPotential::new(interatomic::twobody::NoInteraction),
-        );
+        let mut potentials =
+            SquareMatrix::from_element(n, ArcPotential::new(interatomic::twobody::NoInteraction));
 
         for i in 0..n {
             for j in i..n {

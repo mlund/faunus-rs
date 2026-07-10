@@ -14,31 +14,21 @@
 
 //! Implementation of the exclusions.
 
+use super::square_matrix::SquareMatrix;
 use crate::Topology;
 
-/// Row-major exclusion matrix for cache-friendly nonbonded inner loops.
-///
-/// Uses flat `Vec<u8>` instead of nalgebra `DMatrix` (column-major) so that
-/// iterating row `i` over columns `j` reads sequential memory, hitting one
-/// cache line per ~64 exclusion checks instead of strided loads.
+/// Which particle pairs interact via nonbonded interactions.
 ///
 /// Values: 1 = particles interact, 0 = excluded pair.
 #[derive(Debug, Clone, PartialEq)]
-pub(super) struct ExclusionMatrix {
-    data: Vec<u8>,
-    ncols: usize,
-}
+pub(super) struct ExclusionMatrix(SquareMatrix<u8>);
 
 impl ExclusionMatrix {
     /// Create exclusions based on topology.
     pub fn from_topology(topology: &Topology) -> Self {
         let n = topology.num_particles();
-        let mut data = vec![1u8; n * n];
-        // zero the diagonal (self-exclusion)
-        for i in 0..n {
-            data[i * n + i] = 0;
-        }
-        let mut exclusions = Self { data, ncols: n };
+        // Everything interacts except a particle with itself.
+        let mut exclusions = Self(SquareMatrix::from_fn(n, |i, j| u8::from(i != j)));
 
         let mut atom_cnt = 0;
         for block in topology.blocks() {
@@ -60,23 +50,21 @@ impl ExclusionMatrix {
     /// - 0 => particles do NOT interact via nonbonded interactions.
     #[inline]
     pub fn get(&self, indices: (usize, usize)) -> u8 {
-        self.data[indices.0 * self.ncols + indices.1]
+        self.0[indices]
     }
 
     /// Contiguous row slice so the inner loop can use `get_unchecked(j)`
-    /// on a single slice instead of recomputing `i * ncols + j` each iteration.
+    /// on a single slice instead of recomputing the offset each iteration.
     #[inline]
     pub fn row(&self, i: usize) -> &[u8] {
-        debug_assert!(i * self.ncols < self.data.len());
-        let start = i * self.ncols;
-        &self.data[start..start + self.ncols]
+        self.0.row(i)
     }
 
     /// Set exclusion status for the specified pair of particle indices.
     /// Sets both `(i,j)` and `(j,i)` in the matrix.
-    pub fn set(&mut self, indices: (usize, usize), value: u8) {
-        self.data[indices.0 * self.ncols + indices.1] = value;
-        self.data[indices.1 * self.ncols + indices.0] = value;
+    pub fn set(&mut self, (i, j): (usize, usize), value: u8) {
+        self.0[(i, j)] = value;
+        self.0[(j, i)] = value;
     }
 }
 
@@ -91,8 +79,8 @@ mod tests {
 
         let num_particles = topology.num_particles();
         assert_eq!(exclusions.row(0).len(), num_particles);
-        assert_eq!(exclusions.ncols, num_particles);
-        assert_eq!(exclusions.data.len(), num_particles * num_particles);
+        assert_eq!(exclusions.0.order(), num_particles);
+        assert_eq!(exclusions.0.iter().count(), num_particles * num_particles);
 
         // MOL (RigidAlchemical, 7 atoms) excludes all intra-molecular pairs.
         // MOL2 (Free, 3 atoms, no bonds) has no exclusions.
