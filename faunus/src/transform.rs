@@ -149,7 +149,7 @@ pub enum Transform {
 
 impl Transform {
     /// Apply the transformation to a single group in the context.
-    pub fn on_group(
+    pub(crate) fn on_group(
         &self,
         group_index: usize,
         context: &mut impl crate::Context,
@@ -209,7 +209,7 @@ impl Transform {
     }
 
     /// Apply the transformation to a group, saving affected particles as backup first.
-    pub fn on_group_with_backup(
+    pub(crate) fn on_group_with_backup(
         &self,
         group_index: usize,
         context: &mut impl crate::Context,
@@ -227,13 +227,16 @@ impl Transform {
     }
 
     /// Apply a system-wide transformation with backup (saves all particles, mass centers, cell).
-    pub fn on_system_with_backup(&self, context: &mut impl crate::Context) -> anyhow::Result<()> {
+    pub(crate) fn on_system_with_backup(
+        &self,
+        context: &mut impl crate::Context,
+    ) -> anyhow::Result<()> {
         context.save_system_backup();
         self.on_system(context)
     }
 
     /// Apply a system-wide transformation to the context.
-    pub fn on_system(&self, context: &mut impl crate::Context) -> anyhow::Result<()> {
+    pub(crate) fn on_system(&self, context: &mut impl crate::Context) -> anyhow::Result<()> {
         match self {
             Self::VolumeScale(policy, new_volume) => {
                 context.scale_volume_and_positions(*new_volume, *policy)?;

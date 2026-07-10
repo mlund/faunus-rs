@@ -57,7 +57,7 @@ impl Penalty {
     }
 
     /// Compute bias energy: `ln_g(bin) * kT`, or infinity if out of range.
-    pub fn energy(&self, context: &impl ObserveContext, change: &Change) -> f64 {
+    pub(crate) fn energy(&self, context: &impl ObserveContext, change: &Change) -> f64 {
         if matches!(change, Change::None) {
             return 0.0;
         }
@@ -70,7 +70,7 @@ impl Penalty {
     }
 
     /// Evaluate CV(s) and update the shared histogram + density of states.
-    pub fn update(&self, context: &impl ObserveContext) {
+    pub(crate) fn update(&self, context: &impl ObserveContext) {
         let cv = self.eval_cv(context);
         let mut state = self.state.write().expect("poisoned lock");
         if let Some(bin) = state.bin_index(&cv) {

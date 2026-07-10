@@ -87,6 +87,7 @@ impl StructureWriterBuilder {
 }
 
 impl StructureWriter {
+    #[allow(dead_code)] // constructed by tests
     pub fn new(output_file: &str, frequency: Frequency) -> Self {
         Self {
             output_file: output_file.to_owned(),

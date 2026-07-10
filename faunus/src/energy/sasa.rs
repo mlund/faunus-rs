@@ -90,7 +90,7 @@ impl SasaEnergy {
             .sum()
     }
 
-    pub fn energy(&self, _context: &impl ObserveContext, _change: &Change) -> f64 {
+    pub(crate) fn energy(&self, _context: &impl ObserveContext, _change: &Change) -> f64 {
         self.raw_energy() + self.energy_offset.unwrap_or(0.0)
     }
 

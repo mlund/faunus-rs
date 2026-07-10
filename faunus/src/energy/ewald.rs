@@ -240,7 +240,7 @@ impl EwaldReciprocalEnergy {
     }
 
     /// Compute energy relevant to a change.
-    pub fn energy(&self, _context: &impl ObserveContext, change: &Change) -> f64 {
+    pub(crate) fn energy(&self, _context: &impl ObserveContext, change: &Change) -> f64 {
         match change {
             Change::None => 0.0,
             _ => self.cached_energy,

@@ -192,10 +192,12 @@ impl ProposedMove {
         &self.displacement
     }
 
+    #[allow(dead_code)] // asserted by the move-proposal tests
     pub fn transform(&self) -> &Transform {
         &self.transform
     }
 
+    #[allow(dead_code)] // asserted by the move-proposal tests
     pub fn target(&self) -> &MoveTarget {
         &self.target
     }

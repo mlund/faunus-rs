@@ -303,7 +303,9 @@ impl Hamiltonian {
     ///
     /// Returns a dense vector indexed by absolute particle index, with contributions
     /// from all force-providing terms summed together.
-    pub fn forces(&self, context: &impl ObserveContext) -> Vec<crate::Point> {
+    // Only the Langevin integrator needs forces, and it is gpu-gated.
+    #[cfg_attr(not(feature = "gpu"), allow(dead_code))]
+    pub(crate) fn forces(&self, context: &impl ObserveContext) -> Vec<crate::Point> {
         self.forces_filtered(context, |_| true)
     }
 

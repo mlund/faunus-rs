@@ -80,7 +80,11 @@ macro_rules! dispatch_stateful {
 
 impl EnergyTerm {
     /// Update internal state due to a change in the system.
-    pub fn update(&mut self, context: &impl ObserveContext, change: &Change) -> anyhow::Result<()> {
+    pub(crate) fn update(
+        &mut self,
+        context: &impl ObserveContext,
+        change: &Change,
+    ) -> anyhow::Result<()> {
         match self {
             Self::NonbondedMatrix(x) => {
                 x.update_cache(context, change);
@@ -247,7 +251,7 @@ impl EnergyTerm {
     }
 
     /// Nonbonded energy between two sets of atom indices; `None` for non-nonbonded terms.
-    pub fn nonbonded_energy_between_atoms(
+    pub(crate) fn nonbonded_energy_between_atoms(
         &self,
         context: &impl ObserveContext,
         atoms1: &[crate::group::AbsIndex],

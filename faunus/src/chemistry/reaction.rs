@@ -134,6 +134,9 @@ fn check_sides(sides: &[&str]) -> Result<()> {
     Ok(())
 }
 
+// Direction handling and the equilibrium constant are read by tests and by the planned
+// speciation reporting; see issue #54.
+#[allow(dead_code)]
 impl Reaction {
     /// Parse a reaction from a string representation, e.g. "A + 👻B + ⚛C = D + E"
     ///

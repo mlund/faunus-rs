@@ -50,7 +50,7 @@ pub struct ConstrainBuilder {
 
 impl ConstrainBuilder {
     /// Build a [`Constrain`] energy term by resolving selections against the context.
-    pub fn build(&self, context: &impl ObserveContext) -> Result<Constrain> {
+    pub(crate) fn build(&self, context: &impl ObserveContext) -> Result<Constrain> {
         let cv = self.cv.build(context)?;
         Ok(Constrain {
             cv,
@@ -71,7 +71,7 @@ pub struct Constrain {
 }
 
 impl Constrain {
-    pub fn energy(&self, context: &impl ObserveContext, change: &Change) -> f64 {
+    pub(crate) fn energy(&self, context: &impl ObserveContext, change: &Change) -> f64 {
         if matches!(change, Change::None) {
             return 0.0;
         }

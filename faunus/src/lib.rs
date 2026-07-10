@@ -30,35 +30,40 @@ pub type ParticleVec = Vec<Particle>;
 mod info;
 pub use info::*;
 pub mod cell;
-pub mod celllist;
-mod change;
-pub mod collective_variable;
-pub use self::change::{Change, GroupChange};
-pub mod analysis;
-pub mod auxiliary;
-pub mod axes;
-pub mod backend;
-pub mod chemistry;
 #[cfg(feature = "cli")]
 pub mod cli;
 pub mod energy;
-pub(crate) mod flat_histogram;
-pub(crate) mod geometry;
-pub mod group;
-pub mod histogram;
-pub mod montecarlo;
-pub mod propagate;
-pub mod selection;
-pub mod simulation;
-pub mod state;
-pub mod time;
 pub mod topology;
 pub mod transform;
+
+// Simulation machinery. Nothing outside the crate drives a simulation through these types — the
+// supported entry point is `cli::do_main` — and exposing them would freeze the internal interfaces
+// that Tier 4 exists to keep narrow.
+pub(crate) mod analysis;
+pub(crate) mod auxiliary;
+pub(crate) mod axes;
+pub(crate) mod backend;
+pub(crate) mod celllist;
+pub(crate) mod change;
+pub(crate) mod chemistry;
+pub(crate) mod collective_variable;
+pub(crate) mod flat_histogram;
+pub(crate) mod geometry;
+pub(crate) mod group;
+pub(crate) mod histogram;
+pub(crate) mod montecarlo;
+pub(crate) mod propagate;
+pub(crate) mod selection;
+pub(crate) mod simulation;
+pub(crate) mod state;
+pub(crate) mod time;
 #[cfg(feature = "cli")]
-pub mod umbrella;
+pub(crate) mod umbrella;
 #[cfg(feature = "cli")]
-pub mod wang_landau;
+pub(crate) mod wang_landau;
 pub(crate) mod z_grid;
+
+pub(crate) use self::change::{Change, GroupChange};
 
 mod particle;
 pub use particle::{Particle, PointParticle};
@@ -66,5 +71,5 @@ pub use particle::{Particle, PointParticle};
 /// Re-export interatomic to avoid diamond dependency conflicts in downstream crates.
 pub use interatomic;
 
-mod context;
-pub use context::*;
+pub(crate) mod context;
+pub(crate) use context::*;

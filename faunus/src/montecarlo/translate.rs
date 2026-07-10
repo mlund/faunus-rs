@@ -62,6 +62,7 @@ impl crate::Info for TranslateMolecule {
 
 impl TranslateMolecule {
     /// Create a new `TranslateMolecule` move.
+    #[allow(dead_code)] // constructed by tests
     pub fn new(
         molecule_name: &str,
         molecule_id: usize,
@@ -170,6 +171,7 @@ impl crate::Info for TranslateAtom {
 
 impl TranslateAtom {
     /// Create a new `TranslateAtom` move.
+    #[allow(dead_code)] // constructed by tests
     pub fn new(
         molecule_name: Option<&str>,
         molecule_id: Option<usize>,

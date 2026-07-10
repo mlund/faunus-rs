@@ -316,7 +316,7 @@ impl PolymerDepletion {
     }
 
     /// Compute the energy relevant to a change (kJ/mol).
-    pub fn energy(&self, _context: &impl ObserveContext, change: &Change) -> f64 {
+    pub(crate) fn energy(&self, _context: &impl ObserveContext, change: &Change) -> f64 {
         if !self.change_involves_colloids(change) {
             return 0.0;
         }

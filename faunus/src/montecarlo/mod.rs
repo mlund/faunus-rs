@@ -24,7 +24,6 @@ use crate::ObserveContext;
 use crate::{time::Timer, Context};
 use anyhow::Result;
 use average::{Estimate, Mean};
-use log;
 use rand::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -128,6 +127,8 @@ pub enum Bias {
     /// Dimensionless bias (in units of kT); multiplied by thermal energy before adding to ΔU
     Dimensionless(f64),
     /// Force acceptance of the move regardless of energy change
+    // Nothing constructs it yet; the acceptance path already honours it. See issue #54.
+    #[allow(dead_code)]
     ForceAccept,
     /// No bias
     None,
@@ -424,10 +425,13 @@ impl<T: Context + 'static> MarkovChain<T> {
     ///
     /// This is used to normalize the energy change when determining the acceptance probability.
     /// Must match the unit of the energy.
+    // Seeds of the planned public MC interface; see issue #54.
+    #[allow(dead_code)]
     pub const fn set_thermal_energy(&mut self, thermal_energy: f64) {
         self.thermal_energy = thermal_energy;
     }
     /// Append an analysis to the back of the collection.
+    #[allow(dead_code)]
     pub fn add_analysis(&mut self, analysis: Box<dyn Analyze<T> + Send>) {
         self.analyses.push(analysis)
     }

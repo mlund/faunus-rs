@@ -42,22 +42,22 @@ mod virtual_translate;
 mod virtual_volume_move;
 mod widom;
 mod widom_rotation;
-pub use collective_variable::{CollectiveVariableAnalysis, CollectiveVariableAnalysisBuilder};
-pub use density_profile::{DensityProfile, DensityProfileBuilder};
-pub use double_layer_pressure::{DoubleLayerPressure, DoubleLayerPressureBuilder};
-pub use electric_potential_profile::{ElectricPotentialProfile, ElectricPotentialProfileBuilder};
-pub use energy::{EnergyAnalysis, EnergyAnalysisBuilder};
-pub use mean_along_coordinate::{MeanAlongCoordinate, MeanAlongCoordinateBuilder};
-pub use multipole_distribution::{MultipoleDistribution, MultipoleDistributionBuilder};
-pub use radial_distribution::{RadialDistribution, RadialDistributionBuilder};
-pub use rotational_diffusion::{RotationalDiffusion, RotationalDiffusionBuilder};
-pub use scaled_widom_insertion::{ScaledWidomInsertion, ScaledWidomInsertionBuilder};
-pub use shape::{ShapeAnalysis, ShapeAnalysisBuilder};
-pub use spatial_distribution::{SpatialDistribution, SpatialDistributionBuilder};
-pub use structure_writer::{StructureWriter, StructureWriterBuilder};
-pub use virtual_translate::{VirtualTranslate, VirtualTranslateBuilder};
-pub use virtual_volume_move::{VirtualVolumeMove, VirtualVolumeMoveBuilder};
-pub use widom_rotation::{WidomRotation, WidomRotationBuilder};
+pub(crate) use collective_variable::CollectiveVariableAnalysisBuilder;
+pub(crate) use density_profile::DensityProfileBuilder;
+pub(crate) use double_layer_pressure::DoubleLayerPressureBuilder;
+pub(crate) use electric_potential_profile::ElectricPotentialProfileBuilder;
+pub(crate) use energy::EnergyAnalysisBuilder;
+pub(crate) use mean_along_coordinate::MeanAlongCoordinateBuilder;
+pub(crate) use multipole_distribution::MultipoleDistributionBuilder;
+pub(crate) use radial_distribution::RadialDistributionBuilder;
+pub(crate) use rotational_diffusion::RotationalDiffusionBuilder;
+pub(crate) use scaled_widom_insertion::ScaledWidomInsertionBuilder;
+pub(crate) use shape::ShapeAnalysisBuilder;
+pub(crate) use spatial_distribution::SpatialDistributionBuilder;
+pub(crate) use structure_writer::StructureWriterBuilder;
+pub(crate) use virtual_translate::VirtualTranslateBuilder;
+pub(crate) use virtual_volume_move::VirtualVolumeMoveBuilder;
+pub(crate) use widom_rotation::WidomRotationBuilder;
 
 /// Frequency of analysis.
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
@@ -470,6 +470,8 @@ pub trait AnalysisCollectionExt<T: Context> {
     fn write_to_disk(&mut self) -> Result<()>;
     /// Frames sampled, summed over the analyses — so an analysis that samples every frame
     /// contributes the frame count once. Not the number of frames in the run.
+    // Summing frame counts across analyses is asserted by tests; no production caller.
+    #[allow(dead_code)]
     fn num_samples(&self) -> usize;
 }
 

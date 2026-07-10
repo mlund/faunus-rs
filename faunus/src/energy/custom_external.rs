@@ -311,7 +311,7 @@ impl CustomExternal {
     }
 
     /// Compute energy for a given change.
-    pub fn energy(&self, context: &impl ObserveContext, change: &Change) -> f64 {
+    pub(crate) fn energy(&self, context: &impl ObserveContext, change: &Change) -> f64 {
         match &mut *self.selection_cache.borrow_mut() {
             ComSelection::Atoms(cache) => affected(change, cache, context, &self.warned_empty)
                 .into_iter()

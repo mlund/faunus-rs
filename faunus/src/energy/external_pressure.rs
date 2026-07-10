@@ -98,7 +98,7 @@ impl ExternalPressure {
     }
 
     /// Compute energy for a given change.
-    pub fn energy(&self, context: &impl ObserveContext, change: &Change) -> f64 {
+    pub(crate) fn energy(&self, context: &impl ObserveContext, change: &Change) -> f64 {
         match change {
             Change::Everything | Change::Volume(..) => self.compute(context),
             // N changes when particles are added/removed (GCMC)

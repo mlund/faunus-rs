@@ -146,6 +146,8 @@ impl Backend {
     /// Mirrors [`new`](Self::new) but parses every section from memory, so it works on
     /// targets without a filesystem (e.g. `wasm32-unknown-unknown`). The input must be
     /// fully self-contained: no `include` directives and no external structure files.
+    // Building a system from a string is part of the planned public interface; see issue #54.
+    #[allow(dead_code)]
     pub fn from_yaml_str(
         yaml: &str,
         structure_file: Option<&Path>,

@@ -28,7 +28,7 @@ use crate::{
 pub struct CellOverlap;
 
 impl CellOverlap {
-    pub fn energy(&self, context: &impl ObserveContext, change: &Change) -> f64 {
+    pub(crate) fn energy(&self, context: &impl ObserveContext, change: &Change) -> f64 {
         let cell = context.cell();
         if matches!(change, Change::None) || cell.pbc() == PeriodicDirections::PeriodicXYZ {
             return 0.0;

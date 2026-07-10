@@ -29,13 +29,6 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
 // Re-export CV types for convenience
-pub use atom::AtomPosition;
-pub use cell::Volume;
-pub use dynamic::{Charge, Count, Molarity};
-pub use group::{
-    DipoleMoment, DipoleProduct, EndToEnd, GyrationRadius, MassCenterPosition,
-    MassCenterSeparation, Size,
-};
 
 /// Metadata for one axis of a collective variable.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -506,11 +499,10 @@ macro_rules! impl_two_group_with_dim_builder {
 }
 
 // Re-export for use in submodules
-pub use impl_self_building_cv;
-pub use impl_single_atom_with_dim_builder;
-pub use impl_single_group_builder;
-pub use impl_single_group_with_dim_builder;
-pub use impl_two_group_with_dim_builder;
+pub(crate) use impl_self_building_cv;
+pub(crate) use impl_single_group_builder;
+pub(crate) use impl_single_group_with_dim_builder;
+pub(crate) use impl_two_group_with_dim_builder;
 
 // ---------------------------------------------------------------------------
 // Tests

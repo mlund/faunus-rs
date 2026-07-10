@@ -85,6 +85,7 @@ pub struct CollectiveVariableAnalysis {
 
 impl CollectiveVariableAnalysis {
     /// Running mean of all sampled CV values (Welford's algorithm via `average` crate).
+    #[allow(dead_code)] // read by tests
     pub fn mean(&self) -> f64 {
         self.mean.mean()
     }
