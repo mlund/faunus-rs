@@ -404,6 +404,64 @@ mod tests {
     use crate::UnitQuaternion;
     use float_cmp::assert_approx_eq;
 
+    /// One rigid dimer plus an atomic species that is empty at startup — the state a
+    /// grand-canonical run begins in before its first insertion.
+    const DIMER_AND_EMPTY_GAS: &str = r#"
+atoms:
+  - {name: A, mass: 2.0, charge: 0.0, sigma: 1.0}
+molecules:
+  - name: DIMER
+    atoms: [A, A]
+  - name: GAS
+    atomic: true
+    atoms: [A]
+system:
+  cell: !Cuboid [10.0, 10.0, 10.0]
+  medium: {permittivity: !Vacuum, temperature: 300.0}
+  energy: {}
+  blocks:
+    - molecule: DIMER
+      N: 1
+      insert: !Manual [[0.0, 0.0, -2.0], [0.0, 0.0, 2.0]]
+    - molecule: GAS
+      N: 2
+      active: 0
+      insert: !Manual [[3.0, 0.0, 0.0], [4.0, 0.0, 0.0]]
+propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
+"#;
+
+    fn backend_from_str(yaml: &str) -> crate::backend::Backend {
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(tmp.path(), yaml).unwrap();
+        crate::backend::Backend::new(tmp.path(), None, &mut rand::thread_rng()).unwrap()
+    }
+
+    fn builder(selection: &str) -> RotationalDiffusionBuilder {
+        RotationalDiffusionBuilder {
+            selection: Selection::parse(selection).unwrap(),
+            file: None,
+            frequency: Frequency::Every(1),
+            max_lag: 4,
+        }
+    }
+
+    /// An atomic group has no rigid-body orientation, so a selection naming one is rejected.
+    #[test]
+    fn atomic_group_is_rejected() {
+        let context = backend_from_str(DIMER_AND_EMPTY_GAS);
+        let error = builder("molecule GAS").build(&context).unwrap_err();
+        assert!(error.to_string().contains("matched no groups"), "{error}");
+    }
+
+    /// Characterizes the hole shared with `DensityProfile::use_com`: the atomic species matches
+    /// nothing while it is empty, so `all` slips past the guard and would take the orientation of
+    /// an atomic group once a grand-canonical insertion fills it.
+    #[test]
+    fn an_atomic_species_that_starts_out_empty_slips_past_the_guard() {
+        let context = backend_from_str(DIMER_AND_EMPTY_GAS);
+        assert!(builder("all").build(&context).is_ok());
+    }
+
     #[test]
     fn log_spaced_lags_basic() {
         let lags = log_spaced_lags(100);
