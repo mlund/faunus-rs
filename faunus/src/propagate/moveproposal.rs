@@ -348,7 +348,12 @@ mod pairing_tests {
 
     /// The escape hatch is still checked: a `GroupChange` naming a group no action touches would
     /// make the energy terms recompute the wrong groups.
+    ///
+    /// The validator is a `debug_assert!`, so it — and this test — exist only where debug
+    /// assertions do. `cargo test --release` compiles both away rather than running a test that
+    /// can never panic.
     #[test]
+    #[cfg(debug_assertions)]
     #[should_panic(expected = "each group named in the change must be touched by an action")]
     fn speciation_rejects_a_change_for_an_untouched_group() {
         let actions = vec![SpeciationAction::DeactivateGroup(7)];
@@ -357,6 +362,7 @@ mod pairing_tests {
     }
 
     #[test]
+    #[cfg(debug_assertions)]
     #[should_panic(expected = "each group named in the change must be touched by an action")]
     fn speciation_rejects_an_action_with_no_change() {
         let actions = vec![
