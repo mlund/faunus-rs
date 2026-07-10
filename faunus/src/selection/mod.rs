@@ -226,13 +226,17 @@ impl ComSelection {
     }
 }
 
-/// The first group a selection can ever match whose molecule kind fails `supported`.
+/// Find a group the selection could match but the caller cannot handle.
 ///
-/// Analyses that need a mass centre, a rigid-body orientation, or any other molecular property
-/// must refuse a selection naming a species that lacks it. Resolution here runs against a fully
-/// populated copy of the groups, because a selection matches only the atoms that are *present*: a
-/// species that starts out empty — a grand-canonical reservoir, say — slips past a check made
-/// against the initial configuration and aborts the run once its first particle appears.
+/// An analysis usually works only on molecules carrying some property — a mass centre, say, or a
+/// rigid-body orientation. Describe that property with `supported`, and any group returned here is
+/// one the selection names and the analysis cannot use, ready to be refused while the run is still
+/// starting up. `None` means every group the selection can reach is usable.
+///
+/// The search runs against a fully populated copy of the groups, because a selection matches only
+/// the atoms that are currently present. A species that starts out empty — a grand-canonical
+/// reservoir, for instance — therefore matches nothing, passes a check made against the initial
+/// configuration, and breaks the run much later, once its first particle is inserted.
 pub(crate) fn first_unsupported_group(
     context: &impl crate::ParticleSystem,
     selection: &Selection,
