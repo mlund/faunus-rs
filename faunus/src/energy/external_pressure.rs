@@ -210,7 +210,7 @@ mod tests {
 mod integration_tests {
     use super::*;
     use crate::backend::Backend;
-    use crate::context::ParticleSystem;
+    use crate::context::ObserveContext;
     use crate::WithSimulationCell;
     use float_cmp::assert_approx_eq;
     use std::path::Path;

@@ -721,7 +721,7 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
 
     #[test]
     fn reservoir_excluded_from_mass_centers() {
-        use crate::context::ParticleSystem;
+        use crate::context::ObserveContext;
         let ctx = backend_from_str(
             r#"
 atoms:

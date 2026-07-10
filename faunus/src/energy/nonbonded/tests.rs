@@ -848,7 +848,7 @@ fn test_nonbonded_matrix_splined_with_config() {
 /// Verify nonbonded forces against analytical pair forces.
 #[test]
 fn test_nonbonded_forces() {
-    use crate::context::ParticleSystem;
+    use crate::context::ObserveContext;
     let (system, nonbonded) = get_test_matrix();
 
     let forces = nonbonded.forces(&system);

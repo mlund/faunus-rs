@@ -511,7 +511,7 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
     /// grand-canonical insertion would abort the run much later.
     #[test]
     fn use_com_rejects_an_atomic_species_that_starts_out_empty() {
-        use crate::context::ParticleSystem;
+        use crate::context::ObserveContext;
         let yaml = ATOMIC_GAS.replace("N: 2", "N: 2\n      active: 0");
         let context = backend_from_str(&yaml);
         let selection = Selection::parse("molecule GAS").unwrap();

@@ -7,11 +7,11 @@ use crate::{
     cell::PbcParams,
     cell::{BoundaryConditions, Cell},
     change::Change,
-    context::WithHamiltonianMut,
+    context::{PerturbContext, WithHamiltonianMut},
     energy::{builder::HamiltonianBuilder, Hamiltonian},
     group::{GroupCollection, GroupCollectionMut, GroupGeometry, GroupLists, GroupSize},
     topology::Topology,
-    Context, Group, ParticleSystem, Point, UnitQuaternion, WithSimulationCell, WithTopology,
+    Context, Group, ObserveContext, Point, UnitQuaternion, WithSimulationCell, WithTopology,
 };
 
 use rand::rngs::ThreadRng;
@@ -456,7 +456,7 @@ impl GroupCollectionMut for Backend {
     }
 }
 
-impl ParticleSystem for Backend {
+impl ObserveContext for Backend {
     #[inline(always)]
     fn get_distance(&self, i: usize, j: usize) -> Point {
         let pi = Point::new(self.x[i], self.y[i], self.z[i]);
@@ -490,6 +490,16 @@ impl ParticleSystem for Backend {
     fn get_dihedral_angle(&self, indices: &[usize; 4]) -> f64 {
         let [p1, p2, p3, p4] = indices.map(|i| self.position(i));
         crate::geometry::dihedral_points(&p1, &p2, &p3, &p4, self.cell())
+    }
+}
+
+impl crate::context::PerturbContext for Backend {
+    /// Reaches the `RefCell` directly rather than through `hamiltonian_mut`, which
+    /// `PerturbContext` deliberately does not expose. Both borrows of `self` are shared, so the
+    /// borrow checker is satisfied and no energy term re-borrows the Hamiltonian from `update`.
+    fn update(&mut self, change: &Change) -> anyhow::Result<()> {
+        self.hamiltonian.borrow_mut().update(self, change)?;
+        Ok(())
     }
 
     fn scale_volume_and_positions(

@@ -830,7 +830,7 @@ frequency: !Every 10
 mod integration_tests {
     use super::*;
     use crate::backend::Backend;
-    use crate::context::{ParticleSystem, WithHamiltonian};
+    use crate::context::{ObserveContext, PerturbContext, WithHamiltonian};
     use crate::group::GroupCollection;
     use float_cmp::assert_approx_eq;
     use tempfile::NamedTempFile;

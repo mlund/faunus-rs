@@ -74,7 +74,7 @@ pub trait Target: sealed::Sealed + std::fmt::Debug + Clone {
     type Index: Copy + Clone + std::fmt::Debug + PartialEq;
 
     #[doc(hidden)]
-    fn resolve(context: &impl crate::ParticleSystem, selection: &Selection) -> Vec<Self::Index>;
+    fn resolve(context: &impl crate::ObserveContext, selection: &Selection) -> Vec<Self::Index>;
 }
 
 /// Resolves to the absolute indices of matching atoms.
@@ -87,7 +87,7 @@ pub struct Groups;
 
 impl Target for Atoms {
     type Index = AbsIndex;
-    fn resolve(context: &impl crate::ParticleSystem, selection: &Selection) -> Vec<AbsIndex> {
+    fn resolve(context: &impl crate::ObserveContext, selection: &Selection) -> Vec<AbsIndex> {
         context
             .resolve_atoms(selection)
             .into_iter()
@@ -98,7 +98,7 @@ impl Target for Atoms {
 
 impl Target for Groups {
     type Index = GroupIndex;
-    fn resolve(context: &impl crate::ParticleSystem, selection: &Selection) -> Vec<GroupIndex> {
+    fn resolve(context: &impl crate::ObserveContext, selection: &Selection) -> Vec<GroupIndex> {
         context
             .resolve_groups(selection)
             .into_iter()
@@ -119,7 +119,7 @@ impl Target for Groups {
 /// ```compile_fail
 /// # use faunus::selection::{CachedSelection, Selection};
 /// # use faunus::group::GroupCollection;
-/// # fn demo(context: &impl faunus::ParticleSystem) {
+/// # fn demo(context: &impl faunus::ObserveContext) {
 /// let mut groups = CachedSelection::groups(Selection::parse("molecule water").unwrap());
 /// // Group indices are not particle indices.
 /// let _ = context.position(groups.resolve(context)[0]);
@@ -131,7 +131,7 @@ impl Target for Groups {
 /// ```
 /// # use faunus::selection::{CachedSelection, Selection};
 /// # use faunus::group::GroupCollection;
-/// # fn demo(context: &impl faunus::ParticleSystem) {
+/// # fn demo(context: &impl faunus::ObserveContext) {
 /// let mut groups = CachedSelection::groups(Selection::parse("molecule water").unwrap());
 /// let _ = context.group(groups.resolve(context)[0]);
 /// # }
@@ -173,7 +173,7 @@ impl<T: Target> CachedSelection<T> {
     }
 
     /// Currently matching indices, re-resolved only if the system has changed relevantly.
-    pub fn resolve(&mut self, context: &impl crate::ParticleSystem) -> &[T::Index] {
+    pub fn resolve(&mut self, context: &impl crate::ObserveContext) -> &[T::Index] {
         self.resolve_with_selection(context).1
     }
 
@@ -183,7 +183,7 @@ impl<T: Target> CachedSelection<T> {
     /// to borrow the selection again — wasteful on the energy hot path.
     pub fn resolve_with_selection(
         &mut self,
-        context: &impl crate::ParticleSystem,
+        context: &impl crate::ObserveContext,
     ) -> (&Selection, &[T::Index]) {
         let generation = self.selection.generation(context);
         if self.generation != Some(generation) {
@@ -238,7 +238,7 @@ impl ComSelection {
 /// reservoir, for instance — therefore matches nothing, passes a check made against the initial
 /// configuration, and breaks the run much later, once its first particle is inserted.
 pub(crate) fn first_unsupported_group(
-    context: &impl crate::ParticleSystem,
+    context: &impl crate::ObserveContext,
     selection: &Selection,
     supported: impl Fn(&MoleculeKind) -> bool,
 ) -> anyhow::Result<Option<GroupIndex>> {
@@ -286,7 +286,7 @@ impl Selection {
     ///
     /// Selections that cannot see atom identities ignore that counter, so a titration move does
     /// not force, say, `molecule water` to be re-resolved on every energy evaluation.
-    fn generation(&self, context: &impl crate::ParticleSystem) -> Generation {
+    fn generation(&self, context: &impl crate::ObserveContext) -> Generation {
         Generation {
             groups: context.group_lists_generation(),
             atom_kinds: if self.depends_on_atom_kind {

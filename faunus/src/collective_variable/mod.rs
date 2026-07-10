@@ -179,10 +179,10 @@ where
     T: crate::group::GroupCollection
         + crate::context::WithSimulationCell
         + crate::context::WithTopology
-        + crate::context::ParticleSystem,
+        + crate::context::ObserveContext,
 {
     fn get_distance(&self, i: usize, j: usize) -> crate::Point {
-        <T as crate::context::ParticleSystem>::get_distance(self, i, j)
+        <T as crate::context::ObserveContext>::get_distance(self, i, j)
     }
 }
 
