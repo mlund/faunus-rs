@@ -8,3 +8,8 @@ target/
 *.yaml
 .DS_Store
 
+
+# Editor swap files and per-run simulation output
+*.swp
+*.swo
+*.dat

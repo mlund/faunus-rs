@@ -57,7 +57,7 @@
 //! # Extending faunus
 //!
 //! Adding an analysis, a Monte Carlo move or an energy term means implementing one trait inside the
-//! crate. Each has a worked template next to it — `analysis::template`, `propagate::template` and
+//! crate. Each has a worked template next to it — `analysis::template`, `montecarlo::template` and
 //! `energy::template` — and `docs/extending.md` walks through all three.
 
 use crate::group::Group;
