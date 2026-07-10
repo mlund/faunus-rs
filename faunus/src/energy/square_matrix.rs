@@ -16,19 +16,24 @@
 
 use std::ops::{Index, IndexMut};
 
-/// Row-major square matrix for cache-friendly nonbonded inner loops.
+/// Row-major square matrix indexed by a pair of atom kinds or particles.
 ///
 /// Row-major (unlike nalgebra's column-major `DMatrix`) so that iterating row
 /// `i` over columns `j` reads sequential memory, which is what the pair loops do.
+///
+/// Index it with a `(row, column)` tuple:
+/// ```ignore
+/// let potential = &potentials[(i, j)];
+/// ```
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) struct SquareMatrix<T> {
+pub struct SquareMatrix<T> {
     data: Vec<T>,
     order: usize,
 }
 
 impl<T> SquareMatrix<T> {
     /// Build an `order × order` matrix from a function of the row and column.
-    pub fn from_fn(order: usize, mut f: impl FnMut(usize, usize) -> T) -> Self {
+    pub(crate) fn from_fn(order: usize, mut f: impl FnMut(usize, usize) -> T) -> Self {
         let mut data = Vec::with_capacity(order * order);
         for i in 0..order {
             for j in 0..order {
@@ -57,7 +62,7 @@ impl<T> SquareMatrix<T> {
     /// # Safety
     /// Both `i` and `j` must be less than [`order`](Self::order).
     #[inline]
-    pub unsafe fn uget(&self, (i, j): (usize, usize)) -> &T {
+    pub(crate) unsafe fn uget(&self, (i, j): (usize, usize)) -> &T {
         debug_assert!(i < self.order && j < self.order);
         self.data.get_unchecked(i * self.order + j)
     }
@@ -65,7 +70,7 @@ impl<T> SquareMatrix<T> {
     /// Contiguous row slice, so an inner loop can use `get_unchecked(j)` on a
     /// single slice instead of recomputing `i * order + j` each iteration.
     #[inline]
-    pub fn row(&self, i: usize) -> &[T] {
+    pub(crate) fn row(&self, i: usize) -> &[T] {
         debug_assert!(i < self.order);
         let start = i * self.order;
         &self.data[start..start + self.order]
@@ -79,7 +84,7 @@ impl<T> SquareMatrix<T> {
 
 impl<T: Clone> SquareMatrix<T> {
     /// Build an `order × order` matrix with every element cloned from `value`.
-    pub fn from_element(order: usize, value: T) -> Self {
+    pub(crate) fn from_element(order: usize, value: T) -> Self {
         Self {
             data: vec![value; order * order],
             order,

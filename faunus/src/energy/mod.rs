@@ -36,7 +36,7 @@ pub(crate) mod penalty;
 mod polymer_depletion;
 mod sasa;
 pub(crate) mod slab_potential;
-pub(crate) mod square_matrix;
+pub mod square_matrix;
 mod tabulated;
 mod template;
 
@@ -53,6 +53,7 @@ pub use pairpot::PairPot;
 pub use penalty::{Penalty, PenaltyBuilder};
 pub use polymer_depletion::{PolymerDepletion, PolymerDepletionBuilder};
 pub use sasa::{SasaEnergy, SasaEnergyBuilder};
+pub use square_matrix::SquareMatrix;
 pub use tabulated::{Tabulated3DBuilder, Tabulated6DBuilder, TabulatedEnergy};
 
 // Re-export spline types from interatomic for convenience

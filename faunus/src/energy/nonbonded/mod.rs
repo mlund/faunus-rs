@@ -396,7 +396,7 @@ impl<P: IsotropicTwobodyEnergy> EnergyChange for NonbondedMatrix<P> {
 
 impl<P> NonbondedMatrix<P> {
     /// Get square matrix of pair potentials for all atom type combinations.
-    pub(crate) const fn get_potentials(&self) -> &SquareMatrix<P> {
+    pub const fn get_potentials(&self) -> &SquareMatrix<P> {
         &self.potentials
     }
 
