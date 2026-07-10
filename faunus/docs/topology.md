@@ -186,6 +186,7 @@ molecules:
 ```
 
 When `atomic: true`:
+
 - `has_com` is forced to `false` (no center-of-mass).
 - GCMC inserts/deletes individual atoms within the group via expand/shrink.
 - `TranslateAtom` works as usual; `TranslateMolecule` is not allowed.

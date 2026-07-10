@@ -147,7 +147,7 @@ Multiple reference groups can be selected; the distance is always to the nearest
           reference: "molecule Protein1 or molecule Protein2"
 ```
 
-The `reference` field uses the [selection language](selection.md),
+The `reference` field uses the [selection language](selection_language.md),
 e.g. `"molecule Protein"`, `"protein"`, or boolean combinations.
 
 Key         | Required | Default | Description

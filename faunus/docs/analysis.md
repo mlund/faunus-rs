@@ -175,19 +175,23 @@ matching a selection. Useful for tracking titration state and charge
 fluctuations.
 
 Reports:
-- **⟨Z⟩ ± σ** — mean net charge and standard deviation
-- **capacitance** C = ⟨Z²⟩ − ⟨Z⟩² — charge variance
-- **⟨|μ|⟩ ± σ** — mean dipole moment magnitude (eÅ)
-- **⟨|Θ|⟩ ± σ** — mean quadrupole magnitude (Frobenius norm, eÅ²)
-- **quadrupole tensor** — mean and standard deviation (σ) of the six independent components
-- **per-atom ⟨q⟩ and ⟨q²⟩−⟨q⟩²** — for atoms with fluctuating charge (e.g. from titration or atom swaps)
+
+- **net charge** $\langle Z\rangle \pm \sigma$ — mean and standard deviation
+- **capacitance** $C = \langle Z^2\rangle - \langle Z\rangle^2$ — charge variance
+- **dipole magnitude** $\langle|\boldsymbol{\mu}|\rangle \pm \sigma$ (eÅ)
+- **quadrupole magnitude** $\langle\|\boldsymbol{\Theta}\|\rangle \pm \sigma$ — Frobenius norm (eÅ²)
+- **quadrupole tensor** — mean and standard deviation $\sigma$ of the six independent components
+- **per-atom `⟨q⟩` and `⟨q²⟩-⟨q⟩²`** — for atoms with fluctuating charge (e.g. from titration or atom swaps)
 
 The dipole and quadrupole moments are computed relative to each group's
 center of mass with periodic boundary conditions applied.
 Handles atom-type swaps (titration) and GCMC (only active groups contribute).
 
-The reported quadrupole is the **traceless** form
-Θ_αβ = ½ Σ qᵢ (3 dᵢ_α dᵢ_β − dᵢ² δ_αβ) (Buckingham convention). The isotropic
+The reported quadrupole is the **traceless** form (Buckingham convention)
+
+$$\Theta_{\alpha\beta} = \tfrac{1}{2}\sum_i q_i\left(3 d_{i\alpha} d_{i\beta} - d_i^2\,\delta_{\alpha\beta}\right),$$
+
+where $\boldsymbol{d}_i$ points from the group's center of mass to atom $i$. The isotropic
 part dropped here does not affect the far-field potential, and removing it makes
 the moment vanish for isotropic charge distributions, so the values compare
 directly with experiment and literature.
@@ -266,7 +270,7 @@ characterises a whole solution of _N_ macroions, not just an isolated pair.
 
 Each molecule is reduced to a net charge, a dipole moment, and a traceless quadrupole moment
 about its center of mass, with periodic boundaries applied. The pair energy at separation
-_R_ = **r**ₐ − **r**_b is
+$\boldsymbol{R} = \boldsymbol{r}_a - \boldsymbol{r}_b$ is
 
 $$
 u = \frac{q_a q_b}{R} + \frac{q_a(\boldsymbol{\mu}_b\cdot\boldsymbol{R}) - q_b(\boldsymbol{\mu}_a\cdot\boldsymbol{R})}{R^3} + \frac{\boldsymbol{\mu}_a\cdot\boldsymbol{\mu}_b}{R^3} - \frac{3(\boldsymbol{\mu}_a\cdot\boldsymbol{R})(\boldsymbol{\mu}_b\cdot\boldsymbol{R})}{R^5} + \frac{q_a\,\boldsymbol{R}^{\!\top}\boldsymbol{\Theta}_b\,\boldsymbol{R} + q_b\,\boldsymbol{R}^{\!\top}\boldsymbol{\Theta}_a\,\boldsymbol{R}}{R^5}
@@ -280,11 +284,11 @@ $u_\text{exact} = \sum_i^a\sum_j^b q_i q_j / |\boldsymbol{r}_i-\boldsymbol{r}_j|
 Alongside the energies, five orientational measures are accumulated (column name in
 parentheses):
 
-- **⟨μ̂ₐ·μ̂_b⟩** (`mucorr`) ∈ [−1, 1] — mean cosine between the dipole directions: +1 parallel, −1 antiparallel, 0 uncorrelated.
-- **⟨P₂⟩** = ⟨(3cos²θ − 1)/2⟩ (`p2`) ∈ [−0.5, 1] — nematic-like alignment, blind to dipole sign: +1 collinear (parallel or antiparallel), 0 random, −0.5 mutually perpendicular.
-- **longitudinal projection** ⟨(μ̂ₐ·R̂)(μ̂_b·R̂)⟩ (`long`) ∈ [−1, 1] — orientation relative to the separation axis: near +1 both point along **R** (head-to-tail, end-on), near 0 both lie perpendicular to it (side-by-side, broadside).
-- **Kirkwood factor** g_K(R) = 1 + (1/N)⟨Σ μ̂ᵢ·μ̂ⱼ⟩ (`gK`) — the running dipole-correlation integral, where N counts the reference molecules that carry a dipole (apolar molecules are excluded from the normalization): g_K > 1 signals net parallel ordering of the surrounding dipoles, g_K < 1 net antiparallel ordering. It applies when both selections are the same species; for two different species the bare cumulative sum is reported, without the +1.
-- **quadrupole correlation** — the tensor overlap ⟨**Θ**ₐ:**Θ**_b⟩ (`quadcorr`) and its normalized form ⟨**Θ̂**ₐ:**Θ̂**_b⟩ (`quadcorr_norm`) ∈ [−1, 1]: +1 identically oriented quadrupoles, −1 maximally anti-aligned, 0 uncorrelated.
+- **dipole correlation** $\langle\hat{\boldsymbol{\mu}}_a\cdot\hat{\boldsymbol{\mu}}_b\rangle$ (`mucorr`), between $-1$ and $1$ — mean cosine between the dipole directions: $+1$ parallel, $-1$ antiparallel, $0$ uncorrelated.
+- **nematic order** $\langle P_2\rangle = \langle(3\cos^2\theta - 1)/2\rangle$ (`p2`), between $-0.5$ and $1$ — alignment blind to dipole sign: $+1$ collinear (parallel or antiparallel), $0$ random, $-0.5$ mutually perpendicular.
+- **longitudinal projection** $\langle(\hat{\boldsymbol{\mu}}_a\cdot\hat{\boldsymbol{R}})(\hat{\boldsymbol{\mu}}_b\cdot\hat{\boldsymbol{R}})\rangle$ (`long`), between $-1$ and $1$ — orientation relative to the separation axis: near $+1$ both point along $\boldsymbol{R}$ (head-to-tail, end-on), near $0$ both lie perpendicular to it (side-by-side, broadside).
+- **Kirkwood factor** $g_K(R) = 1 + \frac{1}{N}\sum_{i \neq j,\, r_{ij} \leq R}\langle\hat{\boldsymbol{\mu}}_i\cdot\hat{\boldsymbol{\mu}}_j\rangle$ (`gK`) — the running dipole-correlation integral, where $N$ counts the reference molecules that carry a dipole (apolar molecules are excluded from the normalization): $g_K > 1$ signals net parallel ordering of the surrounding dipoles, $g_K < 1$ net antiparallel ordering. It applies when both selections are the same species; for two different species the bare cumulative sum is reported, without the $+1$.
+- **quadrupole correlation** — the tensor overlap $\langle\boldsymbol{\Theta}_a : \boldsymbol{\Theta}_b\rangle$ (`quadcorr`) and its normalized form $\langle\hat{\boldsymbol{\Theta}}_a : \hat{\boldsymbol{\Theta}}_b\rangle$ (`quadcorr_norm`), between $-1$ and $1$: $+1$ identically oriented quadrupoles, $-1$ maximally anti-aligned, $0$ uncorrelated.
 
 Both selections must resolve to molecules with a center of mass. Results are written to a CSV
 file, one row per distance bin, with columns
@@ -379,6 +383,7 @@ from sigma values, colors by charge, and draws the periodic box.
 
 For speciation/GCMC/titration simulations, two additional companion files
 enable per-frame visualization updates in VMD:
+
 - **`.sizes.dat`** — per-frame group active counts (written when any group
   has inactive atoms). The VMD script hides inactive atoms (radius = 0).
 - **`.charges.dat`** — per-frame atom charges (always written). The VMD
@@ -945,18 +950,21 @@ The `coordinate` block accepts all [collective variable](#collective-variable) f
 ## Rotational Diffusion
 
 Estimates the anisotropic rotational diffusion tensor from the quaternion
-covariance matrix Q̃(τ) of molecular orientations
+covariance matrix $\tilde{Q}(\tau)$ of molecular orientations
 ([Favro 1960](https://doi.org/10.1103/PhysRev.119.53);
 [Holtbrügge & Schäfer 2025](https://doi.org/10.1101/2025.05.27.656261)).
 
-For each lag τ (in snapshot units), the body-frame reorientation quaternion
-q(t,τ) = q(t)·q⁻¹(t+τ) is computed, and its vector components form the 3×3
-covariance matrix Q̃_ij(τ) = ⟨q_i·q_j⟩. In the principal coordinate system,
-Q̃ is diagonal and follows the Favro model:
+For each lag $\tau$ (in snapshot units), the body-frame reorientation quaternion
+$q(t,\tau) = q(t)\cdot q^{-1}(t+\tau)$ is computed, and its vector components form
+the $3\times3$ covariance matrix $\tilde{Q}_{ij}(\tau) = \langle q_i\cdot q_j\rangle$.
+In the principal coordinate system, $\tilde{Q}$ is diagonal and follows the Favro model
 
-Q_ii(τ) = ¼(1 + exp(−(D_j+D_k)τ) − exp(−(D_i+D_j)τ) − exp(−(D_i+D_k)τ))
+$$\tilde{Q}_{ii}(\tau) = \tfrac{1}{4}\left(1
+  + e^{-(D_j+D_k)\tau}
+  - e^{-(D_i+D_j)\tau}
+  - e^{-(D_i+D_k)\tau}\right),$$
 
-where D_x, D_y, D_z are the principal rotational diffusion coefficients
+where $D_x$, $D_y$ and $D_z$ are the principal rotational diffusion coefficients
 (rad²/snapshot). Correlations are averaged over all molecules matching the
 selection, exploiting ensemble averaging.
 
@@ -981,15 +989,15 @@ Key          | Required | Default | Description
 `selection`  | yes      |         | Selection for molecular group(s) to track
 `file`       | no       |         | Streaming output file (see [Output file formats](#output-file-formats))
 `frequency`  | yes      |         | Sample frequency, e.g. `!Every 100`
-`max_lag`    | no       | `1000`  | Max lag in snapshots; actual time window = max_lag × frequency
+`max_lag`    | no       | `1000`  | Max lag in snapshots; actual time window = `max_lag` × `frequency`
 
-The `max_lag` should be large enough for Q̃_ii(τ) to approach its plateau at ¼.
+The `max_lag` should be large enough for $\tilde{Q}_{ii}(\tau)$ to approach its plateau at $\tfrac{1}{4}$.
 A warning is emitted if convergence is not reached.
 
 ### Output
 
 The YAML output includes the covariance matrix at log-spaced lags,
-time-dependent diffusion coefficients D_x(τ), D_y(τ), D_z(τ) from
+time-dependent diffusion coefficients $D_x(\tau)$, $D_y(\tau)$, $D_z(\tau)$ from
 eigenvalue decomposition, and an isotropic estimate from the trace.
 
 ---
