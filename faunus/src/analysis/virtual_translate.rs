@@ -32,7 +32,7 @@ use crate::auxiliary::{ColumnWriter, MappingExt};
 use crate::axes::Axes;
 use crate::change::{Change, GroupChange};
 use crate::energy::EnergyChange;
-use crate::selection::{CachedSelection, Selection};
+use crate::selection::{CachedSelection, Groups, Selection};
 use crate::{Context, Point};
 use anyhow::Result;
 use derive_builder::Builder;
@@ -96,7 +96,7 @@ pub struct VirtualTranslate {
     /// The selection, its resolved groups, and its cache key. Built with the analysis.
     #[builder(setter(skip))]
     #[builder_field_attr(serde(skip))]
-    group_cache: CachedSelection,
+    group_cache: CachedSelection<Groups>,
 
     /// Thermal energy R*T in kJ/mol.
     #[builder(setter(skip))]
@@ -264,7 +264,7 @@ impl<T: Context> Analyze<T> for VirtualTranslate {
             );
         }
 
-        let group_index = active_groups[0];
+        let group_index = active_groups[0].get();
 
         let mut trial_context = context.clone();
         let energy_change = self.perturb(&mut trial_context, group_index)?;

@@ -8,7 +8,7 @@
 
 use super::{Analyze, Frequency, Sampling};
 use crate::auxiliary::{MappingExt, WeightedMean};
-use crate::selection::{CachedSelection, Selection};
+use crate::selection::{CachedSelection, Groups, Selection};
 use crate::topology::GroupKind;
 use crate::Context;
 use anyhow::Result;
@@ -84,7 +84,7 @@ impl MultipoleAnalysisBuilder {
 /// Per-group charge, dipole, and quadrupole analysis.
 #[derive(Debug)]
 pub struct MultipoleAnalysis {
-    selection: CachedSelection,
+    selection: CachedSelection<Groups>,
     /// Frequency and frame count, owned by the framework.
     sampling: Sampling,
     charge: WeightedMean,
@@ -129,7 +129,7 @@ impl<T: Context> Analyze<T> for MultipoleAnalysis {
         let moleculekinds = topology.moleculekinds();
 
         for &gi in &self.selection.resolve(context).to_vec() {
-            let group = &context.groups()[gi];
+            let group = context.group(gi);
             let mol = group.molecule();
 
             // Lazy-init per-atom accumulators from the validated molecular kind.
@@ -162,14 +162,16 @@ impl<T: Context> Analyze<T> for MultipoleAnalysis {
             self.charge.add(z, weight);
             self.charge_squared.add(z * z, weight);
 
-            if let Some(mu) = crate::collective_variable::group::group_dipole_moment(gi, context) {
+            if let Some(mu) =
+                crate::collective_variable::group::group_dipole_moment(gi.get(), context)
+            {
                 let mu_norm = mu.norm();
                 self.dipole_scalar.add(mu_norm, weight);
                 self.dipole_squared.add(mu_norm * mu_norm, weight);
             }
 
             if let Some(qt) =
-                crate::collective_variable::group::group_quadrupole_moment(gi, context)
+                crate::collective_variable::group::group_quadrupole_moment(gi.get(), context)
             {
                 let comps = [
                     qt[(0, 0)],

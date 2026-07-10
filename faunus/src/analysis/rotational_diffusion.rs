@@ -20,7 +20,8 @@
 
 use super::{Analyze, Frequency, Sampling};
 use crate::auxiliary::{ColumnWriter, MappingExt};
-use crate::selection::{CachedSelection, Selection};
+use crate::group::GroupIndex;
+use crate::selection::{CachedSelection, Groups, Selection};
 use crate::Context;
 use anyhow::Result;
 use average::{Estimate, Variance};
@@ -134,11 +135,11 @@ impl RotationalDiffusionBuilder {
 /// [Holtbrügge & Schäfer (2025)](https://doi.org/10.1101/2025.05.27.656261).
 #[derive(Debug)]
 pub struct RotationalDiffusion {
-    selection: CachedSelection,
+    selection: CachedSelection<Groups>,
     /// Frequency and frame count, owned by the framework.
     sampling: Sampling,
     /// Per-group quaternion ring buffers, keyed by group index.
-    snapshots: HashMap<usize, VecDeque<crate::UnitQuaternion>>,
+    snapshots: HashMap<GroupIndex, VecDeque<crate::UnitQuaternion>>,
     /// Q̃_ij(τ) and Ṽ_ij(τ) accumulators at log-spaced lags, shared across all molecules.
     /// Indexed by position in `log_lags`, not by lag value directly.
     covariance: Vec<[Variance; UPPER_TRIANGLE]>,
@@ -255,12 +256,12 @@ impl<T: Context> Analyze<T> for RotationalDiffusion {
         // Must copy: the borrow from `resolve` conflicts with `self.snapshots` mutation
         let group_indices = self.selection.resolve(context).to_vec();
 
-        let active: std::collections::HashSet<usize> = group_indices.iter().copied().collect();
+        let active: std::collections::HashSet<GroupIndex> = group_indices.iter().copied().collect();
         self.snapshots.retain(|gi, _| active.contains(gi));
 
         let max_lag = self.max_lag();
         for &gi in &group_indices {
-            let q = *context.groups()[gi].quaternion();
+            let q = *context.group(gi).quaternion();
             let buf = self
                 .snapshots
                 .entry(gi)

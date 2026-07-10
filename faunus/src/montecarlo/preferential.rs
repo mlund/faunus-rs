@@ -22,7 +22,7 @@
 use crate::auxiliary::ColumnWriter;
 use crate::cell::BoundaryConditions;
 use crate::histogram::Histogram;
-use crate::selection::{CachedSelection, Selection};
+use crate::selection::{CachedSelection, Groups, Selection};
 use crate::{Context, Point};
 use average::{Estimate, Mean};
 use log::{debug, warn};
@@ -81,7 +81,7 @@ pub struct PreferentialSampling {
     file: Option<PathBuf>,
     /// Resolved reference group indices, built from `reference` on first use.
     #[serde(skip)]
-    ref_cache: Option<CachedSelection>,
+    ref_cache: Option<CachedSelection<Groups>>,
     /// Cached (mass_center, bounding_radius) per reference group.
     #[serde(skip)]
     ref_geometries: Vec<(Point, f64)>,
@@ -142,7 +142,7 @@ impl PreferentialSampling {
         self.ref_geometries.clear();
         self.bounding_radii.clear();
         for &gi in ref_indices {
-            let g = &groups[gi];
+            let g = &groups[gi.get()];
             if let Some(&cm) = g.mass_center() {
                 let radius = g.bounding_radius().unwrap_or(0.0);
                 debug!(

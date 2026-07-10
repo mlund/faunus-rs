@@ -11,7 +11,8 @@ use super::{Analyze, Frequency, Sampling};
 use crate::auxiliary::MappingExt;
 use crate::cell::{BoundaryConditions, Shape};
 use crate::group::Group;
-use crate::selection::{CachedSelection, Selection};
+use crate::group::{AbsIndex, GroupIndex};
+use crate::selection::{Atoms, CachedSelection, Groups, Selection};
 use crate::topology::io::{self, StructureData};
 use crate::{Context, Point};
 use anyhow::Result;
@@ -90,7 +91,11 @@ impl SpatialDistributionBuilder {
             );
         }
 
-        let reference_groups = context.resolve_groups(&self.reference);
+        let reference_groups: Vec<GroupIndex> = context
+            .resolve_groups(&self.reference)
+            .into_iter()
+            .map(GroupIndex::new)
+            .collect();
         anyhow::ensure!(
             !reference_groups.is_empty(),
             "SpatialDistribution: reference selection '{}' matched no active groups",
@@ -105,7 +110,9 @@ impl SpatialDistributionBuilder {
         let reference_structure = self
             .reference_file
             .as_ref()
-            .map(|file| capture_reference_structure(context, reference_groups[0], file.clone()))
+            .map(|file| {
+                capture_reference_structure(context, reference_groups[0].get(), file.clone())
+            })
             .transpose()?;
 
         Ok(SpatialDistribution {
@@ -126,8 +133,8 @@ impl SpatialDistributionBuilder {
 /// Spatial distribution function analysis.
 #[derive(Debug)]
 pub struct SpatialDistribution {
-    reference: CachedSelection,
-    selection: CachedSelection,
+    reference: CachedSelection<Groups>,
+    selection: CachedSelection<Atoms>,
     file: PathBuf,
     /// Reference molecule snapshot in the body frame, written once for visualization.
     reference_structure: Option<ReferenceStructure>,
@@ -142,14 +149,14 @@ pub struct SpatialDistribution {
 
 fn validate_reference_groups(
     context: &impl Context,
-    reference_groups: &[usize],
+    reference_groups: &[GroupIndex],
     source: &str,
 ) -> Result<usize> {
     let topology = context.topology_ref();
     let groups = context.groups();
-    let first_molecule = groups[reference_groups[0]].molecule();
+    let first_molecule = groups[reference_groups[0].get()].molecule();
     for &group_index in reference_groups {
-        let group = &groups[group_index];
+        let group = &groups[group_index.get()];
         anyhow::ensure!(
             !group.is_empty(),
             "SpatialDistribution: reference selection '{source}' matched empty group {group_index}"
@@ -234,10 +241,13 @@ fn capture_reference_structure(
     })
 }
 
-fn reference_body_points(context: &impl Context, reference_groups: &[usize]) -> Result<Vec<Point>> {
+fn reference_body_points(
+    context: &impl Context,
+    reference_groups: &[GroupIndex],
+) -> Result<Vec<Point>> {
     let mut points = Vec::new();
     for &group_index in reference_groups {
-        let group = &context.groups()[group_index];
+        let group = context.group(group_index);
         let center = group.mass_center().ok_or_else(|| {
             anyhow::anyhow!("SpatialDistribution: reference group {group_index} has no mass center")
         })?;
@@ -269,25 +279,25 @@ fn validate_grid_extent(context: &impl Context, grid: &Grid) -> Result<()> {
     Ok(())
 }
 
-fn atom_owners(groups: &[Group], num_particles: usize) -> Vec<Option<usize>> {
+fn atom_owners(groups: &[Group], num_particles: usize) -> Vec<Option<GroupIndex>> {
     let mut owners = vec![None; num_particles];
     for group in groups {
         for atom_index in group.iter_active() {
-            owners[atom_index] = Some(group.index());
+            owners[atom_index] = Some(GroupIndex::new(group.index()));
         }
     }
     owners
 }
 
 fn eligible_target_count(
-    target_atoms: &[usize],
-    owners: &[Option<usize>],
-    reference_group: usize,
+    target_atoms: &[AbsIndex],
+    owners: &[Option<GroupIndex>],
+    reference_group: GroupIndex,
     exclude_reference: bool,
 ) -> usize {
     target_atoms
         .iter()
-        .filter(|&&atom_index| !exclude_reference || owners[atom_index] != Some(reference_group))
+        .filter(|&&atom| !exclude_reference || owners[atom.get()] != Some(reference_group))
         .count()
 }
 
@@ -334,7 +344,7 @@ impl<T: Context> Analyze<T> for SpatialDistribution {
         let volume = context.cell().volume();
 
         for reference_group in reference_groups {
-            let group = &context.groups()[reference_group];
+            let group = context.group(reference_group);
             let center = group.mass_center().ok_or_else(|| {
                 anyhow::anyhow!(
                     "SpatialDistribution: reference group {reference_group} has no mass center"
@@ -350,12 +360,12 @@ impl<T: Context> Analyze<T> for SpatialDistribution {
                 .observe_reference(weight, eligible_targets, volume, self.scale)?;
 
             for &atom_index in &target_atoms {
-                if self.exclude_reference && owners[atom_index] == Some(reference_group) {
+                if self.exclude_reference && owners[atom_index.get()] == Some(reference_group) {
                     continue;
                 }
                 let displacement = context
                     .cell()
-                    .distance(&context.position(atom_index), center);
+                    .distance(&context.position(atom_index.get()), center);
                 let body = frame::to_body_frame(&displacement, group.quaternion());
                 if let Some(voxel) = self.grid.index_of(&body) {
                     self.counts[voxel] += weight;

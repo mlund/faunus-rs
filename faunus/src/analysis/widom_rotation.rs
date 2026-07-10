@@ -52,7 +52,7 @@ use crate::cell::BoundaryConditions;
 use crate::change::{Change, GroupChange};
 use crate::energy::EnergyChange;
 use crate::geometry::GyrationTensor;
-use crate::selection::{CachedSelection, Selection};
+use crate::selection::{CachedSelection, Groups, Selection};
 use crate::{Context, Point, UnitQuaternion};
 use anyhow::Result;
 use derive_more::Debug;
@@ -295,7 +295,7 @@ struct TorqueProbe {
 /// Widom rotational perturbation analysis. See the module documentation.
 #[derive(Debug)]
 pub struct WidomRotation {
-    selection: CachedSelection,
+    selection: CachedSelection<Groups>,
     quaternions: Vec<UnitQuaternion>,
     vectors: Vec<VectorSpec>,
     thermal_energy: f64,
@@ -535,7 +535,7 @@ impl<T: Context> Analyze<T> for WidomRotation {
         }
 
         let mut trial = context.clone();
-        for gi in groups {
+        for gi in groups.iter().map(|gi| gi.get()) {
             let indices: Vec<usize> = context.groups()[gi].iter_active().collect();
             let com = context.mass_center(&indices);
             let references = self

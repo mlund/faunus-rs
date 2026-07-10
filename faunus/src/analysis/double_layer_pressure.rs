@@ -40,7 +40,7 @@ use super::{Analyze, Frequency, Sampling};
 use crate::auxiliary::{BlockAverage, ColumnWriter, MappingExt};
 use crate::cell::{BoundaryConditions, Shape};
 use crate::energy::slab_potential::square_sheet_factor;
-use crate::selection::{CachedSelection, Selection};
+use crate::selection::{Atoms, CachedSelection, Selection};
 use crate::{Context, Point};
 use anyhow::Result;
 use derive_more::Debug;
@@ -175,7 +175,7 @@ impl DoubleLayerPressureBuilder {
 #[derive(Debug)]
 pub struct DoubleLayerPressure {
     /// Mobile counterion selection.
-    selection: CachedSelection,
+    selection: CachedSelection<Atoms>,
     /// Thermal energy R*T in kJ/mol.
     thermal_energy: f64,
     /// Coulomb prefactor in kJ/mol·Å (energy of `q_i q_j / r`).
@@ -375,8 +375,8 @@ impl<T: Context> Analyze<T> for DoubleLayerPressure {
 
     fn perform_sample(&mut self, context: &T, step: usize, _weight: f64) -> Result<()> {
         let ions = self.selection.resolve(context);
-        let positions: Vec<Point> = ions.iter().map(|&i| context.position(i)).collect();
-        let charges: Vec<f64> = ions.iter().map(|&i| context.atom_charge(i)).collect();
+        let positions: Vec<Point> = ions.iter().map(|&i| context.position(i.get())).collect();
+        let charges: Vec<f64> = ions.iter().map(|&i| context.atom_charge(i.get())).collect();
 
         let rho = midplane_density(&positions, self.midplane_halfwidth, self.area);
         let fz = cross_force_z(&positions, &charges, context.cell());

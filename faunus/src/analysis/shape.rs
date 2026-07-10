@@ -22,7 +22,7 @@ use super::{Analyze, Frequency, Sampling};
 use crate::auxiliary::{ColumnWriter, MappingExt, WeightedMean};
 use crate::cell::BoundaryConditions;
 use crate::geometry::GyrationTensor;
-use crate::selection::{CachedSelection, Selection};
+use crate::selection::{CachedSelection, Groups, Selection};
 use crate::Context;
 use anyhow::Result;
 use derive_more::Debug;
@@ -102,7 +102,7 @@ impl ShapeAnalysisBuilder {
 /// Polymer shape analysis via the mass-weighted gyration tensor.
 #[derive(Debug)]
 pub struct ShapeAnalysis {
-    selection: CachedSelection,
+    selection: CachedSelection<Groups>,
     #[debug(skip)]
     stream: Option<ColumnWriter>,
     /// Frequency and frame count, owned by the framework.
@@ -208,7 +208,7 @@ impl<T: Context> Analyze<T> for ShapeAnalysis {
         let group_indices = self.selection.resolve(context).to_vec();
 
         for &gi in &group_indices {
-            let group = &context.groups()[gi];
+            let group = context.group(gi);
             let Some(result) = gyration_tensor(group, context) else {
                 continue;
             };

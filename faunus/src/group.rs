@@ -91,6 +91,14 @@ pub struct AbsIndex(usize);
 #[serde(transparent)]
 pub struct RelIndex(usize);
 
+/// Index into the group array, i.e. which molecule.
+///
+/// Numerically indistinguishable from [`AbsIndex`] — group 1 is also a valid particle index — so it
+/// is a separate type for the same reason. See [`AbsIndex`] for why there is no `From<usize>`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct GroupIndex(usize);
+
 impl AbsIndex {
     pub const fn new(index: usize) -> Self {
         Self(index)
@@ -98,6 +106,22 @@ impl AbsIndex {
     /// The raw index, for addressing the particle arrays.
     pub const fn get(self) -> usize {
         self.0
+    }
+}
+
+impl GroupIndex {
+    pub const fn new(index: usize) -> Self {
+        Self(index)
+    }
+    /// The raw index, for addressing the group array.
+    pub const fn get(self) -> usize {
+        self.0
+    }
+}
+
+impl std::fmt::Display for GroupIndex {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
     }
 }
 
@@ -492,6 +516,11 @@ pub trait GroupCollection {
     ///
     /// The first group has index 0, the second group has index 1, etc.
     fn groups(&self) -> &[Group];
+
+    /// The group at `index`.
+    fn group(&self, index: GroupIndex) -> &Group {
+        &self.groups()[index.get()]
+    }
 
     /// Mutable access to all groups (e.g. for quaternion or mass center updates).
     fn groups_mut(&mut self) -> &mut [Group];

@@ -28,7 +28,7 @@
 use super::{Analyze, Frequency, Sampling};
 use crate::auxiliary::{ColumnFormat, ColumnWriter, MappingExt, WeightedMean};
 use crate::cell::{BoundaryConditions, Shape};
-use crate::selection::{CachedSelection, Selection};
+use crate::selection::{CachedSelection, Groups, Selection};
 use crate::{Context, Point};
 use anyhow::Result;
 use derive_more::Debug;
@@ -324,7 +324,7 @@ struct Row {
 #[derive(Debug)]
 pub struct MultipoleDistribution {
     #[debug(skip)]
-    selections: (CachedSelection, CachedSelection),
+    selections: (CachedSelection<Groups>, CachedSelection<Groups>),
     resolution: f64,
     max_r: f64,
     bjerrum_length: f64,
@@ -419,18 +419,20 @@ impl<T: Context> Analyze<T> for MultipoleDistribution {
     }
 
     fn perform_sample(&mut self, context: &T, _step: usize, weight: f64) -> Result<()> {
-        let g1: Vec<usize> = self.selections.0.resolve(context).to_vec();
+        let g1 = self.selections.0.resolve(context).to_vec();
         let moments1: Vec<(usize, GroupMoments)> = g1
             .iter()
-            .filter_map(|&gi| Some((gi, GroupMoments::from_group(gi, context)?)))
+            .filter_map(|&gi| Some((gi.get(), GroupMoments::from_group(gi.get(), context)?)))
             .collect();
         let moments2: Option<Vec<(usize, GroupMoments)>> = if self.same_selection {
             None
         } else {
-            let g2: Vec<usize> = self.selections.1.resolve(context).to_vec();
+            let g2 = self.selections.1.resolve(context).to_vec();
             Some(
                 g2.iter()
-                    .filter_map(|&gi| Some((gi, GroupMoments::from_group(gi, context)?)))
+                    .filter_map(|&gi| {
+                        Some((gi.get(), GroupMoments::from_group(gi.get(), context)?))
+                    })
                     .collect(),
             )
         };

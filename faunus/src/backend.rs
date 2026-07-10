@@ -779,7 +779,7 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
         let mut context = backend();
         let mut by_kind = CachedSelection::atoms(Selection::parse("atomtype B").unwrap());
         let mut by_molecule = CachedSelection::atoms(Selection::parse("molecule DIMER").unwrap());
-        assert_eq!(by_kind.resolve(&context), &[1]);
+        assert_eq!(by_kind.resolve(&context), &[crate::group::AbsIndex::new(1)]);
         let molecule_atoms = by_molecule.resolve(&context).to_vec();
 
         // B → A: nothing is of kind B any more, but the molecule still holds the same atoms.
@@ -1219,18 +1219,33 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
         Backend::new(tmp.path(), None, &mut rand::thread_rng()).unwrap()
     }
 
+    /// Strip the index space, so a resolved slice can be compared with the uncached `Vec<usize>`.
+    trait RawIndices {
+        fn raw(&self) -> Vec<usize>;
+    }
+    impl RawIndices for [crate::group::AbsIndex] {
+        fn raw(&self) -> Vec<usize> {
+            self.iter().map(|i| i.get()).collect()
+        }
+    }
+    impl RawIndices for [crate::group::GroupIndex] {
+        fn raw(&self) -> Vec<usize> {
+            self.iter().map(|i| i.get()).collect()
+        }
+    }
+
     fn assert_agrees(context: &Backend, source: &str) {
         let selection = Selection::parse(source).unwrap();
         let mut atoms = CachedSelection::atoms(selection.clone());
         let mut groups = CachedSelection::groups(selection.clone());
         assert_eq!(
-            atoms.resolve(context),
-            context.resolve_atoms(&selection).as_slice(),
+            atoms.resolve(context).raw(),
+            context.resolve_atoms(&selection),
             "atoms disagree for '{source}'"
         );
         assert_eq!(
-            groups.resolve(context),
-            context.resolve_groups(&selection).as_slice(),
+            groups.resolve(context).raw(),
+            context.resolve_groups(&selection),
             "groups disagree for '{source}'"
         );
     }
@@ -1246,13 +1261,13 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
         mutate(context);
 
         assert_eq!(
-            atoms.resolve(context),
-            context.resolve_atoms(&selection).as_slice(),
+            atoms.resolve(context).raw(),
+            context.resolve_atoms(&selection),
             "cached atoms went stale for '{source}'"
         );
         assert_eq!(
-            groups.resolve(context),
-            context.resolve_groups(&selection).as_slice(),
+            groups.resolve(context).raw(),
+            context.resolve_groups(&selection),
             "cached groups went stale for '{source}'"
         );
     }
@@ -1291,29 +1306,5 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
                 c.resize_group(0, GroupSize::Partial(1)).unwrap();
             });
         }
-    }
-
-    /// Both targets resolve to `&[usize]`, so a group index reads as an atom index and the mistake
-    /// is silent. This pins the cost of that today; the next commit turns it into a type error and
-    /// this test is replaced by a `compile_fail` doctest on `CachedSelection`.
-    #[test]
-    fn a_group_index_silently_reads_as_an_atom_index() {
-        let context = backend();
-        let selection = Selection::parse("molecule DIMER").unwrap();
-        let mut groups = CachedSelection::groups(selection.clone());
-        let mut atoms = CachedSelection::atoms(selection);
-
-        assert_eq!(groups.resolve(&context), &[0, 1]);
-        assert_eq!(atoms.resolve(&context), &[0, 1, 2, 3]);
-
-        // Group index 1 is also a valid *atom* index, so a groups cache fed to a position lookup
-        // compiles and quietly returns the second atom of the first dimer.
-        let positions: Vec<_> = groups
-            .resolve(&context)
-            .iter()
-            .map(|&index| context.position(index))
-            .collect();
-        assert_eq!(positions[1], context.position(1));
-        assert_ne!(positions[1], *context.groups()[1].mass_center().unwrap());
     }
 }

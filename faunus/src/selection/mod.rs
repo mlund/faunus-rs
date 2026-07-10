@@ -23,7 +23,7 @@ mod glob;
 mod parser;
 mod token;
 
-use crate::group::Group;
+use crate::group::{AbsIndex, Group, GroupIndex};
 use crate::topology::Topology;
 
 /// Return the canonical reserved selection keyword matching `name`, if any.
@@ -60,11 +60,51 @@ pub struct Generation {
     pub atom_kinds: u64,
 }
 
-/// What a [`CachedSelection`] resolves to.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Target {
-    Atoms,
-    Groups,
+mod sealed {
+    pub trait Sealed {}
+    impl Sealed for super::Atoms {}
+    impl Sealed for super::Groups {}
+}
+
+/// What a [`CachedSelection`] resolves to, and hence which index space it yields.
+///
+/// Sealed: atoms and groups are the only two spaces a selection can name.
+pub trait Target: sealed::Sealed + std::fmt::Debug + Clone {
+    /// The index space [`CachedSelection::resolve`] yields.
+    type Index: Copy + Clone + std::fmt::Debug + PartialEq;
+
+    #[doc(hidden)]
+    fn resolve(context: &impl crate::ParticleSystem, selection: &Selection) -> Vec<Self::Index>;
+}
+
+/// Resolves to the absolute indices of matching atoms.
+#[derive(Clone, Copy, Debug)]
+pub struct Atoms;
+
+/// Resolves to the indices of groups holding at least one matching atom.
+#[derive(Clone, Copy, Debug)]
+pub struct Groups;
+
+impl Target for Atoms {
+    type Index = AbsIndex;
+    fn resolve(context: &impl crate::ParticleSystem, selection: &Selection) -> Vec<AbsIndex> {
+        context
+            .resolve_atoms(selection)
+            .into_iter()
+            .map(AbsIndex::new)
+            .collect()
+    }
+}
+
+impl Target for Groups {
+    type Index = GroupIndex;
+    fn resolve(context: &impl crate::ParticleSystem, selection: &Selection) -> Vec<GroupIndex> {
+        context
+            .resolve_groups(selection)
+            .into_iter()
+            .map(GroupIndex::new)
+            .collect()
+    }
 }
 
 /// A selection together with its resolved indices, re-resolved only when the system has changed
@@ -73,42 +113,55 @@ enum Target {
 /// The cache key is derived internally, so a consumer cannot supply a key that misses a change.
 /// This matters: an atom-kind swap leaves group composition untouched, and a cache keyed on
 /// composition alone would keep serving the pre-swap atoms of an `atomtype` selection forever.
+///
+/// The target is part of the type, so the indices it yields cannot be spent in the wrong space:
+///
+/// ```compile_fail
+/// # use faunus::selection::{CachedSelection, Selection};
+/// # use faunus::group::GroupCollection;
+/// # fn demo(context: &impl faunus::ParticleSystem) {
+/// let mut groups = CachedSelection::groups(Selection::parse("molecule water").unwrap());
+/// // Group indices are not particle indices.
+/// let _ = context.position(groups.resolve(context)[0]);
+/// # }
+/// ```
+///
+/// The same code against the group array compiles:
+///
+/// ```
+/// # use faunus::selection::{CachedSelection, Selection};
+/// # use faunus::group::GroupCollection;
+/// # fn demo(context: &impl faunus::ParticleSystem) {
+/// let mut groups = CachedSelection::groups(Selection::parse("molecule water").unwrap());
+/// let _ = context.group(groups.resolve(context)[0]);
+/// # }
+/// ```
 #[derive(Debug, Clone)]
-pub struct CachedSelection {
+pub struct CachedSelection<T: Target> {
     selection: Selection,
-    target: Target,
-    indices: Vec<usize>,
+    indices: Vec<T::Index>,
     /// `None` until first resolved.
     generation: Option<Generation>,
 }
 
-impl CachedSelection {
+impl CachedSelection<Atoms> {
     /// Resolve to the absolute indices of matching atoms.
     pub fn atoms(selection: Selection) -> Self {
-        Self::new(selection, Target::Atoms)
+        Self::new(selection)
     }
+}
 
+impl CachedSelection<Groups> {
     /// Resolve to the indices of groups holding at least one matching atom.
     pub fn groups(selection: Selection) -> Self {
-        Self::new(selection, Target::Groups)
+        Self::new(selection)
     }
+}
 
-    /// Groups when `com` acts on molecular mass centers, atoms otherwise.
-    ///
-    /// The `com` flag of an analysis or energy term decides both what it iterates over and what it
-    /// must resolve to; deriving one from the other here keeps the two from drifting apart.
-    pub fn for_com(selection: Selection, com: bool) -> Self {
-        if com {
-            Self::groups(selection)
-        } else {
-            Self::atoms(selection)
-        }
-    }
-
-    fn new(selection: Selection, target: Target) -> Self {
+impl<T: Target> CachedSelection<T> {
+    fn new(selection: Selection) -> Self {
         Self {
             selection,
-            target,
             indices: Vec::new(),
             generation: None,
         }
@@ -119,13 +172,8 @@ impl CachedSelection {
         &self.selection
     }
 
-    /// Whether [`resolve`](Self::resolve) yields atom indices rather than group indices.
-    pub fn targets_atoms(&self) -> bool {
-        self.target == Target::Atoms
-    }
-
     /// Currently matching indices, re-resolved only if the system has changed relevantly.
-    pub fn resolve(&mut self, context: &impl crate::ParticleSystem) -> &[usize] {
+    pub fn resolve(&mut self, context: &impl crate::ParticleSystem) -> &[T::Index] {
         self.resolve_with_selection(context).1
     }
 
@@ -136,16 +184,45 @@ impl CachedSelection {
     pub fn resolve_with_selection(
         &mut self,
         context: &impl crate::ParticleSystem,
-    ) -> (&Selection, &[usize]) {
+    ) -> (&Selection, &[T::Index]) {
         let generation = self.selection.generation(context);
         if self.generation != Some(generation) {
-            self.indices = match self.target {
-                Target::Atoms => context.resolve_atoms(&self.selection),
-                Target::Groups => context.resolve_groups(&self.selection),
-            };
+            self.indices = T::resolve(context, &self.selection);
             self.generation = Some(generation);
         }
         (&self.selection, &self.indices)
+    }
+}
+
+/// A selection whose target follows a consumer's `com` flag.
+///
+/// The flag decides both what the consumer iterates over and what its selection must resolve to;
+/// deriving one from the other here keeps the two from drifting apart, and matching on this enum
+/// hands each branch the index space it can actually use.
+#[derive(Debug, Clone)]
+pub enum ComSelection {
+    /// Individual atoms, for `com: false`.
+    Atoms(CachedSelection<Atoms>),
+    /// Molecular mass centers, one per group, for `com: true`.
+    Groups(CachedSelection<Groups>),
+}
+
+impl ComSelection {
+    /// Groups when `com` acts on molecular mass centers, atoms otherwise.
+    pub fn new(selection: Selection, com: bool) -> Self {
+        if com {
+            Self::Groups(CachedSelection::groups(selection))
+        } else {
+            Self::Atoms(CachedSelection::atoms(selection))
+        }
+    }
+
+    /// The underlying selection, for logging and reporting.
+    pub fn selection(&self) -> &Selection {
+        match self {
+            Self::Atoms(cache) => cache.selection(),
+            Self::Groups(cache) => cache.selection(),
+        }
     }
 }
 

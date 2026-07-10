@@ -6,7 +6,7 @@
 
 use super::{Analyze, Frequency, Sampling};
 use crate::auxiliary::{ColumnWriter, MappingExt, WeightedMean};
-use crate::selection::{CachedSelection, Selection};
+use crate::selection::{Atoms, CachedSelection, Selection};
 use crate::Context;
 use anyhow::Result;
 use derive_more::Debug;
@@ -30,7 +30,7 @@ enum EnergyMode {
     /// Per-term breakdown + total.
     Total,
     /// Nonbonded energy between two selections.
-    Partial(Box<(CachedSelection, CachedSelection)>),
+    Partial(Box<(CachedSelection<Atoms>, CachedSelection<Atoms>)>),
 }
 
 /// Streams energy values to an output file.
@@ -113,8 +113,16 @@ impl<T: Context> Analyze<T> for EnergyAnalysis {
         // Resolving needs `&mut` on the caches, so do it before borrowing the rest of `self`.
         let partial_atoms = match &mut self.mode {
             EnergyMode::Partial(pair) => Some((
-                pair.0.resolve(context).to_vec(),
-                pair.1.resolve(context).to_vec(),
+                pair.0
+                    .resolve(context)
+                    .iter()
+                    .map(|i| i.get())
+                    .collect::<Vec<_>>(),
+                pair.1
+                    .resolve(context)
+                    .iter()
+                    .map(|i| i.get())
+                    .collect::<Vec<_>>(),
             )),
             EnergyMode::Total => None,
         };

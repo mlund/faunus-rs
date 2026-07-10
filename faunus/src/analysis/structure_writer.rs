@@ -1,7 +1,8 @@
 use super::{Analyze, Frequency, Sampling};
 use crate::auxiliary::MappingExt;
 use crate::cell::Shape;
-use crate::selection::{CachedSelection, Selection};
+use crate::group::GroupIndex;
+use crate::selection::{CachedSelection, Groups, Selection};
 use crate::topology::io::{self, frame_state::FrameStateWriter, psf, StructureData};
 use crate::Context;
 use anyhow::Context as _;
@@ -42,7 +43,7 @@ pub struct StructureWriter {
     /// Resolved group indices, built from `selection` on first use.
     #[builder(setter(skip))]
     #[builder_field_attr(serde(skip))]
-    group_cache: Option<CachedSelection>,
+    group_cache: Option<CachedSelection<Groups>>,
     /// Per-frame group sizes for VMD visibility of inactive groups.
     #[builder(setter(skip))]
     #[builder_field_attr(serde(skip))]
@@ -111,10 +112,10 @@ impl crate::Info for StructureWriter {
 
 impl StructureWriter {
     /// Resolve selected group indices, using cache to avoid re-resolution.
-    fn selected_group_indices<T: Context>(&mut self, context: &T) -> Cow<'_, [usize]> {
+    fn selected_group_indices<T: Context>(&mut self, context: &T) -> Cow<'_, [GroupIndex]> {
         match &mut self.group_cache {
             Some(cache) => Cow::Borrowed(cache.resolve(context)),
-            None => Cow::Owned((0..context.groups().len()).collect()),
+            None => Cow::Owned((0..context.groups().len()).map(GroupIndex::new).collect()),
         }
     }
 
@@ -125,13 +126,13 @@ impl StructureWriter {
 
         let num_particles: usize = group_indices
             .iter()
-            .map(|&i| all_groups[i].capacity())
+            .map(|&i| all_groups[i.get()].capacity())
             .sum();
         let mut names = Vec::with_capacity(num_particles);
         let mut positions = Vec::with_capacity(num_particles);
 
         for &gi in group_indices.iter() {
-            let group = &all_groups[gi];
+            let group = &all_groups[gi.get()];
             let molecule = &topology.moleculekinds()[group.molecule()];
             // capacity() not len(): XTC requires fixed particle count per frame
             for i in 0..group.capacity() {
@@ -220,7 +221,7 @@ impl StructureWriter {
         // Only create the file when at least one group has inactive atoms.
         let any_inactive = group_indices
             .iter()
-            .any(|&gi| all_groups[gi].len() != all_groups[gi].capacity());
+            .any(|&gi| all_groups[gi.get()].len() != all_groups[gi.get()].capacity());
         if any_inactive && self.sizes_writer.is_none() {
             let sizes_path = Path::new(&self.output_file).with_extension("sizes.dat");
             let mut w = BufWriter::new(
@@ -230,7 +231,7 @@ impl StructureWriter {
             writeln!(w, "# Faunus group sizes")?;
             let mut start = 0usize;
             for &gi in group_indices.iter() {
-                let g = &all_groups[gi];
+                let g = &all_groups[gi.get()];
                 let mol_name = psf::to_ascii(topology.moleculekinds()[g.molecule()].name());
                 writeln!(
                     w,
@@ -249,7 +250,7 @@ impl StructureWriter {
                 if i > 0 {
                     write!(w, " ")?;
                 }
-                write!(w, "{}", all_groups[gi].len())?;
+                write!(w, "{}", all_groups[gi.get()].len())?;
             }
             writeln!(w)?;
         }
@@ -267,7 +268,7 @@ impl StructureWriter {
             let atomkinds = topology.atomkinds();
             let mut first = true;
             for &gi in group_indices.iter() {
-                let g = &all_groups[gi];
+                let g = &all_groups[gi.get()];
                 for i in g.start()..g.start() + g.capacity() {
                     if !first {
                         write!(w, " ")?;
@@ -308,7 +309,7 @@ impl<T: Context> Analyze<T> for StructureWriter {
             let all_groups = context.groups();
             let filtered: Vec<_> = group_indices
                 .iter()
-                .map(|&i| all_groups[i].clone())
+                .map(|&i| all_groups[i.get()].clone())
                 .collect();
             let psf_path = base.with_extension("psf");
             psf::write_psf(&psf_path, &topology, &filtered)?;

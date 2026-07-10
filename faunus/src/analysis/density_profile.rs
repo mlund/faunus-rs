@@ -26,7 +26,7 @@ use super::{Analyze, Frequency, Sampling};
 use crate::auxiliary::{BlockAverage, BlockSummary, ColumnWriter, MappingExt};
 use crate::cell::Shape;
 use crate::group::GroupSize;
-use crate::selection::{CachedSelection, Selection};
+use crate::selection::{ComSelection, Selection};
 use crate::z_grid::ZGrid;
 use crate::Context;
 use anyhow::Result;
@@ -73,9 +73,8 @@ impl DensityProfileBuilder {
         }
         let n_bins = grid.n_bins();
         Ok(DensityProfile {
-            selection: CachedSelection::for_com(self.selection.clone(), self.use_com),
+            selection: ComSelection::new(self.selection.clone(), self.use_com),
             grid,
-            use_com: self.use_com,
             counts: new_accumulators(n_bins),
             masses: new_accumulators(n_bins),
             total_count: BlockAverage::new(),
@@ -121,11 +120,9 @@ fn new_accumulators(n: usize) -> Vec<BlockAverage> {
 #[derive(Debug)]
 pub struct DensityProfile {
     /// Atoms, or molecules when `use_com` is set, whose density is profiled.
-    selection: CachedSelection,
+    selection: ComSelection,
     /// Slab layout along z.
     grid: ZGrid,
-    /// Bin molecular mass centres rather than individual atoms.
-    use_com: bool,
     /// Particles per slab: mean and error across samples.
     counts: Vec<BlockAverage>,
     /// Mass per slab (g/mol): mean and error across samples.
@@ -150,19 +147,22 @@ impl DensityProfile {
             counts[bin] += 1.0;
             masses[bin] += mass;
         };
-        let indices = self.selection.resolve(context).to_vec();
-        if self.use_com {
-            for group_index in indices {
-                let group = &context.groups()[group_index];
-                let mass_center = group.mass_center().ok_or_else(|| {
-                    anyhow::anyhow!("DensityProfile: group {group_index} has no center of mass")
-                })?;
-                let mass = group.iter_active().map(|i| context.atom_mass(i)).sum();
-                add(mass_center.z, mass);
+        match &mut self.selection {
+            ComSelection::Groups(cache) => {
+                for &group_index in cache.resolve(context) {
+                    let group = context.group(group_index);
+                    let mass_center = group.mass_center().ok_or_else(|| {
+                        anyhow::anyhow!("DensityProfile: group {group_index} has no center of mass")
+                    })?;
+                    let mass = group.iter_active().map(|i| context.atom_mass(i)).sum();
+                    add(mass_center.z, mass);
+                }
             }
-        } else {
-            for index in indices {
-                add(context.position(index).z, context.atom_mass(index));
+            ComSelection::Atoms(cache) => {
+                for &index in cache.resolve(context) {
+                    let index = index.get();
+                    add(context.position(index).z, context.atom_mass(index));
+                }
             }
         }
         Ok((counts, masses))
