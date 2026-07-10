@@ -18,7 +18,6 @@ use crate::{
     cell::{BoundaryConditions, Shape, SimulationCell, VolumeScale, VolumeScalePolicy},
     Point,
 };
-use rand::Rng;
 use serde::{Deserialize, Serialize};
 
 /// Spherical cell with hard walls, i.e. no periodic boundary conditions
@@ -62,22 +61,6 @@ impl Shape for Sphere {
     /// Creates a box which volume fits the sphere.
     fn bounding_box(&self) -> Option<Point> {
         Some(Point::from_element(2.0 * self.radius))
-    }
-    /// Get random point located inside the Sphere.
-    fn get_point_inside<R: Rng + ?Sized>(&self, rng: &mut R) -> Point {
-        let r2 = self.radius * self.radius;
-        let d = 2.0 * self.radius;
-        let mut point;
-        loop {
-            point = Point::new(
-                (rng.r#gen::<f64>() - 0.5) * d,
-                (rng.r#gen::<f64>() - 0.5) * d,
-                (rng.r#gen::<f64>() - 0.5) * d,
-            );
-            if point.norm_squared() < r2 {
-                return point;
-            }
-        }
     }
 }
 

@@ -18,7 +18,6 @@ use crate::{
     cell::{BoundaryConditions, Shape, SimulationCell, VolumeScale, VolumeScalePolicy},
     Point,
 };
-use rand::Rng;
 use serde::{Deserialize, Deserializer, Serialize};
 
 /// Cuboidal unit cell
@@ -73,13 +72,6 @@ impl Shape for Cuboid {
     }
     fn bounding_box(&self) -> Option<Point> {
         Some(self.cell)
-    }
-    fn get_point_inside<R: Rng + ?Sized>(&self, rng: &mut R) -> Point {
-        Point::new(
-            rng.gen_range(-self.half_cell.x..self.half_cell.x),
-            rng.gen_range(-self.half_cell.y..self.half_cell.y),
-            rng.gen_range(-self.half_cell.z..self.half_cell.z),
-        )
     }
 }
 

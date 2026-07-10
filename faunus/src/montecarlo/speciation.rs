@@ -139,9 +139,6 @@ impl crate::Info for SpeciationMove {
     }
 }
 
-/// Re-export for local callers.
-pub(super) use crate::cell::random_point_inside;
-
 /// Look up the activity of an implicit species by name.
 ///
 /// Searches atom kinds first, then molecule kinds.
@@ -564,7 +561,7 @@ impl SpeciationMove {
             } else {
                 entropy_bias(NewOld::from(n_old + 1, n_old), vol)
             };
-            let position = random_point_inside(context.cell(), rng);
+            let position = context.cell().get_point_inside(rng);
             Some((
                 SpeciationAction::ActivateAtom {
                     group_index: gi,
@@ -582,7 +579,7 @@ impl SpeciationMove {
             let empty = context.find_molecules(mol_id, GroupSize::Empty)?;
             let gi = choose_unclaimed(empty, claimed, rng)?;
             let bias = entropy_bias(NewOld::from(n_old + 1, n_old), vol);
-            let pos = random_point_inside(context.cell(), rng);
+            let pos = context.cell().get_point_inside(rng);
             let positions = vec![pos; context.groups()[gi].capacity()];
             Some((
                 SpeciationAction::ActivateGroup {

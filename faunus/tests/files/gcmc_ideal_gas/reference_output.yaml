@@ -1,3 +1,6 @@
+version:
+  faunus: 0.2.0
+  git_revision: v0.3.0-31-g8d21783-dirty
 medium:
   permittivity: Vacuum
   salt: null
@@ -17,14 +20,14 @@ energy_change:
   final: 0.0
   initial: 0.0
 energy_timers:
-  celloverlap: '100 (energy: 66.77, update: 33.23)'
+  celloverlap: '100 (energy: 66.97, update: 33.03)'
 propagate:
   repeat: 5000
   seed: !Fixed 42
   collections:
   - !Deterministic
     repeat: 1
-    elapsed_seconds: 0.011857607
+    elapsed_seconds: 0.018242761
     moves:
     - !SpeciationMove
       reactions:
@@ -33,29 +36,29 @@ propagate:
       temperature: 298.15
       per_reaction:
       - reaction: = particle
-        accepted: 4404
+        accepted: 4408
         trials: 5000
-        acceptance_ratio: '0.8808'
+        acceptance_ratio: '0.8816'
       weight: 1.0
       repeat: 1
       statistics:
         num_trials: 5000
-        num_accepted: 4404
+        num_accepted: 4408
         mean_square_displacement:
           avg: 0.0
-          n: 596
+          n: 592
         timer:
           accumulated:
             secs: 0
             nanos: 0
         info: {}
         energy_change_sum: 0.0
-        acceptance_ratio: 0.8808
+        acceptance_ratio: 0.8816
   criterion: MetropolisHastings
 analysis:
 - collectivevariable:
     property: Count
     description: 'selection: molecule particle'
     num_samples: 5000
-    mean: 10.020000000000007
-    rms: 10.48982364008088
+    mean: 9.603800000000025
+    rms: 10.014759108435902

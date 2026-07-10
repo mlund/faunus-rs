@@ -1,3 +1,6 @@
+version:
+  faunus: 0.2.0
+  git_revision: v0.3.0-31-g8d21783-dirty
 medium:
   permittivity: Water
   salt: null
@@ -22,15 +25,15 @@ energy_change:
   final: -219.6929032321027
   initial: -243.41791139269253
 energy_timers:
-  celloverlap: '4.91 (energy: 3.27, update: 1.64)'
-  nonbonded: '95.08 (energy: 93.33, update: 1.75)'
+  celloverlap: '4.83 (energy: 3.28, update: 1.55)'
+  nonbonded: '95.17 (energy: 93.48, update: 1.69)'
 propagate:
   repeat: 5000
   seed: !Fixed 42
   collections:
   - !Deterministic
     repeat: 1
-    elapsed_seconds: 0.129259619
+    elapsed_seconds: 0.106390484
     moves:
     - !TranslateAtom
       atom: null
@@ -77,30 +80,30 @@ analysis:
     num_samples: 2000
     excess_chemical_potential (kT):
       short_range:
-        mean: 0.16325042568356718
-        error: 0.001947155767834214
+        mean: 0.16104313932586029
+        error: 0.0018924053394129639
       electrostatic:
-        mean: -0.3931838377066931
-        error: 0.003652560121870259
+        mean: -0.39315899082337497
+        error: 0.003655778197266308
       total:
-        mean: -0.22993341202312537
-        error: 0.004088128851839025
+        mean: -0.23211585149751476
+        error: 0.004074339326368158
     unscaled_widom (kT):
-      mean: -0.2594027477793172
-      error: 0.00660221305820959
+      mean: -0.2615201969129146
+      error: 0.006572376647569614
 - scaled_widom_insertion:
     atom: Cl
     num_samples: 2000
     excess_chemical_potential (kT):
       short_range:
-        mean: 0.16325042568356718
-        error: 0.001947155767834214
+        mean: 0.16104313932586029
+        error: 0.0018924053394129639
       electrostatic:
-        mean: -0.39495573066936507
-        error: 0.003685356399888077
+        mean: -0.39029326752306803
+        error: 0.003733636906393699
       total:
-        mean: -0.23170530498579756
-        error: 0.004130938407377287
+        mean: -0.22925012819720783
+        error: 0.004144174483454775
     unscaled_widom (kT):
-      mean: -0.26187406216711184
-      error: 0.006635714863586233
+      mean: -0.2563136742371558
+      error: 0.006695513949364709

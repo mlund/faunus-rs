@@ -21,7 +21,6 @@ use crate::{
     },
     Point,
 };
-use rand::Rng;
 use serde::{Deserialize, Deserializer, Serialize};
 
 const SQRT_3: f64 = 1.732_050_807_568_877_2;
@@ -104,20 +103,6 @@ impl Shape for HexagonalPrism {
             box_lengths: Point::new(self.box_x, 3.0 * self.side, self.height),
             translations: vec![Point::new(self.half_box_x, 1.5 * self.side, 0.0)],
         })
-    }
-
-    /// Random point via rejection sampling in the bounding box (~75% acceptance)
-    fn get_point_inside<R: Rng + ?Sized>(&self, rng: &mut R) -> Point {
-        loop {
-            let point = Point::new(
-                rng.gen_range(-self.half_box_x..self.half_box_x),
-                rng.gen_range(-self.side..self.side),
-                rng.gen_range(-self.half_height..self.half_height),
-            );
-            if self.is_inside(&point) {
-                return point;
-            }
-        }
     }
 }
 

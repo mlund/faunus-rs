@@ -86,35 +86,34 @@ pub trait Shape {
     }
     /// Bounding box of the shape centered at `center()`
     fn bounding_box(&self) -> Option<Point>;
-    /// Generate a random point positioned inside the boundaries of the shape
-    fn get_point_inside<R: Rng + ?Sized>(&self, rng: &mut R) -> Point;
+    /// Generate a uniformly random point inside the shape.
+    ///
+    /// Rejection sampling within the axis-aligned bounding box: draw uniformly in
+    /// the box and keep the first point satisfying [`is_inside`](Shape::is_inside).
+    /// This is uniform on the shape *iff* [`bounding_box`](Shape::bounding_box)
+    /// encloses it — a too-small box would make part of the shape unreachable and
+    /// bias the sample. Panics for cells without a bounding box (e.g. `Endless`).
+    fn get_point_inside<R: Rng + ?Sized>(&self, rng: &mut R) -> Point {
+        let half = self
+            .bounding_box()
+            .expect("finite cell required for point insertion")
+            * 0.5;
+        loop {
+            let point = Point::new(
+                rng.gen_range(-half.x..half.x),
+                rng.gen_range(-half.y..half.y),
+                rng.gen_range(-half.z..half.z),
+            );
+            if self.is_inside(&point) {
+                return point;
+            }
+        }
+    }
     /// Orthorhombic supercell expansion needed for I/O of non-orthorhombic cells.
     ///
     /// Returns `None` for cells whose bounding box is already orthorhombic.
     fn orthorhombic_expansion(&self) -> Option<OrthorhombicExpansion> {
         None
-    }
-}
-
-/// Generate a random point inside a cell using rejection sampling with any RNG.
-///
-/// Duplicates [`Shape::get_point_inside`], but draws from twice the bounding box
-/// in each direction and so rejects most candidates. Retained because the
-/// insertion moves calling it are pinned by committed regression fixtures that
-/// would shift with any change to the draw sequence; see issue #58.
-pub fn random_point_inside(cell: &impl Shape, rng: &mut (impl Rng + ?Sized)) -> Point {
-    let bbox = cell
-        .bounding_box()
-        .expect("Cell must have a bounding box for random point generation");
-    loop {
-        let point = Point::new(
-            rng.gen_range(-bbox.x..bbox.x),
-            rng.gen_range(-bbox.y..bbox.y),
-            rng.gen_range(-bbox.z..bbox.z),
-        );
-        if cell.is_inside(&point) {
-            return point;
-        }
     }
 }
 
@@ -310,18 +309,6 @@ impl Shape for Cell {
     }
 
     #[inline]
-    fn get_point_inside<R: Rng + ?Sized>(&self, rng: &mut R) -> Point {
-        match self {
-            Self::Cuboid(s) => s.get_point_inside(rng),
-            Self::Cylinder(s) => s.get_point_inside(rng),
-            Self::Endless(s) => s.get_point_inside(rng),
-            Self::HexagonalPrism(s) => s.get_point_inside(rng),
-            Self::Slit(s) => s.get_point_inside(rng),
-            Self::Sphere(s) => s.get_point_inside(rng),
-        }
-    }
-
-    #[inline]
     fn bounding_box(&self) -> Option<Point> {
         match self {
             Self::Cuboid(s) => s.bounding_box(),
@@ -459,5 +446,49 @@ mod tests {
         let point1 = Point::new(-203847.21, 947382.143, 2973212.14);
         assert!(cell.is_inside(&point1));
         assert!(TryInto::<Endless>::try_into(cell).is_ok());
+    }
+
+    /// `get_point_inside` samples uniformly in `bounding_box()/2` and rejects
+    /// points failing `is_inside`, which is uniform on the shape *only if* the
+    /// bounding box encloses it. A box too small on any axis would leave part of
+    /// the shape unreachable and silently bias insertion — undetectable by a
+    /// membership test, but a correctness bug for MC insertion moves. Here we
+    /// probe a deliberately enlarged box and require every interior point to fall
+    /// within the sampled half-extents. Tests our geometry, not the RNG, with a
+    /// seeded generator so it is deterministic and cheap enough to run in CI.
+    #[test]
+    fn bounding_box_encloses_shape() {
+        use crate::cell::{Cylinder, HexagonalPrism};
+        use rand::{rngs::StdRng, Rng, SeedableRng};
+
+        fn check(shape: &impl Shape) {
+            let half = shape.bounding_box().expect("finite bounding box") * 0.5;
+            let probe = half * 1.2; // deliberately larger than the sampling box
+            let eps = 1e-9;
+            let mut rng = StdRng::seed_from_u64(0x5EED);
+            let mut hits = 0usize;
+            for _ in 0..5_000 {
+                let p = Point::new(
+                    rng.gen_range(-probe.x..probe.x),
+                    rng.gen_range(-probe.y..probe.y),
+                    rng.gen_range(-probe.z..probe.z),
+                );
+                if shape.is_inside(&p) {
+                    hits += 1;
+                    assert!(
+                        p.x.abs() <= half.x + eps
+                            && p.y.abs() <= half.y + eps
+                            && p.z.abs() <= half.z + eps,
+                        "inside point {p:?} lies outside sampling half-extents {half:?}",
+                    );
+                }
+            }
+            assert!(hits > 0, "probe box never reached the shape interior");
+        }
+
+        check(&Cuboid::new(4.0, 6.0, 8.0));
+        check(&Sphere::new(3.0));
+        check(&Cylinder::new(3.0, 7.0));
+        check(&HexagonalPrism::new(2.5, 5.0));
     }
 }

@@ -18,7 +18,6 @@ use crate::{
     cell::{BoundaryConditions, Cuboid, Shape, SimulationCell, VolumeScale, VolumeScalePolicy},
     Point,
 };
-use rand::Rng;
 use serde::{Deserialize, Serialize};
 
 /// Cuboidal slit with periodic boundaries in XY and hard walls in Z.
@@ -49,9 +48,6 @@ impl Shape for Slit {
     }
     fn bounding_box(&self) -> Option<Point> {
         self.0.bounding_box()
-    }
-    fn get_point_inside<R: Rng + ?Sized>(&self, rng: &mut R) -> Point {
-        self.0.get_point_inside(rng)
     }
 }
 

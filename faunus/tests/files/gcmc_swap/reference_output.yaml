@@ -1,3 +1,6 @@
+version:
+  faunus: 0.2.0
+  git_revision: v0.3.0-31-g8d21783-dirty
 medium:
   permittivity: Vacuum
   salt: null
@@ -22,14 +25,14 @@ energy_change:
   final: 0.0
   initial: 0.0
 energy_timers:
-  celloverlap: '100 (energy: 66.79, update: 33.21)'
+  celloverlap: '100 (energy: 67.15, update: 32.85)'
 propagate:
   repeat: 5000
   seed: !Fixed 42
   collections:
   - !Deterministic
     repeat: 1
-    elapsed_seconds: 0.014154925
+    elapsed_seconds: 0.016491873
     moves:
     - !SpeciationMove
       reactions:
@@ -40,39 +43,39 @@ propagate:
       temperature: 298.15
       per_reaction:
       - reaction: ⚛A = ⚛B
-        accepted: 1959
-        trials: 2516
-        acceptance_ratio: '0.7786'
+        accepted: 1953
+        trials: 2487
+        acceptance_ratio: '0.7853'
       - reaction: = M
-        accepted: 2185
-        trials: 2471
-        acceptance_ratio: '0.8843'
+        accepted: 2199
+        trials: 2489
+        acceptance_ratio: '0.8835'
       weight: 1.0
       repeat: 1
       statistics:
         num_trials: 5000
-        num_accepted: 4144
+        num_accepted: 4152
         mean_square_displacement:
           avg: 0.0
-          n: 856
+          n: 848
         timer:
           accumulated:
             secs: 0
             nanos: 0
         info: {}
         energy_change_sum: 0.0
-        acceptance_ratio: 0.8288
+        acceptance_ratio: 0.8304
   criterion: MetropolisHastings
 analysis:
 - collectivevariable:
     property: Count
     description: 'selection: molecule M'
     num_samples: 5000
-    mean: 10.07459999999998
-    rms: 10.566730809479356
+    mean: 10.036799999999978
+    rms: 10.488336379045062
 - collectivevariable:
     property: Count
     description: 'selection: atomtype A'
     num_samples: 5000
-    mean: 13.754600000000003
-    rms: 14.201232340892096
+    mean: 13.636999999999968
+    rms: 14.075730886884696

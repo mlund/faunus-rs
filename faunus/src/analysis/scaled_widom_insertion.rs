@@ -19,7 +19,7 @@
 
 use super::{Analyze, Sampling};
 use crate::auxiliary::{BlockAverage, MappingExt};
-use crate::cell::BoundaryConditions;
+use crate::cell::{BoundaryConditions, Shape};
 use crate::energy::builder::PairInteraction;
 use crate::energy::pairpot::ShortRange;
 use crate::topology::AtomKind;
@@ -355,7 +355,7 @@ impl<T: ObserveContext> Analyze<T> for ScaledWidomInsertion {
         let lambda_inv = self.lambda_inv;
 
         for _ in 0..self.insertions {
-            let r_ghost = crate::cell::random_point_inside(cell, &mut self.rng);
+            let r_ghost = cell.get_point_inside(&mut self.rng);
             let mut du_sr = 0.0;
             let mut phi = 0.0; // Φ(r) = Σ_j scheme.ion_potential(z_j, r_j)
             let mut s = 0.0; // S(r) = Σ_j scheme.ion_potential(1, r_j)

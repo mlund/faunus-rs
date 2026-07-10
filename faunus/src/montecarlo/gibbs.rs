@@ -5,7 +5,6 @@
 //! Reference: Panagiotopoulos, Mol. Phys. 61, 813 (1987),
 //! [doi:10.1080/00268978700101491](https://doi.org/10.1080/00268978700101491).
 
-use super::speciation::random_point_inside;
 use super::{MarkovChain, MoveStatistics};
 use crate::cell::{Shape, VolumeScalePolicy};
 use crate::energy::EnergyChange;
@@ -346,7 +345,7 @@ impl GibbsParticleTransfer {
         // Pick random active atom in source, random position in target
         let rel_idx = RelIndex::new(rng.gen_range(0..n_src));
         let abs_idx = src.groups()[src_gi].to_absolute(rel_idx)?.get();
-        let position = random_point_inside(tgt.cell(), rng);
+        let position = tgt.cell().get_point_inside(rng);
 
         Transform::Speciation(vec![SpeciationAction::DeactivateAtom {
             group_index: src_gi,

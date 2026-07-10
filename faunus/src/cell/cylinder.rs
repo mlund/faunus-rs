@@ -18,7 +18,6 @@ use crate::{
     cell::{BoundaryConditions, Shape, SimulationCell, VolumeScale, VolumeScalePolicy},
     Point,
 };
-use rand::Rng;
 use serde::{Deserialize, Deserializer, Serialize};
 
 /// Cylindrical cell with hard walls in XY and periodic boundaries in Z.
@@ -69,19 +68,6 @@ impl Shape for Cylinder {
     fn bounding_box(&self) -> Option<Point> {
         let d = 2.0 * self.radius;
         Some(Point::new(d, d, self.height))
-    }
-    /// Random point via rejection sampling in the bounding box
-    fn get_point_inside<R: Rng + ?Sized>(&self, rng: &mut R) -> Point {
-        loop {
-            let point = Point::new(
-                rng.gen_range(-self.radius..self.radius),
-                rng.gen_range(-self.radius..self.radius),
-                rng.gen_range(-self.half_height..self.half_height),
-            );
-            if point.x * point.x + point.y * point.y <= self.radius_squared {
-                return point;
-            }
-        }
     }
 }
 

@@ -1,3 +1,6 @@
+version:
+  faunus: 0.2.0
+  git_revision: v0.3.0-31-g8d21783-dirty
 medium:
   permittivity: Vacuum
   salt: null
@@ -27,14 +30,14 @@ energy_change:
   final: 0.0
   initial: 0.0
 energy_timers:
-  celloverlap: '100 (energy: 67.41, update: 32.59)'
+  celloverlap: '100 (energy: 66.89, update: 33.11)'
 propagate:
   repeat: 30000
   seed: !Fixed 42
   collections:
   - !Deterministic
     repeat: 1
-    elapsed_seconds: 1.494548709
+    elapsed_seconds: 1.378628097
     moves:
     - !SpeciationMove
       reactions:
@@ -43,35 +46,35 @@ propagate:
       temperature: 298.15
       per_reaction:
       - reaction: Ca(OH)₂ = Ca²⁺ + OH⁻ + OH⁻
-        accepted: 28446
+        accepted: 28490
         trials: 30000
-        acceptance_ratio: '0.9482'
+        acceptance_ratio: '0.9497'
       weight: 1.0
       repeat: 1
       statistics:
         num_trials: 30000
-        num_accepted: 28446
+        num_accepted: 28490
         mean_square_displacement:
           avg: 0.0
-          n: 1554
+          n: 1510
         timer:
           accumulated:
             secs: 0
             nanos: 0
         info: {}
         energy_change_sum: 0.0
-        acceptance_ratio: 0.9482
+        acceptance_ratio: 0.9496666666666667
   criterion: MetropolisHastings
 analysis:
 - collectivevariable:
     property: Molarity
     description: 'selection: molecule ''Ca²⁺'''
     num_samples: 30000
-    mean: 0.01175631318845267
-    rms: 0.011768195746419635
+    mean: 0.011680606957327169
+    rms: 0.011690845550285196
 - collectivevariable:
     property: Molarity
     description: 'selection: molecule ''OH⁻'''
     num_samples: 30000
-    mean: 0.02351262637690534
-    rms: 0.02353639149283927
+    mean: 0.023361213914654337
+    rms: 0.023381691100570392
