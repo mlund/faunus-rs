@@ -886,7 +886,7 @@ mod tests {
     use crate::group::GroupCollection;
     use crate::propagate::MoveProposal;
     use crate::Change;
-    use crate::WithCell;
+    use crate::WithSimulationCell;
     use float_cmp::assert_approx_eq;
 
     const TEST_YAML: &str = "tests/files/speciation_test.yaml";

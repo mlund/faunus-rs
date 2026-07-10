@@ -425,7 +425,7 @@ mod tests {
     use super::*;
     use crate::analysis::AnalysisBuilder;
     use crate::backend::Backend;
-    use crate::group::GroupCollection;
+    use crate::group::{GroupCollection, GroupCollectionMut};
     use crate::UnitQuaternion;
     use crate::WithTopology;
     use approx::assert_relative_eq;

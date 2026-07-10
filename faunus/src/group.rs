@@ -495,23 +495,6 @@ impl Group {
 /// Each group has a unique index in a global list of groups, and a unique range of indices in a
 /// global particle list.
 pub trait GroupCollection {
-    /// Add a group to the system based on a molecule id, positions, and atom kind indices.
-    fn add_group(
-        &mut self,
-        molecule: usize,
-        positions: &[Point],
-        atom_ids: &[usize],
-    ) -> anyhow::Result<&mut Group>;
-
-    /// Update mass center for a given group, respecting PBC if appropriate.
-    fn update_mass_center(&mut self, group_index: usize);
-
-    /// Resizes a group to a given size.
-    ///
-    /// Errors if the requested size is larger than the capacity, or if there are
-    /// too few active particles to shrink a group.
-    fn resize_group(&mut self, group_index: usize, size: GroupSize) -> anyhow::Result<()>;
-
     /// All groups in the system.
     ///
     /// The first group has index 0, the second group has index 1, etc.
@@ -522,28 +505,11 @@ pub trait GroupCollection {
         &self.groups()[index.get()]
     }
 
-    /// Mutable access to all groups (e.g. for quaternion or mass center updates).
-    fn groups_mut(&mut self) -> &mut [Group];
-
     /// Position of the i'th particle in the system.
     fn position(&self, index: usize) -> Point;
 
     /// Atom kind index of the i'th particle.
     fn atom_kind(&self, index: usize) -> usize;
-
-    /// Set atom kind index of the i'th particle, keeping derived state consistent.
-    ///
-    /// A kind change invalidates selections that match on atom identity, and — when the mass
-    /// differs — the owning group's mass center and bounding radius. Implementations must
-    /// maintain both, so that callers never have to remember to.
-    fn set_atom_kind(&mut self, index: usize, atom_id: usize);
-
-    /// Set atom kind index without refreshing the owning group's geometry.
-    ///
-    /// Only for bulk restores that recompute every group's geometry afterwards; a per-particle
-    /// refresh would then be quadratic. Like [`set_atom_kind`](Self::set_atom_kind), it bumps the
-    /// atom-kind generation when — and only when — the kind actually changes.
-    fn set_atom_kind_unchecked(&mut self, index: usize, atom_id: usize);
 
     /// Counter bumped whenever any particle's atom kind changes.
     ///
@@ -567,9 +533,6 @@ pub trait GroupCollection {
         });
         found.ok().map(|position| groups[position].index())
     }
-
-    /// Swap all SoA fields (position, atom kind) between two particle indices.
-    fn swap_particles(&mut self, i: usize, j: usize);
 
     /// Get group lists of the system.
     ///
@@ -660,6 +623,50 @@ pub trait GroupCollection {
             }
         }
     }
+}
+
+/// Everything that changes a group collection.
+///
+/// Split from the read-only [`GroupCollection`] so that analyses, move proposals and energy terms —
+/// which are bound to the read half — cannot reshape the system they are only meant to observe.
+/// The callers are the framework itself: `transform`, `state`, `topology::block` and `backend`.
+pub trait GroupCollectionMut: GroupCollection {
+    /// Add a group to the system based on a molecule id, positions, and atom kind indices.
+    fn add_group(
+        &mut self,
+        molecule: usize,
+        positions: &[Point],
+        atom_ids: &[usize],
+    ) -> anyhow::Result<&mut Group>;
+
+    /// Update mass center for a given group, respecting PBC if appropriate.
+    fn update_mass_center(&mut self, group_index: usize);
+
+    /// Resizes a group to a given size.
+    ///
+    /// Errors if the requested size is larger than the capacity, or if there are
+    /// too few active particles to shrink a group.
+    fn resize_group(&mut self, group_index: usize, size: GroupSize) -> anyhow::Result<()>;
+
+    /// Mutable access to all groups (e.g. for quaternion or mass center updates).
+    fn groups_mut(&mut self) -> &mut [Group];
+
+    /// Set atom kind index of the i'th particle, keeping derived state consistent.
+    ///
+    /// A kind change invalidates selections that match on atom identity, and — when the mass
+    /// differs — the owning group's mass center and bounding radius. Implementations must
+    /// maintain both, so that callers never have to remember to.
+    fn set_atom_kind(&mut self, index: usize, atom_id: usize);
+
+    /// Set atom kind index without refreshing the owning group's geometry.
+    ///
+    /// Only for bulk restores that recompute every group's geometry afterwards; a per-particle
+    /// refresh would then be quadratic. Like [`set_atom_kind`](Self::set_atom_kind), it bumps the
+    /// atom-kind generation when — and only when — the kind actually changes.
+    fn set_atom_kind_unchecked(&mut self, index: usize, atom_id: usize);
+
+    /// Swap all SoA fields (position, atom kind) between two particle indices.
+    fn swap_particles(&mut self, i: usize, j: usize);
 
     /// Update only positions (not atom kinds) for the given indices.
     fn set_positions<'a>(

@@ -10,7 +10,12 @@ use std::{
 
 /// Context stores the state of a single simulation system.
 pub trait Context:
-    ParticleSystem + WithHamiltonianMut + WithCellMut + Clone + std::fmt::Debug
+    ParticleSystem
+    + crate::group::GroupCollectionMut
+    + WithHamiltonianMut
+    + WithSimulationCellMut
+    + Clone
+    + std::fmt::Debug
 {
     /// Update internal state after a change (e.g. reciprocal-space energy for Ewald).
     fn update(&mut self, change: &Change) -> anyhow::Result<()> {
@@ -45,16 +50,16 @@ pub trait Context:
 }
 
 /// A trait for objects that have a simulation cell.
-pub trait WithCell {
+pub trait WithSimulationCell {
     /// Get reference to simulation cell.
     fn cell(&self) -> &crate::cell::Cell;
 }
 
 /// Mutable access to the simulation cell.
 ///
-/// Kept apart from [`WithCell`] so that an observer bound to the read half cannot resize the
+/// Kept apart from [`WithSimulationCell`] so that an observer bound to the read half cannot resize the
 /// box. The single production caller restores a saved state (`state.rs`).
-pub trait WithCellMut: WithCell {
+pub trait WithSimulationCellMut: WithSimulationCell {
     /// Get mutable reference to simulation cell.
     fn cell_mut(&mut self) -> &mut crate::cell::Cell;
 }
@@ -93,7 +98,7 @@ pub trait WithHamiltonianMut: WithHamiltonian {
 }
 
 /// A trait for objects which contains groups of particles with defined topology in defined cell.
-pub trait ParticleSystem: GroupCollection + WithCell + WithTopology {
+pub trait ParticleSystem: GroupCollection + WithSimulationCell + WithTopology {
     /// Count independently translatable entities (mass centers).
     ///
     /// Atomic groups contribute each active atom; molecular groups contribute one.

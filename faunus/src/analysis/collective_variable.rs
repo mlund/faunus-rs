@@ -213,7 +213,7 @@ mod integration_tests {
     use crate::analysis::Analyze;
     use crate::backend::Backend;
     use crate::cell::Shape;
-    use crate::context::WithCell;
+    use crate::context::WithSimulationCell;
     use std::path::Path;
 
     fn make_context() -> Backend {

@@ -492,7 +492,7 @@ mod integration_tests {
     /// drift check compares one stale energy against another and reports no problem.
     #[test]
     fn atom_kind_swap_changes_the_selected_set() {
-        use crate::group::GroupCollection;
+        use crate::group::{GroupCollection, GroupCollectionMut};
         use crate::WithTopology;
         let mut context = make_context();
         let yaml = r#"

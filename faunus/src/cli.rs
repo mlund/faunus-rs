@@ -16,7 +16,7 @@ use crate::{
     analysis::{self, AnalysisCollectionExt, Frequency},
     backend::Backend,
     energy::EnergyChange,
-    group::GroupCollection,
+    group::{GroupCollection, GroupCollectionMut},
     montecarlo::{gibbs::GibbsEnsemble, MarkovChain},
     simulation::{self, box_prefixed_path, write_yaml, Simulation},
     topology::io::frame_state::{self, FrameStateReader},

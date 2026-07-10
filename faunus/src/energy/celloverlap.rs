@@ -64,7 +64,7 @@ impl From<CellOverlap> for EnergyTerm {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{backend::Backend, group::GroupCollection, Point};
+    use crate::{backend::Backend, group::GroupCollectionMut, Point};
 
     // Two non-atomic single-atom molecules so each gets its own group index.
     const SLIT_YAML: &str = r#"

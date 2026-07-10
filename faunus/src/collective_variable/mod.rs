@@ -72,7 +72,7 @@ dyn_clone::clone_trait_object!(CvKind);
 
 /// Minimal context trait for CV evaluation (object-safe subset of Context).
 pub trait EvalContext:
-    crate::group::GroupCollection + crate::context::WithCell + crate::context::WithTopology
+    crate::group::GroupCollection + crate::context::WithSimulationCell + crate::context::WithTopology
 {
     fn get_distance(&self, i: usize, j: usize) -> crate::Point;
 }
@@ -177,7 +177,7 @@ dyn_clone::clone_trait_object!(CvKindBuilder);
 impl<T> EvalContext for T
 where
     T: crate::group::GroupCollection
-        + crate::context::WithCell
+        + crate::context::WithSimulationCell
         + crate::context::WithTopology
         + crate::context::ParticleSystem,
 {

@@ -464,7 +464,7 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
     /// atom type must still follow the swap.
     #[test]
     fn an_atom_kind_swap_is_picked_up() {
-        use crate::group::GroupCollection;
+        use crate::group::GroupCollectionMut;
         let mut context = backend_from_str(DIMER);
         let mut analysis = builder("atomtype A", false).build(&context).unwrap();
         analysis.sample(&context, 0).unwrap();
@@ -481,7 +481,7 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
     /// centre cached on the group is not refreshed by such a swap, so it must be recomputed.
     #[test]
     fn a_mass_changing_atom_kind_swap_moves_the_mass_center() {
-        use crate::group::GroupCollection;
+        use crate::group::GroupCollectionMut;
         let mut context = backend_from_str(DIMER);
         let mut analysis = builder("molecule DIMER", true).build(&context).unwrap();
         analysis.sample(&context, 0).unwrap();

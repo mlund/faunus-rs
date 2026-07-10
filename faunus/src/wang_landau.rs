@@ -24,12 +24,12 @@ use crate::{
     analysis::{self, AnalysisCollection},
     backend::Backend,
     collective_variable::CollectiveVariableBuilder,
+    context::WithHamiltonianMut,
     energy::{EnergyTerm, Penalty},
     flat_histogram::{FlatHistogramState, GridDim},
     montecarlo::MarkovChain,
     propagate::Propagate,
     state::State,
-    context::WithHamiltonianMut,
 };
 use anyhow::Result;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};

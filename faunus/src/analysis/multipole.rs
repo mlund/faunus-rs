@@ -276,7 +276,7 @@ mod tests {
     use super::*;
     use crate::analysis::Analyze;
     use crate::backend::Backend;
-    use crate::group::GroupCollection;
+    use crate::group::GroupCollectionMut;
     use tempfile::NamedTempFile;
 
     fn backend_from_str(yaml: &str) -> Backend {
