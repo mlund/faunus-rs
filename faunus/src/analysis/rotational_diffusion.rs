@@ -447,7 +447,10 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
     fn atomic_group_is_rejected() {
         let context = backend_from_str(DIMER_AND_EMPTY_GAS);
         let error = builder("molecule GAS").build(&context).unwrap_err();
-        assert!(error.to_string().contains("matched atomic group"), "{error}");
+        assert!(
+            error.to_string().contains("matched atomic group"),
+            "{error}"
+        );
     }
 
     /// The atomic species matches nothing while it is empty, so the rejection above must be
@@ -457,7 +460,10 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
     fn an_atomic_species_that_starts_out_empty_is_rejected() {
         let context = backend_from_str(DIMER_AND_EMPTY_GAS);
         let error = builder("all").build(&context).unwrap_err();
-        assert!(error.to_string().contains("matched atomic group"), "{error}");
+        assert!(
+            error.to_string().contains("matched atomic group"),
+            "{error}"
+        );
     }
 
     /// A selection that names no group at all is still reported as such.
