@@ -330,8 +330,8 @@ impl DoubleLayerPressure {
             }
         }
         // each ion ↔ its opposite wall (distance half_gap + |z|)
-        for k in 0..n {
-            sum -= self.sigma * lambda[k] * tail(self.half_gap + z(k).abs()) * dz;
+        for (k, lambda_k) in lambda.iter().enumerate() {
+            sum -= self.sigma * lambda_k * tail(self.half_gap + z(k).abs()) * dz;
         }
         // wall ↔ wall (two sheets a full gap apart)
         sum += self.sigma * self.sigma * tail(2.0 * self.half_gap);

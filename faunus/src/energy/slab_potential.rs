@@ -368,13 +368,12 @@ mod tests {
         let (bjerrum, kappa) = (7.0, 0.1);
         let prefactor = 2.0 * PI * bjerrum / kappa;
         let sigma = total_charge / grid.area();
-        for i in 0..grid.n_bins() {
+        for (i, phi_i) in phi.iter().enumerate() {
             let dz = grid.bin_center(i) - grid.bin_center(mid);
             let expected = prefactor * sigma * (-kappa * dz.abs()).exp();
             assert!(
-                (phi[i] - expected).abs() < 1e-9,
-                "bin {i}: {} vs {expected}",
-                phi[i]
+                (phi_i - expected).abs() < 1e-9,
+                "bin {i}: {phi_i} vs {expected}"
             );
         }
     }

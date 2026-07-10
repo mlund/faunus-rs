@@ -1189,7 +1189,7 @@ mod tests {
         for _ in 0..20 {
             if let Some(proposed) = mv.propose_move(&context, &mut rng) {
                 let bias =
-                    MoveProposal::<Backend>::bias(&mv, &proposed.change(), &NewOld::from(0.0, 0.0));
+                    MoveProposal::<Backend>::bias(&mv, proposed.change(), &NewOld::from(0.0, 0.0));
                 assert!(matches!(bias, crate::montecarlo::Bias::Energy(_)));
                 return;
             }

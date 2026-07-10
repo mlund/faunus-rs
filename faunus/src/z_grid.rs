@@ -154,7 +154,7 @@ mod tests {
     #[test]
     fn non_prismatic_and_endless_cells_are_rejected() {
         assert!(ZGrid::from_cell(&Cell::Sphere(Sphere::new(10.0)), 1.0).is_err());
-        assert!(ZGrid::from_cell(&Cell::Endless(Endless::default()), 1.0).is_err());
+        assert!(ZGrid::from_cell(&Cell::Endless(Endless), 1.0).is_err());
     }
 
     /// Cell side lengths are not validated on input, so a degenerate box reaches this far.
