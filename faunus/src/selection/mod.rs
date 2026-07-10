@@ -6,16 +6,9 @@
 //! Supports boolean expressions with `and`, `or`, `not`, parentheses,
 //! and keywords like `chain`, `resname`, `resid`, `name`, `molecule`, etc.
 //!
-//! # Examples
-//!
-//! ```
-//! use faunus::selection::Selection;
-//!
-//! let sel = Selection::parse("protein and backbone").unwrap();
-//! let sel = Selection::parse("molecule water").unwrap();
-//! let sel = Selection::parse("resid 10 to 20 and chain A").unwrap();
-//! let sel = Selection::parse("atomtype CA or atomtype CB").unwrap();
-//! ```
+//! Selections are written as strings and parsed by [`Selection::parse`], for example
+//! `protein and backbone`, `resid 10 to 20 and chain A`, or `atomtype CA or atomtype CB`.
+//! See `parses_the_selection_language` for the full set exercised by the tests.
 
 mod constants;
 mod evaluator;
@@ -114,28 +107,10 @@ impl Target for Groups {
 /// This matters: an atom-kind swap leaves group composition untouched, and a cache keyed on
 /// composition alone would keep serving the pre-swap atoms of an `atomtype` selection forever.
 ///
-/// The target is part of the type, so the indices it yields cannot be spent in the wrong space:
-///
-/// ```compile_fail
-/// # use faunus::selection::{CachedSelection, Selection};
-/// # use faunus::group::GroupCollection;
-/// # fn demo(context: &impl faunus::ObserveContext) {
-/// let mut groups = CachedSelection::groups(Selection::parse("molecule water").unwrap());
-/// // Group indices are not particle indices.
-/// let _ = context.position(groups.resolve(context)[0]);
-/// # }
-/// ```
-///
-/// The same code against the group array compiles:
-///
-/// ```
-/// # use faunus::selection::{CachedSelection, Selection};
-/// # use faunus::group::GroupCollection;
-/// # fn demo(context: &impl faunus::ObserveContext) {
-/// let mut groups = CachedSelection::groups(Selection::parse("molecule water").unwrap());
-/// let _ = context.group(groups.resolve(context)[0]);
-/// # }
-/// ```
+/// The target is part of the type, so the indices it yields cannot be spent in the wrong space.
+/// `CachedSelection::<Groups>::resolve` yields `GroupIndex`, which `group()` accepts and
+/// `position()` — expecting an `AbsIndex` — rejects at compile time. See
+/// `resolved_group_indices_address_the_group_array`.
 #[derive(Debug, Clone)]
 pub struct CachedSelection<T: Target> {
     selection: Selection,
@@ -259,15 +234,6 @@ pub(crate) fn first_unsupported_group(
 ///
 /// Parses from a string, then resolves against topology and groups
 /// to produce atom indices or group indices.
-///
-/// # Examples
-///
-/// ```
-/// use faunus::selection::Selection;
-///
-/// let sel = Selection::parse("molecule water").unwrap();
-/// let sel = Selection::parse("name CA and chain A").unwrap();
-/// ```
 #[derive(Debug, Clone)]
 pub struct Selection {
     source: String,
@@ -425,6 +391,21 @@ mod tests {
     fn parse_and_display() {
         let sel = Selection::parse("protein and backbone").unwrap();
         assert_eq!(sel.to_string(), "protein and backbone");
+    }
+
+    /// Was the module doc example, before `selection` became crate-private and rustdoc stopped
+    /// compiling it.
+    #[test]
+    fn parses_the_selection_language() {
+        for expression in [
+            "protein and backbone",
+            "molecule water",
+            "resid 10 to 20 and chain A",
+            "atomtype CA or atomtype CB",
+            "name CA and chain A",
+        ] {
+            assert!(Selection::parse(expression).is_ok(), "{expression}");
+        }
     }
 
     #[test]

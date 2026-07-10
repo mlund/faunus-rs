@@ -169,19 +169,10 @@ impl Reaction {
         })
     }
 
-    /// Set the direction of the reaction
+    /// Set the direction of the reaction.
     ///
-    /// # Examples
-    /// ~~~
-    /// use std::str::FromStr;
-    /// use faunus::chemistry::reaction::{Reaction, Direction, Participant};
-    /// let mut reaction = Reaction::from_reaction("A = B", 2.0).unwrap();
-    /// reaction.set_direction(Direction::Backward);
-    /// let (reactants, products) = reaction.get();
-    /// assert_eq!(reactants[0], Participant::from_str("B").unwrap());
-    /// assert_eq!(products[0], Participant::from_str("A").unwrap());
-    /// assert_eq!(reaction.equilibrium_const(), 1.0 / 2.0);
-    /// ~~~
+    /// Running `A = B` backwards swaps reactants and products and inverts the equilibrium
+    /// constant. See `reversing_a_reaction_inverts_its_equilibrium_constant`.
     pub const fn set_direction(&mut self, direction: Direction) {
         self.direction = direction;
     }
@@ -316,4 +307,16 @@ fn test_participant() {
     let participant = String::from("Cl").parse::<Participant>().unwrap();
     assert_eq!(participant, Participant::Molecule("Cl".to_string()));
     assert_eq!(participant.to_string(), "Cl");
+}
+
+/// Was the `set_direction` doc example, before `chemistry` became crate-private.
+#[test]
+fn reversing_a_reaction_inverts_its_equilibrium_constant() {
+    use std::str::FromStr;
+    let mut reaction = Reaction::from_reaction("A = B", 2.0).unwrap();
+    reaction.set_direction(Direction::Backward);
+    let (reactants, products) = reaction.get();
+    assert_eq!(reactants[0], Participant::from_str("B").unwrap());
+    assert_eq!(products[0], Participant::from_str("A").unwrap());
+    assert_eq!(reaction.equilibrium_const(), 0.5);
 }

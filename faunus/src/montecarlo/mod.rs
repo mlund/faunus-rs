@@ -35,6 +35,7 @@ mod pivot;
 pub mod preferential;
 mod rotate;
 pub mod speciation;
+mod template;
 mod translate;
 mod volume;
 
@@ -460,13 +461,8 @@ impl<T: Context + 'static> MarkovChain<T> {
 /// - <https://en.wikipedia.org/wiki/Entropy_(statistical_thermodynamics)#Entropy_of_mixing>
 /// - <https://doi.org/10/fqcpg3>
 ///
-/// # Examples
-/// ~~~
-/// use faunus::montecarlo::*;
-/// let vol = NewOld::from(1.0, 1.0);
-/// assert_eq!(entropy_bias(NewOld::from(0, 0), vol.clone()), 0.0);
-/// // With V = 1/c₀ (one standard-state volume), N/V/c₀ = N, so bias = ln(N)
-/// ~~~
+/// An unchanged particle count carries no bias; with `V = 1/c₀` (one standard-state volume),
+/// `N/V/c₀ = N` and the bias is `ln(N)`. See `entropy_bias_is_zero_when_nothing_changes`.
 pub fn entropy_bias(n: NewOld<usize>, volume: NewOld<f64>) -> f64 {
     let dn = n.difference();
     match dn.cmp(&0) {
@@ -498,6 +494,13 @@ mod tests {
     use super::*;
     use crate::backend::Backend;
     use float_cmp::assert_approx_eq;
+
+    /// Was the `entropy_bias` doc example, before `montecarlo` became crate-private.
+    #[test]
+    fn entropy_bias_is_zero_when_nothing_changes() {
+        let volume = NewOld::from(1.0, 1.0);
+        assert_eq!(entropy_bias(NewOld::from(0, 0), volume), 0.0);
+    }
 
     #[test]
     fn translate_molecules_simulation() {

@@ -12,6 +12,54 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
+//! Molecular simulation in the canonical, grand-canonical and Gibbs ensembles.
+//!
+//! A simulation is described entirely by one YAML input file — the atoms and molecules present,
+//! the energy terms acting between them, the moves that propagate the system, and the analyses
+//! that measure it. The `faunus` binary reads that file and runs it:
+//!
+//! ```sh
+//! faunus run --input input.yaml --state state.json
+//! ```
+//!
+//! # Using faunus as a library
+//!
+//! The crate exposes the pieces needed to *describe* a system, not to drive one. Two are useful on
+//! their own: [`topology`], which parses and validates the atoms, molecules and bonds; and
+//! [`energy::NonbondedMatrix`], which turns a topology into a matrix of pair potentials indexed by
+//! atom kind.
+//!
+//! ```
+//! use faunus::topology::Topology;
+//!
+//! // `from_str_partial` reads the atoms and molecules without requiring a full simulation input.
+//! let mut topology = Topology::from_str_partial("
+//! atoms:
+//!   - {name: Na, mass: 22.99, charge: 1.0, sigma: 3.3}
+//!   - {name: Cl, mass: 35.45, charge: -1.0, sigma: 4.4}
+//! molecules:
+//!   - name: salt
+//!     atomic: true
+//!     atoms: [Na, Cl]
+//! ")?;
+//! topology.finalize_atoms()?;
+//!
+//! assert_eq!(topology.atomkinds().len(), 2);
+//! assert_eq!(topology.atomkinds()[0].charge(), 1.0);
+//! assert_eq!(topology.atomkinds()[1].charge(), -1.0);
+//! # Ok::<(), anyhow::Error>(())
+//! ```
+//!
+//! Setting up and running a simulation from library code is not supported yet; the machinery that
+//! does so — the backend, the Monte Carlo moves, the analyses — is internal, so that its interfaces
+//! stay free to change. See [issue 54](https://github.com/mlund/faunus-rs/issues/54).
+//!
+//! # Extending faunus
+//!
+//! Adding an analysis, a Monte Carlo move or an energy term means implementing one trait inside the
+//! crate. Each has a worked template next to it — `analysis::template`, `propagate::template` and
+//! `energy::template` — and `docs/extending.md` walks through all three.
+
 use crate::group::Group;
 
 use topology::Topology;

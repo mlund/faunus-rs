@@ -57,3 +57,4 @@ nav:
   - Moves: moves.md
   - Analysis: analysis.md
   - Selection Language: selection_language.md
+  - Extending Faunus: extending.md

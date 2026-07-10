@@ -26,21 +26,8 @@ use serde::{Deserialize, Serialize};
 /// groups, and a unique range of indices in a global particle list. The group can be resized
 /// within its capacity.
 ///
-/// # Examples
-///
-/// Here an example of a group with 3 particles, starting at index 20 in the main particle vector.
-/// ~~~
-/// use faunus::group::*;
-/// let mut group = Group::new(7, 0, 20..23);
-/// assert_eq!(group.len(), 3);
-/// assert_eq!(group.size(), GroupSize::Full);
-///
-/// // Resize active particles from 3 -> 2
-/// group.resize(GroupSize::Shrink(1)).unwrap();
-/// assert_eq!(group.len(), 2);
-/// assert_eq!(group.capacity(), 3);
-/// assert_eq!(group.size(), GroupSize::Partial(2));
-/// ~~~
+/// A group of three particles starting at index 20 has `len() == 3` and `GroupSize::Full`;
+/// shrinking it by one leaves `len() == 2` with the capacity still 3. See `resize_shrinks_a_group`.
 #[derive(Debug, PartialEq, Clone)]
 pub struct Group {
     /// Index of the molecule kind forming the group (immutable).
@@ -938,6 +925,20 @@ mod tests {
     use crate::WithTopology;
 
     use super::*;
+
+    /// Was the `Group` doc example, before the module became crate-private and rustdoc stopped
+    /// compiling it.
+    #[test]
+    fn resize_shrinks_a_group() {
+        let mut group = Group::new(7, 0, 20..23);
+        assert_eq!(group.len(), 3);
+        assert_eq!(group.size(), GroupSize::Full);
+
+        group.resize(GroupSize::Shrink(1)).unwrap();
+        assert_eq!(group.len(), 2);
+        assert_eq!(group.capacity(), 3);
+        assert_eq!(group.size(), GroupSize::Partial(2));
+    }
 
     #[test]
     fn test_group() {

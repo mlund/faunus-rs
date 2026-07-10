@@ -37,6 +37,7 @@ mod polymer_depletion;
 mod sasa;
 pub(crate) mod slab_potential;
 mod tabulated;
+mod template;
 
 pub use bonded::{IntermolecularBonded, IntramolecularBonded};
 pub use celloverlap::CellOverlap;

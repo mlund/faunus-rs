@@ -38,6 +38,7 @@ mod scaled_widom_insertion;
 mod shape;
 mod spatial_distribution;
 mod structure_writer;
+pub(crate) mod template;
 mod virtual_translate;
 mod virtual_volume_move;
 mod widom;

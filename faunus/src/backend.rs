@@ -1241,6 +1241,18 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
         Backend::new(tmp.path(), None, &mut rand::thread_rng()).unwrap()
     }
 
+    /// A group selection resolves into the group array, not the particle array. `position()` takes
+    /// an `AbsIndex` and so will not accept these indices — the property the type split buys, and
+    /// the reason `CachedSelection` is generic over its target.
+    #[test]
+    fn resolved_group_indices_address_the_group_array() {
+        let context = backend();
+        let mut groups = CachedSelection::groups(Selection::parse("molecule DIMER").unwrap());
+        let resolved = groups.resolve(&context);
+        assert_eq!(resolved.len(), 2);
+        assert_eq!(context.group(resolved[0]).molecule(), 0);
+    }
+
     /// Strip the index space, so a resolved slice can be compared with the uncached `Vec<usize>`.
     trait RawIndices {
         fn raw(&self) -> Vec<usize>;
