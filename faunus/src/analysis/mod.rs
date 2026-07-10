@@ -299,19 +299,10 @@ impl AnalysisBuilder {
 /// Collection of analysis objects. Send-bound required for Gibbs ensemble scoped threads.
 pub type AnalysisCollection<T> = Vec<Box<dyn Analyze<T> + Send>>;
 
-/// Create analysis collection from yaml file containing a list of analysis objects under an "analysis" key.
-#[must_use = "this returns a Result that should be handled"]
-pub fn from_file<T: Context>(
-    path: &Path,
-    context: &T,
-    medium: Option<&interatomic::coulomb::Medium>,
-) -> Result<AnalysisCollection<T>> {
-    from_file_in_dir(path, context, medium, None)
-}
-
-/// As [`from_file`], but creates `output_dir` and prefixes every output
-/// path with it before any file is opened. Used by parallel drivers
-/// (umbrella, Wang-Landau, Gibbs) to keep per-worker outputs apart.
+/// As [`from_file_in_dir`], but creates `output_dir` and prefixes every output
+/// path with it before any file is opened, keeping per-worker outputs apart.
+// Only the `cli`-gated umbrella / Wang-Landau drivers use this; Gibbs goes through `Source`.
+#[cfg(feature = "cli")]
 #[must_use = "this returns a Result that should be handled"]
 pub fn from_file_creating_dir<T: Context>(
     path: &Path,
@@ -323,7 +314,8 @@ pub fn from_file_creating_dir<T: Context>(
     from_file_in_dir(path, context, medium, Some(output_dir))
 }
 
-/// As [`from_file`], but additionally prefixes every output path with
+/// Create an analysis collection from a YAML file holding a list of analysis
+/// objects under an "analysis" key, prefixing every output path with
 /// `output_dir` (when supplied) before any file is opened.
 #[must_use = "this returns a Result that should be handled"]
 pub fn from_file_in_dir<T: Context>(
@@ -332,9 +324,19 @@ pub fn from_file_in_dir<T: Context>(
     medium: Option<&interatomic::coulomb::Medium>,
     output_dir: Option<&Path>,
 ) -> Result<AnalysisCollection<T>> {
-    let yaml = crate::auxiliary::read_yaml(path)
-        .map_err(|err| anyhow::anyhow!("Error reading file {:?}: {}", &path, err))?;
-    let value = serde_yml::from_str::<Value>(&yaml)?
+    let yaml = crate::auxiliary::read_yaml(path)?;
+    from_str_in_dir(&yaml, context, medium, output_dir)
+}
+
+/// As [`from_file_in_dir`], but parses an already-read YAML document.
+#[must_use = "this returns a Result that should be handled"]
+pub fn from_str_in_dir<T: Context>(
+    yaml: &str,
+    context: &T,
+    medium: Option<&interatomic::coulomb::Medium>,
+    output_dir: Option<&Path>,
+) -> Result<AnalysisCollection<T>> {
+    let value = serde_yml::from_str::<Value>(yaml)?
         .get("analysis")
         .ok_or_else(|| anyhow::anyhow!("No 'analysis' key found in input yaml file."))?
         .clone();

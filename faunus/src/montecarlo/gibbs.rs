@@ -431,7 +431,10 @@ pub(crate) enum GibbsMoveBuilder {
 
 impl GibbsMoveBuilder {
     /// Build a concrete `GibbsMove` from the deserialized config.
-    pub(crate) fn build<T: Context + 'static>(self, context: &T) -> Result<Box<dyn GibbsMove<T>>> {
+    pub(crate) fn build<T: Context + 'static>(
+        self,
+        context: &T,
+    ) -> Result<Box<dyn GibbsMove<T> + Send>> {
         Ok(match self {
             Self::GibbsVolumeExchange { dv, method } => {
                 anyhow::ensure!(dv > 0.0, "GibbsVolumeExchange: dV must be positive");
@@ -466,7 +469,8 @@ pub(crate) struct GibbsConfig {
 /// Gibbs ensemble: two boxes with parallel intra-box MC and sequential inter-box moves.
 pub struct GibbsEnsemble<T: Context> {
     boxes: [MarkovChain<T>; 2],
-    inter_moves: Vec<Box<dyn GibbsMove<T>>>,
+    /// Send-bound required so the enclosing `Simulation` handle is `Send`.
+    inter_moves: Vec<Box<dyn GibbsMove<T> + Send>>,
     intra_steps: usize,
     max_sweeps: usize,
     thermal_energy: f64,
@@ -487,7 +491,7 @@ impl<T: Context> Debug for GibbsEnsemble<T> {
 impl<T: Context + Send + 'static> GibbsEnsemble<T> {
     pub(crate) fn new(
         boxes: [MarkovChain<T>; 2],
-        inter_moves: Vec<Box<dyn GibbsMove<T>>>,
+        inter_moves: Vec<Box<dyn GibbsMove<T> + Send>>,
         intra_steps: usize,
         max_sweeps: usize,
         thermal_energy: f64,

@@ -297,6 +297,8 @@ impl<T: Context> Propagate<T> {
     }
 
     /// Remove the repeat limit so `propagate()` never returns `false`.
+    // Only the `cli`-gated umbrella / Wang-Landau drivers use this.
+    #[cfg(feature = "cli")]
     pub fn set_unlimited_repeats(&mut self) {
         self.max_repeats = usize::MAX;
     }
@@ -330,8 +332,12 @@ impl<T: Context> Propagate<T> {
 
 /// Parse the optional `propagate.seed` field, defaulting to hardware entropy.
 pub(crate) fn seed_from_file(filename: impl AsRef<Path>) -> anyhow::Result<Seed> {
-    let yaml = crate::auxiliary::read_yaml(filename)?;
-    let full: serde_yml::Value = serde_yml::from_str(&yaml)?;
+    seed_from_str(&crate::auxiliary::read_yaml(filename)?)
+}
+
+/// As [`seed_from_file`], but parses an already-read YAML document.
+pub(crate) fn seed_from_str(yaml: &str) -> anyhow::Result<Seed> {
+    let full: serde_yml::Value = serde_yml::from_str(yaml)?;
     match full.get("propagate").and_then(|p| p.get("seed")) {
         Some(value) => crate::auxiliary::from_section_value("propagate/seed", value),
         None => Ok(Seed::default()),
@@ -349,12 +355,23 @@ pub(crate) fn setup_rng_from_file(filename: impl AsRef<Path>) -> anyhow::Result<
     Ok(StdRng::from_rng(seed_from_file(filename)?.build_rng())?)
 }
 
+/// As [`setup_rng_from_file`], but derives the stream from an already-read YAML document.
+pub(crate) fn setup_rng_from_str(yaml: &str) -> anyhow::Result<StdRng> {
+    Ok(StdRng::from_rng(seed_from_str(yaml)?.build_rng())?)
+}
+
 /// Parse the optional `propagate.gibbs` section from an input YAML file.
 pub(crate) fn gibbs_config_from_file(
     filename: impl AsRef<Path>,
 ) -> anyhow::Result<Option<crate::montecarlo::gibbs::GibbsConfig>> {
-    let yaml = crate::auxiliary::read_yaml(filename)?;
-    let full: serde_yml::Value = serde_yml::from_str(&yaml)?;
+    gibbs_config_from_str(&crate::auxiliary::read_yaml(filename)?)
+}
+
+/// As [`gibbs_config_from_file`], but parses an already-read YAML document.
+pub(crate) fn gibbs_config_from_str(
+    yaml: &str,
+) -> anyhow::Result<Option<crate::montecarlo::gibbs::GibbsConfig>> {
+    let full: serde_yml::Value = serde_yml::from_str(yaml)?;
     let Some(gibbs_value) = full.get("propagate").and_then(|p| p.get("gibbs")) else {
         return Ok(None);
     };

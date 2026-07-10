@@ -63,7 +63,9 @@ pub fn read_yaml(path: impl AsRef<Path>) -> anyhow::Result<String> {
     } else {
         raw
     };
-    strip_underscore_keys(&yaml)
+    // Name the file here: a serde error alone reports only a line and column, and every
+    // input path funnels through this function.
+    strip_underscore_keys(&yaml).with_context(|| format!("Cannot parse '{}'", path.display()))
 }
 
 /// Remove top-level YAML keys that start with `_`.
@@ -87,6 +89,8 @@ fn strip_underscore_keys(yaml: &str) -> anyhow::Result<String> {
 }
 
 /// Parse a named section from a YAML input file into a typed config struct.
+// Only the `cli`-gated umbrella / Wang-Landau drivers use this.
+#[cfg(feature = "cli")]
 pub fn parse_yaml_section<T: serde::de::DeserializeOwned>(
     input: &Path,
     key: &str,
@@ -145,6 +149,8 @@ pub fn from_tagged_list<T: serde::de::DeserializeOwned>(
 }
 
 /// Resolve max thread count: 0 means use all available cores.
+// Only the `cli`-gated umbrella / Wang-Landau drivers use this.
+#[cfg(feature = "cli")]
 pub fn resolve_thread_count(max_threads: usize) -> usize {
     if max_threads == 0 {
         std::thread::available_parallelism()

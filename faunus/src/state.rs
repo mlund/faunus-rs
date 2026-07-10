@@ -141,6 +141,8 @@ impl State {
     }
 
     /// Override the step counter (e.g. reset to 0 after umbrella drive phase).
+    // Only the `cli`-gated umbrella / Wang-Landau drivers use this.
+    #[cfg(feature = "cli")]
     pub fn with_step(mut self, step: usize) -> Self {
         self.step = step;
         self

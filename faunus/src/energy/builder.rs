@@ -692,8 +692,7 @@ impl HamiltonianBuilder {
     ///
     /// Nonbonded pairs from `include` files are merged in; the input file takes precedence.
     pub(crate) fn from_file(path: impl AsRef<Path>) -> anyhow::Result<Self> {
-        let yaml = crate::auxiliary::read_yaml(&path)
-            .map_err(|err| anyhow::anyhow!("Error reading file {:?}: {}", &path.as_ref(), err))?;
+        let yaml = crate::auxiliary::read_yaml(&path)?;
         let full: serde_yml::Value = serde_yml::from_str(&yaml)?;
 
         let mut current = &full;
@@ -712,9 +711,7 @@ impl HamiltonianBuilder {
             for entry in includes {
                 if let Some(rel) = entry.as_str() {
                     let inc_path = parent_dir.join(rel);
-                    let inc_yaml = crate::auxiliary::read_yaml(&inc_path).map_err(|err| {
-                        anyhow::anyhow!("Error reading include {:?}: {}", &inc_path, err)
-                    })?;
+                    let inc_yaml = crate::auxiliary::read_yaml(&inc_path)?;
                     let inc_full: serde_yml::Value = serde_yml::from_str(&inc_yaml)?;
                     if let Some(energy_val) = inc_full.get("energy") {
                         let inc_builder: Self =
@@ -857,7 +854,13 @@ mod tests {
     fn hamiltonian_deserialization_fail_duplicate_default() {
         let error = HamiltonianBuilder::from_file("tests/files/nonbonded_duplicate_default.yaml")
             .unwrap_err();
-        assert!(error.to_string().contains("duplicate entry with key"));
+        // `read_yaml` names the offending file; `{:#}` flattens the chain onto the serde reason.
+        let message = format!("{error:#}");
+        assert!(
+            message.contains("nonbonded_duplicate_default.yaml"),
+            "{message}"
+        );
+        assert!(message.contains("duplicate entry with key"), "{message}");
     }
 
     #[test]

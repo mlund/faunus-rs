@@ -24,8 +24,18 @@
 //!
 //! # Using faunus as a library
 //!
-//! The crate exposes the pieces needed to *describe* a system, not to drive one. Two are useful on
-//! their own: [`topology`], which parses and validates the atoms, molecules and bonds; and
+//! [`Simulation`] does the same thing from Rust: it loads an input, runs it, and hands back the
+//! results the binary would have written.
+//!
+//! ```no_run
+//! let mut simulation = faunus::Simulation::from_file("input.yaml".as_ref(), None)?;
+//! let output = simulation.run()?;
+//! println!("energy drift: {:.2e} kJ/mol", output.boxes()[0].drift());
+//! # Ok::<(), faunus::Error>(())
+//! ```
+//!
+//! Two further pieces are useful on their own for *describing* a system rather than driving one:
+//! [`topology`], which parses and validates the atoms, molecules and bonds; and
 //! [`energy::NonbondedMatrix`], which turns a topology into a matrix of pair potentials indexed by
 //! atom kind.
 //!
@@ -50,9 +60,8 @@
 //! # Ok::<(), anyhow::Error>(())
 //! ```
 //!
-//! Setting up and running a simulation from library code is not supported yet; the machinery that
-//! does so — the backend, the Monte Carlo moves, the analyses — is internal, so that its interfaces
-//! stay free to change. See [issue 54](https://github.com/mlund/faunus-rs/issues/54).
+//! The machinery behind [`Simulation`] — the backend, the Monte Carlo moves, the analyses — stays
+//! internal, so that its interfaces remain free to change.
 //!
 //! # Extending faunus
 //!
@@ -81,12 +90,15 @@ pub mod cell;
 #[cfg(feature = "cli")]
 pub mod cli;
 pub mod energy;
+pub mod error;
 pub mod topology;
 pub mod transform;
 
-// Simulation machinery. Nothing outside the crate drives a simulation through these types — the
-// supported entry point is `cli::do_main` — and exposing them would freeze the internal interfaces
-// that Tier 4 exists to keep narrow.
+pub use error::{Error, Result};
+pub use simulation::{replay, BoxResult, Simulation, SimulationOutput};
+
+// Simulation machinery. `Simulation` is the only door into it, so exposing these types would
+// freeze internal interfaces that the facade exists to keep narrow.
 pub(crate) mod analysis;
 pub(crate) mod auxiliary;
 pub(crate) mod axes;

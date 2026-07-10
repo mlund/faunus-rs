@@ -383,6 +383,8 @@ impl<T: Context + 'static> MarkovChain<T> {
     }
 
     /// Consume the MarkovChain, returning the owned context.
+    // Only the `cli`-gated umbrella / Wang-Landau drivers use this.
+    #[cfg(feature = "cli")]
     pub fn into_context(self) -> T {
         self.context
     }

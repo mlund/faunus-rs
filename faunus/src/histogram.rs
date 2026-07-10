@@ -64,11 +64,15 @@ impl Histogram {
     }
 
     /// Sum of all bin counts.
+    // Outside tests, only the `cli`-gated umbrella / Wang-Landau drivers use this.
+    #[cfg(any(feature = "cli", test))]
     pub fn total_count(&self) -> f64 {
         self.bins.iter().sum()
     }
 
     /// Fraction of counts in bins whose centers fall within `[lo, hi]`.
+    // Outside tests, only the `cli`-gated umbrella / Wang-Landau drivers use this.
+    #[cfg(any(feature = "cli", test))]
     pub fn fraction_in_range(&self, lo: f64, hi: f64) -> f64 {
         let total = self.total_count();
         if total == 0.0 {
@@ -116,6 +120,8 @@ impl Histogram {
     }
 
     /// Direct read access to the count in the i-th bin.
+    // Outside tests, only the `cli`-gated umbrella / Wang-Landau drivers use this.
+    #[cfg(any(feature = "cli", test))]
     pub fn count(&self, i: usize) -> f64 {
         self.bins[i]
     }

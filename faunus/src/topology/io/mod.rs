@@ -25,7 +25,6 @@ use crate::Point;
 use std::path::Path;
 
 /// Conversion factor from nanometers to ångströms (Gromacs XTC convention).
-#[cfg(feature = "cli")]
 pub const NM_TO_ANGSTROM: f64 = 10.0;
 
 /// Conversion factor from ångströms to nanometers (Gromacs XTC convention).
