@@ -1292,4 +1292,28 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
             });
         }
     }
+
+    /// Both targets resolve to `&[usize]`, so a group index reads as an atom index and the mistake
+    /// is silent. This pins the cost of that today; the next commit turns it into a type error and
+    /// this test is replaced by a `compile_fail` doctest on `CachedSelection`.
+    #[test]
+    fn a_group_index_silently_reads_as_an_atom_index() {
+        let context = backend();
+        let selection = Selection::parse("molecule DIMER").unwrap();
+        let mut groups = CachedSelection::groups(selection.clone());
+        let mut atoms = CachedSelection::atoms(selection);
+
+        assert_eq!(groups.resolve(&context), &[0, 1]);
+        assert_eq!(atoms.resolve(&context), &[0, 1, 2, 3]);
+
+        // Group index 1 is also a valid *atom* index, so a groups cache fed to a position lookup
+        // compiles and quietly returns the second atom of the first dimer.
+        let positions: Vec<_> = groups
+            .resolve(&context)
+            .iter()
+            .map(|&index| context.position(index))
+            .collect();
+        assert_eq!(positions[1], context.position(1));
+        assert_ne!(positions[1], *context.groups()[1].mass_center().unwrap());
+    }
 }
