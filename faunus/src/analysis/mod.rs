@@ -18,7 +18,6 @@ use crate::{Context, Info};
 use anyhow::Result;
 use core::fmt::Debug;
 use interatomic::coulomb::Temperature;
-use rand::Rng;
 use serde::{Deserialize, Serialize};
 use serde_yml::Value;
 use std::path::{Path, PathBuf};
@@ -64,8 +63,6 @@ pub use widom_rotation::{WidomRotation, WidomRotationBuilder};
 pub enum Frequency {
     /// Every `n` steps
     Every(usize),
-    /// With probability `p` regardless of number of affected molecules or atoms
-    Probability(f64),
     /// Once at step `n`
     Once(usize),
     /// Once at the very last step
@@ -75,8 +72,7 @@ pub enum Frequency {
 impl Frequency {
     /// Check if action, typically a move or analysis, should be performed at given step.
     ///
-    /// This handles `Every(n)` and `Once(n)` variants. For `Probability` use
-    /// [`should_perform_randomly`](Self::should_perform_randomly), and for `End` use
+    /// Handles `Every(n)` and `Once(n)`. `End` samples once from `finalize` instead; see
     /// [`should_perform_at_end`](Self::should_perform_at_end).
     #[must_use]
     #[allow(clippy::manual_is_multiple_of)] // is_multiple_of is not const
@@ -84,7 +80,7 @@ impl Frequency {
         match self {
             Self::Every(n) => step % *n == 0,
             Self::Once(n) => step == *n,
-            Self::Probability(_) | Self::End => false,
+            Self::End => false,
         }
     }
 
@@ -95,17 +91,64 @@ impl Frequency {
     pub const fn should_perform_at_end(&self) -> bool {
         matches!(self, Self::End)
     }
+}
 
-    /// Check if action should be performed based on probability.
-    ///
-    /// For `Probability(p)`, returns `true` with probability `p`.
-    /// Returns `false` for all other variants.
-    #[must_use]
-    pub fn should_perform_randomly(&self, rng: &mut impl Rng) -> bool {
-        match self {
-            Self::Probability(p) => rng.gen_bool(*p),
-            _ => false,
+/// Sampling state every analysis carries: when to sample, and how often it has.
+///
+/// Owned by the framework. `num_samples` counts *frames* and is incremented once per successful
+/// `perform_sample`, so it cannot drift into meaning something else per analysis.
+#[derive(Clone, Copy, Debug)]
+pub struct Sampling {
+    frequency: Frequency,
+    num_samples: usize,
+}
+
+impl From<Frequency> for Sampling {
+    fn from(frequency: Frequency) -> Self {
+        Self::new(frequency)
+    }
+}
+
+/// On the wire a `Sampling` *is* its frequency; the sample count is runtime state.
+impl Serialize for Sampling {
+    fn serialize<S: serde::Serializer>(
+        &self,
+        serializer: S,
+    ) -> std::result::Result<S::Ok, S::Error> {
+        self.frequency.serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for Sampling {
+    fn deserialize<D: serde::Deserializer<'de>>(
+        deserializer: D,
+    ) -> std::result::Result<Self, D::Error> {
+        Frequency::deserialize(deserializer).map(Self::new)
+    }
+}
+
+impl Sampling {
+    pub const fn new(frequency: Frequency) -> Self {
+        Self {
+            frequency,
+            num_samples: 0,
         }
+    }
+    pub const fn frequency(&self) -> Frequency {
+        self.frequency
+    }
+    pub const fn set_frequency(&mut self, frequency: Frequency) {
+        self.frequency = frequency;
+    }
+    /// Frames sampled so far.
+    pub const fn num_samples(&self) -> usize {
+        self.num_samples
+    }
+
+    /// Fake a sample count so a unit test can exercise reporting without driving a whole run.
+    #[cfg(test)]
+    pub const fn set_num_samples(&mut self, num_samples: usize) {
+        self.num_samples = num_samples;
     }
 }
 
@@ -307,12 +350,13 @@ pub fn from_file_in_dir<T: Context>(
 
 /// Interface for system analysis.
 pub trait Analyze<T: Context>: Debug + Info {
-    /// Get analysis frequency
-    ///
-    /// This is the frequency at which the analysis should be performed.
-    fn frequency(&self) -> Frequency;
+    /// The analysis' sampling state. The only bookkeeping an implementation must store.
+    fn sampling(&self) -> &Sampling;
+    /// Mutable access, so the framework can count a sample.
+    fn sampling_mut(&mut self) -> &mut Sampling;
 
-    /// Perform the actual sampling logic. Called only when the frequency check passes.
+    /// Perform the actual sampling logic. Called only when the frequency check passes, and never
+    /// responsible for counting itself.
     fn perform_sample(&mut self, context: &T, step: usize, weight: f64) -> Result<()>;
 
     /// Sample system. Checks frequency, then delegates to `perform_sample` with weight 1.
@@ -323,18 +367,36 @@ pub trait Analyze<T: Context>: Debug + Info {
     /// Sample with a reweighting factor. Checks frequency, then delegates to `perform_sample`.
     fn sample_weighted(&mut self, context: &T, step: usize, weight: f64) -> Result<()> {
         if self.frequency().should_perform(step) {
-            self.perform_sample(context, step, weight)
-        } else {
-            Ok(())
+            self.sample_now(context, step, weight)?;
         }
+        Ok(())
     }
 
-    /// Total number of samples which is the sum of successful calls to `sample()`.
-    fn num_samples(&self) -> usize;
+    /// Sample unconditionally and count the frame. Not meant to be overridden.
+    fn sample_now(&mut self, context: &T, step: usize, weight: f64) -> Result<()> {
+        self.perform_sample(context, step, weight)?;
+        self.sampling_mut().num_samples += 1;
+        Ok(())
+    }
 
-    /// Called once after the simulation ends for `End`-frequency work.
-    fn finalize(&mut self, context: &T) -> Result<()> {
-        let _ = context;
+    /// Sampling frequency.
+    fn frequency(&self) -> Frequency {
+        self.sampling().frequency()
+    }
+
+    /// Frames sampled so far.
+    fn num_samples(&self) -> usize {
+        self.sampling().num_samples()
+    }
+
+    /// Called once after the simulation ends, at the final `step`.
+    ///
+    /// The default samples once when the frequency is `End`. Analyses used to have to override
+    /// this to honour `End` at all, and exactly one of them did.
+    fn finalize(&mut self, context: &T, step: usize) -> Result<()> {
+        if self.frequency().should_perform_at_end() {
+            self.sample_now(context, step, 1.0)?;
+        }
         Ok(())
     }
 
@@ -348,13 +410,28 @@ pub trait Analyze<T: Context>: Debug + Info {
         Ok(())
     }
 
-    /// Return a YAML representation of the analysis results, if any.
-    fn to_yaml(&self) -> Option<serde_yml::Value> {
+    /// Build the results mapping. Called only when at least one sample was taken, so an
+    /// implementation never has to guard against dividing by zero or publishing a mean of nothing.
+    fn results(&self) -> Option<serde_yml::Value> {
         None
     }
 
+    /// Results for `output.yaml`, or `None` when nothing was sampled.
+    ///
+    /// Analyses used to guard this themselves and three of them forgot, publishing `.inf` and
+    /// `.nan` — an empty [`WidomAccumulator`](crate::analysis::widom::WidomAccumulator) reports a
+    /// free energy of `+inf`, and an empty `WeightedMean` reports `NaN`. The guard lives here now.
+    fn to_yaml(&self) -> Option<serde_yml::Value> {
+        if self.num_samples() == 0 {
+            return None;
+        }
+        self.results()
+    }
+
     /// Override the sampling frequency. Used by `rerun` to sample every frame.
-    fn set_frequency(&mut self, _freq: Frequency) {}
+    fn set_frequency(&mut self, frequency: Frequency) {
+        self.sampling_mut().set_frequency(frequency);
+    }
 }
 
 /// Collect YAML results from all analyses, keyed by short name.
@@ -381,21 +458,23 @@ impl<T: Context> crate::Info for AnalysisCollection<T> {
 }
 
 /// Extension trait for [`AnalysisCollection`].
+/// A collection of analyses is not itself an analysis: it has no frequency and no sample count of
+/// its own. It only fans out.
 pub trait AnalysisCollectionExt<T: Context> {
     /// Override sampling frequency on all analyses. Used by `rerun` to sample every frame.
     fn override_frequencies(&mut self, freq: Frequency);
+    fn sample(&mut self, context: &T, step: usize) -> Result<()>;
+    fn sample_weighted(&mut self, context: &T, step: usize, weight: f64) -> Result<()>;
+    fn finalize(&mut self, context: &T, step: usize) -> Result<()>;
+    fn write_to_disk(&mut self) -> Result<()>;
+    /// Frames sampled, summed over the analyses — so an analysis that samples every frame
+    /// contributes the frame count once. Not the number of frames in the run.
+    fn num_samples(&self) -> usize;
 }
 
 impl<T: Context> AnalysisCollectionExt<T> for AnalysisCollection<T> {
     fn override_frequencies(&mut self, freq: Frequency) {
         self.iter_mut().for_each(|a| a.set_frequency(freq));
-    }
-}
-
-impl<T: Context> Analyze<T> for AnalysisCollection<T> {
-    fn perform_sample(&mut self, context: &T, step: usize, weight: f64) -> Result<()> {
-        self.iter_mut()
-            .try_for_each(|a| a.sample_weighted(context, step, weight))
     }
     fn sample(&mut self, context: &T, step: usize) -> Result<()> {
         self.iter_mut().try_for_each(|a| a.sample(context, step))
@@ -404,18 +483,14 @@ impl<T: Context> Analyze<T> for AnalysisCollection<T> {
         self.iter_mut()
             .try_for_each(|a| a.sample_weighted(context, step, weight))
     }
-    /// Summed number of samples for all analysis objects
-    fn num_samples(&self) -> usize {
-        self.iter().map(|a| a.num_samples()).sum()
-    }
-    fn frequency(&self) -> Frequency {
-        Frequency::Every(1)
-    }
-    fn finalize(&mut self, context: &T) -> Result<()> {
-        self.iter_mut().try_for_each(|a| a.finalize(context))
+    fn finalize(&mut self, context: &T, step: usize) -> Result<()> {
+        self.iter_mut().try_for_each(|a| a.finalize(context, step))
     }
     fn write_to_disk(&mut self) -> Result<()> {
         self.iter_mut().try_for_each(|a| a.write_to_disk())
+    }
+    fn num_samples(&self) -> usize {
+        self.iter().map(|a| a.num_samples()).sum()
     }
 }
 
@@ -528,5 +603,182 @@ mod tests {
 ";
         let mut builders: Vec<AnalysisBuilder> = serde_yml::from_str(yaml).unwrap();
         assert!(builders[0].apply_output_dir(Path::new("window0")).is_err());
+    }
+}
+
+/// Pins the framework behaviour Tier 2 is about to change: which `Frequency` variants actually
+/// sample, who owns `num_samples`, and what `to_yaml` emits before any sample has been taken.
+///
+/// Several assertions here record *bugs*. They are written down so the fix shows up as a
+/// deliberate flip in the diff rather than as a test invented to match new code.
+#[cfg(test)]
+mod framework_characterization {
+    use super::*;
+    use crate::backend::Backend;
+
+    /// The smallest possible analysis: counts calls, nothing else.
+    #[derive(Debug)]
+    struct Counter {
+        sampling: Sampling,
+        finalized: bool,
+    }
+
+    impl Counter {
+        fn new(frequency: Frequency) -> Self {
+            Self {
+                sampling: Sampling::new(frequency),
+                finalized: false,
+            }
+        }
+    }
+
+    impl crate::Info for Counter {
+        fn short_name(&self) -> Option<&'static str> {
+            Some("counter")
+        }
+        fn long_name(&self) -> Option<&'static str> {
+            Some("counter")
+        }
+    }
+
+    impl<T: Context> Analyze<T> for Counter {
+        fn sampling(&self) -> &Sampling {
+            &self.sampling
+        }
+        fn sampling_mut(&mut self) -> &mut Sampling {
+            &mut self.sampling
+        }
+        fn perform_sample(&mut self, _context: &T, _step: usize, _weight: f64) -> Result<()> {
+            Ok(())
+        }
+        fn finalize(&mut self, context: &T, step: usize) -> Result<()> {
+            self.finalized = true;
+            if self.sampling.frequency().should_perform_at_end() {
+                self.sample_now(context, step, 1.0)?;
+            }
+            Ok(())
+        }
+    }
+
+    fn context() -> Backend {
+        let yaml = r#"
+atoms:
+  - {name: A, mass: 1.0, charge: 0.0, sigma: 1.0}
+molecules:
+  - name: MOL
+    atoms: [A]
+system:
+  cell: !Cuboid [20.0, 20.0, 20.0]
+  medium: {permittivity: !Vacuum, temperature: 300.0}
+  energy: {}
+  blocks:
+    - molecule: MOL
+      N: 2
+      insert: !Manual [[0.0, 0.0, 0.0], [5.0, 0.0, 0.0]]
+propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
+"#;
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(tmp.path(), yaml).unwrap();
+        Backend::new(tmp.path(), None, &mut rand::thread_rng()).unwrap()
+    }
+
+    fn sample_over_steps(frequency: Frequency, steps: usize) -> usize {
+        let context = context();
+        let mut counter = Counter::new(frequency);
+        for step in 0..steps {
+            Analyze::sample(&mut counter, &context, step).unwrap();
+        }
+        Analyze::<Backend>::num_samples(&counter)
+    }
+
+    #[test]
+    fn every_and_once_gate_exactly() {
+        assert_eq!(sample_over_steps(Frequency::Every(1), 10), 10);
+        assert_eq!(sample_over_steps(Frequency::Every(3), 10), 4); // steps 0,3,6,9
+        assert_eq!(sample_over_steps(Frequency::Once(4), 10), 1);
+        assert_eq!(sample_over_steps(Frequency::Once(99), 10), 0);
+    }
+
+    /// `Frequency::Probability` is gone. It never sampled anything — `should_perform` returned
+    /// false for it and `should_perform_randomly` was called from nowhere — so a YAML file that
+    /// asked for it got silence. It is now a parse error instead.
+    #[test]
+    fn probability_frequency_no_longer_parses() {
+        assert!(serde_yml::from_str::<Frequency>("!Probability 1.0").is_err());
+        assert!(serde_yml::from_str::<Frequency>("!Every 10").is_ok());
+        assert!(serde_yml::from_str::<Frequency>("!End").is_ok());
+    }
+
+    /// Was a bug: `End` never sampled during the run and the default `finalize` ignored it, so
+    /// only `structure_writer` honoured it. The default now samples once at the final step.
+    #[test]
+    fn end_frequency_samples_exactly_once_from_finalize() {
+        let context = context();
+        let mut counter = Counter::new(Frequency::End);
+        for step in 0..10 {
+            Analyze::sample(&mut counter, &context, step).unwrap();
+        }
+        assert_eq!(
+            Analyze::<Backend>::num_samples(&counter),
+            0,
+            "End does not sample during the run"
+        );
+
+        Analyze::finalize(&mut counter, &context, 9).unwrap();
+        assert_eq!(Analyze::<Backend>::num_samples(&counter), 1);
+        assert!(Frequency::End.should_perform_at_end());
+    }
+
+    /// ...and a normal frequency must not sample an extra time at the end.
+    #[test]
+    fn finalize_does_not_double_sample_a_periodic_analysis() {
+        let context = context();
+        let mut counter = Counter::new(Frequency::Every(1));
+        for step in 0..3 {
+            Analyze::sample(&mut counter, &context, step).unwrap();
+        }
+        Analyze::finalize(&mut counter, &context, 2).unwrap();
+        assert_eq!(Analyze::<Backend>::num_samples(&counter), 3);
+    }
+
+    /// Was a bug: three analyses skipped the `num_samples == 0` guard and published `.inf`/`.nan`
+    /// (`WidomAccumulator::mean_free_energy` is `+inf` with no samples). The guard now lives in the
+    /// framework's `to_yaml`, so `results()` is only ever called with something to report.
+    #[test]
+    fn zero_sample_yaml_is_omitted_rather_than_non_finite() {
+        let builder: crate::analysis::VirtualVolumeMoveBuilder =
+            serde_yml::from_str("{dV: 0.5, method: Isotropic, frequency: !Every 10}").unwrap();
+        let analysis = builder.build(2.5).unwrap();
+        assert_eq!(Analyze::<Backend>::num_samples(&analysis), 0);
+        assert!(Analyze::<Backend>::to_yaml(&analysis).is_none());
+
+        // The framework's frame-count guard is not sufficient on its own: an analysis whose
+        // `perform_sample` can return early counts a frame without feeding its accumulator, so it
+        // also guards `results()` on the accumulator. Both layers must agree on "nothing to say".
+        assert!(Analyze::<Backend>::results(&analysis).is_none());
+    }
+
+    /// Every analysis that reports something must be silent before its first sample.
+    #[test]
+    fn no_analysis_reports_before_its_first_sample() {
+        let counter = Counter::new(Frequency::Every(1));
+        assert_eq!(Analyze::<Backend>::num_samples(&counter), 0);
+        assert!(Analyze::<Backend>::to_yaml(&counter).is_none());
+    }
+
+    /// `num_samples` means *frames* in most analyses but *group·frames* in `shape` and
+    /// `widom_rotation`, and `AnalysisCollection::num_samples()` sums them regardless.
+    #[test]
+    fn collection_num_samples_sums_incomparable_counters() {
+        let context = context();
+        let mut collection: AnalysisCollection<Backend> = vec![
+            Box::new(Counter::new(Frequency::Every(1))),
+            Box::new(Counter::new(Frequency::Every(1))),
+        ];
+        for step in 0..5 {
+            collection.sample(&context, step).unwrap();
+        }
+        // Two analyses, five frames each: the sum is 10, not 5.
+        assert_eq!(collection.num_samples(), 10);
     }
 }

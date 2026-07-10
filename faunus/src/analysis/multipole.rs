@@ -6,9 +6,9 @@
 //! selection. Handles atom-type swaps (titration) and
 //! GCMC (only active groups contribute).
 
-use super::{Analyze, Frequency};
+use super::{Analyze, Frequency, Sampling};
 use crate::auxiliary::{MappingExt, WeightedMean};
-use crate::selection::Selection;
+use crate::selection::{CachedSelection, Groups, Selection};
 use crate::topology::GroupKind;
 use crate::Context;
 use anyhow::Result;
@@ -63,9 +63,8 @@ impl MultipoleAnalysisBuilder {
             groups.len()
         );
         Ok(MultipoleAnalysis {
-            selection: self.selection.clone(),
-            frequency: self.frequency,
-            num_samples: 0,
+            selection: CachedSelection::groups(self.selection.clone()),
+            sampling: Sampling::new(self.frequency),
             charge: WeightedMean::new(),
             charge_squared: WeightedMean::new(),
             dipole_scalar: WeightedMean::new(),
@@ -85,9 +84,9 @@ impl MultipoleAnalysisBuilder {
 /// Per-group charge, dipole, and quadrupole analysis.
 #[derive(Debug)]
 pub struct MultipoleAnalysis {
-    selection: Selection,
-    frequency: Frequency,
-    num_samples: usize,
+    selection: CachedSelection<Groups>,
+    /// Frequency and frame count, owned by the framework.
+    sampling: Sampling,
     charge: WeightedMean,
     charge_squared: WeightedMean,
     dipole_scalar: WeightedMean,
@@ -117,11 +116,11 @@ impl crate::Info for MultipoleAnalysis {
 }
 
 impl<T: Context> Analyze<T> for MultipoleAnalysis {
-    fn frequency(&self) -> Frequency {
-        self.frequency
+    fn sampling(&self) -> &Sampling {
+        &self.sampling
     }
-    fn set_frequency(&mut self, freq: Frequency) {
-        self.frequency = freq;
+    fn sampling_mut(&mut self) -> &mut Sampling {
+        &mut self.sampling
     }
 
     fn perform_sample(&mut self, context: &T, _step: usize, weight: f64) -> Result<()> {
@@ -129,8 +128,8 @@ impl<T: Context> Analyze<T> for MultipoleAnalysis {
         let atomkinds = topology.atomkinds();
         let moleculekinds = topology.moleculekinds();
 
-        for &gi in &context.resolve_groups(&self.selection) {
-            let group = &context.groups()[gi];
+        for &gi in &self.selection.resolve(context).to_vec() {
+            let group = context.group(gi);
             let mol = group.molecule();
 
             // Lazy-init per-atom accumulators from the validated molecular kind.
@@ -163,14 +162,16 @@ impl<T: Context> Analyze<T> for MultipoleAnalysis {
             self.charge.add(z, weight);
             self.charge_squared.add(z * z, weight);
 
-            if let Some(mu) = crate::collective_variable::group::group_dipole_moment(gi, context) {
+            if let Some(mu) =
+                crate::collective_variable::group::group_dipole_moment(gi.get(), context)
+            {
                 let mu_norm = mu.norm();
                 self.dipole_scalar.add(mu_norm, weight);
                 self.dipole_squared.add(mu_norm * mu_norm, weight);
             }
 
             if let Some(qt) =
-                crate::collective_variable::group::group_quadrupole_moment(gi, context)
+                crate::collective_variable::group::group_quadrupole_moment(gi.get(), context)
             {
                 let comps = [
                     qt[(0, 0)],
@@ -192,16 +193,11 @@ impl<T: Context> Analyze<T> for MultipoleAnalysis {
             }
         }
 
-        self.num_samples += 1;
         Ok(())
     }
 
-    fn num_samples(&self) -> usize {
-        self.num_samples
-    }
-
-    fn to_yaml(&self) -> Option<serde_yml::Value> {
-        if self.num_samples == 0 {
+    fn results(&self) -> Option<serde_yml::Value> {
+        if self.sampling.num_samples() == 0 {
             return None;
         }
         let mut map = serde_yml::Mapping::new();
@@ -214,8 +210,8 @@ impl<T: Context> Analyze<T> for MultipoleAnalysis {
         let mu_var = (self.dipole_squared.mean() - mu_mean * mu_mean).max(0.0);
         let mu_std = mu_var.sqrt();
 
-        map.try_insert("selection", self.selection.source())?;
-        map.try_insert("num_samples", self.num_samples)?;
+        map.try_insert("selection", self.selection.selection().source())?;
+        map.try_insert("num_samples", self.sampling.num_samples())?;
         map.try_insert("charge", format!("{z_mean:.4} ± {z_std:.4}"))?;
         map.try_insert("capacitance", capacitance)?;
         map.try_insert("dipole_moment", format!("{mu_mean:.4} ± {mu_std:.4}"))?;

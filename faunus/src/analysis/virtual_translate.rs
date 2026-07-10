@@ -27,12 +27,12 @@
 //! displacement magnitude.
 
 use super::widom::WidomAccumulator;
-use super::{Analyze, Frequency};
+use super::{Analyze, Sampling};
 use crate::auxiliary::{ColumnWriter, MappingExt};
 use crate::axes::Axes;
 use crate::change::{Change, GroupChange};
 use crate::energy::EnergyChange;
-use crate::selection::{CachedSelection, Selection};
+use crate::selection::{CachedSelection, Groups, Selection};
 use crate::{Context, Point};
 use anyhow::Result;
 use derive_builder::Builder;
@@ -83,18 +83,20 @@ pub struct VirtualTranslate {
     #[debug(skip)]
     stream: Option<ColumnWriter>,
 
-    /// Sample frequency
-    frequency: Frequency,
+    /// Frequency and frame count, owned by the framework. Deserialized from `frequency`.
+    #[builder(setter(name = "frequency", into))]
+    #[builder_field_attr(serde(rename = "frequency"))]
+    sampling: Sampling,
 
     /// Widom exponential average accumulator (log-sum-exp)
     #[builder(setter(skip))]
     #[builder_field_attr(serde(skip))]
     widom: WidomAccumulator,
 
-    /// Resolved group indices, built from `selection` on first use.
+    /// The selection, its resolved groups, and its cache key. Built with the analysis.
     #[builder(setter(skip))]
     #[builder_field_attr(serde(skip))]
-    group_cache: Option<CachedSelection>,
+    group_cache: CachedSelection<Groups>,
 
     /// Thermal energy R*T in kJ/mol.
     #[builder(setter(skip))]
@@ -137,7 +139,7 @@ impl VirtualTranslateBuilder {
         if self.displacement.is_none() {
             anyhow::bail!("Missing required field 'dL' for VirtualTranslate analysis");
         }
-        if self.frequency.is_none() {
+        if self.sampling.is_none() {
             anyhow::bail!("Missing required field 'frequency' for VirtualTranslate analysis");
         }
         Ok(())
@@ -170,9 +172,9 @@ impl VirtualTranslateBuilder {
             unit_direction,
             output_file: self.output_file.as_ref().and_then(|p| p.clone()),
             stream,
-            frequency: self.frequency.unwrap(),
+            sampling: self.sampling.unwrap(),
             widom: WidomAccumulator::default(),
-            group_cache: None,
+            group_cache: CachedSelection::groups(self.selection.as_ref().unwrap().clone()),
             thermal_energy,
         })
     }
@@ -236,11 +238,11 @@ impl VirtualTranslate {
 }
 
 impl<T: Context> Analyze<T> for VirtualTranslate {
-    fn frequency(&self) -> Frequency {
-        self.frequency
+    fn sampling(&self) -> &Sampling {
+        &self.sampling
     }
-    fn set_frequency(&mut self, freq: Frequency) {
-        self.frequency = freq;
+    fn sampling_mut(&mut self) -> &mut Sampling {
+        &mut self.sampling
     }
 
     fn perform_sample(&mut self, context: &T, step: usize, weight: f64) -> Result<()> {
@@ -248,12 +250,7 @@ impl<T: Context> Analyze<T> for VirtualTranslate {
             return Ok(());
         }
 
-        // Disjoint field borrows: `selection` is read while `group_cache` is filled.
-        let selection = &self.selection;
-        let cache = self
-            .group_cache
-            .get_or_insert_with(|| CachedSelection::groups(selection.clone()));
-        let active_groups = cache.resolve(context);
+        let active_groups = self.group_cache.resolve(context);
 
         if active_groups.is_empty() {
             return Ok(());
@@ -267,7 +264,7 @@ impl<T: Context> Analyze<T> for VirtualTranslate {
             );
         }
 
-        let group_index = active_groups[0];
+        let group_index = active_groups[0].get();
 
         let mut trial_context = context.clone();
         let energy_change = self.perturb(&mut trial_context, group_index)?;
@@ -278,41 +275,19 @@ impl<T: Context> Analyze<T> for VirtualTranslate {
         Ok(())
     }
 
-    fn num_samples(&self) -> usize {
-        self.widom.len()
-    }
-
-    fn to_yaml(&self) -> Option<serde_yml::Value> {
+    fn results(&self) -> Option<serde_yml::Value> {
+        // A frame is counted even when `perform_sample` returns early, so the framework's
+        // frame-count guard is not enough: key on the accumulator that feeds every number below.
+        if self.widom.is_empty() {
+            return None;
+        }
         let mut map = serde_yml::Mapping::new();
         map.try_insert("displacement", self.displacement)?;
-        map.try_insert("num_samples", self.widom.len())?;
+        map.try_insert("num_samples", self.sampling.num_samples())?;
+        map.try_insert("num_perturbations", self.widom.len())?;
         map.try_insert("mean_force", self.mean_force())?;
         map.try_insert("mean_free_energy", self.widom.mean_free_energy())?;
         Some(serde_yml::Value::Mapping(map))
-    }
-}
-
-impl<T: Context> From<VirtualTranslate> for Box<dyn Analyze<T>> {
-    fn from(analysis: VirtualTranslate) -> Self {
-        Box::new(analysis)
-    }
-}
-
-impl std::fmt::Display for VirtualTranslate {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(f, "Virtual Translate Analysis:")?;
-        writeln!(f, "  Selection:   {}", self.selection)?;
-        writeln!(f, "  dL:          {} Å", self.displacement)?;
-        writeln!(
-            f,
-            "  Direction:   [{:.3}, {:.3}, {:.3}]",
-            self.unit_direction.x, self.unit_direction.y, self.unit_direction.z
-        )?;
-        writeln!(f, "  Samples:     {}", self.widom.len())?;
-        if !self.widom.is_empty() {
-            writeln!(f, "  <force>:     {:.6} kT/Å", self.mean_force())?;
-        }
-        Ok(())
     }
 }
 
@@ -320,6 +295,7 @@ impl std::fmt::Display for VirtualTranslate {
 mod tests {
     use super::*;
     use crate::analysis::AnalysisBuilder;
+    use crate::analysis::Frequency;
     use crate::Info;
     use float_cmp::assert_approx_eq;
 
@@ -342,6 +318,21 @@ mod tests {
             .frequency(Frequency::Every(1))
             .build(RT_298)
             .unwrap()
+    }
+
+    /// A frame can be counted without contributing: `perform_sample` returns early when the
+    /// displacement is zero or nothing matches the selection. Reporting must key on the
+    /// accumulator, not the frame counter, or an empty Widom average (+inf) reaches output.yaml.
+    #[test]
+    fn counted_but_uncollected_frames_do_not_publish_infinities() {
+        let mut vt = build_vt(0.0); // zero displacement: perform_sample early-returns
+        vt.sampling.set_num_samples(5); // ...yet five frames were counted
+
+        assert!(vt.widom.is_empty());
+        assert!(
+            <VirtualTranslate as Analyze<crate::backend::Backend>>::to_yaml(&vt).is_none(),
+            "an empty accumulator must not be reported"
+        );
     }
 
     /// Deserialize YAML into AnalysisBuilder list and extract the VirtualTranslateBuilder at `index`.
@@ -467,25 +458,6 @@ mod tests {
     }
 
     #[test]
-    fn display_without_samples() {
-        let vt = build_vt(0.01);
-        let output = format!("{vt}");
-        assert!(output.contains("molecule MOL"));
-        assert!(output.contains("0.01"));
-        assert!(output.contains("Samples:     0"));
-        assert!(!output.contains("<force>"));
-    }
-
-    #[test]
-    fn display_with_samples() {
-        let mut vt = build_vt(0.1);
-        vt.widom.collect(0.0, 1.0);
-        let output = format!("{vt}");
-        assert!(output.contains("Samples:     1"));
-        assert!(output.contains("<force>"));
-    }
-
-    #[test]
     fn deserialize_virtual_translate_builders() {
         let yaml = std::fs::read_to_string("tests/files/virtual_translate.yaml").unwrap();
 
@@ -493,12 +465,12 @@ mod tests {
         assert_eq!(vt.selection.source(), "molecule MOL");
         assert_approx_eq!(f64, vt.displacement, 0.01);
         assert_eq!(vt.directions, Axes::Z);
-        assert!(matches!(vt.frequency, Frequency::Every(10)));
+        assert!(matches!(vt.sampling.frequency(), Frequency::Every(10)));
 
         let vt = deserialize_vt_builder(&yaml, 1).build(RT_298).unwrap();
         assert_approx_eq!(f64, vt.displacement, 0.05);
         assert_eq!(vt.directions, Axes::X);
-        assert!(matches!(vt.frequency, Frequency::Every(5)));
+        assert!(matches!(vt.sampling.frequency(), Frequency::Every(5)));
     }
 
     #[test]

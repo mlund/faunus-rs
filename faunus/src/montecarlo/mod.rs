@@ -14,6 +14,7 @@
 
 //! # Support for Monte Carlo sampling
 
+use crate::analysis::AnalysisCollectionExt;
 use crate::analysis::{AnalysisCollection, Analyze};
 use crate::energy::EnergyChange;
 use crate::group::*;
@@ -399,7 +400,7 @@ impl<T: Context + 'static> MarkovChain<T> {
     /// Run end-of-simulation analyses (e.g. `Trajectory` with `frequency: End`)
     /// and write accumulated results to disk.
     pub fn finalize_analyses(&mut self) -> Result<()> {
-        self.analyses.finalize(&self.context)?;
+        self.analyses.finalize(&self.context, self.step)?;
         self.analyses.write_to_disk()
     }
 
@@ -607,5 +608,287 @@ mod tests {
         assert_approx_eq!(f64, pos(6).z, pos(7).z, epsilon = 0.0000001);
         assert_approx_eq!(f64, pos(6).z, pos(8).z, epsilon = 0.0000001);
         assert_approx_eq!(f64, pos(7).z, pos(8).z, epsilon = 0.0000001);
+    }
+}
+
+/// Pins the pairing between each move's `Change` and the `Transform` it applies.
+///
+/// `ProposedMove` today carries the two as independent public fields, and nothing checks that they
+/// agree: `transform` drives the mutation, `change` drives which energy terms recompute. These
+/// tests record the pairing every move currently produces, so the upcoming typed constructors can
+/// be shown to reproduce it exactly.
+#[cfg(test)]
+mod proposal_characterization {
+    use super::*;
+    use crate::backend::Backend;
+    use crate::group::ParticleSelection;
+    use crate::propagate::{Displacement, MoveProposal, MoveTarget, ProposedMove};
+    use crate::transform::Transform;
+    use crate::{Change, GroupChange};
+    use rand::{rngs::StdRng, SeedableRng};
+
+    /// A bonded 4-mer (for pivot/crankshaft) plus a monatomic species (for translate/rotate).
+    const SYSTEM: &str = r#"
+atoms:
+  - {name: A, mass: 1.0, charge: 0.0, sigma: 1.0}
+  - {name: B, mass: 1.0, charge: 0.0, sigma: 1.0}
+molecules:
+  - name: POLY
+    atoms: [A, A, A, A]
+    bonds:
+      - {index: [0, 1], kind: !Harmonic {k: 100.0, req: 1.0}}
+      - {index: [1, 2], kind: !Harmonic {k: 100.0, req: 1.0}}
+      - {index: [2, 3], kind: !Harmonic {k: 100.0, req: 1.0}}
+  - name: MOL
+    atoms: [B]
+system:
+  cell: !Cuboid [30.0, 30.0, 30.0]
+  medium: {permittivity: !Vacuum, temperature: 300.0}
+  energy: {}
+  blocks:
+    - molecule: POLY
+      N: 1
+      insert: !Manual [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [2.0, 0.0, 0.0], [3.0, 0.0, 0.0]]
+    - molecule: MOL
+      N: 2
+      insert: !Manual [[8.0, 0.0, 0.0], [-8.0, 0.0, 0.0]]
+propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
+"#;
+
+    fn context() -> Backend {
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(tmp.path(), SYSTEM).unwrap();
+        Backend::new(tmp.path(), None, &mut rand::thread_rng()).unwrap()
+    }
+
+    fn rng() -> StdRng {
+        StdRng::seed_from_u64(0xFA_u64)
+    }
+
+    fn propose<M: MoveProposal<Backend>>(mut mv: M, context: &Backend) -> ProposedMove {
+        mv.propose_move(context, &mut rng()).expect("a move")
+    }
+
+    #[test]
+    fn translate_molecule_pairs_rigid_body_with_translate() {
+        let context = context();
+        let mut mv: TranslateMolecule = serde_yml::from_str("{molecule: MOL, dp: 0.5}").unwrap();
+        mv.finalize(&context).unwrap();
+        let proposed = propose(mv, &context);
+
+        let Change::SingleGroup(group, GroupChange::RigidBody) = proposed.change() else {
+            panic!(
+                "expected SingleGroup/RigidBody, got {:?}",
+                proposed.change()
+            );
+        };
+        let Transform::Translate(shift) = proposed.transform() else {
+            panic!(
+                "expected Transform::Translate, got {:?}",
+                proposed.transform()
+            );
+        };
+        assert!(matches!(proposed.target(), MoveTarget::Group(g) if g == group));
+        // The reported displacement is exactly the shift the transform applies.
+        let Displacement::Distance(reported) = proposed.displacement() else {
+            panic!("expected Displacement::Distance");
+        };
+        assert_eq!(reported, shift);
+        assert!(shift.norm() <= 0.5);
+    }
+
+    #[test]
+    fn rotate_molecule_pairs_rigid_body_with_rotate() {
+        let context = context();
+        let mut mv: RotateMolecule = serde_yml::from_str("{molecule: MOL, dp: 0.5}").unwrap();
+        mv.finalize(&context).unwrap();
+        let proposed = propose(mv, &context);
+
+        assert!(matches!(
+            proposed.change(),
+            Change::SingleGroup(_, GroupChange::RigidBody)
+        ));
+        assert!(matches!(proposed.transform(), Transform::Rotate(_)));
+        assert!(matches!(proposed.displacement(), Displacement::Angle(_)));
+    }
+
+    /// `TranslateAtom` used to carry a relative index in the change and the absolute one in the
+    /// transform, hand-converted between them. The typed constructor takes the relative index once
+    /// and builds both sides from it, so a `ProposedMove` no longer mentions absolute indices at
+    /// all. `Group::select` resolves `Relative` to the same particles the old `Absolute` named.
+    #[test]
+    fn translate_atom_carries_relative_indices_on_both_sides() {
+        let context = context();
+        let mut mv: TranslateAtom = serde_yml::from_str("{atom: B, dp: 0.3}").unwrap();
+        mv.finalize(&context).unwrap();
+        let proposed = propose(mv, &context);
+
+        let Change::SingleGroup(group, GroupChange::PartialUpdate(relative)) = &proposed.change()
+        else {
+            panic!("expected PartialUpdate, got {:?}", proposed.change());
+        };
+        let Transform::PartialTranslate(_, ParticleSelection::Relative(moved)) =
+            proposed.transform()
+        else {
+            panic!("expected PartialTranslate/Relative");
+        };
+        assert_eq!(
+            relative, moved,
+            "both sides carry the same relative indices"
+        );
+        assert_eq!(relative.len(), 1);
+
+        // The particle actually addressed is still the right one, in a group that does not start
+        // at 0 — so the two spaces genuinely differ here.
+        let group = &context.groups()[*group];
+        assert_ne!(group.start(), 0, "fixture must have a nonzero group start");
+        let absolute = group.to_absolute(relative[0]).unwrap();
+        assert_ne!(relative[0].get(), absolute.get());
+    }
+
+    /// Pivot and crankshaft agree: both spaces are *relative*, so their two vectors are equal.
+    #[test]
+    fn pivot_and_crankshaft_use_relative_indices_on_both_sides() {
+        let context = context();
+
+        let mut pivot: PivotMove = serde_yml::from_str("{molecule: POLY, dp: 0.5}").unwrap();
+        pivot.finalize(&context).unwrap();
+        let mut crank: CrankshaftMove = serde_yml::from_str("{molecule: POLY, dp: 0.5}").unwrap();
+        crank.finalize(&context).unwrap();
+
+        for proposed in [propose(pivot, &context), propose(crank, &context)] {
+            let Change::SingleGroup(_, GroupChange::PartialUpdate(changed)) = &proposed.change()
+            else {
+                panic!("expected PartialUpdate, got {:?}", proposed.change());
+            };
+            let Transform::PartialRotate(_, _, ParticleSelection::Relative(rotated)) =
+                &proposed.transform()
+            else {
+                panic!("expected PartialRotate/Relative");
+            };
+            assert_eq!(
+                changed, rotated,
+                "both sides carry the same relative indices"
+            );
+            assert!(!changed.is_empty());
+        }
+    }
+
+    #[test]
+    fn volume_move_pairs_volume_change_with_volume_scale() {
+        let context = context();
+        let mut mv: VolumeMove =
+            serde_yml::from_str("{dV: 0.1, method: Isotropic, repeat: 1}").unwrap();
+        mv.finalize(&context).unwrap();
+        let proposed = propose(mv, &context);
+
+        let Change::Volume(change_policy, volumes) = proposed.change() else {
+            panic!("expected Change::Volume, got {:?}", proposed.change());
+        };
+        let Transform::VolumeScale(transform_policy, new_volume) = proposed.transform() else {
+            panic!("expected Transform::VolumeScale");
+        };
+        // The policy and the new volume now come from one constructor argument, so they cannot
+        // disagree across the two fields.
+        assert_eq!(change_policy, transform_policy);
+        assert_eq!(volumes.new, *new_volume);
+        assert!(matches!(proposed.target(), MoveTarget::System));
+    }
+}
+
+/// Locks the index space of `GroupChange::UpdateIdentity`.
+///
+/// Every index-carrying `GroupChange` is group-relative, and `energy/ewald.rs::affected_indices`
+/// reconstructs the global index as `group.start() + rel`. `speciation.rs` used to emit the
+/// *absolute* index here — the same value it hands to `set_atom_kind` — which pointed Ewald at a
+/// different particle for any group not starting at 0. Latent only because nothing in the tree runs
+/// Ewald together with a speciation swap.
+#[cfg(test)]
+mod update_identity_index_space {
+    use crate::backend::Backend;
+    use crate::group::GroupCollection;
+    use crate::propagate::MoveProposal;
+    use crate::{Change, GroupChange};
+    use rand::{rngs::StdRng, SeedableRng};
+
+    /// Twenty single-atom `site` molecules, so group `i` owns exactly particle `i`:
+    /// the relative index is always 0 while the absolute index equals the group index.
+    const TITRATION: &str = r#"
+atoms:
+  - {name: HA, mass: 1.0, sigma: 1.0}
+  - {name: A, mass: 1.0, sigma: 1.0}
+  - {name: "H+", mass: 1.0, activity: 1.0e-4}
+molecules:
+  - name: site
+    atoms: [HA]
+system:
+  cell: !Cuboid [20.0, 20.0, 20.0]
+  medium: {permittivity: !Vacuum, temperature: 298.15}
+  energy: {}
+  blocks:
+    - molecule: site
+      N: 20
+      active: 20
+      insert: !RandomAtomPos {}
+propagate:
+  seed: !Fixed 42
+  criterion: Metropolis
+  repeat: 0
+  collections: []
+"#;
+
+    #[test]
+    fn speciation_emits_a_relative_index_as_ewald_expects() {
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(tmp.path(), TITRATION).unwrap();
+        let context = Backend::new(tmp.path(), None, &mut rand::thread_rng()).unwrap();
+
+        let yaml = r#"
+temperature: 298.15
+reactions:
+  - ["⚛HA = ⚛A + ~H+", !pK 4.0]
+"#;
+        let mut speciation: super::speciation::SpeciationMove = serde_yml::from_str(yaml).unwrap();
+        speciation.finalize(&context).unwrap();
+
+        // Find a proposal that touches a group other than 0, where the two spaces differ.
+        let proposal = (0..64u64)
+            .find_map(|seed| {
+                let mut rng = StdRng::seed_from_u64(seed);
+                let proposed = speciation.propose_move(&context, &mut rng)?;
+                match &proposed.change() {
+                    Change::Groups(changes) if changes.first()?.0 != 0 => Some(proposed),
+                    _ => None,
+                }
+            })
+            .expect("a swap on a group with a non-zero start");
+
+        let Change::Groups(changes) = &proposal.change() else {
+            unreachable!()
+        };
+        let (group_index, GroupChange::UpdateIdentity(indices)) = &changes[0] else {
+            panic!("expected UpdateIdentity, got {:?}", changes[0]);
+        };
+        let group = &context.groups()[*group_index];
+
+        // Every `site` holds one atom, so the relative index can only be 0 while the absolute
+        // index equals the group's start — the two differ for every group but the first.
+        assert_eq!(group.iter_active().count(), 1);
+        assert_eq!(indices.len(), 1);
+        assert_ne!(
+            group.start(),
+            0,
+            "fixture must exercise a non-zero group start"
+        );
+        assert_eq!(
+            indices[0].get(),
+            0,
+            "UpdateIdentity carries a group-relative index"
+        );
+
+        // Which is exactly what Ewald reconstructs back to the right particle.
+        let reconstructed = group.start() + indices[0].get();
+        assert!(group.contains(reconstructed));
+        assert_eq!(reconstructed, group.start());
     }
 }

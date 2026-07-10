@@ -7,11 +7,12 @@ mod opendx;
 
 use self::grid::Grid;
 use self::normalize::{Normalization, OutputScale};
-use super::{Analyze, Frequency};
+use super::{Analyze, Frequency, Sampling};
 use crate::auxiliary::MappingExt;
 use crate::cell::{BoundaryConditions, Shape};
 use crate::group::Group;
-use crate::selection::Selection;
+use crate::group::{AbsIndex, GroupIndex};
+use crate::selection::{first_unsupported_group, Atoms, CachedSelection, Groups, Selection};
 use crate::topology::io::{self, StructureData};
 use crate::{Context, Point};
 use anyhow::Result;
@@ -90,7 +91,19 @@ impl SpatialDistributionBuilder {
             );
         }
 
-        let reference_groups = context.resolve_groups(&self.reference);
+        if let Some(group) =
+            first_unsupported_group(context, &self.reference, |kind| !kind.atomic())?
+        {
+            anyhow::bail!(
+                "SpatialDistribution: reference selection '{}' matched atomic group {group}",
+                self.reference.source()
+            );
+        }
+        let reference_groups: Vec<GroupIndex> = context
+            .resolve_groups(&self.reference)
+            .into_iter()
+            .map(GroupIndex::new)
+            .collect();
         anyhow::ensure!(
             !reference_groups.is_empty(),
             "SpatialDistribution: reference selection '{}' matched no active groups",
@@ -105,21 +118,22 @@ impl SpatialDistributionBuilder {
         let reference_structure = self
             .reference_file
             .as_ref()
-            .map(|file| capture_reference_structure(context, reference_groups[0], file.clone()))
+            .map(|file| {
+                capture_reference_structure(context, reference_groups[0].get(), file.clone())
+            })
             .transpose()?;
 
         Ok(SpatialDistribution {
-            reference: self.reference.clone(),
-            selection: self.selection.clone(),
+            reference: CachedSelection::groups(self.reference.clone()),
+            selection: CachedSelection::atoms(self.selection.clone()),
             file: self.file.clone(),
             reference_structure,
             grid: grid.clone(),
             counts: vec![0.0; grid.num_voxels()],
             normalization: Normalization::default(),
-            num_samples: 0,
             scale: OutputScale::from_bulk_normalize(self.bulk_normalize),
             exclude_reference: self.exclude_reference,
-            frequency: self.frequency,
+            sampling: Sampling::new(self.frequency),
         })
     }
 }
@@ -127,30 +141,30 @@ impl SpatialDistributionBuilder {
 /// Spatial distribution function analysis.
 #[derive(Debug)]
 pub struct SpatialDistribution {
-    reference: Selection,
-    selection: Selection,
+    reference: CachedSelection<Groups>,
+    selection: CachedSelection<Atoms>,
     file: PathBuf,
     /// Reference molecule snapshot in the body frame, written once for visualization.
     reference_structure: Option<ReferenceStructure>,
     grid: Grid,
     counts: Vec<f64>,
     normalization: Normalization,
-    num_samples: usize,
     scale: OutputScale,
     exclude_reference: bool,
-    frequency: Frequency,
+    /// Frequency and frame count, owned by the framework.
+    sampling: Sampling,
 }
 
 fn validate_reference_groups(
     context: &impl Context,
-    reference_groups: &[usize],
+    reference_groups: &[GroupIndex],
     source: &str,
 ) -> Result<usize> {
     let topology = context.topology_ref();
     let groups = context.groups();
-    let first_molecule = groups[reference_groups[0]].molecule();
+    let first_molecule = groups[reference_groups[0].get()].molecule();
     for &group_index in reference_groups {
-        let group = &groups[group_index];
+        let group = &groups[group_index.get()];
         anyhow::ensure!(
             !group.is_empty(),
             "SpatialDistribution: reference selection '{source}' matched empty group {group_index}"
@@ -235,10 +249,13 @@ fn capture_reference_structure(
     })
 }
 
-fn reference_body_points(context: &impl Context, reference_groups: &[usize]) -> Result<Vec<Point>> {
+fn reference_body_points(
+    context: &impl Context,
+    reference_groups: &[GroupIndex],
+) -> Result<Vec<Point>> {
     let mut points = Vec::new();
     for &group_index in reference_groups {
-        let group = &context.groups()[group_index];
+        let group = context.group(group_index);
         let center = group.mass_center().ok_or_else(|| {
             anyhow::anyhow!("SpatialDistribution: reference group {group_index} has no mass center")
         })?;
@@ -270,25 +287,25 @@ fn validate_grid_extent(context: &impl Context, grid: &Grid) -> Result<()> {
     Ok(())
 }
 
-fn atom_owners(groups: &[Group], num_particles: usize) -> Vec<Option<usize>> {
+fn atom_owners(groups: &[Group], num_particles: usize) -> Vec<Option<GroupIndex>> {
     let mut owners = vec![None; num_particles];
     for group in groups {
         for atom_index in group.iter_active() {
-            owners[atom_index] = Some(group.index());
+            owners[atom_index] = Some(GroupIndex::new(group.index()));
         }
     }
     owners
 }
 
 fn eligible_target_count(
-    target_atoms: &[usize],
-    owners: &[Option<usize>],
-    reference_group: usize,
+    target_atoms: &[AbsIndex],
+    owners: &[Option<GroupIndex>],
+    reference_group: GroupIndex,
     exclude_reference: bool,
 ) -> usize {
     target_atoms
         .iter()
-        .filter(|&&atom_index| !exclude_reference || owners[atom_index] != Some(reference_group))
+        .filter(|&&atom| !exclude_reference || owners[atom.get()] != Some(reference_group))
         .count()
 }
 
@@ -316,26 +333,26 @@ impl crate::Info for SpatialDistribution {
 }
 
 impl<T: Context> Analyze<T> for SpatialDistribution {
-    fn frequency(&self) -> Frequency {
-        self.frequency
+    fn sampling(&self) -> &Sampling {
+        &self.sampling
     }
-
-    fn set_frequency(&mut self, freq: Frequency) {
-        self.frequency = freq;
+    fn sampling_mut(&mut self) -> &mut Sampling {
+        &mut self.sampling
     }
 
     fn perform_sample(&mut self, context: &T, _step: usize, weight: f64) -> Result<()> {
-        let reference_groups = context.resolve_groups(&self.reference);
+        let reference_groups = self.reference.resolve(context).to_vec();
         if !reference_groups.is_empty() {
-            validate_reference_groups(context, &reference_groups, self.reference.source())?;
+            let source = self.reference.selection().source();
+            validate_reference_groups(context, &reference_groups, source)?;
         }
-        let target_atoms = context.resolve_atoms(&self.selection);
+        let target_atoms = self.selection.resolve(context).to_vec();
 
         let owners = atom_owners(context.groups(), context.num_particles());
         let volume = context.cell().volume();
 
         for reference_group in reference_groups {
-            let group = &context.groups()[reference_group];
+            let group = context.group(reference_group);
             let center = group.mass_center().ok_or_else(|| {
                 anyhow::anyhow!(
                     "SpatialDistribution: reference group {reference_group} has no mass center"
@@ -351,12 +368,12 @@ impl<T: Context> Analyze<T> for SpatialDistribution {
                 .observe_reference(weight, eligible_targets, volume, self.scale)?;
 
             for &atom_index in &target_atoms {
-                if self.exclude_reference && owners[atom_index] == Some(reference_group) {
+                if self.exclude_reference && owners[atom_index.get()] == Some(reference_group) {
                     continue;
                 }
                 let displacement = context
                     .cell()
-                    .distance(&context.position(atom_index), center);
+                    .distance(&context.position(atom_index.get()), center);
                 let body = frame::to_body_frame(&displacement, group.quaternion());
                 if let Some(voxel) = self.grid.index_of(&body) {
                     self.counts[voxel] += weight;
@@ -364,16 +381,11 @@ impl<T: Context> Analyze<T> for SpatialDistribution {
             }
         }
 
-        self.num_samples += 1;
         Ok(())
     }
 
-    fn num_samples(&self) -> usize {
-        self.num_samples
-    }
-
     fn write_to_disk(&mut self) -> Result<()> {
-        if self.num_samples == 0 {
+        if self.sampling.num_samples() == 0 {
             return Ok(());
         }
         let values = self.normalized_values();
@@ -384,12 +396,12 @@ impl<T: Context> Analyze<T> for SpatialDistribution {
         Ok(())
     }
 
-    fn to_yaml(&self) -> Option<serde_yml::Value> {
-        if self.num_samples == 0 {
+    fn results(&self) -> Option<serde_yml::Value> {
+        if self.sampling.num_samples() == 0 {
             return None;
         }
         let mut map = serde_yml::Mapping::new();
-        map.try_insert("num_samples", self.num_samples)?;
+        map.try_insert("num_samples", self.sampling.num_samples())?;
         map.try_insert("grid", self.grid.dims())?;
         map.try_insert("resolution", self.grid.spacing())?;
         map.try_insert("bulk_normalize", self.scale == OutputScale::RelativeBulk)?;
@@ -570,7 +582,7 @@ frequency: !Every 1
         .unwrap();
         builder.apply_output_dir(tmp.path()).unwrap();
         let mut sdf = builder.build(&context).unwrap();
-        sdf.perform_sample(&context, 0, 1.0).unwrap();
+        Analyze::<Backend>::sample_now(&mut sdf, &context, 0, 1.0).unwrap();
 
         let idx_direct = sdf.grid.index_of(&Point::new(2.0, 0.0, 0.0)).unwrap();
         assert_relative_eq!(sdf.counts[idx_direct], 1.0);
@@ -596,7 +608,7 @@ frequency: !Every 1
         )
         .unwrap();
         let mut sdf = builder.build(&context).unwrap();
-        sdf.perform_sample(&context, 0, 1.0).unwrap();
+        Analyze::<Backend>::sample_now(&mut sdf, &context, 0, 1.0).unwrap();
 
         let body =
             frame::to_body_frame(&Point::new(2.0, 0.0, 0.0), context.groups()[0].quaternion());
@@ -621,7 +633,7 @@ frequency: !Every 1
         )
         .unwrap();
         let mut sdf = builder.build(&context).unwrap();
-        sdf.perform_sample(&context, 0, 1.0).unwrap();
+        Analyze::<Backend>::sample_now(&mut sdf, &context, 0, 1.0).unwrap();
         assert_relative_eq!(sdf.counts.iter().sum::<f64>(), 2.0);
     }
 
@@ -640,7 +652,7 @@ frequency: !Every 1
         )
         .unwrap();
         let mut sdf = builder.build(&context).unwrap();
-        sdf.perform_sample(&context, 0, 1.0).unwrap();
+        Analyze::<Backend>::sample_now(&mut sdf, &context, 0, 1.0).unwrap();
 
         let cl_id = context
             .topology_ref()
@@ -649,7 +661,7 @@ frequency: !Every 1
             .position(|kind| kind.name() == "Cl")
             .unwrap();
         context.set_atom_kind(2, cl_id);
-        sdf.perform_sample(&context, 1, 1.0).unwrap();
+        Analyze::<Backend>::sample_now(&mut sdf, &context, 1, 1.0).unwrap();
 
         assert_relative_eq!(sdf.counts.iter().sum::<f64>(), 3.0);
     }
@@ -683,7 +695,7 @@ frequency: !Every 1
         .unwrap();
         builder.apply_output_dir(tmp.path()).unwrap();
         let mut sdf = builder.build(&context).unwrap();
-        sdf.perform_sample(&context, 0, 1.0).unwrap();
+        Analyze::<Backend>::sample_now(&mut sdf, &context, 0, 1.0).unwrap();
         Analyze::<Backend>::write_to_disk(&mut sdf).unwrap();
 
         let structure = io::read_structure(&tmp.path().join("reference.xyz")).unwrap();
@@ -697,17 +709,16 @@ frequency: !Every 1
     #[test]
     fn bulk_normalized_uniform_counts_are_one() {
         let mut sdf = SpatialDistribution {
-            reference: Selection::parse("molecule REF").unwrap(),
-            selection: Selection::parse("atomtype Na").unwrap(),
+            reference: CachedSelection::groups(Selection::parse("molecule REF").unwrap()),
+            selection: CachedSelection::atoms(Selection::parse("atomtype Na").unwrap()),
             file: PathBuf::from("spatial.dx"),
             reference_structure: None,
             grid: Grid::from_points(&[Point::new(0.25, 0.25, 0.25)], 1.0, 0.25).unwrap(),
             counts: vec![0.0; 1],
             normalization: Normalization::default(),
-            num_samples: 1,
             scale: OutputScale::RelativeBulk,
             exclude_reference: true,
-            frequency: Frequency::Every(1),
+            sampling: Sampling::new(Frequency::Every(1)),
         };
         sdf.normalization
             .observe_reference(1.0, 8, Some(8.0), OutputScale::RelativeBulk)

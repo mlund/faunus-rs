@@ -103,7 +103,7 @@ impl SasaEnergy {
         match group_change {
             GroupChange::PartialUpdate(relative_indices) => {
                 let offset = ranges[k].start;
-                out.extend(relative_indices.iter().map(|&i| offset + i));
+                out.extend(relative_indices.iter().map(|i| offset + i.get()));
             }
             _ => out.extend(ranges[k].clone()),
         }

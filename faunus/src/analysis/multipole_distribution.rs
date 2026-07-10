@@ -25,10 +25,10 @@
 //! Ported from the C++ Faunus `MultipoleDistribution` (Malmö 2014). Energies are reported in
 //! **kJ/mol** (C++ reports kT/λ_B); output is a CSV table.
 
-use super::{Analyze, Frequency};
+use super::{Analyze, Frequency, Sampling};
 use crate::auxiliary::{ColumnFormat, ColumnWriter, MappingExt, WeightedMean};
 use crate::cell::{BoundaryConditions, Shape};
-use crate::selection::{CachedSelection, Selection};
+use crate::selection::{CachedSelection, Groups, Selection};
 use crate::{Context, Point};
 use anyhow::Result;
 use derive_more::Debug;
@@ -203,10 +203,9 @@ impl MultipoleDistributionBuilder {
             energy_scale,
             same_selection,
             bins: BTreeMap::new(),
-            num_samples: 0,
             ref_count_sum: 0.0,
             output_file: self.file.clone(),
-            frequency: self.frequency,
+            sampling: Sampling::new(self.frequency),
         })
     }
 }
@@ -325,20 +324,20 @@ struct Row {
 #[derive(Debug)]
 pub struct MultipoleDistribution {
     #[debug(skip)]
-    selections: (CachedSelection, CachedSelection),
+    selections: (CachedSelection<Groups>, CachedSelection<Groups>),
     resolution: f64,
     max_r: f64,
     bjerrum_length: f64,
     energy_scale: f64,
     same_selection: bool,
     bins: BTreeMap<i64, PairData>,
-    num_samples: usize,
     /// Σ (number of reference/first-selection groups) × weight, over frames — the Kirkwood
     /// normalization N_ref.
     ref_count_sum: f64,
     #[debug(skip)]
     output_file: PathBuf,
-    frequency: Frequency,
+    /// Frequency and frame count, owned by the framework.
+    sampling: Sampling,
 }
 
 /// Mean of a per-bin accumulator, or 0 when the accumulator is empty (correlations are only added
@@ -412,26 +411,28 @@ impl crate::Info for MultipoleDistribution {
 }
 
 impl<T: Context> Analyze<T> for MultipoleDistribution {
-    fn frequency(&self) -> Frequency {
-        self.frequency
+    fn sampling(&self) -> &Sampling {
+        &self.sampling
     }
-    fn set_frequency(&mut self, freq: Frequency) {
-        self.frequency = freq;
+    fn sampling_mut(&mut self) -> &mut Sampling {
+        &mut self.sampling
     }
 
     fn perform_sample(&mut self, context: &T, _step: usize, weight: f64) -> Result<()> {
-        let g1: Vec<usize> = self.selections.0.resolve(context).to_vec();
+        let g1 = self.selections.0.resolve(context).to_vec();
         let moments1: Vec<(usize, GroupMoments)> = g1
             .iter()
-            .filter_map(|&gi| Some((gi, GroupMoments::from_group(gi, context)?)))
+            .filter_map(|&gi| Some((gi.get(), GroupMoments::from_group(gi.get(), context)?)))
             .collect();
         let moments2: Option<Vec<(usize, GroupMoments)>> = if self.same_selection {
             None
         } else {
-            let g2: Vec<usize> = self.selections.1.resolve(context).to_vec();
+            let g2 = self.selections.1.resolve(context).to_vec();
             Some(
                 g2.iter()
-                    .filter_map(|&gi| Some((gi, GroupMoments::from_group(gi, context)?)))
+                    .filter_map(|&gi| {
+                        Some((gi.get(), GroupMoments::from_group(gi.get(), context)?))
+                    })
                     .collect(),
             )
         };
@@ -506,16 +507,11 @@ impl<T: Context> Analyze<T> for MultipoleDistribution {
                 }
             }
         }
-        self.num_samples += 1;
         Ok(())
     }
 
-    fn num_samples(&self) -> usize {
-        self.num_samples
-    }
-
     fn write_to_disk(&mut self) -> Result<()> {
-        if self.num_samples == 0 {
+        if self.sampling.num_samples() == 0 {
             return Ok(());
         }
         let mut writer = ColumnWriter::open(
@@ -557,12 +553,12 @@ impl<T: Context> Analyze<T> for MultipoleDistribution {
         Ok(())
     }
 
-    fn to_yaml(&self) -> Option<serde_yml::Value> {
-        if self.num_samples == 0 {
+    fn results(&self) -> Option<serde_yml::Value> {
+        if self.sampling.num_samples() == 0 {
             return None;
         }
         let mut map = serde_yml::Mapping::new();
-        map.try_insert("num_samples", self.num_samples)?;
+        map.try_insert("num_samples", self.sampling.num_samples())?;
         map.try_insert("num_bins", self.bins.len())?;
         map.try_insert("bjerrum_length/Å", self.bjerrum_length)?;
         if let Some(last) = self.rows().last() {
@@ -993,10 +989,9 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
             energy_scale: 1.0,
             same_selection: true,
             bins,
-            num_samples: 1,
             ref_count_sum: 4.0,
             output_file: "x.csv".into(),
-            frequency: Frequency::Every(1),
+            sampling: Sampling::new(Frequency::Every(1)),
         };
         let rows = analysis.rows();
         // Self case stores unordered pairs, so Σ_{i≠j} = 2·Σ_{i<j}: g_K = 1 + 2·cumulative/N_ref.
@@ -1021,10 +1016,9 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
             energy_scale: 1.0,
             same_selection: false,
             bins,
-            num_samples: 1,
             ref_count_sum: 2.0,
             output_file: "x.csv".into(),
-            frequency: Frequency::Every(1),
+            sampling: Sampling::new(Frequency::Every(1)),
         };
         // Cross case: bare cumulative, no +1.
         assert_relative_eq!(analysis.rows()[0].kirkwood, 0.5);

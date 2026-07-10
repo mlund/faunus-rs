@@ -16,9 +16,9 @@ use super::preferential::PreferentialSampling;
 use super::{find_molecule_id, random_atom, random_group, Bias};
 use crate::group::*;
 use crate::montecarlo::NewOld;
-use crate::propagate::{tagged_yaml, Displacement, MoveProposal, MoveTarget, ProposedMove};
-use crate::transform::{random_displacement, random_unit_vector, Transform};
-use crate::{Change, Context, GroupChange};
+use crate::propagate::{tagged_yaml, MoveProposal, ProposedMove};
+use crate::transform::{random_displacement, random_unit_vector};
+use crate::{Change, Context};
 
 use rand::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -98,12 +98,7 @@ impl<T: Context> MoveProposal<T> for TranslateMolecule {
         let displacement = self
             .directions
             .project(random_unit_vector(rng) * random_displacement(rng, self.max_displacement));
-        Some(ProposedMove {
-            change: Change::SingleGroup(group_index, GroupChange::RigidBody),
-            displacement: Displacement::Distance(displacement),
-            transform: Transform::Translate(displacement),
-            target: MoveTarget::Group(group_index),
-        })
+        Some(ProposedMove::translate_group(group_index, displacement))
     }
 
     fn to_yaml(&self) -> Option<serde_yml::Value> {
@@ -332,19 +327,16 @@ impl<T: Context> MoveProposal<T> for TranslateAtom {
             pref.compute_bias(&old_pos, &new_pos, context);
         }
 
+        let absolute_atom = AbsIndex::new(absolute_atom);
         let relative_atom = context.groups()[group]
-            .to_relative_index(absolute_atom)
+            .to_relative(absolute_atom)
             .expect("Atom should be part of the group.");
 
-        Some(ProposedMove {
-            change: Change::SingleGroup(group, GroupChange::PartialUpdate(vec![relative_atom])),
-            displacement: Displacement::Distance(displacement),
-            transform: Transform::PartialTranslate(
-                displacement,
-                ParticleSelection::AbsIndex(vec![absolute_atom]),
-            ),
-            target: MoveTarget::Group(group),
-        })
+        Some(ProposedMove::translate_atoms(
+            group,
+            vec![relative_atom],
+            displacement,
+        ))
     }
 
     fn bias(&self, _change: &Change, _energies: &NewOld<f64>) -> Bias {
@@ -361,6 +353,7 @@ impl<T: Context> MoveProposal<T> for TranslateAtom {
 
 #[cfg(test)]
 mod tests {
+    use crate::{Change, GroupChange};
 
     use std::path::Path;
 
@@ -452,12 +445,18 @@ mod tests {
         let expected_indices = [2, 2, 1, 2, 1, 2, 1, 1, 1, 2];
 
         for i in 0..10 {
-            let change = move1.propose_move(&context, &mut seedable).unwrap().change;
+            let change = move1
+                .propose_move(&context, &mut seedable)
+                .unwrap()
+                .change()
+                .clone();
             match change {
                 Change::SingleGroup(group, group_change) => {
                     assert_eq!(group, expected_groups[i]);
                     match group_change {
-                        GroupChange::PartialUpdate(x) => assert_eq!(x[0], expected_indices[i]),
+                        GroupChange::PartialUpdate(x) => {
+                            assert_eq!(x[0].get(), expected_indices[i])
+                        }
                         _ => panic!("Invalid Group Change."),
                     }
                 }
@@ -473,12 +472,18 @@ mod tests {
         let expected_indices = [2, 4, 1, 2, 3, 2, 0, 2, 5, 2];
 
         for i in 0..10 {
-            let change = move2.propose_move(&context, &mut seedable).unwrap().change;
+            let change = move2
+                .propose_move(&context, &mut seedable)
+                .unwrap()
+                .change()
+                .clone();
             match change {
                 Change::SingleGroup(group, group_change) => {
                     assert_eq!(group, expected_groups[i]);
                     match group_change {
-                        GroupChange::PartialUpdate(x) => assert_eq!(x[0], expected_indices[i]),
+                        GroupChange::PartialUpdate(x) => {
+                            assert_eq!(x[0].get(), expected_indices[i])
+                        }
                         _ => panic!("Invalid Group Change."),
                     }
                 }
@@ -494,12 +499,18 @@ mod tests {
         let expected_indices = [0, 5, 4, 5, 0, 0, 5, 5, 4, 5];
 
         for i in 0..10 {
-            let change = move3.propose_move(&context, &mut seedable).unwrap().change;
+            let change = move3
+                .propose_move(&context, &mut seedable)
+                .unwrap()
+                .change()
+                .clone();
             match change {
                 Change::SingleGroup(group, group_change) => {
                     assert_eq!(group, expected_groups[i]);
                     match group_change {
-                        GroupChange::PartialUpdate(x) => assert_eq!(x[0], expected_indices[i]),
+                        GroupChange::PartialUpdate(x) => {
+                            assert_eq!(x[0].get(), expected_indices[i])
+                        }
                         _ => panic!("Invalid Group Change."),
                     }
                 }
@@ -519,12 +530,18 @@ mod tests {
         let expected_groups = [1, 1, 60, 61, 2, 60, 2, 2, 2, 60];
         let expected_indices = [3, 3, 1, 3, 2, 2, 3, 2, 2, 3];
         for i in 0..10 {
-            let change = move4.propose_move(&context, &mut seedable).unwrap().change;
+            let change = move4
+                .propose_move(&context, &mut seedable)
+                .unwrap()
+                .change()
+                .clone();
             match change {
                 Change::SingleGroup(group, group_change) => {
                     assert_eq!(group, expected_groups[i]);
                     match group_change {
-                        GroupChange::PartialUpdate(x) => assert_eq!(x[0], expected_indices[i]),
+                        GroupChange::PartialUpdate(x) => {
+                            assert_eq!(x[0].get(), expected_indices[i])
+                        }
                         _ => panic!("Invalid Group Change."),
                     }
                 }

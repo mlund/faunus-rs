@@ -7,13 +7,12 @@
 //! balance, consistent with ESPResSo's reaction ensemble implementation.
 
 use crate::chemistry::reaction::{Direction, Participant, Reaction};
-use crate::group::GroupSize;
+use crate::group::{AbsIndex, GroupSize, RelIndex};
 use crate::montecarlo::{entropy_bias, MoveStatistics, NewOld};
 use crate::propagate::{
-    default_repeat, default_weight, tagged_yaml, Displacement, MoveProposal, MoveTarget,
-    ProposedMove,
+    default_repeat, default_weight, tagged_yaml, Displacement, MoveProposal, ProposedMove,
 };
-use crate::transform::{SpeciationAction, Transform};
+use crate::transform::SpeciationAction;
 use crate::{cell::Shape, Change, Context, GroupChange};
 use rand::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -503,8 +502,8 @@ impl SpeciationMove {
             // so the energy code can distinguish pre- vs. post-transform state
             // (`groups[gi].len() < n_old` means post) — required because the
             // swap leaves a *different* atom at slot `rel` in the new state.
-            let rel = rng.gen_range(0..n_old);
-            let abs = context.groups()[gi].to_absolute_index(rel).unwrap();
+            let rel = RelIndex::new(rng.gen_range(0..n_old));
+            let abs = context.groups()[gi].to_absolute(rel).unwrap().get();
             // Reservoirs have zero entropy bias (solid activity = 1; C++ `implicit` convention)
             let bias = if molecule.is_reservoir() {
                 0.0
@@ -564,7 +563,7 @@ impl SpeciationMove {
                 },
                 (
                     gi,
-                    GroupChange::ResizePartial(GroupSize::Expand(1), vec![n_old]),
+                    GroupChange::ResizePartial(GroupSize::Expand(1), vec![RelIndex::new(n_old)]),
                 ),
                 bias,
             ))
@@ -703,13 +702,19 @@ impl SpeciationMove {
         // N_from / (N_to + 1) for detailed balance (ESPResSo convention)
         let ln_bias = (n_from as f64).ln() - ((n_to + 1) as f64).ln();
 
+        // `SwapAtomKind` addresses the global particle array, but every index-carrying
+        // `GroupChange` is group-relative — `energy/ewald.rs` reconstructs the global index as
+        // `group.start() + rel`. Emitting the absolute index here would point Ewald at a different
+        // particle for any group that does not start at 0.
+        let rel = context.groups()[gi].to_relative(AbsIndex::new(abs)).ok()?;
+
         Some((
             SpeciationAction::SwapAtomKind {
                 group_index: gi,
                 abs_index: abs,
                 new_atom_id: to_id,
             },
-            (gi, GroupChange::UpdateIdentity(vec![abs])),
+            (gi, GroupChange::UpdateIdentity(vec![rel])),
             ln_bias,
         ))
     }
@@ -825,12 +830,7 @@ impl<T: Context> MoveProposal<T> for SpeciationMove {
         self.trial_ln_bias = Some(ln_bias);
         self.trial_reaction_index = Some(reaction_index);
 
-        Some(ProposedMove {
-            change: Change::Groups(group_changes),
-            displacement: Displacement::None,
-            transform: Transform::Speciation(actions),
-            target: MoveTarget::System,
-        })
+        Some(ProposedMove::speciation(actions, group_changes))
     }
 
     fn bias(&self, _change: &Change, _energies: &NewOld<f64>) -> crate::montecarlo::Bias {
@@ -885,6 +885,7 @@ mod tests {
     use crate::backend::Backend;
     use crate::group::GroupCollection;
     use crate::propagate::MoveProposal;
+    use crate::Change;
     use crate::WithCell;
     use float_cmp::assert_approx_eq;
 
@@ -1149,8 +1150,14 @@ mod tests {
         // Try multiple times since direction is random and might fail
         for _ in 0..20 {
             if let Some(proposed) = mv.propose_move(&context, &mut rng) {
-                assert!(matches!(proposed.target, MoveTarget::System));
-                assert!(matches!(proposed.transform, Transform::Speciation(_)));
+                assert!(matches!(
+                    proposed.target(),
+                    crate::propagate::MoveTarget::System
+                ));
+                assert!(matches!(
+                    proposed.transform(),
+                    crate::transform::Transform::Speciation(_)
+                ));
                 assert!(mv.trial_ln_bias.is_some());
                 return;
             }
@@ -1181,7 +1188,7 @@ mod tests {
         for _ in 0..20 {
             if let Some(proposed) = mv.propose_move(&context, &mut rng) {
                 let bias =
-                    MoveProposal::<Backend>::bias(&mv, &proposed.change, &NewOld::from(0.0, 0.0));
+                    MoveProposal::<Backend>::bias(&mv, &proposed.change(), &NewOld::from(0.0, 0.0));
                 assert!(matches!(bias, crate::montecarlo::Bias::Energy(_)));
                 return;
             }

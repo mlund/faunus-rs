@@ -779,7 +779,7 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
         let mut context = backend();
         let mut by_kind = CachedSelection::atoms(Selection::parse("atomtype B").unwrap());
         let mut by_molecule = CachedSelection::atoms(Selection::parse("molecule DIMER").unwrap());
-        assert_eq!(by_kind.resolve(&context), &[1]);
+        assert_eq!(by_kind.resolve(&context), &[crate::group::AbsIndex::new(1)]);
         let molecule_atoms = by_molecule.resolve(&context).to_vec();
 
         // B → A: nothing is of kind B any more, but the molecule still holds the same atoms.
@@ -953,8 +953,10 @@ mod tests {
             if ctx.groups()[gi].is_empty() {
                 continue;
             }
-            let change_partial =
-                crate::Change::SingleGroup(gi, crate::GroupChange::PartialUpdate(vec![0]));
+            let change_partial = crate::Change::SingleGroup(
+                gi,
+                crate::GroupChange::PartialUpdate(vec![crate::group::RelIndex::new(0)]),
+            );
             let e_partial = ctx.hamiltonian().energy(&ctx, &change_partial);
             assert!(
                 e_partial.is_finite(),
@@ -1179,5 +1181,130 @@ mod tests {
         ctx.set_atom_kind(0, new_kind);
         assert_eq!(ctx.atom_kind(0), new_kind);
         assert_eq!(ctx.position(0), pos_before);
+    }
+}
+
+/// Six analyses re-resolve their selection on every sample, which is always correct but O(N).
+/// Before they are switched to a `CachedSelection`, pin the property that switch relies on: a
+/// cached selection must agree with the uncached resolver after every mutation an analysis can
+/// observe between samples.
+#[cfg(test)]
+mod cached_selection_agrees_with_uncached {
+    use super::*;
+    use crate::group::GroupSize;
+    use crate::selection::{CachedSelection, Selection};
+
+    /// Two dimers, so a group can be emptied without emptying the system.
+    const TWO_DIMERS: &str = r#"
+atoms:
+  - {name: A, mass: 3.0, charge: 0.0, sigma: 1.0}
+  - {name: B, mass: 1.0, charge: 0.0, sigma: 1.0}
+molecules:
+  - name: DIMER
+    atoms: [A, B]
+system:
+  cell: !Cuboid [20.0, 20.0, 20.0]
+  medium: {permittivity: !Vacuum, temperature: 300.0}
+  energy: {}
+  blocks:
+    - molecule: DIMER
+      N: 2
+      insert: !Manual [[0.0, 0.0, -2.0], [0.0, 0.0, 2.0], [5.0, 0.0, -2.0], [5.0, 0.0, 2.0]]
+propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
+"#;
+
+    fn backend() -> Backend {
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(tmp.path(), TWO_DIMERS).unwrap();
+        Backend::new(tmp.path(), None, &mut rand::thread_rng()).unwrap()
+    }
+
+    /// Strip the index space, so a resolved slice can be compared with the uncached `Vec<usize>`.
+    trait RawIndices {
+        fn raw(&self) -> Vec<usize>;
+    }
+    impl RawIndices for [crate::group::AbsIndex] {
+        fn raw(&self) -> Vec<usize> {
+            self.iter().map(|i| i.get()).collect()
+        }
+    }
+    impl RawIndices for [crate::group::GroupIndex] {
+        fn raw(&self) -> Vec<usize> {
+            self.iter().map(|i| i.get()).collect()
+        }
+    }
+
+    fn assert_agrees(context: &Backend, source: &str) {
+        let selection = Selection::parse(source).unwrap();
+        let mut atoms = CachedSelection::atoms(selection.clone());
+        let mut groups = CachedSelection::groups(selection.clone());
+        assert_eq!(
+            atoms.resolve(context).raw(),
+            context.resolve_atoms(&selection),
+            "atoms disagree for '{source}'"
+        );
+        assert_eq!(
+            groups.resolve(context).raw(),
+            context.resolve_groups(&selection),
+            "groups disagree for '{source}'"
+        );
+    }
+
+    /// The same cache instance must keep agreeing as the system mutates beneath it.
+    fn assert_tracks(context: &mut Backend, source: &str, mutate: impl FnOnce(&mut Backend)) {
+        let selection = Selection::parse(source).unwrap();
+        let mut atoms = CachedSelection::atoms(selection.clone());
+        let mut groups = CachedSelection::groups(selection.clone());
+        atoms.resolve(context);
+        groups.resolve(context);
+
+        mutate(context);
+
+        assert_eq!(
+            atoms.resolve(context).raw(),
+            context.resolve_atoms(&selection),
+            "cached atoms went stale for '{source}'"
+        );
+        assert_eq!(
+            groups.resolve(context).raw(),
+            context.resolve_groups(&selection),
+            "cached groups went stale for '{source}'"
+        );
+    }
+
+    #[test]
+    fn agree_on_an_untouched_system() {
+        let context = backend();
+        for source in ["all", "atomtype A", "molecule DIMER", "element O"] {
+            assert_agrees(&context, source);
+        }
+    }
+
+    #[test]
+    fn track_an_atom_kind_swap() {
+        for source in ["all", "atomtype A", "atomtype B", "molecule DIMER"] {
+            let mut context = backend();
+            assert_tracks(&mut context, source, |c| c.set_atom_kind(1, 0));
+        }
+    }
+
+    #[test]
+    fn track_a_grand_canonical_resize() {
+        for source in ["all", "atomtype A", "molecule DIMER"] {
+            let mut context = backend();
+            assert_tracks(&mut context, source, |c| {
+                c.resize_group(1, GroupSize::Empty).unwrap();
+            });
+        }
+    }
+
+    #[test]
+    fn track_a_partial_resize() {
+        for source in ["all", "atomtype B", "molecule DIMER"] {
+            let mut context = backend();
+            assert_tracks(&mut context, source, |c| {
+                c.resize_group(0, GroupSize::Partial(1)).unwrap();
+            });
+        }
     }
 }

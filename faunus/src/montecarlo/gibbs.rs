@@ -9,7 +9,7 @@ use super::speciation::random_point_inside;
 use super::{MarkovChain, MoveStatistics};
 use crate::cell::{Shape, VolumeScalePolicy};
 use crate::energy::EnergyChange;
-use crate::group::GroupSize;
+use crate::group::{GroupSize, RelIndex};
 use crate::propagate::tagged_yaml;
 use crate::transform::{SpeciationAction, Transform};
 use crate::{Change, Context};
@@ -345,8 +345,8 @@ impl GibbsParticleTransfer {
         tgt.save_system_backup();
 
         // Pick random active atom in source, random position in target
-        let rel_idx = rng.gen_range(0..n_src);
-        let abs_idx = src.groups()[src_gi].to_absolute_index(rel_idx)?;
+        let rel_idx = RelIndex::new(rng.gen_range(0..n_src));
+        let abs_idx = src.groups()[src_gi].to_absolute(rel_idx)?.get();
         let position = random_point_inside(tgt.cell(), rng);
 
         Transform::Speciation(vec![SpeciationAction::DeactivateAtom {

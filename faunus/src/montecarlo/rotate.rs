@@ -13,9 +13,9 @@
 // limitations under the license.
 
 use crate::montecarlo;
-use crate::propagate::{tagged_yaml, Displacement, MoveProposal, MoveTarget, ProposedMove};
-use crate::transform::{random_quaternion, Transform};
-use crate::{Change, Context, GroupChange};
+use crate::propagate::{tagged_yaml, MoveProposal, ProposedMove};
+use crate::transform::random_quaternion;
+use crate::Context;
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
 
@@ -56,12 +56,7 @@ impl<T: Context> MoveProposal<T> for RotateMolecule {
     fn propose_move(&mut self, context: &T, rng: &mut dyn RngCore) -> Option<ProposedMove> {
         let group_index = montecarlo::random_group(context, rng, self.molecule_id)?;
         let (quaternion, angle) = random_quaternion(rng, self.max_displacement);
-        Some(ProposedMove {
-            change: Change::SingleGroup(group_index, GroupChange::RigidBody),
-            displacement: Displacement::Angle(angle),
-            transform: Transform::Rotate(quaternion),
-            target: MoveTarget::Group(group_index),
-        })
+        Some(ProposedMove::rotate_group(group_index, quaternion, angle))
     }
 
     fn to_yaml(&self) -> Option<serde_yml::Value> {

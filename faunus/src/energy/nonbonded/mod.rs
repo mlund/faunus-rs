@@ -734,8 +734,8 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
             GroupChange::PartialUpdate(indices) | GroupChange::ResizePartial(_, indices) => indices
                 .iter()
                 .map(|&rel_idx| {
-                    group.to_absolute_index(rel_idx).map_or(0.0, |abs_i| {
-                        self.particle_energy_all_soa(soa, groups, abs_i, group)
+                    group.to_absolute(rel_idx).map_or(0.0, |abs_i| {
+                        self.particle_energy_all_soa(soa, groups, abs_i.get(), group)
                     })
                 })
                 .sum(),
@@ -744,7 +744,7 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
                 if group.len() != *n_old {
                     return 0.0;
                 }
-                let abs_i = group.start() + rel;
+                let abs_i = group.start() + rel.get();
                 self.particle_energy_all_soa(soa, groups, abs_i, group)
             }
             GroupChange::None => 0.0,
@@ -813,9 +813,9 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
                     let mut affected_abs = [0usize; 8];
                     let mut n_affected = 0;
                     for &r in rel {
-                        if let Ok(abs) = group.to_absolute_index(r) {
+                        if let Ok(abs) = group.to_absolute(r) {
                             debug_assert!(n_affected < affected_abs.len());
-                            affected_abs[n_affected] = abs;
+                            affected_abs[n_affected] = abs.get();
                             n_affected += 1;
                         }
                     }
@@ -856,7 +856,7 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
                     if group.len() != *n_old {
                         continue;
                     }
-                    let abs_i = group.start() + rel;
+                    let abs_i = group.start() + rel.get();
                     for gk in unchanged_groups() {
                         if self.is_molecule_pair_excluded(group.molecule(), gk.molecule()) {
                             continue;

@@ -22,11 +22,11 @@
 //! An insertion or deletion therefore only changes the count of the configuration it occurs in,
 //! leaving the mean equal to the grand-canonical ⟨N(z)⟩ when the particle number fluctuates.
 
-use super::{Analyze, Frequency};
+use super::{Analyze, Frequency, Sampling};
 use crate::auxiliary::{BlockAverage, BlockSummary, ColumnWriter, MappingExt};
 use crate::cell::Shape;
-use crate::group::GroupSize;
-use crate::selection::{CachedSelection, Selection};
+use crate::selection::{first_unsupported_group, ComSelection, Selection};
+use crate::topology::MoleculeKind;
 use crate::z_grid::ZGrid;
 use crate::Context;
 use anyhow::Result;
@@ -73,39 +73,24 @@ impl DensityProfileBuilder {
         }
         let n_bins = grid.n_bins();
         Ok(DensityProfile {
-            selection: CachedSelection::for_com(self.selection.clone(), self.use_com),
+            selection: ComSelection::new(self.selection.clone(), self.use_com),
             grid,
-            use_com: self.use_com,
             counts: new_accumulators(n_bins),
             masses: new_accumulators(n_bins),
             total_count: BlockAverage::new(),
             warned_volume_change: false,
-            num_samples: 0,
             output_file: self.file.clone(),
-            frequency: self.frequency,
+            sampling: Sampling::new(self.frequency),
         })
     }
 
     /// Reject a `use_com` selection that can match a group without a mass centre.
-    ///
-    /// A selection matches only the atoms that are present, so a species that starts out empty —
-    /// a grand-canonical reservoir, say — would slip past a check made against the initial
-    /// state and abort the run once its first particle appears. Testing against a fully
-    /// populated copy of the groups catches it now instead.
     fn reject_selections_without_mass_center(&self, context: &impl Context) -> Result<()> {
-        let mut groups = context.groups().to_vec();
-        for group in &mut groups {
-            group.resize(GroupSize::Full)?;
-        }
-        let topology = context.topology();
-        let matches_atomic_group = self
-            .selection
-            .resolve_groups(&topology, &groups, &|i| context.atom_kind(i))
-            .into_iter()
-            .any(|index| !topology.moleculekinds()[groups[index].molecule()].has_com());
-        if matches_atomic_group {
+        if let Some(group) =
+            first_unsupported_group(context, &self.selection, MoleculeKind::has_com)?
+        {
             anyhow::bail!(
-                "DensityProfile: selection '{}' matches a group without a center of mass \
+                "DensityProfile: selection '{}' matches group {group} without a center of mass \
                  (atomic groups are not supported with use_com)",
                 self.selection.source()
             );
@@ -122,11 +107,9 @@ fn new_accumulators(n: usize) -> Vec<BlockAverage> {
 #[derive(Debug)]
 pub struct DensityProfile {
     /// Atoms, or molecules when `use_com` is set, whose density is profiled.
-    selection: CachedSelection,
+    selection: ComSelection,
     /// Slab layout along z.
     grid: ZGrid,
-    /// Bin molecular mass centres rather than individual atoms.
-    use_com: bool,
     /// Particles per slab: mean and error across samples.
     counts: Vec<BlockAverage>,
     /// Mass per slab (g/mol): mean and error across samples.
@@ -134,10 +117,10 @@ pub struct DensityProfile {
     /// Total number of selected particles, reported as a consistency check.
     total_count: BlockAverage,
     warned_volume_change: bool,
-    num_samples: usize,
     #[debug(skip)]
     output_file: PathBuf,
-    frequency: Frequency,
+    /// Frequency and frame count, owned by the framework.
+    sampling: Sampling,
 }
 
 impl DensityProfile {
@@ -151,19 +134,22 @@ impl DensityProfile {
             counts[bin] += 1.0;
             masses[bin] += mass;
         };
-        let indices = self.selection.resolve(context).to_vec();
-        if self.use_com {
-            for group_index in indices {
-                let group = &context.groups()[group_index];
-                let mass_center = group.mass_center().ok_or_else(|| {
-                    anyhow::anyhow!("DensityProfile: group {group_index} has no center of mass")
-                })?;
-                let mass = group.iter_active().map(|i| context.atom_mass(i)).sum();
-                add(mass_center.z, mass);
+        match &mut self.selection {
+            ComSelection::Groups(cache) => {
+                for &group_index in cache.resolve(context) {
+                    let group = context.group(group_index);
+                    let mass_center = group.mass_center().ok_or_else(|| {
+                        anyhow::anyhow!("DensityProfile: group {group_index} has no center of mass")
+                    })?;
+                    let mass = group.iter_active().map(|i| context.atom_mass(i)).sum();
+                    add(mass_center.z, mass);
+                }
             }
-        } else {
-            for index in indices {
-                add(context.position(index).z, context.atom_mass(index));
+            ComSelection::Atoms(cache) => {
+                for &index in cache.resolve(context) {
+                    let index = index.get();
+                    add(context.position(index).z, context.atom_mass(index));
+                }
             }
         }
         Ok((counts, masses))
@@ -188,11 +174,11 @@ impl DensityProfile {
     /// Build the YAML results mapping (inherent so it is callable without choosing a
     /// `Context` type; the [`Analyze`] trait method delegates here).
     fn report(&self) -> Option<serde_yml::Value> {
-        if self.num_samples == 0 {
+        if self.sampling.num_samples() == 0 {
             return None;
         }
         let mut map = serde_yml::Mapping::new();
-        map.try_insert("num_samples", self.num_samples)?;
+        map.try_insert("num_samples", self.sampling.num_samples())?;
         map.try_insert("num_bins", self.grid.n_bins())?;
         map.try_insert("bin_width/Å", self.grid.bin_width())?;
         map.try_insert("area/Å²", self.grid.area())?;
@@ -261,11 +247,11 @@ impl crate::Info for DensityProfile {
 }
 
 impl<T: Context> Analyze<T> for DensityProfile {
-    fn frequency(&self) -> Frequency {
-        self.frequency
+    fn sampling(&self) -> &Sampling {
+        &self.sampling
     }
-    fn set_frequency(&mut self, freq: Frequency) {
-        self.frequency = freq;
+    fn sampling_mut(&mut self) -> &mut Sampling {
+        &mut self.sampling
     }
 
     fn perform_sample(&mut self, context: &T, _step: usize, _weight: f64) -> Result<()> {
@@ -278,39 +264,18 @@ impl<T: Context> Analyze<T> for DensityProfile {
         for (accumulator, &mass) in self.masses.iter_mut().zip(&masses) {
             accumulator.add(mass);
         }
-        self.num_samples += 1;
         Ok(())
     }
 
-    fn num_samples(&self) -> usize {
-        self.num_samples
-    }
-
     fn write_to_disk(&mut self) -> Result<()> {
-        if self.num_samples == 0 {
+        if self.sampling.num_samples() == 0 {
             return Ok(());
         }
         self.write_profile()
     }
 
-    fn to_yaml(&self) -> Option<serde_yml::Value> {
+    fn results(&self) -> Option<serde_yml::Value> {
         self.report()
-    }
-}
-
-impl<T: Context> From<DensityProfile> for Box<dyn Analyze<T>> {
-    fn from(analysis: DensityProfile) -> Self {
-        Box::new(analysis)
-    }
-}
-
-impl std::fmt::Display for DensityProfile {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(f, "Density Profile:")?;
-        writeln!(f, "  Selection: {}", self.selection.selection())?;
-        writeln!(f, "  Samples:   {}", self.num_samples)?;
-        writeln!(f, "  Bins:      {}", self.grid.n_bins())?;
-        Ok(())
     }
 }
 

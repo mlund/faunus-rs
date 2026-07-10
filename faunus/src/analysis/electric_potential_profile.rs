@@ -25,10 +25,10 @@
 //! <https://doi.org/10/dhb9mj>, specialised to a screened electrolyte (no infinite-slab
 //! correction is needed because screening makes the lateral integral convergent).
 
-use super::{Analyze, Frequency};
+use super::{Analyze, Frequency, Sampling};
 use crate::auxiliary::{BlockAverage, BlockSummary, ColumnWriter, MappingExt};
 use crate::energy::slab_potential::{SlabGrid, SlabKernel};
-use crate::selection::Selection;
+use crate::selection::{Atoms, CachedSelection, Selection};
 use crate::Context;
 use anyhow::Result;
 use derive_more::Debug;
@@ -116,16 +116,15 @@ impl ElectricPotentialProfileBuilder {
         let n_bins = grid.n_bins();
 
         Ok(ElectricPotentialProfile {
-            selection: self.selection.clone(),
+            selection: CachedSelection::atoms(self.selection.clone()),
             grid,
             millivolt_per_kt: kt_per_charge_in_millivolt(medium.temperature()),
             bjerrum_length,
             debye_length,
             slab_charge_density: new_accumulators(n_bins),
             potential: new_accumulators(n_bins),
-            num_samples: 0,
             output_file: self.file.clone(),
-            frequency: self.frequency,
+            sampling: Sampling::new(self.frequency),
         })
     }
 }
@@ -143,7 +142,7 @@ fn new_accumulators(n: usize) -> Vec<BlockAverage> {
 #[derive(Debug)]
 pub struct ElectricPotentialProfile {
     /// Atoms whose charge contributes to the profile.
-    selection: Selection,
+    selection: CachedSelection<Atoms>,
     /// z-grid and screened kernel doing the convolution.
     grid: SlabGrid,
     /// Conversion factor from potential in kT/e to millivolts.
@@ -156,11 +155,10 @@ pub struct ElectricPotentialProfile {
     slab_charge_density: Vec<BlockAverage>,
     /// Per-slab potential φ(z) (kT/e): mean and error across samples.
     potential: Vec<BlockAverage>,
-    /// Number of samples taken.
-    num_samples: usize,
     #[debug(skip)]
     output_file: PathBuf,
-    frequency: Frequency,
+    /// Frequency and frame count, owned by the framework.
+    sampling: Sampling,
 }
 
 /// Centred finite-difference derivative of `values` at index `i`, one-sided at the ends.
@@ -195,7 +193,7 @@ impl ElectricPotentialProfile {
     /// Build the YAML results mapping (inherent so it is callable without choosing a
     /// `Context` type; the [`Analyze`] trait method delegates here).
     fn report(&self) -> Option<serde_yml::Value> {
-        if self.num_samples == 0 {
+        if self.sampling.num_samples() == 0 {
             return None;
         }
         let n = self.grid.n_bins();
@@ -203,7 +201,7 @@ impl ElectricPotentialProfile {
         let upper = self.potential_millivolt(n - 1);
         // The midplane (z=0) falls between the two central bins when n_bins is
         // even, so average them; a single central bin is exact when odd.
-        let midplane = if n % 2 == 0 {
+        let midplane = if n.is_multiple_of(2) {
             let below = self.potential_millivolt(n / 2 - 1);
             let above = self.potential_millivolt(n / 2);
             BlockSummary {
@@ -220,7 +218,7 @@ impl ElectricPotentialProfile {
         };
 
         let mut map = serde_yml::Mapping::new();
-        map.try_insert("num_samples", self.num_samples)?;
+        map.try_insert("num_samples", self.sampling.num_samples())?;
         map.try_insert("bjerrum_length/Å", self.bjerrum_length)?;
         if let Some(debye_length) = self.debye_length {
             map.try_insert("debye_length/Å", debye_length)?;
@@ -281,20 +279,20 @@ impl crate::Info for ElectricPotentialProfile {
 }
 
 impl<T: Context> Analyze<T> for ElectricPotentialProfile {
-    fn frequency(&self) -> Frequency {
-        self.frequency
+    fn sampling(&self) -> &Sampling {
+        &self.sampling
     }
-    fn set_frequency(&mut self, freq: Frequency) {
-        self.frequency = freq;
+    fn sampling_mut(&mut self) -> &mut Sampling {
+        &mut self.sampling
     }
 
     fn perform_sample(&mut self, context: &T, _step: usize, _weight: f64) -> Result<()> {
         // Instantaneous total charge per slab. Only currently-active atoms are resolved, so
         // a fluctuating particle number (GCMC) is handled automatically.
         let mut slab_charge = vec![0.0; self.grid.n_bins()];
-        for index in context.resolve_atoms(&self.selection) {
-            let bin = self.grid.bin_index(context.position(index).z);
-            slab_charge[bin] += context.atom_charge(index);
+        for &index in self.selection.resolve(context) {
+            let bin = self.grid.bin_index(context.position(index.get()).z);
+            slab_charge[bin] += context.atom_charge(index.get());
         }
 
         let area = self.grid.area();
@@ -312,38 +310,18 @@ impl<T: Context> Analyze<T> for ElectricPotentialProfile {
             accumulator.add(potential);
         }
 
-        self.num_samples += 1;
         Ok(())
     }
 
-    fn num_samples(&self) -> usize {
-        self.num_samples
-    }
-
     fn write_to_disk(&mut self) -> Result<()> {
-        if self.num_samples == 0 {
+        if self.sampling.num_samples() == 0 {
             return Ok(());
         }
         self.write_profile()
     }
 
-    fn to_yaml(&self) -> Option<serde_yml::Value> {
+    fn results(&self) -> Option<serde_yml::Value> {
         self.report()
-    }
-}
-
-impl<T: Context> From<ElectricPotentialProfile> for Box<dyn Analyze<T>> {
-    fn from(analysis: ElectricPotentialProfile) -> Self {
-        Box::new(analysis)
-    }
-}
-
-impl std::fmt::Display for ElectricPotentialProfile {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(f, "Electric Potential Profile:")?;
-        writeln!(f, "  Samples:  {}", self.num_samples)?;
-        writeln!(f, "  Bins:     {}", self.grid.n_bins())?;
-        Ok(())
     }
 }
 
@@ -365,16 +343,15 @@ mod tests {
         let n = grid.n_bins();
         assert_eq!(n, 10);
         ElectricPotentialProfile {
-            selection: all_atoms(),
+            selection: CachedSelection::atoms(all_atoms()),
             grid,
             millivolt_per_kt: 25.7,
             bjerrum_length: 7.0,
             debye_length: Some(10.0),
             slab_charge_density: new_accumulators(n),
             potential: new_accumulators(n),
-            num_samples: 0,
             output_file: output_file.into(),
-            frequency: Frequency::Every(1),
+            sampling: Sampling::new(Frequency::Every(1)),
         }
     }
 
@@ -408,7 +385,7 @@ mod tests {
             accumulator.add(1.0);
             accumulator.add(1.0);
         }
-        same.num_samples = 2;
+        same.sampling.set_num_samples(2);
         let yaml = same.report().unwrap();
         let error = yaml["potential_midplane/mV"]["error"].as_f64().unwrap();
         assert_eq!(error, 0.0);
@@ -419,7 +396,7 @@ mod tests {
             accumulator.add(1.0);
             accumulator.add(3.0);
         }
-        differ.num_samples = 2;
+        differ.sampling.set_num_samples(2);
         let yaml = differ.report().unwrap();
         let error = yaml["potential_midplane/mV"]["error"].as_f64().unwrap();
         assert!(error > 0.0, "error = {error}");
@@ -431,7 +408,7 @@ mod tests {
         for accumulator in &mut analysis.potential {
             accumulator.add(2.0);
         }
-        analysis.num_samples = 1;
+        analysis.sampling.set_num_samples(1);
         let yaml = analysis.report().unwrap();
         for key in [
             "potential_lower_wall/mV",
@@ -458,7 +435,7 @@ mod tests {
         for accumulator in &mut analysis.potential {
             accumulator.add(0.5);
         }
-        analysis.num_samples = 1;
+        analysis.sampling.set_num_samples(1);
         analysis.write_profile().unwrap();
 
         let contents = std::fs::read_to_string(path).unwrap();

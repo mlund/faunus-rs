@@ -46,13 +46,13 @@
 //! separate umbrella windows and combine them afterwards.
 
 use super::widom::WidomAccumulator;
-use super::{Analyze, Frequency};
+use super::{Analyze, Frequency, Sampling};
 use crate::auxiliary::{BlockAverage, BlockSummary, ColumnWriter, MappingExt};
 use crate::cell::BoundaryConditions;
 use crate::change::{Change, GroupChange};
 use crate::energy::EnergyChange;
 use crate::geometry::GyrationTensor;
-use crate::selection::{CachedSelection, Selection};
+use crate::selection::{CachedSelection, Groups, Selection};
 use crate::{Context, Point, UnitQuaternion};
 use anyhow::Result;
 use derive_more::Debug;
@@ -259,8 +259,8 @@ impl WidomRotationBuilder {
             stiffness: self
                 .stiffness
                 .then(|| std::array::from_fn(|_| BlockAverage::new())),
-            frequency: self.frequency,
-            num_samples: 0,
+            sampling: Sampling::new(self.frequency),
+            num_blocks: 0,
             stream,
         })
     }
@@ -295,7 +295,7 @@ struct TorqueProbe {
 /// Widom rotational perturbation analysis. See the module documentation.
 #[derive(Debug)]
 pub struct WidomRotation {
-    selection: CachedSelection,
+    selection: CachedSelection<Groups>,
     quaternions: Vec<UnitQuaternion>,
     vectors: Vec<VectorSpec>,
     thermal_energy: f64,
@@ -311,8 +311,11 @@ pub struct WidomRotation {
     torque: Option<TorqueProbe>,
     /// Principal librational stiffnesses (kJ/mol/rad²), ascending.
     stiffness: Option<[BlockAverage; 3]>,
-    frequency: Frequency,
-    num_samples: usize,
+    /// Frequency and frame count, owned by the framework.
+    sampling: Sampling,
+    /// Molecule scans, one per matching molecule per frame. Each is an independent block, so this
+    /// is the count behind every reported error bar.
+    num_blocks: usize,
     #[debug(skip)]
     stream: Option<ColumnWriter>,
 }
@@ -503,11 +506,6 @@ impl WidomRotation {
             accumulator.collect(energy - reference_energy, 1.0);
         }
     }
-
-    /// Mean order parameter averaged over all vectors.
-    fn mean_s2(&self) -> f64 {
-        self.mean_order.mean()
-    }
 }
 
 impl crate::Info for WidomRotation {
@@ -523,11 +521,11 @@ impl crate::Info for WidomRotation {
 }
 
 impl<T: Context> Analyze<T> for WidomRotation {
-    fn frequency(&self) -> Frequency {
-        self.frequency
+    fn sampling(&self) -> &Sampling {
+        &self.sampling
     }
-    fn set_frequency(&mut self, freq: Frequency) {
-        self.frequency = freq;
+    fn sampling_mut(&mut self) -> &mut Sampling {
+        &mut self.sampling
     }
 
     fn perform_sample(&mut self, context: &T, step: usize, _weight: f64) -> Result<()> {
@@ -537,7 +535,7 @@ impl<T: Context> Analyze<T> for WidomRotation {
         }
 
         let mut trial = context.clone();
-        for gi in groups {
+        for gi in groups.iter().map(|gi| gi.get()) {
             let indices: Vec<usize> = context.groups()[gi].iter_active().collect();
             let com = context.mass_center(&indices);
             let references = self
@@ -550,9 +548,8 @@ impl<T: Context> Analyze<T> for WidomRotation {
             let energies = self.scan_energies(&mut trial, gi, &indices, &com);
             self.accumulate(&energies, &references);
             self.accumulate_torque(&mut trial, gi, &indices, &com, reference_energy);
-            // Each molecule-scan is one independent block, so count them here to
-            // match the block count behind every reported error bar.
-            self.num_samples += 1;
+            // Each molecule-scan is one independent block.
+            self.num_blocks += 1;
         }
 
         if let Some(stream) = self.stream.as_mut() {
@@ -567,16 +564,14 @@ impl<T: Context> Analyze<T> for WidomRotation {
         Ok(())
     }
 
-    fn num_samples(&self) -> usize {
-        self.num_samples
-    }
-
-    fn to_yaml(&self) -> Option<serde_yml::Value> {
-        if self.num_samples == 0 {
+    fn results(&self) -> Option<serde_yml::Value> {
+        // A frame in which no molecule matched leaves every block empty.
+        if self.num_blocks == 0 {
             return None;
         }
         let mut map = serde_yml::Mapping::new();
-        map.try_insert("num_samples", self.num_samples)?;
+        map.try_insert("num_samples", self.sampling.num_samples())?;
+        map.try_insert("num_blocks", self.num_blocks)?;
         // Pooled log-sum-exp estimate (matches the module formula and the CSV),
         // with the block-to-block standard error.
         map.try_insert(
@@ -637,20 +632,6 @@ impl<T: Context> Analyze<T> for WidomRotation {
             );
         }
         Some(serde_yml::Value::Mapping(map))
-    }
-}
-
-impl std::fmt::Display for WidomRotation {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(f, "Widom Rotation Analysis:")?;
-        writeln!(f, "  Selection:    {}", self.selection.selection())?;
-        writeln!(f, "  Orientations: {}", self.quaternions.len())?;
-        writeln!(f, "  Vectors:      {}", self.vectors.len())?;
-        writeln!(f, "  Samples:      {}", self.num_samples)?;
-        if self.num_samples > 0 && !self.vectors.is_empty() {
-            writeln!(f, "  mean S²:      {:.4}", self.mean_s2())?;
-        }
-        Ok(())
     }
 }
 

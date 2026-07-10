@@ -19,7 +19,8 @@
 //! are available in the expression (evaluated in alphabetical order per exmex convention).
 
 use crate::change::GroupChange;
-use crate::selection::{CachedSelection, Selection};
+use crate::group::{AbsIndex, GroupIndex};
+use crate::selection::{Atoms, CachedSelection, ComSelection, Groups, Selection, Target};
 use crate::{Change, Context};
 use exmex::{Express, FlatEx, FlatExVal, Val};
 use serde::{Deserialize, Serialize};
@@ -122,74 +123,75 @@ impl CustomExternalBuilder {
         })
     }
 
-    fn cached_selection(&self) -> CachedSelection {
-        CachedSelection::for_com(self.selection.clone(), self.com)
+    fn cached_selection(&self) -> ComSelection {
+        ComSelection::new(self.selection.clone(), self.com)
     }
 }
 
-/// Return indices affected by a change that match a cached selection.
+/// A selection target `customexternal` can evaluate the potential at.
 ///
-/// Whether the indices are atoms or groups follows from how `cache` was constructed, so the two
-/// cannot disagree.
-fn affected(
+/// Lets [`affected`] filter a change against either index space without duplicating the walk over
+/// `Change::Groups`.
+trait ExternalTarget: Target {
+    /// What the selection matched, for the "matched nothing" warning.
+    const NOUN: &'static str;
+
+    /// Whether a change to `group_index` touches the selected `index`.
+    fn touched_by(index: Self::Index, group_index: usize, groups: &[crate::group::Group]) -> bool;
+}
+
+impl ExternalTarget for Atoms {
+    const NOUN: &'static str = "atoms";
+    fn touched_by(index: AbsIndex, group_index: usize, groups: &[crate::group::Group]) -> bool {
+        groups[group_index].contains(index.get())
+    }
+}
+
+impl ExternalTarget for Groups {
+    const NOUN: &'static str = "groups";
+    fn touched_by(index: GroupIndex, group_index: usize, _: &[crate::group::Group]) -> bool {
+        index.get() == group_index
+    }
+}
+
+/// Return the selected indices a change touches, in the index space the selection resolves to.
+fn affected<T: ExternalTarget>(
     change: &Change,
-    cache: &RefCell<CachedSelection>,
+    cache: &mut CachedSelection<T>,
     context: &impl Context,
     warned_empty: &std::cell::Cell<bool>,
-) -> Vec<usize> {
+) -> Vec<T::Index> {
     if matches!(change, Change::None) {
         return vec![];
     }
-    let mut cache = cache.borrow_mut();
-    let by_atoms = cache.targets_atoms();
     let (selection, selected) = cache.resolve_with_selection(context);
     if selected.is_empty() && !warned_empty.replace(true) {
-        let kind = if by_atoms { "atoms" } else { "groups" };
         log::warn!(
-            "customexternal: selection '{selection}' matched no {kind} — energy will always be zero"
+            "customexternal: selection '{selection}' matched no {} — energy will always be zero",
+            T::NOUN
         );
     }
+    let touched = |group_index: usize| {
+        let groups = context.groups();
+        selected
+            .iter()
+            .copied()
+            .filter(move |&index| T::touched_by(index, group_index, groups))
+    };
     match change {
         Change::Everything | Change::Volume(..) => selected.to_vec(),
-        Change::SingleGroup(gi, gc) => {
-            if matches!(gc, GroupChange::None) {
-                return vec![];
-            }
-            if by_atoms {
-                let group = &context.groups()[*gi];
-                selected
-                    .iter()
-                    .filter(|&&ai| group.contains(ai))
-                    .copied()
-                    .collect()
-            } else if selected.contains(gi) {
-                vec![*gi]
-            } else {
+        Change::SingleGroup(group_index, group_change) => {
+            if matches!(group_change, GroupChange::None) {
                 vec![]
-            }
-        }
-        Change::Groups(changes) => {
-            if by_atoms {
-                let groups = context.groups();
-                changes
-                    .iter()
-                    .filter(|(_, gc)| !matches!(gc, GroupChange::None))
-                    .flat_map(|(gi, _)| {
-                        let group = &groups[*gi];
-                        selected
-                            .iter()
-                            .filter(move |&&ai| group.contains(ai))
-                            .copied()
-                    })
-                    .collect()
             } else {
-                changes
-                    .iter()
-                    .filter(|(_, gc)| !matches!(gc, GroupChange::None))
-                    .filter_map(|(gi, _)| selected.contains(gi).then_some(*gi))
-                    .collect()
+                touched(*group_index).collect()
             }
         }
+        Change::Groups(changes) => changes
+            .iter()
+            .filter(|(_, group_change)| !matches!(group_change, GroupChange::None))
+            .flat_map(|(group_index, _)| touched(*group_index))
+            .collect(),
         Change::None => unreachable!(),
     }
 }
@@ -252,7 +254,7 @@ pub struct CustomExternal {
     com: bool,
     /// Owns the selection, its resolved indices, and its cache key. RefCell because energy()
     /// takes &self.
-    selection_cache: RefCell<CachedSelection>,
+    selection_cache: RefCell<ComSelection>,
     /// Guards the "matched nothing" warning, which can only be discovered once a context exists.
     warned_empty: std::cell::Cell<bool>,
 }
@@ -292,8 +294,8 @@ impl CustomExternal {
     }
 
     /// Evaluate the potential at the center of mass of a group (COM mode).
-    fn energy_for_com(&self, context: &impl Context, group_index: usize) -> f64 {
-        let group = &context.groups()[group_index];
+    fn energy_for_com(&self, context: &impl Context, group_index: GroupIndex) -> f64 {
+        let group = context.group(group_index);
         let topology = context.topology_ref();
         let atomkinds = topology.atomkinds();
         if let Some(&com) = group.mass_center() {
@@ -309,17 +311,15 @@ impl CustomExternal {
 
     /// Compute energy for a given change.
     pub fn energy(&self, context: &impl Context, change: &Change) -> f64 {
-        let indices = affected(change, &self.selection_cache, context, &self.warned_empty);
-        if self.com {
-            indices
-                .iter()
-                .map(|&gi| self.energy_for_com(context, gi))
-                .sum()
-        } else {
-            indices
-                .iter()
-                .map(|&ai| self.energy_for_atom(context, ai))
-                .sum()
+        match &mut *self.selection_cache.borrow_mut() {
+            ComSelection::Atoms(cache) => affected(change, cache, context, &self.warned_empty)
+                .into_iter()
+                .map(|atom| self.energy_for_atom(context, atom.get()))
+                .sum(),
+            ComSelection::Groups(cache) => affected(change, cache, context, &self.warned_empty)
+                .into_iter()
+                .map(|group| self.energy_for_com(context, group))
+                .sum(),
         }
     }
 

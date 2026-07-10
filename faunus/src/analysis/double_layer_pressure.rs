@@ -36,11 +36,11 @@
 //! interactions are not part of the cross-midplane stress as long as ions do not
 //! overlap the midplane.
 
-use super::{Analyze, Frequency};
+use super::{Analyze, Frequency, Sampling};
 use crate::auxiliary::{BlockAverage, ColumnWriter, MappingExt};
 use crate::cell::{BoundaryConditions, Shape};
 use crate::energy::slab_potential::square_sheet_factor;
-use crate::selection::Selection;
+use crate::selection::{Atoms, CachedSelection, Selection};
 use crate::{Context, Point};
 use anyhow::Result;
 use derive_more::Debug;
@@ -151,7 +151,7 @@ impl DoubleLayerPressureBuilder {
             .transpose()?;
 
         Ok(DoubleLayerPressure {
-            selection: self.selection.clone(),
+            selection: CachedSelection::atoms(self.selection.clone()),
             thermal_energy,
             prefactor,
             area,
@@ -165,9 +165,8 @@ impl DoubleLayerPressureBuilder {
             p_ideal: BlockAverage::new(),
             p_corr: BlockAverage::new(),
             p_osm: BlockAverage::new(),
-            num_samples: 0,
             stream,
-            frequency: self.frequency,
+            sampling: Sampling::new(self.frequency),
         })
     }
 }
@@ -176,7 +175,7 @@ impl DoubleLayerPressureBuilder {
 #[derive(Debug)]
 pub struct DoubleLayerPressure {
     /// Mobile counterion selection.
-    selection: Selection,
+    selection: CachedSelection<Atoms>,
     /// Thermal energy R*T in kJ/mol.
     thermal_energy: f64,
     /// Coulomb prefactor in kJ/mol·Å (energy of `q_i q_j / r`).
@@ -205,13 +204,12 @@ pub struct DoubleLayerPressure {
     p_corr: BlockAverage,
     /// Total osmotic pressure, kJ/mol·Å⁻³.
     p_osm: BlockAverage,
-    /// Number of samples taken.
-    num_samples: usize,
     /// Optional streaming output.
     #[debug(skip)]
     stream: Option<ColumnWriter>,
     /// Sampling frequency.
-    frequency: Frequency,
+    /// Frequency and frame count, owned by the framework.
+    sampling: Sampling,
 }
 
 /// Net `z`-force (without the Coulomb prefactor) that the lower half (`z < 0`) exerts on
@@ -344,7 +342,7 @@ impl DoubleLayerPressure {
     fn report(&self) -> Option<serde_yml::Value> {
         let fipb = self.fipb_pressure();
         let mut map = serde_yml::Mapping::new();
-        map.try_insert("num_samples", self.num_samples)?;
+        map.try_insert("num_samples", self.sampling.num_samples())?;
         map.insert("rho_mid/Å⁻³".into(), self.rho_mid.to_yaml()?);
         map.insert("p_ideal/mM".into(), self.block_mm_yaml(&self.p_ideal, 0.0)?);
         map.insert("p_corr/mM".into(), self.block_mm_yaml(&self.p_corr, fipb)?);
@@ -368,17 +366,17 @@ impl crate::Info for DoubleLayerPressure {
 }
 
 impl<T: Context> Analyze<T> for DoubleLayerPressure {
-    fn frequency(&self) -> Frequency {
-        self.frequency
+    fn sampling(&self) -> &Sampling {
+        &self.sampling
     }
-    fn set_frequency(&mut self, freq: Frequency) {
-        self.frequency = freq;
+    fn sampling_mut(&mut self) -> &mut Sampling {
+        &mut self.sampling
     }
 
     fn perform_sample(&mut self, context: &T, step: usize, _weight: f64) -> Result<()> {
-        let ions = context.resolve_atoms(&self.selection);
-        let positions: Vec<Point> = ions.iter().map(|&i| context.position(i)).collect();
-        let charges: Vec<f64> = ions.iter().map(|&i| context.atom_charge(i)).collect();
+        let ions = self.selection.resolve(context);
+        let positions: Vec<Point> = ions.iter().map(|&i| context.position(i.get())).collect();
+        let charges: Vec<f64> = ions.iter().map(|&i| context.atom_charge(i.get())).collect();
 
         let rho = midplane_density(&positions, self.midplane_halfwidth, self.area);
         let fz = cross_force_z(&positions, &charges, context.cell());
@@ -399,7 +397,6 @@ impl<T: Context> Analyze<T> for DoubleLayerPressure {
         self.p_ideal.add(p_ideal);
         self.p_corr.add(p_corr);
         self.p_osm.add(p_osm);
-        self.num_samples += 1;
 
         // Accumulate the laterally-averaged counterion charge profile σ_ion(z) (each ion
         // weighted by its own charge → mixture-aware) for the F_iPB correction at report time.
@@ -427,30 +424,8 @@ impl<T: Context> Analyze<T> for DoubleLayerPressure {
         Ok(())
     }
 
-    fn num_samples(&self) -> usize {
-        self.num_samples
-    }
-
-    fn to_yaml(&self) -> Option<serde_yml::Value> {
+    fn results(&self) -> Option<serde_yml::Value> {
         self.report()
-    }
-}
-
-impl<T: Context> From<DoubleLayerPressure> for Box<dyn Analyze<T>> {
-    fn from(analysis: DoubleLayerPressure) -> Self {
-        Box::new(analysis)
-    }
-}
-
-impl std::fmt::Display for DoubleLayerPressure {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(f, "Double Layer Pressure Analysis:")?;
-        writeln!(f, "  Samples:   {}", self.num_samples)?;
-        if self.num_samples > 0 {
-            let p_osm = self.p_osm.mean() + self.fipb_pressure();
-            writeln!(f, "  <P_osm>:   {:.4} mM", self.to_mm(p_osm))?;
-        }
-        Ok(())
     }
 }
 
@@ -572,7 +547,7 @@ mod tests {
     /// Construct an analysis directly for testing the reporting helpers.
     fn dummy(thermal_energy: f64) -> DoubleLayerPressure {
         DoubleLayerPressure {
-            selection: Selection::parse("all").unwrap(),
+            selection: CachedSelection::atoms(Selection::parse("all").unwrap()),
             thermal_energy,
             prefactor: 1.0,
             area: 1.0,
@@ -586,9 +561,8 @@ mod tests {
             p_ideal: BlockAverage::new(),
             p_corr: BlockAverage::new(),
             p_osm: BlockAverage::new(),
-            num_samples: 0,
             stream: None,
-            frequency: Frequency::Every(1),
+            sampling: Sampling::new(Frequency::Every(1)),
         }
     }
 
@@ -608,7 +582,7 @@ mod tests {
         let mut a = dummy(crate::R_IN_KJ_PER_MOL * 298.15);
         a.p_osm.add(1.0);
         a.p_osm.add(3.0);
-        a.num_samples = 2;
+        a.sampling.set_num_samples(2);
         let yaml = a.report().unwrap();
         let osm = &yaml["p_osm/mM"];
         assert!(osm.get("mean").is_some());

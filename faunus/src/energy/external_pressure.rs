@@ -102,12 +102,8 @@ impl ExternalPressure {
             Change::Everything | Change::Volume(..) => self.compute(context),
             // N changes when particles are added/removed (GCMC)
             Change::SingleGroup(_, gc) if gc.is_resize() => self.compute(context),
-            Change::Groups(changes) => {
-                if changes.iter().any(|(_, gc)| gc.is_resize()) {
-                    self.compute(context)
-                } else {
-                    0.0
-                }
+            Change::Groups(changes) if changes.iter().any(|(_, gc)| gc.is_resize()) => {
+                self.compute(context)
             }
             _ => 0.0,
         }

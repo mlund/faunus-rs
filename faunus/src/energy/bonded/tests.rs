@@ -6,7 +6,7 @@ use crate::{
     backend::Backend,
     cell::{Cell, Cuboid},
     energy::Hamiltonian,
-    group::{GroupCollection, GroupSize},
+    group::{GroupCollection, GroupSize, RelIndex},
     montecarlo::NewOld,
     topology::Topology,
     GroupChange,
@@ -114,14 +114,20 @@ fn test_intramolecular_energy() {
     assert_approx_eq!(f64, bonded.energy(&system, &change), 0.0);
 
     // change several particles within a single group
-    let change = Change::SingleGroup(1, GroupChange::PartialUpdate(vec![1, 2]));
+    let change = Change::SingleGroup(
+        1,
+        GroupChange::PartialUpdate(vec![RelIndex::new(1), RelIndex::new(2)]),
+    );
     let expected = bonded.one_group(&system, &system.groups()[1]);
     assert_approx_eq!(f64, bonded.energy(&system, &change), expected);
 
     // change several particles in multiple groups
     let change = Change::Groups(vec![
-        (0, GroupChange::PartialUpdate(vec![1])),
-        (1, GroupChange::PartialUpdate(vec![0, 2])),
+        (0, GroupChange::PartialUpdate(vec![RelIndex::new(1)])),
+        (
+            1,
+            GroupChange::PartialUpdate(vec![RelIndex::new(0), RelIndex::new(2)]),
+        ),
     ]);
     let expected = bonded.multiple_groups(&system, &[0, 1]);
     assert_approx_eq!(f64, bonded.energy(&system, &change), expected);
@@ -186,13 +192,16 @@ fn test_intermolecular_update() {
     assert_eq!(bonded.particles_status, expected_status);
 
     // irrelevant single group change
-    let change = Change::SingleGroup(2, GroupChange::PartialUpdate(vec![0, 1, 3]));
+    let change = Change::SingleGroup(
+        2,
+        GroupChange::PartialUpdate(vec![RelIndex::new(0), RelIndex::new(1), RelIndex::new(3)]),
+    );
     bonded.update(&system, &change).unwrap();
     assert_eq!(bonded.particles_status, expected_status);
 
     // irrelevant changes in multiple groups
     let change = Change::Groups(vec![
-        (0, GroupChange::PartialUpdate(vec![2])),
+        (0, GroupChange::PartialUpdate(vec![RelIndex::new(2)])),
         (2, GroupChange::RigidBody),
     ]);
     bonded.update(&system, &change).unwrap();
@@ -250,7 +259,10 @@ fn test_intermolecular_energy() {
     let expected = 4349.90721737715;
     assert_approx_eq!(f64, bonded.energy(&system, &change), expected);
 
-    let change = Change::SingleGroup(1, GroupChange::PartialUpdate(vec![0, 2]));
+    let change = Change::SingleGroup(
+        1,
+        GroupChange::PartialUpdate(vec![RelIndex::new(0), RelIndex::new(2)]),
+    );
     assert_approx_eq!(f64, bonded.energy(&system, &change), expected);
 
     // resize group
@@ -260,4 +272,76 @@ fn test_intermolecular_energy() {
     bonded.update(&system, &change).unwrap();
     let expected = 4362.58996700314;
     assert_approx_eq!(f64, bonded.energy(&system, &change), expected);
+}
+
+/// Pins how `IntramolecularBonded` gates on the reported `GroupChange`.
+///
+/// The term recomputes only when `GroupChange::internal_change()` is true. A move that perturbs a
+/// molecule's internal geometry but reports `RigidBody` therefore gets **zero** bonded energy for
+/// both the old and the new state, so the bonded contribution to ΔU vanishes silently. Nothing in
+/// `ProposedMove` prevents that pairing today; these tests record both branches before the typed
+/// constructors make the wrong one unrepresentable.
+#[cfg(test)]
+mod change_gating_characterization {
+    use crate::backend::Backend;
+    use crate::energy::bonded::IntramolecularBonded;
+    use crate::energy::EnergyChange;
+    use crate::group::RelIndex;
+    use crate::{Change, GroupChange};
+
+    /// A 4-mer whose last bond is stretched 1 Å beyond `req`, so the bonded energy is non-zero.
+    const STRETCHED_CHAIN: &str = r#"
+atoms:
+  - {name: A, mass: 1.0, charge: 0.0, sigma: 1.0}
+molecules:
+  - name: POLY
+    atoms: [A, A, A, A]
+    bonds:
+      - {index: [0, 1], kind: !Harmonic {k: 100.0, req: 1.0}}
+      - {index: [1, 2], kind: !Harmonic {k: 100.0, req: 1.0}}
+      - {index: [2, 3], kind: !Harmonic {k: 100.0, req: 1.0}}
+system:
+  cell: !Cuboid [30.0, 30.0, 30.0]
+  medium: {permittivity: !Vacuum, temperature: 300.0}
+  energy: {}
+  blocks:
+    - molecule: POLY
+      N: 1
+      insert: !Manual [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [2.0, 0.0, 0.0], [4.0, 0.0, 0.0]]
+propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
+"#;
+
+    fn context() -> Backend {
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(tmp.path(), STRETCHED_CHAIN).unwrap();
+        Backend::new(tmp.path(), None, &mut rand::thread_rng()).unwrap()
+    }
+
+    #[test]
+    fn partial_update_sees_the_stretched_bond() {
+        let context = context();
+        let term = IntramolecularBonded::default();
+        let energy = term.energy(
+            &context,
+            &Change::SingleGroup(0, GroupChange::PartialUpdate(vec![RelIndex::new(3)])),
+        );
+        // One bond stretched by 1 Å: ½·k·Δ² = ½·100·1² = 50 kJ/mol.
+        assert!((energy - 50.0).abs() < 1e-9, "bonded energy = {energy}");
+    }
+
+    /// The bug: the very same configuration reports **zero** bonded energy when the change is
+    /// labelled `RigidBody`, because `internal_change()` is false for it. Both the old and the new
+    /// state return 0.0, so the bonded part of ΔU disappears and the drift check cannot see it.
+    #[test]
+    fn rigid_body_silently_reports_zero_for_the_same_configuration() {
+        let context = context();
+        let term = IntramolecularBonded::default();
+        let energy = term.energy(&context, &Change::SingleGroup(0, GroupChange::RigidBody));
+        assert_eq!(energy, 0.0);
+
+        // And that is exactly the label a rigid translate/rotate legitimately uses — which is why
+        // the pairing, not the label, has to be constrained.
+        assert!(!GroupChange::RigidBody.internal_change());
+        assert!(GroupChange::PartialUpdate(vec![RelIndex::new(3)]).internal_change());
+    }
 }

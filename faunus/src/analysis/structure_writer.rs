@@ -1,7 +1,8 @@
-use super::{Analyze, Frequency};
+use super::{Analyze, Frequency, Sampling};
 use crate::auxiliary::MappingExt;
 use crate::cell::Shape;
-use crate::selection::{CachedSelection, Selection};
+use crate::group::GroupIndex;
+use crate::selection::{CachedSelection, Groups, Selection};
 use crate::topology::io::{self, frame_state::FrameStateWriter, psf, StructureData};
 use crate::Context;
 use anyhow::Context as _;
@@ -13,14 +14,19 @@ use std::path::Path;
 
 /// Writes structure of the system in the specified format during the simulation.
 #[derive(Debug, Builder)]
-#[builder(derive(Deserialize, Serialize), build_fn(validate = "Self::validate"))]
+#[builder(
+    derive(Deserialize, Serialize),
+    build_fn(private, name = "build_without_cache", validate = "Self::validate")
+)]
 #[builder_struct_attr(serde(deny_unknown_fields))]
 pub struct StructureWriter {
     /// Output file name (xyz, pdb, etc.)
     #[builder_field_attr(serde(rename = "file"))]
     output_file: String,
-    /// Sample frequency.
-    frequency: Frequency,
+    /// Frequency and frame count, owned by the framework. Deserialized from `frequency`.
+    #[builder(setter(name = "frequency", into))]
+    #[builder_field_attr(serde(rename = "frequency"))]
+    sampling: Sampling,
     /// Write a `.aux` frame state file alongside the trajectory.
     #[builder_field_attr(serde(default))]
     #[builder(default)]
@@ -30,10 +36,6 @@ pub struct StructureWriter {
     #[builder(setter(strip_option), default)]
     // strip_option: avoid double-Option in builder serde
     selection: Option<Selection>,
-    /// Counter for the number of samples taken.
-    #[builder(setter(skip))]
-    #[builder_field_attr(serde(skip_deserializing))]
-    num_samples: usize,
     /// Lazy-opened so the header can capture group topology from the first frame.
     #[builder(setter(skip))]
     #[builder_field_attr(serde(skip))]
@@ -41,7 +43,7 @@ pub struct StructureWriter {
     /// Resolved group indices, built from `selection` on first use.
     #[builder(setter(skip))]
     #[builder_field_attr(serde(skip))]
-    group_cache: Option<CachedSelection>,
+    group_cache: Option<CachedSelection<Groups>>,
     /// Per-frame group sizes for VMD visibility of inactive groups.
     #[builder(setter(skip))]
     #[builder_field_attr(serde(skip))]
@@ -53,6 +55,16 @@ pub struct StructureWriter {
 }
 
 impl StructureWriterBuilder {
+    /// Build the writer with its selection cache already in place.
+    ///
+    /// `derive_builder`'s generated constructor cannot fill a field derived from another, so the
+    /// cache is attached here rather than on first use.
+    pub fn build(&self) -> Result<StructureWriter, StructureWriterBuilderError> {
+        let mut writer = self.build_without_cache()?;
+        writer.group_cache = writer.selection.clone().map(CachedSelection::groups);
+        Ok(writer)
+    }
+
     fn validate(&self) -> Result<(), String> {
         // Frame state (.aux) encodes full-system group topology; a filtered
         // selection would produce a mismatch during rerun deserialization.
@@ -74,20 +86,13 @@ impl StructureWriterBuilder {
     }
 }
 
-impl<T: Context> From<StructureWriter> for Box<dyn Analyze<T>> {
-    fn from(analysis: StructureWriter) -> Self {
-        Box::new(analysis)
-    }
-}
-
 impl StructureWriter {
     pub fn new(output_file: &str, frequency: Frequency) -> Self {
         Self {
             output_file: output_file.to_owned(),
-            frequency,
+            sampling: Sampling::new(frequency),
             save_frame_state: false,
             selection: None,
-            num_samples: 0,
             frame_state_writer: None,
             group_cache: None,
             sizes_writer: None,
@@ -107,14 +112,10 @@ impl crate::Info for StructureWriter {
 
 impl StructureWriter {
     /// Resolve selected group indices, using cache to avoid re-resolution.
-    fn selected_group_indices<T: Context>(&mut self, context: &T) -> Cow<'_, [usize]> {
-        // Disjoint field borrows: `selection` is read while `group_cache` is filled.
-        match (&self.selection, &mut self.group_cache) {
-            (Some(selection), cache) => {
-                let cache = cache.get_or_insert_with(|| CachedSelection::groups(selection.clone()));
-                Cow::Borrowed(cache.resolve(context))
-            }
-            (None, _) => Cow::Owned((0..context.groups().len()).collect()),
+    fn selected_group_indices<T: Context>(&mut self, context: &T) -> Cow<'_, [GroupIndex]> {
+        match &mut self.group_cache {
+            Some(cache) => Cow::Borrowed(cache.resolve(context)),
+            None => Cow::Owned((0..context.groups().len()).map(GroupIndex::new).collect()),
         }
     }
 
@@ -125,13 +126,13 @@ impl StructureWriter {
 
         let num_particles: usize = group_indices
             .iter()
-            .map(|&i| all_groups[i].capacity())
+            .map(|&i| all_groups[i.get()].capacity())
             .sum();
         let mut names = Vec::with_capacity(num_particles);
         let mut positions = Vec::with_capacity(num_particles);
 
         for &gi in group_indices.iter() {
-            let group = &all_groups[gi];
+            let group = &all_groups[gi.get()];
             let molecule = &topology.moleculekinds()[group.molecule()];
             // capacity() not len(): XTC requires fixed particle count per frame
             for i in 0..group.capacity() {
@@ -147,7 +148,7 @@ impl StructureWriter {
 
         let (box_lengths, shift) = match context.cell().orthorhombic_expansion() {
             Some(expansion) => {
-                if self.num_samples == 0 {
+                if self.sampling.num_samples() == 0 {
                     log::info!(
                         "Expanding {} → {} particles for orthorhombic output",
                         names.len(),
@@ -185,7 +186,7 @@ impl StructureWriter {
             ..Default::default()
         };
 
-        let append = self.num_samples > 0;
+        let append = self.sampling.num_samples() > 0;
         io::write_structure_frame(&self.output_file, &data, append)?;
 
         // Write frame state alongside the trajectory frame
@@ -220,7 +221,7 @@ impl StructureWriter {
         // Only create the file when at least one group has inactive atoms.
         let any_inactive = group_indices
             .iter()
-            .any(|&gi| all_groups[gi].len() != all_groups[gi].capacity());
+            .any(|&gi| all_groups[gi.get()].len() != all_groups[gi.get()].capacity());
         if any_inactive && self.sizes_writer.is_none() {
             let sizes_path = Path::new(&self.output_file).with_extension("sizes.dat");
             let mut w = BufWriter::new(
@@ -230,7 +231,7 @@ impl StructureWriter {
             writeln!(w, "# Faunus group sizes")?;
             let mut start = 0usize;
             for &gi in group_indices.iter() {
-                let g = &all_groups[gi];
+                let g = &all_groups[gi.get()];
                 let mol_name = psf::to_ascii(topology.moleculekinds()[g.molecule()].name());
                 writeln!(
                     w,
@@ -249,7 +250,7 @@ impl StructureWriter {
                 if i > 0 {
                     write!(w, " ")?;
                 }
-                write!(w, "{}", all_groups[gi].len())?;
+                write!(w, "{}", all_groups[gi.get()].len())?;
             }
             writeln!(w)?;
         }
@@ -267,7 +268,7 @@ impl StructureWriter {
             let atomkinds = topology.atomkinds();
             let mut first = true;
             for &gi in group_indices.iter() {
-                let g = &all_groups[gi];
+                let g = &all_groups[gi.get()];
                 for i in g.start()..g.start() + g.capacity() {
                     if !first {
                         write!(w, " ")?;
@@ -279,21 +280,28 @@ impl StructureWriter {
             writeln!(w)?;
         }
 
-        self.num_samples += 1;
         Ok(())
     }
 }
 
 impl<T: Context> Analyze<T> for StructureWriter {
+    fn sampling(&self) -> &Sampling {
+        &self.sampling
+    }
+    fn sampling_mut(&mut self) -> &mut Sampling {
+        &mut self.sampling
+    }
+
     fn perform_sample(&mut self, context: &T, step: usize, _weight: f64) -> anyhow::Result<()> {
         self.write_frame(context, step)
     }
 
-    fn finalize(&mut self, context: &T) -> anyhow::Result<()> {
-        if self.frequency.should_perform_at_end() {
-            self.write_frame(context, self.num_samples)?;
+    fn finalize(&mut self, context: &T, step: usize) -> anyhow::Result<()> {
+        // Writes the frame *and* counts it, like every other End-frequency analysis now does.
+        if self.sampling.frequency().should_perform_at_end() {
+            self.sample_now(context, step, 1.0)?;
         }
-        if self.num_samples > 0 {
+        if self.sampling.num_samples() > 0 {
             // into_owned() releases the borrow on self.group_cache so self.output_file is accessible
             let group_indices = self.selected_group_indices(context).into_owned();
             let base = Path::new(&self.output_file);
@@ -301,7 +309,7 @@ impl<T: Context> Analyze<T> for StructureWriter {
             let all_groups = context.groups();
             let filtered: Vec<_> = group_indices
                 .iter()
-                .map(|&i| all_groups[i].clone())
+                .map(|&i| all_groups[i.get()].clone())
                 .collect();
             let psf_path = base.with_extension("psf");
             psf::write_psf(&psf_path, &topology, &filtered)?;
@@ -348,21 +356,10 @@ impl<T: Context> Analyze<T> for StructureWriter {
         Ok(())
     }
 
-    fn frequency(&self) -> Frequency {
-        self.frequency
-    }
-    fn set_frequency(&mut self, freq: Frequency) {
-        self.frequency = freq;
-    }
-
-    fn num_samples(&self) -> usize {
-        self.num_samples
-    }
-
-    fn to_yaml(&self) -> Option<serde_yml::Value> {
+    fn results(&self) -> Option<serde_yml::Value> {
         let mut map = serde_yml::Mapping::new();
         map.try_insert("file", &self.output_file)?;
-        map.try_insert("num_samples", self.num_samples)?;
+        map.try_insert("num_samples", self.sampling.num_samples())?;
         Some(serde_yml::Value::Mapping(map))
     }
 }
@@ -391,7 +388,7 @@ mod tests {
         };
         let writer = b.build().unwrap();
         assert_eq!(writer.output_file, "traj.xyz");
-        assert!(matches!(writer.frequency, Frequency::Every(100)));
+        assert!(matches!(writer.sampling.frequency(), Frequency::Every(100)));
         assert!(writer.selection.is_none());
 
         // Verify second entry: xtc trajectory
@@ -400,7 +397,7 @@ mod tests {
         };
         let writer = b.build().unwrap();
         assert_eq!(writer.output_file, "traj.xtc");
-        assert!(matches!(writer.frequency, Frequency::Every(50)));
+        assert!(matches!(writer.sampling.frequency(), Frequency::Every(50)));
         assert!(writer.selection.is_none());
 
         // Verify third entry: xyz with selection filter
@@ -409,7 +406,7 @@ mod tests {
         };
         let writer = b.build().unwrap();
         assert_eq!(writer.output_file, "selected.xyz");
-        assert!(matches!(writer.frequency, Frequency::Every(10)));
+        assert!(matches!(writer.sampling.frequency(), Frequency::Every(10)));
         assert!(writer.selection.is_some());
         assert_eq!(writer.selection.unwrap().source(), "molecule water");
     }

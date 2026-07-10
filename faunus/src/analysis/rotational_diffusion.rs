@@ -18,9 +18,10 @@
 //! using the method of [Favro (1960)](https://doi.org/10.1103/PhysRev.119.53)
 //! and [Holtbrügge & Schäfer (2025)](https://doi.org/10.1101/2025.05.27.656261).
 
-use super::{Analyze, Frequency};
+use super::{Analyze, Frequency, Sampling};
 use crate::auxiliary::{ColumnWriter, MappingExt};
-use crate::selection::{CachedSelection, Selection};
+use crate::group::GroupIndex;
+use crate::selection::{first_unsupported_group, CachedSelection, Groups, Selection};
 use crate::Context;
 use anyhow::Result;
 use average::{Estimate, Variance};
@@ -62,28 +63,25 @@ impl RotationalDiffusionBuilder {
 
     pub fn build(&self, context: &impl Context) -> Result<RotationalDiffusion> {
         let topology = context.topology_ref();
-        let groups = context.groups();
+        if let Some(group) =
+            first_unsupported_group(context, &self.selection, |kind| !kind.atomic())?
+        {
+            let molecule = context.groups()[group.get()].molecule();
+            anyhow::bail!(
+                "RotationalDiffusion: selection '{}' matched atomic group {group} (molecule '{}'); \
+                 only molecular groups with rigid-body orientation are supported",
+                self.selection.source(),
+                topology.moleculekinds()[molecule].name()
+            );
+        }
         let group_indices = self
             .selection
-            .resolve_groups(topology, groups, &|i| context.atom_kind(i));
+            .resolve_groups(topology, context.groups(), &|i| context.atom_kind(i));
         if group_indices.is_empty() {
             anyhow::bail!(
                 "RotationalDiffusion: selection '{}' matched no groups",
                 self.selection.source()
             );
-        }
-
-        for &gi in &group_indices {
-            let mol_id = groups[gi].molecule();
-            if topology.moleculekinds()[mol_id].atomic() {
-                anyhow::bail!(
-                    "RotationalDiffusion: selection '{}' matched atomic group {} (molecule '{}'); \
-                     only molecular groups with rigid-body orientation are supported",
-                    self.selection.source(),
-                    gi,
-                    topology.moleculekinds()[mol_id].name()
-                );
-            }
         }
 
         anyhow::ensure!(self.max_lag > 0, "RotationalDiffusion: max_lag must be > 0");
@@ -111,8 +109,7 @@ impl RotationalDiffusionBuilder {
 
         Ok(RotationalDiffusion {
             selection: CachedSelection::groups(self.selection.clone()),
-            frequency: self.frequency,
-            num_samples: 0,
+            sampling: Sampling::new(self.frequency),
             snapshots: HashMap::new(),
             covariance: (0..num_lags)
                 .map(|_| std::array::from_fn(|_| Variance::new()))
@@ -135,11 +132,11 @@ impl RotationalDiffusionBuilder {
 /// [Holtbrügge & Schäfer (2025)](https://doi.org/10.1101/2025.05.27.656261).
 #[derive(Debug)]
 pub struct RotationalDiffusion {
-    selection: CachedSelection,
-    frequency: Frequency,
-    num_samples: usize,
+    selection: CachedSelection<Groups>,
+    /// Frequency and frame count, owned by the framework.
+    sampling: Sampling,
     /// Per-group quaternion ring buffers, keyed by group index.
-    snapshots: HashMap<usize, VecDeque<crate::UnitQuaternion>>,
+    snapshots: HashMap<GroupIndex, VecDeque<crate::UnitQuaternion>>,
     /// Q̃_ij(τ) and Ṽ_ij(τ) accumulators at log-spaced lags, shared across all molecules.
     /// Indexed by position in `log_lags`, not by lag value directly.
     covariance: Vec<[Variance; UPPER_TRIANGLE]>,
@@ -245,24 +242,23 @@ impl crate::Info for RotationalDiffusion {
 }
 
 impl<T: Context> Analyze<T> for RotationalDiffusion {
-    fn frequency(&self) -> Frequency {
-        self.frequency
+    fn sampling(&self) -> &Sampling {
+        &self.sampling
     }
-
-    fn set_frequency(&mut self, freq: Frequency) {
-        self.frequency = freq;
+    fn sampling_mut(&mut self) -> &mut Sampling {
+        &mut self.sampling
     }
 
     fn perform_sample(&mut self, context: &T, step: usize, _weight: f64) -> Result<()> {
         // Must copy: the borrow from `resolve` conflicts with `self.snapshots` mutation
         let group_indices = self.selection.resolve(context).to_vec();
 
-        let active: std::collections::HashSet<usize> = group_indices.iter().copied().collect();
+        let active: std::collections::HashSet<GroupIndex> = group_indices.iter().copied().collect();
         self.snapshots.retain(|gi, _| active.contains(gi));
 
         let max_lag = self.max_lag();
         for &gi in &group_indices {
-            let q = *context.groups()[gi].quaternion();
+            let q = *context.group(gi).quaternion();
             let buf = self
                 .snapshots
                 .entry(gi)
@@ -312,20 +308,15 @@ impl<T: Context> Analyze<T> for RotationalDiffusion {
             writer.write_row(&refs)?;
         }
 
-        self.num_samples += 1;
         Ok(())
     }
 
-    fn num_samples(&self) -> usize {
-        self.num_samples
-    }
-
-    fn to_yaml(&self) -> Option<serde_yml::Value> {
-        if self.num_samples == 0 {
+    fn results(&self) -> Option<serde_yml::Value> {
+        if self.sampling.num_samples() == 0 {
             return None;
         }
         let mut map = serde_yml::Mapping::new();
-        map.try_insert("num_samples", self.num_samples)?;
+        map.try_insert("num_samples", self.sampling.num_samples())?;
 
         let mut cov_list = Vec::new();
         for (lag, c) in self.valid_lags() {
@@ -409,6 +400,79 @@ mod tests {
     use super::*;
     use crate::UnitQuaternion;
     use float_cmp::assert_approx_eq;
+
+    /// One rigid dimer plus an atomic species that is empty at startup — the state a
+    /// grand-canonical run begins in before its first insertion.
+    const DIMER_AND_EMPTY_GAS: &str = r#"
+atoms:
+  - {name: A, mass: 2.0, charge: 0.0, sigma: 1.0}
+molecules:
+  - name: DIMER
+    atoms: [A, A]
+  - name: GAS
+    atomic: true
+    atoms: [A]
+system:
+  cell: !Cuboid [10.0, 10.0, 10.0]
+  medium: {permittivity: !Vacuum, temperature: 300.0}
+  energy: {}
+  blocks:
+    - molecule: DIMER
+      N: 1
+      insert: !Manual [[0.0, 0.0, -2.0], [0.0, 0.0, 2.0]]
+    - molecule: GAS
+      N: 2
+      active: 0
+      insert: !Manual [[3.0, 0.0, 0.0], [4.0, 0.0, 0.0]]
+propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
+"#;
+
+    fn backend_from_str(yaml: &str) -> crate::backend::Backend {
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(tmp.path(), yaml).unwrap();
+        crate::backend::Backend::new(tmp.path(), None, &mut rand::thread_rng()).unwrap()
+    }
+
+    fn builder(selection: &str) -> RotationalDiffusionBuilder {
+        RotationalDiffusionBuilder {
+            selection: Selection::parse(selection).unwrap(),
+            file: None,
+            frequency: Frequency::Every(1),
+            max_lag: 4,
+        }
+    }
+
+    /// An atomic group has no rigid-body orientation, so a selection naming one is rejected.
+    #[test]
+    fn atomic_group_is_rejected() {
+        let context = backend_from_str(DIMER_AND_EMPTY_GAS);
+        let error = builder("molecule GAS").build(&context).unwrap_err();
+        assert!(
+            error.to_string().contains("matched atomic group"),
+            "{error}"
+        );
+    }
+
+    /// The atomic species matches nothing while it is empty, so the rejection above must be
+    /// decided from the topology rather than from the initial configuration — otherwise a
+    /// grand-canonical insertion would later hand `all` the orientation of an atomic group.
+    #[test]
+    fn an_atomic_species_that_starts_out_empty_is_rejected() {
+        let context = backend_from_str(DIMER_AND_EMPTY_GAS);
+        let error = builder("all").build(&context).unwrap_err();
+        assert!(
+            error.to_string().contains("matched atomic group"),
+            "{error}"
+        );
+    }
+
+    /// A selection that names no group at all is still reported as such.
+    #[test]
+    fn a_selection_matching_nothing_is_rejected() {
+        let context = backend_from_str(DIMER_AND_EMPTY_GAS);
+        let error = builder("resid 42").build(&context).unwrap_err();
+        assert!(error.to_string().contains("matched no groups"), "{error}");
+    }
 
     #[test]
     fn log_spaced_lags_basic() {

@@ -22,7 +22,7 @@
 //! ```
 
 use super::widom::WidomAccumulator;
-use super::{Analyze, Frequency};
+use super::{Analyze, Sampling};
 use crate::auxiliary::{BlockSummary, ColumnWriter, MappingExt};
 use crate::cell::{Shape, VolumeScalePolicy};
 use crate::change::Change;
@@ -67,8 +67,10 @@ pub struct VirtualVolumeMove {
     #[debug(skip)]
     stream: Option<ColumnWriter>,
 
-    /// Sample frequency
-    frequency: Frequency,
+    /// Frequency and frame count, owned by the framework. Deserialized from `frequency`.
+    #[builder(setter(name = "frequency", into))]
+    #[builder_field_attr(serde(rename = "frequency"))]
+    sampling: Sampling,
 
     /// Number of samples per block for variance estimation.
     #[builder_field_attr(serde(default = "serde_default_block_size"))]
@@ -107,7 +109,7 @@ impl VirtualVolumeMoveBuilder {
         if dv.abs() < f64::EPSILON {
             anyhow::bail!("VirtualVolumeMove: 'dV' must be non-zero, got {dv}");
         }
-        if self.frequency.is_none() {
+        if self.sampling.is_none() {
             anyhow::bail!("Missing required field 'frequency' for VirtualVolumeMove analysis");
         }
         Ok(())
@@ -134,7 +136,7 @@ impl VirtualVolumeMoveBuilder {
             method: self.method.unwrap_or_default(),
             output_file,
             stream,
-            frequency: self.frequency.unwrap(),
+            sampling: self.sampling.unwrap(),
             block_size,
             widom: WidomAccumulator::default().with_block_size(block_size_nz),
             thermal_energy,
@@ -172,15 +174,6 @@ impl VirtualVolumeMove {
     /// Exploits P = c·kT, so c[1/Å³] = P[kT/Å³].
     fn to_millimolar(&self, p_kt_per_a3: f64) -> f64 {
         p_kt_per_a3 * 1e3 / crate::MOLAR_TO_INV_ANGSTROM3
-    }
-
-    /// Sample standard deviation of pressure across blocks in kT/Å³.
-    /// `None` until at least two blocks have been completed.
-    fn pressure_stddev(&self) -> Option<f64> {
-        if self.widom.free_energy().n() < 2 {
-            return None;
-        }
-        Some(self.widom.free_energy().stddev() / self.volume_displacement.abs())
     }
 
     /// Perform the virtual volume perturbation and return the energy change in kT.
@@ -222,11 +215,11 @@ impl VirtualVolumeMove {
 }
 
 impl<T: Context> Analyze<T> for VirtualVolumeMove {
-    fn frequency(&self) -> Frequency {
-        self.frequency
+    fn sampling(&self) -> &Sampling {
+        &self.sampling
     }
-    fn set_frequency(&mut self, freq: Frequency) {
-        self.frequency = freq;
+    fn sampling_mut(&mut self) -> &mut Sampling {
+        &mut self.sampling
     }
 
     fn perform_sample(&mut self, context: &T, step: usize, weight: f64) -> Result<()> {
@@ -240,16 +233,16 @@ impl<T: Context> Analyze<T> for VirtualVolumeMove {
         Ok(())
     }
 
-    fn num_samples(&self) -> usize {
-        self.widom.len()
-    }
-
-    fn to_yaml(&self) -> Option<serde_yml::Value> {
+    fn results(&self) -> Option<serde_yml::Value> {
+        if self.widom.is_empty() {
+            return None;
+        }
         let mut map = serde_yml::Mapping::new();
         map.try_insert("dV", self.volume_displacement)?;
         map.try_insert("method", format!("{:?}", self.method))?;
         map.try_insert("block_size", self.block_size)?;
-        map.try_insert("num_samples", self.widom.len())?;
+        map.try_insert("num_samples", self.sampling.num_samples())?;
+        map.try_insert("num_perturbations", self.widom.len())?;
         map.try_insert("mean_free_energy", self.widom.mean_free_energy())?;
 
         // Mean comes from the total accumulator (finite from sample 1);
@@ -275,32 +268,11 @@ impl<T: Context> Analyze<T> for VirtualVolumeMove {
     }
 }
 
-impl<T: Context> From<VirtualVolumeMove> for Box<dyn Analyze<T>> {
-    fn from(analysis: VirtualVolumeMove) -> Self {
-        Box::new(analysis)
-    }
-}
-
-impl std::fmt::Display for VirtualVolumeMove {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(f, "Virtual Volume Move Analysis:")?;
-        writeln!(f, "  dV:          {} ų", self.volume_displacement)?;
-        writeln!(f, "  Method:      {:?}", self.method)?;
-        writeln!(f, "  Samples:     {}", self.widom.len())?;
-        if !self.widom.is_empty() {
-            writeln!(f, "  <Pex>:       {:.6} kT/ų", self.mean_pressure())?;
-        }
-        if let Some(s) = self.pressure_stddev() {
-            writeln!(f, "  std(Pex):    {:.6} kT/ų", s)?;
-        }
-        Ok(())
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::analysis::AnalysisBuilder;
+    use crate::analysis::Frequency;
     use crate::Info;
     use float_cmp::assert_approx_eq;
 
@@ -463,57 +435,18 @@ mod tests {
     }
 
     #[test]
-    fn display_without_samples() {
-        let vvm = build_vvm(0.5);
-        let output = format!("{vvm}");
-        assert!(output.contains("0.5"));
-        assert!(output.contains("Samples:     0"));
-        assert!(!output.contains("<Pex>"));
-    }
-
-    #[test]
-    fn display_with_samples() {
-        let mut vvm = build_vvm(0.5);
-        vvm.widom.collect(0.0, 1.0);
-        let output = format!("{vvm}");
-        assert!(output.contains("Samples:     1"));
-        assert!(output.contains("<Pex>"));
-    }
-
-    #[test]
     fn deserialize_virtual_volume_move_builders() {
         let yaml = std::fs::read_to_string("tests/files/virtual_volume_move.yaml").unwrap();
 
         let vvm = deserialize_vvm_builder(&yaml, 0).build(RT_298).unwrap();
         assert_approx_eq!(f64, vvm.volume_displacement, 0.5);
         assert_eq!(vvm.method, VolumeScalePolicy::Isotropic);
-        assert!(matches!(vvm.frequency, Frequency::Every(10)));
+        assert!(matches!(vvm.sampling.frequency(), Frequency::Every(10)));
 
         let vvm = deserialize_vvm_builder(&yaml, 1).build(RT_298).unwrap();
         assert_approx_eq!(f64, vvm.volume_displacement, 1.0);
         assert_eq!(vvm.method, VolumeScalePolicy::ScaleZ);
-        assert!(matches!(vvm.frequency, Frequency::Every(5)));
-    }
-
-    #[test]
-    fn pressure_stddev_no_blocks() {
-        let mut vvm = build_vvm(0.5);
-        vvm.widom.collect(1.0, 1.0);
-        assert!(vvm.pressure_stddev().is_none());
-    }
-
-    #[test]
-    fn pressure_stddev_with_two_blocks() {
-        let mut vvm = build_vvm(0.5);
-        // Block 1: dU = 0 → free_energy = 0
-        vvm.widom.collect(0.0, 1.0);
-        vvm.widom.end_block();
-        // Block 2: dU = 2 → free_energy = 2
-        vvm.widom.collect(2.0, 1.0);
-        vvm.widom.end_block();
-        // stddev of [0, 2] = 1.414..., Pex_std = 1.414... / 0.5 ≈ 2.828
-        let s = vvm.pressure_stddev().expect("two blocks should yield Some");
-        assert!(s > 2.0 && s < 4.0);
+        assert!(matches!(vvm.sampling.frequency(), Frequency::Every(5)));
     }
 
     #[test]
@@ -535,7 +468,7 @@ mod tests {
             vvm.widom.end_block();
         }
         assert!(vvm.widom.free_energy().n() >= 2);
-        assert!(vvm.pressure_stddev().is_some());
+        assert!(vvm.widom.free_energy().stddev().is_finite());
     }
 
     #[test]
@@ -550,6 +483,8 @@ mod tests {
         vvm.widom.end_block();
         vvm.widom.collect(2.0, 1.0);
         vvm.widom.end_block();
+        // The accumulator is driven directly here, so tell the framework two frames were sampled.
+        vvm.sampling.set_num_samples(2);
 
         let yaml = <VirtualVolumeMove as Analyze<crate::backend::Backend>>::to_yaml(&vvm)
             .expect("to_yaml returns Some");

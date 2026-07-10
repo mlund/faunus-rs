@@ -17,7 +17,7 @@
 //! Evaluates a collective variable at each sample step, tracks a running
 //! average, and optionally streams `{step, value, average}` to a file.
 
-use super::{Analyze, Frequency};
+use super::{Analyze, Frequency, Sampling};
 use crate::auxiliary::{ColumnWriter, MappingExt, WeightedMean};
 use crate::collective_variable::{CollectiveVariable, CollectiveVariableBuilder};
 use crate::Context;
@@ -61,10 +61,9 @@ impl CollectiveVariableAnalysisBuilder {
         Ok(CollectiveVariableAnalysis {
             cv,
             stream,
-            frequency: self.frequency,
+            sampling: Sampling::new(self.frequency),
             mean: WeightedMean::new(),
             mean_squared: WeightedMean::new(),
-            num_samples: 0,
         })
     }
 }
@@ -78,10 +77,10 @@ pub struct CollectiveVariableAnalysis {
     cv: CollectiveVariable,
     #[debug(skip)]
     stream: Option<ColumnWriter>,
-    frequency: Frequency,
+    /// Frequency and frame count, owned by the framework.
+    sampling: Sampling,
     mean: WeightedMean,
     mean_squared: WeightedMean,
-    num_samples: usize,
 }
 
 impl CollectiveVariableAnalysis {
@@ -101,18 +100,17 @@ impl crate::Info for CollectiveVariableAnalysis {
 }
 
 impl<T: Context> Analyze<T> for CollectiveVariableAnalysis {
-    fn frequency(&self) -> Frequency {
-        self.frequency
+    fn sampling(&self) -> &Sampling {
+        &self.sampling
     }
-    fn set_frequency(&mut self, freq: Frequency) {
-        self.frequency = freq;
+    fn sampling_mut(&mut self) -> &mut Sampling {
+        &mut self.sampling
     }
 
     fn perform_sample(&mut self, context: &T, step: usize, weight: f64) -> Result<()> {
         let value = self.cv.evaluate(context);
         self.mean.add(value, weight);
         self.mean_squared.add(value * value, weight);
-        self.num_samples += 1;
 
         if let Some(ref mut stream) = self.stream {
             let mean = self.mean.mean();
@@ -125,17 +123,13 @@ impl<T: Context> Analyze<T> for CollectiveVariableAnalysis {
         Ok(())
     }
 
-    fn num_samples(&self) -> usize {
-        self.num_samples
-    }
-
-    fn to_yaml(&self) -> Option<serde_yml::Value> {
+    fn results(&self) -> Option<serde_yml::Value> {
         let mut map = serde_yml::Mapping::new();
         map.try_insert("property", &self.cv.axis().name)?;
         if let Some(desc) = self.cv.description() {
             map.try_insert("description", desc)?;
         }
-        map.try_insert("num_samples", self.num_samples)?;
+        map.try_insert("num_samples", self.sampling.num_samples())?;
         map.try_insert("mean", self.mean.mean())?;
         map.try_insert("rms", self.mean_squared.mean().sqrt())?;
         Some(serde_yml::Value::Mapping(map))

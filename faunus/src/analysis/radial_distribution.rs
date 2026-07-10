@@ -3,12 +3,12 @@
 //! Supports atom-atom and center-of-mass (COM-COM) pair distributions
 //! with minimum image convention for periodic boundary conditions.
 
-use super::{Analyze, Frequency};
+use super::{Analyze, Frequency, Sampling};
 use crate::auxiliary::{ColumnWriter, MappingExt};
 use crate::axes::Axes;
 use crate::cell::{BoundaryConditions, Shape};
 use crate::histogram::Histogram;
-use crate::selection::{CachedSelection, Selection};
+use crate::selection::{Atoms, CachedSelection, Groups, Selection};
 use crate::Context;
 use anyhow::Result;
 use derive_more::Debug;
@@ -68,53 +68,88 @@ impl RadialDistributionBuilder {
         let stream = ColumnWriter::open(&self.file, &["r", "g(r)"])?;
 
         Ok(RadialDistribution {
-            selections: (
-                CachedSelection::for_com(self.selections.0.clone(), self.use_com),
-                CachedSelection::for_com(self.selections.1.clone(), self.use_com),
+            selections: PairSelection::new(
+                self.selections.0.clone(),
+                self.selections.1.clone(),
+                self.use_com,
             ),
             histogram,
             volume_sum: 0.0,
             pair_count_sum: 0.0,
-            num_samples: 0,
-            use_com: self.use_com,
             exclude_intramolecular,
             dimension: self.dimension,
             output_file: self.file.clone(),
             stream,
-            frequency: self.frequency,
+            sampling: Sampling::new(self.frequency),
         })
+    }
+}
+
+/// The two selections of an RDF, resolving to the same index space.
+///
+/// `use_com` picks the space once, for the pair: an RDF between an atom and a mass centre is not a
+/// quantity anyone wants, and keeping the two selections in one variant makes it unrepresentable.
+#[derive(Debug, Clone)]
+enum PairSelection {
+    /// Atom-atom, for `use_com: false`.
+    Atoms(CachedSelection<Atoms>, CachedSelection<Atoms>),
+    /// Mass centre-mass centre, for `use_com: true`.
+    Groups(CachedSelection<Groups>, CachedSelection<Groups>),
+}
+
+impl PairSelection {
+    fn new(first: Selection, second: Selection, use_com: bool) -> Self {
+        if use_com {
+            Self::Groups(
+                CachedSelection::groups(first),
+                CachedSelection::groups(second),
+            )
+        } else {
+            Self::Atoms(
+                CachedSelection::atoms(first),
+                CachedSelection::atoms(second),
+            )
+        }
+    }
+
+    /// The two selection expressions, for comparing whether the pair is self-self.
+    fn sources(&self) -> (&str, &str) {
+        match self {
+            Self::Atoms(first, second) => (first.selection().source(), second.selection().source()),
+            Self::Groups(first, second) => {
+                (first.selection().source(), second.selection().source())
+            }
+        }
     }
 }
 
 /// Radial distribution function analysis.
 #[derive(Debug)]
 pub struct RadialDistribution {
-    /// Target (atoms vs. groups) is fixed by `use_com` at build time.
-    selections: (CachedSelection, CachedSelection),
+    selections: PairSelection,
     histogram: Histogram,
     volume_sum: f64,
     /// Accumulated pair count across all frames (for GC ensemble correctness).
     pair_count_sum: f64,
-    num_samples: usize,
-    use_com: bool,
     exclude_intramolecular: bool,
     dimension: Axes,
     output_file: PathBuf,
     #[debug(skip)]
     stream: ColumnWriter,
-    frequency: Frequency,
+    /// Frequency and frame count, owned by the framework.
+    sampling: Sampling,
 }
 
 /// Iterate unique pairs from two index lists, deduplicating when `same` is true,
 /// look up a position for each index, and feed each PBC distance into the histogram.
 /// Returns the number of pairs evaluated.
 #[allow(clippy::too_many_arguments)]
-fn collect_pair_distances(
-    indices1: &[usize],
-    indices2: &[usize],
+fn collect_pair_distances<Idx: Copy>(
+    indices1: &[Idx],
+    indices2: &[Idx],
     same: bool,
-    mut get_pos: impl FnMut(usize) -> Option<crate::Point>,
-    mut skip: impl FnMut(usize, usize) -> bool,
+    mut get_pos: impl FnMut(Idx) -> Option<crate::Point>,
+    mut skip: impl FnMut(Idx, Idx) -> bool,
     cell: &impl BoundaryConditions,
     dimension: Axes,
     histogram: &mut Histogram,
@@ -142,7 +177,8 @@ fn collect_pair_distances(
 
 impl RadialDistribution {
     fn same_selection(&self) -> bool {
-        self.selections.0.selection().source() == self.selections.1.selection().source()
+        let (first, second) = self.selections.sources();
+        first == second
     }
 
     /// Find which group index an atom belongs to.
@@ -150,61 +186,55 @@ impl RadialDistribution {
         groups.iter().position(|g| g.contains(atom_index))
     }
 
-    /// Sample atom-atom RDF, returning the number of pairs evaluated.
-    fn sample_atom_atom_weighted(&mut self, context: &impl Context, weight: f64) -> f64 {
+    /// Accumulate pair distances for the current frame, returning the number of pairs evaluated.
+    ///
+    /// Which index space the histogram is built from follows from the selection pair, so the
+    /// atom-atom and mass-centre paths cannot be reached with the wrong indices.
+    fn sample_weighted_pairs(&mut self, context: &impl Context, weight: f64) -> f64 {
         let groups = context.groups();
         let same = self.same_selection();
         let exclude = self.exclude_intramolecular;
+        let cell = context.cell();
 
-        let atoms1 = self.selections.0.resolve(context);
-        let atoms2 = self.selections.1.resolve(context);
-
-        collect_pair_distances(
-            atoms1,
-            atoms2,
-            same,
-            |i| Some(context.position(i)),
-            |i, j| {
-                exclude && {
-                    let gi = Self::group_of_atom(groups, i);
-                    gi.is_some() && gi == Self::group_of_atom(groups, j)
-                }
-            },
-            context.cell(),
-            self.dimension,
-            &mut self.histogram,
-            weight,
-        )
-    }
-
-    /// Sample COM-COM RDF, returning the number of pairs evaluated.
-    fn sample_com_com_weighted(&mut self, context: &impl Context, weight: f64) -> f64 {
-        let groups = context.groups();
-        let same = self.same_selection();
-
-        let gi1 = self.selections.0.resolve(context);
-        let gi2 = self.selections.1.resolve(context);
-
-        collect_pair_distances(
-            gi1,
-            gi2,
-            same,
-            |gi| groups[gi].mass_center().copied(),
-            |_, _| false,
-            context.cell(),
-            self.dimension,
-            &mut self.histogram,
-            weight,
-        )
+        match &mut self.selections {
+            PairSelection::Atoms(first, second) => collect_pair_distances(
+                first.resolve(context),
+                second.resolve(context),
+                same,
+                |i| Some(context.position(i.get())),
+                |i, j| {
+                    exclude && {
+                        let gi = Self::group_of_atom(groups, i.get());
+                        gi.is_some() && gi == Self::group_of_atom(groups, j.get())
+                    }
+                },
+                cell,
+                self.dimension,
+                &mut self.histogram,
+                weight,
+            ),
+            PairSelection::Groups(first, second) => collect_pair_distances(
+                first.resolve(context),
+                second.resolve(context),
+                same,
+                |gi| groups[gi.get()].mass_center().copied(),
+                |_, _| false,
+                cell,
+                self.dimension,
+                &mut self.histogram,
+                weight,
+            ),
+        }
     }
 
     /// Write the normalized g(r) to the output file.
     fn write_gr(&mut self) -> Result<()> {
-        if self.num_samples == 0 || self.pair_count_sum == 0.0 || self.volume_sum == 0.0 {
+        if self.sampling.num_samples() == 0 || self.pair_count_sum == 0.0 || self.volume_sum == 0.0
+        {
             return Ok(());
         }
-        let v_avg = self.volume_sum / self.num_samples as f64;
-        let n_pairs_avg = self.pair_count_sum / self.num_samples as f64;
+        let v_avg = self.volume_sum / self.sampling.num_samples() as f64;
+        let n_pairs_avg = self.pair_count_sum / self.sampling.num_samples() as f64;
         let dr = self.histogram.bin_width();
 
         self.stream = ColumnWriter::open(&self.output_file, &["r", "g(r)"])?;
@@ -212,7 +242,7 @@ impl RadialDistribution {
             let r_inner = r - dr / 2.0;
             let r_outer = r + dr / 2.0;
             let shell_volume = self.dimension.shell_measure(r_inner, r_outer);
-            let ideal = n_pairs_avg * self.num_samples as f64 * shell_volume / v_avg;
+            let ideal = n_pairs_avg * self.sampling.num_samples() as f64 * shell_volume / v_avg;
             let gr = if ideal > 0.0 { count / ideal } else { 0.0 };
             self.stream
                 .write_row(&[&format_args!("{r:.6}"), &format_args!("{gr:.6}")])?;
@@ -232,44 +262,35 @@ impl crate::Info for RadialDistribution {
 }
 
 impl<T: Context> Analyze<T> for RadialDistribution {
-    fn frequency(&self) -> Frequency {
-        self.frequency
+    fn sampling(&self) -> &Sampling {
+        &self.sampling
     }
-    fn set_frequency(&mut self, freq: Frequency) {
-        self.frequency = freq;
+    fn sampling_mut(&mut self) -> &mut Sampling {
+        &mut self.sampling
     }
 
     fn perform_sample(&mut self, context: &T, step: usize, weight: f64) -> Result<()> {
         let _ = step;
-        let pairs = if self.use_com {
-            self.sample_com_com_weighted(context, weight)
-        } else {
-            self.sample_atom_atom_weighted(context, weight)
-        };
+        let pairs = self.sample_weighted_pairs(context, weight);
         // Weight the normalization sums so that g(r) = weighted_counts / weighted_ideal,
         // which cancels correctly when all weights are 1.0.
         self.pair_count_sum += pairs * weight;
         if let Some(bbox) = context.cell().bounding_box() {
             self.volume_sum += self.dimension.measure_of(bbox) * weight;
         }
-        self.num_samples += 1;
         Ok(())
-    }
-
-    fn num_samples(&self) -> usize {
-        self.num_samples
     }
 
     fn write_to_disk(&mut self) -> Result<()> {
         self.write_gr()
     }
 
-    fn to_yaml(&self) -> Option<serde_yml::Value> {
-        if self.num_samples == 0 {
+    fn results(&self) -> Option<serde_yml::Value> {
+        if self.sampling.num_samples() == 0 {
             return None;
         }
         let mut map = serde_yml::Mapping::new();
-        map.try_insert("num_samples", self.num_samples)?;
+        map.try_insert("num_samples", self.sampling.num_samples())?;
         map.try_insert("num_bins", self.histogram.num_bins())?;
         Some(serde_yml::Value::Mapping(map))
     }
@@ -353,21 +374,21 @@ frequency: !Every 50
         let sink = tmp.path().join("gr.dat");
 
         let mut rdf = RadialDistribution {
-            selections: (
-                CachedSelection::atoms(Selection::parse("all").unwrap()),
-                CachedSelection::atoms(Selection::parse("all").unwrap()),
+            selections: PairSelection::new(
+                Selection::parse("all").unwrap(),
+                Selection::parse("all").unwrap(),
+                false,
             ),
             histogram: Histogram::new(0.0, 5.0, dr).unwrap(),
             volume_sum: volume * num_samples as f64,
             pair_count_sum: n_pairs * num_samples as f64,
-            num_samples,
-            use_com: false,
             exclude_intramolecular: false,
             dimension,
             output_file: sink.clone(),
             stream: ColumnWriter::open(&sink, &["r", "g(r)"]).unwrap(),
-            frequency: Frequency::Every(1),
+            sampling: Sampling::new(Frequency::Every(1)),
         };
+        rdf.sampling.set_num_samples(num_samples);
         for i in 0..rdf.histogram.num_bins() {
             let r = rdf.histogram.bin_center(i);
             let r_inner = r - dr / 2.0;

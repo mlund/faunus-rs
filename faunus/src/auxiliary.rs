@@ -524,7 +524,8 @@ impl BlockAverage {
         self.0.error()
     }
 
-    /// Sample standard deviation across blocks (σ).
+    /// Sample standard deviation across blocks (σ). Only the unit tests need this.
+    #[cfg(test)]
     pub fn stddev(&self) -> f64 {
         self.0.sample_variance().sqrt()
     }
