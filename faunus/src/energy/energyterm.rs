@@ -150,7 +150,11 @@ impl EnergyTerm {
     }
 
     /// Exclude a molecule-type pair from the nonbonded energy term.
-    pub(crate) fn exclude_molecule_pair(&mut self, mol_a: usize, mol_b: usize) {
+    pub(crate) fn exclude_molecule_pair(
+        &mut self,
+        mol_a: crate::group::MoleculeId,
+        mol_b: crate::group::MoleculeId,
+    ) {
         match self {
             Self::NonbondedMatrix(x) => x.exclude_molecule_pair(mol_a, mol_b),
             Self::NonbondedMatrixSplined(x) => x.exclude_molecule_pair(mol_a, mol_b),
@@ -160,7 +164,7 @@ impl EnergyTerm {
 
     /// Get molecule-type pairs excluded from nonbonded, if applicable.
     #[must_use]
-    pub(crate) fn molecule_pair_exclusions(&self) -> Option<&[[usize; 2]]> {
+    pub(crate) fn molecule_pair_exclusions(&self) -> Option<&[[crate::group::MoleculeId; 2]]> {
         match self {
             Self::NonbondedMatrix(x) => Some(x.molecule_pair_exclusions()),
             Self::NonbondedMatrixSplined(x) => Some(x.molecule_pair_exclusions()),

@@ -9,7 +9,7 @@ use super::speciation::random_point_inside;
 use super::{MarkovChain, MoveStatistics};
 use crate::cell::{Shape, VolumeScalePolicy};
 use crate::energy::EnergyChange;
-use crate::group::{GroupSize, RelIndex};
+use crate::group::{GroupSize, MoleculeId, RelIndex};
 use crate::propagate::tagged_yaml;
 use crate::transform::{SpeciationAction, Transform};
 use crate::{Change, Context};
@@ -195,13 +195,13 @@ impl<T: Context> GibbsMove<T> for GibbsVolumeExchange {
 /// Acceptance follows [Panagiotopoulos Eq. 8](https://doi.org/10.1080/00268978700101491).
 #[derive(Debug)]
 struct GibbsParticleTransfer {
-    molecule_id: usize,
+    molecule_id: MoleculeId,
     molecule_name: String, // kept for YAML output without topology access
     statistics: MoveStatistics,
 }
 
 impl GibbsParticleTransfer {
-    fn new(molecule_id: usize, molecule_name: String) -> Self {
+    fn new(molecule_id: MoleculeId, molecule_name: String) -> Self {
         Self {
             molecule_id,
             molecule_name,
@@ -217,7 +217,7 @@ impl GibbsParticleTransfer {
         thermal_energy: f64,
         rng: &mut StdRng,
     ) -> Result<()> {
-        let is_atomic = src.topology_ref().moleculekinds()[self.molecule_id].atomic();
+        let is_atomic = src.topology_ref().moleculekind(self.molecule_id).atomic();
         if is_atomic {
             self.transfer_atomic(src, tgt, thermal_energy, rng)
         } else {

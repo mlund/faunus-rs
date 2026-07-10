@@ -30,7 +30,7 @@ use std::path::Path;
 /// mismatches early on load, rather than silently producing wrong energies.
 #[derive(Debug, Serialize, Deserialize)]
 struct GroupState {
-    molecule: usize,
+    molecule: crate::group::MoleculeId,
     capacity: usize,
     size: GroupSize,
     /// Rigid-body orientation needed by LD and 6D tabulated energies.
@@ -57,7 +57,7 @@ impl State {
     pub fn save(context: &(impl GroupCollection + WithSimulationCell), step: usize) -> Self {
         State {
             particles: (0..context.num_particles())
-                .map(|i| Particle::new(context.atom_kind(i), context.position(i)))
+                .map(|i| Particle::new(context.atom_kind(i).get(), context.position(i)))
                 .collect(),
             cell: context.cell().clone(),
             groups: context
@@ -99,7 +99,7 @@ impl State {
 
         // Expected after atom swap reactions (titration); not actionable at warn level
         for (i, state_p) in self.particles.iter().enumerate() {
-            let ctx_id = context.atom_kind(i);
+            let ctx_id = context.atom_kind(i).get();
             if state_p.atom_id != ctx_id {
                 log::debug!(
                     "Particle {} atom_id differs: state has {}, topology has {} (atom swap?)",

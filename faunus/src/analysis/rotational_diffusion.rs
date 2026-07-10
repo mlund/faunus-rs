@@ -71,7 +71,7 @@ impl RotationalDiffusionBuilder {
                 "RotationalDiffusion: selection '{}' matched atomic group {group} (molecule '{}'); \
                  only molecular groups with rigid-body orientation are supported",
                 self.selection.source(),
-                topology.moleculekinds()[molecule].name()
+                topology.moleculekind(molecule).name()
             );
         }
         let group_indices = self

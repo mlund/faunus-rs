@@ -193,6 +193,11 @@ impl Topology {
         &self.atomkinds
     }
 
+    /// The atom kind with the given id.
+    pub fn atomkind(&self, id: crate::group::AtomKindId) -> &AtomKind {
+        &self.atomkinds[id.get()]
+    }
+
     /// Get atoms kinds of the topology.
     pub fn atomkinds_mut(&mut self) -> &mut [AtomKind] {
         &mut self.atomkinds
@@ -201,6 +206,11 @@ impl Topology {
     /// Get molecule kinds of the topology.
     pub fn moleculekinds(&self) -> &[MoleculeKind] {
         &self.moleculekinds
+    }
+
+    /// The molecule kind with the given id.
+    pub fn moleculekind(&self, id: crate::group::MoleculeId) -> &MoleculeKind {
+        &self.moleculekinds[id.get()]
     }
 
     /// Add an atom kind to the topology.

@@ -17,6 +17,7 @@
 //! Implements the Forsman & Woodward many-body Hamiltonian for colloids in an
 //! ideal polymer fluid. See [`PolymerDepletion`] for details.
 
+use crate::group::MoleculeId;
 use crate::ObserveContext;
 use crate::{Change, Point};
 use serde::{Deserialize, Serialize};
@@ -157,7 +158,7 @@ pub struct PolymerDepletion {
     /// Schulz-Flory order kappa = n + 1
     kappa: f64,
     /// Molecule type IDs treated as colloids
-    colloid_molecule_ids: Vec<usize>,
+    colloid_molecule_ids: Vec<MoleculeId>,
     /// Molecule type names (for reporting)
     colloid_molecule_names: Vec<String>,
     /// Optional fixed colloid radius override (Å); else use bounding_radius
@@ -689,7 +690,7 @@ impl PolymerDepletionBuilder {
         thermal_energy: f64,
     ) -> anyhow::Result<PolymerDepletion> {
         let topology = context.topology();
-        let colloid_molecule_ids: Vec<usize> = self
+        let colloid_molecule_ids: Vec<MoleculeId> = self
             .molecules
             .iter()
             .map(|name| {
@@ -697,6 +698,7 @@ impl PolymerDepletionBuilder {
                     .moleculekinds()
                     .iter()
                     .position(|m| m.name() == name)
+                    .map(MoleculeId::new)
                     .ok_or_else(|| {
                         anyhow::anyhow!(
                             "Molecule '{}' in polymer_depletion energy term does not exist",
@@ -814,7 +816,7 @@ mod tests {
             rg,
             rho_star,
             kappa,
-            colloid_molecule_ids: vec![0],
+            colloid_molecule_ids: vec![MoleculeId::new(0)],
             colloid_molecule_names: vec!["Test".to_string()],
             fixed_radius: Some(rc),
             radius_scaling: 1.0,

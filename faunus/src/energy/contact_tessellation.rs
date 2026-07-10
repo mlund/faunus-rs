@@ -113,9 +113,12 @@ fn append_group_balls(
     for i in group.iter_active() {
         let pos = context.position(i);
         let kind = context.atom_kind(i);
-        let radius = atomkinds[kind].sigma().map(|s| s / 2.0).unwrap_or(0.0);
+        let radius = atomkinds[kind.get()]
+            .sigma()
+            .map(|s| s / 2.0)
+            .unwrap_or(0.0);
         balls.push(Ball::new(pos.x, pos.y, pos.z, radius));
-        atom_kinds.push(kind);
+        atom_kinds.push(kind.get());
     }
 }
 

@@ -523,7 +523,7 @@ pub fn repack_bonds(topology: &Topology, groups: &[Group]) -> CsrData {
     let mut edges: Vec<Vec<(u32, f32, f32)>> = vec![Vec::new(); n_atoms];
 
     for group in groups {
-        let molecule = &topology.moleculekinds()[group.molecule()];
+        let molecule = topology.moleculekind(group.molecule());
         for bond in molecule.bonds() {
             let BondKind::Harmonic(h) = bond.kind() else {
                 continue;
@@ -587,7 +587,7 @@ pub fn repack_angles(topology: &Topology, groups: &[Group]) -> CsrData {
     let mut entries: Vec<Vec<AngleEntry>> = vec![Vec::new(); n_atoms];
 
     for group in groups {
-        let molecule = &topology.moleculekinds()[group.molecule()];
+        let molecule = topology.moleculekind(group.molecule());
         for torsion in molecule.torsions() {
             let TorsionKind::Harmonic(h) = torsion.kind() else {
                 continue;
@@ -716,7 +716,7 @@ pub fn repack_dihedrals(topology: &Topology, groups: &[Group]) -> CsrData {
     }
 
     for group in groups {
-        let molecule = &topology.moleculekinds()[group.molecule()];
+        let molecule = topology.moleculekind(group.molecule());
         for dihedral in molecule.dihedrals() {
             let [i0, i1, i2, i3] = *dihedral.index();
             if [i0, i1, i2, i3].iter().any(|&idx| idx >= group.len()) {
@@ -772,7 +772,7 @@ pub fn repack_exclusions(topology: &Topology, groups: &[Group]) -> (Vec<u32>, Ve
     let mut per_atom: Vec<Vec<u32>> = vec![Vec::new(); n_atoms];
 
     for group in groups {
-        let molecule = &topology.moleculekinds()[group.molecule()];
+        let molecule = topology.moleculekind(group.molecule());
         // Rigid bodies skip all intra-mol NB in the kernel via mol_is_rigid,
         // so we only need exclusion CSR entries for flexible molecules.
         if molecule.degrees_of_freedom().is_rigid() {

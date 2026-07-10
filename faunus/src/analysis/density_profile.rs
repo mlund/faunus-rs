@@ -471,7 +471,7 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
         assert_eq!(occupied(&analysis), vec![(3, 1.0)]);
 
         // Turn the one A atom (bin 3) into a B atom; nothing of kind A is left.
-        context.set_atom_kind(0, 1);
+        context.set_atom_kind(0, crate::group::AtomKindId::new(1));
         analysis.sample(&context, 1).unwrap();
         assert_relative_eq!(analysis.counts[3].mean(), 0.5);
         assert_relative_eq!(analysis.total_count.mean(), 0.5);
@@ -489,7 +489,7 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
         assert_eq!(occupied(&analysis), vec![(4, 1.0)]);
 
         // Turn B into a second A (mass 1 → 3); the centre moves to z = 0, bin 5.
-        context.set_atom_kind(1, 0);
+        context.set_atom_kind(1, crate::group::AtomKindId::new(0));
         analysis.sample(&context, 1).unwrap();
         assert_relative_eq!(analysis.counts[4].mean(), 0.5);
         assert_relative_eq!(analysis.counts[5].mean(), 0.5);

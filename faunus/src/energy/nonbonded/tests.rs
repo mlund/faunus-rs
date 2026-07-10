@@ -14,6 +14,7 @@ use crate::{
 };
 
 use super::*;
+use crate::group::MoleculeId;
 
 /// Conservative lower bound on group-group distance using bounding spheres.
 fn min_group_distance(gi: &Group, gj: &Group, cell: &impl SimulationCell) -> Option<f64> {
@@ -758,13 +759,13 @@ fn test_nonbonded_matrix_splined_energy_changes() {
 fn test_min_group_distance() {
     let cell = Cuboid::cubic(20.0);
 
-    let mut g1 = Group::new(0, 0, 0..3);
+    let mut g1 = Group::new(0, MoleculeId::new(0), 0..3);
     g1.set_geometry(Some(crate::group::GroupGeometry {
         mass_center: crate::Point::new(0.0, 0.0, 0.0),
         bounding_radius: 1.0,
     }));
 
-    let mut g2 = Group::new(1, 0, 3..6);
+    let mut g2 = Group::new(1, MoleculeId::new(0), 3..6);
     g2.set_geometry(Some(crate::group::GroupGeometry {
         mass_center: crate::Point::new(5.0, 0.0, 0.0),
         bounding_radius: 1.5,
@@ -775,7 +776,7 @@ fn test_min_group_distance() {
     assert_approx_eq!(f64, d, 2.5);
 
     // Overlapping spheres → 0
-    let mut g3 = Group::new(2, 0, 6..9);
+    let mut g3 = Group::new(2, MoleculeId::new(0), 6..9);
     g3.set_geometry(Some(crate::group::GroupGeometry {
         mass_center: crate::Point::new(1.0, 0.0, 0.0),
         bounding_radius: 2.0,
@@ -784,7 +785,7 @@ fn test_min_group_distance() {
     assert_approx_eq!(f64, d, 0.0);
 
     // PBC wrapping: groups near opposite edges
-    let mut g4 = Group::new(3, 0, 9..12);
+    let mut g4 = Group::new(3, MoleculeId::new(0), 9..12);
     g4.set_geometry(Some(crate::group::GroupGeometry {
         mass_center: crate::Point::new(9.0, 0.0, 0.0),
         bounding_radius: 0.5,
@@ -795,7 +796,7 @@ fn test_min_group_distance() {
     assert_approx_eq!(f64, d, 9.0 - 1.0 - 0.5);
 
     // Missing bounding radius → None
-    let g5 = Group::new(4, 0, 12..15);
+    let g5 = Group::new(4, MoleculeId::new(0), 12..15);
     assert!(min_group_distance(&g1, &g5, &cell).is_none());
 }
 
@@ -871,7 +872,7 @@ fn test_nonbonded_forces() {
             let rsq = dr.norm_squared();
             let potential = nonbonded
                 .potentials
-                .get((system.atom_kind(0), system.atom_kind(j)))
+                .get((system.atom_kind(0).get(), system.atom_kind(j).get()))
                 .unwrap();
             let f_mag = potential.isotropic_twobody_force(rsq);
             expected_force += dr * (2.0 * f_mag);

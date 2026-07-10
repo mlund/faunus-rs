@@ -15,7 +15,11 @@
 //! Transformations of particles and groups
 
 use crate::UnitQuaternion;
-use crate::{cell::VolumeScalePolicy, group::ParticleSelection, Point};
+use crate::{
+    cell::VolumeScalePolicy,
+    group::{AtomKindId, ParticleSelection},
+    Point,
+};
 use rand::prelude::*;
 
 /// Generate a random unit vector by sphere picking
@@ -91,7 +95,7 @@ pub enum SpeciationAction {
     SwapAtomKind {
         group_index: usize,
         abs_index: usize,
-        new_atom_id: usize,
+        new_atom_id: AtomKindId,
     },
     /// Activate a single atom in an atomic mega-group
     ActivateAtom { group_index: usize, position: Point },

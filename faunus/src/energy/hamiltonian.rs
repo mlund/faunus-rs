@@ -268,7 +268,11 @@ impl Hamiltonian {
     /// All inter-group interactions between groups of these two molecule kinds
     /// will be skipped by the nonbonded term. Use when the pair is handled by
     /// another energy term (e.g. [`TabulatedEnergy`]).
-    pub(crate) fn exclude_nonbonded_molecule_pair(&mut self, mol_a: usize, mol_b: usize) {
+    pub(crate) fn exclude_nonbonded_molecule_pair(
+        &mut self,
+        mol_a: crate::group::MoleculeId,
+        mol_b: crate::group::MoleculeId,
+    ) {
         self.energy_terms
             .iter_mut()
             .for_each(|t| t.exclude_molecule_pair(mol_a, mol_b));
@@ -522,7 +526,10 @@ impl Hamiltonian {
             }
             let tab = super::TabulatedEnergy::new(tab_entries, inv_thermal_energy);
             for (mol_a, mol_b) in tab.molecule_pairs() {
-                self.exclude_nonbonded_molecule_pair(mol_a, mol_b);
+                self.exclude_nonbonded_molecule_pair(
+                    crate::group::MoleculeId::new(mol_a),
+                    crate::group::MoleculeId::new(mol_b),
+                );
                 log::info!(
                     "Excluded molecule pair ({}, {}) from nonbonded (handled by tabulated energy)",
                     mol_a,

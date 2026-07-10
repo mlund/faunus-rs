@@ -35,7 +35,7 @@ pub struct TranslateMolecule {
     molecule_name: String,
     /// Id of the molecule type to translate.
     #[serde(skip)]
-    molecule_id: usize,
+    molecule_id: MoleculeId,
     /// Maximum displacement.
     #[serde(alias = "dp")]
     max_displacement: f64,
@@ -65,7 +65,7 @@ impl TranslateMolecule {
     #[allow(dead_code)] // constructed by tests
     pub fn new(
         molecule_name: &str,
-        molecule_id: usize,
+        molecule_id: MoleculeId,
         max_displacement: f64,
         weight: f64,
         directions: crate::axes::Axes,
@@ -84,7 +84,11 @@ impl TranslateMolecule {
     /// Validate and finalize the move.
     pub(crate) fn finalize(&mut self, context: &impl ObserveContext) -> anyhow::Result<()> {
         self.molecule_id = find_molecule_id(context, &self.molecule_name, "TranslateMolecule")?;
-        if context.topology_ref().moleculekinds()[self.molecule_id].atomic() {
+        if context
+            .topology_ref()
+            .moleculekind(self.molecule_id)
+            .atomic()
+        {
             anyhow::bail!(
                 "TranslateMolecule cannot be used with atomic molecule '{}'; use TranslateAtom instead",
                 self.molecule_name
@@ -129,13 +133,13 @@ pub struct TranslateAtom {
     atom_name: Option<String>,
     /// Id of the atom type to translate.
     #[serde(skip)]
-    atom_id: Option<usize>,
+    atom_id: Option<AtomKindId>,
     /// Name of the molecule type to select the atom from.
     #[serde(rename = "molecule")]
     molecule_name: Option<String>,
     /// Id of the molecule type to select the atom from.
     #[serde(skip)]
-    molecule_id: Option<usize>,
+    molecule_id: Option<MoleculeId>,
     /// Maximum displacement.
     #[serde(alias = "dp")]
     max_displacement: f64,
@@ -174,9 +178,9 @@ impl TranslateAtom {
     #[allow(dead_code)] // constructed by tests
     pub fn new(
         molecule_name: Option<&str>,
-        molecule_id: Option<usize>,
+        molecule_id: Option<MoleculeId>,
         atom_name: Option<&str>,
-        atom_id: Option<usize>,
+        atom_id: Option<AtomKindId>,
         max_displacement: f64,
         weight: f64,
         repeat: usize,
@@ -234,6 +238,7 @@ impl TranslateAtom {
                     .moleculekinds()
                     .iter()
                     .position(|x| x.name() == molecule_name)
+                    .map(MoleculeId::new)
                     .ok_or_else(|| {
                         anyhow::Error::msg(
                             "Molecule kind in the definition of 'TranslateAtom' move does not exist.",
@@ -249,6 +254,7 @@ impl TranslateAtom {
                     .atomkinds()
                     .iter()
                     .position(|x| x.name() == atom_name)
+                    .map(AtomKindId::new)
                     .ok_or_else(|| {
                         anyhow::Error::msg(
                             "Atom kind in the definition of 'TranslateAtom' move does not exist.",
@@ -263,10 +269,10 @@ impl TranslateAtom {
                 if !context
                     .topology()
                     .moleculekinds()
-                    .get(m)
+                    .get(m.get())
                     .expect("Molecule kind should exist.")
                     .atom_indices()
-                    .contains(&a)
+                    .contains(&a.get())
                 {
                     anyhow::bail!("Atom kind in the definition of 'TranslateAtom' move does not exist in the specified molecule kind.");
                 }
@@ -278,13 +284,13 @@ impl TranslateAtom {
                     .moleculekinds()
                     .iter()
                     .filter_map(|mol| {
-                        if mol.atom_indices().contains(&a) {
-                            Some(mol.id())
+                        if mol.atom_indices().contains(&a.get()) {
+                            Some(MoleculeId::new(mol.id()))
                         } else {
                             None
                         }
                     })
-                    .collect::<Vec<usize>>();
+                    .collect::<Vec<MoleculeId>>();
 
                 self.select_molecule_ids = GroupSelection::ByMoleculeIds(molecule_indices);
             }
@@ -399,12 +405,19 @@ mod tests {
         )
         .unwrap();
 
-        let mut propagator = TranslateMolecule::new("MOL2", 0, 0.5, 4.0, crate::axes::Axes::XYZ, 1);
+        let mut propagator = TranslateMolecule::new(
+            "MOL2",
+            MoleculeId::new(0),
+            0.5,
+            4.0,
+            crate::axes::Axes::XYZ,
+            1,
+        );
 
         propagator.finalize(&context).unwrap();
 
         assert_eq!(propagator.molecule_name, "MOL2");
-        assert_eq!(propagator.molecule_id, 1);
+        assert_eq!(propagator.molecule_id, MoleculeId::new(1));
         assert_eq!(propagator.max_displacement, 0.5);
         assert_eq!(propagator.weight, 4.0);
         assert_eq!(propagator.repeat, 1);
@@ -426,7 +439,7 @@ mod tests {
         assert_eq!(propagator.molecule_name, None);
         assert_eq!(propagator.molecule_id, None);
         assert_eq!(propagator.atom_name, Some(String::from("X")));
-        assert_eq!(propagator.atom_id, Some(2));
+        assert_eq!(propagator.atom_id, Some(AtomKindId::new(2)));
         assert_eq!(propagator.max_displacement, 0.5);
         assert_eq!(propagator.weight, 4.0);
         assert_eq!(propagator.repeat, 1);
@@ -531,7 +544,7 @@ mod tests {
 
         assert_eq!(
             move4.select_molecule_ids,
-            GroupSelection::ByMoleculeIds(vec![0])
+            GroupSelection::ByMoleculeIds(vec![MoleculeId::new(0)])
         );
 
         let expected_groups = [1, 1, 60, 61, 2, 60, 2, 2, 2, 60];

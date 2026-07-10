@@ -131,11 +131,11 @@ impl<'a> AtomContext<'a> {
         group: &Group,
         mol_kind: &'a MoleculeKind,
         topology: &'a Topology,
-        atom_kind_index: usize,
+        atom_kind_index: crate::group::AtomKindId,
     ) -> Self {
         let rel_idx = abs_idx - group.start();
         let topo_rel = mol_kind.topology_index(rel_idx);
-        let atom_kind = &topology.atomkinds()[atom_kind_index];
+        let atom_kind = topology.atomkind(atom_kind_index);
         let atom_name = mol_kind
             .atom_names()
             .get(topo_rel)
@@ -240,13 +240,13 @@ pub(super) fn resolve_atoms(
     expr: &Expr,
     topology: &Topology,
     groups: &[Group],
-    get_atom_kind: &dyn Fn(usize) -> usize,
+    get_atom_kind: &dyn Fn(usize) -> crate::group::AtomKindId,
 ) -> Vec<usize> {
     let mut result: Vec<usize> = groups
         .iter()
         .filter(|g| !g.is_empty())
         .flat_map(|group| {
-            let mol_kind = &topology.moleculekinds()[group.molecule()];
+            let mol_kind = topology.moleculekind(group.molecule());
             group.iter_active().filter(|&abs_idx| {
                 expr.matches(&AtomContext::new(
                     abs_idx,
@@ -270,14 +270,14 @@ pub(super) fn resolve_groups(
     expr: &Expr,
     topology: &Topology,
     groups: &[Group],
-    get_atom_kind: &dyn Fn(usize) -> usize,
+    get_atom_kind: &dyn Fn(usize) -> crate::group::AtomKindId,
 ) -> Vec<usize> {
     groups
         .iter()
         .enumerate()
         .filter(|(_, group)| !group.is_empty())
         .filter(|(_, group)| {
-            let mol_kind = &topology.moleculekinds()[group.molecule()];
+            let mol_kind = topology.moleculekind(group.molecule());
             group.iter_active().any(|abs_idx| {
                 expr.matches(&AtomContext::new(
                     abs_idx,

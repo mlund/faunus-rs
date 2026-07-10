@@ -75,7 +75,7 @@ impl MultipoleAnalysisBuilder {
             quadrupole_norm_squared: WeightedMean::new(),
             per_atom: Vec::new(),
             molecule_kind: Some(molecule_kind),
-            track_per_atom: topology.moleculekinds()[molecule_kind].group_kind()
+            track_per_atom: topology.moleculekind(molecule_kind).group_kind()
                 == GroupKind::Molecular,
         })
     }
@@ -101,7 +101,7 @@ pub struct MultipoleAnalysis {
     /// Stored because `to_yaml()` has no access to topology.
     per_atom: Vec<PerAtomCharge>,
     /// Molecule kind validated at build time.
-    molecule_kind: Option<usize>,
+    molecule_kind: Option<crate::group::MoleculeId>,
     /// True only for single-kind molecular selections.
     track_per_atom: bool,
 }
@@ -134,7 +134,7 @@ impl<T: ObserveContext> Analyze<T> for MultipoleAnalysis {
 
             // Lazy-init per-atom accumulators from the validated molecular kind.
             if self.track_per_atom && self.per_atom.is_empty() {
-                let molkind = &moleculekinds[mol];
+                let molkind = &moleculekinds[mol.get()];
                 self.per_atom = (0..molkind.atoms().len())
                     .map(|i| PerAtomCharge {
                         name: molkind.resolved_atom_name(i, atomkinds).to_owned(),
@@ -149,7 +149,7 @@ impl<T: ObserveContext> Analyze<T> for MultipoleAnalysis {
                 && group.capacity() == self.per_atom.len();
             let mut z = 0.0;
             for i in group.iter_active() {
-                let q = atomkinds[context.atom_kind(i)].charge();
+                let q = atomkinds[context.atom_kind(i).get()].charge();
                 z += q;
                 if track_per_atom {
                     let rel = i - group.start();
@@ -314,7 +314,7 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
         let mut analysis = builder.build(&ctx).unwrap();
 
         analysis.sample(&ctx, 0).unwrap();
-        ctx.set_atom_kind(0, 1);
+        ctx.set_atom_kind(0, crate::group::AtomKindId::new(1));
         analysis.sample(&ctx, 1).unwrap();
 
         let yaml = Analyze::<Backend>::to_yaml(&analysis).unwrap();

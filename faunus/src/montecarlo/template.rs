@@ -21,6 +21,7 @@
 #![allow(dead_code)]
 
 use super::{find_molecule_id, random_group};
+use crate::group::MoleculeId;
 use crate::propagate::{tagged_yaml, MoveProposal, ProposedMove};
 use crate::{ObserveContext, Point};
 use rand::{Rng, RngCore};
@@ -37,7 +38,7 @@ pub struct TranslateAlongZ {
     dp: f64,
     /// Resolved in `finalize`, once the context is known.
     #[serde(skip)]
-    molecule_id: usize,
+    molecule_id: MoleculeId,
 }
 
 impl TranslateAlongZ {
@@ -102,7 +103,7 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
         let mut mv = TranslateAlongZ {
             molecule_name: "dimer".to_owned(),
             dp: 0.5,
-            molecule_id: 0,
+            molecule_id: MoleculeId::new(0),
         };
         mv.finalize(&context).unwrap();
         (mv, context)
@@ -142,7 +143,7 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
         let mut mv = TranslateAlongZ {
             molecule_name: "trimer".to_owned(),
             dp: 0.5,
-            molecule_id: 0,
+            molecule_id: MoleculeId::new(0),
         };
         assert!(mv.finalize(&context).is_err());
     }

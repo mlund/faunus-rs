@@ -11,7 +11,7 @@ use super::{Analyze, Frequency, Sampling};
 use crate::auxiliary::MappingExt;
 use crate::cell::{BoundaryConditions, Shape};
 use crate::group::Group;
-use crate::group::{AbsIndex, GroupIndex};
+use crate::group::{AbsIndex, GroupIndex, MoleculeId};
 use crate::selection::{first_unsupported_group, Atoms, CachedSelection, Groups, Selection};
 use crate::topology::io::{self, StructureData};
 use crate::ObserveContext;
@@ -160,7 +160,7 @@ fn validate_reference_groups(
     context: &impl ObserveContext,
     reference_groups: &[GroupIndex],
     source: &str,
-) -> Result<usize> {
+) -> Result<MoleculeId> {
     let topology = context.topology_ref();
     let groups = context.groups();
     let first_molecule = groups[reference_groups[0].get()].molecule();
@@ -171,7 +171,7 @@ fn validate_reference_groups(
             "SpatialDistribution: reference selection '{source}' matched empty group {group_index}"
         );
         let molecule_id = group.molecule();
-        let molecule = &topology.moleculekinds()[molecule_id];
+        let molecule = topology.moleculekind(molecule_id);
         anyhow::ensure!(
             molecule_id == first_molecule,
             "SpatialDistribution: reference selection '{source}' matched multiple molecule kinds"
@@ -223,7 +223,7 @@ fn capture_reference_structure(
 ) -> Result<ReferenceStructure> {
     let topology = context.topology_ref();
     let group = &context.groups()[reference_group];
-    let molecule = &topology.moleculekinds()[group.molecule()];
+    let molecule = topology.moleculekind(group.molecule());
     let center = group.mass_center().ok_or_else(|| {
         anyhow::anyhow!("SpatialDistribution: reference group {reference_group} has no mass center")
     })?;
@@ -661,7 +661,7 @@ frequency: !Every 1
             .iter()
             .position(|kind| kind.name() == "Cl")
             .unwrap();
-        context.set_atom_kind(2, cl_id);
+        context.set_atom_kind(2, crate::group::AtomKindId::new(cl_id));
         Analyze::<Backend>::sample_now(&mut sdf, &context, 1, 1.0).unwrap();
 
         assert_relative_eq!(sdf.counts.iter().sum::<f64>(), 3.0);

@@ -120,12 +120,12 @@ fn resolve_unique_rigid_group(
     let gi = groups[0];
     let mol_id = context.groups()[gi].molecule();
     let topology = context.topology_ref();
-    let dof = topology.moleculekinds()[mol_id].degrees_of_freedom();
+    let dof = topology.moleculekind(mol_id).degrees_of_freedom();
     if !dof.is_rigid() {
         anyhow::bail!(
             "custompair: {label} '{selection}' resolved to molecule '{}' with {:?} degrees of freedom; \
              only Rigid molecules are supported",
-            topology.moleculekinds()[mol_id].name(),
+            topology.moleculekind(mol_id).name(),
             dof
         );
     }

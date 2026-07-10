@@ -235,7 +235,7 @@ impl GroupMoments {
         let atoms: Vec<(f64, Point)> = group
             .iter_active()
             .map(|i| {
-                let charge = atomkinds[context.atom_kind(i)].charge();
+                let charge = atomkinds[context.atom_kind(i).get()].charge();
                 (charge, cell.distance(&context.position(i), &com))
             })
             .collect();

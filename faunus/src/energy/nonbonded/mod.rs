@@ -28,7 +28,7 @@ use std::sync::RwLock;
 use crate::{
     cell::{PbcParams, SimulationCell},
     energy::{builder::PairPotentialBuilder, EnergyTerm},
-    group::AbsIndex,
+    group::{AbsIndex, MoleculeId},
     topology::Topology,
     Change, Group, GroupChange,
 };
@@ -40,8 +40,8 @@ use super::{
 
 /// Sort a molecule-type pair into canonical `[min, max]` order for symmetric lookup.
 #[inline(always)]
-const fn canonical_mol_pair(a: usize, b: usize) -> [usize; 2] {
-    if a <= b {
+const fn canonical_mol_pair(a: MoleculeId, b: MoleculeId) -> [MoleculeId; 2] {
+    if a.get() <= b.get() {
         [a, b]
     } else {
         [b, a]
@@ -72,7 +72,7 @@ pub struct NonbondedMatrix<P = PairPot> {
     use_bounding_spheres: bool,
     /// Molecule-type pairs excluded from nonbonded evaluation (e.g. handled by TabulatedEnergy).
     /// Each entry is a sorted `[mol_a, mol_b]` pair of molecule kind indices.
-    molecule_pair_exclusions: Vec<[usize; 2]>,
+    molecule_pair_exclusions: Vec<[MoleculeId; 2]>,
 }
 
 impl<P: Clone> Clone for NonbondedMatrix<P> {
@@ -119,7 +119,7 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
         self.exclusions.get((i, j)) as f64
             * self
                 .potentials
-                .get((context.atom_kind(i), context.atom_kind(j)))
+                .get((context.atom_kind(i).get(), context.atom_kind(j).get()))
                 .expect("Atom kinds should exist in the nonbonded matrix.")
                 .isotropic_twobody_energy(distance_squared)
     }
@@ -416,7 +416,7 @@ impl<P> NonbondedMatrix<P> {
 
     /// Get the list of excluded molecule-type pairs.
     #[must_use]
-    pub(crate) fn molecule_pair_exclusions(&self) -> &[[usize; 2]] {
+    pub(crate) fn molecule_pair_exclusions(&self) -> &[[MoleculeId; 2]] {
         &self.molecule_pair_exclusions
     }
 
@@ -431,7 +431,7 @@ impl<P> NonbondedMatrix<P> {
     /// All inter-group interactions between groups of these two molecule kinds
     /// will be skipped. Use when the pair is handled by another energy term
     /// (e.g. [`TabulatedEnergy`]).
-    pub(crate) fn exclude_molecule_pair(&mut self, mol_a: usize, mol_b: usize) {
+    pub(crate) fn exclude_molecule_pair(&mut self, mol_a: MoleculeId, mol_b: MoleculeId) {
         let pair = canonical_mol_pair(mol_a, mol_b);
         if !self.molecule_pair_exclusions.contains(&pair) {
             self.molecule_pair_exclusions.push(pair);
@@ -440,7 +440,7 @@ impl<P> NonbondedMatrix<P> {
 
     /// Check if a molecule-type pair is excluded from nonbonded evaluation.
     #[inline(always)]
-    fn is_molecule_pair_excluded(&self, mol_a: usize, mol_b: usize) -> bool {
+    fn is_molecule_pair_excluded(&self, mol_a: MoleculeId, mol_b: MoleculeId) -> bool {
         // Fast path: most simulations have no molecule-pair exclusions
         if !self.has_molecule_pair_exclusions() {
             return false;

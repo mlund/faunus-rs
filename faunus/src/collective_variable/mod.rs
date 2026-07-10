@@ -182,7 +182,7 @@ pub fn require_group_com(
     cv_name: &str,
 ) -> Result<()> {
     let group = &context.groups()[group_index];
-    let mol_kind = &context.topology_ref().moleculekinds()[group.molecule()];
+    let mol_kind = context.topology_ref().moleculekind(group.molecule());
     if !mol_kind.has_com() {
         anyhow::bail!(
             "{cv_name}: group '{}' (molecule '{}') has no center of mass",

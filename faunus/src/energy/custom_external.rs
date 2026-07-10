@@ -290,7 +290,7 @@ impl CustomExternal {
     fn energy_for_atom(&self, context: &impl ObserveContext, atom_idx: usize) -> f64 {
         let topology = context.topology_ref();
         let pos = context.position(atom_idx);
-        let q = topology.atomkinds()[context.atom_kind(atom_idx)].charge();
+        let q = topology.atomkind(context.atom_kind(atom_idx)).charge();
         self.eval_at(q, pos.x, pos.y, pos.z)
     }
 
@@ -302,7 +302,7 @@ impl CustomExternal {
         if let Some(&com) = group.mass_center() {
             let net_charge: f64 = group
                 .iter_active()
-                .map(|i| atomkinds[context.atom_kind(i)].charge())
+                .map(|i| atomkinds[context.atom_kind(i).get()].charge())
                 .sum();
             self.eval_at(net_charge, com.x, com.y, com.z)
         } else {
@@ -505,8 +505,10 @@ function: "z"
         let before = term.energy(&context, &Change::Everything);
 
         let kinds = context.topology().atomkinds().to_vec();
-        let hydrogen = kinds.iter().position(|k| k.name() == "HW").unwrap();
-        let oxygen = kinds.iter().position(|k| k.name() == "OW").unwrap();
+        let hydrogen =
+            crate::group::AtomKindId::new(kinds.iter().position(|k| k.name() == "HW").unwrap());
+        let oxygen =
+            crate::group::AtomKindId::new(kinds.iter().position(|k| k.name() == "OW").unwrap());
         let atom = (0..context.num_particles())
             .find(|&i| context.atom_kind(i) == oxygen)
             .expect("an OW atom");

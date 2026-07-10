@@ -31,7 +31,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, PartialEq, Clone)]
 pub struct Group {
     /// Index of the molecule kind forming the group (immutable).
-    molecule: usize,
+    molecule: MoleculeId,
     /// Index of the group in the main group vector (immutable and unique).
     index: usize,
     /// Mass center and bounding radius; `None` for groups that have no mass center.
@@ -49,7 +49,7 @@ pub struct Group {
 impl Default for Group {
     fn default() -> Self {
         Self {
-            molecule: 0,
+            molecule: MoleculeId::new(0),
             index: 0,
             geometry: None,
             num_active: 0,
@@ -134,6 +134,62 @@ impl std::fmt::Display for RelIndex {
     }
 }
 
+/// Index of a molecule *kind*, into [`Topology::moleculekinds`](crate::topology::Topology::moleculekinds).
+///
+/// A molecule-kind id and a group index are both `usize` and both valid in the other's space, so
+/// mixing them silently addresses the wrong molecule. It is therefore a separate type. See
+/// [`AbsIndex`] for why there is no `From<usize>`.
+///
+/// `Default` (id 0) exists only so moves that carry the id in a `#[serde(skip)]` field can derive
+/// it; the real id is resolved by name at move setup.
+#[derive(
+    Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize,
+)]
+#[serde(transparent)]
+pub struct MoleculeId(usize);
+
+/// Index of an atom *kind*, into [`Topology::atomkinds`](crate::topology::Topology::atomkinds).
+///
+/// Distinct from a particle index on purpose: `atom_kind` takes a particle index and returns an
+/// `AtomKindId`, and `set_atom_kind` takes both. Keeping them separate types stops the two from
+/// being transposed — a swap that would otherwise retype the wrong atom. See [`AbsIndex`] for why
+/// there is no `From<usize>`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct AtomKindId(usize);
+
+impl MoleculeId {
+    pub const fn new(index: usize) -> Self {
+        Self(index)
+    }
+    /// The raw index, for addressing the molecule-kind array.
+    pub const fn get(self) -> usize {
+        self.0
+    }
+}
+
+impl AtomKindId {
+    pub const fn new(index: usize) -> Self {
+        Self(index)
+    }
+    /// The raw index, for addressing the atom-kind array.
+    pub const fn get(self) -> usize {
+        self.0
+    }
+}
+
+impl std::fmt::Display for MoleculeId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+impl std::fmt::Display for AtomKindId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
 /// Geometric summary of a group's active particles, derived from their positions and masses.
 ///
 /// The two quantities are computed together and are meaningless apart — the radius is measured
@@ -199,7 +255,7 @@ pub enum ParticleSelection {
     /// Specific particles, addressed in the global particle array.
     Absolute(Vec<AbsIndex>),
     /// All active particles with given atom id.
-    ById(usize),
+    ById(AtomKindId),
 }
 
 /// Enum for selecting a subset of groups
@@ -215,14 +271,14 @@ pub enum GroupSelection {
     /// Groups with given index.
     Index(Vec<usize>),
     /// Groups with a given molecule kind.
-    ByMoleculeId(usize),
+    ByMoleculeId(MoleculeId),
     /// Groups with any of the given molecule kinds.
-    ByMoleculeIds(Vec<usize>),
+    ByMoleculeIds(Vec<MoleculeId>),
 }
 
 impl Group {
     /// Create a new group
-    pub fn new(index: usize, molecule: usize, range: core::ops::Range<usize>) -> Self {
+    pub fn new(index: usize, molecule: MoleculeId, range: core::ops::Range<usize>) -> Self {
         Self {
             molecule,
             index,
@@ -291,8 +347,8 @@ impl Group {
         self.index
     }
 
-    /// Get the molecule index of the group.
-    pub const fn molecule(&self) -> usize {
+    /// Get the molecule kind of the group.
+    pub const fn molecule(&self) -> MoleculeId {
         self.molecule
     }
 
@@ -373,15 +429,15 @@ impl Group {
         &self,
         topology: &Topology,
         absolute_indices: std::ops::Range<usize>,
-        id: usize,
+        id: AtomKindId,
     ) -> Vec<usize> {
-        let atom_indices = topology.moleculekinds()[self.molecule].atom_indices();
+        let atom_indices = topology.moleculekind(self.molecule).atom_indices();
 
         atom_indices
             .iter()
             .zip(absolute_indices)
             .filter_map(|(atom_kind_id, atom_index)| {
-                if atom_kind_id == &id {
+                if *atom_kind_id == id.get() {
                     Some(atom_index)
                 } else {
                     None
@@ -496,7 +552,7 @@ pub trait GroupCollection {
     fn position(&self, index: usize) -> Point;
 
     /// Atom kind index of the i'th particle.
-    fn atom_kind(&self, index: usize) -> usize;
+    fn atom_kind(&self, index: usize) -> AtomKindId;
 
     /// Counter bumped whenever any particle's atom kind changes.
     ///
@@ -527,23 +583,23 @@ pub trait GroupCollection {
     /// over calling this directly.
     fn group_lists(&self) -> &GroupLists;
 
-    /// Returns indices of all groups matching given molecule id and size.
-    fn find_molecules(&self, molecule_id: usize, size: GroupSize) -> Option<&[usize]> {
+    /// Returns indices of all groups matching given molecule kind and size.
+    fn find_molecules(&self, molecule_id: MoleculeId, size: GroupSize) -> Option<&[usize]> {
         self.group_lists().find_molecules(molecule_id, size)
     }
 
     /// Find the single mega-group index for an atomic molecule kind.
-    fn find_atomic_group(&self, molecule_id: usize) -> Option<usize> {
+    fn find_atomic_group(&self, molecule_id: MoleculeId) -> Option<usize> {
         self.group_lists().find_atomic_group(molecule_id)
     }
 
-    /// Count groups matching given molecule id and size.
-    fn count_molecules(&self, molecule_id: usize, size: GroupSize) -> usize {
+    /// Count groups matching given molecule kind and size.
+    fn count_molecules(&self, molecule_id: MoleculeId, size: GroupSize) -> usize {
         self.group_lists().count_molecules(molecule_id, size)
     }
 
     /// Count non-empty groups (full + partial) for a molecule kind.
-    fn count_nonempty(&self, molecule_id: usize) -> usize {
+    fn count_nonempty(&self, molecule_id: MoleculeId) -> usize {
         self.group_lists().count_nonempty(molecule_id)
     }
 
@@ -551,7 +607,7 @@ pub trait GroupCollection {
     ///
     /// For atomic/reservoir mega-groups, returns the number of active atoms in the group.
     /// For molecular groups, returns the number of non-empty groups.
-    fn count_active(&self, molecule_id: usize, group_kind: GroupKind) -> usize {
+    fn count_active(&self, molecule_id: MoleculeId, group_kind: GroupKind) -> usize {
         match group_kind {
             GroupKind::Atomic | GroupKind::Reservoir => self
                 .find_atomic_group(molecule_id)
@@ -618,10 +674,10 @@ pub trait GroupCollection {
 /// which are bound to the read half — cannot reshape the system they are only meant to observe.
 /// The callers are the framework itself: `transform`, `state`, `topology::block` and `backend`.
 pub trait GroupCollectionMut: GroupCollection {
-    /// Add a group to the system based on a molecule id, positions, and atom kind indices.
+    /// Add a group to the system based on a molecule kind, positions, and atom kind indices.
     fn add_group(
         &mut self,
-        molecule: usize,
+        molecule: MoleculeId,
         positions: &[Point],
         atom_ids: &[usize],
     ) -> anyhow::Result<&mut Group>;
@@ -643,14 +699,14 @@ pub trait GroupCollectionMut: GroupCollection {
     /// A kind change invalidates selections that match on atom identity, and — when the mass
     /// differs — the owning group's mass center and bounding radius. Implementations must
     /// maintain both, so that callers never have to remember to.
-    fn set_atom_kind(&mut self, index: usize, atom_id: usize);
+    fn set_atom_kind(&mut self, index: usize, atom_id: AtomKindId);
 
     /// Set atom kind index without refreshing the owning group's geometry.
     ///
     /// Only for bulk restores that recompute every group's geometry afterwards; a per-particle
     /// refresh would then be quadratic. Like [`set_atom_kind`](Self::set_atom_kind), it bumps the
     /// atom-kind generation when — and only when — the kind actually changes.
-    fn set_atom_kind_unchecked(&mut self, index: usize, atom_id: usize);
+    fn set_atom_kind_unchecked(&mut self, index: usize, atom_id: AtomKindId);
 
     /// Swap all SoA fields (position, atom kind) between two particle indices.
     fn swap_particles(&mut self, i: usize, j: usize);
@@ -680,7 +736,7 @@ pub trait GroupCollectionMut: GroupCollection {
         self.set_positions(0..particles.len(), particles.iter().map(|p| &p.pos));
         for (i, p) in particles.iter().enumerate() {
             // Every group's geometry is recomputed below, so skip the per-particle refresh.
-            self.set_atom_kind_unchecked(i, p.atom_id);
+            self.set_atom_kind_unchecked(i, AtomKindId::new(p.atom_id));
         }
         for (i, (&size, &q)) in sizes.iter().zip(quaternions.iter()).enumerate() {
             self.resize_group(i, size)?;
@@ -790,14 +846,14 @@ impl GroupLists {
         }
     }
 
-    /// Count groups matching given molecule id and size.
-    pub(crate) fn count_molecules(&self, molecule_id: usize, size: GroupSize) -> usize {
+    /// Count groups matching given molecule kind and size.
+    pub(crate) fn count_molecules(&self, molecule_id: MoleculeId, size: GroupSize) -> usize {
         self.find_molecules(molecule_id, size)
             .map_or(0, |s| s.len())
     }
 
     /// Count non-empty groups (full + partial) for a molecule kind.
-    pub(crate) fn count_nonempty(&self, molecule_id: usize) -> usize {
+    pub(crate) fn count_nonempty(&self, molecule_id: MoleculeId) -> usize {
         self.count_molecules(molecule_id, GroupSize::Full)
             + self.count_molecules(molecule_id, GroupSize::Partial(0))
     }
@@ -805,7 +861,7 @@ impl GroupLists {
     /// Find the single mega-group index for an atomic molecule kind.
     ///
     /// Checks partial first since atomic mega-groups are typically partially filled.
-    pub(crate) fn find_atomic_group(&self, molecule_id: usize) -> Option<usize> {
+    pub(crate) fn find_atomic_group(&self, molecule_id: MoleculeId) -> Option<usize> {
         self.find_molecules(molecule_id, GroupSize::Partial(0))
             .into_iter()
             .chain(self.find_molecules(molecule_id, GroupSize::Full))
@@ -817,11 +873,15 @@ impl GroupLists {
     /// Returns indices of all groups matching given molecule id and size.
     ///
     /// The lookup complexity is O(1).
-    pub(crate) fn find_molecules(&self, molecule_id: usize, size: GroupSize) -> Option<&[usize]> {
+    pub(crate) fn find_molecules(
+        &self,
+        molecule_id: MoleculeId,
+        size: GroupSize,
+    ) -> Option<&[usize]> {
         let indices = match size {
-            GroupSize::Full => self.full.get(molecule_id),
-            GroupSize::Partial(_) => self.partial.get(molecule_id),
-            GroupSize::Empty => self.empty.get(molecule_id),
+            GroupSize::Full => self.full.get(molecule_id.get()),
+            GroupSize::Partial(_) => self.partial.get(molecule_id.get()),
+            GroupSize::Empty => self.empty.get(molecule_id.get()),
             _ => panic!("Unsupported GroupSize."),
         };
         indices.map(|i| i.as_slice())
@@ -842,7 +902,7 @@ impl GroupLists {
             .zip([GroupSize::Full, GroupSize::Partial(1), GroupSize::Empty])
             .find_map(|(outer, size)| {
                 let inner = outer
-                    .get_mut(group.molecule())
+                    .get_mut(group.molecule().get())
                     .expect("Incorrectly initialized GroupLists structure.");
 
                 inner
@@ -857,7 +917,7 @@ impl GroupLists {
     /// ## Notes
     /// - The time complexity of this operation is O(1).
     fn add_to_list(list: &mut [Vec<usize>], group: &Group) {
-        list.get_mut(group.molecule())
+        list.get_mut(group.molecule().get())
             .expect("Incorrectly initialized GroupLists structure.")
             .push(group.index());
     }
@@ -874,7 +934,7 @@ mod index_space_characterization {
 
     /// Six active particles at absolute 10..16, four inactive at 16..20.
     fn partially_active_group() -> Group {
-        let mut group = Group::new(0, 0, 10..20);
+        let mut group = Group::new(0, MoleculeId::new(0), 10..20);
         group.resize(GroupSize::Partial(6)).unwrap();
         group
     }
@@ -930,7 +990,7 @@ mod tests {
     /// compiling it.
     #[test]
     fn resize_shrinks_a_group() {
-        let mut group = Group::new(7, 0, 20..23);
+        let mut group = Group::new(7, MoleculeId::new(0), 20..23);
         assert_eq!(group.len(), 3);
         assert_eq!(group.size(), GroupSize::Full);
 
@@ -944,7 +1004,7 @@ mod tests {
     fn test_group() {
         // Test group creation
         let mut group = Group {
-            molecule: 20,
+            molecule: MoleculeId::new(20),
             index: 2,
             geometry: None,
             num_active: 6,
@@ -964,7 +1024,7 @@ mod tests {
         assert_eq!(group.len(), 6);
         assert_eq!(group.capacity(), 10);
         assert_eq!(group.iter_active(), 0..6);
-        assert_eq!(group.molecule(), 20);
+        assert_eq!(group.molecule(), MoleculeId::new(20));
         assert_eq!(group.size(), GroupSize::Partial(6));
         assert_eq!(group.index(), 2);
         assert!(group.mass_center().is_none());
@@ -1018,7 +1078,7 @@ mod tests {
         assert_eq!(group.size(), GroupSize::Empty);
 
         // Relative selection
-        let mut group = Group::new(7, 0, 20..23);
+        let mut group = Group::new(7, MoleculeId::new(0), 20..23);
         assert_eq!(group.len(), 3);
         let indices = group
             .select(
@@ -1091,14 +1151,20 @@ mod tests {
 
         assert_eq!(
             group
-                .select(&ParticleSelection::ById(0), context.topology_ref())
+                .select(
+                    &ParticleSelection::ById(AtomKindId::new(0)),
+                    context.topology_ref()
+                )
                 .unwrap(),
             expected0
         );
 
         assert_eq!(
             group
-                .select(&ParticleSelection::ById(1), context.topology_ref())
+                .select(
+                    &ParticleSelection::ById(AtomKindId::new(1)),
+                    context.topology_ref()
+                )
                 .unwrap(),
             expected1
         );
@@ -1108,7 +1174,10 @@ mod tests {
 
         assert_eq!(
             group
-                .select(&ParticleSelection::ById(2), context.topology_ref())
+                .select(
+                    &ParticleSelection::ById(AtomKindId::new(2)),
+                    context.topology_ref()
+                )
                 .unwrap(),
             expected_active
         );
@@ -1117,7 +1186,7 @@ mod tests {
     #[test]
     fn test_absolute_relative_indices() {
         let group = Group {
-            molecule: 20,
+            molecule: MoleculeId::new(20),
             index: 2,
             geometry: None,
             num_active: 6,
@@ -1139,9 +1208,9 @@ mod tests {
         assert_eq!(group_lists.empty.len(), 3);
         assert_eq!(group_lists.generation(), 0);
 
-        let mut group1 = Group::new(0, 0, 3..8);
-        let group2 = Group::new(1, 0, 8..13);
-        let mut group3 = Group::new(2, 1, 13..20);
+        let mut group1 = Group::new(0, MoleculeId::new(0), 3..8);
+        let group2 = Group::new(1, MoleculeId::new(0), 8..13);
+        let mut group3 = Group::new(2, MoleculeId::new(1), 13..20);
 
         group_lists.add_group(&group1);
         group_lists.add_group(&group2);
@@ -1168,23 +1237,38 @@ mod tests {
         assert!(group_lists.partial[1].contains(&2));
 
         // count_molecules: mol 0 has 1 full (group2), 0 partial, 1 empty (group1)
-        assert_eq!(group_lists.count_molecules(0, GroupSize::Full), 1);
-        assert_eq!(group_lists.count_molecules(0, GroupSize::Partial(0)), 0);
-        assert_eq!(group_lists.count_molecules(0, GroupSize::Empty), 1);
+        assert_eq!(
+            group_lists.count_molecules(MoleculeId::new(0), GroupSize::Full),
+            1
+        );
+        assert_eq!(
+            group_lists.count_molecules(MoleculeId::new(0), GroupSize::Partial(0)),
+            0
+        );
+        assert_eq!(
+            group_lists.count_molecules(MoleculeId::new(0), GroupSize::Empty),
+            1
+        );
         // mol 1 has 0 full, 1 partial (group3), 0 empty
-        assert_eq!(group_lists.count_molecules(1, GroupSize::Full), 0);
-        assert_eq!(group_lists.count_molecules(1, GroupSize::Partial(0)), 1);
+        assert_eq!(
+            group_lists.count_molecules(MoleculeId::new(1), GroupSize::Full),
+            0
+        );
+        assert_eq!(
+            group_lists.count_molecules(MoleculeId::new(1), GroupSize::Partial(0)),
+            1
+        );
 
         // count_nonempty: mol 0 = 1 full + 0 partial = 1; mol 1 = 0 + 1 = 1
-        assert_eq!(group_lists.count_nonempty(0), 1);
-        assert_eq!(group_lists.count_nonempty(1), 1);
+        assert_eq!(group_lists.count_nonempty(MoleculeId::new(0)), 1);
+        assert_eq!(group_lists.count_nonempty(MoleculeId::new(1)), 1);
 
         // find_atomic_group: mol 0 has partial=[] then full=[1] then empty=[0] → first is 1
-        assert_eq!(group_lists.find_atomic_group(0), Some(1));
+        assert_eq!(group_lists.find_atomic_group(MoleculeId::new(0)), Some(1));
         // mol 1 has partial=[2] → first is 2
-        assert_eq!(group_lists.find_atomic_group(1), Some(2));
+        assert_eq!(group_lists.find_atomic_group(MoleculeId::new(1)), Some(2));
         // mol 2 has nothing
-        assert_eq!(group_lists.find_atomic_group(2), None);
+        assert_eq!(group_lists.find_atomic_group(MoleculeId::new(2)), None);
     }
 
     /// Active-count changes within the partial range must bump the generation so
@@ -1193,7 +1277,7 @@ mod tests {
     #[test]
     fn test_partial_resize_bumps_generation() {
         let mut group_lists = GroupLists::new(1);
-        let mut group = Group::new(0, 0, 0..10); // created Full (10 active)
+        let mut group = Group::new(0, MoleculeId::new(0), 0..10); // created Full (10 active)
         group_lists.add_group(&group);
 
         group.resize(GroupSize::Partial(5)).unwrap();
@@ -1215,7 +1299,7 @@ mod tests {
         assert_eq!(group_lists.generation(), gen + 2);
 
         // Empty→Empty and Full→Full have fixed active counts and must NOT bump.
-        let mut empty = Group::new(1, 0, 10..20);
+        let mut empty = Group::new(1, MoleculeId::new(0), 10..20);
         empty.resize(GroupSize::Empty).unwrap();
         group_lists.add_group(&empty); // adds to empty list (bumps once)
         let gen = group_lists.generation();
@@ -1237,7 +1321,7 @@ mod tests {
         let gl = context.group_lists();
 
         // Trait methods should return the same results as GroupLists methods
-        for mol_id in 0..context.topology_ref().moleculekinds().len() {
+        for mol_id in (0..context.topology_ref().moleculekinds().len()).map(MoleculeId::new) {
             for size in [GroupSize::Full, GroupSize::Partial(0), GroupSize::Empty] {
                 assert_eq!(
                     context.find_molecules(mol_id, size),
@@ -1304,12 +1388,15 @@ mod tests {
 
         // With molecule ID
         let expected = vec![0, 1, 2, 60, 61];
-        let selected = context.select(&GroupSelection::ByMoleculeId(0));
+        let selected = context.select(&GroupSelection::ByMoleculeId(MoleculeId::new(0)));
         assert_eq!(selected, expected);
 
         // With several molecule IDs
         let expected = context.select(&GroupSelection::Size(GroupSize::Full));
-        let selected = context.select(&GroupSelection::ByMoleculeIds(vec![0, 1]));
+        let selected = context.select(&GroupSelection::ByMoleculeIds(vec![
+            MoleculeId::new(0),
+            MoleculeId::new(1),
+        ]));
         assert_eq!(selected, expected);
     }
 
@@ -1317,13 +1404,13 @@ mod tests {
     fn quaternion_default_is_identity() {
         let group = Group::default();
         assert_eq!(*group.quaternion(), crate::UnitQuaternion::identity());
-        let group = Group::new(0, 0, 0..5);
+        let group = Group::new(0, MoleculeId::new(0), 0..5);
         assert_eq!(*group.quaternion(), crate::UnitQuaternion::identity());
     }
 
     #[test]
     fn quaternion_rotate_by() {
-        let mut group = Group::new(0, 0, 0..3);
+        let mut group = Group::new(0, MoleculeId::new(0), 0..3);
         let axis = nalgebra::UnitVector3::new_normalize(crate::Point::new(0.0, 0.0, 1.0));
         let q1 = crate::UnitQuaternion::from_axis_angle(&axis, 0.3);
         let q2 = crate::UnitQuaternion::from_axis_angle(&axis, 0.5);
@@ -1335,7 +1422,7 @@ mod tests {
 
     #[test]
     fn quaternion_set_get() {
-        let mut group = Group::new(0, 0, 0..3);
+        let mut group = Group::new(0, MoleculeId::new(0), 0..3);
         let axis = nalgebra::UnitVector3::new_normalize(crate::Point::new(1.0, 0.0, 0.0));
         let q = crate::UnitQuaternion::from_axis_angle(&axis, 1.2);
         group.set_quaternion(q);

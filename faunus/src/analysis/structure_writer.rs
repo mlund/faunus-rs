@@ -134,7 +134,7 @@ impl StructureWriter {
 
         for &gi in group_indices.iter() {
             let group = &all_groups[gi.get()];
-            let molecule = &topology.moleculekinds()[group.molecule()];
+            let molecule = topology.moleculekind(group.molecule());
             // capacity() not len(): XTC requires fixed particle count per frame
             for i in 0..group.capacity() {
                 let topo_i = molecule.topology_index(i);
@@ -197,7 +197,7 @@ impl StructureWriter {
                 let groups: Vec<(u32, u32)> = context
                     .groups()
                     .iter()
-                    .map(|g| (g.molecule() as u32, g.capacity() as u32))
+                    .map(|g| (g.molecule().get() as u32, g.capacity() as u32))
                     .collect();
                 let n_particles = context.num_particles() as u32;
                 let w = FrameStateWriter::create(&aux_path, &groups, n_particles)?;
@@ -213,7 +213,7 @@ impl StructureWriter {
                 .collect();
             let group_sizes: Vec<u32> = groups.iter().map(|g| g.len() as u32).collect();
             let atom_ids: Vec<u32> = (0..context.num_particles())
-                .map(|i| context.atom_kind(i) as u32)
+                .map(|i| context.atom_kind(i).get() as u32)
                 .collect();
             writer.write_frame(&quaternions, &mass_centers, &group_sizes, &atom_ids)?;
         }
@@ -233,7 +233,7 @@ impl StructureWriter {
             let mut start = 0usize;
             for &gi in group_indices.iter() {
                 let g = &all_groups[gi.get()];
-                let mol_name = psf::to_ascii(topology.moleculekinds()[g.molecule()].name());
+                let mol_name = psf::to_ascii(topology.moleculekind(g.molecule()).name());
                 writeln!(
                     w,
                     "# {:>5} {:<16} {:>6} {:>8}",
@@ -274,7 +274,7 @@ impl StructureWriter {
                     if !first {
                         write!(w, " ")?;
                     }
-                    write!(w, "{:.4}", atomkinds[context.atom_kind(i)].charge())?;
+                    write!(w, "{:.4}", atomkinds[context.atom_kind(i).get()].charge())?;
                     first = false;
                 }
             }

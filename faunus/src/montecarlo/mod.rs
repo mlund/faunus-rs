@@ -72,12 +72,13 @@ fn find_molecule_id(
     context: &impl ObserveContext,
     molecule_name: &str,
     move_name: &str,
-) -> anyhow::Result<usize> {
+) -> anyhow::Result<MoleculeId> {
     context
         .topology()
         .moleculekinds()
         .iter()
         .position(|x| x.name() == molecule_name)
+        .map(MoleculeId::new)
         .ok_or_else(|| {
             anyhow::anyhow!(
                 "Molecule '{}' in '{}' move does not exist.",
@@ -91,7 +92,7 @@ fn find_molecule_id(
 fn random_group(
     context: &impl ObserveContext,
     rng: &mut (impl Rng + ?Sized),
-    molecule_id: usize,
+    molecule_id: MoleculeId,
 ) -> Option<usize> {
     let select = GroupSelection::ByMoleculeId(molecule_id);
     context.select(&select).iter().copied().choose(rng)
@@ -103,7 +104,7 @@ fn random_atom(
     context: &impl ObserveContext,
     rng: &mut (impl Rng + ?Sized),
     group_index: usize,
-    atom_id: Option<usize>,
+    atom_id: Option<AtomKindId>,
 ) -> Option<usize> {
     let select = atom_id.map_or(ParticleSelection::Active, ParticleSelection::ById);
 

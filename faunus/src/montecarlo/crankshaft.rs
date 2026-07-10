@@ -12,7 +12,7 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
-use crate::group::RelIndex;
+use crate::group::{MoleculeId, RelIndex};
 use crate::montecarlo;
 use crate::propagate::{tagged_yaml, MoveProposal, ProposedMove};
 use crate::topology::BondGraph;
@@ -35,7 +35,7 @@ pub struct CrankshaftMove {
     molecule_name: String,
     /// Id of the molecule type.
     #[serde(skip)]
-    molecule_id: usize,
+    molecule_id: MoleculeId,
     /// Maximum angular displacement (radians).
     #[serde(alias = "dp")]
     max_displacement: f64,
@@ -60,7 +60,7 @@ impl CrankshaftMove {
         self.molecule_id =
             montecarlo::find_molecule_id(context, &self.molecule_name, "CrankshaftMove")?;
         let topology = context.topology();
-        let mol_kind = &topology.moleculekinds()[self.molecule_id];
+        let mol_kind = topology.moleculekind(self.molecule_id);
         self.bond_graph = mol_kind.bond_graph().clone();
         self.dihedral_bonds = mol_kind
             .dihedrals()
@@ -150,7 +150,7 @@ mod tests {
         assert_eq!(m.max_displacement, 0.5);
         assert_eq!(m.weight, 1.0);
         assert_eq!(m.repeat, 1);
-        assert_eq!(m.molecule_id, 0);
+        assert_eq!(m.molecule_id, MoleculeId::new(0));
         assert!(m.dihedral_bonds.is_empty());
     }
 

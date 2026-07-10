@@ -9,7 +9,10 @@ use crate::{
     change::Change,
     context::{PerturbContext, WithHamiltonianMut},
     energy::{builder::HamiltonianBuilder, Hamiltonian},
-    group::{GroupCollection, GroupCollectionMut, GroupGeometry, GroupLists, GroupSize},
+    group::{
+        AtomKindId, GroupCollection, GroupCollectionMut, GroupGeometry, GroupLists, GroupSize,
+        MoleculeId,
+    },
     topology::Topology,
     Context, Group, ObserveContext, Point, UnitQuaternion, WithSimulationCell, WithTopology,
 };
@@ -299,8 +302,8 @@ impl GroupCollection for Backend {
     }
 
     #[inline(always)]
-    fn atom_kind(&self, index: usize) -> usize {
-        self.atom_kinds[index] as usize
+    fn atom_kind(&self, index: usize) -> AtomKindId {
+        AtomKindId::new(self.atom_kinds[index] as usize)
     }
 
     fn atom_kinds_generation(&self) -> u64 {
@@ -321,21 +324,22 @@ impl GroupCollectionMut for Backend {
         &mut self.groups
     }
 
-    fn set_atom_kind(&mut self, index: usize, atom_id: usize) {
+    fn set_atom_kind(&mut self, index: usize, atom_id: AtomKindId) {
         let previous = self.atom_kinds[index] as usize;
         self.set_atom_kind_unchecked(index, atom_id);
         // A mass-weighted center only moves if the mass changed; a pure charge swap, which is the
         // common titration, leaves the geometry alone and must not pay for a recompute.
         let kinds = self.topology_ref().atomkinds();
-        let mass_changed = kinds[previous].mass() != kinds[atom_id].mass();
-        if previous != atom_id && mass_changed {
+        let mass_changed = kinds[previous].mass() != kinds[atom_id.get()].mass();
+        if previous != atom_id.get() && mass_changed {
             if let Some(group_index) = self.group_of_particle(index) {
                 self.update_mass_center(group_index);
             }
         }
     }
 
-    fn set_atom_kind_unchecked(&mut self, index: usize, atom_id: usize) {
+    fn set_atom_kind_unchecked(&mut self, index: usize, atom_id: AtomKindId) {
+        let atom_id = atom_id.get();
         debug_assert!(atom_id <= u32::MAX as usize, "atom_id overflows u32");
         if self.atom_kinds[index] == atom_id as u32 {
             return; // a no-op must not invalidate any selection cache
@@ -377,7 +381,7 @@ impl GroupCollectionMut for Backend {
                 self.topology_ref(),
             )
             .unwrap();
-        if !indices.is_empty() && self.topology().moleculekinds()[group.molecule()].has_com() {
+        if !indices.is_empty() && self.topology().moleculekind(group.molecule()).has_com() {
             let mass_center = self.mass_center(&indices);
             // Bounding radius: max PBC distance from COM to any active particle
             let bounding_radius = indices
@@ -396,7 +400,7 @@ impl GroupCollectionMut for Backend {
 
     fn add_group(
         &mut self,
-        molecule: usize,
+        molecule: MoleculeId,
         positions: &[Point],
         atom_ids: &[usize],
     ) -> anyhow::Result<&mut Group> {
@@ -521,7 +525,10 @@ impl crate::context::PerturbContext for Backend {
         let num_groups = self.groups.len();
 
         for g in 0..num_groups {
-            let is_mol = self.topology.moleculekinds()[self.groups[g].molecule()].has_com();
+            let is_mol = self
+                .topology
+                .moleculekind(self.groups[g].molecule())
+                .has_com();
             if !is_mol {
                 for i in self.groups[g].iter_active() {
                     let mut pos = Point::new(self.x[i], self.y[i], self.z[i]);
@@ -769,7 +776,7 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
         let generation = context.atom_kinds_generation();
         let geometry = context.groups()[0].geometry();
         // B (mass 1) → C (mass 1): only the charge differs, the common titration.
-        context.set_atom_kind(1, 2);
+        context.set_atom_kind(1, AtomKindId::new(2));
         assert_eq!(context.atom_kinds_generation(), generation + 1);
         assert_eq!(context.groups()[0].geometry(), geometry);
     }
@@ -781,7 +788,7 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
         // A (mass 3) at z=−2, B (mass 1) at z=+2 ⇒ center at z = −1.
         assert!((before.mass_center.z + 1.0).abs() < 1e-12);
         // Turn B into a second A (mass 1 → 3); the center moves to z = 0.
-        context.set_atom_kind(1, 0);
+        context.set_atom_kind(1, AtomKindId::new(0));
         let after = context.groups()[0].geometry().unwrap();
         assert!(after.mass_center.z.abs() < 1e-12, "{:?}", after.mass_center);
         // Both atoms are now 2 Å from the center, up from 1 and 3.
@@ -802,7 +809,7 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
         let molecule_atoms = by_molecule.resolve(&context).to_vec();
 
         // B → A: nothing is of kind B any more, but the molecule still holds the same atoms.
-        context.set_atom_kind(1, 0);
+        context.set_atom_kind(1, AtomKindId::new(0));
         assert!(
             by_kind.resolve(&context).is_empty(),
             "an atomtype selection must follow the swap"
@@ -827,7 +834,7 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
         let before = context.groups()[0].geometry().unwrap();
 
         context.save_particle_backup(0, &[0, 1]);
-        context.set_atom_kind(1, 0); // mass 1 → 3, moves the center
+        context.set_atom_kind(1, AtomKindId::new(0)); // mass 1 → 3, moves the center
         assert!(context.groups()[0].geometry().unwrap() != before);
 
         context.undo().unwrap();
@@ -839,11 +846,11 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
         let mut context = backend();
         context.save_particle_backup(0, &[0, 1]);
         let before = context.atom_kinds_generation();
-        context.set_atom_kind(1, 0);
+        context.set_atom_kind(1, AtomKindId::new(0));
         assert!(context.atom_kinds_generation() > before);
 
         context.undo().unwrap();
-        assert_eq!(context.atom_kind(1), 1, "kind restored");
+        assert_eq!(context.atom_kind(1), AtomKindId::new(1), "kind restored");
         assert!(
             context.atom_kinds_generation() > before,
             "undoing a swap is itself a kind change and must invalidate caches"
@@ -913,7 +920,7 @@ mod tests {
             let topology = ctx.topology();
             let masses: Vec<f64> = indices
                 .iter()
-                .map(|&i| topology.atomkinds()[ctx.atom_kind(i)].mass())
+                .map(|&i| topology.atomkind(ctx.atom_kind(i)).mass())
                 .collect();
             let com_aux = crate::geometry::mass_center_pbc(&positions, &masses, ctx.cell(), None);
             let err = (com_trait - com_aux).norm();
@@ -1004,7 +1011,7 @@ mod tests {
 
         // Snapshot original state
         let original_particles: Vec<crate::Particle> = (0..ctx.num_particles())
-            .map(|i| crate::Particle::new(ctx.atom_kind(i), ctx.position(i)))
+            .map(|i| crate::Particle::new(ctx.atom_kind(i).get(), ctx.position(i)))
             .collect();
         let original_energy = ctx.hamiltonian().energy(&ctx, &crate::Change::Everything);
         let original_sizes: Vec<crate::group::GroupSize> = ctx
@@ -1050,7 +1057,11 @@ mod tests {
                 (restored_pos - orig.pos).norm() < 1e-14,
                 "Position mismatch at particle {i}"
             );
-            assert_eq!(ctx.atom_kind(i), orig.atom_id, "atom_id mismatch at {i}");
+            assert_eq!(
+                ctx.atom_kind(i).get(),
+                orig.atom_id,
+                "atom_id mismatch at {i}"
+            );
         }
 
         // Verify mass centers restored
@@ -1119,7 +1130,7 @@ mod tests {
                 let pos = ctx.position(i);
                 assert!(pos.x.is_finite() && pos.y.is_finite() && pos.z.is_finite());
                 let kind = ctx.atom_kind(i);
-                assert!(kind < ctx.topology().atomkinds().len());
+                assert!(kind.get() < ctx.topology().atomkinds().len());
             }
         }
     }
@@ -1132,7 +1143,7 @@ mod tests {
         let mut ctx = Backend::new(&yaml, None, &mut rand::thread_rng()).unwrap();
         let group = &ctx.groups()[0];
         let indices: Vec<usize> = group.iter_active().collect();
-        let original_kinds: Vec<usize> = indices.iter().map(|&i| ctx.atom_kind(i)).collect();
+        let original_kinds: Vec<usize> = indices.iter().map(|&i| ctx.atom_kind(i).get()).collect();
         let new_positions: Vec<Point> = indices
             .iter()
             .enumerate()
@@ -1141,7 +1152,7 @@ mod tests {
         ctx.set_positions(indices.clone(), new_positions.iter());
         for (j, &i) in indices.iter().enumerate() {
             assert_eq!(ctx.position(i), new_positions[j]);
-            assert_eq!(ctx.atom_kind(i), original_kinds[j]);
+            assert_eq!(ctx.atom_kind(i).get(), original_kinds[j]);
         }
     }
 
@@ -1153,9 +1164,7 @@ mod tests {
         let mut ctx = Backend::new(&yaml, None, &mut rand::thread_rng()).unwrap();
         let n_before = ctx.num_particles();
         let mol_id = ctx.groups()[0].molecule();
-        let topo_atom_ids: Vec<usize> = ctx.topology().moleculekinds()[mol_id]
-            .atom_indices()
-            .to_vec();
+        let topo_atom_ids: Vec<usize> = ctx.topology().moleculekind(mol_id).atom_indices().to_vec();
         let positions: Vec<Point> = topo_atom_ids
             .iter()
             .enumerate()
@@ -1168,7 +1177,7 @@ mod tests {
         assert_eq!(start, n_before);
         for (j, &expected_kind) in topo_atom_ids.iter().enumerate() {
             assert_eq!(ctx.position(start + j), positions[j]);
-            assert_eq!(ctx.atom_kind(start + j), expected_kind);
+            assert_eq!(ctx.atom_kind(start + j).get(), expected_kind);
         }
     }
 
@@ -1197,7 +1206,8 @@ mod tests {
             .join("tests/files/gibbs_ensemble/input.yaml");
         let mut ctx = Backend::new(&yaml, None, &mut rand::thread_rng()).unwrap();
         let pos_before = ctx.position(0);
-        let new_kind = (ctx.atom_kind(0) + 1) % ctx.topology().atomkinds().len();
+        let new_kind =
+            AtomKindId::new((ctx.atom_kind(0).get() + 1) % ctx.topology().atomkinds().len());
         ctx.set_atom_kind(0, new_kind);
         assert_eq!(ctx.atom_kind(0), new_kind);
         assert_eq!(ctx.position(0), pos_before);
@@ -1249,7 +1259,7 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
         let mut groups = CachedSelection::groups(Selection::parse("molecule DIMER").unwrap());
         let resolved = groups.resolve(&context);
         assert_eq!(resolved.len(), 2);
-        assert_eq!(context.group(resolved[0]).molecule(), 0);
+        assert_eq!(context.group(resolved[0]).molecule(), MoleculeId::new(0));
     }
 
     /// Strip the index space, so a resolved slice can be compared with the uncached `Vec<usize>`.
@@ -1317,7 +1327,9 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
     fn track_an_atom_kind_swap() {
         for source in ["all", "atomtype A", "atomtype B", "molecule DIMER"] {
             let mut context = backend();
-            assert_tracks(&mut context, source, |c| c.set_atom_kind(1, 0));
+            assert_tracks(&mut context, source, |c| {
+                c.set_atom_kind(1, AtomKindId::new(0))
+            });
         }
     }
 

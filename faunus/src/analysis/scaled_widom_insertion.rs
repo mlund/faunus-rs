@@ -364,7 +364,7 @@ impl<T: ObserveContext> Analyze<T> for ScaledWidomInsertion {
                 for j in group.iter_active() {
                     let pos_j = context.position(j);
                     let dist_sq = cell.distance_squared(&r_ghost, &pos_j);
-                    let atom_type = context.atom_kind(j);
+                    let atom_type = context.atom_kind(j).get();
 
                     du_sr += self.sr_potentials[atom_type].isotropic_twobody_energy(dist_sq);
 

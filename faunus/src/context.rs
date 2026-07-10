@@ -107,7 +107,7 @@ pub trait ObserveContext: GroupCollection + WithSimulationCell + WithTopology {
             .moleculekinds()
             .iter()
             .enumerate()
-            .map(|(id, _)| self.count_active_molecules(id))
+            .map(|(id, _)| self.count_active_molecules(crate::group::MoleculeId::new(id)))
             .sum()
     }
 
@@ -116,8 +116,8 @@ pub trait ObserveContext: GroupCollection + WithSimulationCell + WithTopology {
     /// For atomic mega-groups, N = number of active atoms.
     /// For molecular groups, N = number of non-empty groups.
     /// Reservoir groups always return 0 since they are outside the simulation box.
-    fn count_active_molecules(&self, molecule_id: usize) -> usize {
-        let kind = &self.topology_ref().moleculekinds()[molecule_id];
+    fn count_active_molecules(&self, molecule_id: crate::group::MoleculeId) -> usize {
+        let kind = self.topology_ref().moleculekind(molecule_id);
         if kind.is_reservoir() {
             // Reservoir particles live outside the simulation box and must not
             // contribute to physical counts like the V^N partition function factor.
@@ -129,12 +129,12 @@ pub trait ObserveContext: GroupCollection + WithSimulationCell + WithTopology {
 
     /// Mass of the i-th particle's atom type.
     fn atom_mass(&self, index: usize) -> f64 {
-        self.topology_ref().atomkinds()[self.atom_kind(index)].mass()
+        self.topology_ref().atomkind(self.atom_kind(index)).mass()
     }
 
     /// Charge of the i-th particle's atom type.
     fn atom_charge(&self, index: usize) -> f64 {
-        self.topology_ref().atomkinds()[self.atom_kind(index)].charge()
+        self.topology_ref().atomkind(self.atom_kind(index)).charge()
     }
 
     /// Resolve a selection to active atom indices, using each atom's current kind.

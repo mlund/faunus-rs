@@ -36,7 +36,7 @@ pub(crate) fn group_quadrupole_moment(
     let com = group.mass_center()?;
     let atomkinds = context.topology_ref().atomkinds();
     let charges_positions = group.iter_active().map(|i| {
-        let charge = atomkinds[context.atom_kind(i)].charge();
+        let charge = atomkinds[context.atom_kind(i).get()].charge();
         (charge, GroupCollection::position(context, i))
     });
     Some(geometry::quadrupole_moment(
@@ -55,7 +55,7 @@ pub(crate) fn group_dipole_moment(
     let com = group.mass_center()?;
     let atomkinds = context.topology_ref().atomkinds();
     let charges_positions = group.iter_active().map(|i| {
-        let charge = atomkinds[context.atom_kind(i)].charge();
+        let charge = atomkinds[context.atom_kind(i).get()].charge();
         (charge, GroupCollection::position(context, i))
     });
     Some(geometry::dipole_moment(
@@ -152,7 +152,7 @@ impl GyrationRadius {
         let atomkinds = context.topology_ref().atomkinds();
         let positions_masses = group.iter_active().map(|i| {
             let pos = GroupCollection::position(context, i);
-            let mass = atomkinds[context.atom_kind(i)].mass();
+            let mass = atomkinds[context.atom_kind(i).get()].mass();
             (pos, mass)
         });
         GyrationTensor::from_positions_masses_com(positions_masses, com, context.cell())
@@ -388,6 +388,7 @@ mod tests {
             .moleculekinds()
             .iter()
             .position(|m| m.name() == "MOL2")
+            .map(crate::group::MoleculeId::new)
             .expect("MOL2 not found");
         let mut indices = groups
             .iter()

@@ -16,6 +16,7 @@
 //! a) the `MoleculeBlock` structure which is used to define the topology of the system,
 //! b) the `InsertionPolicy` used to specify the construction of the molecule blocks.
 
+use crate::group::MoleculeId;
 use rand::Rng;
 use std::iter::zip;
 use std::{cmp::Ordering, path::Path};
@@ -554,7 +555,7 @@ impl MoleculeBlock {
                 flat_ids.extend(ids);
             }
             let group_index = context
-                .add_group(molecule.id(), &flat_pos, &flat_ids)?
+                .add_group(MoleculeId::new(molecule.id()), &flat_pos, &flat_ids)?
                 .index();
             if let BlockActivationStatus::Partial(active) = self.active {
                 context
@@ -566,7 +567,7 @@ impl MoleculeBlock {
             for (i, q) in quaternions.into_iter().enumerate() {
                 let (mol_positions, atom_ids) = make_mol_data();
                 let group_index = context
-                    .add_group(molecule.id(), &mol_positions, &atom_ids)?
+                    .add_group(MoleculeId::new(molecule.id()), &mol_positions, &atom_ids)?
                     .index();
                 // Sync quaternion with the rotation applied during placement so that
                 // LD and 6D tabulated energies see the correct orientation from the start.

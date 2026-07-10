@@ -12,6 +12,7 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
+use crate::group::MoleculeId;
 use crate::montecarlo;
 use crate::propagate::{tagged_yaml, MoveProposal, ProposedMove};
 use crate::transform::random_quaternion;
@@ -30,7 +31,7 @@ pub struct RotateMolecule {
     molecule_name: String,
     /// Id of the molecule type to rotate.
     #[serde(skip)]
-    molecule_id: usize,
+    molecule_id: MoleculeId,
     /// Maximum angular displacement (radians).
     #[serde(alias = "dp")]
     max_displacement: f64,

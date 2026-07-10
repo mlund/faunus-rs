@@ -120,7 +120,7 @@ mod tests {
     #[test]
     #[cfg(feature = "gpu")]
     fn repack_exclusions_matches_cpu_matrix() {
-        use crate::group::Group;
+        use crate::group::{Group, MoleculeId};
         use std::collections::HashSet;
 
         let topology = Topology::from_file("tests/files/topology_pass.yaml").unwrap();
@@ -132,7 +132,11 @@ mod tests {
             let mol_idx = block.molecule_index();
             let n_atoms = topology.moleculekinds()[mol_idx].atoms().len();
             for _ in 0..block.num_molecules() {
-                groups.push(Group::new(groups.len(), mol_idx, offset..offset + n_atoms));
+                groups.push(Group::new(
+                    groups.len(),
+                    MoleculeId::new(mol_idx),
+                    offset..offset + n_atoms,
+                ));
                 offset += n_atoms;
             }
         }
@@ -154,7 +158,7 @@ mod tests {
                 .iter()
                 .find(|g: &&Group| i >= g.start() && i < g.start() + g.capacity())
                 .unwrap();
-            let mol = &topology.moleculekinds()[group.molecule()];
+            let mol = topology.moleculekind(group.molecule());
 
             if mol.degrees_of_freedom().is_rigid() {
                 assert!(

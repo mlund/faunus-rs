@@ -53,7 +53,7 @@ impl ExcludedCoulomb {
     /// Coulomb energy for excluded pairs in a single group.
     fn one_group(&self, context: &impl ObserveContext, group: &Group) -> f64 {
         let topology = context.topology_ref();
-        let molecule = &topology.moleculekinds()[group.molecule()];
+        let molecule = topology.moleculekind(group.molecule());
 
         if !molecule.keep_excluded_coulomb() || molecule.exclusions().is_empty() {
             return 0.0;
@@ -69,7 +69,7 @@ impl ExcludedCoulomb {
                 let dist_sq = context.get_distance_squared(abs_i, abs_j);
                 let kind_i = context.atom_kind(abs_i);
                 let kind_j = context.atom_kind(abs_j);
-                self.potentials[(kind_i, kind_j)].isotropic_twobody_energy(dist_sq)
+                self.potentials[(kind_i.get(), kind_j.get())].isotropic_twobody_energy(dist_sq)
             })
             .sum()
     }

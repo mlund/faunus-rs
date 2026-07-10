@@ -90,7 +90,7 @@ fn write_atoms(
     let mut resid_counter = 0usize;
 
     for group in groups {
-        let mol = &topology.moleculekinds()[group.molecule()];
+        let mol = topology.moleculekind(group.molecule());
         let mut residue_cursor = 0usize;
 
         // Increment resid once per group when no residues are defined
@@ -164,7 +164,7 @@ fn write_bonded_sections(
 ) -> anyhow::Result<()> {
     // Pre-compute counts for section headers
     let (n_bonds, n_angles, n_dihedrals) = groups.iter().fold((0, 0, 0), |(b, a, d), g| {
-        let mol = &topology.moleculekinds()[g.molecule()];
+        let mol = topology.moleculekind(g.molecule());
         (
             b + mol.bonds().len(),
             a + mol.torsions().len(),
@@ -176,7 +176,7 @@ fn write_bonded_sections(
     writeln!(w, "{:>10} !NBOND: bonds", n_bonds)?;
     let mut col = 0;
     for group in groups {
-        let mol = &topology.moleculekinds()[group.molecule()];
+        let mol = topology.moleculekind(group.molecule());
         let offset = group.start() + 1;
         for bond in mol.bonds() {
             let idx = bond.index();
@@ -196,7 +196,7 @@ fn write_bonded_sections(
     writeln!(w, "{:>10} !NTHETA: angles", n_angles)?;
     col = 0;
     for group in groups {
-        let mol = &topology.moleculekinds()[group.molecule()];
+        let mol = topology.moleculekind(group.molecule());
         let offset = group.start() + 1;
         for torsion in mol.torsions() {
             let idx = torsion.index();
@@ -222,7 +222,7 @@ fn write_bonded_sections(
     writeln!(w, "{:>10} !NPHI: dihedrals", n_dihedrals)?;
     col = 0;
     for group in groups {
-        let mol = &topology.moleculekinds()[group.molecule()];
+        let mol = topology.moleculekind(group.molecule());
         let offset = group.start() + 1;
         for dihedral in mol.dihedrals() {
             let idx = dihedral.index();
@@ -286,7 +286,7 @@ pub fn write_vmd_script(
     let present: std::collections::BTreeSet<usize> = groups
         .iter()
         .flat_map(|g| {
-            let mol = &topology.moleculekinds()[g.molecule()];
+            let mol = topology.moleculekind(g.molecule());
             mol.atom_indices().iter().copied()
         })
         .collect();
@@ -432,7 +432,7 @@ fn write_vmd_charges_callback(w: &mut impl Write, charges_file: &str) -> anyhow:
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::group::Group;
+    use crate::group::{Group, MoleculeId};
 
     fn test_topology(name: &str, yaml: &str) -> crate::topology::Topology {
         let dir = std::env::temp_dir();
@@ -466,7 +466,10 @@ system:
 
         let dir = std::env::temp_dir();
         let path = dir.join("faunus_test_minimal.psf");
-        let groups = vec![Group::new(0, 0, 0..2), Group::new(1, 0, 2..4)];
+        let groups = vec![
+            Group::new(0, MoleculeId::new(0), 0..2),
+            Group::new(1, MoleculeId::new(0), 2..4),
+        ];
 
         write_psf(&path, &topology, &groups).unwrap();
         let content = std::fs::read_to_string(&path).unwrap();
@@ -500,7 +503,7 @@ system:
         let dir = std::env::temp_dir();
         let tcl_path = dir.join("faunus_test_vmd.tcl");
 
-        let groups = vec![Group::new(0, 0, 0..2)];
+        let groups = vec![Group::new(0, MoleculeId::new(0), 0..2)];
         write_vmd_script(
             &tcl_path, &topology, &groups, "traj.psf", "traj.xtc", None, None,
         )
@@ -537,7 +540,10 @@ system:
 
         let dir = std::env::temp_dir();
         let path = dir.join("faunus_test_resid.psf");
-        let groups = vec![Group::new(0, 0, 0..2), Group::new(1, 0, 2..4)];
+        let groups = vec![
+            Group::new(0, MoleculeId::new(0), 0..2),
+            Group::new(1, MoleculeId::new(0), 2..4),
+        ];
 
         write_psf(&path, &topology, &groups).unwrap();
         let content = std::fs::read_to_string(&path).unwrap();

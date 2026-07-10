@@ -284,7 +284,7 @@ impl LangevinRunner {
                 .unwrap_or_else(|| context.mass_center(&group.iter_active().collect::<Vec<_>>()));
             com_positions.extend_from_slice(&[com.x as f32, com.y as f32, com.z as f32, 0.0]);
 
-            let mol_kind = &topology.moleculekinds()[group.molecule()];
+            let mol_kind = topology.moleculekind(group.molecule());
             let atom_indices = mol_kind.atom_indices();
             let mut total_mass = 0.0f64;
             let mut ixx = 0.0f64;
@@ -321,7 +321,8 @@ impl LangevinRunner {
             .iter()
             .map(|g| {
                 u32::from(
-                    topology.moleculekinds()[g.molecule()]
+                    topology
+                        .moleculekind(g.molecule())
                         .degrees_of_freedom()
                         .is_rigid(),
                 )
@@ -332,7 +333,7 @@ impl LangevinRunner {
         let mut atom_is_flexible = Vec::with_capacity(n);
         let mut atom_masses_vec = Vec::with_capacity(n);
         for group in groups {
-            let mol_kind = &topology.moleculekinds()[group.molecule()];
+            let mol_kind = topology.moleculekind(group.molecule());
             let is_free = u32::from(matches!(
                 mol_kind.degrees_of_freedom(),
                 DegreesOfFreedom::Free

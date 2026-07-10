@@ -654,7 +654,9 @@ fn validate_aux_header(header: &frame_state::FrameStateHeader, context: &Backend
         )));
     }
     for (i, (&(mol_id, capacity), group)) in header.groups.iter().zip(groups).enumerate() {
-        if mol_id as usize != group.molecule() || capacity as usize != group.capacity() {
+        if crate::group::MoleculeId::new(mol_id as usize) != group.molecule()
+            || capacity as usize != group.capacity()
+        {
             return Err(Error::Input(format!(
                 "frame state group {i} topology mismatch: aux=({mol_id}, {capacity}), \
                  input=({}, {})",

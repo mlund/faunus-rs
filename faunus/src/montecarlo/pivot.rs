@@ -12,7 +12,7 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
-use crate::group::RelIndex;
+use crate::group::{MoleculeId, RelIndex};
 use crate::montecarlo;
 use crate::propagate::{tagged_yaml, MoveProposal, ProposedMove};
 use crate::topology::BondGraph;
@@ -34,7 +34,7 @@ pub struct PivotMove {
     molecule_name: String,
     /// Id of the molecule type to pivot.
     #[serde(skip)]
-    molecule_id: usize,
+    molecule_id: MoleculeId,
     /// Maximum angular displacement (radians).
     #[serde(alias = "dp")]
     max_displacement: f64,
@@ -54,7 +54,9 @@ impl PivotMove {
     /// Validate and finalize the move.
     pub(crate) fn finalize(&mut self, context: &impl ObserveContext) -> anyhow::Result<()> {
         self.molecule_id = montecarlo::find_molecule_id(context, &self.molecule_name, "PivotMove")?;
-        self.bond_graph = context.topology().moleculekinds()[self.molecule_id]
+        self.bond_graph = context
+            .topology()
+            .moleculekind(self.molecule_id)
             .bond_graph()
             .clone();
         Ok(())
@@ -127,7 +129,7 @@ mod tests {
         assert_eq!(pivot.max_displacement, 1.5);
         assert_eq!(pivot.weight, 2.0);
         assert_eq!(pivot.repeat, 1); // default
-        assert_eq!(pivot.molecule_id, 0); // skipped during deserialization
+        assert_eq!(pivot.molecule_id, MoleculeId::new(0)); // skipped during deserialization
     }
 
     #[test]

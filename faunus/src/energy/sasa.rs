@@ -169,7 +169,7 @@ impl SasaEnergy {
             let start = self.balls.len();
             for i in group.iter_active() {
                 let pos = context.position(i);
-                let ak = &atomkinds[context.atom_kind(i)];
+                let ak = &atomkinds[context.atom_kind(i).get()];
                 let radius = ak.sigma().map(|s| s / 2.0).unwrap_or(0.0);
                 self.balls.push(Ball::new(pos.x, pos.y, pos.z, radius));
                 self.tensions.push(ak.gamma().unwrap_or(0.0));

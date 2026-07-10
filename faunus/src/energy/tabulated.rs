@@ -402,7 +402,8 @@ impl TabulatedEnergy {
         let ga = &groups[gi];
         let gb = &groups[gj];
 
-        let Some((entry, swapped)) = self.find_entry(ga.molecule(), gb.molecule()) else {
+        let Some((entry, swapped)) = self.find_entry(ga.molecule().get(), gb.molecule().get())
+        else {
             return 0.0;
         };
 

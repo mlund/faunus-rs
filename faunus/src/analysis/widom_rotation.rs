@@ -234,7 +234,7 @@ impl WidomRotationBuilder {
                 self.selection.source()
             );
         }
-        let kind = &topology.moleculekinds()[mol_id];
+        let kind = topology.moleculekind(mol_id);
         anyhow::ensure!(
             !kind.atomic() && kind.len() >= 2,
             "WidomRotation: molecule '{}' has no rigid-body orientation",

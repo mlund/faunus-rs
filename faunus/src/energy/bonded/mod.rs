@@ -76,7 +76,7 @@ impl IntramolecularBonded {
     /// Calculate energy of all active bonded interactions of target group.
     fn one_group(&self, context: &impl ObserveContext, group: &Group) -> f64 {
         let topology = context.topology_ref();
-        let molecule = &topology.moleculekinds()[group.molecule()];
+        let molecule = topology.moleculekind(group.molecule());
 
         if !molecule.has_bonded_potentials() {
             return 0.0;

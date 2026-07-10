@@ -7,7 +7,7 @@
 //! balance, consistent with ESPResSo's reaction ensemble implementation.
 
 use crate::chemistry::reaction::{Direction, Participant, Reaction};
-use crate::group::{AbsIndex, GroupSize, RelIndex};
+use crate::group::{AbsIndex, AtomKindId, GroupSize, MoleculeId, RelIndex};
 use crate::montecarlo::{entropy_bias, MoveStatistics, NewOld};
 use crate::propagate::{
     default_repeat, default_weight, tagged_yaml, Displacement, MoveProposal, ProposedMove,
@@ -54,19 +54,19 @@ pub struct ReactionConfig(String, EquilibriumConstant);
 #[derive(Clone, Debug)]
 enum ReactionOp {
     /// Activate a group of this molecule type
-    ActivateMolecule(usize),
+    ActivateMolecule(MoleculeId),
     /// Deactivate a group of this molecule type
-    DeactivateMolecule(usize),
+    DeactivateMolecule(MoleculeId),
     /// Swap an atom from one kind to another within a molecule
     SwapAtom {
-        from_id: usize,
-        to_id: usize,
-        molecule_id: usize,
+        from_id: AtomKindId,
+        to_id: AtomKindId,
+        molecule_id: MoleculeId,
     },
     /// Swap a molecule of one kind for another (deactivate from, activate to with copied positions)
     SwapMolecule {
-        from_mol_id: usize,
-        to_mol_id: usize,
+        from_mol_id: MoleculeId,
+        to_mol_id: MoleculeId,
     },
 }
 
@@ -168,11 +168,15 @@ fn find_implicit_activity(name: &str, topology: &crate::topology::Topology) -> a
 }
 
 /// Look up molecule index by name.
-fn find_molecule_index(name: &str, topology: &crate::topology::Topology) -> anyhow::Result<usize> {
+fn find_molecule_index(
+    name: &str,
+    topology: &crate::topology::Topology,
+) -> anyhow::Result<MoleculeId> {
     topology
         .moleculekinds()
         .iter()
         .position(|m| m.name() == name)
+        .map(MoleculeId::new)
         .ok_or_else(|| anyhow::anyhow!("Unknown molecule '{name}' in reaction"))
 }
 
@@ -196,13 +200,13 @@ fn choose_unclaimed(groups: &[usize], claimed: &[usize], rng: &mut dyn RngCore) 
 fn extract_atom_participants<'a>(
     participants: &'a [Participant],
     topology: &crate::topology::Topology,
-) -> Vec<(usize, &'a str)> {
+) -> Vec<(AtomKindId, &'a str)> {
     participants
         .iter()
         .filter_map(|p| match p {
             Participant::Atom(name) => {
                 let id = topology.atomkinds().iter().position(|a| a.name() == name)?;
-                Some((id, name.as_str()))
+                Some((AtomKindId::new(id), name.as_str()))
             }
             _ => None,
         })
@@ -228,12 +232,16 @@ fn resolve_atom_swaps(
         let molecule_id = topology
             .moleculekinds()
             .iter()
-            .position(|m| m.atom_indices().contains(&from.0) && m.atom_indices().contains(&to.0))
+            .position(|m| {
+                m.atom_indices().contains(&from.0.get()) && m.atom_indices().contains(&to.0.get())
+            })
             .or_else(|| {
                 topology.moleculekinds().iter().position(|m| {
-                    m.atom_indices().contains(&from.0) || m.atom_indices().contains(&to.0)
+                    m.atom_indices().contains(&from.0.get())
+                        || m.atom_indices().contains(&to.0.get())
                 })
             })
+            .map(MoleculeId::new)
             .ok_or_else(|| {
                 anyhow::anyhow!("No molecule contains atom '{}' or '{}'", from.1, to.1)
             })?;
@@ -270,7 +278,7 @@ fn overlay_swap_positions(
     let source_masses: Vec<(crate::Point, f64)> = source_indices
         .clone()
         .map(|i| {
-            let mass = atomkinds[context.atom_kind(i)].mass();
+            let mass = atomkinds[context.atom_kind(i).get()].mass();
             (context.position(i), mass)
         })
         .collect();
@@ -309,7 +317,7 @@ fn resolve_reaction(
     let mut backward_ops = Vec::new();
 
     // Collect molecular participants
-    let mol_ids = |participants: &[Participant]| -> anyhow::Result<Vec<usize>> {
+    let mol_ids = |participants: &[Participant]| -> anyhow::Result<Vec<MoleculeId>> {
         participants
             .iter()
             .filter_map(|p| match p {
@@ -326,7 +334,7 @@ fn resolve_reaction(
     // once on each side: a coefficient >1 (e.g. `2 Na = Ca`) is a count-changing insertion-
     // deletion, not a position-preserving swap. Reservoirs are excluded: they use atomic
     // mega-groups, not individual molecular groups, so the swap overlay cannot apply.
-    let multiplicity = |v: &[usize], id: usize| v.iter().filter(|&&x| x == id).count();
+    let multiplicity = |v: &[MoleculeId], id: MoleculeId| v.iter().filter(|&&x| x == id).count();
     let mut swap_reactants: Vec<usize> = Vec::new();
     let mut swap_products: Vec<usize> = Vec::new();
     for (ri, &from_id) in reactant_mols.iter().enumerate() {
@@ -335,10 +343,10 @@ fn resolve_reaction(
                 && from_id != to_id
                 && multiplicity(&reactant_mols, from_id) == 1
                 && multiplicity(&product_mols, to_id) == 1
-                && !topology.moleculekinds()[from_id].is_reservoir()
-                && !topology.moleculekinds()[to_id].is_reservoir()
-                && topology.moleculekinds()[from_id].atom_indices().len()
-                    == topology.moleculekinds()[to_id].atom_indices().len()
+                && !topology.moleculekind(from_id).is_reservoir()
+                && !topology.moleculekind(to_id).is_reservoir()
+                && topology.moleculekind(from_id).atom_indices().len()
+                    == topology.moleculekind(to_id).atom_indices().len()
             {
                 forward_ops.push(ReactionOp::SwapMolecule {
                     from_mol_id: from_id,
@@ -392,7 +400,7 @@ fn resolve_reaction(
     ] {
         for (idx, &id) in mol_ids.iter().enumerate() {
             if !swapped.contains(&idx) {
-                if let Some(activity) = topology.moleculekinds()[id].activity() {
+                if let Some(activity) = topology.moleculekind(id).activity() {
                     effective_ln_k -= sign * activity.ln();
                 }
             }
@@ -412,7 +420,7 @@ fn validate_reaction_groups(
     context: &impl ObserveContext,
     topology: &crate::topology::Topology,
 ) -> anyhow::Result<()> {
-    let has_any = |mol_id: usize| -> bool {
+    let has_any = |mol_id: MoleculeId| -> bool {
         context.find_molecules(mol_id, GroupSize::Full).is_some()
             || context.find_molecules(mol_id, GroupSize::Empty).is_some()
     };
@@ -420,14 +428,14 @@ fn validate_reaction_groups(
         for op in r.forward_ops.iter().chain(&r.backward_ops) {
             match op {
                 ReactionOp::ActivateMolecule(id) | ReactionOp::DeactivateMolecule(id) => {
-                    let name = topology.moleculekinds()[*id].name();
+                    let name = topology.moleculekind(*id).name();
                     anyhow::ensure!(
                         has_any(*id),
                         "No groups found for molecule '{name}' needed by reaction"
                     );
                 }
                 ReactionOp::SwapAtom { molecule_id, .. } => {
-                    let name = topology.moleculekinds()[*molecule_id].name();
+                    let name = topology.moleculekind(*molecule_id).name();
                     anyhow::ensure!(
                         context
                             .find_molecules(*molecule_id, GroupSize::Full)
@@ -440,7 +448,7 @@ fn validate_reaction_groups(
                     to_mol_id,
                 } => {
                     for &id in [from_mol_id, to_mol_id] {
-                        let name = topology.moleculekinds()[id].name();
+                        let name = topology.moleculekind(id).name();
                         anyhow::ensure!(
                             has_any(id),
                             "No groups found for molecule '{name}' needed by molecular swap"
@@ -483,14 +491,14 @@ impl SpeciationMove {
     /// Deactivate one molecule (atomic: shrink mega-group; molecular: empty a group).
     /// Returns (action, group_change, entropy_bias_delta), or None if infeasible.
     fn deactivate_one(
-        mol_id: usize,
+        mol_id: MoleculeId,
         n_old: usize,
         vol: NewOld<f64>,
         context: &impl ObserveContext,
         rng: &mut dyn RngCore,
         claimed: &[usize],
     ) -> Option<(SpeciationAction, (usize, GroupChange), f64)> {
-        let molecule = &context.topology_ref().moleculekinds()[mol_id];
+        let molecule = context.topology_ref().moleculekind(mol_id);
         if molecule.atomic() {
             let gi = context.find_atomic_group(mol_id)?;
             if n_old == 0 {
@@ -537,14 +545,14 @@ impl SpeciationMove {
     /// Activate one molecule (atomic: expand mega-group; molecular: fill an empty group).
     /// Returns (action, group_change, entropy_bias_delta), or None if infeasible.
     fn activate_one(
-        mol_id: usize,
+        mol_id: MoleculeId,
         n_old: usize,
         vol: NewOld<f64>,
         context: &impl ObserveContext,
         rng: &mut dyn RngCore,
         claimed: &[usize],
     ) -> Option<(SpeciationAction, (usize, GroupChange), f64)> {
-        let molecule = &context.topology_ref().moleculekinds()[mol_id];
+        let molecule = context.topology_ref().moleculekind(mol_id);
         if molecule.atomic() {
             let gi = context.find_atomic_group(mol_id)?;
             if n_old >= context.groups()[gi].capacity() {
@@ -588,7 +596,7 @@ impl SpeciationMove {
     }
 
     /// Look up the running count offset for a molecule id (0 if unseen).
-    fn get_offset(offsets: &[(usize, i32)], mol_id: usize) -> i32 {
+    fn get_offset(offsets: &[(MoleculeId, i32)], mol_id: MoleculeId) -> i32 {
         offsets
             .iter()
             .find(|(id, _)| *id == mol_id)
@@ -596,7 +604,7 @@ impl SpeciationMove {
     }
 
     /// Increment the running count offset for a molecule id.
-    fn add_offset(offsets: &mut Vec<(usize, i32)>, mol_id: usize, delta: i32) {
+    fn add_offset(offsets: &mut Vec<(MoleculeId, i32)>, mol_id: MoleculeId, delta: i32) {
         if let Some(entry) = offsets.iter_mut().find(|(id, _)| *id == mol_id) {
             entry.1 += delta;
         } else {
@@ -609,11 +617,11 @@ impl SpeciationMove {
     /// Unlike `count_active_molecules` (which excludes reservoirs), this returns the
     /// actual population needed for bookkeeping: bounds checks and random index selection.
     /// Clamped to 0 to guard against underflow when multiple deactivations precede activations.
-    fn effective_count(mol_id: usize, offset: i32, context: &impl ObserveContext) -> usize {
+    fn effective_count(mol_id: MoleculeId, offset: i32, context: &impl ObserveContext) -> usize {
         // Use `count_active` (not `count_active_molecules`) because reservoirs need
         // a real head-count for bounds checks and random index selection even though
         // they are excluded from physical counts.
-        let group_kind = context.topology_ref().moleculekinds()[mol_id].group_kind();
+        let group_kind = context.topology_ref().moleculekind(mol_id).group_kind();
         let base = context.count_active(mol_id, group_kind);
         (base as i32 + offset).max(0) as usize
     }
@@ -621,8 +629,8 @@ impl SpeciationMove {
     /// Swap one molecular group for another (deactivate source, activate target with aligned positions).
     /// Returns (actions, group_changes, ln_bias_delta), or None if infeasible.
     fn swap_molecule_one(
-        from_mol_id: usize,
-        to_mol_id: usize,
+        from_mol_id: MoleculeId,
+        to_mol_id: MoleculeId,
         context: &impl ObserveContext,
         rng: &mut dyn RngCore,
         claimed: &[usize],
@@ -665,9 +673,9 @@ impl SpeciationMove {
     /// Swap one atom's type within a molecule.
     /// Returns (action, group_change, ln_bias_delta), or None if infeasible.
     fn swap_atom_one(
-        from_id: usize,
-        to_id: usize,
-        molecule_id: usize,
+        from_id: AtomKindId,
+        to_id: AtomKindId,
+        molecule_id: MoleculeId,
         context: &impl ObserveContext,
         rng: &mut dyn RngCore,
     ) -> Option<(SpeciationAction, (usize, GroupChange), f64)> {
@@ -742,7 +750,7 @@ impl SpeciationMove {
         // When a species appears multiple times (e.g. 2 OH⁻), each successive op must see
         // the updated count to produce the correct Smith & Triska ∏[N!/(N+ν)!] factor.
         // Without this, both OH⁻ activations would use the same N, giving (N+1)² instead of (N+1)(N+2).
-        let mut offsets: Vec<(usize, i32)> = Vec::with_capacity(ops.len());
+        let mut offsets: Vec<(MoleculeId, i32)> = Vec::with_capacity(ops.len());
 
         // Group indices already selected by earlier ops in THIS reaction. Non-atomic
         // selection skips these so repeated ops on one kind (e.g. `2 Na = Ca`) hit distinct
@@ -964,12 +972,13 @@ mod tests {
         assert_eq!(mv.resolved.len(), 1);
         let r = &mv.resolved[0];
         // Forward: activate M (product side)
-        assert!(matches!(r.forward_ops[0], ReactionOp::ActivateMolecule(0)));
+        assert!(
+            matches!(r.forward_ops[0], ReactionOp::ActivateMolecule(id) if id == MoleculeId::new(0))
+        );
         // Backward: deactivate M
-        assert!(matches!(
-            r.backward_ops[0],
-            ReactionOp::DeactivateMolecule(0)
-        ));
+        assert!(
+            matches!(r.backward_ops[0], ReactionOp::DeactivateMolecule(id) if id == MoleculeId::new(0))
+        );
         assert_approx_eq!(f64, r.effective_ln_k, 10.0_f64.ln());
     }
 
@@ -983,19 +992,13 @@ mod tests {
         let r = &mv.resolved[0];
         assert!(matches!(
             r.forward_ops[0],
-            ReactionOp::SwapAtom {
-                from_id: 0,
-                to_id: 1,
-                ..
-            }
+            ReactionOp::SwapAtom { from_id, to_id, .. }
+                if from_id == AtomKindId::new(0) && to_id == AtomKindId::new(1)
         ));
         assert!(matches!(
             r.backward_ops[0],
-            ReactionOp::SwapAtom {
-                from_id: 1,
-                to_id: 0,
-                ..
-            }
+            ReactionOp::SwapAtom { from_id, to_id, .. }
+                if from_id == AtomKindId::new(1) && to_id == AtomKindId::new(0)
         ));
     }
 
@@ -1056,7 +1059,7 @@ mod tests {
         mv.finalize(&context).unwrap();
 
         // Activate all M groups so none are empty
-        let mol_id = 0;
+        let mol_id = MoleculeId::new(0);
         let empty_groups: Vec<usize> = context
             .find_molecules(mol_id, GroupSize::Empty)
             .map(|gs| gs.to_vec())
@@ -1082,7 +1085,7 @@ mod tests {
         mv.finalize(&context).unwrap();
 
         // Deactivate all M groups so none are full
-        let mol_id = 0;
+        let mol_id = MoleculeId::new(0);
         let full_groups: Vec<usize> = context
             .find_molecules(mol_id, GroupSize::Full)
             .map(|gs| gs.to_vec())
@@ -1302,8 +1305,12 @@ propagate:
             step.unwrap();
         }
         let drift = mc.energy_drift(initial_energy);
-        let n_na = mc.context().count_molecules(0, GroupSize::Full);
-        let n_ca = mc.context().count_molecules(1, GroupSize::Full);
+        let n_na = mc
+            .context()
+            .count_molecules(MoleculeId::new(0), GroupSize::Full);
+        let n_ca = mc
+            .context()
+            .count_molecules(MoleculeId::new(1), GroupSize::Full);
         (drift, n_na, n_ca)
     }
 
@@ -1415,7 +1422,7 @@ propagate:
 
     /// Count active molecules of each phosphate species (mol_id 0..4).
     fn count_phosphate_species(context: &Backend) -> [usize; 4] {
-        [0, 1, 2, 3].map(|id| context.count_molecules(id, GroupSize::Full))
+        [0, 1, 2, 3].map(|id| context.count_molecules(MoleculeId::new(id), GroupSize::Full))
     }
 
     #[test]

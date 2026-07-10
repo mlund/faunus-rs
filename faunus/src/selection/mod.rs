@@ -227,7 +227,7 @@ pub(crate) fn first_unsupported_group(
     Ok(selection
         .resolve_groups(topology, &groups, &|index| context.atom_kind(index))
         .into_iter()
-        .find(|&index| !supported(&kinds[groups[index].molecule()]))
+        .find(|&index| !supported(&kinds[groups[index].molecule().get()]))
         .map(GroupIndex::new))
 }
 
@@ -297,7 +297,7 @@ impl Selection {
         &self,
         topology: &Topology,
         groups: &[Group],
-        get_atom_kind: &dyn Fn(usize) -> usize,
+        get_atom_kind: &dyn Fn(usize) -> crate::group::AtomKindId,
     ) -> Vec<usize> {
         evaluator::resolve_atoms(&self.expr, topology, groups, get_atom_kind)
     }
@@ -310,7 +310,7 @@ impl Selection {
         &self,
         topology: &Topology,
         groups: &[Group],
-        get_atom_kind: &dyn Fn(usize) -> usize,
+        get_atom_kind: &dyn Fn(usize) -> crate::group::AtomKindId,
     ) -> Vec<usize> {
         evaluator::resolve_groups(&self.expr, topology, groups, get_atom_kind)
     }
@@ -497,7 +497,7 @@ mod integration_tests {
             sel.resolve_groups(ctx.topology_ref(), ctx.groups(), &|i| ctx.atom_kind(i));
 
         // All returned groups should have the correct molecule kind
-        let mol_id = ctx.topology_ref().moleculekinds()[0].id();
+        let mol_id = crate::group::MoleculeId::new(ctx.topology_ref().moleculekinds()[0].id());
         for &gi in &group_indices {
             assert_eq!(ctx.groups()[gi].molecule(), mol_id);
         }

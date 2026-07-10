@@ -154,7 +154,7 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
         assert_eq!(analysis.sum, 1.0);
 
         // Turn the chloride into a second sodium; the selection now matches both atoms.
-        context.set_atom_kind(1, 0);
+        context.set_atom_kind(1, crate::group::AtomKindId::new(0));
         analysis.sample(&context, 1).unwrap();
         assert_eq!(analysis.sum, 2.0);
     }
