@@ -64,6 +64,13 @@ pub struct ElectricPotentialProfileBuilder {
     /// term. Defaults to `false` (infinite-plane kernel).
     #[serde(default)]
     finite_box_correction: bool,
+    /// Optional ζ-potential estimate: the mean potential φ at the outer edge of the fixed
+    /// charge (the hydrodynamic shear plane), comparable to electrokinetic ζ measurements.
+    /// The value is the cutoff fraction of peak |σ(z)| that locates that edge; 0.02 (2 %) is a
+    /// sensible default. Omit to skip the estimate — it is only meaningful for a charged
+    /// wall/brush where σ(z) decays into solution.
+    #[serde(default)]
+    zeta_threshold: Option<f64>,
     /// Output column file (use a `.csv` extension for comma-separated values).
     #[serde(default = "default_file")]
     file: PathBuf,
@@ -87,6 +94,13 @@ impl ElectricPotentialProfileBuilder {
     ) -> Result<ElectricPotentialProfile> {
         if self.resolution <= 0.0 {
             anyhow::bail!("resolution must be positive");
+        }
+        if let Some(threshold) = self.zeta_threshold {
+            if !(threshold > 0.0 && threshold < 1.0) {
+                anyhow::bail!(
+                    "zeta_threshold must lie in the open interval (0, 1), got {threshold}"
+                );
+            }
         }
         let medium =
             medium.ok_or_else(|| anyhow::anyhow!("a medium is required for the Bjerrum length"))?;
@@ -123,6 +137,7 @@ impl ElectricPotentialProfileBuilder {
             debye_length,
             slab_charge_density: new_accumulators(n_bins),
             potential: new_accumulators(n_bins),
+            zeta_threshold: self.zeta_threshold,
             output_file: self.file.clone(),
             sampling: Sampling::new(self.frequency),
         })
@@ -155,6 +170,8 @@ pub struct ElectricPotentialProfile {
     slab_charge_density: Vec<BlockAverage>,
     /// Per-slab potential φ(z) (kT/e): mean and error across samples.
     potential: Vec<BlockAverage>,
+    /// Cutoff fraction of peak |σ| that locates the shear plane for the ζ estimate; `None` disables it.
+    zeta_threshold: Option<f64>,
     #[debug(skip)]
     output_file: PathBuf,
     /// Frequency and frame count, owned by the framework.
@@ -188,6 +205,49 @@ impl ElectricPotentialProfile {
             .iter()
             .map(|p| p.mean() * self.millivolt_per_kt)
             .collect()
+    }
+
+    /// Locate the shear-plane bin: the outer edge of the fixed charge, into solution.
+    ///
+    /// The |σ(z)|-weighted centroid picks the wall the fixed charge sits against; on that side
+    /// the shear plane is the slab nearest the midplane whose |σ| still exceeds `threshold`
+    /// times the peak |σ| on that same wall. Referencing the *side* peak (not the global peak)
+    /// means an oppositely charged opposite wall cannot mask a weaker surface charge on the
+    /// measured side. Returns `None` if no charge was sampled. The estimate is only meaningful
+    /// for wall-anchored charge that decays into solution before the midplane; a slit charged
+    /// symmetrically on both walls reports the (equivalent) value at one of them.
+    fn shear_plane_bin(&self, threshold: f64) -> Option<usize> {
+        let abs_sigma: Vec<f64> = self
+            .slab_charge_density
+            .iter()
+            .map(|a| a.mean().abs())
+            .collect();
+        let total: f64 = abs_sigma.iter().sum();
+        if total <= 0.0 {
+            return None; // no charge sampled ⇒ no fixed-charge edge (|σ| ≥ 0, so this also means peak = 0)
+        }
+        let centers: Vec<f64> = (0..abs_sigma.len())
+            .map(|i| self.grid.bin_center(i))
+            .collect();
+        let centroid = abs_sigma
+            .iter()
+            .zip(&centers)
+            .map(|(&s, &z)| s * z)
+            .sum::<f64>()
+            / total;
+        let on_brush_side = |i: usize| (centers[i] <= 0.0) == (centroid <= 0.0);
+        let side_peak = (0..abs_sigma.len())
+            .filter(|&i| on_brush_side(i))
+            .map(|i| abs_sigma[i])
+            .fold(0.0, f64::max);
+        if side_peak <= 0.0 {
+            return None;
+        }
+        let cutoff = threshold * side_peak;
+        // Above-cutoff slab nearest the midplane on the brush side = the outer edge into solution.
+        (0..abs_sigma.len())
+            .filter(|&i| on_brush_side(i) && abs_sigma[i] > cutoff)
+            .min_by(|&a, &b| centers[a].abs().total_cmp(&centers[b].abs()))
     }
 
     /// Build the YAML results mapping (inherent so it is callable without choosing a
@@ -229,6 +289,13 @@ impl ElectricPotentialProfile {
         map.try_insert("potential_midplane/mV", midplane)?;
         map.try_insert("potential_drop_lower/mV", drop(&lower))?;
         map.try_insert("potential_drop_upper/mV", drop(&upper))?;
+        // ζ-potential: φ at the outer edge of the fixed charge (shear plane), if requested.
+        if let Some(threshold) = self.zeta_threshold {
+            if let Some(bin) = self.shear_plane_bin(threshold) {
+                map.try_insert("zeta/mV", self.potential_millivolt(bin))?;
+                map.try_insert("z_shear/Å", self.grid.bin_center(bin))?;
+            }
+        }
         Some(serde_yml::Value::Mapping(map))
     }
 
@@ -350,6 +417,7 @@ mod tests {
             debye_length: Some(10.0),
             slab_charge_density: new_accumulators(n),
             potential: new_accumulators(n),
+            zeta_threshold: None,
             output_file: output_file.into(),
             sampling: Sampling::new(Frequency::Every(1)),
         }
@@ -464,6 +532,7 @@ mod tests {
                 assert_eq!(b.resolution, 0.5);
                 assert_eq!(b.file, PathBuf::from("potential.csv"));
                 assert!(!b.finite_box_correction);
+                assert_eq!(b.zeta_threshold, None);
             }
             _ => panic!("expected ElectricPotentialProfile variant"),
         }
@@ -479,6 +548,58 @@ mod tests {
         let builders: Vec<AnalysisBuilder> = serde_yml::from_str(yaml).unwrap();
         match &builders[0] {
             AnalysisBuilder::ElectricPotentialProfile(b) => assert!(b.finite_box_correction),
+            _ => panic!("expected ElectricPotentialProfile variant"),
+        }
+    }
+
+    #[test]
+    fn zeta_reports_potential_at_fixed_charge_edge() {
+        // Fixed charge decays from the lower wall (bins 0..2); bin 3 is below the 2 % cutoff.
+        // Bin centres run −4.5 … +4.5, so the shear plane is bin 2 (nearest the midplane on the
+        // charged side). Potentials are set to the bin index so ζ pins to a known value.
+        let mut analysis = dummy("unused.csv");
+        analysis.zeta_threshold = Some(0.02);
+        for (i, sigma) in [1.0, 0.5, 0.1, 0.01].into_iter().enumerate() {
+            analysis.slab_charge_density[i].add(-sigma); // sign is irrelevant; |σ| is used
+        }
+        for (i, accumulator) in analysis.potential.iter_mut().enumerate() {
+            accumulator.add(i as f64);
+        }
+        analysis.sampling.set_num_samples(1);
+
+        assert_eq!(analysis.shear_plane_bin(0.02), Some(2));
+        let yaml = analysis.report().unwrap();
+        let zeta = yaml["zeta/mV"]["mean"].as_f64().unwrap();
+        assert!((zeta - 2.0 * analysis.millivolt_per_kt).abs() < 1e-9);
+        assert_eq!(yaml["z_shear/Å"].as_f64().unwrap(), -2.5);
+    }
+
+    #[test]
+    fn no_zeta_when_threshold_unset_or_uncharged() {
+        // Threshold unset ⇒ no ζ keys.
+        let mut analysis = dummy("unused.csv");
+        analysis.potential[0].add(1.0);
+        analysis.sampling.set_num_samples(1);
+        assert!(analysis.report().unwrap().get("zeta/mV").is_none());
+
+        // Threshold set but no charge sampled ⇒ no shear plane, no ζ keys.
+        analysis.zeta_threshold = Some(0.02);
+        assert!(analysis.shear_plane_bin(0.02).is_none());
+        assert!(analysis.report().unwrap().get("zeta/mV").is_none());
+    }
+
+    #[test]
+    fn deserialize_zeta_threshold() {
+        let yaml = r#"
+- !ElectricPotentialProfile
+  frequency: !Every 10
+  zeta_threshold: 0.05
+"#;
+        let builders: Vec<AnalysisBuilder> = serde_yml::from_str(yaml).unwrap();
+        match &builders[0] {
+            AnalysisBuilder::ElectricPotentialProfile(b) => {
+                assert_eq!(b.zeta_threshold, Some(0.05))
+            }
             _ => panic!("expected ElectricPotentialProfile variant"),
         }
     }

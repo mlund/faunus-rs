@@ -804,6 +804,26 @@ recovered from the screened form as $\kappa\to0$ once the regularizing constant 
 is removed. Because Greberg's construction models a square minimum-image box, the unscreened
 correction is only defined for a square base; enabling it for a cylinder is an error.
 
+### ζ-potential (optional)
+
+Setting `zeta_threshold` reports a ζ-potential — the potential at the hydrodynamic shear
+plane — directly comparable to electrokinetic measurements. For a charged wall or brush the
+shear plane sits at the outer edge of the fixed charge, where $\sigma(z)$ has decayed into the
+diffuse layer. The edge is located as the slab nearest the solution where
+
+$$|\sigma(z_\text{shear})| > \texttt{zeta\_threshold}\cdot\max_z|\sigma(z)|,$$
+
+with the charge-weighted centroid of $|\sigma(z)|$ selecting which wall the fixed charge sits
+on. The reported ζ is the mean potential $\varphi(z_\text{shear})$ with its statistical error,
+alongside the slab position $z_\text{shear}$. A cutoff of `0.02` (2 % of the peak) is a
+reasonable starting point, but the right value is system-dependent, so inspect $\sigma(z)$ in
+`potential.csv` and adjust. The estimate is only meaningful where the fixed charge is localized
+against a wall and decays into solution before the midplane; a slit charged symmetrically on
+both walls reports the equivalent value at one of them, and it is skipped when no charge is
+sampled. Note that the shear plane is here defined from the charge density, not the solvent
+(matter) density that sets the true no-slip surface, so the magnitude depends on this choice
+while the sign and trends are robust.
+
 ### Example
 
 ```yaml
@@ -813,6 +833,7 @@ analysis:
     # selection, resolution and file are optional:
     # selection: "all"      # atoms contributing charge (default: all)
     # resolution: 0.5       # slab thickness Δz in Å (default: 0.5)
+    # zeta_threshold: 0.02  # also report a ζ-potential at the fixed-charge edge (off by default)
     # file: potential.csv   # output file (default: potential.csv)
 ```
 
@@ -823,6 +844,7 @@ Key                    | Required | Default         | Description
 `selection`            | no       | `all`           | Atoms whose charge contributes to the profile
 `resolution`           | no       | `0.5`           | Slab thickness Δz (Å) along the $z$-axis
 `finite_box_correction`| no       | `false`         | Report the finite-box (Greberg) potential instead of the infinite-plane one
+`zeta_threshold`       | no       | *(off)*         | Report a ζ-potential at the fixed-charge edge, as a fraction of peak $|\sigma|$ (e.g. `0.02`)
 `file`                 | no       | `potential.csv` | Output file path (see [Output file formats](#output-file-formats))
 `frequency`            | yes      |                 | Sample frequency, e.g. `!Every 10`
 
@@ -830,8 +852,9 @@ The output file contains, per slab: the position `z/Å`, the slab charge density
 `e·Å⁻²` and per volume `e·Å⁻³`), the potential `potential/mV` with its statistical error
 `potential_error/mV`, and the electric field `field/mV·Å⁻¹`. `output.yaml` additionally
 reports the potential at each wall and at the midplane (with the wall-to-midplane drops) as
-mean ± error. For reliable numbers, **equilibrate first and start production from a state
-file** (`-s`).
+mean ± error, and, when `zeta_threshold` is set, the ζ-potential `zeta/mV` and the shear-plane
+position `z_shear/Å`. For reliable numbers, **equilibrate first and start production from a
+state file** (`-s`).
 
 ---
 
