@@ -1,0 +1,2042 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="User guide for the Faunus molecular simulation framework">
+      
+      
+      
+      
+        <link rel="prev" href="../energy/">
+      
+      
+        <link rel="next" href="../analysis/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>Moves - Faunus User Guide</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#moves" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+      </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="Faunus User Guide" class="md-header__button md-logo" aria-label="Faunus User Guide" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Faunus User Guide
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Moves
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/mlund/faunus-rs" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    faunus-rs
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="Faunus User Guide" class="md-nav__button md-logo" aria-label="Faunus User Guide" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Faunus User Guide
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/mlund/faunus-rs" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    faunus-rs
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../topology/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Topology
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../units/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Units and Conventions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../energy/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Energy
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Moves
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Moves
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#propagate-settings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Propagate settings
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#collections" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Collections
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#common-move-options" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Common move options
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#example" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Example
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#translate-molecule" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Translate Molecule
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#translate-atom" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Translate Atom
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#rotate-molecule" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Rotate Molecule
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pivot-move" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pivot Move
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#crankshaft-move" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Crankshaft Move
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#volume-move-npt" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Volume Move (NPT)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#speciation-move-reaction-ensemble" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Speciation Move (Reaction Ensemble)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#gibbs-ensemble" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Gibbs Ensemble
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#langevin-dynamics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Langevin Dynamics
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../analysis/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Analysis
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../wang_landau/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Wang-Landau
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../umbrella/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Umbrella Sampling
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../selection_language/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Selection Language
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../extending/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Extending Faunus
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#propagate-settings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Propagate settings
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#collections" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Collections
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#common-move-options" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Common move options
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#example" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Example
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#translate-molecule" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Translate Molecule
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#translate-atom" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Translate Atom
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#rotate-molecule" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Rotate Molecule
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pivot-move" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pivot Move
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#crankshaft-move" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Crankshaft Move
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#volume-move-npt" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Volume Move (NPT)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#speciation-move-reaction-ensemble" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Speciation Move (Reaction Ensemble)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#gibbs-ensemble" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Gibbs Ensemble
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#langevin-dynamics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Langevin Dynamics
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="moves">Moves<a class="headerlink" href="#moves" title="Permanent link">&para;</a></h1>
+<p>Monte Carlo moves are defined in the <code>propagate</code> section of the YAML input file.</p>
+<h2 id="propagate-settings">Propagate settings<a class="headerlink" href="#propagate-settings" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Required</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>repeat</code></td>
+<td>no</td>
+<td>1</td>
+<td>Number of propagate cycles (outer loop)</td>
+</tr>
+<tr>
+<td><code>collections</code></td>
+<td>no</td>
+<td><code>[]</code></td>
+<td>Ordered list of move collections (see below)</td>
+</tr>
+<tr>
+<td><code>seed</code></td>
+<td>no</td>
+<td><code>Hardware</code></td>
+<td>RNG seed: <code>Hardware</code> (random) or <code>!Fixed N</code></td>
+</tr>
+<tr>
+<td><code>criterion</code></td>
+<td>no</td>
+<td><code>MetropolisHastings</code></td>
+<td>Acceptance criterion (<code>Metropolis</code> or <code>Minimize</code>)</td>
+</tr>
+</tbody>
+</table>
+<p>Each propagate cycle executes every collection in order; after all collections
+have run, one cycle is complete and the step counter advances.</p>
+<h2 id="collections">Collections<a class="headerlink" href="#collections" title="Permanent link">&para;</a></h2>
+<p>A collection groups moves together and controls how they are selected.
+Two types are available:</p>
+<ul>
+<li><code>!Stochastic</code> — each repeat draws <em>one</em> move at random, with probability
+  proportional to <code>weight</code>. This is the normal Monte Carlo sampling mode.</li>
+<li><code>!Deterministic</code> — each repeat executes <em>all</em> moves in order.
+  Useful for e.g. hybrid MC/MD schemes. The <code>weight</code> field is unused here but
+  still required by the move schema.</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Required</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>repeat</code></td>
+<td>no</td>
+<td>1</td>
+<td>How many times the collection runs per propagate cycle</td>
+</tr>
+<tr>
+<td><code>moves</code></td>
+<td>no</td>
+<td><code>[]</code></td>
+<td>List of moves</td>
+</tr>
+</tbody>
+</table>
+<h2 id="common-move-options">Common move options<a class="headerlink" href="#common-move-options" title="Permanent link">&para;</a></h2>
+<p>Every move accepts at least:</p>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>weight</code></td>
+<td>Selection weight (only meaningful inside <code>!Stochastic</code> collections)</td>
+</tr>
+<tr>
+<td><code>repeat</code></td>
+<td>How many trial moves to attempt <em>each time the move is selected</em> (default 1)</td>
+</tr>
+<tr>
+<td><code>dp</code></td>
+<td>Maximum displacement parameter (meaning depends on the move)</td>
+</tr>
+</tbody>
+</table>
+<p>The two <code>repeat</code> levels nest: the collection's <code>repeat</code> controls how often
+moves are drawn, and the move's <code>repeat</code> controls how many trials are
+performed per draw. For example, a stochastic collection with <code>repeat: 100</code>
+containing a move with <code>repeat: 5</code> will attempt that move up to 500 times
+per propagate cycle (depending on how often it is drawn).</p>
+<h2 id="example">Example<a class="headerlink" href="#example" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><span class="nt">propagate</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">seed</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Hardware</span>
+<span class="w">  </span><span class="nt">criterion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Metropolis</span>
+<span class="w">  </span><span class="nt">repeat</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1000</span>
+<span class="w">  </span><span class="nt">collections</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!Stochastic</span>
+<span class="w">      </span><span class="nt">repeat</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10</span>
+<span class="w">      </span><span class="nt">moves</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!TranslateMolecule</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> molecule</span><span class="p">:</span><span class="w"> </span><span class="nv">Water</span><span class="p p-Indicator">,</span><span class="nt"> dp</span><span class="p">:</span><span class="w"> </span><span class="nv">0.5</span><span class="p p-Indicator">,</span><span class="nt"> weight</span><span class="p">:</span><span class="w"> </span><span class="nv">1.0</span><span class="w"> </span><span class="p p-Indicator">}</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!RotateMolecule</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> molecule</span><span class="p">:</span><span class="w"> </span><span class="nv">Water</span><span class="p p-Indicator">,</span><span class="nt"> dp</span><span class="p">:</span><span class="w"> </span><span class="nv">0.3</span><span class="p p-Indicator">,</span><span class="nt"> weight</span><span class="p">:</span><span class="w"> </span><span class="nv">1.0</span><span class="w"> </span><span class="p p-Indicator">}</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!VolumeMove</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> dV</span><span class="p">:</span><span class="w"> </span><span class="nv">0.04</span><span class="p p-Indicator">,</span><span class="nt"> weight</span><span class="p">:</span><span class="w"> </span><span class="nv">0.5</span><span class="w"> </span><span class="p p-Indicator">}</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!Deterministic</span>
+<span class="w">      </span><span class="nt">repeat</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
+<span class="w">      </span><span class="nt">moves</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!TranslateAtom</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> molecule</span><span class="p">:</span><span class="w"> </span><span class="nv">Water</span><span class="p p-Indicator">,</span><span class="nt"> atom</span><span class="p">:</span><span class="w"> </span><span class="nv">O</span><span class="p p-Indicator">,</span><span class="nt"> dp</span><span class="p">:</span><span class="w"> </span><span class="nv">0.1</span><span class="p p-Indicator">,</span><span class="nt"> weight</span><span class="p">:</span><span class="w"> </span><span class="nv">1.0</span><span class="w"> </span><span class="p p-Indicator">}</span>
+</code></pre></div>
+<hr />
+<h2 id="translate-molecule">Translate Molecule<a class="headerlink" href="#translate-molecule" title="Permanent link">&para;</a></h2>
+<p>Picks a random molecule of the given type and translates it by a random displacement vector
+with magnitude uniformly sampled in <span class="arithmatex">\([-\text{dp}, +\text{dp}]\)</span>.</p>
+<div class="highlight"><pre><span></span><code><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!TranslateMolecule</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> molecule</span><span class="p">:</span><span class="w"> </span><span class="nv">Water</span><span class="p p-Indicator">,</span><span class="nt"> dp</span><span class="p">:</span><span class="w"> </span><span class="nv">0.5</span><span class="p p-Indicator">,</span><span class="nt"> weight</span><span class="p">:</span><span class="w"> </span><span class="nv">1.0</span><span class="w"> </span><span class="p p-Indicator">}</span>
+<span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!TranslateMolecule</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> molecule</span><span class="p">:</span><span class="w"> </span><span class="nv">Protein</span><span class="p p-Indicator">,</span><span class="nt"> dp</span><span class="p">:</span><span class="w"> </span><span class="nv">0.2</span><span class="p p-Indicator">,</span><span class="nt"> weight</span><span class="p">:</span><span class="w"> </span><span class="nv">2.0</span><span class="p p-Indicator">,</span><span class="nt"> repeat</span><span class="p">:</span><span class="w"> </span><span class="nv">3</span><span class="p p-Indicator">,</span><span class="nt"> directions</span><span class="p">:</span><span class="w"> </span><span class="nv">xy</span><span class="w"> </span><span class="p p-Indicator">}</span>
+</code></pre></div>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Required</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>molecule</code></td>
+<td>yes</td>
+<td></td>
+<td>Name of the molecule type (not allowed for <code>atomic</code> molecules)</td>
+</tr>
+<tr>
+<td><code>dp</code></td>
+<td>yes</td>
+<td></td>
+<td>Maximum displacement (Angstrom)</td>
+</tr>
+<tr>
+<td><code>weight</code></td>
+<td>yes</td>
+<td></td>
+<td>Selection weight</td>
+</tr>
+<tr>
+<td><code>repeat</code></td>
+<td>no</td>
+<td>1</td>
+<td>Repetitions per selection</td>
+</tr>
+<tr>
+<td><code>directions</code></td>
+<td>no</td>
+<td><code>xyz</code></td>
+<td>Active directions (<code>x</code>, <code>y</code>, <code>z</code>, <code>xy</code>, <code>xz</code>, <code>yz</code>, <code>xyz</code>)</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="translate-atom">Translate Atom<a class="headerlink" href="#translate-atom" title="Permanent link">&para;</a></h2>
+<p>Picks a random atom and translates it by a random displacement.
+If <code>molecule</code> is specified, the atom is chosen from that molecule type only.
+If <code>atom</code> is specified, only atoms of that type are selected.</p>
+<div class="highlight"><pre><span></span><code><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!TranslateAtom</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> dp</span><span class="p">:</span><span class="w"> </span><span class="nv">0.1</span><span class="p p-Indicator">,</span><span class="nt"> weight</span><span class="p">:</span><span class="w"> </span><span class="nv">1.0</span><span class="w"> </span><span class="p p-Indicator">}</span>
+<span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!TranslateAtom</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> molecule</span><span class="p">:</span><span class="w"> </span><span class="nv">Water</span><span class="p p-Indicator">,</span><span class="nt"> atom</span><span class="p">:</span><span class="w"> </span><span class="nv">O</span><span class="p p-Indicator">,</span><span class="nt"> dp</span><span class="p">:</span><span class="w"> </span><span class="nv">0.2</span><span class="p p-Indicator">,</span><span class="nt"> weight</span><span class="p">:</span><span class="w"> </span><span class="nv">1.0</span><span class="p p-Indicator">,</span><span class="nt"> repeat</span><span class="p">:</span><span class="w"> </span><span class="nv">5</span><span class="w"> </span><span class="p p-Indicator">}</span>
+</code></pre></div>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Required</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>dp</code></td>
+<td>yes</td>
+<td></td>
+<td>Maximum displacement (Angstrom)</td>
+</tr>
+<tr>
+<td><code>weight</code></td>
+<td>yes</td>
+<td></td>
+<td>Selection weight</td>
+</tr>
+<tr>
+<td><code>molecule</code></td>
+<td>no</td>
+<td></td>
+<td>Restrict to this molecule type</td>
+</tr>
+<tr>
+<td><code>atom</code></td>
+<td>no</td>
+<td></td>
+<td>Restrict to this atom type</td>
+</tr>
+<tr>
+<td><code>repeat</code></td>
+<td>no</td>
+<td>1</td>
+<td>Repetitions per selection</td>
+</tr>
+<tr>
+<td><code>preferential</code></td>
+<td>no</td>
+<td></td>
+<td>Preferential sampling settings (see below)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="preferential-sampling">Preferential Sampling<a class="headerlink" href="#preferential-sampling" title="Permanent link">&para;</a></h3>
+<p>Biases atom selection toward reference group(s) using distance-dependent weights,
+with a corresponding acceptance correction to maintain detailed balance.
+Useful in dilute solutions where standard MC wastes most trial moves on bulk
+particles far from the solute
+(<a href="https://doi.org/10.1016/0009-2614(77)85051-3">Owicki &amp; Scheraga, 1977</a>;
+<a href="https://doi.org/10.1093/oso/9780198803195.001.0001">Allen &amp; Tildesley, 2017</a>, §9.3.1).</p>
+<p>Each candidate atom receives weight <span class="arithmatex">\(W'(r) = (r + \text{offset})^{-\nu}\)</span>
+where <span class="arithmatex">\(r\)</span> is the nearest bounding-sphere distance across all matching reference groups.
+The acceptance criterion includes a correction <span class="arithmatex">\(\ln(W_\text{new} / W_\text{old})\)</span>
+where <span class="arithmatex">\(W = \sum_j W'(r_j)\)</span> is the normalization sum over all candidates.</p>
+<p>Must be placed in a <code>!Deterministic</code> block so that reference groups move first
+(updating their positions), followed by the biased atom moves:</p>
+<div class="highlight"><pre><span></span><code><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!Deterministic</span>
+<span class="w">  </span><span class="nt">moves</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!TranslateMolecule</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> molecule</span><span class="p">:</span><span class="w"> </span><span class="nv">Protein</span><span class="p p-Indicator">,</span><span class="nt"> dp</span><span class="p">:</span><span class="w"> </span><span class="nv">0.5</span><span class="w"> </span><span class="p p-Indicator">}</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!RotateMolecule</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> molecule</span><span class="p">:</span><span class="w"> </span><span class="nv">Protein</span><span class="p p-Indicator">,</span><span class="nt"> dp</span><span class="p">:</span><span class="w"> </span><span class="nv">0.5</span><span class="w"> </span><span class="p p-Indicator">}</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!TranslateAtom</span>
+<span class="w">        </span><span class="nt">molecule</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Na</span>
+<span class="w">        </span><span class="nt">dp</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.5</span>
+<span class="w">        </span><span class="nt">repeat</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">100</span>
+<span class="w">        </span><span class="nt">preferential</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">reference</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;molecule</span><span class="nv"> </span><span class="s">Protein&quot;</span>
+<span class="w">          </span><span class="nt">exponent</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2</span>
+<span class="w">          </span><span class="nt">offset</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1.0</span>
+</code></pre></div>
+<p>Multiple reference groups can be selected; the distance is always to the nearest one:</p>
+<div class="highlight"><pre><span></span><code><span class="w">        </span><span class="nt">preferential</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">reference</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;molecule</span><span class="nv"> </span><span class="s">Protein1</span><span class="nv"> </span><span class="s">or</span><span class="nv"> </span><span class="s">molecule</span><span class="nv"> </span><span class="s">Protein2&quot;</span>
+</code></pre></div>
+<p>The <code>reference</code> field uses the <a href="../selection_language/">selection language</a>,
+e.g. <code>"molecule Protein"</code>, <code>"protein"</code>, or boolean combinations.</p>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Required</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>reference</code></td>
+<td>yes</td>
+<td></td>
+<td>Selection expression for reference group(s)</td>
+</tr>
+<tr>
+<td><code>exponent</code></td>
+<td>no</td>
+<td>2</td>
+<td>Exponent <span class="arithmatex">\(\nu\)</span> in the weight function</td>
+</tr>
+<tr>
+<td><code>offset</code></td>
+<td>no</td>
+<td>1.0</td>
+<td>Offset (Angstrom) to avoid singularity at <span class="arithmatex">\(r = 0\)</span></td>
+</tr>
+<tr>
+<td><code>file</code></td>
+<td>no</td>
+<td></td>
+<td>Path to write selection-distance histogram (.dat/.csv)</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="rotate-molecule">Rotate Molecule<a class="headerlink" href="#rotate-molecule" title="Permanent link">&para;</a></h2>
+<p>Picks a random molecule of the given type and rotates it around a random axis
+by an angle uniformly sampled in <span class="arithmatex">\([-\text{dp}, +\text{dp}]\)</span> (radians).</p>
+<div class="highlight"><pre><span></span><code><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!RotateMolecule</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> molecule</span><span class="p">:</span><span class="w"> </span><span class="nv">Protein</span><span class="p p-Indicator">,</span><span class="nt"> dp</span><span class="p">:</span><span class="w"> </span><span class="nv">0.3</span><span class="p p-Indicator">,</span><span class="nt"> weight</span><span class="p">:</span><span class="w"> </span><span class="nv">1.0</span><span class="w"> </span><span class="p p-Indicator">}</span>
+</code></pre></div>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Required</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>molecule</code></td>
+<td>yes</td>
+<td></td>
+<td>Name of the molecule type</td>
+</tr>
+<tr>
+<td><code>dp</code></td>
+<td>yes</td>
+<td></td>
+<td>Maximum angular displacement (radians)</td>
+</tr>
+<tr>
+<td><code>weight</code></td>
+<td>yes</td>
+<td></td>
+<td>Selection weight</td>
+</tr>
+<tr>
+<td><code>repeat</code></td>
+<td>no</td>
+<td>1</td>
+<td>Repetitions per selection</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="pivot-move">Pivot Move<a class="headerlink" href="#pivot-move" title="Permanent link">&para;</a></h2>
+<p>Picks a random atom as pivot in a polymer chain, randomly selects a bonded direction,
+and rotates the connected sub-tree around the pivot position.
+Uses the bond graph from the molecule topology, so it works for arbitrary
+topologies (linear, branched, star, dendrimer).
+Molecules without bonds are skipped.</p>
+<p>See <a href="https://doi.org/10.1007/BF01022990">Madras &amp; Sokal, <em>J. Stat. Phys.</em> 50, 109–186 (1988)</a>.</p>
+<blockquote>
+<p>Note: The rotated sub-tree must fit within half the box length (L/2).
+For molecules spanning more than L/2, the minimum-image convention used
+during rotation can map atoms to incorrect periodic images.</p>
+</blockquote>
+<div class="highlight"><pre><span></span><code><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!PivotMove</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> molecule</span><span class="p">:</span><span class="w"> </span><span class="nv">Polymer</span><span class="p p-Indicator">,</span><span class="nt"> dp</span><span class="p">:</span><span class="w"> </span><span class="nv">1.5</span><span class="p p-Indicator">,</span><span class="nt"> weight</span><span class="p">:</span><span class="w"> </span><span class="nv">1.0</span><span class="w"> </span><span class="p p-Indicator">}</span>
+</code></pre></div>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Required</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>molecule</code></td>
+<td>yes</td>
+<td></td>
+<td>Name of the molecule type</td>
+</tr>
+<tr>
+<td><code>dp</code></td>
+<td>yes</td>
+<td></td>
+<td>Maximum angular displacement (radians)</td>
+</tr>
+<tr>
+<td><code>weight</code></td>
+<td>yes</td>
+<td></td>
+<td>Selection weight</td>
+</tr>
+<tr>
+<td><code>repeat</code></td>
+<td>no</td>
+<td>1</td>
+<td>Repetitions per selection</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="crankshaft-move">Crankshaft Move<a class="headerlink" href="#crankshaft-move" title="Permanent link">&para;</a></h2>
+<p>Picks a random bond axis in the molecule and rotates the smaller sub-tree
+around it by an angle uniformly sampled in <span class="arithmatex">\([-\text{dp}, +\text{dp}]\)</span> (radians).
+When proper dihedrals are defined, only their middle bonds are used as axes;
+otherwise all bonds serve as candidate axes (e.g. FASTA chains with only
+harmonic bonds).</p>
+<p>Because rotation is constrained to a single bond axis (1-DOF), crankshaft
+preserves bond lengths and bond angles by construction. This makes it
+complementary to <a href="#pivot-move"><code>PivotMove</code></a>, which applies a full 3D rotation
+(3-DOF) and can change bond angles at the pivot. For models without angle
+potentials, <code>PivotMove</code> alone is typically sufficient.</p>
+<div class="highlight"><pre><span></span><code><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!CrankshaftMove</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> molecule</span><span class="p">:</span><span class="w"> </span><span class="nv">Peptide</span><span class="p p-Indicator">,</span><span class="nt"> dp</span><span class="p">:</span><span class="w"> </span><span class="nv">0.5</span><span class="p p-Indicator">,</span><span class="nt"> weight</span><span class="p">:</span><span class="w"> </span><span class="nv">1.0</span><span class="w"> </span><span class="p p-Indicator">}</span>
+</code></pre></div>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Required</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>molecule</code></td>
+<td>yes</td>
+<td></td>
+<td>Name of the molecule type</td>
+</tr>
+<tr>
+<td><code>dp</code></td>
+<td>yes</td>
+<td></td>
+<td>Maximum angular displacement (radians)</td>
+</tr>
+<tr>
+<td><code>weight</code></td>
+<td>yes</td>
+<td></td>
+<td>Selection weight</td>
+</tr>
+<tr>
+<td><code>repeat</code></td>
+<td>no</td>
+<td>1</td>
+<td>Repetitions per selection</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="volume-move-npt">Volume Move (<em>NPT</em>)<a class="headerlink" href="#volume-move-npt" title="Permanent link">&para;</a></h2>
+<p>Proposes isotropic or anisotropic volume changes for sampling the <em>NPT</em> ensemble.
+The volume is sampled logarithmically:</p>
+<div class="arithmatex">\[
+V_\text{new} = \exp\!\bigl(\ln V_\text{old} + (\xi - 0.5) \cdot \text{dV}\bigr)
+\]</div>
+<p>where <span class="arithmatex">\(\xi\)</span> is a uniform random number in <span class="arithmatex">\([0, 1)\)</span>.</p>
+<p>No move-level bias is applied; the acceptance is handled by standard Metropolis
+sampling together with the <a href="../energy/#external-pressure-isobaric"><code>isobaric</code></a> energy term
+which contributes <span class="arithmatex">\(PV - (N+1) k_BT \ln V\)</span>.</p>
+<h3 id="example_1">Example<a class="headerlink" href="#example_1" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><span class="nt">system</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">energy</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">pressure</span><span class="p">:</span><span class="w"> </span><span class="kt">!atm</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1.0</span>
+
+<span class="nt">propagate</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">collections</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!Stochastic</span>
+<span class="w">      </span><span class="nt">moves</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!TranslateMolecule</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> molecule</span><span class="p">:</span><span class="w"> </span><span class="nv">Water</span><span class="p p-Indicator">,</span><span class="nt"> dp</span><span class="p">:</span><span class="w"> </span><span class="nv">0.5</span><span class="p p-Indicator">,</span><span class="nt"> weight</span><span class="p">:</span><span class="w"> </span><span class="nv">1.0</span><span class="w"> </span><span class="p p-Indicator">}</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!VolumeMove</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> dV</span><span class="p">:</span><span class="w"> </span><span class="nv">0.04</span><span class="p p-Indicator">,</span><span class="nt"> weight</span><span class="p">:</span><span class="w"> </span><span class="nv">0.5</span><span class="w"> </span><span class="p p-Indicator">}</span>
+</code></pre></div>
+<h3 id="options">Options<a class="headerlink" href="#options" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Required</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>dV</code></td>
+<td>yes</td>
+<td></td>
+<td>Volume displacement parameter (log-scale)</td>
+</tr>
+<tr>
+<td><code>weight</code></td>
+<td>yes</td>
+<td></td>
+<td>Selection weight</td>
+</tr>
+<tr>
+<td><code>method</code></td>
+<td>no</td>
+<td><code>Isotropic</code></td>
+<td>Scaling policy (see table below)</td>
+</tr>
+<tr>
+<td><code>repeat</code></td>
+<td>no</td>
+<td>1</td>
+<td>Repetitions per selection</td>
+</tr>
+</tbody>
+</table>
+<h3 id="scaling-policies">Scaling policies<a class="headerlink" href="#scaling-policies" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Policy</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Isotropic</code></td>
+<td>Equal scaling in all directions (default)</td>
+</tr>
+<tr>
+<td><code>ScaleZ</code></td>
+<td>Scale along the z-axis only</td>
+</tr>
+<tr>
+<td><code>ScaleXY</code></td>
+<td>Scale the xy-plane only</td>
+</tr>
+<tr>
+<td><code>IsochoricZ</code></td>
+<td>Scale z and xy at constant total volume</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="speciation-move-reaction-ensemble">Speciation Move (Reaction Ensemble)<a class="headerlink" href="#speciation-move-reaction-ensemble" title="Permanent link">&para;</a></h2>
+<p>Performs molecular insertion/deletion and atom-type swaps according to
+chemical reactions in the grand canonical or semi-grand canonical ensemble.
+The acceptance criterion follows
+<a href="https://doi.org/10.1063/1.466443">Smith &amp; Triska, <em>J. Chem. Phys.</em> 100, 3019 (1994)</a>.</p>
+<p>Each step randomly picks a reaction and direction (forward or backward),
+then proposes the corresponding operations:</p>
+<ul>
+<li>Molecular insertion: activates an empty group at a random position in the cell.</li>
+<li>Molecular deletion: deactivates a randomly chosen active group.</li>
+<li>Molecular swap: replaces a molecule of one type with another of equal atom count,
+  preserving spatial orientation via gyration tensor alignment.</li>
+<li>Atom swap: changes the type of a random atom (for reactions like <span class="arithmatex">\(A \rightleftharpoons B\)</span>).</li>
+</ul>
+<p>Reactions are written using the syntax described in <a href="../topology/#chemical-reactions">Chemical Reactions</a>.
+The equilibrium constant <span class="arithmatex">\(K\)</span> is related to the excess chemical potential,
+and the system must pre-allocate inactive molecule slots using <code>active &lt; N</code>
+in the <code>blocks</code> section.</p>
+<h3 id="molecular-insertion-and-deletion">Molecular insertion and deletion<a class="headerlink" href="#molecular-insertion-and-deletion" title="Permanent link">&para;</a></h3>
+<p>For a reaction that creates or destroys molecules (e.g. <span class="arithmatex">\(\emptyset \rightleftharpoons M\)</span>
+with equilibrium constant <span class="arithmatex">\(K\)</span>), the acceptance follows:</p>
+<div class="arithmatex">\[
+\operatorname{acc}_\text{insert} = \min\!\biggl(1,\;
+K \cdot \frac{V}{N+1} \cdot e^{-\beta \Delta U}\biggr),
+\qquad
+\operatorname{acc}_\text{delete} = \min\!\biggl(1,\;
+\frac{N}{K \cdot V} \cdot e^{-\beta \Delta U}\biggr)
+\]</div>
+<p>where <span class="arithmatex">\(N\)</span> is the number of molecules <em>before</em> the move and <span class="arithmatex">\(V\)</span> is the cell volume.
+At equilibrium for an ideal gas (<span class="arithmatex">\(\Delta U = 0\)</span>), this yields <span class="arithmatex">\(\langle N \rangle = KV\)</span>.</p>
+<p>For a general reaction <span class="arithmatex">\(\sum_i \nu_i A_i = 0\)</span> involving multiple species,
+the combinatorial bias generalises to</p>
+<div class="arithmatex">\[
+\ln \Gamma = \sum_i \sum_{j=0}^{|\nu_i|-1}
+\ln\!\Bigl(\frac{N_i^{(\text{old})} \pm (j+1)}{V}\Bigr)
+\]</div>
+<p>with the sign matching the direction of the stoichiometric change
+(<a href="https://doi.org/10/fqcpg3">doi:10/fqcpg3</a>).</p>
+<p><a href="../topology/#implicit-reservoirs">Reservoir molecules</a> participate as molecular
+reaction species and do not need a <code>~</code> prefix.
+The volume factor <span class="arithmatex">\(V\)</span> is replaced by unity for reservoir species,
+since they exist outside the simulation cell.</p>
+<h3 id="atom-type-swaps">Atom-type swaps<a class="headerlink" href="#atom-type-swaps" title="Permanent link">&para;</a></h3>
+<p>For reactions that swap atom types within a molecule (e.g. <span class="arithmatex">\(A \rightleftharpoons B\)</span>
+with equilibrium constant <span class="arithmatex">\(K\)</span>), the acceptance is:</p>
+<div class="arithmatex">\[
+\operatorname{acc} = \min\!\biggl(1,\;
+K \cdot \frac{N_\text{from}}{N_\text{to}+1} \cdot e^{-\beta \Delta U}\biggr)
+\]</div>
+<p>where <span class="arithmatex">\(N_\text{from}\)</span> and <span class="arithmatex">\(N_\text{to}\)</span> are the counts of the source and target
+atom types <em>before</em> the swap, summed over all molecules of the relevant type.
+This <span class="arithmatex">\(N_\text{from}/(N_\text{to}+1)\)</span> factor ensures detailed balance and
+yields a binomial equilibrium distribution with
+<span class="arithmatex">\(\langle N_B \rangle / \langle N_A \rangle = K\)</span>,
+consistent with
+<a href="https://doi.org/10.5281/zenodo.5235137">Faunus</a> and
+<a href="https://doi.org/10.1140/epjst/e2019-800186-9">ESPResSo</a>.</p>
+<h3 id="molecular-swaps">Molecular swaps<a class="headerlink" href="#molecular-swaps" title="Permanent link">&para;</a></h3>
+<p>When a reaction has exactly one molecular reactant and one molecular product
+(each with multiplicity one) of the same atom count
+(e.g. <span class="arithmatex">\(A \rightleftharpoons B + \text{implicit}\)</span>),
+the move is automatically detected as a molecular swap.
+A full group of the source type is deactivated and an empty group of the
+target type is activated with positions transferred via
+<a href="https://doi.org/10.1002/jcc.21776">gyration tensor</a> principal-axis alignment.</p>
+<p>A species appearing with a coefficient greater than one (e.g. <span class="arithmatex">\(2A \rightleftharpoons B\)</span>)
+is not a swap: it is handled as insertion/deletion of the individual molecules,
+conserving charge across the whole reaction. Such charge-conserving exchanges — for
+example <span class="arithmatex">\(2\,\mathrm{Na}^+ \rightleftharpoons \mathrm{Ca}^{2+}\)</span> — must use non-atomic
+single-atom molecules (one group per ion); pooled <code>atomic: true</code> ions are not yet
+supported for coefficient-≥2 deletion together with explicit pair energy.</p>
+<p>The acceptance is:</p>
+<div class="arithmatex">\[
+\operatorname{acc} = \min\!\biggl(1,\;
+K_\text{eff} \cdot \frac{N_\text{from}}{N_\text{to}+1} \cdot e^{-\beta \Delta U}\biggr)
+\]</div>
+<p>where <span class="arithmatex">\(N_\text{from}\)</span> and <span class="arithmatex">\(N_\text{to}\)</span> are the counts of source and target
+molecule groups <em>before</em> the move.
+No volume factor appears because the total molecule count is conserved.
+<span class="arithmatex">\(\Delta U\)</span> excludes intramolecular energy (bonded and nonbonded self-interactions)
+since these are absorbed into the equilibrium constant <span class="arithmatex">\(K\)</span>.
+Each species must have pre-allocated groups (<code>active &lt; N</code>) to serve as a pool;
+if the pool is exhausted, the move is silently rejected.</p>
+<h4 id="phosphate-titration-example">Phosphate titration example<a class="headerlink" href="#phosphate-titration-example" title="Permanent link">&para;</a></h4>
+<p>Four charge states of orthophosphate with three <span class="arithmatex">\(pK_a\)</span> values
+and implicit protons:</p>
+<div class="highlight"><pre><span></span><code><span class="nt">atoms</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="nv">P</span><span class="p p-Indicator">,</span><span class="nt"> mass</span><span class="p">:</span><span class="w"> </span><span class="nv">31.0</span><span class="p p-Indicator">,</span><span class="nt"> sigma</span><span class="p">:</span><span class="w"> </span><span class="nv">3.0</span><span class="p p-Indicator">}</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="nv">O</span><span class="p p-Indicator">,</span><span class="nt"> mass</span><span class="p">:</span><span class="w"> </span><span class="nv">16.0</span><span class="p p-Indicator">,</span><span class="nt"> sigma</span><span class="p">:</span><span class="w"> </span><span class="nv">2.8</span><span class="p p-Indicator">}</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="nv">H+</span><span class="p p-Indicator">,</span><span class="nt"> mass</span><span class="p">:</span><span class="w"> </span><span class="nv">1.0</span><span class="p p-Indicator">,</span><span class="nt"> activity</span><span class="p">:</span><span class="w"> </span><span class="nv">6.31e-8</span><span class="p p-Indicator">}</span><span class="w">  </span><span class="c1"># pH 7.2</span>
+
+<span class="nt">molecules</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">H₃PO₄</span>
+<span class="w">    </span><span class="nt">atoms</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">P</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">O</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">O</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">O</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">O</span><span class="p p-Indicator">]</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">H₂PO₄⁻</span>
+<span class="w">    </span><span class="nt">atoms</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">P</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">O</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">O</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">O</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">O</span><span class="p p-Indicator">]</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">HPO₄²⁻</span>
+<span class="w">    </span><span class="nt">atoms</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">P</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">O</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">O</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">O</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">O</span><span class="p p-Indicator">]</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">PO₄³⁻</span>
+<span class="w">    </span><span class="nt">atoms</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">P</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">O</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">O</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">O</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">O</span><span class="p p-Indicator">]</span>
+
+<span class="nt">system</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">blocks</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">molecule</span><span class="p">:</span><span class="w"> </span><span class="nv">H₃PO₄</span><span class="p p-Indicator">,</span><span class="nt">  N</span><span class="p">:</span><span class="w"> </span><span class="nv">20</span><span class="p p-Indicator">,</span><span class="nt"> active</span><span class="p">:</span><span class="w"> </span><span class="nv">0</span><span class="p p-Indicator">,</span><span class="nt">  insert</span><span class="p">:</span><span class="w"> </span><span class="kt">!RandomAtomPos</span><span class="w"> </span><span class="p p-Indicator">{}}</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">molecule</span><span class="p">:</span><span class="w"> </span><span class="nv">H₂PO₄⁻</span><span class="p p-Indicator">,</span><span class="nt"> N</span><span class="p">:</span><span class="w"> </span><span class="nv">20</span><span class="p p-Indicator">,</span><span class="nt"> active</span><span class="p">:</span><span class="w"> </span><span class="nv">20</span><span class="p p-Indicator">,</span><span class="nt"> insert</span><span class="p">:</span><span class="w"> </span><span class="kt">!RandomAtomPos</span><span class="w"> </span><span class="p p-Indicator">{}}</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">molecule</span><span class="p">:</span><span class="w"> </span><span class="nv">HPO₄²⁻</span><span class="p p-Indicator">,</span><span class="nt">  N</span><span class="p">:</span><span class="w"> </span><span class="nv">20</span><span class="p p-Indicator">,</span><span class="nt"> active</span><span class="p">:</span><span class="w"> </span><span class="nv">0</span><span class="p p-Indicator">,</span><span class="nt">  insert</span><span class="p">:</span><span class="w"> </span><span class="kt">!RandomAtomPos</span><span class="w"> </span><span class="p p-Indicator">{}}</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">molecule</span><span class="p">:</span><span class="w"> </span><span class="nv">PO₄³⁻</span><span class="p p-Indicator">,</span><span class="nt">   N</span><span class="p">:</span><span class="w"> </span><span class="nv">20</span><span class="p p-Indicator">,</span><span class="nt"> active</span><span class="p">:</span><span class="w"> </span><span class="nv">0</span><span class="p p-Indicator">,</span><span class="nt">  insert</span><span class="p">:</span><span class="w"> </span><span class="kt">!RandomAtomPos</span><span class="w"> </span><span class="p p-Indicator">{}}</span>
+
+<span class="nt">propagate</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">collections</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!Deterministic</span>
+<span class="w">      </span><span class="nt">moves</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!SpeciationMove</span>
+<span class="w">          </span><span class="nt">temperature</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">298.15</span>
+<span class="w">          </span><span class="nt">reactions</span><span class="p">:</span>
+<span class="w">            </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;H₃PO₄</span><span class="nv"> </span><span class="s">=</span><span class="nv"> </span><span class="s">H₂PO₄⁻</span><span class="nv"> </span><span class="s">+</span><span class="nv"> </span><span class="s">~H+&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="kt">!pK</span><span class="w"> </span><span class="nv">2.15</span><span class="p p-Indicator">]</span>
+<span class="w">            </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;H₂PO₄⁻</span><span class="nv"> </span><span class="s">=</span><span class="nv"> </span><span class="s">HPO₄²⁻</span><span class="nv"> </span><span class="s">+</span><span class="nv"> </span><span class="s">~H+&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="kt">!pK</span><span class="w"> </span><span class="nv">7.20</span><span class="p p-Indicator">]</span>
+<span class="w">            </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;HPO₄²⁻</span><span class="nv"> </span><span class="s">=</span><span class="nv"> </span><span class="s">PO₄³⁻</span><span class="nv"> </span><span class="s">+</span><span class="nv"> </span><span class="s">~H+&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="kt">!pK</span><span class="w"> </span><span class="nv">12.35</span><span class="p p-Indicator">]</span>
+</code></pre></div>
+<p>At <span class="arithmatex">\(pH = pK_{a2} = 7.20\)</span>, the effective equilibrium constant for the
+second reaction is unity, giving equal populations of H₂PO₄⁻ and HPO₄²⁻.</p>
+<h3 id="gcmc-example">GCMC example<a class="headerlink" href="#gcmc-example" title="Permanent link">&para;</a></h3>
+<p>For single-atom species, <code>atomic: true</code> pools all instances into one group,
+reducing overhead from N groups to 1.</p>
+<div class="highlight"><pre><span></span><code><span class="nt">molecules</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Na+</span>
+<span class="w">    </span><span class="nt">atoms</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">Na</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">atomic</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">    </span><span class="nt">activity</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.030</span><span class="w">           </span><span class="c1"># molar GCMC fugacity</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Cl-</span>
+<span class="w">    </span><span class="nt">atoms</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">Cl</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">atomic</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">    </span><span class="nt">activity</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.030</span>
+
+<span class="nt">system</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">blocks</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">molecule</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Na+</span>
+<span class="w">      </span><span class="nt">N</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">30</span>
+<span class="w">      </span><span class="nt">active</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10</span>
+<span class="w">      </span><span class="nt">insert</span><span class="p">:</span><span class="w"> </span><span class="kt">!RandomAtomPos</span><span class="w"> </span><span class="p p-Indicator">{}</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">molecule</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Cl-</span>
+<span class="w">      </span><span class="nt">N</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">30</span>
+<span class="w">      </span><span class="nt">active</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10</span>
+<span class="w">      </span><span class="nt">insert</span><span class="p">:</span><span class="w"> </span><span class="kt">!RandomAtomPos</span><span class="w"> </span><span class="p p-Indicator">{}</span>
+
+<span class="nt">propagate</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">repeat</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10000</span>
+<span class="w">  </span><span class="nt">collections</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!Deterministic</span>
+<span class="w">      </span><span class="nt">moves</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!SpeciationMove</span>
+<span class="w">          </span><span class="nt">temperature</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">298.15</span>
+<span class="w">          </span><span class="nt">reactions</span><span class="p">:</span>
+<span class="w">            </span><span class="c1"># Coupled titration + salt exchange to maintain electroneutrality</span>
+<span class="w">            </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;⚛HGLU</span><span class="nv"> </span><span class="s">+</span><span class="nv"> </span><span class="s">Cl-</span><span class="nv"> </span><span class="s">=</span><span class="nv"> </span><span class="s">⚛GLU</span><span class="nv"> </span><span class="s">+</span><span class="nv"> </span><span class="s">~H+&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="kt">!pK</span><span class="w"> </span><span class="nv">4.24</span><span class="p p-Indicator">]</span>
+<span class="w">            </span><span class="c1"># Grand canonical salt: activities folded into K_eff</span>
+<span class="w">            </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;=</span><span class="nv"> </span><span class="s">Na+</span><span class="nv"> </span><span class="s">+</span><span class="nv"> </span><span class="s">Cl-&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="kt">!K</span><span class="w"> </span><span class="nv">1.0</span><span class="p p-Indicator">]</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!TranslateAtom</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> atom</span><span class="p">:</span><span class="w"> </span><span class="nv">Na</span><span class="p p-Indicator">,</span><span class="nt"> molecule</span><span class="p">:</span><span class="w"> </span><span class="nv">Na+</span><span class="p p-Indicator">,</span><span class="nt"> dp</span><span class="p">:</span><span class="w"> </span><span class="nv">50.0</span><span class="w"> </span><span class="p p-Indicator">}</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!TranslateAtom</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> atom</span><span class="p">:</span><span class="w"> </span><span class="nv">Cl</span><span class="p p-Indicator">,</span><span class="nt"> molecule</span><span class="p">:</span><span class="w"> </span><span class="nv">Cl-</span><span class="p p-Indicator">,</span><span class="nt"> dp</span><span class="p">:</span><span class="w"> </span><span class="nv">50.0</span><span class="w"> </span><span class="p p-Indicator">}</span>
+</code></pre></div>
+<h3 id="options_1">Options<a class="headerlink" href="#options_1" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Required</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>temperature</code></td>
+<td>yes</td>
+<td></td>
+<td>Temperature in Kelvin (used to compute <span class="arithmatex">\(k_BT\)</span>)</td>
+</tr>
+<tr>
+<td><code>reactions</code></td>
+<td>yes</td>
+<td></td>
+<td>List of reactions (see below)</td>
+</tr>
+<tr>
+<td><code>weight</code></td>
+<td>no</td>
+<td>1</td>
+<td>Selection weight</td>
+</tr>
+<tr>
+<td><code>repeat</code></td>
+<td>no</td>
+<td>1</td>
+<td>Repetitions per selection</td>
+</tr>
+</tbody>
+</table>
+<p>Each reaction is a two-element tuple <code>[reaction_string, equilibrium_constant]</code>:</p>
+<ul>
+<li>Reaction string: e.g. <code>"= NaCl"</code> or <code>"⚛A = ⚛B"</code></li>
+<li>Equilibrium constant: <code>!K &lt;value&gt;</code>, <code>!lnK &lt;value&gt;</code>, <code>!pK &lt;value&gt;</code> (<span class="arithmatex">\(K = 10^{-\text{pK}}\)</span>), or <code>!dG &lt;kJ/mol&gt;</code> (<span class="arithmatex">\(K = e^{-\Delta G/k_BT}\)</span>)</li>
+</ul>
+<h3 id="activity-folding">Activity folding<a class="headerlink" href="#activity-folding" title="Permanent link">&para;</a></h3>
+<p>The user-specified <span class="arithmatex">\(K\)</span> (or <span class="arithmatex">\(10^{-\text{pK}}\)</span>) is combined with species
+activities to form an effective equilibrium constant used in acceptance:</p>
+<div class="arithmatex">\[\ln K_\text{eff} = \ln K
+  + \sum_{\text{implicit reactants}} \ln a_i
+  - \sum_{\text{implicit products}} \ln a_i
+  - \sum_{\text{insert/delete reactants}} \ln z_i
+  + \sum_{\text{insert/delete products}} \ln z_i\]</div>
+<p>where:</p>
+<ul>
+<li>Implicit species (<code>~H+</code>): <span class="arithmatex">\(a_i\)</span> is the <code>activity</code> field on the
+  matching atom type. Consumed reactants increase <span class="arithmatex">\(K_\text{eff}\)</span>;
+  produced products decrease it.</li>
+<li>Molecular species involved in insertion/deletion (<code>Na+</code>, <code>Cl-</code>):
+  <span class="arithmatex">\(z_i = a_i \times N_A / 10^{27}\)</span>
+  converts the molar <code>activity</code> on the molecule type to number density.
+  The sign is reversed relative to implicit species because the
+  acceptance criterion already includes a <span class="arithmatex">\(V\)</span>-dependent combinatorial
+  factor <span class="arithmatex">\(V^{\Delta\nu} \cdot \prod [N!/(N+\nu)!]\)</span> that uses <span class="arithmatex">\(N/V\)</span>;
+  the fugacity correction replaces <span class="arithmatex">\(N/V\)</span> with <span class="arithmatex">\(N/(V \cdot z)\)</span>.</li>
+<li>Molecular swap participants are excluded from fugacity folding since
+  no volume factor enters the acceptance (total molecule count is conserved).</li>
+</ul>
+<p>For example, with <code>["= Na+ + Cl-", !K 1.0]</code> and molecular activities
+of 0.030 M on both ions, the bare <span class="arithmatex">\(K=1\)</span> is modified by the two product
+fugacities: <span class="arithmatex">\(\ln K_\text{eff} = 0 + \ln z_\text{Na} + \ln z_\text{Cl}\)</span>.</p>
+<h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Molecule blocks must have <code>active &lt; N</code> to provide empty slots for insertion and swap targets.</li>
+<li>Atom swap reactions require that at least one atom type belongs to the target molecule definition.</li>
+<li>Molecular swaps are auto-detected when a reaction has one molecular reactant and one molecular
+  product with equal atom counts. Pool exhaustion silently rejects the move — increase <code>N</code> if needed.</li>
+<li>The move targets the entire system, so energy is recomputed globally on each trial.</li>
+</ul>
+<hr />
+<h2 id="gibbs-ensemble">Gibbs Ensemble<a class="headerlink" href="#gibbs-ensemble" title="Permanent link">&para;</a></h2>
+<p>The Gibbs ensemble method
+(<a href="https://doi.org/10.1080/00268978700101491">Panagiotopoulos, <em>Mol. Phys.</em> 61, 813 (1987)</a>)
+simulates two coupled simulation boxes to study phase coexistence without
+an explicit interface.
+When <code>propagate.gibbs</code> is present, faunus clones the system into two boxes
+and alternates between:</p>
+<ol>
+<li>Intra-box MC — each box runs <code>intra_steps</code> propagation cycles in parallel
+   (using the <code>collections</code> defined above).</li>
+<li>Inter-box moves — volume exchange and particle transfer between the two boxes.</li>
+</ol>
+<p>The total number of Gibbs sweeps is <code>repeat / intra_steps</code>.</p>
+<p>Molecule blocks must pre-allocate inactive slots for transfer using <code>active &lt; N</code>
+in the <code>blocks</code> section, e.g. <code>{ molecule: LJ, N: 600, active: 300 }</code>.</p>
+<h3 id="configuration">Configuration<a class="headerlink" href="#configuration" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><span class="nt">propagate</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">repeat</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">5000</span>
+<span class="w">  </span><span class="nt">collections</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!Stochastic</span>
+<span class="w">      </span><span class="nt">moves</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!TranslateMolecule</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> molecule</span><span class="p">:</span><span class="w"> </span><span class="nv">LJ</span><span class="p p-Indicator">,</span><span class="nt"> dp</span><span class="p">:</span><span class="w"> </span><span class="nv">0.3</span><span class="p p-Indicator">,</span><span class="nt"> repeat</span><span class="p">:</span><span class="w"> </span><span class="nv">100</span><span class="w"> </span><span class="p p-Indicator">}</span>
+<span class="w">  </span><span class="nt">gibbs</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">intra_steps</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
+<span class="w">    </span><span class="nt">moves</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!GibbsVolumeExchange</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> dV</span><span class="p">:</span><span class="w"> </span><span class="nv">0.3</span><span class="w"> </span><span class="p p-Indicator">}</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!GibbsParticleTransfer</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> molecule</span><span class="p">:</span><span class="w"> </span><span class="nv">LJ</span><span class="w"> </span><span class="p p-Indicator">}</span>
+</code></pre></div>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Required</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>intra_steps</code></td>
+<td>yes</td>
+<td></td>
+<td>Intra-box propagation cycles between inter-box moves</td>
+</tr>
+<tr>
+<td><code>moves</code></td>
+<td>yes</td>
+<td></td>
+<td>List of inter-box moves</td>
+</tr>
+</tbody>
+</table>
+<h3 id="gibbs-volume-exchange">Gibbs Volume Exchange<a class="headerlink" href="#gibbs-volume-exchange" title="Permanent link">&para;</a></h3>
+<p>Exchanges volume between two boxes while conserving total volume <span class="arithmatex">\(V_1 + V_2\)</span>.
+Both boxes are isotropically rescaled and all particle positions scale with the box.
+<span class="arithmatex">\(N\)</span> counts independently translatable mass centers: one per molecular group,
+one per active atom in atomic groups.</p>
+<p>Logarithmic (default) — displaces in <span class="arithmatex">\(\ln(V_1/V_2)\)</span> space
+(<a href="https://doi.org/10.1016/B978-012267351-1/50006-7">Frenkel &amp; Smit, Sec. 8.3.2</a>):</p>
+<div class="arithmatex">\[
+\operatorname{acc} = \min\!\bigl(1,\;
+  \exp\bigl[-\beta(\Delta U_1 + \Delta U_2)
+  + (N_1{+}1) \ln(V_1'/V_1) + (N_2{+}1) \ln(V_2'/V_2)\bigr]\bigr)
+\]</div>
+<p>The <span class="arithmatex">\((N{+}1)\)</span> factor comes from the Jacobian of the <span class="arithmatex">\(\ln V\)</span> transformation.</p>
+<p>Linear (opt-in) — direct <span class="arithmatex">\(\delta V\)</span> transfer
+(<a href="https://doi.org/10.1093/oso/9780198803195.001.0001">Allen &amp; Tildesley, Eq. 9.75</a>):</p>
+<div class="arithmatex">\[
+\operatorname{acc} = \min\!\bigl(1,\;
+  \exp\bigl[-\beta(\Delta U_1 + \Delta U_2)
+  + N_1 \ln(V_1'/V_1) + N_2 \ln(V_2'/V_2)\bigr]\bigr)
+\]</div>
+<div class="highlight"><pre><span></span><code><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!GibbsVolumeExchange</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> dV</span><span class="p">:</span><span class="w"> </span><span class="nv">10</span><span class="w"> </span><span class="p p-Indicator">}</span><span class="w">                     </span><span class="c1"># default: Logarithmic</span>
+<span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!GibbsVolumeExchange</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> dV</span><span class="p">:</span><span class="w"> </span><span class="nv">10</span><span class="p p-Indicator">,</span><span class="nt"> method</span><span class="p">:</span><span class="w"> </span><span class="nv">Linear</span><span class="w"> </span><span class="p p-Indicator">}</span><span class="w">     </span><span class="c1"># opt-in linear</span>
+</code></pre></div>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Required</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>dV</code></td>
+<td>yes</td>
+<td></td>
+<td>Volume displacement parameter</td>
+</tr>
+<tr>
+<td><code>method</code></td>
+<td>no</td>
+<td><code>Logarithmic</code></td>
+<td>Displacement method: <code>Logarithmic</code> or <code>Linear</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="gibbs-particle-transfer">Gibbs Particle Transfer<a class="headerlink" href="#gibbs-particle-transfer" title="Permanent link">&para;</a></h3>
+<p>Transfers a molecule from one box to the other.
+A random direction is chosen (box 0 → 1 or box 1 → 0).
+Both molecular and atomic molecule kinds are supported:
+for molecular groups, a full group is deactivated/activated;
+for atomic groups, a single atom is removed/inserted via the
+speciation expand/shrink mechanism.
+If no suitable slot exists in either box, the move is rejected.</p>
+<p>Acceptance follows Panagiotopoulos Eq. 8:</p>
+<div class="arithmatex">\[
+\operatorname{acc} = \min\!\bigl(1,\;
+  \exp\bigl[-\beta(\Delta U_\text{src} + \Delta U_\text{tgt})
+  + \ln\!\bigl(\tfrac{V_\text{tgt}\, N_\text{src}}{V_\text{src}\,(N_\text{tgt}+1)}\bigr)\bigr]\bigr)
+\]</div>
+<p>where <span class="arithmatex">\(N\)</span> counts are measured <em>before</em> the move.</p>
+<div class="highlight"><pre><span></span><code><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!GibbsParticleTransfer</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> molecule</span><span class="p">:</span><span class="w"> </span><span class="nv">LJ</span><span class="w"> </span><span class="p p-Indicator">}</span>
+</code></pre></div>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>molecule</code></td>
+<td>yes</td>
+<td>Name of the molecule type to transfer</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="langevin-dynamics">Langevin Dynamics<a class="headerlink" href="#langevin-dynamics" title="Permanent link">&para;</a></h2>
+<p>Rigid-body Langevin dynamics using the BAOAB splitting scheme, accelerated via
+<a href="https://github.com/tracel-ai/cubecl">CubeCL</a> (wgpu, CUDA, or CPU backends).
+Molecules are treated as rigid bodies with translational and rotational degrees of freedom,
+integrated with per-body friction and stochastic forces at the target temperature.
+Requires the <code>gpu</code> cargo feature (<code>cargo run --features gpu</code>).</p>
+<p>Langevin dynamics is placed as a collection entry alongside Monte Carlo moves,
+enabling hybrid MC/LD schemes where MC sweeps alternate with LD blocks within
+each propagation cycle. On each MC→LD transition, atom positions, centers of mass,
+and rigid-body orientations are uploaded to the compute device; after the LD block,
+updated positions and orientations are downloaded back.</p>
+<p>Pair interactions are evaluated on-device using cubic spline interpolation of the
+tabulated pair potentials (see <code>energy.spline</code> in <a href="../energy/">Energy</a>).
+A cell list reduces pairwise force evaluation from <span class="arithmatex">\(O(n^2)\)</span> to <span class="arithmatex">\(O(n \cdot k)\)</span>
+where <span class="arithmatex">\(k\)</span> is the number of atoms in neighboring cells.
+The cell list is built on the CPU from periodically downloaded positions
+and uploaded as a CSR structure; the rebuild interval is configurable.
+Intramolecular bonded forces (harmonic bonds, harmonic angles, and periodic/harmonic
+dihedrals) are also computed on-device when present in the topology.</p>
+<h3 id="theory">Theory<a class="headerlink" href="#theory" title="Permanent link">&para;</a></h3>
+<p>The Langevin equation couples Newtonian dynamics to a heat bath through
+friction and stochastic forces:</p>
+<div class="arithmatex">\[
+m \ddot{\mathbf{r}} = \mathbf{F}(\mathbf{r}) - \gamma\, m\, \dot{\mathbf{r}} + \sqrt{2\gamma\, m\, k_BT}\;\mathbf{\xi}(t)
+\]</div>
+<p>where <span class="arithmatex">\(m\)</span> is the particle mass, <span class="arithmatex">\(\gamma\)</span> the friction coefficient (1/ps),
+<span class="arithmatex">\(\mathbf{F}\)</span> the conservative force, and <span class="arithmatex">\(\mathbf{\xi}(t)\)</span> is Gaussian white noise
+with <span class="arithmatex">\(\langle \xi_i(t)\,\xi_j(t') \rangle = \delta_{ij}\,\delta(t - t')\)</span>.
+The friction and noise terms satisfy the fluctuation–dissipation theorem,
+ensuring that the system samples the canonical (NVT) ensemble at temperature <span class="arithmatex">\(T\)</span>.</p>
+<h4 id="baoab-integrator">BAOAB integrator<a class="headerlink" href="#baoab-integrator" title="Permanent link">&para;</a></h4>
+<p>Time integration uses the BAOAB splitting
+(<a href="https://doi.org/10.1093/amrx/abs010">Leimkuhler &amp; Matthews, <em>Appl. Math. Res. Express</em> 2013, 34–56</a>),
+which splits each timestep <span class="arithmatex">\(\Delta t\)</span> into five sub-steps:</p>
+<table>
+<thead>
+<tr>
+<th>Step</th>
+<th>Operation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>B</td>
+<td>Half-kick: <span class="arithmatex">\(\mathbf{v} \leftarrow \mathbf{v} + \frac{\Delta t}{2m}\,\mathbf{F}\)</span></td>
+</tr>
+<tr>
+<td>A</td>
+<td>Half-drift: <span class="arithmatex">\(\mathbf{r} \leftarrow \mathbf{r} + \frac{\Delta t}{2}\,\mathbf{v}\)</span></td>
+</tr>
+<tr>
+<td>O</td>
+<td>Ornstein–Uhlenbeck: <span class="arithmatex">\(\mathbf{v} \leftarrow e^{-\gamma \Delta t}\,\mathbf{v} + \sqrt{\frac{k_BT}{m}(1 - e^{-2\gamma \Delta t})}\;\mathbf{R}\)</span></td>
+</tr>
+<tr>
+<td>A</td>
+<td>Half-drift: <span class="arithmatex">\(\mathbf{r} \leftarrow \mathbf{r} + \frac{\Delta t}{2}\,\mathbf{v}\)</span></td>
+</tr>
+<tr>
+<td>B</td>
+<td>Half-kick: <span class="arithmatex">\(\mathbf{v} \leftarrow \mathbf{v} + \frac{\Delta t}{2m}\,\mathbf{F}\)</span></td>
+</tr>
+</tbody>
+</table>
+<p>Here <span class="arithmatex">\(\mathbf{R}\)</span> is a vector of independent standard normal variates.
+Placing the stochastic step (O) at the center gives superior configurational
+sampling accuracy compared to other splittings, with the
+configurational distribution correct to <span class="arithmatex">\(\mathcal{O}(\Delta t^2)\)</span>.</p>
+<h4 id="rigid-body-rotational-dynamics">Rigid-body rotational dynamics<a class="headerlink" href="#rigid-body-rotational-dynamics" title="Permanent link">&para;</a></h4>
+<p>Each molecule is represented by its center-of-mass position and a unit quaternion
+<span class="arithmatex">\(\mathbf{q}\)</span> encoding orientation. Atom positions are reconstructed as</p>
+<div class="arithmatex">\[
+\mathbf{r}_i = \mathbf{r}_\text{com} + \mathbf{q}\,\mathbf{r}_i^{\,\text{ref}}\,\mathbf{q}^{-1}
+\]</div>
+<p>where <span class="arithmatex">\(\mathbf{r}_i^{\,\text{ref}}\)</span> are time-independent reference coordinates in the body frame.
+Rotational equations of motion follow the same BAOAB pattern, with
+the body-frame angular velocity <span class="arithmatex">\(\mathbf{\omega}\)</span> and diagonal inertia tensor
+<span class="arithmatex">\(\mathbf{I} = \operatorname{diag}(I_{xx}, I_{yy}, I_{zz})\)</span> replacing
+<span class="arithmatex">\(\mathbf{v}\)</span> and <span class="arithmatex">\(m\)</span>. The O step applies the Ornstein–Uhlenbeck
+thermostat independently to each angular velocity component:</p>
+<div class="arithmatex">\[
+\omega_\alpha \leftarrow e^{-\gamma \Delta t}\,\omega_\alpha + \sqrt{\frac{k_BT}{I_{\alpha\alpha}}(1 - e^{-2\gamma \Delta t})}\;R_\alpha
+\]</div>
+<p>The A drift steps update the quaternion by composing an incremental rotation:</p>
+<div class="arithmatex">\[
+\mathbf{q} \leftarrow \Delta\mathbf{q}\;\mathbf{q}, \quad
+\Delta\mathbf{q} = \exp\!\bigl(\tfrac{\Delta t}{4}\,\mathbf{\omega}\bigr)
+\]</div>
+<p>Torques are computed from the forces on each atom in the body frame:
+<span class="arithmatex">\(\mathbf{\tau} = \sum_i \mathbf{r}_i^{\,\text{ref}} \times \mathbf{f}_i^{\,\text{body}}\)</span>.</p>
+<h3 id="example_2">Example<a class="headerlink" href="#example_2" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><span class="nt">propagate</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">seed</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Hardware</span>
+<span class="w">  </span><span class="nt">criterion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Metropolis</span>
+<span class="w">  </span><span class="nt">repeat</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">500</span>
+<span class="w">  </span><span class="nt">collections</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!Stochastic</span>
+<span class="w">      </span><span class="nt">repeat</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">20</span>
+<span class="w">      </span><span class="nt">moves</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!TranslateMolecule</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> molecule</span><span class="p">:</span><span class="w"> </span><span class="nv">Water</span><span class="p p-Indicator">,</span><span class="nt"> dp</span><span class="p">:</span><span class="w"> </span><span class="nv">0.5</span><span class="p p-Indicator">,</span><span class="nt"> repeat</span><span class="p">:</span><span class="w"> </span><span class="nv">1</span><span class="w"> </span><span class="p p-Indicator">}</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!RotateMolecule</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> molecule</span><span class="p">:</span><span class="w"> </span><span class="nv">Water</span><span class="p p-Indicator">,</span><span class="nt"> dp</span><span class="p">:</span><span class="w"> </span><span class="nv">0.3</span><span class="p p-Indicator">,</span><span class="nt"> repeat</span><span class="p">:</span><span class="w"> </span><span class="nv">1</span><span class="w"> </span><span class="p p-Indicator">}</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!LangevinDynamics</span>
+<span class="w">      </span><span class="nt">timestep</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.1</span>
+<span class="w">      </span><span class="nt">friction</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">5.0</span>
+<span class="w">      </span><span class="nt">steps</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">20</span>
+<span class="w">      </span><span class="nt">temperature</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">298.15</span>
+</code></pre></div>
+<h3 id="options_2">Options<a class="headerlink" href="#options_2" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Required</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>timestep</code></td>
+<td>yes</td>
+<td></td>
+<td>Integration timestep (ps)</td>
+</tr>
+<tr>
+<td><code>friction</code></td>
+<td>yes</td>
+<td></td>
+<td>Friction coefficient (1/ps)</td>
+</tr>
+<tr>
+<td><code>steps</code></td>
+<td>yes</td>
+<td></td>
+<td>Number of LD steps per block</td>
+</tr>
+<tr>
+<td><code>temperature</code></td>
+<td>yes</td>
+<td></td>
+<td>Target temperature (K)</td>
+</tr>
+<tr>
+<td><code>cell_list_rebuild</code></td>
+<td>no</td>
+<td>20</td>
+<td>Cell list rebuild interval (steps; 0 = only at start)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="output">Output<a class="headerlink" href="#output" title="Permanent link">&para;</a></h3>
+<p>After simulation, the YAML output reports measured temperatures
+from the equipartition theorem:</p>
+<div class="highlight"><pre><span></span><code><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!LangevinDynamics</span>
+<span class="w">  </span><span class="nt">timestep</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.1</span>
+<span class="w">  </span><span class="nt">friction</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">5.0</span>
+<span class="w">  </span><span class="nt">steps</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">20</span>
+<span class="w">  </span><span class="nt">temperature</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">298.15</span>
+<span class="w">  </span><span class="nt">measured_temperature</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">translational</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;298.3</span><span class="nv"> </span><span class="s">±</span><span class="nv"> </span><span class="s">1.2&quot;</span>
+<span class="w">    </span><span class="nt">rotational</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;297.8</span><span class="nv"> </span><span class="s">±</span><span class="nv"> </span><span class="s">2.1&quot;</span>
+</code></pre></div>
+<h3 id="notes_1">Notes<a class="headerlink" href="#notes_1" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Molecules must have <code>degrees_of_freedom: Rigid</code> and <code>has_com: true</code> in the topology.</li>
+<li>The simulation cell must be bounded (cuboid).</li>
+<li>Velocities are initialized from the Maxwell–Boltzmann distribution on the first call
+  and persist on the compute device across subsequent LD blocks.</li>
+<li>MC rotation moves (<code>!RotateMolecule</code>) automatically track rigid-body orientation,
+  which is transferred to the device at each LD block start.</li>
+<li>Energy splines must be configured (<code>energy.spline</code>) to provide on-device pair potentials.</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["content.code.copy", "navigation.top", "search.suggest", "search.highlight", "toc.follow"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"provider": "mike"}}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+        <script src="../javascript/mathjax.js"></script>
+      
+        <script src="https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js"></script>
+      
+    
+  </body>
+</html>
