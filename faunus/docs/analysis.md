@@ -225,10 +225,10 @@ variance is nonzero:
 multipole:
   selection: molecule MOL1
   num_samples: 2000
-  charge: '4.7785 ± 2.2373'
+  charge: {mean: 4.7785, error: 2.2373}
   capacitance: 5.005
-  dipole_moment: '141.6532 ± 23.8816'
-  quadrupole_moment: '312.4187 ± 45.1902'
+  dipole_moment: {mean: 141.6532, error: 23.8816}
+  quadrupole_moment: {mean: 312.4187, error: 45.1902}
   quadrupole_tensor:            # order [xx, xy, xz, yy, yz, zz], loads straight into NumPy
     order: [xx, xy, xz, yy, yz, zz]
     values: [180.21, 12.03, -4.11, -95.44, 8.90, -84.77]

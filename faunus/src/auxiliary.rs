@@ -511,6 +511,16 @@ pub(crate) struct BlockSummary {
     pub error: f64,
 }
 
+impl BlockSummary {
+    /// Snapshot whose `error` is a sample standard deviation (fluctuation
+    /// width) rather than a SEM. Used where the spread itself is the reported
+    /// quantity (e.g. charge/dipole fluctuations, equipartition temperatures),
+    /// keeping the same `{ mean, error }` YAML shape as block averages.
+    pub fn from_fluctuation(mean: f64, std: f64) -> Self {
+        Self { mean, error: std }
+    }
+}
+
 /// Running block average with mean and standard error of the mean.
 ///
 /// Wraps [`average::Variance`] with convenience methods for reporting.

@@ -760,8 +760,8 @@ from the equipartition theorem:
   steps: 20
   temperature: 298.15
   measured_temperature:
-    translational: "298.3 ± 1.2"
-    rotational: "297.8 ± 2.1"
+    translational: {mean: 298.3, error: 1.2}
+    rotational: {mean: 297.8, error: 2.1}
 ```
 
 ### Notes

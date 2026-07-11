@@ -7,7 +7,7 @@
 //! GCMC (only active groups contribute).
 
 use super::{Analyze, Frequency, Sampling};
-use crate::auxiliary::{MappingExt, WeightedMean};
+use crate::auxiliary::{BlockSummary, MappingExt, WeightedMean};
 use crate::selection::{CachedSelection, Groups, Selection};
 use crate::topology::GroupKind;
 use crate::ObserveContext;
@@ -212,9 +212,12 @@ impl<T: ObserveContext> Analyze<T> for MultipoleAnalysis {
 
         map.try_insert("selection", self.selection.selection().source())?;
         map.try_insert("num_samples", self.sampling.num_samples())?;
-        map.try_insert("charge", format!("{z_mean:.4} ± {z_std:.4}"))?;
+        map.try_insert("charge", BlockSummary::from_fluctuation(z_mean, z_std))?;
         map.try_insert("capacitance", capacitance)?;
-        map.try_insert("dipole_moment", format!("{mu_mean:.4} ± {mu_std:.4}"))?;
+        map.try_insert(
+            "dipole_moment",
+            BlockSummary::from_fluctuation(mu_mean, mu_std),
+        )?;
 
         let qnorm_mean = self.quadrupole_norm.mean();
         let qnorm_std = (self.quadrupole_norm_squared.mean() - qnorm_mean * qnorm_mean)
@@ -222,7 +225,7 @@ impl<T: ObserveContext> Analyze<T> for MultipoleAnalysis {
             .sqrt();
         map.try_insert(
             "quadrupole_moment",
-            format!("{qnorm_mean:.4} ± {qnorm_std:.4}"),
+            BlockSummary::from_fluctuation(qnorm_mean, qnorm_std),
         )?;
 
         // Two flat lists (order [xx, xy, xz, yy, yz, zz]) rather than per-component
@@ -422,8 +425,13 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
         assert!((values[0] + values[3] + values[5]).abs() < 1e-9);
 
         // Frobenius norm counts off-diagonals twice: √(4²+4²+8² + 2·12²) = √384.
-        let norm_str = yaml.get("quadrupole_moment").unwrap().as_str().unwrap();
-        let norm: f64 = norm_str.split('±').next().unwrap().trim().parse().unwrap();
+        let norm = yaml
+            .get("quadrupole_moment")
+            .unwrap()
+            .get("mean")
+            .unwrap()
+            .as_f64()
+            .unwrap();
         assert!((norm - 384.0_f64.sqrt()).abs() < 1e-3, "norm = {norm}");
     }
 

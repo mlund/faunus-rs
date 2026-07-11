@@ -29,6 +29,7 @@ mod utils;
 use pipeline::*;
 use utils::*;
 
+use crate::auxiliary::BlockSummary;
 use crate::cell::{BoundaryConditions, Shape};
 use crate::energy::nonbonded_kernel::{build_neighbor_cell_table, compute_n_cells_1d};
 use crate::topology::DegreesOfFreedom;
@@ -457,25 +458,16 @@ impl LangevinRunner {
             serde_yml::Value::Number(serde_yml::Number::from(self.elapsed.as_secs_f64())),
         );
         if !self.t_trans.is_empty() {
+            let summary = |v: &Variance| {
+                serde_yml::to_value(BlockSummary::from_fluctuation(
+                    v.mean(),
+                    v.sample_variance().sqrt(),
+                ))
+                .unwrap()
+            };
             let mut temp_map = serde_yml::Mapping::new();
-            temp_map.insert(
-                "translational".into(),
-                format!(
-                    "{:.1} +/- {:.1}",
-                    self.t_trans.mean(),
-                    self.t_trans.sample_variance().sqrt()
-                )
-                .into(),
-            );
-            temp_map.insert(
-                "rotational".into(),
-                format!(
-                    "{:.1} +/- {:.1}",
-                    self.t_rot.mean(),
-                    self.t_rot.sample_variance().sqrt()
-                )
-                .into(),
-            );
+            temp_map.insert("translational".into(), summary(&self.t_trans));
+            temp_map.insert("rotational".into(), summary(&self.t_rot));
             map.insert(
                 "measured_temperature".into(),
                 serde_yml::Value::Mapping(temp_map),
