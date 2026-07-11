@@ -283,16 +283,12 @@ impl FlatHistogramState {
 
     /// Serialize to a YAML checkpoint file.
     pub fn to_file(&self, path: &Path) -> Result<()> {
-        let file = std::fs::File::create(path)?;
-        serde_yml::to_writer(file, self)?;
-        Ok(())
+        crate::auxiliary::write_yaml_file(path, self)
     }
 
     /// Deserialize from a YAML checkpoint file.
     pub fn from_file(path: &Path) -> Result<Self> {
-        let file = std::fs::File::open(path)?;
-        let state: Self = serde_yml::from_reader(file)?;
-        Ok(state)
+        crate::auxiliary::read_yaml_file(path)
     }
 }
 
@@ -300,6 +296,16 @@ impl FlatHistogramState {
 mod tests {
     use super::*;
     use approx::assert_relative_eq;
+
+    #[test]
+    fn from_file_missing_names_the_path() {
+        let path = Path::new("/nonexistent/dir/checkpoint.yaml");
+        let err = FlatHistogramState::from_file(path).unwrap_err();
+        assert!(
+            format!("{err:#}").contains("checkpoint.yaml"),
+            "error should name the missing file: {err:#}"
+        );
+    }
 
     #[test]
     fn bin_index_1d() {

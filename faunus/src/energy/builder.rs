@@ -737,17 +737,17 @@ impl HamiltonianBuilder {
     pub fn from_str(yaml: &str) -> anyhow::Result<Self> {
         let full: serde_yml::Value = serde_yml::from_str(yaml)?;
         // Try navigating system.energy first, then fall back to energy
-        let current = if let Some(system) = full.get("system") {
-            system
+        let (label, current) = if let Some(system) = full.get("system") {
+            let energy = system
                 .get("energy")
-                .ok_or_else(|| anyhow::anyhow!("Could not find `energy` in `system`"))?
+                .ok_or_else(|| anyhow::anyhow!("Could not find `energy` in `system`"))?;
+            ("system/energy", energy)
         } else if let Some(energy) = full.get("energy") {
-            energy
+            ("energy", energy)
         } else {
             anyhow::bail!("Could not find `system.energy` or `energy` in the YAML string")
         };
-        let builder: Self = serde_yml::from_value(current.clone()).map_err(anyhow::Error::msg)?;
-        Ok(builder)
+        crate::auxiliary::from_section_value(label, current)
     }
 
     /// Check that all atom kinds referred to in the pair potentials exist.
@@ -1317,5 +1317,16 @@ mod tests {
 
         // Same variant from include is skipped
         assert_eq!(base.default, vec![kh1]);
+    }
+
+    #[test]
+    fn from_str_error_names_the_section() {
+        // `energy` is a scalar, not a mapping, so deserialization fails; the
+        // section label must survive so the user knows where to look.
+        let err = HamiltonianBuilder::from_str("system:\n  energy: 42\n").unwrap_err();
+        assert!(
+            format!("{err:#}").contains("system/energy"),
+            "error should name the section: {err:#}"
+        );
     }
 }

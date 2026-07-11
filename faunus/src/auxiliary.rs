@@ -148,6 +148,27 @@ pub fn from_tagged_list<T: serde::de::DeserializeOwned>(
         .collect()
 }
 
+/// Serialize `value` to `path` as a YAML file, naming the file on failure.
+///
+/// For checkpoints and other whole-struct dumps; multi-section outputs that
+/// share one file handle keep writing sections directly.
+pub fn write_yaml_file<T: Serialize>(path: &Path, value: &T) -> anyhow::Result<()> {
+    use anyhow::Context;
+    let file = std::fs::File::create(path)
+        .with_context(|| format!("Cannot create '{}'", path.display()))?;
+    serde_yml::to_writer(file, value)
+        .with_context(|| format!("Cannot write '{}'", path.display()))?;
+    Ok(())
+}
+
+/// Deserialize a whole YAML file at `path` into `T`, naming the file on failure.
+pub fn read_yaml_file<T: serde::de::DeserializeOwned>(path: &Path) -> anyhow::Result<T> {
+    use anyhow::Context;
+    let file =
+        std::fs::File::open(path).with_context(|| format!("Cannot open '{}'", path.display()))?;
+    serde_yml::from_reader(file).with_context(|| format!("Cannot parse '{}'", path.display()))
+}
+
 /// Resolve max thread count: 0 means use all available cores.
 // Only the `cli`-gated umbrella / Wang-Landau drivers use this.
 #[cfg(feature = "cli")]

@@ -32,7 +32,7 @@ use crate::{
     simulation,
     state::State,
 };
-use anyhow::Result;
+use anyhow::{Context, Result};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
@@ -384,8 +384,7 @@ fn run_window(
     // re-running already completed production steps
     let cv_path = window_cv_path(params.state_dir, window_index);
     let mut histogram = if cv_path.exists() {
-        let file = std::fs::File::open(&cv_path)?;
-        let loaded: Histogram = serde_yml::from_reader(file)?;
+        let loaded: Histogram = crate::auxiliary::read_yaml_file(&cv_path)?;
         params.multi_progress.println(format!(
             "Window {window_index}: extending from {} existing counts",
             loaded.total_count() as u64
@@ -428,7 +427,8 @@ fn run_window(
 
         // Write per-window output
         let output_path = window_output_path(params.state_dir, window_index);
-        let mut yaml_output = std::fs::File::create(&output_path)?;
+        let mut yaml_output = std::fs::File::create(&output_path)
+            .with_context(|| format!("Cannot create '{}'", output_path.display()))?;
         simulation::write_yaml(params.medium, &mut yaml_output, Some("medium"))?;
         let final_energy = mc.system_energy();
         let drift = mc.energy_drift(initial_energy);
@@ -453,8 +453,7 @@ fn run_window(
         state.to_file(&state_path)?;
     }
 
-    let file = std::fs::File::create(&cv_path)?;
-    serde_yml::to_writer(file, &histogram)?;
+    crate::auxiliary::write_yaml_file(&cv_path, &histogram)?;
 
     params.multi_progress.println(format!(
         "Window {window_index} (center={center:.1}): {} counts",
