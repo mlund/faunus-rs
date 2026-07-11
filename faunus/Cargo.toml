@@ -46,7 +46,9 @@ voronota-ltr = { version = "0.4", default-features = false }
 # CLI-only dependencies
 bytemuck = { version = "1", features = ["derive"], optional = true }
 clap = { version = "4.0", features = ["derive"], optional = true }
-cubecl = { version = "0.9", features = ["wgpu", "cpu"], optional = true }
+# Only the wgpu runtime is used; the `cpu` backend pulls an MLIR/LLVM toolchain
+# (tracel-mlir-sys/tblgen) that cannot build in manylinux/cross wheel environments.
+cubecl = { version = "0.9", features = ["wgpu"], optional = true }
 indicatif = { version = "*", optional = true }
 pretty_env_logger = { version = "0.5", optional = true }
 
