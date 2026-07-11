@@ -1,29 +1,66 @@
 name: docs
+
+# Versioned documentation via `mike`, published to the gh-pages branch.
+#   push to main        → "dev" (bleeding-edge) docs
+#   release vX.Y.Z      → docs under "X.Y", aliased "latest" and set as default
+#   manual dispatch     → deploy an arbitrary version id (also aliased latest)
 on:
   push:
     branches: [main]
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version id to deploy (e.g. 3.0); aliased latest and set default"
+        required: true
 
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write # mike commits and pushes the gh-pages branch
+
+# Serialize deploys so concurrent mike pushes don't clobber the gh-pages branch.
+concurrency:
+  group: docs-deploy
+  cancel-in-progress: false
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history so mike can update the gh-pages branch
       - uses: actions/setup-python@v5
         with:
           python-version: 3.x
-      - run: pip install mkdocs-material
-      - run: mkdocs build -d site
+      - run: pip install mkdocs-material mike
+
+      - name: Configure git identity for mike
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      # Give mike a local gh-pages branch matching the remote so existing
+      # versions are preserved (no-op on the very first deploy).
+      - name: Sync gh-pages branch
+        run: git fetch origin 'refs/heads/gh-pages:refs/heads/gh-pages' || true
+
+      - name: Deploy dev (main)
+        if: github.event_name == 'push'
         working-directory: faunus
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: faunus/site
-      - id: deployment
-        uses: actions/deploy-pages@v4
+        run: mike deploy --push dev
+
+      - name: Deploy release (tag)
+        if: github.event_name == 'release'
+        working-directory: faunus
+        run: |
+          minor="$(echo "${GITHUB_REF_NAME#v}" | grep -oE '^[0-9]+\.[0-9]+')"
+          mike deploy --push --update-aliases "$minor" latest
+          mike set-default --push latest
+
+      - name: Deploy (manual)
+        if: github.event_name == 'workflow_dispatch'
+        working-directory: faunus
+        run: |
+          mike deploy --push --update-aliases "${{ inputs.version }}" latest
+          mike set-default --push latest
