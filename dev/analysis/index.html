@@ -2209,6 +2209,22 @@ u_\text{box}(z) = 8a\,\ln\!\frac{\sqrt{2a^2+z^2}+a}{\sqrt{a^2+z^2}}
 <p>recovered from the screened form as <span class="arithmatex">\(\kappa\to0\)</span> once the regularizing constant <span class="arithmatex">\(2\pi l_B/\kappa\)</span>
 is removed. Because Greberg's construction models a square minimum-image box, the unscreened
 correction is only defined for a square base; enabling it for a cylinder is an error.</p>
+<h3 id="-potential-optional">ζ-potential (optional)<a class="headerlink" href="#-potential-optional" title="Permanent link">&para;</a></h3>
+<p>Setting <code>zeta_threshold</code> reports a ζ-potential — the potential at the hydrodynamic shear
+plane — directly comparable to electrokinetic measurements. For a charged wall or brush the
+shear plane sits at the outer edge of the fixed charge, where <span class="arithmatex">\(\sigma(z)\)</span> has decayed into the
+diffuse layer. The edge is located as the slab nearest the solution where</p>
+<div class="arithmatex">\[|\sigma(z_\text{shear})| &gt; \texttt{zeta\_threshold}\cdot\max_z|\sigma(z)|,\]</div>
+<p>with the charge-weighted centroid of <span class="arithmatex">\(|\sigma(z)|\)</span> selecting which wall the fixed charge sits
+on. The reported ζ is the mean potential <span class="arithmatex">\(\varphi(z_\text{shear})\)</span> with its statistical error,
+alongside the slab position <span class="arithmatex">\(z_\text{shear}\)</span>. A cutoff of <code>0.02</code> (2 % of the peak) is a
+reasonable starting point, but the right value is system-dependent, so inspect <span class="arithmatex">\(\sigma(z)\)</span> in
+<code>potential.csv</code> and adjust. The estimate is only meaningful where the fixed charge is localized
+against a wall and decays into solution before the midplane; a slit charged symmetrically on
+both walls reports the equivalent value at one of them, and it is skipped when no charge is
+sampled. Note that the shear plane is here defined from the charge density, not the solvent
+(matter) density that sets the true no-slip surface, so the magnitude depends on this choice
+while the sign and trends are robust.</p>
 <h3 id="example_10">Example<a class="headerlink" href="#example_10" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><span class="nt">analysis</span><span class="p">:</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!ElectricPotentialProfile</span>
@@ -2216,6 +2232,7 @@ correction is only defined for a square base; enabling it for a cylinder is an e
 <span class="w">    </span><span class="c1"># selection, resolution and file are optional:</span>
 <span class="w">    </span><span class="c1"># selection: &quot;all&quot;      # atoms contributing charge (default: all)</span>
 <span class="w">    </span><span class="c1"># resolution: 0.5       # slab thickness Δz in Å (default: 0.5)</span>
+<span class="w">    </span><span class="c1"># zeta_threshold: 0.02  # also report a ζ-potential at the fixed-charge edge (off by default)</span>
 <span class="w">    </span><span class="c1"># file: potential.csv   # output file (default: potential.csv)</span>
 </code></pre></div>
 <h3 id="options_12">Options<a class="headerlink" href="#options_12" title="Permanent link">&para;</a></h3>
@@ -2248,6 +2265,12 @@ correction is only defined for a square base; enabling it for a cylinder is an e
 <td>Report the finite-box (Greberg) potential instead of the infinite-plane one</td>
 </tr>
 <tr>
+<td><code>zeta_threshold</code></td>
+<td>no</td>
+<td><em>(off)</em></td>
+<td>Report a ζ-potential at the fixed-charge edge, as a fraction of peak $</td>
+</tr>
+<tr>
 <td><code>file</code></td>
 <td>no</td>
 <td><code>potential.csv</code></td>
@@ -2265,8 +2288,9 @@ correction is only defined for a square base; enabling it for a cylinder is an e
 <code>e·Å⁻²</code> and per volume <code>e·Å⁻³</code>), the potential <code>potential/mV</code> with its statistical error
 <code>potential_error/mV</code>, and the electric field <code>field/mV·Å⁻¹</code>. <code>output.yaml</code> additionally
 reports the potential at each wall and at the midplane (with the wall-to-midplane drops) as
-mean ± error. For reliable numbers, <strong>equilibrate first and start production from a state
-file</strong> (<code>-s</code>).</p>
+mean ± error, and, when <code>zeta_threshold</code> is set, the ζ-potential <code>zeta/mV</code> and the shear-plane
+position <code>z_shear/Å</code>. For reliable numbers, <strong>equilibrate first and start production from a
+state file</strong> (<code>-s</code>).</p>
 <hr />
 <h2 id="density-profile">Density Profile<a class="headerlink" href="#density-profile" title="Permanent link">&para;</a></h2>
 <p>Average density of a chosen species along the <span class="arithmatex">\(z\)</span>-axis. The cell is cut into slabs of equal
