@@ -97,6 +97,12 @@ pub struct PreferentialSampling {
 impl PreferentialSampling {
     /// Resolve the selection, prime the geometry cache, and validate.
     pub fn finalize(&mut self, context: &impl ObserveContext) -> anyhow::Result<()> {
+        // r ≥ 0, so offset ≤ 0 lets W'(r) = (r + offset)^{-ν} diverge or go complex at r = -offset.
+        anyhow::ensure!(
+            self.offset > 0.0,
+            "PreferentialSampling: offset must be positive, got {}",
+            self.offset
+        );
         // Built here, not on first use: the reference selection is known as soon as the move is.
         self.ref_cache = Some(CachedSelection::groups(self.reference.clone()));
         self.refresh_ref_geometries(context);

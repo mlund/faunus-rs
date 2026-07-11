@@ -26,7 +26,7 @@
 //! Implicit    | `RCOO- + 👻H+ ⇌ RCOOH` | Mark with `👻` or `~`
 //! Atomic      | `⚛Pb ⇄ ⚛Au`            | Mark with `⚛` or `.`
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 
 /// Participant in a reaction
@@ -96,27 +96,45 @@ pub struct Reaction {
     direction: Direction,
 }
 
+/// Upper bound on a stoichiometric coefficient; guards a leading integer like
+/// "999999999A" from triggering an unbounded allocation while parsing.
+const MAX_STOICHIOMETRY: usize = 1000;
+
 /// Repeat a reaction participant, e.g. "2A" -> ["A", "A"]
-fn repeat_participant(participant: &str) -> Vec<String> {
+fn repeat_participant(participant: &str) -> Result<Vec<String>> {
     let digit_end = participant.len()
         - participant
             .trim_start_matches(|c: char| c.is_ascii_digit())
             .len();
     if digit_end == 0 {
-        return vec![participant.to_string()];
+        return Ok(vec![participant.to_string()]);
     }
-    let n: usize = participant[..digit_end].parse().unwrap_or(1);
+    let coefficient = &participant[..digit_end];
+    let n: usize = coefficient
+        .parse()
+        .with_context(|| format!("Invalid stoichiometric coefficient '{coefficient}'"))?;
+    anyhow::ensure!(
+        n <= MAX_STOICHIOMETRY,
+        "Stoichiometric coefficient {n} exceeds maximum of {MAX_STOICHIOMETRY}"
+    );
     let remaining = participant[digit_end..].trim();
-    vec![remaining.to_string(); n]
+    anyhow::ensure!(
+        !remaining.is_empty(),
+        "Stoichiometric coefficient '{coefficient}' has no species"
+    );
+    Ok(vec![remaining.to_string(); n])
 }
 
 fn parse_side(side: &str) -> Result<Vec<Participant>> {
     side.trim()
         .split_terminator(" + ")
         .map(|i| i.trim())
-        .flat_map(repeat_participant)
+        .map(repeat_participant)
+        .collect::<Result<Vec<_>>>()?
+        .into_iter()
+        .flatten()
         .map(|s| s.parse::<Participant>())
-        .collect::<Result<Vec<Participant>>>()
+        .collect()
 }
 
 fn check_sides(sides: &[&str]) -> Result<()> {
@@ -283,6 +301,16 @@ fn test_reaction_edge_cases() {
             direction: Direction::Forward,
         }
     );
+
+    // small stoichiometric coefficient expands
+    let reaction = Reaction::from_reaction("2A = ", 1.0).unwrap();
+    assert_eq!(reaction.left.len(), 2);
+
+    // oversized coefficient rejected rather than allocating unbounded
+    assert!(Reaction::from_reaction("999999999A = ", 1.0).is_err());
+
+    // bare coefficient with no species rejected at parse time
+    assert!(Reaction::from_reaction("2 = A", 1.0).is_err());
 }
 
 // test conversion of participants to and from strings

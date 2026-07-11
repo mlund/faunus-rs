@@ -263,7 +263,7 @@ pub fn baoab_step(
         let m4 = m * 4;
 
         let mass = mol_masses[m];
-        let inv_mass = 1.0f32 / mass;
+        let inv_mass = safe_inv(mass);
         let inv_ix = safe_inv(mol_inertia[m4]);
         let inv_iy = safe_inv(mol_inertia[m4 + 1]);
         let inv_iz = safe_inv(mol_inertia[m4 + 2]);
@@ -454,7 +454,7 @@ pub fn half_kick(
         let half_dt = 0.5f32 * dt;
         let m4 = m * 4;
 
-        let inv_mass = 1.0f32 / mol_masses[m];
+        let inv_mass = safe_inv(mol_masses[m]);
         let inv_ix = safe_inv(mol_inertia[m4]);
         let inv_iy = safe_inv(mol_inertia[m4 + 1]);
         let inv_iz = safe_inv(mol_inertia[m4 + 2]);
@@ -723,7 +723,7 @@ pub fn baoab_atom_step(
         let i3 = i * 3;
 
         let mass = atom_masses[i];
-        let inv_mass = 1.0f32 / mass;
+        let inv_mass = safe_inv(mass);
 
         let mut rx = positions[i4];
         let mut ry = positions[i4 + 1];
@@ -803,7 +803,7 @@ pub fn half_kick_atoms(
         let i4 = i * 4;
         let i3 = i * 3;
 
-        let inv_mass = 1.0f32 / atom_masses[i];
+        let inv_mass = safe_inv(atom_masses[i]);
         let kick = half_dt * inv_mass * KJ_MOL_TO_INTERNAL;
 
         atom_velocities[i3] += kick * atom_forces[i4];
