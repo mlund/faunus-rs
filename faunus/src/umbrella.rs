@@ -234,23 +234,23 @@ fn build_pmf(results: &[WindowResult], kt: f64, bin_width: f64) -> Vec<PmfPoint>
 // Window state file path
 // ---------------------------------------------------------------------------
 
+/// Per-window directory holding everything for one window: state, output,
+/// histogram, and analysis (`Trajectory`, `Energy`, RDF, …) files. Isolating
+/// each window keeps parallel workers from racing on shared paths (issue #32).
+fn window_output_dir(state_dir: &Path, index: usize) -> PathBuf {
+    state_dir.join(format!("window{index}"))
+}
+
 fn window_state_path(state_dir: &Path, index: usize) -> PathBuf {
-    state_dir.join(format!("window{index}_state.yaml"))
+    window_output_dir(state_dir, index).join("state.yaml")
 }
 
 fn window_output_path(state_dir: &Path, index: usize) -> PathBuf {
-    state_dir.join(format!("window{index}_output.yaml"))
+    window_output_dir(state_dir, index).join("output.yaml")
 }
 
 fn window_cv_path(state_dir: &Path, index: usize) -> PathBuf {
-    state_dir.join(format!("window{index}_histogram.yaml"))
-}
-
-/// Per-window analysis output directory. Each window's `Trajectory`,
-/// `Energy`, RDF, etc. files land here, so parallel windows cannot race
-/// on a single shared path (issue #32).
-fn window_output_dir(state_dir: &Path, index: usize) -> PathBuf {
-    state_dir.join(format!("window{index}"))
+    window_output_dir(state_dir, index).join("histogram.yaml")
 }
 
 // ---------------------------------------------------------------------------
@@ -291,6 +291,10 @@ fn run_window(
     let input = params.input;
 
     let state_path = window_state_path(params.state_dir, window_index);
+
+    // All per-window files nest under this directory; create it before the
+    // drive phase, which writes state.yaml ahead of the analysis outputs.
+    std::fs::create_dir_all(window_output_dir(params.state_dir, window_index))?;
 
     // Skip the drive phase on restart — the walker is already equilibrated in its window
     let had_state = state_path.exists();
