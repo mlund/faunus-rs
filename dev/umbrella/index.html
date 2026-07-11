@@ -865,9 +865,10 @@ drive phase is skipped. Delete a window's state file to re-drive it.</p>
 <ul>
 <li><code>pmf.csv</code> — three-column CSV: <code>cv, pmf_kT, stderr_kT</code>.
   The PMF is shifted so that the minimum is zero.</li>
-<li><code>umbrella_states/window{i}_state.yaml</code> — per-window simulation state.</li>
-<li><code>umbrella_states/window{i}_output.yaml</code> — per-window energy summary,
-  move statistics, and analysis output.</li>
+<li><code>umbrella_states/window{i}/</code> — one self-contained directory per window,
+  holding <code>state.yaml</code> (simulation state), <code>output.yaml</code> (energy summary and
+  move statistics), <code>histogram.yaml</code> (sampled CV counts), and any analysis
+  files produced by the input.</li>
 </ul>
 
 
