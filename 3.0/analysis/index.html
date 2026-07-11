@@ -1,0 +1,2764 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="User guide for the Faunus molecular simulation framework">
+      
+      
+      
+      
+        <link rel="prev" href="../moves/">
+      
+      
+        <link rel="next" href="../wang_landau/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>Analysis - Faunus User Guide</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#analysis" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+      </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="Faunus User Guide" class="md-header__button md-logo" aria-label="Faunus User Guide" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Faunus User Guide
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Analysis
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/mlund/faunus-rs" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    faunus-rs
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="Faunus User Guide" class="md-nav__button md-logo" aria-label="Faunus User Guide" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Faunus User Guide
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/mlund/faunus-rs" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    faunus-rs
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../topology/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Topology
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../units/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Units and Conventions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../energy/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Energy
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../moves/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Moves
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Analysis
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Analysis
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#collective-variable" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Collective Variable
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#polymer-shape" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Polymer Shape
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#multipole" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Multipole
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#multipole-distribution" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Multipole Distribution
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#energy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Energy
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#trajectory" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Trajectory
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#radial-distribution-function" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Radial Distribution Function
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#spatial-distribution-function" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Spatial Distribution Function
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#widom-insertion" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Widom Insertion
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#virtual-translate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Virtual Translate
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#virtual-volume-move" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Virtual Volume Move
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#double-layer-pressure" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Double Layer Pressure
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#electric-potential-profile" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Electric Potential Profile
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#density-profile" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Density Profile
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#mean-along-coordinate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Mean Along Coordinate
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#rotational-diffusion" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Rotational Diffusion
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#widom-rotation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Widom Rotation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#rerun" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Rerun
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../wang_landau/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Wang-Landau
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../umbrella/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Umbrella Sampling
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../selection_language/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Selection Language
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../extending/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Extending Faunus
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#collective-variable" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Collective Variable
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#polymer-shape" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Polymer Shape
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#multipole" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Multipole
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#multipole-distribution" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Multipole Distribution
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#energy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Energy
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#trajectory" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Trajectory
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#radial-distribution-function" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Radial Distribution Function
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#spatial-distribution-function" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Spatial Distribution Function
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#widom-insertion" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Widom Insertion
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#virtual-translate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Virtual Translate
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#virtual-volume-move" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Virtual Volume Move
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#double-layer-pressure" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Double Layer Pressure
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#electric-potential-profile" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Electric Potential Profile
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#density-profile" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Density Profile
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#mean-along-coordinate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Mean Along Coordinate
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#rotational-diffusion" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Rotational Diffusion
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#widom-rotation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Widom Rotation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#rerun" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Rerun
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="analysis">Analysis<a class="headerlink" href="#analysis" title="Permanent link">&para;</a></h1>
+<p>Analysis objects sample the system at a given frequency during a simulation
+and optionally write results to output files.
+They are defined in the <code>analysis</code> section of the YAML input:</p>
+<div class="highlight"><pre><span></span><code><span class="nt">analysis</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!Energy</span>
+<span class="w">    </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">energy.csv.gz</span>
+<span class="w">    </span><span class="nt">frequency</span><span class="p">:</span><span class="w"> </span><span class="kt">!Every</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">100</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!RadialDistribution</span>
+<span class="w">    </span><span class="nt">selections</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;atomtype</span><span class="nv"> </span><span class="s">Na&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;atomtype</span><span class="nv"> </span><span class="s">Cl&quot;</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">rdf.dat</span>
+<span class="w">    </span><span class="nt">dr</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.1</span>
+<span class="w">    </span><span class="nt">frequency</span><span class="p">:</span><span class="w"> </span><span class="kt">!End</span>
+</code></pre></div>
+<h3 id="sampling-frequency">Sampling frequency<a class="headerlink" href="#sampling-frequency" title="Permanent link">&para;</a></h3>
+<p>Each analysis requires a <code>frequency</code> field controlling when it is evaluated.</p>
+<table>
+<thead>
+<tr>
+<th>Frequency</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>!Every N</code></td>
+<td>Every N steps</td>
+</tr>
+<tr>
+<td><code>!Once N</code></td>
+<td>Once at step N</td>
+</tr>
+<tr>
+<td><code>!End</code></td>
+<td>Once after the last step</td>
+</tr>
+</tbody>
+</table>
+<p>In <code>output.yaml</code> every analysis reports <code>num_samples</code>, the number of frames it sampled. Analyses
+that loop over molecules also report how many molecules they accumulated: <code>num_groups_sampled</code> for
+Polymer Shape, <code>num_blocks</code> for Widom Rotation. Those counts, not <code>num_samples</code>, sit behind the
+reported means and error bars.</p>
+<h3 id="output-file-formats">Output file formats<a class="headerlink" href="#output-file-formats" title="Permanent link">&para;</a></h3>
+<p>Most analysis files are column data. For those files, the format is inferred
+from the file extension:</p>
+<table>
+<thead>
+<tr>
+<th>Extension</th>
+<th>Format</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>.dat</code></td>
+<td>Space-separated; header prefixed with <code>#</code></td>
+</tr>
+<tr>
+<td><code>.csv</code>/<code>.tsv</code></td>
+<td>Comma/Tab-separated; plain header row (column labels)</td>
+</tr>
+</tbody>
+</table>
+<p>Both formats support transparent gzip compression by appending <code>.gz</code>
+(e.g. <code>energy.dat.gz</code>).</p>
+<p>Grid-based analyses document their own file format.</p>
+<p>Loading CSV output in Python:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="n">data</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">loadtxt</span><span class="p">(</span><span class="s2">&quot;data.csv.gz&quot;</span><span class="p">,</span> <span class="n">delimiter</span><span class="o">=</span><span class="s2">&quot;,&quot;</span><span class="p">,</span> <span class="n">skiprows</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>
+<span class="n">data</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="s2">&quot;data.csv.gz&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">()</span>
+</code></pre></div>
+<hr />
+<h2 id="collective-variable">Collective Variable<a class="headerlink" href="#collective-variable" title="Permanent link">&para;</a></h2>
+<p>Monitors a collective variable (CV) over the course of a simulation,
+recording the instantaneous value and a running average at each sampled step.
+This is useful for verifying that a CV remains within the expected range,
+for convergence checking, and for post-processing of time/step series data.</p>
+<p>If <code>file</code> is given, each sampled step writes a line with columns
+<code>step</code>, <code>value</code>, and <code>running_average</code>.
+If no file is given, only the mean and RMS are written to <code>output.yaml</code>.</p>
+<h3 id="example">Example<a class="headerlink" href="#example" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><span class="nt">analysis</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!CollectiveVariable</span>
+<span class="w">    </span><span class="nt">property</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">mass_center_position</span>
+<span class="w">    </span><span class="nt">selection</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;molecule</span><span class="nv"> </span><span class="s">protein&quot;</span>
+<span class="w">    </span><span class="nt">projection</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">z</span>
+<span class="w">    </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cv.dat</span>
+<span class="w">    </span><span class="nt">frequency</span><span class="p">:</span><span class="w"> </span><span class="kt">!Every</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">100</span>
+</code></pre></div>
+<h3 id="options">Options<a class="headerlink" href="#options" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Required</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>property</code></td>
+<td>yes</td>
+<td></td>
+<td>CV type (see table below)</td>
+</tr>
+<tr>
+<td><code>frequency</code></td>
+<td>yes</td>
+<td></td>
+<td>Sample frequency, e.g. <code>!Every 100</code></td>
+</tr>
+<tr>
+<td><code>projection</code></td>
+<td>no</td>
+<td><code>xyz</code></td>
+<td>Axis projection (<code>x</code>, <code>y</code>, <code>z</code>, <code>xy</code>, …); alias: <code>dimension</code></td>
+</tr>
+<tr>
+<td><code>selection</code></td>
+<td>depends</td>
+<td></td>
+<td>Selection expression for one atom or group</td>
+</tr>
+<tr>
+<td><code>selection2</code></td>
+<td>depends</td>
+<td></td>
+<td>Second selection (for two-group properties)</td>
+</tr>
+<tr>
+<td><code>resolution</code></td>
+<td>no</td>
+<td></td>
+<td>Bin width (only used by Penalty)</td>
+</tr>
+<tr>
+<td><code>file</code></td>
+<td>no</td>
+<td></td>
+<td>Output file path (see <a href="#output-file-formats">Output file formats</a>); omit to only track the mean</td>
+</tr>
+</tbody>
+</table>
+<h3 id="supported-properties">Supported properties<a class="headerlink" href="#supported-properties" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Property</th>
+<th>Selection</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>volume</code></td>
+<td>none</td>
+<td>Cell measure via <code>dimension</code>: volume (<code>xyz</code>), area (<code>xy</code>), or length (<code>z</code>). Note: <code>volume</code> uses <code>dimension</code>, not <code>projection</code></td>
+</tr>
+<tr>
+<td><code>atom_position</code></td>
+<td>one atom</td>
+<td>Signed component for single axis (<code>x</code>,<code>y</code>,<code>z</code>); Euclidean norm for multi-axis (<code>xy</code> etc.). Selection resolved live each evaluation — works with speciation/GCMC where the matching atom changes. Returns NaN if selection matches ≠ 1 atom. Use <code>atomtype</code> (not <code>name</code>) for atoms defined via explicit <code>atoms:</code> lists</td>
+</tr>
+<tr>
+<td><code>count</code></td>
+<td>atoms or groups</td>
+<td>Molecule instances for Molecular groups; atom count for Atomic/Reservoir groups</td>
+</tr>
+<tr>
+<td><code>molarity</code></td>
+<td>atoms or groups</td>
+<td>Molar concentration (mol/L); molecule-based for Molecular groups, atom-based for Atomic/Reservoir</td>
+</tr>
+<tr>
+<td><code>charge</code></td>
+<td>atoms or groups</td>
+<td>Sum of charges of active atoms matching selection</td>
+</tr>
+<tr>
+<td><code>size</code></td>
+<td>one group</td>
+<td>Number of active particles in a group</td>
+</tr>
+<tr>
+<td><code>end_to_end</code></td>
+<td>one group</td>
+<td>End-to-end distance of a molecular group</td>
+</tr>
+<tr>
+<td><code>gyration_radius</code></td>
+<td>one group</td>
+<td>Radius of gyration (default <code>xyz</code> = full Rg; single axis gives spread along it)</td>
+</tr>
+<tr>
+<td><code>dipole_moment</code></td>
+<td>one group</td>
+<td>Electric dipole moment (default <code>xyz</code> = magnitude; single axis gives signed component)</td>
+</tr>
+<tr>
+<td><code>mass_center_position</code></td>
+<td>one group</td>
+<td>Mass center position along <code>projection</code></td>
+</tr>
+<tr>
+<td><code>mass_center_separation</code></td>
+<td>two groups</td>
+<td>Distance between two group mass centers</td>
+</tr>
+<tr>
+<td><code>dipole_product</code></td>
+<td>two groups</td>
+<td>Normalized dipole dot product μ̂₁·μ̂₂ = cos(θ) (default <code>xyz</code> = full 3D; <code>projection</code> filters dipoles before comparing)</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="polymer-shape">Polymer Shape<a class="headerlink" href="#polymer-shape" title="Permanent link">&para;</a></h2>
+<p>Computes size and shape anisotropy descriptors from the mass-weighted gyration tensor
+(<a href="https://doi.org/10/d6ff">doi:10/d6ff</a>).
+For each matching group the 3×3 symmetric gyration tensor is built as
+<code>S_ij = (1/M) Σ m_k r_i r_j</code>, where <code>r</code> is the PBC-aware displacement from the
+center of mass. Eigenvalue decomposition yields the principal moments
+<code>λ₁ ≤ λ₂ ≤ λ₃</code> from which the following descriptors are derived.</p>
+<p>Following <a href="https://doi.org/10.1515/pac-2013-0201">IUPAC 2014</a> nomenclature,
+the per-configuration squared radius of gyration is <code>s² = Tr(S)</code> (Def. 1.14),
+and the reported <code>Rg = √⟨s²⟩</code> is the root-mean-square radius of gyration
+(Def. 1.16). Note that <code>⟨s⟩ ≠ √⟨s²⟩</code> in general.
+The reported ratio <code>⟨Re²⟩/⟨Rg²⟩</code> equals 6 for ideal Gaussian chains
+(<a href="https://doi.org/10.1063/1.1730022">Wall &amp; Erpenbeck 1959</a>).</p>
+<table>
+<thead>
+<tr>
+<th>Descriptor</th>
+<th>Formula</th>
+<th>Reference</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Radius of gyration squared</td>
+<td><code>Rg² = λ₁ + λ₂ + λ₃</code></td>
+<td><a href="https://doi.org/10.1515/pac-2013-0201">IUPAC 2014</a> Def. 1.14</td>
+</tr>
+<tr>
+<td>Asphericity</td>
+<td><code>b = λ₃ − (λ₁ + λ₂)/2</code></td>
+<td><a href="https://doi.org/10.1051/jphys:019860047090144500">Aronovitz &amp; Nelson 1986</a></td>
+</tr>
+<tr>
+<td>Acylindricity</td>
+<td><code>c = λ₂ − λ₁</code></td>
+<td><a href="https://doi.org/10.1051/jphys:019860047090144500">Aronovitz &amp; Nelson 1986</a></td>
+</tr>
+<tr>
+<td>Relative shape anisotropy</td>
+<td><code>κ² = (b² + ¾c²) / Rg⁴</code>  ∈ [0, 1]</td>
+<td><a href="https://doi.org/10.1088/0305-4470/19/4/004">Rudnick &amp; Gaspari 1986</a></td>
+</tr>
+<tr>
+<td>Prolateness</td>
+<td><code>S = 27(λ₁−λ̄)(λ₂−λ̄)(λ₃−λ̄) / Rg⁶</code>  ∈ [−0.25, 2]</td>
+<td><a href="https://doi.org/10.1021/ma00148a028">Theodorou &amp; Suter 1985</a></td>
+</tr>
+<tr>
+<td>Westin linear (rod-like)</td>
+<td><code>Cl = (λ₃ − λ₂) / Rg²</code></td>
+<td><a href="https://doi.org/10.1016/S1361-8415(02)00053-1">Westin 2002</a></td>
+</tr>
+<tr>
+<td>Westin planar (disc-like)</td>
+<td><code>Cp = 2(λ₂ − λ₁) / Rg²</code></td>
+<td><a href="https://doi.org/10.1016/S1361-8415(02)00053-1">Westin 2002</a></td>
+</tr>
+<tr>
+<td>Westin spherical</td>
+<td><code>Cs = 3λ₁ / Rg²</code>  (Cl + Cp + Cs = 1)</td>
+<td><a href="https://doi.org/10.1016/S1361-8415(02)00053-1">Westin 2002</a></td>
+</tr>
+</tbody>
+</table>
+<p>Mean gyration tensor components (<code>Sxx</code>, <code>Sxy</code>, <code>Sxz</code>, <code>Syy</code>, <code>Syz</code>, <code>Szz</code>) are
+reported in the YAML output. The ratio <code>⟨Szz⟩ / ⟨Rg²⟩</code> indicates orientation
+relative to the z-axis: ~0 for flat objects lying in the xy-plane, ~1/3 for
+isotropic, ~1 for rod-like objects aligned with z.</p>
+<p>If <code>file</code> is given (single-molecule selection only), each sampled step writes a line with
+columns <code>step</code>, <code>Rg</code>, and the upper triangle of the gyration tensor
+(<code>Sxx Sxy Sxz Syy Syz Szz</code>).</p>
+<h3 id="example_1">Example<a class="headerlink" href="#example_1" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><span class="nt">analysis</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!PolymerShape</span>
+<span class="w">    </span><span class="nt">selection</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;molecule</span><span class="nv"> </span><span class="s">polymer&quot;</span>
+<span class="w">    </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">shape.csv.gz</span>
+<span class="w">    </span><span class="nt">frequency</span><span class="p">:</span><span class="w"> </span><span class="kt">!Every</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">100</span>
+</code></pre></div>
+<h3 id="options_1">Options<a class="headerlink" href="#options_1" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Required</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>selection</code></td>
+<td>yes</td>
+<td></td>
+<td>Selection expression for molecule group(s)</td>
+</tr>
+<tr>
+<td><code>file</code></td>
+<td>no</td>
+<td></td>
+<td>Streaming output file, single molecule only (see <a href="#output-file-formats">Output file formats</a>)</td>
+</tr>
+<tr>
+<td><code>frequency</code></td>
+<td>yes</td>
+<td></td>
+<td>Sample frequency, e.g. <code>!Every 100</code></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="multipole">Multipole<a class="headerlink" href="#multipole" title="Permanent link">&para;</a></h2>
+<p>Per-group charge, dipole, and quadrupole analysis, averaged over all groups
+matching a selection. Useful for tracking titration state and charge
+fluctuations.</p>
+<p>Reports:</p>
+<ul>
+<li>net charge <span class="arithmatex">\(\langle Z\rangle \pm \sigma\)</span> — mean and standard deviation</li>
+<li>capacitance <span class="arithmatex">\(C = \langle Z^2\rangle - \langle Z\rangle^2\)</span> — charge variance</li>
+<li>dipole magnitude <span class="arithmatex">\(\langle|\boldsymbol{\mu}|\rangle \pm \sigma\)</span> (eÅ)</li>
+<li>quadrupole magnitude <span class="arithmatex">\(\langle\|\boldsymbol{\Theta}\|\rangle \pm \sigma\)</span> — Frobenius norm (eÅ²)</li>
+<li>quadrupole tensor — mean and standard deviation <span class="arithmatex">\(\sigma\)</span> of the six independent components</li>
+<li>per-atom <code>⟨q⟩</code> and <code>⟨q²⟩-⟨q⟩²</code> — for atoms with fluctuating charge (e.g. from titration or atom swaps)</li>
+</ul>
+<p>The dipole and quadrupole moments are computed relative to each group's
+center of mass with periodic boundary conditions applied.
+Handles atom-type swaps (titration) and GCMC (only active groups contribute).</p>
+<p>The reported quadrupole is the traceless form (Buckingham convention)</p>
+<div class="arithmatex">\[\Theta_{\alpha\beta} = \tfrac{1}{2}\sum_i q_i\left(3 d_{i\alpha} d_{i\beta} - d_i^2\,\delta_{\alpha\beta}\right),\]</div>
+<p>where <span class="arithmatex">\(\boldsymbol{d}_i\)</span> points from the group's center of mass to atom <span class="arithmatex">\(i\)</span>. The isotropic
+part dropped here does not affect the far-field potential, and removing it makes
+the moment vanish for isotropic charge distributions, so the values compare
+directly with experiment and literature.</p>
+<h3 id="selection-resolves-group-wise">Selection resolves group-wise<a class="headerlink" href="#selection-resolves-group-wise" title="Permanent link">&para;</a></h3>
+<p>The selection picks whole groups that contain at least one active
+matching atom — not just the matched atoms themselves. So an atom-level
+selection like <code>atomtype CA</code> pulls in every group that has an active CA
+atom and accumulates the full group's charge and dipole moment. This is
+useful when a molecule changes name during speciation, for example across
+protonation states, but still contains a stable marker atom:</p>
+<div class="highlight"><pre><span></span><code><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!Multipole</span>
+<span class="w">  </span><span class="nt">selection</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;atomtype</span><span class="nv"> </span><span class="s">INO&quot;</span><span class="w">   </span><span class="c1"># picks every phytate, regardless of protonation state</span>
+<span class="w">  </span><span class="nt">frequency</span><span class="p">:</span><span class="w"> </span><span class="kt">!Every</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10</span>
+</code></pre></div>
+<p>By contrast, <code>!CollectiveVariable property: charge</code> sums the charge of
+only the matched atoms, not their parent groups — see <a href="#supported-properties">Supported
+properties</a>.</p>
+<p>Per-atom charge statistics are reported in <code>output.yaml</code> as an <code>atoms</code> list
+only when the selection resolves to a single molecular molecule kind.
+Selections matching multiple molecule kinds are rejected, and atomic/reservoir
+groups do not emit per-atom output. The list includes only atoms whose charge
+variance is nonzero:</p>
+<div class="highlight"><pre><span></span><code><span class="nt">multipole</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">selection</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">molecule MOL1</span>
+<span class="w">  </span><span class="nt">num_samples</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2000</span>
+<span class="w">  </span><span class="nt">charge</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;4.7785</span><span class="nv"> </span><span class="s">±</span><span class="nv"> </span><span class="s">2.2373&#39;</span>
+<span class="w">  </span><span class="nt">capacitance</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">5.005</span>
+<span class="w">  </span><span class="nt">dipole_moment</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;141.6532</span><span class="nv"> </span><span class="s">±</span><span class="nv"> </span><span class="s">23.8816&#39;</span>
+<span class="w">  </span><span class="nt">quadrupole_moment</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;312.4187</span><span class="nv"> </span><span class="s">±</span><span class="nv"> </span><span class="s">45.1902&#39;</span>
+<span class="w">  </span><span class="nt">quadrupole_tensor</span><span class="p">:</span><span class="w">            </span><span class="c1"># order [xx, xy, xz, yy, yz, zz], loads straight into NumPy</span>
+<span class="w">    </span><span class="nt">order</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">xx</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">xy</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">xz</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">yy</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">yz</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">zz</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">values</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">180.21</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">12.03</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">-4.11</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">-95.44</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">8.90</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">-84.77</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">errors</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">22.14</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">3.02</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">1.88</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">15.30</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">2.71</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">11.05</span><span class="p p-Indicator">]</span>
+<span class="w">  </span><span class="nt">atoms</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">index</span><span class="p">:</span><span class="w"> </span><span class="nv">1</span><span class="p p-Indicator">,</span><span class="nt"> name</span><span class="p">:</span><span class="w"> </span><span class="nv">NP</span><span class="p p-Indicator">,</span><span class="nt"> ⟨q⟩</span><span class="p">:</span><span class="w"> </span><span class="nv">-0.52</span><span class="p p-Indicator">,</span><span class="nt"> ⟨q²⟩-⟨q⟩²</span><span class="p">:</span><span class="w"> </span><span class="nv">0.2496</span><span class="p p-Indicator">}</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">index</span><span class="p">:</span><span class="w"> </span><span class="nv">6</span><span class="p p-Indicator">,</span><span class="nt"> name</span><span class="p">:</span><span class="w"> </span><span class="nv">NP</span><span class="p p-Indicator">,</span><span class="nt"> ⟨q⟩</span><span class="p">:</span><span class="w"> </span><span class="nv">-0.48</span><span class="p p-Indicator">,</span><span class="nt"> ⟨q²⟩-⟨q⟩²</span><span class="p">:</span><span class="w"> </span><span class="nv">0.2496</span><span class="p p-Indicator">}</span>
+</code></pre></div>
+<h3 id="example_2">Example<a class="headerlink" href="#example_2" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><span class="nt">analysis</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!Multipole</span>
+<span class="w">    </span><span class="nt">selection</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;molecule</span><span class="nv"> </span><span class="s">peptide&quot;</span>
+<span class="w">    </span><span class="nt">frequency</span><span class="p">:</span><span class="w"> </span><span class="kt">!Every</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10</span>
+</code></pre></div>
+<h3 id="options_2">Options<a class="headerlink" href="#options_2" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Required</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>selection</code></td>
+<td>yes</td>
+<td></td>
+<td>Selection expression for molecule group(s)</td>
+</tr>
+<tr>
+<td><code>frequency</code></td>
+<td>yes</td>
+<td></td>
+<td>Sample frequency</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="multipole-distribution">Multipole Distribution<a class="headerlink" href="#multipole-distribution" title="Permanent link">&para;</a></h2>
+<p>This analysis decomposes the electrostatic interaction between two molecular species into
+ion–ion, ion–dipole, dipole–dipole, and ion–quadrupole terms, each averaged as a function of
+the center-of-mass separation <em>R</em>. Comparing their sum with the exact Coulomb energy shows how
+far a multipole expansion reproduces the true interaction, and how the molecules' mutual
+orientation changes with distance. Each species may contain many molecules: every frame the
+analysis averages over all molecule pairs — all pairs of distinct molecules when the two
+selections name the same species, or all cross pairs when they name different species — so it
+characterises a whole solution of <em>N</em> macroions, not just an isolated pair.</p>
+<p>Each molecule is reduced to a net charge, a dipole moment, and a traceless quadrupole moment
+about its center of mass, with periodic boundaries applied. The pair energy at separation
+<span class="arithmatex">\(\boldsymbol{R} = \boldsymbol{r}_a - \boldsymbol{r}_b\)</span> is</p>
+<div class="arithmatex">\[
+u = \frac{q_a q_b}{R} + \frac{q_a(\boldsymbol{\mu}_b\cdot\boldsymbol{R}) - q_b(\boldsymbol{\mu}_a\cdot\boldsymbol{R})}{R^3} + \frac{\boldsymbol{\mu}_a\cdot\boldsymbol{\mu}_b}{R^3} - \frac{3(\boldsymbol{\mu}_a\cdot\boldsymbol{R})(\boldsymbol{\mu}_b\cdot\boldsymbol{R})}{R^5} + \frac{q_a\,\boldsymbol{R}^{\!\top}\boldsymbol{\Theta}_b\,\boldsymbol{R} + q_b\,\boldsymbol{R}^{\!\top}\boldsymbol{\Theta}_a\,\boldsymbol{R}}{R^5}
+\]</div>
+<p>Each term is thermally averaged over orientations and co-solute configurations. Energies are
+reported in kJ/mol: the geometric factors above carry the Bjerrum length and <em>RT</em> of the
+<a href="../topology/">medium</a>. The exact energy is the explicit sum over atomic charges,
+<span class="arithmatex">\(u_\text{exact} = \sum_i^a\sum_j^b q_i q_j / |\boldsymbol{r}_i-\boldsymbol{r}_j|\)</span>.</p>
+<p>Alongside the energies, five orientational measures are accumulated (column name in
+parentheses):</p>
+<ul>
+<li>dipole correlation <span class="arithmatex">\(\langle\hat{\boldsymbol{\mu}}_a\cdot\hat{\boldsymbol{\mu}}_b\rangle\)</span> (<code>mucorr</code>), between <span class="arithmatex">\(-1\)</span> and <span class="arithmatex">\(1\)</span> — mean cosine between the dipole directions: <span class="arithmatex">\(+1\)</span> parallel, <span class="arithmatex">\(-1\)</span> antiparallel, <span class="arithmatex">\(0\)</span> uncorrelated.</li>
+<li>nematic order <span class="arithmatex">\(\langle P_2\rangle = \langle(3\cos^2\theta - 1)/2\rangle\)</span> (<code>p2</code>), between <span class="arithmatex">\(-0.5\)</span> and <span class="arithmatex">\(1\)</span> — alignment blind to dipole sign: <span class="arithmatex">\(+1\)</span> collinear (parallel or antiparallel), <span class="arithmatex">\(0\)</span> random, <span class="arithmatex">\(-0.5\)</span> mutually perpendicular.</li>
+<li>longitudinal projection <span class="arithmatex">\(\langle(\hat{\boldsymbol{\mu}}_a\cdot\hat{\boldsymbol{R}})(\hat{\boldsymbol{\mu}}_b\cdot\hat{\boldsymbol{R}})\rangle\)</span> (<code>long</code>), between <span class="arithmatex">\(-1\)</span> and <span class="arithmatex">\(1\)</span> — orientation relative to the separation axis: near <span class="arithmatex">\(+1\)</span> both point along <span class="arithmatex">\(\boldsymbol{R}\)</span> (head-to-tail, end-on), near <span class="arithmatex">\(0\)</span> both lie perpendicular to it (side-by-side, broadside).</li>
+<li>Kirkwood factor <span class="arithmatex">\(g_K(R) = 1 + \frac{1}{N}\sum_{i \neq j,\, r_{ij} \leq R}\langle\hat{\boldsymbol{\mu}}_i\cdot\hat{\boldsymbol{\mu}}_j\rangle\)</span> (<code>gK</code>) — the running dipole-correlation integral, where <span class="arithmatex">\(N\)</span> counts the reference molecules that carry a dipole (apolar molecules are excluded from the normalization): <span class="arithmatex">\(g_K &gt; 1\)</span> signals net parallel ordering of the surrounding dipoles, <span class="arithmatex">\(g_K &lt; 1\)</span> net antiparallel ordering. It applies when both selections are the same species; for two different species the bare cumulative sum is reported, without the <span class="arithmatex">\(+1\)</span>.</li>
+<li>quadrupole correlation — the tensor overlap <span class="arithmatex">\(\langle\boldsymbol{\Theta}_a : \boldsymbol{\Theta}_b\rangle\)</span> (<code>quadcorr</code>) and its normalized form <span class="arithmatex">\(\langle\hat{\boldsymbol{\Theta}}_a : \hat{\boldsymbol{\Theta}}_b\rangle\)</span> (<code>quadcorr_norm</code>), between <span class="arithmatex">\(-1\)</span> and <span class="arithmatex">\(1\)</span>: <span class="arithmatex">\(+1\)</span> identically oriented quadrupoles, <span class="arithmatex">\(-1\)</span> maximally anti-aligned, <span class="arithmatex">\(0\)</span> uncorrelated.</li>
+</ul>
+<p>Both selections must resolve to molecules with a center of mass. Results are written to a CSV
+file, one row per distance bin, with columns
+<code>R,exact,tot,ii,id,dd,iq,mucorr,p2,long,gK,quadcorr,quadcorr_norm</code>.</p>
+<h3 id="example_3">Example<a class="headerlink" href="#example_3" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><span class="nt">analysis</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!MultipoleDistribution</span>
+<span class="w">    </span><span class="nt">selections</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;molecule</span><span class="nv"> </span><span class="s">protein&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;molecule</span><span class="nv"> </span><span class="s">protein&quot;</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">dr</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2.0</span>
+<span class="w">    </span><span class="nt">frequency</span><span class="p">:</span><span class="w"> </span><span class="kt">!Every</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">100</span>
+</code></pre></div>
+<p>The output defaults to <code>multipole_dist.csv</code>; set <code>file</code> to override it.</p>
+<h3 id="options_3">Options<a class="headerlink" href="#options_3" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Required</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>selections</code></td>
+<td>yes</td>
+<td></td>
+<td>Two selection expressions, <em>a</em> and <em>b</em></td>
+</tr>
+<tr>
+<td><code>file</code></td>
+<td>no</td>
+<td><code>multipole_dist.csv</code></td>
+<td>Output CSV file</td>
+</tr>
+<tr>
+<td><code>dr</code></td>
+<td>no</td>
+<td>1.0</td>
+<td>Distance resolution along <em>R</em> (Å)</td>
+</tr>
+<tr>
+<td><code>max_r</code></td>
+<td>no</td>
+<td>half box</td>
+<td>Maximum separation (Å)</td>
+</tr>
+<tr>
+<td><code>frequency</code></td>
+<td>yes</td>
+<td></td>
+<td>Sample frequency</td>
+</tr>
+</tbody>
+</table>
+<p>A medium is required for the Bjerrum length.</p>
+<hr />
+<h2 id="energy">Energy<a class="headerlink" href="#energy" title="Permanent link">&para;</a></h2>
+<p>Streams energy values to a file at each sampled step.
+Two modes are supported:</p>
+<ul>
+<li>Total (default): writes every Hamiltonian term plus the total.
+  Output columns: <code>step term1 term2 ... total</code>.</li>
+<li>Partial: writes the nonbonded energy between two sets of atoms
+  selected with VMD-like expressions.
+  Output columns: <code>step energy running_average</code>.</li>
+</ul>
+<h3 id="examples">Examples<a class="headerlink" href="#examples" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><span class="nt">analysis</span><span class="p">:</span>
+<span class="w">  </span><span class="c1"># Total energy with per-term breakdown</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!Energy</span>
+<span class="w">    </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">energy.csv.gz</span>
+<span class="w">    </span><span class="nt">frequency</span><span class="p">:</span><span class="w"> </span><span class="kt">!Every</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">100</span>
+
+<span class="w">  </span><span class="c1"># Nonbonded energy between two molecules</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!Energy</span>
+<span class="w">    </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">mol1_mol2_energy.csv.gz</span>
+<span class="w">    </span><span class="nt">frequency</span><span class="p">:</span><span class="w"> </span><span class="kt">!Every</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">100</span>
+<span class="w">    </span><span class="nt">selections</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;molecule</span><span class="nv"> </span><span class="s">MOL1&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;molecule</span><span class="nv"> </span><span class="s">MOL2&quot;</span><span class="p p-Indicator">]</span>
+
+<span class="w">  </span><span class="c1"># Nonbonded energy between hydrophobic atoms in two molecules</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!Energy</span>
+<span class="w">    </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">hydrophobic_energy.csv.gz</span>
+<span class="w">    </span><span class="nt">frequency</span><span class="p">:</span><span class="w"> </span><span class="kt">!Every</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">100</span>
+<span class="w">    </span><span class="nt">selections</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;hydrophobic</span><span class="nv"> </span><span class="s">and</span><span class="nv"> </span><span class="s">molecule</span><span class="nv"> </span><span class="s">MOL1&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;hydrophobic</span><span class="nv"> </span><span class="s">and</span><span class="nv"> </span><span class="s">molecule</span><span class="nv"> </span><span class="s">MOL2&quot;</span><span class="p p-Indicator">]</span>
+</code></pre></div>
+<h3 id="options_4">Options<a class="headerlink" href="#options_4" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Required</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>file</code></td>
+<td>yes</td>
+<td></td>
+<td>Output file path (see <a href="#output-file-formats">Output file formats</a>)</td>
+</tr>
+<tr>
+<td><code>frequency</code></td>
+<td>yes</td>
+<td></td>
+<td>Sample frequency, e.g. <code>!Every 100</code></td>
+</tr>
+<tr>
+<td><code>selections</code></td>
+<td>no</td>
+<td></td>
+<td>Pair of selection expressions for partial nonbonded energy</td>
+</tr>
+</tbody>
+</table>
+<p>When <code>selections</code> is omitted, total mode is used.
+When given, only nonbonded energy terms contribute; other terms
+(bonded, constraints, etc.) are skipped.
+Selections resolve at the atom level, so atom-type filters
+(e.g. <code>hydrophobic and molecule MOL1</code>) work correctly.
+When both selections resolve to the same atoms, self-pairs and
+duplicates are automatically excluded.</p>
+<hr />
+<h2 id="trajectory">Trajectory<a class="headerlink" href="#trajectory" title="Permanent link">&para;</a></h2>
+<p>Writes particle coordinates to a trajectory file at each sampled step.
+The format is auto-detected from the file extension (<code>.xyz</code> or <code>.xtc</code>).</p>
+<p>On finalization a companion PSF topology file and a VMD scene script are
+written alongside the trajectory. The PSF contains atoms, bonds, angles,
+and dihedrals; the Tcl script loads the PSF and trajectory, sets VDW radii
+from sigma values, colors by charge, and draws the periodic box.</p>
+<p>For speciation/GCMC/titration simulations, two additional companion files
+enable per-frame visualization updates in VMD:</p>
+<ul>
+<li><code>.sizes.dat</code> — per-frame group active counts (written when any group
+  has inactive atoms). The VMD script hides inactive atoms (radius = 0).</li>
+<li><code>.charges.dat</code> — per-frame atom charges (always written). The VMD
+  script updates charges each frame so that atom-type swaps from titration
+  and speciation are reflected in the charge coloring.</li>
+</ul>
+<h3 id="example_4">Example<a class="headerlink" href="#example_4" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><span class="nt">analysis</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!Trajectory</span>
+<span class="w">    </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">traj.xtc</span>
+<span class="w">    </span><span class="nt">frequency</span><span class="p">:</span><span class="w"> </span><span class="kt">!Every</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">100</span>
+<span class="w">    </span><span class="nt">save_frame_state</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!Trajectory</span>
+<span class="w">    </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">protein.xyz</span>
+<span class="w">    </span><span class="nt">frequency</span><span class="p">:</span><span class="w"> </span><span class="kt">!Every</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">100</span>
+<span class="w">    </span><span class="nt">selection</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;protein&quot;</span>
+</code></pre></div>
+<p>After the simulation, visualize with:</p>
+<div class="highlight"><pre><span></span><code>vmd<span class="w"> </span>-e<span class="w"> </span>traj.tcl
+</code></pre></div>
+<h3 id="options_5">Options<a class="headerlink" href="#options_5" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Required</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>file</code></td>
+<td>yes</td>
+<td></td>
+<td>Output file path (<code>.xyz</code>, <code>.xtc</code>, etc.)</td>
+</tr>
+<tr>
+<td><code>frequency</code></td>
+<td>yes</td>
+<td></td>
+<td>Sample frequency, e.g. <code>!Every 100</code> or <code>!End</code></td>
+</tr>
+<tr>
+<td><code>selection</code></td>
+<td>no</td>
+<td></td>
+<td>VMD-like molecule selection, e.g. <code>"molecule protein"</code>. Writes only matching groups.</td>
+</tr>
+<tr>
+<td><code>save_frame_state</code></td>
+<td>no</td>
+<td><code>false</code></td>
+<td>Write a binary <code>.aux</code> file alongside the trajectory (see <a href="#rerun">Rerun</a>). Cannot be combined with <code>selection</code>.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="output-files">Output files<a class="headerlink" href="#output-files" title="Permanent link">&para;</a></h3>
+<p>Given <code>file: traj.xtc</code>, the following files are produced:</p>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>traj.xtc</code></td>
+<td>Trajectory (coordinates per frame)</td>
+</tr>
+<tr>
+<td><code>traj.psf</code></td>
+<td>X-PLOR PSF topology (atoms, bonds, angles, dihedrals, charges, masses)</td>
+</tr>
+<tr>
+<td><code>traj.tcl</code></td>
+<td>VMD scene script (<code>vmd -e traj.tcl</code> loads everything)</td>
+</tr>
+<tr>
+<td><code>traj.charges.dat</code></td>
+<td>Per-frame atom charges (always written)</td>
+</tr>
+<tr>
+<td><code>traj.sizes.dat</code></td>
+<td>Per-frame group active counts (only when groups have inactive atoms)</td>
+</tr>
+<tr>
+<td><code>traj.aux</code></td>
+<td>Frame state file (only when <code>save_frame_state: true</code>)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="frame-state-file-aux">Frame state file (<code>.aux</code>)<a class="headerlink" href="#frame-state-file-aux" title="Permanent link">&para;</a></h3>
+<p>XTC stores only atom positions. Rigid-body simulations also need
+quaternions, mass centers, and group sizes (for GC moves); swap moves change
+<code>atom_id</code>. When <code>save_frame_state: true</code>, a binary <code>.aux</code> file is written
+alongside each XTC frame, storing this per-frame microstate data.</p>
+<p>The <code>.aux</code> file is required by <code>faunus rerun</code> (see <a href="#rerun">Rerun</a>) to fully
+reconstruct the simulation state from each trajectory frame.</p>
+<hr />
+<h2 id="radial-distribution-function">Radial Distribution Function<a class="headerlink" href="#radial-distribution-function" title="Permanent link">&para;</a></h2>
+<p>Computes the radial distribution function g(r) for pairs of particles or
+molecule centers of mass.
+Distances use the minimum image convention for periodic boundary conditions.
+The output file is updated at each sample with columns <code>r</code> and <code>g(r)</code>,
+normalized using the average volume (NPT-compatible).</p>
+<p>Two modes are supported:</p>
+<ul>
+<li>Atom-atom (default): pairwise distances between individual atoms.
+  Intramolecular pairs (atoms in the same molecule) are excluded by default.</li>
+<li>COM-COM (<code>use_com: true</code>): pairwise distances between molecular
+  centers of mass.</li>
+</ul>
+<p>The <code>dimension</code> option controls which spatial components are used for the
+pair distance and shell normalization:</p>
+<ul>
+<li><code>xyz</code> (default): full 3D distance, normalized with spherical shells (4πr²).</li>
+<li><code>xy</code>, <code>xz</code>, <code>yz</code>: projected distance in a plane, normalized with cylindrical shells (2πr).</li>
+<li><code>x</code>, <code>y</code>, <code>z</code>: projected distance along an axis, normalized with linear shells.</li>
+</ul>
+<p>This is useful for systems where particles are constrained to a plane or a line.</p>
+<p>When both selections are identical, self-pairs and duplicates are
+automatically excluded.</p>
+<h3 id="examples_1">Examples<a class="headerlink" href="#examples_1" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><span class="nt">analysis</span><span class="p">:</span>
+<span class="w">  </span><span class="c1"># Atom-atom RDF between Na and Cl</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!RadialDistribution</span>
+<span class="w">    </span><span class="nt">selections</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;atomtype</span><span class="nv"> </span><span class="s">Na&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;atomtype</span><span class="nv"> </span><span class="s">Cl&quot;</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">rdf_nacl.dat</span>
+<span class="w">    </span><span class="nt">dr</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.1</span>
+<span class="w">    </span><span class="nt">frequency</span><span class="p">:</span><span class="w"> </span><span class="kt">!Every</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">100</span>
+
+<span class="w">  </span><span class="c1"># COM-COM RDF for polymer molecules</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!RadialDistribution</span>
+<span class="w">    </span><span class="nt">selections</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;molecule</span><span class="nv"> </span><span class="s">polymer&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;molecule</span><span class="nv"> </span><span class="s">polymer&quot;</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">use_com</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">    </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">rdf_com.dat</span>
+<span class="w">    </span><span class="nt">dr</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.5</span>
+<span class="w">    </span><span class="nt">max_r</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">30.0</span>
+<span class="w">    </span><span class="nt">frequency</span><span class="p">:</span><span class="w"> </span><span class="kt">!Every</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">100</span>
+</code></pre></div>
+<h3 id="options_6">Options<a class="headerlink" href="#options_6" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Required</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>selections</code></td>
+<td>yes</td>
+<td></td>
+<td>Pair of selection expressions, e.g. <code>["atomtype Na", "atomtype Cl"]</code></td>
+</tr>
+<tr>
+<td><code>file</code></td>
+<td>yes</td>
+<td></td>
+<td>Output file path (see <a href="#output-file-formats">Output file formats</a>)</td>
+</tr>
+<tr>
+<td><code>dr</code></td>
+<td>yes</td>
+<td></td>
+<td>Bin width in distance units</td>
+</tr>
+<tr>
+<td><code>frequency</code></td>
+<td>yes</td>
+<td></td>
+<td>Sample frequency, e.g. <code>!Every 100</code></td>
+</tr>
+<tr>
+<td><code>max_r</code></td>
+<td>no</td>
+<td>half shortest box dim</td>
+<td>Maximum distance for histogram</td>
+</tr>
+<tr>
+<td><code>use_com</code></td>
+<td>no</td>
+<td><code>false</code></td>
+<td>Use center-of-mass distances instead of atom-atom</td>
+</tr>
+<tr>
+<td><code>exclude_intramolecular</code></td>
+<td>no</td>
+<td><code>true</code> (atom-atom)</td>
+<td>Skip pairs within the same molecule (atom-atom only)</td>
+</tr>
+<tr>
+<td><code>dimension</code></td>
+<td>no</td>
+<td><code>xyz</code></td>
+<td>Axes for distance projection and normalization (<code>x</code>, <code>y</code>, <code>z</code>, <code>xy</code>, …)</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="spatial-distribution-function">Spatial Distribution Function<a class="headerlink" href="#spatial-distribution-function" title="Permanent link">&para;</a></h2>
+<p>Computes the spatial distribution function (SDF) of an atom selection around a
+rigid molecular reference selection. The result is a scalar grid in the
+reference molecule body frame, averaged over all matching reference molecules
+and all sampled frames.</p>
+<p>This is useful for mapping ions or solvent around rigid macromolecules in a
+periodic box. Target positions are measured from each reference center using
+minimum-image periodic displacements and then rotated by the inverse reference
+quaternion before binning.</p>
+<p>The reference selection must match rigid molecular groups. Flexible reference
+molecules are not supported by this analysis.</p>
+<h3 id="example_5">Example<a class="headerlink" href="#example_5" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><span class="nt">analysis</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!SpatialDistribution</span>
+<span class="w">    </span><span class="nt">reference</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;molecule</span><span class="nv"> </span><span class="s">Macro&quot;</span>
+<span class="w">    </span><span class="nt">selection</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;atomtype</span><span class="nv"> </span><span class="s">Na&quot;</span>
+<span class="w">    </span><span class="nt">frequency</span><span class="p">:</span><span class="w"> </span><span class="kt">!Every</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">100</span>
+</code></pre></div>
+<h3 id="options_7">Options<a class="headerlink" href="#options_7" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Required</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>reference</code></td>
+<td>yes</td>
+<td></td>
+<td>Molecular group selection defining the body-fixed frame</td>
+</tr>
+<tr>
+<td><code>selection</code></td>
+<td>yes</td>
+<td></td>
+<td>Atom selection accumulated on the grid</td>
+</tr>
+<tr>
+<td><code>frequency</code></td>
+<td>yes</td>
+<td></td>
+<td>Sample frequency, e.g. <code>!Every 100</code></td>
+</tr>
+<tr>
+<td><code>file</code></td>
+<td>no</td>
+<td><code>spatial.dx</code></td>
+<td>OpenDX output grid</td>
+</tr>
+<tr>
+<td><code>reference_file</code></td>
+<td>no</td>
+<td></td>
+<td>Optional XYZ structure of the reference molecule, for visualizing the density around it</td>
+</tr>
+<tr>
+<td><code>resolution</code></td>
+<td>no</td>
+<td><code>1.0</code></td>
+<td>Cubic grid spacing in Å</td>
+</tr>
+<tr>
+<td><code>padding</code></td>
+<td>no</td>
+<td><code>8.0</code></td>
+<td>Margin in Å added on every side of the reference molecule's bounding box</td>
+</tr>
+<tr>
+<td><code>bulk_normalize</code></td>
+<td>no</td>
+<td><code>true</code></td>
+<td>Normalize by bulk density to produce dimensionless relative density</td>
+</tr>
+<tr>
+<td><code>exclude_reference</code></td>
+<td>no</td>
+<td><code>true</code></td>
+<td>Skip target atoms belonging to the current reference group</td>
+</tr>
+</tbody>
+</table>
+<p>The grid is the axis-aligned bounding box of the active reference molecule(s) in
+the body frame, rounded to the grid spacing and enlarged by <code>padding</code> on every
+side. Set <code>reference_file</code> to also write the reference molecule itself (in the
+same body frame) so it can be overlaid on the density. Output is written once at
+the end of the run.</p>
+<h3 id="normalization">Normalization<a class="headerlink" href="#normalization" title="Permanent link">&para;</a></h3>
+<p>With the default <code>bulk_normalize: true</code>, grid values are normalized by the
+instantaneous bulk density of the target selection. A homogeneous ideal gas
+therefore gives SDF ≈ 1. The normalization uses the instantaneous target count,
+reference count, and cell volume at each sample, so it works with GCMC where
+particle numbers fluctuate.</p>
+<p>Set <code>bulk_normalize: false</code> to write molar concentration in mol/L instead of
+relative density.</p>
+<h3 id="output">Output<a class="headerlink" href="#output" title="Permanent link">&para;</a></h3>
+<p>The output file is an OpenDX scalar grid suitable for visualization in VMD and
+PyMOL. Grid coordinates are in the reference body frame, not the lab frame.</p>
+<hr />
+<h2 id="widom-insertion">Widom Insertion<a class="headerlink" href="#widom-insertion" title="Permanent link">&para;</a></h2>
+<p>Measures the excess chemical potential of a single ion species using the scaled
+Widom method (<a href="https://doi.org/10.1080/00268978800100203">Svensson &amp; Woodward, 1988</a>).
+A ghost particle is inserted at random positions; charge scaling maintains
+electroneutrality in the finite periodic box, correcting the Coulombic size error
+inherent in naive single-ion Widom insertion.</p>
+<p>The excess chemical potential is decomposed into short-range and electrostatic
+contributions. The electrostatic part is evaluated by numerical integration over
+a charging parameter λ ∈ [0, 1]. Results are block-averaged with standard error
+of the mean reported.</p>
+<p>Pair interactions for the ghost particle are defined directly in the analysis
+block using the same syntax as <code>energy.nonbonded.default</code>, allowing arbitrary
+short-range potentials (WCA, LJ, HardSphere, etc.) beyond the primitive model.</p>
+<h3 id="example_6">Example<a class="headerlink" href="#example_6" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><span class="nt">analysis</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!ScaledWidomInsertion</span>
+<span class="w">    </span><span class="nt">atom</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Na</span>
+<span class="w">    </span><span class="nt">insertions</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">20</span>
+<span class="w">    </span><span class="nt">lambda_points</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">11</span>
+<span class="w">    </span><span class="nt">frequency</span><span class="p">:</span><span class="w"> </span><span class="kt">!Every</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10</span>
+<span class="w">    </span><span class="nt">default</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!Coulomb</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> cutoff</span><span class="p">:</span><span class="w"> </span><span class="nv">1000.0</span><span class="w"> </span><span class="p p-Indicator">}</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!WCA</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> mixing</span><span class="p">:</span><span class="w"> </span><span class="nv">arithmetic</span><span class="w"> </span><span class="p p-Indicator">}</span>
+</code></pre></div>
+<h3 id="options_8">Options<a class="headerlink" href="#options_8" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Required</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>atom</code></td>
+<td>yes</td>
+<td></td>
+<td>Ghost atom type (must exist in topology)</td>
+</tr>
+<tr>
+<td><code>insertions</code></td>
+<td>no</td>
+<td><code>10</code></td>
+<td>Number of ghost insertions per sample</td>
+</tr>
+<tr>
+<td><code>lambda_points</code></td>
+<td>no</td>
+<td><code>11</code></td>
+<td>Quadrature points for charge scaling (odd recommended)</td>
+</tr>
+<tr>
+<td><code>default</code></td>
+<td>yes</td>
+<td></td>
+<td>Pair interactions (same syntax as <code>nonbonded.default</code>)</td>
+</tr>
+<tr>
+<td><code>frequency</code></td>
+<td>yes</td>
+<td></td>
+<td>Sample frequency, e.g. <code>!Every 10</code></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="virtual-translate">Virtual Translate<a class="headerlink" href="#virtual-translate" title="Permanent link">&para;</a></h2>
+<p>Performs a virtual displacement of a single molecule and measures the
+mean force by Widom perturbation
+(<a href="https://doi.org/10.1063/1.1734110">Widom, 1963</a>):</p>
+<div class="arithmatex">\[f = \frac{k_BT \ln\langle e^{-\Delta U / k_BT}\rangle}{\delta L}\]</div>
+<p>where <span class="arithmatex">\(\Delta U\)</span> is the energy change due to the displacement <span class="arithmatex">\(\delta L\)</span>.
+If <code>file</code> is given, each sampled step writes columns
+<code>step</code>, <code>dL</code>, <code>dU/kT</code>, and <code>&lt;force&gt;/kT/Å</code>.</p>
+<h3 id="example_7">Example<a class="headerlink" href="#example_7" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><span class="nt">analysis</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!VirtualTranslate</span>
+<span class="w">    </span><span class="nt">selection</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;molecule</span><span class="nv"> </span><span class="s">protein&quot;</span>
+<span class="w">    </span><span class="nt">dL</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.01</span>
+<span class="w">    </span><span class="nt">directions</span><span class="p">:</span><span class="w"> </span><span class="kt">!z</span>
+<span class="w">    </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">force.dat</span>
+<span class="w">    </span><span class="nt">frequency</span><span class="p">:</span><span class="w"> </span><span class="kt">!Every</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10</span>
+</code></pre></div>
+<h3 id="options_9">Options<a class="headerlink" href="#options_9" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Required</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>selection</code></td>
+<td>yes</td>
+<td></td>
+<td>Selection matching exactly one molecule</td>
+</tr>
+<tr>
+<td><code>dL</code></td>
+<td>yes</td>
+<td></td>
+<td>Displacement magnitude (Å)</td>
+</tr>
+<tr>
+<td><code>directions</code></td>
+<td>no</td>
+<td><code>z</code></td>
+<td>Displacement direction (<code>x</code>, <code>y</code>, <code>z</code>, <code>xy</code>, …)</td>
+</tr>
+<tr>
+<td><code>file</code></td>
+<td>no</td>
+<td></td>
+<td>Output file path (see <a href="#output-file-formats">Output file formats</a>)</td>
+</tr>
+<tr>
+<td><code>frequency</code></td>
+<td>yes</td>
+<td></td>
+<td>Sample frequency, e.g. <code>!Every 10</code></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="virtual-volume-move">Virtual Volume Move<a class="headerlink" href="#virtual-volume-move" title="Permanent link">&para;</a></h2>
+<p>Performs a virtual volume perturbation and measures the excess pressure
+by Widom perturbation (<a href="https://doi.org/10.1063/1.472721">doi:10.1063/1.472721</a>):</p>
+<div class="arithmatex">\[P_{\text{ex}} = \frac{k_BT \ln\langle e^{-\Delta U / k_BT}\rangle}{\delta V}\]</div>
+<p>where <span class="arithmatex">\(\Delta U\)</span> is the energy change due to the volume displacement <span class="arithmatex">\(\delta V\)</span>.
+All particle positions are scaled according to the chosen <code>method</code>.
+If <code>file</code> is given, each sampled step writes columns
+<code>step</code>, <code>dV/Å³</code>, <code>dU/kT</code>, and <code>&lt;Pex&gt;/kT/Å³</code>.</p>
+<h3 id="example_8">Example<a class="headerlink" href="#example_8" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><span class="nt">analysis</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!VirtualVolumeMove</span>
+<span class="w">    </span><span class="nt">dV</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.2</span>
+<span class="w">    </span><span class="nt">method</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Isotropic</span>
+<span class="w">    </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">pressure.csv</span>
+<span class="w">    </span><span class="nt">frequency</span><span class="p">:</span><span class="w"> </span><span class="kt">!Every</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10</span>
+</code></pre></div>
+<h3 id="options_10">Options<a class="headerlink" href="#options_10" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Required</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>dV</code></td>
+<td>yes</td>
+<td></td>
+<td>Volume displacement (Å³)</td>
+</tr>
+<tr>
+<td><code>method</code></td>
+<td>no</td>
+<td><code>Isotropic</code></td>
+<td>Scaling policy: <code>Isotropic</code>, <code>ScaleZ</code>, <code>ScaleXY</code></td>
+</tr>
+<tr>
+<td><code>file</code></td>
+<td>no</td>
+<td></td>
+<td>Output file path (see <a href="#output-file-formats">Output file formats</a>)</td>
+</tr>
+<tr>
+<td><code>frequency</code></td>
+<td>yes</td>
+<td></td>
+<td>Sample frequency, e.g. <code>!Every 10</code></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="double-layer-pressure">Double Layer Pressure<a class="headerlink" href="#double-layer-pressure" title="Permanent link">&para;</a></h2>
+<p>Osmotic (disjoining) pressure between two uniformly charged planes with explicit
+point-charge counterions, by the midplane method of Guldbrand et al.
+(<a href="https://doi.org/10.1063/1.446912">doi:10.1063/1.446912</a>):</p>
+<div class="arithmatex">\[P_\text{osm} = k_BT\sum_i C_i(0) \;+\; \frac{F_z^{AB}}{\text{area}}\]</div>
+<p>The first term is the entropic (repulsive) contribution from the ion concentration at the
+midplane; the second is the cross-midplane electrostatic force. Its ion–ion correlation part
+is the attractive, van-der-Waals-like force that dominates for divalent ions and that
+mean-field Poisson–Boltzmann misses. The surface charge density <span class="arithmatex">\(\sigma\)</span> is set by
+electroneutrality from the counterion charges — you do not specify it.</p>
+<p>The analysis is hardcoded to a <code>Slit</code> cell (periodic in <em>xy</em>, walls at <span class="arithmatex">\(z=\pm L_z/2\)</span>, so
+the midplane is <span class="arithmatex">\(z=0\)</span>) and to electrostatics only; it suits the primitive-model
+double layer with point-charge counterions. Valency mixtures need nothing special —
+select all the counterions (e.g. <code>"atomtype Na Ca"</code>) and report. Results are block-averaged
+and reported as mean ± standard error.</p>
+<h3 id="example_9">Example<a class="headerlink" href="#example_9" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><span class="nt">analysis</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!DoubleLayerPressure</span>
+<span class="w">    </span><span class="nt">selection</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;atomtype</span><span class="nv"> </span><span class="s">Na</span><span class="nv"> </span><span class="s">Ca&quot;</span><span class="w">   </span><span class="c1"># mono- + divalent counterions</span>
+<span class="w">    </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">pressure.csv</span>
+<span class="w">    </span><span class="nt">frequency</span><span class="p">:</span><span class="w"> </span><span class="kt">!Every</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10</span>
+</code></pre></div>
+<h3 id="options_11">Options<a class="headerlink" href="#options_11" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Required</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>selection</code></td>
+<td>yes</td>
+<td></td>
+<td>Mobile counterions; sets the electroneutral surface charge <span class="arithmatex">\(\sigma\)</span> (the Coulomb prefactor comes from the medium)</td>
+</tr>
+<tr>
+<td><code>midplane_halfwidth</code></td>
+<td>no</td>
+<td><code>gap/12</code></td>
+<td>Half-width (Å) of the midplane density sampling window. The default scales with the plate separation and is usually fine; treat it as a convergence parameter</td>
+</tr>
+<tr>
+<td><code>density_bins</code></td>
+<td>no</td>
+<td><code>50</code></td>
+<td>Resolution of the internal charge profile used by the long-range correction; increase and re-check if results drift</td>
+</tr>
+<tr>
+<td><code>file</code></td>
+<td>no</td>
+<td></td>
+<td>Output file path (see <a href="#output-file-formats">Output file formats</a>)</td>
+</tr>
+<tr>
+<td><code>frequency</code></td>
+<td>yes</td>
+<td></td>
+<td>Sample frequency, e.g. <code>!Every 10</code></td>
+</tr>
+</tbody>
+</table>
+<p>A long-range correction for the finite lateral box, reported as <code>F_iPB</code>, is computed and
+added to the pressure automatically — it needs no configuration and handles valency
+mixtures. For reliable numbers, equilibrate first and start production from a state file
+(<code>-s</code>), and confirm the result is stable against <code>density_bins</code> and the lateral box size.</p>
+<p><code>output.yaml</code> reports <code>{mean, error}</code> for the midplane density <code>rho_mid/Å⁻³</code> and the
+pressures <code>p_ideal/mM</code> (entropic), <code>p_corr/mM</code> (electrostatic), and <code>p_osm/mM</code> (total — the
+number you usually want), plus <code>F_iPB/mM</code> and <code>p_osm/Pa</code>; the <code>p_corr</code> and <code>p_osm</code> means
+include <code>F_iPB</code>. With <code>file</code> set, each sampled step writes <code>step</code>, <code>rho_mid/Å⁻³</code>,
+<code>p_ideal/mM</code>, <code>p_corr/mM</code>, <code>p_osm/mM</code> — there the per-step <code>p_corr</code>/<code>p_osm</code> columns exclude
+<code>F_iPB</code> (a run-averaged constant folded into the final means only).</p>
+<hr />
+<h2 id="electric-potential-profile">Electric Potential Profile<a class="headerlink" href="#electric-potential-profile" title="Permanent link">&para;</a></h2>
+<p>Mean electric potential <span class="arithmatex">\(\varphi(z)\)</span> along the <span class="arithmatex">\(z\)</span>-axis of a slab, for an electrolyte with
+implicit salt (Debye–Hückel / Yukawa screening). A uniformly charged plane in a screened
+electrolyte produces a potential that decays exponentially away from it, so the
+laterally-averaged potential is a screened sum over the charge in each thin slab:</p>
+<div class="arithmatex">\[\varphi(z) = \frac{2\pi\,l_B}{\kappa}\sum_{z'} \sigma(z')\,e^{-\kappa\,|z-z'|}\]</div>
+<p>where <span class="arithmatex">\(\sigma(z')\)</span> is the average charge per unit area in the slab at <span class="arithmatex">\(z'\)</span>, <span class="arithmatex">\(l_B\)</span> the Bjerrum
+length, and <span class="arithmatex">\(1/\kappa\)</span> the Debye length — both taken from the medium. Because screening keeps
+the sum convergent, no infinite-plane correction term is needed. The walls are assumed
+neutral; only the explicit ions contribute.</p>
+<p>Without salt (no Debye length) the kernel falls back automatically to bare Coulomb,
+the unscreened limit <span class="arithmatex">\(\kappa\to0\)</span>. The plane potential is then the one-dimensional Poisson
+Green's function</p>
+<div class="arithmatex">\[\varphi(z) = -2\pi\,l_B\sum_{z'}\sigma(z')\,|z-z'|,\]</div>
+<p>which is finite and physical only for an electroneutral slab (the linear background
+cancels when <span class="arithmatex">\(\sum_{z'}\sigma(z')=0\)</span>).</p>
+<p>The cell geometry is detected automatically: a cuboid or slit must have a square base
+(<span class="arithmatex">\(L_x = L_y\)</span>), and a cylinder uses its circular cross-section. The exponential treatment
+assumes each charged plane is effectively infinite, which holds only when the lateral box
+size is much larger than the Debye length — a warning is printed otherwise (screened
+kernel only).</p>
+<h3 id="finite-box-correction-optional">Finite-box correction (optional)<a class="headerlink" href="#finite-box-correction-optional" title="Permanent link">&para;</a></h3>
+<p>For a box that is <em>not</em> much larger than the Debye length, set <code>finite_box_correction: true</code>.
+The infinite-plane potential is then replaced by that of the <em>finite</em> minimum-image
+cross-section, valid at any box size:</p>
+<div class="arithmatex">\[\varphi_\text{box}(z) = \varphi_\infty(z) - \varphi_\text{ext}(z),
+\qquad \varphi_\infty(z) = \frac{2\pi\,l_B}{\kappa}\,e^{-\kappa|z|},\]</div>
+<p>where <span class="arithmatex">\(\varphi_\text{ext}\)</span> is the contribution of the charge <em>outside</em> the cross-section. This
+is the screened (Yukawa) analogue of the finite-box correction of Greberg et al.,
+<a href="https://doi.org/10/dhb9mj">doi:10/dhb9mj</a>; screening makes every term finite, so the
+divergent and linear pieces of the bare-Coulomb construction cancel before quadrature. For a
+square base of half-width <span class="arithmatex">\(a\)</span> (<span class="arithmatex">\(L_x = 2a\)</span>),</p>
+<div class="arithmatex">\[\varphi_\text{ext}(z) = \frac{8\,l_B}{\kappa}\int_0^{\pi/4}
+   \exp\!\Big(\!-\kappa\sqrt{a^2/\cos^2\theta + z^2}\,\Big)\,\mathrm{d}\theta,\]</div>
+<p>a smooth integral evaluated by quadrature; for a disk of radius <span class="arithmatex">\(R\)</span> (cylinder) it has the
+closed form</p>
+<div class="arithmatex">\[\varphi_\text{ext}(z) = \frac{2\pi\,l_B}{\kappa}\,e^{-\kappa\sqrt{R^2 + z^2}}.\]</div>
+<p>Both vanish as the cross-section grows (<span class="arithmatex">\(\varphi_\text{ext}\to0\)</span> for <span class="arithmatex">\(\kappa a\gg1\)</span>), so the
+correction matters only for thin boxes. Enable it only when the simulation itself does not
+already apply such an external correction, otherwise the far field is subtracted twice.</p>
+<p>For the unscreened (bare-Coulomb) kernel the correction reduces to Greberg's original
+square-base form,</p>
+<div class="arithmatex">\[\varphi_\text{ext}(z) = -2\pi\,l_B\,|z| - l_B\,u_\text{box}(z),
+\qquad
+u_\text{box}(z) = 8a\,\ln\!\frac{\sqrt{2a^2+z^2}+a}{\sqrt{a^2+z^2}}
+   - 2z\left(\frac{\pi}{2} + \arcsin\frac{a^4 - z^4 - 2a^2z^2}{(a^2+z^2)^2}\right),\]</div>
+<p>recovered from the screened form as <span class="arithmatex">\(\kappa\to0\)</span> once the regularizing constant <span class="arithmatex">\(2\pi l_B/\kappa\)</span>
+is removed. Because Greberg's construction models a square minimum-image box, the unscreened
+correction is only defined for a square base; enabling it for a cylinder is an error.</p>
+<h3 id="example_10">Example<a class="headerlink" href="#example_10" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><span class="nt">analysis</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!ElectricPotentialProfile</span>
+<span class="w">    </span><span class="nt">frequency</span><span class="p">:</span><span class="w"> </span><span class="kt">!Every</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10</span>
+<span class="w">    </span><span class="c1"># selection, resolution and file are optional:</span>
+<span class="w">    </span><span class="c1"># selection: &quot;all&quot;      # atoms contributing charge (default: all)</span>
+<span class="w">    </span><span class="c1"># resolution: 0.5       # slab thickness Δz in Å (default: 0.5)</span>
+<span class="w">    </span><span class="c1"># file: potential.csv   # output file (default: potential.csv)</span>
+</code></pre></div>
+<h3 id="options_12">Options<a class="headerlink" href="#options_12" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Required</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>selection</code></td>
+<td>no</td>
+<td><code>all</code></td>
+<td>Atoms whose charge contributes to the profile</td>
+</tr>
+<tr>
+<td><code>resolution</code></td>
+<td>no</td>
+<td><code>0.5</code></td>
+<td>Slab thickness Δz (Å) along the <span class="arithmatex">\(z\)</span>-axis</td>
+</tr>
+<tr>
+<td><code>finite_box_correction</code></td>
+<td>no</td>
+<td><code>false</code></td>
+<td>Report the finite-box (Greberg) potential instead of the infinite-plane one</td>
+</tr>
+<tr>
+<td><code>file</code></td>
+<td>no</td>
+<td><code>potential.csv</code></td>
+<td>Output file path (see <a href="#output-file-formats">Output file formats</a>)</td>
+</tr>
+<tr>
+<td><code>frequency</code></td>
+<td>yes</td>
+<td></td>
+<td>Sample frequency, e.g. <code>!Every 10</code></td>
+</tr>
+</tbody>
+</table>
+<p>The output file contains, per slab: the position <code>z/Å</code>, the slab charge density (per area
+<code>e·Å⁻²</code> and per volume <code>e·Å⁻³</code>), the potential <code>potential/mV</code> with its statistical error
+<code>potential_error/mV</code>, and the electric field <code>field/mV·Å⁻¹</code>. <code>output.yaml</code> additionally
+reports the potential at each wall and at the midplane (with the wall-to-midplane drops) as
+mean ± error. For reliable numbers, <strong>equilibrate first and start production from a state
+file</strong> (<code>-s</code>).</p>
+<hr />
+<h2 id="density-profile">Density Profile<a class="headerlink" href="#density-profile" title="Permanent link">&para;</a></h2>
+<p>Average density of a chosen species along the <span class="arithmatex">\(z\)</span>-axis. The cell is cut into slabs of equal
+thickness <span class="arithmatex">\(\Delta z\)</span>, and the density in the slab centred at <span class="arithmatex">\(z\)</span> is the mean number of
+particles it holds divided by its volume,</p>
+<div class="arithmatex">\[\rho(z) = \frac{\langle N(z)\rangle}{A\,\Delta z},\]</div>
+<p>where <span class="arithmatex">\(A\)</span> is the cross-sectional area of the cell. Use it to measure how a species distributes
+itself between a wall and the bulk: ion layering at a charged surface, adsorption in a slit
+pore, or the density of a fluid along a cylindrical channel.</p>
+<p>By default each selected atom counts towards the slab holding it. Set <code>use_com: true</code> to
+count each selected molecule in the slab holding its centre of mass instead, which profiles
+whole molecules rather than their individual atoms. Molecules declared <code>atomic</code> have no centre
+of mass, so selecting one with <code>use_com</code> is an error.</p>
+<p>Every configuration contributes its own count, which is then averaged. The profile therefore
+stays correct when particles are created and destroyed: <span class="arithmatex">\(\langle N(z)\rangle\)</span> is the mean
+occupancy of the slab in the grand canonical ensemble. Particles absent from a configuration do
+not count.</p>
+<p>The cell must have the same cross-section at every height — a cuboid, slit, cylinder, or
+hexagonal prism — since a slab volume is otherwise undefined. Spherical and unbounded cells are
+rejected. The slabs are laid out once at the start of the run and keep their size, so the
+profile is meaningful only at constant volume; rescaling the cell later triggers a warning.</p>
+<h3 id="example_11">Example<a class="headerlink" href="#example_11" title="Permanent link">&para;</a></h3>
+<p>Sodium and chloride profiles across a slit, plus the profile of whole water molecules:</p>
+<div class="highlight"><pre><span></span><code><span class="nt">analysis</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!DensityProfile</span>
+<span class="w">    </span><span class="nt">selection</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;atomtype</span><span class="nv"> </span><span class="s">Na&quot;</span>
+<span class="w">    </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">density_na.csv</span>
+<span class="w">    </span><span class="nt">frequency</span><span class="p">:</span><span class="w"> </span><span class="kt">!Every</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!DensityProfile</span>
+<span class="w">    </span><span class="nt">selection</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;atomtype</span><span class="nv"> </span><span class="s">Cl&quot;</span>
+<span class="w">    </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">density_cl.csv</span>
+<span class="w">    </span><span class="nt">frequency</span><span class="p">:</span><span class="w"> </span><span class="kt">!Every</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!DensityProfile</span>
+<span class="w">    </span><span class="nt">selection</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;molecule</span><span class="nv"> </span><span class="s">water&quot;</span>
+<span class="w">    </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">density_water.csv</span>
+<span class="w">    </span><span class="nt">use_com</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span><span class="w">          </span><span class="c1"># bin mass centres, not individual atoms</span>
+<span class="w">    </span><span class="nt">resolution</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.5</span><span class="w">        </span><span class="c1"># slab thickness Δz in Å (default: 1.0)</span>
+<span class="w">    </span><span class="nt">frequency</span><span class="p">:</span><span class="w"> </span><span class="kt">!Every</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10</span>
+</code></pre></div>
+<p>Each block profiles one species and writes one file; add a block per species.</p>
+<h3 id="options_13">Options<a class="headerlink" href="#options_13" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Required</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>selection</code></td>
+<td>yes</td>
+<td></td>
+<td>Atoms, or molecules when <code>use_com</code> is set, whose density is profiled</td>
+</tr>
+<tr>
+<td><code>file</code></td>
+<td>yes</td>
+<td></td>
+<td>Output file path (see <a href="#output-file-formats">Output file formats</a>)</td>
+</tr>
+<tr>
+<td><code>use_com</code></td>
+<td>no</td>
+<td><code>false</code></td>
+<td>Bin the centre of mass of each selected molecule instead of each atom</td>
+</tr>
+<tr>
+<td><code>resolution</code></td>
+<td>no</td>
+<td><code>1.0</code></td>
+<td>Slab thickness Δz (Å) along the <span class="arithmatex">\(z\)</span>-axis</td>
+</tr>
+<tr>
+<td><code>frequency</code></td>
+<td>yes</td>
+<td></td>
+<td>Sample frequency, e.g. <code>!Every 10</code></td>
+</tr>
+</tbody>
+</table>
+<p>The output file gives, per slab, its centre <code>z/Å</code> followed by three equivalent measures of the
+same density, each with its statistical error: the number density <code>density/Å⁻³</code>, the molar
+concentration <code>molarity/mol·L⁻¹</code>, and the mass density <code>mass_density/g·mL⁻¹</code>. <code>output.yaml</code>
+additionally reports the slab layout and the mean total number of selected particles,
+<code>mean_count</code>, as mean ± error — a useful check, since summing <span class="arithmatex">\(\rho(z)\,A\,\Delta z\)</span> over all
+slabs must return it.</p>
+<hr />
+<h2 id="mean-along-coordinate">Mean Along Coordinate<a class="headerlink" href="#mean-along-coordinate" title="Permanent link">&para;</a></h2>
+<p>Computes the average of one collective variable (CV1) binned along another (CV2).
+CV2 is discretised into uniform bins of width <code>resolution</code>; no range is required
+since bins are created on demand using a sorted map.
+The output file contains columns for the bin center, running mean of CV1, and sample count per bin.
+The file is rewritten at each sample so partial results survive crashes.</p>
+<h3 id="example_12">Example<a class="headerlink" href="#example_12" title="Permanent link">&para;</a></h3>
+<p>Average charge of GLU residue as a function of distance from a protein:</p>
+<div class="highlight"><pre><span></span><code><span class="nt">analysis</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!MeanAlongCoordinate</span>
+<span class="w">    </span><span class="nt">property</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">charge</span>
+<span class="w">    </span><span class="nt">selection</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;molecule</span><span class="nv"> </span><span class="s">GLU&quot;</span>
+<span class="w">    </span><span class="nt">coordinate</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">property</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">mass_center_separation</span>
+<span class="w">      </span><span class="nt">selection</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;molecule</span><span class="nv"> </span><span class="s">GLU&quot;</span>
+<span class="w">      </span><span class="nt">selection2</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;molecule</span><span class="nv"> </span><span class="s">protein&quot;</span>
+<span class="w">      </span><span class="nt">resolution</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.5</span>
+<span class="w">    </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">charge_vs_dist.dat</span>
+<span class="w">    </span><span class="nt">frequency</span><span class="p">:</span><span class="w"> </span><span class="kt">!Every</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">100</span>
+</code></pre></div>
+<h3 id="options_14">Options<a class="headerlink" href="#options_14" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Required</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>property</code></td>
+<td>yes</td>
+<td></td>
+<td>CV1 type to average (see <a href="#supported-properties">Supported properties</a>)</td>
+</tr>
+<tr>
+<td><code>selection</code></td>
+<td>depends</td>
+<td></td>
+<td>Selection for CV1</td>
+</tr>
+<tr>
+<td><code>coordinate</code></td>
+<td>yes</td>
+<td></td>
+<td>CV2 block (must include <code>resolution</code>)</td>
+</tr>
+<tr>
+<td><code>file</code></td>
+<td>yes</td>
+<td></td>
+<td>Output file path (see <a href="#output-file-formats">Output file formats</a>)</td>
+</tr>
+<tr>
+<td><code>frequency</code></td>
+<td>yes</td>
+<td></td>
+<td>Sample frequency, e.g. <code>!Every 100</code></td>
+</tr>
+</tbody>
+</table>
+<p>The <code>coordinate</code> block accepts all <a href="#collective-variable">collective variable</a> fields
+(<code>property</code>, <code>selection</code>, <code>dimension</code>, etc.) plus a required <code>resolution</code> for the bin width.</p>
+<hr />
+<h2 id="rotational-diffusion">Rotational Diffusion<a class="headerlink" href="#rotational-diffusion" title="Permanent link">&para;</a></h2>
+<p>Estimates the anisotropic rotational diffusion tensor from the quaternion
+covariance matrix <span class="arithmatex">\(\tilde{Q}(\tau)\)</span> of molecular orientations
+(<a href="https://doi.org/10.1103/PhysRev.119.53">Favro 1960</a>;
+<a href="https://doi.org/10.1101/2025.05.27.656261">Holtbrügge &amp; Schäfer 2025</a>).</p>
+<p>For each lag <span class="arithmatex">\(\tau\)</span> (in snapshot units), the body-frame reorientation quaternion
+<span class="arithmatex">\(q(t,\tau) = q(t)\cdot q^{-1}(t+\tau)\)</span> is computed, and its vector components form
+the <span class="arithmatex">\(3\times3\)</span> covariance matrix <span class="arithmatex">\(\tilde{Q}_{ij}(\tau) = \langle q_i\cdot q_j\rangle\)</span>.
+In the principal coordinate system, <span class="arithmatex">\(\tilde{Q}\)</span> is diagonal and follows the Favro model</p>
+<div class="arithmatex">\[\tilde{Q}_{ii}(\tau) = \tfrac{1}{4}\left(1
+  + e^{-(D_j+D_k)\tau}
+  - e^{-(D_i+D_j)\tau}
+  - e^{-(D_i+D_k)\tau}\right),\]</div>
+<p>where <span class="arithmatex">\(D_x\)</span>, <span class="arithmatex">\(D_y\)</span> and <span class="arithmatex">\(D_z\)</span> are the principal rotational diffusion coefficients
+(rad²/snapshot). Correlations are averaged over all molecules matching the
+selection, exploiting ensemble averaging.</p>
+<p>The selection must resolve to molecular groups (not atomic) that carry
+rigid-body quaternion state.</p>
+<h3 id="example_13">Example<a class="headerlink" href="#example_13" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><span class="nt">analysis</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!RotationalDiffusion</span>
+<span class="w">    </span><span class="nt">selection</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;molecule</span><span class="nv"> </span><span class="s">Water&quot;</span>
+<span class="w">    </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">rotdiff.dat.gz</span>
+<span class="w">    </span><span class="nt">frequency</span><span class="p">:</span><span class="w"> </span><span class="kt">!Every</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">100</span>
+<span class="w">    </span><span class="nt">max_lag</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1000</span>
+</code></pre></div>
+<h3 id="options_15">Options<a class="headerlink" href="#options_15" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Required</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>selection</code></td>
+<td>yes</td>
+<td></td>
+<td>Selection for molecular group(s) to track</td>
+</tr>
+<tr>
+<td><code>file</code></td>
+<td>no</td>
+<td></td>
+<td>Streaming output file (see <a href="#output-file-formats">Output file formats</a>)</td>
+</tr>
+<tr>
+<td><code>frequency</code></td>
+<td>yes</td>
+<td></td>
+<td>Sample frequency, e.g. <code>!Every 100</code></td>
+</tr>
+<tr>
+<td><code>max_lag</code></td>
+<td>no</td>
+<td><code>1000</code></td>
+<td>Max lag in snapshots; actual time window = <code>max_lag</code> × <code>frequency</code></td>
+</tr>
+</tbody>
+</table>
+<p>The <code>max_lag</code> should be large enough for <span class="arithmatex">\(\tilde{Q}_{ii}(\tau)\)</span> to approach its plateau at <span class="arithmatex">\(\tfrac{1}{4}\)</span>.
+A warning is emitted if convergence is not reached.</p>
+<h3 id="output_1">Output<a class="headerlink" href="#output_1" title="Permanent link">&para;</a></h3>
+<p>The YAML output includes the covariance matrix at log-spaced lags,
+time-dependent diffusion coefficients <span class="arithmatex">\(D_x(\tau)\)</span>, <span class="arithmatex">\(D_y(\tau)\)</span>, <span class="arithmatex">\(D_z(\tau)\)</span> from
+eigenvalue decomposition, and an isotropic estimate from the trace.</p>
+<hr />
+<h2 id="widom-rotation">Widom Rotation<a class="headerlink" href="#widom-rotation" title="Permanent link">&para;</a></h2>
+<p>Measures how the surroundings restrict a molecule's orientation. For each
+snapshot a molecule is held at its center of mass and rigidly turned to <code>M</code> trial
+orientations spread evenly over all rotations
+(<a href="https://doi.org/10.1109/CVPR52688.2022.00811">Alexa 2022</a>). Only its
+interaction with the rest of the system is evaluated, using the run's own energy
+function. Turning a molecule about its center of mass leaves its internal
+geometry unchanged, so its internal energy plays no part.</p>
+<p>From the trial energies <code>u(Ω)</code> the analysis reports, by Widom perturbation
+(<a href="https://doi.org/10.1063/1.1734110">Widom 1963</a>):</p>
+<div class="arithmatex">\[W = -k_BT \ln\left\langle \frac{1}{M}\sum_k e^{-u_k/k_BT}\right\rangle\]</div>
+<p>the orientation-averaged free energy <code>W</code>, the mean interaction, and the effective
+number of accessible orientations <code>N_eff</code>. The analysis also reports how strongly
+the surroundings restrict the molecule, as an entropy relative to free rotation:</p>
+<div class="arithmatex">\[S_\text{orient}/R = -\sum_k w_k \ln (M w_k)\]</div>
+<p>where <code>w_k</code> is the Boltzmann weight of trial orientation <code>k</code>. The entropy follows
+directly from the sampled orientations and assumes nothing about the shape of the
+orientational well. It is dimensionless and never positive; zero means the
+molecule rotates freely. That restricting a molecule's orientation carries a free
+energy cost is the idea of
+<a href="https://doi.org/10.1021/ja00074a073">Akke et al. 1993</a>. Together with <code>W</code> and the
+mean interaction, the entropy splits the free energy into energetic and entropic
+parts.</p>
+<p>For each requested molecular vector the analysis also reports the Lipari–Szabo
+order parameter (<a href="https://doi.org/10.1021/ja00381a009">Lipari &amp; Szabo 1982</a>):</p>
+<div class="arithmatex">\[S^2 = \frac{3}{2}\sum_{\alpha\beta}\langle v_\alpha v_\beta\rangle^2 - \frac{1}{2}\]</div>
+<p>where <code>S²=1</code> means the vector is fully locked and <code>S²=0</code> means it is free. A
+vector is given as a pair of atoms (<code>!pair [i, j]</code>), a gyration principal axis
+(<code>!axis 0|1|2</code>), or an explicit direction in the molecule's reference frame
+(<code>!body [x, y, z]</code>). Optionally, the analysis also reports the mean torque and
+the librational stiffness of the orientational cage.</p>
+<p>The analysis reports one set of numbers per run; for a spatial profile, run
+separate <a href="../umbrella/">umbrella</a> windows and combine them afterwards. With
+implicit solvent the reported energies are free energies relative to pure
+solvent, not mechanical energies.</p>
+<p>The selection must resolve to molecular groups (not atomic) of a single kind.</p>
+<h3 id="example_14">Example<a class="headerlink" href="#example_14" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><span class="nt">analysis</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!WidomRotation</span>
+<span class="w">    </span><span class="nt">selection</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;molecule</span><span class="nv"> </span><span class="s">phytate&quot;</span>
+<span class="w">    </span><span class="nt">orientations</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">500</span>
+<span class="w">    </span><span class="nt">vectors</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!pair</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">5</span><span class="p p-Indicator">]</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!axis</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!body</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">0.0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">0.0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">1.0</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">torque</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">    </span><span class="nt">stiffness</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">    </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">widomrot.csv.gz</span>
+<span class="w">    </span><span class="nt">frequency</span><span class="p">:</span><span class="w"> </span><span class="kt">!Every</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">100</span>
+</code></pre></div>
+<h3 id="options_16">Options<a class="headerlink" href="#options_16" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Required</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>selection</code></td>
+<td>yes</td>
+<td></td>
+<td>Selection for molecular group(s) of one kind</td>
+</tr>
+<tr>
+<td><code>orientations</code></td>
+<td>yes</td>
+<td></td>
+<td>Number of trial orientations <code>M</code> (typically 100–1000)</td>
+</tr>
+<tr>
+<td><code>vectors</code></td>
+<td>no</td>
+<td><code>[]</code></td>
+<td>Vectors for <code>S²</code>: <code>!pair [i,j]</code>, <code>!axis 0\|1\|2</code>, or <code>!body [x,y,z]</code></td>
+</tr>
+<tr>
+<td><code>torque</code></td>
+<td>no</td>
+<td><code>false</code></td>
+<td>Also measure the mean torque</td>
+</tr>
+<tr>
+<td><code>dtheta</code></td>
+<td>no</td>
+<td><code>0.01</code></td>
+<td>Rotation step for the torque (rad)</td>
+</tr>
+<tr>
+<td><code>stiffness</code></td>
+<td>no</td>
+<td><code>false</code></td>
+<td>Also measure the librational stiffness</td>
+</tr>
+<tr>
+<td><code>file</code></td>
+<td>no</td>
+<td></td>
+<td>Streaming output file (see <a href="#output-file-formats">Output file formats</a>)</td>
+</tr>
+<tr>
+<td><code>frequency</code></td>
+<td>yes</td>
+<td></td>
+<td>Sample frequency, e.g. <code>!Every 100</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="output_2">Output<a class="headerlink" href="#output_2" title="Permanent link">&para;</a></h3>
+<p>The YAML output includes <code>W</code>, the mean interaction, the orientational entropy,
+<code>N_eff</code>, and the per-vector and mean <code>S²</code>, each with a statistical error. Torque
+and stiffness are added when enabled. If <code>file</code> is given, each sampled step writes
+columns <code>step</code>, <code>W/kJ/mol</code>, <code>mean_S2</code>, and <code>N_eff</code>.</p>
+<p><code>W</code>, the mean interaction, and the stiffness are in kJ/mol, the torque is in kT
+per radian, and the entropy and <code>S²</code> are dimensionless. Each output key names its
+own unit.</p>
+<hr />
+<h2 id="rerun">Rerun<a class="headerlink" href="#rerun" title="Permanent link">&para;</a></h2>
+<p>The <code>rerun</code> subcommand replays a trajectory through a (possibly different) Hamiltonian,
+running the analysis pipeline on each frame. This decouples analysis from propagation,
+enabling e.g. comparison of explicit nonbonded energies against tabulated 6D potentials
+for the same configurations.</p>
+<p>The input YAML provides the Hamiltonian and analysis configuration;
+the <code>propagate:</code> section is ignored. All analysis frequencies are overridden to
+sample every frame.</p>
+<h3 id="reweighting-biased-trajectories">Reweighting biased trajectories<a class="headerlink" href="#reweighting-biased-trajectories" title="Permanent link">&para;</a></h3>
+<p>If the Hamiltonian contains a <a href="../energy/#penalty-flat-histogram-bias"><code>penalty</code></a> term
+(from a converged Wang-Landau run), rerun automatically reweights all analyses by
+<span class="arithmatex">\(w = \exp(-\ln g(\text{bin}))\)</span>, recovering correct ensemble averages from the
+biased trajectory. This is logged at startup:</p>
+<div class="highlight"><pre><span></span><code>Reweighting enabled: penalty bias detected (Δg=X.X kT)
+</code></pre></div>
+<p>No special configuration is needed — include the same <code>energy.penalty</code> section
+used during the biased simulation.</p>
+<h3 id="usage">Usage<a class="headerlink" href="#usage" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code>faunus<span class="w"> </span>rerun<span class="w"> </span>-i<span class="w"> </span>input.yaml<span class="w"> </span>--traj<span class="w"> </span>traj.xtc<span class="w"> </span><span class="o">[</span>--aux<span class="w"> </span>traj.aux<span class="o">]</span>
+</code></pre></div>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Required</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>-i</code></td>
+<td>yes</td>
+<td></td>
+<td>Input YAML with Hamiltonian + analysis config</td>
+</tr>
+<tr>
+<td><code>--traj</code></td>
+<td>yes</td>
+<td></td>
+<td>XTC trajectory file</td>
+</tr>
+<tr>
+<td><code>--aux</code></td>
+<td>no</td>
+<td><code>traj.aux</code> (from <code>--traj</code>)</td>
+<td>Frame state file</td>
+</tr>
+</tbody>
+</table>
+<h3 id="requirements">Requirements<a class="headerlink" href="#requirements" title="Permanent link">&para;</a></h3>
+<p>The trajectory must have been produced with <code>save_frame_state: true</code> on the
+<a href="#trajectory">Trajectory</a> analysis, so that a matching <code>.aux</code> file exists.
+The <code>.aux</code> file header must match the topology in the rerun input (same number
+of groups, particles, and molecule types).</p>
+<h3 id="example-workflow">Example workflow<a class="headerlink" href="#example-workflow" title="Permanent link">&para;</a></h3>
+<ol>
+<li>
+<p>Run the original simulation with frame state output:</p>
+<div class="highlight"><pre><span></span><code><span class="nt">analysis</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!Trajectory</span>
+<span class="w">    </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">traj.xtc</span>
+<span class="w">    </span><span class="nt">frequency</span><span class="p">:</span><span class="w"> </span><span class="kt">!Every</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">100</span>
+<span class="w">    </span><span class="nt">save_frame_state</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!RadialDistribution</span>
+<span class="w">    </span><span class="nt">selections</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;molecule</span><span class="nv"> </span><span class="s">A&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;molecule</span><span class="nv"> </span><span class="s">B&quot;</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">rdf_explicit.dat</span>
+<span class="w">    </span><span class="nt">dr</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.1</span>
+<span class="w">    </span><span class="nt">frequency</span><span class="p">:</span><span class="w"> </span><span class="kt">!Every</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">100</span>
+</code></pre></div>
+</li>
+<li>
+<p>Rerun with a different Hamiltonian (e.g. 6D tabulated potential):</p>
+<div class="highlight"><pre><span></span><code>faunus<span class="w"> </span>rerun<span class="w"> </span>-i<span class="w"> </span>input_6dtable.yaml<span class="w"> </span>--traj<span class="w"> </span>traj.xtc<span class="w"> </span>-o<span class="w"> </span>output_rerun.yaml
+</code></pre></div>
+<p>where <code>input_6dtable.yaml</code> uses the same topology but a different energy section,
+and defines the desired analysis objects (e.g. RDF, energy time series).</p>
+</li>
+<li>
+<p>Compare the RDFs from the original and rerun outputs.</p>
+</li>
+</ol>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["content.code.copy", "navigation.top", "search.suggest", "search.highlight", "toc.follow"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"provider": "mike"}}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+        <script src="../javascript/mathjax.js"></script>
+      
+        <script src="https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js"></script>
+      
+    
+  </body>
+</html>

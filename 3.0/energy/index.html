@@ -1,0 +1,2649 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="User guide for the Faunus molecular simulation framework">
+      
+      
+      
+      
+        <link rel="prev" href="../units/">
+      
+      
+        <link rel="next" href="../moves/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>Energy - Faunus User Guide</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#energy" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+      </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="Faunus User Guide" class="md-header__button md-logo" aria-label="Faunus User Guide" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Faunus User Guide
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Energy
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/mlund/faunus-rs" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    faunus-rs
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="Faunus User Guide" class="md-nav__button md-logo" aria-label="Faunus User Guide" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Faunus User Guide
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/mlund/faunus-rs" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    faunus-rs
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../topology/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Topology
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../units/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Units and Conventions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Energy
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Energy
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#external-pressure-isobaric" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        External Pressure (Isobaric)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#nonbonded-interactions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Nonbonded Interactions
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#ewald-summation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Ewald Summation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#excluded-pair-coulomb-correction" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Excluded-Pair Coulomb Correction
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#bonded-interactions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Bonded Interactions
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#custom-external-potential" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Custom External Potential
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#custom-pair-potential-com-com" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Custom Pair Potential (COM-COM)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#penalty-flat-histogram-bias" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Penalty (Flat-Histogram Bias)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#solvent-accessible-surface-area-sasa" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Solvent Accessible Surface Area (SASA)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#contact-tessellation-energy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Contact Tessellation Energy
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#constrain" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Constrain
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#polymer-depletion-many-body-interaction" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Polymer Depletion Many-Body Interaction
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tabulated-6d-rigid-body-energy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tabulated 6D Rigid-Body Energy
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tabulated-3d-molecule-atom-energy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tabulated 3D Molecule-Atom Energy
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../moves/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Moves
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../analysis/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Analysis
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../wang_landau/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Wang-Landau
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../umbrella/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Umbrella Sampling
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../selection_language/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Selection Language
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../extending/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Extending Faunus
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#external-pressure-isobaric" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        External Pressure (Isobaric)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#nonbonded-interactions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Nonbonded Interactions
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#ewald-summation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Ewald Summation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#excluded-pair-coulomb-correction" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Excluded-Pair Coulomb Correction
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#bonded-interactions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Bonded Interactions
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#custom-external-potential" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Custom External Potential
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#custom-pair-potential-com-com" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Custom Pair Potential (COM-COM)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#penalty-flat-histogram-bias" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Penalty (Flat-Histogram Bias)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#solvent-accessible-surface-area-sasa" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Solvent Accessible Surface Area (SASA)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#contact-tessellation-energy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Contact Tessellation Energy
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#constrain" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Constrain
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#polymer-depletion-many-body-interaction" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Polymer Depletion Many-Body Interaction
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tabulated-6d-rigid-body-energy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tabulated 6D Rigid-Body Energy
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tabulated-3d-molecule-atom-energy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tabulated 3D Molecule-Atom Energy
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="energy">Energy<a class="headerlink" href="#energy" title="Permanent link">&para;</a></h1>
+<p>The Hamiltonian is the sum of all energy terms acting on the system.
+In a complete input file, energy terms are defined under <code>system.energy</code>.
+Included force-field fragments may instead use a top-level <code>energy</code> section;
+see <a href="#loading-nonbonded-from-include-files">Loading nonbonded from include files</a>.</p>
+<hr />
+<h2 id="external-pressure-isobaric">External Pressure (Isobaric)<a class="headerlink" href="#external-pressure-isobaric" title="Permanent link">&para;</a></h2>
+<p>The <code>pressure</code> energy term adds an external pressure contribution for the <em>NPT</em> ensemble:</p>
+<div class="arithmatex">\[
+U = PV - (N + 1) k_BT \ln V
+\]</div>
+<p>where <span class="arithmatex">\(P\)</span> is the external pressure, <span class="arithmatex">\(V\)</span> is the volume, <span class="arithmatex">\(k_BT\)</span> is the thermal energy,
+and <span class="arithmatex">\(N\)</span> is the number of independently translatable entities
+(individual atoms for single-atom molecules, one per molecule for multi-atom molecules).</p>
+<h3 id="yaml-configuration">YAML configuration<a class="headerlink" href="#yaml-configuration" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><span class="nt">system</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">energy</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">pressure</span><span class="p">:</span><span class="w"> </span><span class="kt">!atm</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1.0</span>
+</code></pre></div>
+<p>Supported pressure units (YAML tags):</p>
+<table>
+<thead>
+<tr>
+<th>Tag</th>
+<th>Unit</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>!atm</code></td>
+<td>atmospheres</td>
+</tr>
+<tr>
+<td><code>!bar</code></td>
+<td>bar</td>
+</tr>
+<tr>
+<td><code>!Pa</code></td>
+<td>Pascal</td>
+</tr>
+<tr>
+<td><code>!kT</code></td>
+<td><span class="arithmatex">\(k_BT/\text{Å}^3\)</span></td>
+</tr>
+<tr>
+<td><code>!mM</code></td>
+<td>millimolar (ideal gas)</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="nonbonded-interactions">Nonbonded Interactions<a class="headerlink" href="#nonbonded-interactions" title="Permanent link">&para;</a></h2>
+<p>The <code>nonbonded</code> energy term handles pairwise particle interactions using a matrix
+of pair potentials indexed by atom type for O(1) lookup.
+Multiple potentials can be summed for each pair, and interactions for specific atom
+pairs can override the default.</p>
+<h3 id="yaml-configuration_1">YAML configuration<a class="headerlink" href="#yaml-configuration_1" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><span class="nt">system</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">energy</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">nonbonded</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">default</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!LennardJones</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">mixing</span><span class="p">:</span><span class="w"> </span><span class="nv">LorentzBerthelot</span><span class="p p-Indicator">}</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!Coulomb</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">cutoff</span><span class="p">:</span><span class="w"> </span><span class="nv">12.0</span><span class="p p-Indicator">}</span>
+<span class="w">      </span><span class="nt">replace</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">[</span><span class="nv">Na</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">Cl</span><span class="p p-Indicator">]:</span>
+<span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!LennardJones</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">σ</span><span class="p">:</span><span class="w"> </span><span class="nv">3.2</span><span class="p p-Indicator">,</span><span class="nt"> ε</span><span class="p">:</span><span class="w"> </span><span class="nv">1.5</span><span class="p p-Indicator">}</span>
+<span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!Coulomb</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">cutoff</span><span class="p">:</span><span class="w"> </span><span class="nv">12.0</span><span class="p p-Indicator">}</span>
+</code></pre></div>
+<p>Three sub-sections control how interactions are assigned to atom pairs:</p>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>default</code></td>
+<td>List of pair potentials applied to all atom pairs</td>
+</tr>
+<tr>
+<td><code>replace: [a, b]: [...]</code></td>
+<td>Completely replaces <code>default</code> for that pair</td>
+</tr>
+<tr>
+<td><code>append: [a, b]: [...]</code></td>
+<td>Merges with <code>default</code> by interaction type</td>
+</tr>
+</tbody>
+</table>
+<p><code>replace</code> pairs get only what is listed — no default inheritance.</p>
+<p><code>append</code> pairs inherit <code>default</code>, but if both define the same interaction type
+(e.g. AshbaughHatch), the append entry replaces that type; other default types
+(e.g. Coulomb) are kept.</p>
+<p>A pair may not appear in both <code>replace</code> and <code>append</code>.</p>
+<h3 id="loading-nonbonded-from-include-files">Loading nonbonded from include files<a class="headerlink" href="#loading-nonbonded-from-include-files" title="Permanent link">&para;</a></h3>
+<p>Nonbonded definitions can be provided in an included force field file.
+The top-level <code>include</code> list is scanned for files with an <code>energy</code> section,
+and any <code>nonbonded</code> entries are merged into the input.
+<code>replace</code>/<code>append</code> entries in the input take precedence over includes.
+<code>default</code> lists are concatenated; duplicate types from includes are skipped with a warning.</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># assets/forcefield.yaml</span>
+<span class="nt">energy</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">nonbonded</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">default</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!AshbaughHatch</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">mixing</span><span class="p">:</span><span class="w"> </span><span class="nv">arithmetic</span><span class="p p-Indicator">,</span><span class="nt"> cutoff</span><span class="p">:</span><span class="w"> </span><span class="nv">20.0</span><span class="p p-Indicator">}</span>
+<span class="w">    </span><span class="nt">replace</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">[</span><span class="nv">A</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">A</span><span class="p p-Indicator">]:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!KimHummer</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">sigma</span><span class="p">:</span><span class="w"> </span><span class="nv">5.0</span><span class="p p-Indicator">,</span><span class="nt"> epsilon</span><span class="p">:</span><span class="w"> </span><span class="nv">-0.18</span><span class="p p-Indicator">}</span>
+
+<span class="c1"># input.yaml — gets both AshbaughHatch (from include) and Coulomb as defaults</span>
+<span class="nt">include</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">assets/forcefield.yaml</span><span class="p p-Indicator">]</span>
+<span class="nt">system</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">energy</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">nonbonded</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">default</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!Coulomb</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">cutoff</span><span class="p">:</span><span class="w"> </span><span class="nv">40.0</span><span class="p p-Indicator">}</span>
+<span class="w">    </span><span class="nt">spline</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">cutoff</span><span class="p">:</span><span class="w"> </span><span class="nv">40.0</span><span class="p p-Indicator">}</span>
+</code></pre></div>
+<h3 id="group-to-group-cutoff">Group-to-group cutoff<a class="headerlink" href="#group-to-group-cutoff" title="Permanent link">&para;</a></h3>
+<p>For molecular systems, distant group (molecule) pairs can be skipped using
+bounding-sphere culling — a group pair is ignored when its center-of-mass
+separation exceeds <code>cutoff + R_i + R_j</code>, where <code>R_i</code>/<code>R_j</code> are the groups'
+bounding radii (max distance from the mass center to any member particle).
+This accelerates the energy without changing it, and — unlike
+<a href="#spline-tabulation">spline tabulation</a> — leaves the pair potentials exact
+(no tabulation, no energy shift).</p>
+<p>Add <code>cutoff</code> and <code>bounding_spheres</code> alongside <code>nonbonded</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="nt">system</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">energy</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">cutoff</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">50</span><span class="w">              </span><span class="c1"># group-to-group cutoff (Å)</span>
+<span class="w">    </span><span class="nt">bounding_spheres</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">    </span><span class="nt">nonbonded</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">default</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!Fanourgakis</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">cutoff</span><span class="p">:</span><span class="w"> </span><span class="nv">50</span><span class="p p-Indicator">}</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!AshbaughHatch</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">mixing</span><span class="p">:</span><span class="w"> </span><span class="nv">arithmetic</span><span class="p p-Indicator">,</span><span class="nt"> cutoff</span><span class="p">:</span><span class="w"> </span><span class="nv">20.0</span><span class="p p-Indicator">}</span>
+</code></pre></div>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Required</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>cutoff</code></td>
+<td>no</td>
+<td>none</td>
+<td>Group-to-group cutoff (Å); no culling if unset</td>
+</tr>
+<tr>
+<td><code>bounding_spheres</code></td>
+<td>no</td>
+<td><code>true</code></td>
+<td>Enable bounding-sphere culling (needs <code>cutoff</code>)</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>Correctness: <code>cutoff</code> must be ≥ the longest per-pair potential range
+(here the 50 Å electrostatics), since a culled group pair skips <em>all</em> of its
+atom–atom interactions. This is checked at startup: a shorter cutoff, or any
+unbounded potential (e.g. Lennard-Jones or Coulomb without a cutoff), is
+rejected with an error rather than silently dropping interactions.</p>
+<p>Culling needs a center of mass, so it only applies to molecules with
+<code>has_com: true</code>, and is skipped on non-orthorhombic cells (where the
+minimum-image distance between centers is unavailable) to keep energies exact.</p>
+<p>These keys apply only when no <code>spline</code> section is present. A spline carries
+its own <code>cutoff</code>/<code>bounding_spheres</code>, and these are ignored in that case.</p>
+</blockquote>
+<h3 id="short-range-potentials">Short-range potentials<a class="headerlink" href="#short-range-potentials" title="Permanent link">&para;</a></h3>
+<p>Each potential is specified as a YAML tag. Parameters can be given directly
+or generated from atom properties (<code>sigma</code>, <code>epsilon</code>) via a combination rule.</p>
+<table>
+<thead>
+<tr>
+<th>Tag</th>
+<th>Aliases</th>
+<th>Parameters (direct)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>!LennardJones</code></td>
+<td></td>
+<td><code>sigma</code>/<code>σ</code>, <code>epsilon</code>/<code>eps</code>/<code>ε</code></td>
+</tr>
+<tr>
+<td><code>!WeeksChandlerAndersen</code></td>
+<td><code>!WCA</code></td>
+<td><code>sigma</code>/<code>σ</code>, <code>epsilon</code>/<code>eps</code>/<code>ε</code></td>
+</tr>
+<tr>
+<td><code>!HardSphere</code></td>
+<td></td>
+<td>(mixing only)</td>
+</tr>
+<tr>
+<td><code>!KimHummer</code></td>
+<td><code>!KH</code></td>
+<td><code>sigma</code>/<code>σ</code>, <code>epsilon</code>/<code>eps</code>/<code>ε</code></td>
+</tr>
+<tr>
+<td><code>!AshbaughHatch</code></td>
+<td><code>!AH</code></td>
+<td>(mixing only, requires <code>cutoff</code>); or <code>wca: true</code> for purely repulsive</td>
+</tr>
+<tr>
+<td><code>!CustomPotential</code></td>
+<td></td>
+<td><code>function</code>, <code>cutoff</code>, <code>constants</code></td>
+</tr>
+</tbody>
+</table>
+<p>When using a combination rule, specify <code>mixing</code> instead of explicit parameters:</p>
+<div class="highlight"><pre><span></span><code><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!LennardJones</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">mixing</span><span class="p">:</span><span class="w"> </span><span class="nv">LorentzBerthelot</span><span class="p p-Indicator">}</span>
+<span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!AshbaughHatch</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">mixing</span><span class="p">:</span><span class="w"> </span><span class="nv">arithmetic</span><span class="p p-Indicator">,</span><span class="nt"> cutoff</span><span class="p">:</span><span class="w"> </span><span class="nv">20.0</span><span class="p p-Indicator">}</span>
+</code></pre></div>
+<h4 id="ashbaugh-hatch-wca-mode">Ashbaugh-Hatch WCA mode<a class="headerlink" href="#ashbaugh-hatch-wca-mode" title="Permanent link">&para;</a></h4>
+<p>Setting <code>wca: true</code> on <code>!AshbaughHatch</code> makes the potential purely repulsive
+(Weeks-Chandler-Andersen) by setting λ=1 and cutoff=σ·2^(1/6),
+ignoring any explicit <code>lambda</code> or <code>cutoff</code> values:</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># Purely repulsive pair via wca flag</span>
+<span class="p p-Indicator">[</span><span class="nv">ARG</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">ALA</span><span class="p p-Indicator">]:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!AshbaughHatch</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">epsilon</span><span class="p">:</span><span class="w"> </span><span class="nv">0.8368</span><span class="p p-Indicator">,</span><span class="nt"> sigma</span><span class="p">:</span><span class="w"> </span><span class="nv">5.62</span><span class="p p-Indicator">,</span><span class="nt"> wca</span><span class="p">:</span><span class="w"> </span><span class="nv">true</span><span class="p p-Indicator">}</span>
+</code></pre></div>
+<blockquote>
+<p>Note: <code>lambda: 0</code> does NOT give WCA — it produces a flat step function
+of height ε. Use <code>wca: true</code> or <code>lambda: 1</code> with cutoff=σ·2^(1/6) for
+true repulsive excluded volume.</p>
+</blockquote>
+<p>Available combination rules:</p>
+<table>
+<thead>
+<tr>
+<th>Rule</th>
+<th>Aliases</th>
+<th><span class="arithmatex">\(\varepsilon_{ij}\)</span></th>
+<th><span class="arithmatex">\(\sigma_{ij}\)</span></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>LorentzBerthelot</code></td>
+<td><code>LB</code>, <code>lorentz-berthelot</code></td>
+<td><span class="arithmatex">\(\sqrt{\varepsilon_i \varepsilon_j}\)</span></td>
+<td><span class="arithmatex">\((\sigma_i + \sigma_j)/2\)</span></td>
+</tr>
+<tr>
+<td><code>Arithmetic</code></td>
+<td><code>arithmetic</code></td>
+<td><span class="arithmatex">\((\varepsilon_i + \varepsilon_j)/2\)</span></td>
+<td><span class="arithmatex">\((\sigma_i + \sigma_j)/2\)</span></td>
+</tr>
+<tr>
+<td><code>Geometric</code></td>
+<td><code>geometric</code></td>
+<td><span class="arithmatex">\(\sqrt{\varepsilon_i \varepsilon_j}\)</span></td>
+<td><span class="arithmatex">\(\sqrt{\sigma_i \sigma_j}\)</span></td>
+</tr>
+<tr>
+<td><code>FenderHalsey</code></td>
+<td><code>FH</code>, <code>fender-halsey</code></td>
+<td><span class="arithmatex">\(2\varepsilon_i\varepsilon_j/(\varepsilon_i + \varepsilon_j)\)</span></td>
+<td><span class="arithmatex">\((\sigma_i + \sigma_j)/2\)</span></td>
+</tr>
+</tbody>
+</table>
+<h4 id="custom-pair-potential">Custom pair potential<a class="headerlink" href="#custom-pair-potential" title="Permanent link">&para;</a></h4>
+<p><code>!CustomPotential</code> lets you define any pair potential as a mathematical expression in <code>r</code> (the pair distance in Å).
+Named constants can be passed via <code>constants</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!CustomPotential</span>
+<span class="w">  </span><span class="nt">function</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;4*eps*((sigma/r)^12</span><span class="nv"> </span><span class="s">-</span><span class="nv"> </span><span class="s">(sigma/r)^6)&quot;</span>
+<span class="w">  </span><span class="nt">cutoff</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">14.0</span>
+<span class="w">  </span><span class="nt">constants</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> eps</span><span class="p">:</span><span class="w"> </span><span class="nv">0.5</span><span class="p p-Indicator">,</span><span class="nt"> sigma</span><span class="p">:</span><span class="w"> </span><span class="nv">3.4</span><span class="w"> </span><span class="p p-Indicator">}</span>
+</code></pre></div>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Required</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>function</code></td>
+<td>yes</td>
+<td></td>
+<td>Math expression in <code>r</code> (kJ/mol)</td>
+</tr>
+<tr>
+<td><code>cutoff</code></td>
+<td>yes</td>
+<td></td>
+<td>Cutoff distance (Å)</td>
+</tr>
+<tr>
+<td><code>constants</code></td>
+<td>no</td>
+<td><code>{}</code></td>
+<td>Named constants substituted before parsing</td>
+</tr>
+</tbody>
+</table>
+<h3 id="medium">Medium<a class="headerlink" href="#medium" title="Permanent link">&para;</a></h3>
+<p>The <code>medium</code> section (under <code>system</code>) defines the implicit solvent environment.
+Electrostatic potentials read permittivity, temperature, and optional salt from here.</p>
+<div class="highlight"><pre><span></span><code><span class="nt">system</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">medium</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">permittivity</span><span class="p">:</span><span class="w"> </span><span class="kt">!Water</span>
+<span class="w">    </span><span class="nt">temperature</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">298.15</span>
+<span class="w">    </span><span class="nt">salt</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="kt">!NaCl,</span><span class="w"> </span><span class="nv">0.005</span><span class="p p-Indicator">]</span><span class="w">  </span><span class="c1"># optional: [salt type, molarity in mol/l]</span>
+</code></pre></div>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>permittivity</code></td>
+<td>yes</td>
+<td>Dielectric constant model (see table below)</td>
+</tr>
+<tr>
+<td><code>temperature</code></td>
+<td>yes</td>
+<td>Temperature (K)</td>
+</tr>
+<tr>
+<td><code>salt</code></td>
+<td>no</td>
+<td>Salt type and molarity as <code>[type, mol/l]</code></td>
+</tr>
+</tbody>
+</table>
+<h4 id="dielectric-constant-models">Dielectric constant models<a class="headerlink" href="#dielectric-constant-models" title="Permanent link">&para;</a></h4>
+<table>
+<thead>
+<tr>
+<th>Tag</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>!Vacuum</code></td>
+<td>Free space, <span class="arithmatex">\(\varepsilon_r = 1\)</span></td>
+</tr>
+<tr>
+<td><code>!Water</code></td>
+<td>Temperature-dependent water (empirical NR model)</td>
+</tr>
+<tr>
+<td><code>!Ethanol</code></td>
+<td>Temperature-dependent ethanol (empirical NR model)</td>
+</tr>
+<tr>
+<td><code>!Methanol</code></td>
+<td>Temperature-dependent methanol (empirical NR model)</td>
+</tr>
+<tr>
+<td><code>!Metal</code></td>
+<td>Perfect conductor, <span class="arithmatex">\(\varepsilon_r = \infty\)</span></td>
+</tr>
+<tr>
+<td><code>!Fixed</code></td>
+<td>Custom constant, e.g. <code>!Fixed 80.0</code></td>
+</tr>
+</tbody>
+</table>
+<h4 id="salt-types">Salt types<a class="headerlink" href="#salt-types" title="Permanent link">&para;</a></h4>
+<table>
+<thead>
+<tr>
+<th>Tag</th>
+<th>Formula</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>!NaCl</code></td>
+<td>NaCl (1:1 electrolyte)</td>
+</tr>
+<tr>
+<td><code>!CaCl₂</code></td>
+<td>CaCl₂</td>
+</tr>
+<tr>
+<td><code>!CaSO₄</code></td>
+<td>CaSO₄</td>
+</tr>
+<tr>
+<td><code>!Na₂SO₄</code></td>
+<td>Na₂SO₄</td>
+</tr>
+<tr>
+<td><code>!KAl(SO₄)₂</code></td>
+<td>KAl(SO₄)₂</td>
+</tr>
+<tr>
+<td><code>!LaCl₃</code></td>
+<td>LaCl₃</td>
+</tr>
+<tr>
+<td><code>!Custom</code></td>
+<td>Custom ion valencies, e.g. <code>!Custom [2, -1]</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="electrostatic-potentials">Electrostatic potentials<a class="headerlink" href="#electrostatic-potentials" title="Permanent link">&para;</a></h3>
+<p>Electrostatic potentials combine atom charges with a coulombic scheme.</p>
+<table>
+<thead>
+<tr>
+<th>Aliases</th>
+<th>Parameters</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>!Coulomb</code></td>
+<td><code>cutoff</code></td>
+</tr>
+<tr>
+<td><code>!Ewald</code></td>
+<td><code>alpha</code>, <code>cutoff</code></td>
+</tr>
+<tr>
+<td><code>!ReactionField</code></td>
+<td><code>epsr_in</code>, <code>epsr_out</code>, <code>cutoff</code>, <code>shift</code></td>
+</tr>
+<tr>
+<td><code>!Fanourgakis</code></td>
+<td><code>cutoff</code></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="ewald-summation">Ewald Summation<a class="headerlink" href="#ewald-summation" title="Permanent link">&para;</a></h2>
+<p>The Ewald method splits long-range electrostatic (or Yukawa) interactions into
+a short-range real-space sum and a long-range reciprocal-space sum,
+plus a self-energy correction:</p>
+<div class="arithmatex">\[U = U_\text{real} + U_\text{recip} + U_\text{self} + U_\text{bg}\]</div>
+<p>The reciprocal-space contribution is</p>
+<div class="arithmatex">\[U_\text{recip} = \frac{2\pi}{V} \sum_{\mathbf{k} \neq 0}
+  \frac{\exp\bigl(-(k^2 + \kappa^2)/4\alpha^2\bigr)}{k^2 + \kappa^2}
+  \, |S(\mathbf{k})|^2\]</div>
+<p>where <span class="arithmatex">\(S(\mathbf{k}) = \sum_j q_j e^{i \mathbf{k} \cdot \mathbf{r}_j}\)</span> is the
+structure factor, <span class="arithmatex">\(\alpha\)</span> is the Ewald splitting parameter, and <span class="arithmatex">\(\kappa\)</span> is the
+Debye screening parameter (<span class="arithmatex">\(\kappa = 0\)</span> for unscreened Coulomb).
+For screened electrostatics (<span class="arithmatex">\(\kappa &gt; 0\)</span>), the method generalises to Yukawa Ewald summation
+(<a href="https://doi.org/10.1063/1.1326477">Salin &amp; Caillol, 2000</a>).</p>
+<h3 id="self-energy-and-electroneutrality-corrections">Self-energy and electroneutrality corrections<a class="headerlink" href="#self-energy-and-electroneutrality-corrections" title="Permanent link">&para;</a></h3>
+<p>The self-energy correction removes spurious self-interaction from the real-space sum.
+For non-neutral systems (<span class="arithmatex">\(Q = \sum_j q_j \neq 0\)</span>), additional corrections are needed
+because the <span class="arithmatex">\(\mathbf{k}=0\)</span> term is excluded from the reciprocal sum.
+The treatment differs between Coulomb and Yukawa:</p>
+<p>Coulomb (<span class="arithmatex">\(\kappa = 0\)</span>): The divergent <span class="arithmatex">\(\mathbf{k}=0\)</span> term is cancelled by a
+uniform neutralizing background charge, leaving a finite correction
+(<a href="https://doi.org/10.1016/B978-0-12-267351-1.X5000-7">Frenkel &amp; Smit</a>, Eq. 12.1.25):</p>
+<div class="arithmatex">\[U_\text{self} = -\frac{\alpha}{\sqrt{\pi}} \sum_j q_j^2, \quad
+  U_\text{bg} = -\frac{\pi Q^2}{2V\alpha^2}\]</div>
+<p>Yukawa (<span class="arithmatex">\(\kappa &gt; 0\)</span>): The <span class="arithmatex">\(\mathbf{k}=0\)</span> term is finite due to screening
+and is included explicitly instead of a neutralizing background:</p>
+<div class="arithmatex">\[U_\text{self} = \left(-\frac{\alpha}{\sqrt{\pi}} e^{-\kappa^2/4\alpha^2}
+  + \frac{\kappa}{2}\operatorname{erfc}\!\frac{\kappa}{2\alpha}\right) \sum_j q_j^2, \quad
+  U_{k=0} = \frac{2\pi}{V} \frac{e^{-\kappa^2/4\alpha^2}}{\kappa^2} Q^2\]</div>
+<p>Both <span class="arithmatex">\(U_\text{bg}\)</span> and <span class="arithmatex">\(U_{k=0}\)</span> vanish for electroneutral systems.</p>
+<h3 id="how-accuracy-controls-parameters">How accuracy controls parameters<a class="headerlink" href="#how-accuracy-controls-parameters" title="Permanent link">&para;</a></h3>
+<p>The <code>accuracy</code> parameter <span class="arithmatex">\(\varepsilon\)</span> (typically <span class="arithmatex">\(10^{-5}\)</span>) controls the
+Ewald splitting parameter and the number of k-vectors via the
+Kolafa–Perram error estimates:</p>
+<div class="arithmatex">\[\alpha = \frac{\sqrt{-\ln \varepsilon}}{r_c}, \quad
+  n_\text{max} = \left\lceil \frac{\alpha \, L_\text{max}}{\pi}
+  \sqrt{-\ln \varepsilon} \right\rceil\]</div>
+<p>where <span class="arithmatex">\(r_c\)</span> is the real-space cutoff and <span class="arithmatex">\(L_\text{max}\)</span> is the largest box side length.
+Higher accuracy (smaller <span class="arithmatex">\(\varepsilon\)</span>) increases both <span class="arithmatex">\(\alpha\)</span> and the number of
+k-vectors. For Yukawa (<span class="arithmatex">\(\kappa &gt; 0\)</span>), the tighter Pålsson–Tornberg bound
+(<a href="https://arxiv.org/abs/1911.04875">arXiv:1911.04875</a>) is used instead,
+yielding a smaller <span class="arithmatex">\(\alpha\)</span> and fewer k-vectors than the Coulomb estimate.
+When <span class="arithmatex">\(2\kappa r_c \geq -\ln\varepsilon\)</span>, the screening is strong enough that
+the real-space sum alone achieves the target accuracy and the reciprocal sum
+is skipped entirely.</p>
+<h3 id="yaml-configuration_2">YAML configuration<a class="headerlink" href="#yaml-configuration_2" title="Permanent link">&para;</a></h3>
+<p>The <code>ewald</code> section automatically sets up both the real-space pair potential
+(injected into the nonbonded defaults before splining) and the reciprocal-space
+energy term. No manual <code>!Ewald</code> entry is needed in the nonbonded list.</p>
+<div class="highlight"><pre><span></span><code><span class="nt">system</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">energy</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">nonbonded</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">default</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!LennardJones</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">mixing</span><span class="p">:</span><span class="w"> </span><span class="nv">LB</span><span class="p p-Indicator">}</span>
+<span class="w">    </span><span class="nt">spline</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">cutoff</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">14.0</span>
+<span class="w">    </span><span class="nt">ewald</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">cutoff</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">9.0</span>
+<span class="w">      </span><span class="nt">accuracy</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1e-5</span>
+<span class="w">      </span><span class="nt">policy</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">PBC</span>
+</code></pre></div>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Required</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>cutoff</code></td>
+<td>yes</td>
+<td></td>
+<td>Real-space cutoff (Å)</td>
+</tr>
+<tr>
+<td><code>accuracy</code></td>
+<td>no</td>
+<td><code>1e-5</code></td>
+<td>Target relative accuracy <span class="arithmatex">\(\varepsilon\)</span></td>
+</tr>
+<tr>
+<td><code>policy</code></td>
+<td>no</td>
+<td><code>PBC</code></td>
+<td><code>PBC</code> or <code>IPBC</code> (<a href="https://doi.org/10.1080/00268976.2018.1516231">Stenqvist &amp; Lund, 2018</a>)</td>
+</tr>
+<tr>
+<td><code>optimize</code></td>
+<td>no</td>
+<td><code>false</code></td>
+<td>Jointly optimize <span class="arithmatex">\(\alpha\)</span> and <span class="arithmatex">\(n_\text{max}\)</span> to minimize k-vectors (Yukawa only)</td>
+</tr>
+</tbody>
+</table>
+<p>If the medium defines a salt concentration, the corresponding Debye screening
+parameter <span class="arithmatex">\(\kappa\)</span> is automatically propagated to both the real-space and
+reciprocal-space Ewald terms (Yukawa Ewald summation).</p>
+<h3 id="mc-move-optimisation">MC move optimisation<a class="headerlink" href="#mc-move-optimisation" title="Permanent link">&para;</a></h3>
+<p>For single-group Monte Carlo moves, the structure factors are updated
+incrementally in <span class="arithmatex">\(O(M \cdot N_k)\)</span> time (where <span class="arithmatex">\(M\)</span> is the number of moved particles),
+rather than the <span class="arithmatex">\(O(N \cdot N_k)\)</span> full rebuild required for volume changes or
+multi-group moves.</p>
+<h3 id="bonded-exclusions">Bonded exclusions<a class="headerlink" href="#bonded-exclusions" title="Permanent link">&para;</a></h3>
+<p>Particles connected by bonds within the same molecule can have their nonbonded
+interactions excluded. This is configured per molecule in the topology via the
+<code>exclusions</code> key (list of intra-molecular index pairs).</p>
+<h3 id="spline-tabulation">Spline tabulation<a class="headerlink" href="#spline-tabulation" title="Permanent link">&para;</a></h3>
+<p>For performance, all nonbonded potentials can be tabulated using cubic Hermite splines.
+Add a <code>spline</code> section alongside <code>nonbonded</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="nt">system</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">energy</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">nonbonded</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">default</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!WCA</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">mixing</span><span class="p">:</span><span class="w"> </span><span class="nv">LB</span><span class="p p-Indicator">}</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!Coulomb</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">cutoff</span><span class="p">:</span><span class="w"> </span><span class="nv">200</span><span class="p p-Indicator">}</span>
+<span class="w">    </span><span class="nt">spline</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">cutoff</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">200.0</span>
+<span class="w">      </span><span class="nt">n_points</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2000</span>
+<span class="w">      </span><span class="nt">grid_type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">PowerLaw2</span>
+</code></pre></div>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Required</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>cutoff</code></td>
+<td>yes</td>
+<td></td>
+<td>Cutoff distance (Å)</td>
+</tr>
+<tr>
+<td><code>n_points</code></td>
+<td>no</td>
+<td><code>2000</code></td>
+<td>Number of spline grid points</td>
+</tr>
+<tr>
+<td><code>grid_type</code></td>
+<td>no</td>
+<td><code>PowerLaw2</code></td>
+<td>Grid spacing strategy (see below)</td>
+</tr>
+<tr>
+<td><code>shift_energy</code></td>
+<td>no</td>
+<td><code>true</code></td>
+<td>Shift energy to zero at cutoff</td>
+</tr>
+<tr>
+<td><code>shift_force</code></td>
+<td>no</td>
+<td><code>false</code></td>
+<td>Shift force to zero at cutoff</td>
+</tr>
+<tr>
+<td><code>cell_list</code></td>
+<td>no</td>
+<td><code>true</code></td>
+<td>Use cell list for spatial acceleration</td>
+</tr>
+<tr>
+<td><code>bounding_spheres</code></td>
+<td>no</td>
+<td><code>true</code></td>
+<td>Use bounding-sphere culling of distant group pairs</td>
+</tr>
+</tbody>
+</table>
+<p>Available grid types:</p>
+<table>
+<thead>
+<tr>
+<th>Grid type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>UniformRsq</code></td>
+<td>Uniform spacing in <span class="arithmatex">\(r^2\)</span> — sparse at short range</td>
+</tr>
+<tr>
+<td><code>UniformR</code></td>
+<td>Uniform spacing in <span class="arithmatex">\(r\)</span></td>
+</tr>
+<tr>
+<td><code>PowerLaw2</code></td>
+<td>Power-law with <span class="arithmatex">\(p=2\)</span> — dense at short range (default)</td>
+</tr>
+<tr>
+<td><code>PowerLaw(p)</code></td>
+<td>Power-law with custom exponent <span class="arithmatex">\(p\)</span></td>
+</tr>
+<tr>
+<td><code>InverseRsq</code></td>
+<td>Uniform in <span class="arithmatex">\(1/r^2\)</span> — dense at short range</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="excluded-pair-coulomb-correction">Excluded-Pair Coulomb Correction<a class="headerlink" href="#excluded-pair-coulomb-correction" title="Permanent link">&para;</a></h2>
+<p>Excluded pairs (from <code>excluded_neighbours</code> or <code>exclusions</code>) skip all nonbonded
+interactions, including Coulomb. For charge titration or alchemical MC moves
+where charges change, the Coulomb contribution between excluded neighbors
+must still be evaluated.</p>
+<p>Setting <code>keep_excluded_coulomb: true</code> on a molecule adds a correction term that
+evaluates Coulomb for all excluded pairs in that molecule:</p>
+<div class="arithmatex">\[E_\text{correction} = \sum_{\text{excluded } (i,j)} U_\text{Coulomb}(r_{ij})\]</div>
+<p>The Coulomb scheme and parameters are taken from the nonbonded configuration.
+The term is automatically added to the Hamiltonian when at least one molecule
+opts in and a Coulomb interaction is configured.</p>
+<p>For <code>Rigid</code> and <code>RigidAlchemical</code> molecules, all intra-molecular pairs are
+excluded (distances are constant). The correction adds back the
+charge-dependent Coulomb part that varies under alchemical moves.</p>
+<h3 id="yaml-configuration_3">YAML configuration<a class="headerlink" href="#yaml-configuration_3" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><span class="nt">molecules</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">peptide</span>
+<span class="w">    </span><span class="nt">atoms</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">A</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">B</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">C</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">excluded_neighbours</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
+<span class="w">    </span><span class="nt">keep_excluded_coulomb</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+</code></pre></div>
+<p>No additional <code>energy:</code> section is needed — the term is created automatically.</p>
+<hr />
+<h2 id="bonded-interactions">Bonded Interactions<a class="headerlink" href="#bonded-interactions" title="Permanent link">&para;</a></h2>
+<p>Bonded energy terms are automatically added to the Hamiltonian based on the
+bonds, torsions, and dihedrals defined in the <a href="../topology/#molecules">topology</a>.
+No explicit <code>energy:</code> configuration is needed.</p>
+<ul>
+<li>Intramolecular — bonds, torsions, and dihedrals within each molecule,
+  using local atom indices defined in the molecule type.
+  Always active.</li>
+<li>Intermolecular — bonds, torsions, and dihedrals between atoms in different
+  molecules, using global atom indices defined in
+  <a href="../topology/#intermolecular-bonded-interactions"><code>system.intermolecular</code></a>.
+  Only added when at least one intermolecular interaction is defined.</li>
+</ul>
+<h3 id="supported-potentials">Supported potentials<a class="headerlink" href="#supported-potentials" title="Permanent link">&para;</a></h3>
+<p>Bonds (two-body, function of distance <span class="arithmatex">\(r\)</span>):</p>
+<table>
+<thead>
+<tr>
+<th>Kind</th>
+<th>Energy</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>!Harmonic</code></td>
+<td><span class="arithmatex">\(\frac{1}{2} k (r - r_\text{eq})^2\)</span></td>
+</tr>
+<tr>
+<td><code>!FENE</code></td>
+<td><span class="arithmatex">\(-\tfrac{1}{2}k R_0^2 \ln\bigl(1 - (r/R_0)^2\bigr)\)</span></td>
+</tr>
+<tr>
+<td><code>!Morse</code></td>
+<td><span class="arithmatex">\(D_e\bigl(1 - e^{-a(r - r_e)}\bigr)^2\)</span></td>
+</tr>
+<tr>
+<td><code>!UreyBradley</code></td>
+<td><span class="arithmatex">\(\frac{1}{2} k (r - r_\text{eq})^2\)</span></td>
+</tr>
+</tbody>
+</table>
+<p>Torsions (three-body, function of angle <span class="arithmatex">\(\theta\)</span> in degrees):</p>
+<table>
+<thead>
+<tr>
+<th>Kind</th>
+<th>Energy</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>!Harmonic</code></td>
+<td><span class="arithmatex">\(\frac{1}{2} k (\theta - \theta_\text{eq})^2\)</span></td>
+</tr>
+<tr>
+<td><code>!Cosine</code></td>
+<td><span class="arithmatex">\(\frac{1}{2} k (\cos\theta - \cos\theta_\text{eq})^2\)</span></td>
+</tr>
+</tbody>
+</table>
+<p>Dihedrals (four-body, function of dihedral angle <span class="arithmatex">\(\phi\)</span> in degrees):</p>
+<table>
+<thead>
+<tr>
+<th>Kind</th>
+<th>Energy</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>!ProperHarmonic</code></td>
+<td><span class="arithmatex">\(\frac{1}{2} k (\phi - \phi_\text{eq})^2\)</span></td>
+</tr>
+<tr>
+<td><code>!ProperPeriodic</code></td>
+<td><span class="arithmatex">\(k \bigl[1 + \cos(n\phi - \phi_0)\bigr]\)</span></td>
+</tr>
+<tr>
+<td><code>!ImproperHarmonic</code></td>
+<td><span class="arithmatex">\(\frac{1}{2} k (\phi - \phi_\text{eq})^2\)</span></td>
+</tr>
+<tr>
+<td><code>!ImproperPeriodic</code></td>
+<td><span class="arithmatex">\(k \bigl[1 + \cos(n\phi - \phi_0)\bigr]\)</span></td>
+</tr>
+</tbody>
+</table>
+<p>See <a href="../topology/#bonds">Topology — Bonds, Torsions, Dihedrals</a> for YAML syntax, parameters, and units.</p>
+<hr />
+<h2 id="custom-external-potential">Custom External Potential<a class="headerlink" href="#custom-external-potential" title="Permanent link">&para;</a></h2>
+<p>The <code>customexternal</code> energy term applies a user-defined mathematical expression
+as an external potential to selected atoms or molecular mass centers.
+The energy is evaluated per particle (or per mass center) and summed over all matching groups.</p>
+<h3 id="variables">Variables<a class="headerlink" href="#variables" title="Permanent link">&para;</a></h3>
+<p>The expression can use any subset of:</p>
+<table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>q</code></td>
+<td>particle charge</td>
+</tr>
+<tr>
+<td><code>x</code></td>
+<td>x-coordinate (Å)</td>
+</tr>
+<tr>
+<td><code>y</code></td>
+<td>y-coordinate (Å)</td>
+</tr>
+<tr>
+<td><code>z</code></td>
+<td>z-coordinate (Å)</td>
+</tr>
+</tbody>
+</table>
+<p>Standard math operators (<code>+</code>, <code>-</code>, <code>*</code>, <code>/</code>, <code>^</code>) and functions
+(<code>sin</code>, <code>cos</code>, <code>exp</code>, <code>ln</code>, <code>sqrt</code>, <code>abs</code>, <code>signum</code>, <code>floor</code>, etc.) are supported
+via <a href="https://docs.rs/exmex">exmex</a>. Built-in constants <code>PI</code>, <code>TAU</code> (=2π), and <code>π</code> are available.</p>
+<p>Python-style conditionals are supported:
+<div class="highlight"><pre><span></span><code>&quot;1.0 if x &gt; 0 else -1.0&quot;
+&quot;(3 if x &lt; 0.5 else 5) * sin(TAU * y)&quot;
+</code></pre></div></p>
+<p>Named constants use word-boundary matching, so single-letter names like <code>c</code> won't
+collide with function names like <code>cos</code>.</p>
+<h3 id="preset-potentials">Preset potentials<a class="headerlink" href="#preset-potentials" title="Permanent link">&para;</a></h3>
+<p>The <code>function</code> field can also name a built-in potential, bypassing the expression
+parser for better performance:</p>
+<table>
+<thead>
+<tr>
+<th>Preset</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>staircase-sincos</code></td>
+<td>Piecewise 2D staircase × sinusoidal surface (Frenkel &amp; Smit)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="yaml-configuration_4">YAML configuration<a class="headerlink" href="#yaml-configuration_4" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><span class="nt">system</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">energy</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">customexternal</span><span class="p">:</span>
+<span class="w">      </span><span class="c1"># Expression with named constants</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">selection</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;molecule</span><span class="nv"> </span><span class="s">water&quot;</span>
+<span class="w">        </span><span class="nt">com</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">        </span><span class="nt">constants</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> radius</span><span class="p">:</span><span class="w"> </span><span class="nv">15</span><span class="p p-Indicator">,</span><span class="nt"> k</span><span class="p">:</span><span class="w"> </span><span class="nv">100</span><span class="w"> </span><span class="p p-Indicator">}</span>
+<span class="w">        </span><span class="nt">function</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;0.5</span><span class="nv"> </span><span class="s">*</span><span class="nv"> </span><span class="s">k</span><span class="nv"> </span><span class="s">*</span><span class="nv"> </span><span class="s">(x^2</span><span class="nv"> </span><span class="s">+</span><span class="nv"> </span><span class="s">y^2</span><span class="nv"> </span><span class="s">+</span><span class="nv"> </span><span class="s">z^2</span><span class="nv"> </span><span class="s">-</span><span class="nv"> </span><span class="s">radius^2)&quot;</span>
+<span class="w">      </span><span class="c1"># Expression with conditional</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">selection</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;all&quot;</span>
+<span class="w">        </span><span class="nt">function</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;10.0</span><span class="nv"> </span><span class="s">if</span><span class="nv"> </span><span class="s">x</span><span class="nv"> </span><span class="s">&gt;</span><span class="nv"> </span><span class="s">0</span><span class="nv"> </span><span class="s">else</span><span class="nv"> </span><span class="s">-5.0&quot;</span>
+<span class="w">      </span><span class="c1"># Built-in preset</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">selection</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;all&quot;</span>
+<span class="w">        </span><span class="nt">function</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">staircase-sincos</span>
+</code></pre></div>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Required</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>selection</code></td>
+<td>yes</td>
+<td></td>
+<td>Selection expression for atoms/molecules</td>
+</tr>
+<tr>
+<td><code>function</code></td>
+<td>yes</td>
+<td></td>
+<td>Math expression, conditional, or preset name</td>
+</tr>
+<tr>
+<td><code>com</code></td>
+<td>no</td>
+<td><code>false</code></td>
+<td>Evaluate at molecular mass center</td>
+</tr>
+<tr>
+<td><code>constants</code></td>
+<td>no</td>
+<td><code>{}</code></td>
+<td>Named constants substituted before parsing</td>
+</tr>
+</tbody>
+</table>
+<p>When <code>com</code> is <code>true</code>, the expression is evaluated once per matching group at the mass
+center position, with <code>q</code> set to the net group charge.
+When <code>false</code> (default), the expression is evaluated at each matching atom position.</p>
+<hr />
+<h2 id="custom-pair-potential-com-com">Custom Pair Potential (COM-COM)<a class="headerlink" href="#custom-pair-potential-com-com" title="Permanent link">&para;</a></h2>
+<p>The <code>custompair</code> energy term applies a user-defined potential <code>U(r)</code> between the
+centres of mass of <em>two</em> rigid-body selections. Unlike <code>customexternal</code>, it
+contributes both energy (consumed by Metropolis MC) and forces
+(consumed by Langevin dynamics), distributed to each rigid body's atoms by mass
+fraction so the COM force is exact and the torque about the COM is zero.</p>
+<p>Typical uses: harmonic biasing for umbrella sampling along a separation
+coordinate, constant-force pulling (steered MD), flat-bottom restraints, or any
+custom <code>U(r)</code> between two rigid molecules.</p>
+<h3 id="variables_1">Variables<a class="headerlink" href="#variables_1" title="Permanent link">&para;</a></h3>
+<p>The expression may use any subset of:</p>
+<table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>r</code></td>
+<td>distance between the two COMs (Å), minimum-image</td>
+</tr>
+<tr>
+<td><code>dx</code></td>
+<td>signed x-component of (com1 − com2) under PBC</td>
+</tr>
+<tr>
+<td><code>dy</code></td>
+<td>signed y-component of (com1 − com2) under PBC</td>
+</tr>
+<tr>
+<td><code>dz</code></td>
+<td>signed z-component of (com1 − com2) under PBC</td>
+</tr>
+</tbody>
+</table>
+<p>The same expression syntax as <a href="#custom-external-potential"><code>customexternal</code></a>
+applies (operators, math functions, Python-style conditionals, named constants).</p>
+<h3 id="yaml-configuration_5">YAML configuration<a class="headerlink" href="#yaml-configuration_5" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><span class="nt">system</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">energy</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">custompair</span><span class="p">:</span>
+<span class="w">      </span><span class="c1"># Harmonic restraint at fixed COM-COM distance (umbrella window)</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">selection1</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;molecule</span><span class="nv"> </span><span class="s">protein0&quot;</span>
+<span class="w">        </span><span class="nt">selection2</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;molecule</span><span class="nv"> </span><span class="s">protein1&quot;</span>
+<span class="w">        </span><span class="nt">function</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;0.5</span><span class="nv"> </span><span class="s">*</span><span class="nv"> </span><span class="s">k</span><span class="nv"> </span><span class="s">*</span><span class="nv"> </span><span class="s">(r</span><span class="nv"> </span><span class="s">-</span><span class="nv"> </span><span class="s">r0)^2&quot;</span>
+<span class="w">        </span><span class="nt">constants</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> k</span><span class="p">:</span><span class="w"> </span><span class="nv">100.0</span><span class="p p-Indicator">,</span><span class="nt"> r0</span><span class="p">:</span><span class="w"> </span><span class="nv">30.0</span><span class="w"> </span><span class="p p-Indicator">}</span>
+<span class="w">      </span><span class="c1"># Constant pulling force along the COM-COM axis (steered MD)</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">selection1</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;molecule</span><span class="nv"> </span><span class="s">protein0&quot;</span>
+<span class="w">        </span><span class="nt">selection2</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;molecule</span><span class="nv"> </span><span class="s">protein1&quot;</span>
+<span class="w">        </span><span class="nt">function</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;f0</span><span class="nv"> </span><span class="s">*</span><span class="nv"> </span><span class="s">r&quot;</span>
+<span class="w">        </span><span class="nt">constants</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> f0</span><span class="p">:</span><span class="w"> </span><span class="nv">50.0</span><span class="w"> </span><span class="p p-Indicator">}</span>
+</code></pre></div>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Required</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>selection1</code></td>
+<td>yes</td>
+<td></td>
+<td>Selection that must resolve to one Rigid molecule</td>
+</tr>
+<tr>
+<td><code>selection2</code></td>
+<td>yes</td>
+<td></td>
+<td>Same, distinct from <code>selection1</code></td>
+</tr>
+<tr>
+<td><code>function</code></td>
+<td>yes</td>
+<td></td>
+<td>Math expression in <code>r</code>, <code>dx</code>, <code>dy</code>, <code>dz</code></td>
+</tr>
+<tr>
+<td><code>constants</code></td>
+<td>no</td>
+<td><code>{}</code></td>
+<td>Named constants substituted before parsing</td>
+</tr>
+<tr>
+<td><code>gradient_h</code></td>
+<td>no</td>
+<td><code>1e-5</code></td>
+<td>Step (Å) for central-difference dU/dr in forces</td>
+</tr>
+</tbody>
+</table>
+<h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Both selections must each resolve to exactly one group whose underlying
+  molecule has <code>degrees_of_freedom: Rigid</code>. Selections matching free-ion clouds,
+  partial rigid bodies, or zero/multiple groups are rejected at build time.</li>
+<li>Force on each COM is <code>−(dU/dr)·d̂_ab</code>, where <code>d̂_ab = (com1−com2)/r</code>.
+  <code>dU/dr</code> is computed by central difference on the parsed expression — no
+  analytic derivative required.</li>
+<li>The same YAML block is consumed identically by MC (energy) and LD (forces),
+  so pure-MC, pure-LD, and hybrid runs all see a consistent bias.</li>
+</ul>
+<hr />
+<h2 id="penalty-flat-histogram-bias">Penalty (Flat-Histogram Bias)<a class="headerlink" href="#penalty-flat-histogram-bias" title="Permanent link">&para;</a></h2>
+<p>Applies a static bias potential loaded from a converged <a href="../wang_landau/">Wang-Landau</a>
+checkpoint. The bias energy is <span class="arithmatex">\(\ln g(\text{bin}) \times k_BT\)</span>, which flattens the
+free energy surface along the collective variable(s).</p>
+<p>During biased sampling, analysis averages are incorrect.
+Use <a href="../analysis/#rerun"><code>faunus rerun</code></a> to replay the trajectory:
+when a penalty term is detected, rerun automatically reweights all analyses
+by <span class="arithmatex">\(w = \exp(-\ln g(\text{bin}))\)</span>, recovering the correct ensemble averages.</p>
+<h3 id="yaml-configuration_6">YAML configuration<a class="headerlink" href="#yaml-configuration_6" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><span class="nt">system</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">energy</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">penalty</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">wl_states/histogram.yaml</span>
+<span class="w">      </span><span class="nt">coordinate</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">property</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">atom_position</span>
+<span class="w">        </span><span class="nt">selection</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;atomtype</span><span class="nv"> </span><span class="s">A&quot;</span>
+<span class="w">        </span><span class="nt">dimension</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">x</span>
+<span class="w">        </span><span class="nt">range</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">-2.0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">2.0</span><span class="p p-Indicator">]</span>
+<span class="w">        </span><span class="nt">resolution</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.1</span>
+<span class="w">      </span><span class="nt">coordinate2</span><span class="p">:</span><span class="w">  </span><span class="c1"># optional, for 2D</span>
+<span class="w">        </span><span class="nt">property</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">atom_position</span>
+<span class="w">        </span><span class="nt">selection</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;atomtype</span><span class="nv"> </span><span class="s">A&quot;</span>
+<span class="w">        </span><span class="nt">dimension</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">y</span>
+<span class="w">        </span><span class="nt">range</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">-2.0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">2.0</span><span class="p p-Indicator">]</span>
+<span class="w">        </span><span class="nt">resolution</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.1</span>
+</code></pre></div>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>file</code></td>
+<td>yes</td>
+<td>Path to <code>FlatHistogramState</code> checkpoint (e.g. from Wang-Landau)</td>
+</tr>
+<tr>
+<td><code>coordinate</code></td>
+<td>yes</td>
+<td>Primary collective variable (see <a href="../analysis/">analysis</a>)</td>
+</tr>
+<tr>
+<td><code>coordinate2</code></td>
+<td>no</td>
+<td>Second CV for 2D surfaces</td>
+</tr>
+</tbody>
+</table>
+<p>The penalty is placed at the front of the Hamiltonian so that out-of-range
+CV values return infinite energy, short-circuiting expensive downstream terms.</p>
+<hr />
+<h2 id="solvent-accessible-surface-area-sasa">Solvent Accessible Surface Area (SASA)<a class="headerlink" href="#solvent-accessible-surface-area-sasa" title="Permanent link">&para;</a></h2>
+<p>Computes an implicit solvation energy based on the solvent-accessible surface area
+of each particle, using Voronoi tessellation (via <code>voronota-ltr</code>).
+The energy is summed over all active particles:</p>
+<div class="arithmatex">\[U = \sum_i \gamma_i \, A_i\]</div>
+<p>where <span class="arithmatex">\(\gamma_i\)</span> is the surface energy density (kJ/mol/Å²) and <span class="arithmatex">\(A_i\)</span> is the
+solvent-accessible surface area of particle <span class="arithmatex">\(i\)</span>.
+An isolated particle has maximal SAS area, <span class="arithmatex">\(4\pi (r_i + r_\text{probe})^2\)</span>.
+Neighboring particles reduce the exposed area through mutual occlusion.
+Positive <span class="arithmatex">\(\gamma\)</span> means exposed surface is energetically costly — the particle is
+hydrophobic and burial is favorable.
+Negative <span class="arithmatex">\(\gamma\)</span> means solvent exposure is favorable.</p>
+<p>This differs from the <a href="#contact-tessellation-energy">contact tessellation</a> energy
+which sums over inter-body <em>contact</em> areas rather than per-atom <em>exposed</em> areas.</p>
+<p>Surface energy densities are set per atom type via the <code>hydrophobicity</code> field
+in the <a href="../topology/#atoms">topology</a>.
+The tessellation is updated incrementally: when a single group moves,
+only the moved atoms and their spatial neighbors are re-tessellated.
+This works for both rigid-body and flexible (polymer) moves.
+Periodic boundary conditions are supported for orthorhombic cells.</p>
+<h3 id="yaml-configuration_7">YAML configuration<a class="headerlink" href="#yaml-configuration_7" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><span class="nt">atoms</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="nv">A</span><span class="p p-Indicator">,</span><span class="nt"> sigma</span><span class="p">:</span><span class="w"> </span><span class="nv">3.0</span><span class="p p-Indicator">,</span><span class="nt"> hydrophobicity</span><span class="p">:</span><span class="w"> </span><span class="kt">!Gamma</span><span class="w"> </span><span class="nv">0.9</span><span class="p p-Indicator">}</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="nv">B</span><span class="p p-Indicator">,</span><span class="nt"> sigma</span><span class="p">:</span><span class="w"> </span><span class="nv">4.0</span><span class="p p-Indicator">,</span><span class="nt"> hydrophobicity</span><span class="p">:</span><span class="w"> </span><span class="kt">!Gamma</span><span class="w"> </span><span class="nv">1.5</span><span class="p p-Indicator">}</span>
+
+<span class="nt">system</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">energy</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">sasa</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">probe_radius</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1.4</span>
+</code></pre></div>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Required</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>probe_radius</code></td>
+<td>yes</td>
+<td></td>
+<td>Probe radius (Å) for the tessellation</td>
+</tr>
+<tr>
+<td><code>energy_offset</code></td>
+<td>no</td>
+<td></td>
+<td>Constant energy shift (kJ/mol)</td>
+</tr>
+<tr>
+<td><code>offset_from_first</code></td>
+<td>no</td>
+<td><code>false</code></td>
+<td>Set offset so that the first configuration has zero energy</td>
+</tr>
+</tbody>
+</table>
+<p>Particle radii are taken from <code>sigma / 2</code> of the atom type definition.
+<code>!SurfaceTension</code> is accepted as an alias for <code>!Gamma</code>.</p>
+<hr />
+<h2 id="contact-tessellation-energy">Contact Tessellation Energy<a class="headerlink" href="#contact-tessellation-energy" title="Permanent link">&para;</a></h2>
+<p>Computes the contact energy between rigid bodies using radical (power) tessellation.
+For each pair of nearby rigid bodies, the atoms of both bodies are tessellated together
+and only inter-body contact areas are extracted. The energy is a sum over all
+inter-body contacts:</p>
+<div class="arithmatex">\[U = s \sum_{\text{contacts}} \gamma_{ij} \; A_{ij}\]</div>
+<p>where <span class="arithmatex">\(A_{ij}\)</span> is the radical tessellation contact area between atoms <span class="arithmatex">\(a\)</span> and <span class="arithmatex">\(b\)</span>
+belonging to different rigid bodies, <span class="arithmatex">\(s\)</span> is an optional scaling factor, and the
+combining rule for the surface energy density is:</p>
+<div class="arithmatex">\[\gamma_{ij} = \begin{cases} \operatorname{sign}(\gamma_i) \sqrt{|\gamma_i \, \gamma_j|} &amp; \text{if } \operatorname{sign}(\gamma_i) = \operatorname{sign}(\gamma_j) \\ 0 &amp; \text{otherwise}\end{cases}\]</div>
+<p>Negative <span class="arithmatex">\(\gamma\)</span> gives attractive contacts (favoring inter-body burial);
+positive values give repulsive contacts. Atoms with opposite signs
+(e.g. hydrophobic vs. hydrophilic) contribute zero energy.</p>
+<p>This differs from the <a href="#solvent-accessible-surface-area-sasa">SASA</a> energy where
+<span class="arithmatex">\(\gamma_i\)</span> multiplies the <em>exposed</em> area of each atom directly — here,
+<span class="arithmatex">\(\gamma_{ij}\)</span> multiplies the <em>contact</em> area between atom pairs from different bodies.</p>
+<p>Body pairs beyond bounding-sphere contact range are skipped.
+Only pairs involving the moved body are recomputed each Monte Carlo step,
+giving <span class="arithmatex">\(O(N)\)</span> scaling in the number of bodies. Periodic boundary conditions
+are supported for orthorhombic (cuboid) cells.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>This energy term is currently designed for rigid bodies only — all atoms in
+each molecule move as a unit. Support for flexible molecules and polymers may be
+added in future versions.</p>
+</div>
+<h3 id="yaml-configuration_8">YAML configuration<a class="headerlink" href="#yaml-configuration_8" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><span class="nt">atoms</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="nv">ALA</span><span class="p p-Indicator">,</span><span class="nt"> sigma</span><span class="p">:</span><span class="w"> </span><span class="nv">5.0</span><span class="p p-Indicator">,</span><span class="nt"> hydrophobicity</span><span class="p">:</span><span class="w"> </span><span class="kt">!Gamma</span><span class="w"> </span><span class="nv">-0.5</span><span class="p p-Indicator">}</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="nv">ARG</span><span class="p p-Indicator">,</span><span class="nt"> sigma</span><span class="p">:</span><span class="w"> </span><span class="nv">6.0</span><span class="p p-Indicator">,</span><span class="nt"> hydrophobicity</span><span class="p">:</span><span class="w"> </span><span class="kt">!Gamma</span><span class="w">  </span><span class="nv">0.3</span><span class="p p-Indicator">}</span>
+
+<span class="nt">system</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">energy</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">contact_tessellation</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> probe_radius</span><span class="p">:</span><span class="w"> </span><span class="nv">1.4</span><span class="w"> </span><span class="p p-Indicator">}</span>
+</code></pre></div>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Required</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>probe_radius</code></td>
+<td>yes</td>
+<td></td>
+<td>Probe radius (Å) for the tessellation</td>
+</tr>
+<tr>
+<td><code>scaling</code></td>
+<td>no</td>
+<td><code>1.0</code></td>
+<td>Global multiplicative scaling of the contact energy</td>
+</tr>
+</tbody>
+</table>
+<p>Particle radii are taken from <code>sigma / 2</code> of the atom type.
+Surface energy densities are set via <code>hydrophobicity: !Gamma &lt;value&gt;</code> (<code>!SurfaceTension</code> is accepted as alias).
+The bounding sphere cutoff automatically includes the probe diameter to account
+for the expanded tessellation radii.</p>
+<hr />
+<h2 id="constrain">Constrain<a class="headerlink" href="#constrain" title="Permanent link">&para;</a></h2>
+<p>Constrains a collective variable to a specified range.
+Two modes are supported:</p>
+<ul>
+<li>Hard constraint (default): returns infinite energy if the CV value falls
+  outside <code>[min, max]</code>, otherwise zero.</li>
+<li>Harmonic constraint: applies a quadratic penalty
+  <span class="arithmatex">\(\frac{1}{2} k (x_\text{eq} - x)^2\)</span> around an equilibrium value.</li>
+</ul>
+<h3 id="yaml-configuration_9">YAML configuration<a class="headerlink" href="#yaml-configuration_9" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><span class="nt">system</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">energy</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">constrain</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">property</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">volume</span>
+<span class="w">        </span><span class="nt">range</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">1000.0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">5000.0</span><span class="p p-Indicator">]</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">property</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">mass_center_position</span>
+<span class="w">        </span><span class="nt">selection</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;molecule</span><span class="nv"> </span><span class="s">protein&quot;</span>
+<span class="w">        </span><span class="nt">projection</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">z</span>
+<span class="w">        </span><span class="nt">range</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">-50.0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">50.0</span><span class="p p-Indicator">]</span>
+<span class="w">        </span><span class="nt">harmonic</span><span class="p">:</span><span class="w"> </span><span class="c1"># optional</span>
+<span class="w">          </span><span class="nt">force_constant</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">100.0</span>
+<span class="w">          </span><span class="nt">equilibrium</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.0</span>
+</code></pre></div>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Required</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>property</code></td>
+<td>yes</td>
+<td></td>
+<td>CV type (see <a href="../analysis/#supported-properties">collective variables</a>)</td>
+</tr>
+<tr>
+<td><code>range</code></td>
+<td>no</td>
+<td><code>[-∞, ∞]</code></td>
+<td>Allowed <code>[min, max]</code> interval</td>
+</tr>
+<tr>
+<td><code>harmonic</code></td>
+<td>no</td>
+<td></td>
+<td>Harmonic restraint parameters (see below)</td>
+</tr>
+<tr>
+<td><code>projection</code></td>
+<td>no</td>
+<td><code>xyz</code></td>
+<td>Axis projection (<code>x</code>, <code>y</code>, <code>z</code>, <code>xy</code>, …); alias: <code>dimension</code></td>
+</tr>
+<tr>
+<td><code>selection</code></td>
+<td>depends</td>
+<td></td>
+<td>Selection expression for one atom or group</td>
+</tr>
+</tbody>
+</table>
+<h4 id="harmonic-parameters">Harmonic parameters<a class="headerlink" href="#harmonic-parameters" title="Permanent link">&para;</a></h4>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>force_constant</code></td>
+<td>yes</td>
+<td>Spring constant <span class="arithmatex">\(k\)</span> (kJ/mol/unit²)</td>
+</tr>
+<tr>
+<td><code>equilibrium</code></td>
+<td>yes</td>
+<td>Target value <span class="arithmatex">\(x_\text{eq}\)</span></td>
+</tr>
+</tbody>
+</table>
+<h2 id="polymer-depletion-many-body-interaction">Polymer Depletion Many-Body Interaction<a class="headerlink" href="#polymer-depletion-many-body-interaction" title="Permanent link">&para;</a></h2>
+<p>The <code>polymer_depletion</code> energy term implements the Forsman &amp; Woodward many-body
+Hamiltonian for colloids immersed in an ideal polymer fluid
+(<a href="https://doi.org/10.1039/c2sm06737d">DOI</a>),
+generalised with tunable polymer–surface affinity.</p>
+<p>Rigid macromolecules of arbitrary shape are treated as neutral spheres using
+their center of mass and bounding sphere radius. The polymers are modelled
+implicitly via an effective potential that captures many-body depletion effects
+through pairwise sums, at <span class="arithmatex">\(O(N_c^2)\)</span> computational cost.</p>
+<p>The free energy change, <span class="arithmatex">\(\Delta \omega\)</span>, due to inserting <span class="arithmatex">\(N_c\)</span> colloids into a polymer reservoir is:</p>
+<div class="arithmatex">\[\frac{\beta \Delta\omega}{4\pi\rho_P^*} \approx
+  \frac{f \cdot N_c}{\kappa^{3/2}} \left(\sigma + \sigma^2 + \frac{\sigma^3}{3}\right)
+  - \frac{f^2 \cdot \sigma^2 e^{2\sigma}}{\kappa^{3/2}}
+    \sum_{i=1}^{N_c}
+    \frac{\displaystyle\sum_{j \neq i} k_0(\lambda R_{ij})}
+         {1 + \tfrac{1}{2}(e^{2\sigma} - 1)\displaystyle\sum_{j \neq i} k_0(\lambda R_{ij})}\]</div>
+<p>where <span class="arithmatex">\(R_{ij}\)</span> is the center-to-center distance between colloids <span class="arithmatex">\(i\)</span> and <span class="arithmatex">\(j\)</span>,
+<span class="arithmatex">\(\sigma = \sqrt{\kappa}\,R_c / R_g\)</span>, <span class="arithmatex">\(\lambda = \sqrt{\kappa}/R_g\)</span>,
+<span class="arithmatex">\(k_0(x) = e^{-x}/x\)</span>, <span class="arithmatex">\(\rho_P^* = \rho_P R_g^3\)</span> is the reduced polymer
+reservoir number density, <span class="arithmatex">\(\kappa = n + 1\)</span> with <span class="arithmatex">\(n\)</span> being the Schulz–Flory
+distribution order (<span class="arithmatex">\(n = 0\)</span> for equilibrium polymers),
+<span class="arithmatex">\(R_c\)</span> is the colloid (bounding sphere) radius, and
+<span class="arithmatex">\(R_g\)</span> is the polymer radius of gyration.</p>
+<p>Here <code>polymer_rg</code> and <code>colloid_radius</code> are given in Å, <code>polymer_density</code>
+is the dimensionless reduced reservoir density <span class="arithmatex">\(\rho_P^*\)</span>, and the
+resulting Faunus energy contribution is reported in <code>kJ/mol</code>, like other
+energy terms.</p>
+<h3 id="robin-boundary-condition">Robin boundary condition<a class="headerlink" href="#robin-boundary-condition" title="Permanent link">&para;</a></h3>
+<p>The original Forsman–Woodward model assumes non-adsorbing colloid surfaces
+(Dirichlet boundary condition, <span class="arithmatex">\(\hat{g} = 0\)</span> at the surface).
+The Robin BC generalises this using the
+<a href="https://doi.org/10.1021/ma00115a001">de Gennes extrapolation length</a>
+<span class="arithmatex">\(b = 1/h\)</span>, replacing the Dirichlet monopole amplitude <span class="arithmatex">\(A_D = \sigma e^\sigma\)</span>
+with <span class="arithmatex">\(A_R = A_D \cdot f\)</span>, where</p>
+<div class="arithmatex">\[f(\sigma, \tilde{h}) = \frac{\tilde{h}}{(1 + \sigma) + \tilde{h}}\]</div>
+<p>and <span class="arithmatex">\(\tilde{h} = R_c / b\)</span> is the dimensionless Robin parameter.
+The single-particle insertion term scales as <span class="arithmatex">\(f\)</span> and the many-body pairwise
+term as <span class="arithmatex">\(f^2\)</span>; this asymmetry is not reproducible by an effective radius.</p>
+<table>
+<thead>
+<tr>
+<th><span class="arithmatex">\(\tilde{h}\)</span></th>
+<th>Boundary condition</th>
+<th>Physical interpretation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>omitted</td>
+<td>Dirichlet (<span class="arithmatex">\(f=1\)</span>)</td>
+<td>Full depletion; original model</td>
+</tr>
+<tr>
+<td>large positive</td>
+<td>near-Dirichlet</td>
+<td>Weakly reduced depletion</td>
+</tr>
+<tr>
+<td><span class="arithmatex">\(0\)</span></td>
+<td>Neumann (<span class="arithmatex">\(f=0\)</span>)</td>
+<td>Neutral surface; no polymer-mediated interaction</td>
+</tr>
+<tr>
+<td><span class="arithmatex">\(&gt; -(1+\sigma)\)</span> and <span class="arithmatex">\(&lt; 0\)</span></td>
+<td>Adsorption (<span class="arithmatex">\(f&lt;0\)</span>)</td>
+<td>Polymer accumulates at surface; interactions sign-inverted</td>
+</tr>
+</tbody>
+</table>
+<h3 id="self-consistent-steric-adsorption">Self-consistent steric adsorption<a class="headerlink" href="#self-consistent-steric-adsorption" title="Permanent link">&para;</a></h3>
+<p>The constant <span class="arithmatex">\(\tilde{h}\)</span> <a href="https://en.wikipedia.org/wiki/Robin_boundary_condition">Robin BC</a>
+diverges when polymer adsorption is strong enough
+to drive <span class="arithmatex">\(\tilde{h} \to -(1+\sigma)\)</span>.
+The <code>steric_adsorption</code> option replaces the fixed <span class="arithmatex">\(\tilde{h}\)</span> with a per-colloid,
+configuration-dependent <span class="arithmatex">\(\tilde{h}_\text{eff}(i)\)</span> obtained by self-consistent
+iteration. This steric adsorption extension follows Nguyen's thesis
+(<a href="https://doi.org/10.26190/unsworks/21422">DOI</a>).
+The steric free energy cost of crowding adsorbed chains limits the surface
+density to a finite saturation value <span class="arithmatex">\(g_0\)</span>, preventing the divergence.</p>
+<p>The effective inverse extrapolation length <span class="arithmatex">\(\varepsilon_\text{eff}(i)\)</span> is
+determined from the surface polymer density <span class="arithmatex">\(\hat{g}_S(i)\)</span> via</p>
+<div class="arithmatex">\[\varepsilon_\text{eff} = \varepsilon_0'
+  + \ln\!\left(1 - \frac{\hat{g}_S^2}{g_0^2}\right)
+  - \frac{2\hat{g}_S^2}{g_0^2 - \hat{g}_S^2}
+  - \beta\delta\mu\]</div>
+<p>with the renormalizing shift</p>
+<div class="arithmatex">\[\beta\delta\mu = \ln\!\left(1 - \frac{1}{g_0^2}\right) - \frac{2}{g_0^2 - 1}\]</div>
+<p>and feeds into the Robin amplitude factor as
+<span class="arithmatex">\(\tilde{h}_\text{eff}(i) = -\varepsilon_\text{eff}(i) \cdot R_c\)</span>.
+The surface density <span class="arithmatex">\(\hat{g}_S\)</span> is itself a function of <span class="arithmatex">\(\varepsilon_\text{eff}\)</span>
+through the modified Helmholtz Green's function, closing the self-consistency
+loop solved by Picard iteration. The shift <span class="arithmatex">\(\beta\delta\mu\)</span> enforces zero
+excess adsorption in the reduced continuum parametrization when
+<span class="arithmatex">\(\varepsilon_0' = 0\)</span>.</p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Physical meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>epsilon0_prime</code></td>
+<td>Bare polymer–surface adsorption strength <span class="arithmatex">\(\varepsilon_0'\)</span> (dimensionless). Larger values mean stronger bare attraction between polymer segments and the colloid surface. Positive values are required; the self-consistent scheme handles the transition to adsorption internally.</td>
+</tr>
+<tr>
+<td><code>g0</code></td>
+<td>Saturation surface density <span class="arithmatex">\(g_0\)</span>. The maximum polymer density that can pack onto the colloid surface before steric repulsion between adsorbed chains halts further accumulation. Must be <span class="arithmatex">\(&gt; 1\)</span>; typical values 5–20. Smaller <span class="arithmatex">\(g_0\)</span> means surface saturates sooner.</td>
+</tr>
+</tbody>
+</table>
+<p>| <code>picard_mixing</code>    | Picard iteration mixing parameter <span class="arithmatex">\(\alpha \in (0, 1]\)</span>. Controls how aggressively the surface density is updated each iteration: <span class="arithmatex">\(\hat{g}_S^\text{new} = \alpha\,\hat{g}_S^\text{calc} + (1-\alpha)\,\hat{g}_S^\text{old}\)</span>. Smaller values improve stability for strongly adsorbing systems at the cost of more iterations. |
+| <code>max_iterations</code>   | Maximum number of Picard iterations before accepting the current solution. |
+| <code>tolerance</code>        | Convergence threshold: iteration stops when the largest change in <span class="arithmatex">\(\hat{g}_S\)</span> across all colloids falls below this value. |</p>
+<blockquote>
+<p>Note: <code>steric_adsorption</code> is mutually exclusive with <code>h_tilde</code>.
+Analytical forces are not yet implemented for this mode.</p>
+</blockquote>
+<h3 id="applicability">Applicability<a class="headerlink" href="#applicability" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Ideal (non-interacting) polymers under theta conditions</li>
+<li>Colloid radius <span class="arithmatex">\(R_c \gtrsim 10\)</span> bond lengths (to avoid curvature artefacts)</li>
+<li>Size ratio <span class="arithmatex">\(q = R_g/R_c\)</span> arbitrary; best tested for <span class="arithmatex">\(q \sim 0.25\)</span>–<span class="arithmatex">\(2\)</span></li>
+<li><span class="arithmatex">\(\kappa = 1\)</span> gives equilibrium (living) polymers; <span class="arithmatex">\(\kappa \gtrsim 5\)</span> approaches
+  monodisperse limit</li>
+</ul>
+<h3 id="yaml-configuration_10">YAML configuration<a class="headerlink" href="#yaml-configuration_10" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><span class="nt">system</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">energy</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">polymer_depletion</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">polymer_rg</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10.0</span>
+<span class="w">      </span><span class="nt">polymer_density</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.5</span>
+<span class="w">      </span><span class="nt">kappa</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1.0</span>
+<span class="w">      </span><span class="nt">molecules</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">Colloid</span><span class="p p-Indicator">]</span>
+<span class="w">      </span><span class="nt">h_tilde</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">5.0</span><span class="w">  </span><span class="c1"># optional; omit for full depletion (Dirichlet)</span>
+</code></pre></div>
+<p>Or with self-consistent steric adsorption (mutually exclusive with <code>h_tilde</code>):</p>
+<div class="highlight"><pre><span></span><code><span class="nt">system</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">energy</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">polymer_depletion</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">polymer_rg</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">100.0</span>
+<span class="w">      </span><span class="nt">polymer_density</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1.0</span>
+<span class="w">      </span><span class="nt">kappa</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1.0</span>
+<span class="w">      </span><span class="nt">molecules</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">Colloid</span><span class="p p-Indicator">]</span>
+<span class="w">      </span><span class="nt">colloid_radius</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">5.0</span>
+<span class="w">      </span><span class="nt">steric_adsorption</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">epsilon0_prime</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.02</span>
+<span class="w">        </span><span class="nt">g0</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10.0</span>
+</code></pre></div>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Required</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>polymer_rg</code></td>
+<td>yes</td>
+<td></td>
+<td>Polymer radius of gyration <span class="arithmatex">\(R_g\)</span> (Å)</td>
+</tr>
+<tr>
+<td><code>polymer_density</code></td>
+<td>yes</td>
+<td></td>
+<td>Reduced reservoir density <span class="arithmatex">\(\rho_P^*\)</span> (dimensionless)</td>
+</tr>
+<tr>
+<td><code>kappa</code></td>
+<td>no</td>
+<td><code>1.0</code></td>
+<td>Schulz–Flory order <span class="arithmatex">\(\kappa = n + 1\)</span></td>
+</tr>
+<tr>
+<td><code>molecules</code></td>
+<td>yes</td>
+<td></td>
+<td>Molecule types treated as colloids</td>
+</tr>
+<tr>
+<td><code>colloid_radius</code></td>
+<td>no</td>
+<td></td>
+<td>Fixed <span class="arithmatex">\(R_c\)</span> (Å); default: bounding sphere radius</td>
+</tr>
+<tr>
+<td><code>colloid_radius_scaling</code></td>
+<td>no</td>
+<td><code>1.0</code></td>
+<td>Scaling factor for the effective colloid radius</td>
+</tr>
+<tr>
+<td><code>h_tilde</code> / <code>h̃</code></td>
+<td>no</td>
+<td></td>
+<td>Robin BC parameter <span class="arithmatex">\(\tilde{h} = R_c/b\)</span>; omit for Dirichlet</td>
+</tr>
+<tr>
+<td><code>steric_adsorption</code></td>
+<td>no</td>
+<td></td>
+<td>Self-consistent steric adsorption block (see below)</td>
+</tr>
+</tbody>
+</table>
+<p><code>steric_adsorption</code> sub-keys:</p>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Required</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>epsilon0_prime</code></td>
+<td>yes</td>
+<td></td>
+<td>Bare adsorption parameter <span class="arithmatex">\(\varepsilon_0'\)</span> (dimensionless, <span class="arithmatex">\(&gt; 0\)</span>)</td>
+</tr>
+<tr>
+<td><code>g0</code></td>
+<td>yes</td>
+<td></td>
+<td>Saturation surface density <span class="arithmatex">\(g_0\)</span> (must be <span class="arithmatex">\(&gt; 1\)</span>)</td>
+</tr>
+</tbody>
+</table>
+<p>| <code>picard_mixing</code>    | no       | <code>0.3</code>   | Picard mixing parameter <span class="arithmatex">\(\alpha \in (0, 1]\)</span>           |
+| <code>max_iterations</code>   | no       | <code>50</code>    | Maximum self-consistency iterations                   |
+| <code>tolerance</code>        | no       | <code>1e-8</code>  | Convergence threshold for <span class="arithmatex">\(\hat{g}_S\)</span>                 |</p>
+<hr />
+<h2 id="tabulated-6d-rigid-body-energy">Tabulated 6D Rigid-Body Energy<a class="headerlink" href="#tabulated-6d-rigid-body-energy" title="Permanent link">&para;</a></h2>
+<p>The <code>tabulated6d</code> energy term loads pre-computed energy tables for pairs of rigid
+molecules, providing O(1) energy lookups during rigid-body Monte Carlo moves.</p>
+<p>Tables are generated by <a href="https://github.com/mlund/duello">Duello</a>, which scans all
+six degrees of freedom <span class="arithmatex">\((R, \omega, \theta_1\varphi_1, \theta_2\varphi_2)\)</span> of two
+rigid molecules and stores the pairwise energy (kJ/mol) on an icosphere mesh.
+Table energies are converted to simulation units using the medium temperature.</p>
+<p>At runtime, the current separation and orientations of each molecule pair
+are mapped to 6D table coordinates and the energy is
+obtained by Boltzmann-weighted barycentric interpolation on the icosphere faces.
+This interpolates <span class="arithmatex">\(\exp(-\beta U)\)</span> rather than <span class="arithmatex">\(U\)</span> directly, avoiding Jensen's
+inequality bias that would otherwise overestimate repulsive energies at contact.
+A pairwise group energy cache gives O(1) lookups for single rigid-body MC moves.</p>
+<h3 id="table-formats">Table formats<a class="headerlink" href="#table-formats" title="Permanent link">&para;</a></h3>
+<p>Two binary table formats are supported and auto-detected at load time:</p>
+<ul>
+<li>Flat (legacy): uniform angular resolution across all separations.
+  Uses <code>f16</code> storage.</li>
+<li>Adaptive: per-slab angular resolution that adjusts with separation.
+  At short range where molecules overlap, slabs with negligible Boltzmann
+  weights (exp(−βU) ≈ 0) store no angular data. At long range where the
+  energy surface is smooth, slabs are collapsed to a single scalar value
+  or use nearest-vertex lookup instead of full interpolation.
+  This reduces both file size and lookup cost.
+  Adaptive tables are temperature-dependent: the repulsive slab classification
+  uses the temperature from table generation. A warning is emitted if the
+  simulation temperature is significantly lower than the generation temperature.</li>
+</ul>
+<h3 id="yaml-configuration_11">YAML configuration<a class="headerlink" href="#yaml-configuration_11" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><span class="nt">system</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">energy</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">tabulated6d</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">molecules</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">ProteinA</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">ProteinA</span><span class="p p-Indicator">]</span>
+<span class="w">        </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">table_AA.bin.gz</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">molecules</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">ProteinA</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">ProteinB</span><span class="p p-Indicator">]</span>
+<span class="w">        </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">table_AB.bin</span>
+</code></pre></div>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Required</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>molecules</code></td>
+<td>yes</td>
+<td></td>
+<td>Ordered pair of molecule type names</td>
+</tr>
+<tr>
+<td><code>file</code></td>
+<td>yes</td>
+<td></td>
+<td>Path to binary table file (<code>.gz</code> enables gzip)</td>
+</tr>
+<tr>
+<td><code>single_lookup</code></td>
+<td>no</td>
+<td><code>false</code></td>
+<td>Skip swap averaging for homo-dimers (~2× faster)</td>
+</tr>
+</tbody>
+</table>
+<p>For homo-dimer entries (identical molecules), the energy is by default averaged
+over both A↔B perspectives to eliminate interpolation asymmetry.
+Setting <code>single_lookup: true</code> uses only one perspective, halving the lookup
+cost at the expense of a small energy drift. The drift decreases with angular
+resolution and is negligible at <code>n_div ≥ 3</code>.</p>
+<p>Molecule pair order in the table must match the order used when generating the
+table with Duello. Reversed pairs are detected automatically.
+Pairs not covered by any table entry contribute zero energy.
+Separations below the table minimum return infinite energy (hard wall).</p>
+<h3 id="tail-correction">Tail correction<a class="headerlink" href="#tail-correction" title="Permanent link">&para;</a></h3>
+<p>Beyond the table's maximum distance <span class="arithmatex">\(R_\text{max}\)</span>, the energy is extrapolated
+using a sum of screened multipole terms stored in the table metadata:</p>
+<div class="arithmatex">\[u_\text{tail}(R) = \frac{e^2}{4\pi\varepsilon_0\varepsilon_r} \sum_i \frac{C_i \, e^{-\kappa_i R}}{R^{p_i}}\]</div>
+<p>where <span class="arithmatex">\(C_i\)</span> is a dimensionless coefficient (charge product <span class="arithmatex">\(z_1 z_2\)</span> for ion-ion,
+fitted for higher-order terms), <span class="arithmatex">\(\kappa_i\)</span> is the screening parameter, and <span class="arithmatex">\(p_i\)</span>
+is the power of <span class="arithmatex">\(R\)</span> in the denominator (<span class="arithmatex">\(p=1\)</span> for ion-ion, <span class="arithmatex">\(p=4\)</span> for ion-dipole).
+The Coulomb prefactor <span class="arithmatex">\(e^2/(4\pi\varepsilon_0\varepsilon_r)\)</span> is stored once in
+the table metadata.
+If no tail correction metadata is present, separations beyond the table range
+return zero.</p>
+<p>If the table covers a sufficiently large range (so that the energy is
+negligible at <span class="arithmatex">\(R_\text{max}\)</span>), the tail correction is not needed and
+can be omitted.</p>
+<p>A <code>medium</code> with <code>temperature</code> is required so that the inverse thermal energy
+<span class="arithmatex">\(\beta = 1/k_BT\)</span> can be computed for the Boltzmann-weighted interpolation.</p>
+<h3 id="automatic-nonbonded-exclusion">Automatic nonbonded exclusion<a class="headerlink" href="#automatic-nonbonded-exclusion" title="Permanent link">&para;</a></h3>
+<p>When <code>tabulated6d</code> or <code>tabulated3d</code> is active, molecule-type pairs covered by table entries are
+automatically excluded from the <code>nonbonded</code> energy term.
+This prevents double-counting when mixing tabulated rigid-body interactions with
+atom-level nonbonded potentials for other molecule types.</p>
+<hr />
+<h2 id="tabulated-3d-molecule-atom-energy">Tabulated 3D Molecule-Atom Energy<a class="headerlink" href="#tabulated-3d-molecule-atom-energy" title="Permanent link">&para;</a></h2>
+<p>The <code>tabulated3d</code> energy term loads pre-computed energy tables for interactions
+between a rigid molecule and an atomic group (e.g. ion-protein),
+providing O(1) energy lookups during Monte Carlo moves.</p>
+<p>Tables are generated by <a href="https://github.com/mlund/duello">Duello</a> <code>atom-scan</code>, which
+scans three degrees of freedom <span class="arithmatex">\((R, \theta, \varphi)\)</span> — the separation distance
+and the direction from molecule to atom in the molecule's body frame — and stores
+the pairwise energy (kJ/mol) on an icosphere mesh.</p>
+<p>At runtime, the separation vector is transformed into the rigid molecule's
+body frame using its quaternion, and the energy is obtained by Boltzmann-weighted
+barycentric interpolation, identical to the 6D term.
+The same pairwise group energy cache gives O(1) lookups for rigid-body MC moves.</p>
+<h3 id="table-format">Table format<a class="headerlink" href="#table-format" title="Permanent link">&para;</a></h3>
+<p>Only the adaptive format is supported, using per-slab angular resolution
+that adjusts with separation (same scheme as 6D adaptive tables).
+No swap averaging is performed since the interaction is inherently asymmetric.</p>
+<h3 id="yaml-configuration_12">YAML configuration<a class="headerlink" href="#yaml-configuration_12" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><span class="nt">system</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">energy</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">tabulated3d</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">molecules</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">Protein</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">Sodium</span><span class="p p-Indicator">]</span>
+<span class="w">        </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">protein_na.bin.gz</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">molecules</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">Protein</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">Chloride</span><span class="p p-Indicator">]</span>
+<span class="w">        </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">protein_cl.bin.gz</span>
+</code></pre></div>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>molecules</code></td>
+<td>yes</td>
+<td>Pair of molecule type names <code>[rigid, atomic]</code></td>
+</tr>
+<tr>
+<td><code>file</code></td>
+<td>yes</td>
+<td>Path to binary table file (<code>.gz</code> enables gzip)</td>
+</tr>
+</tbody>
+</table>
+<p>The first molecule must be the rigid body whose orientation is used for the
+lookup; the second is the atomic group (single atom, no orientation).
+Reversed pairs are detected automatically.</p>
+<h3 id="tail-correction-and-nonbonded-exclusion">Tail correction and nonbonded exclusion<a class="headerlink" href="#tail-correction-and-nonbonded-exclusion" title="Permanent link">&para;</a></h3>
+<p>Beyond <span class="arithmatex">\(R_\text{max}\)</span>, the tail correction from table metadata is used (if present);
+otherwise zero is returned. A <code>medium</code> with <code>temperature</code> is required for
+the Boltzmann-weighted interpolation.</p>
+<p>Molecule-type pairs covered by <code>tabulated3d</code> entries are automatically excluded
+from the <code>nonbonded</code> energy term, same as for <code>tabulated6d</code>.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["content.code.copy", "navigation.top", "search.suggest", "search.highlight", "toc.follow"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"provider": "mike"}}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+        <script src="../javascript/mathjax.js"></script>
+      
+        <script src="https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js"></script>
+      
+    
+  </body>
+</html>
