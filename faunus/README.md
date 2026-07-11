@@ -9,7 +9,14 @@ and GPU-accelerated dynamics.
 
 ## Install
 
-Requires the [Rust toolchain](https://www.rust-lang.org/tools/install).
+Prebuilt binary — no Rust toolchain required:
+
+~~~ bash
+pip install faunus        # or: uv tool install faunus
+~~~
+
+To build from source instead, install the
+[Rust toolchain](https://www.rust-lang.org/tools/install) and run:
 
 ~~~ bash
 cargo install --git https://github.com/mlund/faunus-rs faunus --features gpu

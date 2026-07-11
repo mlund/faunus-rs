@@ -245,15 +245,21 @@ mod integration_tests {
     #[test]
     fn build_and_sample() {
         let ctx = make_context();
-        let yaml = r#"
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("mean_along.dat");
+        // Single-quote so Windows drive paths (`C:\…`) survive YAML parsing verbatim.
+        let yaml = format!(
+            r#"
 property: volume
 coordinate:
   property: volume
   resolution: 100.0
-file: /tmp/faunus_test_mean_along.dat
+file: '{}'
 frequency: !Every 1
-"#;
-        let builder: MeanAlongCoordinateBuilder = serde_yml::from_str(yaml).unwrap();
+"#,
+            file.display()
+        );
+        let builder: MeanAlongCoordinateBuilder = serde_yml::from_str(&yaml).unwrap();
         let mut analysis = builder.build(&ctx).unwrap();
 
         assert_eq!(Analyze::<Backend>::num_samples(&analysis), 0);
@@ -275,7 +281,7 @@ frequency: !Every 1
 property: volume
 coordinate:
   property: volume
-file: /tmp/faunus_test_mean_along_fail.dat
+file: fail.dat
 frequency: !Every 1
 "#;
         let builder: MeanAlongCoordinateBuilder = serde_yml::from_str(yaml).unwrap();

@@ -1,0 +1,31 @@
+[build-system]
+requires = ["maturin>=1.7,<2"]
+build-backend = "maturin"
+
+[project]
+name = "faunus"
+# Version comes from Cargo.toml (maturin normalizes `-beta.1` → PEP 440 `b1`).
+dynamic = ["version"]
+description = "Monte Carlo and Langevin dynamics for coarse-grained (bio)molecular simulation"
+readme = "README.md"
+license = { file = "LICENSE" }
+authors = [{ name = "Mikael Lund", email = "kemikael@gmail.com" }]
+keywords = ["molecular-simulation", "monte-carlo", "molecular-dynamics", "biophysics", "chemistry"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Programming Language :: Rust",
+    "License :: OSI Approved :: Apache Software License",
+    "Topic :: Scientific/Engineering :: Chemistry",
+    "Topic :: Scientific/Engineering :: Physics",
+]
+
+[project.urls]
+Documentation = "https://mlund.github.io/faunus-rs/"
+Repository = "https://github.com/mlund/faunus-rs"
+
+# `bin` bindings wrap the compiled `faunus` executable in a wheel, so
+# `pip install faunus` places the CLI on PATH — no Python API is exposed.
+[tool.maturin]
+bindings = "bin"
+features = ["gpu"]
+strip = true

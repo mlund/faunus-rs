@@ -373,14 +373,14 @@ mod tests {
 
     #[test]
     fn yaml_is_none_without_samples() {
-        let analysis = dummy("/tmp/faunus_epp_none.csv");
+        let analysis = dummy("unused.csv");
         assert!(analysis.report().is_none());
     }
 
     #[test]
     fn error_is_zero_for_identical_samples_and_positive_otherwise() {
         // Two identical configurations ⇒ zero variance ⇒ zero SEM.
-        let mut same = dummy("/tmp/faunus_epp_same.csv");
+        let mut same = dummy("unused.csv");
         for accumulator in &mut same.potential {
             accumulator.add(1.0);
             accumulator.add(1.0);
@@ -391,7 +391,7 @@ mod tests {
         assert_eq!(error, 0.0);
 
         // Two distinct configurations ⇒ positive SEM.
-        let mut differ = dummy("/tmp/faunus_epp_differ.csv");
+        let mut differ = dummy("unused.csv");
         for accumulator in &mut differ.potential {
             accumulator.add(1.0);
             accumulator.add(3.0);
@@ -404,7 +404,7 @@ mod tests {
 
     #[test]
     fn yaml_reports_walls_midplane_and_drops() {
-        let mut analysis = dummy("/tmp/faunus_epp_walls.csv");
+        let mut analysis = dummy("unused.csv");
         for accumulator in &mut analysis.potential {
             accumulator.add(2.0);
         }
@@ -427,8 +427,9 @@ mod tests {
 
     #[test]
     fn write_profile_emits_a_row_per_bin_with_headers() {
-        let path = "/tmp/faunus_epp_profile.csv";
-        let mut analysis = dummy(path);
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("profile.csv");
+        let mut analysis = dummy(path.to_str().unwrap());
         for accumulator in &mut analysis.slab_charge_density {
             accumulator.add(1e-3);
         }
@@ -438,7 +439,7 @@ mod tests {
         analysis.sampling.set_num_samples(1);
         analysis.write_profile().unwrap();
 
-        let contents = std::fs::read_to_string(path).unwrap();
+        let contents = std::fs::read_to_string(&path).unwrap();
         let mut lines = contents.lines();
         let header = lines.next().unwrap();
         assert!(header.contains("z/Å"));
@@ -446,7 +447,7 @@ mod tests {
         assert!(header.contains("potential_error/mV"));
         assert!(header.contains("field/mV·Å⁻¹"));
         assert_eq!(lines.count(), analysis.grid.n_bins());
-        std::fs::remove_file(path).ok();
+        // `dir` cleans up on drop.
     }
 
     #[test]
@@ -485,7 +486,7 @@ mod tests {
     #[test]
     fn info_trait() {
         use crate::Info;
-        let analysis = dummy("/tmp/faunus_epp_info.csv");
+        let analysis = dummy("unused.csv");
         assert_eq!(analysis.short_name(), Some("electricpotentialprofile"));
         assert!(analysis.citation().unwrap().starts_with("doi:"));
     }
