@@ -241,8 +241,11 @@ impl PolymerDepletion {
                 continue;
             }
             if let Some(&com) = g.mass_center() {
-                let radius =
-                    self.fixed_radius.or(g.bounding_radius()).unwrap_or(0.0) * self.radius_scaling;
+                let radius = self
+                    .fixed_radius
+                    .or_else(|| g.bounding_radius())
+                    .unwrap_or(0.0)
+                    * self.radius_scaling;
                 self.colloids.push(ColloidInfo {
                     group_index: gi,
                     com,
@@ -264,7 +267,7 @@ impl PolymerDepletion {
                 colloid.com = com;
                 colloid.radius = self
                     .fixed_radius
-                    .or(groups[group_index].bounding_radius())
+                    .or_else(|| groups[group_index].bounding_radius())
                     .unwrap_or(0.0)
                     * self.radius_scaling;
             }
