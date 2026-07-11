@@ -19,9 +19,9 @@ have run, one cycle is complete and the step counter advances.
 A collection groups moves together and controls how they are selected.
 Two types are available:
 
-- **`!Stochastic`** — each repeat draws *one* move at random, with probability
+- `!Stochastic` — each repeat draws *one* move at random, with probability
   proportional to `weight`. This is the normal Monte Carlo sampling mode.
-- **`!Deterministic`** — each repeat executes *all* moves in order.
+- `!Deterministic` — each repeat executes *all* moves in order.
   Useful for e.g. hybrid MC/MD schemes. The `weight` field is unused here but
   still required by the move schema.
 
@@ -187,7 +187,7 @@ Molecules without bonds are skipped.
 
 See [Madras & Sokal, _J. Stat. Phys._ 50, 109–186 (1988)](https://doi.org/10.1007/BF01022990).
 
-> **Note:** The rotated sub-tree must fit within half the box length (L/2).
+> Note: The rotated sub-tree must fit within half the box length (L/2).
 > For molecules spanning more than L/2, the minimum-image convention used
 > during rotation can map atoms to incorrect periodic images.
 
@@ -249,8 +249,9 @@ which contributes $PV - (N+1) k_BT \ln V$.
 ### Example
 
 ```yaml
-energy:
-  pressure: !atm 1.0
+system:
+  energy:
+    pressure: !atm 1.0
 
 propagate:
   collections:
@@ -290,11 +291,11 @@ The acceptance criterion follows
 Each step randomly picks a reaction and direction (forward or backward),
 then proposes the corresponding operations:
 
-- **Molecular insertion**: activates an empty group at a random position in the cell.
-- **Molecular deletion**: deactivates a randomly chosen active group.
-- **Molecular swap**: replaces a molecule of one type with another of equal atom count,
+- Molecular insertion: activates an empty group at a random position in the cell.
+- Molecular deletion: deactivates a randomly chosen active group.
+- Molecular swap: replaces a molecule of one type with another of equal atom count,
   preserving spatial orientation via gyration tensor alignment.
-- **Atom swap**: changes the type of a random atom (for reactions like $A \rightleftharpoons B$).
+- Atom swap: changes the type of a random atom (for reactions like $A \rightleftharpoons B$).
 
 Reactions are written using the syntax described in [Chemical Reactions](topology.md#chemical-reactions).
 The equilibrium constant $K$ is related to the excess chemical potential,
@@ -328,8 +329,8 @@ $$
 with the sign matching the direction of the stoichiometric change
 ([doi:10/fqcpg3](https://doi.org/10/fqcpg3)).
 
-[Reservoir molecules](topology.md#implicit-reservoirs) participate as regular
-`Participant::Molecule` in reactions (no `~` prefix needed).
+[Reservoir molecules](topology.md#implicit-reservoirs) participate as molecular
+reaction species and do not need a `~` prefix.
 The volume factor $V$ is replaced by unity for reservoir species,
 since they exist outside the simulation cell.
 
@@ -363,10 +364,10 @@ target type is activated with positions transferred via
 [gyration tensor](https://doi.org/10.1002/jcc.21776) principal-axis alignment.
 
 A species appearing with a coefficient greater than one (e.g. $2A \rightleftharpoons B$)
-is **not** a swap: it is handled as insertion/deletion of the individual molecules,
+is not a swap: it is handled as insertion/deletion of the individual molecules,
 conserving charge across the whole reaction. Such charge-conserving exchanges — for
-example $2\,\mathrm{Na}^+ \rightleftharpoons \mathrm{Ca}^{2+}$ — must use **non-atomic**
-single-atom molecules (one group per ion); `atomic: true` mega-groups are not yet
+example $2\,\mathrm{Na}^+ \rightleftharpoons \mathrm{Ca}^{2+}$ — must use non-atomic
+single-atom molecules (one group per ion); pooled `atomic: true` ions are not yet
 supported for coefficient-≥2 deletion together with explicit pair energy.
 
 The acceptance is:
@@ -481,8 +482,8 @@ Key           | Required | Default | Description
 
 Each reaction is a two-element tuple `[reaction_string, equilibrium_constant]`:
 
-- **Reaction string**: e.g. `"= NaCl"` or `"⚛A = ⚛B"`
-- **Equilibrium constant**: `!K <value>`, `!lnK <value>`, `!pK <value>` ($K = 10^{-\text{pK}}$), or `!dG <kJ/mol>` ($K = e^{-\Delta G/k_BT}$)
+- Reaction string: e.g. `"= NaCl"` or `"⚛A = ⚛B"`
+- Equilibrium constant: `!K <value>`, `!lnK <value>`, `!pK <value>` ($K = 10^{-\text{pK}}$), or `!dG <kJ/mol>` ($K = e^{-\Delta G/k_BT}$)
 
 ### Activity folding
 
@@ -497,17 +498,17 @@ $$\ln K_\text{eff} = \ln K
 
 where:
 
-- **Implicit species** (`~H+`): $a_i$ is the `activity` field on the
+- Implicit species (`~H+`): $a_i$ is the `activity` field on the
   matching atom type. Consumed reactants increase $K_\text{eff}$;
   produced products decrease it.
-- **Molecular species** involved in insertion/deletion (`Na+`, `Cl-`):
+- Molecular species involved in insertion/deletion (`Na+`, `Cl-`):
   $z_i = a_i \times N_A / 10^{27}$
   converts the molar `activity` on the molecule type to number density.
   The sign is reversed relative to implicit species because the
   acceptance criterion already includes a $V$-dependent combinatorial
   factor $V^{\Delta\nu} \cdot \prod [N!/(N+\nu)!]$ that uses $N/V$;
   the fugacity correction replaces $N/V$ with $N/(V \cdot z)$.
-- **Molecular swap** participants are excluded from fugacity folding since
+- Molecular swap participants are excluded from fugacity folding since
   no volume factor enters the acceptance (total molecule count is conserved).
 
 For example, with `["= Na+ + Cl-", !K 1.0]` and molecular activities
@@ -533,9 +534,9 @@ an explicit interface.
 When `propagate.gibbs` is present, faunus clones the system into two boxes
 and alternates between:
 
-1. **Intra-box MC** — each box runs `intra_steps` propagation cycles in parallel
+1. Intra-box MC — each box runs `intra_steps` propagation cycles in parallel
    (using the `collections` defined above).
-2. **Inter-box moves** — volume exchange and particle transfer between the two boxes.
+2. Inter-box moves — volume exchange and particle transfer between the two boxes.
 
 The total number of Gibbs sweeps is `repeat / intra_steps`.
 
@@ -570,7 +571,7 @@ Both boxes are isotropically rescaled and all particle positions scale with the 
 $N$ counts independently translatable mass centers: one per molecular group,
 one per active atom in atomic groups.
 
-**Logarithmic** (default) — displaces in $\ln(V_1/V_2)$ space
+Logarithmic (default) — displaces in $\ln(V_1/V_2)$ space
 ([Frenkel & Smit, Sec. 8.3.2](https://doi.org/10.1016/B978-012267351-1/50006-7)):
 
 $$
@@ -581,7 +582,7 @@ $$
 
 The $(N{+}1)$ factor comes from the Jacobian of the $\ln V$ transformation.
 
-**Linear** (opt-in) — direct $\delta V$ transfer
+Linear (opt-in) — direct $\delta V$ transfer
 ([Allen & Tildesley, Eq. 9.75](https://doi.org/10.1093/oso/9780198803195.001.0001)):
 
 $$
@@ -676,14 +677,14 @@ which splits each timestep $\Delta t$ into five sub-steps:
 
 | Step | Operation |
 |------|-----------|
-| **B** | Half-kick: $\mathbf{v} \leftarrow \mathbf{v} + \frac{\Delta t}{2m}\,\mathbf{F}$ |
-| **A** | Half-drift: $\mathbf{r} \leftarrow \mathbf{r} + \frac{\Delta t}{2}\,\mathbf{v}$ |
-| **O** | Ornstein–Uhlenbeck: $\mathbf{v} \leftarrow e^{-\gamma \Delta t}\,\mathbf{v} + \sqrt{\frac{k_BT}{m}(1 - e^{-2\gamma \Delta t})}\;\mathbf{R}$ |
-| **A** | Half-drift: $\mathbf{r} \leftarrow \mathbf{r} + \frac{\Delta t}{2}\,\mathbf{v}$ |
-| **B** | Half-kick: $\mathbf{v} \leftarrow \mathbf{v} + \frac{\Delta t}{2m}\,\mathbf{F}$ |
+| B | Half-kick: $\mathbf{v} \leftarrow \mathbf{v} + \frac{\Delta t}{2m}\,\mathbf{F}$ |
+| A | Half-drift: $\mathbf{r} \leftarrow \mathbf{r} + \frac{\Delta t}{2}\,\mathbf{v}$ |
+| O | Ornstein–Uhlenbeck: $\mathbf{v} \leftarrow e^{-\gamma \Delta t}\,\mathbf{v} + \sqrt{\frac{k_BT}{m}(1 - e^{-2\gamma \Delta t})}\;\mathbf{R}$ |
+| A | Half-drift: $\mathbf{r} \leftarrow \mathbf{r} + \frac{\Delta t}{2}\,\mathbf{v}$ |
+| B | Half-kick: $\mathbf{v} \leftarrow \mathbf{v} + \frac{\Delta t}{2m}\,\mathbf{F}$ |
 
 Here $\mathbf{R}$ is a vector of independent standard normal variates.
-Placing the stochastic step (**O**) at the center gives superior configurational
+Placing the stochastic step (O) at the center gives superior configurational
 sampling accuracy compared to other splittings, with the
 configurational distribution correct to $\mathcal{O}(\Delta t^2)$.
 
@@ -700,14 +701,14 @@ where $\mathbf{r}_i^{\,\text{ref}}$ are time-independent reference coordinates i
 Rotational equations of motion follow the same BAOAB pattern, with
 the body-frame angular velocity $\mathbf{\omega}$ and diagonal inertia tensor
 $\mathbf{I} = \operatorname{diag}(I_{xx}, I_{yy}, I_{zz})$ replacing
-$\mathbf{v}$ and $m$. The **O** step applies the Ornstein–Uhlenbeck
+$\mathbf{v}$ and $m$. The O step applies the Ornstein–Uhlenbeck
 thermostat independently to each angular velocity component:
 
 $$
 \omega_\alpha \leftarrow e^{-\gamma \Delta t}\,\omega_\alpha + \sqrt{\frac{k_BT}{I_{\alpha\alpha}}(1 - e^{-2\gamma \Delta t})}\;R_\alpha
 $$
 
-The **A** drift steps update the quaternion by composing an incremental rotation:
+The A drift steps update the quaternion by composing an incremental rotation:
 
 $$
 \mathbf{q} \leftarrow \Delta\mathbf{q}\;\mathbf{q}, \quad

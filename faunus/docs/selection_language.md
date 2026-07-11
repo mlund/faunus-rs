@@ -87,8 +87,8 @@ Keyword        | Matched residues
 
 A selection can be resolved in two ways:
 
-- **Atom-level** (`resolve_atoms`): returns absolute particle indices of all matching atoms.
-- **Group-level** (`resolve_groups`): returns group indices where _any_ active atom matches.
+- Atom-level: selects the matching atoms only.
+- Group-level: selects each group that contains at least one matching active atom.
 
 The resolution mode depends on the analysis.
 For example, partial energy analysis uses atom-level resolution

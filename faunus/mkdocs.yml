@@ -53,8 +53,11 @@ extra_javascript:
 nav:
   - Home: index.md
   - Topology: topology.md
+  - Units and Conventions: units.md
   - Energy: energy.md
   - Moves: moves.md
   - Analysis: analysis.md
+  - Wang-Landau: wang_landau.md
+  - Umbrella Sampling: umbrella.md
   - Selection Language: selection_language.md
   - Extending Faunus: extending.md

@@ -71,9 +71,9 @@ the window, or errors if `propagate.repeat` sweeps are exhausted.
 
 ## Per-window lifecycle
 
-1. **Drive** — harmonic bias pulls the walker into its target window.
+1. Drive — harmonic bias pulls the walker into its target window.
    Skipped on restart if a state file already exists.
-2. **Production** — hard-wall constraint only. The `propagate:` and `analysis:`
+2. Production — hard-wall constraint only. The `propagate:` and `analysis:`
    sections run normally.
 
 ## Restart
@@ -83,8 +83,8 @@ drive phase is skipped. Delete a window's state file to re-drive it.
 
 ## Output
 
-- **`pmf.csv`** — three-column CSV: `cv, pmf_kT, stderr_kT`.
+- `pmf.csv` — three-column CSV: `cv, pmf_kT, stderr_kT`.
   The PMF is shifted so that the minimum is zero.
-- **`umbrella_states/window{i}_state.yaml`** — per-window simulation state.
-- **`umbrella_states/window{i}_output.yaml`** — per-window energy summary,
+- `umbrella_states/window{i}_state.yaml` — per-window simulation state.
+- `umbrella_states/window{i}_output.yaml` — per-window energy summary,
   move statistics, and analysis output.

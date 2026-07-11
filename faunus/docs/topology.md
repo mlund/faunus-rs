@@ -91,14 +91,14 @@ molecules:
 
 The `from_structure` field accepts multiple formats:
 
-**File path** — load atom names and reference positions from a structure file (XYZ, PDB, etc.):
+File path — load atom names and reference positions from a structure file (XYZ, PDB, etc.):
 ```yaml
 molecules:
   - name: MOL1
     from_structure: "cppm-p18.xyz"
 ```
 
-**Inline positions** — define atoms and coordinates directly (one atom per entry):
+Inline positions — define atoms and coordinates directly (one atom per entry):
 ```yaml
 molecules:
   - name: water
@@ -108,7 +108,7 @@ molecules:
       - HW: [-0.58, 0.76, 0.0]
 ```
 
-**FASTA sequence** — build a linear peptide from a
+FASTA sequence — build a linear peptide from a
 [FASTA](https://doi.org/10.1073/pnas.85.8.2444) sequence with harmonic bonds
 (provides atom names and bonds, but no reference positions — use `!RandomWalk` for insertion):
 ```yaml
@@ -378,7 +378,7 @@ include: [forcefield.yaml, overrides.yaml]
 
 Reservoir counter atoms (`reservoir: true`) represent a finite amount of substance in another phase
 (e.g., a solid) that is never spatially represented in the simulation cell.
-A molecule containing a reservoir atom automatically becomes an atomic mega-group
+A molecule containing a reservoir atom automatically becomes a pooled atomic group
 whose active count tracks the reservoir size.
 
 This is distinct from `activity` (infinite bath at fixed chemical potential).
@@ -387,7 +387,7 @@ and the entropy bias is excluded entirely (solid activity = 1).
 A molecule cannot have both `reservoir` and `activity`.
 State persistence is automatic via group sizes.
 
-**Example: Ca(OH)₂ solubility** ($K_{sp} = 10^{-5.19}$):
+Example: Ca(OH)₂ solubility ($K_{sp} = 10^{-5.19}$):
 
 ```yaml
 atoms:

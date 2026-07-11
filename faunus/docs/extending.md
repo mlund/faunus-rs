@@ -34,7 +34,7 @@ evaluate would corrupt the simulation, and no test would catch it.
 
 ## What an analysis must get right
 
-**Resolve selections once, in `build`.** A selection such as `atomtype Na` resolves to a list of
+Resolve selections once, in `build`. A selection such as `atomtype Na` resolves to a list of
 particle indices. Resolving it every frame wastes time; caching it naively is wrong. Store it in a
 `CachedSelection`, which re-resolves when — and only when — the system changes in a way that
 selection can see.
@@ -44,7 +44,7 @@ groups are unchanged, and a cache keyed on group composition alone would serve t
 for the rest of the run. `CachedSelection` watches atom kinds as well. The template tests exactly
 this case.
 
-**Do not count your own samples.** The framework owns the frame counter and the sampling frequency.
+Do not count your own samples. The framework owns the frame counter and the sampling frequency.
 Implement `perform_sample`, which runs only when a sample is due. `results` runs only after at least
 one sample, so an average never guards against dividing by zero.
 

@@ -1,13 +1,13 @@
 # Wang-Landau Flat-Histogram Sampling
 
-Iteratively estimates the density of states _g(CV)_ in collective variable space,
-producing a free energy surface _F(CV) = −kT ln g(CV)_ without predefined windows
+Iteratively estimates the density of states $g(\mathrm{CV})$ in collective variable space,
+producing a free energy surface $F(\mathrm{CV}) = -k_BT \ln g(\mathrm{CV})$ without predefined windows
 or force constants. Multiple walkers share a single histogram and bias estimate,
 accelerating convergence.
 
 The algorithm follows [Chevallier & Cazals](https://doi.org/10.1016/j.jcp.2020.109366):
 exponential reduction of the modification factor until a flatness criterion is met
-a configurable number of times, then switching to a 1/t rule for rigorous convergence.
+a configurable number of times, then switching to a $1/t$ rule for rigorous convergence.
 
 ## Usage
 
@@ -25,14 +25,14 @@ faunus wang-landau -i input.yaml [-s wl_states] [-o free_energy.csv] [-j 4]
 ## Configuration
 
 The input file must contain a `wang_landau:` section alongside the standard
-`system:`, `energy:`, and `propagate:` sections.
+`system:` section (including `system.energy`) and `propagate:` section.
 
 ```yaml
 wang_landau:
   coordinate:
     property: mass_center_separation
-    selection:
-      molecule: protein
+    selection: "molecule protein0"
+    selection2: "molecule protein1"
     range: [2.0, 15.0]
     resolution: 0.1
   # coordinate2: ...         # optional, for 2D
@@ -47,16 +47,16 @@ wang_landau:
 |-----------|-------------|---------|
 | `coordinate` | Collective variable (see [analysis](analysis.md)) | (required) |
 | `coordinate2` | Second CV for 2D sampling | (none) |
-| `ln_f_initial` | Starting value of ln _f_ | 1.0 |
+| `ln_f_initial` | Starting value of $\ln f$ | 1.0 |
 | `flatness_threshold` | Flatness criterion (min/mean of histogram) | 0.8 |
-| `min_flatness` | Flatness checks before 1/t transition | 20 |
-| `min_ln_f` | Stop when ln _f_ falls below this | 1e-6 |
+| `min_flatness` | Flatness checks before $1/t$ transition | 20 |
+| `min_ln_f` | Stop when $\ln f$ falls below this | 1e-6 |
 | `steps_per_check` | MC steps per walker between flatness checks | 10000 |
 
 ## Convergence regimes
 
-1. **Exponential**: Each time the histogram is flat, `ln_f → ln_f / 2` and the histogram resets.
-2. **1/t**: After `min_flatness` checks, `ln_f = 1/(t+1)` where _t_ is the cumulative update count.
+1. Exponential: Each time the histogram is flat, `ln_f → ln_f / 2` and the histogram resets.
+2. $1/t$: After `min_flatness` checks, `ln_f = 1/(t+1)` where $t$ is the cumulative update count.
 
 ## Restart
 
@@ -96,5 +96,5 @@ penalty term — reweighting by $w = 1/g(\text{bin})$ is applied automatically.
 
 ## Reference
 
-- Chevallier & Cazals, _J. Comput. Phys._ **410**, 109366 (2020).
+- Chevallier & Cazals, _J. Comput. Phys._ 410, 109366 (2020).
   [doi:10.1016/j.jcp.2020.109366](https://doi.org/10.1016/j.jcp.2020.109366)

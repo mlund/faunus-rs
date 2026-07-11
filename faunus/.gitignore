@@ -23,6 +23,7 @@ Cargo.lock
 *.gz
 *.yaml
 *.yml
+!docs/*.md
 *.txt
 *.xyz
 *.csv

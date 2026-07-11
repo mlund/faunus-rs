@@ -176,18 +176,18 @@ fluctuations.
 
 Reports:
 
-- **net charge** $\langle Z\rangle \pm \sigma$ — mean and standard deviation
-- **capacitance** $C = \langle Z^2\rangle - \langle Z\rangle^2$ — charge variance
-- **dipole magnitude** $\langle|\boldsymbol{\mu}|\rangle \pm \sigma$ (eÅ)
-- **quadrupole magnitude** $\langle\|\boldsymbol{\Theta}\|\rangle \pm \sigma$ — Frobenius norm (eÅ²)
-- **quadrupole tensor** — mean and standard deviation $\sigma$ of the six independent components
-- **per-atom `⟨q⟩` and `⟨q²⟩-⟨q⟩²`** — for atoms with fluctuating charge (e.g. from titration or atom swaps)
+- net charge $\langle Z\rangle \pm \sigma$ — mean and standard deviation
+- capacitance $C = \langle Z^2\rangle - \langle Z\rangle^2$ — charge variance
+- dipole magnitude $\langle|\boldsymbol{\mu}|\rangle \pm \sigma$ (eÅ)
+- quadrupole magnitude $\langle\|\boldsymbol{\Theta}\|\rangle \pm \sigma$ — Frobenius norm (eÅ²)
+- quadrupole tensor — mean and standard deviation $\sigma$ of the six independent components
+- per-atom `⟨q⟩` and `⟨q²⟩-⟨q⟩²` — for atoms with fluctuating charge (e.g. from titration or atom swaps)
 
 The dipole and quadrupole moments are computed relative to each group's
 center of mass with periodic boundary conditions applied.
 Handles atom-type swaps (titration) and GCMC (only active groups contribute).
 
-The reported quadrupole is the **traceless** form (Buckingham convention)
+The reported quadrupole is the traceless form (Buckingham convention)
 
 $$\Theta_{\alpha\beta} = \tfrac{1}{2}\sum_i q_i\left(3 d_{i\alpha} d_{i\beta} - d_i^2\,\delta_{\alpha\beta}\right),$$
 
@@ -198,13 +198,12 @@ directly with experiment and literature.
 
 ### Selection resolves group-wise
 
-The selection picks **whole groups** that contain at least one active
+The selection picks whole groups that contain at least one active
 matching atom — not just the matched atoms themselves. So an atom-level
 selection like `atomtype CA` pulls in every group that has an active CA
 atom and accumulates the full group's charge and dipole moment. This is
-the same `resolve_groups_live` behavior used elsewhere in faunus, and it
-makes it easy to address molecules whose name varies (e.g. across
-protonation states) via a stable marker atom that they all share:
+useful when a molecule changes name during speciation, for example across
+protonation states, but still contains a stable marker atom:
 
 ```yaml
 - !Multipole
@@ -213,7 +212,7 @@ protonation states) via a stable marker atom that they all share:
 ```
 
 By contrast, `!CollectiveVariable property: charge` sums the charge of
-**only the matched atoms**, not their parent groups — see [Supported
+only the matched atoms, not their parent groups — see [Supported
 properties](#supported-properties).
 
 Per-atom charge statistics are reported in `output.yaml` as an `atoms` list
@@ -277,18 +276,18 @@ u = \frac{q_a q_b}{R} + \frac{q_a(\boldsymbol{\mu}_b\cdot\boldsymbol{R}) - q_b(\
 $$
 
 Each term is thermally averaged over orientations and co-solute configurations. Energies are
-reported in **kJ/mol**: the geometric factors above carry the Bjerrum length and _RT_ of the
+reported in kJ/mol: the geometric factors above carry the Bjerrum length and _RT_ of the
 [medium](topology.md). The exact energy is the explicit sum over atomic charges,
 $u_\text{exact} = \sum_i^a\sum_j^b q_i q_j / |\boldsymbol{r}_i-\boldsymbol{r}_j|$.
 
 Alongside the energies, five orientational measures are accumulated (column name in
 parentheses):
 
-- **dipole correlation** $\langle\hat{\boldsymbol{\mu}}_a\cdot\hat{\boldsymbol{\mu}}_b\rangle$ (`mucorr`), between $-1$ and $1$ — mean cosine between the dipole directions: $+1$ parallel, $-1$ antiparallel, $0$ uncorrelated.
-- **nematic order** $\langle P_2\rangle = \langle(3\cos^2\theta - 1)/2\rangle$ (`p2`), between $-0.5$ and $1$ — alignment blind to dipole sign: $+1$ collinear (parallel or antiparallel), $0$ random, $-0.5$ mutually perpendicular.
-- **longitudinal projection** $\langle(\hat{\boldsymbol{\mu}}_a\cdot\hat{\boldsymbol{R}})(\hat{\boldsymbol{\mu}}_b\cdot\hat{\boldsymbol{R}})\rangle$ (`long`), between $-1$ and $1$ — orientation relative to the separation axis: near $+1$ both point along $\boldsymbol{R}$ (head-to-tail, end-on), near $0$ both lie perpendicular to it (side-by-side, broadside).
-- **Kirkwood factor** $g_K(R) = 1 + \frac{1}{N}\sum_{i \neq j,\, r_{ij} \leq R}\langle\hat{\boldsymbol{\mu}}_i\cdot\hat{\boldsymbol{\mu}}_j\rangle$ (`gK`) — the running dipole-correlation integral, where $N$ counts the reference molecules that carry a dipole (apolar molecules are excluded from the normalization): $g_K > 1$ signals net parallel ordering of the surrounding dipoles, $g_K < 1$ net antiparallel ordering. It applies when both selections are the same species; for two different species the bare cumulative sum is reported, without the $+1$.
-- **quadrupole correlation** — the tensor overlap $\langle\boldsymbol{\Theta}_a : \boldsymbol{\Theta}_b\rangle$ (`quadcorr`) and its normalized form $\langle\hat{\boldsymbol{\Theta}}_a : \hat{\boldsymbol{\Theta}}_b\rangle$ (`quadcorr_norm`), between $-1$ and $1$: $+1$ identically oriented quadrupoles, $-1$ maximally anti-aligned, $0$ uncorrelated.
+- dipole correlation $\langle\hat{\boldsymbol{\mu}}_a\cdot\hat{\boldsymbol{\mu}}_b\rangle$ (`mucorr`), between $-1$ and $1$ — mean cosine between the dipole directions: $+1$ parallel, $-1$ antiparallel, $0$ uncorrelated.
+- nematic order $\langle P_2\rangle = \langle(3\cos^2\theta - 1)/2\rangle$ (`p2`), between $-0.5$ and $1$ — alignment blind to dipole sign: $+1$ collinear (parallel or antiparallel), $0$ random, $-0.5$ mutually perpendicular.
+- longitudinal projection $\langle(\hat{\boldsymbol{\mu}}_a\cdot\hat{\boldsymbol{R}})(\hat{\boldsymbol{\mu}}_b\cdot\hat{\boldsymbol{R}})\rangle$ (`long`), between $-1$ and $1$ — orientation relative to the separation axis: near $+1$ both point along $\boldsymbol{R}$ (head-to-tail, end-on), near $0$ both lie perpendicular to it (side-by-side, broadside).
+- Kirkwood factor $g_K(R) = 1 + \frac{1}{N}\sum_{i \neq j,\, r_{ij} \leq R}\langle\hat{\boldsymbol{\mu}}_i\cdot\hat{\boldsymbol{\mu}}_j\rangle$ (`gK`) — the running dipole-correlation integral, where $N$ counts the reference molecules that carry a dipole (apolar molecules are excluded from the normalization): $g_K > 1$ signals net parallel ordering of the surrounding dipoles, $g_K < 1$ net antiparallel ordering. It applies when both selections are the same species; for two different species the bare cumulative sum is reported, without the $+1$.
+- quadrupole correlation — the tensor overlap $\langle\boldsymbol{\Theta}_a : \boldsymbol{\Theta}_b\rangle$ (`quadcorr`) and its normalized form $\langle\hat{\boldsymbol{\Theta}}_a : \hat{\boldsymbol{\Theta}}_b\rangle$ (`quadcorr_norm`), between $-1$ and $1$: $+1$ identically oriented quadrupoles, $-1$ maximally anti-aligned, $0$ uncorrelated.
 
 Both selections must resolve to molecules with a center of mass. Results are written to a CSV
 file, one row per distance bin, with columns
@@ -325,9 +324,9 @@ A medium is required for the Bjerrum length.
 Streams energy values to a file at each sampled step.
 Two modes are supported:
 
-- **Total** (default): writes every Hamiltonian term plus the total.
+- Total (default): writes every Hamiltonian term plus the total.
   Output columns: `step term1 term2 ... total`.
-- **Partial**: writes the nonbonded energy between two sets of atoms
+- Partial: writes the nonbonded energy between two sets of atoms
   selected with VMD-like expressions.
   Output columns: `step energy running_average`.
 
@@ -384,9 +383,9 @@ from sigma values, colors by charge, and draws the periodic box.
 For speciation/GCMC/titration simulations, two additional companion files
 enable per-frame visualization updates in VMD:
 
-- **`.sizes.dat`** — per-frame group active counts (written when any group
+- `.sizes.dat` — per-frame group active counts (written when any group
   has inactive atoms). The VMD script hides inactive atoms (radius = 0).
-- **`.charges.dat`** — per-frame atom charges (always written). The VMD
+- `.charges.dat` — per-frame atom charges (always written). The VMD
   script updates charges each frame so that atom-type swaps from titration
   and speciation are reflected in the charge coloring.
 
@@ -454,9 +453,9 @@ normalized using the average volume (NPT-compatible).
 
 Two modes are supported:
 
-- **Atom-atom** (default): pairwise distances between individual atoms.
+- Atom-atom (default): pairwise distances between individual atoms.
   Intramolecular pairs (atoms in the same molecule) are excluded by default.
-- **COM-COM** (`use_com: true`): pairwise distances between molecular
+- COM-COM (`use_com: true`): pairwise distances between molecular
   centers of mass.
 
 The `dimension` option controls which spatial components are used for the
@@ -676,7 +675,7 @@ analysis:
 
 Key           | Required | Default      | Description
 ------------- | -------- | ------------ | -------------------------------------------
-`dV`          | yes      |              | Volume displacement (ų)
+`dV`          | yes      |              | Volume displacement (Å³)
 `method`      | no       | `Isotropic`  | Scaling policy: `Isotropic`, `ScaleZ`, `ScaleXY`
 `file`        | no       |              | Output file path (see [Output file formats](#output-file-formats))
 `frequency`   | yes      |              | Sample frequency, e.g. `!Every 10`
@@ -697,9 +696,9 @@ is the attractive, van-der-Waals-like force that dominates for divalent ions and
 mean-field Poisson–Boltzmann misses. The surface charge density $\sigma$ is set by
 electroneutrality from the counterion charges — you do not specify it.
 
-The analysis is **hardcoded to a `Slit` cell** (periodic in *xy*, walls at $z=\pm L_z/2$, so
-the **midplane is $z=0$**) and to **electrostatics only**; it suits the primitive-model
-double layer with point-charge counterions. Valency **mixtures need nothing special** —
+The analysis is hardcoded to a `Slit` cell (periodic in *xy*, walls at $z=\pm L_z/2$, so
+the midplane is $z=0$) and to electrostatics only; it suits the primitive-model
+double layer with point-charge counterions. Valency mixtures need nothing special —
 select all the counterions (e.g. `"atomtype Na Ca"`) and report. Results are block-averaged
 and reported as mean ± standard error.
 
@@ -723,9 +722,9 @@ Key                  | Required | Default  | Description
 `file`               | no       |          | Output file path (see [Output file formats](#output-file-formats))
 `frequency`          | yes      |          | Sample frequency, e.g. `!Every 10`
 
-A **long-range correction** for the finite lateral box, reported as `F_iPB`, is computed and
+A long-range correction for the finite lateral box, reported as `F_iPB`, is computed and
 added to the pressure automatically — it needs no configuration and handles valency
-mixtures. For reliable numbers, **equilibrate first and start production from a state file**
+mixtures. For reliable numbers, equilibrate first and start production from a state file
 (`-s`), and confirm the result is stable against `density_bins` and the lateral box size.
 
 `output.yaml` reports `{mean, error}` for the midplane density `rho_mid/Å⁻³` and the
@@ -751,19 +750,19 @@ length, and $1/\kappa$ the Debye length — both taken from the medium. Because 
 the sum convergent, no infinite-plane correction term is needed. The walls are assumed
 neutral; only the explicit ions contribute.
 
-**Without salt** (no Debye length) the kernel falls back automatically to **bare Coulomb**,
+Without salt (no Debye length) the kernel falls back automatically to bare Coulomb,
 the unscreened limit $\kappa\to0$. The plane potential is then the one-dimensional Poisson
 Green's function
 
 $$\varphi(z) = -2\pi\,l_B\sum_{z'}\sigma(z')\,|z-z'|,$$
 
-which is finite and physical only for an **electroneutral** slab (the linear background
+which is finite and physical only for an electroneutral slab (the linear background
 cancels when $\sum_{z'}\sigma(z')=0$).
 
-The cell geometry is detected automatically: a **cuboid or slit must have a square base**
-($L_x = L_y$), and a **cylinder** uses its circular cross-section. The exponential treatment
+The cell geometry is detected automatically: a cuboid or slit must have a square base
+($L_x = L_y$), and a cylinder uses its circular cross-section. The exponential treatment
 assumes each charged plane is effectively infinite, which holds only when the lateral box
-size is **much larger than the Debye length** — a warning is printed otherwise (screened
+size is much larger than the Debye length — a warning is printed otherwise (screened
 kernel only).
 
 ### Finite-box correction (optional)
@@ -779,21 +778,21 @@ where $\varphi_\text{ext}$ is the contribution of the charge *outside* the cross
 is the screened (Yukawa) analogue of the finite-box correction of Greberg et al.,
 [doi:10/dhb9mj](https://doi.org/10/dhb9mj); screening makes every term finite, so the
 divergent and linear pieces of the bare-Coulomb construction cancel before quadrature. For a
-**square base** of half-width $a$ ($L_x = 2a$),
+square base of half-width $a$ ($L_x = 2a$),
 
 $$\varphi_\text{ext}(z) = \frac{8\,l_B}{\kappa}\int_0^{\pi/4}
    \exp\!\Big(\!-\kappa\sqrt{a^2/\cos^2\theta + z^2}\,\Big)\,\mathrm{d}\theta,$$
 
-a smooth integral evaluated by quadrature; for a **disk** of radius $R$ (cylinder) it has the
+a smooth integral evaluated by quadrature; for a disk of radius $R$ (cylinder) it has the
 closed form
 
 $$\varphi_\text{ext}(z) = \frac{2\pi\,l_B}{\kappa}\,e^{-\kappa\sqrt{R^2 + z^2}}.$$
 
 Both vanish as the cross-section grows ($\varphi_\text{ext}\to0$ for $\kappa a\gg1$), so the
-correction matters only for thin boxes. Enable it only when the simulation itself does **not**
+correction matters only for thin boxes. Enable it only when the simulation itself does not
 already apply such an external correction, otherwise the far field is subtracted twice.
 
-For the **unscreened** (bare-Coulomb) kernel the correction reduces to Greberg's original
+For the unscreened (bare-Coulomb) kernel the correction reduces to Greberg's original
 square-base form,
 
 $$\varphi_\text{ext}(z) = -2\pi\,l_B\,|z| - l_B\,u_\text{box}(z),
@@ -803,7 +802,7 @@ u_\text{box}(z) = 8a\,\ln\!\frac{\sqrt{2a^2+z^2}+a}{\sqrt{a^2+z^2}}
 
 recovered from the screened form as $\kappa\to0$ once the regularizing constant $2\pi l_B/\kappa$
 is removed. Because Greberg's construction models a square minimum-image box, the unscreened
-correction is **only defined for a square base**; enabling it for a cylinder is an error.
+correction is only defined for a square base; enabling it for a cylinder is an error.
 
 ### Example
 
@@ -848,8 +847,8 @@ where $A$ is the cross-sectional area of the cell. Use it to measure how a speci
 itself between a wall and the bulk: ion layering at a charged surface, adsorption in a slit
 pore, or the density of a fluid along a cylindrical channel.
 
-By default each selected **atom** counts towards the slab holding it. Set `use_com: true` to
-count each selected **molecule** in the slab holding its centre of mass instead, which profiles
+By default each selected atom counts towards the slab holding it. Set `use_com: true` to
+count each selected molecule in the slab holding its centre of mass instead, which profiles
 whole molecules rather than their individual atoms. Molecules declared `atomic` have no centre
 of mass, so selecting one with `use_com` is an error.
 

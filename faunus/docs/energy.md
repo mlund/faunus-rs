@@ -1,7 +1,9 @@
 # Energy
 
 The Hamiltonian is the sum of all energy terms acting on the system.
-Energy terms are defined in the `energy` section of the YAML input.
+In a complete input file, energy terms are defined under `system.energy`.
+Included force-field fragments may instead use a top-level `energy` section;
+see [Loading nonbonded from include files](#loading-nonbonded-from-include-files).
 
 ---
 
@@ -20,8 +22,9 @@ and $N$ is the number of independently translatable entities
 ### YAML configuration
 
 ```yaml
-energy:
-  pressure: !atm 1.0
+system:
+  energy:
+    pressure: !atm 1.0
 ```
 
 Supported pressure units (YAML tags):
@@ -46,15 +49,16 @@ pairs can override the default.
 ### YAML configuration
 
 ```yaml
-energy:
-  nonbonded:
-    default:
-      - !LennardJones {mixing: LorentzBerthelot}
-      - !Coulomb {cutoff: 12.0}
-    replace:
-      [Na, Cl]:
-        - !LennardJones {σ: 3.2, ε: 1.5}
+system:
+  energy:
+    nonbonded:
+      default:
+        - !LennardJones {mixing: LorentzBerthelot}
         - !Coulomb {cutoff: 12.0}
+      replace:
+        [Na, Cl]:
+          - !LennardJones {σ: 3.2, ε: 1.5}
+          - !Coulomb {cutoff: 12.0}
 ```
 
 Three sub-sections control how interactions are assigned to atom pairs:
@@ -65,9 +69,9 @@ Three sub-sections control how interactions are assigned to atom pairs:
 | `replace: [a, b]: [...]` | Completely replaces `default` for that pair           |
 | `append: [a, b]: [...]`  | Merges with `default` by interaction type             |
 
-**`replace`** pairs get only what is listed — no default inheritance.
+`replace` pairs get only what is listed — no default inheritance.
 
-**`append`** pairs inherit `default`, but if both define the same interaction type
+`append` pairs inherit `default`, but if both define the same interaction type
 (e.g. AshbaughHatch), the append entry replaces that type; other default types
 (e.g. Coulomb) are kept.
 
@@ -108,19 +112,20 @@ bounding-sphere culling — a group pair is ignored when its center-of-mass
 separation exceeds `cutoff + R_i + R_j`, where `R_i`/`R_j` are the groups'
 bounding radii (max distance from the mass center to any member particle).
 This accelerates the energy without changing it, and — unlike
-[spline tabulation](#spline-tabulation) — leaves the pair potentials **exact**
+[spline tabulation](#spline-tabulation) — leaves the pair potentials exact
 (no tabulation, no energy shift).
 
 Add `cutoff` and `bounding_spheres` alongside `nonbonded`:
 
 ```yaml
-energy:
-  cutoff: 50              # group-to-group cutoff (Å)
-  bounding_spheres: true
-  nonbonded:
-    default:
-      - !Fanourgakis {cutoff: 50}
-      - !AshbaughHatch {mixing: arithmetic, cutoff: 20.0}
+system:
+  energy:
+    cutoff: 50              # group-to-group cutoff (Å)
+    bounding_spheres: true
+    nonbonded:
+      default:
+        - !Fanourgakis {cutoff: 50}
+        - !AshbaughHatch {mixing: arithmetic, cutoff: 20.0}
 ```
 
 | Key                | Required | Default | Description                                        |
@@ -128,7 +133,7 @@ energy:
 | `cutoff`           | no       | none    | Group-to-group cutoff (Å); no culling if unset     |
 | `bounding_spheres` | no       | `true`  | Enable bounding-sphere culling (needs `cutoff`)    |
 
-> **Correctness:** `cutoff` must be **≥ the longest per-pair potential range**
+> Correctness: `cutoff` must be ≥ the longest per-pair potential range
 > (here the 50 Å electrostatics), since a culled group pair skips *all* of its
 > atom–atom interactions. This is checked at startup: a shorter cutoff, or any
 > unbounded potential (e.g. Lennard-Jones or Coulomb without a cutoff), is
@@ -174,7 +179,7 @@ ignoring any explicit `lambda` or `cutoff` values:
   - !AshbaughHatch {epsilon: 0.8368, sigma: 5.62, wca: true}
 ```
 
-> **Note:** `lambda: 0` does NOT give WCA — it produces a flat step function
+> Note: `lambda: 0` does NOT give WCA — it produces a flat step function
 > of height ε. Use `wca: true` or `lambda: 1` with cutoff=σ·2^(1/6) for
 > true repulsive excluded volume.
 
@@ -287,14 +292,14 @@ For non-neutral systems ($Q = \sum_j q_j \neq 0$), additional corrections are ne
 because the $\mathbf{k}=0$ term is excluded from the reciprocal sum.
 The treatment differs between Coulomb and Yukawa:
 
-**Coulomb** ($\kappa = 0$): The divergent $\mathbf{k}=0$ term is cancelled by a
+Coulomb ($\kappa = 0$): The divergent $\mathbf{k}=0$ term is cancelled by a
 uniform neutralizing background charge, leaving a finite correction
 ([Frenkel & Smit](https://doi.org/10.1016/B978-0-12-267351-1.X5000-7), Eq. 12.1.25):
 
 $$U_\text{self} = -\frac{\alpha}{\sqrt{\pi}} \sum_j q_j^2, \quad
   U_\text{bg} = -\frac{\pi Q^2}{2V\alpha^2}$$
 
-**Yukawa** ($\kappa > 0$): The $\mathbf{k}=0$ term is finite due to screening
+Yukawa ($\kappa > 0$): The $\mathbf{k}=0$ term is finite due to screening
 and is included explicitly instead of a neutralizing background:
 
 $$U_\text{self} = \left(-\frac{\alpha}{\sqrt{\pi}} e^{-\kappa^2/4\alpha^2}
@@ -329,16 +334,17 @@ The `ewald` section automatically sets up both the real-space pair potential
 energy term. No manual `!Ewald` entry is needed in the nonbonded list.
 
 ```yaml
-energy:
-  nonbonded:
-    default:
-      - !LennardJones {mixing: LB}
-  spline:
-    cutoff: 14.0
-  ewald:
-    cutoff: 9.0
-    accuracy: 1e-5
-    policy: PBC
+system:
+  energy:
+    nonbonded:
+      default:
+        - !LennardJones {mixing: LB}
+    spline:
+      cutoff: 14.0
+    ewald:
+      cutoff: 9.0
+      accuracy: 1e-5
+      policy: PBC
 ```
 
 | Key        | Required | Default | Description                                                 |
@@ -371,15 +377,16 @@ For performance, all nonbonded potentials can be tabulated using cubic Hermite s
 Add a `spline` section alongside `nonbonded`:
 
 ```yaml
-energy:
-  nonbonded:
-    default:
-      - !WCA {mixing: LB}
-      - !Coulomb {cutoff: 200}
-  spline:
-    cutoff: 200.0
-    n_points: 2000
-    grid_type: PowerLaw2
+system:
+  energy:
+    nonbonded:
+      default:
+        - !WCA {mixing: LB}
+        - !Coulomb {cutoff: 200}
+    spline:
+      cutoff: 200.0
+      n_points: 2000
+      grid_type: PowerLaw2
 ```
 
 | Key                | Required | Default      | Description                              |
@@ -444,17 +451,17 @@ Bonded energy terms are automatically added to the Hamiltonian based on the
 bonds, torsions, and dihedrals defined in the [topology](topology.md#molecules).
 No explicit `energy:` configuration is needed.
 
-- **Intramolecular** — bonds, torsions, and dihedrals within each molecule,
+- Intramolecular — bonds, torsions, and dihedrals within each molecule,
   using local atom indices defined in the molecule type.
   Always active.
-- **Intermolecular** — bonds, torsions, and dihedrals between atoms in different
+- Intermolecular — bonds, torsions, and dihedrals between atoms in different
   molecules, using global atom indices defined in
   [`system.intermolecular`](topology.md#intermolecular-bonded-interactions).
   Only added when at least one intermolecular interaction is defined.
 
 ### Supported potentials
 
-**Bonds** (two-body, function of distance $r$):
+Bonds (two-body, function of distance $r$):
 
 | Kind            | Energy                                                       |
 |-----------------|--------------------------------------------------------------|
@@ -463,14 +470,14 @@ No explicit `energy:` configuration is needed.
 | `!Morse`        | $D_e\bigl(1 - e^{-a(r - r_e)}\bigr)^2$                      |
 | `!UreyBradley`  | $\frac{1}{2} k (r - r_\text{eq})^2$                         |
 
-**Torsions** (three-body, function of angle $\theta$ in degrees):
+Torsions (three-body, function of angle $\theta$ in degrees):
 
 | Kind         | Energy                                         |
 |--------------|------------------------------------------------|
 | `!Harmonic`  | $\frac{1}{2} k (\theta - \theta_\text{eq})^2$  |
 | `!Cosine`    | $\frac{1}{2} k (\cos\theta - \cos\theta_\text{eq})^2$ |
 
-**Dihedrals** (four-body, function of dihedral angle $\phi$ in degrees):
+Dihedrals (four-body, function of dihedral angle $\phi$ in degrees):
 
 | Kind               | Energy                                                  |
 |--------------------|---------------------------------------------------------|
@@ -525,19 +532,20 @@ parser for better performance:
 ### YAML configuration
 
 ```yaml
-energy:
-  customexternal:
-    # Expression with named constants
-    - selection: "molecule water"
-      com: true
-      constants: { radius: 15, k: 100 }
-      function: "0.5 * k * (x^2 + y^2 + z^2 - radius^2)"
-    # Expression with conditional
-    - selection: "all"
-      function: "10.0 if x > 0 else -5.0"
-    # Built-in preset
-    - selection: "all"
-      function: staircase-sincos
+system:
+  energy:
+    customexternal:
+      # Expression with named constants
+      - selection: "molecule water"
+        com: true
+        constants: { radius: 15, k: 100 }
+        function: "0.5 * k * (x^2 + y^2 + z^2 - radius^2)"
+      # Expression with conditional
+      - selection: "all"
+        function: "10.0 if x > 0 else -5.0"
+      # Built-in preset
+      - selection: "all"
+        function: staircase-sincos
 ```
 
 | Key         | Required | Default | Description                                      |
@@ -557,7 +565,7 @@ When `false` (default), the expression is evaluated at each matching atom positi
 
 The `custompair` energy term applies a user-defined potential `U(r)` between the
 centres of mass of *two* rigid-body selections. Unlike `customexternal`, it
-contributes both **energy** (consumed by Metropolis MC) and **forces**
+contributes both energy (consumed by Metropolis MC) and forces
 (consumed by Langevin dynamics), distributed to each rigid body's atoms by mass
 fraction so the COM force is exact and the torque about the COM is zero.
 
@@ -582,18 +590,19 @@ applies (operators, math functions, Python-style conditionals, named constants).
 ### YAML configuration
 
 ```yaml
-energy:
-  custompair:
-    # Harmonic restraint at fixed COM-COM distance (umbrella window)
-    - selection1: "molecule protein0"
-      selection2: "molecule protein1"
-      function: "0.5 * k * (r - r0)^2"
-      constants: { k: 100.0, r0: 30.0 }
-    # Constant pulling force along the COM-COM axis (steered MD)
-    - selection1: "molecule protein0"
-      selection2: "molecule protein1"
-      function: "f0 * r"
-      constants: { f0: 50.0 }
+system:
+  energy:
+    custompair:
+      # Harmonic restraint at fixed COM-COM distance (umbrella window)
+      - selection1: "molecule protein0"
+        selection2: "molecule protein1"
+        function: "0.5 * k * (r - r0)^2"
+        constants: { k: 100.0, r0: 30.0 }
+      # Constant pulling force along the COM-COM axis (steered MD)
+      - selection1: "molecule protein0"
+        selection2: "molecule protein1"
+        function: "f0 * r"
+        constants: { f0: 50.0 }
 ```
 
 | Key           | Required | Default     | Description                                          |
@@ -606,7 +615,7 @@ energy:
 
 ### Notes
 
-- Both selections must each resolve to **exactly one** group whose underlying
+- Both selections must each resolve to exactly one group whose underlying
   molecule has `degrees_of_freedom: Rigid`. Selections matching free-ion clouds,
   partial rigid bodies, or zero/multiple groups are rejected at build time.
 - Force on each COM is `−(dU/dr)·d̂_ab`, where `d̂_ab = (com1−com2)/r`.
@@ -631,21 +640,22 @@ by $w = \exp(-\ln g(\text{bin}))$, recovering the correct ensemble averages.
 ### YAML configuration
 
 ```yaml
-energy:
-  penalty:
-    file: wl_states/histogram.yaml
-    coordinate:
-      property: atom_position
-      selection: "atomtype A"
-      dimension: x
-      range: [-2.0, 2.0]
-      resolution: 0.1
-    coordinate2:  # optional, for 2D
-      property: atom_position
-      selection: "atomtype A"
-      dimension: y
-      range: [-2.0, 2.0]
-      resolution: 0.1
+system:
+  energy:
+    penalty:
+      file: wl_states/histogram.yaml
+      coordinate:
+        property: atom_position
+        selection: "atomtype A"
+        dimension: x
+        range: [-2.0, 2.0]
+        resolution: 0.1
+      coordinate2:  # optional, for 2D
+        property: atom_position
+        selection: "atomtype A"
+        dimension: y
+        range: [-2.0, 2.0]
+        resolution: 0.1
 ```
 
 | Key           | Required | Description                                                    |
@@ -738,7 +748,7 @@ giving $O(N)$ scaling in the number of bodies. Periodic boundary conditions
 are supported for orthorhombic (cuboid) cells.
 
 !!! note
-    This energy term is currently designed for **rigid bodies** only — all atoms in
+    This energy term is currently designed for rigid bodies only — all atoms in
     each molecule move as a unit. Support for flexible molecules and polymers may be
     added in future versions.
 
@@ -771,25 +781,26 @@ for the expanded tessellation radii.
 Constrains a collective variable to a specified range.
 Two modes are supported:
 
-- **Hard constraint** (default): returns infinite energy if the CV value falls
+- Hard constraint (default): returns infinite energy if the CV value falls
   outside `[min, max]`, otherwise zero.
-- **Harmonic constraint**: applies a quadratic penalty
+- Harmonic constraint: applies a quadratic penalty
   $\frac{1}{2} k (x_\text{eq} - x)^2$ around an equilibrium value.
 
 ### YAML configuration
 
 ```yaml
-energy:
-  constrain:
-    - property: volume
-      range: [1000.0, 5000.0]
-    - property: mass_center_position
-      selection: "molecule protein"
-      projection: z
-      range: [-50.0, 50.0]
-      harmonic: # optional
-        force_constant: 100.0
-        equilibrium: 0.0
+system:
+  energy:
+    constrain:
+      - property: volume
+        range: [1000.0, 5000.0]
+      - property: mass_center_position
+        selection: "molecule protein"
+        projection: z
+        range: [-50.0, 50.0]
+        harmonic: # optional
+          force_constant: 100.0
+          equilibrium: 0.0
 ```
 
 | Key              | Required | Default | Description                                    |
@@ -904,7 +915,7 @@ $\varepsilon_0' = 0$.
 | `max_iterations`   | Maximum number of Picard iterations before accepting the current solution. |
 | `tolerance`        | Convergence threshold: iteration stops when the largest change in $\hat{g}_S$ across all colloids falls below this value. |
 
-> **Note:** `steric_adsorption` is mutually exclusive with `h_tilde`.
+> Note: `steric_adsorption` is mutually exclusive with `h_tilde`.
 > Analytical forces are not yet implemented for this mode.
 
 ### Applicability
@@ -918,28 +929,30 @@ $\varepsilon_0' = 0$.
 ### YAML configuration
 
 ```yaml
-energy:
-  polymer_depletion:
-    polymer_rg: 10.0
-    polymer_density: 0.5
-    kappa: 1.0
-    molecules: [Colloid]
-    h_tilde: 5.0  # optional; omit for full depletion (Dirichlet)
+system:
+  energy:
+    polymer_depletion:
+      polymer_rg: 10.0
+      polymer_density: 0.5
+      kappa: 1.0
+      molecules: [Colloid]
+      h_tilde: 5.0  # optional; omit for full depletion (Dirichlet)
 ```
 
 Or with self-consistent steric adsorption (mutually exclusive with `h_tilde`):
 
 ```yaml
-energy:
-  polymer_depletion:
-    polymer_rg: 100.0
-    polymer_density: 1.0
-    kappa: 1.0
-    molecules: [Colloid]
-    colloid_radius: 5.0
-    steric_adsorption:
-      epsilon0_prime: 0.02
-      g0: 10.0
+system:
+  energy:
+    polymer_depletion:
+      polymer_rg: 100.0
+      polymer_density: 1.0
+      kappa: 1.0
+      molecules: [Colloid]
+      colloid_radius: 5.0
+      steric_adsorption:
+        epsilon0_prime: 0.02
+        g0: 10.0
 ```
 
 | Key                | Required | Default | Description                                           |
@@ -953,7 +966,7 @@ energy:
 | `h_tilde` / `h̃`  | no       |         | Robin BC parameter $\tilde{h} = R_c/b$; omit for Dirichlet |
 | `steric_adsorption` | no     |         | Self-consistent steric adsorption block (see below)   |
 
-**`steric_adsorption` sub-keys:**
+`steric_adsorption` sub-keys:
 
 | Key                | Required | Default | Description                                           |
 |--------------------|----------|---------|-------------------------------------------------------|
@@ -987,9 +1000,9 @@ A pairwise group energy cache gives O(1) lookups for single rigid-body MC moves.
 
 Two binary table formats are supported and auto-detected at load time:
 
-- **Flat** (legacy): uniform angular resolution across all separations.
+- Flat (legacy): uniform angular resolution across all separations.
   Uses `f16` storage.
-- **Adaptive**: per-slab angular resolution that adjusts with separation.
+- Adaptive: per-slab angular resolution that adjusts with separation.
   At short range where molecules overlap, slabs with negligible Boltzmann
   weights (exp(−βU) ≈ 0) store no angular data. At long range where the
   energy surface is smooth, slabs are collapsed to a single scalar value
@@ -1002,12 +1015,13 @@ Two binary table formats are supported and auto-detected at load time:
 ### YAML configuration
 
 ```yaml
-energy:
-  tabulated6d:
-    - molecules: [ProteinA, ProteinA]
-      file: table_AA.bin.gz
-    - molecules: [ProteinA, ProteinB]
-      file: table_AB.bin
+system:
+  energy:
+    tabulated6d:
+      - molecules: [ProteinA, ProteinA]
+        file: table_AA.bin.gz
+      - molecules: [ProteinA, ProteinB]
+        file: table_AB.bin
 ```
 
 | Key             | Required | Default | Description                                     |
@@ -1076,19 +1090,20 @@ The same pairwise group energy cache gives O(1) lookups for rigid-body MC moves.
 
 ### Table format
 
-Only the **adaptive** format is supported, using per-slab angular resolution
+Only the adaptive format is supported, using per-slab angular resolution
 that adjusts with separation (same scheme as 6D adaptive tables).
 No swap averaging is performed since the interaction is inherently asymmetric.
 
 ### YAML configuration
 
 ```yaml
-energy:
-  tabulated3d:
-    - molecules: [Protein, Sodium]
-      file: protein_na.bin.gz
-    - molecules: [Protein, Chloride]
-      file: protein_cl.bin.gz
+system:
+  energy:
+    tabulated3d:
+      - molecules: [Protein, Sodium]
+        file: protein_na.bin.gz
+      - molecules: [Protein, Chloride]
+        file: protein_cl.bin.gz
 ```
 
 | Key         | Required | Description                                        |
