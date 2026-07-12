@@ -1,4 +1,4 @@
-// Copyright 2024 Mikael Lund
+// Copyright 2026 Mikael Lund
 //
 // Licensed under the Apache license, version 2.0 (the "license");
 // you may not use this file except in compliance with the license.
@@ -42,9 +42,9 @@ const fn default_true() -> bool {
 /// boundary. A single molecule type means equal group masses, so the unweighted centroid of the
 /// group mass centers *is* the cluster mass center.
 ///
-/// Two clustering criteria are selectable via the `com` flag:
-/// - `com: true` (default): mass-center to mass-center distance — O(N_mol) per BFS step, fast.
-/// - `com: false`: closest bead-to-bead distance — O(N_mol × N_beads²), physically transferable
+/// Two clustering criteria are selectable via the `use_com` flag:
+/// - `use_com: true` (default): mass-center to mass-center distance — O(N_mol) per BFS step, fast.
+/// - `use_com: false`: closest bead-to-bead distance — O(N_mol × N_beads²), physically transferable
 ///   (the threshold is a surface separation, e.g. 6 Å = in contact).
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -62,7 +62,7 @@ pub struct ClusterMove {
     #[serde(alias = "dprot")]
     max_angle: f64,
     /// Distance threshold for cluster membership (Å).
-    /// Interpreted as COM-to-COM when `com: true`, or closest bead-to-bead when `com: false`.
+    /// Interpreted as COM-to-COM when `use_com: true`, or closest bead-to-bead when `use_com: false`.
     threshold: f64,
     /// Move selection weight.
     #[serde(skip_serializing, default = "crate::propagate::default_weight")]
@@ -74,7 +74,7 @@ pub struct ClusterMove {
     /// If true (default), use mass-center distance for the cluster criterion.
     /// If false, use closest bead-to-bead distance.
     #[serde(default = "default_true")]
-    com: bool,
+    use_com: bool,
     /// Set by `propose_move`, read by `bias`: true if the cluster membership is unchanged by the move.
     #[serde(skip)]
     cluster_stable: bool,
@@ -137,7 +137,7 @@ impl ClusterMove {
     /// True if groups `gi` and `gj` are within the threshold distance.
     fn in_contact(&self, gi: usize, gj: usize, context: &impl Context) -> bool {
         let threshold_sq = self.threshold * self.threshold;
-        if self.com {
+        if self.use_com {
             let ci = self.group_com(gi, context);
             let cj = self.group_com(gj, context);
             context.cell().distance_squared(&ci, &cj) <= threshold_sq
@@ -221,7 +221,7 @@ impl ClusterMove {
             })
         };
 
-        if self.com {
+        if self.use_com {
             !outsiders().any(|(_, g)| {
                 let other = g
                     .mass_center()
@@ -506,16 +506,16 @@ propagate: {{seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}}
         assert_eq!(m.max_displacement, 5.0);
         assert_eq!(m.max_angle, 0.3);
         assert_eq!(m.threshold, 30.0);
-        assert!(m.com, "com should default to true");
+        assert!(m.use_com, "use_com should default to true");
         assert_eq!(m.weight, 1.0);
         assert_eq!(m.repeat, 1);
     }
 
     #[test]
     fn test_parse_bead_mode_explicit() {
-        let s = "{ molecule: MOL1, dp: 5.0, dprot: 0.3, threshold: 6.0, com: false }";
+        let s = "{ molecule: MOL1, dp: 5.0, dprot: 0.3, threshold: 6.0, use_com: false }";
         let m: ClusterMove = serde_yml::from_str(s).unwrap();
-        assert!(!m.com, "com should be false");
+        assert!(!m.use_com, "use_com should be false");
         assert_eq!(m.threshold, 6.0);
     }
 

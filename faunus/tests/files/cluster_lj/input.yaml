@@ -1,0 +1,41 @@
+# Energy-drift regression for ClusterMove with pairwise interactions enabled.
+#
+# Attractive Lennard-Jones single-bead molecules aggregate into clusters that the move then
+# translates and rotates as rigid units. The check is that the energy drift is zero: the move's
+# incremental ΔU (announced as Change::Groups → cluster-vs-rest plus the rigidly comoving
+# intra-cluster pairs, which cancel) must equal the recomputed total energy change. A missed or
+# double-counted intra-cluster pair would show up as nonzero drift.
+atoms:
+  - {name: A, mass: 1.0, sigma: 4.0, eps: 4.0}
+
+molecules:
+  - name: MOL
+    atoms: [A]
+    has_com: true
+
+system:
+  cell: !Cuboid [30.0, 30.0, 30.0]
+  medium:
+    permittivity: !Vacuum
+    temperature: 300.0
+  energy:
+    nonbonded:
+      default:
+        - !LennardJones {mixing: LB}
+  blocks:
+    - molecule: MOL
+      N: 30
+      insert: !RandomAtomPos {}
+
+analysis:
+  - !Energy {file: energy.dat, frequency: !Every 100}
+
+propagate:
+  seed: !Fixed 42
+  criterion: Metropolis
+  repeat: 2000
+  collections:
+    - !Stochastic
+      moves:
+        - !TranslateMolecule {molecule: MOL, dp: 2.0, repeat: 10}
+        - !ClusterMove {molecule: MOL, dp: 3.0, dprot: 3.0, threshold: 8.0, use_com: true, repeat: 1}

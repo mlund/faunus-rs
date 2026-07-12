@@ -240,16 +240,15 @@ leave a molecule trapped by its neighbours, so aggregates diffuse only slowly an
 observables such as $S(q)$ converge poorly. Moving whole clusters restores that diffusion.
 
 Two molecules join the same cluster when their separation is below `threshold`. The separation is
-measured between mass centers (`com: true`, the default) or between the closest pair of beads
-(`com: false`); the latter makes the threshold a surface separation that transfers across molecule
-sizes. Membership is transitive: the cluster grows outward from the seed until no further molecule
-lies within the threshold.
+measured between mass centers (`use_com: true`, the default) or between the closest pair of beads
+(`use_com: false`); the latter makes the threshold a surface separation that transfers across
+molecule sizes. Membership is transitive: the cluster grows outward from the seed until no further
+molecule lies within the threshold.
 
 Detailed balance is preserved by rejecting any move after which the cluster membership would
-change, and by drawing the translation and rotation from symmetric distributions. The move samples
-the correct Boltzmann distribution; it restores whole-cluster diffusion but does not attempt the
-gradient-based recruitment or hydrodynamic scaling of virtual-move Monte Carlo. The cluster grows in
-unwrapped coordinates, so a cluster that spans the periodic boundary still rotates correctly.
+change, and by drawing the translation and rotation from symmetric distributions, so the move
+samples the correct Boltzmann distribution. The cluster grows in unwrapped coordinates, so a
+cluster that spans the periodic boundary still rotates correctly.
 
 See [Dress & Krauth, _J. Phys. A_ 28, L597 (1995)](https://doi.org/10.1088/0305-4470/28/23/001) and
 [Whitelam & Geissler, _J. Chem. Phys._ 127, 154101 (2007)](https://doi.org/10.1063/1.2790421).
@@ -264,7 +263,7 @@ Key         | Required | Default | Description
 `dp`        | yes      |         | Maximum translational displacement (Å)
 `dprot`     | yes      |         | Maximum angular displacement (radians)
 `threshold` | yes      |         | Clustering distance (Å); mass-center or bead separation
-`com`       | no       | `true`  | Cluster on mass-center (`true`) or closest-bead (`false`) distance
+`use_com`   | no       | `true`  | Cluster on mass-center (`true`) or closest-bead (`false`) distance
 `weight`    | no       | 1       | Selection weight in a `!Stochastic` collection
 `repeat`    | no       | 1       | Repetitions per selection
 
