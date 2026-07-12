@@ -531,6 +531,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#cluster-move" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cluster Move
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#volume-move-npt" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -836,6 +847,17 @@
     <span class="md-ellipsis">
       
         Crankshaft Move
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cluster-move" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cluster Move
       
     </span>
   </a>
@@ -1343,6 +1365,84 @@ potentials, <code>PivotMove</code> alone is typically sufficient.</p>
 </tr>
 </tbody>
 </table>
+<hr />
+<h2 id="cluster-move">Cluster Move<a class="headerlink" href="#cluster-move" title="Permanent link">&para;</a></h2>
+<p>Picks a random seed molecule, grows a cluster of nearby molecules of the same type, and
+translates and rotates the whole cluster as one rigid body. In strongly associating systems —
+for example proteins with short-ranged attractions at high concentration — single-molecule moves
+leave a molecule trapped by its neighbours, so aggregates diffuse only slowly and structural
+observables such as <span class="arithmatex">\(S(q)\)</span> converge poorly. Moving whole clusters restores that diffusion.</p>
+<p>Two molecules join the same cluster when their separation is below <code>threshold</code>. The separation is
+measured between mass centers (<code>use_com: true</code>, the default) or between the closest pair of beads
+(<code>use_com: false</code>); the latter makes the threshold a surface separation that transfers across
+molecule sizes. Membership is transitive: the cluster grows outward from the seed until no further
+molecule lies within the threshold.</p>
+<p>Detailed balance is preserved by rejecting any move after which the cluster membership would
+change, and by drawing the translation and rotation from symmetric distributions, so the move
+samples the correct Boltzmann distribution. The cluster grows in unwrapped coordinates, so a
+cluster that spans the periodic boundary still rotates correctly.</p>
+<p>See <a href="https://doi.org/10.1088/0305-4470/28/23/001">Dress &amp; Krauth, <em>J. Phys. A</em> 28, L597 (1995)</a> and
+<a href="https://doi.org/10.1063/1.2790421">Whitelam &amp; Geissler, <em>J. Chem. Phys.</em> 127, 154101 (2007)</a>.</p>
+<div class="highlight"><pre><span></span><code><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!ClusterMove</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> molecule</span><span class="p">:</span><span class="w"> </span><span class="nv">Protein</span><span class="p p-Indicator">,</span><span class="nt"> dp</span><span class="p">:</span><span class="w"> </span><span class="nv">10.0</span><span class="p p-Indicator">,</span><span class="nt"> dprot</span><span class="p">:</span><span class="w"> </span><span class="nv">0.5</span><span class="p p-Indicator">,</span><span class="nt"> threshold</span><span class="p">:</span><span class="w"> </span><span class="nv">35.0</span><span class="w"> </span><span class="p p-Indicator">}</span>
+</code></pre></div>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Required</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>molecule</code></td>
+<td>yes</td>
+<td></td>
+<td>Name of the molecule type</td>
+</tr>
+<tr>
+<td><code>dp</code></td>
+<td>yes</td>
+<td></td>
+<td>Maximum translational displacement (Å)</td>
+</tr>
+<tr>
+<td><code>dprot</code></td>
+<td>yes</td>
+<td></td>
+<td>Maximum angular displacement (radians)</td>
+</tr>
+<tr>
+<td><code>threshold</code></td>
+<td>yes</td>
+<td></td>
+<td>Clustering distance (Å); mass-center or bead separation</td>
+</tr>
+<tr>
+<td><code>use_com</code></td>
+<td>no</td>
+<td><code>true</code></td>
+<td>Cluster on mass-center (<code>true</code>) or closest-bead (<code>false</code>) distance</td>
+</tr>
+<tr>
+<td><code>weight</code></td>
+<td>no</td>
+<td>1</td>
+<td>Selection weight in a <code>!Stochastic</code> collection</td>
+</tr>
+<tr>
+<td><code>repeat</code></td>
+<td>no</td>
+<td>1</td>
+<td>Repetitions per selection</td>
+</tr>
+</tbody>
+</table>
+<p>Output reports the mean cluster size <span class="arithmatex">\(\langle N\rangle\)</span> with its standard error, the fraction of
+trials rejected to preserve membership (<code>bias_rejection_rate</code>), and the root-mean-square
+translational and rotational displacements. For an ideal gas, <span class="arithmatex">\(\langle N\rangle = 1 + (N/V)\,\tfrac{4}{3}\pi R_c^3\)</span>
+with threshold <span class="arithmatex">\(R_c\)</span>, a useful check that the clustering is unbiased.</p>
 <hr />
 <h2 id="volume-move-npt">Volume Move (<em>NPT</em>)<a class="headerlink" href="#volume-move-npt" title="Permanent link">&para;</a></h2>
 <p>Proposes isotropic or anisotropic volume changes for sampling the <em>NPT</em> ensemble.
