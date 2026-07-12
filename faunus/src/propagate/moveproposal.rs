@@ -90,6 +90,41 @@ impl ProposedMove {
         }
     }
 
+    /// Move a set of groups together as one rigid cluster (roto-translation).
+    ///
+    /// `new_mass_centers` are the wrapped target mass centers (parallel to `groups`), which the
+    /// caller computes in *unwrapped* coordinates so a cluster spanning the periodic boundary
+    /// rotates correctly. `rotation` is the common orientation change (`None` for translation only).
+    /// `angle`/`translation` are recorded only for displacement statistics. The move is announced as
+    /// a [`Change::Groups`] of rigid bodies — the energy terms then compute both the cluster-vs-rest
+    /// and the (rigidly comoving) intra-cluster interactions, so the ΔU is correct for any cluster
+    /// geometry, including a cluster whose self-interaction through the periodic boundary changes.
+    pub fn cluster(
+        groups: Vec<usize>,
+        new_mass_centers: Vec<Point>,
+        rotation: Option<UnitQuaternion>,
+        angle: f64,
+        translation: Point,
+    ) -> Self {
+        debug_assert_eq!(groups.len(), new_mass_centers.len());
+        let change = Change::Groups(
+            groups
+                .iter()
+                .map(|&gi| (gi, GroupChange::RigidBody))
+                .collect(),
+        );
+        Self {
+            change,
+            displacement: Displacement::AngleDistance(angle, translation),
+            transform: Transform::ClusterTransform {
+                groups,
+                new_mass_centers,
+                rotation,
+            },
+            target: MoveTarget::System,
+        }
+    }
+
     /// Translate a subset of a group's particles, changing its internal geometry.
     pub fn translate_atoms(group: usize, relative: Vec<RelIndex>, shift: Point) -> Self {
         Self {

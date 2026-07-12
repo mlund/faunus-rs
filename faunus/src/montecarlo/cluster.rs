@@ -13,14 +13,16 @@
 // limitations under the license.
 
 use super::{find_molecule_id, random_group, Bias};
+use crate::auxiliary::BlockAverage;
 use crate::cell::BoundaryConditions;
-use crate::group::ParticleSelection;
+use crate::group::{MoleculeId, ParticleSelection};
 use crate::montecarlo::NewOld;
-use crate::propagate::{tagged_yaml, Displacement, MoveProposal, MoveTarget, ProposedMove};
-use crate::transform::{random_displacement, random_quaternion, random_unit_vector, Transform};
-use crate::{Change, Context, GroupChange, Point};
+use crate::propagate::{tagged_yaml, MoveProposal, ProposedMove};
+use crate::transform::{random_displacement, random_quaternion, random_unit_vector};
+use crate::{Change, Context, Point, UnitQuaternion};
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 
 const fn default_true() -> bool {
     true
@@ -28,15 +30,22 @@ const fn default_true() -> bool {
 
 /// Rigid-body cluster move.
 ///
-/// Picks a random seed molecule, grows a cluster by BFS using a distance threshold,
-/// then translates and rotates the entire cluster as a rigid unit. Ensures detailed
-/// balance via bias rejection: if the cluster composition changes after the move,
-/// the move is rejected with certainty.
+/// Picks a random seed molecule, grows a cluster by BFS using a distance threshold, then moves the
+/// whole cluster as a rigid unit. Detailed balance is enforced by rejecting any move that would
+/// change the cluster membership (`bias = ∞`); combined with symmetric roto-translation proposals,
+/// this samples the correct Boltzmann distribution. See Dress & Krauth,
+/// <https://doi.org/10.1088/0305-4470/28/23/001>.
 ///
-/// Two clustering criteria are supported via the `com` flag:
+/// The cluster is grown in *unwrapped* coordinates — each recruited neighbour is placed by minimum
+/// image relative to the molecule that recruited it — so the rotation pivot (the cluster mass
+/// center) is well defined and the whole cluster rotates correctly even when it spans the periodic
+/// boundary. A single molecule type means equal group masses, so the unweighted centroid of the
+/// group mass centers *is* the cluster mass center.
+///
+/// Two clustering criteria are selectable via the `com` flag:
 /// - `com: true` (default): mass-center to mass-center distance — O(N_mol) per BFS step, fast.
 /// - `com: false`: closest bead-to-bead distance — O(N_mol × N_beads²), physically transferable
-///   (threshold directly means surface separation, e.g. 6 Å = in contact).
+///   (the threshold is a surface separation, e.g. 6 Å = in contact).
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ClusterMove {
@@ -45,7 +54,7 @@ pub struct ClusterMove {
     molecule_name: String,
     /// Resolved molecule id (filled in `finalize`).
     #[serde(skip)]
-    molecule_id: usize,
+    molecule_id: MoleculeId,
     /// Maximum translational displacement (Å).
     #[serde(alias = "dp")]
     max_displacement: f64,
@@ -62,28 +71,42 @@ pub struct ClusterMove {
     #[serde(default = "crate::propagate::default_repeat")]
     #[serde(skip_serializing)]
     pub(crate) repeat: usize,
-    /// If true (default), use mass-center distance for cluster criterion.
+    /// If true (default), use mass-center distance for the cluster criterion.
     /// If false, use closest bead-to-bead distance.
     #[serde(default = "default_true")]
     com: bool,
-    /// Set by `propose_move`, read by `bias`: true if cluster composition is stable after move.
+    /// Set by `propose_move`, read by `bias`: true if the cluster membership is unchanged by the move.
     #[serde(skip)]
     cluster_stable: bool,
+    /// Runtime diagnostics reported to `output.yaml`.
+    #[serde(skip)]
+    stats: ClusterStats,
 }
 
-impl crate::Info for ClusterMove {
-    fn short_name(&self) -> Option<&'static str> {
-        Some("cluster")
-    }
-    fn long_name(&self) -> Option<&'static str> {
-        Some("Rigid-body cluster move")
-    }
+/// Running diagnostics for the cluster move, mirroring the C++ Faunus reporting.
+#[derive(Clone, Debug, Default)]
+struct ClusterStats {
+    /// Mean cluster size ⟨N⟩ with standard error.
+    size: BlockAverage,
+    /// Mean-square translational and rotational displacement (0 on rejected trials).
+    msd_translation: BlockAverage,
+    msd_rotation: BlockAverage,
+    /// Squared displacement of the pending trial, banked by `on_trial_outcome`.
+    pending_sq_translation: f64,
+    pending_sq_rotation: f64,
+    n_proposals: u64,
+    n_bias_rejected: u64,
 }
+
+impl_info!(ClusterMove, "cluster", "Rigid-body cluster move");
 
 impl ClusterMove {
     pub(crate) fn finalize(&mut self, context: &impl Context) -> anyhow::Result<()> {
         self.molecule_id = find_molecule_id(context, &self.molecule_name, "ClusterMove")?;
-        anyhow::ensure!(self.threshold > 0.0, "ClusterMove: threshold must be positive");
+        anyhow::ensure!(
+            self.threshold > 0.0,
+            "ClusterMove: threshold must be positive"
+        );
         anyhow::ensure!(
             self.max_displacement >= 0.0,
             "ClusterMove: max_displacement must be non-negative"
@@ -95,12 +118,20 @@ impl ClusterMove {
         Ok(())
     }
 
+    /// Mass center of group `gi` (all cluster groups are molecular and have one).
+    fn group_com(&self, gi: usize, context: &impl Context) -> Point {
+        context.groups()[gi]
+            .mass_center()
+            .copied()
+            .expect("cluster molecule has a mass center")
+    }
+
     /// True if groups `gi` and `gj` are within the threshold distance.
     fn in_contact(&self, gi: usize, gj: usize, context: &impl Context) -> bool {
         let threshold_sq = self.threshold * self.threshold;
         if self.com {
-            let ci = context.groups()[gi].mass_center().copied().unwrap_or_default();
-            let cj = context.groups()[gj].mass_center().copied().unwrap_or_default();
+            let ci = self.group_com(gi, context);
+            let cj = self.group_com(gj, context);
             context.cell().distance_squared(&ci, &cj) <= threshold_sq
         } else {
             let ai = context.groups()[gi]
@@ -116,21 +147,35 @@ impl ClusterMove {
         }
     }
 
-    /// Grow a cluster from `seed` via BFS. Returns sorted group indices.
-    fn find_cluster(&self, seed: usize, context: &impl Context) -> Vec<usize> {
+    /// Grow a cluster from `seed` via BFS.
+    ///
+    /// Returns the sorted group indices together with each group's *unwrapped* mass center: the
+    /// seed keeps its wrapped mass center, and every recruited member is placed by minimum image
+    /// relative to the member that recruited it. The result is contiguous in Euclidean space (for a
+    /// non-percolating cluster), independent of the recruitment order, so rotating about the
+    /// cluster mass center is well defined regardless of periodic boundaries.
+    fn find_cluster(&self, seed: usize, context: &impl Context) -> (Vec<usize>, Vec<Point>) {
         let mut cluster = vec![seed];
+        let mut unwrapped = vec![self.group_com(seed, context)];
         let mut pool: Vec<usize> = context
             .groups()
             .iter()
             .enumerate()
-            .filter(|(i, g)| g.molecule() == self.molecule_id && *i != seed)
+            .filter(|(i, g)| g.molecule() == self.molecule_id && *i != seed && !g.is_empty())
             .map(|(i, _)| i)
             .collect();
 
         let mut ci = 0;
         while ci < cluster.len() {
+            let parent = cluster[ci];
+            let parent_unwrapped = unwrapped[ci];
+            let parent_com = self.group_com(parent, context);
             pool.retain(|&j| {
-                if self.in_contact(cluster[ci], j, context) {
+                if self.in_contact(parent, j, context) {
+                    let disp = context
+                        .cell()
+                        .distance(&self.group_com(j, context), &parent_com);
+                    unwrapped.push(parent_unwrapped + disp);
                     cluster.push(j);
                     false
                 } else {
@@ -139,120 +184,163 @@ impl ClusterMove {
             });
             ci += 1;
         }
-        cluster.sort_unstable();
-        cluster
+
+        // Sort by group index (keeping the unwrapped centers parallel) for deterministic output.
+        let mut order: Vec<usize> = (0..cluster.len()).collect();
+        order.sort_unstable_by_key(|&k| cluster[k]);
+        (
+            order.iter().map(|&k| cluster[k]).collect(),
+            order.iter().map(|&k| unwrapped[k]).collect(),
+        )
+    }
+
+    /// Would the cluster membership survive the proposed move? If a non-cluster molecule of the
+    /// same type would fall within the threshold of the moved cluster, membership changes and the
+    /// move must be rejected to preserve detailed balance.
+    #[allow(clippy::too_many_arguments)]
+    fn cluster_membership_stable(
+        &self,
+        context: &impl Context,
+        cluster: &[usize],
+        new_mass_centers: &[Point],
+        rotation: UnitQuaternion,
+    ) -> bool {
+        let threshold_sq = self.threshold * self.threshold;
+        let members: HashSet<usize> = cluster.iter().copied().collect();
+        let outsiders = || {
+            context.groups().iter().enumerate().filter(|(i, g)| {
+                g.molecule() == self.molecule_id && !members.contains(i) && !g.is_empty()
+            })
+        };
+
+        if self.com {
+            !outsiders().any(|(_, g)| {
+                let other = g
+                    .mass_center()
+                    .copied()
+                    .expect("molecule has a mass center");
+                new_mass_centers
+                    .iter()
+                    .any(|nc| context.cell().distance_squared(nc, &other) <= threshold_sq)
+            })
+        } else {
+            // Moved bead positions, consistent with `Transform::ClusterTransform`: each bead is
+            // rotated about its own group mass center, then placed at the group's new mass center.
+            let moved_beads: Vec<Point> = cluster
+                .iter()
+                .zip(new_mass_centers)
+                .flat_map(|(&gi, &new_com)| {
+                    let old_com = self.group_com(gi, context);
+                    context.groups()[gi]
+                        .select(&ParticleSelection::Active, context.topology_ref())
+                        .unwrap_or_default()
+                        .into_iter()
+                        .map(move |b| {
+                            new_com
+                                + rotation * context.cell().distance(&context.position(b), &old_com)
+                        })
+                })
+                .collect();
+            !outsiders().any(|(_, g)| {
+                let beads = g
+                    .select(&ParticleSelection::Active, context.topology_ref())
+                    .unwrap_or_default();
+                moved_beads.iter().any(|mb| {
+                    beads.iter().any(|&b| {
+                        context.cell().distance_squared(mb, &context.position(b)) <= threshold_sq
+                    })
+                })
+            })
+        }
     }
 }
 
 impl<T: Context> MoveProposal<T> for ClusterMove {
     fn propose_move(&mut self, context: &T, rng: &mut dyn RngCore) -> Option<ProposedMove> {
-        // 1. Pick random seed molecule
         let seed = random_group(context, rng, self.molecule_id)?;
+        let (cluster, unwrapped) = self.find_cluster(seed, context);
 
-        // 2. Grow cluster via BFS
-        let cluster = self.find_cluster(seed, context);
+        self.stats.size.add(cluster.len() as f64);
+        self.stats.n_proposals += 1;
 
-        // 3. Compute unweighted cluster mass center
-        let cluster_com = {
-            let coms: Vec<Point> = cluster
-                .iter()
-                .map(|&i| context.groups()[i].mass_center().copied().unwrap_or_default())
-                .collect();
-            let n = coms.len() as f64;
-            coms.iter().fold(Point::zeros(), |acc, p| acc + p) / n
-        };
+        // Cluster mass center in unwrapped space (= centroid, since one molecule type ⇒ equal mass).
+        let pivot = unwrapped.iter().fold(Point::zeros(), |acc, p| acc + p) / cluster.len() as f64;
 
-        // 4. Random translation and rotation
-        let translation =
-            random_unit_vector(rng) * random_displacement(rng, self.max_displacement);
+        let translation = random_unit_vector(rng) * random_displacement(rng, self.max_displacement);
         let (quaternion, angle) = random_quaternion(rng, self.max_angle);
+        let rotation = (self.max_angle > 0.0).then_some(quaternion);
 
-        // 5. Pre-compute bias: mentally apply transform to cluster positions and
-        //    check whether any non-cluster molecule would enter the threshold.
-        //    If yes → cluster composition would change → bias = infinity (reject).
-        let threshold_sq = self.threshold * self.threshold;
-        let transform_point = |p: Point| -> Point {
-            cluster_com + quaternion * (p - cluster_com) + translation
-        };
+        // Each group's new mass center: rotate its unwrapped center about the pivot, translate, wrap.
+        let new_mass_centers: Vec<Point> = unwrapped
+            .iter()
+            .map(|&u| {
+                let mut p = pivot + quaternion * (u - pivot) + translation;
+                context.cell().boundary(&mut p);
+                p
+            })
+            .collect();
 
-        self.cluster_stable = if self.com {
-            // COM mode: check new cluster COMs against non-cluster COMs
-            let new_coms: Vec<Point> = cluster
-                .iter()
-                .map(|&i| {
-                    transform_point(
-                        context.groups()[i].mass_center().copied().unwrap_or_default(),
-                    )
-                })
-                .collect();
-            !context
-                .groups()
-                .iter()
-                .enumerate()
-                .filter(|(i, g)| g.molecule() == self.molecule_id && !cluster.contains(i))
-                .any(|(_, g)| {
-                    let other = g.mass_center().copied().unwrap_or_default();
-                    new_coms.iter().any(|nc| {
-                        context.cell().distance_squared(nc, &other) <= threshold_sq
-                    })
-                })
-        } else {
-            // Bead mode: check new cluster bead positions against non-cluster beads
-            let new_positions: Vec<Point> = cluster
-                .iter()
-                .flat_map(|&i| {
-                    context.groups()[i]
-                        .select(&ParticleSelection::Active, context.topology_ref())
-                        .unwrap_or_default()
-                        .into_iter()
-                        .map(|abs| transform_point(context.position(abs)))
-                })
-                .collect();
-            !context
-                .groups()
-                .iter()
-                .enumerate()
-                .filter(|(i, g)| g.molecule() == self.molecule_id && !cluster.contains(i))
-                .any(|(_, g)| {
-                    let other_beads = g
-                        .select(&ParticleSelection::Active, context.topology_ref())
-                        .unwrap_or_default();
-                    new_positions.iter().any(|np| {
-                        other_beads.iter().any(|&b| {
-                            let bp = context.position(b);
-                            context.cell().distance_squared(np, &bp) <= threshold_sq
-                        })
-                    })
-                })
-        };
+        self.cluster_stable =
+            self.cluster_membership_stable(context, &cluster, &new_mass_centers, quaternion);
+        if !self.cluster_stable {
+            self.stats.n_bias_rejected += 1;
+        }
+        self.stats.pending_sq_translation = translation.norm_squared();
+        self.stats.pending_sq_rotation = angle * angle;
 
-        // 6. Build change and proposed move
-        let change =
-            Change::Groups(cluster.iter().map(|&i| (i, GroupChange::RigidBody)).collect());
-
-        Some(ProposedMove {
-            change,
-            displacement: Displacement::AngleDistance(angle, translation),
-            transform: Transform::ClusterTransform {
-                groups: cluster,
-                translation,
-                rotation: Some((cluster_com, quaternion)),
-            },
-            target: MoveTarget::System,
-        })
+        Some(ProposedMove::cluster(
+            cluster,
+            new_mass_centers,
+            rotation,
+            angle,
+            translation,
+        ))
     }
 
     fn bias(&self, _change: &Change, _energies: &NewOld<f64>) -> Bias {
         if self.cluster_stable {
             Bias::None
         } else {
-            // Cluster composition changed after move → reject to maintain detailed balance
+            // Membership would change → reject with certainty to maintain detailed balance.
             Bias::Energy(f64::INFINITY)
         }
     }
 
+    fn on_trial_outcome(&mut self, accepted: bool) {
+        let (dr2, dtheta2) = if accepted {
+            (
+                self.stats.pending_sq_translation,
+                self.stats.pending_sq_rotation,
+            )
+        } else {
+            (0.0, 0.0)
+        };
+        self.stats.msd_translation.add(dr2);
+        self.stats.msd_rotation.add(dtheta2);
+    }
+
     fn to_yaml(&self) -> Option<serde_yml::Value> {
-        tagged_yaml("ClusterMove", self)
+        let mut value = tagged_yaml("ClusterMove", self)?;
+        if let serde_yml::Value::Tagged(tagged) = &mut value {
+            if let serde_yml::Value::Mapping(map) = &mut tagged.value {
+                let rate = if self.stats.n_proposals > 0 {
+                    self.stats.n_bias_rejected as f64 / self.stats.n_proposals as f64
+                } else {
+                    0.0
+                };
+                map.insert("cluster_size".into(), self.stats.size.to_yaml()?);
+                map.insert("bias_rejection_rate".into(), rate.into());
+                map.insert(
+                    "rmsd_translation".into(),
+                    self.stats.msd_translation.mean().sqrt().into(),
+                );
+                map.insert(
+                    "rmsd_rotation".into(),
+                    self.stats.msd_rotation.mean().sqrt().into(),
+                );
+            }
+        }
+        Some(value)
     }
 }
 
@@ -260,7 +348,147 @@ impl<T: Context> MoveProposal<T> for ClusterMove {
 mod tests {
     use super::*;
     use crate::backend::Backend;
+    use crate::context::WithSimulationCell;
+    use crate::group::GroupCollection;
+    use float_cmp::assert_approx_eq;
+    use rand::{rngs::StdRng, SeedableRng};
     use std::path::Path;
+
+    /// Build a system of single-bead `MOL` molecules at the given (box-centred) positions.
+    fn system(positions: &[[f64; 3]]) -> Backend {
+        let inserts = positions
+            .iter()
+            .map(|p| format!("[{}, {}, {}]", p[0], p[1], p[2]))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let yaml = format!(
+            r#"
+atoms:
+  - {{name: B, mass: 1.0, charge: 0.0, sigma: 1.0}}
+molecules:
+  - name: MOL
+    atoms: [B]
+system:
+  cell: !Cuboid [30.0, 30.0, 30.0]
+  medium: {{permittivity: !Vacuum, temperature: 300.0}}
+  energy: {{}}
+  blocks:
+    - molecule: MOL
+      N: {}
+      insert: !Manual [{}]
+propagate: {{seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}}
+"#,
+            positions.len(),
+            inserts
+        );
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(tmp.path(), yaml).unwrap();
+        Backend::new(tmp.path(), None, &mut rand::thread_rng()).unwrap()
+    }
+
+    fn cluster_move(yaml: &str, context: &Backend) -> ClusterMove {
+        let mut m: ClusterMove = serde_yml::from_str(yaml).unwrap();
+        m.finalize(context).unwrap();
+        m
+    }
+
+    /// All pairwise minimum-image distances between group mass centers.
+    fn pairwise_distances(context: &Backend) -> Vec<f64> {
+        let coms: Vec<Point> = context
+            .groups()
+            .iter()
+            .map(|g| g.mass_center().copied().unwrap())
+            .collect();
+        let mut out = Vec::new();
+        for i in 0..coms.len() {
+            for j in (i + 1)..coms.len() {
+                out.push(context.cell().distance(&coms[i], &coms[j]).norm());
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn find_cluster_grows_by_single_linkage() {
+        // 0—3—6 are linked (gaps of 3 < threshold 4); 12 is isolated.
+        let context = system(&[
+            [0.0, 0.0, 0.0],
+            [3.0, 0.0, 0.0],
+            [6.0, 0.0, 0.0],
+            [12.0, 0.0, 0.0],
+        ]);
+        let m = cluster_move(
+            "{molecule: MOL, dp: 1.0, dprot: 0.1, threshold: 4.0}",
+            &context,
+        );
+        let (cluster, _) = m.find_cluster(0, &context);
+        assert_eq!(cluster, vec![0, 1, 2], "transitive single-linkage cluster");
+
+        let (isolated, _) = m.find_cluster(3, &context);
+        assert_eq!(isolated, vec![3], "the far molecule clusters alone");
+    }
+
+    #[test]
+    fn bias_rejects_membership_change() {
+        // Cluster {0,1}; outsider 2 sits at x=10.
+        let context = system(&[[0.0, 0.0, 0.0], [3.0, 0.0, 0.0], [10.0, 0.0, 0.0]]);
+        let m = cluster_move(
+            "{molecule: MOL, dp: 1.0, dprot: 0.1, threshold: 4.0}",
+            &context,
+        );
+        let cluster = vec![0, 1];
+        let id = UnitQuaternion::identity();
+
+        // Shift the cluster +5 x → member reaches x=8, within 4 Å of the outsider ⇒ membership grows.
+        let toward = vec![Point::new(5.0, 0.0, 0.0), Point::new(8.0, 0.0, 0.0)];
+        assert!(!m.cluster_membership_stable(&context, &cluster, &toward, id));
+
+        // Shift the cluster away ⇒ membership unchanged.
+        let away = vec![Point::new(-5.0, 0.0, 0.0), Point::new(-2.0, 0.0, 0.0)];
+        assert!(m.cluster_membership_stable(&context, &cluster, &away, id));
+    }
+
+    #[test]
+    fn rigid_motion_preserves_distances_across_pbc() {
+        // A 12-molecule cluster straddling the ±15 boundary. A rigid roto-translation must preserve
+        // every intra-cluster minimum-image distance exactly, validating the unwrapped-space pivot
+        // and rotation for a box-spanning cluster.
+        let positions = [
+            [14.0, 0.0, 0.0],
+            [14.0, 2.0, 0.0],
+            [13.0, 0.0, 2.0],
+            [-14.0, 0.0, 0.0],
+            [-14.0, 2.0, 0.0],
+            [-13.0, 0.0, 2.0],
+            [14.0, -2.0, 1.0],
+            [-14.0, -2.0, 1.0],
+            [13.0, 2.0, -2.0],
+            [-13.0, 2.0, -2.0],
+            [14.0, 0.0, -3.0],
+            [-14.0, 0.0, -3.0],
+        ];
+        let mut context = system(&positions);
+        // Huge threshold ⇒ every molecule joins one cluster regardless of geometry.
+        let mut m = cluster_move(
+            "{molecule: MOL, dp: 5.0, dprot: 1.0, threshold: 100.0}",
+            &context,
+        );
+
+        let before = pairwise_distances(&context);
+        let proposed = m
+            .propose_move(&context, &mut StdRng::seed_from_u64(7))
+            .unwrap();
+        match proposed.change() {
+            Change::Groups(v) => assert_eq!(v.len(), 12, "all 12 molecules in one cluster"),
+            other => panic!("expected Groups, got {other:?}"),
+        }
+        proposed.apply_with_backup(&mut context).unwrap();
+
+        let after = pairwise_distances(&context);
+        for (b, a) in before.iter().zip(&after) {
+            assert_approx_eq!(f64, *b, *a, epsilon = 1e-9);
+        }
+    }
 
     #[test]
     fn test_parse_com_mode_default() {
@@ -305,10 +533,9 @@ mod tests {
         .unwrap();
 
         let mut m: ClusterMove =
-            serde_yml::from_str("{ molecule: MOL, dp: 5.0, dprot: 0.3, threshold: 30.0 }")
-                .unwrap();
+            serde_yml::from_str("{ molecule: MOL, dp: 5.0, dprot: 0.3, threshold: 30.0 }").unwrap();
         m.finalize(&context).unwrap();
-        assert_eq!(m.molecule_id, 0); // MOL is the first molecule in topology_pass.yaml
+        assert_eq!(m.molecule_id, MoleculeId::new(0)); // MOL is first in topology_pass.yaml
     }
 
     #[test]

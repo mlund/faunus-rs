@@ -149,12 +149,19 @@ pub enum Transform {
     Speciation(Vec<SpeciationAction>),
     /// No operation
     None,
-    /// Translate and optionally rotate a set of groups as a rigid cluster.
-    /// `rotation` is `Some((cluster_com, quaternion))` for roto-translation, `None` for translation only.
+    /// Move a set of groups as one rigid cluster (roto-translation).
+    ///
+    /// `new_mass_centers` gives each group's target mass center (parallel to `groups`, already
+    /// wrapped). The move computes them in *unwrapped* coordinates — recruiting neighbours by
+    /// minimum image during cluster growth — so a cluster spanning the periodic boundary rotates
+    /// correctly, unlike a single-pivot rotation on raw coordinates. `rotation` is the common
+    /// orientation change (`None` for translation only); it is applied about each group's own mass
+    /// center (a molecule spans less than half the box, so that step is PBC-safe), and the
+    /// cluster-level rotation about the pivot is realised by the mass-center targets.
     ClusterTransform {
         groups: Vec<usize>,
-        translation: Point,
-        rotation: Option<(Point, UnitQuaternion)>,
+        new_mass_centers: Vec<Point>,
+        rotation: Option<UnitQuaternion>,
     },
 }
 
@@ -301,18 +308,25 @@ impl Transform {
             }
             Self::ClusterTransform {
                 groups,
-                translation,
+                new_mass_centers,
                 rotation,
             } => {
-                for &gi in groups {
-                    if let Some((pivot, q)) = rotation {
-                        let indices = context.groups()[gi]
-                            .select(&ParticleSelection::Active, context.topology_ref())?;
-                        context.rotate_particles(&indices, q, Some(-*pivot));
+                for (&gi, &new_com) in groups.iter().zip(new_mass_centers) {
+                    let old_com = context.groups()[gi]
+                        .mass_center()
+                        .copied()
+                        .expect("cluster groups are molecular and have a mass center");
+                    let indices = context.groups()[gi]
+                        .select(&ParticleSelection::Active, context.topology_ref())?;
+                    if let Some(q) = rotation {
+                        // Rotate the molecule about its own mass center — PBC-safe because a molecule
+                        // spans less than half the box. Rotation about the center leaves it invariant,
+                        // so the subsequent shift alone places the mass center at its cluster target.
+                        context.rotate_particles(&indices, q, Some(-old_com));
                         context.groups_mut()[gi].rotate_by(q);
-                        context.update_mass_center(gi);
                     }
-                    Self::Translate(*translation).on_group(gi, context)?;
+                    context.translate_particles(&indices, &(new_com - old_com));
+                    context.update_mass_center(gi);
                 }
             }
             _ => {

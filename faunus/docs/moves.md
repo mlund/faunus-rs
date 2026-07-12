@@ -231,6 +231,50 @@ Key        | Required | Default | Description
 
 ---
 
+## Cluster Move
+
+Picks a random seed molecule, grows a cluster of nearby molecules of the same type, and
+translates and rotates the whole cluster as one rigid body. In strongly associating systems —
+for example proteins with short-ranged attractions at high concentration — single-molecule moves
+leave a molecule trapped by its neighbours, so aggregates diffuse only slowly and structural
+observables such as $S(q)$ converge poorly. Moving whole clusters restores that diffusion.
+
+Two molecules join the same cluster when their separation is below `threshold`. The separation is
+measured between mass centers (`com: true`, the default) or between the closest pair of beads
+(`com: false`); the latter makes the threshold a surface separation that transfers across molecule
+sizes. Membership is transitive: the cluster grows outward from the seed until no further molecule
+lies within the threshold.
+
+Detailed balance is preserved by rejecting any move after which the cluster membership would
+change, and by drawing the translation and rotation from symmetric distributions. The move samples
+the correct Boltzmann distribution; it restores whole-cluster diffusion but does not attempt the
+gradient-based recruitment or hydrodynamic scaling of virtual-move Monte Carlo. The cluster grows in
+unwrapped coordinates, so a cluster that spans the periodic boundary still rotates correctly.
+
+See [Dress & Krauth, _J. Phys. A_ 28, L597 (1995)](https://doi.org/10.1088/0305-4470/28/23/001) and
+[Whitelam & Geissler, _J. Chem. Phys._ 127, 154101 (2007)](https://doi.org/10.1063/1.2790421).
+
+```yaml
+- !ClusterMove { molecule: Protein, dp: 10.0, dprot: 0.5, threshold: 35.0 }
+```
+
+Key         | Required | Default | Description
+----------- | -------- | ------- | -------------------------------------------
+`molecule`  | yes      |         | Name of the molecule type
+`dp`        | yes      |         | Maximum translational displacement (Å)
+`dprot`     | yes      |         | Maximum angular displacement (radians)
+`threshold` | yes      |         | Clustering distance (Å); mass-center or bead separation
+`com`       | no       | `true`  | Cluster on mass-center (`true`) or closest-bead (`false`) distance
+`weight`    | no       | 1       | Selection weight in a `!Stochastic` collection
+`repeat`    | no       | 1       | Repetitions per selection
+
+Output reports the mean cluster size $\langle N\rangle$ with its standard error, the fraction of
+trials rejected to preserve membership (`bias_rejection_rate`), and the root-mean-square
+translational and rotational displacements. For an ideal gas, $\langle N\rangle = 1 + (N/V)\,\tfrac{4}{3}\pi R_c^3$
+with threshold $R_c$, a useful check that the clustering is unbiased.
+
+---
+
 ## Volume Move (_NPT_)
 
 Proposes isotropic or anisotropic volume changes for sampling the _NPT_ ensemble.
