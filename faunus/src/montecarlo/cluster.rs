@@ -104,6 +104,14 @@ impl ClusterMove {
     pub(crate) fn finalize(&mut self, context: &impl Context) -> anyhow::Result<()> {
         self.molecule_id = find_molecule_id(context, &self.molecule_name, "ClusterMove")?;
         anyhow::ensure!(
+            context
+                .topology_ref()
+                .moleculekind(self.molecule_id)
+                .has_com(),
+            "ClusterMove requires a molecule with a mass center; '{}' has none",
+            self.molecule_name
+        );
+        anyhow::ensure!(
             self.threshold > 0.0,
             "ClusterMove: threshold must be positive"
         );
@@ -523,7 +531,9 @@ propagate: {{seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}}
     }
 
     #[test]
-    fn test_cluster_move_finalize() {
+    fn finalize_rejects_molecule_without_mass_center() {
+        // `MOL` in topology_pass.yaml has `has_com: false`; the rotation pivot needs a mass center,
+        // so the move must fail at startup rather than panic mid-simulation.
         let mut rng = rand::thread_rng();
         let context = Backend::new(
             "tests/files/topology_pass.yaml",
@@ -534,8 +544,7 @@ propagate: {{seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}}
 
         let mut m: ClusterMove =
             serde_yml::from_str("{ molecule: MOL, dp: 5.0, dprot: 0.3, threshold: 30.0 }").unwrap();
-        m.finalize(&context).unwrap();
-        assert_eq!(m.molecule_id, MoleculeId::new(0)); // MOL is first in topology_pass.yaml
+        assert!(m.finalize(&context).is_err());
     }
 
     #[test]

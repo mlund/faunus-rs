@@ -792,14 +792,14 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
         groups: &[Group],
         changes: &[(usize, GroupChange)],
     ) -> f64 {
-        // Indices of every group carrying a non-None change. Usually 2–4 (speciation), but a
-        // cluster move can touch arbitrarily many groups, so this must not be a fixed-size buffer.
-        let changed_set: Vec<usize> = changes
-            .iter()
-            .filter(|(_, gc)| !matches!(gc, GroupChange::None))
-            .map(|(gi, _)| *gi)
-            .collect();
-        let changed_set = changed_set.as_slice();
+        // Whether a group carries a non-None change. Tested directly against `changes` — small for
+        // speciation (2–4) and unbounded for a cluster move — so the hot path allocates nothing
+        // regardless of cluster size (`changes` is a slice reference, hence `Copy` into the closure).
+        let is_changed = move |idx: usize| {
+            changes
+                .iter()
+                .any(|(gi, gc)| *gi == idx && !matches!(gc, GroupChange::None))
+        };
 
         let mut energy = 0.0;
 
@@ -809,7 +809,7 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
             let unchanged_groups = || {
                 groups
                     .iter()
-                    .filter(move |gk| gk.index() != *gi && !changed_set.contains(&gk.index()))
+                    .filter(move |gk| gk.index() != *gi && !is_changed(gk.index()))
             };
             match gc {
                 GroupChange::None => continue,
