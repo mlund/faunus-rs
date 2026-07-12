@@ -267,10 +267,8 @@ impl AcceptanceCriterion {
                     log::trace!("Accepting infinite -> finite energy change");
                     return true;
                 }
-                // always accept if negative infinity
-                if energy.new.is_infinite() && energy.new.is_sign_negative() {
-                    return true;
-                }
+                // A `-∞` energy is unphysical and is rejected upstream in `do_move` via
+                // [`ensure_physical_energy`]; only `+∞` (a hard overlap → rejection) reaches here.
 
                 let Some(bias_energy) = bias.to_energy(thermal_energy) else {
                     return true; // ForceAccept
@@ -295,6 +293,21 @@ impl AcceptanceCriterion {
             }
         }
     }
+}
+
+/// Guard a trial energy before it reaches the acceptance criterion.
+///
+/// A finite system's energy may be `+∞` (a hard-sphere overlap, which the Metropolis criterion
+/// rejects) but never `-∞`: a `-∞` total is unphysical and signals a broken potential — a
+/// custom-expression singularity (`log(z)` at 0, `-1/r`) or overlapping fixed charges. Rather than
+/// silently accept it (the move would collapse into the singularity), fail loudly. `NaN` is left to
+/// the criterion, which rejects it (it arises transiently as `∞ − ∞` during overlaps).
+pub(crate) fn ensure_physical_energy(energy: f64) -> anyhow::Result<f64> {
+    anyhow::ensure!(
+        energy != f64::NEG_INFINITY,
+        "unphysical -∞ energy — a potential is singular (check custom expressions and fixed-atom overlaps)"
+    );
+    Ok(energy)
 }
 
 /// # Monte Carlo simulation instance
@@ -506,6 +519,19 @@ mod tests {
     fn entropy_bias_is_zero_when_nothing_changes() {
         let volume = NewOld::from(1.0, 1.0);
         assert_eq!(entropy_bias(NewOld::from(0, 0), volume), 0.0);
+    }
+
+    #[test]
+    fn unphysical_negative_infinite_energy_is_an_error() {
+        // `-∞` is unphysical and must fail loudly rather than be silently accepted (collapse).
+        assert!(ensure_physical_energy(f64::NEG_INFINITY).is_err());
+        // `+∞` is a legitimate hard overlap (rejected by the criterion), finite energies are fine.
+        assert_eq!(
+            ensure_physical_energy(f64::INFINITY).unwrap(),
+            f64::INFINITY
+        );
+        assert_eq!(ensure_physical_energy(-123.4).unwrap(), -123.4);
+        assert_eq!(ensure_physical_energy(0.0).unwrap(), 0.0);
     }
 
     #[test]

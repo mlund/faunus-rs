@@ -1090,3 +1090,69 @@ fn cutoff_validation_rejects_unbounded_potential() {
     builder.cutoff = Some(50.0);
     assert!(Hamiltonian::new(&builder, &topology, Some(medium)).is_err());
 }
+
+/// Regression: `multi_group_change_soa` resolved a group's `PartialUpdate` atoms into a fixed
+/// `[usize; 8]` buffer, panicking (index out of bounds) for more than eight affected atoms. A
+/// `Change::Groups` partial update must match the equivalent `SingleGroup` partial update — which
+/// handles any atom count — for a molecule with more than eight atoms.
+#[test]
+fn multi_group_partial_update_handles_more_than_eight_affected_atoms() {
+    use std::io::Write;
+    const N: usize = 12; // > 8
+
+    let atom_list = vec!["A"; N].join(", ");
+    let row = |dy: f64| {
+        (0..N)
+            .map(|i| format!("[{i}.0, {dy}, 0.0]"))
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+    let yaml = format!(
+        "atoms:\n  - {{name: A, mass: 1.0, sigma: 1.0, eps: 1.0}}\n\
+         molecules:\n  - {{name: BIG, atoms: [{atom_list}]}}\n\
+         system:\n  cell: !Cuboid [40.0, 40.0, 40.0]\n  \
+         medium: {{permittivity: !Vacuum, temperature: 298.15}}\n  \
+         energy:\n    nonbonded:\n      default:\n        - !LennardJones {{mixing: LB}}\n  \
+         blocks:\n    - molecule: BIG\n      N: 2\n      insert: !Manual [{m0}, {m1}]\n",
+        m0 = row(0.0),
+        m1 = row(3.0),
+    );
+    let mut tmp = tempfile::NamedTempFile::new().unwrap();
+    tmp.write_all(yaml.as_bytes()).unwrap();
+    let path = tmp.path();
+
+    let topology = Topology::from_file(path).unwrap();
+    let builder = HamiltonianBuilder::from_file(path)
+        .unwrap()
+        .pairpot_builder
+        .unwrap();
+    let medium = interatomic::coulomb::Medium::new(
+        298.15,
+        interatomic::coulomb::permittivity::Permittivity::Vacuum,
+        None,
+    );
+    let nonbonded = NonbondedMatrix::new(&builder, &topology, Some(medium)).unwrap();
+    let system = Backend::from_raw_parts(
+        Arc::new(topology),
+        Cell::Cuboid(Cuboid::cubic(40.0)),
+        RefCell::new(Hamiltonian::from(vec![nonbonded.clone().into()])),
+        None,
+        &mut rand::thread_rng(),
+    )
+    .unwrap();
+
+    // Both groups fully partial-updated: every pair involves a changed atom, so the deduplicated
+    // multi-group sum must equal the total nonbonded energy exactly once per pair (cf. the
+    // multi-group test above). With >8 affected atoms per group this exercised the panicking buffer.
+    let all: Vec<RelIndex> = (0..N).map(RelIndex::new).collect();
+    let change = Change::Groups(vec![
+        (0, GroupChange::PartialUpdate(all.clone())),
+        (1, GroupChange::PartialUpdate(all)),
+    ]);
+    let expected = nonbonded.total_nonbonded(&system);
+    assert!(
+        expected.is_finite() && expected != 0.0,
+        "sanity: molecules interact"
+    );
+    assert_approx_eq!(f64, nonbonded.energy(&system, &change), expected);
+}

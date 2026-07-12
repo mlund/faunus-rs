@@ -824,17 +824,13 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
                 GroupChange::PartialUpdate(rel) | GroupChange::ResizePartial(_, rel) => {
                     // Resolve affected absolute indices once; we reuse this list
                     // to deduplicate intra pairs when multiple affected atoms
-                    // share the same group.
-                    let mut affected_abs = [0usize; 8];
-                    let mut n_affected = 0;
-                    for &r in rel {
-                        if let Ok(abs) = group.to_absolute(r) {
-                            debug_assert!(n_affected < affected_abs.len());
-                            affected_abs[n_affected] = abs.get();
-                            n_affected += 1;
-                        }
-                    }
-                    let affected_abs = &affected_abs[..n_affected];
+                    // share the same group. A `Vec` (not a fixed buffer) so a group with
+                    // arbitrarily many affected atoms cannot panic — see the single-group path.
+                    let affected_abs: Vec<usize> = rel
+                        .iter()
+                        .filter_map(|&r| group.to_absolute(r).ok().map(|abs| abs.get()))
+                        .collect();
+                    let affected_abs = affected_abs.as_slice();
 
                     // Cross with each valid unchanged group: outer-loop the
                     // group filters (per-pair exclusion / cutoff), inner-loop
