@@ -62,6 +62,10 @@ impl std::fmt::Debug for EwaldReciprocalEnergy {
 struct EwaldBackup {
     ewald: EwaldReciprocal,
     cached_energy: f64,
+    /// Charges before the move. A resize (`refresh_charges`) zeroes a deactivated molecule's
+    /// charges; without restoring these on reject, a later rigid move of that molecule reads
+    /// `charge == 0.0` and silently stops tracking it. Every field `update()` mutates must be here.
+    charges: Vec<f64>,
     /// Old positions of affected particles: (global_index, [x, y, z])
     old_positions: Vec<(usize, [f64; 3])>,
 }
@@ -341,6 +345,7 @@ impl EwaldReciprocalEnergy {
         self.backup = Some(EwaldBackup {
             ewald: self.ewald.clone(),
             cached_energy: self.cached_energy,
+            charges: self.charges.clone(),
             old_positions,
         });
     }
@@ -372,6 +377,7 @@ impl EwaldReciprocalEnergy {
         if let Some(backup) = self.backup.take() {
             self.ewald = backup.ewald;
             self.cached_energy = backup.cached_energy;
+            self.charges = backup.charges;
         }
     }
 
@@ -387,5 +393,66 @@ impl EwaldReciprocalEnergy {
             "n_max" => (self.ewald.n_max() as u64),
             "k_vectors" => (self.ewald.num_k_vectors() as u64),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::backend::Backend;
+    use crate::group::{GroupCollectionMut, GroupSize};
+    use crate::GroupChange;
+    use std::io::Write;
+
+    /// Two single-atom molecules of opposite charge (net neutral), individually deactivatable.
+    fn charged_context() -> Backend {
+        let yaml = "atoms:\n  - {name: Cat, mass: 1.0, charge: 1.0, sigma: 1.0}\n  \
+                    - {name: Ani, mass: 1.0, charge: -1.0, sigma: 1.0}\n\
+                    molecules:\n  - {name: CAT, atoms: [Cat]}\n  - {name: ANI, atoms: [Ani]}\n\
+                    system:\n  cell: !Cuboid [30.0, 30.0, 30.0]\n  \
+                    medium: {permittivity: !Vacuum, temperature: 300.0}\n  energy: {}\n  \
+                    blocks:\n    - {molecule: CAT, N: 1, insert: !Manual [[0.0, 0.0, 0.0]]}\n    \
+                    - {molecule: ANI, N: 1, insert: !Manual [[5.0, 0.0, 0.0]]}\n\
+                    propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}\n";
+        let mut tmp = tempfile::NamedTempFile::new().unwrap();
+        tmp.write_all(yaml.as_bytes()).unwrap();
+        Backend::new(tmp.path(), None, &mut rand::thread_rng()).unwrap()
+    }
+
+    #[test]
+    fn undo_restores_charges_after_a_rejected_resize() {
+        let mut context = charged_context();
+        let builder = EwaldBuilder {
+            cutoff: 12.0,
+            accuracy: 1e-4,
+            policy: EwaldPolicy::default(),
+            optimize: false,
+        };
+        let medium = interatomic::coulomb::Medium::new(
+            300.0,
+            interatomic::coulomb::permittivity::Permittivity::Vacuum,
+            None,
+        );
+        let mut term = EwaldReciprocalEnergy::new(&builder, &context, &medium).unwrap();
+
+        let original = term.charges.clone();
+        assert!(original.iter().any(|&q| q != 0.0), "molecules carry charge");
+
+        // Simulate a rejected deletion of molecule 0: back up, deactivate it, update (which
+        // refreshes and zeroes its charge), then undo.
+        let change = Change::SingleGroup(0, GroupChange::Resize(GroupSize::Shrink(1)));
+        term.save_backup(&change, &context);
+        context.resize_group(0, GroupSize::Shrink(1)).unwrap();
+        term.update(&context, &change).unwrap();
+        assert_ne!(
+            term.charges, original,
+            "resize should zero the deactivated molecule's charge"
+        );
+
+        term.undo();
+        assert_eq!(
+            term.charges, original,
+            "undo must restore charges, not just the structure factors"
+        );
     }
 }
