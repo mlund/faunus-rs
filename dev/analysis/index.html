@@ -1597,9 +1597,10 @@ enable per-frame visualization updates in VMD:</p>
 <ul>
 <li><code>.sizes.dat</code> — per-frame group active counts (written when any group
   has inactive atoms). The VMD script hides inactive atoms (radius = 0).</li>
-<li><code>.charges.dat</code> — per-frame atom charges (always written). The VMD
-  script updates charges each frame so that atom-type swaps from titration
-  and speciation are reflected in the charge coloring.</li>
+<li><code>.charges.dat</code> — per-frame atom charges (only when <code>save_charges: true</code>).
+  The VMD script then updates charges each frame so that atom-type swaps from
+  titration and speciation are reflected in the charge coloring. Without it,
+  VMD colors by the static charges stored in the PSF.</li>
 </ul>
 <h3 id="example_4">Example<a class="headerlink" href="#example_4" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><span class="nt">analysis</span><span class="p">:</span>
@@ -1650,6 +1651,12 @@ enable per-frame visualization updates in VMD:</p>
 <td><code>false</code></td>
 <td>Write a binary <code>.aux</code> file alongside the trajectory (see <a href="#rerun">Rerun</a>). Cannot be combined with <code>selection</code>.</td>
 </tr>
+<tr>
+<td><code>save_charges</code></td>
+<td>no</td>
+<td><code>false</code></td>
+<td>Write a per-frame <code>.charges.dat</code> file for VMD charge coloring of titration/speciation swaps. One float per atom per frame, so large for big systems.</td>
+</tr>
 </tbody>
 </table>
 <h3 id="output-files">Output files<a class="headerlink" href="#output-files" title="Permanent link">&para;</a></h3>
@@ -1676,7 +1683,7 @@ enable per-frame visualization updates in VMD:</p>
 </tr>
 <tr>
 <td><code>traj.charges.dat</code></td>
-<td>Per-frame atom charges (always written)</td>
+<td>Per-frame atom charges (only when <code>save_charges: true</code>)</td>
 </tr>
 <tr>
 <td><code>traj.sizes.dat</code></td>
