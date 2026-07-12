@@ -29,6 +29,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::{cmp::Ordering, ops::Neg};
 
+mod cluster;
 mod crankshaft;
 pub mod gibbs;
 mod pivot;
@@ -39,6 +40,7 @@ mod template;
 mod translate;
 mod volume;
 
+pub use cluster::ClusterMove;
 pub use crankshaft::CrankshaftMove;
 pub use pivot::PivotMove;
 pub use rotate::RotateMolecule;
@@ -65,6 +67,7 @@ impl_buildable_move!(
     PivotMove,
     CrankshaftMove,
     SpeciationMove,
+    ClusterMove,
 );
 
 /// Look up a molecule kind by name and return its id.

@@ -1,0 +1,43 @@
+# Ideal-gas cluster-size regression for the rigid-body ClusterMove.
+#
+# The molecules do not interact (empty energy), so the mean cluster size measured by the
+# center-of-mass cluster criterion is the analytic ideal-gas value
+#
+#     ⟨N⟩ = 1 + (N/V)·(4π R_c³/3)
+#         = 1 + (10 / 40³)·(4π·7³/3) ≈ 1.22
+#
+# with V = 40³ Å³, N = 10 molecules and threshold R_c = 7 Å (cf. the C++ Faunus
+# examples/cluster-ideal). Because ΔU = 0, the roto-translation is always accepted unless the
+# bias rejects it for a membership change; the reported ⟨N⟩ therefore probes the clustering and
+# detailed-balance logic directly.
+atoms:
+  - {name: A, mass: 1.0, sigma: 1.0}
+
+molecules:
+  - name: MOL
+    atoms: [A]
+    has_com: true
+
+system:
+  cell: !Cuboid [40.0, 40.0, 40.0]
+  medium:
+    permittivity: !Vacuum
+    temperature: 300.0
+  energy: {}
+  blocks:
+    - molecule: MOL
+      N: 10
+      insert: !RandomAtomPos {}
+
+analysis:
+  - !Energy {file: energy.dat, frequency: !Every 100}
+
+propagate:
+  seed: !Fixed 42
+  criterion: Metropolis
+  repeat: 20000
+  collections:
+    - !Stochastic
+      moves:
+        - !TranslateMolecule {molecule: MOL, dp: 20.0, repeat: 10}
+        - !ClusterMove {molecule: MOL, dp: 19.99, dprot: 3.0, threshold: 7.0, use_com: true, repeat: 1}

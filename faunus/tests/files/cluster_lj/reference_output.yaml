@@ -1,0 +1,83 @@
+version:
+  faunus: 3.0.0-beta.1
+  git_revision: v3.0.0-beta.1-11-g2bc4e04-dirty
+medium:
+  permittivity: Vacuum
+  salt: null
+  temperature: 300.0
+blocks:
+- molecule: MOL
+  N: 30
+  active: null
+  insert: !RandomAtomPos
+    directions: xyz
+cell: !Cuboid
+- 30.0
+- 30.0
+- 30.0
+energy_change:
+  drift: 2.2737367544323206e-13
+  final: -265.2055090156706
+  initial: -219.94522194011788
+energy_timers:
+  celloverlap: '3.3200000000000003 (energy: 2.2, update: 1.12)'
+  nonbonded: '96.67999999999999 (energy: 83.19, update: 13.49)'
+propagate:
+  repeat: 2000
+  seed: !Fixed 42
+  collections:
+  - !Stochastic
+    repeat: 1
+    elapsed_seconds: 0.028193942
+    moves:
+    - !TranslateMolecule
+      molecule: MOL
+      max_displacement: 2.0
+      directions: xyz
+      weight: 1.0
+      repeat: 10
+      statistics:
+        num_trials: 10660
+        num_accepted: 4773
+        mean_square_displacement:
+          avg: 0.35555834591548585
+          n: 10660
+        timer:
+          accumulated:
+            secs: 0
+            nanos: 0
+        info: {}
+        energy_change_sum: -27.36426753241728
+        acceptance_ratio: 0.4477485928705441
+    - !ClusterMove
+      molecule: MOL
+      max_displacement: 3.0
+      max_angle: 3.0
+      threshold: 8.0
+      use_com: true
+      cluster_size:
+        mean: 29.08993576017135
+        error: 0.11466967715095981
+      bias_rejection_rate: 0.12955032119914348
+      rmsd_translation: 1.5154141814127138
+      rmsd_rotation: 1.5465119974278596
+      weight: 1.0
+      repeat: 1
+      statistics:
+        num_trials: 934
+        num_accepted: 711
+        mean_square_displacement:
+          avg: 0.0
+          n: 223
+        timer:
+          accumulated:
+            secs: 0
+            nanos: 0
+        info: {}
+        energy_change_sum: -17.896019543135694
+        acceptance_ratio: 0.7612419700214133
+  criterion: MetropolisHastings
+analysis:
+- energy:
+    num_samples: 20
+    mean: -252.0310528794209

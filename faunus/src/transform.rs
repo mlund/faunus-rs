@@ -149,6 +149,20 @@ pub enum Transform {
     Speciation(Vec<SpeciationAction>),
     /// No operation
     None,
+    /// Move a set of groups as one rigid cluster (roto-translation).
+    ///
+    /// `new_mass_centers` gives each group's target mass center (parallel to `groups`, already
+    /// wrapped). The move computes them in *unwrapped* coordinates — recruiting neighbours by
+    /// minimum image during cluster growth — so a cluster spanning the periodic boundary rotates
+    /// correctly, unlike a single-pivot rotation on raw coordinates. `rotation` is the common
+    /// orientation change (`None` for translation only); it is applied about each group's own mass
+    /// center (a molecule spans less than half the box, so that step is PBC-safe), and the
+    /// cluster-level rotation about the pivot is realised by the mass-center targets.
+    ClusterTransform {
+        groups: Vec<usize>,
+        new_mass_centers: Vec<Point>,
+        rotation: Option<UnitQuaternion>,
+    },
 }
 
 impl Transform {
@@ -290,6 +304,29 @@ impl Transform {
                             Self::Contract(1).on_group(*group_index, context)?;
                         }
                     }
+                }
+            }
+            Self::ClusterTransform {
+                groups,
+                new_mass_centers,
+                rotation,
+            } => {
+                for (&gi, &new_com) in groups.iter().zip(new_mass_centers) {
+                    let old_com = context.groups()[gi]
+                        .mass_center()
+                        .copied()
+                        .expect("cluster groups are molecular and have a mass center");
+                    let indices = context.groups()[gi]
+                        .select(&ParticleSelection::Active, context.topology_ref())?;
+                    if let Some(q) = rotation {
+                        // Rotate the molecule about its own mass center — PBC-safe because a molecule
+                        // spans less than half the box. Rotation about the center leaves it invariant,
+                        // so the subsequent shift alone places the mass center at its cluster target.
+                        context.rotate_particles(&indices, q, Some(-old_com));
+                        context.groups_mut()[gi].rotate_by(q);
+                    }
+                    context.translate_particles(&indices, &(new_com - old_com));
+                    context.update_mass_center(gi);
                 }
             }
             _ => {

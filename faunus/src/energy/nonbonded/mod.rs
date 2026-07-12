@@ -792,18 +792,14 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
         groups: &[Group],
         changes: &[(usize, GroupChange)],
     ) -> f64 {
-        // Indices of every group carrying a non-None change.
-        // Typically 2–4 entries; stack array avoids heap allocation on the hot path.
-        let mut changed_set = [0usize; 8];
-        let mut n_changed = 0;
-        for (gi, gc) in changes {
-            if !matches!(gc, GroupChange::None) {
-                debug_assert!(n_changed < changed_set.len(), "too many group changes");
-                changed_set[n_changed] = *gi;
-                n_changed += 1;
-            }
-        }
-        let changed_set = &changed_set[..n_changed];
+        // Whether a group carries a non-None change. Tested directly against `changes` — small for
+        // speciation (2–4) and unbounded for a cluster move — so the hot path allocates nothing
+        // regardless of cluster size (`changes` is a slice reference, hence `Copy` into the closure).
+        let is_changed = move |idx: usize| {
+            changes
+                .iter()
+                .any(|(gi, gc)| *gi == idx && !matches!(gc, GroupChange::None))
+        };
 
         let mut energy = 0.0;
 
@@ -813,7 +809,7 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
             let unchanged_groups = || {
                 groups
                     .iter()
-                    .filter(move |gk| gk.index() != *gi && !changed_set.contains(&gk.index()))
+                    .filter(move |gk| gk.index() != *gi && !is_changed(gk.index()))
             };
             match gc {
                 GroupChange::None => continue,

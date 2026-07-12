@@ -211,11 +211,21 @@ impl Backend {
 
     /// Update cell list assignments for moved particles, tracking changes in backup.
     fn update_cell_list_particles(&mut self, indices: &[usize]) {
-        if let (Some(cl), Some(backup)) = (&mut self.cell_list, &mut self.backup) {
-            if let Some(cl_backup) = &mut backup.cell_list_backup {
-                for &i in indices {
-                    let pos = Point::new(self.x[i], self.y[i], self.z[i]);
-                    cl.update_particle_tracked(i, &pos, cl_backup);
+        // A group move logs per-particle deltas (`cell_list_backup`) for a cheap tracked undo. A
+        // system move (cluster, volume) instead snapshots the whole list (`cell_list_clone`) and is
+        // restored wholesale on reject, so its live updates are untracked. Without the untracked
+        // branch below, an accepted system move would leave the moved particles in their old cells.
+        let tracked = self
+            .backup
+            .as_ref()
+            .is_some_and(|b| b.cell_list_backup.is_some());
+        if tracked {
+            if let (Some(cl), Some(backup)) = (&mut self.cell_list, &mut self.backup) {
+                if let Some(cl_backup) = &mut backup.cell_list_backup {
+                    for &i in indices {
+                        let pos = Point::new(self.x[i], self.y[i], self.z[i]);
+                        cl.update_particle_tracked(i, &pos, cl_backup);
+                    }
                 }
             }
         } else if let Some(cl) = &mut self.cell_list {
