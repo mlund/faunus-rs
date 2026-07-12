@@ -56,6 +56,7 @@ fn lateral_shape(cell: &Cell) -> Result<(f64, LateralShape)> {
     let bbox = cell
         .bounding_box()
         .ok_or_else(|| anyhow::anyhow!("a finite cell is required (got an endless cell)"))?;
+    #[allow(clippy::wildcard_enum_match_arm)] // deliberately reject all other cell shapes
     match cell {
         Cell::Cuboid(_) | Cell::Slit(_) => {
             if (bbox.x - bbox.y).abs() > SQUARE_TOLERANCE * bbox.x.max(bbox.y) {

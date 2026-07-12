@@ -442,6 +442,15 @@ impl GroupCollectionMut for Backend {
     }
 
     fn resize_group(&mut self, group_index: usize, status: GroupSize) -> anyhow::Result<()> {
+        // A resize mutates the cell list untracked (below), so it may only run under a wholesale
+        // (system) backup, never a tracked per-particle one — otherwise a rejected group-target
+        // resize move would leak these cell-list edits. Pins "no group-target resize move" (#69).
+        debug_assert!(
+            self.backup
+                .as_ref()
+                .is_none_or(|b| b.cell_list_backup.is_none()),
+            "resize_group under a tracked cell-list backup would leak untracked updates on reject"
+        );
         let old_active: Vec<usize> = self.groups[group_index].iter_active().collect();
         self.groups[group_index].resize(status)?;
         let new_active: Vec<usize> = self.groups[group_index].iter_active().collect();

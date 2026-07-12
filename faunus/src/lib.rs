@@ -92,6 +92,10 @@ pub use info::*;
 pub mod cell;
 #[cfg(feature = "cli")]
 pub mod cli;
+// A wildcard arm on a `Change`/`GroupChange` match silently swallows a new variant — the class
+// of bug behind the deferred energy issues. Scope the lint here so a forgotten variant in an
+// energy term is a compile error; genuinely-safe non-`Change` wildcards carry a local `#[allow]`.
+#[warn(clippy::wildcard_enum_match_arm)]
 pub mod energy;
 pub mod error;
 pub mod topology;

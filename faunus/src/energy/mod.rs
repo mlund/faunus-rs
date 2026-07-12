@@ -14,6 +14,7 @@
 
 //! # Energy calculation and Hamiltonian
 
+mod backup;
 pub(crate) mod bonded;
 pub(crate) mod builder;
 mod celloverlap;
@@ -37,6 +38,7 @@ mod polymer_depletion;
 mod sasa;
 pub(crate) mod slab_potential;
 pub mod square_matrix;
+pub(crate) mod stateful;
 mod tabulated;
 mod template;
 

@@ -10,7 +10,7 @@ template, so none can fall out of step with the interface it demonstrates.
 |---|---|---|
 | an analysis | `src/analysis/template.rs` | `Analyze` |
 | a move | `src/montecarlo/template.rs` | `MoveProposal` |
-| an energy term | `src/energy/template.rs` | `EnergyChange` |
+| an energy term | `src/energy/template.rs` | `EnergyChange`, or `StatefulEnergy` to cache |
 
 Read the template first. What follows explains why they are shaped as they are.
 
@@ -76,9 +76,15 @@ A term is told which part of the system changed and may recompute only what that
 must return the energy of exactly the particles the change touches, and use the same partition on
 both calls. A term that gets this wrong returns plausible numbers and passes the drift check.
 
-The safe starting point, which the template takes, is to ignore the description of the change and
-recompute the total. That is correct and slow. Optimize once the term is right, and use the
-`save_backup` and `undo` protocol so that a rejected move restores whatever was cached.
+The safe starting point, which the stateless template term takes, is to ignore the description of
+the change and recompute the total. That is correct and slow.
+
+A term that caches move-mutable state to go faster implements `StatefulEnergy` instead. The trait
+splits the energy into a fresh `total_energy` and an incremental `partial_energy`, and the framework
+routes a whole-system evaluation to `total_energy` — so a cache cannot hide its own drift from the
+energy-drift check. The cached state lives behind a `Snapshot`, which reduces the
+`save_backup`/`undo`/`discard_backup` reject protocol to one line each and covers every field, so a
+rejected move always restores exactly what was cached. The template's second term demonstrates this.
 
 Caching inside a term is fine, including through a `RefCell`. Changing the system through one is not.
 

@@ -14,6 +14,7 @@
 
 //! # Energy due to solvent-accessible surface area and atomic-level surface energy densities.
 
+use super::stateful::{derived_energy, StatefulEnergy};
 use crate::ObserveContext;
 use crate::{Change, GroupChange};
 use derive_builder::Builder;
@@ -90,8 +91,27 @@ impl SasaEnergy {
             .sum()
     }
 
-    pub(crate) fn energy(&self, _context: &impl ObserveContext, _change: &Change) -> f64 {
-        self.raw_energy() + self.energy_offset.unwrap_or(0.0)
+    pub(crate) fn energy(&self, context: &impl ObserveContext, change: &Change) -> f64 {
+        derived_energy(self, context, change)
+    }
+
+    /// Build balls and surface tensions for every active atom, without touching `self`.
+    /// Shared by the incremental `rebuild_all` and the fresh `total_energy`.
+    fn collect_balls(context: &impl ObserveContext) -> (Vec<Ball>, Vec<f64>) {
+        let topology = context.topology();
+        let atomkinds = topology.atomkinds();
+        let mut balls = Vec::new();
+        let mut tensions = Vec::new();
+        for group in context.groups() {
+            for i in group.iter_active() {
+                let pos = context.position(i);
+                let ak = &atomkinds[context.atom_kind(i).get()];
+                let radius = ak.sigma().map(|s| s / 2.0).unwrap_or(0.0);
+                balls.push(Ball::new(pos.x, pos.y, pos.z, radius));
+                tensions.push(ak.gamma().unwrap_or(0.0));
+            }
+        }
+        (balls, tensions)
     }
 
     /// Free function to avoid borrowing `self`, allowing callers to pass `&mut self.backup_ids`.
@@ -106,7 +126,14 @@ impl SasaEnergy {
                 let offset = ranges[k].start;
                 out.extend(relative_indices.iter().map(|i| offset + i.get()));
             }
-            _ => out.extend(ranges[k].clone()),
+            // Any whole-group change touches every ball in the group's range.
+            GroupChange::None
+            | GroupChange::RigidBody
+            | GroupChange::UpdateIdentity(_)
+            | GroupChange::Resize(_)
+            | GroupChange::ResizeExcludeIntra(_)
+            | GroupChange::ResizePartial(..)
+            | GroupChange::AtomicShrink { .. } => out.extend(ranges[k].clone()),
         }
     }
 
@@ -122,38 +149,6 @@ impl SasaEnergy {
             self.balls[ball_id].y = pos.y;
             self.balls[ball_id].z = pos.z;
         }
-    }
-
-    pub(super) fn update(
-        &mut self,
-        context: &impl ObserveContext,
-        change: &Change,
-    ) -> anyhow::Result<()> {
-        match change {
-            // GCMC resize changes the ball count, invalidating all ranges and the tessellation.
-            Change::SingleGroup(_, gc) if gc.is_resize() => self.rebuild_all(context),
-            Change::SingleGroup(k, gc) => {
-                let mut changed = Vec::new();
-                Self::append_ball_ids(&self.group_ball_ranges, *k, gc, &mut changed);
-                self.sync_balls(context, *k, &changed);
-                self.tess.update_with_changed(&self.balls, &changed);
-            }
-            Change::Groups(changes) if changes.iter().any(|(_, gc)| gc.is_resize()) => {
-                self.rebuild_all(context);
-            }
-            Change::Groups(changes) => {
-                let mut all_changed = Vec::new();
-                for (k, gc) in changes {
-                    let start = all_changed.len();
-                    Self::append_ball_ids(&self.group_ball_ranges, *k, gc, &mut all_changed);
-                    self.sync_balls(context, *k, &all_changed[start..]);
-                }
-                self.tess.update_with_changed(&self.balls, &all_changed);
-            }
-            Change::Everything | Change::Volume(..) => self.rebuild_all(context),
-            Change::None => {}
-        }
-        Ok(())
     }
 
     fn rebuild_all(&mut self, context: &impl ObserveContext) {
@@ -191,10 +186,62 @@ impl SasaEnergy {
     }
 }
 
-impl SasaEnergy {
+impl StatefulEnergy for SasaEnergy {
+    /// Fresh SASA on a scratch tessellation of the current configuration.
+    ///
+    /// Uses a throwaway `UpdateableTessellation` so the live incremental `self.tess`
+    /// (and its internal backup) is untouched; a mutating re-`init` here would corrupt
+    /// an in-flight trial. The scratch result exposes any incremental drift to the
+    /// energy-drift check.
+    fn total_energy(&self, context: &impl ObserveContext) -> f64 {
+        let (balls, tensions) = Self::collect_balls(context);
+        let periodic_box = super::make_periodic_box(context.cell());
+        let mut tess = UpdateableTessellation::with_backup();
+        tess.init(&balls, self.probe_radius, periodic_box.as_ref());
+        let raw: f64 = tess
+            .result()
+            .cells
+            .iter()
+            .map(|cell| tensions[cell.index] * cell.sas_area)
+            .sum();
+        raw + self.energy_offset.unwrap_or(0.0)
+    }
+
+    fn partial_energy(&self, _context: &impl ObserveContext, _change: &Change) -> f64 {
+        self.raw_energy() + self.energy_offset.unwrap_or(0.0)
+    }
+
+    fn refresh(&mut self, context: &impl ObserveContext, change: &Change) -> anyhow::Result<()> {
+        match change {
+            // GCMC resize changes the ball count, invalidating all ranges and the tessellation.
+            Change::SingleGroup(_, gc) if gc.is_resize() => self.rebuild_all(context),
+            Change::SingleGroup(k, gc) => {
+                let mut changed = Vec::new();
+                Self::append_ball_ids(&self.group_ball_ranges, *k, gc, &mut changed);
+                self.sync_balls(context, *k, &changed);
+                self.tess.update_with_changed(&self.balls, &changed);
+            }
+            Change::Groups(changes) if changes.iter().any(|(_, gc)| gc.is_resize()) => {
+                self.rebuild_all(context);
+            }
+            Change::Groups(changes) => {
+                let mut all_changed = Vec::new();
+                for (k, gc) in changes {
+                    let start = all_changed.len();
+                    Self::append_ball_ids(&self.group_ball_ranges, *k, gc, &mut all_changed);
+                    self.sync_balls(context, *k, &all_changed[start..]);
+                }
+                self.tess.update_with_changed(&self.balls, &all_changed);
+            }
+            Change::Everything | Change::Volume(..) => self.rebuild_all(context),
+            Change::None => {}
+        }
+        Ok(())
+    }
+
     /// Save ball positions for later undo. The tessellation snapshots its own state
     /// automatically inside each `update_with_changed` / `init` call.
-    pub(super) fn save_backup(&mut self, change: &Change) {
+    fn save_backup(&mut self, _context: &impl ObserveContext, change: &Change) {
         assert!(!self.has_backup, "backup already exists");
         self.backup_ids.clear();
         self.backup_balls.clear();
@@ -230,7 +277,8 @@ impl SasaEnergy {
                         );
                     }
                 }
-                _ => {}
+                // The full-backup branch above already handled resize/volume/everything.
+                Change::None | Change::Everything | Change::Volume(..) => {}
             }
             self.backup_balls
                 .extend(self.backup_ids.iter().map(|&i| self.balls[i]));
@@ -239,7 +287,7 @@ impl SasaEnergy {
         self.has_backup = true;
     }
 
-    pub(super) fn undo(&mut self) {
+    fn undo(&mut self) {
         assert!(self.has_backup, "undo called without backup");
         if self.is_full_backup {
             // Swap is O(1) — the old (post-resize) state lands in the backup buffers
@@ -256,10 +304,12 @@ impl SasaEnergy {
         self.has_backup = false;
     }
 
-    pub(super) fn discard_backup(&mut self) {
+    fn discard_backup(&mut self) {
         self.has_backup = false;
     }
+}
 
+impl SasaEnergy {
     pub(super) fn to_yaml(&self) -> serde_yml::Value {
         let mut map = serde_yml::Mapping::new();
         map.insert("probe_radius".into(), self.probe_radius.into());

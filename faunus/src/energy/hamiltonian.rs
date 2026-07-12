@@ -224,6 +224,7 @@ impl Hamiltonian {
 
     /// Return a reference to the Penalty term, if present.
     pub fn penalty(&self) -> Option<&super::penalty::Penalty> {
+        #[allow(clippy::wildcard_enum_match_arm)] // searching specifically for the Penalty term
         self.energy_terms.iter().find_map(|t| match t {
             EnergyTerm::Penalty(p) => Some(p),
             _ => None,

@@ -13,6 +13,7 @@ use crate::{
 };
 
 use super::*;
+use crate::energy::stateful::StatefulEnergy;
 
 fn make_system() -> (Topology, Backend) {
     let topology = Topology::from_file("tests/files/bonded_interactions.yaml").unwrap();
@@ -177,8 +178,8 @@ fn test_intermolecular_update() {
         true, true, true, true, // second group
         false, false, false, false, // third group
     ];
-    bonded.update(&system, &change).unwrap();
-    assert_eq!(bonded.particles_status, expected_status);
+    bonded.refresh(&system, &change).unwrap();
+    assert_eq!(*bonded.particles_status, expected_status);
 
     // volume change
     let change = Change::Volume(
@@ -188,39 +189,39 @@ fn test_intermolecular_update() {
             new: 108.0,
         },
     );
-    bonded.update(&system, &change).unwrap();
-    assert_eq!(bonded.particles_status, expected_status);
+    bonded.refresh(&system, &change).unwrap();
+    assert_eq!(*bonded.particles_status, expected_status);
 
     // irrelevant single group change
     let change = Change::SingleGroup(
         2,
         GroupChange::PartialUpdate(vec![RelIndex::new(0), RelIndex::new(1), RelIndex::new(3)]),
     );
-    bonded.update(&system, &change).unwrap();
-    assert_eq!(bonded.particles_status, expected_status);
+    bonded.refresh(&system, &change).unwrap();
+    assert_eq!(*bonded.particles_status, expected_status);
 
     // irrelevant changes in multiple groups
     let change = Change::Groups(vec![
         (0, GroupChange::PartialUpdate(vec![RelIndex::new(2)])),
         (2, GroupChange::RigidBody),
     ]);
-    bonded.update(&system, &change).unwrap();
-    assert_eq!(bonded.particles_status, expected_status);
+    bonded.refresh(&system, &change).unwrap();
+    assert_eq!(*bonded.particles_status, expected_status);
 
     // resize single group (irrelevant one)
     let change = Change::SingleGroup(0, GroupChange::Resize(GroupSize::Shrink(2)));
-    bonded.update(&system, &change).unwrap();
-    assert_eq!(bonded.particles_status, expected_status);
+    bonded.refresh(&system, &change).unwrap();
+    assert_eq!(*bonded.particles_status, expected_status);
 
     // resize single group (relevant)
     let change = Change::SingleGroup(1, GroupChange::Resize(GroupSize::Shrink(2)));
-    bonded.update(&system, &change).unwrap();
+    bonded.refresh(&system, &change).unwrap();
     let expected_status = [
         true, true, true, true, // first group
         true, true, false, false, // second group
         false, false, false, false, // third group
     ];
-    assert_eq!(bonded.particles_status, expected_status);
+    assert_eq!(*bonded.particles_status, expected_status);
 
     let mut bonded = original_bonded.clone();
 
@@ -230,20 +231,20 @@ fn test_intermolecular_update() {
         (1, GroupChange::Resize(GroupSize::Shrink(2))),
         (2, GroupChange::Resize(GroupSize::Expand(3))),
     ]);
-    bonded.update(&system, &change).unwrap();
+    bonded.refresh(&system, &change).unwrap();
     let expected_status = [
         true, true, true, true, // first group
         true, true, false, false, // second group
         true, true, true, false, // third group
     ];
-    assert_eq!(bonded.particles_status, expected_status);
+    assert_eq!(*bonded.particles_status, expected_status);
 
     let mut bonded = original_bonded.clone();
 
     // everything changes
     let change = Change::Everything;
-    bonded.update(&system, &change).unwrap();
-    assert_eq!(bonded.particles_status, expected_status);
+    bonded.refresh(&system, &change).unwrap();
+    assert_eq!(*bonded.particles_status, expected_status);
 }
 
 #[test]
@@ -269,7 +270,7 @@ fn test_intermolecular_energy() {
     let resize = GroupSize::Expand(2);
     system.resize_group(2, resize).unwrap();
     let change = Change::SingleGroup(2, GroupChange::Resize(resize));
-    bonded.update(&system, &change).unwrap();
+    bonded.refresh(&system, &change).unwrap();
     let expected = 4362.58996700314;
     assert_approx_eq!(f64, bonded.energy(&system, &change), expected);
 }
