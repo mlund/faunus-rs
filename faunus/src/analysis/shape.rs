@@ -187,25 +187,15 @@ fn compute_descriptors(evals: &[f64; 3], rg_squared: f64) -> Option<ShapeDescrip
     })
 }
 
-impl crate::Info for ShapeAnalysis {
-    fn short_name(&self) -> Option<&'static str> {
-        Some("polymershape")
-    }
-    fn long_name(&self) -> Option<&'static str> {
-        Some("Polymer shape via gyration tensor")
-    }
-    fn citation(&self) -> Option<&'static str> {
-        Some("doi:10/d6ff")
-    }
-}
+impl_info!(
+    ShapeAnalysis,
+    "polymershape",
+    "Polymer shape via gyration tensor",
+    "doi:10/d6ff"
+);
 
 impl<T: ObserveContext> Analyze<T> for ShapeAnalysis {
-    fn sampling(&self) -> &Sampling {
-        &self.sampling
-    }
-    fn sampling_mut(&mut self) -> &mut Sampling {
-        &mut self.sampling
-    }
+    impl_sampling_accessors!();
 
     fn perform_sample(&mut self, context: &T, step: usize, weight: f64) -> Result<()> {
         let group_indices = self.selection.resolve(context).to_vec();

@@ -91,22 +91,14 @@ impl CollectiveVariableAnalysis {
     }
 }
 
-impl crate::Info for CollectiveVariableAnalysis {
-    fn short_name(&self) -> Option<&'static str> {
-        Some("collectivevariable")
-    }
-    fn long_name(&self) -> Option<&'static str> {
-        Some("Collective variable time series")
-    }
-}
+impl_info!(
+    CollectiveVariableAnalysis,
+    "collectivevariable",
+    "Collective variable time series"
+);
 
 impl<T: ObserveContext> Analyze<T> for CollectiveVariableAnalysis {
-    fn sampling(&self) -> &Sampling {
-        &self.sampling
-    }
-    fn sampling_mut(&mut self) -> &mut Sampling {
-        &mut self.sampling
-    }
+    impl_sampling_accessors!();
 
     fn perform_sample(&mut self, context: &T, step: usize, weight: f64) -> Result<()> {
         let value = self.cv.evaluate(context);

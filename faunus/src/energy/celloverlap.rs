@@ -19,7 +19,6 @@ use std::fmt::Debug;
 
 use crate::{
     cell::{BoundaryConditions, PeriodicDirections, Shape},
-    energy::EnergyTerm,
     Change,
 };
 
@@ -53,12 +52,6 @@ impl CellOverlap {
         } else {
             0.0
         }
-    }
-}
-
-impl From<CellOverlap> for EnergyTerm {
-    fn from(celloverlap: CellOverlap) -> Self {
-        Self::CellOverlap(celloverlap)
     }
 }
 

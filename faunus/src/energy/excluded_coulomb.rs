@@ -10,7 +10,7 @@ use interatomic::twobody::{ArcPotential, IsotropicTwobodyEnergy};
 
 use crate::{group::Group, topology::Topology, Change};
 
-use super::{builder::PairPotentialBuilder, square_matrix::SquareMatrix, EnergyChange, EnergyTerm};
+use super::{builder::PairPotentialBuilder, square_matrix::SquareMatrix, EnergyChange};
 
 /// Evaluates analytical Coulomb for excluded pairs in opted-in molecules.
 ///
@@ -94,12 +94,6 @@ impl EnergyChange for ExcludedCoulomb {
                 .map(|(id, _)| self.one_group(context, &context.groups()[*id]))
                 .sum(),
         }
-    }
-}
-
-impl From<ExcludedCoulomb> for EnergyTerm {
-    fn from(term: ExcludedCoulomb) -> Self {
-        Self::ExcludedCoulomb(term)
     }
 }
 

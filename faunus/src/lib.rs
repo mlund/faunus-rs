@@ -84,6 +84,9 @@ pub type UnitQuaternion = nalgebra::UnitQuaternion<f64>;
 pub type PositionVec = Vec<Point>;
 pub type ParticleVec = Vec<Particle>;
 
+#[macro_use]
+mod macros;
+
 mod info;
 pub use info::*;
 pub mod cell;

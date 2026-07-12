@@ -402,22 +402,14 @@ impl MultipoleDistribution {
     }
 }
 
-impl crate::Info for MultipoleDistribution {
-    fn short_name(&self) -> Option<&'static str> {
-        Some("multipoledistribution")
-    }
-    fn long_name(&self) -> Option<&'static str> {
-        Some("Multipolar decomposition vs. separation")
-    }
-}
+impl_info!(
+    MultipoleDistribution,
+    "multipoledistribution",
+    "Multipolar decomposition vs. separation"
+);
 
 impl<T: ObserveContext> Analyze<T> for MultipoleDistribution {
-    fn sampling(&self) -> &Sampling {
-        &self.sampling
-    }
-    fn sampling_mut(&mut self) -> &mut Sampling {
-        &mut self.sampling
-    }
+    impl_sampling_accessors!();
 
     fn perform_sample(&mut self, context: &T, _step: usize, weight: f64) -> Result<()> {
         let g1 = self.selections.0.resolve(context).to_vec();

@@ -108,14 +108,7 @@ impl<T: ObserveContext> MoveProposal<T> for PivotMove {
     }
 }
 
-impl crate::Info for PivotMove {
-    fn short_name(&self) -> Option<&'static str> {
-        Some("pivot")
-    }
-    fn long_name(&self) -> Option<&'static str> {
-        Some("Pivot rotation of polymer chain")
-    }
-}
+impl_info!(PivotMove, "pivot", "Pivot rotation of polymer chain");
 
 #[cfg(test)]
 mod tests {

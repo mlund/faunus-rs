@@ -30,7 +30,6 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use super::expr_helpers::substitute_constants;
-use super::EnergyTerm;
 
 /// Builder for deserializing a `CustomExternal` entry from YAML.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -326,18 +325,12 @@ impl CustomExternal {
 
     /// Report custom external parameters as YAML.
     pub(super) fn to_yaml(&self) -> serde_yml::Value {
-        let mut map = serde_yml::Mapping::new();
-        map.insert("function".into(), self.function.clone().into());
-        map.insert("com".into(), self.com.into());
         let selection = self.selection_cache.borrow().selection().to_string();
-        map.insert("selection".into(), selection.into());
-        serde_yml::Value::Mapping(map)
-    }
-}
-
-impl From<CustomExternal> for EnergyTerm {
-    fn from(ce: CustomExternal) -> Self {
-        Self::CustomExternal(ce)
+        yaml_map! {
+            "function" => self.function.clone(),
+            "com" => self.com,
+            "selection" => selection,
+        }
     }
 }
 

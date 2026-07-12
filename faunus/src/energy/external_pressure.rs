@@ -23,8 +23,6 @@ use crate::Change;
 use crate::ObserveContext;
 use serde::{Deserialize, Serialize};
 
-use super::EnergyTerm;
-
 /// Pa → kJ/(mol·Å³). Derives from PV having units J when P is in Pa and V in m³;
 /// multiplying by N_A gives kJ/mol·m³, then 1e-30 m³/ų and 1e-3 kJ/J yield the 1e-33.
 const PA_TO_INTERNAL: f64 = physical_constants::AVOGADRO_CONSTANT * 1e-33;
@@ -112,16 +110,10 @@ impl ExternalPressure {
 
     /// Report pressure parameters as YAML.
     pub(super) fn to_yaml(&self) -> serde_yml::Value {
-        let mut map = serde_yml::Mapping::new();
-        map.insert("pressure_kj_mol_A3".into(), self.pressure.into());
-        map.insert("thermal_energy".into(), self.thermal_energy.into());
-        serde_yml::Value::Mapping(map)
-    }
-}
-
-impl From<ExternalPressure> for EnergyTerm {
-    fn from(ep: ExternalPressure) -> Self {
-        Self::ExternalPressure(ep)
+        yaml_map! {
+            "pressure_kj_mol_A3" => self.pressure,
+            "thermal_energy" => self.thermal_energy,
+        }
     }
 }
 

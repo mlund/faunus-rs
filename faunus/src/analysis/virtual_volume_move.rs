@@ -144,19 +144,12 @@ impl VirtualVolumeMoveBuilder {
     }
 }
 
-impl crate::Info for VirtualVolumeMove {
-    fn short_name(&self) -> Option<&'static str> {
-        Some("virtualvolumemove")
-    }
-
-    fn long_name(&self) -> Option<&'static str> {
-        Some("Virtual volume move for pressure measurement by perturbation")
-    }
-
-    fn citation(&self) -> Option<&'static str> {
-        Some("doi:10.1063/1.472721")
-    }
-}
+impl_info!(
+    VirtualVolumeMove,
+    "virtualvolumemove",
+    "Virtual volume move for pressure measurement by perturbation",
+    "doi:10.1063/1.472721"
+);
 
 impl VirtualVolumeMove {
     /// Mean excess pressure in kT/Å³. `dV ≠ 0` is enforced at build time.
@@ -215,12 +208,7 @@ impl VirtualVolumeMove {
 }
 
 impl<T: PerturbContext> Analyze<T> for VirtualVolumeMove {
-    fn sampling(&self) -> &Sampling {
-        &self.sampling
-    }
-    fn sampling_mut(&mut self) -> &mut Sampling {
-        &mut self.sampling
-    }
+    impl_sampling_accessors!();
 
     fn perform_sample(&mut self, context: &T, step: usize, weight: f64) -> Result<()> {
         let old_energy = context.hamiltonian().energy(context, &Change::Everything);

@@ -181,19 +181,12 @@ impl VirtualTranslateBuilder {
     }
 }
 
-impl crate::Info for VirtualTranslate {
-    fn short_name(&self) -> Option<&'static str> {
-        Some("virtualtranslate")
-    }
-
-    fn long_name(&self) -> Option<&'static str> {
-        Some("Virtual translate move for force measurement by perturbation")
-    }
-
-    fn citation(&self) -> Option<&'static str> {
-        Some("doi:10.1063/1.1734110") // Widom insertion method
-    }
-}
+impl_info!(
+    VirtualTranslate,
+    "virtualtranslate",
+    "Virtual translate move for force measurement by perturbation",
+    "doi:10.1063/1.1734110" // Widom insertion method
+);
 
 impl VirtualTranslate {
     /// Calculate the mean force in units of kT/Å
@@ -239,12 +232,7 @@ impl VirtualTranslate {
 }
 
 impl<T: PerturbContext> Analyze<T> for VirtualTranslate {
-    fn sampling(&self) -> &Sampling {
-        &self.sampling
-    }
-    fn sampling_mut(&mut self) -> &mut Sampling {
-        &mut self.sampling
-    }
+    impl_sampling_accessors!();
 
     fn perform_sample(&mut self, context: &T, step: usize, weight: f64) -> Result<()> {
         if self.displacement.abs() < f64::EPSILON {

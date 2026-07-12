@@ -354,25 +354,15 @@ impl DoubleLayerPressure {
     }
 }
 
-impl crate::Info for DoubleLayerPressure {
-    fn short_name(&self) -> Option<&'static str> {
-        Some("doublelayerpressure")
-    }
-    fn long_name(&self) -> Option<&'static str> {
-        Some("Osmotic pressure between two charged planes (Guldbrand midplane method)")
-    }
-    fn citation(&self) -> Option<&'static str> {
-        Some("doi:10.1063/1.446912")
-    }
-}
+impl_info!(
+    DoubleLayerPressure,
+    "doublelayerpressure",
+    "Osmotic pressure between two charged planes (Guldbrand midplane method)",
+    "doi:10.1063/1.446912"
+);
 
 impl<T: ObserveContext> Analyze<T> for DoubleLayerPressure {
-    fn sampling(&self) -> &Sampling {
-        &self.sampling
-    }
-    fn sampling_mut(&mut self) -> &mut Sampling {
-        &mut self.sampling
-    }
+    impl_sampling_accessors!();
 
     fn perform_sample(&mut self, context: &T, step: usize, _weight: f64) -> Result<()> {
         let ions = self.selection.resolve(context);

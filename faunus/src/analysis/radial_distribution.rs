@@ -252,22 +252,14 @@ impl RadialDistribution {
     }
 }
 
-impl crate::Info for RadialDistribution {
-    fn short_name(&self) -> Option<&'static str> {
-        Some("rdf")
-    }
-    fn long_name(&self) -> Option<&'static str> {
-        Some("Radial distribution function g(r)")
-    }
-}
+impl_info!(
+    RadialDistribution,
+    "rdf",
+    "Radial distribution function g(r)"
+);
 
 impl<T: ObserveContext> Analyze<T> for RadialDistribution {
-    fn sampling(&self) -> &Sampling {
-        &self.sampling
-    }
-    fn sampling_mut(&mut self) -> &mut Sampling {
-        &mut self.sampling
-    }
+    impl_sampling_accessors!();
 
     fn perform_sample(&mut self, context: &T, step: usize, weight: f64) -> Result<()> {
         let _ = step;

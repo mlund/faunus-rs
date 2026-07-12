@@ -106,22 +106,14 @@ pub struct MultipoleAnalysis {
     track_per_atom: bool,
 }
 
-impl crate::Info for MultipoleAnalysis {
-    fn short_name(&self) -> Option<&'static str> {
-        Some("multipole")
-    }
-    fn long_name(&self) -> Option<&'static str> {
-        Some("Per-group charge, dipole, and quadrupole analysis")
-    }
-}
+impl_info!(
+    MultipoleAnalysis,
+    "multipole",
+    "Per-group charge, dipole, and quadrupole analysis"
+);
 
 impl<T: ObserveContext> Analyze<T> for MultipoleAnalysis {
-    fn sampling(&self) -> &Sampling {
-        &self.sampling
-    }
-    fn sampling_mut(&mut self) -> &mut Sampling {
-        &mut self.sampling
-    }
+    impl_sampling_accessors!();
 
     fn perform_sample(&mut self, context: &T, _step: usize, weight: f64) -> Result<()> {
         let topology = context.topology_ref();

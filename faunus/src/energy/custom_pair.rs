@@ -36,7 +36,6 @@ use crate::selection::Selection;
 use crate::Change;
 
 use super::expr_helpers::substitute_constants;
-use super::EnergyTerm;
 
 /// Numerical step (Å) for central-difference dU/dr. Two evaluations per call.
 const DEFAULT_GRADIENT_H: f64 = 1.0e-5;
@@ -230,11 +229,11 @@ impl CustomPair {
     }
 
     pub(super) fn to_yaml(&self) -> serde_yml::Value {
-        let mut map = serde_yml::Mapping::new();
-        map.insert("function".into(), self.function.clone().into());
-        map.insert("selection1".into(), self.selection1.to_string().into());
-        map.insert("selection2".into(), self.selection2.to_string().into());
-        serde_yml::Value::Mapping(map)
+        yaml_map! {
+            "function" => self.function.clone(),
+            "selection1" => self.selection1.to_string(),
+            "selection2" => self.selection2.to_string(),
+        }
     }
 
     /// Minimum-image vector com1 − com2 and its norm.
@@ -313,12 +312,6 @@ fn distribute_force(
             let w = context.atom_mass(i) / total_mass;
             forces[i] += w * f_com;
         }
-    }
-}
-
-impl From<CustomPair> for EnergyTerm {
-    fn from(cp: CustomPair) -> Self {
-        Self::CustomPair(cp)
     }
 }
 

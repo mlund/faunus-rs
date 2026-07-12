@@ -519,25 +519,15 @@ impl WidomRotation {
     }
 }
 
-impl crate::Info for WidomRotation {
-    fn short_name(&self) -> Option<&'static str> {
-        Some("widomrotation")
-    }
-    fn long_name(&self) -> Option<&'static str> {
-        Some("Widom rotational perturbation about the center of mass")
-    }
-    fn citation(&self) -> Option<&'static str> {
-        Some("doi:10.1063/1.1734110") // Widom insertion method
-    }
-}
+impl_info!(
+    WidomRotation,
+    "widomrotation",
+    "Widom rotational perturbation about the center of mass",
+    "doi:10.1063/1.1734110" // Widom insertion method
+);
 
 impl<T: PerturbContext> Analyze<T> for WidomRotation {
-    fn sampling(&self) -> &Sampling {
-        &self.sampling
-    }
-    fn sampling_mut(&mut self) -> &mut Sampling {
-        &mut self.sampling
-    }
+    impl_sampling_accessors!();
 
     fn perform_sample(&mut self, context: &T, step: usize, _weight: f64) -> Result<()> {
         let groups = self.selection.resolve(context).to_vec();

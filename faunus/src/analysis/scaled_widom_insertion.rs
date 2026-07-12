@@ -319,27 +319,15 @@ impl ScaledWidomInsertion {
     }
 }
 
-impl crate::Info for ScaledWidomInsertion {
-    fn short_name(&self) -> Option<&'static str> {
-        Some("scaled_widom_insertion")
-    }
-
-    fn long_name(&self) -> Option<&'static str> {
-        Some("Scaled Widom insertion for single-ion chemical potential")
-    }
-
-    fn citation(&self) -> Option<&'static str> {
-        Some("doi:10.1080/00268978800100203")
-    }
-}
+impl_info!(
+    ScaledWidomInsertion,
+    "scaled_widom_insertion",
+    "Scaled Widom insertion for single-ion chemical potential",
+    "doi:10.1080/00268978800100203"
+);
 
 impl<T: ObserveContext> Analyze<T> for ScaledWidomInsertion {
-    fn sampling(&self) -> &Sampling {
-        &self.sampling
-    }
-    fn sampling_mut(&mut self) -> &mut Sampling {
-        &mut self.sampling
-    }
+    impl_sampling_accessors!();
 
     fn perform_sample(&mut self, context: &T, _step: usize, _weight: f64) -> Result<()> {
         // N_T enters the charge scaling factor 1 − λz_α/(z_β N_T)
@@ -429,13 +417,13 @@ impl<T: ObserveContext> Analyze<T> for ScaledWidomInsertion {
         let mut map = serde_yml::Mapping::new();
         map.try_insert("atom", &self.atom)?;
         map.try_insert("num_samples", self.sampling.num_samples())?;
-        let mut excess = serde_yml::Mapping::new();
-        excess.insert("short_range".into(), self.mu_sr.to_yaml()?);
-        excess.insert("electrostatic".into(), self.mu_el.to_yaml()?);
-        excess.insert("total".into(), self.mu_total.to_yaml()?);
         map.insert(
             "excess_chemical_potential (kT)".into(),
-            serde_yml::Value::Mapping(excess),
+            yaml_map! {
+                "short_range" => self.mu_sr.to_yaml()?,
+                "electrostatic" => self.mu_el.to_yaml()?,
+                "total" => self.mu_total.to_yaml()?,
+            },
         );
         map.insert("unscaled_widom (kT)".into(), self.mu_unscaled.to_yaml()?);
         Some(serde_yml::Value::Mapping(map))

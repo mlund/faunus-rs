@@ -51,14 +51,11 @@ pub struct TranslateMolecule {
     directions: crate::axes::Axes,
 }
 
-impl crate::Info for TranslateMolecule {
-    fn short_name(&self) -> Option<&'static str> {
-        Some("trans-mol")
-    }
-    fn long_name(&self) -> Option<&'static str> {
-        Some("Translate a random molecule")
-    }
-}
+impl_info!(
+    TranslateMolecule,
+    "trans-mol",
+    "Translate a random molecule"
+);
 
 impl TranslateMolecule {
     /// Create a new `TranslateMolecule` move.
@@ -164,14 +161,7 @@ const fn default_select_molecule_ids() -> GroupSelection {
     GroupSelection::Size(GroupSize::Full)
 }
 
-impl crate::Info for TranslateAtom {
-    fn short_name(&self) -> Option<&'static str> {
-        Some("trans-atom")
-    }
-    fn long_name(&self) -> Option<&'static str> {
-        Some("Translate a random atom")
-    }
-}
+impl_info!(TranslateAtom, "trans-atom", "Translate a random atom");
 
 impl TranslateAtom {
     /// Create a new `TranslateAtom` move.

@@ -78,6 +78,69 @@ macro_rules! dispatch_stateful {
     };
 }
 
+/// Dispatch a method that every variant forwards identically, passing `$args`.
+/// Unlike [`dispatch_stateful`] there is no stateless subset: the compiler
+/// rejects a new variant until it is added here.
+macro_rules! dispatch_all {
+    ($self:expr, $method:ident $(, $arg:expr)*) => {
+        match $self {
+            EnergyTerm::NonbondedMatrix(x) => x.$method($($arg),*),
+            EnergyTerm::NonbondedMatrixSplined(x) => x.$method($($arg),*),
+            EnergyTerm::IntramolecularBonded(x) => x.$method($($arg),*),
+            EnergyTerm::IntermolecularBonded(x) => x.$method($($arg),*),
+            EnergyTerm::SasaEnergy(x) => x.$method($($arg),*),
+            EnergyTerm::CellOverlap(x) => x.$method($($arg),*),
+            EnergyTerm::Constrain(x) => x.$method($($arg),*),
+            EnergyTerm::ExternalPressure(x) => x.$method($($arg),*),
+            EnergyTerm::CustomExternal(x) => x.$method($($arg),*),
+            EnergyTerm::CustomPair(x) => x.$method($($arg),*),
+            EnergyTerm::EwaldReciprocal(x) => x.$method($($arg),*),
+            EnergyTerm::PolymerDepletion(x) => x.$method($($arg),*),
+            EnergyTerm::ExcludedCoulomb(x) => x.$method($($arg),*),
+            EnergyTerm::Tabulated(x) => x.$method($($arg),*),
+            EnergyTerm::Penalty(x) => x.$method($($arg),*),
+            EnergyTerm::ContactTessellation(x) => x.$method($($arg),*),
+        }
+    };
+}
+
+/// Generate `From<Concrete> for EnergyTerm` wrappers. Prefix an entry with
+/// `boxed` when the variant stores a `Box`.
+macro_rules! impl_energyterm_from {
+    (boxed $variant:ident($ty:ty), $($rest:tt)*) => {
+        impl From<$ty> for EnergyTerm {
+            fn from(value: $ty) -> Self {
+                Self::$variant(Box::new(value))
+            }
+        }
+        impl_energyterm_from!($($rest)*);
+    };
+    ($variant:ident($ty:ty), $($rest:tt)*) => {
+        impl From<$ty> for EnergyTerm {
+            fn from(value: $ty) -> Self {
+                Self::$variant(value)
+            }
+        }
+        impl_energyterm_from!($($rest)*);
+    };
+    () => {};
+}
+
+impl_energyterm_from! {
+    boxed SasaEnergy(SasaEnergy),
+    boxed EwaldReciprocal(EwaldReciprocalEnergy),
+    CellOverlap(CellOverlap),
+    Constrain(Constrain),
+    ExternalPressure(ExternalPressure),
+    CustomExternal(CustomExternal),
+    CustomPair(CustomPair),
+    PolymerDepletion(PolymerDepletion),
+    ExcludedCoulomb(ExcludedCoulomb),
+    Tabulated(TabulatedEnergy),
+    Penalty(Penalty),
+    ContactTessellation(ContactTessellationEnergy),
+}
+
 impl EnergyTerm {
     /// Update internal state due to a change in the system.
     pub(crate) fn update(
@@ -297,59 +360,6 @@ impl EnergyChange for EnergyTerm {
     /// Compute the energy of the EnergyTerm relevant to the change in the system.
     /// The energy is returned in the units of kJ/mol.
     fn energy(&self, context: &impl ObserveContext, change: &Change) -> f64 {
-        match self {
-            Self::NonbondedMatrix(x) => x.energy(context, change),
-            Self::NonbondedMatrixSplined(x) => x.energy(context, change),
-            Self::IntramolecularBonded(x) => x.energy(context, change),
-            Self::IntermolecularBonded(x) => x.energy(context, change),
-            Self::SasaEnergy(x) => x.energy(context, change),
-            Self::CellOverlap(x) => x.energy(context, change),
-            Self::Constrain(x) => x.energy(context, change),
-            Self::ExternalPressure(x) => x.energy(context, change),
-            Self::CustomExternal(x) => x.energy(context, change),
-            Self::CustomPair(x) => x.energy(context, change),
-            Self::EwaldReciprocal(x) => x.energy(context, change),
-            Self::PolymerDepletion(x) => x.energy(context, change),
-            Self::ExcludedCoulomb(x) => x.energy(context, change),
-            Self::Tabulated(x) => x.energy(context, change),
-            Self::Penalty(x) => x.energy(context, change),
-            Self::ContactTessellation(x) => x.energy(context, change),
-        }
-    }
-}
-
-impl From<SasaEnergy> for EnergyTerm {
-    fn from(sasa: SasaEnergy) -> Self {
-        Self::SasaEnergy(Box::new(sasa))
-    }
-}
-
-impl From<Constrain> for EnergyTerm {
-    fn from(constrain: Constrain) -> Self {
-        Self::Constrain(constrain)
-    }
-}
-
-impl From<PolymerDepletion> for EnergyTerm {
-    fn from(pm: PolymerDepletion) -> Self {
-        Self::PolymerDepletion(pm)
-    }
-}
-
-impl From<TabulatedEnergy> for EnergyTerm {
-    fn from(t: TabulatedEnergy) -> Self {
-        Self::Tabulated(t)
-    }
-}
-
-impl From<Penalty> for EnergyTerm {
-    fn from(p: Penalty) -> Self {
-        Self::Penalty(p)
-    }
-}
-
-impl From<ContactTessellationEnergy> for EnergyTerm {
-    fn from(ct: ContactTessellationEnergy) -> Self {
-        Self::ContactTessellation(ct)
+        dispatch_all!(self, energy, context, change)
     }
 }

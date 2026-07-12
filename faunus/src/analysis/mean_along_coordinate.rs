@@ -123,22 +123,14 @@ impl MeanAlongCoordinate {
     }
 }
 
-impl crate::Info for MeanAlongCoordinate {
-    fn short_name(&self) -> Option<&'static str> {
-        Some("meanalongcoordinate")
-    }
-    fn long_name(&self) -> Option<&'static str> {
-        Some("Mean of collective variable along coordinate")
-    }
-}
+impl_info!(
+    MeanAlongCoordinate,
+    "meanalongcoordinate",
+    "Mean of collective variable along coordinate"
+);
 
 impl<T: ObserveContext> Analyze<T> for MeanAlongCoordinate {
-    fn sampling(&self) -> &Sampling {
-        &self.sampling
-    }
-    fn sampling_mut(&mut self) -> &mut Sampling {
-        &mut self.sampling
-    }
+    impl_sampling_accessors!();
 
     fn perform_sample(&mut self, context: &T, _step: usize, weight: f64) -> Result<()> {
         let coord_value = self.coordinate.evaluate(context);

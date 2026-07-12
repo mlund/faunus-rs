@@ -33,8 +33,6 @@ use interatomic::coulomb::reciprocal::{EwaldPolicy, EwaldReciprocal};
 use interatomic::coulomb::DebyeLength;
 use serde::{Deserialize, Serialize};
 
-use super::EnergyTerm;
-
 /// Ewald reciprocal-space energy with backup/undo for MC moves.
 #[derive(Clone)]
 pub struct EwaldReciprocalEnergy {
@@ -384,19 +382,10 @@ impl EwaldReciprocalEnergy {
 
     /// Report Ewald parameters as YAML.
     pub(super) fn to_yaml(&self) -> serde_yml::Value {
-        let mut map = serde_yml::Mapping::new();
-        map.insert("alpha".into(), self.ewald.alpha().into());
-        map.insert("n_max".into(), (self.ewald.n_max() as u64).into());
-        map.insert(
-            "k_vectors".into(),
-            (self.ewald.num_k_vectors() as u64).into(),
-        );
-        serde_yml::Value::Mapping(map)
-    }
-}
-
-impl From<EwaldReciprocalEnergy> for EnergyTerm {
-    fn from(ewald: EwaldReciprocalEnergy) -> Self {
-        Self::EwaldReciprocal(Box::new(ewald))
+        yaml_map! {
+            "alpha" => self.ewald.alpha(),
+            "n_max" => (self.ewald.n_max() as u64),
+            "k_vectors" => (self.ewald.num_k_vectors() as u64),
+        }
     }
 }

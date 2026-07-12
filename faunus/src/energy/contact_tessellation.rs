@@ -411,12 +411,12 @@ impl ContactTessellationEnergy {
     }
 
     pub(super) fn to_yaml(&self) -> serde_yml::Value {
-        let mut map = serde_yml::Mapping::new();
-        map.insert("probe_radius".into(), self.probe_radius.into());
-        map.insert("scaling".into(), self.scaling.into());
         let total = self.cache.group_energies.iter().sum::<f64>() / 2.0;
-        map.insert("total_energy".into(), total.into());
-        serde_yml::Value::Mapping(map)
+        yaml_map! {
+            "probe_radius" => self.probe_radius,
+            "scaling" => self.scaling,
+            "total_energy" => total,
+        }
     }
 }
 

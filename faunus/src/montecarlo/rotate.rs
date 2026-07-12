@@ -65,11 +65,8 @@ impl<T: ObserveContext> MoveProposal<T> for RotateMolecule {
     }
 }
 
-impl crate::Info for RotateMolecule {
-    fn short_name(&self) -> Option<&'static str> {
-        Some("rotate_molecule")
-    }
-    fn long_name(&self) -> Option<&'static str> {
-        Some("Rigid body rotation of random molecule")
-    }
-}
+impl_info!(
+    RotateMolecule,
+    "rotate_molecule",
+    "Rigid body rotation of random molecule"
+);

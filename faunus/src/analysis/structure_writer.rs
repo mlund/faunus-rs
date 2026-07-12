@@ -102,14 +102,11 @@ impl StructureWriter {
     }
 }
 
-impl crate::Info for StructureWriter {
-    fn short_name(&self) -> Option<&'static str> {
-        Some("structure printer")
-    }
-    fn long_name(&self) -> Option<&'static str> {
-        Some("Writes structure of the system at specified frequency into an output trajectory.")
-    }
-}
+impl_info!(
+    StructureWriter,
+    "structure printer",
+    "Writes structure of the system at specified frequency into an output trajectory."
+);
 
 impl StructureWriter {
     /// Resolve selected group indices, using cache to avoid re-resolution.
@@ -286,12 +283,7 @@ impl StructureWriter {
 }
 
 impl<T: ObserveContext> Analyze<T> for StructureWriter {
-    fn sampling(&self) -> &Sampling {
-        &self.sampling
-    }
-    fn sampling_mut(&mut self) -> &mut Sampling {
-        &mut self.sampling
-    }
+    impl_sampling_accessors!();
 
     fn perform_sample(&mut self, context: &T, step: usize, _weight: f64) -> anyhow::Result<()> {
         self.write_frame(context, step)

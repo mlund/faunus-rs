@@ -154,44 +154,105 @@ impl Sampling {
     }
 }
 
-/// Helper to deserialize analysis input and create a boxed `Analyze` object.
-#[derive(Clone, Deserialize)]
-pub enum AnalysisBuilder {
+/// Generate the [`AnalysisBuilder`] enum and its `apply_output_dir` / `build`
+/// dispatch from one table. Each entry lists a variant, its builder type, and
+/// which arguments that builder's `build()` takes — the sole axis of variation
+/// across the analyses. Registering a new analysis is then a single line here
+/// rather than an enum variant plus two parallel match arms kept in sync.
+macro_rules! analysis_builders {
+    // Per-variant `build()` call shapes; `context`/`medium`/`rt` are threaded in
+    // from the generated `build` method so hygiene stays consistent.
+    (@build $b:ident, none, $ctx:ident, $medium:ident, $rt:ident) => { $b.build()? };
+    (@build $b:ident, context, $ctx:ident, $medium:ident, $rt:ident) => { $b.build($ctx)? };
+    (@build $b:ident, context_medium, $ctx:ident, $medium:ident, $rt:ident) => {
+        $b.build($ctx, $medium)?
+    };
+    (@build $b:ident, context_rt, $ctx:ident, $medium:ident, $rt:ident) => {
+        $b.build($ctx, $rt)?
+    };
+    (@build $b:ident, rt, $ctx:ident, $medium:ident, $rt:ident) => { $b.build($rt)? };
+    (
+        $(
+            $(#[$attr:meta])*
+            $variant:ident($builder:ty) => $kind:ident
+        ),* $(,)?
+    ) => {
+        /// Helper to deserialize analysis input and create a boxed `Analyze` object.
+        #[derive(Clone, Deserialize)]
+        pub enum AnalysisBuilder {
+            $(
+                $(#[$attr])*
+                $variant($builder),
+            )*
+        }
+
+        impl AnalysisBuilder {
+            /// Prepend `dir` to every output path on this builder, in place.
+            /// Returns an error if any path is absolute.
+            pub fn apply_output_dir(&mut self, dir: &Path) -> Result<()> {
+                match self {
+                    $( Self::$variant(b) => b.apply_output_dir(dir), )*
+                }
+            }
+
+            /// Build analysis object
+            #[must_use = "this returns a Result that should be handled"]
+            pub fn build<T: Context>(
+                &self,
+                context: &T,
+                medium: Option<&interatomic::coulomb::Medium>,
+            ) -> Result<Box<dyn Analyze<T> + Send>> {
+                let rt = medium
+                    .map(|m| crate::R_IN_KJ_PER_MOL * m.temperature())
+                    .unwrap_or(crate::R_IN_KJ_PER_MOL * 298.15);
+                Ok(match self {
+                    $(
+                        Self::$variant(b) => {
+                            Box::new(analysis_builders!(@build b, $kind, context, medium, rt))
+                        }
+                    )*
+                })
+            }
+        }
+    };
+}
+
+analysis_builders! {
     /// Structure writer
     #[serde(rename = "Trajectory")]
-    StructureWriter(StructureWriterBuilder),
+    StructureWriter(StructureWriterBuilder) => none,
     /// Virtual translate analysis for force measurement
-    VirtualTranslate(VirtualTranslateBuilder),
+    VirtualTranslate(VirtualTranslateBuilder) => rt,
     /// Collective variable time series
-    CollectiveVariable(CollectiveVariableAnalysisBuilder),
+    CollectiveVariable(CollectiveVariableAnalysisBuilder) => context,
     /// Polymer shape analysis via gyration tensor
-    PolymerShape(ShapeAnalysisBuilder),
+    PolymerShape(ShapeAnalysisBuilder) => context,
     /// Radial distribution function g(r)
-    RadialDistribution(RadialDistributionBuilder),
+    RadialDistribution(RadialDistributionBuilder) => context,
     /// Spatial distribution function on a body-fixed grid
-    SpatialDistribution(SpatialDistributionBuilder),
+    SpatialDistribution(SpatialDistributionBuilder) => context,
     /// Energy time series (total or partial)
-    Energy(EnergyAnalysisBuilder),
+    Energy(EnergyAnalysisBuilder) => context,
     /// Mean of one CV binned along another
-    MeanAlongCoordinate(MeanAlongCoordinateBuilder),
+    MeanAlongCoordinate(MeanAlongCoordinateBuilder) => context,
     /// Scaled Widom insertion for single-ion chemical potential
-    ScaledWidomInsertion(ScaledWidomInsertionBuilder),
+    ScaledWidomInsertion(ScaledWidomInsertionBuilder) => context_medium,
     /// Virtual volume move for excess pressure measurement
-    VirtualVolumeMove(VirtualVolumeMoveBuilder),
+    VirtualVolumeMove(VirtualVolumeMoveBuilder) => rt,
     /// Rotational diffusion via quaternion covariance matrix
-    RotationalDiffusion(RotationalDiffusionBuilder),
+    RotationalDiffusion(RotationalDiffusionBuilder) => context,
     /// Per-group charge and dipole moment analysis
-    Multipole(multipole::MultipoleAnalysisBuilder),
+    Multipole(multipole::MultipoleAnalysisBuilder) => context,
     /// Multipolar decomposition and orientational correlations vs. COM separation
-    MultipoleDistribution(MultipoleDistributionBuilder),
+    MultipoleDistribution(MultipoleDistributionBuilder) => context_medium,
     /// Osmotic pressure between two charged planes (Guldbrand midplane method)
-    DoubleLayerPressure(DoubleLayerPressureBuilder),
+    DoubleLayerPressure(DoubleLayerPressureBuilder) => context_medium,
     /// Electric potential profile φ(z) along z (screened slab)
-    ElectricPotentialProfile(ElectricPotentialProfileBuilder),
+    ElectricPotentialProfile(ElectricPotentialProfileBuilder) => context_medium,
     /// Density profile ρ(z) of a selected species along z
-    DensityProfile(DensityProfileBuilder),
+    DensityProfile(DensityProfileBuilder) => context,
     /// Widom rotational perturbation about the center of mass
-    WidomRotation(WidomRotationBuilder),
+    WidomRotation(WidomRotationBuilder) => context_rt,
 }
 
 /// Prefix `dir` onto a relative output path that stays within `dir`.
@@ -237,63 +298,6 @@ pub(crate) fn prefix_string(s: &mut String, dir: &Path) -> Result<()> {
         .into_string()
         .map_err(|os| anyhow::anyhow!("Non-UTF-8 path after prefix: {os:?}"))?;
     Ok(())
-}
-
-impl AnalysisBuilder {
-    /// Prepend `dir` to every output path on this builder, in place.
-    /// Returns an error if any path is absolute.
-    pub fn apply_output_dir(&mut self, dir: &Path) -> Result<()> {
-        match self {
-            Self::StructureWriter(b) => b.apply_output_dir(dir),
-            Self::VirtualTranslate(b) => b.apply_output_dir(dir),
-            Self::CollectiveVariable(b) => b.apply_output_dir(dir),
-            Self::PolymerShape(b) => b.apply_output_dir(dir),
-            Self::RadialDistribution(b) => b.apply_output_dir(dir),
-            Self::SpatialDistribution(b) => b.apply_output_dir(dir),
-            Self::Energy(b) => b.apply_output_dir(dir),
-            Self::MeanAlongCoordinate(b) => b.apply_output_dir(dir),
-            Self::ScaledWidomInsertion(b) => b.apply_output_dir(dir),
-            Self::VirtualVolumeMove(b) => b.apply_output_dir(dir),
-            Self::RotationalDiffusion(b) => b.apply_output_dir(dir),
-            Self::Multipole(b) => b.apply_output_dir(dir),
-            Self::MultipoleDistribution(b) => b.apply_output_dir(dir),
-            Self::DoubleLayerPressure(b) => b.apply_output_dir(dir),
-            Self::ElectricPotentialProfile(b) => b.apply_output_dir(dir),
-            Self::DensityProfile(b) => b.apply_output_dir(dir),
-            Self::WidomRotation(b) => b.apply_output_dir(dir),
-        }
-    }
-
-    /// Build analysis object
-    #[must_use = "this returns a Result that should be handled"]
-    pub fn build<T: Context>(
-        &self,
-        context: &T,
-        medium: Option<&interatomic::coulomb::Medium>,
-    ) -> Result<Box<dyn Analyze<T> + Send>> {
-        let rt = medium
-            .map(|m| crate::R_IN_KJ_PER_MOL * m.temperature())
-            .unwrap_or(crate::R_IN_KJ_PER_MOL * 298.15);
-        Ok(match self {
-            Self::StructureWriter(builder) => Box::new(builder.build()?),
-            Self::VirtualTranslate(builder) => Box::new(builder.build(rt)?),
-            Self::CollectiveVariable(builder) => Box::new(builder.build(context)?),
-            Self::PolymerShape(builder) => Box::new(builder.build(context)?),
-            Self::RadialDistribution(builder) => Box::new(builder.build(context)?),
-            Self::SpatialDistribution(builder) => Box::new(builder.build(context)?),
-            Self::Energy(builder) => Box::new(builder.build(context)?),
-            Self::MeanAlongCoordinate(builder) => Box::new(builder.build(context)?),
-            Self::ScaledWidomInsertion(builder) => Box::new(builder.build(context, medium)?),
-            Self::VirtualVolumeMove(builder) => Box::new(builder.build(rt)?),
-            Self::RotationalDiffusion(builder) => Box::new(builder.build(context)?),
-            Self::Multipole(builder) => Box::new(builder.build(context)?),
-            Self::MultipoleDistribution(builder) => Box::new(builder.build(context, medium)?),
-            Self::DoubleLayerPressure(builder) => Box::new(builder.build(context, medium)?),
-            Self::ElectricPotentialProfile(builder) => Box::new(builder.build(context, medium)?),
-            Self::DensityProfile(builder) => Box::new(builder.build(context)?),
-            Self::WidomRotation(builder) => Box::new(builder.build(context, rt)?),
-        })
-    }
 }
 
 /// Collection of analysis objects. Send-bound required for Gibbs ensemble scoped threads.
@@ -454,9 +458,7 @@ pub fn analyses_to_yaml<T: Context>(analyses: &AnalysisCollection<T>) -> Vec<ser
         .filter_map(|a| {
             let yaml = a.to_yaml()?;
             let name = a.short_name().unwrap_or("unknown");
-            let mut map = serde_yml::Mapping::new();
-            map.insert(serde_yml::Value::String(name.to_string()), yaml);
-            Some(serde_yml::Value::Mapping(map))
+            Some(yaml_map! { serde_yml::Value::String(name.to_string()) => yaml })
         })
         .collect()
 }
@@ -647,22 +649,10 @@ mod framework_characterization {
         }
     }
 
-    impl crate::Info for Counter {
-        fn short_name(&self) -> Option<&'static str> {
-            Some("counter")
-        }
-        fn long_name(&self) -> Option<&'static str> {
-            Some("counter")
-        }
-    }
+    impl_info!(Counter, "counter", "counter");
 
     impl<T: ObserveContext> Analyze<T> for Counter {
-        fn sampling(&self) -> &Sampling {
-            &self.sampling
-        }
-        fn sampling_mut(&mut self) -> &mut Sampling {
-            &mut self.sampling
-        }
+        impl_sampling_accessors!();
         fn perform_sample(&mut self, _context: &T, _step: usize, _weight: f64) -> Result<()> {
             Ok(())
         }

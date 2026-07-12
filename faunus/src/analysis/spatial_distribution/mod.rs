@@ -323,23 +323,10 @@ impl SpatialDistribution {
     }
 }
 
-impl crate::Info for SpatialDistribution {
-    fn short_name(&self) -> Option<&'static str> {
-        Some("sdf")
-    }
-
-    fn long_name(&self) -> Option<&'static str> {
-        Some("Spatial distribution function")
-    }
-}
+impl_info!(SpatialDistribution, "sdf", "Spatial distribution function");
 
 impl<T: ObserveContext> Analyze<T> for SpatialDistribution {
-    fn sampling(&self) -> &Sampling {
-        &self.sampling
-    }
-    fn sampling_mut(&mut self) -> &mut Sampling {
-        &mut self.sampling
-    }
+    impl_sampling_accessors!();
 
     fn perform_sample(&mut self, context: &T, _step: usize, weight: f64) -> Result<()> {
         let reference_groups = self.reference.resolve(context).to_vec();

@@ -96,22 +96,10 @@ impl EnergyAnalysisBuilder {
     }
 }
 
-impl crate::Info for EnergyAnalysis {
-    fn short_name(&self) -> Option<&'static str> {
-        Some("energy")
-    }
-    fn long_name(&self) -> Option<&'static str> {
-        Some("Energy analysis")
-    }
-}
+impl_info!(EnergyAnalysis, "energy", "Energy analysis");
 
 impl<T: ObserveContext + WithHamiltonian> Analyze<T> for EnergyAnalysis {
-    fn sampling(&self) -> &Sampling {
-        &self.sampling
-    }
-    fn sampling_mut(&mut self) -> &mut Sampling {
-        &mut self.sampling
-    }
+    impl_sampling_accessors!();
 
     fn perform_sample(&mut self, context: &T, step: usize, weight: f64) -> Result<()> {
         // Resolving needs `&mut` on the caches, so do it before borrowing the rest of `self`.

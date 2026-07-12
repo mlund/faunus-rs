@@ -229,25 +229,15 @@ fn accumulate_covariance(accum: &mut [Variance; UPPER_TRIANGLE], v: &nalgebra::V
     accum[5].add(z * z);
 }
 
-impl crate::Info for RotationalDiffusion {
-    fn short_name(&self) -> Option<&'static str> {
-        Some("rotational_diffusion")
-    }
-    fn long_name(&self) -> Option<&'static str> {
-        Some("Rotational diffusion via quaternion covariance")
-    }
-    fn citation(&self) -> Option<&'static str> {
-        Some("doi:10.1103/PhysRev.119.53")
-    }
-}
+impl_info!(
+    RotationalDiffusion,
+    "rotational_diffusion",
+    "Rotational diffusion via quaternion covariance",
+    "doi:10.1103/PhysRev.119.53"
+);
 
 impl<T: ObserveContext> Analyze<T> for RotationalDiffusion {
-    fn sampling(&self) -> &Sampling {
-        &self.sampling
-    }
-    fn sampling_mut(&mut self) -> &mut Sampling {
-        &mut self.sampling
-    }
+    impl_sampling_accessors!();
 
     fn perform_sample(&mut self, context: &T, step: usize, _weight: f64) -> Result<()> {
         // Must copy: the borrow from `resolve` conflicts with `self.snapshots` mutation

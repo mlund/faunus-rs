@@ -129,14 +129,11 @@ impl<T: ObserveContext> MoveProposal<T> for CrankshaftMove {
     }
 }
 
-impl crate::Info for CrankshaftMove {
-    fn short_name(&self) -> Option<&'static str> {
-        Some("crankshaft")
-    }
-    fn long_name(&self) -> Option<&'static str> {
-        Some("Crankshaft rotation around dihedral axis")
-    }
-}
+impl_info!(
+    CrankshaftMove,
+    "crankshaft",
+    "Crankshaft rotation around dihedral axis"
+);
 
 #[cfg(test)]
 mod tests {

@@ -127,17 +127,12 @@ pub struct SpeciationMove {
     reaction_statistics: Vec<MoveStatistics>,
 }
 
-impl crate::Info for SpeciationMove {
-    fn short_name(&self) -> Option<&'static str> {
-        Some("speciation")
-    }
-    fn long_name(&self) -> Option<&'static str> {
-        Some("Reaction ensemble (speciation)")
-    }
-    fn citation(&self) -> Option<&'static str> {
-        Some("doi:10.1063/1.466443")
-    }
-}
+impl_info!(
+    SpeciationMove,
+    "speciation",
+    "Reaction ensemble (speciation)",
+    "doi:10.1063/1.466443"
+);
 
 /// Look up the activity of an implicit species by name.
 ///

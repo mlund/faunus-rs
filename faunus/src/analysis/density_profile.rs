@@ -237,22 +237,10 @@ impl DensityProfile {
     }
 }
 
-impl crate::Info for DensityProfile {
-    fn short_name(&self) -> Option<&'static str> {
-        Some("densityprofile")
-    }
-    fn long_name(&self) -> Option<&'static str> {
-        Some("Density profile along z")
-    }
-}
+impl_info!(DensityProfile, "densityprofile", "Density profile along z");
 
 impl<T: ObserveContext> Analyze<T> for DensityProfile {
-    fn sampling(&self) -> &Sampling {
-        &self.sampling
-    }
-    fn sampling_mut(&mut self) -> &mut Sampling {
-        &mut self.sampling
-    }
+    impl_sampling_accessors!();
 
     fn perform_sample(&mut self, context: &T, _step: usize, _weight: f64) -> Result<()> {
         self.check_volume(context);

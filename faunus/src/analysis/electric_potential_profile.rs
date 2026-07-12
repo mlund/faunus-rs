@@ -333,25 +333,15 @@ impl ElectricPotentialProfile {
     }
 }
 
-impl crate::Info for ElectricPotentialProfile {
-    fn short_name(&self) -> Option<&'static str> {
-        Some("electricpotentialprofile")
-    }
-    fn long_name(&self) -> Option<&'static str> {
-        Some("Electric potential profile along z (slab geometry)")
-    }
-    fn citation(&self) -> Option<&'static str> {
-        Some("doi:10/dhb9mj")
-    }
-}
+impl_info!(
+    ElectricPotentialProfile,
+    "electricpotentialprofile",
+    "Electric potential profile along z (slab geometry)",
+    "doi:10/dhb9mj"
+);
 
 impl<T: ObserveContext> Analyze<T> for ElectricPotentialProfile {
-    fn sampling(&self) -> &Sampling {
-        &self.sampling
-    }
-    fn sampling_mut(&mut self) -> &mut Sampling {
-        &mut self.sampling
-    }
+    impl_sampling_accessors!();
 
     fn perform_sample(&mut self, context: &T, _step: usize, _weight: f64) -> Result<()> {
         // Instantaneous total charge per slab. Only currently-active atoms are resolved, so

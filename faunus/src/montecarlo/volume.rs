@@ -44,14 +44,7 @@ pub struct VolumeMove {
     pub(crate) repeat: usize,
 }
 
-impl crate::Info for VolumeMove {
-    fn short_name(&self) -> Option<&'static str> {
-        Some("volume")
-    }
-    fn long_name(&self) -> Option<&'static str> {
-        Some("Volume move (NPT)")
-    }
-}
+impl_info!(VolumeMove, "volume", "Volume move (NPT)");
 
 impl VolumeMove {
     /// Validate and finalize the move.
