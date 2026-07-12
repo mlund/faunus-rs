@@ -87,6 +87,10 @@ impl Topology {
     pub fn from_file_partial(path: impl AsRef<Path>) -> anyhow::Result<Self> {
         let yaml = crate::auxiliary::read_yaml(&path)
             .map_err(|err| anyhow::anyhow!("Error reading file {:?}: {}", path.as_ref(), err))?;
+        // Included files are parsed piecemeal here too, so their unknown/misspelled
+        // top-level keys would vanish silently without this check (issue #64).
+        crate::auxiliary::validate_section_keys(&serde_yml::from_str(&yaml)?)
+            .map_err(|err| anyhow::anyhow!("in included file {:?}: {err}", path.as_ref()))?;
         let mut topology: Self = serde_yml::from_str(&yaml)?;
         for file in topology.include.iter_mut() {
             file.finalize(&path);

@@ -80,17 +80,26 @@ impl<T> CoulombScheme for T where
 #[serde(untagged)]
 pub enum DirectOrMixing<T: IsotropicTwobodyEnergy> {
     /// Calculate the parameters using the provided combination rule.
-    Mixing {
-        /// Combination rule to use for mixing.
-        mixing: CombinationRule,
-        /// Optional cutoff for the interaction.
-        cutoff: Option<f64>,
-        #[serde(skip)]
-        /// Marker specifying the interaction type.
-        _phantom: PhantomData<T>,
-    },
+    ///
+    /// Held in a named struct so `deny_unknown_fields` can reject typos: serde
+    /// forbids that attribute on an untagged enum's inline struct variant, but
+    /// allows it on a newtype variant's inner struct.
+    Mixing(MixingParams<T>),
     /// The parameters for the interaction are specifically provided.
     Direct(T),
+}
+
+/// Combination-rule parameters for [`DirectOrMixing::Mixing`].
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct MixingParams<T> {
+    /// Combination rule to use for mixing.
+    mixing: CombinationRule,
+    /// Optional cutoff for the interaction.
+    cutoff: Option<f64>,
+    #[serde(skip)]
+    /// Marker specifying the interaction type.
+    _phantom: PhantomData<T>,
 }
 
 /// Construct a potential from combined atom parameters, factoring out the
@@ -152,9 +161,9 @@ impl<T: FromMixing> DirectOrMixing<T> {
     fn to_concrete(&self, atom1: &AtomKind, atom2: &AtomKind) -> anyhow::Result<T> {
         match self {
             Self::Direct(inner) => Ok(inner.clone()),
-            Self::Mixing { mixing, cutoff, .. } => {
-                let combined = AtomKind::combine(*mixing, atom1, atom2);
-                T::from_mixing(&combined, *cutoff)
+            Self::Mixing(params) => {
+                let combined = AtomKind::combine(params.mixing, atom1, atom2);
+                T::from_mixing(&combined, params.cutoff)
             }
         }
     }
@@ -356,6 +365,7 @@ impl PairInteraction {
 /// - `replace`: pair-specific entries that completely replace `default`
 /// - `append`: pair-specific entries merged with `default` by interaction type
 #[derive(Debug, Default, Serialize, Deserialize, Clone, PartialEq)]
+#[serde(deny_unknown_fields)]
 pub struct PairPotentialBuilder {
     #[serde(default)]
     default: Vec<PairInteraction>,
@@ -573,6 +583,7 @@ const fn default_spline_n_points() -> usize {
 /// When present in the YAML input, nonbonded interactions will be
 /// tabulated using cubic Hermite splines for faster evaluation.
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct SplineOptions {
     /// Cutoff distance for splined potentials (Ångström).
     pub cutoff: f64,
@@ -627,6 +638,7 @@ impl SplineOptions {
 
 /// Structure used for (de)serializing the Hamiltonian of the system.
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct HamiltonianBuilder {
     /// Nonbonded interactions defined for the system.
     #[serde(rename = "nonbonded")]
@@ -813,11 +825,11 @@ mod tests {
                 PairInteraction::WeeksChandlerAndersen(DirectOrMixing::Direct(
                     WeeksChandlerAndersen::new(1.5, 3.0)
                 )),
-                PairInteraction::HardSphere(DirectOrMixing::Mixing {
+                PairInteraction::HardSphere(DirectOrMixing::Mixing(MixingParams {
                     mixing: CombinationRule::Geometric,
                     cutoff: None,
                     _phantom: Default::default()
-                }),
+                })),
                 PairInteraction::CoulombReactionField(
                     interatomic::coulomb::pairwise::ReactionField::new(11.0, 100.0, 1.5, true)
                 ),
@@ -831,11 +843,11 @@ mod tests {
         assert_eq!(
             ow_hw,
             &[
-                PairInteraction::HardSphere(DirectOrMixing::Mixing {
+                PairInteraction::HardSphere(DirectOrMixing::Mixing(MixingParams {
                     mixing: CombinationRule::LorentzBerthelot,
                     cutoff: None,
                     _phantom: Default::default()
-                }),
+                })),
                 PairInteraction::CoulombEwald(interatomic::coulomb::pairwise::EwaldTruncated::new(
                     11.0, 0.1
                 )),
@@ -1003,11 +1015,11 @@ mod tests {
         let interaction2 =
             PairInteraction::CoulombPlain(interatomic::coulomb::pairwise::Plain::new(11.0, None));
 
-        let interaction3 = PairInteraction::HardSphere(DirectOrMixing::Mixing {
+        let interaction3 = PairInteraction::HardSphere(DirectOrMixing::Mixing(MixingParams {
             mixing: CombinationRule::Arithmetic,
             cutoff: None,
             _phantom: PhantomData,
-        });
+        }));
 
         let atom1 = AtomKindBuilder::default()
             .name("NA")
@@ -1171,11 +1183,13 @@ mod tests {
 
         assert_eq!(
             pb.default,
-            vec![PairInteraction::KimHummer(DirectOrMixing::Mixing {
-                mixing: CombinationRule::LorentzBerthelot,
-                cutoff: None,
-                _phantom: Default::default()
-            })]
+            vec![PairInteraction::KimHummer(DirectOrMixing::Mixing(
+                MixingParams {
+                    mixing: CombinationRule::LorentzBerthelot,
+                    cutoff: None,
+                    _phantom: Default::default()
+                }
+            ))]
         );
 
         assert_eq!(pb.replace.len(), 2);

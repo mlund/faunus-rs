@@ -126,6 +126,16 @@ impl Source<'_> {
         }
     }
 
+    /// Parse the whole document into a `Value` for whole-section key validation,
+    /// applying the same template/underscore preprocessing as the file readers.
+    fn root_value(&self) -> anyhow::Result<serde_yml::Value> {
+        let yaml = match *self {
+            Self::File(path) => crate::auxiliary::read_yaml(path)?,
+            Self::Yaml(yaml) => yaml.to_string(),
+        };
+        Ok(serde_yml::from_str(&yaml)?)
+    }
+
     fn setup_rng(&self) -> anyhow::Result<rand::rngs::StdRng> {
         match *self {
             Self::File(path) => propagate::setup_rng_from_file(path),
@@ -262,6 +272,7 @@ impl Simulation {
     }
 
     fn build(source: Source, structure: Option<&Path>, state: Option<&Path>) -> Result<Self> {
+        crate::auxiliary::validate_section_keys(&source.root_value()?)?;
         let medium = source.medium()?;
         let rt = crate::R_IN_KJ_PER_MOL * medium.temperature();
 

@@ -148,6 +148,100 @@ pub fn from_tagged_list<T: serde::de::DeserializeOwned>(
         .collect()
 }
 
+/// Valid top-level sections of an input document.
+///
+/// `version` and `comment` are free-form annotations that faunus itself writes
+/// into output files and that shipped atom/energy libraries carry; they are read
+/// by nothing but must not be rejected when such a file is used as input.
+const TOP_LEVEL_KEYS: &[&str] = &[
+    "atoms",
+    "molecules",
+    "system",
+    "energy",
+    "analysis",
+    "propagate",
+    "include",
+    "umbrella",
+    "wang_landau",
+    "version",
+    "comment",
+];
+
+/// Valid keys directly under `system:`.
+const SYSTEM_KEYS: &[&str] = &["cell", "medium", "energy", "blocks", "intermolecular"];
+
+/// Reject unknown keys at the document root and directly under `system:`.
+///
+/// The document is parsed piecemeal: each section reader extracts only the keys
+/// it recognizes (`value.get("propagate")`, …) and ignores the rest. A
+/// misspelled section name (`analysiss:`) or a stray key would therefore vanish
+/// silently instead of erroring. These two levels have no owning struct that
+/// could carry `deny_unknown_fields`, so we validate them explicitly.
+///
+/// `_`-prefixed keys are intentionally-disabled sections and are always allowed.
+pub fn validate_section_keys(root: &serde_yml::Value) -> anyhow::Result<()> {
+    check_allowed_keys("the document root", root, TOP_LEVEL_KEYS)?;
+    if let Some(system) = root.get("system") {
+        check_allowed_keys("`system`", system, SYSTEM_KEYS)?;
+    }
+    Ok(())
+}
+
+fn check_allowed_keys(
+    location: &str,
+    value: &serde_yml::Value,
+    allowed: &[&str],
+) -> anyhow::Result<()> {
+    let serde_yml::Value::Mapping(map) = value else {
+        return Ok(());
+    };
+    for key in map.keys() {
+        // A non-string key can never name a valid section, so reject it rather
+        // than skipping it (which would let a mis-typed scalar key slip through).
+        let Some(key) = key.as_str() else {
+            anyhow::bail!("non-string key {key:?} in {location}");
+        };
+        if key.starts_with('_') || allowed.contains(&key) {
+            continue;
+        }
+        let hint = did_you_mean(key, allowed)
+            .map(|s| format!(" (did you mean `{s}`?)"))
+            .unwrap_or_default();
+        anyhow::bail!(
+            "unknown key `{key}` in {location}{hint}; allowed keys: {}",
+            allowed.join(", "),
+        );
+    }
+    Ok(())
+}
+
+/// Closest allowed key within a small edit distance, for a typo hint.
+fn did_you_mean<'a>(key: &str, allowed: &[&'a str]) -> Option<&'a str> {
+    allowed
+        .iter()
+        .map(|&candidate| (candidate, levenshtein(key, candidate)))
+        // Only suggest genuinely-close matches, scaled to the word length.
+        .filter(|&(candidate, dist)| dist <= candidate.len().div_ceil(2))
+        .min_by_key(|&(_, dist)| dist)
+        .map(|(candidate, _)| candidate)
+}
+
+/// Levenshtein edit distance between two ASCII-ish strings.
+fn levenshtein(a: &str, b: &str) -> usize {
+    let b_chars: Vec<char> = b.chars().collect();
+    let mut prev: Vec<usize> = (0..=b_chars.len()).collect();
+    let mut curr = vec![0; b_chars.len() + 1];
+    for (i, ca) in a.chars().enumerate() {
+        curr[0] = i + 1;
+        for (j, &cb) in b_chars.iter().enumerate() {
+            let cost = usize::from(ca != cb);
+            curr[j + 1] = (prev[j] + cost).min(prev[j + 1] + 1).min(curr[j] + 1);
+        }
+        std::mem::swap(&mut prev, &mut curr);
+    }
+    prev[b_chars.len()]
+}
+
 /// Serialize `value` to `path` as a YAML file, naming the file on failure.
 ///
 /// For checkpoints and other whole-struct dumps; multi-section outputs that

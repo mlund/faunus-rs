@@ -41,6 +41,7 @@ pub enum BlockActivationStatus {
 
 /// Specifies how the structure of molecules of a molecule block should be obtained or generated.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub enum InsertionPolicy {
     /// Read molecule block from a file.
     FromFile(InputPath),
