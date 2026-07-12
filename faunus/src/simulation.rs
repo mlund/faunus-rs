@@ -457,7 +457,9 @@ fn run_single_box(
         log::info!("Penalty bias active: analysis averages are biased (use rerun for reweighting)");
     }
 
-    let initial_energy = mc.system_energy();
+    // A `-∞` starting energy is unphysical (a singular/overlapping potential); fail loudly here
+    // rather than let the first move to a finite state be silently auto-accepted.
+    let initial_energy = crate::montecarlo::ensure_physical_energy(mc.system_energy())?;
     log::info!("Initial energy = {initial_energy:.2} kJ/mol");
     log::info!("Net charge = {:.4e} e", net_charge(mc.context()));
 
@@ -508,6 +510,9 @@ fn run_gibbs(
         log::info!("Box {i}: initial energy = {energy:.2} kJ/mol, net charge = {charge:.4e} e");
         energy
     });
+    for &energy in &initial_energies {
+        crate::montecarlo::ensure_physical_energy(energy)?;
+    }
 
     let max_sweeps = ensemble.max_sweeps();
     for sweep in 0..max_sweeps {

@@ -85,9 +85,13 @@ impl<T: Context> MoveRunner<T> {
             context.save_energy_backups(proposed.change());
             proposed.apply_with_backup(context)?;
             context.update(proposed.change())?;
-            let new_energy = crate::montecarlo::ensure_physical_energy(
-                context.hamiltonian().energy(context, proposed.change()),
-            )?;
+            let new_energy = context.hamiltonian().energy(context, proposed.change());
+            // Roll the trial back to the pre-move state before surfacing an unphysical energy, so the
+            // context stays consistent (and the backup disarmed) even if the caller handles the error.
+            if let Err(err) = crate::montecarlo::ensure_physical_energy(new_energy) {
+                context.undo()?;
+                return Err(err);
+            }
 
             let energy = NewOld::<f64>::from(new_energy, old_energy);
             let bias = self.inner.bias(proposed.change(), &energy);

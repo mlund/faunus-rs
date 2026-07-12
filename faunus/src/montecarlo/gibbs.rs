@@ -19,15 +19,26 @@ use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 
 /// Metropolis accept/reject for two-context Gibbs moves.
+#[allow(clippy::too_many_arguments)]
 fn accept_or_reject(
     a: &mut impl Context,
     b: &mut impl Context,
     du: f64,
     exponent: f64,
+    new_energies: [f64; 2],
     displacement: crate::propagate::Displacement,
     statistics: &mut MoveStatistics,
     rng: &mut StdRng,
 ) -> Result<()> {
+    // A `-∞` box energy is unphysical (a singular potential) and would give `exponent = +∞`, silently
+    // always-accepting the collapse. Roll both boxes back and fail loudly — mirrors `do_move`.
+    if let Err(err) = super::ensure_physical_energy(new_energies[0])
+        .and(super::ensure_physical_energy(new_energies[1]))
+    {
+        a.undo()?;
+        b.undo()?;
+        return Err(err);
+    }
     if rng.r#gen::<f64>() < exponent.exp() {
         statistics.accept(du, displacement);
         a.discard_backup();
@@ -165,6 +176,7 @@ impl<T: Context> GibbsMove<T> for GibbsVolumeExchange {
             c1,
             du,
             exponent,
+            [new_energy_0, new_energy_1],
             crate::propagate::Displacement::Custom(displacement),
             &mut self.statistics,
             rng,
@@ -295,6 +307,7 @@ impl GibbsParticleTransfer {
             tgt,
             du,
             exponent,
+            [new_e_src, new_e_tgt],
             crate::propagate::Displacement::None,
             &mut self.statistics,
             rng,
@@ -375,6 +388,7 @@ impl GibbsParticleTransfer {
             tgt,
             du,
             exponent,
+            [new_e_src, new_e_tgt],
             crate::propagate::Displacement::None,
             &mut self.statistics,
             rng,
