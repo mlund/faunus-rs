@@ -1055,6 +1055,98 @@ fn cutoff_culling_is_lossless_and_gated() {
     assert_approx_eq!(f64, disabled.energy(&system, &everything), baseline);
 }
 
+/// When a group moves *out* of the cutoff of a partner it was interacting with, the cell-list-aware
+/// `update_cache` must recompute that departed partner to zero — not leave a stale non-zero entry.
+/// Uses a sparse box (cutoff ≪ box) with two atoms interacting at ~1.2 σ, then jumps one beyond the
+/// cutoff and checks the incremental cache row equals a from-scratch rebuild.
+#[test]
+fn cell_list_update_cache_zeroes_a_departed_partner() {
+    use crate::context::PerturbContext;
+    use crate::energy::stateful::StatefulEnergy;
+    use crate::Point;
+    use std::io::Write;
+
+    // Box (40 Å) ≫ cutoff (10 Å) so groups can be genuinely beyond range. Atoms 0 and 1 sit
+    // ~1.2 σ apart (strongly interacting); 2 and 3 are elsewhere. Single-atom molecules → one
+    // group each. `cell_list` defaults on for splined nonbonded.
+    let yaml = "\
+atoms:\n  - {name: LJ, mass: 1.0, sigma: 1.0, epsilon: 2.5}\n\
+molecules:\n  - {name: m, atoms: [LJ]}\n\
+system:\n  cell: !Cuboid [40.0, 40.0, 40.0]\n  \
+medium: {permittivity: !Vacuum, temperature: 298.15}\n  \
+energy:\n    nonbonded:\n      default:\n        - !LennardJones {mixing: LB}\n    \
+spline:\n      cutoff: 10.0\n      n_points: 1000\n  \
+blocks:\n    - {molecule: m, N: 4, insert: !Manual [[0.0, 0.0, 0.0], [1.2, 0.0, 0.0], [20.0, 20.0, 20.0], [22.0, 20.0, 20.0]]}\n\
+propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}\n";
+    let mut tmp = tempfile::NamedTempFile::new().unwrap();
+    tmp.write_all(yaml.as_bytes()).unwrap();
+
+    let mut ctx = Backend::new(tmp.path(), None, &mut rand::thread_rng()).unwrap();
+    let cutoff = ctx
+        .cell_list()
+        .expect("splined input builds a cell list")
+        .cutoff();
+
+    let topology = Topology::from_file(tmp.path()).unwrap();
+    let builder = HamiltonianBuilder::from_file(tmp.path())
+        .unwrap()
+        .pairpot_builder
+        .unwrap();
+    let medium = interatomic::coulomb::Medium::new(
+        298.15,
+        interatomic::coulomb::permittivity::Permittivity::Vacuum,
+        None,
+    );
+    let make_term = || {
+        let mut t = NonbondedMatrix::new(&builder, &topology, Some(medium.clone())).unwrap();
+        t.set_cutoff(cutoff);
+        t.set_bounding_spheres(true); // cull beyond the cutoff so a departed pair is exactly zero
+        t
+    };
+
+    let mut term = make_term();
+    let change = Change::SingleGroup(0, GroupChange::RigidBody);
+    let _ = term.energy(&ctx, &change); // prime the cache; pairwise[0][1] is now non-zero
+    assert!(
+        term.cache.read().unwrap().as_ref().unwrap().pairwise[1].abs() > 1e-3,
+        "atoms 0 and 1 should interact before the move"
+    );
+
+    // Jump group 0 ~24 Å from atom 1 — beyond the 10 Å cutoff *and* out of its cell-list neighbour
+    // cells (cell size ≈ cutoff), so atom 1 is a genuine departure the cell list no longer surfaces.
+    term.save_backup(&ctx, &change);
+    ctx.translate_particles(&[0], &Point::new(25.0, 0.0, 0.0));
+    term.refresh(&ctx, &change).unwrap();
+    term.discard_backup();
+
+    let reference = make_term();
+    let _ = reference.energy(&ctx, &change);
+    let inc = term.cache.read().unwrap().as_ref().unwrap().clone();
+    let reb = reference.cache.read().unwrap().as_ref().unwrap().clone();
+    for idx in 0..inc.pairwise.len() {
+        approx::assert_relative_eq!(
+            inc.pairwise[idx],
+            reb.pairwise[idx],
+            epsilon = 1e-9,
+            max_relative = 1e-9
+        );
+    }
+    for gi in 0..inc.n_groups {
+        approx::assert_relative_eq!(
+            inc.group_energies[gi],
+            reb.group_energies[gi],
+            epsilon = 1e-9,
+            max_relative = 1e-9
+        );
+    }
+    // The departed partner's entry collapsed from its near-range value to the far-range one
+    // (~0), not left stale — the assertion that fails if the old-neighbour row scan is dropped.
+    assert!(
+        inc.pairwise[1].abs() < 1e-3,
+        "pairwise[0][1] must be recomputed after departure, not left stale"
+    );
+}
+
 #[test]
 fn cutoff_validation_rejects_too_short() {
     let file = "tests/files/nonbonded_culling.yaml";

@@ -293,6 +293,38 @@ fn soa_from_context<'a>(
     }
 }
 
+/// Groups whose pairwise energy with the moved group `m` may have changed and so must be
+/// recomputed: the union of m's *pre-move* partners (non-zero entries in its cache row, which
+/// still holds the old values) and its *post-move* spatial neighbours (from the cell list). The
+/// first set is what zeroes a partner that left m's neighbourhood; the second catches one that
+/// entered it. With no cell list, falls back to every other group.
+fn affected_groups(
+    cache: &GroupEnergyCache,
+    context: &impl ObserveContext,
+    cell_list: Option<&crate::celllist::CellList>,
+    groups: &[Group],
+    m: usize,
+    n: usize,
+) -> Vec<usize> {
+    let Some(cl) = cell_list else {
+        return (0..n).filter(|&j| j != m).collect();
+    };
+    let mut set: Vec<usize> = (0..n)
+        .filter(|&j| j != m && cache.pairwise[m * n + j] != 0.0)
+        .collect();
+    for i in groups[m].iter_active() {
+        for p in cl.neighbors(i) {
+            match context.group_of_particle(p) {
+                Some(gj) if gj != m => set.push(gj),
+                _ => {}
+            }
+        }
+    }
+    set.sort_unstable();
+    set.dedup();
+    set
+}
+
 impl<'a, C: SimulationCell> SoaSlices<'a, C> {
     /// Minimum image squared distance from `(xi, yi, zi)` to particle `j`.
     ///
@@ -1173,19 +1205,24 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
         // group_pair_energy_soa(&self), and the cache lives inside self.
         let mut cache_opt = self.cache.get_mut().unwrap().take();
         if let Some(ref mut cache) = cache_opt {
-            // Bypass cell list so all group-pair interactions are fully recomputed
-            let mut soa = soa_from_context(context);
-            soa.cell_list = None;
+            let soa = soa_from_context(context);
             let groups = context.groups();
             let n = cache.n_groups;
             let m = *group_index;
 
-            for gj in groups.iter() {
-                let j = gj.index();
-                if j == m {
-                    continue;
-                }
-                let new_pair = self.group_pair_energy_soa(&soa, &groups[m], gj);
+            // Recompute only the groups whose pair energy with `m` can have changed: those it
+            // interacted with *before* the move (non-zero entries in its not-yet-updated row —
+            // this catches groups that just left m's neighbourhood, whose stale energy must go to
+            // zero) plus its spatial neighbours *after* the move (from the cell list, which now
+            // reflects the new positions). This replaces the O(N_groups) per-group COM-distance
+            // cull with an O(neighbours) group-pair recompute. `group_pair_energy_soa` iterates
+            // group atoms directly and never reads `soa.cell_list`, so the energies are unchanged,
+            // and it returns 0 for excluded molecule pairs, so surfaced neighbours need no
+            // exclusion guard. Falls back to the full sweep when the system has no cell list.
+            // (The old-row scan is still O(N_groups) but is a contiguous `!= 0` read; strict
+            // O(neighbours) would need a tracked per-group adjacency list — see #70.)
+            for &j in &affected_groups(cache, context, soa.cell_list, groups, m, n) {
+                let new_pair = self.group_pair_energy_soa(&soa, &groups[m], &groups[j]);
                 let old_pair = cache.pairwise[m * n + j];
                 let delta = new_pair - old_pair;
                 cache.pairwise[m * n + j] = new_pair;
