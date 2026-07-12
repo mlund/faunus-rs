@@ -17,6 +17,7 @@
 //! Implements the Forsman & Woodward many-body Hamiltonian for colloids in an
 //! ideal polymer fluid. See [`PolymerDepletion`] for details.
 
+use super::stateful::{derived_energy, StatefulEnergy};
 use crate::group::MoleculeId;
 use crate::ObserveContext;
 use crate::{Change, Point};
@@ -188,10 +189,24 @@ pub struct PolymerDepletion {
 }
 
 impl PolymerDepletion {
-    /// Compute the dimensionless free energy beta*dw (eq 17 from the paper).
+    /// Dimensionless free energy beta*dw (eq 17) using the term's own cached steric state.
     fn compute_beta_energy(
         &self,
         colloids: &[ColloidInfo],
+        cell: &impl crate::cell::BoundaryConditions,
+    ) -> f64 {
+        self.compute_beta_energy_with(colloids, self.steric.as_ref(), cell)
+    }
+
+    /// Compute the dimensionless free energy beta*dw (eq 17 from the paper).
+    ///
+    /// `steric` is passed explicitly (rather than read from `self`) so the fresh
+    /// [`total_energy`](StatefulEnergy::total_energy) path can supply a locally-solved state
+    /// instead of the move cache.
+    fn compute_beta_energy_with(
+        &self,
+        colloids: &[ColloidInfo],
+        steric: Option<&StericAdsorptionState>,
         cell: &impl crate::cell::BoundaryConditions,
     ) -> f64 {
         if colloids.is_empty() {
@@ -204,7 +219,7 @@ impl PolymerDepletion {
         let mut energy = 0.0;
         for (i, ci) in colloids.iter().enumerate() {
             let sigma = lambda * ci.radius;
-            let f = match &self.steric {
+            let f = match steric {
                 Some(s) => {
                     debug_assert_eq!(s.h_tilde_eff.len(), colloids.len());
                     robin_f(sigma, Some(s.h_tilde_eff[i]))
@@ -233,26 +248,47 @@ impl PolymerDepletion {
         prefactor * energy
     }
 
-    /// Rebuild the colloid list from the current context, reusing existing capacity.
+    /// Build the colloid list from the current context (does not touch `self`).
+    fn build_colloids(&self, context: &impl ObserveContext) -> Vec<ColloidInfo> {
+        context
+            .groups()
+            .iter()
+            .enumerate()
+            .filter(|(_, g)| self.colloid_molecule_ids.contains(&g.molecule()))
+            .filter_map(|(gi, g)| {
+                g.mass_center().map(|&com| {
+                    let radius = self
+                        .fixed_radius
+                        .or_else(|| g.bounding_radius())
+                        .unwrap_or(0.0)
+                        * self.radius_scaling;
+                    ColloidInfo {
+                        group_index: gi,
+                        com,
+                        radius,
+                    }
+                })
+            })
+            .collect()
+    }
+
+    /// Rebuild the cached colloid list from the current context.
     fn rebuild_colloids(&mut self, context: &impl ObserveContext) {
-        self.colloids.clear();
-        for (gi, g) in context.groups().iter().enumerate() {
-            if !self.colloid_molecule_ids.contains(&g.molecule()) {
-                continue;
-            }
-            if let Some(&com) = g.mass_center() {
-                let radius = self
-                    .fixed_radius
-                    .or_else(|| g.bounding_radius())
-                    .unwrap_or(0.0)
-                    * self.radius_scaling;
-                self.colloids.push(ColloidInfo {
-                    group_index: gi,
-                    com,
-                    radius,
-                });
-            }
-        }
+        self.colloids = self.build_colloids(context);
+    }
+
+    /// Solve a fresh steric self-consistency for `colloids`, cloned from the cached state so the
+    /// [`total_energy`](StatefulEnergy::total_energy) recompute never reads the move cache.
+    fn fresh_steric(
+        &self,
+        colloids: &[ColloidInfo],
+        cell: &impl crate::cell::BoundaryConditions,
+    ) -> Option<StericAdsorptionState> {
+        self.steric.as_ref().map(|s| {
+            let mut s = s.clone();
+            s.solve(colloids, self.kappa.sqrt() / self.rg, cell);
+            s
+        })
     }
 
     /// Update a single colloid's COM and radius from the context.
@@ -287,11 +323,8 @@ impl PolymerDepletion {
     }
 
     /// Update internal state after a system change.
-    pub(super) fn update(
-        &mut self,
-        context: &impl ObserveContext,
-        change: &Change,
-    ) -> anyhow::Result<()> {
+    /// Recompute cached colloid state and depletion energy after a change.
+    fn recompute(&mut self, context: &impl ObserveContext, change: &Change) {
         match change {
             Change::SingleGroup(gi, _) if self.change_involves_colloids(change) => {
                 self.update_single_colloid(*gi, context);
@@ -306,7 +339,8 @@ impl PolymerDepletion {
                     }
                 }
             }
-            _ => return Ok(()),
+            // Changes not involving colloids leave the cached energy untouched.
+            Change::None | Change::SingleGroup(..) | Change::Groups(..) => return,
         }
         // Re-solve self-consistency before energy evaluation: colloid positions
         // changed, so the neighbor sums and effective Robin parameters must update.
@@ -316,18 +350,17 @@ impl PolymerDepletion {
         }
         let beta_energy = self.compute_beta_energy(&self.colloids, context.cell());
         self.cached_energy = beta_energy * self.thermal_energy;
-        Ok(())
     }
 
     /// Compute the energy relevant to a change (kJ/mol).
-    pub(crate) fn energy(&self, _context: &impl ObserveContext, change: &Change) -> f64 {
-        if !self.change_involves_colloids(change) {
-            return 0.0;
-        }
-        self.cached_energy
+    pub(crate) fn energy(&self, context: &impl ObserveContext, change: &Change) -> f64 {
+        derived_energy(self, context, change)
     }
 
-    pub(super) fn save_backup(&mut self) {
+    /// Snapshot move-mutable state (colloids, cached energy, steric g_s / h̃_eff) into reused
+    /// buffers, avoiding per-trial allocation. Folding this into a `Snapshot<S>` awaits a
+    /// reuse-aware `clone_from` on `StericAdsorptionState`.
+    fn save_state_backup(&mut self) {
         assert!(!self.has_backup, "backup already exists");
         self.backup_colloids.clear();
         self.backup_colloids.extend_from_slice(&self.colloids);
@@ -342,7 +375,7 @@ impl PolymerDepletion {
         self.has_backup = true;
     }
 
-    pub(super) fn undo(&mut self) {
+    fn undo_state(&mut self) {
         assert!(self.has_backup, "undo called without backup");
         std::mem::swap(&mut self.colloids, &mut self.backup_colloids);
         self.cached_energy = self.backup_energy;
@@ -350,10 +383,6 @@ impl PolymerDepletion {
             std::mem::swap(&mut steric.g_s, &mut self.backup_g_s);
             std::mem::swap(&mut steric.h_tilde_eff, &mut self.backup_h_tilde_eff);
         }
-        self.has_backup = false;
-    }
-
-    pub(super) fn discard_backup(&mut self) {
         self.has_backup = false;
     }
 
@@ -485,6 +514,42 @@ impl PolymerDepletion {
                 (cm.group_index, force * prefactor)
             })
             .collect()
+    }
+}
+
+impl StatefulEnergy for PolymerDepletion {
+    /// Fresh depletion energy (`kJ/mol`): rebuilds the colloid list from the context and re-solves
+    /// the steric self-consistency locally, reading neither `self.colloids` nor `self.steric`, so
+    /// the `Change::Everything` drift check can expose a stale colloid cache.
+    fn total_energy(&self, context: &impl ObserveContext) -> f64 {
+        let colloids = self.build_colloids(context);
+        let steric = self.fresh_steric(&colloids, context.cell());
+        self.compute_beta_energy_with(&colloids, steric.as_ref(), context.cell())
+            * self.thermal_energy
+    }
+
+    fn partial_energy(&self, _context: &impl ObserveContext, change: &Change) -> f64 {
+        if !self.change_involves_colloids(change) {
+            return 0.0;
+        }
+        self.cached_energy
+    }
+
+    fn refresh(&mut self, context: &impl ObserveContext, change: &Change) -> anyhow::Result<()> {
+        self.recompute(context, change);
+        Ok(())
+    }
+
+    fn save_backup(&mut self, _context: &impl ObserveContext, _change: &Change) {
+        self.save_state_backup();
+    }
+
+    fn undo(&mut self) {
+        self.undo_state();
+    }
+
+    fn discard_backup(&mut self) {
+        self.has_backup = false;
     }
 }
 
@@ -1448,7 +1513,7 @@ molecules: [Colloid]
         // Save state
         let original_gs = pm.steric.as_ref().unwrap().g_s.clone();
         let original_ht = pm.steric.as_ref().unwrap().h_tilde_eff.clone();
-        pm.save_backup();
+        pm.save_state_backup();
 
         // Modify state (simulate an update)
         if let Some(steric) = &mut pm.steric {
@@ -1457,7 +1522,7 @@ molecules: [Colloid]
         }
 
         // Undo should restore
-        pm.undo();
+        pm.undo_state();
         assert_approx_eq!(
             f64,
             pm.steric.as_ref().unwrap().g_s[0],

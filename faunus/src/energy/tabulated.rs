@@ -5,6 +5,7 @@
 //! ([`icotable::Table3DAdaptive`]) produced by Duello.
 
 use super::nonbonded::cache::GroupEnergyCache;
+use super::stateful::{derived_energy, StatefulEnergy};
 use crate::cell::BoundaryConditions;
 use crate::ObserveContext;
 use crate::{Change, GroupChange};
@@ -494,17 +495,6 @@ impl TabulatedEnergy {
         0.5 * (e_forward + e_reverse)
     }
 
-    fn total_energy(&self, context: &impl ObserveContext) -> f64 {
-        let n = context.groups().len();
-        let mut sum = 0.0;
-        for i in 0..n {
-            for j in (i + 1)..n {
-                sum += self.pair_energy(context, i, j);
-            }
-        }
-        sum
-    }
-
     /// Lazily initialize cache on first RigidBody query.
     /// Uses `RwLock` (not `get_mut`) because `energy()` only has `&self`.
     fn ensure_cache(&self, context: &impl ObserveContext) {
@@ -544,36 +534,12 @@ impl TabulatedEnergy {
             let delta = new_e - cache.pairwise[gi * n + j];
             cache.pairwise[gi * n + j] = new_e;
             cache.pairwise[j * n + gi] = new_e;
-            cache.group_energies[gi] += delta;
             cache.group_energies[j] += delta;
         }
+        // Resum the moved group's row instead of accumulating deltas, so its cached total
+        // cannot drift over a long run of moves (issue #68; mirrors NonbondedMatrix).
+        cache.group_energies[gi] = (0..n).map(|j| cache.pairwise[gi * n + j]).sum();
         *self.cache.get_mut().expect("cache lock poisoned") = Some(cache);
-    }
-
-    pub(crate) fn save_backup(&mut self, change: &Change) {
-        match change {
-            Change::SingleGroup(gi, GroupChange::RigidBody) => {
-                if let Some(c) = self.cache.get_mut().expect("cache lock poisoned").as_mut() {
-                    c.save_backup([*gi]);
-                }
-            }
-            // Topology-changing moves invalidate the N×N pairwise matrix.
-            _ => {
-                *self.cache.get_mut().expect("cache lock poisoned") = None;
-            }
-        }
-    }
-
-    pub(crate) fn undo(&mut self) {
-        if let Some(c) = self.cache.get_mut().expect("cache lock poisoned").as_mut() {
-            c.undo();
-        }
-    }
-
-    pub(crate) fn discard_backup(&mut self) {
-        if let Some(c) = self.cache.get_mut().expect("cache lock poisoned").as_mut() {
-            c.discard_backup();
-        }
     }
 
     /// Welford online update of (count, mean, M2) statistics.
@@ -599,6 +565,23 @@ impl TabulatedEnergy {
 
 impl super::EnergyChange for TabulatedEnergy {
     fn energy(&self, context: &impl ObserveContext, change: &Change) -> f64 {
+        derived_energy(self, context, change)
+    }
+}
+
+impl StatefulEnergy for TabulatedEnergy {
+    fn total_energy(&self, context: &impl ObserveContext) -> f64 {
+        let n = context.groups().len();
+        let mut sum = 0.0;
+        for i in 0..n {
+            for j in (i + 1)..n {
+                sum += self.pair_energy(context, i, j);
+            }
+        }
+        sum
+    }
+
+    fn partial_energy(&self, context: &impl ObserveContext, change: &Change) -> f64 {
         match change {
             Change::None => 0.0,
             Change::Everything | Change::Volume(_, _) => self.total_energy(context),
@@ -636,6 +619,41 @@ impl super::EnergyChange for TabulatedEnergy {
                 }
                 sum
             }
+        }
+    }
+
+    fn refresh(&mut self, context: &impl ObserveContext, change: &Change) -> anyhow::Result<()> {
+        self.update_cache(context, change);
+        Ok(())
+    }
+
+    fn save_backup(&mut self, _context: &impl ObserveContext, change: &Change) {
+        match change {
+            Change::SingleGroup(gi, GroupChange::RigidBody) => {
+                if let Some(c) = self.cache.get_mut().expect("cache lock poisoned").as_mut() {
+                    c.save_backup([*gi]);
+                }
+            }
+            // Topology-changing moves invalidate the N×N pairwise matrix.
+            Change::None
+            | Change::Everything
+            | Change::Volume(..)
+            | Change::Groups(..)
+            | Change::SingleGroup(..) => {
+                *self.cache.get_mut().expect("cache lock poisoned") = None;
+            }
+        }
+    }
+
+    fn undo(&mut self) {
+        if let Some(c) = self.cache.get_mut().expect("cache lock poisoned").as_mut() {
+            c.undo();
+        }
+    }
+
+    fn discard_backup(&mut self) {
+        if let Some(c) = self.cache.get_mut().expect("cache lock poisoned").as_mut() {
+            c.discard_backup();
         }
     }
 }

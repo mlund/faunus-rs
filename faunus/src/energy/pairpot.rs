@@ -88,10 +88,13 @@ impl PairPot {
     pub(crate) fn max_cutoff(&self) -> f64 {
         // An absent component has zero range, but its `cutoff()` reports
         // infinity (it never limits the pair), so handle `None` explicitly.
+        // Every present variant delegates to `cutoff()`; only the absent `None` case differs.
+        #[allow(clippy::wildcard_enum_match_arm)]
         let short_range = match self.short_range {
             ShortRange::None => 0.0,
             _ => self.short_range.cutoff(),
         };
+        #[allow(clippy::wildcard_enum_match_arm)]
         let coulomb = match self.coulomb {
             Coulomb::None => 0.0,
             _ => self.coulomb.cutoff(),

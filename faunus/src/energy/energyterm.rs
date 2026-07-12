@@ -11,6 +11,7 @@ use super::{
     penalty::Penalty,
     polymer_depletion::PolymerDepletion,
     sasa::SasaEnergy,
+    stateful::StatefulEnergy,
     tabulated::TabulatedEnergy,
     CellOverlap, EnergyChange,
 };
@@ -53,19 +54,19 @@ pub enum EnergyTerm {
     ContactTessellation(ContactTessellationEnergy),
 }
 
-/// Dispatch a no-arg method to stateful energy terms; stateless terms are no-ops.
-/// Explicit variant listing ensures new variants trigger a compile error.
+/// Dispatch a unit-returning [`StatefulEnergy`] method to the stateful terms; stateless
+/// terms are no-ops. Explicit variant listing ensures a new variant triggers a compile error.
 macro_rules! dispatch_stateful {
-    ($self:expr, $method:ident) => {
+    ($self:expr, $method:ident $(, $arg:expr)*) => {
         match $self {
-            EnergyTerm::IntermolecularBonded(x) => x.$method(),
-            EnergyTerm::SasaEnergy(x) => x.$method(),
-            EnergyTerm::ContactTessellation(x) => x.$method(),
-            EnergyTerm::NonbondedMatrix(x) => x.$method(),
-            EnergyTerm::NonbondedMatrixSplined(x) => x.$method(),
-            EnergyTerm::EwaldReciprocal(x) => x.$method(),
-            EnergyTerm::PolymerDepletion(x) => x.$method(),
-            EnergyTerm::Tabulated(x) => x.$method(),
+            EnergyTerm::IntermolecularBonded(x) => x.$method($($arg),*),
+            EnergyTerm::SasaEnergy(x) => x.$method($($arg),*),
+            EnergyTerm::ContactTessellation(x) => x.$method($($arg),*),
+            EnergyTerm::NonbondedMatrix(x) => x.$method($($arg),*),
+            EnergyTerm::NonbondedMatrixSplined(x) => x.$method($($arg),*),
+            EnergyTerm::EwaldReciprocal(x) => x.$method($($arg),*),
+            EnergyTerm::PolymerDepletion(x) => x.$method($($arg),*),
+            EnergyTerm::Tabulated(x) => x.$method($($arg),*),
             EnergyTerm::IntramolecularBonded(_)
             | EnergyTerm::CellOverlap(_)
             | EnergyTerm::Constrain(_)
@@ -149,23 +150,14 @@ impl EnergyTerm {
         change: &Change,
     ) -> anyhow::Result<()> {
         match self {
-            Self::NonbondedMatrix(x) => {
-                x.update_cache(context, change);
-                Ok(())
-            }
-            Self::NonbondedMatrixSplined(x) => {
-                x.update_cache(context, change);
-                Ok(())
-            }
-            Self::IntermolecularBonded(x) => x.update(context, change),
-            Self::SasaEnergy(x) => x.update(context, change),
-            Self::EwaldReciprocal(x) => x.update(context, change),
-            Self::PolymerDepletion(x) => x.update(context, change),
-            Self::Tabulated(x) => {
-                x.update_cache(context, change); // mirrors NonbondedMatrix pattern
-                Ok(())
-            }
-            Self::ContactTessellation(x) => x.update(context, change),
+            Self::NonbondedMatrix(x) => x.refresh(context, change),
+            Self::NonbondedMatrixSplined(x) => x.refresh(context, change),
+            Self::IntermolecularBonded(x) => x.refresh(context, change),
+            Self::SasaEnergy(x) => x.refresh(context, change),
+            Self::EwaldReciprocal(x) => x.refresh(context, change),
+            Self::PolymerDepletion(x) => x.refresh(context, change),
+            Self::Tabulated(x) => x.refresh(context, change),
+            Self::ContactTessellation(x) => x.refresh(context, change),
             Self::IntramolecularBonded(_)
             | Self::CellOverlap(_)
             | Self::Constrain(_)
@@ -182,24 +174,7 @@ impl EnergyTerm {
     /// The context is passed so that terms like Ewald can snapshot positions
     /// of affected particles before the move is applied.
     pub(crate) fn save_backup(&mut self, change: &Change, context: &impl ObserveContext) {
-        match self {
-            Self::IntermolecularBonded(x) => x.save_backup(change),
-            Self::SasaEnergy(x) => x.save_backup(change),
-            Self::PolymerDepletion(x) => x.save_backup(),
-            Self::NonbondedMatrix(x) => x.save_backup(change),
-            Self::NonbondedMatrixSplined(x) => x.save_backup(change),
-            Self::EwaldReciprocal(x) => x.save_backup(change, context),
-            Self::Tabulated(x) => x.save_backup(change),
-            Self::ContactTessellation(x) => x.save_backup(change),
-            Self::IntramolecularBonded(_)
-            | Self::CellOverlap(_)
-            | Self::Constrain(_)
-            | Self::ExternalPressure(_)
-            | Self::CustomExternal(_)
-            | Self::CustomPair(_)
-            | Self::ExcludedCoulomb(_)
-            | Self::Penalty(_) => {}
-        }
+        dispatch_stateful!(self, save_backup, context, change);
     }
 
     /// Restore from internal backup (reject path).
@@ -218,6 +193,9 @@ impl EnergyTerm {
         mol_a: crate::group::MoleculeId,
         mol_b: crate::group::MoleculeId,
     ) {
+        // Only the nonbonded matrix terms carry molecule-pair exclusions; every other term
+        // correctly ignores this, so a new variant defaulting to a no-op is intended.
+        #[allow(clippy::wildcard_enum_match_arm)]
         match self {
             Self::NonbondedMatrix(x) => x.exclude_molecule_pair(mol_a, mol_b),
             Self::NonbondedMatrixSplined(x) => x.exclude_molecule_pair(mol_a, mol_b),
@@ -228,6 +206,7 @@ impl EnergyTerm {
     /// Get molecule-type pairs excluded from nonbonded, if applicable.
     #[must_use]
     pub(crate) fn molecule_pair_exclusions(&self) -> Option<&[[crate::group::MoleculeId; 2]]> {
+        #[allow(clippy::wildcard_enum_match_arm)] // only nonbonded terms expose exclusions
         match self {
             Self::NonbondedMatrix(x) => Some(x.molecule_pair_exclusions()),
             Self::NonbondedMatrixSplined(x) => Some(x.molecule_pair_exclusions()),
@@ -239,6 +218,8 @@ impl EnergyTerm {
     /// has moved all molecules, making the pairwise cache stale).
     #[cfg_attr(not(feature = "gpu"), allow(dead_code))]
     pub(crate) fn invalidate_cache(&mut self) {
+        #[allow(clippy::wildcard_enum_match_arm)]
+        // only nonbonded terms hold an invalidatable cache
         match self {
             Self::NonbondedMatrix(x) => x.invalidate_cache(),
             Self::NonbondedMatrixSplined(x) => x.invalidate_cache(),
@@ -324,6 +305,7 @@ impl EnergyTerm {
         atoms1: &[crate::group::AbsIndex],
         atoms2: &[crate::group::AbsIndex],
     ) -> Option<f64> {
+        #[allow(clippy::wildcard_enum_match_arm)] // only nonbonded terms score index-pair energies
         match self {
             Self::NonbondedMatrix(nb) => Some(nb.indices_with_indices(context, atoms1, atoms2)),
             Self::NonbondedMatrixSplined(nb) => {

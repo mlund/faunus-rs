@@ -292,6 +292,7 @@ impl PairInteraction {
         atom2: &AtomKind,
     ) -> anyhow::Result<super::pairpot::ShortRange> {
         use super::pairpot::ShortRange;
+        #[allow(clippy::wildcard_enum_match_arm)] // Coulomb variants are dispatched by to_coulomb()
         match self {
             Self::LennardJones(x) => Ok(ShortRange::LennardJones(x.to_concrete(atom1, atom2)?)),
             Self::WeeksChandlerAndersen(x) => Ok(ShortRange::Wca(x.to_concrete(atom1, atom2)?)),
@@ -315,6 +316,8 @@ impl PairInteraction {
         use super::pairpot::Coulomb;
         let mixed = AtomKind::combine(CombinationRule::Arithmetic, atom1, atom2);
         let charge_product = mixed.charge();
+        #[allow(clippy::wildcard_enum_match_arm)]
+        // short-range variants are dispatched by to_short_range()
         match self {
             Self::CoulombPlain(scheme) => Ok(Coulomb::Plain(Self::make_ionion(
                 charge_product,

@@ -66,14 +66,13 @@ impl<T: ObserveContext> MoveProposal<T> for TranslateAlongZ {
     }
 }
 
-impl crate::Info for TranslateAlongZ {
-    fn short_name(&self) -> Option<&'static str> {
-        Some("translate_along_z")
-    }
-    fn long_name(&self) -> Option<&'static str> {
-        Some("Translation of a random molecule along z")
-    }
-}
+// The shared `impl_info!` macro models the blessed pattern: real moves use it rather than
+// hand-writing the `short_name`/`long_name` accessors.
+impl_info!(
+    TranslateAlongZ,
+    "translate_along_z",
+    "Translation of a random molecule along z"
+);
 
 #[cfg(test)]
 mod tests {

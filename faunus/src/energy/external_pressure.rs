@@ -104,7 +104,8 @@ impl ExternalPressure {
             Change::Groups(changes) if changes.iter().any(|(_, gc)| gc.is_resize()) => {
                 self.compute(context)
             }
-            _ => 0.0,
+            // Moves that leave N and the volume unchanged do not shift the pressure term.
+            Change::None | Change::SingleGroup(..) | Change::Groups(..) => 0.0,
         }
     }
 

@@ -15,12 +15,23 @@
 //! and always summing over the whole system. That is correct but O(N) per move; the real terms
 //! narrow it, and pay for that with the `save_backup`/`undo` cache protocol.
 //!
-//! The test at the bottom exercises the term against a real system, so this file cannot rot. Copy
+//! A term that *caches* move-mutable state (a pairwise matrix, a reciprocal summator) instead of
+//! recomputing in full implements [`StatefulEnergy`](super::stateful::StatefulEnergy) rather than
+//! [`EnergyChange`] directly — see [`CachedZRestraint`] below. The trait splits the outward energy
+//! into a fresh `total_energy` and an incremental `partial_energy`, and the framework derives
+//! `energy` so that `Change::Everything` always recomputes; a cache therefore cannot hide its own
+//! drift from the energy-drift check. The move-mutable state lives behind a
+//! [`Snapshot`](super::backup::Snapshot), which makes `save_backup`/`undo`/`discard_backup`
+//! one-liners and covers every field automatically.
+//!
+//! The tests at the bottom exercise both terms against a real system, so this file cannot rot. Copy
 //! it, rename it, add a variant to [`EnergyTerm`](super::EnergyTerm), and register the builder.
 
-// Nothing but the tests below drives this term; it is a template, not a registered energy term.
+// Nothing but the tests below drives these terms; this is a template, not a registered energy term.
 #![allow(dead_code)]
 
+use super::backup::Snapshot;
+use super::stateful::{derived_energy, StatefulEnergy};
 use super::EnergyChange;
 use crate::{Change, ObserveContext};
 use serde::{Deserialize, Serialize};
@@ -64,6 +75,94 @@ impl EnergyChange for ZRestraint {
             .map(|i| context.position(i).z.powi(2))
             .sum();
         0.5 * self.spring_constant * sum_z_squared
+    }
+}
+
+/// A *stateful* sibling of [`ZRestraint`] that caches the restraint energy, so a move costs less
+/// than a full recompute. It models the contract a real caching term (nonbonded, Ewald, …) must
+/// keep — the same three energy modes and the [`Snapshot`] backup protocol — on physics simple
+/// enough to check by hand.
+///
+/// The cached, move-mutable state lives behind a [`Snapshot`]: `save_backup`/`undo`/
+/// `discard_backup` are one-liners, and a field added to [`CachedState`] is covered by undo
+/// automatically, so the forget-a-field backup bug cannot recur.
+pub struct CachedZRestraint {
+    spring_constant: f64,
+    state: Snapshot<CachedState>,
+}
+
+/// Everything a trial move mutates lives here, so [`Snapshot`] backs it up whole.
+#[derive(Clone)]
+struct CachedState {
+    /// Cached total restraint energy (kJ/mol), refreshed after every accepted move.
+    energy: f64,
+}
+
+impl CachedZRestraint {
+    pub fn new(spring_constant: f64, context: &impl ObserveContext) -> Self {
+        let mut term = Self {
+            spring_constant,
+            state: Snapshot::new(CachedState { energy: 0.0 }),
+        };
+        term.state.energy = term.compute(context);
+        term
+    }
+
+    /// Fresh ½k Σᵢ zᵢ² over the whole system.
+    fn compute(&self, context: &impl ObserveContext) -> f64 {
+        let sum_z_squared: f64 = context
+            .groups()
+            .iter()
+            .flat_map(|group| group.iter_active())
+            .map(|i| context.position(i).z.powi(2))
+            .sum();
+        0.5 * self.spring_constant * sum_z_squared
+    }
+
+    /// Per-term info for output reporting, assembled with the shared `yaml_map!` macro
+    /// (the same helper the real terms use for their `to_yaml`).
+    pub fn to_yaml(&self) -> serde_yml::Value {
+        yaml_map! { "spring_constant" => self.spring_constant }
+    }
+}
+
+impl EnergyChange for CachedZRestraint {
+    /// The framework derives the outward energy: `Change::Everything` recomputes fresh, everything
+    /// else reads the cache — so drift is always visible to the drift check.
+    fn energy(&self, context: &impl ObserveContext, change: &Change) -> f64 {
+        derived_energy(self, context, change)
+    }
+}
+
+impl StatefulEnergy for CachedZRestraint {
+    /// From-scratch total; never reads the cache.
+    fn total_energy(&self, context: &impl ObserveContext) -> f64 {
+        self.compute(context)
+    }
+
+    /// The incremental path. A real term recomputes only the part `change` touches; this template
+    /// keeps the contract honest by returning the value [`refresh`](Self::refresh) last cached.
+    fn partial_energy(&self, _context: &impl ObserveContext, _change: &Change) -> f64 {
+        self.state.energy
+    }
+
+    /// Refresh the cache after the move has been applied (positions are now the new ones). A real
+    /// term updates only the affected rows here; the template recomputes in full for clarity.
+    fn refresh(&mut self, context: &impl ObserveContext, _change: &Change) -> anyhow::Result<()> {
+        self.state.energy = self.compute(context);
+        Ok(())
+    }
+
+    fn save_backup(&mut self, _context: &impl ObserveContext, _change: &Change) {
+        self.state.save();
+    }
+
+    fn undo(&mut self) {
+        self.state.undo();
+    }
+
+    fn discard_backup(&mut self) {
+        self.state.discard();
     }
 }
 
@@ -130,5 +229,28 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
         }
         .build()
         .is_err());
+    }
+
+    /// The `save_backup` → mutate → `undo` protocol must restore the cache exactly, so a rejected
+    /// move leaves the term as if it never happened. This is the invariant every stateful term relies
+    /// on; verifying it on the template keeps the backup pattern from silently rotting.
+    #[test]
+    fn undo_restores_the_cached_energy_after_a_rejected_move() {
+        let mut context = backend();
+        let mut term = CachedZRestraint::new(2.0, &context);
+        assert_eq!(term.energy(&context, &Change::Everything), 8.0);
+
+        let change = Change::SingleGroup(0, crate::GroupChange::RigidBody);
+        term.save_backup(&context, &change);
+
+        // Apply a trial move (slide both atoms onto the plane) and refresh the cache.
+        context.translate_particles(&[0], &Point::new(0.0, 0.0, 2.0));
+        context.translate_particles(&[1], &Point::new(0.0, 0.0, -2.0));
+        term.refresh(&context, &change).unwrap();
+        assert_eq!(term.partial_energy(&context, &change), 0.0);
+
+        // Reject: the term's undo restores its cache (the caller restores the positions).
+        term.undo();
+        assert_eq!(term.partial_energy(&context, &change), 8.0);
     }
 }

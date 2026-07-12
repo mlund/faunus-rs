@@ -30,6 +30,7 @@ use voronota_ltr::{compute_contacts_only, Ball, PeriodicBox};
 
 use super::make_periodic_box;
 use super::nonbonded::cache::GroupEnergyCache;
+use super::stateful::{derived_energy, StatefulEnergy};
 
 /// Precomputed `γ_ab` matrix indexed by atom kind pairs.
 ///
@@ -346,10 +347,41 @@ impl ContactTessellationEnergy {
         self.cache.n_groups = context.groups().len();
     }
 
-    pub(super) fn energy(&self, _context: &impl ObserveContext, change: &Change) -> f64 {
+    pub(super) fn energy(&self, context: &impl ObserveContext, change: &Change) -> f64 {
+        derived_energy(self, context, change)
+    }
+
+    pub(super) fn to_yaml(&self) -> serde_yml::Value {
+        let total = self.cache.group_energies.iter().sum::<f64>() / 2.0;
+        yaml_map! {
+            "probe_radius" => self.probe_radius,
+            "scaling" => self.scaling,
+            "total_energy" => total,
+        }
+    }
+}
+
+impl StatefulEnergy for ContactTessellationEnergy {
+    /// Fresh tessellation of every group pair against the current box, bypassing the
+    /// cache so drift is visible to the energy-drift check. Pure: touches no state.
+    fn total_energy(&self, context: &impl ObserveContext) -> f64 {
+        let periodic_box = make_periodic_box(context.cell());
+        let (_, group_energies) = compute_all_pairwise(
+            context,
+            context.groups(),
+            self.probe_radius,
+            self.scaling,
+            self.max_sigma,
+            &self.gamma,
+            periodic_box.as_ref(),
+        );
+        // Each pair counted in both group_energies[i] and [j], so halve.
+        group_energies.iter().sum::<f64>() / 2.0
+    }
+
+    fn partial_energy(&self, _context: &impl ObserveContext, change: &Change) -> f64 {
         match change {
             Change::Everything | Change::Volume(..) => {
-                // Each pair counted in both group_energies[i] and [j], so halve
                 self.cache.group_energies.iter().sum::<f64>() / 2.0
             }
             Change::SingleGroup(k, _) => self.cache.group_energies[*k],
@@ -379,11 +411,7 @@ impl ContactTessellationEnergy {
         }
     }
 
-    pub(super) fn update(
-        &mut self,
-        context: &impl ObserveContext,
-        change: &Change,
-    ) -> anyhow::Result<()> {
+    fn refresh(&mut self, context: &impl ObserveContext, change: &Change) -> anyhow::Result<()> {
         match change {
             Change::Everything | Change::Volume(..) => {
                 // Volume change may alter periodic box dimensions
@@ -405,7 +433,7 @@ impl ContactTessellationEnergy {
 
     /// Snapshot enough state to undo a rejected move. Exhaustive on purpose — a `_` arm here once
     /// silently skipped the volume/everything case, leaving the cache at the rejected box.
-    pub(super) fn save_backup(&mut self, change: &Change) {
+    fn save_backup(&mut self, _context: &impl ObserveContext, change: &Change) {
         match change {
             Change::SingleGroup(k, _) => self.cache.save_backup([*k]),
             // A cluster or speciation move recomputes a row per changed group; back them all up so a
@@ -422,25 +450,16 @@ impl ContactTessellationEnergy {
         }
     }
 
-    pub(super) fn undo(&mut self) {
+    fn undo(&mut self) {
         if let Some(periodic_box) = self.periodic_box_backup.take() {
             self.periodic_box = Some(periodic_box);
         }
         self.cache.undo();
     }
 
-    pub(super) fn discard_backup(&mut self) {
+    fn discard_backup(&mut self) {
         self.periodic_box_backup = None;
         self.cache.discard_backup();
-    }
-
-    pub(super) fn to_yaml(&self) -> serde_yml::Value {
-        let total = self.cache.group_energies.iter().sum::<f64>() / 2.0;
-        yaml_map! {
-            "probe_radius" => self.probe_radius,
-            "scaling" => self.scaling,
-            "total_energy" => total,
-        }
     }
 }
 

@@ -19,6 +19,7 @@ pub(crate) mod cache;
 mod tests;
 
 use super::pairpot::PairPot;
+use super::stateful::{derived_energy, StatefulEnergy};
 use crate::ObserveContext;
 use cache::GroupEnergyCache;
 use interatomic::twobody::{IsotropicTwobodyEnergy, SplineConfig, SplinedPotential};
@@ -368,6 +369,17 @@ unsafe fn read_particle(
 
 impl<P: IsotropicTwobodyEnergy> EnergyChange for NonbondedMatrix<P> {
     fn energy(&self, context: &impl ObserveContext, change: &Change) -> f64 {
+        derived_energy(self, context, change)
+    }
+}
+
+impl<P: IsotropicTwobodyEnergy> StatefulEnergy for NonbondedMatrix<P> {
+    fn total_energy(&self, context: &impl ObserveContext) -> f64 {
+        let soa = soa_from_context(context);
+        self.total_nonbonded_soa(&soa, context.groups())
+    }
+
+    fn partial_energy(&self, context: &impl ObserveContext, change: &Change) -> f64 {
         // O(1) cache hit for rigid body moves (the MC hot path)
         if let Change::SingleGroup(gi, GroupChange::RigidBody) = change {
             if let Some(ref cache) = *self.cache.read().unwrap() {
@@ -390,6 +402,42 @@ impl<P: IsotropicTwobodyEnergy> EnergyChange for NonbondedMatrix<P> {
             }
             Change::Groups(vec) => self.multi_group_change_soa(&soa, groups, vec),
             Change::None => 0.0,
+        }
+    }
+
+    fn refresh(&mut self, context: &impl ObserveContext, change: &Change) -> anyhow::Result<()> {
+        self.update_cache(context, change);
+        Ok(())
+    }
+
+    fn save_backup(&mut self, _context: &impl ObserveContext, change: &Change) {
+        match change {
+            Change::SingleGroup(gi, GroupChange::RigidBody | GroupChange::PartialUpdate(_)) => {
+                if let Some(c) = self.cache.get_mut().unwrap().as_mut() {
+                    c.save_backup([*gi]);
+                }
+            }
+            // Topology-changing moves (resize, insert, identity swap, etc.)
+            // invalidate the entire N×N pairwise matrix.
+            Change::None
+            | Change::Everything
+            | Change::Volume(..)
+            | Change::Groups(..)
+            | Change::SingleGroup(..) => {
+                *self.cache.get_mut().unwrap() = None;
+            }
+        }
+    }
+
+    fn undo(&mut self) {
+        if let Some(c) = self.cache.get_mut().unwrap().as_mut() {
+            c.undo();
+        }
+    }
+
+    fn discard_backup(&mut self) {
+        if let Some(c) = self.cache.get_mut().unwrap().as_mut() {
+            c.discard_backup();
         }
     }
 }
@@ -879,7 +927,12 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
                     }
                     energy += self.particle_energy_soa(soa, abs_i, group.iter_active());
                 }
-                _ => unreachable!("matched all GroupChange variants above"),
+                GroupChange::RigidBody
+                | GroupChange::UpdateIdentity(_)
+                | GroupChange::Resize(_)
+                | GroupChange::ResizeExcludeIntra(_) => {
+                    unreachable!("non-internal GroupChange variants are handled by other paths")
+                }
             }
         }
 
@@ -1105,27 +1158,15 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
             .collect()
     }
 
-    /// Backup cache state before a move. Invalidates for topology-changing moves.
-    pub(super) fn save_backup(&mut self, change: &Change) {
-        match change {
-            Change::SingleGroup(gi, GroupChange::RigidBody | GroupChange::PartialUpdate(_)) => {
-                if let Some(c) = self.cache.get_mut().unwrap().as_mut() {
-                    c.save_backup([*gi]);
-                }
-            }
-            // Topology-changing moves (resize, insert, identity swap, etc.)
-            // invalidate the entire N×N pairwise matrix.
-            _ => {
-                *self.cache.get_mut().unwrap() = None;
-            }
-        }
-    }
-
     /// Recompute the moved group's cache row with new positions (accept/reject agnostic).
     pub(super) fn update_cache(&mut self, context: &impl ObserveContext, change: &Change) {
         let group_index = match change {
             Change::SingleGroup(gi, GroupChange::RigidBody | GroupChange::PartialUpdate(_)) => gi,
-            _ => return,
+            Change::None
+            | Change::Everything
+            | Change::Volume(..)
+            | Change::Groups(..)
+            | Change::SingleGroup(..) => return,
         };
 
         // take() avoids a borrow conflict: we need &mut cache while calling
@@ -1155,20 +1196,6 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
             cache.group_energies[m] = (0..n).map(|j| cache.pairwise[m * n + j]).sum();
         }
         *self.cache.get_mut().unwrap() = cache_opt;
-    }
-
-    /// Restore cache from backup (MC reject path).
-    pub(super) fn undo(&mut self) {
-        if let Some(c) = self.cache.get_mut().unwrap().as_mut() {
-            c.undo();
-        }
-    }
-
-    /// Drop cache backup (MC accept path).
-    pub(super) fn discard_backup(&mut self) {
-        if let Some(c) = self.cache.get_mut().unwrap().as_mut() {
-            c.discard_backup();
-        }
     }
 
     /// Invalidate the pairwise energy cache (e.g. after Langevin dynamics).

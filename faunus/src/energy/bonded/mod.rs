@@ -24,6 +24,8 @@ use crate::{
     Change,
 };
 
+use super::backup::Snapshot;
+use super::stateful::{derived_energy, StatefulEnergy};
 use super::{EnergyChange, EnergyTerm};
 
 /// Energy term for computing intramolecular bonded interactions.
@@ -113,41 +115,16 @@ impl From<IntramolecularBonded> for EnergyTerm {
 /// Energy term for computing intermolecular bonded interactions.
 #[derive(Debug, Clone)]
 pub struct IntermolecularBonded {
-    /// Stores whether each particle of the system is active (true) or inactive (false).
-    particles_status: Vec<bool>,
-    /// Backup for undo on MC reject
-    backup: Option<Vec<bool>>,
+    /// Whether each particle of the system is active (true) or inactive (false),
+    /// held behind a [`Snapshot`] so a rejected resize restores it whole.
+    particles_status: Snapshot<Vec<bool>>,
 }
 
 impl EnergyChange for IntermolecularBonded {
     /// Compute the energy associated with the intermolecular
     /// bonded interactions relevant to some change in the system.
     fn energy(&self, context: &impl ObserveContext, change: &Change) -> f64 {
-        match change {
-            Change::None => 0.0,
-            _ => {
-                let intermolecular = context.topology_ref().intermolecular();
-                let bond_energy: f64 = intermolecular
-                    .bonds()
-                    .iter()
-                    .map(|bond| bond.energy_intermolecular(context, self))
-                    .sum();
-
-                let torsion_energy: f64 = intermolecular
-                    .torsions()
-                    .iter()
-                    .map(|torsion| torsion.energy_intermolecular(context, self))
-                    .sum();
-
-                let dihedral_energy: f64 = intermolecular
-                    .dihedrals()
-                    .iter()
-                    .map(|dihedral| dihedral.energy_intermolecular(context, self))
-                    .sum();
-
-                bond_energy + torsion_energy + dihedral_energy
-            }
-        }
+        derived_energy(self, context, change)
     }
 }
 
@@ -173,38 +150,32 @@ impl IntermolecularBonded {
             .collect();
 
         EnergyTerm::IntermolecularBonded(Self {
-            particles_status,
-            backup: None,
+            particles_status: Snapshot::new(particles_status),
         })
     }
 
-    /// Update the energy term. The update is needed if at least one particle was activated or deactivated.
-    //
-    // TODO:
-    // Currently this updates the entire group upon any change in the size of the group.
-    // However, `change` contains information about the number of (de)activated particles in the group.
-    // We should probably use this information to only update the relevant part of the group.
-    pub(super) fn update(
-        &mut self,
-        context: &impl ObserveContext,
-        change: &Change,
-    ) -> anyhow::Result<()> {
-        match change {
-            Change::SingleGroup(i, gc) if gc.is_resize() => {
-                self.update_status_one_group(&context.groups()[*i])
-            }
-            Change::Groups(groups) => self.update_status_multiple_groups(
-                context,
-                &groups
-                    .iter()
-                    .filter_map(|(idx, gc)| gc.is_resize().then_some(*idx))
-                    .collect::<Vec<usize>>(),
-            ),
-            Change::Everything => self.update_status_all(context),
-            Change::SingleGroup(_, _) | Change::None | Change::Volume { .. } => (),
-        }
+    /// Sum of intermolecular bond, torsion, and dihedral energies (`kJ/mol`).
+    fn intermolecular_energy(&self, context: &impl ObserveContext) -> f64 {
+        let intermolecular = context.topology_ref().intermolecular();
+        let bond_energy: f64 = intermolecular
+            .bonds()
+            .iter()
+            .map(|bond| bond.energy_intermolecular(context, self))
+            .sum();
 
-        Ok(())
+        let torsion_energy: f64 = intermolecular
+            .torsions()
+            .iter()
+            .map(|torsion| torsion.energy_intermolecular(context, self))
+            .sum();
+
+        let dihedral_energy: f64 = intermolecular
+            .dihedrals()
+            .iter()
+            .map(|dihedral| dihedral.energy_intermolecular(context, self))
+            .sum();
+
+        bond_energy + torsion_energy + dihedral_energy
     }
 
     /// Check whether the particle with the provided absolute index is active.
@@ -245,27 +216,56 @@ impl From<IntermolecularBonded> for EnergyTerm {
     }
 }
 
-impl IntermolecularBonded {
-    /// Only save when `update()` would actually modify state.
-    pub(super) fn save_backup(&mut self, change: &Change) {
+impl StatefulEnergy for IntermolecularBonded {
+    fn total_energy(&self, context: &impl ObserveContext) -> f64 {
+        self.intermolecular_energy(context)
+    }
+
+    fn partial_energy(&self, context: &impl ObserveContext, _change: &Change) -> f64 {
+        self.intermolecular_energy(context)
+    }
+
+    /// Update the active/inactive status. Needed only when a particle was (de)activated.
+    //
+    // TODO:
+    // Currently this updates the entire group upon any change in the size of the group.
+    // However, `change` contains information about the number of (de)activated particles in the group.
+    // We should probably use this information to only update the relevant part of the group.
+    fn refresh(&mut self, context: &impl ObserveContext, change: &Change) -> anyhow::Result<()> {
+        match change {
+            Change::SingleGroup(i, gc) if gc.is_resize() => {
+                self.update_status_one_group(&context.groups()[*i])
+            }
+            Change::Groups(groups) => self.update_status_multiple_groups(
+                context,
+                &groups
+                    .iter()
+                    .filter_map(|(idx, gc)| gc.is_resize().then_some(*idx))
+                    .collect::<Vec<usize>>(),
+            ),
+            Change::Everything => self.update_status_all(context),
+            Change::SingleGroup(_, _) | Change::None | Change::Volume { .. } => (),
+        }
+        Ok(())
+    }
+
+    /// Only snapshot when [`refresh`](Self::refresh) would actually modify the status.
+    fn save_backup(&mut self, _context: &impl ObserveContext, change: &Change) {
         let dominated = matches!(change, Change::Everything)
             || matches!(change, Change::SingleGroup(_, gc) if gc.is_resize())
             || matches!(change, Change::Groups(v) if v.iter().any(|(_, gc)| gc.is_resize()));
 
         if dominated {
-            assert!(self.backup.is_none(), "backup already exists");
-            self.backup = Some(self.particles_status.clone());
+            self.particles_status.save();
         }
     }
 
-    pub(super) fn undo(&mut self) {
-        if let Some(backup) = self.backup.take() {
-            self.particles_status = backup;
-        }
+    fn undo(&mut self) {
+        self.particles_status.undo();
     }
 
-    pub(super) fn discard_backup(&mut self) {
-        self.backup = None;
+    fn discard_backup(&mut self) {
+        self.particles_status.discard();
     }
 }
 
