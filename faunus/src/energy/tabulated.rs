@@ -554,7 +554,7 @@ impl TabulatedEnergy {
         match change {
             Change::SingleGroup(gi, GroupChange::RigidBody) => {
                 if let Some(c) = self.cache.get_mut().expect("cache lock poisoned").as_mut() {
-                    c.save_backup(*gi);
+                    c.save_backup([*gi]);
                 }
             }
             // Topology-changing moves invalidate the N×N pairwise matrix.

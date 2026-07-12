@@ -225,6 +225,12 @@ pub struct ContactTessellationEnergy {
     #[builder_field_attr(serde(skip))]
     #[builder(default)]
     periodic_box: Option<PeriodicBox>,
+
+    /// Pre-move periodic box, snapshotted on a volume/everything change so a rejected volume move
+    /// (which rebuilds the whole cache against the trial box) can be undone.
+    #[builder_field_attr(serde(skip))]
+    #[builder(default)]
+    periodic_box_backup: Option<PeriodicBox>,
 }
 
 impl ContactTessellationEnergy {
@@ -272,6 +278,7 @@ impl ContactTessellationEnergy {
             max_sigma,
             cache: GroupEnergyCache::new(pairwise, group_energies, n_groups),
             periodic_box,
+            periodic_box_backup: None,
         })
     }
 
@@ -396,17 +403,34 @@ impl ContactTessellationEnergy {
         Ok(())
     }
 
+    /// Snapshot enough state to undo a rejected move. Exhaustive on purpose — a `_` arm here once
+    /// silently skipped the volume/everything case, leaving the cache at the rejected box.
     pub(super) fn save_backup(&mut self, change: &Change) {
-        if let Change::SingleGroup(k, _) = change {
-            self.cache.save_backup(*k);
+        match change {
+            Change::SingleGroup(k, _) => self.cache.save_backup([*k]),
+            // A cluster or speciation move recomputes a row per changed group; back them all up so a
+            // reject restores the whole set (issue #62).
+            Change::Groups(changes) => self.cache.save_backup(changes.iter().map(|(k, _)| *k)),
+            // A volume/everything change rebuilds the whole cache against a new box; snapshot every
+            // row and the periodic box so a rejected volume move is fully restored.
+            Change::Volume(..) | Change::Everything => {
+                self.periodic_box_backup = self.periodic_box;
+                let n = self.cache.n_groups;
+                self.cache.save_backup(0..n);
+            }
+            Change::None => {}
         }
     }
 
     pub(super) fn undo(&mut self) {
+        if let Some(periodic_box) = self.periodic_box_backup.take() {
+            self.periodic_box = Some(periodic_box);
+        }
         self.cache.undo();
     }
 
     pub(super) fn discard_backup(&mut self) {
+        self.periodic_box_backup = None;
         self.cache.discard_backup();
     }
 

@@ -1114,7 +1114,7 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
         match change {
             Change::SingleGroup(gi, GroupChange::RigidBody | GroupChange::PartialUpdate(_)) => {
                 if let Some(c) = self.cache.get_mut().unwrap().as_mut() {
-                    c.save_backup(*gi);
+                    c.save_backup([*gi]);
                 }
             }
             // Topology-changing moves (resize, insert, identity swap, etc.)
