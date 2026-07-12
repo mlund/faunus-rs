@@ -338,9 +338,10 @@ impl EwaldReciprocalEnergy {
 
     /// Fresh reciprocal + self energy on a scratch summator (`kJ/mol`).
     ///
-    /// Recomputes from re-extracted charges and current positions without touching
-    /// the live cache, so the energy-drift check sees any accumulated structure-factor
-    /// drift or a charge left stale by an identity swap.
+    /// Recomputes from re-extracted charges, current positions, and the box read from the
+    /// context (not the cloned summator's cached dimensions), so the energy-drift check sees
+    /// accumulated structure-factor drift, a stale charge after an identity swap, or a box that
+    /// has drifted from `context.cell()`.
     fn compute_total(&self, context: &impl ObserveContext) -> f64 {
         let charges = Self::extract_charges(context);
         let n = charges.len();
@@ -353,8 +354,9 @@ impl EwaldReciprocalEnergy {
                 z[i] = pos.z;
             }
         }
+        let box_length = Self::box_length_from_context(context).ok();
         let mut ewald = self.state.ewald.clone();
-        ewald.update_all(&x, &y, &z, &charges, None, false);
+        ewald.update_all(&x, &y, &z, &charges, box_length, false);
         self.prefactor * (ewald.energy() + ewald.self_energy(&charges))
     }
 

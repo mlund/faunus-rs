@@ -43,7 +43,15 @@ impl<S: Clone> Snapshot<S> {
     }
 
     /// Snapshot the current state so a later [`undo`](Self::undo) can restore it.
+    ///
+    /// A trial saves at most once (paired with a later `undo`/`discard`); a second `save` while
+    /// still armed would silently narrow what `undo` restores, so it is a misuse the assertion
+    /// catches in debug builds.
     pub(crate) fn save(&mut self) {
+        debug_assert!(
+            !self.armed,
+            "Snapshot::save called twice without undo/discard"
+        );
         self.backup.clone_from(&self.current);
         self.armed = true;
     }
