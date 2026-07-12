@@ -385,9 +385,10 @@ enable per-frame visualization updates in VMD:
 
 - `.sizes.dat` — per-frame group active counts (written when any group
   has inactive atoms). The VMD script hides inactive atoms (radius = 0).
-- `.charges.dat` — per-frame atom charges (always written). The VMD
-  script updates charges each frame so that atom-type swaps from titration
-  and speciation are reflected in the charge coloring.
+- `.charges.dat` — per-frame atom charges (only when `save_charges: true`).
+  The VMD script then updates charges each frame so that atom-type swaps from
+  titration and speciation are reflected in the charge coloring. Without it,
+  VMD colors by the static charges stored in the PSF.
 
 ### Example
 
@@ -417,6 +418,7 @@ Key                | Required | Default | Description
 `frequency`        | yes      |         | Sample frequency, e.g. `!Every 100` or `!End`
 `selection`        | no       |         | VMD-like molecule selection, e.g. `"molecule protein"`. Writes only matching groups.
 `save_frame_state` | no       | `false` | Write a binary `.aux` file alongside the trajectory (see [Rerun](#rerun)). Cannot be combined with `selection`.
+`save_charges`     | no       | `false` | Write a per-frame `.charges.dat` file for VMD charge coloring of titration/speciation swaps. One float per atom per frame, so large for big systems.
 
 ### Output files
 
@@ -427,7 +429,7 @@ File               | Description
 `traj.xtc`         | Trajectory (coordinates per frame)
 `traj.psf`         | X-PLOR PSF topology (atoms, bonds, angles, dihedrals, charges, masses)
 `traj.tcl`         | VMD scene script (`vmd -e traj.tcl` loads everything)
-`traj.charges.dat` | Per-frame atom charges (always written)
+`traj.charges.dat` | Per-frame atom charges (only when `save_charges: true`)
 `traj.sizes.dat`   | Per-frame group active counts (only when groups have inactive atoms)
 `traj.aux`         | Frame state file (only when `save_frame_state: true`)
 

@@ -31,6 +31,12 @@ pub struct StructureWriter {
     #[builder_field_attr(serde(default))]
     #[builder(default)]
     save_frame_state: bool,
+    /// Write per-frame atom charges (`.charges.dat`) for VMD charge coloring of
+    /// titration/speciation swaps. Off by default: one float per atom per frame is
+    /// large and uncompressed for big systems, and only useful when charges change.
+    #[builder_field_attr(serde(default))]
+    #[builder(default)]
+    save_charges: bool,
     /// Optional molecule selection filter (VMD-like expression).
     #[builder_field_attr(serde(default))]
     #[builder(setter(strip_option), default)]
@@ -49,6 +55,7 @@ pub struct StructureWriter {
     #[builder_field_attr(serde(skip))]
     sizes_writer: Option<BufWriter<std::fs::File>>,
     /// Per-frame atom charges for VMD charge coloring of titration swaps.
+    /// Lazily opened only when `save_charges` is set.
     #[builder(setter(skip))]
     #[builder_field_attr(serde(skip))]
     charges_writer: Option<BufWriter<std::fs::File>>,
@@ -93,6 +100,7 @@ impl StructureWriter {
             output_file: output_file.to_owned(),
             sampling: Sampling::new(frequency),
             save_frame_state: false,
+            save_charges: false,
             selection: None,
             frame_state_writer: None,
             group_cache: None,
@@ -254,28 +262,31 @@ impl StructureWriter {
         }
 
         // Per-frame charges for VMD coloring of titration and speciation swaps.
-        // Always written — the file is small and atom types can change at any time.
-        if self.charges_writer.is_none() {
-            let charges_path = Path::new(&self.output_file).with_extension("charges.dat");
-            self.charges_writer = Some(BufWriter::new(
-                std::fs::File::create(&charges_path)
-                    .with_context(|| format!("Cannot create '{}'", charges_path.display()))?,
-            ));
-        }
-        if let Some(w) = self.charges_writer.as_mut() {
-            let atomkinds = topology.atomkinds();
-            let mut first = true;
-            for &gi in group_indices.iter() {
-                let g = &all_groups[gi.get()];
-                for i in g.start()..g.start() + g.capacity() {
-                    if !first {
-                        write!(w, " ")?;
-                    }
-                    write!(w, "{:.4}", atomkinds[context.atom_kind(i).get()].charge())?;
-                    first = false;
-                }
+        // Opt-in (`save_charges`): one float per atom per frame is large for big systems
+        // and only meaningful when atom types change during the run.
+        if self.save_charges {
+            if self.charges_writer.is_none() {
+                let charges_path = Path::new(&self.output_file).with_extension("charges.dat");
+                self.charges_writer = Some(BufWriter::new(
+                    std::fs::File::create(&charges_path)
+                        .with_context(|| format!("Cannot create '{}'", charges_path.display()))?,
+                ));
             }
-            writeln!(w)?;
+            if let Some(w) = self.charges_writer.as_mut() {
+                let atomkinds = topology.atomkinds();
+                let mut first = true;
+                for &gi in group_indices.iter() {
+                    let g = &all_groups[gi.get()];
+                    for i in g.start()..g.start() + g.capacity() {
+                        if !first {
+                            write!(w, " ")?;
+                        }
+                        write!(w, "{:.4}", atomkinds[context.atom_kind(i).get()].charge())?;
+                        first = false;
+                    }
+                }
+                writeln!(w)?;
+            }
         }
 
         Ok(())
@@ -377,6 +388,25 @@ mod tests {
         // Confirms the `builder_struct_attr` passthrough reaches the generated builder.
         let yaml = "file: traj.xyz\nfrequency: !Every 100\nfile_typo: foo.xyz\n";
         assert!(serde_yml::from_str::<StructureWriterBuilder>(yaml).is_err());
+    }
+
+    #[test]
+    fn save_charges_defaults_off_and_opts_in() {
+        let default = serde_yml::from_str::<StructureWriterBuilder>(
+            "file: traj.xtc\nfrequency: !Every 100\n",
+        )
+        .unwrap()
+        .build()
+        .unwrap();
+        assert!(!default.save_charges);
+
+        let opted_in = serde_yml::from_str::<StructureWriterBuilder>(
+            "file: traj.xtc\nfrequency: !Every 100\nsave_charges: true\n",
+        )
+        .unwrap()
+        .build()
+        .unwrap();
+        assert!(opted_in.save_charges);
     }
 
     #[test]
