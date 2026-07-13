@@ -237,7 +237,7 @@ impl DensityProfile {
     }
 }
 
-impl_info!(DensityProfile, "densityprofile", "Density profile along z");
+impl_info!(DensityProfile, "density_profile", "Density profile along z");
 
 impl<T: ObserveContext> Analyze<T> for DensityProfile {
     impl_sampling_accessors!();
@@ -601,6 +601,6 @@ frequency: !Every 10
         use crate::Info;
         let context = backend_from_str(DIMER);
         let analysis = builder("all", false).build(&context).unwrap();
-        assert_eq!(analysis.short_name(), Some("densityprofile"));
+        assert_eq!(analysis.short_name(), Some("density_profile"));
     }
 }

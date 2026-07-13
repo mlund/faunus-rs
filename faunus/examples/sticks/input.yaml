@@ -96,12 +96,12 @@ propagate:
       moves:
         - !RotateMolecule {
             molecule: MOL1,
-            dp: 1.0,
+            dprot: 1.0,
             weight: 1.0,
           }
         - !RotateMolecule {
             molecule: MOL2,
-            dp: 1.0,
+            dprot: 1.0,
             weight: 1.0,
           }
         - !TranslateMolecule {

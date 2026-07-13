@@ -185,7 +185,7 @@ impl<T: Context> GibbsMove<T> for GibbsVolumeExchange {
 
     fn to_yaml(&self) -> Option<serde_yml::Value> {
         let mut map = serde_yml::Mapping::new();
-        map.insert("dV".into(), self.dv.into());
+        map.insert("volume_displacement".into(), self.dv.into());
         map.insert("method".into(), serde_yml::to_value(self.method).ok()?);
         map.insert(
             "statistics".into(),
@@ -432,7 +432,7 @@ impl<T: Context> GibbsMove<T> for GibbsParticleTransfer {
 #[derive(Clone, Debug, Deserialize)]
 pub(crate) enum GibbsMoveBuilder {
     GibbsVolumeExchange {
-        #[serde(alias = "dV")]
+        #[serde(rename = "volume_displacement", alias = "dV")]
         dv: f64,
         #[serde(default)]
         method: VolumeDisplacementMethod,
@@ -450,7 +450,10 @@ impl GibbsMoveBuilder {
     ) -> Result<Box<dyn GibbsMove<T> + Send>> {
         Ok(match self {
             Self::GibbsVolumeExchange { dv, method } => {
-                anyhow::ensure!(dv > 0.0, "GibbsVolumeExchange: dV must be positive");
+                anyhow::ensure!(
+                    dv > 0.0,
+                    "GibbsVolumeExchange: volume_displacement must be positive"
+                );
                 Box::new(GibbsVolumeExchange::new(dv, method))
             }
             Self::GibbsParticleTransfer { molecule } => {

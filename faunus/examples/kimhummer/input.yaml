@@ -47,7 +47,7 @@ analysis:
   - !RadialDistribution
     selections: ["molecule MOL1", "molecule MOL2"]
     file: "rdf.dat.gz"
-    dr: 0.5
+    resolution: 0.5
     use_com: true
     dimension: !z
     frequency: !Every 10
@@ -59,8 +59,8 @@ propagate:
   collections:
     - !Stochastic
       moves:
-        - !RotateMolecule {molecule: MOL1, dp: 1.0, weight: 0.5}
-        - !RotateMolecule {molecule: MOL2, dp: 2.0, weight: 1.0}
+        - !RotateMolecule {molecule: MOL1, dprot: 1.0, weight: 0.5}
+        - !RotateMolecule {molecule: MOL2, dprot: 2.0, weight: 1.0}
         - !TranslateMolecule
           molecule: MOL2
           dp: 15.0

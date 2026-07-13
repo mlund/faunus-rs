@@ -189,7 +189,7 @@ fn compute_descriptors(evals: &[f64; 3], rg_squared: f64) -> Option<ShapeDescrip
 
 impl_info!(
     ShapeAnalysis,
-    "polymershape",
+    "polymer_shape",
     "Polymer shape via gyration tensor",
     "doi:10/d6ff"
 );

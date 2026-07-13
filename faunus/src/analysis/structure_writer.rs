@@ -112,7 +112,7 @@ impl StructureWriter {
 
 impl_info!(
     StructureWriter,
-    "structure printer",
+    "structure_writer",
     "Writes structure of the system at specified frequency into an output trajectory."
 );
 

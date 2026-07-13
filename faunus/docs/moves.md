@@ -38,7 +38,8 @@ Key      | Description
 -------- | -------------------------------------------
 `weight` | Selection weight (only meaningful inside `!Stochastic` collections)
 `repeat` | How many trial moves to attempt *each time the move is selected* (default 1)
-`dp`     | Maximum displacement parameter (meaning depends on the move)
+`dp`     | Maximum translational displacement (Å), for translational moves
+`dprot`  | Maximum rotational angle (radians), for rotational moves
 
 The two `repeat` levels nest: the collection's `repeat` controls how often
 moves are drawn, and the move's `repeat` controls how many trials are
@@ -58,8 +59,8 @@ propagate:
       repeat: 10
       moves:
         - !TranslateMolecule { molecule: Water, dp: 0.5, weight: 1.0 }
-        - !RotateMolecule { molecule: Water, dp: 0.3, weight: 1.0 }
-        - !VolumeMove { dV: 0.04, weight: 0.5 }
+        - !RotateMolecule { molecule: Water, dprot: 0.3, weight: 1.0 }
+        - !VolumeMove { volume_displacement: 0.04, weight: 0.5 }
     - !Deterministic
       repeat: 1
       moves:
@@ -129,7 +130,7 @@ Must be placed in a `!Deterministic` block so that reference groups move first
 - !Deterministic
   moves:
     - !TranslateMolecule { molecule: Protein, dp: 0.5 }
-    - !RotateMolecule { molecule: Protein, dp: 0.5 }
+    - !RotateMolecule { molecule: Protein, dprot: 0.5 }
     - !TranslateAtom
         molecule: Na
         dp: 0.5
@@ -162,16 +163,16 @@ Key         | Required | Default | Description
 ## Rotate Molecule
 
 Picks a random molecule of the given type and rotates it around a random axis
-by an angle uniformly sampled in $[-\text{dp}, +\text{dp}]$ (radians).
+by an angle uniformly sampled in $[-\text{dprot}, +\text{dprot}]$ (radians).
 
 ```yaml
-- !RotateMolecule { molecule: Protein, dp: 0.3, weight: 1.0 }
+- !RotateMolecule { molecule: Protein, dprot: 0.3, weight: 1.0 }
 ```
 
 Key        | Required | Default | Description
 ---------- | -------- | ------- | -------------------------------------------
 `molecule` | yes      |         | Name of the molecule type
-`dp`       | yes      |         | Maximum angular displacement (radians)
+`dprot`       | yes      |         | Maximum angular displacement (radians)
 `weight`   | yes      |         | Selection weight
 `repeat`   | no       | 1       | Repetitions per selection
 
@@ -192,13 +193,13 @@ See [Madras & Sokal, _J. Stat. Phys._ 50, 109–186 (1988)](https://doi.org/10.1
 > during rotation can map atoms to incorrect periodic images.
 
 ```yaml
-- !PivotMove { molecule: Polymer, dp: 1.5, weight: 1.0 }
+- !PivotMove { molecule: Polymer, dprot: 1.5, weight: 1.0 }
 ```
 
 Key        | Required | Default | Description
 ---------- | -------- | ------- | -------------------------------------------
 `molecule` | yes      |         | Name of the molecule type
-`dp`       | yes      |         | Maximum angular displacement (radians)
+`dprot`       | yes      |         | Maximum angular displacement (radians)
 `weight`   | yes      |         | Selection weight
 `repeat`   | no       | 1       | Repetitions per selection
 
@@ -207,7 +208,7 @@ Key        | Required | Default | Description
 ## Crankshaft Move
 
 Picks a random bond axis in the molecule and rotates the smaller sub-tree
-around it by an angle uniformly sampled in $[-\text{dp}, +\text{dp}]$ (radians).
+around it by an angle uniformly sampled in $[-\text{dprot}, +\text{dprot}]$ (radians).
 When proper dihedrals are defined, only their middle bonds are used as axes;
 otherwise all bonds serve as candidate axes (e.g. FASTA chains with only
 harmonic bonds).
@@ -219,13 +220,13 @@ complementary to [`PivotMove`](#pivot-move), which applies a full 3D rotation
 potentials, `PivotMove` alone is typically sufficient.
 
 ```yaml
-- !CrankshaftMove { molecule: Peptide, dp: 0.5, weight: 1.0 }
+- !CrankshaftMove { molecule: Peptide, dprot: 0.5, weight: 1.0 }
 ```
 
 Key        | Required | Default | Description
 ---------- | -------- | ------- | -------------------------------------------
 `molecule` | yes      |         | Name of the molecule type
-`dp`       | yes      |         | Maximum angular displacement (radians)
+`dprot`       | yes      |         | Maximum angular displacement (radians)
 `weight`   | yes      |         | Selection weight
 `repeat`   | no       | 1       | Repetitions per selection
 
@@ -301,14 +302,14 @@ propagate:
     - !Stochastic
       moves:
         - !TranslateMolecule { molecule: Water, dp: 0.5, weight: 1.0 }
-        - !VolumeMove { dV: 0.04, weight: 0.5 }
+        - !VolumeMove { volume_displacement: 0.04, weight: 0.5 }
 ```
 
 ### Options
 
 Key      | Required | Default      | Description
 -------- | -------- | ------------ | -------------------------------------------
-`dV`     | yes      |              | Volume displacement parameter (log-scale)
+`volume_displacement` | yes |     | Volume displacement parameter, log-scale (alias `dV`)
 `weight` | yes      |              | Selection weight
 `method` | no       | `Isotropic`  | Scaling policy (see table below)
 `repeat` | no       | 1            | Repetitions per selection
@@ -641,7 +642,7 @@ $$
 
 Key      | Required | Default        | Description
 -------- | -------- | -------------- | -------------------------------------------
-`dV`     | yes      |                | Volume displacement parameter
+`volume_displacement` | yes |       | Volume displacement parameter (alias `dV`)
 `method` | no       | `Logarithmic`  | Displacement method: `Logarithmic` or `Linear`
 
 ### Gibbs Particle Transfer
@@ -773,7 +774,7 @@ propagate:
       repeat: 20
       moves:
         - !TranslateMolecule { molecule: Water, dp: 0.5, repeat: 1 }
-        - !RotateMolecule { molecule: Water, dp: 0.3, repeat: 1 }
+        - !RotateMolecule { molecule: Water, dprot: 0.3, repeat: 1 }
     - !LangevinDynamics
       timestep: 0.1
       friction: 5.0

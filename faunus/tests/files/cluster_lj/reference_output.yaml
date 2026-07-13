@@ -20,7 +20,7 @@ energy_change:
   final: -265.2055090156706
   initial: -219.94522194011788
 energy_timers:
-  celloverlap: '3.3200000000000003 (energy: 2.2, update: 1.12)'
+  cell_overlap: '3.3200000000000003 (energy: 2.2, update: 1.12)'
   nonbonded: '96.67999999999999 (energy: 83.19, update: 13.49)'
 propagate:
   repeat: 2000

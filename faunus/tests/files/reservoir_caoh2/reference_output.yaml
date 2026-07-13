@@ -30,7 +30,7 @@ energy_change:
   final: 0.0
   initial: 0.0
 energy_timers:
-  celloverlap: '100 (energy: 66.89, update: 33.11)'
+  cell_overlap: '100 (energy: 66.89, update: 33.11)'
 propagate:
   repeat: 30000
   seed: !Fixed 42
@@ -66,13 +66,13 @@ propagate:
         acceptance_ratio: 0.9496666666666667
   criterion: MetropolisHastings
 analysis:
-- collectivevariable:
+- collective_variable:
     property: Molarity
     description: 'selection: molecule ''Ca²⁺'''
     num_samples: 30000
     mean: 0.011680606957327169
     rms: 0.011690845550285196
-- collectivevariable:
+- collective_variable:
     property: Molarity
     description: 'selection: molecule ''OH⁻'''
     num_samples: 30000

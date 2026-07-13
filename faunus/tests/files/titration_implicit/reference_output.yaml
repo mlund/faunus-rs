@@ -17,7 +17,7 @@ energy_change:
   final: 0.0
   initial: 0.0
 energy_timers:
-  celloverlap: '100 (energy: 67.5, update: 32.5)'
+  cell_overlap: '100 (energy: 67.5, update: 32.5)'
 propagate:
   repeat: 5000
   seed: !Fixed 42
@@ -53,7 +53,7 @@ propagate:
         acceptance_ratio: 0.822
   criterion: MetropolisHastings
 analysis:
-- collectivevariable:
+- collective_variable:
     property: Count
     description: 'selection: atomtype A'
     num_samples: 5000

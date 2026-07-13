@@ -98,7 +98,7 @@ PRODUCTION_ANALYSIS = """\
   - !RadialDistribution
     selections: ["molecule Colloid", "molecule Colloid"]
     file: rdf.dat
-    dr: 1.0
+    resolution: 1.0
     frequency: !Every 10
   - !Trajectory
     file: confout.xyz

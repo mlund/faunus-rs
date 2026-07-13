@@ -25,7 +25,7 @@ energy_change:
   final: -219.6929032321027
   initial: -243.41791139269253
 energy_timers:
-  celloverlap: '4.83 (energy: 3.28, update: 1.55)'
+  cell_overlap: '4.83 (energy: 3.28, update: 1.55)'
   nonbonded: '95.17 (energy: 93.48, update: 1.69)'
 propagate:
   repeat: 5000
@@ -78,7 +78,7 @@ analysis:
 - scaled_widom_insertion:
     atom: Na
     num_samples: 2000
-    excess_chemical_potential (kT):
+    excess_chemical_potential/kT:
       short_range:
         mean: 0.16104313932586029
         error: 0.0018924053394129639
@@ -88,13 +88,13 @@ analysis:
       total:
         mean: -0.23211585149751476
         error: 0.004074339326368158
-    unscaled_widom (kT):
+    unscaled_widom/kT:
       mean: -0.2615201969129146
       error: 0.006572376647569614
 - scaled_widom_insertion:
     atom: Cl
     num_samples: 2000
-    excess_chemical_potential (kT):
+    excess_chemical_potential/kT:
       short_range:
         mean: 0.16104313932586029
         error: 0.0018924053394129639
@@ -104,6 +104,6 @@ analysis:
       total:
         mean: -0.22925012819720783
         error: 0.004144174483454775
-    unscaled_widom (kT):
+    unscaled_widom/kT:
       mean: -0.2563136742371558
       error: 0.006695513949364709

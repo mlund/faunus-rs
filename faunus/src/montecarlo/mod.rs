@@ -740,7 +740,7 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
     #[test]
     fn rotate_molecule_pairs_rigid_body_with_rotate() {
         let context = context();
-        let mut mv: RotateMolecule = serde_yml::from_str("{molecule: MOL, dp: 0.5}").unwrap();
+        let mut mv: RotateMolecule = serde_yml::from_str("{molecule: MOL, dprot: 0.5}").unwrap();
         mv.finalize(&context).unwrap();
         let proposed = propose(mv, &context);
 
@@ -791,9 +791,10 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
     fn pivot_and_crankshaft_use_relative_indices_on_both_sides() {
         let context = context();
 
-        let mut pivot: PivotMove = serde_yml::from_str("{molecule: POLY, dp: 0.5}").unwrap();
+        let mut pivot: PivotMove = serde_yml::from_str("{molecule: POLY, dprot: 0.5}").unwrap();
         pivot.finalize(&context).unwrap();
-        let mut crank: CrankshaftMove = serde_yml::from_str("{molecule: POLY, dp: 0.5}").unwrap();
+        let mut crank: CrankshaftMove =
+            serde_yml::from_str("{molecule: POLY, dprot: 0.5}").unwrap();
         crank.finalize(&context).unwrap();
 
         for proposed in [propose(pivot, &context), propose(crank, &context)] {

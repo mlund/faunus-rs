@@ -356,7 +356,7 @@ impl DoubleLayerPressure {
 
 impl_info!(
     DoubleLayerPressure,
-    "doublelayerpressure",
+    "double_layer_pressure",
     "Osmotic pressure between two charged planes (Guldbrand midplane method)",
     "doi:10.1063/1.446912"
 );
@@ -620,7 +620,7 @@ mod tests {
     fn info_trait() {
         let a = dummy(crate::R_IN_KJ_PER_MOL * 298.15);
         use crate::Info;
-        assert_eq!(a.short_name(), Some("doublelayerpressure"));
+        assert_eq!(a.short_name(), Some("double_layer_pressure"));
         assert!(a.citation().unwrap().starts_with("doi:"));
     }
 

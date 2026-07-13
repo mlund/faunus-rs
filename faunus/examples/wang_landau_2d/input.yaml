@@ -37,7 +37,7 @@ system:
       insert: !RandomAtomPos {}
 
   energy:
-    customexternal:
+    custom_external:
       - selection: "all"
         function: staircase-sincos
 

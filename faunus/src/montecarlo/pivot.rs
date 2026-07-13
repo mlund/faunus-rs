@@ -35,9 +35,9 @@ pub struct PivotMove {
     /// Id of the molecule type to pivot.
     #[serde(skip)]
     molecule_id: MoleculeId,
-    /// Maximum angular displacement (radians).
-    #[serde(alias = "dp")]
-    max_displacement: f64,
+    /// Maximum rotation angle (radians).
+    #[serde(alias = "dprot")]
+    max_angle: f64,
     /// Move selection weight.
     #[serde(skip_serializing, default = "crate::propagate::default_weight")]
     pub(crate) weight: f64,
@@ -92,7 +92,7 @@ impl<T: ObserveContext> MoveProposal<T> for PivotMove {
         .collect();
 
         let pivot_pos = context.position(group.start() + pivot_rel);
-        let (quaternion, angle) = random_quaternion(rng, self.max_displacement);
+        let (quaternion, angle) = random_quaternion(rng, self.max_angle);
 
         Some(ProposedMove::rotate_atoms(
             group_index,
@@ -116,10 +116,10 @@ mod tests {
 
     #[test]
     fn yaml_parsing() {
-        let yaml = "!PivotMove {molecule: Polymer, dp: 1.5, weight: 2.0}";
+        let yaml = "!PivotMove {molecule: Polymer, dprot: 1.5, weight: 2.0}";
         let pivot: PivotMove = serde_yml::from_str(yaml).unwrap();
         assert_eq!(pivot.molecule_name, "Polymer");
-        assert_eq!(pivot.max_displacement, 1.5);
+        assert_eq!(pivot.max_angle, 1.5);
         assert_eq!(pivot.weight, 2.0);
         assert_eq!(pivot.repeat, 1); // default
         assert_eq!(pivot.molecule_id, MoleculeId::new(0)); // skipped during deserialization
@@ -127,7 +127,7 @@ mod tests {
 
     #[test]
     fn yaml_unknown_field_rejected() {
-        let yaml = "!PivotMove {molecule: Polymer, dp: 1.5, weight: 2.0, unknown: 42}";
+        let yaml = "!PivotMove {molecule: Polymer, dprot: 1.5, weight: 2.0, unknown: 42}";
         assert!(serde_yml::from_str::<PivotMove>(yaml).is_err());
     }
 }

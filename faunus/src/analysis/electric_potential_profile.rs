@@ -335,7 +335,7 @@ impl ElectricPotentialProfile {
 
 impl_info!(
     ElectricPotentialProfile,
-    "electricpotentialprofile",
+    "electric_potential_profile",
     "Electric potential profile along z (slab geometry)",
     "doi:10/dhb9mj"
 );
@@ -598,7 +598,7 @@ mod tests {
     fn info_trait() {
         use crate::Info;
         let analysis = dummy("unused.csv");
-        assert_eq!(analysis.short_name(), Some("electricpotentialprofile"));
+        assert_eq!(analysis.short_name(), Some("electric_potential_profile"));
         assert!(analysis.citation().unwrap().starts_with("doi:"));
     }
 }

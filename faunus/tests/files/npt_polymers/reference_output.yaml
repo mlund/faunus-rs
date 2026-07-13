@@ -23,14 +23,14 @@ energy_change:
   final: -1046.5620112446659
   initial: -1020.9081480087555
 energy:
-  externalpressure:
-    pressure_kj_mol_A3: 0.00016899207088419543
+  external_pressure:
+    pressure/kJ/mol/Å³: 0.00016899207088419543
     thermal_energy: 2.4789570295566996
 energy_timers:
-  celloverlap: '2.73 (energy: 1.93, update: 0.8)'
+  cell_overlap: '2.73 (energy: 1.93, update: 0.8)'
   nonbonded: '92.8 (energy: 42.87, update: 49.93)'
   intramolecular: '2.49 (energy: 1.73, update: 0.76)'
-  externalpressure: '1.99 (energy: 1.24, update: 0.75)'
+  external_pressure: '1.99 (energy: 1.24, update: 0.75)'
 propagate:
   repeat: 25000
   seed: !Fixed 42
@@ -60,7 +60,7 @@ propagate:
         acceptance_ratio: 0.574765
     - !RotateMolecule
       molecule: polymer
-      max_displacement: 1.0
+      max_angle: 1.0
       weight: 1.0
       repeat: 8
       statistics:
@@ -78,7 +78,7 @@ propagate:
         acceptance_ratio: 0.78446
     - !PivotMove
       molecule: polymer
-      max_displacement: 3.0
+      max_angle: 3.0
       weight: 1.0
       repeat: 24
       statistics:
@@ -152,12 +152,12 @@ propagate:
         acceptance_ratio: 0.1284
   criterion: MetropolisHastings
 analysis:
-- collectivevariable:
+- collective_variable:
     property: Volume
     num_samples: 15000
     mean: 537090.4517000052
     rms: 543635.0141380299
-- polymershape:
+- polymer_shape:
     Rg: 6.810877225878546
     Re: 15.935541199829423
     Re2/Rg2: 5.474286612007862

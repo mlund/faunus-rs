@@ -52,5 +52,5 @@ propagate:
     - !Deterministic
       moves:
         - !TranslateMolecule {molecule: water, dp: 0.4, repeat: 64}
-        - !RotateMolecule {molecule: water, dp: 0.4, repeat: 64}
+        - !RotateMolecule {molecule: water, dprot: 0.4, repeat: 64}
         - !VolumeMove {dV: 0.03, repeat: 5}

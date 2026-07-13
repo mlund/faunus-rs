@@ -36,7 +36,7 @@ system:
     nonbonded:
       default:
         - !Coulomb { cutoff: {{ (side * 10.0) | round(3) }} }   # full minimum-image, no Ewald
-    customexternal:
+    custom_external:
       # Smeared charged walls (finite charged-square sheet, Guldbrand Eq. 9).
       - selection: "all"
         constants: { c: {{ c_wall }}, b: {{ side / 2.0 }}, hg: {{ lz / 2.0 }} }

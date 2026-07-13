@@ -112,7 +112,7 @@ impl ExternalPressure {
     /// Report pressure parameters as YAML.
     pub(super) fn to_yaml(&self) -> serde_yml::Value {
         yaml_map! {
-            "pressure_kj_mol_A3" => self.pressure,
+            "pressure/kJ/mol/Å³" => self.pressure,
             "thermal_energy" => self.thermal_energy,
         }
     }

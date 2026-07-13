@@ -20,17 +20,17 @@ energy_change:
   final: -48332.969579279044
   initial: -48430.761759525114
 energy:
-  externalpressure:
-    pressure_kj_mol_A3: 0.000061019341250700007
+  external_pressure:
+    pressure/kJ/mol/Å³: 0.000061019341250700007
     thermal_energy: 2.4943387854
   ewald_reciprocal:
     alpha: 0.3770078013563951
     n_max: 7
     k_vectors: 709
 energy_timers:
-  celloverlap: '0.05 (energy: 0.03, update: 0.02)'
+  cell_overlap: '0.05 (energy: 0.03, update: 0.02)'
   nonbonded: '31.94 (energy: 26.5, update: 5.44)'
-  externalpressure: '0.05 (energy: 0.03, update: 0.02)'
+  external_pressure: '0.05 (energy: 0.03, update: 0.02)'
   ewald_reciprocal: '67.97 (energy: 0.03, update: 67.94)'
 propagate:
   repeat: 1000
@@ -61,7 +61,7 @@ propagate:
         acceptance_ratio: 0.4236875
     - !RotateMolecule
       molecule: water
-      max_displacement: 0.4
+      max_angle: 0.4
       weight: 1.0
       repeat: 64
       statistics:
@@ -97,7 +97,7 @@ propagate:
         acceptance_ratio: 0.6924
   criterion: MetropolisHastings
 analysis:
-- collectivevariable:
+- collective_variable:
     property: Volume
     num_samples: 300
     mean: 3917.2455445965948
