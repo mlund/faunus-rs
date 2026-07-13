@@ -191,16 +191,22 @@ fn overlap_ratio_offsets(results: &[WindowResult], kt: f64) -> Result<Vec<f64>> 
     Ok(offsets)
 }
 
-/// PMF point: bin center, free energy, and standard error.
+/// PMF point: bin center, free energy, sampling error, and inter-window spread.
 struct PmfPoint {
     cv: f64,
     f: f64,
     stderr: f64,
+    spread: f64,
 }
 
 /// Build fine-grained PMF from per-window histograms and overlap-ratio offsets.
 /// Within each window: F(r) = −kT ln ρ(r) + C_i.
-/// Error bars from weighted variance across contributing windows.
+///
+/// Each contributing window carries the Poisson counting error σ_j = kT/√n_j, so its
+/// inverse-variance weight is ∝ n_j — the count weighting used for the mean. The error of that
+/// weighted mean is therefore kT/√(Σ_j n_j), shrinking monotonically with sampling. The spread of
+/// the windows about the mean is reported separately: it diagnoses stitching quality and vanishes
+/// when the windows agree, so it must not be mistaken for an error bar (issue #76).
 fn build_pmf(results: &[WindowResult], kt: f64, bin_width: f64) -> Result<Vec<PmfPoint>> {
     if results.is_empty() {
         return Ok(Vec::new());
@@ -237,7 +243,7 @@ fn build_pmf(results: &[WindowResult], kt: f64, bin_width: f64) -> Result<Vec<Pm
         }
     }
 
-    // Weighted mean and standard error per bin
+    // Weighted mean, sampling error, and inter-window spread per bin
     let mut pmf: Vec<PmfPoint> = (0..n_bins)
         .filter(|i| !bin_entries[*i].is_empty())
         .map(|i| {
@@ -246,24 +252,28 @@ fn build_pmf(results: &[WindowResult], kt: f64, bin_width: f64) -> Result<Vec<Pm
             let w_total: f64 = entries.iter().map(|&(_, w)| w).sum();
             let mean = entries.iter().map(|&(f, w)| f * w).sum::<f64>() / w_total;
 
-            // Weighted standard error from inter-window variance
-            let stderr = if entries.len() > 1 {
-                let var = entries
+            // Poisson counting error of the count-weighted mean: kT/√(Σ n_j)
+            let stderr = kt / w_total.sqrt();
+
+            // Weighted spread of the contributing windows about the mean. A lone window has
+            // nothing to disagree with; short-circuit it so round-off in `mean` cannot leak a
+            // spurious ~1e-16 spread into the output.
+            let spread = if entries.len() > 1 {
+                (entries
                     .iter()
                     .map(|&(f, w)| w * (f - mean).powi(2))
                     .sum::<f64>()
-                    / w_total;
-                (var / entries.len() as f64).sqrt()
+                    / w_total)
+                    .sqrt()
             } else {
-                // Single window: estimate from Poisson counting error
-                // σ(−kT ln ρ) ≈ kT / √N
-                let n = entries[0].1;
-                kt / n.sqrt()
+                0.0
             };
+
             PmfPoint {
                 cv,
                 f: mean,
                 stderr,
+                spread,
             }
         })
         .collect();
@@ -686,15 +696,35 @@ pub fn run(
     let pmf = build_pmf(&all_results, rt, config.windows.bin_width)?;
 
     // Write PMF output
-    let mut writer = ColumnWriter::open(output, &["cv", "pmf_kT", "stderr_kT"])?;
+    let mut writer = ColumnWriter::open(output, &["cv", "pmf_kT", "stderr_kT", "spread_kT"])?;
     for p in &pmf {
+        // Scientific notation for the error columns: fixed-point truncates a small but finite
+        // error to a literal zero, which breaks 1/σ-weighted fits downstream (issue #76)
         writer.write_row(&[
             &format!("{:.4}", p.cv),
             &format!("{:.6}", p.f / rt),
-            &format!("{:.6}", p.stderr / rt),
+            &format!("{:.6e}", p.stderr / rt),
+            &format!("{:.6e}", p.spread / rt),
         ])?;
     }
     log::info!("Wrote PMF ({} bins) to {}", pmf.len(), output.display());
+
+    // The error bars measure sampling only, so a broken stitch no longer widens them (issue #76).
+    // Surface it here instead — otherwise poor overlap is visible only to whoever opens the CSV.
+    if let Some(worst) = pmf
+        .iter()
+        .max_by(|a, b| a.spread.total_cmp(&b.spread))
+        .filter(|p| p.spread > rt)
+    {
+        log::warn!(
+            "Windows overlapping cv={:.2} disagree by {:.1} RT — more than thermal energy. \
+             The stitched PMF is unreliable there; increase window overlap or sampling. \
+             See the 'spread_kT' column of {}.",
+            worst.cv,
+            worst.spread / rt,
+            output.display()
+        );
+    }
 
     Ok(())
 }
@@ -833,6 +863,76 @@ mod tests {
         ];
         let err = overlap_ratio_offsets(&results, 1.0).unwrap_err();
         assert!(err.to_string().contains("no samples"), "{err}");
+    }
+
+    /// Repeat `value` `count` times — builds histograms with exact per-bin counts.
+    fn repeat(value: f64, count: usize) -> Vec<f64> {
+        vec![value; count]
+    }
+
+    #[test]
+    fn build_pmf_stderr_is_poisson_over_summed_counts() {
+        let kt = 2.0;
+        // Bin [8,9) is covered by both windows with 40 and 60 counts; bin [2,3) by one with 5.
+        let mut samples_a = repeat(8.5, 40);
+        samples_a.extend(repeat(2.5, 5));
+        let mut samples_b = repeat(8.5, 60);
+        samples_b.extend(repeat(15.5, 5));
+        let results = vec![
+            window_result(0.0, 10.0, 1.0, &samples_a),
+            window_result(8.0, 18.0, 1.0, &samples_b),
+        ];
+        let pmf = build_pmf(&results, kt, 1.0).unwrap();
+        let at = |cv: f64| pmf.iter().find(|p| (p.cv - cv).abs() < 1e-9).unwrap();
+
+        // Two windows: kT/√(40 + 60)
+        assert!((at(8.5).stderr - kt / 100.0_f64.sqrt()).abs() < 1e-12);
+        // Single window: kT/√5, unchanged from the pre-#76 isolated-bin estimate
+        assert!((at(2.5).stderr - kt / 5.0_f64.sqrt()).abs() < 1e-12);
+    }
+
+    #[test]
+    fn build_pmf_stderr_survives_perfect_window_agreement() {
+        // The issue-#76 scenario: two windows whose aligned free energies coincide in the overlap.
+        // The spread vanishes there, but the error bar must not.
+        let n = 10000;
+        let samples_a: Vec<f64> = (0..n).map(|i| i as f64 / n as f64 * 10.0).collect();
+        let samples_b: Vec<f64> = (0..n).map(|i| 8.0 + i as f64 / n as f64 * 10.0).collect();
+        let results = vec![
+            window_result(0.0, 10.0, 1.0, &samples_a),
+            window_result(8.0, 18.0, 1.0, &samples_b),
+        ];
+        let pmf = build_pmf(&results, 1.0, 1.0).unwrap();
+        let overlap = pmf.iter().find(|p| (p.cv - 8.5).abs() < 1e-9).unwrap();
+
+        assert!(overlap.spread < 1e-9, "spread={}", overlap.spread);
+        assert!(overlap.stderr > 0.0);
+        assert!(pmf.iter().all(|p| p.stderr > 0.0));
+        // More counts must mean a smaller error: the two-window bin beats a one-window bin
+        let single = pmf.iter().find(|p| (p.cv - 4.5).abs() < 1e-9).unwrap();
+        assert!(overlap.stderr < single.stderr);
+    }
+
+    #[test]
+    fn build_pmf_spread_flags_disagreeing_windows() {
+        // Window B's density profile differs from A's across the overlap, so the two stitched
+        // estimates disagree bin-by-bin even though their overlap fractions align on average.
+        let mut samples_a = repeat(8.5, 50);
+        samples_a.extend(repeat(9.5, 50));
+        samples_a.extend(repeat(2.5, 100));
+        let mut samples_b = repeat(8.5, 20);
+        samples_b.extend(repeat(9.5, 80));
+        samples_b.extend(repeat(15.5, 100));
+        let results = vec![
+            window_result(0.0, 10.0, 1.0, &samples_a),
+            window_result(8.0, 18.0, 1.0, &samples_b),
+        ];
+        let pmf = build_pmf(&results, 1.0, 1.0).unwrap();
+        let at = |cv: f64| pmf.iter().find(|p| (p.cv - cv).abs() < 1e-9).unwrap();
+
+        assert!(at(8.5).spread > 0.1, "spread={}", at(8.5).spread);
+        // A bin only one window reaches has nothing to disagree with
+        assert_eq!(at(2.5).spread, 0.0);
     }
 
     #[test]
