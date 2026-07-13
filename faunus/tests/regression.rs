@@ -66,6 +66,7 @@ regression_test!(molswap_phytate);
 regression_test!(preferential_ideal_gas);
 regression_test!(widom_1_1_electrolyte);
 regression_test!(reservoir_caoh2);
+regression_test!(reservoir_caoh2_coupled);
 regression_test!(gcmc_pair_atomic);
 regression_test!(cluster_ideal);
 regression_test!(cluster_lj);

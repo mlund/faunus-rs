@@ -1,0 +1,83 @@
+# Coupled precipitation from three implicit reservoirs — the C++ Faunus
+# `calciumhydroxide` example (examples/calciumhydroxide/calciumhydroxide.yml).
+#
+# Mixing NaOH and CaCl₂ precipitates Ca(OH)₂:
+#   CaCl₂(s)   ⇌ Ca²⁺ + 2 Cl⁻      pK = -3.083
+#   Ca(OH)₂(s) ⇌ Ca²⁺ + 2 OH⁻      pK =  5.19   (Ksp)
+#   NaOH(s)    ⇌ Na⁺  + OH⁻        pK = -2.03
+#
+# The soluble reservoirs dissolve completely and the insoluble one grows from nothing,
+# so this exercises reservoir *depletion* (the forward reaction becomes infeasible once a
+# reservoir empties) and a reservoir filling from zero — neither of which the single-
+# reservoir `reservoir_caoh2` fixture covers. Coefficient-2 products on pooled `atomic`
+# ions exercise the coalesced multi-slot deletion.
+#
+# C++ reference (200k moves): Ca(OH)₂ = 58.81, CaCl₂ = 0, NaOH = 0;
+#   [Ca²⁺] = 0.02099 M, [Cl⁻] = 0.04920 M, [Na⁺] = 0.02460 M, [OH⁻] = 0.01762 M
+
+atoms:
+  - {name: cacl₂, mass: 0.0, reservoir: true}
+  - {name: ca(oh)₂, mass: 0.0, reservoir: true}
+  - {name: naoh, mass: 0.0, reservoir: true}
+  - {name: ca²⁺, mass: 40.0, charge: 2.0}
+  - {name: cl⁻, mass: 35.5, charge: -1.0}
+  - {name: na⁺, mass: 23.0, charge: 1.0}
+  - {name: oh⁻, mass: 17.0, charge: -1.0}
+
+molecules:
+  - name: CaCl₂
+    atoms: [cacl₂]
+  - name: Ca(OH)₂
+    atoms: [ca(oh)₂]
+  - name: NaOH
+    atoms: [naoh]
+  - name: Ca²⁺
+    atoms: [ca²⁺]
+    atomic: true
+  - name: Cl⁻
+    atoms: [cl⁻]
+    atomic: true
+  - name: Na⁺
+    atoms: [na⁺]
+    atomic: true
+  - name: OH⁻
+    atoms: [oh⁻]
+    atomic: true
+
+system:
+  cell: !Cuboid [300.0, 300.0, 300.0]
+  medium:
+    permittivity: !Vacuum
+    temperature: 298.15
+  energy: {}
+  blocks:
+    - {molecule: CaCl₂, N: 400, active: 400}
+    - {molecule: NaOH, N: 400, active: 400}
+    - {molecule: Ca(OH)₂, N: 400, active: 0}   # insoluble product; grows from nothing
+    - {molecule: Ca²⁺, N: 800, active: 0, insert: !RandomAtomPos {}}
+    - {molecule: Cl⁻, N: 1600, active: 0, insert: !RandomAtomPos {}}
+    - {molecule: Na⁺, N: 800, active: 0, insert: !RandomAtomPos {}}
+    - {molecule: OH⁻, N: 1600, active: 0, insert: !RandomAtomPos {}}
+
+analysis:
+  - !CollectiveVariable {property: molarity, selection: "molecule 'Ca²⁺'", frequency: !Every 10}
+  - !CollectiveVariable {property: molarity, selection: "molecule 'Cl⁻'", frequency: !Every 10}
+  - !CollectiveVariable {property: molarity, selection: "molecule 'Na⁺'", frequency: !Every 10}
+  - !CollectiveVariable {property: molarity, selection: "molecule 'OH⁻'", frequency: !Every 10}
+  - !CollectiveVariable {property: count, selection: "molecule 'Ca(OH)₂'", frequency: !Every 10}
+  - !CollectiveVariable {property: count, selection: "molecule 'CaCl₂'", frequency: !Every 10}
+  - !CollectiveVariable {property: count, selection: "molecule 'NaOH'", frequency: !Every 10}
+
+propagate:
+  seed: !Fixed 42
+  criterion: MetropolisHastings
+  repeat: 30000
+  collections:
+    - !Deterministic
+      moves:
+        - !SpeciationMove
+          repeat: 10
+          reactions:
+            - ["CaCl₂ = Ca²⁺ + Cl⁻ + Cl⁻", !pK -3.083]
+            - ["Ca(OH)₂ = Ca²⁺ + OH⁻ + OH⁻", !pK 5.19]
+            - ["NaOH = Na⁺ + OH⁻", !pK -2.03]
