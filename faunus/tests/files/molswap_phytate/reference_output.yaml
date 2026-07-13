@@ -1,0 +1,300 @@
+version:
+  faunus: 3.0.0-beta.1
+  git_revision: v3.0.0-beta.1-28-gd763387-dirty
+medium:
+  permittivity: Vacuum
+  salt: null
+  temperature: 298.15
+blocks:
+- molecule: H₁₂PA
+  N: 20
+  active: 0
+  insert: !RandomCOM
+    rotate: false
+    directions: xyz
+    offset: null
+    min_distance: null
+- molecule: H₁₁PA¹⁻
+  N: 20
+  active: 0
+  insert: !RandomCOM
+    rotate: false
+    directions: xyz
+    offset: null
+    min_distance: null
+- molecule: H₁₀PA²⁻
+  N: 20
+  active: 0
+  insert: !RandomCOM
+    rotate: false
+    directions: xyz
+    offset: null
+    min_distance: null
+- molecule: H₉PA³⁻
+  N: 20
+  active: 0
+  insert: !RandomCOM
+    rotate: false
+    directions: xyz
+    offset: null
+    min_distance: null
+- molecule: H₈PA⁴⁻
+  N: 20
+  active: 0
+  insert: !RandomCOM
+    rotate: false
+    directions: xyz
+    offset: null
+    min_distance: null
+- molecule: H₇PA⁵⁻
+  N: 20
+  active: 0
+  insert: !RandomCOM
+    rotate: false
+    directions: xyz
+    offset: null
+    min_distance: null
+- molecule: H₆PA⁶⁻
+  N: 20
+  active: 0
+  insert: !RandomCOM
+    rotate: false
+    directions: xyz
+    offset: null
+    min_distance: null
+- molecule: H₅PA⁷⁻
+  N: 20
+  active: 0
+  insert: !RandomCOM
+    rotate: false
+    directions: xyz
+    offset: null
+    min_distance: null
+- molecule: H₄PA⁸⁻
+  N: 20
+  active: 0
+  insert: !RandomCOM
+    rotate: false
+    directions: xyz
+    offset: null
+    min_distance: null
+- molecule: H₃PA⁹⁻
+  N: 20
+  active: null
+  insert: !RandomCOM
+    rotate: false
+    directions: xyz
+    offset: null
+    min_distance: null
+- molecule: H₂PA¹⁰⁻
+  N: 20
+  active: 0
+  insert: !RandomCOM
+    rotate: false
+    directions: xyz
+    offset: null
+    min_distance: null
+- molecule: HPA¹¹⁻
+  N: 20
+  active: 0
+  insert: !RandomCOM
+    rotate: false
+    directions: xyz
+    offset: null
+    min_distance: null
+- molecule: PA¹²⁻
+  N: 20
+  active: 0
+  insert: !RandomCOM
+    rotate: false
+    directions: xyz
+    offset: null
+    min_distance: null
+cell: !Cuboid
+- 100.0
+- 100.0
+- 100.0
+energy_change:
+  drift: 0.0
+  final: 0.0
+  initial: 0.0
+energy_timers:
+  cell_overlap: '100 (energy: 67.06, update: 32.94)'
+propagate:
+  repeat: 30000
+  seed: !Fixed 42
+  collections:
+  - !Deterministic
+    repeat: 1
+    elapsed_seconds: 1.062951215
+    moves:
+    - !SpeciationMove
+      reactions:
+      - - H₁₂PA = H₁₁PA¹⁻ + ~H+
+        - !pK 1.1
+      - - H₁₁PA¹⁻ = H₁₀PA²⁻ + ~H+
+        - !pK 1.5
+      - - H₁₀PA²⁻ = H₉PA³⁻ + ~H+
+        - !pK 1.7
+      - - H₉PA³⁻ = H₈PA⁴⁻ + ~H+
+        - !pK 2.1
+      - - H₈PA⁴⁻ = H₇PA⁵⁻ + ~H+
+        - !pK 2.5
+      - - H₇PA⁵⁻ = H₆PA⁶⁻ + ~H+
+        - !pK 2.9
+      - - H₆PA⁶⁻ = H₅PA⁷⁻ + ~H+
+        - !pK 5.72
+      - - H₅PA⁷⁻ = H₄PA⁸⁻ + ~H+
+        - !pK 6.28
+      - - H₄PA⁸⁻ = H₃PA⁹⁻ + ~H+
+        - !pK 6.81
+      - - H₃PA⁹⁻ = H₂PA¹⁰⁻ + ~H+
+        - !pK 7.6
+      - - H₂PA¹⁰⁻ = HPA¹¹⁻ + ~H+
+        - !pK 9.94
+      - - HPA¹¹⁻ = PA¹²⁻ + ~H+
+        - !pK 11.84
+      per_reaction:
+      - reaction: H₁₂PA = H₁₁PA¹⁻ + ~H+
+        accepted: 0
+        trials: 0
+        acceptance_ratio: NaN
+      - reaction: H₁₁PA¹⁻ = H₁₀PA²⁻ + ~H+
+        accepted: 0
+        trials: 0
+        acceptance_ratio: NaN
+      - reaction: H₁₀PA²⁻ = H₉PA³⁻ + ~H+
+        accepted: 0
+        trials: 0
+        acceptance_ratio: NaN
+      - reaction: H₉PA³⁻ = H₈PA⁴⁻ + ~H+
+        accepted: 0
+        trials: 0
+        acceptance_ratio: NaN
+      - reaction: H₈PA⁴⁻ = H₇PA⁵⁻ + ~H+
+        accepted: 0
+        trials: 0
+        acceptance_ratio: NaN
+      - reaction: H₇PA⁵⁻ = H₆PA⁶⁻ + ~H+
+        accepted: 0
+        trials: 820
+        acceptance_ratio: '0.0000'
+      - reaction: H₆PA⁶⁻ = H₅PA⁷⁻ + ~H+
+        accepted: 1636
+        trials: 9714
+        acceptance_ratio: '0.1684'
+      - reaction: H₅PA⁷⁻ = H₄PA⁸⁻ + ~H+
+        accepted: 15600
+        trials: 21692
+        acceptance_ratio: '0.7192'
+      - reaction: H₄PA⁸⁻ = H₃PA⁹⁻ + ~H+
+        accepted: 20048
+        trials: 24975
+        acceptance_ratio: '0.8027'
+      - reaction: H₃PA⁹⁻ = H₂PA¹⁰⁻ + ~H+
+        accepted: 18226
+        trials: 24351
+        acceptance_ratio: '0.7485'
+      - reaction: H₂PA¹⁰⁻ = HPA¹¹⁻ + ~H+
+        accepted: 60
+        trials: 11630
+        acceptance_ratio: '0.0052'
+      - reaction: HPA¹¹⁻ = PA¹²⁻ + ~H+
+        accepted: 0
+        trials: 40
+        acceptance_ratio: '0.0000'
+      weight: 1.0
+      repeat: 10
+      statistics:
+        num_trials: 300000
+        num_accepted: 55570
+        mean_square_displacement:
+          avg: 0.0
+          n: 244430
+        timer:
+          accumulated:
+            secs: 0
+            nanos: 0
+        info: {}
+        energy_change_sum: 0.0
+        acceptance_ratio: 0.18523333333333333
+  criterion: MetropolisHastings
+analysis:
+- collective_variable:
+    property: Count
+    description: 'selection: molecule ''H₁₂PA'''
+    num_samples: 3000
+    mean: 0.0
+    rms: 0.0
+- collective_variable:
+    property: Count
+    description: 'selection: molecule ''H₁₁PA¹⁻'''
+    num_samples: 3000
+    mean: 0.0
+    rms: 0.0
+- collective_variable:
+    property: Count
+    description: 'selection: molecule ''H₁₀PA²⁻'''
+    num_samples: 3000
+    mean: 0.0
+    rms: 0.0
+- collective_variable:
+    property: Count
+    description: 'selection: molecule ''H₉PA³⁻'''
+    num_samples: 3000
+    mean: 0.0
+    rms: 0.0
+- collective_variable:
+    property: Count
+    description: 'selection: molecule ''H₈PA⁴⁻'''
+    num_samples: 3000
+    mean: 0.0
+    rms: 0.0
+- collective_variable:
+    property: Count
+    description: 'selection: molecule ''H₇PA⁵⁻'''
+    num_samples: 3000
+    mean: 0.0
+    rms: 0.0
+- collective_variable:
+    property: Count
+    description: 'selection: molecule ''H₆PA⁶⁻'''
+    num_samples: 3000
+    mean: 0.07200000000000016
+    rms: 0.27928480087537916
+- collective_variable:
+    property: Count
+    description: 'selection: molecule ''H₅PA⁷⁻'''
+    num_samples: 3000
+    mean: 1.2159999999999997
+    rms: 1.6027060449959847
+- collective_variable:
+    property: Count
+    description: 'selection: molecule ''H₄PA⁸⁻'''
+    num_samples: 3000
+    mean: 6.465333333333348
+    rms: 6.801764476957434
+- collective_variable:
+    property: Count
+    description: 'selection: molecule ''H₃PA⁹⁻'''
+    num_samples: 3000
+    mean: 9.797999999999986
+    rms: 10.056540160512464
+- collective_variable:
+    property: Count
+    description: 'selection: molecule ''H₂PA¹⁰⁻'''
+    num_samples: 3000
+    mean: 2.444666666666672
+    rms: 2.8191015117113682
+- collective_variable:
+    property: Count
+    description: 'selection: molecule ''HPA¹¹⁻'''
+    num_samples: 3000
+    mean: 0.004000000000000007
+    rms: 0.06324555320336764
+- collective_variable:
+    property: Count
+    description: 'selection: molecule ''PA¹²⁻'''
+    num_samples: 3000
+    mean: 0.0
+    rms: 0.0

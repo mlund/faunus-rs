@@ -2383,6 +2383,193 @@ propagate:
         );
     }
 
+    // --- Polyprotic titration by molecular swap: phytate (IP6), 13 states ---
+
+    /// Stepwise dissociation constants of phytic acid (IP6), 12 protons.
+    /// De Stefano et al., <https://doi.org/10.1021/je020124m>.
+    const PHYTATE_PKA: [f64; 12] = [
+        1.1, 1.5, 1.7, 2.1, 2.5, 2.9, 5.72, 6.28, 6.81, 7.60, 9.94, 11.84,
+    ];
+
+    /// Mole fraction of the state retaining `m` protons, for a polyprotic acid with stepwise
+    /// `pk`. Exact solution: de Levie, *General Expressions for Acid–Base Titrations of
+    /// Arbitrary Mixtures*, Anal. Chem. 68, 585 (1996),
+    /// <https://doi.org/10.1021/ac950430l>.
+    ///
+    /// χ_m = [H⁺]^m · Π_{j≤n−m} K_j ⁄ ( [H⁺]ⁿ + Σ_{i≤n} [H⁺]^{n−i} · Π_{j≤i} K_j )
+    fn polyprotic_fraction(m: usize, ph: f64, pk: &[f64]) -> f64 {
+        let n = pk.len();
+        let h = 10.0_f64.powf(-ph);
+        let k = |i: usize| 10.0_f64.powf(-pk[i]);
+        let prod = |upto: usize| (0..upto).map(k).product::<f64>();
+
+        let numerator = h.powi(m as i32) * prod(n - m);
+        let denominator = h.powi(n as i32)
+            + (0..n)
+                .map(|i| h.powi((n - i - 1) as i32) * prod(i + 1))
+                .sum::<f64>();
+        numerator / denominator
+    }
+
+    /// Mean charge ⟨Z⟩ = −Σ_m (n − m)·χ_m.
+    fn polyprotic_mean_charge(ph: f64, pk: &[f64]) -> f64 {
+        let n = pk.len();
+        -(0..=n)
+            .map(|m| (n - m) as f64 * polyprotic_fraction(m, ph, pk))
+            .sum::<f64>()
+    }
+
+    /// Thirteen protonation states of phytate, each a 7-atom molecule (an inositol centre
+    /// bead plus six phosphates) exchanged as a whole molecule kind.
+    fn phytate_yaml(ph: f64, n_molecules: usize, repeat: usize) -> String {
+        // Sites carrying the k-th extra negative charge, maximising the minimum separation.
+        const MAXSEP: [&[usize]; 7] = [
+            &[],
+            &[0],
+            &[0, 3],
+            &[0, 2, 4],
+            &[0, 1, 3, 5],
+            &[0, 1, 2, 4, 5],
+            &[0, 1, 2, 3, 4, 5],
+        ];
+        const SITES: [[f64; 3]; 6] = [
+            [4.5, 0.0, 1.5],
+            [2.25, 3.897, -0.5],
+            [-2.25, 3.897, -0.5],
+            [-4.5, 0.0, -0.5],
+            [-2.25, -3.897, -0.5],
+            [2.25, -3.897, -0.5],
+        ];
+        let n_states = PHYTATE_PKA.len() + 1;
+        // Start from the state closest to neutral at this pH so equilibration is short.
+        let start = (0..n_states)
+            .max_by(|a, b| {
+                polyprotic_fraction(n_states - 1 - a, ph, &PHYTATE_PKA)
+                    .partial_cmp(&polyprotic_fraction(n_states - 1 - b, ph, &PHYTATE_PKA))
+                    .unwrap()
+            })
+            .unwrap();
+
+        let site_kind = |state: usize, j: usize| -> &'static str {
+            if state <= 6 {
+                if MAXSEP[state].contains(&j) {
+                    "PH1"
+                } else {
+                    "PH0"
+                }
+            } else if MAXSEP[state - 6].contains(&j) {
+                "PH2"
+            } else {
+                "PH1"
+            }
+        };
+
+        let mut yaml = format!(
+            "atoms:\n  - {{name: INO, mass: 180.0, charge: 0.0, sigma: 6.2}}\n\
+             \x20 - {{name: PH0, mass: 95.0, charge: 0.0, sigma: 5.8}}\n\
+             \x20 - {{name: PH1, mass: 95.0, charge: -1.0, sigma: 5.8}}\n\
+             \x20 - {{name: PH2, mass: 95.0, charge: -2.0, sigma: 5.8}}\n\
+             \x20 - {{name: H+, mass: 1.0, sigma: 1.0, activity: {:.6e}}}\nmolecules:\n",
+            10.0_f64.powf(-ph)
+        );
+        for state in 0..n_states {
+            let sites = (0..6)
+                .map(|j| {
+                    let [x, y, z] = SITES[j];
+                    format!("{{{}: [{x}, {y}, {z}]}}", site_kind(state, j))
+                })
+                .collect::<Vec<_>>()
+                .join(", ");
+            yaml += &format!(
+                "  - name: \"PA{state}\"\n    from_structure: [{{INO: [0.0, 0.0, 0.0]}}, {sites}]\n"
+            );
+        }
+        yaml += "system:\n  cell: !Cuboid [100.0, 100.0, 100.0]\n  \
+                 medium: {permittivity: !Vacuum, temperature: 298.15}\n  energy: {}\n  blocks:\n";
+        for state in 0..n_states {
+            let active = if state == start { n_molecules } else { 0 };
+            yaml += &format!(
+                "    - {{molecule: \"PA{state}\", N: {n_molecules}, active: {active}, \
+                 insert: !RandomCOM {{}}}}\n"
+            );
+        }
+        yaml += &format!(
+            "propagate:\n  seed: !Fixed 42\n  criterion: MetropolisHastings\n  repeat: {repeat}\n  \
+             collections:\n    - !Deterministic\n      moves:\n        - !SpeciationMove\n          \
+             repeat: 10\n          reactions:\n"
+        );
+        for (i, pk) in PHYTATE_PKA.iter().enumerate() {
+            yaml += &format!("            - [\"PA{i} = PA{} + ~H+\", !pK {pk}]\n", i + 1);
+        }
+        yaml
+    }
+
+    /// Phytate (IP6) titrates through 13 protonation states, swapped as whole 7-atom
+    /// molecules. Ideal, so the sampled mean charge must reproduce the exact polyprotic
+    /// solution across the whole titration curve — a 13-state, polyatomic exercise of the
+    /// molecular-swap path that no other test covers.
+    #[test]
+    #[ignore = "statistical; run explicitly (cargo test --release -- --ignored)"]
+    fn phytate_mean_charge_matches_exact_polyprotic_solution() {
+        use crate::analysis::AnalysisCollection;
+        use crate::montecarlo::MarkovChain;
+        use crate::propagate::Propagate;
+
+        let n_states = PHYTATE_PKA.len() + 1;
+        let (n_molecules, repeat, equilibrate) = (20, 20_000, 4_000);
+
+        for ph in [2.0, 5.0, 7.0, 9.0, 11.0] {
+            let tmp = tempfile::NamedTempFile::new().unwrap();
+            std::fs::write(tmp.path(), phytate_yaml(ph, n_molecules, repeat).as_bytes()).unwrap();
+            let path = tmp.path();
+
+            let mut rng = rand::thread_rng();
+            let context = Backend::new(path, None, &mut rng).unwrap();
+            let propagate = Propagate::from_file(path, &context, THERMAL_ENERGY).unwrap();
+            let mut mc = MarkovChain::new(
+                context,
+                propagate,
+                THERMAL_ENERGY,
+                AnalysisCollection::default(),
+            )
+            .unwrap();
+
+            let (mut charge_sum, mut samples) = (0.0_f64, 0usize);
+            for step in 0..repeat {
+                mc.propagate
+                    .propagate(
+                        &mut mc.context,
+                        mc.thermal_energy,
+                        &mut mc.step,
+                        &mut mc.analyses,
+                    )
+                    .unwrap();
+                if step < equilibrate {
+                    continue;
+                }
+                let mut total = 0usize;
+                let mut charge = 0.0;
+                for state in 0..n_states {
+                    let n = mc
+                        .context
+                        .count_molecules(MoleculeId::new(state), GroupSize::Full);
+                    total += n;
+                    charge -= (state * n) as f64;
+                }
+                assert_eq!(total, n_molecules, "molecules not conserved at pH {ph}");
+                charge_sum += charge / total as f64;
+                samples += 1;
+            }
+
+            let observed = charge_sum / samples as f64;
+            let expected = polyprotic_mean_charge(ph, &PHYTATE_PKA);
+            assert!(
+                (observed - expected).abs() < 0.15,
+                "pH {ph}: ⟨Z⟩ = {observed:.3} e, exact solution gives {expected:.3} e"
+            );
+        }
+    }
+
     // --- Grand-canonical ideal gas: ⟨N⟩ = K·c₀·V ---
 
     /// Ideal gas in a 10 Å cube with a single insertion/deletion reaction `= particle`.
