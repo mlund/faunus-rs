@@ -497,27 +497,30 @@ impl WidomRotation {
         }
     }
 
-    /// Mean torque about each lab axis via a small virtual rotation, analogous to
-    /// the virtual-translate force. Positions-only, so the quaternion is safe.
+    /// Mean torque about each lab axis via a small virtual rotation, analogous to the
+    /// virtual-translate force.
+    ///
+    /// Through the group, for the same reason as [`scan_energies`](Self::scan_energies): rotating
+    /// the coordinates alone leaves an orientation-dependent potential reading an unchanged
+    /// quaternion, so every axis would report a torque of exactly zero.
     fn accumulate_torque<T: PerturbContext + WithHamiltonian>(
         &mut self,
         trial: &mut T,
         gi: usize,
-        indices: &[usize],
-        com: &Point,
         reference_energy: f64,
-    ) {
+    ) -> anyhow::Result<()> {
         let Some(probe) = self.torque.as_mut() else {
-            return;
+            return Ok(());
         };
         let axes = [Vector3::x_axis(), Vector3::y_axis(), Vector3::z_axis()];
         for (accumulator, axis) in probe.axes.iter_mut().zip(axes) {
             let rotation = UnitQuaternion::from_axis_angle(&axis, probe.dtheta);
-            trial.rotate_particles(indices, &rotation, Some(-com));
+            trial.rotate_group(gi, &rotation)?;
             let energy = group_energy_kt(trial, gi, self.thermal_energy);
-            trial.rotate_particles(indices, &rotation.inverse(), Some(-com));
+            trial.rotate_group(gi, &rotation.inverse())?;
             accumulator.collect(energy - reference_energy, 1.0);
         }
+        Ok(())
     }
 }
 
@@ -550,7 +553,7 @@ impl<T: PerturbContext> Analyze<T> for WidomRotation {
             let reference_energy = group_energy_kt(&trial, gi, self.thermal_energy);
             let energies = self.scan_energies(&mut trial, gi)?;
             self.accumulate(&energies, &references);
-            self.accumulate_torque(&mut trial, gi, &indices, &com, reference_energy);
+            self.accumulate_torque(&mut trial, gi, reference_energy)?;
             // Each molecule-scan is one independent block.
             self.num_blocks += 1;
         }

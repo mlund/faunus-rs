@@ -207,6 +207,40 @@ pub(crate) fn best_fit_rotation(reference: &[Point], current: &[Point]) -> Optio
     ))
 }
 
+/// Relative spread below which a molecule counts as linear and its axial rotation as free.
+const COLLINEARITY_TOL: f64 = 1e-9;
+
+/// The direction a molecule lies along, if it is linear.
+///
+/// A superposition pins a rigid body's rotation only when the molecule spans at least a plane.
+/// A diatomic — or any linear molecule — leaves the rotation *about its own axis* completely
+/// undetermined: every axial angle reproduces the coordinates exactly, so the fit is free to
+/// return any of them.
+fn collinear_axis(points: &[Point]) -> Option<Point> {
+    let n = points.len() as f64;
+    let com: Point = points.iter().sum::<Point>() / n;
+    let covariance = points.iter().fold(Matrix3::zeros(), |acc, p| {
+        let d = p - com;
+        acc + d * d.transpose()
+    });
+    let eigen = SymmetricEigen::new(covariance);
+    let mut order = [0, 1, 2];
+    order.sort_by(|&a, &b| eigen.eigenvalues[b].total_cmp(&eigen.eigenvalues[a]));
+    let (largest, second) = (eigen.eigenvalues[order[0]], eigen.eigenvalues[order[1]]);
+    (second <= COLLINEARITY_TOL * largest).then(|| eigen.eigenvectors.column(order[0]).normalize())
+}
+
+/// The component of `rotation` about `axis` (the twist of a swing-twist decomposition).
+fn twist_about(rotation: &UnitQuaternion, axis: &Point) -> UnitQuaternion {
+    let projected = axis * rotation.vector().dot(axis);
+    let twist = nalgebra::Quaternion::new(rotation.w, projected.x, projected.y, projected.z);
+    if twist.norm() < f64::EPSILON {
+        UnitQuaternion::identity()
+    } else {
+        UnitQuaternion::new_normalize(twist)
+    }
+}
+
 /// Rotation carrying `reference` onto `current`, but only when `current` really is a rigid
 /// image of it — the residual of the fit is below `tolerance`.
 ///
@@ -215,10 +249,16 @@ pub(crate) fn best_fit_rotation(reference: &[Point], current: &[Point]) -> Optio
 /// actually changed, where a best fit is just the closest lie and the stored orientation is the
 /// only record of the rotations that were applied. Returning `None` there keeps a fit from
 /// silently overwriting it.
+///
+/// A *linear* molecule is recoverable only up to its axial spin, which no coordinate can
+/// witness. The free component is resolved against `prior` — the orientation the group already
+/// holds — rather than left to whatever the superposition happens to produce, which would
+/// otherwise re-spin a diatomic by an arbitrary angle every time its coordinates were revisited.
 pub(crate) fn rigid_body_rotation(
     reference: &[Point],
     current: &[Point],
     tolerance: f64,
+    prior: &UnitQuaternion,
 ) -> Option<UnitQuaternion> {
     let rotation = best_fit_rotation(reference, current)?;
     let n = reference.len() as f64;
@@ -231,7 +271,18 @@ pub(crate) fn rigid_body_rotation(
         .sum::<f64>()
         / n)
         .sqrt();
-    (residual <= tolerance).then_some(rotation)
+    if residual > tolerance {
+        return None;
+    }
+
+    let Some(axis) = collinear_axis(reference) else {
+        return Some(rotation); // the fit is unique
+    };
+    // Keep the axial spin the group already had: it is unobservable, so re-deriving it would
+    // change the stored orientation without anything in the coordinates having moved.
+    let lab_axis = rotation * axis;
+    let delta = prior * rotation.inverse();
+    Some(twist_about(&delta, &lab_axis) * rotation)
 }
 
 /// Place a molecule's template at `com`, keeping its conformation and orientation.
@@ -500,6 +551,69 @@ mod tests {
         let fitted = best_fit_rotation(&reference, &current).unwrap();
         let matrix = fitted.to_rotation_matrix();
         assert_relative_eq!(matrix.matrix().determinant(), 1.0, epsilon = 1e-9);
+    }
+
+    /// A linear molecule's spin about its own axis is unobservable, so it must not be invented.
+    ///
+    /// The superposition of a diatomic is rank-deficient: every axial angle reproduces the
+    /// coordinates exactly, and the raw fit returns an arbitrary one — measured at up to 170°
+    /// from the truth. Left unchecked, restoring a perfectly consistent checkpoint would re-spin
+    /// every dimer in it and report the file as corrupt.
+    #[test]
+    fn a_linear_molecule_keeps_the_axial_spin_it_already_had() {
+        let reference = [Point::new(-1.0, 0.0, 0.0), Point::new(1.0, 0.0, 0.0)];
+        let mut rng = rand::thread_rng();
+
+        for _ in 0..50 {
+            let truth = crate::transform::random_rotation(&mut rng);
+            let current: Vec<Point> = reference.iter().map(|p| truth * p).collect();
+
+            // Told what the group already believes, the fit must return exactly that.
+            let recovered = rigid_body_rotation(&reference, &current, 1e-3, &truth)
+                .expect("a rigidly rotated dimer is a rigid image");
+            assert!(
+                recovered.angle_to(&truth) < 1e-9,
+                "re-spun a dimer by {:.1}° against coordinates that never moved",
+                recovered.angle_to(&truth).to_degrees()
+            );
+
+            // Whatever it returns must still reproduce the coordinates.
+            for (r, c) in reference.iter().zip(&current) {
+                assert_relative_eq!((recovered * r - c).norm(), 0.0, epsilon = 1e-9);
+            }
+        }
+    }
+
+    /// A molecule spanning a plane pins its rotation outright; the prior is irrelevant.
+    #[test]
+    fn a_non_linear_molecule_ignores_the_prior() {
+        let reference = [
+            Point::new(0.0, 0.0, 0.0),
+            Point::new(2.0, 0.0, 0.0),
+            Point::new(0.0, 1.5, 0.0),
+        ];
+        let mut rng = rand::thread_rng();
+        let truth = crate::transform::random_rotation(&mut rng);
+        let current: Vec<Point> = reference.iter().map(|p| truth * p).collect();
+
+        let nonsense = crate::transform::random_rotation(&mut rng);
+        let recovered = rigid_body_rotation(&reference, &current, 1e-3, &nonsense).unwrap();
+        assert!(recovered.angle_to(&truth) < 1e-9);
+    }
+
+    /// A conformation that actually changed has no rigid-body rotation to recover.
+    #[test]
+    fn a_reshaped_molecule_has_no_rigid_body_rotation() {
+        let reference = [
+            Point::new(0.0, 0.0, 0.0),
+            Point::new(2.0, 0.0, 0.0),
+            Point::new(0.0, 1.5, 0.0),
+        ];
+        let mut deformed = reference.to_vec();
+        deformed[2].y += 0.9; // a pivot-scale change, far beyond any rounding
+        assert!(
+            rigid_body_rotation(&reference, &deformed, 1e-3, &UnitQuaternion::identity()).is_none()
+        );
     }
 
     #[test]

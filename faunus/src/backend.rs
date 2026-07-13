@@ -138,9 +138,11 @@ impl Backend {
     /// genuinely changed (a chain after a pivot move), for which no rigid-body rotation exists
     /// and the stored value is the only record of the rotations applied.
     fn refresh_orientation(&mut self, group_index: usize) {
-        /// A rigid image reproduces its reference to numerical precision; a changed conformation
-        /// misses it by ångströms. Nothing lands in between.
-        const RIGID_IMAGE_TOLERANCE: f64 = 1e-6;
+        /// Below this, coordinates *are* the reference conformation, rotated. Loose enough to
+        /// absorb the rounding of a three-decimal structure file, and orders of magnitude tighter
+        /// than any conformational change: a chain that has actually been reshaped misses its
+        /// reference by ångströms, not by thousandths. Nothing real lands in between.
+        const RIGID_IMAGE_TOLERANCE: f64 = 1e-3;
 
         let group = &self.groups[group_index];
         let reference = self
@@ -153,11 +155,46 @@ impl Backend {
             return;
         }
         let gathered = crate::geometry::gather_molecule(&current, &self.cell);
-        if let Some(orientation) =
-            crate::geometry::rigid_body_rotation(&reference, &gathered, RIGID_IMAGE_TOLERANCE)
-        {
+        let prior = *group.quaternion();
+        if let Some(orientation) = crate::geometry::rigid_body_rotation(
+            &reference,
+            &gathered,
+            RIGID_IMAGE_TOLERANCE,
+            &prior,
+        ) {
             self.groups[group_index].set_quaternion(orientation);
         }
+    }
+
+    /// Take on the orientation of the molecule whose coordinates were just written into a group.
+    ///
+    /// The wholesale-write counterpart of [`refresh_orientation`](Self::refresh_orientation),
+    /// which may decline and leave the stored value in place. Declining is right when the group
+    /// still holds the *same* molecule — a chain that has merely been reshaped keeps the only
+    /// record of the rotations applied to it. It is wrong here: the slot now holds a *different*
+    /// molecule, so the orientation it held describes something that is no longer there, and
+    /// keeping it would be inheriting a stranger's frame.
+    ///
+    /// Where the coordinates pin a frame, that frame is taken. Where they only approximate one —
+    /// a flexible molecule, which is no rigid image of its reference conformation — the closest
+    /// rigid frame is taken anyway, as the best available answer. Where there is no reference
+    /// conformation at all, the molecule has no body frame to speak of, and the honest answer is
+    /// the identity.
+    fn adopt_orientation(&mut self, group_index: usize) {
+        let group = &self.groups[group_index];
+        let reference = self
+            .topology_ref()
+            .moleculekind(group.molecule())
+            .reference_positions()
+            .to_vec();
+        let current: Vec<Point> = group.iter_active().map(|i| self.position(i)).collect();
+        let gathered = crate::geometry::gather_molecule(&current, &self.cell);
+
+        let orientation = (reference.len() == current.len())
+            .then(|| crate::geometry::best_fit_rotation(&reference, &gathered))
+            .flatten()
+            .unwrap_or_else(UnitQuaternion::identity);
+        self.groups[group_index].set_quaternion(orientation);
     }
 
     /// Build from raw parts (topology, cell, hamiltonian) for testing.
@@ -521,7 +558,7 @@ impl GroupCollectionMut for Backend {
         let start = group.start();
         self.set_positions(start..start + positions.len(), positions.iter());
         self.update_mass_center(group_index);
-        self.refresh_orientation(group_index);
+        self.adopt_orientation(group_index);
         Ok(())
     }
 
