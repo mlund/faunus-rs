@@ -341,24 +341,26 @@ fn group_energy_kt<T: ObserveContext + WithHamiltonian>(
 }
 
 impl WidomRotation {
-    /// Scan all trial orientations of group `gi` on `trial`, returning the
-    /// per-orientation energies in kT. `trial` is left unchanged (each rotation
-    /// is immediately inverted); the carried quaternion is never touched because
-    /// we rotate positions only, about the invariant center of mass.
+    /// Scan all trial orientations of group `gi` on `trial`, returning the per-orientation
+    /// energies in kT. `trial` is left unchanged — each rotation is immediately inverted, and
+    /// composing the group's orientation both ways restores it exactly.
+    ///
+    /// The rotation goes through the group, not the bare coordinates. An orientation-dependent
+    /// energy — a 6D tabulated potential is a function of the mass center and the quaternion,
+    /// and of nothing else — would otherwise return the same value for every trial orientation,
+    /// making ΔU identically zero and the whole scan vacuous.
     fn scan_energies<T: PerturbContext + WithHamiltonian>(
         &self,
         trial: &mut T,
         gi: usize,
-        indices: &[usize],
-        com: &Point,
-    ) -> Vec<f64> {
+    ) -> anyhow::Result<Vec<f64>> {
         self.quaternions
             .iter()
             .map(|q| {
-                trial.rotate_particles(indices, q, Some(-com));
+                trial.rotate_group(gi, q)?;
                 let energy = group_energy_kt(trial, gi, self.thermal_energy);
-                trial.rotate_particles(indices, &q.inverse(), Some(-com));
-                energy
+                trial.rotate_group(gi, &q.inverse())?;
+                Ok(energy)
             })
             .collect()
     }
@@ -546,7 +548,7 @@ impl<T: PerturbContext> Analyze<T> for WidomRotation {
                 .collect::<Result<Vec<_>>>()?;
 
             let reference_energy = group_energy_kt(&trial, gi, self.thermal_energy);
-            let energies = self.scan_energies(&mut trial, gi, &indices, &com);
+            let energies = self.scan_energies(&mut trial, gi)?;
             self.accumulate(&energies, &references);
             self.accumulate_torque(&mut trial, gi, &indices, &com, reference_energy);
             // Each molecule-scan is one independent block.

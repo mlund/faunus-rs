@@ -262,6 +262,56 @@ pub trait PerturbContext: ObserveContext + WithHamiltonian + Clone {
         policy: crate::cell::VolumeScalePolicy,
     ) -> anyhow::Result<f64>;
 
+    /// Rigidly translate a whole group, carrying its mass center with it.
+    ///
+    /// Group-scoped rather than index-scoped so that it *can* maintain the group's derived
+    /// state. A displaced molecule whose cached mass center stays behind is not a bookkeeping
+    /// detail: the bounding-sphere cull in `energy/nonbonded` reads that centre to decide
+    /// whether two groups interact at all, so a stale one silently drops the pair.
+    fn translate_group(&mut self, group_index: usize, shift: &Point) -> anyhow::Result<()>;
+
+    /// Rigidly rotate a whole group about its own mass center, composing its orientation.
+    ///
+    /// The mass center is invariant under a rotation about itself; the orientation is not, and
+    /// composing it here is what keeps it describing the coordinates. Being exact and
+    /// incremental, it also preserves the continuity that a best fit could not: for a symmetric
+    /// molecule, re-deriving the frame each step could jump between equivalent orientations.
+    fn rotate_group(
+        &mut self,
+        group_index: usize,
+        quaternion: &crate::UnitQuaternion,
+    ) -> anyhow::Result<()>;
+
+    /// Reshape a group: move some of its atoms, leaving its rigid-body frame alone.
+    ///
+    /// The counterpart to [`translate_group`](Self::translate_group) and
+    /// [`rotate_group`](Self::rotate_group): those move the molecule, this changes its shape.
+    /// The internal-coordinate moves — pivot, crankshaft — apply here. The mass center and
+    /// bounding radius are recomputed, since the atoms moved; the orientation is not, because a
+    /// conformational change is not a rotation of the body. That is a fact about the operation,
+    /// not something a caller has to remember.
+    ///
+    /// Positions are given outright rather than as a rotation because a sub-tree of a chain must
+    /// be unwrapped by *following bonds*: taking the minimum image of each atom independently, as
+    /// a rotation about a centre would, folds the part of the chain lying more than half a box
+    /// from that centre into the wrong periodic image and tears it apart.
+    fn set_group_conformation(
+        &mut self,
+        group_index: usize,
+        indices: &[usize],
+        positions: &[Point],
+    ) -> anyhow::Result<()>;
+
+    /// Shift a subset of a group's atoms, leaving its rigid-body frame alone.
+    ///
+    /// Like [`set_group_conformation`](Self::set_group_conformation), but expressed as a shift.
+    fn translate_group_atoms(
+        &mut self,
+        group_index: usize,
+        indices: &[usize],
+        shift: &Point,
+    ) -> anyhow::Result<()>;
+
     /// Shift positions of selected particles by target vector and apply periodic boundary conditions.
     fn translate_particles(&mut self, indices: &[usize], shift: &Point);
 

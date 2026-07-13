@@ -1,6 +1,6 @@
 //! Geometry: mass center, dipole moment, angles, dihedrals, gyration tensor, and molecular overlay.
 
-use crate::{cell::SimulationCell, Point};
+use crate::{cell::SimulationCell, Point, UnitQuaternion};
 use nalgebra::{Matrix3, Rotation3, SymmetricEigen, Vector3};
 use rand::Rng;
 
@@ -159,7 +159,7 @@ fn randomize_degenerate_axes(
 ///
 /// Meaningful only while the molecule spans less than half the shortest box side; beyond
 /// that, minimum image picks the wrong periodic copy and no gathering can recover it.
-fn gather_molecule(positions: &[Point], cell: &impl SimulationCell) -> Vec<Point> {
+pub(crate) fn gather_molecule(positions: &[Point], cell: &impl SimulationCell) -> Vec<Point> {
     let Some(&first) = positions.first() else {
         return Vec::new();
     };
@@ -167,6 +167,71 @@ fn gather_molecule(positions: &[Point], cell: &impl SimulationCell) -> Vec<Point
         .iter()
         .map(|p| first + cell.distance(p, &first))
         .collect()
+}
+
+/// Rotation that best maps a molecule's `reference` conformation onto its `current`
+/// coordinates (Kabsch superposition).
+///
+/// This is what a group's stored orientation *means*, so it can be recovered from the
+/// coordinates rather than carried alongside them and forgotten. `current` must already be
+/// gathered into one periodic image; both sets are centred here.
+///
+/// `None` when there is nothing to fit — fewer than two atoms, or a mismatched conformation.
+/// The fit is exact for a rigid body and a least-squares best fit otherwise. It is ambiguous,
+/// though always consistent with the coordinates, for a molecule with rotational symmetry.
+pub(crate) fn best_fit_rotation(reference: &[Point], current: &[Point]) -> Option<UnitQuaternion> {
+    if reference.len() != current.len() || reference.len() < 2 {
+        return None;
+    }
+    let n = reference.len() as f64;
+    let ref_com: Point = reference.iter().sum::<Point>() / n;
+    let cur_com: Point = current.iter().sum::<Point>() / n;
+
+    // Covariance of the two centred point sets; its SVD gives the optimal rotation.
+    let covariance = reference
+        .iter()
+        .zip(current)
+        .fold(Matrix3::zeros(), |acc, (r, c)| {
+            acc + (c - cur_com) * (r - ref_com).transpose()
+        });
+
+    let svd = covariance.svd(true, true);
+    let (u, v_t) = (svd.u?, svd.v_t?);
+    // A negative determinant would be a reflection, not a rotation: flip the least significant
+    // singular vector, which is the smallest change that restores a proper rotation.
+    let sign = (u * v_t).determinant().signum();
+    let matrix = u * Matrix3::from_diagonal(&Vector3::new(1.0, 1.0, sign)) * v_t;
+
+    Some(UnitQuaternion::from_rotation_matrix(
+        &Rotation3::from_matrix_unchecked(matrix),
+    ))
+}
+
+/// Rotation carrying `reference` onto `current`, but only when `current` really is a rigid
+/// image of it — the residual of the fit is below `tolerance`.
+///
+/// This is the test for "is the orientation recoverable from the coordinates at all". It is,
+/// for a molecule that has only been rotated and translated; it is not for one whose shape has
+/// actually changed, where a best fit is just the closest lie and the stored orientation is the
+/// only record of the rotations that were applied. Returning `None` there keeps a fit from
+/// silently overwriting it.
+pub(crate) fn rigid_body_rotation(
+    reference: &[Point],
+    current: &[Point],
+    tolerance: f64,
+) -> Option<UnitQuaternion> {
+    let rotation = best_fit_rotation(reference, current)?;
+    let n = reference.len() as f64;
+    let ref_com: Point = reference.iter().sum::<Point>() / n;
+    let cur_com: Point = current.iter().sum::<Point>() / n;
+    let residual = (reference
+        .iter()
+        .zip(current)
+        .map(|(r, c)| (rotation * (r - ref_com) - (c - cur_com)).norm_squared())
+        .sum::<f64>()
+        / n)
+        .sqrt();
+    (residual <= tolerance).then_some(rotation)
 }
 
 /// Place a molecule's template at `com`, keeping its conformation and orientation.
@@ -392,6 +457,57 @@ mod tests {
         for pos in &result {
             assert!(cell.is_inside(pos), "Position {pos:?} outside cell");
         }
+    }
+
+    /// The rotation a molecule was placed with is exactly what the fit recovers.
+    #[test]
+    fn best_fit_rotation_recovers_an_applied_rotation() {
+        let reference = [
+            Point::new(0.0, 0.0, 0.0),
+            Point::new(4.5, 0.0, 1.5),
+            Point::new(2.25, 3.9, -0.5),
+            Point::new(-2.25, -3.9, -0.5),
+        ];
+        let mut rng = rand::thread_rng();
+        for _ in 0..50 {
+            let applied = crate::transform::random_rotation(&mut rng);
+            let shift = Point::new(11.0, -3.0, 7.0);
+            let current: Vec<Point> = reference.iter().map(|p| applied * p + shift).collect();
+
+            let fitted = best_fit_rotation(&reference, &current).unwrap();
+            assert!(
+                fitted.angle_to(&applied) < 1e-9,
+                "recovered {fitted:?}, applied {applied:?}"
+            );
+        }
+    }
+
+    /// A reflection is not a rotation: a mirrored molecule must not be fitted with one.
+    #[test]
+    fn best_fit_rotation_never_returns_a_reflection() {
+        let reference = [
+            Point::new(0.0, 0.0, 0.0),
+            Point::new(1.0, 0.0, 0.0),
+            Point::new(0.0, 1.0, 0.0),
+            Point::new(0.0, 0.0, 1.0),
+        ];
+        // Mirror through the xy-plane — no rotation can reproduce it.
+        let current: Vec<Point> = reference
+            .iter()
+            .map(|p| Point::new(p.x, p.y, -p.z))
+            .collect();
+
+        let fitted = best_fit_rotation(&reference, &current).unwrap();
+        let matrix = fitted.to_rotation_matrix();
+        assert_relative_eq!(matrix.matrix().determinant(), 1.0, epsilon = 1e-9);
+    }
+
+    #[test]
+    fn best_fit_rotation_needs_two_matched_atoms() {
+        let one = [Point::new(1.0, 2.0, 3.0)];
+        assert!(best_fit_rotation(&one, &one).is_none());
+        let two = [Point::zeros(), Point::new(1.0, 0.0, 0.0)];
+        assert!(best_fit_rotation(&two, &one).is_none());
     }
 
     /// All pairwise minimum-image separations, ascending — the molecule's shape,

@@ -287,13 +287,12 @@ impl GibbsParticleTransfer {
             .iter()
             .map(|&i| src.position(i) + shift)
             .collect();
-        let tgt_start = tgt.groups()[tgt_group].start();
-        let tgt_indices = tgt_start..tgt_start + positions.len();
-        // atom kinds are already correct in the target slot
-        tgt.set_positions(tgt_indices, positions.iter());
-
         Transform::Deactivate.on_group(src_group, src)?;
         Transform::Activate.on_group(tgt_group, tgt)?;
+        // Atom kinds are already correct in the target slot; `place_group` writes the coordinates
+        // and settles the mass center and orientation that follow from them. The molecule arrives
+        // in the pose it had in the other box, which the target group has no way to guess.
+        tgt.place_group(tgt_group, &positions)?;
 
         src.update_with_backup(&Change::Everything)?;
         tgt.update_with_backup(&Change::Everything)?;

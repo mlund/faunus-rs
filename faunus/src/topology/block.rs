@@ -565,15 +565,16 @@ impl MoleculeBlock {
             }
         } else {
             // Standard: one group per molecule
-            for (i, q) in quaternions.into_iter().enumerate() {
+            for i in 0..quaternions.len() {
                 let (mol_positions, atom_ids) = make_mol_data();
                 let group_index = context
                     .add_group(MoleculeId::new(molecule.id()), &mol_positions, &atom_ids)?
                     .index();
-                // Sync quaternion with the rotation applied during placement so that
-                // LD and 6D tabulated energies see the correct orientation from the start.
-                context.groups_mut()[group_index].set_quaternion(q);
-                context.update_mass_center(group_index);
+                // The orientation the placement applied is recovered from the coordinates it
+                // produced, rather than carried alongside them — including for molecules read
+                // straight from a structure file, which arrive already oriented and used to be
+                // recorded as unrotated.
+                context.place_group(group_index, &mol_positions)?;
                 if let BlockActivationStatus::Partial(x) = self.active {
                     if i >= x {
                         context.resize_group(group_index, GroupSize::Empty).unwrap();

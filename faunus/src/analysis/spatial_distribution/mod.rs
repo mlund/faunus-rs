@@ -582,7 +582,7 @@ frequency: !Every 1
         let mut context = test_context();
         let axis = Vector3::z_axis();
         let orientation = UnitQuaternion::from_axis_angle(&axis, std::f64::consts::FRAC_PI_2);
-        context.groups_mut()[0].set_quaternion(orientation);
+        context.set_group_orientation(0, orientation);
 
         let builder: SpatialDistributionBuilder = serde_yml::from_str(
             r#"

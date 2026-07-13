@@ -86,15 +86,11 @@ pub fn random_rotation(rng: &mut (impl Rng + ?Sized)) -> UnitQuaternion {
 pub enum SpeciationAction {
     /// Activate an empty group and set particle positions.
     ///
-    /// `quaternion` is the orientation the molecule was placed with, so the group's stored
-    /// orientation stays in step with its coordinates — 6D tabulated energies and
-    /// orientation analyses read it. `None` leaves the existing orientation alone, used by
-    /// the molecular-swap path, which overlays a template onto an existing pose rather than
-    /// applying a rotation of its own.
+    /// The group's orientation is derived from `positions` when they are applied, so there is
+    /// nothing here to keep in step — and no way to forget to.
     ActivateGroup {
         group_index: usize,
         positions: Vec<Point>,
-        quaternion: Option<UnitQuaternion>,
     },
     /// Deactivate a full group
     DeactivateGroup(usize),
@@ -186,61 +182,30 @@ impl Transform {
         context: &mut impl crate::Context,
     ) -> anyhow::Result<()> {
         use crate::group::GroupSize;
-        let needs_mass_center_update = match self {
-            Self::Translate(displacement) => {
-                let indices = context.groups()[group_index]
-                    .select(&ParticleSelection::Active, context.topology_ref())?;
-                context.translate_particles(&indices, displacement);
-                true
-            }
+        // Every arm leaves the group's derived state settled — the resizes because
+        // `resize_group` refreshes it, the coordinate writes because they do it themselves.
+        // There is deliberately no "and now remember to update the mass center" step: that
+        // bookkeeping is what let a shrink walk away with the geometry of atoms it had dropped.
+        match self {
+            Self::Translate(displacement) => context.translate_group(group_index, displacement)?,
             Self::PartialTranslate(displacement, selection) => {
                 let indices =
                     context.groups()[group_index].select(selection, context.topology_ref())?;
-                context.translate_particles(&indices, displacement);
-                true
+                context.translate_group_atoms(group_index, &indices, displacement)?;
             }
-            Self::Rotate(quaternion) => {
-                let indices = context.groups()[group_index]
-                    .select(&ParticleSelection::Active, context.topology_ref())?;
-                let center = context.mass_center(&indices);
-                context.rotate_particles(&indices, quaternion, Some(-center));
-                context.groups_mut()[group_index].rotate_by(quaternion);
-                true
-            }
+            Self::Rotate(quaternion) => context.rotate_group(group_index, quaternion)?,
             Self::SetPositions(positions, selection) => {
                 let indices =
                     context.groups()[group_index].select(selection, context.topology_ref())?;
-                anyhow::ensure!(
-                    indices.len() == positions.len(),
-                    "SetPositions: {} positions for {} selected particles",
-                    positions.len(),
-                    indices.len()
-                );
-                context.set_particle_positions(&indices, positions);
-                true
+                context.set_group_conformation(group_index, &indices, positions)?;
             }
-            Self::Activate => {
-                context.resize_group(group_index, GroupSize::Full)?;
-                true
-            }
-            Self::Expand(n) => {
-                context.resize_group(group_index, GroupSize::Expand(*n))?;
-                true
-            }
-            Self::Deactivate => {
-                context.resize_group(group_index, GroupSize::Empty)?;
-                false
-            }
-            Self::Contract(n) => {
-                context.resize_group(group_index, GroupSize::Shrink(*n))?;
-                false
-            }
+            Self::Activate => context.resize_group(group_index, GroupSize::Full)?,
+            Self::Expand(n) => context.resize_group(group_index, GroupSize::Expand(*n))?,
+            Self::Deactivate => context.resize_group(group_index, GroupSize::Empty)?,
+            Self::Contract(n) => context.resize_group(group_index, GroupSize::Shrink(*n))?,
             _ => {
                 todo!("Implement other transforms")
             }
-        };
-        if needs_mass_center_update {
-            context.update_mass_center(group_index);
         }
         Ok(())
     }
@@ -311,15 +276,9 @@ impl Transform {
                         SpeciationAction::ActivateGroup {
                             group_index,
                             positions,
-                            quaternion,
                         } => {
-                            let start = context.groups()[*group_index].start();
-                            let indices = start..start + positions.len();
-                            context.set_positions(indices, positions.iter());
                             Self::Activate.on_group(*group_index, context)?;
-                            if let Some(quaternion) = quaternion {
-                                context.groups_mut()[*group_index].set_quaternion(*quaternion);
-                            }
+                            context.place_group(*group_index, positions)?;
                         }
                         SpeciationAction::DeactivateGroup(group_index) => {
                             Self::Deactivate.on_group(*group_index, context)?;
@@ -366,17 +325,14 @@ impl Transform {
                         .mass_center()
                         .copied()
                         .expect("cluster groups are molecular and have a mass center");
-                    let indices = context.groups()[gi]
-                        .select(&ParticleSelection::Active, context.topology_ref())?;
                     if let Some(q) = rotation {
-                        // Rotate the molecule about its own mass center — PBC-safe because a molecule
-                        // spans less than half the box. Rotation about the center leaves it invariant,
-                        // so the subsequent shift alone places the mass center at its cluster target.
-                        context.rotate_particles(&indices, q, Some(-old_com));
-                        context.groups_mut()[gi].rotate_by(q);
+                        // Rotate the molecule about its own mass center — PBC-safe because a
+                        // molecule spans less than half the box. Rotation about the center leaves
+                        // it invariant, so the shift below alone places the mass center at its
+                        // cluster target.
+                        context.rotate_group(gi, q)?;
                     }
-                    context.translate_particles(&indices, &(new_com - old_com));
-                    context.update_mass_center(gi);
+                    context.translate_group(gi, &(new_com - old_com))?;
                 }
             }
             _ => {
@@ -458,6 +414,93 @@ mod tests {
                 .quaternion()
                 .angle_to(&expected)
                 < 1e-12
+        );
+    }
+
+    /// A system of COM-bearing molecules. `topology_pass.yaml` declares `has_com: false`, so it
+    /// cannot exercise geometry at all.
+    fn com_bearing_context() -> (tempfile::NamedTempFile, crate::backend::Backend) {
+        let yaml = r#"
+atoms:
+  - {name: A, mass: 1.0, sigma: 2.0}
+  - {name: B, mass: 9.0, sigma: 2.0}
+molecules:
+  # Lopsided masses, so dropping an atom visibly moves the mass center.
+  - name: quad
+    from_structure: [{A: [-3.0, 0.0, 0.0]}, {A: [3.0, 0.0, 0.0]}, {B: [0.0, 4.0, 0.0]}, {B: [0.0, -4.0, 0.0]}]
+system:
+  cell: !Cuboid [40.0, 40.0, 40.0]
+  medium: {permittivity: !Vacuum, temperature: 298.15}
+  energy: {}
+  blocks:
+    - {molecule: quad, N: 3, active: 3, insert: !RandomCOM {rotate: true}}
+propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
+"#;
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(tmp.path(), yaml).unwrap();
+        let mut rng = rand::thread_rng();
+        let context = crate::backend::Backend::new(tmp.path(), None, &mut rng).unwrap();
+        (tmp, context)
+    }
+
+    /// Shrinking a group moves its mass center, so the cached one has to follow.
+    ///
+    /// The bounding radius derived alongside it feeds the cutoff culling in `energy/nonbonded`
+    /// and `contact_tessellation`, so a stale one silently drops a genuinely interacting pair.
+    /// Only unreachable today because contraction is used exclusively on atomic groups, which
+    /// have no mass center — this is the guard that makes it safe to reach (issue #52).
+    #[test]
+    fn contracting_a_group_refreshes_its_mass_center() {
+        use crate::context::{ObserveContext, WithTopology};
+        use crate::group::{GroupCollection, ParticleSelection};
+
+        let (_tmp, mut context) = com_bearing_context();
+        let group_index = 1;
+        let before = context.groups()[group_index]
+            .mass_center()
+            .copied()
+            .expect("a molecular group has a mass center");
+
+        Transform::Contract(1)
+            .on_group(group_index, &mut context)
+            .unwrap();
+
+        let remaining = context.groups()[group_index]
+            .select(&ParticleSelection::Active, context.topology_ref())
+            .unwrap();
+        assert_eq!(remaining.len(), 3);
+        let expected = context.mass_center(&remaining);
+        let stored = context.groups()[group_index]
+            .mass_center()
+            .copied()
+            .expect("a shrunken molecular group still has a mass center");
+
+        assert!(
+            (stored - before).norm() > 1e-6,
+            "dropping a heavy atom must move the mass center, or this proves nothing"
+        );
+        assert!(
+            (stored - expected).norm() < 1e-12,
+            "mass center still describes the atoms the group had before shrinking"
+        );
+    }
+
+    /// An emptied group has no mass center — not the one it had when it was last occupied.
+    #[test]
+    fn deactivating_a_group_clears_its_geometry() {
+        use crate::group::GroupCollection;
+
+        let (_tmp, mut context) = com_bearing_context();
+        let group_index = 1;
+        assert!(context.groups()[group_index].mass_center().is_some());
+
+        Transform::Deactivate
+            .on_group(group_index, &mut context)
+            .unwrap();
+
+        assert!(
+            context.groups()[group_index].mass_center().is_none(),
+            "an empty group kept the mass center of the molecule it no longer holds"
         );
     }
 

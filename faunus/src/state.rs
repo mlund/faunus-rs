@@ -171,6 +171,52 @@ mod tests {
     use crate::Point;
     use rand::SeedableRng;
 
+    /// A checkpoint whose orientation disagrees with its own coordinates heals on load.
+    ///
+    /// State files written before orientations were tracked default to identity, and the
+    /// molecular-swap path used to leave them behind entirely, so files in the wild carry
+    /// orientations that describe a molecule they no longer hold. The coordinates are the ground
+    /// truth: restore recomputes the orientation from them rather than importing the lie.
+    #[test]
+    fn a_checkpoint_orientation_that_contradicts_its_coordinates_is_recomputed() {
+        let yaml = r#"
+atoms:
+  - {name: T1, mass: 1.0, sigma: 2.0}
+  - {name: T2, mass: 2.0, sigma: 2.0}
+  - {name: T3, mass: 3.0, sigma: 2.0}
+molecules:
+  - name: bent
+    from_structure: [{T1: [-3.0, 0.0, 0.0]}, {T2: [0.0, 2.5, 0.0]}, {T3: [3.0, 0.0, 0.0]}]
+system:
+  cell: !Cuboid [30.0, 30.0, 30.0]
+  medium: {permittivity: !Vacuum, temperature: 298.15}
+  energy: {}
+  blocks:
+    - {molecule: bent, N: 4, active: 4, insert: !RandomCOM {rotate: true}}
+propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
+"#;
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(tmp.path(), yaml).unwrap();
+        let mut rng = rand::rngs::StdRng::seed_from_u64(0);
+        let mut context = Backend::new(tmp.path(), None, &mut rng).unwrap();
+
+        let truth = *context.groups()[0].quaternion();
+        assert_ne!(truth, UnitQuaternion::identity(), "insertion rotated it");
+
+        // A pre-quaternion state file: coordinates as they are, orientations claiming "unrotated".
+        let mut state = State::save(&context, 0);
+        for group in &mut state.groups {
+            group.quaternion = UnitQuaternion::identity();
+        }
+        state.load(&mut context).unwrap();
+
+        // The coordinates never moved, so the orientation must come back to what they imply.
+        assert!(
+            context.groups()[0].quaternion().angle_to(&truth) < 1e-9,
+            "restore imported an orientation contradicting the coordinates it restored"
+        );
+    }
+
     /// Largest separation between any two atoms of a molecule, as stored.
     ///
     /// Measured under minimum image, so it is what the code itself would reconstruct. Taken over
@@ -245,11 +291,32 @@ mod tests {
                     continue;
                 }
                 checked += 1;
+
                 let expected = reference_extent(reference);
                 let found = stored_extent(&context, group);
                 if (found - expected).abs() > TOLERANCE {
                     torn.push(format!(
                         "{name}: group {gi} spans {found:.1} Å; its conformation is {expected:.1} Å across"
+                    ));
+                    // A torn molecule has no meaningful orientation either; one complaint is enough.
+                    continue;
+                }
+
+                // A checkpoint carries the orientation forward into the next run, so a stored
+                // quaternion that disagrees with the stored coordinates imports the lie wholesale.
+                if group.is_empty() {
+                    continue;
+                }
+                let current: Vec<Point> =
+                    group.iter_active().map(|i| context.position(i)).collect();
+                let gathered = crate::geometry::gather_molecule(&current, context.cell());
+                let Some(fitted) = crate::geometry::best_fit_rotation(reference, &gathered) else {
+                    continue;
+                };
+                let error = group.quaternion().angle_to(&fitted).to_degrees();
+                if error > 1e-6 {
+                    torn.push(format!(
+                        "{name}: group {gi} stores an orientation {error:.1}° from its coordinates"
                     ));
                 }
             }
@@ -259,7 +326,7 @@ mod tests {
         assert!(checked > 0, "no molecular groups were checked");
         assert!(
             torn.is_empty(),
-            "{} of {checked} rigid molecules in committed state files do not match their conformation:\n{}",
+            "{} problems across {checked} rigid molecules in committed state files:\n{}",
             torn.len(),
             torn.join("\n")
         );
