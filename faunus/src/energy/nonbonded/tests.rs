@@ -275,7 +275,7 @@ fn test_nonbonded_matrix_particle_with_self_group() {
     let expected = nonbonded.particle_with_particle(&system, 0, 1);
     assert_approx_eq!(
         f64,
-        nonbonded.particle_with_group(&system, 0, &system.groups()[0]),
+        nonbonded.particle_with_group_reference(&system, 0, &system.groups()[0]),
         expected
     );
 
@@ -283,7 +283,7 @@ fn test_nonbonded_matrix_particle_with_self_group() {
         + nonbonded.particle_with_particle(&system, 4, 5);
     assert_approx_eq!(
         f64,
-        nonbonded.particle_with_group(&system, 4, &system.groups()[1]),
+        nonbonded.particle_with_group_reference(&system, 4, &system.groups()[1]),
         expected
     )
 }
@@ -301,14 +301,14 @@ fn test_nonbonded_matrix_particle_with_group() {
         + nonbonded.particle_with_particle(&system, 1, 5);
     assert_approx_eq!(
         f64,
-        nonbonded.particle_with_group(&system, 1, &system.groups()[1]),
+        nonbonded.particle_with_group_reference(&system, 1, &system.groups()[1]),
         expected
     );
 
     let expected = 0.0;
     assert_approx_eq!(
         f64,
-        nonbonded.particle_with_group(&system, 0, &system.groups()[2]),
+        nonbonded.particle_with_group_reference(&system, 0, &system.groups()[2]),
         expected
     );
 
@@ -316,7 +316,7 @@ fn test_nonbonded_matrix_particle_with_group() {
         + nonbonded.particle_with_particle(&system, 5, 1);
     assert_approx_eq!(
         f64,
-        nonbonded.particle_with_group(&system, 5, &system.groups()[0]),
+        nonbonded.particle_with_group_reference(&system, 5, &system.groups()[0]),
         expected
     );
 }
@@ -329,19 +329,19 @@ fn test_nonbonded_matrix_particle_with_other_groups() {
     system.resize_group(0, GroupSize::Shrink(1)).unwrap();
     system.resize_group(2, GroupSize::Shrink(3)).unwrap();
 
-    let expected = nonbonded.particle_with_group(&system, 0, &system.groups()[1])
-        + nonbonded.particle_with_group(&system, 0, &system.groups()[2]);
+    let expected = nonbonded.particle_with_group_reference(&system, 0, &system.groups()[1])
+        + nonbonded.particle_with_group_reference(&system, 0, &system.groups()[2]);
     assert_approx_eq!(
         f64,
-        nonbonded.particle_with_other_groups(&system, 0, &system.groups()[0]),
+        nonbonded.particle_with_other_groups_reference(&system, 0, &system.groups()[0]),
         expected
     );
 
-    let expected = nonbonded.particle_with_group(&system, 3, &system.groups()[0])
-        + nonbonded.particle_with_group(&system, 3, &system.groups()[2]);
+    let expected = nonbonded.particle_with_group_reference(&system, 3, &system.groups()[0])
+        + nonbonded.particle_with_group_reference(&system, 3, &system.groups()[2]);
     assert_approx_eq!(
         f64,
-        nonbonded.particle_with_other_groups(&system, 3, &system.groups()[1]),
+        nonbonded.particle_with_other_groups_reference(&system, 3, &system.groups()[1]),
         expected
     );
 }
@@ -361,7 +361,7 @@ fn test_nonbonded_matrix_particle_with_all() {
 
     assert_approx_eq!(
         f64,
-        nonbonded.particle_with_all(&system, 1, &system.groups()[0]),
+        nonbonded.particle_with_all_reference(&system, 1, &system.groups()[0]),
         expected
     );
 }
@@ -374,29 +374,29 @@ fn test_nonbonded_matrix_group_with_group() {
     system.resize_group(0, GroupSize::Shrink(1)).unwrap();
     system.resize_group(2, GroupSize::Shrink(3)).unwrap();
 
-    let expected = nonbonded.particle_with_group(&system, 0, &system.groups()[1])
-        + nonbonded.particle_with_group(&system, 1, &system.groups()[1]);
+    let expected = nonbonded.particle_with_group_reference(&system, 0, &system.groups()[1])
+        + nonbonded.particle_with_group_reference(&system, 1, &system.groups()[1]);
 
     assert_approx_eq!(
         f64,
-        nonbonded.group_with_group(&system, &system.groups()[0], &system.groups()[1]),
+        nonbonded.group_with_group_reference(&system, &system.groups()[0], &system.groups()[1]),
         expected
     );
     assert_approx_eq!(
         f64,
-        nonbonded.group_with_group(&system, &system.groups()[1], &system.groups()[0]),
+        nonbonded.group_with_group_reference(&system, &system.groups()[1], &system.groups()[0]),
         expected
     );
 
     let expected = 0.0;
     assert_approx_eq!(
         f64,
-        nonbonded.group_with_group(&system, &system.groups()[0], &system.groups()[2]),
+        nonbonded.group_with_group_reference(&system, &system.groups()[0], &system.groups()[2]),
         expected
     );
     assert_approx_eq!(
         f64,
-        nonbonded.group_with_group(&system, &system.groups()[2], &system.groups()[0]),
+        nonbonded.group_with_group_reference(&system, &system.groups()[2], &system.groups()[0]),
         expected
     );
 }
@@ -412,7 +412,7 @@ fn test_nonbonded_matrix_group_with_itself() {
     let expected = nonbonded.particle_with_particle(&system, 0, 1);
     assert_approx_eq!(
         f64,
-        nonbonded.group_with_itself(&system, &system.groups()[0]),
+        nonbonded.group_with_itself_reference(&system, &system.groups()[0]),
         expected
     );
 
@@ -421,14 +421,14 @@ fn test_nonbonded_matrix_group_with_itself() {
         + nonbonded.particle_with_particle(&system, 4, 5);
     assert_approx_eq!(
         f64,
-        nonbonded.group_with_itself(&system, &system.groups()[1]),
+        nonbonded.group_with_itself_reference(&system, &system.groups()[1]),
         expected
     );
 
     let expected = 0.0;
     assert_approx_eq!(
         f64,
-        nonbonded.group_with_itself(&system, &system.groups()[2]),
+        nonbonded.group_with_itself_reference(&system, &system.groups()[2]),
         expected
     );
 }
@@ -441,22 +441,23 @@ fn test_nonbonded_matrix_group_with_other_groups() {
     system.resize_group(0, GroupSize::Shrink(1)).unwrap();
     system.resize_group(2, GroupSize::Shrink(3)).unwrap();
 
-    let expected = nonbonded.group_with_group(&system, &system.groups()[0], &system.groups()[1]);
+    let expected =
+        nonbonded.group_with_group_reference(&system, &system.groups()[0], &system.groups()[1]);
     assert_approx_eq!(
         f64,
-        nonbonded.group_with_other_groups(&system, &system.groups()[0]),
+        nonbonded.group_with_other_groups_reference(&system, &system.groups()[0]),
         expected
     );
     assert_approx_eq!(
         f64,
-        nonbonded.group_with_other_groups(&system, &system.groups()[1]),
+        nonbonded.group_with_other_groups_reference(&system, &system.groups()[1]),
         expected
     );
 
     let expected = 0.0;
     assert_approx_eq!(
         f64,
-        nonbonded.group_with_other_groups(&system, &system.groups()[2]),
+        nonbonded.group_with_other_groups_reference(&system, &system.groups()[2]),
         expected
     );
 }
@@ -469,26 +470,28 @@ fn test_nonbonded_matrix_group_with_all() {
     system.resize_group(0, GroupSize::Shrink(1)).unwrap();
     system.resize_group(2, GroupSize::Shrink(3)).unwrap();
 
-    let expected = nonbonded.group_with_group(&system, &system.groups()[0], &system.groups()[1])
-        + nonbonded.group_with_itself(&system, &system.groups()[0]);
+    let expected =
+        nonbonded.group_with_group_reference(&system, &system.groups()[0], &system.groups()[1])
+            + nonbonded.group_with_itself_reference(&system, &system.groups()[0]);
     assert_approx_eq!(
         f64,
-        nonbonded.group_with_all(&system, &system.groups()[0]),
+        nonbonded.group_with_all_reference(&system, &system.groups()[0]),
         expected
     );
 
-    let expected = nonbonded.group_with_group(&system, &system.groups()[0], &system.groups()[1])
-        + nonbonded.group_with_itself(&system, &system.groups()[1]);
+    let expected =
+        nonbonded.group_with_group_reference(&system, &system.groups()[0], &system.groups()[1])
+            + nonbonded.group_with_itself_reference(&system, &system.groups()[1]);
     assert_approx_eq!(
         f64,
-        nonbonded.group_with_all(&system, &system.groups()[1]),
+        nonbonded.group_with_all_reference(&system, &system.groups()[1]),
         expected
     );
 
     let expected = 0.0;
     assert_approx_eq!(
         f64,
-        nonbonded.group_with_all(&system, &system.groups()[2]),
+        nonbonded.group_with_all_reference(&system, &system.groups()[2]),
         expected
     );
 }
@@ -518,7 +521,7 @@ fn test_nonbonded_matrix_total_nonbonded() {
         .into_iter()
         .map(|(i, j)| nonbonded.particle_with_particle(&system, i, j))
         .sum();
-    assert_approx_eq!(f64, nonbonded.total_nonbonded(&system), expected);
+    assert_approx_eq!(f64, nonbonded.total_nonbonded_reference(&system), expected);
 }
 
 #[test]
@@ -535,7 +538,7 @@ fn test_nonbonded_matrix_energy() {
 
     // change everything
     let change = Change::Everything;
-    let expected = nonbonded.total_nonbonded(&system);
+    let expected = nonbonded.total_nonbonded_reference(&system);
     assert_approx_eq!(f64, nonbonded.energy(&system, &change), expected);
 
     // change volume
@@ -554,7 +557,7 @@ fn test_nonbonded_matrix_energy() {
 
     // change single rigid group
     let change = Change::SingleGroup(1, GroupChange::RigidBody);
-    let expected = nonbonded.group_with_other_groups(&system, &system.groups()[1]);
+    let expected = nonbonded.group_with_other_groups_reference(&system, &system.groups()[1]);
     assert_approx_eq!(f64, nonbonded.energy(&system, &change), expected);
 
     // change multiple rigid groups — cross-term group0↔group1 counted once, not twice
@@ -562,9 +565,9 @@ fn test_nonbonded_matrix_energy() {
         (0, GroupChange::RigidBody),
         (1, GroupChange::RigidBody),
     ]);
-    let expected = nonbonded.group_with_other_groups(&system, &system.groups()[0])
-        + nonbonded.group_with_other_groups(&system, &system.groups()[1])
-        - nonbonded.group_with_group(&system, &system.groups()[0], &system.groups()[1]);
+    let expected = nonbonded.group_with_other_groups_reference(&system, &system.groups()[0])
+        + nonbonded.group_with_other_groups_reference(&system, &system.groups()[1])
+        - nonbonded.group_with_group_reference(&system, &system.groups()[0], &system.groups()[1]);
     assert_approx_eq!(f64, nonbonded.energy(&system, &change), expected);
 
     // change several particles within a single group
@@ -572,16 +575,16 @@ fn test_nonbonded_matrix_energy() {
         1,
         GroupChange::PartialUpdate(vec![RelIndex::new(0), RelIndex::new(1)]),
     );
-    let expected = nonbonded.particle_with_all(&system, 3, &system.groups()[1])
-        + nonbonded.particle_with_all(&system, 4, &system.groups()[1]);
+    let expected = nonbonded.particle_with_all_reference(&system, 3, &system.groups()[1])
+        + nonbonded.particle_with_all_reference(&system, 4, &system.groups()[1]);
     assert_approx_eq!(f64, nonbonded.energy(&system, &change), expected);
 
     // change several particles in multiple groups.
     //
     // Affected atoms: 1 (g0), 3 (g1), 4 (g1). g2 has no active particles in
-    // this fixture, so every pair in `total_nonbonded` involves at least one
-    // atom in a changed group — `multi_group_change_soa` must therefore
-    // return `total_nonbonded` exactly once per pair, with no double-counting
+    // this fixture, so every pair in `total_nonbonded_reference` involves at least one
+    // atom in a changed group — `multi_group_change` must therefore
+    // return `total_nonbonded_reference` exactly once per pair, with no double-counting
     // of the cross terms (1,3), (1,4), or the intra pair (3,4).
     let change = Change::Groups(vec![
         (0, GroupChange::PartialUpdate(vec![RelIndex::new(1)])),
@@ -590,7 +593,7 @@ fn test_nonbonded_matrix_energy() {
             GroupChange::PartialUpdate(vec![RelIndex::new(0), RelIndex::new(1)]),
         ),
     ]);
-    let expected = nonbonded.total_nonbonded(&system);
+    let expected = nonbonded.total_nonbonded_reference(&system);
     assert_approx_eq!(f64, nonbonded.energy(&system, &change), expected);
 
     // Same affected atoms via a different relative-index spelling: g0 rel 2
@@ -682,8 +685,8 @@ fn test_nonbonded_matrix_splined_total_nonbonded() {
     system.resize_group(0, GroupSize::Shrink(1)).unwrap();
     system.resize_group(2, GroupSize::Shrink(3)).unwrap();
 
-    let analytical_total = nonbonded.total_nonbonded(&system);
-    let splined_total = splined.total_nonbonded(&system);
+    let analytical_total = nonbonded.total_nonbonded_reference(&system);
+    let splined_total = splined.total_nonbonded_reference(&system);
 
     // Allow for some tolerance due to spline approximation
     let tolerance = 1e-3;
@@ -813,9 +816,9 @@ fn test_nonbonded_matrix_splined_with_config() {
     let splined_fast = NonbondedMatrixSplined::from_nonbonded(&nonbonded, 15.0, Some(config));
 
     // Both should produce reasonable energies
-    let energy_high = splined_high.total_nonbonded(&system);
-    let energy_fast = splined_fast.total_nonbonded(&system);
-    let analytical = nonbonded.total_nonbonded(&system);
+    let energy_high = splined_high.total_nonbonded_reference(&system);
+    let energy_fast = splined_fast.total_nonbonded_reference(&system);
+    let analytical = nonbonded.total_nonbonded_reference(&system);
 
     // High accuracy should be closer to analytical
     let error_high = ((analytical - energy_high) / analytical).abs();
@@ -1033,7 +1036,7 @@ fn cutoff_culling_is_lossless_and_gated() {
     let (system, base) = culling_system();
     assert_approx_eq!(f64, base.required_cull_cutoff(), 6.0);
 
-    // Culling acts in the full-energy (SoA) path, so evaluate via `energy`.
+    // Culling acts in the full-energy path, so evaluate via `energy`.
     let everything = Change::Everything;
     let baseline = base.energy(&system, &everything);
 
@@ -1091,7 +1094,7 @@ fn cutoff_validation_rejects_unbounded_potential() {
     assert!(Hamiltonian::new(&builder, &topology, Some(medium)).is_err());
 }
 
-/// Regression: `multi_group_change_soa` resolved a group's `PartialUpdate` atoms into a fixed
+/// Regression: `multi_group_change` resolved a group's `PartialUpdate` atoms into a fixed
 /// `[usize; 8]` buffer, panicking (index out of bounds) for more than eight affected atoms. A
 /// `Change::Groups` partial update must match the equivalent `SingleGroup` partial update — which
 /// handles any atom count — for a molecule with more than eight atoms.
@@ -1149,7 +1152,7 @@ fn multi_group_partial_update_handles_more_than_eight_affected_atoms() {
         (0, GroupChange::PartialUpdate(all.clone())),
         (1, GroupChange::PartialUpdate(all)),
     ]);
-    let expected = nonbonded.total_nonbonded(&system);
+    let expected = nonbonded.total_nonbonded_reference(&system);
     assert!(
         expected.is_finite() && expected != 0.0,
         "sanity: molecules interact"

@@ -63,7 +63,7 @@ pub enum GroupChange {
     /// shrinks by one. Carrying `n_old` lets the energy code recognise the
     /// post-transform state (`groups[gi].len() < n_old`) and treat the
     /// removed atom's contribution as zero — without this, reading
-    /// `soa[start + rel]` in the new state returns the *swap-target's*
+    /// particle slot `start + rel` in the new state returns the *swap-target's*
     /// data and corrupts the energy delta.
     AtomicShrink {
         /// Relative slot of the atom being deactivated, in the pre-shrink frame.

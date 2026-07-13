@@ -105,7 +105,7 @@ pub type NonbondedMatrixSplined = NonbondedMatrix<SplinedPotential>;
 //
 // These methods use the ObserveContext trait for per-pair distance/atom-kind lookups.
 // They serve as ground-truth reference for tests and for `indices_with_indices`
-// (called from EnergyTerm). The production hot path uses the SoA methods below.
+// (called from EnergyTerm). The production hot path uses the batch-array methods below.
 
 impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
     /// Energy between two particles given by absolute indices.
@@ -128,7 +128,12 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
     /// Energy of particle `i` with all other particles in `group` (self-avoiding).
     #[inline(always)]
     #[allow(dead_code)]
-    fn particle_with_group(&self, context: &impl ObserveContext, i: usize, group: &Group) -> f64 {
+    fn particle_with_group_reference(
+        &self,
+        context: &impl ObserveContext,
+        i: usize,
+        group: &Group,
+    ) -> f64 {
         group
             .iter_active()
             .filter(|j| *j != i)
@@ -139,7 +144,7 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
     /// Energy of particle `i` with all other groups.
     #[inline(always)]
     #[allow(dead_code)]
-    fn particle_with_other_groups(
+    fn particle_with_other_groups_reference(
         &self,
         context: &impl ObserveContext,
         i: usize,
@@ -149,22 +154,27 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
             .groups()
             .iter()
             .filter(|group_j| group_j.index() != group.index())
-            .map(|group_j| self.particle_with_group(context, i, group_j))
+            .map(|group_j| self.particle_with_group_reference(context, i, group_j))
             .sum()
     }
 
     /// Energy of particle `i` with all other particles.
     #[inline(always)]
     #[allow(dead_code)]
-    fn particle_with_all(&self, context: &impl ObserveContext, i: usize, group: &Group) -> f64 {
-        self.particle_with_other_groups(context, i, group)
-            + self.particle_with_group(context, i, group)
+    fn particle_with_all_reference(
+        &self,
+        context: &impl ObserveContext,
+        i: usize,
+        group: &Group,
+    ) -> f64 {
+        self.particle_with_other_groups_reference(context, i, group)
+            + self.particle_with_group_reference(context, i, group)
     }
 
     /// Energy between two groups (no self-avoidance check — groups must differ).
     #[inline(always)]
     #[allow(dead_code)]
-    fn group_with_group(
+    fn group_with_group_reference(
         &self,
         context: &impl ObserveContext,
         group1: &Group,
@@ -183,7 +193,7 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
     /// Intra-group energy (unique pairs only).
     #[inline(always)]
     #[allow(dead_code)]
-    fn group_with_itself(&self, context: &impl ObserveContext, group: &Group) -> f64 {
+    fn group_with_itself_reference(&self, context: &impl ObserveContext, group: &Group) -> f64 {
         group
             .iter_active()
             .enumerate()
@@ -199,18 +209,23 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
     /// Energy of a group with all other groups.
     #[inline(always)]
     #[allow(dead_code)]
-    fn group_with_other_groups(&self, context: &impl ObserveContext, group: &Group) -> f64 {
+    fn group_with_other_groups_reference(
+        &self,
+        context: &impl ObserveContext,
+        group: &Group,
+    ) -> f64 {
         group
             .iter_active()
-            .map(|i| self.particle_with_other_groups(context, i, group))
+            .map(|i| self.particle_with_other_groups_reference(context, i, group))
             .sum()
     }
 
     /// Energy of a group with all particles (inter + intra).
     #[inline(always)]
     #[allow(dead_code)]
-    fn group_with_all(&self, context: &impl ObserveContext, group: &Group) -> f64 {
-        self.group_with_other_groups(context, group) + self.group_with_itself(context, group)
+    fn group_with_all_reference(&self, context: &impl ObserveContext, group: &Group) -> f64 {
+        self.group_with_other_groups_reference(context, group)
+            + self.group_with_itself_reference(context, group)
     }
 
     /// Energy between two sets of particle indices with automatic deduplication.
@@ -239,7 +254,7 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
 
     /// Total nonbonded energy (reference implementation for tests).
     #[allow(dead_code)]
-    fn total_nonbonded(&self, context: &impl ObserveContext) -> f64 {
+    fn total_nonbonded_reference(&self, context: &impl ObserveContext) -> f64 {
         context
             .groups()
             .iter()
@@ -249,20 +264,22 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
                     .groups()
                     .iter()
                     .skip(i + 1)
-                    .map(move |group_j| self.group_with_group(context, group_i, group_j))
-                    .chain(std::iter::once(self.group_with_itself(context, group_i)))
+                    .map(move |group_j| self.group_with_group_reference(context, group_i, group_j))
+                    .chain(std::iter::once(
+                        self.group_with_itself_reference(context, group_i),
+                    ))
             })
             .sum()
     }
 }
 
-// ─── SoA (Structure-of-Arrays) hot path ──────────────────────────────────────
+// ─── Batch-array hot path ────────────────────────────────────────────────────
 
-/// Borrowed SoA arrays for batch nonbonded energy evaluation.
+/// Borrowed particle arrays for batch nonbonded energy evaluation.
 ///
 /// Holds `cell` for HexagonalPrism fallback; all other cell types
 /// use precomputed `pbc` params for inline branchless distance.
-struct SoaSlices<'a, C: SimulationCell> {
+struct ParticleArrays<'a, C: SimulationCell> {
     x: &'a [f64],
     y: &'a [f64],
     z: &'a [f64],
@@ -272,17 +289,17 @@ struct SoaSlices<'a, C: SimulationCell> {
     cell_list: Option<&'a crate::celllist::CellList>,
 }
 
-/// Build SoA slices from an observable context, extracting all arrays.
-fn soa_from_context<'a>(
+/// Build borrowed particle arrays from an observable context.
+fn particle_arrays_from_context<'a>(
     context: &'a impl ObserveContext,
-) -> SoaSlices<'a, impl SimulationCell + 'a> {
-    let (x, y, z) = context.positions_soa();
+) -> ParticleArrays<'a, impl SimulationCell + 'a> {
+    let (x, y, z) = context.positions();
     let atom_kinds = context.atom_kinds_u32();
     let cell = context.cell();
     let pbc = context
         .pbc_params()
         .or_else(|| PbcParams::try_from_cell(cell));
-    SoaSlices {
+    ParticleArrays {
         x,
         y,
         z,
@@ -293,7 +310,7 @@ fn soa_from_context<'a>(
     }
 }
 
-impl<'a, C: SimulationCell> SoaSlices<'a, C> {
+impl<'a, C: SimulationCell> ParticleArrays<'a, C> {
     /// Minimum image squared distance from `(xi, yi, zi)` to particle `j`.
     ///
     /// # Safety
@@ -350,20 +367,20 @@ impl<'a, C: SimulationCell> SoaSlices<'a, C> {
     }
 }
 
-/// Extract `(xi, yi, zi, kind_i)` for particle `i` from SoA arrays.
+/// Extract `(xi, yi, zi, kind_i)` for particle `i` from particle arrays.
 ///
 /// # Safety
-/// `i` must be in bounds for all SoA arrays.
+/// `i` must be in bounds for all particle arrays.
 #[inline(always)]
 unsafe fn read_particle(
-    soa: &SoaSlices<'_, impl SimulationCell>,
+    arrays: &ParticleArrays<'_, impl SimulationCell>,
     i: usize,
 ) -> (f64, f64, f64, usize) {
     (
-        *soa.x.get_unchecked(i),
-        *soa.y.get_unchecked(i),
-        *soa.z.get_unchecked(i),
-        *soa.atom_kinds.get_unchecked(i) as usize,
+        *arrays.x.get_unchecked(i),
+        *arrays.y.get_unchecked(i),
+        *arrays.z.get_unchecked(i),
+        *arrays.atom_kinds.get_unchecked(i) as usize,
     )
 }
 
@@ -375,8 +392,8 @@ impl<P: IsotropicTwobodyEnergy> EnergyChange for NonbondedMatrix<P> {
 
 impl<P: IsotropicTwobodyEnergy> StatefulEnergy for NonbondedMatrix<P> {
     fn total_energy(&self, context: &impl ObserveContext) -> f64 {
-        let soa = soa_from_context(context);
-        self.total_nonbonded_soa(&soa, context.groups())
+        let arrays = particle_arrays_from_context(context);
+        self.total_nonbonded(&arrays, context.groups())
     }
 
     fn partial_energy(&self, context: &impl ObserveContext, change: &Change) -> f64 {
@@ -388,19 +405,19 @@ impl<P: IsotropicTwobodyEnergy> StatefulEnergy for NonbondedMatrix<P> {
             }
         }
 
-        let soa = soa_from_context(context);
+        let arrays = particle_arrays_from_context(context);
         let groups = context.groups();
         match change {
-            Change::Everything | Change::Volume(_, _) => self.total_nonbonded_soa(&soa, groups),
+            Change::Everything | Change::Volume(_, _) => self.total_nonbonded(&arrays, groups),
             Change::SingleGroup(gi, GroupChange::RigidBody) => {
                 // Cache miss — lazy-initialize all pairwise energies
-                self.initialize_cache_soa(&soa, groups);
+                self.initialize_cache(&arrays, groups);
                 self.cache.read().unwrap().as_ref().unwrap().group_energies[*gi]
             }
             Change::SingleGroup(group_index, group_change) => {
-                self.single_group_change_soa(&soa, groups, *group_index, group_change)
+                self.single_group_change(&arrays, groups, *group_index, group_change)
             }
-            Change::Groups(vec) => self.multi_group_change_soa(&soa, groups, vec),
+            Change::Groups(vec) => self.multi_group_change(&arrays, groups, vec),
             Change::None => 0.0,
         }
     }
@@ -643,7 +660,7 @@ impl From<&NonbondedMatrix> for NonbondedMatrixSplined {
     }
 }
 
-// ─── SoA energy and force evaluation ─────────────────────────────────────────
+// ─── Batch-array energy and force evaluation ─────────────────────────────────
 
 impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
     /// Fast check if two groups are beyond interaction range using squared
@@ -677,30 +694,30 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
         dist_sq > threshold_sq
     }
 
-    /// Energy of particle `i` with targets, reading directly from SoA arrays.
+    /// Energy of particle `i` with targets, reading directly from particle arrays.
     ///
     /// Uses unchecked indexing to eliminate ~6 bounds checks per pair in the inner
     /// loop — this is the single hottest function in MC sweeps. All indices are
     /// validated by `debug_assert!` so debug builds still catch OOB.
     ///
     /// # Safety invariants (upheld by callers)
-    /// - `i` and all `targets` values are in `[0, soa.x.len())`
+    /// - `i` and all `targets` values are in `[0, arrays.x.len())`
     /// - `atom_kinds[i]` values index within `self.potentials` dimensions
     #[inline]
-    fn particle_energy_soa(
+    fn particle_energy(
         &self,
-        soa: &SoaSlices<'_, impl SimulationCell>,
+        arrays: &ParticleArrays<'_, impl SimulationCell>,
         i: usize,
         targets: impl Iterator<Item = usize>,
     ) -> f64 {
-        debug_assert!(i < soa.x.len());
+        debug_assert!(i < arrays.x.len());
         // SAFETY: i is a valid particle index from an active group range.
-        let (xi, yi, zi, kind_i) = unsafe { read_particle(soa, i) };
+        let (xi, yi, zi, kind_i) = unsafe { read_particle(arrays, i) };
         // Row slice gives a contiguous &[u8] for sequential cache-line reads over j.
         let excl_row = self.exclusions.row(i);
         let mut energy = 0.0;
         for j in targets {
-            debug_assert!(j < soa.x.len());
+            debug_assert!(j < arrays.x.len());
             // SAFETY: j is a valid particle index from an active group range;
             // atom kinds are topology-derived indices into the potentials matrix.
             // No j==i guard needed: callers use disjoint ranges, and the exclusion
@@ -709,8 +726,8 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
                 if *excl_row.get_unchecked(j) == 0 {
                     continue;
                 }
-                let rsq = soa.distance_squared_to(xi, yi, zi, j);
-                let kind_j = *soa.atom_kinds.get_unchecked(j) as usize;
+                let rsq = arrays.distance_squared_to(xi, yi, zi, j);
+                let kind_j = *arrays.atom_kinds.get_unchecked(j) as usize;
                 energy += self
                     .potentials
                     .uget((kind_i, kind_j))
@@ -720,24 +737,24 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
         energy
     }
 
-    /// Intra-group energy (i < j pairs) via SoA arrays.
+    /// Intra-group energy (i < j pairs) via particle arrays.
     #[inline]
-    fn group_with_itself_soa(
+    fn group_with_itself(
         &self,
-        soa: &SoaSlices<'_, impl SimulationCell>,
+        arrays: &ParticleArrays<'_, impl SimulationCell>,
         group: &Group,
     ) -> f64 {
         let active = group.iter_active();
         active
             .clone()
-            .map(|i| self.particle_energy_soa(soa, i, (i + 1)..active.end))
+            .map(|i| self.particle_energy(arrays, i, (i + 1)..active.end))
             .sum()
     }
 
-    /// Total nonbonded energy via SoA arrays.
-    fn total_nonbonded_soa(
+    /// Total nonbonded energy via particle arrays.
+    fn total_nonbonded(
         &self,
-        soa: &SoaSlices<'_, impl SimulationCell>,
+        arrays: &ParticleArrays<'_, impl SimulationCell>,
         groups: &[Group],
     ) -> f64 {
         groups
@@ -749,24 +766,24 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
                     .skip(gi + 1)
                     .filter(|group_j| {
                         !self.is_molecule_pair_excluded(group_i.molecule(), group_j.molecule())
-                            && !self.groups_beyond_cutoff(group_i, group_j, soa.pbc.as_ref())
+                            && !self.groups_beyond_cutoff(group_i, group_j, arrays.pbc.as_ref())
                     })
                     .flat_map(|group_j| {
                         group_i
                             .iter_active()
-                            .map(move |i| self.particle_energy_soa(soa, i, group_j.iter_active()))
+                            .map(move |i| self.particle_energy(arrays, i, group_j.iter_active()))
                     })
                     .sum();
-                inter + self.group_with_itself_soa(soa, group_i)
+                inter + self.group_with_itself(arrays, group_i)
             })
             .sum()
     }
 
-    /// Inter-group energy of one particle via SoA arrays.
+    /// Inter-group energy of one particle via particle arrays.
     #[inline]
-    fn inter_group_energy_soa(
+    fn inter_group_energy(
         &self,
-        soa: &SoaSlices<'_, impl SimulationCell>,
+        arrays: &ParticleArrays<'_, impl SimulationCell>,
         groups: &[Group],
         i: usize,
         own_group: &Group,
@@ -775,15 +792,15 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
             .iter()
             .filter(|gj| gj.index() != own_group.index())
             .filter(|gj| !self.is_molecule_pair_excluded(own_group.molecule(), gj.molecule()))
-            .filter(|gj| !self.groups_beyond_cutoff(own_group, gj, soa.pbc.as_ref()))
-            .map(|gj| self.particle_energy_soa(soa, i, gj.iter_active()))
+            .filter(|gj| !self.groups_beyond_cutoff(own_group, gj, arrays.pbc.as_ref()))
+            .map(|gj| self.particle_energy(arrays, i, gj.iter_active()))
             .sum()
     }
 
-    /// Single group change via pre-extracted SoA arrays.
-    fn single_group_change_soa(
+    /// Single group change via pre-extracted particle arrays.
+    fn single_group_change(
         &self,
-        soa: &SoaSlices<'_, impl SimulationCell>,
+        arrays: &ParticleArrays<'_, impl SimulationCell>,
         groups: &[Group],
         group_index: usize,
         change: &GroupChange,
@@ -791,18 +808,18 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
         let group = &groups[group_index];
         match change {
             GroupChange::RigidBody | GroupChange::ResizeExcludeIntra(_) => {
-                self.inter_group_energy_all_soa(soa, groups, group)
+                self.inter_group_energy_all(arrays, groups, group)
             }
             GroupChange::Resize(_) | GroupChange::UpdateIdentity(_) => {
-                self.inter_group_energy_all_soa(soa, groups, group)
-                    + self.group_with_itself_soa(soa, group)
+                self.inter_group_energy_all(arrays, groups, group)
+                    + self.group_with_itself(arrays, group)
             }
             // ResizePartial reuses the PartialUpdate path for O(N) per affected atom
             GroupChange::PartialUpdate(indices) | GroupChange::ResizePartial(_, indices) => indices
                 .iter()
                 .map(|&rel_idx| {
                     group.to_absolute(rel_idx).map_or(0.0, |abs_i| {
-                        self.particle_energy_all_soa(soa, groups, abs_i.get(), group)
+                        self.particle_energy_all(arrays, groups, abs_i.get(), group)
                     })
                 })
                 .sum(),
@@ -812,13 +829,13 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
                     return 0.0;
                 }
                 let abs_i = group.start() + rel.get();
-                self.particle_energy_all_soa(soa, groups, abs_i, group)
+                self.particle_energy_all(arrays, groups, abs_i, group)
             }
             GroupChange::None => 0.0,
         }
     }
 
-    /// Energy for multiple simultaneous group changes (SoA), counting every
+    /// Energy for multiple simultaneous group changes, counting every
     /// pair of changed groups exactly once regardless of change kind.
     ///
     /// The energy framework calls this in the old and new states and
@@ -826,17 +843,17 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
     /// `Q_new - Q_old = ΔU`. The simplest such `Q` for multi-change moves is
     ///
     ///   Σ_{changed gi}  per-change-contrib(gi)
-    /// + Σ_{i<j, both changed}  group_pair_energy_soa(gi, gj)
+    /// + Σ_{i<j, both changed}  group_pair_energy(gi, gj)
     ///
-    /// The per-change contribution mirrors `single_group_change_soa` but
+    /// The per-change contribution mirrors `single_group_change` but
     /// only sums against *unchanged* groups (cross-terms between changed
     /// groups are handled exactly once in the second sum). The naive
-    /// implementation — letting `single_group_change_soa` iterate all
+    /// implementation — letting `single_group_change` iterate all
     /// other groups — double-counts the cross-term between two partial
     /// changes (the original bug).
-    fn multi_group_change_soa(
+    fn multi_group_change(
         &self,
-        soa: &SoaSlices<'_, impl SimulationCell>,
+        arrays: &ParticleArrays<'_, impl SimulationCell>,
         groups: &[Group],
         changes: &[(usize, GroupChange)],
     ) -> f64 {
@@ -863,10 +880,10 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
                 GroupChange::None => continue,
                 gc if gc.is_whole_group() => {
                     energy += unchanged_groups()
-                        .map(|gk| self.group_pair_energy_soa(soa, group, gk))
+                        .map(|gk| self.group_pair_energy(arrays, group, gk))
                         .sum::<f64>();
                     if gc.internal_change() {
-                        energy += self.group_with_itself_soa(soa, group);
+                        energy += self.group_with_itself(arrays, group);
                     }
                 }
                 GroupChange::PartialUpdate(rel) | GroupChange::ResizePartial(_, rel) => {
@@ -888,11 +905,11 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
                         if self.is_molecule_pair_excluded(group.molecule(), gk.molecule()) {
                             continue;
                         }
-                        if self.groups_beyond_cutoff(group, gk, soa.pbc.as_ref()) {
+                        if self.groups_beyond_cutoff(group, gk, arrays.pbc.as_ref()) {
                             continue;
                         }
                         for &abs_i in affected_abs {
-                            energy += self.particle_energy_soa(soa, abs_i, gk.iter_active());
+                            energy += self.particle_energy(arrays, abs_i, gk.iter_active());
                         }
                     }
 
@@ -903,8 +920,8 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
                     // self pair.
                     for (k, &abs_i) in affected_abs.iter().enumerate() {
                         let earlier = &affected_abs[..k];
-                        energy += self.particle_energy_soa(
-                            soa,
+                        energy += self.particle_energy(
+                            arrays,
                             abs_i,
                             group.iter_active().filter(|j| !earlier.contains(j)),
                         );
@@ -920,12 +937,12 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
                         if self.is_molecule_pair_excluded(group.molecule(), gk.molecule()) {
                             continue;
                         }
-                        if self.groups_beyond_cutoff(group, gk, soa.pbc.as_ref()) {
+                        if self.groups_beyond_cutoff(group, gk, arrays.pbc.as_ref()) {
                             continue;
                         }
-                        energy += self.particle_energy_soa(soa, abs_i, gk.iter_active());
+                        energy += self.particle_energy(arrays, abs_i, gk.iter_active());
                     }
-                    energy += self.particle_energy_soa(soa, abs_i, group.iter_active());
+                    energy += self.particle_energy(arrays, abs_i, group.iter_active());
                 }
                 GroupChange::RigidBody
                 | GroupChange::UpdateIdentity(_)
@@ -937,7 +954,7 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
         }
 
         // Phase 2: cross-term between each unique pair of changed groups.
-        // `group_pair_energy_soa` already applies exclusion + cutoff filters.
+        // `group_pair_energy` already applies exclusion + cutoff filters.
         for (i, (gi, gci)) in changes.iter().enumerate() {
             if matches!(gci, GroupChange::None) {
                 continue;
@@ -946,7 +963,7 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
                 if matches!(gcj, GroupChange::None) {
                     continue;
                 }
-                energy += self.group_pair_energy_soa(soa, &groups[*gi], &groups[*gj]);
+                energy += self.group_pair_energy(arrays, &groups[*gi], &groups[*gj]);
             }
         }
 
@@ -958,9 +975,9 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
     /// With a cell list, iterates spatial neighbors per atom and excludes
     /// own-group contributions. Falls back to bounding-sphere-filtered
     /// group iteration otherwise.
-    fn inter_group_energy_all_soa(
+    fn inter_group_energy_all(
         &self,
-        soa: &SoaSlices<'_, impl SimulationCell>,
+        arrays: &ParticleArrays<'_, impl SimulationCell>,
         groups: &[Group],
         group: &Group,
     ) -> f64 {
@@ -968,13 +985,13 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
         // so it cannot skip excluded molecule-type pairs. Fall back to
         // group-based iteration where the exclusion check is applied per pair.
         if !self.has_molecule_pair_exclusions() {
-            if let Some(cl) = soa.cell_list {
+            if let Some(cl) = arrays.cell_list {
                 let own_range = group.iter_active();
                 return group
                     .iter_active()
                     .map(|i| {
-                        self.particle_energy_soa(
-                            soa,
+                        self.particle_energy(
+                            arrays,
                             i,
                             cl.neighbors(i)
                                 .filter(move |&j| j < own_range.start || j >= own_range.end),
@@ -985,7 +1002,7 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
         }
         group
             .iter_active()
-            .map(|i| self.inter_group_energy_soa(soa, groups, i, group))
+            .map(|i| self.inter_group_energy(arrays, groups, i, group))
             .sum()
     }
 
@@ -994,50 +1011,50 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
     /// When a cell list is available, iterates only over spatial neighbors
     /// (O(neighbors) instead of O(N)). Falls back to group-based iteration otherwise.
     #[inline]
-    fn particle_energy_all_soa(
+    fn particle_energy_all(
         &self,
-        soa: &SoaSlices<'_, impl SimulationCell>,
+        arrays: &ParticleArrays<'_, impl SimulationCell>,
         groups: &[Group],
         abs_i: usize,
         own_group: &Group,
     ) -> f64 {
         // Cell list lacks group ownership, so cannot enforce molecule-pair exclusions
         if !self.has_molecule_pair_exclusions() {
-            if let Some(cl) = soa.cell_list {
-                return self.particle_energy_soa(
-                    soa,
+            if let Some(cl) = arrays.cell_list {
+                return self.particle_energy(
+                    arrays,
                     abs_i,
                     cl.neighbors(abs_i).filter(move |&j| j != abs_i),
                 );
             }
         }
         // Fallback: inter-group + intra-group
-        self.inter_group_energy_soa(soa, groups, abs_i, own_group)
-            + self.particle_energy_soa(soa, abs_i, own_group.iter_active())
+        self.inter_group_energy(arrays, groups, abs_i, own_group)
+            + self.particle_energy(arrays, abs_i, own_group.iter_active())
     }
 
-    /// Inter-group nonbonded energy between two specific groups via SoA arrays.
+    /// Inter-group nonbonded energy between two specific groups via particle arrays.
     #[inline]
-    fn group_pair_energy_soa(
+    fn group_pair_energy(
         &self,
-        soa: &SoaSlices<'_, impl SimulationCell>,
+        arrays: &ParticleArrays<'_, impl SimulationCell>,
         group_i: &Group,
         group_j: &Group,
     ) -> f64 {
         if self.is_molecule_pair_excluded(group_i.molecule(), group_j.molecule()) {
             return 0.0;
         }
-        if self.groups_beyond_cutoff(group_i, group_j, soa.pbc.as_ref()) {
+        if self.groups_beyond_cutoff(group_i, group_j, arrays.pbc.as_ref()) {
             return 0.0;
         }
         group_i
             .iter_active()
-            .map(|i| self.particle_energy_soa(soa, i, group_j.iter_active()))
+            .map(|i| self.particle_energy(arrays, i, group_j.iter_active()))
             .sum()
     }
 
     /// Compute all pairwise inter-group energies and populate the cache.
-    fn initialize_cache_soa(&self, soa: &SoaSlices<'_, impl SimulationCell>, groups: &[Group]) {
+    fn initialize_cache(&self, arrays: &ParticleArrays<'_, impl SimulationCell>, groups: &[Group]) {
         let n = groups.len();
         let mut pairwise = vec![0.0; n * n];
         let mut group_energies = vec![0.0; n];
@@ -1046,7 +1063,7 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
             debug_assert!(group_i.index() == gi);
             for group_j in groups.iter().skip(gi + 1) {
                 let gj = group_j.index();
-                let e = self.group_pair_energy_soa(soa, group_i, group_j);
+                let e = self.group_pair_energy(arrays, group_i, group_j);
                 pairwise[gi * n + gj] = e;
                 pairwise[gj * n + gi] = e;
                 group_energies[gi] += e;
@@ -1057,13 +1074,13 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
         *self.cache.write().unwrap() = Some(GroupEnergyCache::new(pairwise, group_energies, n));
     }
 
-    /// Compute per-atom nonbonded forces for all active particles using SoA arrays.
+    /// Compute per-atom nonbonded forces for all active particles using particle arrays.
     ///
     /// For each unique pair (i, j), evaluates `-dU/d(r²)` from the pair potential
     /// and accumulates the force vector on both atoms (Newton's third law).
-    fn accumulate_forces_soa(
+    fn accumulate_forces(
         &self,
-        soa: &SoaSlices<'_, impl SimulationCell>,
+        arrays: &ParticleArrays<'_, impl SimulationCell>,
         groups: &[Group],
         forces: &mut [[f64; 3]],
     ) {
@@ -1073,17 +1090,17 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
                 if self.is_molecule_pair_excluded(group_i.molecule(), group_j.molecule()) {
                     continue;
                 }
-                if self.groups_beyond_cutoff(group_i, group_j, soa.pbc.as_ref()) {
+                if self.groups_beyond_cutoff(group_i, group_j, arrays.pbc.as_ref()) {
                     continue;
                 }
                 for i in group_i.iter_active() {
-                    self.accumulate_particle_forces_soa(soa, i, group_j.iter_active(), forces);
+                    self.accumulate_particle_forces(arrays, i, group_j.iter_active(), forces);
                 }
             }
             // Intra-group pairs (i < j)
             let active = group_i.iter_active();
             for i in active.clone() {
-                self.accumulate_particle_forces_soa(soa, i, (i + 1)..active.end, forces);
+                self.accumulate_particle_forces(arrays, i, (i + 1)..active.end, forces);
             }
         }
     }
@@ -1091,29 +1108,29 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
     /// Accumulate forces on atom `i` from interactions with `targets`, applying Newton's third law.
     ///
     /// # Safety invariants (upheld by callers)
-    /// - `i` and all `targets` values are in bounds for SoA arrays and `forces`
+    /// - `i` and all `targets` values are in bounds for particle arrays and `forces`
     #[inline]
-    fn accumulate_particle_forces_soa(
+    fn accumulate_particle_forces(
         &self,
-        soa: &SoaSlices<'_, impl SimulationCell>,
+        arrays: &ParticleArrays<'_, impl SimulationCell>,
         i: usize,
         targets: impl Iterator<Item = usize>,
         forces: &mut [[f64; 3]],
     ) {
-        debug_assert!(i < soa.x.len());
+        debug_assert!(i < arrays.x.len());
         // SAFETY: i is a valid particle index from an active group range.
-        let (xi, yi, zi, kind_i) = unsafe { read_particle(soa, i) };
+        let (xi, yi, zi, kind_i) = unsafe { read_particle(arrays, i) };
         let excl_row = self.exclusions.row(i);
 
         for j in targets {
-            debug_assert!(j < soa.x.len());
+            debug_assert!(j < arrays.x.len());
             unsafe {
                 if *excl_row.get_unchecked(j) == 0 {
                     continue;
                 }
-                let dr = soa.distance_vector_to(xi, yi, zi, j);
+                let dr = arrays.distance_vector_to(xi, yi, zi, j);
                 let rsq = dr[0].mul_add(dr[0], dr[1].mul_add(dr[1], dr[2] * dr[2]));
-                let kind_j = *soa.atom_kinds.get_unchecked(j) as usize;
+                let kind_j = *arrays.atom_kinds.get_unchecked(j) as usize;
                 let f_mag = self
                     .potentials
                     .uget((kind_i, kind_j))
@@ -1149,8 +1166,8 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
             .unwrap_or(0);
         let mut forces = vec![[0.0f64; 3]; n];
 
-        let soa = soa_from_context(context);
-        self.accumulate_forces_soa(&soa, context.groups(), &mut forces);
+        let arrays = particle_arrays_from_context(context);
+        self.accumulate_forces(&arrays, context.groups(), &mut forces);
 
         forces
             .into_iter()
@@ -1170,12 +1187,12 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
         };
 
         // take() avoids a borrow conflict: we need &mut cache while calling
-        // group_pair_energy_soa(&self), and the cache lives inside self.
+        // group_pair_energy(&self), and the cache lives inside self.
         let mut cache_opt = self.cache.get_mut().unwrap().take();
         if let Some(ref mut cache) = cache_opt {
             // Bypass cell list so all group-pair interactions are fully recomputed
-            let mut soa = soa_from_context(context);
-            soa.cell_list = None;
+            let mut arrays = particle_arrays_from_context(context);
+            arrays.cell_list = None;
             let groups = context.groups();
             let n = cache.n_groups;
             let m = *group_index;
@@ -1185,7 +1202,7 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
                 if j == m {
                     continue;
                 }
-                let new_pair = self.group_pair_energy_soa(&soa, &groups[m], gj);
+                let new_pair = self.group_pair_energy(&arrays, &groups[m], gj);
                 let old_pair = cache.pairwise[m * n + j];
                 let delta = new_pair - old_pair;
                 cache.pairwise[m * n + j] = new_pair;

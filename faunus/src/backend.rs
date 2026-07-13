@@ -1,4 +1,4 @@
-//! SoA (Structure-of-Arrays) backend with SIMD-friendly memory layout.
+//! Simulation backend with a structure-of-arrays memory layout.
 //!
 //! Positions are stored as separate x, y, z vectors for cache-friendly access.
 //! This enables SIMD batch evaluation without sync overhead.
@@ -42,7 +42,7 @@ pub fn get_medium_str(yaml: &str) -> anyhow::Result<interatomic::coulomb::Medium
 
 /// Backup for undo on MC reject.
 #[derive(Clone, Debug)]
-struct SoaBackup {
+struct Backup {
     /// (index, x, y, z, atom_kind) tuples for changed particles
     particles: Vec<(usize, f64, f64, f64, u32)>,
     /// Derived geometry per group; `None` records a group that had none, so undo can restore that.
@@ -56,7 +56,7 @@ struct SoaBackup {
     cell_list_clone: Option<crate::celllist::CellList>,
 }
 
-/// Simulation backend with SoA position layout for SIMD-friendly access.
+/// Simulation backend with structure-of-arrays position layout for SIMD-friendly access.
 #[derive(Clone, Debug, Serialize)]
 pub struct Backend {
     topology: Arc<Topology>,
@@ -84,7 +84,7 @@ pub struct Backend {
     #[serde(skip)]
     hamiltonian: RefCell<Hamiltonian>,
     #[serde(skip)]
-    backup: Option<SoaBackup>,
+    backup: Option<Backup>,
     /// Optional cell list for spatial acceleration (built when cutoff is known).
     #[serde(skip)]
     cell_list: Option<crate::celllist::CellList>,
@@ -487,7 +487,7 @@ impl ObserveContext for Backend {
         self.cell().distance(&pi, &pj)
     }
 
-    fn positions_soa(&self) -> (&[f64], &[f64], &[f64]) {
+    fn positions(&self) -> (&[f64], &[f64], &[f64]) {
         (&self.x, &self.y, &self.z)
     }
 
@@ -653,7 +653,7 @@ impl Context for Backend {
         let quaternion = *group.quaternion();
         let group_size = group.size();
         let cell_list_backup = self.cell_list.as_ref().map(|cl| cl.begin_changes());
-        self.backup = Some(SoaBackup {
+        self.backup = Some(Backup {
             particles,
             geometries: vec![(group_index, geometry)],
             quaternions: vec![(group_index, quaternion)],
@@ -687,7 +687,7 @@ impl Context for Backend {
             .enumerate()
             .map(|(i, g)| (i, g.size()))
             .collect();
-        self.backup = Some(SoaBackup {
+        self.backup = Some(Backup {
             particles,
             geometries,
             quaternions,
@@ -902,7 +902,7 @@ mod tests {
 
     /// Verify total energy equals sum of per-group energies, and mass_center matches auxiliary.
     #[test]
-    fn soa_energy_and_mass_center() {
+    fn energy_and_mass_center() {
         let yaml = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("tests/files/gibbs_ensemble/input.yaml");
         let ctx = Backend::new(&yaml, None, &mut rand::thread_rng()).unwrap();

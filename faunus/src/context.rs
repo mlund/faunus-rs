@@ -173,8 +173,8 @@ pub trait ObserveContext: GroupCollection + WithSimulationCell + WithTopology {
         self.get_distance(i, j).norm_squared()
     }
 
-    /// SoA position arrays for batch evaluation.
-    fn positions_soa(&self) -> (&[f64], &[f64], &[f64]);
+    /// Position arrays (separate x, y, z) for batch evaluation.
+    fn positions(&self) -> (&[f64], &[f64], &[f64]);
 
     /// Contiguous atom kind array (u32 for SIMD gather).
     fn atom_kinds_u32(&self) -> &[u32];

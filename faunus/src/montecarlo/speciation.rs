@@ -1325,7 +1325,7 @@ propagate:
 
     /// Same reaction on an ATOMIC mega-group is NOT yet supported with explicit energy:
     /// the two same-group deletions become two change-entries sharing one group, which the
-    /// `multi_group_change_soa` path double-counts as a self-pair (large drift). Tracked
+    /// `multi_group_change` path double-counts as a self-pair (large drift). Tracked
     /// for a follow-up energy-framework fix (batch same-mega-group changes into one entry).
     /// Until then, use non-atomic single-atom molecules for coefficient-≥2 ion exchange.
     #[test]

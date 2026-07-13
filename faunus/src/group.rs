@@ -708,7 +708,7 @@ pub trait GroupCollectionMut: GroupCollection {
     /// atom-kind generation when — and only when — the kind actually changes.
     fn set_atom_kind_unchecked(&mut self, index: usize, atom_id: AtomKindId);
 
-    /// Swap all SoA fields (position, atom kind) between two particle indices.
+    /// Swap all per-particle array fields (position, atom kind) between two particle indices.
     fn swap_particles(&mut self, i: usize, j: usize);
 
     /// Update only positions (not atom kinds) for the given indices.

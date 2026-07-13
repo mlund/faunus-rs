@@ -222,7 +222,7 @@ pub(super) fn gpu_to_quat(q: &[f32; 4]) -> crate::UnitQuaternion {
 pub(super) fn pack_positions_f32<T: Context>(context: &T) -> Vec<f32> {
     let n = context.num_particles();
     let mut positions = Vec::with_capacity(n * 4);
-    let (x, y, z) = context.positions_soa();
+    let (x, y, z) = context.positions();
     let atom_kinds = context.atom_kinds_u32();
     for i in 0..n {
         positions.push(x[i] as f32);
