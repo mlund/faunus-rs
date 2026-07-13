@@ -28,7 +28,7 @@
 
 use super::widom::WidomAccumulator;
 use super::{Analyze, Sampling};
-use crate::auxiliary::{ColumnWriter, MappingExt};
+use crate::auxiliary::{BlockSummary, ColumnWriter, MappingExt};
 use crate::axes::Axes;
 use crate::change::{Change, GroupChange};
 use crate::context::PerturbContext;
@@ -189,12 +189,20 @@ impl_info!(
 );
 
 impl VirtualTranslate {
-    /// Calculate the mean force in units of kT/Å
-    fn mean_force(&self) -> f64 {
+    /// Mean force ± SEM in units of kT/Å.
+    ///
+    /// Mean comes from the total accumulator (finite from sample 1); error comes
+    /// from the block aggregator (NaN until ≥ 1 block closes, ~0 with 1 block,
+    /// real SEM with ≥ 2). Both scale by 1/dL, the error by |dL| since the sign
+    /// carries no information about the spread.
+    fn mean_force(&self) -> BlockSummary {
         if self.displacement.abs() > f64::EPSILON {
-            -self.widom.mean_free_energy() / self.displacement
+            BlockSummary {
+                mean: -self.widom.mean_free_energy() / self.displacement,
+                error: self.widom.free_energy().error() / self.displacement.abs(),
+            }
         } else {
-            0.0
+            BlockSummary::default()
         }
     }
 
@@ -216,7 +224,7 @@ impl VirtualTranslate {
     /// One row per sampled step, keeping the file in sync with other analyses
     /// at the same frequency.
     fn write_to_stream(&mut self, step: usize, energy_change: f64) -> Result<()> {
-        let mean_force = self.mean_force();
+        let mean_force = self.mean_force().mean;
         let displacement = self.displacement;
 
         if let Some(stream) = self.stream.as_mut() {
@@ -414,7 +422,7 @@ mod tests {
         vt.widom.collect(0.0, 1.0);
         vt.widom.collect(0.0, 1.0);
         assert_approx_eq!(f64, vt.widom.mean_free_energy(), 0.0);
-        assert_approx_eq!(f64, vt.mean_force(), 0.0);
+        assert_approx_eq!(f64, vt.mean_force().mean, 0.0);
     }
 
     #[test]
@@ -423,7 +431,7 @@ mod tests {
         // free_energy = -ln(exp(-2.0)) = 2.0, force = -2.0/0.1 = -20.0
         vt.widom.collect(2.0, 1.0);
         assert_approx_eq!(f64, vt.widom.mean_free_energy(), 2.0, epsilon = 1e-12);
-        assert_approx_eq!(f64, vt.mean_force(), -20.0, epsilon = 1e-10);
+        assert_approx_eq!(f64, vt.mean_force().mean, -20.0, epsilon = 1e-10);
     }
 
     #[test]
@@ -435,7 +443,33 @@ mod tests {
     #[test]
     fn mean_force_zero_displacement() {
         let vt = build_vt(0.0);
-        assert_approx_eq!(f64, vt.mean_force(), 0.0);
+        let force = vt.mean_force();
+        assert_approx_eq!(f64, force.mean, 0.0);
+        assert_approx_eq!(f64, force.error, 0.0);
+    }
+
+    #[test]
+    fn to_yaml_emits_mean_force_mapping() {
+        let mut vt = build_vt(0.1);
+        // Close two distinct blocks so the BlockAverage has finite mean and SEM.
+        vt.widom.collect(0.0, 1.0);
+        vt.widom.end_block();
+        vt.widom.collect(2.0, 1.0);
+        vt.widom.end_block();
+        // The accumulator is driven directly here, so tell the framework two frames were sampled.
+        vt.sampling.set_num_samples(2);
+
+        let yaml = <VirtualTranslate as Analyze<crate::backend::Backend>>::to_yaml(&vt)
+            .expect("to_yaml returns Some");
+        let entry = yaml
+            .as_mapping()
+            .and_then(|map| map.get("mean_force"))
+            .expect("mean_force entry");
+        let parsed: BlockSummary =
+            serde_yml::from_value(entry.clone()).expect("mean_force parses as BlockSummary");
+        assert!(parsed.mean.is_finite(), "mean must be finite");
+        assert!(parsed.error.is_finite(), "error must be finite");
+        assert!(parsed.error >= 0.0, "error must be non-negative");
     }
 
     #[test]
