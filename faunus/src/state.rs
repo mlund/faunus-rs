@@ -162,3 +162,106 @@ impl State {
             .with_context(|| format!("Failed to write state file {:?}", path.as_ref()))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::backend::Backend;
+    use crate::context::{ObserveContext, WithTopology};
+    use crate::Point;
+    use rand::SeedableRng;
+
+    /// Largest separation between any two atoms of a molecule, as stored.
+    ///
+    /// Measured under minimum image, so it is what the code itself would reconstruct. Taken over
+    /// the group's whole capacity rather than its active atoms: the *inactive* slots are what
+    /// molecular swap reads as its overlay template, so their geometry has to be sound too — a
+    /// dormant group is exactly where a torn molecule hides.
+    fn stored_extent(context: &Backend, group: &crate::group::Group) -> f64 {
+        let indices: Vec<usize> = (group.start()..group.start() + group.capacity()).collect();
+        let mut extent = 0.0_f64;
+        for (n, &i) in indices.iter().enumerate() {
+            for &j in &indices[n + 1..] {
+                extent = extent.max(context.get_distance(i, j).norm());
+            }
+        }
+        extent
+    }
+
+    /// Largest separation between any two atoms of the molecule's reference conformation.
+    fn reference_extent(reference: &[Point]) -> f64 {
+        let mut extent = 0.0_f64;
+        for (n, p) in reference.iter().enumerate() {
+            for q in &reference[n + 1..] {
+                extent = extent.max((p - q).norm());
+            }
+        }
+        extent
+    }
+
+    /// Every committed checkpoint must hold intact molecules.
+    ///
+    /// Scanning the committed fixtures rather than a live run keeps a state file with torn
+    /// geometry from being reused as the starting point of the next simulation — which is how
+    /// one such file survived in the tree unnoticed.
+    ///
+    /// The yardstick is the molecule's own reference conformation, not the box: a minimum-image
+    /// separation is bounded by half the box *by construction*, so comparing it against half the
+    /// box could never report a tear. Restricted to molecules with a reference conformation and
+    /// no bonded potentials, whose shape therefore nothing can legitimately change — a bonded
+    /// chain under a pivot move is free to extend well beyond its reference, and a kind declared
+    /// as a bare list of atoms has no reference shape at all. (Some fixtures deliberately scatter
+    /// such atoms across the cell with `insert: !RandomAtomPos`; those groups are torn by
+    /// construction rather than by any code path — a separate defect.)
+    #[test]
+    fn committed_state_files_hold_intact_molecules() {
+        const TOLERANCE: f64 = 1e-6;
+        let files_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/files");
+        let mut checked = 0usize;
+        // Collected rather than asserted one at a time: a regeneration can tear many molecules at
+        // once, and the whole list is what tells you which fixtures to look at.
+        let mut torn: Vec<String> = Vec::new();
+
+        for entry in std::fs::read_dir(&files_dir).unwrap() {
+            let dir = entry.unwrap().path();
+            let (input, state) = (dir.join("input.yaml"), dir.join("state.yaml"));
+            if !input.is_file() || !state.is_file() {
+                continue;
+            }
+            let name = dir.file_name().unwrap().to_string_lossy();
+            let mut rng = rand::rngs::StdRng::seed_from_u64(0);
+            let mut context = Backend::new(&input, None, &mut rng)
+                .unwrap_or_else(|e| panic!("{name}: cannot build system: {e:#}"));
+            State::from_file(&state)
+                .unwrap()
+                .load(&mut context)
+                .unwrap_or_else(|e| panic!("{name}: cannot load state: {e:#}"));
+
+            let topology = context.topology();
+            for (gi, group) in context.groups().iter().enumerate() {
+                let kind = topology.moleculekind(group.molecule());
+                let reference = kind.reference_positions();
+                if !kind.has_com() || reference.len() < 2 || kind.has_bonded_potentials() {
+                    continue;
+                }
+                checked += 1;
+                let expected = reference_extent(reference);
+                let found = stored_extent(&context, group);
+                if (found - expected).abs() > TOLERANCE {
+                    torn.push(format!(
+                        "{name}: group {gi} spans {found:.1} Å; its conformation is {expected:.1} Å across"
+                    ));
+                }
+            }
+        }
+
+        // Guards against the filter above silently excluding everything.
+        assert!(checked > 0, "no molecular groups were checked");
+        assert!(
+            torn.is_empty(),
+            "{} of {checked} rigid molecules in committed state files do not match their conformation:\n{}",
+            torn.len(),
+            torn.join("\n")
+        );
+    }
+}

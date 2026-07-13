@@ -359,18 +359,17 @@ fn overlay_swap_positions(
         })
         .collect();
 
-    if source_masses.len() < 2 {
-        return source_masses.into_iter().map(|(pos, _)| pos).collect();
-    }
-
     let com = context.mass_center(&source_indices.collect::<Vec<_>>());
     let template: Vec<crate::Point> = (0..target_group.capacity())
         .map(|i| context.position(target_group.start() + i))
         .collect();
-    let source_positions: Vec<crate::Point> = source_masses.iter().map(|(pos, _)| *pos).collect();
 
+    // The result is written into the target group's slots, so it must have exactly that many
+    // positions — never the source group's count, which may differ. When either molecule has too
+    // few atoms to define a principal-axis frame, there is no orientation to align and the
+    // template is simply carried over to the outgoing molecule's mass center.
     crate::geometry::overlay_positions(&template, source_masses, &com, context.cell(), rng)
-        .unwrap_or(source_positions)
+        .unwrap_or_else(|| crate::geometry::place_at(&template, &com, context.cell()))
 }
 
 /// Resolve a single reaction config into forward/backward ops and effective ln(K).

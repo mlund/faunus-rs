@@ -137,9 +137,9 @@ fn test_intramolecular_energy() {
 #[test]
 fn test_intermolecular_new() {
     let (topology, _) = make_system();
-    let intermolecular = match IntermolecularBonded::new(&topology) {
-        EnergyTerm::IntermolecularBonded(e) => e,
-        _ => panic!("IntermolecularBonded not constructed."),
+    let EnergyTerm::IntermolecularBonded(intermolecular) = IntermolecularBonded::new(&topology)
+    else {
+        panic!("IntermolecularBonded not constructed.");
     };
 
     for i in 0..8 {
@@ -153,9 +153,8 @@ fn test_intermolecular_new() {
 
 fn get_intermolecular_bonded() -> (Backend, IntermolecularBonded) {
     let (topology, system) = make_system();
-    let bonded = match IntermolecularBonded::new(&topology) {
-        EnergyTerm::IntermolecularBonded(e) => e,
-        _ => panic!("IntermolecularBonded not constructed."),
+    let EnergyTerm::IntermolecularBonded(bonded) = IntermolecularBonded::new(&topology) else {
+        panic!("IntermolecularBonded not constructed.");
     };
     (system, bonded)
 }

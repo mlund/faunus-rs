@@ -107,22 +107,6 @@ impl GyrationTensor {
         tensor /= total_mass;
         Some(Self::from_tensor(tensor))
     }
-
-    /// Build from equal-mass positions (no PBC).
-    pub fn from_equal_mass_positions(positions: &[Point]) -> Option<Self> {
-        if positions.len() < 2 {
-            return None;
-        }
-        let n = positions.len() as f64;
-        let com: Point = positions.iter().sum::<Point>() / n;
-        let mut tensor = Matrix3::<f64>::zeros();
-        for p in positions {
-            let r = p - com;
-            tensor += r * r.transpose();
-        }
-        tensor /= n;
-        Some(Self::from_tensor(tensor))
-    }
 }
 
 /// Tolerance for detecting degenerate eigenvalues.
@@ -166,12 +150,53 @@ fn randomize_degenerate_axes(
     Rotation3::from_matrix_unchecked(mat)
 }
 
+/// Gather a molecule into a single periodic image, minimum-imaged about its first atom.
+///
+/// Stored coordinates are wrapped into the cell, so a molecule straddling a boundary has
+/// atoms at opposite ends of an axis. Any arithmetic that treats those raw values as a rigid
+/// body — a centroid, a gyration tensor, a displacement from the centre — then describes a
+/// shell the size of the box rather than a molecule. Gather first.
+///
+/// Meaningful only while the molecule spans less than half the shortest box side; beyond
+/// that, minimum image picks the wrong periodic copy and no gathering can recover it.
+fn gather_molecule(positions: &[Point], cell: &impl SimulationCell) -> Vec<Point> {
+    let Some(&first) = positions.first() else {
+        return Vec::new();
+    };
+    positions
+        .iter()
+        .map(|p| first + cell.distance(p, &first))
+        .collect()
+}
+
+/// Place a molecule's template at `com`, keeping its conformation and orientation.
+///
+/// The unoriented counterpart of [`overlay_positions`], for the cases where no principal-axis
+/// frame exists to align against — a molecule of fewer than two atoms has no such frame.
+pub(crate) fn place_at(template: &[Point], com: &Point, cell: &impl SimulationCell) -> Vec<Point> {
+    let gathered = gather_molecule(template, cell);
+    if gathered.is_empty() {
+        return Vec::new();
+    }
+    let centroid: Point = gathered.iter().sum::<Point>() / gathered.len() as f64;
+    gathered
+        .iter()
+        .map(|p| {
+            let mut pos = com + (p - centroid);
+            cell.boundary(&mut pos);
+            pos
+        })
+        .collect()
+}
+
 /// Overlay template positions onto a target molecule using gyration tensor alignment.
 ///
-/// Aligns the principal axes of `template_positions` (equal-mass, no PBC) to
-/// match the principal-axis frame of the target group defined by
-/// `target_positions_masses` (mass-weighted, with PBC). Degenerate eigenvalues
-/// are resolved with random sign flips to avoid MC bias.
+/// Aligns the principal axes of `template_positions` to match the principal-axis frame of
+/// the target group defined by `target_positions_masses` (mass-weighted, with PBC).
+/// Degenerate eigenvalues are resolved with random sign flips to avoid MC bias.
+///
+/// The template arrives as raw stored coordinates and so is gathered first; the target is
+/// minimum-imaged about its own mass center by [`GyrationTensor::from_positions_masses_com`].
 ///
 /// Returns new positions in lab frame, centered on the target COM.
 pub(crate) fn overlay_positions(
@@ -181,9 +206,17 @@ pub(crate) fn overlay_positions(
     cell: &impl SimulationCell,
     rng: &mut (impl Rng + ?Sized),
 ) -> Option<Vec<Point>> {
+    let template = gather_molecule(template_positions, cell);
+    let template_com: Point = template.iter().sum::<Point>() / template.len() as f64;
+
     let target_gt =
         GyrationTensor::from_positions_masses_com(target_positions_masses, target_com, cell)?;
-    let template_gt = GyrationTensor::from_equal_mass_positions(template_positions)?;
+    // Already gathered, so there is no minimum image left to apply — hence `Endless`.
+    let template_gt = GyrationTensor::from_positions_masses_com(
+        template.iter().map(|&p| (p, 1.0)),
+        &template_com,
+        &crate::cell::Endless,
+    )?;
 
     // Randomize degenerate axes for both frames
     let target_rot = randomize_degenerate_axes(&target_gt.rotation, &target_gt.eigenvalues, rng);
@@ -193,11 +226,7 @@ pub(crate) fn overlay_positions(
     // R = R_target · R_template⁻¹ maps template body frame → target lab frame
     let align = target_rot * template_rot.inverse();
 
-    // Template COM
-    let n = template_positions.len() as f64;
-    let template_com: Point = template_positions.iter().sum::<Point>() / n;
-
-    let positions = template_positions
+    let positions = template
         .iter()
         .map(|p| {
             let mut pos = target_com + align * (p - template_com);
@@ -212,9 +241,19 @@ pub(crate) fn overlay_positions(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::cell::{BoundaryConditions, Shape};
+    use crate::cell::{BoundaryConditions, Endless, Shape};
     use approx::assert_relative_eq;
     use nalgebra::Vector3;
+
+    /// Gyration tensor of equal-mass points that are already in one image.
+    fn equal_mass_gyration(positions: &[Point]) -> Option<GyrationTensor> {
+        let com: Point = positions.iter().sum::<Point>() / positions.len().max(1) as f64;
+        GyrationTensor::from_positions_masses_com(
+            positions.iter().map(|&p| (p, 1.0)),
+            &com,
+            &Endless,
+        )
+    }
 
     #[test]
     fn dipole_moment_simple() {
@@ -253,7 +292,7 @@ mod tests {
             Point::new(0.0, 0.0, 0.0),
             Point::new(1.0, 0.0, 0.0),
         ];
-        let gt = GyrationTensor::from_equal_mass_positions(&positions).unwrap();
+        let gt = equal_mass_gyration(&positions).unwrap();
         assert_relative_eq!(gt.eigenvalues[0], 0.0, epsilon = 1e-10);
         assert_relative_eq!(gt.eigenvalues[1], 0.0, epsilon = 1e-10);
         assert!(gt.eigenvalues[2] > 0.0);
@@ -268,7 +307,7 @@ mod tests {
             Point::new(-1.0, 1.0, -1.0),
             Point::new(-1.0, -1.0, 1.0),
         ];
-        let gt = GyrationTensor::from_equal_mass_positions(&positions).unwrap();
+        let gt = equal_mass_gyration(&positions).unwrap();
         assert_relative_eq!(gt.eigenvalues[0], gt.eigenvalues[1], epsilon = 1e-10);
         assert_relative_eq!(gt.eigenvalues[1], gt.eigenvalues[2], epsilon = 1e-10);
     }
@@ -281,15 +320,15 @@ mod tests {
             Point::new(0.0, 0.0, 0.5),
             Point::new(-1.0, 0.5, 0.2),
         ];
-        let gt = GyrationTensor::from_equal_mass_positions(&positions).unwrap();
+        let gt = equal_mass_gyration(&positions).unwrap();
         assert_relative_eq!(gt.rotation.matrix().determinant(), 1.0, epsilon = 1e-10);
     }
 
     #[test]
     fn too_few_particles_returns_none() {
         let positions = [Point::new(1.0, 2.0, 3.0)];
-        assert!(GyrationTensor::from_equal_mass_positions(&positions).is_none());
-        assert!(GyrationTensor::from_equal_mass_positions(&[]).is_none());
+        assert!(equal_mass_gyration(&positions).is_none());
+        assert!(equal_mass_gyration(&[]).is_none());
     }
 
     #[test]
@@ -322,8 +361,8 @@ mod tests {
         assert_relative_eq!(result_com.z, target_com.z, epsilon = 1e-8);
 
         // Rg² should be preserved (same shape, just rotated+translated)
-        let template_gt = GyrationTensor::from_equal_mass_positions(&template).unwrap();
-        let result_gt = GyrationTensor::from_equal_mass_positions(&result).unwrap();
+        let template_gt = equal_mass_gyration(&template).unwrap();
+        let result_gt = equal_mass_gyration(&result).unwrap();
         assert_relative_eq!(result_gt.rg_squared, template_gt.rg_squared, epsilon = 1e-8);
     }
 
@@ -352,6 +391,63 @@ mod tests {
         // All result positions should be inside the cell
         for pos in &result {
             assert!(cell.is_inside(pos), "Position {pos:?} outside cell");
+        }
+    }
+
+    /// All pairwise minimum-image separations, ascending — the molecule's shape,
+    /// independent of where and how it is oriented.
+    fn pair_distances(positions: &[Point], cell: &impl BoundaryConditions) -> Vec<f64> {
+        let mut d = Vec::new();
+        for (n, p) in positions.iter().enumerate() {
+            for q in &positions[n + 1..] {
+                d.push(cell.distance(p, q).norm());
+            }
+        }
+        d.sort_by(f64::total_cmp);
+        d
+    }
+
+    /// A template stored across a periodic boundary still overlays as one intact molecule.
+    ///
+    /// The template arrives as raw wrapped coordinates — a molecule sitting on the box edge
+    /// has atoms at both ends of the axis. Treating those as a rigid body without gathering
+    /// them first puts its centre mid-box and flings the atoms apart on overlay.
+    #[test]
+    fn overlay_of_a_wrapped_template_keeps_the_molecule_intact() {
+        let cell = crate::cell::Cuboid::new(20.0, 20.0, 20.0);
+
+        // Centre the molecule on the +x face so that it straddles the boundary.
+        let shape = [
+            Point::new(-2.0, 0.0, 0.0),
+            Point::new(2.0, 0.0, 0.0),
+            Point::new(0.0, 1.5, 0.0),
+        ];
+        let template: Vec<Point> = shape
+            .iter()
+            .map(|p| {
+                let mut pos = p + Point::new(10.0, 0.0, 0.0);
+                cell.boundary(&mut pos);
+                pos
+            })
+            .collect();
+        assert!(
+            template.iter().any(|p| p.x < 0.0) && template.iter().any(|p| p.x > 0.0),
+            "template must straddle the boundary for this test to mean anything"
+        );
+
+        // Target: the same molecule, intact, in the middle of the box.
+        let target_com = Point::new(1.0, 2.0, 3.0);
+        let target: Vec<(Point, f64)> = shape.iter().map(|p| (p + target_com, 1.0)).collect();
+
+        let mut rng = rand::thread_rng();
+        let result = overlay_positions(&template, target, &target_com, &cell, &mut rng).unwrap();
+
+        // The overlay may reorient the molecule, but it must not deform it.
+        let expected = pair_distances(&shape, &Endless);
+        let got = pair_distances(&result, &cell);
+        assert_eq!(got.len(), expected.len());
+        for (got, want) in got.iter().zip(&expected) {
+            assert_relative_eq!(got, want, epsilon = 1e-8);
         }
     }
 }

@@ -1103,7 +1103,7 @@ fn multi_group_partial_update_handles_more_than_eight_affected_atoms() {
     use std::io::Write;
     const N: usize = 12; // > 8
 
-    let atom_list = vec!["A"; N].join(", ");
+    let atom_list = ["A"; N].join(", ");
     let row = |dy: f64| {
         (0..N)
             .map(|i| format!("[{i}.0, {dy}, 0.0]"))
