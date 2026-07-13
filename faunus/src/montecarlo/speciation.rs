@@ -91,10 +91,11 @@ type ActionBuild = (Vec<SpeciationAction>, Vec<(usize, GroupChange)>, f64);
 ///
 /// Supports molecular insertion/deletion and atom-type swaps.
 ///
+/// The thermal energy comes from the system medium; the move has no temperature of its own.
+///
 /// # YAML example
 /// ```yaml
 /// - !SpeciationMove
-///   temperature: 298.15
 ///   reactions:
 ///     - ["= NaCl", !K 100.0]
 ///     - ["⚛HA = ⚛A + ~H+", !pK 4.24]
@@ -230,6 +231,14 @@ fn extract_atom_participants<'a>(
         .collect()
 }
 
+/// Comma-separated molecule-kind names, for error messages.
+fn kind_names(ids: &[MoleculeId], topology: &crate::topology::Topology) -> String {
+    ids.iter()
+        .map(|id| topology.moleculekind(*id).name().as_str())
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
 /// Find atom swap pairs: atoms appearing on both sides form swap operations.
 fn resolve_atom_swaps(
     reactants: &[Participant],
@@ -276,11 +285,36 @@ fn resolve_atom_swaps(
         let (from_index, to_index) = (from.0.get(), to.0.get());
         let mut molecule_ids =
             kinds_with(&|atoms: &[usize]| atoms.contains(&from_index) && atoms.contains(&to_index));
+
         if molecule_ids.is_empty() {
-            molecule_ids = kinds_with(&|atoms: &[usize]| {
-                atoms.contains(&from_index) || atoms.contains(&to_index)
-            });
+            let with_from = kinds_with(&|atoms: &[usize]| atoms.contains(&from_index));
+            let with_to = kinds_with(&|atoms: &[usize]| atoms.contains(&to_index));
+
+            // Kinds hosting one state and kinds hosting the other, with none hosting both,
+            // cannot be told apart from a titratable site and an unrelated species that
+            // merely reuses the atom kind — a free `A⁻` ion pool beside a titratable `HA`
+            // site. Titrating both would convert ions into sites; titrating one silently
+            // freezes the other. Neither is defensible, so ask the user to disambiguate.
+            anyhow::ensure!(
+                with_from.is_empty() || with_to.is_empty(),
+                "Ambiguous atom swap '{}' ⇌ '{}': {} contain(s) '{}' while {} contain(s) '{}', \
+                 and no molecule lists both. If these are the same titratable site, list both \
+                 states in the molecule definition; if they are different species, use \
+                 distinct atom names.",
+                from.1,
+                to.1,
+                kind_names(&with_from, topology),
+                from.1,
+                kind_names(&with_to, topology),
+                to.1
+            );
+            molecule_ids = if with_from.is_empty() {
+                with_to
+            } else {
+                with_from
+            };
         }
+
         anyhow::ensure!(
             !molecule_ids.is_empty(),
             "No molecule contains atom '{}' or '{}'",
@@ -484,18 +518,17 @@ fn validate_reaction_groups(
                     );
                 }
                 ReactionOp::SwapAtom { molecule_ids, .. } => {
-                    // At least one kind carrying the site must have a group to titrate.
-                    // `Partial` matters: an atomic mega-group is never `Full`.
+                    // A kind carrying the site must have groups *allocated*, but need not be
+                    // populated yet: a kind that starts at `active: 0` may be filled during
+                    // the run by another reaction, and its sites titrate from then on. An
+                    // empty pool at this instant is a runtime rejection, not a bad input.
                     let names = molecule_ids
                         .iter()
                         .map(|id| topology.moleculekind(*id).name().as_str())
                         .collect::<Vec<_>>();
                     anyhow::ensure!(
-                        molecule_ids.iter().any(|id| {
-                            context.count_molecules(*id, GroupSize::Full) > 0
-                                || context.count_molecules(*id, GroupSize::Partial(0)) > 0
-                        }),
-                        "No active groups for molecule(s) {} needed by atom swap",
+                        molecule_ids.iter().copied().any(has_any),
+                        "No groups allocated for molecule(s) {} needed by atom swap",
                         names.join(", ")
                     );
                 }
@@ -768,11 +801,7 @@ impl SpeciationMove {
             let (positions, quaternion) = if capacity == 1 {
                 (vec![com], None)
             } else {
-                let topology = context.topology_ref();
-                let centered = crate::topology::InsertionPolicy::centered_reference_positions(
-                    molecule,
-                    topology.atomkinds(),
-                );
+                let centered = Self::centered_template(mol_id, gi, context);
                 let (positions, quaternion) = crate::topology::InsertionPolicy::place_molecule_at(
                     &centered,
                     &com,
@@ -945,6 +974,39 @@ impl SpeciationMove {
             (gi, GroupChange::UpdateIdentity(vec![rel])),
             ln_bias,
         ))
+    }
+
+    /// Origin-centred coordinates to insert a molecule of kind `mol_id` with.
+    ///
+    /// Prefer the kind's reference geometry, but that is only populated by `from_structure`;
+    /// a molecule declared with a plain `atoms:` list has none. Fall back to the coordinates
+    /// the group itself already holds: `resize_group` only changes the active count, so an
+    /// inactive group still carries the conformation it was built with. Returning the
+    /// reference positions blindly would yield an *empty* vector for such kinds, and the
+    /// transform would then activate the group without writing any coordinates at all —
+    /// re-inserting it at stale positions while the bias assumes a uniform random insertion.
+    fn centered_template(
+        mol_id: MoleculeId,
+        group_index: usize,
+        context: &impl ObserveContext,
+    ) -> Vec<crate::Point> {
+        let topology = context.topology_ref();
+        let molecule = topology.moleculekind(mol_id);
+        if !molecule.reference_positions().is_empty() {
+            return crate::topology::InsertionPolicy::centered_reference_positions(
+                molecule,
+                topology.atomkinds(),
+            );
+        }
+
+        let group = &context.groups()[group_index];
+        let indices: Vec<usize> = (group.start()..group.start() + group.capacity()).collect();
+        let mut positions: Vec<crate::Point> =
+            indices.iter().map(|&i| context.position(i)).collect();
+        let masses: Vec<f64> = indices.iter().map(|&i| context.atom_mass(i)).collect();
+        let com = crate::geometry::mass_center(&positions, &masses);
+        positions.iter_mut().for_each(|pos| *pos -= com);
+        positions
     }
 
     /// Fold a group change into the list, coalescing with any existing entry for the same
@@ -2178,6 +2240,49 @@ propagate:
         (n_a, n_ha)
     }
 
+    /// When one molecule kind hosts the protonated state and a *different* kind hosts the
+    /// deprotonated one, with none hosting both, the two are indistinguishable from a
+    /// titratable site sitting beside an unrelated species that reuses the atom kind — a free
+    /// `A⁻` ion pool next to a titratable `HA`. Titrating both would protonate free ions into
+    /// sites; titrating one would silently freeze the other. Reject it and say so.
+    #[test]
+    fn atom_swap_split_across_unrelated_kinds_is_error() {
+        let yaml = r#"atoms:
+  - {name: HA, mass: 1.0, charge: 0.0, sigma: 3.0}
+  - {name: A, mass: 1.0, charge: -1.0, sigma: 3.0}
+  - {name: H+, mass: 1.0, activity: 1.0e-4}
+molecules:
+  - name: site
+    atoms: [HA]
+  - name: freeion
+    atoms: [A]
+    atomic: true
+system:
+  cell: !Cuboid [30.0, 30.0, 30.0]
+  medium: {permittivity: !Vacuum, temperature: 298.15}
+  energy: {}
+  blocks:
+    - {molecule: site, N: 10, active: 10, insert: !RandomAtomPos {}}
+    - {molecule: freeion, N: 10, active: 5, insert: !RandomAtomPos {}}
+propagate:
+  seed: !Fixed 42
+  repeat: 1
+  collections: []
+"#;
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(tmp.path(), yaml.as_bytes()).unwrap();
+        let mut rng = rand::thread_rng();
+        let context = Backend::new(tmp.path(), None, &mut rng).unwrap();
+
+        let mut mv = make_move("⚛HA = ⚛A + ~H+", 1.0);
+        let err = mv
+            .finalize(&context, THERMAL_ENERGY)
+            .expect_err("a swap split across unrelated kinds must be rejected");
+        let msg = err.to_string();
+        assert!(msg.contains("Ambiguous"), "{msg}");
+        assert!(msg.contains("site") && msg.contains("freeion"), "{msg}");
+    }
+
     /// A titratable atom kind may occur in several molecule kinds. Binding the swap to the
     /// first matching kind freezes every other kind's sites in their initial protonation
     /// state for the whole run — a silently wrong titration curve — and computes the
@@ -2315,6 +2420,61 @@ propagate:
             }
         }
         assert!(insertions > 0, "no insertion was ever proposed");
+    }
+
+    /// A molecule declared with a plain `atoms:` list has no reference geometry — only
+    /// `from_structure` populates it. Building the insertion from `reference_positions()`
+    /// alone therefore produced an *empty* coordinate list, and the transform activated the
+    /// group without writing any positions: the molecule reappeared at stale coordinates
+    /// while the bias assumed a uniform random insertion, breaking detailed balance.
+    #[test]
+    fn insertion_places_a_molecule_that_has_no_reference_geometry() {
+        let yaml = r#"atoms:
+  - {name: Na, mass: 23.0, charge: 1.0, sigma: 3.0}
+  - {name: Cl, mass: 35.0, charge: -1.0, sigma: 4.0}
+molecules:
+  - name: NaCl
+    atoms: [Na, Cl]
+system:
+  cell: !Cuboid [30.0, 30.0, 30.0]
+  medium: {permittivity: !Vacuum, temperature: 298.15}
+  energy: {}
+  blocks:
+    - {molecule: NaCl, N: 10, active: 2, insert: !RandomAtomPos {}}
+propagate:
+  seed: !Fixed 42
+  repeat: 1
+  collections: []
+"#;
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(tmp.path(), yaml.as_bytes()).unwrap();
+        let mut rng = rand::thread_rng();
+        let context = Backend::new(tmp.path(), None, &mut rng).unwrap();
+
+        let mut mv = make_move("= NaCl", 20.0);
+        mv.finalize(&context, THERMAL_ENERGY).unwrap();
+
+        for _ in 0..50 {
+            let Some((actions, _, _)) =
+                mv.try_build_actions(&mv.resolved[0], Direction::Forward, &context, &mut rng)
+            else {
+                continue;
+            };
+            let Some(SpeciationAction::ActivateGroup { positions, .. }) = actions
+                .iter()
+                .find(|a| matches!(a, SpeciationAction::ActivateGroup { .. }))
+            else {
+                continue;
+            };
+            assert_eq!(
+                positions.len(),
+                2,
+                "an inserted molecule must get one position per atom, even with no \
+                 `from_structure` reference geometry"
+            );
+            return;
+        }
+        panic!("no insertion proposed in 50 attempts");
     }
 
     /// The insertion applies a random orientation, so the group's stored quaternion must be
