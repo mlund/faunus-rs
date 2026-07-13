@@ -135,22 +135,21 @@ impl ProposedMove {
         }
     }
 
-    /// Rotate a subset of a group's particles about `center`, changing its internal geometry.
-    pub fn rotate_atoms(
+    /// Move a subset of a group's particles to `positions`, changing its internal geometry.
+    ///
+    /// `angle` is the rotation the positions were derived from, and is reported to the acceptance
+    /// statistics. The positions themselves are computed by the move, which alone knows how to
+    /// unwrap the affected atoms across the periodic boundary (see [`Transform::SetPositions`]).
+    pub fn move_atoms(
         group: usize,
         relative: Vec<RelIndex>,
-        center: Point,
-        rotation: UnitQuaternion,
+        positions: Vec<Point>,
         angle: f64,
     ) -> Self {
         Self {
             change: Change::SingleGroup(group, GroupChange::PartialUpdate(relative.clone())),
             displacement: Displacement::Angle(angle),
-            transform: Transform::PartialRotate(
-                center,
-                rotation,
-                ParticleSelection::Relative(relative),
-            ),
+            transform: Transform::SetPositions(positions, ParticleSelection::Relative(relative)),
             target: MoveTarget::Group(group),
         }
     }
@@ -321,17 +320,12 @@ mod pairing_tests {
         assert_eq!(moved, &relative);
     }
 
-    /// A partial rotation must never be labelled `RigidBody`: the bonded term recomputes only when
-    /// `internal_change()` holds, so the mislabelled move would drop its bonded ΔU entirely.
+    /// A change of internal geometry must never be labelled `RigidBody`: the bonded term recomputes
+    /// only when `internal_change()` holds, so the mislabelled move would drop its bonded ΔU.
     #[test]
-    fn rotate_atoms_never_labels_itself_rigid_body() {
-        let proposed = ProposedMove::rotate_atoms(
-            0,
-            vec![RelIndex::new(1)],
-            Point::zeros(),
-            UnitQuaternion::identity(),
-            0.1,
-        );
+    fn move_atoms_never_labels_itself_rigid_body() {
+        let proposed =
+            ProposedMove::move_atoms(0, vec![RelIndex::new(1)], vec![Point::zeros()], 0.1);
         let Change::SingleGroup(_, group_change) = proposed.change() else {
             panic!("expected SingleGroup");
         };

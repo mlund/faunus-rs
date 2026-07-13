@@ -37,7 +37,7 @@ propagate:
   collections:
     - !Stochastic
       moves:
-        - !TranslateAtom {molecule: particle, dp: 1.0, weight: 1.0}
+        - !TranslateAtom {molecule: particle, max_displacement: 1.0, weight: 1.0}
 
 analysis: []
 ```

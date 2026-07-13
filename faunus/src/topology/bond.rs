@@ -186,6 +186,20 @@ pub struct BondGraph {
     neighbors: Vec<Vec<usize>>,
 }
 
+/// One side of a molecule, cut at a bond; see [`BondGraph::smaller_branch`].
+///
+/// The side carries the atom it hangs from, so that a caller turning it about the cut bond cannot
+/// pair it with the wrong end of that bond.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Branch {
+    /// The atom of the cut bond that lies on this side.
+    pub root: usize,
+    /// The atom of the cut bond that lies on the other side.
+    pub cut_at: usize,
+    /// Atoms of this side, `root` first.
+    pub atoms: Vec<usize>,
+}
+
 impl BondGraph {
     pub fn from_bonds(bonds: &[Bond], num_atoms: usize) -> Self {
         let mut neighbors = vec![Vec::new(); num_atoms];
@@ -201,23 +215,48 @@ impl BondGraph {
         &self.neighbors[index]
     }
 
-    pub const fn is_empty(&self) -> bool {
-        self.neighbors.is_empty()
+    /// Number of bonds at `index`.
+    pub fn degree(&self, index: usize) -> usize {
+        self.neighbors[index].len()
     }
 
     pub const fn num_atoms(&self) -> usize {
         self.neighbors.len()
     }
 
+    /// The smaller of the two sub-trees the bond `a`–`b` cuts the molecule into.
+    ///
+    /// Ties go to `a`'s side. Cutting a bond of an acyclic molecule always yields exactly two
+    /// sides; in a ring both sides span the whole molecule, and the rotation is then no longer
+    /// rigid — the callers of this method are bonded rotation moves, which a ring must not use.
+    pub fn smaller_branch(&self, a: usize, b: usize) -> Branch {
+        let branch_a = self.connected_from(a, b);
+        let branch_b = self.connected_from(b, a);
+        if branch_a.len() <= branch_b.len() {
+            Branch {
+                root: a,
+                cut_at: b,
+                atoms: branch_a,
+            }
+        } else {
+            Branch {
+                root: b,
+                cut_at: a,
+                atoms: branch_b,
+            }
+        }
+    }
+
     /// BFS from `start`, treating `excluded` as a barrier.
-    /// Returns all reachable nodes including `start`.
+    /// Returns all reachable nodes including `start`, in breadth-first order.
     pub fn connected_from(&self, start: usize, excluded: usize) -> Vec<usize> {
         let mut visited = vec![false; self.neighbors.len()];
         visited[excluded] = true;
         visited[start] = true;
-        let mut queue = VecDeque::new();
+        let mut queue = VecDeque::with_capacity(self.neighbors.len());
         queue.push_back(start);
-        let mut result = vec![start];
+        let mut result = Vec::with_capacity(self.neighbors.len());
+        result.push(start);
         while let Some(current) = queue.pop_front() {
             for &neighbor in &self.neighbors[current] {
                 if !visited[neighbor] {
@@ -302,7 +341,6 @@ mod tests {
 
         let graph = BondGraph::from_bonds(&bonds, 7);
         assert_eq!(graph.num_atoms(), 7);
-        assert!(!graph.is_empty());
 
         // Verify neighbor counts
         assert_eq!(graph.neighbors(0).len(), 1); // 0 -> [1]
@@ -327,23 +365,17 @@ mod tests {
     #[test]
     fn bond_graph_empty() {
         let graph = BondGraph::from_bonds(&[], 0);
-        assert!(graph.is_empty());
         assert_eq!(graph.num_atoms(), 0);
 
-        // No bonds but some atoms
+        // a bondless molecule still has a node per atom, just no edges
         let graph = BondGraph::from_bonds(&[], 3);
-        assert!(!graph.is_empty());
         assert_eq!(graph.num_atoms(), 3);
-        assert!(graph.neighbors(0).is_empty());
-        assert!(graph.neighbors(1).is_empty());
-        assert!(graph.neighbors(2).is_empty());
+        assert!((0..3).all(|atom| graph.degree(atom) == 0));
     }
 
     #[test]
     fn bond_graph_default() {
-        let graph = BondGraph::default();
-        assert!(graph.is_empty());
-        assert_eq!(graph.num_atoms(), 0);
+        assert_eq!(BondGraph::default().num_atoms(), 0);
     }
 
     #[test]
@@ -377,6 +409,27 @@ mod tests {
         // Pivot must not appear in result
         let result = graph.connected_from(3, 2);
         assert!(!result.contains(&2));
+    }
+
+    /// The branch carries the end of the cut bond it hangs from, so a caller turning it about that
+    /// bond cannot pair it with the wrong end.
+    #[test]
+    fn smaller_branch_carries_its_own_root() {
+        // linear 0-1-2-3-4, cut at 1-2: {0,1} is smaller than {2,3,4}
+        let bonds: Vec<Bond> = [[0, 1], [1, 2], [2, 3], [3, 4]]
+            .iter()
+            .map(|&[i, j]| make_bond(i, j))
+            .collect();
+        let graph = BondGraph::from_bonds(&bonds, 5);
+
+        for (a, b) in [(1, 2), (2, 1)] {
+            let branch = graph.smaller_branch(a, b);
+            assert_eq!(branch.root, 1, "the smaller side hangs from atom 1");
+            assert_eq!(branch.cut_at, 2, "and is anchored at the bond's other end");
+            let mut atoms = branch.atoms;
+            atoms.sort_unstable();
+            assert_eq!(atoms, vec![0, 1]);
+        }
     }
 
     #[test]

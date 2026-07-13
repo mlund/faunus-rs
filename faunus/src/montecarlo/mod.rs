@@ -29,6 +29,9 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::{cmp::Ordering, ops::Neg};
 
+mod branch;
+#[cfg(test)]
+mod chain_fixture;
 mod cluster;
 mod crankshaft;
 pub mod gibbs;
@@ -89,6 +92,49 @@ fn find_molecule_id(
                 move_name
             )
         })
+}
+
+/// Check a maximum rotation angle taken from user input.
+///
+/// Zero is the trap worth guarding: every proposal is then the identity, every move is accepted,
+/// and the run reports a perfect acceptance ratio while sampling no orientations at all.
+fn validate_max_angle(max_angle: f64, move_name: &str) -> anyhow::Result<()> {
+    anyhow::ensure!(
+        max_angle.is_finite() && max_angle > 0.0 && max_angle <= std::f64::consts::PI,
+        "{move_name}: maximum angle must lie in (0, π] radians, got {max_angle}"
+    );
+    Ok(())
+}
+
+/// Check that a molecule kind may have its internal geometry sampled.
+fn validate_flexible(
+    molecule: &crate::topology::MoleculeKind,
+    move_name: &str,
+) -> anyhow::Result<()> {
+    anyhow::ensure!(
+        molecule.degrees_of_freedom() == crate::topology::DegreesOfFreedom::Free,
+        "{move_name}: molecule '{}' is rigid or frozen, so its internal geometry cannot change",
+        molecule.name()
+    );
+    anyhow::ensure!(
+        !molecule.bonds().is_empty(),
+        "{move_name}: molecule '{}' has no bonds to turn about",
+        molecule.name()
+    );
+    Ok(())
+}
+
+/// Check that a molecule kind has an orientation, i.e. that it is not a lone atom.
+fn validate_orientable(
+    molecule: &crate::topology::MoleculeKind,
+    move_name: &str,
+) -> anyhow::Result<()> {
+    anyhow::ensure!(
+        !molecule.atomic(),
+        "{move_name} cannot be used with atomic molecule '{}', which has no orientation",
+        molecule.name()
+    );
+    Ok(())
 }
 
 /// Pick a random group index of the specified molecule type.
@@ -802,15 +848,16 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
             else {
                 panic!("expected PartialUpdate, got {:?}", proposed.change());
             };
-            let Transform::PartialRotate(_, _, ParticleSelection::Relative(rotated)) =
+            let Transform::SetPositions(positions, ParticleSelection::Relative(rotated)) =
                 &proposed.transform()
             else {
-                panic!("expected PartialRotate/Relative");
+                panic!("expected SetPositions/Relative");
             };
             assert_eq!(
                 changed, rotated,
                 "both sides carry the same relative indices"
             );
+            assert_eq!(positions.len(), rotated.len());
             assert!(!changed.is_empty());
         }
     }

@@ -49,6 +49,9 @@ impl RotateMolecule {
     pub(crate) fn finalize(&mut self, context: &impl ObserveContext) -> anyhow::Result<()> {
         self.molecule_id =
             montecarlo::find_molecule_id(context, &self.molecule_name, "RotateMolecule")?;
+        montecarlo::validate_max_angle(self.max_angle, "RotateMolecule")?;
+        let topology = context.topology();
+        montecarlo::validate_orientable(topology.moleculekind(self.molecule_id), "RotateMolecule")?;
         Ok(())
     }
 }
@@ -70,3 +73,59 @@ impl_info!(
     "rotate_molecule",
     "Rigid body rotation of random molecule"
 );
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::montecarlo::chain_fixture::{chain, chain_context, ChainSpec};
+
+    fn rotate(max_angle: f64) -> RotateMolecule {
+        serde_yml::from_str(&format!("{{molecule: Chain, dprot: {max_angle}}}")).unwrap()
+    }
+
+    /// Zero is the dangerous one: every proposal is then the identity, so the move is always
+    /// accepted and the run reports 100 % acceptance while sampling nothing.
+    #[test]
+    fn rejects_unusable_max_angle() {
+        let context = chain_context(&chain(4), ChainSpec::default());
+        for max_angle in ["0", "-1.0", "4.0", ".nan", ".inf"] {
+            let mut move_: RotateMolecule =
+                serde_yml::from_str(&format!("{{molecule: Chain, dprot: {max_angle}}}")).unwrap();
+            assert!(
+                move_.finalize(&context).is_err(),
+                "max_angle {max_angle} should be rejected"
+            );
+        }
+        assert!(rotate(0.5).finalize(&context).is_ok());
+    }
+
+    /// A single-particle molecule has no orientation to sample; `RotateMolecule` would spin it
+    /// about its own mass centre forever, always accepting.
+    #[test]
+    fn rejects_atomic_molecule() {
+        let yaml = "
+atoms:
+  - {name: A, mass: 1.0, sigma: 1.0, eps: 0.1}
+molecules:
+  - name: Chain
+    atoms: [A]
+    atomic: true
+system:
+  cell: !Cuboid [20.0, 20.0, 20.0]
+  medium:
+    permittivity: !Vacuum
+    temperature: 300.0
+  energy:
+    nonbonded:
+      default:
+        - !LennardJones {mixing: LB}
+  blocks:
+    - molecule: Chain
+      N: 4
+      insert: !RandomAtomPos {}
+";
+        let context =
+            crate::backend::Backend::from_yaml_str(yaml, None, &mut rand::thread_rng()).unwrap();
+        assert!(rotate(0.5).finalize(&context).is_err());
+    }
+}

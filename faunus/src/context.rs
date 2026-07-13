@@ -274,4 +274,12 @@ pub trait PerturbContext: ObserveContext + WithHamiltonian + Clone {
         quaternion: &crate::UnitQuaternion,
         center: Option<Point>,
     );
+
+    /// Move selected particles to the given positions and apply periodic boundary conditions.
+    ///
+    /// For geometry that must be built by following bonds — a rotated sub-tree of a chain, say —
+    /// the caller has to supply positions outright: [`rotate_particles`](Self::rotate_particles)
+    /// takes the minimum image of each particle independently, which folds any part of the
+    /// molecule lying more than half a box length from the rotation centre into the wrong image.
+    fn set_particle_positions(&mut self, indices: &[usize], positions: &[Point]);
 }

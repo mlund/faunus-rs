@@ -131,8 +131,14 @@ pub enum Transform {
     PartialTranslate(Point, ParticleSelection),
     /// Rotate all active particles around their mass center
     Rotate(UnitQuaternion),
-    /// Rotate selected particles around a given center point
-    PartialRotate(Point, UnitQuaternion, ParticleSelection),
+    /// Move selected particles to given positions (parallel to the selection).
+    ///
+    /// Used by the internal-coordinate moves, which rotate a sub-tree of a molecule about one of
+    /// its own bonds or atoms. They pass positions rather than a rotation because the sub-tree
+    /// must first be unwrapped by *following bonds*: taking the minimum image of each atom
+    /// independently, as a rotation about a centre would, folds the part of a chain lying more
+    /// than half a box length from that centre into the wrong periodic image and tears it apart.
+    SetPositions(Vec<Point>, ParticleSelection),
     /// Scale coordinates to a new volume using the given policy
     VolumeScale(VolumeScalePolicy, f64),
     /// Expand by `n` particles
@@ -194,10 +200,16 @@ impl Transform {
                 context.groups_mut()[group_index].rotate_by(quaternion);
                 true
             }
-            Self::PartialRotate(center, quaternion, selection) => {
+            Self::SetPositions(positions, selection) => {
                 let indices =
                     context.groups()[group_index].select(selection, context.topology_ref())?;
-                context.rotate_particles(&indices, quaternion, Some(-*center));
+                anyhow::ensure!(
+                    indices.len() == positions.len(),
+                    "SetPositions: {} positions for {} selected particles",
+                    positions.len(),
+                    indices.len()
+                );
+                context.set_particle_positions(&indices, positions);
                 true
             }
             Self::Activate => {
@@ -235,7 +247,7 @@ impl Transform {
         let indices = match self {
             Self::Translate(_) | Self::Rotate(_) => context.groups()[group_index]
                 .select(&ParticleSelection::Active, context.topology_ref())?,
-            Self::PartialTranslate(_, selection) | Self::PartialRotate(_, _, selection) => {
+            Self::PartialTranslate(_, selection) | Self::SetPositions(_, selection) => {
                 context.groups()[group_index].select(selection, context.topology_ref())?
             }
             _ => vec![],
@@ -411,8 +423,9 @@ mod tests {
         );
     }
 
+    /// A change of internal geometry leaves the group's rigid-body orientation alone.
     #[test]
-    fn partial_rotate_does_not_update_quaternion() {
+    fn set_positions_does_not_update_quaternion() {
         use crate::backend::Backend;
         use crate::group::{GroupCollection, ParticleSelection};
         let mut rng = rand::thread_rng();
@@ -423,11 +436,14 @@ mod tests {
         )
         .unwrap();
 
+        use crate::context::WithTopology;
         let group_index = 1;
-        let center = Point::new(0.0, 0.0, 0.0);
-        let axis = nalgebra::UnitVector3::new_normalize(Point::new(1.0, 0.0, 0.0));
-        let q = UnitQuaternion::from_axis_angle(&axis, 0.7);
-        let transform = Transform::PartialRotate(center, q, ParticleSelection::Active);
+        let selection = ParticleSelection::Active;
+        let indices = context.groups()[group_index]
+            .select(&selection, context.topology_ref())
+            .unwrap();
+        let positions = vec![Point::new(1.0, 2.0, 3.0); indices.len()];
+        let transform = Transform::SetPositions(positions, selection);
         transform.on_group(group_index, &mut context).unwrap();
         assert_eq!(
             *context.groups()[group_index].quaternion(),

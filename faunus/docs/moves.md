@@ -38,8 +38,8 @@ Key      | Description
 -------- | -------------------------------------------
 `weight` | Selection weight (only meaningful inside `!Stochastic` collections)
 `repeat` | How many trial moves to attempt *each time the move is selected* (default 1)
-`dp`     | Maximum translational displacement (Å), for translational moves
-`dprot`  | Maximum rotational angle (radians), for rotational moves
+`max_displacement` | Maximum translational displacement (Å), for translational moves (alias `dp`)
+`max_angle`        | Maximum rotational angle (radians), for rotational moves (alias `dprot`)
 
 The two `repeat` levels nest: the collection's `repeat` controls how often
 moves are drawn, and the move's `repeat` controls how many trials are
@@ -58,13 +58,13 @@ propagate:
     - !Stochastic
       repeat: 10
       moves:
-        - !TranslateMolecule { molecule: Water, dp: 0.5, weight: 1.0 }
-        - !RotateMolecule { molecule: Water, dprot: 0.3, weight: 1.0 }
+        - !TranslateMolecule { molecule: Water, max_displacement: 0.5, weight: 1.0 }
+        - !RotateMolecule { molecule: Water, max_angle: 0.3, weight: 1.0 }
         - !VolumeMove { volume_displacement: 0.04, weight: 0.5 }
     - !Deterministic
       repeat: 1
       moves:
-        - !TranslateAtom { molecule: Water, atom: O, dp: 0.1, weight: 1.0 }
+        - !TranslateAtom { molecule: Water, atom: O, max_displacement: 0.1, weight: 1.0 }
 ```
 
 ---
@@ -72,17 +72,17 @@ propagate:
 ## Translate Molecule
 
 Picks a random molecule of the given type and translates it by a random displacement vector
-with magnitude uniformly sampled in $[-\text{dp}, +\text{dp}]$.
+with magnitude uniformly sampled in $[-\Delta r, +\Delta r]$, set by `max_displacement`.
 
 ```yaml
-- !TranslateMolecule { molecule: Water, dp: 0.5, weight: 1.0 }
-- !TranslateMolecule { molecule: Protein, dp: 0.2, weight: 2.0, repeat: 3, directions: xy }
+- !TranslateMolecule { molecule: Water, max_displacement: 0.5, weight: 1.0 }
+- !TranslateMolecule { molecule: Protein, max_displacement: 0.2, weight: 2.0, repeat: 3, directions: xy }
 ```
 
 Key          | Required | Default | Description
 ------------ | -------- | ------- | -------------------------------------------
 `molecule`   | yes      |         | Name of the molecule type (not allowed for `atomic` molecules)
-`dp`         | yes      |         | Maximum displacement (Angstrom)
+`max_displacement` | yes |    | Maximum displacement (Å); alias `dp`
 `weight`     | yes      |         | Selection weight
 `repeat`     | no       | 1       | Repetitions per selection
 `directions` | no       | `xyz`   | Active directions (`x`, `y`, `z`, `xy`, `xz`, `yz`, `xyz`)
@@ -96,13 +96,13 @@ If `molecule` is specified, the atom is chosen from that molecule type only.
 If `atom` is specified, only atoms of that type are selected.
 
 ```yaml
-- !TranslateAtom { dp: 0.1, weight: 1.0 }
-- !TranslateAtom { molecule: Water, atom: O, dp: 0.2, weight: 1.0, repeat: 5 }
+- !TranslateAtom { max_displacement: 0.1, weight: 1.0 }
+- !TranslateAtom { molecule: Water, atom: O, max_displacement: 0.2, weight: 1.0, repeat: 5 }
 ```
 
 Key            | Required | Default | Description
 -------------- | -------- | ------- | -------------------------------------------
-`dp`           | yes      |         | Maximum displacement (Angstrom)
+`max_displacement` | yes |    | Maximum displacement (Å); alias `dp`
 `weight`       | yes      |         | Selection weight
 `molecule`     | no       |         | Restrict to this molecule type
 `atom`         | no       |         | Restrict to this atom type
@@ -129,11 +129,11 @@ Must be placed in a `!Deterministic` block so that reference groups move first
 ```yaml
 - !Deterministic
   moves:
-    - !TranslateMolecule { molecule: Protein, dp: 0.5 }
-    - !RotateMolecule { molecule: Protein, dprot: 0.5 }
+    - !TranslateMolecule { molecule: Protein, max_displacement: 0.5 }
+    - !RotateMolecule { molecule: Protein, max_angle: 0.5 }
     - !TranslateAtom
         molecule: Na
-        dp: 0.5
+        max_displacement: 0.5
         repeat: 100
         preferential:
           reference: "molecule Protein"
@@ -163,16 +163,17 @@ Key         | Required | Default | Description
 ## Rotate Molecule
 
 Picks a random molecule of the given type and rotates it around a random axis
-by an angle uniformly sampled in $[-\text{dprot}, +\text{dprot}]$ (radians).
+by an angle uniformly sampled in $[-\theta_\text{max}, +\theta_\text{max}]$, set by `max_angle`.
+Atomic molecules have no orientation to sample and are rejected.
 
 ```yaml
-- !RotateMolecule { molecule: Protein, dprot: 0.3, weight: 1.0 }
+- !RotateMolecule { molecule: Protein, max_angle: 0.3, weight: 1.0 }
 ```
 
 Key        | Required | Default | Description
 ---------- | -------- | ------- | -------------------------------------------
 `molecule` | yes      |         | Name of the molecule type
-`dprot`       | yes      |         | Maximum angular displacement (radians)
+`max_angle` | yes |    | Maximum angular displacement, in $(0, \pi]$ radians; alias `dprot`
 `weight`   | yes      |         | Selection weight
 `repeat`   | no       | 1       | Repetitions per selection
 
@@ -184,34 +185,35 @@ Picks a random atom as pivot in a polymer chain, randomly selects a bonded direc
 and rotates the connected sub-tree around the pivot position.
 Uses the bond graph from the molecule topology, so it works for arbitrary
 topologies (linear, branched, star, dendrimer).
-Molecules without bonds are skipped.
+The sub-tree is unwrapped along its bonds before rotation, so chains reaching further
+than half the box length turn correctly.
 
 See [Madras & Sokal, _J. Stat. Phys._ 50, 109–186 (1988)](https://doi.org/10.1007/BF01022990).
 
-> Note: The rotated sub-tree must fit within half the box length (L/2).
-> For molecules spanning more than L/2, the minimum-image convention used
-> during rotation can map atoms to incorrect periodic images.
-
 ```yaml
-- !PivotMove { molecule: Polymer, dprot: 1.5, weight: 1.0 }
+- !PivotMove { molecule: Polymer, max_angle: 1.5, weight: 1.0 }
 ```
 
 Key        | Required | Default | Description
 ---------- | -------- | ------- | -------------------------------------------
 `molecule` | yes      |         | Name of the molecule type
-`dprot`       | yes      |         | Maximum angular displacement (radians)
+`max_angle` | yes |    | Maximum angular displacement, in $(0, \pi]$ radians; alias `dprot`
 `weight`   | yes      |         | Selection weight
 `repeat`   | no       | 1       | Repetitions per selection
+
+The molecule must be bonded and free to change shape; declaring it rigid or frozen, or
+giving it no bonds, is an input error. Partially active molecules, as encountered under
+grand-canonical or speciation moves, are skipped.
 
 ---
 
 ## Crankshaft Move
 
 Picks a random bond axis in the molecule and rotates the smaller sub-tree
-around it by an angle uniformly sampled in $[-\text{dprot}, +\text{dprot}]$ (radians).
+around it by an angle uniformly sampled in $[-\theta_\text{max}, +\theta_\text{max}]$, set by `max_angle`.
 When proper dihedrals are defined, only their middle bonds are used as axes;
 otherwise all bonds serve as candidate axes (e.g. FASTA chains with only
-harmonic bonds).
+harmonic bonds). Terminal bonds are excluded, as no torsion is defined about them.
 
 Because rotation is constrained to a single bond axis (1-DOF), crankshaft
 preserves bond lengths and bond angles by construction. This makes it
@@ -220,15 +222,17 @@ complementary to [`PivotMove`](#pivot-move), which applies a full 3D rotation
 potentials, `PivotMove` alone is typically sufficient.
 
 ```yaml
-- !CrankshaftMove { molecule: Peptide, dprot: 0.5, weight: 1.0 }
+- !CrankshaftMove { molecule: Peptide, max_angle: 0.5, weight: 1.0 }
 ```
 
 Key        | Required | Default | Description
 ---------- | -------- | ------- | -------------------------------------------
 `molecule` | yes      |         | Name of the molecule type
-`dprot`       | yes      |         | Maximum angular displacement (radians)
+`max_angle` | yes |    | Maximum angular displacement, in $(0, \pi]$ radians; alias `dprot`
 `weight`   | yes      |         | Selection weight
 `repeat`   | no       | 1       | Repetitions per selection
+
+The restrictions listed for [`PivotMove`](#pivot-move) apply here too.
 
 ---
 
@@ -255,14 +259,14 @@ See [Dress & Krauth, _J. Phys. A_ 28, L597 (1995)](https://doi.org/10.1088/0305-
 [Whitelam & Geissler, _J. Chem. Phys._ 127, 154101 (2007)](https://doi.org/10.1063/1.2790421).
 
 ```yaml
-- !ClusterMove { molecule: Protein, dp: 10.0, dprot: 0.5, threshold: 35.0 }
+- !ClusterMove { molecule: Protein, max_displacement: 10.0, max_angle: 0.5, threshold: 35.0 }
 ```
 
 Key         | Required | Default | Description
 ----------- | -------- | ------- | -------------------------------------------
 `molecule`  | yes      |         | Name of the molecule type
-`dp`        | yes      |         | Maximum translational displacement (Å)
-`dprot`     | yes      |         | Maximum angular displacement (radians)
+`max_displacement` | yes |    | Maximum translational displacement (Å); alias `dp`
+`max_angle` | yes |    | Maximum angular displacement (radians); alias `dprot`
 `threshold` | yes      |         | Clustering distance (Å); mass-center or bead separation
 `use_com`   | no       | `true`  | Cluster on mass-center (`true`) or closest-bead (`false`) distance
 `weight`    | no       | 1       | Selection weight in a `!Stochastic` collection
@@ -301,7 +305,7 @@ propagate:
   collections:
     - !Stochastic
       moves:
-        - !TranslateMolecule { molecule: Water, dp: 0.5, weight: 1.0 }
+        - !TranslateMolecule { molecule: Water, max_displacement: 0.5, weight: 1.0 }
         - !VolumeMove { volume_displacement: 0.04, weight: 0.5 }
 ```
 
@@ -511,8 +515,8 @@ propagate:
             - ["⚛HGLU + Cl- = ⚛GLU + ~H+", !pK 4.24]
             # Grand canonical salt: activities folded into K_eff
             - ["= Na+ + Cl-", !K 1.0]
-        - !TranslateAtom { atom: Na, molecule: Na+, dp: 50.0 }
-        - !TranslateAtom { atom: Cl, molecule: Cl-, dp: 50.0 }
+        - !TranslateAtom { atom: Na, molecule: Na+, max_displacement: 50.0 }
+        - !TranslateAtom { atom: Cl, molecule: Cl-, max_displacement: 50.0 }
 ```
 
 ### Options
@@ -595,7 +599,7 @@ propagate:
   collections:
     - !Stochastic
       moves:
-        - !TranslateMolecule { molecule: LJ, dp: 0.3, repeat: 100 }
+        - !TranslateMolecule { molecule: LJ, max_displacement: 0.3, repeat: 100 }
   gibbs:
     intra_steps: 1
     moves:
@@ -773,8 +777,8 @@ propagate:
     - !Stochastic
       repeat: 20
       moves:
-        - !TranslateMolecule { molecule: Water, dp: 0.5, repeat: 1 }
-        - !RotateMolecule { molecule: Water, dprot: 0.3, repeat: 1 }
+        - !TranslateMolecule { molecule: Water, max_displacement: 0.5, repeat: 1 }
+        - !RotateMolecule { molecule: Water, max_angle: 0.3, repeat: 1 }
     - !LangevinDynamics
       timestep: 0.1
       friction: 5.0

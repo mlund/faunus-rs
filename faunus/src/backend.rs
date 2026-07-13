@@ -639,6 +639,17 @@ impl crate::context::PerturbContext for Backend {
         }
         self.update_cell_list_particles(indices);
     }
+
+    fn set_particle_positions(&mut self, indices: &[usize], positions: &[Point]) {
+        for (&i, position) in indices.iter().zip(positions) {
+            let mut position = *position;
+            self.cell.boundary(&mut position);
+            self.x[i] = position.x;
+            self.y[i] = position.y;
+            self.z[i] = position.z;
+        }
+        self.update_cell_list_particles(indices);
+    }
 }
 
 impl Context for Backend {

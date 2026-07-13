@@ -13,7 +13,7 @@ field or YAML tag states otherwise, use the conventions below.
 | Activity or concentration | mol/L | Atom and molecule `activity`, salt concentrations, molarity collective variables |
 | Pressure | Tagged units | `!atm`, `!bar`, `!Pa`, `!kT`, and `!mM` in `system.energy.pressure` |
 | Topology angles | Degrees | Torsion and dihedral equilibrium angles such as `aeq` and `phi` |
-| Move angles | Radians | Angular MC move sizes such as `!RotateMolecule {dprot: ...}` |
+| Move angles | Radians | Angular MC move sizes such as `!RotateMolecule {max_angle: ...}` |
 
 ## Input conventions
 
