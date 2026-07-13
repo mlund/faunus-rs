@@ -808,7 +808,6 @@ impl SpeciationMove {
                     context.cell(),
                     rng,
                 )
-                .0
             };
             Some((
                 SpeciationAction::ActivateGroup {

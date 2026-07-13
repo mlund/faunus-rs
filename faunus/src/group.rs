@@ -683,10 +683,14 @@ pub trait GroupCollectionMut: GroupCollection {
         atom_ids: &[usize],
     ) -> anyhow::Result<&mut Group>;
 
-    /// Write every particle's position and settle every group's derived state.
+    /// Write every particle's position and recompute every group's mass center and bounding
+    /// radius.
     ///
     /// The bulk counterpart of [`place_group`](Self::place_group), for an integrator that has
-    /// advanced the whole system at once.
+    /// advanced the whole system at once. Orientations are *not* touched: a rigid-body integrator
+    /// advances them itself and reports them through
+    /// [`set_group_orientation`](Self::set_group_orientation), and it would be wrong to overwrite
+    /// that with a fit to the coordinates it derived from them.
     fn set_all_positions(&mut self, positions: &[Point]) -> anyhow::Result<()>;
 
     /// Record the orientation a rigid-body integrator computed for a group.

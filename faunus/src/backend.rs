@@ -508,8 +508,12 @@ impl GroupCollectionMut for Backend {
 
     fn place_group(&mut self, group_index: usize, positions: &[Point]) -> anyhow::Result<()> {
         let group = &self.groups[group_index];
+        // Exactly the capacity, not merely "no more than": a short slice would leave the tail of
+        // the group holding the previous molecule's coordinates, and the mass center and
+        // orientation would then be derived from a mixture of the new atoms and the old. The
+        // inactive slots matter too — molecular swap reads them as its overlay template.
         anyhow::ensure!(
-            positions.len() <= group.capacity(),
+            positions.len() == group.capacity(),
             "place_group: {} positions for a group of capacity {}",
             positions.len(),
             group.capacity()
