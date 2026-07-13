@@ -57,4 +57,4 @@ propagate:
       repeat: 100
       moves:
         - !TranslateMolecule {molecule: CPPM, dp: 80.0}
-        - !RotateMolecule {molecule: CPPM, dp: 3.0}
+        - !RotateMolecule {molecule: CPPM, dprot: 3.0}

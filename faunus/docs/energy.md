@@ -492,7 +492,7 @@ See [Topology — Bonds, Torsions, Dihedrals](topology.md#bonds) for YAML syntax
 
 ## Custom External Potential
 
-The `customexternal` energy term applies a user-defined mathematical expression
+The `custom_external` energy term applies a user-defined mathematical expression
 as an external potential to selected atoms or molecular mass centers.
 The energy is evaluated per particle (or per mass center) and summed over all matching groups.
 
@@ -534,10 +534,10 @@ parser for better performance:
 ```yaml
 system:
   energy:
-    customexternal:
+    custom_external:
       # Expression with named constants
       - selection: "molecule water"
-        com: true
+        use_com: true
         constants: { radius: 15, k: 100 }
         function: "0.5 * k * (x^2 + y^2 + z^2 - radius^2)"
       # Expression with conditional
@@ -552,10 +552,10 @@ system:
 |-------------|----------|---------|--------------------------------------------------|
 | `selection` | yes      |         | Selection expression for atoms/molecules         |
 | `function`  | yes      |         | Math expression, conditional, or preset name     |
-| `com`       | no       | `false` | Evaluate at molecular mass center                |
+| `use_com`   | no       | `false` | Evaluate at molecular mass center                |
 | `constants` | no       | `{}`    | Named constants substituted before parsing       |
 
-When `com` is `true`, the expression is evaluated once per matching group at the mass
+When `use_com` is `true`, the expression is evaluated once per matching group at the mass
 center position, with `q` set to the net group charge.
 When `false` (default), the expression is evaluated at each matching atom position.
 
@@ -563,8 +563,8 @@ When `false` (default), the expression is evaluated at each matching atom positi
 
 ## Custom Pair Potential (COM-COM)
 
-The `custompair` energy term applies a user-defined potential `U(r)` between the
-centres of mass of *two* rigid-body selections. Unlike `customexternal`, it
+The `custom_pair` energy term applies a user-defined potential `U(r)` between the
+centres of mass of *two* rigid-body selections. Unlike `custom_external`, it
 contributes both energy (consumed by Metropolis MC) and forces
 (consumed by Langevin dynamics), distributed to each rigid body's atoms by mass
 fraction so the COM force is exact and the torque about the COM is zero.
@@ -584,7 +584,7 @@ The expression may use any subset of:
 | `dy`     | signed y-component of (com1 − com2) under PBC                   |
 | `dz`     | signed z-component of (com1 − com2) under PBC                   |
 
-The same expression syntax as [`customexternal`](#custom-external-potential)
+The same expression syntax as [`custom_external`](#custom-external-potential)
 applies (operators, math functions, Python-style conditionals, named constants).
 
 ### YAML configuration
@@ -592,7 +592,7 @@ applies (operators, math functions, Python-style conditionals, named constants).
 ```yaml
 system:
   energy:
-    custompair:
+    custom_pair:
       # Harmonic restraint at fixed COM-COM distance (umbrella window)
       - selection1: "molecule protein0"
         selection2: "molecule protein1"

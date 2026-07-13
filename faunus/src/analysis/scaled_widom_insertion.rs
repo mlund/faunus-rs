@@ -418,14 +418,14 @@ impl<T: ObserveContext> Analyze<T> for ScaledWidomInsertion {
         map.try_insert("atom", &self.atom)?;
         map.try_insert("num_samples", self.sampling.num_samples())?;
         map.insert(
-            "excess_chemical_potential (kT)".into(),
+            "excess_chemical_potential/kT".into(),
             yaml_map! {
                 "short_range" => self.mu_sr.to_yaml()?,
                 "electrostatic" => self.mu_el.to_yaml()?,
                 "total" => self.mu_total.to_yaml()?,
             },
         );
-        map.insert("unscaled_widom (kT)".into(), self.mu_unscaled.to_yaml()?);
+        map.insert("unscaled_widom/kT".into(), self.mu_unscaled.to_yaml()?);
         Some(serde_yml::Value::Mapping(map))
     }
 }

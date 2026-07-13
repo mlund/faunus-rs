@@ -36,7 +36,7 @@ energy_change:
   final: -14.858887009431452
   initial: -12.508348774890969
 energy_timers:
-  celloverlap: '2.34 (energy: 1.66, update: 0.68)'
+  cell_overlap: '2.34 (energy: 1.66, update: 0.68)'
   nonbonded: '97.66 (energy: 96.97, update: 0.69)'
 propagate:
   repeat: 2000
@@ -147,19 +147,19 @@ propagate:
         acceptance_ratio: 0.552
   criterion: MetropolisHastings
 analysis:
-- collectivevariable:
+- collective_variable:
     property: Count
     description: 'selection: atomtype GLU'
     num_samples: 6000
     mean: 0.9990000000000016
     rms: 0.9994998749374617
-- collectivevariable:
+- collective_variable:
     property: Count
     description: 'selection: atomtype HHIS'
     num_samples: 6000
     mean: 0.21549999999999958
     rms: 0.46421977553740595
-- collectivevariable:
+- collective_variable:
     property: Count
     description: 'selection: atomtype CYS'
     num_samples: 6000

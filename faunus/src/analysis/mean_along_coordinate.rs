@@ -125,7 +125,7 @@ impl MeanAlongCoordinate {
 
 impl_info!(
     MeanAlongCoordinate,
-    "meanalongcoordinate",
+    "mean_along_coordinate",
     "Mean of collective variable along coordinate"
 );
 

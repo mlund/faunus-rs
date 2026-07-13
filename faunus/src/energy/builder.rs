@@ -673,10 +673,10 @@ pub struct HamiltonianBuilder {
     pub pressure: Option<Pressure>,
 
     /// Custom external potentials from math expressions.
-    pub customexternal: Option<Vec<CustomExternalBuilder>>,
+    pub custom_external: Option<Vec<CustomExternalBuilder>>,
 
     /// User-defined energy/force between two rigid-body centers of mass.
-    pub custompair: Option<Vec<CustomPairBuilder>>,
+    pub custom_pair: Option<Vec<CustomPairBuilder>>,
 
     /// Ewald reciprocal-space energy configuration.
     pub ewald: Option<EwaldBuilder>,

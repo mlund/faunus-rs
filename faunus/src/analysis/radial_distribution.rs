@@ -24,6 +24,7 @@ pub struct RadialDistributionBuilder {
     /// Output file path.
     file: PathBuf,
     /// Bin width in distance units.
+    #[serde(rename = "resolution")]
     dr: f64,
     /// Maximum distance. Defaults to half the shortest box dimension.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -299,7 +300,7 @@ mod tests {
         let yaml = r#"
 selections: ["atomtype Na", "atomtype Cl"]
 file: rdf.dat
-dr: 0.1
+resolution: 0.1
 frequency: !Every 100
 "#;
         let builder: RadialDistributionBuilder = serde_yml::from_str(yaml).unwrap();
@@ -316,7 +317,7 @@ frequency: !Every 100
         let yaml = r#"
 selections: ["atomtype Na", "atomtype Cl"]
 file: rdf.dat
-dr: 0.1
+resolution: 0.1
 frequency: !Every 100
 dr_typo: 0.1
 "#;
@@ -329,7 +330,7 @@ dr_typo: 0.1
 selections: ["molecule polymer", "molecule polymer"]
 use_com: true
 file: rdf_com.dat
-dr: 0.5
+resolution: 0.5
 max_r: 30.0
 frequency: !Every 50
 "#;
@@ -344,7 +345,7 @@ frequency: !Every 50
 - !RadialDistribution
   selections: ["atomtype Na", "atomtype Cl"]
   file: rdf.dat
-  dr: 0.1
+  resolution: 0.1
   frequency: !Every 100
 "#;
         let builders: Vec<AnalysisBuilder> = serde_yml::from_str(yaml).unwrap();

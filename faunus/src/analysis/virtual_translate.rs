@@ -183,7 +183,7 @@ impl VirtualTranslateBuilder {
 
 impl_info!(
     VirtualTranslate,
-    "virtualtranslate",
+    "virtual_translate",
     "Virtual translate move for force measurement by perturbation",
     "doi:10.1063/1.1734110" // Widom insertion method
 );
@@ -441,7 +441,7 @@ mod tests {
     #[test]
     fn info_trait() {
         let vt = build_vt(0.01);
-        assert_eq!(vt.short_name(), Some("virtualtranslate"));
+        assert_eq!(vt.short_name(), Some("virtual_translate"));
         assert!(vt.long_name().unwrap().contains("force measurement"));
         assert!(vt.citation().unwrap().starts_with("doi:"));
     }

@@ -53,7 +53,7 @@ pub struct TranslateMolecule {
 
 impl_info!(
     TranslateMolecule,
-    "trans-mol",
+    "trans_mol",
     "Translate a random molecule"
 );
 
@@ -161,7 +161,7 @@ const fn default_select_molecule_ids() -> GroupSelection {
     GroupSelection::Size(GroupSize::Full)
 }
 
-impl_info!(TranslateAtom, "trans-atom", "Translate a random atom");
+impl_info!(TranslateAtom, "trans_atom", "Translate a random atom");
 
 impl TranslateAtom {
     /// Create a new `TranslateAtom` move.

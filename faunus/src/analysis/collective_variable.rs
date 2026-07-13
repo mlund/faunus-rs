@@ -93,7 +93,7 @@ impl CollectiveVariableAnalysis {
 
 impl_info!(
     CollectiveVariableAnalysis,
-    "collectivevariable",
+    "collective_variable",
     "Collective variable time series"
 );
 
@@ -277,6 +277,6 @@ frequency: !Every 10
 "#;
         let builders: Vec<crate::analysis::AnalysisBuilder> = serde_yml::from_str(yaml).unwrap();
         let analysis = builders[0].build(&ctx, None).unwrap();
-        assert_eq!(analysis.short_name(), Some("collectivevariable"));
+        assert_eq!(analysis.short_name(), Some("collective_variable"));
     }
 }

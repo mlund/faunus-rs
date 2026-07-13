@@ -49,7 +49,7 @@ use std::path::PathBuf;
 #[builder_struct_attr(serde(deny_unknown_fields))]
 pub struct VirtualVolumeMove {
     /// Volume displacement in Angstrom^3
-    #[builder_field_attr(serde(rename = "dV"))]
+    #[builder_field_attr(serde(rename = "volume_displacement", alias = "dV"))]
     volume_displacement: f64,
 
     /// Volume scaling policy
@@ -104,10 +104,12 @@ impl VirtualVolumeMoveBuilder {
 
     fn validate(&self) -> Result<()> {
         let dv = self.volume_displacement.ok_or_else(|| {
-            anyhow::anyhow!("Missing required field 'dV' for VirtualVolumeMove analysis")
+            anyhow::anyhow!(
+                "Missing required field 'volume_displacement' for VirtualVolumeMove analysis"
+            )
         })?;
         if dv.abs() < f64::EPSILON {
-            anyhow::bail!("VirtualVolumeMove: 'dV' must be non-zero, got {dv}");
+            anyhow::bail!("VirtualVolumeMove: 'volume_displacement' must be non-zero, got {dv}");
         }
         if self.sampling.is_none() {
             anyhow::bail!("Missing required field 'frequency' for VirtualVolumeMove analysis");
@@ -146,7 +148,7 @@ impl VirtualVolumeMoveBuilder {
 
 impl_info!(
     VirtualVolumeMove,
-    "virtualvolumemove",
+    "virtual_volume_move",
     "Virtual volume move for pressure measurement by perturbation",
     "doi:10.1063/1.472721"
 );
@@ -226,7 +228,7 @@ impl<T: PerturbContext> Analyze<T> for VirtualVolumeMove {
             return None;
         }
         let mut map = serde_yml::Mapping::new();
-        map.try_insert("dV", self.volume_displacement)?;
+        map.try_insert("volume_displacement", self.volume_displacement)?;
         map.try_insert("method", format!("{:?}", self.method))?;
         map.try_insert("block_size", self.block_size)?;
         map.try_insert("num_samples", self.sampling.num_samples())?;
@@ -240,10 +242,10 @@ impl<T: PerturbContext> Analyze<T> for VirtualVolumeMove {
         let mean_kt = self.mean_pressure();
         let err_kt = self.widom.free_energy().error() / self.volume_displacement.abs();
         let pex_units = [
-            ("Pex (kT/Å³)", mean_kt, err_kt),
-            ("Pex (Pa)", self.to_pascal(mean_kt), self.to_pascal(err_kt)),
+            ("Pex/kT/Å³", mean_kt, err_kt),
+            ("Pex/Pa", self.to_pascal(mean_kt), self.to_pascal(err_kt)),
             (
-                "Pex (mM)",
+                "Pex/mM",
                 self.to_millimolar(mean_kt),
                 self.to_millimolar(err_kt),
             ),
@@ -340,7 +342,10 @@ mod tests {
             .frequency(Frequency::Every(10))
             .build(RT_298);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("dV"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("volume_displacement"));
     }
 
     #[test]
@@ -399,7 +404,10 @@ mod tests {
             .frequency(Frequency::Every(1))
             .build(RT_298);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("dV"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("volume_displacement"));
     }
 
     #[test]
@@ -417,7 +425,7 @@ mod tests {
     #[test]
     fn info_trait() {
         let vvm = build_vvm(0.5);
-        assert_eq!(vvm.short_name(), Some("virtualvolumemove"));
+        assert_eq!(vvm.short_name(), Some("virtual_volume_move"));
         assert!(vvm.long_name().unwrap().contains("pressure"));
         assert!(vvm.citation().unwrap().starts_with("doi:"));
     }
@@ -478,7 +486,7 @@ mod tests {
             .expect("to_yaml returns Some");
         let map = yaml.as_mapping().expect("top-level mapping");
 
-        for key in ["Pex (kT/Å³)", "Pex (Pa)", "Pex (mM)"] {
+        for key in ["Pex/kT/Å³", "Pex/Pa", "Pex/mM"] {
             let entry = map.get(key).unwrap_or_else(|| panic!("missing {key}"));
             let parsed: crate::auxiliary::BlockSummary =
                 serde_yml::from_value(entry.clone()).expect("entry parses as BlockSummary");

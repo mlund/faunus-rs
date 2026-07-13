@@ -525,7 +525,7 @@ mod tests {
 - !RadialDistribution
   selections: ["atomtype Na", "atomtype Cl"]
   file: rdf.dat
-  dr: 0.1
+  resolution: 0.1
   frequency: !Every 100
 - !SpatialDistribution
   reference: "all"

@@ -78,7 +78,7 @@ analysis:
     selections: ["molecule MOL1", "molecule MOL2"]
     use_com: true
     file: "rdf_z.dat"
-    dr: 0.5
+    resolution: 0.5
     frequency: !Every 10
 
 propagate:
@@ -90,12 +90,12 @@ propagate:
       moves:
         - !RotateMolecule {
             molecule: MOL1,
-            dp: 1.0,
+            dprot: 1.0,
             weight: 1.0,
           }
         - !RotateMolecule {
             molecule: MOL2,
-            dp: 1.0,
+            dprot: 1.0,
             weight: 1.0,
           }
         - !TranslateMolecule {

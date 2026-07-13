@@ -20,7 +20,7 @@ energy_change:
   final: 0.0
   initial: 0.0
 energy_timers:
-  celloverlap: '100 (energy: 68, update: 32)'
+  cell_overlap: '100 (energy: 68, update: 32)'
 propagate:
   repeat: 20000
   seed: !Fixed 42

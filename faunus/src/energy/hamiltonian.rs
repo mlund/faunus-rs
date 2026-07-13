@@ -493,12 +493,12 @@ impl Hamiltonian {
                 self.push(cb.build(context)?.into());
             }
         }
-        if let Some(ext_builders) = &builder.customexternal {
+        if let Some(ext_builders) = &builder.custom_external {
             for eb in ext_builders {
                 self.push(eb.build()?.into());
             }
         }
-        if let Some(pair_builders) = &builder.custompair {
+        if let Some(pair_builders) = &builder.custom_pair {
             for pb in pair_builders {
                 self.push(pb.build(context)?.into());
             }

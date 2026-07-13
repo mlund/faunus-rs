@@ -114,7 +114,7 @@ pub struct MultipoleDistributionBuilder {
     #[serde(default = "default_file")]
     file: PathBuf,
     /// Distance resolution along R (Å).
-    #[serde(default = "default_resolution")]
+    #[serde(default = "default_resolution", rename = "resolution")]
     dr: f64,
     /// Maximum separation. Defaults to half the shortest box dimension.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -404,7 +404,7 @@ impl MultipoleDistribution {
 
 impl_info!(
     MultipoleDistribution,
-    "multipoledistribution",
+    "multipole_distribution",
     "Multipolar decomposition vs. separation"
 );
 
@@ -741,7 +741,7 @@ oops: 1
 - !MultipoleDistribution
   selections: ["molecule A", "molecule B"]
   file: multipole.csv
-  dr: 0.5
+  resolution: 0.5
   frequency: !Every 100
 "#;
         let builders: Vec<AnalysisBuilder> = serde_yml::from_str(yaml).unwrap();

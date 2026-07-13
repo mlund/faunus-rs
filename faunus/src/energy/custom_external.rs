@@ -41,7 +41,7 @@ pub struct CustomExternalBuilder {
     function: String,
     /// Apply to molecular mass center instead of individual atoms.
     #[serde(default)]
-    com: bool,
+    use_com: bool,
     /// User-defined constants substituted into the expression.
     #[serde(default)]
     constants: HashMap<String, f64>,
@@ -56,16 +56,16 @@ impl CustomExternalBuilder {
         // Try preset name first (pure Rust, no parsing overhead)
         if let Some(preset) = find_preset(&self.function) {
             log::info!(
-                "Custom external potential: preset '{}' (com={}, selection='{}')",
+                "Custom external potential: preset '{}' (use_com={}, selection='{}')",
                 self.function,
-                self.com,
+                self.use_com,
                 self.selection
             );
             return Ok(CustomExternal {
                 expression: Arc::new(Expression::Preset(preset)),
                 function: self.function.clone(),
                 var_indices: vec![0, 1, 2, 3], // q, x, y, z — all passed to preset
-                com: self.com,
+                use_com: self.use_com,
                 selection_cache: RefCell::new(self.cached_selection()),
                 warned_empty: std::cell::Cell::new(false),
             });
@@ -102,9 +102,9 @@ impl CustomExternalBuilder {
         }
 
         log::info!(
-            "Custom external potential: '{}' (com={}, selection='{}')",
+            "Custom external potential: '{}' (use_com={}, selection='{}')",
             self.function,
-            self.com,
+            self.use_com,
             self.selection
         );
 
@@ -117,18 +117,18 @@ impl CustomExternalBuilder {
             expression: Arc::new(expression),
             function: self.function.clone(),
             var_indices,
-            com: self.com,
+            use_com: self.use_com,
             selection_cache: RefCell::new(self.cached_selection()),
             warned_empty: std::cell::Cell::new(false),
         })
     }
 
     fn cached_selection(&self) -> ComSelection {
-        ComSelection::new(self.selection.clone(), self.com)
+        ComSelection::new(self.selection.clone(), self.use_com)
     }
 }
 
-/// A selection target `customexternal` can evaluate the potential at.
+/// A selection target `custom_external` can evaluate the potential at.
 ///
 /// Lets [`affected`] filter a change against either index space without duplicating the walk over
 /// `Change::Groups`.
@@ -167,7 +167,7 @@ fn affected<T: ExternalTarget>(
     let (selection, selected) = cache.resolve_with_selection(context);
     if selected.is_empty() && !warned_empty.replace(true) {
         log::warn!(
-            "customexternal: selection '{selection}' matched no {} — energy will always be zero",
+            "custom_external: selection '{selection}' matched no {} — energy will always be zero",
             T::NOUN
         );
     }
@@ -251,7 +251,7 @@ pub struct CustomExternal {
     function: String,
     /// Maps each exmex variable slot to index in [q, x, y, z].
     var_indices: Vec<usize>,
-    com: bool,
+    use_com: bool,
     /// Owns the selection, its resolved indices, and its cache key. RefCell because energy()
     /// takes &self.
     selection_cache: RefCell<ComSelection>,
@@ -328,7 +328,7 @@ impl CustomExternal {
         let selection = self.selection_cache.borrow().selection().to_string();
         yaml_map! {
             "function" => self.function.clone(),
-            "com" => self.com,
+            "use_com" => self.use_com,
             "selection" => selection,
         }
     }
@@ -348,7 +348,7 @@ constants:
 "#;
         let builder: CustomExternalBuilder = serde_yml::from_str(yaml).unwrap();
         assert!(builder.build().is_ok());
-        assert!(!builder.com);
+        assert!(!builder.use_com);
     }
 
     #[test]
@@ -356,11 +356,11 @@ constants:
         let yaml = r#"
 selection: "all"
 function: "q * 0.1 * z"
-com: true
+use_com: true
 "#;
         let builder: CustomExternalBuilder = serde_yml::from_str(yaml).unwrap();
         let ext = builder.build().unwrap();
-        assert!(ext.com);
+        assert!(ext.use_com);
     }
 
     #[test]
@@ -455,12 +455,12 @@ function: "q * z"
   function: "x^2"
 - selection: "all"
   function: "q * z"
-  com: true
+  use_com: true
 "#;
         let builders: Vec<CustomExternalBuilder> = serde_yml::from_str(yaml).unwrap();
         assert_eq!(builders.len(), 2);
-        assert!(!builders[0].com);
-        assert!(builders[1].com);
+        assert!(!builders[0].use_com);
+        assert!(builders[1].use_com);
     }
 }
 
@@ -592,7 +592,7 @@ function: "0.5 * (x^2 + y^2 + z^2)"
         let yaml = r#"
 selection: "all"
 function: "x^2 + y^2 + z^2"
-com: true
+use_com: true
 "#;
         let builder: CustomExternalBuilder = serde_yml::from_str(yaml).unwrap();
         let ext = builder.build().unwrap();

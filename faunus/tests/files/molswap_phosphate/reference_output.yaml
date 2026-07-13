@@ -32,7 +32,7 @@ energy_change:
   final: 0.0
   initial: 0.0
 energy_timers:
-  celloverlap: '100 (energy: 67.04, update: 32.96)'
+  cell_overlap: '100 (energy: 67.04, update: 32.96)'
 propagate:
   repeat: 5000
   seed: !Fixed 42
@@ -80,13 +80,13 @@ propagate:
         acceptance_ratio: 0.2718
   criterion: MetropolisHastings
 analysis:
-- collectivevariable:
+- collective_variable:
     property: Count
     description: 'selection: molecule ''H₂PO₄⁻'''
     num_samples: 5000
     mean: 10.350799999999978
     rms: 10.569427609856643
-- collectivevariable:
+- collective_variable:
     property: Count
     description: 'selection: molecule ''HPO₄²⁻'''
     num_samples: 5000

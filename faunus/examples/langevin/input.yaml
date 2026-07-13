@@ -116,10 +116,10 @@ propagate:
 #     repeat: 10
 #     moves:
 #       - !TranslateMolecule {molecule: CPPM, dp: 50.0, repeat: 10}
-#       - !RotateMolecule {molecule: CPPM, dp: 0.5, repeat: 10}
+#       - !RotateMolecule {molecule: CPPM, dprot: 0.5, repeat: 10}
 #       - !TranslateMolecule {molecule: Chain20, dp: 50.0, repeat: 10}
-#       - !RotateMolecule {molecule: Chain20, dp: 0.5, repeat: 10}
-#       - !PivotMove {molecule: Chain20, dp: 0.5, repeat: 20}
+#       - !RotateMolecule {molecule: Chain20, dprot: 0.5, repeat: 10}
+#       - !PivotMove {molecule: Chain20, dprot: 0.5, repeat: 20}
 #       - !TranslateMolecule {molecule: Na, dp: 10.0, repeat: 20}
     # LD production — comment out Stochastic block above for LD-only
     - !LangevinDynamics

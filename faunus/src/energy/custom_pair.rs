@@ -51,7 +51,7 @@ const MIN_SEPARATION: f64 = 1.0e-12;
 /// when computing the per-atom mass fraction.
 const MIN_MASS: f64 = 1.0e-30;
 
-/// YAML deserializer for a single `custompair` entry.
+/// YAML deserializer for a single `custom_pair` entry.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct CustomPairBuilder {
@@ -74,7 +74,7 @@ impl CustomPairBuilder {
         let group2 = resolve_unique_rigid_group(context, &self.selection2, "selection2")?;
         if group1 == group2 {
             anyhow::bail!(
-                "custompair: selection1 and selection2 resolved to the same group ({group1})"
+                "custom_pair: selection1 and selection2 resolved to the same group ({group1})"
             );
         }
 
@@ -111,7 +111,7 @@ fn resolve_unique_rigid_group(
     let groups = context.resolve_groups(selection);
     if groups.len() != 1 {
         anyhow::bail!(
-            "custompair: {label} '{selection}' must resolve to exactly one group, got {} ({:?})",
+            "custom_pair: {label} '{selection}' must resolve to exactly one group, got {} ({:?})",
             groups.len(),
             groups
         );
@@ -122,7 +122,7 @@ fn resolve_unique_rigid_group(
     let dof = topology.moleculekind(mol_id).degrees_of_freedom();
     if !dof.is_rigid() {
         anyhow::bail!(
-            "custompair: {label} '{selection}' resolved to molecule '{}' with {:?} degrees of freedom; \
+            "custom_pair: {label} '{selection}' resolved to molecule '{}' with {:?} degrees of freedom; \
              only Rigid molecules are supported",
             topology.moleculekind(mol_id).name(),
             dof
@@ -143,12 +143,12 @@ fn parse_expression(substituted: &str) -> anyhow::Result<(Expression, Vec<String
     let has_conditionals = substituted.contains(" if ") || substituted.contains(" else ");
     if has_conditionals {
         let expr: FlatExVal<i32, f64> = exmex::parse_val(substituted)
-            .map_err(|e| anyhow::anyhow!("custompair expression parse error: {e}"))?;
+            .map_err(|e| anyhow::anyhow!("custom_pair expression parse error: {e}"))?;
         let names = expr.var_names().to_vec();
         Ok((Expression::Val(expr), names))
     } else {
         let expr: FlatEx<f64> = FlatEx::parse(substituted)
-            .map_err(|e| anyhow::anyhow!("custompair expression parse error: {e}"))?;
+            .map_err(|e| anyhow::anyhow!("custom_pair expression parse error: {e}"))?;
         let names = expr.var_names().to_vec();
         Ok((Expression::Float(expr), names))
     }
@@ -163,7 +163,7 @@ fn map_var_indices(var_names: &[String]) -> anyhow::Result<Vec<usize>> {
         .collect();
     if !bad.is_empty() {
         anyhow::bail!(
-            "unresolved variables in custompair: {} (allowed: r, dx, dy, dz)",
+            "unresolved variables in custom_pair: {} (allowed: r, dx, dy, dz)",
             bad.join(", ")
         );
     }

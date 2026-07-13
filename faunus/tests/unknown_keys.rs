@@ -49,7 +49,7 @@ analysis:
   - !RadialDistribution
     selections: ["atomtype OW", "atomtype OW"]
     file: rdf.dat
-    dr: 0.1
+    resolution: 0.1
     frequency: !Every 10
 
 propagate:

@@ -12,7 +12,7 @@ analysis:
   - !RadialDistribution
     selections: ["atomtype Na", "atomtype Cl"]
     file: rdf.dat
-    dr: 0.1
+    resolution: 0.1
     frequency: !End
 ```
 
@@ -299,7 +299,7 @@ file, one row per distance bin, with columns
 analysis:
   - !MultipoleDistribution
     selections: ["molecule protein", "molecule protein"]
-    dr: 2.0
+    resolution: 2.0
     frequency: !Every 100
 ```
 
@@ -311,7 +311,7 @@ Key           | Required | Default              | Description
 ------------- | -------- | -------------------- | ----------------------------------------
 `selections`  | yes      |                      | Two selection expressions, _a_ and _b_
 `file`        | no       | `multipole_dist.csv` | Output CSV file
-`dr`          | no       | 1.0                  | Distance resolution along _R_ (Å)
+`resolution`          | no       | 1.0                  | Distance resolution along _R_ (Å)
 `max_r`       | no       | half box             | Maximum separation (Å)
 `frequency`   | yes      |                      | Sample frequency
 
@@ -480,7 +480,7 @@ analysis:
   - !RadialDistribution
     selections: ["atomtype Na", "atomtype Cl"]
     file: rdf_nacl.dat
-    dr: 0.1
+    resolution: 0.1
     frequency: !Every 100
 
   # COM-COM RDF for polymer molecules
@@ -488,7 +488,7 @@ analysis:
     selections: ["molecule polymer", "molecule polymer"]
     use_com: true
     file: rdf_com.dat
-    dr: 0.5
+    resolution: 0.5
     max_r: 30.0
     frequency: !Every 100
 ```
@@ -499,7 +499,7 @@ Key                        | Required | Default               | Description
 -------------------------- | -------- | --------------------- | -------------------------------------------
 `selections`               | yes      |                       | Pair of selection expressions, e.g. `["atomtype Na", "atomtype Cl"]`
 `file`                     | yes      |                       | Output file path (see [Output file formats](#output-file-formats))
-`dr`                       | yes      |                       | Bin width in distance units
+`resolution`                       | yes      |                       | Bin width in distance units
 `frequency`                | yes      |                       | Sample frequency, e.g. `!Every 100`
 `max_r`                    | no       | half shortest box dim | Maximum distance for histogram
 `use_com`                  | no       | `false`               | Use center-of-mass distances instead of atom-atom
@@ -667,7 +667,7 @@ If `file` is given, each sampled step writes columns
 ```yaml
 analysis:
   - !VirtualVolumeMove
-    dV: 0.2
+    volume_displacement: 0.2
     method: Isotropic
     file: pressure.csv
     frequency: !Every 10
@@ -677,7 +677,7 @@ analysis:
 
 Key           | Required | Default      | Description
 ------------- | -------- | ------------ | -------------------------------------------
-`dV`          | yes      |              | Volume displacement (Å³)
+`volume_displacement`          | yes      |              | Volume displacement (Å³)
 `method`      | no       | `Isotropic`  | Scaling policy: `Isotropic`, `ScaleZ`, `ScaleXY`
 `file`        | no       |              | Output file path (see [Output file formats](#output-file-formats))
 `frequency`   | yes      |              | Sample frequency, e.g. `!Every 10`
@@ -1174,7 +1174,7 @@ of groups, particles, and molecule types).
       - !RadialDistribution
         selections: ["molecule A", "molecule B"]
         file: rdf_explicit.dat
-        dr: 0.1
+        resolution: 0.1
         frequency: !Every 100
     ```
 

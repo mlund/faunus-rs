@@ -25,7 +25,7 @@ energy_change:
   final: -1.8509285832440676
   initial: -1.9606794556729374
 energy_timers:
-  celloverlap: '13.04 (energy: 8.73, update: 4.31)'
+  cell_overlap: '13.04 (energy: 8.73, update: 4.31)'
   nonbonded: '86.96000000000001 (energy: 82.68, update: 4.28)'
 propagate:
   repeat: 500
@@ -107,13 +107,13 @@ analysis:
 - energy:
     num_samples: 20
     mean: -2.827403433207691
-- collectivevariable:
+- collective_variable:
     property: Count
     description: 'selection: atomtype Na'
     num_samples: 20
     mean: 2.15
     rms: 2.4392621835300936
-- collectivevariable:
+- collective_variable:
     property: Count
     description: 'selection: atomtype Cl'
     num_samples: 20

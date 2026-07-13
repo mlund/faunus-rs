@@ -521,7 +521,7 @@ impl WidomRotation {
 
 impl_info!(
     WidomRotation,
-    "widomrotation",
+    "widom_rotation",
     "Widom rotational perturbation about the center of mass",
     "doi:10.1063/1.1734110" // Widom insertion method
 );
@@ -883,7 +883,7 @@ propagate: {{seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}}
 
     #[test]
     fn full_observables_are_reported_and_state_is_preserved() {
-        let ctx = dimer_backend(r#"customexternal: [{selection: "all", function: "q * z"}]"#);
+        let ctx = dimer_backend(r#"custom_external: [{selection: "all", function: "q * z"}]"#);
         let mut analysis = builder(true, true).build(&ctx, RT_300).unwrap();
 
         let gi = ctx.resolve_groups(analysis.selection.selection())[0];
@@ -977,7 +977,7 @@ propagate: {{seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}}
         // With one external-only molecule, the group↔environment energy that the
         // scan reads equals the full system energy at every orientation — the
         // cache-correctness guardrail for the rotate/restore loop.
-        let ctx = dimer_backend(r#"customexternal: [{selection: "all", function: "q * z"}]"#);
+        let ctx = dimer_backend(r#"custom_external: [{selection: "all", function: "q * z"}]"#);
         let mut trial = ctx.clone();
         let gi = ctx.resolve_groups(&Selection::parse("molecule DIMER").unwrap())[0];
         let indices: Vec<usize> = ctx.groups()[gi].iter_active().collect();

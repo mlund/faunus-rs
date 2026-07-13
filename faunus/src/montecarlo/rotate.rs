@@ -32,9 +32,9 @@ pub struct RotateMolecule {
     /// Id of the molecule type to rotate.
     #[serde(skip)]
     molecule_id: MoleculeId,
-    /// Maximum angular displacement (radians).
-    #[serde(alias = "dp")]
-    max_displacement: f64,
+    /// Maximum rotation angle (radians).
+    #[serde(alias = "dprot")]
+    max_angle: f64,
     /// Move selection weight.
     #[serde(skip_serializing, default = "crate::propagate::default_weight")]
     pub(crate) weight: f64,
@@ -56,7 +56,7 @@ impl RotateMolecule {
 impl<T: ObserveContext> MoveProposal<T> for RotateMolecule {
     fn propose_move(&mut self, context: &T, rng: &mut dyn RngCore) -> Option<ProposedMove> {
         let group_index = montecarlo::random_group(context, rng, self.molecule_id)?;
-        let (quaternion, angle) = random_quaternion(rng, self.max_displacement);
+        let (quaternion, angle) = random_quaternion(rng, self.max_angle);
         Some(ProposedMove::rotate_group(group_index, quaternion, angle))
     }
 

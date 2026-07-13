@@ -36,9 +36,9 @@ pub struct CrankshaftMove {
     /// Id of the molecule type.
     #[serde(skip)]
     molecule_id: MoleculeId,
-    /// Maximum angular displacement (radians).
-    #[serde(alias = "dp")]
-    max_displacement: f64,
+    /// Maximum rotation angle (radians).
+    #[serde(alias = "dprot")]
+    max_angle: f64,
     /// Move selection weight.
     #[serde(skip_serializing, default = "crate::propagate::default_weight")]
     pub(crate) weight: f64,
@@ -112,7 +112,7 @@ impl<T: ObserveContext> MoveProposal<T> for CrankshaftMove {
         let dir_pos = context.position(group_start + dir_rel);
 
         let uaxis = UnitVector3::new_normalize(dir_pos - pivot_pos);
-        let angle = random_displacement(rng, self.max_displacement);
+        let angle = random_displacement(rng, self.max_angle);
         let quaternion = crate::UnitQuaternion::from_axis_angle(&uaxis, angle);
 
         Some(ProposedMove::rotate_atoms(
@@ -141,10 +141,10 @@ mod tests {
 
     #[test]
     fn yaml_parsing() {
-        let yaml = "!CrankshaftMove {molecule: Peptide, dp: 0.5, weight: 1.0}";
+        let yaml = "!CrankshaftMove {molecule: Peptide, dprot: 0.5, weight: 1.0}";
         let m: CrankshaftMove = serde_yml::from_str(yaml).unwrap();
         assert_eq!(m.molecule_name, "Peptide");
-        assert_eq!(m.max_displacement, 0.5);
+        assert_eq!(m.max_angle, 0.5);
         assert_eq!(m.weight, 1.0);
         assert_eq!(m.repeat, 1);
         assert_eq!(m.molecule_id, MoleculeId::new(0));
@@ -153,7 +153,7 @@ mod tests {
 
     #[test]
     fn yaml_unknown_field_rejected() {
-        let yaml = "!CrankshaftMove {molecule: Peptide, dp: 0.5, weight: 1.0, unknown: 42}";
+        let yaml = "!CrankshaftMove {molecule: Peptide, dprot: 0.5, weight: 1.0, unknown: 42}";
         assert!(serde_yml::from_str::<CrankshaftMove>(yaml).is_err());
     }
 }
