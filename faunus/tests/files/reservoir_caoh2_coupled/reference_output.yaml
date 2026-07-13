@@ -1,0 +1,141 @@
+version:
+  faunus: 3.0.0-beta.1
+  git_revision: v3.0.0-beta.1-31-gc9b6763-dirty
+medium:
+  permittivity: Vacuum
+  salt: null
+  temperature: 298.15
+blocks:
+- molecule: CaCl₂
+  N: 400
+  active: null
+  insert: !RandomAtomPos
+    directions: xyz
+- molecule: NaOH
+  N: 400
+  active: null
+  insert: !RandomAtomPos
+    directions: xyz
+- molecule: Ca(OH)₂
+  N: 400
+  active: 0
+  insert: !RandomAtomPos
+    directions: xyz
+- molecule: Ca²⁺
+  N: 800
+  active: 0
+  insert: !RandomAtomPos
+    directions: xyz
+- molecule: Cl⁻
+  N: 1600
+  active: 0
+  insert: !RandomAtomPos
+    directions: xyz
+- molecule: Na⁺
+  N: 800
+  active: 0
+  insert: !RandomAtomPos
+    directions: xyz
+- molecule: OH⁻
+  N: 1600
+  active: 0
+  insert: !RandomAtomPos
+    directions: xyz
+cell: !Cuboid
+- 300.0
+- 300.0
+- 300.0
+energy_change:
+  drift: 0.0
+  final: 0.0
+  initial: 0.0
+energy_timers:
+  cell_overlap: '100 (energy: 53.93, update: 46.07)'
+propagate:
+  repeat: 30000
+  seed: !Fixed 42
+  collections:
+  - !Deterministic
+    repeat: 1
+    elapsed_seconds: 4.790925491
+    moves:
+    - !SpeciationMove
+      reactions:
+      - - CaCl₂ = Ca²⁺ + Cl⁻ + Cl⁻
+        - !pK -3.083
+      - - Ca(OH)₂ = Ca²⁺ + OH⁻ + OH⁻
+        - !pK 5.19
+      - - NaOH = Na⁺ + OH⁻
+        - !pK -2.03
+      per_reaction:
+      - reaction: CaCl₂ = Ca²⁺ + Cl⁻ + Cl⁻
+        accepted: 0
+        trials: 50130
+        acceptance_ratio: '0.0000'
+      - reaction: Ca(OH)₂ = Ca²⁺ + OH⁻ + OH⁻
+        accepted: 94831
+        trials: 100309
+        acceptance_ratio: '0.9454'
+      - reaction: NaOH = Na⁺ + OH⁻
+        accepted: 0
+        trials: 49878
+        acceptance_ratio: '0.0000'
+      weight: 1.0
+      repeat: 10
+      statistics:
+        num_trials: 300000
+        num_accepted: 94831
+        mean_square_displacement:
+          avg: 0.0
+          n: 205169
+        timer:
+          accumulated:
+            secs: 0
+            nanos: 0
+        info: {}
+        energy_change_sum: 0.0
+        acceptance_ratio: 0.31610333333333335
+  criterion: MetropolisHastings
+analysis:
+- collective_variable:
+    property: Molarity
+    description: 'selection: molecule ''Ca²⁺'''
+    num_samples: 3000
+    mean: 0.021080707461630446
+    rms: 0.021086586285801064
+- collective_variable:
+    property: Molarity
+    description: 'selection: molecule ''Cl⁻'''
+    num_samples: 3000
+    mean: 0.04920115754589175
+    rms: 0.04920115754589175
+- collective_variable:
+    property: Molarity
+    description: 'selection: molecule ''Na⁺'''
+    num_samples: 3000
+    mean: 0.024600578772945875
+    rms: 0.024600578772945875
+- collective_variable:
+    property: Molarity
+    description: 'selection: molecule ''OH⁻'''
+    num_samples: 3000
+    mean: 0.017560836150315017
+    rms: 0.01758904610037107
+- collective_variable:
+    property: Count
+    description: 'selection: molecule ''Ca(OH)₂'''
+    num_samples: 3000
+    mean: 57.23233333333338
+    rms: 57.80206167026686
+- collective_variable:
+    property: Count
+    description: 'selection: molecule ''CaCl₂'''
+    num_samples: 3000
+    mean: 0.0
+    rms: 0.0
+- collective_variable:
+    property: Count
+    description: 'selection: molecule ''NaOH'''
+    num_samples: 3000
+    mean: 0.0
+    rms: 0.0

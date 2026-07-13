@@ -1,0 +1,104 @@
+# Phytate (IP6) titration by molecular swap: 13 protonation states, 12 pKa steps.
+#
+# Exact solution: de Levie, Anal. Chem. 68, 585 (1996), doi:10.1021/ac950430l.
+#   chi_m = [H+]^m * prod_{j<=n-m} K_j / ( [H+]^n + sum_i [H+]^(n-i) prod_{j<=i} K_j )
+#   <Z> = -sum_m (n-m) * chi_m
+# At pH 7.0: <Z> = -8.675 e, with states 9, 8, 10, 7 the most populated.
+#
+# pKa from De Stefano et al., doi:10.1021/je020124m. Ideal (no interactions), so the
+# equilibrium is exactly the analytic one. INO is the invariant centre bead: it
+# survives every speciation name swap and so identifies the phytate molecules.
+
+atoms:
+  - {name: INO, mass: 180.0, charge: 0.0, sigma: 6.2}
+  - {name: PH0, mass: 95.0, charge: 0.0, sigma: 5.8}
+  - {name: PH1, mass: 95.0, charge: -1.0, sigma: 5.8}
+  - {name: PH2, mass: 95.0, charge: -2.0, sigma: 5.8}
+  - {name: H+, mass: 1.0, sigma: 1.0, activity: 1.000000e-07}
+
+molecules:
+  - name: "H₁₂PA"
+    from_structure: [{INO: [0.0, 0.0, 0.0]}, {PH0: [4.5, 0.0, 1.5]}, {PH0: [2.25, 3.897, -0.5]}, {PH0: [-2.25, 3.897, -0.5]}, {PH0: [-4.5, 0.0, -0.5]}, {PH0: [-2.25, -3.897, -0.5]}, {PH0: [2.25, -3.897, -0.5]}]
+  - name: "H₁₁PA¹⁻"
+    from_structure: [{INO: [0.0, 0.0, 0.0]}, {PH1: [4.5, 0.0, 1.5]}, {PH0: [2.25, 3.897, -0.5]}, {PH0: [-2.25, 3.897, -0.5]}, {PH0: [-4.5, 0.0, -0.5]}, {PH0: [-2.25, -3.897, -0.5]}, {PH0: [2.25, -3.897, -0.5]}]
+  - name: "H₁₀PA²⁻"
+    from_structure: [{INO: [0.0, 0.0, 0.0]}, {PH1: [4.5, 0.0, 1.5]}, {PH0: [2.25, 3.897, -0.5]}, {PH0: [-2.25, 3.897, -0.5]}, {PH1: [-4.5, 0.0, -0.5]}, {PH0: [-2.25, -3.897, -0.5]}, {PH0: [2.25, -3.897, -0.5]}]
+  - name: "H₉PA³⁻"
+    from_structure: [{INO: [0.0, 0.0, 0.0]}, {PH1: [4.5, 0.0, 1.5]}, {PH0: [2.25, 3.897, -0.5]}, {PH1: [-2.25, 3.897, -0.5]}, {PH0: [-4.5, 0.0, -0.5]}, {PH1: [-2.25, -3.897, -0.5]}, {PH0: [2.25, -3.897, -0.5]}]
+  - name: "H₈PA⁴⁻"
+    from_structure: [{INO: [0.0, 0.0, 0.0]}, {PH1: [4.5, 0.0, 1.5]}, {PH1: [2.25, 3.897, -0.5]}, {PH0: [-2.25, 3.897, -0.5]}, {PH1: [-4.5, 0.0, -0.5]}, {PH0: [-2.25, -3.897, -0.5]}, {PH1: [2.25, -3.897, -0.5]}]
+  - name: "H₇PA⁵⁻"
+    from_structure: [{INO: [0.0, 0.0, 0.0]}, {PH1: [4.5, 0.0, 1.5]}, {PH1: [2.25, 3.897, -0.5]}, {PH1: [-2.25, 3.897, -0.5]}, {PH0: [-4.5, 0.0, -0.5]}, {PH1: [-2.25, -3.897, -0.5]}, {PH1: [2.25, -3.897, -0.5]}]
+  - name: "H₆PA⁶⁻"
+    from_structure: [{INO: [0.0, 0.0, 0.0]}, {PH1: [4.5, 0.0, 1.5]}, {PH1: [2.25, 3.897, -0.5]}, {PH1: [-2.25, 3.897, -0.5]}, {PH1: [-4.5, 0.0, -0.5]}, {PH1: [-2.25, -3.897, -0.5]}, {PH1: [2.25, -3.897, -0.5]}]
+  - name: "H₅PA⁷⁻"
+    from_structure: [{INO: [0.0, 0.0, 0.0]}, {PH2: [4.5, 0.0, 1.5]}, {PH1: [2.25, 3.897, -0.5]}, {PH1: [-2.25, 3.897, -0.5]}, {PH1: [-4.5, 0.0, -0.5]}, {PH1: [-2.25, -3.897, -0.5]}, {PH1: [2.25, -3.897, -0.5]}]
+  - name: "H₄PA⁸⁻"
+    from_structure: [{INO: [0.0, 0.0, 0.0]}, {PH2: [4.5, 0.0, 1.5]}, {PH1: [2.25, 3.897, -0.5]}, {PH1: [-2.25, 3.897, -0.5]}, {PH2: [-4.5, 0.0, -0.5]}, {PH1: [-2.25, -3.897, -0.5]}, {PH1: [2.25, -3.897, -0.5]}]
+  - name: "H₃PA⁹⁻"
+    from_structure: [{INO: [0.0, 0.0, 0.0]}, {PH2: [4.5, 0.0, 1.5]}, {PH1: [2.25, 3.897, -0.5]}, {PH2: [-2.25, 3.897, -0.5]}, {PH1: [-4.5, 0.0, -0.5]}, {PH2: [-2.25, -3.897, -0.5]}, {PH1: [2.25, -3.897, -0.5]}]
+  - name: "H₂PA¹⁰⁻"
+    from_structure: [{INO: [0.0, 0.0, 0.0]}, {PH2: [4.5, 0.0, 1.5]}, {PH2: [2.25, 3.897, -0.5]}, {PH1: [-2.25, 3.897, -0.5]}, {PH2: [-4.5, 0.0, -0.5]}, {PH1: [-2.25, -3.897, -0.5]}, {PH2: [2.25, -3.897, -0.5]}]
+  - name: "HPA¹¹⁻"
+    from_structure: [{INO: [0.0, 0.0, 0.0]}, {PH2: [4.5, 0.0, 1.5]}, {PH2: [2.25, 3.897, -0.5]}, {PH2: [-2.25, 3.897, -0.5]}, {PH1: [-4.5, 0.0, -0.5]}, {PH2: [-2.25, -3.897, -0.5]}, {PH2: [2.25, -3.897, -0.5]}]
+  - name: "PA¹²⁻"
+    from_structure: [{INO: [0.0, 0.0, 0.0]}, {PH2: [4.5, 0.0, 1.5]}, {PH2: [2.25, 3.897, -0.5]}, {PH2: [-2.25, 3.897, -0.5]}, {PH2: [-4.5, 0.0, -0.5]}, {PH2: [-2.25, -3.897, -0.5]}, {PH2: [2.25, -3.897, -0.5]}]
+
+system:
+  cell: !Cuboid [100.0, 100.0, 100.0]
+  medium:
+    permittivity: !Vacuum
+    temperature: 298.15
+  energy: {}
+  blocks:
+    - {molecule: "H₁₂PA", N: 20, active: 0, insert: !RandomCOM {}}
+    - {molecule: "H₁₁PA¹⁻", N: 20, active: 0, insert: !RandomCOM {}}
+    - {molecule: "H₁₀PA²⁻", N: 20, active: 0, insert: !RandomCOM {}}
+    - {molecule: "H₉PA³⁻", N: 20, active: 0, insert: !RandomCOM {}}
+    - {molecule: "H₈PA⁴⁻", N: 20, active: 0, insert: !RandomCOM {}}
+    - {molecule: "H₇PA⁵⁻", N: 20, active: 0, insert: !RandomCOM {}}
+    - {molecule: "H₆PA⁶⁻", N: 20, active: 0, insert: !RandomCOM {}}
+    - {molecule: "H₅PA⁷⁻", N: 20, active: 0, insert: !RandomCOM {}}
+    - {molecule: "H₄PA⁸⁻", N: 20, active: 0, insert: !RandomCOM {}}
+    - {molecule: "H₃PA⁹⁻", N: 20, active: 20, insert: !RandomCOM {}}
+    - {molecule: "H₂PA¹⁰⁻", N: 20, active: 0, insert: !RandomCOM {}}
+    - {molecule: "HPA¹¹⁻", N: 20, active: 0, insert: !RandomCOM {}}
+    - {molecule: "PA¹²⁻", N: 20, active: 0, insert: !RandomCOM {}}
+
+analysis:
+  - !CollectiveVariable {property: count, selection: "molecule 'H₁₂PA'", frequency: !Every 10}
+  - !CollectiveVariable {property: count, selection: "molecule 'H₁₁PA¹⁻'", frequency: !Every 10}
+  - !CollectiveVariable {property: count, selection: "molecule 'H₁₀PA²⁻'", frequency: !Every 10}
+  - !CollectiveVariable {property: count, selection: "molecule 'H₉PA³⁻'", frequency: !Every 10}
+  - !CollectiveVariable {property: count, selection: "molecule 'H₈PA⁴⁻'", frequency: !Every 10}
+  - !CollectiveVariable {property: count, selection: "molecule 'H₇PA⁵⁻'", frequency: !Every 10}
+  - !CollectiveVariable {property: count, selection: "molecule 'H₆PA⁶⁻'", frequency: !Every 10}
+  - !CollectiveVariable {property: count, selection: "molecule 'H₅PA⁷⁻'", frequency: !Every 10}
+  - !CollectiveVariable {property: count, selection: "molecule 'H₄PA⁸⁻'", frequency: !Every 10}
+  - !CollectiveVariable {property: count, selection: "molecule 'H₃PA⁹⁻'", frequency: !Every 10}
+  - !CollectiveVariable {property: count, selection: "molecule 'H₂PA¹⁰⁻'", frequency: !Every 10}
+  - !CollectiveVariable {property: count, selection: "molecule 'HPA¹¹⁻'", frequency: !Every 10}
+  - !CollectiveVariable {property: count, selection: "molecule 'PA¹²⁻'", frequency: !Every 10}
+
+propagate:
+  seed: !Fixed 42
+  criterion: MetropolisHastings
+  repeat: 30000
+  collections:
+    - !Deterministic
+      moves:
+        - !SpeciationMove
+          repeat: 10
+          reactions:
+            - ["H₁₂PA = H₁₁PA¹⁻ + ~H+", !pK 1.1]
+            - ["H₁₁PA¹⁻ = H₁₀PA²⁻ + ~H+", !pK 1.5]
+            - ["H₁₀PA²⁻ = H₉PA³⁻ + ~H+", !pK 1.7]
+            - ["H₉PA³⁻ = H₈PA⁴⁻ + ~H+", !pK 2.1]
+            - ["H₈PA⁴⁻ = H₇PA⁵⁻ + ~H+", !pK 2.5]
+            - ["H₇PA⁵⁻ = H₆PA⁶⁻ + ~H+", !pK 2.9]
+            - ["H₆PA⁶⁻ = H₅PA⁷⁻ + ~H+", !pK 5.72]
+            - ["H₅PA⁷⁻ = H₄PA⁸⁻ + ~H+", !pK 6.28]
+            - ["H₄PA⁸⁻ = H₃PA⁹⁻ + ~H+", !pK 6.81]
+            - ["H₃PA⁹⁻ = H₂PA¹⁰⁻ + ~H+", !pK 7.6]
+            - ["H₂PA¹⁰⁻ = HPA¹¹⁻ + ~H+", !pK 9.94]
+            - ["HPA¹¹⁻ = PA¹²⁻ + ~H+", !pK 11.84]

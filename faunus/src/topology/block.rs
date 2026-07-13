@@ -164,7 +164,7 @@ impl InsertionPolicy {
     }
 
     /// Center molecule's reference positions at the origin (COM = 0).
-    fn centered_reference_positions(
+    pub(crate) fn centered_reference_positions(
         molecule_kind: &MoleculeKind,
         atoms: &[AtomKind],
     ) -> Vec<Point> {
@@ -291,12 +291,12 @@ impl InsertionPolicy {
     /// Returns the placed positions and the applied rotation quaternion so
     /// that the group's orientation is correct from the start (needed by LD
     /// and 6D tabulated energies).
-    fn place_molecule_at(
+    pub(crate) fn place_molecule_at(
         centered_positions: &[Point],
         com: &Point,
         rotate: bool,
         cell: &impl SimulationCell,
-        rng: &mut impl Rng,
+        rng: &mut (impl Rng + ?Sized),
     ) -> (Vec<Point>, UnitQuaternion) {
         let mut positions: Vec<_> = centered_positions.iter().map(|pos| pos + com).collect();
         let quaternion = if rotate {

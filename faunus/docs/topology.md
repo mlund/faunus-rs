@@ -35,7 +35,7 @@ atoms:
 | `sigma` / `σ`    | no       |         | Lennard-Jones diameter (Å)               |
 | `epsilon` / `ε` / `eps` | no |      | Lennard-Jones well depth (kJ/mol)        |
 | `hydrophobicity` | no       |         | See below                                |
-| `activity`       | no       |         | Activity for implicit species (molar)    |
+| `activity`       | no       |         | Activity of an implicit reaction species (molar) |
 | `reservoir`      | no       | `false` | Reservoir counter atom (see [Implicit Reservoirs](#implicit-reservoirs)) |
 | `custom`         | no       | `{}`    | Arbitrary key-value properties           |
 
@@ -82,7 +82,7 @@ molecules:
 | `atom_names`          | no       | `[]`    | Per-atom names (use `null` to skip)              |
 | `residues`            | no       | `[]`    | Protein residues                                 |
 | `chains`              | no       | `[]`    | Protein chains                                   |
-| `activity`            | no       |         | Activity for GCMC fugacity (molar)               |
+| `activity`            | no       |         | GCMC fugacity, or the activity of an implicit species named after this molecule (molar) |
 | `has_com`             | no       | `true`  | Whether center-of-mass makes sense               |
 | `atomic`              | no       | `false` | Pool all instances into a single group (see below). Auto-set for reservoir atoms |
 | `custom`              | no       | `{}`    | Arbitrary key-value properties                   |
@@ -191,6 +191,10 @@ When `atomic: true`:
 - GCMC inserts/deletes individual atoms within the group via expand/shrink.
 - `TranslateAtom` works as usual; `TranslateMolecule` is not allowed.
 - The `N` field in `blocks` sets the group capacity (maximum atom count).
+- A one-to-one reaction (`A = B`) is not allowed, because it is read as a
+  [molecular swap](moves.md#molecular-swaps): the whole group would have to move between
+  full and empty, and every member of an atomic kind shares one group. Reactions with
+  explicit stoichiometry, such as `2 Na = Ca`, are insertions and deletions and work.
 
 ### Bonds
 
@@ -429,7 +433,19 @@ Molecular   | `A + A ⇌ D`            | Possible arrows: `=`, `⇌`, `⇄`, `�
 Implicit    | `RCOO- + 👻H+ ⇌ RCOOH` | Mark with `👻` or `~`
 Atomic      | `⚛Pb ⇄ ⚛Au`            | Mark with `⚛` or `.`
 
+An implicit participant takes its activity from the `activity` field of the atom type of
+that name, or, if no atom type carries it, of the molecule type — so an implicit molecular
+reservoir such as `~H2O` is legal.
+
 When a reaction has one molecular reactant and one molecular product with equal
 atom counts (e.g. `A = B + ~H+`), it is treated as a molecular swap:
 the source group is deactivated and a target group is activated with aligned positions.
+Both types must be non-atomic, and their intramolecular energy is left out of $\Delta U$
+(see [Molecular swaps](moves.md#molecular-swaps)) — so if the two states differ in it, add
+`exclusions` covering their intramolecular pairs.
 Unicode names are supported in reactions and molecule definitions.
+
+The following are rejected when the reaction is parsed, rather than silently sampled as a
+different reaction: an atom or molecule name matching no type; unbalanced atom
+stoichiometry, e.g. `⚛A + ⚛A = ⚛B`; an equilibrium constant that is not positive and
+finite; and a reaction naming a molecule for which no `blocks:` entry allocates groups.

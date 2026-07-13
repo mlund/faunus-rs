@@ -246,10 +246,14 @@ impl GibbsParticleTransfer {
     ) -> Result<()> {
         let src_group = src
             .find_molecules(self.molecule_id, GroupSize::Full)
-            .and_then(|gs| gs.iter().copied().choose(rng));
+            .iter()
+            .copied()
+            .choose(rng);
         let tgt_group = tgt
             .find_molecules(self.molecule_id, GroupSize::Empty)
-            .and_then(|gs| gs.iter().copied().choose(rng));
+            .iter()
+            .copied()
+            .choose(rng);
 
         let (Some(src_group), Some(tgt_group)) = (src_group, tgt_group) else {
             self.statistics.reject();

@@ -210,7 +210,7 @@ pub fn run(input: &Path, state_dir: &Path, output: &Path, max_threads: usize) ->
                     let walker_path = walker_state_path(state_dir_ref, i);
                     if walker_path.exists() {
                         let ws = State::from_file(&walker_path)?;
-                        let propagate = Propagate::from_file(input_ref, &ctx)?;
+                        let propagate = Propagate::from_file(input_ref, &ctx, rt)?;
                         let analyses = AnalysisCollection::default();
                         let mut mc = MarkovChain::new(ctx, propagate, rt, analyses)?;
                         mc.load_state(ws)?;
@@ -226,7 +226,7 @@ pub fn run(input: &Path, state_dir: &Path, output: &Path, max_threads: usize) ->
                     ctx.hamiltonian_mut().push_front(EnergyTerm::from(penalty));
 
                     // WL controls its own loop; disable the YAML repeat limit
-                    let mut propagate = Propagate::from_file(input_ref, &ctx)?;
+                    let mut propagate = Propagate::from_file(input_ref, &ctx, rt)?;
                     propagate.set_unlimited_repeats();
                     let out_dir = walker_output_dir(state_dir_ref, i);
                     let analyses = analysis::from_file_creating_dir(
