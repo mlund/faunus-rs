@@ -285,10 +285,12 @@ Proposes isotropic or anisotropic volume changes for sampling the _NPT_ ensemble
 The volume is sampled logarithmically:
 
 $$
-V_\text{new} = \exp\!\bigl(\ln V_\text{old} + (\xi - 0.5)\, \Delta_V \bigr)
+V_\text{new} = \exp\!\bigl(\ln V_\text{old} + (\xi - 0.5)\, \Delta \ln V \bigr)
 $$
 
-where $\xi$ is a uniform random number in $[0, 1)$.
+where $\xi$ is a uniform random number in $[0, 1)$ and $\Delta \ln V$ is the width of the
+displacement in $\ln V$, set by `volume_displacement`. Being a displacement of the logarithm,
+it is dimensionless: it scales the volume by a factor, not by an absolute amount.
 
 No move-level bias is applied; the acceptance is handled by standard Metropolis
 sampling together with the [`isobaric`](energy.md#external-pressure-isobaric) energy term
@@ -313,7 +315,7 @@ propagate:
 
 Key      | Required | Default      | Description
 -------- | -------- | ------------ | -------------------------------------------
-`volume_displacement` | yes |     | Volume displacement parameter, log-scale (alias `dV`)
+`volume_displacement` | yes |     | Width $\Delta \ln V$ of the displacement in $\ln V$; dimensionless (alias `dV`)
 `weight` | yes      |              | Selection weight
 `method` | no       | `Isotropic`  | Scaling policy (see table below)
 `repeat` | no       | 1            | Repetitions per selection
@@ -704,8 +706,14 @@ $$
 
 Key      | Required | Default        | Description
 -------- | -------- | -------------- | -------------------------------------------
-`volume_displacement` | yes |       | Volume displacement parameter (alias `dV`)
+`volume_displacement` | yes |       | Displacement width; its meaning follows `method` (see below). Alias `dV`
 `method` | no       | `Logarithmic`  | Displacement method: `Logarithmic` or `Linear`
+
+The two methods give `volume_displacement` different meanings and different units:
+
+- `Logarithmic` — the width of a displacement in $\ln(V_1/V_2)$, so it is **dimensionless**
+  and scales the two volumes by a factor while conserving $V_1 + V_2$.
+- `Linear` — the width of a direct volume transfer $\delta V$, in **Å³**.
 
 ### Gibbs Particle Transfer
 
