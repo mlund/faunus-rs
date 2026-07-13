@@ -2584,6 +2584,8 @@ propagate:
 
     /// Stepwise dissociation constants of phytic acid (IP6), 12 protons.
     /// De Stefano et al., <https://doi.org/10.1021/je020124m>.
+    // The 8th pKa, 6.28, is measured data — not an approximation of τ, as clippy suspects.
+    #[allow(clippy::approx_constant)]
     const PHYTATE_PKA: [f64; 12] = [
         1.1, 1.5, 1.7, 2.1, 2.5, 2.9, 5.72, 6.28, 6.81, 7.60, 9.94, 11.84,
     ];
