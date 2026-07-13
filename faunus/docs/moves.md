@@ -449,6 +449,11 @@ molecule groups _before_ the move.
 No volume factor appears because the total molecule count is conserved.
 $\Delta U$ excludes intramolecular energy (bonded and nonbonded self-interactions)
 since these are absorbed into the equilibrium constant $K$.
+The total energy still counts it, so if the two states differ in intramolecular energy —
+say their sites carry different charges — the incremental and the recomputed energy
+disagree and the run reports an energy drift. Exclude every intramolecular pair of the
+swapped molecules to remove the term from both sides; faunus warns at startup when a swap
+between molecules of differing atom types leaves such pairs unexcluded.
 Each species must have pre-allocated groups (`active < N`) to serve as a pool;
 if the pool is exhausted, the move is silently rejected.
 

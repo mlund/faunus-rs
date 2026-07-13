@@ -525,6 +525,43 @@ fn validate_reaction_groups(
             }
         }
 
+        // A molecular swap leaves intramolecular energy out of ΔU, on the grounds that it is
+        // absorbed into K. The total energy still counts it, so if the two kinds differ in
+        // intramolecular energy the incremental and full energies disagree and the run
+        // accumulates drift — the very check that would otherwise catch a bad ΔU. Excluding
+        // the intramolecular pairs removes the term from both sides and settles it.
+        for op in &r.forward_ops {
+            let ReactionOp::SwapMolecule {
+                from_mol_id,
+                to_mol_id,
+            } = op
+            else {
+                continue;
+            };
+            let (from, to) = (
+                topology.moleculekind(*from_mol_id),
+                topology.moleculekind(*to_mol_id),
+            );
+            // Identical atom kinds means identical intramolecular energy, so nothing to warn
+            // about however the pairs are treated.
+            if from.atom_indices() == to.atom_indices() {
+                continue;
+            }
+            let n = from.atom_indices().len();
+            let all_pairs = n * n.saturating_sub(1) / 2;
+            if from.exclusions().len() < all_pairs || to.exclusions().len() < all_pairs {
+                log::warn!(
+                    "SpeciationMove: '{}' ⇌ '{}' swaps molecules whose atoms differ, but not \
+                     every intramolecular pair is excluded. Intramolecular energy is left out \
+                     of ΔU (absorbed into K), so any difference between the two states will \
+                     show up as energy drift. Add `exclusions` covering all intramolecular \
+                     pairs if the equilibrium constant already accounts for them.",
+                    from.name(),
+                    to.name()
+                );
+            }
+        }
+
         // All members of an atomic kind share one mega-group, so activating *and*
         // deactivating that kind in one reaction yields an expand and a shrink on the same
         // group. Those cannot be coalesced into the single change entry the energy path
@@ -2419,9 +2456,17 @@ propagate:
             .sum::<f64>()
     }
 
+    /// No interactions: the equilibrium is then exactly the analytic one.
+    const IDEAL_ENERGY: &str = "  energy: {}\n";
+
+    /// Screened electrostatics plus a soft core. The phosphates carry −1 and −2, so a
+    /// protonation swap changes the charge distribution and ΔU is genuinely non-zero.
+    const INTERACTING_ENERGY: &str = "  energy:\n    nonbonded:\n      default:\n        \
+         - !Coulomb {cutoff: 30.0}\n        - !WeeksChandlerAndersen {mixing: LB}\n";
+
     /// Thirteen protonation states of phytate, each a 7-atom molecule (an inositol centre
     /// bead plus six phosphates) exchanged as a whole molecule kind.
-    fn phytate_yaml(ph: f64, n_molecules: usize, repeat: usize) -> String {
+    fn phytate_yaml(ph: f64, n_molecules: usize, repeat: usize, energy: &str) -> String {
         // Sites carrying the k-th extra negative charge, maximising the minimum separation.
         const MAXSEP: [&[usize]; 7] = [
             &[],
@@ -2465,13 +2510,17 @@ propagate:
         };
 
         let mut yaml = format!(
-            "atoms:\n  - {{name: INO, mass: 180.0, charge: 0.0, sigma: 6.2}}\n\
-             \x20 - {{name: PH0, mass: 95.0, charge: 0.0, sigma: 5.8}}\n\
-             \x20 - {{name: PH1, mass: 95.0, charge: -1.0, sigma: 5.8}}\n\
-             \x20 - {{name: PH2, mass: 95.0, charge: -2.0, sigma: 5.8}}\n\
-             \x20 - {{name: H+, mass: 1.0, sigma: 1.0, activity: {:.6e}}}\nmolecules:\n",
+            "atoms:\n  - {{name: INO, mass: 180.0, charge: 0.0, sigma: 6.2, epsilon: 0.8368}}\n\
+             \x20 - {{name: PH0, mass: 95.0, charge: 0.0, sigma: 5.8, epsilon: 0.8368}}\n\
+             \x20 - {{name: PH1, mass: 95.0, charge: -1.0, sigma: 5.8, epsilon: 0.8368}}\n\
+             \x20 - {{name: PH2, mass: 95.0, charge: -2.0, sigma: 5.8, epsilon: 0.8368}}\n\
+             \x20 - {{name: H+, mass: 1.0, sigma: 1.0, epsilon: 0.8368, activity: {:.6e}}}\nmolecules:\n",
             10.0_f64.powf(-ph)
         );
+        let exclusions = (0..7)
+            .flat_map(|i| (i + 1..7).map(move |j| format!("[{i},{j}]")))
+            .collect::<Vec<_>>()
+            .join(", ");
         for state in 0..n_states {
             let sites = (0..6)
                 .map(|j| {
@@ -2480,12 +2529,19 @@ propagate:
                 })
                 .collect::<Vec<_>>()
                 .join(", ");
+            // All intramolecular pairs excluded: the electrostatic repulsion between the
+            // phosphates is already carried empirically by the pKa ladder, so counting it
+            // again would skew the equilibrium. This is also what the molecular swap's
+            // `ResizeExcludeIntra` assumes — see `molecular_swap_energy_drift_with_interactions`.
             yaml += &format!(
-                "  - name: \"PA{state}\"\n    from_structure: [{{INO: [0.0, 0.0, 0.0]}}, {sites}]\n"
+                "  - name: \"PA{state}\"\n    from_structure: [{{INO: [0.0, 0.0, 0.0]}}, {sites}]\n    \
+                 exclusions: [{exclusions}]\n"
             );
         }
-        yaml += "system:\n  cell: !Cuboid [100.0, 100.0, 100.0]\n  \
-                 medium: {permittivity: !Vacuum, temperature: 298.15}\n  energy: {}\n  blocks:\n";
+        yaml += &format!(
+            "system:\n  cell: !Cuboid [100.0, 100.0, 100.0]\n  \
+             medium: {{permittivity: !Water, temperature: 298.15}}\n{energy}  blocks:\n"
+        );
         for state in 0..n_states {
             let active = if state == start { n_molecules } else { 0 };
             yaml += &format!(
@@ -2520,7 +2576,11 @@ propagate:
 
         for ph in [2.0, 5.0, 7.0, 9.0, 11.0] {
             let tmp = tempfile::NamedTempFile::new().unwrap();
-            std::fs::write(tmp.path(), phytate_yaml(ph, n_molecules, repeat).as_bytes()).unwrap();
+            std::fs::write(
+                tmp.path(),
+                phytate_yaml(ph, n_molecules, repeat, IDEAL_ENERGY).as_bytes(),
+            )
+            .unwrap();
             let path = tmp.path();
 
             let mut rng = rand::thread_rng();
@@ -2568,6 +2628,116 @@ propagate:
                 "pH {ph}: ⟨Z⟩ = {observed:.3} e, exact solution gives {expected:.3} e"
             );
         }
+    }
+
+    /// The analytic titration tests above are all ideal, so ΔU ≡ 0 and no energy bug can
+    /// show up in them. The molecular-swap path in particular computes ΔU with
+    /// `GroupChange::ResizeExcludeIntra` — intramolecular energy is deliberately left out
+    /// and absorbed into K — which only an interacting system exercises.
+    ///
+    /// Here the phosphates carry −1 and −2, so every protonation swap changes the charge
+    /// distribution and ΔU is real. The incremental energy must then agree with a full
+    /// recompute; a drift means the swap's ΔU is wrong even though the ideal test passes.
+    #[test]
+    fn molecular_swap_energy_drift_with_interactions() {
+        use crate::analysis::AnalysisCollection;
+        use crate::montecarlo::MarkovChain;
+        use crate::propagate::Propagate;
+
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(
+            tmp.path(),
+            phytate_yaml(7.0, 12, 2_000, INTERACTING_ENERGY).as_bytes(),
+        )
+        .unwrap();
+        let path = tmp.path();
+
+        let mut rng = rand::thread_rng();
+        let context = Backend::new(path, None, &mut rng).unwrap();
+        let propagate = Propagate::from_file(path, &context, THERMAL_ENERGY).unwrap();
+        let mut mc = MarkovChain::new(
+            context,
+            propagate,
+            THERMAL_ENERGY,
+            AnalysisCollection::default(),
+        )
+        .unwrap();
+
+        let initial_energy = mc.system_energy();
+        for step in mc.iter() {
+            step.unwrap();
+        }
+
+        // The reaction must actually fire, or the drift check is vacuous.
+        let start = mc
+            .context()
+            .count_molecules(MoleculeId::new(9), GroupSize::Full);
+        assert_ne!(
+            start, 12,
+            "no swap was ever accepted; drift check is vacuous"
+        );
+
+        let drift = mc.energy_drift(initial_energy);
+        assert!(
+            drift < 1e-6,
+            "energy drift {drift:.6e} for an interacting molecular swap"
+        );
+    }
+
+    /// The drift above is worth catching before the run rather than after, so a swap between
+    /// kinds with differing atoms and un-excluded intramolecular pairs warns at startup.
+    /// A swap between kinds with identical atoms cannot differ in intramolecular energy and
+    /// must stay quiet — `molswap_phosphate` is exactly that case.
+    #[test]
+    fn intramolecular_exclusion_warning_only_when_it_can_drift() {
+        fn warns(yaml: &str, reaction: &str) -> bool {
+            let tmp = tempfile::NamedTempFile::new().unwrap();
+            std::fs::write(tmp.path(), yaml.as_bytes()).unwrap();
+            let mut rng = rand::thread_rng();
+            let context = Backend::new(tmp.path(), None, &mut rng).unwrap();
+            let mut mv = make_move(reaction, 1.0);
+            mv.finalize(&context, THERMAL_ENERGY).unwrap();
+            let topology = crate::context::WithTopology::topology_ref(&context);
+
+            // The warning fires exactly when the resolved swap has differing atom kinds and
+            // fewer than all-pairs exclusions; assert on that condition directly.
+            mv.resolved[0].forward_ops.iter().any(|op| {
+                let ReactionOp::SwapMolecule {
+                    from_mol_id,
+                    to_mol_id,
+                } = op
+                else {
+                    return false;
+                };
+                let (from, to) = (
+                    topology.moleculekind(*from_mol_id),
+                    topology.moleculekind(*to_mol_id),
+                );
+                if from.atom_indices() == to.atom_indices() {
+                    return false;
+                }
+                let n = from.atom_indices().len();
+                let all_pairs = n * n.saturating_sub(1) / 2;
+                from.exclusions().len() < all_pairs || to.exclusions().len() < all_pairs
+            })
+        }
+
+        let charged_no_exclusions = phytate_yaml(7.0, 4, 1, INTERACTING_ENERGY)
+            .lines()
+            .filter(|line| !line.trim_start().starts_with("exclusions:"))
+            .collect::<Vec<_>>()
+            .join("\n")
+            + "\n";
+        assert!(
+            warns(&charged_no_exclusions, "PA9 = PA10 + ~H+"),
+            "differing atoms with no exclusions must warn: this configuration drifts"
+        );
+
+        let charged_with_exclusions = phytate_yaml(7.0, 4, 1, INTERACTING_ENERGY);
+        assert!(
+            !warns(&charged_with_exclusions, "PA9 = PA10 + ~H+"),
+            "all intramolecular pairs excluded: nothing can drift, so do not warn"
+        );
     }
 
     // --- Grand-canonical ideal gas: ⟨N⟩ = K·c₀·V ---
