@@ -109,6 +109,98 @@ pub fn run_regression(dir: &Path) {
     );
 }
 
+/// Run faunus umbrella sampling, single-threaded for run-to-run reproducibility.
+///
+/// `-j 1` fixes the batching so the stitched PMF is independent of the host core
+/// count, and the fixed `propagate.seed` makes each window deterministic.
+pub fn run_umbrella(input: &Path, state_dir: &Path, pmf_output: &Path) {
+    let status = Command::new(faunus_binary())
+        .arg("umbrella")
+        .arg("-i")
+        .arg(input)
+        .arg("-s")
+        .arg(state_dir)
+        .arg("-o")
+        .arg(pmf_output)
+        .arg("-j")
+        .arg("1")
+        .status()
+        .expect("failed to execute faunus binary");
+    assert!(
+        status.success(),
+        "faunus umbrella exited with status: {status}"
+    );
+}
+
+/// Generate the `reference_pmf.csv` fixture for an umbrella test directory.
+///
+/// Runs from scratch (per-window states live in a throwaway temp dir) so the
+/// committed fixture is just the input and the stitched PMF.
+pub fn generate_umbrella_fixtures(dir: &Path) {
+    let input = dir.join("input.yaml");
+    let reference = dir.join("reference_pmf.csv");
+
+    let tmp = tempfile::tempdir().expect("failed to create temp dir");
+    let state_dir = tmp.path().join("umbrella_states");
+    let pmf = tmp.path().join("pmf.csv");
+    run_umbrella(&input, &state_dir, &pmf);
+    std::fs::copy(&pmf, &reference).expect("failed to copy pmf.csv");
+    println!("Generated {}", reference.display());
+}
+
+/// Run an umbrella regression: rerun from input and compare the PMF to reference.
+pub fn run_umbrella_regression(dir: &Path) {
+    let input = dir.join("input.yaml");
+    let reference = dir.join("reference_pmf.csv");
+
+    assert!(
+        reference.exists(),
+        "reference_pmf.csv not found in {}",
+        dir.display()
+    );
+
+    let tmp = tempfile::tempdir().expect("failed to create temp dir");
+    let state_dir = tmp.path().join("umbrella_states");
+    let pmf = tmp.path().join("pmf.csv");
+    run_umbrella(&input, &state_dir, &pmf);
+
+    let actual = std::fs::read_to_string(&pmf).expect("failed to read pmf.csv");
+    let expected = std::fs::read_to_string(&reference).expect("failed to read reference_pmf.csv");
+    assert_csv_eq(&expected, &actual, 1e-6);
+}
+
+/// Assert two CSV strings match: identical shape, numeric cells within `tol`,
+/// non-numeric cells (headers) compared exactly.
+pub fn assert_csv_eq(expected: &str, actual: &str, tol: f64) {
+    let e_lines: Vec<&str> = expected.lines().collect();
+    let a_lines: Vec<&str> = actual.lines().collect();
+    assert_eq!(
+        e_lines.len(),
+        a_lines.len(),
+        "CSV row count differs: expected {}, got {}",
+        e_lines.len(),
+        a_lines.len()
+    );
+    for (i, (el, al)) in e_lines.iter().zip(&a_lines).enumerate() {
+        let ecells: Vec<&str> = el.split(',').collect();
+        let acells: Vec<&str> = al.split(',').collect();
+        assert_eq!(
+            ecells.len(),
+            acells.len(),
+            "row {i}: column count differs: {el:?} vs {al:?}"
+        );
+        for (j, (ec, ac)) in ecells.iter().zip(&acells).enumerate() {
+            match (ec.trim().parse::<f64>(), ac.trim().parse::<f64>()) {
+                (Ok(ev), Ok(av)) => assert!(
+                    (ev - av).abs() <= tol,
+                    "row {i} col {j}: float mismatch {ev} vs {av} (tol {tol})"
+                ),
+                _ => assert_eq!(ec, ac, "row {i} col {j}: text mismatch"),
+            }
+        }
+    }
+}
+
 /// Compare two YAML values recursively.
 ///
 /// Returns a list of human-readable difference descriptions.

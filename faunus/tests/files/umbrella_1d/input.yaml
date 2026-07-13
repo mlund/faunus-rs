@@ -1,0 +1,57 @@
+# Umbrella-sampling regression: one particle in a linear 1-D external field U(x) = force·x.
+#
+# With no pair interactions the equilibrium density is ρ(x) ∝ exp(−U/kT), so the
+# overlap-ratio–stitched PMF must recover F(x) = force·x + const — the input potential
+# itself. This makes the reference verifiable by hand: pmf_kT is linear in x with slope
+# force/kT ≈ 1/2.494 ≈ 0.40 per Å at 300 K.
+#
+# Window geometry keeps `spacing` and `width` as integer multiples of `bin_width` so the
+# window→grid bin mapping is exact, and adjacent windows overlap by half a width so the
+# overlap fractions are well sampled.
+atoms:
+  - {name: A, mass: 1.0}
+
+molecules:
+  - name: MOL
+    atoms: [A]
+    has_com: true
+
+system:
+  cell: !Cuboid [40.0, 40.0, 40.0]
+  medium:
+    permittivity: !Vacuum
+    temperature: 300.0
+  energy:
+    custom_external:
+      - selection: "atomtype A"
+        function: "force * x"
+        constants: {force: 1.0}
+  blocks:
+    - molecule: MOL
+      N: 1
+      insert: !RandomAtomPos {}
+
+analysis:
+  - !Energy {file: energy.dat, frequency: !Every 1000}
+
+propagate:
+  seed: !Fixed 42
+  criterion: Metropolis
+  repeat: 40000
+  collections:
+    - !Stochastic
+      moves:
+        - !TranslateMolecule {molecule: MOL, dp: 3.0, repeat: 1}
+
+umbrella:
+  cv:
+    property: atom_position
+    selection: "atomtype A"
+    projection: x
+  windows:
+    range: [-9.0, 9.0]
+    width: 6.0
+    spacing: 3.0
+    bin_width: 0.5
+  drive:
+    force_constant: 2.0

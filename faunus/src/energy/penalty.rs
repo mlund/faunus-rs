@@ -24,7 +24,20 @@ use crate::Change;
 use crate::ObserveContext;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, Once, PoisonError, RwLock};
+
+/// Recover the guard from a poisoned shared-state lock, warning once so a run does not
+/// silently proceed on bias data that a panicking walker may have left inconsistent.
+fn recover_poisoned<T>(poisoned: PoisonError<T>) -> T {
+    static WARNED: Once = Once::new();
+    WARNED.call_once(|| {
+        log::warn!(
+            "penalty bias lock was poisoned by a panicking walker; recovering and continuing, \
+             but shared bias state may be inconsistent — treat results with caution"
+        );
+    });
+    poisoned.into_inner()
+}
 
 /// Flat-histogram bias that enters the Hamiltonian as `ln g(CV) × kT`.
 ///
@@ -62,7 +75,9 @@ impl Penalty {
             return 0.0;
         }
         let cv = self.eval_cv(context);
-        let state = self.state.read().expect("poisoned lock");
+        // Recover rather than propagate a poisoned lock: in a multi-walker run one thread
+        // panicking must not cascade a panic into every sibling's next bias evaluation.
+        let state = self.state.read().unwrap_or_else(recover_poisoned);
         match state.bin_index(&cv) {
             Some(b) => state.ln_g(b) * self.thermal_energy,
             None => f64::INFINITY,
@@ -74,7 +89,7 @@ impl Penalty {
     #[cfg(feature = "cli")]
     pub(crate) fn update(&self, context: &impl ObserveContext) {
         let cv = self.eval_cv(context);
-        let mut state = self.state.write().expect("poisoned lock");
+        let mut state = self.state.write().unwrap_or_else(recover_poisoned);
         if let Some(bin) = state.bin_index(&cv) {
             state.update(bin);
         }
@@ -136,5 +151,37 @@ impl PenaltyBuilder {
             Arc::new(RwLock::new(state)),
             thermal_energy,
         ))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::flat_histogram::GridDim;
+
+    /// A poisoned shared lock must be recovered, not re-panicked: the recovery expression
+    /// used by `Penalty::energy`/`update` yields a usable guard after a sibling panics
+    /// while holding the write lock.
+    #[test]
+    fn poisoned_lock_is_recovered_not_repanicked() {
+        let dim = GridDim::new_1d(0.0, 10.0, 1.0).unwrap();
+        let state = Arc::new(RwLock::new(FlatHistogramState::new(
+            dim, 0.8, 1, 1e-6, 1.0, 1,
+        )));
+
+        // Poison the lock: panic while holding the write guard.
+        let poisoned = Arc::clone(&state);
+        let _ = std::thread::spawn(move || {
+            let _guard = poisoned.write().unwrap();
+            panic!("simulated walker panic while holding the lock");
+        })
+        .join();
+        assert!(state.is_poisoned());
+
+        // Both accesses recover instead of panicking, exactly as energy()/update() now do.
+        let read_ok = state.read().unwrap_or_else(PoisonError::into_inner);
+        assert_eq!(read_ok.dim().num_bins(), 10);
+        drop(read_ok);
+        let _write_ok = state.write().unwrap_or_else(PoisonError::into_inner);
     }
 }

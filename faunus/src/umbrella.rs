@@ -34,6 +34,7 @@ use crate::{
 };
 use anyhow::{Context, Result};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
+use rand::Rng;
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
 
@@ -90,6 +91,56 @@ impl WindowGrid {
     fn half_width(&self) -> f64 {
         self.width / 2.0
     }
+
+    /// Reject geometrically invalid or grid-misaligned window layouts before sampling.
+    ///
+    /// A non-positive `spacing` makes `centers()` loop forever, and both `width` and
+    /// `spacing` must be integer multiples of `bin_width` so each window's local histogram
+    /// maps onto the global PMF grid without rounding drift (`build_pmf`) or a dropped
+    /// partial trailing bin (`Histogram::new`).
+    fn validate(&self) -> Result<()> {
+        anyhow::ensure!(
+            self.range.0 < self.range.1,
+            "umbrella windows: range start ({}) must be less than end ({})",
+            self.range.0,
+            self.range.1
+        );
+        anyhow::ensure!(self.width > 0.0, "umbrella windows: width must be positive");
+        anyhow::ensure!(
+            self.spacing > 0.0,
+            "umbrella windows: spacing must be positive"
+        );
+        anyhow::ensure!(
+            self.bin_width > 0.0,
+            "umbrella windows: bin_width must be positive"
+        );
+        // Overlap-ratio stitching needs adjacent windows to share CV range; spacing ≥ width
+        // leaves them touching or disjoint, which would only surface as a stitch error after
+        // the whole (potentially long) run.
+        anyhow::ensure!(
+            self.spacing < self.width,
+            "umbrella windows: spacing ({}) must be less than width ({}) so adjacent windows overlap",
+            self.spacing,
+            self.width
+        );
+        let is_multiple_of_bin = |x: f64| {
+            let ratio = x / self.bin_width;
+            (ratio - ratio.round()).abs() < 1e-9
+        };
+        anyhow::ensure!(
+            is_multiple_of_bin(self.width),
+            "umbrella windows: width ({}) must be an integer multiple of bin_width ({})",
+            self.width,
+            self.bin_width
+        );
+        anyhow::ensure!(
+            is_multiple_of_bin(self.spacing),
+            "umbrella windows: spacing ({}) must be an integer multiple of bin_width ({})",
+            self.spacing,
+            self.bin_width
+        );
+        Ok(())
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -108,41 +159,36 @@ struct WindowResult {
 
 /// Compute free-energy offsets between adjacent windows from overlap fractions.
 /// Returns per-window offset in kJ/mol (first window = 0).
-fn overlap_ratio_offsets(results: &[WindowResult], kt: f64) -> Vec<f64> {
+///
+/// Offsets are cumulative, so a single broken link (no overlap or no samples in the overlap
+/// band) would poison every downstream window. Rather than silently truncate the PMF there,
+/// fail loudly and name the offending pair.
+fn overlap_ratio_offsets(results: &[WindowResult], kt: f64) -> Result<Vec<f64>> {
     let mut offsets = vec![0.0_f64];
     for (i, pair) in results.windows(2).enumerate() {
         let (cur, next) = (&pair[0], &pair[1]);
         // Overlap region = intersection of adjacent windows
         let overlap_lo = next.lo;
         let overlap_hi = cur.hi;
-        let delta = if overlap_lo >= overlap_hi {
-            log::warn!(
-                "Windows {} and {} have no overlap ({:.2}..{:.2}), PMF discontinuous",
-                i,
-                i + 1,
-                overlap_lo,
-                overlap_hi
-            );
-            f64::NAN
-        } else {
-            let f_i = cur.histogram.fraction_in_range(overlap_lo, overlap_hi);
-            let f_next = next.histogram.fraction_in_range(overlap_lo, overlap_hi);
-            if f_i > 0.0 && f_next > 0.0 {
-                -kt * (f_i / f_next).ln()
-            } else {
-                log::warn!(
-                    "Windows {}-{}: zero overlap counts (f_i={:.4}, f_next={:.4})",
-                    i,
-                    i + 1,
-                    f_i,
-                    f_next
-                );
-                f64::NAN
-            }
-        };
+        anyhow::ensure!(
+            overlap_lo < overlap_hi,
+            "Umbrella windows {i} and {} do not overlap ({overlap_lo:.2}..{overlap_hi:.2}); \
+             cannot stitch a continuous PMF — increase window width or decrease spacing.",
+            i + 1
+        );
+        let f_i = cur.histogram.fraction_in_range(overlap_lo, overlap_hi);
+        let f_next = next.histogram.fraction_in_range(overlap_lo, overlap_hi);
+        anyhow::ensure!(
+            f_i > 0.0 && f_next > 0.0,
+            "Umbrella windows {i} and {} have no samples in their overlap region \
+             ({overlap_lo:.2}..{overlap_hi:.2}, f_i={f_i:.4}, f_next={f_next:.4}); \
+             increase sampling (propagate.repeat) or window overlap.",
+            i + 1
+        );
+        let delta = -kt * (f_i / f_next).ln();
         offsets.push(offsets.last().unwrap() + delta);
     }
-    offsets
+    Ok(offsets)
 }
 
 /// PMF point: bin center, free energy, and standard error.
@@ -155,11 +201,11 @@ struct PmfPoint {
 /// Build fine-grained PMF from per-window histograms and overlap-ratio offsets.
 /// Within each window: F(r) = −kT ln ρ(r) + C_i.
 /// Error bars from weighted variance across contributing windows.
-fn build_pmf(results: &[WindowResult], kt: f64, bin_width: f64) -> Vec<PmfPoint> {
+fn build_pmf(results: &[WindowResult], kt: f64, bin_width: f64) -> Result<Vec<PmfPoint>> {
     if results.is_empty() {
-        return Vec::new();
+        return Ok(Vec::new());
     }
-    let offsets = overlap_ratio_offsets(results, kt);
+    let offsets = overlap_ratio_offsets(results, kt)?;
 
     // Global bin grid spanning all windows
     let global_lo = results.iter().map(|w| w.lo).reduce(f64::min).unwrap();
@@ -172,7 +218,7 @@ fn build_pmf(results: &[WindowResult], kt: f64, bin_width: f64) -> Vec<PmfPoint>
 
     for (win, &offset) in results.iter().zip(&offsets) {
         let n_total = win.histogram.total_count();
-        if n_total == 0.0 || offset.is_nan() {
+        if n_total == 0.0 {
             continue;
         }
         // Map local histogram bins to global grid
@@ -227,7 +273,7 @@ fn build_pmf(results: &[WindowResult], kt: f64, bin_width: f64) -> Vec<PmfPoint>
             p.f -= f_min;
         }
     }
-    pmf
+    Ok(pmf)
 }
 
 // ---------------------------------------------------------------------------
@@ -281,6 +327,7 @@ fn run_window(
     mut context: Backend,
     window_index: usize,
     center: f64,
+    window_seed: u64,
     pb: &ProgressBar,
 ) -> Result<WindowResult> {
     use interatomic::coulomb::Temperature;
@@ -387,21 +434,35 @@ fn run_window(
     // Persisted histogram lets us extend sampling across restarts without
     // re-running already completed production steps
     let cv_path = window_cv_path(params.state_dir, window_index);
-    let mut histogram = if cv_path.exists() {
+    let mut histogram = Histogram::new(lo, hi, params.bin_width)?;
+    if cv_path.exists() {
         let loaded: Histogram = crate::auxiliary::read_yaml_file(&cv_path)?;
+        // A persisted histogram binned on a stale grid (edited width/bin_width) would map
+        // its counts to the wrong CV; reject the mismatch instead of silently corrupting.
+        loaded
+            .ensure_shape(lo, params.bin_width, histogram.num_bins())
+            .with_context(|| {
+                format!(
+                    "Window {window_index}: persisted histogram '{}' does not match the \
+                     current window geometry — delete the state directory to restart, or \
+                     restore the original input",
+                    cv_path.display()
+                )
+            })?;
         params.multi_progress.println(format!(
             "Window {window_index}: extending from {} existing counts",
             loaded.total_count() as u64
         ))?;
-        loaded
-    } else {
-        Histogram::new(lo, hi, params.bin_width)?
-    };
+        histogram = loaded;
+    }
 
     // Production phase: hard-wall only, collect CV samples.
     // Each run appends max_repeats new samples so users can extend sampling
     // by simply rerunning without editing the input file.
-    let propagate = Propagate::from_file(input, &context)?;
+    let mut propagate = Propagate::from_file(input, &context)?;
+    // Per-window seed decorrelates the sampled trajectories across windows (the drive phase
+    // is throwaway equilibration, so only production needs the independent stream).
+    propagate.reseed(window_seed);
     let max_repeats = propagate.max_repeats();
     // Block ensures `mc` (which owns `context`) is dropped before we serialize
     // the histogram and return the result.
@@ -487,6 +548,7 @@ pub fn run(
     use interatomic::coulomb::Temperature;
 
     let config = parse_config(input)?;
+    config.windows.validate()?;
     let medium = crate::backend::get_medium(input)?;
     let rt = crate::R_IN_KJ_PER_MOL * medium.temperature();
 
@@ -541,6 +603,15 @@ pub fn run(
         log::info!("Loaded common state from {}", state_path.display());
     }
 
+    // Give every window an independent RNG stream. All windows clone the same seeded base
+    // context, so without a per-window reseed a fixed seed makes every walker draw the
+    // identical sequence and propose correlated moves. Pre-drawn from a seed RNG (order is
+    // deterministic under `-j 1`), mirroring the per-box reseed in Gibbs sampling.
+    let window_seeds: Vec<u64> = {
+        let mut seed_rng = crate::propagate::setup_rng_from_file(input)?;
+        (0..n_windows).map(|_| seed_rng.gen()).collect()
+    };
+
     let n_threads = crate::auxiliary::resolve_thread_count(max_threads);
 
     // Process in batches so N_windows > N_cores doesn't over-subscribe the machine
@@ -587,8 +658,9 @@ pub fn run(
                 .map(|(&i, pb)| {
                     let center = centers[i];
                     let ctx = base_context.clone();
+                    let seed = window_seeds[i];
                     let p = &params;
-                    s.spawn(move || run_window(p, ctx, i, center, pb))
+                    s.spawn(move || run_window(p, ctx, i, center, seed, pb))
                 })
                 .collect();
 
@@ -611,7 +683,7 @@ pub fn run(
     }
 
     // Histogram + overlap-ratio stitching into fine-grained PMF
-    let pmf = build_pmf(&all_results, rt, config.windows.bin_width);
+    let pmf = build_pmf(&all_results, rt, config.windows.bin_width)?;
 
     // Write PMF output
     let mut writer = ColumnWriter::open(output, &["cv", "pmf_kT", "stderr_kT"])?;
@@ -664,6 +736,47 @@ mod tests {
         assert!((centers[0] - 5.0).abs() < 1e-10);
     }
 
+    fn grid(range: (f64, f64), width: f64, spacing: f64, bin_width: f64) -> WindowGrid {
+        WindowGrid {
+            range,
+            width,
+            spacing,
+            bin_width,
+        }
+    }
+
+    #[test]
+    fn window_grid_validate_accepts_aligned_geometry() {
+        // The umbrella_1d fixture geometry: width and spacing are multiples of bin_width.
+        assert!(grid((-9.0, 9.0), 6.0, 3.0, 0.5).validate().is_ok());
+    }
+
+    #[test]
+    fn window_grid_validate_rejects_nonpositive_spacing() {
+        assert!(grid((0.0, 10.0), 6.0, 0.0, 1.0).validate().is_err());
+        assert!(grid((0.0, 10.0), 6.0, -3.0, 1.0).validate().is_err());
+    }
+
+    #[test]
+    fn window_grid_validate_rejects_unaligned_width_or_spacing() {
+        // width 5 not a multiple of bin_width 2.0 (5/2 = 2.5)
+        assert!(grid((0.0, 10.0), 5.0, 2.0, 2.0).validate().is_err());
+        // spacing 2.5 not a multiple of bin_width 1.0
+        assert!(grid((0.0, 10.0), 6.0, 2.5, 1.0).validate().is_err());
+    }
+
+    #[test]
+    fn window_grid_validate_rejects_inverted_range() {
+        assert!(grid((10.0, 0.0), 6.0, 3.0, 1.0).validate().is_err());
+    }
+
+    #[test]
+    fn window_grid_validate_rejects_nonoverlapping_spacing() {
+        // spacing == width → adjacent windows only touch; spacing > width → disjoint.
+        assert!(grid((0.0, 30.0), 6.0, 6.0, 1.0).validate().is_err());
+        assert!(grid((0.0, 30.0), 6.0, 8.0, 1.0).validate().is_err());
+    }
+
     /// Helper to build a `WindowResult` from raw samples.
     fn window_result(lo: f64, hi: f64, bin_width: f64, samples: &[f64]) -> WindowResult {
         let mut histogram = Histogram::new(lo, hi, bin_width).unwrap();
@@ -680,7 +793,7 @@ mod tests {
             window_result(0.0, 10.0, 1.0, &[3.0, 5.0, 7.0, 8.5, 9.0]),
             window_result(8.0, 18.0, 1.0, &[8.5, 9.0, 11.0, 13.0, 15.0]),
         ];
-        let offsets = overlap_ratio_offsets(&results, 1.0);
+        let offsets = overlap_ratio_offsets(&results, 1.0).unwrap();
         assert_eq!(offsets.len(), 2);
         assert!((offsets[0] - 0.0).abs() < 1e-10);
         // f_i = 2/5 (8.5, 9.0 in [8,10]), f_next = 2/5 (8.5, 9.0 in [8,10])
@@ -695,9 +808,31 @@ mod tests {
             window_result(0.0, 10.0, 1.0, &[2.0, 4.0, 6.0, 9.0]),
             window_result(8.0, 18.0, 1.0, &[8.5, 9.0, 9.5, 15.0]),
         ];
-        let offsets = overlap_ratio_offsets(&results, 1.0);
+        let offsets = overlap_ratio_offsets(&results, 1.0).unwrap();
         let expected = -(1.0_f64 / 3.0).ln(); // ln(3)
         assert!((offsets[1] - expected).abs() < 1e-10);
+    }
+
+    #[test]
+    fn overlap_ratio_offsets_rejects_nonoverlapping_windows() {
+        // Windows [0,8] and [10,18] share no CV range → cannot be stitched.
+        let results = vec![
+            window_result(0.0, 8.0, 1.0, &[1.0, 3.0, 5.0, 7.0]),
+            window_result(10.0, 18.0, 1.0, &[11.0, 13.0, 15.0, 17.0]),
+        ];
+        let err = overlap_ratio_offsets(&results, 1.0).unwrap_err();
+        assert!(err.to_string().contains("do not overlap"), "{err}");
+    }
+
+    #[test]
+    fn overlap_ratio_offsets_rejects_empty_overlap() {
+        // Windows overlap in [8,10] but neither samples there → no stitch possible.
+        let results = vec![
+            window_result(0.0, 10.0, 1.0, &[1.0, 3.0, 5.0]),
+            window_result(8.0, 18.0, 1.0, &[13.0, 15.0, 17.0]),
+        ];
+        let err = overlap_ratio_offsets(&results, 1.0).unwrap_err();
+        assert!(err.to_string().contains("no samples"), "{err}");
     }
 
     #[test]
@@ -710,7 +845,7 @@ mod tests {
             window_result(0.0, 10.0, 1.0, &samples_a),
             window_result(8.0, 18.0, 1.0, &samples_b),
         ];
-        let pmf = build_pmf(&results, 1.0, 1.0);
+        let pmf = build_pmf(&results, 1.0, 1.0).unwrap();
         // Should have bins from 0 to 18
         assert!(pmf.len() > 2);
         // PMF should be approximately flat (uniform → constant −kT ln ρ)

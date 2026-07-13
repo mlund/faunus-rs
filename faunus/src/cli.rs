@@ -160,6 +160,8 @@ pub fn do_main() -> Result<()> {
             pmf_output,
             threads,
         } => {
+            // Reject an unwritable PMF path now, not after every window has run.
+            probe_output_path(&pmf_output)?;
             crate::umbrella::run(&input, &state_dir, state.as_deref(), &pmf_output, threads)?;
         }
         Commands::WangLandau {
@@ -168,6 +170,8 @@ pub fn do_main() -> Result<()> {
             output,
             threads,
         } => {
+            // Reject an unwritable output path now, not after the whole run.
+            probe_output_path(&output)?;
             crate::wang_landau::run(&input, &state_dir, &output, threads)?;
         }
     }
