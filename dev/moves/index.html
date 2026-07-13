@@ -1798,7 +1798,7 @@ in the <code>blocks</code> section, e.g. <code>{ molecule: LJ, N: 600, active: 3
 <span class="w">  </span><span class="nt">gibbs</span><span class="p">:</span>
 <span class="w">    </span><span class="nt">intra_steps</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
 <span class="w">    </span><span class="nt">moves</span><span class="p">:</span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!GibbsVolumeExchange</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> dV</span><span class="p">:</span><span class="w"> </span><span class="nv">0.3</span><span class="w"> </span><span class="p p-Indicator">}</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!GibbsVolumeExchange</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> volume_displacement</span><span class="p">:</span><span class="w"> </span><span class="nv">0.3</span><span class="w"> </span><span class="p p-Indicator">}</span>
 <span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!GibbsParticleTransfer</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> molecule</span><span class="p">:</span><span class="w"> </span><span class="nv">LJ</span><span class="w"> </span><span class="p p-Indicator">}</span>
 </code></pre></div>
 <table>
@@ -1845,8 +1845,8 @@ one per active atom in atomic groups.</p>
   \exp\bigl[-\beta(\Delta U_1 + \Delta U_2)
   + N_1 \ln(V_1'/V_1) + N_2 \ln(V_2'/V_2)\bigr]\bigr)
 \]</div>
-<div class="highlight"><pre><span></span><code><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!GibbsVolumeExchange</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> dV</span><span class="p">:</span><span class="w"> </span><span class="nv">10</span><span class="w"> </span><span class="p p-Indicator">}</span><span class="w">                     </span><span class="c1"># default: Logarithmic</span>
-<span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!GibbsVolumeExchange</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> dV</span><span class="p">:</span><span class="w"> </span><span class="nv">10</span><span class="p p-Indicator">,</span><span class="nt"> method</span><span class="p">:</span><span class="w"> </span><span class="nv">Linear</span><span class="w"> </span><span class="p p-Indicator">}</span><span class="w">     </span><span class="c1"># opt-in linear</span>
+<div class="highlight"><pre><span></span><code><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!GibbsVolumeExchange</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> volume_displacement</span><span class="p">:</span><span class="w"> </span><span class="nv">10</span><span class="w"> </span><span class="p p-Indicator">}</span><span class="w">                 </span><span class="c1"># default: Logarithmic</span>
+<span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!GibbsVolumeExchange</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> volume_displacement</span><span class="p">:</span><span class="w"> </span><span class="nv">10</span><span class="p p-Indicator">,</span><span class="nt"> method</span><span class="p">:</span><span class="w"> </span><span class="nv">Linear</span><span class="w"> </span><span class="p p-Indicator">}</span><span class="w"> </span><span class="c1"># opt-in linear</span>
 </code></pre></div>
 <table>
 <thead>
