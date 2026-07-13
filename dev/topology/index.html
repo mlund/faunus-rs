@@ -807,7 +807,7 @@ An atom need not be a chemical element — it can represent any interaction site
 <td><code>activity</code></td>
 <td>no</td>
 <td></td>
-<td>Activity for implicit species (molar)</td>
+<td>Activity of an implicit reaction species (molar)</td>
 </tr>
 <tr>
 <td><code>reservoir</code></td>
@@ -961,7 +961,7 @@ An atom need not be a chemical element — it can represent any interaction site
 <td><code>activity</code></td>
 <td>no</td>
 <td></td>
-<td>Activity for GCMC fugacity (molar)</td>
+<td>GCMC fugacity, or the activity of an implicit species named after this molecule (molar)</td>
 </tr>
 <tr>
 <td><code>has_com</code></td>
@@ -1104,6 +1104,10 @@ The molecule must have exactly one atom type and no bonds.</p>
 <li>GCMC inserts/deletes individual atoms within the group via expand/shrink.</li>
 <li><code>TranslateAtom</code> works as usual; <code>TranslateMolecule</code> is not allowed.</li>
 <li>The <code>N</code> field in <code>blocks</code> sets the group capacity (maximum atom count).</li>
+<li>A one-to-one reaction (<code>A = B</code>) is not allowed, because it is read as a
+  <a href="../moves/#molecular-swaps">molecular swap</a>: the whole group would have to move between
+  full and empty, and every member of an atomic kind shares one group. Reactions with
+  explicit stoichiometry, such as <code>2 Na = Ca</code>, are insertions and deletions and work.</li>
 </ul>
 <h3 id="bonds">Bonds<a class="headerlink" href="#bonds" title="Permanent link">&para;</a></h3>
 <p>Bonds connect pairs of atoms within a molecule.</p>
@@ -1530,10 +1534,20 @@ Molecules are not prefixed, e.g. <em>Cl</em>.</p>
 </tr>
 </tbody>
 </table>
+<p>An implicit participant takes its activity from the <code>activity</code> field of the atom type of
+that name, or, if no atom type carries it, of the molecule type — so an implicit molecular
+reservoir such as <code>~H2O</code> is legal.</p>
 <p>When a reaction has one molecular reactant and one molecular product with equal
 atom counts (e.g. <code>A = B + ~H+</code>), it is treated as a molecular swap:
 the source group is deactivated and a target group is activated with aligned positions.
+Both types must be non-atomic, and their intramolecular energy is left out of <span class="arithmatex">\(\Delta U\)</span>
+(see <a href="../moves/#molecular-swaps">Molecular swaps</a>) — so if the two states differ in it, add
+<code>exclusions</code> covering their intramolecular pairs.
 Unicode names are supported in reactions and molecule definitions.</p>
+<p>The following are rejected when the reaction is parsed, rather than silently sampled as a
+different reaction: an atom or molecule name matching no type; unbalanced atom
+stoichiometry, e.g. <code>⚛A + ⚛A = ⚛B</code>; an equilibrium constant that is not positive and
+finite; and a reaction naming a molecule for which no <code>blocks:</code> entry allocates groups.</p>
 
 
 

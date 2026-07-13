@@ -1453,9 +1453,11 @@ with threshold <span class="arithmatex">\(R_c\)</span>, a useful check that the 
 <p>Proposes isotropic or anisotropic volume changes for sampling the <em>NPT</em> ensemble.
 The volume is sampled logarithmically:</p>
 <div class="arithmatex">\[
-V_\text{new} = \exp\!\bigl(\ln V_\text{old} + (\xi - 0.5) \cdot \text{dV}\bigr)
+V_\text{new} = \exp\!\bigl(\ln V_\text{old} + (\xi - 0.5)\, \Delta \ln V \bigr)
 \]</div>
-<p>where <span class="arithmatex">\(\xi\)</span> is a uniform random number in <span class="arithmatex">\([0, 1)\)</span>.</p>
+<p>where <span class="arithmatex">\(\xi\)</span> is a uniform random number in <span class="arithmatex">\([0, 1)\)</span> and <span class="arithmatex">\(\Delta \ln V\)</span> is the width of the
+displacement in <span class="arithmatex">\(\ln V\)</span>, set by <code>volume_displacement</code>. Being a displacement of the logarithm,
+it is dimensionless: it scales the volume by a factor, not by an absolute amount.</p>
 <p>No move-level bias is applied; the acceptance is handled by standard Metropolis
 sampling together with the <a href="../energy/#external-pressure-isobaric"><code>isobaric</code></a> energy term
 which contributes <span class="arithmatex">\(PV - (N+1) k_BT \ln V\)</span>.</p>
@@ -1486,7 +1488,7 @@ which contributes <span class="arithmatex">\(PV - (N+1) k_BT \ln V\)</span>.</p>
 <td><code>volume_displacement</code></td>
 <td>yes</td>
 <td></td>
-<td>Volume displacement parameter, log-scale (alias <code>dV</code>)</td>
+<td>Width <span class="arithmatex">\(\Delta \ln V\)</span> of the displacement in <span class="arithmatex">\(\ln V\)</span>; dimensionless (alias <code>dV</code>)</td>
 </tr>
 <tr>
 <td><code>weight</code></td>
@@ -1555,28 +1557,39 @@ The equilibrium constant <span class="arithmatex">\(K\)</span> is related to the
 and the system must pre-allocate inactive molecule slots using <code>active &lt; N</code>
 in the <code>blocks</code> section.</p>
 <h3 id="molecular-insertion-and-deletion">Molecular insertion and deletion<a class="headerlink" href="#molecular-insertion-and-deletion" title="Permanent link">&para;</a></h3>
+<p><span class="arithmatex">\(K\)</span> is dimensionless, referred to a standard state of 1 M. Concentrations
+therefore enter the acceptance relative to the standard-state number density</p>
+<div class="arithmatex">\[
+c_0 = N_A \times 10^{-27}\ \text{Å}^{-3} \approx 6.022 \times 10^{-4}\ \text{Å}^{-3},
+\]</div>
+<p>so it is <span class="arithmatex">\(c_0 V\)</span>, not <span class="arithmatex">\(V\)</span>, that pairs with <span class="arithmatex">\(K\)</span>.</p>
 <p>For a reaction that creates or destroys molecules (e.g. <span class="arithmatex">\(\emptyset \rightleftharpoons M\)</span>
 with equilibrium constant <span class="arithmatex">\(K\)</span>), the acceptance follows:</p>
 <div class="arithmatex">\[
 \operatorname{acc}_\text{insert} = \min\!\biggl(1,\;
-K \cdot \frac{V}{N+1} \cdot e^{-\beta \Delta U}\biggr),
+K \cdot \frac{c_0 V}{N+1} \cdot e^{-\beta \Delta U}\biggr),
 \qquad
 \operatorname{acc}_\text{delete} = \min\!\biggl(1,\;
-\frac{N}{K \cdot V} \cdot e^{-\beta \Delta U}\biggr)
+\frac{N}{K \cdot c_0 V} \cdot e^{-\beta \Delta U}\biggr)
 \]</div>
 <p>where <span class="arithmatex">\(N\)</span> is the number of molecules <em>before</em> the move and <span class="arithmatex">\(V\)</span> is the cell volume.
-At equilibrium for an ideal gas (<span class="arithmatex">\(\Delta U = 0\)</span>), this yields <span class="arithmatex">\(\langle N \rangle = KV\)</span>.</p>
+At equilibrium for an ideal gas (<span class="arithmatex">\(\Delta U = 0\)</span>) this yields</p>
+<div class="arithmatex">\[
+\langle N \rangle = K c_0 V .
+\]</div>
+<p>To place on average ten molecules in a <span class="arithmatex">\(10 \times 10 \times 10\)</span> Å cell, set
+<span class="arithmatex">\(K = 10 / (c_0 V) = 16.6054\)</span>.</p>
 <p>For a general reaction <span class="arithmatex">\(\sum_i \nu_i A_i = 0\)</span> involving multiple species,
 the combinatorial bias generalises to</p>
 <div class="arithmatex">\[
 \ln \Gamma = \sum_i \sum_{j=0}^{|\nu_i|-1}
-\ln\!\Bigl(\frac{N_i^{(\text{old})} \pm (j+1)}{V}\Bigr)
+\ln\!\Bigl(\frac{N_i^{(\text{old})} \pm (j+1)}{c_0 V}\Bigr)
 \]</div>
 <p>with the sign matching the direction of the stoichiometric change
 (<a href="https://doi.org/10/fqcpg3">doi:10/fqcpg3</a>).</p>
 <p><a href="../topology/#implicit-reservoirs">Reservoir molecules</a> participate as molecular
 reaction species and do not need a <code>~</code> prefix.
-The volume factor <span class="arithmatex">\(V\)</span> is replaced by unity for reservoir species,
+The factor <span class="arithmatex">\(c_0 V\)</span> is replaced by unity for reservoir species,
 since they exist outside the simulation cell.</p>
 <h3 id="atom-type-swaps">Atom-type swaps<a class="headerlink" href="#atom-type-swaps" title="Permanent link">&para;</a></h3>
 <p>For reactions that swap atom types within a molecule (e.g. <span class="arithmatex">\(A \rightleftharpoons B\)</span>
@@ -1603,10 +1616,12 @@ target type is activated with positions transferred via
 <a href="https://doi.org/10.1002/jcc.21776">gyration tensor</a> principal-axis alignment.</p>
 <p>A species appearing with a coefficient greater than one (e.g. <span class="arithmatex">\(2A \rightleftharpoons B\)</span>)
 is not a swap: it is handled as insertion/deletion of the individual molecules,
-conserving charge across the whole reaction. Such charge-conserving exchanges — for
-example <span class="arithmatex">\(2\,\mathrm{Na}^+ \rightleftharpoons \mathrm{Ca}^{2+}\)</span> — must use non-atomic
-single-atom molecules (one group per ion); pooled <code>atomic: true</code> ions are not yet
-supported for coefficient-≥2 deletion together with explicit pair energy.</p>
+conserving charge across the whole reaction. Charge-conserving exchanges such as
+<span class="arithmatex">\(2\,\mathrm{Na}^+ \rightleftharpoons \mathrm{Ca}^{2+}\)</span> work with either one group per
+ion or pooled <code>atomic: true</code> ions.</p>
+<p>A one-to-one reaction between two species is always read as a molecular swap, so both
+species must be non-atomic: every member of an <code>atomic: true</code> kind shares a single
+group, which cannot move between full and empty on its own.</p>
 <p>The acceptance is:</p>
 <div class="arithmatex">\[
 \operatorname{acc} = \min\!\biggl(1,\;
@@ -1617,6 +1632,11 @@ molecule groups <em>before</em> the move.
 No volume factor appears because the total molecule count is conserved.
 <span class="arithmatex">\(\Delta U\)</span> excludes intramolecular energy (bonded and nonbonded self-interactions)
 since these are absorbed into the equilibrium constant <span class="arithmatex">\(K\)</span>.
+The total energy still counts it, so if the two states differ in intramolecular energy —
+say their sites carry different charges — the incremental and the recomputed energy
+disagree and the run reports an energy drift. Exclude every intramolecular pair of the
+swapped molecules to remove the term from both sides; faunus warns at startup when a swap
+between molecules of differing atom types leaves such pairs unexcluded.
 Each species must have pre-allocated groups (<code>active &lt; N</code>) to serve as a pool;
 if the pool is exhausted, the move is silently rejected.</p>
 <h4 id="phosphate-titration-example">Phosphate titration example<a class="headerlink" href="#phosphate-titration-example" title="Permanent link">&para;</a></h4>
@@ -1649,7 +1669,6 @@ and implicit protons:</p>
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!Deterministic</span>
 <span class="w">      </span><span class="nt">moves</span><span class="p">:</span>
 <span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!SpeciationMove</span>
-<span class="w">          </span><span class="nt">temperature</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">298.15</span>
 <span class="w">          </span><span class="nt">reactions</span><span class="p">:</span>
 <span class="w">            </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;H₃PO₄</span><span class="nv"> </span><span class="s">=</span><span class="nv"> </span><span class="s">H₂PO₄⁻</span><span class="nv"> </span><span class="s">+</span><span class="nv"> </span><span class="s">~H+&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="kt">!pK</span><span class="w"> </span><span class="nv">2.15</span><span class="p p-Indicator">]</span>
 <span class="w">            </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;H₂PO₄⁻</span><span class="nv"> </span><span class="s">=</span><span class="nv"> </span><span class="s">HPO₄²⁻</span><span class="nv"> </span><span class="s">+</span><span class="nv"> </span><span class="s">~H+&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="kt">!pK</span><span class="w"> </span><span class="nv">7.20</span><span class="p p-Indicator">]</span>
@@ -1657,45 +1676,57 @@ and implicit protons:</p>
 </code></pre></div>
 <p>At <span class="arithmatex">\(pH = pK_{a2} = 7.20\)</span>, the effective equilibrium constant for the
 second reaction is unity, giving equal populations of H₂PO₄⁻ and HPO₄²⁻.</p>
-<h3 id="gcmc-example">GCMC example<a class="headerlink" href="#gcmc-example" title="Permanent link">&para;</a></h3>
-<p>For single-atom species, <code>atomic: true</code> pools all instances into one group,
-reducing overhead from N groups to 1.</p>
-<div class="highlight"><pre><span></span><code><span class="nt">molecules</span><span class="p">:</span>
-<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Na+</span>
+<h3 id="grand-canonical-salt-example">Grand-canonical salt example<a class="headerlink" href="#grand-canonical-salt-example" title="Permanent link">&para;</a></h3>
+<p>Insertion and deletion of a neutral ion pair from a salt reservoir at fixed activity.
+For single-atom species, <code>atomic: true</code> pools all instances into one group, reducing
+overhead from <span class="arithmatex">\(N\)</span> groups to one.</p>
+<div class="highlight"><pre><span></span><code><span class="nt">atoms</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="nv">Na</span><span class="p p-Indicator">,</span><span class="nt"> mass</span><span class="p">:</span><span class="w"> </span><span class="nv">22.99</span><span class="p p-Indicator">,</span><span class="nt"> charge</span><span class="p">:</span><span class="w"> </span><span class="nv">1.0</span><span class="p p-Indicator">,</span><span class="nt"> sigma</span><span class="p">:</span><span class="w"> </span><span class="nv">3.3</span><span class="p p-Indicator">,</span><span class="nt"> epsilon</span><span class="p">:</span><span class="w"> </span><span class="nv">0.01</span><span class="p p-Indicator">}</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="nv">Cl</span><span class="p p-Indicator">,</span><span class="nt"> mass</span><span class="p">:</span><span class="w"> </span><span class="nv">35.45</span><span class="p p-Indicator">,</span><span class="nt"> charge</span><span class="p">:</span><span class="w"> </span><span class="nv">-1.0</span><span class="p p-Indicator">,</span><span class="nt"> sigma</span><span class="p">:</span><span class="w"> </span><span class="nv">4.4</span><span class="p p-Indicator">,</span><span class="nt"> epsilon</span><span class="p">:</span><span class="w"> </span><span class="nv">0.01</span><span class="p p-Indicator">}</span>
+
+<span class="nt">molecules</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cation</span>
 <span class="w">    </span><span class="nt">atoms</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">Na</span><span class="p p-Indicator">]</span>
 <span class="w">    </span><span class="nt">atomic</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
-<span class="w">    </span><span class="nt">activity</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.030</span><span class="w">           </span><span class="c1"># molar GCMC fugacity</span>
-<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Cl-</span>
+<span class="w">    </span><span class="nt">activity</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.05</span><span class="w">            </span><span class="c1"># molar</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">anion</span>
 <span class="w">    </span><span class="nt">atoms</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">Cl</span><span class="p p-Indicator">]</span>
 <span class="w">    </span><span class="nt">atomic</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
-<span class="w">    </span><span class="nt">activity</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.030</span>
+<span class="w">    </span><span class="nt">activity</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.05</span>
 
 <span class="nt">system</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">cell</span><span class="p">:</span><span class="w"> </span><span class="kt">!Cuboid</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">40.0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">40.0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">40.0</span><span class="p p-Indicator">]</span>
+<span class="w">  </span><span class="nt">medium</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">permittivity</span><span class="p">:</span><span class="w"> </span><span class="kt">!Water</span>
+<span class="w">    </span><span class="nt">temperature</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">298.15</span>
+<span class="w">  </span><span class="nt">energy</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">nonbonded</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">default</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!Coulomb</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">cutoff</span><span class="p">:</span><span class="w"> </span><span class="nv">20.0</span><span class="p p-Indicator">}</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!WeeksChandlerAndersen</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">mixing</span><span class="p">:</span><span class="w"> </span><span class="nv">LB</span><span class="p p-Indicator">}</span>
 <span class="w">  </span><span class="nt">blocks</span><span class="p">:</span>
-<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">molecule</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Na+</span>
-<span class="w">      </span><span class="nt">N</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">30</span>
-<span class="w">      </span><span class="nt">active</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10</span>
-<span class="w">      </span><span class="nt">insert</span><span class="p">:</span><span class="w"> </span><span class="kt">!RandomAtomPos</span><span class="w"> </span><span class="p p-Indicator">{}</span>
-<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">molecule</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Cl-</span>
-<span class="w">      </span><span class="nt">N</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">30</span>
-<span class="w">      </span><span class="nt">active</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10</span>
-<span class="w">      </span><span class="nt">insert</span><span class="p">:</span><span class="w"> </span><span class="kt">!RandomAtomPos</span><span class="w"> </span><span class="p p-Indicator">{}</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">molecule</span><span class="p">:</span><span class="w"> </span><span class="nv">cation</span><span class="p p-Indicator">,</span><span class="nt"> N</span><span class="p">:</span><span class="w"> </span><span class="nv">120</span><span class="p p-Indicator">,</span><span class="nt"> active</span><span class="p">:</span><span class="w"> </span><span class="nv">30</span><span class="p p-Indicator">,</span><span class="nt"> insert</span><span class="p">:</span><span class="w"> </span><span class="kt">!RandomAtomPos</span><span class="w"> </span><span class="p p-Indicator">{}}</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">molecule</span><span class="p">:</span><span class="w"> </span><span class="nv">anion</span><span class="p p-Indicator">,</span><span class="nt">  N</span><span class="p">:</span><span class="w"> </span><span class="nv">120</span><span class="p p-Indicator">,</span><span class="nt"> active</span><span class="p">:</span><span class="w"> </span><span class="nv">30</span><span class="p p-Indicator">,</span><span class="nt"> insert</span><span class="p">:</span><span class="w"> </span><span class="kt">!RandomAtomPos</span><span class="w"> </span><span class="p p-Indicator">{}}</span>
 
 <span class="nt">propagate</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">repeat</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10000</span>
 <span class="w">  </span><span class="nt">collections</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!Stochastic</span>
+<span class="w">      </span><span class="nt">moves</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!TranslateAtom</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">atom</span><span class="p">:</span><span class="w"> </span><span class="nv">Na</span><span class="p p-Indicator">,</span><span class="nt"> molecule</span><span class="p">:</span><span class="w"> </span><span class="nv">cation</span><span class="p p-Indicator">,</span><span class="nt"> max_displacement</span><span class="p">:</span><span class="w"> </span><span class="nv">5.0</span><span class="p p-Indicator">}</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!TranslateAtom</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">atom</span><span class="p">:</span><span class="w"> </span><span class="nv">Cl</span><span class="p p-Indicator">,</span><span class="nt"> molecule</span><span class="p">:</span><span class="w"> </span><span class="nv">anion</span><span class="p p-Indicator">,</span><span class="nt"> max_displacement</span><span class="p">:</span><span class="w"> </span><span class="nv">5.0</span><span class="p p-Indicator">}</span>
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!Deterministic</span>
 <span class="w">      </span><span class="nt">moves</span><span class="p">:</span>
 <span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!SpeciationMove</span>
-<span class="w">          </span><span class="nt">temperature</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">298.15</span>
+<span class="w">          </span><span class="nt">repeat</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">5</span>
 <span class="w">          </span><span class="nt">reactions</span><span class="p">:</span>
-<span class="w">            </span><span class="c1"># Coupled titration + salt exchange to maintain electroneutrality</span>
-<span class="w">            </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;⚛HGLU</span><span class="nv"> </span><span class="s">+</span><span class="nv"> </span><span class="s">Cl-</span><span class="nv"> </span><span class="s">=</span><span class="nv"> </span><span class="s">⚛GLU</span><span class="nv"> </span><span class="s">+</span><span class="nv"> </span><span class="s">~H+&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="kt">!pK</span><span class="w"> </span><span class="nv">4.24</span><span class="p p-Indicator">]</span>
-<span class="w">            </span><span class="c1"># Grand canonical salt: activities folded into K_eff</span>
-<span class="w">            </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;=</span><span class="nv"> </span><span class="s">Na+</span><span class="nv"> </span><span class="s">+</span><span class="nv"> </span><span class="s">Cl-&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="kt">!K</span><span class="w"> </span><span class="nv">1.0</span><span class="p p-Indicator">]</span>
-<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!TranslateAtom</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> atom</span><span class="p">:</span><span class="w"> </span><span class="nv">Na</span><span class="p p-Indicator">,</span><span class="nt"> molecule</span><span class="p">:</span><span class="w"> </span><span class="nv">Na+</span><span class="p p-Indicator">,</span><span class="nt"> max_displacement</span><span class="p">:</span><span class="w"> </span><span class="nv">50.0</span><span class="w"> </span><span class="p p-Indicator">}</span>
-<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!TranslateAtom</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> atom</span><span class="p">:</span><span class="w"> </span><span class="nv">Cl</span><span class="p p-Indicator">,</span><span class="nt"> molecule</span><span class="p">:</span><span class="w"> </span><span class="nv">Cl-</span><span class="p p-Indicator">,</span><span class="nt"> max_displacement</span><span class="p">:</span><span class="w"> </span><span class="nv">50.0</span><span class="w"> </span><span class="p p-Indicator">}</span>
+<span class="w">            </span><span class="c1"># Both activities fold into K_eff; see Activity folding below.</span>
+<span class="w">            </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;=</span><span class="nv"> </span><span class="s">cation</span><span class="nv"> </span><span class="s">+</span><span class="nv"> </span><span class="s">anion&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="kt">!dG</span><span class="w"> </span><span class="nv">0.0</span><span class="p p-Indicator">]</span>
 </code></pre></div>
+<p>The ion densities settle <em>above</em> the 0.05 M reservoir activity — about 0.061 M here.
+The activity, not the concentration, is what the reservoir fixes; ion–ion attraction makes
+the electrostatic excess chemical potential negative, so the mean activity coefficient
+<span class="arithmatex">\(\gamma_\pm \approx 0.82 &lt; 1\)</span> and <span class="arithmatex">\(c = a / \gamma_\pm &gt; a\)</span>.</p>
 <h3 id="options_1">Options<a class="headerlink" href="#options_1" title="Permanent link">&para;</a></h3>
 <table>
 <thead>
@@ -1707,12 +1738,6 @@ reducing overhead from N groups to 1.</p>
 </tr>
 </thead>
 <tbody>
-<tr>
-<td><code>temperature</code></td>
-<td>yes</td>
-<td></td>
-<td>Temperature in Kelvin (used to compute <span class="arithmatex">\(k_BT\)</span>)</td>
-</tr>
 <tr>
 <td><code>reactions</code></td>
 <td>yes</td>
@@ -1731,13 +1756,27 @@ reducing overhead from N groups to 1.</p>
 <td>1</td>
 <td>Repetitions per selection</td>
 </tr>
+<tr>
+<td><code>temperature</code></td>
+<td>no</td>
+<td></td>
+<td>Deprecated and ignored; see below</td>
+</tr>
 </tbody>
 </table>
+<p>The system temperature (<code>system.medium.temperature</code>) sets the thermal energy <span class="arithmatex">\(RT\)</span> used
+throughout. The <code>temperature</code> key is a leftover that duplicated it, and a value
+disagreeing with the system temperature is an error — remove the key.</p>
 <p>Each reaction is a two-element tuple <code>[reaction_string, equilibrium_constant]</code>:</p>
 <ul>
 <li>Reaction string: e.g. <code>"= NaCl"</code> or <code>"⚛A = ⚛B"</code></li>
-<li>Equilibrium constant: <code>!K &lt;value&gt;</code>, <code>!lnK &lt;value&gt;</code>, <code>!pK &lt;value&gt;</code> (<span class="arithmatex">\(K = 10^{-\text{pK}}\)</span>), or <code>!dG &lt;kJ/mol&gt;</code> (<span class="arithmatex">\(K = e^{-\Delta G/k_BT}\)</span>)</li>
+<li>Equilibrium constant: <code>!K &lt;value&gt;</code>, <code>!lnK &lt;value&gt;</code>, <code>!pK &lt;value&gt;</code> (<span class="arithmatex">\(K = 10^{-\text{pK}}\)</span>),
+  or <code>!dG &lt;kJ/mol&gt;</code> (<span class="arithmatex">\(K = e^{-\Delta G / RT}\)</span>, with <span class="arithmatex">\(R\)</span> the molar gas constant, matching
+  the kJ/mol energy unit)</li>
 </ul>
+<p>An equilibrium constant that overflows to infinity — from a large <code>!lnK</code>, or from a
+<code>!dG</code> mistakenly given in J/mol — is rejected at startup rather than accepting every
+trial.</p>
 <h3 id="activity-folding">Activity folding<a class="headerlink" href="#activity-folding" title="Permanent link">&para;</a></h3>
 <p>The user-specified <span class="arithmatex">\(K\)</span> (or <span class="arithmatex">\(10^{-\text{pK}}\)</span>) is combined with species
 activities to form an effective equilibrium constant used in acceptance:</p>
@@ -1748,16 +1787,16 @@ activities to form an effective equilibrium constant used in acceptance:</p>
   + \sum_{\text{insert/delete products}} \ln z_i\]</div>
 <p>where:</p>
 <ul>
-<li>Implicit species (<code>~H+</code>): <span class="arithmatex">\(a_i\)</span> is the <code>activity</code> field on the
-  matching atom type. Consumed reactants increase <span class="arithmatex">\(K_\text{eff}\)</span>;
-  produced products decrease it.</li>
+<li>Implicit species (<code>~H+</code>): <span class="arithmatex">\(a_i\)</span> is the <code>activity</code> field on the matching atom type,
+  or, if no atom type carries that name, on the matching molecule type — so an implicit
+  molecular reservoir such as <code>~H2O</code> is legal. Consumed reactants increase
+  <span class="arithmatex">\(K_\text{eff}\)</span>; produced products decrease it.</li>
 <li>Molecular species involved in insertion/deletion (<code>Na+</code>, <code>Cl-</code>):
-  <span class="arithmatex">\(z_i = a_i \times N_A / 10^{27}\)</span>
-  converts the molar <code>activity</code> on the molecule type to number density.
-  The sign is reversed relative to implicit species because the
-  acceptance criterion already includes a <span class="arithmatex">\(V\)</span>-dependent combinatorial
-  factor <span class="arithmatex">\(V^{\Delta\nu} \cdot \prod [N!/(N+\nu)!]\)</span> that uses <span class="arithmatex">\(N/V\)</span>;
-  the fugacity correction replaces <span class="arithmatex">\(N/V\)</span> with <span class="arithmatex">\(N/(V \cdot z)\)</span>.</li>
+  <span class="arithmatex">\(z_i = a_i c_0\)</span> converts the molar <code>activity</code> on the molecule type to a number
+  density. The sign is reversed relative to implicit species because the acceptance
+  criterion already includes the combinatorial factor
+  <span class="arithmatex">\((c_0 V)^{\Delta\nu} \cdot \prod [N!/(N+\nu)!]\)</span>, which uses <span class="arithmatex">\(N/(c_0 V)\)</span>; the fugacity
+  correction turns this into <span class="arithmatex">\(N/(c_0 V a)\)</span>.</li>
 <li>Molecular swap participants are excluded from fugacity folding since
   no volume factor enters the acceptance (total molecule count is conserved).</li>
 </ul>
@@ -1767,10 +1806,22 @@ fugacities: <span class="arithmatex">\(\ln K_\text{eff} = 0 + \ln z_\text{Na} + 
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <ul>
 <li>Molecule blocks must have <code>active &lt; N</code> to provide empty slots for insertion and swap targets.</li>
-<li>Atom swap reactions require that at least one atom type belongs to the target molecule definition.</li>
+<li>A titratable atom type may occur in several molecule types; all of them titrate, and
+  <span class="arithmatex">\(N_\text{from}\)</span> and <span class="arithmatex">\(N_\text{to}\)</span> are counted over the whole population. If some molecule
+  type lists <em>both</em> protonation states, only those types titrate — which keeps a species
+  that merely reuses the same atom type (say a monatomic salt ion) out of the reaction.</li>
 <li>Molecular swaps are auto-detected when a reaction has one molecular reactant and one molecular
   product with equal atom counts. Pool exhaustion silently rejects the move — increase <code>N</code> if needed.</li>
+<li>Inserted molecules arrive with their reference geometry at a random position and orientation.</li>
 <li>The move targets the entire system, so energy is recomputed globally on each trial.</li>
+</ul>
+<p>The following are rejected at startup rather than sampled as a different reaction:</p>
+<ul>
+<li>an atom or molecule name that matches no type;</li>
+<li>unbalanced atom stoichiometry, e.g. <code>"⚛A + ⚛A = ⚛B"</code>;</li>
+<li>an equilibrium constant that is not positive and finite;</li>
+<li>a reaction naming a molecule for which no <code>blocks:</code> entry allocates groups;</li>
+<li>a one-to-one reaction between <code>atomic: true</code> species.</li>
 </ul>
 <hr />
 <h2 id="gibbs-ensemble">Gibbs Ensemble<a class="headerlink" href="#gibbs-ensemble" title="Permanent link">&para;</a></h2>
@@ -1862,7 +1913,7 @@ one per active atom in atomic groups.</p>
 <td><code>volume_displacement</code></td>
 <td>yes</td>
 <td></td>
-<td>Volume displacement parameter (alias <code>dV</code>)</td>
+<td>Displacement width; its meaning follows <code>method</code> (see below). Alias <code>dV</code></td>
 </tr>
 <tr>
 <td><code>method</code></td>
@@ -1872,6 +1923,12 @@ one per active atom in atomic groups.</p>
 </tr>
 </tbody>
 </table>
+<p>The two methods give <code>volume_displacement</code> different meanings and different units:</p>
+<ul>
+<li><code>Logarithmic</code> — the width of a displacement in <span class="arithmatex">\(\ln(V_1/V_2)\)</span>, so it is <strong>dimensionless</strong>
+  and scales the two volumes by a factor while conserving <span class="arithmatex">\(V_1 + V_2\)</span>.</li>
+<li><code>Linear</code> — the width of a direct volume transfer <span class="arithmatex">\(\delta V\)</span>, in <strong>Å³</strong>.</li>
+</ul>
 <h3 id="gibbs-particle-transfer">Gibbs Particle Transfer<a class="headerlink" href="#gibbs-particle-transfer" title="Permanent link">&para;</a></h3>
 <p>Transfers a molecule from one box to the other.
 A random direction is chosen (box 0 → 1 or box 1 → 0).
