@@ -285,7 +285,7 @@ Proposes isotropic or anisotropic volume changes for sampling the _NPT_ ensemble
 The volume is sampled logarithmically:
 
 $$
-V_\text{new} = \exp\!\bigl(\ln V_\text{old} + (\xi - 0.5) \cdot \text{dV}\bigr)
+V_\text{new} = \exp\!\bigl(\ln V_\text{old} + (\xi - 0.5)\, \Delta_V \bigr)
 $$
 
 where $\xi$ is a uniform random number in $[0, 1)$.
@@ -352,26 +352,42 @@ in the `blocks` section.
 
 ### Molecular insertion and deletion
 
+$K$ is dimensionless, referred to a standard state of 1 M. Concentrations
+therefore enter the acceptance relative to the standard-state number density
+
+$$
+c_0 = N_A \times 10^{-27}\ \text{Å}^{-3} \approx 6.022 \times 10^{-4}\ \text{Å}^{-3},
+$$
+
+so it is $c_0 V$, not $V$, that pairs with $K$.
+
 For a reaction that creates or destroys molecules (e.g. $\emptyset \rightleftharpoons M$
 with equilibrium constant $K$), the acceptance follows:
 
 $$
 \operatorname{acc}_\text{insert} = \min\!\biggl(1,\;
-K \cdot \frac{V}{N+1} \cdot e^{-\beta \Delta U}\biggr),
+K \cdot \frac{c_0 V}{N+1} \cdot e^{-\beta \Delta U}\biggr),
 \qquad
 \operatorname{acc}_\text{delete} = \min\!\biggl(1,\;
-\frac{N}{K \cdot V} \cdot e^{-\beta \Delta U}\biggr)
+\frac{N}{K \cdot c_0 V} \cdot e^{-\beta \Delta U}\biggr)
 $$
 
 where $N$ is the number of molecules _before_ the move and $V$ is the cell volume.
-At equilibrium for an ideal gas ($\Delta U = 0$), this yields $\langle N \rangle = KV$.
+At equilibrium for an ideal gas ($\Delta U = 0$) this yields
+
+$$
+\langle N \rangle = K c_0 V .
+$$
+
+To place on average ten molecules in a $10 \times 10 \times 10$ Å cell, set
+$K = 10 / (c_0 V) = 16.6054$.
 
 For a general reaction $\sum_i \nu_i A_i = 0$ involving multiple species,
 the combinatorial bias generalises to
 
 $$
 \ln \Gamma = \sum_i \sum_{j=0}^{|\nu_i|-1}
-\ln\!\Bigl(\frac{N_i^{(\text{old})} \pm (j+1)}{V}\Bigr)
+\ln\!\Bigl(\frac{N_i^{(\text{old})} \pm (j+1)}{c_0 V}\Bigr)
 $$
 
 with the sign matching the direction of the stoichiometric change
@@ -379,7 +395,7 @@ with the sign matching the direction of the stoichiometric change
 
 [Reservoir molecules](topology.md#implicit-reservoirs) participate as molecular
 reaction species and do not need a `~` prefix.
-The volume factor $V$ is replaced by unity for reservoir species,
+The factor $c_0 V$ is replaced by unity for reservoir species,
 since they exist outside the simulation cell.
 
 ### Atom-type swaps
@@ -413,10 +429,13 @@ target type is activated with positions transferred via
 
 A species appearing with a coefficient greater than one (e.g. $2A \rightleftharpoons B$)
 is not a swap: it is handled as insertion/deletion of the individual molecules,
-conserving charge across the whole reaction. Such charge-conserving exchanges — for
-example $2\,\mathrm{Na}^+ \rightleftharpoons \mathrm{Ca}^{2+}$ — must use non-atomic
-single-atom molecules (one group per ion); pooled `atomic: true` ions are not yet
-supported for coefficient-≥2 deletion together with explicit pair energy.
+conserving charge across the whole reaction. Charge-conserving exchanges such as
+$2\,\mathrm{Na}^+ \rightleftharpoons \mathrm{Ca}^{2+}$ work with either one group per
+ion or pooled `atomic: true` ions.
+
+A one-to-one reaction between two species is always read as a molecular swap, so both
+species must be non-atomic: every member of an `atomic: true` kind shares a single
+group, which cannot move between full and empty on its own.
 
 The acceptance is:
 
@@ -466,7 +485,6 @@ propagate:
     - !Deterministic
       moves:
         - !SpeciationMove
-          temperature: 298.15
           reactions:
             - ["H₃PO₄ = H₂PO₄⁻ + ~H+", !pK 2.15]
             - ["H₂PO₄⁻ = HPO₄²⁻ + ~H+", !pK 7.20]
@@ -476,62 +494,85 @@ propagate:
 At $pH = pK_{a2} = 7.20$, the effective equilibrium constant for the
 second reaction is unity, giving equal populations of H₂PO₄⁻ and HPO₄²⁻.
 
-### GCMC example
+### Grand-canonical salt example
 
-For single-atom species, `atomic: true` pools all instances into one group,
-reducing overhead from N groups to 1.
+Insertion and deletion of a neutral ion pair from a salt reservoir at fixed activity.
+For single-atom species, `atomic: true` pools all instances into one group, reducing
+overhead from $N$ groups to one.
 
 ```yaml
+atoms:
+  - {name: Na, mass: 22.99, charge: 1.0, sigma: 3.3, epsilon: 0.01}
+  - {name: Cl, mass: 35.45, charge: -1.0, sigma: 4.4, epsilon: 0.01}
+
 molecules:
-  - name: Na+
+  - name: cation
     atoms: [Na]
     atomic: true
-    activity: 0.030           # molar GCMC fugacity
-  - name: Cl-
+    activity: 0.05            # molar
+  - name: anion
     atoms: [Cl]
     atomic: true
-    activity: 0.030
+    activity: 0.05
 
 system:
+  cell: !Cuboid [40.0, 40.0, 40.0]
+  medium:
+    permittivity: !Water
+    temperature: 298.15
+  energy:
+    nonbonded:
+      default:
+        - !Coulomb {cutoff: 20.0}
+        - !WeeksChandlerAndersen {mixing: LB}
   blocks:
-    - molecule: Na+
-      N: 30
-      active: 10
-      insert: !RandomAtomPos {}
-    - molecule: Cl-
-      N: 30
-      active: 10
-      insert: !RandomAtomPos {}
+    - {molecule: cation, N: 120, active: 30, insert: !RandomAtomPos {}}
+    - {molecule: anion,  N: 120, active: 30, insert: !RandomAtomPos {}}
 
 propagate:
   repeat: 10000
   collections:
+    - !Stochastic
+      moves:
+        - !TranslateAtom {atom: Na, molecule: cation, max_displacement: 5.0}
+        - !TranslateAtom {atom: Cl, molecule: anion, max_displacement: 5.0}
     - !Deterministic
       moves:
         - !SpeciationMove
-          temperature: 298.15
+          repeat: 5
           reactions:
-            # Coupled titration + salt exchange to maintain electroneutrality
-            - ["⚛HGLU + Cl- = ⚛GLU + ~H+", !pK 4.24]
-            # Grand canonical salt: activities folded into K_eff
-            - ["= Na+ + Cl-", !K 1.0]
-        - !TranslateAtom { atom: Na, molecule: Na+, max_displacement: 50.0 }
-        - !TranslateAtom { atom: Cl, molecule: Cl-, max_displacement: 50.0 }
+            # Both activities fold into K_eff; see Activity folding below.
+            - ["= cation + anion", !dG 0.0]
 ```
+
+The ion densities settle *above* the 0.05 M reservoir activity — about 0.061 M here.
+The activity, not the concentration, is what the reservoir fixes; ion–ion attraction makes
+the electrostatic excess chemical potential negative, so the mean activity coefficient
+$\gamma_\pm \approx 0.82 < 1$ and $c = a / \gamma_\pm > a$.
 
 ### Options
 
 Key           | Required | Default | Description
 ------------- | -------- | ------- | -------------------------------------------
-`temperature` | yes      |         | Temperature in Kelvin (used to compute $k_BT$)
 `reactions`   | yes      |         | List of reactions (see below)
 `weight`      | no       | 1       | Selection weight
 `repeat`      | no       | 1       | Repetitions per selection
+`temperature` | no       |         | Deprecated and ignored; see below
+
+The system temperature (`system.medium.temperature`) sets the thermal energy $RT$ used
+throughout. The `temperature` key is a leftover that duplicated it, and a value
+disagreeing with the system temperature is an error — remove the key.
 
 Each reaction is a two-element tuple `[reaction_string, equilibrium_constant]`:
 
 - Reaction string: e.g. `"= NaCl"` or `"⚛A = ⚛B"`
-- Equilibrium constant: `!K <value>`, `!lnK <value>`, `!pK <value>` ($K = 10^{-\text{pK}}$), or `!dG <kJ/mol>` ($K = e^{-\Delta G/k_BT}$)
+- Equilibrium constant: `!K <value>`, `!lnK <value>`, `!pK <value>` ($K = 10^{-\text{pK}}$),
+  or `!dG <kJ/mol>` ($K = e^{-\Delta G / RT}$, with $R$ the molar gas constant, matching
+  the kJ/mol energy unit)
+
+An equilibrium constant that overflows to infinity — from a large `!lnK`, or from a
+`!dG` mistakenly given in J/mol — is rejected at startup rather than accepting every
+trial.
 
 ### Activity folding
 
@@ -546,16 +587,16 @@ $$\ln K_\text{eff} = \ln K
 
 where:
 
-- Implicit species (`~H+`): $a_i$ is the `activity` field on the
-  matching atom type. Consumed reactants increase $K_\text{eff}$;
-  produced products decrease it.
+- Implicit species (`~H+`): $a_i$ is the `activity` field on the matching atom type,
+  or, if no atom type carries that name, on the matching molecule type — so an implicit
+  molecular reservoir such as `~H2O` is legal. Consumed reactants increase
+  $K_\text{eff}$; produced products decrease it.
 - Molecular species involved in insertion/deletion (`Na+`, `Cl-`):
-  $z_i = a_i \times N_A / 10^{27}$
-  converts the molar `activity` on the molecule type to number density.
-  The sign is reversed relative to implicit species because the
-  acceptance criterion already includes a $V$-dependent combinatorial
-  factor $V^{\Delta\nu} \cdot \prod [N!/(N+\nu)!]$ that uses $N/V$;
-  the fugacity correction replaces $N/V$ with $N/(V \cdot z)$.
+  $z_i = a_i c_0$ converts the molar `activity` on the molecule type to a number
+  density. The sign is reversed relative to implicit species because the acceptance
+  criterion already includes the combinatorial factor
+  $(c_0 V)^{\Delta\nu} \cdot \prod [N!/(N+\nu)!]$, which uses $N/(c_0 V)$; the fugacity
+  correction turns this into $N/(c_0 V a)$.
 - Molecular swap participants are excluded from fugacity folding since
   no volume factor enters the acceptance (total molecule count is conserved).
 
@@ -566,10 +607,22 @@ fugacities: $\ln K_\text{eff} = 0 + \ln z_\text{Na} + \ln z_\text{Cl}$.
 ### Notes
 
 - Molecule blocks must have `active < N` to provide empty slots for insertion and swap targets.
-- Atom swap reactions require that at least one atom type belongs to the target molecule definition.
+- A titratable atom type may occur in several molecule types; all of them titrate, and
+  $N_\text{from}$ and $N_\text{to}$ are counted over the whole population. If some molecule
+  type lists *both* protonation states, only those types titrate — which keeps a species
+  that merely reuses the same atom type (say a monatomic salt ion) out of the reaction.
 - Molecular swaps are auto-detected when a reaction has one molecular reactant and one molecular
   product with equal atom counts. Pool exhaustion silently rejects the move — increase `N` if needed.
+- Inserted molecules arrive with their reference geometry at a random position and orientation.
 - The move targets the entire system, so energy is recomputed globally on each trial.
+
+The following are rejected at startup rather than sampled as a different reaction:
+
+- an atom or molecule name that matches no type;
+- unbalanced atom stoichiometry, e.g. `"⚛A + ⚛A = ⚛B"`;
+- an equilibrium constant that is not positive and finite;
+- a reaction naming a molecule for which no `blocks:` entry allocates groups;
+- a one-to-one reaction between `atomic: true` species.
 
 ---
 
