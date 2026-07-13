@@ -459,18 +459,36 @@ fn box_result<T: Context + 'static>(
     })
 }
 
+/// Reject a non-finite starting energy (out-of-range penalty/constraint or overlap → `+∞`/NaN),
+/// which would otherwise render the drift report as `inf`/`NaN` instead of a clear error.
+fn require_finite_initial_energy(energy: f64) -> anyhow::Result<f64> {
+    anyhow::ensure!(
+        energy.is_finite(),
+        "initial energy is non-finite ({energy}): the starting configuration is outside the \
+         collective-variable range or has overlapping particles — start from a valid configuration"
+    );
+    Ok(energy)
+}
+
 fn run_single_box(
     mc: &mut MarkovChain<Backend>,
     medium: &Medium,
     on_step: &mut dyn FnMut(usize, usize),
 ) -> Result<SimulationOutput> {
-    if mc.context().hamiltonian().penalty().is_some() {
+    let penalty_active = mc.context().hamiltonian().penalty().is_some();
+    if penalty_active {
         log::info!("Penalty bias active: analysis averages are biased (use rerun for reweighting)");
     }
 
     // A `-∞` starting energy is unphysical (a singular/overlapping potential); fail loudly here
     // rather than let the first move to a finite state be silently auto-accepted.
     let initial_energy = crate::montecarlo::ensure_physical_energy(mc.system_energy())?;
+    // A penalty/constraint CV that starts out of range gives `+∞`/NaN here, which would poison
+    // the drift report — reject it. Plain runs may legitimately start from an overlap (`+∞`)
+    // and relax on the first auto-accepted move, so this stricter check is penalty-only.
+    if penalty_active {
+        require_finite_initial_energy(initial_energy)?;
+    }
     log::info!("Initial energy = {initial_energy:.2} kJ/mol");
     log::info!("Net charge = {:.4e} e", net_charge(mc.context()));
 
@@ -860,4 +878,17 @@ pub fn replay(input: &Path, traj: &Path, aux: Option<&Path>) -> Result<Simulatio
         yaml: yaml.into(),
         boxes: Vec::new(),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::require_finite_initial_energy;
+
+    #[test]
+    fn require_finite_initial_energy_rejects_non_finite() {
+        assert_eq!(require_finite_initial_energy(-123.4).unwrap(), -123.4);
+        assert!(require_finite_initial_energy(f64::INFINITY).is_err());
+        assert!(require_finite_initial_energy(f64::NEG_INFINITY).is_err());
+        assert!(require_finite_initial_energy(f64::NAN).is_err());
+    }
 }

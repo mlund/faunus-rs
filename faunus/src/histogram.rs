@@ -125,6 +125,25 @@ impl Histogram {
     pub fn count(&self, i: usize) -> f64 {
         self.bins[i]
     }
+
+    /// Error if this histogram's grid differs from the expected `(min, bin_width, num_bins)`.
+    ///
+    /// Used on restart to reject a persisted histogram whose window geometry no longer
+    /// matches the current input, rather than silently binning new samples on a stale grid.
+    #[cfg(any(feature = "cli", test))]
+    pub fn ensure_shape(&self, min: f64, bin_width: f64, num_bins: usize) -> anyhow::Result<()> {
+        anyhow::ensure!(
+            self.bins.len() == num_bins
+                && (self.min - min).abs() < 1e-9
+                && (self.bin_width - bin_width).abs() < 1e-9,
+            "histogram shape mismatch: have (min={}, bin_width={}, bins={}), \
+             expected (min={min}, bin_width={bin_width}, bins={num_bins})",
+            self.min,
+            self.bin_width,
+            self.bins.len()
+        );
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -232,6 +251,15 @@ mod tests {
     fn fraction_in_range_empty_histogram() {
         let h = Histogram::new(0.0, 10.0, 1.0).unwrap();
         assert_relative_eq!(h.fraction_in_range(0.0, 10.0), 0.0);
+    }
+
+    #[test]
+    fn ensure_shape_detects_mismatch() {
+        let h = Histogram::new(0.0, 10.0, 1.0).unwrap();
+        assert!(h.ensure_shape(0.0, 1.0, 10).is_ok());
+        assert!(h.ensure_shape(1.0, 1.0, 10).is_err()); // different min
+        assert!(h.ensure_shape(0.0, 2.0, 10).is_err()); // different bin_width
+        assert!(h.ensure_shape(0.0, 1.0, 5).is_err()); // different bin count
     }
 
     #[test]

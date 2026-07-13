@@ -27,6 +27,30 @@ macro_rules! regression_test {
             }
         }
     };
+    // Umbrella-sampling fixtures run the `umbrella` subcommand (from scratch,
+    // single-threaded for reproducibility) and compare the stitched PMF CSV.
+    ($name:ident, umbrella) => {
+        mod $name {
+            use super::*;
+
+            fn dir() -> PathBuf {
+                Path::new(env!("CARGO_MANIFEST_DIR"))
+                    .join(concat!("tests/files/", stringify!($name)))
+            }
+
+            #[test]
+            #[ignore]
+            fn fixtures() {
+                common::generate_umbrella_fixtures(&dir());
+            }
+
+            #[test]
+            #[ignore]
+            fn regression() {
+                common::run_umbrella_regression(&dir());
+            }
+        }
+    };
 }
 
 regression_test!(npt_polymers);
@@ -44,3 +68,4 @@ regression_test!(reservoir_caoh2);
 regression_test!(gcmc_pair_atomic);
 regression_test!(cluster_ideal);
 regression_test!(cluster_lj);
+regression_test!(umbrella_1d, umbrella);

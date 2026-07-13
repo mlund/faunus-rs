@@ -23,8 +23,8 @@ use std::io::{BufRead, Write};
 use std::ops::Mul;
 use std::path::Path;
 
-/// Read a YAML file, applying Jinja2 template rendering if the file
-/// contains template syntax (`{%` or `{#`).
+/// Read a YAML file, applying Jinja2 template rendering when the file contains a Jinja
+/// opener outside of comments (see [`looks_like_template`]).
 ///
 /// Top-level keys prefixed with `_` are silently removed, allowing
 /// sections to be temporarily disabled (e.g. `_umbrella:` instead of `umbrella:`).
@@ -37,7 +37,7 @@ pub fn read_yaml(path: impl AsRef<Path>) -> anyhow::Result<String> {
     let raw = std::fs::read_to_string(path)
         .with_context(|| format!("Cannot read '{}'", path.display()))?;
     // Only invoke the template engine when template tags are present
-    let yaml = if raw.contains("{%") || raw.contains("{#") {
+    let yaml = if looks_like_template(&raw) {
         let mut env = minijinja::Environment::new();
         // Strict mode fails fast on undefined variables with the variable name
         // and line, instead of silently producing `undefined` values that
@@ -66,6 +66,40 @@ pub fn read_yaml(path: impl AsRef<Path>) -> anyhow::Result<String> {
     // Name the file here: a serde error alone reports only a line and column, and every
     // input path funnels through this function.
     strip_underscore_keys(&yaml).with_context(|| format!("Cannot parse '{}'", path.display()))
+}
+
+/// Decide whether `raw` should be rendered as a Jinja template before YAML parsing.
+///
+/// Templating is triggered by a Jinja opener (`{%` or `{#`), but the trigger must not fire on
+/// one that appears only inside a YAML comment — otherwise a previously-valid input aborts at
+/// load time (`# note: use {% ... %}` should stay a plain comment). We therefore look for the
+/// opener in each line with its trailing YAML comment removed. Detecting the opener (rather
+/// than a matched pair) keeps multi-line tags and block comments working, e.g. a
+/// `{# … #}` section-disabling comment whose delimiters span several lines. Residual
+/// limitation: an opener inside a quoted string value still triggers — matching the original
+/// behaviour, and rare in practice.
+fn looks_like_template(raw: &str) -> bool {
+    raw.lines().any(|line| {
+        let code = strip_line_comment(line);
+        code.contains("{%") || code.contains("{#")
+    })
+}
+
+/// Strip a trailing YAML end-of-line comment, leaving Jinja `#}` intact.
+///
+/// A YAML comment starts at a `#` that begins the line or follows whitespace; a `#`
+/// immediately followed by `}` is a Jinja `#}` close and is not treated as a comment.
+fn strip_line_comment(line: &str) -> &str {
+    let b = line.as_bytes();
+    for i in 0..b.len() {
+        let is_comment_start = b[i] == b'#'
+            && (i == 0 || b[i - 1].is_ascii_whitespace())
+            && !(i + 1 < b.len() && b[i + 1] == b'}');
+        if is_comment_start {
+            return &line[..i];
+        }
+    }
+    line
 }
 
 /// Remove top-level YAML keys that start with `_`.
@@ -954,6 +988,62 @@ mod block_tests {
         // The unscaled-by-1 form matches direct accessors
         assert_relative_eq!(base.mean, b.mean());
         assert_relative_eq!(base.error, b.error());
+    }
+}
+
+#[cfg(test)]
+mod template_detect_tests {
+    use super::looks_like_template;
+
+    #[test]
+    fn real_statement_line_is_a_template() {
+        assert!(looks_like_template(
+            "{% set lz = 30.0 %}\ncell: !Cuboid [{{ lz }}, 1, 1]\n"
+        ));
+    }
+
+    #[test]
+    fn jinja_comment_block_is_a_template() {
+        assert!(looks_like_template("foo: 1  {# inline jinja comment #}\n"));
+    }
+
+    #[test]
+    fn tag_inside_yaml_comment_is_not_a_template() {
+        // Regression for the false positive: `{%`/`{#` in a plain YAML comment must not
+        // route the whole file through the strict template engine.
+        assert!(!looks_like_template(
+            "spacing: 5.0  # try {% production %} later\n"
+        ));
+        assert!(!looks_like_template(
+            "# see docs on {# templating #}\nspacing: 5.0\n"
+        ));
+    }
+
+    #[test]
+    fn multiline_block_comment_is_a_template() {
+        // docs/index.md documents a `{# … #}` block comment (delimiters on separate lines)
+        // to disable whole YAML sections; it must still be detected and rendered.
+        assert!(looks_like_template(
+            "{# Disabled section:\numbrella:\n  cv: ...\n#}\natoms: []\n"
+        ));
+    }
+
+    #[test]
+    fn multiline_statement_is_a_template() {
+        assert!(looks_like_template(
+            "{% set xs = [\n  1, 2, 3,\n] %}\nn: {{ xs | length }}\n"
+        ));
+    }
+
+    #[test]
+    fn hash_inside_jinja_comment_still_detects() {
+        // A `#` inside `{# … #}` must not defeat detection of the opener.
+        assert!(looks_like_template("foo: 1  {# see item #7 #}\n"));
+    }
+
+    #[test]
+    fn plain_yaml_is_not_a_template() {
+        assert!(!looks_like_template("atoms:\n  - {name: A, mass: 1.0}\n"));
     }
 }
 
