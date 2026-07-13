@@ -7,6 +7,7 @@
 - unknown user input (serde YAML etc) is an error
 - when executing plans, finish with a "/code-review"
 - I/O should support mac/linux/windows (OS independent)
+- YAML output: prefer {mean, error} key mapping, not "x ± y" str
 
 ## Code comments
 
@@ -31,9 +32,11 @@
   - use markdown compatible LaTeX
   - verify with `scripts/docs-check/`
   - prefer .csv over .dat in examples
+  - Prefer verified, hyperlinked DOI references
 
 # Before committing:
-  - cargo clippy / fmt
+  - cargo clippy --tests --no-deps
+  - cargo fmt
   - *ask* to run `scripts/regression_tests.sh`
   - don't add commit co-authorships (commits, PRs, issues). Be brief.
   - verify compilation with and without `gpu` feature
