@@ -1027,7 +1027,7 @@ They are defined in the <code>analysis</code> section of the YAML input:</p>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!RadialDistribution</span>
 <span class="w">    </span><span class="nt">selections</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;atomtype</span><span class="nv"> </span><span class="s">Na&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;atomtype</span><span class="nv"> </span><span class="s">Cl&quot;</span><span class="p p-Indicator">]</span>
 <span class="w">    </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">rdf.dat</span>
-<span class="w">    </span><span class="nt">dr</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.1</span>
+<span class="w">    </span><span class="nt">resolution</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.1</span>
 <span class="w">    </span><span class="nt">frequency</span><span class="p">:</span><span class="w"> </span><span class="kt">!End</span>
 </code></pre></div>
 <h3 id="sampling-frequency">Sampling frequency<a class="headerlink" href="#sampling-frequency" title="Permanent link">&para;</a></h3>
@@ -1468,7 +1468,7 @@ file, one row per distance bin, with columns
 <div class="highlight"><pre><span></span><code><span class="nt">analysis</span><span class="p">:</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!MultipoleDistribution</span>
 <span class="w">    </span><span class="nt">selections</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;molecule</span><span class="nv"> </span><span class="s">protein&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;molecule</span><span class="nv"> </span><span class="s">protein&quot;</span><span class="p p-Indicator">]</span>
-<span class="w">    </span><span class="nt">dr</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2.0</span>
+<span class="w">    </span><span class="nt">resolution</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2.0</span>
 <span class="w">    </span><span class="nt">frequency</span><span class="p">:</span><span class="w"> </span><span class="kt">!Every</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">100</span>
 </code></pre></div>
 <p>The output defaults to <code>multipole_dist.csv</code>; set <code>file</code> to override it.</p>
@@ -1496,7 +1496,7 @@ file, one row per distance bin, with columns
 <td>Output CSV file</td>
 </tr>
 <tr>
-<td><code>dr</code></td>
+<td><code>resolution</code></td>
 <td>no</td>
 <td>1.0</td>
 <td>Distance resolution along <em>R</em> (Å)</td>
@@ -1732,7 +1732,7 @@ automatically excluded.</p>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!RadialDistribution</span>
 <span class="w">    </span><span class="nt">selections</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;atomtype</span><span class="nv"> </span><span class="s">Na&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;atomtype</span><span class="nv"> </span><span class="s">Cl&quot;</span><span class="p p-Indicator">]</span>
 <span class="w">    </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">rdf_nacl.dat</span>
-<span class="w">    </span><span class="nt">dr</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.1</span>
+<span class="w">    </span><span class="nt">resolution</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.1</span>
 <span class="w">    </span><span class="nt">frequency</span><span class="p">:</span><span class="w"> </span><span class="kt">!Every</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">100</span>
 
 <span class="w">  </span><span class="c1"># COM-COM RDF for polymer molecules</span>
@@ -1740,7 +1740,7 @@ automatically excluded.</p>
 <span class="w">    </span><span class="nt">selections</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;molecule</span><span class="nv"> </span><span class="s">polymer&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;molecule</span><span class="nv"> </span><span class="s">polymer&quot;</span><span class="p p-Indicator">]</span>
 <span class="w">    </span><span class="nt">use_com</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 <span class="w">    </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">rdf_com.dat</span>
-<span class="w">    </span><span class="nt">dr</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.5</span>
+<span class="w">    </span><span class="nt">resolution</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.5</span>
 <span class="w">    </span><span class="nt">max_r</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">30.0</span>
 <span class="w">    </span><span class="nt">frequency</span><span class="p">:</span><span class="w"> </span><span class="kt">!Every</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">100</span>
 </code></pre></div>
@@ -1768,7 +1768,7 @@ automatically excluded.</p>
 <td>Output file path (see <a href="#output-file-formats">Output file formats</a>)</td>
 </tr>
 <tr>
-<td><code>dr</code></td>
+<td><code>resolution</code></td>
 <td>yes</td>
 <td></td>
 <td>Bin width in distance units</td>
@@ -2048,7 +2048,7 @@ If <code>file</code> is given, each sampled step writes columns
 <h3 id="example_8">Example<a class="headerlink" href="#example_8" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><span class="nt">analysis</span><span class="p">:</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!VirtualVolumeMove</span>
-<span class="w">    </span><span class="nt">dV</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.2</span>
+<span class="w">    </span><span class="nt">volume_displacement</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.2</span>
 <span class="w">    </span><span class="nt">method</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Isotropic</span>
 <span class="w">    </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">pressure.csv</span>
 <span class="w">    </span><span class="nt">frequency</span><span class="p">:</span><span class="w"> </span><span class="kt">!Every</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10</span>
@@ -2065,7 +2065,7 @@ If <code>file</code> is given, each sampled step writes columns
 </thead>
 <tbody>
 <tr>
-<td><code>dV</code></td>
+<td><code>volume_displacement</code></td>
 <td>yes</td>
 <td></td>
 <td>Volume displacement (Å³)</td>
@@ -2711,7 +2711,7 @@ of groups, particles, and molecule types).</p>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!RadialDistribution</span>
 <span class="w">    </span><span class="nt">selections</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;molecule</span><span class="nv"> </span><span class="s">A&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;molecule</span><span class="nv"> </span><span class="s">B&quot;</span><span class="p p-Indicator">]</span>
 <span class="w">    </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">rdf_explicit.dat</span>
-<span class="w">    </span><span class="nt">dr</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.1</span>
+<span class="w">    </span><span class="nt">resolution</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.1</span>
 <span class="w">    </span><span class="nt">frequency</span><span class="p">:</span><span class="w"> </span><span class="kt">!Every</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">100</span>
 </code></pre></div>
 </li>

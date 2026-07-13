@@ -1023,7 +1023,11 @@ Two types are available:</p>
 </tr>
 <tr>
 <td><code>dp</code></td>
-<td>Maximum displacement parameter (meaning depends on the move)</td>
+<td>Maximum translational displacement (Å), for translational moves</td>
+</tr>
+<tr>
+<td><code>dprot</code></td>
+<td>Maximum rotational angle (radians), for rotational moves</td>
 </tr>
 </tbody>
 </table>
@@ -1042,8 +1046,8 @@ per propagate cycle (depending on how often it is drawn).</p>
 <span class="w">      </span><span class="nt">repeat</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10</span>
 <span class="w">      </span><span class="nt">moves</span><span class="p">:</span>
 <span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!TranslateMolecule</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> molecule</span><span class="p">:</span><span class="w"> </span><span class="nv">Water</span><span class="p p-Indicator">,</span><span class="nt"> dp</span><span class="p">:</span><span class="w"> </span><span class="nv">0.5</span><span class="p p-Indicator">,</span><span class="nt"> weight</span><span class="p">:</span><span class="w"> </span><span class="nv">1.0</span><span class="w"> </span><span class="p p-Indicator">}</span>
-<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!RotateMolecule</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> molecule</span><span class="p">:</span><span class="w"> </span><span class="nv">Water</span><span class="p p-Indicator">,</span><span class="nt"> dp</span><span class="p">:</span><span class="w"> </span><span class="nv">0.3</span><span class="p p-Indicator">,</span><span class="nt"> weight</span><span class="p">:</span><span class="w"> </span><span class="nv">1.0</span><span class="w"> </span><span class="p p-Indicator">}</span>
-<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!VolumeMove</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> dV</span><span class="p">:</span><span class="w"> </span><span class="nv">0.04</span><span class="p p-Indicator">,</span><span class="nt"> weight</span><span class="p">:</span><span class="w"> </span><span class="nv">0.5</span><span class="w"> </span><span class="p p-Indicator">}</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!RotateMolecule</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> molecule</span><span class="p">:</span><span class="w"> </span><span class="nv">Water</span><span class="p p-Indicator">,</span><span class="nt"> dprot</span><span class="p">:</span><span class="w"> </span><span class="nv">0.3</span><span class="p p-Indicator">,</span><span class="nt"> weight</span><span class="p">:</span><span class="w"> </span><span class="nv">1.0</span><span class="w"> </span><span class="p p-Indicator">}</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!VolumeMove</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> volume_displacement</span><span class="p">:</span><span class="w"> </span><span class="nv">0.04</span><span class="p p-Indicator">,</span><span class="nt"> weight</span><span class="p">:</span><span class="w"> </span><span class="nv">0.5</span><span class="w"> </span><span class="p p-Indicator">}</span>
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!Deterministic</span>
 <span class="w">      </span><span class="nt">repeat</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
 <span class="w">      </span><span class="nt">moves</span><span class="p">:</span>
@@ -1170,7 +1174,7 @@ where <span class="arithmatex">\(W = \sum_j W'(r_j)\)</span> is the normalizatio
 <div class="highlight"><pre><span></span><code><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!Deterministic</span>
 <span class="w">  </span><span class="nt">moves</span><span class="p">:</span>
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!TranslateMolecule</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> molecule</span><span class="p">:</span><span class="w"> </span><span class="nv">Protein</span><span class="p p-Indicator">,</span><span class="nt"> dp</span><span class="p">:</span><span class="w"> </span><span class="nv">0.5</span><span class="w"> </span><span class="p p-Indicator">}</span>
-<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!RotateMolecule</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> molecule</span><span class="p">:</span><span class="w"> </span><span class="nv">Protein</span><span class="p p-Indicator">,</span><span class="nt"> dp</span><span class="p">:</span><span class="w"> </span><span class="nv">0.5</span><span class="w"> </span><span class="p p-Indicator">}</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!RotateMolecule</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> molecule</span><span class="p">:</span><span class="w"> </span><span class="nv">Protein</span><span class="p p-Indicator">,</span><span class="nt"> dprot</span><span class="p">:</span><span class="w"> </span><span class="nv">0.5</span><span class="w"> </span><span class="p p-Indicator">}</span>
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!TranslateAtom</span>
 <span class="w">        </span><span class="nt">molecule</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Na</span>
 <span class="w">        </span><span class="nt">dp</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.5</span>
@@ -1225,8 +1229,8 @@ e.g. <code>"molecule Protein"</code>, <code>"protein"</code>, or boolean combina
 <hr />
 <h2 id="rotate-molecule">Rotate Molecule<a class="headerlink" href="#rotate-molecule" title="Permanent link">&para;</a></h2>
 <p>Picks a random molecule of the given type and rotates it around a random axis
-by an angle uniformly sampled in <span class="arithmatex">\([-\text{dp}, +\text{dp}]\)</span> (radians).</p>
-<div class="highlight"><pre><span></span><code><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!RotateMolecule</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> molecule</span><span class="p">:</span><span class="w"> </span><span class="nv">Protein</span><span class="p p-Indicator">,</span><span class="nt"> dp</span><span class="p">:</span><span class="w"> </span><span class="nv">0.3</span><span class="p p-Indicator">,</span><span class="nt"> weight</span><span class="p">:</span><span class="w"> </span><span class="nv">1.0</span><span class="w"> </span><span class="p p-Indicator">}</span>
+by an angle uniformly sampled in <span class="arithmatex">\([-\text{dprot}, +\text{dprot}]\)</span> (radians).</p>
+<div class="highlight"><pre><span></span><code><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!RotateMolecule</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> molecule</span><span class="p">:</span><span class="w"> </span><span class="nv">Protein</span><span class="p p-Indicator">,</span><span class="nt"> dprot</span><span class="p">:</span><span class="w"> </span><span class="nv">0.3</span><span class="p p-Indicator">,</span><span class="nt"> weight</span><span class="p">:</span><span class="w"> </span><span class="nv">1.0</span><span class="w"> </span><span class="p p-Indicator">}</span>
 </code></pre></div>
 <table>
 <thead>
@@ -1245,7 +1249,7 @@ by an angle uniformly sampled in <span class="arithmatex">\([-\text{dp}, +\text{
 <td>Name of the molecule type</td>
 </tr>
 <tr>
-<td><code>dp</code></td>
+<td><code>dprot</code></td>
 <td>yes</td>
 <td></td>
 <td>Maximum angular displacement (radians)</td>
@@ -1277,7 +1281,7 @@ Molecules without bonds are skipped.</p>
 For molecules spanning more than L/2, the minimum-image convention used
 during rotation can map atoms to incorrect periodic images.</p>
 </blockquote>
-<div class="highlight"><pre><span></span><code><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!PivotMove</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> molecule</span><span class="p">:</span><span class="w"> </span><span class="nv">Polymer</span><span class="p p-Indicator">,</span><span class="nt"> dp</span><span class="p">:</span><span class="w"> </span><span class="nv">1.5</span><span class="p p-Indicator">,</span><span class="nt"> weight</span><span class="p">:</span><span class="w"> </span><span class="nv">1.0</span><span class="w"> </span><span class="p p-Indicator">}</span>
+<div class="highlight"><pre><span></span><code><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!PivotMove</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> molecule</span><span class="p">:</span><span class="w"> </span><span class="nv">Polymer</span><span class="p p-Indicator">,</span><span class="nt"> dprot</span><span class="p">:</span><span class="w"> </span><span class="nv">1.5</span><span class="p p-Indicator">,</span><span class="nt"> weight</span><span class="p">:</span><span class="w"> </span><span class="nv">1.0</span><span class="w"> </span><span class="p p-Indicator">}</span>
 </code></pre></div>
 <table>
 <thead>
@@ -1296,7 +1300,7 @@ during rotation can map atoms to incorrect periodic images.</p>
 <td>Name of the molecule type</td>
 </tr>
 <tr>
-<td><code>dp</code></td>
+<td><code>dprot</code></td>
 <td>yes</td>
 <td></td>
 <td>Maximum angular displacement (radians)</td>
@@ -1318,7 +1322,7 @@ during rotation can map atoms to incorrect periodic images.</p>
 <hr />
 <h2 id="crankshaft-move">Crankshaft Move<a class="headerlink" href="#crankshaft-move" title="Permanent link">&para;</a></h2>
 <p>Picks a random bond axis in the molecule and rotates the smaller sub-tree
-around it by an angle uniformly sampled in <span class="arithmatex">\([-\text{dp}, +\text{dp}]\)</span> (radians).
+around it by an angle uniformly sampled in <span class="arithmatex">\([-\text{dprot}, +\text{dprot}]\)</span> (radians).
 When proper dihedrals are defined, only their middle bonds are used as axes;
 otherwise all bonds serve as candidate axes (e.g. FASTA chains with only
 harmonic bonds).</p>
@@ -1327,7 +1331,7 @@ preserves bond lengths and bond angles by construction. This makes it
 complementary to <a href="#pivot-move"><code>PivotMove</code></a>, which applies a full 3D rotation
 (3-DOF) and can change bond angles at the pivot. For models without angle
 potentials, <code>PivotMove</code> alone is typically sufficient.</p>
-<div class="highlight"><pre><span></span><code><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!CrankshaftMove</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> molecule</span><span class="p">:</span><span class="w"> </span><span class="nv">Peptide</span><span class="p p-Indicator">,</span><span class="nt"> dp</span><span class="p">:</span><span class="w"> </span><span class="nv">0.5</span><span class="p p-Indicator">,</span><span class="nt"> weight</span><span class="p">:</span><span class="w"> </span><span class="nv">1.0</span><span class="w"> </span><span class="p p-Indicator">}</span>
+<div class="highlight"><pre><span></span><code><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!CrankshaftMove</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> molecule</span><span class="p">:</span><span class="w"> </span><span class="nv">Peptide</span><span class="p p-Indicator">,</span><span class="nt"> dprot</span><span class="p">:</span><span class="w"> </span><span class="nv">0.5</span><span class="p p-Indicator">,</span><span class="nt"> weight</span><span class="p">:</span><span class="w"> </span><span class="nv">1.0</span><span class="w"> </span><span class="p p-Indicator">}</span>
 </code></pre></div>
 <table>
 <thead>
@@ -1346,7 +1350,7 @@ potentials, <code>PivotMove</code> alone is typically sufficient.</p>
 <td>Name of the molecule type</td>
 </tr>
 <tr>
-<td><code>dp</code></td>
+<td><code>dprot</code></td>
 <td>yes</td>
 <td></td>
 <td>Maximum angular displacement (radians)</td>
@@ -1464,7 +1468,7 @@ which contributes <span class="arithmatex">\(PV - (N+1) k_BT \ln V\)</span>.</p>
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!Stochastic</span>
 <span class="w">      </span><span class="nt">moves</span><span class="p">:</span>
 <span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!TranslateMolecule</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> molecule</span><span class="p">:</span><span class="w"> </span><span class="nv">Water</span><span class="p p-Indicator">,</span><span class="nt"> dp</span><span class="p">:</span><span class="w"> </span><span class="nv">0.5</span><span class="p p-Indicator">,</span><span class="nt"> weight</span><span class="p">:</span><span class="w"> </span><span class="nv">1.0</span><span class="w"> </span><span class="p p-Indicator">}</span>
-<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!VolumeMove</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> dV</span><span class="p">:</span><span class="w"> </span><span class="nv">0.04</span><span class="p p-Indicator">,</span><span class="nt"> weight</span><span class="p">:</span><span class="w"> </span><span class="nv">0.5</span><span class="w"> </span><span class="p p-Indicator">}</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!VolumeMove</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> volume_displacement</span><span class="p">:</span><span class="w"> </span><span class="nv">0.04</span><span class="p p-Indicator">,</span><span class="nt"> weight</span><span class="p">:</span><span class="w"> </span><span class="nv">0.5</span><span class="w"> </span><span class="p p-Indicator">}</span>
 </code></pre></div>
 <h3 id="options">Options<a class="headerlink" href="#options" title="Permanent link">&para;</a></h3>
 <table>
@@ -1478,10 +1482,10 @@ which contributes <span class="arithmatex">\(PV - (N+1) k_BT \ln V\)</span>.</p>
 </thead>
 <tbody>
 <tr>
-<td><code>dV</code></td>
+<td><code>volume_displacement</code></td>
 <td>yes</td>
 <td></td>
-<td>Volume displacement parameter (log-scale)</td>
+<td>Volume displacement parameter, log-scale (alias <code>dV</code>)</td>
 </tr>
 <tr>
 <td><code>weight</code></td>
@@ -1854,10 +1858,10 @@ one per active atom in atomic groups.</p>
 </thead>
 <tbody>
 <tr>
-<td><code>dV</code></td>
+<td><code>volume_displacement</code></td>
 <td>yes</td>
 <td></td>
-<td>Volume displacement parameter</td>
+<td>Volume displacement parameter (alias <code>dV</code>)</td>
 </tr>
 <tr>
 <td><code>method</code></td>
@@ -2001,7 +2005,7 @@ thermostat independently to each angular velocity component:</p>
 <span class="w">      </span><span class="nt">repeat</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">20</span>
 <span class="w">      </span><span class="nt">moves</span><span class="p">:</span>
 <span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!TranslateMolecule</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> molecule</span><span class="p">:</span><span class="w"> </span><span class="nv">Water</span><span class="p p-Indicator">,</span><span class="nt"> dp</span><span class="p">:</span><span class="w"> </span><span class="nv">0.5</span><span class="p p-Indicator">,</span><span class="nt"> repeat</span><span class="p">:</span><span class="w"> </span><span class="nv">1</span><span class="w"> </span><span class="p p-Indicator">}</span>
-<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!RotateMolecule</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> molecule</span><span class="p">:</span><span class="w"> </span><span class="nv">Water</span><span class="p p-Indicator">,</span><span class="nt"> dp</span><span class="p">:</span><span class="w"> </span><span class="nv">0.3</span><span class="p p-Indicator">,</span><span class="nt"> repeat</span><span class="p">:</span><span class="w"> </span><span class="nv">1</span><span class="w"> </span><span class="p p-Indicator">}</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!RotateMolecule</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> molecule</span><span class="p">:</span><span class="w"> </span><span class="nv">Water</span><span class="p p-Indicator">,</span><span class="nt"> dprot</span><span class="p">:</span><span class="w"> </span><span class="nv">0.3</span><span class="p p-Indicator">,</span><span class="nt"> repeat</span><span class="p">:</span><span class="w"> </span><span class="nv">1</span><span class="w"> </span><span class="p p-Indicator">}</span>
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!LangevinDynamics</span>
 <span class="w">      </span><span class="nt">timestep</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.1</span>
 <span class="w">      </span><span class="nt">friction</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">5.0</span>
