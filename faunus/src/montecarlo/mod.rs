@@ -560,6 +560,48 @@ mod tests {
     use crate::backend::Backend;
     use float_cmp::assert_approx_eq;
 
+    /// The pre-3.0 key spellings are still accepted, so that older input keeps running.
+    ///
+    /// Nothing else pins them: the inputs under `tests/` all use the canonical keys, so dropping
+    /// an alias would break users' files while every test still passed.
+    #[test]
+    fn legacy_yaml_keys_are_still_accepted() {
+        /// Parse `yaml`, then re-serialize: the value must come back under its canonical key.
+        fn assert_alias<T: serde::de::DeserializeOwned + serde::Serialize>(
+            yaml: &str,
+            canonical: &str,
+            expected: f64,
+        ) {
+            let parsed: T = serde_yml::from_str(yaml).unwrap_or_else(|e| panic!("{yaml}: {e}"));
+            let value = serde_yml::to_value(&parsed).unwrap();
+            assert_eq!(
+                value[canonical].as_f64(),
+                Some(expected),
+                "{yaml} should deserialize into '{canonical}'"
+            );
+        }
+
+        assert_alias::<TranslateMolecule>("{molecule: X, dp: 0.5}", "max_displacement", 0.5);
+        assert_alias::<TranslateAtom>("{atom: A, dp: 0.5}", "max_displacement", 0.5);
+        assert_alias::<RotateMolecule>("{molecule: X, dprot: 0.5}", "max_angle", 0.5);
+        assert_alias::<PivotMove>("{molecule: X, dprot: 0.5}", "max_angle", 0.5);
+        assert_alias::<CrankshaftMove>("{molecule: X, dprot: 0.5}", "max_angle", 0.5);
+        assert_alias::<ClusterMove>(
+            "{molecule: X, dp: 1.0, dprot: 0.5, threshold: 8.0}",
+            "max_angle",
+            0.5,
+        );
+        assert_alias::<VolumeMove>("{dV: 0.1, method: Isotropic}", "volume_displacement", 0.1);
+
+        // Deserialize-only, so assert on the parse alone
+        let gibbs: gibbs::GibbsMoveBuilder =
+            serde_yml::from_str("!GibbsVolumeExchange {dV: 0.3}").unwrap();
+        assert!(matches!(
+            gibbs,
+            gibbs::GibbsMoveBuilder::GibbsVolumeExchange { dv, .. } if dv == 0.3
+        ));
+    }
+
     /// Was the `entropy_bias` doc example, before `montecarlo` became crate-private.
     #[test]
     fn entropy_bias_is_zero_when_nothing_changes() {
@@ -758,7 +800,8 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
     #[test]
     fn translate_molecule_pairs_rigid_body_with_translate() {
         let context = context();
-        let mut mv: TranslateMolecule = serde_yml::from_str("{molecule: MOL, dp: 0.5}").unwrap();
+        let mut mv: TranslateMolecule =
+            serde_yml::from_str("{molecule: MOL, max_displacement: 0.5}").unwrap();
         mv.finalize(&context).unwrap();
         let proposed = propose(mv, &context);
 
@@ -786,7 +829,8 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
     #[test]
     fn rotate_molecule_pairs_rigid_body_with_rotate() {
         let context = context();
-        let mut mv: RotateMolecule = serde_yml::from_str("{molecule: MOL, dprot: 0.5}").unwrap();
+        let mut mv: RotateMolecule =
+            serde_yml::from_str("{molecule: MOL, max_angle: 0.5}").unwrap();
         mv.finalize(&context).unwrap();
         let proposed = propose(mv, &context);
 
@@ -805,7 +849,8 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
     #[test]
     fn translate_atom_carries_relative_indices_on_both_sides() {
         let context = context();
-        let mut mv: TranslateAtom = serde_yml::from_str("{atom: B, dp: 0.3}").unwrap();
+        let mut mv: TranslateAtom =
+            serde_yml::from_str("{atom: B, max_displacement: 0.3}").unwrap();
         mv.finalize(&context).unwrap();
         let proposed = propose(mv, &context);
 
@@ -837,10 +882,10 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
     fn pivot_and_crankshaft_use_relative_indices_on_both_sides() {
         let context = context();
 
-        let mut pivot: PivotMove = serde_yml::from_str("{molecule: POLY, dprot: 0.5}").unwrap();
+        let mut pivot: PivotMove = serde_yml::from_str("{molecule: POLY, max_angle: 0.5}").unwrap();
         pivot.finalize(&context).unwrap();
         let mut crank: CrankshaftMove =
-            serde_yml::from_str("{molecule: POLY, dprot: 0.5}").unwrap();
+            serde_yml::from_str("{molecule: POLY, max_angle: 0.5}").unwrap();
         crank.finalize(&context).unwrap();
 
         for proposed in [propose(pivot, &context), propose(crank, &context)] {
@@ -866,7 +911,8 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
     fn volume_move_pairs_volume_change_with_volume_scale() {
         let context = context();
         let mut mv: VolumeMove =
-            serde_yml::from_str("{dV: 0.1, method: Isotropic, repeat: 1}").unwrap();
+            serde_yml::from_str("{volume_displacement: 0.1, method: Isotropic, repeat: 1}")
+                .unwrap();
         mv.finalize(&context).unwrap();
         let proposed = propose(mv, &context);
 

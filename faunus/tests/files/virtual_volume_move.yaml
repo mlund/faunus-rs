@@ -1,11 +1,11 @@
 - !VirtualVolumeMove
-  dV: 0.5
+  volume_displacement: 0.5
   method: Isotropic
   frequency: !Every 10
 - !VirtualVolumeMove
-  dV: 1.0
+  volume_displacement: 1.0
   method: ScaleZ
   frequency: !Every 5
 - !VirtualVolumeMove
-  dV: 0.5
+  volume_displacement: 0.5
   frequency: !Every 10

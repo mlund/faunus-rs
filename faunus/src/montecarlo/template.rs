@@ -35,7 +35,7 @@ pub struct TranslateAlongZ {
     #[serde(rename = "molecule")]
     molecule_name: String,
     /// Maximum displacement along z, in Å.
-    dp: f64,
+    max_displacement: f64,
     /// Resolved in `finalize`, once the context is known.
     #[serde(skip)]
     molecule_id: MoleculeId,
@@ -57,7 +57,11 @@ impl<T: ObserveContext> MoveProposal<T> for TranslateAlongZ {
     /// convention, but because the methods that would do it are not on the trait.
     fn propose_move(&mut self, context: &T, rng: &mut dyn RngCore) -> Option<ProposedMove> {
         let group_index = random_group(context, rng, self.molecule_id)?;
-        let shift = Point::new(0.0, 0.0, rng.gen_range(-self.dp..self.dp));
+        let shift = Point::new(
+            0.0,
+            0.0,
+            rng.gen_range(-self.max_displacement..self.max_displacement),
+        );
         Some(ProposedMove::translate_group(group_index, shift))
     }
 
@@ -101,7 +105,7 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
         let context = Backend::from_yaml_str(TWO_DIMERS, None, &mut rand::thread_rng()).unwrap();
         let mut mv = TranslateAlongZ {
             molecule_name: "dimer".to_owned(),
-            dp: 0.5,
+            max_displacement: 0.5,
             molecule_id: MoleculeId::new(0),
         };
         mv.finalize(&context).unwrap();
@@ -141,7 +145,7 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
         let (_, context) = move_and_context();
         let mut mv = TranslateAlongZ {
             molecule_name: "trimer".to_owned(),
-            dp: 0.5,
+            max_displacement: 0.5,
             molecule_id: MoleculeId::new(0),
         };
         assert!(mv.finalize(&context).is_err());

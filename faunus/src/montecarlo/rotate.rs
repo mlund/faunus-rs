@@ -80,7 +80,7 @@ mod tests {
     use crate::montecarlo::chain_fixture::{chain, chain_context, ChainSpec};
 
     fn rotate(max_angle: f64) -> RotateMolecule {
-        serde_yml::from_str(&format!("{{molecule: Chain, dprot: {max_angle}}}")).unwrap()
+        serde_yml::from_str(&format!("{{molecule: Chain, max_angle: {max_angle}}}")).unwrap()
     }
 
     /// Zero is the dangerous one: every proposal is then the identity, so the move is always
@@ -90,7 +90,8 @@ mod tests {
         let context = chain_context(&chain(4), ChainSpec::default());
         for max_angle in ["0", "-1.0", "4.0", ".nan", ".inf"] {
             let mut move_: RotateMolecule =
-                serde_yml::from_str(&format!("{{molecule: Chain, dprot: {max_angle}}}")).unwrap();
+                serde_yml::from_str(&format!("{{molecule: Chain, max_angle: {max_angle}}}"))
+                    .unwrap();
             assert!(
                 move_.finalize(&context).is_err(),
                 "max_angle {max_angle} should be rejected"

@@ -56,7 +56,7 @@ propagate:
       moves:
         - !TranslateAtom
           molecule: Ion
-          dp: 2.0
+          max_displacement: 2.0
           repeat: 20
           preferential:
             reference: "molecule Macromolecule"

@@ -365,7 +365,7 @@ mod tests {
 
     #[test]
     fn test_translate_molecule_parse() {
-        let string = "{ molecule: Water, dp: 0.5, weight: 0.7 }";
+        let string = "{ molecule: Water, max_displacement: 0.5, weight: 0.7 }";
         let translate: TranslateMolecule = serde_yml::from_str(string).unwrap();
 
         assert_eq!(translate.molecule_name, "Water");
@@ -375,7 +375,7 @@ mod tests {
 
     #[test]
     fn test_translate_atom_parse() {
-        let string = "{ atom: O, dp: 0.1, weight: 1.0, repeat: 4}";
+        let string = "{ atom: O, max_displacement: 0.1, weight: 1.0, repeat: 4}";
         let translate: TranslateAtom = serde_yml::from_str(string).unwrap();
 
         assert_eq!(translate.molecule_name, None);

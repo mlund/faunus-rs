@@ -169,7 +169,7 @@ mod tests {
     const PROPOSALS: usize = 64;
 
     fn crankshaft(max_angle: f64) -> CrankshaftMove {
-        serde_yml::from_str(&format!("{{molecule: Chain, dprot: {max_angle}}}")).unwrap()
+        serde_yml::from_str(&format!("{{molecule: Chain, max_angle: {max_angle}}}")).unwrap()
     }
 
     /// A crankshaft turns a sub-tree about one of its own bonds, so it conserves every bond length
@@ -313,7 +313,8 @@ system:
         let context = chain_context(&chain(6), ChainSpec::default());
         for max_angle in ["0", "-1.0", "4.0", ".nan", ".inf"] {
             let mut move_: CrankshaftMove =
-                serde_yml::from_str(&format!("{{molecule: Chain, dprot: {max_angle}}}")).unwrap();
+                serde_yml::from_str(&format!("{{molecule: Chain, max_angle: {max_angle}}}"))
+                    .unwrap();
             assert!(
                 move_.finalize(&context).is_err(),
                 "max_angle {max_angle} should be rejected"
@@ -347,7 +348,7 @@ system:
 
     #[test]
     fn yaml_parsing() {
-        let yaml = "!CrankshaftMove {molecule: Peptide, dprot: 0.5, weight: 1.0}";
+        let yaml = "!CrankshaftMove {molecule: Peptide, max_angle: 0.5, weight: 1.0}";
         let m: CrankshaftMove = serde_yml::from_str(yaml).unwrap();
         assert_eq!(m.molecule_name, "Peptide");
         assert_eq!(m.max_angle, 0.5);
@@ -359,7 +360,7 @@ system:
 
     #[test]
     fn yaml_unknown_field_rejected() {
-        let yaml = "!CrankshaftMove {molecule: Peptide, dprot: 0.5, weight: 1.0, unknown: 42}";
+        let yaml = "!CrankshaftMove {molecule: Peptide, max_angle: 0.5, weight: 1.0, unknown: 42}";
         assert!(serde_yml::from_str::<CrankshaftMove>(yaml).is_err());
     }
 }

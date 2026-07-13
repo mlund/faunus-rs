@@ -40,9 +40,9 @@ propagate:
   collections:
     - !Stochastic
       moves:
-        - !TranslateMolecule {molecule: molecule1, dp: 0.3, repeat: 100}
+        - !TranslateMolecule {molecule: molecule1, max_displacement: 0.3, repeat: 100}
   gibbs:
     intra_steps: 1
     moves:
-      - !GibbsVolumeExchange {dV: 0.5}
+      - !GibbsVolumeExchange {volume_displacement: 0.5}
       - !GibbsParticleTransfer {molecule: molecule1}

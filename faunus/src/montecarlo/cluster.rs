@@ -426,7 +426,7 @@ propagate: {{seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}}
             [12.0, 0.0, 0.0],
         ]);
         let m = cluster_move(
-            "{molecule: MOL, dp: 1.0, dprot: 0.1, threshold: 4.0}",
+            "{molecule: MOL, max_displacement: 1.0, max_angle: 0.1, threshold: 4.0}",
             &context,
         );
         let (cluster, _) = m.find_cluster(0, &context);
@@ -441,7 +441,7 @@ propagate: {{seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}}
         // Cluster {0,1}; outsider 2 sits at x=10.
         let context = system(&[[0.0, 0.0, 0.0], [3.0, 0.0, 0.0], [10.0, 0.0, 0.0]]);
         let m = cluster_move(
-            "{molecule: MOL, dp: 1.0, dprot: 0.1, threshold: 4.0}",
+            "{molecule: MOL, max_displacement: 1.0, max_angle: 0.1, threshold: 4.0}",
             &context,
         );
         let cluster = vec![0, 1];
@@ -478,7 +478,7 @@ propagate: {{seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}}
         let mut context = system(&positions);
         // Huge threshold ⇒ every molecule joins one cluster regardless of geometry.
         let mut m = cluster_move(
-            "{molecule: MOL, dp: 5.0, dprot: 1.0, threshold: 100.0}",
+            "{molecule: MOL, max_displacement: 5.0, max_angle: 1.0, threshold: 100.0}",
             &context,
         );
 
@@ -500,7 +500,7 @@ propagate: {{seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}}
 
     #[test]
     fn test_parse_com_mode_default() {
-        let s = "{ molecule: MOL1, dp: 5.0, dprot: 0.3, threshold: 30.0 }";
+        let s = "{ molecule: MOL1, max_displacement: 5.0, max_angle: 0.3, threshold: 30.0 }";
         let m: ClusterMove = serde_yml::from_str(s).unwrap();
         assert_eq!(m.molecule_name, "MOL1");
         assert_eq!(m.max_displacement, 5.0);
@@ -513,7 +513,7 @@ propagate: {{seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}}
 
     #[test]
     fn test_parse_bead_mode_explicit() {
-        let s = "{ molecule: MOL1, dp: 5.0, dprot: 0.3, threshold: 6.0, use_com: false }";
+        let s = "{ molecule: MOL1, max_displacement: 5.0, max_angle: 0.3, threshold: 6.0, use_com: false }";
         let m: ClusterMove = serde_yml::from_str(s).unwrap();
         assert!(!m.use_com, "use_com should be false");
         assert_eq!(m.threshold, 6.0);
@@ -522,7 +522,7 @@ propagate: {{seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}}
     #[test]
     fn test_parse_dp_alias() {
         // Verify "dp" and "dprot" aliases work
-        let s1 = "{ molecule: M, dp: 2.0, dprot: 0.5, threshold: 10.0 }";
+        let s1 = "{ molecule: M, max_displacement: 2.0, max_angle: 0.5, threshold: 10.0 }";
         let s2 = "{ molecule: M, max_displacement: 2.0, max_angle: 0.5, threshold: 10.0 }";
         let m1: ClusterMove = serde_yml::from_str(s1).unwrap();
         let m2: ClusterMove = serde_yml::from_str(s2).unwrap();
@@ -542,8 +542,10 @@ propagate: {{seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}}
         )
         .unwrap();
 
-        let mut m: ClusterMove =
-            serde_yml::from_str("{ molecule: MOL, dp: 5.0, dprot: 0.3, threshold: 30.0 }").unwrap();
+        let mut m: ClusterMove = serde_yml::from_str(
+            "{ molecule: MOL, max_displacement: 5.0, max_angle: 0.3, threshold: 30.0 }",
+        )
+        .unwrap();
         assert!(m.finalize(&context).is_err());
     }
 
@@ -557,9 +559,10 @@ propagate: {{seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}}
         )
         .unwrap();
 
-        let mut m: ClusterMove =
-            serde_yml::from_str("{ molecule: DOESNOTEXIST, dp: 5.0, dprot: 0.3, threshold: 30.0 }")
-                .unwrap();
+        let mut m: ClusterMove = serde_yml::from_str(
+            "{ molecule: DOESNOTEXIST, max_displacement: 5.0, max_angle: 0.3, threshold: 30.0 }",
+        )
+        .unwrap();
         assert!(m.finalize(&context).is_err());
     }
 }

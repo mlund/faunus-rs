@@ -114,7 +114,7 @@ mod tests {
     const PROPOSALS: usize = 64;
 
     fn pivot(max_angle: f64) -> PivotMove {
-        serde_yml::from_str(&format!("{{molecule: Chain, dprot: {max_angle}}}")).unwrap()
+        serde_yml::from_str(&format!("{{molecule: Chain, max_angle: {max_angle}}}")).unwrap()
     }
 
     /// A pivot rotates a sub-tree rigidly about one of its own atoms, so no bond can change length.
@@ -197,7 +197,8 @@ mod tests {
         let context = chain_context(&chain(6), ChainSpec::default());
         for max_angle in ["0", "-1.0", "4.0", ".nan", ".inf"] {
             let mut move_: PivotMove =
-                serde_yml::from_str(&format!("{{molecule: Chain, dprot: {max_angle}}}")).unwrap();
+                serde_yml::from_str(&format!("{{molecule: Chain, max_angle: {max_angle}}}"))
+                    .unwrap();
             assert!(
                 move_.finalize(&context).is_err(),
                 "max_angle {max_angle} should be rejected"
@@ -231,7 +232,7 @@ mod tests {
 
     #[test]
     fn yaml_parsing() {
-        let yaml = "!PivotMove {molecule: Polymer, dprot: 1.5, weight: 2.0}";
+        let yaml = "!PivotMove {molecule: Polymer, max_angle: 1.5, weight: 2.0}";
         let pivot: PivotMove = serde_yml::from_str(yaml).unwrap();
         assert_eq!(pivot.molecule_name, "Polymer");
         assert_eq!(pivot.max_angle, 1.5);
@@ -242,7 +243,7 @@ mod tests {
 
     #[test]
     fn yaml_unknown_field_rejected() {
-        let yaml = "!PivotMove {molecule: Polymer, dprot: 1.5, weight: 2.0, unknown: 42}";
+        let yaml = "!PivotMove {molecule: Polymer, max_angle: 1.5, weight: 2.0, unknown: 42}";
         assert!(serde_yml::from_str::<PivotMove>(yaml).is_err());
     }
 }

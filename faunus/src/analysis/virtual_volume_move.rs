@@ -284,11 +284,22 @@ mod tests {
         }
     }
 
+    /// The pre-3.0 spelling of `volume_displacement` is still accepted, so that older input keeps
+    /// running. Nothing else pins it: the inputs under `tests/` all use the canonical key.
+    #[test]
+    fn legacy_dv_key_is_still_accepted() {
+        let builder = deserialize_vvm_builder(
+            "- !VirtualVolumeMove {dV: 0.2, file: pressure.csv, frequency: !Every 10}",
+            0,
+        );
+        assert_approx_eq!(f64, builder.build(RT_298).unwrap().volume_displacement, 0.2);
+    }
+
     #[test]
     fn apply_output_dir_prefixes_file() {
         let yaml = "
 - !VirtualVolumeMove
-  dV: 0.2
+  volume_displacement: 0.2
   file: pressure.csv
   frequency: !Every 10
 ";
@@ -361,7 +372,7 @@ mod tests {
     fn build_rejects_zero_block_size() {
         let yaml = "
 - !VirtualVolumeMove
-  dV: 0.5
+  volume_displacement: 0.5
   frequency: !Every 1
   block_size: 0
 ";
@@ -500,7 +511,7 @@ mod tests {
     fn deserialize_custom_block_size() {
         let yaml = r#"
 - !VirtualVolumeMove
-  dV: 0.5
+  volume_displacement: 0.5
   frequency: !Every 10
   block_size: 50
 "#;
@@ -512,7 +523,7 @@ mod tests {
     fn deserialize_default_block_size() {
         let yaml = r#"
 - !VirtualVolumeMove
-  dV: 0.5
+  volume_displacement: 0.5
   frequency: !Every 10
 "#;
         let vvm = deserialize_vvm_builder(yaml, 0).build(RT_298).unwrap();
@@ -533,7 +544,7 @@ mod tests {
     fn deserialize_default_method_is_isotropic() {
         let yaml = r#"
 - !VirtualVolumeMove
-  dV: 0.5
+  volume_displacement: 0.5
   frequency: !Every 1
 "#;
         let vvm = deserialize_vvm_builder(yaml, 0).build(RT_298).unwrap();
@@ -543,7 +554,7 @@ mod tests {
     #[test]
     fn roundtrip_serialize_deserialize_builder() {
         let yaml = r#"
-dV: 0.5
+volume_displacement: 0.5
 method: ScaleZ
 frequency: !Every 5
 "#;

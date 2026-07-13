@@ -39,5 +39,5 @@ propagate:
   collections:
     - !Stochastic
       moves:
-        - !TranslateMolecule {molecule: MOL, dp: 20.0, repeat: 10}
-        - !ClusterMove {molecule: MOL, dp: 19.99, dprot: 3.0, threshold: 7.0, use_com: true, repeat: 1}
+        - !TranslateMolecule {molecule: MOL, max_displacement: 20.0, repeat: 10}
+        - !ClusterMove {molecule: MOL, max_displacement: 19.99, max_angle: 3.0, threshold: 7.0, use_com: true, repeat: 1}

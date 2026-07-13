@@ -189,7 +189,7 @@ propagate:
   collections:
     - !Deterministic
       moves:
-        - !TranslateMolecule {molecule: particle, dp: 1.0, repeat: 1}"
+        - !TranslateMolecule {molecule: particle, max_displacement: 1.0, repeat: 1}"
     } else {
         ""
     };

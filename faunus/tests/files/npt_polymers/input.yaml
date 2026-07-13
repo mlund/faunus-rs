@@ -58,9 +58,9 @@ propagate:
   collections:
     - !Deterministic
       moves:
-        - !TranslateMolecule {molecule: polymer, dp: 10.0, weight: 1.0, repeat: 8}
-        - !RotateMolecule {molecule: polymer, dprot: 1.0, weight: 1.0, repeat: 8}
-        - !PivotMove {molecule: polymer, dprot: 3.0, weight: 1.0, repeat: 24}
-        - !TranslateAtom {molecule: polymer, dp: 10.0, weight: 1.0, repeat: 32}
-        - !TranslateAtom {molecule: counterion, dp: 110.0, weight: 1.0, repeat: 32}
-        - !VolumeMove {dV: 2.0, weight: 1.0}
+        - !TranslateMolecule {molecule: polymer, max_displacement: 10.0, weight: 1.0, repeat: 8}
+        - !RotateMolecule {molecule: polymer, max_angle: 1.0, weight: 1.0, repeat: 8}
+        - !PivotMove {molecule: polymer, max_angle: 3.0, weight: 1.0, repeat: 24}
+        - !TranslateAtom {molecule: polymer, max_displacement: 10.0, weight: 1.0, repeat: 32}
+        - !TranslateAtom {molecule: counterion, max_displacement: 110.0, weight: 1.0, repeat: 32}
+        - !VolumeMove {volume_displacement: 2.0, weight: 1.0}

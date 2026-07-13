@@ -621,14 +621,14 @@ mod tests {
 
     #[test]
     fn gibbs_move_builder_volume_yaml_default() {
-        let yaml = "!GibbsVolumeExchange { dV: 10.0 }";
+        let yaml = "!GibbsVolumeExchange { volume_displacement: 10.0 }";
         let builder: GibbsMoveBuilder = serde_yml::from_str(yaml).unwrap();
         assert!(matches!(builder, GibbsMoveBuilder::GibbsVolumeExchange { dv, .. } if dv == 10.0));
     }
 
     #[test]
     fn gibbs_move_builder_volume_yaml_linear() {
-        let yaml = "!GibbsVolumeExchange { dV: 10.0, method: Linear }";
+        let yaml = "!GibbsVolumeExchange { volume_displacement: 10.0, method: Linear }";
         let builder: GibbsMoveBuilder = serde_yml::from_str(yaml).unwrap();
         assert!(
             matches!(builder, GibbsMoveBuilder::GibbsVolumeExchange { dv, method: VolumeDisplacementMethod::Linear } if dv == 10.0)
@@ -649,7 +649,7 @@ mod tests {
         let yaml = "
 intra_steps: 100
 moves:
-  - !GibbsVolumeExchange { dV: 10 }
+  - !GibbsVolumeExchange { volume_displacement: 10 }
   - !GibbsParticleTransfer { molecule: LJ }
 ";
         let config: GibbsConfig = serde_yml::from_str(yaml).unwrap();

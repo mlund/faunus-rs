@@ -751,8 +751,10 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
     /// framework's `to_yaml`, so `results()` is only ever called with something to report.
     #[test]
     fn zero_sample_yaml_is_omitted_rather_than_non_finite() {
-        let builder: crate::analysis::VirtualVolumeMoveBuilder =
-            serde_yml::from_str("{dV: 0.5, method: Isotropic, frequency: !Every 10}").unwrap();
+        let builder: crate::analysis::VirtualVolumeMoveBuilder = serde_yml::from_str(
+            "{volume_displacement: 0.5, method: Isotropic, frequency: !Every 10}",
+        )
+        .unwrap();
         let analysis = builder.build(2.5).unwrap();
         assert_eq!(Analyze::<Backend>::num_samples(&analysis), 0);
         assert!(Analyze::<Backend>::to_yaml(&analysis).is_none());

@@ -95,5 +95,5 @@ propagate:
             # Grand canonical salt: ∅ ⇌ Na⁺ + Cl⁻
             # Bare dG=0; molecular activities (0.030 M) are folded in automatically
             - ["= Na+ + Cl-", !dG 0.0]
-        - !TranslateAtom {atom: Na, molecule: Na+, dp: 50.0}
-        - !TranslateAtom {atom: Cl, molecule: Cl-, dp: 50.0}
+        - !TranslateAtom {atom: Na, molecule: Na+, max_displacement: 50.0}
+        - !TranslateAtom {atom: Cl, molecule: Cl-, max_displacement: 50.0}

@@ -30,4 +30,4 @@ propagate:
   collections:
     - !Stochastic
       moves:
-        - !TranslateMolecule {molecule: particle, dp: 0.5, repeat: 5}
+        - !TranslateMolecule {molecule: particle, max_displacement: 0.5, repeat: 5}

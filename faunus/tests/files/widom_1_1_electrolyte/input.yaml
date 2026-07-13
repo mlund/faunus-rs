@@ -55,7 +55,7 @@ propagate:
       moves:
         - !TranslateAtom
           molecule: cation
-          dp: 40.0
+          max_displacement: 40.0
         - !TranslateAtom
           molecule: anion
-          dp: 40.0
+          max_displacement: 40.0

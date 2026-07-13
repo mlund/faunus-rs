@@ -59,7 +59,7 @@ propagate:
   collections:
     - !Deterministic
       moves:
-        - !TranslateMolecule {molecule: water, dp: 0.4, repeat: 64}
+        - !TranslateMolecule {molecule: water, max_displacement: 0.4, repeat: 64}
 "#;
 
 #[test]

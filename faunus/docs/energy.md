@@ -647,13 +647,13 @@ system:
       coordinate:
         property: atom_position
         selection: "atomtype A"
-        dimension: x
+        projection: x
         range: [-2.0, 2.0]
         resolution: 0.1
       coordinate2:  # optional, for 2D
         property: atom_position
         selection: "atomtype A"
-        dimension: y
+        projection: y
         range: [-2.0, 2.0]
         resolution: 0.1
 ```

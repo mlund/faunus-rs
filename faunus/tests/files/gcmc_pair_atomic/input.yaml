@@ -62,8 +62,8 @@ propagate:
   collections:
     - !Stochastic
       moves:
-        - !TranslateAtom {molecule: cation, atom: Na, dp: 5.0}
-        - !TranslateAtom {molecule: anion,  atom: Cl, dp: 5.0}
+        - !TranslateAtom {molecule: cation, atom: Na, max_displacement: 5.0}
+        - !TranslateAtom {molecule: anion,  atom: Cl, max_displacement: 5.0}
     - !Deterministic
       moves:
         - !SpeciationMove

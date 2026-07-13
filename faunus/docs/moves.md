@@ -603,7 +603,7 @@ propagate:
   gibbs:
     intra_steps: 1
     moves:
-      - !GibbsVolumeExchange { dV: 0.3 }
+      - !GibbsVolumeExchange { volume_displacement: 0.3 }
       - !GibbsParticleTransfer { molecule: LJ }
 ```
 
@@ -640,8 +640,8 @@ $$
 $$
 
 ```yaml
-- !GibbsVolumeExchange { dV: 10 }                     # default: Logarithmic
-- !GibbsVolumeExchange { dV: 10, method: Linear }     # opt-in linear
+- !GibbsVolumeExchange { volume_displacement: 10 }                 # default: Logarithmic
+- !GibbsVolumeExchange { volume_displacement: 10, method: Linear } # opt-in linear
 ```
 
 Key      | Required | Default        | Description

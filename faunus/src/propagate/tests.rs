@@ -21,9 +21,9 @@ fn seed_parse() {
 fn stochastic_parse() {
     let string = "repeat: 20
 moves:
-   - !TranslateMolecule { molecule: Water, dp: 0.4, weight: 1.0 }
-   - !TranslateMolecule { molecule: Protein, dp: 0.6, weight: 2.0 }
-   - !TranslateMolecule { molecule: Lipid, dp: 0.5, weight: 0.5 }";
+   - !TranslateMolecule { molecule: Water, max_displacement: 0.4, weight: 1.0 }
+   - !TranslateMolecule { molecule: Protein, max_displacement: 0.6, weight: 2.0 }
+   - !TranslateMolecule { molecule: Lipid, max_displacement: 0.5, weight: 0.5 }";
 
     let collection: CollectionBuilder = serde_yml::from_str(string).unwrap();
     assert_eq!(collection.repeat, 20);
@@ -54,9 +54,9 @@ temperature: 300.0";
 fn deterministic_parse() {
     let string = "repeat: 10
 moves:
-   - !TranslateMolecule { molecule: Water, dp: 0.4, weight: 1.0 }
-   - !TranslateMolecule { molecule: Protein, dp: 0.6, weight: 2.0 }
-   - !TranslateMolecule { molecule: Lipid, dp: 0.5, weight: 0.5 }";
+   - !TranslateMolecule { molecule: Water, max_displacement: 0.4, weight: 1.0 }
+   - !TranslateMolecule { molecule: Protein, max_displacement: 0.6, weight: 2.0 }
+   - !TranslateMolecule { molecule: Lipid, max_displacement: 0.5, weight: 0.5 }";
 
     let collection: CollectionBuilder = serde_yml::from_str(string).unwrap();
     assert_eq!(collection.repeat, 10);
