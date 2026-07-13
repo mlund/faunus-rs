@@ -584,7 +584,8 @@ pub trait GroupCollection {
     fn group_lists(&self) -> &GroupLists;
 
     /// Returns indices of all groups matching given molecule kind and size.
-    fn find_molecules(&self, molecule_id: MoleculeId, size: GroupSize) -> Option<&[usize]> {
+    /// Empty when the kind has no group of that size.
+    fn find_molecules(&self, molecule_id: MoleculeId, size: GroupSize) -> &[usize] {
         self.group_lists().find_molecules(molecule_id, size)
     }
 
@@ -652,9 +653,9 @@ pub trait GroupCollection {
             GroupSelection::All => (0..self.groups().len()).collect(),
             GroupSelection::ByMoleculeId(i) => self
                 .find_molecules(*i, GroupSize::Full)
-                .into_iter()
+                .iter()
                 .chain(self.find_molecules(*i, GroupSize::Partial(0)))
-                .flat_map(|s| s.iter().copied())
+                .copied()
                 .collect::<Vec<usize>>(),
             GroupSelection::ByMoleculeIds(vec) => {
                 let mut vector = vec
@@ -848,8 +849,7 @@ impl GroupLists {
 
     /// Count groups matching given molecule kind and size.
     pub(crate) fn count_molecules(&self, molecule_id: MoleculeId, size: GroupSize) -> usize {
-        self.find_molecules(molecule_id, size)
-            .map_or(0, |s| s.len())
+        self.find_molecules(molecule_id, size).len()
     }
 
     /// Count non-empty groups (full + partial) for a molecule kind.
@@ -863,28 +863,30 @@ impl GroupLists {
     /// Checks partial first since atomic mega-groups are typically partially filled.
     pub(crate) fn find_atomic_group(&self, molecule_id: MoleculeId) -> Option<usize> {
         self.find_molecules(molecule_id, GroupSize::Partial(0))
-            .into_iter()
+            .iter()
             .chain(self.find_molecules(molecule_id, GroupSize::Full))
             .chain(self.find_molecules(molecule_id, GroupSize::Empty))
-            .flat_map(|s| s.iter().copied())
+            .copied()
             .next()
     }
 
     /// Returns indices of all groups matching given molecule id and size.
     ///
+    /// Empty when the kind has no group of that size. This deliberately does *not* return an
+    /// `Option`: the lists are pre-sized to one entry per molecule kind, so the only way to
+    /// miss is an out-of-range id, which cannot arise from a topology lookup. An `Option`
+    /// whose `Some` may still wrap an empty slice invites `is_some()` checks that are always
+    /// true — which is exactly how the speciation startup validation went vacuous.
+    ///
     /// The lookup complexity is O(1).
-    pub(crate) fn find_molecules(
-        &self,
-        molecule_id: MoleculeId,
-        size: GroupSize,
-    ) -> Option<&[usize]> {
+    pub(crate) fn find_molecules(&self, molecule_id: MoleculeId, size: GroupSize) -> &[usize] {
         let indices = match size {
             GroupSize::Full => self.full.get(molecule_id.get()),
             GroupSize::Partial(_) => self.partial.get(molecule_id.get()),
             GroupSize::Empty => self.empty.get(molecule_id.get()),
             _ => panic!("Unsupported GroupSize."),
         };
-        indices.map(|i| i.as_slice())
+        indices.map_or(&[], |i| i.as_slice())
     }
 
     /// Find the group in GroupLists.

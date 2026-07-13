@@ -61,7 +61,10 @@ enum ReactionOp {
     SwapAtom {
         from_id: AtomKindId,
         to_id: AtomKindId,
-        molecule_id: MoleculeId,
+        /// Every molecule kind carrying this site. A titratable atom kind may appear in more
+        /// than one kind of molecule, and all of them titrate — so `N_from`/`N_to` must be
+        /// counted over the whole population, not just the first kind that matched.
+        molecule_ids: Vec<MoleculeId>,
     },
     /// Swap a molecule of one kind for another (deactivate from, activate to with copied positions)
     SwapMolecule {
@@ -192,18 +195,37 @@ fn choose_unclaimed(groups: &[usize], claimed: &[usize], rng: &mut dyn RngCore) 
 }
 
 /// Extract atom participants as (atom_kind_index, name) pairs.
+///
+/// An atom name matching no atom kind is an error: dropping it silently leaves the reaction
+/// with fewer operations than the user wrote, and the run then samples a different reaction
+/// (or none at all) without saying so.
 fn extract_atom_participants<'a>(
     participants: &'a [Participant],
     topology: &crate::topology::Topology,
-) -> Vec<(AtomKindId, &'a str)> {
+) -> anyhow::Result<Vec<(AtomKindId, &'a str)>> {
     participants
         .iter()
         .filter_map(|p| match p {
-            Participant::Atom(name) => {
-                let id = topology.atomkinds().iter().position(|a| a.name() == name)?;
-                Some((AtomKindId::new(id), name.as_str()))
-            }
+            Participant::Atom(name) => Some(name),
             _ => None,
+        })
+        .map(|name| {
+            let id = topology
+                .atomkinds()
+                .iter()
+                .position(|a| a.name() == name)
+                .ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "Unknown atom kind '{name}' in reaction; known kinds: {}",
+                        topology
+                            .atomkinds()
+                            .iter()
+                            .map(|a| a.name())
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    )
+                })?;
+            Ok((AtomKindId::new(id), name.as_str()))
         })
         .collect()
 }
@@ -217,39 +239,64 @@ fn resolve_atom_swaps(
     let mut forward_ops = Vec::new();
     let mut backward_ops = Vec::new();
 
-    let reactant_atoms = extract_atom_participants(reactants, topology);
-    let product_atoms = extract_atom_participants(products, topology);
+    let reactant_atoms = extract_atom_participants(reactants, topology)?;
+    let product_atoms = extract_atom_participants(products, topology)?;
+
+    // Atoms are paired off one-to-one, so an unbalanced count would be silently truncated by
+    // the zip below and the move would run a different reaction than the one written.
+    anyhow::ensure!(
+        reactant_atoms.len() == product_atoms.len(),
+        "Unbalanced atom stoichiometry: {} reactant atom(s) but {} product atom(s). \
+         Each swapped atom needs a counterpart on the other side.",
+        reactant_atoms.len(),
+        product_atoms.len()
+    );
 
     // Pair up reactant and product atoms
     for (from, to) in reactant_atoms.iter().zip(product_atoms.iter()) {
-        // Prefer molecule containing both atom kinds; fall back to either
-        // (titration templates may only list the initial protonation state)
-        let molecule_id = topology
-            .moleculekinds()
-            .iter()
-            .position(|m| {
-                m.atom_indices().contains(&from.0.get()) && m.atom_indices().contains(&to.0.get())
-            })
-            .or_else(|| {
-                topology.moleculekinds().iter().position(|m| {
-                    m.atom_indices().contains(&from.0.get())
-                        || m.atom_indices().contains(&to.0.get())
-                })
-            })
-            .map(MoleculeId::new)
-            .ok_or_else(|| {
-                anyhow::anyhow!("No molecule contains atom '{}' or '{}'", from.1, to.1)
-            })?;
+        // Which molecule kinds carry this site. Kinds listing *both* states are unambiguously
+        // the titratable species, so if any exist they alone titrate — a kind listing only one
+        // state may well be a different species that merely happens to reuse the atom kind
+        // (e.g. a monatomic GCMC particle `M = [A]` alongside a titratable `AB = [A, B]`).
+        // Only when no kind lists both do we fall back to kinds listing either, which is the
+        // usual titration case: the template gives just the initial protonation state.
+        //
+        // Both tiers return *every* match, not the first: one titratable site may occur in
+        // several molecule kinds, and all of them titrate. Binding to the first match freezes
+        // every other kind's sites for the whole run.
+        let kinds_with = |predicate: &dyn Fn(&[usize]) -> bool| -> Vec<MoleculeId> {
+            topology
+                .moleculekinds()
+                .iter()
+                .enumerate()
+                .filter(|(_, m)| predicate(m.atom_indices()))
+                .map(|(index, _)| MoleculeId::new(index))
+                .collect()
+        };
+        let (from_index, to_index) = (from.0.get(), to.0.get());
+        let mut molecule_ids =
+            kinds_with(&|atoms: &[usize]| atoms.contains(&from_index) && atoms.contains(&to_index));
+        if molecule_ids.is_empty() {
+            molecule_ids = kinds_with(&|atoms: &[usize]| {
+                atoms.contains(&from_index) || atoms.contains(&to_index)
+            });
+        }
+        anyhow::ensure!(
+            !molecule_ids.is_empty(),
+            "No molecule contains atom '{}' or '{}'",
+            from.1,
+            to.1
+        );
 
         forward_ops.push(ReactionOp::SwapAtom {
             from_id: from.0,
             to_id: to.0,
-            molecule_id,
+            molecule_ids: molecule_ids.clone(),
         });
         backward_ops.push(ReactionOp::SwapAtom {
             from_id: to.0,
             to_id: from.0,
-            molecule_id,
+            molecule_ids,
         });
     }
 
@@ -299,9 +346,12 @@ fn resolve_reaction(
     topology: &crate::topology::Topology,
 ) -> anyhow::Result<ResolvedReaction> {
     let k = config.1.to_k(thermal_energy);
+    // `exp` overflows to +∞ past an exponent of ~709 — reachable from a large `lnK`, or from
+    // a `dG` given in J/mol where kJ/mol was meant. `k > 0.0` accepts ∞, whereupon the
+    // acceptance bias is infinite and every trial is accepted regardless of energy.
     anyhow::ensure!(
-        k > 0.0,
-        "Equilibrium constant must be positive for reaction '{}'",
+        k.is_finite() && k > 0.0,
+        "Equilibrium constant must be positive and finite for reaction '{}' (got {k})",
         config.0
     );
 
@@ -415,9 +465,13 @@ fn validate_reaction_groups(
     context: &impl ObserveContext,
     topology: &crate::topology::Topology,
 ) -> anyhow::Result<()> {
+    // Does this kind have *any* group allocated by a `blocks:` entry? All three sizes count:
+    // an insertion needs an Empty group to fill, a deletion a Full one, and an atomic
+    // mega-group is Partial for as long as it is neither full nor empty.
     let has_any = |mol_id: MoleculeId| -> bool {
-        context.find_molecules(mol_id, GroupSize::Full).is_some()
-            || context.find_molecules(mol_id, GroupSize::Empty).is_some()
+        [GroupSize::Full, GroupSize::Partial(0), GroupSize::Empty]
+            .iter()
+            .any(|size| context.count_molecules(mol_id, *size) > 0)
     };
     for r in resolved {
         for op in r.forward_ops.iter().chain(&r.backward_ops) {
@@ -429,13 +483,20 @@ fn validate_reaction_groups(
                         "No groups found for molecule '{name}' needed by reaction"
                     );
                 }
-                ReactionOp::SwapAtom { molecule_id, .. } => {
-                    let name = topology.moleculekind(*molecule_id).name();
+                ReactionOp::SwapAtom { molecule_ids, .. } => {
+                    // At least one kind carrying the site must have a group to titrate.
+                    // `Partial` matters: an atomic mega-group is never `Full`.
+                    let names = molecule_ids
+                        .iter()
+                        .map(|id| topology.moleculekind(*id).name().as_str())
+                        .collect::<Vec<_>>();
                     anyhow::ensure!(
-                        context
-                            .find_molecules(*molecule_id, GroupSize::Full)
-                            .is_some(),
-                        "No active groups for molecule '{name}' needed by atom swap"
+                        molecule_ids.iter().any(|id| {
+                            context.count_molecules(*id, GroupSize::Full) > 0
+                                || context.count_molecules(*id, GroupSize::Partial(0)) > 0
+                        }),
+                        "No active groups for molecule(s) {} needed by atom swap",
+                        names.join(", ")
                     );
                 }
                 ReactionOp::SwapMolecule {
@@ -448,8 +509,45 @@ fn validate_reaction_groups(
                             has_any(id),
                             "No groups found for molecule '{name}' needed by molecular swap"
                         );
+                        // A molecular swap moves a whole group between Full and Empty. Every
+                        // member of an atomic kind shares one mega-group, which is Partial
+                        // whenever it is neither full nor empty, so the swap would find no
+                        // group to act on and the reaction would silently never fire.
+                        anyhow::ensure!(
+                            !topology.moleculekind(id).atomic(),
+                            "Molecule '{name}' is atomic and cannot take part in a molecular \
+                             swap ('A = B'). Give it a non-atomic molecule kind, or write the \
+                             reaction with explicit stoichiometry so it becomes an \
+                             insertion/deletion."
+                        );
                     }
                 }
+            }
+        }
+
+        // All members of an atomic kind share one mega-group, so activating *and*
+        // deactivating that kind in one reaction yields an expand and a shrink on the same
+        // group. Those cannot be coalesced into the single change entry the energy path
+        // requires, so reject the input instead of proposing a corrupt move.
+        for ops in [&r.forward_ops, &r.backward_ops] {
+            let atomic_targets = |activate: bool| -> Vec<MoleculeId> {
+                ops.iter()
+                    .filter_map(|op| match op {
+                        ReactionOp::ActivateMolecule(id) if activate => Some(*id),
+                        ReactionOp::DeactivateMolecule(id) if !activate => Some(*id),
+                        _ => None,
+                    })
+                    .filter(|id| topology.moleculekind(*id).atomic())
+                    .collect()
+            };
+            let (activated, deactivated) = (atomic_targets(true), atomic_targets(false));
+            if let Some(id) = activated.iter().find(|id| deactivated.contains(id)) {
+                anyhow::bail!(
+                    "Atomic molecule '{}' appears on both sides of one reaction. Every atom of \
+                     an atomic kind lives in a single group, so it cannot grow and shrink in \
+                     the same step; use a non-atomic molecule kind.",
+                    topology.moleculekind(*id).name()
+                );
             }
         }
     }
@@ -572,7 +670,7 @@ impl SpeciationMove {
             // Exclude groups already claimed by earlier ops in this reaction, so a
             // coefficient-2 deletion (e.g. `2 Na = Ca`) empties two DISTINCT groups
             // rather than the same one twice (which would leave charge unbalanced).
-            let full = context.find_molecules(mol_id, GroupSize::Full)?;
+            let full = context.find_molecules(mol_id, GroupSize::Full);
             let gi = choose_unclaimed(full, claimed, rng)?;
             let bias = entropy_bias(NewOld::from(n_old.saturating_sub(1), n_old), vol);
             Some((
@@ -620,7 +718,7 @@ impl SpeciationMove {
         } else {
             // Exclude groups already claimed by earlier ops in this reaction (distinct
             // groups for a coefficient-2 insertion).
-            let empty = context.find_molecules(mol_id, GroupSize::Empty)?;
+            let empty = context.find_molecules(mol_id, GroupSize::Empty);
             let gi = choose_unclaimed(empty, claimed, rng)?;
             let bias = entropy_bias(NewOld::from(n_old + 1, n_old), vol);
             let com = context.cell().get_point_inside(rng);
@@ -701,11 +799,11 @@ impl SpeciationMove {
     ) -> Option<ActionBuild> {
         // Pick unclaimed source/target groups (counts stay the full available totals so the
         // N_from/(N_to+1) detailed-balance factor is unaffected).
-        let full = context.find_molecules(from_mol_id, GroupSize::Full)?;
+        let full = context.find_molecules(from_mol_id, GroupSize::Full);
         let n_from = full.len();
         let from_gi = choose_unclaimed(full, claimed, rng)?;
 
-        let empty = context.find_molecules(to_mol_id, GroupSize::Empty)?;
+        let empty = context.find_molecules(to_mol_id, GroupSize::Empty);
         let to_gi = choose_unclaimed(empty, claimed, rng)?;
         let n_to = context.count_molecules(to_mol_id, GroupSize::Full);
 
@@ -744,26 +842,41 @@ impl SpeciationMove {
     fn swap_atom_one(
         from_id: AtomKindId,
         to_id: AtomKindId,
-        molecule_id: MoleculeId,
+        molecule_ids: &[MoleculeId],
         context: &impl ObserveContext,
         rng: &mut dyn RngCore,
+        claimed_atoms: &[(usize, AtomKindId)],
     ) -> Option<(SpeciationAction, (usize, GroupChange), f64)> {
-        // Full + partial groups (atomic mega-groups appear as partial)
-        let group_indices: Vec<usize> = context
-            .find_molecules(molecule_id, GroupSize::Full)
-            .into_iter()
-            .chain(context.find_molecules(molecule_id, GroupSize::Partial(0)))
-            .flat_map(|s| s.iter().copied())
+        // Every kind carrying the site, so the combinatorial factor is counted over the whole
+        // population. Full + partial groups (atomic mega-groups appear as partial).
+        let group_indices: Vec<usize> = molecule_ids
+            .iter()
+            .flat_map(|&mol_id| {
+                context
+                    .find_molecules(mol_id, GroupSize::Full)
+                    .iter()
+                    .chain(context.find_molecules(mol_id, GroupSize::Partial(0)))
+                    .copied()
+            })
             .collect();
         if group_indices.is_empty() {
             return None;
         }
 
+        // The context is not mutated during proposal, so an atom already swapped by an
+        // earlier op in this reaction still reads as its *old* kind. Substituting the kind it
+        // is becoming is what makes a coefficient-2 titration correct: without it both ops
+        // draw from the same pool and use the same N_from/N_to, so one atom can be converted
+        // twice while the bias assumes two — charge is not conserved and the acceptance
+        // factor is N/(N_to+1)² instead of N(N-1)/((N_to+1)(N_to+2)).
         let (mut n_from, mut n_to) = (0usize, 0usize);
         let mut from_atoms: Vec<(usize, usize)> = Vec::new();
         for &gi in &group_indices {
             for i in context.groups()[gi].iter_active() {
-                let kind = context.atom_kind(i);
+                let kind = claimed_atoms
+                    .iter()
+                    .find(|(index, _)| *index == i)
+                    .map_or_else(|| context.atom_kind(i), |(_, kind)| *kind);
                 if kind == from_id {
                     n_from += 1;
                     from_atoms.push((gi, i));
@@ -874,6 +987,10 @@ impl SpeciationMove {
         // repeated deletion from one mega-group cannot pick the same atom twice.
         let mut claimed_slots: Vec<(usize, usize)> = Vec::new();
 
+        // Atoms already swapped by an earlier op, with the kind they are becoming, so a
+        // repeated swap sees the counts the first one leaves behind.
+        let mut claimed_atoms: Vec<(usize, AtomKindId)> = Vec::new();
+
         for op in ops {
             match op {
                 ReactionOp::DeactivateMolecule(mol_id) => {
@@ -929,11 +1046,25 @@ impl SpeciationMove {
                 ReactionOp::SwapAtom {
                     from_id,
                     to_id,
-                    molecule_id,
+                    molecule_ids,
                 } => {
-                    let (a, c, b) =
-                        Self::swap_atom_one(*from_id, *to_id, *molecule_id, context, rng)?;
+                    let (a, c, b) = Self::swap_atom_one(
+                        *from_id,
+                        *to_id,
+                        molecule_ids,
+                        context,
+                        rng,
+                        &claimed_atoms,
+                    )?;
                     ln_bias += b;
+                    if let SpeciationAction::SwapAtomKind {
+                        abs_index,
+                        new_atom_id,
+                        ..
+                    } = &a
+                    {
+                        claimed_atoms.push((*abs_index, *new_atom_id));
+                    }
                     actions.push(a);
                     Self::merge_change(&mut group_changes, c.0, c.1)?;
                 }
@@ -1229,10 +1360,7 @@ mod tests {
 
         // Activate all M groups so none are empty
         let mol_id = MoleculeId::new(0);
-        let empty_groups: Vec<usize> = context
-            .find_molecules(mol_id, GroupSize::Empty)
-            .map(|gs| gs.to_vec())
-            .unwrap_or_default();
+        let empty_groups: Vec<usize> = context.find_molecules(mol_id, GroupSize::Empty).to_vec();
         for gi in empty_groups {
             crate::transform::Transform::Activate
                 .on_group(gi, &mut context)
@@ -1255,10 +1383,7 @@ mod tests {
 
         // Deactivate all M groups so none are full
         let mol_id = MoleculeId::new(0);
-        let full_groups: Vec<usize> = context
-            .find_molecules(mol_id, GroupSize::Full)
-            .map(|gs| gs.to_vec())
-            .unwrap_or_default();
+        let full_groups: Vec<usize> = context.find_molecules(mol_id, GroupSize::Full).to_vec();
         for gi in full_groups {
             crate::transform::Transform::Deactivate
                 .on_group(gi, &mut context)
@@ -1723,6 +1848,353 @@ propagate:
                     (obs - exp).abs()
                 );
             }
+        }
+    }
+
+    // --- Input validation: bad YAML must fail at startup, not sample wrong physics ---
+
+    /// An atom name that matches no atom kind was silently dropped, leaving the reaction with
+    /// no operations: `propose_move` returned `None` forever and the run finished reporting a
+    /// titration that never happened.
+    #[test]
+    fn unknown_atom_in_reaction_is_error() {
+        let context = make_context();
+        let mut mv = make_move("⚛Zz = ⚛A", 1.0);
+        let err = mv
+            .finalize(&context, THERMAL_ENERGY)
+            .expect_err("unknown atom kind must be rejected");
+        assert!(err.to_string().contains("Zz"), "{err}");
+    }
+
+    /// Reactant and product atoms were zipped, so a longer side was silently truncated and the
+    /// move performed a different reaction than the one written.
+    #[test]
+    fn unbalanced_atom_stoichiometry_is_error() {
+        let context = make_context();
+        let mut mv = make_move("⚛A + ⚛A = ⚛B", 1.0);
+        assert!(mv.finalize(&context, THERMAL_ENERGY).is_err());
+    }
+
+    /// `to_k` overflows to +∞ for a large `lnK` or a large negative `dG` (a kJ/J units slip),
+    /// and `k > 0.0` happily accepts ∞ — after which the Metropolis criterion accepts every
+    /// trial and the run degenerates in silence.
+    #[test]
+    fn non_finite_equilibrium_constant_is_error() {
+        let context = make_context();
+
+        for yaml in [
+            "reactions:\n  - [\"= M\", !lnK 1000.0]",
+            "reactions:\n  - [\"= M\", !dG -1.0e6]",
+        ] {
+            let mut mv: SpeciationMove = serde_yml::from_str(yaml).unwrap();
+            let err = mv
+                .finalize(&context, THERMAL_ENERGY)
+                .expect_err("a non-finite equilibrium constant must be rejected: {yaml}");
+            assert!(err.to_string().contains("finite"), "{err}");
+        }
+    }
+
+    /// `find_molecules` returns `Some(&[])` for a declared kind with no groups, so the
+    /// `is_some()` guards in `validate_reaction_groups` never fired: forgetting a `blocks:`
+    /// entry gave a full-length run at 0 % acceptance instead of a startup error.
+    #[test]
+    fn reaction_needs_allocated_groups() {
+        let yaml = r#"atoms:
+  - {name: A, mass: 1.0, sigma: 1.0}
+molecules:
+  - name: M
+    atoms: [A]
+  - name: Unallocated
+    atoms: [A]
+system:
+  cell: !Cuboid [10.0, 10.0, 10.0]
+  medium: {permittivity: !Vacuum, temperature: 298.15}
+  energy: {}
+  blocks:
+    - molecule: M
+      N: 4
+      active: 2
+      insert: !RandomAtomPos {}
+propagate:
+  seed: !Fixed 42
+  repeat: 1
+  collections: []
+"#;
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(tmp.path(), yaml.as_bytes()).unwrap();
+        let mut rng = rand::thread_rng();
+        let context = Backend::new(tmp.path(), None, &mut rng).unwrap();
+
+        let mut mv = make_move("= Unallocated", 1.0);
+        let err = mv
+            .finalize(&context, THERMAL_ENERGY)
+            .expect_err("a reaction naming a molecule with no groups must be rejected");
+        assert!(err.to_string().contains("Unallocated"), "{err}");
+    }
+
+    /// A one-to-one reaction between two kinds resolves to a *molecular swap*, which moves a
+    /// whole group from Full to Empty. An atomic mega-group is neither — it is Partial — so
+    /// the swap could never find a group to act on: `propose_move` returned `None` on every
+    /// call and the reaction silently never fired.
+    #[test]
+    fn molecular_swap_between_atomic_kinds_is_error() {
+        let yaml = charge_swap_yaml(true);
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(tmp.path(), yaml.as_bytes()).unwrap();
+        let mut rng = rand::thread_rng();
+        let context = Backend::new(tmp.path(), None, &mut rng).unwrap();
+
+        let mut mv = make_move("na = ca", 1.0);
+        let err = mv
+            .finalize(&context, THERMAL_ENERGY)
+            .expect_err("a molecular swap between atomic kinds must be rejected");
+        assert!(err.to_string().contains("atomic"), "{err}");
+    }
+
+    // --- Repeated atom swaps within one reaction ---
+
+    /// Four titratable sites per molecule, five molecules: 20 `HA` and no `A` to start.
+    fn double_swap_yaml(repeat: usize) -> String {
+        format!(
+            r#"atoms:
+  - {{name: HA, mass: 1.0, charge: 0.0, sigma: 3.0}}
+  - {{name: A, mass: 1.0, charge: -1.0, sigma: 3.0}}
+molecules:
+  - name: site4
+    atoms: [HA, HA, HA, HA]
+system:
+  cell: !Cuboid [40.0, 40.0, 40.0]
+  medium:
+    permittivity: !Fixed 78.0
+    temperature: 298.15
+  energy:
+    nonbonded:
+      default:
+        - !Coulomb {{cutoff: 18.0}}
+  blocks:
+    - molecule: site4
+      N: 5
+      active: 5
+      insert: !RandomAtomPos {{}}
+propagate:
+  seed: !Fixed 42
+  criterion: MetropolisHastings
+  repeat: {repeat}
+  collections:
+    - !Deterministic
+      moves:
+        - !SpeciationMove
+          reactions:
+            - ["⚛HA + ⚛HA = ⚛A + ⚛A", !K 1.0]
+"#
+        )
+    }
+
+    /// A reaction swapping two atoms must pick two *distinct* atoms, and the second swap
+    /// must see the counts left by the first. Rescanning the unchanged state for both gives
+    /// `N/(N_to+1)` twice instead of `N(N-1)/((N_to+1)(N_to+2))`, and lets one atom be
+    /// converted twice — releasing one proton where the bias assumed two.
+    #[test]
+    fn paired_atom_swap_selects_distinct_atoms_and_correct_bias() {
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(tmp.path(), double_swap_yaml(10).as_bytes()).unwrap();
+        let mut rng = rand::thread_rng();
+        let context = Backend::new(tmp.path(), None, &mut rng).unwrap();
+
+        let mut mv = make_move("⚛HA + ⚛HA = ⚛A + ⚛A", 1.0);
+        mv.finalize(&context, THERMAL_ENERGY).unwrap();
+
+        // 20 HA, 0 A: ln K + [ln 20 − ln 1] + [ln 19 − ln 2]
+        let expected = 20.0_f64.ln() - 1.0_f64.ln() + 19.0_f64.ln() - 2.0_f64.ln();
+
+        let mut proposals = 0;
+        for attempt in 0..200 {
+            let Some((actions, changes, ln_bias)) =
+                mv.try_build_actions(&mv.resolved[0], Direction::Forward, &context, &mut rng)
+            else {
+                continue;
+            };
+            proposals += 1;
+
+            let swapped: Vec<usize> = actions
+                .iter()
+                .filter_map(|a| match a {
+                    SpeciationAction::SwapAtomKind { abs_index, .. } => Some(*abs_index),
+                    _ => None,
+                })
+                .collect();
+            assert_eq!(swapped.len(), 2, "expected two swaps, got {swapped:?}");
+            assert_ne!(
+                swapped[0], swapped[1],
+                "attempt {attempt}: both swaps hit the same atom {swapped:?}"
+            );
+
+            let groups: Vec<usize> = changes.iter().map(|(gi, _)| *gi).collect();
+            let unique: std::collections::BTreeSet<usize> = groups.iter().copied().collect();
+            assert_eq!(
+                groups.len(),
+                unique.len(),
+                "attempt {attempt}: duplicate group index in changes {groups:?}"
+            );
+
+            assert_approx_eq!(f64, ln_bias, expected, epsilon = 1e-9);
+        }
+        assert!(proposals > 0, "no proposal was ever built");
+    }
+
+    /// Two swaps landing in one group emit two `UpdateIdentity` entries for it unless they
+    /// are coalesced, which the energy path then pairs with itself.
+    #[test]
+    fn repeated_atom_swap_energy_drift() {
+        use crate::analysis::AnalysisCollection;
+        use crate::montecarlo::MarkovChain;
+        use crate::propagate::Propagate;
+
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(tmp.path(), double_swap_yaml(2_000).as_bytes()).unwrap();
+        let path = tmp.path();
+
+        let mut rng = rand::thread_rng();
+        let context = Backend::new(path, None, &mut rng).unwrap();
+        let propagate = Propagate::from_file(path, &context, THERMAL_ENERGY).unwrap();
+        let mut mc = MarkovChain::new(
+            context,
+            propagate,
+            THERMAL_ENERGY,
+            AnalysisCollection::default(),
+        )
+        .unwrap();
+
+        let initial_energy = mc.system_energy();
+        for step in mc.iter() {
+            step.unwrap();
+        }
+        let drift = mc.energy_drift(initial_energy);
+        assert!(
+            drift < 1e-6,
+            "energy drift {drift:.6e} for paired atom swap"
+        );
+    }
+
+    // --- A titratable atom shared by several molecule kinds ---
+
+    /// `HA` sites live in two different molecule kinds. Ideal, so the equilibrium is exactly
+    /// Henderson–Hasselbalch and every site titrates independently.
+    fn shared_site_yaml(ph: f64, repeat: usize) -> String {
+        let activity = 10.0_f64.powf(-ph);
+        format!(
+            r#"atoms:
+  - {{name: HA, mass: 1.0, charge: 0.0, sigma: 3.0}}
+  - {{name: A, mass: 1.0, charge: -1.0, sigma: 3.0}}
+  - {{name: X, mass: 1.0, charge: 0.0, sigma: 3.0}}
+  - {{name: H+, mass: 1.0, activity: {activity:.6e}}}
+molecules:
+  - name: siteA
+    atoms: [HA]
+  - name: siteB
+    atoms: [X, HA]
+system:
+  cell: !Cuboid [30.0, 30.0, 30.0]
+  medium:
+    permittivity: !Vacuum
+    temperature: 298.15
+  energy: {{}}
+  blocks:
+    - molecule: siteA
+      N: 20
+      active: 20
+      insert: !RandomAtomPos {{}}
+    - molecule: siteB
+      N: 20
+      active: 20
+      insert: !RandomAtomPos {{}}
+propagate:
+  seed: !Fixed 42
+  criterion: MetropolisHastings
+  repeat: {repeat}
+  collections:
+    - !Deterministic
+      moves:
+        - !SpeciationMove
+          repeat: 4
+          reactions:
+            - ["⚛HA = ⚛A + ~H+", !pK 4.0]
+"#
+        )
+    }
+
+    /// Count deprotonated (`A`) and protonated (`HA`) atoms within each molecule kind.
+    fn count_protonation(context: &Backend, molecule_id: MoleculeId) -> (usize, usize) {
+        let (mut n_a, mut n_ha) = (0, 0);
+        let a = AtomKindId::new(1);
+        let ha = AtomKindId::new(0);
+        let selection = crate::montecarlo::GroupSelection::ByMoleculeId(molecule_id);
+        for gi in context.select(&selection) {
+            for i in context.groups()[gi].iter_active() {
+                match context.atom_kind(i) {
+                    kind if kind == a => n_a += 1,
+                    kind if kind == ha => n_ha += 1,
+                    _ => {}
+                }
+            }
+        }
+        (n_a, n_ha)
+    }
+
+    /// A titratable atom kind may occur in several molecule kinds. Binding the swap to the
+    /// first matching kind freezes every other kind's sites in their initial protonation
+    /// state for the whole run — a silently wrong titration curve — and computes the
+    /// `N_from/(N_to+1)` factor over the wrong population.
+    #[test]
+    fn atom_swap_titrates_every_molecule_kind() {
+        use crate::analysis::AnalysisCollection;
+        use crate::montecarlo::MarkovChain;
+        use crate::propagate::Propagate;
+
+        // pH = pKa, so each site is 50 % deprotonated at equilibrium.
+        let repeat = 20_000;
+        let equilibrate = 4_000;
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(tmp.path(), shared_site_yaml(4.0, repeat).as_bytes()).unwrap();
+        let path = tmp.path();
+
+        let mut rng = rand::thread_rng();
+        let context = Backend::new(path, None, &mut rng).unwrap();
+        let propagate = Propagate::from_file(path, &context, THERMAL_ENERGY).unwrap();
+        let mut mc = MarkovChain::new(
+            context,
+            propagate,
+            THERMAL_ENERGY,
+            AnalysisCollection::default(),
+        )
+        .unwrap();
+
+        let mut sums = [0.0_f64; 2];
+        let mut samples = 0usize;
+        for step in 0..repeat {
+            mc.propagate
+                .propagate(
+                    &mut mc.context,
+                    mc.thermal_energy,
+                    &mut mc.step,
+                    &mut mc.analyses,
+                )
+                .unwrap();
+            if step >= equilibrate {
+                for (id, sum) in sums.iter_mut().enumerate() {
+                    let (n_a, n_ha) = count_protonation(&mc.context, MoleculeId::new(id));
+                    *sum += n_a as f64 / (n_a + n_ha) as f64;
+                }
+                samples += 1;
+            }
+        }
+
+        for (id, sum) in sums.iter().enumerate() {
+            let fraction = sum / samples as f64;
+            assert!(
+                (fraction - 0.5).abs() < 0.05,
+                "molecule kind {id}: deprotonated fraction {fraction:.3}, expected 0.5 at pH = pKa"
+            );
         }
     }
 
