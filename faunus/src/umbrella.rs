@@ -348,7 +348,7 @@ fn run_window(
     if had_state {
         let state = State::from_file(&state_path)?;
         // MarkovChain.load_state handles topology validation and position/group restoration
-        let propagate = Propagate::from_file(input, &context)?;
+        let propagate = Propagate::from_file(input, &context, rt)?;
         let analyses = AnalysisCollection::default();
         let mut mc = MarkovChain::new(context, propagate, rt, analyses)?;
         mc.load_state(state)?;
@@ -378,7 +378,7 @@ fn run_window(
         let harmonic_term = EnergyTerm::from(harmonic_builder.build(&context)?);
         context.hamiltonian_mut().push_front(harmonic_term);
 
-        let propagate = Propagate::from_file(input, &context)?;
+        let propagate = Propagate::from_file(input, &context, rt)?;
         let drive_len = propagate.max_repeats() as u64;
         let analyses = AnalysisCollection::default();
         let mut mc = MarkovChain::new(context, propagate, rt, analyses)?;
@@ -459,7 +459,7 @@ fn run_window(
     // Production phase: hard-wall only, collect CV samples.
     // Each run appends max_repeats new samples so users can extend sampling
     // by simply rerunning without editing the input file.
-    let mut propagate = Propagate::from_file(input, &context)?;
+    let mut propagate = Propagate::from_file(input, &context, rt)?;
     // Per-window seed decorrelates the sampled trajectories across windows (the drive phase
     // is throwaway equilibration, so only production needs the independent stream).
     propagate.reseed(window_seed);
@@ -595,7 +595,7 @@ pub fn run(
     // Load common state file to seed all windows that don't yet have a per-window state
     if let Some(state_path) = common_state {
         let state = State::from_file(state_path)?;
-        let propagate = Propagate::from_file(input, &base_context)?;
+        let propagate = Propagate::from_file(input, &base_context, rt)?;
         let analyses = AnalysisCollection::default();
         let mut mc = MarkovChain::new(base_context, propagate, rt, analyses)?;
         mc.load_state(state)?;

@@ -52,10 +52,15 @@ pub use translate::*;
 pub use volume::VolumeMove;
 
 /// Implement `BuildableMove` for types with `weight`, `repeat` fields and a `finalize` method.
+///
+/// These moves bias nothing, so they ignore the system thermal energy. `SpeciationMove`
+/// does bias the acceptance and implements `BuildableMove` by hand to consume it.
 macro_rules! impl_buildable_move {
     ($($ty:ty),+ $(,)?) => {$(
         impl<T: Context> crate::propagate::BuildableMove<T> for $ty {
-            fn finalize(&mut self, context: &T) -> anyhow::Result<()> { self.finalize(context) }
+            fn finalize(&mut self, context: &T, _thermal_energy: f64) -> anyhow::Result<()> {
+                self.finalize(context)
+            }
             fn weight(&self) -> f64 { self.weight }
             fn repeat(&self) -> usize { self.repeat }
         }
@@ -69,9 +74,22 @@ impl_buildable_move!(
     VolumeMove,
     PivotMove,
     CrankshaftMove,
-    SpeciationMove,
     ClusterMove,
 );
+
+/// `SpeciationMove` biases the acceptance by `ln K_eff`, so it needs the same thermal
+/// energy the acceptance criterion divides by.
+impl<T: Context> crate::propagate::BuildableMove<T> for SpeciationMove {
+    fn finalize(&mut self, context: &T, thermal_energy: f64) -> anyhow::Result<()> {
+        self.finalize(context, thermal_energy)
+    }
+    fn weight(&self) -> f64 {
+        self.weight
+    }
+    fn repeat(&self) -> usize {
+        self.repeat
+    }
+}
 
 /// Look up a molecule kind by name and return its id.
 fn find_molecule_id(
@@ -632,9 +650,12 @@ mod tests {
         )
         .unwrap();
 
-        let propagate =
-            Propagate::from_file("tests/files/translate_molecules_simulation.yaml", &context)
-                .unwrap();
+        let propagate = Propagate::from_file(
+            "tests/files/translate_molecules_simulation.yaml",
+            &context,
+            1.0,
+        )
+        .unwrap();
 
         let mut markov_chain =
             MarkovChain::new(context, propagate, 1.0, AnalysisCollection::default()).unwrap();
@@ -983,7 +1004,9 @@ reactions:
   - ["⚛HA = ⚛A + ~H+", !pK 4.0]
 "#;
         let mut speciation: super::speciation::SpeciationMove = serde_yml::from_str(yaml).unwrap();
-        speciation.finalize(&context).unwrap();
+        speciation
+            .finalize(&context, crate::R_IN_KJ_PER_MOL * 298.15)
+            .unwrap();
 
         // Find a proposal that touches a group other than 0, where the two spaces differ.
         let proposal = (0..64u64)

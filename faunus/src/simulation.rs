@@ -157,10 +157,14 @@ impl Source<'_> {
         }
     }
 
-    fn propagate<T: Context>(&self, context: &T) -> anyhow::Result<Propagate<T>> {
+    fn propagate<T: Context>(
+        &self,
+        context: &T,
+        thermal_energy: f64,
+    ) -> anyhow::Result<Propagate<T>> {
         match *self {
-            Self::File(path) => Propagate::from_file(path, context),
-            Self::Yaml(yaml) => Propagate::from_str(yaml, context),
+            Self::File(path) => Propagate::from_file(path, context, thermal_energy),
+            Self::Yaml(yaml) => Propagate::from_str(yaml, context, thermal_energy),
         }
     }
 
@@ -192,7 +196,7 @@ fn build_markov_chain<T: Context + 'static>(
     medium: Option<&Medium>,
     output_dir: Option<&Path>,
 ) -> anyhow::Result<MarkovChain<T>> {
-    let propagate = source.propagate(&context)?;
+    let propagate = source.propagate(&context, rt)?;
     let analyses = source.analyses(&context, medium, output_dir)?;
     let mut mc = MarkovChain::new(context, propagate, rt, analyses)?;
     if let Some(state_path) = state {

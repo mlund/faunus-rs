@@ -27,12 +27,16 @@ use serde::{Deserialize, Serialize};
 pub(crate) trait BuildableMove<T: Context>:
     MoveProposal<T> + Send + Sized + 'static
 {
-    fn finalize(&mut self, context: &T) -> anyhow::Result<()>;
+    /// `thermal_energy` is the system RT in **kJ/mol**, the same quantity the acceptance
+    /// criterion divides by; a move that biases the acceptance must use it, not a
+    /// temperature of its own.
+    fn finalize(&mut self, context: &T, thermal_energy: f64) -> anyhow::Result<()>;
     fn weight(&self) -> f64;
     fn repeat(&self) -> usize;
 
-    fn into_runner(mut self, context: &T) -> anyhow::Result<MoveRunner<T>> {
-        self.finalize(context)?;
+    /// `thermal_energy` is the system RT in kJ/mol.
+    fn into_runner(mut self, context: &T, thermal_energy: f64) -> anyhow::Result<MoveRunner<T>> {
+        self.finalize(context, thermal_energy)?;
         let (w, r) = (self.weight(), self.repeat());
         Ok(MoveRunner::new(Box::new(self), w, r))
     }
@@ -53,16 +57,22 @@ pub enum MoveBuilder {
 
 impl MoveBuilder {
     /// Finalize and validate the inner move, then wrap it in a `MoveRunner`.
-    pub fn build<T: Context>(self, context: &T) -> anyhow::Result<MoveRunner<T>> {
+    ///
+    /// `thermal_energy` is the system RT in kJ/mol.
+    pub fn build<T: Context>(
+        self,
+        context: &T,
+        thermal_energy: f64,
+    ) -> anyhow::Result<MoveRunner<T>> {
         match self {
-            Self::TranslateMolecule(m) => m.into_runner(context),
-            Self::TranslateAtom(m) => (*m).into_runner(context),
-            Self::RotateMolecule(m) => m.into_runner(context),
-            Self::VolumeMove(m) => m.into_runner(context),
-            Self::PivotMove(m) => m.into_runner(context),
-            Self::CrankshaftMove(m) => m.into_runner(context),
-            Self::SpeciationMove(m) => m.into_runner(context),
-            Self::ClusterMove(m) => m.into_runner(context),
+            Self::TranslateMolecule(m) => m.into_runner(context, thermal_energy),
+            Self::TranslateAtom(m) => (*m).into_runner(context, thermal_energy),
+            Self::RotateMolecule(m) => m.into_runner(context, thermal_energy),
+            Self::VolumeMove(m) => m.into_runner(context, thermal_energy),
+            Self::PivotMove(m) => m.into_runner(context, thermal_energy),
+            Self::CrankshaftMove(m) => m.into_runner(context, thermal_energy),
+            Self::SpeciationMove(m) => m.into_runner(context, thermal_energy),
+            Self::ClusterMove(m) => m.into_runner(context, thermal_energy),
         }
     }
 }
@@ -78,11 +88,15 @@ pub(super) struct CollectionBuilder {
 }
 
 impl CollectionBuilder {
-    fn build_moves<T: Context>(self, context: &T) -> anyhow::Result<(usize, Vec<MoveRunner<T>>)> {
+    fn build_moves<T: Context>(
+        self,
+        context: &T,
+        thermal_energy: f64,
+    ) -> anyhow::Result<(usize, Vec<MoveRunner<T>>)> {
         let moves = self
             .moves
             .into_iter()
-            .map(|m| m.build(context))
+            .map(|m| m.build(context, thermal_energy))
             .collect::<anyhow::Result<Vec<_>>>()?;
         Ok((self.repeat, moves))
     }
@@ -97,7 +111,11 @@ pub(super) enum MoveCollectionBuilder {
 }
 
 impl MoveCollectionBuilder {
-    pub(super) fn build<T: Context>(self, context: &T) -> anyhow::Result<PropagationBlock<T>> {
+    pub(super) fn build<T: Context>(
+        self,
+        context: &T,
+        thermal_energy: f64,
+    ) -> anyhow::Result<PropagationBlock<T>> {
         let (strategy, builder) = match self {
             #[cfg(feature = "gpu")]
             Self::LangevinDynamics(config) => {
@@ -121,7 +139,7 @@ impl MoveCollectionBuilder {
             }
             Self::Deterministic(b) => (SelectionStrategy::Deterministic, b),
         };
-        let (repeat, moves) = builder.build_moves(context)?;
+        let (repeat, moves) = builder.build_moves(context, thermal_energy)?;
         Ok(PropagationBlock::MonteCarlo(MoveCollection::new(
             strategy, repeat, moves,
         )))

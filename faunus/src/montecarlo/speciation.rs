@@ -101,8 +101,11 @@ type ActionBuild = (Vec<SpeciationAction>, Vec<(usize, GroupChange)>, f64);
 pub struct SpeciationMove {
     /// Reactions to sample from.
     reactions: Vec<ReactionConfig>,
-    /// Temperature in Kelvin.
-    temperature: f64,
+    /// Temperature in Kelvin. Deprecated: the system temperature
+    /// (`system.medium.temperature`) is used. Kept only so that existing inputs still
+    /// parse; a value disagreeing with the system temperature is an error.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    temperature: Option<f64>,
     /// Move selection weight.
     #[serde(skip_serializing, default = "default_weight")]
     pub(crate) weight: f64,
@@ -455,12 +458,34 @@ fn validate_reaction_groups(
 
 impl SpeciationMove {
     /// Resolve reaction strings to topology IDs and validate.
-    pub(crate) fn finalize(&mut self, context: &impl ObserveContext) -> anyhow::Result<()> {
-        anyhow::ensure!(
-            self.temperature > 0.0,
-            "SpeciationMove: temperature must be positive"
-        );
-        self.thermal_energy = crate::R_IN_KJ_PER_MOL * self.temperature;
+    ///
+    /// `thermal_energy` is the system kT (kJ/mol). It is the single source of truth: the
+    /// acceptance criterion divides by it, so the reaction bias must be built from it too.
+    pub(crate) fn finalize(
+        &mut self,
+        context: &impl ObserveContext,
+        thermal_energy: f64,
+    ) -> anyhow::Result<()> {
+        self.thermal_energy = thermal_energy;
+
+        // The move used to carry its own temperature, which silently rescaled every
+        // equilibrium constant when it disagreed with the system's.
+        if let Some(temperature) = self.temperature {
+            anyhow::ensure!(
+                temperature > 0.0,
+                "SpeciationMove: temperature must be positive"
+            );
+            let system_temperature = thermal_energy / crate::R_IN_KJ_PER_MOL;
+            anyhow::ensure!(
+                (temperature - system_temperature).abs() <= 1e-6 * system_temperature,
+                "SpeciationMove: `temperature: {temperature}` K disagrees with the system \
+                 temperature ({system_temperature:.4} K from `system.medium.temperature`). \
+                 The key is deprecated and ignored — remove it."
+            );
+            log::warn!(
+                "SpeciationMove: `temperature` is deprecated; the system temperature is used."
+            );
+        }
 
         let topology = context.topology();
         self.resolved = self
@@ -489,6 +514,7 @@ impl SpeciationMove {
         context: &impl ObserveContext,
         rng: &mut dyn RngCore,
         claimed: &[usize],
+        claimed_slots: &[(usize, usize)],
     ) -> Option<(SpeciationAction, (usize, GroupChange), f64)> {
         let molecule = context.topology_ref().moleculekind(mol_id);
         if molecule.atomic() {
@@ -503,8 +529,25 @@ impl SpeciationMove {
             // so the energy code can distinguish pre- vs. post-transform state
             // (`groups[gi].len() < n_old` means post) — required because the
             // swap leaves a *different* atom at slot `rel` in the new state.
-            let rel = RelIndex::new(rng.gen_range(0..n_old));
-            let abs = context.groups()[gi].to_absolute(rel).unwrap().get();
+            //
+            // Slots claimed by an earlier op in this reaction are off limits: a
+            // coefficient-2 deletion (`Ca(OH)₂ = Ca²⁺ + 2 OH⁻`) must remove two *distinct*
+            // atoms, or the reaction silently removes one while the bias assumes two.
+            // The context is not mutated during proposal, so the true pre-transform size
+            // is the group's current length — `n_old` here is the *effective* count, which
+            // already accounts for earlier ops and is what the entropy bias needs.
+            let num_active = context.groups()[gi].len();
+            let rel = if claimed_slots.iter().all(|(group, _)| *group != gi) {
+                // Nothing claimed in *this* group: draw exactly as a lone deletion would,
+                // so the RNG stream of every single-deletion reaction is unchanged.
+                rng.gen_range(0..num_active)
+            } else {
+                (0..num_active)
+                    .filter(|slot| !claimed_slots.contains(&(gi, *slot)))
+                    .choose(rng)?
+            };
+            let rel = RelIndex::new(rel);
+            let abs = context.groups()[gi].to_absolute(rel).ok()?.get();
             // Reservoirs have zero entropy bias (solid activity = 1; C++ `implicit` convention)
             let bias = if molecule.is_reservoir() {
                 0.0
@@ -516,7 +559,13 @@ impl SpeciationMove {
                     group_index: gi,
                     abs_index: abs,
                 },
-                (gi, GroupChange::AtomicShrink { rel, n_old }),
+                (
+                    gi,
+                    GroupChange::AtomicShrink {
+                        rels: vec![rel],
+                        n_old: num_active,
+                    },
+                ),
                 bias,
             ))
         } else {
@@ -574,12 +623,35 @@ impl SpeciationMove {
             let empty = context.find_molecules(mol_id, GroupSize::Empty)?;
             let gi = choose_unclaimed(empty, claimed, rng)?;
             let bias = entropy_bias(NewOld::from(n_old + 1, n_old), vol);
-            let pos = context.cell().get_point_inside(rng);
-            let positions = vec![pos; context.groups()[gi].capacity()];
+            let com = context.cell().get_point_inside(rng);
+
+            // Place the molecule's template at a random position and orientation. A lone
+            // atom has neither internal geometry nor an orientation, so it skips the
+            // rotation entirely — and with it the RNG draw, keeping the stream of every
+            // monatomic GCMC input unchanged.
+            let capacity = context.groups()[gi].capacity();
+            let (positions, quaternion) = if capacity == 1 {
+                (vec![com], None)
+            } else {
+                let topology = context.topology_ref();
+                let centered = crate::topology::InsertionPolicy::centered_reference_positions(
+                    molecule,
+                    topology.atomkinds(),
+                );
+                let (positions, quaternion) = crate::topology::InsertionPolicy::place_molecule_at(
+                    &centered,
+                    &com,
+                    true,
+                    context.cell(),
+                    rng,
+                );
+                (positions, Some(quaternion))
+            };
             Some((
                 SpeciationAction::ActivateGroup {
                     group_index: gi,
                     positions,
+                    quaternion,
                 },
                 (gi, GroupChange::Resize(GroupSize::Full)),
                 bias,
@@ -653,6 +725,11 @@ impl SpeciationMove {
             SpeciationAction::ActivateGroup {
                 group_index: to_gi,
                 positions,
+                // The overlay aligns the incoming template onto the outgoing molecule's pose
+                // rather than applying a rotation of its own, so there is no quaternion to
+                // record. The swapped-in group therefore keeps a stale orientation — a
+                // pre-existing limitation that only bites orientation-dependent energies.
+                quaternion: None,
             },
         ];
         let changes = vec![
@@ -720,6 +797,49 @@ impl SpeciationMove {
         ))
     }
 
+    /// Fold a group change into the list, coalescing with any existing entry for the same
+    /// group.
+    ///
+    /// The energy path pairs *distinct* entries with one another, so a group index must
+    /// appear at most once; two entries naming the same group would make it pair that group
+    /// with itself and corrupt ΔU. Reactions that touch one atomic mega-group several times
+    /// (`Ca(OH)₂ = Ca²⁺ + 2 OH⁻`) therefore merge here into a single entry.
+    ///
+    /// Returns `None` for a combination that cannot be merged — e.g. activating and
+    /// deactivating the same atomic kind in one reaction — which rejects the proposal
+    /// rather than producing a corrupt one.
+    fn merge_change(
+        changes: &mut Vec<(usize, GroupChange)>,
+        gi: usize,
+        change: GroupChange,
+    ) -> Option<()> {
+        let Some((_, existing)) = changes.iter_mut().find(|(index, _)| *index == gi) else {
+            changes.push((gi, change));
+            return Some(());
+        };
+        match (existing, change) {
+            (
+                GroupChange::AtomicShrink { rels, n_old },
+                GroupChange::AtomicShrink {
+                    rels: more,
+                    n_old: n,
+                },
+            ) if *n_old == n => rels.extend(more),
+            (
+                GroupChange::ResizePartial(GroupSize::Expand(count), rels),
+                GroupChange::ResizePartial(GroupSize::Expand(more_count), more),
+            ) => {
+                *count += more_count;
+                rels.extend(more);
+            }
+            (GroupChange::UpdateIdentity(rels), GroupChange::UpdateIdentity(more)) => {
+                rels.extend(more)
+            }
+            _ => return None,
+        }
+        Some(())
+    }
+
     /// Try to build speciation actions for one direction of a resolved reaction.
     fn try_build_actions(
         &self,
@@ -746,8 +866,13 @@ impl SpeciationMove {
 
         // Group indices already selected by earlier ops in THIS reaction. Non-atomic
         // selection skips these so repeated ops on one kind (e.g. `2 Na = Ca`) hit distinct
-        // groups; atomic mega-groups reuse the same group (coordinated via `offsets` instead).
+        // groups; atomic mega-groups reuse the same group (coordinated via `offsets` and
+        // `claimed_slots` instead).
         let mut claimed: Vec<usize> = Vec::new();
+
+        // Atom slots (group index, relative slot) already spoken for by an earlier op, so a
+        // repeated deletion from one mega-group cannot pick the same atom twice.
+        let mut claimed_slots: Vec<(usize, usize)> = Vec::new();
 
         for op in ops {
             match op {
@@ -757,11 +882,22 @@ impl SpeciationMove {
                         Self::get_offset(&offsets, *mol_id),
                         context,
                     );
-                    let (a, c, b) = Self::deactivate_one(*mol_id, n, vol, context, rng, &claimed)?;
+                    let (a, c, b) = Self::deactivate_one(
+                        *mol_id,
+                        n,
+                        vol,
+                        context,
+                        rng,
+                        &claimed,
+                        &claimed_slots,
+                    )?;
                     ln_bias -= b;
                     claimed.push(c.0);
+                    if let GroupChange::AtomicShrink { rels, .. } = &c.1 {
+                        claimed_slots.extend(rels.iter().map(|rel| (c.0, rel.get())));
+                    }
                     actions.push(a);
-                    group_changes.push(c);
+                    Self::merge_change(&mut group_changes, c.0, c.1)?;
                     Self::add_offset(&mut offsets, *mol_id, -1);
                 }
                 ReactionOp::ActivateMolecule(mol_id) => {
@@ -774,7 +910,7 @@ impl SpeciationMove {
                     ln_bias -= b;
                     claimed.push(c.0);
                     actions.push(a);
-                    group_changes.push(c);
+                    Self::merge_change(&mut group_changes, c.0, c.1)?;
                     Self::add_offset(&mut offsets, *mol_id, 1);
                 }
                 ReactionOp::SwapMolecule {
@@ -786,7 +922,9 @@ impl SpeciationMove {
                     ln_bias += b;
                     claimed.extend(c.iter().map(|(gi, _)| *gi));
                     actions.extend(a);
-                    group_changes.extend(c);
+                    for (gi, change) in c {
+                        Self::merge_change(&mut group_changes, gi, change)?;
+                    }
                 }
                 ReactionOp::SwapAtom {
                     from_id,
@@ -797,7 +935,7 @@ impl SpeciationMove {
                         Self::swap_atom_one(*from_id, *to_id, *molecule_id, context, rng)?;
                     ln_bias += b;
                     actions.push(a);
-                    group_changes.push(c);
+                    Self::merge_change(&mut group_changes, c.0, c.1)?;
                 }
             }
         }
@@ -835,8 +973,10 @@ impl<T: ObserveContext> MoveProposal<T> for SpeciationMove {
     }
 
     fn bias(&self, _change: &Change, _energies: &NewOld<f64>) -> crate::montecarlo::Bias {
+        // Dimensionless: the criterion multiplies by the same thermal energy it divides
+        // the total by, so the reaction bias is exactly ln K_eff whatever the temperature.
         if let Some(ln_bias) = self.trial_ln_bias {
-            crate::montecarlo::Bias::Energy(-self.thermal_energy * ln_bias)
+            crate::montecarlo::Bias::Dimensionless(-ln_bias)
         } else {
             crate::montecarlo::Bias::None
         }
@@ -884,6 +1024,7 @@ impl<T: ObserveContext> MoveProposal<T> for SpeciationMove {
 mod tests {
     use super::*;
     use crate::backend::Backend;
+    use crate::cell::BoundaryConditions;
     use crate::group::GroupCollection;
     use crate::propagate::MoveProposal;
     use crate::Change;
@@ -891,7 +1032,7 @@ mod tests {
     use float_cmp::assert_approx_eq;
 
     const TEST_YAML: &str = "tests/files/speciation_test.yaml";
-    const RT: f64 = crate::R_IN_KJ_PER_MOL * 298.15;
+    const THERMAL_ENERGY: f64 = crate::R_IN_KJ_PER_MOL * 298.15;
 
     fn make_context() -> Backend {
         let mut rng = rand::thread_rng();
@@ -932,10 +1073,13 @@ mod tests {
         let config: ReactionConfig = serde_yml::from_str(r#"["= Na+ + Cl-", !dG 0.0]"#).unwrap();
         assert!((config.1.to_k(2.479) - 1.0).abs() < 1e-10);
 
-        let rt = 2.479;
-        let config: ReactionConfig =
-            serde_yml::from_str(&format!(r#"["= M", !dG {}]"#, -rt * 10.0_f64.ln())).unwrap();
-        assert!((config.1.to_k(rt) - 10.0).abs() < 1e-10);
+        let thermal_energy = 2.479;
+        let config: ReactionConfig = serde_yml::from_str(&format!(
+            r#"["= M", !dG {}]"#,
+            -thermal_energy * 10.0_f64.ln()
+        ))
+        .unwrap();
+        assert!((config.1.to_k(thermal_energy) - 10.0).abs() < 1e-10);
     }
 
     #[test]
@@ -943,8 +1087,20 @@ mod tests {
         let yaml =
             "temperature: 298.15\nreactions:\n  - [\"= M\", !K 10.0]\n  - [\"⚛A = ⚛B\", !pK 0.0]";
         let mv: SpeciationMove = serde_yml::from_str(yaml).unwrap();
-        assert_eq!(mv.temperature, 298.15);
+        assert_eq!(mv.temperature, Some(298.15));
         assert_eq!(mv.reactions.len(), 2);
+    }
+
+    /// The `temperature` key is deprecated and optional; the system value is used.
+    #[test]
+    fn speciation_move_yaml_without_temperature() {
+        let mv: SpeciationMove = serde_yml::from_str("reactions:\n  - [\"= M\", !K 10.0]").unwrap();
+        assert_eq!(mv.temperature, None);
+
+        let context = make_context();
+        let mut mv = mv;
+        mv.finalize(&context, THERMAL_ENERGY).unwrap();
+        assert_approx_eq!(f64, mv.thermal_energy, THERMAL_ENERGY, epsilon = 1e-12);
     }
 
     #[test]
@@ -959,7 +1115,7 @@ mod tests {
     fn finalize_resolves_molecular_insertion() {
         let context = make_context();
         let mut mv = make_move("= M", 10.0);
-        mv.finalize(&context).unwrap();
+        mv.finalize(&context, THERMAL_ENERGY).unwrap();
 
         assert_eq!(mv.resolved.len(), 1);
         let r = &mv.resolved[0];
@@ -979,7 +1135,7 @@ mod tests {
         let context = make_context();
         // A and B are atoms in molecule AB (mol_id=1)
         let mut mv = make_move("⚛A = ⚛B", 1.0);
-        mv.finalize(&context).unwrap();
+        mv.finalize(&context, THERMAL_ENERGY).unwrap();
 
         let r = &mv.resolved[0];
         assert!(matches!(
@@ -998,24 +1154,45 @@ mod tests {
     fn finalize_rejects_zero_temperature() {
         let context = make_context();
         let mut mv = make_move("= M", 1.0);
-        mv.temperature = 0.0;
-        assert!(mv.finalize(&context).is_err());
+        mv.temperature = Some(0.0);
+        assert!(mv.finalize(&context, THERMAL_ENERGY).is_err());
+    }
+
+    /// A `temperature` disagreeing with the system's used to silently raise every
+    /// equilibrium constant to the power T_move/T_system. It is now a startup error.
+    #[test]
+    fn finalize_rejects_temperature_disagreeing_with_system() {
+        let context = make_context(); // system temperature is 298.15 K
+        let mut mv = make_move("= M", 1.0);
+        mv.temperature = Some(310.0);
+
+        let err = mv
+            .finalize(&context, THERMAL_ENERGY)
+            .expect_err("a mismatched move temperature must be rejected");
+        let msg = err.to_string();
+        assert!(
+            msg.contains("310"),
+            "error should name the move value: {msg}"
+        );
+        assert!(
+            msg.contains("298.15"),
+            "error should name the system value: {msg}"
+        );
     }
 
     #[test]
     fn finalize_rejects_negative_k() {
         let context = make_context();
         let mut mv = make_move("= M", -1.0);
-        assert!(mv.finalize(&context).is_err());
+        assert!(mv.finalize(&context, THERMAL_ENERGY).is_err());
     }
 
     #[test]
     fn finalize_computes_thermal_energy() {
         let context = make_context();
         let mut mv = make_move("= M", 1.0);
-        mv.finalize(&context).unwrap();
-        let expected_rt = RT;
-        assert_approx_eq!(f64, mv.thermal_energy, expected_rt, epsilon = 1e-10);
+        mv.finalize(&context, THERMAL_ENERGY).unwrap();
+        assert_approx_eq!(f64, mv.thermal_energy, THERMAL_ENERGY, epsilon = 1e-10);
     }
 
     // --- Feasibility (try_build_actions) ---
@@ -1024,7 +1201,7 @@ mod tests {
     fn insertion_feasible_with_empty_groups() {
         let context = make_context();
         let mut mv = make_move("= M", 10.0);
-        mv.finalize(&context).unwrap();
+        mv.finalize(&context, THERMAL_ENERGY).unwrap();
 
         // M has 5 inactive groups -> insertion should be feasible
         let mut rng = rand::thread_rng();
@@ -1036,7 +1213,7 @@ mod tests {
     fn deletion_feasible_with_full_groups() {
         let context = make_context();
         let mut mv = make_move("= M", 10.0);
-        mv.finalize(&context).unwrap();
+        mv.finalize(&context, THERMAL_ENERGY).unwrap();
 
         // M has 5 active groups -> deletion (backward) should be feasible
         let mut rng = rand::thread_rng();
@@ -1048,7 +1225,7 @@ mod tests {
     fn insertion_infeasible_when_no_empty_groups() {
         let mut context = make_context();
         let mut mv = make_move("= M", 10.0);
-        mv.finalize(&context).unwrap();
+        mv.finalize(&context, THERMAL_ENERGY).unwrap();
 
         // Activate all M groups so none are empty
         let mol_id = MoleculeId::new(0);
@@ -1074,7 +1251,7 @@ mod tests {
     fn deletion_infeasible_when_no_full_groups() {
         let mut context = make_context();
         let mut mv = make_move("= M", 10.0);
-        mv.finalize(&context).unwrap();
+        mv.finalize(&context, THERMAL_ENERGY).unwrap();
 
         // Deactivate all M groups so none are full
         let mol_id = MoleculeId::new(0);
@@ -1102,7 +1279,7 @@ mod tests {
     fn insertion_bias_uses_volume_and_count() {
         let context = make_context();
         let mut mv = make_move("= M", 10.0);
-        mv.finalize(&context).unwrap();
+        mv.finalize(&context, THERMAL_ENERGY).unwrap();
 
         let mut rng = rand::thread_rng();
         let (_, _, ln_bias) = mv
@@ -1120,7 +1297,7 @@ mod tests {
     fn deletion_bias_uses_volume_and_count() {
         let context = make_context();
         let mut mv = make_move("= M", 10.0);
-        mv.finalize(&context).unwrap();
+        mv.finalize(&context, THERMAL_ENERGY).unwrap();
 
         let mut rng = rand::thread_rng();
         let (_, _, ln_bias) = mv
@@ -1140,7 +1317,7 @@ mod tests {
     fn propose_move_returns_system_target() {
         let context = make_context();
         let mut mv = make_move("= M", 10.0);
-        mv.finalize(&context).unwrap();
+        mv.finalize(&context, THERMAL_ENERGY).unwrap();
 
         let mut rng = rand::thread_rng();
         // Try multiple times since direction is random and might fail
@@ -1166,7 +1343,7 @@ mod tests {
         let context = make_context();
         let mut mv: SpeciationMove =
             serde_yml::from_str("temperature: 298.15\nreactions: []").unwrap();
-        mv.finalize(&context).unwrap();
+        mv.finalize(&context, THERMAL_ENERGY).unwrap();
 
         let mut rng = rand::thread_rng();
         assert!(mv.propose_move(&context, &mut rng).is_none());
@@ -1175,17 +1352,17 @@ mod tests {
     // --- Bias ---
 
     #[test]
-    fn bias_returns_energy_after_propose() {
+    fn bias_returns_dimensionless_after_propose() {
         let context = make_context();
         let mut mv = make_move("= M", 10.0);
-        mv.finalize(&context).unwrap();
+        mv.finalize(&context, THERMAL_ENERGY).unwrap();
 
         let mut rng = rand::thread_rng();
         for _ in 0..20 {
             if let Some(proposed) = mv.propose_move(&context, &mut rng) {
                 let bias =
                     MoveProposal::<Backend>::bias(&mv, proposed.change(), &NewOld::from(0.0, 0.0));
-                assert!(matches!(bias, crate::montecarlo::Bias::Energy(_)));
+                assert!(matches!(bias, crate::montecarlo::Bias::Dimensionless(_)));
                 return;
             }
         }
@@ -1209,11 +1386,16 @@ mod tests {
 
         let mut rng = rand::thread_rng();
         let context = Backend::new(TEST_YAML, None, &mut rng).unwrap();
-        let propagate = Propagate::from_file(TEST_YAML, &context).unwrap();
+        let propagate = Propagate::from_file(TEST_YAML, &context, THERMAL_ENERGY).unwrap();
 
-        let rt = RT;
-        let mut mc =
-            MarkovChain::new(context, propagate, rt, AnalysisCollection::default()).unwrap();
+        let thermal_energy = THERMAL_ENERGY;
+        let mut mc = MarkovChain::new(
+            context,
+            propagate,
+            thermal_energy,
+            AnalysisCollection::default(),
+        )
+        .unwrap();
 
         let initial_energy = mc.system_energy();
 
@@ -1289,20 +1471,24 @@ propagate:
         let path = tmp.path().to_str().unwrap();
         let mut rng = rand::thread_rng();
         let context = Backend::new(path, None, &mut rng).unwrap();
-        let propagate = Propagate::from_file(path, &context).unwrap();
-        let mut mc =
-            MarkovChain::new(context, propagate, RT, AnalysisCollection::default()).unwrap();
+        let propagate = Propagate::from_file(path, &context, THERMAL_ENERGY).unwrap();
+        let mut mc = MarkovChain::new(
+            context,
+            propagate,
+            THERMAL_ENERGY,
+            AnalysisCollection::default(),
+        )
+        .unwrap();
         let initial_energy = mc.system_energy();
         for step in mc.iter() {
             step.unwrap();
         }
         let drift = mc.energy_drift(initial_energy);
-        let n_na = mc
-            .context()
-            .count_molecules(MoleculeId::new(0), GroupSize::Full);
-        let n_ca = mc
-            .context()
-            .count_molecules(MoleculeId::new(1), GroupSize::Full);
+        // `count_active_molecules` works for both flavours: a partly-filled atomic
+        // mega-group is `Partial`, never `Full`, so counting Full *groups* would report
+        // zero for the atomic case however many atoms are active.
+        let n_na = mc.context().count_active_molecules(MoleculeId::new(0));
+        let n_ca = mc.context().count_active_molecules(MoleculeId::new(1));
         (drift, n_na, n_ca)
     }
 
@@ -1323,16 +1509,71 @@ propagate:
         assert!(drift < 1e-6, "energy drift {drift:.6e} for 2 Na = Ca");
     }
 
-    /// Same reaction on an ATOMIC mega-group is NOT yet supported with explicit energy:
-    /// the two same-group deletions become two change-entries sharing one group, which the
-    /// `multi_group_change` path double-counts as a self-pair (large drift). Tracked
-    /// for a follow-up energy-framework fix (batch same-mega-group changes into one entry).
-    /// Until then, use non-atomic single-atom molecules for coefficient-≥2 ion exchange.
+    /// The same reaction on an ATOMIC mega-group must give the same physics as on separate
+    /// molecular groups: the two deletions land in one mega-group, so they have to be
+    /// coalesced into a single change entry (otherwise the energy path pairs the group with
+    /// itself) and must pick two *distinct* slots (otherwise one Na is deleted, not two).
     #[test]
-    #[ignore = "atomic mega-group multi-change energy double-counts; use non-atomic molecules"]
-    fn charge_conserving_swap_atomic_drifts() {
-        let (drift, _, _) = run_charge_swap(true);
-        assert!(drift > 1.0, "atomic drift unexpectedly small");
+    fn charge_conserving_swap_atomic() {
+        let (drift, n_na, n_ca) = run_charge_swap(true);
+        assert!(n_ca > 0, "reaction never fired (no Ca formed)");
+        assert_eq!(
+            n_na + 2 * n_ca,
+            20,
+            "charge not conserved: {n_na} Na + {n_ca} Ca"
+        );
+        assert!(
+            drift < 1e-6,
+            "energy drift {drift:.6e} for atomic 2 Na = Ca"
+        );
+    }
+
+    /// The proposal-level defect behind `charge_conserving_swap_atomic`. Deleting two atoms
+    /// from one mega-group must (a) pick two distinct slots and (b) emit a *single* change
+    /// entry for that group — `multi_group_change` pairs entries with one another, so a
+    /// repeated group index makes it pair the group with itself and corrupt ΔU.
+    #[test]
+    fn atomic_multi_delete_picks_distinct_slots() {
+        let yaml = charge_swap_yaml(true);
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(tmp.path(), yaml.as_bytes()).unwrap();
+
+        let mut rng = rand::thread_rng();
+        let context = Backend::new(tmp.path(), None, &mut rng).unwrap();
+        let mut mv = make_move("na + na = ca", 1.0);
+        mv.finalize(&context, THERMAL_ENERGY).unwrap();
+
+        let mut proposals = 0;
+        for attempt in 0..200 {
+            let Some((actions, changes, _)) =
+                mv.try_build_actions(&mv.resolved[0], Direction::Forward, &context, &mut rng)
+            else {
+                continue;
+            };
+            proposals += 1;
+
+            let groups: Vec<usize> = changes.iter().map(|(gi, _)| *gi).collect();
+            let unique: std::collections::BTreeSet<usize> = groups.iter().copied().collect();
+            assert_eq!(
+                groups.len(),
+                unique.len(),
+                "attempt {attempt}: duplicate group index in changes {groups:?}"
+            );
+
+            let deleted: Vec<usize> = actions
+                .iter()
+                .filter_map(|a| match a {
+                    SpeciationAction::DeactivateAtom { abs_index, .. } => Some(*abs_index),
+                    _ => None,
+                })
+                .collect();
+            assert_eq!(deleted.len(), 2, "expected two deletions, got {deleted:?}");
+            assert_ne!(
+                deleted[0], deleted[1],
+                "attempt {attempt}: both deletions hit the same atom {deleted:?}"
+            );
+        }
+        assert!(proposals > 0, "no proposal was ever built");
     }
 
     // --- Molecular swap: phosphate titration at different pH ---
@@ -1436,10 +1677,15 @@ propagate:
 
             let mut rng = rand::thread_rng();
             let context = Backend::new(path, None, &mut rng).unwrap();
-            let propagate = Propagate::from_file(path, &context).unwrap();
-            let rt = RT;
-            let mut mc =
-                MarkovChain::new(context, propagate, rt, AnalysisCollection::default()).unwrap();
+            let propagate = Propagate::from_file(path, &context, THERMAL_ENERGY).unwrap();
+            let thermal_energy = THERMAL_ENERGY;
+            let mut mc = MarkovChain::new(
+                context,
+                propagate,
+                thermal_energy,
+                AnalysisCollection::default(),
+            )
+            .unwrap();
 
             let mut sums = [0.0_f64; 4];
             let mut n_samples = 0usize;
@@ -1478,5 +1724,333 @@ propagate:
                 );
             }
         }
+    }
+
+    // --- Grand-canonical insertion of a polyatomic molecule ---
+
+    /// A bonded dimer with a 3 Å equilibrium bond, given inline so the fixture is
+    /// self-contained. `slots` groups, `active` of them active.
+    fn dimer_yaml(k: f64, slots: usize, active: usize, repeat: usize) -> String {
+        format!(
+            r#"atoms:
+  - {{name: D1, mass: 1.0, sigma: 2.0, epsilon: 0.5}}
+  - {{name: D2, mass: 1.0, sigma: 2.0, epsilon: 0.5}}
+molecules:
+  - name: dimer
+    from_structure: [{{D1: [0.0, 0.0, 0.0]}}, {{D2: [3.0, 0.0, 0.0]}}]
+    bonds:
+      - {{index: [0, 1], kind: !Harmonic {{k: 100.0, req: 3.0}}}}
+system:
+  cell: !Cuboid [30.0, 30.0, 30.0]
+  medium:
+    permittivity: !Vacuum
+    temperature: 298.15
+  energy:
+    nonbonded:
+      default:
+        - !WeeksChandlerAndersen {{mixing: LB}}
+  blocks:
+    - molecule: dimer
+      N: {slots}
+      active: {active}
+      insert: !RandomCOM {{}}
+propagate:
+  seed: !Fixed 42
+  criterion: MetropolisHastings
+  repeat: {repeat}
+  collections:
+    - !Deterministic
+      moves:
+        - !SpeciationMove
+          reactions:
+            - ["= dimer", !K {k:.10}]
+"#
+        )
+    }
+
+    fn dimer_context(slots: usize, active: usize) -> (tempfile::NamedTempFile, Backend) {
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(tmp.path(), dimer_yaml(1.0, slots, active, 10).as_bytes()).unwrap();
+        let mut rng = rand::thread_rng();
+        let context = Backend::new(tmp.path(), None, &mut rng).unwrap();
+        (tmp, context)
+    }
+
+    /// An inserted polyatomic must arrive with its template geometry intact. Placing every
+    /// atom at one point (`vec![pos; capacity]`) gives a bond length of zero: with a
+    /// repulsive potential the trial energy is +∞ and the insertion can never be accepted;
+    /// with a soft one the molecule is accepted in an impossible collapsed geometry.
+    #[test]
+    fn inserted_polyatomic_keeps_template_geometry() {
+        let (_tmp, context) = dimer_context(10, 2);
+        let mut mv = make_move("= dimer", 1.0);
+        mv.finalize(&context, THERMAL_ENERGY).unwrap();
+
+        let mut rng = rand::thread_rng();
+        let mut insertions = 0;
+        for _ in 0..200 {
+            let Some((actions, _, _)) =
+                mv.try_build_actions(&mv.resolved[0], Direction::Forward, &context, &mut rng)
+            else {
+                continue;
+            };
+            for action in &actions {
+                let SpeciationAction::ActivateGroup { positions, .. } = action else {
+                    continue;
+                };
+                insertions += 1;
+                assert_eq!(positions.len(), 2, "dimer must get two positions");
+                // Minimum image: the template may straddle a periodic boundary.
+                let bond = context.cell().distance(&positions[0], &positions[1]).norm();
+                assert_approx_eq!(f64, bond, 3.0, epsilon = 1e-9);
+            }
+        }
+        assert!(insertions > 0, "no insertion was ever proposed");
+    }
+
+    /// The insertion applies a random orientation, so the group's stored quaternion must be
+    /// updated to match its new coordinates. A stale one corrupts orientation-dependent
+    /// energies (6D tables) and any analysis reading `Group::quaternion`.
+    #[test]
+    fn polyatomic_insertion_sets_group_orientation() {
+        let (_tmp, mut context) = dimer_context(10, 2);
+        let mut mv = make_move("= dimer", 1.0);
+        mv.finalize(&context, THERMAL_ENERGY).unwrap();
+
+        let mut rng = rand::thread_rng();
+        for _ in 0..200 {
+            let Some((actions, _, _)) =
+                mv.try_build_actions(&mv.resolved[0], Direction::Forward, &context, &mut rng)
+            else {
+                continue;
+            };
+            let Some(SpeciationAction::ActivateGroup {
+                group_index,
+                quaternion,
+                ..
+            }) = actions
+                .iter()
+                .find(|a| matches!(a, SpeciationAction::ActivateGroup { .. }))
+                .cloned()
+            else {
+                continue;
+            };
+            let quaternion = quaternion.expect("a polyatomic insertion records its rotation");
+
+            crate::transform::Transform::Speciation(actions)
+                .on_system(&mut context)
+                .unwrap();
+
+            assert_eq!(
+                context.groups()[group_index].quaternion(),
+                &quaternion,
+                "group orientation must match the rotation the molecule was placed with"
+            );
+            return;
+        }
+        panic!("no insertion proposed in 200 attempts");
+    }
+
+    /// End to end: the dimer is inserted at its equilibrium bond length, so its
+    /// intramolecular energy is zero and the ideal-gas relation ⟨N⟩ = K·c₀·V survives even
+    /// with a repulsive nonbonded term at this low density. Collapsed insertions would
+    /// instead cost ~450 kJ/mol of bond energy (plus a WCA overlap) and never be accepted,
+    /// driving ⟨N⟩ to zero.
+    #[test]
+    #[ignore = "statistical; run explicitly (cargo test --release -- --ignored)"]
+    fn dimer_gcmc_energy_drift_and_count() {
+        use crate::analysis::AnalysisCollection;
+        use crate::montecarlo::MarkovChain;
+        use crate::propagate::Propagate;
+
+        let volume = 30.0_f64.powi(3);
+        let lambda = 8.0;
+        let k = lambda / (crate::MOLAR_TO_INV_ANGSTROM3 * volume);
+
+        let repeat = 40_000;
+        let equilibrate = 8_000;
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(tmp.path(), dimer_yaml(k, 60, 8, repeat).as_bytes()).unwrap();
+        let path = tmp.path();
+
+        let mut rng = rand::thread_rng();
+        let context = Backend::new(path, None, &mut rng).unwrap();
+        let propagate = Propagate::from_file(path, &context, THERMAL_ENERGY).unwrap();
+        let mut mc = MarkovChain::new(
+            context,
+            propagate,
+            THERMAL_ENERGY,
+            AnalysisCollection::default(),
+        )
+        .unwrap();
+        let initial_energy = mc.system_energy();
+
+        let (mut sum, mut samples) = (0.0_f64, 0usize);
+        for step in 0..repeat {
+            mc.propagate
+                .propagate(
+                    &mut mc.context,
+                    mc.thermal_energy,
+                    &mut mc.step,
+                    &mut mc.analyses,
+                )
+                .unwrap();
+            if step >= equilibrate {
+                sum += mc.context.count_active_molecules(MoleculeId::new(0)) as f64;
+                samples += 1;
+            }
+        }
+
+        let drift = mc.energy_drift(initial_energy);
+        assert!(drift < 1e-6, "energy drift {drift:.6e} for dimer GCMC");
+
+        let mean = sum / samples as f64;
+        assert!(
+            (mean - lambda).abs() < 0.1 * lambda,
+            "⟨N⟩ = {mean:.3}, expected ≈ K·c₀·V = {lambda:.3}"
+        );
+    }
+
+    // --- Grand-canonical ideal gas: ⟨N⟩ = K·c₀·V ---
+
+    /// Ideal gas in a 10 Å cube with a single insertion/deletion reaction `= particle`.
+    fn ideal_gas_yaml(k: f64, slots: usize, active: usize, repeat: usize) -> String {
+        format!(
+            r#"atoms:
+  - {{name: X, mass: 1.0, sigma: 1.0}}
+molecules:
+  - name: particle
+    atoms: [X]
+system:
+  cell: !Cuboid [10.0, 10.0, 10.0]
+  medium:
+    permittivity: !Vacuum
+    temperature: 298.15
+  energy: {{}}
+  blocks:
+    - molecule: particle
+      N: {slots}
+      active: {active}
+      insert: !RandomAtomPos {{}}
+propagate:
+  seed: !Fixed 42
+  criterion: MetropolisHastings
+  repeat: {repeat}
+  collections:
+    - !Deterministic
+      moves:
+        - !SpeciationMove
+          temperature: 298.15
+          repeat: 4
+          reactions:
+            - ["= particle", !K {k:.10}]
+"#
+        )
+    }
+
+    /// The grand-canonical ideal gas is Poisson-distributed with λ = K·c₀·V, where
+    /// c₀ = N_A·10⁻²⁷ Å⁻³ is the 1 M standard state. This pins the standard-state
+    /// convention of the acceptance criterion: without the c₀ factor the same K would
+    /// target ⟨N⟩ = K·V, larger by ~1/c₀ ≈ 1660.
+    ///
+    /// The variance is the sharper assertion: any rescaling of the bias exponent (e.g. a
+    /// move temperature differing from the system temperature) leaves the mode roughly in
+    /// place but destroys the Poisson relation Var(N) = ⟨N⟩.
+    #[test]
+    #[ignore = "statistical; run explicitly (cargo test --release -- --ignored)"]
+    fn ideal_gas_gcmc_matches_k_c0_v() {
+        use crate::analysis::AnalysisCollection;
+        use crate::montecarlo::MarkovChain;
+        use crate::propagate::Propagate;
+
+        let volume = 10.0_f64.powi(3);
+        let lambda = 20.0;
+        let k = lambda / (crate::MOLAR_TO_INV_ANGSTROM3 * volume);
+
+        let repeat = 60_000;
+        let equilibrate = 10_000;
+        let yaml = ideal_gas_yaml(k, 200, 20, repeat);
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(tmp.path(), yaml.as_bytes()).unwrap();
+        let path = tmp.path();
+
+        let mut rng = rand::thread_rng();
+        let context = Backend::new(path, None, &mut rng).unwrap();
+        let propagate = Propagate::from_file(path, &context, THERMAL_ENERGY).unwrap();
+        let mut mc = MarkovChain::new(
+            context,
+            propagate,
+            THERMAL_ENERGY,
+            AnalysisCollection::default(),
+        )
+        .unwrap();
+
+        let (mut sum, mut sum_sq, mut samples) = (0.0_f64, 0.0_f64, 0usize);
+        for _ in 0..repeat {
+            let running = mc.propagate.propagate(
+                &mut mc.context,
+                mc.thermal_energy,
+                &mut mc.step,
+                &mut mc.analyses,
+            );
+            assert!(running.unwrap(), "simulation ended early");
+            samples += 1;
+            if samples > equilibrate {
+                let n = mc
+                    .context
+                    .count_molecules(MoleculeId::new(0), GroupSize::Full)
+                    as f64;
+                sum += n;
+                sum_sq += n * n;
+            }
+        }
+
+        let n = (samples - equilibrate) as f64;
+        let mean = sum / n;
+        let variance = sum_sq / n - mean * mean;
+
+        assert!(
+            (mean - lambda).abs() < 0.5,
+            "⟨N⟩ = {mean:.3}, expected K·c₀·V = {lambda:.3}"
+        );
+        assert!(
+            (variance / mean - 1.0).abs() < 0.15,
+            "Var(N)/⟨N⟩ = {:.3}, expected 1 (Poisson); ⟨N⟩ = {mean:.3}",
+            variance / mean
+        );
+    }
+
+    // --- Temperature consistency ---
+
+    /// The acceptance criterion forms `exp(-(ΔU + bias)/thermal_energy)` using the *system*
+    /// thermal energy. The reaction bias must therefore be dimensionless: whatever scale the
+    /// criterion divides by, the applied bias has to come out as exactly `ln K_eff`.
+    ///
+    /// Evaluating at two different scales is what pins this. The move used to return
+    /// `Bias::Energy(-kT_move · ln K_eff)` built from a temperature of its own, so the
+    /// applied bias scaled as `kT_move/kT_system` — silently raising every equilibrium
+    /// constant to the power `T_move/T_system` whenever the two disagreed.
+    #[test]
+    fn speciation_bias_is_dimensionless() {
+        let context = make_context();
+        let mut mv = make_move("= M", 10.0);
+        mv.finalize(&context, THERMAL_ENERGY).unwrap();
+
+        let mut rng = rand::thread_rng();
+        for _ in 0..20 {
+            let Some(proposed) = mv.propose_move(&context, &mut rng) else {
+                continue;
+            };
+            let ln_bias = mv.trial_ln_bias.expect("propose sets the trial bias");
+            let bias =
+                MoveProposal::<Backend>::bias(&mv, proposed.change(), &NewOld::from(0.0, 0.0));
+
+            for scale in [THERMAL_ENERGY, 2.0 * THERMAL_ENERGY] {
+                let applied = bias.to_energy(scale).expect("not a ForceAccept") / scale;
+                assert_approx_eq!(f64, applied, -ln_bias, epsilon = 1e-12);
+            }
+            return;
+        }
+        panic!("no proposal in 20 attempts");
     }
 }

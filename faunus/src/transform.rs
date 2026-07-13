@@ -84,10 +84,17 @@ pub fn random_rotation(rng: &mut (impl Rng + ?Sized)) -> UnitQuaternion {
 /// A single group-level action for speciation (reaction ensemble) moves.
 #[derive(Clone, Debug)]
 pub enum SpeciationAction {
-    /// Activate an empty group and set particle positions
+    /// Activate an empty group and set particle positions.
+    ///
+    /// `quaternion` is the orientation the molecule was placed with, so the group's stored
+    /// orientation stays in step with its coordinates — 6D tabulated energies and
+    /// orientation analyses read it. `None` leaves the existing orientation alone, used by
+    /// the molecular-swap path, which overlays a template onto an existing pose rather than
+    /// applying a rotation of its own.
     ActivateGroup {
         group_index: usize,
         positions: Vec<Point>,
+        quaternion: Option<UnitQuaternion>,
     },
     /// Deactivate a full group
     DeactivateGroup(usize),
@@ -272,16 +279,47 @@ impl Transform {
                 context.scale_volume_and_positions(*new_volume, *policy)?;
             }
             Self::Speciation(actions) => {
+                // Deleting an atom swaps it with the last active slot before shrinking, so a
+                // second deletion from the same group would find a *different* particle at
+                // its `abs_index`. Running deletions highest-index-first avoids that: the
+                // swap only ever disturbs slots at or above the current last active one,
+                // which every remaining (lower) target sits below.
+                let mut deletions: Vec<usize> = actions
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, a)| matches!(a, SpeciationAction::DeactivateAtom { .. }))
+                    .map(|(i, _)| i)
+                    .collect();
+                deletions.sort_unstable_by_key(|&i| match &actions[i] {
+                    SpeciationAction::DeactivateAtom { abs_index, .. } => {
+                        std::cmp::Reverse(*abs_index)
+                    }
+                    _ => unreachable!("filtered to deletions"),
+                });
+                let mut next_deletion = deletions.iter();
+
                 for action in actions {
+                    // Deletions keep their place in the sequence but are applied in
+                    // descending index order.
+                    let action = match action {
+                        SpeciationAction::DeactivateAtom { .. } => {
+                            &actions[*next_deletion.next().expect("one slot per deletion")]
+                        }
+                        other => other,
+                    };
                     match action {
                         SpeciationAction::ActivateGroup {
                             group_index,
                             positions,
+                            quaternion,
                         } => {
                             let start = context.groups()[*group_index].start();
                             let indices = start..start + positions.len();
                             context.set_positions(indices, positions.iter());
                             Self::Activate.on_group(*group_index, context)?;
+                            if let Some(quaternion) = quaternion {
+                                context.groups_mut()[*group_index].set_quaternion(*quaternion);
+                            }
                         }
                         SpeciationAction::DeactivateGroup(group_index) => {
                             Self::Deactivate.on_group(*group_index, context)?;

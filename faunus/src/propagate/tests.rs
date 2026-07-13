@@ -6,6 +6,9 @@ use crate::backend::Backend;
 use crate::montecarlo::AcceptanceCriterion;
 use std::path::Path;
 
+/// System thermal energy RT (kJ/mol) at 298.15 K, matching the test inputs.
+const THERMAL_ENERGY: f64 = crate::R_IN_KJ_PER_MOL * 298.15;
+
 #[test]
 fn seed_parse() {
     let string = "!Fixed 49786352";
@@ -72,7 +75,8 @@ fn propagate_parse() {
         &mut rng,
     )
     .unwrap();
-    let propagate = Propagate::from_file("tests/files/topology_pass.yaml", &context).unwrap();
+    let propagate =
+        Propagate::from_file("tests/files/topology_pass.yaml", &context, THERMAL_ENERGY).unwrap();
 
     assert_eq!(propagate.max_repeats, 10000);
     assert_eq!(propagate.seed, Seed::Hardware);
@@ -102,7 +106,12 @@ fn propagate_parse_fail() {
     )
     .unwrap();
 
-    assert!(Propagate::from_file("tests/files/topology_invalid_propagate.yaml", &context).is_err());
+    assert!(Propagate::from_file(
+        "tests/files/topology_invalid_propagate.yaml",
+        &context,
+        THERMAL_ENERGY
+    )
+    .is_err());
 }
 
 #[test]
@@ -117,7 +126,8 @@ fn propagate_translate_atom_parse_fail1() {
 
     assert!(Propagate::from_file(
         "tests/files/topology_invalid_translate_atom1.yaml",
-        &context
+        &context,
+        THERMAL_ENERGY
     )
     .is_err());
 }
@@ -134,7 +144,8 @@ fn propagate_translate_atom_parse_fail2() {
 
     assert!(Propagate::from_file(
         "tests/files/topology_invalid_translate_atom2.yaml",
-        &context
+        &context,
+        THERMAL_ENERGY
     )
     .is_err());
 }
@@ -151,7 +162,8 @@ fn propagate_translate_atom_parse_fail3() {
 
     assert!(Propagate::from_file(
         "tests/files/topology_invalid_translate_atom3.yaml",
-        &context
+        &context,
+        THERMAL_ENERGY
     )
     .is_err());
 }

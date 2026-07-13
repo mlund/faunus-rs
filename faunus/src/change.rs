@@ -56,18 +56,23 @@ pub enum GroupChange {
     /// Resize an atomic group and report the affected relative indices.
     /// Used for GCMC on atomic mega-groups where only the inserted/deleted atoms changed.
     ResizePartial(GroupSize, Vec<RelIndex>),
-    /// Deactivate a single atom in an atomic mega-group, where the chosen
-    /// atom is at relative slot `rel` in the pre-shrink state of size
-    /// `n_old`. The transform implements this as swap-and-pop: slot `rel`
-    /// is swapped with the last active slot (`n_old - 1`) before the size
-    /// shrinks by one. Carrying `n_old` lets the energy code recognise the
-    /// post-transform state (`groups[gi].len() < n_old`) and treat the
-    /// removed atom's contribution as zero — without this, reading
-    /// particle slot `start + rel` in the new state returns the *swap-target's*
-    /// data and corrupts the energy delta.
+    /// Deactivate one or more atoms in an atomic mega-group, at relative slots
+    /// `rels` in the pre-shrink state of size `n_old`. The transform implements
+    /// this as swap-and-pop: each chosen slot is swapped with the last active
+    /// slot before the size shrinks. Carrying `n_old` lets the energy code
+    /// recognise the post-transform state (`groups[gi].len() < n_old`) and treat
+    /// the removed atoms' contribution as zero — without this, reading particle
+    /// slot `start + rel` in the new state returns the *swap-target's* data and
+    /// corrupts the energy delta.
+    ///
+    /// A reaction removing several atoms from one mega-group (`Ca(OH)₂ = Ca²⁺ + 2 OH⁻`)
+    /// must coalesce them into a *single* change with several `rels`: the energy path
+    /// pairs distinct change entries with one another, so two entries naming the same
+    /// group would make it pair that group with itself.
     AtomicShrink {
-        /// Relative slot of the atom being deactivated, in the pre-shrink frame.
-        rel: RelIndex,
+        /// Relative slots of the atoms being deactivated, in the pre-shrink frame.
+        /// Distinct, and applied highest-index-first by the transform.
+        rels: Vec<RelIndex>,
         /// Active count before the shrink. Used to distinguish pre- vs.
         /// post-transform state from the same change description.
         n_old: usize,

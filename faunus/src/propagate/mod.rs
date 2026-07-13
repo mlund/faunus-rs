@@ -238,13 +238,19 @@ impl<T: Context> Propagate<T> {
     }
 
     /// Build a `Propagate<T>` from an input YAML file.
-    pub fn from_file(filename: impl AsRef<Path>, context: &T) -> anyhow::Result<Self> {
+    ///
+    /// `thermal_energy` is the system kT (kJ/mol), from `system.medium.temperature`.
+    pub fn from_file(
+        filename: impl AsRef<Path>,
+        context: &T,
+        thermal_energy: f64,
+    ) -> anyhow::Result<Self> {
         let yaml = crate::auxiliary::read_yaml(filename)?;
-        Self::from_str(&yaml, context)
+        Self::from_str(&yaml, context, thermal_energy)
     }
 
     /// Build a `Propagate<T>` from an input YAML string (the `propagate` section).
-    pub fn from_str(yaml: &str, context: &T) -> anyhow::Result<Self> {
+    pub fn from_str(yaml: &str, context: &T, thermal_energy: f64) -> anyhow::Result<Self> {
         let full: serde_yml::Value = serde_yml::from_str(yaml)?;
 
         let current = full
@@ -256,7 +262,7 @@ impl<T: Context> Propagate<T> {
         let blocks = builder
             .move_collections
             .into_iter()
-            .map(|c| c.build(context))
+            .map(|c| c.build(context, thermal_energy))
             .collect::<anyhow::Result<Vec<_>>>()?;
 
         let rng = builder.seed.build_rng();

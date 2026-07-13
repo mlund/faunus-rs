@@ -824,12 +824,21 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
                 })
                 .sum(),
             // See `GroupChange::AtomicShrink` doc for the swap-and-pop rationale.
-            GroupChange::AtomicShrink { rel, n_old } => {
+            GroupChange::AtomicShrink { rels, n_old } => {
                 if group.len() != *n_old {
                     return 0.0;
                 }
-                let abs_i = group.start() + rel.get();
-                self.particle_energy_all(arrays, groups, abs_i, group)
+                let removed: Vec<usize> = rels.iter().map(|r| group.start() + r.get()).collect();
+                let mut energy: f64 = removed
+                    .iter()
+                    .map(|&abs_i| self.particle_energy_all(arrays, groups, abs_i, group))
+                    .sum();
+                // Each pair *among* the removed atoms was counted by both of its members
+                // above; drop one copy so the pair is removed once, not twice.
+                for (k, &abs_i) in removed.iter().enumerate() {
+                    energy -= self.particle_energy(arrays, abs_i, removed[..k].iter().copied());
+                }
+                energy
             }
             GroupChange::None => 0.0,
         }
@@ -927,12 +936,15 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
                         );
                     }
                 }
-                GroupChange::AtomicShrink { rel, n_old } => {
+                GroupChange::AtomicShrink { rels, n_old } => {
                     // See `GroupChange::AtomicShrink` doc for the swap-and-pop rationale.
                     if group.len() != *n_old {
                         continue;
                     }
-                    let abs_i = group.start() + rel.get();
+                    let removed: Vec<usize> =
+                        rels.iter().map(|r| group.start() + r.get()).collect();
+                    let removed = removed.as_slice();
+
                     for gk in unchanged_groups() {
                         if self.is_molecule_pair_excluded(group.molecule(), gk.molecule()) {
                             continue;
@@ -940,9 +952,21 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
                         if self.groups_beyond_cutoff(group, gk, arrays.pbc.as_ref()) {
                             continue;
                         }
-                        energy += self.particle_energy(arrays, abs_i, gk.iter_active());
+                        for &abs_i in removed {
+                            energy += self.particle_energy(arrays, abs_i, gk.iter_active());
+                        }
                     }
-                    energy += self.particle_energy(arrays, abs_i, group.iter_active());
+
+                    // Intra: skip atoms removed earlier in this loop so each
+                    // removed–removed pair inside the mega-group is counted once.
+                    for (k, &abs_i) in removed.iter().enumerate() {
+                        let earlier = &removed[..k];
+                        energy += self.particle_energy(
+                            arrays,
+                            abs_i,
+                            group.iter_active().filter(|j| !earlier.contains(j)),
+                        );
+                    }
                 }
                 GroupChange::RigidBody
                 | GroupChange::UpdateIdentity(_)
@@ -955,12 +979,31 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
 
         // Phase 2: cross-term between each unique pair of changed groups.
         // `group_pair_energy` already applies exclusion + cutoff filters.
+        //
+        // A group index must appear at most once in `changes`: several changes to one
+        // group have to be coalesced into a single entry (see `GroupChange::AtomicShrink`),
+        // otherwise the loop below would pair that group with *itself* and count its
+        // internal energy as a cross-term.
+        debug_assert!(
+            {
+                let mut seen: Vec<usize> = changes
+                    .iter()
+                    .filter(|(_, gc)| !matches!(gc, GroupChange::None))
+                    .map(|(gi, _)| *gi)
+                    .collect();
+                seen.sort_unstable();
+                let len = seen.len();
+                seen.dedup();
+                seen.len() == len
+            },
+            "multi_group_change: duplicate group index in changes"
+        );
         for (i, (gi, gci)) in changes.iter().enumerate() {
             if matches!(gci, GroupChange::None) {
                 continue;
             }
             for (gj, gcj) in &changes[i + 1..] {
-                if matches!(gcj, GroupChange::None) {
+                if matches!(gcj, GroupChange::None) || gi == gj {
                     continue;
                 }
                 energy += self.group_pair_energy(arrays, &groups[*gi], &groups[*gj]);
