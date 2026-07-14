@@ -15,11 +15,7 @@ use std::{
 /// unreachable from them. Every field of the implementing type is private, so this trait list *is*
 /// the mutation surface.
 pub trait Context:
-    PerturbContext
-    + crate::group::GroupCollectionMut
-    + WithHamiltonianMut
-    + WithSimulationCellMut
-    + std::fmt::Debug
+    PerturbContext + crate::group::GroupCollectionMut + WithHamiltonianMut + std::fmt::Debug
 {
     /// Update internal state after a change (e.g. reciprocal-space energy for Ewald).
     ///
@@ -27,6 +23,21 @@ pub trait Context:
     /// evaluate, accept or undo — and must place the refresh between them. An analysis has no such
     /// stages: it perturbs and reads, so [`PerturbContext::measure`] refreshes on its behalf.
     fn update(&mut self, change: &Change) -> anyhow::Result<()>;
+
+    /// Restore a whole configuration — a checkpoint, or a replayed trajectory frame.
+    ///
+    /// One verb rather than a box-setter and a coordinate-setter, because the order is load-bearing
+    /// and getting it wrong is silent: orientations are fitted against the cell in force at the
+    /// time, so coordinates applied while the outgoing box is still installed shatter any molecule
+    /// straddling the new boundary, and the stored quaternion then describes that wreck. `cell` is
+    /// `None` when the box is unchanged.
+    fn restore_configuration(
+        &mut self,
+        cell: Option<crate::cell::Cell>,
+        particles: &[crate::Particle],
+        sizes: &[crate::group::GroupSize],
+        quaternions: &[crate::UnitQuaternion],
+    ) -> anyhow::Result<()>;
 
     /// Save energy term backups before a move is applied.
     ///
@@ -109,15 +120,6 @@ pub trait Context:
 pub trait WithSimulationCell {
     /// Get reference to simulation cell.
     fn cell(&self) -> &crate::cell::Cell;
-}
-
-/// Mutable access to the simulation cell.
-///
-/// Kept apart from [`WithSimulationCell`] so that an observer bound to the read half cannot resize the
-/// box. The single production caller restores a saved state (`state.rs`).
-pub trait WithSimulationCellMut: WithSimulationCell {
-    /// Get mutable reference to simulation cell.
-    fn cell_mut(&mut self) -> &mut crate::cell::Cell;
 }
 
 /// A trait for objects that have a topology.

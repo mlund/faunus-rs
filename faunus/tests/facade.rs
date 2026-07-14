@@ -278,3 +278,85 @@ analysis:
         "expected several frames replayed, got {frames}"
     );
 }
+
+/// An NPT trajectory carries a box that fluctuates away from the input's. Replay must evaluate each
+/// frame in the box it was generated in, not in the one the input file happens to declare (#89).
+#[test]
+fn replay_uses_the_box_each_frame_was_generated_in() {
+    const INPUT_VOLUME: f64 = 8000.0; // the 20 Å cube both inputs declare
+
+    let temp = tempfile::tempdir().expect("temp dir");
+    let trajectory = temp.path().join("npt.xtc");
+
+    let system = "
+atoms:
+  - {name: X, mass: 1.0, sigma: 2.0, epsilon: 0.5}
+molecules:
+  - name: particle
+    atoms: [X]
+system:
+  cell: !Cuboid [20.0, 20.0, 20.0]
+  medium: {permittivity: !Vacuum, temperature: 298.15}
+  energy:
+    nonbonded:
+      default:
+        - !LennardJones {mixing: LB}
+    pressure: !atm 1.0
+  blocks:
+    - {molecule: particle, N: 20, insert: !RandomAtomPos {}}";
+
+    let generator = temp.path().join("generate.yaml");
+    std::fs::write(
+        &generator,
+        format!(
+            "{system}
+analysis:
+  - !Trajectory {{file: \"{}\", save_frame_state: true, frequency: !Every 10}}
+  - !CollectiveVariable {{property: volume, frequency: !Every 10}}
+propagate:
+  seed: !Fixed 42
+  criterion: Metropolis
+  repeat: 200
+  collections:
+    - !Stochastic
+      moves:
+        - !TranslateMolecule {{molecule: particle, max_displacement: 1.0, repeat: 1}}
+        - !VolumeMove {{volume_displacement: 0.2, weight: 1.0}}",
+            trajectory.display()
+        ),
+    )
+    .expect("write generator");
+
+    let run = Simulation::from_file(&generator, None)
+        .expect("load generator")
+        .run()
+        .expect("generate trajectory");
+    let sampled_volume = parse(run.to_yaml())["analysis"][1]["collective_variable"]["mean"]
+        .as_f64()
+        .expect("generator samples a mean volume");
+    assert!(
+        (sampled_volume - INPUT_VOLUME).abs() > 1.0,
+        "the volume move never moved the box, so the test proves nothing"
+    );
+
+    let rerun = temp.path().join("rerun.yaml");
+    std::fs::write(
+        &rerun,
+        format!(
+            "{system}
+analysis:
+  - !CollectiveVariable {{property: volume, frequency: !Every 1}}"
+        ),
+    )
+    .expect("write rerun input");
+
+    let output = faunus::replay(&rerun, &trajectory, None).expect("replay should succeed");
+    let replayed_volume = parse(output.to_yaml())["analysis"][0]["collective_variable"]["mean"]
+        .as_f64()
+        .expect("replay samples a mean volume");
+
+    assert!(
+        (replayed_volume - sampled_volume).abs() < 1e-2 * sampled_volume,
+        "replayed in {replayed_volume} Å³, but the frames were generated in {sampled_volume} Å³"
+    );
+}

@@ -16,7 +16,7 @@
 
 use crate::{
     topology::{GroupKind, Topology},
-    Particle, Point, UnitQuaternion,
+    Point, UnitQuaternion,
 };
 use serde::{Deserialize, Serialize};
 
@@ -745,24 +745,6 @@ pub trait GroupCollectionMut: GroupCollection {
         group_index: usize,
         positions: &[Point],
         orientation: Option<crate::UnitQuaternion>,
-    ) -> anyhow::Result<()>;
-
-    /// Restore particles, group sizes and orientations wholesale, settling all derived state.
-    ///
-    /// The single entry point for a bulk state change — checkpoint restore and trajectory
-    /// replay. `quaternions` is what the state file *recorded*; where the restored coordinates
-    /// turn out to be a rigid image of the molecule's reference conformation, the orientation is
-    /// recomputed from them instead, because the coordinates are what every energy term and
-    /// analysis actually reads. A state file written before orientations were tracked, or by a
-    /// path that forgot to update one, therefore heals on load rather than importing the lie.
-    ///
-    /// Does not call `Context::update` — the caller must, to rebuild energy caches and cell
-    /// lists after the bulk change.
-    fn apply_particles_and_groups(
-        &mut self,
-        particles: &[Particle],
-        sizes: &[GroupSize],
-        quaternions: &[crate::UnitQuaternion],
     ) -> anyhow::Result<()>;
 }
 

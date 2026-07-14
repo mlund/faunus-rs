@@ -221,6 +221,175 @@ impl Cell {
         let cell = crate::auxiliary::from_section_value("system/cell", value)?;
         Ok(cell)
     }
+
+    /// The same cell, resized to the orthorhombic box recorded in a trajectory frame.
+    ///
+    /// The shape comes from the input file, so only its size has to be recovered: the box inverts
+    /// [`Shape::bounding_box`]. `None` when there is nothing to do — the box is unchanged, the cell
+    /// has none to invert, or the frame carries none.
+    pub(crate) fn resized_to_box(&self, lengths: Point) -> anyhow::Result<Option<Self>> {
+        // A cell with no box, or a frame with none — a trajectory of an endless cell records zeros.
+        // Keeping the input's cell is what a rerun did before frames carried a box at all; adopting
+        // a zero one would make every inverse box length infinite and every distance NaN.
+        let Some(current) = self.bounding_box() else {
+            return Ok(None);
+        };
+        if lengths.iter().any(|l| !l.is_finite() || *l <= 0.0) {
+            return Ok(None);
+        }
+        if close(current, lengths) {
+            return Ok(None);
+        }
+        if let Some(reason) = self.rerun_rejection() {
+            anyhow::bail!(reason);
+        }
+        let mismatch = |expected: &str| {
+            anyhow::anyhow!(
+                "the trajectory's box changed ({current:?} → {lengths:?}), which is not {expected}"
+            )
+        };
+        let square_xy = close(lengths, Point::new(lengths.y, lengths.x, lengths.z));
+
+        match self {
+            Self::Cuboid(_) => Ok(Some(Self::Cuboid(Cuboid::new(
+                lengths.x, lengths.y, lengths.z,
+            )))),
+            Self::Slit(_) => Ok(Some(Self::Slit(Slit::new(lengths.x, lengths.y, lengths.z)))),
+            Self::Sphere(_) => {
+                if !square_xy || !close(lengths, Point::from_element(lengths.x)) {
+                    return Err(mismatch("a cube, as a sphere's box must be"));
+                }
+                Ok(Some(Self::Sphere(Sphere::new(0.5 * lengths.x))))
+            }
+            Self::Cylinder(_) => {
+                if !square_xy {
+                    return Err(mismatch("square in xy, as a cylinder's box must be"));
+                }
+                Ok(Some(Self::Cylinder(Cylinder::new(
+                    0.5 * lengths.x,
+                    lengths.z,
+                ))))
+            }
+            // Rejected above by `rerun_rejection`; `Endless` by the missing bounding box.
+            Self::HexagonalPrism(_) | Self::Endless(_) => unreachable!(),
+        }
+    }
+
+    /// Why a trajectory written in this cell cannot be replayed, if it cannot.
+    ///
+    /// A hexagonal prism is written as its orthorhombic supercell — twice the atoms — so a rerun
+    /// would otherwise fail on atom count, sending the user after a topology error that is not there.
+    pub(crate) const fn rerun_rejection(&self) -> Option<&'static str> {
+        match self {
+            Self::HexagonalPrism(_) => Some(
+                "a hexagonal prism is written to a trajectory as an expanded orthorhombic \
+                 supercell, so its trajectories cannot be rerun",
+            ),
+            _ => None,
+        }
+    }
+}
+
+/// Box lengths agree to the single precision a trajectory frame stores them in (~1e-7).
+fn close(a: Point, b: Point) -> bool {
+    const TOLERANCE: f64 = 1e-5;
+    a.iter()
+        .zip(b.iter())
+        .all(|(a, b)| (a - b).abs() <= TOLERANCE * a.abs().max(b.abs()).max(1.0))
+}
+
+#[cfg(test)]
+mod resized_to_box {
+    use super::*;
+
+    #[test]
+    fn a_cuboid_takes_the_frames_box() {
+        let cell = Cell::Cuboid(Cuboid::cubic(30.0));
+        let resized = cell
+            .resized_to_box(Point::new(10.0, 20.0, 40.0))
+            .unwrap()
+            .expect("a cuboid is determined by its box");
+        assert_eq!(
+            resized.bounding_box().unwrap(),
+            Point::new(10.0, 20.0, 40.0)
+        );
+    }
+
+    /// An unchanged box must be a no-op, or every frame of a constant-volume rerun would pay a cell
+    /// list rebuild and swap the declared box for its single-precision round-trip.
+    #[test]
+    fn an_unchanged_box_leaves_the_cell_alone() {
+        for cell in [
+            Cell::Cuboid(Cuboid::cubic(30.0)),
+            Cell::Sphere(Sphere::new(15.0)),
+        ] {
+            let unchanged = cell.bounding_box().unwrap();
+            assert!(cell.resized_to_box(unchanged).unwrap().is_none());
+        }
+    }
+
+    #[test]
+    fn a_sphere_and_a_cylinder_follow_their_box() {
+        let sphere = Cell::Sphere(Sphere::new(15.0))
+            .resized_to_box(Point::new(20.0, 20.0, 20.0))
+            .unwrap()
+            .expect("a sphere is 2r on every side");
+        assert_eq!(
+            sphere.volume().unwrap(),
+            Sphere::new(10.0).volume().unwrap()
+        );
+
+        let cylinder = Cell::Cylinder(Cylinder::new(5.0, 10.0))
+            .resized_to_box(Point::new(20.0, 20.0, 30.0))
+            .unwrap()
+            .expect("a cylinder is (2r, 2r, h)");
+        assert_eq!(
+            cylinder.bounding_box().unwrap(),
+            Point::new(20.0, 20.0, 30.0)
+        );
+    }
+
+    /// A trajectory of an endless cell records a zero box. Adopting it would make every inverse box
+    /// length infinite and every distance NaN, so the input's cell stands — as it did before frames
+    /// carried a box at all.
+    #[test]
+    fn a_frame_without_a_box_leaves_the_cell_alone() {
+        let cell = Cell::Cuboid(Cuboid::cubic(30.0));
+        assert!(cell.resized_to_box(Point::zeros()).unwrap().is_none());
+        assert!(cell
+            .resized_to_box(Point::new(f64::NAN, 30.0, 30.0))
+            .unwrap()
+            .is_none());
+    }
+
+    /// An endless cell has no box, so a frame's box says nothing about it.
+    #[test]
+    fn an_endless_cell_is_left_alone() {
+        let cell = Cell::Endless(Endless);
+        assert!(cell.resized_to_box(Point::zeros()).unwrap().is_none());
+        assert!(cell
+            .resized_to_box(Point::new(10.0, 10.0, 10.0))
+            .unwrap()
+            .is_none());
+    }
+
+    #[test]
+    fn a_hexagonal_prism_says_why_it_cannot_be_rerun() {
+        let cell = Cell::HexagonalPrism(HexagonalPrism::new(10.0, 20.0));
+        let err = cell
+            .resized_to_box(Point::new(30.0, 30.0, 30.0))
+            .unwrap_err();
+        assert!(err.to_string().contains("supercell"), "{err}");
+    }
+
+    #[test]
+    fn a_sphere_whose_box_is_not_a_cube_is_an_error() {
+        let cell = Cell::Sphere(Sphere::new(15.0));
+        let err = cell
+            .resized_to_box(Point::new(20.0, 25.0, 30.0))
+            .unwrap_err();
+        assert!(err.to_string().contains("must be"), "{err}");
+    }
 }
 
 impl TryFrom<Cell> for Cuboid {
