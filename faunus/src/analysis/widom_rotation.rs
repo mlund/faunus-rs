@@ -341,24 +341,26 @@ fn group_energy_kt<T: ObserveContext + WithHamiltonian>(
 }
 
 impl WidomRotation {
-    /// Scan all trial orientations of group `gi` on `trial`, returning the
-    /// per-orientation energies in kT. `trial` is left unchanged (each rotation
-    /// is immediately inverted); the carried quaternion is never touched because
-    /// we rotate positions only, about the invariant center of mass.
+    /// Scan all trial orientations of group `gi` on `trial`, returning the per-orientation
+    /// energies in kT. `trial` is left unchanged — each rotation is immediately inverted, and
+    /// composing the group's orientation both ways restores it exactly.
+    ///
+    /// The rotation goes through the group, not the bare coordinates. An orientation-dependent
+    /// energy — a 6D tabulated potential is a function of the mass center and the quaternion,
+    /// and of nothing else — would otherwise return the same value for every trial orientation,
+    /// making ΔU identically zero and the whole scan vacuous.
     fn scan_energies<T: PerturbContext + WithHamiltonian>(
         &self,
         trial: &mut T,
         gi: usize,
-        indices: &[usize],
-        com: &Point,
-    ) -> Vec<f64> {
+    ) -> anyhow::Result<Vec<f64>> {
         self.quaternions
             .iter()
             .map(|q| {
-                trial.rotate_particles(indices, q, Some(-com));
+                trial.rotate_group(gi, q)?;
                 let energy = group_energy_kt(trial, gi, self.thermal_energy);
-                trial.rotate_particles(indices, &q.inverse(), Some(-com));
-                energy
+                trial.rotate_group(gi, &q.inverse())?;
+                Ok(energy)
             })
             .collect()
     }
@@ -495,27 +497,30 @@ impl WidomRotation {
         }
     }
 
-    /// Mean torque about each lab axis via a small virtual rotation, analogous to
-    /// the virtual-translate force. Positions-only, so the quaternion is safe.
+    /// Mean torque about each lab axis via a small virtual rotation, analogous to the
+    /// virtual-translate force.
+    ///
+    /// Through the group, for the same reason as [`scan_energies`](Self::scan_energies): rotating
+    /// the coordinates alone leaves an orientation-dependent potential reading an unchanged
+    /// quaternion, so every axis would report a torque of exactly zero.
     fn accumulate_torque<T: PerturbContext + WithHamiltonian>(
         &mut self,
         trial: &mut T,
         gi: usize,
-        indices: &[usize],
-        com: &Point,
         reference_energy: f64,
-    ) {
+    ) -> anyhow::Result<()> {
         let Some(probe) = self.torque.as_mut() else {
-            return;
+            return Ok(());
         };
         let axes = [Vector3::x_axis(), Vector3::y_axis(), Vector3::z_axis()];
         for (accumulator, axis) in probe.axes.iter_mut().zip(axes) {
             let rotation = UnitQuaternion::from_axis_angle(&axis, probe.dtheta);
-            trial.rotate_particles(indices, &rotation, Some(-com));
+            trial.rotate_group(gi, &rotation)?;
             let energy = group_energy_kt(trial, gi, self.thermal_energy);
-            trial.rotate_particles(indices, &rotation.inverse(), Some(-com));
+            trial.rotate_group(gi, &rotation.inverse())?;
             accumulator.collect(energy - reference_energy, 1.0);
         }
+        Ok(())
     }
 }
 
@@ -546,9 +551,9 @@ impl<T: PerturbContext> Analyze<T> for WidomRotation {
                 .collect::<Result<Vec<_>>>()?;
 
             let reference_energy = group_energy_kt(&trial, gi, self.thermal_energy);
-            let energies = self.scan_energies(&mut trial, gi, &indices, &com);
+            let energies = self.scan_energies(&mut trial, gi)?;
             self.accumulate(&energies, &references);
-            self.accumulate_torque(&mut trial, gi, &indices, &com, reference_energy);
+            self.accumulate_torque(&mut trial, gi, reference_energy)?;
             // Each molecule-scan is one independent block.
             self.num_blocks += 1;
         }
@@ -980,16 +985,14 @@ propagate: {{seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}}
         let ctx = dimer_backend(r#"custom_external: [{selection: "all", function: "q * z"}]"#);
         let mut trial = ctx.clone();
         let gi = ctx.resolve_groups(&Selection::parse("molecule DIMER").unwrap())[0];
-        let indices: Vec<usize> = ctx.groups()[gi].iter_active().collect();
-        let com = ctx.mass_center(&indices);
 
         for q in super_fibonacci(16) {
-            trial.rotate_particles(&indices, &q, Some(-com));
+            trial.rotate_group(gi, &q).unwrap();
             let single = trial
                 .hamiltonian()
                 .energy(&trial, &Change::SingleGroup(gi, GroupChange::RigidBody));
             let total = trial.hamiltonian().energy(&trial, &Change::Everything);
-            trial.rotate_particles(&indices, &q.inverse(), Some(-com));
+            trial.rotate_group(gi, &q.inverse()).unwrap();
             assert_approx_eq!(f64, single, total, epsilon = 1e-9);
         }
     }

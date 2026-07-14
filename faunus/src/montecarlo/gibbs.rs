@@ -280,6 +280,7 @@ impl GibbsParticleTransfer {
         // copy source molecule positions and compute COM
         let src_indices: Vec<usize> = src.groups()[src_group].iter_active().collect();
         let com = src.mass_center(&src_indices);
+        let orientation = *src.groups()[src_group].quaternion();
 
         // shift positions to a random position in target cell
         let shift = tgt.cell().get_point_inside(rng) - com;
@@ -287,13 +288,13 @@ impl GibbsParticleTransfer {
             .iter()
             .map(|&i| src.position(i) + shift)
             .collect();
-        let tgt_start = tgt.groups()[tgt_group].start();
-        let tgt_indices = tgt_start..tgt_start + positions.len();
-        // atom kinds are already correct in the target slot
-        tgt.set_positions(tgt_indices, positions.iter());
-
         Transform::Deactivate.on_group(src_group, src)?;
         Transform::Activate.on_group(tgt_group, tgt)?;
+        // Atom kinds are already correct in the target slot. The molecule is translated, not
+        // reoriented, so it arrives in the pose it held in the other box — and the source group
+        // knows that pose exactly. Carrying it is not an optimisation: a flexible molecule is no
+        // rigid image of its reference conformation, so no fit could recover it.
+        tgt.place_group(tgt_group, &positions, Some(orientation))?;
 
         src.update_with_backup(&Change::Everything)?;
         tgt.update_with_backup(&Change::Everything)?;

@@ -335,9 +335,15 @@ frequency: !Every 50
         assert!(matches!(builders[0], AnalysisBuilder::PolymerShape(_)));
     }
 
-    /// Helper: build gyration tensor from equal-mass positions.
+    /// Helper: build gyration tensor from equal-mass positions in a single image.
     fn gyration_from_positions(positions: &[nalgebra::Vector3<f64>]) -> GyrationTensor {
-        GyrationTensor::from_equal_mass_positions(positions).unwrap()
+        let com = positions.iter().sum::<crate::Point>() / positions.len() as f64;
+        GyrationTensor::from_positions_masses_com(
+            positions.iter().map(|&p| (p, 1.0)),
+            &com,
+            &crate::cell::Endless,
+        )
+        .unwrap()
     }
 
     #[test]

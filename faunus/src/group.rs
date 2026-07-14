@@ -683,17 +683,29 @@ pub trait GroupCollectionMut: GroupCollection {
         atom_ids: &[usize],
     ) -> anyhow::Result<&mut Group>;
 
-    /// Update mass center for a given group, respecting PBC if appropriate.
-    fn update_mass_center(&mut self, group_index: usize);
+    /// Write every particle's position and recompute every group's mass center and bounding
+    /// radius.
+    ///
+    /// The bulk counterpart of [`place_group`](Self::place_group), for an integrator that has
+    /// advanced the whole system at once. Orientations are *not* touched: a rigid-body integrator
+    /// advances them itself and reports them through
+    /// [`set_group_orientation`](Self::set_group_orientation), and it would be wrong to overwrite
+    /// that with a fit to the coordinates it derived from them.
+    fn set_all_positions(&mut self, positions: &[Point]) -> anyhow::Result<()>;
+
+    /// Record the orientation a rigid-body integrator computed for a group.
+    ///
+    /// The one place an orientation is *supplied* rather than derived from coordinates, and it
+    /// earns the exception: the integrator advanced the rigid body's rotational degrees of
+    /// freedom itself, so its quaternion is the source of the coordinates it wrote, not a claim
+    /// about them.
+    fn set_group_orientation(&mut self, group_index: usize, orientation: crate::UnitQuaternion);
 
     /// Resizes a group to a given size.
     ///
     /// Errors if the requested size is larger than the capacity, or if there are
     /// too few active particles to shrink a group.
     fn resize_group(&mut self, group_index: usize, size: GroupSize) -> anyhow::Result<()>;
-
-    /// Mutable access to all groups (e.g. for quaternion or mass center updates).
-    fn groups_mut(&mut self) -> &mut [Group];
 
     /// Set atom kind index of the i'th particle, keeping derived state consistent.
     ///
@@ -720,34 +732,38 @@ pub trait GroupCollectionMut: GroupCollection {
     ) where
         Self: Sized;
 
-    /// Apply particles, group sizes, and quaternions, then recompute mass centers.
+    /// Write a whole group's coordinates and settle the derived state that follows from them.
     ///
-    /// Shared by checkpoint restore and trajectory replay. Does not call
-    /// `Context::update` — the caller must do so to rebuild energy caches
-    /// and cell lists after the bulk state change.
+    /// The mass center and bounding radius are recomputed from the coordinates just written, and
+    /// so is the orientation unless the caller passes one it already knows (a Gibbs transfer
+    /// carries the molecule's pose across from the other box; see the module docs on how an
+    /// orientation is recovered otherwise). A caller replacing a group's coordinates wholesale
+    /// therefore cannot leave it describing the molecule that used to occupy the slot — which it
+    /// has no way to remember and every reason to forget.
+    fn place_group(
+        &mut self,
+        group_index: usize,
+        positions: &[Point],
+        orientation: Option<crate::UnitQuaternion>,
+    ) -> anyhow::Result<()>;
+
+    /// Restore particles, group sizes and orientations wholesale, settling all derived state.
+    ///
+    /// The single entry point for a bulk state change — checkpoint restore and trajectory
+    /// replay. `quaternions` is what the state file *recorded*; where the restored coordinates
+    /// turn out to be a rigid image of the molecule's reference conformation, the orientation is
+    /// recomputed from them instead, because the coordinates are what every energy term and
+    /// analysis actually reads. A state file written before orientations were tracked, or by a
+    /// path that forgot to update one, therefore heals on load rather than importing the lie.
+    ///
+    /// Does not call `Context::update` — the caller must, to rebuild energy caches and cell
+    /// lists after the bulk change.
     fn apply_particles_and_groups(
         &mut self,
         particles: &[Particle],
         sizes: &[GroupSize],
         quaternions: &[crate::UnitQuaternion],
-    ) -> anyhow::Result<()>
-    where
-        Self: Sized,
-    {
-        self.set_positions(0..particles.len(), particles.iter().map(|p| &p.pos));
-        for (i, p) in particles.iter().enumerate() {
-            // Every group's geometry is recomputed below, so skip the per-particle refresh.
-            self.set_atom_kind_unchecked(i, AtomKindId::new(p.atom_id));
-        }
-        for (i, (&size, &q)) in sizes.iter().zip(quaternions.iter()).enumerate() {
-            self.resize_group(i, size)?;
-            self.groups_mut()[i].set_quaternion(q);
-        }
-        for i in 0..sizes.len() {
-            self.update_mass_center(i);
-        }
-        Ok(())
-    }
+    ) -> anyhow::Result<()>;
 }
 
 /// Structure storing groups separated into three types:

@@ -359,18 +359,17 @@ fn overlay_swap_positions(
         })
         .collect();
 
-    if source_masses.len() < 2 {
-        return source_masses.into_iter().map(|(pos, _)| pos).collect();
-    }
-
     let com = context.mass_center(&source_indices.collect::<Vec<_>>());
     let template: Vec<crate::Point> = (0..target_group.capacity())
         .map(|i| context.position(target_group.start() + i))
         .collect();
-    let source_positions: Vec<crate::Point> = source_masses.iter().map(|(pos, _)| *pos).collect();
 
+    // The result is written into the target group's slots, so it must have exactly that many
+    // positions — never the source group's count, which may differ. When either molecule has too
+    // few atoms to define a principal-axis frame, there is no orientation to align and the
+    // template is simply carried over to the outgoing molecule's mass center.
     crate::geometry::overlay_positions(&template, source_masses, &com, context.cell(), rng)
-        .unwrap_or(source_positions)
+        .unwrap_or_else(|| crate::geometry::place_at(&template, &com, context.cell()))
 }
 
 /// Resolve a single reaction config into forward/backward ops and effective ln(K).
@@ -798,24 +797,22 @@ impl SpeciationMove {
             // rotation entirely — and with it the RNG draw, keeping the stream of every
             // monatomic GCMC input unchanged.
             let capacity = context.groups()[gi].capacity();
-            let (positions, quaternion) = if capacity == 1 {
-                (vec![com], None)
+            let positions = if capacity == 1 {
+                vec![com]
             } else {
                 let centered = Self::centered_template(mol_id, gi, context);
-                let (positions, quaternion) = crate::topology::InsertionPolicy::place_molecule_at(
+                crate::topology::InsertionPolicy::place_molecule_at(
                     &centered,
                     &com,
                     true,
                     context.cell(),
                     rng,
-                );
-                (positions, Some(quaternion))
+                )
             };
             Some((
                 SpeciationAction::ActivateGroup {
                     group_index: gi,
                     positions,
-                    quaternion,
                 },
                 (gi, GroupChange::Resize(GroupSize::Full)),
                 bias,
@@ -889,11 +886,6 @@ impl SpeciationMove {
             SpeciationAction::ActivateGroup {
                 group_index: to_gi,
                 positions,
-                // The overlay aligns the incoming template onto the outgoing molecule's pose
-                // rather than applying a rotation of its own, so there is no quaternion to
-                // record. The swapped-in group therefore keeps a stale orientation — a
-                // pre-existing limitation that only bites orientation-dependent energies.
-                quaternion: None,
             },
         ];
         let changes = vec![
@@ -2382,6 +2374,24 @@ propagate:
         )
     }
 
+    /// How far a group's coordinates depart from the ones its stored orientation claims (RMSD, Å).
+    ///
+    /// The stored quaternion claims to carry the molecule's reference conformation onto its
+    /// coordinates; this asks whether it does. Deliberately *not* an angle against a fitted
+    /// rotation: a linear or symmetric molecule has many orientations its coordinates cannot tell
+    /// apart, and comparing quaternions would report those agreements as disagreements.
+    fn orientation_error(context: &Backend, group_index: usize) -> Option<f64> {
+        use crate::context::WithTopology;
+        let group = &context.groups()[group_index];
+        let topology = context.topology();
+        let reference = topology
+            .moleculekind(group.molecule())
+            .reference_positions();
+        let current: Vec<crate::Point> = group.iter_active().map(|i| context.position(i)).collect();
+        let gathered = crate::geometry::gather_molecule(&current, context.cell());
+        crate::geometry::orientation_residual(reference, &gathered, group.quaternion())
+    }
+
     fn dimer_context(slots: usize, active: usize) -> (tempfile::NamedTempFile, Backend) {
         let tmp = tempfile::NamedTempFile::new().unwrap();
         std::fs::write(tmp.path(), dimer_yaml(1.0, slots, active, 10).as_bytes()).unwrap();
@@ -2493,27 +2503,25 @@ propagate:
             else {
                 continue;
             };
-            let Some(SpeciationAction::ActivateGroup {
-                group_index,
-                quaternion,
-                ..
-            }) = actions
+            let Some(SpeciationAction::ActivateGroup { group_index, .. }) = actions
                 .iter()
                 .find(|a| matches!(a, SpeciationAction::ActivateGroup { .. }))
                 .cloned()
             else {
                 continue;
             };
-            let quaternion = quaternion.expect("a polyatomic insertion records its rotation");
 
             crate::transform::Transform::Speciation(actions)
                 .on_system(&mut context)
                 .unwrap();
 
-            assert_eq!(
-                context.groups()[group_index].quaternion(),
-                &quaternion,
-                "group orientation must match the rotation the molecule was placed with"
+            // An insertion places the template at a random orientation; the group must report
+            // the one its coordinates actually have.
+            let error = orientation_error(&context, group_index)
+                .expect("a polyatomic group has a reference conformation");
+            assert!(
+                error < 1e-9,
+                "stored orientation misses the coordinates it was placed with by {error:.2e} Å"
             );
             return;
         }
@@ -2843,6 +2851,203 @@ propagate:
         assert!(
             drift < 1e-6,
             "energy drift {drift:.6e} for an interacting molecular swap"
+        );
+    }
+
+    /// A one-atom molecular group has no orientation, and deriving one must not invent it.
+    ///
+    /// Deriving the orientation from coordinates has to stay a no-op where there are too few
+    /// coordinates to define a frame — a single point is the same point however you turn it.
+    /// The group keeps the identity it was built with, and nothing panics on the way.
+    #[test]
+    fn one_atom_molecular_group_keeps_an_identity_orientation() {
+        let yaml = r#"
+atoms:
+  - {name: A, mass: 1.0, sigma: 2.0}
+molecules:
+  - name: mono
+    from_structure: [{A: [0.0, 0.0, 0.0]}]
+system:
+  cell: !Cuboid [20.0, 20.0, 20.0]
+  medium: {permittivity: !Vacuum, temperature: 298.15}
+  energy: {}
+  blocks:
+    - {molecule: mono, N: 8, active: 2, insert: !RandomCOM {}}
+propagate: {seed: !Fixed 3, criterion: MetropolisHastings, repeat: 0, collections: []}
+"#;
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(tmp.path(), yaml.as_bytes()).unwrap();
+        let mut rng = rand::thread_rng();
+        let mut context = Backend::new(tmp.path(), None, &mut rng).unwrap();
+
+        // Activate an empty slot: the path that derives an orientation from written coordinates.
+        let gi = 5;
+        assert!(context.groups()[gi].is_empty());
+        crate::transform::Transform::Speciation(vec![SpeciationAction::ActivateGroup {
+            group_index: gi,
+            positions: vec![crate::Point::new(3.0, -4.0, 5.0)],
+        }])
+        .on_system(&mut context)
+        .unwrap();
+
+        assert_eq!(context.groups()[gi].len(), 1);
+        assert_eq!(
+            *context.groups()[gi].quaternion(),
+            crate::UnitQuaternion::identity(),
+            "a single atom has no orientation to derive"
+        );
+        // A single point sits at zero residual whichever way you turn it — which is the point.
+        assert_eq!(orientation_error(&context, gi), Some(0.0));
+        // The mass center still follows the coordinates, single atom or not.
+        assert_eq!(
+            context.groups()[gi].mass_center().copied(),
+            Some(crate::Point::new(3.0, -4.0, 5.0))
+        );
+    }
+
+    /// Swapping molecules of *different* shape still leaves each describing its own conformation.
+    ///
+    /// The overlay writes the incoming kind's template, so the swapped-in molecule is a rigid
+    /// image of *its* reference, not of the one it replaced. Deriving the orientation from the
+    /// coordinates is what makes that work: an alignment rotation threaded through from the
+    /// overlay would relate two different frames and be wrong the moment the shapes differ.
+    #[test]
+    fn swap_between_differently_shaped_molecules_keeps_each_orientation_honest() {
+        let yaml = r#"
+atoms:
+  - {name: T1, mass: 1.0, sigma: 2.0}
+  - {name: T2, mass: 2.0, sigma: 2.0}
+  - {name: T3, mass: 3.0, sigma: 2.0}
+molecules:
+  # Straight and bent: deliberately different conformations, and different masses per site,
+  # so an orientation fitted against the wrong reference cannot pass by coincidence.
+  - name: straight
+    from_structure: [{T1: [-4.0, 0.0, 0.0]}, {T2: [0.0, 0.0, 0.0]}, {T3: [4.0, 0.0, 0.0]}]
+  - name: bent
+    from_structure: [{T1: [-3.0, 0.0, 0.0]}, {T2: [0.0, 2.5, 0.0]}, {T3: [3.0, 0.0, 0.0]}]
+system:
+  cell: !Cuboid [30.0, 30.0, 30.0]
+  medium: {permittivity: !Vacuum, temperature: 298.15}
+  energy: {}
+  blocks:
+    - {molecule: straight, N: 6, active: 6, insert: !RandomCOM {rotate: true}}
+    - {molecule: bent, N: 6, active: 0, insert: !RandomCOM {rotate: true}}
+propagate:
+  seed: !Fixed 7
+  criterion: MetropolisHastings
+  repeat: 300
+  collections:
+    - !Deterministic
+      moves:
+        - !SpeciationMove
+          repeat: 1
+          reactions:
+            - ["straight = bent", !K 1.0]
+"#;
+        use crate::analysis::AnalysisCollection;
+        use crate::montecarlo::MarkovChain;
+        use crate::propagate::Propagate;
+
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(tmp.path(), yaml.as_bytes()).unwrap();
+        let path = tmp.path();
+
+        let mut rng = rand::thread_rng();
+        let context = Backend::new(path, None, &mut rng).unwrap();
+        let propagate = Propagate::from_file(path, &context, THERMAL_ENERGY).unwrap();
+        let mut mc = MarkovChain::new(
+            context,
+            propagate,
+            THERMAL_ENERGY,
+            AnalysisCollection::default(),
+        )
+        .unwrap();
+        for step in mc.iter() {
+            step.unwrap();
+        }
+
+        let context = mc.context();
+        let bent_active = context.count_molecules(MoleculeId::new(1), GroupSize::Full);
+        assert!(
+            bent_active > 0,
+            "no swap was accepted; the check is vacuous"
+        );
+
+        for gi in 0..context.groups().len() {
+            if context.groups()[gi].is_empty() {
+                continue;
+            }
+            let error =
+                orientation_error(context, gi).expect("a trimer has a reference conformation");
+            assert!(
+                error < 1e-6,
+                "group {gi} stores an orientation that misses its coordinates by {error:.2e} Å"
+            );
+        }
+    }
+
+    /// A swapped-in molecule's stored orientation must describe the coordinates it was given.
+    ///
+    /// The swap overlays the incoming template onto the outgoing molecule's pose, which is a
+    /// reorientation; a group whose quaternion still says "unrotated" is lying to every consumer
+    /// that reads it — 6D tabulated energies, body-frame analyses, the GPU rigid integrator and
+    /// the checkpoint. Nothing in this fixture reads it, which is exactly why it went unnoticed.
+    #[test]
+    fn molecular_swap_sets_group_orientation() {
+        use crate::analysis::AnalysisCollection;
+        use crate::montecarlo::MarkovChain;
+        use crate::propagate::Propagate;
+
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(
+            tmp.path(),
+            phytate_yaml(7.0, 12, 500, IDEAL_ENERGY).as_bytes(),
+        )
+        .unwrap();
+        let path = tmp.path();
+
+        let mut rng = rand::thread_rng();
+        let context = Backend::new(path, None, &mut rng).unwrap();
+        let propagate = Propagate::from_file(path, &context, THERMAL_ENERGY).unwrap();
+        let mut mc = MarkovChain::new(
+            context,
+            propagate,
+            THERMAL_ENERGY,
+            AnalysisCollection::default(),
+        )
+        .unwrap();
+        for step in mc.iter() {
+            step.unwrap();
+        }
+
+        use crate::context::WithTopology;
+        let context = mc.context();
+        let topology = context.topology();
+        let mut checked = 0usize;
+        let mut wrong: Vec<String> = Vec::new();
+
+        for gi in 0..context.groups().len() {
+            let group = &context.groups()[gi];
+            let kind = topology.moleculekind(group.molecule());
+            if group.is_empty() || kind.reference_positions().len() < 2 {
+                continue;
+            }
+            checked += 1;
+            let error = orientation_error(context, gi)
+                .expect("a 7-bead phytate has a reference conformation");
+            if error > 1e-6 {
+                wrong.push(format!(
+                    "group {gi}: stored orientation is off by {error:.1}°"
+                ));
+            }
+        }
+
+        assert!(checked > 0, "no molecular groups were checked");
+        assert!(
+            wrong.is_empty(),
+            "{} of {checked} groups store an orientation that does not match their coordinates:\n{}",
+            wrong.len(),
+            wrong.join("\n")
         );
     }
 

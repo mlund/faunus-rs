@@ -138,10 +138,6 @@ impl LangevinRunner {
             if context.hamiltonian().has_ld_overlay_forces() {
                 let mut overlay = |positions: &[[f32; 4]]| -> (Vec<[f32; 4]>, Vec<[f32; 4]>) {
                     Self::write_positions(context, positions);
-                    let n_groups = context.groups().len();
-                    for g in 0..n_groups {
-                        context.update_mass_center(g);
-                    }
                     let forces = context.hamiltonian().ld_overlay_forces(context);
                     reduce_forces_to_com(context, &forces)
                 };
@@ -152,10 +148,6 @@ impl LangevinRunner {
         } else {
             let mut force_callback = |positions: &[[f32; 4]]| -> (Vec<[f32; 4]>, Vec<[f32; 4]>) {
                 Self::write_positions(context, positions);
-                let n_groups = context.groups().len();
-                for g in 0..n_groups {
-                    context.update_mass_center(g);
-                }
                 let forces = context.hamiltonian().forces(context);
                 reduce_forces_to_com(context, &forces)
             };
@@ -191,19 +183,14 @@ impl LangevinRunner {
 
         Self::write_positions(context, &positions);
 
-        // LD->MC: download quaternions and write to rigid groups only
+        // LD->MC: the integrator advanced each rigid body's rotational degrees of freedom itself,
+        // so its quaternion is the source of the coordinates written above, not a claim about them.
         let gpu_quats = gpu.download_quaternions();
         let mol_is_rigid = &gpu.mol_is_rigid_host;
-        for (i, (group, q)) in context.groups_mut().iter_mut().zip(&gpu_quats).enumerate() {
+        for (i, q) in gpu_quats.iter().enumerate() {
             if mol_is_rigid[i] != 0 {
-                group.set_quaternion(gpu_to_quat(q));
+                context.set_group_orientation(i, gpu_to_quat(q));
             }
-        }
-
-        // Recompute mass centers for all groups
-        let n_groups = context.groups().len();
-        for g in 0..n_groups {
-            context.update_mass_center(g);
         }
 
         // Invalidate energy caches since all molecules moved
@@ -440,7 +427,9 @@ impl LangevinRunner {
             })
             .collect();
 
-        context.set_positions(0..points.len(), points.iter());
+        context
+            .set_all_positions(&points)
+            .expect("the integrator returns one position per particle");
     }
 
     pub(in crate::propagate) fn to_yaml(&self) -> serde_yml::Value {

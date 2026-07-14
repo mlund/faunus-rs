@@ -292,33 +292,69 @@ impl PolymerDepletion {
     }
 
     /// Update a single colloid's COM and radius from the context.
+    ///
+    /// Must add and drop entries, not only refresh them, so that the incremental path lists
+    /// exactly what [`build_colloids`](Self::build_colloids) would. A group with no mass center
+    /// has been emptied and is not a colloid any more; leaving its entry behind would let the
+    /// cached energy count a particle the recomputed energy does not, which surfaces as energy
+    /// drift. Entries stay ordered by group index, as the full rebuild produces them.
     fn update_single_colloid(&mut self, group_index: usize, context: &impl ObserveContext) {
-        let groups = context.groups();
-        if let Some(colloid) = self
+        let group = &context.groups()[group_index];
+        let position = self
             .colloids
-            .iter_mut()
-            .find(|c| c.group_index == group_index)
-        {
-            if let Some(&com) = groups[group_index].mass_center() {
-                colloid.com = com;
-                colloid.radius = self
-                    .fixed_radius
-                    .or_else(|| groups[group_index].bounding_radius())
-                    .unwrap_or(0.0)
-                    * self.radius_scaling;
+            .iter()
+            .position(|c| c.group_index == group_index);
+
+        let Some(&com) = group.mass_center() else {
+            if let Some(i) = position {
+                self.colloids.remove(i);
+            }
+            return;
+        };
+        let radius = self
+            .fixed_radius
+            .or_else(|| group.bounding_radius())
+            .unwrap_or(0.0)
+            * self.radius_scaling;
+
+        match position {
+            Some(i) => {
+                self.colloids[i].com = com;
+                self.colloids[i].radius = radius;
+            }
+            // Re-activated: the rebuild would list it, so the incremental path must too.
+            None => {
+                let at = self
+                    .colloids
+                    .partition_point(|c| c.group_index < group_index);
+                self.colloids.insert(
+                    at,
+                    ColloidInfo {
+                        group_index,
+                        com,
+                        radius,
+                    },
+                );
             }
         }
     }
 
+    /// Whether a group holds one of the colloid molecule kinds.
+    ///
+    /// Keyed on the topology, not on the cached colloid list: a deactivated colloid is dropped
+    /// from the cache, and a test against the cache would then fail to notice it coming back.
+    fn is_colloid(&self, group_index: usize, context: &impl ObserveContext) -> bool {
+        self.colloid_molecule_ids
+            .contains(&context.groups()[group_index].molecule())
+    }
+
     /// Check whether a change involves any colloid group.
-    fn change_involves_colloids(&self, change: &Change) -> bool {
+    fn change_involves_colloids(&self, change: &Change, context: &impl ObserveContext) -> bool {
         match change {
             Change::Everything | Change::Volume(_, _) => true,
             Change::None => false,
-            Change::SingleGroup(gi, _) => self.colloids.iter().any(|c| c.group_index == *gi),
-            Change::Groups(groups) => groups
-                .iter()
-                .any(|(gi, _)| self.colloids.iter().any(|c| c.group_index == *gi)),
+            Change::SingleGroup(gi, _) => self.is_colloid(*gi, context),
+            Change::Groups(groups) => groups.iter().any(|(gi, _)| self.is_colloid(*gi, context)),
         }
     }
 
@@ -326,15 +362,15 @@ impl PolymerDepletion {
     /// Recompute cached colloid state and depletion energy after a change.
     fn recompute(&mut self, context: &impl ObserveContext, change: &Change) {
         match change {
-            Change::SingleGroup(gi, _) if self.change_involves_colloids(change) => {
+            Change::SingleGroup(gi, _) if self.change_involves_colloids(change, context) => {
                 self.update_single_colloid(*gi, context);
             }
             Change::Everything | Change::Volume(_, _) => {
                 self.rebuild_colloids(context);
             }
-            Change::Groups(groups) if self.change_involves_colloids(change) => {
+            Change::Groups(groups) if self.change_involves_colloids(change, context) => {
                 for &(gi, _) in groups {
-                    if self.colloids.iter().any(|c| c.group_index == gi) {
+                    if self.is_colloid(gi, context) {
                         self.update_single_colloid(gi, context);
                     }
                 }
@@ -528,8 +564,8 @@ impl StatefulEnergy for PolymerDepletion {
             * self.thermal_energy
     }
 
-    fn partial_energy(&self, _context: &impl ObserveContext, change: &Change) -> f64 {
-        if !self.change_involves_colloids(change) {
+    fn partial_energy(&self, context: &impl ObserveContext, change: &Change) -> f64 {
+        if !self.change_involves_colloids(change, context) {
             return 0.0;
         }
         self.cached_energy

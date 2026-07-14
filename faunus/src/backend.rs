@@ -90,7 +90,149 @@ pub struct Backend {
     cell_list: Option<crate::celllist::CellList>,
 }
 
+/// What to do with a group's stored orientation when its coordinates cannot pin one.
+#[derive(Clone, Copy)]
+enum OrientationPolicy {
+    /// The group still holds the *same* molecule. A chain that has merely been reshaped is no
+    /// rigid image of its reference conformation, and its stored orientation is the only record
+    /// of the rotations that were applied to it — so keep it.
+    KeepWhatIsStored,
+    /// The slot now holds a *different* molecule, so the orientation it held describes something
+    /// that is no longer there. Take the closest frame the coordinates allow; never inherit.
+    NeverInherit,
+}
+
 impl Backend {
+    /// Recompute a group's mass center and bounding radius from its active atoms.
+    ///
+    /// Private: every mutator that can invalidate them calls this itself. Exposing it would
+    /// re-create the obligation to remember, which is the whole defect being closed.
+    fn update_mass_center(&mut self, group_index: usize) {
+        let group = &self.groups[group_index];
+        let active = group.iter_active();
+        // Tested before gathering the indices: an atomic mega-group has no mass center but does
+        // have every ion in the box, and this runs on every insertion and deletion.
+        if active.is_empty() || !self.topology().moleculekind(group.molecule()).has_com() {
+            // A group with no active atoms has no mass center. Leaving the last one in place
+            // would let an emptied group keep describing the molecule it no longer holds, and
+            // its bounding radius feeds the cutoff culling that decides which pairs interact.
+            self.groups[group_index].set_geometry(None);
+            return;
+        }
+        let indices: Vec<usize> = active.collect();
+        let mass_center = self.mass_center(&indices);
+        // Bounding radius: max PBC distance from COM to any active particle
+        let bounding_radius = indices
+            .iter()
+            .map(|&i| {
+                let pos = Point::new(self.x[i], self.y[i], self.z[i]);
+                self.cell.distance(&pos, &mass_center).norm()
+            })
+            .fold(0.0_f64, f64::max);
+        self.groups[group_index].set_geometry(Some(GroupGeometry {
+            mass_center,
+            bounding_radius,
+        }));
+    }
+
+    /// Shift the given particles and re-apply periodic boundaries.
+    ///
+    /// Private: an index list says nothing about which group's derived state it invalidates, which
+    /// is exactly how a mass center gets left behind. Callers go through the group-scoped verbs.
+    #[inline(always)]
+    pub(crate) fn translate_particles(&mut self, indices: &[usize], shift: &Point) {
+        let cell = self.cell.clone();
+        for &i in indices {
+            let mut pos = Point::new(
+                self.x[i] + shift.x,
+                self.y[i] + shift.y,
+                self.z[i] + shift.z,
+            );
+            cell.boundary(&mut pos);
+            self.x[i] = pos.x;
+            self.y[i] = pos.y;
+            self.z[i] = pos.z;
+        }
+        self.update_cell_list_particles(indices);
+    }
+
+    pub(crate) fn rotate_particles(
+        &mut self,
+        indices: &[usize],
+        quaternion: &crate::UnitQuaternion,
+        shift: Option<Point>,
+    ) {
+        let center = -shift.unwrap_or_else(Point::zeros);
+        for &i in indices {
+            let pos = Point::new(self.x[i], self.y[i], self.z[i]);
+            let relative = self.cell.distance(&pos, &center);
+            let mut rotated = quaternion.transform_vector(&relative) + center;
+            self.cell.boundary(&mut rotated);
+            self.x[i] = rotated.x;
+            self.y[i] = rotated.y;
+            self.z[i] = rotated.z;
+        }
+        self.update_cell_list_particles(indices);
+    }
+
+    pub(crate) fn set_particle_positions(&mut self, indices: &[usize], positions: &[Point]) {
+        for (&i, position) in indices.iter().zip(positions) {
+            let mut position = *position;
+            self.cell.boundary(&mut position);
+            self.x[i] = position.x;
+            self.y[i] = position.y;
+            self.z[i] = position.z;
+        }
+        self.update_cell_list_particles(indices);
+    }
+
+    /// A group's reference conformation and its current coordinates, gathered into one image —
+    /// the two point sets a body frame is fitted between.
+    ///
+    /// The reference is copied only to release the borrow on the topology.
+    fn body_frame_inputs(&self, group_index: usize) -> (Vec<Point>, Vec<Point>) {
+        let group = &self.groups[group_index];
+        let reference = self
+            .topology_ref()
+            .moleculekind(group.molecule())
+            .reference_positions()
+            .to_vec();
+        let current: Vec<Point> = group.iter_active().map(|i| self.position(i)).collect();
+        let gathered = crate::geometry::gather_molecule(&current, &self.cell);
+        (reference, gathered)
+    }
+
+    /// Settle a group's orientation against the coordinates it now holds.
+    ///
+    /// One query, both policies, so that the awkward cases — a linear molecule, whose axial spin
+    /// no coordinate can witness — are handled the same way whichever path arrives here.
+    fn settle_orientation(&mut self, group_index: usize, policy: OrientationPolicy) {
+        /// Below this, the coordinates *are* the reference conformation, rotated. Loose enough to
+        /// absorb the rounding of a three-decimal structure file, and orders of magnitude tighter
+        /// than any conformational change: a chain that has actually been reshaped misses its
+        /// reference by ångströms, not by thousandths. Nothing real lands in between.
+        const RIGID_IMAGE_TOLERANCE: f64 = 1e-3;
+
+        let (reference, gathered) = self.body_frame_inputs(group_index);
+        let prior = *self.groups[group_index].quaternion();
+        let tolerance = match policy {
+            OrientationPolicy::KeepWhatIsStored => RIGID_IMAGE_TOLERANCE,
+            // Any frame the coordinates suggest beats one describing a molecule that has left.
+            OrientationPolicy::NeverInherit => f64::INFINITY,
+        };
+
+        match crate::geometry::rigid_body_rotation(&reference, &gathered, tolerance, &prior) {
+            Some(orientation) => self.groups[group_index].set_quaternion(orientation),
+            None => match policy {
+                OrientationPolicy::KeepWhatIsStored => (),
+                // No reference conformation to fit against: no body frame to speak of.
+                OrientationPolicy::NeverInherit => {
+                    self.groups[group_index].set_quaternion(UnitQuaternion::identity());
+                }
+            },
+        }
+    }
+
     /// Build from raw parts (topology, cell, hamiltonian) for testing.
     pub(crate) fn from_raw_parts(
         topology: Arc<Topology>,
@@ -330,8 +472,22 @@ impl GroupCollection for Backend {
 }
 
 impl GroupCollectionMut for Backend {
-    fn groups_mut(&mut self) -> &mut [Group] {
-        &mut self.groups
+    fn set_all_positions(&mut self, positions: &[Point]) -> anyhow::Result<()> {
+        anyhow::ensure!(
+            positions.len() == self.x.len(),
+            "set_all_positions: {} positions for {} particles",
+            positions.len(),
+            self.x.len()
+        );
+        self.set_positions(0..positions.len(), positions.iter());
+        for g in 0..self.groups.len() {
+            self.update_mass_center(g);
+        }
+        Ok(())
+    }
+
+    fn set_group_orientation(&mut self, group_index: usize, orientation: crate::UnitQuaternion) {
+        self.groups[group_index].set_quaternion(orientation);
     }
 
     fn set_atom_kind(&mut self, index: usize, atom_id: AtomKindId) {
@@ -383,29 +539,71 @@ impl GroupCollectionMut for Backend {
         }
     }
 
-    fn update_mass_center(&mut self, group_index: usize) {
-        let group = &self.groups[group_index];
-        let indices = group
-            .select(
-                &crate::group::ParticleSelection::Active,
-                self.topology_ref(),
-            )
-            .unwrap();
-        if !indices.is_empty() && self.topology().moleculekind(group.molecule()).has_com() {
-            let mass_center = self.mass_center(&indices);
-            // Bounding radius: max PBC distance from COM to any active particle
-            let bounding_radius = indices
-                .iter()
-                .map(|&i| {
-                    let pos = Point::new(self.x[i], self.y[i], self.z[i]);
-                    self.cell.distance(&pos, &mass_center).norm()
-                })
-                .fold(0.0_f64, f64::max);
-            self.groups[group_index].set_geometry(Some(GroupGeometry {
-                mass_center,
-                bounding_radius,
-            }));
+    fn apply_particles_and_groups(
+        &mut self,
+        particles: &[crate::Particle],
+        sizes: &[GroupSize],
+        quaternions: &[crate::UnitQuaternion],
+    ) -> anyhow::Result<()> {
+        /// Two orientations further apart than this describe visibly different molecules.
+        const ORIENTATION_MISMATCH: f64 = 1e-6;
+
+        self.set_positions(0..particles.len(), particles.iter().map(|p| &p.pos));
+        for (i, p) in particles.iter().enumerate() {
+            // Every group's geometry is recomputed below, so skip the per-particle refresh.
+            self.set_atom_kind_unchecked(i, AtomKindId::new(p.atom_id));
         }
+        for (i, (&size, &q)) in sizes.iter().zip(quaternions.iter()).enumerate() {
+            self.resize_group(i, size)?;
+            self.groups[i].set_quaternion(q);
+        }
+
+        // `resize_group` has already refreshed each group's geometry against the final coordinates.
+        let mut corrected = 0usize;
+        for i in 0..sizes.len() {
+            let recorded = *self.groups[i].quaternion();
+            self.settle_orientation(i, OrientationPolicy::KeepWhatIsStored);
+            if self.groups[i].quaternion().angle_to(&recorded) > ORIENTATION_MISMATCH {
+                corrected += 1;
+            }
+        }
+        // Silently healing this would hide the fact that the run it came from was writing
+        // orientations that did not describe its own coordinates.
+        if corrected > 0 {
+            log::warn!(
+                "{corrected} group(s) had a stored orientation inconsistent with their coordinates; \
+                 recomputed from the coordinates. The state file was written before orientations \
+                 were tracked, or by a path that did not keep them in step."
+            );
+        }
+        Ok(())
+    }
+
+    fn place_group(
+        &mut self,
+        group_index: usize,
+        positions: &[Point],
+        orientation: Option<crate::UnitQuaternion>,
+    ) -> anyhow::Result<()> {
+        let group = &self.groups[group_index];
+        // Exactly the capacity, not merely "no more than": a short slice would leave the tail of
+        // the group holding the previous molecule's coordinates, and the mass center and
+        // orientation would then be derived from a mixture of the new atoms and the old. The
+        // inactive slots matter too — molecular swap reads them as its overlay template.
+        anyhow::ensure!(
+            positions.len() == group.capacity(),
+            "place_group: {} positions for a group of capacity {}",
+            positions.len(),
+            group.capacity()
+        );
+        let start = group.start();
+        self.set_positions(start..start + positions.len(), positions.iter());
+        self.update_mass_center(group_index);
+        match orientation {
+            Some(known) => self.groups[group_index].set_quaternion(known),
+            None => self.settle_orientation(group_index, OrientationPolicy::NeverInherit),
+        }
+        Ok(())
     }
 
     fn add_group(
@@ -475,6 +673,11 @@ impl GroupCollectionMut for Backend {
                 }
             }
         }
+
+        // Which atoms are active *is* what the mass center and bounding radius are taken over,
+        // so a resize invalidates them. Refreshing here rather than at the call sites is what
+        // stops a shrink from quietly keeping the geometry of the atoms it just dropped (#52).
+        self.update_mass_center(group_index);
         Ok(())
     }
 }
@@ -604,51 +807,50 @@ impl crate::context::PerturbContext for Backend {
         Ok(old_volume)
     }
 
-    #[inline(always)]
-    fn translate_particles(&mut self, indices: &[usize], shift: &Point) {
-        let cell = self.cell.clone();
-        for &i in indices {
-            let mut pos = Point::new(
-                self.x[i] + shift.x,
-                self.y[i] + shift.y,
-                self.z[i] + shift.z,
-            );
-            cell.boundary(&mut pos);
-            self.x[i] = pos.x;
-            self.y[i] = pos.y;
-            self.z[i] = pos.z;
-        }
-        self.update_cell_list_particles(indices);
+    fn translate_group(&mut self, group_index: usize, shift: &Point) -> anyhow::Result<()> {
+        let indices = self.groups[group_index].select(
+            &crate::group::ParticleSelection::Active,
+            self.topology_ref(),
+        )?;
+        self.translate_particles(&indices, shift);
+        // The orientation is unchanged by a translation; the mass center moves with the group.
+        self.update_mass_center(group_index);
+        Ok(())
     }
 
-    fn rotate_particles(
+    fn rotate_group(
         &mut self,
-        indices: &[usize],
+        group_index: usize,
         quaternion: &crate::UnitQuaternion,
-        shift: Option<Point>,
-    ) {
-        let center = -shift.unwrap_or_else(Point::zeros);
-        for &i in indices {
-            let pos = Point::new(self.x[i], self.y[i], self.z[i]);
-            let relative = self.cell.distance(&pos, &center);
-            let mut rotated = quaternion.transform_vector(&relative) + center;
-            self.cell.boundary(&mut rotated);
-            self.x[i] = rotated.x;
-            self.y[i] = rotated.y;
-            self.z[i] = rotated.z;
-        }
-        self.update_cell_list_particles(indices);
+    ) -> anyhow::Result<()> {
+        let indices = self.groups[group_index].select(
+            &crate::group::ParticleSelection::Active,
+            self.topology_ref(),
+        )?;
+        let center = self.mass_center(&indices);
+        self.rotate_particles(&indices, quaternion, Some(-center));
+        self.groups[group_index].rotate_by(quaternion);
+        // Rotation about the mass center leaves it invariant, but the bounding radius is taken
+        // under minimum image and a molecule near a boundary can present a different one.
+        self.update_mass_center(group_index);
+        Ok(())
     }
 
-    fn set_particle_positions(&mut self, indices: &[usize], positions: &[Point]) {
-        for (&i, position) in indices.iter().zip(positions) {
-            let mut position = *position;
-            self.cell.boundary(&mut position);
-            self.x[i] = position.x;
-            self.y[i] = position.y;
-            self.z[i] = position.z;
-        }
-        self.update_cell_list_particles(indices);
+    fn set_group_conformation(
+        &mut self,
+        group_index: usize,
+        indices: &[usize],
+        positions: &[Point],
+    ) -> anyhow::Result<()> {
+        anyhow::ensure!(
+            indices.len() == positions.len(),
+            "set_group_conformation: {} positions for {} selected particles",
+            positions.len(),
+            indices.len()
+        );
+        self.set_particle_positions(indices, positions);
+        self.update_mass_center(group_index);
+        Ok(())
     }
 }
 
@@ -894,7 +1096,7 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
     #[test]
     fn undo_can_clear_a_geometry_the_move_created() {
         let mut context = backend();
-        context.groups_mut()[1].set_geometry(None);
+        context.groups[1].set_geometry(None);
 
         context.save_particle_backup(1, &[2, 3]);
         Transform::Activate.on_group(1, &mut context).unwrap();

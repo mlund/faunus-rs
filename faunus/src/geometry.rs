@@ -1,6 +1,6 @@
 //! Geometry: mass center, dipole moment, angles, dihedrals, gyration tensor, and molecular overlay.
 
-use crate::{cell::SimulationCell, Point};
+use crate::{cell::SimulationCell, Point, UnitQuaternion};
 use nalgebra::{Matrix3, Rotation3, SymmetricEigen, Vector3};
 use rand::Rng;
 
@@ -107,22 +107,6 @@ impl GyrationTensor {
         tensor /= total_mass;
         Some(Self::from_tensor(tensor))
     }
-
-    /// Build from equal-mass positions (no PBC).
-    pub fn from_equal_mass_positions(positions: &[Point]) -> Option<Self> {
-        if positions.len() < 2 {
-            return None;
-        }
-        let n = positions.len() as f64;
-        let com: Point = positions.iter().sum::<Point>() / n;
-        let mut tensor = Matrix3::<f64>::zeros();
-        for p in positions {
-            let r = p - com;
-            tensor += r * r.transpose();
-        }
-        tensor /= n;
-        Some(Self::from_tensor(tensor))
-    }
 }
 
 /// Tolerance for detecting degenerate eigenvalues.
@@ -166,12 +150,201 @@ fn randomize_degenerate_axes(
     Rotation3::from_matrix_unchecked(mat)
 }
 
+/// Gather a molecule into a single periodic image, minimum-imaged about its first atom.
+///
+/// Stored coordinates are wrapped into the cell, so a molecule straddling a boundary has
+/// atoms at opposite ends of an axis. Any arithmetic that treats those raw values as a rigid
+/// body — a centroid, a gyration tensor, a displacement from the centre — then describes a
+/// shell the size of the box rather than a molecule. Gather first.
+///
+/// Meaningful only while the molecule spans less than half the shortest box side; beyond
+/// that, minimum image picks the wrong periodic copy and no gathering can recover it.
+pub(crate) fn gather_molecule(positions: &[Point], cell: &impl SimulationCell) -> Vec<Point> {
+    let Some(&first) = positions.first() else {
+        return Vec::new();
+    };
+    positions
+        .iter()
+        .map(|p| first + cell.distance(p, &first))
+        .collect()
+}
+
+/// Rotation that best maps a molecule's `reference` conformation onto its `current`
+/// coordinates (Kabsch superposition).
+///
+/// This is what a group's stored orientation *means*, so it can be recovered from the
+/// coordinates rather than carried alongside them and forgotten. `current` must already be
+/// gathered into one periodic image; both sets are centred here.
+///
+/// `None` when there is nothing to fit — fewer than two atoms, or a mismatched conformation.
+/// The fit is exact for a rigid body and a least-squares best fit otherwise. It is ambiguous,
+/// though always consistent with the coordinates, for a molecule with rotational symmetry.
+pub(crate) fn best_fit_rotation(reference: &[Point], current: &[Point]) -> Option<UnitQuaternion> {
+    if reference.len() != current.len() || reference.len() < 2 {
+        return None;
+    }
+    let n = reference.len() as f64;
+    let ref_com: Point = reference.iter().sum::<Point>() / n;
+    let cur_com: Point = current.iter().sum::<Point>() / n;
+
+    // Covariance of the two centred point sets; its SVD gives the optimal rotation.
+    let covariance = reference
+        .iter()
+        .zip(current)
+        .fold(Matrix3::zeros(), |acc, (r, c)| {
+            acc + (c - cur_com) * (r - ref_com).transpose()
+        });
+
+    let svd = covariance.svd(true, true);
+    let (u, v_t) = (svd.u?, svd.v_t?);
+    // A negative determinant would be a reflection, not a rotation: flip the least significant
+    // singular vector, which is the smallest change that restores a proper rotation.
+    let sign = (u * v_t).determinant().signum();
+    let matrix = u * Matrix3::from_diagonal(&Vector3::new(1.0, 1.0, sign)) * v_t;
+
+    Some(UnitQuaternion::from_rotation_matrix(
+        &Rotation3::from_matrix_unchecked(matrix),
+    ))
+}
+
+/// How far a molecule's coordinates depart from the ones `orientation` claims it has (RMSD, Å).
+///
+/// The honest test of a stored orientation, and the only one that works for every molecule: it
+/// asks whether the quaternion *reproduces the coordinates*, not whether it equals some fitted
+/// value. A symmetric or linear molecule has many orientations consistent with the same
+/// coordinates — comparing against a best fit would call those disagreements, when the coordinates
+/// cannot tell them apart at all.
+///
+/// `None` when there is nothing to compare — a mismatched or absent reference conformation.
+#[cfg(test)]
+pub(crate) fn orientation_residual(
+    reference: &[Point],
+    current: &[Point],
+    orientation: &UnitQuaternion,
+) -> Option<f64> {
+    if reference.len() != current.len() || reference.is_empty() {
+        return None;
+    }
+    let n = reference.len() as f64;
+    let ref_com: Point = reference.iter().sum::<Point>() / n;
+    let cur_com: Point = current.iter().sum::<Point>() / n;
+    Some(
+        (reference
+            .iter()
+            .zip(current)
+            .map(|(r, c)| (orientation * (r - ref_com) - (c - cur_com)).norm_squared())
+            .sum::<f64>()
+            / n)
+            .sqrt(),
+    )
+}
+
+/// Relative spread below which a molecule counts as linear and its axial rotation as free.
+const COLLINEARITY_TOL: f64 = 1e-9;
+
+/// The direction a molecule lies along, if it is linear.
+///
+/// A superposition pins a rigid body's rotation only when the molecule spans at least a plane.
+/// A diatomic — or any linear molecule — leaves the rotation *about its own axis* completely
+/// undetermined: every axial angle reproduces the coordinates exactly, so the fit is free to
+/// return any of them.
+fn collinear_axis(points: &[Point]) -> Option<Point> {
+    let n = points.len() as f64;
+    let com: Point = points.iter().sum::<Point>() / n;
+    let covariance = points.iter().fold(Matrix3::zeros(), |acc, p| {
+        let d = p - com;
+        acc + d * d.transpose()
+    });
+    let eigen = SymmetricEigen::new(covariance);
+    let mut order = [0, 1, 2];
+    order.sort_by(|&a, &b| eigen.eigenvalues[b].total_cmp(&eigen.eigenvalues[a]));
+    let (largest, second) = (eigen.eigenvalues[order[0]], eigen.eigenvalues[order[1]]);
+    (second <= COLLINEARITY_TOL * largest).then(|| eigen.eigenvectors.column(order[0]).normalize())
+}
+
+/// The component of `rotation` about `axis` (the twist of a swing-twist decomposition).
+fn twist_about(rotation: &UnitQuaternion, axis: &Point) -> UnitQuaternion {
+    let projected = axis * rotation.vector().dot(axis);
+    let twist = nalgebra::Quaternion::new(rotation.w, projected.x, projected.y, projected.z);
+    if twist.norm() < f64::EPSILON {
+        UnitQuaternion::identity()
+    } else {
+        UnitQuaternion::new_normalize(twist)
+    }
+}
+
+/// Rotation carrying `reference` onto `current`, but only when `current` really is a rigid
+/// image of it — the residual of the fit is below `tolerance`.
+///
+/// This is the test for "is the orientation recoverable from the coordinates at all". It is,
+/// for a molecule that has only been rotated and translated; it is not for one whose shape has
+/// actually changed, where a best fit is just the closest lie and the stored orientation is the
+/// only record of the rotations that were applied. Returning `None` there keeps a fit from
+/// silently overwriting it.
+///
+/// A *linear* molecule is recoverable only up to its axial spin, which no coordinate can
+/// witness. The free component is resolved against `prior` — the orientation the group already
+/// holds — rather than left to whatever the superposition happens to produce, which would
+/// otherwise re-spin a diatomic by an arbitrary angle every time its coordinates were revisited.
+pub(crate) fn rigid_body_rotation(
+    reference: &[Point],
+    current: &[Point],
+    tolerance: f64,
+    prior: &UnitQuaternion,
+) -> Option<UnitQuaternion> {
+    let rotation = best_fit_rotation(reference, current)?;
+    let n = reference.len() as f64;
+    let ref_com: Point = reference.iter().sum::<Point>() / n;
+    let cur_com: Point = current.iter().sum::<Point>() / n;
+    let residual = (reference
+        .iter()
+        .zip(current)
+        .map(|(r, c)| (rotation * (r - ref_com) - (c - cur_com)).norm_squared())
+        .sum::<f64>()
+        / n)
+        .sqrt();
+    if residual > tolerance {
+        return None;
+    }
+
+    let Some(axis) = collinear_axis(reference) else {
+        return Some(rotation); // the fit is unique
+    };
+    // Keep the axial spin the group already had: it is unobservable, so re-deriving it would
+    // change the stored orientation without anything in the coordinates having moved.
+    let lab_axis = rotation * axis;
+    let delta = prior * rotation.inverse();
+    Some(twist_about(&delta, &lab_axis) * rotation)
+}
+
+/// Place a molecule's template at `com`, keeping its conformation and orientation.
+///
+/// The unoriented counterpart of [`overlay_positions`], for the cases where no principal-axis
+/// frame exists to align against — a molecule of fewer than two atoms has no such frame.
+pub(crate) fn place_at(template: &[Point], com: &Point, cell: &impl SimulationCell) -> Vec<Point> {
+    let gathered = gather_molecule(template, cell);
+    if gathered.is_empty() {
+        return Vec::new();
+    }
+    let centroid: Point = gathered.iter().sum::<Point>() / gathered.len() as f64;
+    gathered
+        .iter()
+        .map(|p| {
+            let mut pos = com + (p - centroid);
+            cell.boundary(&mut pos);
+            pos
+        })
+        .collect()
+}
+
 /// Overlay template positions onto a target molecule using gyration tensor alignment.
 ///
-/// Aligns the principal axes of `template_positions` (equal-mass, no PBC) to
-/// match the principal-axis frame of the target group defined by
-/// `target_positions_masses` (mass-weighted, with PBC). Degenerate eigenvalues
-/// are resolved with random sign flips to avoid MC bias.
+/// Aligns the principal axes of `template_positions` to match the principal-axis frame of
+/// the target group defined by `target_positions_masses` (mass-weighted, with PBC).
+/// Degenerate eigenvalues are resolved with random sign flips to avoid MC bias.
+///
+/// The template arrives as raw stored coordinates and so is gathered first; the target is
+/// minimum-imaged about its own mass center by [`GyrationTensor::from_positions_masses_com`].
 ///
 /// Returns new positions in lab frame, centered on the target COM.
 pub(crate) fn overlay_positions(
@@ -181,9 +354,17 @@ pub(crate) fn overlay_positions(
     cell: &impl SimulationCell,
     rng: &mut (impl Rng + ?Sized),
 ) -> Option<Vec<Point>> {
+    let template = gather_molecule(template_positions, cell);
+    let template_com: Point = template.iter().sum::<Point>() / template.len() as f64;
+
     let target_gt =
         GyrationTensor::from_positions_masses_com(target_positions_masses, target_com, cell)?;
-    let template_gt = GyrationTensor::from_equal_mass_positions(template_positions)?;
+    // Already gathered, so there is no minimum image left to apply — hence `Endless`.
+    let template_gt = GyrationTensor::from_positions_masses_com(
+        template.iter().map(|&p| (p, 1.0)),
+        &template_com,
+        &crate::cell::Endless,
+    )?;
 
     // Randomize degenerate axes for both frames
     let target_rot = randomize_degenerate_axes(&target_gt.rotation, &target_gt.eigenvalues, rng);
@@ -193,11 +374,7 @@ pub(crate) fn overlay_positions(
     // R = R_target · R_template⁻¹ maps template body frame → target lab frame
     let align = target_rot * template_rot.inverse();
 
-    // Template COM
-    let n = template_positions.len() as f64;
-    let template_com: Point = template_positions.iter().sum::<Point>() / n;
-
-    let positions = template_positions
+    let positions = template
         .iter()
         .map(|p| {
             let mut pos = target_com + align * (p - template_com);
@@ -212,9 +389,19 @@ pub(crate) fn overlay_positions(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::cell::{BoundaryConditions, Shape};
+    use crate::cell::{BoundaryConditions, Endless, Shape};
     use approx::assert_relative_eq;
     use nalgebra::Vector3;
+
+    /// Gyration tensor of equal-mass points that are already in one image.
+    fn equal_mass_gyration(positions: &[Point]) -> Option<GyrationTensor> {
+        let com: Point = positions.iter().sum::<Point>() / positions.len().max(1) as f64;
+        GyrationTensor::from_positions_masses_com(
+            positions.iter().map(|&p| (p, 1.0)),
+            &com,
+            &Endless,
+        )
+    }
 
     #[test]
     fn dipole_moment_simple() {
@@ -253,7 +440,7 @@ mod tests {
             Point::new(0.0, 0.0, 0.0),
             Point::new(1.0, 0.0, 0.0),
         ];
-        let gt = GyrationTensor::from_equal_mass_positions(&positions).unwrap();
+        let gt = equal_mass_gyration(&positions).unwrap();
         assert_relative_eq!(gt.eigenvalues[0], 0.0, epsilon = 1e-10);
         assert_relative_eq!(gt.eigenvalues[1], 0.0, epsilon = 1e-10);
         assert!(gt.eigenvalues[2] > 0.0);
@@ -268,7 +455,7 @@ mod tests {
             Point::new(-1.0, 1.0, -1.0),
             Point::new(-1.0, -1.0, 1.0),
         ];
-        let gt = GyrationTensor::from_equal_mass_positions(&positions).unwrap();
+        let gt = equal_mass_gyration(&positions).unwrap();
         assert_relative_eq!(gt.eigenvalues[0], gt.eigenvalues[1], epsilon = 1e-10);
         assert_relative_eq!(gt.eigenvalues[1], gt.eigenvalues[2], epsilon = 1e-10);
     }
@@ -281,15 +468,15 @@ mod tests {
             Point::new(0.0, 0.0, 0.5),
             Point::new(-1.0, 0.5, 0.2),
         ];
-        let gt = GyrationTensor::from_equal_mass_positions(&positions).unwrap();
+        let gt = equal_mass_gyration(&positions).unwrap();
         assert_relative_eq!(gt.rotation.matrix().determinant(), 1.0, epsilon = 1e-10);
     }
 
     #[test]
     fn too_few_particles_returns_none() {
         let positions = [Point::new(1.0, 2.0, 3.0)];
-        assert!(GyrationTensor::from_equal_mass_positions(&positions).is_none());
-        assert!(GyrationTensor::from_equal_mass_positions(&[]).is_none());
+        assert!(equal_mass_gyration(&positions).is_none());
+        assert!(equal_mass_gyration(&[]).is_none());
     }
 
     #[test]
@@ -322,8 +509,8 @@ mod tests {
         assert_relative_eq!(result_com.z, target_com.z, epsilon = 1e-8);
 
         // Rg² should be preserved (same shape, just rotated+translated)
-        let template_gt = GyrationTensor::from_equal_mass_positions(&template).unwrap();
-        let result_gt = GyrationTensor::from_equal_mass_positions(&result).unwrap();
+        let template_gt = equal_mass_gyration(&template).unwrap();
+        let result_gt = equal_mass_gyration(&result).unwrap();
         assert_relative_eq!(result_gt.rg_squared, template_gt.rg_squared, epsilon = 1e-8);
     }
 
@@ -352,6 +539,177 @@ mod tests {
         // All result positions should be inside the cell
         for pos in &result {
             assert!(cell.is_inside(pos), "Position {pos:?} outside cell");
+        }
+    }
+
+    /// The rotation a molecule was placed with is exactly what the fit recovers.
+    #[test]
+    fn best_fit_rotation_recovers_an_applied_rotation() {
+        let reference = [
+            Point::new(0.0, 0.0, 0.0),
+            Point::new(4.5, 0.0, 1.5),
+            Point::new(2.25, 3.9, -0.5),
+            Point::new(-2.25, -3.9, -0.5),
+        ];
+        let mut rng = rand::thread_rng();
+        for _ in 0..50 {
+            let applied = crate::transform::random_rotation(&mut rng);
+            let shift = Point::new(11.0, -3.0, 7.0);
+            let current: Vec<Point> = reference.iter().map(|p| applied * p + shift).collect();
+
+            let fitted = best_fit_rotation(&reference, &current).unwrap();
+            assert!(
+                fitted.angle_to(&applied) < 1e-9,
+                "recovered {fitted:?}, applied {applied:?}"
+            );
+        }
+    }
+
+    /// A reflection is not a rotation: a mirrored molecule must not be fitted with one.
+    #[test]
+    fn best_fit_rotation_never_returns_a_reflection() {
+        let reference = [
+            Point::new(0.0, 0.0, 0.0),
+            Point::new(1.0, 0.0, 0.0),
+            Point::new(0.0, 1.0, 0.0),
+            Point::new(0.0, 0.0, 1.0),
+        ];
+        // Mirror through the xy-plane — no rotation can reproduce it.
+        let current: Vec<Point> = reference
+            .iter()
+            .map(|p| Point::new(p.x, p.y, -p.z))
+            .collect();
+
+        let fitted = best_fit_rotation(&reference, &current).unwrap();
+        let matrix = fitted.to_rotation_matrix();
+        assert_relative_eq!(matrix.matrix().determinant(), 1.0, epsilon = 1e-9);
+    }
+
+    /// A linear molecule's spin about its own axis is unobservable, so it must not be invented.
+    ///
+    /// The superposition of a diatomic is rank-deficient: every axial angle reproduces the
+    /// coordinates exactly, and the raw fit returns an arbitrary one — measured at up to 170°
+    /// from the truth. Left unchecked, restoring a perfectly consistent checkpoint would re-spin
+    /// every dimer in it and report the file as corrupt.
+    #[test]
+    fn a_linear_molecule_keeps_the_axial_spin_it_already_had() {
+        let reference = [Point::new(-1.0, 0.0, 0.0), Point::new(1.0, 0.0, 0.0)];
+        let mut rng = rand::thread_rng();
+
+        for _ in 0..50 {
+            let truth = crate::transform::random_rotation(&mut rng);
+            let current: Vec<Point> = reference.iter().map(|p| truth * p).collect();
+
+            // Told what the group already believes, the fit must return exactly that.
+            let recovered = rigid_body_rotation(&reference, &current, 1e-3, &truth)
+                .expect("a rigidly rotated dimer is a rigid image");
+            assert!(
+                recovered.angle_to(&truth) < 1e-9,
+                "re-spun a dimer by {:.1}° against coordinates that never moved",
+                recovered.angle_to(&truth).to_degrees()
+            );
+
+            // Whatever it returns must still reproduce the coordinates.
+            for (r, c) in reference.iter().zip(&current) {
+                assert_relative_eq!((recovered * r - c).norm(), 0.0, epsilon = 1e-9);
+            }
+        }
+    }
+
+    /// A molecule spanning a plane pins its rotation outright; the prior is irrelevant.
+    #[test]
+    fn a_non_linear_molecule_ignores_the_prior() {
+        let reference = [
+            Point::new(0.0, 0.0, 0.0),
+            Point::new(2.0, 0.0, 0.0),
+            Point::new(0.0, 1.5, 0.0),
+        ];
+        let mut rng = rand::thread_rng();
+        let truth = crate::transform::random_rotation(&mut rng);
+        let current: Vec<Point> = reference.iter().map(|p| truth * p).collect();
+
+        let nonsense = crate::transform::random_rotation(&mut rng);
+        let recovered = rigid_body_rotation(&reference, &current, 1e-3, &nonsense).unwrap();
+        assert!(recovered.angle_to(&truth) < 1e-9);
+    }
+
+    /// A conformation that actually changed has no rigid-body rotation to recover.
+    #[test]
+    fn a_reshaped_molecule_has_no_rigid_body_rotation() {
+        let reference = [
+            Point::new(0.0, 0.0, 0.0),
+            Point::new(2.0, 0.0, 0.0),
+            Point::new(0.0, 1.5, 0.0),
+        ];
+        let mut deformed = reference.to_vec();
+        deformed[2].y += 0.9; // a pivot-scale change, far beyond any rounding
+        assert!(
+            rigid_body_rotation(&reference, &deformed, 1e-3, &UnitQuaternion::identity()).is_none()
+        );
+    }
+
+    #[test]
+    fn best_fit_rotation_needs_two_matched_atoms() {
+        let one = [Point::new(1.0, 2.0, 3.0)];
+        assert!(best_fit_rotation(&one, &one).is_none());
+        let two = [Point::zeros(), Point::new(1.0, 0.0, 0.0)];
+        assert!(best_fit_rotation(&two, &one).is_none());
+    }
+
+    /// All pairwise minimum-image separations, ascending — the molecule's shape,
+    /// independent of where and how it is oriented.
+    fn pair_distances(positions: &[Point], cell: &impl BoundaryConditions) -> Vec<f64> {
+        let mut d = Vec::new();
+        for (n, p) in positions.iter().enumerate() {
+            for q in &positions[n + 1..] {
+                d.push(cell.distance(p, q).norm());
+            }
+        }
+        d.sort_by(f64::total_cmp);
+        d
+    }
+
+    /// A template stored across a periodic boundary still overlays as one intact molecule.
+    ///
+    /// The template arrives as raw wrapped coordinates — a molecule sitting on the box edge
+    /// has atoms at both ends of the axis. Treating those as a rigid body without gathering
+    /// them first puts its centre mid-box and flings the atoms apart on overlay.
+    #[test]
+    fn overlay_of_a_wrapped_template_keeps_the_molecule_intact() {
+        let cell = crate::cell::Cuboid::new(20.0, 20.0, 20.0);
+
+        // Centre the molecule on the +x face so that it straddles the boundary.
+        let shape = [
+            Point::new(-2.0, 0.0, 0.0),
+            Point::new(2.0, 0.0, 0.0),
+            Point::new(0.0, 1.5, 0.0),
+        ];
+        let template: Vec<Point> = shape
+            .iter()
+            .map(|p| {
+                let mut pos = p + Point::new(10.0, 0.0, 0.0);
+                cell.boundary(&mut pos);
+                pos
+            })
+            .collect();
+        assert!(
+            template.iter().any(|p| p.x < 0.0) && template.iter().any(|p| p.x > 0.0),
+            "template must straddle the boundary for this test to mean anything"
+        );
+
+        // Target: the same molecule, intact, in the middle of the box.
+        let target_com = Point::new(1.0, 2.0, 3.0);
+        let target: Vec<(Point, f64)> = shape.iter().map(|p| (p + target_com, 1.0)).collect();
+
+        let mut rng = rand::thread_rng();
+        let result = overlay_positions(&template, target, &target_com, &cell, &mut rng).unwrap();
+
+        // The overlay may reorient the molecule, but it must not deform it.
+        let expected = pair_distances(&shape, &Endless);
+        let got = pair_distances(&result, &cell);
+        assert_eq!(got.len(), expected.len());
+        for (got, want) in got.iter().zip(&expected) {
+            assert_relative_eq!(got, want, epsilon = 1e-8);
         }
     }
 }

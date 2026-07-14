@@ -24,7 +24,7 @@ use std::{cmp::Ordering, path::Path};
 use super::{molecule::MoleculeKind, structure, AtomKind, InputPath};
 use crate::axes::Axes;
 use crate::transform;
-use crate::{cell::SimulationCell, group::GroupSize, Context, Point, UnitQuaternion};
+use crate::{cell::SimulationCell, group::GroupSize, Context, Point};
 use serde::{Deserialize, Serialize};
 use validator::{Validate, ValidationError};
 
@@ -94,7 +94,10 @@ pub enum InsertionPolicy {
 }
 
 impl InsertionPolicy {
-    /// Obtain or generate positions and per-molecule quaternions.
+    /// Obtain or generate the block's particle positions.
+    ///
+    /// No orientation is reported: a molecule's orientation is recovered from the coordinates it
+    /// was placed at, so there is nothing here to record and nothing to fall out of step with them.
     fn get_positions(
         &self,
         atoms: &[AtomKind],
@@ -102,20 +105,18 @@ impl InsertionPolicy {
         number: usize,
         cell: &impl SimulationCell,
         rng: &mut impl Rng,
-    ) -> anyhow::Result<(Vec<Point>, Vec<UnitQuaternion>)> {
+    ) -> anyhow::Result<Vec<Point>> {
         match self {
             Self::FromFile(filename) => {
                 let pos =
                     structure::positions_from_structure_file(filename.path().unwrap(), Some(cell))?;
-                Ok((pos, vec![UnitQuaternion::identity(); number]))
+                Ok(pos)
             }
 
-            Self::RandomAtomPos { directions } => Ok((
-                (0..(molecule_kind.atom_indices().len() * number))
-                    .map(|_| directions.project(cell.get_point_inside(rng)))
-                    .collect(),
-                vec![UnitQuaternion::identity(); number],
-            )),
+            Self::RandomAtomPos { directions } => Ok((0..(molecule_kind.atom_indices().len()
+                * number))
+                .map(|_| directions.project(cell.get_point_inside(rng)))
+                .collect()),
 
             Self::RandomCOM {
                 rotate,
@@ -137,10 +138,7 @@ impl InsertionPolicy {
                 Self::generate_fixed_com(molecule_kind, atoms, number, cell, rng, *rotate, position)
             }
 
-            Self::Manual(positions) => Ok((
-                positions.to_owned(),
-                vec![UnitQuaternion::identity(); number],
-            )),
+            Self::Manual(positions) => Ok(positions.to_owned()),
 
             Self::RandomWalk {
                 bond_length,
@@ -154,7 +152,7 @@ impl InsertionPolicy {
                     *bond_length,
                     directions,
                 )?;
-                Ok((pos, vec![UnitQuaternion::identity(); number]))
+                Ok(pos)
             }
 
             Self::GridCOM { rotate } => {
@@ -190,7 +188,7 @@ impl InsertionPolicy {
         rng: &mut impl Rng,
         rotate: bool,
         position: &Point,
-    ) -> anyhow::Result<(Vec<Point>, Vec<UnitQuaternion>)> {
+    ) -> anyhow::Result<Vec<Point>> {
         if num_molecules != 1 {
             anyhow::bail!("FixedCOM policy can only be used to insert a single molecule.");
         }
@@ -223,7 +221,7 @@ impl InsertionPolicy {
         directions: &Axes,
         offset: &Option<Point>,
         min_distance: Option<f64>,
-    ) -> anyhow::Result<(Vec<Point>, Vec<UnitQuaternion>)> {
+    ) -> anyhow::Result<Vec<Point>> {
         const MAX_ATTEMPTS: usize = 1_000_000;
 
         let centered_positions = Self::centered_reference_positions(molecule_kind, atoms);
@@ -236,31 +234,29 @@ impl InsertionPolicy {
         let mut gen_pos = || {
             let new_com =
                 directions.project(cell.get_point_inside(rng)) + offset.unwrap_or(Point::zeros());
-            let (positions, q) =
+            let positions =
                 Self::place_molecule_at(&centered_positions, &new_com, rotate, cell, rng);
-            (new_com, positions, q)
+            (new_com, positions)
         };
 
         let mut placed_coms: Vec<Point> = Vec::with_capacity(num_molecules);
         let mut all_positions: Vec<Point> =
             Vec::with_capacity(num_molecules * centered_positions.len());
-        let mut quaternions: Vec<UnitQuaternion> = Vec::with_capacity(num_molecules);
-
         let threshold_sq = min_distance.map(|d| {
             let t = 2.0 * bounding_radius + d;
             t * t
         });
 
         for i in 0..num_molecules {
-            let (com, positions, q) = if let Some(tsq) = threshold_sq {
+            let (com, positions) = if let Some(tsq) = threshold_sq {
                 let mut attempts = 0;
                 loop {
-                    let (com, positions, q) = gen_pos();
+                    let (com, positions) = gen_pos();
                     let overlaps = placed_coms
                         .iter()
                         .any(|other| cell.distance(&com, other).norm_squared() < tsq);
                     if !overlaps {
-                        break (com, positions, q);
+                        break (com, positions);
                     }
                     attempts += 1;
                     if attempts >= MAX_ATTEMPTS {
@@ -280,10 +276,9 @@ impl InsertionPolicy {
 
             placed_coms.push(com);
             all_positions.extend(positions);
-            quaternions.push(q);
         }
 
-        Ok((all_positions, quaternions))
+        Ok(all_positions)
     }
 
     /// Translate centered molecule positions to a given COM, optionally rotate, and wrap into cell.
@@ -297,20 +292,16 @@ impl InsertionPolicy {
         rotate: bool,
         cell: &impl SimulationCell,
         rng: &mut (impl Rng + ?Sized),
-    ) -> (Vec<Point>, UnitQuaternion) {
+    ) -> Vec<Point> {
         let mut positions: Vec<_> = centered_positions.iter().map(|pos| pos + com).collect();
-        let quaternion = if rotate {
-            let q = transform::random_rotation(rng);
-            let matrix = q.to_rotation_matrix();
+        if rotate {
+            let matrix = transform::random_rotation(rng).to_rotation_matrix();
             positions
                 .iter_mut()
                 .for_each(|pos| *pos = matrix * (*pos - com) + com);
-            q
-        } else {
-            UnitQuaternion::identity()
-        };
+        }
         positions.iter_mut().for_each(|pos| cell.boundary(pos));
-        (positions, quaternion)
+        positions
     }
 
     /// Place molecules on a simple cubic grid within a cuboidal cell.
@@ -324,7 +315,7 @@ impl InsertionPolicy {
         cell: &impl SimulationCell,
         rng: &mut impl Rng,
         rotate: bool,
-    ) -> anyhow::Result<(Vec<Point>, Vec<UnitQuaternion>)> {
+    ) -> anyhow::Result<Vec<Point>> {
         let box_lengths = cell
             .bounding_box()
             .ok_or_else(|| anyhow::anyhow!("GridCOM requires a cell with a bounding box"))?;
@@ -363,15 +354,18 @@ impl InsertionPolicy {
         grid_points.shuffle(rng);
 
         let mut all_positions = Vec::with_capacity(num_molecules * centered_positions.len());
-        let mut quaternions = Vec::with_capacity(num_molecules);
 
         for com in grid_points.iter().take(num_molecules) {
-            let (pos, q) = Self::place_molecule_at(&centered_positions, com, rotate, cell, rng);
-            all_positions.extend(pos);
-            quaternions.push(q);
+            all_positions.extend(Self::place_molecule_at(
+                &centered_positions,
+                com,
+                rotate,
+                cell,
+                rng,
+            ));
         }
 
-        Ok((all_positions, quaternions))
+        Ok(all_positions)
     }
 
     /// Generate positions as a self-avoiding random walk from a random origin.
@@ -514,12 +508,9 @@ impl MoleculeBlock {
             n_particles
         );
 
-        // get flat list of positions and per-molecule quaternions
-        let (positions_vec, quaternions) = match &self.insert {
-            None => (
-                external_positions.to_owned(),
-                vec![UnitQuaternion::identity(); self.num_molecules],
-            ),
+        // get flat list of positions
+        let positions_vec = match &self.insert {
+            None => external_positions.to_owned(),
             Some(policy) => policy.get_positions(
                 context.topology().atomkinds(),
                 molecule,
@@ -565,15 +556,16 @@ impl MoleculeBlock {
             }
         } else {
             // Standard: one group per molecule
-            for (i, q) in quaternions.into_iter().enumerate() {
+            for i in 0..self.num_molecules {
                 let (mol_positions, atom_ids) = make_mol_data();
                 let group_index = context
                     .add_group(MoleculeId::new(molecule.id()), &mol_positions, &atom_ids)?
                     .index();
-                // Sync quaternion with the rotation applied during placement so that
-                // LD and 6D tabulated energies see the correct orientation from the start.
-                context.groups_mut()[group_index].set_quaternion(q);
-                context.update_mass_center(group_index);
+                // The orientation the placement applied is recovered from the coordinates it
+                // produced, rather than carried alongside them — including for molecules read
+                // straight from a structure file, which arrive already oriented and used to be
+                // recorded as unrotated.
+                context.place_group(group_index, &mol_positions, None)?;
                 if let BlockActivationStatus::Partial(x) = self.active {
                     if i >= x {
                         context.resize_group(group_index, GroupSize::Empty).unwrap();

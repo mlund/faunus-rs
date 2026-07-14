@@ -213,10 +213,13 @@ impl VirtualTranslate {
 
         let old_energy = context.hamiltonian().energy(context, &change); // kJ/mol
 
-        let particle_indices: Vec<usize> = context.groups()[group_index].iter_active().collect();
-        context.translate_particles(&particle_indices, &displacement_vector);
+        // Through the group, not the bare indices: the perturbed energy must be evaluated against
+        // the displaced mass center. The bounding-sphere cull in `energy/nonbonded` reads it to
+        // decide whether a pair interacts at all, so a centre left behind at the old position can
+        // cull away the very interaction this analysis is trying to measure.
+        context.translate_group(group_index, &displacement_vector)?;
         let new_energy = context.hamiltonian().energy(context, &change); // kJ/mol
-        context.translate_particles(&particle_indices, &(-displacement_vector));
+        context.translate_group(group_index, &(-displacement_vector))?;
 
         Ok((new_energy - old_energy) / self.thermal_energy)
     }

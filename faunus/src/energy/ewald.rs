@@ -496,7 +496,6 @@ mod tests {
     /// fresh reciprocal sum.
     #[test]
     fn incremental_update_matches_fresh_recompute() {
-        use crate::context::PerturbContext;
         use crate::group::GroupCollection;
         use crate::Point;
 
