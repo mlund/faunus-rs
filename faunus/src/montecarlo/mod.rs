@@ -578,6 +578,56 @@ mod tests {
     use crate::backend::Backend;
     use float_cmp::assert_approx_eq;
 
+    /// A `+∞` energy is a state the chain can never enter, only start in.
+    ///
+    /// This is what makes the `∞ → finite` force-accept above safe. That branch returns before it
+    /// reads the bias, so a biased move escaping an overlap skips its acceptance correction — which
+    /// would break detailed balance if such states were part of the equilibrium ensemble. They are
+    /// not: a move *into* an overlap has `ΔU = +∞` and is always rejected, and a move *within* one
+    /// gives `∞ − ∞ = NaN`, which is also rejected. So an overlapping configuration can only be an
+    /// initial one, the force-accept fires during the opening transient and never again, and the
+    /// stationary distribution is untouched.
+    ///
+    /// Nothing else pins this — it is an arithmetic property of the criterion, invisible in the
+    /// fixtures, and the safety of skipping the bias rests entirely on it.
+    #[test]
+    fn an_infinite_energy_state_cannot_be_entered_only_started_in() {
+        let mut rng = rand::rngs::StdRng::seed_from_u64(1);
+        let criterion = AcceptanceCriterion::MetropolisHastings;
+        let thermal_energy = 2.5;
+        // A bias large enough to flip any finite decision, to show it cannot rescue an overlap.
+        let bias = Bias::Dimensionless(-100.0);
+
+        for _ in 0..100 {
+            assert!(
+                !criterion.accept(
+                    NewOld::from(f64::INFINITY, 1.0),
+                    bias,
+                    thermal_energy,
+                    &mut rng
+                ),
+                "a move into an overlap must never be accepted"
+            );
+            assert!(
+                !criterion.accept(
+                    NewOld::from(f64::INFINITY, f64::INFINITY),
+                    bias,
+                    thermal_energy,
+                    &mut rng
+                ),
+                "a move within an overlap must never be accepted"
+            );
+        }
+
+        // Escaping an overlap is always accepted — the transient the force-accept exists for.
+        assert!(criterion.accept(
+            NewOld::from(1.0, f64::INFINITY),
+            bias,
+            thermal_energy,
+            &mut rng
+        ));
+    }
+
     /// The pre-3.0 key spellings are still accepted, so that older input keeps running.
     ///
     /// Nothing else pins them: the inputs under `tests/` all use the canonical keys, so dropping
