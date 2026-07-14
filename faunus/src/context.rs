@@ -21,6 +21,13 @@ pub trait Context:
     + WithSimulationCellMut
     + std::fmt::Debug
 {
+    /// Update internal state after a change (e.g. reciprocal-space energy for Ewald).
+    ///
+    /// The framework calls this itself because it drives a trial in stages — propose, apply,
+    /// evaluate, accept or undo — and must place the refresh between them. An analysis has no such
+    /// stages: it perturbs and reads, so [`PerturbContext::measure`] refreshes on its behalf.
+    fn update(&mut self, change: &Change) -> anyhow::Result<()>;
+
     /// Save energy term backups before a move is applied.
     ///
     /// Call before `apply_with_backup` so Ewald can snapshot old positions.
@@ -45,6 +52,57 @@ pub trait Context:
 
     /// Drop backup without restoring (accept path).
     fn discard_backup(&mut self);
+
+    /// Scale all particle positions and cell volume to a new volume.
+    ///
+    /// The algorithm unwraps PBC for molecular groups, scales positions using the old cell,
+    /// resizes the cell, re-applies PBC with the new cell, and recomputes mass centers.
+    /// Returns the old volume.
+    fn scale_volume_and_positions(
+        &mut self,
+        new_volume: f64,
+        policy: crate::cell::VolumeScalePolicy,
+    ) -> anyhow::Result<f64>;
+
+    /// Rigidly translate a whole group, carrying its mass center with it.
+    ///
+    /// Group-scoped rather than index-scoped so that it *can* maintain the group's derived
+    /// state. A displaced molecule whose cached mass center stays behind is not a bookkeeping
+    /// detail: the bounding-sphere cull in `energy/nonbonded` reads that centre to decide
+    /// whether two groups interact at all, so a stale one silently drops the pair.
+    fn translate_group(&mut self, group_index: usize, shift: &Point) -> anyhow::Result<()>;
+
+    /// Rigidly rotate a whole group about its own mass center, composing its orientation.
+    ///
+    /// The mass center is invariant under a rotation about itself; the orientation is not, and
+    /// composing it here is what keeps it describing the coordinates. Being exact and
+    /// incremental, it also preserves the continuity that a best fit could not: for a symmetric
+    /// molecule, re-deriving the frame each step could jump between equivalent orientations.
+    fn rotate_group(
+        &mut self,
+        group_index: usize,
+        quaternion: &crate::UnitQuaternion,
+    ) -> anyhow::Result<()>;
+
+    /// Reshape a group: move some of its atoms, leaving its rigid-body frame alone.
+    ///
+    /// The counterpart to [`translate_group`](Self::translate_group) and
+    /// [`rotate_group`](Self::rotate_group): those move the molecule, this changes its shape.
+    /// The internal-coordinate moves — pivot, crankshaft — apply here. The mass center and
+    /// bounding radius are recomputed, since the atoms moved; the orientation is not, because a
+    /// conformational change is not a rotation of the body. That is a fact about the operation,
+    /// not something a caller has to remember.
+    ///
+    /// Positions are given outright rather than as a rotation because a sub-tree of a chain must
+    /// be unwrapped by *following bonds*: taking the minimum image of each atom independently, as
+    /// a rotation about a centre would, folds the part of the chain lying more than half a box
+    /// from that centre into the wrong periodic image and tears it apart.
+    fn set_group_conformation(
+        &mut self,
+        group_index: usize,
+        indices: &[usize],
+        positions: &[Point],
+    ) -> anyhow::Result<()>;
 }
 
 /// A trait for objects that have a simulation cell.
@@ -235,70 +293,114 @@ pub trait ObserveContext: GroupCollection + WithSimulationCell + WithTopology {
     }
 }
 
+/// A virtual move: what an analysis asks a cloned system to do to itself.
+///
+/// Each variant states an intent, not a sequence of writes. The caller never names the [`Change`]
+/// that follows from it, so the two cannot disagree.
+#[derive(Clone, Debug)]
+pub enum Perturbation {
+    /// Rigidly translate a group, carrying its mass center with it.
+    Translate { group: usize, shift: Point },
+    /// Rigidly rotate a group about its mass center, composing its orientation.
+    ///
+    /// Through the group, not the bare coordinates: a 6D tabulated potential is a function of the
+    /// mass center and the quaternion alone, so rotating the coordinates by themselves would leave
+    /// it reading an unchanged orientation.
+    Rotate {
+        group: usize,
+        rotation: crate::UnitQuaternion,
+    },
+    /// Scale the cell and every particle position to `volume`.
+    ScaleVolume {
+        volume: f64,
+        policy: crate::cell::VolumeScalePolicy,
+    },
+}
+
+impl Perturbation {
+    /// The change this perturbation makes, derived from it rather than stated alongside it.
+    pub(crate) fn change(&self) -> Change {
+        match self {
+            Self::Translate { group, .. } | Self::Rotate { group, .. } => {
+                Change::SingleGroup(*group, crate::change::GroupChange::RigidBody)
+            }
+            // `Everything` and `Volume` are the same change to every stateful term — both drop the
+            // caches and rebuild them (`energy::stateful`). They differ only in what a *read* then
+            // returns: `Volume` is served from the rebuilt cache, `Everything` is recomputed from
+            // scratch. A virtual volume move compares absolute totals across a box that has
+            // changed size, so it wants the recompute.
+            Self::ScaleVolume { .. } => Change::Everything,
+        }
+    }
+}
+
 /// A system that can be cloned and perturbed, for analyses that need a trial move.
 ///
-/// This is the whole of what a virtual move requires: displace particles, rotate them, rescale the
-/// volume, and rebuild the energy caches afterwards. Everything else — backups, `undo`, group
-/// resizing, atom-kind swaps — stays on [`Context`], so an analysis cannot desynchronise energy
-/// caches it does not own.
+/// [`measure`](Self::measure) is the whole mutation surface, and it hands the system back as it
+/// found it. The verbs it is built from, the `update` that must follow them, and the backups that
+/// roll a trial back all live on [`Context`], the framework's own view.
 ///
-/// [`hamiltonian`](WithHamiltonian::hamiltonian) is reachable here, but `hamiltonian_mut` is not.
-/// That is why [`update`](Self::update) is a *required* method rather than a provided one: its
-/// natural body would call `hamiltonian_mut`, which would hand the mutation back.
+/// That asymmetry is the point: the framework drives a trial in stages because it must decide
+/// between them whether to keep it, while an analysis only ever looks. A perturbation that outlives
+/// its refresh — or its rollback — is therefore something only the framework can express.
 pub trait PerturbContext: ObserveContext + WithHamiltonian + Clone {
-    /// Update internal state after a change (e.g. reciprocal-space energy for Ewald).
+    /// Apply `perturbation`, evaluate `read` on the perturbed system, and restore it exactly.
     ///
-    /// Implementors reach their own Hamiltonian directly; there is no shared default body.
-    fn update(&mut self, change: &Change) -> anyhow::Result<()>;
-
-    /// Scale all particle positions and cell volume to a new volume.
+    /// `read` receives the perturbed system and the [`Change`] describing it, which is what
+    /// [`hamiltonian`](WithHamiltonian::hamiltonian)`().energy()` wants. Mass centers, bounding
+    /// radii, the cell list and every energy cache describe the perturbed coordinates for the
+    /// duration of the call.
     ///
-    /// The algorithm unwraps PBC for molecular groups, scales positions using the old cell,
-    /// resizes the cell, re-applies PBC with the new cell, and recomputes mass centers.
-    /// Returns the old volume.
-    fn scale_volume_and_positions(
+    /// The system is then *restored*, not un-perturbed. An inverse perturbation would re-derive
+    /// each cache by running its incremental update backwards, and a neighbour that a trial pose
+    /// overlapped carries `+∞` in its cached energy: subtracting that again yields `NaN`. A
+    /// snapshot has no such arithmetic to undo, and costs one refresh per trial instead of two.
+    /// It is restored whether or not the trial succeeded, so a failure cannot leave the system
+    /// half-moved.
+    fn measure<R>(
         &mut self,
-        new_volume: f64,
-        policy: crate::cell::VolumeScalePolicy,
-    ) -> anyhow::Result<f64>;
+        perturbation: &Perturbation,
+        read: impl FnOnce(&Self, &Change) -> R,
+    ) -> anyhow::Result<R>;
+}
 
-    /// Rigidly translate a whole group, carrying its mass center with it.
-    ///
-    /// Group-scoped rather than index-scoped so that it *can* maintain the group's derived
-    /// state. A displaced molecule whose cached mass center stays behind is not a bookkeeping
-    /// detail: the bounding-sphere cull in `energy/nonbonded` reads that centre to decide
-    /// whether two groups interact at all, so a stale one silently drops the pair.
-    fn translate_group(&mut self, group_index: usize, shift: &Point) -> anyhow::Result<()>;
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::change::GroupChange;
 
-    /// Rigidly rotate a whole group about its own mass center, composing its orientation.
-    ///
-    /// The mass center is invariant under a rotation about itself; the orientation is not, and
-    /// composing it here is what keeps it describing the coordinates. Being exact and
-    /// incremental, it also preserves the continuity that a best fit could not: for a symmetric
-    /// molecule, re-deriving the frame each step could jump between equivalent orientations.
-    fn rotate_group(
-        &mut self,
-        group_index: usize,
-        quaternion: &crate::UnitQuaternion,
-    ) -> anyhow::Result<()>;
+    /// A rigid-body perturbation must announce itself as one. Labelling it `PartialUpdate` would
+    /// make the bonded term recompute an intramolecular energy that a rigid move cannot change;
+    /// labelling an internal change `RigidBody` would make it skip one that did. The same pairing
+    /// is asserted for the framework's own moves in `propagate::moveproposal`.
+    #[test]
+    fn a_rigid_perturbation_announces_a_rigid_body_change() {
+        let translate = Perturbation::Translate {
+            group: 3,
+            shift: Point::new(0.1, 0.0, 0.0),
+        };
+        let rotate = Perturbation::Rotate {
+            group: 3,
+            rotation: crate::UnitQuaternion::identity(),
+        };
+        for perturbation in [translate, rotate] {
+            let Change::SingleGroup(group, group_change) = perturbation.change() else {
+                panic!("expected SingleGroup, got {:?}", perturbation.change());
+            };
+            assert_eq!(group, 3);
+            assert!(matches!(group_change, GroupChange::RigidBody));
+            assert!(!group_change.internal_change());
+        }
+    }
 
-    /// Reshape a group: move some of its atoms, leaving its rigid-body frame alone.
-    ///
-    /// The counterpart to [`translate_group`](Self::translate_group) and
-    /// [`rotate_group`](Self::rotate_group): those move the molecule, this changes its shape.
-    /// The internal-coordinate moves — pivot, crankshaft — apply here. The mass center and
-    /// bounding radius are recomputed, since the atoms moved; the orientation is not, because a
-    /// conformational change is not a rotation of the body. That is a fact about the operation,
-    /// not something a caller has to remember.
-    ///
-    /// Positions are given outright rather than as a rotation because a sub-tree of a chain must
-    /// be unwrapped by *following bonds*: taking the minimum image of each atom independently, as
-    /// a rotation about a centre would, folds the part of the chain lying more than half a box
-    /// from that centre into the wrong periodic image and tears it apart.
-    fn set_group_conformation(
-        &mut self,
-        group_index: usize,
-        indices: &[usize],
-        positions: &[Point],
-    ) -> anyhow::Result<()>;
+    /// A volume scale moves every particle and the cell, and the analyses that use it want the
+    /// absolute total energy either side — which only `Everything` recomputes from scratch.
+    #[test]
+    fn scaling_a_volume_announces_a_whole_system_change() {
+        let scale = Perturbation::ScaleVolume {
+            volume: 1000.0,
+            policy: crate::cell::VolumeScalePolicy::Isotropic,
+        };
+        assert!(matches!(scale.change(), Change::Everything));
+    }
 }

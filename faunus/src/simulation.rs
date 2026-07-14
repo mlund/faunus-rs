@@ -7,7 +7,6 @@
 use crate::{
     analysis::{self, AnalysisCollection, AnalysisCollectionExt, Frequency},
     backend::Backend,
-    context::PerturbContext,
     energy::EnergyChange,
     error::{Error, Result},
     group::{GroupCollection, GroupCollectionMut},

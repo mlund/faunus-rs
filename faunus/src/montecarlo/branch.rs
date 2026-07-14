@@ -49,8 +49,8 @@ impl From<(UnitQuaternion, f64)> for Rotation {
 /// unwrapped by *following bonds*, walking the graph outward from `anchor` and accumulating the
 /// minimum-image vector of each bond in turn. Bonds are short, so every step is unambiguous, and
 /// the sub-tree stays contiguous however far it reaches across the cell. Taking the minimum image
-/// of each atom independently — the obvious reading of "rotate about a centre", and what
-/// [`rotate_particles`](crate::context::PerturbContext::rotate_particles) does — instead folds
+/// of each atom independently — the obvious reading of "rotate about a centre", and what a
+/// rotation of the bare coordinates does — instead folds
 /// atoms more than half a box length from `anchor` into the wrong periodic image, tearing the
 /// chain apart at exactly the chain lengths these moves exist to sample.
 ///

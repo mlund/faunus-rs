@@ -1277,3 +1277,81 @@ fn thermostat_noise_follows_the_seed() {
         "thermostat noise ignores its key, so every run shares one noise stream"
     );
 }
+
+// ============================================================================
+// Rigid-body reference frame
+// ============================================================================
+
+/// A rigid trimer, rotated so its carried orientation is *not* the identity.
+///
+/// Every other reconstruct test starts from the identity quaternion, where a lab-frame and a
+/// body-frame reference coincide — which is exactly why the two could be confused for each other.
+fn rotated_trimer() -> crate::backend::Backend {
+    use crate::context::Context;
+
+    let mut context = crate::backend::Backend::from_yaml_str(
+        r#"
+atoms:
+  - {name: A, mass: 1.0, charge: 0.0}
+molecules:
+  - name: TRIMER
+    atoms: [A, A, A]
+    degrees_of_freedom: Rigid
+system:
+  cell: !Cuboid [40.0, 40.0, 40.0]
+  medium: {permittivity: !Vacuum, temperature: 300.0}
+  energy: {}
+  blocks:
+    - molecule: TRIMER
+      N: 1
+      insert: !Manual [[0.0, 0.0, 0.0], [2.0, 0.0, 0.0], [0.0, 1.5, 0.0]]
+propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
+"#,
+        None,
+        &mut rand::thread_rng(),
+    )
+    .unwrap();
+
+    // An orientation off every axis, so a lab/body mix-up cannot cancel by symmetry.
+    let rotation = crate::UnitQuaternion::from_euler_angles(0.3, -0.7, 1.1);
+    context.rotate_group(0, &rotation).unwrap();
+    context
+}
+
+/// Uploading a state and reconstructing it must return the coordinates it was given.
+///
+/// The kernel computes `r = com + R(q)·ref`, so `ref` must be the atom's position in the *body*
+/// frame. Uploading the lab-frame displacement `r − com` instead makes the first reconstruct apply
+/// `R(q)` to coordinates that already carry it, rotating every rigid molecule a second time by its
+/// own orientation — silently, and before a single dynamics step has been taken.
+#[test]
+fn upload_and_reconstruct_preserves_a_rotated_rigid_molecule() {
+    use crate::group::GroupCollection;
+    use crate::Point;
+
+    let context = rotated_trimer();
+    let config = LangevinConfig {
+        timestep: 0.001,
+        friction: 1.0,
+        steps: 0,
+        temperature: 300.0,
+        cell_list_rebuild: 20,
+    };
+    let mut rng = test_rng();
+
+    let expected: Vec<Point> = (0..context.num_particles())
+        .map(|i| context.position(i))
+        .collect();
+
+    let mut gpu = LangevinRunner::init_gpu(&context, &config, &mut rng).unwrap();
+    LangevinRunner::upload_full_state(&context, &mut gpu, &mut rng).unwrap();
+    gpu.dispatch_reconstruct().unwrap();
+
+    for (i, (got, want)) in gpu.download_positions().iter().zip(&expected).enumerate() {
+        let got = Point::new(got[0] as f64, got[1] as f64, got[2] as f64);
+        assert!(
+            (got - want).norm() < 1e-4,
+            "atom {i} reconstructed at {got:?}, uploaded at {want:?}"
+        );
+    }
+}

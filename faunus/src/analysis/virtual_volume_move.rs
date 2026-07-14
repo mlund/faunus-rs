@@ -26,7 +26,7 @@ use super::{Analyze, Sampling};
 use crate::auxiliary::{BlockSummary, ColumnWriter, MappingExt};
 use crate::cell::{Shape, VolumeScalePolicy};
 use crate::change::Change;
-use crate::context::PerturbContext;
+use crate::context::{PerturbContext, Perturbation};
 use crate::energy::EnergyChange;
 use anyhow::Result;
 use derive_builder::Builder;
@@ -182,11 +182,13 @@ impl VirtualVolumeMove {
             .ok_or_else(|| anyhow::anyhow!("VirtualVolumeMove: cell has no defined volume"))?;
         let new_volume = old_volume + self.volume_displacement;
 
-        context.scale_volume_and_positions(new_volume, self.method)?;
-        // Ewald reciprocal-space caches k-vectors for the old box; must refresh before energy eval
-        context.update(&Change::Everything)?;
-
-        let new_energy = context.hamiltonian().energy(context, &Change::Everything);
+        let new_energy = context.measure(
+            &Perturbation::ScaleVolume {
+                volume: new_volume,
+                policy: self.method,
+            },
+            |scaled, change| scaled.hamiltonian().energy(scaled, change),
+        )?;
 
         Ok((new_energy - old_energy) / self.thermal_energy)
     }
@@ -564,5 +566,75 @@ frequency: !Every 5
         let vvm = roundtrip.build(RT_298).unwrap();
         assert_approx_eq!(f64, vvm.volume_displacement, 0.5);
         assert_eq!(vvm.method, VolumeScalePolicy::ScaleZ);
+    }
+}
+
+#[cfg(test)]
+mod integration_tests {
+    use super::*;
+    use crate::analysis::Frequency;
+    use crate::backend::Backend;
+    use crate::context::{Context, WithHamiltonian, WithSimulationCell};
+    use crate::energy::EnergyChange;
+    use float_cmp::assert_approx_eq;
+
+    const RT_300: f64 = crate::R_IN_KJ_PER_MOL * 300.0;
+
+    /// Two Lennard-Jones molecules: `nonbonded` is stateful, so a missed refresh would show.
+    fn lj_backend() -> Backend {
+        Backend::from_yaml_str(
+            r#"
+atoms:
+  - {name: A, mass: 1.0, charge: 0.0}
+molecules:
+  - name: MOL
+    atoms: [A]
+system:
+  cell: !Cuboid [20.0, 20.0, 20.0]
+  medium: {permittivity: !Vacuum, temperature: 300.0}
+  energy:
+    nonbonded:
+      default:
+        - !LennardJones {sigma: 3.0, eps: 2.5}
+  blocks:
+    - molecule: MOL
+      N: 2
+      insert: !Manual [[0.0, 0.0, 0.0], [0.0, 0.0, 4.0]]
+propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
+"#,
+            None,
+            &mut rand::thread_rng(),
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn perturbation_energy_matches_the_true_energy_change() {
+        let context = lj_backend();
+        let vvm = VirtualVolumeMoveBuilder::default()
+            .volume_displacement(10.0)
+            .frequency(Frequency::Every(1))
+            .build(RT_300)
+            .unwrap();
+
+        let total = |ctx: &Backend| ctx.hamiltonian().energy(ctx, &Change::Everything);
+        let old_energy = total(&context);
+
+        let mut reference = context.clone();
+        let old_volume = reference.cell().volume().unwrap();
+        reference
+            .scale_volume_and_positions(old_volume + 10.0, vvm.method)
+            .unwrap();
+        reference.update(&Change::Everything).unwrap();
+        let expected = (total(&reference) - old_energy) / RT_300;
+
+        let mut trial = context.clone();
+        let measured = vvm.perturb(&mut trial, old_energy).unwrap();
+
+        assert!(
+            expected.abs() > 1e-6,
+            "the test system must have a real ΔU to measure, got {expected}"
+        );
+        assert_approx_eq!(f64, measured, expected, epsilon = 1e-12);
     }
 }

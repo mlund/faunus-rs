@@ -1,6 +1,5 @@
 //! Spatial distribution function analysis on a body-fixed grid.
 
-mod frame;
 mod grid;
 mod normalize;
 mod opendx;
@@ -241,7 +240,10 @@ fn capture_reference_structure(
         let displacement = context
             .cell()
             .distance(&context.position(atom_index), center);
-        positions.push(frame::to_body_frame(&displacement, group.quaternion()));
+        positions.push(crate::geometry::to_body_frame(
+            &displacement,
+            group.quaternion(),
+        ));
     }
     Ok(ReferenceStructure {
         file,
@@ -264,7 +266,10 @@ fn reference_body_points(
             let displacement = context
                 .cell()
                 .distance(&context.position(atom_index), center);
-            points.push(frame::to_body_frame(&displacement, group.quaternion()));
+            points.push(crate::geometry::to_body_frame(
+                &displacement,
+                group.quaternion(),
+            ));
         }
     }
     Ok(points)
@@ -362,7 +367,7 @@ impl<T: ObserveContext> Analyze<T> for SpatialDistribution {
                 let displacement = context
                     .cell()
                     .distance(&context.position(atom_index.get()), center);
-                let body = frame::to_body_frame(&displacement, group.quaternion());
+                let body = crate::geometry::to_body_frame(&displacement, group.quaternion());
                 if let Some(voxel) = self.grid.index_of(&body) {
                     self.counts[voxel] += weight;
                 }
@@ -598,8 +603,10 @@ frequency: !Every 1
         let mut sdf = builder.build(&context).unwrap();
         Analyze::<Backend>::sample_now(&mut sdf, &context, 0, 1.0).unwrap();
 
-        let body =
-            frame::to_body_frame(&Point::new(2.0, 0.0, 0.0), context.groups()[0].quaternion());
+        let body = crate::geometry::to_body_frame(
+            &Point::new(2.0, 0.0, 0.0),
+            context.groups()[0].quaternion(),
+        );
         assert_relative_eq!(body.x, 0.0, epsilon = 1e-12);
         assert_relative_eq!(body.y, -2.0, epsilon = 1e-12);
         let idx = sdf.grid.index_of(&body).unwrap();

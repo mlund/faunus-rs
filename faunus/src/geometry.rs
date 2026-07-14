@@ -286,6 +286,17 @@ fn twist_about(rotation: &UnitQuaternion, axis: &Point) -> UnitQuaternion {
 /// witness. The free component is resolved against `prior` — the orientation the group already
 /// holds — rather than left to whatever the superposition happens to produce, which would
 /// otherwise re-spin a diatomic by an arbitrary angle every time its coordinates were revisited.
+/// Express a lab-frame displacement in the body frame a group's orientation defines.
+///
+/// The inverse of the rotation [`rigid_body_rotation`] fits, and the single home of that
+/// convention: a body-frame coordinate `b` sits at `com + R(q)·b` in the lab, so `b = q⁻¹·(r − com)`.
+/// Anything that stores coordinates relative to a rotating molecule — an orientation-resolved
+/// density, the reference conformation the GPU integrator rebuilds a rigid body from — goes through
+/// here, so a flip of the convention cannot reach one of them and miss the other.
+pub(crate) fn to_body_frame(displacement: &Point, orientation: &UnitQuaternion) -> Point {
+    orientation.inverse_transform_vector(displacement)
+}
+
 pub(crate) fn rigid_body_rotation(
     reference: &[Point],
     current: &[Point],
@@ -1094,4 +1105,33 @@ fn test_dihedral_points_pbc() {
         dihedral_points(&p1, &p4, &p5, &p7, &cuboid),
         -177.6364115152126
     );
+}
+
+#[cfg(test)]
+mod body_frame_tests {
+    use super::*;
+    use approx::assert_relative_eq;
+
+    /// The body frame is what the lab frame looks like with the group's own rotation taken out.
+    #[test]
+    fn inverse_quaternion_maps_lab_to_body_frame() {
+        let orientation = UnitQuaternion::from_axis_angle(
+            &nalgebra::Vector3::z_axis(),
+            std::f64::consts::FRAC_PI_2,
+        );
+        let body = to_body_frame(&Point::new(0.0, 1.0, 0.0), &orientation);
+        assert_relative_eq!(body.x, 1.0, epsilon = 1e-12);
+        assert_relative_eq!(body.y, 0.0, epsilon = 1e-12);
+        assert_relative_eq!(body.z, 0.0, epsilon = 1e-12);
+    }
+
+    /// Rotating a body-frame vector back by the same orientation returns the lab vector: the two
+    /// directions are exact inverses, which is what `reconstruct_positions` on the GPU relies on.
+    #[test]
+    fn body_and_lab_frames_are_exact_inverses() {
+        let orientation = UnitQuaternion::from_euler_angles(0.3, -0.7, 1.1);
+        let lab = Point::new(1.5, -2.0, 0.75);
+        let round_trip = orientation.transform_vector(&to_body_frame(&lab, &orientation));
+        assert_relative_eq!((round_trip - lab).norm(), 0.0, epsilon = 1e-12);
+    }
 }
