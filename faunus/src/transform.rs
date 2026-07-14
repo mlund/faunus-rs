@@ -364,10 +364,17 @@ mod tests {
         positions.into_iter().for_each(rotate);
     }
 
+    /// Sphere picking is unbiased: unit length, and no preferred direction.
+    ///
+    /// Seeded, because the tolerances below sit only ~2.5σ from the mean of 5000 samples — on an
+    /// unseeded generator this test failed roughly one run in fifty, which reads as a broken build
+    /// rather than as the sampling fluctuation it is. A fixed seed keeps the same assertions and
+    /// makes a failure mean the sampler changed.
     #[test]
     fn test_random_unit_vector() {
+        use rand::SeedableRng;
         let n = 5000;
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rngs::StdRng::seed_from_u64(42);
         let mut x_mean = 0.0;
         let mut y_mean = 0.0;
         let mut z_mean = 0.0;
