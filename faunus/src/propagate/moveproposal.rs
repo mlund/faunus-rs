@@ -223,6 +223,16 @@ pub trait MoveProposal<T: ObserveContext>: Debug + Info {
     /// Describe a move without applying it; context is read-only.
     fn propose_move(&mut self, context: &T, rng: &mut dyn RngCore) -> Option<ProposedMove>;
 
+    /// Re-check, before proposing, any invariant the system can break under the move.
+    ///
+    /// What held at build time need not still hold: a titration swap alters atom identities, GCMC
+    /// inserts and removes groups. `Err` aborts the run and means the move can no longer sample
+    /// correctly — not merely that it has nothing to do, which is a `None` from
+    /// [`propose_move`](Self::propose_move).
+    fn revalidate(&mut self, _context: &T) -> anyhow::Result<()> {
+        Ok(())
+    }
+
     /// Optional bias added to the trial energy for acceptance.
     fn bias(&self, _change: &Change, _energies: &NewOld<f64>) -> Bias {
         Bias::None
@@ -233,9 +243,15 @@ pub trait MoveProposal<T: ObserveContext>: Debug + Info {
         1
     }
 
-    /// Called after a trial move is accepted or rejected.
-    /// Override to track per-sub-move statistics (e.g. per-reaction in speciation).
-    fn on_trial_outcome(&mut self, _accepted: bool) {}
+    /// Called once the trial has been resolved, with the context in its settled state.
+    ///
+    /// The context is whatever the outcome made it: the trial configuration if the move was
+    /// accepted, the original one if it was rejected and rolled back. This is the only point at
+    /// which a move can bring state it derives from the configuration back in step, and the only
+    /// point at which it *knows* the change was its own — so it may update that state cheaply
+    /// instead of rebuilding it. Also used to track per-sub-move statistics (per-reaction in
+    /// speciation, squared displacement in cluster moves).
+    fn on_trial_outcome(&mut self, _context: &T, _accepted: bool) {}
 
     /// Serialize the move-specific fields to a tagged YAML value.
     fn to_yaml(&self) -> Option<serde_yml::Value>;
