@@ -1159,19 +1159,27 @@ If <code>atom</code> is specified, only atoms of that type are selected.</p>
 </tbody>
 </table>
 <h3 id="preferential-sampling">Preferential Sampling<a class="headerlink" href="#preferential-sampling" title="Permanent link">&para;</a></h3>
-<p>Biases atom selection toward reference group(s) using distance-dependent weights,
-with a corresponding acceptance correction to maintain detailed balance.
-Useful in dilute solutions where standard MC wastes most trial moves on bulk
-particles far from the solute
+<p>In a dilute solution, most trial moves displace bulk particles far from the solute, where
+little of interest happens. Preferential sampling picks the particles near the solute more
+often and corrects the acceptance so that the equilibrium distribution is unchanged
 (<a href="https://doi.org/10.1016/0009-2614(77)85051-3">Owicki &amp; Scheraga, 1977</a>;
-<a href="https://doi.org/10.1093/oso/9780198803195.001.0001">Allen &amp; Tildesley, 2017</a>, §9.3.1).</p>
-<p>Each candidate atom receives weight <span class="arithmatex">\(W'(r) = (r + \text{offset})^{-\nu}\)</span>
-where <span class="arithmatex">\(r\)</span> is the nearest bounding-sphere distance across all matching reference groups.
-The acceptance criterion includes a correction <span class="arithmatex">\(\ln(W_\text{new} / W_\text{old})\)</span>
-where <span class="arithmatex">\(W = \sum_j W'(r_j)\)</span> is the normalization sum over all candidates.</p>
-<p>Must be placed in a <code>!Deterministic</code> block so that reference groups move first
-(updating their positions), followed by the biased atom moves:</p>
-<div class="highlight"><pre><span></span><code><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!Deterministic</span>
+<a href="https://doi.org/10.1093/oso/9780198803195.001.0001">Allen &amp; Tildesley, 2017</a>, §9.3.1).
+Only the rate of convergence improves; the sampled ensemble does not.</p>
+<p>Candidate atom <span class="arithmatex">\(j\)</span> sits a distance <span class="arithmatex">\(r_j\)</span> from the bounding sphere of the nearest matching
+reference group and carries the unnormalized weight</p>
+<div class="arithmatex">\[W'(r_j) = (r_j + \text{offset})^{-\nu}\]</div>
+<p>where <code>offset</code> keeps the weight finite at contact. Atom <span class="arithmatex">\(i\)</span> is then selected with probability</p>
+<div class="arithmatex">\[W(r_i) = \frac{W'(r_i)}{\sum_j W'(r_j)}\]</div>
+<p>The sum runs over every atom the move may pick, across all matching groups, so a particle
+beside the solute competes against the whole bulk.</p>
+<p>Selecting atoms unevenly makes a move and its reverse unequally likely to be proposed, so the
+acceptance criterion carries the ratio of the two selection probabilities of the moved atom,</p>
+<div class="arithmatex">\[\frac{\alpha_{nm}}{\alpha_{mn}} = \frac{W(r_i^\text{new})}{W(r_i^\text{old})}\]</div>
+<p>An atom that moves away from the solute was easy to select and would be hard to select back,
+so such moves are accepted less often; moves toward the solute are accepted more often.
+Dropping this correction would drain the very region the method exists to sample.</p>
+<p>The reference groups may move as freely as any others, and need no correction of their own:</p>
+<div class="highlight"><pre><span></span><code><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!Stochastic</span>
 <span class="w">  </span><span class="nt">moves</span><span class="p">:</span>
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!TranslateMolecule</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> molecule</span><span class="p">:</span><span class="w"> </span><span class="nv">Protein</span><span class="p p-Indicator">,</span><span class="nt"> max_displacement</span><span class="p">:</span><span class="w"> </span><span class="nv">0.5</span><span class="w"> </span><span class="p p-Indicator">}</span>
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!RotateMolecule</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> molecule</span><span class="p">:</span><span class="w"> </span><span class="nv">Protein</span><span class="p p-Indicator">,</span><span class="nt"> max_angle</span><span class="p">:</span><span class="w"> </span><span class="nv">0.5</span><span class="w"> </span><span class="p p-Indicator">}</span>
@@ -1190,6 +1198,15 @@ where <span class="arithmatex">\(W = \sum_j W'(r_j)\)</span> is the normalizatio
 </code></pre></div>
 <p>The <code>reference</code> field uses the <a href="../selection_language/">selection language</a>,
 e.g. <code>"molecule Protein"</code>, <code>"protein"</code>, or boolean combinations.</p>
+<p>The bias acts among the candidates, so there must be more than one: if <code>molecule</code> and <code>atom</code>
+together match a single atom, <span class="arithmatex">\(W(r_i) = 1\)</span> throughout and the selection reduces to the uniform
+one. Choose the mobile species so that the candidates span the solvent — an atomic species such
+as <code>Na</code>, or a single atom kind shared by many solvent molecules.</p>
+<p>The move may not displace its own reference, and is refused if it would. Moving a reference atom
+would shift the sphere the distances are measured from, changing every candidate's weight at once,
+which the acceptance correction above does not account for. Restrict the move with <code>molecule</code> or
+<code>atom</code> so that its candidates and the reference are distinct — an unrestricted <code>!TranslateAtom</code>
+selects from every molecule in the system, the reference included.</p>
 <table>
 <thead>
 <tr>
@@ -1204,19 +1221,19 @@ e.g. <code>"molecule Protein"</code>, <code>"protein"</code>, or boolean combina
 <td><code>reference</code></td>
 <td>yes</td>
 <td></td>
-<td>Selection expression for reference group(s)</td>
+<td>Selection expression for reference group(s); must not match atoms the move displaces</td>
 </tr>
 <tr>
 <td><code>exponent</code></td>
 <td>no</td>
 <td>2</td>
-<td>Exponent <span class="arithmatex">\(\nu\)</span> in the weight function</td>
+<td>Exponent <span class="arithmatex">\(\nu\)</span> in the weight function; must be positive</td>
 </tr>
 <tr>
 <td><code>offset</code></td>
 <td>no</td>
 <td>1.0</td>
-<td>Offset (Angstrom) to avoid singularity at <span class="arithmatex">\(r = 0\)</span></td>
+<td>Offset (Angstrom) to avoid singularity at <span class="arithmatex">\(r = 0\)</span>; must be positive</td>
 </tr>
 <tr>
 <td><code>file</code></td>
