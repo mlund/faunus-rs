@@ -75,8 +75,8 @@ pub struct Backend {
     atom_kinds_generation: u64,
     /// Bumped on every coordinate change, so state derived from positions can tell it went stale.
     ///
-    /// Bumped through [`Self::touch_positions`], deliberately generously: an extra bump costs a
-    /// consumer one rebuild, a missing one costs correctness.
+    /// Bumped generously via [`Self::touch_positions`]: an extra bump costs a consumer one rebuild,
+    /// a missing one costs correctness.
     #[serde(skip)]
     positions_generation: u64,
     #[serde(skip)]

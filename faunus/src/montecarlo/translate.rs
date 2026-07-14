@@ -359,6 +359,13 @@ impl<T: ObserveContext> MoveProposal<T> for TranslateAtom {
         }
     }
 
+    fn revalidate(&mut self, context: &T) -> anyhow::Result<()> {
+        match self.preferential.as_mut() {
+            Some(preferential) => preferential.revalidate(context),
+            None => Ok(()),
+        }
+    }
+
     fn on_trial_outcome(&mut self, context: &T, accepted: bool) {
         if let Some(preferential) = self.preferential.as_mut() {
             preferential.on_trial_outcome(context, accepted);

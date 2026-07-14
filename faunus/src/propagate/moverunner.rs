@@ -74,6 +74,9 @@ impl<T: Context> MoveRunner<T> {
         rng: &mut dyn RngCore,
     ) -> anyhow::Result<()> {
         for _ in 0..self.repeat {
+            // The system may have changed since the move was built, or since its last trial.
+            self.inner.revalidate(context)?;
+
             let Some(proposed) = self.inner.propose_move(context, rng) else {
                 // Move couldn't be proposed (e.g. no feasible reaction) — count as rejected
                 self.statistics.reject();

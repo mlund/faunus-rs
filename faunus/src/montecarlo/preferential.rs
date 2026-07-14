@@ -55,20 +55,10 @@ fn serialize_radii<S: serde::Serializer>(
     serializer.collect_seq(geometries.iter().map(|&(_, radius)| radius))
 }
 
-/// Acceptance correction for having selected an atom non-uniformly.
+/// `ln(W_m/W_n)` of eqn 9.44, from the *unnormalized* weights of the moved atom and their sum.
 ///
-/// Selecting atom `i` with the normalized weight `W = W'(rᵢ) / Σⱼ W'(rⱼ)` of eqn 9.43 makes the
-/// proposal asymmetric, so the acceptance carries the ratio of underlying transition
-/// probabilities, eqn 9.44: `α_nm/α_mn = W_n/W_m`. Both are normalized weights *of the moved
-/// atom* — `W_m` before the move, `W_n` after — and only that atom's `W'` changes, so the sum
-/// shifts by `w_new - w_old`.
-///
-/// Returned as `ln(W_m/W_n)` rather than `ln(W_n/W_m)` because the acceptance adds the bias to
-/// ΔU and applies `exp(-bias)`.
-///
-/// Arguments are the *unnormalized* weights `W'` of the moved atom before and after the move,
-/// and `w_sum = Σⱼ W'(rⱼ)` before it. The sum is not `W`; conflating the two drops the
-/// `w_new/w_old` factor, which depletes the neighbourhood of the reference.
+/// Reciprocated because the acceptance adds the bias to ΔU and applies `exp(-bias)`. Only the
+/// moved atom's `W'` changes, so the sum shifts by `w_new - w_old`.
 fn acceptance_correction(w_old: f64, w_new: f64, w_sum: f64) -> f64 {
     let w_sum_new = w_sum - w_old + w_new;
     ((w_old / w_sum) / (w_new / w_sum_new)).ln()
@@ -126,14 +116,13 @@ impl Candidates {
     }
 }
 
-/// Unnormalized weights W'(rⱼ) and their sum, valid for one configuration only.
+/// Unnormalized weights and their sum, valid for one configuration only.
 ///
-/// Keyed on the coordinates *and* the candidate set, since either can change under them: an
-/// ordinary trial moves an atom, a GCMC insertion changes who the candidates are.
+/// Keyed on the coordinates *and* the candidate set: a trial moves an atom, a GCMC insertion
+/// changes who the candidates are.
 #[derive(Clone, Debug)]
 struct Weights {
     values: Vec<f64>,
-    /// Σⱼ W'(rⱼ) — the denominator of eqn 9.43, never the `W` of eqn 9.44.
     sum: f64,
     positions: u64,
     candidates: Generation,
@@ -141,24 +130,21 @@ struct Weights {
 
 /// Distance-biased atom selection with detailed-balance correction.
 ///
-/// A candidate atom at distance `r` from the nearest reference bounding sphere carries the
-/// unnormalized weight `W'(r) = (r + offset)^{-ν}` ([Allen & Tildesley, 2017](https://doi.org/10.1093/oso/9780198803195.001.0001),
-/// eqn 9.42; `offset` regularizes the singularity at `r = 0`). Atom `i` is then selected with
-/// the *normalized* weight of eqn 9.43,
+/// A candidate at distance `r` from the nearest reference bounding sphere carries the unnormalized
+/// weight `W'(r) = (r + offset)^{-ν}` (eqn 9.42; `offset` regularizes `r = 0`), and atom `i` is
+/// selected with the normalized weight of eqn 9.43:
 ///
 /// ```text
 /// W(rᵢ) = W'(rᵢ) / Σⱼ W'(rⱼ)
 /// ```
 ///
-/// Selecting non-uniformly makes the proposal asymmetric, so the acceptance must be corrected by
-/// the ratio of the underlying transition probabilities, eqn 9.44: `α_nm/α_mn = W_n/W_m`, where
-/// `W_n` and `W_m` are the normalized weights of *the moved atom* after and before the move
-/// ([Owicki & Scheraga, 1977](https://doi.org/10.1016/0009-2614(77)85051-3), eqn 5). Omitting it
-/// depletes the very neighbourhood the bias exists to sample.
+/// Selecting non-uniformly makes the proposal asymmetric, so the acceptance carries the ratio of
+/// underlying transition probabilities, eqn 9.44: `α_nm/α_mn = W_n/W_m`, the normalized weights of
+/// *the moved atom* after and before the move. Omit it and the neighbourhood of the reference —
+/// the region the bias exists to sample — is depleted instead.
 ///
-/// The distinction between `W'` (unnormalized, per atom) and `W` (normalized) is load-bearing:
-/// the sum `Σⱼ W'(rⱼ)` is only the *denominator* of eqn 9.43, never the `W` of eqn 9.44. It is
-/// named `w_sum` throughout to keep the two apart.
+/// `W'` and `W` are not interchangeable: the sum `Σⱼ W'(rⱼ)` is the *denominator* of eqn 9.43,
+/// never the `W` of eqn 9.44. It is called `w_sum` throughout to keep them apart.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PreferentialSampling {
@@ -276,16 +262,24 @@ impl PreferentialSampling {
         (r + self.offset).powf(-self.exponent)
     }
 
+    /// Re-check the reference against the candidates whenever the candidate set is rebuilt.
+    ///
+    /// A group matches the reference if it holds *any* matching atom, so a titration swap can give
+    /// a candidate group the reference's atom kind and turn every atom in it into a reference atom.
+    /// The candidate set is keyed on exactly that, so the trials in between cost nothing.
+    pub(super) fn revalidate(&mut self, context: &impl ObserveContext) -> anyhow::Result<()> {
+        let (_, rebuilt) = self.candidates.resolve(context);
+        if rebuilt {
+            self.ensure_reference_is_disjoint(context)?;
+        }
+        Ok(())
+    }
+
     /// The reference must hold none of the atoms this move displaces.
     ///
-    /// Moving a reference atom would shift the very sphere the distances are measured from: every
-    /// other candidate's weight would change at once, while `acceptance_correction` assumes only
-    /// the moved atom's did, and the trial distance would be taken against the sphere as it stood
-    /// *before* the move. Both assumptions fail silently, so the overlap is refused instead.
-    ///
-    /// Re-checked whenever the candidates re-resolve, not only at startup: group selection matches
-    /// on any active atom, so a titration swap or a GCMC insertion can make a candidate group
-    /// *become* a reference group long after the move was built.
+    /// Moving one would shift the sphere the distances are measured from, so every other
+    /// candidate's weight would change at once — which both `acceptance_correction` and the
+    /// incremental patch assume never happens. Silent, so the overlap is refused instead.
     fn ensure_reference_is_disjoint(
         &mut self,
         context: &impl ObserveContext,
@@ -351,9 +345,8 @@ impl PreferentialSampling {
 
     /// Weights for the configuration as it now stands, rebuilt only if it moved under them.
     ///
-    /// Rebuilding costs one minimum-image distance per candidate, which is the whole cost of the
-    /// move at realistic solvent counts. The cache key is the coordinates and the candidate set,
-    /// both read from the context — so it cannot be satisfied by a caller that has lost track.
+    /// A rebuild costs one minimum-image distance per candidate — the whole cost of the move at
+    /// realistic solvent counts. The key comes from the context, so no caller can fake it.
     fn weights(&mut self, context: &impl ObserveContext) -> &Weights {
         self.candidates.resolve(context);
         let key = (
@@ -391,13 +384,12 @@ impl PreferentialSampling {
         })
     }
 
-    /// Pick a candidate atom for the given displacement and stage its acceptance correction.
+    /// Pick an atom for the given displacement and stage its acceptance correction.
     ///
-    /// Selection and correction are one step because both read the same configuration: the
-    /// normalized weight that selects the atom is the `W_m` that corrects for having selected it.
-    ///
-    /// The displacement is drawn independently of which atom is picked, so the caller supplies it.
-    /// Returns the absolute index of the selected atom; the correction is read via [`Self::ln_bias`].
+    /// One step, not two: the `W_m` that corrects for the choice is the weight that made it, so
+    /// both must read the same configuration. The displacement is independent of which atom is
+    /// picked, so the caller draws it. Returns the atom; the correction is read via
+    /// [`Self::ln_bias`].
     pub(super) fn propose(
         &mut self,
         context: &impl ObserveContext,
@@ -406,11 +398,9 @@ impl PreferentialSampling {
     ) -> Option<usize> {
         let weights = self.weights(context);
 
-        // `WeightedIndex` rejects an empty or all-zero weight vector — the degenerate cases
-        // reachable here, when the move has nothing to pick from, every W'(r) underflows, or the
-        // reference has left the system so that every distance is infinite. Declining counts the
-        // trial as a rejection; carrying on would divide by zero and hand the criterion a NaN bias,
-        // which it also rejects, but silently and for every move thereafter.
+        // No candidate, or none with any weight: every W'(r) underflowed, or the reference left the
+        // system so every distance is infinite. Declining counts as a rejection; carrying on would
+        // divide by zero and hand the criterion a NaN bias, which it rejects silently, forever.
         let Ok(distribution) = WeightedIndex::new(&weights.values) else {
             debug!("PreferentialSampling: no candidate carries any weight; declining to select");
             return None;
@@ -443,15 +433,11 @@ impl PreferentialSampling {
 
     /// Bring the weights back in step with the configuration the trial settled on.
     ///
-    /// This is the one moment the sampler knows the change was *its own*, and so the one moment it
-    /// may patch rather than rebuild. An accepted trial moved exactly one candidate — the one it
-    /// picked — and left the reference alone, since the two are disjoint. A rejected trial was
-    /// rolled back, so the weights already describe the current coordinates. Either way only the
-    /// key has to catch up, and the O(N) rebuild is avoided.
-    ///
-    /// Anything else that moves an atom advances the positions generation without coming through
-    /// here, and [`Self::weights`] rebuilds on the next read. Forgetting this hook therefore costs
-    /// a rebuild, never correctness.
+    /// The one moment the sampler knows the change was *its own*, and so the only one where it may
+    /// patch rather than rebuild: an accepted trial moved a single candidate and left the reference
+    /// alone (the two are disjoint), and a rejected one was rolled back. Any other move advances the
+    /// positions generation without passing through here, so [`Self::weights`] rebuilds on the next
+    /// read — forgetting this hook costs a rebuild, never correctness.
     pub(super) fn on_trial_outcome(&mut self, context: &impl ObserveContext, accepted: bool) {
         let Some(selected) = self.proposed.take() else {
             return;
@@ -717,10 +703,7 @@ mod tests {
 
     /// Patching one weight after an accepted trial must land exactly where a rebuild would.
     ///
-    /// The cache patches the single atom the move displaced instead of recomputing all N weights.
-    /// That is only sound if the patch is *identical* to the rebuild — the reference must not have
-    /// shifted, and no other candidate can have moved. Compare the two directly, rather than
-    /// trusting the reasoning.
+    /// The whole speed-up rests on that equality holding. Compare the two rather than argue it.
     #[test]
     fn patching_an_accepted_trial_agrees_with_a_full_rebuild() {
         use crate::backend::Backend;
@@ -783,6 +766,44 @@ mod tests {
         }
         // The running sum drifts if a patch ever updates a weight without its own contribution.
         assert_approx_eq!(f64, patched.sum, rebuilt.sum, epsilon = 1e-10);
+    }
+
+    /// The system can pull the reference and the candidates together after the move was built.
+    ///
+    /// Swapping one candidate atom to the reference's kind makes its whole group a reference group,
+    /// long after the build-time check passed. Only the re-check on rebuild can catch that.
+    #[test]
+    fn a_swap_that_makes_a_candidate_group_the_reference_is_caught_mid_run() {
+        use crate::backend::Backend;
+        use crate::group::{AtomKindId, GroupCollection, GroupCollectionMut};
+        use rand::SeedableRng;
+
+        let mut rng = rand::rngs::StdRng::seed_from_u64(4);
+        let mut context =
+            Backend::new("tests/files/preferential_two_groups.yaml", None, &mut rng).unwrap();
+
+        // Reference by atom kind, so a swap can hand it a new group.
+        let solvent = GroupSelection::ByMoleculeId(crate::group::MoleculeId::new(1));
+        let mut sampler = make_sampler(2.0, 1.0);
+        sampler.reference = Selection::parse("atomtype Solute").unwrap();
+        sampler.finalize(&context, solvent, None).unwrap();
+        sampler
+            .revalidate(&context)
+            .expect("Solvent and Macromolecule start out disjoint");
+
+        // Titrate one Solvent atom into a Solute: its group now matches "atomtype Solute", so
+        // every atom the move draws from has become a reference atom.
+        let solute_kind = AtomKindId::new(0);
+        let victim = context.groups()[1].iter_active().next().unwrap();
+        context.set_atom_kind(victim, solute_kind);
+
+        let error = sampler
+            .revalidate(&context)
+            .expect_err("the reference now contains the atoms this move displaces");
+        assert!(
+            error.to_string().contains("distinct from the atoms"),
+            "unexpected error: {error}"
+        );
     }
 
     fn make_sampler(exponent: f64, offset: f64) -> PreferentialSampling {

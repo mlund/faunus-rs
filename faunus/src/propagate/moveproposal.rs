@@ -223,6 +223,16 @@ pub trait MoveProposal<T: ObserveContext>: Debug + Info {
     /// Describe a move without applying it; context is read-only.
     fn propose_move(&mut self, context: &T, rng: &mut dyn RngCore) -> Option<ProposedMove>;
 
+    /// Re-check, before proposing, any invariant the system can break under the move.
+    ///
+    /// What held at build time need not still hold: a titration swap alters atom identities, GCMC
+    /// inserts and removes groups. `Err` aborts the run and means the move can no longer sample
+    /// correctly — not merely that it has nothing to do, which is a `None` from
+    /// [`propose_move`](Self::propose_move).
+    fn revalidate(&mut self, _context: &T) -> anyhow::Result<()> {
+        Ok(())
+    }
+
     /// Optional bias added to the trial energy for acceptance.
     fn bias(&self, _change: &Change, _energies: &NewOld<f64>) -> Bias {
         Bias::None
