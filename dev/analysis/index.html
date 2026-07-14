@@ -2652,6 +2652,12 @@ for the same configurations.</p>
 <p>The input YAML provides the Hamiltonian and analysis configuration;
 the <code>propagate:</code> section is ignored. All analysis frequencies are overridden to
 sample every frame.</p>
+<h3 id="fluctuating-cells">Fluctuating cells<a class="headerlink" href="#fluctuating-cells" title="Permanent link">&para;</a></h3>
+<p>Each frame is evaluated in the cell it was generated in, read from the box stored in the trajectory,
+so a constant-pressure trajectory reruns at its own volumes rather than at the volume declared in
+the input. A trajectory records an orthorhombic box, which determines a <code>Cuboid</code>, a <code>Slit</code>, a
+<code>Sphere</code> and a <code>Cylinder</code>. A <code>HexagonalPrism</code> is written to a trajectory as an expanded orthorhombic
+supercell and cannot be rerun. An <code>Endless</code> cell has no box, so it is left as the input declares it.</p>
 <h3 id="reweighting-biased-trajectories">Reweighting biased trajectories<a class="headerlink" href="#reweighting-biased-trajectories" title="Permanent link">&para;</a></h3>
 <p>If the Hamiltonian contains a <a href="../energy/#penalty-flat-histogram-bias"><code>penalty</code></a> term
 (from a converged Wang-Landau run), rerun automatically reweights all analyses by
