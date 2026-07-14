@@ -1,6 +1,6 @@
 [package]
 name = "faunus"
-version = "3.0.0-beta.1"
+version = "3.0.0-beta.2"
 edition = "2021"
 description = "Monte Carlo and Langevin dynamics for coarse-grained (bio)molecular simulation"
 license = "Apache-2.0"
