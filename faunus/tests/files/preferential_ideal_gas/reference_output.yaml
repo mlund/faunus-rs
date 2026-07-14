@@ -1,3 +1,6 @@
+version:
+  faunus: 3.0.0-beta.1
+  git_revision: v3.0.0-beta.1-47-g18d8110-dirty
 medium:
   permittivity: Vacuum
   salt: null
@@ -22,14 +25,14 @@ energy_change:
   final: 0.0
   initial: 0.0
 energy_timers:
-  cell_overlap: '100 (energy: 65.55, update: 34.45)'
+  cell_overlap: '100 (energy: 66.57, update: 33.43)'
 propagate:
   repeat: 100
   seed: !Fixed 42
   collections:
   - !Deterministic
     repeat: 1
-    elapsed_seconds: 0.001191626
+    elapsed_seconds: 0.002391292
     moves:
     - !TranslateAtom
       atom: null
@@ -39,9 +42,9 @@ propagate:
         reference: molecule Macromolecule
         exponent: 2.0
         offset: 1.0
-        sum_bias: 1.4097939766196979
+        sum_bias: 1.9335289432816425
         mean_bias:
-          avg: 0.008723992599096021
+          avg: 0.047540468453532894
           n: 2000
         bounding_radii:
         - 1.7763568394002505e-15
@@ -49,9 +52,9 @@ propagate:
       repeat: 20
       statistics:
         num_trials: 2000
-        num_accepted: 1991
+        num_accepted: 1959
         mean_square_displacement:
-          avg: 1.3030142377147396
+          avg: 1.248761755035238
           n: 2000
         timer:
           accumulated:
@@ -59,7 +62,7 @@ propagate:
             nanos: 0
         info: {}
         energy_change_sum: 0.0
-        acceptance_ratio: 0.9955
+        acceptance_ratio: 0.9795
   criterion: MetropolisHastings
 analysis:
 - energy:

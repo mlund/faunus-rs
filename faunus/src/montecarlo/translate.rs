@@ -20,6 +20,7 @@ use crate::propagate::{tagged_yaml, MoveProposal, ProposedMove};
 use crate::transform::{random_displacement, random_unit_vector};
 use crate::Change;
 use crate::ObserveContext;
+use crate::Point;
 
 use rand::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -188,11 +189,6 @@ impl TranslateAtom {
         }
     }
 
-    /// Whether this move uses preferential sampling.
-    pub(crate) fn has_preferential(&self) -> bool {
-        self.preferential.is_some()
-    }
-
     /// Pick a random group index matching the molecule/selection filter.
     fn pick_group(
         &self,
@@ -207,6 +203,36 @@ impl TranslateAtom {
                 .copied()
                 .choose(rng),
         }
+    }
+
+    /// A random displacement of at most `max_displacement`, isotropic in direction.
+    fn trial_displacement(&self, rng: &mut dyn RngCore) -> Point {
+        random_unit_vector(rng) * random_displacement(rng, self.max_displacement)
+    }
+
+    /// Every atom the move may pick, across all groups it may pick from.
+    ///
+    /// Preferential sampling weighs candidates against one another, so the set has to span every
+    /// eligible group: the normalized weight that selects an atom (Allen & Tildesley eqn 9.43) is
+    /// defined relative to all the atoms it competes with. Narrowing to one randomly chosen group
+    /// first would leave the solvent molecules near the solute competing only with their own
+    /// atoms — no bias toward the solute at all, and for a one-atom candidate set, none possible.
+    fn eligible_atoms(&self, context: &impl ObserveContext) -> Vec<usize> {
+        let select = self
+            .atom_id
+            .map_or(ParticleSelection::Active, ParticleSelection::ById);
+        let groups = match self.molecule_id {
+            Some(molecule) => context.select(&GroupSelection::ByMoleculeId(molecule)),
+            None => context.select(&self.select_molecule_ids),
+        };
+        groups
+            .iter()
+            .flat_map(|&group| {
+                context.groups()[group]
+                    .select(&select, context.topology_ref())
+                    .expect("Selection should be successful.")
+            })
+            .collect()
     }
 
     /// Returns group id and absolute index of a uniformly chosen atom.
@@ -287,8 +313,13 @@ impl TranslateAtom {
             _ => (),
         }
 
-        if let Some(ref mut pref) = self.preferential {
-            pref.finalize(context)?;
+        // Resolved before the sampler is borrowed: it needs the candidates in order to check that
+        // the reference is not among the atoms this move would displace.
+        if self.preferential.is_some() {
+            let candidates = self.eligible_atoms(context);
+            if let Some(preferential) = self.preferential.as_mut() {
+                preferential.finalize(context, &candidates)?;
+            }
         }
 
         Ok(())
@@ -296,19 +327,20 @@ impl TranslateAtom {
 }
 
 impl<T: ObserveContext> MoveProposal<T> for TranslateAtom {
-    #[allow(clippy::unnecessary_unwrap)] // split borrow: pick_group borrows self, then pref
+    #[allow(clippy::unnecessary_unwrap)] // split borrow: eligible_atoms borrows self, then pref
     fn propose_move(&mut self, context: &T, rng: &mut dyn RngCore) -> Option<ProposedMove> {
-        let (group, absolute_atom) = if self.preferential.is_some() {
-            let group = self.pick_group(context, rng)?;
-            let select = self
-                .atom_id
-                .map_or(ParticleSelection::Active, ParticleSelection::ById);
-            let candidates = context.groups()[group]
-                .select(&select, context.topology_ref())
-                .expect("Selection should be successful.");
+        let (group, absolute_atom, displacement) = if self.preferential.is_some() {
+            // Drawn before the pick: the acceptance correction of eqn 9.44 needs both endpoints
+            // of the move, and the displacement does not depend on which atom is chosen.
+            let displacement = self.trial_displacement(rng);
+            let candidates = self.eligible_atoms(context);
             let pref = self.preferential.as_mut().unwrap();
-            let atom = pref.weighted_select(context, &candidates, rng)?;
-            (group, atom)
+            let atom = pref.propose(context, &candidates, &displacement, rng)?;
+            // The atom is picked from the whole eligible set, so its group follows from it.
+            let group = context
+                .group_of_particle(atom)
+                .expect("a selected atom belongs to the group it was selected from");
+            (group, atom, displacement)
         } else {
             // Bounded retries: GCMC may leave the eligible groups empty
             // (count fluctuates to zero). Spinning forever in that case
@@ -317,18 +349,9 @@ impl<T: ObserveContext> MoveProposal<T> for TranslateAtom {
             // multi-group selection where the first few picks miss; an
             // empty system fails fast.
             const MAX_RETRIES: usize = 16;
-            (0..MAX_RETRIES).find_map(|_| self.get_group_atom(context, rng))?
+            let (group, atom) = (0..MAX_RETRIES).find_map(|_| self.get_group_atom(context, rng))?;
+            (group, atom, self.trial_displacement(rng))
         };
-
-        let displacement =
-            random_unit_vector(rng) * random_displacement(rng, self.max_displacement);
-
-        // Pre-compute preferential bias before the move is applied
-        if let Some(ref mut pref) = self.preferential {
-            let old_pos = context.position(absolute_atom);
-            let new_pos = old_pos + displacement;
-            pref.compute_bias(&old_pos, &new_pos, context);
-        }
 
         let absolute_atom = AbsIndex::new(absolute_atom);
         let relative_atom = context.groups()[group]
@@ -362,6 +385,114 @@ mod tests {
 
     use super::*;
     use crate::backend::Backend;
+
+    /// Preferential candidates must span every matching group, not one picked at random.
+    ///
+    /// Two Solvent molecules, one 3 Å from the solute and one 28 Å away. Weighing their atoms
+    /// against each other puts the near molecule at ~98% of selections, since W'(3) : W'(28) is
+    /// (3+1)⁻² : (28+1)⁻² ≈ 53 : 1. Choosing a group uniformly first and only weighting inside it
+    /// caps the near molecule at ~50% — and weighs one molecule's atoms with the other's weights.
+    #[test]
+    fn preferential_candidates_span_all_matching_groups() {
+        use rand::SeedableRng;
+
+        const PROPOSALS: usize = 2_000;
+
+        let mut rng = rand::rngs::StdRng::seed_from_u64(11);
+        let context =
+            Backend::new("tests/files/preferential_two_groups.yaml", None, &mut rng).unwrap();
+
+        // Positions are pinned in the input: group 0 is the solute, 1 the near Solvent, 2 the far.
+        let distance_to_solute = |group: usize| {
+            context.groups()[group]
+                .mass_center()
+                .unwrap()
+                .metric_distance(context.groups()[0].mass_center().unwrap())
+        };
+        assert!(distance_to_solute(1) < 5.0, "group 1 is the near Solvent");
+        assert!(distance_to_solute(2) > 25.0, "group 2 is the far Solvent");
+
+        let mut translate: TranslateAtom = serde_yml::from_str(
+            "{molecule: Solvent, max_displacement: 0.5, preferential: \
+             {reference: \"molecule Macromolecule\", exponent: 2, offset: 1.0}}",
+        )
+        .unwrap();
+        translate.finalize(&context).unwrap();
+
+        let near_picks = (0..PROPOSALS)
+            .filter(|_| {
+                let proposed = translate.propose_move(&context, &mut rng).unwrap();
+                let Change::SingleGroup(group, _) = proposed.change() else {
+                    panic!("TranslateAtom proposes a single-group change");
+                };
+                *group == 1
+            })
+            .count();
+
+        let fraction = near_picks as f64 / PROPOSALS as f64;
+        assert!(
+            fraction > 0.9,
+            "the near molecule took only {:.0}% of selections; candidates are not being \
+             weighed across both groups",
+            100.0 * fraction
+        );
+    }
+
+    /// A move may not displace its own reference.
+    ///
+    /// Moving a reference atom shifts the sphere the distances are measured from, so every other
+    /// candidate's weight changes at once — while the acceptance correction assumes only the moved
+    /// atom's did. The result would be a silently non-Boltzmann chain, so the input is refused.
+    /// An unrestricted `TranslateAtom` is the dangerous case: with neither `molecule` nor `atom`
+    /// set, its candidates are every atom in the system, the reference among them.
+    #[test]
+    fn a_move_may_not_displace_its_own_reference() {
+        let mut rng = rand::rngs::StdRng::seed_from_u64(5);
+        let context =
+            Backend::new("tests/files/preferential_two_groups.yaml", None, &mut rng).unwrap();
+
+        for yaml in [
+            // Unrestricted: candidates default to every group, including the reference.
+            "{max_displacement: 0.5, preferential: \
+             {reference: \"molecule Macromolecule\", exponent: 2, offset: 1.0}}",
+            // Explicitly pointed at itself.
+            "{molecule: Macromolecule, max_displacement: 0.5, preferential: \
+             {reference: \"molecule Macromolecule\", exponent: 2, offset: 1.0}}",
+        ] {
+            let mut translate: TranslateAtom = serde_yml::from_str(yaml).unwrap();
+            let error = translate
+                .finalize(&context)
+                .expect_err("a move overlapping its own reference must be refused");
+            assert!(
+                error.to_string().contains("distinct from the atoms"),
+                "unexpected error: {error}"
+            );
+        }
+    }
+
+    /// The weight exponent must bias selection *toward* the reference.
+    #[test]
+    fn a_non_positive_exponent_is_refused() {
+        let mut rng = rand::rngs::StdRng::seed_from_u64(5);
+        let context =
+            Backend::new("tests/files/preferential_two_groups.yaml", None, &mut rng).unwrap();
+
+        // nu <= 0 makes W'(r) grow with r, biasing selection toward the atoms furthest away.
+        let mut translate: TranslateAtom = serde_yml::from_str(
+            "{molecule: Solvent, max_displacement: 0.5, preferential: \
+             {reference: \"molecule Macromolecule\", exponent: -2, offset: 1.0}}",
+        )
+        .unwrap();
+        let error = translate
+            .finalize(&context)
+            .expect_err("a negative exponent must be refused");
+        assert!(
+            error
+                .to_string()
+                .contains("exponent must be finite and positive"),
+            "unexpected error: {error}"
+        );
+    }
 
     #[test]
     fn test_translate_molecule_parse() {
