@@ -731,11 +731,13 @@
 
 
 <h1 id="umbrella-sampling">Umbrella Sampling<a class="headerlink" href="#umbrella-sampling" title="Permanent link">&para;</a></h1>
-<p>Multi-walker umbrella sampling with free-energy stitching from overlap fractions.
-The reaction coordinate is divided into overlapping hard-wall windows that are
-run in parallel. A PMF is reconstructed from the density histograms using
-<span class="arithmatex">\(\Delta F_{i \to i+1} = -k_BT \ln(f_i / f_{i+1})\)</span>
-where <span class="arithmatex">\(f_i\)</span> is the fraction of window <span class="arithmatex">\(i\)</span>'s samples in the overlap region.</p>
+<p>Umbrella sampling maps the potential of mean force (PMF) along a collective variable that the
+system would otherwise cross too rarely to sample. Faunus divides the coordinate into overlapping
+hard-wall windows and runs one walker per window in parallel. Each walker builds a density
+histogram within its window, and adjacent windows are stitched into a continuous PMF from the
+free-energy difference</p>
+<div class="arithmatex">\[\Delta F_{i \to i+1} = -RT \ln(f_i / f_{i+1}),\]</div>
+<p>where <span class="arithmatex">\(f_i\)</span> is the fraction of window <span class="arithmatex">\(i\)</span>'s samples that fall in the range the two windows share.</p>
 <h2 id="command-line">Command line<a class="headerlink" href="#command-line" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code>faunus umbrella -i input.yaml [-s umbrella_states/] [-o pmf.csv] [-j 0]
 </code></pre></div>
@@ -771,10 +773,9 @@ where <span class="arithmatex">\(f_i\)</span> is the fraction of window <span cl
 </tbody>
 </table>
 <h2 id="yaml-configuration">YAML configuration<a class="headerlink" href="#yaml-configuration" title="Permanent link">&para;</a></h2>
-<p>The <code>umbrella:</code> section is added alongside the normal <code>system:</code>, <code>propagate:</code>,
-and <code>analysis:</code> sections. The <code>propagate:</code> section defines the MC moves used in
-both the drive and production phases. The <code>analysis:</code> section runs per-window
-during production.</p>
+<p>Add an <code>umbrella:</code> section alongside the usual <code>system:</code>, <code>propagate:</code>, and <code>analysis:</code> sections.
+The <code>propagate:</code> section defines the Monte Carlo moves used in both the drive and the production
+phase; the <code>analysis:</code> section runs once per window during production.</p>
 <div class="highlight"><pre><span></span><code><span class="nt">umbrella</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">cv</span><span class="p">:</span>
 <span class="w">    </span><span class="nt">property</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">mass_center_separation</span>
@@ -789,8 +790,8 @@ during production.</p>
 <span class="w">    </span><span class="nt">force_constant</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">5.0</span>
 </code></pre></div>
 <h3 id="cv-collective-variable"><code>cv</code> — collective variable<a class="headerlink" href="#cv-collective-variable" title="Permanent link">&para;</a></h3>
-<p>Any <a href="../analysis/#supported-properties">collective variable</a> can be used.
-Selections are resolved per window.</p>
+<p>Any <a href="../analysis/#supported-properties">collective variable</a> works; selections resolve separately
+for each window.</p>
 <h3 id="windows-window-layout"><code>windows</code> — window layout<a class="headerlink" href="#windows-window-layout" title="Permanent link">&para;</a></h3>
 <table>
 <thead>
@@ -848,27 +849,73 @@ Adjacent windows must overlap (<code>spacing &lt; width</code>) for stitching.</
 </tr>
 </tbody>
 </table>
-<p>During the drive phase a harmonic bias <span class="arithmatex">\(\frac{1}{2}k(x - c_i)^2\)</span> steers each
-walker toward its window center. The drive exits as soon as the CV enters
-the window, or errors if <code>propagate.repeat</code> sweeps are exhausted.</p>
+<p>During the drive phase a harmonic bias <span class="arithmatex">\(\frac{1}{2}k(x - c_i)^2\)</span> steers each walker toward the
+center of its window. The drive ends as soon as the collective variable enters the window. If
+<code>propagate.repeat</code> sweeps pass without the walker arriving, the run stops with an error;
+strengthen <code>force_constant</code> or allow more sweeps.</p>
 <h2 id="per-window-lifecycle">Per-window lifecycle<a class="headerlink" href="#per-window-lifecycle" title="Permanent link">&para;</a></h2>
 <ol>
-<li>Drive — harmonic bias pulls the walker into its target window.
-   Skipped on restart if a state file already exists.</li>
-<li>Production — hard-wall constraint only. The <code>propagate:</code> and <code>analysis:</code>
-   sections run normally.</li>
+<li>Drive — the harmonic bias pulls the walker into its target window. Skipped on restart if a
+   state file already exists.</li>
+<li>Production — the harmonic bias is switched off and a hard wall confines the walker to its
+   window. The wall contributes zero energy inside the window and rejects any move that leaves
+   it, so the sampled density is the unbiased Boltzmann density restricted to the window and needs
+   no reweighting. The <code>propagate:</code> and <code>analysis:</code> sections run normally.</li>
 </ol>
 <h2 id="restart">Restart<a class="headerlink" href="#restart" title="Permanent link">&para;</a></h2>
-<p>On restart, existing state files in the <code>-s</code> directory are loaded and the
-drive phase is skipped. Delete a window's state file to re-drive it.</p>
+<p>Rerunning the same input loads any state files found in the <code>-s</code> directory, skips the drive phase,
+and extends the existing histograms with further sampling. To drive a window afresh, delete its
+state file.</p>
 <h2 id="output">Output<a class="headerlink" href="#output" title="Permanent link">&para;</a></h2>
-<ul>
-<li><code>pmf.csv</code> — three-column CSV: <code>cv, pmf_kT, stderr_kT</code>.
-  The PMF is shifted so that the minimum is zero.</li>
-<li><code>umbrella_states/window{i}_state.yaml</code> — per-window simulation state.</li>
-<li><code>umbrella_states/window{i}_output.yaml</code> — per-window energy summary,
-  move statistics, and analysis output.</li>
-</ul>
+<h3 id="pmfcsv"><code>pmf.csv</code><a class="headerlink" href="#pmfcsv" title="Permanent link">&para;</a></h3>
+<p>One row per histogram bin:</p>
+<table>
+<thead>
+<tr>
+<th>Column</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>cv</code></td>
+<td>Bin center of the collective variable</td>
+</tr>
+<tr>
+<td><code>pmf_kT</code></td>
+<td>Free energy in units of <span class="arithmatex">\(RT\)</span>, shifted so that the minimum is zero</td>
+</tr>
+<tr>
+<td><code>stderr_kT</code></td>
+<td>Statistical uncertainty of <code>pmf_kT</code></td>
+</tr>
+<tr>
+<td><code>spread_kT</code></td>
+<td>Disagreement between the windows covering the bin</td>
+</tr>
+</tbody>
+</table>
+<p>Where several windows cover a bin, their free energies are combined by inverse-variance weighting.
+A window holding <span class="arithmatex">\(N_j\)</span> samples in the bin carries the counting uncertainty <span class="arithmatex">\(RT/\sqrt{N_j}\)</span>, so the
+windows combine to
+<span class="arithmatex">\(\sigma = RT / \sqrt{\sum_j N_j}\)</span>,
+which shrinks as sampling accumulates.</p>
+<p>Two effects make <code>stderr_kT</code> a lower bound on the true uncertainty. It assumes statistically
+independent samples, whereas successive Monte Carlo sweeps are correlated; scale it by <span class="arithmatex">\(\sqrt{g}\)</span>,
+the statistical inefficiency of the collective variable, for a rigorous bound. It also measures a
+single bin in isolation. The free-energy offset between adjacent windows is itself estimated from
+the overlap fractions, and these offsets accumulate along the reaction coordinate. That
+accumulated uncertainty is not propagated, so <code>stderr_kT</code> understates the error on free-energy
+differences between distant bins.</p>
+<p><code>spread_kT</code> measures how far the individual windows covering a bin disagree about its free energy,
+weighted by their counts. Read it as a stitching diagnostic rather than an error bar: it vanishes
+wherever a single window covers the bin, and it is small wherever overlapping windows agree. Large
+values flag poor overlap or unconverged windows. Warning: where <code>spread_kT</code> approaches <span class="arithmatex">\(RT\)</span>, the
+stitched PMF is unreliable — widen the windows or sample longer.</p>
+<h3 id="umbrella_stateswindowi"><code>umbrella_states/window{i}/</code><a class="headerlink" href="#umbrella_stateswindowi" title="Permanent link">&para;</a></h3>
+<p>One self-contained directory per window, holding <code>state.yaml</code> (simulation state), <code>output.yaml</code>
+(energy summary and move statistics), <code>histogram.yaml</code> (sampled CV counts), and any analysis files
+produced by the input.</p>
 
 
 

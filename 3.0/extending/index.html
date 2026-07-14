@@ -755,7 +755,7 @@ template, so none can fall out of step with the interface it demonstrates.</p>
 <tr>
 <td>an energy term</td>
 <td><code>src/energy/template.rs</code></td>
-<td><code>EnergyChange</code></td>
+<td><code>EnergyChange</code>, or <code>StatefulEnergy</code> to cache</td>
 </tr>
 </tbody>
 </table>
@@ -768,9 +768,21 @@ change an atom's kind or rescale the volume, because the interface they are hand
 operations. A move therefore cannot mutate the system while proposing a change to it; it returns a
 description of the change, and the framework applies it.</p>
 <p>Analyses that need a trial move, such as a Widom insertion, are the exception. They receive a
-<em>perturbable</em> system: a copy they may translate, rotate and rescale to measure an energy difference.
+<em>perturbable</em> system: a copy they may translate, rotate or rescale to measure an energy difference.
 The copy is theirs; the real system is untouched. <code>src/analysis/virtual_translate.rs</code> is the smallest
 example.</p>
+<p>A single call, <code>measure</code>, owns the whole excursion. It states the intent — translate this molecule,
+reorient that one, scale the volume — evaluates a closure on the perturbed system, and restores it.
+Nothing else mutates the copy, so a perturbation cannot outlive the measurement that needed it.</p>
+<p>That closes a class of error. An energy term caches each molecule's interactions and cannot see
+that a molecule has moved, so a displacement followed by an energy evaluation returns the energy of
+the configuration before it. The force such a measurement reports is exactly zero, and the
+orientational landscape perfectly flat — the quantities <code>virtual_translate</code> and <code>widom_rotation</code>
+exist to measure, and neither looks wrong on sight.</p>
+<p>Restoring the copy is not the same as perturbing it back. <code>measure</code> rolls each cache back to a
+snapshot; reversing the incremental update instead would compute <span class="arithmatex">\(\infty + (-\infty) = \mathrm{NaN}\)</span>
+for any trial pose that overlapped a neighbour, and one forbidden orientation would poison every
+reading after it.</p>
 <p>Energy terms also receive an observable system. A term that changed the system it was asked to
 evaluate would corrupt the simulation, and no test would catch it.</p>
 <h2 id="what-an-analysis-must-get-right">What an analysis must get right<a class="headerlink" href="#what-an-analysis-must-get-right" title="Permanent link">&para;</a></h2>
@@ -805,9 +817,14 @@ measure the same thing.</p>
 <p>A term is told which part of the system changed and may recompute only what that requires. Then it
 must return the energy of exactly the particles the change touches, and use the same partition on
 both calls. A term that gets this wrong returns plausible numbers and passes the drift check.</p>
-<p>The safe starting point, which the template takes, is to ignore the description of the change and
-recompute the total. That is correct and slow. Optimize once the term is right, and use the
-<code>save_backup</code> and <code>undo</code> protocol so that a rejected move restores whatever was cached.</p>
+<p>The safe starting point, which the stateless template term takes, is to ignore the description of
+the change and recompute the total. That is correct and slow.</p>
+<p>A term that caches move-mutable state to go faster implements <code>StatefulEnergy</code> instead. The trait
+splits the energy into a fresh <code>total_energy</code> and an incremental <code>partial_energy</code>, and the framework
+routes a whole-system evaluation to <code>total_energy</code> — so a cache cannot hide its own drift from the
+energy-drift check. The cached state lives behind a <code>Snapshot</code>, which reduces the
+<code>save_backup</code>/<code>undo</code>/<code>discard_backup</code> reject protocol to one line each and covers every field, so a
+rejected move always restores exactly what was cached. The template's second term demonstrates this.</p>
 <p>Caching inside a term is fine, including through a <code>RefCell</code>. Changing the system through one is not.</p>
 <h2 id="registering-a-new-extension">Registering a new extension<a class="headerlink" href="#registering-a-new-extension" title="Permanent link">&para;</a></h2>
 <p>An analysis is named from YAML through the <code>AnalysisBuilder</code> enum and a move through <code>MoveBuilder</code>:
