@@ -2809,14 +2809,12 @@ propagate:
     /// distribution and ΔU is real. The incremental energy must then agree with a full
     /// recompute; a drift means the swap's ΔU is wrong even though the ideal test passes.
     ///
-    /// Drift is measured *relative* to the energy scale, and the starting configuration is seeded.
-    /// `!RandomCOM` can drop two phytates almost on top of each other, so the Coulomb energy of an
-    /// initial configuration ranges over 10⁵ to 10¹⁴ kJ/mol. At 10¹⁴, f64's ~16 significant digits
-    /// put machine precision at ~10⁻² kJ/mol, and an *absolute* bound of 1e-6 is then unreachable
-    /// however correct the bookkeeping is — such a bound tests the luck of the draw, not the
-    /// physics. Relative drift is ~10⁻¹² whatever the configuration, which is the quantity that
-    /// means something. Drawing the configuration from the OS instead did not improve the physics;
-    /// it only made which configuration got tested, and hence whether the bound held, unrepeatable.
+    /// Drift is judged *relative* to the energy scale, from a seeded configuration. `!RandomCOM`
+    /// can drop two phytates nearly on top of each other, so an initial Coulomb energy ranges over
+    /// 10⁵ to 10¹⁴ kJ/mol; at 10¹⁴, f64 resolves no finer than ~10⁻² kJ/mol, and an *absolute*
+    /// bound of 1e-6 is unreachable however correct the bookkeeping. Such a bound tests the luck of
+    /// the draw. Relative drift stays ~10⁻¹² whatever the configuration — and drawing that
+    /// configuration at random only decides, unrepeatably, which one gets tested.
     #[test]
     fn molecular_swap_energy_drift_with_interactions() {
         use crate::analysis::AnalysisCollection;
@@ -2857,8 +2855,8 @@ propagate:
             "no swap was ever accepted; drift check is vacuous"
         );
 
-        // Judge the drift against the energy it accumulated over, which is set by the starting
-        // configuration: the chain only ever relaxes downhill from the overlaps `!RandomCOM` left.
+        // The chain only relaxes downhill from the overlaps `!RandomCOM` left, so the initial
+        // energy is the scale the drift accumulated over.
         let drift = mc.energy_drift(initial_energy);
         let scale = initial_energy.abs().max(1.0);
         assert!(
