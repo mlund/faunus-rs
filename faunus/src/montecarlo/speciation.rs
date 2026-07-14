@@ -2808,11 +2808,19 @@ propagate:
     /// Here the phosphates carry −1 and −2, so every protonation swap changes the charge
     /// distribution and ΔU is real. The incremental energy must then agree with a full
     /// recompute; a drift means the swap's ΔU is wrong even though the ideal test passes.
+    ///
+    /// Drift is judged *relative* to the energy scale, from a seeded configuration. `!RandomCOM`
+    /// can drop two phytates nearly on top of each other, so an initial Coulomb energy ranges over
+    /// 10⁵ to 10¹⁴ kJ/mol; at 10¹⁴, f64 resolves no finer than ~10⁻² kJ/mol, and an *absolute*
+    /// bound of 1e-6 is unreachable however correct the bookkeeping. Such a bound tests the luck of
+    /// the draw. Relative drift stays ~10⁻¹² whatever the configuration — and drawing that
+    /// configuration at random only decides, unrepeatably, which one gets tested.
     #[test]
     fn molecular_swap_energy_drift_with_interactions() {
         use crate::analysis::AnalysisCollection;
         use crate::montecarlo::MarkovChain;
         use crate::propagate::Propagate;
+        use rand::SeedableRng;
 
         let tmp = tempfile::NamedTempFile::new().unwrap();
         std::fs::write(
@@ -2822,7 +2830,7 @@ propagate:
         .unwrap();
         let path = tmp.path();
 
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rngs::StdRng::seed_from_u64(42);
         let context = Backend::new(path, None, &mut rng).unwrap();
         let propagate = Propagate::from_file(path, &context, THERMAL_ENERGY).unwrap();
         let mut mc = MarkovChain::new(
@@ -2847,10 +2855,15 @@ propagate:
             "no swap was ever accepted; drift check is vacuous"
         );
 
+        // The chain only relaxes downhill from the overlaps `!RandomCOM` left, so the initial
+        // energy is the scale the drift accumulated over.
         let drift = mc.energy_drift(initial_energy);
+        let scale = initial_energy.abs().max(1.0);
         assert!(
-            drift < 1e-6,
-            "energy drift {drift:.6e} for an interacting molecular swap"
+            drift / scale < 1e-9,
+            "energy drift {drift:.6e} on an energy scale of {scale:.3e} (relative {:.3e}) \
+             for an interacting molecular swap",
+            drift / scale
         );
     }
 
