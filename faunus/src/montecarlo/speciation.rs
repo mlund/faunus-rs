@@ -2374,11 +2374,12 @@ propagate:
         )
     }
 
-    /// Angle (degrees) between a group's stored orientation and the one its coordinates imply,
-    /// or `None` for a group with no orientation to speak of (fewer than two atoms).
+    /// How far a group's coordinates depart from the ones its stored orientation claims (RMSD, Å).
     ///
     /// The stored quaternion claims to carry the molecule's reference conformation onto its
-    /// coordinates. Superposing the two says whether that is true.
+    /// coordinates; this asks whether it does. Deliberately *not* an angle against a fitted
+    /// rotation: a linear or symmetric molecule has many orientations its coordinates cannot tell
+    /// apart, and comparing quaternions would report those agreements as disagreements.
     fn orientation_error(context: &Backend, group_index: usize) -> Option<f64> {
         use crate::context::WithTopology;
         let group = &context.groups()[group_index];
@@ -2388,8 +2389,7 @@ propagate:
             .reference_positions();
         let current: Vec<crate::Point> = group.iter_active().map(|i| context.position(i)).collect();
         let gathered = crate::geometry::gather_molecule(&current, context.cell());
-        let fitted = crate::geometry::best_fit_rotation(reference, &gathered)?;
-        Some(group.quaternion().angle_to(&fitted).to_degrees())
+        crate::geometry::orientation_residual(reference, &gathered, group.quaternion())
     }
 
     fn dimer_context(slots: usize, active: usize) -> (tempfile::NamedTempFile, Backend) {
@@ -2518,10 +2518,10 @@ propagate:
             // An insertion places the template at a random orientation; the group must report
             // the one its coordinates actually have.
             let error = orientation_error(&context, group_index)
-                .expect("a polyatomic group has a fittable frame");
+                .expect("a polyatomic group has a reference conformation");
             assert!(
                 error < 1e-9,
-                "group orientation is {error:.1}° from the coordinates it was placed with"
+                "stored orientation misses the coordinates it was placed with by {error:.2e} Å"
             );
             return;
         }
@@ -2896,7 +2896,8 @@ propagate: {seed: !Fixed 3, criterion: MetropolisHastings, repeat: 0, collection
             crate::UnitQuaternion::identity(),
             "a single atom has no orientation to derive"
         );
-        assert!(orientation_error(&context, gi).is_none());
+        // A single point sits at zero residual whichever way you turn it — which is the point.
+        assert_eq!(orientation_error(&context, gi), Some(0.0));
         // The mass center still follows the coordinates, single atom or not.
         assert_eq!(
             context.groups()[gi].mass_center().copied(),
@@ -2976,10 +2977,11 @@ propagate:
             if context.groups()[gi].is_empty() {
                 continue;
             }
-            let error = orientation_error(context, gi).expect("a trimer has a fittable frame");
+            let error =
+                orientation_error(context, gi).expect("a trimer has a reference conformation");
             assert!(
                 error < 1e-6,
-                "group {gi} stores an orientation {error:.1}° from the one its coordinates imply"
+                "group {gi} stores an orientation that misses its coordinates by {error:.2e} Å"
             );
         }
     }
@@ -3031,7 +3033,8 @@ propagate:
                 continue;
             }
             checked += 1;
-            let error = orientation_error(context, gi).expect("a 7-bead phytate has a frame");
+            let error = orientation_error(context, gi)
+                .expect("a 7-bead phytate has a reference conformation");
             if error > 1e-6 {
                 wrong.push(format!(
                     "group {gi}: stored orientation is off by {error:.1}°"

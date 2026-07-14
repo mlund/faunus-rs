@@ -170,7 +170,6 @@ impl StatefulEnergy for CachedZRestraint {
 mod tests {
     use super::*;
     use crate::backend::Backend;
-    use crate::context::PerturbContext;
     use crate::Point;
 
     /// Two atoms at z = ±2, so the restraint energy is ½·k·(4 + 4) = 4k.

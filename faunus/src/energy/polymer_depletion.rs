@@ -339,20 +339,22 @@ impl PolymerDepletion {
         }
     }
 
-    /// Check whether a change involves any colloid group.
+    /// Whether a group holds one of the colloid molecule kinds.
     ///
     /// Keyed on the topology, not on the cached colloid list: a deactivated colloid is dropped
     /// from the cache, and a test against the cache would then fail to notice it coming back.
+    fn is_colloid(&self, group_index: usize, context: &impl ObserveContext) -> bool {
+        self.colloid_molecule_ids
+            .contains(&context.groups()[group_index].molecule())
+    }
+
+    /// Check whether a change involves any colloid group.
     fn change_involves_colloids(&self, change: &Change, context: &impl ObserveContext) -> bool {
-        let is_colloid = |gi: usize| {
-            self.colloid_molecule_ids
-                .contains(&context.groups()[gi].molecule())
-        };
         match change {
             Change::Everything | Change::Volume(_, _) => true,
             Change::None => false,
-            Change::SingleGroup(gi, _) => is_colloid(*gi),
-            Change::Groups(groups) => groups.iter().any(|(gi, _)| is_colloid(*gi)),
+            Change::SingleGroup(gi, _) => self.is_colloid(*gi, context),
+            Change::Groups(groups) => groups.iter().any(|(gi, _)| self.is_colloid(*gi, context)),
         }
     }
 
@@ -368,10 +370,7 @@ impl PolymerDepletion {
             }
             Change::Groups(groups) if self.change_involves_colloids(change, context) => {
                 for &(gi, _) in groups {
-                    if self
-                        .colloid_molecule_ids
-                        .contains(&context.groups()[gi].molecule())
-                    {
+                    if self.is_colloid(gi, context) {
                         self.update_single_colloid(gi, context);
                     }
                 }

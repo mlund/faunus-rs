@@ -207,6 +207,38 @@ pub(crate) fn best_fit_rotation(reference: &[Point], current: &[Point]) -> Optio
     ))
 }
 
+/// How far a molecule's coordinates depart from the ones `orientation` claims it has (RMSD, Å).
+///
+/// The honest test of a stored orientation, and the only one that works for every molecule: it
+/// asks whether the quaternion *reproduces the coordinates*, not whether it equals some fitted
+/// value. A symmetric or linear molecule has many orientations consistent with the same
+/// coordinates — comparing against a best fit would call those disagreements, when the coordinates
+/// cannot tell them apart at all.
+///
+/// `None` when there is nothing to compare — a mismatched or absent reference conformation.
+#[cfg(test)]
+pub(crate) fn orientation_residual(
+    reference: &[Point],
+    current: &[Point],
+    orientation: &UnitQuaternion,
+) -> Option<f64> {
+    if reference.len() != current.len() || reference.is_empty() {
+        return None;
+    }
+    let n = reference.len() as f64;
+    let ref_com: Point = reference.iter().sum::<Point>() / n;
+    let cur_com: Point = current.iter().sum::<Point>() / n;
+    Some(
+        (reference
+            .iter()
+            .zip(current)
+            .map(|(r, c)| (orientation * (r - ref_com) - (c - cur_com)).norm_squared())
+            .sum::<f64>()
+            / n)
+            .sqrt(),
+    )
+}
+
 /// Relative spread below which a molecule counts as linear and its axial rotation as free.
 const COLLINEARITY_TOL: f64 = 1e-9;
 

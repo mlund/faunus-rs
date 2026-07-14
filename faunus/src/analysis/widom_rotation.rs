@@ -985,16 +985,14 @@ propagate: {{seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}}
         let ctx = dimer_backend(r#"custom_external: [{selection: "all", function: "q * z"}]"#);
         let mut trial = ctx.clone();
         let gi = ctx.resolve_groups(&Selection::parse("molecule DIMER").unwrap())[0];
-        let indices: Vec<usize> = ctx.groups()[gi].iter_active().collect();
-        let com = ctx.mass_center(&indices);
 
         for q in super_fibonacci(16) {
-            trial.rotate_particles(&indices, &q, Some(-com));
+            trial.rotate_group(gi, &q).unwrap();
             let single = trial
                 .hamiltonian()
                 .energy(&trial, &Change::SingleGroup(gi, GroupChange::RigidBody));
             let total = trial.hamiltonian().energy(&trial, &Change::Everything);
-            trial.rotate_particles(&indices, &q.inverse(), Some(-com));
+            trial.rotate_group(gi, &q.inverse()).unwrap();
             assert_approx_eq!(f64, single, total, epsilon = 1e-9);
         }
     }

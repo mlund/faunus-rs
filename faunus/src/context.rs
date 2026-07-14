@@ -301,35 +301,4 @@ pub trait PerturbContext: ObserveContext + WithHamiltonian + Clone {
         indices: &[usize],
         positions: &[Point],
     ) -> anyhow::Result<()>;
-
-    /// Shift a subset of a group's atoms, leaving its rigid-body frame alone.
-    ///
-    /// Like [`set_group_conformation`](Self::set_group_conformation), but expressed as a shift.
-    fn translate_group_atoms(
-        &mut self,
-        group_index: usize,
-        indices: &[usize],
-        shift: &Point,
-    ) -> anyhow::Result<()>;
-
-    /// Shift positions of selected particles by target vector and apply periodic boundary conditions.
-    fn translate_particles(&mut self, indices: &[usize], shift: &Point);
-
-    /// Rotate selected particles around the center of mass by the given quaternion. An optional
-    /// translational shift can be provided to help remove PBC. The shift is added before rotation and
-    /// subtracted after.
-    fn rotate_particles(
-        &mut self,
-        indices: &[usize],
-        quaternion: &crate::UnitQuaternion,
-        center: Option<Point>,
-    );
-
-    /// Move selected particles to the given positions and apply periodic boundary conditions.
-    ///
-    /// For geometry that must be built by following bonds — a rotated sub-tree of a chain, say —
-    /// the caller has to supply positions outright: [`rotate_particles`](Self::rotate_particles)
-    /// takes the minimum image of each particle independently, which folds any part of the
-    /// molecule lying more than half a box length from the rotation centre into the wrong image.
-    fn set_particle_positions(&mut self, indices: &[usize], positions: &[Point]);
 }

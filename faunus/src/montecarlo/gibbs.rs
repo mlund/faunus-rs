@@ -290,15 +290,11 @@ impl GibbsParticleTransfer {
             .collect();
         Transform::Deactivate.on_group(src_group, src)?;
         Transform::Activate.on_group(tgt_group, tgt)?;
-        // Atom kinds are already correct in the target slot; `place_group` writes the coordinates
-        // and settles the mass center and the orientation that follows from them.
-        tgt.place_group(tgt_group, &positions)?;
-        // The molecule is translated, not reoriented, so it arrives in the pose it held in the
-        // other box — and the source group knows that pose exactly. Carry it over rather than
-        // rely on recovering it: a flexible molecule is not a rigid image of its reference
-        // conformation, so no fit could, and the target would silently keep the orientation of
-        // whichever molecule occupied the slot before.
-        tgt.set_group_orientation(tgt_group, orientation);
+        // Atom kinds are already correct in the target slot. The molecule is translated, not
+        // reoriented, so it arrives in the pose it held in the other box — and the source group
+        // knows that pose exactly. Carrying it is not an optimisation: a flexible molecule is no
+        // rigid image of its reference conformation, so no fit could recover it.
+        tgt.place_group(tgt_group, &positions, Some(orientation))?;
 
         src.update_with_backup(&Change::Everything)?;
         tgt.update_with_backup(&Change::Everything)?;

@@ -304,19 +304,22 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
 
                 // A checkpoint carries the orientation forward into the next run, so a stored
                 // quaternion that disagrees with the stored coordinates imports the lie wholesale.
+                // Measured as a residual, not an angle against a fit: a symmetric molecule has
+                // several orientations its coordinates cannot tell apart, and all of them are true.
                 if group.is_empty() {
                     continue;
                 }
                 let current: Vec<Point> =
                     group.iter_active().map(|i| context.position(i)).collect();
                 let gathered = crate::geometry::gather_molecule(&current, context.cell());
-                let Some(fitted) = crate::geometry::best_fit_rotation(reference, &gathered) else {
+                let Some(error) =
+                    crate::geometry::orientation_residual(reference, &gathered, group.quaternion())
+                else {
                     continue;
                 };
-                let error = group.quaternion().angle_to(&fitted).to_degrees();
-                if error > 1e-6 {
+                if error > TOLERANCE {
                     torn.push(format!(
-                        "{name}: group {gi} stores an orientation {error:.1}° from its coordinates"
+                        "{name}: group {gi} stores an orientation that misses its coordinates by {error:.2e} Å"
                     ));
                 }
             }

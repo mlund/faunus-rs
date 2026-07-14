@@ -565,7 +565,7 @@ impl MoleculeBlock {
                 // produced, rather than carried alongside them — including for molecules read
                 // straight from a structure file, which arrive already oriented and used to be
                 // recorded as unrotated.
-                context.place_group(group_index, &mol_positions)?;
+                context.place_group(group_index, &mol_positions, None)?;
                 if let BlockActivationStatus::Partial(x) = self.active {
                     if i >= x {
                         context.resize_group(group_index, GroupSize::Empty).unwrap();

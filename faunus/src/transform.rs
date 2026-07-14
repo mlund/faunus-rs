@@ -191,7 +191,11 @@ impl Transform {
             Self::PartialTranslate(displacement, selection) => {
                 let indices =
                     context.groups()[group_index].select(selection, context.topology_ref())?;
-                context.translate_group_atoms(group_index, &indices, displacement)?;
+                let positions: Vec<Point> = indices
+                    .iter()
+                    .map(|&i| context.position(i) + displacement)
+                    .collect();
+                context.set_group_conformation(group_index, &indices, &positions)?;
             }
             Self::Rotate(quaternion) => context.rotate_group(group_index, quaternion)?,
             Self::SetPositions(positions, selection) => {
@@ -278,7 +282,7 @@ impl Transform {
                             positions,
                         } => {
                             Self::Activate.on_group(*group_index, context)?;
-                            context.place_group(*group_index, positions)?;
+                            context.place_group(*group_index, positions, None)?;
                         }
                         SpeciationAction::DeactivateGroup(group_index) => {
                             Self::Deactivate.on_group(*group_index, context)?;

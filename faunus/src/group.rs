@@ -734,18 +734,18 @@ pub trait GroupCollectionMut: GroupCollection {
 
     /// Write a whole group's coordinates and settle the derived state that follows from them.
     ///
-    /// The mass center, bounding radius *and* orientation are all recomputed from the
-    /// coordinates just written — the orientation by superposing the molecule's reference
-    /// conformation onto them. A caller that replaces a group's coordinates wholesale
-    /// (speciation, a Gibbs transfer) therefore cannot leave the group describing the molecule
-    /// that used to occupy it, which it has no way to remember and every reason to forget.
-    ///
-    /// Rotations and translations keep their own exact updates instead of coming through here:
-    /// a best fit is ambiguous for a symmetric molecule, so re-deriving it every step would let
-    /// the orientation jump between equivalent frames and destroy the continuous trajectory that
-    /// rotational diffusion integrates. Here there is no continuity to preserve — a *different*
-    /// molecule now occupies the slot.
-    fn place_group(&mut self, group_index: usize, positions: &[Point]) -> anyhow::Result<()>;
+    /// The mass center and bounding radius are recomputed from the coordinates just written, and
+    /// so is the orientation unless the caller passes one it already knows (a Gibbs transfer
+    /// carries the molecule's pose across from the other box; see the module docs on how an
+    /// orientation is recovered otherwise). A caller replacing a group's coordinates wholesale
+    /// therefore cannot leave it describing the molecule that used to occupy the slot — which it
+    /// has no way to remember and every reason to forget.
+    fn place_group(
+        &mut self,
+        group_index: usize,
+        positions: &[Point],
+        orientation: Option<crate::UnitQuaternion>,
+    ) -> anyhow::Result<()>;
 
     /// Restore particles, group sizes and orientations wholesale, settling all derived state.
     ///
