@@ -2857,8 +2857,10 @@ propagate:
             "no swap was ever accepted; drift check is vacuous"
         );
 
+        // Judge the drift against the energy it accumulated over, which is set by the starting
+        // configuration: the chain only ever relaxes downhill from the overlaps `!RandomCOM` left.
         let drift = mc.energy_drift(initial_energy);
-        let scale = initial_energy.abs().max(mc.system_energy().abs()).max(1.0);
+        let scale = initial_energy.abs().max(1.0);
         assert!(
             drift / scale < 1e-9,
             "energy drift {drift:.6e} on an energy scale of {scale:.3e} (relative {:.3e}) \
