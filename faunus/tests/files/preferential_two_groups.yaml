@@ -1,0 +1,39 @@
+# Two Solvent molecules of the same kind, one beside the solute and one far from it.
+#
+# Preferential sampling must weigh the atoms of both against each other, so the near
+# molecule should absorb nearly all selections. Positions are pinned so the weight
+# ratio is exactly predictable: with nu = 2 and offset = 1, an atom at 3 A carries
+# (3+1)^-2 = 1/16 and one at 28 A carries (28+1)^-2 = 1/841, a ratio of ~53.
+#
+# The box is 60 A, so the 28 A separation is unambiguous under the minimum image.
+
+atoms:
+  - {name: Solute, mass: 100.0, sigma: 10.0}
+  - {name: S, mass: 1.0, sigma: 1.0}
+
+molecules:
+  - name: Macromolecule
+    atoms: [Solute]
+    has_com: true
+  - name: Solvent
+    atoms: [S, S]
+    has_com: true
+
+system:
+  cell: !Cuboid [60.0, 60.0, 60.0]
+  medium:
+    permittivity: !Vacuum
+    temperature: 300.0
+  energy: {}
+  blocks:
+    - molecule: Macromolecule
+      N: 1
+      insert: !Manual
+        - [0.0, 0.0, 0.0]
+    - molecule: Solvent
+      N: 2
+      insert: !Manual
+        - [3.0, 0.0, 0.0]   # near molecule, atom 0
+        - [3.0, 1.0, 0.0]   # near molecule, atom 1
+        - [28.0, 0.0, 0.0]  # far molecule, atom 0
+        - [28.0, 1.0, 0.0]  # far molecule, atom 1

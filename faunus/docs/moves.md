@@ -111,23 +111,38 @@ Key            | Required | Default | Description
 
 ### Preferential Sampling
 
-Biases atom selection toward reference group(s) using distance-dependent weights,
-with a corresponding acceptance correction to maintain detailed balance.
-Useful in dilute solutions where standard MC wastes most trial moves on bulk
-particles far from the solute
+In a dilute solution, most trial moves displace bulk particles far from the solute, where
+little of interest happens. Preferential sampling picks the particles near the solute more
+often and corrects the acceptance so that the equilibrium distribution is unchanged
 ([Owicki & Scheraga, 1977](https://doi.org/10.1016/0009-2614(77)85051-3);
 [Allen & Tildesley, 2017](https://doi.org/10.1093/oso/9780198803195.001.0001), §9.3.1).
+Only the rate of convergence improves; the sampled ensemble does not.
 
-Each candidate atom receives weight $W'(r) = (r + \text{offset})^{-\nu}$
-where $r$ is the nearest bounding-sphere distance across all matching reference groups.
-The acceptance criterion includes a correction $\ln(W_\text{new} / W_\text{old})$
-where $W = \sum_j W'(r_j)$ is the normalization sum over all candidates.
+Candidate atom $j$ sits a distance $r_j$ from the bounding sphere of the nearest matching
+reference group and carries the unnormalized weight
 
-Must be placed in a `!Deterministic` block so that reference groups move first
-(updating their positions), followed by the biased atom moves:
+$$W'(r_j) = (r_j + \text{offset})^{-\nu}$$
+
+where `offset` keeps the weight finite at contact. Atom $i$ is then selected with probability
+
+$$W(r_i) = \frac{W'(r_i)}{\sum_j W'(r_j)}$$
+
+The sum runs over every atom the move may pick, across all matching groups, so a particle
+beside the solute competes against the whole bulk.
+
+Selecting atoms unevenly makes a move and its reverse unequally likely to be proposed, so the
+acceptance criterion carries the ratio of the two selection probabilities of the moved atom,
+
+$$\frac{\alpha_{nm}}{\alpha_{mn}} = \frac{W(r_i^\text{new})}{W(r_i^\text{old})}$$
+
+An atom that moves away from the solute was easy to select and would be hard to select back,
+so such moves are accepted less often; moves toward the solute are accepted more often.
+Dropping this correction would drain the very region the method exists to sample.
+
+The reference groups may move as freely as any others, and need no correction of their own:
 
 ```yaml
-- !Deterministic
+- !Stochastic
   moves:
     - !TranslateMolecule { molecule: Protein, max_displacement: 0.5 }
     - !RotateMolecule { molecule: Protein, max_angle: 0.5 }
@@ -151,11 +166,22 @@ Multiple reference groups can be selected; the distance is always to the nearest
 The `reference` field uses the [selection language](selection_language.md),
 e.g. `"molecule Protein"`, `"protein"`, or boolean combinations.
 
+The bias acts among the candidates, so there must be more than one: if `molecule` and `atom`
+together match a single atom, $W(r_i) = 1$ throughout and the selection reduces to the uniform
+one. Choose the mobile species so that the candidates span the solvent — an atomic species such
+as `Na`, or a single atom kind shared by many solvent molecules.
+
+The move may not displace its own reference, and is refused if it would. Moving a reference atom
+would shift the sphere the distances are measured from, changing every candidate's weight at once,
+which the acceptance correction above does not account for. Restrict the move with `molecule` or
+`atom` so that its candidates and the reference are distinct — an unrestricted `!TranslateAtom`
+selects from every molecule in the system, the reference included.
+
 Key         | Required | Default | Description
 ----------- | -------- | ------- | -------------------------------------------
-`reference` | yes      |         | Selection expression for reference group(s)
-`exponent`  | no       | 2       | Exponent $\nu$ in the weight function
-`offset`    | no       | 1.0     | Offset (Angstrom) to avoid singularity at $r = 0$
+`reference` | yes      |         | Selection expression for reference group(s); must not match atoms the move displaces
+`exponent`  | no       | 2       | Exponent $\nu$ in the weight function; must be positive
+`offset`    | no       | 1.0     | Offset (Angstrom) to avoid singularity at $r = 0$; must be positive
 `file`      | no       |         | Path to write selection-distance histogram (.dat/.csv)
 
 ---

@@ -36,7 +36,7 @@ mod cluster;
 mod crankshaft;
 pub mod gibbs;
 mod pivot;
-pub mod preferential;
+mod preferential;
 mod rotate;
 pub mod speciation;
 mod template;
