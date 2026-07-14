@@ -578,6 +578,55 @@ mod tests {
     use crate::backend::Backend;
     use float_cmp::assert_approx_eq;
 
+    /// A `+∞` energy is a state the chain can never enter, only start in.
+    ///
+    /// The `∞ → finite` branch above force-accepts before it reads the bias, so a biased move
+    /// escaping an overlap skips its acceptance correction. That is safe only because overlapping
+    /// states lie outside the equilibrium ensemble: a move *into* one has `ΔU = +∞` and is
+    /// rejected, and a move *within* one gives `∞ − ∞ = NaN`, also rejected. The force-accept
+    /// therefore fires in the opening transient and never again, leaving the stationary
+    /// distribution untouched.
+    ///
+    /// An arithmetic property of the criterion, invisible in every fixture, and nothing else pins
+    /// it — while the correctness of skipping the bias rests on it entirely.
+    #[test]
+    fn an_infinite_energy_state_cannot_be_entered_only_started_in() {
+        let mut rng = rand::rngs::StdRng::seed_from_u64(1);
+        let criterion = AcceptanceCriterion::MetropolisHastings;
+        let thermal_energy = 2.5;
+        // A bias large enough to flip any finite decision, to show it cannot rescue an overlap.
+        let bias = Bias::Dimensionless(-100.0);
+
+        for _ in 0..100 {
+            assert!(
+                !criterion.accept(
+                    NewOld::from(f64::INFINITY, 1.0),
+                    bias,
+                    thermal_energy,
+                    &mut rng
+                ),
+                "a move into an overlap must never be accepted"
+            );
+            assert!(
+                !criterion.accept(
+                    NewOld::from(f64::INFINITY, f64::INFINITY),
+                    bias,
+                    thermal_energy,
+                    &mut rng
+                ),
+                "a move within an overlap must never be accepted"
+            );
+        }
+
+        // Escaping an overlap is always accepted — the transient the force-accept exists for.
+        assert!(criterion.accept(
+            NewOld::from(1.0, f64::INFINITY),
+            bias,
+            thermal_energy,
+            &mut rng
+        ));
+    }
+
     /// The pre-3.0 key spellings are still accepted, so that older input keeps running.
     ///
     /// Nothing else pins them: the inputs under `tests/` all use the canonical keys, so dropping
