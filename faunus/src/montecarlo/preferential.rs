@@ -26,9 +26,9 @@
 
 use crate::auxiliary::ColumnWriter;
 use crate::cell::BoundaryConditions;
-use crate::group::GroupIndex;
+use crate::group::{AtomKindId, GroupIndex, GroupSelection, ParticleSelection};
 use crate::histogram::Histogram;
-use crate::selection::{CachedSelection, Groups, Selection};
+use crate::selection::{CachedSelection, Generation, Groups, Selection};
 use crate::ObserveContext;
 use crate::Point;
 use average::{Estimate, Mean};
@@ -72,6 +72,71 @@ fn serialize_radii<S: serde::Serializer>(
 fn acceptance_correction(w_old: f64, w_new: f64, w_sum: f64) -> f64 {
     let w_sum_new = w_sum - w_old + w_new;
     ((w_old / w_sum) / (w_new / w_sum_new)).ln()
+}
+
+/// The atoms a move may pick from, re-resolved only when the system changes under them.
+///
+/// Which atoms are eligible depends on group composition and atom identities, never on where the
+/// atoms are — so this survives every ordinary Monte Carlo trial and is rebuilt only by a GCMC
+/// insertion, an activation change, or a titration swap.
+#[derive(Clone, Debug, Default)]
+struct Candidates {
+    /// Groups the move may draw from.
+    groups: GroupSelection,
+    /// Restrict to this atom kind, if the move names one.
+    atom: Option<AtomKindId>,
+    atoms: Vec<usize>,
+    /// `None` until first resolved.
+    generation: Option<Generation>,
+}
+
+impl Candidates {
+    fn new(groups: GroupSelection, atom: Option<AtomKindId>) -> Self {
+        Self {
+            groups,
+            atom,
+            atoms: Vec::new(),
+            generation: None,
+        }
+    }
+
+    /// The eligible atoms, and whether they were just re-resolved.
+    fn resolve(&mut self, context: &impl ObserveContext) -> (&[usize], bool) {
+        let generation = Generation {
+            groups: context.group_lists_generation(),
+            atom_kinds: context.atom_kinds_generation(),
+        };
+        if self.generation == Some(generation) {
+            return (&self.atoms, false);
+        }
+        let select = self
+            .atom
+            .map_or(ParticleSelection::Active, ParticleSelection::ById);
+        self.atoms = context
+            .select(&self.groups)
+            .iter()
+            .flat_map(|&group| {
+                context.groups()[group]
+                    .select(&select, context.topology_ref())
+                    .expect("Selection should be successful.")
+            })
+            .collect();
+        self.generation = Some(generation);
+        (&self.atoms, true)
+    }
+}
+
+/// Unnormalized weights W'(rⱼ) and their sum, valid for one configuration only.
+///
+/// Keyed on the coordinates *and* the candidate set, since either can change under them: an
+/// ordinary trial moves an atom, a GCMC insertion changes who the candidates are.
+#[derive(Clone, Debug)]
+struct Weights {
+    values: Vec<f64>,
+    /// Σⱼ W'(rⱼ) — the denominator of eqn 9.43, never the `W` of eqn 9.44.
+    sum: f64,
+    positions: u64,
+    candidates: Generation,
 }
 
 /// Distance-biased atom selection with detailed-balance correction.
@@ -134,19 +199,34 @@ pub struct PreferentialSampling {
     /// Histogram of selection distances; only allocated when `file` is set.
     #[serde(skip)]
     distance_histogram: Option<Histogram>,
+    /// The atoms this move may pick from, owned here so they cannot disagree with the reference.
+    #[serde(skip)]
+    candidates: Candidates,
+    /// Weights for the current configuration, or `None` until first built.
+    #[serde(skip)]
+    weights: Option<Weights>,
+    /// Index into `candidates` of the atom the last proposal picked.
+    ///
+    /// The one thing whose weight the next `on_trial_outcome` may have to refresh: if the trial was
+    /// accepted, this atom moved and nothing else did.
+    #[serde(skip)]
+    proposed: Option<usize>,
 }
 
 impl PreferentialSampling {
-    /// Resolve the reference selection and validate it against the atoms the move will displace.
+    /// Resolve the reference and take ownership of the atoms the move may pick from.
     ///
-    /// Takes the candidates rather than letting the caller check them separately: the reference
-    /// has to be disjoint from them, and a check the caller must remember to make is one it can
-    /// forget.
+    /// The sampler derives the candidates itself, from the move's own group/atom filter, rather
+    /// than being handed a list on every proposal. A caller cannot then pass a set the reference
+    /// was never checked against, nor one that has drifted from the set the move actually draws
+    /// from — the two are the same object.
     pub(super) fn finalize(
         &mut self,
         context: &impl ObserveContext,
-        candidates: &[usize],
+        groups: GroupSelection,
+        atom: Option<AtomKindId>,
     ) -> anyhow::Result<()> {
+        self.candidates = Candidates::new(groups, atom);
         // r ≥ 0, so offset ≤ 0 lets W'(r) = (r + offset)^{-ν} diverge or go complex at r = -offset.
         anyhow::ensure!(
             self.offset > 0.0,
@@ -169,24 +249,7 @@ impl PreferentialSampling {
             self.reference
         );
 
-        // Displacing a reference atom would move the very sphere the distances are measured from:
-        // every other candidate's weight would change too, while `acceptance_correction` assumes
-        // only the moved atom's did, and the trial distance would be taken against the sphere as it
-        // stood *before* the move. Both assumptions are silent, so refuse the input instead.
-        let reference_atoms: HashSet<usize> = self
-            .resolve_reference(context)
-            .iter()
-            .flat_map(|&group| context.groups()[group.get()].iter_active())
-            .collect();
-        if let Some(clash) = candidates.iter().find(|a| reference_atoms.contains(a)) {
-            anyhow::bail!(
-                "PreferentialSampling: reference '{}' contains atom {} that this move displaces. \
-                 The reference must be distinct from the atoms being sampled; restrict the move \
-                 with 'molecule' or 'atom'.",
-                self.reference,
-                clash
-            );
-        }
+        self.ensure_reference_is_disjoint(context)?;
 
         for (i, &(_, radius)) in self.ref_geometries.iter().enumerate() {
             if radius < f64::EPSILON {
@@ -211,6 +274,38 @@ impl PreferentialSampling {
     /// Weight function: `W'(r) = (r + offset)^{-exponent}`
     fn weight(&self, r: f64) -> f64 {
         (r + self.offset).powf(-self.exponent)
+    }
+
+    /// The reference must hold none of the atoms this move displaces.
+    ///
+    /// Moving a reference atom would shift the very sphere the distances are measured from: every
+    /// other candidate's weight would change at once, while `acceptance_correction` assumes only
+    /// the moved atom's did, and the trial distance would be taken against the sphere as it stood
+    /// *before* the move. Both assumptions fail silently, so the overlap is refused instead.
+    ///
+    /// Re-checked whenever the candidates re-resolve, not only at startup: group selection matches
+    /// on any active atom, so a titration swap or a GCMC insertion can make a candidate group
+    /// *become* a reference group long after the move was built.
+    fn ensure_reference_is_disjoint(
+        &mut self,
+        context: &impl ObserveContext,
+    ) -> anyhow::Result<()> {
+        let reference_atoms: HashSet<usize> = self
+            .resolve_reference(context)
+            .iter()
+            .flat_map(|&group| context.groups()[group.get()].iter_active())
+            .collect();
+        let (candidates, _) = self.candidates.resolve(context);
+        if let Some(clash) = candidates.iter().find(|a| reference_atoms.contains(a)) {
+            anyhow::bail!(
+                "PreferentialSampling: reference '{}' contains atom {} that this move displaces. \
+                 The reference must be distinct from the atoms being sampled; restrict the move \
+                 with 'molecule' or 'atom'.",
+                self.reference,
+                clash
+            );
+        }
+        Ok(())
     }
 
     /// Reference group indices, re-resolved against the current groups and atom kinds.
@@ -254,6 +349,48 @@ impl PreferentialSampling {
             .unwrap_or(f64::INFINITY)
     }
 
+    /// Weights for the configuration as it now stands, rebuilt only if it moved under them.
+    ///
+    /// Rebuilding costs one minimum-image distance per candidate, which is the whole cost of the
+    /// move at realistic solvent counts. The cache key is the coordinates and the candidate set,
+    /// both read from the context — so it cannot be satisfied by a caller that has lost track.
+    fn weights(&mut self, context: &impl ObserveContext) -> &Weights {
+        self.candidates.resolve(context);
+        let key = (
+            context.positions_generation(),
+            self.candidates
+                .generation
+                .expect("resolve() just set the generation"),
+        );
+        if self
+            .weights
+            .as_ref()
+            .is_some_and(|w| (w.positions, w.candidates) == key)
+        {
+            return self.weights.as_ref().expect("just checked");
+        }
+
+        self.refresh_ref_geometries(context);
+        let cell = context.cell();
+        // Lifted out so the weight closure may borrow `self` immutably; handed straight back.
+        let atoms = std::mem::take(&mut self.candidates.atoms);
+        let values: Vec<f64> = atoms
+            .iter()
+            .map(|&atom| {
+                let r = self.distance_to_nearest_reference(&context.position(atom), cell);
+                self.weight(r)
+            })
+            .collect();
+        self.candidates.atoms = atoms;
+
+        self.weights.insert(Weights {
+            sum: values.iter().sum(),
+            values,
+            positions: key.0,
+            candidates: key.1,
+        })
+    }
+
     /// Pick a candidate atom for the given displacement and stage its acceptance correction.
     ///
     /// Selection and correction are one step because both read the same configuration: the
@@ -264,38 +401,27 @@ impl PreferentialSampling {
     pub(super) fn propose(
         &mut self,
         context: &impl ObserveContext,
-        candidates: &[usize],
         displacement: &Point,
         rng: &mut dyn RngCore,
     ) -> Option<usize> {
-        if candidates.is_empty() {
-            return None;
-        }
-        self.refresh_ref_geometries(context);
-        let cell = context.cell();
+        let weights = self.weights(context);
 
-        let weights: Vec<f64> = candidates
-            .iter()
-            .map(|&atom| {
-                let r = self.distance_to_nearest_reference(&context.position(atom), cell);
-                self.weight(r)
-            })
-            .collect();
-        let w_sum: f64 = weights.iter().sum();
-
-        // `WeightedIndex` rejects an all-zero weight vector — the one degenerate case reachable
-        // here, when every W'(r) underflows or the reference has left the system so that every
-        // distance is infinite. Declining the proposal counts the trial as a rejection; carrying on
-        // would divide by zero and hand the criterion a NaN bias, which it also rejects, but
-        // silently and for every move thereafter.
-        let Ok(distribution) = WeightedIndex::new(&weights) else {
+        // `WeightedIndex` rejects an empty or all-zero weight vector — the degenerate cases
+        // reachable here, when the move has nothing to pick from, every W'(r) underflows, or the
+        // reference has left the system so that every distance is infinite. Declining counts the
+        // trial as a rejection; carrying on would divide by zero and hand the criterion a NaN bias,
+        // which it also rejects, but silently and for every move thereafter.
+        let Ok(distribution) = WeightedIndex::new(&weights.values) else {
             debug!("PreferentialSampling: no candidate carries any weight; declining to select");
             return None;
         };
         let selected = distribution.sample(rng);
-        let atom = candidates[selected];
-        let w_old = weights[selected]; // already computed above, against this same configuration
+        let w_old = weights.values[selected]; // computed against this same configuration
+        let w_sum = weights.sum;
+        let atom = self.candidates.atoms[selected];
+        self.proposed = Some(selected);
 
+        let cell = context.cell();
         let old_pos = context.position(atom);
         let r_new = self.distance_to_nearest_reference(&(old_pos + displacement), cell);
         let w_new = self.weight(r_new);
@@ -313,6 +439,41 @@ impl PreferentialSampling {
             }
         }
         Some(atom)
+    }
+
+    /// Bring the weights back in step with the configuration the trial settled on.
+    ///
+    /// This is the one moment the sampler knows the change was *its own*, and so the one moment it
+    /// may patch rather than rebuild. An accepted trial moved exactly one candidate — the one it
+    /// picked — and left the reference alone, since the two are disjoint. A rejected trial was
+    /// rolled back, so the weights already describe the current coordinates. Either way only the
+    /// key has to catch up, and the O(N) rebuild is avoided.
+    ///
+    /// Anything else that moves an atom advances the positions generation without coming through
+    /// here, and [`Self::weights`] rebuilds on the next read. Forgetting this hook therefore costs
+    /// a rebuild, never correctness.
+    pub(super) fn on_trial_outcome(&mut self, context: &impl ObserveContext, accepted: bool) {
+        let Some(selected) = self.proposed.take() else {
+            return;
+        };
+        let Some(weights) = self.weights.as_mut() else {
+            return;
+        };
+        if accepted {
+            let atom = self.candidates.atoms[selected];
+            let r = self
+                .ref_geometries
+                .iter()
+                .map(|(cm, radius)| {
+                    (context.cell().distance(&context.position(atom), cm).norm() - radius).max(0.0)
+                })
+                .reduce(f64::min)
+                .unwrap_or(f64::INFINITY);
+            let updated = (r + self.offset).powf(-self.exponent);
+            weights.sum += updated - weights.values[selected];
+            weights.values[selected] = updated;
+        }
+        weights.positions = context.positions_generation();
     }
 
     /// The staged acceptance correction `ln(W_m / W_n)` for the last proposal.
@@ -493,17 +654,19 @@ mod tests {
             .iter()
             .position(|g| context.topology().moleculekind(g.molecule()).has_com())
             .expect("the input defines one Macromolecule with a mass center");
-        let ions: Vec<usize> = context
-            .groups()
+        let ion_kind = context
+            .topology()
+            .moleculekinds()
             .iter()
-            .enumerate()
-            .filter(|(i, _)| *i != solute)
-            .flat_map(|(_, g)| g.iter_active())
-            .collect();
+            .position(|m| m.name() == "Ion")
+            .map(crate::group::MoleculeId::new)
+            .expect("the input defines an Ion molecule");
 
         let mut sampler = make_sampler(2.0, 1.0);
         sampler.reference = Selection::parse("molecule Macromolecule").unwrap();
-        sampler.finalize(&context, &ions).unwrap();
+        sampler
+            .finalize(&context, GroupSelection::ByMoleculeId(ion_kind), None)
+            .unwrap();
 
         // Mean distance from the picked atoms to a given point, over many proposals.
         let mean_pick_distance = |sampler: &mut PreferentialSampling,
@@ -513,9 +676,7 @@ mod tests {
             let mut mean = Mean::new();
             for _ in 0..PROPOSALS {
                 // A null displacement leaves the configuration untouched; only the pick matters.
-                let atom = sampler
-                    .propose(context, &ions, &Point::zeros(), rng)
-                    .unwrap();
+                let atom = sampler.propose(context, &Point::zeros(), rng).unwrap();
                 mean.add(
                     context
                         .cell()
@@ -554,6 +715,76 @@ mod tests {
         );
     }
 
+    /// Patching one weight after an accepted trial must land exactly where a rebuild would.
+    ///
+    /// The cache patches the single atom the move displaced instead of recomputing all N weights.
+    /// That is only sound if the patch is *identical* to the rebuild — the reference must not have
+    /// shifted, and no other candidate can have moved. Compare the two directly, rather than
+    /// trusting the reasoning.
+    #[test]
+    fn patching_an_accepted_trial_agrees_with_a_full_rebuild() {
+        use crate::backend::Backend;
+        use crate::context::WithTopology;
+        use rand::SeedableRng;
+
+        let mut rng = rand::rngs::StdRng::seed_from_u64(17);
+        let mut context = Backend::new(
+            "tests/files/preferential_ideal_gas/input.yaml",
+            None,
+            &mut rng,
+        )
+        .unwrap();
+
+        let ion_kind = context
+            .topology()
+            .moleculekinds()
+            .iter()
+            .position(|m| m.name() == "Ion")
+            .map(crate::group::MoleculeId::new)
+            .unwrap();
+        let reference = || Selection::parse("molecule Macromolecule").unwrap();
+
+        let mut sampler = make_sampler(2.0, 1.0);
+        sampler.reference = reference();
+        sampler
+            .finalize(&context, GroupSelection::ByMoleculeId(ion_kind), None)
+            .unwrap();
+
+        // A run of accepted trials, each moving one candidate for real, so the cache is carried
+        // forward by patching — never rebuilt, since only this sampler's own atom ever moves.
+        for i in 0..25 {
+            let displacement = Point::new(1.5, -0.7, 0.3) * (1.0 + i as f64 * 0.1);
+            let atom = sampler.propose(&context, &displacement, &mut rng).unwrap();
+            context.translate_particles(&[atom], &displacement);
+            sampler.on_trial_outcome(&context, true);
+        }
+        // And one rejected trial: nothing moved, so the weights must simply stand.
+        sampler
+            .propose(&context, &Point::new(0.5, 0.5, 0.5), &mut rng)
+            .unwrap();
+        sampler.on_trial_outcome(&context, false);
+
+        let patched = sampler.weights(&context).clone();
+
+        // What a sampler that never patched anything computes from the same configuration.
+        let mut fresh = make_sampler(2.0, 1.0);
+        fresh.reference = reference();
+        fresh
+            .finalize(&context, GroupSelection::ByMoleculeId(ion_kind), None)
+            .unwrap();
+        let rebuilt = fresh.weights(&context).clone();
+
+        assert_eq!(patched.values.len(), rebuilt.values.len());
+        for (atom, (&incremental, &full)) in
+            patched.values.iter().zip(rebuilt.values.iter()).enumerate()
+        {
+            assert_approx_eq!(f64, incremental, full, epsilon = 1e-12);
+            assert!(full.is_finite(), "candidate {atom} has a non-finite weight");
+        }
+        // The running sum drifts if a patch ever updates a weight without its own contribution.
+        assert_approx_eq!(f64, patched.sum, rebuilt.sum, epsilon = 1e-10);
+    }
+
     fn make_sampler(exponent: f64, offset: f64) -> PreferentialSampling {
         PreferentialSampling {
             reference: Selection::parse("all").unwrap(),
@@ -566,6 +797,9 @@ mod tests {
             ref_cache: None,
             ref_geometries: Vec::new(),
             distance_histogram: None,
+            candidates: Candidates::default(),
+            weights: None,
+            proposed: None,
         }
     }
 

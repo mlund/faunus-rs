@@ -210,29 +210,18 @@ impl TranslateAtom {
         random_unit_vector(rng) * random_displacement(rng, self.max_displacement)
     }
 
-    /// Every atom the move may pick, across all groups it may pick from.
+    /// The groups this move may draw from.
     ///
-    /// Preferential sampling weighs candidates against one another, so the set has to span every
-    /// eligible group: the normalized weight that selects an atom (Allen & Tildesley eqn 9.43) is
-    /// defined relative to all the atoms it competes with. Narrowing to one randomly chosen group
-    /// first would leave the solvent molecules near the solute competing only with their own
-    /// atoms — no bias toward the solute at all, and for a one-atom candidate set, none possible.
-    fn eligible_atoms(&self, context: &impl ObserveContext) -> Vec<usize> {
-        let select = self
-            .atom_id
-            .map_or(ParticleSelection::Active, ParticleSelection::ById);
-        let groups = match self.molecule_id {
-            Some(molecule) => context.select(&GroupSelection::ByMoleculeId(molecule)),
-            None => context.select(&self.select_molecule_ids),
-        };
-        groups
-            .iter()
-            .flat_map(|&group| {
-                context.groups()[group]
-                    .select(&select, context.topology_ref())
-                    .expect("Selection should be successful.")
-            })
-            .collect()
+    /// Preferential sampling weighs candidates against one another, so its candidate set has to
+    /// span every eligible group: the normalized weight that selects an atom (Allen & Tildesley
+    /// eqn 9.43) is defined relative to all the atoms it competes with. Narrowing to one randomly
+    /// chosen group first would leave the solvent molecules near the solute competing only with
+    /// their own atoms — no bias toward the solute at all, and for a one-atom set, none possible.
+    fn eligible_groups(&self) -> GroupSelection {
+        match self.molecule_id {
+            Some(molecule) => GroupSelection::ByMoleculeId(molecule),
+            None => self.select_molecule_ids.clone(),
+        }
     }
 
     /// Returns group id and absolute index of a uniformly chosen atom.
@@ -313,13 +302,12 @@ impl TranslateAtom {
             _ => (),
         }
 
-        // Resolved before the sampler is borrowed: it needs the candidates in order to check that
-        // the reference is not among the atoms this move would displace.
-        if self.preferential.is_some() {
-            let candidates = self.eligible_atoms(context);
-            if let Some(preferential) = self.preferential.as_mut() {
-                preferential.finalize(context, &candidates)?;
-            }
+        // The sampler takes the move's own filter and derives its candidates from it, so the two
+        // cannot drift apart and the reference is checked against the set actually drawn from.
+        let groups = self.eligible_groups();
+        let atom = self.atom_id;
+        if let Some(preferential) = self.preferential.as_mut() {
+            preferential.finalize(context, groups, atom)?;
         }
 
         Ok(())
@@ -333,9 +321,8 @@ impl<T: ObserveContext> MoveProposal<T> for TranslateAtom {
             // Drawn before the pick: the acceptance correction of eqn 9.44 needs both endpoints
             // of the move, and the displacement does not depend on which atom is chosen.
             let displacement = self.trial_displacement(rng);
-            let candidates = self.eligible_atoms(context);
             let pref = self.preferential.as_mut().unwrap();
-            let atom = pref.propose(context, &candidates, &displacement, rng)?;
+            let atom = pref.propose(context, &displacement, rng)?;
             // The atom is picked from the whole eligible set, so its group follows from it.
             let group = context
                 .group_of_particle(atom)
@@ -369,6 +356,12 @@ impl<T: ObserveContext> MoveProposal<T> for TranslateAtom {
         match &self.preferential {
             Some(pref) => Bias::Dimensionless(pref.ln_bias()),
             None => Bias::None,
+        }
+    }
+
+    fn on_trial_outcome(&mut self, context: &T, accepted: bool) {
+        if let Some(preferential) = self.preferential.as_mut() {
+            preferential.on_trial_outcome(context, accepted);
         }
     }
 

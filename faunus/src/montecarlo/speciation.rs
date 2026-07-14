@@ -1204,7 +1204,7 @@ impl<T: ObserveContext> MoveProposal<T> for SpeciationMove {
         }
     }
 
-    fn on_trial_outcome(&mut self, accepted: bool) {
+    fn on_trial_outcome(&mut self, _context: &T, accepted: bool) {
         if let Some(i) = self.trial_reaction_index.take() {
             if accepted {
                 self.reaction_statistics[i].accept(0.0, Displacement::None);

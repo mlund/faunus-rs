@@ -314,7 +314,7 @@ impl<T: Context> MoveProposal<T> for ClusterMove {
         }
     }
 
-    fn on_trial_outcome(&mut self, accepted: bool) {
+    fn on_trial_outcome(&mut self, _context: &T, accepted: bool) {
         let (dr2, dtheta2) = if accepted {
             (
                 self.stats.pending_sq_translation,

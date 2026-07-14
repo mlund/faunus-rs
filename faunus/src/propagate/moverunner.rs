@@ -105,7 +105,7 @@ impl<T: Context> MoveRunner<T> {
                 self.statistics.reject();
                 context.undo()?;
             }
-            self.inner.on_trial_outcome(accepted);
+            self.inner.on_trial_outcome(context, accepted);
         }
 
         *step += self.inner.step_by();

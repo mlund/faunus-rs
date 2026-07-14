@@ -233,9 +233,15 @@ pub trait MoveProposal<T: ObserveContext>: Debug + Info {
         1
     }
 
-    /// Called after a trial move is accepted or rejected.
-    /// Override to track per-sub-move statistics (e.g. per-reaction in speciation).
-    fn on_trial_outcome(&mut self, _accepted: bool) {}
+    /// Called once the trial has been resolved, with the context in its settled state.
+    ///
+    /// The context is whatever the outcome made it: the trial configuration if the move was
+    /// accepted, the original one if it was rejected and rolled back. This is the only point at
+    /// which a move can bring state it derives from the configuration back in step, and the only
+    /// point at which it *knows* the change was its own — so it may update that state cheaply
+    /// instead of rebuilding it. Also used to track per-sub-move statistics (per-reaction in
+    /// speciation, squared displacement in cluster moves).
+    fn on_trial_outcome(&mut self, _context: &T, _accepted: bool) {}
 
     /// Serialize the move-specific fields to a tagged YAML value.
     fn to_yaml(&self) -> Option<serde_yml::Value>;

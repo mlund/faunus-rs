@@ -73,6 +73,12 @@ pub struct Backend {
     /// Bumped on every atom-kind change, so selections matching on atom identity re-resolve.
     #[serde(skip)]
     atom_kinds_generation: u64,
+    /// Bumped on every coordinate change, so state derived from positions can tell it went stale.
+    ///
+    /// Bumped through [`Self::touch_positions`], deliberately generously: an extra bump costs a
+    /// consumer one rebuild, a missing one costs correctness.
+    #[serde(skip)]
+    positions_generation: u64,
     #[serde(skip)]
     groups: Vec<Group>,
     #[serde(skip)]
@@ -253,6 +259,7 @@ impl Backend {
             z: Vec::new(),
             atom_kinds: Vec::new(),
             atom_kinds_generation: 0,
+            positions_generation: 0,
             groups: Vec::new(),
             group_lists,
             cell,
@@ -351,8 +358,21 @@ impl Backend {
         self.update_cell_list_particles(&[i]);
     }
 
+    /// Record that coordinates changed, so state derived from them can tell it went stale.
+    ///
+    /// Called from every path that writes `x`/`y`/`z` — the particle-moving verbs (via
+    /// `update_cell_list_particles`), volume scaling, insertion, and `undo`. A restore counts:
+    /// coordinates moved, even if they moved back.
+    fn touch_positions(&mut self) {
+        self.positions_generation += 1;
+    }
+
     /// Update cell list assignments for moved particles, tracking changes in backup.
+    ///
+    /// Every particle-moving verb ends here, which makes it the one place those paths have to
+    /// announce that coordinates changed.
     fn update_cell_list_particles(&mut self, indices: &[usize]) {
+        self.touch_positions();
         // A group move logs per-particle deltas (`cell_list_backup`) for a cheap tracked undo. A
         // system move (cluster, volume) instead snapshots the whole list (`cell_list_clone`) and is
         // restored wholesale on reject, so its live updates are untracked. Without the untracked
@@ -622,6 +642,8 @@ impl GroupCollectionMut for Backend {
                 atom_ids.len()
             );
         }
+        // Growing the coordinate arrays changes what a position-derived cache would have covered.
+        self.touch_positions();
         let start = self.x.len();
         for (pos, &aid) in positions.iter().zip(atom_ids) {
             self.x.push(pos.x);
@@ -683,6 +705,10 @@ impl GroupCollectionMut for Backend {
 }
 
 impl ObserveContext for Backend {
+    fn positions_generation(&self) -> u64 {
+        self.positions_generation
+    }
+
     #[inline(always)]
     fn get_distance(&self, i: usize, j: usize) -> Point {
         let pi = Point::new(self.x[i], self.y[i], self.z[i]);
@@ -774,6 +800,10 @@ impl Context for Backend {
         policy: crate::cell::VolumeScalePolicy,
     ) -> anyhow::Result<f64> {
         use crate::cell::{Shape, VolumeScale};
+
+        // Rescaling moves every particle, and writes the coordinates directly rather than through
+        // the particle-moving verbs.
+        self.touch_positions();
 
         let old_volume = self
             .cell
@@ -951,6 +981,9 @@ impl Context for Backend {
 
     fn undo(&mut self) -> anyhow::Result<()> {
         let backup = self.backup.take().expect("undo called without backup");
+        // A restore moves coordinates too, even though it moves them back. A consumer holding
+        // state derived from the *trial* coordinates must see that they are no longer current.
+        self.touch_positions();
         for (i, bx, by, bz, kind) in backup.particles {
             self.x[i] = bx;
             self.y[i] = by;
@@ -1030,6 +1063,74 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
         let tmp = tempfile::NamedTempFile::new().unwrap();
         std::fs::write(tmp.path(), DIMER).unwrap();
         Backend::new(tmp.path(), None, &mut rand::thread_rng()).unwrap()
+    }
+
+    /// Every path that writes a coordinate must advance the positions generation.
+    ///
+    /// A consumer caches state derived from the coordinates and re-reads this counter to learn
+    /// whether they moved under it. A path that forgets to advance it hands that consumer stale
+    /// state and no way to know — the defect class of #86 and #88. An *extra* bump is harmless
+    /// (one wasted rebuild), so each case here asserts only that the counter moved.
+    #[test]
+    fn every_coordinate_change_advances_the_positions_generation() {
+        use crate::cell::VolumeScalePolicy;
+
+        let shift = Point::new(0.1, 0.0, 0.0);
+        let quaternion = crate::UnitQuaternion::identity();
+
+        /// A named route into the backend that writes coordinates.
+        type Mutation = (&'static str, Box<dyn Fn(&mut Backend)>);
+
+        // Each case mutates coordinates by a different route into the backend.
+        let mutations: Vec<Mutation> = vec![
+            (
+                "translate_particles",
+                Box::new(move |c: &mut Backend| c.translate_particles(&[0], &shift)),
+            ),
+            (
+                "rotate_particles",
+                Box::new(move |c: &mut Backend| c.rotate_particles(&[0, 1], &quaternion, None)),
+            ),
+            (
+                "set_particle_positions",
+                Box::new(move |c: &mut Backend| {
+                    c.set_particle_positions(&[0], &[Point::new(1.0, 1.0, 1.0)])
+                }),
+            ),
+            (
+                "set_positions",
+                Box::new(|c: &mut Backend| c.set_positions([0], [&Point::new(2.0, 2.0, 2.0)])),
+            ),
+            (
+                "scale_volume_and_positions",
+                Box::new(|c: &mut Backend| {
+                    c.scale_volume_and_positions(7000.0, VolumeScalePolicy::Isotropic)
+                        .unwrap();
+                }),
+            ),
+        ];
+
+        for (name, mutate) in mutations {
+            let mut context = backend();
+            let before = context.positions_generation();
+            mutate(&mut context);
+            assert!(
+                context.positions_generation() > before,
+                "{name} changed coordinates without advancing the positions generation"
+            );
+        }
+
+        // A restore moves coordinates back, which is still a move: state derived from the trial
+        // coordinates is no longer current.
+        let mut context = backend();
+        context.save_system_backup();
+        context.translate_particles(&[0], &shift);
+        let after_trial = context.positions_generation();
+        context.undo().unwrap();
+        assert!(
+            context.positions_generation() > after_trial,
+            "undo restored coordinates without advancing the positions generation"
+        );
     }
 
     #[test]

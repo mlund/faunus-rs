@@ -234,6 +234,18 @@ pub trait ObserveContext: GroupCollection + WithSimulationCell + WithTopology {
     /// Position arrays (separate x, y, z) for batch evaluation.
     fn positions(&self) -> (&[f64], &[f64], &[f64]);
 
+    /// Counter advanced whenever any particle position changes, including a restore.
+    ///
+    /// Lets a consumer cache a quantity derived from the coordinates and know, on reading it,
+    /// whether the coordinates have moved under it — the same contract as
+    /// [`group_lists_generation`](crate::group::GroupCollection::group_lists_generation), for the
+    /// one thing that changes on almost every Monte Carlo trial. The counter is maintained by the
+    /// context, so a consumer cannot supply a key that misses a change.
+    ///
+    /// It says only *that* something moved, never what: a consumer that needs to survive an
+    /// unrelated move must rebuild, and only one that knows it caused the change itself may patch.
+    fn positions_generation(&self) -> u64;
+
     /// Contiguous atom kind array (u32 for SIMD gather).
     fn atom_kinds_u32(&self) -> &[u32];
 
