@@ -25,9 +25,24 @@ operations. A move therefore cannot mutate the system while proposing a change t
 description of the change, and the framework applies it.
 
 Analyses that need a trial move, such as a Widom insertion, are the exception. They receive a
-*perturbable* system: a copy they may translate, rotate and rescale to measure an energy difference.
+*perturbable* system: a copy they may translate, rotate or rescale to measure an energy difference.
 The copy is theirs; the real system is untouched. `src/analysis/virtual_translate.rs` is the smallest
 example.
+
+A single call, `measure`, owns the whole excursion. It states the intent — translate this molecule,
+reorient that one, scale the volume — evaluates a closure on the perturbed system, and restores it.
+Nothing else mutates the copy, so a perturbation cannot outlive the measurement that needed it.
+
+That closes a class of error. An energy term caches each molecule's interactions and cannot see
+that a molecule has moved, so a displacement followed by an energy evaluation returns the energy of
+the configuration before it. The force such a measurement reports is exactly zero, and the
+orientational landscape perfectly flat — the quantities `virtual_translate` and `widom_rotation`
+exist to measure, and neither looks wrong on sight.
+
+Restoring the copy is not the same as perturbing it back. `measure` rolls each cache back to a
+snapshot; reversing the incremental update instead would compute $\infty + (-\infty) = \mathrm{NaN}$
+for any trial pose that overlapped a neighbour, and one forbidden orientation would poison every
+reading after it.
 
 Energy terms also receive an observable system. A term that changed the system it was asked to
 evaluate would corrupt the simulation, and no test would catch it.

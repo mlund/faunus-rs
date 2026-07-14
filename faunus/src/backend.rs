@@ -7,7 +7,7 @@ use crate::{
     cell::PbcParams,
     cell::{BoundaryConditions, Cell},
     change::Change,
-    context::{PerturbContext, WithHamiltonianMut},
+    context::{Perturbation, WithHamiltonianMut},
     energy::{builder::HamiltonianBuilder, Hamiltonian},
     group::{
         AtomKindId, GroupCollection, GroupCollectionMut, GroupGeometry, GroupLists, GroupSize,
@@ -720,9 +720,49 @@ impl ObserveContext for Backend {
 }
 
 impl crate::context::PerturbContext for Backend {
-    /// Reaches the `RefCell` directly rather than through `hamiltonian_mut`, which
-    /// `PerturbContext` deliberately does not expose. Both borrows of `self` are shared, so the
-    /// borrow checker is satisfied and no energy term re-borrows the Hamiltonian from `update`.
+    /// A virtual move is a Monte Carlo trial that is always rejected, so it runs the same sequence
+    /// `MoveRunner` does and inherits its guarantees. The energy backups must be taken *before* the
+    /// coordinates move: Ewald's incremental update reads the old positions of the particles
+    /// `change` names. `undo` then restores every cache from a snapshot instead of re-deriving it.
+    ///
+    /// The backup is armed before anything fallible, and `undo` runs whether or not the trial
+    /// succeeded, so a failed perturbation cannot leave the system half-moved.
+    fn measure<R>(
+        &mut self,
+        perturbation: &Perturbation,
+        read: impl FnOnce(&Self, &Change) -> R,
+    ) -> anyhow::Result<R> {
+        use crate::transform::Transform;
+
+        let change = perturbation.change();
+        self.save_energy_backups(&change);
+
+        let applied = match perturbation {
+            Perturbation::Translate { group, shift } => {
+                Transform::Translate(*shift).on_group_with_backup(*group, self)
+            }
+            Perturbation::Rotate { group, rotation } => {
+                Transform::Rotate(*rotation).on_group_with_backup(*group, self)
+            }
+            Perturbation::ScaleVolume { volume, policy } => {
+                Transform::VolumeScale(*policy, *volume).on_system_with_backup(self)
+            }
+        };
+
+        let outcome = applied.and_then(|()| {
+            Context::update(self, &change)?;
+            Ok(read(self, &change))
+        });
+
+        self.undo()?;
+        outcome
+    }
+}
+
+impl Context for Backend {
+    /// Reaches the `RefCell` directly rather than through `hamiltonian_mut`, so that both borrows
+    /// of `self` are shared: the borrow checker is satisfied and no energy term re-borrows the
+    /// Hamiltonian from `update`.
     fn update(&mut self, change: &Change) -> anyhow::Result<()> {
         self.hamiltonian.borrow_mut().update(self, change)?;
         Ok(())
@@ -852,9 +892,7 @@ impl crate::context::PerturbContext for Backend {
         self.update_mass_center(group_index);
         Ok(())
     }
-}
 
-impl Context for Backend {
     fn save_particle_backup(&mut self, group_index: usize, indices: &[usize]) {
         assert!(self.backup.is_none(), "backup already exists");
         let particles = indices

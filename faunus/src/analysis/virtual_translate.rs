@@ -30,8 +30,7 @@ use super::widom::WidomAccumulator;
 use super::{Analyze, Sampling};
 use crate::auxiliary::{BlockSummary, ColumnWriter, MappingExt};
 use crate::axes::Axes;
-use crate::change::{Change, GroupChange};
-use crate::context::PerturbContext;
+use crate::context::{PerturbContext, Perturbation};
 use crate::energy::EnergyChange;
 use crate::selection::{CachedSelection, Groups, Selection};
 use crate::Point;
@@ -206,20 +205,22 @@ impl VirtualTranslate {
         }
     }
 
-    /// Perform the virtual perturbation and return the energy change in kT
+    /// Perform the virtual perturbation and return the energy change in kT.
+    ///
+    /// Both energies are the molecule's interaction with its surroundings, one displaced and one
+    /// not. Both are read against the *same* change — the one the displacement derives — or the
+    /// difference would subtract two different quantities. The unperturbed one needs no refresh:
+    /// nothing has moved, so the caches still describe the coordinates.
     fn perturb<T: PerturbContext>(&self, context: &mut T, group_index: usize) -> Result<f64> {
-        let displacement_vector = self.displacement * self.unit_direction;
-        let change = Change::SingleGroup(group_index, GroupChange::RigidBody);
+        let displace = Perturbation::Translate {
+            group: group_index,
+            shift: self.displacement * self.unit_direction,
+        };
 
-        let old_energy = context.hamiltonian().energy(context, &change); // kJ/mol
-
-        // Through the group, not the bare indices: the perturbed energy must be evaluated against
-        // the displaced mass center. The bounding-sphere cull in `energy/nonbonded` reads it to
-        // decide whether a pair interacts at all, so a centre left behind at the old position can
-        // cull away the very interaction this analysis is trying to measure.
-        context.translate_group(group_index, &displacement_vector)?;
-        let new_energy = context.hamiltonian().energy(context, &change); // kJ/mol
-        context.translate_group(group_index, &(-displacement_vector))?;
+        let old_energy = context.hamiltonian().energy(context, &displace.change()); // kJ/mol
+        let new_energy = context.measure(&displace, |displaced, change| {
+            displaced.hamiltonian().energy(displaced, change) // kJ/mol
+        })?;
 
         Ok((new_energy - old_energy) / self.thermal_energy)
     }
@@ -535,5 +536,109 @@ frequency: !Every 5
         let vt = roundtrip.build(RT_298).unwrap();
         assert_approx_eq!(f64, vt.displacement, 0.05);
         assert_eq!(vt.directions, Axes::X);
+    }
+}
+
+#[cfg(test)]
+mod integration_tests {
+    use super::*;
+    use crate::analysis::Frequency;
+    use crate::backend::Backend;
+    use crate::change::Change;
+    use crate::context::{Context, ObserveContext, WithHamiltonian};
+    use crate::energy::EnergyChange;
+    use float_cmp::assert_approx_eq;
+
+    const RT_300: f64 = crate::R_IN_KJ_PER_MOL * 300.0;
+
+    /// A Lennard-Jones pair: the tagged molecule at the origin and a neighbour 4 Å up the z-axis.
+    ///
+    /// `nonbonded` is a stateful term — its group energies are cached — so a stale cache shows up
+    /// here as a force of exactly zero. A stateless external field cannot expose that.
+    fn lj_pair_backend() -> Backend {
+        Backend::from_yaml_str(
+            r#"
+atoms:
+  - {name: A, mass: 1.0, charge: 0.0}
+  - {name: B, mass: 1.0, charge: 0.0}
+molecules:
+  - name: MOL
+    atoms: [A]
+  - name: NEIGHBOUR
+    atoms: [B]
+system:
+  cell: !Cuboid [30.0, 30.0, 30.0]
+  medium: {permittivity: !Vacuum, temperature: 300.0}
+  energy:
+    nonbonded:
+      default:
+        - !LennardJones {sigma: 3.0, eps: 2.5}
+  blocks:
+    - molecule: MOL
+      N: 1
+      insert: !Manual [[0.0, 0.0, 0.0]]
+    - molecule: NEIGHBOUR
+      N: 1
+      insert: !Manual [[0.0, 0.0, 4.0]]
+propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
+"#,
+            None,
+            &mut rand::thread_rng(),
+        )
+        .unwrap()
+    }
+
+    fn vt_z(displacement: f64) -> VirtualTranslate {
+        VirtualTranslateBuilder::default()
+            .selection(Selection::parse("molecule MOL").unwrap())
+            .displacement(displacement)
+            .frequency(Frequency::Every(1))
+            .build(RT_300)
+            .unwrap()
+    }
+
+    /// The measured ΔU must be the ΔU the system actually undergoes.
+    ///
+    /// The reference is a fresh whole-system energy either side of the same displacement — the
+    /// one evaluation no cache can serve — so the two agree only if the perturbed energy describes
+    /// the displaced coordinates.
+    #[test]
+    fn perturbation_energy_matches_the_true_energy_change() {
+        let context = lj_pair_backend();
+        let vt = vt_z(0.5);
+        let group = context.resolve_groups(&Selection::parse("molecule MOL").unwrap())[0];
+
+        let mut reference = context.clone();
+        let total = |ctx: &Backend| ctx.hamiltonian().energy(ctx, &Change::Everything);
+        let before = total(&reference);
+        reference
+            .translate_group(group, &(0.5 * Point::new(0.0, 0.0, 1.0)))
+            .unwrap();
+        let expected = (total(&reference) - before) / RT_300;
+
+        let mut trial = context.clone();
+        let measured = vt.perturb(&mut trial, group).unwrap();
+
+        assert!(
+            expected.abs() > 1e-3,
+            "the test system must have a real ΔU to measure, got {expected}"
+        );
+        assert_approx_eq!(f64, measured, expected, epsilon = 1e-9);
+    }
+
+    /// A molecule 4 Å from a Lennard-Jones neighbour feels a force. Reporting exactly zero is the
+    /// signature of an energy read back from a cache that never saw the displacement.
+    #[test]
+    fn mean_force_is_nonzero_next_to_a_neighbour() {
+        let context = lj_pair_backend();
+        let mut vt = vt_z(0.1);
+
+        vt.sample(&context, 1).unwrap();
+
+        let force = vt.mean_force().mean;
+        assert!(
+            force.abs() > 1e-3,
+            "expected a finite force towards the neighbour, got {force}"
+        );
     }
 }

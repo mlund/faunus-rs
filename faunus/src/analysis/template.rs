@@ -76,7 +76,8 @@ impl<T: ObserveContext> Analyze<T> for MeanCharge {
     }
 
     /// Called only when the frequency check passes. The context is read-only: an analysis that
-    /// needs a trial move takes `T: PerturbContext` instead — see `analysis/virtual_translate.rs`.
+    /// needs a trial move takes `T: PerturbContext` instead and perturbs a clone through
+    /// `measure` — see `analysis/virtual_translate.rs`.
     fn perform_sample(&mut self, context: &T, _step: usize, _weight: f64) -> Result<()> {
         let atoms = self.selection.resolve(context);
         let charge: f64 = atoms.iter().map(|i| context.atom_charge(i.get())).sum();

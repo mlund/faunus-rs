@@ -274,13 +274,22 @@ impl LangevinRunner {
 
             let mol_kind = topology.moleculekind(group.molecule());
             let atom_indices = mol_kind.atom_indices();
+            let orientation = group.quaternion();
             let mut total_mass = 0.0f64;
             let mut ixx = 0.0f64;
             let mut iyy = 0.0f64;
             let mut izz = 0.0f64;
             for (idx, i) in group.iter_active().enumerate() {
-                let rel = cell.distance(&context.position(i), &com);
-                let (rx, ry, rz) = (rel.x, rel.y, rel.z);
+                // The device works a rigid body in the frame its quaternion defines, not the lab:
+                // `reconstruct_positions` rebuilds each atom as com + R(q)·ref, and the BAOAB
+                // rotational step divides a torque it has already rotated by q⁻¹ by these moments.
+                // The lab-frame displacement coincides with the body frame only at q = 1 — where,
+                // until now, every test started.
+                let body = crate::geometry::to_body_frame(
+                    &cell.distance(&context.position(i), &com),
+                    orientation,
+                );
+                let (rx, ry, rz) = (body.x, body.y, body.z);
                 ref_positions.extend_from_slice(&[rx as f32, ry as f32, rz as f32, 0.0]);
 
                 let m = atom_mass(&topology, atom_indices, idx) as f64;

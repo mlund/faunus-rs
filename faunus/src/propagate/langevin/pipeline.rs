@@ -805,7 +805,7 @@ impl<R: Runtime> LangevinGpu<R> {
         Ok(())
     }
 
-    fn dispatch_reconstruct(&self) -> anyhow::Result<()> {
+    pub(super) fn dispatch_reconstruct(&self) -> anyhow::Result<()> {
         if !self.has_rigid {
             return Ok(());
         }

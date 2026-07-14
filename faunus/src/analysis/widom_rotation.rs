@@ -49,13 +49,11 @@ use super::widom::WidomAccumulator;
 use super::{Analyze, Frequency, Sampling};
 use crate::auxiliary::{BlockAverage, BlockSummary, ColumnWriter, MappingExt};
 use crate::cell::BoundaryConditions;
-use crate::change::{Change, GroupChange};
-use crate::context::PerturbContext;
+use crate::context::{PerturbContext, Perturbation};
 use crate::energy::EnergyChange;
 use crate::geometry::GyrationTensor;
 use crate::selection::{CachedSelection, Groups, Selection};
 use crate::ObserveContext;
-use crate::WithHamiltonian;
 use crate::{Point, UnitQuaternion};
 use anyhow::Result;
 use derive_more::Debug;
@@ -327,41 +325,40 @@ pub struct WidomRotation {
     stream: Option<ColumnWriter>,
 }
 
-/// Absolute molecule↔environment energy of group `gi`, in kT.
+/// Rigidly reorient group `gi` and return its molecule↔environment energy there, in kT.
 ///
-/// A rigid-body change excludes the rotation-invariant intramolecular energy, so
-/// this is exactly the interaction with the rest of the system.
-fn group_energy_kt<T: ObserveContext + WithHamiltonian>(
-    context: &T,
+/// The group, and every cache that describes it, is left exactly as it was found — see
+/// [`PerturbContext::measure`].
+///
+/// A rigid-body change excludes the rotation-invariant intramolecular energy, so the energy read
+/// is exactly the interaction with the rest of the system. It is `+∞` for a pose that overlaps a
+/// neighbour, which [`WidomRotation::weights`] expects and handles.
+fn energy_at_orientation<T: PerturbContext>(
+    trial: &mut T,
     gi: usize,
+    rotation: &UnitQuaternion,
     thermal_energy: f64,
-) -> f64 {
-    let change = Change::SingleGroup(gi, GroupChange::RigidBody);
-    context.hamiltonian().energy(context, &change) / thermal_energy
+) -> anyhow::Result<f64> {
+    trial.measure(
+        &Perturbation::Rotate {
+            group: gi,
+            rotation: *rotation,
+        },
+        |perturbed, change| perturbed.hamiltonian().energy(perturbed, change) / thermal_energy,
+    )
 }
 
 impl WidomRotation {
     /// Scan all trial orientations of group `gi` on `trial`, returning the per-orientation
-    /// energies in kT. `trial` is left unchanged — each rotation is immediately inverted, and
-    /// composing the group's orientation both ways restores it exactly.
-    ///
-    /// The rotation goes through the group, not the bare coordinates. An orientation-dependent
-    /// energy — a 6D tabulated potential is a function of the mass center and the quaternion,
-    /// and of nothing else — would otherwise return the same value for every trial orientation,
-    /// making ΔU identically zero and the whole scan vacuous.
-    fn scan_energies<T: PerturbContext + WithHamiltonian>(
+    /// energies in kT. `trial` is left unchanged.
+    fn scan_energies<T: PerturbContext>(
         &self,
         trial: &mut T,
         gi: usize,
     ) -> anyhow::Result<Vec<f64>> {
         self.quaternions
             .iter()
-            .map(|q| {
-                trial.rotate_group(gi, q)?;
-                let energy = group_energy_kt(trial, gi, self.thermal_energy);
-                trial.rotate_group(gi, &q.inverse())?;
-                Ok(energy)
-            })
+            .map(|q| energy_at_orientation(trial, gi, q, self.thermal_energy))
             .collect()
     }
 
@@ -499,11 +496,7 @@ impl WidomRotation {
 
     /// Mean torque about each lab axis via a small virtual rotation, analogous to the
     /// virtual-translate force.
-    ///
-    /// Through the group, for the same reason as [`scan_energies`](Self::scan_energies): rotating
-    /// the coordinates alone leaves an orientation-dependent potential reading an unchanged
-    /// quaternion, so every axis would report a torque of exactly zero.
-    fn accumulate_torque<T: PerturbContext + WithHamiltonian>(
+    fn accumulate_torque<T: PerturbContext>(
         &mut self,
         trial: &mut T,
         gi: usize,
@@ -515,9 +508,7 @@ impl WidomRotation {
         let axes = [Vector3::x_axis(), Vector3::y_axis(), Vector3::z_axis()];
         for (accumulator, axis) in probe.axes.iter_mut().zip(axes) {
             let rotation = UnitQuaternion::from_axis_angle(&axis, probe.dtheta);
-            trial.rotate_group(gi, &rotation)?;
-            let energy = group_energy_kt(trial, gi, self.thermal_energy);
-            trial.rotate_group(gi, &rotation.inverse())?;
+            let energy = energy_at_orientation(trial, gi, &rotation, self.thermal_energy)?;
             accumulator.collect(energy - reference_energy, 1.0);
         }
         Ok(())
@@ -550,7 +541,16 @@ impl<T: PerturbContext> Analyze<T> for WidomRotation {
                 .map(|v| v.reference(gi, &indices, &com, context))
                 .collect::<Result<Vec<_>>>()?;
 
-            let reference_energy = group_energy_kt(&trial, gi, self.thermal_energy);
+            // The torque compares each rotated energy against this one, so it must be read against
+            // the change a rotation of this group derives — not one named independently here. No
+            // refresh is owed: nothing has been perturbed, so the caches still describe the
+            // coordinates.
+            let unrotated = Perturbation::Rotate {
+                group: gi,
+                rotation: UnitQuaternion::identity(),
+            };
+            let reference_energy =
+                trial.hamiltonian().energy(&trial, &unrotated.change()) / self.thermal_energy;
             let energies = self.scan_energies(&mut trial, gi)?;
             self.accumulate(&energies, &references);
             self.accumulate_torque(&mut trial, gi, reference_energy)?;
@@ -836,18 +836,15 @@ frequency: !Every 10
 mod integration_tests {
     use super::*;
     use crate::backend::Backend;
-    use crate::context::{ObserveContext, PerturbContext, WithHamiltonian};
+    use crate::change::{Change, GroupChange};
+    use crate::context::{Context, ObserveContext, WithHamiltonian};
     use crate::group::GroupCollection;
     use float_cmp::assert_approx_eq;
-    use tempfile::NamedTempFile;
 
     const RT_300: f64 = crate::R_IN_KJ_PER_MOL * 300.0;
 
     fn backend_from_str(yaml: &str) -> Backend {
-        let tmp = NamedTempFile::new().unwrap();
-        std::fs::write(tmp.path(), yaml).unwrap();
-        let mut rng = rand::thread_rng();
-        Backend::new(tmp.path(), None, &mut rng).unwrap()
+        Backend::from_yaml_str(yaml, None, &mut rand::thread_rng()).unwrap()
     }
 
     /// A charged dimer along x, optionally in a linear external field `q*z`.
@@ -977,23 +974,212 @@ propagate: {{seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}}
         assert_approx_eq!(f64, neff, 200.0, epsilon = 1e-6);
     }
 
+    /// A charged dimer whose neighbour is an ion 8 Å up the z-axis, interacting through
+    /// `nonbonded` — a stateful term, whose group energies are cached. Rotating the dimer swings
+    /// its dipole relative to the ion, so the landscape is genuinely orientation-dependent, and a
+    /// stale cache shows up as a flat one. A stateless external field cannot expose that.
+    fn dimer_and_ion_backend() -> Backend {
+        backend_from_str(
+            r#"
+atoms:
+  - {name: P, mass: 1.0, charge: 1.0, sigma: 2.0}
+  - {name: N, mass: 1.0, charge: -1.0, sigma: 2.0}
+  - {name: I, mass: 1.0, charge: 1.0, sigma: 2.0}
+molecules:
+  - name: DIMER
+    atoms: [P, N]
+  - name: ION
+    atoms: [I]
+system:
+  cell: !Cuboid [30.0, 30.0, 30.0]
+  medium: {permittivity: !Vacuum, temperature: 300.0}
+  energy:
+    nonbonded:
+      default:
+        - !CoulombPlain {cutoff: 14.0}
+  blocks:
+    - molecule: DIMER
+      N: 1
+      insert: !Manual [[0.0, 0.0, 0.0], [3.0, 0.0, 0.0]]
+    - molecule: ION
+      N: 1
+      insert: !Manual [[0.0, 0.0, 8.0]]
+propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
+"#,
+        )
+    }
+
+    /// The scan must see the landscape it exists to measure. An orientation-dependent potential
+    /// that returns the same energy for all 200 trial orientations has not been evaluated against
+    /// the rotated coordinates — ΔU ≡ 0, and every observable downstream is vacuous.
     #[test]
-    fn single_group_energy_matches_total_energy() {
-        // With one external-only molecule, the group↔environment energy that the
-        // scan reads equals the full system energy at every orientation — the
-        // cache-correctness guardrail for the rotate/restore loop.
-        let ctx = dimer_backend(r#"custom_external: [{selection: "all", function: "q * z"}]"#);
-        let mut trial = ctx.clone();
+    fn scan_sees_a_nonflat_landscape_under_a_stateful_potential() {
+        let ctx = dimer_and_ion_backend();
+        let analysis = builder(false, false).build(&ctx, RT_300).unwrap();
         let gi = ctx.resolve_groups(&Selection::parse("molecule DIMER").unwrap())[0];
 
-        for q in super_fibonacci(16) {
-            trial.rotate_group(gi, &q).unwrap();
-            let single = trial
-                .hamiltonian()
-                .energy(&trial, &Change::SingleGroup(gi, GroupChange::RigidBody));
-            let total = trial.hamiltonian().energy(&trial, &Change::Everything);
-            trial.rotate_group(gi, &q.inverse()).unwrap();
-            assert_approx_eq!(f64, single, total, epsilon = 1e-9);
+        let mut trial = ctx.clone();
+        let energies = analysis.scan_energies(&mut trial, gi).unwrap();
+
+        let min = energies.iter().copied().fold(f64::INFINITY, f64::min);
+        let max = energies.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+        assert!(
+            max - min > 1e-3,
+            "orientational landscape is flat: every trial orientation gave U = {min} kT"
+        );
+    }
+
+    /// Each scanned energy must be the energy of the orientation it claims to describe. The
+    /// reference is a fresh whole-system evaluation, the one number no cache can serve.
+    #[test]
+    fn scanned_energies_match_fresh_total_energies() {
+        let ctx = dimer_and_ion_backend();
+        let analysis = builder(false, false).build(&ctx, RT_300).unwrap();
+        let gi = ctx.resolve_groups(&Selection::parse("molecule DIMER").unwrap())[0];
+
+        let mut trial = ctx.clone();
+        let scanned = analysis.scan_energies(&mut trial, gi).unwrap();
+
+        // The dimer's intramolecular Coulomb energy is invariant under a rotation about the mass
+        // center, so total and group↔environment energies differ by a constant: compare shapes.
+        let mut reference = ctx.clone();
+        let expected: Vec<f64> = analysis
+            .quaternions
+            .iter()
+            .map(|q| {
+                reference.rotate_group(gi, q).unwrap();
+                reference.update(&Change::Everything).unwrap();
+                let total = reference
+                    .hamiltonian()
+                    .energy(&reference, &Change::Everything)
+                    / RT_300;
+                reference.rotate_group(gi, &q.inverse()).unwrap();
+                reference.update(&Change::Everything).unwrap();
+                total
+            })
+            .collect();
+
+        let offset = scanned[0] - expected[0];
+        for (k, (got, want)) in scanned.iter().zip(&expected).enumerate() {
+            assert_approx_eq!(f64, *got - offset, *want, epsilon = 1e-9, ulps = 4);
+            assert!(got.is_finite(), "orientation {k} gave a non-finite energy");
         }
+    }
+
+    /// Two hard-sphere dimers close enough that some trial orientation of either one overlaps the
+    /// other, so the scan necessarily meets `u = +∞`. `weights()` documents that pose as expected
+    /// and survivable — but only if the scan leaves no trace of it behind.
+    fn clashing_dimers_backend() -> Backend {
+        backend_from_str(
+            r#"
+atoms:
+  - {name: P, mass: 1.0, charge: 0.0, sigma: 4.0}
+molecules:
+  - name: DIMER
+    atoms: [P, P]
+system:
+  cell: !Cuboid [30.0, 30.0, 30.0]
+  medium: {permittivity: !Vacuum, temperature: 300.0}
+  energy:
+    nonbonded:
+      default:
+        - !HardSphere {sigma: 4.0}
+  blocks:
+    - molecule: DIMER
+      N: 2
+      insert: !Manual [[0.0, 0.0, 0.0], [5.0, 0.0, 0.0], [0.0, 0.0, 5.0], [5.0, 0.0, 5.0]]
+propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
+"#,
+        )
+    }
+
+    /// A forbidden trial pose must not leave the system poisoned for the next molecule.
+    ///
+    /// The failure this guards against is the one [`PerturbContext::measure`] documents: a
+    /// neighbour's cached energy is left NaN, so the second molecule of the loop reads its
+    /// reference energy from it and reports `.nan` torque for the whole run.
+    #[test]
+    fn a_forbidden_pose_does_not_poison_the_next_molecule() {
+        let ctx = clashing_dimers_backend();
+        let mut analysis = WidomRotationBuilder {
+            selection: Selection::parse("molecule DIMER").unwrap(),
+            orientations: 64,
+            vectors: vec![],
+            torque: true,
+            dtheta: 0.01,
+            stiffness: false,
+            file: None,
+            frequency: Frequency::Every(1),
+        }
+        .build(&ctx, RT_300)
+        .unwrap();
+
+        // The scan must actually meet a forbidden pose, or the test proves nothing.
+        let gi = ctx.resolve_groups(&Selection::parse("molecule DIMER").unwrap())[0];
+        let mut probe = ctx.clone();
+        let scanned = analysis.scan_energies(&mut probe, gi).unwrap();
+        assert!(
+            scanned.iter().any(|u| u.is_infinite()),
+            "no trial orientation overlapped the neighbour: the test system is too dilute"
+        );
+
+        analysis.sample(&ctx, 1).unwrap();
+
+        let probe = analysis.torque.as_ref().unwrap();
+        for (axis, accumulator) in ["x", "y", "z"].iter().zip(&probe.axes) {
+            let torque = -accumulator.mean_free_energy() / probe.dtheta;
+            assert!(
+                !torque.is_nan(),
+                "torque about {axis} is NaN: a forbidden pose poisoned a cached group energy"
+            );
+        }
+    }
+
+    /// A trial perturbation must leave the system it borrowed exactly as it found it — the energy
+    /// caches included, not merely the coordinates.
+    #[test]
+    fn a_scan_restores_every_cached_energy_exactly() {
+        let ctx = clashing_dimers_backend();
+        let analysis = builder(false, false).build(&ctx, RT_300).unwrap();
+        let gi = ctx.resolve_groups(&Selection::parse("molecule DIMER").unwrap())[0];
+
+        let group_energy = |c: &Backend, g: usize| {
+            c.hamiltonian()
+                .energy(c, &Change::SingleGroup(g, GroupChange::RigidBody))
+        };
+
+        let mut trial = ctx.clone();
+        let before: Vec<f64> = (0..2).map(|g| group_energy(&trial, g)).collect();
+
+        let _ = analysis.scan_energies(&mut trial, gi).unwrap();
+
+        for (g, want) in before.iter().enumerate() {
+            let got = group_energy(&trial, g);
+            assert_eq!(
+                got.to_bits(),
+                want.to_bits(),
+                "group {g}: cached energy came back as {got}, not {want}"
+            );
+        }
+    }
+
+    /// Torque about at least one axis must be non-zero for a dipole in an ion's field.
+    #[test]
+    fn torque_is_nonzero_for_a_dipole_near_an_ion() {
+        let ctx = dimer_and_ion_backend();
+        let mut analysis = builder(true, false).build(&ctx, RT_300).unwrap();
+
+        analysis.sample(&ctx, 1).unwrap();
+
+        let probe = analysis.torque.as_ref().unwrap();
+        let torques: Vec<f64> = probe
+            .axes
+            .iter()
+            .map(|a| -a.mean_free_energy() / probe.dtheta)
+            .collect();
+        assert!(
+            torques.iter().any(|t| t.abs() > 1e-3),
+            "every axis reported zero torque: {torques:?}"
+        );
     }
 }
