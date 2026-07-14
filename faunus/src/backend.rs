@@ -490,8 +490,13 @@ impl Backend {
         let (Some(cutoff), Some(bb)) = (self.cell_list_cutoff, self.cell.bounding_box()) else {
             return;
         };
+        // A cell that needs an orthorhombic *expansion* is not one: a hexagonal prism reduces
+        // distances by Wigner-Seitz, which a rectangular grid's neighbour wrapping does not
+        // reproduce, so the grid would hand back neighbour lists that miss interacting pairs.
+        if self.cell.orthorhombic_expansion().is_some() {
+            return;
+        }
         let box_len = [bb.x, bb.y, bb.z];
-        // Only for finite orthorhombic cells
         if box_len.iter().any(|&l| l.is_infinite() || l <= 0.0) {
             return;
         }
@@ -1830,6 +1835,23 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
         let mut context = context(true);
         restore_box(&mut context, Cell::Endless(crate::cell::Endless));
         assert!(context.cell_list.is_none());
+    }
+
+    /// A rectangular grid cannot serve a cell whose minimum image is Wigner-Seitz: its neighbour
+    /// wrapping would drop interacting pairs while the distances came out of the hexagonal cell.
+    #[test]
+    fn a_hexagonal_prism_gets_no_cell_list() {
+        let mut context = context(true);
+        assert!(context.cell_list.is_some());
+        restore_box(
+            &mut context,
+            Cell::HexagonalPrism(crate::cell::HexagonalPrism::new(20.0, 40.0)),
+        );
+        assert!(context.cell_list.is_none());
+        assert!(
+            context.pbc_params().is_none(),
+            "hexagonal prism has no PBC parameters"
+        );
     }
 }
 
