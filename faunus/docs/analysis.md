@@ -1128,6 +1128,14 @@ The input YAML provides the Hamiltonian and analysis configuration;
 the `propagate:` section is ignored. All analysis frequencies are overridden to
 sample every frame.
 
+### Fluctuating cells
+
+Each frame is evaluated in the cell it was generated in, read from the box stored in the trajectory,
+so a constant-pressure trajectory reruns at its own volumes rather than at the volume declared in
+the input. A trajectory records an orthorhombic box, which determines a `Cuboid`, a `Slit`, a
+`Sphere` and a `Cylinder`. A `HexagonalPrism` is written to a trajectory as an expanded orthorhombic
+supercell and cannot be rerun. An `Endless` cell has no box, so it is left as the input declares it.
+
 ### Reweighting biased trajectories
 
 If the Hamiltonian contains a [`penalty`](energy.md#penalty-flat-histogram-bias) term

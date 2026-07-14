@@ -130,11 +130,9 @@ impl State {
             }
         }
 
-        *context.cell_mut() = self.cell;
         let sizes: Vec<_> = self.groups.iter().map(|gs| gs.size).collect();
         let quaternions: Vec<_> = self.groups.iter().map(|gs| gs.quaternion).collect();
-        context.apply_particles_and_groups(&self.particles, &sizes, &quaternions)?;
-        context.update(&crate::Change::Everything)?;
+        context.restore_configuration(Some(self.cell), &self.particles, &sizes, &quaternions)?;
 
         log::info!("Restored simulation state");
         Ok(self.step)

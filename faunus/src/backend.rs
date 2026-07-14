@@ -91,9 +91,13 @@ pub struct Backend {
     hamiltonian: RefCell<Hamiltonian>,
     #[serde(skip)]
     backup: Option<Backup>,
-    /// Optional cell list for spatial acceleration (built when cutoff is known).
+    /// Cell list for spatial acceleration, when one was requested *and* the box can host a grid.
     #[serde(skip)]
     cell_list: Option<crate::celllist::CellList>,
+    /// Cutoff a cell list was *requested* at. Kept apart from `cell_list`, which a box that cannot
+    /// host a grid leaves empty — taking the request with it.
+    #[serde(skip)]
+    cell_list_cutoff: Option<f64>,
 }
 
 /// What to do with a group's stored orientation when its coordinates cannot pin one.
@@ -267,6 +271,7 @@ impl Backend {
             hamiltonian,
             backup: None,
             cell_list: None,
+            cell_list_cutoff: None,
         };
         topology.insert_groups(&mut backend, structure, rng)?;
         backend.update(&Change::Everything)?;
@@ -343,10 +348,9 @@ impl Backend {
             .finalize(&hamiltonian_builder, &backend, medium.as_ref())?;
         backend.update(&Change::Everything)?;
 
-        // Build cell list if configured and cell is orthorhombic
         if let Some(spline_opts) = &hamiltonian_builder.spline {
             if spline_opts.cell_list {
-                backend.build_cell_list(spline_opts.cutoff);
+                backend.request_cell_list(spline_opts.cutoff);
             }
         }
 
@@ -398,14 +402,101 @@ impl Backend {
         }
     }
 
-    /// Build the cell list from current positions and box dimensions.
-    fn build_cell_list(&mut self, cutoff: f64) {
+    /// `quaternions` is what the state file *recorded*; where the restored coordinates turn out to
+    /// be a rigid image of the molecule's reference conformation, the orientation is recomputed from
+    /// them instead, because the coordinates are what every energy term and analysis actually reads.
+    /// A state file written before orientations were tracked, or by a path that forgot to update
+    /// one, therefore heals on load rather than importing the lie.
+    fn apply_particles_and_groups(
+        &mut self,
+        particles: &[crate::Particle],
+        sizes: &[GroupSize],
+        quaternions: &[crate::UnitQuaternion],
+    ) -> anyhow::Result<()> {
+        /// Two orientations further apart than this describe visibly different molecules.
+        const ORIENTATION_MISMATCH: f64 = 1e-6;
+
+        self.set_positions(0..particles.len(), particles.iter().map(|p| &p.pos));
+        for (i, p) in particles.iter().enumerate() {
+            // Every group's geometry is recomputed below, so skip the per-particle refresh.
+            self.set_atom_kind_unchecked(i, AtomKindId::new(p.atom_id));
+        }
+        for (i, (&size, &q)) in sizes.iter().zip(quaternions.iter()).enumerate() {
+            self.resize_group(i, size)?;
+            self.groups[i].set_quaternion(q);
+        }
+
+        // `resize_group` has already refreshed each group's geometry against the final coordinates.
+        let mut corrected = 0usize;
+        for i in 0..sizes.len() {
+            let recorded = *self.groups[i].quaternion();
+            self.settle_orientation(i, OrientationPolicy::KeepWhatIsStored);
+            if self.groups[i].quaternion().angle_to(&recorded) > ORIENTATION_MISMATCH {
+                corrected += 1;
+            }
+        }
+        // Silently healing this would hide the fact that the run it came from was writing
+        // orientations that did not describe its own coordinates.
+        if corrected > 0 {
+            log::warn!(
+                "{corrected} group(s) had a stored orientation inconsistent with their coordinates; \
+                 recomputed from the coordinates. The state file was written before orientations \
+                 were tracked, or by a path that did not keep them in step."
+            );
+        }
+        Ok(())
+    }
+
+    /// Re-derive everything that is a function of the box, around the coordinates that belong in it.
+    ///
+    /// The one place that knows what a new cell invalidates, so no path that installs one can
+    /// remember a different subset. (`undo` is the exception: it *restores* the pre-move caches
+    /// wholesale rather than re-deriving them, which is cheaper and exact.)
+    ///
+    /// `settle` brings in those coordinates, and runs with no cell list: a grid sized for the box
+    /// that is gone must not be updated particle-by-particle, so it is built once, afterwards, from
+    /// the coordinates that stay.
+    fn cell_changed(
+        &mut self,
+        settle: impl FnOnce(&mut Self) -> anyhow::Result<()>,
+    ) -> anyhow::Result<()> {
+        self.pbc_params = PbcParams::try_from_cell(&self.cell);
+        self.cell_list = None;
+        settle(self)?;
+        self.rebuild_cell_list();
+        // A bounding radius is a minimum-image distance, so it belongs to the box it was measured in.
+        for group_index in 0..self.groups.len() {
+            self.update_mass_center(group_index);
+        }
+        Ok(())
+    }
+
+    /// Accelerate pair interactions with a cell list, sized for the current box.
+    ///
+    /// The cutoff outlives any grid built from it, so a box that cannot host one today can still
+    /// get one after [`Self::set_cell`].
+    fn request_cell_list(&mut self, cutoff: f64) {
+        self.cell_list_cutoff = Some(cutoff);
+        self.rebuild_cell_list();
+    }
+
+    /// Rebuild the cell list from the current positions and box, at the requested cutoff.
+    ///
+    /// Leaves no list behind when the box cannot host one: a grid sized for a box that is gone
+    /// mis-bins silently, because `CellList` wraps out-of-range indices rather than rejecting them.
+    fn rebuild_cell_list(&mut self) {
         use crate::cell::Shape;
-        let Some(bb) = self.cell.bounding_box() else {
+        self.cell_list = None;
+        let (Some(cutoff), Some(bb)) = (self.cell_list_cutoff, self.cell.bounding_box()) else {
             return;
         };
+        // A cell that needs an orthorhombic *expansion* is not one: a hexagonal prism reduces
+        // distances by Wigner-Seitz, which a rectangular grid's neighbour wrapping does not
+        // reproduce, so the grid would hand back neighbour lists that miss interacting pairs.
+        if self.cell.orthorhombic_expansion().is_some() {
+            return;
+        }
         let box_len = [bb.x, bb.y, bb.z];
-        // Only for finite orthorhombic cells
         if box_len.iter().any(|&l| l.is_infinite() || l <= 0.0) {
             return;
         }
@@ -431,14 +522,6 @@ impl crate::WithSimulationCell for Backend {
     #[inline(always)]
     fn cell(&self) -> &Cell {
         &self.cell
-    }
-}
-
-impl crate::context::WithSimulationCellMut for Backend {
-    /// Returns mutable cell reference and invalidates cached `pbc_params`.
-    fn cell_mut(&mut self) -> &mut Cell {
-        self.pbc_params = None;
-        &mut self.cell
     }
 }
 
@@ -557,46 +640,6 @@ impl GroupCollectionMut for Backend {
             self.z[i] = pos.z;
             self.update_cell_list_particle(i);
         }
-    }
-
-    fn apply_particles_and_groups(
-        &mut self,
-        particles: &[crate::Particle],
-        sizes: &[GroupSize],
-        quaternions: &[crate::UnitQuaternion],
-    ) -> anyhow::Result<()> {
-        /// Two orientations further apart than this describe visibly different molecules.
-        const ORIENTATION_MISMATCH: f64 = 1e-6;
-
-        self.set_positions(0..particles.len(), particles.iter().map(|p| &p.pos));
-        for (i, p) in particles.iter().enumerate() {
-            // Every group's geometry is recomputed below, so skip the per-particle refresh.
-            self.set_atom_kind_unchecked(i, AtomKindId::new(p.atom_id));
-        }
-        for (i, (&size, &q)) in sizes.iter().zip(quaternions.iter()).enumerate() {
-            self.resize_group(i, size)?;
-            self.groups[i].set_quaternion(q);
-        }
-
-        // `resize_group` has already refreshed each group's geometry against the final coordinates.
-        let mut corrected = 0usize;
-        for i in 0..sizes.len() {
-            let recorded = *self.groups[i].quaternion();
-            self.settle_orientation(i, OrientationPolicy::KeepWhatIsStored);
-            if self.groups[i].quaternion().angle_to(&recorded) > ORIENTATION_MISMATCH {
-                corrected += 1;
-            }
-        }
-        // Silently healing this would hide the fact that the run it came from was writing
-        // orientations that did not describe its own coordinates.
-        if corrected > 0 {
-            log::warn!(
-                "{corrected} group(s) had a stored orientation inconsistent with their coordinates; \
-                 recomputed from the coordinates. The state file was written before orientations \
-                 were tracked, or by a path that did not keep them in step."
-            );
-        }
-        Ok(())
     }
 
     fn place_group(
@@ -794,6 +837,26 @@ impl Context for Backend {
         Ok(())
     }
 
+    fn restore_configuration(
+        &mut self,
+        cell: Option<Cell>,
+        particles: &[crate::Particle],
+        sizes: &[GroupSize],
+        quaternions: &[crate::UnitQuaternion],
+    ) -> anyhow::Result<()> {
+        // The box first: orientations are fitted, and coordinates binned, against the cell in force.
+        match cell {
+            Some(cell) => {
+                self.cell = cell;
+                self.cell_changed(|this| {
+                    this.apply_particles_and_groups(particles, sizes, quaternions)
+                })?;
+            }
+            None => self.apply_particles_and_groups(particles, sizes, quaternions)?,
+        }
+        Context::update(self, &Change::Everything)
+    }
+
     fn scale_volume_and_positions(
         &mut self,
         new_volume: f64,
@@ -855,24 +918,20 @@ impl Context for Backend {
         }
 
         self.cell.scale_volume(new_volume, policy)?;
-        // Cell dimensions changed — recompute cached PBC params
-        self.pbc_params = PbcParams::try_from_cell(&self.cell);
 
-        for g in 0..num_groups {
-            for i in self.groups[g].iter_active() {
-                let mut pos = Point::new(self.x[i], self.y[i], self.z[i]);
-                self.cell.boundary(&mut pos);
-                self.x[i] = pos.x;
-                self.y[i] = pos.y;
-                self.z[i] = pos.z;
+        // The scaled coordinates are what belongs in the new box, once wrapped into it.
+        self.cell_changed(|this| {
+            for g in 0..num_groups {
+                for i in this.groups[g].iter_active() {
+                    let mut pos = Point::new(this.x[i], this.y[i], this.z[i]);
+                    this.cell.boundary(&mut pos);
+                    this.x[i] = pos.x;
+                    this.y[i] = pos.y;
+                    this.z[i] = pos.z;
+                }
             }
-            self.update_mass_center(g);
-        }
-
-        // Cell dimensions changed — rebuild cell list
-        if let Some(cutoff) = self.cell_list.as_ref().map(|cl| cl.cutoff()) {
-            self.build_cell_list(cutoff);
-        }
+            Ok(())
+        })?;
 
         Ok(old_volume)
     }
@@ -1582,6 +1641,217 @@ mod tests {
         ctx.set_atom_kind(0, new_kind);
         assert_eq!(ctx.atom_kind(0), new_kind);
         assert_eq!(ctx.position(0), pos_before);
+    }
+}
+
+/// Everything derived from the box — the cell-list grid, the cached PBC parameters, every group's
+/// minimum-image bounding radius — must follow when a new cell is installed.
+#[cfg(test)]
+mod restoring_a_cell {
+    use super::*;
+    use crate::cell::{Cuboid, Shape};
+    use crate::energy::EnergyChange;
+    use crate::WithHamiltonian;
+    use rand::SeedableRng;
+
+    const BIG: f64 = 120.0;
+    const SMALL: f64 = 60.0;
+    const CUTOFF: f64 = 10.0;
+
+    fn input(cell_list: bool) -> String {
+        format!(
+            r#"
+atoms:
+  - {{name: LJ, mass: 1.0, sigma: 3.0, epsilon: 1.0}}
+molecules:
+  - {{name: M, atoms: [LJ]}}
+system:
+  cell: !Cuboid [{BIG}, {BIG}, {BIG}]
+  medium: {{permittivity: !Vacuum, temperature: 298.15}}
+  energy:
+    nonbonded:
+      default:
+        - !LennardJones {{mixing: LB}}
+    spline: {{cutoff: {CUTOFF}, n_points: 1000, cell_list: {cell_list}}}
+  blocks:
+    - molecule: M
+      N: 512
+      active: 512
+      insert: !RandomAtomPos {{}}
+propagate: {{seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}}
+"#
+        )
+    }
+
+    fn context(cell_list: bool) -> Backend {
+        Backend::from_yaml_str(
+            &input(cell_list),
+            None,
+            &mut rand::rngs::StdRng::seed_from_u64(7),
+        )
+        .unwrap()
+    }
+
+    /// 8³ simple-cubic lattice filling the *small* box, spacing 7.5 Å < cutoff. Sites sit half a
+    /// spacing from each face, so opposite faces interact through the periodic boundary — the pairs
+    /// a grid still sized for the big box loses.
+    fn lattice() -> Vec<Point> {
+        let spacing = SMALL / 8.0;
+        let coord = |i: usize| -SMALL / 2.0 + spacing * (i as f64 + 0.5);
+        (0..8)
+            .flat_map(|i| (0..8).flat_map(move |j| (0..8).map(move |k| (i, j, k))))
+            .map(|(i, j, k)| Point::new(coord(i), coord(j), coord(k)))
+            .collect()
+    }
+
+    /// Install a box and the coordinates that belong in it, through the one public restore verb.
+    fn restore(context: &mut Backend, cell: Cell, positions: &[Point]) {
+        let particles: Vec<_> = positions
+            .iter()
+            .enumerate()
+            .map(|(i, &pos)| crate::Particle::new(context.atom_kind(i).get(), pos))
+            .collect();
+        let sizes: Vec<_> = context
+            .groups()
+            .iter()
+            .map(|g| GroupSize::from_count(g.len(), g.capacity()))
+            .collect();
+        let quaternions: Vec<_> = context.groups().iter().map(|g| *g.quaternion()).collect();
+        context
+            .restore_configuration(Some(cell), &particles, &sizes, &quaternions)
+            .unwrap();
+    }
+
+    /// Resize the box, leaving the coordinates where they are.
+    fn restore_box(context: &mut Backend, cell: Cell) {
+        let positions: Vec<Point> = (0..context.num_particles())
+            .map(|i| context.position(i))
+            .collect();
+        restore(context, cell, &positions);
+    }
+
+    /// Every atom against the rest of the system — the quantity the cell list serves. The total
+    /// energy is summed pair-by-pair and a rigid-body move reads a cached group matrix, so neither
+    /// would notice a stale grid.
+    fn move_energies(context: &Backend) -> f64 {
+        let hamiltonian = context.hamiltonian();
+        (0..context.groups().len())
+            .map(|g| {
+                let change = Change::SingleGroup(
+                    g,
+                    crate::GroupChange::PartialUpdate(vec![crate::group::RelIndex::new(0)]),
+                );
+                hamiltonian.energy(context, &change)
+            })
+            .sum()
+    }
+
+    fn move_energies_in_small_box(cell_list: bool) -> f64 {
+        let mut context = context(cell_list);
+        assert_eq!(context.cell_list.is_some(), cell_list);
+        restore(&mut context, Cell::Cuboid(Cuboid::cubic(SMALL)), &lattice());
+        move_energies(&context)
+    }
+
+    #[test]
+    fn the_cell_list_still_finds_every_pair_the_brute_force_sum_does() {
+        let with_list = move_energies_in_small_box(true);
+        let brute_force = move_energies_in_small_box(false);
+        assert!(
+            brute_force.is_finite() && brute_force.abs() > 0.1,
+            "degenerate reference energy {brute_force}"
+        );
+        assert!(
+            (with_list - brute_force).abs() < 1e-9 * brute_force.abs(),
+            "cell list {with_list} vs brute force {brute_force}"
+        );
+    }
+
+    /// The restore path is what issue #89 was reported against: a state saved in a smaller box,
+    /// loaded into a context the input file built at the larger one.
+    #[test]
+    fn restoring_a_state_saved_in_another_box_agrees_with_the_brute_force_sum() {
+        let mut saved = context(true);
+        restore(&mut saved, Cell::Cuboid(Cuboid::cubic(SMALL)), &lattice());
+        let state = crate::state::State::save(&saved, 0);
+
+        let mut restored = context(true);
+        state.load(&mut restored).unwrap();
+        assert_eq!(
+            restored.cell().bounding_box().unwrap(),
+            Point::new(SMALL, SMALL, SMALL)
+        );
+
+        let restored_energies = move_energies(&restored);
+        let brute_force = move_energies_in_small_box(false);
+        assert!(
+            (restored_energies - brute_force).abs() < 1e-9 * brute_force.abs(),
+            "restored {restored_energies} vs brute force {brute_force}"
+        );
+    }
+
+    /// A stale cache would keep taking the minimum image in the old box.
+    #[test]
+    fn the_pbc_parameters_describe_the_new_box() {
+        let mut context = context(true);
+        restore_box(&mut context, Cell::Cuboid(Cuboid::cubic(SMALL)));
+        let pbc = context.pbc_params().expect("cuboid has PBC parameters");
+        // ±29 Å is 2 Å across the 60 Å boundary, but 58 Å in the 120 Å box.
+        let [dx, _, _] = pbc.distance_vector(-29.0, 0.0, 0.0, 29.0, 0.0, 0.0);
+        assert!((dx.abs() - 2.0).abs() < 1e-9, "{dx}");
+    }
+
+    /// The bounding radius is a minimum-image distance, so shrinking the box shortens it.
+    #[test]
+    fn the_bounding_radius_follows_the_box() {
+        let yaml = r#"
+atoms:
+  - {name: A, mass: 1.0, sigma: 1.0}
+molecules:
+  - {name: DIMER, atoms: [A, A]}
+system:
+  cell: !Cuboid [100.0, 100.0, 100.0]
+  medium: {permittivity: !Vacuum, temperature: 298.15}
+  energy: {}
+  blocks:
+    - molecule: DIMER
+      N: 1
+      insert: !Manual [[0.0, 0.0, -20.0], [0.0, 0.0, 20.0]]
+propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
+"#;
+        let mut context =
+            Backend::from_yaml_str(yaml, None, &mut rand::rngs::StdRng::seed_from_u64(1)).unwrap();
+        // 40 Å apart in a 100 Å box: the atoms are 20 Å from their center.
+        assert!((context.groups()[0].bounding_radius().unwrap() - 20.0).abs() < 1e-9);
+
+        // In a 30 Å box the minimum image is 10 Å, halving the radius to 5 Å.
+        restore_box(&mut context, Cell::Cuboid(Cuboid::cubic(30.0)));
+        assert!((context.groups()[0].bounding_radius().unwrap() - 5.0).abs() < 1e-9);
+    }
+
+    /// An unusable box must drop the grid rather than leave the previous one in place.
+    #[test]
+    fn an_endless_cell_drops_the_cell_list() {
+        let mut context = context(true);
+        restore_box(&mut context, Cell::Endless(crate::cell::Endless));
+        assert!(context.cell_list.is_none());
+    }
+
+    /// A rectangular grid cannot serve a cell whose minimum image is Wigner-Seitz: its neighbour
+    /// wrapping would drop interacting pairs while the distances came out of the hexagonal cell.
+    #[test]
+    fn a_hexagonal_prism_gets_no_cell_list() {
+        let mut context = context(true);
+        assert!(context.cell_list.is_some());
+        restore_box(
+            &mut context,
+            Cell::HexagonalPrism(crate::cell::HexagonalPrism::new(20.0, 40.0)),
+        );
+        assert!(context.cell_list.is_none());
+        assert!(
+            context.pbc_params().is_none(),
+            "hexagonal prism has no PBC parameters"
+        );
     }
 }
 

@@ -9,12 +9,12 @@ use crate::{
     backend::Backend,
     energy::EnergyChange,
     error::{Error, Result},
-    group::{GroupCollection, GroupCollectionMut},
+    group::GroupCollection,
     montecarlo::{gibbs::GibbsEnsemble, MarkovChain},
     propagate::{self, Propagate},
     state::State,
     topology::io::frame_state::{self, FrameStateReader},
-    Change, Context, ObserveContext, Particle, Point, WithHamiltonian,
+    Change, Context, ObserveContext, Particle, Point, WithHamiltonian, WithSimulationCell,
 };
 use interatomic::coulomb::{Medium, Temperature};
 use rand::{Rng, SeedableRng};
@@ -718,10 +718,14 @@ fn validate_aux_header(header: &frame_state::FrameStateHeader, context: &Backend
 }
 
 /// Load a single frame's state into the context from XTC positions + aux data.
+///
+/// `box_lengths` is the frame's own box, so a trajectory whose volume fluctuated replays each frame
+/// in the cell it was generated in rather than in the input file's.
 fn load_frame_into_context(
     context: &mut Backend,
     particles: &[Particle],
     frame_state: &frame_state::FrameStateFrame,
+    box_lengths: Point,
 ) -> anyhow::Result<()> {
     use crate::group::GroupSize;
 
@@ -732,9 +736,8 @@ fn load_frame_into_context(
         .map(|(&size, g)| GroupSize::from_count(size as usize, g.capacity()))
         .collect();
 
-    context.apply_particles_and_groups(particles, &sizes, &frame_state.quaternions)?;
-    context.update(&Change::Everything)?;
-    Ok(())
+    let cell = context.cell().resized_to_box(box_lengths)?;
+    context.restore_configuration(cell, particles, &sizes, &frame_state.quaternions)
 }
 
 /// Replay a trajectory through an input's Hamiltonian and analyses.
@@ -753,6 +756,11 @@ pub fn replay(input: &Path, traj: &Path, aux: Option<&Path>) -> Result<Simulatio
     let medium = source.medium()?;
     let mut context = source.backend(None, &mut source.setup_rng()?)?;
     let mut analyses = source.analyses(&context, Some(&medium), None)?;
+
+    // Before the atom-count check below, which would otherwise be the user's only clue.
+    if let Some(reason) = context.cell().rerun_rejection() {
+        return Err(Error::Unsupported(reason.to_owned()));
+    }
 
     log::info!("{}", medium);
     log::info!("Thermal energy: {:.2} kJ/mol", thermal_energy(&medium));
@@ -851,7 +859,7 @@ pub fn replay(input: &Path, traj: &Path, aux: Option<&Path>) -> Result<Simulatio
             Particle::new(aux_frame.atom_ids[i] as usize, pos)
         }));
 
-        load_frame_into_context(&mut context, &particles, &aux_frame)?;
+        load_frame_into_context(&mut context, &particles, &aux_frame, box_half * 2.0)?;
         let weight = weight_source.weight(&context);
         analyses.sample_weighted(&context, frame_index, weight)?;
         frame_index += 1;

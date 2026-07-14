@@ -28,8 +28,6 @@ pub struct CellList {
     particle_cell: Vec<usize>,
     /// Precomputed neighbor cell offsets per cell (including self), with PBC wrapping
     neighbor_offsets: Vec<Vec<usize>>,
-    /// Interaction cutoff
-    cutoff: f64,
 }
 
 impl CellList {
@@ -62,13 +60,7 @@ impl CellList {
             cells,
             particle_cell: Vec::new(),
             neighbor_offsets,
-            cutoff,
         }
-    }
-
-    /// Interaction cutoff used to size the cells.
-    pub fn cutoff(&self) -> f64 {
-        self.cutoff
     }
 
     /// Build from a set of positions. `num_particles` is the total capacity
@@ -135,18 +127,6 @@ impl CellList {
             self.remove_from_cell(particle, ci);
             self.particle_cell[particle] = usize::MAX;
         }
-    }
-
-    /// Full rebuild (e.g. after volume change). Recreates cell grid.
-    pub fn rebuild(
-        &mut self,
-        box_len: [f64; 3],
-        positions: impl Fn(usize) -> Point,
-        num_particles: usize,
-        active_indices: impl Iterator<Item = usize>,
-    ) {
-        *self = Self::new(box_len, self.cutoff);
-        self.build(positions, num_particles, active_indices);
     }
 
     /// Compute the flat cell index for a position.
