@@ -580,16 +580,15 @@ mod tests {
 
     /// A `+∞` energy is a state the chain can never enter, only start in.
     ///
-    /// This is what makes the `∞ → finite` force-accept above safe. That branch returns before it
-    /// reads the bias, so a biased move escaping an overlap skips its acceptance correction — which
-    /// would break detailed balance if such states were part of the equilibrium ensemble. They are
-    /// not: a move *into* an overlap has `ΔU = +∞` and is always rejected, and a move *within* one
-    /// gives `∞ − ∞ = NaN`, which is also rejected. So an overlapping configuration can only be an
-    /// initial one, the force-accept fires during the opening transient and never again, and the
-    /// stationary distribution is untouched.
+    /// The `∞ → finite` branch above force-accepts before it reads the bias, so a biased move
+    /// escaping an overlap skips its acceptance correction. That is safe only because overlapping
+    /// states lie outside the equilibrium ensemble: a move *into* one has `ΔU = +∞` and is
+    /// rejected, and a move *within* one gives `∞ − ∞ = NaN`, also rejected. The force-accept
+    /// therefore fires in the opening transient and never again, leaving the stationary
+    /// distribution untouched.
     ///
-    /// Nothing else pins this — it is an arithmetic property of the criterion, invisible in the
-    /// fixtures, and the safety of skipping the bias rests entirely on it.
+    /// An arithmetic property of the criterion, invisible in every fixture, and nothing else pins
+    /// it — while the correctness of skipping the bias rests on it entirely.
     #[test]
     fn an_infinite_energy_state_cannot_be_entered_only_started_in() {
         let mut rng = rand::rngs::StdRng::seed_from_u64(1);
