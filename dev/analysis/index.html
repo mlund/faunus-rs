@@ -2411,109 +2411,37 @@ additionally reports the slab layout and the mean total number of selected parti
 slabs must return it.</p>
 <hr />
 <h2 id="preferential-interaction">Preferential Interaction<a class="headerlink" href="#preferential-interaction" title="Permanent link">&para;</a></h2>
-<p>Preferential interaction coefficient <span class="arithmatex">\(\Gamma\)</span> of a ligand with a rigid substrate. <span class="arithmatex">\(\Gamma\)</span> is a
-thermodynamic derivative, not a coordination number: it fixes how the chemical potential of the
-substrate responds to the ligand concentration, and through the Wyman linkage</p>
-<div class="arithmatex">\[\left(\frac{\partial \ln K_{\rm obs}}{\partial \ln a_3}\right)_{T,P} = \Delta\Gamma,\]</div>
-<p>it gives the ligand dependence of any equilibrium the substrate takes part in — an <span class="arithmatex">\(m\)</span>-value or a
-Setschenow coefficient for an uncharged cosolute (a salt needs the correction below). A positive
-<span class="arithmatex">\(\Gamma\)</span> means the ligand accumulates near the substrate (preferential binding); a negative one
-means it is excluded (preferential hydration).</p>
-<p>Let <span class="arithmatex">\(D(\delta)\)</span> be the region within <span class="arithmatex">\(r_{\rm lig} + \delta\)</span> of the substrate surface. Then</p>
-<div class="arithmatex">\[\Gamma(\delta) = \langle N(\delta)\rangle - c\,\mathrm{Vol}\,D(\delta),\]</div>
-<p>the excess of ligand over what the same volume of bulk solution would hold. Here <span class="arithmatex">\(c\)</span> is the bulk
-concentration, measured in the part of the cell the domain does not reach, so no separate
-substrate-free simulation is needed.</p>
-<p>This is the ligand excess <span class="arithmatex">\(N_{23} = \rho_3 G_{23}\)</span> in Kirkwood–Buff terms. For an implicit-solvent
-(McMillan–Mayer) model, where water is the continuum rather than a counted species, it <em>is</em> the
-preferential interaction coefficient. With explicit solvent the full coefficient
-<span class="arithmatex">\(\Gamma_{23} = N_{23} - (\rho_3/\rho_1)N_{21}\)</span> carries a second term for the displaced water
-(<span class="arithmatex">\(N_{21}\)</span>), which this analysis does not compute; use it only on implicit-solvent models.</p>
-<h3 id="read-the-profile-before-the-number">Read the profile before the number<a class="headerlink" href="#read-the-profile-before-the-number" title="Permanent link">&para;</a></h3>
-<p><span class="arithmatex">\(\Gamma(\delta)\)</span> is the exact cumulative excess in <span class="arithmatex">\(D(\delta)\)</span> at every <span class="arithmatex">\(\delta\)</span> — the identity
-above, not yet the thermodynamic coefficient. This turns the usual difficulty — <em>where does the
-local domain end?</em> — into something to measure rather than choose. For a hard-core ligand
-<span class="arithmatex">\(\langle N(0)\rangle = 0\)</span>, so <span class="arithmatex">\(\Gamma(0) = -c\,\mathrm{Vol}\,D(0)\)</span> is pure excluded volume; a soft
-or centre-of-mass ligand that penetrates the surface has <span class="arithmatex">\(\langle N(0)\rangle &gt; 0\)</span> and no such
-reading. As <span class="arithmatex">\(\delta\)</span> grows, the domain swallows the region where the ligand is perturbed and
-<span class="arithmatex">\(\Gamma\)</span> approaches a plateau — that plateau is the reported <span class="arithmatex">\(\Gamma\)</span>. The approach need not be
-monotonic: a solvation peak or charge screening can make <span class="arithmatex">\(\Gamma(\delta)\)</span> overshoot and settle
-back. A profile still varying at the widest <span class="arithmatex">\(\delta\)</span> is therefore unconverged, neither an upper
-nor a lower bound — the cell is too small or the ladder too short.</p>
-<h3 id="per-residue">Per residue<a class="headerlink" href="#per-residue" title="Permanent link">&para;</a></h3>
-<p>The domain is partitioned among the substrate's residues by a radical Voronoi tessellation, so the
-excess decomposes,</p>
-<div class="arithmatex">\[\Gamma = \sum_i \gamma_i,\]</div>
-<p>exactly: the cells tile the domain and each ligand falls in one of them. Summing <span class="arithmatex">\(\gamma_i\)</span> over a
-residue therefore gives a per-residue preferential binding coefficient that adds up to the
-measurable total, which a distance cutoff cannot do — a ligand within reach of three residues would
-be counted three times.</p>
-<p>Two further quantities follow per residue. The local–bulk partition coefficient
-<span class="arithmatex">\(K_p = \langle N_i(\delta) - N_i(0)\rangle / (c\,v_i^{\rm acc})\)</span> compares the ligand concentration
-in the accessible shell the residue offers with that in bulk (numerator and denominator both net
-of the excluded interior at <span class="arithmatex">\(\delta = 0\)</span>); above one the ligand accumulates there, below one it is
-excluded.
-The hydration density <span class="arithmatex">\(b_1 = v_i^{\rm w} / (\bar v_{\rm w}\,\mathrm{ASA}_i)\)</span> is the water shell
-volume per Å² of water-accessible surface, in waters, with both the shell and the area taken at the
-water probe, so <span class="arithmatex">\(b_1\)</span> is a property of the substrate surface and water alone, independent of the
-ligand. The solute partitioning model treats <span class="arithmatex">\(b_1\)</span> as a single constant for the whole surface
-(0.11 for native BSA, 0.18–0.19 for small hydrocarbons and the air–water surface); it is not one,
-because a convex patch carries more shell volume per unit area than a flat one, and reporting <span class="arithmatex">\(b_1\)</span>
-per residue makes the variation visible.</p>
-<p>Unlike <span class="arithmatex">\(\Gamma\)</span>, <span class="arithmatex">\(K_p\)</span> and <span class="arithmatex">\(b_1\)</span> are cumulative to a shell of thickness <span class="arithmatex">\(\delta\)</span> and so keep
-changing with <code>shell.max</code> even after <span class="arithmatex">\(\Gamma\)</span> has plateaued — as the shell fills with bulk, <span class="arithmatex">\(K_p
-\to 1\)</span>. They describe the domain out to the widest <span class="arithmatex">\(\delta\)</span>, so comparison with Record's constants
-requires matching that thickness to his local domain, not reading the widest-<span class="arithmatex">\(\delta\)</span> value.
-The per-residue split is exact for a coarse-grained substrate of equal-radius beads; for all-atom
-radii the radical partition moves with the probe, so a residue's <span class="arithmatex">\(v_i^{\rm acc}\)</span> carries a
-partition-dependent ownership transfer between neighbouring atoms, whose size varies with the
-system and the shell. The total <span class="arithmatex">\(\Gamma\)</span> is unaffected.</p>
-<p>Occlusion needs no special handling. The domain is built at probe <span class="arithmatex">\(r_{\rm lig} + \delta\)</span>, so its
-boundary is the surface a ligand of <em>that</em> size can reach: a buried residue offers no volume at any
-<span class="arithmatex">\(\delta\)</span>, and a pocket open to a small ion is sealed over for a larger one. Occlusion is thus a
-property of the substrate–ligand pair, and the same substrate gives different answers for different
-ligands.</p>
-<h3 id="the-ligand">The ligand<a class="headerlink" href="#the-ligand" title="Permanent link">&para;</a></h3>
-<p>By default every selected atom is a ligand, with radius <span class="arithmatex">\(\sigma/2\)</span>. Because one radius sets the
-whole domain ladder, a selection spanning atom kinds of different <span class="arithmatex">\(\sigma\)</span> is an error; give
-<code>radius</code> explicitly to resolve it.</p>
-<p>Set <code>use_com: true</code> to treat each selected <em>molecule</em> as one ligand, located at its centre of mass.
-A molecular ligand has an orientation and therefore no single exclusion radius, so <code>radius</code> then
-defaults to zero and <span class="arithmatex">\(\delta\)</span> is measured from the substrate's own surface. <span class="arithmatex">\(\Gamma\)</span> stays exact —
-it never required a spherical ligand — but the excluded-volume reading of <span class="arithmatex">\(\Gamma(0)\)</span> is lost.
-In its place, <span class="arithmatex">\(K_p(\delta)\)</span> climbs from zero across the innermost shells, tracing the
-orientation-averaged exclusion of the ligand against that surface.</p>
-<h3 id="requirements">Requirements<a class="headerlink" href="#requirements" title="Permanent link">&para;</a></h3>
-<p>The substrate must be one whole rigid molecule in a cell of fixed dimensions. The reference
-geometry is built once and reused, so a flexing chain leaves <span class="arithmatex">\(\Gamma\)</span> referenced against a shape
-the system no longer has; a volume move does the same — including an anisotropic one that reshapes
-the box at constant volume. Because the analysis cannot see the move set when it is built, it
-stops with an error at the first sample whose cell dimensions have drifted.</p>
-<p>The cell must be cuboid or spherical — a partially periodic cell would wrap the geometry through
-its own walls. It must also be wide enough to leave bulk beyond the widest domain: the run stops
-when less than 1% of the cell is bulk and warns below 10%, where the error bar on <span class="arithmatex">\(\Gamma\)</span> turns
-optimistic. Two further limits keep the tessellation honest. In a periodic cell the domain must
-fit within half the shortest edge, or it wraps onto its own image; a substrate plus domain wider
-than that is refused at build. In a spherical cell the tessellation cannot be clipped to the hard
-wall, so the substrate must stay far enough from it that its domain does not reach the wall — a
-central macromolecule is fine, one that drifts against the wall is refused at sample time.</p>
-<h3 id="scope-and-caveats">Scope and caveats<a class="headerlink" href="#scope-and-caveats" title="Permanent link">&para;</a></h3>
-<p>For a charged substrate the analysis measures each ionic species' coefficient <span class="arithmatex">\(\Gamma_{\pm,2}\)</span>
-separately, for any salt. Each carries an electroneutrality contribution — the Donnan term,
-present even for an ideal polyion and not a chemical interaction — so a single ion's <span class="arithmatex">\(\Gamma\)</span> is
-not the salt coefficient. For a uni-univalent (1:1) electrolyte this term is <span class="arithmatex">\(\pm\tfrac{1}{2}|Z|\)</span>,
-with <span class="arithmatex">\(Z\)</span> the substrate charge, and the neutral-salt coefficient is the plain sum
-<span class="arithmatex">\(\Gamma_{+,2} + \Gamma_{-,2}\)</span>, in which the Donnan terms cancel. For a non-1:1 salt such as
-MgCl<span class="arithmatex">\(_2\)</span> the ion excesses are still measured separately, but combining them into a neutral-salt
-coefficient needs the appropriate stoichiometric weighting and activity convention. Either way,
-run each ion as its own block and form the combination yourself; this analysis reports only the
-single-ion coefficients.</p>
-<p>The reported errors are the standard error of the mean across samples, which assumes the samples
-are independent. Monte Carlo frames are correlated, so the error is optimistic unless the sampling
-interval exceeds the autocorrelation time; block the trajectory or space out <code>frequency</code>
-accordingly.</p>
+<p>Measures the excess of a ligand around one rigid substrate. A positive <span class="arithmatex">\(\Gamma\)</span> means that the
+ligand accumulates near the substrate; a negative value means that it is depleted. For an
+implicit-solvent model, the converged value is the preferential interaction coefficient. With
+explicit solvent, the full coefficient also requires the excess of water and is not available from
+this analysis alone.</p>
+<p>For a shell of thickness <span class="arithmatex">\(\delta\)</span> around the substrate, the analysis reports</p>
+<div class="arithmatex">\[\Gamma(\delta) = \langle N(\delta)\rangle - c\,\operatorname{Vol}\!\left[D(\delta)\right],\]</div>
+<p>where <span class="arithmatex">\(\langle N(\delta)\rangle\)</span> is the mean number of ligands in the shell, <span class="arithmatex">\(c\)</span> is the measured
+bulk concentration, and <span class="arithmatex">\(D(\delta)\)</span> is the shell volume. The bulk concentration is measured in
+the remaining part of the simulation cell, so no substrate-free simulation is required.</p>
+<h3 id="choosing-the-shell">Choosing the shell<a class="headerlink" href="#choosing-the-shell" title="Permanent link">&para;</a></h3>
+<p>Use the profile to select <span class="arithmatex">\(\Gamma\)</span>: increase <code>shell.max</code> until <span class="arithmatex">\(\Gamma(\delta)\)</span> has reached a
+plateau. Do not use a profile that still changes at the largest <span class="arithmatex">\(\delta\)</span>; enlarge the cell or
+extend the shell instead. A hard-core atomic ligand gives an excluded-volume contribution at
+<span class="arithmatex">\(\delta=0\)</span>. This interpretation does not apply to a soft or centre-of-mass ligand.</p>
+<p>The substrate must be a rigid molecule in a fixed cuboid or spherical cell. Leave sufficient bulk
+beyond the largest shell. The analysis rejects domains that overlap periodic images or reach a
+spherical boundary.</p>
+<h3 id="ions-and-residue-contributions">Ions and residue contributions<a class="headerlink" href="#ions-and-residue-contributions" title="Permanent link">&para;</a></h3>
+<p>Analyze each ionic species separately. For a charged substrate, individual ion excesses include
+the electroneutrality contribution and are not neutral-salt coefficients. Combine the ion
+profiles with the salt stoichiometry and the activity convention appropriate to the system.</p>
+<p>The residue file partitions the total excess among residues:</p>
+<div class="arithmatex">\[\Gamma = \sum_i \gamma_i.\]</div>
+<p>The contributions sum to the profile at the same shell thickness and provide a spatial
+description of ligand enrichment. <code>kp</code> and <code>b1</code> are local descriptors, not thermodynamic
+coefficients. They depend on the selected shell thickness and may be <code>nan</code> where no meaningful
+local volume is available.</p>
 <h3 id="example_12">Example<a class="headerlink" href="#example_12" title="Permanent link">&para;</a></h3>
-<p>Sodium and a polyphosphate around a protein. One ligand per block; add a block per species.</p>
+<p>One block is needed for each ligand species. Use <code>use_com: true</code> for a molecular ligand; otherwise,
+the selected atoms are counted individually.</p>
 <div class="highlight"><pre><span></span><code><span class="nt">analysis</span><span class="p">:</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!PreferentialInteraction</span>
 <span class="w">    </span><span class="nt">substrate</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;molecule</span><span class="nv"> </span><span class="s">protein&quot;</span>
@@ -2598,17 +2526,11 @@ accordingly.</p>
 </tr>
 </tbody>
 </table>
-<p>The profile file gives <code>delta/Å</code> and <code>gamma</code> with its statistical error. The residue file gives one
-row per residue, at the widest δ: name and number, the water-accessible surface area <code>asa/Å²</code>, the
-volume <code>accessible_volume/Å³</code> offered to a ligand centre, the hydration density <code>b1/Å⁻²</code>, the
-partition coefficient <code>kp</code>, and <code>gamma</code> with its error. A buried residue offers no accessible
-surface, so its <code>kp</code> and <code>b1</code> are undefined and written as <code>nan</code> — not as zero. The same holds
-where the radical partition transfers ownership between unequal-radius neighbours and drives a
-residue's accessible shell volume negative: <code>kp</code> and <code>b1</code> would be negative, which is unphysical,
-so they too are written as <code>nan</code>. The exact total <span class="arithmatex">\(\Gamma\)</span> and the per-residue <span class="arithmatex">\(\gamma_i\)</span> are
-unaffected. <code>output.yaml</code>
-reports the <code>gamma</code> at the widest δ, the measured bulk <code>concentration/Å⁻³</code>, and the
-<code>excluded_volume/Å³</code>.</p>
+<p>The profile file contains <code>delta/Å</code>, <code>gamma</code>, and its statistical error. The residue file contains
+the residue identifier, <code>asa/Å²</code>, <code>accessible_volume/Å³</code>, <code>b1/Å⁻²</code>, <code>kp</code>, and <code>gamma</code> with its
+error at the widest shell. <code>output.yaml</code> reports <code>gamma</code> at that shell, the measured bulk
+<code>concentration/Å⁻³</code>, and <code>excluded_volume/Å³</code>. Errors are standard errors across sampled frames;
+use sufficiently spaced samples or block analysis when frames are correlated.</p>
 <h3 id="references">References<a class="headerlink" href="#references" title="Permanent link">&para;</a></h3>
 <ul>
 <li>Record &amp; Anderson, <em>Biophys. J.</em> <strong>68</strong>, 786 (1995).
@@ -2931,7 +2853,7 @@ used during the biased simulation.</p>
 </tr>
 </tbody>
 </table>
-<h3 id="requirements_1">Requirements<a class="headerlink" href="#requirements_1" title="Permanent link">&para;</a></h3>
+<h3 id="requirements">Requirements<a class="headerlink" href="#requirements" title="Permanent link">&para;</a></h3>
 <p>The trajectory must have been produced with <code>save_frame_state: true</code> on the
 <a href="#trajectory">Trajectory</a> analysis, so that a matching <code>.aux</code> file exists.
 The <code>.aux</code> file header must match the topology in the rerun input (same number
