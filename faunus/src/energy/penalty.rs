@@ -19,7 +19,7 @@
 //! produce infinite energy for early rejection.
 
 use crate::collective_variable::{CollectiveVariable, CollectiveVariableBuilder};
-use crate::flat_histogram::FlatHistogramState;
+use crate::flat_histogram::{FlatHistogramState, GridDim};
 use crate::Change;
 use crate::ObserveContext;
 use serde::{Deserialize, Serialize};
@@ -125,6 +125,28 @@ pub struct PenaltyBuilder {
     pub coordinate2: Option<CollectiveVariableBuilder>,
 }
 
+/// Reject a config whose CV count disagrees with the checkpoint's grid dimensionality.
+///
+/// The checkpoint is authoritative: a mismatch would drive the wrong number of CVs into
+/// `bin_index`, which silently bins at `cv[1] = 0.0` (2-D grid, 1-D config) or discards
+/// the second CV (1-D grid, 2-D config) rather than erroring. Nothing downstream catches
+/// it, so validate here.
+fn check_dimensionality(
+    grid_is_2d: bool,
+    has_cv2: bool,
+    file: &std::path::Path,
+) -> anyhow::Result<()> {
+    anyhow::ensure!(
+        grid_is_2d == has_cv2,
+        "penalty checkpoint '{}' is a {}-D grid but the config supplies {} collective variable(s); \
+         provide `coordinate2` for a 2-D grid and omit it for a 1-D grid",
+        file.display(),
+        if grid_is_2d { 2 } else { 1 },
+        if has_cv2 { 2 } else { 1 },
+    );
+    Ok(())
+}
+
 impl PenaltyBuilder {
     /// Build a static [`Penalty`] by loading the checkpoint and resolving CVs.
     pub fn build(
@@ -133,6 +155,8 @@ impl PenaltyBuilder {
         thermal_energy: f64,
     ) -> anyhow::Result<Penalty> {
         let state = FlatHistogramState::from_file(&self.file)?;
+        let grid_is_2d = matches!(state.dim(), GridDim::Two { .. });
+        check_dimensionality(grid_is_2d, self.coordinate2.is_some(), &self.file)?;
         log::info!(
             "Loaded penalty from '{}': {} bins, Δg={:.1} kT",
             self.file.display(),
@@ -158,6 +182,22 @@ impl PenaltyBuilder {
 mod tests {
     use super::*;
     use crate::flat_histogram::GridDim;
+
+    #[test]
+    fn matching_dimensionality_is_accepted() {
+        let file = std::path::Path::new("histogram.yaml");
+        assert!(check_dimensionality(false, false, file).is_ok()); // 1-D grid, 1 CV
+        assert!(check_dimensionality(true, true, file).is_ok()); // 2-D grid, 2 CVs
+    }
+
+    #[test]
+    fn mismatched_dimensionality_is_rejected() {
+        let file = std::path::Path::new("histogram.yaml");
+        // 2-D grid driven by a 1-D config: would silently bin at cv[1] = 0.0.
+        assert!(check_dimensionality(true, false, file).is_err());
+        // 1-D grid with a superfluous coordinate2: would discard the second CV.
+        assert!(check_dimensionality(false, true, file).is_err());
+    }
 
     /// A poisoned shared lock must be recovered, not re-panicked: the recovery expression
     /// used by `Penalty::energy`/`update` yields a usable guard after a sibling panics

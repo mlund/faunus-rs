@@ -664,6 +664,10 @@ system:
 | `coordinate`  | yes      | Primary collective variable (see [analysis](analysis.md))      |
 | `coordinate2` | no       | Second CV for 2D surfaces                                      |
 
+Supply `coordinate2` when, and only when, the checkpoint stores a 2-D grid; a
+mismatch between the checkpoint dimensionality and the configured coordinates is
+rejected at startup.
+
 The penalty is placed at the front of the Hamiltonian so that out-of-range
 CV values return infinite energy, short-circuiting expensive downstream terms.
 
