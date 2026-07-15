@@ -1,0 +1,2203 @@
+// Copyright 2026 Mikael Lund
+//
+// Licensed under the Apache license, version 2.0 (the "license");
+// you may not use this file except in compliance with the license.
+// You may obtain a copy of the license at
+//
+//     http://www.apache.org/licenses/license-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the license is distributed on an "as is" basis,
+// without warranties or conditions of any kind, either express or implied.
+// See the license for the specific language governing permissions and
+// limitations under the license.
+
+//! Preferential interaction coefficient Γ of a ligand with a rigid substrate.
+//!
+//! Γ is the thermodynamic derivative behind preferential binding and exclusion: it fixes how the
+//! chemical potential of the substrate responds to the ligand concentration, and hence — through
+//! the Wyman linkage — the ligand dependence of any equilibrium the substrate takes part in.
+//!
+//! Let `D(δ)` be the region within `r_lig + δ` of the substrate surface. Then
+//!
+//! ```text
+//! Γ(δ) = ⟨N(δ)⟩ − c·Vol(D(δ))
+//! ```
+//!
+//! is the exact cumulative ligand excess in `D(δ)` at every δ — this identity, not yet the
+//! thermodynamic coefficient. It is the Kirkwood–Buff excess `N₂₃ = ρ₃G₂₃`; for an implicit-solvent
+//! (McMillan–Mayer) model, where water is the continuum rather than a counted species, it *is* the
+//! preferential interaction coefficient. With explicit solvent the full coefficient subtracts a
+//! displaced-water term, which this analysis does not form — use it only on implicit-solvent
+//! models. Scanning δ removes the need to *choose* a domain: Γ(δ) approaches a plateau once δ
+//! outruns the range over which the ligand is perturbed, and that plateau is Γ. The approach need
+//! not be monotonic, so a profile still varying at the widest δ is unconverged, not a bound.
+//!
+//! # Rigid body, one copy
+//!
+//! The reference geometry — the per-atom cell volumes `vᵢ(p)`, the surface areas, the engulfed
+//! flags — is built once (`SurfaceReference::new`) and reused for the whole run. This is sound
+//! only because the substrate is a rigid body: those quantities depend on the substrate's
+//! *internal* geometry alone, which translation and rotation preserve, while the per-sample
+//! counting reads *live* positions through the minimum image. The substrate is therefore free to
+//! translate, rotate, and wrap across the periodic boundary; nothing is recomputed as it moves.
+//!
+//! Only one substrate copy is allowed (`reject_mobile_substrate`). Several identical rigid copies
+//! would share the same body-frame reference and could multiply the ligand statistics per frame,
+//! but only while their domains stay disjoint: once two `D(δ)` overlap, a ligand between them
+//! falls in both (breaking the tile-the-space partition behind Σγᵢ = Γ), and each copy's `vᵢ`
+//! reaches into space the other copy occupies (biasing the volume). At that separation Γ also
+//! stops being the infinite-dilution coefficient and picks up a protein–protein crowding term.
+//! Supporting N > 1 therefore needs a nearest-copy tie-break plus an inter-copy overlap guard, or
+//! a joint tessellation of all copies that forfeits the compute-once optimization — a deliberate
+//! follow-up, not a free win.
+
+use super::{Analyze, Frequency, Sampling};
+use crate::auxiliary::{BlockAverage, BlockSummary, ColumnWriter, MappingExt};
+use crate::cell::{BoundaryConditions, Shape};
+use crate::selection::{ComSelection, Selection};
+use crate::{ObserveContext, Point};
+use anyhow::Result;
+use derive_more::Debug;
+use serde::{Deserialize, Serialize};
+use std::path::{Path, PathBuf};
+
+/// Ladder of domain thicknesses δ.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Shell {
+    /// Largest δ (Å). Beyond this a ligand counts as bulk.
+    max: f64,
+    /// Spacing of the ladder (Å).
+    resolution: f64,
+}
+
+impl Shell {
+    /// Unknown user input is an error, so a ladder that cannot be walked is refused here rather
+    /// than overflowing `len` or silently collapsing to a single rung.
+    fn validate(&self) -> Result<()> {
+        anyhow::ensure!(
+            self.resolution.is_finite() && self.resolution > 0.0,
+            "PreferentialInteraction: shell.resolution must be positive, got {}",
+            self.resolution
+        );
+        anyhow::ensure!(
+            self.max.is_finite() && self.max >= self.resolution,
+            "PreferentialInteraction: shell.max must be at least shell.resolution, got {} and {}",
+            self.max,
+            self.resolution
+        );
+        // Each rung is a tessellation and an allocation, so an enormous max/resolution ratio would
+        // hang the build before any later guard runs. A few thousand rungs is already far past any
+        // sensible ladder.
+        const MAX_RUNGS: f64 = 10_000.0;
+        anyhow::ensure!(
+            self.max / self.resolution <= MAX_RUNGS,
+            "PreferentialInteraction: shell.max / shell.resolution = {:.0} exceeds {MAX_RUNGS:.0}; \
+             coarsen the ladder",
+            self.max / self.resolution
+        );
+        Ok(())
+    }
+
+    /// Number of rungs, including δ = 0.
+    fn len(&self) -> usize {
+        (self.max / self.resolution).round() as usize + 1
+    }
+
+    /// δ of rung `k`.
+    fn delta(&self, k: usize) -> f64 {
+        k as f64 * self.resolution
+    }
+
+    /// Rung a ligand sitting `gap` beyond the exclusion boundary belongs to, or `None` for bulk.
+    ///
+    /// A ligand that has penetrated the boundary (`gap < 0`) lands in rung zero, so the count and
+    /// the volume keep referring to the same region even when the ligand is soft.
+    fn index(&self, gap: f64) -> Option<usize> {
+        let k = if gap <= 0.0 {
+            0
+        } else {
+            (gap / self.resolution).ceil() as usize
+        };
+        (k < self.len()).then_some(k)
+    }
+}
+
+/// YAML builder for [`PreferentialInteraction`].
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PreferentialInteractionBuilder {
+    /// The rigid body the ligand is counted around.
+    substrate: Selection,
+    /// The species whose excess is measured. One per analysis; declare the analysis again for more.
+    ligand: Selection,
+    /// Count the mass centre of each selected molecule instead of each selected atom.
+    #[serde(default)]
+    use_com: bool,
+    /// Ligand radius (Å). Defaults to σ/2 for atoms and to zero for mass centres.
+    #[serde(default)]
+    radius: Option<f64>,
+    /// The δ ladder.
+    shell: Shell,
+    /// Water radius (Å), setting the surface area against which hydration is reported.
+    #[serde(default = "default_solvent_probe")]
+    solvent_probe: f64,
+    /// Γ(δ), the convergence profile. Read this before trusting the reported Γ.
+    #[serde(default)]
+    profile: Option<PathBuf>,
+    /// One row per residue, at the widest δ.
+    #[serde(default)]
+    file: Option<PathBuf>,
+    /// Sampling frequency.
+    frequency: Frequency,
+}
+
+const fn default_solvent_probe() -> f64 {
+    1.4
+}
+
+/// Volume of one water molecule (Å³): 18.015 g/mol at 1 g/mL.
+const WATER_VOLUME: f64 = 18.015e24 / physical_constants::AVOGADRO_CONSTANT;
+
+impl PreferentialInteractionBuilder {
+    pub fn apply_output_dir(&mut self, dir: &Path) -> Result<()> {
+        crate::analysis::prefix_opt(&mut self.profile, dir)?;
+        crate::analysis::prefix_opt(&mut self.file, dir)
+    }
+
+    pub fn build(&self, context: &impl ObserveContext) -> Result<PreferentialInteraction> {
+        self.shell.validate()?;
+        anyhow::ensure!(
+            self.solvent_probe.is_finite() && self.solvent_probe >= 0.0,
+            "PreferentialInteraction: solvent_probe must be finite and non-negative, got {}",
+            self.solvent_probe
+        );
+        if let Some(radius) = self.radius {
+            anyhow::ensure!(
+                radius.is_finite() && radius >= 0.0,
+                "PreferentialInteraction: radius must be finite and non-negative, got {radius}"
+            );
+        }
+        // The σ-derived radius path already rejects an empty ligand selection, but the explicit
+        // `radius` and `use_com` paths skip it, so check here for every path.
+        let matched = if self.use_com {
+            !context.resolve_groups(&self.ligand).is_empty()
+        } else {
+            !context.resolve_atoms(&self.ligand).is_empty()
+        };
+        anyhow::ensure!(
+            matched,
+            "PreferentialInteraction: ligand selection '{}' matched nothing",
+            self.ligand.source()
+        );
+        let ligand_radius = self.ligand_radius(context)?;
+        let reference = SurfaceReference::new(
+            context,
+            &self.substrate,
+            ligand_radius,
+            self.shell,
+            self.solvent_probe,
+        )?;
+        let n_shells = self.shell.len();
+        let accumulators = || (0..n_shells).map(|_| BlockAverage::new()).collect();
+        let n_residues = reference.residues.len();
+        Ok(PreferentialInteraction {
+            ligand: ComSelection::new(self.ligand.clone(), self.use_com),
+            residue_gamma: (0..n_residues).map(|_| accumulators()).collect(),
+            counts: vec![0.0; n_residues * n_shells],
+            shell_totals: vec![0.0; n_shells],
+            positions: Vec::new(),
+            reference,
+            gamma: accumulators(),
+            concentration: BlockAverage::new(),
+            stopped: false,
+            profile_file: self.profile.clone(),
+            residue_file: self.file.clone(),
+            sampling: Sampling::new(self.frequency),
+        })
+    }
+
+    /// The single radius that sets the whole ladder.
+    ///
+    /// An averaged radius would corrupt every reference volume, so a selection spanning atom kinds
+    /// of different size is refused rather than reconciled.
+    fn ligand_radius(&self, context: &impl ObserveContext) -> Result<f64> {
+        if let Some(radius) = self.radius {
+            return Ok(radius);
+        }
+        if self.use_com {
+            return Ok(0.0);
+        }
+        let topology = context.topology_ref();
+        let kinds = topology.atomkinds();
+        let atoms = context.resolve_atoms(&self.ligand);
+        anyhow::ensure!(
+            !atoms.is_empty(),
+            "PreferentialInteraction: ligand selection '{}' matched no atoms",
+            self.ligand.source()
+        );
+        let mut radii = atoms.into_iter().map(|i| {
+            let kind = &kinds[context.atom_kind(i).get()];
+            kind.sigma().map(|sigma| sigma / 2.0).ok_or_else(|| {
+                anyhow::anyhow!(
+                    "PreferentialInteraction: ligand atom kind '{}' has no σ; set `radius` \
+                     explicitly",
+                    kind.name()
+                )
+            })
+        });
+        let first = radii.next().unwrap()?;
+        for radius in radii {
+            anyhow::ensure!(
+                (radius? - first).abs() < 1e-9,
+                "PreferentialInteraction: ligand selection '{}' spans atom kinds of different σ; \
+                 set `radius` explicitly",
+                self.ligand.source()
+            );
+        }
+        Ok(first)
+    }
+}
+
+/// A residue of the substrate, and the geometry it offers a ligand.
+///
+/// Residues partition the substrate's atoms, so summing a per-atom excess over them loses nothing:
+/// Σ γ stays exactly Γ. A substrate without residue records — a coarse-grained bead model — gets
+/// one residue per atom, which is the same statement with a finer grain.
+#[derive(Debug)]
+pub(crate) struct Residue {
+    pub name: String,
+    pub number: usize,
+    /// Water-accessible surface area (Å²).
+    pub asa: f64,
+}
+
+/// Refuse a cell whose tessellation and minimum image would disagree.
+///
+/// The domain volumes come from a tessellation of the periodic box, while the counting uses the
+/// cell's own minimum image. A partially periodic cell — a slit, a cylinder — would wrap the
+/// tessellation through its hard walls while the counting does not, so volume and count would
+/// refer to different regions and Γ would be biased with nothing to show for it.
+fn reject_unsupported_cell(context: &impl ObserveContext) -> Result<()> {
+    use crate::cell::{Cell, PeriodicDirections};
+    let cell = context.cell();
+    anyhow::ensure!(
+        matches!(cell, Cell::Cuboid(_) | Cell::Sphere(_)),
+        "PreferentialInteraction: needs a cuboid or spherical cell; a partially periodic cell \
+         would tessellate through its own walls"
+    );
+    anyhow::ensure!(
+        matches!(
+            cell.pbc(),
+            PeriodicDirections::PeriodicXYZ | PeriodicDirections::None
+        ),
+        "PreferentialInteraction: needs a fully periodic or fully aperiodic cell"
+    );
+    Ok(())
+}
+
+/// Radius of a sphere about the substrate centroid enclosing every atom, including its own radius.
+///
+/// The molecule is unwrapped by growing a spanning tree: each atom is placed on the minimum image
+/// of the *nearest already-placed* atom, so a rigid body straddling a periodic boundary is
+/// measured at its true extent. Unwrapping against a single anchor instead would fold any atom
+/// farther than half the box from that anchor onto the wrong image, underestimating the radius —
+/// and defeating the self-overlap guard for exactly the oversized substrate it must reject, since
+/// a molecule wider than the box then reports a true, large radius here.
+fn bounding_radius(
+    cell: &crate::cell::Cell,
+    atoms: &[usize],
+    radii: &[f64],
+    position: impl Fn(usize) -> Point,
+) -> f64 {
+    let raw: Vec<Point> = atoms.iter().map(|&i| position(i)).collect();
+    let n = raw.len();
+    let mut unwrapped = vec![Point::zeros(); n];
+    let mut in_tree = vec![false; n];
+    // Prim's algorithm: `best[i]` is the unwrapped position atom i would take against its nearest
+    // in-tree atom, and its minimum-image distance to that atom.
+    let mut best = vec![(Point::zeros(), f64::INFINITY); n];
+    unwrapped[0] = raw[0];
+    in_tree[0] = true;
+    let mut last = 0;
+    for _ in 1..n {
+        for i in 0..n {
+            if in_tree[i] {
+                continue;
+            }
+            let disp = cell.distance(&unwrapped[last], &raw[i]);
+            let d = disp.norm();
+            if d < best[i].1 {
+                best[i] = (unwrapped[last] - disp, d);
+            }
+        }
+        last = (0..n)
+            .filter(|&i| !in_tree[i])
+            .min_by(|&a, &b| best[a].1.total_cmp(&best[b].1))
+            .expect("substrate is non-empty");
+        unwrapped[last] = best[last].0;
+        in_tree[last] = true;
+    }
+    let centroid = unwrapped.iter().sum::<Point>() / n as f64;
+    unwrapped
+        .iter()
+        .zip(radii)
+        .map(|(p, &r)| (p - centroid).norm() + r)
+        .fold(0.0, f64::max)
+}
+
+/// Refuse a substrate whose geometry will not hold still.
+///
+/// Every reference volume is computed once from the starting configuration and reused, which is
+/// sound only because a rigid body carries its geometry with it. A flexible chain — or several
+/// separate molecules drifting apart — would leave Γ referenced against a shape the system no
+/// longer has.
+fn reject_mobile_substrate(
+    context: &impl ObserveContext,
+    substrate: &Selection,
+    atoms: &[usize],
+) -> Result<()> {
+    let groups = context.resolve_groups(substrate);
+    anyhow::ensure!(
+        groups.len() == 1,
+        "PreferentialInteraction: substrate selection '{}' matched {} molecules; it must name \
+         exactly one",
+        substrate.source(),
+        groups.len()
+    );
+    let group = context.group(crate::group::GroupIndex::new(groups[0]));
+    let molecule = context.topology_ref().moleculekind(group.molecule());
+    anyhow::ensure!(
+        !molecule.atomic(),
+        "PreferentialInteraction: substrate '{}' is an atomic group, which has no fixed shape",
+        molecule.name()
+    );
+    anyhow::ensure!(
+        molecule.degrees_of_freedom().is_rigid(),
+        "PreferentialInteraction: substrate '{}' is not rigid, so its reference geometry would go \
+         stale as it flexes",
+        molecule.name()
+    );
+    // A selection reaching only part of the molecule would leave the rest of the body out of the
+    // tessellation, and the domain would close over surface that is really buried.
+    anyhow::ensure!(
+        atoms.len() == group.len(),
+        "PreferentialInteraction: substrate selection '{}' matched {} of the {} atoms of '{}'; \
+         it must cover the whole molecule",
+        substrate.source(),
+        atoms.len(),
+        group.len(),
+        molecule.name()
+    );
+    Ok(())
+}
+
+/// Residue of each substrate atom, and the residues themselves.
+///
+/// Faunus keeps residues as metadata on the molecule *template*, so an absolute particle index has
+/// to be walked back through the group to reach them.
+fn residues_of(
+    context: &impl ObserveContext,
+    atoms: &[usize],
+) -> Result<(Vec<Residue>, Vec<usize>)> {
+    use crate::topology::IndexRange as _;
+
+    /// What an atom belongs to. A residue *position* and an atom's *template index* are different
+    /// index spaces, so they must not share a key: an atom outside every residue range would
+    /// otherwise be folded into whichever residue happens to sit at that position.
+    #[derive(PartialEq, Eq, Hash)]
+    enum Key {
+        Residue(usize, usize),
+        LoneAtom(usize, usize),
+    }
+
+    let topology = context.topology_ref();
+    let mut residues: Vec<Residue> = Vec::new();
+    let mut owner = Vec::with_capacity(atoms.len());
+    let mut seen: std::collections::HashMap<Key, usize> = std::collections::HashMap::new();
+
+    for &atom in atoms {
+        let group_index = context.group_of_particle(atom).ok_or_else(|| {
+            anyhow::anyhow!("PreferentialInteraction: atom {atom} belongs to no group")
+        })?;
+        let group = context.group(crate::group::GroupIndex::new(group_index));
+        let kind = &topology.moleculekinds()[group.molecule().get()];
+        let template = kind.topology_index(atom - group.start());
+
+        let found = kind
+            .residues()
+            .iter()
+            .position(|residue| residue.range().contains(&template));
+
+        let key = match found {
+            Some(position) => Key::Residue(group_index, position),
+            None => Key::LoneAtom(group_index, template),
+        };
+        let index = *seen.entry(key).or_insert_with(|| {
+            let (name, number) = match found.map(|i| &kind.residues()[i]) {
+                Some(residue) => (
+                    residue.name().to_owned(),
+                    residue.number().unwrap_or(residues.len() + 1),
+                ),
+                // Outside every residue record — a cap, an ion, a coarse-grained bead. Fall back to
+                // the atom kind, as the selection language does.
+                None => (
+                    topology.atomkinds()[context.atom_kind(atom).get()]
+                        .name()
+                        .to_owned(),
+                    residues.len() + 1,
+                ),
+            };
+            residues.push(Residue {
+                name,
+                number,
+                asa: 0.0,
+            });
+            residues.len() - 1
+        });
+        owner.push(index);
+    }
+    Ok((residues, owner))
+}
+
+/// Geometry of a rigid substrate: the domain ladder D(δ) and its partition among substrate atoms.
+///
+/// Built once. The volumes are body-frame invariants, so rigid-body motion cannot stale them, and
+/// no tessellation runs while sampling: computing a cell's volume needs the diagram, but testing
+/// whether a point lies in that cell is an argmin.
+#[derive(Debug)]
+struct SurfaceReference {
+    /// Absolute indices of the substrate atoms.
+    atoms: Vec<usize>,
+    /// Radius of each substrate atom (Å).
+    radii: Vec<f64>,
+    /// Residue owning each substrate atom.
+    owner: Vec<usize>,
+    /// The residues, carrying their water-accessible surface area.
+    residues: Vec<Residue>,
+    /// `v(r_lig + δ_k)`, the domain volume owned by each residue, indexed `[shell][residue]`.
+    ///
+    /// This is voronota's own partition, which is why the ownership argmin in `locate` must use
+    /// the power distance: numerator and denominator have to name the same region.
+    volumes: Vec<Vec<f64>>,
+    /// `v(p_w + δ_k)`, the water-accessible domain volume owned by each residue at the water probe
+    /// `p_w = solvent_probe`, indexed `[shell][residue]`. Backs the hydration density b₁, which is
+    /// a substrate + water property independent of the ligand.
+    water_volumes: Vec<Vec<f64>>,
+    /// `Vol(D(δ_k)) = Σ v(r_lig + δ_k)`, the domain volume at each rung.
+    domain_volume: Vec<f64>,
+    /// Box edge lengths the reference was built against (Å), for the constant-cell check — an
+    /// anisotropic move can reshape the box at constant volume.
+    box_dimensions: Point,
+    /// How far any cached tessellation reaches beyond an atom surface,
+    /// `max(r_lig, solvent_probe) + shell.max` (Å). Used by the spherical-cell wall check.
+    domain_reach: f64,
+    /// Box volume outside the widest domain (Å³).
+    bulk_volume: f64,
+    ligand_radius: f64,
+    shell: Shell,
+    /// Per-atom `dᵢ² − Rᵢ²` for the ligand being placed, the probe-free part of the power distance;
+    /// reused so `credit` allocates nothing.
+    scratch: Vec<f64>,
+}
+
+impl SurfaceReference {
+    fn new(
+        context: &impl ObserveContext,
+        substrate: &Selection,
+        ligand_radius: f64,
+        shell: Shell,
+        solvent_probe: f64,
+    ) -> Result<Self> {
+        reject_unsupported_cell(context)?;
+        let atoms = context.resolve_atoms(substrate);
+        anyhow::ensure!(
+            !atoms.is_empty(),
+            "PreferentialInteraction: substrate selection '{}' matched no atoms",
+            substrate.source()
+        );
+        reject_mobile_substrate(context, substrate, &atoms)?;
+
+        let topology = context.topology_ref();
+        let kinds = topology.atomkinds();
+        // A missing σ would collapse the ball to a point and shift the whole domain ladder inwards.
+        // The mixed-σ ligand is refused for the same reason; an absent σ is the same corruption.
+        let radii: Vec<f64> = atoms
+            .iter()
+            .map(|&i| {
+                let kind = &kinds[context.atom_kind(i).get()];
+                kind.sigma().map(|sigma| sigma / 2.0).ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "PreferentialInteraction: substrate atom kind '{}' has no σ, so its size \
+                         is undefined",
+                        kind.name()
+                    )
+                })
+            })
+            .collect::<Result<_>>()?;
+
+        let periodic_box = crate::energy::make_periodic_box(context.cell());
+        let balls: Vec<voronota_ltr::Ball> = atoms
+            .iter()
+            .zip(&radii)
+            .map(|(&i, &r)| {
+                let p = context.position(i);
+                voronota_ltr::Ball::new(p.x, p.y, p.z, r)
+            })
+            .collect();
+        let engulfed = engulfed_atoms(context, &atoms, &radii);
+
+        let (mut residues, owner) = residues_of(context, &atoms)?;
+
+        // Roll a per-atom quantity up onto the residues that partition the atoms.
+        let per_residue = |per_atom: &[f64]| {
+            let mut sums = vec![0.0; residues.len()];
+            for (&value, &residue) in per_atom.iter().zip(&owner) {
+                sums[residue] += value;
+            }
+            sums
+        };
+
+        // One tessellation per rung — the only place the diagram is built. The substrate is rigid,
+        // so these volumes are body-frame invariants and no tessellation runs while sampling.
+        let ladder = |probe_base: f64| -> Vec<Vec<f64>> {
+            (0..shell.len())
+                .map(|k| {
+                    let volumes = cell_volumes(
+                        &balls,
+                        &radii,
+                        &engulfed,
+                        probe_base + shell.delta(k),
+                        periodic_box.as_ref(),
+                    );
+                    per_residue(&volumes)
+                })
+                .collect()
+        };
+
+        let volumes = ladder(ligand_radius);
+        let domain_volume: Vec<f64> = volumes.iter().map(|v| v.iter().sum()).collect();
+
+        // b₁ is Record's hydration density — a property of the substrate surface and water alone,
+        // with no ligand in it, which is what lets him tabulate it once and transfer it between
+        // solutes. It therefore uses the water probe for *both* the shell volume and the area; a
+        // ligand-probe volume over a water-probe area would inject a spurious curvature factor
+        // (a + r_lig)² / (a + p_w)² on top of the real shell curvature. This second ladder is at
+        // `solvent_probe + δ`, in parallel with the ligand ladder above.
+        let water_volumes = ladder(solvent_probe);
+
+        let asa = per_residue(&surface_areas(
+            &balls,
+            &radii,
+            &engulfed,
+            solvent_probe,
+            periodic_box.as_ref(),
+        ));
+        for (residue, area) in residues.iter_mut().zip(asa) {
+            residue.asa = area;
+        }
+
+        let box_volume = context.cell().volume().ok_or_else(|| {
+            anyhow::anyhow!("PreferentialInteraction: the cell has no volume, so there is no bulk")
+        })?;
+        // Under periodic boundaries the domain saturates at the cell volume, so a ladder wider than
+        // the box does not overflow — it quietly consumes the bulk, leaving Γ referenced against
+        // nothing. A positive remainder is not enough to catch that; it has to be a usable one.
+        const MIN_BULK_FRACTION: f64 = 0.01;
+        let bulk_volume = box_volume - domain_volume[shell.len() - 1];
+        anyhow::ensure!(
+            bulk_volume > MIN_BULK_FRACTION * box_volume,
+            "PreferentialInteraction: the domain leaves only {:.1}% of the cell as bulk, which is \
+             too little to reference Γ against. Reduce `shell.max` or enlarge the cell",
+            100.0 * bulk_volume / box_volume
+        );
+        if bulk_volume < 0.1 * box_volume {
+            log::warn!(
+                "preferential interaction: only {:.0}% of the cell is bulk; Γ is referenced \
+                 against a thin shell and its error bar will be optimistic",
+                100.0 * bulk_volume / box_volume
+            );
+        }
+
+        // Widest of the two ladders (the water ladder wins when `use_com` makes r_lig = 0). Under
+        // PBC the domain must fit within half the shortest edge or it wraps onto its own image —
+        // the bulk-fraction check does not catch this (a thin box can stay 99 % bulk).
+        let domain_reach = ligand_radius.max(solvent_probe) + shell.delta(shell.len() - 1);
+        let bound = bounding_radius(context.cell(), &atoms, &radii, |i| context.position(i));
+        if context.cell().pbc().is_some() {
+            let min_edge = context
+                .cell()
+                .bounding_box()
+                .map(|b| b.x.min(b.y).min(b.z))
+                .unwrap_or(f64::INFINITY);
+            anyhow::ensure!(
+                bound + domain_reach < 0.5 * min_edge,
+                "PreferentialInteraction: the substrate plus its domain (radius {:.1} Å) exceeds \
+                 half the shortest box edge ({:.1} Å); the domain would wrap onto its periodic \
+                 image. Enlarge the cell or reduce `shell.max`",
+                bound + domain_reach,
+                0.5 * min_edge
+            );
+        }
+
+        let n = atoms.len();
+        Ok(Self {
+            atoms,
+            radii,
+            domain_reach,
+            owner,
+            residues,
+            volumes,
+            water_volumes,
+            domain_volume,
+            box_dimensions: context.cell().bounding_box().unwrap_or_else(Point::zeros),
+            bulk_volume,
+            ligand_radius,
+            shell,
+            scratch: vec![0.0; n],
+        })
+    }
+
+    /// Credit a ligand at `r` to the residue that owns it, at every rung whose domain contains it.
+    ///
+    /// Ownership is recomputed per rung: the radical cell boundary between two balls of unequal
+    /// radius moves with the probe, so a ligand near an interface can belong to different residues
+    /// at different δ. Counting it once at its innermost rung and carrying that owner outward — the
+    /// tempting shortcut — would misattribute it wherever the partition shifts. `counts` is the
+    /// flat `[residue][rung]` tally; returns `true` if the ligand entered the domain at all.
+    fn credit(&mut self, context: &impl ObserveContext, r: &Point, counts: &mut [f64]) -> bool {
+        let n_shells = self.shell.len();
+        let cell = context.cell();
+        let mut surface_distance = f64::INFINITY;
+        for ((slot, &i), &radius) in self.scratch.iter_mut().zip(&self.atoms).zip(&self.radii) {
+            let d = cell.distance(r, &context.position(i)).norm();
+            // Proximal distance: `r ∈ D(p)` iff `minᵢ(|r − rᵢ| − Rᵢ) ≤ p`, exactly. Its square,
+            // less the atom radius squared, is the probe-free part of the power distance below.
+            surface_distance = surface_distance.min(d - radius);
+            *slot = d * d - radius * radius;
+        }
+        let Some(first) = self.shell.index(surface_distance - self.ligand_radius) else {
+            return false;
+        };
+
+        for k in first..n_shells {
+            // Power distance `dᵢ² − (Rᵢ + p)²` decides ownership at probe `p_k`, the same partition
+            // that gave `volumes[k]`. Dropping the common `−p²` term leaves `(dᵢ² − Rᵢ²) − 2Rᵢp`,
+            // so the cached `scratch` needs only a linear correction per rung, no squaring.
+            let probe = self.ligand_radius + self.shell.delta(k);
+            let atom = self
+                .scratch
+                .iter()
+                .zip(&self.radii)
+                .map(|(cached, r)| cached - 2.0 * r * probe)
+                .enumerate()
+                .min_by(|(_, a), (_, b)| a.total_cmp(b))
+                .map(|(i, _)| i)
+                .expect("substrate is non-empty");
+            counts[self.owner[atom] * n_shells + k] += 1.0;
+        }
+        true
+    }
+}
+
+/// Which substrate atoms are engulfed — buried inside a neighbour's van der Waals sphere.
+///
+/// Atom `i` lies wholly inside atom `j` when `dᵢⱼ + Rᵢ ≤ Rⱼ`, a probe-independent condition since
+/// inflating both radii by the probe cancels. voronota still reports such an atom's *free-sphere*
+/// volume and area rather than zero, which double-counts against the neighbour that already
+/// contains it; forcing it to zero keeps the domain volume equal to the true union.
+fn engulfed_atoms(context: &impl ObserveContext, atoms: &[usize], radii: &[f64]) -> Vec<bool> {
+    let cell = context.cell();
+    atoms
+        .iter()
+        .enumerate()
+        .map(|(i, &ai)| {
+            let pi = context.position(ai);
+            atoms.iter().enumerate().any(|(j, &aj)| {
+                j != i && cell.distance(&pi, &context.position(aj)).norm() + radii[i] <= radii[j]
+            })
+        })
+        .collect()
+}
+
+/// Per-ball tessellation quantity at `probe`, resolving voronota's `None`.
+///
+/// `extract` picks the quantity (cell volume or SAS area) and `whole` gives its closed form for a
+/// lonely ball; a ball buried in a neighbour contributes nothing, and a lonely ball voronota
+/// leaves as `None` falls back to `whole`.
+fn per_ball(
+    balls: &[voronota_ltr::Ball],
+    radii: &[f64],
+    engulfed: &[bool],
+    probe: f64,
+    periodic_box: Option<&voronota_ltr::PeriodicBox>,
+    extract: impl Fn(&voronota_ltr::TessellationResult) -> Vec<Option<f64>>,
+    whole: impl Fn(f64) -> f64,
+) -> Vec<f64> {
+    let result = voronota_ltr::compute_tessellation(balls, probe, periodic_box, None, false);
+    extract(&result)
+        .into_iter()
+        .zip(radii)
+        .zip(engulfed)
+        .map(|((value, &r), &engulfed)| {
+            if engulfed {
+                0.0
+            } else {
+                value.unwrap_or_else(|| whole(r))
+            }
+        })
+        .collect()
+}
+
+/// Per-ball cell volume at `probe`, clipped to the solvent-accessible surface.
+fn cell_volumes(
+    balls: &[voronota_ltr::Ball],
+    radii: &[f64],
+    engulfed: &[bool],
+    probe: f64,
+    periodic_box: Option<&voronota_ltr::PeriodicBox>,
+) -> Vec<f64> {
+    use voronota_ltr::Results as _;
+    per_ball(
+        balls,
+        radii,
+        engulfed,
+        probe,
+        periodic_box,
+        |result| result.volumes(),
+        |r| 4.0 / 3.0 * std::f64::consts::PI * (r + probe).powi(3),
+    )
+}
+
+/// Per-ball solvent-accessible surface area at `probe`.
+fn surface_areas(
+    balls: &[voronota_ltr::Ball],
+    radii: &[f64],
+    engulfed: &[bool],
+    probe: f64,
+    periodic_box: Option<&voronota_ltr::PeriodicBox>,
+) -> Vec<f64> {
+    use voronota_ltr::Results as _;
+    per_ball(
+        balls,
+        radii,
+        engulfed,
+        probe,
+        periodic_box,
+        |result| result.sas_areas(),
+        |r| 4.0 * std::f64::consts::PI * (r + probe).powi(2),
+    )
+}
+
+/// Preferential interaction coefficient of a ligand with a rigid substrate.
+#[derive(Debug)]
+pub struct PreferentialInteraction {
+    ligand: ComSelection,
+    reference: SurfaceReference,
+    /// Γ(δ_k), one accumulator per rung.
+    gamma: Vec<BlockAverage>,
+    /// γ(δ_k), the excess owned by each residue, indexed `[residue][shell]`.
+    residue_gamma: Vec<Vec<BlockAverage>>,
+    /// Bulk concentration of the ligand (Å⁻³).
+    concentration: BlockAverage,
+    /// Per-sample scratch, reused to keep sampling allocation-free: ligand tally
+    /// `[residue * n_shells + shell]`, per-shell totals, and the current ligand positions.
+    counts: Vec<f64>,
+    shell_totals: Vec<f64>,
+    positions: Vec<Point>,
+    /// Set once the live geometry drifts from the frozen reference; further samples are skipped.
+    stopped: bool,
+    #[debug(skip)]
+    profile_file: Option<PathBuf>,
+    #[debug(skip)]
+    residue_file: Option<PathBuf>,
+    sampling: Sampling,
+}
+
+impl PreferentialInteraction {
+    /// Γ at rung `k`, mean and standard error.
+    pub(crate) fn gamma(&self, shell: usize) -> BlockSummary {
+        self.gamma[shell].summary()
+    }
+
+    /// Whether the analysis has stopped sampling after a geometry violation.
+    #[cfg(test)]
+    pub(crate) fn is_stopped(&self) -> bool {
+        self.stopped
+    }
+
+    /// Mean ligands owned by `residue` at rung `shell` — the Kₚ numerator.
+    ///
+    /// Recovered from the excess rather than accumulated separately: γ = count − c·v with v
+    /// constant, so ⟨count⟩ = ⟨γ⟩ + v·⟨c⟩.
+    fn residue_count(&self, residue: usize, shell: usize) -> f64 {
+        self.residue_gamma[residue][shell].mean()
+            + self.reference.volumes[shell][residue] * self.concentration.mean()
+    }
+
+    /// γ of `residue` at rung `shell`. These sum to [`gamma`](Self::gamma) by construction: the
+    /// counts partition the ligands and the volumes partition the domain.
+    pub(crate) fn residue_gamma(&self, residue: usize, shell: usize) -> BlockSummary {
+        self.residue_gamma[residue][shell].summary()
+    }
+
+    /// Volume `residue` offers a ligand centre out to rung `shell`, `v(r_lig + δ) − v(r_lig)`.
+    ///
+    /// Occlusion lives here. The reference is built at probe `r_lig + δ`, so the envelope is the
+    /// surface a ligand of *that* radius can reach: a bead whose cell is walled in by its
+    /// neighbours never gains volume as δ grows, and a pocket that admits a small ion is sealed
+    /// over for a larger one. It is the denominator of Kₚ, and the numerator of b₁.
+    pub(crate) fn accessible_volume(&self, residue: usize, shell: usize) -> f64 {
+        self.reference.volumes[shell][residue] - self.reference.volumes[0][residue]
+    }
+
+    /// Local-to-bulk partition coefficient Kₚ of `residue` at rung `shell`.
+    ///
+    /// Above one the ligand accumulates against this residue, below one it is excluded. Numerator
+    /// and denominator both count only the *accessible* slab, so the rung-0 count and volume — the
+    /// excluded interior, which a soft or off-centre ligand can still penetrate — are subtracted
+    /// from each. An occluded residue offers no volume and so has no Kₚ, which is not Kₚ = 0.
+    pub(crate) fn partition_coefficient(&self, residue: usize, shell: usize) -> Option<f64> {
+        let volume = self.accessible_volume(residue, shell);
+        let reference = self.concentration.mean() * volume;
+        let count = self.residue_count(residue, shell) - self.residue_count(residue, 0);
+        (reference > 0.0).then_some(count / reference)
+    }
+
+    /// Hydration per unit area, b₁ = v_w^shell / (v̄_w · ASA), in waters per Å².
+    ///
+    /// Both the shell volume and the area are taken at the water probe, so b₁ is a property of the
+    /// substrate surface and water alone — Record's hydration density — independent of the ligand.
+    /// The solute-partitioning model treats it as one number for the whole surface. It is not: the
+    /// shell volume a convex patch carries per unit area exceeds that of a flat one, so b₁ is a
+    /// field over the surface, and reporting it per residue is what makes that visible. A buried
+    /// residue exposes no surface, so its b₁ is undefined rather than zero.
+    pub(crate) fn hydration_density(&self, residue: usize, shell: usize) -> Option<f64> {
+        let asa = self.reference.residues[residue].asa;
+        let water_shell =
+            self.reference.water_volumes[shell][residue] - self.reference.water_volumes[0][residue];
+        (asa > 0.0).then(|| water_shell / (WATER_VOLUME * asa))
+    }
+
+    /// Why the frozen reference geometry no longer matches the live cell, or `Ok` if it still does.
+    ///
+    /// A `VolumeMove` cannot be rejected at build (the analysis never sees the propagator), so a
+    /// changed cell is caught here at the first drifted sample. A spherical cell adds a second
+    /// check: voronota cannot clip to a hard wall, so a substrate whose domain reaches the wall has
+    /// its free-space volume counting space no ligand can occupy. The caller stops *this* analysis
+    /// on a violation rather than aborting the whole run — earlier samples remain valid.
+    fn check_geometry_still_valid(&self, context: &impl ObserveContext) -> Result<()> {
+        // Dimensions, not just volume: an anisotropic move can reshape a cuboid at constant volume.
+        if let Some(current) = context.cell().bounding_box() {
+            let reference = self.reference.box_dimensions;
+            let drifted = (current - reference).abs().max() > 1e-6 * reference.min();
+            anyhow::ensure!(
+                !drifted,
+                "PreferentialInteraction: the cell changed from {:.1?} to {:.1?} Å. The reference \
+                 geometry is fixed at build, so this analysis requires a constant cell — remove \
+                 the volume move",
+                reference.as_slice(),
+                current.as_slice()
+            );
+        }
+        if let crate::cell::Cell::Sphere(sphere) = context.cell() {
+            // Origin-centred; radius = half the bounding-box edge.
+            let wall = sphere.bounding_box().map_or(f64::INFINITY, |b| b.x / 2.0);
+            let farthest = self
+                .reference
+                .atoms
+                .iter()
+                .zip(&self.reference.radii)
+                .map(|(&i, &r)| context.position(i).norm() + r)
+                .fold(0.0, f64::max);
+            anyhow::ensure!(
+                farthest + self.reference.domain_reach <= wall,
+                "PreferentialInteraction: the substrate's domain has reached the spherical wall \
+                 (extends to {:.1} Å of the {:.1} Å radius); the domain volume then counts space \
+                 outside the cell and Γ is biased. Keep the substrate away from the wall, enlarge \
+                 the cell, or reduce `shell.max`",
+                farthest + self.reference.domain_reach,
+                wall
+            );
+        }
+        Ok(())
+    }
+
+    /// Γ(δ) across the ladder: the profile that says whether Γ has converged.
+    fn write_profile(&self, path: &Path) -> Result<()> {
+        let mut writer = ColumnWriter::open(path, &["delta/Å", "gamma", "gamma_error"])?;
+        for k in 0..self.reference.shell.len() {
+            let gamma = self.gamma(k);
+            writer.write_row(&[
+                &format_args!("{:.4}", self.reference.shell.delta(k)),
+                &format_args!("{:.6e}", gamma.mean),
+                &format_args!("{:.6e}", gamma.error),
+            ])?;
+        }
+        writer.flush()?;
+        Ok(())
+    }
+
+    /// One row per residue, at the widest δ.
+    fn write_residues(&self, path: &Path) -> Result<()> {
+        let mut writer = ColumnWriter::open(
+            path,
+            &[
+                "residue",
+                "number",
+                "asa/Å²",
+                "accessible_volume/Å³",
+                "b1/Å⁻²",
+                "kp",
+                "gamma",
+                "gamma_error",
+            ],
+        )?;
+        // A residue with no accessible surface offers neither a partition coefficient nor a
+        // hydration density; both are undefined rather than zero, and go out as `nan`.
+        let optional =
+            |value: Option<f64>| value.map_or_else(|| "nan".to_owned(), |v| format!("{v:.6e}"));
+        let last = self.reference.shell.len() - 1;
+        for (index, residue) in self.reference.residues.iter().enumerate() {
+            let gamma = self.residue_gamma(index, last);
+            writer.write_row(&[
+                &residue.name,
+                &residue.number,
+                &format_args!("{:.4}", residue.asa),
+                &format_args!("{:.4}", self.accessible_volume(index, last)),
+                &optional(self.hydration_density(index, last)),
+                &optional(self.partition_coefficient(index, last)),
+                &format_args!("{:.6e}", gamma.mean),
+                &format_args!("{:.6e}", gamma.error),
+            ])?;
+        }
+        writer.flush()?;
+        Ok(())
+    }
+
+    fn report(&self) -> Option<serde_yml::Value> {
+        let last = self.reference.shell.len() - 1;
+        let mut map = serde_yml::Mapping::new();
+        map.try_insert("num_samples", self.sampling.num_samples())?;
+        map.try_insert("gamma", self.gamma(last))?;
+        map.try_insert("concentration/Å⁻³", self.concentration.summary())?;
+        map.try_insert("excluded_volume/Å³", self.reference.domain_volume[0])?;
+        map.try_insert("ligand_radius/Å", self.reference.ligand_radius)?;
+        map.try_insert("num_residues", self.reference.residues.len())?;
+        Some(serde_yml::Value::Mapping(map))
+    }
+
+    /// Refill `self.positions` with the ligands of the current configuration.
+    fn load_ligand_positions(&mut self, context: &impl ObserveContext) -> Result<()> {
+        self.positions.clear();
+        match &mut self.ligand {
+            ComSelection::Atoms(cache) => {
+                for i in cache.resolve(context) {
+                    self.positions.push(context.position(i.get()));
+                }
+            }
+            ComSelection::Groups(cache) => {
+                for &g in cache.resolve(context) {
+                    let center = context.group(g).mass_center().copied().ok_or_else(|| {
+                        anyhow::anyhow!("PreferentialInteraction: group {g} has no center of mass")
+                    })?;
+                    self.positions.push(center);
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+impl_info!(
+    PreferentialInteraction,
+    "preferential_interaction",
+    "Preferential interaction coefficient of a ligand with a rigid substrate"
+);
+
+impl<T: ObserveContext> Analyze<T> for PreferentialInteraction {
+    impl_sampling_accessors!();
+
+    fn perform_sample(&mut self, context: &T, _step: usize, _weight: f64) -> Result<()> {
+        if self.stopped {
+            return Ok(());
+        }
+        if let Err(reason) = self.check_geometry_still_valid(context) {
+            log::warn!("{reason}; this analysis stops sampling while the run continues");
+            self.stopped = true;
+            return Ok(());
+        }
+        let n_shells = self.reference.shell.len();
+        // `counts[residue * n_shells + k]` holds the ligands owned by `residue` at rung k, already
+        // resolved per rung by `credit`, so no prefix sum is needed here.
+        self.counts.fill(0.0);
+        self.load_ligand_positions(context)?;
+
+        let mut bulk = 0.0f64;
+        // A raw index keeps `self.positions` borrowed immutably while `credit` borrows `self.counts`
+        // and `self.reference` mutably.
+        for p in 0..self.positions.len() {
+            let position = self.positions[p];
+            if !self.reference.credit(context, &position, &mut self.counts) {
+                bulk += 1.0;
+            }
+        }
+
+        // Γ is a per-sample estimator, so the fluctuating bulk concentration enters each sample
+        // rather than being divided out afterwards — that keeps the error bar honest without
+        // tracking a covariance.
+        let concentration = bulk / self.reference.bulk_volume;
+        self.concentration.add(concentration);
+
+        self.shell_totals.fill(0.0);
+        for (residue, accumulators) in self.residue_gamma.iter_mut().enumerate() {
+            for (k, accumulator) in accumulators.iter_mut().enumerate() {
+                let count = self.counts[residue * n_shells + k];
+                accumulator.add(count - concentration * self.reference.volumes[k][residue]);
+                self.shell_totals[k] += count;
+            }
+        }
+        for (k, accumulator) in self.gamma.iter_mut().enumerate() {
+            accumulator.add(self.shell_totals[k] - concentration * self.reference.domain_volume[k]);
+        }
+        Ok(())
+    }
+
+    fn write_to_disk(&mut self) -> Result<()> {
+        if self.sampling.num_samples() == 0 {
+            return Ok(());
+        }
+        if let Some(path) = self.profile_file.clone() {
+            self.write_profile(&path)?;
+        }
+        if let Some(path) = self.residue_file.clone() {
+            self.write_residues(&path)?;
+        }
+        Ok(())
+    }
+
+    fn results(&self) -> Option<serde_yml::Value> {
+        self.report()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::backend::Backend;
+
+    /// Eight ligands parked far enough out to be bulk at every rung of the ladder.
+    const BULK: [[f64; 3]; 8] = [
+        [25.0, 0.0, 0.0],
+        [-25.0, 0.0, 0.0],
+        [0.0, 25.0, 0.0],
+        [0.0, -25.0, 0.0],
+        [0.0, 0.0, 25.0],
+        [0.0, 0.0, -25.0],
+        [20.0, 20.0, 0.0],
+        [-20.0, -20.0, 0.0],
+    ];
+
+    fn manual(positions: &[[f64; 3]]) -> String {
+        positions
+            .iter()
+            .map(|p| format!("[{}, {}, {}]", p[0], p[1], p[2]))
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
+
+    const BOX: f64 = 60.0;
+
+    /// A rigid substrate and free ligands. The substrate is one rigid molecule — the analysis
+    /// requires it, since it freezes the reference geometry once — with `sub_sigma` beads at the
+    /// given body-frame positions; the ligands are a separate atomic species. Nothing interacts;
+    /// the analysis is fed a configuration, not a trajectory.
+    fn build_system(
+        cell: f64,
+        sub_sigma: f64,
+        substrate: &[[f64; 3]],
+        ligands: &[[f64; 3]],
+    ) -> Backend {
+        let structure = substrate
+            .iter()
+            .map(|p| format!("      - SUB: [{}, {}, {}]", p[0], p[1], p[2]))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let input = format!(
+            r#"
+atoms:
+  - {{name: SUB, mass: 1.0, charge: 0.0, sigma: {sub_sigma}}}
+  - {{name: LIG, mass: 1.0, charge: 0.0, sigma: 3.0}}
+molecules:
+  - name: substrate
+    degrees_of_freedom: Rigid
+    from_structure:
+{structure}
+  - name: ligand
+    atoms: [LIG]
+    atomic: true
+system:
+  cell: !Cuboid [{cell}, {cell}, {cell}]
+  medium: {{permittivity: !Vacuum, temperature: 300.0}}
+  energy: {{}}
+  blocks:
+    - molecule: substrate
+      N: 1
+      insert: !Manual [{substrate_positions}]
+    - molecule: ligand
+      N: {n_ligands}
+      insert: !Manual [{ligand_positions}]
+propagate: {{seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}}
+"#,
+            substrate_positions = manual(substrate),
+            n_ligands = ligands.len(),
+            ligand_positions = manual(ligands),
+        );
+        Backend::from_yaml_str(&input, None, &mut rand::thread_rng()).unwrap()
+    }
+
+    /// σ = 6 beads (R = 3), σ = 3 ligands (r = 1.5), in a 60 Å box.
+    fn system(substrate: &[[f64; 3]], ligands: &[[f64; 3]]) -> Backend {
+        build_system(BOX, 6.0, substrate, ligands)
+    }
+
+    fn system_in_box(cell: f64, substrate: &[[f64; 3]], ligands: &[[f64; 3]]) -> Backend {
+        build_system(cell, 6.0, substrate, ligands)
+    }
+
+    /// One substrate bead at the origin.
+    fn one_bead(ligands: &[[f64; 3]]) -> Backend {
+        system(&[[0.0, 0.0, 0.0]], ligands)
+    }
+
+    /// A single substrate bead of the given radius, alone in a box large enough that its widest
+    /// domain cannot reach its own periodic image.
+    fn lone_bead(radius: f64) -> Backend {
+        build_system(
+            200.0,
+            2.0 * radius,
+            &[[0.0, 0.0, 0.0]],
+            &[[90.0, 90.0, 90.0]],
+        )
+    }
+
+    const SHELL: Shell = Shell {
+        max: 10.0,
+        resolution: 1.0,
+    };
+
+    const SOLVENT_PROBE: f64 = 1.4;
+
+    fn analysis_with_radius(context: &Backend, radius: Option<f64>) -> PreferentialInteraction {
+        PreferentialInteractionBuilder {
+            substrate: Selection::parse("atomtype SUB").unwrap(),
+            ligand: Selection::parse("atomtype LIG").unwrap(),
+            use_com: false,
+            radius,
+            shell: SHELL,
+            solvent_probe: SOLVENT_PROBE,
+            profile: None,
+            file: None,
+            frequency: Frequency::Every(1),
+        }
+        .build(context)
+        .unwrap()
+    }
+
+    fn analysis(context: &Backend) -> PreferentialInteraction {
+        analysis_with_radius(context, None)
+    }
+
+    /// A bead at the origin walled in by six neighbours at ±`spacing` along the axes. Its Voronoi
+    /// cell is the bounded cube the six bisector planes cut out, so it is occluded by
+    /// construction — how thoroughly depends on the ligand's size.
+    fn caged_bead(spacing: f64) -> Backend {
+        let substrate = [
+            [0.0, 0.0, 0.0],
+            [spacing, 0.0, 0.0],
+            [-spacing, 0.0, 0.0],
+            [0.0, spacing, 0.0],
+            [0.0, -spacing, 0.0],
+            [0.0, 0.0, spacing],
+            [0.0, 0.0, -spacing],
+        ];
+        system(&substrate, &BULK)
+    }
+
+    /// Volume of a sphere; the domain around a lone bead is one, so every reference volume in
+    /// these tests is analytic and independent of the code under test.
+    fn sphere(radius: f64) -> f64 {
+        4.0 / 3.0 * std::f64::consts::PI * radius.powi(3)
+    }
+
+    const SUBSTRATE_RADIUS: f64 = 3.0;
+    const LIGAND_RADIUS: f64 = 1.5;
+
+    /// Vol(D(δ_k)) around the lone bead.
+    fn domain(k: usize) -> f64 {
+        sphere(SUBSTRATE_RADIUS + LIGAND_RADIUS + SHELL.delta(k))
+    }
+
+    /// Bulk concentration when `n` ligands sit outside the widest domain.
+    fn concentration(n: f64) -> f64 {
+        n / (BOX.powi(3) - domain(SHELL.len() - 1))
+    }
+
+    /// With every ligand in bulk, Γ(δ) is pure excluded volume — and for a lone sphere that volume
+    /// is analytic, so the whole path (tessellation, ladder, bulk concentration, arithmetic) is
+    /// pinned to a number computed independently of the code under test.
+    #[test]
+    fn gamma_of_a_lone_sphere_is_minus_the_excluded_volume() {
+        let context = one_bead(&BULK);
+        let mut analysis = analysis(&context);
+        analysis.sample(&context, 0).unwrap();
+
+        for k in 0..SHELL.len() {
+            let expected = -concentration(8.0) * domain(k);
+            assert!(
+                (analysis.gamma(k).mean - expected).abs() < 1e-9,
+                "rung {k}: Γ = {}, expected {expected}",
+                analysis.gamma(k).mean
+            );
+        }
+    }
+
+    /// Kₚ against a known local density. Six ligands sit 8 Å from a lone bead, inside the
+    /// accessible slab and all owned by the single residue; eight more in bulk set the reference
+    /// concentration. Then Kₚ = 6 / (c · v_acc) with c and v_acc analytic for the lone sphere.
+    #[test]
+    fn partition_coefficient_matches_a_known_local_density() {
+        let slab = [
+            [8.0, 0.0, 0.0],
+            [-8.0, 0.0, 0.0],
+            [0.0, 8.0, 0.0],
+            [0.0, -8.0, 0.0],
+            [0.0, 0.0, 8.0],
+            [0.0, 0.0, -8.0],
+        ];
+        let mut ligands = slab.to_vec();
+        ligands.extend_from_slice(&BULK);
+        let context = one_bead(&ligands);
+        let mut analysis = analysis(&context);
+        analysis.sample(&context, 0).unwrap();
+
+        let last = SHELL.len() - 1;
+        let v_acc = sphere(SUBSTRATE_RADIUS + LIGAND_RADIUS + SHELL.max)
+            - sphere(SUBSTRATE_RADIUS + LIGAND_RADIUS);
+        let expected = slab.len() as f64 / (concentration(BULK.len() as f64) * v_acc);
+        let kp = analysis.partition_coefficient(0, last).unwrap();
+        assert!(
+            (kp - expected).abs() < 1e-6,
+            "Kₚ = {kp}, expected {expected}"
+        );
+    }
+
+    /// The same eight bulk ligands, plus one placed 8 Å from the bead centre. Its surface distance
+    /// is 8 − 3 = 5 Å, so it clears the exclusion boundary by 5 − 1.5 = 3.5 Å and first enters the
+    /// domain at δ = 4. Γ must therefore step by exactly one there and nowhere else — which pins
+    /// the shell binning and the prefix sum together.
+    #[test]
+    fn a_ligand_enters_the_domain_at_the_rung_matching_its_gap() {
+        let mut ligands = BULK.to_vec();
+        ligands.push([8.0, 0.0, 0.0]);
+        let context = one_bead(&ligands);
+        let mut analysis = analysis(&context);
+        analysis.sample(&context, 0).unwrap();
+
+        for k in 0..SHELL.len() {
+            let counted = f64::from(u8::from(k >= 4));
+            let expected = counted - concentration(8.0) * domain(k);
+            assert!(
+                (analysis.gamma(k).mean - expected).abs() < 1e-9,
+                "rung {k}: Γ = {}, expected {expected} (count {counted})",
+                analysis.gamma(k).mean
+            );
+        }
+    }
+
+    /// Two overlapping beads: the domain is the union of two inflated spheres, whose volume is
+    /// analytic. Unlike the lone bead — where voronota reports no cell at all and the closed form
+    /// takes over — here the tessellation genuinely partitions a shared surface, so this pins
+    /// `Results::volumes()` itself, and with it the ownership argmin that must agree with it.
+    #[test]
+    fn gamma_of_two_overlapping_beads_matches_the_union_volume() {
+        // A box wide enough that the widest domain (radius 14.5 Å) cannot reach its own image.
+        const CELL: f64 = 80.0;
+        const SEPARATION: f64 = 4.0;
+        let substrate = [[-SEPARATION / 2.0, 0.0, 0.0], [SEPARATION / 2.0, 0.0, 0.0]];
+        let bulk = [
+            [35.0, 0.0, 0.0],
+            [-35.0, 0.0, 0.0],
+            [0.0, 35.0, 0.0],
+            [0.0, -35.0, 0.0],
+            [0.0, 0.0, 35.0],
+            [0.0, 0.0, -35.0],
+        ];
+        let context = system_in_box(CELL, &substrate, &bulk);
+        let mut analysis = analysis(&context);
+        analysis.sample(&context, 0).unwrap();
+
+        // Union of two equal spheres of radius `a` whose centres are `d` apart, with the lens
+        // (their intersection) counted once: V = 2·(4/3)πa³ − π(4a + d)(2a − d)²/12.
+        let union = |a: f64| {
+            let lens =
+                std::f64::consts::PI * (4.0 * a + SEPARATION) * (2.0 * a - SEPARATION).powi(2)
+                    / 12.0;
+            2.0 * sphere(a) - lens
+        };
+        let widest = union(SUBSTRATE_RADIUS + LIGAND_RADIUS + SHELL.max);
+        let concentration = bulk.len() as f64 / (CELL.powi(3) - widest);
+
+        for k in 0..SHELL.len() {
+            let expected =
+                -concentration * union(SUBSTRATE_RADIUS + LIGAND_RADIUS + SHELL.delta(k));
+            let gamma = analysis.gamma(k).mean;
+            assert!(
+                (gamma - expected).abs() < 1e-6,
+                "rung {k}: Γ = {gamma}, expected {expected}"
+            );
+        }
+    }
+
+    /// The decomposition is only worth having if it is exact. Σᵢ γᵢ = Γ holds because the counts
+    /// partition the ligands and the volumes partition the domain — so it must hold for a lumpy
+    /// multi-bead substrate with ligands scattered through the shells, not just for a lone sphere.
+    #[test]
+    fn per_atom_excess_sums_to_the_total() {
+        let substrate = [
+            [0.0, 0.0, 0.0],
+            [4.0, 0.0, 0.0],
+            [2.0, 4.0, 0.0],
+            [2.0, 1.5, 4.0],
+        ];
+        let ligands = [
+            [9.0, 0.0, 0.0],
+            [-6.0, 0.0, 0.0],
+            [2.0, 11.0, 0.0],
+            [2.0, 1.5, 9.5],
+            [0.0, -7.0, 3.0],
+            [25.0, 0.0, 0.0],
+            [-25.0, 0.0, 0.0],
+            [0.0, 25.0, 0.0],
+        ];
+        let context = system(&substrate, &ligands);
+        let mut analysis = analysis(&context);
+        analysis.sample(&context, 0).unwrap();
+
+        for k in 0..SHELL.len() {
+            let sum: f64 = (0..substrate.len())
+                .map(|residue| analysis.residue_gamma(residue, k).mean)
+                .sum();
+            let total = analysis.gamma(k).mean;
+            assert!(
+                (sum - total).abs() < 1e-9,
+                "rung {k}: Σᵢ γᵢ = {sum}, Γ = {total}"
+            );
+        }
+    }
+
+    /// On a substrate of unequal radii the radical cell boundary moves with the probe, so a ligand
+    /// near an interface can belong to different residues at different δ. Ownership must therefore
+    /// be resolved per rung; carrying a single innermost owner outward misattributes it. The
+    /// expected per-rung owner is recomputed here from the power distance, independently of the
+    /// analysis, so the test fails if the analysis ever reverts to a fixed owner.
+    #[test]
+    #[allow(clippy::needless_range_loop)] // the brute-force reference indexes [rung][residue] directly
+    fn ownership_follows_the_radical_partition_at_each_rung() {
+        // Two beads: small A (σ = 2, R = 1) at the origin, large B (σ = 10, R = 5) at 10 Å. The
+        // A–B radical plane sweeps from x ≈ 3.2 at δ = 0 toward A as δ grows, so ligands parked
+        // between those positions change hands.
+        const MIXED: &str = r#"
+atoms:
+  - {name: A, mass: 1.0, charge: 0.0, sigma: 2.0}
+  - {name: B, mass: 1.0, charge: 0.0, sigma: 10.0}
+  - {name: LIG, mass: 1.0, charge: 0.0, sigma: 3.0}
+molecules:
+  - name: substrate
+    degrees_of_freedom: Rigid
+    from_structure:
+      - A: [0.0, 0.0, 0.0]
+      - B: [10.0, 0.0, 0.0]
+  - name: ligand
+    atoms: [LIG]
+    atomic: true
+system:
+  cell: !Cuboid [200.0, 200.0, 200.0]
+  medium: {permittivity: !Vacuum, temperature: 300.0}
+  energy: {}
+  blocks:
+    - molecule: substrate
+      N: 1
+      insert: !Manual [[0.0, 0.0, 0.0], [10.0, 0.0, 0.0]]
+    - molecule: ligand
+      N: 4
+      insert: !Manual [[3.0, 1.0, 0.0], [4.0, 0.0, 2.0], [5.0, 2.0, 0.0], [2.5, 0.0, 1.5]]
+propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
+"#;
+        let ligands = [
+            [3.0, 1.0, 0.0],
+            [4.0, 0.0, 2.0],
+            [5.0, 2.0, 0.0],
+            [2.5, 0.0, 1.5],
+        ];
+        let beads = [([0.0, 0.0, 0.0], 1.0), ([10.0, 0.0, 0.0], 5.0)];
+        let r_lig = 1.5;
+
+        let context = Backend::from_yaml_str(MIXED, None, &mut rand::thread_rng()).unwrap();
+        let mut analysis = PreferentialInteractionBuilder {
+            substrate: Selection::parse("molecule substrate").unwrap(),
+            ligand: Selection::parse("atomtype LIG").unwrap(),
+            use_com: false,
+            radius: Some(r_lig),
+            shell: SHELL,
+            solvent_probe: SOLVENT_PROBE,
+            profile: None,
+            file: None,
+            frequency: Frequency::Every(1),
+        }
+        .build(&context)
+        .unwrap();
+        analysis.sample(&context, 0).unwrap();
+
+        // Independent brute force: per ligand, per rung it is inside, the owner is the bead
+        // minimising the power distance at that rung's probe.
+        let mut expected = vec![[0.0f64; 2]; SHELL.len()];
+        for lig in ligands {
+            let dist = |b: usize| {
+                let c: [f64; 3] = beads[b].0;
+                ((lig[0] - c[0]).powi(2) + (lig[1] - c[1]).powi(2) + (lig[2] - c[2]).powi(2)).sqrt()
+            };
+            let surface = (0..2)
+                .map(|b| dist(b) - beads[b].1)
+                .fold(f64::INFINITY, f64::min);
+            let Some(first) = SHELL.index(surface - r_lig) else {
+                continue;
+            };
+            for k in first..SHELL.len() {
+                let probe = r_lig + SHELL.delta(k);
+                let owner = (0..2)
+                    .min_by(|&a, &b| {
+                        let power = |i: usize| dist(i).powi(2) - (beads[i].1 + probe).powi(2);
+                        power(a).total_cmp(&power(b))
+                    })
+                    .unwrap();
+                expected[k][owner] += 1.0;
+            }
+        }
+
+        for k in 0..SHELL.len() {
+            for residue in 0..2 {
+                assert!(
+                    (analysis.residue_count(residue, k) - expected[k][residue]).abs() < 1e-9,
+                    "rung {k}, residue {residue}: count {}, expected {}",
+                    analysis.residue_count(residue, k),
+                    expected[k][residue]
+                );
+            }
+        }
+        // The point of the test: at least one ligand actually changes hands across the ladder.
+        let flips = (0..2).any(|residue| {
+            (1..SHELL.len()).any(|k| expected[k][residue] != expected[k - 1][residue])
+        });
+        assert!(flips, "test is vacuous: no ligand changed owner across δ");
+    }
+
+    /// Accumulation at one residue and exclusion at another, in the same substrate and the same
+    /// frame. This is the shape every real result takes — the Hofmeister series is a table of such
+    /// reversals — so the decomposition has to be able to represent it, not average it away.
+    #[test]
+    fn one_atom_can_accumulate_while_another_excludes() {
+        let substrate = [[-8.0, 0.0, 0.0], [8.0, 0.0, 0.0]];
+        // Four ligands crowded against the first bead; none near the second.
+        let ligands = [
+            [-13.0, 0.0, 0.0],
+            [-8.0, 5.0, 0.0],
+            [-8.0, -5.0, 0.0],
+            [-8.0, 0.0, 5.0],
+            [25.0, 25.0, 0.0],
+            [-25.0, -25.0, 0.0],
+        ];
+        let context = system(&substrate, &ligands);
+        let mut analysis = analysis(&context);
+        analysis.sample(&context, 0).unwrap();
+
+        let last = SHELL.len() - 1;
+        let crowded = analysis.residue_gamma(0, last).mean;
+        let bare = analysis.residue_gamma(1, last).mean;
+        assert!(
+            crowded > 0.0,
+            "crowded atom should accumulate, got γ = {crowded}"
+        );
+        assert!(bare < 0.0, "bare atom should exclude, got γ = {bare}");
+    }
+
+    /// A bead walled in tightly enough that its cell lies wholly inside its own solvent-accessible
+    /// sphere offers a ligand *no* volume, at any δ. A distance cutoff would still count ligands
+    /// against it; the Voronoi reference cannot, because the geometry gives it nothing to hold.
+    #[test]
+    fn a_buried_atom_offers_no_accessible_volume() {
+        let context = caged_bead(5.0);
+        let mut analysis = analysis(&context);
+        analysis.sample(&context, 0).unwrap();
+
+        for k in 0..SHELL.len() {
+            assert!(
+                analysis.accessible_volume(0, k) < 1e-9,
+                "rung {k}: buried atom has accessible volume {}",
+                analysis.accessible_volume(0, k)
+            );
+        }
+        // A neighbour on the outside of the cage is not occluded, so the test cannot pass by
+        // reporting zero for everything.
+        assert!(analysis.accessible_volume(1, SHELL.len() - 1) > 0.0);
+    }
+
+    /// The same cage, loosened. A small ligand reaches the caged bead through the gaps; a larger
+    /// one does not, because the accessible surface seals over. Occlusion is therefore a property
+    /// of the *pair*, not of the substrate alone — which is exactly what a distance cutoff, blind
+    /// to the ligand's size, cannot express.
+    #[test]
+    fn occlusion_depends_on_the_size_of_the_ligand() {
+        let context = caged_bead(6.5);
+        let last = SHELL.len() - 1;
+
+        let mut small = analysis_with_radius(&context, Some(1.5));
+        small.sample(&context, 0).unwrap();
+        let reachable = small.accessible_volume(0, last);
+
+        let mut large = analysis_with_radius(&context, Some(4.0));
+        large.sample(&context, 0).unwrap();
+        let sealed = large.accessible_volume(0, last);
+
+        assert!(
+            reachable > 1.0,
+            "the small ligand should reach the caged bead, got {reachable} Å³"
+        );
+        assert!(
+            sealed < 1e-9,
+            "the large ligand should be sealed out, got {sealed} Å³"
+        );
+    }
+
+    /// voronota returns no cell both for a lonely atom and for one a neighbour engulfs. A tiny bead
+    /// buried inside a large one must be read as the second — zero volume — not handed a full free
+    /// sphere. Getting this wrong would inflate the domain and bias Γ by −c·V_spurious.
+    #[test]
+    fn an_engulfed_atom_is_not_mistaken_for_a_lonely_one() {
+        // A σ = 1 bead (R = 0.5) sitting 5 Å off the centre of a σ = 30 bead (R = 15): its whole
+        // inflated sphere lies inside the big one, so its radical cell is empty.
+        const ENGULFED: &str = r#"
+atoms:
+  - {name: BIG, mass: 1.0, charge: 0.0, sigma: 30.0}
+  - {name: DOT, mass: 1.0, charge: 0.0, sigma: 1.0}
+  - {name: LIG, mass: 1.0, charge: 0.0, sigma: 3.0}
+molecules:
+  - name: substrate
+    degrees_of_freedom: Rigid
+    from_structure:
+      - BIG: [0.0, 0.0, 0.0]
+      - DOT: [5.0, 0.0, 0.0]
+  - name: ligand
+    atoms: [LIG]
+    atomic: true
+system:
+  cell: !Cuboid [200.0, 200.0, 200.0]
+  medium: {permittivity: !Vacuum, temperature: 300.0}
+  energy: {}
+  blocks:
+    - molecule: substrate
+      N: 1
+      insert: !Manual [[0.0, 0.0, 0.0], [5.0, 0.0, 0.0]]
+    - molecule: ligand
+      N: 1
+      insert: !Manual [[90.0, 90.0, 90.0]]
+propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
+"#;
+        let context = Backend::from_yaml_str(ENGULFED, None, &mut rand::thread_rng()).unwrap();
+        let mut analysis = PreferentialInteractionBuilder {
+            substrate: Selection::parse("molecule substrate").unwrap(),
+            ligand: Selection::parse("atomtype LIG").unwrap(),
+            use_com: false,
+            radius: Some(1.5),
+            shell: SHELL,
+            solvent_probe: SOLVENT_PROBE,
+            profile: None,
+            file: None,
+            frequency: Frequency::Every(1),
+        }
+        .build(&context)
+        .unwrap();
+        analysis.sample(&context, 0).unwrap();
+
+        // The engulfed dot (residue 1) offers essentially nothing; the big bead (residue 0) offers
+        // the whole domain. A free-sphere fallback would have given the dot ~14 Å³ at δ = 0.
+        let last = SHELL.len() - 1;
+        assert!(
+            analysis.accessible_volume(1, last) < 1e-6,
+            "engulfed atom should offer no volume, got {} Å³",
+            analysis.accessible_volume(1, last)
+        );
+    }
+
+    #[test]
+    fn a_degenerate_shell_ladder_is_refused() {
+        let build = |shell: Shell| {
+            PreferentialInteractionBuilder {
+                substrate: Selection::parse("molecule substrate").unwrap(),
+                ligand: Selection::parse("atomtype LIG").unwrap(),
+                use_com: false,
+                radius: Some(1.5),
+                shell,
+                solvent_probe: SOLVENT_PROBE,
+                profile: None,
+                file: None,
+                frequency: Frequency::Every(1),
+            }
+            .build(&one_bead(&BULK))
+        };
+        assert!(build(Shell {
+            max: 10.0,
+            resolution: 0.0
+        })
+        .is_err());
+        assert!(build(Shell {
+            max: 10.0,
+            resolution: -1.0
+        })
+        .is_err());
+        assert!(build(Shell {
+            max: -5.0,
+            resolution: 1.0
+        })
+        .is_err());
+    }
+
+    #[test]
+    fn a_non_rigid_substrate_is_refused() {
+        const FLEXIBLE: &str = r#"
+atoms:
+  - {name: SUB, mass: 1.0, charge: 0.0, sigma: 6.0}
+  - {name: LIG, mass: 1.0, charge: 0.0, sigma: 3.0}
+molecules:
+  - name: substrate
+    atoms: [SUB, SUB]
+  - name: ligand
+    atoms: [LIG]
+    atomic: true
+system:
+  cell: !Cuboid [60.0, 60.0, 60.0]
+  medium: {permittivity: !Vacuum, temperature: 300.0}
+  energy: {}
+  blocks:
+    - molecule: substrate
+      N: 1
+      insert: !Manual [[0.0, 0.0, 0.0], [4.0, 0.0, 0.0]]
+    - molecule: ligand
+      N: 1
+      insert: !Manual [[25.0, 0.0, 0.0]]
+propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
+"#;
+        let context = Backend::from_yaml_str(FLEXIBLE, None, &mut rand::thread_rng()).unwrap();
+        let builder = PreferentialInteractionBuilder {
+            substrate: Selection::parse("molecule substrate").unwrap(),
+            ligand: Selection::parse("atomtype LIG").unwrap(),
+            use_com: false,
+            radius: Some(1.5),
+            shell: SHELL,
+            solvent_probe: SOLVENT_PROBE,
+            profile: None,
+            file: None,
+            frequency: Frequency::Every(1),
+        };
+        assert!(builder.build(&context).is_err());
+    }
+
+    /// Under periodic boundaries the domain must fit within half the shortest edge, or it wraps
+    /// onto its own image and the minimum-image tessellation is wrong. In a 25 Å box the σ = 6 bead
+    /// (R = 3) plus r_lig 1.5 plus δ_max 10 reaches 14.5 Å > 12.5 Å, so the build must refuse it.
+    #[test]
+    fn a_domain_wider_than_half_the_box_is_refused() {
+        let context = build_system(25.0, 6.0, &[[0.0, 0.0, 0.0]], &[[5.0, 0.0, 0.0]]);
+        let builder = PreferentialInteractionBuilder {
+            substrate: Selection::parse("molecule substrate").unwrap(),
+            ligand: Selection::parse("atomtype LIG").unwrap(),
+            use_com: false,
+            radius: Some(1.5),
+            shell: SHELL,
+            solvent_probe: SOLVENT_PROBE,
+            profile: None,
+            file: None,
+            frequency: Frequency::Every(1),
+        };
+        assert!(builder.build(&context).is_err());
+    }
+
+    /// The b₁ water ladder reaches `solvent_probe + δ_max`, wider than the ligand ladder when
+    /// `use_com` sets r_lig = 0. In a 27 Å box (half-edge 13.5) the ligand reach 3 + 0 + 10 = 13
+    /// fits but the water reach 3 + 1.4 + 10 = 14.4 does not, so only a guard that covers the water
+    /// ladder refuses it — the box is chosen to fail the fixed code and pass the old ligand-only one.
+    #[test]
+    fn the_guard_covers_the_water_ladder_not_only_the_ligand() {
+        let dimer = |cell: f64| {
+            build_system(
+                cell,
+                6.0,
+                &[[0.0, 0.0, 0.0]],
+                &[[7.0, 0.0, 0.0], [9.0, 0.0, 0.0]],
+            )
+        };
+        let builder = |context: &Backend| {
+            PreferentialInteractionBuilder {
+                substrate: Selection::parse("molecule substrate").unwrap(),
+                ligand: Selection::parse("atomtype LIG").unwrap(),
+                use_com: true, // r_lig defaults to 0; the water ladder is the wider one
+                radius: None,
+                shell: SHELL,
+                solvent_probe: SOLVENT_PROBE,
+                profile: None,
+                file: None,
+                frequency: Frequency::Every(1),
+            }
+            .build(context)
+        };
+        assert!(builder(&dimer(27.0)).is_err());
+        assert!(builder(&dimer(40.0)).is_ok());
+    }
+
+    /// A rigid substrate straddling the periodic boundary is legitimate (the tessellation reconnects
+    /// it by minimum image), so the self-overlap guard must measure its true extent, not the
+    /// box-wide spread of its raw coordinates.
+    #[test]
+    fn a_substrate_straddling_the_boundary_is_not_falsely_rejected() {
+        // Beads at ±19 in a 40 Å box: 38 Å apart by raw coordinate, 2 Å by minimum image.
+        let context = build_system(40.0, 6.0, &[[19.0, 0.0, 0.0], [-19.0, 0.0, 0.0]], &BULK);
+        let builder = PreferentialInteractionBuilder {
+            substrate: Selection::parse("molecule substrate").unwrap(),
+            ligand: Selection::parse("atomtype LIG").unwrap(),
+            use_com: false,
+            radius: Some(1.5),
+            shell: Shell {
+                max: 5.0,
+                resolution: 1.0,
+            },
+            solvent_probe: SOLVENT_PROBE,
+            profile: None,
+            file: None,
+            frequency: Frequency::Every(1),
+        };
+        assert!(builder.build(&context).is_ok());
+    }
+
+    /// A cell reshaped at constant volume (stretch z, shrink xy back) must stop sampling — a
+    /// volume-only check would miss it, so the guard compares box dimensions.
+    #[test]
+    fn a_reshaped_cell_stops_sampling() {
+        use crate::cell::VolumeScalePolicy;
+        use crate::context::WithSimulationCell as _;
+        use crate::Context as _;
+
+        let mut context = one_bead(&BULK);
+        let mut analysis = analysis(&context);
+        analysis.sample(&context, 0).unwrap();
+
+        let volume = context.cell().volume().unwrap();
+        // z doubles (volume ×2), then xy shrinks to restore the original volume: same volume,
+        // different shape.
+        context
+            .scale_volume_and_positions(2.0 * volume, VolumeScalePolicy::ScaleZ)
+            .unwrap();
+        context
+            .scale_volume_and_positions(volume, VolumeScalePolicy::ScaleXY)
+            .unwrap();
+        assert!((context.cell().volume().unwrap() - volume).abs() < 1e-6);
+
+        // The sample succeeds (the run is not aborted) but the analysis stops accumulating, so its
+        // Γ is unchanged by the reshaped-cell frame.
+        let gamma_before = analysis.gamma(0).mean;
+        analysis.sample(&context, 1).unwrap();
+        assert!(analysis.is_stopped());
+        assert_eq!(analysis.gamma(0).mean, gamma_before);
+    }
+
+    #[test]
+    fn a_negative_radius_or_probe_is_refused() {
+        let context = one_bead(&BULK);
+        let build = |radius: Option<f64>, solvent_probe: f64| {
+            PreferentialInteractionBuilder {
+                substrate: Selection::parse("molecule substrate").unwrap(),
+                ligand: Selection::parse("atomtype LIG").unwrap(),
+                use_com: false,
+                radius,
+                shell: SHELL,
+                solvent_probe,
+                profile: None,
+                file: None,
+                frequency: Frequency::Every(1),
+            }
+            .build(&context)
+        };
+        assert!(build(Some(-1.0), SOLVENT_PROBE).is_err());
+        assert!(build(Some(f64::NAN), SOLVENT_PROBE).is_err());
+        assert!(build(Some(1.5), -1.4).is_err());
+    }
+
+    /// A dense rigid chain that wraps across the boundary must be measured at its true extent. The
+    /// far beads' periodic images sit near the start of the chain, so unwrapping against a single
+    /// anchor would fold them and misreport the radius; the spanning tree follows the short hops.
+    #[test]
+    fn bounding_radius_unwraps_a_wrapped_dense_chain() {
+        use crate::cell::{Cell, Cuboid};
+        // True chain along x at 0,4,8,12,16,22,26; the last two wrap into [−20, 20) of a 40 Å box.
+        let wrapped = [0.0, 4.0, 8.0, 12.0, 16.0, -18.0, -14.0];
+        let true_x = [0.0, 4.0, 8.0, 12.0, 16.0, 22.0, 26.0];
+        let cell = Cell::Cuboid(Cuboid::new(40.0, 40.0, 40.0));
+        let radii = vec![1.0; wrapped.len()];
+        let atoms: Vec<usize> = (0..wrapped.len()).collect();
+
+        let bound = bounding_radius(&cell, &atoms, &radii, |i| Point::new(wrapped[i], 0.0, 0.0));
+
+        // Expected radius about the true centroid, plus the atom radius.
+        let centroid = true_x.iter().sum::<f64>() / true_x.len() as f64;
+        let expected = true_x
+            .iter()
+            .map(|x| (x - centroid).abs() + 1.0)
+            .fold(0.0, f64::max);
+        assert!(
+            (bound - expected).abs() < 1e-9,
+            "bound = {bound}, expected {expected}"
+        );
+    }
+
+    #[test]
+    fn an_empty_ligand_selection_is_refused() {
+        let context = one_bead(&BULK);
+        let build = |use_com: bool, radius: Option<f64>| {
+            PreferentialInteractionBuilder {
+                substrate: Selection::parse("molecule substrate").unwrap(),
+                ligand: Selection::parse("atomtype Xe").unwrap(), // matches nothing
+                use_com,
+                radius,
+                shell: SHELL,
+                solvent_probe: SOLVENT_PROBE,
+                profile: None,
+                file: None,
+                frequency: Frequency::Every(1),
+            }
+            .build(&context)
+        };
+        // Every path must reject an empty ligand, not just the σ-derived one.
+        assert!(build(false, None).is_err());
+        assert!(build(false, Some(1.5)).is_err());
+        assert!(build(true, None).is_err());
+    }
+
+    #[test]
+    fn an_enormous_shell_ladder_is_refused() {
+        let context = one_bead(&BULK);
+        let builder = PreferentialInteractionBuilder {
+            substrate: Selection::parse("molecule substrate").unwrap(),
+            ligand: Selection::parse("atomtype LIG").unwrap(),
+            use_com: false,
+            radius: Some(1.5),
+            shell: Shell {
+                max: 1.0e6,
+                resolution: 1.0e-3,
+            }, // 10^9 rungs
+            solvent_probe: SOLVENT_PROBE,
+            profile: None,
+            file: None,
+            frequency: Frequency::Every(1),
+        };
+        assert!(builder.build(&context).is_err());
+    }
+
+    /// voronota cannot clip the domain to a hard spherical wall, so the stored volume is the
+    /// free-space union. A substrate at the centre of a wide sphere is fine; one whose domain
+    /// reaches the wall stops the analysis (without aborting the run) before it biases Γ.
+    #[test]
+    fn a_substrate_reaching_the_spherical_wall_stops_the_analysis() {
+        let stopped_at = |bead_position: f64| {
+            let input = format!(
+                r#"
+atoms:
+  - {{name: SUB, mass: 1.0, charge: 0.0, sigma: 6.0}}
+  - {{name: LIG, mass: 1.0, charge: 0.0, sigma: 3.0}}
+molecules:
+  - name: substrate
+    degrees_of_freedom: Rigid
+    from_structure:
+      - SUB: [0.0, 0.0, 0.0]
+  - name: ligand
+    atoms: [LIG]
+    atomic: true
+system:
+  cell: !Sphere {{radius: 30.0}}
+  medium: {{permittivity: !Vacuum, temperature: 300.0}}
+  energy: {{}}
+  blocks:
+    - molecule: substrate
+      N: 1
+      insert: !Manual [[{bead_position}, 0.0, 0.0]]
+    - molecule: ligand
+      N: 1
+      insert: !Manual [[0.0, 0.0, 5.0]]
+propagate: {{seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}}
+"#
+            );
+            let context = Backend::from_yaml_str(&input, None, &mut rand::thread_rng()).unwrap();
+            let mut analysis = PreferentialInteractionBuilder {
+                substrate: Selection::parse("molecule substrate").unwrap(),
+                ligand: Selection::parse("atomtype LIG").unwrap(),
+                use_com: false,
+                radius: Some(1.5),
+                shell: SHELL,
+                solvent_probe: SOLVENT_PROBE,
+                profile: None,
+                file: None,
+                frequency: Frequency::Every(1),
+            }
+            .build(&context)
+            .unwrap();
+            analysis.sample(&context, 0).unwrap();
+            analysis.is_stopped()
+        };
+
+        // Centre: domain reaches 3 + 1.5 + 10 = 14.5 Å < 30 Å radius. Fine, keeps sampling.
+        assert!(!stopped_at(0.0));
+        // Near the wall: 20 + 3 + 1.5 + 10 = 34.5 Å > 30 Å. Stops at sample time.
+        assert!(stopped_at(20.0));
+    }
+
+    /// b₁ is not a material constant.
+    ///
+    /// The solute-partitioning model assumes the hydration volume is proportional to ASA with one
+    /// universal b₁ — which is what lets it transfer a partition coefficient from a model compound
+    /// to a protein. But for a sphere of solvent-accessible radius `a`, the shell of thickness δ
+    /// carries
+    ///
+    /// ```text
+    /// b₁ = δ(1 + δ/a + δ²/3a²) / v̄_w
+    /// ```
+    ///
+    /// per unit area: the curvature terms vanish only as a → ∞, with `a` the water-accessible
+    /// radius `substrate_radius + solvent_probe`. A tightly curved bead must therefore report a
+    /// *larger* b₁ than a blunt one at the same δ. Both are checked against the closed form, so
+    /// this pins the number and not merely the ordering. The ligand radius is set away from the
+    /// water probe on purpose: b₁ is a substrate–water property and must not depend on it.
+    #[test]
+    fn hydration_per_unit_area_grows_with_curvature() {
+        // For a sphere of water-accessible radius a, the shell of thickness δ carries this many
+        // waters per Å² of surface. The curvature terms vanish only as a → ∞.
+        let expected = |substrate_radius: f64, delta: f64| {
+            let a = substrate_radius + SOLVENT_PROBE;
+            delta * (1.0 + delta / a + delta.powi(2) / (3.0 * a.powi(2))) / WATER_VOLUME
+        };
+
+        let delta = 3.0;
+        let k = (delta / SHELL.resolution) as usize;
+
+        // A ligand radius (3.0) different from the water probe (1.4): b₁ must come out water-based
+        // regardless, which is the whole point of measuring the shell at the water probe.
+        let b1 = |substrate_radius: f64| {
+            let context = lone_bead(substrate_radius);
+            let mut analysis = analysis_with_radius(&context, Some(3.0));
+            analysis.sample(&context, 0).unwrap();
+            analysis.hydration_density(0, k).unwrap()
+        };
+
+        let (sharp, blunt) = (3.0, 20.0);
+        let (curved, flat) = (b1(sharp), b1(blunt));
+
+        assert!(
+            (curved - expected(sharp, delta)).abs() < 1e-6,
+            "curved bead: b₁ = {curved}, expected {}",
+            expected(sharp, delta)
+        );
+        assert!(
+            (flat - expected(blunt, delta)).abs() < 1e-6,
+            "blunt bead: b₁ = {flat}, expected {}",
+            expected(blunt, delta)
+        );
+        assert!(
+            curved > flat,
+            "curvature must raise b₁: curved {curved} vs blunt {flat}"
+        );
+        // Both sit above the flat-plate limit δ/v̄_w, which they approach from above as a → ∞.
+        assert!(flat > delta / WATER_VOLUME);
+    }
+
+    /// A molecular ligand is located by its mass centre. Its radius defaults to zero, so δ is then
+    /// measured from the substrate's own surface — an anisotropic ligand has no single exclusion
+    /// radius, and inventing one would be a spherical approximation dressed up as geometry.
+    #[test]
+    fn a_molecular_ligand_is_placed_at_its_mass_centre() {
+        // Two beads at 7 and 9 Å, so the mass centre sits at 8 Å: a surface distance of 8 − 3 = 5,
+        // which with a zero ligand radius first enters the domain at δ = 5.
+        const DIMER: &str = r#"
+atoms:
+  - {name: SUB, mass: 1.0, charge: 0.0, sigma: 6.0}
+  - {name: LIG, mass: 1.0, charge: 0.0, sigma: 3.0}
+molecules:
+  - name: substrate
+    degrees_of_freedom: Rigid
+    from_structure:
+      - SUB: [0.0, 0.0, 0.0]
+  - name: dimer
+    atoms: [LIG, LIG]
+system:
+  cell: !Cuboid [60.0, 60.0, 60.0]
+  medium: {permittivity: !Vacuum, temperature: 300.0}
+  energy: {}
+  blocks:
+    - molecule: substrate
+      N: 1
+      insert: !Manual [[0.0, 0.0, 0.0]]
+    - molecule: dimer
+      N: 2
+      insert: !Manual [[7.0, 0.0, 0.0], [9.0, 0.0, 0.0],
+                       [25.0, 0.0, 0.0], [27.0, 0.0, 0.0]]
+propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
+"#;
+        let context = Backend::from_yaml_str(DIMER, None, &mut rand::thread_rng()).unwrap();
+        let mut analysis = PreferentialInteractionBuilder {
+            substrate: Selection::parse("atomtype SUB").unwrap(),
+            ligand: Selection::parse("molecule dimer").unwrap(),
+            use_com: true,
+            radius: None,
+            shell: SHELL,
+            solvent_probe: SOLVENT_PROBE,
+            profile: None,
+            file: None,
+            frequency: Frequency::Every(1),
+        }
+        .build(&context)
+        .unwrap();
+        analysis.sample(&context, 0).unwrap();
+
+        // One dimer is bulk, so the excluded volume is referenced against it; the other appears at
+        // δ = 5. The exclusion boundary is now the bare substrate surface, not an inflated one.
+        let bulk_volume = 60.0f64.powi(3) - sphere(SUBSTRATE_RADIUS + SHELL.max);
+        let concentration = 1.0 / bulk_volume;
+        for k in 0..SHELL.len() {
+            let counted = f64::from(u8::from(k >= 5));
+            let expected = counted - concentration * sphere(SUBSTRATE_RADIUS + SHELL.delta(k));
+            assert!(
+                (analysis.gamma(k).mean - expected).abs() < 1e-9,
+                "rung {k}: Γ = {}, expected {expected}",
+                analysis.gamma(k).mean
+            );
+        }
+    }
+
+    /// One radius sets every reference volume, so a ligand selection spanning atom kinds of
+    /// different size has no single answer. Averaging them would corrupt the geometry silently;
+    /// refusing is the only honest option.
+    #[test]
+    fn a_ligand_selection_of_mixed_size_is_refused() {
+        const TWO_SIZES: &str = r#"
+atoms:
+  - {name: SUB, mass: 1.0, charge: 0.0, sigma: 6.0}
+  - {name: SMALL, mass: 1.0, charge: 0.0, sigma: 3.0}
+  - {name: BIG, mass: 1.0, charge: 0.0, sigma: 5.0}
+molecules:
+  - name: substrate
+    degrees_of_freedom: Rigid
+    from_structure:
+      - SUB: [0.0, 0.0, 0.0]
+  - name: small
+    atoms: [SMALL]
+  - name: big
+    atoms: [BIG]
+system:
+  cell: !Cuboid [60.0, 60.0, 60.0]
+  medium: {permittivity: !Vacuum, temperature: 300.0}
+  energy: {}
+  blocks:
+    - molecule: substrate
+      N: 1
+      insert: !Manual [[0.0, 0.0, 0.0]]
+    - molecule: small
+      N: 1
+      insert: !Manual [[25.0, 0.0, 0.0]]
+    - molecule: big
+      N: 1
+      insert: !Manual [[-25.0, 0.0, 0.0]]
+propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
+"#;
+        let context = Backend::from_yaml_str(TWO_SIZES, None, &mut rand::thread_rng()).unwrap();
+        let builder = |ligand: &str, radius: Option<f64>| PreferentialInteractionBuilder {
+            substrate: Selection::parse("atomtype SUB").unwrap(),
+            ligand: Selection::parse(ligand).unwrap(),
+            use_com: false,
+            radius,
+            shell: SHELL,
+            solvent_probe: SOLVENT_PROBE,
+            profile: None,
+            file: None,
+            frequency: Frequency::Every(1),
+        };
+
+        let mixed = "atomtype SMALL or atomtype BIG";
+        assert!(builder(mixed, None).build(&context).is_err());
+        // …unless the ambiguity is resolved explicitly.
+        assert!(builder(mixed, Some(1.5)).build(&context).is_ok());
+        // A single kind needs no help.
+        assert!(builder("atomtype SMALL", None).build(&context).is_ok());
+    }
+
+    /// Γ is measured against bulk, so a ladder that swallows the cell leaves nothing to measure
+    /// against. Failing at build is better than reporting a Γ referenced to an empty region.
+    #[test]
+    fn a_domain_that_fills_the_cell_is_refused() {
+        let context = one_bead(&BULK);
+        let builder = PreferentialInteractionBuilder {
+            substrate: Selection::parse("atomtype SUB").unwrap(),
+            ligand: Selection::parse("atomtype LIG").unwrap(),
+            use_com: false,
+            radius: None,
+            shell: Shell {
+                max: 100.0,
+                resolution: 1.0,
+            },
+            solvent_probe: SOLVENT_PROBE,
+            profile: None,
+            file: None,
+            frequency: Frequency::Every(1),
+        };
+        assert!(builder.build(&context).is_err());
+    }
+
+    #[test]
+    fn an_empty_substrate_selection_is_refused() {
+        let context = one_bead(&BULK);
+        let builder = PreferentialInteractionBuilder {
+            substrate: Selection::parse("atomtype Ca").unwrap(),
+            ligand: Selection::parse("atomtype LIG").unwrap(),
+            use_com: false,
+            radius: Some(1.5),
+            shell: SHELL,
+            solvent_probe: SOLVENT_PROBE,
+            profile: None,
+            file: None,
+            frequency: Frequency::Every(1),
+        };
+        assert!(builder.build(&context).is_err());
+    }
+
+    #[test]
+    fn deserialize_via_analysis_builder() {
+        let input = r#"
+!PreferentialInteraction
+  substrate: "atomtype SUB"
+  ligand: "atomtype LIG"
+  shell: {max: 10.0, resolution: 0.5}
+  file: residues.csv
+  profile: gamma.csv
+  frequency: !Every 100
+"#;
+        let builder: crate::analysis::AnalysisBuilder = serde_yml::from_str(input).unwrap();
+        let context = one_bead(&BULK);
+        builder.build(&context, None).unwrap();
+    }
+}

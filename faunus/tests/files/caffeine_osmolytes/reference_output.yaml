@@ -1,0 +1,164 @@
+version:
+  faunus: 3.0.0-beta.2
+  git_revision: v3.0.0-beta.1-64-gb719586-dirty
+medium:
+  permittivity: Vacuum
+  salt: null
+  temperature: 298.15
+blocks:
+- molecule: caffeine
+  N: 1
+  active: null
+  insert: !Manual
+  - - -3.224
+    - 1.42
+    - 0.747
+  - - 2.324
+    - 0.583
+    - 1.887
+  - - 1.035
+    - -1.893
+    - -2.361
+  - - -0.354
+    - 1.447
+    - 1.994
+  - - 2.875
+    - -1.077
+    - -0.38
+  - - -2.188
+    - -0.423
+    - -1.578
+  - - 0.882
+    - -0.2
+    - 0.064
+  - - -1.348
+    - 0.144
+    - -0.375
+- molecule: osmolyte_a
+  N: 20
+  active: null
+  insert: !RandomAtomPos
+    directions: xyz
+- molecule: osmolyte_r
+  N: 20
+  active: null
+  insert: !RandomAtomPos
+    directions: xyz
+cell: !Cuboid
+- 35.0
+- 35.0
+- 35.0
+energy_change:
+  drift: 8.526512829121202e-14
+  final: -77.66317421485782
+  initial: -55.405211837504886
+energy_timers:
+  cell_overlap: '2.57 (energy: 1.69, update: 0.88)'
+  nonbonded: '97.42999999999999 (energy: 15.77, update: 81.66)'
+propagate:
+  repeat: 2000
+  seed: !Fixed 42
+  collections:
+  - !Stochastic
+    repeat: 1
+    elapsed_seconds: 0.051295822
+    moves:
+    - !TranslateMolecule
+      molecule: caffeine
+      max_displacement: 1.0
+      directions: xyz
+      weight: 1.0
+      repeat: 1
+      statistics:
+        num_trials: 504
+        num_accepted: 166
+        mean_square_displacement:
+          avg: 0.0476083225637905
+          n: 504
+        timer:
+          accumulated:
+            secs: 0
+            nanos: 0
+        info: {}
+        energy_change_sum: 9.315915935158515
+        acceptance_ratio: 0.32936507936507936
+    - !RotateMolecule
+      molecule: caffeine
+      max_angle: 0.5
+      weight: 1.0
+      repeat: 1
+      statistics:
+        num_trials: 520
+        num_accepted: 128
+        mean_square_displacement:
+          avg: 0.00467944097296423
+          n: 520
+        timer:
+          accumulated:
+            secs: 0
+            nanos: 0
+        info: {}
+        energy_change_sum: -4.819364868584877
+        acceptance_ratio: 0.24615384615384617
+    - !TranslateAtom
+      atom: null
+      molecule: osmolyte_a
+      max_displacement: 2.0
+      weight: 1.0
+      repeat: 20
+      statistics:
+        num_trials: 10120
+        num_accepted: 7728
+        mean_square_displacement:
+          avg: 0.9105876608865004
+          n: 10120
+        timer:
+          accumulated:
+            secs: 0
+            nanos: 0
+        info: {}
+        energy_change_sum: -38.73731339945512
+        acceptance_ratio: 0.7636363636363637
+    - !TranslateAtom
+      atom: null
+      molecule: osmolyte_r
+      max_displacement: 2.0
+      weight: 1.0
+      repeat: 20
+      statistics:
+        num_trials: 9400
+        num_accepted: 8994
+        mean_square_displacement:
+          avg: 1.2436985457302348
+          n: 9400
+        timer:
+          accumulated:
+            secs: 0
+            nanos: 0
+        info: {}
+        energy_change_sum: 11.982799955528634
+        acceptance_ratio: 0.9568085106382979
+  criterion: MetropolisHastings
+analysis:
+- preferential_interaction:
+    num_samples: 1000
+    gamma:
+      mean: 8.067699981208769
+      error: 0.07425065244977329
+    concentration/Å⁻³:
+      mean: 0.00027830437361612176
+      error: 1.7317936431433963e-6
+    excluded_volume/Å³: 539.1766333220099
+    ligand_radius/Å: 1.5
+    num_residues: 8
+- preferential_interaction:
+    num_samples: 1000
+    gamma:
+      mean: -3.0767154093805287
+      error: 0.053989891512274325
+    concentration/Å⁻³:
+      mean: 0.0005382324293733068
+      error: 1.259239452181324e-6
+    excluded_volume/Å³: 842.1038064742107
+    ligand_radius/Å: 2.25
+    num_residues: 8

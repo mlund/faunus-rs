@@ -31,6 +31,7 @@ mod energy;
 mod mean_along_coordinate;
 mod multipole;
 mod multipole_distribution;
+mod preferential_interaction;
 mod radial_distribution;
 pub mod reweight;
 mod rotational_diffusion;
@@ -50,6 +51,7 @@ pub(crate) use electric_potential_profile::ElectricPotentialProfileBuilder;
 pub(crate) use energy::EnergyAnalysisBuilder;
 pub(crate) use mean_along_coordinate::MeanAlongCoordinateBuilder;
 pub(crate) use multipole_distribution::MultipoleDistributionBuilder;
+pub(crate) use preferential_interaction::PreferentialInteractionBuilder;
 pub(crate) use radial_distribution::RadialDistributionBuilder;
 pub(crate) use rotational_diffusion::RotationalDiffusionBuilder;
 pub(crate) use scaled_widom_insertion::ScaledWidomInsertionBuilder;
@@ -251,6 +253,8 @@ analysis_builders! {
     ElectricPotentialProfile(ElectricPotentialProfileBuilder) => context_medium,
     /// Density profile ρ(z) of a selected species along z
     DensityProfile(DensityProfileBuilder) => context,
+    /// Preferential interaction coefficient Γ of a ligand with a rigid substrate
+    PreferentialInteraction(PreferentialInteractionBuilder) => context,
     /// Widom rotational perturbation about the center of mass
     WidomRotation(WidomRotationBuilder) => context_rt,
 }
