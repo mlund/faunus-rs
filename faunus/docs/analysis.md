@@ -1087,7 +1087,7 @@ Key             | Required | Default | Description
 --------------- | -------- | ------- | --------------------------------------------------------
 `substrate`     | yes      |         | The rigid molecule the ligand is counted around
 `ligand`        | yes      |         | Atoms, or molecules when `use_com` is set, whose excess is measured
-`shell`         | yes      |         | The δ ladder: `{max, resolution}` in Å
+`shell`         | yes      |         | The δ ladder: `{max, resolution}` in Å, with `max` a multiple of `resolution`
 `use_com`       | no       | `false` | Count the mass centre of each selected molecule instead of each atom
 `radius`        | no       | σ/2, or 0 with `use_com` | Ligand radius (Å), setting the exclusion boundary
 `solvent_probe` | no       | `1.4`   | Water radius (Å), setting the surface and shell behind $b_1$

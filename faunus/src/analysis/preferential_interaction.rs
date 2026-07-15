@@ -66,7 +66,7 @@ use std::path::{Path, PathBuf};
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Shell {
-    /// Largest δ (Å). Beyond this a ligand counts as bulk.
+    /// Largest δ (Å). Beyond this a ligand counts as bulk; must be a multiple of `resolution`.
     max: f64,
     /// Spacing of the ladder (Å).
     resolution: f64,
@@ -96,6 +96,17 @@ impl Shell {
             "PreferentialInteraction: shell.max / shell.resolution = {:.0} exceeds {MAX_RUNGS:.0}; \
              coarsen the ladder",
             self.max / self.resolution
+        );
+        // shell.max is the bulk boundary, so the ladder must land on it exactly. If it were not a
+        // multiple of the resolution, the outermost rung δ = round(max/resolution)·resolution would
+        // sit up to half a step from shell.max, quietly shifting where a ligand stops counting.
+        let rungs = self.max / self.resolution;
+        anyhow::ensure!(
+            (rungs - rungs.round()).abs() <= 1e-6 * rungs.max(1.0),
+            "PreferentialInteraction: shell.max ({}) must be an integer multiple of \
+             shell.resolution ({})",
+            self.max,
+            self.resolution
         );
         Ok(())
     }
@@ -1669,6 +1680,12 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
         assert!(build(Shell {
             max: -5.0,
             resolution: 1.0
+        })
+        .is_err());
+        // shell.max not a whole multiple of the resolution would misplace the bulk boundary.
+        assert!(build(Shell {
+            max: 8.0,
+            resolution: 0.3
         })
         .is_err());
     }
