@@ -7284,6 +7284,8 @@ checksum = "6a02e4885ed3bc0f2de90ea6dd45ebcbb66dacffe03547fadbb0eeae2770887d"
 [[package]]
 name = "voronota-ltr"
 version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fdecf43473d83841d80505a7d99ada65a7921fb78bb0786be14d96360b6f91ed"
 dependencies = [
  "clap",
  "env_logger 0.11.11",
