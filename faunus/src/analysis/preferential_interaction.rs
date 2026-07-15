@@ -557,8 +557,6 @@ impl SurfaceReference {
                 voronota_ltr::Ball::new(p.x, p.y, p.z, r)
             })
             .collect();
-        let engulfed = engulfed_atoms(context, &atoms, &radii);
-
         let (mut residues, owner) = residues_of(context, &atoms)?;
 
         // Roll a per-atom quantity up onto the residues that partition the atoms.
@@ -572,22 +570,17 @@ impl SurfaceReference {
 
         // One tessellation per rung — the only place the diagram is built. The substrate is rigid,
         // so these volumes are body-frame invariants and no tessellation runs while sampling.
-        let ladder = |probe_base: f64| -> Vec<Vec<f64>> {
+        let ladder = |probe_base: f64| -> Result<Vec<Vec<f64>>> {
             (0..shell.len())
                 .map(|k| {
-                    let volumes = cell_volumes(
-                        &balls,
-                        &radii,
-                        &engulfed,
-                        probe_base + shell.delta(k),
-                        periodic_box.as_ref(),
-                    );
-                    per_residue(&volumes)
+                    let volumes =
+                        cell_volumes(&balls, probe_base + shell.delta(k), periodic_box.as_ref())?;
+                    Ok(per_residue(&volumes))
                 })
                 .collect()
         };
 
-        let volumes = ladder(ligand_radius);
+        let volumes = ladder(ligand_radius)?;
         let domain_volume: Vec<f64> = volumes.iter().map(|v| v.iter().sum()).collect();
 
         // b₁ is Record's hydration density — a property of the substrate surface and water alone,
@@ -596,15 +589,13 @@ impl SurfaceReference {
         // ligand-probe volume over a water-probe area would inject a spurious curvature factor
         // (a + r_lig)² / (a + p_w)² on top of the real shell curvature. This second ladder is at
         // `solvent_probe + δ`, in parallel with the ligand ladder above.
-        let water_volumes = ladder(solvent_probe);
+        let water_volumes = ladder(solvent_probe)?;
 
         let asa = per_residue(&surface_areas(
             &balls,
-            &radii,
-            &engulfed,
             solvent_probe,
             periodic_box.as_ref(),
-        ));
+        )?);
         for (residue, area) in residues.iter_mut().zip(asa) {
             residue.asa = area;
         }
@@ -712,50 +703,28 @@ impl SurfaceReference {
     }
 }
 
-/// Which substrate atoms are engulfed — buried inside a neighbour's van der Waals sphere.
+/// Per-ball tessellation quantity at `probe`.
 ///
-/// Atom `i` lies wholly inside atom `j` when `dᵢⱼ + Rᵢ ≤ Rⱼ`, a probe-independent condition since
-/// inflating both radii by the probe cancels. voronota still reports such an atom's *free-sphere*
-/// volume and area rather than zero, which double-counts against the neighbour that already
-/// contains it; forcing it to zero keeps the domain volume equal to the true union.
-fn engulfed_atoms(context: &impl ObserveContext, atoms: &[usize], radii: &[f64]) -> Vec<bool> {
-    let cell = context.cell();
-    atoms
-        .iter()
-        .enumerate()
-        .map(|(i, &ai)| {
-            let pi = context.position(ai);
-            atoms.iter().enumerate().any(|(j, &aj)| {
-                j != i && cell.distance(&pi, &context.position(aj)).norm() + radii[i] <= radii[j]
-            })
-        })
-        .collect()
-}
-
-/// Per-ball tessellation quantity at `probe`, resolving voronota's `None`.
-///
-/// `extract` picks the quantity (cell volume or SAS area) and `whole` gives its closed form for a
-/// lonely ball; a ball buried in a neighbour contributes nothing, and a lonely ball voronota
-/// leaves as `None` falls back to `whole`.
+/// `voronota-ltr` distinguishes a computed cell from a geometrically empty one. An unavailable
+/// cell is an error because silently assigning it zero would bias the reference domain.
 fn per_ball(
     balls: &[voronota_ltr::Ball],
-    radii: &[f64],
-    engulfed: &[bool],
     probe: f64,
     periodic_box: Option<&voronota_ltr::PeriodicBox>,
-    extract: impl Fn(&voronota_ltr::TessellationResult) -> Vec<Option<f64>>,
-    whole: impl Fn(f64) -> f64,
-) -> Vec<f64> {
+    extract: impl Fn(&voronota_ltr::TessellationResult) -> Vec<voronota_ltr::CellMeasure>,
+) -> Result<Vec<f64>> {
     let result = voronota_ltr::compute_tessellation(balls, probe, periodic_box, None, false);
     extract(&result)
         .into_iter()
-        .zip(radii)
-        .zip(engulfed)
-        .map(|((value, &r), &engulfed)| {
-            if engulfed {
-                0.0
-            } else {
-                value.unwrap_or_else(|| whole(r))
+        .enumerate()
+        .map(|(index, measure)| match measure {
+            voronota_ltr::CellMeasure::Computed(value) => Ok(value),
+            voronota_ltr::CellMeasure::Empty => Ok(0.0),
+            voronota_ltr::CellMeasure::NotComputed => {
+                anyhow::bail!(
+                    "PreferentialInteraction: voronota-ltr did not compute cell {index} at probe \
+                     {probe} Å"
+                )
             }
         })
         .collect()
@@ -764,41 +733,21 @@ fn per_ball(
 /// Per-ball cell volume at `probe`, clipped to the solvent-accessible surface.
 fn cell_volumes(
     balls: &[voronota_ltr::Ball],
-    radii: &[f64],
-    engulfed: &[bool],
     probe: f64,
     periodic_box: Option<&voronota_ltr::PeriodicBox>,
-) -> Vec<f64> {
+) -> Result<Vec<f64>> {
     use voronota_ltr::Results as _;
-    per_ball(
-        balls,
-        radii,
-        engulfed,
-        probe,
-        periodic_box,
-        |result| result.volumes(),
-        |r| 4.0 / 3.0 * std::f64::consts::PI * (r + probe).powi(3),
-    )
+    per_ball(balls, probe, periodic_box, |result| result.volumes())
 }
 
 /// Per-ball solvent-accessible surface area at `probe`.
 fn surface_areas(
     balls: &[voronota_ltr::Ball],
-    radii: &[f64],
-    engulfed: &[bool],
     probe: f64,
     periodic_box: Option<&voronota_ltr::PeriodicBox>,
-) -> Vec<f64> {
+) -> Result<Vec<f64>> {
     use voronota_ltr::Results as _;
-    per_ball(
-        balls,
-        radii,
-        engulfed,
-        probe,
-        periodic_box,
-        |result| result.sas_areas(),
-        |r| 4.0 * std::f64::consts::PI * (r + probe).powi(2),
-    )
+    per_ball(balls, probe, periodic_box, |result| result.sas_areas())
 }
 
 /// Preferential interaction coefficient of a ligand with a rigid substrate.
@@ -1328,9 +1277,8 @@ propagate: {{seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}}
     }
 
     /// Two overlapping beads: the domain is the union of two inflated spheres, whose volume is
-    /// analytic. Unlike the lone bead — where voronota reports no cell at all and the closed form
-    /// takes over — here the tessellation genuinely partitions a shared surface, so this pins
-    /// `Results::volumes()` itself, and with it the ownership argmin that must agree with it.
+    /// analytic. Their tessellation genuinely partitions a shared surface, so this pins
+    /// `Results::volumes()` and the ownership argmin that must agree with it.
     #[test]
     fn gamma_of_two_overlapping_beads_matches_the_union_volume() {
         // A box wide enough that the widest domain (radius 14.5 Å) cannot reach its own image.
@@ -1591,11 +1539,11 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
         );
     }
 
-    /// voronota returns no cell both for a lonely atom and for one a neighbour engulfs. A tiny bead
-    /// buried inside a large one must be read as the second — zero volume — not handed a full free
-    /// sphere. Getting this wrong would inflate the domain and bias Γ by −c·V_spurious.
+    /// A tiny bead buried inside a large one has an empty weighted cell and therefore zero volume,
+    /// while a detached bead has a computed full-sphere cell. Confusing those states would inflate
+    /// the domain and bias Γ by −c·V_spurious.
     #[test]
-    fn an_engulfed_atom_is_not_mistaken_for_a_lonely_one() {
+    fn an_engulfed_atom_has_an_empty_cell() {
         // A σ = 1 bead (R = 0.5) sitting 5 Å off the centre of a σ = 30 bead (R = 15): its whole
         // inflated sphere lies inside the big one, so its radical cell is empty.
         const ENGULFED: &str = r#"
@@ -1648,6 +1596,89 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
             analysis.accessible_volume(1, last) < 1e-6,
             "engulfed atom should offer no volume, got {} Å³",
             analysis.accessible_volume(1, last)
+        );
+    }
+
+    /// Several neighbours can eliminate a weighted cell even though none contains the atom by
+    /// itself. Such an atom offers zero reference volume; treating the missing cell as a detached
+    /// full sphere creates the large-probe δ³ divergence seen for molecular substrates.
+    #[test]
+    fn a_collectively_hidden_atom_has_zero_excess() {
+        const COLLECTIVELY_HIDDEN: &str = r#"
+atoms:
+  - {name: A, mass: 1.0, charge: 0.0, sigma: 4.00}
+  - {name: B, mass: 1.0, charge: 0.0, sigma: 5.18}
+  - {name: C, mass: 1.0, charge: 0.0, sigma: 5.58}
+  - {name: D, mass: 1.0, charge: 0.0, sigma: 4.00}
+  - {name: E, mass: 1.0, charge: 0.0, sigma: 4.50}
+  - {name: F, mass: 1.0, charge: 0.0, sigma: 6.56}
+  - {name: G, mass: 1.0, charge: 0.0, sigma: 5.62}
+  - {name: LIG, mass: 1.0, charge: 0.0, sigma: 3.0}
+molecules:
+  - name: substrate
+    degrees_of_freedom: Rigid
+    from_structure:
+      - A: [0.4025, 0.1675, -3.5540]
+      - B: [2.8625, -3.5723, 0.7652]
+      - C: [0.5942, 1.6715, 0.1783]
+      - D: [0.0, 0.0, 0.0]
+      - E: [-1.3506, 3.6633, 2.9246]
+      - F: [-3.8649, 0.5584, -0.3824]
+      - G: [-1.2191, -2.0496, 3.8379]
+  - name: ligand
+    atoms: [LIG]
+    atomic: true
+system:
+  cell: !Cuboid [100.0, 100.0, 100.0]
+  medium: {permittivity: !Vacuum, temperature: 300.0}
+  energy: {}
+  blocks:
+    - molecule: substrate
+      N: 1
+      insert: !Manual
+        - [0.4025, 0.1675, -3.5540]
+        - [2.8625, -3.5723, 0.7652]
+        - [0.5942, 1.6715, 0.1783]
+        - [0.0, 0.0, 0.0]
+        - [-1.3506, 3.6633, 2.9246]
+        - [-3.8649, 0.5584, -0.3824]
+        - [-1.2191, -2.0496, 3.8379]
+    - molecule: ligand
+      N: 6
+      insert: !Manual
+        - [45.0, 0.0, 0.0]
+        - [-45.0, 0.0, 0.0]
+        - [0.0, 45.0, 0.0]
+        - [0.0, -45.0, 0.0]
+        - [0.0, 0.0, 45.0]
+        - [0.0, 0.0, -45.0]
+propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
+"#;
+        let context =
+            Backend::from_yaml_str(COLLECTIVELY_HIDDEN, None, &mut rand::thread_rng()).unwrap();
+        let mut analysis = PreferentialInteractionBuilder {
+            substrate: Selection::parse("molecule substrate").unwrap(),
+            ligand: Selection::parse("atomtype LIG").unwrap(),
+            use_com: false,
+            radius: Some(5.0),
+            shell: Shell {
+                max: 1.0,
+                resolution: 1.0,
+            },
+            solvent_probe: SOLVENT_PROBE,
+            profile: None,
+            file: None,
+            frequency: Frequency::Every(1),
+        }
+        .build(&context)
+        .unwrap();
+
+        analysis.sample(&context, 0).unwrap();
+
+        assert!(
+            analysis.residue_gamma(3, 0).mean.abs() < 1e-12,
+            "collectively hidden atom should have γ = 0, got {}",
+            analysis.residue_gamma(3, 0).mean
         );
     }
 

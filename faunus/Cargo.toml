@@ -41,7 +41,7 @@ thiserror = "2"
 typetag = "0.2"
 unordered-pair = { version = "0.2.4", features = ["serde"] }
 validator = { version = "0.20", features = ["derive"] }
-voronota-ltr = { version = "0.4", default-features = false }
+voronota-ltr = { version = "0.7", path = "../../voronota-ltr", default-features = false }
 
 # CLI-only dependencies
 bytemuck = { version = "1", features = ["derive"], optional = true }
@@ -72,5 +72,4 @@ cli = ["dep:clap", "dep:pretty_env_logger", "dep:indicatif"]
 gpu = ["dep:cubecl", "dep:bytemuck"]
 
 #lto = "thin"
-
 
