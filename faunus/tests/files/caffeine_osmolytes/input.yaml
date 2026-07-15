@@ -1,0 +1,113 @@
+# Preferential-interaction regression: a single coarse-grained caffeine in a mixture of an
+# attracted and a repelled osmolyte.
+#
+# The caffeine is the 8-bead CG model of Hervø-Hansen et al. (J. Phys. Chem. B 2023,
+# doi:10.1021/acs.jpcb.3c01085; structure from github.com/mlund/SI-caffeine-surface-area), a rigid
+# body free to translate and rotate. The 8 beads keep the model geometry but share the five
+# chemical-class atom types the model defines. Two explicit osmolyte species surround it:
+#
+#   - OSM_A carries a deep Lennard-Jones well against the caffeine surface and accumulates (Γ > 0).
+#   - OSM_R sees an Ashbaugh-Hatch repulsive shoulder (λ < 0) against the surface — soft repulsion
+#     beyond the excluded volume — and is excluded (Γ < 0).
+#
+# The PreferentialInteraction analysis is run once per osmolyte. The regression pins the reported
+# Γ(δ) and the measured bulk concentration across a deterministic trajectory — exercising the
+# counting, the rigid-body reference reuse under translation and rotation, and the opposite signs
+# of accumulation and exclusion.
+
+atoms:
+  # Caffeine CG atom types (σ, mass from the SASA model), one per chemical class.
+  - {name: Cali, mass: 15.03, sigma: 3.06, eps: 0.5} # aliphatic C
+  - {name: Oket, mass: 16.00, sigma: 3.12, eps: 0.5} # amine/ketone O
+  - {name: Nam, mass: 27.03, sigma: 3.72, eps: 0.5} # amine N
+  - {name: Car1, mass: 76.06, sigma: 4.64, eps: 0.5} # aromatic C
+  - {name: Car2, mass: 38.03, sigma: 4.18, eps: 0.5} # aromatic C
+  # Osmolytes.
+  - {name: OSM_A, mass: 1.0, sigma: 3.0, eps: 1.0}
+  - {name: OSM_R, mass: 1.0, sigma: 4.5, eps: 1.0}
+
+molecules:
+  - name: caffeine
+    degrees_of_freedom: Rigid
+    from_structure:
+      - Cali: [-3.224, 1.420, 0.747]
+      - Cali: [2.324, 0.583, 1.887]
+      - Cali: [1.035, -1.893, -2.361]
+      - Oket: [-0.354, 1.447, 1.994]
+      - Oket: [2.875, -1.077, -0.380]
+      - Nam: [-2.188, -0.423, -1.578]
+      - Car1: [0.882, -0.200, 0.064]
+      - Car2: [-1.348, 0.144, -0.375]
+  - name: osmolyte_a
+    atoms: [OSM_A]
+    atomic: true
+  - name: osmolyte_r
+    atoms: [OSM_R]
+    atomic: true
+
+system:
+  cell: !Cuboid [35.0, 35.0, 35.0]
+  medium:
+    permittivity: !Vacuum
+    temperature: 298.15
+  energy:
+    nonbonded:
+      # Everything is purely repulsive by default. OSM_A gets an attractive well against the
+      # caffeine surface, so it accumulates; OSM_R gets an Ashbaugh-Hatch repulsive shoulder
+      # (λ < 0), soft repulsion reaching beyond the core, so it is excluded more strongly than by
+      # volume alone.
+      default:
+        - !WCA {mixing: LB}
+      replace:
+        [OSM_A, Cali]: [!LennardJones {sigma: 3.3, epsilon: 4.0}]
+        [OSM_A, Oket]: [!LennardJones {sigma: 3.3, epsilon: 4.0}]
+        [OSM_A, Nam]: [!LennardJones {sigma: 3.6, epsilon: 4.0}]
+        [OSM_A, Car1]: [!LennardJones {sigma: 3.8, epsilon: 4.0}]
+        [OSM_A, Car2]: [!LennardJones {sigma: 3.6, epsilon: 4.0}]
+        [OSM_R, Cali]: [!AshbaughHatch {sigma: 3.8, epsilon: 3.0, lambda: -2.0, cutoff: 11.0}]
+        [OSM_R, Oket]: [!AshbaughHatch {sigma: 3.8, epsilon: 3.0, lambda: -2.0, cutoff: 11.0}]
+        [OSM_R, Nam]: [!AshbaughHatch {sigma: 4.1, epsilon: 3.0, lambda: -2.0, cutoff: 11.0}]
+        [OSM_R, Car1]: [!AshbaughHatch {sigma: 4.6, epsilon: 3.0, lambda: -2.0, cutoff: 11.0}]
+        [OSM_R, Car2]: [!AshbaughHatch {sigma: 4.3, epsilon: 3.0, lambda: -2.0, cutoff: 11.0}]
+  blocks:
+    - molecule: caffeine
+      N: 1
+      insert: !Manual
+        - [-3.224, 1.420, 0.747]
+        - [2.324, 0.583, 1.887]
+        - [1.035, -1.893, -2.361]
+        - [-0.354, 1.447, 1.994]
+        - [2.875, -1.077, -0.380]
+        - [-2.188, -0.423, -1.578]
+        - [0.882, -0.200, 0.064]
+        - [-1.348, 0.144, -0.375]
+    - molecule: osmolyte_a
+      N: 20
+      insert: !RandomAtomPos {}
+    - molecule: osmolyte_r
+      N: 20
+      insert: !RandomAtomPos {}
+
+analysis:
+  - !PreferentialInteraction
+      substrate: "molecule caffeine"
+      ligand: "atomtype OSM_A"
+      shell: {max: 8.0, resolution: 1.0}
+      frequency: !Every 2
+  - !PreferentialInteraction
+      substrate: "molecule caffeine"
+      ligand: "atomtype OSM_R"
+      shell: {max: 8.0, resolution: 1.0}
+      frequency: !Every 2
+
+propagate:
+  seed: !Fixed 42
+  criterion: Metropolis
+  repeat: 2000
+  collections:
+    - !Stochastic
+      moves:
+        - !TranslateMolecule {molecule: caffeine, max_displacement: 1.0, repeat: 1}
+        - !RotateMolecule {molecule: caffeine, max_angle: 0.5, repeat: 1}
+        - !TranslateAtom {molecule: osmolyte_a, max_displacement: 2.0, repeat: 20}
+        - !TranslateAtom {molecule: osmolyte_r, max_displacement: 2.0, repeat: 20}
