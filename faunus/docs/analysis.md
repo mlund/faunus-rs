@@ -1135,48 +1135,67 @@ eigenvalue decomposition, and an isotropic estimate from the trace.
 ## Widom Rotation
 
 Measures how the surroundings restrict a molecule's orientation. For each
-snapshot a molecule is held at its center of mass and rigidly turned to `M` trial
-orientations spread evenly over all rotations
-([Alexa 2022](https://doi.org/10.1109/CVPR52688.2022.00811)). Only its
-interaction with the rest of the system is evaluated, using the run's own energy
-function. Turning a molecule about its center of mass leaves its internal
-geometry unchanged, so its internal energy plays no part.
+snapshot the analysis holds a molecule at its center of mass and rigidly turns it
+to `M` trial orientations spread evenly over all rotations
+([Alexa 2022](https://doi.org/10.1109/CVPR52688.2022.00811)), evaluating each
+with the run's own energy function. Turning a molecule about its center of mass
+leaves its internal geometry unchanged, so the internal energy cancels.
 
-From the trial energies `u(Ω)` the analysis reports, by Widom perturbation
-([Widom 1963](https://doi.org/10.1063/1.1734110)):
+Each snapshot is referenced to its deepest accessible orientation, so a constant
+that shifts every orientation equally cancels. This keeps the analysis correct
+for a stateful energy term that returns a whole-system total for a single-molecule
+change: Ewald reciprocal space returns the entire $k$-space energy, not the tagged
+molecule's share. The reported free energy and interaction are therefore excess
+quantities, measured relative to that deepest well rather than as absolute
+interactions.
 
-$$W = -k_BT \ln\left\langle \frac{1}{M}\sum_k e^{-u_k/k_BT}\right\rangle$$
+From the referenced trial energies $u_k$ the analysis forms, per snapshot, a cage
+free energy, a mean energy and an entropy that satisfy $F_b = U_b - T S_b$
+exactly, and averages each over snapshots. The cage free energy is
 
-the orientation-averaged free energy `W`, the mean interaction, and the effective
-number of accessible orientations `N_eff`. The analysis also reports how strongly
-the surroundings restrict the molecule, as an entropy relative to free rotation:
+$$F_b = -k_BT \ln\left[\frac{1}{M}\sum_k e^{-(u_k - u_\text{min})/k_BT}\right],
+\qquad W = \langle F_b\rangle,$$
 
-$$S_\text{orient}/R = -\sum_k w_k \ln (M w_k)$$
+which matches the per-vector cage partition function of
+[Akke et al. 1993](https://doi.org/10.1021/ja00074a073). The mean excess
+interaction is $U_b = \sum_k w_k (u_k - u_\text{min})$ with Boltzmann weights
+$w_k$, and the effective number of accessible orientations is
+$N_\text{eff} = 1/\sum_k w_k^2$. The orientational entropy relative to free
+rotation,
 
-where `w_k` is the Boltzmann weight of trial orientation `k`. The entropy follows
-directly from the sampled orientations and assumes nothing about the shape of the
-orientational well. It is dimensionless and never positive; zero means the
-molecule rotates freely. That restricting a molecule's orientation carries a free
-energy cost is the idea of
-[Akke et al. 1993](https://doi.org/10.1021/ja00074a073). Together with `W` and the
-mean interaction, the entropy splits the free energy into energetic and entropic
-parts.
+$$S_\text{orient}/R = -\sum_k w_k \ln (M w_k),$$
 
-For each requested molecular vector the analysis also reports the Lipari–Szabo
-order parameter ([Lipari & Szabo 1982](https://doi.org/10.1021/ja00381a009)):
+follows directly from the sampled orientations and assumes nothing about the shape
+of the well. It is dimensionless and never positive; zero means the molecule
+rotates freely.
 
-$$S^2 = \frac{3}{2}\sum_{\alpha\beta}\langle v_\alpha v_\beta\rangle^2 - \frac{1}{2}$$
+For each requested vector the analysis reports the ensemble Lipari–Szabo order
+parameter ([Lipari & Szabo 1982](https://doi.org/10.1021/ja00381a009)):
 
-where `S²=1` means the vector is fully locked and `S²=0` means it is free. A
-vector is given as a pair of atoms (`!pair [i, j]`), a gyration principal axis
+$$S^2 = \frac{3}{2}\sum_{\alpha\beta}\langle v_\alpha v_\beta\rangle^2 - \frac{1}{2},$$
+
+where the average runs over all snapshots, so $S^2 = 1$ marks a fully locked
+vector and $S^2 = 0$ a free one. An axis that is locked within each snapshot but
+wanders between them gives $S^2 \to 0$, as the ensemble average intends. A vector
+is given as a pair of atoms (`!pair [i, j]`), a gyration principal axis
 (`!axis 0|1|2`), or an explicit direction in the molecule's reference frame
-(`!body [x, y, z]`). Optionally, the analysis also reports the mean torque and
-the librational stiffness of the orientational cage.
+(`!body [x, y, z]`).
+
+Two further diagnostics are optional. The root-mean-square torque
+$\sqrt{\langle\tau^2\rangle}$ about each lab axis measures the strength of the
+orientational restoring force; the mean torque of an equilibrium molecule is zero,
+so its magnitude is the informative quantity. The local-harmonic stiffness
+$RT/\sigma^2$ estimates the curvature of the well from the librational variance
+$\sigma^2$ about each principal axis. It is a small-angle estimate, defined only
+for a confined, near-harmonic cage: an axis whose libration approaches free
+rotation is left out, so the reported value is conditioned on the confined
+snapshots.
 
 The analysis reports one set of numbers per run; for a spatial profile, run
 separate [umbrella](umbrella.md) windows and combine them afterwards. With
-implicit solvent the reported energies are free energies relative to pure
-solvent, not mechanical energies.
+implicit solvent the reported energies are free energies relative to pure solvent,
+not mechanical energies. A `rerun` weights every snapshot by its trajectory
+weight, so biased (penalty or Wang–Landau) trajectories are reweighted correctly.
 
 The selection must resolve to molecular groups (not atomic) of a single kind.
 
@@ -1204,22 +1223,25 @@ Key            | Required | Default | Description
 `selection`    | yes      |         | Selection for molecular group(s) of one kind
 `orientations` | yes      |         | Number of trial orientations `M` (typically 100–1000)
 `vectors`      | no       | `[]`    | Vectors for `S²`: `!pair [i,j]`, `!axis 0\|1\|2`, or `!body [x,y,z]`
-`torque`       | no       | `false` | Also measure the mean torque
-`dtheta`       | no       | `0.01`  | Rotation step for the torque (rad)
-`stiffness`    | no       | `false` | Also measure the librational stiffness
+`torque`       | no       | `false` | Also report the RMS torque about each axis
+`dtheta`       | no       | `0.01`  | Finite-difference rotation step for the torque (rad)
+`stiffness`    | no       | `false` | Also report the local-harmonic cage stiffness
 `file`         | no       |         | Streaming output file (see [Output file formats](#output-file-formats))
 `frequency`    | yes      |         | Sample frequency, e.g. `!Every 100`
 
 ### Output
 
-The YAML output includes `W`, the mean interaction, the orientational entropy,
-`N_eff`, and the per-vector and mean `S²`, each with a statistical error. Torque
-and stiffness are added when enabled. If `file` is given, each sampled step writes
-columns `step`, `W/kJ/mol`, `mean_S2`, and `N_eff`.
+The YAML output includes `W`, the mean excess interaction, the orientational
+entropy, `N_eff`, and the per-vector and mean `S²`, each with a statistical error.
+Snapshots in which the molecule clashes in every trial orientation are excluded
+from these averages and counted under `num_inaccessible`. The RMS torque
+(`rms_torque`) and stiffness (`local_harmonic_stiffness`) are added when enabled;
+an axis with no resolved samples reports null. If `file` is given, each sampled
+step writes columns `step`, `W/kJ/mol`, `mean_S2`, and `N_eff`.
 
-`W`, the mean interaction, and the stiffness are in kJ/mol, the torque is in kT
-per radian, and the entropy and `S²` are dimensionless. Each output key names its
-own unit.
+`W`, the mean excess interaction, and the stiffness are in kJ/mol, the torque is
+in kT per radian, and the entropy and `S²` are dimensionless. Each output key
+names its own unit.
 
 ---
 

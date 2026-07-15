@@ -16,38 +16,51 @@
 //!
 //! For each frozen snapshot a tagged rigid molecule is held at its center of
 //! mass and rigidly reoriented to `M` trial orientations sampled uniformly on
-//! SO(3). We evaluate only the molecule↔environment energy. A rotation about the
-//! center of mass leaves every intramolecular distance unchanged, so the bonded
-//! and intramolecular non-bonded energy are rotation-invariant and cancel.
+//! SO(3). A rotation about the center of mass leaves every intramolecular
+//! distance unchanged, so the bonded and intramolecular non-bonded energy are
+//! rotation-invariant and cancel.
 //!
-//! The run's own Hamiltonian supplies the orientational energy landscape `u(Ω)`,
-//! which we reduce to:
-//! - the orientationally-averaged one-body potential of mean force
-//!   `W = -RT·ln⟨M⁻¹ Σ exp(-u/RT)⟩` (compare with an umbrella profile);
-//! - the mean interaction energy `⟨u⟩`;
+//! Each snapshot is referenced to its own deepest accessible orientation `u_min`,
+//! so any snapshot-constant offset cancels. This matters because a stateful term
+//! reports a *whole-system* total for a single-group change — Ewald reciprocal
+//! space returns the entire k-space energy, not the tagged molecule's share — and
+//! only orientation-dependent differences survive the reference. The reported `W`
+//! and mean interaction are therefore excess quantities relative to that well, not
+//! absolute one-body potentials of mean force.
+//!
+//! From the referenced landscape `u(Ω)` each snapshot yields a conditional cage
+//! free energy, energy and entropy that satisfy `F_b = U_b − T·S_b` exactly, and
+//! we report their averages over snapshots:
+//! - `W = ⟨F_b⟩` with `F_b = -RT·ln[M⁻¹ Σₖ exp(-(uₖ-u_min)/RT)]` — the mean local
+//!   cage free energy (Akke's per-vector `q̃`);
+//! - the mean interaction energy `⟨U_b⟩` relative to the same reference;
 //! - the orientational entropy relative to a free rotor,
 //!   `S_orient/R = -Σₖ wₖ ln(M wₖ)`, taken straight from the Boltzmann weights
-//!   `wₖ` of the trial orientations. This is the exact SO(3) entropy, with no
-//!   model for the shape of the well; the restriction-of-order/free-energy
-//!   connection is due to [Akke et al. (1993)](https://doi.org/10.1021/ja00074a073),
-//!   whose per-vector `S² → entropy` mapping we do *not* use. Together with `W`
-//!   and `⟨u⟩` it forms an `F = U - TS` decomposition;
-//! - the Lipari–Szabo generalized order parameter `S²` for chosen molecular
-//!   vectors ([Lipari & Szabo (1982)](https://doi.org/10.1021/ja00381a009));
-//! - optionally the mean torque and the librational stiffness of the cage.
+//!   `wₖ`. This is the exact SO(3) entropy, with no model for the shape of the
+//!   well; the restriction-of-order/free-energy connection is due to
+//!   [Akke et al. (1993)](https://doi.org/10.1021/ja00074a073), whose
+//!   per-vector `S² → entropy` mapping we do *not* use;
+//! - the ensemble Lipari–Szabo generalized order parameter
+//!   `S² = 1.5‖⟨vvᵀ⟩‖² − 0.5` for chosen molecular vectors, formed from the grand
+//!   tensor accumulated across snapshots (not the average of per-snapshot squares),
+//!   so an axis that is locally locked but wanders isotropically reads `S² → 0`
+//!   ([Lipari & Szabo (1982)](https://doi.org/10.1021/ja00381a009));
+//! - optionally the RMS instantaneous torque and the local-harmonic stiffness of
+//!   the cage. The mean torque of an equilibrium molecule is zero by Haar
+//!   invariance, so the informative quantity is `√⟨τ²⟩`; the stiffness is a
+//!   small-angle harmonic estimate, undefined for a near-free rotor.
 //!
-//! `W`, `⟨u⟩` and the stiffness are in kJ/mol; the entropy is dimensionless
-//! (`≤ 0`, zero for a free rotor) and the torque is in kT per radian.
+//! `W`, `⟨U_b⟩` and the stiffness are in kJ/mol; the entropy is dimensionless
+//! (`≤ 0`, zero for a free rotor), the order parameter is dimensionless, and the
+//! torque is in kT per radian.
 //!
-//! With implicit solvent these energies are potentials of mean force (free
-//! energies relative to pure solvent), not mechanical energies.
+//! With implicit solvent these energies are free energies relative to pure
+//! solvent, not mechanical energies.
 //!
-//! The analysis emits one set of numbers per run. For spatial resolution, run
-//! separate umbrella windows and combine them afterwards.
+//! The analysis emits one set of numbers per run.
 
-use super::widom::WidomAccumulator;
 use super::{Analyze, Frequency, Sampling};
-use crate::auxiliary::{BlockAverage, BlockSummary, ColumnWriter, MappingExt};
+use crate::auxiliary::{BlockSummary, ColumnWriter, MappingExt, WeightedBlockAverage};
 use crate::cell::BoundaryConditions;
 use crate::context::{PerturbContext, Perturbation};
 use crate::energy::EnergyChange;
@@ -57,7 +70,7 @@ use crate::ObserveContext;
 use crate::{Point, UnitQuaternion};
 use anyhow::Result;
 use derive_more::Debug;
-use nalgebra::{Matrix3, Matrix4, Quaternion, Vector3};
+use nalgebra::{DMatrix, DVector, Matrix3, Matrix4, Quaternion, Vector3};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
@@ -70,8 +83,170 @@ const PSI: f64 = 1.533_751_168_755_204_3;
 /// to define a 3×3 covariance, so per-snapshot stiffness is skipped.
 const MIN_NEFF_FOR_STIFFNESS: f64 = 3.0;
 
+/// Above this librational variance (rad²) the cloud is too broad for a harmonic
+/// well to describe, so the local stiffness estimate is skipped for that axis.
+/// A uniform SO(3) cloud has component variance `π²/9 + 2/3 ≈ 1.76`; the cap of
+/// `0.25 rad²` (RMS libration ≈ 29°) keeps only genuinely confined, near-harmonic
+/// wells and refuses to report a finite spring constant for a near-free rotor.
+const MAX_VARIANCE_FOR_STIFFNESS: f64 = 0.25;
+
 /// Guard against dividing by a vanishing orientational variance.
 const VARIANCE_EPSILON: f64 = 1e-12;
+
+/// The six independent components `[xx, yy, zz, xy, xz, yz]` of a symmetric 3×3.
+fn tensor_components(tensor: &Matrix3<f64>) -> [f64; 6] {
+    [
+        tensor[(0, 0)],
+        tensor[(1, 1)],
+        tensor[(2, 2)],
+        tensor[(0, 1)],
+        tensor[(0, 2)],
+        tensor[(1, 2)],
+    ]
+}
+
+/// Serialize an optional diagnostic to YAML, or null when it has no value — the
+/// shape a per-axis quantity that may lack samples in a given run reports.
+fn value_or_null<T: Serialize>(value: Option<T>) -> serde_yml::Value {
+    value
+        .and_then(|v| serde_yml::to_value(v).ok())
+        .unwrap_or(serde_yml::Value::Null)
+}
+
+/// `S² = 1.5 Σ_αβ T_αβ² − 0.5` and its gradient `∂S²/∂T_αβ` for one vector's six
+/// tensor components `[xx, yy, zz, xy, xz, yz]` (off-diagonals appear twice).
+fn order_and_gradient(m: &[f64]) -> (f64, [f64; 6]) {
+    let s2 = 1.5 * (m[0] * m[0] + m[1] * m[1] + m[2] * m[2])
+        + 3.0 * (m[3] * m[3] + m[4] * m[4] + m[5] * m[5])
+        - 0.5;
+    let gradient = [
+        3.0 * m[0],
+        3.0 * m[1],
+        3.0 * m[2],
+        6.0 * m[3],
+        6.0 * m[4],
+        6.0 * m[5],
+    ];
+    (s2, gradient)
+}
+
+/// Joint estimator of the ensemble Lipari–Szabo order parameter for every requested
+/// vector.
+///
+/// Each frame contributes the concatenated six components of every vector's
+/// conditional tensor `Σₖ wₖ vₖvₖᵀ`. A weighted mean and co-moment (West's algorithm)
+/// give the grand tensor `⟨vvᵀ⟩` and the covariance of *that mean*, so `S²` and its
+/// error follow from the delta method `gᵀ·Cov·g`. Tracking the full joint covariance
+/// — rather than six independent block averages — is what makes the error respect the
+/// exact per-frame trace constraint `T_xx + T_yy + T_zz = 1` (which perfectly
+/// anti-correlates the diagonal components) and the correlation between vectors that
+/// move together on a rigid body.
+#[derive(Clone, Debug)]
+struct OrderAccumulator {
+    num_vectors: usize,
+    sum_w: f64,
+    sum_w2: f64,
+    mean: DVector<f64>,
+    /// `Σ w (x − mean_old)(x − mean_new)ᵀ` over frames (weighted co-moment).
+    comoment: DMatrix<f64>,
+}
+
+impl OrderAccumulator {
+    fn new(num_vectors: usize) -> Self {
+        let dim = 6 * num_vectors;
+        Self {
+            num_vectors,
+            sum_w: 0.0,
+            sum_w2: 0.0,
+            mean: DVector::zeros(dim),
+            comoment: DMatrix::zeros(dim, dim),
+        }
+    }
+
+    /// Whether any frame has contributed. `sum_w2` grows only on a non-zero weight,
+    /// so it doubles as the sample count without a separate counter.
+    fn is_empty(&self) -> bool {
+        self.sum_w2 == 0.0
+    }
+
+    /// Fold one frame's concatenated tensor components (length `6·num_vectors`).
+    fn add(&mut self, components: &[f64], weight: f64) {
+        if self.num_vectors == 0 || weight == 0.0 {
+            return;
+        }
+        let x = DVector::from_row_slice(components);
+        self.sum_w += weight;
+        self.sum_w2 += weight * weight;
+        let delta = &x - &self.mean;
+        self.mean.axpy(weight / self.sum_w, &delta, 1.0);
+        let delta2 = &x - &self.mean;
+        // Weighted rank-1 update in place: comoment += weight · delta · delta2ᵀ.
+        self.comoment.ger(weight, &delta, &delta2, 1.0);
+    }
+
+    /// Covariance of the grand-tensor mean, matching [`WeightedBlockAverage::error`]:
+    /// `comoment / (Σw · (N_eff − 1))`. `None` for fewer than two effective frames.
+    fn covariance_of_mean(&self) -> Option<DMatrix<f64>> {
+        if self.is_empty() {
+            return None;
+        }
+        let effective_n = self.sum_w * self.sum_w / self.sum_w2;
+        if effective_n <= 1.0 || self.sum_w <= 0.0 {
+            return None;
+        }
+        Some(&self.comoment / (self.sum_w * (effective_n - 1.0)))
+    }
+
+    /// Ensemble `S²` point estimate for vector `v`, from its grand-tensor mean.
+    fn vector_order(&self, v: usize) -> Option<f64> {
+        (!self.is_empty() && v < self.num_vectors)
+            .then(|| order_and_gradient(self.mean.rows(6 * v, 6).as_slice()).0)
+    }
+
+    /// Ensemble `S²` and its delta-method error for vector `v`.
+    fn vector_summary(&self, v: usize) -> Option<BlockSummary> {
+        let mean = self.vector_order(v)?;
+        let (_, gradient) = order_and_gradient(self.mean.rows(6 * v, 6).as_slice());
+        let error = self.covariance_of_mean().map_or(0.0, |cov| {
+            let g = DVector::from_row_slice(&gradient);
+            let sub = cov.view((6 * v, 6 * v), (6, 6));
+            (g.transpose() * sub * &g)[(0, 0)].max(0.0).sqrt()
+        });
+        Some(BlockSummary { mean, error })
+    }
+
+    /// Mean ensemble `S²` point estimate over all vectors (no error), cheap enough
+    /// to stream every frame.
+    fn mean_order(&self) -> Option<f64> {
+        if self.is_empty() || self.num_vectors == 0 {
+            return None;
+        }
+        let sum: f64 = (0..self.num_vectors)
+            .filter_map(|v| self.vector_order(v))
+            .sum();
+        Some(sum / self.num_vectors as f64)
+    }
+
+    /// Mean ensemble `S²` over all vectors, with the error propagated through the
+    /// full joint covariance so cross-vector correlation is kept.
+    fn mean_summary(&self) -> Option<BlockSummary> {
+        let mean = self.mean_order()?;
+        let n = self.num_vectors as f64;
+        let mut full_gradient = DVector::zeros(6 * self.num_vectors);
+        for v in 0..self.num_vectors {
+            let (_, gradient) = order_and_gradient(self.mean.rows(6 * v, 6).as_slice());
+            for (i, g) in gradient.iter().enumerate() {
+                full_gradient[6 * v + i] = g / n;
+            }
+        }
+        let error = self.covariance_of_mean().map_or(0.0, |cov| {
+            (full_gradient.transpose() * cov * &full_gradient)[(0, 0)]
+                .max(0.0)
+                .sqrt()
+        });
+        Some(BlockSummary { mean, error })
+    }
+}
 
 /// Low-discrepancy set of `n` orientations sampled uniformly on SO(3).
 ///
@@ -251,21 +426,21 @@ impl WidomRotationBuilder {
             quaternions: super_fibonacci(self.orientations),
             vectors: self.vectors.clone(),
             thermal_energy,
-            widom: WidomAccumulator::default(),
-            order: self.vectors.iter().map(|_| BlockAverage::new()).collect(),
-            mean_order: BlockAverage::new(),
-            mean_interaction: BlockAverage::new(),
-            entropy: BlockAverage::new(),
-            neff: BlockAverage::new(),
+            cage_free_energy: WeightedBlockAverage::new(),
+            order: OrderAccumulator::new(self.vectors.len()),
+            mean_interaction: WeightedBlockAverage::new(),
+            entropy: WeightedBlockAverage::new(),
+            neff: WeightedBlockAverage::new(),
             torque: self.torque.then(|| TorqueProbe {
-                axes: std::array::from_fn(|_| WidomAccumulator::default()),
+                axes: std::array::from_fn(|_| WeightedBlockAverage::new()),
                 dtheta: self.dtheta,
             }),
             stiffness: self
                 .stiffness
-                .then(|| std::array::from_fn(|_| BlockAverage::new())),
+                .then(|| std::array::from_fn(|_| WeightedBlockAverage::new())),
             sampling: Sampling::new(self.frequency),
             num_blocks: 0,
+            num_inaccessible: 0,
             stream,
         })
     }
@@ -290,10 +465,15 @@ impl WidomRotationBuilder {
     }
 }
 
-/// Mean-torque probe: one Widom accumulator per lab axis.
+/// Instantaneous-torque probe: one accumulator of `τ²` per lab axis.
+///
+/// The mean torque of a molecule at equilibrium is zero by Haar invariance (a
+/// rigid rotation is measure-preserving, so `⟨τ⟩ = 0` however anisotropic the
+/// cage), so the magnitude `√⟨τ²⟩` is the informative quantity.
 #[derive(Clone, Debug, Default)]
 struct TorqueProbe {
-    axes: [WidomAccumulator; 3],
+    /// Block averages of `τ²` about x, y, z (kT²/rad²).
+    axes: [WeightedBlockAverage; 3],
     dtheta: f64,
 }
 
@@ -304,23 +484,26 @@ pub struct WidomRotation {
     quaternions: Vec<UnitQuaternion>,
     vectors: Vec<VectorSpec>,
     thermal_energy: f64,
-    /// Orientational partition function → `W`.
-    widom: WidomAccumulator,
-    /// `S²` per vector, and averaged over vectors.
-    order: Vec<BlockAverage>,
-    mean_order: BlockAverage,
-    mean_interaction: BlockAverage,
+    /// Per-snapshot cage free energy `F_b`, averaged over snapshots → `W = ⟨F_b⟩`.
+    cage_free_energy: WeightedBlockAverage,
+    /// Joint grand-tensor estimator for the ensemble Lipari–Szabo `S²`.
+    order: OrderAccumulator,
+    /// Mean interaction relative to the per-snapshot deepest well (kJ/mol).
+    mean_interaction: WeightedBlockAverage,
     /// Orientational configurational entropy in units of the gas constant.
-    entropy: BlockAverage,
-    neff: BlockAverage,
+    entropy: WeightedBlockAverage,
+    neff: WeightedBlockAverage,
     torque: Option<TorqueProbe>,
-    /// Principal librational stiffnesses (kJ/mol/rad²), ascending.
-    stiffness: Option<[BlockAverage; 3]>,
+    /// Principal local-harmonic stiffnesses (kJ/mol/rad²), ascending.
+    stiffness: Option<[WeightedBlockAverage; 3]>,
     /// Frequency and frame count, owned by the framework.
     sampling: Sampling,
-    /// Molecule scans, one per matching molecule per frame. Each is an independent block, so this
-    /// is the count behind every reported error bar.
+    /// Accessible molecule scans, one per matching molecule per frame. Each is an
+    /// independent block, so this is the count behind every reported error bar.
     num_blocks: usize,
+    /// Molecule scans with no accessible orientation (every trial pose clashes);
+    /// excluded from every average so `F = U − TS` stays consistent.
+    num_inaccessible: usize,
     #[debug(skip)]
     stream: Option<ColumnWriter>,
 }
@@ -366,8 +549,8 @@ impl WidomRotation {
     ///
     /// Returns `None` when every trial orientation is forbidden (all energies
     /// `+∞`, e.g. a large molecule that clashes in any pose): the conditional
-    /// orientational distribution is then undefined, and only `W` (which the
-    /// Widom accumulator records as `+∞`) remains meaningful.
+    /// orientational distribution is then undefined and the cage free energy
+    /// diverges, so the snapshot is counted as inaccessible and skipped.
     fn weights(energies: &[f64]) -> Option<Vec<f64>> {
         let min = energies.iter().copied().fold(f64::INFINITY, f64::min);
         if !min.is_finite() {
@@ -378,36 +561,60 @@ impl WidomRotation {
         (sum > 0.0 && sum.is_finite()).then(|| unnormalized.iter().map(|w| w / sum).collect())
     }
 
-    /// Accumulate all snapshot observables for one molecule.
-    fn accumulate(&mut self, energies: &[f64], references: &[Point]) {
-        // W: pool every orientation (an all-forbidden pose gives W→∞); one block
-        // per molecule-snapshot for errors.
-        for &u in energies {
-            self.widom.collect(u, 1.0);
-        }
-        self.widom.end_block();
-
-        // The remaining observables need the conditional orientational distribution.
+    /// Accumulate all snapshot observables for one molecule, weighted by the
+    /// frame's reweighting factor `weight` (`1.0` for an unbiased run).
+    ///
+    /// Every energy is referenced to the deepest accessible orientation `u_min`,
+    /// so a snapshot-constant offset — the whole-system total that a stateful
+    /// term's `partial_energy` returns (e.g. Ewald reciprocal space) — cancels
+    /// and only orientation-dependent differences enter. `W` and the mean
+    /// interaction are therefore excess quantities relative to that reference.
+    ///
+    /// Returns `true` if the snapshot was accessible and fed the averages, so the
+    /// caller can keep the torque probe on exactly the same set of frames.
+    fn accumulate(&mut self, energies: &[f64], references: &[Point], weight: f64) -> bool {
         let Some(weights) = Self::weights(energies) else {
-            return;
+            // No accessible orientation: the cage free energy diverges and the
+            // conditional distribution is undefined. Record it and leave every
+            // average untouched, so the reported F = U − TS stays consistent.
+            self.num_inaccessible += 1;
+            return false;
         };
+        let u_min = energies.iter().copied().fold(f64::INFINITY, f64::min);
+        let count = energies.len() as f64;
 
-        let mean_u: f64 = energies.iter().zip(&weights).map(|(u, w)| u * w).sum();
-        self.mean_interaction.add(mean_u * self.thermal_energy);
+        // Conditional cage free energy relative to the deepest well (Akke's q̃):
+        // F_b = −ln[(1/M) Σₖ exp(−(uₖ−u_min))] in kT. Averaged over snapshots this
+        // gives W = ⟨F_b⟩, whose error is the SEM of the same per-block estimator.
+        // A forbidden pose has u = +∞, so exp(−(u−u_min)) = 0 and drops out cleanly.
+        let partition = energies.iter().map(|&u| (-(u - u_min)).exp()).sum::<f64>() / count;
+        self.cage_free_energy.add(-partition.ln(), weight);
+
+        // Mean interaction relative to the same reference (kT → kJ/mol). With the
+        // free-rotor entropy below, U_b − T·S_b = F_b holds exactly per snapshot.
+        // A forbidden pose carries u = +∞ and w = 0; skip it, or (+∞)·0 = NaN would
+        // poison the average.
+        let mean_u: f64 = energies
+            .iter()
+            .zip(&weights)
+            .filter(|(u, _)| u.is_finite())
+            .map(|(u, w)| (u - u_min) * w)
+            .sum();
+        self.mean_interaction
+            .add(mean_u * self.thermal_energy, weight);
 
         // Orientational configurational entropy relative to a free rotor.
-        let count = energies.len() as f64;
         let entropy: f64 = weights
             .iter()
             .filter(|&&w| w > 0.0)
             .map(|&w| -w * (count * w).ln())
             .sum();
-        self.entropy.add(entropy);
+        self.entropy.add(entropy, weight);
 
         let neff = 1.0 / weights.iter().map(|w| w * w).sum::<f64>();
-        self.neff.add(neff);
+        self.neff.add(neff, weight);
 
-        self.accumulate_order(&weights, references);
+        self.accumulate_order(&weights, references, weight);
         if let Some(stiffness) = self.stiffness.as_mut() {
             Self::accumulate_stiffness(
                 stiffness,
@@ -415,37 +622,57 @@ impl WidomRotation {
                 &weights,
                 neff,
                 self.thermal_energy,
+                weight,
             );
         }
+        self.num_blocks += 1;
+        true
     }
 
-    /// Per-vector and mean order parameter `S²`.
-    fn accumulate_order(&mut self, weights: &[f64], references: &[Point]) {
+    /// Fold this snapshot's conditional orientation tensors `Σₖ wₖ vₖvₖᵀ` into the
+    /// joint grand-tensor estimator.
+    ///
+    /// The ensemble Lipari–Szabo `S²` is `1.5‖⟨vvᵀ⟩‖² − 0.5` — the square of the
+    /// *ensemble-averaged* tensor. Accumulating the tensor here and squaring once
+    /// at report time (not the per-snapshot square) is what lets an axis that is
+    /// locally locked but wanders isotropically between snapshots read `S² → 0`.
+    fn accumulate_order(&mut self, weights: &[f64], references: &[Point], weight: f64) {
         if references.is_empty() {
             return;
         }
-        let mut sum = 0.0;
-        for (accumulator, reference) in self.order.iter_mut().zip(references) {
+        let mut components = Vec::with_capacity(6 * references.len());
+        for reference in references {
             let mut tensor = Matrix3::zeros();
             for (q, &w) in self.quaternions.iter().zip(weights) {
                 let v = q.transform_vector(reference);
                 tensor += w * (v * v.transpose());
             }
-            let s2 = 1.5 * tensor.iter().map(|x| x * x).sum::<f64>() - 0.5;
-            accumulator.add(s2);
-            sum += s2;
+            components.extend_from_slice(&tensor_components(&tensor));
         }
-        self.mean_order.add(sum / references.len() as f64);
+        self.order.add(&components, weight);
     }
 
-    /// Librational stiffness `K = RT·Cov⁻¹` from the weighted orientation cloud;
-    /// its principal values are `RT / var` along each principal libration axis.
+    /// Local small-angle harmonic stiffness `K = RT·Cov⁻¹` from the weighted
+    /// orientation cloud; its principal values are `RT / var` along each principal
+    /// libration axis.
+    ///
+    /// This is a *local* estimate: it is meaningful only for a unimodal cloud
+    /// confined to small angles, where the well is approximately harmonic. A broad
+    /// or near-free cloud has no single well and no Markley mean, so an axis whose
+    /// libration variance exceeds [`MAX_VARIANCE_FOR_STIFFNESS`] is skipped rather
+    /// than reported — a free rotor must not read as a finite spring constant.
+    ///
+    /// Because that guard drops the loose snapshots, the reported value is
+    /// conditioned on the confined frames and so biased toward the stiff
+    /// sub-ensemble of a cage that breathes between tight and loose. The per-axis
+    /// sample count (`n`) shows how many snapshots qualified.
     fn accumulate_stiffness(
-        stiffness: &mut [BlockAverage; 3],
+        stiffness: &mut [WeightedBlockAverage; 3],
         quaternions: &[UnitQuaternion],
         weights: &[f64],
         neff: f64,
         thermal_energy: f64,
+        weight: f64,
     ) {
         if neff < MIN_NEFF_FOR_STIFFNESS {
             return; // cloud too sparse to define a covariance
@@ -484,32 +711,49 @@ impl WidomRotation {
             .collect();
         variances.sort_by(|a, b| b.total_cmp(a));
         for (accumulator, &variance) in stiffness.iter_mut().zip(&variances) {
-            // A vanishing variance means the cloud is degenerate along this libration
-            // axis and the stiffness diverges. Skip that axis alone — dropping the
-            // snapshot would discard the well-defined axes, and recording a non-finite
-            // value would poison the block average for good.
-            if variance.is_finite() && variance > VARIANCE_EPSILON {
-                accumulator.add(thermal_energy / variance);
+            // Skip an axis whose harmonic estimate is undefined at either extreme:
+            // a vanishing variance means a degenerate (collapsed) cloud and a
+            // diverging stiffness, while a variance above the harmonic cap means a
+            // broad, near-free cloud that no spring constant describes. Skipping the
+            // axis alone keeps the well-defined axes and never poisons the average
+            // with a non-finite value.
+            if variance.is_finite()
+                && variance > VARIANCE_EPSILON
+                && variance < MAX_VARIANCE_FOR_STIFFNESS
+            {
+                accumulator.add(thermal_energy / variance, weight);
             }
         }
     }
 
-    /// Mean torque about each lab axis via a small virtual rotation, analogous to the
-    /// virtual-translate force.
+    /// Instantaneous torque² about each lab axis, by a central finite difference of
+    /// the energy at the molecule's current orientation.
+    ///
+    /// `τ = −(u(+δ) − u(−δ)) / 2δ` is Ewald-safe: the snapshot-constant offset
+    /// cancels between the two poses without any reference subtraction. We
+    /// accumulate `τ²`, whose root-mean-square is the reported magnitude — the mean
+    /// torque itself vanishes at equilibrium (Haar). An axis is skipped if either
+    /// probe pose clashes (`u = +∞`), leaving a well-defined pose's neighbours
+    /// unrecorded rather than poisoning the average with `+∞`.
     fn accumulate_torque<T: PerturbContext>(
         &mut self,
         trial: &mut T,
         gi: usize,
-        reference_energy: f64,
+        weight: f64,
     ) -> anyhow::Result<()> {
         let Some(probe) = self.torque.as_mut() else {
             return Ok(());
         };
         let axes = [Vector3::x_axis(), Vector3::y_axis(), Vector3::z_axis()];
         for (accumulator, axis) in probe.axes.iter_mut().zip(axes) {
-            let rotation = UnitQuaternion::from_axis_angle(&axis, probe.dtheta);
-            let energy = energy_at_orientation(trial, gi, &rotation, self.thermal_energy)?;
-            accumulator.collect(energy - reference_energy, 1.0);
+            let forward = UnitQuaternion::from_axis_angle(&axis, probe.dtheta);
+            let backward = UnitQuaternion::from_axis_angle(&axis, -probe.dtheta);
+            let u_forward = energy_at_orientation(trial, gi, &forward, self.thermal_energy)?;
+            let u_backward = energy_at_orientation(trial, gi, &backward, self.thermal_energy)?;
+            if u_forward.is_finite() && u_backward.is_finite() {
+                let torque = -(u_forward - u_backward) / (2.0 * probe.dtheta);
+                accumulator.add(torque * torque, weight);
+            }
         }
         Ok(())
     }
@@ -525,7 +769,7 @@ impl_info!(
 impl<T: PerturbContext> Analyze<T> for WidomRotation {
     impl_sampling_accessors!();
 
-    fn perform_sample(&mut self, context: &T, step: usize, _weight: f64) -> Result<()> {
+    fn perform_sample(&mut self, context: &T, step: usize, weight: f64) -> Result<()> {
         let groups = self.selection.resolve(context).to_vec();
         if groups.is_empty() {
             return Ok(()); // e.g. all molecules removed under GCMC
@@ -541,53 +785,58 @@ impl<T: PerturbContext> Analyze<T> for WidomRotation {
                 .map(|v| v.reference(gi, &indices, &com, context))
                 .collect::<Result<Vec<_>>>()?;
 
-            // The torque compares each rotated energy against this one, so it must be read against
-            // the change a rotation of this group derives — not one named independently here. No
-            // refresh is owed: nothing has been perturbed, so the caches still describe the
-            // coordinates.
-            let unrotated = Perturbation::Rotate {
-                group: gi,
-                rotation: UnitQuaternion::identity(),
-            };
-            let reference_energy =
-                trial.hamiltonian().energy(&trial, &unrotated.change()) / self.thermal_energy;
             let energies = self.scan_energies(&mut trial, gi)?;
-            self.accumulate(&energies, &references);
-            self.accumulate_torque(&mut trial, gi, reference_energy)?;
-            // Each molecule-scan is one independent block.
-            self.num_blocks += 1;
+            // Keep the torque on exactly the frames that fed W/U/S: an inaccessible
+            // scan contributes to neither.
+            if self.accumulate(&energies, &references, weight) {
+                self.accumulate_torque(&mut trial, gi, weight)?;
+            }
         }
 
-        if let Some(stream) = self.stream.as_mut() {
-            let w = self.widom.mean_free_energy() * self.thermal_energy;
-            stream.write_row(&[
-                &step,
-                &format_args!("{w:.6e}"),
-                &format_args!("{:.6}", self.mean_order.mean()),
-                &format_args!("{:.3}", self.neff.mean()),
-            ])?;
+        // Skip the row until at least one accessible scan exists, so an all-clash
+        // opening frame does not write a NaN line. Read every streamed value before
+        // borrowing the stream mutably.
+        if self.cage_free_energy.n() > 0 {
+            let w = self.cage_free_energy.mean() * self.thermal_energy;
+            let mean_s2 = self.order.mean_order().unwrap_or(f64::NAN);
+            let neff = self.neff.mean();
+            if let Some(stream) = self.stream.as_mut() {
+                stream.write_row(&[
+                    &step,
+                    &format_args!("{w:.6e}"),
+                    &format_args!("{mean_s2:.6}"),
+                    &format_args!("{neff:.3}"),
+                ])?;
+            }
         }
         Ok(())
     }
 
     fn results(&self) -> Option<serde_yml::Value> {
-        // A frame in which no molecule matched leaves every block empty.
-        if self.num_blocks == 0 {
+        // A frame in which no molecule matched at all leaves nothing to report.
+        if self.num_blocks == 0 && self.num_inaccessible == 0 {
             return None;
         }
         let mut map = serde_yml::Mapping::new();
         map.try_insert("num_samples", self.sampling.num_samples())?;
         map.try_insert("num_blocks", self.num_blocks)?;
-        // Pooled log-sum-exp estimate (matches the module formula and the CSV),
-        // with the block-to-block standard error.
+        // Scans with no accessible orientation carry a diverging cage free energy;
+        // they are excluded from every average, so surface their count separately.
+        if self.num_inaccessible > 0 {
+            map.try_insert("num_inaccessible", self.num_inaccessible)?;
+        }
+        // Every molecule clashed in every pose: nothing finite to average.
+        if self.num_blocks == 0 {
+            return Some(serde_yml::Value::Mapping(map));
+        }
+
+        // W = ⟨F_b⟩ over per-snapshot cage free energies (excess, relative to each
+        // snapshot's deepest well); mean and error are the one block estimator.
+        map.try_insert("W/kJ/mol", &self.cage_free_energy * self.thermal_energy)?;
         map.try_insert(
-            "W/kJ/mol",
-            BlockSummary {
-                mean: self.widom.mean_free_energy() * self.thermal_energy,
-                error: self.widom.free_energy().error() * self.thermal_energy,
-            },
+            "mean_excess_interaction/kJ/mol",
+            self.mean_interaction.summary(),
         )?;
-        map.try_insert("mean_interaction/kJ/mol", self.mean_interaction.summary())?;
         map.try_insert("orientational_entropy/R", self.entropy.summary())?;
         map.try_insert("N_eff", self.neff.summary())?;
 
@@ -595,45 +844,45 @@ impl<T: PerturbContext> Analyze<T> for WidomRotation {
             let per_vector: Vec<serde_yml::Value> = self
                 .vectors
                 .iter()
-                .zip(&self.order)
-                .filter_map(|(spec, accumulator)| {
+                .enumerate()
+                .filter_map(|(v, spec)| {
                     let mut entry = serde_yml::Mapping::new();
                     entry.try_insert("vector", spec.label())?;
-                    entry.try_insert("S2", accumulator.summary())?;
+                    entry.try_insert("S2", self.order.vector_summary(v)?)?;
                     Some(serde_yml::Value::Mapping(entry))
                 })
                 .collect();
             map.insert("S2".into(), serde_yml::Value::Sequence(per_vector));
-            map.try_insert("mean_S2", self.mean_order.summary())?;
+            if let Some(mean_s2) = self.order.mean_summary() {
+                map.try_insert("mean_S2", mean_s2)?;
+            }
         }
 
         if let Some(probe) = &self.torque {
             let mut torque = serde_yml::Mapping::new();
             for (axis, accumulator) in ["x", "y", "z"].iter().zip(&probe.axes) {
-                let value = -accumulator.mean_free_energy() / probe.dtheta;
-                torque.try_insert(axis, value)?;
+                // Root-mean-square torque magnitude: the mean torque vanishes at
+                // equilibrium, so √⟨τ²⟩ is the informative quantity. An axis whose
+                // ±δ probe clashed in every frame has no samples and reports null.
+                let value = value_or_null(accumulator.checked_mean().map(f64::sqrt));
+                torque.insert(axis.to_string().into(), value);
             }
             map.insert(
-                "torque/kT_per_rad".into(),
+                "rms_torque/kT_per_rad".into(),
                 serde_yml::Value::Mapping(torque),
             );
         }
 
         if let Some(stiffness) = &self.stiffness {
-            // An axis that was degenerate in every snapshot has no samples; report it
-            // as null rather than letting an empty average read as zero stiffness,
-            // which would claim free rotation about an axis that is in fact locked.
+            // An axis with no samples was degenerate or too soft in every snapshot;
+            // report it as null rather than letting an empty average read as zero
+            // stiffness, which would claim free rotation about a locked axis.
             let values: Vec<serde_yml::Value> = stiffness
                 .iter()
-                .map(|accumulator| match accumulator.n() {
-                    0 => serde_yml::Value::Null,
-                    _ => {
-                        serde_yml::to_value(accumulator.summary()).unwrap_or(serde_yml::Value::Null)
-                    }
-                })
+                .map(|accumulator| value_or_null(accumulator.summary()))
                 .collect();
             map.insert(
-                "stiffness/kJ_per_mol_per_rad2".into(),
+                "local_harmonic_stiffness/kJ_per_mol_per_rad2".into(),
                 serde_yml::Value::Sequence(values),
             );
         }
@@ -696,11 +945,11 @@ mod tests {
     /// every stiffness diverges and nothing may be recorded.
     #[test]
     fn stiffness_skips_fully_degenerate_orientation_cloud() {
-        let mut stiffness = std::array::from_fn(|_| BlockAverage::new());
+        let mut stiffness = std::array::from_fn(|_| WeightedBlockAverage::new());
         let identical = vec![UnitQuaternion::identity(); 4];
         let weights = vec![0.25; 4];
 
-        WidomRotation::accumulate_stiffness(&mut stiffness, &identical, &weights, 4.0, 2.5);
+        WidomRotation::accumulate_stiffness(&mut stiffness, &identical, &weights, 4.0, 2.5, 1.0);
 
         for accumulator in &stiffness {
             assert_eq!(
@@ -715,7 +964,7 @@ mod tests {
     /// normal alone. The two well-defined axes must still be recorded.
     #[test]
     fn stiffness_skips_only_the_degenerate_axis() {
-        let mut stiffness = std::array::from_fn(|_| BlockAverage::new());
+        let mut stiffness = std::array::from_fn(|_| WeightedBlockAverage::new());
         let angle = 0.1;
         let planar: Vec<UnitQuaternion> = [
             Vector3::x_axis(),
@@ -731,7 +980,14 @@ mod tests {
         let weights = vec![0.2; 5];
         let thermal_energy = 2.5;
 
-        WidomRotation::accumulate_stiffness(&mut stiffness, &planar, &weights, 5.0, thermal_energy);
+        WidomRotation::accumulate_stiffness(
+            &mut stiffness,
+            &planar,
+            &weights,
+            5.0,
+            thermal_energy,
+            1.0,
+        );
 
         // Softest first: the two in-plane axes carry the samples, the collapsed
         // out-of-plane axis carries none.
@@ -905,11 +1161,18 @@ propagate: {{seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}}
         assert_approx_eq!(f64, (ctx.mass_center(&indices) - com_before).norm(), 0.0);
 
         let yaml = Analyze::<Backend>::to_yaml(&analysis).unwrap();
-        for key in ["W/kJ/mol", "mean_interaction/kJ/mol", "N_eff", "mean_S2"] {
+        for key in [
+            "W/kJ/mol",
+            "mean_excess_interaction/kJ/mol",
+            "N_eff",
+            "mean_S2",
+        ] {
             assert!(yaml.get(key).is_some(), "missing key {key}");
         }
-        assert!(yaml.get("torque/kT_per_rad").is_some());
-        assert!(yaml.get("stiffness/kJ_per_mol_per_rad2").is_some());
+        assert!(yaml.get("rms_torque/kT_per_rad").is_some());
+        assert!(yaml
+            .get("local_harmonic_stiffness/kJ_per_mol_per_rad2")
+            .is_some());
 
         let s2 = yaml
             .get("S2")
@@ -1127,9 +1390,9 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
 
         let probe = analysis.torque.as_ref().unwrap();
         for (axis, accumulator) in ["x", "y", "z"].iter().zip(&probe.axes) {
-            let torque = -accumulator.mean_free_energy() / probe.dtheta;
+            let rms_torque = accumulator.mean().sqrt();
             assert!(
-                !torque.is_nan(),
+                !rms_torque.is_nan(),
                 "torque about {axis} is NaN: a forbidden pose poisoned a cached group energy"
             );
         }
@@ -1172,14 +1435,301 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
         analysis.sample(&ctx, 1).unwrap();
 
         let probe = analysis.torque.as_ref().unwrap();
-        let torques: Vec<f64> = probe
-            .axes
-            .iter()
-            .map(|a| -a.mean_free_energy() / probe.dtheta)
-            .collect();
+        let torques: Vec<f64> = probe.axes.iter().map(|a| a.mean().sqrt()).collect();
         assert!(
             torques.iter().any(|t| t.abs() > 1e-3),
             "every axis reported zero torque: {torques:?}"
         );
+    }
+
+    /// The reported free energy, energy and entropy must satisfy `W = U − TS`
+    /// exactly, per snapshot and hence in the mean — the decomposition the module
+    /// documents. A pooled `W` would break it by Jensen's inequality.
+    #[test]
+    fn free_energy_splits_into_energy_and_entropy() {
+        let ctx = dimer_backend("");
+        let mut analysis = builder(false, false).build(&ctx, RT_300).unwrap();
+
+        // Two distinct orientational landscapes, so the mean is a genuine average.
+        analysis.accumulate(&[0.0, 1.0, 2.5, 0.3, 4.0], &[], 1.0);
+        analysis.accumulate(&[0.0, 0.2, 0.2, 5.0, 0.1], &[], 1.0);
+
+        let w = analysis.cage_free_energy.mean() * RT_300;
+        let u = analysis.mean_interaction.mean();
+        let ts = analysis.entropy.mean() * RT_300;
+        assert_approx_eq!(f64, w, u - ts, epsilon = 1e-9);
+    }
+
+    /// Forbidden trial poses (`u = +∞`, `w = 0`) must not poison the mean
+    /// interaction with a `+∞·0 = NaN`, and `F = U − TS` must still hold when some
+    /// orientations clash.
+    #[test]
+    fn a_partial_clash_keeps_observables_finite() {
+        let ctx = dimer_backend("");
+        let mut analysis = builder(false, false).build(&ctx, RT_300).unwrap();
+
+        let energies = [0.0, 1.0, f64::INFINITY, 2.0, f64::INFINITY];
+        assert!(analysis.accumulate(&energies, &[], 1.0));
+
+        let w = analysis.cage_free_energy.mean() * RT_300;
+        let u = analysis.mean_interaction.mean();
+        let ts = analysis.entropy.mean() * RT_300;
+        assert!(u.is_finite(), "mean interaction poisoned to NaN by a clash");
+        assert!(w.is_finite());
+        assert_approx_eq!(f64, w, u - ts, epsilon = 1e-9);
+    }
+
+    /// The ensemble `S²` error must respect the covariance of the tensor
+    /// components: with no frame-to-frame fluctuation the grand-tensor mean has no
+    /// sampling spread, so the error is exactly zero — not the spurious value an
+    /// independent-component quadrature would report.
+    #[test]
+    fn ensemble_order_error_vanishes_without_fluctuation() {
+        let ctx = dimer_backend("");
+        let mut analysis = WidomRotationBuilder {
+            selection: Selection::parse("molecule DIMER").unwrap(),
+            orientations: 128,
+            vectors: vec![
+                VectorSpec::Body([0.0, 0.0, 1.0]),
+                VectorSpec::Body([1.0, 0.0, 0.0]),
+            ],
+            torque: false,
+            dtheta: 0.01,
+            stiffness: false,
+            file: None,
+            frequency: Frequency::Every(1),
+        }
+        .build(&ctx, RT_300)
+        .unwrap();
+
+        // Identical conditional tensors every frame → zero sampling variance.
+        let mut weights = vec![0.0; analysis.quaternions.len()];
+        weights[3] = 1.0;
+        let references = [Point::new(0.0, 0.0, 1.0), Point::new(1.0, 0.0, 0.0)];
+        for _ in 0..16 {
+            analysis.accumulate_order(&weights, &references, 1.0);
+        }
+
+        for v in 0..2 {
+            assert_approx_eq!(f64, analysis.order.vector_summary(v).unwrap().error, 0.0);
+        }
+        assert_approx_eq!(f64, analysis.order.mean_summary().unwrap().error, 0.0);
+    }
+
+    /// A snapshot-constant offset added to every trial energy — the signature of a
+    /// whole-system stateful term like Ewald reciprocal space, whose `partial_energy`
+    /// returns the total — must leave every observable unchanged. Referencing to the
+    /// deepest well cancels it.
+    #[test]
+    fn a_constant_energy_offset_cancels() {
+        let ctx = dimer_backend("");
+        let energies = [0.0, 1.0, 2.5, 0.3, 4.0];
+        let shifted: Vec<f64> = energies.iter().map(|u| u + 137.0).collect();
+
+        let mut plain = builder(false, false).build(&ctx, RT_300).unwrap();
+        let mut offset = builder(false, false).build(&ctx, RT_300).unwrap();
+        plain.accumulate(&energies, &[], 1.0);
+        offset.accumulate(&shifted, &[], 1.0);
+
+        assert_approx_eq!(
+            f64,
+            plain.cage_free_energy.mean(),
+            offset.cage_free_energy.mean(),
+            epsilon = 1e-9
+        );
+        assert_approx_eq!(
+            f64,
+            plain.mean_interaction.mean(),
+            offset.mean_interaction.mean(),
+            epsilon = 1e-9
+        );
+        assert_approx_eq!(
+            f64,
+            plain.entropy.mean(),
+            offset.entropy.mean(),
+            epsilon = 1e-9
+        );
+        assert_approx_eq!(f64, plain.neff.mean(), offset.neff.mean(), epsilon = 1e-9);
+    }
+
+    /// The rerun weight must reach the accumulators: two snapshots with distinct
+    /// cage free energies must give a weight-dependent mean.
+    #[test]
+    fn rerun_weight_reweights_the_free_energy() {
+        let ctx = dimer_backend("");
+        let flat = [1.0, 1.0, 1.0, 1.0]; // F = 0
+        let welled = [0.0, 10.0, 10.0, 10.0]; // one deep well, F > 0
+
+        let mut unbiased = builder(false, false).build(&ctx, RT_300).unwrap();
+        unbiased.accumulate(&flat, &[], 1.0);
+        unbiased.accumulate(&welled, &[], 1.0);
+
+        let mut reweighted = builder(false, false).build(&ctx, RT_300).unwrap();
+        reweighted.accumulate(&flat, &[], 3.0);
+        reweighted.accumulate(&welled, &[], 1.0);
+
+        let f_flat = 0.0;
+        let f_welled = -((1.0 + 3.0 * (-10.0f64).exp()) / 4.0).ln();
+        assert_approx_eq!(
+            f64,
+            unbiased.cage_free_energy.mean(),
+            0.5 * (f_flat + f_welled),
+            epsilon = 1e-9
+        );
+        assert_approx_eq!(
+            f64,
+            reweighted.cage_free_energy.mean(),
+            (3.0 * f_flat + f_welled) / 4.0,
+            epsilon = 1e-9
+        );
+    }
+
+    /// An axis that is locally locked in every snapshot but points isotropically
+    /// across snapshots has ensemble `S² → 0` (Lipari–Szabo eq 20), even though its
+    /// per-snapshot conditional order is 1. The grand-tensor estimator must report
+    /// the ensemble value, not the average of the per-snapshot squares.
+    #[test]
+    fn wandering_axis_has_zero_ensemble_order() {
+        let ctx = dimer_backend("");
+        let mut analysis = WidomRotationBuilder {
+            selection: Selection::parse("molecule DIMER").unwrap(),
+            orientations: 512,
+            vectors: vec![VectorSpec::Body([0.0, 0.0, 1.0])],
+            torque: false,
+            dtheta: 0.01,
+            stiffness: false,
+            file: None,
+            frequency: Frequency::Every(1),
+        }
+        .build(&ctx, RT_300)
+        .unwrap();
+
+        // Each snapshot locks onto a different trial orientation (one-hot weights),
+        // and those orientations tile SO(3) isotropically, so the fixed body vector
+        // is carried to isotropically-scattered lab directions.
+        let reference = Point::new(0.0, 0.0, 1.0);
+        for locked in 0..analysis.quaternions.len() {
+            let mut weights = vec![0.0; analysis.quaternions.len()];
+            weights[locked] = 1.0;
+            analysis.accumulate_order(&weights, std::slice::from_ref(&reference), 1.0);
+        }
+
+        let s2 = analysis.order.vector_summary(0).unwrap();
+        assert!(
+            s2.mean.abs() < 1e-2,
+            "wandering axis should give ensemble S² ≈ 0, got {}",
+            s2.mean
+        );
+    }
+
+    /// A free rotor (flat landscape) must not report a finite librational stiffness:
+    /// the cloud fills SO(3), no harmonic well exists, and the naive `RT·Cov⁻¹`
+    /// would report a spurious `≈0.57 RT/rad²`. Every axis must be skipped.
+    #[test]
+    fn free_rotor_reports_no_stiffness() {
+        let ctx = dimer_backend("");
+        let mut analysis = builder(false, true).build(&ctx, RT_300).unwrap();
+
+        // A flat landscape gives uniform weights over the full SO(3) trial set.
+        let flat = vec![0.0; analysis.quaternions.len()];
+        analysis.accumulate(&flat, &[], 1.0);
+
+        for accumulator in analysis.stiffness.as_ref().unwrap() {
+            assert_eq!(
+                accumulator.n(),
+                0,
+                "a free rotor must report no local-harmonic stiffness"
+            );
+        }
+    }
+
+    /// A charged dimer in a uniform field `q·z` is a point dipole, `u(Ω) = a·n_z`
+    /// in kT with `a = μE/kT`. Its orientational entropy, effective sample size and
+    /// bond-axis order parameter then have closed Langevin forms, so this checks the
+    /// quadrature, Boltzmann weights and ensemble tensor against dipole theory — not
+    /// just internal consistency.
+    #[test]
+    fn dipole_in_uniform_field_matches_langevin_theory() {
+        let orientations = 4000;
+        let ctx = dimer_backend(r#"custom_external: [{selection: "all", function: "q * z"}]"#);
+        let mut analysis = WidomRotationBuilder {
+            selection: Selection::parse("molecule DIMER").unwrap(),
+            orientations,
+            vectors: vec![VectorSpec::Pair([0, 1])],
+            torque: false,
+            dtheta: 0.01,
+            stiffness: false,
+            file: None,
+            frequency: Frequency::Every(1),
+        }
+        .build(&ctx, RT_300)
+        .unwrap();
+
+        // Coupling a = μE/kT read from the scan: u/kT spans [−a, a] since u ∝ n_z.
+        let gi = ctx.resolve_groups(analysis.selection.selection())[0];
+        let mut trial = ctx.clone();
+        let energies = analysis.scan_energies(&mut trial, gi).unwrap();
+        let u_max = energies.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+        let u_min = energies.iter().copied().fold(f64::INFINITY, f64::min);
+        let a = 0.5 * (u_max - u_min);
+        assert!(a > 0.5, "field too weak to be a meaningful test: a = {a}");
+
+        analysis.sample(&ctx, 1).unwrap();
+
+        let langevin = |a: f64| 1.0 / a.tanh() - 1.0 / a; // L(a) = coth a − 1/a
+
+        // Orientational entropy S/R = −a·L(a) + ln(sinh a / a).
+        let entropy_theory = -a * langevin(a) + (a.sinh() / a).ln();
+        assert_approx_eq!(f64, analysis.entropy.mean(), entropy_theory, epsilon = 2e-3);
+
+        // Effective accessible orientations N_eff / M = tanh(a) / a.
+        let neff_theory = orientations as f64 * a.tanh() / a;
+        assert_approx_eq!(f64, analysis.neff.mean(), neff_theory, epsilon = 4.0);
+
+        // Bond-axis order parameter S² = [1 − 3·L(a)/a]² (Langevin second moment).
+        let s2_theory = (1.0 - 3.0 * langevin(a) / a).powi(2);
+        let s2 = analysis.order.vector_summary(0).unwrap().mean;
+        assert_approx_eq!(f64, s2, s2_theory, epsilon = 2e-3);
+    }
+
+    /// The ensemble `S²` of a vector distributed uniformly over a cone of half-angle
+    /// β about a lab axis is `[½cosβ(1+cosβ)]²`. Feeding exactly that cap
+    /// distribution through the grand-tensor path checks the order-parameter
+    /// magnitude at a substantial value, not only the isotropic and locked limits.
+    #[test]
+    fn cone_distribution_matches_analytic_order_parameter() {
+        let ctx = dimer_backend("");
+        let mut analysis = WidomRotationBuilder {
+            selection: Selection::parse("molecule DIMER").unwrap(),
+            orientations: 8000,
+            vectors: vec![VectorSpec::Body([0.0, 0.0, 1.0])],
+            torque: false,
+            dtheta: 0.01,
+            stiffness: false,
+            file: None,
+            frequency: Frequency::Every(1),
+        }
+        .build(&ctx, RT_300)
+        .unwrap();
+
+        // Uniform over the cap n_z ≥ cos β about +z: the trial set tiles SO(3), so
+        // its image of ẑ tiles the sphere and selecting the cap gives a uniform cone.
+        let reference = Point::new(0.0, 0.0, 1.0);
+        let cos_beta = 0.5_f64; // β = 60°
+        let in_cap: Vec<bool> = analysis
+            .quaternions
+            .iter()
+            .map(|q| q.transform_vector(&reference).z >= cos_beta)
+            .collect();
+        let count = in_cap.iter().filter(|&&c| c).count() as f64;
+        let weights: Vec<f64> = in_cap
+            .iter()
+            .map(|&c| if c { 1.0 / count } else { 0.0 })
+            .collect();
+        analysis.accumulate_order(&weights, std::slice::from_ref(&reference), 1.0);
+
+        let s2_theory = (0.5 * cos_beta * (1.0 + cos_beta)).powi(2);
+        let s2 = analysis.order.vector_summary(0).unwrap().mean;
+        assert_approx_eq!(f64, s2, s2_theory, epsilon = 1e-2);
     }
 }

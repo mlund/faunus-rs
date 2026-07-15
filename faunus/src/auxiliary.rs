@@ -695,7 +695,8 @@ impl BlockAverage {
         self.0.sample_variance().sqrt()
     }
 
-    /// Number of blocks recorded.
+    /// Number of blocks recorded. Only the unit tests need this.
+    #[cfg(test)]
     pub fn n(&self) -> u64 {
         self.0.len()
     }
@@ -712,6 +713,107 @@ impl BlockAverage {
     /// Serialize as YAML mapping `{ mean, error }` via [`BlockSummary`].
     pub fn to_yaml(&self) -> Option<serde_yml::Value> {
         serde_yml::to_value(self.summary()).ok()
+    }
+}
+
+/// Running block average with a reliability-weighted mean and standard error.
+///
+/// Each [`add`](Self::add) records one block measurement together with a
+/// reweighting factor (`1.0` for an unbiased run, the trajectory weight for a
+/// penalty/Wang–Landau rerun). The mean is weight-normalised; the error is a
+/// standard error built on the Kish effective sample size
+/// `N_eff = (Σwᵢ)² / Σwᵢ²`, so `SEM² = S / (Σwᵢ · (N_eff − 1))` with
+/// `S = Σ wᵢ (xᵢ − x̄)²` accumulated by West's algorithm. With every weight
+/// `1.0` this reduces exactly to the unweighted [`BlockAverage`] SEM.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct WeightedBlockAverage {
+    sum_w: f64,
+    sum_w2: f64,
+    mean: f64,
+    /// Weighted sum of squared deviations, `S = Σ wᵢ (xᵢ − x̄)²`.
+    sum_sq: f64,
+    count: u64,
+}
+
+impl WeightedBlockAverage {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Record a per-block value with a reweighting factor. Zero-weight samples
+    /// are ignored (they carry no information and would only perturb `N_eff`).
+    pub fn add(&mut self, value: f64, weight: f64) {
+        if weight == 0.0 {
+            return;
+        }
+        self.sum_w += weight;
+        self.sum_w2 += weight * weight;
+        let delta = value - self.mean;
+        self.mean += weight / self.sum_w * delta;
+        self.sum_sq += weight * delta * (value - self.mean);
+        self.count += 1;
+    }
+
+    /// Weight-normalised mean, or NaN if no samples have been added.
+    pub fn mean(&self) -> f64 {
+        if self.count == 0 {
+            f64::NAN
+        } else {
+            self.mean
+        }
+    }
+
+    /// Weight-normalised mean, or `None` if empty — so callers reporting a value
+    /// cannot leak the NaN sentinel into the output.
+    pub fn checked_mean(&self) -> Option<f64> {
+        (self.count > 0).then_some(self.mean)
+    }
+
+    /// Kish effective sample size `(Σwᵢ)² / Σwᵢ²`; the number of equally-weighted
+    /// samples that would carry the same information.
+    pub fn effective_n(&self) -> f64 {
+        if self.sum_w2 == 0.0 {
+            0.0
+        } else {
+            self.sum_w * self.sum_w / self.sum_w2
+        }
+    }
+
+    /// Standard error of the weighted mean. Zero for fewer than two effective
+    /// samples, where the spread is undefined.
+    pub fn error(&self) -> f64 {
+        let neff = self.effective_n();
+        if neff <= 1.0 || self.sum_w <= 0.0 {
+            0.0
+        } else {
+            (self.sum_sq / (self.sum_w * (neff - 1.0))).sqrt()
+        }
+    }
+
+    /// Number of blocks recorded.
+    pub fn n(&self) -> u64 {
+        self.count
+    }
+
+    /// Snapshot of mean ± SEM in the canonical `{ mean, error }` YAML shape, or
+    /// `None` when empty so an unsampled accumulator serializes as null rather than
+    /// a `{nan, 0}` mapping.
+    pub fn summary(&self) -> Option<BlockSummary> {
+        (self.count > 0).then(|| BlockSummary {
+            mean: self.mean,
+            error: self.error(),
+        })
+    }
+}
+
+impl Mul<f64> for &WeightedBlockAverage {
+    type Output = BlockSummary;
+
+    fn mul(self, scale: f64) -> BlockSummary {
+        BlockSummary {
+            mean: self.mean() * scale,
+            error: self.error() * scale.abs(),
+        }
     }
 }
 
@@ -988,6 +1090,64 @@ mod block_tests {
         // The unscaled-by-1 form matches direct accessors
         assert_relative_eq!(base.mean, b.mean());
         assert_relative_eq!(base.error, b.error());
+    }
+}
+
+#[cfg(test)]
+mod weighted_block_tests {
+    use super::{BlockAverage, WeightedBlockAverage};
+    use approx::assert_relative_eq;
+
+    /// With every weight 1.0 the weighted accumulator must reproduce the
+    /// unweighted block mean and SEM exactly.
+    #[test]
+    fn unit_weights_match_block_average() {
+        let values = [1.0, 2.0, 4.0, 8.0, 16.0];
+        let mut plain = BlockAverage::new();
+        let mut weighted = WeightedBlockAverage::new();
+        for &v in &values {
+            plain.add(v);
+            weighted.add(v, 1.0);
+        }
+        assert_relative_eq!(weighted.mean(), plain.mean(), epsilon = 1e-12);
+        assert_relative_eq!(weighted.error(), plain.error(), epsilon = 1e-12);
+        assert_eq!(weighted.n(), 5);
+        assert_relative_eq!(weighted.effective_n(), 5.0, epsilon = 1e-12);
+    }
+
+    /// A rescaled weight set leaves the mean and the effective sample size
+    /// unchanged: only relative weights matter.
+    #[test]
+    fn weighted_mean_and_effective_n() {
+        let mut wba = WeightedBlockAverage::new();
+        // weight 3 on 2.0, weight 1 on 6.0 → mean = (6 + 6)/4 = 3.0
+        wba.add(2.0, 3.0);
+        wba.add(6.0, 1.0);
+        assert_relative_eq!(wba.mean(), 3.0, epsilon = 1e-12);
+        // N_eff = (3+1)² / (9+1) = 16/10 = 1.6
+        assert_relative_eq!(wba.effective_n(), 1.6, epsilon = 1e-12);
+    }
+
+    /// A dominant weight collapses the effective sample size toward one, and the
+    /// error toward zero — a single frame carries no spread.
+    #[test]
+    fn single_effective_sample_has_zero_error() {
+        let mut wba = WeightedBlockAverage::new();
+        wba.add(5.0, 1.0);
+        assert_eq!(wba.error(), 0.0);
+        let empty = WeightedBlockAverage::new();
+        assert!(empty.mean().is_nan());
+        assert_eq!(empty.error(), 0.0);
+    }
+
+    #[test]
+    fn scaling_signs_the_mean_and_absolutes_the_error() {
+        let mut wba = WeightedBlockAverage::new();
+        wba.add(1.0, 2.0);
+        wba.add(3.0, 2.0);
+        let scaled = &wba * -2.0;
+        assert_relative_eq!(scaled.mean, wba.mean() * -2.0, epsilon = 1e-12);
+        assert_relative_eq!(scaled.error, wba.error() * 2.0, epsilon = 1e-12);
     }
 }
 
