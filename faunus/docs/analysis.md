@@ -968,9 +968,18 @@ The residue file partitions the total excess among residues:
 $$\Gamma = \sum_i \gamma_i.$$
 
 The contributions sum to the profile at the same shell thickness and provide a spatial
-description of ligand enrichment. `kp` and `b1` are local descriptors, not thermodynamic
-coefficients. They depend on the selected shell thickness and may be `nan` where no meaningful
-local volume is available.
+description of ligand enrichment. The local-to-bulk partition coefficient is
+
+$$K_{p,i} = \frac{\langle N_i(\delta)\rangle - \langle N_i(0)\rangle}{c\,v_i^{\rm acc}(\delta)},$$
+
+where $v_i^{\rm acc}$ is the volume accessible to ligand centres around residue $i$. Values above
+one indicate local enrichment and values below one indicate depletion. The hydration density
+
+$$b_{1,i} = \frac{v_i^{\rm w}}{\bar v_{\rm w}\,\mathrm{ASA}_i}$$
+
+is the water-shell volume per unit water-accessible surface area, in waters per Å². `kp` and `b1`
+are local descriptors, not thermodynamic coefficients; they depend on the selected shell
+thickness and are `nan` when the required local volume or surface area is unavailable.
 
 ### Example
 
