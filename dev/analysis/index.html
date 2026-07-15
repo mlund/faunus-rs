@@ -2436,9 +2436,14 @@ profiles with the salt stoichiometry and the activity convention appropriate to 
 <p>The residue file partitions the total excess among residues:</p>
 <div class="arithmatex">\[\Gamma = \sum_i \gamma_i.\]</div>
 <p>The contributions sum to the profile at the same shell thickness and provide a spatial
-description of ligand enrichment. <code>kp</code> and <code>b1</code> are local descriptors, not thermodynamic
-coefficients. They depend on the selected shell thickness and may be <code>nan</code> where no meaningful
-local volume is available.</p>
+description of ligand enrichment. The local-to-bulk partition coefficient is</p>
+<div class="arithmatex">\[K_{p,i} = \frac{\langle N_i(\delta)\rangle - \langle N_i(0)\rangle}{c\,v_i^{\rm acc}(\delta)},\]</div>
+<p>where <span class="arithmatex">\(v_i^{\rm acc}\)</span> is the volume accessible to ligand centres around residue <span class="arithmatex">\(i\)</span>. Values above
+one indicate local enrichment and values below one indicate depletion. The hydration density</p>
+<div class="arithmatex">\[b_{1,i} = \frac{v_i^{\rm w}}{\bar v_{\rm w}\,\mathrm{ASA}_i}\]</div>
+<p>is the water-shell volume per unit water-accessible surface area, in waters per Å². <code>kp</code> and <code>b1</code>
+are local descriptors, not thermodynamic coefficients; they depend on the selected shell
+thickness and are <code>nan</code> when the required local volume or surface area is unavailable.</p>
 <h3 id="example_12">Example<a class="headerlink" href="#example_12" title="Permanent link">&para;</a></h3>
 <p>One block is needed for each ligand species. Use <code>use_com: true</code> for a molecular ligand; otherwise,
 the selected atoms are counted individually.</p>
