@@ -2602,7 +2602,11 @@ accordingly.</p>
 row per residue, at the widest δ: name and number, the water-accessible surface area <code>asa/Å²</code>, the
 volume <code>accessible_volume/Å³</code> offered to a ligand centre, the hydration density <code>b1/Å⁻²</code>, the
 partition coefficient <code>kp</code>, and <code>gamma</code> with its error. A buried residue offers no accessible
-surface, so its <code>kp</code> and <code>b1</code> are undefined and written as <code>nan</code> — not as zero. <code>output.yaml</code>
+surface, so its <code>kp</code> and <code>b1</code> are undefined and written as <code>nan</code> — not as zero. The same holds
+where the radical partition transfers ownership between unequal-radius neighbours and drives a
+residue's accessible shell volume negative: <code>kp</code> and <code>b1</code> would be negative, which is unphysical,
+so they too are written as <code>nan</code>. The exact total <span class="arithmatex">\(\Gamma\)</span> and the per-residue <span class="arithmatex">\(\gamma_i\)</span> are
+unaffected. <code>output.yaml</code>
 reports the <code>gamma</code> at the widest δ, the measured bulk <code>concentration/Å⁻³</code>, and the
 <code>excluded_volume/Å³</code>.</p>
 <h3 id="references">References<a class="headerlink" href="#references" title="Permanent link">&para;</a></h3>
