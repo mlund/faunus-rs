@@ -151,6 +151,22 @@ impl SlabGrid {
         })
     }
 
+    /// Error out if the cell's volume has changed from the one the grid was built from.
+    ///
+    /// The bin layout and cross-sectional area are frozen at construction, so a committed volume
+    /// move (NPT / anisotropic) would silently bias σ = q/area and the z-binning. A *virtual* or
+    /// rejected volume move restores the exact cell, so this passes for those.
+    pub(crate) fn ensure_cell_unchanged(&self, cell: &Cell) -> Result<()> {
+        if let Some(current) = self.grid.volume_drift(cell) {
+            anyhow::bail!(
+                "the slab profile assumes a constant cell, but the volume changed from {:.4} to \
+                 {current:.4} Å³ since the grid was built; it is not valid under volume moves (NPT)",
+                self.grid.volume(),
+            );
+        }
+        Ok(())
+    }
+
     /// Enable the finite-box correction: the profile then reports φ_box = φ_∞ − φ_ext, the
     /// potential of the finite minimum-image cross-section rather than of an infinite plane.
     /// Use when the simulation has no Åkesson external term of its own.
@@ -332,6 +348,26 @@ mod tests {
             kernel,
         )
         .unwrap()
+    }
+
+    #[test]
+    fn unchanged_cell_passes_but_a_volume_change_errors() {
+        let cell = Cell::Cuboid(Cuboid::new(100.0, 100.0, 100.0));
+        let grid = SlabGrid::from_cell(&cell, 1.0, SlabKernel::screened(7.0, 0.1)).unwrap();
+        // The exact same cell — as a virtual/rejected volume move restores it — passes.
+        assert!(grid.ensure_cell_unchanged(&cell).is_ok());
+        // Isotropic growth changes both volume and Lz.
+        assert!(grid
+            .ensure_cell_unchanged(&Cell::Cuboid(Cuboid::new(110.0, 110.0, 110.0)))
+            .is_err());
+        // ScaleXY: volume changes, Lz fixed.
+        assert!(grid
+            .ensure_cell_unchanged(&Cell::Cuboid(Cuboid::new(110.0, 110.0, 100.0)))
+            .is_err());
+        // ScaleZ: Lz and volume change.
+        assert!(grid
+            .ensure_cell_unchanged(&Cell::Cuboid(Cuboid::new(100.0, 100.0, 110.0)))
+            .is_err());
     }
 
     #[test]

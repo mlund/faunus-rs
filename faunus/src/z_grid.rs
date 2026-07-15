@@ -22,6 +22,10 @@
 use crate::cell::{Cell, Shape};
 use anyhow::Result;
 
+/// Relative tolerance for detecting cell-volume drift: a committed volume move exceeds it, while a
+/// virtual/rejected move restores the exact cell and stays within it.
+const VOLUME_TOLERANCE: f64 = 1e-6;
+
 /// A uniform grid of slabs spanning the cell along z, from `−half_length_z` to `+half_length_z`.
 ///
 /// The grid is laid out once from the cell and does not follow later volume changes.
@@ -95,6 +99,18 @@ impl ZGrid {
     /// Volume of the cell the grid was laid out from (Å³).
     pub(crate) fn volume(&self) -> f64 {
         self.bin_volume() * self.n_bins as f64
+    }
+
+    /// The cell's current volume, but only if it has drifted from the grid's build-time volume
+    /// beyond a small relative tolerance; otherwise `None`.
+    ///
+    /// The slabs keep their initial size, so any drift makes a z-profile meaningful only at
+    /// constant volume. Consumers decide whether to warn or to error. Since every volume move in
+    /// practice changes the total volume, this single scalar catches them all.
+    pub(crate) fn volume_drift(&self, cell: &Cell) -> Option<f64> {
+        let current = cell.volume()?;
+        let initial = self.volume();
+        ((current - initial).abs() > VOLUME_TOLERANCE * initial).then_some(current)
     }
 
     /// z at the centre of bin `index`.

@@ -24,7 +24,6 @@
 
 use super::{Analyze, Frequency, Sampling};
 use crate::auxiliary::{BlockAverage, BlockSummary, ColumnWriter, MappingExt};
-use crate::cell::Shape;
 use crate::selection::{first_unsupported_group, ComSelection, Selection};
 use crate::topology::MoleculeKind;
 use crate::z_grid::ZGrid;
@@ -222,15 +221,12 @@ impl DensityProfile {
         if self.warned_volume_change {
             return;
         }
-        let initial = self.grid.volume();
-        let Some(current) = context.cell().volume() else {
-            return;
-        };
-        if (current - initial).abs() > 1e-6 * initial {
+        if let Some(current) = self.grid.volume_drift(context.cell()) {
             log::warn!(
-                "density profile: the cell volume changed from {initial:.1} to {current:.1} Å³; \
+                "density profile: the cell volume changed from {:.1} to {current:.1} Å³; \
                  the slabs keep their initial size, so the profile is only meaningful at \
-                 constant volume"
+                 constant volume",
+                self.grid.volume()
             );
             self.warned_volume_change = true;
         }

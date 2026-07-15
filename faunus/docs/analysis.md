@@ -767,11 +767,17 @@ assumes each charged plane is effectively infinite, which holds only when the la
 size is much larger than the Debye length — a warning is printed otherwise (screened
 kernel only).
 
+The kernel treats the $z$-axis as open rather than periodic: the separation $|z-z'|$ is never
+wrapped into the box, so the profile applies to a slab confined by walls or otherwise
+electroneutral along $z$, and it becomes inaccurate near the $z$-boundaries of a cell that is
+periodic in $z$. The slab grid is laid out once at start-up and the analysis therefore requires
+a constant cell; it aborts if the box changes, as under volume moves (NPT).
+
 ### Finite-box correction (optional)
 
 For a box that is *not* much larger than the Debye length, set `finite_box_correction: true`.
 The infinite-plane potential is then replaced by that of the *finite* minimum-image
-cross-section, valid at any box size:
+cross-section:
 
 $$\varphi_\text{box}(z) = \varphi_\infty(z) - \varphi_\text{ext}(z),
 \qquad \varphi_\infty(z) = \frac{2\pi\,l_B}{\kappa}\,e^{-\kappa|z|},$$
@@ -790,8 +796,11 @@ closed form
 
 $$\varphi_\text{ext}(z) = \frac{2\pi\,l_B}{\kappa}\,e^{-\kappa\sqrt{R^2 + z^2}}.$$
 
-Both vanish as the cross-section grows ($\varphi_\text{ext}\to0$ for $\kappa a\gg1$), so the
-correction matters only for thin boxes. Enable it only when the simulation itself does not
+This disk expression is the potential *on the cylinder axis* — the on-axis potential of a
+uniformly charged disk of radius $R$ — rather than a laterally-averaged cross-section, so for a
+cylinder the correction is exact on-axis and approximate off it. Both forms vanish as the
+cross-section grows ($\varphi_\text{ext}\to0$ for $\kappa a\gg1$), so the correction matters
+only for thin boxes. Enable it only when the simulation itself does not
 already apply such an external correction, otherwise the far field is subtracted twice.
 
 For the unscreened (bare-Coulomb) kernel the correction reduces to Greberg's original
@@ -800,7 +809,7 @@ square-base form,
 $$\varphi_\text{ext}(z) = -2\pi\,l_B\,|z| - l_B\,u_\text{box}(z),
 \qquad
 u_\text{box}(z) = 8a\,\ln\!\frac{\sqrt{2a^2+z^2}+a}{\sqrt{a^2+z^2}}
-   - 2z\left(\frac{\pi}{2} + \arcsin\frac{a^4 - z^4 - 2a^2z^2}{(a^2+z^2)^2}\right),$$
+   - 2|z|\left(\frac{\pi}{2} + \arcsin\frac{a^4 - z^4 - 2a^2z^2}{(a^2+z^2)^2}\right),$$
 
 recovered from the screened form as $\kappa\to0$ once the regularizing constant $2\pi l_B/\kappa$
 is removed. Because Greberg's construction models a square minimum-image box, the unscreened
@@ -813,11 +822,15 @@ plane — directly comparable to electrokinetic measurements. For a charged wall
 shear plane sits at the outer edge of the fixed charge, where $\sigma(z)$ has decayed into the
 diffuse layer. The edge is located as the slab nearest the solution where
 
-$$|\sigma(z_\text{shear})| > \texttt{zeta\_threshold}\cdot\max_z|\sigma(z)|,$$
+$$|\sigma(z_\text{shear})| > \texttt{zeta\_threshold}\cdot\max_\text{wall}|\sigma(z)|,$$
 
-with the charge-weighted centroid of $|\sigma(z)|$ selecting which wall the fixed charge sits
-on. The reported ζ is the mean potential $\varphi(z_\text{shear})$ with its statistical error,
-alongside the slab position $z_\text{shear}$. A cutoff of `0.02` (2 % of the peak) is a
+where the $|\sigma(z)|$-weighted centroid first selects which wall the fixed charge sits on and
+the peak $\max_\text{wall}|\sigma(z)|$ is taken over that wall's side, so an oppositely charged
+far wall cannot mask a weaker surface charge on the measured side. Because $\sigma(z)$ is built
+from the configured `selection`, which defaults to all charged atoms, mobile ions then enter it
+and can shift the shear plane; restrict `selection` to the fixed wall or brush charge for a
+well-defined ζ. The reported ζ is the mean potential $\varphi(z_\text{shear})$ with its
+statistical error, alongside the slab position $z_\text{shear}$. A cutoff of `0.02` (2 % of the peak) is a
 reasonable starting point, but the right value is system-dependent, so inspect $\sigma(z)$ in
 `potential.csv` and adjust. The estimate is only meaningful where the fixed charge is localized
 against a wall and decays into solution before the midplane; a slit charged symmetrically on
@@ -852,11 +865,15 @@ Key                    | Required | Default         | Description
 
 The output file contains, per slab: the position `z/Å`, the slab charge density (per area
 `e·Å⁻²` and per volume `e·Å⁻³`), the potential `potential/mV` with its statistical error
-`potential_error/mV`, and the electric field `field/mV·Å⁻¹`. `output.yaml` additionally
-reports the potential at each wall and at the midplane (with the wall-to-midplane drops) as
-mean ± error, and, when `zeta_threshold` is set, the ζ-potential `zeta/mV` and the shear-plane
-position `z_shear/Å`. For reliable numbers, **equilibrate first and start production from a
-state file** (`-s`).
+`potential_error/mV`, and the electric field `field/mV·Å⁻¹`. `output.yaml` additionally reports
+the potential at the two outermost slabs (`potential_edge_lower/mV`, `potential_edge_upper/mV`
+— the outermost bin centres, half a slab $\Delta z/2$ inside the physical walls) and at the
+midplane (`potential_midplane/mV`), together with the edge-to-midplane drops
+(`potential_drop_lower/mV`, `potential_drop_upper/mV`), as mean ± error; the midplane and drop
+errors are accumulated per configuration, so they reflect the correlation between the slabs they
+combine. When `zeta_threshold` is set it also reports the ζ-potential `zeta/mV` and the
+shear-plane position `z_shear/Å`. For reliable numbers, **equilibrate first and start production
+from a state file** (`-s`).
 
 ---
 

@@ -101,6 +101,15 @@ impl ElectricPotentialProfileBuilder {
                     "zeta_threshold must lie in the open interval (0, 1), got {threshold}"
                 );
             }
+            // The shear plane is located from |σ(z)| of the *selected* charge; with the default
+            // 'all' selection the mobile ions enter σ(z) and can blur or shift it.
+            if self.selection.source() == "all" {
+                log::warn!(
+                    "electric potential profile: ζ estimate requested with the default 'all' \
+                     selection; mobile ions then enter |σ(z)| and can shift the shear plane — \
+                     restrict `selection` to the fixed (wall/brush) charge for a well-defined ζ"
+                );
+            }
         }
         let medium =
             medium.ok_or_else(|| anyhow::anyhow!("a medium is required for the Bjerrum length"))?;
@@ -137,6 +146,9 @@ impl ElectricPotentialProfileBuilder {
             debye_length,
             slab_charge_density: new_accumulators(n_bins),
             potential: new_accumulators(n_bins),
+            midplane_potential: BlockAverage::new(),
+            drop_lower: BlockAverage::new(),
+            drop_upper: BlockAverage::new(),
             zeta_threshold: self.zeta_threshold,
             output_file: self.file.clone(),
             sampling: Sampling::new(self.frequency),
@@ -170,6 +182,11 @@ pub struct ElectricPotentialProfile {
     slab_charge_density: Vec<BlockAverage>,
     /// Per-slab potential φ(z) (kT/e): mean and error across samples.
     potential: Vec<BlockAverage>,
+    /// Midplane potential and the two edge→midplane drops (kT/e), accumulated per configuration so
+    /// their block errors reflect the correlation between the bins they combine, not independence.
+    midplane_potential: BlockAverage,
+    drop_lower: BlockAverage,
+    drop_upper: BlockAverage,
     /// Cutoff fraction of peak |σ| that locates the shear plane for the ζ estimate; `None` disables it.
     zeta_threshold: Option<f64>,
     #[debug(skip)]
@@ -194,9 +211,14 @@ fn derivative(values: &[f64], i: usize, spacing: f64) -> f64 {
 }
 
 impl ElectricPotentialProfile {
+    /// Convert an accumulated potential (kT/e) to millivolts as `{mean, error}`.
+    fn to_millivolt(&self, potential: &BlockAverage) -> BlockSummary {
+        potential * self.millivolt_per_kt
+    }
+
     /// Potential at bin `index` in millivolts, as `{mean, error}`.
     fn potential_millivolt(&self, index: usize) -> BlockSummary {
-        &self.potential[index] * self.millivolt_per_kt
+        self.to_millivolt(&self.potential[index])
     }
 
     /// Mean potential profile in millivolts (drives the field column and the YAML scalars).
@@ -205,6 +227,26 @@ impl ElectricPotentialProfile {
             .iter()
             .map(|p| p.mean() * self.millivolt_per_kt)
             .collect()
+    }
+
+    /// Fold one configuration's potential profile φ(z) (kT/e) into every accumulator, advancing the
+    /// per-bin profile and the derived midplane/drop scalars on the same samples so their block
+    /// errors reflect the real bin-to-bin correlation instead of assuming independence.
+    fn accumulate(&mut self, profile: &[f64]) {
+        let n = profile.len();
+        // z = 0 falls between the two central bins when n is even; a single central bin is exact
+        // when odd.
+        let midplane = if n.is_multiple_of(2) {
+            0.5 * (profile[n / 2 - 1] + profile[n / 2])
+        } else {
+            profile[n / 2]
+        };
+        self.midplane_potential.add(midplane);
+        self.drop_lower.add(profile[0] - midplane);
+        self.drop_upper.add(profile[n - 1] - midplane);
+        for (accumulator, &potential) in self.potential.iter_mut().zip(profile) {
+            accumulator.add(potential);
+        }
     }
 
     /// Locate the shear-plane bin: the outer edge of the fixed charge, into solution.
@@ -257,25 +299,10 @@ impl ElectricPotentialProfile {
             return None;
         }
         let n = self.grid.n_bins();
-        let lower = self.potential_millivolt(0);
-        let upper = self.potential_millivolt(n - 1);
-        // The midplane (z=0) falls between the two central bins when n_bins is
-        // even, so average them; a single central bin is exact when odd.
-        let midplane = if n.is_multiple_of(2) {
-            let below = self.potential_millivolt(n / 2 - 1);
-            let above = self.potential_millivolt(n / 2);
-            BlockSummary {
-                mean: 0.5 * (below.mean + above.mean),
-                error: 0.5 * below.error.hypot(above.error),
-            }
-        } else {
-            self.potential_millivolt(n / 2)
-        };
-        // Drop = wall − midplane; treat the two as independent for the error estimate.
-        let drop = |wall: &BlockSummary| BlockSummary {
-            mean: wall.mean - midplane.mean,
-            error: wall.error.hypot(midplane.error),
-        };
+        // Outermost slabs: bin centres offset Δz/2 inward from the physical walls, not wall values.
+        let edge_lower = self.potential_millivolt(0);
+        let edge_upper = self.potential_millivolt(n - 1);
+        let midplane = self.to_millivolt(&self.midplane_potential);
 
         let mut map = serde_yml::Mapping::new();
         map.try_insert("num_samples", self.sampling.num_samples())?;
@@ -284,11 +311,17 @@ impl ElectricPotentialProfile {
             map.try_insert("debye_length/Å", debye_length)?;
         }
         map.try_insert("num_bins", n)?;
-        map.try_insert("potential_lower_wall/mV", lower)?;
-        map.try_insert("potential_upper_wall/mV", upper)?;
+        map.try_insert("potential_edge_lower/mV", edge_lower)?;
+        map.try_insert("potential_edge_upper/mV", edge_upper)?;
         map.try_insert("potential_midplane/mV", midplane)?;
-        map.try_insert("potential_drop_lower/mV", drop(&lower))?;
-        map.try_insert("potential_drop_upper/mV", drop(&upper))?;
+        map.try_insert(
+            "potential_drop_lower/mV",
+            self.to_millivolt(&self.drop_lower),
+        )?;
+        map.try_insert(
+            "potential_drop_upper/mV",
+            self.to_millivolt(&self.drop_upper),
+        )?;
         // ζ-potential: φ at the outer edge of the fixed charge (shear plane), if requested.
         if let Some(threshold) = self.zeta_threshold {
             if let Some(bin) = self.shear_plane_bin(threshold) {
@@ -344,6 +377,10 @@ impl<T: ObserveContext> Analyze<T> for ElectricPotentialProfile {
     impl_sampling_accessors!();
 
     fn perform_sample(&mut self, context: &T, _step: usize, _weight: f64) -> Result<()> {
+        // The grid's bin edges and area are frozen at build time, so a committed volume move would
+        // silently bias the profile; refuse rather than report a wrong result.
+        self.grid.ensure_cell_unchanged(context.cell())?;
+
         // Instantaneous total charge per slab. Only currently-active atoms are resolved, so
         // a fluctuating particle number (GCMC) is handled automatically.
         let mut slab_charge = vec![0.0; self.grid.n_bins()];
@@ -357,16 +394,7 @@ impl<T: ObserveContext> Analyze<T> for ElectricPotentialProfile {
             accumulator.add(charge / area);
         }
 
-        // Accumulate this configuration's full φ(z); computing it per sample lets the error
-        // capture cross-slab charge correlations a per-bin variance would miss.
-        for (accumulator, potential) in self
-            .potential
-            .iter_mut()
-            .zip(self.grid.potential_profile(&slab_charge))
-        {
-            accumulator.add(potential);
-        }
-
+        self.accumulate(&self.grid.potential_profile(&slab_charge));
         Ok(())
     }
 
@@ -407,6 +435,9 @@ mod tests {
             debye_length: Some(10.0),
             slab_charge_density: new_accumulators(n),
             potential: new_accumulators(n),
+            midplane_potential: BlockAverage::new(),
+            drop_lower: BlockAverage::new(),
+            drop_upper: BlockAverage::new(),
             zeta_threshold: None,
             output_file: output_file.into(),
             sampling: Sampling::new(Frequency::Every(1)),
@@ -439,10 +470,9 @@ mod tests {
     fn error_is_zero_for_identical_samples_and_positive_otherwise() {
         // Two identical configurations ⇒ zero variance ⇒ zero SEM.
         let mut same = dummy("unused.csv");
-        for accumulator in &mut same.potential {
-            accumulator.add(1.0);
-            accumulator.add(1.0);
-        }
+        let flat = vec![1.0; same.grid.n_bins()];
+        same.accumulate(&flat);
+        same.accumulate(&flat);
         same.sampling.set_num_samples(2);
         let yaml = same.report().unwrap();
         let error = yaml["potential_midplane/mV"]["error"].as_f64().unwrap();
@@ -450,10 +480,8 @@ mod tests {
 
         // Two distinct configurations ⇒ positive SEM.
         let mut differ = dummy("unused.csv");
-        for accumulator in &mut differ.potential {
-            accumulator.add(1.0);
-            accumulator.add(3.0);
-        }
+        differ.accumulate(&vec![1.0; differ.grid.n_bins()]);
+        differ.accumulate(&vec![3.0; differ.grid.n_bins()]);
         differ.sampling.set_num_samples(2);
         let yaml = differ.report().unwrap();
         let error = yaml["potential_midplane/mV"]["error"].as_f64().unwrap();
@@ -461,16 +489,36 @@ mod tests {
     }
 
     #[test]
-    fn yaml_reports_walls_midplane_and_drops() {
+    fn drop_error_reflects_wall_midplane_correlation_not_independence() {
+        // Same fluctuation on the edge and the midplane bins: the drop φ_edge − φ_mid is exactly
+        // constant, so its error must be zero — an independence (hypot) estimate would report a
+        // spurious positive value.
         let mut analysis = dummy("unused.csv");
-        for accumulator in &mut analysis.potential {
-            accumulator.add(2.0);
+        let n = analysis.grid.n_bins();
+        for offset in [0.0, 1.0] {
+            analysis.accumulate(&vec![offset; n]); // whole profile shifts together
         }
+        analysis.sampling.set_num_samples(2);
+        let yaml = analysis.report().unwrap();
+        assert_eq!(
+            yaml["potential_drop_lower/mV"]["error"].as_f64().unwrap(),
+            0.0
+        );
+        assert_eq!(
+            yaml["potential_drop_upper/mV"]["error"].as_f64().unwrap(),
+            0.0
+        );
+    }
+
+    #[test]
+    fn yaml_reports_edges_midplane_and_drops() {
+        let mut analysis = dummy("unused.csv");
+        analysis.accumulate(&vec![2.0; analysis.grid.n_bins()]);
         analysis.sampling.set_num_samples(1);
         let yaml = analysis.report().unwrap();
         for key in [
-            "potential_lower_wall/mV",
-            "potential_upper_wall/mV",
+            "potential_edge_lower/mV",
+            "potential_edge_upper/mV",
             "potential_midplane/mV",
             "potential_drop_lower/mV",
             "potential_drop_upper/mV",
@@ -552,9 +600,8 @@ mod tests {
         for (i, sigma) in [1.0, 0.5, 0.1, 0.01].into_iter().enumerate() {
             analysis.slab_charge_density[i].add(-sigma); // sign is irrelevant; |σ| is used
         }
-        for (i, accumulator) in analysis.potential.iter_mut().enumerate() {
-            accumulator.add(i as f64);
-        }
+        let profile: Vec<f64> = (0..analysis.grid.n_bins()).map(|i| i as f64).collect();
+        analysis.accumulate(&profile);
         analysis.sampling.set_num_samples(1);
 
         assert_eq!(analysis.shear_plane_bin(0.02), Some(2));
@@ -568,7 +615,7 @@ mod tests {
     fn no_zeta_when_threshold_unset_or_uncharged() {
         // Threshold unset ⇒ no ζ keys.
         let mut analysis = dummy("unused.csv");
-        analysis.potential[0].add(1.0);
+        analysis.accumulate(&vec![1.0; analysis.grid.n_bins()]);
         analysis.sampling.set_num_samples(1);
         assert!(analysis.report().unwrap().get("zeta/mV").is_none());
 
@@ -600,5 +647,84 @@ mod tests {
         let analysis = dummy("unused.csv");
         assert_eq!(analysis.short_name(), Some("electric_potential_profile"));
         assert!(analysis.citation().unwrap().starts_with("doi:"));
+    }
+}
+
+/// The constant-geometry guard, exercised through a real [`Backend`] and a volume move.
+#[cfg(test)]
+mod geometry_guard_tests {
+    use super::*;
+    use crate::backend::{get_medium_str, Backend};
+    use crate::cell::{Shape, VolumeScalePolicy};
+    use crate::context::{Context, PerturbContext, Perturbation, WithSimulationCell};
+
+    // Two unit charges on the z-axis in a 20 Å square-base cuboid; salt-free ⇒ unscreened kernel.
+    const IONS: &str = r#"
+atoms:
+  - {name: I, mass: 1.0, charge: 1.0, sigma: 1.0}
+molecules:
+  - name: ION
+    atomic: true
+    atoms: [I]
+system:
+  cell: !Cuboid [20.0, 20.0, 20.0]
+  medium: {permittivity: !Vacuum, temperature: 300.0}
+  energy: {}
+  blocks:
+    - molecule: ION
+      N: 2
+      insert: !Manual [[0.0, 0.0, -4.0], [0.0, 0.0, 4.0]]
+propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
+"#;
+
+    fn backend() -> Backend {
+        Backend::from_yaml_str(IONS, None, &mut rand::thread_rng()).unwrap()
+    }
+
+    fn build_analysis(context: &Backend) -> ElectricPotentialProfile {
+        let medium = get_medium_str(IONS).unwrap();
+        ElectricPotentialProfileBuilder {
+            selection: all_atoms(),
+            resolution: 1.0,
+            finite_box_correction: false,
+            zeta_threshold: None,
+            file: "unused.csv".into(),
+            frequency: Frequency::Every(1),
+        }
+        .build(context, Some(&medium))
+        .unwrap()
+    }
+
+    #[test]
+    fn sampling_after_a_committed_volume_change_errors() {
+        let mut context = backend();
+        let mut analysis = build_analysis(&context);
+        analysis.sample(&context, 0).unwrap();
+
+        let volume = context.cell().volume().unwrap();
+        context
+            .scale_volume_and_positions(volume * 1.2, VolumeScalePolicy::Isotropic)
+            .unwrap();
+        assert!(analysis.sample(&context, 1).is_err());
+    }
+
+    #[test]
+    fn a_virtual_volume_move_leaves_sampling_valid() {
+        let mut context = backend();
+        let mut analysis = build_analysis(&context);
+
+        // A virtual volume move scales the cell, reads, then restores it — the committed geometry
+        // never changed, so the profile must stay samplable afterwards.
+        let volume = context.cell().volume().unwrap();
+        context
+            .measure(
+                &Perturbation::ScaleVolume {
+                    volume: volume * 1.2,
+                    policy: VolumeScalePolicy::Isotropic,
+                },
+                |_ctx, _change| (),
+            )
+            .unwrap();
+        assert!(analysis.sample(&context, 0).is_ok());
     }
 }
