@@ -201,11 +201,16 @@ impl EwaldReciprocalEnergy {
     }
 
     /// Full recompute of structure factors and cached energy.
+    ///
+    /// Re-extracts charges and re-reads positions from the context, so any full rebuild starts
+    /// from the current protonation — the incremental path can only move a fixed charge between
+    /// positions, so callers routing a charge change here need not refresh charges themselves.
     fn full_update(&mut self, context: &impl ObserveContext) {
         self.full_update_impl(context, false);
     }
 
     fn full_update_impl(&mut self, context: &impl ObserveContext, optimize: bool) {
+        self.refresh_charges(context);
         self.fill_positions(context);
         let (x, y, z) = &self.pos_buf;
         let st = &mut *self.state;
@@ -216,6 +221,7 @@ impl EwaldReciprocalEnergy {
     /// Full recompute with new box dimensions (volume change).
     fn full_update_with_box(&mut self, context: &impl ObserveContext) -> anyhow::Result<()> {
         let box_length = Self::box_length_from_context(context)?;
+        self.refresh_charges(context);
         self.fill_positions(context);
         let (x, y, z) = &self.pos_buf;
         let st = &mut *self.state;
@@ -386,20 +392,18 @@ impl StatefulEnergy for EwaldReciprocalEnergy {
     fn refresh(&mut self, context: &impl ObserveContext, change: &Change) -> anyhow::Result<()> {
         match change {
             Change::None => {}
-            Change::Volume(..) | Change::Everything => {
+            // A full rebuild re-extracts charges (see `full_update`), so a restore that applies the
+            // checkpoint's protonation via `Everything`, or a volume change, both start fresh (#102).
+            Change::Everything | Change::Volume(..) => {
                 self.full_update_with_box(context)?;
             }
-            Change::Groups(changes) => {
-                if changes.iter().any(|(_, gc)| Self::changes_charges(gc)) {
-                    self.refresh_charges(context);
-                }
+            Change::Groups(_) => {
                 self.full_update(context);
             }
             // A resize (de)activates particles and an identity swap can change a charge; either way
             // the incremental structure-factor update — which only moves a fixed charge between
-            // positions — is invalid, so re-extract charges and rebuild from scratch (issue #66).
+            // positions — is invalid, so rebuild from scratch (issue #66).
             Change::SingleGroup(_, gc) if Self::changes_charges(gc) => {
-                self.refresh_charges(context);
                 self.full_update(context);
             }
             Change::SingleGroup(gi, gc) => match gc {
@@ -524,6 +528,40 @@ mod tests {
                 .energy(&context, &change);
             approx::assert_relative_eq!(incremental, fresh, epsilon = 1e-9, max_relative = 1e-9);
         }
+    }
+
+    /// #102: a restore applies the checkpoint's atom kinds and then refreshes with
+    /// `Change::Everything`. That arm must re-extract charges; otherwise the reciprocal
+    /// sum is rebuilt from the topology's initial protonation and every later move reads a
+    /// stale cached energy.
+    #[test]
+    fn everything_refreshes_charges() {
+        use crate::group::{AtomKindId, GroupCollectionMut};
+
+        let mut context = charged_context();
+        let builder = test_builder();
+        let medium = vacuum_medium();
+        let mut term = EwaldReciprocalEnergy::new(&builder, &context, &medium).unwrap();
+        assert_eq!(term.state.charges[0], 1.0, "atom 0 starts as the +1 cation");
+
+        // Mimic a restore: the loaded checkpoint swaps atom 0 to the anion kind, then the
+        // energy term is refreshed wholesale via `Change::Everything`.
+        context.set_atom_kind(0, AtomKindId::new(1));
+        term.refresh(&context, &Change::Everything).unwrap();
+
+        assert_eq!(
+            term.state.charges[0], -1.0,
+            "Change::Everything must re-extract charges after an identity swap"
+        );
+        let fresh = EwaldReciprocalEnergy::new(&builder, &context, &medium)
+            .unwrap()
+            .energy(&context, &Change::Everything);
+        approx::assert_relative_eq!(
+            term.energy(&context, &Change::Everything),
+            fresh,
+            epsilon = 1e-9,
+            max_relative = 1e-9
+        );
     }
 
     fn test_builder() -> EwaldBuilder {
