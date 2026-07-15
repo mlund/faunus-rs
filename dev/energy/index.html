@@ -1971,6 +1971,9 @@ by <span class="arithmatex">\(w = \exp(-\ln g(\text{bin}))\)</span>, recovering 
 </tr>
 </tbody>
 </table>
+<p>Supply <code>coordinate2</code> when, and only when, the checkpoint stores a 2-D grid; a
+mismatch between the checkpoint dimensionality and the configured coordinates is
+rejected at startup.</p>
 <p>The penalty is placed at the front of the Hamiltonian so that out-of-range
 CV values return infinite energy, short-circuiting expensive downstream terms.</p>
 <hr />
