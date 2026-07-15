@@ -1099,7 +1099,11 @@ The profile file gives `delta/Å` and `gamma` with its statistical error. The re
 row per residue, at the widest δ: name and number, the water-accessible surface area `asa/Å²`, the
 volume `accessible_volume/Å³` offered to a ligand centre, the hydration density `b1/Å⁻²`, the
 partition coefficient `kp`, and `gamma` with its error. A buried residue offers no accessible
-surface, so its `kp` and `b1` are undefined and written as `nan` — not as zero. `output.yaml`
+surface, so its `kp` and `b1` are undefined and written as `nan` — not as zero. The same holds
+where the radical partition transfers ownership between unequal-radius neighbours and drives a
+residue's accessible shell volume negative: `kp` and `b1` would be negative, which is unphysical,
+so they too are written as `nan`. The exact total $\Gamma$ and the per-residue $\gamma_i$ are
+unaffected. `output.yaml`
 reports the `gamma` at the widest δ, the measured bulk `concentration/Å⁻³`, and the
 `excluded_volume/Å³`.
 

@@ -818,11 +818,16 @@ impl PreferentialInteraction {
     /// and denominator both count only the *accessible* slab, so the rung-0 count and volume — the
     /// excluded interior, which a soft or off-centre ligand can still penetrate — are subtracted
     /// from each. An occluded residue offers no volume and so has no Kₚ, which is not Kₚ = 0.
+    ///
+    /// Both the accessible volume and the accessible count can turn negative when the radical
+    /// partition transfers ownership between unequal-radius neighbours as the probe grows. Kₚ is a
+    /// local-to-bulk concentration ratio, so a negative numerator or denominator has no meaning; it
+    /// is reported as `None` rather than as a negative Kₚ.
     pub(crate) fn partition_coefficient(&self, residue: usize, shell: usize) -> Option<f64> {
         let volume = self.accessible_volume(residue, shell);
         let reference = self.concentration.mean() * volume;
         let count = self.residue_count(residue, shell) - self.residue_count(residue, 0);
-        (reference > 0.0).then_some(count / reference)
+        (reference > 0.0 && count >= 0.0).then_some(count / reference)
     }
 
     /// Hydration per unit area, b₁ = v_w^shell / (v̄_w · ASA), in waters per Å².
@@ -832,12 +837,14 @@ impl PreferentialInteraction {
     /// The solute-partitioning model treats it as one number for the whole surface. It is not: the
     /// shell volume a convex patch carries per unit area exceeds that of a flat one, so b₁ is a
     /// field over the surface, and reporting it per residue is what makes that visible. A buried
-    /// residue exposes no surface, so its b₁ is undefined rather than zero.
+    /// residue exposes no surface, so its b₁ is undefined rather than zero. The water shell volume
+    /// can itself turn negative when the radical partition shifts ownership between unequal-radius
+    /// neighbours; a hydration density cannot be negative, so that too reads as undefined.
     pub(crate) fn hydration_density(&self, residue: usize, shell: usize) -> Option<f64> {
         let asa = self.reference.residues[residue].asa;
         let water_shell =
             self.reference.water_volumes[shell][residue] - self.reference.water_volumes[0][residue];
-        (asa > 0.0).then(|| water_shell / (WATER_VOLUME * asa))
+        (asa > 0.0 && water_shell >= 0.0).then(|| water_shell / (WATER_VOLUME * asa))
     }
 
     /// Why the frozen reference geometry no longer matches the live cell, or `Ok` if it still does.
@@ -1596,6 +1603,92 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
             analysis.accessible_volume(1, last) < 1e-6,
             "engulfed atom should offer no volume, got {} Å³",
             analysis.accessible_volume(1, last)
+        );
+    }
+
+    /// With unequal radii the radical partition shifts with the probe: a larger neighbour's cell
+    /// grows faster and can take volume from a smaller bead, so its accessible shell volume goes
+    /// negative. Kₚ (a concentration ratio) and b₁ (a hydration density) cannot be negative, so an
+    /// unphysical shell volume must read as `nan`, not as a negative number.
+    #[test]
+    fn ownership_transfer_never_yields_a_negative_kp_or_b1() {
+        // A σ = 6 bead half-caged by five σ = 30 beads: open on −z, so it keeps a water-accessible
+        // face (asa > 0), yet the five neighbours overrun its cell as the probe grows, driving its
+        // water shell volume negative. This is the lysozyme regime in miniature — a partly exposed
+        // bead whose hydration density would read negative without the guard.
+        const CLUSTER: &str = r#"
+atoms:
+  - {name: BIG, mass: 1.0, charge: 0.0, sigma: 30.0}
+  - {name: MED, mass: 1.0, charge: 0.0, sigma: 6.0}
+  - {name: LIG, mass: 1.0, charge: 0.0, sigma: 3.0}
+molecules:
+  - name: substrate
+    degrees_of_freedom: Rigid
+    from_structure:
+      - MED: [0.0, 0.0, 0.0]
+      - BIG: [17.0, 0.0, 0.0]
+      - BIG: [-17.0, 0.0, 0.0]
+      - BIG: [0.0, 17.0, 0.0]
+      - BIG: [0.0, -17.0, 0.0]
+      - BIG: [0.0, 0.0, 17.0]
+  - name: ligand
+    atoms: [LIG]
+    atomic: true
+system:
+  cell: !Cuboid [200.0, 200.0, 200.0]
+  medium: {permittivity: !Vacuum, temperature: 300.0}
+  energy: {}
+  blocks:
+    - molecule: substrate
+      N: 1
+      insert: !Manual [[0.0, 0.0, 0.0], [17.0, 0.0, 0.0], [-17.0, 0.0, 0.0],
+                       [0.0, 17.0, 0.0], [0.0, -17.0, 0.0], [0.0, 0.0, 17.0]]
+    - molecule: ligand
+      N: 1
+      insert: !Manual [[90.0, 90.0, 90.0]]
+propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
+"#;
+        let context = Backend::from_yaml_str(CLUSTER, None, &mut rand::thread_rng()).unwrap();
+        let mut analysis = PreferentialInteractionBuilder {
+            substrate: Selection::parse("molecule substrate").unwrap(),
+            ligand: Selection::parse("atomtype LIG").unwrap(),
+            use_com: false,
+            radius: Some(1.5),
+            shell: SHELL,
+            solvent_probe: SOLVENT_PROBE,
+            profile: None,
+            file: None,
+            frequency: Frequency::Every(1),
+        }
+        .build(&context)
+        .unwrap();
+        analysis.sample(&context, 0).unwrap();
+
+        // The medium beads lose shell volume as the probe grows; the reported partition coefficient
+        // and hydration density must stay `None`-or-non-negative rather than turning negative.
+        let mut saw_transfer = false;
+        for residue in 0..analysis.reference.residues.len() {
+            for shell in 0..SHELL.len() {
+                if analysis.accessible_volume(residue, shell) < 0.0 {
+                    saw_transfer = true;
+                }
+                if let Some(kp) = analysis.partition_coefficient(residue, shell) {
+                    assert!(
+                        kp >= 0.0,
+                        "negative Kₚ = {kp} at residue {residue}, shell {shell}"
+                    );
+                }
+                if let Some(b1) = analysis.hydration_density(residue, shell) {
+                    assert!(
+                        b1 >= 0.0,
+                        "negative b₁ = {b1} at residue {residue}, shell {shell}"
+                    );
+                }
+            }
+        }
+        assert!(
+            saw_transfer,
+            "geometry did not exercise ownership transfer; test is vacuous"
         );
     }
 
