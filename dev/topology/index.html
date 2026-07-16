@@ -1420,7 +1420,7 @@ The molecule must have exactly one atom type and no bonds.</p>
 <tr>
 <td><code>!RandomAtomPos</code></td>
 <td><code>{directions: xy}</code></td>
-<td>Random position per atom</td>
+<td>Random position per atom (geometry-free kinds)</td>
 </tr>
 <tr>
 <td><code>!FixedCOM</code></td>
@@ -1450,6 +1450,11 @@ The molecule must have exactly one atom type and no bonds.</p>
 </tbody>
 </table>
 <p>The <code>directions</code> field controls which axes are randomized: <code>xyz</code> (default), <code>xy</code>, <code>xz</code>, <code>yz</code>, <code>x</code>, <code>y</code>, or <code>z</code>.
+<code>!RandomAtomPos</code> places every atom independently, discarding any conformation; it is meant for atomic
+species (salt, ions). A multi-atom kind that carries geometry — one that tracks a center of mass or declares
+<code>from_structure</code> reference positions — is therefore rejected. Place such a kind with a COM-based policy
+(<code>!RandomCOM</code>, <code>!FixedCOM</code>, <code>!GridCOM</code>) using its reference positions. Only a geometry-free kind may use
+<code>!RandomAtomPos</code>: one with no <code>from_structure</code> and <code>has_com: false</code>.
 <code>!RandomCOM</code>, <code>!FixedCOM</code>, and <code>!GridCOM</code> use reference positions from the molecule's <code>from_structure</code> field.
 The optional <code>min_distance</code> field (Å) in <code>!RandomCOM</code> uses bounding sphere rejection to avoid molecular overlaps in dense systems.
 <code>!GridCOM</code> places molecules on a simple cubic lattice with auto-calculated spacing; requires <code>!Cuboid</code> or <code>!Slit</code> cells.</p>
