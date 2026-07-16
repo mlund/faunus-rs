@@ -455,22 +455,41 @@ impl Topology {
                 }
             }
 
-            // COM-based policies require the molecule to have reference positions
-            if matches!(
-                block.insert_policy(),
+            // The insertion policy must be compatible with the molecule kind's geometry.
+            let mol = &self.moleculekinds[index];
+            match block.insert_policy() {
+                // `RandomAtomPos` places every atom independently, discarding the conformation
+                // that makes a kind molecular (issue #83). Right for an atomic species, wrong for a
+                // multi-atom kind that carries geometry: the scattered atoms still feed a bogus mass
+                // center and bounding radius into cutoff culling. A conformation exists to destroy
+                // when the kind tracks a COM *or* declares `from_structure` reference positions —
+                // the latter matters because `has_com: false` alone would otherwise wave a real
+                // structure through. Single-atom kinds have no geometry to lose.
+                Some(InsertionPolicy::RandomAtomPos { .. })
+                    if mol.len() > 1
+                        && (mol.has_com() || !mol.reference_positions().is_empty()) =>
+                {
+                    anyhow::bail!(
+                        "molecule '{}' carries a conformation that `!RandomAtomPos` would \
+                         destroy by scattering its atoms; place it with a COM-based policy \
+                         (`!RandomCOM`, `!FixedCOM`, `!GridCOM`) using `from_structure` \
+                         reference positions. Only a geometry-free kind may use \
+                         `!RandomAtomPos`: drop `from_structure` and set `has_com: false`",
+                        mol.name()
+                    );
+                }
+                // COM-based policies require the molecule to have reference positions.
                 Some(
                     InsertionPolicy::RandomCOM { .. }
-                        | InsertionPolicy::FixedCOM { .. }
-                        | InsertionPolicy::GridCOM { .. }
-                )
-            ) {
-                let mol = &self.moleculekinds[index];
-                if mol.reference_positions().is_empty() {
+                    | InsertionPolicy::FixedCOM { .. }
+                    | InsertionPolicy::GridCOM { .. },
+                ) if mol.reference_positions().is_empty() => {
                     anyhow::bail!(
                         "molecule '{}' needs `from_structure` with positions for COM-based insertion",
                         mol.name()
                     );
                 }
+                _ => {}
             }
         }
 

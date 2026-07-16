@@ -340,7 +340,7 @@ Blocks specify how many copies of each molecule to create and how to initialize 
 | Policy           | Example                                              | Description                                    |
 |------------------|------------------------------------------------------|------------------------------------------------|
 | `!RandomCOM`     | `{rotate: true, min_distance: 2.0}`                  | Random center-of-mass placement                |
-| `!RandomAtomPos` | `{directions: xy}`                                   | Random position per atom                       |
+| `!RandomAtomPos` | `{directions: xy}`                                   | Random position per atom (geometry-free kinds) |
 | `!FixedCOM`      | `{position: [0, 0, 0]}`                              | Place at specific position                     |
 | `!FromFile`      | `structure.xyz`                                      | Read all positions from file                   |
 | `!Manual`        | `[[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]`                | Explicit coordinates for all atoms             |
@@ -348,6 +348,11 @@ Blocks specify how many copies of each molecule to create and how to initialize 
 | `!GridCOM`       | `{rotate: true}`                                     | Simple cubic grid; cuboidal cells only         |
 
 The `directions` field controls which axes are randomized: `xyz` (default), `xy`, `xz`, `yz`, `x`, `y`, or `z`.
+`!RandomAtomPos` places every atom independently, discarding any conformation; it is meant for atomic
+species (salt, ions). A multi-atom kind that carries geometry — one that tracks a center of mass or declares
+`from_structure` reference positions — is therefore rejected. Place such a kind with a COM-based policy
+(`!RandomCOM`, `!FixedCOM`, `!GridCOM`) using its reference positions. Only a geometry-free kind may use
+`!RandomAtomPos`: one with no `from_structure` and `has_com: false`.
 `!RandomCOM`, `!FixedCOM`, and `!GridCOM` use reference positions from the molecule's `from_structure` field.
 The optional `min_distance` field (Å) in `!RandomCOM` uses bounding sphere rejection to avoid molecular overlaps in dense systems.
 `!GridCOM` places molecules on a simple cubic lattice with auto-calculated spacing; requires `!Cuboid` or `!Slit` cells.

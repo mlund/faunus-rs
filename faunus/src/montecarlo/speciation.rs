@@ -1823,12 +1823,16 @@ propagate:
 molecules:
   - name: "H3PO4"
     atoms: [P, O, O, O, O]
+    has_com: false
   - name: "H2PO4"
     atoms: [P, O, O, O, O]
+    has_com: false
   - name: "HPO4"
     atoms: [P, O, O, O, O]
+    has_com: false
   - name: "PO4"
     atoms: [P, O, O, O, O]
+    has_com: false
 system:
   cell: !Cuboid [20.0, 20.0, 20.0]
   medium:
@@ -2053,6 +2057,7 @@ propagate:
 molecules:
   - name: site4
     atoms: [HA, HA, HA, HA]
+    has_com: false  # geometry-free titration model: atoms scattered by !RandomAtomPos
 system:
   cell: !Cuboid [40.0, 40.0, 40.0]
   medium:
@@ -2184,6 +2189,7 @@ molecules:
     atoms: [HA]
   - name: siteB
     atoms: [X, HA]
+    has_com: false  # geometry-free titration model: atoms scattered by !RandomAtomPos
 system:
   cell: !Cuboid [30.0, 30.0, 30.0]
   medium:
@@ -2445,6 +2451,7 @@ propagate:
 molecules:
   - name: NaCl
     atoms: [Na, Cl]
+    has_com: false  # ideal, geometry-free: atoms are scattered by !RandomAtomPos
 system:
   cell: !Cuboid [30.0, 30.0, 30.0]
   medium: {permittivity: !Vacuum, temperature: 298.15}

@@ -20,15 +20,20 @@ atoms:
   - {name: O, mass: 16.0, sigma: 2.8, charge: 0.0}
   - {name: H+, mass: 1.0, activity: 6.30957e-8}  # 10^(-7.20)
 
+# All ideal and geometry-free: atoms are scattered by !RandomAtomPos, so no COM.
 molecules:
   - name: H₃PO₄
     atoms: [P, O, O, O, O]
+    has_com: false
   - name: H₂PO₄⁻
     atoms: [P, O, O, O, O]
+    has_com: false
   - name: HPO₄²⁻
     atoms: [P, O, O, O, O]
+    has_com: false
   - name: PO₄³⁻
     atoms: [P, O, O, O, O]
+    has_com: false
 
 system:
   cell: !Cuboid [20.0, 20.0, 20.0]

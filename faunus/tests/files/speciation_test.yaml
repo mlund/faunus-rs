@@ -10,6 +10,7 @@ molecules:
     atoms: [A]
   - name: AB
     atoms: [A, B]
+    has_com: false  # ideal, geometry-free: atoms are scattered by !RandomAtomPos
 
 system:
   cell: !Cuboid [10.0, 10.0, 10.0]

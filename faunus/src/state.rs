@@ -255,8 +255,8 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
     /// no bonded potentials, whose shape therefore nothing can legitimately change — a bonded
     /// chain under a pivot move is free to extend well beyond its reference, and a kind declared
     /// as a bare list of atoms has no reference shape at all. (Some fixtures deliberately scatter
-    /// such atoms across the cell with `insert: !RandomAtomPos`; those groups are torn by
-    /// construction rather than by any code path — a separate defect.)
+    /// such atoms across the cell with `insert: !RandomAtomPos`, now confined to geometry-free
+    /// kinds — no `from_structure`, no COM — that carry nothing to tear; see issue #83.)
     #[test]
     fn committed_state_files_hold_intact_molecules() {
         const TOLERANCE: f64 = 1e-6;

@@ -1000,4 +1000,62 @@ mod tests {
             "tests/files/topology_exclusions_undefined_atoms.yaml"
             => "exclusion between undefined atoms";
     }
+
+    // Inline rather than `tests/files/*.yaml` + the `topology_error_tests!` macro: one of these
+    // three cases asserts *success*, which the error-only macro cannot express, so all three stay
+    // together sharing one builder. See issue #83.
+    const RANDOM_ATOM_POS_HEADER: &str = "\
+atoms:
+  - {name: A, mass: 1.0, sigma: 1.0}
+  - {name: B, mass: 2.0, sigma: 1.0}
+";
+
+    fn random_atom_pos_topology(molecule: &str) -> String {
+        format!(
+            "{RANDOM_ATOM_POS_HEADER}molecules:
+  - name: AB
+{molecule}
+system:
+  cell: !Cuboid [10.0, 10.0, 10.0]
+  medium: {{permittivity: !Vacuum, temperature: 298.15}}
+  energy: {{}}
+  blocks:
+    - {{molecule: AB, N: 4, insert: !RandomAtomPos {{}}}}
+"
+        )
+    }
+
+    /// A COM-tracking multi-atom kind scattered by `!RandomAtomPos` loses its conformation.
+    #[test]
+    fn random_atom_pos_rejected_for_com_kind() {
+        let err = Topology::from_str(&random_atom_pos_topology("    atoms: [A, B]"))
+            .expect_err("RandomAtomPos on a COM-tracking multi-atom kind must be rejected");
+        assert!(
+            err.to_string().contains("would destroy"),
+            "unexpected error: {err}"
+        );
+    }
+
+    /// `has_com: false` is not an escape hatch when the kind still declares reference geometry:
+    /// `!RandomAtomPos` would scatter a real `from_structure` conformation.
+    #[test]
+    fn random_atom_pos_rejected_for_from_structure_kind() {
+        let molecule =
+            "    from_structure: [{A: [0.0, 0.0, 0.0]}, {B: [3.0, 0.0, 0.0]}]\n    has_com: false";
+        let err = Topology::from_str(&random_atom_pos_topology(molecule))
+            .expect_err("RandomAtomPos on a kind with reference geometry must be rejected");
+        assert!(
+            err.to_string().contains("would destroy"),
+            "unexpected error: {err}"
+        );
+    }
+
+    /// A geometry-free multi-atom kind (`has_com: false`, no `from_structure`) may scatter its
+    /// atoms — this is the legitimate ideal-species use of `!RandomAtomPos`.
+    #[test]
+    fn random_atom_pos_allowed_for_geometry_free_kind() {
+        let molecule = "    atoms: [A, B]\n    has_com: false";
+        Topology::from_str(&random_atom_pos_topology(molecule))
+            .expect("geometry-free multi-atom kind may use RandomAtomPos");
+    }
 }
