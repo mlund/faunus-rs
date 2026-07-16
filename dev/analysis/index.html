@@ -2427,12 +2427,11 @@ additionally reports the slab layout and the mean total number of selected parti
 slabs must return it.</p>
 <hr />
 <h2 id="preferential-interaction">Preferential Interaction<a class="headerlink" href="#preferential-interaction" title="Permanent link">&para;</a></h2>
-<p>Measures the excess of a ligand around one molecular substrate. A positive <span class="arithmatex">\(\Gamma\)</span> means that the
-ligand accumulates near the substrate; a negative value means that it is depleted. For an
-implicit-solvent model, the converged value is the preferential interaction coefficient. With
-explicit solvent, the full coefficient also requires the excess of water and is not available from
-this analysis alone.</p>
-<p>For a shell of thickness <span class="arithmatex">\(\delta\)</span> around the substrate, the analysis reports</p>
+<p>Measures the preferential interaction of a ligand around one molecular substrate. A positive
+<span class="arithmatex">\(\Gamma\)</span> means that the local solvent composition is enriched in ligand relative to bulk; a
+negative value means that it is depleted. Both implicit- and explicit-solvent estimators are
+available.</p>
+<p>For implicit solvent, the analysis reports the cumulative ligand excess</p>
 <div class="arithmatex">\[\Gamma(\delta) = \left\langle N(\delta)
 - c_{\mathrm{bulk}}\,\operatorname{Vol}\!\left[D(\delta)\right]\right\rangle,\]</div>
 <p>where <span class="arithmatex">\(N(\delta)\)</span> is the number of ligands in the shell, <span class="arithmatex">\(c_{\mathrm{bulk}}\)</span> is the measured bulk
@@ -2440,11 +2439,19 @@ concentration, and <span class="arithmatex">\(D(\delta)\)</span> is the shell vo
 formed for each frame before averaging, preserving correlations between concentration and shape.
 The bulk concentration is measured in the remaining part of the simulation cell, so no
 substrate-free simulation is required.</p>
+<p>For explicit solvent, components 1 and 3 denote solvent and ligand. The finite-box estimator is</p>
+<div class="arithmatex">\[\Gamma_{23}(\delta) = \left\langle N_3(\delta)
+- \frac{N_3^{\rm bulk}}{N_1^{\rm bulk}}N_1(\delta)\right\rangle.\]</div>
+<p>The ratio and both local populations are evaluated in each frame before averaging. Ligand and
+solvent are counted in the same <span class="arithmatex">\(D(\delta)\)</span>; using different spatial regions would introduce a
+spurious displaced-solvent contribution. The bulk populations are those outside the widest shell,
+and that common bulk ratio is used throughout the profile. A sampled frame with no bulk solvent is
+an error because its reference composition is undefined.</p>
 <h3 id="choosing-the-shell">Choosing the shell<a class="headerlink" href="#choosing-the-shell" title="Permanent link">&para;</a></h3>
 <p>Use the profile to select <span class="arithmatex">\(\Gamma\)</span>: increase <code>shell.max</code> until <span class="arithmatex">\(\Gamma(\delta)\)</span> has reached a
 plateau. Do not use a profile that still changes at the largest <span class="arithmatex">\(\delta\)</span>; enlarge the cell or
-extend the shell instead. A hard-core atomic ligand gives an excluded-volume contribution at
-<span class="arithmatex">\(\delta=0\)</span>. This interpretation does not apply to a soft or centre-of-mass ligand.</p>
+extend the shell instead. In implicit solvent, a hard-core atomic ligand gives an excluded-volume
+contribution at <span class="arithmatex">\(\delta=0\)</span>. This interpretation does not apply to a soft or centre-of-mass ligand.</p>
 <p>The substrate selection must cover exactly one complete molecular group. For a rigid substrate,
 the surface geometry is calculated once and reused under translation and rotation. For a flexible
 substrate, the surface, shell volumes, and residue partition are recalculated at every sampled
@@ -2462,19 +2469,28 @@ profiles with the salt stoichiometry and the activity convention appropriate to 
 <p>The residue file partitions the total excess among residues:</p>
 <div class="arithmatex">\[\Gamma = \sum_i \gamma_i.\]</div>
 <p>The contributions sum to the profile at the same shell thickness and provide a spatial
-description of ligand enrichment. The local-to-bulk partition coefficient is</p>
+description of ligand enrichment. In implicit solvent, the local-to-bulk partition coefficient is</p>
 <div class="arithmatex">\[K_{p,i} = \frac{\left\langle N_i(\delta)-N_i(0)\right\rangle}
 {\left\langle c_{\mathrm{bulk}}\,v_i^{\rm acc}(\delta)\right\rangle},\]</div>
 <p>where <span class="arithmatex">\(v_i^{\rm acc}\)</span> is the volume accessible to ligand centres around residue <span class="arithmatex">\(i\)</span>. Values above
-one indicate local enrichment and values below one indicate depletion. The hydration density</p>
+one indicate local enrichment and values below one indicate depletion. In explicit solvent the
+corresponding denominator is</p>
+<div class="arithmatex">\[\left\langle \frac{N_3^{\rm bulk}}{N_1^{\rm bulk}}
+\left[N_{1,i}(\delta)-N_{1,i}(0)\right]\right\rangle,\]</div>
+<p>so <span class="arithmatex">\(K_{p,i}=1\)</span> when the accessible slab has the bulk ligand-to-solvent ratio. The implicit-solvent
+hydration density</p>
 <div class="arithmatex">\[b_{1,i} = \frac{\left\langle v_i^{\rm w}\right\rangle}
 {\bar v_{\rm w}\left\langle\mathrm{ASA}_i\right\rangle}\]</div>
-<p>is the water-shell volume per unit water-accessible surface area, in waters per Å². <code>kp</code> and <code>b1</code>
-are local descriptors, not thermodynamic coefficients; they depend on the selected shell
-thickness and are <code>nan</code> when the required local volume or surface area is unavailable.</p>
+<p>estimates the water population from the water-probe volume. With explicit solvent,
+<span class="arithmatex">\(v_i^{\rm w}/\bar v_{\rm w}\)</span> is replaced by the sampled
+<span class="arithmatex">\(N_{1,i}(\delta)-N_{1,i}(0)\)</span> in the ligand-accessible slab. <code>kp</code> and <code>b1</code> are local descriptors,
+not thermodynamic coefficients; they depend on the selected shell thickness and are <code>nan</code> when the
+required local population, volume, or surface area is unavailable.</p>
 <h3 id="example_12">Example<a class="headerlink" href="#example_12" title="Permanent link">&para;</a></h3>
 <p>One block is needed for each ligand species. Use <code>use_com: true</code> for a molecular ligand; otherwise,
-the selected atoms are counted individually.</p>
+the selected atoms are counted individually. To use the explicit-solvent estimator, add <code>solvent</code>
+and state whether its selection is counted by molecular mass centre or by atom. Molecular water is
+normally counted by mass centre.</p>
 <div class="highlight"><pre><span></span><code><span class="nt">analysis</span><span class="p">:</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!PreferentialInteraction</span>
 <span class="w">    </span><span class="nt">substrate</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;molecule</span><span class="nv"> </span><span class="s">protein&quot;</span>
@@ -2487,6 +2503,9 @@ the selected atoms are counted individually.</p>
 <span class="w">    </span><span class="nt">substrate</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;molecule</span><span class="nv"> </span><span class="s">protein&quot;</span>
 <span class="w">    </span><span class="nt">ligand</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;molecule</span><span class="nv"> </span><span class="s">polyphosphate&quot;</span>
 <span class="w">    </span><span class="nt">use_com</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span><span class="w">                         </span><span class="c1"># count molecules at their centre of mass</span>
+<span class="w">    </span><span class="nt">solvent</span><span class="p">:</span><span class="w">                              </span><span class="c1"># enables the explicit-solvent estimator</span>
+<span class="w">      </span><span class="nt">selection</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;molecule</span><span class="nv"> </span><span class="s">water&quot;</span>
+<span class="w">      </span><span class="nt">use_com</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span><span class="w">                       </span><span class="c1"># count one centre per water molecule</span>
 <span class="w">    </span><span class="nt">shell</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">max</span><span class="p">:</span><span class="w"> </span><span class="nv">15.0</span><span class="p p-Indicator">,</span><span class="nt"> resolution</span><span class="p">:</span><span class="w"> </span><span class="nv">0.5</span><span class="p p-Indicator">}</span>
 <span class="w">    </span><span class="nt">profile</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">gamma_pp.csv</span>
 <span class="w">    </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">residues_pp.csv</span>
@@ -2528,6 +2547,12 @@ the selected atoms are counted individually.</p>
 <td>Count the mass centre of each selected molecule instead of each atom</td>
 </tr>
 <tr>
+<td><code>solvent</code></td>
+<td>no</td>
+<td></td>
+<td>Explicit solvent as <code>{selection, use_com}</code>; its presence selects the finite-box estimator</td>
+</tr>
+<tr>
 <td><code>radius</code></td>
 <td>no</td>
 <td>σ/2, or 0 with <code>use_com</code></td>
@@ -2537,7 +2562,7 @@ the selected atoms are counted individually.</p>
 <td><code>solvent_probe</code></td>
 <td>no</td>
 <td><code>1.4</code></td>
-<td>Water radius (Å), setting the surface and shell behind <span class="arithmatex">\(b_1\)</span></td>
+<td>Water radius (Å), setting the accessible surface and implicit-solvent shell behind <span class="arithmatex">\(b_1\)</span></td>
 </tr>
 <tr>
 <td><code>profile</code></td>
@@ -2563,9 +2588,10 @@ the selected atoms are counted individually.</p>
 the residue identifier, <code>asa/Å²</code>, <code>accessible_volume/Å³</code>, <code>b1/Å⁻²</code>, <code>kp</code>, and <code>gamma</code> with its
 error at the widest shell. Geometric quantities are ensemble averages for a flexible substrate.
 <code>output.yaml</code> reports <code>gamma</code> at that shell, the measured bulk <code>concentration/Å⁻³</code>, and the mean
-<code>excluded_volume/Å³</code>. Rerun weights are applied to all reported averages. Errors are standard
-errors across sampled frames; use sufficiently spaced samples or block analysis when frames are
-correlated.</p>
+<code>excluded_volume/Å³</code>. With explicit solvent it also reports <code>solvent_concentration/Å⁻³</code> and
+<code>bulk_ligand_to_solvent_ratio</code>. Rerun weights are applied to all reported averages. Errors are
+standard errors across sampled frames; use sufficiently spaced samples or block analysis when
+frames are correlated.</p>
 <h3 id="references">References<a class="headerlink" href="#references" title="Permanent link">&para;</a></h3>
 <ul>
 <li>Record &amp; Anderson, <em>Biophys. J.</em> <strong>68</strong>, 786 (1995).
@@ -2574,6 +2600,10 @@ correlated.</p>
   <a href="https://doi.org/10.1110/ps.ps.20801">10.1110/ps.ps.20801</a></li>
 <li>Pegram &amp; Record, <em>J. Phys. Chem. B</em> <strong>112</strong>, 9428 (2008).
   <a href="https://doi.org/10.1021/jp800816a">10.1021/jp800816a</a></li>
+<li>Tang &amp; Bloomfield, <em>Biophys. J.</em> <strong>82</strong>, 2876 (2002).
+  <a href="https://doi.org/10.1016/S0006-3495(02)75629-4">10.1016/S0006-3495(02)75629-4</a></li>
+<li>Vagenende &amp; Trout, <em>Biophys. J.</em> <strong>103</strong>, 1354 (2012).
+  <a href="https://doi.org/10.1016/j.bpj.2012.08.011">10.1016/j.bpj.2012.08.011</a></li>
 </ul>
 <hr />
 <h2 id="mean-along-coordinate">Mean Along Coordinate<a class="headerlink" href="#mean-along-coordinate" title="Permanent link">&para;</a></h2>
