@@ -949,7 +949,7 @@ slabs must return it.
 
 ## Preferential Interaction
 
-Measures the excess of a ligand around one rigid substrate. A positive $\Gamma$ means that the
+Measures the excess of a ligand around one molecular substrate. A positive $\Gamma$ means that the
 ligand accumulates near the substrate; a negative value means that it is depleted. For an
 implicit-solvent model, the converged value is the preferential interaction coefficient. With
 explicit solvent, the full coefficient also requires the excess of water and is not available from
@@ -957,11 +957,14 @@ this analysis alone.
 
 For a shell of thickness $\delta$ around the substrate, the analysis reports
 
-$$\Gamma(\delta) = \langle N(\delta)\rangle - c\,\operatorname{Vol}\!\left[D(\delta)\right],$$
+$$\Gamma(\delta) = \left\langle N(\delta)
+- c_{\mathrm{bulk}}\,\operatorname{Vol}\!\left[D(\delta)\right]\right\rangle,$$
 
-where $\langle N(\delta)\rangle$ is the mean number of ligands in the shell, $c$ is the measured
-bulk concentration, and $D(\delta)$ is the shell volume. The bulk concentration is measured in
-the remaining part of the simulation cell, so no substrate-free simulation is required.
+where $N(\delta)$ is the number of ligands in the shell, $c_{\mathrm{bulk}}$ is the measured bulk
+concentration, and $D(\delta)$ is the shell volume in the sampled conformation. The product is
+formed for each frame before averaging, preserving correlations between concentration and shape.
+The bulk concentration is measured in the remaining part of the simulation cell, so no
+substrate-free simulation is required.
 
 ### Choosing the shell
 
@@ -970,9 +973,17 @@ plateau. Do not use a profile that still changes at the largest $\delta$; enlarg
 extend the shell instead. A hard-core atomic ligand gives an excluded-volume contribution at
 $\delta=0$. This interpretation does not apply to a soft or centre-of-mass ligand.
 
-The substrate must be a rigid molecule in a fixed cuboid or spherical cell. Leave sufficient bulk
-beyond the largest shell. The analysis rejects domains that overlap periodic images or reach a
-spherical boundary.
+The substrate selection must cover exactly one complete molecular group. For a rigid substrate,
+the surface geometry is calculated once and reused under translation and rotation. For a flexible
+substrate, the surface, shell volumes, and residue partition are recalculated at every sampled
+frame. A flexible substrate can therefore be analyzed during simulation or by
+[`rerun`](#rerun), including trajectories whose cuboid changes between frames. Flexible analysis
+is substantially more expensive; increase the sampling interval if tessellation dominates the
+run time.
+
+Leave sufficient bulk beyond the largest shell. Every sampled conformation must fit together with
+its largest shell without overlapping its periodic image or reaching a spherical boundary. A
+rigid substrate still requires a fixed cell because its geometric reference is reused.
 
 ### Ions and residue contributions
 
@@ -987,12 +998,14 @@ $$\Gamma = \sum_i \gamma_i.$$
 The contributions sum to the profile at the same shell thickness and provide a spatial
 description of ligand enrichment. The local-to-bulk partition coefficient is
 
-$$K_{p,i} = \frac{\langle N_i(\delta)\rangle - \langle N_i(0)\rangle}{c\,v_i^{\rm acc}(\delta)},$$
+$$K_{p,i} = \frac{\left\langle N_i(\delta)-N_i(0)\right\rangle}
+{\left\langle c_{\mathrm{bulk}}\,v_i^{\rm acc}(\delta)\right\rangle},$$
 
 where $v_i^{\rm acc}$ is the volume accessible to ligand centres around residue $i$. Values above
 one indicate local enrichment and values below one indicate depletion. The hydration density
 
-$$b_{1,i} = \frac{v_i^{\rm w}}{\bar v_{\rm w}\,\mathrm{ASA}_i}$$
+$$b_{1,i} = \frac{\left\langle v_i^{\rm w}\right\rangle}
+{\bar v_{\rm w}\left\langle\mathrm{ASA}_i\right\rangle}$$
 
 is the water-shell volume per unit water-accessible surface area, in waters per Å². `kp` and `b1`
 are local descriptors, not thermodynamic coefficients; they depend on the selected shell
@@ -1026,7 +1039,7 @@ analysis:
 
 Key             | Required | Default | Description
 --------------- | -------- | ------- | --------------------------------------------------------
-`substrate`     | yes      |         | The rigid molecule the ligand is counted around
+`substrate`     | yes      |         | The complete molecular group the ligand is counted around
 `ligand`        | yes      |         | Atoms, or molecules when `use_com` is set, whose excess is measured
 `shell`         | yes      |         | The δ ladder: `{max, resolution}` in Å, with `max` a multiple of `resolution`
 `use_com`       | no       | `false` | Count the mass centre of each selected molecule instead of each atom
@@ -1038,9 +1051,11 @@ Key             | Required | Default | Description
 
 The profile file contains `delta/Å`, `gamma`, and its statistical error. The residue file contains
 the residue identifier, `asa/Å²`, `accessible_volume/Å³`, `b1/Å⁻²`, `kp`, and `gamma` with its
-error at the widest shell. `output.yaml` reports `gamma` at that shell, the measured bulk
-`concentration/Å⁻³`, and `excluded_volume/Å³`. Errors are standard errors across sampled frames;
-use sufficiently spaced samples or block analysis when frames are correlated.
+error at the widest shell. Geometric quantities are ensemble averages for a flexible substrate.
+`output.yaml` reports `gamma` at that shell, the measured bulk `concentration/Å⁻³`, and the mean
+`excluded_volume/Å³`. Rerun weights are applied to all reported averages. Errors are standard
+errors across sampled frames; use sufficiently spaced samples or block analysis when frames are
+correlated.
 
 ### References
 

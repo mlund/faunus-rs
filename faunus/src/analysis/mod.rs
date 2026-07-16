@@ -253,7 +253,7 @@ analysis_builders! {
     ElectricPotentialProfile(ElectricPotentialProfileBuilder) => context_medium,
     /// Density profile ρ(z) of a selected species along z
     DensityProfile(DensityProfileBuilder) => context,
-    /// Preferential interaction coefficient Γ of a ligand with a rigid substrate
+    /// Preferential interaction coefficient Γ of a ligand with a molecular substrate
     PreferentialInteraction(PreferentialInteractionBuilder) => context,
     /// Widom rotational perturbation about the center of mass
     WidomRotation(WidomRotationBuilder) => context_rt,
