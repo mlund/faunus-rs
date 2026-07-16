@@ -18,20 +18,24 @@
 //! chemical potential of the substrate responds to the ligand concentration, and hence — through
 //! the Wyman linkage — the ligand dependence of any equilibrium the substrate takes part in.
 //!
-//! Let `D(δ)` be the region within `r_lig + δ` of the substrate surface. Then
+//! Let `D(δ)` be the region within `r_lig + δ` of the substrate surface. In implicit solvent,
 //!
 //! ```text
 //! Γ(δ) = ⟨N(δ)⟩ − c·Vol(D(δ))
 //! ```
 //!
-//! is the exact cumulative ligand excess in `D(δ)` at every δ — this identity, not yet the
-//! thermodynamic coefficient. It is the Kirkwood–Buff excess `N₂₃ = ρ₃G₂₃`; for an implicit-solvent
-//! (McMillan–Mayer) model, where water is the continuum rather than a counted species, it *is* the
-//! preferential interaction coefficient. With explicit solvent the full coefficient subtracts a
-//! displaced-water term, which this analysis does not form — use it only on implicit-solvent
-//! models. Scanning δ removes the need to *choose* a domain: Γ(δ) approaches a plateau once δ
-//! outruns the range over which the ligand is perturbed, and that plateau is Γ. The approach need
-//! not be monotonic, so a profile still varying at the widest δ is unconverged, not a bound.
+//! is the cumulative ligand excess. In explicit solvent, the counted-solvent estimator instead is
+//!
+//! ```text
+//! Γ(δ) = ⟨N₃(δ) − [N₃ᵇ/N₁ᵇ] N₁(δ)⟩,
+//! ```
+//!
+//! where components 1 and 3 are solvent and ligand, and superscript `b` denotes the region outside
+//! the widest domain. The ligand and solvent are partitioned through the identical `D(δ)` in each
+//! frame. Scanning δ removes the need to *choose* a domain: Γ(δ) approaches a plateau once δ
+//! outruns the range over which the solvent composition is perturbed, and that plateau is Γ. The
+//! approach need not be monotonic, so a profile still varying at the widest δ is unconverged, not
+//! a bound.
 //!
 //! # Substrate geometry, one copy
 //!
@@ -69,6 +73,45 @@ pub struct Shell {
     max: f64,
     /// Spacing of the ladder (Å).
     resolution: f64,
+}
+
+/// A counted solvent species used as the finite-box reference for Γ.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ExplicitSolvent {
+    /// Solvent molecules or atoms whose local and bulk populations are compared with the ligand.
+    selection: Selection,
+    /// Count one mass centre per selected molecule instead of every selected atom.
+    use_com: bool,
+}
+
+/// Hidden state for the choice of thermodynamic reference medium.
+#[derive(Debug)]
+enum SolventReference {
+    /// McMillan–Mayer estimator, with the solvent integrated out.
+    Implicit,
+    /// Finite-box estimator using a counted solvent species in the same spatial partition as the
+    /// ligand.
+    Explicit(Box<ExplicitSolventReference>),
+}
+
+#[derive(Debug)]
+struct ExplicitSolventReference {
+    selection: ComSelection,
+    /// Per-frame solvent tally `[residue * n_shells + shell]`.
+    counts: Vec<f64>,
+    shell_totals: Vec<f64>,
+    positions: Vec<Point>,
+    /// Mean solvent population owned by each residue and shell.
+    residue_counts: Vec<Vec<WeightedBlockAverage>>,
+    concentration: WeightedBlockAverage,
+    bulk_ligand_to_solvent_ratio: WeightedBlockAverage,
+}
+
+impl SolventReference {
+    fn is_explicit(&self) -> bool {
+        matches!(self, Self::Explicit(_))
+    }
 }
 
 impl Shell {
@@ -145,6 +188,10 @@ pub struct PreferentialInteractionBuilder {
     /// Count the mass centre of each selected molecule instead of each selected atom.
     #[serde(default)]
     use_com: bool,
+    /// Counted solvent for the finite-box explicit-solvent estimator. If absent, use the implicit
+    /// solvent estimator.
+    #[serde(default)]
+    solvent: Option<ExplicitSolvent>,
     /// Ligand radius (Å). Defaults to σ/2 for atoms and to zero for mass centres.
     #[serde(default)]
     radius: Option<f64>,
@@ -201,6 +248,41 @@ impl PreferentialInteractionBuilder {
             "PreferentialInteraction: ligand selection '{}' matched nothing",
             self.ligand.source()
         );
+        if let Some(solvent) = &self.solvent {
+            let matched = if solvent.use_com {
+                !context.resolve_groups(&solvent.selection).is_empty()
+            } else {
+                !context.resolve_atoms(&solvent.selection).is_empty()
+            };
+            anyhow::ensure!(
+                matched,
+                "PreferentialInteraction: solvent selection '{}' matched nothing",
+                solvent.selection.source()
+            );
+            let ligand_atoms: std::collections::HashSet<_> =
+                context.resolve_atoms(&self.ligand).into_iter().collect();
+            let solvent_atoms = context.resolve_atoms(&solvent.selection);
+            anyhow::ensure!(
+                solvent_atoms
+                    .iter()
+                    .all(|atom| !ligand_atoms.contains(atom)),
+                "PreferentialInteraction: ligand selection '{}' and solvent selection '{}' \
+                 overlap; they must count distinct species",
+                self.ligand.source(),
+                solvent.selection.source()
+            );
+            let substrate_atoms: std::collections::HashSet<_> =
+                context.resolve_atoms(&self.substrate).into_iter().collect();
+            anyhow::ensure!(
+                solvent_atoms
+                    .iter()
+                    .all(|atom| !substrate_atoms.contains(atom)),
+                "PreferentialInteraction: substrate selection '{}' and solvent selection '{}' \
+                 overlap; the substrate cannot be its own solvent",
+                self.substrate.source(),
+                solvent.selection.source()
+            );
+        }
         let ligand_radius = self.ligand_radius(context)?;
         let reference = SurfaceReference::new(
             context,
@@ -212,8 +294,23 @@ impl PreferentialInteractionBuilder {
         let n_shells = self.shell.len();
         let accumulators = || (0..n_shells).map(|_| WeightedBlockAverage::new()).collect();
         let n_residues = reference.residues.len();
+        let solvent_reference =
+            self.solvent
+                .as_ref()
+                .map_or(SolventReference::Implicit, |solvent| {
+                    SolventReference::Explicit(Box::new(ExplicitSolventReference {
+                        selection: ComSelection::new(solvent.selection.clone(), solvent.use_com),
+                        counts: vec![0.0; n_residues * n_shells],
+                        shell_totals: vec![0.0; n_shells],
+                        positions: Vec::new(),
+                        residue_counts: (0..n_residues).map(|_| accumulators()).collect(),
+                        concentration: WeightedBlockAverage::new(),
+                        bulk_ligand_to_solvent_ratio: WeightedBlockAverage::new(),
+                    }))
+                });
         Ok(PreferentialInteraction {
             ligand: ComSelection::new(self.ligand.clone(), self.use_com),
+            solvent_reference,
             residue_gamma: (0..n_residues).map(|_| accumulators()).collect(),
             residue_counts: (0..n_residues).map(|_| accumulators()).collect(),
             reference_counts: (0..n_residues).map(|_| accumulators()).collect(),
@@ -797,14 +894,17 @@ fn surface_areas(
 #[derive(Debug)]
 pub struct PreferentialInteraction {
     ligand: ComSelection,
+    solvent_reference: SolventReference,
     reference: SurfaceReference,
     /// Γ(δ_k), one accumulator per rung.
     gamma: Vec<WeightedBlockAverage>,
     /// γ(δ_k), the excess owned by each residue, indexed `[residue][shell]`.
     residue_gamma: Vec<Vec<WeightedBlockAverage>>,
-    /// Mean ligand population owned by each residue and shell for dynamic geometry.
+    /// Mean ligand population owned by each residue and shell when the geometry or solvent
+    /// reference is sampled.
     residue_counts: Vec<Vec<WeightedBlockAverage>>,
-    /// Mean ideal population `c_bulk · v` for each residue and shell for dynamic geometry.
+    /// Mean reference population for each residue and shell: `c₃ᵇv` in implicit solvent or
+    /// `(N₃ᵇ/N₁ᵇ)N₁` in explicit solvent.
     reference_counts: Vec<Vec<WeightedBlockAverage>>,
     /// Frame-dependent residue geometry, indexed `[residue][shell]`.
     residue_volumes: Vec<Vec<WeightedBlockAverage>>,
@@ -843,7 +943,7 @@ impl PreferentialInteraction {
     /// Mean ligands owned by `residue` at rung `shell` — the Kₚ numerator.
     ///
     fn residue_count(&self, residue: usize, shell: usize) -> f64 {
-        if self.reference.is_dynamic() {
+        if self.reference.is_dynamic() || self.solvent_reference.is_explicit() {
             self.residue_counts[residue][shell].mean()
         } else {
             self.residue_gamma[residue][shell].mean()
@@ -885,7 +985,7 @@ impl PreferentialInteraction {
     /// local-to-bulk concentration ratio, so a negative numerator or denominator has no meaning; it
     /// is reported as `None` rather than as a negative Kₚ.
     pub(crate) fn partition_coefficient(&self, residue: usize, shell: usize) -> Option<f64> {
-        let reference = if self.reference.is_dynamic() {
+        let reference = if self.reference.is_dynamic() || self.solvent_reference.is_explicit() {
             self.reference_counts[residue][shell].mean() - self.reference_counts[residue][0].mean()
         } else {
             self.concentration.mean() * self.accessible_volume(residue, shell)
@@ -902,25 +1002,33 @@ impl PreferentialInteraction {
         }
     }
 
-    /// Hydration per unit area, b₁ = v_w^shell / (v̄_w · ASA), in waters per Å².
+    /// Hydration per unit area b₁, in waters per Å².
     ///
-    /// Both the shell volume and the area are taken at the water probe, so b₁ is a property of the
-    /// substrate surface and water alone — Record's hydration density — independent of the ligand.
-    /// The solute-partitioning model treats it as one number for the whole surface. It is not: the
-    /// shell volume a convex patch carries per unit area exceeds that of a flat one, so b₁ is a
-    /// field over the surface, and reporting it per residue is what makes that visible. A buried
-    /// residue exposes no surface, so its b₁ is undefined rather than zero. The water shell volume
-    /// can itself turn negative when the radical partition shifts ownership between unequal-radius
-    /// neighbours; a hydration density cannot be negative, so that too reads as undefined.
+    /// In implicit solvent the water population is the water-probe shell volume divided by the
+    /// molecular volume of water. In explicit solvent it is the sampled solvent population in the
+    /// same ligand-accessible slab used by Γ. A buried residue exposes no surface, so its b₁ is
+    /// undefined rather than zero. A negative shell volume or population can arise when the
+    /// radical partition transfers ownership between unequal-radius neighbours; a hydration
+    /// density cannot be negative, so that too reads as undefined.
     pub(crate) fn hydration_density(&self, residue: usize, shell: usize) -> Option<f64> {
         let asa = self.surface_area(residue);
-        let water_shell = if self.reference.is_dynamic() {
-            self.residue_water_volumes[residue][shell].mean()
-                - self.residue_water_volumes[residue][0].mean()
-        } else {
-            self.reference.water_volumes[shell][residue] - self.reference.water_volumes[0][residue]
-        };
-        (asa > 0.0 && water_shell >= 0.0).then(|| water_shell / (WATER_VOLUME * asa))
+        match &self.solvent_reference {
+            SolventReference::Implicit => {
+                let water_shell = if self.reference.is_dynamic() {
+                    self.residue_water_volumes[residue][shell].mean()
+                        - self.residue_water_volumes[residue][0].mean()
+                } else {
+                    self.reference.water_volumes[shell][residue]
+                        - self.reference.water_volumes[0][residue]
+                };
+                (asa > 0.0 && water_shell >= 0.0).then(|| water_shell / (WATER_VOLUME * asa))
+            }
+            SolventReference::Explicit(explicit) => {
+                let waters = explicit.residue_counts[residue][shell].mean()
+                    - explicit.residue_counts[residue][0].mean();
+                (asa > 0.0 && waters >= 0.0).then_some(waters / asa)
+            }
+        }
     }
 
     /// Why the current reference geometry is invalid in the live cell, or `Ok` if it remains valid.
@@ -1025,6 +1133,16 @@ impl PreferentialInteraction {
         map.try_insert("num_samples", self.sampling.num_samples())?;
         map.try_insert("gamma", self.gamma(last))?;
         map.try_insert("concentration/Å⁻³", self.concentration.summary()?)?;
+        if let SolventReference::Explicit(explicit) = &self.solvent_reference {
+            map.try_insert(
+                "solvent_concentration/Å⁻³",
+                explicit.concentration.summary()?,
+            )?;
+            map.try_insert(
+                "bulk_ligand_to_solvent_ratio",
+                explicit.bulk_ligand_to_solvent_ratio.summary()?,
+            )?;
+        }
         let excluded_volume = if self.reference.is_dynamic() {
             self.domain_volume[0].mean()
         } else {
@@ -1038,24 +1156,35 @@ impl PreferentialInteraction {
 
     /// Refill `self.positions` with the ligands of the current configuration.
     fn load_ligand_positions(&mut self, context: &impl ObserveContext) -> Result<()> {
-        self.positions.clear();
-        match &mut self.ligand {
-            ComSelection::Atoms(cache) => {
-                for i in cache.resolve(context) {
-                    self.positions.push(context.position(i.get()));
-                }
-            }
-            ComSelection::Groups(cache) => {
-                for &g in cache.resolve(context) {
-                    let center = context.group(g).mass_center().copied().ok_or_else(|| {
-                        anyhow::anyhow!("PreferentialInteraction: group {g} has no center of mass")
-                    })?;
-                    self.positions.push(center);
-                }
+        load_positions(&mut self.ligand, &mut self.positions, context, "ligand")
+    }
+}
+
+fn load_positions(
+    selection: &mut ComSelection,
+    positions: &mut Vec<Point>,
+    context: &impl ObserveContext,
+    species: &str,
+) -> Result<()> {
+    positions.clear();
+    match selection {
+        ComSelection::Atoms(cache) => {
+            for i in cache.resolve(context) {
+                positions.push(context.position(i.get()));
             }
         }
-        Ok(())
+        ComSelection::Groups(cache) => {
+            for &g in cache.resolve(context) {
+                let center = context.group(g).mass_center().copied().ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "PreferentialInteraction: {species} group {g} has no center of mass"
+                    )
+                })?;
+                positions.push(center);
+            }
+        }
     }
+    Ok(())
 }
 
 impl_info!(
@@ -1067,7 +1196,7 @@ impl_info!(
 impl<T: ObserveContext> Analyze<T> for PreferentialInteraction {
     impl_sampling_accessors!();
 
-    fn perform_sample(&mut self, context: &T, _step: usize, weight: f64) -> Result<()> {
+    fn perform_sample(&mut self, context: &T, step: usize, weight: f64) -> Result<()> {
         if self.stopped {
             return Ok(());
         }
@@ -1093,14 +1222,50 @@ impl<T: ObserveContext> Analyze<T> for PreferentialInteraction {
             }
         }
 
-        // Γ is a per-sample estimator, so the fluctuating bulk concentration enters each sample
-        // rather than being divided out afterwards — that keeps the error bar honest without
-        // tracking a covariance.
+        // Γ is a per-sample estimator, so the fluctuating bulk composition enters each sample
+        // rather than being divided out afterwards. This retains its covariance with the local
+        // populations and gives the block error estimator the quantity actually being averaged.
         let concentration = bulk / self.reference.bulk_volume;
+
+        let bulk_ligand_to_solvent_ratio = match &mut self.solvent_reference {
+            SolventReference::Implicit => 0.0,
+            SolventReference::Explicit(explicit) => {
+                explicit.counts.fill(0.0);
+                load_positions(
+                    &mut explicit.selection,
+                    &mut explicit.positions,
+                    context,
+                    "solvent",
+                )?;
+                let mut solvent_bulk = 0.0;
+                for p in 0..explicit.positions.len() {
+                    let position = explicit.positions[p];
+                    if !self
+                        .reference
+                        .credit(context, &position, &mut explicit.counts)
+                    {
+                        solvent_bulk += 1.0;
+                    }
+                }
+                anyhow::ensure!(
+                    solvent_bulk > 0.0,
+                    "PreferentialInteraction: explicit solvent has no molecules in the bulk at \
+                     step {step}; enlarge the cell or reduce `shell.max`"
+                );
+                explicit
+                    .concentration
+                    .add(solvent_bulk / self.reference.bulk_volume, weight);
+                let ratio = bulk / solvent_bulk;
+                explicit.bulk_ligand_to_solvent_ratio.add(ratio, weight);
+                explicit.shell_totals.fill(0.0);
+                ratio
+            }
+        };
         self.concentration.add(concentration, weight);
 
         self.shell_totals.fill(0.0);
         let dynamic = self.reference.is_dynamic();
+        let sample_populations = dynamic || self.solvent_reference.is_explicit();
         for (residue, accumulators) in self.residue_gamma.iter_mut().enumerate() {
             if dynamic {
                 self.residue_asa[residue].add(self.reference.residues[residue].asa, weight);
@@ -1108,14 +1273,25 @@ impl<T: ObserveContext> Analyze<T> for PreferentialInteraction {
             for (k, accumulator) in accumulators.iter_mut().enumerate() {
                 let count = self.counts[residue * n_shells + k];
                 let volume = self.reference.volumes[k][residue];
-                if dynamic {
+                let reference_count = match &mut self.solvent_reference {
+                    SolventReference::Implicit => concentration * volume,
+                    SolventReference::Explicit(explicit) => {
+                        let solvent_count = explicit.counts[residue * n_shells + k];
+                        explicit.residue_counts[residue][k].add(solvent_count, weight);
+                        explicit.shell_totals[k] += solvent_count;
+                        bulk_ligand_to_solvent_ratio * solvent_count
+                    }
+                };
+                if sample_populations {
                     self.residue_counts[residue][k].add(count, weight);
-                    self.reference_counts[residue][k].add(concentration * volume, weight);
+                    self.reference_counts[residue][k].add(reference_count, weight);
+                }
+                if dynamic {
                     self.residue_volumes[residue][k].add(volume, weight);
                     self.residue_water_volumes[residue][k]
                         .add(self.reference.water_volumes[k][residue], weight);
                 }
-                accumulator.add(count - concentration * volume, weight);
+                accumulator.add(count - reference_count, weight);
                 self.shell_totals[k] += count;
             }
         }
@@ -1123,10 +1299,13 @@ impl<T: ObserveContext> Analyze<T> for PreferentialInteraction {
             if dynamic {
                 self.domain_volume[k].add(self.reference.domain_volume[k], weight);
             }
-            accumulator.add(
-                self.shell_totals[k] - concentration * self.reference.domain_volume[k],
-                weight,
-            );
+            let reference_count = match &self.solvent_reference {
+                SolventReference::Implicit => concentration * self.reference.domain_volume[k],
+                SolventReference::Explicit(explicit) => {
+                    bulk_ligand_to_solvent_ratio * explicit.shell_totals[k]
+                }
+            };
+            accumulator.add(self.shell_totals[k] - reference_count, weight);
         }
         Ok(())
     }
@@ -1257,6 +1436,136 @@ propagate: {{seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}}
         Backend::from_yaml_str(&input, None, &mut rand::thread_rng()).unwrap()
     }
 
+    fn build_explicit_system(ligands: &[[f64; 3]], solvents: &[[f64; 3]]) -> Backend {
+        let input = format!(
+            r#"
+atoms:
+  - {{name: SUB, mass: 1.0, charge: 0.0, sigma: 6.0}}
+  - {{name: LIG, mass: 1.0, charge: 0.0, sigma: 3.0}}
+  - {{name: SOL, mass: 1.0, charge: 0.0, sigma: 2.8}}
+molecules:
+  - name: substrate
+    degrees_of_freedom: Rigid
+    atoms: [SUB]
+  - name: ligand
+    atoms: [LIG]
+    atomic: true
+  - name: solvent
+    atoms: [SOL]
+    atomic: true
+system:
+  cell: !Cuboid [{BOX}, {BOX}, {BOX}]
+  medium: {{permittivity: !Vacuum, temperature: 300.0}}
+  energy: {{}}
+  blocks:
+    - molecule: substrate
+      N: 1
+      insert: !Manual [[0.0, 0.0, 0.0]]
+    - molecule: ligand
+      N: {n_ligands}
+      insert: !Manual [{ligand_positions}]
+    - molecule: solvent
+      N: {n_solvents}
+      insert: !Manual [{solvent_positions}]
+propagate: {{seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}}
+"#,
+            n_ligands = ligands.len(),
+            ligand_positions = manual(ligands),
+            n_solvents = solvents.len(),
+            solvent_positions = manual(solvents),
+        );
+        Backend::from_yaml_str(&input, None, &mut rand::thread_rng()).unwrap()
+    }
+
+    fn build_molecular_solvent_system() -> Backend {
+        let input = r#"
+atoms:
+  - {name: SUB, mass: 1.0, charge: 0.0, sigma: 6.0}
+  - {name: LIG, mass: 1.0, charge: 0.0, sigma: 3.0}
+  - {name: SOL, mass: 1.0, charge: 0.0, sigma: 2.8}
+molecules:
+  - name: substrate
+    degrees_of_freedom: Rigid
+    atoms: [SUB]
+  - name: ligand
+    atoms: [LIG]
+    atomic: true
+  - name: water
+    atoms: [SOL, SOL]
+    has_com: true
+system:
+  cell: !Cuboid [60.0, 60.0, 60.0]
+  medium: {permittivity: !Vacuum, temperature: 300.0}
+  energy: {}
+  blocks:
+    - molecule: substrate
+      N: 1
+      insert: !Manual [[0.0, 0.0, 0.0]]
+    - molecule: ligand
+      N: 2
+      insert: !Manual [[8.0, 0.0, 0.0], [25.0, 0.0, 0.0]]
+    - molecule: water
+      N: 4
+      insert: !Manual
+        - [-8.5, 0.0, 0.0]
+        - [-7.5, 0.0, 0.0]
+        - [-0.5, 8.0, 0.0]
+        - [0.5, 8.0, 0.0]
+        - [-25.5, 0.0, 0.0]
+        - [-24.5, 0.0, 0.0]
+        - [-0.5, 25.0, 0.0]
+        - [0.5, 25.0, 0.0]
+propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
+"#;
+        Backend::from_yaml_str(input, None, &mut rand::thread_rng()).unwrap()
+    }
+
+    fn build_flexible_explicit_dimer(
+        separation: f64,
+        ligands: &[[f64; 3]],
+        solvents: &[[f64; 3]],
+    ) -> Backend {
+        let input = format!(
+            r#"
+atoms:
+  - {{name: SUB, mass: 1.0, charge: 0.0, sigma: 6.0}}
+  - {{name: LIG, mass: 1.0, charge: 0.0, sigma: 3.0}}
+  - {{name: SOL, mass: 1.0, charge: 0.0, sigma: 2.8}}
+molecules:
+  - name: substrate
+    atoms: [SUB, SUB]
+  - name: ligand
+    atoms: [LIG]
+    atomic: true
+  - name: solvent
+    atoms: [SOL]
+    atomic: true
+system:
+  cell: !Cuboid [60.0, 60.0, 60.0]
+  medium: {{permittivity: !Vacuum, temperature: 300.0}}
+  energy: {{}}
+  blocks:
+    - molecule: substrate
+      N: 1
+      insert: !Manual [[{left}, 0.0, 0.0], [{right}, 0.0, 0.0]]
+    - molecule: ligand
+      N: {n_ligands}
+      insert: !Manual [{ligand_positions}]
+    - molecule: solvent
+      N: {n_solvents}
+      insert: !Manual [{solvent_positions}]
+propagate: {{seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}}
+"#,
+            left = -0.5 * separation,
+            right = 0.5 * separation,
+            n_ligands = ligands.len(),
+            ligand_positions = manual(ligands),
+            n_solvents = solvents.len(),
+            solvent_positions = manual(solvents),
+        );
+        Backend::from_yaml_str(&input, None, &mut rand::thread_rng()).unwrap()
+    }
+
     fn equal_sphere_union_volume(radius: f64, separation: f64) -> f64 {
         let sphere = 4.0 * std::f64::consts::PI * radius.powi(3) / 3.0;
         if separation >= 2.0 * radius {
@@ -1321,6 +1630,7 @@ propagate: {{seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}}
             substrate: Selection::parse("atomtype SUB").unwrap(),
             ligand: Selection::parse("atomtype LIG").unwrap(),
             use_com: false,
+            solvent: None,
             radius,
             shell: SHELL,
             solvent_probe: SOLVENT_PROBE,
@@ -1334,6 +1644,30 @@ propagate: {{seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}}
 
     fn analysis(context: &Backend) -> PreferentialInteraction {
         analysis_with_radius(context, None)
+    }
+
+    fn explicit_analysis(
+        context: &Backend,
+        solvent: &str,
+        use_com: bool,
+    ) -> PreferentialInteraction {
+        PreferentialInteractionBuilder {
+            substrate: Selection::parse("atomtype SUB").unwrap(),
+            ligand: Selection::parse("atomtype LIG").unwrap(),
+            use_com: false,
+            solvent: Some(ExplicitSolvent {
+                selection: Selection::parse(solvent).unwrap(),
+                use_com,
+            }),
+            radius: None,
+            shell: SHELL,
+            solvent_probe: SOLVENT_PROBE,
+            profile: None,
+            file: None,
+            frequency: Frequency::Every(1),
+        }
+        .build(context)
+        .unwrap()
     }
 
     /// A bead at the origin walled in by six neighbours at ±`spacing` along the axes. Its Voronoi
@@ -1388,6 +1722,172 @@ propagate: {{seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}}
                 analysis.gamma(k).mean
             );
         }
+    }
+
+    /// In explicit solvent the finite-box estimator compares ligand and solvent populations in
+    /// the same domain. Matching the local 1:2 ratio to the bulk 1:2 ratio therefore gives Γ = 0,
+    /// independently of the geometric domain volume.
+    #[test]
+    fn explicit_solvent_uniform_composition_has_zero_gamma() {
+        let ligands = [[8.0, 0.0, 0.0], [25.0, 0.0, 0.0]];
+        let solvents = [
+            [-8.0, 0.0, 0.0],
+            [0.0, 8.0, 0.0],
+            [-25.0, 0.0, 0.0],
+            [0.0, 25.0, 0.0],
+        ];
+        let context = build_explicit_system(&ligands, &solvents);
+        let mut analysis = explicit_analysis(&context, "atomtype SOL", false);
+
+        analysis.sample(&context, 0).unwrap();
+        let last = SHELL.len() - 1;
+        let gamma = analysis.gamma(last).mean;
+        assert!(gamma.abs() < 1e-12, "Γ = {gamma}, expected zero");
+        float_cmp::assert_approx_eq!(
+            f64,
+            analysis.partition_coefficient(0, last).unwrap(),
+            1.0,
+            epsilon = 1e-12
+        );
+        float_cmp::assert_approx_eq!(
+            f64,
+            analysis.hydration_density(0, last).unwrap(),
+            2.0 / analysis.surface_area(0),
+            epsilon = 1e-12
+        );
+
+        let report = analysis.report().unwrap();
+        let report = report.as_mapping().unwrap();
+        let ratio = &report["bulk_ligand_to_solvent_ratio"];
+        let ratio = ratio.as_mapping().unwrap()["mean"].as_f64().unwrap();
+        float_cmp::assert_approx_eq!(f64, ratio, 0.5, epsilon = 1e-12);
+    }
+
+    #[test]
+    fn explicit_solvent_enrichment_matches_the_finite_box_estimator() {
+        let ligands = [[8.0, 0.0, 0.0], [0.0, -8.0, 0.0], [25.0, 0.0, 0.0]];
+        let solvents = [
+            [-8.0, 0.0, 0.0],
+            [0.0, 8.0, 0.0],
+            [-25.0, 0.0, 0.0],
+            [0.0, 25.0, 0.0],
+        ];
+        let context = build_explicit_system(&ligands, &solvents);
+        let mut analysis = explicit_analysis(&context, "atomtype SOL", false);
+
+        analysis.sample(&context, 0).unwrap();
+        let gamma = analysis.gamma(SHELL.len() - 1).mean;
+        float_cmp::assert_approx_eq!(f64, gamma, 1.0, epsilon = 1e-12);
+    }
+
+    #[test]
+    fn explicit_solvent_requires_a_bulk_population() {
+        let ligands = [[8.0, 0.0, 0.0], [25.0, 0.0, 0.0]];
+        let solvents = [[-8.0, 0.0, 0.0], [0.0, 8.0, 0.0]];
+        let context = build_explicit_system(&ligands, &solvents);
+        let mut analysis = explicit_analysis(&context, "atomtype SOL", false);
+
+        let error = analysis.sample(&context, 7).unwrap_err().to_string();
+        assert!(
+            error.contains("no molecules in the bulk at step 7"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn explicit_solvent_can_count_one_center_per_molecule() {
+        let context = build_molecular_solvent_system();
+        let mut analysis = explicit_analysis(&context, "molecule water", true);
+
+        analysis.sample(&context, 0).unwrap();
+        let last = SHELL.len() - 1;
+        assert!(analysis.gamma(last).mean.abs() < 1e-12);
+        let SolventReference::Explicit(explicit) = &analysis.solvent_reference else {
+            unreachable!()
+        };
+        float_cmp::assert_approx_eq!(
+            f64,
+            explicit.residue_counts[0][last].mean(),
+            2.0,
+            epsilon = 1e-12
+        );
+    }
+
+    #[test]
+    fn explicit_solvent_decomposition_is_exact_for_a_flexible_substrate() {
+        let ligands = [[-11.0, 0.0, 0.0], [-6.0, 5.0, 0.0], [25.0, 0.0, 0.0]];
+        let solvents = [
+            [-6.0, -5.0, 0.0],
+            [6.0, 5.0, 0.0],
+            [-25.0, 0.0, 0.0],
+            [0.0, 25.0, 0.0],
+        ];
+        let context = build_flexible_explicit_dimer(12.0, &ligands, &solvents);
+        let mut analysis = explicit_analysis(&context, "atomtype SOL", false);
+
+        analysis.sample(&context, 0).unwrap();
+        let last = SHELL.len() - 1;
+        let total = analysis.gamma(last).mean;
+        let residues: Vec<f64> = (0..2)
+            .map(|residue| analysis.residue_gamma(residue, last).mean)
+            .collect();
+        float_cmp::assert_approx_eq!(f64, total, 1.0, epsilon = 1e-12);
+        float_cmp::assert_approx_eq!(f64, residues.iter().sum::<f64>(), total, epsilon = 1e-12);
+        assert!(residues[0] > 0.0, "left residue γ = {}", residues[0]);
+        assert!(residues[1] < 0.0, "right residue γ = {}", residues[1]);
+    }
+
+    #[test]
+    fn explicit_solvent_honors_rerun_weights() {
+        let solvents = [
+            [-8.0, 0.0, 0.0],
+            [0.0, 8.0, 0.0],
+            [-25.0, 0.0, 0.0],
+            [0.0, 25.0, 0.0],
+        ];
+        let bulk_rich = build_explicit_system(
+            &[[8.0, 0.0, 0.0], [25.0, 0.0, 0.0], [0.0, -25.0, 0.0]],
+            &solvents,
+        );
+        let local_rich = build_explicit_system(
+            &[[8.0, 0.0, 0.0], [0.0, -8.0, 0.0], [25.0, 0.0, 0.0]],
+            &solvents,
+        );
+        let mut analysis = explicit_analysis(&bulk_rich, "atomtype SOL", false);
+
+        analysis.sample_weighted(&bulk_rich, 0, 3.0).unwrap();
+        analysis.sample_weighted(&local_rich, 1, 1.0).unwrap();
+        float_cmp::assert_approx_eq!(
+            f64,
+            analysis.gamma(SHELL.len() - 1).mean,
+            -0.5,
+            epsilon = 1e-12
+        );
+    }
+
+    #[test]
+    fn ligand_and_explicit_solvent_must_be_distinct() {
+        let context = build_explicit_system(
+            &[[8.0, 0.0, 0.0], [25.0, 0.0, 0.0]],
+            &[[-8.0, 0.0, 0.0], [-25.0, 0.0, 0.0]],
+        );
+        let builder = PreferentialInteractionBuilder {
+            substrate: Selection::parse("atomtype SUB").unwrap(),
+            ligand: Selection::parse("atomtype LIG").unwrap(),
+            use_com: false,
+            solvent: Some(ExplicitSolvent {
+                selection: Selection::parse("atomtype LIG").unwrap(),
+                use_com: false,
+            }),
+            radius: None,
+            shell: SHELL,
+            solvent_probe: SOLVENT_PROBE,
+            profile: None,
+            file: None,
+            frequency: Frequency::Every(1),
+        };
+        let error = builder.build(&context).unwrap_err().to_string();
+        assert!(error.contains("overlap"), "{error}");
     }
 
     /// Kₚ against a known local density. Six ligands sit 8 Å from a lone bead, inside the
@@ -1575,6 +2075,7 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
             substrate: Selection::parse("molecule substrate").unwrap(),
             ligand: Selection::parse("atomtype LIG").unwrap(),
             use_com: false,
+            solvent: None,
             radius: Some(r_lig),
             shell: SHELL,
             solvent_probe: SOLVENT_PROBE,
@@ -1745,6 +2246,7 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
             substrate: Selection::parse("molecule substrate").unwrap(),
             ligand: Selection::parse("atomtype LIG").unwrap(),
             use_com: false,
+            solvent: None,
             radius: Some(1.5),
             shell: SHELL,
             solvent_probe: SOLVENT_PROBE,
@@ -1813,6 +2315,7 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
             substrate: Selection::parse("molecule substrate").unwrap(),
             ligand: Selection::parse("atomtype LIG").unwrap(),
             use_com: false,
+            solvent: None,
             radius: Some(1.5),
             shell: SHELL,
             solvent_probe: SOLVENT_PROBE,
@@ -1913,6 +2416,7 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
             substrate: Selection::parse("molecule substrate").unwrap(),
             ligand: Selection::parse("atomtype LIG").unwrap(),
             use_com: false,
+            solvent: None,
             radius: Some(5.0),
             shell: Shell {
                 max: 1.0,
@@ -1942,6 +2446,7 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
                 substrate: Selection::parse("molecule substrate").unwrap(),
                 ligand: Selection::parse("atomtype LIG").unwrap(),
                 use_com: false,
+                solvent: None,
                 radius: Some(1.5),
                 shell,
                 solvent_probe: SOLVENT_PROBE,
@@ -2004,6 +2509,7 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
             substrate: Selection::parse("molecule substrate").unwrap(),
             ligand: Selection::parse("atomtype LIG").unwrap(),
             use_com: false,
+            solvent: None,
             radius: Some(1.5),
             shell: SHELL,
             solvent_probe: SOLVENT_PROBE,
@@ -2163,6 +2669,7 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
             substrate: Selection::parse("molecule substrate").unwrap(),
             ligand: Selection::parse("atomtype LIG").unwrap(),
             use_com: false,
+            solvent: None,
             radius: Some(1.5),
             shell: SHELL,
             solvent_probe: SOLVENT_PROBE,
@@ -2192,6 +2699,7 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
                 substrate: Selection::parse("molecule substrate").unwrap(),
                 ligand: Selection::parse("atomtype LIG").unwrap(),
                 use_com: true, // r_lig defaults to 0; the water ladder is the wider one
+                solvent: None,
                 radius: None,
                 shell: SHELL,
                 solvent_probe: SOLVENT_PROBE,
@@ -2216,6 +2724,7 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
             substrate: Selection::parse("molecule substrate").unwrap(),
             ligand: Selection::parse("atomtype LIG").unwrap(),
             use_com: false,
+            solvent: None,
             radius: Some(1.5),
             shell: Shell {
                 max: 5.0,
@@ -2268,6 +2777,7 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
                 substrate: Selection::parse("molecule substrate").unwrap(),
                 ligand: Selection::parse("atomtype LIG").unwrap(),
                 use_com: false,
+                solvent: None,
                 radius,
                 shell: SHELL,
                 solvent_probe,
@@ -2317,6 +2827,7 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
                 substrate: Selection::parse("molecule substrate").unwrap(),
                 ligand: Selection::parse("atomtype Xe").unwrap(), // matches nothing
                 use_com,
+                solvent: None,
                 radius,
                 shell: SHELL,
                 solvent_probe: SOLVENT_PROBE,
@@ -2339,6 +2850,7 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
             substrate: Selection::parse("molecule substrate").unwrap(),
             ligand: Selection::parse("atomtype LIG").unwrap(),
             use_com: false,
+            solvent: None,
             radius: Some(1.5),
             shell: Shell {
                 max: 1.0e6,
@@ -2390,6 +2902,7 @@ propagate: {{seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}}
                 substrate: Selection::parse("molecule substrate").unwrap(),
                 ligand: Selection::parse("atomtype LIG").unwrap(),
                 use_com: false,
+                solvent: None,
                 radius: Some(1.5),
                 shell: SHELL,
                 solvent_probe: SOLVENT_PROBE,
@@ -2504,6 +3017,7 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
             substrate: Selection::parse("atomtype SUB").unwrap(),
             ligand: Selection::parse("molecule dimer").unwrap(),
             use_com: true,
+            solvent: None,
             radius: None,
             shell: SHELL,
             solvent_probe: SOLVENT_PROBE,
@@ -2570,6 +3084,7 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
             substrate: Selection::parse("atomtype SUB").unwrap(),
             ligand: Selection::parse(ligand).unwrap(),
             use_com: false,
+            solvent: None,
             radius,
             shell: SHELL,
             solvent_probe: SOLVENT_PROBE,
@@ -2595,6 +3110,7 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
             substrate: Selection::parse("atomtype SUB").unwrap(),
             ligand: Selection::parse("atomtype LIG").unwrap(),
             use_com: false,
+            solvent: None,
             radius: None,
             shell: Shell {
                 max: 100.0,
@@ -2615,6 +3131,7 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
             substrate: Selection::parse("atomtype Ca").unwrap(),
             ligand: Selection::parse("atomtype LIG").unwrap(),
             use_com: false,
+            solvent: None,
             radius: Some(1.5),
             shell: SHELL,
             solvent_probe: SOLVENT_PROBE,
@@ -2639,5 +3156,22 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
         let builder: crate::analysis::AnalysisBuilder = serde_yml::from_str(input).unwrap();
         let context = one_bead(&BULK);
         builder.build(&context, None).unwrap();
+    }
+
+    #[test]
+    fn explicit_solvent_configuration_is_accepted() {
+        let input = r#"
+!PreferentialInteraction
+  substrate: "atomtype SUB"
+  ligand: "atomtype LIG"
+  solvent: {selection: "molecule water", use_com: true}
+  shell: {max: 10.0, resolution: 0.5}
+  frequency: !Every 100
+"#;
+        let builder: crate::analysis::AnalysisBuilder = serde_yml::from_str(input).unwrap();
+        assert!(matches!(
+            builder,
+            crate::analysis::AnalysisBuilder::PreferentialInteraction(_)
+        ));
     }
 }
