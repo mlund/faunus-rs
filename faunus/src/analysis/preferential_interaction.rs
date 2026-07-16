@@ -507,16 +507,11 @@ fn validate_substrate(
         group.len(),
         molecule.name()
     );
-    Ok(
-        if matches!(
-            molecule.degrees_of_freedom(),
-            crate::topology::DegreesOfFreedom::Rigid
-        ) {
-            GeometryMode::Static
-        } else {
-            GeometryMode::Dynamic
-        },
-    )
+    Ok(if molecule.degrees_of_freedom().is_rigid() {
+        GeometryMode::Static
+    } else {
+        GeometryMode::Dynamic
+    })
 }
 
 /// Residue of each substrate atom, and the residues themselves.
@@ -587,6 +582,14 @@ fn residues_of(
     Ok((residues, owner))
 }
 
+/// Accumulate per-atom quantities onto their owning residues without reallocating.
+fn accumulate_by_owner(target: &mut [f64], per_atom: &[f64], owner: &[usize]) {
+    target.fill(0.0);
+    for (&value, &residue) in per_atom.iter().zip(owner) {
+        target[residue] += value;
+    }
+}
+
 /// Geometry of the substrate: the domain ladder D(δ) and its partition among substrate atoms.
 ///
 /// Rigid-body invariants are built once. Flexible geometry is replaced from the live coordinates
@@ -594,8 +597,6 @@ fn residues_of(
 /// lies in that cell is an argmin.
 #[derive(Debug)]
 struct SurfaceReference {
-    /// Selection retained so dynamic geometry can rebuild itself without caller bookkeeping.
-    substrate: Selection,
     mode: GeometryMode,
     /// Absolute indices of the substrate atoms.
     atoms: Vec<usize>,
@@ -764,7 +765,6 @@ impl SurfaceReference {
 
         let n = atoms.len();
         Ok(Self {
-            substrate: substrate.clone(),
             mode,
             atoms,
             radii,
@@ -786,13 +786,78 @@ impl SurfaceReference {
     /// Refresh all geometry derived from coordinates when the substrate can change shape.
     fn refresh(&mut self, context: &impl ObserveContext) -> Result<()> {
         if self.mode == GeometryMode::Dynamic {
-            *self = Self::new(
-                context,
-                &self.substrate,
+            reject_unsupported_cell(context)?;
+
+            let shell = self.shell;
+            let owner = &self.owner;
+            let residues_len = self.residues.len();
+            let periodic_box = crate::energy::make_periodic_box(context.cell());
+            let balls: Vec<voronota_ltr::Ball> = self
+                .atoms
+                .iter()
+                .zip(&self.radii)
+                .map(|(&i, &r)| {
+                    let p = context.position(i);
+                    voronota_ltr::Ball::new(p.x, p.y, p.z, r)
+                })
+                .collect();
+
+            let refill_ladder =
+                |target: &mut [Vec<f64>],
+                 mut domain_volume: Option<&mut [f64]>,
+                 probe_base: f64|
+                 -> Result<()> {
+                    for k in 0..shell.len() {
+                        let values =
+                            cell_volumes(&balls, probe_base + shell.delta(k), periodic_box.as_ref())?;
+                        let rung = &mut target[k];
+                        if rung.len() != residues_len {
+                            rung.resize(residues_len, 0.0);
+                        }
+                        accumulate_by_owner(rung, &values, owner);
+                        if let Some(domain_volume) = domain_volume.as_deref_mut() {
+                            domain_volume[k] = rung.iter().sum();
+                        }
+                    }
+                    Ok(())
+                };
+
+            refill_ladder(
+                &mut self.volumes,
+                Some(&mut self.domain_volume),
                 self.ligand_radius,
-                self.shell,
-                self.solvent_probe,
             )?;
+            refill_ladder(&mut self.water_volumes, None, self.solvent_probe)?;
+
+            let areas = surface_areas(&balls, self.solvent_probe, periodic_box.as_ref())?;
+            let mut asa = vec![0.0; self.residues.len()];
+            accumulate_by_owner(&mut asa, &areas, &self.owner);
+            for (residue, area) in self.residues.iter_mut().zip(asa) {
+                residue.asa = area;
+            }
+
+            let box_volume = context.cell().volume().ok_or_else(|| {
+                anyhow::anyhow!(
+                    "PreferentialInteraction: the cell has no volume, so there is no bulk"
+                )
+            })?;
+            self.box_dimensions = context.cell().bounding_box().unwrap_or_else(Point::zeros);
+            self.bulk_volume = box_volume - self.domain_volume[self.shell.len() - 1];
+            const MIN_BULK_FRACTION: f64 = 0.01;
+            anyhow::ensure!(
+                self.bulk_volume > MIN_BULK_FRACTION * box_volume,
+                "PreferentialInteraction: the domain leaves only {:.1}% of the cell as bulk, \
+                 which is too little to reference Γ against. Reduce `shell.max` or enlarge the \
+                 cell",
+                100.0 * self.bulk_volume / box_volume
+            );
+            if self.bulk_volume < 0.1 * box_volume {
+                log::warn!(
+                    "preferential interaction: only {:.0}% of the cell is bulk; Γ is referenced \
+                     against a thin shell and its error bar will be optimistic",
+                    100.0 * self.bulk_volume / box_volume
+                );
+            }
         }
         Ok(())
     }
@@ -1365,6 +1430,16 @@ mod tests {
         substrate: &[[f64; 3]],
         ligands: &[[f64; 3]],
     ) -> Backend {
+        build_system_with_dof(cell, sub_sigma, substrate, ligands, "Rigid")
+    }
+
+    fn build_system_with_dof(
+        cell: f64,
+        sub_sigma: f64,
+        substrate: &[[f64; 3]],
+        ligands: &[[f64; 3]],
+        degrees_of_freedom: &str,
+    ) -> Backend {
         let structure = substrate
             .iter()
             .map(|p| format!("      - SUB: [{}, {}, {}]", p[0], p[1], p[2]))
@@ -1377,7 +1452,7 @@ atoms:
   - {{name: LIG, mass: 1.0, charge: 0.0, sigma: 3.0}}
 molecules:
   - name: substrate
-    degrees_of_freedom: Rigid
+    degrees_of_freedom: {degrees_of_freedom}
     from_structure:
 {structure}
   - name: ligand
@@ -1810,6 +1885,22 @@ propagate: {{seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}}
             explicit.residue_counts[0][last].mean(),
             2.0,
             epsilon = 1e-12
+        );
+    }
+
+    #[test]
+    fn rigid_alchemical_substrate_stays_static() {
+        let context = build_system_with_dof(
+            80.0,
+            6.0,
+            &[[0.0, 0.0, 0.0]],
+            &[[25.0, 0.0, 0.0]],
+            "RigidAlchemical",
+        );
+        let analysis = analysis(&context);
+        assert!(
+            !analysis.reference.is_dynamic(),
+            "RigidAlchemical substrates should use the cached static geometry path"
         );
     }
 
@@ -2521,6 +2612,22 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
         .unwrap();
         analysis.sample(&context, 0).unwrap();
         assert!(analysis.gamma(SHELL.len() - 1).mean.is_finite());
+    }
+
+    #[test]
+    fn flexible_substrate_refreshes_geometry_in_place() {
+        let context = build_flexible_dimer(4.0, &BULK);
+        let mut analysis = analysis(&context);
+        let initial_volume_ptr = analysis.reference.volumes[0].as_ptr();
+        let initial_water_volume_ptr = analysis.reference.water_volumes[0].as_ptr();
+
+        analysis.sample(&context, 0).unwrap();
+
+        assert_eq!(analysis.reference.volumes[0].as_ptr(), initial_volume_ptr);
+        assert_eq!(
+            analysis.reference.water_volumes[0].as_ptr(),
+            initial_water_volume_ptr
+        );
     }
 
     #[test]
