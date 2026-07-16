@@ -1082,10 +1082,10 @@ error at the widest shell. Geometric quantities are ensemble averages for a flex
 `excluded_volume/Å³`. With explicit solvent it also reports `solvent_concentration/Å⁻³` and
 `bulk_ligand_to_solvent_ratio`. Rerun weights are applied to all reported averages. Errors are
 estimated automatically by hierarchical blocking: adjacent observations are combined into blocks
-of increasing length, and the coarsest level with at least 16 blocks sets the standard error. This
-reduces bias from serial correlation without requiring a user-selected block size. The trajectory
-must still be long enough to contain multiple correlation times
-([Flyvbjerg & Petersen, 1989](https://doi.org/10.1063/1.457480)).
+of increasing length, and the coarsest level with at least 16 blocks sets the standard error. For
+short trajectories that never reach that threshold, the finest level is used instead. This reduces
+bias from serial correlation without requiring a user-selected block size. The trajectory must
+still be long enough to contain multiple correlation times ([Flyvbjerg & Petersen, 1989](https://doi.org/10.1063/1.457480)).
 
 ### References
 
@@ -1304,8 +1304,10 @@ entropy, `N_eff`, and the per-vector and mean `S²`, each with a statistical err
 Snapshots in which the molecule clashes in every trial orientation are excluded
 from these averages and counted under `num_inaccessible`. The RMS torque
 (`rms_torque`) and stiffness (`local_harmonic_stiffness`) are added when enabled;
-an axis with no resolved samples reports null. If `file` is given, each sampled
-step writes columns `step`, `W/kJ/mol`, `mean_S2`, and `N_eff`.
+an axis with no resolved samples reports null. Errors use the same hierarchical
+blocking fallback as above: the coarsest level with at least 16 blocks wins, and
+short runs fall back to the finest level. If `file` is given, each sampled step
+writes columns `step`, `W/kJ/mol`, `mean_S2`, and `N_eff`.
 
 Errors for `W`, the mean interaction, entropy, `N_eff`, torque, and stiffness use
 automatic hierarchical blocking with at least 16 blocks at the selected level. The
