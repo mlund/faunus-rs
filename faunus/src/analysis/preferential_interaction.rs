@@ -12,7 +12,7 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
-//! Preferential interaction coefficient Γ of a ligand with a rigid substrate.
+//! Preferential interaction coefficient Γ of a ligand with a molecular substrate.
 //!
 //! Γ is the thermodynamic derivative behind preferential binding and exclusion: it fixes how the
 //! chemical potential of the substrate responds to the ligand concentration, and hence — through
@@ -33,16 +33,15 @@
 //! outruns the range over which the ligand is perturbed, and that plateau is Γ. The approach need
 //! not be monotonic, so a profile still varying at the widest δ is unconverged, not a bound.
 //!
-//! # Rigid body, one copy
+//! # Substrate geometry, one copy
 //!
 //! The reference geometry — the per-atom cell volumes `vᵢ(p)`, the surface areas, the engulfed
-//! flags — is built once (`SurfaceReference::new`) and reused for the whole run. This is sound
-//! only because the substrate is a rigid body: those quantities depend on the substrate's
-//! *internal* geometry alone, which translation and rotation preserve, while the per-sample
-//! counting reads *live* positions through the minimum image. The substrate is therefore free to
-//! translate, rotate, and wrap across the periodic boundary; nothing is recomputed as it moves.
+//! flags — is cached for a rigid substrate because translation and rotation preserve its internal
+//! geometry. For a flexible substrate it is rebuilt from the live coordinates at every sampled
+//! frame. Per-sample counting always reads live positions through the minimum image, so either
+//! substrate may translate and wrap across the periodic boundary.
 //!
-//! Only one substrate copy is allowed (`reject_mobile_substrate`). Several identical rigid copies
+//! Only one substrate copy is allowed (`validate_substrate`). Several identical rigid copies
 //! would share the same body-frame reference and could multiply the ligand statistics per frame,
 //! but only while their domains stay disjoint: once two `D(δ)` overlap, a ligand between them
 //! falls in both (breaking the tile-the-space partition behind Σγᵢ = Γ), and each copy's `vᵢ`
@@ -53,7 +52,7 @@
 //! follow-up, not a free win.
 
 use super::{Analyze, Frequency, Sampling};
-use crate::auxiliary::{BlockAverage, BlockSummary, ColumnWriter, MappingExt};
+use crate::auxiliary::{BlockSummary, ColumnWriter, MappingExt, WeightedBlockAverage};
 use crate::cell::{BoundaryConditions, Shape};
 use crate::selection::{ComSelection, Selection};
 use crate::{ObserveContext, Point};
@@ -139,7 +138,7 @@ impl Shell {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PreferentialInteractionBuilder {
-    /// The rigid body the ligand is counted around.
+    /// The molecular substrate the ligand is counted around.
     substrate: Selection,
     /// The species whose excess is measured. One per analysis; declare the analysis again for more.
     ligand: Selection,
@@ -211,17 +210,25 @@ impl PreferentialInteractionBuilder {
             self.solvent_probe,
         )?;
         let n_shells = self.shell.len();
-        let accumulators = || (0..n_shells).map(|_| BlockAverage::new()).collect();
+        let accumulators = || (0..n_shells).map(|_| WeightedBlockAverage::new()).collect();
         let n_residues = reference.residues.len();
         Ok(PreferentialInteraction {
             ligand: ComSelection::new(self.ligand.clone(), self.use_com),
             residue_gamma: (0..n_residues).map(|_| accumulators()).collect(),
+            residue_counts: (0..n_residues).map(|_| accumulators()).collect(),
+            reference_counts: (0..n_residues).map(|_| accumulators()).collect(),
+            residue_volumes: (0..n_residues).map(|_| accumulators()).collect(),
+            residue_water_volumes: (0..n_residues).map(|_| accumulators()).collect(),
+            residue_asa: (0..n_residues)
+                .map(|_| WeightedBlockAverage::new())
+                .collect(),
+            domain_volume: accumulators(),
             counts: vec![0.0; n_residues * n_shells],
             shell_totals: vec![0.0; n_shells],
             positions: Vec::new(),
             reference,
             gamma: accumulators(),
-            concentration: BlockAverage::new(),
+            concentration: WeightedBlockAverage::new(),
             stopped: false,
             profile_file: self.profile.clone(),
             residue_file: self.file.clone(),
@@ -358,17 +365,25 @@ fn bounding_radius(
         .fold(0.0, f64::max)
 }
 
-/// Refuse a substrate whose geometry will not hold still.
+/// How the substrate geometry must be maintained while sampling.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum GeometryMode {
+    /// Internal geometry is invariant, so the initial tessellation remains valid.
+    Static,
+    /// Internal geometry may change, so every sampled frame needs a fresh tessellation.
+    Dynamic,
+}
+
+/// Validate the substrate and decide how its geometry must be maintained.
 ///
-/// Every reference volume is computed once from the starting configuration and reused, which is
-/// sound only because a rigid body carries its geometry with it. A flexible chain — or several
-/// separate molecules drifting apart — would leave Γ referenced against a shape the system no
-/// longer has.
-fn reject_mobile_substrate(
+/// A single complete molecular group is required so its changing surface remains one connected
+/// thermodynamic reference. Rigid geometry can be cached; every other degree-of-freedom model is
+/// conservatively refreshed at each sample.
+fn validate_substrate(
     context: &impl ObserveContext,
     substrate: &Selection,
     atoms: &[usize],
-) -> Result<()> {
+) -> Result<GeometryMode> {
     let groups = context.resolve_groups(substrate);
     anyhow::ensure!(
         groups.len() == 1,
@@ -384,12 +399,6 @@ fn reject_mobile_substrate(
         "PreferentialInteraction: substrate '{}' is an atomic group, which has no fixed shape",
         molecule.name()
     );
-    anyhow::ensure!(
-        molecule.degrees_of_freedom().is_rigid(),
-        "PreferentialInteraction: substrate '{}' is not rigid, so its reference geometry would go \
-         stale as it flexes",
-        molecule.name()
-    );
     // A selection reaching only part of the molecule would leave the rest of the body out of the
     // tessellation, and the domain would close over surface that is really buried.
     anyhow::ensure!(
@@ -401,7 +410,16 @@ fn reject_mobile_substrate(
         group.len(),
         molecule.name()
     );
-    Ok(())
+    Ok(
+        if matches!(
+            molecule.degrees_of_freedom(),
+            crate::topology::DegreesOfFreedom::Rigid
+        ) {
+            GeometryMode::Static
+        } else {
+            GeometryMode::Dynamic
+        },
+    )
 }
 
 /// Residue of each substrate atom, and the residues themselves.
@@ -472,13 +490,16 @@ fn residues_of(
     Ok((residues, owner))
 }
 
-/// Geometry of a rigid substrate: the domain ladder D(δ) and its partition among substrate atoms.
+/// Geometry of the substrate: the domain ladder D(δ) and its partition among substrate atoms.
 ///
-/// Built once. The volumes are body-frame invariants, so rigid-body motion cannot stale them, and
-/// no tessellation runs while sampling: computing a cell's volume needs the diagram, but testing
-/// whether a point lies in that cell is an argmin.
+/// Rigid-body invariants are built once. Flexible geometry is replaced from the live coordinates
+/// before every sample. Computing a cell's volume needs the diagram, but testing whether a point
+/// lies in that cell is an argmin.
 #[derive(Debug)]
 struct SurfaceReference {
+    /// Selection retained so dynamic geometry can rebuild itself without caller bookkeeping.
+    substrate: Selection,
+    mode: GeometryMode,
     /// Absolute indices of the substrate atoms.
     atoms: Vec<usize>,
     /// Radius of each substrate atom (Å).
@@ -507,6 +528,7 @@ struct SurfaceReference {
     /// Box volume outside the widest domain (Å³).
     bulk_volume: f64,
     ligand_radius: f64,
+    solvent_probe: f64,
     shell: Shell,
     /// Per-atom `dᵢ² − Rᵢ²` for the ligand being placed, the probe-free part of the power distance;
     /// reused so `credit` allocates nothing.
@@ -528,7 +550,7 @@ impl SurfaceReference {
             "PreferentialInteraction: substrate selection '{}' matched no atoms",
             substrate.source()
         );
-        reject_mobile_substrate(context, substrate, &atoms)?;
+        let mode = validate_substrate(context, substrate, &atoms)?;
 
         let topology = context.topology_ref();
         let kinds = topology.atomkinds();
@@ -568,8 +590,8 @@ impl SurfaceReference {
             sums
         };
 
-        // One tessellation per rung — the only place the diagram is built. The substrate is rigid,
-        // so these volumes are body-frame invariants and no tessellation runs while sampling.
+        // One tessellation per rung. For a rigid substrate this happens only at construction; a
+        // flexible substrate takes the same path before every sampled frame.
         let ladder = |probe_base: f64| -> Result<Vec<Vec<f64>>> {
             (0..shell.len())
                 .map(|k| {
@@ -645,6 +667,8 @@ impl SurfaceReference {
 
         let n = atoms.len();
         Ok(Self {
+            substrate: substrate.clone(),
+            mode,
             atoms,
             radii,
             domain_reach,
@@ -656,9 +680,28 @@ impl SurfaceReference {
             box_dimensions: context.cell().bounding_box().unwrap_or_else(Point::zeros),
             bulk_volume,
             ligand_radius,
+            solvent_probe,
             shell,
             scratch: vec![0.0; n],
         })
+    }
+
+    /// Refresh all geometry derived from coordinates when the substrate can change shape.
+    fn refresh(&mut self, context: &impl ObserveContext) -> Result<()> {
+        if self.mode == GeometryMode::Dynamic {
+            *self = Self::new(
+                context,
+                &self.substrate,
+                self.ligand_radius,
+                self.shell,
+                self.solvent_probe,
+            )?;
+        }
+        Ok(())
+    }
+
+    fn is_dynamic(&self) -> bool {
+        self.mode == GeometryMode::Dynamic
     }
 
     /// Credit a ligand at `r` to the residue that owns it, at every rung whose domain contains it.
@@ -750,23 +793,33 @@ fn surface_areas(
     per_ball(balls, probe, periodic_box, |result| result.sas_areas())
 }
 
-/// Preferential interaction coefficient of a ligand with a rigid substrate.
+/// Preferential interaction coefficient of a ligand with a molecular substrate.
 #[derive(Debug)]
 pub struct PreferentialInteraction {
     ligand: ComSelection,
     reference: SurfaceReference,
     /// Γ(δ_k), one accumulator per rung.
-    gamma: Vec<BlockAverage>,
+    gamma: Vec<WeightedBlockAverage>,
     /// γ(δ_k), the excess owned by each residue, indexed `[residue][shell]`.
-    residue_gamma: Vec<Vec<BlockAverage>>,
+    residue_gamma: Vec<Vec<WeightedBlockAverage>>,
+    /// Mean ligand population owned by each residue and shell for dynamic geometry.
+    residue_counts: Vec<Vec<WeightedBlockAverage>>,
+    /// Mean ideal population `c_bulk · v` for each residue and shell for dynamic geometry.
+    reference_counts: Vec<Vec<WeightedBlockAverage>>,
+    /// Frame-dependent residue geometry, indexed `[residue][shell]`.
+    residue_volumes: Vec<Vec<WeightedBlockAverage>>,
+    residue_water_volumes: Vec<Vec<WeightedBlockAverage>>,
+    residue_asa: Vec<WeightedBlockAverage>,
+    /// Frame-dependent total domain volume at each shell.
+    domain_volume: Vec<WeightedBlockAverage>,
     /// Bulk concentration of the ligand (Å⁻³).
-    concentration: BlockAverage,
+    concentration: WeightedBlockAverage,
     /// Per-sample scratch, reused to keep sampling allocation-free: ligand tally
     /// `[residue * n_shells + shell]`, per-shell totals, and the current ligand positions.
     counts: Vec<f64>,
     shell_totals: Vec<f64>,
     positions: Vec<Point>,
-    /// Set once the live geometry drifts from the frozen reference; further samples are skipped.
+    /// Set once a frame violates a geometric constraint; further samples are skipped.
     stopped: bool,
     #[debug(skip)]
     profile_file: Option<PathBuf>,
@@ -778,7 +831,7 @@ pub struct PreferentialInteraction {
 impl PreferentialInteraction {
     /// Γ at rung `k`, mean and standard error.
     pub(crate) fn gamma(&self, shell: usize) -> BlockSummary {
-        self.gamma[shell].summary()
+        self.gamma[shell].summary().unwrap_or_default()
     }
 
     /// Whether the analysis has stopped sampling after a geometry violation.
@@ -789,17 +842,21 @@ impl PreferentialInteraction {
 
     /// Mean ligands owned by `residue` at rung `shell` — the Kₚ numerator.
     ///
-    /// Recovered from the excess rather than accumulated separately: γ = count − c·v with v
-    /// constant, so ⟨count⟩ = ⟨γ⟩ + v·⟨c⟩.
     fn residue_count(&self, residue: usize, shell: usize) -> f64 {
-        self.residue_gamma[residue][shell].mean()
-            + self.reference.volumes[shell][residue] * self.concentration.mean()
+        if self.reference.is_dynamic() {
+            self.residue_counts[residue][shell].mean()
+        } else {
+            self.residue_gamma[residue][shell].mean()
+                + self.reference.volumes[shell][residue] * self.concentration.mean()
+        }
     }
 
     /// γ of `residue` at rung `shell`. These sum to [`gamma`](Self::gamma) by construction: the
     /// counts partition the ligands and the volumes partition the domain.
     pub(crate) fn residue_gamma(&self, residue: usize, shell: usize) -> BlockSummary {
-        self.residue_gamma[residue][shell].summary()
+        self.residue_gamma[residue][shell]
+            .summary()
+            .unwrap_or_default()
     }
 
     /// Volume `residue` offers a ligand centre out to rung `shell`, `v(r_lig + δ) − v(r_lig)`.
@@ -809,7 +866,11 @@ impl PreferentialInteraction {
     /// neighbours never gains volume as δ grows, and a pocket that admits a small ion is sealed
     /// over for a larger one. It is the denominator of Kₚ, and the numerator of b₁.
     pub(crate) fn accessible_volume(&self, residue: usize, shell: usize) -> f64 {
-        self.reference.volumes[shell][residue] - self.reference.volumes[0][residue]
+        if self.reference.is_dynamic() {
+            self.residue_volumes[residue][shell].mean() - self.residue_volumes[residue][0].mean()
+        } else {
+            self.reference.volumes[shell][residue] - self.reference.volumes[0][residue]
+        }
     }
 
     /// Local-to-bulk partition coefficient Kₚ of `residue` at rung `shell`.
@@ -824,10 +885,21 @@ impl PreferentialInteraction {
     /// local-to-bulk concentration ratio, so a negative numerator or denominator has no meaning; it
     /// is reported as `None` rather than as a negative Kₚ.
     pub(crate) fn partition_coefficient(&self, residue: usize, shell: usize) -> Option<f64> {
-        let volume = self.accessible_volume(residue, shell);
-        let reference = self.concentration.mean() * volume;
+        let reference = if self.reference.is_dynamic() {
+            self.reference_counts[residue][shell].mean() - self.reference_counts[residue][0].mean()
+        } else {
+            self.concentration.mean() * self.accessible_volume(residue, shell)
+        };
         let count = self.residue_count(residue, shell) - self.residue_count(residue, 0);
         (reference > 0.0 && count >= 0.0).then_some(count / reference)
+    }
+
+    fn surface_area(&self, residue: usize) -> f64 {
+        if self.reference.is_dynamic() {
+            self.residue_asa[residue].mean()
+        } else {
+            self.reference.residues[residue].asa
+        }
     }
 
     /// Hydration per unit area, b₁ = v_w^shell / (v̄_w · ASA), in waters per Å².
@@ -841,13 +913,17 @@ impl PreferentialInteraction {
     /// can itself turn negative when the radical partition shifts ownership between unequal-radius
     /// neighbours; a hydration density cannot be negative, so that too reads as undefined.
     pub(crate) fn hydration_density(&self, residue: usize, shell: usize) -> Option<f64> {
-        let asa = self.reference.residues[residue].asa;
-        let water_shell =
-            self.reference.water_volumes[shell][residue] - self.reference.water_volumes[0][residue];
+        let asa = self.surface_area(residue);
+        let water_shell = if self.reference.is_dynamic() {
+            self.residue_water_volumes[residue][shell].mean()
+                - self.residue_water_volumes[residue][0].mean()
+        } else {
+            self.reference.water_volumes[shell][residue] - self.reference.water_volumes[0][residue]
+        };
         (asa > 0.0 && water_shell >= 0.0).then(|| water_shell / (WATER_VOLUME * asa))
     }
 
-    /// Why the frozen reference geometry no longer matches the live cell, or `Ok` if it still does.
+    /// Why the current reference geometry is invalid in the live cell, or `Ok` if it remains valid.
     ///
     /// A `VolumeMove` cannot be rejected at build (the analysis never sees the propagator), so a
     /// changed cell is caught here at the first drifted sample. A spherical cell adds a second
@@ -931,7 +1007,7 @@ impl PreferentialInteraction {
             writer.write_row(&[
                 &residue.name,
                 &residue.number,
-                &format_args!("{:.4}", residue.asa),
+                &format_args!("{:.4}", self.surface_area(index)),
                 &format_args!("{:.4}", self.accessible_volume(index, last)),
                 &optional(self.hydration_density(index, last)),
                 &optional(self.partition_coefficient(index, last)),
@@ -948,8 +1024,13 @@ impl PreferentialInteraction {
         let mut map = serde_yml::Mapping::new();
         map.try_insert("num_samples", self.sampling.num_samples())?;
         map.try_insert("gamma", self.gamma(last))?;
-        map.try_insert("concentration/Å⁻³", self.concentration.summary())?;
-        map.try_insert("excluded_volume/Å³", self.reference.domain_volume[0])?;
+        map.try_insert("concentration/Å⁻³", self.concentration.summary()?)?;
+        let excluded_volume = if self.reference.is_dynamic() {
+            self.domain_volume[0].mean()
+        } else {
+            self.reference.domain_volume[0]
+        };
+        map.try_insert("excluded_volume/Å³", excluded_volume)?;
         map.try_insert("ligand_radius/Å", self.reference.ligand_radius)?;
         map.try_insert("num_residues", self.reference.residues.len())?;
         Some(serde_yml::Value::Mapping(map))
@@ -980,16 +1061,17 @@ impl PreferentialInteraction {
 impl_info!(
     PreferentialInteraction,
     "preferential_interaction",
-    "Preferential interaction coefficient of a ligand with a rigid substrate"
+    "Preferential interaction coefficient of a ligand with a molecular substrate"
 );
 
 impl<T: ObserveContext> Analyze<T> for PreferentialInteraction {
     impl_sampling_accessors!();
 
-    fn perform_sample(&mut self, context: &T, _step: usize, _weight: f64) -> Result<()> {
+    fn perform_sample(&mut self, context: &T, _step: usize, weight: f64) -> Result<()> {
         if self.stopped {
             return Ok(());
         }
+        self.reference.refresh(context)?;
         if let Err(reason) = self.check_geometry_still_valid(context) {
             log::warn!("{reason}; this analysis stops sampling while the run continues");
             self.stopped = true;
@@ -1015,18 +1097,36 @@ impl<T: ObserveContext> Analyze<T> for PreferentialInteraction {
         // rather than being divided out afterwards — that keeps the error bar honest without
         // tracking a covariance.
         let concentration = bulk / self.reference.bulk_volume;
-        self.concentration.add(concentration);
+        self.concentration.add(concentration, weight);
 
         self.shell_totals.fill(0.0);
+        let dynamic = self.reference.is_dynamic();
         for (residue, accumulators) in self.residue_gamma.iter_mut().enumerate() {
+            if dynamic {
+                self.residue_asa[residue].add(self.reference.residues[residue].asa, weight);
+            }
             for (k, accumulator) in accumulators.iter_mut().enumerate() {
                 let count = self.counts[residue * n_shells + k];
-                accumulator.add(count - concentration * self.reference.volumes[k][residue]);
+                let volume = self.reference.volumes[k][residue];
+                if dynamic {
+                    self.residue_counts[residue][k].add(count, weight);
+                    self.reference_counts[residue][k].add(concentration * volume, weight);
+                    self.residue_volumes[residue][k].add(volume, weight);
+                    self.residue_water_volumes[residue][k]
+                        .add(self.reference.water_volumes[k][residue], weight);
+                }
+                accumulator.add(count - concentration * volume, weight);
                 self.shell_totals[k] += count;
             }
         }
         for (k, accumulator) in self.gamma.iter_mut().enumerate() {
-            accumulator.add(self.shell_totals[k] - concentration * self.reference.domain_volume[k]);
+            if dynamic {
+                self.domain_volume[k].add(self.reference.domain_volume[k], weight);
+            }
+            accumulator.add(
+                self.shell_totals[k] - concentration * self.reference.domain_volume[k],
+                weight,
+            );
         }
         Ok(())
     }
@@ -1122,6 +1222,66 @@ propagate: {{seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}}
             ligand_positions = manual(ligands),
         );
         Backend::from_yaml_str(&input, None, &mut rand::thread_rng()).unwrap()
+    }
+
+    fn build_flexible_dimer(separation: f64, ligands: &[[f64; 3]]) -> Backend {
+        let ligand_positions = manual(ligands);
+        let input = format!(
+            r#"
+atoms:
+  - {{name: SUB, mass: 1.0, charge: 0.0, sigma: 6.0}}
+  - {{name: LIG, mass: 1.0, charge: 0.0, sigma: 3.0}}
+molecules:
+  - name: substrate
+    atoms: [SUB, SUB]
+  - name: ligand
+    atoms: [LIG]
+    atomic: true
+system:
+  cell: !Cuboid [{BOX}, {BOX}, {BOX}]
+  medium: {{permittivity: !Vacuum, temperature: 300.0}}
+  energy: {{}}
+  blocks:
+    - molecule: substrate
+      N: 1
+      insert: !Manual [[{left}, 0.0, 0.0], [{right}, 0.0, 0.0]]
+    - molecule: ligand
+      N: {n_ligands}
+      insert: !Manual [{ligand_positions}]
+propagate: {{seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}}
+"#,
+            left = -0.5 * separation,
+            right = 0.5 * separation,
+            n_ligands = ligands.len(),
+        );
+        Backend::from_yaml_str(&input, None, &mut rand::thread_rng()).unwrap()
+    }
+
+    fn equal_sphere_union_volume(radius: f64, separation: f64) -> f64 {
+        let sphere = 4.0 * std::f64::consts::PI * radius.powi(3) / 3.0;
+        if separation >= 2.0 * radius {
+            return 2.0 * sphere;
+        }
+        let overlap = std::f64::consts::PI
+            * (4.0 * radius + separation)
+            * (2.0 * radius - separation).powi(2)
+            / 12.0;
+        2.0 * sphere - overlap
+    }
+
+    fn set_flexible_dimer_separation(context: &mut Backend, separation: f64) {
+        use crate::Context as _;
+
+        context
+            .set_group_conformation(
+                0,
+                &[0, 1],
+                &[
+                    Point::new(-0.5 * separation, 0.0, 0.0),
+                    Point::new(0.5 * separation, 0.0, 0.0),
+                ],
+            )
+            .unwrap();
     }
 
     /// σ = 6 beads (R = 3), σ = 3 ligands (r = 1.5), in a 60 Å box.
@@ -1815,7 +1975,7 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
     }
 
     #[test]
-    fn a_non_rigid_substrate_is_refused() {
+    fn a_flexible_substrate_can_be_sampled() {
         const FLEXIBLE: &str = r#"
 atoms:
   - {name: SUB, mass: 1.0, charge: 0.0, sigma: 6.0}
@@ -1840,7 +2000,7 @@ system:
 propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
 "#;
         let context = Backend::from_yaml_str(FLEXIBLE, None, &mut rand::thread_rng()).unwrap();
-        let builder = PreferentialInteractionBuilder {
+        let mut analysis = PreferentialInteractionBuilder {
             substrate: Selection::parse("molecule substrate").unwrap(),
             ligand: Selection::parse("atomtype LIG").unwrap(),
             use_com: false,
@@ -1850,8 +2010,147 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
             profile: None,
             file: None,
             frequency: Frequency::Every(1),
-        };
-        assert!(builder.build(&context).is_err());
+        }
+        .build(&context)
+        .unwrap();
+        analysis.sample(&context, 0).unwrap();
+        assert!(analysis.gamma(SHELL.len() - 1).mean.is_finite());
+    }
+
+    #[test]
+    fn each_flexible_conformation_uses_its_own_domain_volume() {
+        let mut context = build_flexible_dimer(4.0, &BULK);
+        let mut analysis = analysis(&context);
+        analysis.sample(&context, 0).unwrap();
+
+        let separation = 12.0;
+        set_flexible_dimer_separation(&mut context, separation);
+        analysis.sample(&context, 1).unwrap();
+
+        let inflated_radius = 3.0 + 1.5 + SHELL.max;
+        let box_volume = BOX.powi(3);
+        let expected = [4.0, separation]
+            .map(|distance| {
+                let domain = equal_sphere_union_volume(inflated_radius, distance);
+                -(BULK.len() as f64) * domain / (box_volume - domain)
+            })
+            .into_iter()
+            .sum::<f64>()
+            / 2.0;
+        float_cmp::assert_approx_eq!(
+            f64,
+            analysis.gamma(SHELL.len() - 1).mean,
+            expected,
+            epsilon = 1e-8
+        );
+    }
+
+    #[test]
+    fn flexible_geometry_output_is_averaged_over_sampled_conformations() {
+        let mut context = build_flexible_dimer(4.0, &BULK);
+        let mut analysis = analysis(&context);
+        analysis.sample(&context, 0).unwrap();
+
+        let separation = 12.0;
+        set_flexible_dimer_separation(&mut context, separation);
+        analysis.sample(&context, 1).unwrap();
+
+        let inflated_radius = 3.0 + 1.5;
+        let expected = [4.0, separation]
+            .map(|distance| equal_sphere_union_volume(inflated_radius, distance))
+            .into_iter()
+            .sum::<f64>()
+            / 2.0;
+        let report = analysis.report().unwrap();
+        let key = serde_yml::Value::String("excluded_volume/Å³".to_owned());
+        let actual = report.as_mapping().unwrap()[&key].as_f64().unwrap();
+        float_cmp::assert_approx_eq!(f64, actual, expected, epsilon = 1e-8);
+    }
+
+    #[test]
+    fn flexible_conformations_honor_rerun_weights() {
+        let mut context = build_flexible_dimer(4.0, &BULK);
+        let mut analysis = analysis(&context);
+        analysis.sample_weighted(&context, 0, 3.0).unwrap();
+
+        let separation = 12.0;
+        set_flexible_dimer_separation(&mut context, separation);
+        analysis.sample_weighted(&context, 1, 1.0).unwrap();
+
+        let inflated_radius = 3.0 + 1.5 + SHELL.max;
+        let box_volume = BOX.powi(3);
+        let gamma = [4.0, separation].map(|distance| {
+            let domain = equal_sphere_union_volume(inflated_radius, distance);
+            -(BULK.len() as f64) * domain / (box_volume - domain)
+        });
+        let expected = (3.0 * gamma[0] + gamma[1]) / 4.0;
+        float_cmp::assert_approx_eq!(
+            f64,
+            analysis.gamma(SHELL.len() - 1).mean,
+            expected,
+            epsilon = 1e-8
+        );
+    }
+
+    #[test]
+    fn a_flexible_substrate_uses_the_current_cell() {
+        use crate::cell::VolumeScalePolicy;
+        use crate::context::WithSimulationCell as _;
+        use crate::Context as _;
+
+        let mut context = build_flexible_dimer(4.0, &BULK);
+        let mut analysis = analysis(&context);
+        analysis.sample(&context, 0).unwrap();
+
+        let initial_volume = context.cell().volume().unwrap();
+        context
+            .scale_volume_and_positions(2.0 * initial_volume, VolumeScalePolicy::ScaleZ)
+            .unwrap();
+        analysis.sample(&context, 1).unwrap();
+
+        assert!(!analysis.is_stopped());
+        let domain = equal_sphere_union_volume(3.0 + 1.5 + SHELL.max, 4.0);
+        let expected = -(BULK.len() as f64)
+            * 0.5
+            * (domain / (initial_volume - domain) + domain / (2.0 * initial_volume - domain));
+        float_cmp::assert_approx_eq!(
+            f64,
+            analysis.gamma(SHELL.len() - 1).mean,
+            expected,
+            epsilon = 1e-8
+        );
+    }
+
+    #[test]
+    fn residue_output_averages_flexible_surface_area() {
+        let mut context = build_flexible_dimer(4.0, &BULK);
+        let mut analysis = analysis(&context);
+        let directory = tempfile::tempdir().unwrap();
+        let output = directory.path().join("residues.csv");
+        analysis.residue_file = Some(output.clone());
+        analysis.sample(&context, 0).unwrap();
+
+        let separation = 12.0;
+        set_flexible_dimer_separation(&mut context, separation);
+        analysis.sample(&context, 1).unwrap();
+        <PreferentialInteraction as Analyze<Backend>>::write_to_disk(&mut analysis).unwrap();
+
+        let contents = std::fs::read_to_string(output).unwrap();
+        let asa: f64 = contents
+            .lines()
+            .nth(1)
+            .unwrap()
+            .split(',')
+            .nth(2)
+            .unwrap()
+            .parse()
+            .unwrap();
+        let radius = 3.0 + SOLVENT_PROBE;
+        let exposed_at_four =
+            2.0 * std::f64::consts::PI * radius.powi(2) + std::f64::consts::PI * radius * 4.0;
+        let exposed_at_twelve = 4.0 * std::f64::consts::PI * radius.powi(2);
+        let expected = 0.5 * (exposed_at_four + exposed_at_twelve);
+        float_cmp::assert_approx_eq!(f64, asa, expected, epsilon = 1e-4);
     }
 
     /// Under periodic boundaries the domain must fit within half the shortest edge, or it wraps
