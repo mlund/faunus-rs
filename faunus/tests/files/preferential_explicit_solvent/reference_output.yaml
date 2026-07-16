@@ -177,16 +177,16 @@ analysis:
     num_samples: 800
     gamma:
       mean: -0.9772097079263591
-      error: 0.061802699683999526
+      error: 0.25297384564905473
     concentration/Å⁻³:
       mean: 0.0021807659563042032
-      error: 9.444490885273539e-6
+      error: 0.00003575738450661716
     solvent_concentration/Å⁻³:
       mean: 0.01616310670331079
-      error: 0.000016596199429540266
+      error: 0.00007673953750768867
     bulk_ligand_to_solvent_ratio:
       mean: 0.13517926779089945
-      error: 0.0006437781217083285
+      error: 0.002635144225510984
     excluded_volume/Å³: 291.2834587486793
     ligand_radius/Å: 1.5
     num_residues: 2

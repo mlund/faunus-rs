@@ -716,17 +716,12 @@ impl BlockAverage {
     }
 }
 
-/// Running block average with a reliability-weighted mean and standard error.
-///
-/// Each [`add`](Self::add) records one block measurement together with a
-/// reweighting factor (`1.0` for an unbiased run, the trajectory weight for a
-/// penalty/Wang–Landau rerun). The mean is weight-normalised; the error is a
-/// standard error built on the Kish effective sample size
-/// `N_eff = (Σwᵢ)² / Σwᵢ²`, so `SEM² = S / (Σwᵢ · (N_eff − 1))` with
-/// `S = Σ wᵢ (xᵢ − x̄)²` accumulated by West's algorithm. With every weight
-/// `1.0` this reduces exactly to the unweighted [`BlockAverage`] SEM.
+/// Fewer block means make their sample variance too noisy to be a useful error estimate.
+const MIN_BLOCKS_PER_LEVEL: u64 = 16;
+
+/// Weighted running moments for one blocking level.
 #[derive(Clone, Debug, Default)]
-pub(crate) struct WeightedBlockAverage {
+struct WeightedMoments {
     sum_w: f64,
     sum_w2: f64,
     mean: f64,
@@ -735,17 +730,8 @@ pub(crate) struct WeightedBlockAverage {
     count: u64,
 }
 
-impl WeightedBlockAverage {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    /// Record a per-block value with a reweighting factor. Zero-weight samples
-    /// are ignored (they carry no information and would only perturb `N_eff`).
-    pub fn add(&mut self, value: f64, weight: f64) {
-        if weight == 0.0 {
-            return;
-        }
+impl WeightedMoments {
+    fn add(&mut self, value: f64, weight: f64) {
         self.sum_w += weight;
         self.sum_w2 += weight * weight;
         let delta = value - self.mean;
@@ -754,24 +740,7 @@ impl WeightedBlockAverage {
         self.count += 1;
     }
 
-    /// Weight-normalised mean, or NaN if no samples have been added.
-    pub fn mean(&self) -> f64 {
-        if self.count == 0 {
-            f64::NAN
-        } else {
-            self.mean
-        }
-    }
-
-    /// Weight-normalised mean, or `None` if empty — so callers reporting a value
-    /// cannot leak the NaN sentinel into the output.
-    pub fn checked_mean(&self) -> Option<f64> {
-        (self.count > 0).then_some(self.mean)
-    }
-
-    /// Kish effective sample size `(Σwᵢ)² / Σwᵢ²`; the number of equally-weighted
-    /// samples that would carry the same information.
-    pub fn effective_n(&self) -> f64 {
+    fn effective_n(&self) -> f64 {
         if self.sum_w2 == 0.0 {
             0.0
         } else {
@@ -779,9 +748,7 @@ impl WeightedBlockAverage {
         }
     }
 
-    /// Standard error of the weighted mean. Zero for fewer than two effective
-    /// samples, where the spread is undefined.
-    pub fn error(&self) -> f64 {
+    fn error(&self) -> f64 {
         let neff = self.effective_n();
         if neff <= 1.0 || self.sum_w <= 0.0 {
             0.0
@@ -790,17 +757,116 @@ impl WeightedBlockAverage {
         }
     }
 
-    /// Number of blocks recorded.
+    fn has_reliable_error(&self) -> bool {
+        self.count >= MIN_BLOCKS_PER_LEVEL && self.effective_n() > 1.0 && self.sum_w > 0.0
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+struct WeightedSample {
+    value: f64,
+    weight: f64,
+}
+
+impl WeightedSample {
+    fn merge(self, other: Self) -> Self {
+        let weight = self.weight + other.weight;
+        Self {
+            value: self.value + other.weight / weight * (other.value - self.value),
+            weight,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Default)]
+struct BlockingLevel {
+    moments: WeightedMoments,
+    pending: Option<WeightedSample>,
+}
+
+/// Running reliability-weighted average with automatic hierarchical blocking.
+///
+/// Each [`add`](Self::add) records one trajectory sample and its reweighting
+/// factor (`1.0` for an unbiased run). Adjacent samples are merged recursively
+/// into blocks of 2, 4, 8, … samples. The reported error comes from the coarsest
+/// level containing enough blocks, while the mean always uses every sample.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct WeightedBlockAverage {
+    levels: Vec<BlockingLevel>,
+}
+
+impl WeightedBlockAverage {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Record a trajectory value with a reweighting factor. Zero-weight samples
+    /// carry no information and do not advance the blocking hierarchy.
+    pub fn add(&mut self, value: f64, weight: f64) {
+        if weight == 0.0 {
+            return;
+        }
+
+        let mut sample = WeightedSample { value, weight };
+        let mut index = 0;
+        loop {
+            if index == self.levels.len() {
+                self.levels.push(BlockingLevel::default());
+            }
+            let level = &mut self.levels[index];
+            level.moments.add(sample.value, sample.weight);
+            if let Some(previous) = level.pending.take() {
+                sample = previous.merge(sample);
+                index += 1;
+            } else {
+                level.pending = Some(sample);
+                break;
+            }
+        }
+    }
+
+    /// Weight-normalised mean, or NaN if no samples have been added.
+    pub fn mean(&self) -> f64 {
+        self.levels
+            .first()
+            .map_or(f64::NAN, |level| level.moments.mean)
+    }
+
+    /// Weight-normalised mean, or `None` if empty — so callers reporting a value
+    /// cannot leak the NaN sentinel into the output.
+    pub fn checked_mean(&self) -> Option<f64> {
+        self.levels.first().map(|level| level.moments.mean)
+    }
+
+    /// Kish effective sample size of the original weighted observations.
+    #[cfg(test)]
+    pub fn effective_n(&self) -> f64 {
+        self.levels
+            .first()
+            .map_or(0.0, |level| level.moments.effective_n())
+    }
+
+    /// Standard error from the coarsest statistically populated blocking level.
+    pub fn error(&self) -> f64 {
+        self.levels
+            .iter()
+            .rev()
+            .find(|level| level.moments.has_reliable_error())
+            .or_else(|| self.levels.first())
+            .map_or(0.0, |level| level.moments.error())
+    }
+
+    /// Number of original trajectory samples recorded.
     pub fn n(&self) -> u64 {
-        self.count
+        self.levels.first().map_or(0, |level| level.moments.count)
     }
 
     /// Snapshot of mean ± SEM in the canonical `{ mean, error }` YAML shape, or
     /// `None` when empty so an unsampled accumulator serializes as null rather than
     /// a `{nan, 0}` mapping.
     pub fn summary(&self) -> Option<BlockSummary> {
-        (self.count > 0).then(|| BlockSummary {
-            mean: self.mean,
+        self.checked_mean().map(|mean| BlockSummary {
+            mean,
             error: self.error(),
         })
     }
@@ -1148,6 +1214,63 @@ mod weighted_block_tests {
         let scaled = &wba * -2.0;
         assert_relative_eq!(scaled.mean, wba.mean() * -2.0, epsilon = 1e-12);
         assert_relative_eq!(scaled.error, wba.error() * 2.0, epsilon = 1e-12);
+    }
+
+    #[test]
+    fn serial_correlation_increases_the_reported_error() {
+        let mut correlated = WeightedBlockAverage::new();
+        let mut interleaved = WeightedBlockAverage::new();
+
+        for _ in 0..256 {
+            correlated.add(0.0, 1.0);
+            interleaved.add(0.0, 1.0);
+            interleaved.add(1.0, 1.0);
+        }
+        for _ in 0..256 {
+            correlated.add(1.0, 1.0);
+        }
+
+        assert_relative_eq!(correlated.mean(), interleaved.mean(), epsilon = 1e-12);
+        assert!(
+            correlated.error() > 10.0 * interleaved.error(),
+            "blocking should distinguish serial correlation from interleaved samples"
+        );
+    }
+
+    #[test]
+    fn uncorrelated_uniform_samples_match_theoretical_error() {
+        const N: usize = 4096;
+        let mut state = 0x4d59_5df4_d0f3_3173_u64;
+        let mut average = WeightedBlockAverage::new();
+
+        for _ in 0..N {
+            state = state
+                .wrapping_mul(6_364_136_223_846_793_005)
+                .wrapping_add(1);
+            let value = (state >> 11) as f64 / (1_u64 << 53) as f64;
+            average.add(value, 1.0);
+        }
+
+        let theoretical_error = (1.0 / (12.0 * N as f64)).sqrt();
+        assert_relative_eq!(average.error(), theoretical_error, max_relative = 0.35);
+    }
+
+    #[test]
+    fn hierarchical_blocking_preserves_weighted_mean_with_incomplete_block() {
+        let mut average = WeightedBlockAverage::new();
+        let mut weighted_sum = 0.0;
+        let mut sum_weights = 0.0;
+
+        for index in 0..513 {
+            let value = (index % 7) as f64;
+            let weight = (index % 5 + 1) as f64;
+            average.add(value, weight);
+            weighted_sum += weight * value;
+            sum_weights += weight;
+        }
+
+        assert_relative_eq!(average.mean(), weighted_sum / sum_weights, epsilon = 1e-12);
+        assert_eq!(average.n(), 513);
     }
 }
 
