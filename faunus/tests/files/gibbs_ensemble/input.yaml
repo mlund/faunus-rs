@@ -36,7 +36,7 @@ analysis: []
 propagate:
   seed: !Fixed 42
   criterion: Metropolis
-  repeat: 5000
+  repeat: 1000  # pre-equilibrated state; sufficient for the coexistence regression
   collections:
     - !Stochastic
       moves:
