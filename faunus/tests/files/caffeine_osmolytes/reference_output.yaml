@@ -144,10 +144,10 @@ analysis:
     num_samples: 1000
     gamma:
       mean: 8.067699981208769
-      error: 0.07425065244977329
+      error: 0.4053267301444128
     concentration/Å⁻³:
       mean: 0.00027830437361612176
-      error: 1.7317936431433963e-6
+      error: 0.00000945368466809126
     excluded_volume/Å³: 539.1766333220099
     ligand_radius/Å: 1.5
     num_residues: 8
@@ -155,10 +155,10 @@ analysis:
     num_samples: 1000
     gamma:
       mean: -3.0767154093805287
-      error: 0.053989891512274325
+      error: 0.24998720501661198
     concentration/Å⁻³:
       mean: 0.0005382324293733068
-      error: 1.259239452181324e-6
+      error: 0.000005830605364818945
     excluded_volume/Å³: 842.1038064742107
     ligand_radius/Å: 2.25
     num_residues: 8

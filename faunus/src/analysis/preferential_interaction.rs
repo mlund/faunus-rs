@@ -802,25 +802,24 @@ impl SurfaceReference {
                 })
                 .collect();
 
-            let refill_ladder =
-                |target: &mut [Vec<f64>],
-                 mut domain_volume: Option<&mut [f64]>,
-                 probe_base: f64|
-                 -> Result<()> {
-                    for k in 0..shell.len() {
-                        let values =
-                            cell_volumes(&balls, probe_base + shell.delta(k), periodic_box.as_ref())?;
-                        let rung = &mut target[k];
-                        if rung.len() != residues_len {
-                            rung.resize(residues_len, 0.0);
-                        }
-                        accumulate_by_owner(rung, &values, owner);
-                        if let Some(domain_volume) = domain_volume.as_deref_mut() {
-                            domain_volume[k] = rung.iter().sum();
-                        }
+            let refill_ladder = |target: &mut [Vec<f64>],
+                                 mut domain_volume: Option<&mut [f64]>,
+                                 probe_base: f64|
+             -> Result<()> {
+                for k in 0..shell.len() {
+                    let values =
+                        cell_volumes(&balls, probe_base + shell.delta(k), periodic_box.as_ref())?;
+                    let rung = &mut target[k];
+                    if rung.len() != residues_len {
+                        rung.resize(residues_len, 0.0);
                     }
-                    Ok(())
-                };
+                    accumulate_by_owner(rung, &values, owner);
+                    if let Some(domain_volume) = domain_volume.as_deref_mut() {
+                        domain_volume[k] = rung.iter().sum();
+                    }
+                }
+                Ok(())
+            };
 
             refill_ladder(
                 &mut self.volumes,

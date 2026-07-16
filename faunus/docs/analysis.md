@@ -28,8 +28,9 @@ Frequency         | Description
 
 In `output.yaml` every analysis reports `num_samples`, the number of frames it sampled. Analyses
 that loop over molecules also report how many molecules they accumulated: `num_groups_sampled` for
-Polymer Shape, `num_blocks` for Widom Rotation. Those counts, not `num_samples`, sit behind the
-reported means and error bars.
+Polymer Shape, `num_blocks` for Widom Rotation. These counts give the raw observations behind the
+reported means. Analyses with automatic blocking combine adjacent observations when estimating
+statistical errors.
 
 ### Output file formats
 
@@ -1080,8 +1081,11 @@ error at the widest shell. Geometric quantities are ensemble averages for a flex
 `output.yaml` reports `gamma` at that shell, the measured bulk `concentration/Å⁻³`, and the mean
 `excluded_volume/Å³`. With explicit solvent it also reports `solvent_concentration/Å⁻³` and
 `bulk_ligand_to_solvent_ratio`. Rerun weights are applied to all reported averages. Errors are
-standard errors across sampled frames; use sufficiently spaced samples or block analysis when
-frames are correlated.
+estimated automatically by hierarchical blocking: adjacent observations are combined into blocks
+of increasing length, and the coarsest level with at least 16 blocks sets the standard error. This
+reduces bias from serial correlation without requiring a user-selected block size. The trajectory
+must still be long enough to contain multiple correlation times
+([Flyvbjerg & Petersen, 1989](https://doi.org/10.1063/1.457480)).
 
 ### References
 
@@ -1095,6 +1099,8 @@ frames are correlated.
   [10.1016/S0006-3495(02)75629-4](https://doi.org/10.1016/S0006-3495(02)75629-4)
 - Vagenende & Trout, *Biophys. J.* **103**, 1354 (2012).
   [10.1016/j.bpj.2012.08.011](https://doi.org/10.1016/j.bpj.2012.08.011)
+- Flyvbjerg & Petersen, *J. Chem. Phys.* **91**, 461 (1989).
+  [10.1063/1.457480](https://doi.org/10.1063/1.457480)
 
 ---
 
@@ -1300,6 +1306,10 @@ from these averages and counted under `num_inaccessible`. The RMS torque
 (`rms_torque`) and stiffness (`local_harmonic_stiffness`) are added when enabled;
 an axis with no resolved samples reports null. If `file` is given, each sampled
 step writes columns `step`, `W/kJ/mol`, `mean_S2`, and `N_eff`.
+
+Errors for `W`, the mean interaction, entropy, `N_eff`, torque, and stiffness use
+automatic hierarchical blocking with at least 16 blocks at the selected level. The
+`S²` errors instead retain the joint covariance between tensor components and vectors.
 
 `W`, the mean excess interaction, and the stiffness are in kJ/mol, the torque is
 in kT per radian, and the entropy and `S²` are dimensionless. Each output key

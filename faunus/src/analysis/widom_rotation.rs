@@ -184,7 +184,7 @@ impl OrderAccumulator {
         self.comoment.ger(weight, &delta, &delta2, 1.0);
     }
 
-    /// Covariance of the grand-tensor mean, matching [`WeightedBlockAverage::error`]:
+    /// Independent-frame covariance of the grand-tensor mean:
     /// `comoment / (Σw · (N_eff − 1))`. `None` for fewer than two effective frames.
     fn covariance_of_mean(&self) -> Option<DMatrix<f64>> {
         if self.is_empty() {
@@ -498,8 +498,7 @@ pub struct WidomRotation {
     stiffness: Option<[WeightedBlockAverage; 3]>,
     /// Frequency and frame count, owned by the framework.
     sampling: Sampling,
-    /// Accessible molecule scans, one per matching molecule per frame. Each is an
-    /// independent block, so this is the count behind every reported error bar.
+    /// Accessible molecule scans, one per matching molecule per frame.
     num_blocks: usize,
     /// Molecule scans with no accessible orientation (every trial pose clashes);
     /// excluded from every average so `F = U − TS` stays consistent.
