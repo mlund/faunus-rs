@@ -1078,8 +1078,9 @@ They are defined in the <code>analysis</code> section of the YAML input:</p>
 </table>
 <p>In <code>output.yaml</code> every analysis reports <code>num_samples</code>, the number of frames it sampled. Analyses
 that loop over molecules also report how many molecules they accumulated: <code>num_groups_sampled</code> for
-Polymer Shape, <code>num_blocks</code> for Widom Rotation. Those counts, not <code>num_samples</code>, sit behind the
-reported means and error bars.</p>
+Polymer Shape, <code>num_blocks</code> for Widom Rotation. These counts give the raw observations behind the
+reported means. Analyses with automatic blocking combine adjacent observations when estimating
+statistical errors.</p>
 <h3 id="output-file-formats">Output file formats<a class="headerlink" href="#output-file-formats" title="Permanent link">&para;</a></h3>
 <p>Most analysis files are column data. For those files, the format is inferred
 from the file extension:</p>
@@ -2590,8 +2591,11 @@ error at the widest shell. Geometric quantities are ensemble averages for a flex
 <code>output.yaml</code> reports <code>gamma</code> at that shell, the measured bulk <code>concentration/Å⁻³</code>, and the mean
 <code>excluded_volume/Å³</code>. With explicit solvent it also reports <code>solvent_concentration/Å⁻³</code> and
 <code>bulk_ligand_to_solvent_ratio</code>. Rerun weights are applied to all reported averages. Errors are
-standard errors across sampled frames; use sufficiently spaced samples or block analysis when
-frames are correlated.</p>
+estimated automatically by hierarchical blocking: adjacent observations are combined into blocks
+of increasing length, and the coarsest level with at least 16 blocks sets the standard error. For
+short trajectories that never reach that threshold, the finest level is used instead. This reduces
+bias from serial correlation without requiring a user-selected block size. The trajectory must
+still be long enough to contain multiple correlation times (<a href="https://doi.org/10.1063/1.457480">Flyvbjerg &amp; Petersen, 1989</a>).</p>
 <h3 id="references">References<a class="headerlink" href="#references" title="Permanent link">&para;</a></h3>
 <ul>
 <li>Record &amp; Anderson, <em>Biophys. J.</em> <strong>68</strong>, 786 (1995).
@@ -2604,6 +2608,8 @@ frames are correlated.</p>
   <a href="https://doi.org/10.1016/S0006-3495(02)75629-4">10.1016/S0006-3495(02)75629-4</a></li>
 <li>Vagenende &amp; Trout, <em>Biophys. J.</em> <strong>103</strong>, 1354 (2012).
   <a href="https://doi.org/10.1016/j.bpj.2012.08.011">10.1016/j.bpj.2012.08.011</a></li>
+<li>Flyvbjerg &amp; Petersen, <em>J. Chem. Phys.</em> <strong>91</strong>, 461 (1989).
+  <a href="https://doi.org/10.1063/1.457480">10.1063/1.457480</a></li>
 </ul>
 <hr />
 <h2 id="mean-along-coordinate">Mean Along Coordinate<a class="headerlink" href="#mean-along-coordinate" title="Permanent link">&para;</a></h2>
@@ -2876,8 +2882,13 @@ entropy, <code>N_eff</code>, and the per-vector and mean <code>S²</code>, each 
 Snapshots in which the molecule clashes in every trial orientation are excluded
 from these averages and counted under <code>num_inaccessible</code>. The RMS torque
 (<code>rms_torque</code>) and stiffness (<code>local_harmonic_stiffness</code>) are added when enabled;
-an axis with no resolved samples reports null. If <code>file</code> is given, each sampled
-step writes columns <code>step</code>, <code>W/kJ/mol</code>, <code>mean_S2</code>, and <code>N_eff</code>.</p>
+an axis with no resolved samples reports null. Errors use the same hierarchical
+blocking fallback as above: the coarsest level with at least 16 blocks wins, and
+short runs fall back to the finest level. If <code>file</code> is given, each sampled step
+writes columns <code>step</code>, <code>W/kJ/mol</code>, <code>mean_S2</code>, and <code>N_eff</code>.</p>
+<p>Errors for <code>W</code>, the mean interaction, entropy, <code>N_eff</code>, torque, and stiffness use
+automatic hierarchical blocking with at least 16 blocks at the selected level. The
+<code>S²</code> errors instead retain the joint covariance between tensor components and vectors.</p>
 <p><code>W</code>, the mean excess interaction, and the stiffness are in kJ/mol, the torque is
 in kT per radian, and the entropy and <code>S²</code> are dimensionless. Each output key
 names its own unit.</p>
