@@ -12,6 +12,12 @@
 - internal state shouldn't be handled by caller, but automatic, hidden by deep design interfaces
 - test driven development, TDD (skill https://deepwiki.com/mattpocock/skills/4.1-test-driven-development)
 
+## Physics test
+
+- cover physics correctness in unit tests
+- compare with analytical theory if possible in some limit
+- verify that docs/ is consistent with code
+
 ## Code comments
 
   - prefer *why* over *what* comments
@@ -23,11 +29,13 @@
 
 ## Regression tests
 
+  - use `macro_rules! regression_test` which are automatically ignored (and may be longer)
   - never override fixtures without checking physics drift
   - prefer manual, targeted fixture updates
 
 # End user documentation (docs/.md)
 
+  - delay writing until implementation; tests; code-review; simplifications are completed
   - write and review with the /scientific-writing skill (https://raw.githubusercontent.com/mlund/claude-skills/refs/heads/main/plugins/scientific-writing/skills/scientific-writing/SKILL.md)
   - don't leak internals
   - target audience: physicist/biophysics/chemist
@@ -46,4 +54,5 @@
   - verify compilation with and without `gpu` feature
   - verify with `cargo check --workspace`
   - verify DOIs correctness with `doi2bib` CLI command
+  - verify docs/ formulas and math is in agreement with actual code
 

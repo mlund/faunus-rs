@@ -1,0 +1,192 @@
+version:
+  faunus: 3.0.0-beta.2
+  git_revision: v3.0.0-beta.1-78-g1ab88bb-dirty
+medium:
+  permittivity: Vacuum
+  salt: null
+  temperature: 300.0
+blocks:
+- molecule: solute
+  N: 1
+  active: null
+  insert: !Manual
+  - - -1.5
+    - 0.0
+    - 0.0
+  - - 1.5
+    - 0.0
+    - 0.0
+- molecule: ligand
+  N: 12
+  active: null
+  insert: !RandomAtomPos
+    directions: xyz
+- molecule: water
+  N: 96
+  active: null
+  insert: !RandomCOM
+    rotate: true
+    directions: xyz
+    offset: null
+    min_distance: null
+cell: !Cuboid
+- 18.0
+- 18.0
+- 18.0
+energy_change:
+  drift: 2.000888343900442e-11
+  final: -3420.3135850970907
+  initial: -3417.1590020925782
+energy_timers:
+  cell_overlap: '0.8599999999999999 (energy: 0.57, update: 0.29)'
+  nonbonded: '98.3 (energy: 7.71, update: 90.59)'
+  intramolecular: '0.8300000000000001 (energy: 0.56, update: 0.27)'
+propagate:
+  repeat: 8000
+  seed: !Fixed 42
+  collections:
+  - !Stochastic
+    repeat: 1
+    elapsed_seconds: 1.008558518
+    moves:
+    - !TranslateMolecule
+      molecule: water
+      max_displacement: 0.4
+      directions: xyz
+      weight: 1.0
+      repeat: 48
+      statistics:
+        num_trials: 64944
+        num_accepted: 33350
+        mean_square_displacement:
+          avg: 0.016790069502843844
+          n: 64944
+        timer:
+          accumulated:
+            secs: 0
+            nanos: 0
+        info: {}
+        energy_change_sum: -288.1651197354285
+        acceptance_ratio: 0.5135193397388519
+    - !RotateMolecule
+      molecule: water
+      max_angle: 0.4
+      weight: 1.0
+      repeat: 48
+      statistics:
+        num_trials: 63216
+        num_accepted: 36783
+        mean_square_displacement:
+          avg: 0.021271427758726553
+          n: 63216
+        timer:
+          accumulated:
+            secs: 0
+            nanos: 0
+        info: {}
+        energy_change_sum: 294.30890113522497
+        acceptance_ratio: 0.5818621867881549
+    - !TranslateAtom
+      atom: null
+      molecule: solute
+      max_displacement: 0.2
+      weight: 1.0
+      repeat: 2
+      statistics:
+        num_trials: 2632
+        num_accepted: 2088
+        mean_square_displacement:
+          avg: 0.009226678220860264
+          n: 2632
+        timer:
+          accumulated:
+            secs: 0
+            nanos: 0
+        info: {}
+        energy_change_sum: -27.27421488251618
+        acceptance_ratio: 0.7933130699088146
+    - !TranslateMolecule
+      molecule: solute
+      max_displacement: 0.3
+      directions: xyz
+      weight: 1.0
+      repeat: 1
+      statistics:
+        num_trials: 1379
+        num_accepted: 940
+        mean_square_displacement:
+          avg: 0.01556953950747919
+          n: 1379
+        timer:
+          accumulated:
+            secs: 0
+            nanos: 0
+        info: {}
+        energy_change_sum: -13.226241127416692
+        acceptance_ratio: 0.6816533720087019
+    - !RotateMolecule
+      molecule: solute
+      max_angle: 0.2
+      weight: 1.0
+      repeat: 1
+      statistics:
+        num_trials: 1327
+        num_accepted: 963
+        mean_square_displacement:
+          avg: 0.007897820982691059
+          n: 1327
+        timer:
+          accumulated:
+            secs: 0
+            nanos: 0
+        info: {}
+        energy_change_sum: 55.919902474767305
+        acceptance_ratio: 0.7256970610399397
+    - !TranslateAtom
+      atom: null
+      molecule: ligand
+      max_displacement: 1.5
+      preferential:
+        reference: molecule solute
+        exponent: 2.0
+        offset: 1.0
+        sum_bias: 54.133460337179244
+        mean_bias:
+          avg: 0.09870812094413939
+          n: 15696
+        bounding_radii:
+        - 1.5001553329489983
+      weight: 1.0
+      repeat: 12
+      statistics:
+        num_trials: 15696
+        num_accepted: 10017
+        mean_square_displacement:
+          avg: 0.3680619674980665
+          n: 15696
+        timer:
+          accumulated:
+            secs: 0
+            nanos: 0
+        info: {}
+        energy_change_sum: -24.71781086916315
+        acceptance_ratio: 0.6381880733944955
+  criterion: MetropolisHastings
+analysis:
+- preferential_interaction:
+    num_samples: 800
+    gamma:
+      mean: -0.9772097079263591
+      error: 0.061802699683999526
+    concentration/Å⁻³:
+      mean: 0.0021807659563042032
+      error: 9.444490885273539e-6
+    solvent_concentration/Å⁻³:
+      mean: 0.01616310670331079
+      error: 0.000016596199429540266
+    bulk_ligand_to_solvent_ratio:
+      mean: 0.13517926779089945
+      error: 0.0006437781217083285
+    excluded_volume/Å³: 291.2834587486793
+    ligand_radius/Å: 1.5
+    num_residues: 2

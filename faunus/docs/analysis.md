@@ -949,13 +949,12 @@ slabs must return it.
 
 ## Preferential Interaction
 
-Measures the excess of a ligand around one molecular substrate. A positive $\Gamma$ means that the
-ligand accumulates near the substrate; a negative value means that it is depleted. For an
-implicit-solvent model, the converged value is the preferential interaction coefficient. With
-explicit solvent, the full coefficient also requires the excess of water and is not available from
-this analysis alone.
+Measures the preferential interaction of a ligand around one molecular substrate. A positive
+$\Gamma$ means that the local solvent composition is enriched in ligand relative to bulk; a
+negative value means that it is depleted. Both implicit- and explicit-solvent estimators are
+available.
 
-For a shell of thickness $\delta$ around the substrate, the analysis reports
+For implicit solvent, the analysis reports the cumulative ligand excess
 
 $$\Gamma(\delta) = \left\langle N(\delta)
 - c_{\mathrm{bulk}}\,\operatorname{Vol}\!\left[D(\delta)\right]\right\rangle,$$
@@ -966,12 +965,23 @@ formed for each frame before averaging, preserving correlations between concentr
 The bulk concentration is measured in the remaining part of the simulation cell, so no
 substrate-free simulation is required.
 
+For explicit solvent, components 1 and 3 denote solvent and ligand. The finite-box estimator is
+
+$$\Gamma_{23}(\delta) = \left\langle N_3(\delta)
+- \frac{N_3^{\rm bulk}}{N_1^{\rm bulk}}N_1(\delta)\right\rangle.$$
+
+The ratio and both local populations are evaluated in each frame before averaging. Ligand and
+solvent are counted in the same $D(\delta)$; using different spatial regions would introduce a
+spurious displaced-solvent contribution. The bulk populations are those outside the widest shell,
+and that common bulk ratio is used throughout the profile. A sampled frame with no bulk solvent is
+an error because its reference composition is undefined.
+
 ### Choosing the shell
 
 Use the profile to select $\Gamma$: increase `shell.max` until $\Gamma(\delta)$ has reached a
 plateau. Do not use a profile that still changes at the largest $\delta$; enlarge the cell or
-extend the shell instead. A hard-core atomic ligand gives an excluded-volume contribution at
-$\delta=0$. This interpretation does not apply to a soft or centre-of-mass ligand.
+extend the shell instead. In implicit solvent, a hard-core atomic ligand gives an excluded-volume
+contribution at $\delta=0$. This interpretation does not apply to a soft or centre-of-mass ligand.
 
 The substrate selection must cover exactly one complete molecular group. For a rigid substrate,
 the surface geometry is calculated once and reused under translation and rotation. For a flexible
@@ -996,25 +1006,36 @@ The residue file partitions the total excess among residues:
 $$\Gamma = \sum_i \gamma_i.$$
 
 The contributions sum to the profile at the same shell thickness and provide a spatial
-description of ligand enrichment. The local-to-bulk partition coefficient is
+description of ligand enrichment. In implicit solvent, the local-to-bulk partition coefficient is
 
 $$K_{p,i} = \frac{\left\langle N_i(\delta)-N_i(0)\right\rangle}
 {\left\langle c_{\mathrm{bulk}}\,v_i^{\rm acc}(\delta)\right\rangle},$$
 
 where $v_i^{\rm acc}$ is the volume accessible to ligand centres around residue $i$. Values above
-one indicate local enrichment and values below one indicate depletion. The hydration density
+one indicate local enrichment and values below one indicate depletion. In explicit solvent the
+corresponding denominator is
+
+$$\left\langle \frac{N_3^{\rm bulk}}{N_1^{\rm bulk}}
+\left[N_{1,i}(\delta)-N_{1,i}(0)\right]\right\rangle,$$
+
+so $K_{p,i}=1$ when the accessible slab has the bulk ligand-to-solvent ratio. The implicit-solvent
+hydration density
 
 $$b_{1,i} = \frac{\left\langle v_i^{\rm w}\right\rangle}
 {\bar v_{\rm w}\left\langle\mathrm{ASA}_i\right\rangle}$$
 
-is the water-shell volume per unit water-accessible surface area, in waters per Å². `kp` and `b1`
-are local descriptors, not thermodynamic coefficients; they depend on the selected shell
-thickness and are `nan` when the required local volume or surface area is unavailable.
+estimates the water population from the water-probe volume. With explicit solvent,
+$v_i^{\rm w}/\bar v_{\rm w}$ is replaced by the sampled
+$N_{1,i}(\delta)-N_{1,i}(0)$ in the ligand-accessible slab. `kp` and `b1` are local descriptors,
+not thermodynamic coefficients; they depend on the selected shell thickness and are `nan` when the
+required local population, volume, or surface area is unavailable.
 
 ### Example
 
 One block is needed for each ligand species. Use `use_com: true` for a molecular ligand; otherwise,
-the selected atoms are counted individually.
+the selected atoms are counted individually. To use the explicit-solvent estimator, add `solvent`
+and state whether its selection is counted by molecular mass centre or by atom. Molecular water is
+normally counted by mass centre.
 
 ```yaml
 analysis:
@@ -1029,6 +1050,9 @@ analysis:
     substrate: "molecule protein"
     ligand: "molecule polyphosphate"
     use_com: true                         # count molecules at their centre of mass
+    solvent:                              # enables the explicit-solvent estimator
+      selection: "molecule water"
+      use_com: true                       # count one centre per water molecule
     shell: {max: 15.0, resolution: 0.5}
     profile: gamma_pp.csv
     file: residues_pp.csv
@@ -1043,8 +1067,9 @@ Key             | Required | Default | Description
 `ligand`        | yes      |         | Atoms, or molecules when `use_com` is set, whose excess is measured
 `shell`         | yes      |         | The δ ladder: `{max, resolution}` in Å, with `max` a multiple of `resolution`
 `use_com`       | no       | `false` | Count the mass centre of each selected molecule instead of each atom
+`solvent`       | no       |         | Explicit solvent as `{selection, use_com}`; its presence selects the finite-box estimator
 `radius`        | no       | σ/2, or 0 with `use_com` | Ligand radius (Å), setting the exclusion boundary
-`solvent_probe` | no       | `1.4`   | Water radius (Å), setting the surface and shell behind $b_1$
+`solvent_probe` | no       | `1.4`   | Water radius (Å), setting the accessible surface and implicit-solvent shell behind $b_1$
 `profile`       | no       |         | Output file for Γ(δ) (see [Output file formats](#output-file-formats))
 `file`          | no       |         | Output file for the per-residue table
 `frequency`     | yes      |         | Sample frequency, e.g. `!Every 100`
@@ -1053,9 +1078,10 @@ The profile file contains `delta/Å`, `gamma`, and its statistical error. The re
 the residue identifier, `asa/Å²`, `accessible_volume/Å³`, `b1/Å⁻²`, `kp`, and `gamma` with its
 error at the widest shell. Geometric quantities are ensemble averages for a flexible substrate.
 `output.yaml` reports `gamma` at that shell, the measured bulk `concentration/Å⁻³`, and the mean
-`excluded_volume/Å³`. Rerun weights are applied to all reported averages. Errors are standard
-errors across sampled frames; use sufficiently spaced samples or block analysis when frames are
-correlated.
+`excluded_volume/Å³`. With explicit solvent it also reports `solvent_concentration/Å⁻³` and
+`bulk_ligand_to_solvent_ratio`. Rerun weights are applied to all reported averages. Errors are
+standard errors across sampled frames; use sufficiently spaced samples or block analysis when
+frames are correlated.
 
 ### References
 
@@ -1065,6 +1091,10 @@ correlated.
   [10.1110/ps.ps.20801](https://doi.org/10.1110/ps.ps.20801)
 - Pegram & Record, *J. Phys. Chem. B* **112**, 9428 (2008).
   [10.1021/jp800816a](https://doi.org/10.1021/jp800816a)
+- Tang & Bloomfield, *Biophys. J.* **82**, 2876 (2002).
+  [10.1016/S0006-3495(02)75629-4](https://doi.org/10.1016/S0006-3495(02)75629-4)
+- Vagenende & Trout, *Biophys. J.* **103**, 1354 (2012).
+  [10.1016/j.bpj.2012.08.011](https://doi.org/10.1016/j.bpj.2012.08.011)
 
 ---
 

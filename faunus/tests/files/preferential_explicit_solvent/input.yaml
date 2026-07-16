@@ -1,0 +1,85 @@
+# Explicit-solvent preferential-interaction regression. A flexible, neutral charged dimer is
+# solvated by molecular water and a neutral atomic ligand. The analysis counts water centres of
+# mass and uses the finite-box ligand/water population ratio. Fanourgakis electrostatics exercises
+# the charged solute–water coupling without the cost of reciprocal-space Ewald summation.
+
+atoms:
+  - {name: POS, mass: 20.0, charge: 0.5, sigma: 4.0, epsilon: 0.4}
+  - {name: NEG, mass: 20.0, charge: -0.5, sigma: 4.0, epsilon: 0.4}
+  - {name: LIG, mass: 30.0, charge: 0.0, sigma: 3.0, epsilon: 0.8}
+  - {name: OW, mass: 15.999, charge: -0.8476, sigma: 3.166, epsilon: 0.650}
+  - {name: HW, mass: 1.007, charge: 0.4238, sigma: 2.0, epsilon: 0.0}
+
+molecules:
+  - name: solute
+    atoms: [POS, NEG]
+    bonds:
+      - {index: [0, 1], kind: !Harmonic {k: 100.0, req: 3.0}}
+    exclusions: [[0, 1]]
+    has_com: true
+  - name: ligand
+    atoms: [LIG]
+    atomic: true
+  - name: water
+    degrees_of_freedom: Rigid
+    from_structure:
+      - OW: [0.0000, 0.0000, 0.0000]
+      - HW: [0.9572, 0.0000, 0.0000]
+      - HW: [-0.2390, 0.9270, 0.0000]
+    exclusions: [[0, 1], [0, 2], [1, 2]]
+    has_com: true
+
+system:
+  cell: !Cuboid [18.0, 18.0, 18.0]
+  medium:
+    temperature: 300.0
+    permittivity: !Vacuum
+  blocks:
+    - molecule: solute
+      N: 1
+      insert: !Manual [[-1.5, 0.0, 0.0], [1.5, 0.0, 0.0]]
+    - molecule: ligand
+      N: 12
+      insert: !RandomAtomPos {}
+    - molecule: water
+      N: 96
+      insert: !RandomCOM {rotate: true}
+  energy:
+    nonbonded:
+      default:
+        - !LennardJones {mixing: LB}
+        - !Fanourgakis {cutoff: 8.0}
+    spline:
+      cutoff: 8.5
+      shift_energy: false
+
+analysis:
+  - !PreferentialInteraction
+      substrate: "molecule solute"
+      ligand: "atomtype LIG"
+      solvent: {selection: "molecule water", use_com: true}
+      shell: {max: 3.0, resolution: 1.0}
+      frequency: !Every 10
+
+propagate:
+  seed: !Fixed 42
+  criterion: Metropolis
+  # The 96 waters need ≈4000 repeats to relax from the random insertion; a shorter run
+  # snapshots the fixture mid-transient, on a steep energy slope.
+  repeat: 8000
+  collections:
+    - !Stochastic
+      moves:
+        - !TranslateMolecule {molecule: water, max_displacement: 0.4, repeat: 48}
+        - !RotateMolecule {molecule: water, max_angle: 0.4, repeat: 48}
+        - !TranslateAtom {molecule: solute, max_displacement: 0.2, repeat: 2}
+        - !TranslateMolecule {molecule: solute, max_displacement: 0.3, repeat: 1}
+        - !RotateMolecule {molecule: solute, max_angle: 0.2, repeat: 1}
+        - !TranslateAtom
+          molecule: ligand
+          max_displacement: 1.5
+          repeat: 12
+          preferential:
+            reference: "molecule solute"
+            exponent: 2
+            offset: 1.0
