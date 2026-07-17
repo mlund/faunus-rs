@@ -435,6 +435,7 @@ impl<T: Context> GibbsMove<T> for GibbsParticleTransfer {
 
 /// Deserialization helper for Gibbs inter-box moves.
 #[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub(crate) enum GibbsMoveBuilder {
     GibbsVolumeExchange {
         #[serde(rename = "volume_displacement", alias = "dV")]

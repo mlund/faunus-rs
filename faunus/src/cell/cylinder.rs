@@ -37,6 +37,7 @@ pub struct Cylinder {
 impl<'de> Deserialize<'de> for Cylinder {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         #[derive(Deserialize)]
+        #[serde(deny_unknown_fields)]
         struct Raw {
             radius: f64,
             height: f64,

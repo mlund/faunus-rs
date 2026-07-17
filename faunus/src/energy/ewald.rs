@@ -88,6 +88,7 @@ impl std::fmt::Debug for EwaldReciprocalEnergy {
 ///   optimize: true  # reduce k-vectors for Yukawa; no-op for pure Coulomb or IPBC
 /// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct EwaldBuilder {
     /// Real-space cutoff (Å)
     pub cutoff: f64,

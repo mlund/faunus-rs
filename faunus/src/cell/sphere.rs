@@ -22,8 +22,9 @@ use serde::{Deserialize, Serialize};
 
 /// Spherical cell with hard walls, i.e. no periodic boundary conditions
 #[derive(Clone, Debug, Serialize, Deserialize, Copy, PartialEq)]
+#[serde(deny_unknown_fields)]
 pub struct Sphere {
-    /// The center of the sphere
+    /// The radius of the sphere
     radius: f64,
 }
 

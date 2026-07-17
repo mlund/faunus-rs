@@ -43,7 +43,10 @@ The workspace uses git submodules (`duello`, `interatomic`, ...).
 ## Workflow
 
 - Update `docs/*.md` whenever end-user behaviour changes or a feature is added.
-- Finish a plan with `/code-review`, then `/simplify`.
+- Finish complex tasks / plans with `/code-review`, then `/simplify`.
+- Spend review *agents* (subagents, multi-agent workflows) only where the task is
+  complex enough to repay them. A small or mechanical diff — say, one attribute
+  repeated across ten types — is reviewed inline, or not at all.
 - Keep commit, PR and issue messages brief. Never append co-authorship lines.
 
 ## Before committing
