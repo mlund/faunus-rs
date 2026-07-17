@@ -1,10 +1,10 @@
 - !VirtualTranslate
   selection: "molecule MOL"
-  dL: 0.01
+  displacement: 0.01
   directions: !z
   frequency: !Every 10
 - !VirtualTranslate
   selection: "molecule MOL"
-  dL: 0.05
+  displacement: 0.05
   directions: !x
   frequency: !Every 5

@@ -39,7 +39,7 @@ system:
         - !WeeksChandlerAndersen {mixing: LB}
     spline:             # tabulate potentials for GPU evaluation
       cutoff: 200.0
-      n_points: 2000
+      table_points: 2000
 
 
 analysis:

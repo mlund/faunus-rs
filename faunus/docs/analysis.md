@@ -113,7 +113,7 @@ option. Supplying `range`/`resolution` on a plain CV is an error.
 
 Property                 | Selection       | Description
 ------------------------ | --------------- | -------------------------------------------
-`volume`                 | none            | Cell measure via `dimension`: volume (`xyz`), area (`xy`), or length (`z`). Note: `volume` uses `dimension`, not `projection`
+`volume`                 | none            | Cell measure via `projection`: volume (`xyz`), area (`xy`), or length (`z`)
 `atom_position`          | one atom        | Signed component for single axis (`x`,`y`,`z`); Euclidean norm for multi-axis (`xy` etc.). Selection resolved live each evaluation — works with speciation/GCMC where the matching atom changes. Returns NaN if selection matches ≠ 1 atom. Use `atomtype` (not `name`) for atoms defined via explicit `atoms:` lists
 `count`                  | atoms or groups | Molecule instances for Molecular groups; atom count for Atomic/Reservoir groups
 `molarity`               | atoms or groups | Molar concentration (mol/L); molecule-based for Molecular groups, atom-based for Atomic/Reservoir
@@ -648,7 +648,7 @@ If `file` is given, each sampled step writes columns
 analysis:
   - !VirtualTranslate
     selection: "molecule protein"
-    dL: 0.01
+    displacement: 0.01
     directions: !z
     file: force.dat
     frequency: !Every 10
@@ -659,7 +659,7 @@ analysis:
 Key           | Required | Default  | Description
 ------------- | -------- | -------- | -------------------------------------------
 `selection`   | yes      |          | Selection matching exactly one molecule
-`dL`          | yes      |          | Displacement magnitude (Å)
+`displacement`| yes      |          | Displacement magnitude (Å)
 `directions`  | no       | `z`      | Displacement direction (`x`, `y`, `z`, `xy`, …)
 `file`        | no       |          | Output file path (see [Output file formats](#output-file-formats))
 `frequency`   | yes      |          | Sample frequency, e.g. `!Every 10`

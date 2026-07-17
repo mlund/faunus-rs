@@ -96,7 +96,7 @@ system:
         - !WeeksChandlerAndersen {mixing: LB}
     spline:
       cutoff: 80.0
-      n_points: 2000
+      table_points: 2000
 
 analysis:
   - !Trajectory
