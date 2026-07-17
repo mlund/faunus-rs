@@ -59,7 +59,7 @@ struct WindowGrid {
     width: f64,
     spacing: f64,
     /// PMF histogram bin width (default: 1.0)
-    #[serde(default = "default_bin_width")]
+    #[serde(rename = "resolution", default = "default_bin_width")]
     bin_width: f64,
 }
 
@@ -735,6 +735,16 @@ pub fn run(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn window_grid_bin_width_key_is_resolution() {
+        // #123: umbrella's PMF bin width unified on `resolution`; `bin_width` is a clean break.
+        let ok = "range: [0.0, 10.0]\nwidth: 4.0\nspacing: 2.0\nresolution: 0.5";
+        let grid: WindowGrid = serde_yml::from_str(ok).unwrap();
+        assert!((grid.bin_width - 0.5).abs() < 1e-12);
+        let old = "range: [0.0, 10.0]\nwidth: 4.0\nspacing: 2.0\nbin_width: 0.5";
+        assert!(serde_yml::from_str::<WindowGrid>(old).is_err());
+    }
 
     #[test]
     fn window_grid_centers() {

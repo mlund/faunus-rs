@@ -592,21 +592,18 @@ system:
   energy:
     custom_pair:
       # Harmonic restraint at fixed COM-COM distance (umbrella window)
-      - selection1: "molecule protein0"
-        selection2: "molecule protein1"
+      - selections: ["molecule protein0", "molecule protein1"]
         function: "0.5 * k * (r - r0)^2"
         constants: { k: 100.0, r0: 30.0 }
       # Constant pulling force along the COM-COM axis (steered MD)
-      - selection1: "molecule protein0"
-        selection2: "molecule protein1"
+      - selections: ["molecule protein0", "molecule protein1"]
         function: "f0 * r"
         constants: { f0: 50.0 }
 ```
 
 | Key           | Required | Default     | Description                                          |
 |---------------|----------|-------------|------------------------------------------------------|
-| `selection1`  | yes      |             | Selection that must resolve to one Rigid molecule    |
-| `selection2`  | yes      |             | Same, distinct from `selection1`                     |
+| `selections`  | yes      |             | Pair `[a, b]`; each must resolve to one Rigid molecule, and the two must differ |
 | `function`    | yes      |             | Math expression in `r`, `dx`, `dy`, `dz`             |
 | `constants`   | no       | `{}`        | Named constants substituted before parsing           |
 | `gradient_h`  | no       | `1e-5`      | Step (Å) for central-difference dU/dr in forces      |

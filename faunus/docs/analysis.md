@@ -99,8 +99,8 @@ Key          | Required | Default | Description
 `property`   | yes      |         | CV type (see table below)
 `frequency`  | yes      |         | Sample frequency, e.g. `!Every 100`
 `projection` | no       | `xyz`   | Axis projection (`x`, `y`, `z`, `xy`, …); alias: `dimension`
-`selection`  | depends  |         | Selection expression for one atom or group
-`selection2` | depends  |         | Second selection (for two-group properties)
+`selection`  | depends  |         | Selection expression for one atom or group (single-group properties)
+`selections` | depends  |         | Pair `[a, b]` of selections (two-group properties, e.g. `mass_center_separation`)
 `file`       | no       |         | Output file path (see [Output file formats](#output-file-formats)); omit to only track the mean
 
 A collective variable specifies only *what* is measured. Where a value needs a
@@ -1155,8 +1155,7 @@ analysis:
     selection: "molecule GLU"
     coordinate:
       property: mass_center_separation
-      selection: "molecule GLU"
-      selection2: "molecule protein"
+      selections: ["molecule GLU", "molecule protein"]
       resolution: 0.5
     file: charge_vs_dist.dat
     frequency: !Every 100

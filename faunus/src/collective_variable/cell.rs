@@ -69,15 +69,16 @@ impl CvKind for Volume {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct VolumeBuilder {
-    #[serde(default)]
-    pub dimension: Axes,
+    /// Aligned with the other CVs, which spell this `projection`; `dimension` kept as alias.
+    #[serde(default, alias = "dimension")]
+    pub projection: Axes,
 }
 
 #[typetag::serde(name = "volume")]
 impl CvKindBuilder for VolumeBuilder {
     fn build(&self, _context: &dyn EvalContext) -> Result<Box<dyn CvKind>> {
         Ok(Box::new(Volume {
-            dimension: self.dimension,
+            dimension: self.projection,
         }))
     }
 }

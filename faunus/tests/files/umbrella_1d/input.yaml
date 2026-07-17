@@ -5,7 +5,7 @@
 # itself. This makes the reference verifiable by hand: pmf_kT is linear in x with slope
 # force/kT ≈ 1/2.494 ≈ 0.40 per Å at 300 K.
 #
-# Window geometry keeps `spacing` and `width` as integer multiples of `bin_width` so the
+# Window geometry keeps `spacing` and `width` as integer multiples of `resolution` so the
 # window→grid bin mapping is exact, and adjacent windows overlap by half a width so the
 # overlap fractions are well sampled.
 atoms:
@@ -52,6 +52,6 @@ umbrella:
     range: [-9.0, 9.0]
     width: 6.0
     spacing: 3.0
-    bin_width: 0.5
+    resolution: 0.5
   drive:
     force_constant: 2.0
