@@ -9,7 +9,8 @@ The workspace uses git submodules (`duello`, `interatomic`, ...).
 - Prefer deep modules with a minimal public API ([skill](https://deepwiki.com/mattpocock/skills/4.1.4-designing-deep-modules)).
 - Make misuse hard: newtypes, enums, type-state over documented conventions.
 - Internal state is the module's job, not the caller's; hide it behind the interface.
-- Unknown user input (serde YAML, ...) is an error. Avoid panics under normal use; return errors.
+- Unknown user input (serde YAML, ...) is an error. E.g. with Serde `deny_unknown_fields`.
+  Avoid panics under normal use; return errors.
 - I/O must work on macOS, Linux and Windows.
 
 ## Rust
