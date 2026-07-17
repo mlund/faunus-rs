@@ -23,7 +23,7 @@ use crate::{
     analysis::{self, AnalysisCollection},
     auxiliary::ColumnWriter,
     backend::Backend,
-    collective_variable::{CvKindBuilder, ForceConstant, Interval},
+    collective_variable::{CvKindBuilder, Finite, ForceConstant, Interval},
     context::WithHamiltonianMut,
     energy::{ConstrainBuilder, EnergyTerm, Restraint},
     histogram::Histogram,
@@ -381,7 +381,7 @@ fn run_window(
             cv: dyn_clone::clone_box(params.cv_builder),
             restraint: Restraint::Harmonic {
                 force_constant: params.drive_k,
-                equilibrium: center,
+                equilibrium: Finite::new(center)?,
             },
         };
         let harmonic_term = EnergyTerm::from(harmonic_builder.build(&context)?);

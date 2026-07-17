@@ -77,25 +77,24 @@ impl From<Interval> for (f64, f64) {
     }
 }
 
-/// Defines a newtype wrapping a strictly positive, finite `f64` that
-/// deserializes from (and serializes to) a bare scalar, rejecting non-positive
-/// and non-finite values at parse.
-macro_rules! positive_finite_f64 {
-    ($(#[$meta:meta])* $name:ident, $what:literal) => {
+/// Defines an `f64` newtype that deserializes from (and serializes to) a bare
+/// scalar, rejecting at parse any value failing `predicate(value)`.
+macro_rules! validated_f64 {
+    ($(#[$meta:meta])* $name:ident, $requirement:literal, |$v:ident| $predicate:expr) => {
         $(#[$meta])*
         #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
         #[serde(try_from = "f64", into = "f64")]
         pub struct $name(f64);
 
         impl $name {
-            #[doc = concat!("Construct a ", $what, ", rejecting non-positive and non-finite values.")]
-            pub fn new(value: f64) -> anyhow::Result<Self> {
+            #[doc = concat!("Construct a value, requiring it be ", $requirement, ".")]
+            pub fn new($v: f64) -> anyhow::Result<Self> {
                 anyhow::ensure!(
-                    value.is_finite() && value > 0.0,
-                    concat!($what, " must be finite and positive, got {}"),
-                    value
+                    $predicate,
+                    concat!("value must be ", $requirement, ", got {}"),
+                    $v
                 );
-                Ok(Self(value))
+                Ok(Self($v))
             }
 
             pub fn get(&self) -> f64 {
@@ -118,18 +117,29 @@ macro_rules! positive_finite_f64 {
     };
 }
 
-positive_finite_f64!(
+validated_f64!(
     /// A strictly positive, finite histogram bin width. YAML: a bare scalar, e.g. `0.5`.
     BinWidth,
-    "bin width"
+    "finite and positive",
+    |v| v.is_finite() && v > 0.0
 );
 
-positive_finite_f64!(
+validated_f64!(
     /// A strictly positive, finite harmonic force constant. A non-positive `k`
     /// would make `½k·d²` reward leaving the restrained region — an anti-confining
     /// "restraint" — so it is rejected at parse.
     ForceConstant,
-    "force constant"
+    "finite and positive",
+    |v| v.is_finite() && v > 0.0
+);
+
+validated_f64!(
+    /// A finite `f64` — any value except `inf`/`nan`. Used for restraint bounds
+    /// and equilibria, where a non-finite value (e.g. `!Below .inf`) would be a
+    /// silent no-op.
+    Finite,
+    "finite",
+    |v| v.is_finite()
 );
 
 /// A collective variable together with the uniform grid it is histogrammed on.

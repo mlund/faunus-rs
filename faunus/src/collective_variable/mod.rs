@@ -26,7 +26,7 @@ mod cell;
 mod dynamic;
 pub(crate) mod group;
 
-pub use axis::{BinnedCv, ForceConstant, HistogrammedCv, Interval};
+pub use axis::{BinnedCv, Finite, ForceConstant, HistogrammedCv, Interval};
 
 use anyhow::Result;
 

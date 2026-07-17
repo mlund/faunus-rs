@@ -17,7 +17,9 @@
 //! A [`Restraint`] restrains a collective variable, either with a hard wall
 //! (infinite energy outside the allowed region) or a quadratic penalty.
 
-use crate::collective_variable::{CollectiveVariable, CvKindBuilder, ForceConstant, Interval};
+use crate::collective_variable::{
+    CollectiveVariable, CvKindBuilder, Finite, ForceConstant, Interval,
+};
 use crate::Change;
 use crate::ObserveContext;
 use anyhow::Result;
@@ -31,15 +33,15 @@ use serde::{Deserialize, Serialize};
 #[serde(deny_unknown_fields)]
 pub enum Restraint {
     /// Hard one-sided wall: `0` for `x ≤ max`, `∞` above.
-    Below(f64),
+    Below(Finite),
     /// Hard one-sided wall: `0` for `x ≥ min`, `∞` below.
-    Above(f64),
+    Above(Finite),
     /// Hard two-sided wall: `0` inside the interval, `∞` outside.
     Between(Interval),
     /// Quadratic penalty about a point: `½k(x₀ − x)²`.
     Harmonic {
         force_constant: ForceConstant,
-        equilibrium: f64,
+        equilibrium: Finite,
     },
     /// Flat-bottomed well: `0` inside the interval, `½k·d²` beyond the nearest
     /// edge (`d` is the distance to that edge). The soft counterpart of `Between`.
@@ -55,13 +57,13 @@ impl Restraint {
         // `∞` for a hard wall breached, `0.0` otherwise.
         let wall = |inside: bool| if inside { 0.0 } else { f64::INFINITY };
         match self {
-            Self::Below(max) => wall(x <= *max),
-            Self::Above(min) => wall(x >= *min),
+            Self::Below(max) => wall(x <= max.get()),
+            Self::Above(min) => wall(x >= min.get()),
             Self::Between(interval) => wall(interval.contains(x)),
             Self::Harmonic {
                 force_constant,
                 equilibrium,
-            } => 0.5 * force_constant.get() * (equilibrium - x).powi(2),
+            } => 0.5 * force_constant.get() * (equilibrium.get() - x).powi(2),
             Self::HarmonicWall {
                 interval,
                 force_constant,
@@ -129,7 +131,7 @@ mod tests {
         assert!(matches!(
             harmonic.restraint,
             Restraint::Harmonic { force_constant, equilibrium }
-                if force_constant.get() == 100.0 && equilibrium == 3000.0
+                if force_constant.get() == 100.0 && equilibrium.get() == 3000.0
         ));
     }
 
@@ -163,6 +165,22 @@ mod tests {
     }
 
     #[test]
+    fn non_finite_bound_is_rejected() {
+        // `!Below .inf` would make `x <= ∞` always true — a silent no-op, the very
+        // failure this fix removes. Non-finite bounds and equilibria are rejected.
+        for yaml in [
+            "property: volume\nrestraint: !Below .inf",
+            "property: volume\nrestraint: !Above .nan",
+            "property: volume\nrestraint: !Harmonic {force_constant: 1.0, equilibrium: .inf}",
+        ] {
+            assert!(
+                serde_yml::from_str::<ConstrainBuilder>(yaml).is_err(),
+                "non-finite scalar must be rejected: {yaml}"
+            );
+        }
+    }
+
+    #[test]
     fn non_positive_force_constant_is_rejected() {
         // A negative k makes ½k·d² reward leaving the well — an anti-confining
         // "restraint". Rejected at parse, like a zero-width bin.
@@ -191,10 +209,10 @@ mod tests {
 
     #[test]
     fn below_and_above_are_one_sided_walls() {
-        let below = Restraint::Below(50.0);
+        let below = Restraint::Below(Finite::new(50.0).unwrap());
         assert_eq!(below.energy(50.0), 0.0);
         assert_eq!(below.energy(51.0), f64::INFINITY);
-        let above = Restraint::Above(50.0);
+        let above = Restraint::Above(Finite::new(50.0).unwrap());
         assert_eq!(above.energy(50.0), 0.0);
         assert_eq!(above.energy(49.0), f64::INFINITY);
     }
