@@ -38,6 +38,7 @@ use anyhow::Result;
 use derive_builder::Builder;
 use derive_more::Debug;
 use serde::{Deserialize, Serialize};
+use std::num::NonZeroUsize;
 use std::path::PathBuf;
 
 /// Virtual translate move analysis.
@@ -173,7 +174,9 @@ impl VirtualTranslateBuilder {
             output_file: self.output_file.as_ref().and_then(|p| p.clone()),
             stream,
             sampling: self.sampling.unwrap(),
-            widom: WidomAccumulator::default(),
+            // One block per sampled configuration: each frame yields one force estimate,
+            // and the hierarchy then finds the correlation scale on its own.
+            widom: WidomAccumulator::new(NonZeroUsize::MIN),
             group_cache: CachedSelection::groups(self.selection.as_ref().unwrap().clone()),
             thermal_energy,
         })
@@ -190,10 +193,16 @@ impl_info!(
 impl VirtualTranslate {
     /// Mean force ± SEM in units of kT/Å.
     ///
-    /// Mean comes from the total accumulator (finite from sample 1); error comes
-    /// from the block aggregator (NaN until ≥ 1 block closes, ~0 with 1 block,
-    /// real SEM with ≥ 2). Both scale by 1/dL, the error by |dL| since the sign
-    /// carries no information about the spread.
+    /// Mean comes from the total accumulator (finite from sample 1); the error comes from
+    /// the block aggregator, which blocks one free energy per sampled configuration and
+    /// corrects for correlation between them once the run is long enough to resolve it.
+    /// Both scale by 1/dL, the error by |dL| since the sign carries no information about
+    /// the spread.
+    ///
+    /// With one sample per block the exponential average collapses to `F = dU`, so this is
+    /// the SEM of ⟨dU⟩ rather than of `-ln⟨exp(-dU)⟩`; the two agree to leading order in
+    /// dL, which is the only regime where a finite-difference force is meaningful. See
+    /// issue #117.
     fn mean_force(&self) -> BlockSummary {
         if self.displacement.abs() > f64::EPSILON {
             BlockSummary {
@@ -228,10 +237,13 @@ impl VirtualTranslate {
     /// One row per sampled step, keeping the file in sync with other analyses
     /// at the same frequency.
     fn write_to_stream(&mut self, step: usize, energy_change: f64) -> Result<()> {
-        let mean_force = self.mean_force().mean;
         let displacement = self.displacement;
 
         if let Some(stream) = self.stream.as_mut() {
+            // The column wants the mean alone; `mean_force()` would also run the whole
+            // plateau scan per sampled step only to discard it. `perform_sample` has
+            // already rejected a zero displacement.
+            let mean_force = -self.widom.mean_free_energy() / displacement;
             stream.write_row(&[
                 &step,
                 &format_args!("{displacement:.3e}"),
@@ -452,16 +464,26 @@ mod tests {
         assert_approx_eq!(f64, force.error, 0.0);
     }
 
+    /// Sampling alone must produce a spread. Closing blocks by hand here would prove
+    /// nothing about the built analysis: it is exactly what production never did, leaving
+    /// the aggregator empty and `mean_force` reporting an exact zero uncertainty.
     #[test]
-    fn to_yaml_emits_mean_force_mapping() {
+    fn sampling_alone_yields_a_finite_force_uncertainty() {
         let mut vt = build_vt(0.1);
-        // Close two distinct blocks so the BlockAverage has finite mean and SEM.
         vt.widom.collect(0.0, 1.0);
-        vt.widom.end_block();
         vt.widom.collect(2.0, 1.0);
-        vt.widom.end_block();
         // The accumulator is driven directly here, so tell the framework two frames were sampled.
         vt.sampling.set_num_samples(2);
+
+        assert_eq!(
+            vt.widom.free_energy().n(),
+            2,
+            "each sample closes its own block"
+        );
+        assert!(
+            vt.mean_force().error > 0.0,
+            "two differing samples must not report an exact zero uncertainty"
+        );
 
         let yaml = <VirtualTranslate as Analyze<crate::backend::Backend>>::to_yaml(&vt)
             .expect("to_yaml returns Some");

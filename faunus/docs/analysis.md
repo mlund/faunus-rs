@@ -26,13 +26,21 @@ Frequency         | Description
 `!Once N`         | Once at step N
 `!End`            | Once after the last step
 
+### Reported quantities
+
 In `output.yaml` every analysis reports `num_samples`, the number of frames it sampled. Analyses
 that loop over molecules also report how many molecules they accumulated: `num_groups_sampled` for
 Polymer Shape, `num_blocks` for Widom Rotation. These counts give the raw observations behind the
 reported means. Where an analysis uses automatic blocking, adjacent observations are combined into
-blocks of increasing length. The coarsest level with at least 16 blocks sets the standard error;
-short runs use the original observations. The mean always includes every observation, and no block
-size is required in the input.
+blocks of increasing length. Longer blocks are less correlated with one another, so the estimated
+standard error grows with block length and levels off once the blocks are effectively independent;
+the error is read from that plateau
+([Flyvbjerg & Petersen, 1989](https://doi.org/10.1063/1.457480)). A run whose blocking curve has
+not levelled off is too short to resolve the correlation time, and the largest estimate is reported.
+Levels holding fewer than 16 effective blocks are too noisy to estimate a variance and are skipped;
+if no level qualifies, the uncorrelated standard error is reported. The mean always includes every
+observation, and the blocking needs no input from the user — the one exception is Virtual Volume
+Move, whose `block_size` is described with that analysis.
 
 ### Output file formats
 
@@ -682,8 +690,24 @@ Key           | Required | Default      | Description
 ------------- | -------- | ------------ | -------------------------------------------
 `volume_displacement`          | yes      |              | Volume displacement (Å³)
 `method`      | no       | `Isotropic`  | Scaling policy: `Isotropic`, `ScaleZ`, `ScaleXY`
+`block_size`  | no       | `100`        | Samples per free-energy block (see below)
 `file`        | no       |              | Output file path (see [Output file formats](#output-file-formats))
 `frequency`   | yes      |              | Sample frequency, e.g. `!Every 10`
+
+### Block size
+
+Unlike other analyses, Virtual Volume Move averages an exponential, $\langle e^{-\Delta U/k_BT}\rangle$,
+and $\Delta U$ enters non-linearly. Its uncertainty is therefore estimated from the scatter of
+free energies computed over consecutive blocks of `block_size` samples, rather than from the
+samples themselves. Each block must be long enough for its exponential average to converge, or
+the reported error describes the scatter of $\Delta U$ instead of that of $P_\text{ex}$.
+
+The blocks so formed feed the automatic blocking described under
+[Reported quantities](#reported-quantities), which handles any residual correlation between
+them. That hierarchy needs at least 16 blocks, so a run should collect at least
+$16 \times$ `block_size` samples; below that the reported error ignores correlation between
+blocks. Raising `block_size` therefore trades statistical resolution of the correlation time for
+convergence of the exponential average within each block.
 
 ---
 
@@ -876,8 +900,7 @@ midplane (`potential_midplane/mV`), together with the edge-to-midplane drops
 (`potential_drop_lower/mV`, `potential_drop_upper/mV`), as mean ± error; the midplane and drop
 errors are accumulated per configuration, so they reflect the correlation between the slabs they
 combine. Automatic blocking estimates these errors across configurations. When `zeta_threshold`
-is set it also reports the ζ-potential `zeta/mV` and the
-shear-plane position `z_shear/Å`. For reliable numbers, **equilibrate first and start production
+is set it also reports the ζ-potential `zeta/mV` and the shear-plane position `z_shear/Å`. For reliable numbers, **equilibrate first and start production
 from a state file** (`-s`).
 
 ---

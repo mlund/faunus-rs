@@ -679,7 +679,7 @@ impl BlockAverage {
         self.0.mean().unwrap_or(0.0)
     }
 
-    /// Standard error from the coarsest statistically populated blocking level.
+    /// Standard error of the mean, corrected for serial correlation by blocking.
     pub fn error(&self) -> f64 {
         self.0.error()
     }
@@ -711,8 +711,9 @@ impl BlockAverage {
     }
 }
 
-/// Fewer block means make their sample variance too noisy to be a useful error estimate.
-const MIN_BLOCKS_PER_LEVEL: u64 = 16;
+/// Fewer effective block means make their sample variance too noisy to be a useful
+/// error estimate.
+const MIN_EFFECTIVE_BLOCKS: f64 = 16.0;
 
 /// Weighted running moments for one blocking level.
 #[derive(Clone, Debug, Default)]
@@ -761,9 +762,38 @@ impl WeightedMoments {
         }
     }
 
-    fn has_reliable_error(&self) -> bool {
-        self.count >= MIN_BLOCKS_PER_LEVEL && self.effective_n() > 1.0 && self.sum_w > 0.0
+    /// Uncertainty of the error estimate itself, σ(σ) ≈ σ/√(2(M−1)) for M effective
+    /// blocks (Flyvbjerg & Petersen 1989). Sets the scale below which a rise in the
+    /// blocking curve is indistinguishable from noise.
+    ///
+    /// Infinite below two effective blocks, where σ(σ) is undefined. Levels that thin are
+    /// filtered out by [`has_reliable_error`](Self::has_reliable_error) long before the
+    /// plateau scan; the guard keeps the undefined case from silently reading as "flat".
+    fn error_uncertainty(&self) -> f64 {
+        let neff = self.effective_n();
+        if neff <= 1.0 {
+            f64::INFINITY
+        } else {
+            self.error() / (2.0 * (neff - 1.0)).sqrt()
+        }
     }
+
+    /// Whether this level's block means are numerous enough to estimate a variance.
+    ///
+    /// Gated on the *effective* sample size, not the raw block count, to stay consistent
+    /// with `error()`, whose degrees of freedom are `neff − 1`: under skewed weights a
+    /// level can hold hundreds of blocks yet carry barely one independent observation.
+    fn has_reliable_error(&self) -> bool {
+        self.effective_n() >= MIN_EFFECTIVE_BLOCKS
+    }
+}
+
+/// One point on the blocking curve: an error estimate and the noise on that estimate.
+/// Paired in a struct so a level's error can never be compared against another's σ(σ).
+#[derive(Clone, Copy, Debug)]
+struct BlockingPoint {
+    error: f64,
+    noise: f64,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -814,35 +844,76 @@ impl HierarchicalBlockAverage {
         }
     }
 
+    /// Level 0 — every observation, unblocked. The mean and the uncorrelated spread
+    /// are read from here; only the error consults the coarser levels.
+    fn base(&self) -> Option<&WeightedMoments> {
+        self.levels.first().map(|level| &level.moments)
+    }
+
     fn mean(&self) -> Option<f64> {
-        self.levels.first().map(|level| level.moments.mean)
+        self.base().map(|moments| moments.mean)
     }
 
     #[cfg(test)]
     fn effective_n(&self) -> f64 {
-        self.levels
-            .first()
-            .map_or(0.0, |level| level.moments.effective_n())
+        self.base().map_or(0.0, WeightedMoments::effective_n)
     }
 
+    /// Standard error of the mean, corrected for serial correlation by blocking.
+    ///
+    /// Correlation can only inflate the variance of a mean, so the naive SEM is a floor:
+    /// a blocked estimate below it means the blocking curve dipped through noise, or the
+    /// data are anti-correlated — a regime this does not claim to resolve, and where the
+    /// uncorrelated estimate is the conservative reading.
     fn error(&self) -> f64 {
-        self.levels
+        let naive = self.base().map_or(0.0, WeightedMoments::error);
+        let curve: Vec<BlockingPoint> = self
+            .levels
             .iter()
-            .rev()
-            .find(|level| level.moments.has_reliable_error())
-            .or_else(|| self.levels.first())
-            .map_or(0.0, |level| level.moments.error())
+            .map(|level| &level.moments)
+            .filter(|moments| moments.has_reliable_error())
+            .map(|moments| BlockingPoint {
+                error: moments.error(),
+                noise: moments.error_uncertainty(),
+            })
+            .collect();
+        Self::plateau_error(&curve).map_or(naive, |error| error.max(naive))
+    }
+
+    /// The Flyvbjerg-Petersen plateau, or `None` for a run too short to block.
+    ///
+    /// Coarsening blocks decorrelates them, so the SEM estimate climbs while adjacent blocks
+    /// still share information and levels off once they no longer do. The plateau is the
+    /// first level that no *later* level rises above by more than the noise on the two
+    /// estimates combined — the curve must stay flat, not merely pause. Testing only the
+    /// next level stops at the first slow step of a curve that is still climbing, which is
+    /// how a strongly correlated observable reads at fine resolution: successive levels
+    /// there differ by less than σ(σ) even though the curve has far to go.
+    ///
+    /// The coarsest level is never itself a plateau: nothing follows it to show it has
+    /// levelled off. A curve still rising at that point belongs to a run too short to
+    /// resolve its correlation time, so report the largest estimate rather than a
+    /// confident-looking small one.
+    fn plateau_error(curve: &[BlockingPoint]) -> Option<f64> {
+        let levelled_off = |(index, point): (usize, &BlockingPoint)| {
+            curve[index + 1..]
+                .iter()
+                .all(|later| later.error - point.error <= point.noise.hypot(later.noise))
+                .then_some(point.error)
+        };
+        curve
+            .split_last()
+            .and_then(|(_, rising)| rising.iter().enumerate().find_map(levelled_off))
+            .or_else(|| curve.iter().map(|point| point.error).reduce(f64::max))
     }
 
     #[cfg(test)]
     fn sample_stddev(&self) -> f64 {
-        self.levels
-            .first()
-            .map_or(0.0, |level| level.moments.sample_stddev())
+        self.base().map_or(0.0, WeightedMoments::sample_stddev)
     }
 
     fn n(&self) -> u64 {
-        self.levels.first().map_or(0, |level| level.moments.count)
+        self.base().map_or(0, |moments| moments.count)
     }
 }
 
@@ -850,8 +921,8 @@ impl HierarchicalBlockAverage {
 ///
 /// Each [`add`](Self::add) records one trajectory sample and its reweighting
 /// factor (`1.0` for an unbiased run). Adjacent samples are merged recursively
-/// into blocks of 2, 4, 8, … samples. The reported error comes from the coarsest
-/// level containing enough blocks, while the mean always uses every sample.
+/// into blocks of 2, 4, 8, … samples. The reported error is read off the blocking
+/// plateau, while the mean always uses every sample.
 #[derive(Clone, Debug, Default)]
 pub(crate) struct WeightedBlockAverage(HierarchicalBlockAverage);
 
@@ -886,7 +957,7 @@ impl WeightedBlockAverage {
         self.0.effective_n()
     }
 
-    /// Standard error from the coarsest statistically populated blocking level.
+    /// Standard error of the mean, corrected for serial correlation by blocking.
     pub fn error(&self) -> f64 {
         self.0.error()
     }
@@ -1194,27 +1265,6 @@ mod block_tests {
     }
 
     #[test]
-    fn serial_correlation_increases_the_reported_error() {
-        let mut correlated = BlockAverage::new();
-        let mut interleaved = BlockAverage::new();
-
-        for _ in 0..256 {
-            correlated.add(0.0);
-            interleaved.add(0.0);
-            interleaved.add(1.0);
-        }
-        for _ in 0..256 {
-            correlated.add(1.0);
-        }
-
-        assert_relative_eq!(correlated.mean(), interleaved.mean(), epsilon = 1e-12);
-        assert!(
-            correlated.error() > 10.0 * interleaved.error(),
-            "blocking should distinguish serial correlation from interleaved samples"
-        );
-    }
-
-    #[test]
     fn short_run_uses_the_ordinary_standard_error() {
         let mut average = BlockAverage::new();
         for value in [1.0, 2.0, 4.0, 8.0, 16.0] {
@@ -1231,20 +1281,6 @@ mod block_tests {
         );
         assert_eq!(average.n(), 5);
     }
-
-    #[test]
-    fn incomplete_blocks_preserve_every_observation_in_the_mean() {
-        let mut average = BlockAverage::new();
-        let mut sum = 0.0;
-        for index in 0..513 {
-            let value = (index % 7) as f64;
-            average.add(value);
-            sum += value;
-        }
-
-        assert_relative_eq!(average.mean(), sum / 513.0, epsilon = 1e-12);
-        assert_eq!(average.n(), 513);
-    }
 }
 
 #[cfg(test)]
@@ -1252,21 +1288,27 @@ mod weighted_block_tests {
     use super::{BlockAverage, WeightedBlockAverage};
     use approx::assert_relative_eq;
 
-    /// With every weight 1.0 the weighted accumulator must reproduce the
-    /// unweighted block mean and SEM exactly.
+    /// Both wrappers delegate to the same engine, so comparing them to each other
+    /// proves nothing. Pin them to a hand-computed SEM instead: five values whose
+    /// sample variance is 37.2, giving √(37.2/5) over a run too short to block.
     #[test]
-    fn unit_weights_match_block_average() {
+    fn unit_weights_match_the_analytical_standard_error() {
         let mut plain = BlockAverage::new();
         let mut weighted = WeightedBlockAverage::new();
-        for index in 0..513 {
-            let value = (index % 7) as f64;
+        for value in [1.0, 2.0, 4.0, 8.0, 16.0] {
             plain.add(value);
             weighted.add(value, 1.0);
         }
-        assert_relative_eq!(weighted.mean(), plain.mean(), epsilon = 1e-12);
-        assert_relative_eq!(weighted.error(), plain.error(), epsilon = 1e-12);
-        assert_eq!(weighted.n(), 513);
-        assert_relative_eq!(weighted.effective_n(), 513.0, epsilon = 1e-12);
+        let expected_error = (37.2_f64 / 5.0).sqrt();
+        for (mean, error) in [
+            (plain.mean(), plain.error()),
+            (weighted.mean(), weighted.error()),
+        ] {
+            assert_relative_eq!(mean, 6.2, epsilon = 1e-12);
+            assert_relative_eq!(error, expected_error, epsilon = 1e-12);
+        }
+        assert_eq!(weighted.n(), 5);
+        assert_relative_eq!(weighted.effective_n(), 5.0, epsilon = 1e-12);
     }
 
     /// A rescaled weight set leaves the mean and the effective sample size
@@ -1305,45 +1347,6 @@ mod weighted_block_tests {
     }
 
     #[test]
-    fn serial_correlation_increases_the_reported_error() {
-        let mut correlated = WeightedBlockAverage::new();
-        let mut interleaved = WeightedBlockAverage::new();
-
-        for _ in 0..256 {
-            correlated.add(0.0, 1.0);
-            interleaved.add(0.0, 1.0);
-            interleaved.add(1.0, 1.0);
-        }
-        for _ in 0..256 {
-            correlated.add(1.0, 1.0);
-        }
-
-        assert_relative_eq!(correlated.mean(), interleaved.mean(), epsilon = 1e-12);
-        assert!(
-            correlated.error() > 10.0 * interleaved.error(),
-            "blocking should distinguish serial correlation from interleaved samples"
-        );
-    }
-
-    #[test]
-    fn uncorrelated_uniform_samples_match_theoretical_error() {
-        const N: usize = 4096;
-        let mut state = 0x4d59_5df4_d0f3_3173_u64;
-        let mut average = WeightedBlockAverage::new();
-
-        for _ in 0..N {
-            state = state
-                .wrapping_mul(6_364_136_223_846_793_005)
-                .wrapping_add(1);
-            let value = (state >> 11) as f64 / (1_u64 << 53) as f64;
-            average.add(value, 1.0);
-        }
-
-        let theoretical_error = (1.0 / (12.0 * N as f64)).sqrt();
-        assert_relative_eq!(average.error(), theoretical_error, max_relative = 0.35);
-    }
-
-    #[test]
     fn hierarchical_blocking_preserves_weighted_mean_with_incomplete_block() {
         let mut average = WeightedBlockAverage::new();
         let mut weighted_sum = 0.0;
@@ -1359,6 +1362,182 @@ mod weighted_block_tests {
 
         assert_relative_eq!(average.mean(), weighted_sum / sum_weights, epsilon = 1e-12);
         assert_eq!(average.n(), 513);
+    }
+}
+
+/// Analytical tests of the blocking engine itself. Both public wrappers delegate here,
+/// so the statistics are pinned once, against closed-form answers rather than against
+/// each other.
+#[cfg(test)]
+mod blocking_engine_tests {
+    use super::{HierarchicalBlockAverage, WeightedMoments};
+    use approx::assert_relative_eq;
+    use rand::{Rng, SeedableRng};
+
+    /// Seeded so the blocking curves below are the same on every run and platform.
+    fn test_rng() -> rand::rngs::StdRng {
+        rand::rngs::StdRng::seed_from_u64(0x4d59_5df4_d0f3_3173)
+    }
+
+    fn engine(values: &[f64]) -> HierarchicalBlockAverage {
+        let mut average = HierarchicalBlockAverage::default();
+        for value in values {
+            average.add(*value, 1.0);
+        }
+        average
+    }
+
+    /// The correlation-blind estimate the blocking curve starts from.
+    fn naive_error(average: &HierarchicalBlockAverage) -> f64 {
+        average.base().map_or(0.0, WeightedMoments::error)
+    }
+
+    /// σ/√N over an independent sample — the answer blocking must reproduce.
+    fn analytical_sem(values: &[f64]) -> f64 {
+        values.iter().collect::<average::Variance>().error()
+    }
+
+    /// Independent samples have no plateau to find: every level estimates the same
+    /// variance, so blocking must land on the uncorrelated SEM, √(1/12N) for U(0,1).
+    #[test]
+    fn independent_samples_reproduce_the_uncorrelated_sem() {
+        const N: usize = 4096;
+        let mut rng = test_rng();
+        let values: Vec<f64> = (0..N).map(|_| rng.gen::<f64>()).collect();
+        let average = engine(&values);
+
+        assert_relative_eq!(
+            average.error(),
+            (1.0 / (12.0 * N as f64)).sqrt(),
+            max_relative = 0.35
+        );
+        assert_relative_eq!(
+            average.error(),
+            analytical_sem(&values),
+            max_relative = 0.35
+        );
+    }
+
+    /// Each independent draw repeated eight times: the correlation time is exactly 8
+    /// samples, so the true SEM is that of the 64 underlying draws and the naive
+    /// estimate understates it by √8. Blocking must recover the former.
+    #[test]
+    fn known_correlation_time_recovers_the_independent_sem() {
+        const BLOCKS: usize = 64;
+        const REPEATS: usize = 8;
+        let mut rng = test_rng();
+        let independent: Vec<f64> = (0..BLOCKS).map(|_| rng.gen::<f64>()).collect();
+        let correlated: Vec<f64> = independent
+            .iter()
+            .flat_map(|value| std::iter::repeat_n(*value, REPEATS))
+            .collect();
+        let average = engine(&correlated);
+        let truth = analytical_sem(&independent);
+
+        // Level 3 blocks exactly one repeat run, so its block means *are* the draws.
+        assert_relative_eq!(average.levels[3].moments.error(), truth, epsilon = 1e-12);
+        assert_relative_eq!(average.error(), truth, max_relative = 0.15);
+        assert!(
+            average.error() > 2.5 * naive_error(&average),
+            "blocking must expose the √8 the naive SEM misses"
+        );
+    }
+
+    /// Anti-correlated data: every block of two averages to exactly 0.5, so all coarse
+    /// levels report zero spread. Correlation only ever inflates the variance of a mean,
+    /// so the naive SEM is a floor — reporting the coarse levels verbatim would claim a
+    /// visibly fluctuating observable is known exactly.
+    #[test]
+    fn anti_correlated_samples_never_report_below_the_naive_sem() {
+        let values: Vec<f64> = (0..512).map(|index| (index % 2) as f64).collect();
+        let average = engine(&values);
+
+        assert!(average.levels[1..]
+            .iter()
+            .all(|level| level.moments.error() == 0.0));
+        assert_relative_eq!(average.error(), naive_error(&average), epsilon = 1e-12);
+        assert!(average.error() > 0.0);
+    }
+
+    /// A single dominant weight leaves ~1 effective observation at every level however
+    /// many blocks each holds. Gating on the raw count would call such a level reliable
+    /// and prefer it; gating on `effective_n` disqualifies all of them.
+    #[test]
+    fn skewed_weights_disqualify_every_blocking_level() {
+        let mut average = HierarchicalBlockAverage::default();
+        average.add(1.0, 1e4);
+        for index in 0..511 {
+            average.add((index % 7) as f64, 1.0);
+        }
+
+        assert!(average.levels[0].moments.count >= 512);
+        assert!(average.levels[0].moments.effective_n() < 2.0);
+        assert!(!average
+            .levels
+            .iter()
+            .any(|level| level.moments.has_reliable_error()));
+        assert_relative_eq!(average.error(), naive_error(&average), epsilon = 1e-12);
+    }
+
+    /// A slow mode buried under fast noise: the curve creeps at fine resolution — the first
+    /// step rises by less than σ(σ) — then climbs steeply once blocks span the slow mode.
+    /// Judging the plateau from the next level alone reads that creep as a plateau and
+    /// reports the naive SEM for data correlated by a factor of ~2.5. Real observables look
+    /// like this (`cluster_lj`'s cluster size does), and a random walk does not: it rises
+    /// too steeply at every level to expose the mistake.
+    #[test]
+    fn a_slowly_rising_curve_is_not_mistaken_for_a_plateau() {
+        const RUN: usize = 256;
+        let mut rng = test_rng();
+        let mut slow = 0.0;
+        let values: Vec<f64> = (0..4096)
+            .map(|index| {
+                if index % RUN == 0 {
+                    // A few percent of the noise variance: gentle enough that the first
+                    // blocking step is lost in σ(σ), yet it dominates once blocks span a run.
+                    slow = (rng.gen::<f64>() - 0.5) * 0.18;
+                }
+                slow + rng.gen::<f64>() - 0.5
+            })
+            .collect();
+        let average = engine(&values);
+
+        let first_step =
+            average.levels[1].moments.error() / average.levels[0].moments.error() - 1.0;
+        assert!(
+            first_step
+                < average.levels[0].moments.error_uncertainty() / average.levels[0].moments.error(),
+            "test is only meaningful while the first step hides inside σ(σ)"
+        );
+        assert!(
+            average.error() > 1.8 * naive_error(&average),
+            "a creeping curve is still a rising curve, not a plateau"
+        );
+    }
+
+    /// A random walk stays correlated at every resolved scale, so the blocking curve
+    /// never levels off. With no plateau the run is too short to resolve the correlation
+    /// time, and the largest eligible estimate is the conservative reading.
+    #[test]
+    fn unresolved_correlation_falls_back_to_the_largest_estimate() {
+        let mut rng = test_rng();
+        let mut position = 0.0;
+        let values: Vec<f64> = (0..512)
+            .map(|_| {
+                position += rng.gen::<f64>() - 0.5;
+                position
+            })
+            .collect();
+        let average = engine(&values);
+
+        let largest = average
+            .levels
+            .iter()
+            .filter(|level| level.moments.has_reliable_error())
+            .map(|level| level.moments.error())
+            .fold(f64::NEG_INFINITY, f64::max);
+        assert_relative_eq!(average.error(), largest, epsilon = 1e-12);
+        assert!(average.error() > 3.0 * naive_error(&average));
     }
 }
 

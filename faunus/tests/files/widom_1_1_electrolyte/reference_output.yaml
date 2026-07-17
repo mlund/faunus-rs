@@ -81,29 +81,29 @@ analysis:
     excess_chemical_potential/kT:
       short_range:
         mean: 0.16104313932586029
-        error: 0.0018118325906368157
+        error: 0.0018924053394129637
       electrostatic:
         mean: -0.39315899082337497
-        error: 0.0057331666982003955
+        error: 0.005538953320975873
       total:
         mean: -0.23211585149751476
-        error: 0.00638087850044338
+        error: 0.005987704090227995
     unscaled_widom/kT:
       mean: -0.2615201969129146
-      error: 0.009890078307993525
+      error: 0.009377351963379837
 - scaled_widom_insertion:
     atom: Cl
     num_samples: 2000
     excess_chemical_potential/kT:
       short_range:
         mean: 0.16104313932586029
-        error: 0.0018118325906368157
+        error: 0.0018924053394129637
       electrostatic:
         mean: -0.39029326752306803
-        error: 0.004815507077122589
+        error: 0.004183004376749019
       total:
         mean: -0.22925012819720783
-        error: 0.004964090717832645
+        error: 0.004522537007496316
     unscaled_widom/kT:
       mean: -0.2563136742371558
-      error: 0.007650303033216663
+      error: 0.006760177449369757

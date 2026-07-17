@@ -300,8 +300,9 @@ Key         | Required | Default | Description
 
 Output reports the mean cluster size $\langle N\rangle$ with an automatically blocked standard
 error. It also reports the fraction of trials rejected to preserve membership
-(`bias_rejection_rate`) and the root-mean-square translational and rotational displacements. For an ideal gas, $\langle N\rangle = 1 + (N/V)\,\tfrac{4}{3}\pi R_c^3$
-with threshold $R_c$, a useful check that the clustering is unbiased.
+(`bias_rejection_rate`) and the root-mean-square translational and rotational displacements.
+For an ideal gas, $\langle N\rangle = 1 + (N/V)\,\tfrac{4}{3}\pi R_c^3$ with threshold $R_c$,
+a useful check that the clustering is unbiased.
 
 ---
 
