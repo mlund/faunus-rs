@@ -577,7 +577,7 @@ impl PairPotentialBuilder {
     }
 }
 
-const fn default_spline_n_points() -> usize {
+const fn default_spline_table_points() -> usize {
     2000
 }
 
@@ -591,8 +591,8 @@ pub struct SplineOptions {
     /// Cutoff distance for splined potentials (Ångström).
     pub cutoff: f64,
     /// Number of grid points for the spline table.
-    #[serde(default = "default_spline_n_points")]
-    pub n_points: usize,
+    #[serde(default = "default_spline_table_points")]
+    pub table_points: usize,
     /// Grid spacing strategy for spline construction.
     #[serde(default)]
     pub grid_type: GridType,
@@ -630,7 +630,7 @@ impl SplineOptions {
     /// Convert to interatomic's SplineConfig.
     pub fn to_spline_config(&self) -> SplineConfig {
         SplineConfig {
-            n_points: self.n_points,
+            n_points: self.table_points,
             grid_type: self.grid_type,
             shift_energy: self.shift_energy,
             shift_force: self.shift_force,
@@ -1246,7 +1246,7 @@ mod tests {
         // Check that spline options are present and correctly parsed
         let spline = builder.spline.expect("Spline options should be present");
         assert_approx_eq!(f64, spline.cutoff, 15.0);
-        assert_eq!(spline.n_points, 2000);
+        assert_eq!(spline.table_points, 2000);
         assert_eq!(spline.grid_type, GridType::PowerLaw2);
 
         // Verify conversion to SplineConfig works

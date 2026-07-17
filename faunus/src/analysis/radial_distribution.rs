@@ -27,7 +27,7 @@ pub struct RadialDistributionBuilder {
     #[serde(rename = "resolution")]
     dr: f64,
     /// Maximum distance. Defaults to half the shortest box dimension.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "max", skip_serializing_if = "Option::is_none")]
     max_r: Option<f64>,
     /// If true, use center-of-mass distances instead of atom-atom.
     #[serde(default)]
@@ -331,12 +331,17 @@ selections: ["molecule polymer", "molecule polymer"]
 use_com: true
 file: rdf_com.dat
 resolution: 0.5
-max_r: 30.0
+max: 30.0
 frequency: !Every 50
 "#;
         let builder: RadialDistributionBuilder = serde_yml::from_str(yaml).unwrap();
         assert!(builder.use_com);
         assert_relative_eq!(builder.max_r.unwrap(), 30.0);
+        // #123: the range maximum unified on `max`; the old `max_r` is a clean break.
+        assert!(
+            serde_yml::from_str::<RadialDistributionBuilder>(&yaml.replace("max:", "max_r:"))
+                .is_err()
+        );
     }
 
     #[test]

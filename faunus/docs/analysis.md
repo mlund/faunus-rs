@@ -328,7 +328,7 @@ Key           | Required | Default              | Description
 `selections`  | yes      |                      | Two selection expressions, _a_ and _b_
 `file`        | no       | `multipole_dist.csv` | Output CSV file
 `resolution`          | no       | 1.0                  | Distance resolution along _R_ (Å)
-`max_r`       | no       | half box             | Maximum separation (Å)
+`max`         | no       | half box             | Maximum separation (Å)
 `frequency`   | yes      |                      | Sample frequency
 
 A medium is required for the Bjerrum length.
@@ -505,7 +505,7 @@ analysis:
     use_com: true
     file: rdf_com.dat
     resolution: 0.5
-    max_r: 30.0
+    max: 30.0
     frequency: !Every 100
 ```
 
@@ -517,7 +517,7 @@ Key                        | Required | Default               | Description
 `file`                     | yes      |                       | Output file path (see [Output file formats](#output-file-formats))
 `resolution`                       | yes      |                       | Bin width in distance units
 `frequency`                | yes      |                       | Sample frequency, e.g. `!Every 100`
-`max_r`                    | no       | half shortest box dim | Maximum distance for histogram
+`max`                      | no       | half shortest box dim | Maximum distance for histogram
 `use_com`                  | no       | `false`               | Use center-of-mass distances instead of atom-atom
 `exclude_intramolecular`   | no       | `true` (atom-atom)    | Skip pairs within the same molecule (atom-atom only)
 `dimension`                | no       | `xyz`                 | Axes for distance projection and normalization (`x`, `y`, `z`, `xy`, …)
@@ -1102,7 +1102,7 @@ Key             | Required | Default | Description
 `use_com`       | no       | `false` | Count the mass centre of each selected molecule instead of each atom
 `solvent`       | no       |         | Explicit solvent as `{selection, use_com}`; its presence selects the finite-box estimator
 `radius`        | no       | σ/2, or 0 with `use_com` | Ligand radius (Å), setting the exclusion boundary
-`solvent_probe` | no       | `1.4`   | Water radius (Å), setting the accessible surface and implicit-solvent shell behind $b_1$
+`probe_radius`  | no       | `1.4`   | Water radius (Å), setting the accessible surface and implicit-solvent shell behind $b_1$
 `profile`       | no       |         | Output file for Γ(δ) (see [Output file formats](#output-file-formats))
 `file`          | no       |         | Output file for the per-residue table
 `frequency`     | yes      |         | Sample frequency, e.g. `!Every 100`

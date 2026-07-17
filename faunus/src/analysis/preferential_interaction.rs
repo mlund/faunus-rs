@@ -198,7 +198,8 @@ pub struct PreferentialInteractionBuilder {
     /// The δ ladder.
     shell: Shell,
     /// Water radius (Å), setting the surface area against which hydration is reported.
-    #[serde(default = "default_solvent_probe")]
+    /// Spelled `probe_radius` to match the SASA/tessellation energy terms.
+    #[serde(rename = "probe_radius", default = "default_solvent_probe")]
     solvent_probe: f64,
     /// Γ(δ), the convergence profile. Read this before trusting the reported Γ.
     #[serde(default)]
@@ -227,7 +228,7 @@ impl PreferentialInteractionBuilder {
         self.shell.validate()?;
         anyhow::ensure!(
             self.solvent_probe.is_finite() && self.solvent_probe >= 0.0,
-            "PreferentialInteraction: solvent_probe must be finite and non-negative, got {}",
+            "PreferentialInteraction: probe_radius must be finite and non-negative, got {}",
             self.solvent_probe
         );
         if let Some(radius) = self.radius {

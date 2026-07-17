@@ -383,14 +383,14 @@ system:
         - !Coulomb {cutoff: 200}
     spline:
       cutoff: 200.0
-      n_points: 2000
+      table_points: 2000
       grid_type: PowerLaw2
 ```
 
 | Key                | Required | Default      | Description                              |
 |--------------------|----------|--------------|------------------------------------------|
 | `cutoff`           | yes      |              | Cutoff distance (Å)                      |
-| `n_points`         | no       | `2000`       | Number of spline grid points             |
+| `table_points`     | no       | `2000`       | Number of spline grid points             |
 | `grid_type`        | no       | `PowerLaw2`  | Grid spacing strategy (see below)        |
 | `shift_energy`     | no       | `true`       | Shift energy to zero at cutoff           |
 | `shift_force`      | no       | `false`      | Shift force to zero at cutoff            |

@@ -117,7 +117,7 @@ pub struct MultipoleDistributionBuilder {
     #[serde(default = "default_resolution", rename = "resolution")]
     dr: f64,
     /// Maximum separation. Defaults to half the shortest box dimension.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default, rename = "max", skip_serializing_if = "Option::is_none")]
     max_r: Option<f64>,
     /// Sampling frequency.
     frequency: Frequency,

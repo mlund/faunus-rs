@@ -59,8 +59,9 @@ pub struct VirtualTranslate {
     /// Selection expression for the molecule to translate
     selection: Selection,
 
-    /// Displacement magnitude in Angstrom
-    #[builder_field_attr(serde(rename = "dL"))]
+    /// Displacement magnitude in Angstrom. Canonical `displacement` matches the
+    /// `volume_displacement` moves; `dL` kept as their `dV`-style short alias.
+    #[builder_field_attr(serde(alias = "dL"))]
     displacement: f64,
 
     /// Displacement directions. Defaults to z-axis.
@@ -138,7 +139,7 @@ impl VirtualTranslateBuilder {
             anyhow::bail!("Missing required field 'selection' for VirtualTranslate analysis");
         }
         if self.displacement.is_none() {
-            anyhow::bail!("Missing required field 'dL' for VirtualTranslate analysis");
+            anyhow::bail!("Missing required field 'displacement' for VirtualTranslate analysis");
         }
         if self.sampling.is_none() {
             anyhow::bail!("Missing required field 'frequency' for VirtualTranslate analysis");
@@ -404,7 +405,7 @@ mod tests {
             .frequency(Frequency::Every(10))
             .build(RT_298);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("dL"));
+        assert!(result.unwrap_err().to_string().contains("displacement"));
     }
 
     #[test]
@@ -537,7 +538,7 @@ mod tests {
         let yaml = r#"
 - !VirtualTranslate
   selection: "molecule MOL"
-  dL: 0.1
+  displacement: 0.1
   frequency: !Every 1
 "#;
         let vt = deserialize_vt_builder(yaml, 0).build(RT_298).unwrap();

@@ -1672,7 +1672,7 @@ system:
     nonbonded:
       default:
         - !LennardJones {{mixing: LB}}
-    spline: {{cutoff: {CUTOFF}, n_points: 1000, cell_list: {cell_list}}}
+    spline: {{cutoff: {CUTOFF}, table_points: 1000, cell_list: {cell_list}}}
   blocks:
     - molecule: M
       N: 512
