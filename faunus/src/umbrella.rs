@@ -23,9 +23,9 @@ use crate::{
     analysis::{self, AnalysisCollection},
     auxiliary::ColumnWriter,
     backend::Backend,
-    collective_variable::CollectiveVariableBuilder,
+    collective_variable::{CvKindBuilder, Finite, ForceConstant, Interval},
     context::WithHamiltonianMut,
-    energy::{ConstrainBuilder, EnergyTerm, HarmonicConstraint},
+    energy::{ConstrainBuilder, EnergyTerm, Restraint},
     histogram::Histogram,
     montecarlo::MarkovChain,
     propagate::Propagate,
@@ -46,7 +46,7 @@ use std::path::{Path, PathBuf};
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct UmbrellaConfig {
-    cv: CollectiveVariableBuilder,
+    cv: Box<dyn CvKindBuilder>,
     windows: WindowGrid,
     drive: DriveConfig,
 }
@@ -71,7 +71,7 @@ fn default_bin_width() -> f64 {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct DriveConfig {
-    force_constant: f64,
+    force_constant: ForceConstant,
 }
 
 impl WindowGrid {
@@ -319,8 +319,8 @@ struct WindowParams<'a> {
     state_dir: &'a Path,
     half_width: f64,
     bin_width: f64,
-    drive_k: f64,
-    cv_builder: &'a CollectiveVariableBuilder,
+    drive_k: ForceConstant,
+    cv_builder: &'a (dyn CvKindBuilder + 'static),
     medium: &'a interatomic::coulomb::Medium,
     multi_progress: &'a MultiProgress,
 }
@@ -369,8 +369,7 @@ fn run_window(
         ))?;
     }
 
-    let mut hard_wall_cv = params.cv_builder.clone();
-    hard_wall_cv.range = (lo, hi);
+    let window = Interval::new(lo, hi)?;
 
     pb.set_style(progress_style());
 
@@ -379,11 +378,11 @@ fn run_window(
     // must be free to traverse intermediate CV values to reach the target.
     if !had_state {
         let harmonic_builder = ConstrainBuilder {
-            cv: params.cv_builder.clone(),
-            harmonic: Some(HarmonicConstraint {
+            cv: dyn_clone::clone_box(params.cv_builder),
+            restraint: Restraint::Harmonic {
                 force_constant: params.drive_k,
-                equilibrium: center,
-            }),
+                equilibrium: Finite::new(center)?,
+            },
         };
         let harmonic_term = EnergyTerm::from(harmonic_builder.build(&context)?);
         context.hamiltonian_mut().push_front(harmonic_term);
@@ -393,7 +392,7 @@ fn run_window(
         let analyses = AnalysisCollection::default();
         let mut mc = MarkovChain::new(context, propagate, rt, analyses)?;
 
-        let cv_check = hard_wall_cv.build(mc.context())?;
+        let cv_check = params.cv_builder.build_cv(mc.context())?;
         pb.set_length(drive_len);
         pb.set_prefix(format!("W{window_index:>2} drive"));
         let mut reached = false;
@@ -435,8 +434,8 @@ fn run_window(
     // Hard-wall at front so Hamiltonian short-circuits on out-of-window configs
     // before evaluating expensive nonbonded terms
     let hard_wall_builder = ConstrainBuilder {
-        cv: hard_wall_cv.clone(),
-        harmonic: None,
+        cv: dyn_clone::clone_box(params.cv_builder),
+        restraint: Restraint::Between(window),
     };
     let hard_wall_term = EnergyTerm::from(hard_wall_builder.build(&context)?);
     context.hamiltonian_mut().push_front(hard_wall_term);
@@ -482,7 +481,7 @@ fn run_window(
             analysis::from_file_creating_dir(input, &context, Some(params.medium), &out_dir)?;
         let mut mc = MarkovChain::new(context, propagate, rt, analyses)?;
 
-        let cv = hard_wall_cv.build(mc.context())?;
+        let cv = params.cv_builder.build_cv(mc.context())?;
         let initial_energy = mc.system_energy();
 
         pb.set_length(max_repeats as u64);
@@ -645,7 +644,7 @@ pub fn run(
             half_width,
             bin_width: config.windows.bin_width,
             drive_k: config.drive.force_constant,
-            cv_builder: &config.cv,
+            cv_builder: config.cv.as_ref(),
             medium: &medium,
             multi_progress: &multi_progress,
         };

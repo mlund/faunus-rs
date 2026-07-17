@@ -101,8 +101,13 @@ Key          | Required | Default | Description
 `projection` | no       | `xyz`   | Axis projection (`x`, `y`, `z`, `xy`, …); alias: `dimension`
 `selection`  | depends  |         | Selection expression for one atom or group
 `selection2` | depends  |         | Second selection (for two-group properties)
-`resolution` | no       |         | Bin width (only used by Penalty)
 `file`       | no       |         | Output file path (see [Output file formats](#output-file-formats)); omit to only track the mean
+
+A collective variable specifies only *what* is measured. Where a value needs a
+grid — the `coordinate` of [`mean_along_coordinate`](#mean-along-coordinate) and
+of [Wang-Landau](wang_landau.md)/[penalty](energy.md#penalty-flat-histogram-bias) — the `resolution`
+(and, for Wang-Landau, the `range`) is given alongside the CV there, not as a CV
+option. Supplying `range`/`resolution` on a plain CV is an error.
 
 ### Supported properties
 

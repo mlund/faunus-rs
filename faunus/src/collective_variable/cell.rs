@@ -67,6 +67,7 @@ impl CvKind for Volume {
 
 /// Builder for Volume CV.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct VolumeBuilder {
     #[serde(default)]
     pub dimension: Axes,

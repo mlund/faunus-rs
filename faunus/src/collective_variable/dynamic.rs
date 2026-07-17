@@ -47,6 +47,7 @@ fn count_by_group_kind(selection: &Selection, context: &dyn EvalContext) -> f64 
 
 /// Number of active entities matching a selection.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Count {
     pub selection: Selection,
 }
@@ -73,6 +74,7 @@ impl_self_building_cv!(Count, "count", |s| Some(format!(
 
 /// Molar concentration (mol/L) of active entities matching a selection.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Molarity {
     pub selection: Selection,
 }
@@ -100,6 +102,7 @@ impl_self_building_cv!(Molarity, "molarity", |s| Some(format!(
 
 /// Sum of charges of active atoms matching a selection (re-resolves each evaluation).
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Charge {
     pub selection: Selection,
 }

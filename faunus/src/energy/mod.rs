@@ -44,7 +44,7 @@ mod template;
 
 pub use bonded::{IntermolecularBonded, IntramolecularBonded};
 pub use celloverlap::CellOverlap;
-pub use constrain::{Constrain, ConstrainBuilder, HarmonicConstraint};
+pub use constrain::{Constrain, ConstrainBuilder, Restraint};
 pub use custom_external::{CustomExternal, CustomExternalBuilder};
 pub use energyterm::EnergyTerm;
 pub use ewald::{EwaldBuilder, EwaldReciprocalEnergy};

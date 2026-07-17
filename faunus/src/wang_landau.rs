@@ -23,7 +23,7 @@
 use crate::{
     analysis::{self, AnalysisCollection},
     backend::Backend,
-    collective_variable::CollectiveVariableBuilder,
+    collective_variable::HistogrammedCv,
     context::WithHamiltonianMut,
     energy::{EnergyTerm, Penalty},
     flat_histogram::{FlatHistogramState, GridDim},
@@ -47,8 +47,8 @@ use std::{
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct WangLandauConfig {
-    coordinate: CollectiveVariableBuilder,
-    coordinate2: Option<CollectiveVariableBuilder>,
+    coordinate: HistogrammedCv,
+    coordinate2: Option<HistogrammedCv>,
     #[serde(default = "default_ln_f_initial")]
     ln_f_initial: f64,
     #[serde(default = "default_flatness_threshold")]
@@ -115,16 +115,18 @@ pub fn run(input: &Path, state_dir: &Path, output: &Path, max_threads: usize) ->
     let medium = crate::backend::get_medium(input)?;
     let rt = crate::R_IN_KJ_PER_MOL * medium.temperature();
 
-    // Build grid dimensions from CV range/resolution
-    let resolution1 = config.coordinate.resolution.unwrap_or(1.0);
-    let (min1, max1) = config.coordinate.range;
-
-    let dim = if let Some(ref cv2_builder) = config.coordinate2 {
-        let resolution2 = cv2_builder.resolution.unwrap_or(1.0);
-        let (min2, max2) = cv2_builder.range;
-        GridDim::new_2d([min1, min2], [max1, max2], [resolution1, resolution2])?
+    // Grid bounds and bin widths are validated (finite, min < max, width > 0) by
+    // `Interval`/`BinWidth`, so `GridDim` can never receive an infinite range.
+    let c1 = config.coordinate.range();
+    let dim = if let Some(ref cv2) = config.coordinate2 {
+        let c2 = cv2.range();
+        GridDim::new_2d(
+            [c1.min(), c2.min()],
+            [c1.max(), c2.max()],
+            [config.coordinate.resolution().get(), cv2.resolution().get()],
+        )?
     } else {
-        GridDim::new_1d(min1, max1, resolution1)?
+        GridDim::new_1d(c1.min(), c1.max(), config.coordinate.resolution().get())?
     };
 
     log::info!(
@@ -168,9 +170,9 @@ pub fn run(input: &Path, state_dir: &Path, output: &Path, max_threads: usize) ->
     )?;
 
     // Verify CVs resolve against the base context (catches selection errors early)
-    config.coordinate.build(&base_context)?;
+    config.coordinate.build_cv(&base_context)?;
     if let Some(ref cv2) = config.coordinate2 {
-        cv2.build(&base_context)?;
+        cv2.build_cv(&base_context)?;
     }
 
     log::info!(
@@ -219,8 +221,8 @@ pub fn run(input: &Path, state_dir: &Path, output: &Path, max_threads: usize) ->
 
                     // Clone penalty before moving into Hamiltonian — the clone
                     // is used for histogram updates outside the energy evaluation path
-                    let cv = cv_builder.build(&ctx)?;
-                    let cv2 = cv2_builder.map(|b| b.build(&ctx)).transpose()?;
+                    let cv = cv_builder.build_cv(&ctx)?;
+                    let cv2 = cv2_builder.map(|b| b.build_cv(&ctx)).transpose()?;
                     let penalty = Penalty::new(cv, cv2, state_ref.clone(), rt);
                     let penalty_for_update = penalty.clone();
                     ctx.hamiltonian_mut().push_front(EnergyTerm::from(penalty));

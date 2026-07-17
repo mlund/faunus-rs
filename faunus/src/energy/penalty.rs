@@ -18,7 +18,7 @@
 //! returning `ln g(bin) × kT` as a bias energy. Out-of-range CV values
 //! produce infinite energy for early rejection.
 
-use crate::collective_variable::{CollectiveVariable, CollectiveVariableBuilder};
+use crate::collective_variable::{CollectiveVariable, CvKindBuilder};
 use crate::flat_histogram::{FlatHistogramState, GridDim};
 use crate::Change;
 use crate::ObserveContext;
@@ -119,10 +119,11 @@ impl Penalty {
 pub struct PenaltyBuilder {
     /// Path to a `FlatHistogramState` checkpoint (e.g. `wl_states/histogram.yaml`).
     pub file: PathBuf,
-    /// Primary collective variable.
-    pub coordinate: CollectiveVariableBuilder,
+    /// Primary collective variable. The grid (range and resolution) comes from
+    /// the checkpoint, so only the CV kind is specified here.
+    pub coordinate: Box<dyn CvKindBuilder>,
     /// Optional second CV for 2D penalty surfaces.
-    pub coordinate2: Option<CollectiveVariableBuilder>,
+    pub coordinate2: Option<Box<dyn CvKindBuilder>>,
 }
 
 /// Reject a config whose CV count disagrees with the checkpoint's grid dimensionality.
@@ -163,11 +164,11 @@ impl PenaltyBuilder {
             state.dim().num_bins(),
             state.ln_g_range(),
         );
-        let cv = self.coordinate.build(context)?;
+        let cv = self.coordinate.build_cv(context)?;
         let cv2 = self
             .coordinate2
             .as_ref()
-            .map(|b| b.build(context))
+            .map(|b| b.build_cv(context))
             .transpose()?;
         Ok(Penalty::new(
             cv,

@@ -44,7 +44,6 @@ system:
 analysis:
   - !CollectiveVariable
     property: volume
-    range: [0.0, 40000000.0]
     file: volume.dat.gz
     frequency: !Every 10
   - !PolymerShape

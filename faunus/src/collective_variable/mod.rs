@@ -15,37 +15,24 @@
 //! Collective variables for enhanced sampling, constraints, and analysis.
 //!
 //! A collective variable (CV) maps the simulation state to a single scalar value.
-//! The [`CollectiveVariable`] struct pairs an [`AxisDescriptor`] (range, resolution)
-//! with a [`CvKind`] trait object that evaluates the CV.
+//! The runtime [`CollectiveVariable`] wraps a [`CvKind`] trait object that
+//! evaluates the CV. Range and bin width are not part of the CV — each consumer
+//! that needs them owns a validated [`Interval`], bin width, or
+//! [`crate::energy::Restraint`].
 //!
 //! Each CV type is defined in its own submodule and registered via `typetag`.
 
 mod atom;
+mod axis;
 mod cell;
 mod dynamic;
 pub(crate) mod group;
 
+pub use axis::{BinnedCv, Finite, ForceConstant, HistogrammedCv, Interval};
+
 use anyhow::Result;
-use serde::{Deserialize, Serialize};
 
 // Re-export CV types for convenience
-
-/// Metadata for one axis of a collective variable.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AxisDescriptor {
-    pub name: String,
-    pub min: f64,
-    pub max: f64,
-    /// Only needed for Penalty (Wang-Landau) histogramming.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub resolution: Option<f64>,
-}
-
-impl AxisDescriptor {
-    pub fn in_range(&self, value: f64) -> bool {
-        value >= self.min && value <= self.max
-    }
-}
 
 /// Trait for collective variable evaluation.
 ///
@@ -69,40 +56,31 @@ pub trait EvalContext:
     fn get_distance(&self, i: usize, j: usize) -> crate::Point;
 }
 
-/// A scalar observable of the simulation state.
+/// A scalar observable of the simulation state: a resolved [`CvKind`] together
+/// with an optional human-readable description of the selections it bound to.
 ///
-/// Wraps a [`CvKind`] trait object with axis metadata (range, resolution).
-#[derive(Debug, Clone, Deserialize)]
+/// Range and resolution are *not* here — they belong to whichever consumer
+/// histograms or restrains the CV, and each owns them (see [`Interval`],
+/// [`BinWidth`], and [`crate::energy::Restraint`]).
+#[derive(Debug, Clone)]
 pub struct CollectiveVariable {
-    #[serde(flatten)]
-    axis: AxisDescriptor,
-    #[serde(flatten)]
     kind: Box<dyn CvKind>,
-    /// Human-readable description of selections/projection (populated at build time).
-    #[serde(skip)]
     description: Option<String>,
 }
 
 impl CollectiveVariable {
-    /// Create a new collective variable from a kind and axis descriptor.
-    pub fn new(kind: Box<dyn CvKind>, axis: AxisDescriptor) -> Self {
-        Self {
-            axis,
-            kind,
-            description: None,
-        }
+    /// Create a collective variable from a resolved kind and description.
+    pub fn new(kind: Box<dyn CvKind>, description: Option<String>) -> Self {
+        Self { kind, description }
     }
 
     pub fn evaluate(&self, context: &dyn EvalContext) -> f64 {
         self.kind.evaluate(context)
     }
 
-    pub fn axis(&self) -> &AxisDescriptor {
-        &self.axis
-    }
-
-    pub fn in_range(&self, value: f64) -> bool {
-        self.axis.in_range(value)
+    /// The CV kind's name, e.g. `"Volume"`.
+    pub fn name(&self) -> &'static str {
+        self.kind.name()
     }
 
     pub fn description(&self) -> Option<&str> {
@@ -110,44 +88,15 @@ impl CollectiveVariable {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Builder support for backward compatibility
-// ---------------------------------------------------------------------------
-
-fn default_range() -> (f64, f64) {
-    (f64::NEG_INFINITY, f64::INFINITY)
-}
-
-/// Builder for constructing a collective variable from YAML.
-///
-/// This provides a two-phase construction: first deserialize the builder,
-/// then call `build()` with context to resolve selections into indices.
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct CollectiveVariableBuilder {
-    #[serde(default = "default_range")]
-    pub range: (f64, f64),
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub resolution: Option<f64>,
-    #[serde(flatten)]
-    kind_builder: Box<dyn CvKindBuilder>,
-}
-
-impl CollectiveVariableBuilder {
-    /// Resolve selections and construct a [`CollectiveVariable`].
-    pub fn build(&self, context: &impl crate::ObserveContext) -> Result<CollectiveVariable> {
-        let description = self.kind_builder.description();
-        let kind = self.kind_builder.build(context)?;
-        let axis = AxisDescriptor {
-            name: kind.name().to_string(),
-            min: self.range.0,
-            max: self.range.1,
-            resolution: self.resolution,
-        };
-        Ok(CollectiveVariable {
-            axis,
-            kind,
-            description,
-        })
+impl dyn CvKindBuilder {
+    /// Resolve selections against context into a runtime [`CollectiveVariable`],
+    /// pairing the built kind with its description. This is the whole job the
+    /// old `CollectiveVariableBuilder` wrapper existed to do.
+    pub fn build_cv(&self, context: &impl crate::ObserveContext) -> Result<CollectiveVariable> {
+        Ok(CollectiveVariable::new(
+            self.build(context)?,
+            self.description(),
+        ))
     }
 }
 
@@ -259,6 +208,7 @@ macro_rules! impl_single_group_builder {
         ::paste::paste! {
             #[doc = "Builder for " $cv " CV."]
             #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+            #[serde(deny_unknown_fields)]
             pub struct [<$cv Builder>] {
                 pub selection: $crate::selection::Selection,
             }
@@ -316,6 +266,7 @@ macro_rules! impl_single_group_with_dim_builder {
         ::paste::paste! {
             #[doc = "Builder for " $cv " CV."]
             #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+            #[serde(deny_unknown_fields)]
             pub struct [<$cv Builder>] {
                 pub selection: $crate::selection::Selection,
                 #[serde(default, alias = "dimension")]
@@ -358,60 +309,6 @@ macro_rules! impl_single_group_with_dim_builder {
     };
 }
 
-/// Defines a builder that resolves a single atom selection with projection.
-///
-/// Generates `{Name}Builder` struct with `selection` and `projection` fields.
-///
-/// # Example
-/// ```ignore
-/// pub struct AtomPosition { projection: Axes, index: usize }
-///
-/// impl_single_atom_with_dim_builder!(AtomPosition, "atom_position",
-///     |projection, index| AtomPosition { projection, index });
-/// ```
-#[macro_export]
-macro_rules! impl_single_atom_with_dim_builder {
-    ($cv:ident, $name:literal, |$dim:ident, $index:ident| $construct:expr) => {
-        ::paste::paste! {
-            #[doc = "Builder for " $cv " CV."]
-            #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-            pub struct [<$cv Builder>] {
-                pub selection: $crate::selection::Selection,
-                #[serde(default, alias = "dimension")]
-                pub projection: $crate::axes::Axes,
-            }
-
-            #[typetag::serde(name = $name)]
-            impl $crate::collective_variable::CvKindBuilder for [<$cv Builder>] {
-                fn build(
-                    &self,
-                    context: &dyn $crate::collective_variable::EvalContext,
-                ) -> anyhow::Result<Box<dyn $crate::collective_variable::CvKind>> {
-                    let indices = self.selection.resolve_atoms(
-                        context.topology_ref(),
-                        context.groups(),
-                        &|i| context.atom_kind(i),
-                    );
-                    if indices.len() != 1 {
-                        anyhow::bail!(
-                            "{}: selection '{}' must match exactly one atom, found {}",
-                            stringify!($cv),
-                            self.selection,
-                            indices.len()
-                        );
-                    }
-                    let $dim = self.projection;
-                    let $index = indices[0];
-                    Ok(Box::new($construct))
-                }
-                fn description(&self) -> Option<String> {
-                    Some(format!("selection: {}, projection: {:?}", self.selection, self.projection))
-                }
-            }
-        }
-    };
-}
-
 /// Defines a builder that resolves two group selections with projection.
 ///
 /// Generates `{Name}Builder` struct with `selection`, `selection2`, and `projection` fields.
@@ -435,6 +332,7 @@ macro_rules! impl_two_group_with_dim_builder {
         ::paste::paste! {
             #[doc = "Builder for " $cv " CV."]
             #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+            #[serde(deny_unknown_fields)]
             pub struct [<$cv Builder>] {
                 pub selection: $crate::selection::Selection,
                 pub selection2: $crate::selection::Selection,
@@ -513,17 +411,22 @@ mod tests {
     use super::*;
 
     #[test]
-    fn axis_descriptor_in_range() {
-        let axis = AxisDescriptor {
-            name: "test".to_string(),
-            min: 0.0,
-            max: 10.0,
-            resolution: None,
-        };
-        assert!(axis.in_range(0.0));
-        assert!(axis.in_range(5.0));
-        assert!(axis.in_range(10.0));
-        assert!(!axis.in_range(-0.1));
-        assert!(!axis.in_range(10.1));
+    fn concrete_builder_rejects_unknown_field() {
+        // #73: each concrete CvKindBuilder now denies unknown fields. typetag
+        // strips the `property` tag before the builder sees the map, so a genuine
+        // typo is caught rather than swallowed.
+        assert!(
+            serde_yml::from_str::<Box<dyn CvKindBuilder>>("property: volume\nbogus: 3").is_err(),
+            "a single-field builder must reject an unknown key",
+        );
+        assert!(
+            serde_yml::from_str::<Box<dyn CvKindBuilder>>(
+                "property: mass_center_separation\nselection: all\nselection2: all\nbogus: 3"
+            )
+            .is_err(),
+            "a two-group builder must reject an unknown key",
+        );
+        // The valid form still parses.
+        assert!(serde_yml::from_str::<Box<dyn CvKindBuilder>>("property: volume").is_ok());
     }
 }
