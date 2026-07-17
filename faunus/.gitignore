@@ -43,3 +43,6 @@ examples/langevin/state.yaml
 
 # MkDocs build output
 site/
+
+# Scratch analysis directory (not tracked)
+josh/

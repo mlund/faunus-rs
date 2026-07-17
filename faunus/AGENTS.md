@@ -1,58 +1,55 @@
-# Code
+# Agent instructions for faunus-rs
 
-- prefer deep module design; minimum public API (see skill https://deepwiki.com/mattpocock/skills/4.1.4-designing-deep-modules)
-- use idiomatic rust and descriptive names
-- make misuse hard w. e.g newtypes, enums
-- avoid panic under normal use, prefer error
-- unknown user input (serde YAML etc) is an error
-- when executing plans, finish with a "/code-review", then "/simplify"
-- I/O should support mac/linux/windows (OS independent)
-- YAML output: prefer {mean, error} key mapping, not "x ± y" str
-- remember to update docs/.md for changes in end-user behavior / new features (see below)
-- internal state shouldn't be handled by caller, but automatic, hidden by deep design interfaces
-- test driven development, TDD (skill https://deepwiki.com/mattpocock/skills/4.1-test-driven-development)
+Applies to all coding agents (Claude Code, Codex, ...). `.claude/CLAUDE.md` is a symlink to this file.
 
-## Physics test
+The workspace uses git submodules (`duello`, `interatomic`, ...).
 
-- cover physics correctness in unit tests
-- compare with analytical theory if possible in some limit
-- verify that docs/ is consistent with code
+## Design
 
-## Code comments
+- Prefer deep modules with a minimal public API ([skill](https://deepwiki.com/mattpocock/skills/4.1.4-designing-deep-modules)).
+- Make misuse hard: newtypes, enums, type-state over documented conventions.
+- Internal state is the module's job, not the caller's; hide it behind the interface.
+- Unknown user input (serde YAML, ...) is an error. Avoid panics under normal use; return errors.
+- I/O must work on macOS, Linux and Windows.
 
-  - prefer *why* over *what* comments
-  - use unicode for math
+## Rust
 
-## Faunus-rs workspace
+- Idiomatic Rust, descriptive names.
+- Use the LSP tool / rust-analyzer where possible.
+- Comments explain *why*, not *what*; unicode for math.
 
-  - has git submodules (duello, interatomic, ...)
+## Testing
 
-## Regression tests
+- Test-driven development ([skill](https://deepwiki.com/mattpocock/skills/4.1-test-driven-development)).
+- Cover physics correctness in unit tests, comparing against analytical theory in some limit where one exists.
+- Regression tests use `macro_rules! regression_test` and are ignored by default, so they may run longer.
+- Never overwrite fixtures without checking for physics drift; prefer manual, targeted updates.
 
-  - use `macro_rules! regression_test` which are automatically ignored (and may be longer)
-  - never override fixtures without checking physics drift
-  - prefer manual, targeted fixture updates
+## YAML
 
-# End user documentation (docs/.md)
+- Output: prefer a `{mean, error}` mapping over an `"x ± y"` string.
+- Output: unicode math where it beats ascii for readability (⟨q²⟩-⟨q⟩²); keep ascii where it already reads fine (Rg).
+- Input keys: add unicode only as an alias — it can be hard to type.
 
-  - delay writing until implementation; tests; code-review; simplifications are completed
-  - write and review with the /scientific-writing skill (https://raw.githubusercontent.com/mlund/claude-skills/refs/heads/main/plugins/scientific-writing/skills/scientific-writing/SKILL.md)
-  - don't leak internals
-  - target audience: physicist/biophysics/chemist
-  - don't emphasize w. bold unless it's a warning
-  - use markdown compatible LaTeX
-  - verify with `scripts/docs-check/`
-  - prefer .csv over .dat in examples
-  - Prefer verified, hyperlinked DOI references
+## End-user documentation (`docs/*.md`)
 
-# Before committing:
-  - cargo clippy --tests --no-deps
-  - cargo fmt
-  - *ask* to run `scripts/regression_tests.sh`. Useful to use `--exact` when manually running ignored regression tests to avoid overwriting fixtures.
-    Never commit fixture updates without checking that physics is conserved.
-  - commits, PRs, issue messages: Be brief, never append co-authorships
-  - verify compilation with and without `gpu` feature
-  - verify with `cargo check --workspace`
-  - verify DOIs correctness with `doi2bib` CLI command
-  - verify docs/ formulas and math is in agreement with actual code
+- Write it only after implementation, tests, code review and simplification are done.
+- Draft and review with the [/scientific-writing skill](https://raw.githubusercontent.com/mlund/claude-skills/refs/heads/main/plugins/scientific-writing/skills/scientific-writing/SKILL.md).
+- Audience: physicists, biophysicists, chemists. Don't leak internals.
+- Markdown-compatible LaTeX; `.csv` over `.dat` in examples; verified, hyperlinked DOI references.
+- Bold is for warnings only.
 
+## Workflow
+
+- Update `docs/*.md` whenever end-user behaviour changes or a feature is added.
+- Finish a plan with `/code-review`, then `/simplify`.
+- Keep commit, PR and issue messages brief. Never append co-authorship lines.
+
+## Before committing
+
+- `cargo fmt`
+- `cargo clippy --tests --no-deps`
+- `cargo check --workspace`, and verify compilation both with and without the `gpu` feature.
+- If needed, *Ask* before running `scripts/regression_tests.sh`. When running ignored tests by hand, pass `--exact` to avoid overwriting fixtures. Never commit fixture updates without confirming the physics is conserved.
+- `scripts/docs-check/`, and confirm that the formulas and math in `docs/` agree with the code.
+- Verify DOIs with the `doi2bib` CLI.
