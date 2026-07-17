@@ -206,6 +206,7 @@ impl std::fmt::Debug for TabulatedEnergy {
 
 /// Builder entry for a 6D rigid molecule-molecule table.
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct Tabulated6DEntryBuilder {
     pub molecules: [String; 2],
     pub file: PathBuf,
@@ -218,6 +219,7 @@ pub struct Tabulated6DEntryBuilder {
 
 /// Builder entry for a 3D rigid molecule-atom table.
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct Tabulated3DEntryBuilder {
     /// `[rigid_molecule, atom_molecule]` — order matters: the first molecule
     /// must be the rigid body whose orientation is used for the lookup.

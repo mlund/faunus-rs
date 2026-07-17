@@ -321,6 +321,7 @@ impl System {
 
 /// Intermolecular bonded interactions. Global atom indices have to be provided.
 #[derive(Debug, Clone, Serialize, Deserialize, Default, Validate, Getters)]
+#[serde(deny_unknown_fields)]
 pub struct IntermolecularBonded {
     /// Intermolecular bonds between the atoms.
     #[serde(default)]

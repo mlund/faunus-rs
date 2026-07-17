@@ -179,6 +179,9 @@ impl<T: FromMixing> DirectOrMixing<T> {
 }
 
 /// Types of pair interactions
+// The attribute below is inert: it only bites on struct variants, and every
+// variant here is a newtype. Unknown keys are caught by the wrapped potential,
+// so a new variant must carry `deny_unknown_fields` on its own type.
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub enum PairInteraction {

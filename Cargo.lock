@@ -1213,7 +1213,7 @@ dependencies = [
 
 [[package]]
 name = "coulomb"
-version = "0.5.1"
+version = "0.5.2"
 dependencies = [
  "approx",
  "colorgrad",
@@ -3616,7 +3616,7 @@ dependencies = [
 
 [[package]]
 name = "interatomic"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "approx",
  "bytemuck",
