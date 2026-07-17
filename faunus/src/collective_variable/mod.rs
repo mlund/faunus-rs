@@ -15,8 +15,10 @@
 //! Collective variables for enhanced sampling, constraints, and analysis.
 //!
 //! A collective variable (CV) maps the simulation state to a single scalar value.
-//! The [`CollectiveVariable`] struct pairs an [`AxisDescriptor`] (range, resolution)
-//! with a [`CvKind`] trait object that evaluates the CV.
+//! The runtime [`CollectiveVariable`] wraps a [`CvKind`] trait object that
+//! evaluates the CV. Range and bin width are not part of the CV — each consumer
+//! that needs them owns a validated [`Interval`], bin width, or
+//! [`crate::energy::Restraint`].
 //!
 //! Each CV type is defined in its own submodule and registered via `typetag`.
 
