@@ -242,15 +242,13 @@ system:
 
 #### Salt types
 
-| Tag            | Formula                          |
-|----------------|----------------------------------|
-| `!NaCl`        | NaCl (1:1 electrolyte)           |
-| `!CaCl₂`      | CaCl₂                           |
-| `!CaSO₄`      | CaSO₄                           |
-| `!Na₂SO₄`     | Na₂SO₄                          |
-| `!KAl(SO₄)₂`  | KAl(SO₄)₂                       |
-| `!LaCl₃`      | LaCl₃                           |
-| `!Custom`      | Custom ion valencies, e.g. `!Custom [2, -1]` |
+- `!NaCl` — a 1:1 electrolyte
+- `!CaCl2`, `!CaSO4`, `!Na2SO4`, `!KAl(SO4)2`, `!LaCl3`
+- `!Custom` — arbitrary ion valencies, e.g. `!Custom [2, -1]`
+
+Tags are ASCII because a YAML tag may not contain subscripts. The subscripted
+spelling is accepted as an alias if the tag marker is dropped, e.g.
+`salt: [CaCl₂, 0.1]`.
 
 ### Electrostatic potentials
 
