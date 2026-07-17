@@ -29,8 +29,10 @@ Frequency         | Description
 In `output.yaml` every analysis reports `num_samples`, the number of frames it sampled. Analyses
 that loop over molecules also report how many molecules they accumulated: `num_groups_sampled` for
 Polymer Shape, `num_blocks` for Widom Rotation. These counts give the raw observations behind the
-reported means. Analyses with automatic blocking combine adjacent observations when estimating
-statistical errors.
+reported means. Where an analysis uses automatic blocking, adjacent observations are combined into
+blocks of increasing length. The coarsest level with at least 16 blocks sets the standard error;
+short runs use the original observations. The mean always includes every observation, and no block
+size is required in the input.
 
 ### Output file formats
 
@@ -582,8 +584,8 @@ inherent in naive single-ion Widom insertion.
 
 The excess chemical potential is decomposed into short-range and electrostatic
 contributions. The electrostatic part is evaluated by numerical integration over
-a charging parameter λ ∈ [0, 1]. Results are block-averaged with standard error
-of the mean reported.
+a charging parameter λ ∈ [0, 1]. Each sampled configuration contributes one
+insertion average. Automatic blocking estimates the reported standard errors.
 
 Pair interactions for the ghost particle are defined directly in the analysis
 block using the same syntax as `energy.nonbonded.default`, allowing arbitrary
@@ -703,7 +705,8 @@ The analysis is hardcoded to a `Slit` cell (periodic in *xy*, walls at $z=\pm L_
 the midplane is $z=0$) and to electrostatics only; it suits the primitive-model
 double layer with point-charge counterions. Valency mixtures need nothing special —
 select all the counterions (e.g. `"atomtype Na Ca"`) and report. Results are block-averaged
-and reported as mean ± standard error.
+over sampled configurations and reported as mean ± standard error. Automatic blocking estimates
+the errors.
 
 ### Example
 
@@ -872,7 +875,8 @@ the potential at the two outermost slabs (`potential_edge_lower/mV`, `potential_
 midplane (`potential_midplane/mV`), together with the edge-to-midplane drops
 (`potential_drop_lower/mV`, `potential_drop_upper/mV`), as mean ± error; the midplane and drop
 errors are accumulated per configuration, so they reflect the correlation between the slabs they
-combine. When `zeta_threshold` is set it also reports the ζ-potential `zeta/mV` and the
+combine. Automatic blocking estimates these errors across configurations. When `zeta_threshold`
+is set it also reports the ζ-potential `zeta/mV` and the
 shear-plane position `z_shear/Å`. For reliable numbers, **equilibrate first and start production
 from a state file** (`-s`).
 
@@ -944,7 +948,7 @@ same density, each with its statistical error: the number density `density/Å⁻
 concentration `molarity/mol·L⁻¹`, and the mass density `mass_density/g·mL⁻¹`. `output.yaml`
 additionally reports the slab layout and the mean total number of selected particles,
 `mean_count`, as mean ± error — a useful check, since summing $\rho(z)\,A\,\Delta z$ over all
-slabs must return it.
+slabs must return it. Automatic blocking estimates all these errors across sampled configurations.
 
 ---
 
