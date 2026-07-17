@@ -20,7 +20,7 @@
 
 use super::{Analyze, Frequency, Sampling};
 use crate::auxiliary::{ColumnWriter, MappingExt, WeightedMean};
-use crate::collective_variable::{CollectiveVariable, CollectiveVariableBuilder};
+use crate::collective_variable::{BinnedCv, CollectiveVariable, CvKindBuilder};
 use crate::ObserveContext;
 use anyhow::Result;
 use derive_more::Debug;
@@ -35,11 +35,11 @@ use std::path::PathBuf;
 /// must include a `resolution` field.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MeanAlongCoordinateBuilder {
-    // No `deny_unknown_fields`: serde forbids combining it with `flatten`, since
-    // unrecognized keys are delegated to the flattened `cv` rather than rejected.
+    // No `deny_unknown_fields`: serde forbids combining it with `flatten`. Strictness
+    // comes from the flattened concrete `CvKindBuilder`, which denies unknown fields.
     #[serde(flatten)]
-    pub cv: CollectiveVariableBuilder,
-    pub coordinate: CollectiveVariableBuilder,
+    pub cv: Box<dyn CvKindBuilder>,
+    pub coordinate: BinnedCv,
     pub file: PathBuf,
     pub frequency: Frequency,
 }
@@ -50,13 +50,9 @@ impl MeanAlongCoordinateBuilder {
     }
 
     pub fn build(&self, context: &impl ObserveContext) -> Result<MeanAlongCoordinate> {
-        let cv = self.cv.build(context)?;
-        let coordinate = self.coordinate.build(context)?;
-        let resolution = coordinate
-            .axis()
-            .resolution
-            .filter(|&r| r > 0.0)
-            .ok_or_else(|| anyhow::anyhow!("coordinate requires a positive 'resolution' field"))?;
+        let cv = self.cv.build_cv(context)?;
+        let coordinate = self.coordinate.build_cv(context)?;
+        let resolution = self.coordinate.resolution().get();
 
         Ok(MeanAlongCoordinate {
             cv,
@@ -104,8 +100,8 @@ impl MeanAlongCoordinate {
         if self.bins.is_empty() {
             return Ok(());
         }
-        let cv_name = &self.cv.axis().name;
-        let coord_name = &self.coordinate.axis().name;
+        let cv_name = self.cv.name();
+        let coord_name = self.coordinate.name();
         let mean_col = format!("mean({cv_name})");
         let mut stream = ColumnWriter::open(&self.output_file, &[coord_name, &mean_col, "count"])?;
         for (&idx, wm) in &self.bins {
@@ -151,9 +147,9 @@ impl<T: ObserveContext> Analyze<T> for MeanAlongCoordinate {
             return None;
         }
         let mut map = serde_yml::Mapping::new();
-        map.try_insert("property", &self.cv.axis().name)?;
+        map.try_insert("property", self.cv.name())?;
         map.try_insert("mean_property", self.cv_mean.mean())?;
-        map.try_insert("coordinate", &self.coordinate.axis().name)?;
+        map.try_insert("coordinate", self.coordinate.name())?;
         map.try_insert("mean_coordinate", self.coord_mean.mean())?;
         map.try_insert("num_samples", self.sampling.num_samples())?;
         map.try_insert("num_bins", self.bins.len())?;
@@ -177,8 +173,22 @@ file: test.dat
 frequency: !Every 100
 "#;
         let builder: MeanAlongCoordinateBuilder = serde_yml::from_str(yaml).unwrap();
-        assert_eq!(builder.coordinate.resolution, Some(0.5));
+        assert_eq!(builder.coordinate.resolution().get(), 0.5);
         assert_eq!(builder.file.to_str().unwrap(), "test.dat");
+    }
+
+    #[test]
+    fn missing_resolution_is_rejected_at_parse() {
+        // #73: the coordinate's bin width is required, so a forgotten `resolution`
+        // is a parse error rather than a build-time failure (or, worse, a default).
+        let yaml = r#"
+property: volume
+coordinate:
+  property: volume
+file: fail.dat
+frequency: !Every 1
+"#;
+        assert!(serde_yml::from_str::<MeanAlongCoordinateBuilder>(yaml).is_err());
     }
 
     #[test]
@@ -264,19 +274,5 @@ frequency: !Every 1
         assert_eq!(Analyze::<Backend>::num_samples(&analysis), 2);
         // Same volume each time, so still 1 bin
         assert_eq!(analysis.bins.len(), 1);
-    }
-
-    #[test]
-    fn missing_resolution_fails() {
-        let ctx = make_context();
-        let yaml = r#"
-property: volume
-coordinate:
-  property: volume
-file: fail.dat
-frequency: !Every 1
-"#;
-        let builder: MeanAlongCoordinateBuilder = serde_yml::from_str(yaml).unwrap();
-        assert!(builder.build(&ctx).is_err());
     }
 }

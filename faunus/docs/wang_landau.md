@@ -45,8 +45,8 @@ wang_landau:
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `coordinate` | Collective variable (see [analysis](analysis.md)) | (required) |
-| `coordinate2` | Second CV for 2D sampling | (none) |
+| `coordinate` | Collective variable with its grid `range` and `resolution`, both required (see [analysis](analysis.md)) | (required) |
+| `coordinate2` | Second CV (with its own `range`/`resolution`) for 2D sampling | (none) |
 | `ln_f_initial` | Starting value of $\ln f$ | 1.0 |
 | `flatness_threshold` | Flatness criterion (min/mean of histogram) | 0.8 |
 | `min_flatness` | Flatness checks before $1/t$ transition | 20 |

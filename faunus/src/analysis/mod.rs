@@ -538,7 +538,6 @@ mod tests {
   frequency: !Every 100
 - !CollectiveVariable
   property: volume
-  range: [1000.0, 5000.0]
   file: cv.dat
   frequency: !Every 1
 - !MeanAlongCoordinate
@@ -603,7 +602,6 @@ mod tests {
         let yaml = r#"
 - !CollectiveVariable
   property: volume
-  range: [1000.0, 5000.0]
   file: cv.dat
   frequency: !Every 1
 "#;

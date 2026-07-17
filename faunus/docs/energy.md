@@ -646,15 +646,14 @@ system:
         property: atom_position
         selection: "atomtype A"
         projection: x
-        range: [-2.0, 2.0]
-        resolution: 0.1
       coordinate2:  # optional, for 2D
         property: atom_position
         selection: "atomtype A"
         projection: y
-        range: [-2.0, 2.0]
-        resolution: 0.1
 ```
+
+The grid (bounds and bin width) is read from the checkpoint, so `coordinate`
+specifies only the collective variable — no `range` or `resolution`.
 
 | Key           | Required | Description                                                    |
 |---------------|----------|----------------------------------------------------------------|
@@ -780,13 +779,21 @@ for the expanded tessellation radii.
 
 ## Constrain
 
-Constrains a collective variable to a specified range.
-Two modes are supported:
+Restrains a collective variable. Each entry pairs a `property` (the CV) with a
+`restraint`, a tagged form that fixes both the geometry and whether the wall is
+hard (infinite outside) or soft (quadratic):
 
-- Hard constraint (default): returns infinite energy if the CV value falls
-  outside `[min, max]`, otherwise zero.
-- Harmonic constraint: applies a quadratic penalty
-  $\frac{1}{2} k (x_\text{eq} - x)^2$ around an equilibrium value.
+| Tag            | Energy                                          | Meaning                                  |
+|----------------|-------------------------------------------------|------------------------------------------|
+| `!Between`     | $0$ inside $[a, b]$, $\infty$ outside           | Hard two-sided wall                      |
+| `!Below`       | $0$ for $x \le b$, $\infty$ above               | Hard one-sided wall                      |
+| `!Above`       | $0$ for $x \ge a$, $\infty$ below               | Hard one-sided wall                      |
+| `!Harmonic`    | $\tfrac{1}{2} k (x_\text{eq} - x)^2$            | Quadratic penalty about a point          |
+| `!HarmonicWall`| $0$ inside $[a, b]$, $\tfrac{1}{2} k\,d^2$ beyond the nearest edge (distance $d$) | Flat-bottomed well (soft `!Between`) |
+
+`!HarmonicWall` confines the CV to an interval while pushing back smoothly rather
+than with an abrupt wall — the usual choice for keeping a coordinate in a window
+without the sampling artefacts of a hard boundary.
 
 ### YAML configuration
 
@@ -795,30 +802,29 @@ system:
   energy:
     constrain:
       - property: volume
-        range: [1000.0, 5000.0]
+        restraint: !Between [1000.0, 5000.0]
       - property: mass_center_position
         selection: "molecule protein"
         projection: z
-        range: [-50.0, 50.0]
-        harmonic: # optional
-          force_constant: 100.0
-          equilibrium: 0.0
+        restraint: !Below 50.0
+      - property: mass_center_position
+        selection: "molecule protein"
+        projection: z
+        restraint: !HarmonicWall {interval: [-50.0, 50.0], force_constant: 100.0}
 ```
 
-| Key              | Required | Default | Description                                    |
-|------------------|----------|---------|------------------------------------------------|
-| `property`       | yes      |         | CV type (see [collective variables](analysis.md#supported-properties)) |
-| `range`          | no       | `[-∞, ∞]` | Allowed `[min, max]` interval               |
-| `harmonic`       | no       |         | Harmonic restraint parameters (see below)      |
-| `projection`     | no       | `xyz`   | Axis projection (`x`, `y`, `z`, `xy`, …); alias: `dimension` |
-| `selection`      | depends  |         | Selection expression for one atom or group     |
+| Key          | Required | Description                                                             |
+|--------------|----------|-------------------------------------------------------------------------|
+| `property`   | yes      | CV type (see [collective variables](analysis.md#supported-properties))  |
+| `restraint`  | yes      | One of the tags above; exactly one restraint per entry                  |
+| `projection` | no       | Axis projection (`x`, `y`, `z`, `xy`, …); alias: `dimension`             |
+| `selection`  | depends  | Selection expression for one atom or group                              |
 
-#### Harmonic parameters
+`force_constant` is the spring constant $k$ (kJ/mol/unit²) and must be positive;
+`equilibrium` is the target value $x_\text{eq}$ for `!Harmonic`.
 
-| Key              | Required | Description                      |
-|------------------|----------|----------------------------------|
-| `force_constant` | yes      | Spring constant $k$ (kJ/mol/unit²) |
-| `equilibrium`    | yes      | Target value $x_\text{eq}$       |
+**A restraint is required.** Omitting `restraint`, or giving an interval with
+`min ≥ max`, is an error rather than a silently unconstrained run.
 
 ## Polymer Depletion Many-Body Interaction
 

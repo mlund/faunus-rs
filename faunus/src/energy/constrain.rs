@@ -14,60 +14,93 @@
 
 //! Constrain energy term for collective variables.
 //!
-//! Supports hard constraints (infinite energy outside range) and
-//! soft harmonic constraints (quadratic penalty around equilibrium).
+//! A [`Restraint`] restrains a collective variable, either with a hard wall
+//! (infinite energy outside the allowed region) or a quadratic penalty.
 
-use crate::collective_variable::{CollectiveVariable, CollectiveVariableBuilder};
+use crate::collective_variable::{CollectiveVariable, CvKindBuilder, ForceConstant, Interval};
 use crate::Change;
 use crate::ObserveContext;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
-/// Harmonic constraint parameters.
+/// How a collective variable is restrained.
 ///
-/// Applies a quadratic penalty: `0.5 * force_constant * (equilibrium - value)²`.
+/// A single `restraint:` YAML tag selects one form, so the old ambiguity —
+/// giving both `range` and `harmonic`, or neither — is unrepresentable.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct HarmonicConstraint {
-    pub force_constant: f64,
-    pub equilibrium: f64,
+pub enum Restraint {
+    /// Hard one-sided wall: `0` for `x ≤ max`, `∞` above.
+    Below(f64),
+    /// Hard one-sided wall: `0` for `x ≥ min`, `∞` below.
+    Above(f64),
+    /// Hard two-sided wall: `0` inside the interval, `∞` outside.
+    Between(Interval),
+    /// Quadratic penalty about a point: `½k(x₀ − x)²`.
+    Harmonic {
+        force_constant: ForceConstant,
+        equilibrium: f64,
+    },
+    /// Flat-bottomed well: `0` inside the interval, `½k·d²` beyond the nearest
+    /// edge (`d` is the distance to that edge). The soft counterpart of `Between`.
+    HarmonicWall {
+        interval: Interval,
+        force_constant: ForceConstant,
+    },
+}
+
+impl Restraint {
+    /// Restraining energy at collective-variable value `x`.
+    fn energy(&self, x: f64) -> f64 {
+        // `∞` for a hard wall breached, `0.0` otherwise.
+        let wall = |inside: bool| if inside { 0.0 } else { f64::INFINITY };
+        match self {
+            Self::Below(max) => wall(x <= *max),
+            Self::Above(min) => wall(x >= *min),
+            Self::Between(interval) => wall(interval.contains(x)),
+            Self::Harmonic {
+                force_constant,
+                equilibrium,
+            } => 0.5 * force_constant.get() * (equilibrium - x).powi(2),
+            Self::HarmonicWall {
+                interval,
+                force_constant,
+            } => {
+                // Distance to the nearest edge, or 0 inside the interval.
+                let d = (interval.min() - x).max(x - interval.max()).max(0.0);
+                0.5 * force_constant.get() * d * d
+            }
+        }
+    }
 }
 
 /// Builder for deserializing a single constrain entry from YAML.
 ///
-/// Flattens the CV builder fields together with an optional `harmonic` section.
-// Note: `deny_unknown_fields` is intentionally omitted here because serde
-// does not support it in combination with `flatten`. Unknown fields are
-// still rejected by the flattened `CollectiveVariableBuilder` which has
-// `deny_unknown_fields`.
+/// Flattens the CV kind builder together with the `restraint`. `deny_unknown_fields`
+/// is impossible next to `flatten`; strictness comes from the concrete
+/// `CvKindBuilder`, which rejects whatever the flatten leaves over.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConstrainBuilder {
     #[serde(flatten)]
-    pub cv: CollectiveVariableBuilder,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub harmonic: Option<HarmonicConstraint>,
+    pub cv: Box<dyn CvKindBuilder>,
+    pub restraint: Restraint,
 }
 
 impl ConstrainBuilder {
     /// Build a [`Constrain`] energy term by resolving selections against the context.
     pub(crate) fn build(&self, context: &impl ObserveContext) -> Result<Constrain> {
-        let cv = self.cv.build(context)?;
         Ok(Constrain {
-            cv,
-            harmonic: self.harmonic.clone(),
+            cv: self.cv.build_cv(context)?,
+            restraint: self.restraint.clone(),
         })
     }
 }
 
-/// Constrains a collective variable to a range.
-///
-/// - **Hard constraint** (no `harmonic`): returns `f64::INFINITY` if the CV
-///   value falls outside its axis range, otherwise 0.
-/// - **Soft harmonic constraint**: returns `0.5 * k * (eq - value)²`.
+/// Restrains a collective variable according to its [`Restraint`].
 #[derive(Debug, Clone)]
 pub struct Constrain {
     cv: CollectiveVariable,
-    harmonic: Option<HarmonicConstraint>,
+    restraint: Restraint,
 }
 
 impl Constrain {
@@ -75,16 +108,7 @@ impl Constrain {
         if matches!(change, Change::None) {
             return 0.0;
         }
-        let value = self.cv.evaluate(context);
-        #[allow(clippy::option_if_let_else)] // if-let-else with else-if is clearer here
-        if let Some(h) = &self.harmonic {
-            let delta = h.equilibrium - value;
-            0.5 * h.force_constant * delta * delta
-        } else if self.cv.axis().in_range(value) {
-            0.0
-        } else {
-            f64::INFINITY
-        }
+        self.restraint.energy(self.cv.evaluate(context))
     }
 }
 
@@ -93,46 +117,116 @@ mod tests {
     use super::*;
 
     #[test]
-    fn deserialize_hard_constraint() {
-        let yaml = r#"
-property: volume
-range: [1000.0, 5000.0]
-"#;
-        let builder: ConstrainBuilder = serde_yml::from_str(yaml).unwrap();
-        assert!(builder.harmonic.is_none());
-        assert_eq!(builder.cv.range, (1000.0, 5000.0));
+    fn deserialize_between_and_harmonic() {
+        let between: ConstrainBuilder =
+            serde_yml::from_str("property: volume\nrestraint: !Between [1000.0, 5000.0]").unwrap();
+        assert!(matches!(between.restraint, Restraint::Between(_)));
+
+        let harmonic: ConstrainBuilder = serde_yml::from_str(
+            "property: volume\nrestraint: !Harmonic {force_constant: 100.0, equilibrium: 3000.0}",
+        )
+        .unwrap();
+        assert!(matches!(
+            harmonic.restraint,
+            Restraint::Harmonic { force_constant, equilibrium }
+                if force_constant.get() == 100.0 && equilibrium == 3000.0
+        ));
     }
 
     #[test]
-    fn deserialize_harmonic_constraint() {
-        let yaml = r#"
-property: volume
-range: [1000.0, 5000.0]
-harmonic:
-  force_constant: 100.0
-  equilibrium: 3000.0
-"#;
-        let builder: ConstrainBuilder = serde_yml::from_str(yaml).unwrap();
-        let h = builder.harmonic.unwrap();
-        assert!((h.force_constant - 100.0).abs() < 1e-10);
-        assert!((h.equilibrium - 3000.0).abs() < 1e-10);
+    fn missing_restraint_is_rejected() {
+        // #73: a constrain entry must name a restraint. The old silent no-op —
+        // neither `range` nor `harmonic`, so `range` defaulted to (-∞,∞) and the
+        // constraint never fired — is now a parse error.
+        let err = serde_yml::from_str::<ConstrainBuilder>("property: volume")
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("restraint"),
+            "should name the missing field: {err}"
+        );
     }
 
     #[test]
-    fn deserialize_list_of_constraints() {
-        let yaml = r#"
-- property: volume
-  range: [1000.0, 5000.0]
-- property: volume
-  range: [1000.0, 5000.0]
-  harmonic:
-    force_constant: 100.0
-    equilibrium: 3000.0
-"#;
-        let builders: Vec<ConstrainBuilder> = serde_yml::from_str(yaml).unwrap();
-        assert_eq!(builders.len(), 2);
-        assert!(builders[0].harmonic.is_none());
-        assert!(builders[1].harmonic.is_some());
+    fn unknown_field_is_rejected() {
+        // The former `range` key now lands in the flattened kind builder, which
+        // denies it — a typo can no longer disable the constraint silently.
+        assert!(serde_yml::from_str::<ConstrainBuilder>(
+            "property: volume\nrestraint: !Between [0.0, 1.0]\nrange: [2.0, 3.0]"
+        )
+        .is_err());
+        // A typo'd key inside a restraint tag is denied too.
+        assert!(serde_yml::from_str::<ConstrainBuilder>(
+            "property: volume\nrestraint: !Harmonic {force_constant: 100.0, equilibrium: 0.0, k: 5.0}"
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn non_positive_force_constant_is_rejected() {
+        // A negative k makes ½k·d² reward leaving the well — an anti-confining
+        // "restraint". Rejected at parse, like a zero-width bin.
+        for k in ["-100.0", "0.0"] {
+            let yaml = format!(
+                "property: volume\nrestraint: !Harmonic {{force_constant: {k}, equilibrium: 0.0}}"
+            );
+            assert!(
+                serde_yml::from_str::<ConstrainBuilder>(&yaml).is_err(),
+                "force_constant {k} must be rejected"
+            );
+        }
+    }
+
+    // --- Restraint::energy physics (no context needed) ---
+
+    #[test]
+    fn between_is_a_hard_wall() {
+        let r = Restraint::Between(Interval::new(0.0, 10.0).unwrap());
+        assert_eq!(r.energy(0.0), 0.0);
+        assert_eq!(r.energy(5.0), 0.0);
+        assert_eq!(r.energy(10.0), 0.0);
+        assert_eq!(r.energy(-0.1), f64::INFINITY);
+        assert_eq!(r.energy(10.1), f64::INFINITY);
+    }
+
+    #[test]
+    fn below_and_above_are_one_sided_walls() {
+        let below = Restraint::Below(50.0);
+        assert_eq!(below.energy(50.0), 0.0);
+        assert_eq!(below.energy(51.0), f64::INFINITY);
+        let above = Restraint::Above(50.0);
+        assert_eq!(above.energy(50.0), 0.0);
+        assert_eq!(above.energy(49.0), f64::INFINITY);
+    }
+
+    #[test]
+    fn harmonic_wall_is_flat_inside_and_quadratic_outside() {
+        // The flat-bottom the docs always described (range + harmonic) but the
+        // code never implemented. Interior is exactly flat; beyond each edge the
+        // energy is ½k·d² in the distance d to that edge, continuous at the edge.
+        let k = 4.0;
+        let r = Restraint::HarmonicWall {
+            interval: Interval::new(-50.0, 50.0).unwrap(),
+            force_constant: ForceConstant::new(k).unwrap(),
+        };
+        assert_eq!(r.energy(0.0), 0.0);
+        assert_eq!(r.energy(-50.0), 0.0);
+        assert_eq!(r.energy(50.0), 0.0);
+        assert!(r.energy(50.0 + 1e-6) < 1e-9, "continuous at the edge");
+        assert!((r.energy(53.0) - 0.5 * k * 9.0).abs() < 1e-12); // d = 3 above max
+        assert!((r.energy(-54.0) - 0.5 * k * 16.0).abs() < 1e-12); // d = 4 below min
+    }
+
+    #[test]
+    fn harmonic_wall_approaches_hard_wall_as_k_grows() {
+        // As k → ∞ the soft wall matches the hard wall: 0 inside, diverging outside.
+        let interval = Interval::new(0.0, 10.0).unwrap();
+        let soft = Restraint::HarmonicWall {
+            interval,
+            force_constant: ForceConstant::new(1e30).unwrap(),
+        };
+        assert_eq!(soft.energy(5.0), Restraint::Between(interval).energy(5.0)); // 0 inside
+        assert!(soft.energy(11.0) > 1e20, "huge outside, like the hard wall");
     }
 }
 
@@ -159,24 +253,22 @@ mod integration_tests {
         let ctx = make_context();
         let volume = ctx.cell().volume().unwrap();
         let builder: ConstrainBuilder = serde_yml::from_str(&format!(
-            "property: volume\nrange: [{}, {}]",
+            "property: volume\nrestraint: !Between [{}, {}]",
             volume - 1.0,
             volume + 1.0
         ))
         .unwrap();
         let constrain = builder.build(&ctx).unwrap();
-        let energy = constrain.energy(&ctx, &Change::Everything);
-        assert_eq!(energy, 0.0);
+        assert_eq!(constrain.energy(&ctx, &Change::Everything), 0.0);
     }
 
     #[test]
     fn hard_constraint_volume_out_of_range() {
         let ctx = make_context();
         let builder: ConstrainBuilder =
-            serde_yml::from_str("property: volume\nrange: [0.0, 1.0]").unwrap();
+            serde_yml::from_str("property: volume\nrestraint: !Between [0.0, 1.0]").unwrap();
         let constrain = builder.build(&ctx).unwrap();
-        let energy = constrain.energy(&ctx, &Change::Everything);
-        assert_eq!(energy, f64::INFINITY);
+        assert_eq!(constrain.energy(&ctx, &Change::Everything), f64::INFINITY);
     }
 
     #[test]
@@ -186,7 +278,7 @@ mod integration_tests {
         let eq = volume + 10.0;
         let k = 50.0;
         let yaml = format!(
-            "property: volume\nrange: [0.0, 1e10]\nharmonic:\n  force_constant: {k}\n  equilibrium: {eq}"
+            "property: volume\nrestraint: !Harmonic {{force_constant: {k}, equilibrium: {eq}}}"
         );
         let builder: ConstrainBuilder = serde_yml::from_str(&yaml).unwrap();
         let constrain = builder.build(&ctx).unwrap();
@@ -199,9 +291,29 @@ mod integration_tests {
     fn no_energy_on_no_change() {
         let ctx = make_context();
         let builder: ConstrainBuilder =
-            serde_yml::from_str("property: volume\nrange: [0.0, 1.0]").unwrap();
+            serde_yml::from_str("property: volume\nrestraint: !Between [0.0, 1.0]").unwrap();
         let constrain = builder.build(&ctx).unwrap();
-        // Even though volume is out of range, Change::None returns 0
+        // Volume is out of range, but Change::None short-circuits to 0.
         assert_eq!(constrain.energy(&ctx, &Change::None), 0.0);
+    }
+
+    #[test]
+    fn flat_bottom_constrains_volume_softly() {
+        // The documented `range` + `harmonic` intent, now real: a hard-walled
+        // interval around the current volume gives 0; shrinking the window below
+        // the volume produces a finite quadratic penalty, not INFINITY.
+        let ctx = make_context();
+        let volume = ctx.cell().volume().unwrap();
+        let k = 2.0;
+        let hi = volume - 5.0; // volume sits 5 above the upper edge
+        let yaml = format!(
+            "property: volume\nrestraint: !HarmonicWall {{interval: [0.0, {hi}], force_constant: {k}}}"
+        );
+        let energy = serde_yml::from_str::<ConstrainBuilder>(&yaml)
+            .unwrap()
+            .build(&ctx)
+            .unwrap()
+            .energy(&ctx, &Change::Everything);
+        assert!((energy - 0.5 * k * 25.0).abs() < 1e-6, "½k·d² with d = 5");
     }
 }

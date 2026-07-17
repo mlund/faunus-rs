@@ -298,6 +298,18 @@ mod tests {
     use approx::assert_relative_eq;
 
     #[test]
+    fn characterize_infinite_range_yields_usize_max_bins() {
+        // #73 characterization: `new_1d`'s `max > min` guard passes for (-∞, +∞),
+        // so `(inf - -inf)/res as usize` saturates to usize::MAX. Wang-Landau's
+        // default range reaches this, and `vec![0.0; usize::MAX]` then aborts.
+        // Assert only the bin count — never build FlatHistogramState here.
+        // The real fix is upstream: `Interval` refuses infinite bounds, so no
+        // caller can hand this to `new_1d`.
+        let grid = GridDim::new_1d(f64::NEG_INFINITY, f64::INFINITY, 1.0).unwrap();
+        assert_eq!(grid.num_bins(), usize::MAX);
+    }
+
+    #[test]
     fn from_file_missing_names_the_path() {
         let path = Path::new("/nonexistent/dir/checkpoint.yaml");
         let err = FlatHistogramState::from_file(path).unwrap_err();

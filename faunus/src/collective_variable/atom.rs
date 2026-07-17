@@ -62,6 +62,7 @@ impl CvKind for AtomPosition {
 
 /// Builder for AtomPosition CV.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct AtomPositionBuilder {
     pub selection: Selection,
     #[serde(default, alias = "dimension")]

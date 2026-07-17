@@ -19,7 +19,7 @@
 
 use super::{Analyze, Frequency, Sampling};
 use crate::auxiliary::{ColumnWriter, MappingExt, WeightedMean};
-use crate::collective_variable::{CollectiveVariable, CollectiveVariableBuilder};
+use crate::collective_variable::{CollectiveVariable, CvKindBuilder};
 use crate::ObserveContext;
 use anyhow::Result;
 use derive_more::Debug;
@@ -28,16 +28,15 @@ use std::path::PathBuf;
 
 /// YAML builder for [`CollectiveVariableAnalysis`].
 ///
-/// Uses `#[serde(flatten)]` on [`CollectiveVariableBuilder`] so users write
-/// CV fields (`property`, `range`, …) at the same level as `file` and
-/// `frequency`, avoiding a nested `cv:` block. Same approach as
-/// [`ConstrainBuilder`](crate::energy::ConstrainBuilder).
+/// Flattens the CV kind so users write its fields (`property`, `selection`, …)
+/// at the same level as `file` and `frequency`, with no nested `cv:` block.
+/// This analysis only observes the CV, so it takes no `range`/`resolution`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CollectiveVariableAnalysisBuilder {
-    // No `deny_unknown_fields`: serde forbids combining it with `flatten`, since
-    // unrecognized keys are delegated to the flattened `cv` rather than rejected.
+    // No `deny_unknown_fields`: serde forbids combining it with `flatten`. Strictness
+    // comes from the flattened concrete `CvKindBuilder`, which denies unknown fields.
     #[serde(flatten)]
-    pub cv: CollectiveVariableBuilder,
+    pub cv: Box<dyn CvKindBuilder>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub file: Option<PathBuf>,
     pub frequency: Frequency,
@@ -50,7 +49,7 @@ impl CollectiveVariableAnalysisBuilder {
 
     /// Resolve selections against live context and open the output file, if any.
     pub fn build(&self, context: &impl ObserveContext) -> Result<CollectiveVariableAnalysis> {
-        let cv = self.cv.build(context)?;
+        let cv = self.cv.build_cv(context)?;
 
         let stream = if let Some(path) = &self.file {
             Some(ColumnWriter::open(path, &["step", "value", "average"])?)
@@ -118,7 +117,7 @@ impl<T: ObserveContext> Analyze<T> for CollectiveVariableAnalysis {
 
     fn results(&self) -> Option<serde_yml::Value> {
         let mut map = serde_yml::Mapping::new();
-        map.try_insert("property", &self.cv.axis().name)?;
+        map.try_insert("property", self.cv.name())?;
         if let Some(desc) = self.cv.description() {
             map.try_insert("description", desc)?;
         }
@@ -136,41 +135,35 @@ mod tests {
 
     #[test]
     fn deserialize_builder() {
-        let yaml = r#"
-property: volume
-range: [1000.0, 5000.0]
-frequency: !Every 100
-"#;
+        let yaml = "property: volume\nfrequency: !Every 100";
         let builder: CollectiveVariableAnalysisBuilder = serde_yml::from_str(yaml).unwrap();
-        assert_eq!(builder.cv.range, (1000.0, 5000.0));
         assert!(builder.file.is_none());
         assert!(matches!(builder.frequency, Frequency::Every(100)));
     }
 
     #[test]
     fn deserialize_builder_with_file() {
-        let yaml = r#"
-property: volume
-range: [1000.0, 5000.0]
-file: rc.dat
-frequency: !Every 50
-"#;
+        let yaml = "property: volume\nfile: rc.dat\nfrequency: !Every 50";
         let builder: CollectiveVariableAnalysisBuilder = serde_yml::from_str(yaml).unwrap();
         assert_eq!(builder.file.as_ref().unwrap().to_str().unwrap(), "rc.dat");
     }
 
     #[test]
+    fn range_is_rejected() {
+        // #73: this analysis only observes the CV, so `range` is not a valid key;
+        // it used to be parsed and silently discarded. The flattened kind builder
+        // now rejects it.
+        let yaml = "property: volume\nrange: [1000.0, 5000.0]\nfrequency: !Every 100";
+        assert!(serde_yml::from_str::<CollectiveVariableAnalysisBuilder>(yaml).is_err());
+    }
+
+    #[test]
     fn roundtrip_serialize_deserialize() {
-        let yaml = r#"
-property: volume
-range: [1000.0, 5000.0]
-frequency: !Every 100
-"#;
+        let yaml = "property: volume\nfrequency: !Every 100";
         let builder: CollectiveVariableAnalysisBuilder = serde_yml::from_str(yaml).unwrap();
         let serialized = serde_yml::to_string(&builder).unwrap();
         let roundtrip: CollectiveVariableAnalysisBuilder =
             serde_yml::from_str(&serialized).unwrap();
-        assert_eq!(roundtrip.cv.range, (1000.0, 5000.0));
         assert!(matches!(roundtrip.frequency, Frequency::Every(100)));
     }
 
@@ -178,7 +171,6 @@ frequency: !Every 100
     fn deserialize_missing_frequency() {
         let yaml = r#"
 property: volume
-range: [1000.0, 5000.0]
 "#;
         let result = serde_yml::from_str::<CollectiveVariableAnalysisBuilder>(yaml);
         assert!(result.is_err());
@@ -189,7 +181,6 @@ range: [1000.0, 5000.0]
         let yaml = r#"
 - !CollectiveVariable
   property: volume
-  range: [1000.0, 5000.0]
   frequency: !Every 100
 "#;
         let builders: Vec<AnalysisBuilder> = serde_yml::from_str(yaml).unwrap();
@@ -224,7 +215,6 @@ mod integration_tests {
         let ctx = make_context();
         let yaml = r#"
 property: volume
-range: [0.0, 1e10]
 frequency: !Every 1
 "#;
         let builder: CollectiveVariableAnalysisBuilder = serde_yml::from_str(yaml).unwrap();
@@ -247,7 +237,6 @@ frequency: !Every 1
         let ctx = make_context();
         let yaml = r#"
 property: volume
-range: [0.0, 1e10]
 frequency: !Every 10
 "#;
         let builder: CollectiveVariableAnalysisBuilder = serde_yml::from_str(yaml).unwrap();
@@ -272,7 +261,6 @@ frequency: !Every 10
         let yaml = r#"
 - !CollectiveVariable
   property: volume
-  range: [0.0, 1e10]
   frequency: !Every 1
 "#;
         let builders: Vec<crate::analysis::AnalysisBuilder> = serde_yml::from_str(yaml).unwrap();
