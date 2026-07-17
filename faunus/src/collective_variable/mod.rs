@@ -311,7 +311,7 @@ macro_rules! impl_single_group_with_dim_builder {
 
 /// Defines a builder that resolves two group selections with projection.
 ///
-/// Generates `{Name}Builder` struct with `selection`, `selection2`, and `projection` fields.
+/// Generates `{Name}Builder` struct with a `selections: (a, b)` pair and a `projection` field.
 ///
 /// # Example
 /// ```ignore
@@ -356,7 +356,7 @@ macro_rules! impl_two_group_with_dim_builder {
                     );
                     if indices1.len() != 1 {
                         anyhow::bail!(
-                            "{}: selection '{}' must match exactly one group, found {}",
+                            "{}: selections[0] '{}' must match exactly one group, found {}",
                             stringify!($cv),
                             self.selections.0,
                             indices1.len()
@@ -369,7 +369,7 @@ macro_rules! impl_two_group_with_dim_builder {
                     );
                     if indices2.len() != 1 {
                         anyhow::bail!(
-                            "{}: second selection '{}' must match exactly one group, found {}",
+                            "{}: selections[1] '{}' must match exactly one group, found {}",
                             stringify!($cv),
                             self.selections.1,
                             indices2.len()

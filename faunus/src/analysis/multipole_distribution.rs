@@ -134,7 +134,7 @@ impl MultipoleDistributionBuilder {
         medium: Option<&Medium>,
     ) -> Result<MultipoleDistribution> {
         if self.dr <= 0.0 {
-            anyhow::bail!("MultipoleDistribution: dr must be positive");
+            anyhow::bail!("MultipoleDistribution: resolution must be positive");
         }
         if ColumnFormat::from_path(&self.file) != ColumnFormat::Csv {
             anyhow::bail!("MultipoleDistribution: output file must be a .csv file");
@@ -150,13 +150,13 @@ impl MultipoleDistributionBuilder {
             Some(r) => r,
             None => {
                 let bbox = context.cell().bounding_box().ok_or_else(|| {
-                    anyhow::anyhow!("MultipoleDistribution: cell has no bounding box; set max_r")
+                    anyhow::anyhow!("MultipoleDistribution: cell has no bounding box; set max")
                 })?;
                 bbox.x.min(bbox.y).min(bbox.z) / 2.0
             }
         };
         if max_r <= 0.0 {
-            anyhow::bail!("MultipoleDistribution: max_r must be positive");
+            anyhow::bail!("MultipoleDistribution: max must be positive");
         }
 
         // The analysis is defined on molecular COM separations, so every resolved group must

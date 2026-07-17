@@ -54,14 +54,14 @@ impl RadialDistributionBuilder {
             None => {
                 let bbox = cell.bounding_box().ok_or_else(|| {
                     anyhow::anyhow!(
-                        "RadialDistribution: cell has no bounding box; set explicit max_r"
+                        "RadialDistribution: cell has no bounding box; set explicit max"
                     )
                 })?;
                 bbox.x.min(bbox.y).min(bbox.z) / 2.0
             }
         };
         if max_r <= 0.0 {
-            anyhow::bail!("RadialDistribution: max_r must be positive");
+            anyhow::bail!("RadialDistribution: max must be positive");
         }
         let exclude_intramolecular = !self.use_com && self.exclude_intramolecular.unwrap_or(true);
 

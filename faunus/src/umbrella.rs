@@ -112,7 +112,7 @@ impl WindowGrid {
         );
         anyhow::ensure!(
             self.bin_width > 0.0,
-            "umbrella windows: bin_width must be positive"
+            "umbrella windows: resolution must be positive"
         );
         // Overlap-ratio stitching needs adjacent windows to share CV range; spacing ≥ width
         // leaves them touching or disjoint, which would only surface as a stitch error after
@@ -129,13 +129,13 @@ impl WindowGrid {
         };
         anyhow::ensure!(
             is_multiple_of_bin(self.width),
-            "umbrella windows: width ({}) must be an integer multiple of bin_width ({})",
+            "umbrella windows: width ({}) must be an integer multiple of resolution ({})",
             self.width,
             self.bin_width
         );
         anyhow::ensure!(
             is_multiple_of_bin(self.spacing),
-            "umbrella windows: spacing ({}) must be an integer multiple of bin_width ({})",
+            "umbrella windows: spacing ({}) must be an integer multiple of resolution ({})",
             self.spacing,
             self.bin_width
         );
