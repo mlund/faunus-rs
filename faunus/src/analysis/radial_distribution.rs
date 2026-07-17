@@ -341,11 +341,19 @@ frequency: !Every 50
         let builder: RadialDistributionBuilder = serde_yml::from_str(yaml).unwrap();
         assert!(builder.use_com);
         assert_relative_eq!(builder.max_r.unwrap(), 30.0);
+    }
+
+    #[test]
+    fn old_max_r_key_is_rejected() {
         // #123: the range maximum unified on `max`; the old `max_r` is a clean break.
-        assert!(
-            serde_yml::from_str::<RadialDistributionBuilder>(&yaml.replace("max:", "max_r:"))
-                .is_err()
-        );
+        let yaml = r#"
+selections: ["molecule polymer", "molecule polymer"]
+file: rdf.dat
+resolution: 0.5
+max_r: 30.0
+frequency: !Every 50
+"#;
+        assert!(serde_yml::from_str::<RadialDistributionBuilder>(yaml).is_err());
     }
 
     #[test]
