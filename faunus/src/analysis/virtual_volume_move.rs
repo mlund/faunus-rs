@@ -140,7 +140,7 @@ impl VirtualVolumeMoveBuilder {
             stream,
             sampling: self.sampling.unwrap(),
             block_size,
-            widom: WidomAccumulator::default().with_block_size(block_size_nz),
+            widom: WidomAccumulator::new(block_size_nz),
             thermal_energy,
         })
     }
@@ -460,9 +460,8 @@ mod tests {
 
     #[test]
     fn pressure_stddev_via_perform_sample() {
-        // Uses build_vvm which sets block_size = 100 (default).
-        // We need to drive 200 samples through perform_sample without a real Context,
-        // so instead wire up end_block directly via the public API.
+        // A block size of 2 lets two collects close a block, so this reaches the same
+        // state perform_sample would after 200 samples at the default size.
         let mut vvm = VirtualVolumeMoveBuilder::default()
             .volume_displacement(1.0)
             .frequency(Frequency::Every(1))
@@ -474,7 +473,6 @@ mod tests {
         for _ in 0..2 {
             vvm.widom.collect(0.0, 1.0);
             vvm.widom.collect(2.0, 1.0);
-            vvm.widom.end_block();
         }
         assert!(vvm.widom.free_energy().n() >= 2);
         assert!(vvm.widom.free_energy().stddev().is_finite());
@@ -482,16 +480,15 @@ mod tests {
 
     #[test]
     fn to_yaml_emits_pex_mapping_per_unit() {
+        // Size 1 so sampling alone closes each block, as production does.
         let mut vvm = VirtualVolumeMoveBuilder::default()
             .volume_displacement(0.5)
             .frequency(Frequency::Every(1))
+            .block_size(1)
             .build(RT_298)
             .unwrap();
-        // Close two distinct blocks so the BlockAverage has finite mean and SEM.
         vvm.widom.collect(0.0, 1.0);
-        vvm.widom.end_block();
         vvm.widom.collect(2.0, 1.0);
-        vvm.widom.end_block();
         // The accumulator is driven directly here, so tell the framework two frames were sampled.
         vvm.sampling.set_num_samples(2);
 

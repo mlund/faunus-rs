@@ -154,20 +154,20 @@ impl DensityProfile {
         Ok((counts, masses))
     }
 
-    /// Number density (Å⁻³) of each slab, mean and error.
-    fn number_density(&self, bin: usize) -> BlockSummary {
-        &self.counts[bin] * self.grid.bin_volume().recip()
+    /// Number density (Å⁻³) of each slab, mean and error. `None` before any sample.
+    fn number_density(&self, bin: usize) -> Option<BlockSummary> {
+        self.counts[bin].scaled(self.grid.bin_volume().recip())
     }
 
-    /// Molar concentration (mol·L⁻¹) of each slab, mean and error.
-    fn molarity(&self, bin: usize) -> BlockSummary {
-        &self.counts[bin] * (self.grid.bin_volume() * crate::MOLAR_TO_INV_ANGSTROM3).recip()
+    /// Molar concentration (mol·L⁻¹) of each slab, mean and error. `None` before any sample.
+    fn molarity(&self, bin: usize) -> Option<BlockSummary> {
+        self.counts[bin].scaled((self.grid.bin_volume() * crate::MOLAR_TO_INV_ANGSTROM3).recip())
     }
 
-    /// Mass density (g·mL⁻¹) of each slab, mean and error.
-    fn mass_density(&self, bin: usize) -> BlockSummary {
-        &self.masses[bin]
-            * (GRAM_PER_MOL_PER_CUBIC_ANGSTROM_TO_GRAM_PER_MILLILITER / self.grid.bin_volume())
+    /// Mass density (g·mL⁻¹) of each slab, mean and error. `None` before any sample.
+    fn mass_density(&self, bin: usize) -> Option<BlockSummary> {
+        self.masses[bin]
+            .scaled(GRAM_PER_MOL_PER_CUBIC_ANGSTROM_TO_GRAM_PER_MILLILITER / self.grid.bin_volume())
     }
 
     /// Build the YAML results mapping (inherent so it is callable without choosing a
@@ -186,6 +186,11 @@ impl DensityProfile {
     }
 
     fn write_profile(&self) -> Result<()> {
+        // Nothing sampled ⇒ no profile. Every bin is fed on every sample (see
+        // `accumulate`), so past this point each one has a summary.
+        if self.sampling.num_samples() == 0 {
+            return Ok(());
+        }
         let mut writer = ColumnWriter::open(
             &self.output_file,
             &[
@@ -199,9 +204,13 @@ impl DensityProfile {
             ],
         )?;
         for bin in 0..self.grid.n_bins() {
-            let density = self.number_density(bin);
-            let molarity = self.molarity(bin);
-            let mass_density = self.mass_density(bin);
+            let (Some(density), Some(molarity), Some(mass_density)) = (
+                self.number_density(bin),
+                self.molarity(bin),
+                self.mass_density(bin),
+            ) else {
+                continue;
+            };
             writer.write_row(&[
                 &format_args!("{:.4}", self.grid.bin_center(bin)),
                 &format_args!("{:.6e}", density.mean),
@@ -354,8 +363,12 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
             .counts
             .iter()
             .enumerate()
-            .filter(|(_, accumulator)| accumulator.mean() > 0.0)
-            .map(|(bin, accumulator)| (bin, accumulator.mean()))
+            .filter_map(|(bin, accumulator)| {
+                accumulator
+                    .checked_mean()
+                    .filter(|mean| *mean > 0.0)
+                    .map(|mean| (bin, mean))
+            })
             .collect()
     }
 
@@ -366,8 +379,8 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
         analysis.sample(&context, 0).unwrap();
         assert_eq!(occupied(&analysis), vec![(3, 1.0), (7, 1.0)]);
         // Bin 3 holds the heavy atom, bin 7 the light one.
-        assert_relative_eq!(analysis.masses[3].mean(), 3.0);
-        assert_relative_eq!(analysis.masses[7].mean(), 1.0);
+        assert_relative_eq!(analysis.masses[3].checked_mean().unwrap(), 3.0);
+        assert_relative_eq!(analysis.masses[7].checked_mean().unwrap(), 1.0);
     }
 
     #[test]
@@ -377,7 +390,7 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
         analysis.sample(&context, 0).unwrap();
         // A single count at the mass-weighted centre z = −1, carrying the whole molecular mass.
         assert_eq!(occupied(&analysis), vec![(4, 1.0)]);
-        assert_relative_eq!(analysis.masses[4].mean(), 4.0);
+        assert_relative_eq!(analysis.masses[4].checked_mean().unwrap(), 4.0);
     }
 
     #[test]
@@ -395,7 +408,7 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
         analysis.sample(&context, 0).unwrap();
         let bin_volume = analysis.grid.bin_volume();
         let particles: f64 = (0..analysis.grid.n_bins())
-            .map(|bin| analysis.number_density(bin).mean * bin_volume)
+            .map(|bin| analysis.number_density(bin).unwrap().mean * bin_volume)
             .sum();
         assert_relative_eq!(particles, 2.0, epsilon = 1e-9);
     }
@@ -408,11 +421,15 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
         // Bin 3: one atom of mass 3 in a 100 Å³ slab.
         let bin_volume = analysis.grid.bin_volume();
         assert_relative_eq!(bin_volume, 100.0);
-        assert_relative_eq!(analysis.number_density(3).mean, 0.01);
+        assert_relative_eq!(analysis.number_density(3).unwrap().mean, 0.01);
         // 1 Å⁻³ ≈ 1660.54 M, so 0.01 Å⁻³ ≈ 16.6 M.
-        assert_relative_eq!(analysis.molarity(3).mean, 16.605, epsilon = 1e-3);
+        assert_relative_eq!(analysis.molarity(3).unwrap().mean, 16.605, epsilon = 1e-3);
         // 3 g/mol in 100 Å³ ≈ 0.0498 g/mL.
-        assert_relative_eq!(analysis.mass_density(3).mean, 0.049816, epsilon = 1e-5);
+        assert_relative_eq!(
+            analysis.mass_density(3).unwrap().mean,
+            0.049816,
+            epsilon = 1e-5
+        );
     }
 
     #[test]
@@ -421,13 +438,13 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
         let mut same = builder("all", false).build(&context).unwrap();
         same.sample(&context, 0).unwrap();
         same.sample(&context, 1).unwrap();
-        assert_eq!(same.number_density(3).error, 0.0);
+        assert_eq!(same.number_density(3).unwrap().error, 0.0);
 
         // Emptying bin 3 in a second sample makes its mean fluctuate.
         let mut differ = builder("all", false).build(&context).unwrap();
         differ.sample(&context, 0).unwrap();
         differ.counts[3].add(0.0);
-        assert!(differ.number_density(3).error > 0.0);
+        assert!(differ.number_density(3).unwrap().error > 0.0);
     }
 
     /// Under grand-canonical sampling the profile must count only the particles that are
@@ -438,9 +455,9 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
         let mut analysis = builder("all", false).build(&context).unwrap();
         analysis.sample(&context, 0).unwrap();
         assert_eq!(occupied(&analysis), vec![(3, 1.0), (7, 1.0)]);
-        assert_relative_eq!(analysis.total_count.mean(), 2.0);
+        assert_relative_eq!(analysis.total_count.checked_mean().unwrap(), 2.0);
         // Bin 9 holds the deactivated atom and must stay empty.
-        assert_relative_eq!(analysis.number_density(9).mean, 0.0);
+        assert_relative_eq!(analysis.number_density(9).unwrap().mean, 0.0);
     }
 
     /// A speciation or titration move swaps an atom's kind in place, leaving every group's
@@ -457,8 +474,8 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
         // Turn the one A atom (bin 3) into a B atom; nothing of kind A is left.
         context.set_atom_kind(0, crate::group::AtomKindId::new(1));
         analysis.sample(&context, 1).unwrap();
-        assert_relative_eq!(analysis.counts[3].mean(), 0.5);
-        assert_relative_eq!(analysis.total_count.mean(), 0.5);
+        assert_relative_eq!(analysis.counts[3].checked_mean().unwrap(), 0.5);
+        assert_relative_eq!(analysis.total_count.checked_mean().unwrap(), 0.5);
     }
 
     /// A titration swap can change an atom's mass, which moves the molecule's mass centre. The
@@ -475,10 +492,10 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
         // Turn B into a second A (mass 1 → 3); the centre moves to z = 0, bin 5.
         context.set_atom_kind(1, crate::group::AtomKindId::new(0));
         analysis.sample(&context, 1).unwrap();
-        assert_relative_eq!(analysis.counts[4].mean(), 0.5);
-        assert_relative_eq!(analysis.counts[5].mean(), 0.5);
+        assert_relative_eq!(analysis.counts[4].checked_mean().unwrap(), 0.5);
+        assert_relative_eq!(analysis.counts[5].checked_mean().unwrap(), 0.5);
         // The mass follows the new kinds too: 3 + 3 = 6.
-        assert_relative_eq!(analysis.masses[5].mean(), 3.0); // 6.0 in one of two samples
+        assert_relative_eq!(analysis.masses[5].checked_mean().unwrap(), 3.0); // 6.0 in one of two samples
     }
 
     #[test]

@@ -212,20 +212,22 @@ fn derivative(values: &[f64], i: usize, spacing: f64) -> f64 {
 
 impl ElectricPotentialProfile {
     /// Convert an accumulated potential (kT/e) to millivolts as `{mean, error}`.
-    fn to_millivolt(&self, potential: &BlockAverage) -> BlockSummary {
-        potential * self.millivolt_per_kt
+    /// `None` before any sample.
+    fn to_millivolt(&self, potential: &BlockAverage) -> Option<BlockSummary> {
+        potential.scaled(self.millivolt_per_kt)
     }
 
-    /// Potential at bin `index` in millivolts, as `{mean, error}`.
-    fn potential_millivolt(&self, index: usize) -> BlockSummary {
+    /// Potential at bin `index` in millivolts, as `{mean, error}`. `None` before any sample.
+    fn potential_millivolt(&self, index: usize) -> Option<BlockSummary> {
         self.to_millivolt(&self.potential[index])
     }
 
     /// Mean potential profile in millivolts (drives the field column and the YAML scalars).
-    fn mean_potential_millivolt(&self) -> Vec<f64> {
+    /// `None` before any sample.
+    fn mean_potential_millivolt(&self) -> Option<Vec<f64>> {
         self.potential
             .iter()
-            .map(|p| p.mean() * self.millivolt_per_kt)
+            .map(|p| Some(p.checked_mean()? * self.millivolt_per_kt))
             .collect()
     }
 
@@ -262,8 +264,8 @@ impl ElectricPotentialProfile {
         let abs_sigma: Vec<f64> = self
             .slab_charge_density
             .iter()
-            .map(|a| a.mean().abs())
-            .collect();
+            .map(|a| Some(a.checked_mean()?.abs()))
+            .collect::<Option<_>>()?;
         let total: f64 = abs_sigma.iter().sum();
         if total <= 0.0 {
             return None; // no charge sampled ⇒ no fixed-charge edge (|σ| ≥ 0, so this also means peak = 0)
@@ -333,6 +335,11 @@ impl ElectricPotentialProfile {
     }
 
     fn write_profile(&self) -> Result<()> {
+        // Nothing sampled ⇒ no profile. Every bin is fed on every configuration (see
+        // `accumulate`), so past this point each one has a mean.
+        let Some(potential_mv) = self.mean_potential_millivolt() else {
+            return Ok(());
+        };
         let mut writer = ColumnWriter::open(
             &self.output_file,
             &[
@@ -344,12 +351,15 @@ impl ElectricPotentialProfile {
                 "field/mV·Å⁻¹",
             ],
         )?;
-        let potential_mv = self.mean_potential_millivolt();
         let bin_width = self.grid.bin_width();
         for i in 0..self.grid.n_bins() {
             let z = self.grid.bin_center(i);
-            let sigma = self.slab_charge_density[i].mean();
-            let summary = self.potential_millivolt(i);
+            let (Some(sigma), Some(summary)) = (
+                self.slab_charge_density[i].checked_mean(),
+                self.potential_millivolt(i),
+            ) else {
+                continue;
+            };
             // E = −dφ/dz.
             let field = -derivative(&potential_mv, i, bin_width);
             writer.write_row(&[
@@ -597,8 +607,13 @@ mod tests {
         // charged side). Potentials are set to the bin index so ζ pins to a known value.
         let mut analysis = dummy("unused.csv");
         analysis.zeta_threshold = Some(0.02);
-        for (i, sigma) in [1.0, 0.5, 0.1, 0.01].into_iter().enumerate() {
-            analysis.slab_charge_density[i].add(-sigma); // sign is irrelevant; |σ| is used
+        // Feed every bin, as `perform_sample` does — it accumulates a full-length σ profile
+        // whose uncharged slabs are zeros, not gaps.
+        let sigma_profile: Vec<f64> = (0..analysis.grid.n_bins())
+            .map(|i| *[1.0, 0.5, 0.1, 0.01].get(i).unwrap_or(&0.0))
+            .collect();
+        for (accumulator, sigma) in analysis.slab_charge_density.iter_mut().zip(&sigma_profile) {
+            accumulator.add(-sigma); // sign is irrelevant; |σ| is used
         }
         let profile: Vec<f64> = (0..analysis.grid.n_bins()).map(|i| i as f64).collect();
         analysis.accumulate(&profile);

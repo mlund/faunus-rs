@@ -65,10 +65,10 @@ impl LogSumExp {
 ///
 /// Free energy: `F = -ln(<exp(-dU/kT)>)` in units of kT.
 ///
-/// When constructed via [`with_block_size`](Self::with_block_size), `collect`
-/// auto-finalizes a block every `block_size` samples so the consumer does not
-/// have to track block boundaries.
-#[derive(Clone, Debug, Default)]
+/// `collect` finalizes a block every `block_size` samples, so no consumer tracks block
+/// boundaries — an accumulator that never closed one would report an error of exactly
+/// zero forever.
+#[derive(Clone, Debug)]
 pub(crate) struct WidomAccumulator {
     /// Samples in the current (open) block; reset by [`end_block`](Self::end_block).
     open: LogSumExp,
@@ -83,17 +83,24 @@ pub(crate) struct WidomAccumulator {
     n_samples: u64,
     /// Mean ± SEM of per-block free energies for block-error estimation.
     free_energy: BlockAverage,
-    block_size: Option<NonZeroUsize>,
+    block_size: NonZeroUsize,
 }
 
 impl WidomAccumulator {
-    /// Enable automatic block segmentation: `collect` finalizes a block
-    /// every `block_size` samples. `NonZeroUsize` makes a zero block size
-    /// unrepresentable — otherwise every sample would become its own block
-    /// and skew SEM/stddev.
-    pub fn with_block_size(mut self, block_size: NonZeroUsize) -> Self {
-        self.block_size = Some(block_size);
-        self
+    /// Block length is a physical choice, not a tuning knob, so it is required rather
+    /// than defaulted: `free_energy` averages `-ln⟨exp(-dU)⟩` *per block*, which is
+    /// non-linear in the samples, so each block must be long enough for its exponential
+    /// average to converge. [`NonZeroUsize::MIN`] collapses the log-sum-exp to `F = dU`
+    /// exactly, making the aggregator an average of raw energy changes — correct only
+    /// where `dU` is small enough that the two agree to leading order. See issue #117.
+    pub fn new(block_size: NonZeroUsize) -> Self {
+        Self {
+            open: LogSumExp::default(),
+            closed: LogSumExp::default(),
+            n_samples: 0,
+            free_energy: BlockAverage::default(),
+            block_size,
+        }
     }
 
     /// Add a sample to the running log-sum-exp average.
@@ -106,10 +113,8 @@ impl WidomAccumulator {
         }
         self.open.accumulate(-energy_change, weight);
         self.n_samples += 1;
-        if let Some(n) = self.block_size {
-            if self.open.count >= n.get() as u64 {
-                self.end_block();
-            }
+        if self.open.count >= self.block_size.get() as u64 {
+            self.end_block();
         }
     }
 
@@ -139,10 +144,14 @@ impl WidomAccumulator {
         self.n_samples as usize
     }
 
-    /// Finalize the current block: push its free energy into the block
-    /// average and fold it into the running `closed` aggregate, then reset
-    /// the within-block state for the next block.
-    pub fn end_block(&mut self) {
+    /// Finalize the current block: push its free energy into the block average and fold
+    /// it into the running `closed` aggregate, then reset the within-block state for the
+    /// next block.
+    ///
+    /// Private: block boundaries are the accumulator's own business. Exposing them let a
+    /// caller close blocks the production path never closed, and let its tests pass while
+    /// production reported a zero uncertainty.
+    fn end_block(&mut self) {
         if self.open.count == 0 {
             return;
         }
@@ -176,7 +185,7 @@ mod tests {
 
     #[test]
     fn single_sample_zero_energy() {
-        let mut acc = WidomAccumulator::default();
+        let mut acc = WidomAccumulator::new(NonZeroUsize::MIN);
         acc.collect(0.0, 1.0);
         // exp(0) = 1, mean = 1, free_energy = -ln(1) = 0
         assert_approx_eq!(f64, acc.mean_free_energy(), 0.0);
@@ -185,7 +194,7 @@ mod tests {
 
     #[test]
     fn single_sample_positive_energy() {
-        let mut acc = WidomAccumulator::default();
+        let mut acc = WidomAccumulator::new(NonZeroUsize::MIN);
         acc.collect(2.0, 1.0);
         // exp(-2) → free_energy = -ln(exp(-2)) = 2.0
         assert_approx_eq!(f64, acc.mean_free_energy(), 2.0, epsilon = 1e-12);
@@ -193,7 +202,7 @@ mod tests {
 
     #[test]
     fn two_samples_unit_weight() {
-        let mut acc = WidomAccumulator::default();
+        let mut acc = WidomAccumulator::new(NonZeroUsize::MIN);
         acc.collect(0.0, 1.0); // exp(0) = 1
         acc.collect(1.0, 1.0); // exp(-1) ≈ 0.3679
         let expected = -((1.0 + (-1.0_f64).exp()) / 2.0).ln();
@@ -202,14 +211,14 @@ mod tests {
 
     #[test]
     fn empty_returns_infinity() {
-        let acc = WidomAccumulator::default();
+        let acc = WidomAccumulator::new(NonZeroUsize::MIN);
         assert!(acc.mean_free_energy().is_infinite());
         assert!(acc.is_empty());
     }
 
     #[test]
     fn extreme_negative_energy_no_overflow() {
-        let mut acc = WidomAccumulator::default();
+        let mut acc = WidomAccumulator::new(NonZeroUsize::MIN);
         // Very negative dU → exp(-dU) is huge, but log-sum-exp handles it
         acc.collect(-1000.0, 1.0);
         assert_approx_eq!(f64, acc.mean_free_energy(), -1000.0, epsilon = 1e-10);
@@ -217,7 +226,7 @@ mod tests {
 
     #[test]
     fn extreme_positive_energy_no_underflow() {
-        let mut acc = WidomAccumulator::default();
+        let mut acc = WidomAccumulator::new(NonZeroUsize::MIN);
         // Very positive dU → exp(-dU) ≈ 0, free_energy ≈ dU
         acc.collect(1000.0, 1.0);
         assert_approx_eq!(f64, acc.mean_free_energy(), 1000.0, epsilon = 1e-10);
@@ -225,7 +234,7 @@ mod tests {
 
     #[test]
     fn weighted_samples() {
-        let mut acc = WidomAccumulator::default();
+        let mut acc = WidomAccumulator::new(NonZeroUsize::MIN);
         // Weight 2 on dU=0 (exp=1), weight 1 on dU=1 (exp=e^-1)
         // Weighted mean = (2*1 + 1*exp(-1)) / 3
         acc.collect(0.0, 2.0);
@@ -236,25 +245,26 @@ mod tests {
 
     #[test]
     fn zero_weight_ignored() {
-        let mut acc = WidomAccumulator::default();
+        let mut acc = WidomAccumulator::new(NonZeroUsize::MIN);
         acc.collect(0.0, 0.0);
         assert!(acc.is_empty());
     }
 
     #[test]
     fn block_averaging() {
-        let mut acc = WidomAccumulator::default();
+        let mut acc = WidomAccumulator::new(NonZeroUsize::MIN);
 
-        // Block 1: dU=0 → free_energy = 0
+        // One sample per block: free energies 0 and 2.
         acc.collect(0.0, 1.0);
-        acc.end_block();
-
-        // Block 2: dU=2 → free_energy = 2
         acc.collect(2.0, 1.0);
-        acc.end_block();
 
         // Block mean ≈ 1.0, error > 0
-        assert_approx_eq!(f64, acc.free_energy().mean(), 1.0, epsilon = 1e-12);
+        assert_approx_eq!(
+            f64,
+            acc.free_energy().checked_mean().unwrap(),
+            1.0,
+            epsilon = 1e-12
+        );
         assert!(acc.free_energy().stddev() > 0.0);
 
         // Total accumulator is never reset: 2 samples, overall mean = -ln((1 + exp(-2)) / 2)
@@ -264,9 +274,9 @@ mod tests {
     }
 
     #[test]
-    fn with_block_size_auto_finalizes() {
+    fn block_size_auto_finalizes() {
         let n = NonZeroUsize::new(2).unwrap();
-        let mut acc = WidomAccumulator::default().with_block_size(n);
+        let mut acc = WidomAccumulator::new(n);
         // Block 1: free_energy = 0
         acc.collect(0.0, 1.0);
         acc.collect(0.0, 1.0);

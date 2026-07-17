@@ -56,7 +56,7 @@ propagate:
       use_com: true
       cluster_size:
         mean: 1.2248288360853783
-        error: 0.0051173339497916455
+        error: 0.006088657496670429
       bias_rejection_rate: 0.15263793797825212
       rmsd_translation: 10.38367629665459
       rmsd_rotation: 1.5969021570448498

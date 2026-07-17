@@ -298,10 +298,11 @@ Key         | Required | Default | Description
 `weight`    | no       | 1       | Selection weight in a `!Stochastic` collection
 `repeat`    | no       | 1       | Repetitions per selection
 
-Output reports the mean cluster size $\langle N\rangle$ with its standard error, the fraction of
-trials rejected to preserve membership (`bias_rejection_rate`), and the root-mean-square
-translational and rotational displacements. For an ideal gas, $\langle N\rangle = 1 + (N/V)\,\tfrac{4}{3}\pi R_c^3$
-with threshold $R_c$, a useful check that the clustering is unbiased.
+Output reports the mean cluster size $\langle N\rangle$ with an automatically blocked standard
+error. It also reports the fraction of trials rejected to preserve membership
+(`bias_rejection_rate`) and the root-mean-square translational and rotational displacements.
+For an ideal gas, $\langle N\rangle = 1 + (N/V)\,\tfrac{4}{3}\pi R_c^3$ with threshold $R_c$,
+a useful check that the clustering is unbiased.
 
 ---
 

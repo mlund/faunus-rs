@@ -291,10 +291,14 @@ impl DoubleLayerPressure {
         p * 1e6 / crate::MOLAR_TO_INV_ANGSTROM3
     }
 
-    /// `{mean, error}` mapping for a block average plus a constant `offset`, converted to mM.
+    /// `{mean, error}` mapping for a block average plus a constant `offset`, converted to
+    /// mM, or null when nothing was sampled.
     fn block_mm_yaml(&self, b: &BlockAverage, offset: f64) -> Option<serde_yml::Value> {
+        let Some(mean) = b.checked_mean() else {
+            return Some(serde_yml::Value::Null);
+        };
         let mut m = serde_yml::Mapping::new();
-        m.try_insert("mean", self.to_mm(b.mean() + offset))?;
+        m.try_insert("mean", self.to_mm(mean + offset))?;
         m.try_insert("error", self.to_mm(b.error()))?;
         Some(serde_yml::Value::Mapping(m))
     }
@@ -349,7 +353,12 @@ impl DoubleLayerPressure {
         map.insert("p_corr/mM".into(), self.block_mm_yaml(&self.p_corr, fipb)?);
         map.insert("p_osm/mM".into(), self.block_mm_yaml(&self.p_osm, fipb)?);
         map.try_insert("F_iPB/mM", self.to_mm(fipb))?;
-        map.try_insert("p_osm/Pa", self.to_pa(self.p_osm.mean() + fipb))?;
+        // Unsampled ⇒ null, matching `p_osm/mM` above rather than reading as 0 Pa.
+        let p_osm_pa = self
+            .p_osm
+            .checked_mean()
+            .map(|mean| self.to_pa(mean + fipb));
+        map.try_insert("p_osm/Pa", p_osm_pa)?;
         Some(serde_yml::Value::Mapping(map))
     }
 }
