@@ -63,6 +63,10 @@ impl RadialDistributionBuilder {
         if max_r <= 0.0 {
             anyhow::bail!("RadialDistribution: max must be positive");
         }
+        // Validate here so a bad `resolution` names that key, not `Histogram`'s internal `bin_width`.
+        if self.dr <= 0.0 {
+            anyhow::bail!("RadialDistribution: resolution must be positive");
+        }
         let exclude_intramolecular = !self.use_com && self.exclude_intramolecular.unwrap_or(true);
 
         let histogram = Histogram::new(0.0, max_r, self.dr)?;
