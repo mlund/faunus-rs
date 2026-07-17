@@ -1309,44 +1309,14 @@ Electrostatic potentials read permittivity, temperature, and optional salt from 
 </tbody>
 </table>
 <h4 id="salt-types">Salt types<a class="headerlink" href="#salt-types" title="Permanent link">&para;</a></h4>
-<table>
-<thead>
-<tr>
-<th>Tag</th>
-<th>Formula</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>!NaCl</code></td>
-<td>NaCl (1:1 electrolyte)</td>
-</tr>
-<tr>
-<td><code>!CaCl₂</code></td>
-<td>CaCl₂</td>
-</tr>
-<tr>
-<td><code>!CaSO₄</code></td>
-<td>CaSO₄</td>
-</tr>
-<tr>
-<td><code>!Na₂SO₄</code></td>
-<td>Na₂SO₄</td>
-</tr>
-<tr>
-<td><code>!KAl(SO₄)₂</code></td>
-<td>KAl(SO₄)₂</td>
-</tr>
-<tr>
-<td><code>!LaCl₃</code></td>
-<td>LaCl₃</td>
-</tr>
-<tr>
-<td><code>!Custom</code></td>
-<td>Custom ion valencies, e.g. <code>!Custom [2, -1]</code></td>
-</tr>
-</tbody>
-</table>
+<ul>
+<li><code>!NaCl</code> — a 1:1 electrolyte</li>
+<li><code>!CaCl2</code>, <code>!CaSO4</code>, <code>!Na2SO4</code>, <code>!KAl(SO4)2</code>, <code>!LaCl3</code></li>
+<li><code>!Custom</code> — arbitrary ion valencies, e.g. <code>!Custom [2, -1]</code></li>
+</ul>
+<p>Tags are ASCII because a YAML tag may not contain subscripts. The subscripted
+spelling is accepted as an alias if the tag marker is dropped, e.g.
+<code>salt: [CaCl₂, 0.1]</code>.</p>
 <h3 id="electrostatic-potentials">Electrostatic potentials<a class="headerlink" href="#electrostatic-potentials" title="Permanent link">&para;</a></h3>
 <p>Electrostatic potentials combine atom charges with a coulombic scheme.</p>
 <table>
