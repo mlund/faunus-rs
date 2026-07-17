@@ -653,17 +653,6 @@ impl BlockSummary {
 #[derive(Clone, Debug, Default)]
 pub(crate) struct BlockAverage(HierarchicalBlockAverage);
 
-impl Mul<f64> for &BlockAverage {
-    type Output = BlockSummary;
-
-    fn mul(self, scale: f64) -> BlockSummary {
-        BlockSummary {
-            mean: self.mean() * scale,
-            error: self.error() * scale.abs(),
-        }
-    }
-}
-
 impl BlockAverage {
     pub fn new() -> Self {
         Self::default()
@@ -674,14 +663,28 @@ impl BlockAverage {
         self.0.add(value, 1.0);
     }
 
-    /// Mean over all observations.
-    pub fn mean(&self) -> f64 {
-        self.0.mean().unwrap_or(0.0)
+    /// Mean over all observations, or `None` if nothing was sampled.
+    ///
+    /// There is no honest `f64` for the unsampled case: `0.0` reads as a measured zero,
+    /// and a NaN sentinel silently defeats the callers' own guards, since every
+    /// comparison against NaN is false. `Option` makes each caller say what it means.
+    pub fn checked_mean(&self) -> Option<f64> {
+        self.0.mean()
     }
 
     /// Standard error of the mean, corrected for serial correlation by blocking.
+    /// NaN below two observations, where the spread is unknown rather than zero.
     pub fn error(&self) -> f64 {
         self.0.error()
+    }
+
+    /// Snapshot scaled to a derived quantity: the mean signs with `scale`, the error
+    /// takes its magnitude (variance scales by c²). `None` when unsampled.
+    pub fn scaled(&self, scale: f64) -> Option<BlockSummary> {
+        self.summary().map(|summary| BlockSummary {
+            mean: summary.mean * scale,
+            error: summary.error * scale.abs(),
+        })
     }
 
     /// Sample standard deviation across observations (σ). Only the unit tests need this.
@@ -696,16 +699,18 @@ impl BlockAverage {
         self.0.n()
     }
 
-    /// Snapshot of mean ± SEM in the same `{mean, error}` shape used
-    /// throughout YAML output. Scaled views go through `&self * scale`.
-    pub fn summary(&self) -> BlockSummary {
-        BlockSummary {
-            mean: self.mean(),
+    /// Snapshot of mean ± SEM in the same `{mean, error}` shape used throughout YAML
+    /// output, or `None` when unsampled. Scaled views go through [`scaled`](Self::scaled).
+    pub fn summary(&self) -> Option<BlockSummary> {
+        self.checked_mean().map(|mean| BlockSummary {
+            mean,
             error: self.error(),
-        }
+        })
     }
 
-    /// Serialize as YAML mapping `{ mean, error }` via [`BlockSummary`].
+    /// Serialize as YAML mapping `{ mean, error }`, or null when unsampled. Serializing
+    /// the `Option` keeps the null in place of the mapping, so a caller's `?` reports the
+    /// unsampled quantity rather than dropping its siblings from the output.
     pub fn to_yaml(&self) -> Option<serde_yml::Value> {
         serde_yml::to_value(self.summary()).ok()
     }
@@ -744,10 +749,13 @@ impl WeightedMoments {
         }
     }
 
+    /// Standard error of the mean. NaN below two effective observations: one sample
+    /// fixes the mean but says nothing about its spread, and 0.0 would claim the
+    /// opposite — that the mean is known exactly.
     fn error(&self) -> f64 {
         let neff = self.effective_n();
         if neff <= 1.0 || self.sum_w <= 0.0 {
-            0.0
+            f64::NAN
         } else {
             (self.sum_sq / (self.sum_w * (neff - 1.0))).sqrt()
         }
@@ -866,7 +874,7 @@ impl HierarchicalBlockAverage {
     /// data are anti-correlated — a regime this does not claim to resolve, and where the
     /// uncorrelated estimate is the conservative reading.
     fn error(&self) -> f64 {
-        let naive = self.base().map_or(0.0, WeightedMoments::error);
+        let naive = self.base().map_or(f64::NAN, WeightedMoments::error);
         let curve: Vec<BlockingPoint> = self
             .levels
             .iter()
@@ -1249,19 +1257,46 @@ mod block_tests {
     }
 
     #[test]
-    fn block_average_mul_scales_mean_signed_error_absolute() {
+    fn scaling_signs_the_mean_and_absolutes_the_error() {
         let mut b = BlockAverage::new();
         b.add(1.0);
         b.add(3.0);
-        let base = &b * 1.0;
-        let scaled = &b * -2.0;
+        let base = b.scaled(1.0).unwrap();
+        let scaled = b.scaled(-2.0).unwrap();
         // mean: signed scaling
         assert_relative_eq!(scaled.mean, base.mean * -2.0);
         // error: absolute scaling (variance scales by c²)
         assert_relative_eq!(scaled.error, base.error * 2.0);
         // The unscaled-by-1 form matches direct accessors
-        assert_relative_eq!(base.mean, b.mean());
+        assert_relative_eq!(base.mean, b.checked_mean().unwrap());
         assert_relative_eq!(base.error, b.error());
+    }
+
+    /// An unsampled accumulator has no mean to report. Reporting 0.0 — what
+    /// `average::Variance` returns and what this wrapper used to pass through — is
+    /// indistinguishable from a genuine measured zero, and no caller could tell them
+    /// apart because the sample count is not on the public surface.
+    #[test]
+    fn an_unsampled_average_has_no_summary_and_serializes_as_null() {
+        let empty = BlockAverage::new();
+        assert_eq!(empty.checked_mean(), None);
+        assert!(empty.summary().is_none());
+        assert!(empty.scaled(2.0).is_none());
+        assert_eq!(empty.to_yaml(), Some(serde_yml::Value::Null));
+    }
+
+    /// One observation fixes the mean but says nothing about its spread. `0.0` claims
+    /// the opposite — that the mean is known exactly.
+    #[test]
+    fn a_single_observation_reports_an_unknown_error() {
+        let mut average = BlockAverage::new();
+        average.add(5.0);
+
+        assert_eq!(average.checked_mean(), Some(5.0));
+        assert!(average.error().is_nan());
+        let summary = average.summary().expect("a sampled average has a summary");
+        assert_relative_eq!(summary.mean, 5.0);
+        assert!(summary.error.is_nan());
     }
 
     #[test]
@@ -1272,7 +1307,7 @@ mod block_tests {
         }
 
         let sample_variance = 37.2_f64;
-        assert_relative_eq!(average.mean(), 6.2, epsilon = 1e-12);
+        assert_relative_eq!(average.checked_mean().unwrap(), 6.2, epsilon = 1e-12);
         assert_relative_eq!(average.stddev(), sample_variance.sqrt(), epsilon = 1e-12);
         assert_relative_eq!(
             average.error(),
@@ -1301,7 +1336,7 @@ mod weighted_block_tests {
         }
         let expected_error = (37.2_f64 / 5.0).sqrt();
         for (mean, error) in [
-            (plain.mean(), plain.error()),
+            (plain.checked_mean().unwrap(), plain.error()),
             (weighted.mean(), weighted.error()),
         ] {
             assert_relative_eq!(mean, 6.2, epsilon = 1e-12);
@@ -1324,16 +1359,20 @@ mod weighted_block_tests {
         assert_relative_eq!(wba.effective_n(), 1.6, epsilon = 1e-12);
     }
 
-    /// A dominant weight collapses the effective sample size toward one, and the
-    /// error toward zero — a single frame carries no spread.
+    /// A single effective sample fixes the mean and says nothing about its spread, so the
+    /// error is unknown rather than zero — reporting 0.0 would claim the mean is exact.
     #[test]
-    fn single_effective_sample_has_zero_error() {
+    fn single_effective_sample_has_an_unknown_error() {
         let mut wba = WeightedBlockAverage::new();
         wba.add(5.0, 1.0);
-        assert_eq!(wba.error(), 0.0);
+        assert_eq!(wba.checked_mean(), Some(5.0));
+        assert!(wba.error().is_nan());
+
         let empty = WeightedBlockAverage::new();
+        assert_eq!(empty.checked_mean(), None);
         assert!(empty.mean().is_nan());
-        assert_eq!(empty.error(), 0.0);
+        assert!(empty.error().is_nan());
+        assert!(empty.summary().is_none());
     }
 
     #[test]
@@ -1454,6 +1493,7 @@ mod blocking_engine_tests {
 
         assert!(average.levels[1..]
             .iter()
+            .filter(|level| level.moments.has_reliable_error())
             .all(|level| level.moments.error() == 0.0));
         assert_relative_eq!(average.error(), naive_error(&average), epsilon = 1e-12);
         assert!(average.error() > 0.0);

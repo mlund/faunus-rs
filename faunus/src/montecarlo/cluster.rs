@@ -338,14 +338,15 @@ impl<T: Context> MoveProposal<T> for ClusterMove {
                 };
                 map.insert("cluster_size".into(), self.stats.size.to_yaml()?);
                 map.insert("bias_rejection_rate".into(), rate.into());
-                map.insert(
-                    "rmsd_translation".into(),
-                    self.stats.msd_translation.mean().sqrt().into(),
-                );
-                map.insert(
-                    "rmsd_rotation".into(),
-                    self.stats.msd_rotation.mean().sqrt().into(),
-                );
+                // A move that never ran has no displacement to report; null says so, where
+                // √0 would read as a move that ran and never went anywhere.
+                for (key, msd) in [
+                    ("rmsd_translation", &self.stats.msd_translation),
+                    ("rmsd_rotation", &self.stats.msd_rotation),
+                ] {
+                    let rmsd = msd.checked_mean().map(f64::sqrt);
+                    map.insert(key.into(), serde_yml::to_value(rmsd).ok()?);
+                }
             }
         }
         Some(value)

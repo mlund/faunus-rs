@@ -259,7 +259,12 @@ mod tests {
         acc.collect(2.0, 1.0);
 
         // Block mean ≈ 1.0, error > 0
-        assert_approx_eq!(f64, acc.free_energy().mean(), 1.0, epsilon = 1e-12);
+        assert_approx_eq!(
+            f64,
+            acc.free_energy().checked_mean().unwrap(),
+            1.0,
+            epsilon = 1e-12
+        );
         assert!(acc.free_energy().stddev() > 0.0);
 
         // Total accumulator is never reset: 2 samples, overall mean = -ln((1 + exp(-2)) / 2)
