@@ -1461,10 +1461,11 @@ cluster that spans the periodic boundary still rotates correctly.</p>
 </tr>
 </tbody>
 </table>
-<p>Output reports the mean cluster size <span class="arithmatex">\(\langle N\rangle\)</span> with its standard error, the fraction of
-trials rejected to preserve membership (<code>bias_rejection_rate</code>), and the root-mean-square
-translational and rotational displacements. For an ideal gas, <span class="arithmatex">\(\langle N\rangle = 1 + (N/V)\,\tfrac{4}{3}\pi R_c^3\)</span>
-with threshold <span class="arithmatex">\(R_c\)</span>, a useful check that the clustering is unbiased.</p>
+<p>Output reports the mean cluster size <span class="arithmatex">\(\langle N\rangle\)</span> with an automatically blocked standard
+error. It also reports the fraction of trials rejected to preserve membership
+(<code>bias_rejection_rate</code>) and the root-mean-square translational and rotational displacements.
+For an ideal gas, <span class="arithmatex">\(\langle N\rangle = 1 + (N/V)\,\tfrac{4}{3}\pi R_c^3\)</span> with threshold <span class="arithmatex">\(R_c\)</span>,
+a useful check that the clustering is unbiased.</p>
 <hr />
 <h2 id="volume-move-npt">Volume Move (<em>NPT</em>)<a class="headerlink" href="#volume-move-npt" title="Permanent link">&para;</a></h2>
 <p>Proposes isotropic or anisotropic volume changes for sampling the <em>NPT</em> ensemble.

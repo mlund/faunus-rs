@@ -1076,11 +1076,20 @@ They are defined in the <code>analysis</code> section of the YAML input:</p>
 </tr>
 </tbody>
 </table>
+<h3 id="reported-quantities">Reported quantities<a class="headerlink" href="#reported-quantities" title="Permanent link">&para;</a></h3>
 <p>In <code>output.yaml</code> every analysis reports <code>num_samples</code>, the number of frames it sampled. Analyses
 that loop over molecules also report how many molecules they accumulated: <code>num_groups_sampled</code> for
 Polymer Shape, <code>num_blocks</code> for Widom Rotation. These counts give the raw observations behind the
-reported means. Analyses with automatic blocking combine adjacent observations when estimating
-statistical errors.</p>
+reported means. Where an analysis uses automatic blocking, adjacent observations are combined into
+blocks of increasing length. Longer blocks are less correlated with one another, so the estimated
+standard error grows with block length and levels off once the blocks are effectively independent;
+the error is read from that plateau
+(<a href="https://doi.org/10.1063/1.457480">Flyvbjerg &amp; Petersen, 1989</a>). A run whose blocking curve has
+not levelled off is too short to resolve the correlation time, and the largest estimate is reported.
+Levels holding fewer than 16 effective blocks are too noisy to estimate a variance and are skipped;
+if no level qualifies, the uncorrelated standard error is reported. The mean always includes every
+observation, and the blocking needs no input from the user — the one exception is Virtual Volume
+Move, whose <code>block_size</code> is described with that analysis.</p>
 <h3 id="output-file-formats">Output file formats<a class="headerlink" href="#output-file-formats" title="Permanent link">&para;</a></h3>
 <p>Most analysis files are column data. For those files, the format is inferred
 from the file extension:</p>
@@ -1939,8 +1948,8 @@ electroneutrality in the finite periodic box, correcting the Coulombic size erro
 inherent in naive single-ion Widom insertion.</p>
 <p>The excess chemical potential is decomposed into short-range and electrostatic
 contributions. The electrostatic part is evaluated by numerical integration over
-a charging parameter λ ∈ [0, 1]. Results are block-averaged with standard error
-of the mean reported.</p>
+a charging parameter λ ∈ [0, 1]. Each sampled configuration contributes one
+insertion average. Automatic blocking estimates the reported standard errors.</p>
 <p>Pair interactions for the ghost particle are defined directly in the analysis
 block using the same syntax as <code>energy.nonbonded.default</code>, allowing arbitrary
 short-range potentials (WCA, LJ, HardSphere, etc.) beyond the primitive model.</p>
@@ -2100,6 +2109,12 @@ If <code>file</code> is given, each sampled step writes columns
 <td>Scaling policy: <code>Isotropic</code>, <code>ScaleZ</code>, <code>ScaleXY</code></td>
 </tr>
 <tr>
+<td><code>block_size</code></td>
+<td>no</td>
+<td><code>100</code></td>
+<td>Samples per free-energy block (see below)</td>
+</tr>
+<tr>
 <td><code>file</code></td>
 <td>no</td>
 <td></td>
@@ -2113,6 +2128,18 @@ If <code>file</code> is given, each sampled step writes columns
 </tr>
 </tbody>
 </table>
+<h3 id="block-size">Block size<a class="headerlink" href="#block-size" title="Permanent link">&para;</a></h3>
+<p>Unlike other analyses, Virtual Volume Move averages an exponential, <span class="arithmatex">\(\langle e^{-\Delta U/k_BT}\rangle\)</span>,
+and <span class="arithmatex">\(\Delta U\)</span> enters non-linearly. Its uncertainty is therefore estimated from the scatter of
+free energies computed over consecutive blocks of <code>block_size</code> samples, rather than from the
+samples themselves. Each block must be long enough for its exponential average to converge, or
+the reported error describes the scatter of <span class="arithmatex">\(\Delta U\)</span> instead of that of <span class="arithmatex">\(P_\text{ex}\)</span>.</p>
+<p>The blocks so formed feed the automatic blocking described under
+<a href="#reported-quantities">Reported quantities</a>, which handles any residual correlation between
+them. That hierarchy needs at least 16 blocks, so a run should collect at least
+<span class="arithmatex">\(16 \times\)</span> <code>block_size</code> samples; below that the reported error ignores correlation between
+blocks. Raising <code>block_size</code> therefore trades statistical resolution of the correlation time for
+convergence of the exponential average within each block.</p>
 <hr />
 <h2 id="double-layer-pressure">Double Layer Pressure<a class="headerlink" href="#double-layer-pressure" title="Permanent link">&para;</a></h2>
 <p>Osmotic (disjoining) pressure between two uniformly charged planes with explicit
@@ -2128,7 +2155,8 @@ electroneutrality from the counterion charges — you do not specify it.</p>
 the midplane is <span class="arithmatex">\(z=0\)</span>) and to electrostatics only; it suits the primitive-model
 double layer with point-charge counterions. Valency mixtures need nothing special —
 select all the counterions (e.g. <code>"atomtype Na Ca"</code>) and report. Results are block-averaged
-and reported as mean ± standard error.</p>
+over sampled configurations and reported as mean ± standard error. Automatic blocking estimates
+the errors.</p>
 <h3 id="example_9">Example<a class="headerlink" href="#example_9" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><span class="nt">analysis</span><span class="p">:</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!DoubleLayerPressure</span>
@@ -2334,8 +2362,8 @@ the potential at the two outermost slabs (<code>potential_edge_lower/mV</code>, 
 midplane (<code>potential_midplane/mV</code>), together with the edge-to-midplane drops
 (<code>potential_drop_lower/mV</code>, <code>potential_drop_upper/mV</code>), as mean ± error; the midplane and drop
 errors are accumulated per configuration, so they reflect the correlation between the slabs they
-combine. When <code>zeta_threshold</code> is set it also reports the ζ-potential <code>zeta/mV</code> and the
-shear-plane position <code>z_shear/Å</code>. For reliable numbers, <strong>equilibrate first and start production
+combine. Automatic blocking estimates these errors across configurations. When <code>zeta_threshold</code>
+is set it also reports the ζ-potential <code>zeta/mV</code> and the shear-plane position <code>z_shear/Å</code>. For reliable numbers, <strong>equilibrate first and start production
 from a state file</strong> (<code>-s</code>).</p>
 <hr />
 <h2 id="density-profile">Density Profile<a class="headerlink" href="#density-profile" title="Permanent link">&para;</a></h2>
@@ -2425,7 +2453,7 @@ same density, each with its statistical error: the number density <code>density/
 concentration <code>molarity/mol·L⁻¹</code>, and the mass density <code>mass_density/g·mL⁻¹</code>. <code>output.yaml</code>
 additionally reports the slab layout and the mean total number of selected particles,
 <code>mean_count</code>, as mean ± error — a useful check, since summing <span class="arithmatex">\(\rho(z)\,A\,\Delta z\)</span> over all
-slabs must return it.</p>
+slabs must return it. Automatic blocking estimates all these errors across sampled configurations.</p>
 <hr />
 <h2 id="preferential-interaction">Preferential Interaction<a class="headerlink" href="#preferential-interaction" title="Permanent link">&para;</a></h2>
 <p>Measures the preferential interaction of a ligand around one molecular substrate. A positive
