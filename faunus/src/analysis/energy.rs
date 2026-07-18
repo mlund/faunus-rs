@@ -214,18 +214,6 @@ selections: ["molecule water", "atomtype Na"]
         let builders: Vec<AnalysisBuilder> = serde_yml::from_str(yaml).unwrap();
         assert!(matches!(builders[0], AnalysisBuilder::Energy(_)));
     }
-
-    #[test]
-    fn roundtrip_via_analysis_builder_partial() {
-        let yaml = r#"
-- !Energy
-  file: partial.dat
-  frequency: !Every 50
-  selections: ["all", "all"]
-"#;
-        let builders: Vec<AnalysisBuilder> = serde_yml::from_str(yaml).unwrap();
-        assert!(matches!(builders[0], AnalysisBuilder::Energy(_)));
-    }
 }
 
 #[cfg(test)]

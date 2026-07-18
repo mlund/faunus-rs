@@ -1302,7 +1302,7 @@ molecules: [Colloid]
 
         let lambda = kappa.sqrt() / rg;
         let sigma = lambda * rc;
-        let f = ht / ((1.0 + sigma) + ht);
+        let f = robin_f(sigma, Some(ht));
         let expected = 4.0
             * PI
             * rho_star

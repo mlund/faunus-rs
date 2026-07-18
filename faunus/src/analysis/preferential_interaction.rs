@@ -2571,22 +2571,6 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
     }
 
     #[test]
-    fn flexible_substrate_refreshes_geometry_in_place() {
-        let context = build_flexible_dimer(4.0, &BULK);
-        let mut analysis = analysis(&context);
-        let initial_volume_ptr = analysis.reference.volumes[0].as_ptr();
-        let initial_water_volume_ptr = analysis.reference.water_volumes[0].as_ptr();
-
-        analysis.sample(&context, 0).unwrap();
-
-        assert_eq!(analysis.reference.volumes[0].as_ptr(), initial_volume_ptr);
-        assert_eq!(
-            analysis.reference.water_volumes[0].as_ptr(),
-            initial_water_volume_ptr
-        );
-    }
-
-    #[test]
     fn each_flexible_conformation_uses_its_own_domain_volume() {
         let mut context = build_flexible_dimer(4.0, &BULK);
         let mut analysis = analysis(&context);

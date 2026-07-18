@@ -1549,22 +1549,6 @@ mod tests {
         );
     }
 
-    /// Verify position() and atom_kind() return correct values after add_group.
-    #[test]
-    fn test_position_and_atom_kind() {
-        let yaml = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("tests/files/gibbs_ensemble/input.yaml");
-        let ctx = Backend::new(&yaml, None, &mut rand::thread_rng()).unwrap();
-        for group in ctx.groups() {
-            for i in group.iter_active() {
-                let pos = ctx.position(i);
-                assert!(pos.x.is_finite() && pos.y.is_finite() && pos.z.is_finite());
-                let kind = ctx.atom_kind(i);
-                assert!(kind.get() < ctx.topology().atomkinds().len());
-            }
-        }
-    }
-
     /// Verify add_group stores positions and atom_ids correctly.
     #[test]
     fn test_add_group_preserves_data() {

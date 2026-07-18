@@ -20,8 +20,12 @@ fn seed_parse() {
     assert!(matches!(seed, Seed::Hardware));
 }
 
+/// `Stochastic`/`Deterministic` is a tag on the wrapping `MoveCollectionBuilder` (see
+/// `builder.rs`), not on `CollectionBuilder` itself — that routing is exercised indirectly by
+/// `propagate_parse` below, which loads a file containing both tags. This test only pins
+/// `CollectionBuilder`'s own field parsing.
 #[test]
-fn stochastic_parse() {
+fn collection_builder_parse() {
     let string = "repeat: 20
 moves:
    - !TranslateMolecule { molecule: Water, max_displacement: 0.4, weight: 1.0 }
@@ -51,19 +55,6 @@ temperature: 300.0";
         assert_eq!(config.friction, 1.0);
         assert_eq!(config.steps, 500);
     }
-}
-
-#[test]
-fn deterministic_parse() {
-    let string = "repeat: 10
-moves:
-   - !TranslateMolecule { molecule: Water, max_displacement: 0.4, weight: 1.0 }
-   - !TranslateMolecule { molecule: Protein, max_displacement: 0.6, weight: 2.0 }
-   - !TranslateMolecule { molecule: Lipid, max_displacement: 0.5, weight: 0.5 }";
-
-    let collection: CollectionBuilder = serde_yml::from_str(string).unwrap();
-    assert_eq!(collection.repeat, 10);
-    assert_eq!(collection.moves.len(), 3);
 }
 
 #[test]

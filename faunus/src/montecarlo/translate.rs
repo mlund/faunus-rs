@@ -385,6 +385,7 @@ mod tests {
 
     use super::*;
     use crate::backend::Backend;
+    use crate::context::WithTopology;
 
     /// Preferential candidates must span every matching group, not one picked at random.
     ///
@@ -566,8 +567,11 @@ mod tests {
         assert_eq!(propagator.repeat, 1);
     }
 
+    /// A `molecule`/`atom` filter must be honoured by every proposal it selects, not just the
+    /// literal sequence one seed happens to draw — pinning the latter would break on any
+    /// unrelated change to the selection algorithm while saying nothing about the filter itself.
     #[test]
-    fn test_translate_atom_selections() {
+    fn atom_selection_respects_molecule_and_atom_filters() {
         let mut rng = rand::thread_rng();
         let context = Backend::new(
             "tests/files/topology_pass.yaml",
@@ -576,118 +580,68 @@ mod tests {
         )
         .unwrap();
 
-        let mut seedable = rand::rngs::StdRng::seed_from_u64(12345);
+        let molecule_of = |group: usize| -> String {
+            let molecule_id = context.groups()[group].molecule();
+            context
+                .topology_ref()
+                .moleculekind(molecule_id)
+                .name()
+                .clone()
+        };
+        let atom_kind_of = |group: usize, index: RelIndex| -> String {
+            let absolute = context.groups()[group].to_absolute(index).unwrap();
+            let kind = context.atom_kind(absolute.get());
+            context.topology_ref().atomkinds()[kind.get()]
+                .name()
+                .to_string()
+        };
 
-        // anything can move
+        let mut seedable = rand::rngs::StdRng::seed_from_u64(12345);
+        let mut assert_filters_hold =
+            |move_: &mut TranslateAtom, allowed_molecules: &[&str], allowed_atoms: &[&str]| {
+                for _ in 0..10 {
+                    let change = move_
+                        .propose_move(&context, &mut seedable)
+                        .unwrap()
+                        .change()
+                        .clone();
+                    let Change::SingleGroup(group, GroupChange::PartialUpdate(indices)) = change
+                    else {
+                        panic!("expected a single-group partial update");
+                    };
+                    if !allowed_molecules.is_empty() {
+                        assert!(allowed_molecules.contains(&molecule_of(group).as_str()));
+                    }
+                    if !allowed_atoms.is_empty() {
+                        for &index in &indices {
+                            assert!(allowed_atoms.contains(&atom_kind_of(group, index).as_str()));
+                        }
+                    }
+                }
+            };
+
+        // Unrestricted: any molecule and atom kind may be drawn.
         let mut move1 = TranslateAtom::new(None, None, None, None, 0.1, 1.0, 1);
         move1.finalize(&context).unwrap();
+        assert_filters_hold(&mut move1, &[], &[]);
 
-        let expected_groups = [25, 30, 29, 66, 27, 31, 64, 32, 23, 12];
-        let expected_indices = [2, 2, 1, 2, 1, 2, 1, 1, 1, 2];
-
-        for i in 0..10 {
-            let change = move1
-                .propose_move(&context, &mut seedable)
-                .unwrap()
-                .change()
-                .clone();
-            match change {
-                Change::SingleGroup(group, group_change) => {
-                    assert_eq!(group, expected_groups[i]);
-                    match group_change {
-                        GroupChange::PartialUpdate(x) => {
-                            assert_eq!(x[0].get(), expected_indices[i])
-                        }
-                        _ => panic!("Invalid Group Change."),
-                    }
-                }
-                _ => panic!("Invalid Change."),
-            };
-        }
-
-        // only MOL can move
+        // Only MOL may move.
         let mut move2 = TranslateAtom::new(Some("MOL"), None, None, None, 0.1, 1.0, 1);
         move2.finalize(&context).unwrap();
+        assert_filters_hold(&mut move2, &["MOL"], &[]);
 
-        let expected_groups = [61, 60, 0, 61, 1, 0, 0, 61, 2, 1];
-        let expected_indices = [2, 4, 1, 2, 3, 2, 0, 2, 5, 2];
-
-        for i in 0..10 {
-            let change = move2
-                .propose_move(&context, &mut seedable)
-                .unwrap()
-                .change()
-                .clone();
-            match change {
-                Change::SingleGroup(group, group_change) => {
-                    assert_eq!(group, expected_groups[i]);
-                    match group_change {
-                        GroupChange::PartialUpdate(x) => {
-                            assert_eq!(x[0].get(), expected_indices[i])
-                        }
-                        _ => panic!("Invalid Group Change."),
-                    }
-                }
-                _ => panic!("Invalid Change."),
-            };
-        }
-
-        // only MOL and OW can move
+        // Only MOL, and only its OW atoms.
         let mut move3 = TranslateAtom::new(Some("MOL"), None, Some("OW"), None, 0.1, 1.0, 1);
         move3.finalize(&context).unwrap();
+        assert_filters_hold(&mut move3, &["MOL"], &["OW"]);
 
-        let expected_groups = [60, 61, 0, 60, 0, 61, 61, 2, 1, 2];
-        let expected_indices = [0, 5, 4, 5, 0, 0, 5, 5, 4, 5];
-
-        for i in 0..10 {
-            let change = move3
-                .propose_move(&context, &mut seedable)
-                .unwrap()
-                .change()
-                .clone();
-            match change {
-                Change::SingleGroup(group, group_change) => {
-                    assert_eq!(group, expected_groups[i]);
-                    match group_change {
-                        GroupChange::PartialUpdate(x) => {
-                            assert_eq!(x[0].get(), expected_indices[i])
-                        }
-                        _ => panic!("Invalid Group Change."),
-                    }
-                }
-                _ => panic!("Invalid Change."),
-            };
-        }
-
-        // only HW can move
+        // Only HW atoms, drawn from whichever molecule kind carries them.
         let mut move4 = TranslateAtom::new(None, None, Some("HW"), None, 0.1, 1.0, 1);
         move4.finalize(&context).unwrap();
-
         assert_eq!(
             move4.select_molecule_ids,
             GroupSelection::ByMoleculeIds(vec![MoleculeId::new(0)])
         );
-
-        let expected_groups = [1, 1, 60, 61, 2, 60, 2, 2, 2, 60];
-        let expected_indices = [3, 3, 1, 3, 2, 2, 3, 2, 2, 3];
-        for i in 0..10 {
-            let change = move4
-                .propose_move(&context, &mut seedable)
-                .unwrap()
-                .change()
-                .clone();
-            match change {
-                Change::SingleGroup(group, group_change) => {
-                    assert_eq!(group, expected_groups[i]);
-                    match group_change {
-                        GroupChange::PartialUpdate(x) => {
-                            assert_eq!(x[0].get(), expected_indices[i])
-                        }
-                        _ => panic!("Invalid Group Change."),
-                    }
-                }
-                _ => panic!("Invalid Change."),
-            };
-        }
+        assert_filters_hold(&mut move4, &[], &["HW"]);
     }
 }

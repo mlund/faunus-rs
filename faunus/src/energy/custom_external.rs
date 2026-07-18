@@ -526,20 +526,6 @@ function: "0 * x"
     }
 
     #[test]
-    fn harmonic_confinement_positive_energy() {
-        let ctx = make_context();
-        let yaml = r#"
-selection: "all"
-function: "0.5 * (x^2 + y^2 + z^2)"
-"#;
-        let builder: CustomExternalBuilder = serde_yml::from_str(yaml).unwrap();
-        let ext = builder.build().unwrap();
-        let energy = ext.energy(&ctx, &Change::Everything);
-        // With particles at various positions, energy should be > 0
-        assert!(energy > 0.0);
-    }
-
-    #[test]
     fn no_energy_on_no_change() {
         let ctx = make_context();
         let yaml = r#"

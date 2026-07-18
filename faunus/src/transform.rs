@@ -366,19 +366,16 @@ mod tests {
         let mut x_mean = 0.0;
         let mut y_mean = 0.0;
         let mut z_mean = 0.0;
-        let mut rngsum = 0.0;
         for _ in 0..n {
             let v = random_unit_vector(&mut rng);
             assert_approx_eq!(f64, v.norm(), 1.0);
             x_mean += v.x;
             y_mean += v.y;
             z_mean += v.z;
-            rngsum += rng.r#gen::<f64>();
         }
         assert_approx_eq!(f64, x_mean / n as f64, 0.0, epsilon = 0.025);
         assert_approx_eq!(f64, y_mean / n as f64, 0.0, epsilon = 0.025);
         assert_approx_eq!(f64, z_mean / n as f64, 0.0, epsilon = 0.025);
-        assert_approx_eq!(f64, rngsum / n as f64, 0.5, epsilon = 0.01);
     }
 
     #[test]

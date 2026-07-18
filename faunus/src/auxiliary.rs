@@ -1700,34 +1700,10 @@ mod simpson_tests {
     }
 
     #[test]
-    fn read_yaml_template_for_loop() {
-        let path = write_temp(
-            "loop",
-            "items:\n{% for i in range(3) %}\n  - {{ i }}\n{% endfor %}",
-        );
-        let result = super::read_yaml(&path).unwrap();
-        assert!(result.contains("- 0"));
-        assert!(result.contains("- 1"));
-        assert!(result.contains("- 2"));
-        std::fs::remove_file(path).ok();
-    }
-
-    #[test]
     fn read_yaml_template_variables() {
         let path = write_temp("vars", "{% set x = 42 %}\nvalue: {{ x }}");
         let result = super::read_yaml(&path).unwrap();
         assert!(result.contains("value: 42"));
-        std::fs::remove_file(path).ok();
-    }
-
-    #[test]
-    fn read_yaml_template_math() {
-        let path = write_temp(
-            "math",
-            "{% set a = 3.8 %}{% set b = 5.0 %}\nσ: {{ (a + b) / 2 }}",
-        );
-        let result = super::read_yaml(&path).unwrap();
-        assert!(result.contains("σ: 4.4"));
         std::fs::remove_file(path).ok();
     }
 

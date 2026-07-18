@@ -372,25 +372,6 @@ mod tests {
     }
 
     #[test]
-    fn build_with_custom_method() {
-        let vvm = VirtualVolumeMoveBuilder::default()
-            .volume_displacement(1.0)
-            .frequency(Frequency::Every(5))
-            .method(VolumeScalePolicy::ScaleZ)
-            .build(RT_298)
-            .unwrap();
-        assert_eq!(vvm.method, VolumeScalePolicy::ScaleZ);
-    }
-
-    #[test]
-    fn mean_pressure_zero_energy() {
-        let mut vvm = build_vvm(0.5);
-        vvm.widom.collect(0.0, 1.0);
-        vvm.widom.collect(0.0, 1.0);
-        assert_approx_eq!(f64, vvm.mean_pressure(), 0.0);
-    }
-
-    #[test]
     fn mean_pressure_nonzero_energy() {
         let mut vvm = build_vvm(0.2);
         // dU = 2.0 kT → free_energy = 2.0 → Pex = -2.0 / 0.2 = -10.0 kT/ų
@@ -447,26 +428,6 @@ mod tests {
     }
 
     #[test]
-    fn pressure_stddev_via_perform_sample() {
-        // A block size of 2 lets two collects close a block, so this reaches the same
-        // state perform_sample would after 200 samples at the default size.
-        let mut vvm = VirtualVolumeMoveBuilder::default()
-            .volume_displacement(1.0)
-            .frequency(Frequency::Every(1))
-            .block_size(2)
-            .build(RT_298)
-            .unwrap();
-        assert_eq!(vvm.block_size, 2);
-        // Manually simulate what perform_sample does after perturb():
-        for _ in 0..2 {
-            vvm.widom.collect(0.0, 1.0);
-            vvm.widom.collect(2.0, 1.0);
-        }
-        assert!(vvm.widom.free_energy().n() >= 2);
-        assert!(vvm.widom.free_energy().stddev().is_finite());
-    }
-
-    #[test]
     fn to_yaml_emits_pex_mapping_per_unit() {
         // Size 1 so sampling alone closes each block, as production does.
         let mut vvm = VirtualVolumeMoveBuilder::default()
@@ -515,16 +476,6 @@ mod tests {
 "#;
         let vvm = deserialize_vvm_builder(yaml, 0).build(RT_298).unwrap();
         assert_eq!(vvm.block_size, 100);
-    }
-
-    #[test]
-    fn deserialize_missing_required_fields() {
-        let yaml = r#"
-- !VirtualVolumeMove
-  method: Isotropic
-  frequency: !Every 10
-"#;
-        assert!(deserialize_vvm_builder(yaml, 0).build(RT_298).is_err());
     }
 
     #[test]

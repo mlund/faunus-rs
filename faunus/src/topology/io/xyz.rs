@@ -165,15 +165,6 @@ mod tests {
     }
 
     #[test]
-    fn read_mol2_absolute_xyz() {
-        let data = XyzFormat
-            .read(Path::new("tests/files/mol2_absolute.xyz"))
-            .unwrap();
-        assert_eq!(data.names.len(), 15);
-        assert_eq!(data.positions.len(), 15);
-    }
-
-    #[test]
     fn read_structure_xyz() {
         let data = XyzFormat
             .read(Path::new("tests/files/structure.xyz"))

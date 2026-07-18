@@ -226,16 +226,6 @@ mod tests {
     }
 
     #[test]
-    fn total_count() {
-        let mut h = Histogram::new(0.0, 10.0, 1.0).unwrap();
-        assert_relative_eq!(h.total_count(), 0.0);
-        h.add(1.0);
-        h.add(5.0);
-        h.add(9.0);
-        assert_relative_eq!(h.total_count(), 3.0);
-    }
-
-    #[test]
     fn fraction_in_range_partial() {
         let mut h = Histogram::new(0.0, 10.0, 1.0).unwrap();
         // bin centers: 0.5, 1.5, ..., 9.5

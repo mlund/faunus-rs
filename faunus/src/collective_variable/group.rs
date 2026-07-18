@@ -445,12 +445,16 @@ mod tests {
 
     #[test]
     fn dipole_product_serde_roundtrip() {
+        let ctx = make_context();
         let cv = DipoleProduct {
             projection: Axes::default(),
             group1: 0,
             group2: 1,
         };
         let yaml = serde_yml::to_string(&cv as &dyn CvKind).unwrap();
-        let _: Box<dyn CvKind> = serde_yml::from_str(&yaml).unwrap();
+        let roundtripped: Box<dyn CvKind> = serde_yml::from_str(&yaml).unwrap();
+        // A lost/corrupted group1, group2, or projection would (near-certainly) change the
+        // evaluated value, so this catches what a mere "it deserializes" check would not.
+        assert_eq!(cv.evaluate(&ctx), roundtripped.evaluate(&ctx));
     }
 }

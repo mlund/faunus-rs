@@ -834,9 +834,10 @@ mod tests {
 
     #[test]
     fn weight_with_custom_params() {
+        // Confirms exponent/offset are actually plumbed through, not hardcoded to the
+        // (2, 1) pair `weight_function_values` uses above: W'(2.5) = 3.0^-3 = 1/27.
         let ps = make_sampler(3.0, 0.5);
-        let expected = (2.5_f64 + 0.5).powf(-3.0);
-        assert_approx_eq!(f64, ps.weight(2.5), expected, epsilon = 1e-15);
+        assert_approx_eq!(f64, ps.weight(2.5), 1.0 / 27.0, epsilon = 1e-15);
     }
 
     /// The correction of eqn 9.44, against values computed outside this code.

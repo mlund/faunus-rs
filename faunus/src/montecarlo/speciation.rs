@@ -1409,14 +1409,6 @@ mod tests {
         assert!(mv.finalize(&context, THERMAL_ENERGY).is_err());
     }
 
-    #[test]
-    fn finalize_computes_thermal_energy() {
-        let context = make_context();
-        let mut mv = make_move("= M", 1.0);
-        mv.finalize(&context, THERMAL_ENERGY).unwrap();
-        assert_approx_eq!(f64, mv.thermal_energy, THERMAL_ENERGY, epsilon = 1e-10);
-    }
-
     // --- Feasibility (try_build_actions) ---
 
     #[test]

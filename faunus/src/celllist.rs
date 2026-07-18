@@ -269,11 +269,14 @@ mod tests {
 
         cl.build(|i| positions[i], 3, 0..3);
 
-        // All three should be in cells
+        // All three should be in cells, and — center, corner, opposite corner — in different ones.
         assert_eq!(cl.particle_cell.len(), 3);
         for i in 0..3 {
             assert_ne!(cl.particle_cell[i], usize::MAX);
         }
+        assert_ne!(cl.particle_cell[0], cl.particle_cell[1]);
+        assert_ne!(cl.particle_cell[0], cl.particle_cell[2]);
+        assert_ne!(cl.particle_cell[1], cl.particle_cell[2]);
     }
 
     #[test]
