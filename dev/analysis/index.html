@@ -2809,9 +2809,9 @@ parameter (<a href="https://doi.org/10.1021/ja00381a009">Lipari &amp; Szabo 1982
 <p>where the average runs over all snapshots, so <span class="arithmatex">\(S^2 = 1\)</span> marks a fully locked
 vector and <span class="arithmatex">\(S^2 = 0\)</span> a free one. An axis that is locked within each snapshot but
 wanders between them gives <span class="arithmatex">\(S^2 \to 0\)</span>, as the ensemble average intends. A vector
-is given as a pair of atoms (<code>!pair [i, j]</code>), a gyration principal axis
-(<code>!axis 0|1|2</code>), or an explicit direction in the molecule's reference frame
-(<code>!body [x, y, z]</code>).</p>
+is given as a pair of atoms (<code>!Pair [i, j]</code>), a gyration principal axis
+(<code>!Axis 0|1|2</code>), or an explicit direction in the molecule's reference frame
+(<code>!Body [x, y, z]</code>).</p>
 <p>Two further diagnostics are optional. The root-mean-square torque
 <span class="arithmatex">\(\sqrt{\langle\tau^2\rangle}\)</span> about each lab axis measures the strength of the
 orientational restoring force; the mean torque of an equilibrium molecule is zero,
@@ -2833,9 +2833,9 @@ weight, so biased (penalty or Wang–Landau) trajectories are reweighted correct
 <span class="w">    </span><span class="nt">selection</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;molecule</span><span class="nv"> </span><span class="s">phytate&quot;</span>
 <span class="w">    </span><span class="nt">orientations</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">500</span>
 <span class="w">    </span><span class="nt">vectors</span><span class="p">:</span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!pair</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">5</span><span class="p p-Indicator">]</span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!axis</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2</span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!body</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">0.0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">0.0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">1.0</span><span class="p p-Indicator">]</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!Pair</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">5</span><span class="p p-Indicator">]</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!Axis</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!Body</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">0.0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">0.0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">1.0</span><span class="p p-Indicator">]</span>
 <span class="w">    </span><span class="nt">torque</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 <span class="w">    </span><span class="nt">stiffness</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 <span class="w">    </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">widomrot.csv.gz</span>
@@ -2868,7 +2868,7 @@ weight, so biased (penalty or Wang–Landau) trajectories are reweighted correct
 <td><code>vectors</code></td>
 <td>no</td>
 <td><code>[]</code></td>
-<td>Vectors for <code>S²</code>: <code>!pair [i,j]</code>, <code>!axis 0\|1\|2</code>, or <code>!body [x,y,z]</code></td>
+<td>Vectors for <code>S²</code>: <code>!Pair [i,j]</code>, <code>!Axis 0\|1\|2</code>, or <code>!Body [x,y,z]</code></td>
 </tr>
 <tr>
 <td><code>torque</code></td>
