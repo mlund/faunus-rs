@@ -516,7 +516,8 @@ mod integration_tests {
         let atoms = sel.resolve_atoms(ctx.topology_ref(), ctx.groups(), &|i| ctx.atom_kind(i));
         assert!(!atoms.is_empty());
         for &i in &atoms {
-            assert_eq!(ctx.atom_kind(i).get(), 0);
+            let kind = ctx.atom_kind(i).get();
+            assert_eq!(ctx.topology_ref().atomkinds()[kind].name(), atom_name);
         }
     }
 
@@ -587,7 +588,10 @@ mod integration_tests {
         let atoms = sel.resolve_atoms(ctx.topology_ref(), ctx.groups(), &|i| ctx.atom_kind(i));
         assert!(!atoms.is_empty());
         for &i in &atoms {
-            assert_eq!(ctx.atom_kind(i).get(), 0);
+            let kind = ctx.atom_kind(i).get();
+            // `atomid` filters on `AtomKind::id()`, not the raw array index — check that field
+            // directly rather than the index it happens to coincide with.
+            assert_eq!(ctx.topology_ref().atomkinds()[kind].id(), 0);
         }
     }
 }

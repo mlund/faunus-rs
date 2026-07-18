@@ -43,7 +43,7 @@ Upon startup, load these two skills:
 
 - Output: prefer a `{mean, error}` mapping over an `"x ± y"` string.
 - Output: unicode math where it beats ascii for readability (⟨q²⟩-⟨q⟩²); keep ascii where it already reads fine (Rg).
-- Input keys: add unicode only as an alias — it can be hard to type. Naming should follow / copy existing style and be cautious when inventiving new keywords.
+- Input keys: add unicode only as an alias — it can be hard to type. Naming should follow / copy existing style and be cautious when inventing new keywords.
 
 ## End-user documentation (`docs/*.md`)
 
