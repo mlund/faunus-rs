@@ -7,7 +7,7 @@ The workspace uses git submodules (`duello`, `interatomic`, ...).
 Upon startup, load these two skills:
 
 - Deep modules: https://deepwiki.com/mattpocock/skills/4.1.4-designing-deep-modules
-- TDD: https://deepwiki.com/mattpocock/skills/4.1-test-driven-development
+- TDD: https://raw.githubusercontent.com/mattpocock/skills/refs/heads/main/skills/engineering/tdd/SKILL.md
 
 ## Design
 
@@ -26,7 +26,7 @@ Upon startup, load these two skills:
 
 ## Testing
 
-- Test-driven development (load this [skill](https://deepwiki.com/mattpocock/skills/4.1-test-driven-development)).
+- Test-driven development (load this [skill](https://raw.githubusercontent.com/mattpocock/skills/refs/heads/main/skills/engineering/tdd/SKILL.md)).
 - Cover physics correctness in unit tests, comparing against analytical theory in some limit where one exists.
 - Regression tests use `macro_rules! regression_test` and are ignored by default, so they may run longer.
 - Never overwrite fixtures without checking for physics drift; prefer manual, targeted updates.
@@ -37,6 +37,7 @@ Upon startup, load these two skills:
   - A builder test that only checks a getter echoes what a setter set, when an equivalent YAML-deserialize test already covers the same field.
   - A per-type test for macro-supplied boilerplate (e.g. `info_trait`/`impl_info!` accessors) — one smoke test for the macro is enough.
   - A second test that reruns the same branch with different numbers and asserts nothing new.
+  - Keep internal test documentation brief, to the point, and focus on why.
 
 ## YAML
 
