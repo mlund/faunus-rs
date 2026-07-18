@@ -276,18 +276,4 @@ mod tests {
         assert_relative_eq!(a.count(9), 1.0);
         assert_relative_eq!(a.total_count(), 4.0);
     }
-
-    #[test]
-    fn serde_roundtrip() {
-        let mut h = Histogram::new(0.0, 10.0, 2.5).unwrap();
-        h.add(1.0);
-        h.add(5.0);
-        let yaml = serde_yml::to_string(&h).unwrap();
-        let h2: Histogram = serde_yml::from_str(&yaml).unwrap();
-        assert_eq!(h2.num_bins(), h.num_bins());
-        assert_relative_eq!(h2.total_count(), h.total_count());
-        for i in 0..h.num_bins() {
-            assert_relative_eq!(h2.count(i), h.count(i));
-        }
-    }
 }

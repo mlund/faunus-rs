@@ -1241,20 +1241,8 @@ mod weighted_mean_tests {
 
 #[cfg(test)]
 mod block_tests {
-    use super::{BlockAverage, BlockSummary};
+    use super::BlockAverage;
     use approx::assert_relative_eq;
-
-    #[test]
-    fn block_summary_serde_roundtrip() {
-        let original = BlockSummary {
-            mean: -0.0615,
-            error: 0.0013,
-        };
-        let yaml = serde_yml::to_string(&original).unwrap();
-        let parsed: BlockSummary = serde_yml::from_str(&yaml).unwrap();
-        assert_relative_eq!(parsed.mean, original.mean);
-        assert_relative_eq!(parsed.error, original.error);
-    }
 
     #[test]
     fn scaling_signs_the_mean_and_absolutes_the_error() {

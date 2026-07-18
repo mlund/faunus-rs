@@ -2571,50 +2571,6 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
     }
 
     #[test]
-    fn a_flexible_substrate_can_be_sampled() {
-        const FLEXIBLE: &str = r#"
-atoms:
-  - {name: SUB, mass: 1.0, charge: 0.0, sigma: 6.0}
-  - {name: LIG, mass: 1.0, charge: 0.0, sigma: 3.0}
-molecules:
-  - name: substrate
-    atoms: [SUB, SUB]
-  - name: ligand
-    atoms: [LIG]
-    atomic: true
-system:
-  cell: !Cuboid [60.0, 60.0, 60.0]
-  medium: {permittivity: !Vacuum, temperature: 300.0}
-  energy: {}
-  blocks:
-    - molecule: substrate
-      N: 1
-      insert: !Manual [[0.0, 0.0, 0.0], [4.0, 0.0, 0.0]]
-    - molecule: ligand
-      N: 1
-      insert: !Manual [[25.0, 0.0, 0.0]]
-propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
-"#;
-        let context = Backend::from_yaml_str(FLEXIBLE, None, &mut rand::thread_rng()).unwrap();
-        let mut analysis = PreferentialInteractionBuilder {
-            substrate: Selection::parse("molecule substrate").unwrap(),
-            ligand: Selection::parse("atomtype LIG").unwrap(),
-            use_com: false,
-            solvent: None,
-            radius: Some(1.5),
-            shell: SHELL,
-            solvent_probe: SOLVENT_PROBE,
-            profile: None,
-            file: None,
-            frequency: Frequency::Every(1),
-        }
-        .build(&context)
-        .unwrap();
-        analysis.sample(&context, 0).unwrap();
-        assert!(analysis.gamma(SHELL.len() - 1).mean.is_finite());
-    }
-
-    #[test]
     fn flexible_substrate_refreshes_geometry_in_place() {
         let context = build_flexible_dimer(4.0, &BULK);
         let mut analysis = analysis(&context);

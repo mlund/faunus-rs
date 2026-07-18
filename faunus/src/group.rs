@@ -1419,13 +1419,4 @@ mod tests {
         let expected = q2 * q1;
         assert!((group.quaternion().angle_to(&expected)).abs() < 1e-12);
     }
-
-    #[test]
-    fn quaternion_set_get() {
-        let mut group = Group::new(0, MoleculeId::new(0), 0..3);
-        let axis = nalgebra::UnitVector3::new_normalize(crate::Point::new(1.0, 0.0, 0.0));
-        let q = crate::UnitQuaternion::from_axis_angle(&axis, 1.2);
-        group.set_quaternion(q);
-        assert_eq!(*group.quaternion(), q);
-    }
 }

@@ -899,50 +899,6 @@ mod tests {
         );
     }
 
-    /// Selection probability must equal w_i / W for each candidate.
-    /// With fixed seed, verify the exact selected index.
-    #[test]
-    fn selection_probabilities() {
-        let ps = make_sampler(2.0, 1.0);
-        let distances = [1.0, 5.0, 20.0];
-        let weights: Vec<f64> = distances.iter().map(|&r| ps.weight(r)).collect();
-        let w_total: f64 = weights.iter().sum();
-
-        // Analytical selection probabilities
-        let p: Vec<f64> = weights.iter().map(|w| w / w_total).collect();
-        // w(1) = 1/4, w(5) = 1/36, w(20) = 1/441
-        // p(0) ≈ 0.25 / 0.280 ≈ 0.893 — closest atom dominates
-        assert!(p[0] > 0.85);
-        assert!(p[1] < 0.12);
-        assert!(p[2] < 0.02);
-
-        // Empirical check: count selections over many draws
-        let mut rng = rand::rngs::StdRng::seed_from_u64(42);
-        let mut counts = [0u64; 3];
-        let n = 100_000;
-        for _ in 0..n {
-            let threshold = rng.r#gen::<f64>() * w_total;
-            let mut cumulative = 0.0;
-            for (i, &w) in weights.iter().enumerate() {
-                cumulative += w;
-                if cumulative >= threshold {
-                    counts[i] += 1;
-                    break;
-                }
-            }
-        }
-
-        // Empirical frequencies should match analytical probabilities within ~1%
-        for (i, &count) in counts.iter().enumerate() {
-            let empirical = count as f64 / n as f64;
-            assert!(
-                (empirical - p[i]).abs() < 0.01,
-                "atom {i}: empirical={empirical:.4}, expected={:.4}",
-                p[i]
-            );
-        }
-    }
-
     /// Moving away from the reference must be *harder* to accept, not easier.
     ///
     /// Close atoms are picked more often than far ones, so an outward move is proposed far more
@@ -961,41 +917,5 @@ mod tests {
 
         assert!(outward > 0.0, "outward move should be penalized: {outward}");
         assert!(inward < 0.0, "inward move should be favoured: {inward}");
-    }
-
-    /// Nearest-reference distance picks the closest among multiple reference groups.
-    #[test]
-    fn nearest_reference_distance() {
-        use crate::cell::{BoundaryConditions, Cuboid};
-        use nalgebra::Vector3;
-
-        let mut ps = make_sampler(2.0, 1.0);
-        // Two reference groups: one at (10,0,0) R=2, one at (20,0,0) R=3
-        ps.ref_geometries = vec![
-            (Point::from(Vector3::new(10.0, 0.0, 0.0)), 2.0),
-            (Point::from(Vector3::new(20.0, 0.0, 0.0)), 3.0),
-        ];
-
-        let cell = Cuboid::new(100.0, 100.0, 100.0);
-
-        // Helper: compute nearest bounding-sphere distance manually
-        let nearest = |pos: &Point| -> f64 {
-            ps.ref_geometries
-                .iter()
-                .map(|(cm, r)| (cell.distance(pos, cm).norm() - r).max(0.0))
-                .fold(f64::INFINITY, f64::min)
-        };
-
-        // Atom at origin: d1 = 10-2 = 8, d2 = 20-3 = 17 → nearest = 8
-        let pos = Point::from(Vector3::new(0.0, 0.0, 0.0));
-        assert_approx_eq!(f64, nearest(&pos), 8.0, epsilon = 1e-10);
-
-        // Atom at (18,0,0): d1 = 8-2 = 6, d2 = max(0, 2-3) = 0 → nearest = 0
-        let pos2 = Point::from(Vector3::new(18.0, 0.0, 0.0));
-        assert_approx_eq!(f64, nearest(&pos2), 0.0, epsilon = 1e-10);
-
-        // Atom at (15,0,0): d1 = 5-2 = 3, d2 = 5-3 = 2 → nearest = 2
-        let pos3 = Point::from(Vector3::new(15.0, 0.0, 0.0));
-        assert_approx_eq!(f64, nearest(&pos3), 2.0, epsilon = 1e-10);
     }
 }

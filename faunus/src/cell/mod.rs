@@ -34,7 +34,6 @@ mod cuboid;
 mod cylinder;
 mod endless;
 mod hexagonal_prism;
-//pub(crate) mod lumol;
 mod pbc_params;
 mod slit;
 mod sphere;

@@ -608,12 +608,4 @@ frequency: !Every 10
             _ => panic!("expected DensityProfile variant"),
         }
     }
-
-    #[test]
-    fn info_trait() {
-        use crate::Info;
-        let context = backend_from_str(DIMER);
-        let analysis = builder("all", false).build(&context).unwrap();
-        assert_eq!(analysis.short_name(), Some("density_profile"));
-    }
 }

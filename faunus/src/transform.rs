@@ -352,18 +352,6 @@ mod tests {
     use super::*;
     use float_cmp::assert_approx_eq;
 
-    fn rotate_random<'a>(
-        positions: impl IntoIterator<Item = &'a mut Point>,
-        center: &Point,
-        rng: &mut impl Rng,
-    ) {
-        let angle = rng.gen_range(0.0..2.0 * std::f64::consts::PI);
-        let axis = random_unit_vector(rng);
-        let matrix = nalgebra::Rotation3::new(axis * angle);
-        let rotate = |pos: &mut Point| *pos = matrix * (*pos - center) + center;
-        positions.into_iter().for_each(rotate);
-    }
-
     /// Sphere picking is unbiased: unit length, and no preferred direction.
     ///
     /// Seeded, because the tolerances below sit only ~2.5σ from the mean of 5000 samples — on an
@@ -541,32 +529,5 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
             *context.groups()[group_index].quaternion(),
             UnitQuaternion::identity()
         );
-    }
-
-    #[test]
-    fn test_rotate_random() {
-        let positions = [
-            Point::new(10.4, 11.3, 12.8),
-            Point::new(7.3, 9.3, 2.6),
-            Point::new(9.3, 10.1, 17.2),
-        ];
-        let masses = [1.46, 2.23, 10.73];
-        let com = crate::geometry::mass_center(&positions, &masses);
-
-        let mut rng = rand::thread_rng();
-        for _ in 0..100 {
-            let mut cloned = positions;
-
-            rotate_random(&mut cloned, &com, &mut rng);
-
-            for (original, new) in positions.iter().zip(cloned.iter()) {
-                assert_ne!(original, new);
-            }
-
-            let com_rotated = crate::geometry::mass_center(&cloned, &masses);
-            assert_approx_eq!(f64, com.x, com_rotated.x);
-            assert_approx_eq!(f64, com.y, com_rotated.y);
-            assert_approx_eq!(f64, com.z, com_rotated.z);
-        }
     }
 }

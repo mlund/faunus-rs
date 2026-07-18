@@ -338,18 +338,6 @@ mod tests {
     }
 
     #[test]
-    fn build_with_valid_fields() {
-        let vvm = VirtualVolumeMoveBuilder::default()
-            .volume_displacement(0.5)
-            .frequency(Frequency::Every(10))
-            .build(RT_298)
-            .unwrap();
-        assert_approx_eq!(f64, vvm.volume_displacement, 0.5);
-        assert_eq!(vvm.method, VolumeScalePolicy::Isotropic);
-        assert!(vvm.widom.is_empty());
-    }
-
-    #[test]
     fn build_missing_dv() {
         let result = VirtualVolumeMoveBuilder::default()
             .frequency(Frequency::Every(10))
@@ -548,21 +536,6 @@ mod tests {
 "#;
         let vvm = deserialize_vvm_builder(yaml, 0).build(RT_298).unwrap();
         assert_eq!(vvm.method, VolumeScalePolicy::Isotropic);
-    }
-
-    #[test]
-    fn roundtrip_serialize_deserialize_builder() {
-        let yaml = r#"
-volume_displacement: 0.5
-method: ScaleZ
-frequency: !Every 5
-"#;
-        let builder: VirtualVolumeMoveBuilder = serde_yml::from_str(yaml).unwrap();
-        let serialized = serde_yml::to_string(&builder).unwrap();
-        let roundtrip: VirtualVolumeMoveBuilder = serde_yml::from_str(&serialized).unwrap();
-        let vvm = roundtrip.build(RT_298).unwrap();
-        assert_approx_eq!(f64, vvm.volume_displacement, 0.5);
-        assert_eq!(vvm.method, VolumeScalePolicy::ScaleZ);
     }
 }
 

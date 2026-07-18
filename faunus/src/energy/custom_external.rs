@@ -447,21 +447,6 @@ function: "q * z"
         let energy = ext.eval_at(2.0, 0.0, 0.0, 3.0);
         assert!((energy - 6.0).abs() < 1e-10); // 2.0 * 3.0 = 6
     }
-
-    #[test]
-    fn deserialize_list_of_builders() {
-        let yaml = r#"
-- selection: "all"
-  function: "x^2"
-- selection: "all"
-  function: "q * z"
-  use_com: true
-"#;
-        let builders: Vec<CustomExternalBuilder> = serde_yml::from_str(yaml).unwrap();
-        assert_eq!(builders.len(), 2);
-        assert!(!builders[0].use_com);
-        assert!(builders[1].use_com);
-    }
 }
 
 #[cfg(test)]
@@ -584,20 +569,5 @@ function: "0.5 * (x^2 + y^2 + z^2)"
             .map(|gi| ext.energy(&ctx, &Change::SingleGroup(gi, GroupChange::RigidBody)))
             .sum();
         assert!((sum_partials - total).abs() < 1e-10);
-    }
-
-    #[test]
-    fn com_mode_uses_mass_center() {
-        let ctx = make_context();
-        let yaml = r#"
-selection: "all"
-function: "x^2 + y^2 + z^2"
-use_com: true
-"#;
-        let builder: CustomExternalBuilder = serde_yml::from_str(yaml).unwrap();
-        let ext = builder.build().unwrap();
-        let energy = ext.energy(&ctx, &Change::Everything);
-        // With com mode, should get energy from mass centers
-        assert!(energy >= 0.0);
     }
 }

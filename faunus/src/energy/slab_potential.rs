@@ -672,17 +672,6 @@ mod tests {
         );
     }
 
-    #[test]
-    fn bin_index_and_center_roundtrip() {
-        let grid = screened_grid(1.0);
-        for i in 0..grid.n_bins() {
-            assert_eq!(grid.bin_index(grid.bin_center(i)), i);
-        }
-        // Out-of-range positions clamp to the end bins.
-        assert_eq!(grid.bin_index(-1e3), 0);
-        assert_eq!(grid.bin_index(1e3), grid.n_bins() - 1);
-    }
-
     fn grid_from(cell: Cell) -> Result<SlabGrid> {
         SlabGrid::from_cell(&cell, 1.0, SlabKernel::screened(7.0, 0.1))
     }

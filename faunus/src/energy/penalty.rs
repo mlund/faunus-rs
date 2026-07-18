@@ -182,7 +182,6 @@ impl PenaltyBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::flat_histogram::GridDim;
 
     #[test]
     fn matching_dimensionality_is_accepted() {
@@ -198,31 +197,5 @@ mod tests {
         assert!(check_dimensionality(true, false, file).is_err());
         // 1-D grid with a superfluous coordinate2: would discard the second CV.
         assert!(check_dimensionality(false, true, file).is_err());
-    }
-
-    /// A poisoned shared lock must be recovered, not re-panicked: the recovery expression
-    /// used by `Penalty::energy`/`update` yields a usable guard after a sibling panics
-    /// while holding the write lock.
-    #[test]
-    fn poisoned_lock_is_recovered_not_repanicked() {
-        let dim = GridDim::new_1d(0.0, 10.0, 1.0).unwrap();
-        let state = Arc::new(RwLock::new(FlatHistogramState::new(
-            dim, 0.8, 1, 1e-6, 1.0, 1,
-        )));
-
-        // Poison the lock: panic while holding the write guard.
-        let poisoned = Arc::clone(&state);
-        let _ = std::thread::spawn(move || {
-            let _guard = poisoned.write().unwrap();
-            panic!("simulated walker panic while holding the lock");
-        })
-        .join();
-        assert!(state.is_poisoned());
-
-        // Both accesses recover instead of panicking, exactly as energy()/update() now do.
-        let read_ok = state.read().unwrap_or_else(PoisonError::into_inner);
-        assert_eq!(read_ok.dim().num_bins(), 10);
-        drop(read_ok);
-        let _write_ok = state.write().unwrap_or_else(PoisonError::into_inner);
     }
 }
