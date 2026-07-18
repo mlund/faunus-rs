@@ -1466,7 +1466,7 @@ Add a <code>spline</code> section alongside <code>nonbonded</code>:</p>
 <span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!Coulomb</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">cutoff</span><span class="p">:</span><span class="w"> </span><span class="nv">200</span><span class="p p-Indicator">}</span>
 <span class="w">    </span><span class="nt">spline</span><span class="p">:</span>
 <span class="w">      </span><span class="nt">cutoff</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">200.0</span>
-<span class="w">      </span><span class="nt">n_points</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2000</span>
+<span class="w">      </span><span class="nt">table_points</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2000</span>
 <span class="w">      </span><span class="nt">grid_type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">PowerLaw2</span>
 </code></pre></div>
 <table>
@@ -1486,7 +1486,7 @@ Add a <code>spline</code> section alongside <code>nonbonded</code>:</p>
 <td>Cutoff distance (Å)</td>
 </tr>
 <tr>
-<td><code>n_points</code></td>
+<td><code>table_points</code></td>
 <td>no</td>
 <td><code>2000</code></td>
 <td>Number of spline grid points</td>
@@ -1825,13 +1825,11 @@ applies (operators, math functions, Python-style conditionals, named constants).
 <span class="w">  </span><span class="nt">energy</span><span class="p">:</span>
 <span class="w">    </span><span class="nt">custom_pair</span><span class="p">:</span>
 <span class="w">      </span><span class="c1"># Harmonic restraint at fixed COM-COM distance (umbrella window)</span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">selection1</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;molecule</span><span class="nv"> </span><span class="s">protein0&quot;</span>
-<span class="w">        </span><span class="nt">selection2</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;molecule</span><span class="nv"> </span><span class="s">protein1&quot;</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">selections</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;molecule</span><span class="nv"> </span><span class="s">protein0&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;molecule</span><span class="nv"> </span><span class="s">protein1&quot;</span><span class="p p-Indicator">]</span>
 <span class="w">        </span><span class="nt">function</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;0.5</span><span class="nv"> </span><span class="s">*</span><span class="nv"> </span><span class="s">k</span><span class="nv"> </span><span class="s">*</span><span class="nv"> </span><span class="s">(r</span><span class="nv"> </span><span class="s">-</span><span class="nv"> </span><span class="s">r0)^2&quot;</span>
 <span class="w">        </span><span class="nt">constants</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> k</span><span class="p">:</span><span class="w"> </span><span class="nv">100.0</span><span class="p p-Indicator">,</span><span class="nt"> r0</span><span class="p">:</span><span class="w"> </span><span class="nv">30.0</span><span class="w"> </span><span class="p p-Indicator">}</span>
 <span class="w">      </span><span class="c1"># Constant pulling force along the COM-COM axis (steered MD)</span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">selection1</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;molecule</span><span class="nv"> </span><span class="s">protein0&quot;</span>
-<span class="w">        </span><span class="nt">selection2</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;molecule</span><span class="nv"> </span><span class="s">protein1&quot;</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">selections</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;molecule</span><span class="nv"> </span><span class="s">protein0&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;molecule</span><span class="nv"> </span><span class="s">protein1&quot;</span><span class="p p-Indicator">]</span>
 <span class="w">        </span><span class="nt">function</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;f0</span><span class="nv"> </span><span class="s">*</span><span class="nv"> </span><span class="s">r&quot;</span>
 <span class="w">        </span><span class="nt">constants</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> f0</span><span class="p">:</span><span class="w"> </span><span class="nv">50.0</span><span class="w"> </span><span class="p p-Indicator">}</span>
 </code></pre></div>
@@ -1846,16 +1844,10 @@ applies (operators, math functions, Python-style conditionals, named constants).
 </thead>
 <tbody>
 <tr>
-<td><code>selection1</code></td>
+<td><code>selections</code></td>
 <td>yes</td>
 <td></td>
-<td>Selection that must resolve to one Rigid molecule</td>
-</tr>
-<tr>
-<td><code>selection2</code></td>
-<td>yes</td>
-<td></td>
-<td>Same, distinct from <code>selection1</code></td>
+<td>Pair <code>[a, b]</code>; each must resolve to one Rigid molecule, and the two must differ</td>
 </tr>
 <tr>
 <td><code>function</code></td>

@@ -1172,13 +1172,13 @@ If no file is given, only the mean and RMS are written to <code>output.yaml</cod
 <td><code>selection</code></td>
 <td>depends</td>
 <td></td>
-<td>Selection expression for one atom or group</td>
+<td>Selection expression for one atom or group (single-group properties)</td>
 </tr>
 <tr>
-<td><code>selection2</code></td>
+<td><code>selections</code></td>
 <td>depends</td>
 <td></td>
-<td>Second selection (for two-group properties)</td>
+<td>Pair <code>[a, b]</code> of selections (two-group properties, e.g. <code>mass_center_separation</code>)</td>
 </tr>
 <tr>
 <td><code>file</code></td>
@@ -1206,7 +1206,7 @@ option. Supplying <code>range</code>/<code>resolution</code> on a plain CV is an
 <tr>
 <td><code>volume</code></td>
 <td>none</td>
-<td>Cell measure via <code>dimension</code>: volume (<code>xyz</code>), area (<code>xy</code>), or length (<code>z</code>). Note: <code>volume</code> uses <code>dimension</code>, not <code>projection</code></td>
+<td>Cell measure via <code>projection</code>: volume (<code>xyz</code>), area (<code>xy</code>), or length (<code>z</code>)</td>
 </tr>
 <tr>
 <td><code>atom_position</code></td>
@@ -1533,7 +1533,7 @@ file, one row per distance bin, with columns
 <td>Distance resolution along <em>R</em> (Å)</td>
 </tr>
 <tr>
-<td><code>max_r</code></td>
+<td><code>max</code></td>
 <td>no</td>
 <td>half box</td>
 <td>Maximum separation (Å)</td>
@@ -1772,7 +1772,7 @@ automatically excluded.</p>
 <span class="w">    </span><span class="nt">use_com</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 <span class="w">    </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">rdf_com.dat</span>
 <span class="w">    </span><span class="nt">resolution</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.5</span>
-<span class="w">    </span><span class="nt">max_r</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">30.0</span>
+<span class="w">    </span><span class="nt">max</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">30.0</span>
 <span class="w">    </span><span class="nt">frequency</span><span class="p">:</span><span class="w"> </span><span class="kt">!Every</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">100</span>
 </code></pre></div>
 <h3 id="options_6">Options<a class="headerlink" href="#options_6" title="Permanent link">&para;</a></h3>
@@ -1811,7 +1811,7 @@ automatically excluded.</p>
 <td>Sample frequency, e.g. <code>!Every 100</code></td>
 </tr>
 <tr>
-<td><code>max_r</code></td>
+<td><code>max</code></td>
 <td>no</td>
 <td>half shortest box dim</td>
 <td>Maximum distance for histogram</td>
@@ -2019,7 +2019,7 @@ If <code>file</code> is given, each sampled step writes columns
 <div class="highlight"><pre><span></span><code><span class="nt">analysis</span><span class="p">:</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!VirtualTranslate</span>
 <span class="w">    </span><span class="nt">selection</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;molecule</span><span class="nv"> </span><span class="s">protein&quot;</span>
-<span class="w">    </span><span class="nt">dL</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.01</span>
+<span class="w">    </span><span class="nt">displacement</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.01</span>
 <span class="w">    </span><span class="nt">directions</span><span class="p">:</span><span class="w"> </span><span class="kt">!z</span>
 <span class="w">    </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">force.dat</span>
 <span class="w">    </span><span class="nt">frequency</span><span class="p">:</span><span class="w"> </span><span class="kt">!Every</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10</span>
@@ -2042,7 +2042,7 @@ If <code>file</code> is given, each sampled step writes columns
 <td>Selection matching exactly one molecule</td>
 </tr>
 <tr>
-<td><code>dL</code></td>
+<td><code>displacement</code></td>
 <td>yes</td>
 <td></td>
 <td>Displacement magnitude (Å)</td>
@@ -2587,7 +2587,7 @@ normally counted by mass centre.</p>
 <td>Ligand radius (Å), setting the exclusion boundary</td>
 </tr>
 <tr>
-<td><code>solvent_probe</code></td>
+<td><code>probe_radius</code></td>
 <td>no</td>
 <td><code>1.4</code></td>
 <td>Water radius (Å), setting the accessible surface and implicit-solvent shell behind <span class="arithmatex">\(b_1\)</span></td>
@@ -2653,8 +2653,7 @@ The file is rewritten at each sample so partial results survive crashes.</p>
 <span class="w">    </span><span class="nt">selection</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;molecule</span><span class="nv"> </span><span class="s">GLU&quot;</span>
 <span class="w">    </span><span class="nt">coordinate</span><span class="p">:</span>
 <span class="w">      </span><span class="nt">property</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">mass_center_separation</span>
-<span class="w">      </span><span class="nt">selection</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;molecule</span><span class="nv"> </span><span class="s">GLU&quot;</span>
-<span class="w">      </span><span class="nt">selection2</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;molecule</span><span class="nv"> </span><span class="s">protein&quot;</span>
+<span class="w">      </span><span class="nt">selections</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;molecule</span><span class="nv"> </span><span class="s">GLU&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;molecule</span><span class="nv"> </span><span class="s">protein&quot;</span><span class="p p-Indicator">]</span>
 <span class="w">      </span><span class="nt">resolution</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.5</span>
 <span class="w">    </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">charge_vs_dist.dat</span>
 <span class="w">    </span><span class="nt">frequency</span><span class="p">:</span><span class="w"> </span><span class="kt">!Every</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">100</span>
