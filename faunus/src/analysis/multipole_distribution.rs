@@ -667,48 +667,6 @@ mod tests {
         assert_relative_eq!(energy, expected, epsilon = 1e-12);
     }
 
-    // --- Structural helper values ---
-
-    #[test]
-    fn orientational_correlations() {
-        let r_hat = Point::new(1.0, 0.0, 0.0);
-        let along = Point::new(1.0, 0.0, 0.0);
-        let perp = Point::new(0.0, 1.0, 0.0);
-
-        // Aligned along R: cos=1, P2=1, longitudinal=1.
-        let cos = along.dot(&along);
-        assert_relative_eq!(cos, 1.0);
-        assert_relative_eq!(0.5 * (3.0 * cos * cos - 1.0), 1.0);
-        assert_relative_eq!(along.dot(&r_hat) * along.dot(&r_hat), 1.0);
-        // Perpendicular to each other and to R: cos=0, P2=−0.5, longitudinal=0.
-        let cos_perp = along.dot(&perp);
-        assert_relative_eq!(cos_perp, 0.0);
-        assert_relative_eq!(0.5 * (3.0 * cos_perp * cos_perp - 1.0), -0.5);
-        assert_relative_eq!(perp.dot(&r_hat) * along.dot(&r_hat), 0.0);
-        // Magic angle 54.7356° → P2 ≈ 0.
-        let theta = (1.0f64 / 3.0).sqrt().acos();
-        let magic = theta.cos();
-        assert_relative_eq!(0.5 * (3.0 * magic * magic - 1.0), 0.0, epsilon = 1e-12);
-    }
-
-    #[test]
-    fn quadrupole_correlation_normalized() {
-        // Identical tensors → normalized Frobenius correlation = 1.
-        let mut a = Matrix3::zeros();
-        a[(0, 0)] = 2.0;
-        a[(1, 1)] = -1.0;
-        a[(2, 2)] = -1.0;
-        assert_relative_eq!(a.dot(&a) / (a.norm() * a.norm()), 1.0);
-        // 90° swap of x/y axes (still traceless) → known reduced overlap in (−1, 1).
-        let mut b = Matrix3::zeros();
-        b[(0, 0)] = -1.0;
-        b[(1, 1)] = 2.0;
-        b[(2, 2)] = -1.0;
-        let corr = a.dot(&b) / (a.norm() * b.norm());
-        assert!(corr > -1.0 && corr < 1.0);
-        assert_relative_eq!(corr, -0.5, epsilon = 1e-12);
-    }
-
     // --- Builder / serde ---
 
     #[test]

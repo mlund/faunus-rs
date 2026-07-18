@@ -870,52 +870,6 @@ fn test_angle_vectors() {
 }
 
 #[test]
-fn test_angle_points() {
-    use float_cmp::assert_approx_eq;
-
-    let endless_cell = crate::cell::Endless;
-
-    let p1 = Point::new(3.2, 3.3, 2.5);
-    let p2 = Point::new(1.2, 3.3, 2.5);
-    let p3 = Point::new(1.2, 5.3, 2.5);
-    assert_approx_eq!(f64, angle_points(&p1, &p2, &p3, &endless_cell), 90.0);
-
-    let p1 = Point::new(3.2, 3.3, 2.5);
-    let p2 = Point::new(1.2, 3.3, 2.5);
-    let p3 = Point::new(1.2, 1.3, 2.5);
-    assert_approx_eq!(f64, angle_points(&p1, &p2, &p3, &endless_cell), 90.0);
-
-    let p1 = Point::new(4.2, 3.3, 2.5);
-    let p2 = Point::new(3.2, 3.3, 2.5);
-    let p3 = Point::new(3.2, 3.3, 9.5);
-    assert_approx_eq!(f64, angle_points(&p1, &p2, &p3, &endless_cell), 90.0);
-
-    let p1 = Point::new(4.2, 3.3, 2.5);
-    let p2 = Point::new(3.2, 3.3, 2.5);
-    let p3 = Point::new(6.2, 3.3, 5.5);
-    assert_approx_eq!(f64, angle_points(&p1, &p2, &p3, &endless_cell), 45.0);
-
-    let p1 = Point::new(4.2, 3.3, 2.5);
-    let p2 = Point::new(3.2, 3.3, 2.5);
-    let p3 = Point::new(7.2, 3.3, 2.5);
-    assert_approx_eq!(f64, angle_points(&p1, &p2, &p3, &endless_cell), 0.0);
-
-    let p1 = Point::new(4.2, 3.3, 2.5);
-    let p2 = Point::new(3.2, 3.3, 2.5);
-    let p3 = Point::new(-1.2, 3.3, 2.5);
-    assert_approx_eq!(f64, angle_points(&p1, &p2, &p3, &endless_cell), 180.0);
-
-    let p1 = Point::new(4.2, 2.3, 6.0);
-    let p2 = Point::new(3.2, 3.3, 2.5);
-    let p3 = Point::new(4.4, 5.7, 1.8);
-    assert_approx_eq!(
-        f64,
-        angle_points(&p1, &p2, &p3, &endless_cell),
-        110.40636490060925
-    );
-}
-
-#[test]
 fn test_angle_points_pbc() {
     use float_cmp::assert_approx_eq;
 

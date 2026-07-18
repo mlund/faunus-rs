@@ -86,14 +86,6 @@ mod tests {
     }
 
     #[test]
-    fn deserialize_new_format_without_index() {
-        let yaml = "atom_id: 1\npos:\n- 4.0\n- 5.0\n- 6.0\n";
-        let p: Particle = serde_yml::from_str(yaml).unwrap();
-        assert_eq!(p.atom_id, 1);
-        assert_eq!(p.pos, Point::new(4.0, 5.0, 6.0));
-    }
-
-    #[test]
     fn roundtrip_serialization() {
         let p = Particle::new(3, Point::new(7.0, 8.0, 9.0));
         let yaml = serde_yml::to_string(&p).unwrap();

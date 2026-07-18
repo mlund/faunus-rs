@@ -5,26 +5,15 @@ use interatomic::twobody::{IsotropicTwobodyEnergy, SplineConfig};
 
 use crate::{
     backend::Backend,
-    cell::{Cell, Cuboid, SimulationCell},
+    cell::{Cell, Cuboid},
     energy::{builder::HamiltonianBuilder, Hamiltonian},
     group::{GroupCollection, GroupCollectionMut, GroupSize, RelIndex},
     montecarlo::NewOld,
     topology::Topology,
-    Change, Group, GroupChange,
+    Change, GroupChange,
 };
 
 use super::*;
-use crate::group::MoleculeId;
-
-/// Conservative lower bound on group-group distance using bounding spheres.
-fn min_group_distance(gi: &Group, gj: &Group, cell: &impl SimulationCell) -> Option<f64> {
-    let com_i = gi.mass_center()?;
-    let com_j = gj.mass_center()?;
-    let ri = gi.bounding_radius()?;
-    let rj = gj.bounding_radius()?;
-    let com_dist = cell.distance(com_i, com_j).norm();
-    Some((com_dist - ri - rj).max(0.0))
-}
 
 /// Compare behavior of two `IsotropicTwobodyEnergy` trait objects.
 fn assert_behavior(obj1: &dyn IsotropicTwobodyEnergy, obj2: &dyn IsotropicTwobodyEnergy) {
@@ -756,51 +745,6 @@ fn test_nonbonded_matrix_splined_energy_changes() {
         splined_energy,
         relative_error
     );
-}
-
-#[test]
-fn test_min_group_distance() {
-    let cell = Cuboid::cubic(20.0);
-
-    let mut g1 = Group::new(0, MoleculeId::new(0), 0..3);
-    g1.set_geometry(Some(crate::group::GroupGeometry {
-        mass_center: crate::Point::new(0.0, 0.0, 0.0),
-        bounding_radius: 1.0,
-    }));
-
-    let mut g2 = Group::new(1, MoleculeId::new(0), 3..6);
-    g2.set_geometry(Some(crate::group::GroupGeometry {
-        mass_center: crate::Point::new(5.0, 0.0, 0.0),
-        bounding_radius: 1.5,
-    }));
-
-    // COM distance = 5.0, sum of radii = 2.5, min distance = 2.5
-    let d = min_group_distance(&g1, &g2, &cell).unwrap();
-    assert_approx_eq!(f64, d, 2.5);
-
-    // Overlapping spheres → 0
-    let mut g3 = Group::new(2, MoleculeId::new(0), 6..9);
-    g3.set_geometry(Some(crate::group::GroupGeometry {
-        mass_center: crate::Point::new(1.0, 0.0, 0.0),
-        bounding_radius: 2.0,
-    }));
-    let d = min_group_distance(&g1, &g3, &cell).unwrap();
-    assert_approx_eq!(f64, d, 0.0);
-
-    // PBC wrapping: groups near opposite edges
-    let mut g4 = Group::new(3, MoleculeId::new(0), 9..12);
-    g4.set_geometry(Some(crate::group::GroupGeometry {
-        mass_center: crate::Point::new(9.0, 0.0, 0.0),
-        bounding_radius: 0.5,
-    }));
-    // COM distance via PBC = 20 - 9 = 11, but PBC gives min image = 9
-    // Actually: g1 at 0, g4 at 9 → distance via PBC in [-10,10] box: 9.0
-    let d = min_group_distance(&g1, &g4, &cell).unwrap();
-    assert_approx_eq!(f64, d, 9.0 - 1.0 - 0.5);
-
-    // Missing bounding radius → None
-    let g5 = Group::new(4, MoleculeId::new(0), 12..15);
-    assert!(min_group_distance(&g1, &g5, &cell).is_none());
 }
 
 #[test]

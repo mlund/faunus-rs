@@ -338,18 +338,6 @@ mod tests {
     }
 
     #[test]
-    fn build_with_valid_fields() {
-        let vvm = VirtualVolumeMoveBuilder::default()
-            .volume_displacement(0.5)
-            .frequency(Frequency::Every(10))
-            .build(RT_298)
-            .unwrap();
-        assert_approx_eq!(f64, vvm.volume_displacement, 0.5);
-        assert_eq!(vvm.method, VolumeScalePolicy::Isotropic);
-        assert!(vvm.widom.is_empty());
-    }
-
-    #[test]
     fn build_missing_dv() {
         let result = VirtualVolumeMoveBuilder::default()
             .frequency(Frequency::Every(10))
@@ -381,25 +369,6 @@ mod tests {
         let result = deserialize_vvm_builder(yaml, 0).build(RT_298);
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("block_size"));
-    }
-
-    #[test]
-    fn build_with_custom_method() {
-        let vvm = VirtualVolumeMoveBuilder::default()
-            .volume_displacement(1.0)
-            .frequency(Frequency::Every(5))
-            .method(VolumeScalePolicy::ScaleZ)
-            .build(RT_298)
-            .unwrap();
-        assert_eq!(vvm.method, VolumeScalePolicy::ScaleZ);
-    }
-
-    #[test]
-    fn mean_pressure_zero_energy() {
-        let mut vvm = build_vvm(0.5);
-        vvm.widom.collect(0.0, 1.0);
-        vvm.widom.collect(0.0, 1.0);
-        assert_approx_eq!(f64, vvm.mean_pressure(), 0.0);
     }
 
     #[test]
@@ -459,26 +428,6 @@ mod tests {
     }
 
     #[test]
-    fn pressure_stddev_via_perform_sample() {
-        // A block size of 2 lets two collects close a block, so this reaches the same
-        // state perform_sample would after 200 samples at the default size.
-        let mut vvm = VirtualVolumeMoveBuilder::default()
-            .volume_displacement(1.0)
-            .frequency(Frequency::Every(1))
-            .block_size(2)
-            .build(RT_298)
-            .unwrap();
-        assert_eq!(vvm.block_size, 2);
-        // Manually simulate what perform_sample does after perturb():
-        for _ in 0..2 {
-            vvm.widom.collect(0.0, 1.0);
-            vvm.widom.collect(2.0, 1.0);
-        }
-        assert!(vvm.widom.free_energy().n() >= 2);
-        assert!(vvm.widom.free_energy().stddev().is_finite());
-    }
-
-    #[test]
     fn to_yaml_emits_pex_mapping_per_unit() {
         // Size 1 so sampling alone closes each block, as production does.
         let mut vvm = VirtualVolumeMoveBuilder::default()
@@ -530,16 +479,6 @@ mod tests {
     }
 
     #[test]
-    fn deserialize_missing_required_fields() {
-        let yaml = r#"
-- !VirtualVolumeMove
-  method: Isotropic
-  frequency: !Every 10
-"#;
-        assert!(deserialize_vvm_builder(yaml, 0).build(RT_298).is_err());
-    }
-
-    #[test]
     fn deserialize_default_method_is_isotropic() {
         let yaml = r#"
 - !VirtualVolumeMove
@@ -548,21 +487,6 @@ mod tests {
 "#;
         let vvm = deserialize_vvm_builder(yaml, 0).build(RT_298).unwrap();
         assert_eq!(vvm.method, VolumeScalePolicy::Isotropic);
-    }
-
-    #[test]
-    fn roundtrip_serialize_deserialize_builder() {
-        let yaml = r#"
-volume_displacement: 0.5
-method: ScaleZ
-frequency: !Every 5
-"#;
-        let builder: VirtualVolumeMoveBuilder = serde_yml::from_str(yaml).unwrap();
-        let serialized = serde_yml::to_string(&builder).unwrap();
-        let roundtrip: VirtualVolumeMoveBuilder = serde_yml::from_str(&serialized).unwrap();
-        let vvm = roundtrip.build(RT_298).unwrap();
-        assert_approx_eq!(f64, vvm.volume_displacement, 0.5);
-        assert_eq!(vvm.method, VolumeScalePolicy::ScaleZ);
     }
 }
 

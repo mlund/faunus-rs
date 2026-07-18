@@ -374,11 +374,6 @@ mod tests {
     }
 
     #[test]
-    fn bond_graph_default() {
-        assert_eq!(BondGraph::default().num_atoms(), 0);
-    }
-
-    #[test]
     fn connected_from_branched() {
         // Branched: 0-1-2-3(-4,-5-6), plus 3-6, 4-6
         let bonds: Vec<Bond> = [

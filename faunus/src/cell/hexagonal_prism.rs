@@ -281,17 +281,6 @@ mod tests {
     }
 
     #[test]
-    fn bounding_box() {
-        let side = 5.0;
-        let height = 10.0;
-        let hex = HexagonalPrism::new(side, height);
-        let bb = hex.bounding_box().unwrap();
-        assert!((bb.x - 3.0_f64.sqrt() * side).abs() < 1e-10);
-        assert!((bb.y - 2.0 * side).abs() < 1e-10);
-        assert!((bb.z - height).abs() < 1e-10);
-    }
-
-    #[test]
     fn random_points_inside() {
         let hex = HexagonalPrism::new(5.0, 10.0);
         let mut rng = rand::thread_rng();

@@ -629,7 +629,13 @@ mod tests {
     fn gibbs_move_builder_volume_yaml_default() {
         let yaml = "!GibbsVolumeExchange { volume_displacement: 10.0 }";
         let builder: GibbsMoveBuilder = serde_yml::from_str(yaml).unwrap();
-        assert!(matches!(builder, GibbsMoveBuilder::GibbsVolumeExchange { dv, .. } if dv == 10.0));
+        assert!(matches!(
+            builder,
+            GibbsMoveBuilder::GibbsVolumeExchange {
+                dv,
+                method: VolumeDisplacementMethod::Logarithmic
+            } if dv == 10.0
+        ));
     }
 
     #[test]

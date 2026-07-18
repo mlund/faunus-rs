@@ -233,29 +233,6 @@ frequency: !Every 1
     }
 
     #[test]
-    fn frequency_filtering() {
-        let ctx = make_context();
-        let yaml = r#"
-property: volume
-frequency: !Every 10
-"#;
-        let builder: CollectiveVariableAnalysisBuilder = serde_yml::from_str(yaml).unwrap();
-        let mut analysis = builder.build(&ctx).unwrap();
-
-        // Step 1 should not sample (not multiple of 10)
-        analysis.sample(&ctx, 1).unwrap();
-        assert_eq!(Analyze::<Backend>::num_samples(&analysis), 0);
-
-        // Step 10 should sample
-        analysis.sample(&ctx, 10).unwrap();
-        assert_eq!(Analyze::<Backend>::num_samples(&analysis), 1);
-
-        // Step 20 should sample
-        analysis.sample(&ctx, 20).unwrap();
-        assert_eq!(Analyze::<Backend>::num_samples(&analysis), 2);
-    }
-
-    #[test]
     fn build_via_analysis_builder() {
         let ctx = make_context();
         let yaml = r#"

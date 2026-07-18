@@ -359,13 +359,6 @@ mod pairing_tests {
         assert!(!group_change.internal_change());
     }
 
-    #[test]
-    fn speciation_accepts_changes_that_match_its_actions() {
-        let actions = vec![SpeciationAction::DeactivateGroup(7)];
-        let changes = vec![(7, GroupChange::Resize(GroupSize::Empty))];
-        let _ = ProposedMove::speciation(actions, changes);
-    }
-
     /// The escape hatch is still checked: a `GroupChange` naming a group no action touches would
     /// make the energy terms recompute the wrong groups.
     ///

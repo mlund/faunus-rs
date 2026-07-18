@@ -208,23 +208,6 @@ frequency: !Every 1
             AnalysisBuilder::MeanAlongCoordinate(_)
         ));
     }
-
-    #[test]
-    fn bin_index_and_center() {
-        let resolution = 1.0;
-        let bin_index = |v: f64| (v / resolution).floor() as i64;
-        let bin_center = |i: i64| (i as f64 + 0.5) * resolution;
-
-        assert_eq!(bin_index(0.0), 0);
-        assert_eq!(bin_index(0.9), 0);
-        assert_eq!(bin_index(1.0), 1);
-        assert_eq!(bin_index(-0.1), -1);
-        assert_eq!(bin_index(-1.0), -1);
-
-        assert!((bin_center(0) - 0.5).abs() < 1e-10);
-        assert!((bin_center(-1) - (-0.5)).abs() < 1e-10);
-        assert!((bin_center(1) - 1.5).abs() < 1e-10);
-    }
 }
 
 #[cfg(test)]

@@ -1184,22 +1184,6 @@ mod tests {
     }
 
     #[test]
-    fn test_absolute_relative_indices() {
-        let group = Group {
-            molecule: MoleculeId::new(20),
-            index: 2,
-            geometry: None,
-            num_active: 6,
-            range: 10..27,
-            size_status: GroupSize::Partial(6),
-            ..Default::default()
-        };
-
-        assert_eq!(group.to_absolute(RelIndex::new(4)).unwrap().get(), 14);
-        assert_eq!(group.to_relative(AbsIndex::new(21)).unwrap().get(), 11);
-    }
-
-    #[test]
     fn test_group_lists() {
         let mut group_lists = GroupLists::new(3);
 
@@ -1418,14 +1402,5 @@ mod tests {
         group.rotate_by(&q2);
         let expected = q2 * q1;
         assert!((group.quaternion().angle_to(&expected)).abs() < 1e-12);
-    }
-
-    #[test]
-    fn quaternion_set_get() {
-        let mut group = Group::new(0, MoleculeId::new(0), 0..3);
-        let axis = nalgebra::UnitVector3::new_normalize(crate::Point::new(1.0, 0.0, 0.0));
-        let q = crate::UnitQuaternion::from_axis_angle(&axis, 1.2);
-        group.set_quaternion(q);
-        assert_eq!(*group.quaternion(), q);
     }
 }

@@ -521,17 +521,6 @@ propagate: {{seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}}
     }
 
     #[test]
-    fn test_parse_dp_alias() {
-        // Verify "dp" and "dprot" aliases work
-        let s1 = "{ molecule: M, max_displacement: 2.0, max_angle: 0.5, threshold: 10.0 }";
-        let s2 = "{ molecule: M, max_displacement: 2.0, max_angle: 0.5, threshold: 10.0 }";
-        let m1: ClusterMove = serde_yml::from_str(s1).unwrap();
-        let m2: ClusterMove = serde_yml::from_str(s2).unwrap();
-        assert_eq!(m1.max_displacement, m2.max_displacement);
-        assert_eq!(m1.max_angle, m2.max_angle);
-    }
-
-    #[test]
     fn finalize_rejects_molecule_without_mass_center() {
         // `MOL` in topology_pass.yaml has `has_com: false`; the rotation pivot needs a mass center,
         // so the move must fail at startup rather than panic mid-simulation.

@@ -901,28 +901,6 @@ mod tests {
     }
 
     #[test]
-    fn build_pmf_stderr_survives_perfect_window_agreement() {
-        // The issue-#76 scenario: two windows whose aligned free energies coincide in the overlap.
-        // The spread vanishes there, but the error bar must not.
-        let n = 10000;
-        let samples_a: Vec<f64> = (0..n).map(|i| i as f64 / n as f64 * 10.0).collect();
-        let samples_b: Vec<f64> = (0..n).map(|i| 8.0 + i as f64 / n as f64 * 10.0).collect();
-        let results = vec![
-            window_result(0.0, 10.0, 1.0, &samples_a),
-            window_result(8.0, 18.0, 1.0, &samples_b),
-        ];
-        let pmf = build_pmf(&results, 1.0, 1.0).unwrap();
-        let overlap = pmf.iter().find(|p| (p.cv - 8.5).abs() < 1e-9).unwrap();
-
-        assert!(overlap.spread < 1e-9, "spread={}", overlap.spread);
-        assert!(overlap.stderr > 0.0);
-        assert!(pmf.iter().all(|p| p.stderr > 0.0));
-        // More counts must mean a smaller error: the two-window bin beats a one-window bin
-        let single = pmf.iter().find(|p| (p.cv - 4.5).abs() < 1e-9).unwrap();
-        assert!(overlap.stderr < single.stderr);
-    }
-
-    #[test]
     fn build_pmf_spread_flags_disagreeing_windows() {
         // Window B's density profile differs from A's across the overlap, so the two stitched
         // estimates disagree bin-by-bin even though their overlap fractions align on average.
@@ -946,7 +924,9 @@ mod tests {
 
     #[test]
     fn build_pmf_produces_bins() {
-        // Uniform samples in two overlapping windows → flat PMF
+        // Uniform samples in two overlapping windows → flat PMF, and (issue #76) the error bar
+        // must survive even where the two windows' aligned free energies coincide in the overlap
+        // and the spread between them vanishes.
         let n = 10000;
         let samples_a: Vec<f64> = (0..n).map(|i| i as f64 / n as f64 * 10.0).collect();
         let samples_b: Vec<f64> = (0..n).map(|i| 8.0 + i as f64 / n as f64 * 10.0).collect();
@@ -955,10 +935,19 @@ mod tests {
             window_result(8.0, 18.0, 1.0, &samples_b),
         ];
         let pmf = build_pmf(&results, 1.0, 1.0).unwrap();
+
         // Should have bins from 0 to 18
         assert!(pmf.len() > 2);
         // PMF should be approximately flat (uniform → constant −kT ln ρ)
         let max_f = pmf.iter().map(|p| p.f).fold(0.0_f64, f64::max);
         assert!(max_f < 0.5, "PMF not flat for uniform data: max={max_f}");
+
+        let overlap = pmf.iter().find(|p| (p.cv - 8.5).abs() < 1e-9).unwrap();
+        assert!(overlap.spread < 1e-9, "spread={}", overlap.spread);
+        assert!(overlap.stderr > 0.0);
+        assert!(pmf.iter().all(|p| p.stderr > 0.0));
+        // More counts must mean a smaller error: the two-window bin beats a one-window bin
+        let single = pmf.iter().find(|p| (p.cv - 4.5).abs() < 1e-9).unwrap();
+        assert!(overlap.stderr < single.stderr);
     }
 }

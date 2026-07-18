@@ -374,21 +374,6 @@ mod tests {
     }
 
     #[test]
-    fn build_with_valid_fields() {
-        let vt = VirtualTranslateBuilder::default()
-            .selection(Selection::parse("molecule MOL").unwrap())
-            .displacement(0.01)
-            .frequency(Frequency::Every(10))
-            .build(RT_298)
-            .unwrap();
-        assert_approx_eq!(f64, vt.displacement, 0.01);
-        assert_eq!(vt.selection.source(), "molecule MOL");
-        assert_approx_eq!(f64, vt.thermal_energy, RT_298);
-        assert_eq!(vt.directions, Axes::Z);
-        assert_eq!(vt.widom.len(), 0);
-    }
-
-    #[test]
     fn build_missing_selection() {
         let result = VirtualTranslateBuilder::default()
             .displacement(0.01)

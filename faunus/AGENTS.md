@@ -4,13 +4,18 @@ Applies to all coding agents (Claude Code, Codex, ...). `.claude/CLAUDE.md` is a
 
 The workspace uses git submodules (`duello`, `interatomic`, ...).
 
+Upon startup, load these two skills:
+
+- Deep modules: https://deepwiki.com/mattpocock/skills/4.1.4-designing-deep-modules
+- TDD: https://raw.githubusercontent.com/mattpocock/skills/refs/heads/main/skills/engineering/tdd/SKILL.md
+
 ## Design
 
-- Prefer deep modules with a minimal public API ([skill](https://deepwiki.com/mattpocock/skills/4.1.4-designing-deep-modules)).
+- Prefer deep modules with a minimal public API (load this [skill](https://deepwiki.com/mattpocock/skills/4.1.4-designing-deep-modules)).
 - Make misuse hard: newtypes, enums, type-state over documented conventions.
 - Internal state is the module's job, not the caller's; hide it behind the interface.
 - Unknown user input (serde YAML, ...) is an error. E.g. with Serde `deny_unknown_fields`.
-  Avoid panics under normal use; return errors.
+- Avoid panics under normal use; return errors.
 - I/O must work on macOS, Linux and Windows.
 
 ## Rust
@@ -21,16 +26,24 @@ The workspace uses git submodules (`duello`, `interatomic`, ...).
 
 ## Testing
 
-- Test-driven development ([skill](https://deepwiki.com/mattpocock/skills/4.1-test-driven-development)).
+- Test-driven development (load this [skill](https://raw.githubusercontent.com/mattpocock/skills/refs/heads/main/skills/engineering/tdd/SKILL.md)).
 - Cover physics correctness in unit tests, comparing against analytical theory in some limit where one exists.
 - Regression tests use `macro_rules! regression_test` and are ignored by default, so they may run longer.
 - Never overwrite fixtures without checking for physics drift; prefer manual, targeted updates.
+- Unit tests should test real, non-trivial edge cases. Trust that Rust `rng` and other stable APIs are working -> don't overtest
+- Don't litter with weak tests. Before adding one, ask "which line of *our* code fails if this regresses?" — if the answer is a std/serde/rng line, or nothing, don't write it. Concretely, avoid:
+  - Per the TDD skill above: "expected values must come from literals, examples, or the spec, not from re-implementing the logic in the test" — a physics formula copied into the test only checks agreement with itself.
+  - Asserting `.is_finite()`, `> 0`, or "doesn't panic" where a specific numeric/physical value is knowable — a broken implementation can still pass.
+  - A builder test that only checks a getter echoes what a setter set, when an equivalent YAML-deserialize test already covers the same field.
+  - A per-type test for macro-supplied boilerplate (e.g. `info_trait`/`impl_info!` accessors) — one smoke test for the macro is enough.
+  - A second test that reruns the same branch with different numbers and asserts nothing new.
+  - Keep internal test documentation brief, to the point, and focus on why.
 
 ## YAML
 
 - Output: prefer a `{mean, error}` mapping over an `"x ± y"` string.
 - Output: unicode math where it beats ascii for readability (⟨q²⟩-⟨q⟩²); keep ascii where it already reads fine (Rg).
-- Input keys: add unicode only as an alias — it can be hard to type.
+- Input keys: add unicode only as an alias — it can be hard to type. Naming should follow / copy existing style and be cautious when inventing new keywords.
 
 ## End-user documentation (`docs/*.md`)
 

@@ -1549,43 +1549,6 @@ mod tests {
         );
     }
 
-    /// Verify position() and atom_kind() return correct values after add_group.
-    #[test]
-    fn test_position_and_atom_kind() {
-        let yaml = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("tests/files/gibbs_ensemble/input.yaml");
-        let ctx = Backend::new(&yaml, None, &mut rand::thread_rng()).unwrap();
-        for group in ctx.groups() {
-            for i in group.iter_active() {
-                let pos = ctx.position(i);
-                assert!(pos.x.is_finite() && pos.y.is_finite() && pos.z.is_finite());
-                let kind = ctx.atom_kind(i);
-                assert!(kind.get() < ctx.topology().atomkinds().len());
-            }
-        }
-    }
-
-    /// Verify set_positions updates coordinates without changing atom kinds.
-    #[test]
-    fn test_set_positions_roundtrip() {
-        let yaml = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("tests/files/gibbs_ensemble/input.yaml");
-        let mut ctx = Backend::new(&yaml, None, &mut rand::thread_rng()).unwrap();
-        let group = &ctx.groups()[0];
-        let indices: Vec<usize> = group.iter_active().collect();
-        let original_kinds: Vec<usize> = indices.iter().map(|&i| ctx.atom_kind(i).get()).collect();
-        let new_positions: Vec<Point> = indices
-            .iter()
-            .enumerate()
-            .map(|(j, _)| Point::new(j as f64, j as f64 * 2.0, j as f64 * 3.0))
-            .collect();
-        ctx.set_positions(indices.clone(), new_positions.iter());
-        for (j, &i) in indices.iter().enumerate() {
-            assert_eq!(ctx.position(i), new_positions[j]);
-            assert_eq!(ctx.atom_kind(i).get(), original_kinds[j]);
-        }
-    }
-
     /// Verify add_group stores positions and atom_ids correctly.
     #[test]
     fn test_add_group_preserves_data() {

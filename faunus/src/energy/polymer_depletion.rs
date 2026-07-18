@@ -1302,7 +1302,7 @@ molecules: [Colloid]
 
         let lambda = kappa.sqrt() / rg;
         let sigma = lambda * rc;
-        let f = ht / ((1.0 + sigma) + ht);
+        let f = robin_f(sigma, Some(ht));
         let expected = 4.0
             * PI
             * rho_star
@@ -1592,25 +1592,5 @@ steric_adsorption:
         assert_approx_eq!(f64, steric.picard_mixing, 0.3);
         assert_eq!(steric.max_iterations, 50);
         assert!(builder.h_tilde.is_none());
-    }
-
-    #[test]
-    fn test_steric_mutual_exclusion() {
-        let yaml = r#"
-polymer_rg: 100.0
-polymer_density: 1.0
-kappa: 1.0
-molecules: [Colloid]
-colloid_radius: 5.0
-h_tilde: 3.0
-steric_adsorption:
-  epsilon0_prime: 0.02
-  g0: 10.0
-"#;
-        let builder: PolymerDepletionBuilder = serde_yml::from_str(yaml).unwrap();
-        // Can't test build() without a Context, but verify both are set
-        assert!(builder.h_tilde.is_some());
-        assert!(builder.steric_adsorption.is_some());
-        // The build() method would reject this with an error
     }
 }

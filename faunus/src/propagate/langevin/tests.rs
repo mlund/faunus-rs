@@ -48,22 +48,6 @@ fn quaternion_sign_invariance() {
     );
 }
 
-#[test]
-fn quaternion_90_degree_rotations() {
-    for (label, axis) in [
-        ("x", crate::Point::x_axis()),
-        ("y", crate::Point::y_axis()),
-        ("z", crate::Point::z_axis()),
-    ] {
-        let q = crate::UnitQuaternion::from_axis_angle(&axis, std::f64::consts::FRAC_PI_2);
-        let back = gpu_to_quat(&quat_to_gpu(&q));
-        assert!(
-            q.angle_to(&back) < 1e-6,
-            "90° rotation around {label} failed roundtrip"
-        );
-    }
-}
-
 // ============================================================================
 // Temperature computation tests
 // ============================================================================
@@ -585,38 +569,6 @@ fn mb_velocities_w_components_are_zero() {
     for (i, chunk) in ang_vel.chunks(4).enumerate() {
         assert_eq!(chunk[3], 0.0, "ang_vel[{i}].w != 0");
     }
-}
-
-/// Velocity magnitude should increase with temperature (sanity check).
-#[test]
-fn mb_velocities_increase_with_temperature() {
-    let mol_is_rigid = vec![1u32; 1000];
-    let mol_masses = vec![18.0f32; 1000];
-    let mol_inertia = vec![0.0f32; 4000];
-
-    let rms = |kt: f64| -> f64 {
-        let (com_vel, _, _) = generate_mb_velocities(
-            kt,
-            &mol_is_rigid,
-            &mol_masses,
-            &mol_inertia,
-            &[],
-            &[],
-            &mut test_rng(),
-        );
-        let sum_sq: f64 = com_vel
-            .chunks(4)
-            .map(|c| (c[0] as f64).powi(2))
-            .sum::<f64>();
-        (sum_sq / 1000.0).sqrt()
-    };
-
-    let rms_cold = rms(0.5); // ~60 K
-    let rms_hot = rms(5.0); // ~600 K
-    assert!(
-        rms_hot > rms_cold * 2.0,
-        "rms_hot={rms_hot:.4} should be > 2× rms_cold={rms_cold:.4} (10× kT ratio → ~3.2× rms)"
-    );
 }
 
 // ============================================================================

@@ -514,8 +514,11 @@ mod integration_tests {
         let sel_str = format!("atomtype {atom_name}");
         let sel = Selection::parse(&sel_str).unwrap();
         let atoms = sel.resolve_atoms(ctx.topology_ref(), ctx.groups(), &|i| ctx.atom_kind(i));
-        // All returned atoms should have atomkind id 0
         assert!(!atoms.is_empty());
+        for &i in &atoms {
+            let kind = ctx.atom_kind(i).get();
+            assert_eq!(ctx.topology_ref().atomkinds()[kind].name(), atom_name);
+        }
     }
 
     #[test]
@@ -583,7 +586,12 @@ mod integration_tests {
         let ctx = make_context();
         let sel = Selection::parse("atomid 0 to 0").unwrap();
         let atoms = sel.resolve_atoms(ctx.topology_ref(), ctx.groups(), &|i| ctx.atom_kind(i));
-        // Should select only atoms with atomkind id 0
         assert!(!atoms.is_empty());
+        for &i in &atoms {
+            let kind = ctx.atom_kind(i).get();
+            // `atomid` filters on `AtomKind::id()`, not the raw array index — check that field
+            // directly rather than the index it happens to coincide with.
+            assert_eq!(ctx.topology_ref().atomkinds()[kind].id(), 0);
+        }
     }
 }
