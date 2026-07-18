@@ -669,28 +669,63 @@ impl SurfaceReference {
             })
             .collect::<Result<_>>()?;
 
+        let (residues, owner) = residues_of(context, &atoms)?;
+        // Widest of the two ladders (the water ladder wins when `use_com` makes r_lig = 0), used by
+        // the PBC wrap and spherical-wall guards.
+        let domain_reach = ligand_radius.max(solvent_probe) + shell.delta(shell.len() - 1);
+
+        let n = atoms.len();
+        let mut reference = Self {
+            mode,
+            atoms,
+            radii,
+            domain_reach,
+            owner,
+            residues,
+            volumes: Vec::new(),
+            water_volumes: Vec::new(),
+            domain_volume: Vec::new(),
+            box_dimensions: Point::zeros(),
+            bulk_volume: 0.0,
+            ligand_radius,
+            solvent_probe,
+            shell,
+            scratch: vec![0.0; n],
+        };
+        // Fill the coordinate-derived geometry and run the geometry guards. For a rigid substrate
+        // this is the only build; a flexible one repeats it before every frame in `refresh`.
+        reference.rebuild(context)?;
+        Ok(reference)
+    }
+
+    /// Rebuild everything derived from the live substrate coordinates — both probe ladders, the
+    /// per-residue surface area, the bulk remainder — and run the geometry guards. Shared by `new`
+    /// (once, rigid) and `refresh` (per frame, flexible) so both compute Γ's geometry by identical
+    /// rules, including the periodic wrap guard a flexible substrate can newly violate by elongating.
+    fn rebuild(&mut self, context: &impl ObserveContext) -> Result<()> {
         let periodic_box = crate::energy::make_periodic_box(context.cell());
-        let balls: Vec<voronota_ltr::Ball> = atoms
+        let balls: Vec<voronota_ltr::Ball> = self
+            .atoms
             .iter()
-            .zip(&radii)
+            .zip(&self.radii)
             .map(|(&i, &r)| {
                 let p = context.position(i);
                 voronota_ltr::Ball::new(p.x, p.y, p.z, r)
             })
             .collect();
-        let (mut residues, owner) = residues_of(context, &atoms)?;
 
+        let owner = &self.owner;
+        let shell = self.shell;
+        let residues_len = self.residues.len();
         // Roll a per-atom quantity up onto the residues that partition the atoms.
         let per_residue = |per_atom: &[f64]| {
-            let mut sums = vec![0.0; residues.len()];
-            for (&value, &residue) in per_atom.iter().zip(&owner) {
-                sums[residue] += value;
-            }
+            let mut sums = vec![0.0; residues_len];
+            accumulate_by_owner(&mut sums, per_atom, owner);
             sums
         };
 
-        // One tessellation per rung. For a rigid substrate this happens only at construction; a
-        // flexible substrate takes the same path before every sampled frame.
+        // One tessellation per rung, at `probe_base + δ`. For a rigid substrate this happens only at
+        // construction; a flexible substrate takes the same path before every sampled frame.
         let ladder = |probe_base: f64| -> Result<Vec<Vec<f64>>> {
             (0..shell.len())
                 .map(|k| {
@@ -701,7 +736,7 @@ impl SurfaceReference {
                 .collect()
         };
 
-        let volumes = ladder(ligand_radius)?;
+        let volumes = ladder(self.ligand_radius)?;
         let domain_volume: Vec<f64> = volumes.iter().map(|v| v.iter().sum()).collect();
 
         // b₁ is Record's hydration density — a property of the substrate surface and water alone,
@@ -710,16 +745,12 @@ impl SurfaceReference {
         // ligand-probe volume over a water-probe area would inject a spurious curvature factor
         // (a + r_lig)² / (a + p_w)² on top of the real shell curvature. This second ladder is at
         // `solvent_probe + δ`, in parallel with the ligand ladder above.
-        let water_volumes = ladder(solvent_probe)?;
-
+        let water_volumes = ladder(self.solvent_probe)?;
         let asa = per_residue(&surface_areas(
             &balls,
-            solvent_probe,
+            self.solvent_probe,
             periodic_box.as_ref(),
         )?);
-        for (residue, area) in residues.iter_mut().zip(asa) {
-            residue.asa = area;
-        }
 
         let box_volume = context.cell().volume().ok_or_else(|| {
             anyhow::anyhow!("PreferentialInteraction: the cell has no volume, so there is no bulk")
@@ -743,121 +774,45 @@ impl SurfaceReference {
             );
         }
 
-        // Widest of the two ladders (the water ladder wins when `use_com` makes r_lig = 0). Under
-        // PBC the domain must fit within half the shortest edge or it wraps onto its own image —
-        // the bulk-fraction check does not catch this (a thin box can stay 99 % bulk).
-        let domain_reach = ligand_radius.max(solvent_probe) + shell.delta(shell.len() - 1);
-        let bound = bounding_radius(context.cell(), &atoms, &radii, |i| context.position(i));
+        // Under PBC the domain must fit within half the shortest edge or it wraps onto its own
+        // image — the bulk-fraction check does not catch this (a thin box can stay 99 % bulk). A
+        // flexible substrate can newly cross this bound by elongating, so it is re-checked here.
         if context.cell().pbc().is_some() {
             let min_edge = context
                 .cell()
                 .bounding_box()
                 .map(|b| b.x.min(b.y).min(b.z))
                 .unwrap_or(f64::INFINITY);
+            let bound = bounding_radius(context.cell(), &self.atoms, &self.radii, |i| {
+                context.position(i)
+            });
             anyhow::ensure!(
-                bound + domain_reach < 0.5 * min_edge,
+                bound + self.domain_reach < 0.5 * min_edge,
                 "PreferentialInteraction: the substrate plus its domain (radius {:.1} Å) exceeds \
                  half the shortest box edge ({:.1} Å); the domain would wrap onto its periodic \
                  image. Enlarge the cell or reduce `shell.max`",
-                bound + domain_reach,
+                bound + self.domain_reach,
                 0.5 * min_edge
             );
         }
 
-        let n = atoms.len();
-        Ok(Self {
-            mode,
-            atoms,
-            radii,
-            domain_reach,
-            owner,
-            residues,
-            volumes,
-            water_volumes,
-            domain_volume,
-            box_dimensions: context.cell().bounding_box().unwrap_or_else(Point::zeros),
-            bulk_volume,
-            ligand_radius,
-            solvent_probe,
-            shell,
-            scratch: vec![0.0; n],
-        })
+        self.volumes = volumes;
+        self.water_volumes = water_volumes;
+        self.domain_volume = domain_volume;
+        self.bulk_volume = bulk_volume;
+        self.box_dimensions = context.cell().bounding_box().unwrap_or_else(Point::zeros);
+        for (residue, area) in self.residues.iter_mut().zip(asa) {
+            residue.asa = area;
+        }
+        Ok(())
     }
 
-    /// Refresh all geometry derived from coordinates when the substrate can change shape.
+    /// Refresh all geometry derived from coordinates when the substrate can change shape. An Err
+    /// (transient bulk-fraction dip, a newly-wrapped domain) stops this analysis rather than the
+    /// run; see the caller in `perform_sample`.
     fn refresh(&mut self, context: &impl ObserveContext) -> Result<()> {
         if self.mode == GeometryMode::Dynamic {
-            reject_unsupported_cell(context)?;
-
-            let shell = self.shell;
-            let owner = &self.owner;
-            let residues_len = self.residues.len();
-            let periodic_box = crate::energy::make_periodic_box(context.cell());
-            let balls: Vec<voronota_ltr::Ball> = self
-                .atoms
-                .iter()
-                .zip(&self.radii)
-                .map(|(&i, &r)| {
-                    let p = context.position(i);
-                    voronota_ltr::Ball::new(p.x, p.y, p.z, r)
-                })
-                .collect();
-
-            let refill_ladder = |target: &mut [Vec<f64>],
-                                 mut domain_volume: Option<&mut [f64]>,
-                                 probe_base: f64|
-             -> Result<()> {
-                for k in 0..shell.len() {
-                    let values =
-                        cell_volumes(&balls, probe_base + shell.delta(k), periodic_box.as_ref())?;
-                    let rung = &mut target[k];
-                    if rung.len() != residues_len {
-                        rung.resize(residues_len, 0.0);
-                    }
-                    accumulate_by_owner(rung, &values, owner);
-                    if let Some(domain_volume) = domain_volume.as_deref_mut() {
-                        domain_volume[k] = rung.iter().sum();
-                    }
-                }
-                Ok(())
-            };
-
-            refill_ladder(
-                &mut self.volumes,
-                Some(&mut self.domain_volume),
-                self.ligand_radius,
-            )?;
-            refill_ladder(&mut self.water_volumes, None, self.solvent_probe)?;
-
-            let areas = surface_areas(&balls, self.solvent_probe, periodic_box.as_ref())?;
-            let mut asa = vec![0.0; self.residues.len()];
-            accumulate_by_owner(&mut asa, &areas, &self.owner);
-            for (residue, area) in self.residues.iter_mut().zip(asa) {
-                residue.asa = area;
-            }
-
-            let box_volume = context.cell().volume().ok_or_else(|| {
-                anyhow::anyhow!(
-                    "PreferentialInteraction: the cell has no volume, so there is no bulk"
-                )
-            })?;
-            self.box_dimensions = context.cell().bounding_box().unwrap_or_else(Point::zeros);
-            self.bulk_volume = box_volume - self.domain_volume[self.shell.len() - 1];
-            const MIN_BULK_FRACTION: f64 = 0.01;
-            anyhow::ensure!(
-                self.bulk_volume > MIN_BULK_FRACTION * box_volume,
-                "PreferentialInteraction: the domain leaves only {:.1}% of the cell as bulk, \
-                 which is too little to reference Γ against. Reduce `shell.max` or enlarge the \
-                 cell",
-                100.0 * self.bulk_volume / box_volume
-            );
-            if self.bulk_volume < 0.1 * box_volume {
-                log::warn!(
-                    "preferential interaction: only {:.0}% of the cell is bulk; Γ is referenced \
-                     against a thin shell and its error bar will be optimistic",
-                    100.0 * self.bulk_volume / box_volume
-                );
-            }
+            self.rebuild(context)?;
         }
         Ok(())
     }
@@ -1005,10 +960,16 @@ impl PreferentialInteraction {
         self.stopped
     }
 
+    /// Whether `perform_sample` fills the sampled-population accumulators (`residue_counts` /
+    /// `reference_counts`). A flexible substrate or an explicit solvent must sample them per frame;
+    /// a rigid implicit-solvent run reads its fixed reference geometry directly instead.
+    fn samples_populations(&self) -> bool {
+        self.reference.is_dynamic() || self.solvent_reference.is_explicit()
+    }
+
     /// Mean ligands owned by `residue` at rung `shell` — the Kₚ numerator.
-    ///
     fn residue_count(&self, residue: usize, shell: usize) -> f64 {
-        if self.reference.is_dynamic() || self.solvent_reference.is_explicit() {
+        if self.samples_populations() {
             self.residue_counts[residue][shell].mean()
         } else {
             self.residue_gamma[residue][shell].mean()
@@ -1050,7 +1011,7 @@ impl PreferentialInteraction {
     /// local-to-bulk concentration ratio, so a negative numerator or denominator has no meaning; it
     /// is reported as `None` rather than as a negative Kₚ.
     pub(crate) fn partition_coefficient(&self, residue: usize, shell: usize) -> Option<f64> {
-        let reference = if self.reference.is_dynamic() || self.solvent_reference.is_explicit() {
+        let reference = if self.samples_populations() {
             self.reference_counts[residue][shell].mean() - self.reference_counts[residue][0].mean()
         } else {
             self.concentration.mean() * self.accessible_volume(residue, shell)
@@ -1218,11 +1179,6 @@ impl PreferentialInteraction {
         map.try_insert("num_residues", self.reference.residues.len())?;
         Some(serde_yml::Value::Mapping(map))
     }
-
-    /// Refill `self.positions` with the ligands of the current configuration.
-    fn load_ligand_positions(&mut self, context: &impl ObserveContext) -> Result<()> {
-        load_positions(&mut self.ligand, &mut self.positions, context, "ligand")
-    }
 }
 
 fn load_positions(
@@ -1252,6 +1208,28 @@ fn load_positions(
     Ok(())
 }
 
+/// Fill `counts[residue * n_shells + shell]` with the species owned by each residue-shell and
+/// return how many fell in the bulk. `positions` and `counts` are caller-owned scratch so sampling
+/// stays allocation-free; the ligand and the explicit solvent are tallied by this one routine.
+fn tally_species(
+    reference: &mut SurfaceReference,
+    selection: &mut ComSelection,
+    positions: &mut Vec<Point>,
+    counts: &mut [f64],
+    context: &impl ObserveContext,
+    species: &str,
+) -> Result<f64> {
+    counts.fill(0.0);
+    load_positions(selection, positions, context, species)?;
+    let mut bulk = 0.0;
+    for position in positions.iter() {
+        if !reference.credit(context, position, counts) {
+            bulk += 1.0;
+        }
+    }
+    Ok(bulk)
+}
+
 impl_info!(
     PreferentialInteraction,
     "preferential_interaction",
@@ -1265,8 +1243,14 @@ impl<T: ObserveContext> Analyze<T> for PreferentialInteraction {
         if self.stopped {
             return Ok(());
         }
-        self.reference.refresh(context)?;
-        if let Err(reason) = self.check_geometry_still_valid(context) {
+        // A flexible substrate can transiently violate a geometry guard (bulk fraction, PBC wrap)
+        // as it moves. Like every other geometry violation, that stops this one analysis rather
+        // than aborting the whole run.
+        let geometry = self
+            .reference
+            .refresh(context)
+            .and_then(|()| self.check_geometry_still_valid(context));
+        if let Err(reason) = geometry {
             log::warn!("{reason}; this analysis stops sampling while the run continues");
             self.stopped = true;
             return Ok(());
@@ -1274,18 +1258,14 @@ impl<T: ObserveContext> Analyze<T> for PreferentialInteraction {
         let n_shells = self.reference.shell.len();
         // `counts[residue * n_shells + k]` holds the ligands owned by `residue` at rung k, already
         // resolved per rung by `credit`, so no prefix sum is needed here.
-        self.counts.fill(0.0);
-        self.load_ligand_positions(context)?;
-
-        let mut bulk = 0.0f64;
-        // A raw index keeps `self.positions` borrowed immutably while `credit` borrows `self.counts`
-        // and `self.reference` mutably.
-        for p in 0..self.positions.len() {
-            let position = self.positions[p];
-            if !self.reference.credit(context, &position, &mut self.counts) {
-                bulk += 1.0;
-            }
-        }
+        let bulk = tally_species(
+            &mut self.reference,
+            &mut self.ligand,
+            &mut self.positions,
+            &mut self.counts,
+            context,
+            "ligand",
+        )?;
 
         // Γ is a per-sample estimator, so the fluctuating bulk composition enters each sample
         // rather than being divided out afterwards. This retains its covariance with the local
@@ -1295,23 +1275,14 @@ impl<T: ObserveContext> Analyze<T> for PreferentialInteraction {
         let bulk_ligand_to_solvent_ratio = match &mut self.solvent_reference {
             SolventReference::Implicit => 0.0,
             SolventReference::Explicit(explicit) => {
-                explicit.counts.fill(0.0);
-                load_positions(
+                let solvent_bulk = tally_species(
+                    &mut self.reference,
                     &mut explicit.selection,
                     &mut explicit.positions,
+                    &mut explicit.counts,
                     context,
                     "solvent",
                 )?;
-                let mut solvent_bulk = 0.0;
-                for p in 0..explicit.positions.len() {
-                    let position = explicit.positions[p];
-                    if !self
-                        .reference
-                        .credit(context, &position, &mut explicit.counts)
-                    {
-                        solvent_bulk += 1.0;
-                    }
-                }
                 anyhow::ensure!(
                     solvent_bulk > 0.0,
                     "PreferentialInteraction: explicit solvent has no molecules in the bulk at \
@@ -1330,7 +1301,7 @@ impl<T: ObserveContext> Analyze<T> for PreferentialInteraction {
 
         self.shell_totals.fill(0.0);
         let dynamic = self.reference.is_dynamic();
-        let sample_populations = dynamic || self.solvent_reference.is_explicit();
+        let sample_populations = self.samples_populations();
         for (residue, accumulators) in self.residue_gamma.iter_mut().enumerate() {
             if dynamic {
                 self.residue_asa[residue].add(self.reference.residues[residue].asa, weight);
@@ -2672,6 +2643,45 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
             expected,
             epsilon = 1e-8
         );
+    }
+
+    /// A flexible substrate that fits at build time but elongates mid-run until its domain would
+    /// wrap onto its periodic image must stop *this* analysis, not abort the run — the wrap guard
+    /// is re-checked every frame, so a frame that trips it is skipped like any other geometry
+    /// violation. Reverting either the re-check or the stop-not-abort routing fails this test.
+    #[test]
+    fn a_flexible_substrate_that_outgrows_the_box_stops_sampling() {
+        let mut context = build_flexible_dimer(4.0, &BULK);
+        let mut analysis = PreferentialInteractionBuilder {
+            substrate: Selection::parse("atomtype SUB").unwrap(),
+            ligand: Selection::parse("atomtype LIG").unwrap(),
+            use_com: false,
+            solvent: None,
+            radius: None,
+            // Wide enough that a stretched conformation's domain reaches past half the box edge,
+            // yet leaves ample bulk so the wrap guard — not the bulk-fraction guard — is what trips.
+            shell: Shell {
+                max: 12.0,
+                resolution: 1.0,
+            },
+            solvent_probe: SOLVENT_PROBE,
+            profile: None,
+            file: None,
+            frequency: Frequency::Every(1),
+        }
+        .build(&context)
+        .unwrap();
+
+        analysis.sample(&context, 0).unwrap();
+        assert!(!analysis.is_stopped());
+        let gamma_before = analysis.gamma(0).mean;
+
+        // Beads at ±14 in the 60 Å box: the σ=6 beads (R=3) plus the 12 Å ladder reach 30.5 Å from
+        // the centre, past the 30 Å half-edge.
+        set_flexible_dimer_separation(&mut context, 28.0);
+        analysis.sample(&context, 1).unwrap(); // the run is not aborted...
+        assert!(analysis.is_stopped()); // ...but this analysis has stopped sampling.
+        assert_eq!(analysis.gamma(0).mean, gamma_before);
     }
 
     #[test]
