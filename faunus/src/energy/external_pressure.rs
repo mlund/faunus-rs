@@ -43,6 +43,9 @@ pub struct ExternalPressure {
 }
 
 /// Pressure with unit, serialized as a YAML tag (e.g. `!atm 1.0`).
+///
+/// Unit tags keep their conventional scientific casing (`!Pa`, `!atm`, `!bar`, `!kT`,
+/// `!mM`) rather than the PascalCase used for every other type tag — do not "normalise".
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Pressure {
     #[serde(rename = "atm")]

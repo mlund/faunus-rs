@@ -44,6 +44,7 @@ Upon startup, load these two skills:
 - Output: prefer a `{mean, error}` mapping over an `"x ± y"` string.
 - Output: unicode math where it beats ascii for readability (⟨q²⟩-⟨q⟩²); keep ascii where it already reads fine (Rg).
 - Input keys: add unicode only as an alias — it can be hard to type. Naming should follow / copy existing style and be cautious when inventing new keywords.
+- Type tags are PascalCase (`!Cuboid`, `!Harmonic`, `!Pair`). Two exemptions: unit tags keep conventional scientific casing (`!Pa`, `!atm`, `!kT`, `!mM`), and `Axes` are lowercase *values* (`projection: z`), not tags.
 
 ## End-user documentation (`docs/*.md`)
 

@@ -274,14 +274,19 @@ fn super_fibonacci(n: usize) -> Vec<UnitQuaternion> {
 }
 
 /// A molecular vector whose orientational order parameter is measured.
+///
+/// PascalCase tags like every other type tag in the tree; the pre-#123 lowercase
+/// spellings stay accepted as aliases.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
 pub enum VectorSpec {
     /// Vector between two atoms/beads, given by their indices within the molecule.
+    #[serde(alias = "pair")]
     Pair([usize; 2]),
     /// Gyration-tensor principal axis: 0 = smallest, 1 = middle, 2 = largest.
+    #[serde(alias = "axis")]
     Axis(usize),
     /// Explicit unit vector in the molecule's initial reference frame.
+    #[serde(alias = "body")]
     Body([f64; 3]),
 }
 
@@ -1046,20 +1051,21 @@ mod tests {
 
     #[test]
     fn deserialize_vector_specs() {
+        // #123: canonical PascalCase tags; the old lowercase spellings stay accepted as aliases.
         let yaml = r#"
 selection: "molecule MOL"
 orientations: 100
 vectors:
-  - !pair [0, 5]
+  - !Pair [0, 5]
   - !axis 2
-  - !body [0.0, 0.0, 1.0]
+  - !Body [0.0, 0.0, 1.0]
 frequency: !Every 10
 "#;
         let builder: WidomRotationBuilder = serde_yml::from_str(yaml).unwrap();
         assert_eq!(builder.orientations, 100);
         assert_eq!(builder.vectors.len(), 3);
         assert!(matches!(builder.vectors[0], VectorSpec::Pair([0, 5])));
-        assert!(matches!(builder.vectors[1], VectorSpec::Axis(2)));
+        assert!(matches!(builder.vectors[1], VectorSpec::Axis(2))); // via `!axis` alias
         assert!(matches!(builder.vectors[2], VectorSpec::Body(_)));
     }
 

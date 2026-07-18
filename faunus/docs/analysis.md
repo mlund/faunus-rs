@@ -1276,9 +1276,9 @@ $$S^2 = \frac{3}{2}\sum_{\alpha\beta}\langle v_\alpha v_\beta\rangle^2 - \frac{1
 where the average runs over all snapshots, so $S^2 = 1$ marks a fully locked
 vector and $S^2 = 0$ a free one. An axis that is locked within each snapshot but
 wanders between them gives $S^2 \to 0$, as the ensemble average intends. A vector
-is given as a pair of atoms (`!pair [i, j]`), a gyration principal axis
-(`!axis 0|1|2`), or an explicit direction in the molecule's reference frame
-(`!body [x, y, z]`).
+is given as a pair of atoms (`!Pair [i, j]`), a gyration principal axis
+(`!Axis 0|1|2`), or an explicit direction in the molecule's reference frame
+(`!Body [x, y, z]`).
 
 Two further diagnostics are optional. The root-mean-square torque
 $\sqrt{\langle\tau^2\rangle}$ about each lab axis measures the strength of the
@@ -1306,9 +1306,9 @@ analysis:
     selection: "molecule phytate"
     orientations: 500
     vectors:
-      - !pair [0, 5]
-      - !axis 2
-      - !body [0.0, 0.0, 1.0]
+      - !Pair [0, 5]
+      - !Axis 2
+      - !Body [0.0, 0.0, 1.0]
     torque: true
     stiffness: true
     file: widomrot.csv.gz
@@ -1321,7 +1321,7 @@ Key            | Required | Default | Description
 -------------- | -------- | ------- | -------------------------------------------
 `selection`    | yes      |         | Selection for molecular group(s) of one kind
 `orientations` | yes      |         | Number of trial orientations `M` (typically 100–1000)
-`vectors`      | no       | `[]`    | Vectors for `S²`: `!pair [i,j]`, `!axis 0\|1\|2`, or `!body [x,y,z]`
+`vectors`      | no       | `[]`    | Vectors for `S²`: `!Pair [i,j]`, `!Axis 0\|1\|2`, or `!Body [x,y,z]`
 `torque`       | no       | `false` | Also report the RMS torque about each axis
 `dtheta`       | no       | `0.01`  | Finite-difference rotation step for the torque (rad)
 `stiffness`    | no       | `false` | Also report the local-harmonic cage stiffness
