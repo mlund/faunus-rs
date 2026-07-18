@@ -27,7 +27,7 @@ pub struct RadialDistributionBuilder {
     #[serde(rename = "resolution")]
     dr: f64,
     /// Maximum distance. Defaults to half the shortest box dimension.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "max", skip_serializing_if = "Option::is_none")]
     max_r: Option<f64>,
     /// If true, use center-of-mass distances instead of atom-atom.
     #[serde(default)]
@@ -54,14 +54,18 @@ impl RadialDistributionBuilder {
             None => {
                 let bbox = cell.bounding_box().ok_or_else(|| {
                     anyhow::anyhow!(
-                        "RadialDistribution: cell has no bounding box; set explicit max_r"
+                        "RadialDistribution: cell has no bounding box; set explicit max"
                     )
                 })?;
                 bbox.x.min(bbox.y).min(bbox.z) / 2.0
             }
         };
         if max_r <= 0.0 {
-            anyhow::bail!("RadialDistribution: max_r must be positive");
+            anyhow::bail!("RadialDistribution: max must be positive");
+        }
+        // Validate here so a bad `resolution` names that key, not `Histogram`'s internal `bin_width`.
+        if self.dr <= 0.0 {
+            anyhow::bail!("RadialDistribution: resolution must be positive");
         }
         let exclude_intramolecular = !self.use_com && self.exclude_intramolecular.unwrap_or(true);
 
@@ -331,12 +335,25 @@ selections: ["molecule polymer", "molecule polymer"]
 use_com: true
 file: rdf_com.dat
 resolution: 0.5
-max_r: 30.0
+max: 30.0
 frequency: !Every 50
 "#;
         let builder: RadialDistributionBuilder = serde_yml::from_str(yaml).unwrap();
         assert!(builder.use_com);
         assert_relative_eq!(builder.max_r.unwrap(), 30.0);
+    }
+
+    #[test]
+    fn old_max_r_key_is_rejected() {
+        // #123: the range maximum unified on `max`; the old `max_r` is a clean break.
+        let yaml = r#"
+selections: ["molecule polymer", "molecule polymer"]
+file: rdf.dat
+resolution: 0.5
+max_r: 30.0
+frequency: !Every 50
+"#;
+        assert!(serde_yml::from_str::<RadialDistributionBuilder>(yaml).is_err());
     }
 
     #[test]

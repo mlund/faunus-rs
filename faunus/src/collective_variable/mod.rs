@@ -311,7 +311,7 @@ macro_rules! impl_single_group_with_dim_builder {
 
 /// Defines a builder that resolves two group selections with projection.
 ///
-/// Generates `{Name}Builder` struct with `selection`, `selection2`, and `projection` fields.
+/// Generates `{Name}Builder` struct with a `selections: (a, b)` pair and a `projection` field.
 ///
 /// # Example
 /// ```ignore
@@ -334,8 +334,11 @@ macro_rules! impl_two_group_with_dim_builder {
             #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
             #[serde(deny_unknown_fields)]
             pub struct [<$cv Builder>] {
-                pub selection: $crate::selection::Selection,
-                pub selection2: $crate::selection::Selection,
+                /// The two groups; separation is symmetric, so a positional pair, not named roles.
+                pub selections: (
+                    $crate::selection::Selection,
+                    $crate::selection::Selection,
+                ),
                 #[serde(default, alias = "dimension")]
                 pub projection: $crate::axes::Axes,
             }
@@ -346,29 +349,29 @@ macro_rules! impl_two_group_with_dim_builder {
                     &self,
                     context: &dyn $crate::collective_variable::EvalContext,
                 ) -> anyhow::Result<Box<dyn $crate::collective_variable::CvKind>> {
-                    let indices1 = self.selection.resolve_groups(
+                    let indices1 = self.selections.0.resolve_groups(
                         context.topology_ref(),
                         context.groups(),
                         &|i| context.atom_kind(i),
                     );
                     if indices1.len() != 1 {
                         anyhow::bail!(
-                            "{}: selection '{}' must match exactly one group, found {}",
+                            "{}: selections[0] '{}' must match exactly one group, found {}",
                             stringify!($cv),
-                            self.selection,
+                            self.selections.0,
                             indices1.len()
                         );
                     }
-                    let indices2 = self.selection2.resolve_groups(
+                    let indices2 = self.selections.1.resolve_groups(
                         context.topology_ref(),
                         context.groups(),
                         &|i| context.atom_kind(i),
                     );
                     if indices2.len() != 1 {
                         anyhow::bail!(
-                            "{}: selection2 '{}' must match exactly one group, found {}",
+                            "{}: selections[1] '{}' must match exactly one group, found {}",
                             stringify!($cv),
-                            self.selection2,
+                            self.selections.1,
                             indices2.len()
                         );
                     }
@@ -387,8 +390,8 @@ macro_rules! impl_two_group_with_dim_builder {
                 }
                 fn description(&self) -> Option<String> {
                     Some(format!(
-                        "selection: {}, selection2: {}, projection: {:?}",
-                        self.selection, self.selection2, self.projection
+                        "selections: [{}, {}], projection: {:?}",
+                        self.selections.0, self.selections.1, self.projection
                     ))
                 }
             }
@@ -421,12 +424,46 @@ mod tests {
         );
         assert!(
             serde_yml::from_str::<Box<dyn CvKindBuilder>>(
-                "property: mass_center_separation\nselection: all\nselection2: all\nbogus: 3"
+                "property: mass_center_separation\nselections: [all, all]\nbogus: 3"
             )
             .is_err(),
             "a two-group builder must reject an unknown key",
         );
         // The valid form still parses.
         assert!(serde_yml::from_str::<Box<dyn CvKindBuilder>>("property: volume").is_ok());
+    }
+
+    #[test]
+    fn two_group_cv_takes_a_selections_pair() {
+        // #123: symmetric two-group CVs unified on `selections: [a, b]`.
+        assert!(
+            serde_yml::from_str::<Box<dyn CvKindBuilder>>(
+                "property: mass_center_separation\nselections: [all, all]"
+            )
+            .is_ok(),
+            "the `selections` pair must parse",
+        );
+        // The pre-#123 `selection`/`selection2` spelling is a clean break — now rejected.
+        assert!(
+            serde_yml::from_str::<Box<dyn CvKindBuilder>>(
+                "property: mass_center_separation\nselection: all\nselection2: all"
+            )
+            .is_err(),
+            "the old two-key spelling must be rejected",
+        );
+    }
+
+    #[test]
+    fn volume_cv_accepts_projection_and_dimension_alias() {
+        // #123: Volume CV aligned to its siblings — canonical `projection`, `dimension` alias.
+        for yaml in [
+            "property: volume\nprojection: z",
+            "property: volume\ndimension: z",
+        ] {
+            assert!(
+                serde_yml::from_str::<Box<dyn CvKindBuilder>>(yaml).is_ok(),
+                "Volume CV must accept `{yaml}`",
+            );
+        }
     }
 }

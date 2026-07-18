@@ -55,8 +55,8 @@ const MIN_MASS: f64 = 1.0e-30;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct CustomPairBuilder {
-    selection1: Selection,
-    selection2: Selection,
+    /// The two groups; positional pair, matching the other pair analyses.
+    selections: (Selection, Selection),
     function: String,
     #[serde(default)]
     constants: HashMap<String, f64>,
@@ -70,12 +70,10 @@ const fn default_gradient_h() -> f64 {
 
 impl CustomPairBuilder {
     pub(crate) fn build(&self, context: &impl ObserveContext) -> anyhow::Result<CustomPair> {
-        let group1 = resolve_unique_rigid_group(context, &self.selection1, "selection1")?;
-        let group2 = resolve_unique_rigid_group(context, &self.selection2, "selection2")?;
+        let group1 = resolve_unique_rigid_group(context, &self.selections.0, "selections[0]")?;
+        let group2 = resolve_unique_rigid_group(context, &self.selections.1, "selections[1]")?;
         if group1 == group2 {
-            anyhow::bail!(
-                "custom_pair: selection1 and selection2 resolved to the same group ({group1})"
-            );
+            anyhow::bail!("custom_pair: both selections resolved to the same group ({group1})");
         }
 
         let substituted = substitute_constants(&self.function, &self.constants);
@@ -83,10 +81,10 @@ impl CustomPairBuilder {
         let var_indices = map_var_indices(&var_names)?;
 
         log::info!(
-            "Custom pair potential: '{}' (selection1='{}', selection2='{}')",
+            "Custom pair potential: '{}' (selections=['{}', '{}'])",
             self.function,
-            self.selection1,
-            self.selection2
+            self.selections.0,
+            self.selections.1
         );
 
         Ok(CustomPair {
@@ -96,8 +94,8 @@ impl CustomPairBuilder {
             group1,
             group2,
             gradient_h: self.gradient_h,
-            selection1: self.selection1.clone(),
-            selection2: self.selection2.clone(),
+            selection1: self.selections.0.clone(),
+            selection2: self.selections.1.clone(),
         })
     }
 }
@@ -231,8 +229,7 @@ impl CustomPair {
     pub(super) fn to_yaml(&self) -> serde_yml::Value {
         yaml_map! {
             "function" => self.function.clone(),
-            "selection1" => self.selection1.to_string(),
-            "selection2" => self.selection2.to_string(),
+            "selections" => vec![self.selection1.to_string(), self.selection2.to_string()],
         }
     }
 
@@ -409,8 +406,7 @@ mod tests {
     #[test]
     fn deserialize_builder() {
         let yaml = r#"
-selection1: "molecule a"
-selection2: "molecule b"
+selections: ["molecule a", "molecule b"]
 function: "0.5 * k * (r - r0)^2"
 constants:
   k: 100.0
@@ -418,5 +414,16 @@ constants:
 "#;
         let b: CustomPairBuilder = serde_yml::from_str(yaml).unwrap();
         assert_eq!(b.gradient_h, DEFAULT_GRADIENT_H);
+    }
+
+    #[test]
+    fn deserialize_builder_rejects_old_selection_keys() {
+        // #123: `selection1`/`selection2` unified on a `selections` pair; clean break.
+        let yaml = r#"
+selection1: "molecule a"
+selection2: "molecule b"
+function: "r"
+"#;
+        assert!(serde_yml::from_str::<CustomPairBuilder>(yaml).is_err());
     }
 }

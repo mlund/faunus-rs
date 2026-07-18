@@ -139,9 +139,9 @@ impl Hamiltonian {
             );
             splined.set_bounding_spheres(spline_opts.bounding_spheres);
             log::info!(
-                "Using splined nonbonded potentials (cutoff={}, n_points={})",
+                "Using splined nonbonded potentials (cutoff={}, table_points={})",
                 spline_opts.cutoff,
-                spline_opts.n_points
+                spline_opts.table_points
             );
             Ok(splined.into())
         } else {

@@ -73,8 +73,7 @@ analysis:
 wang_landau:
   coordinate:
     property: mass_center_separation
-    selection: "molecule MOL1"
-    selection2: "molecule MOL2"
+    selections: ["molecule MOL1", "molecule MOL2"]
     projection: z
     range: [26.0, 50.0]
     resolution: 0.5
@@ -86,14 +85,13 @@ wang_landau:
 umbrella:
   cv:
     property: mass_center_separation
-    selection: "molecule MOL1"
-    selection2: "molecule MOL2"
+    selections: ["molecule MOL1", "molecule MOL2"]
     projection: z
   windows:
     range: [24.0, 50.0]
     width: 8.0
     spacing: 4.0
-    bin_width: 0.5
+    resolution: 0.5
   drive:
     force_constant: 0.5
 

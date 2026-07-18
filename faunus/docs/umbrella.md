@@ -33,13 +33,12 @@ phase; the `analysis:` section runs once per window during production.
 umbrella:
   cv:
     property: mass_center_separation
-    selection: "molecule protein0"
-    selection2: "molecule protein1"
+    selections: ["molecule protein0", "molecule protein1"]
   windows:
     range: [25.0, 100.0]
     width: 10.0
     spacing: 6.0
-    bin_width: 1.0
+    resolution: 1.0
   drive:
     force_constant: 5.0
 ```
@@ -51,12 +50,12 @@ for each window.
 
 ### `windows` — window layout
 
-| Key         | Required | Default | Description                              |
-|-------------|----------|---------|------------------------------------------|
-| `range`     | yes      |         | `[min, max]` of the CV range to cover    |
-| `width`     | yes      |         | Full width of each window                |
-| `spacing`   | yes      |         | Distance between adjacent window centers |
-| `bin_width` | no       | `1.0`   | Histogram bin width for the PMF          |
+| Key          | Required | Default | Description                              |
+|--------------|----------|---------|------------------------------------------|
+| `range`      | yes      |         | `[min, max]` of the CV range to cover    |
+| `width`      | yes      |         | Full width of each window                |
+| `spacing`    | yes      |         | Distance between adjacent window centers |
+| `resolution` | no       | `1.0`   | Histogram bin width for the PMF          |
 
 Window centers are placed at $c_i = \text{min} + \text{width}/2 + i \cdot \text{spacing}$.
 Each window spans $[c_i - \text{width}/2,\; c_i + \text{width}/2]$.

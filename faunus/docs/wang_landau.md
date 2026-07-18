@@ -31,8 +31,7 @@ The input file must contain a `wang_landau:` section alongside the standard
 wang_landau:
   coordinate:
     property: mass_center_separation
-    selection: "molecule protein0"
-    selection2: "molecule protein1"
+    selections: ["molecule protein0", "molecule protein1"]
     range: [2.0, 15.0]
     resolution: 0.1
   # coordinate2: ...         # optional, for 2D

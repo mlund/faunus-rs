@@ -99,8 +99,8 @@ Key          | Required | Default | Description
 `property`   | yes      |         | CV type (see table below)
 `frequency`  | yes      |         | Sample frequency, e.g. `!Every 100`
 `projection` | no       | `xyz`   | Axis projection (`x`, `y`, `z`, `xy`, …); alias: `dimension`
-`selection`  | depends  |         | Selection expression for one atom or group
-`selection2` | depends  |         | Second selection (for two-group properties)
+`selection`  | depends  |         | Selection expression for one atom or group (single-group properties)
+`selections` | depends  |         | Pair `[a, b]` of selections (two-group properties, e.g. `mass_center_separation`)
 `file`       | no       |         | Output file path (see [Output file formats](#output-file-formats)); omit to only track the mean
 
 A collective variable specifies only *what* is measured. Where a value needs a
@@ -113,7 +113,7 @@ option. Supplying `range`/`resolution` on a plain CV is an error.
 
 Property                 | Selection       | Description
 ------------------------ | --------------- | -------------------------------------------
-`volume`                 | none            | Cell measure via `dimension`: volume (`xyz`), area (`xy`), or length (`z`). Note: `volume` uses `dimension`, not `projection`
+`volume`                 | none            | Cell measure via `projection`: volume (`xyz`), area (`xy`), or length (`z`)
 `atom_position`          | one atom        | Signed component for single axis (`x`,`y`,`z`); Euclidean norm for multi-axis (`xy` etc.). Selection resolved live each evaluation — works with speciation/GCMC where the matching atom changes. Returns NaN if selection matches ≠ 1 atom. Use `atomtype` (not `name`) for atoms defined via explicit `atoms:` lists
 `count`                  | atoms or groups | Molecule instances for Molecular groups; atom count for Atomic/Reservoir groups
 `molarity`               | atoms or groups | Molar concentration (mol/L); molecule-based for Molecular groups, atom-based for Atomic/Reservoir
@@ -328,7 +328,7 @@ Key           | Required | Default              | Description
 `selections`  | yes      |                      | Two selection expressions, _a_ and _b_
 `file`        | no       | `multipole_dist.csv` | Output CSV file
 `resolution`          | no       | 1.0                  | Distance resolution along _R_ (Å)
-`max_r`       | no       | half box             | Maximum separation (Å)
+`max`         | no       | half box             | Maximum separation (Å)
 `frequency`   | yes      |                      | Sample frequency
 
 A medium is required for the Bjerrum length.
@@ -505,7 +505,7 @@ analysis:
     use_com: true
     file: rdf_com.dat
     resolution: 0.5
-    max_r: 30.0
+    max: 30.0
     frequency: !Every 100
 ```
 
@@ -517,7 +517,7 @@ Key                        | Required | Default               | Description
 `file`                     | yes      |                       | Output file path (see [Output file formats](#output-file-formats))
 `resolution`                       | yes      |                       | Bin width in distance units
 `frequency`                | yes      |                       | Sample frequency, e.g. `!Every 100`
-`max_r`                    | no       | half shortest box dim | Maximum distance for histogram
+`max`                      | no       | half shortest box dim | Maximum distance for histogram
 `use_com`                  | no       | `false`               | Use center-of-mass distances instead of atom-atom
 `exclude_intramolecular`   | no       | `true` (atom-atom)    | Skip pairs within the same molecule (atom-atom only)
 `dimension`                | no       | `xyz`                 | Axes for distance projection and normalization (`x`, `y`, `z`, `xy`, …)
@@ -648,7 +648,7 @@ If `file` is given, each sampled step writes columns
 analysis:
   - !VirtualTranslate
     selection: "molecule protein"
-    dL: 0.01
+    displacement: 0.01
     directions: !z
     file: force.dat
     frequency: !Every 10
@@ -659,7 +659,7 @@ analysis:
 Key           | Required | Default  | Description
 ------------- | -------- | -------- | -------------------------------------------
 `selection`   | yes      |          | Selection matching exactly one molecule
-`dL`          | yes      |          | Displacement magnitude (Å)
+`displacement`| yes      |          | Displacement magnitude (Å)
 `directions`  | no       | `z`      | Displacement direction (`x`, `y`, `z`, `xy`, …)
 `file`        | no       |          | Output file path (see [Output file formats](#output-file-formats))
 `frequency`   | yes      |          | Sample frequency, e.g. `!Every 10`
@@ -1102,7 +1102,7 @@ Key             | Required | Default | Description
 `use_com`       | no       | `false` | Count the mass centre of each selected molecule instead of each atom
 `solvent`       | no       |         | Explicit solvent as `{selection, use_com}`; its presence selects the finite-box estimator
 `radius`        | no       | σ/2, or 0 with `use_com` | Ligand radius (Å), setting the exclusion boundary
-`solvent_probe` | no       | `1.4`   | Water radius (Å), setting the accessible surface and implicit-solvent shell behind $b_1$
+`probe_radius`  | no       | `1.4`   | Water radius (Å), setting the accessible surface and implicit-solvent shell behind $b_1$
 `profile`       | no       |         | Output file for Γ(δ) (see [Output file formats](#output-file-formats))
 `file`          | no       |         | Output file for the per-residue table
 `frequency`     | yes      |         | Sample frequency, e.g. `!Every 100`
@@ -1155,8 +1155,7 @@ analysis:
     selection: "molecule GLU"
     coordinate:
       property: mass_center_separation
-      selection: "molecule GLU"
-      selection2: "molecule protein"
+      selections: ["molecule GLU", "molecule protein"]
       resolution: 0.5
     file: charge_vs_dist.dat
     frequency: !Every 100
