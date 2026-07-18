@@ -32,7 +32,7 @@ Upon startup, load these two skills:
 - Never overwrite fixtures without checking for physics drift; prefer manual, targeted updates.
 - Unit tests should test real, non-trivial edge cases. Trust that Rust `rng` and other stable APIs are working -> don't overtest
 - Don't litter with weak tests. Before adding one, ask "which line of *our* code fails if this regresses?" — if the answer is a std/serde/rng line, or nothing, don't write it. Concretely, avoid:
-  - Reimplementing the formula/algorithm under test inline instead of calling the real function — it only checks agreement with itself.
+  - Per the TDD skill above: "expected values must come from literals, examples, or the spec, not from re-implementing the logic in the test" — a physics formula copied into the test only checks agreement with itself.
   - Asserting `.is_finite()`, `> 0`, or "doesn't panic" where a specific numeric/physical value is knowable — a broken implementation can still pass.
   - A builder test that only checks a getter echoes what a setter set, when an equivalent YAML-deserialize test already covers the same field.
   - A per-type test for macro-supplied boilerplate (e.g. `info_trait`/`impl_info!` accessors) — one smoke test for the macro is enough.
