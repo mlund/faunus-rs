@@ -304,6 +304,9 @@ impl TryFrom<Displacement> for f64 {
 #[cfg(test)]
 mod pairing_tests {
     use super::*;
+    // Only the `#[cfg(debug_assertions)]` speciation tests below use this; gate it so
+    // `cargo test --release` (where those tests vanish) doesn't see an unused import.
+    #[cfg(debug_assertions)]
     use crate::group::GroupSize;
 
     /// Was the `ProposedMove` doc example, before `propagate` became crate-private.
