@@ -44,7 +44,7 @@ propagate:
         - !TranslateMolecule {molecule: MOL, max_displacement: 3.0, repeat: 1}
 
 umbrella:
-  cv:
+  coordinate:
     property: atom_position
     selection: "atomtype A"
     projection: x

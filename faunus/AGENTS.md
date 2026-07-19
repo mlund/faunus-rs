@@ -45,6 +45,7 @@ Upon startup, load these two skills:
 - Output: unicode math where it beats ascii for readability (⟨q²⟩-⟨q⟩²); keep ascii where it already reads fine (Rg).
 - Input keys: add unicode only as an alias — it can be hard to type. Naming should follow / copy existing style and be cautious when inventing new keywords.
 - Type tags are PascalCase (`!Cuboid`, `!Harmonic`, `!Pair`). Two exemptions: unit tags keep conventional scientific casing (`!Pa`, `!atm`, `!kT`, `!mM`), and `Axes` are lowercase *values* (`projection: z`), not tags.
+- Collective variable placement: a CV that *is* the analysis/constraint is flattened (`property:` at the top level); a CV used as a binning/biasing axis goes under `coordinate:` / `coordinate2:`.
 
 ## End-user documentation (`docs/*.md`)
 

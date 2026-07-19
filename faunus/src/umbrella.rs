@@ -46,7 +46,10 @@ use std::path::{Path, PathBuf};
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct UmbrellaConfig {
-    cv: Box<dyn CvKindBuilder>,
+    /// The biased/binned reaction coordinate. Spelled `coordinate:` like the other
+    /// axis-role CVs (Wang-Landau, penalty); a CV that is itself an analysis stays
+    /// flattened (`property:` at top level).
+    coordinate: Box<dyn CvKindBuilder>,
     windows: WindowGrid,
     drive: DriveConfig,
 }
@@ -644,7 +647,7 @@ pub fn run(
             half_width,
             bin_width: config.windows.bin_width,
             drive_k: config.drive.force_constant,
-            cv_builder: config.cv.as_ref(),
+            cv_builder: config.coordinate.as_ref(),
             medium: &medium,
             multi_progress: &multi_progress,
         };

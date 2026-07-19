@@ -1602,7 +1602,7 @@ mod template_detect_tests {
         // docs/index.md documents a `{# … #}` block comment (delimiters on separate lines)
         // to disable whole YAML sections; it must still be detected and rendered.
         assert!(looks_like_template(
-            "{# Disabled section:\numbrella:\n  cv: ...\n#}\natoms: []\n"
+            "{# Disabled section:\numbrella:\n  coordinate: ...\n#}\natoms: []\n"
         ));
     }
 

@@ -83,7 +83,7 @@ wang_landau:
   steps_per_check: 100
 
 umbrella:
-  cv:
+  coordinate:
     property: mass_center_separation
     selections: ["molecule MOL1", "molecule MOL2"]
     projection: z

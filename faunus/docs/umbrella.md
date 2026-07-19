@@ -31,7 +31,7 @@ phase; the `analysis:` section runs once per window during production.
 
 ```yaml
 umbrella:
-  cv:
+  coordinate:
     property: mass_center_separation
     selections: ["molecule protein0", "molecule protein1"]
   windows:
@@ -43,7 +43,7 @@ umbrella:
     force_constant: 5.0
 ```
 
-### `cv` — collective variable
+### `coordinate` — collective variable
 
 Any [collective variable](analysis.md#supported-properties) works; selections resolve separately
 for each window.
