@@ -1,22 +1,31 @@
-# Faunus YAML Quick Reference
+# Faunus YAML Input Reference
 
 For full details, read the documentation in `docs/` and working examples in `examples/`.
+Regression-tested inputs (`tests/files/*/input.yaml`) are the most reliable references
+since they are validated against known output on every release. The top-level file
+structure is in `SKILL.md`.
 
-## Top-Level Structure
+## Valid example input files
 
-```yaml
-include: [forcefield.yaml]      # optional: merge external YAML files
-atoms: [...]                    # required: atom/bead type definitions
-molecules: [...]                # required: molecular topologies
-system:
-  medium: {...}                 # temperature, dielectric, salt
-  cell: ...                     # simulation box geometry
-  blocks: [...]                 # molecule placement
-  energy: {...}                 # interaction potentials
-  intermolecular: {...}         # optional: cross-molecule bonds
-propagate: {...}                # MC moves or Langevin dynamics
-analysis: [...]                 # optional: output and sampling
-```
+All examples and regression tests use `input.yaml` as the main input file; find them with
+`examples/*/input.yaml` and `tests/files/*/input.yaml`. Always read the relevant example
+when generating a new config to ensure accuracy.
+
+Unit-test topologies — partial configs for specific features:
+- `tests/files/speciation_test.yaml` — speciation move setup
+- `tests/files/topology_pass.yaml` — valid topology with includes
+- `tests/files/translate_molecules_simulation.yaml` — molecule translation
+- `tests/files/bonded_interactions.yaml` — bonded energy terms
+- `tests/files/nonbonded_interactions.yaml` — nonbonded energy terms
+- `tests/files/nonbonded_kimhummer.yaml` — Kim-Hummer potential
+- `tests/files/nonbonded_custom.yaml` — custom pair potential
+- `tests/files/sasa_interactions.yaml` — SASA energy terms
+- `tests/files/cell_sphere.yaml` — spherical cell geometry
+
+Include file fragments (not standalone):
+- `examples/calvados3/calvados3.yaml` — CALVADOS3 forcefield
+- `examples/sticks/duello-topology.yaml` — stick molecule topology
+- `tests/files/top2.yaml`, `tests/files/top3.yaml` — partial topologies
 
 ## Where to Find Details
 
@@ -34,9 +43,6 @@ analysis: [...]                 # optional: output and sampling
 | Kim-Hummer potential | — | `examples/kimhummer/input.yaml` |
 | GCMC / speciation | — | `tests/files/gcmc_ideal_gas/input.yaml`, `tests/files/gcmc_swap/input.yaml` |
 | Force field include | — | `examples/calvados3/calvados3.yaml` (included by `input.yaml`) |
-
-Regression-tested inputs (`tests/files/*/input.yaml`) are the most reliable references
-since they are validated against known output on every release.
 
 ## Cell Types
 
@@ -67,3 +73,10 @@ cell: !Endless                                     # infinite
 ## Mixing Rules
 
 `LorentzBerthelot` / `LB`, `Arithmetic`, `Geometric`, `FenderHalsey` / `FH`
+
+## Tips
+
+- Use `spline` tabulation for performance; add `bounding_spheres: true` for rigid molecules
+- Use `replace:` for pairs that fully override `default`; `append:` for pairs that extend it
+- `!Stochastic` collections for mixed molecule types; `!Deterministic` with `repeat` for sweeps
+- Unknown keys are rejected (`deny_unknown_fields`): a mistyped key errors rather than being ignored

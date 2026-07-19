@@ -32,8 +32,8 @@ See `examples/` for simulation setups and the [documentation](https://mlund.gith
 
 ## Claude Code
 
-Skills `faunus-input` and `faunus-run` help create YAML input files and
-run simulations, respectively. They trigger automatically, e.g.:
+The `faunus` skill helps create YAML input files and run simulations. It
+triggers automatically, e.g.:
 
 ~~~
 Set up an NPT simulation of 256 SPC/E water molecules with Ewald summation
