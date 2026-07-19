@@ -17,6 +17,8 @@ use std::path::{Path, PathBuf};
 
 use derive_builder::Builder;
 use derive_getters::Getters;
+use serde::de::value::{MapAccessDeserializer, SeqAccessDeserializer};
+use serde::de::{MapAccess, SeqAccess, Visitor};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use unordered_pair::UnorderedPair;
 
@@ -28,7 +30,13 @@ use super::bond::BondKind;
 use super::{Bond, BondGraph, CustomProperty, Dihedral, IndexRange, Indexed, Torsion};
 
 /// Source of molecular structure: atom names, reference positions, and/or bonds.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+///
+/// The three forms are distinguished by YAML node type (string, list, mapping), so
+/// Serialize stays `untagged` (emits the bare inner value). The hand-written
+/// [`Deserialize`] dispatches on that node type and, unlike the `untagged` derive,
+/// surfaces the inner error (e.g. an unknown FASTA field) instead of the opaque
+/// "data did not match any variant".
+#[derive(Debug, Clone, Serialize, PartialEq)]
 #[serde(untagged)]
 enum StructureSource {
     /// Path to a structure file (xyz, pdb, etc.)
@@ -37,6 +45,39 @@ enum StructureSource {
     Inline(Vec<HashMap<String, Point>>),
     /// FASTA sequence with harmonic bond parameters
     Fasta(FastaStructure),
+}
+
+impl<'de> Deserialize<'de> for StructureSource {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct SourceVisitor;
+
+        impl<'de> Visitor<'de> for SourceVisitor {
+            type Value = StructureSource;
+
+            fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                f.write_str(
+                    "a structure file path (string), inline positions (a list of \
+                     `{name: [x, y, z]}` maps), or a FASTA block (a mapping)",
+                )
+            }
+
+            fn visit_str<E: serde::de::Error>(self, s: &str) -> Result<Self::Value, E> {
+                Ok(StructureSource::File(PathBuf::from(s)))
+            }
+
+            fn visit_seq<A: SeqAccess<'de>>(self, seq: A) -> Result<Self::Value, A::Error> {
+                Deserialize::deserialize(SeqAccessDeserializer::new(seq))
+                    .map(StructureSource::Inline)
+            }
+
+            fn visit_map<A: MapAccess<'de>>(self, map: A) -> Result<Self::Value, A::Error> {
+                Deserialize::deserialize(MapAccessDeserializer::new(map))
+                    .map(StructureSource::Fasta)
+            }
+        }
+
+        deserializer.deserialize_any(SourceVisitor)
+    }
 }
 
 /// FASTA sequence with harmonic bond parameters for building linear, flexible peptides.
@@ -517,6 +558,34 @@ impl CustomProperty for MoleculeKind {
 mod tests {
     use super::*;
     use crate::topology::bond::{BondKind, BondOrder};
+
+    #[test]
+    fn structure_source_dispatches_on_node_type() {
+        // #131: each YAML node type maps to one variant.
+        assert!(matches!(
+            serde_yml::from_str::<StructureSource>("water.pdb").unwrap(),
+            StructureSource::File(_)
+        ));
+        assert!(matches!(
+            serde_yml::from_str::<StructureSource>("[{OW: [0, 0, 0]}, {HW: [1, 0, 0]}]").unwrap(),
+            StructureSource::Inline(_)
+        ));
+        assert!(matches!(
+            serde_yml::from_str::<StructureSource>("{sequence: nAGGKc, k: 100.0, req: 4.0}")
+                .unwrap(),
+            StructureSource::Fasta(_)
+        ));
+    }
+
+    #[test]
+    fn structure_source_surfaces_the_inner_fasta_error() {
+        // Pre-#131 a bad FASTA field reported the opaque "did not match any variant"; the
+        // hand-written deserializer now surfaces FASTA's own `deny_unknown_fields` message.
+        let err = serde_yml::from_str::<StructureSource>("{sequence: nAGGKc, k: 100.0, bogus: 1}")
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("bogus"), "unexpected message: {err}");
+    }
 
     #[test]
     fn generate_exclusions_n1() {

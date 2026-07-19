@@ -25,18 +25,66 @@ use super::{molecule::MoleculeKind, structure, AtomKind, InputPath};
 use crate::axes::Axes;
 use crate::transform;
 use crate::{cell::SimulationCell, group::GroupSize, Context, Point};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use validator::{Validate, ValidationError};
 
 /// Describes the activation status of a MoleculeBlock.
 /// Partial(n) means that only the first 'n' molecules of the block are active.
 /// All means that all molecules of the block are active.
-#[derive(Debug, Clone, PartialEq, Eq, Copy, Serialize, Deserialize, Default)]
+///
+/// Serialize stays `untagged` (`Partial(n)` → `n`, `All` → `null`); the hand-written
+/// [`Deserialize`] below adds `all` as a readable spelling and names the accepted forms
+/// on error, which the `untagged` derive could not.
+#[derive(Debug, Clone, PartialEq, Eq, Copy, Serialize, Default)]
 #[serde(untagged)]
 pub enum BlockActivationStatus {
     Partial(usize),
     #[default]
     All,
+}
+
+impl<'de> Deserialize<'de> for BlockActivationStatus {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct StatusVisitor;
+
+        impl serde::de::Visitor<'_> for StatusVisitor {
+            type Value = BlockActivationStatus;
+
+            fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                f.write_str(r#"a non-negative integer (number of active molecules) or "all""#)
+            }
+
+            fn visit_u64<E: serde::de::Error>(self, n: u64) -> Result<Self::Value, E> {
+                Ok(BlockActivationStatus::Partial(n as usize))
+            }
+
+            fn visit_i64<E: serde::de::Error>(self, n: i64) -> Result<Self::Value, E> {
+                usize::try_from(n)
+                    .map(BlockActivationStatus::Partial)
+                    .map_err(|_| {
+                        E::custom(format!(
+                            "number of active molecules cannot be negative, got {n}"
+                        ))
+                    })
+            }
+
+            fn visit_str<E: serde::de::Error>(self, s: &str) -> Result<Self::Value, E> {
+                match s {
+                    "all" => Ok(BlockActivationStatus::All),
+                    other => Err(E::custom(format!(
+                        r#"expected a non-negative integer or "all", got "{other}""#
+                    ))),
+                }
+            }
+
+            // `null` was the untagged serialization of `All`; keep accepting it.
+            fn visit_unit<E: serde::de::Error>(self) -> Result<Self::Value, E> {
+                Ok(BlockActivationStatus::All)
+            }
+        }
+
+        deserializer.deserialize_any(StatusVisitor)
+    }
 }
 
 /// Specifies how the structure of molecules of a molecule block should be obtained or generated.
@@ -613,8 +661,32 @@ impl MoleculeBlock {
 
 #[cfg(test)]
 mod tests {
+    use super::BlockActivationStatus;
     use crate::backend::Backend;
     use crate::group::GroupCollection;
+
+    #[test]
+    fn block_activation_status_spellings() {
+        use BlockActivationStatus::{All, Partial};
+        let parse = |s| serde_yml::from_str::<BlockActivationStatus>(s).unwrap();
+        // #131: `all` is now a writable spelling; the old `null` form stays valid.
+        assert_eq!(parse("5"), Partial(5));
+        assert_eq!(parse("all"), All);
+        assert_eq!(parse("null"), All);
+        // Omitted → default (All) is covered by `#[serde(default)]` at the field.
+        assert_eq!(BlockActivationStatus::default(), All);
+    }
+
+    #[test]
+    fn block_activation_status_names_accepted_forms_on_error() {
+        // The pre-#131 untagged enum reported "did not match any variant"; now the message
+        // names what is accepted.
+        let err = serde_yml::from_str::<BlockActivationStatus>("half")
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("all"), "unexpected message: {err}");
+        assert!(serde_yml::from_str::<BlockActivationStatus>("-1").is_err());
+    }
 
     fn backend_from_str(yaml: &str) -> Backend {
         let tmp = tempfile::NamedTempFile::new().unwrap();

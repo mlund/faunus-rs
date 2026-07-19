@@ -332,7 +332,7 @@ Blocks specify how many copies of each molecule to create and how to initialize 
 |------------|----------|---------|---------------------------------------------------|
 | `molecule` | yes      |         | Name of the molecule type                         |
 | `N`        | yes      |         | Number of molecules                               |
-| `active`   | no       | all     | Number of initially active molecules              |
+| `active`   | no       | `all`   | Initially active molecules: a count, or `all`     |
 | `insert`   | no       |         | Insertion policy (see below)                      |
 
 ### Insertion Policies
