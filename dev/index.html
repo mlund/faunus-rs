@@ -898,14 +898,14 @@ templates for variables, loops, and expressions.</p>
 <p>Faunus also ignores top-level keys whose name starts with <code>_</code>. This is useful
 for temporarily disabling whole sections while keeping them as valid YAML:</p>
 <div class="highlight"><pre><span></span><code><span class="nt">_umbrella</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">cv</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">...</span>
+<span class="w">  </span><span class="nt">coordinate</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">...</span>
 <span class="w">  </span><span class="nt">windows</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">...</span>
 </code></pre></div>
 <p>For template input files, MiniJinja block comments can hide entire YAML
 sections without per-line <code>#</code>:</p>
 <div class="highlight"><pre><span></span><code><span class="p p-Indicator">{</span><span class="nt"># Disabled section</span><span class="p">:</span>
 <span class="nt">umbrella</span><span class="p">:</span>
-<span class="nt">  cv</span><span class="p">:</span><span class="w"> </span><span class="nv">...</span>
+<span class="nt">  coordinate</span><span class="p">:</span><span class="w"> </span><span class="nv">...</span>
 <span class="w">  </span><span class="nv">windows</span><span class="p p-Indicator">:</span><span class="w"> </span><span class="nv">...</span>
 <span class="nv">#</span><span class="p p-Indicator">}</span>
 </code></pre></div>

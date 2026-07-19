@@ -777,7 +777,7 @@ free-energy difference</p>
 The <code>propagate:</code> section defines the Monte Carlo moves used in both the drive and the production
 phase; the <code>analysis:</code> section runs once per window during production.</p>
 <div class="highlight"><pre><span></span><code><span class="nt">umbrella</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">cv</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">coordinate</span><span class="p">:</span>
 <span class="w">    </span><span class="nt">property</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">mass_center_separation</span>
 <span class="w">    </span><span class="nt">selections</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;molecule</span><span class="nv"> </span><span class="s">protein0&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;molecule</span><span class="nv"> </span><span class="s">protein1&quot;</span><span class="p p-Indicator">]</span>
 <span class="w">  </span><span class="nt">windows</span><span class="p">:</span>
@@ -788,7 +788,7 @@ phase; the <code>analysis:</code> section runs once per window during production
 <span class="w">  </span><span class="nt">drive</span><span class="p">:</span>
 <span class="w">    </span><span class="nt">force_constant</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">5.0</span>
 </code></pre></div>
-<h3 id="cv-collective-variable"><code>cv</code> — collective variable<a class="headerlink" href="#cv-collective-variable" title="Permanent link">&para;</a></h3>
+<h3 id="coordinate-collective-variable"><code>coordinate</code> — collective variable<a class="headerlink" href="#coordinate-collective-variable" title="Permanent link">&para;</a></h3>
 <p>Any <a href="../analysis/#supported-properties">collective variable</a> works; selections resolve separately
 for each window.</p>
 <h3 id="windows-window-layout"><code>windows</code> — window layout<a class="headerlink" href="#windows-window-layout" title="Permanent link">&para;</a></h3>
