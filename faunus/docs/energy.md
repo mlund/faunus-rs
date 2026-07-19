@@ -102,7 +102,7 @@ system:
     nonbonded:
       default:
         - !Coulomb {cutoff: 40.0}
-    spline: {cutoff: 40.0}
+      spline: {cutoff: 40.0}
 ```
 
 ### Group-to-group cutoff
@@ -115,14 +115,14 @@ This accelerates the energy without changing it, and — unlike
 [spline tabulation](#spline-tabulation) — leaves the pair potentials exact
 (no tabulation, no energy shift).
 
-Add `cutoff` and `bounding_spheres` alongside `nonbonded`:
+Add `cutoff` and `bounding_spheres` inside `nonbonded`:
 
 ```yaml
 system:
   energy:
-    cutoff: 50              # group-to-group cutoff (Å)
-    bounding_spheres: true
     nonbonded:
+      cutoff: 50              # group-to-group cutoff (Å)
+      bounding_spheres: true
       default:
         - !Fanourgakis {cutoff: 50}
         - !AshbaughHatch {mixing: arithmetic, cutoff: 20.0}
@@ -337,8 +337,8 @@ system:
     nonbonded:
       default:
         - !LennardJones {mixing: LB}
-    spline:
-      cutoff: 14.0
+      spline:
+        cutoff: 14.0
     ewald:
       cutoff: 9.0
       accuracy: 1e-5
@@ -372,7 +372,7 @@ interactions excluded. This is configured per molecule in the topology via the
 ### Spline tabulation
 
 For performance, all nonbonded potentials can be tabulated using cubic Hermite splines.
-Add a `spline` section alongside `nonbonded`:
+Add a `spline` section inside `nonbonded`:
 
 ```yaml
 system:
@@ -381,10 +381,10 @@ system:
       default:
         - !WCA {mixing: LB}
         - !Coulomb {cutoff: 200}
-    spline:
-      cutoff: 200.0
-      table_points: 2000
-      grid_type: PowerLaw2
+      spline:
+        cutoff: 200.0
+        table_points: 2000
+        grid_type: PowerLaw2
 ```
 
 | Key                | Required | Default      | Description                              |

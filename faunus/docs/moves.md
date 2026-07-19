@@ -787,7 +787,7 @@ and rigid-body orientations are uploaded to the compute device; after the LD blo
 updated positions and orientations are downloaded back.
 
 Pair interactions are evaluated on-device using cubic spline interpolation of the
-tabulated pair potentials (see `energy.spline` in [Energy](energy.md)).
+tabulated pair potentials (see `energy.nonbonded.spline` in [Energy](energy.md)).
 A cell list reduces pairwise force evaluation from $O(n^2)$ to $O(n \cdot k)$
 where $k$ is the number of atoms in neighboring cells.
 The cell list is built on the CPU from periodically downloaded positions
@@ -913,4 +913,4 @@ from the equipartition theorem:
   and persist on the compute device across subsequent LD blocks.
 - MC rotation moves (`!RotateMolecule`) automatically track rigid-body orientation,
   which is transferred to the device at each LD block start.
-- Energy splines must be configured (`energy.spline`) to provide on-device pair potentials.
+- Energy splines must be configured (`energy.nonbonded.spline`) to provide on-device pair potentials.

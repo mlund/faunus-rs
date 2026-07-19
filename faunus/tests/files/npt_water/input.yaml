@@ -37,9 +37,9 @@ system:
       default:
         - !LennardJones {mixing: LB}
         - !Fanourgakis {cutoff: 9.0}
-    spline:
-      cutoff: 14.0
-      shift_energy: false
+      spline:
+        cutoff: 14.0
+        shift_energy: false
     pressure: !atm 1
 
 analysis:

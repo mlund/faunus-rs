@@ -348,7 +348,11 @@ impl Backend {
             .finalize(&hamiltonian_builder, &backend, medium.as_ref())?;
         backend.update(&Change::Everything)?;
 
-        if let Some(spline_opts) = &hamiltonian_builder.spline {
+        if let Some(spline_opts) = hamiltonian_builder
+            .pairpot_builder
+            .as_ref()
+            .and_then(|pb| pb.spline())
+        {
             if spline_opts.cell_list {
                 backend.request_cell_list(spline_opts.cutoff);
             }
@@ -1635,7 +1639,7 @@ system:
     nonbonded:
       default:
         - !LennardJones {{mixing: LB}}
-    spline: {{cutoff: {CUTOFF}, table_points: 1000, cell_list: {cell_list}}}
+      spline: {{cutoff: {CUTOFF}, table_points: 1000, cell_list: {cell_list}}}
   blocks:
     - molecule: M
       N: 512

@@ -41,9 +41,9 @@ system:
       default:
         - !LennardJones {mixing: LB}
         - !Fanourgakis {cutoff: 9.0}
-    spline:
-      cutoff: 14.0
-      shift_energy: false
+      spline:
+        cutoff: 14.0
+        shift_energy: false
 
 analysis:
   - !RadialDistribution
@@ -105,7 +105,11 @@ fn rejects_unknown_nonbonded_key() {
 
 #[test]
 fn rejects_unknown_spline_key() {
-    assert_rejected("spline", "cutoff: 14.0", "cutoff: 14.0\n      bogus_zz: 1");
+    assert_rejected(
+        "spline",
+        "cutoff: 14.0",
+        "cutoff: 14.0\n        bogus_zz: 1",
+    );
 }
 
 #[test]
@@ -157,8 +161,8 @@ fn rejects_unknown_toplevel_key() {
 fn rejects_unknown_ewald_key() {
     assert_rejected(
         "ewald",
-        "    spline:",
-        "    ewald:\n      cutoff: 9.0\n      bogus_zz: 1\n    spline:",
+        "    nonbonded:",
+        "    ewald:\n      cutoff: 9.0\n      bogus_zz: 1\n    nonbonded:",
     );
 }
 
@@ -242,8 +246,8 @@ fn rejects_unknown_tabulated6d_entry_key() {
     // deserializing, before the entry is built.
     assert_rejected(
         "tabulated6d",
-        "    spline:",
-        "    tabulated6d:\n      - molecules: [water, water]\n        file: absent_zz.dat\n        bogus_zz: 1\n    spline:",
+        "    nonbonded:",
+        "    tabulated6d:\n      - molecules: [water, water]\n        file: absent_zz.dat\n        bogus_zz: 1\n    nonbonded:",
     );
 }
 
@@ -251,8 +255,8 @@ fn rejects_unknown_tabulated6d_entry_key() {
 fn rejects_unknown_tabulated3d_entry_key() {
     assert_rejected(
         "tabulated3d",
-        "    spline:",
-        "    tabulated3d:\n      - molecules: [water, water]\n        file: absent_zz.dat\n        bogus_zz: 1\n    spline:",
+        "    nonbonded:",
+        "    tabulated3d:\n      - molecules: [water, water]\n        file: absent_zz.dat\n        bogus_zz: 1\n    nonbonded:",
     );
 }
 

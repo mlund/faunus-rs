@@ -367,7 +367,11 @@ impl PairInteraction {
 /// - `default`: base interactions applied to all pairs
 /// - `replace`: pair-specific entries that completely replace `default`
 /// - `append`: pair-specific entries merged with `default` by interaction type
-#[derive(Debug, Default, Serialize, Deserialize, Clone, PartialEq)]
+///
+/// The `spline`, `cutoff` and `bounding_spheres` keys configure how the assembled
+/// pair matrix is evaluated (splining and group-to-group culling); they live here
+/// rather than at the top level because they configure only this term.
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct PairPotentialBuilder {
     #[serde(default)]
@@ -378,12 +382,46 @@ pub struct PairPotentialBuilder {
 
     #[serde(default, with = "::serde_with::rust::maps_duplicate_key_is_error")]
     append: HashMap<UnorderedPair<String>, Vec<PairInteraction>>,
+
+    /// Optional spline configuration for the nonbonded interactions.
+    /// When present, `NonbondedMatrixSplined` is used instead of `NonbondedMatrix`.
+    #[serde(default)]
+    spline: Option<SplineOptions>,
+
+    /// Optional global cutoff (Å) for group-to-group bounding-sphere culling of
+    /// the (non-splined) nonbonded matrix. Must be ≥ the largest per-pair
+    /// potential cutoff to remain exact. Ignored when `spline` is set (the
+    /// spline carries its own cutoff).
+    #[serde(default)]
+    cutoff: Option<f64>,
+
+    /// Enable bounding-sphere culling for the non-splined matrix (default: true).
+    /// Only has an effect together with `cutoff`.
+    #[serde(default = "default_bounding_spheres")]
+    bounding_spheres: bool,
+}
+
+// Manual `Default` so `bounding_spheres` matches its serde default (`true`);
+// a derived impl would give `false` and silently disable culling for callers
+// that build a `PairPotentialBuilder` without deserializing.
+impl Default for PairPotentialBuilder {
+    fn default() -> Self {
+        Self {
+            default: Vec::new(),
+            replace: HashMap::new(),
+            append: HashMap::new(),
+            spline: None,
+            cutoff: None,
+            bounding_spheres: default_bounding_spheres(),
+        }
+    }
 }
 
 impl PairPotentialBuilder {
     /// Merge pairs from an included file. Default lists are concatenated
-    /// (skip duplicate types); `replace`/`append` entries from the input
-    /// take precedence over includes.
+    /// (skip duplicate types); `replace`/`append` entries and the evaluation
+    /// settings (`spline`/`cutoff`/`bounding_spheres`) from the input take
+    /// precedence over includes.
     fn merge_from(&mut self, other: Self) {
         for interaction in other.default {
             let disc = std::mem::discriminant(&interaction);
@@ -406,6 +444,20 @@ impl PairPotentialBuilder {
         };
         merge(&mut self.replace, other.replace);
         merge(&mut self.append, other.append);
+
+        // Adopt the include's evaluation settings only where the input left them
+        // unset, so nonbonded config factored into an include is honoured rather
+        // than silently dropped. `bounding_spheres` follows the culling `cutoff`
+        // it qualifies (a plain bool can't distinguish "unset" from "false").
+        if self.spline.is_none() {
+            self.spline = other.spline;
+        }
+        if self.cutoff.is_none() {
+            self.cutoff = other.cutoff;
+            if self.cutoff.is_some() {
+                self.bounding_spheres = other.bounding_spheres;
+            }
+        }
     }
 
     /// Append a pair interaction to the `default` list.
@@ -575,6 +627,27 @@ impl PairPotentialBuilder {
             .chain(self.append.values().flatten())
             .any(|i| i.is_coulomb())
     }
+
+    /// Spline configuration for this nonbonded term, if any.
+    pub(crate) fn spline(&self) -> Option<&SplineOptions> {
+        self.spline.as_ref()
+    }
+
+    /// Group-to-group culling cutoff (Å) for the non-splined matrix, if set.
+    pub(crate) fn cutoff(&self) -> Option<f64> {
+        self.cutoff
+    }
+
+    /// Whether bounding-sphere culling is enabled for the non-splined matrix.
+    pub(crate) fn bounding_spheres(&self) -> bool {
+        self.bounding_spheres
+    }
+
+    /// Override the culling cutoff (test-only; inputs set it via YAML).
+    #[cfg(test)]
+    pub(crate) fn set_cutoff(&mut self, cutoff: Option<f64>) {
+        self.cutoff = cutoff;
+    }
 }
 
 const fn default_spline_table_points() -> usize {
@@ -585,7 +658,7 @@ const fn default_spline_table_points() -> usize {
 ///
 /// When present in the YAML input, nonbonded interactions will be
 /// tabulated using cubic Hermite splines for faster evaluation.
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct SplineOptions {
     /// Cutoff distance for splined potentials (Ångström).
@@ -646,21 +719,6 @@ pub struct HamiltonianBuilder {
     /// Nonbonded interactions defined for the system.
     #[serde(rename = "nonbonded")]
     pub pairpot_builder: Option<PairPotentialBuilder>,
-
-    /// Optional spline configuration for nonbonded interactions.
-    /// When present, `NonbondedMatrixSplined` is used instead of `NonbondedMatrix`.
-    pub spline: Option<SplineOptions>,
-
-    /// Optional global cutoff (Å) for group-to-group bounding-sphere culling of
-    /// the (non-splined) nonbonded matrix. Must be ≥ the largest per-pair
-    /// potential cutoff to remain exact. Ignored when `spline` is set (the
-    /// spline carries its own cutoff).
-    pub cutoff: Option<f64>,
-
-    /// Enable bounding-sphere culling for the non-splined matrix (default: true).
-    /// Only has an effect together with `cutoff`.
-    #[serde(default = "default_bounding_spheres")]
-    pub bounding_spheres: bool,
 
     /// Solvent Accessible Surface Area (SASA) energy term.
     pub sasa: Option<SasaEnergyBuilder>,
@@ -1062,6 +1120,7 @@ mod tests {
                 ],
             )]),
             append: HashMap::new(),
+            ..Default::default()
         };
 
         let expected = interaction1.to_boxed(&atom1, &atom2, None).unwrap()
@@ -1141,6 +1200,7 @@ mod tests {
                 ],
             )]),
             append: HashMap::new(),
+            ..Default::default()
         };
 
         let expected = Box::new(IonIon::new(0.0, VACUUM_PERMITTIVITY, plain_coulomb.clone()))
@@ -1240,11 +1300,11 @@ mod tests {
             HamiltonianBuilder::from_file("tests/files/nonbonded_interactions_splined.yaml")
                 .unwrap();
 
-        // Check that nonbonded interactions are present
-        assert!(builder.pairpot_builder.is_some());
-
         // Check that spline options are present and correctly parsed
-        let spline = builder.spline.expect("Spline options should be present");
+        let pb = builder
+            .pairpot_builder
+            .expect("Nonbonded interactions should be present");
+        let spline = pb.spline().expect("Spline options should be present");
         assert_approx_eq!(f64, spline.cutoff, 15.0);
         assert_eq!(spline.table_points, 2000);
         assert_eq!(spline.grid_type, GridType::PowerLaw2);
@@ -1337,6 +1397,45 @@ mod tests {
 
         // Same variant from include is skipped
         assert_eq!(base.default, vec![kh1]);
+    }
+
+    #[test]
+    fn test_pairpot_merge_from_adopts_eval_settings() {
+        let spline = SplineOptions {
+            cutoff: 12.0,
+            table_points: 500,
+            grid_type: GridType::default(),
+            shift_energy: true,
+            shift_force: false,
+            cell_list: true,
+            bounding_spheres: true,
+        };
+
+        // Input left spline/culling unset → adopt the include's, including its
+        // `bounding_spheres: false` which rides along with the culling cutoff.
+        let mut base = PairPotentialBuilder::default();
+        base.merge_from(PairPotentialBuilder {
+            spline: Some(spline),
+            cutoff: Some(30.0),
+            bounding_spheres: false,
+            ..Default::default()
+        });
+        assert_eq!(base.spline().map(|s| s.cutoff), Some(12.0));
+        assert_eq!(base.cutoff(), Some(30.0));
+        assert!(!base.bounding_spheres());
+
+        // Input set its own cutoff → include's cutoff and bounding_spheres ignored.
+        let mut base = PairPotentialBuilder {
+            cutoff: Some(50.0),
+            ..Default::default()
+        };
+        base.merge_from(PairPotentialBuilder {
+            cutoff: Some(30.0),
+            bounding_spheres: false,
+            ..Default::default()
+        });
+        assert_eq!(base.cutoff(), Some(50.0));
+        assert!(base.bounding_spheres());
     }
 
     #[test]

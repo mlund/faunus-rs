@@ -72,7 +72,6 @@ impl Hamiltonian {
         if let Some(nonbonded_matrix) = pairpot_ref {
             hamiltonian.push(Self::build_nonbonded_term(
                 nonbonded_matrix,
-                builder,
                 topology,
                 medium.clone(),
             )?);
@@ -123,14 +122,16 @@ impl Hamiltonian {
     }
 
     /// Build a nonbonded energy term (plain or splined) from a pair potential builder.
+    ///
+    /// The `spline`/`cutoff`/`bounding_spheres` knobs are read from the pair
+    /// potential builder itself, so an Ewald-augmented clone carries them along.
     fn build_nonbonded_term(
         pairpot_builder: &super::builder::PairPotentialBuilder,
-        builder: &HamiltonianBuilder,
         topology: &Topology,
         medium: Option<interatomic::coulomb::Medium>,
     ) -> anyhow::Result<EnergyTerm> {
         let mut nonbonded = NonbondedMatrix::new(pairpot_builder, topology, medium)?;
-        if let Some(spline_opts) = &builder.spline {
+        if let Some(spline_opts) = pairpot_builder.spline() {
             let config = spline_opts.to_spline_config();
             let mut splined = NonbondedMatrixSplined::from_nonbonded(
                 &nonbonded,
@@ -145,28 +146,28 @@ impl Hamiltonian {
             );
             Ok(splined.into())
         } else {
-            if let Some(cutoff) = builder.cutoff {
+            if let Some(cutoff) = pairpot_builder.cutoff() {
                 // The documented exactness condition, enforced rather than trusted:
                 // a culled group pair drops *all* its atom-atom terms, so the cutoff
                 // must reach past the longest-ranged pair potential.
                 let required = nonbonded.required_cull_cutoff();
                 anyhow::ensure!(
                     required.is_finite(),
-                    "energy.cutoff is set but a pair potential has unbounded range \
+                    "nonbonded.cutoff is set but a pair potential has unbounded range \
                      (e.g. Lennard-Jones or Coulomb without a cutoff); group-to-group \
-                     culling cannot be exact. Remove energy.cutoff or give every \
+                     culling cannot be exact. Remove nonbonded.cutoff or give every \
                      potential a cutoff."
                 );
                 anyhow::ensure!(
                     cutoff >= required,
-                    "energy.cutoff ({cutoff} Å) is shorter than the longest pair-potential \
+                    "nonbonded.cutoff ({cutoff} Å) is shorter than the longest pair-potential \
                      range ({required} Å); culling would drop interactions still in range. \
                      Use a cutoff of at least {required} Å."
                 );
 
-                if !builder.bounding_spheres {
+                if !pairpot_builder.bounding_spheres() {
                     log::warn!(
-                        "energy.cutoff ({cutoff} Å) is set but bounding_spheres is false; \
+                        "nonbonded.cutoff ({cutoff} Å) is set but bounding_spheres is false; \
                          no group-to-group culling will be applied."
                     );
                 } else if topology.moleculekinds().iter().any(|m| m.has_com()) {
@@ -174,7 +175,7 @@ impl Hamiltonian {
                     log::info!("Group-to-group cutoff culling enabled (cutoff = {cutoff} Å)");
                 } else {
                     log::warn!(
-                        "energy.cutoff ({cutoff} Å) is set but no molecule has has_com: true; \
+                        "nonbonded.cutoff ({cutoff} Å) is set but no molecule has has_com: true; \
                          group-to-group culling will not be applied."
                     );
                 }
@@ -246,7 +247,7 @@ impl Hamiltonian {
             real_space,
         ));
 
-        let new_term = Self::build_nonbonded_term(&pairpot_builder, builder, topology, medium)?;
+        let new_term = Self::build_nonbonded_term(&pairpot_builder, topology, medium)?;
 
         for term in &mut self.energy_terms {
             // Ewald rebuild replaces the entire nonbonded term; carry over

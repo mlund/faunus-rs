@@ -32,9 +32,9 @@ system:
     nonbonded:
       default:
         - !LennardJones {mixing: LB}
-    spline:
-      cutoff: 14.0
-      shift_energy: false
+      spline:
+        cutoff: 14.0
+        shift_energy: false
     ewald:
       cutoff: 9.0
       accuracy: 1e-5

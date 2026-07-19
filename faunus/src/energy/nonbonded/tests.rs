@@ -1013,12 +1013,17 @@ fn cutoff_validation_rejects_too_short() {
         None,
     );
 
+    let pb = builder.pairpot_builder.as_mut().unwrap();
     // Longest pair range is 6 Å; a 3 Å group cutoff would silently drop interactions.
-    builder.cutoff = Some(3.0);
+    pb.set_cutoff(Some(3.0));
     assert!(Hamiltonian::new(&builder, &topology, Some(medium.clone())).is_err());
 
     // Exactly at the required range is accepted.
-    builder.cutoff = Some(6.0);
+    builder
+        .pairpot_builder
+        .as_mut()
+        .unwrap()
+        .set_cutoff(Some(6.0));
     assert!(Hamiltonian::new(&builder, &topology, Some(medium)).is_ok());
 }
 
@@ -1034,7 +1039,11 @@ fn cutoff_validation_rejects_unbounded_potential() {
         None,
     );
 
-    builder.cutoff = Some(50.0);
+    builder
+        .pairpot_builder
+        .as_mut()
+        .unwrap()
+        .set_cutoff(Some(50.0));
     assert!(Hamiltonian::new(&builder, &topology, Some(medium)).is_err());
 }
 

@@ -20,10 +20,10 @@ system:
       replace:
         [B, B]:
           - !LennardJones {sigma: 2.0, ε: 5.0}
-    spline:
-      cutoff: 15.0
-      table_points: 2000
-      grid_type: PowerLaw2
+      spline:
+        cutoff: 15.0
+        table_points: 2000
+        grid_type: PowerLaw2
 
   blocks:
     - molecule: MOL
