@@ -1224,15 +1224,16 @@ impl<T: ObserveContext> MoveProposal<T> for SpeciationMove {
                     .iter()
                     .zip(self.reaction_statistics.iter())
                     .map(|(config, stats)| {
-                        yaml_serde::Value::Mapping(yaml_serde::Mapping::from_iter([
-                            ("reaction".into(), config.0.clone().into()),
-                            ("accepted".into(), stats.num_accepted.into()),
-                            ("trials".into(), stats.num_trials.into()),
-                            (
-                                "acceptance_ratio".into(),
-                                format!("{:.4}", stats.acceptance_ratio()).into(),
-                            ),
-                        ]))
+                        // Reuse the canonical statistics rendering so per-reaction output cannot
+                        // drift from a move's `statistics:` block; only prepend the reaction name.
+                        let mut entry = yaml_serde::Mapping::from_iter([(
+                            "reaction".into(),
+                            config.0.clone().into(),
+                        )]);
+                        if let yaml_serde::Value::Mapping(stats_map) = stats.to_yaml() {
+                            entry.extend(stats_map);
+                        }
+                        yaml_serde::Value::Mapping(entry)
                     })
                     .collect();
                 map.insert("per_reaction".into(), per_reaction.into());
@@ -1331,6 +1332,30 @@ mod tests {
     fn unknown_field_rejected() {
         let yaml = r#"{ temperature: 300.0, reactions: [], bogus: 42 }"#;
         assert!(yaml_serde::from_str::<SpeciationMove>(yaml).is_err());
+    }
+
+    /// `per_reaction` must reuse `MoveStatistics`' canonical shape rather than
+    /// hand-rebuilding it: our keys (`num_trials`/`num_accepted`, not
+    /// `trials`/`accepted`) and a *numeric* `acceptance_ratio` (not a formatted
+    /// string), each entry led by its reaction name.
+    #[test]
+    fn per_reaction_reuses_move_statistics_shape() {
+        let context = make_context();
+        let mut mv = make_move("= M", 10.0);
+        mv.finalize(&context, THERMAL_ENERGY).unwrap();
+        mv.reaction_statistics[0].accept(0.0, Displacement::None);
+        mv.reaction_statistics[0].reject(); // 1 of 2 accepted
+
+        let tagged = match MoveProposal::<Backend>::to_yaml(&mv).unwrap() {
+            yaml_serde::Value::Tagged(t) => t.value,
+            other => panic!("expected tagged mapping, got {other:?}"),
+        };
+        let entry = &tagged["per_reaction"][0];
+
+        assert_eq!(entry["reaction"].as_str(), Some("= M"));
+        assert_eq!(entry["num_trials"].as_i64(), Some(2));
+        assert_eq!(entry["num_accepted"].as_i64(), Some(1));
+        assert_eq!(entry["acceptance_ratio"].as_f64(), Some(0.5));
     }
 
     // --- Finalize / reaction resolution ---

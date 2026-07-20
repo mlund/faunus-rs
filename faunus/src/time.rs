@@ -14,7 +14,7 @@
 
 //! Support for operations dealing with *time*.
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, Serializer};
 use std::fmt::Display;
 use std::time::Duration;
 
@@ -29,7 +29,7 @@ pub use web_time::Instant;
 /// Helper class to keep track of time spent in a Monte Carlo move
 ///
 /// The reported time is the accumulated time spent between multiple calls to `start` and `stop`.
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Deserialize, Default)]
 pub struct Timer {
     /// Start time
     #[serde(skip_serializing)]
@@ -38,6 +38,14 @@ pub struct Timer {
     /// Accumulated time
     #[serde(skip_deserializing)]
     accumulated: Duration,
+}
+
+/// Serializes as the accumulated seconds (an `f64`), so callers report a plain
+/// `elapsed_seconds` number rather than leaking `Duration`'s `{secs, nanos}`.
+impl Serialize for Timer {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_f64(self.accumulated.as_secs_f64())
+    }
 }
 
 // Only `start` is wired up; the rest await the timing report of issue #54.

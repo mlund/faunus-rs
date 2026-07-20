@@ -1,6 +1,6 @@
 version:
   faunus: 3.0.0-beta.2
-  git_revision: v3.0.0-beta.2-47-g908697e-dirty
+  git_revision: v3.0.0-beta.2-48-gcf0c1cf-dirty
 medium:
   permittivity: Vacuum
   salt: null
@@ -35,14 +35,17 @@ energy_change:
   final: 0.0
   initial: 0.0
 energy_timers:
-- cell_overlap: '100 (energy: 67.73, update: 32.27)'
+- cell_overlap:
+    total: 100.0
+    energy: 67.34
+    update: 32.66
 propagate:
   steps: 5000
   seed: !Fixed 42
   collections:
   - !Deterministic
     cycles: 1
-    elapsed_seconds: 0.0697801
+    elapsed_seconds: 0.066608025
     moves:
     - !SpeciationMove
       reactions:
@@ -55,29 +58,44 @@ propagate:
       temperature: 298.15
       per_reaction:
       - reaction: H₃PO₄ = H₂PO₄⁻ + ~H+
-        accepted: 0
-        trials: 776
-        acceptance_ratio: '0.0000'
+        num_trials: 776
+        num_accepted: 0
+        mean_square_displacement:
+          mean: 0.0
+          samples: 776
+        elapsed_seconds: 0.0
+        info: {}
+        energy_change_sum: 0.0
+        acceptance_ratio: 0.0
       - reaction: H₂PO₄⁻ = HPO₄²⁻ + ~H+
-        accepted: 1359
-        trials: 1682
-        acceptance_ratio: '0.8080'
+        num_trials: 1682
+        num_accepted: 1359
+        mean_square_displacement:
+          mean: 0.0
+          samples: 323
+        elapsed_seconds: 0.0
+        info: {}
+        energy_change_sum: 0.0
+        acceptance_ratio: 0.8079667063020214
       - reaction: HPO₄²⁻ = PO₄³⁻ + ~H+
-        accepted: 0
-        trials: 854
-        acceptance_ratio: '0.0000'
+        num_trials: 854
+        num_accepted: 0
+        mean_square_displacement:
+          mean: 0.0
+          samples: 854
+        elapsed_seconds: 0.0
+        info: {}
+        energy_change_sum: 0.0
+        acceptance_ratio: 0.0
       weight: 1.0
       repeat: 1
       statistics:
         num_trials: 5000
         num_accepted: 1359
         mean_square_displacement:
-          avg: 0.0
-          n: 3641
-        timer:
-          accumulated:
-            secs: 0
-            nanos: 0
+          mean: 0.0
+          samples: 3641
+        elapsed_seconds: 0.0
         info: {}
         energy_change_sum: 0.0
         acceptance_ratio: 0.2718

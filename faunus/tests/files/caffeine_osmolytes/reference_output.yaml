@@ -1,6 +1,6 @@
 version:
   faunus: 3.0.0-beta.2
-  git_revision: v3.0.0-beta.2-47-g908697e-dirty
+  git_revision: v3.0.0-beta.2-48-gcf0c1cf-dirty
 medium:
   permittivity: Vacuum
   salt: null
@@ -53,15 +53,21 @@ energy_change:
   final: -77.66317421485782
   initial: -55.405211837504886
 energy_timers:
-- cell_overlap: '2.51 (energy: 1.69, update: 0.82)'
-- nonbonded: '97.47999999999999 (energy: 15.79, update: 81.69)'
+- cell_overlap:
+    total: 2.59
+    energy: 1.74
+    update: 0.85
+- nonbonded:
+    total: 97.41
+    energy: 15.94
+    update: 81.46
 propagate:
   steps: 2000
   seed: !Fixed 42
   collections:
   - !Stochastic
     cycles: 1
-    elapsed_seconds: 0.053652768
+    elapsed_seconds: 0.053391878
     moves:
     - !TranslateMolecule
       molecule: caffeine
@@ -73,12 +79,9 @@ propagate:
         num_trials: 504
         num_accepted: 166
         mean_square_displacement:
-          avg: 0.0476083225637905
-          n: 504
-        timer:
-          accumulated:
-            secs: 0
-            nanos: 0
+          mean: 0.0476083225637905
+          samples: 504
+        elapsed_seconds: 0.0
         info: {}
         energy_change_sum: 9.315915935158515
         acceptance_ratio: 0.32936507936507936
@@ -91,12 +94,9 @@ propagate:
         num_trials: 520
         num_accepted: 128
         mean_square_displacement:
-          avg: 0.00467944097296423
-          n: 520
-        timer:
-          accumulated:
-            secs: 0
-            nanos: 0
+          mean: 0.00467944097296423
+          samples: 520
+        elapsed_seconds: 0.0
         info: {}
         energy_change_sum: -4.819364868584877
         acceptance_ratio: 0.24615384615384617
@@ -110,12 +110,9 @@ propagate:
         num_trials: 10120
         num_accepted: 7728
         mean_square_displacement:
-          avg: 0.9105876608865004
-          n: 10120
-        timer:
-          accumulated:
-            secs: 0
-            nanos: 0
+          mean: 0.9105876608865004
+          samples: 10120
+        elapsed_seconds: 0.0
         info: {}
         energy_change_sum: -38.73731339945512
         acceptance_ratio: 0.7636363636363637
@@ -129,12 +126,9 @@ propagate:
         num_trials: 9400
         num_accepted: 8994
         mean_square_displacement:
-          avg: 1.2436985457302348
-          n: 9400
-        timer:
-          accumulated:
-            secs: 0
-            nanos: 0
+          mean: 1.2436985457302348
+          samples: 9400
+        elapsed_seconds: 0.0
         info: {}
         energy_change_sum: 11.982799955528634
         acceptance_ratio: 0.9568085106382979

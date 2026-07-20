@@ -25,7 +25,7 @@ use crate::{time::Timer, Context};
 use anyhow::Result;
 use average::{Estimate, Mean};
 use rand::prelude::*;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, Serializer};
 use std::collections::HashMap;
 use std::{cmp::Ordering, ops::Neg};
 
@@ -248,6 +248,36 @@ impl NewOld<f64> {
 impl Copy for NewOld<usize> {}
 impl Copy for NewOld<f64> {}
 
+/// Our stable YAML shape for a foreign [`average::Mean`], whose derived
+/// `Serialize` would otherwise leak its private `{avg, n}` field names. `Mean`
+/// carries a mean and a count (no variance), so `{mean, samples}` is what it can
+/// report — a `{mean, error}` would invent an error it does not have.
+#[derive(Serialize)]
+struct MeanView {
+    mean: f64,
+    samples: u64,
+}
+
+/// Serialize an [`average::Mean`] as `{mean, samples}` (see [`MeanView`]).
+fn serialize_mean<S: Serializer>(mean: &Mean, serializer: S) -> Result<S::Ok, S::Error> {
+    MeanView {
+        mean: mean.mean(),
+        samples: mean.len(),
+    }
+    .serialize(serializer)
+}
+
+/// Serialize an optional [`average::Mean`] as `{mean, samples}` or null.
+fn serialize_optional_mean<S: Serializer>(
+    mean: &Option<Mean>,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    match mean {
+        Some(mean) => serialize_mean(mean, serializer),
+        None => serializer.serialize_none(),
+    }
+}
+
 /// # Helper class to keep track of accepted and rejected moves
 ///
 /// It is optionally possible to let this class keep track of a single mean square displacement
@@ -259,9 +289,10 @@ pub struct MoveStatistics {
     /// Number of accepted moves
     pub num_accepted: usize,
     /// Mean square displacement of some quantity (optional)
+    #[serde(serialize_with = "serialize_optional_mean")]
     pub mean_square_displacement: Option<Mean>,
     /// Timer that measures the time spent in the move
-    #[serde(skip_deserializing)]
+    #[serde(rename = "elapsed_seconds", skip_deserializing)]
     pub timer: Timer,
     /// Custom statistics and information (only serialized)
     #[serde(skip_deserializing)]
@@ -288,6 +319,25 @@ impl MoveStatistics {
     /// Acceptance ratio
     pub fn acceptance_ratio(&self) -> f64 {
         self.num_accepted as f64 / self.num_trials as f64
+    }
+
+    /// Canonical YAML rendering of the statistics: the serialized fields plus the
+    /// computed [`acceptance_ratio`](Self::acceptance_ratio) as a number.
+    ///
+    /// The single source of truth for how move statistics appear in output, shared
+    /// by the generic move runner and the per-reaction speciation report so the two
+    /// cannot drift in keys or types.
+    pub fn to_yaml(&self) -> yaml_serde::Value {
+        let mut value = yaml_serde::to_value(self).unwrap_or(yaml_serde::Value::Null);
+        if let yaml_serde::Value::Mapping(ref mut map) = value {
+            // With zero trials the ratio is 0/0 = NaN, which serializes to a non-finite
+            // `.nan` (invalid JSON). A never-run move has no ratio to report, so omit it
+            // rather than emit a value no numeric parser can read.
+            if self.num_trials > 0 {
+                map.insert("acceptance_ratio".into(), self.acceptance_ratio().into());
+            }
+        }
+        value
     }
 
     /// Update mean square displacement if possible
@@ -577,6 +627,37 @@ mod tests {
     use super::*;
     use crate::backend::Backend;
     use float_cmp::assert_approx_eq;
+
+    /// `MoveStatistics::to_yaml` owns the output shape, so it must supply the three
+    /// things the plain derive cannot: a *numeric* acceptance ratio, the foreign
+    /// `average::Mean` rendered under our `{mean, samples}` keys (never its private
+    /// `{avg, n}`), and the timer as a plain `elapsed_seconds` number.
+    #[test]
+    fn move_statistics_to_yaml_uses_our_keys_and_types() {
+        let mut stats = MoveStatistics::default();
+        stats.accept(1.0, Displacement::Custom(2.0)); // MSD records 2² = 4
+        stats.reject(); // MSD records 0; ratio becomes 1/2
+
+        let yaml = stats.to_yaml();
+
+        assert_eq!(yaml["acceptance_ratio"].as_f64(), Some(0.5));
+        let msd = &yaml["mean_square_displacement"];
+        assert_approx_eq!(f64, msd["mean"].as_f64().unwrap(), 2.0); // (4 + 0) / 2
+        assert_eq!(msd["samples"].as_i64(), Some(2));
+        // Timer never started, so it renders as a plain 0.0 seconds under the renamed
+        // key — not the derive's `timer: {accumulated: {secs, nanos}}`.
+        assert_eq!(yaml["elapsed_seconds"].as_f64(), Some(0.0));
+    }
+
+    /// A never-run move has `num_trials == 0`, so `acceptance_ratio` is `0/0 = NaN`.
+    /// `to_yaml` must omit it rather than emit a non-finite `.nan` float that no
+    /// numeric parser can read — the whole point of the machine-readable output.
+    #[test]
+    fn zero_trial_statistics_omit_acceptance_ratio() {
+        let yaml = MoveStatistics::default().to_yaml();
+        assert_eq!(yaml["num_trials"].as_i64(), Some(0));
+        assert_eq!(yaml["acceptance_ratio"].as_f64(), None); // absent, not `.nan`
+    }
 
     /// A `+∞` energy is a state the chain can never enter, only start in.
     ///

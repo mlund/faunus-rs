@@ -1,6 +1,6 @@
 version:
   faunus: 3.0.0-beta.2
-  git_revision: v3.0.0-beta.2-47-g908697e-dirty
+  git_revision: v3.0.0-beta.2-48-gcf0c1cf-dirty
 medium:
   permittivity: Water
   salt: null
@@ -36,15 +36,21 @@ energy_change:
   final: -14.858887009431452
   initial: -12.508348774890969
 energy_timers:
-- cell_overlap: '2.56 (energy: 1.8, update: 0.76)'
-- nonbonded: '97.44 (energy: 96.66, update: 0.78)'
+- cell_overlap:
+    total: 2.61
+    energy: 1.84
+    update: 0.78
+- nonbonded:
+    total: 97.39
+    energy: 96.59
+    update: 0.8
 propagate:
   steps: 2000
   seed: !Fixed 42
   collections:
   - !Deterministic
     cycles: 1
-    elapsed_seconds: 0.222983987
+    elapsed_seconds: 0.216434036
     moves:
     - !SpeciationMove
       reactions:
@@ -65,45 +71,84 @@ propagate:
       temperature: 298.0
       per_reaction:
       - reaction: ⚛HGLU + Cl- = ⚛GLU + ~H+
-        accepted: 19
-        trials: 6991
-        acceptance_ratio: '0.0027'
+        num_trials: 6991
+        num_accepted: 19
+        mean_square_displacement:
+          mean: 0.0
+          samples: 6972
+        elapsed_seconds: 0.0
+        info: {}
+        energy_change_sum: 0.0
+        acceptance_ratio: 0.002717780002860821
       - reaction: ⚛HGLU = Na+ + ⚛GLU + ~H+
-        accepted: 33
-        trials: 7216
-        acceptance_ratio: '0.0046'
+        num_trials: 7216
+        num_accepted: 33
+        mean_square_displacement:
+          mean: 0.0
+          samples: 7183
+        elapsed_seconds: 0.0
+        info: {}
+        energy_change_sum: 0.0
+        acceptance_ratio: 0.004573170731707317
       - reaction: ⚛HHIS + Cl- = ⚛HIS + ~H+
-        accepted: 3008
-        trials: 6974
-        acceptance_ratio: '0.4313'
+        num_trials: 6974
+        num_accepted: 3008
+        mean_square_displacement:
+          mean: 0.0
+          samples: 3966
+        elapsed_seconds: 0.0
+        info: {}
+        energy_change_sum: 0.0
+        acceptance_ratio: 0.43131631775164897
       - reaction: ⚛HHIS = Na+ + ⚛HIS + ~H+
-        accepted: 3145
-        trials: 7232
-        acceptance_ratio: '0.4349'
+        num_trials: 7232
+        num_accepted: 3145
+        mean_square_displacement:
+          mean: 0.0
+          samples: 4087
+        elapsed_seconds: 0.0
+        info: {}
+        energy_change_sum: 0.0
+        acceptance_ratio: 0.4348727876106195
       - reaction: ⚛HCYS + Cl- = ⚛CYS + ~H+
-        accepted: 640
-        trials: 7271
-        acceptance_ratio: '0.0880'
+        num_trials: 7271
+        num_accepted: 640
+        mean_square_displacement:
+          mean: 0.0
+          samples: 6631
+        elapsed_seconds: 0.0
+        info: {}
+        energy_change_sum: 0.0
+        acceptance_ratio: 0.08802090496492918
       - reaction: ⚛HCYS = Na+ + ⚛CYS + ~H+
-        accepted: 668
-        trials: 7226
-        acceptance_ratio: '0.0924'
+        num_trials: 7226
+        num_accepted: 668
+        mean_square_displacement:
+          mean: 0.0
+          samples: 6558
+        elapsed_seconds: 0.0
+        info: {}
+        energy_change_sum: 0.0
+        acceptance_ratio: 0.0924439523941323
       - reaction: = Na+ + Cl-
-        accepted: 10157
-        trials: 14217
-        acceptance_ratio: '0.7144'
+        num_trials: 14217
+        num_accepted: 10157
+        mean_square_displacement:
+          mean: 0.0
+          samples: 4060
+        elapsed_seconds: 0.0
+        info: {}
+        energy_change_sum: 0.0
+        acceptance_ratio: 0.7144263909404235
       weight: 1.0
       repeat: 50
       statistics:
         num_trials: 100000
         num_accepted: 17670
         mean_square_displacement:
-          avg: 0.0
-          n: 82330
-        timer:
-          accumulated:
-            secs: 0
-            nanos: 0
+          mean: 0.0
+          samples: 82330
+        elapsed_seconds: 0.0
         info: {}
         energy_change_sum: -19.97138690283524
         acceptance_ratio: 0.1767
@@ -117,12 +162,9 @@ propagate:
         num_trials: 2000
         num_accepted: 1103
         mean_square_displacement:
-          avg: 318.7364658063867
-          n: 2000
-        timer:
-          accumulated:
-            secs: 0
-            nanos: 0
+          mean: 318.7364658063867
+          samples: 2000
+        elapsed_seconds: 0.0
         info: {}
         energy_change_sum: 21.130929829159037
         acceptance_ratio: 0.5515
@@ -136,12 +178,9 @@ propagate:
         num_trials: 2000
         num_accepted: 1104
         mean_square_displacement:
-          avg: 302.27298219935375
-          n: 2000
-        timer:
-          accumulated:
-            secs: 0
-            nanos: 0
+          mean: 302.27298219935375
+          samples: 2000
+        elapsed_seconds: 0.0
         info: {}
         energy_change_sum: -3.510081160864424
         acceptance_ratio: 0.552

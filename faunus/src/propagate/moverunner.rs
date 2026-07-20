@@ -122,14 +122,7 @@ impl<T: Context> MoveRunner<T> {
             if let yaml_serde::Value::Mapping(ref mut map) = tagged_value.value {
                 map.insert("weight".into(), self.weight.into());
                 map.insert("repeat".into(), self.repeat.into());
-                let mut stats = yaml_serde::to_value(&self.statistics).ok()?;
-                if let yaml_serde::Value::Mapping(ref mut smap) = stats {
-                    smap.insert(
-                        "acceptance_ratio".into(),
-                        self.statistics.acceptance_ratio().into(),
-                    );
-                }
-                map.insert("statistics".into(), stats);
+                map.insert("statistics".into(), self.statistics.to_yaml());
             }
             Some(yaml_serde::Value::Tagged(tagged_value))
         } else {

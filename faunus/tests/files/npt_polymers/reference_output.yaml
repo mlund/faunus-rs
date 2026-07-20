@@ -1,6 +1,6 @@
 version:
   faunus: 3.0.0-beta.2
-  git_revision: v3.0.0-beta.2-47-g908697e-dirty
+  git_revision: v3.0.0-beta.2-48-gcf0c1cf-dirty
 medium:
   permittivity: Water
   salt: null
@@ -30,17 +30,29 @@ energy:
     pressure/kJ/mol/Å³: 0.00016899207088419543
     thermal_energy: 2.4789570295566996
 energy_timers:
-- cell_overlap: '2.76 (energy: 1.97, update: 0.79)'
-- nonbonded: '92.82 (energy: 46.37, update: 46.45)'
-- intramolecular: '2.4699999999999998 (energy: 1.75, update: 0.72)'
-- external_pressure: '1.94 (energy: 1.22, update: 0.72)'
+- cell_overlap:
+    total: 2.62
+    energy: 1.88
+    update: 0.74
+- nonbonded:
+    total: 93.07
+    energy: 46.84
+    update: 46.23
+- intramolecular:
+    total: 2.38
+    energy: 1.67
+    update: 0.71
+- external_pressure:
+    total: 1.94
+    energy: 1.2
+    update: 0.74
 propagate:
   steps: 25000
   seed: !Fixed 42
   collections:
   - !Deterministic
     cycles: 1
-    elapsed_seconds: 7.44997269
+    elapsed_seconds: 7.91232641
     moves:
     - !TranslateMolecule
       molecule: polymer
@@ -52,12 +64,9 @@ propagate:
         num_trials: 200000
         num_accepted: 114595
         mean_square_displacement:
-          avg: 14.323690808669102
-          n: 200000
-        timer:
-          accumulated:
-            secs: 0
-            nanos: 0
+          mean: 14.323690808669102
+          samples: 200000
+        elapsed_seconds: 0.0
         info: {}
         energy_change_sum: 592.1202513511124
         acceptance_ratio: 0.572975
@@ -70,12 +79,9 @@ propagate:
         num_trials: 200000
         num_accepted: 156885
         mean_square_displacement:
-          avg: 0.23507799149088887
-          n: 200000
-        timer:
-          accumulated:
-            secs: 0
-            nanos: 0
+          mean: 0.23507799149088887
+          samples: 200000
+        elapsed_seconds: 0.0
         info: {}
         energy_change_sum: -341.4372290395763
         acceptance_ratio: 0.784425
@@ -88,12 +94,9 @@ propagate:
         num_trials: 600000
         num_accepted: 329735
         mean_square_displacement:
-          avg: 1.3106932947882388
-          n: 600000
-        timer:
-          accumulated:
-            secs: 0
-            nanos: 0
+          mean: 1.3106932947882388
+          samples: 600000
+        elapsed_seconds: 0.0
         info: {}
         energy_change_sum: 5.575125669109713
         acceptance_ratio: 0.5495583333333334
@@ -107,12 +110,9 @@ propagate:
         num_trials: 800000
         num_accepted: 216906
         mean_square_displacement:
-          avg: 3.565203783611324
-          n: 800000
-        timer:
-          accumulated:
-            secs: 0
-            nanos: 0
+          mean: 3.565203783611324
+          samples: 800000
+        elapsed_seconds: 0.0
         info: {}
         energy_change_sum: -214.04071778500338
         acceptance_ratio: 0.2711325
@@ -126,12 +126,9 @@ propagate:
         num_trials: 800000
         num_accepted: 183415
         mean_square_displacement:
-          avg: 222.52130844978555
-          n: 800000
-        timer:
-          accumulated:
-            secs: 0
-            nanos: 0
+          mean: 222.52130844978555
+          samples: 800000
+        elapsed_seconds: 0.0
         info: {}
         energy_change_sum: -18.252938770894353
         acceptance_ratio: 0.22926875
@@ -144,12 +141,9 @@ propagate:
         num_trials: 25000
         num_accepted: 3258
         mean_square_displacement:
-          avg: 927430616.2534946
-          n: 25000
-        timer:
-          accumulated:
-            secs: 0
-            nanos: 0
+          mean: 927430616.2534946
+          samples: 25000
+        elapsed_seconds: 0.0
         info: {}
         energy_change_sum: -36.62157927859778
         acceptance_ratio: 0.13032

@@ -455,19 +455,23 @@ impl Hamiltonian {
                         0.0
                     }
                 };
-                let e_pct = to_pct(e_timer.get().as_secs_f64());
-                let u_pct = to_pct(u_timer.get().as_secs_f64());
-                let combined = e_pct + u_pct;
-                if combined == 0.0 {
+                let e_secs = e_timer.get().as_secs_f64();
+                let u_secs = u_timer.get().as_secs_f64();
+                let e_pct = to_pct(e_secs);
+                let u_pct = to_pct(u_secs);
+                // Skip only when both components round away, so a term never shows a
+                // non-zero `total` over an all-zero breakdown. `total` itself comes from
+                // the raw seconds, not `e_pct + u_pct`, so it carries no float noise
+                // (e.g. 0.15000000000000002).
+                if e_pct == 0.0 && u_pct == 0.0 {
                     return None;
                 }
-                // Show "energy + update" breakdown only when update is significant
-                let label = if u_pct >= 0.01 {
-                    format!("{combined} (energy: {e_pct}, update: {u_pct})")
-                } else {
-                    format!("{combined}")
+                let breakdown = yaml_map! {
+                    "total" => to_pct(e_secs + u_secs),
+                    "energy" => e_pct,
+                    "update" => u_pct,
                 };
-                Some(yaml_map! { yaml_serde::Value::String(name.to_string()) => label })
+                Some(yaml_map! { yaml_serde::Value::String(name.to_string()) => breakdown })
             })
             .collect();
         yaml_serde::Value::Sequence(seq)
@@ -594,5 +598,36 @@ impl EnergyChange for Hamiltonian {
             }
         }
         sum
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// `timing_to_yaml` reports each term as a `{total, energy, update}` mapping of
+    /// numbers (never the old packed string), with `total` derived from the raw
+    /// seconds rather than the sum of two rounded percentages — so it carries no
+    /// float noise such as `0.15000000000000002`. This output is scrubbed from every
+    /// integration fixture, so this is its only guard.
+    #[test]
+    fn timing_to_yaml_is_a_numeric_breakdown_without_rounding_noise() {
+        let h = Hamiltonian::from(vec![
+            EnergyTerm::CellOverlap(CellOverlap),
+            EnergyTerm::CellOverlap(CellOverlap),
+        ]);
+        // Second term dominates, so the first rounds to small percentages whose naive
+        // sum (0.1 + 0.05) is the noisy 0.15000000000000002 the fix removes.
+        h.energy_timers[0].set(Duration::from_secs_f64(0.1));
+        h.update_timers[0].set(Duration::from_secs_f64(0.05));
+        h.energy_timers[1].set(Duration::from_secs_f64(100.0));
+
+        let yaml = h.timing_to_yaml();
+        let entry = &yaml[0]["cell_overlap"];
+
+        assert_eq!(entry["energy"].as_f64(), Some(0.1));
+        assert_eq!(entry["update"].as_f64(), Some(0.05));
+        // Clean 0.15, not 0.1 + 0.05 == 0.15000000000000002.
+        assert_eq!(entry["total"].as_f64(), Some(0.15));
     }
 }

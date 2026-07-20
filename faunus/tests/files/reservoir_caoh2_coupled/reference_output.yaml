@@ -1,6 +1,6 @@
 version:
   faunus: 3.0.0-beta.2
-  git_revision: v3.0.0-beta.2-47-g908697e-dirty
+  git_revision: v3.0.0-beta.2-48-gcf0c1cf-dirty
 medium:
   permittivity: Vacuum
   salt: null
@@ -50,14 +50,17 @@ energy_change:
   final: 0.0
   initial: 0.0
 energy_timers:
-- cell_overlap: '100 (energy: 67.44, update: 32.56)'
+- cell_overlap:
+    total: 100.0
+    energy: 68.74
+    update: 31.26
 propagate:
   steps: 30000
   seed: !Fixed 42
   collections:
   - !Deterministic
     cycles: 1
-    elapsed_seconds: 4.823217641
+    elapsed_seconds: 4.91954527
     moves:
     - !SpeciationMove
       reactions:
@@ -69,29 +72,44 @@ propagate:
         - !pK -2.03
       per_reaction:
       - reaction: CaCl₂ = Ca²⁺ + Cl⁻ + Cl⁻
-        accepted: 0
-        trials: 50130
-        acceptance_ratio: '0.0000'
+        num_trials: 50130
+        num_accepted: 0
+        mean_square_displacement:
+          mean: 0.0
+          samples: 50130
+        elapsed_seconds: 0.0
+        info: {}
+        energy_change_sum: 0.0
+        acceptance_ratio: 0.0
       - reaction: Ca(OH)₂ = Ca²⁺ + OH⁻ + OH⁻
-        accepted: 94831
-        trials: 100309
-        acceptance_ratio: '0.9454'
+        num_trials: 100309
+        num_accepted: 94831
+        mean_square_displacement:
+          mean: 0.0
+          samples: 5478
+        elapsed_seconds: 0.0
+        info: {}
+        energy_change_sum: 0.0
+        acceptance_ratio: 0.9453887487663121
       - reaction: NaOH = Na⁺ + OH⁻
-        accepted: 0
-        trials: 49878
-        acceptance_ratio: '0.0000'
+        num_trials: 49878
+        num_accepted: 0
+        mean_square_displacement:
+          mean: 0.0
+          samples: 49878
+        elapsed_seconds: 0.0
+        info: {}
+        energy_change_sum: 0.0
+        acceptance_ratio: 0.0
       weight: 1.0
       repeat: 10
       statistics:
         num_trials: 300000
         num_accepted: 94831
         mean_square_displacement:
-          avg: 0.0
-          n: 205169
-        timer:
-          accumulated:
-            secs: 0
-            nanos: 0
+          mean: 0.0
+          samples: 205169
+        elapsed_seconds: 0.0
         info: {}
         energy_change_sum: 0.0
         acceptance_ratio: 0.31610333333333335

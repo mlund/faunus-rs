@@ -163,7 +163,7 @@ pub struct PreferentialSampling {
     #[serde(skip_deserializing)]
     sum_bias: f64,
     /// Running mean of |ln(W_m / W_n)| — diagnostic for the size of the correction
-    #[serde(skip_deserializing)]
+    #[serde(skip_deserializing, serialize_with = "super::serialize_mean")]
     mean_bias: Mean,
     /// Optional output file for the selection-distance histogram.
     #[serde(default, skip_serializing_if = "Option::is_none")]

@@ -1,6 +1,6 @@
 version:
   faunus: 3.0.0-beta.2
-  git_revision: v3.0.0-beta.2-47-g908697e-dirty
+  git_revision: v3.0.0-beta.2-48-gcf0c1cf-dirty
 medium:
   permittivity: Vacuum
   salt: null
@@ -27,16 +27,25 @@ energy:
     pressure/kJ/mol/Å³: 0.000061019341250700007
     thermal_energy: 2.4943387854
 energy_timers:
-- cell_overlap: '0.15000000000000002 (energy: 0.1, update: 0.05)'
-- nonbonded: '99.7 (energy: 83.23, update: 16.47)'
-- external_pressure: '0.15000000000000002 (energy: 0.1, update: 0.05)'
+- cell_overlap:
+    total: 0.15
+    energy: 0.1
+    update: 0.05
+- nonbonded:
+    total: 99.7
+    energy: 83.1
+    update: 16.6
+- external_pressure:
+    total: 0.15
+    energy: 0.1
+    update: 0.05
 propagate:
   steps: 1000
   seed: !Fixed 42
   collections:
   - !Deterministic
     cycles: 1
-    elapsed_seconds: 4.634965665
+    elapsed_seconds: 4.795957756
     moves:
     - !TranslateMolecule
       molecule: water
@@ -48,12 +57,9 @@ propagate:
         num_trials: 64000
         num_accepted: 26963
         mean_square_displacement:
-          avg: 0.01104969975040706
-          n: 64000
-        timer:
-          accumulated:
-            secs: 0
-            nanos: 0
+          mean: 0.01104969975040706
+          samples: 64000
+        elapsed_seconds: 0.0
         info: {}
         energy_change_sum: 154.76029853923646
         acceptance_ratio: 0.421296875
@@ -66,12 +72,9 @@ propagate:
         num_trials: 64000
         num_accepted: 32357
         mean_square_displacement:
-          avg: 0.016101203042786356
-          n: 64000
-        timer:
-          accumulated:
-            secs: 0
-            nanos: 0
+          mean: 0.016101203042786356
+          samples: 64000
+        elapsed_seconds: 0.0
         info: {}
         energy_change_sum: -67.49453461857951
         acceptance_ratio: 0.505578125
@@ -84,12 +87,9 @@ propagate:
         num_trials: 5000
         num_accepted: 3477
         mean_square_displacement:
-          avg: 631.0947329055416
-          n: 5000
-        timer:
-          accumulated:
-            secs: 0
-            nanos: 0
+          mean: 631.0947329055416
+          samples: 5000
+        elapsed_seconds: 0.0
         info: {}
         energy_change_sum: 30.935265256010098
         acceptance_ratio: 0.6954
