@@ -850,7 +850,7 @@ Adjacent windows must overlap (<code>spacing &lt; width</code>) for stitching.</
 </table>
 <p>During the drive phase a harmonic bias <span class="arithmatex">\(\frac{1}{2}k(x - c_i)^2\)</span> steers each walker toward the
 center of its window. The drive ends as soon as the collective variable enters the window. If
-<code>propagate.repeat</code> sweeps pass without the walker arriving, the run stops with an error;
+<code>propagate.steps</code> steps pass without the walker arriving, the run stops with an error;
 strengthen <code>force_constant</code> or allow more sweeps.</p>
 <h2 id="per-window-lifecycle">Per-window lifecycle<a class="headerlink" href="#per-window-lifecycle" title="Permanent link">&para;</a></h2>
 <ol>

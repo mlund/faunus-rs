@@ -2572,7 +2572,7 @@ normally counted by mass centre.</p>
 <td><code>use_com</code></td>
 <td>no</td>
 <td><code>false</code></td>
-<td>Count the mass centre of each selected molecule instead of each atom</td>
+<td>Count the mass centre of each selected molecule instead of each atom — a counting choice only; the ligand size is set independently by <code>radius</code></td>
 </tr>
 <tr>
 <td><code>solvent</code></td>
@@ -2583,8 +2583,8 @@ normally counted by mass centre.</p>
 <tr>
 <td><code>radius</code></td>
 <td>no</td>
-<td>σ/2, or 0 with <code>use_com</code></td>
-<td>Ligand radius (Å), setting the exclusion boundary</td>
+<td>σ/2 (atoms), 0 (mass centre)</td>
+<td>Ligand exclusion radius (Å), independent of <code>use_com</code>; the effective value is echoed as <code>ligand_radius/Å</code> in the report</td>
 </tr>
 <tr>
 <td><code>probe_radius</code></td>
