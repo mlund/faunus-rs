@@ -115,8 +115,8 @@ impl<T: ObserveContext> Analyze<T> for CollectiveVariableAnalysis {
         Ok(())
     }
 
-    fn results(&self) -> Option<serde_yml::Value> {
-        let mut map = serde_yml::Mapping::new();
+    fn results(&self) -> Option<yaml_serde::Value> {
+        let mut map = yaml_serde::Mapping::new();
         map.try_insert("property", self.cv.name())?;
         if let Some(desc) = self.cv.description() {
             map.try_insert("description", desc)?;
@@ -124,7 +124,7 @@ impl<T: ObserveContext> Analyze<T> for CollectiveVariableAnalysis {
         map.try_insert("num_samples", self.sampling.num_samples())?;
         map.try_insert("mean", self.mean.mean())?;
         map.try_insert("rms", self.mean_squared.mean().sqrt())?;
-        Some(serde_yml::Value::Mapping(map))
+        Some(yaml_serde::Value::Mapping(map))
     }
 }
 
@@ -136,7 +136,7 @@ mod tests {
     #[test]
     fn deserialize_builder() {
         let yaml = "property: volume\nfrequency: !Every 100";
-        let builder: CollectiveVariableAnalysisBuilder = serde_yml::from_str(yaml).unwrap();
+        let builder: CollectiveVariableAnalysisBuilder = yaml_serde::from_str(yaml).unwrap();
         assert!(builder.file.is_none());
         assert!(matches!(builder.frequency, Frequency::Every(100)));
     }
@@ -144,7 +144,7 @@ mod tests {
     #[test]
     fn deserialize_builder_with_file() {
         let yaml = "property: volume\nfile: rc.dat\nfrequency: !Every 50";
-        let builder: CollectiveVariableAnalysisBuilder = serde_yml::from_str(yaml).unwrap();
+        let builder: CollectiveVariableAnalysisBuilder = yaml_serde::from_str(yaml).unwrap();
         assert_eq!(builder.file.as_ref().unwrap().to_str().unwrap(), "rc.dat");
     }
 
@@ -154,16 +154,16 @@ mod tests {
         // it used to be parsed and silently discarded. The flattened kind builder
         // now rejects it.
         let yaml = "property: volume\nrange: [1000.0, 5000.0]\nfrequency: !Every 100";
-        assert!(serde_yml::from_str::<CollectiveVariableAnalysisBuilder>(yaml).is_err());
+        assert!(yaml_serde::from_str::<CollectiveVariableAnalysisBuilder>(yaml).is_err());
     }
 
     #[test]
     fn roundtrip_serialize_deserialize() {
         let yaml = "property: volume\nfrequency: !Every 100";
-        let builder: CollectiveVariableAnalysisBuilder = serde_yml::from_str(yaml).unwrap();
-        let serialized = serde_yml::to_string(&builder).unwrap();
+        let builder: CollectiveVariableAnalysisBuilder = yaml_serde::from_str(yaml).unwrap();
+        let serialized = yaml_serde::to_string(&builder).unwrap();
         let roundtrip: CollectiveVariableAnalysisBuilder =
-            serde_yml::from_str(&serialized).unwrap();
+            yaml_serde::from_str(&serialized).unwrap();
         assert!(matches!(roundtrip.frequency, Frequency::Every(100)));
     }
 
@@ -172,7 +172,7 @@ mod tests {
         let yaml = r#"
 property: volume
 "#;
-        let result = serde_yml::from_str::<CollectiveVariableAnalysisBuilder>(yaml);
+        let result = yaml_serde::from_str::<CollectiveVariableAnalysisBuilder>(yaml);
         assert!(result.is_err());
     }
 
@@ -183,7 +183,7 @@ property: volume
   property: volume
   frequency: !Every 100
 "#;
-        let builders: Vec<AnalysisBuilder> = serde_yml::from_str(yaml).unwrap();
+        let builders: Vec<AnalysisBuilder> = yaml_serde::from_str(yaml).unwrap();
         assert!(matches!(
             builders[0],
             AnalysisBuilder::CollectiveVariable(_)
@@ -217,7 +217,7 @@ mod integration_tests {
 property: volume
 frequency: !Every 1
 "#;
-        let builder: CollectiveVariableAnalysisBuilder = serde_yml::from_str(yaml).unwrap();
+        let builder: CollectiveVariableAnalysisBuilder = yaml_serde::from_str(yaml).unwrap();
         let mut analysis = builder.build(&ctx).unwrap();
 
         assert_eq!(Analyze::<Backend>::num_samples(&analysis), 0);
@@ -240,7 +240,7 @@ frequency: !Every 1
   property: volume
   frequency: !Every 1
 "#;
-        let builders: Vec<crate::analysis::AnalysisBuilder> = serde_yml::from_str(yaml).unwrap();
+        let builders: Vec<crate::analysis::AnalysisBuilder> = yaml_serde::from_str(yaml).unwrap();
         let analysis = builders[0].build(&ctx, None).unwrap();
         assert_eq!(analysis.short_name(), Some("collective_variable"));
     }

@@ -441,8 +441,8 @@ impl LangevinRunner {
             .expect("the integrator returns one position per particle");
     }
 
-    pub(in crate::propagate) fn to_yaml(&self) -> serde_yml::Value {
-        let mut map = serde_yml::Mapping::new();
+    pub(in crate::propagate) fn to_yaml(&self) -> yaml_serde::Value {
+        let mut map = yaml_serde::Mapping::new();
         map.insert("timestep".into(), self.config.timestep.into());
         map.insert("friction".into(), self.config.friction.into());
         map.insert("steps".into(), self.config.steps.into());
@@ -453,27 +453,27 @@ impl LangevinRunner {
         );
         map.insert(
             "elapsed_seconds".into(),
-            serde_yml::Value::Number(serde_yml::Number::from(self.elapsed.as_secs_f64())),
+            yaml_serde::Value::Number(yaml_serde::Number::from(self.elapsed.as_secs_f64())),
         );
         if !self.t_trans.is_empty() {
             let summary = |v: &Variance| {
-                serde_yml::to_value(BlockSummary::from_fluctuation(
+                yaml_serde::to_value(BlockSummary::from_fluctuation(
                     v.mean(),
                     v.sample_variance().sqrt(),
                 ))
                 .unwrap()
             };
-            let mut temp_map = serde_yml::Mapping::new();
+            let mut temp_map = yaml_serde::Mapping::new();
             temp_map.insert("translational".into(), summary(&self.t_trans));
             temp_map.insert("rotational".into(), summary(&self.t_rot));
             map.insert(
                 "measured_temperature".into(),
-                serde_yml::Value::Mapping(temp_map),
+                yaml_serde::Value::Mapping(temp_map),
             );
         }
-        serde_yml::Value::Tagged(Box::new(serde_yml::value::TaggedValue {
-            tag: serde_yml::value::Tag::new("LangevinDynamics"),
-            value: serde_yml::Value::Mapping(map),
+        yaml_serde::Value::Tagged(Box::new(yaml_serde::value::TaggedValue {
+            tag: yaml_serde::value::Tag::new("LangevinDynamics"),
+            value: yaml_serde::Value::Mapping(map),
         }))
     }
 }

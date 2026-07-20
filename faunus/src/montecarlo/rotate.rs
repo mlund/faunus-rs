@@ -63,7 +63,7 @@ impl<T: ObserveContext> MoveProposal<T> for RotateMolecule {
         Some(ProposedMove::rotate_group(group_index, quaternion, angle))
     }
 
-    fn to_yaml(&self) -> Option<serde_yml::Value> {
+    fn to_yaml(&self) -> Option<yaml_serde::Value> {
         tagged_yaml("RotateMolecule", self)
     }
 }
@@ -80,7 +80,7 @@ mod tests {
     use crate::montecarlo::chain_fixture::{chain, chain_context, ChainSpec};
 
     fn rotate(max_angle: f64) -> RotateMolecule {
-        serde_yml::from_str(&format!("{{molecule: Chain, max_angle: {max_angle}}}")).unwrap()
+        yaml_serde::from_str(&format!("{{molecule: Chain, max_angle: {max_angle}}}")).unwrap()
     }
 
     /// Zero is the dangerous one: every proposal is then the identity, so the move is always
@@ -90,7 +90,7 @@ mod tests {
         let context = chain_context(&chain(4), ChainSpec::default());
         for max_angle in ["0", "-1.0", "4.0", ".nan", ".inf"] {
             let mut move_: RotateMolecule =
-                serde_yml::from_str(&format!("{{molecule: Chain, max_angle: {max_angle}}}"))
+                yaml_serde::from_str(&format!("{{molecule: Chain, max_angle: {max_angle}}}"))
                     .unwrap();
             assert!(
                 move_.finalize(&context).is_err(),
@@ -117,9 +117,9 @@ system:
     permittivity: !Vacuum
     temperature: 300.0
   energy:
-    nonbonded:
-      default:
-        - !LennardJones {mixing: LB}
+    - !Nonbonded
+        default:
+          - !LennardJones {mixing: LB}
   blocks:
     - molecule: Chain
       N: 4

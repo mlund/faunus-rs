@@ -30,7 +30,7 @@ system:
   cell: !Cuboid [100.0, 100.0, 100.0]
   blocks:
     - {molecule: particle, N: 1, insert: !RandomAtomPos {}}
-  energy: {}
+  energy: []
 
 propagate:
   repeat: 100

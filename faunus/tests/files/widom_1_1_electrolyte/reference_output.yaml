@@ -1,6 +1,6 @@
 version:
-  faunus: 0.2.0
-  git_revision: v0.3.0-31-g8d21783-dirty
+  faunus: 3.0.0-beta.2
+  git_revision: v3.0.0-beta.2-47-g908697e-dirty
 medium:
   permittivity: Water
   salt: null
@@ -25,15 +25,15 @@ energy_change:
   final: -219.6929032321027
   initial: -243.41791139269253
 energy_timers:
-  cell_overlap: '4.83 (energy: 3.28, update: 1.55)'
-  nonbonded: '95.17 (energy: 93.48, update: 1.69)'
+- cell_overlap: '4.8 (energy: 3.23, update: 1.57)'
+- nonbonded: '95.19999999999999 (energy: 93.46, update: 1.74)'
 propagate:
   repeat: 5000
   seed: !Fixed 42
   collections:
   - !Deterministic
     repeat: 1
-    elapsed_seconds: 0.106390484
+    elapsed_seconds: 0.11400289
     moves:
     - !TranslateAtom
       atom: null
@@ -86,7 +86,7 @@ analysis:
         mean: -0.39315899082337497
         error: 0.005538953320975873
       total:
-        mean: -0.23211585149751476
+        mean: -0.23211585149751474
         error: 0.005987704090227995
     unscaled_widom/kT:
       mean: -0.2615201969129146
@@ -105,5 +105,5 @@ analysis:
         mean: -0.22925012819720783
         error: 0.004522537007496316
     unscaled_widom/kT:
-      mean: -0.2563136742371558
+      mean: -0.25631367423715573
       error: 0.006760177449369757

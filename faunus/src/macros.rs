@@ -16,16 +16,16 @@
 //! move builders. Each removes a boilerplate pattern that recurred across dozens
 //! of sites; keeping them here avoids a per-subsystem copy of the same idea.
 
-/// Build a `serde_yml::Value::Mapping` from `"key" => value` pairs.
+/// Build a `yaml_serde::Value::Mapping` from `"key" => value` pairs.
 ///
 /// Values are `.into()`-converted, mirroring the hand-rolled
 /// `Mapping::new()` + `insert` + `Value::Mapping` scaffold it replaces.
 /// Insertion order is preserved, so serialized output is unchanged.
 macro_rules! yaml_map {
     ($($key:expr => $value:expr),* $(,)?) => {{
-        let mut map = serde_yml::Mapping::new();
+        let mut map = yaml_serde::Mapping::new();
         $( map.insert($key.into(), $value.into()); )*
-        serde_yml::Value::Mapping(map)
+        yaml_serde::Value::Mapping(map)
     }};
 }
 

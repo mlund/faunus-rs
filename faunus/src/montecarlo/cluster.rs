@@ -327,10 +327,10 @@ impl<T: Context> MoveProposal<T> for ClusterMove {
         self.stats.msd_rotation.add(dtheta2);
     }
 
-    fn to_yaml(&self) -> Option<serde_yml::Value> {
+    fn to_yaml(&self) -> Option<yaml_serde::Value> {
         let mut value = tagged_yaml("ClusterMove", self)?;
-        if let serde_yml::Value::Tagged(tagged) = &mut value {
-            if let serde_yml::Value::Mapping(map) = &mut tagged.value {
+        if let yaml_serde::Value::Tagged(tagged) = &mut value {
+            if let yaml_serde::Value::Mapping(map) = &mut tagged.value {
                 let rate = if self.stats.n_proposals > 0 {
                     self.stats.n_bias_rejected as f64 / self.stats.n_proposals as f64
                 } else {
@@ -345,7 +345,7 @@ impl<T: Context> MoveProposal<T> for ClusterMove {
                     ("rmsd_rotation", &self.stats.msd_rotation),
                 ] {
                     let rmsd = msd.checked_mean().map(f64::sqrt);
-                    map.insert(key.into(), serde_yml::to_value(rmsd).ok()?);
+                    map.insert(key.into(), yaml_serde::to_value(rmsd).ok()?);
                 }
             }
         }
@@ -380,7 +380,7 @@ molecules:
 system:
   cell: !Cuboid [30.0, 30.0, 30.0]
   medium: {{permittivity: !Vacuum, temperature: 300.0}}
-  energy: {{}}
+  energy: []
   blocks:
     - molecule: MOL
       N: {}
@@ -396,7 +396,7 @@ propagate: {{seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}}
     }
 
     fn cluster_move(yaml: &str, context: &Backend) -> ClusterMove {
-        let mut m: ClusterMove = serde_yml::from_str(yaml).unwrap();
+        let mut m: ClusterMove = yaml_serde::from_str(yaml).unwrap();
         m.finalize(context).unwrap();
         m
     }
@@ -502,7 +502,7 @@ propagate: {{seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}}
     #[test]
     fn test_parse_com_mode_default() {
         let s = "{ molecule: MOL1, max_displacement: 5.0, max_angle: 0.3, threshold: 30.0 }";
-        let m: ClusterMove = serde_yml::from_str(s).unwrap();
+        let m: ClusterMove = yaml_serde::from_str(s).unwrap();
         assert_eq!(m.molecule_name, "MOL1");
         assert_eq!(m.max_displacement, 5.0);
         assert_eq!(m.max_angle, 0.3);
@@ -515,7 +515,7 @@ propagate: {{seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}}
     #[test]
     fn test_parse_bead_mode_explicit() {
         let s = "{ molecule: MOL1, max_displacement: 5.0, max_angle: 0.3, threshold: 6.0, use_com: false }";
-        let m: ClusterMove = serde_yml::from_str(s).unwrap();
+        let m: ClusterMove = yaml_serde::from_str(s).unwrap();
         assert!(!m.use_com, "use_com should be false");
         assert_eq!(m.threshold, 6.0);
     }
@@ -532,7 +532,7 @@ propagate: {{seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}}
         )
         .unwrap();
 
-        let mut m: ClusterMove = serde_yml::from_str(
+        let mut m: ClusterMove = yaml_serde::from_str(
             "{ molecule: MOL, max_displacement: 5.0, max_angle: 0.3, threshold: 30.0 }",
         )
         .unwrap();
@@ -549,7 +549,7 @@ propagate: {{seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}}
         )
         .unwrap();
 
-        let mut m: ClusterMove = serde_yml::from_str(
+        let mut m: ClusterMove = yaml_serde::from_str(
             "{ molecule: DOESNOTEXIST, max_displacement: 5.0, max_angle: 0.3, threshold: 30.0 }",
         )
         .unwrap();

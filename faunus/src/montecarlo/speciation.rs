@@ -1214,17 +1214,17 @@ impl<T: ObserveContext> MoveProposal<T> for SpeciationMove {
         }
     }
 
-    fn to_yaml(&self) -> Option<serde_yml::Value> {
+    fn to_yaml(&self) -> Option<yaml_serde::Value> {
         let mut value = tagged_yaml("SpeciationMove", self)?;
         // Append per-reaction acceptance ratios
-        if let serde_yml::Value::Tagged(ref mut tagged) = value {
-            if let serde_yml::Value::Mapping(ref mut map) = tagged.value {
-                let per_reaction: Vec<serde_yml::Value> = self
+        if let yaml_serde::Value::Tagged(ref mut tagged) = value {
+            if let yaml_serde::Value::Mapping(ref mut map) = tagged.value {
+                let per_reaction: Vec<yaml_serde::Value> = self
                     .reactions
                     .iter()
                     .zip(self.reaction_statistics.iter())
                     .map(|(config, stats)| {
-                        serde_yml::Value::Mapping(serde_yml::Mapping::from_iter([
+                        yaml_serde::Value::Mapping(yaml_serde::Mapping::from_iter([
                             ("reaction".into(), config.0.clone().into()),
                             ("accepted".into(), stats.num_accepted.into()),
                             ("trials".into(), stats.num_trials.into()),
@@ -1262,7 +1262,7 @@ mod tests {
     }
 
     fn make_move(reaction: &str, k: f64) -> SpeciationMove {
-        serde_yml::from_str(&format!(
+        yaml_serde::from_str(&format!(
             "temperature: 298.15\nreactions:\n  - [\"{reaction}\", !K {k}]"
         ))
         .unwrap()
@@ -1272,31 +1272,32 @@ mod tests {
 
     #[test]
     fn reaction_config_yaml_k() {
-        let config: ReactionConfig = serde_yml::from_str(r#"["= NaCl", !K 100.0]"#).unwrap();
+        let config: ReactionConfig = yaml_serde::from_str(r#"["= NaCl", !K 100.0]"#).unwrap();
         assert_eq!(config.0, "= NaCl");
         assert!((config.1.to_k(1.0) - 100.0).abs() < 1e-10);
     }
 
     #[test]
     fn reaction_config_yaml_pk() {
-        let config: ReactionConfig = serde_yml::from_str(r#"["⚛HA = ⚛A + ~H+", !pK 4.0]"#).unwrap();
+        let config: ReactionConfig =
+            yaml_serde::from_str(r#"["⚛HA = ⚛A + ~H+", !pK 4.0]"#).unwrap();
         assert!((config.1.to_k(1.0) - 1e-4).abs() < 1e-14);
     }
 
     #[test]
     fn reaction_config_yaml_lnk() {
-        let config: ReactionConfig = serde_yml::from_str(r#"["= M", !lnK -2.302585]"#).unwrap();
+        let config: ReactionConfig = yaml_serde::from_str(r#"["= M", !lnK -2.302585]"#).unwrap();
         assert!((config.1.to_k(1.0) - 0.1).abs() < 1e-5);
     }
 
     #[test]
     fn reaction_config_yaml_dg() {
         // dG = 0 => K = 1; dG = -kT·ln(10) => K = 10
-        let config: ReactionConfig = serde_yml::from_str(r#"["= Na+ + Cl-", !dG 0.0]"#).unwrap();
+        let config: ReactionConfig = yaml_serde::from_str(r#"["= Na+ + Cl-", !dG 0.0]"#).unwrap();
         assert!((config.1.to_k(2.479) - 1.0).abs() < 1e-10);
 
         let thermal_energy = 2.479;
-        let config: ReactionConfig = serde_yml::from_str(&format!(
+        let config: ReactionConfig = yaml_serde::from_str(&format!(
             r#"["= M", !dG {}]"#,
             -thermal_energy * 10.0_f64.ln()
         ))
@@ -1308,7 +1309,7 @@ mod tests {
     fn speciation_move_yaml() {
         let yaml =
             "temperature: 298.15\nreactions:\n  - [\"= M\", !K 10.0]\n  - [\"⚛A = ⚛B\", !pK 0.0]";
-        let mv: SpeciationMove = serde_yml::from_str(yaml).unwrap();
+        let mv: SpeciationMove = yaml_serde::from_str(yaml).unwrap();
         assert_eq!(mv.temperature, Some(298.15));
         assert_eq!(mv.reactions.len(), 2);
     }
@@ -1316,7 +1317,8 @@ mod tests {
     /// The `temperature` key is deprecated and optional; the system value is used.
     #[test]
     fn speciation_move_yaml_without_temperature() {
-        let mv: SpeciationMove = serde_yml::from_str("reactions:\n  - [\"= M\", !K 10.0]").unwrap();
+        let mv: SpeciationMove =
+            yaml_serde::from_str("reactions:\n  - [\"= M\", !K 10.0]").unwrap();
         assert_eq!(mv.temperature, None);
 
         let context = make_context();
@@ -1328,7 +1330,7 @@ mod tests {
     #[test]
     fn unknown_field_rejected() {
         let yaml = r#"{ temperature: 300.0, reactions: [], bogus: 42 }"#;
-        assert!(serde_yml::from_str::<SpeciationMove>(yaml).is_err());
+        assert!(yaml_serde::from_str::<SpeciationMove>(yaml).is_err());
     }
 
     // --- Finalize / reaction resolution ---
@@ -1550,7 +1552,7 @@ mod tests {
     fn propose_move_returns_none_when_empty() {
         let context = make_context();
         let mut mv: SpeciationMove =
-            serde_yml::from_str("temperature: 298.15\nreactions: []").unwrap();
+            yaml_serde::from_str("temperature: 298.15\nreactions: []").unwrap();
         mv.finalize(&context, THERMAL_ENERGY).unwrap();
 
         let mut rng = rand::thread_rng();
@@ -1639,9 +1641,9 @@ system:
     permittivity: !Fixed 78.0
     temperature: 298.15
   energy:
-    nonbonded:
-      default:
-        - !Coulomb {{cutoff: 14.0}}
+    - !Nonbonded
+        default:
+          - !Coulomb {{cutoff: 14.0}}
   blocks:
     - molecule: na
       N: 20
@@ -1830,7 +1832,7 @@ system:
   medium:
     permittivity: !Vacuum
     temperature: 298.15
-  energy: {{}}
+  energy: []
   blocks:
     - molecule: "H3PO4"
       N: {n_molecules}
@@ -1973,7 +1975,7 @@ propagate:
             "reactions:\n  - [\"= M\", !lnK 1000.0]",
             "reactions:\n  - [\"= M\", !dG -1.0e6]",
         ] {
-            let mut mv: SpeciationMove = serde_yml::from_str(yaml).unwrap();
+            let mut mv: SpeciationMove = yaml_serde::from_str(yaml).unwrap();
             let err = mv
                 .finalize(&context, THERMAL_ENERGY)
                 .expect_err("a non-finite equilibrium constant must be rejected: {yaml}");
@@ -1996,7 +1998,7 @@ molecules:
 system:
   cell: !Cuboid [10.0, 10.0, 10.0]
   medium: {permittivity: !Vacuum, temperature: 298.15}
-  energy: {}
+  energy: []
   blocks:
     - molecule: M
       N: 4
@@ -2056,9 +2058,9 @@ system:
     permittivity: !Fixed 78.0
     temperature: 298.15
   energy:
-    nonbonded:
-      default:
-        - !Coulomb {{cutoff: 18.0}}
+    - !Nonbonded
+        default:
+          - !Coulomb {{cutoff: 18.0}}
   blocks:
     - molecule: site4
       N: 5
@@ -2187,7 +2189,7 @@ system:
   medium:
     permittivity: !Vacuum
     temperature: 298.15
-  energy: {{}}
+  energy: []
   blocks:
     - molecule: siteA
       N: 20
@@ -2250,7 +2252,7 @@ molecules:
 system:
   cell: !Cuboid [30.0, 30.0, 30.0]
   medium: {permittivity: !Vacuum, temperature: 298.15}
-  energy: {}
+  energy: []
   blocks:
     - {molecule: site, N: 10, active: 10, insert: !RandomAtomPos {}}
     - {molecule: freeion, N: 10, active: 5, insert: !RandomAtomPos {}}
@@ -2350,9 +2352,9 @@ system:
     permittivity: !Vacuum
     temperature: 298.15
   energy:
-    nonbonded:
-      default:
-        - !WeeksChandlerAndersen {{mixing: LB}}
+    - !Nonbonded
+        default:
+          - !WeeksChandlerAndersen {{mixing: LB}}
   blocks:
     - molecule: dimer
       N: {slots}
@@ -2447,7 +2449,7 @@ molecules:
 system:
   cell: !Cuboid [30.0, 30.0, 30.0]
   medium: {permittivity: !Vacuum, temperature: 298.15}
-  energy: {}
+  energy: []
   blocks:
     - {molecule: NaCl, N: 10, active: 2, insert: !RandomAtomPos {}}
 propagate:
@@ -2626,12 +2628,12 @@ propagate:
     }
 
     /// No interactions: the equilibrium is then exactly the analytic one.
-    const IDEAL_ENERGY: &str = "  energy: {}\n";
+    const IDEAL_ENERGY: &str = "  energy: []\n";
 
     /// Screened electrostatics plus a soft core. The phosphates carry −1 and −2, so a
     /// protonation swap changes the charge distribution and ΔU is genuinely non-zero.
-    const INTERACTING_ENERGY: &str = "  energy:\n    nonbonded:\n      default:\n        \
-         - !Coulomb {cutoff: 30.0}\n        - !WeeksChandlerAndersen {mixing: LB}\n";
+    const INTERACTING_ENERGY: &str = "  energy:\n    - !Nonbonded\n        default:\n          \
+         - !Coulomb {cutoff: 30.0}\n          - !WeeksChandlerAndersen {mixing: LB}\n";
 
     /// Thirteen protonation states of phytate, each a 7-atom molecule (an inositol centre
     /// bead plus six phosphates) exchanged as a whole molecule kind.
@@ -2882,7 +2884,7 @@ molecules:
 system:
   cell: !Cuboid [20.0, 20.0, 20.0]
   medium: {permittivity: !Vacuum, temperature: 298.15}
-  energy: {}
+  energy: []
   blocks:
     - {molecule: mono, N: 8, active: 2, insert: !RandomCOM {}}
 propagate: {seed: !Fixed 3, criterion: MetropolisHastings, repeat: 0, collections: []}
@@ -2940,7 +2942,7 @@ molecules:
 system:
   cell: !Cuboid [30.0, 30.0, 30.0]
   medium: {permittivity: !Vacuum, temperature: 298.15}
-  energy: {}
+  energy: []
   blocks:
     - {molecule: straight, N: 6, active: 6, insert: !RandomCOM {rotate: true}}
     - {molecule: bent, N: 6, active: 0, insert: !RandomCOM {rotate: true}}
@@ -3134,7 +3136,7 @@ system:
   medium:
     permittivity: !Vacuum
     temperature: 298.15
-  energy: {{}}
+  energy: []
   blocks:
     - molecule: particle
       N: {slots}

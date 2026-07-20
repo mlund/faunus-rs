@@ -86,11 +86,11 @@ impl<T: ObserveContext> Analyze<T> for MeanCharge {
     }
 
     /// Called only when at least one sample was taken, so dividing by the frame count is safe.
-    fn results(&self) -> Option<serde_yml::Value> {
+    fn results(&self) -> Option<yaml_serde::Value> {
         let mean = self.sum / self.sampling.num_samples() as f64;
-        let mut map = serde_yml::Mapping::new();
+        let mut map = yaml_serde::Mapping::new();
         map.insert("mean_charge".into(), mean.into());
-        Some(serde_yml::Value::Mapping(map))
+        Some(yaml_serde::Value::Mapping(map))
     }
 }
 
@@ -111,7 +111,7 @@ molecules:
 system:
   cell: !Cuboid [20.0, 20.0, 20.0]
   medium: {permittivity: !Vacuum, temperature: 300.0}
-  energy: {}
+  energy: []
   blocks:
     - molecule: pair
       N: 1

@@ -1153,9 +1153,9 @@ impl PreferentialInteraction {
         Ok(())
     }
 
-    fn report(&self) -> Option<serde_yml::Value> {
+    fn report(&self) -> Option<yaml_serde::Value> {
         let last = self.reference.shell.len() - 1;
-        let mut map = serde_yml::Mapping::new();
+        let mut map = yaml_serde::Mapping::new();
         map.try_insert("num_samples", self.sampling.num_samples())?;
         map.try_insert("gamma", self.gamma(last))?;
         map.try_insert("concentration/Å⁻³", self.concentration.summary()?)?;
@@ -1177,7 +1177,7 @@ impl PreferentialInteraction {
         map.try_insert("excluded_volume/Å³", excluded_volume)?;
         map.try_insert("ligand_radius/Å", self.reference.ligand_radius)?;
         map.try_insert("num_residues", self.reference.residues.len())?;
-        Some(serde_yml::Value::Mapping(map))
+        Some(yaml_serde::Value::Mapping(map))
     }
 }
 
@@ -1359,7 +1359,7 @@ impl<T: ObserveContext> Analyze<T> for PreferentialInteraction {
         Ok(())
     }
 
-    fn results(&self) -> Option<serde_yml::Value> {
+    fn results(&self) -> Option<yaml_serde::Value> {
         self.report()
     }
 }
@@ -1432,7 +1432,7 @@ molecules:
 system:
   cell: !Cuboid [{cell}, {cell}, {cell}]
   medium: {{permittivity: !Vacuum, temperature: 300.0}}
-  energy: {{}}
+  energy: []
   blocks:
     - molecule: substrate
       N: 1
@@ -1465,7 +1465,7 @@ molecules:
 system:
   cell: !Cuboid [{BOX}, {BOX}, {BOX}]
   medium: {{permittivity: !Vacuum, temperature: 300.0}}
-  energy: {{}}
+  energy: []
   blocks:
     - molecule: substrate
       N: 1
@@ -1502,7 +1502,7 @@ molecules:
 system:
   cell: !Cuboid [{BOX}, {BOX}, {BOX}]
   medium: {{permittivity: !Vacuum, temperature: 300.0}}
-  energy: {{}}
+  energy: []
   blocks:
     - molecule: substrate
       N: 1
@@ -1542,7 +1542,7 @@ molecules:
 system:
   cell: !Cuboid [60.0, 60.0, 60.0]
   medium: {permittivity: !Vacuum, temperature: 300.0}
-  energy: {}
+  energy: []
   blocks:
     - molecule: substrate
       N: 1
@@ -1589,7 +1589,7 @@ molecules:
 system:
   cell: !Cuboid [60.0, 60.0, 60.0]
   medium: {{permittivity: !Vacuum, temperature: 300.0}}
-  energy: {{}}
+  energy: []
   blocks:
     - molecule: substrate
       N: 1
@@ -2113,7 +2113,7 @@ molecules:
 system:
   cell: !Cuboid [200.0, 200.0, 200.0]
   medium: {permittivity: !Vacuum, temperature: 300.0}
-  energy: {}
+  energy: []
   blocks:
     - molecule: substrate
       N: 1
@@ -2293,7 +2293,7 @@ molecules:
 system:
   cell: !Cuboid [200.0, 200.0, 200.0]
   medium: {permittivity: !Vacuum, temperature: 300.0}
-  energy: {}
+  energy: []
   blocks:
     - molecule: substrate
       N: 1
@@ -2361,7 +2361,7 @@ molecules:
 system:
   cell: !Cuboid [200.0, 200.0, 200.0]
   medium: {permittivity: !Vacuum, temperature: 300.0}
-  energy: {}
+  energy: []
   blocks:
     - molecule: substrate
       N: 1
@@ -2449,7 +2449,7 @@ molecules:
 system:
   cell: !Cuboid [100.0, 100.0, 100.0]
   medium: {permittivity: !Vacuum, temperature: 300.0}
-  energy: {}
+  energy: []
   blocks:
     - molecule: substrate
       N: 1
@@ -2586,7 +2586,7 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
             .sum::<f64>()
             / 2.0;
         let report = analysis.report().unwrap();
-        let key = serde_yml::Value::String("excluded_volume/Å³".to_owned());
+        let key = yaml_serde::Value::String("excluded_volume/Å³".to_owned());
         let actual = report.as_mapping().unwrap()[&key].as_f64().unwrap();
         float_cmp::assert_approx_eq!(f64, actual, expected, epsilon = 1e-8);
     }
@@ -2943,7 +2943,7 @@ molecules:
 system:
   cell: !Sphere {{radius: 30.0}}
   medium: {{permittivity: !Vacuum, temperature: 300.0}}
-  energy: {{}}
+  energy: []
   blocks:
     - molecule: substrate
       N: 1
@@ -3058,7 +3058,7 @@ molecules:
 system:
   cell: !Cuboid [60.0, 60.0, 60.0]
   medium: {permittivity: !Vacuum, temperature: 300.0}
-  energy: {}
+  energy: []
   blocks:
     - molecule: substrate
       N: 1
@@ -3123,7 +3123,7 @@ molecules:
 system:
   cell: !Cuboid [60.0, 60.0, 60.0]
   medium: {permittivity: !Vacuum, temperature: 300.0}
-  energy: {}
+  energy: []
   blocks:
     - molecule: substrate
       N: 1
@@ -3210,7 +3210,7 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
   profile: gamma.csv
   frequency: !Every 100
 "#;
-        let builder: crate::analysis::AnalysisBuilder = serde_yml::from_str(input).unwrap();
+        let builder: crate::analysis::AnalysisBuilder = yaml_serde::from_str(input).unwrap();
         let context = one_bead(&BULK);
         builder.build(&context, None).unwrap();
     }
@@ -3225,7 +3225,7 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
   shell: {max: 10.0, resolution: 0.5}
   frequency: !Every 100
 "#;
-        let builder: crate::analysis::AnalysisBuilder = serde_yml::from_str(input).unwrap();
+        let builder: crate::analysis::AnalysisBuilder = yaml_serde::from_str(input).unwrap();
         assert!(matches!(
             builder,
             crate::analysis::AnalysisBuilder::PreferentialInteraction(_)

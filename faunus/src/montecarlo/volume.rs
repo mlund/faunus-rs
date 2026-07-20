@@ -86,7 +86,7 @@ impl<T: ObserveContext> MoveProposal<T> for VolumeMove {
         ))
     }
 
-    fn to_yaml(&self) -> Option<serde_yml::Value> {
+    fn to_yaml(&self) -> Option<yaml_serde::Value> {
         tagged_yaml("VolumeMove", self)
     }
 }
@@ -98,7 +98,7 @@ mod tests {
     #[test]
     fn test_volume_move_yaml_defaults() {
         let yaml = "{ volume_displacement: 0.03, weight: 1.0 }";
-        let vm: VolumeMove = serde_yml::from_str(yaml).unwrap();
+        let vm: VolumeMove = yaml_serde::from_str(yaml).unwrap();
         assert_eq!(vm.volume_displacement, 0.03);
         assert_eq!(vm.weight, 1.0);
         assert_eq!(vm.method, VolumeScalePolicy::Isotropic);
@@ -108,7 +108,7 @@ mod tests {
     #[test]
     fn test_volume_move_yaml_explicit() {
         let yaml = "{ volume_displacement: 0.05, method: ScaleZ, weight: 0.5, repeat: 2 }";
-        let vm: VolumeMove = serde_yml::from_str(yaml).unwrap();
+        let vm: VolumeMove = yaml_serde::from_str(yaml).unwrap();
         assert_eq!(vm.volume_displacement, 0.05);
         assert_eq!(vm.weight, 0.5);
         assert_eq!(vm.method, VolumeScalePolicy::ScaleZ);
@@ -118,6 +118,6 @@ mod tests {
     #[test]
     fn test_volume_move_yaml_unknown_field() {
         let yaml = "{ volume_displacement: 0.03, weight: 1.0, unknown: 42 }";
-        assert!(serde_yml::from_str::<VolumeMove>(yaml).is_err());
+        assert!(yaml_serde::from_str::<VolumeMove>(yaml).is_err());
     }
 }

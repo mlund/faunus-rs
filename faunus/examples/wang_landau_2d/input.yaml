@@ -37,8 +37,8 @@ system:
       insert: !RandomAtomPos {}
 
   energy:
-    custom_external:
-      - selection: "all"
+    - !CustomExternal
+        selection: "all"
         function: staircase-sincos
 
 wang_landau:

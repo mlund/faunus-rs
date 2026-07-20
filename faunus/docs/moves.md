@@ -328,7 +328,7 @@ which contributes $PV - (N+1) k_BT \ln V$.
 ```yaml
 system:
   energy:
-    pressure: !atm 1.0
+    - !Pressure {atm: 1.0}
 
 propagate:
   collections:
@@ -555,7 +555,7 @@ system:
     permittivity: !Water
     temperature: 298.15
   energy:
-    nonbonded:
+    - !Nonbonded
       default:
         - !Coulomb {cutoff: 20.0}
         - !WeeksChandlerAndersen {mixing: LB}
@@ -787,7 +787,7 @@ and rigid-body orientations are uploaded to the compute device; after the LD blo
 updated positions and orientations are downloaded back.
 
 Pair interactions are evaluated on-device using cubic spline interpolation of the
-tabulated pair potentials (see `energy.nonbonded.spline` in [Energy](energy.md)).
+tabulated pair potentials (see the `!Nonbonded` term's `spline` in [Energy](energy.md)).
 A cell list reduces pairwise force evaluation from $O(n^2)$ to $O(n \cdot k)$
 where $k$ is the number of atoms in neighboring cells.
 The cell list is built on the CPU from periodically downloaded positions

@@ -19,7 +19,7 @@ system:
     permittivity: !Vacuum
     temperature: 300.0
   energy:
-    nonbonded:
+    - !Nonbonded
       default:
         - !LennardJones {mixing: LB}
   blocks:

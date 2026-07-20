@@ -301,16 +301,16 @@ impl<T: ObserveContext> Analyze<T> for RotationalDiffusion {
         Ok(())
     }
 
-    fn results(&self) -> Option<serde_yml::Value> {
+    fn results(&self) -> Option<yaml_serde::Value> {
         if self.sampling.num_samples() == 0 {
             return None;
         }
-        let mut map = serde_yml::Mapping::new();
+        let mut map = yaml_serde::Mapping::new();
         map.try_insert("num_samples", self.sampling.num_samples())?;
 
         let mut cov_list = Vec::new();
         for (lag, c) in self.valid_lags() {
-            let mut entry = serde_yml::Mapping::new();
+            let mut entry = yaml_serde::Mapping::new();
             entry.try_insert("lag", lag)?;
             entry.try_insert("q1q1", c[0].mean())?;
             entry.try_insert("q1q2", c[1].mean())?;
@@ -322,9 +322,9 @@ impl<T: ObserveContext> Analyze<T> for RotationalDiffusion {
             entry.try_insert("var_q2q2", c[3].sample_variance())?;
             entry.try_insert("var_q3q3", c[5].sample_variance())?;
             entry.try_insert("samples", c[0].len())?;
-            cov_list.push(serde_yml::Value::Mapping(entry));
+            cov_list.push(yaml_serde::Value::Mapping(entry));
         }
-        map.insert("covariance".into(), serde_yml::Value::Sequence(cov_list));
+        map.insert("covariance".into(), yaml_serde::Value::Sequence(cov_list));
 
         let mut d_list = Vec::new();
         for (lag, c) in self.valid_lags() {
@@ -336,7 +336,7 @@ impl<T: ObserveContext> Analyze<T> for RotationalDiffusion {
             let evals = [eigenvalues[0], eigenvalues[1], eigenvalues[2]];
 
             if let Some([dx, dy, dz]) = diffusion_from_eigenvalues(&evals, lag) {
-                let mut entry = serde_yml::Mapping::new();
+                let mut entry = yaml_serde::Mapping::new();
                 entry.try_insert("lag", lag)?;
                 entry.try_insert("Dx", dx)?;
                 entry.try_insert("Dy", dy)?;
@@ -351,13 +351,13 @@ impl<T: ObserveContext> Analyze<T> for RotationalDiffusion {
                 if denom.abs() > 1e-30 {
                     entry.try_insert("rhombicity", 1.5 * (dy - dx) / denom)?;
                 }
-                d_list.push(serde_yml::Value::Mapping(entry));
+                d_list.push(yaml_serde::Value::Mapping(entry));
             }
         }
         if !d_list.is_empty() {
             map.insert(
                 "diffusion_coefficients".into(),
-                serde_yml::Value::Sequence(d_list),
+                yaml_serde::Value::Sequence(d_list),
             );
         }
 
@@ -381,7 +381,7 @@ impl<T: ObserveContext> Analyze<T> for RotationalDiffusion {
             }
         }
 
-        Some(serde_yml::Value::Mapping(map))
+        Some(yaml_serde::Value::Mapping(map))
     }
 }
 
@@ -405,7 +405,7 @@ molecules:
 system:
   cell: !Cuboid [10.0, 10.0, 10.0]
   medium: {permittivity: !Vacuum, temperature: 300.0}
-  energy: {}
+  energy: []
   blocks:
     - molecule: DIMER
       N: 1
@@ -649,7 +649,7 @@ selection: "molecule Water"
 frequency: !Every 100
 max_lag: 500
 "#;
-        let builder: RotationalDiffusionBuilder = serde_yml::from_str(yaml).unwrap();
+        let builder: RotationalDiffusionBuilder = yaml_serde::from_str(yaml).unwrap();
         assert_eq!(builder.max_lag, 500);
         assert!(builder.file.is_none());
     }
@@ -660,7 +660,7 @@ max_lag: 500
 selection: "molecule Water"
 frequency: !Every 100
 "#;
-        let builder: RotationalDiffusionBuilder = serde_yml::from_str(yaml).unwrap();
+        let builder: RotationalDiffusionBuilder = yaml_serde::from_str(yaml).unwrap();
         assert_eq!(builder.max_lag, 1000);
     }
 }

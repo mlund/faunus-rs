@@ -121,10 +121,10 @@ mod tests {
     #[test]
     fn deserialize_between_and_harmonic() {
         let between: ConstrainBuilder =
-            serde_yml::from_str("property: volume\nrestraint: !Between [1000.0, 5000.0]").unwrap();
+            yaml_serde::from_str("property: volume\nrestraint: !Between [1000.0, 5000.0]").unwrap();
         assert!(matches!(between.restraint, Restraint::Between(_)));
 
-        let harmonic: ConstrainBuilder = serde_yml::from_str(
+        let harmonic: ConstrainBuilder = yaml_serde::from_str(
             "property: volume\nrestraint: !Harmonic {force_constant: 100.0, equilibrium: 3000.0}",
         )
         .unwrap();
@@ -140,7 +140,7 @@ mod tests {
         // #73: a constrain entry must name a restraint. The old silent no-op —
         // neither `range` nor `harmonic`, so `range` defaulted to (-∞,∞) and the
         // constraint never fired — is now a parse error.
-        let err = serde_yml::from_str::<ConstrainBuilder>("property: volume")
+        let err = yaml_serde::from_str::<ConstrainBuilder>("property: volume")
             .unwrap_err()
             .to_string();
         assert!(
@@ -153,12 +153,12 @@ mod tests {
     fn unknown_field_is_rejected() {
         // The former `range` key now lands in the flattened kind builder, which
         // denies it — a typo can no longer disable the constraint silently.
-        assert!(serde_yml::from_str::<ConstrainBuilder>(
+        assert!(yaml_serde::from_str::<ConstrainBuilder>(
             "property: volume\nrestraint: !Between [0.0, 1.0]\nrange: [2.0, 3.0]"
         )
         .is_err());
         // A typo'd key inside a restraint tag is denied too.
-        assert!(serde_yml::from_str::<ConstrainBuilder>(
+        assert!(yaml_serde::from_str::<ConstrainBuilder>(
             "property: volume\nrestraint: !Harmonic {force_constant: 100.0, equilibrium: 0.0, k: 5.0}"
         )
         .is_err());
@@ -174,7 +174,7 @@ mod tests {
             "property: volume\nrestraint: !Harmonic {force_constant: 1.0, equilibrium: .inf}",
         ] {
             assert!(
-                serde_yml::from_str::<ConstrainBuilder>(yaml).is_err(),
+                yaml_serde::from_str::<ConstrainBuilder>(yaml).is_err(),
                 "non-finite scalar must be rejected: {yaml}"
             );
         }
@@ -189,7 +189,7 @@ mod tests {
                 "property: volume\nrestraint: !Harmonic {{force_constant: {k}, equilibrium: 0.0}}"
             );
             assert!(
-                serde_yml::from_str::<ConstrainBuilder>(&yaml).is_err(),
+                yaml_serde::from_str::<ConstrainBuilder>(&yaml).is_err(),
                 "force_constant {k} must be rejected"
             );
         }
@@ -270,7 +270,7 @@ mod integration_tests {
     fn hard_constraint_volume_in_range() {
         let ctx = make_context();
         let volume = ctx.cell().volume().unwrap();
-        let builder: ConstrainBuilder = serde_yml::from_str(&format!(
+        let builder: ConstrainBuilder = yaml_serde::from_str(&format!(
             "property: volume\nrestraint: !Between [{}, {}]",
             volume - 1.0,
             volume + 1.0
@@ -284,7 +284,7 @@ mod integration_tests {
     fn hard_constraint_volume_out_of_range() {
         let ctx = make_context();
         let builder: ConstrainBuilder =
-            serde_yml::from_str("property: volume\nrestraint: !Between [0.0, 1.0]").unwrap();
+            yaml_serde::from_str("property: volume\nrestraint: !Between [0.0, 1.0]").unwrap();
         let constrain = builder.build(&ctx).unwrap();
         assert_eq!(constrain.energy(&ctx, &Change::Everything), f64::INFINITY);
     }
@@ -298,7 +298,7 @@ mod integration_tests {
         let yaml = format!(
             "property: volume\nrestraint: !Harmonic {{force_constant: {k}, equilibrium: {eq}}}"
         );
-        let builder: ConstrainBuilder = serde_yml::from_str(&yaml).unwrap();
+        let builder: ConstrainBuilder = yaml_serde::from_str(&yaml).unwrap();
         let constrain = builder.build(&ctx).unwrap();
         let energy = constrain.energy(&ctx, &Change::Everything);
         let expected = 0.5 * k * (eq - volume) * (eq - volume);
@@ -309,7 +309,7 @@ mod integration_tests {
     fn no_energy_on_no_change() {
         let ctx = make_context();
         let builder: ConstrainBuilder =
-            serde_yml::from_str("property: volume\nrestraint: !Between [0.0, 1.0]").unwrap();
+            yaml_serde::from_str("property: volume\nrestraint: !Between [0.0, 1.0]").unwrap();
         let constrain = builder.build(&ctx).unwrap();
         // Volume is out of range, but Change::None short-circuits to 0.
         assert_eq!(constrain.energy(&ctx, &Change::None), 0.0);
@@ -327,7 +327,7 @@ mod integration_tests {
         let yaml = format!(
             "property: volume\nrestraint: !HarmonicWall {{interval: [0.0, {hi}], force_constant: {k}}}"
         );
-        let energy = serde_yml::from_str::<ConstrainBuilder>(&yaml)
+        let energy = yaml_serde::from_str::<ConstrainBuilder>(&yaml)
             .unwrap()
             .build(&ctx)
             .unwrap()

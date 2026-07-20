@@ -107,8 +107,8 @@ Caching inside a term is fine, including through a `RefCell`. Changing the syste
 
 An analysis is named from YAML through the `AnalysisBuilder` enum and a move through `MoveBuilder`:
 add a variant pointing at your builder struct, and the name becomes available in the input file. An
-energy term needs a variant in the `EnergyTerm` enum and an optional field on `HamiltonianBuilder`,
-which is how the `energy:` section maps names to terms.
+energy term needs a variant in the `EnergyTerm` enum and a matching variant in the
+`EnergyTermBuilder` enum, whose tag (`!YourTerm`) is how the `energy:` list names the term.
 
 Every template shows the builder shape: a struct deserialized from the input, and a `build` method
 that takes the system and returns the finished object.

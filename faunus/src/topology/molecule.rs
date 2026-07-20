@@ -563,15 +563,15 @@ mod tests {
     fn structure_source_dispatches_on_node_type() {
         // #131: each YAML node type maps to one variant.
         assert!(matches!(
-            serde_yml::from_str::<StructureSource>("water.pdb").unwrap(),
+            yaml_serde::from_str::<StructureSource>("water.pdb").unwrap(),
             StructureSource::File(_)
         ));
         assert!(matches!(
-            serde_yml::from_str::<StructureSource>("[{OW: [0, 0, 0]}, {HW: [1, 0, 0]}]").unwrap(),
+            yaml_serde::from_str::<StructureSource>("[{OW: [0, 0, 0]}, {HW: [1, 0, 0]}]").unwrap(),
             StructureSource::Inline(_)
         ));
         assert!(matches!(
-            serde_yml::from_str::<StructureSource>("{sequence: nAGGKc, k: 100.0, req: 4.0}")
+            yaml_serde::from_str::<StructureSource>("{sequence: nAGGKc, k: 100.0, req: 4.0}")
                 .unwrap(),
             StructureSource::Fasta(_)
         ));
@@ -581,7 +581,7 @@ mod tests {
     fn structure_source_surfaces_the_inner_fasta_error() {
         // Pre-#131 a bad FASTA field reported the opaque "did not match any variant"; the
         // hand-written deserializer now surfaces FASTA's own `deny_unknown_fields` message.
-        let err = serde_yml::from_str::<StructureSource>("{sequence: nAGGKc, k: 100.0, bogus: 1}")
+        let err = yaml_serde::from_str::<StructureSource>("{sequence: nAGGKc, k: 100.0, bogus: 1}")
             .unwrap_err()
             .to_string();
         assert!(err.contains("bogus"), "unexpected message: {err}");
@@ -763,7 +763,7 @@ mod tests {
             name: peptide
             from_structure: {sequence: "nAGKc", k: 80.33, req: 3.8}
         "#;
-        let mut molecule: MoleculeKind = serde_yml::from_str(yaml).unwrap();
+        let mut molecule: MoleculeKind = yaml_serde::from_str(yaml).unwrap();
         molecule.expand_structure(Path::new(".")).unwrap();
 
         assert_eq!(molecule.atoms, ["NTR", "ALA", "GLY", "LYS", "CTR"]);
@@ -861,7 +861,7 @@ mod tests {
               - HW: [0.58, 0.76, 0.0]
               - HW: [-0.58, 0.76, 0.0]
         "#;
-        let mut molecule: MoleculeKind = serde_yml::from_str(yaml).unwrap();
+        let mut molecule: MoleculeKind = yaml_serde::from_str(yaml).unwrap();
         molecule.expand_structure(Path::new(".")).unwrap();
 
         assert_eq!(molecule.atoms, ["OW", "HW", "HW"]);
@@ -879,7 +879,7 @@ mod tests {
         )
         .unwrap();
         let yaml = "name: m\nfrom_structure: mol.xyz\n";
-        let mut molecule: MoleculeKind = serde_yml::from_str(yaml).unwrap();
+        let mut molecule: MoleculeKind = yaml_serde::from_str(yaml).unwrap();
         molecule.expand_structure(dir.path()).unwrap();
         assert_eq!(molecule.atoms, ["A", "B"]);
         assert_eq!(molecule.reference_positions.len(), 2);

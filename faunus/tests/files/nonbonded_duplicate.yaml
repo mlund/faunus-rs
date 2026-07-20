@@ -11,7 +11,7 @@ molecules:
   
 system:
   energy:
-    nonbonded:
+    - !Nonbonded
       default:
         - !LennardJones {sigma: 6.0, eps: 1.5}
       replace:

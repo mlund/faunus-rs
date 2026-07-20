@@ -19,7 +19,7 @@ system:
     temperature: 298.15
     permittivity: !Vacuum
   energy:
-    nonbonded:
+    - !Nonbonded
       default:
         - !LennardJones {mixing: LB}
       spline:

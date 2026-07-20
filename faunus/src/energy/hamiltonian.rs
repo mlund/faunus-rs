@@ -48,14 +48,14 @@ impl Hamiltonian {
         // If Ewald is configured, inject real-space pair potential into nonbonded
         // defaults *before* building (and potentially splining) the pair matrix.
         let mut pairpot_builder;
-        let pairpot_ref = if let Some(ewald) = &builder.ewald {
+        let pairpot_ref = if let Some(ewald) = builder.ewald() {
             let debye_length = medium.as_ref().and_then(|m| m.debye_length());
             let real_space = interatomic::coulomb::pairwise::RealSpaceEwald::new(
                 ewald.cutoff,
                 ewald.accuracy,
                 debye_length,
             );
-            pairpot_builder = builder.pairpot_builder.clone().unwrap_or_default();
+            pairpot_builder = builder.nonbonded().cloned().unwrap_or_default();
             pairpot_builder.push_default(super::builder::PairInteraction::CoulombRealSpaceEwald(
                 real_space,
             ));
@@ -66,7 +66,7 @@ impl Hamiltonian {
             );
             Some(&pairpot_builder)
         } else {
-            builder.pairpot_builder.as_ref()
+            builder.nonbonded()
         };
 
         if let Some(nonbonded_matrix) = pairpot_ref {
@@ -106,11 +106,11 @@ impl Hamiltonian {
             hamiltonian.push(IntermolecularBonded::new(topology));
         }
 
-        if let Some(sasa_builder) = &builder.sasa {
+        for sasa_builder in builder.sasas() {
             hamiltonian.push(sasa_builder.build()?.into());
         }
 
-        if let Some(pressure) = &builder.pressure {
+        if let Some(pressure) = builder.pressure() {
             let temperature = temperature.ok_or_else(|| {
                 anyhow::anyhow!("Medium with temperature required for isobaric energy term")
             })?;
@@ -191,6 +191,7 @@ impl Hamiltonian {
         medium: Option<interatomic::coulomb::Medium>,
     ) -> anyhow::Result<Self> {
         let builder = HamiltonianBuilder::from_file(filename)?;
+        builder.validate(topology.atomkinds())?;
         Self::new(&builder, topology, medium)
     }
 
@@ -242,7 +243,7 @@ impl Hamiltonian {
         medium: Option<interatomic::coulomb::Medium>,
         real_space: interatomic::coulomb::pairwise::RealSpaceEwald,
     ) -> anyhow::Result<()> {
-        let mut pairpot_builder = builder.pairpot_builder.clone().unwrap_or_default();
+        let mut pairpot_builder = builder.nonbonded().cloned().unwrap_or_default();
         pairpot_builder.push_default(super::builder::PairInteraction::CoulombRealSpaceEwald(
             real_space,
         ));
@@ -408,33 +409,39 @@ impl Hamiltonian {
             .for_each(|term| term.discard_backup());
     }
 
-    /// Per-term information as a YAML mapping (term name → info).
+    /// Per-term information as a YAML sequence of single-key mappings (`- name: info`).
     ///
-    /// Only includes terms that provide information via `EnergyTerm::to_yaml()`.
-    pub fn info_to_yaml(&self) -> serde_yml::Value {
-        let map: serde_yml::Mapping = self
+    /// A sequence rather than a map so repeated terms (e.g. two `!Sasa`) each get their
+    /// own entry instead of colliding on a shared `short_name` key; this mirrors the
+    /// `energy:` list input and the `analysis:` output convention. Only includes terms
+    /// that provide information via `EnergyTerm::to_yaml()`.
+    pub fn info_to_yaml(&self) -> yaml_serde::Value {
+        let seq: Vec<yaml_serde::Value> = self
             .energy_terms
             .iter()
             .filter_map(|term| {
                 let name = crate::Info::short_name(term)?;
                 let info = term.to_yaml()?;
-                Some((serde_yml::Value::String(name.to_string()), info))
+                Some(yaml_map! { yaml_serde::Value::String(name.to_string()) => info })
             })
             .collect();
-        serde_yml::Value::Mapping(map)
+        yaml_serde::Value::Sequence(seq)
     }
 
-    /// Per-term energy timing as a YAML-serializable map (term name → percentage of total).
+    /// Per-term energy timing as a YAML sequence of single-key mappings
+    /// (`- name: percentage of total`).
     ///
-    /// Reports both `energy()` and `update()` time per term.
-    pub fn timing_to_yaml(&self) -> serde_yml::Value {
+    /// A sequence for the same reason as [`info_to_yaml`](Self::info_to_yaml): repeated
+    /// terms must not collide on a shared name key. Reports both `energy()` and
+    /// `update()` time per term.
+    pub fn timing_to_yaml(&self) -> yaml_serde::Value {
         let total: f64 = self
             .energy_timers
             .iter()
             .chain(self.update_timers.iter())
             .map(|t| t.get().as_secs_f64())
             .sum();
-        let map: serde_yml::Mapping = self
+        let seq: Vec<yaml_serde::Value> = self
             .energy_terms
             .iter()
             .zip(self.energy_timers.iter())
@@ -460,13 +467,10 @@ impl Hamiltonian {
                 } else {
                     format!("{combined}")
                 };
-                Some((
-                    serde_yml::Value::String(name.to_string()),
-                    serde_yml::Value::String(label),
-                ))
+                Some(yaml_map! { yaml_serde::Value::String(name.to_string()) => label })
             })
             .collect();
-        serde_yml::Value::Mapping(map)
+        yaml_serde::Value::Sequence(seq)
     }
     /// Add energy terms that require a live context (particles already placed).
     ///
@@ -484,46 +488,41 @@ impl Hamiltonian {
             Ok(crate::R_IN_KJ_PER_MOL * m.temperature())
         };
 
-        if let Some(penalty_builder) = &builder.penalty {
+        if let Some(penalty_builder) = builder.penalty() {
             let thermal_energy = require_thermal_energy("penalty")?;
             // Front placement: out-of-range CVs short-circuit before expensive terms
             self.push_front(penalty_builder.build(context, thermal_energy)?.into());
         }
-        if let Some(constrain_builders) = &builder.constrain {
-            for cb in constrain_builders {
-                self.push(cb.build(context)?.into());
-            }
+        for cb in builder.constrains() {
+            self.push(cb.build(context)?.into());
         }
-        if let Some(ext_builders) = &builder.custom_external {
-            for eb in ext_builders {
-                self.push(eb.build()?.into());
-            }
+        for eb in builder.custom_externals() {
+            self.push(eb.build()?.into());
         }
-        if let Some(pair_builders) = &builder.custom_pair {
-            for pb in pair_builders {
-                self.push(pb.build(context)?.into());
-            }
+        for pb in builder.custom_pairs() {
+            self.push(pb.build(context)?.into());
         }
 
-        if let Some(pm_builder) = &builder.polymer_depletion {
+        if let Some(pm_builder) = builder.polymer_depletion() {
             let thermal_energy = require_thermal_energy("polymer_depletion")?;
             self.push(pm_builder.build(context, thermal_energy)?.into());
         }
-        if let Some(ct_builder) = &builder.contact_tessellation {
+        if let Some(ct_builder) = builder.contact_tessellation() {
             let ct = super::contact_tessellation::ContactTessellationEnergy::from_builder(
                 ct_builder, context,
             )?;
             self.push(ct.into());
         }
         // Build tabulated energy entries (6D molecule-molecule and 3D molecule-atom)
-        if builder.tabulated6d.is_some() || builder.tabulated3d.is_some() {
+        let (tab6d, tab3d) = (builder.tabulated6d(), builder.tabulated3d());
+        if tab6d.is_some() || tab3d.is_some() {
             let inv_thermal_energy = 1.0 / require_thermal_energy("tabulated")?;
             let topology = context.topology();
             let mut tab_entries = Vec::new();
-            if let Some(tab6d) = &builder.tabulated6d {
+            if let Some(tab6d) = tab6d {
                 tab_entries.extend(tab6d.build_entries(&topology, inv_thermal_energy)?);
             }
-            if let Some(tab3d) = &builder.tabulated3d {
+            if let Some(tab3d) = tab3d {
                 tab_entries.extend(tab3d.build_entries(&topology, inv_thermal_energy)?);
             }
             let tab = super::TabulatedEnergy::new(tab_entries, inv_thermal_energy);
@@ -540,7 +539,7 @@ impl Hamiltonian {
             }
             self.push(tab.into());
         }
-        if let Some(ewald_builder) = &builder.ewald {
+        if let Some(ewald_builder) = builder.ewald() {
             let medium = medium
                 .ok_or_else(|| anyhow::anyhow!("Ewald requires a medium with permittivity"))?;
             let initial_alpha = {

@@ -368,7 +368,7 @@ impl EwaldReciprocalEnergy {
     }
 
     /// Report Ewald parameters as YAML.
-    pub(super) fn to_yaml(&self) -> serde_yml::Value {
+    pub(super) fn to_yaml(&self) -> yaml_serde::Value {
         yaml_map! {
             "alpha" => self.state.ewald.alpha(),
             "n_max" => (self.state.ewald.n_max() as u64),
@@ -458,7 +458,7 @@ mod tests {
                     - {name: Ani, mass: 1.0, charge: -1.0, sigma: 1.0}\n\
                     molecules:\n  - {name: CAT, atoms: [Cat]}\n  - {name: ANI, atoms: [Ani]}\n\
                     system:\n  cell: !Cuboid [30.0, 30.0, 30.0]\n  \
-                    medium: {permittivity: !Vacuum, temperature: 300.0}\n  energy: {}\n  \
+                    medium: {permittivity: !Vacuum, temperature: 300.0}\n  energy: []\n  \
                     blocks:\n    - {molecule: CAT, N: 1, insert: !Manual [[0.0, 0.0, 0.0]]}\n    \
                     - {molecule: ANI, N: 1, insert: !Manual [[5.0, 0.0, 0.0]]}\n\
                     propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}\n";

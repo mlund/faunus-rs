@@ -145,7 +145,7 @@ impl<T: ObserveContext> MoveProposal<T> for CrankshaftMove {
         ))
     }
 
-    fn to_yaml(&self) -> Option<serde_yml::Value> {
+    fn to_yaml(&self) -> Option<yaml_serde::Value> {
         tagged_yaml("CrankshaftMove", self)
     }
 }
@@ -169,7 +169,7 @@ mod tests {
     const PROPOSALS: usize = 64;
 
     fn crankshaft(max_angle: f64) -> CrankshaftMove {
-        serde_yml::from_str(&format!("{{molecule: Chain, max_angle: {max_angle}}}")).unwrap()
+        yaml_serde::from_str(&format!("{{molecule: Chain, max_angle: {max_angle}}}")).unwrap()
     }
 
     /// A crankshaft turns a sub-tree about one of its own bonds, so it conserves every bond length
@@ -284,9 +284,9 @@ system:
     permittivity: !Vacuum
     temperature: 300.0
   energy:
-    nonbonded:
-      default:
-        - !LennardJones {mixing: LB}
+    - !Nonbonded
+        default:
+          - !LennardJones {mixing: LB}
   blocks:
     - molecule: Chain
       N: 1
@@ -313,7 +313,7 @@ system:
         let context = chain_context(&chain(6), ChainSpec::default());
         for max_angle in ["0", "-1.0", "4.0", ".nan", ".inf"] {
             let mut move_: CrankshaftMove =
-                serde_yml::from_str(&format!("{{molecule: Chain, max_angle: {max_angle}}}"))
+                yaml_serde::from_str(&format!("{{molecule: Chain, max_angle: {max_angle}}}"))
                     .unwrap();
             assert!(
                 move_.finalize(&context).is_err(),
@@ -349,7 +349,7 @@ system:
     #[test]
     fn yaml_parsing() {
         let yaml = "!CrankshaftMove {molecule: Peptide, max_angle: 0.5, weight: 1.0}";
-        let m: CrankshaftMove = serde_yml::from_str(yaml).unwrap();
+        let m: CrankshaftMove = yaml_serde::from_str(yaml).unwrap();
         assert_eq!(m.molecule_name, "Peptide");
         assert_eq!(m.max_angle, 0.5);
         assert_eq!(m.weight, 1.0);
@@ -361,6 +361,6 @@ system:
     #[test]
     fn yaml_unknown_field_rejected() {
         let yaml = "!CrankshaftMove {molecule: Peptide, max_angle: 0.5, weight: 1.0, unknown: 42}";
-        assert!(serde_yml::from_str::<CrankshaftMove>(yaml).is_err());
+        assert!(yaml_serde::from_str::<CrankshaftMove>(yaml).is_err());
     }
 }

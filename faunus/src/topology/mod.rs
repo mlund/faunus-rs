@@ -1019,7 +1019,7 @@ atoms:
 system:
   cell: !Cuboid [10.0, 10.0, 10.0]
   medium: {{permittivity: !Vacuum, temperature: 298.15}}
-  energy: {{}}
+  energy: []
   blocks:
     - {{molecule: AB, N: 4, insert: !RandomAtomPos {{}}}}
 "

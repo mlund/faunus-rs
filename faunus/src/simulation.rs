@@ -71,9 +71,9 @@ fn yaml_block<T: serde::Serialize>(data: &T, key: Option<&str>) -> anyhow::Resul
         Some(key) => {
             let mut wrapper = BTreeMap::new();
             wrapper.insert(key.to_string(), data);
-            serde_yml::to_string(&wrapper)?
+            yaml_serde::to_string(&wrapper)?
         }
-        None => serde_yml::to_string(data)?,
+        None => yaml_serde::to_string(data)?,
     })
 }
 
@@ -127,12 +127,12 @@ impl Source<'_> {
 
     /// Parse the whole document into a `Value` for whole-section key validation,
     /// applying the same template/underscore preprocessing as the file readers.
-    fn root_value(&self) -> anyhow::Result<serde_yml::Value> {
+    fn root_value(&self) -> anyhow::Result<yaml_serde::Value> {
         let yaml = match *self {
             Self::File(path) => crate::auxiliary::read_yaml(path)?,
             Self::Yaml(yaml) => yaml.to_string(),
         };
-        Ok(serde_yml::from_str(&yaml)?)
+        Ok(yaml_serde::from_str(&yaml)?)
     }
 
     fn setup_rng(&self) -> anyhow::Result<rand::rngs::StdRng> {
@@ -440,7 +440,7 @@ fn box_result<T: Context + 'static>(
     yaml.push_str(&yaml_block(&energy_summary, Some("energy_change"))?);
 
     let energy_info = mc.context().hamiltonian().info_to_yaml();
-    if energy_info.as_mapping().is_some_and(|map| !map.is_empty()) {
+    if energy_info.as_sequence().is_some_and(|seq| !seq.is_empty()) {
         yaml.push_str(&yaml_block(&energy_info, Some("energy"))?);
     }
     yaml.push_str(&yaml_block(

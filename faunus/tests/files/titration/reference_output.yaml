@@ -1,6 +1,6 @@
 version:
-  faunus: 0.2.0
-  git_revision: v0.3.0-31-g8d21783-dirty
+  faunus: 3.0.0-beta.2
+  git_revision: v3.0.0-beta.2-47-g908697e-dirty
 medium:
   permittivity: Water
   salt: null
@@ -36,15 +36,15 @@ energy_change:
   final: -14.858887009431452
   initial: -12.508348774890969
 energy_timers:
-  cell_overlap: '2.34 (energy: 1.66, update: 0.68)'
-  nonbonded: '97.66 (energy: 96.97, update: 0.69)'
+- cell_overlap: '2.56 (energy: 1.8, update: 0.76)'
+- nonbonded: '97.44 (energy: 96.66, update: 0.78)'
 propagate:
   repeat: 2000
   seed: !Fixed 42
   collections:
   - !Deterministic
     repeat: 1
-    elapsed_seconds: 0.227983751
+    elapsed_seconds: 0.222983987
     moves:
     - !SpeciationMove
       reactions:

@@ -389,11 +389,11 @@ impl<T: ObserveContext> Analyze<T> for SpatialDistribution {
         Ok(())
     }
 
-    fn results(&self) -> Option<serde_yml::Value> {
+    fn results(&self) -> Option<yaml_serde::Value> {
         if self.sampling.num_samples() == 0 {
             return None;
         }
-        let mut map = serde_yml::Mapping::new();
+        let mut map = yaml_serde::Mapping::new();
         map.try_insert("num_samples", self.sampling.num_samples())?;
         map.try_insert("grid", self.grid.dims())?;
         map.try_insert("resolution", self.grid.spacing())?;
@@ -409,7 +409,7 @@ impl<T: ObserveContext> Analyze<T> for SpatialDistribution {
                 reference_structure.file.display().to_string(),
             )?;
         }
-        Some(serde_yml::Value::Mapping(map))
+        Some(yaml_serde::Value::Mapping(map))
     }
 }
 
@@ -445,8 +445,8 @@ system:
     permittivity: !Vacuum
     temperature: 298.15
   energy:
-    nonbonded:
-      default: []
+    - !Nonbonded
+        default: []
   blocks:
     - molecule: REF
       N: 1
@@ -482,8 +482,8 @@ system:
     permittivity: !Vacuum
     temperature: 298.15
   energy:
-    nonbonded:
-      default: []
+    - !Nonbonded
+        default: []
   blocks:
     - molecule: REF
       N: 1
@@ -505,7 +505,7 @@ reference: "molecule REF"
 selection: "atomtype Na"
 frequency: !Every 100
 "#;
-        let builder: SpatialDistributionBuilder = serde_yml::from_str(yaml).unwrap();
+        let builder: SpatialDistributionBuilder = yaml_serde::from_str(yaml).unwrap();
         assert_eq!(builder.file, PathBuf::from("spatial.dx"));
         assert_relative_eq!(builder.resolution, 1.0);
         assert_relative_eq!(builder.padding, 8.0);
@@ -521,7 +521,7 @@ frequency: !Every 100
   selection: "atomtype Na"
   frequency: !Every 10
 "#;
-        let builders: Vec<AnalysisBuilder> = serde_yml::from_str(yaml).unwrap();
+        let builders: Vec<AnalysisBuilder> = yaml_serde::from_str(yaml).unwrap();
         assert!(matches!(
             builders[0],
             AnalysisBuilder::SpatialDistribution(_)
@@ -539,14 +539,14 @@ molecules:
 system:
   cell: !Cuboid [20.0, 20.0, 20.0]
   medium: {permittivity: !Vacuum, temperature: 298.15}
-  energy: {nonbonded: {default: []}}
+  energy: [!Nonbonded {default: []}]
   blocks:
     - molecule: FLEX
       N: 1
       insert: !Manual [[0.0, 0.0, 0.0]]
 "#;
         let context = Backend::from_yaml_str(yaml, None, &mut rand::thread_rng()).unwrap();
-        let builder: SpatialDistributionBuilder = serde_yml::from_str(
+        let builder: SpatialDistributionBuilder = yaml_serde::from_str(
             r#"
 reference: "molecule FLEX"
 selection: "all"
@@ -561,7 +561,7 @@ frequency: !Every 1
     fn periodic_minimum_image_places_target_inside_grid() {
         let context = pbc_context();
         let tmp = tempfile::tempdir().unwrap();
-        let mut builder: SpatialDistributionBuilder = serde_yml::from_str(
+        let mut builder: SpatialDistributionBuilder = yaml_serde::from_str(
             r#"
 reference: "molecule REF"
 selection: "atomtype Na"
@@ -589,7 +589,7 @@ frequency: !Every 1
         let orientation = UnitQuaternion::from_axis_angle(&axis, std::f64::consts::FRAC_PI_2);
         context.set_group_orientation(0, orientation);
 
-        let builder: SpatialDistributionBuilder = serde_yml::from_str(
+        let builder: SpatialDistributionBuilder = yaml_serde::from_str(
             r#"
 reference: "molecule REF"
 selection: "atomtype Na"
@@ -616,7 +616,7 @@ frequency: !Every 1
     #[test]
     fn exclude_reference_skips_overlapping_target_atoms() {
         let context = test_context();
-        let builder: SpatialDistributionBuilder = serde_yml::from_str(
+        let builder: SpatialDistributionBuilder = yaml_serde::from_str(
             r#"
 reference: "molecule REF"
 selection: "all"
@@ -635,7 +635,7 @@ frequency: !Every 1
     #[test]
     fn atomtype_selection_is_resolved_after_atom_kind_changes() {
         let mut context = test_context();
-        let builder: SpatialDistributionBuilder = serde_yml::from_str(
+        let builder: SpatialDistributionBuilder = yaml_serde::from_str(
             r#"
 reference: "molecule REF"
 selection: "atomtype Na"
@@ -669,14 +669,14 @@ selection: "atomtype Na"
 frequency: !Every 100
 typo_field: 1.0
 "#;
-        assert!(serde_yml::from_str::<SpatialDistributionBuilder>(yaml).is_err());
+        assert!(yaml_serde::from_str::<SpatialDistributionBuilder>(yaml).is_err());
     }
 
     #[test]
     fn reference_file_writes_body_frame_structure() {
         let context = test_context();
         let tmp = tempfile::tempdir().unwrap();
-        let mut builder: SpatialDistributionBuilder = serde_yml::from_str(
+        let mut builder: SpatialDistributionBuilder = yaml_serde::from_str(
             r#"
 reference: "molecule REF"
 selection: "atomtype Na"

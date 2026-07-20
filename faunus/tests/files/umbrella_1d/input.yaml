@@ -22,8 +22,8 @@ system:
     permittivity: !Vacuum
     temperature: 300.0
   energy:
-    custom_external:
-      - selection: "atomtype A"
+    - !CustomExternal
+        selection: "atomtype A"
         function: "force * x"
         constants: {force: 1.0}
   blocks:

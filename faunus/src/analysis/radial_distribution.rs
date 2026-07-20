@@ -282,14 +282,14 @@ impl<T: ObserveContext> Analyze<T> for RadialDistribution {
         self.write_gr()
     }
 
-    fn results(&self) -> Option<serde_yml::Value> {
+    fn results(&self) -> Option<yaml_serde::Value> {
         if self.sampling.num_samples() == 0 {
             return None;
         }
-        let mut map = serde_yml::Mapping::new();
+        let mut map = yaml_serde::Mapping::new();
         map.try_insert("num_samples", self.sampling.num_samples())?;
         map.try_insert("num_bins", self.histogram.num_bins())?;
-        Some(serde_yml::Value::Mapping(map))
+        Some(yaml_serde::Value::Mapping(map))
     }
 }
 
@@ -307,7 +307,7 @@ file: rdf.dat
 resolution: 0.1
 frequency: !Every 100
 "#;
-        let builder: RadialDistributionBuilder = serde_yml::from_str(yaml).unwrap();
+        let builder: RadialDistributionBuilder = yaml_serde::from_str(yaml).unwrap();
         assert!(!builder.use_com);
         assert!(builder.max_r.is_none());
         assert!(builder.exclude_intramolecular.is_none());
@@ -325,7 +325,7 @@ resolution: 0.1
 frequency: !Every 100
 dr_typo: 0.1
 "#;
-        assert!(serde_yml::from_str::<RadialDistributionBuilder>(yaml).is_err());
+        assert!(yaml_serde::from_str::<RadialDistributionBuilder>(yaml).is_err());
     }
 
     #[test]
@@ -338,7 +338,7 @@ resolution: 0.5
 max: 30.0
 frequency: !Every 50
 "#;
-        let builder: RadialDistributionBuilder = serde_yml::from_str(yaml).unwrap();
+        let builder: RadialDistributionBuilder = yaml_serde::from_str(yaml).unwrap();
         assert!(builder.use_com);
         assert_relative_eq!(builder.max_r.unwrap(), 30.0);
     }
@@ -353,7 +353,7 @@ resolution: 0.5
 max_r: 30.0
 frequency: !Every 50
 "#;
-        assert!(serde_yml::from_str::<RadialDistributionBuilder>(yaml).is_err());
+        assert!(yaml_serde::from_str::<RadialDistributionBuilder>(yaml).is_err());
     }
 
     #[test]
@@ -365,7 +365,7 @@ frequency: !Every 50
   resolution: 0.1
   frequency: !Every 100
 "#;
-        let builders: Vec<AnalysisBuilder> = serde_yml::from_str(yaml).unwrap();
+        let builders: Vec<AnalysisBuilder> = yaml_serde::from_str(yaml).unwrap();
         assert!(matches!(
             builders[0],
             AnalysisBuilder::RadialDistribution(_)

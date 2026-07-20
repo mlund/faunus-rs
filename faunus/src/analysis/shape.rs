@@ -257,12 +257,12 @@ impl<T: ObserveContext> Analyze<T> for ShapeAnalysis {
         Ok(())
     }
 
-    fn results(&self) -> Option<serde_yml::Value> {
+    fn results(&self) -> Option<yaml_serde::Value> {
         // A frame in which no molecule matched leaves every accumulator empty.
         if self.num_groups_sampled == 0 {
             return None;
         }
-        let mut map = serde_yml::Mapping::new();
+        let mut map = yaml_serde::Mapping::new();
         let rg2 = self.gyration_radius_squared.mean();
         let re2 = self.end_to_end_squared.mean();
 
@@ -288,7 +288,7 @@ impl<T: ObserveContext> Analyze<T> for ShapeAnalysis {
         map.try_insert("num_samples", self.sampling.num_samples())?;
         map.try_insert("num_groups_sampled", self.num_groups_sampled)?;
 
-        Some(serde_yml::Value::Mapping(map))
+        Some(yaml_serde::Value::Mapping(map))
     }
 }
 
@@ -305,7 +305,7 @@ mod tests {
 selection: "molecule polymer"
 frequency: !Every 100
 "#;
-        let builder: ShapeAnalysisBuilder = serde_yml::from_str(yaml).unwrap();
+        let builder: ShapeAnalysisBuilder = yaml_serde::from_str(yaml).unwrap();
         assert!(builder.file.is_none());
         assert!(matches!(builder.frequency, Frequency::Every(100)));
     }
@@ -317,7 +317,7 @@ selection: "molecule polymer"
 file: shape.dat.gz
 frequency: !Every 50
 "#;
-        let builder: ShapeAnalysisBuilder = serde_yml::from_str(yaml).unwrap();
+        let builder: ShapeAnalysisBuilder = yaml_serde::from_str(yaml).unwrap();
         assert_eq!(
             builder.file.as_ref().unwrap().to_str().unwrap(),
             "shape.dat.gz"
@@ -331,7 +331,7 @@ frequency: !Every 50
   selection: "molecule polymer"
   frequency: !Every 100
 "#;
-        let builders: Vec<AnalysisBuilder> = serde_yml::from_str(yaml).unwrap();
+        let builders: Vec<AnalysisBuilder> = yaml_serde::from_str(yaml).unwrap();
         assert!(matches!(builders[0], AnalysisBuilder::PolymerShape(_)));
     }
 
@@ -547,7 +547,7 @@ molecules:
 system:
   cell: !Cuboid [30.0, 30.0, 30.0]
   medium: {permittivity: !Vacuum, temperature: 300.0}
-  energy: {}
+  energy: []
   blocks:
     - molecule: POLY
       N: 2
@@ -565,7 +565,7 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
         let context = Backend::new(tmp.path(), None, &mut rand::thread_rng()).unwrap();
 
         let builder: ShapeAnalysisBuilder =
-            serde_yml::from_str("{selection: \"molecule POLY\", frequency: !Every 1}").unwrap();
+            yaml_serde::from_str("{selection: \"molecule POLY\", frequency: !Every 1}").unwrap();
         let mut analysis = builder.build(&context).unwrap();
 
         for step in 0..3 {

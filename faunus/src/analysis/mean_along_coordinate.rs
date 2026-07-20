@@ -142,18 +142,18 @@ impl<T: ObserveContext> Analyze<T> for MeanAlongCoordinate {
         self.write_output()
     }
 
-    fn results(&self) -> Option<serde_yml::Value> {
+    fn results(&self) -> Option<yaml_serde::Value> {
         if self.bins.is_empty() {
             return None;
         }
-        let mut map = serde_yml::Mapping::new();
+        let mut map = yaml_serde::Mapping::new();
         map.try_insert("property", self.cv.name())?;
         map.try_insert("mean_property", self.cv_mean.mean())?;
         map.try_insert("coordinate", self.coordinate.name())?;
         map.try_insert("mean_coordinate", self.coord_mean.mean())?;
         map.try_insert("num_samples", self.sampling.num_samples())?;
         map.try_insert("num_bins", self.bins.len())?;
-        Some(serde_yml::Value::Mapping(map))
+        Some(yaml_serde::Value::Mapping(map))
     }
 }
 
@@ -172,7 +172,7 @@ coordinate:
 file: test.dat
 frequency: !Every 100
 "#;
-        let builder: MeanAlongCoordinateBuilder = serde_yml::from_str(yaml).unwrap();
+        let builder: MeanAlongCoordinateBuilder = yaml_serde::from_str(yaml).unwrap();
         assert_eq!(builder.coordinate.resolution().get(), 0.5);
         assert_eq!(builder.file.to_str().unwrap(), "test.dat");
     }
@@ -188,7 +188,7 @@ coordinate:
 file: fail.dat
 frequency: !Every 1
 "#;
-        assert!(serde_yml::from_str::<MeanAlongCoordinateBuilder>(yaml).is_err());
+        assert!(yaml_serde::from_str::<MeanAlongCoordinateBuilder>(yaml).is_err());
     }
 
     #[test]
@@ -202,7 +202,7 @@ frequency: !Every 1
   file: test.dat
   frequency: !Every 100
 "#;
-        let builders: Vec<AnalysisBuilder> = serde_yml::from_str(yaml).unwrap();
+        let builders: Vec<AnalysisBuilder> = yaml_serde::from_str(yaml).unwrap();
         assert!(matches!(
             builders[0],
             AnalysisBuilder::MeanAlongCoordinate(_)
@@ -244,7 +244,7 @@ frequency: !Every 1
 "#,
             file.display()
         );
-        let builder: MeanAlongCoordinateBuilder = serde_yml::from_str(&yaml).unwrap();
+        let builder: MeanAlongCoordinateBuilder = yaml_serde::from_str(&yaml).unwrap();
         let mut analysis = builder.build(&ctx).unwrap();
 
         assert_eq!(Analyze::<Backend>::num_samples(&analysis), 0);

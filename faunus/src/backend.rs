@@ -30,7 +30,7 @@ pub fn get_medium(path: impl AsRef<Path>) -> anyhow::Result<interatomic::coulomb
 
 /// Extract medium from the `system/medium` section of a YAML string.
 pub fn get_medium_str(yaml: &str) -> anyhow::Result<interatomic::coulomb::Medium> {
-    let value = serde_yml::from_str::<serde_yml::Value>(yaml)?;
+    let value = yaml_serde::from_str::<yaml_serde::Value>(yaml)?;
     // Keep "not found" distinct from "found but invalid" so a bad field in an
     // existing section is reported as a parse error, not a missing section.
     let medium = value
@@ -348,11 +348,7 @@ impl Backend {
             .finalize(&hamiltonian_builder, &backend, medium.as_ref())?;
         backend.update(&Change::Everything)?;
 
-        if let Some(spline_opts) = hamiltonian_builder
-            .pairpot_builder
-            .as_ref()
-            .and_then(|pb| pb.spline())
-        {
+        if let Some(spline_opts) = hamiltonian_builder.nonbonded().and_then(|pb| pb.spline()) {
             if spline_opts.cell_list {
                 backend.request_cell_list(spline_opts.cutoff);
             }
@@ -1113,7 +1109,7 @@ molecules:
 system:
   cell: !Cuboid [20.0, 20.0, 20.0]
   medium: {permittivity: !Vacuum, temperature: 300.0}
-  energy: {}
+  energy: []
   blocks:
     - molecule: DIMER
       N: 2
@@ -1636,10 +1632,10 @@ system:
   cell: !Cuboid [{BIG}, {BIG}, {BIG}]
   medium: {{permittivity: !Vacuum, temperature: 298.15}}
   energy:
-    nonbonded:
-      default:
-        - !LennardJones {{mixing: LB}}
-      spline: {{cutoff: {CUTOFF}, table_points: 1000, cell_list: {cell_list}}}
+    - !Nonbonded
+        default:
+          - !LennardJones {{mixing: LB}}
+        spline: {{cutoff: {CUTOFF}, table_points: 1000, cell_list: {cell_list}}}
   blocks:
     - molecule: M
       N: 512
@@ -1779,7 +1775,7 @@ molecules:
 system:
   cell: !Cuboid [100.0, 100.0, 100.0]
   medium: {permittivity: !Vacuum, temperature: 298.15}
-  energy: {}
+  energy: []
   blocks:
     - molecule: DIMER
       N: 1
@@ -1843,7 +1839,7 @@ molecules:
 system:
   cell: !Cuboid [20.0, 20.0, 20.0]
   medium: {permittivity: !Vacuum, temperature: 300.0}
-  energy: {}
+  energy: []
   blocks:
     - molecule: DIMER
       N: 2

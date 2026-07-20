@@ -43,7 +43,7 @@ system:
 
   
   energy:
-    nonbonded:
+    - !Nonbonded
       replace:
         [O, O]:
           - !LennardJones {epsilon: 0.1521, sigma: 3.1507}

@@ -546,18 +546,18 @@ impl<T: ObserveContext> Analyze<T> for MultipoleDistribution {
         Ok(())
     }
 
-    fn results(&self) -> Option<serde_yml::Value> {
+    fn results(&self) -> Option<yaml_serde::Value> {
         if self.sampling.num_samples() == 0 {
             return None;
         }
-        let mut map = serde_yml::Mapping::new();
+        let mut map = yaml_serde::Mapping::new();
         map.try_insert("num_samples", self.sampling.num_samples())?;
         map.try_insert("num_bins", self.bins.len())?;
         map.try_insert("bjerrum_length/Å", self.bjerrum_length)?;
         if let Some(last) = self.rows().last() {
             map.try_insert("kirkwood_factor", last.kirkwood)?;
         }
-        Some(serde_yml::Value::Mapping(map))
+        Some(yaml_serde::Value::Mapping(map))
     }
 }
 
@@ -676,7 +676,7 @@ mod tests {
 selections: ["molecule A", "molecule B"]
 frequency: !Every 100
 "#;
-        let builder: MultipoleDistributionBuilder = serde_yml::from_str(yaml).unwrap();
+        let builder: MultipoleDistributionBuilder = yaml_serde::from_str(yaml).unwrap();
         assert_relative_eq!(builder.dr, 1.0);
         assert!(builder.max_r.is_none());
         assert_eq!(builder.file, PathBuf::from("multipole_dist.csv"));
@@ -690,7 +690,7 @@ file: multipole.csv
 frequency: !Every 100
 oops: 1
 "#;
-        assert!(serde_yml::from_str::<MultipoleDistributionBuilder>(yaml).is_err());
+        assert!(yaml_serde::from_str::<MultipoleDistributionBuilder>(yaml).is_err());
     }
 
     #[test]
@@ -702,7 +702,7 @@ oops: 1
   resolution: 0.5
   frequency: !Every 100
 "#;
-        let builders: Vec<AnalysisBuilder> = serde_yml::from_str(yaml).unwrap();
+        let builders: Vec<AnalysisBuilder> = yaml_serde::from_str(yaml).unwrap();
         assert!(matches!(
             builders[0],
             AnalysisBuilder::MultipoleDistribution(_)
@@ -738,7 +738,7 @@ molecules:
 system:
   cell: !Cuboid [50.0, 50.0, 50.0]
   medium: {permittivity: !Vacuum, temperature: 300.0}
-  energy: {}
+  energy: []
   blocks:
     - molecule: particle
       N: 10
@@ -767,7 +767,7 @@ molecules:
 system:
   cell: !Cuboid [100.0, 100.0, 100.0]
   medium: {permittivity: !Vacuum, temperature: 300.0}
-  energy: {}
+  energy: []
   blocks:
     - molecule: CATION
       N: 1
@@ -818,7 +818,7 @@ molecules:
 system:
   cell: !Cuboid [100.0, 100.0, 100.0]
   medium: {permittivity: !Vacuum, temperature: 300.0}
-  energy: {}
+  energy: []
   blocks:
     - molecule: ION
       N: 1
@@ -859,7 +859,7 @@ molecules:
 system:
   cell: !Cuboid [10.0, 10.0, 10.0]
   medium: {permittivity: !Vacuum, temperature: 300.0}
-  energy: {}
+  energy: []
   blocks:
     - molecule: CATION
       N: 1

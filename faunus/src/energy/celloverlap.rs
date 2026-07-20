@@ -73,7 +73,7 @@ system:
   cell: !Slit [10.0, 10.0, 10.0]
   medium: {permittivity: !Vacuum, temperature: 300.0}
   # CellOverlap is added to every Hamiltonian automatically; no energy key selects it.
-  energy: {}
+  energy: []
   blocks:
     - molecule: A
       N: 1

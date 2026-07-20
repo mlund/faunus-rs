@@ -1,6 +1,6 @@
 version:
-  faunus: 3.0.0-beta.1
-  git_revision: v3.0.0-beta.1-23-g7478a1e-dirty
+  faunus: 3.0.0-beta.2
+  git_revision: v3.0.0-beta.2-47-g908697e-dirty
 medium:
   permittivity: Water
   salt: null
@@ -26,21 +26,21 @@ energy_change:
   final: -1033.5652358625857
   initial: -1020.9081480087555
 energy:
-  external_pressure:
+- external_pressure:
     pressure/kJ/mol/Å³: 0.00016899207088419543
     thermal_energy: 2.4789570295566996
 energy_timers:
-  cell_overlap: '2.73 (energy: 1.94, update: 0.79)'
-  nonbonded: '92.94 (energy: 46.52, update: 46.42)'
-  intramolecular: '2.41 (energy: 1.69, update: 0.72)'
-  external_pressure: '1.92 (energy: 1.2, update: 0.72)'
+- cell_overlap: '2.76 (energy: 1.97, update: 0.79)'
+- nonbonded: '92.82 (energy: 46.37, update: 46.45)'
+- intramolecular: '2.4699999999999998 (energy: 1.75, update: 0.72)'
+- external_pressure: '1.94 (energy: 1.22, update: 0.72)'
 propagate:
   repeat: 25000
   seed: !Fixed 42
   collections:
   - !Deterministic
     repeat: 1
-    elapsed_seconds: 7.080209416
+    elapsed_seconds: 7.44997269
     moves:
     - !TranslateMolecule
       molecule: polymer

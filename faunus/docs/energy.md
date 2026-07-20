@@ -1,15 +1,18 @@
 # Energy
 
 The Hamiltonian is the sum of all energy terms acting on the system.
-In a complete input file, energy terms are defined under `system.energy`.
-Included force-field fragments may instead use a top-level `energy` section;
-see [Loading nonbonded from include files](#loading-nonbonded-from-include-files).
+In a complete input file, energy terms are defined under `system.energy` as a
+list of tagged entries (`!Nonbonded`, `!Pressure`, …), mirroring `analysis` and
+`moves`. Order is irrelevant — the total energy is a sum — and most terms may
+appear only once; `!Sasa`, `!Constrain`, `!CustomExternal` and `!CustomPair` may
+repeat. Included force-field fragments may instead use a top-level `energy`
+section; see [Loading nonbonded from include files](#loading-nonbonded-from-include-files).
 
 ---
 
 ## External Pressure (Isobaric)
 
-The `pressure` energy term adds an external pressure contribution for the _NPT_ ensemble:
+The `!Pressure` energy term adds an external pressure contribution for the _NPT_ ensemble:
 
 $$
 U = PV - (N + 1) k_BT \ln V
@@ -24,24 +27,26 @@ and $N$ is the number of independently translatable entities
 ```yaml
 system:
   energy:
-    pressure: !atm 1.0
+    - !Pressure {atm: 1.0}
 ```
 
-Supported pressure units (YAML tags):
+The unit is a map key rather than a tag, since a YAML node cannot carry both
+`!Pressure` and a unit tag. `!Isobaric` is accepted as an alias for `!Pressure`.
+Supported pressure units:
 
-| Tag    | Unit                          |
-|--------|-------------------------------|
-| `!atm` | atmospheres                   |
-| `!bar` | bar                           |
-| `!Pa`  | Pascal                        |
-| `!kT`  | $k_BT/\text{Å}^3$            |
-| `!mM`  | millimolar (ideal gas)        |
+| Key   | Unit                          |
+|-------|-------------------------------|
+| `atm` | atmospheres                   |
+| `bar` | bar                           |
+| `Pa`  | Pascal                        |
+| `kT`  | $k_BT/\text{Å}^3$            |
+| `mM`  | millimolar (ideal gas)        |
 
 --- 
 
 ## Nonbonded Interactions
 
-The `nonbonded` energy term handles pairwise particle interactions using a matrix
+The `!Nonbonded` energy term handles pairwise particle interactions using a matrix
 of pair potentials indexed by atom type for O(1) lookup.
 Multiple potentials can be summed for each pair, and interactions for specific atom
 pairs can override the default.
@@ -51,7 +56,7 @@ pairs can override the default.
 ```yaml
 system:
   energy:
-    nonbonded:
+    - !Nonbonded
       default:
         - !LennardJones {mixing: LorentzBerthelot}
         - !Coulomb {cutoff: 12.0}
@@ -81,14 +86,14 @@ A pair may not appear in both `replace` and `append`.
 
 Nonbonded definitions can be provided in an included force field file.
 The top-level `include` list is scanned for files with an `energy` section,
-and any `nonbonded` entries are merged into the input.
+and its `!Nonbonded` term is merged into the input.
 `replace`/`append` entries in the input take precedence over includes.
 `default` lists are concatenated; duplicate types from includes are skipped with a warning.
 
 ```yaml
 # assets/forcefield.yaml
 energy:
-  nonbonded:
+  - !Nonbonded
     default:
       - !AshbaughHatch {mixing: arithmetic, cutoff: 20.0}
     replace:
@@ -99,7 +104,7 @@ energy:
 include: [assets/forcefield.yaml]
 system:
   energy:
-    nonbonded:
+    - !Nonbonded
       default:
         - !Coulomb {cutoff: 40.0}
       spline: {cutoff: 40.0}
@@ -115,12 +120,12 @@ This accelerates the energy without changing it, and — unlike
 [spline tabulation](#spline-tabulation) — leaves the pair potentials exact
 (no tabulation, no energy shift).
 
-Add `cutoff` and `bounding_spheres` inside `nonbonded`:
+Add `cutoff` and `bounding_spheres` inside `!Nonbonded`:
 
 ```yaml
 system:
   energy:
-    nonbonded:
+    - !Nonbonded
       cutoff: 50              # group-to-group cutoff (Å)
       bounding_spheres: true
       default:
@@ -327,19 +332,19 @@ is skipped entirely.
 
 ### YAML configuration
 
-The `ewald` section automatically sets up both the real-space pair potential
+The `!Ewald` term automatically sets up both the real-space pair potential
 (injected into the nonbonded defaults before splining) and the reciprocal-space
-energy term. No manual `!Ewald` entry is needed in the nonbonded list.
+energy term. No manual `!CoulombEwald` pair potential is needed in the nonbonded list.
 
 ```yaml
 system:
   energy:
-    nonbonded:
+    - !Nonbonded
       default:
         - !LennardJones {mixing: LB}
       spline:
         cutoff: 14.0
-    ewald:
+    - !Ewald
       cutoff: 9.0
       accuracy: 1e-5
       policy: PBC
@@ -372,12 +377,12 @@ interactions excluded. This is configured per molecule in the topology via the
 ### Spline tabulation
 
 For performance, all nonbonded potentials can be tabulated using cubic Hermite splines.
-Add a `spline` section inside `nonbonded`:
+Add a `spline` section inside `!Nonbonded`:
 
 ```yaml
 system:
   energy:
-    nonbonded:
+    - !Nonbonded
       default:
         - !WCA {mixing: LB}
         - !Coulomb {cutoff: 200}
@@ -532,19 +537,19 @@ parser for better performance:
 ```yaml
 system:
   energy:
-    custom_external:
-      # Expression with named constants
-      - selection: "molecule water"
+    # Expression with named constants
+    - !CustomExternal
+        selection: "molecule water"
         use_com: true
         constants: { radius: 15, k: 100 }
         function: "0.5 * k * (x^2 + y^2 + z^2 - radius^2)"
-      # Expression with conditional
-      - selection: "all"
-        function: "10.0 if x > 0 else -5.0"
-      # Built-in preset
-      - selection: "all"
-        function: staircase-sincos
+    # Expression with conditional
+    - !CustomExternal {selection: "all", function: "10.0 if x > 0 else -5.0"}
+    # Built-in preset
+    - !CustomExternal {selection: "all", function: staircase-sincos}
 ```
+
+`!CustomExternal` may appear several times, one entry per potential.
 
 | Key         | Required | Default | Description                                      |
 |-------------|----------|---------|--------------------------------------------------|
@@ -561,8 +566,8 @@ When `false` (default), the expression is evaluated at each matching atom positi
 
 ## Custom Pair Potential (COM-COM)
 
-The `custom_pair` energy term applies a user-defined potential `U(r)` between the
-centres of mass of *two* rigid-body selections. Unlike `custom_external`, it
+The `!CustomPair` energy term applies a user-defined potential `U(r)` between the
+centres of mass of *two* rigid-body selections. Unlike `!CustomExternal`, it
 contributes both energy (consumed by Metropolis MC) and forces
 (consumed by Langevin dynamics), distributed to each rigid body's atoms by mass
 fraction so the COM force is exact and the torque about the COM is zero.
@@ -590,16 +595,19 @@ applies (operators, math functions, Python-style conditionals, named constants).
 ```yaml
 system:
   energy:
-    custom_pair:
-      # Harmonic restraint at fixed COM-COM distance (umbrella window)
-      - selections: ["molecule protein0", "molecule protein1"]
+    # Harmonic restraint at fixed COM-COM distance (umbrella window)
+    - !CustomPair
+        selections: ["molecule protein0", "molecule protein1"]
         function: "0.5 * k * (r - r0)^2"
         constants: { k: 100.0, r0: 30.0 }
-      # Constant pulling force along the COM-COM axis (steered MD)
-      - selections: ["molecule protein0", "molecule protein1"]
+    # Constant pulling force along the COM-COM axis (steered MD)
+    - !CustomPair
+        selections: ["molecule protein0", "molecule protein1"]
         function: "f0 * r"
         constants: { f0: 50.0 }
 ```
+
+`!CustomPair` may appear several times, one entry per rigid-body pair.
 
 | Key           | Required | Default     | Description                                          |
 |---------------|----------|-------------|------------------------------------------------------|
@@ -637,7 +645,7 @@ by $w = \exp(-\ln g(\text{bin}))$, recovering the correct ensemble averages.
 ```yaml
 system:
   energy:
-    penalty:
+    - !Penalty
       file: wl_states/histogram.yaml
       coordinate:
         property: atom_position
@@ -702,9 +710,11 @@ atoms:
 
 system:
   energy:
-    sasa:
-      probe_radius: 1.4
+    - !Sasa {probe_radius: 1.4}
 ```
+
+`!Sasa` may appear more than once — for example two probe radii — each an
+independent surface-area term.
 
 | Key                | Required | Default | Description                                           |
 |--------------------|----------|---------|-------------------------------------------------------|
@@ -759,7 +769,7 @@ atoms:
 
 system:
   energy:
-    contact_tessellation: { probe_radius: 1.4 }
+    - !ContactTessellation {probe_radius: 1.4}
 ```
 
 | Key              | Required | Default | Description                                         |
@@ -797,18 +807,23 @@ without the sampling artefacts of a hard boundary.
 ```yaml
 system:
   energy:
-    constrain:
-      - property: volume
+    - !Constrain
+        property: volume
         restraint: !Between [1000.0, 5000.0]
-      - property: mass_center_position
+    - !Constrain
+        property: mass_center_position
         selection: "molecule protein"
         projection: z
         restraint: !Below 50.0
-      - property: mass_center_position
+    - !Constrain
+        property: mass_center_position
         selection: "molecule protein"
         projection: z
         restraint: !HarmonicWall {interval: [-50.0, 50.0], force_constant: 100.0}
 ```
+
+Each `!Constrain` restrains one collective variable; use several entries for
+several constraints.
 
 | Key          | Required | Description                                                             |
 |--------------|----------|-------------------------------------------------------------------------|
@@ -936,7 +951,7 @@ $\varepsilon_0' = 0$.
 ```yaml
 system:
   energy:
-    polymer_depletion:
+    - !PolymerDepletion
       polymer_rg: 10.0
       polymer_density: 0.5
       kappa: 1.0
@@ -949,7 +964,7 @@ Or with self-consistent steric adsorption (mutually exclusive with `h_tilde`):
 ```yaml
 system:
   energy:
-    polymer_depletion:
+    - !PolymerDepletion
       polymer_rg: 100.0
       polymer_density: 1.0
       kappa: 1.0
@@ -1022,7 +1037,7 @@ Two binary table formats are supported and auto-detected at load time:
 ```yaml
 system:
   energy:
-    tabulated6d:
+    - !Tabulated6d
       - molecules: [ProteinA, ProteinA]
         file: table_AA.bin.gz
       - molecules: [ProteinA, ProteinB]
@@ -1070,8 +1085,8 @@ $\beta = 1/k_BT$ can be computed for the Boltzmann-weighted interpolation.
 
 ### Automatic nonbonded exclusion
 
-When `tabulated6d` or `tabulated3d` is active, molecule-type pairs covered by table entries are
-automatically excluded from the `nonbonded` energy term.
+When `!Tabulated6d` or `!Tabulated3d` is active, molecule-type pairs covered by table entries are
+automatically excluded from the `!Nonbonded` energy term.
 This prevents double-counting when mixing tabulated rigid-body interactions with
 atom-level nonbonded potentials for other molecule types.
 
@@ -1079,7 +1094,7 @@ atom-level nonbonded potentials for other molecule types.
 
 ## Tabulated 3D Molecule-Atom Energy
 
-The `tabulated3d` energy term loads pre-computed energy tables for interactions
+The `!Tabulated3d` energy term loads pre-computed energy tables for interactions
 between a rigid molecule and an atomic group (e.g. ion-protein),
 providing O(1) energy lookups during Monte Carlo moves.
 
@@ -1104,7 +1119,7 @@ No swap averaging is performed since the interaction is inherently asymmetric.
 ```yaml
 system:
   energy:
-    tabulated3d:
+    - !Tabulated3d
       - molecules: [Protein, Sodium]
         file: protein_na.bin.gz
       - molecules: [Protein, Chloride]
@@ -1126,5 +1141,5 @@ Beyond $R_\text{max}$, the tail correction from table metadata is used (if prese
 otherwise zero is returned. A `medium` with `temperature` is required for
 the Boltzmann-weighted interpolation.
 
-Molecule-type pairs covered by `tabulated3d` entries are automatically excluded
-from the `nonbonded` energy term, same as for `tabulated6d`.
+Molecule-type pairs covered by `!Tabulated3d` entries are automatically excluded
+from the `!Nonbonded` energy term, same as for `!Tabulated6d`.

@@ -107,10 +107,10 @@ fn tensor_components(tensor: &Matrix3<f64>) -> [f64; 6] {
 
 /// Serialize an optional diagnostic to YAML, or null when it has no value — the
 /// shape a per-axis quantity that may lack samples in a given run reports.
-fn value_or_null<T: Serialize>(value: Option<T>) -> serde_yml::Value {
+fn value_or_null<T: Serialize>(value: Option<T>) -> yaml_serde::Value {
     value
-        .and_then(|v| serde_yml::to_value(v).ok())
-        .unwrap_or(serde_yml::Value::Null)
+        .and_then(|v| yaml_serde::to_value(v).ok())
+        .unwrap_or(yaml_serde::Value::Null)
 }
 
 /// `S² = 1.5 Σ_αβ T_αβ² − 0.5` and its gradient `∂S²/∂T_αβ` for one vector's six
@@ -816,12 +816,12 @@ impl<T: PerturbContext> Analyze<T> for WidomRotation {
         Ok(())
     }
 
-    fn results(&self) -> Option<serde_yml::Value> {
+    fn results(&self) -> Option<yaml_serde::Value> {
         // A frame in which no molecule matched at all leaves nothing to report.
         if self.num_blocks == 0 && self.num_inaccessible == 0 {
             return None;
         }
-        let mut map = serde_yml::Mapping::new();
+        let mut map = yaml_serde::Mapping::new();
         map.try_insert("num_samples", self.sampling.num_samples())?;
         map.try_insert("num_blocks", self.num_blocks)?;
         // Scans with no accessible orientation carry a diverging cage free energy;
@@ -831,7 +831,7 @@ impl<T: PerturbContext> Analyze<T> for WidomRotation {
         }
         // Every molecule clashed in every pose: nothing finite to average.
         if self.num_blocks == 0 {
-            return Some(serde_yml::Value::Mapping(map));
+            return Some(yaml_serde::Value::Mapping(map));
         }
 
         // W = ⟨F_b⟩ over per-snapshot cage free energies (excess, relative to each
@@ -845,25 +845,25 @@ impl<T: PerturbContext> Analyze<T> for WidomRotation {
         map.try_insert("N_eff", self.neff.summary())?;
 
         if !self.vectors.is_empty() {
-            let per_vector: Vec<serde_yml::Value> = self
+            let per_vector: Vec<yaml_serde::Value> = self
                 .vectors
                 .iter()
                 .enumerate()
                 .filter_map(|(v, spec)| {
-                    let mut entry = serde_yml::Mapping::new();
+                    let mut entry = yaml_serde::Mapping::new();
                     entry.try_insert("vector", spec.label())?;
                     entry.try_insert("S2", self.order.vector_summary(v)?)?;
-                    Some(serde_yml::Value::Mapping(entry))
+                    Some(yaml_serde::Value::Mapping(entry))
                 })
                 .collect();
-            map.insert("S2".into(), serde_yml::Value::Sequence(per_vector));
+            map.insert("S2".into(), yaml_serde::Value::Sequence(per_vector));
             if let Some(mean_s2) = self.order.mean_summary() {
                 map.try_insert("mean_S2", mean_s2)?;
             }
         }
 
         if let Some(probe) = &self.torque {
-            let mut torque = serde_yml::Mapping::new();
+            let mut torque = yaml_serde::Mapping::new();
             for (axis, accumulator) in ["x", "y", "z"].iter().zip(&probe.axes) {
                 // Root-mean-square torque magnitude: the mean torque vanishes at
                 // equilibrium, so √⟨τ²⟩ is the informative quantity. An axis whose
@@ -873,7 +873,7 @@ impl<T: PerturbContext> Analyze<T> for WidomRotation {
             }
             map.insert(
                 "rms_torque/kT_per_rad".into(),
-                serde_yml::Value::Mapping(torque),
+                yaml_serde::Value::Mapping(torque),
             );
         }
 
@@ -881,16 +881,16 @@ impl<T: PerturbContext> Analyze<T> for WidomRotation {
             // An axis with no samples was degenerate or too soft in every snapshot;
             // report it as null rather than letting an empty average read as zero
             // stiffness, which would claim free rotation about a locked axis.
-            let values: Vec<serde_yml::Value> = stiffness
+            let values: Vec<yaml_serde::Value> = stiffness
                 .iter()
                 .map(|accumulator| value_or_null(accumulator.summary()))
                 .collect();
             map.insert(
                 "local_harmonic_stiffness/kJ_per_mol_per_rad2".into(),
-                serde_yml::Value::Sequence(values),
+                yaml_serde::Value::Sequence(values),
             );
         }
-        Some(serde_yml::Value::Mapping(map))
+        Some(yaml_serde::Value::Mapping(map))
     }
 }
 
@@ -1061,7 +1061,7 @@ vectors:
   - !Body [0.0, 0.0, 1.0]
 frequency: !Every 10
 "#;
-        let builder: WidomRotationBuilder = serde_yml::from_str(yaml).unwrap();
+        let builder: WidomRotationBuilder = yaml_serde::from_str(yaml).unwrap();
         assert_eq!(builder.orientations, 100);
         assert_eq!(builder.vectors.len(), 3);
         assert!(matches!(builder.vectors[0], VectorSpec::Pair([0, 5])));
@@ -1108,7 +1108,8 @@ mod integration_tests {
         Backend::from_yaml_str(yaml, None, &mut rand::thread_rng()).unwrap()
     }
 
-    /// A charged dimer along x, optionally in a linear external field `q*z`.
+    /// A charged dimer along x, optionally with extra energy terms (`external` is a
+    /// comma-separated list of tagged `energy:` entries, or empty for none).
     fn dimer_backend(external: &str) -> Backend {
         backend_from_str(&format!(
             r#"
@@ -1121,7 +1122,7 @@ molecules:
 system:
   cell: !Cuboid [30.0, 30.0, 30.0]
   medium: {{permittivity: !Vacuum, temperature: 300.0}}
-  energy: {{{external}}}
+  energy: [{external}]
   blocks:
     - molecule: DIMER
       N: 1
@@ -1146,7 +1147,7 @@ propagate: {{seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}}
 
     #[test]
     fn full_observables_are_reported_and_state_is_preserved() {
-        let ctx = dimer_backend(r#"custom_external: [{selection: "all", function: "q * z"}]"#);
+        let ctx = dimer_backend(r#"!CustomExternal {selection: "all", function: "q * z"}"#);
         let mut analysis = builder(true, true).build(&ctx, RT_300).unwrap();
 
         let gi = ctx.resolve_groups(analysis.selection.selection())[0];
@@ -1181,7 +1182,7 @@ propagate: {{seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}}
 
         let s2 = yaml
             .get("S2")
-            .and_then(serde_yml::Value::as_sequence)
+            .and_then(yaml_serde::Value::as_sequence)
             .unwrap();
         assert_eq!(s2.len(), 2);
         for entry in s2 {
@@ -1262,9 +1263,9 @@ system:
   cell: !Cuboid [30.0, 30.0, 30.0]
   medium: {permittivity: !Vacuum, temperature: 300.0}
   energy:
-    nonbonded:
-      default:
-        - !CoulombPlain {cutoff: 14.0}
+    - !Nonbonded
+        default:
+          - !CoulombPlain {cutoff: 14.0}
   blocks:
     - molecule: DIMER
       N: 1
@@ -1349,9 +1350,9 @@ system:
   cell: !Cuboid [30.0, 30.0, 30.0]
   medium: {permittivity: !Vacuum, temperature: 300.0}
   energy:
-    nonbonded:
-      default:
-        - !HardSphere {sigma: 4.0}
+    - !Nonbonded
+        default:
+          - !HardSphere {sigma: 4.0}
   blocks:
     - molecule: DIMER
       N: 2
@@ -1656,7 +1657,7 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
     #[test]
     fn dipole_in_uniform_field_matches_langevin_theory() {
         let orientations = 4000;
-        let ctx = dimer_backend(r#"custom_external: [{selection: "all", function: "q * z"}]"#);
+        let ctx = dimer_backend(r#"!CustomExternal {selection: "all", function: "q * z"}"#);
         let mut analysis = WidomRotationBuilder {
             selection: Selection::parse("molecule DIMER").unwrap(),
             orientations,

@@ -116,14 +116,14 @@ impl<T: Context> MoveRunner<T> {
     }
 
     /// Serialize to YAML, merging bookkeeping fields into the inner move's tagged output.
-    pub fn to_yaml(&self) -> Option<serde_yml::Value> {
+    pub fn to_yaml(&self) -> Option<yaml_serde::Value> {
         let tagged = self.inner.to_yaml()?;
-        if let serde_yml::Value::Tagged(mut tagged_value) = tagged {
-            if let serde_yml::Value::Mapping(ref mut map) = tagged_value.value {
+        if let yaml_serde::Value::Tagged(mut tagged_value) = tagged {
+            if let yaml_serde::Value::Mapping(ref mut map) = tagged_value.value {
                 map.insert("weight".into(), self.weight.into());
                 map.insert("repeat".into(), self.repeat.into());
-                let mut stats = serde_yml::to_value(&self.statistics).ok()?;
-                if let serde_yml::Value::Mapping(ref mut smap) = stats {
+                let mut stats = yaml_serde::to_value(&self.statistics).ok()?;
+                if let yaml_serde::Value::Mapping(ref mut smap) = stats {
                     smap.insert(
                         "acceptance_ratio".into(),
                         self.statistics.acceptance_ratio().into(),
@@ -131,7 +131,7 @@ impl<T: Context> MoveRunner<T> {
                 }
                 map.insert("statistics".into(), stats);
             }
-            Some(serde_yml::Value::Tagged(tagged_value))
+            Some(yaml_serde::Value::Tagged(tagged_value))
         } else {
             Some(tagged)
         }

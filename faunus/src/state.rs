@@ -150,12 +150,12 @@ impl State {
     pub fn from_file(path: impl AsRef<Path>) -> anyhow::Result<Self> {
         let yaml = std::fs::read_to_string(path.as_ref())
             .with_context(|| format!("Failed to read state file {:?}", path.as_ref()))?;
-        Ok(serde_yml::from_str(&yaml)?)
+        Ok(yaml_serde::from_str(&yaml)?)
     }
 
     /// Save the state to a YAML file.
     pub fn to_file(&self, path: impl AsRef<Path>) -> anyhow::Result<()> {
-        let yaml = serde_yml::to_string(self)?;
+        let yaml = yaml_serde::to_string(self)?;
         std::fs::write(path.as_ref(), yaml)
             .with_context(|| format!("Failed to write state file {:?}", path.as_ref()))
     }
@@ -188,7 +188,7 @@ molecules:
 system:
   cell: !Cuboid [30.0, 30.0, 30.0]
   medium: {permittivity: !Vacuum, temperature: 298.15}
-  energy: {}
+  energy: []
   blocks:
     - {molecule: bent, N: 4, active: 4, insert: !RandomCOM {rotate: true}}
 propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}

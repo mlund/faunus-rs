@@ -37,7 +37,7 @@ system:
       insert:
         !RandomCOM { rotate: true }
   energy:
-    nonbonded:
+    - !Nonbonded
       default:
         - !LennardJones {mixing: LB}
         - !Fanourgakis {cutoff: 9.0}
@@ -86,11 +86,13 @@ fn assert_rejected(section: &str, find: &str, repl: &str) {
 }
 
 #[test]
-fn rejects_unknown_energy_key() {
+fn rejects_unknown_energy_term_tag() {
+    // `energy:` is a tagged list, so the analogue of a stray key is an unknown
+    // term tag; the reader names the offending entry and its tag.
     assert_rejected(
         "energy",
-        "energy:\n    nonbonded",
-        "energy:\n    bogus_zz: 1\n    nonbonded",
+        "    - !Nonbonded",
+        "    - !bogus_zz {}\n    - !Nonbonded",
     );
 }
 
@@ -98,8 +100,8 @@ fn rejects_unknown_energy_key() {
 fn rejects_unknown_nonbonded_key() {
     assert_rejected(
         "nonbonded",
-        "nonbonded:\n      default",
-        "nonbonded:\n      bogus_zz: 1\n      default",
+        "!Nonbonded\n      default",
+        "!Nonbonded\n      bogus_zz: 1\n      default",
     );
 }
 
@@ -161,8 +163,8 @@ fn rejects_unknown_toplevel_key() {
 fn rejects_unknown_ewald_key() {
     assert_rejected(
         "ewald",
-        "    nonbonded:",
-        "    ewald:\n      cutoff: 9.0\n      bogus_zz: 1\n    nonbonded:",
+        "    - !Nonbonded",
+        "    - !Ewald\n      cutoff: 9.0\n      bogus_zz: 1\n    - !Nonbonded",
     );
 }
 
@@ -246,8 +248,8 @@ fn rejects_unknown_tabulated6d_entry_key() {
     // deserializing, before the entry is built.
     assert_rejected(
         "tabulated6d",
-        "    nonbonded:",
-        "    tabulated6d:\n      - molecules: [water, water]\n        file: absent_zz.dat\n        bogus_zz: 1\n    nonbonded:",
+        "    - !Nonbonded",
+        "    - !Tabulated6d\n      - molecules: [water, water]\n        file: absent_zz.dat\n        bogus_zz: 1\n    - !Nonbonded",
     );
 }
 
@@ -255,8 +257,8 @@ fn rejects_unknown_tabulated6d_entry_key() {
 fn rejects_unknown_tabulated3d_entry_key() {
     assert_rejected(
         "tabulated3d",
-        "    nonbonded:",
-        "    tabulated3d:\n      - molecules: [water, water]\n        file: absent_zz.dat\n        bogus_zz: 1\n    nonbonded:",
+        "    - !Nonbonded",
+        "    - !Tabulated3d\n      - molecules: [water, water]\n        file: absent_zz.dat\n        bogus_zz: 1\n    - !Nonbonded",
     );
 }
 

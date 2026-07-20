@@ -427,7 +427,7 @@ molecules:
 system:
   cell: !Cuboid [40.0, 40.0, 40.0]
   medium: {permittivity: !Vacuum, temperature: 298.15}
-  energy: {}
+  energy: []
   blocks:
     - {molecule: quad, N: 3, active: 3, insert: !RandomCOM {rotate: true}}
 propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}

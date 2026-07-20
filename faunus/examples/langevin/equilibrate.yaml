@@ -33,7 +33,7 @@ system:
       insert:
         !RandomCOM { rotate: true }
   energy:
-    nonbonded:
+    - !Nonbonded
       default:
         - !Coulomb {cutoff: 200}
         - !WeeksChandlerAndersen {mixing: LB}

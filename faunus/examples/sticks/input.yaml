@@ -70,7 +70,7 @@ system:
         }
 
   energy:
-    nonbonded:
+    - !Nonbonded
       default:
         - !Coulomb {cutoff: 1000}
         - !AshbaughHatch {mixing: arithmetic, cutoff: 20.0}

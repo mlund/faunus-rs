@@ -228,7 +228,7 @@ impl EnergyTerm {
     }
 
     /// Optional per-term information as YAML, for output reporting.
-    pub fn to_yaml(&self) -> Option<serde_yml::Value> {
+    pub fn to_yaml(&self) -> Option<yaml_serde::Value> {
         match self {
             Self::PolymerDepletion(x) => Some(x.to_yaml()),
             Self::EwaldReciprocal(x) => Some(x.to_yaml()),

@@ -351,7 +351,7 @@ impl ContactTessellationEnergy {
         derived_energy(self, context, change)
     }
 
-    pub(super) fn to_yaml(&self) -> serde_yml::Value {
+    pub(super) fn to_yaml(&self) -> yaml_serde::Value {
         let total = self.cache.group_energies.iter().sum::<f64>() / 2.0;
         yaml_map! {
             "probe_radius" => self.probe_radius,

@@ -225,11 +225,11 @@ impl<T: PerturbContext> Analyze<T> for VirtualVolumeMove {
         Ok(())
     }
 
-    fn results(&self) -> Option<serde_yml::Value> {
+    fn results(&self) -> Option<yaml_serde::Value> {
         if self.widom.is_empty() {
             return None;
         }
-        let mut map = serde_yml::Mapping::new();
+        let mut map = yaml_serde::Mapping::new();
         map.try_insert("volume_displacement", self.volume_displacement)?;
         map.try_insert("method", format!("{:?}", self.method))?;
         map.try_insert("block_size", self.block_size)?;
@@ -256,7 +256,7 @@ impl<T: PerturbContext> Analyze<T> for VirtualVolumeMove {
             map.try_insert(key, BlockSummary { mean: m, error: e })?;
         }
 
-        Some(serde_yml::Value::Mapping(map))
+        Some(yaml_serde::Value::Mapping(map))
     }
 }
 
@@ -279,7 +279,7 @@ mod tests {
     }
 
     fn deserialize_vvm_builder(yaml: &str, index: usize) -> VirtualVolumeMoveBuilder {
-        let builders: Vec<AnalysisBuilder> = serde_yml::from_str(yaml).unwrap();
+        let builders: Vec<AnalysisBuilder> = yaml_serde::from_str(yaml).unwrap();
         match &builders[index] {
             AnalysisBuilder::VirtualVolumeMove(b) => b.clone(),
             _ => panic!("expected VirtualVolumeMove variant"),
@@ -305,7 +305,7 @@ mod tests {
   file: pressure.csv
   frequency: !Every 10
 ";
-        let mut builders: Vec<AnalysisBuilder> = serde_yml::from_str(yaml).unwrap();
+        let mut builders: Vec<AnalysisBuilder> = yaml_serde::from_str(yaml).unwrap();
         builders[0]
             .apply_output_dir(std::path::Path::new("box0"))
             .unwrap();
@@ -448,7 +448,7 @@ mod tests {
         for key in ["Pex/kT/Å³", "Pex/Pa", "Pex/mM"] {
             let entry = map.get(key).unwrap_or_else(|| panic!("missing {key}"));
             let parsed: crate::auxiliary::BlockSummary =
-                serde_yml::from_value(entry.clone()).expect("entry parses as BlockSummary");
+                yaml_serde::from_value(entry.clone()).expect("entry parses as BlockSummary");
             assert!(parsed.mean.is_finite(), "{key} mean must be finite");
             assert!(parsed.error.is_finite(), "{key} error must be finite");
             assert!(parsed.error >= 0.0, "{key} error must be non-negative");
@@ -514,9 +514,9 @@ system:
   cell: !Cuboid [20.0, 20.0, 20.0]
   medium: {permittivity: !Vacuum, temperature: 300.0}
   energy:
-    nonbonded:
-      default:
-        - !LennardJones {sigma: 3.0, eps: 2.5}
+    - !Nonbonded
+        default:
+          - !LennardJones {sigma: 3.0, eps: 2.5}
   blocks:
     - molecule: MOL
       N: 2

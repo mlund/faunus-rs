@@ -29,16 +29,16 @@ system:
         !RandomCOM { rotate: true }
 
   energy:
-    nonbonded:
+    - !Nonbonded
       default:
         - !LennardJones {mixing: LB}
       spline:
         cutoff: 14.0
         shift_energy: false
-    ewald:
+    - !Ewald
       cutoff: 9.0
       accuracy: 1e-5
-    pressure: !atm 1
+    - !Pressure {atm: 1}
 
 analysis:
   - !CollectiveVariable {property: volume, frequency: !Every 10}

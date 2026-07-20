@@ -33,12 +33,12 @@ system:
   cell: !Slit [{{ side }}, {{ side }}, {{ lz }}]
   medium: { permittivity: !Fixed {{ eps_r }}, temperature: 298.15 }
   energy:
-    nonbonded:
+    - !Nonbonded
       default:
         - !Coulomb { cutoff: {{ (side * 10.0) | round(3) }} }   # full minimum-image, no Ewald
-    custom_external:
       # Smeared charged walls (finite charged-square sheet, Guldbrand Eq. 9).
-      - selection: "all"
+    - !CustomExternal
+        selection: "all"
         constants: { c: {{ c_wall }}, b: {{ side / 2.0 }}, hg: {{ lz / 2.0 }} }
         function: >-
           c * q * (
@@ -48,8 +48,8 @@ system:
           - (hg-z)*atan(b*b/((hg-z)*sqrt(2*b*b+(hg-z)*(hg-z))))
           )
       # Transparent midplane wall: hold each half's groups on its side.
-      - { selection: "molecule na_lo ca_lo", function: "1000000.0 if z > 0 else 0.0" }
-      - { selection: "molecule na_up ca_up", function: "1000000.0 if z < 0 else 0.0" }
+    - !CustomExternal { selection: "molecule na_lo ca_lo", function: "1000000.0 if z > 0 else 0.0" }
+    - !CustomExternal { selection: "molecule na_up ca_up", function: "1000000.0 if z < 0 else 0.0" }
 
   blocks:
     - { molecule: na_lo, N: {{ k }},        active: {{ k }}, insert: !RandomAtomPos { directions: xy } }

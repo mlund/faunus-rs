@@ -419,25 +419,25 @@ mod tests {
         // strips the `property` tag before the builder sees the map, so a genuine
         // typo is caught rather than swallowed.
         assert!(
-            serde_yml::from_str::<Box<dyn CvKindBuilder>>("property: volume\nbogus: 3").is_err(),
+            yaml_serde::from_str::<Box<dyn CvKindBuilder>>("property: volume\nbogus: 3").is_err(),
             "a single-field builder must reject an unknown key",
         );
         assert!(
-            serde_yml::from_str::<Box<dyn CvKindBuilder>>(
+            yaml_serde::from_str::<Box<dyn CvKindBuilder>>(
                 "property: mass_center_separation\nselections: [all, all]\nbogus: 3"
             )
             .is_err(),
             "a two-group builder must reject an unknown key",
         );
         // The valid form still parses.
-        assert!(serde_yml::from_str::<Box<dyn CvKindBuilder>>("property: volume").is_ok());
+        assert!(yaml_serde::from_str::<Box<dyn CvKindBuilder>>("property: volume").is_ok());
     }
 
     #[test]
     fn two_group_cv_takes_a_selections_pair() {
         // #123: symmetric two-group CVs unified on `selections: [a, b]`.
         assert!(
-            serde_yml::from_str::<Box<dyn CvKindBuilder>>(
+            yaml_serde::from_str::<Box<dyn CvKindBuilder>>(
                 "property: mass_center_separation\nselections: [all, all]"
             )
             .is_ok(),
@@ -445,7 +445,7 @@ mod tests {
         );
         // The pre-#123 `selection`/`selection2` spelling is a clean break — now rejected.
         assert!(
-            serde_yml::from_str::<Box<dyn CvKindBuilder>>(
+            yaml_serde::from_str::<Box<dyn CvKindBuilder>>(
                 "property: mass_center_separation\nselection: all\nselection2: all"
             )
             .is_err(),
@@ -461,7 +461,7 @@ mod tests {
             "property: volume\ndimension: z",
         ] {
             assert!(
-                serde_yml::from_str::<Box<dyn CvKindBuilder>>(yaml).is_ok(),
+                yaml_serde::from_str::<Box<dyn CvKindBuilder>>(yaml).is_ok(),
                 "Volume CV must accept `{yaml}`",
             );
         }

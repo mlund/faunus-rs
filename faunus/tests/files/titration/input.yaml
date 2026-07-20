@@ -53,7 +53,7 @@ system:
       active: 10
       insert: !RandomAtomPos {}
   energy:
-    nonbonded:
+    - !Nonbonded
       default:
         - !CoulombPlain {cutoff: 100.0}
         - !LennardJones {mixing: LB}

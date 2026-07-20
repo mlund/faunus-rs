@@ -16,7 +16,7 @@ system:
     permittivity: !Water
     temperature: 298.15
   energy:
-    nonbonded:
+    - !Nonbonded
       default:
         - !Coulomb { cutoff: 1000.0 }
         - !WCA { mixing: arithmetic }

@@ -12,7 +12,7 @@ system:
     permittivity: !Vacuum
     temperature: 298.15
   energy:
-    nonbonded:
+    - !Nonbonded
       default:
         - !CustomPotential
           function: "eps*(sigma/r)^2"

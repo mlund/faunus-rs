@@ -65,7 +65,7 @@ impl<T: ObserveContext> MoveProposal<T> for TranslateAlongZ {
         Some(ProposedMove::translate_group(group_index, shift))
     }
 
-    fn to_yaml(&self) -> Option<serde_yml::Value> {
+    fn to_yaml(&self) -> Option<yaml_serde::Value> {
         tagged_yaml("TranslateAlongZ", self)
     }
 }
@@ -93,7 +93,7 @@ molecules:
 system:
   cell: !Cuboid [20.0, 20.0, 20.0]
   medium: {permittivity: !Vacuum, temperature: 300.0}
-  energy: {}
+  energy: []
   blocks:
     - molecule: dimer
       N: 2
