@@ -22,11 +22,11 @@ energy_change:
 energy_timers:
 - cell_overlap: '100 (energy: 68.63, update: 31.37)'
 propagate:
-  repeat: 5000
+  steps: 5000
   seed: !Fixed 42
   collections:
   - !Deterministic
-    repeat: 1
+    cycles: 1
     elapsed_seconds: 0.003431461
     moves:
     - !SpeciationMove

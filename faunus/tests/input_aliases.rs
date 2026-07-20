@@ -43,7 +43,7 @@ analysis:
 
 propagate:
   seed: !Fixed 42
-  repeat: 1
+  steps: 1
   collections:
     - !Deterministic
       moves:

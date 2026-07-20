@@ -98,7 +98,7 @@ umbrella:
 propagate:
   seed: Hardware
   criterion: Metropolis
-  repeat: 200000
+  steps: 200000
   collections:
     - !Stochastic
       moves:

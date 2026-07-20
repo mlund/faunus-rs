@@ -191,7 +191,7 @@ system:
   energy: []
   blocks:
     - {molecule: bent, N: 4, active: 4, insert: !RandomCOM {rotate: true}}
-propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
+propagate: {seed: !Fixed 1, criterion: Metropolis, steps: 0, collections: []}
 "#;
         let tmp = tempfile::NamedTempFile::new().unwrap();
         std::fs::write(tmp.path(), yaml).unwrap();

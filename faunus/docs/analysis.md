@@ -1099,9 +1099,9 @@ Key             | Required | Default | Description
 `substrate`     | yes      |         | The complete molecular group the ligand is counted around
 `ligand`        | yes      |         | Atoms, or molecules when `use_com` is set, whose excess is measured
 `shell`         | yes      |         | The δ ladder: `{max, resolution}` in Å, with `max` a multiple of `resolution`
-`use_com`       | no       | `false` | Count the mass centre of each selected molecule instead of each atom
+`use_com`       | no       | `false` | Count the mass centre of each selected molecule instead of each atom — a counting choice only; the ligand size is set independently by `radius`
 `solvent`       | no       |         | Explicit solvent as `{selection, use_com}`; its presence selects the finite-box estimator
-`radius`        | no       | σ/2, or 0 with `use_com` | Ligand radius (Å), setting the exclusion boundary
+`radius`        | no       | σ/2 (atoms), 0 (mass centre) | Ligand exclusion radius (Å), independent of `use_com`; the effective value is echoed as `ligand_radius/Å` in the report
 `probe_radius`  | no       | `1.4`   | Water radius (Å), setting the accessible surface and implicit-solvent shell behind $b_1$
 `profile`       | no       |         | Output file for Γ(δ) (see [Output file formats](#output-file-formats))
 `file`          | no       |         | Output file for the per-residue table

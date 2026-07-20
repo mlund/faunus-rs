@@ -109,7 +109,7 @@ analysis:
 propagate:
   seed: Hardware
   criterion: Metropolis
-  repeat: 1000
+  steps: 1000
   collections:
     # MC equilibration — comment out for LD-only production
 #   - !Stochastic

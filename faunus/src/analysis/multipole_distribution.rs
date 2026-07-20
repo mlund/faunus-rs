@@ -744,7 +744,7 @@ system:
       N: 10
       active: 4
       insert: !RandomAtomPos {}
-propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
+propagate: {seed: !Fixed 1, criterion: Metropolis, steps: 0, collections: []}
 "#;
         let ctx = backend_from_str(yaml);
         let medium = get_medium_str(yaml).unwrap();
@@ -775,7 +775,7 @@ system:
     - molecule: ANION
       N: 1
       insert: !Manual [[10.0, 0.0, 0.0]]
-propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
+propagate: {seed: !Fixed 1, criterion: Metropolis, steps: 0, collections: []}
 "#;
 
     #[test]
@@ -826,7 +826,7 @@ system:
     - molecule: DIP
       N: 1
       insert: !Manual [[10.1, 0.0, 0.0], [9.9, 0.0, 0.0]]
-propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
+propagate: {seed: !Fixed 1, criterion: Metropolis, steps: 0, collections: []}
 "#;
         let ctx = backend_from_str(yaml);
         let medium = get_medium_str(yaml).unwrap();
@@ -867,7 +867,7 @@ system:
     - molecule: ANION
       N: 1
       insert: !Manual [[9.5, 5.0, 5.0]]
-propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
+propagate: {seed: !Fixed 1, criterion: Metropolis, steps: 0, collections: []}
 "#;
         let ctx = backend_from_str(yaml);
         let medium = get_medium_str(yaml).unwrap();

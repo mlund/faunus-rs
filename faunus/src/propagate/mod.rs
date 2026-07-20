@@ -106,7 +106,7 @@ impl<T: Context> MoveCollection<T> {
             SelectionStrategy::Deterministic => "Deterministic",
         };
         let mut map = yaml_serde::Mapping::new();
-        map.insert("repeat".into(), self.repeat.into());
+        map.insert("cycles".into(), self.repeat.into());
         map.insert(
             "elapsed_seconds".into(),
             yaml_serde::Value::Number(yaml_serde::Number::from(self.elapsed.as_secs_f64())),
@@ -318,7 +318,7 @@ impl<T: Context> Propagate<T> {
     /// Serialize the propagate state to a YAML value.
     pub fn to_yaml(&self) -> yaml_serde::Value {
         let mut map = yaml_serde::Mapping::new();
-        map.insert("repeat".into(), self.max_repeats.into());
+        map.insert("steps".into(), self.max_repeats.into());
         map.insert(
             "seed".into(),
             yaml_serde::to_value(self.seed).unwrap_or_default(),

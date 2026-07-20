@@ -36,11 +36,11 @@ energy_timers:
 - external_pressure: '0.05 (energy: 0.03, update: 0.02)'
 - ewald_reciprocal: '68.61 (energy: 0.09, update: 68.52)'
 propagate:
-  repeat: 500
+  steps: 500
   seed: !Fixed 42
   collections:
   - !Deterministic
-    repeat: 1
+    cycles: 1
     elapsed_seconds: 7.369369589
     moves:
     - !TranslateMolecule

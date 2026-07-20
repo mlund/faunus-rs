@@ -298,7 +298,7 @@ system:
     - molecule: DIMER
       N: 1
       insert: !Manual [[0.0, 0.0, -2.0], [0.0, 0.0, 2.0]]
-propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
+propagate: {seed: !Fixed 1, criterion: Metropolis, steps: 0, collections: []}
 "#;
 
     /// Two independent atoms in an atomic mega-group, which carries no mass centre.
@@ -317,7 +317,7 @@ system:
     - molecule: GAS
       N: 2
       insert: !Manual [[0.0, 0.0, -2.0], [0.0, 0.0, 2.0]]
-propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
+propagate: {seed: !Fixed 1, criterion: Metropolis, steps: 0, collections: []}
 "#;
 
     /// Three atoms inserted, one of them deactivated — the state a grand-canonical run reaches
@@ -338,7 +338,7 @@ system:
       N: 3
       active: 2
       insert: !Manual [[0.0, 0.0, -2.0], [0.0, 0.0, 2.0], [0.0, 0.0, 4.0]]
-propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
+propagate: {seed: !Fixed 1, criterion: Metropolis, steps: 0, collections: []}
 "#;
 
     fn backend_from_str(yaml: &str) -> Backend {

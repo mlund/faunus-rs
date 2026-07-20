@@ -66,7 +66,7 @@ propagate:
   criterion: Metropolis
   # The 96 waters need ≈4000 repeats to relax from the random insertion; a shorter run
   # snapshots the fixture mid-transient, on a steep energy slope.
-  repeat: 8000
+  steps: 8000
   collections:
     - !Stochastic
       moves:

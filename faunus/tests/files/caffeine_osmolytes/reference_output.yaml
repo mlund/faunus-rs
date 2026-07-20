@@ -56,11 +56,11 @@ energy_timers:
 - cell_overlap: '2.51 (energy: 1.69, update: 0.82)'
 - nonbonded: '97.47999999999999 (energy: 15.79, update: 81.69)'
 propagate:
-  repeat: 2000
+  steps: 2000
   seed: !Fixed 42
   collections:
   - !Stochastic
-    repeat: 1
+    cycles: 1
     elapsed_seconds: 0.053652768
     moves:
     - !TranslateMolecule

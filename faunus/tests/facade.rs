@@ -185,7 +185,7 @@ fn trajectory_input(trajectory: &Path, with_moves: bool) -> String {
 propagate:
   seed: !Fixed 42
   criterion: Metropolis
-  repeat: 20
+  steps: 20
   collections:
     - !Deterministic
       moves:
@@ -316,7 +316,7 @@ analysis:
 propagate:
   seed: !Fixed 42
   criterion: Metropolis
-  repeat: 200
+  steps: 200
   collections:
     - !Stochastic
       moves:

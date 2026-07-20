@@ -81,10 +81,10 @@ analysis:
 propagate:
   seed: Hardware
   criterion: Metropolis
-  repeat: 500
+  steps: 500
   collections:
     - !Stochastic
-      repeat: 10
+      cycles: 10
       moves:
         - !SpeciationMove
           temperature: 298.15

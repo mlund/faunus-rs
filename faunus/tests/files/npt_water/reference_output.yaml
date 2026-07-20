@@ -31,11 +31,11 @@ energy_timers:
 - nonbonded: '99.7 (energy: 83.23, update: 16.47)'
 - external_pressure: '0.15000000000000002 (energy: 0.1, update: 0.05)'
 propagate:
-  repeat: 1000
+  steps: 1000
   seed: !Fixed 42
   collections:
   - !Deterministic
-    repeat: 1
+    cycles: 1
     elapsed_seconds: 4.634965665
     moves:
     - !TranslateMolecule

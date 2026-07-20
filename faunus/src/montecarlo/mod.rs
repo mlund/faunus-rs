@@ -850,7 +850,7 @@ system:
     - molecule: MOL
       N: 2
       insert: !Manual [[8.0, 0.0, 0.0], [-8.0, 0.0, 0.0]]
-propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
+propagate: {seed: !Fixed 1, criterion: Metropolis, steps: 0, collections: []}
 "#;
 
     fn context() -> Backend {
@@ -1038,7 +1038,7 @@ system:
 propagate:
   seed: !Fixed 42
   criterion: Metropolis
-  repeat: 0
+  steps: 0
   collections: []
 "#;
 

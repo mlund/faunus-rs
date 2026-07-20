@@ -28,11 +28,11 @@ energy_timers:
 - cell_overlap: '11.809999999999999 (energy: 8.02, update: 3.79)'
 - nonbonded: '88.18 (energy: 84.18, update: 4)'
 propagate:
-  repeat: 500
+  steps: 500
   seed: !Fixed 42
   collections:
   - !Stochastic
-    repeat: 1
+    cycles: 1
     elapsed_seconds: 0.000378544
     moves:
     - !TranslateAtom
@@ -74,7 +74,7 @@ propagate:
         energy_change_sum: 7.909819240717711
         acceptance_ratio: 0.8285714285714286
   - !Deterministic
-    repeat: 1
+    cycles: 1
     elapsed_seconds: 0.003898297
     moves:
     - !SpeciationMove

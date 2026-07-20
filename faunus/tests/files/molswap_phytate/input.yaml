@@ -83,7 +83,7 @@ analysis:
 propagate:
   seed: !Fixed 42
   criterion: MetropolisHastings
-  repeat: 30000
+  steps: 30000
   collections:
     - !Deterministic
       moves:

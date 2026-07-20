@@ -385,7 +385,7 @@ system:
     - molecule: MOL
       N: {}
       insert: !Manual [{}]
-propagate: {{seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}}
+propagate: {{seed: !Fixed 1, criterion: Metropolis, steps: 0, collections: []}}
 "#,
             positions.len(),
             inserts

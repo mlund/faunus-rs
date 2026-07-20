@@ -1257,7 +1257,7 @@ system:
     - molecule: TRIMER
       N: 1
       insert: !Manual [[0.0, 0.0, 0.0], [2.0, 0.0, 0.0], [0.0, 1.5, 0.0]]
-propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
+propagate: {seed: !Fixed 1, criterion: Metropolis, steps: 0, collections: []}
 "#,
         None,
         &mut rand::thread_rng(),

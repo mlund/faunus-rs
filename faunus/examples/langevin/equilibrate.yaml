@@ -51,10 +51,10 @@ analysis:
 propagate:
   seed: Hardware
   criterion: Metropolis
-  repeat: 100
+  steps: 100
   collections:
     - !Stochastic
-      repeat: 100
+      cycles: 100
       moves:
         - !TranslateMolecule {molecule: CPPM, dp: 80.0}
         - !RotateMolecule {molecule: CPPM, dprot: 3.0}

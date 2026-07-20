@@ -6,28 +6,28 @@ Monte Carlo moves are defined in the `propagate` section of the YAML input file.
 
 Key           | Required | Default              | Description
 ------------- | -------- | -------------------- | -------------------------------------------
-`repeat`      | no       | 1                    | Number of propagate cycles (outer loop)
+`steps`       | no       | 1                    | Number of propagate steps (the outer loop)
 `collections` | no       | `[]`                 | Ordered list of move collections (see below)
 `seed`        | no       | `Hardware`           | RNG seed: `Hardware` (random) or `!Fixed N`
 `criterion`   | no       | `MetropolisHastings` | Acceptance criterion (`Metropolis` or `Minimize`)
 
-Each propagate cycle executes every collection in order; after all collections
-have run, one cycle is complete and the step counter advances.
+Each propagate step executes every collection in order; after all collections
+have run, one step is complete and the step counter advances.
 
 ## Collections
 
 A collection groups moves together and controls how they are selected.
 Two types are available:
 
-- `!Stochastic` — each repeat draws *one* move at random, with probability
+- `!Stochastic` — each cycle draws *one* move at random, with probability
   proportional to `weight`. This is the normal Monte Carlo sampling mode.
-- `!Deterministic` — each repeat executes *all* moves in order.
+- `!Deterministic` — each cycle executes *all* moves in order.
   Useful for e.g. hybrid MC/MD schemes. The `weight` field is unused here but
   still required by the move schema.
 
 Key      | Required | Default | Description
 -------- | -------- | ------- | -------------------------------------------
-`repeat` | no       | 1       | How many times the collection runs per propagate cycle
+`cycles` | no       | 1       | How many times the collection runs per propagate step
 `moves`  | no       | `[]`    | List of moves
 
 ## Common move options
@@ -41,11 +41,12 @@ Key      | Description
 `max_displacement` | Maximum translational displacement (Å), for translational moves (alias `dp`)
 `max_angle`        | Maximum rotational angle (radians), for rotational moves (alias `dprot`)
 
-The two `repeat` levels nest: the collection's `repeat` controls how often
-moves are drawn, and the move's `repeat` controls how many trials are
-performed per draw. For example, a stochastic collection with `repeat: 100`
-containing a move with `repeat: 5` will attempt that move up to 500 times
-per propagate cycle (depending on how often it is drawn).
+The collection's `cycles` and the move's `repeat` nest: `cycles` controls how
+often moves are drawn from the collection each propagate step, and the move's
+`repeat` controls how many trials are performed per draw. For example, a
+stochastic collection with `cycles: 100` containing a move with `repeat: 5`
+will attempt that move up to 500 times per step (depending on how often it is
+drawn).
 
 ## Example
 
@@ -53,16 +54,16 @@ per propagate cycle (depending on how often it is drawn).
 propagate:
   seed: Hardware
   criterion: Metropolis
-  repeat: 1000
+  steps: 1000
   collections:
     - !Stochastic
-      repeat: 10
+      cycles: 10
       moves:
         - !TranslateMolecule { molecule: Water, max_displacement: 0.5, weight: 1.0 }
         - !RotateMolecule { molecule: Water, max_angle: 0.3, weight: 1.0 }
         - !VolumeMove { volume_displacement: 0.04, weight: 0.5 }
     - !Deterministic
-      repeat: 1
+      cycles: 1
       moves:
         - !TranslateAtom { molecule: Water, atom: O, max_displacement: 0.1, weight: 1.0 }
 ```
@@ -564,7 +565,7 @@ system:
     - {molecule: anion,  N: 120, active: 30, insert: !RandomAtomPos {}}
 
 propagate:
-  repeat: 10000
+  steps: 10000
   collections:
     - !Stochastic
       moves:
@@ -673,7 +674,7 @@ and alternates between:
    (using the `collections` defined above).
 2. Inter-box moves — volume exchange and particle transfer between the two boxes.
 
-The total number of Gibbs sweeps is `repeat / intra_steps`.
+The total number of Gibbs sweeps is `steps / intra_steps`.
 
 Molecule blocks must pre-allocate inactive slots for transfer using `active < N`
 in the `blocks` section, e.g. `{ molecule: LJ, N: 600, active: 300 }`.
@@ -682,7 +683,7 @@ in the `blocks` section, e.g. `{ molecule: LJ, N: 600, active: 300 }`.
 
 ```yaml
 propagate:
-  repeat: 5000
+  steps: 5000
   collections:
     - !Stochastic
       moves:
@@ -865,10 +866,10 @@ $\mathbf{\tau} = \sum_i \mathbf{r}_i^{\,\text{ref}} \times \mathbf{f}_i^{\,\text
 propagate:
   seed: Hardware
   criterion: Metropolis
-  repeat: 500
+  steps: 500
   collections:
     - !Stochastic
-      repeat: 20
+      cycles: 20
       moves:
         - !TranslateMolecule { molecule: Water, max_displacement: 0.5, repeat: 1 }
         - !RotateMolecule { molecule: Water, max_angle: 0.3, repeat: 1 }

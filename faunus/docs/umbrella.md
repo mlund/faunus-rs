@@ -69,7 +69,7 @@ Adjacent windows must overlap (`spacing < width`) for stitching.
 
 During the drive phase a harmonic bias $\frac{1}{2}k(x - c_i)^2$ steers each walker toward the
 center of its window. The drive ends as soon as the collective variable enters the window. If
-`propagate.repeat` sweeps pass without the walker arriving, the run stops with an error;
+`propagate.steps` steps pass without the walker arriving, the run stops with an error;
 strengthen `force_constant` or allow more sweeps.
 
 ## Per-window lifecycle

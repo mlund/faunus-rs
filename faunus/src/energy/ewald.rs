@@ -461,7 +461,7 @@ mod tests {
                     medium: {permittivity: !Vacuum, temperature: 300.0}\n  energy: []\n  \
                     blocks:\n    - {molecule: CAT, N: 1, insert: !Manual [[0.0, 0.0, 0.0]]}\n    \
                     - {molecule: ANI, N: 1, insert: !Manual [[5.0, 0.0, 0.0]]}\n\
-                    propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}\n";
+                    propagate: {seed: !Fixed 1, criterion: Metropolis, steps: 0, collections: []}\n";
         let mut tmp = tempfile::NamedTempFile::new().unwrap();
         tmp.write_all(yaml.as_bytes()).unwrap();
         Backend::new(tmp.path(), None, &mut rand::thread_rng()).unwrap()

@@ -26,7 +26,7 @@ fn seed_parse() {
 /// `CollectionBuilder`'s own field parsing.
 #[test]
 fn collection_builder_parse() {
-    let string = "repeat: 20
+    let string = "cycles: 20
 moves:
    - !TranslateMolecule { molecule: Water, max_displacement: 0.4, weight: 1.0 }
    - !TranslateMolecule { molecule: Protein, max_displacement: 0.6, weight: 2.0 }

@@ -1115,7 +1115,7 @@ system:
       N: 2
       active: 1
       insert: !Manual [[0.0, 0.0, -2.0], [0.0, 0.0, 2.0], [5.0, 0.0, -2.0], [5.0, 0.0, 2.0]]
-propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
+propagate: {seed: !Fixed 1, criterion: Metropolis, steps: 0, collections: []}
 "#;
 
     fn backend() -> Backend {
@@ -1641,7 +1641,7 @@ system:
       N: 512
       active: 512
       insert: !RandomAtomPos {{}}
-propagate: {{seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}}
+propagate: {{seed: !Fixed 1, criterion: Metropolis, steps: 0, collections: []}}
 "#
         )
     }
@@ -1780,7 +1780,7 @@ system:
     - molecule: DIMER
       N: 1
       insert: !Manual [[0.0, 0.0, -20.0], [0.0, 0.0, 20.0]]
-propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
+propagate: {seed: !Fixed 1, criterion: Metropolis, steps: 0, collections: []}
 "#;
         let mut context =
             Backend::from_yaml_str(yaml, None, &mut rand::rngs::StdRng::seed_from_u64(1)).unwrap();
@@ -1844,7 +1844,7 @@ system:
     - molecule: DIMER
       N: 2
       insert: !Manual [[0.0, 0.0, -2.0], [0.0, 0.0, 2.0], [5.0, 0.0, -2.0], [5.0, 0.0, 2.0]]
-propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
+propagate: {seed: !Fixed 1, criterion: Metropolis, steps: 0, collections: []}
 "#;
 
     fn backend() -> Backend {

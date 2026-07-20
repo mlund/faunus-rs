@@ -98,7 +98,7 @@ system:
     - molecule: dimer
       N: 2
       insert: !Manual [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [5.0, 0.0, 0.0], [6.0, 0.0, 0.0]]
-propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
+propagate: {seed: !Fixed 1, criterion: Metropolis, steps: 0, collections: []}
 "#;
 
     fn move_and_context() -> (TranslateAlongZ, Backend) {

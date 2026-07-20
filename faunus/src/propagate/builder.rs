@@ -81,6 +81,7 @@ impl MoveBuilder {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct CollectionBuilder {
+    #[serde(rename = "cycles")]
     #[serde(default = "default_repeat")]
     pub(super) repeat: usize,
     #[serde(default)]
@@ -137,7 +138,7 @@ impl MoveCollectionBuilder {
 #[derive(Debug, Deserialize, Default)]
 #[serde(deny_unknown_fields)]
 pub(super) struct PropagateBuilder {
-    #[serde(rename = "repeat")]
+    #[serde(rename = "steps")]
     #[serde(default = "default_repeat")]
     pub(super) max_repeats: usize,
     #[serde(default)]

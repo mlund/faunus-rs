@@ -62,7 +62,7 @@ wang_landau:
 propagate:
   seed: !Fixed 42
   criterion: Metropolis
-  repeat: 1
+  steps: 1
   collections:
     - !Deterministic
       moves:

@@ -299,7 +299,7 @@ system:
     - molecule: MOL
       N: 1
       insert: !Manual [[0.0, 0.0, 0.0]]
-propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
+propagate: {seed: !Fixed 1, criterion: Metropolis, steps: 0, collections: []}
 "#,
         );
         let builder = MultipoleAnalysisBuilder {
@@ -352,7 +352,7 @@ system:
     - molecule: ATOM
       N: 2
       insert: !RandomAtomPos {}
-propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
+propagate: {seed: !Fixed 1, criterion: Metropolis, steps: 0, collections: []}
 "#,
         );
         let builder = MultipoleAnalysisBuilder {
@@ -390,7 +390,7 @@ system:
     - molecule: PAIR
       N: 1
       insert: !Manual [[2.0, 2.0, 0.0], [-2.0, -2.0, 0.0]]
-propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
+propagate: {seed: !Fixed 1, criterion: Metropolis, steps: 0, collections: []}
 "#,
         );
         let builder = MultipoleAnalysisBuilder {
@@ -446,7 +446,7 @@ system:
       N: 20
       active: 8
       insert: !RandomAtomPos {}
-propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
+propagate: {seed: !Fixed 1, criterion: Metropolis, steps: 0, collections: []}
 "#,
         );
         let builder = MultipoleAnalysisBuilder {

@@ -33,7 +33,7 @@ system:
   energy: []
 
 propagate:
-  repeat: 100
+  steps: 100
   collections:
     - !Stochastic
       moves:

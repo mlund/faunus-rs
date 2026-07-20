@@ -185,14 +185,18 @@ pub struct PreferentialInteractionBuilder {
     substrate: Selection,
     /// The species whose excess is measured. One per analysis; declare the analysis again for more.
     ligand: Selection,
-    /// Count the mass centre of each selected molecule instead of each selected atom.
+    /// Count one mass centre per selected molecule instead of every selected atom. Purely a
+    /// counting choice, exactly as in rdf/density and the nested `solvent`; the ligand's size is
+    /// set independently by `radius`.
     #[serde(default)]
     use_com: bool,
     /// Counted solvent for the finite-box explicit-solvent estimator. If absent, use the implicit
     /// solvent estimator.
     #[serde(default)]
     solvent: Option<ExplicitSolvent>,
-    /// Ligand radius (Å). Defaults to σ/2 for atoms and to zero for mass centres.
+    /// Ligand exclusion radius (Å), independent of `use_com`. Defaults to σ/2 for an atomic ligand
+    /// and to 0 for a mass centre (which has no σ, so a point); set it to give a molecular ligand a
+    /// real size. The effective value is echoed as `ligand_radius/Å` in the report.
     #[serde(default)]
     radius: Option<f64>,
     /// The δ ladder.
@@ -342,6 +346,8 @@ impl PreferentialInteractionBuilder {
         if let Some(radius) = self.radius {
             return Ok(radius);
         }
+        // Not a mode switch: a mass centre carries no σ, so its default exclusion radius is a point.
+        // The σ/2 rule below is for atomic counting; either way `radius` can override.
         if self.use_com {
             return Ok(0.0);
         }
@@ -1440,7 +1446,7 @@ system:
     - molecule: ligand
       N: {n_ligands}
       insert: !Manual [{ligand_positions}]
-propagate: {{seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}}
+propagate: {{seed: !Fixed 1, criterion: Metropolis, steps: 0, collections: []}}
 "#,
             substrate_positions = manual(substrate),
             n_ligands = ligands.len(),
@@ -1473,7 +1479,7 @@ system:
     - molecule: ligand
       N: {n_ligands}
       insert: !Manual [{ligand_positions}]
-propagate: {{seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}}
+propagate: {{seed: !Fixed 1, criterion: Metropolis, steps: 0, collections: []}}
 "#,
             left = -0.5 * separation,
             right = 0.5 * separation,
@@ -1513,7 +1519,7 @@ system:
     - molecule: solvent
       N: {n_solvents}
       insert: !Manual [{solvent_positions}]
-propagate: {{seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}}
+propagate: {{seed: !Fixed 1, criterion: Metropolis, steps: 0, collections: []}}
 "#,
             n_ligands = ligands.len(),
             ligand_positions = manual(ligands),
@@ -1561,7 +1567,7 @@ system:
         - [-24.5, 0.0, 0.0]
         - [-0.5, 25.0, 0.0]
         - [0.5, 25.0, 0.0]
-propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
+propagate: {seed: !Fixed 1, criterion: Metropolis, steps: 0, collections: []}
 "#;
         Backend::from_yaml_str(input, None, &mut rand::thread_rng()).unwrap()
     }
@@ -1600,7 +1606,7 @@ system:
     - molecule: solvent
       N: {n_solvents}
       insert: !Manual [{solvent_positions}]
-propagate: {{seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}}
+propagate: {{seed: !Fixed 1, criterion: Metropolis, steps: 0, collections: []}}
 "#,
             left = -0.5 * separation,
             right = 0.5 * separation,
@@ -2121,7 +2127,7 @@ system:
     - molecule: ligand
       N: 4
       insert: !Manual [[3.0, 1.0, 0.0], [4.0, 0.0, 2.0], [5.0, 2.0, 0.0], [2.5, 0.0, 1.5]]
-propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
+propagate: {seed: !Fixed 1, criterion: Metropolis, steps: 0, collections: []}
 "#;
         let ligands = [
             [3.0, 1.0, 0.0],
@@ -2301,7 +2307,7 @@ system:
     - molecule: ligand
       N: 1
       insert: !Manual [[90.0, 90.0, 90.0]]
-propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
+propagate: {seed: !Fixed 1, criterion: Metropolis, steps: 0, collections: []}
 "#;
         let context = Backend::from_yaml_str(ENGULFED, None, &mut rand::thread_rng()).unwrap();
         let mut analysis = PreferentialInteractionBuilder {
@@ -2370,7 +2376,7 @@ system:
     - molecule: ligand
       N: 1
       insert: !Manual [[90.0, 90.0, 90.0]]
-propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
+propagate: {seed: !Fixed 1, criterion: Metropolis, steps: 0, collections: []}
 "#;
         let context = Backend::from_yaml_str(CLUSTER, None, &mut rand::thread_rng()).unwrap();
         let mut analysis = PreferentialInteractionBuilder {
@@ -2470,7 +2476,7 @@ system:
         - [0.0, -45.0, 0.0]
         - [0.0, 0.0, 45.0]
         - [0.0, 0.0, -45.0]
-propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
+propagate: {seed: !Fixed 1, criterion: Metropolis, steps: 0, collections: []}
 "#;
         let context =
             Backend::from_yaml_str(COLLECTIVELY_HIDDEN, None, &mut rand::thread_rng()).unwrap();
@@ -2951,7 +2957,7 @@ system:
     - molecule: ligand
       N: 1
       insert: !Manual [[0.0, 0.0, 5.0]]
-propagate: {{seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}}
+propagate: {{seed: !Fixed 1, criterion: Metropolis, steps: 0, collections: []}}
 "#
             );
             let context = Backend::from_yaml_str(&input, None, &mut rand::thread_rng()).unwrap();
@@ -3067,7 +3073,7 @@ system:
       N: 2
       insert: !Manual [[7.0, 0.0, 0.0], [9.0, 0.0, 0.0],
                        [25.0, 0.0, 0.0], [27.0, 0.0, 0.0]]
-propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
+propagate: {seed: !Fixed 1, criterion: Metropolis, steps: 0, collections: []}
 "#;
         let context = Backend::from_yaml_str(DIMER, None, &mut rand::thread_rng()).unwrap();
         let mut analysis = PreferentialInteractionBuilder {
@@ -3134,7 +3140,7 @@ system:
     - molecule: big
       N: 1
       insert: !Manual [[-25.0, 0.0, 0.0]]
-propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
+propagate: {seed: !Fixed 1, criterion: Metropolis, steps: 0, collections: []}
 "#;
         let context = Backend::from_yaml_str(TWO_SIZES, None, &mut rand::thread_rng()).unwrap();
         let builder = |ligand: &str, radius: Option<f64>| PreferentialInteractionBuilder {

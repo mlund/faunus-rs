@@ -53,7 +53,7 @@ analysis:
 propagate:
   seed: !Fixed 42
   criterion: Metropolis
-  repeat: 25000
+  steps: 25000
   collections:
     - !Deterministic
       moves:

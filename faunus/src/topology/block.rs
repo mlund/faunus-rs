@@ -714,7 +714,7 @@ system:
       N: 20
       active: 8
       insert: !RandomAtomPos {}
-propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
+propagate: {seed: !Fixed 1, criterion: Metropolis, steps: 0, collections: []}
 "#,
         );
         assert_eq!(ctx.groups().len(), 1);
@@ -741,7 +741,7 @@ system:
     - molecule: solid
       N: 200
       active: 150
-propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
+propagate: {seed: !Fixed 1, criterion: Metropolis, steps: 0, collections: []}
 "#,
         );
         // Single atomic mega-group
@@ -775,7 +775,7 @@ system:
   blocks:
     - molecule: solid
       N: 10
-propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
+propagate: {seed: !Fixed 1, criterion: Metropolis, steps: 0, collections: []}
 "#,
         )
         .unwrap();
@@ -811,7 +811,7 @@ system:
     - molecule: particle
       N: 10
       insert: !RandomAtomPos {}
-propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
+propagate: {seed: !Fixed 1, criterion: Metropolis, steps: 0, collections: []}
 "#,
         );
         // Reservoir (50 active) should NOT count; 10 atoms should
@@ -836,7 +836,7 @@ system:
       N: 20
       active: 8
       insert: !RandomAtomPos {}
-propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
+propagate: {seed: !Fixed 1, criterion: Metropolis, steps: 0, collections: []}
 "#,
         );
         assert_eq!(ctx.groups().len(), 20);

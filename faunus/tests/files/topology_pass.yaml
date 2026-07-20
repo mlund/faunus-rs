@@ -49,7 +49,7 @@ molecules:
 propagate:
   seed: Hardware
   criterion: Metropolis
-  repeat: 10000
+  steps: 10000
   collections:
     - !Stochastic
       moves: 
@@ -57,7 +57,7 @@ propagate:
         - !TranslateMolecule {molecule: "MOL2", max_displacement: 0.3, weight: 1.0}
         - !TranslateAtom {max_displacement: 0.1, weight: 0.2}  # translate any atom
     - !Deterministic
-      repeat: 5
+      cycles: 5
       moves:
         - !TranslateAtom {molecule: "MOL", atom: "OW", max_displacement: 1.0, weight: 1.0}
 

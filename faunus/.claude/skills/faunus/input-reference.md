@@ -78,5 +78,5 @@ cell: !Endless                                     # infinite
 
 - Use `spline` tabulation for performance; add `bounding_spheres: true` for rigid molecules
 - Use `replace:` for pairs that fully override `default`; `append:` for pairs that extend it
-- `!Stochastic` collections for mixed molecule types; `!Deterministic` with `repeat` for sweeps
+- `!Stochastic` collections for mixed molecule types; `!Deterministic` with `cycles` for sweeps
 - Unknown keys are rejected (`deny_unknown_fields`): a mistyped key errors rather than being ignored

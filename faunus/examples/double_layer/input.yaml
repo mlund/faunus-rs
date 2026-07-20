@@ -60,10 +60,10 @@ system:
 propagate:
   seed: !Fixed 42
   criterion: Metropolis
-  repeat: {{ sweeps }}
+  steps: {{ sweeps }}
   collections:
     - !Stochastic
-      repeat: {{ total_charge }}      # trial moves per sweep
+      cycles: {{ total_charge }}      # trial moves per sweep
       moves:
         - !TranslateMolecule { molecule: na_lo, dp: {{ dp }}, weight: {{ k }} }
         - !TranslateMolecule { molecule: na_up, dp: {{ dp }}, weight: {{ k }} }

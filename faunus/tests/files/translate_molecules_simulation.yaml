@@ -20,7 +20,7 @@ molecules:
 propagate:
   seed: !Fixed 12345
   criterion: Metropolis
-  repeat: 100
+  steps: 100
   collections:
     - !Stochastic
       moves:
@@ -31,7 +31,7 @@ propagate:
       moves:
         - !TranslateMolecule {molecule: "TIP3P", max_displacement: 0.2, weight: 0.0}
     - !Stochastic
-      repeat: 5
+      cycles: 5
       moves:
         - !TranslateMolecule {molecule: "TIP3P", max_displacement: 0.5, weight: 1.0}
 

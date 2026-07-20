@@ -84,7 +84,7 @@ analysis:
 propagate:
   seed: Hardware
   criterion: Metropolis
-  repeat: 5000000
+  steps: 5000000
   collections:
     - !Stochastic
       moves:

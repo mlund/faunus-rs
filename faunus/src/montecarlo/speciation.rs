@@ -1656,7 +1656,7 @@ system:
 propagate:
   seed: !Fixed 42
   criterion: Metropolis
-  repeat: 2000
+  steps: 2000
   collections:
     - !Stochastic
       moves:
@@ -1853,7 +1853,7 @@ system:
 propagate:
   seed: !Fixed 42
   criterion: Metropolis
-  repeat: {repeat}
+  steps: {repeat}
   collections:
     - !Deterministic
       moves:
@@ -2006,7 +2006,7 @@ system:
       insert: !RandomAtomPos {}
 propagate:
   seed: !Fixed 42
-  repeat: 1
+  steps: 1
   collections: []
 "#;
         let tmp = tempfile::NamedTempFile::new().unwrap();
@@ -2069,7 +2069,7 @@ system:
 propagate:
   seed: !Fixed 42
   criterion: MetropolisHastings
-  repeat: {repeat}
+  steps: {repeat}
   collections:
     - !Deterministic
       moves:
@@ -2202,7 +2202,7 @@ system:
 propagate:
   seed: !Fixed 42
   criterion: MetropolisHastings
-  repeat: {repeat}
+  steps: {repeat}
   collections:
     - !Deterministic
       moves:
@@ -2258,7 +2258,7 @@ system:
     - {molecule: freeion, N: 10, active: 5, insert: !RandomAtomPos {}}
 propagate:
   seed: !Fixed 42
-  repeat: 1
+  steps: 1
   collections: []
 "#;
         let tmp = tempfile::NamedTempFile::new().unwrap();
@@ -2363,7 +2363,7 @@ system:
 propagate:
   seed: !Fixed 42
   criterion: MetropolisHastings
-  repeat: {repeat}
+  steps: {repeat}
   collections:
     - !Deterministic
       moves:
@@ -2454,7 +2454,7 @@ system:
     - {molecule: NaCl, N: 10, active: 2, insert: !RandomAtomPos {}}
 propagate:
   seed: !Fixed 42
-  repeat: 1
+  steps: 1
   collections: []
 "#;
         let tmp = tempfile::NamedTempFile::new().unwrap();
@@ -2721,7 +2721,7 @@ propagate:
             );
         }
         yaml += &format!(
-            "propagate:\n  seed: !Fixed 42\n  criterion: MetropolisHastings\n  repeat: {repeat}\n  \
+            "propagate:\n  seed: !Fixed 42\n  criterion: MetropolisHastings\n  steps: {repeat}\n  \
              collections:\n    - !Deterministic\n      moves:\n        - !SpeciationMove\n          \
              repeat: 10\n          reactions:\n"
         );
@@ -2887,7 +2887,7 @@ system:
   energy: []
   blocks:
     - {molecule: mono, N: 8, active: 2, insert: !RandomCOM {}}
-propagate: {seed: !Fixed 3, criterion: MetropolisHastings, repeat: 0, collections: []}
+propagate: {seed: !Fixed 3, criterion: MetropolisHastings, steps: 0, collections: []}
 "#;
         let tmp = tempfile::NamedTempFile::new().unwrap();
         std::fs::write(tmp.path(), yaml.as_bytes()).unwrap();
@@ -2949,7 +2949,7 @@ system:
 propagate:
   seed: !Fixed 7
   criterion: MetropolisHastings
-  repeat: 300
+  steps: 300
   collections:
     - !Deterministic
       moves:
@@ -3145,7 +3145,7 @@ system:
 propagate:
   seed: !Fixed 42
   criterion: MetropolisHastings
-  repeat: {repeat}
+  steps: {repeat}
   collections:
     - !Deterministic
       moves:
