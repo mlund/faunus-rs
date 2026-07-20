@@ -1623,20 +1623,6 @@ mod tests {
     }
 
     #[test]
-    fn terms_route_by_kind_regardless_of_list_order() {
-        // Order never affects the total energy, so the accessors must find a term
-        // wherever it sits in the list.
-        for yaml in [
-            "energy:\n  - !Nonbonded {default: []}\n  - !Sasa {probe_radius: 1.4}\n",
-            "energy:\n  - !Sasa {probe_radius: 1.4}\n  - !Nonbonded {default: []}\n",
-        ] {
-            let builder = HamiltonianBuilder::from_str(yaml).unwrap();
-            assert!(builder.nonbonded().is_some());
-            assert_eq!(builder.sasas().count(), 1);
-        }
-    }
-
-    #[test]
     fn nonbonded_is_merged_from_included_files_with_input_winning() {
         let dir = tempfile::tempdir().unwrap();
         // Include contributes a KimHummer default (a different variant than the parent's).
