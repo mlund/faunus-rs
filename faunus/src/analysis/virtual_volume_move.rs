@@ -231,7 +231,7 @@ impl<T: PerturbContext> Analyze<T> for VirtualVolumeMove {
         }
         let mut map = yaml_serde::Mapping::new();
         map.try_insert("volume_displacement", self.volume_displacement)?;
-        map.try_insert("method", format!("{:?}", self.method))?;
+        map.try_insert("method", yaml_serde::to_value(self.method).ok()?)?;
         map.try_insert("block_size", self.block_size)?;
         map.try_insert("num_samples", self.sampling.num_samples())?;
         map.try_insert("num_perturbations", self.widom.len())?;

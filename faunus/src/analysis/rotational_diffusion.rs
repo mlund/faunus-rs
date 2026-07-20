@@ -321,7 +321,7 @@ impl<T: ObserveContext> Analyze<T> for RotationalDiffusion {
             entry.try_insert("var_q1q1", c[0].sample_variance())?;
             entry.try_insert("var_q2q2", c[3].sample_variance())?;
             entry.try_insert("var_q3q3", c[5].sample_variance())?;
-            entry.try_insert("samples", c[0].len())?;
+            entry.try_insert("num_samples", c[0].len())?;
             cov_list.push(yaml_serde::Value::Mapping(entry));
         }
         map.insert("covariance".into(), yaml_serde::Value::Sequence(cov_list));

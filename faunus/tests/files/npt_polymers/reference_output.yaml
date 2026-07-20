@@ -27,7 +27,7 @@ energy_change:
   initial: -1020.9081480087555
 energy:
 - external_pressure:
-    pressure/kJ/mol/Å³: 0.00016899207088419543
+    pressure/kJ·mol⁻¹·Å⁻³: 0.00016899207088419543
     thermal_energy: 2.4789570295566996
 energy_timers:
 - cell_overlap:
@@ -157,7 +157,7 @@ analysis:
 - polymer_shape:
     Rg: 6.799799257755103
     Re: 15.909542586178187
-    Re2/Rg2: 5.474232055618817
+    ⟨Re²⟩/⟨Rg²⟩: 5.474232055618817
     asphericity: 34.26129799988935
     acylindricity: 5.885871239302223
     relative_shape_anisotropy: 0.5476091141299243

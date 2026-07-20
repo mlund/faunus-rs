@@ -872,7 +872,7 @@ impl<T: PerturbContext> Analyze<T> for WidomRotation {
                 torque.insert(axis.to_string().into(), value);
             }
             map.insert(
-                "rms_torque/kT_per_rad".into(),
+                "rms_torque/kT·rad⁻¹".into(),
                 yaml_serde::Value::Mapping(torque),
             );
         }
@@ -1175,7 +1175,7 @@ propagate: {{seed: !Fixed 1, criterion: Metropolis, steps: 0, collections: []}}
         ] {
             assert!(yaml.get(key).is_some(), "missing key {key}");
         }
-        assert!(yaml.get("rms_torque/kT_per_rad").is_some());
+        assert!(yaml.get("rms_torque/kT·rad⁻¹").is_some());
         assert!(yaml
             .get("local_harmonic_stiffness/kJ_per_mol_per_rad2")
             .is_some());

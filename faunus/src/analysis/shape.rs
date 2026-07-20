@@ -268,7 +268,7 @@ impl<T: ObserveContext> Analyze<T> for ShapeAnalysis {
 
         map.try_insert("Rg", rg2.sqrt())?;
         map.try_insert("Re", re2.sqrt())?;
-        map.try_insert("Re2/Rg2", re2 / rg2)?;
+        map.try_insert("⟨Re²⟩/⟨Rg²⟩", re2 / rg2)?;
         map.try_insert("asphericity", self.asphericity.mean())?;
         map.try_insert("acylindricity", self.acylindricity.mean())?;
         map.try_insert(

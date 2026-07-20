@@ -24,7 +24,7 @@ energy_change:
   initial: -48430.761759525114
 energy:
 - external_pressure:
-    pressure/kJ/mol/Å³: 0.000061019341250700007
+    pressure/kJ·mol⁻¹·Å⁻³: 0.000061019341250700007
     thermal_energy: 2.4943387854
 - ewald_reciprocal:
     alpha: 0.3770078013563951

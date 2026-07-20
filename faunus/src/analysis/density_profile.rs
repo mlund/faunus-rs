@@ -179,7 +179,7 @@ impl DensityProfile {
         let mut map = yaml_serde::Mapping::new();
         map.try_insert("num_samples", self.sampling.num_samples())?;
         map.try_insert("num_bins", self.grid.n_bins())?;
-        map.try_insert("bin_width/Å", self.grid.bin_width())?;
+        map.try_insert("resolution/Å", self.grid.bin_width())?;
         map.try_insert("area/Å²", self.grid.area())?;
         map.try_insert("mean_count", self.total_count.summary())?;
         Some(yaml_serde::Value::Mapping(map))
@@ -543,7 +543,7 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, steps: 0, collections: []}
         let yaml = analysis.report().unwrap();
         assert_eq!(yaml["num_samples"].as_u64(), Some(1));
         assert_eq!(yaml["num_bins"].as_u64(), Some(10));
-        assert_relative_eq!(yaml["bin_width/Å"].as_f64().unwrap(), 1.0);
+        assert_relative_eq!(yaml["resolution/Å"].as_f64().unwrap(), 1.0);
         assert_relative_eq!(yaml["area/Å²"].as_f64().unwrap(), 100.0);
         assert_relative_eq!(yaml["mean_count"]["mean"].as_f64().unwrap(), 2.0);
     }

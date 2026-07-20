@@ -396,7 +396,7 @@ impl<T: ObserveContext> Analyze<T> for SpatialDistribution {
         let mut map = yaml_serde::Mapping::new();
         map.try_insert("num_samples", self.sampling.num_samples())?;
         map.try_insert("grid", self.grid.dims())?;
-        map.try_insert("resolution", self.grid.spacing())?;
+        map.try_insert("resolution/Å", self.grid.spacing())?;
         map.try_insert("bulk_normalize", self.scale == OutputScale::RelativeBulk)?;
         map.try_insert(
             "reference_observations",
