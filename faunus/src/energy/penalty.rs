@@ -108,7 +108,7 @@ impl Penalty {
     }
 }
 
-/// Builder for deserializing a static `Penalty` from the `energy.penalty` YAML section.
+/// Builder for deserializing a static `Penalty` from a `!Penalty` energy-list entry.
 ///
 /// Loads a converged `FlatHistogramState` from a checkpoint file and uses the
 /// stored `ln g` as a fixed bias. Useful for production runs after Wang-Landau

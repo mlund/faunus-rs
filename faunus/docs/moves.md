@@ -913,4 +913,4 @@ from the equipartition theorem:
   and persist on the compute device across subsequent LD blocks.
 - MC rotation moves (`!RotateMolecule`) automatically track rigid-body orientation,
   which is transferred to the device at each LD block start.
-- Energy splines must be configured (`energy.nonbonded.spline`) to provide on-device pair potentials.
+- Energy splines must be configured (the `!Nonbonded` term's `spline`) to provide on-device pair potentials.
