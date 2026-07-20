@@ -65,7 +65,7 @@ system:
         }
 
   energy:
-    nonbonded:
+    - !Nonbonded
       default:
         - !Coulomb {cutoff: 2000}
         - !WeeksChandlerAndersen {mixing: LB}

@@ -1,6 +1,6 @@
 version:
   faunus: 3.0.0-beta.2
-  git_revision: v3.0.0-beta.1-63-gd2e44d4-dirty
+  git_revision: v3.0.0-beta.2-47-g908697e-dirty
 medium:
   permittivity: Vacuum
   salt: null
@@ -23,20 +23,20 @@ energy_change:
   final: -8481.181689562274
   initial: -8599.382718738849
 energy:
-  external_pressure:
+- external_pressure:
     pressure/kJ/mol/Å³: 0.000061019341250700007
     thermal_energy: 2.4943387854
 energy_timers:
-  cell_overlap: '0.15000000000000002 (energy: 0.1, update: 0.05)'
-  nonbonded: '99.71 (energy: 83.19, update: 16.52)'
-  external_pressure: '0.15000000000000002 (energy: 0.1, update: 0.05)'
+- cell_overlap: '0.15000000000000002 (energy: 0.1, update: 0.05)'
+- nonbonded: '99.7 (energy: 83.23, update: 16.47)'
+- external_pressure: '0.15000000000000002 (energy: 0.1, update: 0.05)'
 propagate:
   repeat: 1000
   seed: !Fixed 42
   collections:
   - !Deterministic
     repeat: 1
-    elapsed_seconds: 4.574520579
+    elapsed_seconds: 4.634965665
     moves:
     - !TranslateMolecule
       molecule: water

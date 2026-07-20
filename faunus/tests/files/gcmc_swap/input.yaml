@@ -25,7 +25,7 @@ system:
   medium:
     permittivity: !Vacuum
     temperature: 298.15
-  energy: {}
+  energy: []
   blocks:
     - molecule: M
       N: 20

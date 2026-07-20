@@ -226,7 +226,7 @@ impl CustomPair {
         forces
     }
 
-    pub(super) fn to_yaml(&self) -> serde_yml::Value {
+    pub(super) fn to_yaml(&self) -> yaml_serde::Value {
         yaml_map! {
             "function" => self.function.clone(),
             "selections" => vec![self.selection1.to_string(), self.selection2.to_string()],
@@ -412,7 +412,7 @@ constants:
   k: 100.0
   r0: 30.0
 "#;
-        let b: CustomPairBuilder = serde_yml::from_str(yaml).unwrap();
+        let b: CustomPairBuilder = yaml_serde::from_str(yaml).unwrap();
         assert_eq!(b.gradient_h, DEFAULT_GRADIENT_H);
     }
 
@@ -424,6 +424,6 @@ selection1: "molecule a"
 selection2: "molecule b"
 function: "r"
 "#;
-        assert!(serde_yml::from_str::<CustomPairBuilder>(yaml).is_err());
+        assert!(yaml_serde::from_str::<CustomPairBuilder>(yaml).is_err());
     }
 }

@@ -143,11 +143,11 @@ impl<T: ObserveContext + WithHamiltonian> Analyze<T> for EnergyAnalysis {
         Ok(())
     }
 
-    fn results(&self) -> Option<serde_yml::Value> {
+    fn results(&self) -> Option<yaml_serde::Value> {
         if self.sampling.num_samples() == 0 {
             return None;
         }
-        let mut map = serde_yml::Mapping::new();
+        let mut map = yaml_serde::Mapping::new();
         map.try_insert("num_samples", self.sampling.num_samples())?;
         map.try_insert("mean", self.mean.mean())?;
         if let EnergyMode::Partial(pair) = &self.mode {
@@ -156,7 +156,7 @@ impl<T: ObserveContext + WithHamiltonian> Analyze<T> for EnergyAnalysis {
                 [pair.0.selection().source(), pair.1.selection().source()],
             )?;
         }
-        Some(serde_yml::Value::Mapping(map))
+        Some(yaml_serde::Value::Mapping(map))
     }
 }
 
@@ -185,7 +185,7 @@ mod tests {
 file: energy.dat
 frequency: !Every 100
 "#;
-        let builder: EnergyAnalysisBuilder = serde_yml::from_str(yaml).unwrap();
+        let builder: EnergyAnalysisBuilder = yaml_serde::from_str(yaml).unwrap();
         assert!(builder.selections.is_none());
         assert!(matches!(builder.frequency, Frequency::Every(100)));
     }
@@ -197,7 +197,7 @@ file: partial.dat
 frequency: !Every 50
 selections: ["molecule water", "atomtype Na"]
 "#;
-        let builder: EnergyAnalysisBuilder = serde_yml::from_str(yaml).unwrap();
+        let builder: EnergyAnalysisBuilder = yaml_serde::from_str(yaml).unwrap();
         assert!(builder.selections.is_some());
         let (sel1, sel2) = builder.selections.unwrap();
         assert_eq!(sel1.source(), "molecule water");
@@ -211,7 +211,7 @@ selections: ["molecule water", "atomtype Na"]
   file: energy.dat
   frequency: !Every 100
 "#;
-        let builders: Vec<AnalysisBuilder> = serde_yml::from_str(yaml).unwrap();
+        let builders: Vec<AnalysisBuilder> = yaml_serde::from_str(yaml).unwrap();
         assert!(matches!(builders[0], AnalysisBuilder::Energy(_)));
     }
 }
@@ -243,7 +243,7 @@ mod integration_tests {
             "file: {}\nfrequency: !Every 1\n",
             sink.to_string_lossy().replace('\\', "/")
         );
-        let builder: EnergyAnalysisBuilder = serde_yml::from_str(&yaml).unwrap();
+        let builder: EnergyAnalysisBuilder = yaml_serde::from_str(&yaml).unwrap();
         let mut analysis = builder.build(&ctx).unwrap();
 
         assert_eq!(Analyze::<Backend>::num_samples(&analysis), 0);
@@ -265,7 +265,7 @@ mod integration_tests {
             "file: {}\nfrequency: !Every 1\nselections: [\"all\", \"all\"]\n",
             sink.to_string_lossy().replace('\\', "/")
         );
-        let builder: EnergyAnalysisBuilder = serde_yml::from_str(&yaml).unwrap();
+        let builder: EnergyAnalysisBuilder = yaml_serde::from_str(&yaml).unwrap();
         let mut analysis = builder.build(&ctx).unwrap();
 
         analysis.sample(&ctx, 1).unwrap();

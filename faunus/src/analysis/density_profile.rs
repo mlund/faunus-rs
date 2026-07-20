@@ -172,17 +172,17 @@ impl DensityProfile {
 
     /// Build the YAML results mapping (inherent so it is callable without choosing a
     /// `Context` type; the [`Analyze`] trait method delegates here).
-    fn report(&self) -> Option<serde_yml::Value> {
+    fn report(&self) -> Option<yaml_serde::Value> {
         if self.sampling.num_samples() == 0 {
             return None;
         }
-        let mut map = serde_yml::Mapping::new();
+        let mut map = yaml_serde::Mapping::new();
         map.try_insert("num_samples", self.sampling.num_samples())?;
         map.try_insert("num_bins", self.grid.n_bins())?;
         map.try_insert("bin_width/Å", self.grid.bin_width())?;
         map.try_insert("area/Å²", self.grid.area())?;
         map.try_insert("mean_count", self.total_count.summary())?;
-        Some(serde_yml::Value::Mapping(map))
+        Some(yaml_serde::Value::Mapping(map))
     }
 
     fn write_profile(&self) -> Result<()> {
@@ -267,7 +267,7 @@ impl<T: ObserveContext> Analyze<T> for DensityProfile {
         self.write_profile()
     }
 
-    fn results(&self) -> Option<serde_yml::Value> {
+    fn results(&self) -> Option<yaml_serde::Value> {
         self.report()
     }
 }
@@ -293,7 +293,7 @@ molecules:
 system:
   cell: !Cuboid [10.0, 10.0, 10.0]
   medium: {permittivity: !Vacuum, temperature: 300.0}
-  energy: {}
+  energy: []
   blocks:
     - molecule: DIMER
       N: 1
@@ -312,7 +312,7 @@ molecules:
 system:
   cell: !Cuboid [10.0, 10.0, 10.0]
   medium: {permittivity: !Vacuum, temperature: 300.0}
-  energy: {}
+  energy: []
   blocks:
     - molecule: GAS
       N: 2
@@ -332,7 +332,7 @@ molecules:
 system:
   cell: !Cuboid [10.0, 10.0, 10.0]
   medium: {permittivity: !Vacuum, temperature: 300.0}
-  energy: {}
+  energy: []
   blocks:
     - molecule: GAS
       N: 3
@@ -575,7 +575,7 @@ selection: "atomtype Na"
 file: sodium.csv
 frequency: !Every 10
 "#;
-        let builder: DensityProfileBuilder = serde_yml::from_str(yaml).unwrap();
+        let builder: DensityProfileBuilder = yaml_serde::from_str(yaml).unwrap();
         assert_eq!(builder.selection.source(), "atomtype Na");
         assert_relative_eq!(builder.resolution, 1.0);
         assert!(!builder.use_com);
@@ -584,9 +584,9 @@ frequency: !Every 10
     #[test]
     fn file_is_required_and_unknown_fields_are_rejected() {
         let no_file = "selection: all\nfrequency: !Every 10\n";
-        assert!(serde_yml::from_str::<DensityProfileBuilder>(no_file).is_err());
+        assert!(yaml_serde::from_str::<DensityProfileBuilder>(no_file).is_err());
         let unknown = "selection: all\nfile: d.csv\nfrequency: !Every 10\noops: 1\n";
-        assert!(serde_yml::from_str::<DensityProfileBuilder>(unknown).is_err());
+        assert!(yaml_serde::from_str::<DensityProfileBuilder>(unknown).is_err());
     }
 
     #[test]
@@ -599,7 +599,7 @@ frequency: !Every 10
   resolution: 0.5
   frequency: !Every 10
 "#;
-        let builders: Vec<AnalysisBuilder> = serde_yml::from_str(yaml).unwrap();
+        let builders: Vec<AnalysisBuilder> = yaml_serde::from_str(yaml).unwrap();
         match &builders[0] {
             AnalysisBuilder::DensityProfile(builder) => {
                 assert!(builder.use_com);

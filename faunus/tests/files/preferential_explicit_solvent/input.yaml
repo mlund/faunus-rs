@@ -45,13 +45,13 @@ system:
       N: 96
       insert: !RandomCOM {rotate: true}
   energy:
-    nonbonded:
+    - !Nonbonded
       default:
         - !LennardJones {mixing: LB}
         - !Fanourgakis {cutoff: 8.0}
-    spline:
-      cutoff: 8.5
-      shift_energy: false
+      spline:
+        cutoff: 8.5
+        shift_energy: false
 
 analysis:
   - !PreferentialInteraction

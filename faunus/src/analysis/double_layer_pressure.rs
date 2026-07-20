@@ -293,14 +293,14 @@ impl DoubleLayerPressure {
 
     /// `{mean, error}` mapping for a block average plus a constant `offset`, converted to
     /// mM, or null when nothing was sampled.
-    fn block_mm_yaml(&self, b: &BlockAverage, offset: f64) -> Option<serde_yml::Value> {
+    fn block_mm_yaml(&self, b: &BlockAverage, offset: f64) -> Option<yaml_serde::Value> {
         let Some(mean) = b.checked_mean() else {
-            return Some(serde_yml::Value::Null);
+            return Some(yaml_serde::Value::Null);
         };
-        let mut m = serde_yml::Mapping::new();
+        let mut m = yaml_serde::Mapping::new();
         m.try_insert("mean", self.to_mm(mean + offset))?;
         m.try_insert("error", self.to_mm(b.error()))?;
-        Some(serde_yml::Value::Mapping(m))
+        Some(yaml_serde::Value::Mapping(m))
     }
 
     /// Self-consistent long-range correction `F_iPB` (Guldbrand), as a pressure
@@ -344,9 +344,9 @@ impl DoubleLayerPressure {
 
     /// Build the YAML results mapping (inherent so it is callable without choosing a
     /// `Context` type; the [`Analyze`] trait method delegates here).
-    fn report(&self) -> Option<serde_yml::Value> {
+    fn report(&self) -> Option<yaml_serde::Value> {
         let fipb = self.fipb_pressure();
-        let mut map = serde_yml::Mapping::new();
+        let mut map = yaml_serde::Mapping::new();
         map.try_insert("num_samples", self.sampling.num_samples())?;
         map.insert("rho_mid/Å⁻³".into(), self.rho_mid.to_yaml()?);
         map.insert("p_ideal/mM".into(), self.block_mm_yaml(&self.p_ideal, 0.0)?);
@@ -359,7 +359,7 @@ impl DoubleLayerPressure {
             .checked_mean()
             .map(|mean| self.to_pa(mean + fipb));
         map.try_insert("p_osm/Pa", p_osm_pa)?;
-        Some(serde_yml::Value::Mapping(map))
+        Some(yaml_serde::Value::Mapping(map))
     }
 }
 
@@ -424,7 +424,7 @@ impl<T: ObserveContext> Analyze<T> for DoubleLayerPressure {
         Ok(())
     }
 
-    fn results(&self) -> Option<serde_yml::Value> {
+    fn results(&self) -> Option<yaml_serde::Value> {
         self.report()
     }
 }
@@ -642,7 +642,7 @@ mod tests {
   file: pressure.csv
   frequency: !Every 10
 "#;
-        let builders: Vec<crate::analysis::AnalysisBuilder> = serde_yml::from_str(yaml).unwrap();
+        let builders: Vec<crate::analysis::AnalysisBuilder> = yaml_serde::from_str(yaml).unwrap();
         match &builders[0] {
             crate::analysis::AnalysisBuilder::DoubleLayerPressure(b) => {
                 assert_eq!(b.midplane_halfwidth, Some(2.0));
@@ -654,7 +654,7 @@ mod tests {
     #[test]
     fn deserialize_from_fixture() {
         let yaml = std::fs::read_to_string("tests/files/double_layer_pressure.yaml").unwrap();
-        let builders: Vec<crate::analysis::AnalysisBuilder> = serde_yml::from_str(&yaml).unwrap();
+        let builders: Vec<crate::analysis::AnalysisBuilder> = yaml_serde::from_str(&yaml).unwrap();
         assert_eq!(builders.len(), 2);
         // Second entry omits midplane_halfwidth/file: they default.
         match &builders[1] {

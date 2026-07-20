@@ -423,18 +423,18 @@ impl PolymerDepletion {
     }
 
     /// Report key parameters and per-colloid bounding spheres as YAML.
-    pub(super) fn to_yaml(&self) -> serde_yml::Value {
-        let mut map = serde_yml::Mapping::new();
+    pub(super) fn to_yaml(&self) -> yaml_serde::Value {
+        let mut map = yaml_serde::Mapping::new();
         map.insert("polymer_rg".into(), self.rg.into());
         map.insert("polymer_density".into(), self.rho_star.into());
         map.insert("kappa".into(), self.kappa.into());
-        let molecules: Vec<serde_yml::Value> = self
+        let molecules: Vec<yaml_serde::Value> = self
             .colloid_molecule_names
             .iter()
             .cloned()
             .map(Into::into)
             .collect();
-        map.insert("molecules".into(), serde_yml::Value::Sequence(molecules));
+        map.insert("molecules".into(), yaml_serde::Value::Sequence(molecules));
         if self.radius_scaling != 1.0 {
             map.insert("colloid_radius_scaling".into(), self.radius_scaling.into());
         }
@@ -446,33 +446,33 @@ impl PolymerDepletion {
         }
 
         if let Some(steric) = &self.steric {
-            let mut steric_map = serde_yml::Mapping::new();
+            let mut steric_map = yaml_serde::Mapping::new();
             steric_map.insert("epsilon0_prime".into(), steric.config.epsilon0_prime.into());
             steric_map.insert("g0".into(), steric.config.g0.into());
-            let gs_vals: Vec<serde_yml::Value> = steric.g_s.iter().map(|&v| v.into()).collect();
-            steric_map.insert("g_s".into(), serde_yml::Value::Sequence(gs_vals));
-            let ht_vals: Vec<serde_yml::Value> =
+            let gs_vals: Vec<yaml_serde::Value> = steric.g_s.iter().map(|&v| v.into()).collect();
+            steric_map.insert("g_s".into(), yaml_serde::Value::Sequence(gs_vals));
+            let ht_vals: Vec<yaml_serde::Value> =
                 steric.h_tilde_eff.iter().map(|&v| v.into()).collect();
-            steric_map.insert("h_tilde_eff".into(), serde_yml::Value::Sequence(ht_vals));
+            steric_map.insert("h_tilde_eff".into(), yaml_serde::Value::Sequence(ht_vals));
             map.insert(
                 "steric_adsorption".into(),
-                serde_yml::Value::Mapping(steric_map),
+                yaml_serde::Value::Mapping(steric_map),
             );
         }
 
-        let colloids: Vec<serde_yml::Value> = self
+        let colloids: Vec<yaml_serde::Value> = self
             .colloids
             .iter()
             .map(|c| {
-                let mut m = serde_yml::Mapping::new();
+                let mut m = yaml_serde::Mapping::new();
                 m.insert("group".into(), (c.group_index as u64).into());
                 m.insert("radius".into(), c.radius.into());
-                serde_yml::Value::Mapping(m)
+                yaml_serde::Value::Mapping(m)
             })
             .collect();
-        map.insert("colloids".into(), serde_yml::Value::Sequence(colloids));
+        map.insert("colloids".into(), yaml_serde::Value::Sequence(colloids));
 
-        serde_yml::Value::Mapping(map)
+        yaml_serde::Value::Mapping(map)
     }
 
     /// Compute COM forces on all colloids (kJ/(mol·Å)).
@@ -1087,7 +1087,7 @@ kappa: 2.0
 molecules: [Colloid, Sphere]
 colloid_radius: 5.0
 "#;
-        let builder: PolymerDepletionBuilder = serde_yml::from_str(yaml).unwrap();
+        let builder: PolymerDepletionBuilder = yaml_serde::from_str(yaml).unwrap();
         assert_approx_eq!(f64, builder.polymer_rg, 10.0);
         assert_approx_eq!(f64, builder.polymer_density, 0.5);
         assert_approx_eq!(f64, builder.kappa, 2.0);
@@ -1100,7 +1100,7 @@ polymer_rg: 10.0
 polymer_density: 0.5
 molecules: [Colloid]
 "#;
-        let builder2: PolymerDepletionBuilder = serde_yml::from_str(yaml2).unwrap();
+        let builder2: PolymerDepletionBuilder = yaml_serde::from_str(yaml2).unwrap();
         assert_approx_eq!(f64, builder2.kappa, 1.0);
         assert!(builder2.colloid_radius.is_none());
     }
@@ -1345,7 +1345,7 @@ kappa: 2.0
 molecules: [Colloid]
 h_tilde: 5.0
 "#;
-        let builder: PolymerDepletionBuilder = serde_yml::from_str(yaml).unwrap();
+        let builder: PolymerDepletionBuilder = yaml_serde::from_str(yaml).unwrap();
         assert_approx_eq!(f64, builder.h_tilde.unwrap(), 5.0);
 
         // Without h_tilde -> None (Dirichlet)
@@ -1354,7 +1354,7 @@ polymer_rg: 10.0
 polymer_density: 0.5
 molecules: [Colloid]
 "#;
-        let builder2: PolymerDepletionBuilder = serde_yml::from_str(yaml2).unwrap();
+        let builder2: PolymerDepletionBuilder = yaml_serde::from_str(yaml2).unwrap();
         assert!(builder2.h_tilde.is_none());
     }
 
@@ -1585,7 +1585,7 @@ steric_adsorption:
   epsilon0_prime: 0.02
   g0: 10.0
 "#;
-        let builder: PolymerDepletionBuilder = serde_yml::from_str(yaml).unwrap();
+        let builder: PolymerDepletionBuilder = yaml_serde::from_str(yaml).unwrap();
         let steric = builder.steric_adsorption.as_ref().unwrap();
         assert_approx_eq!(f64, steric.epsilon0_prime, 0.02);
         assert_approx_eq!(f64, steric.g0, 10.0);

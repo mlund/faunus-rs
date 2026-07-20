@@ -639,8 +639,8 @@ mod tests {
             canonical: &str,
             expected: f64,
         ) {
-            let parsed: T = serde_yml::from_str(yaml).unwrap_or_else(|e| panic!("{yaml}: {e}"));
-            let value = serde_yml::to_value(&parsed).unwrap();
+            let parsed: T = yaml_serde::from_str(yaml).unwrap_or_else(|e| panic!("{yaml}: {e}"));
+            let value = yaml_serde::to_value(&parsed).unwrap();
             assert_eq!(
                 value[canonical].as_f64(),
                 Some(expected),
@@ -662,7 +662,7 @@ mod tests {
 
         // Deserialize-only, so assert on the parse alone
         let gibbs: gibbs::GibbsMoveBuilder =
-            serde_yml::from_str("!GibbsVolumeExchange {dV: 0.3}").unwrap();
+            yaml_serde::from_str("!GibbsVolumeExchange {dV: 0.3}").unwrap();
         assert!(matches!(
             gibbs,
             gibbs::GibbsMoveBuilder::GibbsVolumeExchange { dv, .. } if dv == 0.3
@@ -842,7 +842,7 @@ molecules:
 system:
   cell: !Cuboid [30.0, 30.0, 30.0]
   medium: {permittivity: !Vacuum, temperature: 300.0}
-  energy: {}
+  energy: []
   blocks:
     - molecule: POLY
       N: 1
@@ -871,7 +871,7 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
     fn translate_molecule_pairs_rigid_body_with_translate() {
         let context = context();
         let mut mv: TranslateMolecule =
-            serde_yml::from_str("{molecule: MOL, max_displacement: 0.5}").unwrap();
+            yaml_serde::from_str("{molecule: MOL, max_displacement: 0.5}").unwrap();
         mv.finalize(&context).unwrap();
         let proposed = propose(mv, &context);
 
@@ -900,7 +900,7 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
     fn rotate_molecule_pairs_rigid_body_with_rotate() {
         let context = context();
         let mut mv: RotateMolecule =
-            serde_yml::from_str("{molecule: MOL, max_angle: 0.5}").unwrap();
+            yaml_serde::from_str("{molecule: MOL, max_angle: 0.5}").unwrap();
         mv.finalize(&context).unwrap();
         let proposed = propose(mv, &context);
 
@@ -920,7 +920,7 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
     fn translate_atom_carries_relative_indices_on_both_sides() {
         let context = context();
         let mut mv: TranslateAtom =
-            serde_yml::from_str("{atom: B, max_displacement: 0.3}").unwrap();
+            yaml_serde::from_str("{atom: B, max_displacement: 0.3}").unwrap();
         mv.finalize(&context).unwrap();
         let proposed = propose(mv, &context);
 
@@ -952,10 +952,11 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
     fn pivot_and_crankshaft_use_relative_indices_on_both_sides() {
         let context = context();
 
-        let mut pivot: PivotMove = serde_yml::from_str("{molecule: POLY, max_angle: 0.5}").unwrap();
+        let mut pivot: PivotMove =
+            yaml_serde::from_str("{molecule: POLY, max_angle: 0.5}").unwrap();
         pivot.finalize(&context).unwrap();
         let mut crank: CrankshaftMove =
-            serde_yml::from_str("{molecule: POLY, max_angle: 0.5}").unwrap();
+            yaml_serde::from_str("{molecule: POLY, max_angle: 0.5}").unwrap();
         crank.finalize(&context).unwrap();
 
         for proposed in [propose(pivot, &context), propose(crank, &context)] {
@@ -981,7 +982,7 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
     fn volume_move_pairs_volume_change_with_volume_scale() {
         let context = context();
         let mut mv: VolumeMove =
-            serde_yml::from_str("{volume_displacement: 0.1, method: Isotropic, repeat: 1}")
+            yaml_serde::from_str("{volume_displacement: 0.1, method: Isotropic, repeat: 1}")
                 .unwrap();
         mv.finalize(&context).unwrap();
         let proposed = propose(mv, &context);
@@ -1028,7 +1029,7 @@ molecules:
 system:
   cell: !Cuboid [20.0, 20.0, 20.0]
   medium: {permittivity: !Vacuum, temperature: 298.15}
-  energy: {}
+  energy: []
   blocks:
     - molecule: site
       N: 20
@@ -1052,7 +1053,7 @@ temperature: 298.15
 reactions:
   - ["⚛HA = ⚛A + ~H+", !pK 4.0]
 "#;
-        let mut speciation: super::speciation::SpeciationMove = serde_yml::from_str(yaml).unwrap();
+        let mut speciation: super::speciation::SpeciationMove = yaml_serde::from_str(yaml).unwrap();
         speciation
             .finalize(&context, crate::R_IN_KJ_PER_MOL * 298.15)
             .unwrap();

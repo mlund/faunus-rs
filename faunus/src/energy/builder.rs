@@ -367,7 +367,11 @@ impl PairInteraction {
 /// - `default`: base interactions applied to all pairs
 /// - `replace`: pair-specific entries that completely replace `default`
 /// - `append`: pair-specific entries merged with `default` by interaction type
-#[derive(Debug, Default, Serialize, Deserialize, Clone, PartialEq)]
+///
+/// The `spline`, `cutoff` and `bounding_spheres` keys configure how the assembled
+/// pair matrix is evaluated (splining and group-to-group culling); they live here
+/// rather than at the top level because they configure only this term.
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct PairPotentialBuilder {
     #[serde(default)]
@@ -378,12 +382,46 @@ pub struct PairPotentialBuilder {
 
     #[serde(default, with = "::serde_with::rust::maps_duplicate_key_is_error")]
     append: HashMap<UnorderedPair<String>, Vec<PairInteraction>>,
+
+    /// Optional spline configuration for the nonbonded interactions.
+    /// When present, `NonbondedMatrixSplined` is used instead of `NonbondedMatrix`.
+    #[serde(default)]
+    spline: Option<SplineOptions>,
+
+    /// Optional global cutoff (Å) for group-to-group bounding-sphere culling of
+    /// the (non-splined) nonbonded matrix. Must be ≥ the largest per-pair
+    /// potential cutoff to remain exact. Ignored when `spline` is set (the
+    /// spline carries its own cutoff).
+    #[serde(default)]
+    cutoff: Option<f64>,
+
+    /// Enable bounding-sphere culling for the non-splined matrix (default: true).
+    /// Only has an effect together with `cutoff`.
+    #[serde(default = "default_bounding_spheres")]
+    bounding_spheres: bool,
+}
+
+// Manual `Default` so `bounding_spheres` matches its serde default (`true`);
+// a derived impl would give `false` and silently disable culling for callers
+// that build a `PairPotentialBuilder` without deserializing.
+impl Default for PairPotentialBuilder {
+    fn default() -> Self {
+        Self {
+            default: Vec::new(),
+            replace: HashMap::new(),
+            append: HashMap::new(),
+            spline: None,
+            cutoff: None,
+            bounding_spheres: default_bounding_spheres(),
+        }
+    }
 }
 
 impl PairPotentialBuilder {
     /// Merge pairs from an included file. Default lists are concatenated
-    /// (skip duplicate types); `replace`/`append` entries from the input
-    /// take precedence over includes.
+    /// (skip duplicate types); `replace`/`append` entries and the evaluation
+    /// settings (`spline`/`cutoff`/`bounding_spheres`) from the input take
+    /// precedence over includes.
     fn merge_from(&mut self, other: Self) {
         for interaction in other.default {
             let disc = std::mem::discriminant(&interaction);
@@ -406,6 +444,20 @@ impl PairPotentialBuilder {
         };
         merge(&mut self.replace, other.replace);
         merge(&mut self.append, other.append);
+
+        // Adopt the include's evaluation settings only where the input left them
+        // unset, so nonbonded config factored into an include is honoured rather
+        // than silently dropped. `bounding_spheres` follows the culling `cutoff`
+        // it qualifies (a plain bool can't distinguish "unset" from "false").
+        if self.spline.is_none() {
+            self.spline = other.spline;
+        }
+        if self.cutoff.is_none() {
+            self.cutoff = other.cutoff;
+            if self.cutoff.is_some() {
+                self.bounding_spheres = other.bounding_spheres;
+            }
+        }
     }
 
     /// Append a pair interaction to the `default` list.
@@ -575,6 +627,27 @@ impl PairPotentialBuilder {
             .chain(self.append.values().flatten())
             .any(|i| i.is_coulomb())
     }
+
+    /// Spline configuration for this nonbonded term, if any.
+    pub(crate) fn spline(&self) -> Option<&SplineOptions> {
+        self.spline.as_ref()
+    }
+
+    /// Group-to-group culling cutoff (Å) for the non-splined matrix, if set.
+    pub(crate) fn cutoff(&self) -> Option<f64> {
+        self.cutoff
+    }
+
+    /// Whether bounding-sphere culling is enabled for the non-splined matrix.
+    pub(crate) fn bounding_spheres(&self) -> bool {
+        self.bounding_spheres
+    }
+
+    /// Override the culling cutoff (test-only; inputs set it via YAML).
+    #[cfg(test)]
+    pub(crate) fn set_cutoff(&mut self, cutoff: Option<f64>) {
+        self.cutoff = cutoff;
+    }
 }
 
 const fn default_spline_table_points() -> usize {
@@ -585,7 +658,7 @@ const fn default_spline_table_points() -> usize {
 ///
 /// When present in the YAML input, nonbonded interactions will be
 /// tabulated using cubic Hermite splines for faster evaluation.
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct SplineOptions {
     /// Cutoff distance for splined potentials (Ångström).
@@ -639,113 +712,210 @@ impl SplineOptions {
     }
 }
 
-/// Structure used for (de)serializing the Hamiltonian of the system.
-#[derive(Debug, Serialize, Deserialize, Clone)]
-#[serde(deny_unknown_fields)]
-pub struct HamiltonianBuilder {
-    /// Nonbonded interactions defined for the system.
-    #[serde(rename = "nonbonded")]
-    pub pairpot_builder: Option<PairPotentialBuilder>,
-
-    /// Optional spline configuration for nonbonded interactions.
-    /// When present, `NonbondedMatrixSplined` is used instead of `NonbondedMatrix`.
-    pub spline: Option<SplineOptions>,
-
-    /// Optional global cutoff (Å) for group-to-group bounding-sphere culling of
-    /// the (non-splined) nonbonded matrix. Must be ≥ the largest per-pair
-    /// potential cutoff to remain exact. Ignored when `spline` is set (the
-    /// spline carries its own cutoff).
-    pub cutoff: Option<f64>,
-
-    /// Enable bounding-sphere culling for the non-splined matrix (default: true).
-    /// Only has an effect together with `cutoff`.
-    #[serde(default = "default_bounding_spheres")]
-    pub bounding_spheres: bool,
-
-    /// Solvent Accessible Surface Area (SASA) energy term.
-    pub sasa: Option<SasaEnergyBuilder>,
-
+/// A single entry in the `energy:` input list.
+///
+/// The `energy:` section is a sequence of externally-tagged entries (`!Nonbonded`,
+/// `!Sasa`, …), mirroring `analysis:` and `moves:`. Order is irrelevant — the total
+/// energy is a commutative sum — so [`Hamiltonian::new`](super::Hamiltonian) and
+/// `finalize` route entries by variant kind (via the accessors on
+/// [`HamiltonianBuilder`]), not by position.
+///
+/// The tag is inert for strictness: an unknown *key inside* an entry is rejected by
+/// the wrapped builder's own `deny_unknown_fields`; an unknown *tag* is an
+/// unknown-variant error named by
+/// [`from_tagged_list`](crate::auxiliary::from_tagged_list).
+#[derive(Debug, Clone, Deserialize)]
+pub enum EnergyTermBuilder {
+    /// Nonbonded pair interactions plus their evaluation config (spline/cutoff/…).
+    Nonbonded(PairPotentialBuilder),
+    /// Solvent-accessible-surface-area energy. May repeat (e.g. different probes).
+    Sasa(SasaEnergyBuilder),
     /// Contact tessellation energy between rigid bodies.
-    pub contact_tessellation: Option<ContactTessellationEnergyBuilder>,
-
-    /// Collective variable constraints (hard or harmonic).
-    pub constrain: Option<Vec<ConstrainBuilder>>,
-
-    /// External pressure for the NPT ensemble.
-    #[serde(alias = "isobaric")]
-    pub pressure: Option<Pressure>,
-
-    /// Custom external potentials from math expressions.
-    pub custom_external: Option<Vec<CustomExternalBuilder>>,
-
-    /// User-defined energy/force between two rigid-body centers of mass.
-    pub custom_pair: Option<Vec<CustomPairBuilder>>,
-
+    ContactTessellation(ContactTessellationEnergyBuilder),
+    /// Collective-variable constraint (hard or harmonic). May repeat.
+    Constrain(ConstrainBuilder),
+    /// External pressure for the NPT ensemble. The unit is an inner map key,
+    /// e.g. `!Pressure {atm: 1}` — a node cannot carry both `!Pressure` and `!atm`,
+    /// so `singleton_map` reads the otherwise tag-valued `Pressure` unit as a map key.
+    #[serde(alias = "Isobaric", with = "yaml_serde::with::singleton_map")]
+    Pressure(Pressure),
+    /// Custom external potential from a math expression. May repeat.
+    CustomExternal(CustomExternalBuilder),
+    /// User-defined energy/force between two rigid-body centers of mass. May repeat.
+    CustomPair(CustomPairBuilder),
     /// Ewald reciprocal-space energy configuration.
-    pub ewald: Option<EwaldBuilder>,
-
+    Ewald(EwaldBuilder),
     /// Polymer depletion many-body interaction.
-    pub polymer_depletion: Option<PolymerDepletionBuilder>,
-
+    PolymerDepletion(PolymerDepletionBuilder),
     /// Tabulated 6D rigid molecule-molecule energy tables.
-    pub tabulated6d: Option<Tabulated6DBuilder>,
-
+    Tabulated6d(Tabulated6DBuilder),
     /// Tabulated 3D rigid molecule-atom energy tables.
-    pub tabulated3d: Option<Tabulated3DBuilder>,
-
+    Tabulated3d(Tabulated3DBuilder),
     /// Static flat-histogram bias loaded from a Wang-Landau checkpoint.
-    pub penalty: Option<PenaltyBuilder>,
+    Penalty(PenaltyBuilder),
+}
+
+/// Generate `EnergyTermBuilder::kind` and the by-kind accessors on
+/// [`HamiltonianBuilder`] from one table, so each term's uniqueness (`unique` vs
+/// `iter`) is stated once and drives both the duplicate policy and the read path.
+/// Adding an enum variant without a row here makes `kind`'s `match` non-exhaustive —
+/// a compile error — keeping the enum and this table in step. `unique` yields
+/// `Option<&T>` (the first match); `iter` yields every match.
+macro_rules! energy_dispatch {
+    ( $( $variant:ident => $flavor:ident $accessor:ident : $ty:ty ),* $(,)? ) => {
+        impl EnergyTermBuilder {
+            /// The entry's tag name and whether it may appear more than once. The
+            /// name labels duplicate errors; the flag drives `validate_uniqueness`.
+            const fn kind(&self) -> (&'static str, bool) {
+                match self {
+                    $(
+                        Self::$variant(_) =>
+                            (stringify!($variant), energy_dispatch!(@repeatable $flavor)),
+                    )*
+                }
+            }
+        }
+        impl HamiltonianBuilder {
+            $( energy_dispatch!(@accessor $flavor $accessor $variant $ty); )*
+        }
+    };
+    (@repeatable unique) => { false };
+    (@repeatable iter) => { true };
+    (@accessor unique $name:ident $variant:ident $ty:ty) => {
+        #[allow(clippy::wildcard_enum_match_arm)]
+        pub(crate) fn $name(&self) -> Option<&$ty> {
+            self.terms.iter().find_map(|t| match t {
+                EnergyTermBuilder::$variant(b) => Some(b),
+                _ => None,
+            })
+        }
+    };
+    (@accessor iter $name:ident $variant:ident $ty:ty) => {
+        #[allow(clippy::wildcard_enum_match_arm)]
+        pub(crate) fn $name(&self) -> impl Iterator<Item = &$ty> {
+            self.terms.iter().filter_map(|t| match t {
+                EnergyTermBuilder::$variant(b) => Some(b),
+                _ => None,
+            })
+        }
+    };
+}
+
+/// Deserialized `energy:` section: an ordered list of energy-term builders.
+///
+/// A thin newtype over the list; the type name stays stable for the many call sites
+/// that thread a `&HamiltonianBuilder`, while [`Hamiltonian`](super::Hamiltonian)
+/// reads terms through the by-kind accessors rather than named struct fields.
+#[derive(Debug, Clone)]
+pub struct HamiltonianBuilder {
+    terms: Vec<EnergyTermBuilder>,
+}
+
+// One row per term: variant => (unique | iter) accessor : builder type.
+energy_dispatch! {
+    Nonbonded           => unique nonbonded            : PairPotentialBuilder,
+    Sasa                => iter   sasas                : SasaEnergyBuilder,
+    ContactTessellation => unique contact_tessellation : ContactTessellationEnergyBuilder,
+    Constrain           => iter   constrains           : ConstrainBuilder,
+    Pressure            => unique pressure             : Pressure,
+    CustomExternal      => iter   custom_externals     : CustomExternalBuilder,
+    CustomPair          => iter   custom_pairs         : CustomPairBuilder,
+    Ewald               => unique ewald                : EwaldBuilder,
+    PolymerDepletion    => unique polymer_depletion    : PolymerDepletionBuilder,
+    Tabulated6d         => unique tabulated6d          : Tabulated6DBuilder,
+    Tabulated3d         => unique tabulated3d          : Tabulated3DBuilder,
+    Penalty             => unique penalty              : PenaltyBuilder,
 }
 
 impl HamiltonianBuilder {
+    /// Mutable access to the single nonbonded builder, for include-merging.
+    #[allow(clippy::wildcard_enum_match_arm)]
+    fn nonbonded_mut(&mut self) -> Option<&mut PairPotentialBuilder> {
+        self.terms.iter_mut().find_map(|t| match t {
+            EnergyTermBuilder::Nonbonded(b) => Some(b),
+            _ => None,
+        })
+    }
+
+    /// Override the nonbonded culling cutoff (test-only; inputs set it via YAML).
+    #[cfg(test)]
+    pub(crate) fn set_nonbonded_cutoff(&mut self, cutoff: Option<f64>) {
+        self.nonbonded_mut()
+            .expect("nonbonded term must be present")
+            .set_cutoff(cutoff);
+    }
+
+    /// Parse the `energy:` section into a term list.
+    ///
+    /// Wraps [`from_tagged_list`](crate::auxiliary::from_tagged_list) so a pre-#133
+    /// struct-form input — a mapping like `energy: {nonbonded: …}` or an empty `{}` —
+    /// gets a migration hint pointing at the tagged-list form rather than the bare
+    /// "must be a list".
+    fn parse_energy_terms(
+        section: &str,
+        value: &yaml_serde::Value,
+    ) -> anyhow::Result<Vec<EnergyTermBuilder>> {
+        if value.is_mapping() {
+            anyhow::bail!(
+                "`{section}` must be a list of tagged terms (e.g. `- !Nonbonded {{...}}`), \
+                 not a mapping — the `key:` struct form was removed in #133; \
+                 wrap each term as a `- !Tag` entry, or use `[]` for no terms."
+            );
+        }
+        crate::auxiliary::from_tagged_list(section, value)
+    }
+
     /// Get hamiltonian from faunus input file.
     ///
     /// This assumes this YAML layout:
     /// ```yaml
     /// system:
     ///   energy:
-    ///     nonbonded:
-    ///       ...
+    ///     - !Nonbonded
+    ///         default: [...]
     /// ```
     ///
-    /// Nonbonded pairs from `include` files are merged in; the input file takes precedence.
+    /// The `!Nonbonded` term from `include` files is merged in; the input file takes precedence.
     pub(crate) fn from_file(path: impl AsRef<Path>) -> anyhow::Result<Self> {
         let yaml = crate::auxiliary::read_yaml(&path)?;
-        let full: serde_yml::Value = serde_yml::from_str(&yaml)?;
+        let full: yaml_serde::Value = yaml_serde::from_str(&yaml)?;
 
-        let mut current = &full;
-        for key in ["system", "energy"] {
-            current = match current.get(key) {
-                Some(x) => x,
-                None => anyhow::bail!("Could not find `{}` in the YAML file.", key),
-            }
-        }
+        let energy = full
+            .get("system")
+            .and_then(|system| system.get("energy"))
+            .ok_or_else(|| anyhow::anyhow!("Could not find `system.energy` in the YAML file."))?;
 
-        let mut builder: Self = crate::auxiliary::from_section_value("system/energy", current)?;
+        let mut builder = Self {
+            terms: Self::parse_energy_terms("system/energy", energy)?,
+        };
 
-        // Merge nonbonded from included files (input overrides)
+        // Merge the nonbonded term from included files (input overrides include).
         if let Some(includes) = full.get("include").and_then(|v| v.as_sequence()) {
             let parent_dir = path.as_ref().parent().unwrap_or(Path::new("."));
             for entry in includes {
-                if let Some(rel) = entry.as_str() {
-                    let inc_path = parent_dir.join(rel);
-                    let inc_yaml = crate::auxiliary::read_yaml(&inc_path)?;
-                    let inc_full: serde_yml::Value = serde_yml::from_str(&inc_yaml)?;
-                    if let Some(energy_val) = inc_full.get("energy") {
-                        let inc_builder: Self =
-                            crate::auxiliary::from_section_value("energy", energy_val)?;
-                        // include files carry `energy:` at top level, so the bare label is correct here
-                        if let Some(inc_pairpot) = inc_builder.pairpot_builder {
-                            builder
-                                .pairpot_builder
-                                .get_or_insert_default()
-                                .merge_from(inc_pairpot);
-                        }
+                let Some(rel) = entry.as_str() else { continue };
+                let inc_path = parent_dir.join(rel);
+                let inc_yaml = crate::auxiliary::read_yaml(&inc_path)?;
+                let inc_full: yaml_serde::Value = yaml_serde::from_str(&inc_yaml)?;
+                let Some(inc_energy) = inc_full.get("energy") else {
+                    continue;
+                };
+                // include files carry `energy:` at top level, so the bare label is correct here
+                let inc_terms = Self::parse_energy_terms("energy", inc_energy)?;
+                #[allow(clippy::wildcard_enum_match_arm)]
+                if let Some(inc_nb) = inc_terms.into_iter().find_map(|t| match t {
+                    EnergyTermBuilder::Nonbonded(pb) => Some(pb),
+                    _ => None,
+                }) {
+                    match builder.nonbonded_mut() {
+                        Some(nb) => nb.merge_from(inc_nb),
+                        None => builder.terms.push(EnergyTermBuilder::Nonbonded(inc_nb)),
                     }
                 }
             }
         }
 
+        builder.validate_uniqueness()?;
         Ok(builder)
     }
 
@@ -753,9 +923,9 @@ impl HamiltonianBuilder {
     ///
     /// Does not support `include` file merging.
     pub fn from_str(yaml: &str) -> anyhow::Result<Self> {
-        let full: serde_yml::Value = serde_yml::from_str(yaml)?;
+        let full: yaml_serde::Value = yaml_serde::from_str(yaml)?;
         // Try navigating system.energy first, then fall back to energy
-        let (label, current) = if let Some(system) = full.get("system") {
+        let (label, energy) = if let Some(system) = full.get("system") {
             let energy = system
                 .get("energy")
                 .ok_or_else(|| anyhow::anyhow!("Could not find `energy` in `system`"))?;
@@ -765,12 +935,21 @@ impl HamiltonianBuilder {
         } else {
             anyhow::bail!("Could not find `system.energy` or `energy` in the YAML string")
         };
-        crate::auxiliary::from_section_value(label, current)
+        let builder = Self {
+            terms: Self::parse_energy_terms(label, energy)?,
+        };
+        builder.validate_uniqueness()?;
+        Ok(builder)
     }
 
-    /// Check that all atom kinds referred to in the pair potentials exist.
+    /// Check that every atom kind named in the nonbonded `replace`/`append`
+    /// sections exists in the topology.
+    ///
+    /// The per-term duplicate policy is enforced earlier, at parse time
+    /// ([`validate_uniqueness`](Self::validate_uniqueness)), so every construction
+    /// path is covered rather than only those that reach this atom-kind check.
     pub(crate) fn validate(&self, atom_kinds: &[AtomKind]) -> anyhow::Result<()> {
-        if let Some(pb) = &self.pairpot_builder {
+        if let Some(pb) = self.nonbonded() {
             for key @ UnorderedPair(x, y) in pb.replace.keys().chain(pb.append.keys()) {
                 for name in [x, y] {
                     anyhow::ensure!(
@@ -787,6 +966,26 @@ impl HamiltonianBuilder {
 
         Ok(())
     }
+
+    /// Reject a second copy of any energy term that must be unique.
+    ///
+    /// Called from [`from_file`](Self::from_file)/[`from_str`](Self::from_str) so the
+    /// policy holds by construction — a downstream caller (e.g. `Hamiltonian::from_file`)
+    /// cannot skip it the way it can skip the atom-kind [`validate`](Self::validate).
+    fn validate_uniqueness(&self) -> anyhow::Result<()> {
+        let mut seen: std::collections::HashSet<&str> = std::collections::HashSet::new();
+        for term in &self.terms {
+            let (name, repeatable) = term.kind();
+            if repeatable {
+                continue;
+            }
+            anyhow::ensure!(
+                seen.insert(name),
+                "energy term `{name}` may appear only once"
+            );
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -800,7 +999,7 @@ mod tests {
     fn hamiltonian_deserialization_pass() {
         let builder = HamiltonianBuilder::from_file("tests/files/topology_pass.yaml").unwrap();
 
-        let pb = builder.pairpot_builder.unwrap();
+        let pb = builder.nonbonded().unwrap();
 
         assert_eq!(
             pb.default,
@@ -864,7 +1063,7 @@ mod tests {
             HamiltonianBuilder::from_file("tests/files/nonbonded_duplicate.yaml").unwrap_err();
         assert_eq!(
             &error.to_string(),
-            "in `system/energy` section: invalid entry: found duplicate key"
+            "in `system/energy` entry 1 (!Nonbonded): invalid entry: found duplicate key"
         );
     }
 
@@ -1062,6 +1261,7 @@ mod tests {
                 ],
             )]),
             append: HashMap::new(),
+            ..Default::default()
         };
 
         let expected = interaction1.to_boxed(&atom1, &atom2, None).unwrap()
@@ -1141,6 +1341,7 @@ mod tests {
                 ],
             )]),
             append: HashMap::new(),
+            ..Default::default()
         };
 
         let expected = Box::new(IonIon::new(0.0, VACUUM_PERMITTIVITY, plain_coulomb.clone()))
@@ -1182,7 +1383,7 @@ mod tests {
         let builder =
             HamiltonianBuilder::from_file("tests/files/nonbonded_kimhummer.yaml").unwrap();
 
-        let pb = builder.pairpot_builder.unwrap();
+        let pb = builder.nonbonded().unwrap();
 
         assert_eq!(
             pb.default,
@@ -1215,7 +1416,7 @@ mod tests {
     #[test]
     fn test_custom_potential_deserialization() {
         let builder = HamiltonianBuilder::from_file("tests/files/nonbonded_custom.yaml").unwrap();
-        let pb = builder.pairpot_builder.unwrap();
+        let pb = builder.nonbonded().unwrap();
 
         assert!(!pb.default.is_empty());
 
@@ -1240,11 +1441,11 @@ mod tests {
             HamiltonianBuilder::from_file("tests/files/nonbonded_interactions_splined.yaml")
                 .unwrap();
 
-        // Check that nonbonded interactions are present
-        assert!(builder.pairpot_builder.is_some());
-
         // Check that spline options are present and correctly parsed
-        let spline = builder.spline.expect("Spline options should be present");
+        let pb = builder
+            .nonbonded()
+            .expect("Nonbonded interactions should be present");
+        let spline = pb.spline().expect("Spline options should be present");
         assert_approx_eq!(f64, spline.cutoff, 15.0);
         assert_eq!(spline.table_points, 2000);
         assert_eq!(spline.grid_type, GridType::PowerLaw2);
@@ -1340,6 +1541,45 @@ mod tests {
     }
 
     #[test]
+    fn test_pairpot_merge_from_adopts_eval_settings() {
+        let spline = SplineOptions {
+            cutoff: 12.0,
+            table_points: 500,
+            grid_type: GridType::default(),
+            shift_energy: true,
+            shift_force: false,
+            cell_list: true,
+            bounding_spheres: true,
+        };
+
+        // Input left spline/culling unset → adopt the include's, including its
+        // `bounding_spheres: false` which rides along with the culling cutoff.
+        let mut base = PairPotentialBuilder::default();
+        base.merge_from(PairPotentialBuilder {
+            spline: Some(spline),
+            cutoff: Some(30.0),
+            bounding_spheres: false,
+            ..Default::default()
+        });
+        assert_eq!(base.spline().map(|s| s.cutoff), Some(12.0));
+        assert_eq!(base.cutoff(), Some(30.0));
+        assert!(!base.bounding_spheres());
+
+        // Input set its own cutoff → include's cutoff and bounding_spheres ignored.
+        let mut base = PairPotentialBuilder {
+            cutoff: Some(50.0),
+            ..Default::default()
+        };
+        base.merge_from(PairPotentialBuilder {
+            cutoff: Some(30.0),
+            bounding_spheres: false,
+            ..Default::default()
+        });
+        assert_eq!(base.cutoff(), Some(50.0));
+        assert!(base.bounding_spheres());
+    }
+
+    #[test]
     fn from_str_error_names_the_section() {
         // `energy` is a scalar, not a mapping, so deserialization fails; the
         // section label must survive so the user knows where to look.
@@ -1348,5 +1588,60 @@ mod tests {
             format!("{err:#}").contains("system/energy"),
             "error should name the section: {err:#}"
         );
+    }
+
+    #[test]
+    fn repeatable_terms_are_allowed_but_a_second_unique_term_is_rejected() {
+        // Two `!Sasa` are independent runtime terms (e.g. different probes) and stand.
+        let two_sasa = HamiltonianBuilder::from_str(
+            "energy:\n  - !Sasa {probe_radius: 1.4}\n  - !Sasa {probe_radius: 2.0}\n",
+        )
+        .unwrap();
+        assert_eq!(two_sasa.sasas().count(), 2);
+
+        // A second `!Pressure` would double-count; rejected at parse time (so no
+        // caller can bypass it), naming the term.
+        let err = HamiltonianBuilder::from_str(
+            "energy:\n  - !Pressure {atm: 1}\n  - !Pressure {bar: 2}\n",
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("Pressure"), "{err}");
+    }
+
+    #[test]
+    fn pressure_reads_its_unit_as_a_map_key_under_both_tags() {
+        // The unit cannot be a second YAML tag next to `!Pressure`, so it is a map
+        // key; `singleton_map` turns `{atm: 1}` back into the tagged `Pressure` enum.
+        for yaml in [
+            "energy:\n  - !Pressure {atm: 1}\n",
+            "energy:\n  - !Isobaric {atm: 1}\n",
+        ] {
+            let builder = HamiltonianBuilder::from_str(yaml).unwrap();
+            assert!(matches!(builder.pressure(), Some(Pressure::Atm(p)) if *p == 1.0));
+        }
+    }
+
+    #[test]
+    fn nonbonded_is_merged_from_included_files_with_input_winning() {
+        let dir = tempfile::tempdir().unwrap();
+        // Include contributes a KimHummer default (a different variant than the parent's).
+        std::fs::write(
+            dir.path().join("lib.yaml"),
+            "energy:\n  - !Nonbonded\n      default:\n        - !KimHummer {mixing: LB}\n",
+        )
+        .unwrap();
+        let input = dir.path().join("input.yaml");
+        std::fs::write(
+            &input,
+            "include: [lib.yaml]\nsystem:\n  energy:\n    - !Nonbonded\n        \
+             default:\n          - !Coulomb {cutoff: 10.0}\n",
+        )
+        .unwrap();
+
+        let builder = HamiltonianBuilder::from_file(&input).unwrap();
+        let pb = builder.nonbonded().unwrap();
+        // Parent's Coulomb and the include's KimHummer are different variants, so both survive.
+        assert_eq!(pb.default.len(), 2);
     }
 }

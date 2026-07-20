@@ -1,6 +1,6 @@
 version:
-  faunus: 3.0.0-beta.1
-  git_revision: v3.0.0-beta.1-11-g2bc4e04-dirty
+  faunus: 3.0.0-beta.2
+  git_revision: v3.0.0-beta.2-47-g908697e-dirty
 medium:
   permittivity: Vacuum
   salt: null
@@ -20,15 +20,15 @@ energy_change:
   final: -265.2055090156706
   initial: -219.94522194011788
 energy_timers:
-  cell_overlap: '3.3200000000000003 (energy: 2.2, update: 1.12)'
-  nonbonded: '96.67999999999999 (energy: 83.19, update: 13.49)'
+- cell_overlap: '3.15 (energy: 2.13, update: 1.02)'
+- nonbonded: '96.85 (energy: 83.88, update: 12.97)'
 propagate:
   repeat: 2000
   seed: !Fixed 42
   collections:
   - !Stochastic
     repeat: 1
-    elapsed_seconds: 0.028193942
+    elapsed_seconds: 0.029442831
     moves:
     - !TranslateMolecule
       molecule: MOL

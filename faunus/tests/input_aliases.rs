@@ -31,7 +31,7 @@ system:
       N: 8
       insert: !RandomAtomPos {}
   energy:
-    nonbonded:
+    - !Nonbonded
       default:
         - !LennardJones {mixing: LB}
         - !CoulombEwald {alpha: 0.1, cutoff: 11.0}

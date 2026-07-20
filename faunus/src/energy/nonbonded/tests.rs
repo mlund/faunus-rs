@@ -34,14 +34,15 @@ fn test_nonbonded_matrix_new() {
     let topology = Topology::from_file(file).unwrap();
     let pairpot_builder = HamiltonianBuilder::from_file(file)
         .unwrap()
-        .pairpot_builder
+        .nonbonded()
+        .cloned()
         .unwrap();
     let medium: Option<interatomic::coulomb::Medium> =
-        serde_yml::from_reader(std::fs::File::open(file).unwrap())
+        yaml_serde::from_reader(std::fs::File::open(file).unwrap())
             .ok()
-            .and_then(|s: serde_yml::Value| {
+            .and_then(|s: yaml_serde::Value| {
                 let medium = s.get("system")?.get("medium")?;
-                serde_yml::from_value(medium.clone()).ok()
+                yaml_serde::from_value(medium.clone()).ok()
             });
 
     let nonbonded = NonbondedMatrix::new(&pairpot_builder, &topology, medium).unwrap();
@@ -119,7 +120,8 @@ fn get_test_matrix() -> (Backend, NonbondedMatrix) {
     let topology = Topology::from_file(file).unwrap();
     let builder = HamiltonianBuilder::from_file(file)
         .unwrap()
-        .pairpot_builder
+        .nonbonded()
+        .cloned()
         .unwrap();
 
     let medium = interatomic::coulomb::Medium::new(
@@ -953,7 +955,8 @@ fn culling_system() -> (Backend, NonbondedMatrix) {
     let topology = Topology::from_file(file).unwrap();
     let builder = HamiltonianBuilder::from_file(file)
         .unwrap()
-        .pairpot_builder
+        .nonbonded()
+        .cloned()
         .unwrap();
     let medium = interatomic::coulomb::Medium::new(
         298.15,
@@ -1014,11 +1017,11 @@ fn cutoff_validation_rejects_too_short() {
     );
 
     // Longest pair range is 6 Å; a 3 Å group cutoff would silently drop interactions.
-    builder.cutoff = Some(3.0);
+    builder.set_nonbonded_cutoff(Some(3.0));
     assert!(Hamiltonian::new(&builder, &topology, Some(medium.clone())).is_err());
 
     // Exactly at the required range is accepted.
-    builder.cutoff = Some(6.0);
+    builder.set_nonbonded_cutoff(Some(6.0));
     assert!(Hamiltonian::new(&builder, &topology, Some(medium)).is_ok());
 }
 
@@ -1034,7 +1037,7 @@ fn cutoff_validation_rejects_unbounded_potential() {
         None,
     );
 
-    builder.cutoff = Some(50.0);
+    builder.set_nonbonded_cutoff(Some(50.0));
     assert!(Hamiltonian::new(&builder, &topology, Some(medium)).is_err());
 }
 
@@ -1059,7 +1062,7 @@ fn multi_group_partial_update_handles_more_than_eight_affected_atoms() {
          molecules:\n  - {{name: BIG, atoms: [{atom_list}]}}\n\
          system:\n  cell: !Cuboid [40.0, 40.0, 40.0]\n  \
          medium: {{permittivity: !Vacuum, temperature: 298.15}}\n  \
-         energy:\n    nonbonded:\n      default:\n        - !LennardJones {{mixing: LB}}\n  \
+         energy:\n    - !Nonbonded\n        default:\n          - !LennardJones {{mixing: LB}}\n  \
          blocks:\n    - molecule: BIG\n      N: 2\n      insert: !Manual [{m0}, {m1}]\n",
         m0 = row(0.0),
         m1 = row(3.0),
@@ -1071,7 +1074,8 @@ fn multi_group_partial_update_handles_more_than_eight_affected_atoms() {
     let topology = Topology::from_file(path).unwrap();
     let builder = HamiltonianBuilder::from_file(path)
         .unwrap()
-        .pairpot_builder
+        .nonbonded()
+        .cloned()
         .unwrap();
     let medium = interatomic::coulomb::Medium::new(
         298.15,

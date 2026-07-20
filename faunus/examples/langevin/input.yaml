@@ -90,13 +90,13 @@ system:
       insert: !RandomAtomPos {}
 
   energy:
-    nonbonded:
+    - !Nonbonded
       default:
         - !Coulomb {cutoff: 200}
         - !WeeksChandlerAndersen {mixing: LB}
-    spline:
-      cutoff: 80.0
-      table_points: 2000
+      spline:
+        cutoff: 80.0
+        table_points: 2000
 
 analysis:
   - !Trajectory

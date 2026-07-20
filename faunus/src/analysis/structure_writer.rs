@@ -370,11 +370,11 @@ impl<T: ObserveContext> Analyze<T> for StructureWriter {
         Ok(())
     }
 
-    fn results(&self) -> Option<serde_yml::Value> {
-        let mut map = serde_yml::Mapping::new();
+    fn results(&self) -> Option<yaml_serde::Value> {
+        let mut map = yaml_serde::Mapping::new();
         map.try_insert("file", &self.output_file)?;
         map.try_insert("num_samples", self.sampling.num_samples())?;
-        Some(serde_yml::Value::Mapping(map))
+        Some(yaml_serde::Value::Mapping(map))
     }
 }
 
@@ -387,12 +387,12 @@ mod tests {
     fn unknown_field_is_rejected() {
         // Confirms the `builder_struct_attr` passthrough reaches the generated builder.
         let yaml = "file: traj.xyz\nfrequency: !Every 100\nfile_typo: foo.xyz\n";
-        assert!(serde_yml::from_str::<StructureWriterBuilder>(yaml).is_err());
+        assert!(yaml_serde::from_str::<StructureWriterBuilder>(yaml).is_err());
     }
 
     #[test]
     fn save_charges_defaults_off_and_opts_in() {
-        let default = serde_yml::from_str::<StructureWriterBuilder>(
+        let default = yaml_serde::from_str::<StructureWriterBuilder>(
             "file: traj.xtc\nfrequency: !Every 100\n",
         )
         .unwrap()
@@ -400,7 +400,7 @@ mod tests {
         .unwrap();
         assert!(!default.save_charges);
 
-        let opted_in = serde_yml::from_str::<StructureWriterBuilder>(
+        let opted_in = yaml_serde::from_str::<StructureWriterBuilder>(
             "file: traj.xtc\nfrequency: !Every 100\nsave_charges: true\n",
         )
         .unwrap()
@@ -412,7 +412,7 @@ mod tests {
     #[test]
     fn deserialize_trajectory_builders() {
         let yaml = std::fs::read_to_string("tests/files/trajectory_xyz.yaml").unwrap();
-        let builders: Vec<AnalysisBuilder> = serde_yml::from_str(&yaml).unwrap();
+        let builders: Vec<AnalysisBuilder> = yaml_serde::from_str(&yaml).unwrap();
         assert_eq!(builders.len(), 3);
 
         // Verify first entry: xyz trajectory

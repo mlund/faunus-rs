@@ -133,9 +133,9 @@ system:
         - [0.0, 0.0, 0.0]
         - [{distance}, 0.0, 0.0]
   energy:
-    nonbonded:
-      default:
-        - !CoulombPlain {{cutoff: 50.0}}
+    - !Nonbonded
+        default:
+          - !CoulombPlain {{cutoff: 50.0}}
 "#
         );
 
@@ -210,10 +210,10 @@ system:
         - [0.0, 0.0, 0.0]
         - [{distance}, 0.0, 0.0]
   energy:
-    nonbonded:
-      default:
-        - !Coulomb {{cutoff: 50.0}}
-        - !AshbaughHatch {{mixing: arithmetic, cutoff: 20.0}}
+    - !Nonbonded
+        default:
+          - !Coulomb {{cutoff: 50.0}}
+          - !AshbaughHatch {{mixing: arithmetic, cutoff: 20.0}}
 "#
         );
 

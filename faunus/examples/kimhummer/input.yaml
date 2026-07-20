@@ -38,7 +38,7 @@ system:
           offset: [0.0, 0.0, 40.0],
         }
 
-  energy: {}
+  energy: []
 
 analysis:
   - !Energy

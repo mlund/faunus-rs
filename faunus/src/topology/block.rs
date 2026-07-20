@@ -668,7 +668,7 @@ mod tests {
     #[test]
     fn block_activation_status_spellings() {
         use BlockActivationStatus::{All, Partial};
-        let parse = |s| serde_yml::from_str::<BlockActivationStatus>(s).unwrap();
+        let parse = |s| yaml_serde::from_str::<BlockActivationStatus>(s).unwrap();
         // #131: `all` is now a writable spelling; the old `null` form stays valid.
         assert_eq!(parse("5"), Partial(5));
         assert_eq!(parse("all"), All);
@@ -681,11 +681,11 @@ mod tests {
     fn block_activation_status_names_accepted_forms_on_error() {
         // The pre-#131 untagged enum reported "did not match any variant"; now the message
         // names what is accepted.
-        let err = serde_yml::from_str::<BlockActivationStatus>("half")
+        let err = yaml_serde::from_str::<BlockActivationStatus>("half")
             .unwrap_err()
             .to_string();
         assert!(err.contains("all"), "unexpected message: {err}");
-        assert!(serde_yml::from_str::<BlockActivationStatus>("-1").is_err());
+        assert!(yaml_serde::from_str::<BlockActivationStatus>("-1").is_err());
     }
 
     fn backend_from_str(yaml: &str) -> Backend {
@@ -708,7 +708,7 @@ molecules:
 system:
   cell: !Cuboid [10.0, 10.0, 10.0]
   medium: {permittivity: !Vacuum, temperature: 300.0}
-  energy: {}
+  energy: []
   blocks:
     - molecule: particle
       N: 20
@@ -736,7 +736,7 @@ molecules:
 system:
   cell: !Cuboid [10.0, 10.0, 10.0]
   medium: {permittivity: !Vacuum, temperature: 300.0}
-  energy: {}
+  energy: []
   blocks:
     - molecule: solid
       N: 200
@@ -771,7 +771,7 @@ molecules:
 system:
   cell: !Cuboid [10.0, 10.0, 10.0]
   medium: {permittivity: !Vacuum, temperature: 300.0}
-  energy: {}
+  energy: []
   blocks:
     - molecule: solid
       N: 10
@@ -803,7 +803,7 @@ molecules:
 system:
   cell: !Cuboid [10.0, 10.0, 10.0]
   medium: {permittivity: !Vacuum, temperature: 300.0}
-  energy: {}
+  energy: []
   blocks:
     - molecule: solid
       N: 100
@@ -830,7 +830,7 @@ molecules:
 system:
   cell: !Cuboid [10.0, 10.0, 10.0]
   medium: {permittivity: !Vacuum, temperature: 300.0}
-  energy: {}
+  energy: []
   blocks:
     - molecule: particle
       N: 20

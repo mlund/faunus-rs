@@ -1,6 +1,6 @@
 //! A fixed `propagate.seed` must reproduce a run exactly.
 //!
-//! Every fixture uses an ideal gas (`energy: {}`), so they say nothing about
+//! Every fixture uses an ideal gas (`energy: []`), so they say nothing about
 //! physics and finish in milliseconds — cheap enough to run on every
 //! `cargo test` rather than behind `--ignored`.
 

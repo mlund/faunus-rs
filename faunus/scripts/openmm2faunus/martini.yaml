@@ -1128,7 +1128,7 @@ molecules:
     - 1
 system:
   energy:
-    nonbonded:
+    - !Nonbonded
       ? - Q5_1.0_72.0
         - Q5_1.0_72.0
       : - !LennardJones

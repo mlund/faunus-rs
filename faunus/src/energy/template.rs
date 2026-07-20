@@ -121,7 +121,7 @@ impl CachedZRestraint {
 
     /// Per-term info for output reporting, assembled with the shared `yaml_map!` macro
     /// (the same helper the real terms use for their `to_yaml`).
-    pub fn to_yaml(&self) -> serde_yml::Value {
+    pub fn to_yaml(&self) -> yaml_serde::Value {
         yaml_map! { "spring_constant" => self.spring_constant }
     }
 }
@@ -182,7 +182,7 @@ molecules:
 system:
   cell: !Cuboid [20.0, 20.0, 20.0]
   medium: {permittivity: !Vacuum, temperature: 300.0}
-  energy: {}
+  energy: []
   blocks:
     - molecule: dimer
       N: 1

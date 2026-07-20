@@ -28,7 +28,7 @@ system:
   medium: {permittivity: !Fixed 80.0, temperature: 298.15}
 
   energy:
-    nonbonded:
+    - !Nonbonded
       default:
         - !LennardJones {sigma: 6.0, ε: 1.5}
         - !WeeksChandlerAndersen {sigma: 8.0, epsilon: 1.3}

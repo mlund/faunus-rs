@@ -100,22 +100,22 @@ impl<T: Context> MoveCollection<T> {
         self.repeat
     }
 
-    fn to_yaml(&self) -> serde_yml::Value {
+    fn to_yaml(&self) -> yaml_serde::Value {
         let tag = match self.strategy {
             SelectionStrategy::Stochastic => "Stochastic",
             SelectionStrategy::Deterministic => "Deterministic",
         };
-        let mut map = serde_yml::Mapping::new();
+        let mut map = yaml_serde::Mapping::new();
         map.insert("repeat".into(), self.repeat.into());
         map.insert(
             "elapsed_seconds".into(),
-            serde_yml::Value::Number(serde_yml::Number::from(self.elapsed.as_secs_f64())),
+            yaml_serde::Value::Number(yaml_serde::Number::from(self.elapsed.as_secs_f64())),
         );
         let moves: Vec<_> = self.moves.iter().filter_map(|m| m.to_yaml()).collect();
-        map.insert("moves".into(), serde_yml::Value::Sequence(moves));
-        serde_yml::Value::Tagged(Box::new(serde_yml::value::TaggedValue {
-            tag: serde_yml::value::Tag::new(tag),
-            value: serde_yml::Value::Mapping(map),
+        map.insert("moves".into(), yaml_serde::Value::Sequence(moves));
+        yaml_serde::Value::Tagged(Box::new(yaml_serde::value::TaggedValue {
+            tag: yaml_serde::value::Tag::new(tag),
+            value: yaml_serde::Value::Mapping(map),
         }))
     }
 }
@@ -186,7 +186,7 @@ impl<T: Context> PropagationBlock<T> {
         }
     }
 
-    fn to_yaml(&self) -> serde_yml::Value {
+    fn to_yaml(&self) -> yaml_serde::Value {
         match self {
             Self::MonteCarlo(mc) => mc.to_yaml(),
             #[cfg(feature = "gpu")]
@@ -251,7 +251,7 @@ impl<T: Context> Propagate<T> {
 
     /// Build a `Propagate<T>` from an input YAML string (the `propagate` section).
     pub fn from_str(yaml: &str, context: &T, thermal_energy: f64) -> anyhow::Result<Self> {
-        let full: serde_yml::Value = serde_yml::from_str(yaml)?;
+        let full: yaml_serde::Value = yaml_serde::from_str(yaml)?;
 
         let current = full
             .get("propagate")
@@ -316,23 +316,23 @@ impl<T: Context> Propagate<T> {
     }
 
     /// Serialize the propagate state to a YAML value.
-    pub fn to_yaml(&self) -> serde_yml::Value {
-        let mut map = serde_yml::Mapping::new();
+    pub fn to_yaml(&self) -> yaml_serde::Value {
+        let mut map = yaml_serde::Mapping::new();
         map.insert("repeat".into(), self.max_repeats.into());
         map.insert(
             "seed".into(),
-            serde_yml::to_value(self.seed).unwrap_or_default(),
+            yaml_serde::to_value(self.seed).unwrap_or_default(),
         );
         let collections: Vec<_> = self.blocks.iter().map(|b| b.to_yaml()).collect();
         map.insert(
             "collections".into(),
-            serde_yml::Value::Sequence(collections),
+            yaml_serde::Value::Sequence(collections),
         );
         map.insert(
             "criterion".into(),
-            serde_yml::to_value(self.criterion).unwrap_or_default(),
+            yaml_serde::to_value(self.criterion).unwrap_or_default(),
         );
-        serde_yml::Value::Mapping(map)
+        yaml_serde::Value::Mapping(map)
     }
 }
 
@@ -343,7 +343,7 @@ pub(crate) fn seed_from_file(filename: impl AsRef<Path>) -> anyhow::Result<Seed>
 
 /// As [`seed_from_file`], but parses an already-read YAML document.
 pub(crate) fn seed_from_str(yaml: &str) -> anyhow::Result<Seed> {
-    let full: serde_yml::Value = serde_yml::from_str(yaml)?;
+    let full: yaml_serde::Value = yaml_serde::from_str(yaml)?;
     match full.get("propagate").and_then(|p| p.get("seed")) {
         Some(value) => crate::auxiliary::from_section_value("propagate/seed", value),
         None => Ok(Seed::default()),
@@ -377,7 +377,7 @@ pub(crate) fn gibbs_config_from_file(
 pub(crate) fn gibbs_config_from_str(
     yaml: &str,
 ) -> anyhow::Result<Option<crate::montecarlo::gibbs::GibbsConfig>> {
-    let full: serde_yml::Value = serde_yml::from_str(yaml)?;
+    let full: yaml_serde::Value = yaml_serde::from_str(yaml)?;
     let Some(gibbs_value) = full.get("propagate").and_then(|p| p.get("gibbs")) else {
         return Ok(None);
     };

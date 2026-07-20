@@ -33,7 +33,7 @@ atoms:
   - {name: TYR, charge: 0.0, mass: 163.18, sigma: 6.5}
   - {name: VAL, charge: 0.0, mass: 99.13, sigma: 5.9}
 energy:
-  nonbonded:
+  - !Nonbonded
     default:
       - !Coulomb {cutoff: 1000}
     append:

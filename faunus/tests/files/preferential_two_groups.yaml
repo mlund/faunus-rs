@@ -24,7 +24,7 @@ system:
   medium:
     permittivity: !Vacuum
     temperature: 300.0
-  energy: {}
+  energy: []
   blocks:
     - molecule: Macromolecule
       N: 1

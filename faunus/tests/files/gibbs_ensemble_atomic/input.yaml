@@ -19,12 +19,12 @@ system:
     temperature: 298.15
     permittivity: !Vacuum
   energy:
-    nonbonded:
+    - !Nonbonded
       default:
         - !LennardJones {mixing: LB}
-    spline:
-      cutoff: 20.0
-      table_points: 2000
+      spline:
+        cutoff: 20.0
+        table_points: 2000
 
   blocks:
     - molecule: molecule1

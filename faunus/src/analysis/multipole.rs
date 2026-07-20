@@ -188,11 +188,11 @@ impl<T: ObserveContext> Analyze<T> for MultipoleAnalysis {
         Ok(())
     }
 
-    fn results(&self) -> Option<serde_yml::Value> {
+    fn results(&self) -> Option<yaml_serde::Value> {
         if self.sampling.num_samples() == 0 {
             return None;
         }
-        let mut map = serde_yml::Mapping::new();
+        let mut map = yaml_serde::Mapping::new();
 
         let z_mean = self.charge.mean();
         let capacitance = (self.charge_squared.mean() - z_mean * z_mean).max(0.0);
@@ -232,14 +232,14 @@ impl<T: ObserveContext> Analyze<T> for MultipoleAnalysis {
                 (mean, std)
             })
             .unzip();
-        let mut qt_map = serde_yml::Mapping::new();
+        let mut qt_map = yaml_serde::Mapping::new();
         qt_map.try_insert("order", ["xx", "xy", "xz", "yy", "yz", "zz"])?;
         qt_map.try_insert("values", values)?;
         qt_map.try_insert("errors", errors)?;
-        map.try_insert("quadrupole_tensor", serde_yml::Value::Mapping(qt_map))?;
+        map.try_insert("quadrupole_tensor", yaml_serde::Value::Mapping(qt_map))?;
 
         if !self.per_atom.is_empty() {
-            let atoms: Vec<serde_yml::Value> = self
+            let atoms: Vec<yaml_serde::Value> = self
                 .per_atom
                 .iter()
                 .enumerate()
@@ -249,12 +249,12 @@ impl<T: ObserveContext> Analyze<T> for MultipoleAnalysis {
                     if variance < f64::EPSILON {
                         return None;
                     }
-                    let mut entry = serde_yml::Mapping::new();
+                    let mut entry = yaml_serde::Mapping::new();
                     entry.try_insert("index", idx)?;
                     entry.try_insert("name", atom.name.as_str())?;
                     entry.try_insert("⟨q⟩", q_mean)?;
                     entry.try_insert("⟨q²⟩-⟨q⟩²", variance)?;
-                    Some(serde_yml::Value::Mapping(entry))
+                    Some(yaml_serde::Value::Mapping(entry))
                 })
                 .collect();
             if !atoms.is_empty() {
@@ -262,7 +262,7 @@ impl<T: ObserveContext> Analyze<T> for MultipoleAnalysis {
             }
         }
 
-        Some(serde_yml::Value::Mapping(map))
+        Some(yaml_serde::Value::Mapping(map))
     }
 }
 
@@ -294,7 +294,7 @@ molecules:
 system:
   cell: !Cuboid [10.0, 10.0, 10.0]
   medium: {permittivity: !Vacuum, temperature: 300.0}
-  energy: {}
+  energy: []
   blocks:
     - molecule: MOL
       N: 1
@@ -315,15 +315,15 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
         let yaml = Analyze::<Backend>::to_yaml(&analysis).unwrap();
         let atoms = yaml
             .get("atoms")
-            .and_then(serde_yml::Value::as_sequence)
+            .and_then(yaml_serde::Value::as_sequence)
             .unwrap();
         assert_eq!(atoms.len(), 1);
         assert_eq!(
-            atoms[0].get("index").and_then(serde_yml::Value::as_u64),
+            atoms[0].get("index").and_then(yaml_serde::Value::as_u64),
             Some(0)
         );
         assert_eq!(
-            atoms[0].get("name").and_then(serde_yml::Value::as_str),
+            atoms[0].get("name").and_then(yaml_serde::Value::as_str),
             Some("A0")
         );
     }
@@ -344,7 +344,7 @@ molecules:
 system:
   cell: !Cuboid [10.0, 10.0, 10.0]
   medium: {permittivity: !Vacuum, temperature: 300.0}
-  energy: {}
+  energy: []
   blocks:
     - molecule: MOL
       N: 1
@@ -385,7 +385,7 @@ molecules:
 system:
   cell: !Cuboid [100.0, 100.0, 100.0]
   medium: {permittivity: !Vacuum, temperature: 300.0}
-  energy: {}
+  energy: []
   blocks:
     - molecule: PAIR
       N: 1
@@ -440,7 +440,7 @@ molecules:
 system:
   cell: !Cuboid [10.0, 10.0, 10.0]
   medium: {permittivity: !Vacuum, temperature: 300.0}
-  energy: {}
+  energy: []
   blocks:
     - molecule: particle
       N: 20

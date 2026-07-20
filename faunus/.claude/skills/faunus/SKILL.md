@@ -26,7 +26,7 @@ system:
   medium: {...}                 # required: temperature, dielectric, salt
   cell: ...                     # required: simulation box geometry
   blocks: [...]                 # required: place molecules in box
-  energy: {...}                 # required: interaction potentials
+  energy: [...]                 # required: interaction potentials (tagged list: - !Nonbonded, …)
   intermolecular: {...}         # optional: cross-molecule bonded terms
 
 propagate: {...}                # required: MC moves or Langevin dynamics

@@ -49,7 +49,7 @@ system:
   medium:
     permittivity: !Vacuum
     temperature: 298.15
-  energy: {}
+  energy: []
   blocks:
     - {molecule: CaCl₂, N: 400, active: 400}
     - {molecule: NaOH, N: 400, active: 400}

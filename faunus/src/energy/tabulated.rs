@@ -554,7 +554,7 @@ impl TabulatedEnergy {
         self.swap_stats.set((n, new_mean, new_m2));
     }
 
-    pub(crate) fn to_yaml(&self) -> serde_yml::Value {
+    pub(crate) fn to_yaml(&self) -> yaml_serde::Value {
         let (n, mean, m2) = self.swap_stats.get();
         let stddev = if n > 1 { (m2 / n as f64).sqrt() } else { 0.0 };
         yaml_map! {

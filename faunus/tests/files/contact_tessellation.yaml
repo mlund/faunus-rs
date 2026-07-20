@@ -17,7 +17,7 @@ system:
     permittivity: !Vacuum
 
   energy:
-    contact_tessellation:
+    - !ContactTessellation
       probe_radius: 1.4
 
   blocks:

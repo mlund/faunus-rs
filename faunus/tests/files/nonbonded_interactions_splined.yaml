@@ -13,17 +13,17 @@ system:
     permittivity: !Vacuum
     temperature: 298.15
   energy:
-    nonbonded:
+    - !Nonbonded
       default:
         - !LennardJones {σ: 1.0, eps: 2.5}
         - !CoulombPlain {cutoff: 6.0}
       replace:
         [B, B]:
           - !LennardJones {sigma: 2.0, ε: 5.0}
-    spline:
-      cutoff: 15.0
-      table_points: 2000
-      grid_type: PowerLaw2
+      spline:
+        cutoff: 15.0
+        table_points: 2000
+        grid_type: PowerLaw2
 
   blocks:
     - molecule: MOL

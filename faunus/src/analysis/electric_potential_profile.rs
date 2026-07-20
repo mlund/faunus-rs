@@ -296,7 +296,7 @@ impl ElectricPotentialProfile {
 
     /// Build the YAML results mapping (inherent so it is callable without choosing a
     /// `Context` type; the [`Analyze`] trait method delegates here).
-    fn report(&self) -> Option<serde_yml::Value> {
+    fn report(&self) -> Option<yaml_serde::Value> {
         if self.sampling.num_samples() == 0 {
             return None;
         }
@@ -306,7 +306,7 @@ impl ElectricPotentialProfile {
         let edge_upper = self.potential_millivolt(n - 1);
         let midplane = self.to_millivolt(&self.midplane_potential);
 
-        let mut map = serde_yml::Mapping::new();
+        let mut map = yaml_serde::Mapping::new();
         map.try_insert("num_samples", self.sampling.num_samples())?;
         map.try_insert("bjerrum_length/Å", self.bjerrum_length)?;
         if let Some(debye_length) = self.debye_length {
@@ -331,7 +331,7 @@ impl ElectricPotentialProfile {
                 map.try_insert("z_shear/Å", self.grid.bin_center(bin))?;
             }
         }
-        Some(serde_yml::Value::Mapping(map))
+        Some(yaml_serde::Value::Mapping(map))
     }
 
     fn write_profile(&self) -> Result<()> {
@@ -415,7 +415,7 @@ impl<T: ObserveContext> Analyze<T> for ElectricPotentialProfile {
         self.write_profile()
     }
 
-    fn results(&self) -> Option<serde_yml::Value> {
+    fn results(&self) -> Option<yaml_serde::Value> {
         self.report()
     }
 }
@@ -573,7 +573,7 @@ mod tests {
 - !ElectricPotentialProfile
   frequency: !Every 10
 "#;
-        let builders: Vec<AnalysisBuilder> = serde_yml::from_str(yaml).unwrap();
+        let builders: Vec<AnalysisBuilder> = yaml_serde::from_str(yaml).unwrap();
         match &builders[0] {
             AnalysisBuilder::ElectricPotentialProfile(b) => {
                 assert_eq!(b.selection.source(), "all");
@@ -593,7 +593,7 @@ mod tests {
   frequency: !Every 10
   finite_box_correction: true
 "#;
-        let builders: Vec<AnalysisBuilder> = serde_yml::from_str(yaml).unwrap();
+        let builders: Vec<AnalysisBuilder> = yaml_serde::from_str(yaml).unwrap();
         match &builders[0] {
             AnalysisBuilder::ElectricPotentialProfile(b) => assert!(b.finite_box_correction),
             _ => panic!("expected ElectricPotentialProfile variant"),
@@ -647,7 +647,7 @@ mod tests {
   frequency: !Every 10
   zeta_threshold: 0.05
 "#;
-        let builders: Vec<AnalysisBuilder> = serde_yml::from_str(yaml).unwrap();
+        let builders: Vec<AnalysisBuilder> = yaml_serde::from_str(yaml).unwrap();
         match &builders[0] {
             AnalysisBuilder::ElectricPotentialProfile(b) => {
                 assert_eq!(b.zeta_threshold, Some(0.05))
@@ -684,7 +684,7 @@ molecules:
 system:
   cell: !Cuboid [20.0, 20.0, 20.0]
   medium: {permittivity: !Vacuum, temperature: 300.0}
-  energy: {}
+  energy: []
   blocks:
     - molecule: ION
       N: 2

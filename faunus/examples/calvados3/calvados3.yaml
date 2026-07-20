@@ -27,6 +27,6 @@ atoms:
   - {charge: 0.0,  hydrophobicity: !Lambda 0.3469777523519372, mass: 97.12,  name: PRO, σ: 5.56, ε: 0.8368}
   - {charge: 0.0,  hydrophobicity: !Lambda 0.8906449355499866, mass: 147.18, name: PHE, σ: 6.36, ε: 0.8368}
 energy:
-  nonbonded:
+  - !Nonbonded
     default:
       - !AshbaughHatch {mixing: arithmetic, cutoff: 20.0}

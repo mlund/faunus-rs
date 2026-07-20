@@ -254,15 +254,15 @@ pub trait MoveProposal<T: ObserveContext>: Debug + Info {
     fn on_trial_outcome(&mut self, _context: &T, _accepted: bool) {}
 
     /// Serialize the move-specific fields to a tagged YAML value.
-    fn to_yaml(&self) -> Option<serde_yml::Value>;
+    fn to_yaml(&self) -> Option<yaml_serde::Value>;
 }
 
 /// Wrap a serializable value in a YAML tag.
-pub(crate) fn tagged_yaml(tag: &str, value: &impl Serialize) -> Option<serde_yml::Value> {
-    let value = serde_yml::to_value(value).ok()?;
-    Some(serde_yml::Value::Tagged(Box::new(
-        serde_yml::value::TaggedValue {
-            tag: serde_yml::value::Tag::new(tag),
+pub(crate) fn tagged_yaml(tag: &str, value: &impl Serialize) -> Option<yaml_serde::Value> {
+    let value = yaml_serde::to_value(value).ok()?;
+    Some(yaml_serde::Value::Tagged(Box::new(
+        yaml_serde::value::TaggedValue {
+            tag: yaml_serde::value::Tag::new(tag),
             value,
         },
     )))

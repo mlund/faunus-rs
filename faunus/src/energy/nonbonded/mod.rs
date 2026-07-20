@@ -540,7 +540,7 @@ impl NonbondedMatrix {
     ) -> anyhow::Result<Self> {
         let builder = HamiltonianBuilder::from_file(file)?;
         builder.validate(topology.atomkinds())?;
-        Self::new(&builder.pairpot_builder.unwrap(), topology, medium)
+        Self::new(builder.nonbonded().unwrap(), topology, medium)
     }
 
     /// Create from a YAML string and a topology (no filesystem access).
@@ -551,7 +551,7 @@ impl NonbondedMatrix {
     ) -> anyhow::Result<Self> {
         let builder = HamiltonianBuilder::from_str(yaml)?;
         builder.validate(topology.atomkinds())?;
-        Self::new(&builder.pairpot_builder.unwrap(), topology, medium)
+        Self::new(builder.nonbonded().unwrap(), topology, medium)
     }
 
     /// Create a new NonbondedMatrix using enum-dispatched [`PairPot`] potentials.

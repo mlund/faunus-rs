@@ -58,7 +58,7 @@ system:
       active: 0
       insert: !FixedCOM {position: [0.0, 0.0, 0.0]}
 
-  energy: {}
+  energy: []
 
 analysis:
   - !CollectiveVariable

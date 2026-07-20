@@ -35,11 +35,11 @@ system:
         !RandomCOM { rotate: true }
 
   energy:
-    nonbonded:
+    - !Nonbonded
       default:
         - !Coulomb {cutoff: 200.0}
         - !HardSphere {mixing: Arithmetic}
-    pressure: !mM 113.2
+    - !Pressure {mM: 113.2}
 
 analysis:
   - !CollectiveVariable

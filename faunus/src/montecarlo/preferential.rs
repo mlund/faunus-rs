@@ -525,7 +525,7 @@ mod tests {
         } else {
             "{molecule: Ion, max_displacement: 2.0}"
         };
-        let mut translate: TranslateAtom = serde_yml::from_str(yaml).unwrap();
+        let mut translate: TranslateAtom = yaml_serde::from_str(yaml).unwrap();
         translate.finalize(&context).unwrap();
         let mut runner = MoveRunner::new(Box::new(translate), 1.0, 20);
 

@@ -410,11 +410,11 @@ impl<T: ObserveContext> Analyze<T> for ScaledWidomInsertion {
         Ok(())
     }
 
-    fn results(&self) -> Option<serde_yml::Value> {
+    fn results(&self) -> Option<yaml_serde::Value> {
         if self.sampling.num_samples() == 0 {
             return None;
         }
-        let mut map = serde_yml::Mapping::new();
+        let mut map = yaml_serde::Mapping::new();
         map.try_insert("atom", &self.atom)?;
         map.try_insert("num_samples", self.sampling.num_samples())?;
         map.insert(
@@ -426,7 +426,7 @@ impl<T: ObserveContext> Analyze<T> for ScaledWidomInsertion {
             },
         );
         map.insert("unscaled_widom/kT".into(), self.mu_unscaled.to_yaml()?);
-        Some(serde_yml::Value::Mapping(map))
+        Some(yaml_serde::Value::Mapping(map))
     }
 }
 
@@ -446,7 +446,7 @@ default:
   - !Coulomb { cutoff: 1000.0 }
   - !WCA { mixing: arithmetic }
 "#;
-        let builder: ScaledWidomInsertionBuilder = serde_yml::from_str(yaml).unwrap();
+        let builder: ScaledWidomInsertionBuilder = yaml_serde::from_str(yaml).unwrap();
         assert_eq!(builder.atom.as_deref().unwrap(), "Na");
         assert_eq!(builder.insertions.unwrap(), 20);
         assert_eq!(builder.lambda_points.unwrap(), 11);

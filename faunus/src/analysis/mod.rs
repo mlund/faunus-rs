@@ -20,8 +20,8 @@ use anyhow::Result;
 use core::fmt::Debug;
 use interatomic::coulomb::Temperature;
 use serde::{Deserialize, Serialize};
-use serde_yml::Value;
 use std::path::{Path, PathBuf};
+use yaml_serde::Value;
 
 mod collective_variable;
 mod density_profile;
@@ -344,7 +344,7 @@ pub fn from_str_in_dir<T: Context>(
     medium: Option<&interatomic::coulomb::Medium>,
     output_dir: Option<&Path>,
 ) -> Result<AnalysisCollection<T>> {
-    let value = serde_yml::from_str::<Value>(yaml)?
+    let value = yaml_serde::from_str::<Value>(yaml)?
         .get("analysis")
         .ok_or_else(|| anyhow::anyhow!("No 'analysis' key found in input yaml file."))?
         .clone();
@@ -433,7 +433,7 @@ pub trait Analyze<T: ObserveContext>: Debug + Info {
 
     /// Build the results mapping. Called only when at least one sample was taken, so an
     /// implementation never has to guard against dividing by zero or publishing a mean of nothing.
-    fn results(&self) -> Option<serde_yml::Value> {
+    fn results(&self) -> Option<yaml_serde::Value> {
         None
     }
 
@@ -442,7 +442,7 @@ pub trait Analyze<T: ObserveContext>: Debug + Info {
     /// Analyses used to guard this themselves and three of them forgot, publishing `.inf` and
     /// `.nan` — an empty [`WidomAccumulator`](crate::analysis::widom::WidomAccumulator) reports a
     /// free energy of `+inf`, and an empty `WeightedMean` reports `NaN`. The guard lives here now.
-    fn to_yaml(&self) -> Option<serde_yml::Value> {
+    fn to_yaml(&self) -> Option<yaml_serde::Value> {
         if self.num_samples() == 0 {
             return None;
         }
@@ -456,13 +456,13 @@ pub trait Analyze<T: ObserveContext>: Debug + Info {
 }
 
 /// Collect YAML results from all analyses, keyed by short name.
-pub fn analyses_to_yaml<T: Context>(analyses: &AnalysisCollection<T>) -> Vec<serde_yml::Value> {
+pub fn analyses_to_yaml<T: Context>(analyses: &AnalysisCollection<T>) -> Vec<yaml_serde::Value> {
     analyses
         .iter()
         .filter_map(|a| {
             let yaml = a.to_yaml()?;
             let name = a.short_name().unwrap_or("unknown");
-            Some(yaml_map! { serde_yml::Value::String(name.to_string()) => yaml })
+            Some(yaml_map! { yaml_serde::Value::String(name.to_string()) => yaml })
         })
         .collect()
 }
@@ -591,7 +591,7 @@ mod tests {
 
     #[test]
     fn apply_output_dir_succeeds_for_every_file_bearing_variant() {
-        let mut builders: Vec<AnalysisBuilder> = serde_yml::from_str(YAML_WITH_FILES).unwrap();
+        let mut builders: Vec<AnalysisBuilder> = yaml_serde::from_str(YAML_WITH_FILES).unwrap();
         for b in &mut builders {
             b.apply_output_dir(Path::new("window7")).unwrap();
         }
@@ -605,7 +605,7 @@ mod tests {
   file: cv.dat
   frequency: !Every 1
 "#;
-        let mut builders: Vec<AnalysisBuilder> = serde_yml::from_str(yaml).unwrap();
+        let mut builders: Vec<AnalysisBuilder> = yaml_serde::from_str(yaml).unwrap();
         builders[0].apply_output_dir(Path::new("window7")).unwrap();
         let AnalysisBuilder::CollectiveVariable(b) = &builders[0] else {
             panic!("expected CollectiveVariable variant");
@@ -620,7 +620,7 @@ mod tests {
   file: /tmp/energy.dat
   frequency: !Every 5
 ";
-        let mut builders: Vec<AnalysisBuilder> = serde_yml::from_str(yaml).unwrap();
+        let mut builders: Vec<AnalysisBuilder> = yaml_serde::from_str(yaml).unwrap();
         assert!(builders[0].apply_output_dir(Path::new("window0")).is_err());
     }
 }
@@ -677,7 +677,7 @@ molecules:
 system:
   cell: !Cuboid [20.0, 20.0, 20.0]
   medium: {permittivity: !Vacuum, temperature: 300.0}
-  energy: {}
+  energy: []
   blocks:
     - molecule: MOL
       N: 2
@@ -711,9 +711,9 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
     /// asked for it got silence. It is now a parse error instead.
     #[test]
     fn probability_frequency_no_longer_parses() {
-        assert!(serde_yml::from_str::<Frequency>("!Probability 1.0").is_err());
-        assert!(serde_yml::from_str::<Frequency>("!Every 10").is_ok());
-        assert!(serde_yml::from_str::<Frequency>("!End").is_ok());
+        assert!(yaml_serde::from_str::<Frequency>("!Probability 1.0").is_err());
+        assert!(yaml_serde::from_str::<Frequency>("!Every 10").is_ok());
+        assert!(yaml_serde::from_str::<Frequency>("!End").is_ok());
     }
 
     /// Was a bug: `End` never sampled during the run and the default `finalize` ignored it, so
@@ -753,7 +753,7 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, repeat: 0, collections: []}
     /// framework's `to_yaml`, so `results()` is only ever called with something to report.
     #[test]
     fn zero_sample_yaml_is_omitted_rather_than_non_finite() {
-        let builder: crate::analysis::VirtualVolumeMoveBuilder = serde_yml::from_str(
+        let builder: crate::analysis::VirtualVolumeMoveBuilder = yaml_serde::from_str(
             "{volume_displacement: 0.5, method: Isotropic, frequency: !Every 10}",
         )
         .unwrap();

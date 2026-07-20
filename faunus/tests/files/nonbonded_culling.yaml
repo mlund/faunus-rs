@@ -15,7 +15,7 @@ system:
     permittivity: !Vacuum
     temperature: 298.15
   energy:
-    nonbonded:
+    - !Nonbonded
       default:
         - !CoulombPlain {cutoff: 6.0}
 

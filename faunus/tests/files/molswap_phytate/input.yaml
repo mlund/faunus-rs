@@ -49,7 +49,7 @@ system:
   medium:
     permittivity: !Vacuum
     temperature: 298.15
-  energy: {}
+  energy: []
   blocks:
     - {molecule: "H₁₂PA", N: 20, active: 0, insert: !RandomCOM {}}
     - {molecule: "H₁₁PA¹⁻", N: 20, active: 0, insert: !RandomCOM {}}

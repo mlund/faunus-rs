@@ -221,14 +221,14 @@ mod tests {
 
     #[test]
     fn interval_yaml_roundtrip() {
-        let i: Interval = serde_yml::from_str("[1.0, 2.0]").unwrap();
+        let i: Interval = yaml_serde::from_str("[1.0, 2.0]").unwrap();
         assert_eq!(i, Interval::new(1.0, 2.0).unwrap());
         assert_eq!(
-            serde_yml::to_string(&i).unwrap().trim(),
+            yaml_serde::to_string(&i).unwrap().trim(),
             "- 1.0\n- 2.0".trim()
         );
         // An infinite bound is rejected at parse, not silently accepted.
-        assert!(serde_yml::from_str::<Interval>("[-.inf, 50.0]").is_err());
+        assert!(yaml_serde::from_str::<Interval>("[-.inf, 50.0]").is_err());
     }
 
     #[test]
@@ -242,10 +242,10 @@ mod tests {
 
     #[test]
     fn bin_width_yaml_is_a_bare_scalar() {
-        let w: BinWidth = serde_yml::from_str("0.5").unwrap();
+        let w: BinWidth = yaml_serde::from_str("0.5").unwrap();
         assert_eq!(w.get(), 0.5);
-        assert_eq!(serde_yml::to_string(&w).unwrap().trim(), "0.5");
-        assert!(serde_yml::from_str::<BinWidth>("0.0").is_err());
+        assert_eq!(yaml_serde::to_string(&w).unwrap().trim(), "0.5");
+        assert!(yaml_serde::from_str::<BinWidth>("0.0").is_err());
     }
 
     #[test]
@@ -263,20 +263,20 @@ mod tests {
         // are required now, so the old silent defaults — (-∞,∞) range that
         // allocated usize::MAX bins, and a resolution that fell back to 1.0 —
         // become parse errors.
-        assert!(serde_yml::from_str::<HistogrammedCv>(
+        assert!(yaml_serde::from_str::<HistogrammedCv>(
             "property: volume\nrange: [0.0, 10.0]\nresolution: 0.5"
         )
         .is_ok());
         assert!(
-            serde_yml::from_str::<HistogrammedCv>("property: volume\nrange: [0.0, 10.0]").is_err(),
+            yaml_serde::from_str::<HistogrammedCv>("property: volume\nrange: [0.0, 10.0]").is_err(),
             "missing resolution must be rejected"
         );
         assert!(
-            serde_yml::from_str::<HistogrammedCv>("property: volume\nresolution: 0.5").is_err(),
+            yaml_serde::from_str::<HistogrammedCv>("property: volume\nresolution: 0.5").is_err(),
             "missing range must be rejected"
         );
         assert!(
-            serde_yml::from_str::<HistogrammedCv>(
+            yaml_serde::from_str::<HistogrammedCv>(
                 "property: volume\nrange: [-.inf, .inf]\nresolution: 0.5"
             )
             .is_err(),

@@ -104,8 +104,8 @@ fn strip_line_comment(line: &str) -> &str {
 
 /// Remove top-level YAML keys that start with `_`.
 fn strip_underscore_keys(yaml: &str) -> anyhow::Result<String> {
-    let mut value: serde_yml::Value = serde_yml::from_str(yaml)?;
-    if let serde_yml::Value::Mapping(ref mut map) = value {
+    let mut value: yaml_serde::Value = yaml_serde::from_str(yaml)?;
+    if let yaml_serde::Value::Mapping(ref mut map) = value {
         let disabled: Vec<_> = map
             .keys()
             .filter(|k| k.as_str().is_some_and(|s| s.starts_with('_')))
@@ -119,7 +119,7 @@ fn strip_underscore_keys(yaml: &str) -> anyhow::Result<String> {
             map.remove(key);
         }
     }
-    Ok(serde_yml::to_string(&value)?)
+    Ok(yaml_serde::to_string(&value)?)
 }
 
 /// Parse a named section from a YAML input file into a typed config struct.
@@ -130,14 +130,14 @@ pub fn parse_yaml_section<T: serde::de::DeserializeOwned>(
     key: &str,
 ) -> anyhow::Result<T> {
     let yaml = read_yaml(input)?;
-    let value: serde_yml::Value = serde_yml::from_str(&yaml)?;
+    let value: yaml_serde::Value = yaml_serde::from_str(&yaml)?;
     let section = value
         .get(key)
         .ok_or_else(|| anyhow::anyhow!("Missing `{key}:` section in input file"))?;
     from_section_value(key, section)
 }
 
-/// Deserialize a section's already-extracted [`Value`](serde_yml::Value),
+/// Deserialize a section's already-extracted [`Value`](yaml_serde::Value),
 /// labeling any error with the section name so the user knows where to look.
 ///
 /// The location is gone once the document is a parsed `Value`, so the section
@@ -146,9 +146,10 @@ pub fn parse_yaml_section<T: serde::de::DeserializeOwned>(
 /// single literal key, so the message reads as a location rather than a key.
 pub fn from_section_value<T: serde::de::DeserializeOwned>(
     section: &str,
-    value: &serde_yml::Value,
+    value: &yaml_serde::Value,
 ) -> anyhow::Result<T> {
-    serde_yml::from_value(value.clone()).map_err(|e| anyhow::anyhow!("in `{section}` section: {e}"))
+    yaml_serde::from_value(value.clone())
+        .map_err(|e| anyhow::anyhow!("in `{section}` section: {e}"))
 }
 
 /// Deserialize a YAML sequence of (typically tagged) entries one at a time so an
@@ -159,7 +160,7 @@ pub fn from_section_value<T: serde::de::DeserializeOwned>(
 /// how `from_value::<Vec<_>>` treats `Null`.
 pub fn from_tagged_list<T: serde::de::DeserializeOwned>(
     section: &str,
-    value: &serde_yml::Value,
+    value: &yaml_serde::Value,
 ) -> anyhow::Result<Vec<T>> {
     if value.is_null() {
         return Ok(Vec::new());
@@ -170,10 +171,10 @@ pub fn from_tagged_list<T: serde::de::DeserializeOwned>(
     seq.iter()
         .enumerate()
         .map(|(index, entry)| {
-            serde_yml::from_value::<T>(entry.clone()).map_err(|e| {
+            yaml_serde::from_value::<T>(entry.clone()).map_err(|e| {
                 // `Tag`'s Display renders as `!Name`; untagged entries get no suffix.
                 let tag = match entry {
-                    serde_yml::Value::Tagged(tagged) => format!(" ({})", tagged.tag),
+                    yaml_serde::Value::Tagged(tagged) => format!(" ({})", tagged.tag),
                     _ => String::new(),
                 };
                 anyhow::anyhow!("in `{section}` entry {}{}: {e}", index + 1, tag)
@@ -213,7 +214,7 @@ const SYSTEM_KEYS: &[&str] = &["cell", "medium", "energy", "blocks", "intermolec
 /// could carry `deny_unknown_fields`, so we validate them explicitly.
 ///
 /// `_`-prefixed keys are intentionally-disabled sections and are always allowed.
-pub fn validate_section_keys(root: &serde_yml::Value) -> anyhow::Result<()> {
+pub fn validate_section_keys(root: &yaml_serde::Value) -> anyhow::Result<()> {
     check_allowed_keys("the document root", root, TOP_LEVEL_KEYS)?;
     if let Some(system) = root.get("system") {
         check_allowed_keys("`system`", system, SYSTEM_KEYS)?;
@@ -223,10 +224,10 @@ pub fn validate_section_keys(root: &serde_yml::Value) -> anyhow::Result<()> {
 
 fn check_allowed_keys(
     location: &str,
-    value: &serde_yml::Value,
+    value: &yaml_serde::Value,
     allowed: &[&str],
 ) -> anyhow::Result<()> {
-    let serde_yml::Value::Mapping(map) = value else {
+    let yaml_serde::Value::Mapping(map) = value else {
         return Ok(());
     };
     for key in map.keys() {
@@ -284,7 +285,7 @@ pub fn write_yaml_file<T: Serialize>(path: &Path, value: &T) -> anyhow::Result<(
     use anyhow::Context;
     let file = std::fs::File::create(path)
         .with_context(|| format!("Cannot create '{}'", path.display()))?;
-    serde_yml::to_writer(file, value)
+    yaml_serde::to_writer(file, value)
         .with_context(|| format!("Cannot write '{}'", path.display()))?;
     Ok(())
 }
@@ -294,7 +295,7 @@ pub fn read_yaml_file<T: serde::de::DeserializeOwned>(path: &Path) -> anyhow::Re
     use anyhow::Context;
     let file =
         std::fs::File::open(path).with_context(|| format!("Cannot open '{}'", path.display()))?;
-    serde_yml::from_reader(file).with_context(|| format!("Cannot parse '{}'", path.display()))
+    yaml_serde::from_reader(file).with_context(|| format!("Cannot parse '{}'", path.display()))
 }
 
 /// Resolve max thread count: 0 means use all available cores.
@@ -711,8 +712,8 @@ impl BlockAverage {
     /// Serialize as YAML mapping `{ mean, error }`, or null when unsampled. Serializing
     /// the `Option` keeps the null in place of the mapping, so a caller's `?` reports the
     /// unsampled quantity rather than dropping its siblings from the output.
-    pub fn to_yaml(&self) -> Option<serde_yml::Value> {
-        serde_yml::to_value(self.summary()).ok()
+    pub fn to_yaml(&self) -> Option<yaml_serde::Value> {
+        yaml_serde::to_value(self.summary()).ok()
     }
 }
 
@@ -1003,9 +1004,9 @@ pub(crate) trait MappingExt {
     fn try_insert(&mut self, key: &str, value: impl serde::Serialize) -> Option<()>;
 }
 
-impl MappingExt for serde_yml::Mapping {
+impl MappingExt for yaml_serde::Mapping {
     fn try_insert(&mut self, key: &str, value: impl serde::Serialize) -> Option<()> {
-        self.insert(key.into(), serde_yml::to_value(value).ok()?);
+        self.insert(key.into(), yaml_serde::to_value(value).ok()?);
         Some(())
     }
 }
@@ -1030,8 +1031,8 @@ mod section_parse_tests {
 
     #[test]
     fn tagged_list_error_names_entry_and_tag() {
-        let value: serde_yml::Value =
-            serde_yml::from_str("- !Widget {name: a}\n- !Widget {name: b, oops: 1}\n").unwrap();
+        let value: yaml_serde::Value =
+            yaml_serde::from_str("- !Widget {name: a}\n- !Widget {name: b, oops: 1}\n").unwrap();
         let err = from_tagged_list::<Item>("things", &value)
             .unwrap_err()
             .to_string();
@@ -1042,7 +1043,7 @@ mod section_parse_tests {
 
     #[test]
     fn tagged_list_requires_sequence() {
-        let value: serde_yml::Value = serde_yml::from_str("name: a").unwrap();
+        let value: yaml_serde::Value = yaml_serde::from_str("name: a").unwrap();
         let err = from_tagged_list::<Item>("things", &value)
             .unwrap_err()
             .to_string();
@@ -1052,7 +1053,7 @@ mod section_parse_tests {
     #[test]
     fn tagged_list_null_is_empty() {
         // A present-but-null section must behave like an empty list, not an error.
-        let value: serde_yml::Value = serde_yml::from_str("~").unwrap();
+        let value: yaml_serde::Value = yaml_serde::from_str("~").unwrap();
         assert!(from_tagged_list::<Item>("things", &value)
             .unwrap()
             .is_empty());
@@ -1060,7 +1061,7 @@ mod section_parse_tests {
 
     #[test]
     fn section_value_error_names_section() {
-        let value: serde_yml::Value = serde_yml::from_str("name: a\noops: 1").unwrap();
+        let value: yaml_serde::Value = yaml_serde::from_str("name: a\noops: 1").unwrap();
         let err = from_section_value::<Widget>("system/widget", &value)
             .unwrap_err()
             .to_string();
@@ -1270,7 +1271,7 @@ mod block_tests {
         assert_eq!(empty.checked_mean(), None);
         assert!(empty.summary().is_none());
         assert!(empty.scaled(2.0).is_none());
-        assert_eq!(empty.to_yaml(), Some(serde_yml::Value::Null));
+        assert_eq!(empty.to_yaml(), Some(yaml_serde::Value::Null));
     }
 
     /// One observation fixes the mean but says nothing about its spread. `0.0` claims

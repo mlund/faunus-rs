@@ -37,7 +37,7 @@ system:
       insert: !RandomAtomPos {}
 
   energy:
-    nonbonded:
+    - !Nonbonded
       default:
         - !Coulomb {cutoff: 20.0}
         - !WeeksChandlerAndersen {mixing: LB}

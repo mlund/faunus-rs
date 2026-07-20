@@ -289,19 +289,19 @@ impl<T: PerturbContext> Analyze<T> for VirtualTranslate {
         Ok(())
     }
 
-    fn results(&self) -> Option<serde_yml::Value> {
+    fn results(&self) -> Option<yaml_serde::Value> {
         // A frame is counted even when `perform_sample` returns early, so the framework's
         // frame-count guard is not enough: key on the accumulator that feeds every number below.
         if self.widom.is_empty() {
             return None;
         }
-        let mut map = serde_yml::Mapping::new();
+        let mut map = yaml_serde::Mapping::new();
         map.try_insert("displacement", self.displacement)?;
         map.try_insert("num_samples", self.sampling.num_samples())?;
         map.try_insert("num_perturbations", self.widom.len())?;
         map.try_insert("mean_force", self.mean_force())?;
         map.try_insert("mean_free_energy", self.widom.mean_free_energy())?;
-        Some(serde_yml::Value::Mapping(map))
+        Some(yaml_serde::Value::Mapping(map))
     }
 }
 
@@ -351,7 +351,7 @@ mod tests {
 
     /// Deserialize YAML into AnalysisBuilder list and extract the VirtualTranslateBuilder at `index`.
     fn deserialize_vt_builder(yaml: &str, index: usize) -> VirtualTranslateBuilder {
-        let builders: Vec<AnalysisBuilder> = serde_yml::from_str(yaml).unwrap();
+        let builders: Vec<AnalysisBuilder> = yaml_serde::from_str(yaml).unwrap();
         match &builders[index] {
             AnalysisBuilder::VirtualTranslate(b) => b.clone(),
             _ => panic!("expected VirtualTranslate variant"),
@@ -478,7 +478,7 @@ mod tests {
             .and_then(|map| map.get("mean_force"))
             .expect("mean_force entry");
         let parsed: BlockSummary =
-            serde_yml::from_value(entry.clone()).expect("mean_force parses as BlockSummary");
+            yaml_serde::from_value(entry.clone()).expect("mean_force parses as BlockSummary");
         assert!(parsed.mean.is_finite(), "mean must be finite");
         assert!(parsed.error.is_finite(), "error must be finite");
         assert!(parsed.error >= 0.0, "error must be non-negative");
@@ -538,9 +538,9 @@ dL: 0.05
 directions: !x
 frequency: !Every 5
 "#;
-        let builder: VirtualTranslateBuilder = serde_yml::from_str(yaml).unwrap();
-        let serialized = serde_yml::to_string(&builder).unwrap();
-        let roundtrip: VirtualTranslateBuilder = serde_yml::from_str(&serialized).unwrap();
+        let builder: VirtualTranslateBuilder = yaml_serde::from_str(yaml).unwrap();
+        let serialized = yaml_serde::to_string(&builder).unwrap();
+        let roundtrip: VirtualTranslateBuilder = yaml_serde::from_str(&serialized).unwrap();
         let vt = roundtrip.build(RT_298).unwrap();
         assert_approx_eq!(f64, vt.displacement, 0.05);
         assert_eq!(vt.directions, Axes::X);
@@ -578,9 +578,9 @@ system:
   cell: !Cuboid [30.0, 30.0, 30.0]
   medium: {permittivity: !Vacuum, temperature: 300.0}
   energy:
-    nonbonded:
-      default:
-        - !LennardJones {sigma: 3.0, eps: 2.5}
+    - !Nonbonded
+        default:
+          - !LennardJones {sigma: 3.0, eps: 2.5}
   blocks:
     - molecule: MOL
       N: 1

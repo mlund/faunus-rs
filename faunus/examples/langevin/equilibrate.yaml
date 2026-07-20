@@ -33,13 +33,13 @@ system:
       insert:
         !RandomCOM { rotate: true }
   energy:
-    nonbonded:
+    - !Nonbonded
       default:
         - !Coulomb {cutoff: 200}
         - !WeeksChandlerAndersen {mixing: LB}
-    spline:             # tabulate potentials for GPU evaluation
-      cutoff: 200.0
-      table_points: 2000
+      spline:             # tabulate potentials for GPU evaluation
+        cutoff: 200.0
+        table_points: 2000
 
 
 analysis:

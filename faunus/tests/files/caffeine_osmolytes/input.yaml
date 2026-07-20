@@ -51,7 +51,7 @@ system:
     permittivity: !Vacuum
     temperature: 298.15
   energy:
-    nonbonded:
+    - !Nonbonded
       # Everything is purely repulsive by default. OSM_A gets an attractive well against the
       # caffeine surface, so it accumulates; OSM_R gets an Ashbaugh-Hatch repulsive shoulder
       # (λ < 0), soft repulsion reaching beyond the core, so it is excluded more strongly than by

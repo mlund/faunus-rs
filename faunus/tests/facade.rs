@@ -15,7 +15,7 @@ mod common;
 use std::path::Path;
 
 use faunus::{Error, Simulation};
-use serde_yml::Value;
+use yaml_serde::Value;
 
 /// Wall-clock measurements and the git revision differ between any two runs of the same input.
 const VOLATILE_KEYS: &[&str] = &["timer", "elapsed_seconds", "energy_timers", "version"];
@@ -25,7 +25,7 @@ fn fixture(name: &str) -> std::path::PathBuf {
 }
 
 fn parse(yaml: &str) -> Value {
-    serde_yml::from_str(yaml).expect("output is valid YAML")
+    yaml_serde::from_str(yaml).expect("output is valid YAML")
 }
 
 /// Running from a checkpoint through `Simulation` reproduces what the CLI wrote for the same input.
@@ -203,7 +203,7 @@ molecules:
 system:
   cell: !Cuboid [20.0, 20.0, 20.0]
   medium: {{permittivity: !Vacuum, temperature: 298.15}}
-  energy: {{}}
+  energy: []
   blocks:
     - {{molecule: particle, N: 4, insert: !RandomAtomPos {{}}}}
 analysis:
@@ -261,7 +261,7 @@ molecules:
 system:
   cell: !Cuboid [20.0, 20.0, 20.0]
   medium: {permittivity: !Vacuum, temperature: 298.15}
-  energy: {}
+  energy: []
   blocks:
     - {molecule: particle, N: 4, insert: !RandomAtomPos {}}
 analysis:
@@ -298,10 +298,10 @@ system:
   cell: !Cuboid [20.0, 20.0, 20.0]
   medium: {permittivity: !Vacuum, temperature: 298.15}
   energy:
-    nonbonded:
+    - !Nonbonded
       default:
         - !LennardJones {mixing: LB}
-    pressure: !atm 1.0
+    - !Pressure {atm: 1.0}
   blocks:
     - {molecule: particle, N: 20, insert: !RandomAtomPos {}}";
 

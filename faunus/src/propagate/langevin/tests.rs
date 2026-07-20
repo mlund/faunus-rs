@@ -284,7 +284,7 @@ fn langevin_config_deserialize() {
         steps: 1000
         temperature: 300.0
     "#;
-    let config: LangevinConfig = serde_yml::from_str(yaml).unwrap();
+    let config: LangevinConfig = yaml_serde::from_str(yaml).unwrap();
     assert_eq!(config.timestep, 0.002);
     assert_eq!(config.friction, 10.0);
     assert_eq!(config.steps, 1000);
@@ -301,7 +301,7 @@ fn langevin_config_with_cell_list_rebuild() {
         temperature: 298.0
         cell_list_rebuild: 50
     "#;
-    let config: LangevinConfig = serde_yml::from_str(yaml).unwrap();
+    let config: LangevinConfig = yaml_serde::from_str(yaml).unwrap();
     assert_eq!(config.cell_list_rebuild, 50);
 }
 
@@ -314,7 +314,7 @@ fn langevin_config_rejects_unknown_fields() {
         temperature: 300.0
         bogus_field: 42
     "#;
-    let result: Result<LangevinConfig, _> = serde_yml::from_str(yaml);
+    let result: Result<LangevinConfig, _> = yaml_serde::from_str(yaml);
     assert!(result.is_err(), "unknown fields should be rejected");
 }
 
@@ -335,14 +335,14 @@ fn langevin_runner_to_yaml_without_temperature() {
     let yaml = runner.to_yaml();
 
     // Should be a tagged mapping with expected fields
-    if let serde_yml::Value::Tagged(tagged) = &yaml {
+    if let yaml_serde::Value::Tagged(tagged) = &yaml {
         assert_eq!(tagged.tag.to_string(), "!LangevinDynamics");
-        if let serde_yml::Value::Mapping(map) = &tagged.value {
-            assert!(map.contains_key(serde_yml::Value::from("timestep")));
-            assert!(map.contains_key(serde_yml::Value::from("friction")));
-            assert!(map.contains_key(serde_yml::Value::from("steps")));
-            assert!(map.contains_key(serde_yml::Value::from("temperature")));
-            assert!(!map.contains_key(serde_yml::Value::from("measured_temperature")));
+        if let yaml_serde::Value::Mapping(map) = &tagged.value {
+            assert!(map.contains_key(yaml_serde::Value::from("timestep")));
+            assert!(map.contains_key(yaml_serde::Value::from("friction")));
+            assert!(map.contains_key(yaml_serde::Value::from("steps")));
+            assert!(map.contains_key(yaml_serde::Value::from("temperature")));
+            assert!(!map.contains_key(yaml_serde::Value::from("measured_temperature")));
         } else {
             panic!("expected mapping");
         }
@@ -367,10 +367,10 @@ fn langevin_runner_to_yaml_with_temperature() {
     runner.t_rot.add(310.0);
 
     let yaml = runner.to_yaml();
-    if let serde_yml::Value::Tagged(tagged) = &yaml {
-        if let serde_yml::Value::Mapping(map) = &tagged.value {
+    if let yaml_serde::Value::Tagged(tagged) = &yaml {
+        if let yaml_serde::Value::Mapping(map) = &tagged.value {
             assert!(
-                map.contains_key(serde_yml::Value::from("measured_temperature")),
+                map.contains_key(yaml_serde::Value::from("measured_temperature")),
                 "should include measured_temperature after adding samples"
             );
         } else {
@@ -1252,7 +1252,7 @@ molecules:
 system:
   cell: !Cuboid [40.0, 40.0, 40.0]
   medium: {permittivity: !Vacuum, temperature: 300.0}
-  energy: {}
+  energy: []
   blocks:
     - molecule: TRIMER
       N: 1

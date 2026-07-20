@@ -601,7 +601,7 @@ a charging parameter λ ∈ [0, 1]. Each sampled configuration contributes one
 insertion average. Automatic blocking estimates the reported standard errors.
 
 Pair interactions for the ghost particle are defined directly in the analysis
-block using the same syntax as `energy.nonbonded.default`, allowing arbitrary
+block using the same syntax as the `!Nonbonded` term's `default`, allowing arbitrary
 short-range potentials (WCA, LJ, HardSphere, etc.) beyond the primitive model.
 
 ### Example

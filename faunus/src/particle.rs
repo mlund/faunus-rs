@@ -80,7 +80,7 @@ mod tests {
     #[test]
     fn deserialize_legacy_state_with_index() {
         let yaml = "atom_id: 0\nindex: 42\npos:\n- 1.0\n- 2.0\n- 3.0\n";
-        let p: Particle = serde_yml::from_str(yaml).unwrap();
+        let p: Particle = yaml_serde::from_str(yaml).unwrap();
         assert_eq!(p.atom_id, 0);
         assert_eq!(p.pos, Point::new(1.0, 2.0, 3.0));
     }
@@ -88,9 +88,9 @@ mod tests {
     #[test]
     fn roundtrip_serialization() {
         let p = Particle::new(3, Point::new(7.0, 8.0, 9.0));
-        let yaml = serde_yml::to_string(&p).unwrap();
+        let yaml = yaml_serde::to_string(&p).unwrap();
         assert!(!yaml.contains("index"));
-        let p2: Particle = serde_yml::from_str(&yaml).unwrap();
+        let p2: Particle = yaml_serde::from_str(&yaml).unwrap();
         assert_eq!(p, p2);
     }
 }

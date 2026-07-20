@@ -310,13 +310,13 @@ impl StatefulEnergy for SasaEnergy {
 }
 
 impl SasaEnergy {
-    pub(super) fn to_yaml(&self) -> serde_yml::Value {
-        let mut map = serde_yml::Mapping::new();
+    pub(super) fn to_yaml(&self) -> yaml_serde::Value {
+        let mut map = yaml_serde::Mapping::new();
         map.insert("probe_radius".into(), self.probe_radius.into());
         if let Some(offset) = self.energy_offset {
             map.insert("energy_offset".into(), offset.into());
         }
-        serde_yml::Value::Mapping(map)
+        yaml_serde::Value::Mapping(map)
     }
 }
 

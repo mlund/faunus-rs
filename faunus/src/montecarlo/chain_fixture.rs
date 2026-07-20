@@ -102,9 +102,9 @@ system:
     permittivity: !Vacuum
     temperature: 300.0
   energy:
-    nonbonded:
-      default:
-        - !LennardJones {{mixing: LB}}
+    - !Nonbonded
+        default:
+          - !LennardJones {{mixing: LB}}
   blocks:
     - molecule: Chain
       N: 1

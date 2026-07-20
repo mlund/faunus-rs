@@ -207,7 +207,7 @@ impl Cell {
 
     /// Get simulation cell from a YAML string (the `system/cell` section).
     pub(crate) fn from_str(yaml: &str) -> anyhow::Result<Self> {
-        let full: serde_yml::Value = serde_yml::from_str(yaml)?;
+        let full: yaml_serde::Value = yaml_serde::from_str(yaml)?;
 
         let system = full
             .get("system")
