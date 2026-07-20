@@ -1482,7 +1482,7 @@ which contributes <span class="arithmatex">\(PV - (N+1) k_BT \ln V\)</span>.</p>
 <h3 id="example_1">Example<a class="headerlink" href="#example_1" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><span class="nt">system</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">energy</span><span class="p">:</span>
-<span class="w">    </span><span class="nt">pressure</span><span class="p">:</span><span class="w"> </span><span class="kt">!atm</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1.0</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!Pressure</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">atm</span><span class="p">:</span><span class="w"> </span><span class="nv">1.0</span><span class="p p-Indicator">}</span>
 
 <span class="nt">propagate</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">collections</span><span class="p">:</span>
@@ -1718,7 +1718,7 @@ overhead from <span class="arithmatex">\(N\)</span> groups to one.</p>
 <span class="w">    </span><span class="nt">permittivity</span><span class="p">:</span><span class="w"> </span><span class="kt">!Water</span>
 <span class="w">    </span><span class="nt">temperature</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">298.15</span>
 <span class="w">  </span><span class="nt">energy</span><span class="p">:</span>
-<span class="w">    </span><span class="nt">nonbonded</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!Nonbonded</span>
 <span class="w">      </span><span class="nt">default</span><span class="p">:</span>
 <span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!Coulomb</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">cutoff</span><span class="p">:</span><span class="w"> </span><span class="nv">20.0</span><span class="p p-Indicator">}</span>
 <span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!WeeksChandlerAndersen</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">mixing</span><span class="p">:</span><span class="w"> </span><span class="nv">LB</span><span class="p p-Indicator">}</span>
@@ -1993,7 +1993,7 @@ each propagation cycle. On each MC→LD transition, atom positions, centers of m
 and rigid-body orientations are uploaded to the compute device; after the LD block,
 updated positions and orientations are downloaded back.</p>
 <p>Pair interactions are evaluated on-device using cubic spline interpolation of the
-tabulated pair potentials (see <code>energy.spline</code> in <a href="../energy/">Energy</a>).
+tabulated pair potentials (see the <code>!Nonbonded</code> term's <code>spline</code> in <a href="../energy/">Energy</a>).
 A cell list reduces pairwise force evaluation from <span class="arithmatex">\(O(n^2)\)</span> to <span class="arithmatex">\(O(n \cdot k)\)</span>
 where <span class="arithmatex">\(k\)</span> is the number of atoms in neighboring cells.
 The cell list is built on the CPU from periodically downloaded positions
@@ -2151,7 +2151,7 @@ from the equipartition theorem:</p>
   and persist on the compute device across subsequent LD blocks.</li>
 <li>MC rotation moves (<code>!RotateMolecule</code>) automatically track rigid-body orientation,
   which is transferred to the device at each LD block start.</li>
-<li>Energy splines must be configured (<code>energy.spline</code>) to provide on-device pair potentials.</li>
+<li>Energy splines must be configured (the <code>!Nonbonded</code> term's <code>spline</code>) to provide on-device pair potentials.</li>
 </ul>
 
 

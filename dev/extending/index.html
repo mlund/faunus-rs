@@ -829,8 +829,8 @@ rejected move always restores exactly what was cached. The template's second ter
 <h2 id="registering-a-new-extension">Registering a new extension<a class="headerlink" href="#registering-a-new-extension" title="Permanent link">&para;</a></h2>
 <p>An analysis is named from YAML through the <code>AnalysisBuilder</code> enum and a move through <code>MoveBuilder</code>:
 add a variant pointing at your builder struct, and the name becomes available in the input file. An
-energy term needs a variant in the <code>EnergyTerm</code> enum and an optional field on <code>HamiltonianBuilder</code>,
-which is how the <code>energy:</code> section maps names to terms.</p>
+energy term needs a variant in the <code>EnergyTerm</code> enum and a matching variant in the
+<code>EnergyTermBuilder</code> enum, whose tag (<code>!YourTerm</code>) is how the <code>energy:</code> list names the term.</p>
 <p>Every template shows the builder shape: a struct deserialized from the input, and a <code>build</code> method
 that takes the system and returns the finished object.</p>
 
