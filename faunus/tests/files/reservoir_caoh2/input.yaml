@@ -1,0 +1,67 @@
+# Ca(OH)₂ solubility from an implicit reservoir (no interactions).
+#
+# Ca(OH)₂(s) ⇌ Ca²⁺ + 2 OH⁻   Ksp = 10⁻⁵·¹⁹ ≈ 6.46×10⁻⁶ M³
+#
+# Analytical: Ksp = s·(2s)² = 4s³  →  s = (Ksp/4)^(1/3)
+#
+# Expected molarities:
+#   [Ca²⁺] ≈ 0.0117 M
+#   [OH⁻]  ≈ 0.0235 M
+#
+# Same 300 Å box as the C++ Faunus calciumhydroxide example.
+
+atoms:
+  - {name: ca(oh)₂, mass: 0.0, reservoir: true}
+  - {name: ca²⁺, mass: 40.0, charge: 2.0}
+  - {name: oh⁻, mass: 17.0, charge: -1.0}
+
+molecules:
+  - name: Ca(OH)₂
+    atoms: [ca(oh)₂]
+  - name: Ca²⁺
+    atoms: [ca²⁺]
+    atomic: true
+  - name: OH⁻
+    atoms: [oh⁻]
+    atomic: true
+
+system:
+  cell: !Cuboid [300.0, 300.0, 300.0]
+  medium:
+    permittivity: !Vacuum
+    temperature: 298.15
+  energy: []
+  blocks:
+    - molecule: Ca(OH)₂
+      N: 400
+      active: 400
+    - molecule: Ca²⁺
+      N: 800
+      active: 0
+      insert: !RandomAtomPos {}
+    - molecule: OH⁻
+      N: 800
+      active: 0
+      insert: !RandomAtomPos {}
+
+analysis:
+  - !CollectiveVariable
+    property: molarity
+    selection: "molecule 'Ca²⁺'"
+    frequency: !Every 1
+  - !CollectiveVariable
+    property: molarity
+    selection: "molecule 'OH⁻'"
+    frequency: !Every 1
+
+propagate:
+  seed: !Fixed 42
+  criterion: Metropolis
+  repeat: 30000
+  collections:
+    - !Deterministic
+      moves:
+        - !SpeciationMove
+          temperature: 298.15
+          reactions:
+            - ["Ca(OH)₂ = Ca²⁺ + OH⁻ + OH⁻", !pK 5.19]

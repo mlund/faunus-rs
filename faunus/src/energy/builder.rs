@@ -845,6 +845,26 @@ impl HamiltonianBuilder {
             .set_cutoff(cutoff);
     }
 
+    /// Parse the `energy:` section into a term list.
+    ///
+    /// Wraps [`from_tagged_list`](crate::auxiliary::from_tagged_list) so a pre-#133
+    /// struct-form input — a mapping like `energy: {nonbonded: …}` or an empty `{}` —
+    /// gets a migration hint pointing at the tagged-list form rather than the bare
+    /// "must be a list".
+    fn parse_energy_terms(
+        section: &str,
+        value: &yaml_serde::Value,
+    ) -> anyhow::Result<Vec<EnergyTermBuilder>> {
+        if value.is_mapping() {
+            anyhow::bail!(
+                "`{section}` must be a list of tagged terms (e.g. `- !Nonbonded {{...}}`), \
+                 not a mapping — the `key:` struct form was removed in #133; \
+                 wrap each term as a `- !Tag` entry, or use `[]` for no terms."
+            );
+        }
+        crate::auxiliary::from_tagged_list(section, value)
+    }
+
     /// Get hamiltonian from faunus input file.
     ///
     /// This assumes this YAML layout:
@@ -866,7 +886,7 @@ impl HamiltonianBuilder {
             .ok_or_else(|| anyhow::anyhow!("Could not find `system.energy` in the YAML file."))?;
 
         let mut builder = Self {
-            terms: crate::auxiliary::from_tagged_list("system/energy", energy)?,
+            terms: Self::parse_energy_terms("system/energy", energy)?,
         };
 
         // Merge the nonbonded term from included files (input overrides include).
@@ -881,8 +901,7 @@ impl HamiltonianBuilder {
                     continue;
                 };
                 // include files carry `energy:` at top level, so the bare label is correct here
-                let inc_terms: Vec<EnergyTermBuilder> =
-                    crate::auxiliary::from_tagged_list("energy", inc_energy)?;
+                let inc_terms = Self::parse_energy_terms("energy", inc_energy)?;
                 #[allow(clippy::wildcard_enum_match_arm)]
                 if let Some(inc_nb) = inc_terms.into_iter().find_map(|t| match t {
                     EnergyTermBuilder::Nonbonded(pb) => Some(pb),
@@ -917,7 +936,7 @@ impl HamiltonianBuilder {
             anyhow::bail!("Could not find `system.energy` or `energy` in the YAML string")
         };
         let builder = Self {
-            terms: crate::auxiliary::from_tagged_list(label, energy)?,
+            terms: Self::parse_energy_terms(label, energy)?,
         };
         builder.validate_uniqueness()?;
         Ok(builder)
