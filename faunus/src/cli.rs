@@ -94,19 +94,33 @@ struct Args {
     /// Output file in YAML format
     #[clap(long, short = 'o', default_value = "output.yaml")]
     pub output: PathBuf,
+    /// Validate the input and stop before running (dry run). Works with every
+    /// subcommand; may appear on either side of it.
+    #[clap(long, global = true)]
+    pub check: bool,
+}
+
+/// Message logged when a `--check` dry run finds no problems.
+fn log_check_ok() {
+    log::info!("✓ input valid (dry run — no simulation performed)");
 }
 
 /// Check that `-o` is writable before the run, so an unusable path costs nothing rather than a
-/// whole simulation. Deliberately does not truncate: a run that fails or is interrupted must
-/// leave any previous results intact.
+/// whole simulation, and leave the filesystem exactly as found. Never truncates, so a run that
+/// fails or is interrupted keeps any previous results; and removes a file the probe itself
+/// created, so a `--check` dry run leaves no stray empty output behind.
 fn probe_output_path(output: &std::path::Path) -> Result<()> {
     use anyhow::Context as _;
+    let existed = output.exists();
     std::fs::OpenOptions::new()
         .write(true)
         .create(true)
         .truncate(false)
         .open(output)
         .with_context(|| format!("Cannot write output file '{}'", output.display()))?;
+    if !existed {
+        let _ = std::fs::remove_file(output);
+    }
     Ok(())
 }
 
@@ -134,9 +148,13 @@ pub fn do_main() -> Result<()> {
 
     match args.command {
         Commands::Run { input, state } => {
-            let mut simulation = Simulation::from_file(&input, state.as_deref())?;
-            // Reject an unwritable `-o` before the run rather than after it.
+            // Reject an unwritable `-o` before the (potentially expensive) build.
             probe_output_path(&args.output)?;
+            let mut simulation = Simulation::from_file(&input, state.as_deref())?;
+            if args.check {
+                log_check_ok();
+                return Ok(());
+            }
             let progress = ProgressBar::new(0);
             let output = simulation.run_with_progress(&mut |step, total| {
                 progress.set_length(total as u64);
@@ -151,7 +169,12 @@ pub fn do_main() -> Result<()> {
         }
         Commands::Rerun { input, traj, aux } => {
             probe_output_path(&args.output)?;
-            crate::replay(&input, &traj, aux.as_deref())?.write_to(&args.output)?;
+            let replay = crate::simulation::Replay::prepare(&input, &traj, aux.as_deref())?;
+            if args.check {
+                log_check_ok();
+                return Ok(());
+            }
+            replay.run()?.write_to(&args.output)?;
         }
         Commands::Umbrella {
             input,
@@ -162,7 +185,12 @@ pub fn do_main() -> Result<()> {
         } => {
             // Reject an unwritable PMF path now, not after every window has run.
             probe_output_path(&pmf_output)?;
-            crate::umbrella::run(&input, &state_dir, state.as_deref(), &pmf_output, threads)?;
+            let umbrella = crate::umbrella::Umbrella::prepare(&input, state.as_deref())?;
+            if args.check {
+                log_check_ok();
+                return Ok(());
+            }
+            umbrella.run(&state_dir, &pmf_output, threads)?;
         }
         Commands::WangLandau {
             input,
@@ -172,7 +200,12 @@ pub fn do_main() -> Result<()> {
         } => {
             // Reject an unwritable output path now, not after the whole run.
             probe_output_path(&output)?;
-            crate::wang_landau::run(&input, &state_dir, &output, threads)?;
+            let wl = crate::wang_landau::WangLandau::prepare(&input)?;
+            if args.check {
+                log_check_ok();
+                return Ok(());
+            }
+            wl.run(&state_dir, &output, threads)?;
         }
     }
     Ok(())
@@ -182,15 +215,19 @@ pub fn do_main() -> Result<()> {
 mod tests {
     use super::probe_output_path;
 
-    /// A run that fails or is interrupted must leave the previous `-o` file intact, so the probe
-    /// may create the file but must never truncate it.
+    /// The probe leaves the filesystem exactly as found: a missing path stays missing (so a
+    /// `--check` dry run drops no stray empty file), and an existing file keeps its contents
+    /// (so an interrupted run keeps its previous results — the probe must never truncate).
     #[test]
-    fn probe_output_path_creates_without_truncating() {
+    fn probe_output_path_leaves_filesystem_unchanged() {
         let dir = tempfile::tempdir().unwrap();
 
         let absent = dir.path().join("new.yaml");
         probe_output_path(&absent).unwrap();
-        assert!(absent.exists(), "probe should create a missing output file");
+        assert!(
+            !absent.exists(),
+            "probe must not leave a file it created for a writability check"
+        );
 
         let existing = dir.path().join("previous.yaml");
         std::fs::write(&existing, "earlier results\n").unwrap();

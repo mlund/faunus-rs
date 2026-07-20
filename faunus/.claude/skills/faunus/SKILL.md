@@ -38,6 +38,7 @@ analysis: [...]                 # optional: trajectory, RDF, energy output
 - **Global CLI flags go before the subcommand.** `-o/--output` and `-v/--verbose` belong
   to the top-level command: `faunus -o out.yaml run -i input.yaml`, not `faunus run … -o`.
 - **Unknown YAML keys are rejected** (`deny_unknown_fields`): a mistyped key is an error,
-  not silently ignored — a fast way to catch typos is simply to run the input.
+  not silently ignored — `faunus --check run -i input.yaml` validates the whole input and
+  stops before the simulation, so typos surface without paying for a run.
 - **Type tags are PascalCase** (`!Cuboid`, `!Harmonic`); unit tags keep scientific casing
   (`!atm`, `!Pa`, `!kT`, `!mM`) and `Axes` are lowercase values (`projection: z`).

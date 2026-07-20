@@ -6,7 +6,8 @@ the recipes below are the common paths.
 **Global flags come before the subcommand.** `-o/--output` (default `output.yaml`) and
 `-v/--verbose` belong to the top-level command, so they must precede `run`/`rerun`/etc.
 `faunus run -i in.yaml -o out.yaml` fails with `unexpected argument '-o'`; write
-`faunus -o out.yaml run -i in.yaml`.
+`faunus -o out.yaml run -i in.yaml`. The exception is `--check` (see below), which may
+appear on either side of the subcommand.
 
 ## Building
 
@@ -48,6 +49,21 @@ faunus -o results.yaml run -i input.yaml
 faunus -v run -i input.yaml
 RUST_LOG=Debug faunus run -i input.yaml
 ```
+
+### Validating input (dry run)
+
+`--check` builds and validates the whole input — the same construction a real run does
+(unknown keys, Hamiltonian, selections, collective variables, trajectory/aux headers) —
+then stops immediately before the first step, without writing results or state:
+
+```bash
+faunus --check run -i input.yaml          # or: faunus run -i input.yaml --check
+```
+
+On success it logs `✓ input valid (dry run — no simulation performed)` and exits 0; on a
+bad input it fails with the same error the real run would give. It works with every
+subcommand (`run`/`rerun`/`umbrella`/`wang-landau`) and, being global, may sit on either
+side of the subcommand. Use it to develop an input without paying for a full simulation.
 
 ## Rerunning Trajectories
 

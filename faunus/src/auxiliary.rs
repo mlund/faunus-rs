@@ -19,9 +19,9 @@ use flate2::write::GzEncoder;
 use flate2::Compression;
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
-use std::io::{BufRead, Write};
+use std::io::{self, BufRead, Write};
 use std::ops::Mul;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 /// Read a YAML file, applying Jinja2 template rendering when the file contains a Jinja
 /// opener outside of comments (see [`looks_like_template`]).
@@ -378,11 +378,22 @@ impl ColumnFormat {
 
 /// Format-aware writer for column data (.dat, .csv, optionally gzip-compressed).
 ///
-/// Writes a header row on construction and provides [`write_row`](Self::write_row)
-/// for appending data rows with the correct separator.
+/// The file and its header row are created lazily, on the first
+/// [`write_row`](Self::write_row) — constructing a writer for a path touches no disk. A run
+/// that is only validated (`--check`) or that fails during setup therefore never truncates an
+/// existing output file: you cannot destroy a file you have not written a row to.
 pub(crate) struct ColumnWriter {
-    inner: Box<dyn Write + Send>,
-    sep: &'static str,
+    format: ColumnFormat,
+    state: WriterState,
+}
+
+enum WriterState {
+    /// A path-backed writer not yet opened; the file and header are created on the first row.
+    Pending {
+        path: PathBuf,
+        columns: Vec<String>,
+    },
+    Open(Box<dyn Write + Send>),
 }
 
 impl std::fmt::Debug for ColumnWriter {
@@ -392,45 +403,85 @@ impl std::fmt::Debug for ColumnWriter {
 }
 
 impl ColumnWriter {
-    /// Open a file, infer the format from its extension, and write the header.
+    /// Prepare a file-backed writer, inferring the format from the extension. The file is
+    /// created and the header written on the first [`write_row`](Self::write_row), not here.
     pub(crate) fn open(path: &Path, columns: &[&str]) -> anyhow::Result<Self> {
-        let inner = open_compressed(path)?;
-        let format = ColumnFormat::from_path(path);
-        Self::new(inner, format, columns)
+        Ok(Self {
+            format: ColumnFormat::from_path(path),
+            state: WriterState::Pending {
+                path: path.to_path_buf(),
+                columns: columns.iter().map(|c| c.to_string()).collect(),
+            },
+        })
     }
 
-    /// Wrap an existing writer, write the header row.
+    /// Wrap an already-open writer and write the header now. Used only by tests, where the sink
+    /// is an in-memory buffer rather than a path, so there is nothing to defer.
+    #[cfg(test)]
     pub(crate) fn new(
         mut inner: Box<dyn Write + Send>,
         format: ColumnFormat,
         columns: &[&str],
     ) -> anyhow::Result<Self> {
-        let sep = format.separator();
-        write!(inner, "{}", format.comment_prefix())?;
-        for (i, col) in columns.iter().enumerate() {
-            if i > 0 {
-                write!(inner, "{sep}")?;
-            }
-            write!(inner, "{col}")?;
+        write_header(&mut inner, format, columns)?;
+        Ok(Self {
+            format,
+            state: WriterState::Open(inner),
+        })
+    }
+
+    /// Open the file and write the header on first use, returning the underlying writer. A
+    /// path that cannot be created surfaces here, on the first row, rather than at construction.
+    fn writer(&mut self) -> std::io::Result<&mut (dyn Write + Send)> {
+        if let WriterState::Pending { path, columns } = &self.state {
+            let mut inner =
+                open_compressed(path).map_err(|e| io::Error::other(format!("{e:#}")))?;
+            write_header(&mut inner, self.format, columns)?;
+            self.state = WriterState::Open(inner);
         }
-        writeln!(inner)?;
-        Ok(Self { inner, sep })
+        let WriterState::Open(inner) = &mut self.state else {
+            unreachable!("just transitioned to Open");
+        };
+        Ok(inner.as_mut())
     }
 
     /// Write a row of values using the format's separator.
     pub(crate) fn write_row(&mut self, values: &[&dyn Display]) -> std::io::Result<()> {
+        let sep = self.format.separator();
+        let inner = self.writer()?;
         for (i, val) in values.iter().enumerate() {
             if i > 0 {
-                write!(self.inner, "{}", self.sep)?;
+                write!(inner, "{sep}")?;
             }
-            write!(self.inner, "{val}")?;
+            write!(inner, "{val}")?;
         }
-        writeln!(self.inner)
+        writeln!(inner)
     }
 
     pub(crate) fn flush(&mut self) -> std::io::Result<()> {
-        self.inner.flush()
+        match &mut self.state {
+            WriterState::Open(inner) => inner.flush(),
+            // Nothing was written, so there is no open file to flush.
+            WriterState::Pending { .. } => Ok(()),
+        }
     }
+}
+
+/// Write the `# col1 col2 …` header row in `format` to an already-open writer.
+fn write_header(
+    inner: &mut (impl Write + ?Sized),
+    format: ColumnFormat,
+    columns: &[impl AsRef<str>],
+) -> std::io::Result<()> {
+    let sep = format.separator();
+    write!(inner, "{}", format.comment_prefix())?;
+    for (i, col) in columns.iter().enumerate() {
+        if i > 0 {
+            write!(inner, "{sep}")?;
+        }
+        write!(inner, "{}", col.as_ref())?;
+    }
+    writeln!(inner)
 }
 
 /// Reader for single-column numeric data files (.csv, .csv.gz, .dat, .dat.gz).
@@ -1151,6 +1202,35 @@ mod column_writer_tests {
         let reader = ColumnReader::open(&path).unwrap();
         let loaded: Vec<f64> = reader.try_into().unwrap();
         assert_eq!(loaded, values);
+    }
+
+    /// The writer must not touch disk until the first row: this is what keeps a validated
+    /// (`--check`) or setup-failed run from truncating an existing output file. Opening an
+    /// existing file and then never writing must leave its contents intact.
+    #[test]
+    fn column_writer_opens_lazily_on_first_row() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("out.dat");
+
+        std::fs::write(&path, "PRIOR\n").unwrap();
+        let mut w = ColumnWriter::open(&path, &["step", "value"]).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(&path).unwrap(),
+            "PRIOR\n",
+            "constructing the writer must not truncate the existing file"
+        );
+
+        w.write_row(&[&1, &2]).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(&path).unwrap(),
+            "# step value\n1 2\n",
+            "the first row creates the file with a header, replacing prior contents"
+        );
+
+        // A writer that is only opened (never written) leaves a missing file missing.
+        let untouched = dir.path().join("never.dat");
+        let _ = ColumnWriter::open(&untouched, &["x"]).unwrap();
+        assert!(!untouched.exists(), "opening alone must create no file");
     }
 
     #[test]
