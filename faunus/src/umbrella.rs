@@ -549,32 +549,41 @@ fn parse_config(input: &Path) -> Result<UmbrellaConfig> {
     crate::auxiliary::parse_yaml_section(input, "umbrella")
 }
 
-/// Run multi-walker umbrella sampling with BAR stitching.
-pub fn run(
-    input: &Path,
-    state_dir: &Path,
-    common_state: Option<&Path>,
-    output: &Path,
-    max_threads: usize,
-) -> Result<()> {
-    use interatomic::coulomb::Temperature;
+/// A validated multi-window umbrella run, ready to drive its walkers.
+///
+/// Building one parses and validates the window grid, builds the shared base context
+/// (Hamiltonian construction), seeds the per-window RNG streams, and — when a common
+/// `--state` is given — loads and validates that checkpoint. A `--check` dry run can stop
+/// at [`prepare`](Self::prepare) with no walker threads spawned and no state directory
+/// created. [`run`](Self::run) then drives the windows and stitches the PMF.
+pub(crate) struct Umbrella {
+    input: PathBuf,
+    config: UmbrellaConfig,
+    medium: interatomic::coulomb::Medium,
+    rt: f64,
+    base_context: Backend,
+    /// Window centers, computed once in `prepare` and reused by `run`.
+    centers: Vec<f64>,
+    window_seeds: Vec<u64>,
+}
 
-    let config = parse_config(input)?;
-    config.windows.validate()?;
-    let medium = crate::backend::get_medium(input)?;
-    let rt = crate::R_IN_KJ_PER_MOL * medium.temperature();
+impl Umbrella {
+    /// Validate the input and build the shared context without spawning any walkers or
+    /// touching the filesystem beyond reading the input and optional common state.
+    pub(crate) fn prepare(input: &Path, common_state: Option<&Path>) -> Result<Self> {
+        use interatomic::coulomb::Temperature;
 
-    let centers = config.windows.centers();
-    let half_width = config.windows.half_width();
-    let n_windows = centers.len();
+        let config = parse_config(input)?;
+        config.windows.validate()?;
+        let medium = crate::backend::get_medium(input)?;
+        let rt = crate::R_IN_KJ_PER_MOL * medium.temperature();
 
-    if n_windows == 0 {
-        anyhow::bail!("No umbrella windows generated — check range/width/spacing");
-    }
+        let centers = config.windows.centers();
+        let n_windows = centers.len();
+        if n_windows == 0 {
+            anyhow::bail!("No umbrella windows generated — check range/width/spacing");
+        }
 
-    let multi_progress = MultiProgress::new();
-
-    multi_progress.suspend(|| {
         log::info!(
             "Umbrella sampling: {n_windows} windows, width={:.1}, spacing={:.1}",
             config.windows.width,
@@ -587,148 +596,175 @@ pub fn run(
                 .map(|c| format!("{c:.1}"))
                 .collect::<Vec<_>>()
         );
-    });
 
-    std::fs::create_dir_all(state_dir).map_err(|e| {
-        anyhow::anyhow!(
-            "Cannot create state directory '{}': {e}. \
-             Note: use --state-dir for the directory and --state for a common state file.",
-            state_dir.display()
-        )
-    })?;
-
-    // Build once; cloned per window to avoid redundant YAML parsing + Hamiltonian construction.
-    let mut base_context = Backend::new(
-        input,
-        None,
-        &mut crate::propagate::setup_rng_from_file(input)?,
-    )?;
-
-    // Load common state file to seed all windows that don't yet have a per-window state
-    if let Some(state_path) = common_state {
-        let state = State::from_file(state_path)?;
-        let propagate = Propagate::from_file(input, &base_context, rt)?;
-        let analyses = AnalysisCollection::default();
-        let mut mc = MarkovChain::new(base_context, propagate, rt, analyses)?;
-        mc.load_state(state)?;
-        base_context = mc.into_context();
-        log::info!("Loaded common state from {}", state_path.display());
-    }
-
-    // Give every window an independent RNG stream. All windows clone the same seeded base
-    // context, so without a per-window reseed a fixed seed makes every walker draw the
-    // identical sequence and propose correlated moves. Pre-drawn from a seed RNG (order is
-    // deterministic under `-j 1`), mirroring the per-box reseed in Gibbs sampling.
-    let window_seeds: Vec<u64> = {
-        let mut seed_rng = crate::propagate::setup_rng_from_file(input)?;
-        (0..n_windows).map(|_| seed_rng.gen()).collect()
-    };
-
-    let n_threads = crate::auxiliary::resolve_thread_count(max_threads);
-
-    // Process in batches so N_windows > N_cores doesn't over-subscribe the machine
-    let mut all_results: Vec<WindowResult> = Vec::with_capacity(n_windows);
-
-    for batch_start in (0..n_windows).step_by(n_threads) {
-        let batch_end = (batch_start + n_threads).min(n_windows);
-        let batch_indices: Vec<usize> = (batch_start..batch_end).collect();
-
-        multi_progress.suspend(|| {
-            log::info!(
-                "Running windows {batch_start}..{} ({} threads)",
-                batch_end - 1,
-                batch_indices.len()
-            );
-        });
-
-        let params = WindowParams {
+        // Build once; cloned per window to avoid redundant YAML parsing + Hamiltonian construction.
+        let mut base_context = Backend::new(
             input,
-            state_dir,
-            half_width,
-            bin_width: config.windows.bin_width,
-            drive_k: config.drive.force_constant,
-            cv_builder: config.coordinate.as_ref(),
-            medium: &medium,
-            multi_progress: &multi_progress,
+            None,
+            &mut crate::propagate::setup_rng_from_file(input)?,
+        )?;
+
+        // Load common state file to seed all windows that don't yet have a per-window state
+        if let Some(state_path) = common_state {
+            let state = State::from_file(state_path)?;
+            let propagate = Propagate::from_file(input, &base_context, rt)?;
+            let analyses = AnalysisCollection::default();
+            let mut mc = MarkovChain::new(base_context, propagate, rt, analyses)?;
+            mc.load_state(state)?;
+            base_context = mc.into_context();
+            log::info!("Loaded common state from {}", state_path.display());
+        }
+
+        // Give every window an independent RNG stream. All windows clone the same seeded base
+        // context, so without a per-window reseed a fixed seed makes every walker draw the
+        // identical sequence and propose correlated moves. Pre-drawn from a seed RNG (order is
+        // deterministic under `-j 1`), mirroring the per-box reseed in Gibbs sampling.
+        let window_seeds: Vec<u64> = {
+            let mut seed_rng = crate::propagate::setup_rng_from_file(input)?;
+            (0..n_windows).map(|_| seed_rng.gen()).collect()
         };
 
-        // Pre-create all bars for this batch so MultiProgress has a stable set of lines
-        let bars: Vec<ProgressBar> = batch_indices
-            .iter()
-            .map(|&i| {
-                let pb = multi_progress.add(ProgressBar::new(0));
-                pb.set_style(progress_style());
-                pb.set_prefix(format!("W{i:>2} wait "));
-                pb
-            })
-            .collect();
+        Ok(Self {
+            input: input.to_path_buf(),
+            config,
+            medium,
+            rt,
+            base_context,
+            centers,
+            window_seeds,
+        })
+    }
 
-        let batch_results: Vec<Result<WindowResult>> = std::thread::scope(|s| {
-            let handles: Vec<_> = batch_indices
+    /// Drive every window to completion and write the stitched PMF to `output`.
+    pub(crate) fn run(self, state_dir: &Path, output: &Path, max_threads: usize) -> Result<()> {
+        let Umbrella {
+            input,
+            config,
+            medium,
+            rt,
+            base_context,
+            centers,
+            window_seeds,
+        } = self;
+
+        let half_width = config.windows.half_width();
+        let n_windows = centers.len();
+
+        std::fs::create_dir_all(state_dir).map_err(|e| {
+            anyhow::anyhow!(
+                "Cannot create state directory '{}': {e}. \
+                 Note: use --state-dir for the directory and --state for a common state file.",
+                state_dir.display()
+            )
+        })?;
+
+        let multi_progress = MultiProgress::new();
+        let n_threads = crate::auxiliary::resolve_thread_count(max_threads);
+
+        // Process in batches so N_windows > N_cores doesn't over-subscribe the machine
+        let mut all_results: Vec<WindowResult> = Vec::with_capacity(n_windows);
+
+        for batch_start in (0..n_windows).step_by(n_threads) {
+            let batch_end = (batch_start + n_threads).min(n_windows);
+            let batch_indices: Vec<usize> = (batch_start..batch_end).collect();
+
+            multi_progress.suspend(|| {
+                log::info!(
+                    "Running windows {batch_start}..{} ({} threads)",
+                    batch_end - 1,
+                    batch_indices.len()
+                );
+            });
+
+            let params = WindowParams {
+                input: input.as_path(),
+                state_dir,
+                half_width,
+                bin_width: config.windows.bin_width,
+                drive_k: config.drive.force_constant,
+                cv_builder: config.coordinate.as_ref(),
+                medium: &medium,
+                multi_progress: &multi_progress,
+            };
+
+            // Pre-create all bars for this batch so MultiProgress has a stable set of lines
+            let bars: Vec<ProgressBar> = batch_indices
                 .iter()
-                .zip(&bars)
-                .map(|(&i, pb)| {
-                    let center = centers[i];
-                    let ctx = base_context.clone();
-                    let seed = window_seeds[i];
-                    let p = &params;
-                    s.spawn(move || run_window(p, ctx, i, center, seed, pb))
+                .map(|&i| {
+                    let pb = multi_progress.add(ProgressBar::new(0));
+                    pb.set_style(progress_style());
+                    pb.set_prefix(format!("W{i:>2} wait "));
+                    pb
                 })
                 .collect();
 
-            handles
-                .into_iter()
-                .map(|h| {
-                    h.join()
-                        .map_err(|_| anyhow::anyhow!("window thread panicked"))?
-                })
-                .collect()
-        });
+            let batch_results: Vec<Result<WindowResult>> = std::thread::scope(|s| {
+                let handles: Vec<_> = batch_indices
+                    .iter()
+                    .zip(&bars)
+                    .map(|(&i, pb)| {
+                        let center = centers[i];
+                        let ctx = base_context.clone();
+                        let seed = window_seeds[i];
+                        let p = &params;
+                        s.spawn(move || run_window(p, ctx, i, center, seed, pb))
+                    })
+                    .collect();
 
-        // Remove all batch bars after threads complete
-        for pb in &bars {
-            pb.finish_and_clear();
-            multi_progress.remove(pb);
+                handles
+                    .into_iter()
+                    .map(|h| {
+                        h.join()
+                            .map_err(|_| anyhow::anyhow!("window thread panicked"))?
+                    })
+                    .collect()
+            });
+
+            // Remove all batch bars after threads complete
+            for pb in &bars {
+                pb.finish_and_clear();
+                multi_progress.remove(pb);
+            }
+
+            all_results.extend(batch_results.into_iter().collect::<Result<Vec<_>>>()?);
         }
 
-        all_results.extend(batch_results.into_iter().collect::<Result<Vec<_>>>()?);
-    }
+        // Histogram + overlap-ratio stitching into fine-grained PMF
+        let pmf = build_pmf(&all_results, rt, config.windows.bin_width)?;
 
-    // Histogram + overlap-ratio stitching into fine-grained PMF
-    let pmf = build_pmf(&all_results, rt, config.windows.bin_width)?;
+        // Write PMF output
+        let mut writer = ColumnWriter::open(output, &["cv", "pmf_kT", "stderr_kT", "spread_kT"])?;
+        for p in &pmf {
+            // Scientific notation for the error columns: fixed-point truncates a small but finite
+            // error to a literal zero, which breaks 1/σ-weighted fits downstream (issue #76)
+            writer.write_row(&[
+                &format!("{:.4}", p.cv),
+                &format!("{:.6}", p.f / rt),
+                &format!("{:.6e}", p.stderr / rt),
+                &format!("{:.6e}", p.spread / rt),
+            ])?;
+        }
+        log::info!("Wrote PMF ({} bins) to {}", pmf.len(), output.display());
 
-    // Write PMF output
-    let mut writer = ColumnWriter::open(output, &["cv", "pmf_kT", "stderr_kT", "spread_kT"])?;
-    for p in &pmf {
-        // Scientific notation for the error columns: fixed-point truncates a small but finite
-        // error to a literal zero, which breaks 1/σ-weighted fits downstream (issue #76)
-        writer.write_row(&[
-            &format!("{:.4}", p.cv),
-            &format!("{:.6}", p.f / rt),
-            &format!("{:.6e}", p.stderr / rt),
-            &format!("{:.6e}", p.spread / rt),
-        ])?;
-    }
-    log::info!("Wrote PMF ({} bins) to {}", pmf.len(), output.display());
-
-    // The error bars measure sampling only, so a broken stitch no longer widens them (issue #76).
-    // Surface it here instead — otherwise poor overlap is visible only to whoever opens the CSV.
-    if let Some(worst) = pmf
-        .iter()
-        .max_by(|a, b| a.spread.total_cmp(&b.spread))
-        .filter(|p| p.spread > rt)
-    {
-        log::warn!(
-            "Windows overlapping cv={:.2} disagree by {:.1} RT — more than thermal energy. \
+        // The error bars measure sampling only, so a broken stitch no longer widens them (issue #76).
+        // Surface it here instead — otherwise poor overlap is visible only to whoever opens the CSV.
+        if let Some(worst) = pmf
+            .iter()
+            .max_by(|a, b| a.spread.total_cmp(&b.spread))
+            .filter(|p| p.spread > rt)
+        {
+            log::warn!(
+                "Windows overlapping cv={:.2} disagree by {:.1} RT — more than thermal energy. \
              The stitched PMF is unreliable there; increase window overlap or sampling. \
              See the 'spread_kT' column of {}.",
-            worst.cv,
-            worst.spread / rt,
-            output.display()
-        );
-    }
+                worst.cv,
+                worst.spread / rt,
+                output.display()
+            );
+        }
 
-    Ok(())
+        Ok(())
+    }
 }
 
 // ---------------------------------------------------------------------------

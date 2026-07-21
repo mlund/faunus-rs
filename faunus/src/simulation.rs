@@ -748,147 +748,191 @@ fn load_frame_into_context(
 ///
 /// This is a free function rather than a [`Simulation`] method because a replay is driven by the
 /// trajectory, not by the input's `propagate` section.
-pub fn replay(input: &Path, traj: &Path, aux: Option<&Path>) -> Result<SimulationOutput> {
-    use crate::topology::io::NM_TO_ANGSTROM;
+/// A validated rerun, ready to stream frames.
+///
+/// Building one performs every fallible check a rerun needs — Hamiltonian and analyses
+/// construction, cell rerun support, analysis/trajectory output collision, aux-header match,
+/// and opening both readers — so a `--check` dry run can stop at [`prepare`](Self::prepare)
+/// without processing a single frame. [`run`](Self::run) then streams the trajectory.
+pub(crate) struct Replay {
+    context: Backend,
+    analyses: AnalysisCollection<Backend>,
+    medium: Medium,
+    traj: std::path::PathBuf,
+    xtc_reader: molly::XTCReader<std::fs::File>,
+    aux_reader: FrameStateReader,
+    weight_source: analysis::reweight::WeightSource,
+}
 
-    std::fs::File::open(input).map_err(|source| Error::io(input, source))?;
-    let source = Source::File(input);
-    let medium = source.medium()?;
-    let mut context = source.backend(None, &mut source.setup_rng()?)?;
-    let mut analyses = source.analyses(&context, Some(&medium), None)?;
+impl Replay {
+    /// Validate a rerun and open its readers without processing any frames.
+    pub(crate) fn prepare(input: &Path, traj: &Path, aux: Option<&Path>) -> Result<Self> {
+        std::fs::File::open(input).map_err(|source| Error::io(input, source))?;
+        let source = Source::File(input);
+        let medium = source.medium()?;
+        let context = source.backend(None, &mut source.setup_rng()?)?;
+        let mut analyses = source.analyses(&context, Some(&medium), None)?;
 
-    // Before the atom-count check below, which would otherwise be the user's only clue.
-    if let Some(reason) = context.cell().rerun_rejection() {
-        return Err(Error::Unsupported(reason.to_owned()));
-    }
+        // Before the atom-count check in `run`, which would otherwise be the user's only clue.
+        if let Some(reason) = context.cell().rerun_rejection() {
+            return Err(Error::Unsupported(reason.to_owned()));
+        }
 
-    log::info!("{}", medium);
-    log::info!("Thermal energy: {:.2} kJ/mol", thermal_energy(&medium));
+        log::info!("{}", medium);
+        log::info!("Thermal energy: {:.2} kJ/mol", thermal_energy(&medium));
 
-    // Every frame must be sampled since we can't skip frames in the XTC/aux pair
-    analyses.override_frequencies(Frequency::Every(1));
+        // Every frame must be sampled since we can't skip frames in the XTC/aux pair
+        analyses.override_frequencies(Frequency::Every(1));
 
-    let aux = aux
-        .map(std::path::PathBuf::from)
-        .unwrap_or_else(|| frame_state::aux_path_from_traj(traj));
+        let aux = aux
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| frame_state::aux_path_from_traj(traj));
 
-    // An analysis pointed at the trajectory being replayed would truncate it mid-read, silently
-    // yielding one frame instead of many (issue #60). Refuse before opening the readers.
-    for analysis in &analyses {
-        for written in analysis.trajectory_outputs() {
-            if same_file(&written, traj) || same_file(&written, &aux) {
-                return Err(Error::Input(format!(
-                    "analysis writes {}, which is the trajectory being replayed; \
-                     change the analysis `file:` or drop it from the rerun input",
-                    written.display()
-                )));
+        // An analysis pointed at the trajectory being replayed would truncate it mid-read, silently
+        // yielding one frame instead of many (issue #60). Refuse before opening the readers.
+        for analysis in &analyses {
+            for written in analysis.trajectory_outputs() {
+                if same_file(&written, traj) || same_file(&written, &aux) {
+                    return Err(Error::Input(format!(
+                        "analysis writes {}, which is the trajectory being replayed; \
+                         change the analysis `file:` or drop it from the rerun input",
+                        written.display()
+                    )));
+                }
             }
         }
-    }
 
-    let mut aux_reader = FrameStateReader::open(&aux)?;
+        let aux_reader = FrameStateReader::open(&aux)?;
+        validate_aux_header(aux_reader.header(), &context)?;
+        let xtc_reader = molly::XTCReader::open(traj).map_err(|source| Error::io(traj, source))?;
 
-    validate_aux_header(aux_reader.header(), &context)?;
-
-    let mut xtc_reader = molly::XTCReader::open(traj).map_err(|source| Error::io(traj, source))?;
-    let mut frame = molly::Frame::default();
-
-    let n_particles = context.num_particles();
-    let mut frame_index = 0usize;
-    // Pre-allocate and reuse across frames to avoid per-frame heap allocation
-    let mut particles = Vec::with_capacity(n_particles);
-    let mut aux_frame = frame_state::FrameStateFrame::default();
-
-    // Detect penalty bias for reweighting
-    let weight_source = if let Some(penalty) = context.hamiltonian().penalty() {
-        let inv_kt = 1.0 / thermal_energy(&medium);
-        let state = penalty.state();
-        let state_guard = state.read().expect("poisoned lock");
-        log::info!(
-            "Reweighting enabled: penalty bias detected (\u{0394}g={:.1} kT)",
-            state_guard.ln_g_range()
-        );
-        drop(state_guard);
-        // Clone is cheap (state is behind Arc) and avoids borrowing from context
-        analysis::reweight::WeightSource::Penalty {
-            penalty: Box::new(penalty.clone()),
-            inv_thermal_energy: inv_kt,
-        }
-    } else {
-        analysis::reweight::WeightSource::Uniform
-    };
-
-    log::info!("Replaying trajectory: {}", traj.display());
-
-    loop {
-        match xtc_reader.read_frame(&mut frame) {
-            Ok(()) => {}
-            Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => break,
-            Err(source) => return Err(Error::io(traj, source)),
-        }
-
-        if frame.natoms() != n_particles {
-            return Err(Error::Input(format!(
-                "XTC frame {frame_index} has {} atoms, expected {n_particles}",
-                frame.natoms()
-            )));
-        }
-
-        if !aux_reader.read_frame_into(&mut aux_frame)? {
-            return Err(Error::Input(format!(
-                "aux file ended before XTC at frame {frame_index}"
-            )));
-        }
-
-        // XTC stores positions in nm with corner at origin; Faunus uses Å with
-        // center at origin. Column-major layout: [c0x, c0y, c0z, c1x, ...].
-        let cols = frame.boxvec.to_cols_array();
-        let box_half = Point::new(
-            cols[0] as f64 * NM_TO_ANGSTROM * 0.5,
-            cols[4] as f64 * NM_TO_ANGSTROM * 0.5,
-            cols[8] as f64 * NM_TO_ANGSTROM * 0.5,
-        );
-
-        particles.clear();
-        particles.extend((0..n_particles).map(|i| {
-            let pos = Point::new(
-                frame.positions[3 * i] as f64 * NM_TO_ANGSTROM - box_half.x,
-                frame.positions[3 * i + 1] as f64 * NM_TO_ANGSTROM - box_half.y,
-                frame.positions[3 * i + 2] as f64 * NM_TO_ANGSTROM - box_half.z,
+        // Detect penalty bias for reweighting
+        let weight_source = if let Some(penalty) = context.hamiltonian().penalty() {
+            let inv_kt = 1.0 / thermal_energy(&medium);
+            let state = penalty.state();
+            let state_guard = state.read().expect("poisoned lock");
+            log::info!(
+                "Reweighting enabled: penalty bias detected (\u{0394}g={:.1} kT)",
+                state_guard.ln_g_range()
             );
-            Particle::new(aux_frame.atom_ids[i] as usize, pos)
-        }));
+            drop(state_guard);
+            // Clone is cheap (state is behind Arc) and avoids borrowing from context
+            analysis::reweight::WeightSource::Penalty {
+                penalty: Box::new(penalty.clone()),
+                inv_thermal_energy: inv_kt,
+            }
+        } else {
+            analysis::reweight::WeightSource::Uniform
+        };
 
-        load_frame_into_context(&mut context, &particles, &aux_frame, box_half * 2.0)?;
-        let weight = weight_source.weight(&context);
-        analyses.sample_weighted(&context, frame_index, weight)?;
-        frame_index += 1;
+        Ok(Self {
+            context,
+            analyses,
+            medium,
+            traj: traj.to_path_buf(),
+            xtc_reader,
+            aux_reader,
+            weight_source,
+        })
     }
 
-    log::info!("Processed {frame_index} frames");
+    /// Stream every frame through the Hamiltonian and analyses, returning the summary output.
+    pub(crate) fn run(self) -> Result<SimulationOutput> {
+        use crate::topology::io::NM_TO_ANGSTROM;
+        let Replay {
+            mut context,
+            mut analyses,
+            medium,
+            traj,
+            mut xtc_reader,
+            mut aux_reader,
+            weight_source,
+        } = self;
 
-    // `frame_index` counts frames, so the last one carries step `frame_index - 1`, matching
-    // what the Monte Carlo loop passes.
-    analyses.finalize(&context, frame_index.saturating_sub(1))?;
-    analyses.write_to_disk()?;
+        let mut frame = molly::Frame::default();
+        let n_particles = context.num_particles();
+        let mut frame_index = 0usize;
+        // Pre-allocate and reuse across frames to avoid per-frame heap allocation
+        let mut particles = Vec::with_capacity(n_particles);
+        let mut aux_frame = frame_state::FrameStateFrame::default();
 
-    let energy = context.hamiltonian().energy(&context, &Change::Everything);
-    let energy_summary = BTreeMap::from([
-        ("last_frame_energy".to_string(), energy),
-        ("frames".to_string(), frame_index as f64),
-    ]);
+        log::info!("Replaying trajectory: {}", traj.display());
 
-    let mut yaml = yaml_block(&medium, Some("medium"))?;
-    yaml.push_str(&yaml_block(&energy_summary, Some("rerun"))?);
-    let analysis_yaml = analysis::analyses_to_yaml(&analyses);
-    if !analysis_yaml.is_empty() {
-        yaml.push_str(&yaml_block(&analysis_yaml, Some("analysis"))?);
+        loop {
+            match xtc_reader.read_frame(&mut frame) {
+                Ok(()) => {}
+                Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => break,
+                Err(source) => return Err(Error::io(traj.as_path(), source)),
+            }
+
+            if frame.natoms() != n_particles {
+                return Err(Error::Input(format!(
+                    "XTC frame {frame_index} has {} atoms, expected {n_particles}",
+                    frame.natoms()
+                )));
+            }
+
+            if !aux_reader.read_frame_into(&mut aux_frame)? {
+                return Err(Error::Input(format!(
+                    "aux file ended before XTC at frame {frame_index}"
+                )));
+            }
+
+            // XTC stores positions in nm with corner at origin; Faunus uses Å with
+            // center at origin. Column-major layout: [c0x, c0y, c0z, c1x, ...].
+            let cols = frame.boxvec.to_cols_array();
+            let box_half = Point::new(
+                cols[0] as f64 * NM_TO_ANGSTROM * 0.5,
+                cols[4] as f64 * NM_TO_ANGSTROM * 0.5,
+                cols[8] as f64 * NM_TO_ANGSTROM * 0.5,
+            );
+
+            particles.clear();
+            particles.extend((0..n_particles).map(|i| {
+                let pos = Point::new(
+                    frame.positions[3 * i] as f64 * NM_TO_ANGSTROM - box_half.x,
+                    frame.positions[3 * i + 1] as f64 * NM_TO_ANGSTROM - box_half.y,
+                    frame.positions[3 * i + 2] as f64 * NM_TO_ANGSTROM - box_half.z,
+                );
+                Particle::new(aux_frame.atom_ids[i] as usize, pos)
+            }));
+
+            load_frame_into_context(&mut context, &particles, &aux_frame, box_half * 2.0)?;
+            let weight = weight_source.weight(&context);
+            analyses.sample_weighted(&context, frame_index, weight)?;
+            frame_index += 1;
+        }
+
+        log::info!("Processed {frame_index} frames");
+
+        // `frame_index` counts frames, so the last one carries step `frame_index - 1`, matching
+        // what the Monte Carlo loop passes.
+        analyses.finalize(&context, frame_index.saturating_sub(1))?;
+        analyses.write_to_disk()?;
+
+        let energy = context.hamiltonian().energy(&context, &Change::Everything);
+        let energy_summary = BTreeMap::from([
+            ("last_frame_energy".to_string(), energy),
+            ("frames".to_string(), frame_index as f64),
+        ]);
+
+        let mut yaml = yaml_block(&medium, Some("medium"))?;
+        yaml.push_str(&yaml_block(&energy_summary, Some("rerun"))?);
+        let analysis_yaml = analysis::analyses_to_yaml(&analyses);
+        if !analysis_yaml.is_empty() {
+            yaml.push_str(&yaml_block(&analysis_yaml, Some("analysis"))?);
+        }
+
+        Ok(SimulationOutput {
+            yaml: yaml.into(),
+            boxes: Vec::new(),
+        })
     }
+}
 
-    Ok(SimulationOutput {
-        yaml: yaml.into(),
-        boxes: Vec::new(),
-    })
+/// Replay a trajectory through a (possibly different) Hamiltonian.
+pub fn replay(input: &Path, traj: &Path, aux: Option<&Path>) -> Result<SimulationOutput> {
+    Replay::prepare(input, traj, aux)?.run()
 }
 
 #[cfg(test)]
