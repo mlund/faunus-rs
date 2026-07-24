@@ -1278,6 +1278,11 @@ Electrostatic potentials read permittivity, temperature, and optional salt from 
 </tr>
 </tbody>
 </table>
+<p>The <code>salt</code> setting describes an implicit salt bath; it does not insert explicit
+ions into the system. Faunus uses the salt stoichiometry and molarity to derive
+the ionic strength and Debye length, which are then passed to supported
+screened electrostatic potentials. Without <code>salt</code>, the medium supplies no
+screening unless a pair potential defines its own <code>debye_length</code>.</p>
 <h4 id="dielectric-constant-models">Dielectric constant models<a class="headerlink" href="#dielectric-constant-models" title="Permanent link">&para;</a></h4>
 <table>
 <thead>
@@ -1334,7 +1339,7 @@ spelling is accepted as an alias if the tag marker is dropped, e.g.
 <tbody>
 <tr>
 <td><code>!Coulomb</code></td>
-<td><code>cutoff</code></td>
+<td><code>cutoff</code>, <code>debye_length</code></td>
 </tr>
 <tr>
 <td><code>!Ewald</code></td>
@@ -1346,10 +1351,27 @@ spelling is accepted as an alias if the tag marker is dropped, e.g.
 </tr>
 <tr>
 <td><code>!Fanourgakis</code></td>
-<td><code>cutoff</code></td>
+<td><code>cutoff</code>, <code>debye_length</code></td>
 </tr>
 </tbody>
 </table>
+<p>The recommended way to configure salt screening is <code>medium.salt</code>. For pair
+schemes that support explicit screening, a <code>debye_length</code> is also accepted and
+takes precedence for that pair; Faunus emits a warning when both settings are
+present. Omitting both settings leaves the pair potential unscreened.</p>
+<div class="highlight"><pre><span></span><code><span class="nt">system</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">medium</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">permittivity</span><span class="p">:</span><span class="w"> </span><span class="kt">!Water</span>
+<span class="w">    </span><span class="nt">temperature</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">298.15</span>
+<span class="w">    </span><span class="nt">salt</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="kt">!NaCl,</span><span class="w"> </span><span class="nv">0.005</span><span class="p p-Indicator">]</span>
+<span class="w">  </span><span class="nt">energy</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!Nonbonded</span>
+<span class="w">      </span><span class="nt">default</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!Fanourgakis</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">cutoff</span><span class="p">:</span><span class="w"> </span><span class="nv">50.0</span><span class="p p-Indicator">}</span>
+<span class="w">      </span><span class="nt">replace</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">[</span><span class="nv">Na</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">Cl</span><span class="p p-Indicator">]:</span>
+<span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!Fanourgakis</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">cutoff</span><span class="p">:</span><span class="w"> </span><span class="nv">50.0</span><span class="p p-Indicator">,</span><span class="nt"> debye_length</span><span class="p">:</span><span class="w"> </span><span class="nv">12.0</span><span class="p p-Indicator">}</span>
+</code></pre></div>
 <hr />
 <h2 id="ewald-summation">Ewald Summation<a class="headerlink" href="#ewald-summation" title="Permanent link">&para;</a></h2>
 <p>The Ewald method splits long-range electrostatic (or Yukawa) interactions into
