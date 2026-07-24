@@ -418,6 +418,8 @@ mod tests {
     use super::*;
     use crate::analysis::AnalysisBuilder;
     use crate::backend::Backend;
+    use crate::context::Context;
+    use crate::context::WithSimulationCell;
     use crate::group::{GroupCollection, GroupCollectionMut};
     use crate::UnitQuaternion;
     use crate::WithTopology;
@@ -496,6 +498,42 @@ system:
         - [-9.0, 0.0, 0.0]
 "#;
         Backend::from_yaml_str(yaml, None, &mut rand::thread_rng()).unwrap()
+    }
+
+    fn cppm_context() -> Backend {
+        let structure =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("assets/cppm-p18.xyz");
+        let yaml = format!(
+            r#"
+atoms:
+  - {{name: PP, mass: 1.0, charge: 1.0}}
+  - {{name: NP, mass: 1.0, charge: -1.0}}
+  - {{name: MP, mass: 1.0, charge: 0.0}}
+  - {{name: Na, mass: 1.0, charge: 1.0}}
+molecules:
+  - name: CPPM
+    degrees_of_freedom: Rigid
+    from_structure: "{}"
+  - name: ION
+    atoms: [Na]
+    atomic: true
+system:
+  cell: !Cuboid [100.0, 100.0, 100.0]
+  medium:
+    permittivity: !Vacuum
+    temperature: 298.15
+  energy: []
+  blocks:
+    - molecule: CPPM
+      N: 2
+      insert: !GridCOM
+    - molecule: ION
+      N: 2
+      insert: !Manual [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]]
+"#,
+            structure.display()
+        );
+        Backend::from_yaml_str(&yaml, None, &mut rand::thread_rng()).unwrap()
     }
 
     #[test]
@@ -580,6 +618,113 @@ frequency: !Every 1
         let idx_direct = sdf.grid.index_of(&Point::new(2.0, 0.0, 0.0)).unwrap();
         assert_relative_eq!(sdf.counts[idx_direct], 1.0);
         assert_relative_eq!(sdf.normalization.reference_observations(), 1.0);
+    }
+
+    #[test]
+    fn restart_reconstructs_com_and_quaternion_before_sdf_sampling() {
+        let mut saved_context = pbc_context();
+        let orientation =
+            UnitQuaternion::from_axis_angle(&Vector3::z_axis(), std::f64::consts::FRAC_PI_4);
+
+        // The reference COM is at x = 9.5 Å. Rotate the molecule and target in
+        // the lab frame, then wrap all positions; the second reference atom and
+        // target therefore cross x = +10 Å.
+        let com = Point::new(9.5, 0.0, 0.0);
+        let body_reference = [Point::new(-1.0, 0.0, 0.0), Point::new(1.0, 0.0, 0.0)];
+        let body_target = Point::new(2.5, 0.5, 0.5);
+        let mut positions: Vec<Point> = body_reference
+            .into_iter()
+            .map(|body| {
+                let mut position = com + orientation.transform_vector(&body);
+                saved_context.cell().boundary(&mut position);
+                position
+            })
+            .collect();
+        let mut target = com + orientation.transform_vector(&body_target);
+        saved_context.cell().boundary(&mut target);
+        positions.push(target);
+        saved_context.set_all_positions(&positions).unwrap();
+        saved_context.set_group_orientation(0, orientation);
+        let state = crate::state::State::save(&saved_context, 17);
+
+        // Normal restarts construct analyses before restoring state.yaml.
+        let mut restarted_context = pbc_context();
+        let tmp = tempfile::tempdir().unwrap();
+        let mut builder: SpatialDistributionBuilder = yaml_serde::from_str(
+            r#"
+reference: "molecule REF"
+selection: "atomtype Na"
+file: spatial.dx
+resolution: 1.0
+padding: 3.0
+bulk_normalize: false
+frequency: !Every 1
+"#,
+        )
+        .unwrap();
+        builder.apply_output_dir(tmp.path()).unwrap();
+        let mut sdf = builder.build(&restarted_context).unwrap();
+
+        state.load(&mut restarted_context).unwrap();
+        Analyze::<Backend>::sample_now(&mut sdf, &restarted_context, 0, 1.0).unwrap();
+
+        let expected_body = Point::new(2.5, 0.5, 0.5);
+        let expected_voxel = sdf.grid.index_of(&expected_body).unwrap();
+        assert_relative_eq!(sdf.counts[expected_voxel], 1.0);
+        assert_relative_eq!(sdf.counts.iter().sum::<f64>(), 1.0);
+    }
+
+    #[test]
+    fn multiple_patchy_references_average_in_their_body_frames_after_restart() {
+        let mut saved_context = cppm_context();
+        let rotations = [
+            UnitQuaternion::from_axis_angle(&Vector3::z_axis(), 0.37),
+            UnitQuaternion::from_axis_angle(&Vector3::y_axis(), -0.61),
+        ];
+        for (group_index, rotation) in rotations.into_iter().enumerate() {
+            saved_context.rotate_group(group_index, &rotation).unwrap();
+        }
+
+        // Put one ion at the same body-frame position around each CPPM.
+        let body_target = Point::new(22.0, 0.5, 0.5);
+        let ion_indices: Vec<_> = saved_context.groups()[2].iter_active().collect();
+        let mut positions: Vec<_> = (0..saved_context.num_particles())
+            .map(|index| saved_context.position(index))
+            .collect();
+        for (group_index, &ion_index) in ion_indices.iter().enumerate() {
+            let group = &saved_context.groups()[group_index];
+            let mut target =
+                *group.mass_center().unwrap() + group.quaternion().transform_vector(&body_target);
+            saved_context.cell().boundary(&mut target);
+            positions[ion_index] = target;
+        }
+        saved_context.set_all_positions(&positions).unwrap();
+        let state = crate::state::State::save(&saved_context, 23);
+
+        // Build the analysis before loading state.yaml, as in a normal restart.
+        let mut restarted_context = cppm_context();
+        let tmp = tempfile::tempdir().unwrap();
+        let mut builder: SpatialDistributionBuilder = yaml_serde::from_str(
+            r#"
+reference: "molecule CPPM"
+selection: "atomtype Na"
+file: spatial.dx
+resolution: 1.0
+padding: 3.0
+bulk_normalize: false
+frequency: !Every 1
+"#,
+        )
+        .unwrap();
+        builder.apply_output_dir(tmp.path()).unwrap();
+        let mut sdf = builder.build(&restarted_context).unwrap();
+
+        state.load(&mut restarted_context).unwrap();
+        Analyze::<Backend>::sample_now(&mut sdf, &restarted_context, 0, 1.0).unwrap();
+
+        let expected_voxel = sdf.grid.index_of(&body_target).unwrap();
+        assert_relative_eq!(sdf.counts[expected_voxel], 2.0);
+        assert_relative_eq!(sdf.counts.iter().sum::<f64>(), 2.0);
     }
 
     #[test]
