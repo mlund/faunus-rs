@@ -274,15 +274,19 @@ impl PairInteraction {
     ) -> IonIon<T> {
         let mut ionion = IonIon::new(charge_product, medium.clone().into(), scheme);
         ionion.set_permittivity(medium.permittivity()).unwrap();
-        if let Some(e) = medium
-            .debye_length()
-            .take_if(|_| ionion.debye_length().is_none())
-            .and_then(|d| ionion.set_debye_length(Some(d)).err())
-        {
-            log::warn!(
-                "Couldn't copy global medium::debye_length to ion-ion pair potential: {}",
-                e
-            )
+        let medium_debye_length = medium.debye_length();
+        if let Some(pair_debye_length) = ionion.debye_length() {
+            if medium_debye_length.is_some() {
+                log::warn!(
+                    "Pair-potential debye_length ({pair_debye_length:.3} Å) overrides the Debye length derived from medium.salt; prefer configuring screening through medium.salt"
+                );
+            }
+        } else if let Some(debye_length) = medium_debye_length {
+            if let Err(error) = ionion.set_debye_length(Some(debye_length)) {
+                log::warn!(
+                    "Couldn't copy global medium::debye_length to ion-ion pair potential: {error}"
+                )
+            }
         };
         log::debug!("{}", &ionion);
         ionion

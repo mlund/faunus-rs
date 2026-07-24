@@ -234,6 +234,12 @@ system:
 | `temperature`   | yes      | Temperature (K)                                  |
 | `salt`          | no       | Salt type and molarity as `[type, mol/l]`        |
 
+The `salt` setting describes an implicit salt bath; it does not insert explicit
+ions into the system. Faunus uses the salt stoichiometry and molarity to derive
+the ionic strength and Debye length, which are then passed to supported
+screened electrostatic potentials. Without `salt`, the medium supplies no
+screening unless a pair potential defines its own `debye_length`.
+
 #### Dielectric constant models
 
 | Tag         | Description                                          |
@@ -261,10 +267,30 @@ Electrostatic potentials combine atom charges with a coulombic scheme.
 
 | Aliases           | Parameters                                 |
 |-------------------|--------------------------------------------|
-| `!Coulomb`        | `cutoff`                                   |
+| `!Coulomb`        | `cutoff`, `debye_length`                   |
 | `!Ewald`          | `alpha`, `cutoff`                          |
 | `!ReactionField`  | `epsr_in`, `epsr_out`, `cutoff`, `shift`   |
-| `!Fanourgakis`    | `cutoff`                                   |
+| `!Fanourgakis`    | `cutoff`, `debye_length`                   |
+
+The recommended way to configure salt screening is `medium.salt`. For pair
+schemes that support explicit screening, a `debye_length` is also accepted and
+takes precedence for that pair; Faunus emits a warning when both settings are
+present. Omitting both settings leaves the pair potential unscreened.
+
+```yaml
+system:
+  medium:
+    permittivity: !Water
+    temperature: 298.15
+    salt: [!NaCl, 0.005]
+  energy:
+    - !Nonbonded
+      default:
+        - !Fanourgakis {cutoff: 50.0}
+      replace:
+        [Na, Cl]:
+          - !Fanourgakis {cutoff: 50.0, debye_length: 12.0}
+```
 
 ---
 
