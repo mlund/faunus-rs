@@ -49,7 +49,7 @@ use interatomic::coulomb::{Medium, Temperature};
 /// *traceless* Θ from [`geometry::quadrupole_moment`](crate::geometry), and it carries
 /// scheme/cutoff state we do not want here. All take the separation vector `R = rₐ − r_b` and are
 /// unit-tested against analytical two-body values.
-mod kernels {
+pub(crate) mod kernels {
     use crate::Point;
     use nalgebra::Matrix3;
 
@@ -144,7 +144,7 @@ impl MultipoleDistributionBuilder {
         })?;
         let bjerrum_length = medium.bjerrum_length();
         // geometric energy (e²/Å) × λ_B → kT, × RT → kJ/mol
-        let energy_scale = bjerrum_length * crate::R_IN_KJ_PER_MOL * medium.temperature();
+        let energy_scale = multipole_energy_scale(medium);
 
         let max_r = match self.max_r {
             Some(r) => r,
@@ -212,20 +212,20 @@ impl MultipoleDistributionBuilder {
 }
 
 /// Reduced electrostatic representation of a single group, precomputed once per frame.
-struct GroupMoments {
-    charge: f64,
-    com: Point,
+pub(crate) struct GroupMoments {
+    pub(crate) charge: f64,
+    pub(crate) com: Point,
     /// Full dipole vector μ = Σ qᵢ(rᵢ − com), PBC-aware.
-    dipole: Point,
+    pub(crate) dipole: Point,
     /// Traceless quadrupole Θ, PBC-aware.
-    quadrupole: Matrix3<f64>,
+    pub(crate) quadrupole: Matrix3<f64>,
     /// Per-atom (charge, displacement-from-COM), minimum-image. Cached so the exact energy uses
     /// the same periodic image as the multipole moments, and so each group is traversed once.
-    atoms: Vec<(f64, Point)>,
+    pub(crate) atoms: Vec<(f64, Point)>,
 }
 
 impl GroupMoments {
-    fn from_group(group_index: usize, context: &impl ObserveContext) -> Option<Self> {
+    pub(crate) fn from_group(group_index: usize, context: &impl ObserveContext) -> Option<Self> {
         let group = &context.groups()[group_index];
         let com = *group.mass_center()?;
         let atomkinds = context.topology_ref().atomkinds();
@@ -253,6 +253,90 @@ impl GroupMoments {
             atoms,
         })
     }
+}
+
+/// Pair-level multipole observables shared by multipole reporting and conditioned SDFs.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct PairDescriptor {
+    pub(crate) ii: f64,
+    pub(crate) id: f64,
+    pub(crate) dd: f64,
+    pub(crate) iq: f64,
+    pub(crate) mucorr: Option<f64>,
+    pub(crate) p2: Option<f64>,
+    pub(crate) long: Option<f64>,
+    pub(crate) quadcorr: f64,
+    pub(crate) quadcorr_norm: Option<f64>,
+}
+
+/// Evaluate all pair observables from PBC-consistent group moments.
+pub(crate) fn pair_descriptor(
+    first: &GroupMoments,
+    second: &GroupMoments,
+    cell: &impl BoundaryConditions,
+    energy_scale: f64,
+) -> PairDescriptor {
+    // Keep the convention identical to MultipoleDistribution: R = rₐ − r_b.
+    let separation = cell.distance(&first.com, &second.com);
+    let distance = separation.norm();
+    let ii = kernels::ion_ion(first.charge, second.charge, distance);
+    let id = kernels::ion_dipole(
+        first.charge,
+        &first.dipole,
+        second.charge,
+        &second.dipole,
+        &separation,
+    );
+    let dd = kernels::dipole_dipole(&first.dipole, &second.dipole, &separation);
+    let iq = kernels::ion_quadrupole(
+        first.charge,
+        &first.quadrupole,
+        second.charge,
+        &second.quadrupole,
+        &separation,
+    );
+
+    let (mucorr, p2, long) = {
+        let (norm_first, norm_second) = (first.dipole.norm(), second.dipole.norm());
+        if norm_first > 1e-9 && norm_second > 1e-9 {
+            let unit_first = first.dipole / norm_first;
+            let unit_second = second.dipole / norm_second;
+            let cosine = unit_first.dot(&unit_second);
+            let r_hat = separation / distance;
+            (
+                Some(cosine),
+                Some(0.5 * (3.0 * cosine * cosine - 1.0)),
+                Some(unit_first.dot(&r_hat) * unit_second.dot(&r_hat)),
+            )
+        } else {
+            (None, None, None)
+        }
+    };
+    let quadcorr = first.quadrupole.dot(&second.quadrupole);
+    let quadcorr_norm = {
+        let denominator = first.quadrupole.norm() * second.quadrupole.norm();
+        if denominator > 0.0 {
+            Some(quadcorr / denominator)
+        } else {
+            None
+        }
+    };
+
+    PairDescriptor {
+        ii: ii * energy_scale,
+        id: id * energy_scale,
+        dd: dd * energy_scale,
+        iq: iq * energy_scale,
+        mucorr,
+        p2,
+        long,
+        quadcorr,
+        quadcorr_norm,
+    }
+}
+
+pub(crate) fn multipole_energy_scale(medium: &Medium) -> f64 {
+    medium.bjerrum_length() * crate::R_IN_KJ_PER_MOL * medium.temperature()
 }
 
 /// Explicit Coulomb double sum Σᵢ Σⱼ qᵢqⱼ / |rᵢ − rⱼ| over the two groups' active atoms.
@@ -461,42 +545,24 @@ impl<T: ObserveContext> Analyze<T> for MultipoleDistribution {
                 let data = self.bins.entry((r / dr).floor() as i64).or_default();
 
                 data.exact.add(exact_energy(a, b, &r_vec), weight);
-                data.ion_ion
-                    .add(kernels::ion_ion(a.charge, b.charge, r), weight);
-                data.ion_dipole.add(
-                    kernels::ion_dipole(a.charge, &a.dipole, b.charge, &b.dipole, &r_vec),
-                    weight,
-                );
-                data.dipole_dipole
-                    .add(kernels::dipole_dipole(&a.dipole, &b.dipole, &r_vec), weight);
-                data.ion_quadrupole.add(
-                    kernels::ion_quadrupole(
-                        a.charge,
-                        &a.quadrupole,
-                        b.charge,
-                        &b.quadrupole,
-                        &r_vec,
-                    ),
-                    weight,
-                );
+                let descriptor = pair_descriptor(a, b, cell, 1.0);
+                data.ion_ion.add(descriptor.ii, weight);
+                data.ion_dipole.add(descriptor.id, weight);
+                data.dipole_dipole.add(descriptor.dd, weight);
+                data.ion_quadrupole.add(descriptor.iq, weight);
 
                 let (len_a, len_b) = (a.dipole.norm(), b.dipole.norm());
                 if len_a > 1e-9 && len_b > 1e-9 {
-                    let (unit_a, unit_b) = (a.dipole / len_a, b.dipole / len_b);
-                    let cos = unit_a.dot(&unit_b);
-                    data.dipole_corr.add(cos, weight);
-                    data.p2.add(0.5 * (3.0 * cos * cos - 1.0), weight);
-                    let r_hat = r_vec / r;
-                    data.longitudinal
-                        .add(unit_a.dot(&r_hat) * unit_b.dot(&r_hat), weight);
+                    data.dipole_corr.add(descriptor.mucorr.unwrap(), weight);
+                    data.p2.add(descriptor.p2.unwrap(), weight);
+                    data.longitudinal.add(descriptor.long.unwrap(), weight);
                 }
 
-                let frobenius = a.quadrupole.dot(&b.quadrupole);
-                data.quad_corr.add(frobenius, weight);
+                data.quad_corr.add(descriptor.quadcorr, weight);
                 let (norm_a, norm_b) = (a.quadrupole.norm(), b.quadrupole.norm());
                 if norm_a > 0.0 && norm_b > 0.0 {
                     data.quad_corr_norm
-                        .add(frobenius / (norm_a * norm_b), weight);
+                        .add(descriptor.quadcorr_norm.unwrap(), weight);
                 }
             }
         }
@@ -618,6 +684,27 @@ mod tests {
             kernels::ion_dipole(1.0, &Point::zeros(), 0.0, &mu_perp, &r),
             0.0
         );
+    }
+
+    #[test]
+    fn pair_descriptor_uses_same_r_convention_as_multipole_distribution() {
+        let cell = crate::cell::Cuboid::cubic(100.0);
+        let first = GroupMoments {
+            charge: 1.0,
+            com: Point::new(0.0, 0.0, 0.0),
+            dipole: Point::zeros(),
+            quadrupole: Matrix3::zeros(),
+            atoms: Vec::new(),
+        };
+        let second = GroupMoments {
+            charge: 0.0,
+            com: Point::new(3.0, 0.0, 0.0),
+            dipole: Point::new(1.0, 0.0, 0.0),
+            quadrupole: Matrix3::zeros(),
+            atoms: Vec::new(),
+        };
+        let descriptor = pair_descriptor(&first, &second, &cell, 1.0);
+        assert_relative_eq!(descriptor.id, -1.0 / 9.0);
     }
 
     #[test]
