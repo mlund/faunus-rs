@@ -95,7 +95,7 @@ impl Grid {
         )
     }
 
-    /// Return the linear x-fastest voxel index for a body-frame point.
+    /// Return the voxel index (z-fastest / standard OpenDX order) for a body-frame point.
     pub(super) fn index_of(&self, point: &Point) -> Option<usize> {
         let rel = (point - self.origin) / self.spacing;
         if rel.x < 0.0 || rel.y < 0.0 || rel.z < 0.0 {
@@ -111,8 +111,9 @@ impl Grid {
         }
     }
 
+    /// Standard OpenDX z-fastest (C-order) layout: ix varies slowest, iz varies fastest.
     pub(super) const fn linear_index(&self, ix: usize, iy: usize, iz: usize) -> usize {
-        ix + self.dims[0] * (iy + self.dims[1] * iz)
+        ix * (self.dims[1] * self.dims[2]) + iy * self.dims[2] + iz
     }
 }
 
@@ -133,14 +134,15 @@ mod tests {
     }
 
     #[test]
-    fn indexing_is_x_fastest_and_includes_padded_upper_bound() {
+    fn indexing_is_z_fastest_and_includes_padded_upper_bound() {
+        // Standard OpenDX: ix slowest, iz fastest. Grid 3×3×3 from origin (-1,-1,-1).
         let grid = Grid::from_points(&[Point::zeros()], 1.0, 1.0).unwrap();
         assert_eq!(grid.dims(), [3, 3, 3]);
         assert_eq!(grid.index_of(&Point::new(-1.0, -1.0, -1.0)), Some(0));
-        assert_eq!(grid.index_of(&Point::new(0.1, -1.0, -1.0)), Some(1));
-        assert_eq!(grid.index_of(&Point::new(-1.0, 0.1, -1.0)), Some(3));
-        assert_eq!(grid.index_of(&Point::new(-1.0, -1.0, 0.1)), Some(9));
-        assert_eq!(grid.index_of(&Point::new(1.0, 0.0, 0.0)), Some(14));
+        assert_eq!(grid.index_of(&Point::new(0.1, -1.0, -1.0)), Some(9));  // ix+1 → +ny*nz=9
+        assert_eq!(grid.index_of(&Point::new(-1.0, 0.1, -1.0)), Some(3));  // iy+1 → +nz=3
+        assert_eq!(grid.index_of(&Point::new(-1.0, -1.0, 0.1)), Some(1));  // iz+1 → +1
+        assert_eq!(grid.index_of(&Point::new(1.0, 0.0, 0.0)), Some(22));   // (2,1,1)→2*9+1*3+1
         assert_eq!(grid.index_of(&Point::new(2.0, 0.0, 0.0)), None);
     }
 
