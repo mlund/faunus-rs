@@ -139,10 +139,10 @@ mod tests {
         let grid = Grid::from_points(&[Point::zeros()], 1.0, 1.0).unwrap();
         assert_eq!(grid.dims(), [3, 3, 3]);
         assert_eq!(grid.index_of(&Point::new(-1.0, -1.0, -1.0)), Some(0));
-        assert_eq!(grid.index_of(&Point::new(0.1, -1.0, -1.0)), Some(9));  // ix+1 → +ny*nz=9
-        assert_eq!(grid.index_of(&Point::new(-1.0, 0.1, -1.0)), Some(3));  // iy+1 → +nz=3
-        assert_eq!(grid.index_of(&Point::new(-1.0, -1.0, 0.1)), Some(1));  // iz+1 → +1
-        assert_eq!(grid.index_of(&Point::new(1.0, 0.0, 0.0)), Some(22));   // (2,1,1)→2*9+1*3+1
+        assert_eq!(grid.index_of(&Point::new(0.1, -1.0, -1.0)), Some(9)); // ix+1 → +ny*nz=9
+        assert_eq!(grid.index_of(&Point::new(-1.0, 0.1, -1.0)), Some(3)); // iy+1 → +nz=3
+        assert_eq!(grid.index_of(&Point::new(-1.0, -1.0, 0.1)), Some(1)); // iz+1 → +1
+        assert_eq!(grid.index_of(&Point::new(1.0, 0.0, 0.0)), Some(22)); // (2,1,1)→2*9+1*3+1
         assert_eq!(grid.index_of(&Point::new(2.0, 0.0, 0.0)), None);
     }
 
