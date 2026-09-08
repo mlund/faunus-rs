@@ -1047,7 +1047,7 @@ They are defined in the <code>analysis</code> section of the YAML input:</p>
 <span class="w">    </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">energy.csv.gz</span>
 <span class="w">    </span><span class="nt">frequency</span><span class="p">:</span><span class="w"> </span><span class="kt">!Every</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">100</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!RadialDistribution</span>
-<span class="w">    </span><span class="nt">selections</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;atomtype</span><span class="nv"> </span><span class="s">Na&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;atomtype</span><span class="nv"> </span><span class="s">Cl&quot;</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">selections</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">"atomtype</span><span class="nv"> </span><span class="s">Na"</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">"atomtype</span><span class="nv"> </span><span class="s">Cl"</span><span class="p p-Indicator">]</span>
 <span class="w">    </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">rdf.dat</span>
 <span class="w">    </span><span class="nt">resolution</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.1</span>
 <span class="w">    </span><span class="nt">frequency</span><span class="p">:</span><span class="w"> </span><span class="kt">!End</span>
@@ -1116,10 +1116,10 @@ from the file extension:</p>
 <p>Grid-based analyses document their own file format.</p>
 <p>Loading CSV output in Python:</p>
 <div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
-<span class="n">data</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">loadtxt</span><span class="p">(</span><span class="s2">&quot;data.csv.gz&quot;</span><span class="p">,</span> <span class="n">delimiter</span><span class="o">=</span><span class="s2">&quot;,&quot;</span><span class="p">,</span> <span class="n">skiprows</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+<span class="n">data</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">loadtxt</span><span class="p">(</span><span class="s2">"data.csv.gz"</span><span class="p">,</span> <span class="n">delimiter</span><span class="o">=</span><span class="s2">","</span><span class="p">,</span> <span class="n">skiprows</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>
-<span class="n">data</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="s2">&quot;data.csv.gz&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">()</span>
+<span class="n">data</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="s2">"data.csv.gz"</span><span class="p">)</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">()</span>
 </code></pre></div>
 <hr />
 <h2 id="collective-variable">Collective Variable<a class="headerlink" href="#collective-variable" title="Permanent link">&para;</a></h2>
@@ -1134,7 +1134,7 @@ If no file is given, only the mean and RMS are written to <code>output.yaml</cod
 <div class="highlight"><pre><span></span><code><span class="nt">analysis</span><span class="p">:</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!CollectiveVariable</span>
 <span class="w">    </span><span class="nt">property</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">mass_center_position</span>
-<span class="w">    </span><span class="nt">selection</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;molecule</span><span class="nv"> </span><span class="s">protein&quot;</span>
+<span class="w">    </span><span class="nt">selection</span><span class="p">:</span><span class="w"> </span><span class="s">"molecule</span><span class="nv"> </span><span class="s">protein"</span>
 <span class="w">    </span><span class="nt">projection</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">z</span>
 <span class="w">    </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cv.dat</span>
 <span class="w">    </span><span class="nt">frequency</span><span class="p">:</span><span class="w"> </span><span class="kt">!Every</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">100</span>
@@ -1340,7 +1340,7 @@ columns <code>step</code>, <code>Rg</code>, and the upper triangle of the gyrati
 <h3 id="example_1">Example<a class="headerlink" href="#example_1" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><span class="nt">analysis</span><span class="p">:</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!PolymerShape</span>
-<span class="w">    </span><span class="nt">selection</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;molecule</span><span class="nv"> </span><span class="s">polymer&quot;</span>
+<span class="w">    </span><span class="nt">selection</span><span class="p">:</span><span class="w"> </span><span class="s">"molecule</span><span class="nv"> </span><span class="s">polymer"</span>
 <span class="w">    </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">shape.csv.gz</span>
 <span class="w">    </span><span class="nt">frequency</span><span class="p">:</span><span class="w"> </span><span class="kt">!Every</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">100</span>
 </code></pre></div>
@@ -1406,7 +1406,7 @@ atom and accumulates the full group's charge and dipole moment. This is
 useful when a molecule changes name during speciation, for example across
 protonation states, but still contains a stable marker atom:</p>
 <div class="highlight"><pre><span></span><code><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!Multipole</span>
-<span class="w">  </span><span class="nt">selection</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;atomtype</span><span class="nv"> </span><span class="s">INO&quot;</span><span class="w">   </span><span class="c1"># picks every phytate, regardless of protonation state</span>
+<span class="w">  </span><span class="nt">selection</span><span class="p">:</span><span class="w"> </span><span class="s">"atomtype</span><span class="nv"> </span><span class="s">INO"</span><span class="w">   </span><span class="c1"># picks every phytate, regardless of protonation state</span>
 <span class="w">  </span><span class="nt">frequency</span><span class="p">:</span><span class="w"> </span><span class="kt">!Every</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10</span>
 </code></pre></div>
 <p>By contrast, <code>!CollectiveVariable property: charge</code> sums the charge of
@@ -1435,7 +1435,7 @@ variance is nonzero:</p>
 <h3 id="example_2">Example<a class="headerlink" href="#example_2" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><span class="nt">analysis</span><span class="p">:</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!Multipole</span>
-<span class="w">    </span><span class="nt">selection</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;molecule</span><span class="nv"> </span><span class="s">peptide&quot;</span>
+<span class="w">    </span><span class="nt">selection</span><span class="p">:</span><span class="w"> </span><span class="s">"molecule</span><span class="nv"> </span><span class="s">peptide"</span>
 <span class="w">    </span><span class="nt">frequency</span><span class="p">:</span><span class="w"> </span><span class="kt">!Every</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10</span>
 </code></pre></div>
 <h3 id="options_2">Options<a class="headerlink" href="#options_2" title="Permanent link">&para;</a></h3>
@@ -1498,7 +1498,7 @@ file, one row per distance bin, with columns
 <h3 id="example_3">Example<a class="headerlink" href="#example_3" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><span class="nt">analysis</span><span class="p">:</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!MultipoleDistribution</span>
-<span class="w">    </span><span class="nt">selections</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;molecule</span><span class="nv"> </span><span class="s">protein&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;molecule</span><span class="nv"> </span><span class="s">protein&quot;</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">selections</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">"molecule</span><span class="nv"> </span><span class="s">protein"</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">"molecule</span><span class="nv"> </span><span class="s">protein"</span><span class="p p-Indicator">]</span>
 <span class="w">    </span><span class="nt">resolution</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2.0</span>
 <span class="w">    </span><span class="nt">frequency</span><span class="p">:</span><span class="w"> </span><span class="kt">!Every</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">100</span>
 </code></pre></div>
@@ -1569,13 +1569,13 @@ Two modes are supported:</p>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!Energy</span>
 <span class="w">    </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">mol1_mol2_energy.csv.gz</span>
 <span class="w">    </span><span class="nt">frequency</span><span class="p">:</span><span class="w"> </span><span class="kt">!Every</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">100</span>
-<span class="w">    </span><span class="nt">selections</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;molecule</span><span class="nv"> </span><span class="s">MOL1&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;molecule</span><span class="nv"> </span><span class="s">MOL2&quot;</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">selections</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">"molecule</span><span class="nv"> </span><span class="s">MOL1"</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">"molecule</span><span class="nv"> </span><span class="s">MOL2"</span><span class="p p-Indicator">]</span>
 
 <span class="w">  </span><span class="c1"># Nonbonded energy between hydrophobic atoms in two molecules</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!Energy</span>
 <span class="w">    </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">hydrophobic_energy.csv.gz</span>
 <span class="w">    </span><span class="nt">frequency</span><span class="p">:</span><span class="w"> </span><span class="kt">!Every</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">100</span>
-<span class="w">    </span><span class="nt">selections</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;hydrophobic</span><span class="nv"> </span><span class="s">and</span><span class="nv"> </span><span class="s">molecule</span><span class="nv"> </span><span class="s">MOL1&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;hydrophobic</span><span class="nv"> </span><span class="s">and</span><span class="nv"> </span><span class="s">molecule</span><span class="nv"> </span><span class="s">MOL2&quot;</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">selections</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">"hydrophobic</span><span class="nv"> </span><span class="s">and</span><span class="nv"> </span><span class="s">molecule</span><span class="nv"> </span><span class="s">MOL1"</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">"hydrophobic</span><span class="nv"> </span><span class="s">and</span><span class="nv"> </span><span class="s">molecule</span><span class="nv"> </span><span class="s">MOL2"</span><span class="p p-Indicator">]</span>
 </code></pre></div>
 <h3 id="options_4">Options<a class="headerlink" href="#options_4" title="Permanent link">&para;</a></h3>
 <table>
@@ -1642,7 +1642,7 @@ enable per-frame visualization updates in VMD:</p>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!Trajectory</span>
 <span class="w">    </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">protein.xyz</span>
 <span class="w">    </span><span class="nt">frequency</span><span class="p">:</span><span class="w"> </span><span class="kt">!Every</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">100</span>
-<span class="w">    </span><span class="nt">selection</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;protein&quot;</span>
+<span class="w">    </span><span class="nt">selection</span><span class="p">:</span><span class="w"> </span><span class="s">"protein"</span>
 </code></pre></div>
 <p>After the simulation, visualize with:</p>
 <div class="highlight"><pre><span></span><code>vmd<span class="w"> </span>-e<span class="w"> </span>traj.tcl
@@ -1761,14 +1761,14 @@ automatically excluded.</p>
 <div class="highlight"><pre><span></span><code><span class="nt">analysis</span><span class="p">:</span>
 <span class="w">  </span><span class="c1"># Atom-atom RDF between Na and Cl</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!RadialDistribution</span>
-<span class="w">    </span><span class="nt">selections</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;atomtype</span><span class="nv"> </span><span class="s">Na&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;atomtype</span><span class="nv"> </span><span class="s">Cl&quot;</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">selections</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">"atomtype</span><span class="nv"> </span><span class="s">Na"</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">"atomtype</span><span class="nv"> </span><span class="s">Cl"</span><span class="p p-Indicator">]</span>
 <span class="w">    </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">rdf_nacl.dat</span>
 <span class="w">    </span><span class="nt">resolution</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.1</span>
 <span class="w">    </span><span class="nt">frequency</span><span class="p">:</span><span class="w"> </span><span class="kt">!Every</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">100</span>
 
 <span class="w">  </span><span class="c1"># COM-COM RDF for polymer molecules</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!RadialDistribution</span>
-<span class="w">    </span><span class="nt">selections</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;molecule</span><span class="nv"> </span><span class="s">polymer&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;molecule</span><span class="nv"> </span><span class="s">polymer&quot;</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">selections</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">"molecule</span><span class="nv"> </span><span class="s">polymer"</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">"molecule</span><span class="nv"> </span><span class="s">polymer"</span><span class="p p-Indicator">]</span>
 <span class="w">    </span><span class="nt">use_com</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 <span class="w">    </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">rdf_com.dat</span>
 <span class="w">    </span><span class="nt">resolution</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.5</span>
@@ -1851,8 +1851,8 @@ molecules are not supported by this analysis.</p>
 <h3 id="example_5">Example<a class="headerlink" href="#example_5" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><span class="nt">analysis</span><span class="p">:</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!SpatialDistribution</span>
-<span class="w">    </span><span class="nt">reference</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;molecule</span><span class="nv"> </span><span class="s">Macro&quot;</span>
-<span class="w">    </span><span class="nt">selection</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;atomtype</span><span class="nv"> </span><span class="s">Na&quot;</span>
+<span class="w">    </span><span class="nt">reference</span><span class="p">:</span><span class="w"> </span><span class="s">"molecule</span><span class="nv"> </span><span class="s">Macro"</span>
+<span class="w">    </span><span class="nt">selection</span><span class="p">:</span><span class="w"> </span><span class="s">"atomtype</span><span class="nv"> </span><span class="s">Na"</span>
 <span class="w">    </span><span class="nt">frequency</span><span class="p">:</span><span class="w"> </span><span class="kt">!Every</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">100</span>
 </code></pre></div>
 <h3 id="options_7">Options<a class="headerlink" href="#options_7" title="Permanent link">&para;</a></h3>
@@ -2018,7 +2018,7 @@ If <code>file</code> is given, each sampled step writes columns
 <h3 id="example_7">Example<a class="headerlink" href="#example_7" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><span class="nt">analysis</span><span class="p">:</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!VirtualTranslate</span>
-<span class="w">    </span><span class="nt">selection</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;molecule</span><span class="nv"> </span><span class="s">protein&quot;</span>
+<span class="w">    </span><span class="nt">selection</span><span class="p">:</span><span class="w"> </span><span class="s">"molecule</span><span class="nv"> </span><span class="s">protein"</span>
 <span class="w">    </span><span class="nt">displacement</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.01</span>
 <span class="w">    </span><span class="nt">directions</span><span class="p">:</span><span class="w"> </span><span class="kt">!z</span>
 <span class="w">    </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">force.dat</span>
@@ -2159,7 +2159,7 @@ the errors.</p>
 <h3 id="example_9">Example<a class="headerlink" href="#example_9" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><span class="nt">analysis</span><span class="p">:</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!DoubleLayerPressure</span>
-<span class="w">    </span><span class="nt">selection</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;atomtype</span><span class="nv"> </span><span class="s">Na</span><span class="nv"> </span><span class="s">Ca&quot;</span><span class="w">   </span><span class="c1"># mono- + divalent counterions</span>
+<span class="w">    </span><span class="nt">selection</span><span class="p">:</span><span class="w"> </span><span class="s">"atomtype</span><span class="nv"> </span><span class="s">Na</span><span class="nv"> </span><span class="s">Ca"</span><span class="w">   </span><span class="c1"># mono- + divalent counterions</span>
 <span class="w">    </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">pressure.csv</span>
 <span class="w">    </span><span class="nt">frequency</span><span class="p">:</span><span class="w"> </span><span class="kt">!Every</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10</span>
 </code></pre></div>
@@ -2299,7 +2299,7 @@ while the sign and trends are robust.</p>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!ElectricPotentialProfile</span>
 <span class="w">    </span><span class="nt">frequency</span><span class="p">:</span><span class="w"> </span><span class="kt">!Every</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10</span>
 <span class="w">    </span><span class="c1"># selection, resolution and file are optional:</span>
-<span class="w">    </span><span class="c1"># selection: &quot;all&quot;      # atoms contributing charge (default: all)</span>
+<span class="w">    </span><span class="c1"># selection: "all"      # atoms contributing charge (default: all)</span>
 <span class="w">    </span><span class="c1"># resolution: 0.5       # slab thickness Δz in Å (default: 0.5)</span>
 <span class="w">    </span><span class="c1"># zeta_threshold: 0.02  # also report a ζ-potential at the fixed-charge edge (off by default)</span>
 <span class="w">    </span><span class="c1"># file: potential.csv   # output file (default: potential.csv)</span>
@@ -2389,15 +2389,15 @@ profile is meaningful only at constant volume; rescaling the cell later triggers
 <p>Sodium and chloride profiles across a slit, plus the profile of whole water molecules:</p>
 <div class="highlight"><pre><span></span><code><span class="nt">analysis</span><span class="p">:</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!DensityProfile</span>
-<span class="w">    </span><span class="nt">selection</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;atomtype</span><span class="nv"> </span><span class="s">Na&quot;</span>
+<span class="w">    </span><span class="nt">selection</span><span class="p">:</span><span class="w"> </span><span class="s">"atomtype</span><span class="nv"> </span><span class="s">Na"</span>
 <span class="w">    </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">density_na.csv</span>
 <span class="w">    </span><span class="nt">frequency</span><span class="p">:</span><span class="w"> </span><span class="kt">!Every</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!DensityProfile</span>
-<span class="w">    </span><span class="nt">selection</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;atomtype</span><span class="nv"> </span><span class="s">Cl&quot;</span>
+<span class="w">    </span><span class="nt">selection</span><span class="p">:</span><span class="w"> </span><span class="s">"atomtype</span><span class="nv"> </span><span class="s">Cl"</span>
 <span class="w">    </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">density_cl.csv</span>
 <span class="w">    </span><span class="nt">frequency</span><span class="p">:</span><span class="w"> </span><span class="kt">!Every</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!DensityProfile</span>
-<span class="w">    </span><span class="nt">selection</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;molecule</span><span class="nv"> </span><span class="s">water&quot;</span>
+<span class="w">    </span><span class="nt">selection</span><span class="p">:</span><span class="w"> </span><span class="s">"molecule</span><span class="nv"> </span><span class="s">water"</span>
 <span class="w">    </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">density_water.csv</span>
 <span class="w">    </span><span class="nt">use_com</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span><span class="w">          </span><span class="c1"># bin mass centres, not individual atoms</span>
 <span class="w">    </span><span class="nt">resolution</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.5</span><span class="w">        </span><span class="c1"># slab thickness Δz in Å (default: 1.0)</span>
@@ -2521,18 +2521,18 @@ and state whether its selection is counted by molecular mass centre or by atom. 
 normally counted by mass centre.</p>
 <div class="highlight"><pre><span></span><code><span class="nt">analysis</span><span class="p">:</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!PreferentialInteraction</span>
-<span class="w">    </span><span class="nt">substrate</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;molecule</span><span class="nv"> </span><span class="s">protein&quot;</span>
-<span class="w">    </span><span class="nt">ligand</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;atomtype</span><span class="nv"> </span><span class="s">Na&quot;</span>
+<span class="w">    </span><span class="nt">substrate</span><span class="p">:</span><span class="w"> </span><span class="s">"molecule</span><span class="nv"> </span><span class="s">protein"</span>
+<span class="w">    </span><span class="nt">ligand</span><span class="p">:</span><span class="w"> </span><span class="s">"atomtype</span><span class="nv"> </span><span class="s">Na"</span>
 <span class="w">    </span><span class="nt">shell</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">max</span><span class="p">:</span><span class="w"> </span><span class="nv">15.0</span><span class="p p-Indicator">,</span><span class="nt"> resolution</span><span class="p">:</span><span class="w"> </span><span class="nv">0.5</span><span class="p p-Indicator">}</span><span class="w">   </span><span class="c1"># the δ ladder</span>
 <span class="w">    </span><span class="nt">profile</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">gamma_na.csv</span><span class="w">                 </span><span class="c1"># Γ(δ) — read this first</span>
 <span class="w">    </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">residues_na.csv</span><span class="w">                 </span><span class="c1"># one row per residue</span>
 <span class="w">    </span><span class="nt">frequency</span><span class="p">:</span><span class="w"> </span><span class="kt">!Every</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">100</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!PreferentialInteraction</span>
-<span class="w">    </span><span class="nt">substrate</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;molecule</span><span class="nv"> </span><span class="s">protein&quot;</span>
-<span class="w">    </span><span class="nt">ligand</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;molecule</span><span class="nv"> </span><span class="s">polyphosphate&quot;</span>
+<span class="w">    </span><span class="nt">substrate</span><span class="p">:</span><span class="w"> </span><span class="s">"molecule</span><span class="nv"> </span><span class="s">protein"</span>
+<span class="w">    </span><span class="nt">ligand</span><span class="p">:</span><span class="w"> </span><span class="s">"molecule</span><span class="nv"> </span><span class="s">polyphosphate"</span>
 <span class="w">    </span><span class="nt">use_com</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span><span class="w">                         </span><span class="c1"># count molecules at their centre of mass</span>
 <span class="w">    </span><span class="nt">solvent</span><span class="p">:</span><span class="w">                              </span><span class="c1"># enables the explicit-solvent estimator</span>
-<span class="w">      </span><span class="nt">selection</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;molecule</span><span class="nv"> </span><span class="s">water&quot;</span>
+<span class="w">      </span><span class="nt">selection</span><span class="p">:</span><span class="w"> </span><span class="s">"molecule</span><span class="nv"> </span><span class="s">water"</span>
 <span class="w">      </span><span class="nt">use_com</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span><span class="w">                       </span><span class="c1"># count one centre per water molecule</span>
 <span class="w">    </span><span class="nt">shell</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">max</span><span class="p">:</span><span class="w"> </span><span class="nv">15.0</span><span class="p p-Indicator">,</span><span class="nt"> resolution</span><span class="p">:</span><span class="w"> </span><span class="nv">0.5</span><span class="p p-Indicator">}</span>
 <span class="w">    </span><span class="nt">profile</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">gamma_pp.csv</span>
@@ -2650,10 +2650,10 @@ The file is rewritten at each sample so partial results survive crashes.</p>
 <div class="highlight"><pre><span></span><code><span class="nt">analysis</span><span class="p">:</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!MeanAlongCoordinate</span>
 <span class="w">    </span><span class="nt">property</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">charge</span>
-<span class="w">    </span><span class="nt">selection</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;molecule</span><span class="nv"> </span><span class="s">GLU&quot;</span>
+<span class="w">    </span><span class="nt">selection</span><span class="p">:</span><span class="w"> </span><span class="s">"molecule</span><span class="nv"> </span><span class="s">GLU"</span>
 <span class="w">    </span><span class="nt">coordinate</span><span class="p">:</span>
 <span class="w">      </span><span class="nt">property</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">mass_center_separation</span>
-<span class="w">      </span><span class="nt">selections</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;molecule</span><span class="nv"> </span><span class="s">GLU&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;molecule</span><span class="nv"> </span><span class="s">protein&quot;</span><span class="p p-Indicator">]</span>
+<span class="w">      </span><span class="nt">selections</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">"molecule</span><span class="nv"> </span><span class="s">GLU"</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">"molecule</span><span class="nv"> </span><span class="s">protein"</span><span class="p p-Indicator">]</span>
 <span class="w">      </span><span class="nt">resolution</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.5</span>
 <span class="w">    </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">charge_vs_dist.dat</span>
 <span class="w">    </span><span class="nt">frequency</span><span class="p">:</span><span class="w"> </span><span class="kt">!Every</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">100</span>
@@ -2725,7 +2725,7 @@ rigid-body quaternion state.</p>
 <h3 id="example_14">Example<a class="headerlink" href="#example_14" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><span class="nt">analysis</span><span class="p">:</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!RotationalDiffusion</span>
-<span class="w">    </span><span class="nt">selection</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;molecule</span><span class="nv"> </span><span class="s">Water&quot;</span>
+<span class="w">    </span><span class="nt">selection</span><span class="p">:</span><span class="w"> </span><span class="s">"molecule</span><span class="nv"> </span><span class="s">Water"</span>
 <span class="w">    </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">rotdiff.dat.gz</span>
 <span class="w">    </span><span class="nt">frequency</span><span class="p">:</span><span class="w"> </span><span class="kt">!Every</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">100</span>
 <span class="w">    </span><span class="nt">max_lag</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1000</span>
@@ -2830,7 +2830,7 @@ weight, so biased (penalty or Wang–Landau) trajectories are reweighted correct
 <h3 id="example_15">Example<a class="headerlink" href="#example_15" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><span class="nt">analysis</span><span class="p">:</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!WidomRotation</span>
-<span class="w">    </span><span class="nt">selection</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;molecule</span><span class="nv"> </span><span class="s">phytate&quot;</span>
+<span class="w">    </span><span class="nt">selection</span><span class="p">:</span><span class="w"> </span><span class="s">"molecule</span><span class="nv"> </span><span class="s">phytate"</span>
 <span class="w">    </span><span class="nt">orientations</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">500</span>
 <span class="w">    </span><span class="nt">vectors</span><span class="p">:</span>
 <span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!Pair</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">5</span><span class="p p-Indicator">]</span>
@@ -2990,7 +2990,7 @@ of groups, particles, and molecule types).</p>
 <span class="w">    </span><span class="nt">frequency</span><span class="p">:</span><span class="w"> </span><span class="kt">!Every</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">100</span>
 <span class="w">    </span><span class="nt">save_frame_state</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!RadialDistribution</span>
-<span class="w">    </span><span class="nt">selections</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;molecule</span><span class="nv"> </span><span class="s">A&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;molecule</span><span class="nv"> </span><span class="s">B&quot;</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">selections</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">"molecule</span><span class="nv"> </span><span class="s">A"</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">"molecule</span><span class="nv"> </span><span class="s">B"</span><span class="p p-Indicator">]</span>
 <span class="w">    </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">rdf_explicit.dat</span>
 <span class="w">    </span><span class="nt">resolution</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.1</span>
 <span class="w">    </span><span class="nt">frequency</span><span class="p">:</span><span class="w"> </span><span class="kt">!Every</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">100</span>

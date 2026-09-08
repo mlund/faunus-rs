@@ -988,7 +988,7 @@ An atom need not be a chemical element — it can represent any interaction site
 <p>File path — load atom names and reference positions from a structure file (XYZ, PDB, etc.):
 <div class="highlight"><pre><span></span><code><span class="nt">molecules</span><span class="p">:</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">MOL1</span>
-<span class="w">    </span><span class="nt">from_structure</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;cppm-p18.xyz&quot;</span>
+<span class="w">    </span><span class="nt">from_structure</span><span class="p">:</span><span class="w"> </span><span class="s">"cppm-p18.xyz"</span>
 </code></pre></div></p>
 <p>Inline positions — define atoms and coordinates directly (one atom per entry):
 <div class="highlight"><pre><span></span><code><span class="nt">molecules</span><span class="p">:</span>
@@ -1003,7 +1003,7 @@ An atom need not be a chemical element — it can represent any interaction site
 (provides atom names and bonds, but no reference positions — use <code>!RandomWalk</code> for insertion):
 <div class="highlight"><pre><span></span><code><span class="nt">molecules</span><span class="p">:</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">peptide</span>
-<span class="w">    </span><span class="nt">from_structure</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">sequence</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;nAGGKRc&quot;</span><span class="p p-Indicator">,</span><span class="nt"> k</span><span class="p">:</span><span class="w"> </span><span class="nv">80.33</span><span class="p p-Indicator">,</span><span class="nt"> req</span><span class="p">:</span><span class="w"> </span><span class="nv">3.8</span><span class="p p-Indicator">}</span>
+<span class="w">    </span><span class="nt">from_structure</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">sequence</span><span class="p">:</span><span class="w"> </span><span class="s">"nAGGKRc"</span><span class="p p-Indicator">,</span><span class="nt"> k</span><span class="p">:</span><span class="w"> </span><span class="nv">80.33</span><span class="p p-Indicator">,</span><span class="nt"> req</span><span class="p">:</span><span class="w"> </span><span class="nv">3.8</span><span class="p p-Indicator">}</span>
 <span class="w">    </span><span class="nt">excluded_neighbours</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
 </code></pre></div></p>
 <p>Each letter is mapped to a three-letter atom type name following
@@ -1043,14 +1043,14 @@ Additional lowercase codes:</p>
 where header lines (<code>&gt;</code>) and comment lines (<code>;</code>) are skipped:</p>
 <div class="highlight"><pre><span></span><code><span class="nt">molecules</span><span class="p">:</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my_protein</span>
-<span class="w">    </span><span class="nt">from_structure</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">sequence</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;my_protein.fasta&quot;</span><span class="p p-Indicator">,</span><span class="nt"> k</span><span class="p">:</span><span class="w"> </span><span class="nv">80.33</span><span class="p p-Indicator">,</span><span class="nt"> req</span><span class="p">:</span><span class="w"> </span><span class="nv">3.8</span><span class="p p-Indicator">}</span>
+<span class="w">    </span><span class="nt">from_structure</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">sequence</span><span class="p">:</span><span class="w"> </span><span class="s">"my_protein.fasta"</span><span class="p p-Indicator">,</span><span class="nt"> k</span><span class="p">:</span><span class="w"> </span><span class="nv">80.33</span><span class="p p-Indicator">,</span><span class="nt"> req</span><span class="p">:</span><span class="w"> </span><span class="nv">3.8</span><span class="p p-Indicator">}</span>
 </code></pre></div>
 <p>For the <a href="https://doi.org/10.1073/pnas.2111696119">CALVADOS</a> coarse-grained model,
 use <code>k: 80.33</code> and <code>req: 3.8</code> together with the <code>calvados3.yaml</code> force field:</p>
 <div class="highlight"><pre><span></span><code><span class="nt">include</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">calvados3.yaml</span><span class="p p-Indicator">]</span>
 <span class="nt">molecules</span><span class="p">:</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">histatin5</span>
-<span class="w">    </span><span class="nt">from_structure</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">sequence</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;DSHAKRHHGYKRKFHEKHHSHRGY&quot;</span><span class="p p-Indicator">,</span><span class="nt"> k</span><span class="p">:</span><span class="w"> </span><span class="nv">80.33</span><span class="p p-Indicator">,</span><span class="nt"> req</span><span class="p">:</span><span class="w"> </span><span class="nv">3.8</span><span class="p p-Indicator">}</span>
+<span class="w">    </span><span class="nt">from_structure</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">sequence</span><span class="p">:</span><span class="w"> </span><span class="s">"DSHAKRHHGYKRKFHEKHHSHRGY"</span><span class="p p-Indicator">,</span><span class="nt"> k</span><span class="p">:</span><span class="w"> </span><span class="nv">80.33</span><span class="p p-Indicator">,</span><span class="nt"> req</span><span class="p">:</span><span class="w"> </span><span class="nv">3.8</span><span class="p p-Indicator">}</span>
 <span class="w">    </span><span class="nt">excluded_neighbours</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
 <span class="nt">system</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">blocks</span><span class="p">:</span>
@@ -1502,7 +1502,7 @@ State persistence is automatic via group sizes.</p>
 </code></pre></div>
 <p>With the <a href="../moves/#speciation-move-reaction-ensemble">speciation move</a>:
 <div class="highlight"><pre><span></span><code><span class="nt">reactions</span><span class="p">:</span>
-<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;Ca(OH)₂</span><span class="nv"> </span><span class="s">=</span><span class="nv"> </span><span class="s">Ca²⁺</span><span class="nv"> </span><span class="s">+</span><span class="nv"> </span><span class="s">OH⁻</span><span class="nv"> </span><span class="s">+</span><span class="nv"> </span><span class="s">OH⁻&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="kt">!pK</span><span class="w"> </span><span class="nv">5.19</span><span class="p p-Indicator">]</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">"Ca(OH)₂</span><span class="nv"> </span><span class="s">=</span><span class="nv"> </span><span class="s">Ca²⁺</span><span class="nv"> </span><span class="s">+</span><span class="nv"> </span><span class="s">OH⁻</span><span class="nv"> </span><span class="s">+</span><span class="nv"> </span><span class="s">OH⁻"</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="kt">!pK</span><span class="w"> </span><span class="nv">5.19</span><span class="p p-Indicator">]</span>
 </code></pre></div>
 At equilibrium: <span class="arithmatex">\([Ca^{2+}] \approx 0.012\;\text{M}\)</span>, <span class="arithmatex">\([OH^-] \approx 0.023\;\text{M}\)</span>.</p>
 <hr />
