@@ -21,7 +21,7 @@
       
       
       <link rel="icon" href="../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
     
     
       
@@ -29,7 +29,7 @@
       
     
     
-      <link rel="stylesheet" href="../assets/stylesheets/main.484c7ddc.min.css">
+      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
       
         
         <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
@@ -822,8 +822,7 @@ a configurable number of times, then switching to a <span class="arithmatex">\(1
 <div class="highlight"><pre><span></span><code><span class="nt">wang_landau</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">coordinate</span><span class="p">:</span>
 <span class="w">    </span><span class="nt">property</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">mass_center_separation</span>
-<span class="w">    </span><span class="nt">selection</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;molecule</span><span class="nv"> </span><span class="s">protein0&quot;</span>
-<span class="w">    </span><span class="nt">selection2</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;molecule</span><span class="nv"> </span><span class="s">protein1&quot;</span>
+<span class="w">    </span><span class="nt">selections</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">"molecule</span><span class="nv"> </span><span class="s">protein0"</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">"molecule</span><span class="nv"> </span><span class="s">protein1"</span><span class="p p-Indicator">]</span>
 <span class="w">    </span><span class="nt">range</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">2.0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">15.0</span><span class="p p-Indicator">]</span>
 <span class="w">    </span><span class="nt">resolution</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.1</span>
 <span class="w">  </span><span class="c1"># coordinate2: ...         # optional, for 2D</span>
@@ -844,12 +843,12 @@ a configurable number of times, then switching to a <span class="arithmatex">\(1
 <tbody>
 <tr>
 <td><code>coordinate</code></td>
-<td>Collective variable (see <a href="../analysis/">analysis</a>)</td>
+<td>Collective variable with its grid <code>range</code> and <code>resolution</code>, both required (see <a href="../analysis/">analysis</a>)</td>
 <td>(required)</td>
 </tr>
 <tr>
 <td><code>coordinate2</code></td>
-<td>Second CV for 2D sampling</td>
+<td>Second CV (with its own <code>range</code>/<code>resolution</code>) for 2D sampling</td>
 <td>(none)</td>
 </tr>
 <tr>
@@ -974,7 +973,7 @@ penalty term — reweighting by <span class="arithmatex">\(w = 1/g(\text{bin})\)
       <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["content.code.copy", "navigation.top", "search.suggest", "search.highlight", "toc.follow"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"provider": "mike"}}</script>
     
     
-      <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
+      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
       
         <script src="../javascript/mathjax.js"></script>
       

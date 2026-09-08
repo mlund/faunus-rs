@@ -21,7 +21,7 @@
       
       
       <link rel="icon" href="../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
     
     
       
@@ -29,7 +29,7 @@
       
     
     
-      <link rel="stylesheet" href="../assets/stylesheets/main.484c7ddc.min.css">
+      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
       
         
         <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
@@ -988,7 +988,7 @@ An atom need not be a chemical element — it can represent any interaction site
 <p>File path — load atom names and reference positions from a structure file (XYZ, PDB, etc.):
 <div class="highlight"><pre><span></span><code><span class="nt">molecules</span><span class="p">:</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">MOL1</span>
-<span class="w">    </span><span class="nt">from_structure</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;cppm-p18.xyz&quot;</span>
+<span class="w">    </span><span class="nt">from_structure</span><span class="p">:</span><span class="w"> </span><span class="s">"cppm-p18.xyz"</span>
 </code></pre></div></p>
 <p>Inline positions — define atoms and coordinates directly (one atom per entry):
 <div class="highlight"><pre><span></span><code><span class="nt">molecules</span><span class="p">:</span>
@@ -1003,7 +1003,7 @@ An atom need not be a chemical element — it can represent any interaction site
 (provides atom names and bonds, but no reference positions — use <code>!RandomWalk</code> for insertion):
 <div class="highlight"><pre><span></span><code><span class="nt">molecules</span><span class="p">:</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">peptide</span>
-<span class="w">    </span><span class="nt">from_structure</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">sequence</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;nAGGKRc&quot;</span><span class="p p-Indicator">,</span><span class="nt"> k</span><span class="p">:</span><span class="w"> </span><span class="nv">80.33</span><span class="p p-Indicator">,</span><span class="nt"> req</span><span class="p">:</span><span class="w"> </span><span class="nv">3.8</span><span class="p p-Indicator">}</span>
+<span class="w">    </span><span class="nt">from_structure</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">sequence</span><span class="p">:</span><span class="w"> </span><span class="s">"nAGGKRc"</span><span class="p p-Indicator">,</span><span class="nt"> k</span><span class="p">:</span><span class="w"> </span><span class="nv">80.33</span><span class="p p-Indicator">,</span><span class="nt"> req</span><span class="p">:</span><span class="w"> </span><span class="nv">3.8</span><span class="p p-Indicator">}</span>
 <span class="w">    </span><span class="nt">excluded_neighbours</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
 </code></pre></div></p>
 <p>Each letter is mapped to a three-letter atom type name following
@@ -1043,14 +1043,14 @@ Additional lowercase codes:</p>
 where header lines (<code>&gt;</code>) and comment lines (<code>;</code>) are skipped:</p>
 <div class="highlight"><pre><span></span><code><span class="nt">molecules</span><span class="p">:</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my_protein</span>
-<span class="w">    </span><span class="nt">from_structure</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">sequence</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;my_protein.fasta&quot;</span><span class="p p-Indicator">,</span><span class="nt"> k</span><span class="p">:</span><span class="w"> </span><span class="nv">80.33</span><span class="p p-Indicator">,</span><span class="nt"> req</span><span class="p">:</span><span class="w"> </span><span class="nv">3.8</span><span class="p p-Indicator">}</span>
+<span class="w">    </span><span class="nt">from_structure</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">sequence</span><span class="p">:</span><span class="w"> </span><span class="s">"my_protein.fasta"</span><span class="p p-Indicator">,</span><span class="nt"> k</span><span class="p">:</span><span class="w"> </span><span class="nv">80.33</span><span class="p p-Indicator">,</span><span class="nt"> req</span><span class="p">:</span><span class="w"> </span><span class="nv">3.8</span><span class="p p-Indicator">}</span>
 </code></pre></div>
 <p>For the <a href="https://doi.org/10.1073/pnas.2111696119">CALVADOS</a> coarse-grained model,
 use <code>k: 80.33</code> and <code>req: 3.8</code> together with the <code>calvados3.yaml</code> force field:</p>
 <div class="highlight"><pre><span></span><code><span class="nt">include</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">calvados3.yaml</span><span class="p p-Indicator">]</span>
 <span class="nt">molecules</span><span class="p">:</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">histatin5</span>
-<span class="w">    </span><span class="nt">from_structure</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">sequence</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;DSHAKRHHGYKRKFHEKHHSHRGY&quot;</span><span class="p p-Indicator">,</span><span class="nt"> k</span><span class="p">:</span><span class="w"> </span><span class="nv">80.33</span><span class="p p-Indicator">,</span><span class="nt"> req</span><span class="p">:</span><span class="w"> </span><span class="nv">3.8</span><span class="p p-Indicator">}</span>
+<span class="w">    </span><span class="nt">from_structure</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">sequence</span><span class="p">:</span><span class="w"> </span><span class="s">"DSHAKRHHGYKRKFHEKHHSHRGY"</span><span class="p p-Indicator">,</span><span class="nt"> k</span><span class="p">:</span><span class="w"> </span><span class="nv">80.33</span><span class="p p-Indicator">,</span><span class="nt"> req</span><span class="p">:</span><span class="w"> </span><span class="nv">3.8</span><span class="p p-Indicator">}</span>
 <span class="w">    </span><span class="nt">excluded_neighbours</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
 <span class="nt">system</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">blocks</span><span class="p">:</span>
@@ -1391,8 +1391,8 @@ The molecule must have exactly one atom type and no bonds.</p>
 <tr>
 <td><code>active</code></td>
 <td>no</td>
-<td>all</td>
-<td>Number of initially active molecules</td>
+<td><code>all</code></td>
+<td>Initially active molecules: a count, or <code>all</code></td>
 </tr>
 <tr>
 <td><code>insert</code></td>
@@ -1420,7 +1420,7 @@ The molecule must have exactly one atom type and no bonds.</p>
 <tr>
 <td><code>!RandomAtomPos</code></td>
 <td><code>{directions: xy}</code></td>
-<td>Random position per atom</td>
+<td>Random position per atom (geometry-free kinds)</td>
 </tr>
 <tr>
 <td><code>!FixedCOM</code></td>
@@ -1450,6 +1450,11 @@ The molecule must have exactly one atom type and no bonds.</p>
 </tbody>
 </table>
 <p>The <code>directions</code> field controls which axes are randomized: <code>xyz</code> (default), <code>xy</code>, <code>xz</code>, <code>yz</code>, <code>x</code>, <code>y</code>, or <code>z</code>.
+<code>!RandomAtomPos</code> places every atom independently, discarding any conformation; it is meant for atomic
+species (salt, ions). A multi-atom kind that carries geometry — one that tracks a center of mass or declares
+<code>from_structure</code> reference positions — is therefore rejected. Place such a kind with a COM-based policy
+(<code>!RandomCOM</code>, <code>!FixedCOM</code>, <code>!GridCOM</code>) using its reference positions. Only a geometry-free kind may use
+<code>!RandomAtomPos</code>: one with no <code>from_structure</code> and <code>has_com: false</code>.
 <code>!RandomCOM</code>, <code>!FixedCOM</code>, and <code>!GridCOM</code> use reference positions from the molecule's <code>from_structure</code> field.
 The optional <code>min_distance</code> field (Å) in <code>!RandomCOM</code> uses bounding sphere rejection to avoid molecular overlaps in dense systems.
 <code>!GridCOM</code> places molecules on a simple cubic lattice with auto-calculated spacing; requires <code>!Cuboid</code> or <code>!Slit</code> cells.</p>
@@ -1497,7 +1502,7 @@ State persistence is automatic via group sizes.</p>
 </code></pre></div>
 <p>With the <a href="../moves/#speciation-move-reaction-ensemble">speciation move</a>:
 <div class="highlight"><pre><span></span><code><span class="nt">reactions</span><span class="p">:</span>
-<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;Ca(OH)₂</span><span class="nv"> </span><span class="s">=</span><span class="nv"> </span><span class="s">Ca²⁺</span><span class="nv"> </span><span class="s">+</span><span class="nv"> </span><span class="s">OH⁻</span><span class="nv"> </span><span class="s">+</span><span class="nv"> </span><span class="s">OH⁻&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="kt">!pK</span><span class="w"> </span><span class="nv">5.19</span><span class="p p-Indicator">]</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">"Ca(OH)₂</span><span class="nv"> </span><span class="s">=</span><span class="nv"> </span><span class="s">Ca²⁺</span><span class="nv"> </span><span class="s">+</span><span class="nv"> </span><span class="s">OH⁻</span><span class="nv"> </span><span class="s">+</span><span class="nv"> </span><span class="s">OH⁻"</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="kt">!pK</span><span class="w"> </span><span class="nv">5.19</span><span class="p p-Indicator">]</span>
 </code></pre></div>
 At equilibrium: <span class="arithmatex">\([Ca^{2+}] \approx 0.012\;\text{M}\)</span>, <span class="arithmatex">\([OH^-] \approx 0.023\;\text{M}\)</span>.</p>
 <hr />
@@ -1606,7 +1611,7 @@ finite; and a reaction naming a molecule for which no <code>blocks:</code> entry
       <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["content.code.copy", "navigation.top", "search.suggest", "search.highlight", "toc.follow"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"provider": "mike"}}</script>
     
     
-      <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
+      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
       
         <script src="../javascript/mathjax.js"></script>
       

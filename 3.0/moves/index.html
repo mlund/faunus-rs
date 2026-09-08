@@ -21,7 +21,7 @@
       
       
       <link rel="icon" href="../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
     
     
       
@@ -29,7 +29,7 @@
       
     
     
-      <link rel="stylesheet" href="../assets/stylesheets/main.484c7ddc.min.css">
+      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
       
         
         <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
@@ -942,10 +942,10 @@
 </thead>
 <tbody>
 <tr>
-<td><code>repeat</code></td>
+<td><code>steps</code></td>
 <td>no</td>
 <td>1</td>
-<td>Number of propagate cycles (outer loop)</td>
+<td>Number of propagate steps (the outer loop)</td>
 </tr>
 <tr>
 <td><code>collections</code></td>
@@ -967,15 +967,15 @@
 </tr>
 </tbody>
 </table>
-<p>Each propagate cycle executes every collection in order; after all collections
-have run, one cycle is complete and the step counter advances.</p>
+<p>Each propagate step executes every collection in order; after all collections
+have run, one step is complete and the step counter advances.</p>
 <h2 id="collections">Collections<a class="headerlink" href="#collections" title="Permanent link">&para;</a></h2>
 <p>A collection groups moves together and controls how they are selected.
 Two types are available:</p>
 <ul>
-<li><code>!Stochastic</code> — each repeat draws <em>one</em> move at random, with probability
+<li><code>!Stochastic</code> — each cycle draws <em>one</em> move at random, with probability
   proportional to <code>weight</code>. This is the normal Monte Carlo sampling mode.</li>
-<li><code>!Deterministic</code> — each repeat executes <em>all</em> moves in order.
+<li><code>!Deterministic</code> — each cycle executes <em>all</em> moves in order.
   Useful for e.g. hybrid MC/MD schemes. The <code>weight</code> field is unused here but
   still required by the move schema.</li>
 </ul>
@@ -990,10 +990,10 @@ Two types are available:</p>
 </thead>
 <tbody>
 <tr>
-<td><code>repeat</code></td>
+<td><code>cycles</code></td>
 <td>no</td>
 <td>1</td>
-<td>How many times the collection runs per propagate cycle</td>
+<td>How many times the collection runs per propagate step</td>
 </tr>
 <tr>
 <td><code>moves</code></td>
@@ -1031,25 +1031,26 @@ Two types are available:</p>
 </tr>
 </tbody>
 </table>
-<p>The two <code>repeat</code> levels nest: the collection's <code>repeat</code> controls how often
-moves are drawn, and the move's <code>repeat</code> controls how many trials are
-performed per draw. For example, a stochastic collection with <code>repeat: 100</code>
-containing a move with <code>repeat: 5</code> will attempt that move up to 500 times
-per propagate cycle (depending on how often it is drawn).</p>
+<p>The collection's <code>cycles</code> and the move's <code>repeat</code> nest: <code>cycles</code> controls how
+often moves are drawn from the collection each propagate step, and the move's
+<code>repeat</code> controls how many trials are performed per draw. For example, a
+stochastic collection with <code>cycles: 100</code> containing a move with <code>repeat: 5</code>
+will attempt that move up to 500 times per step (depending on how often it is
+drawn).</p>
 <h2 id="example">Example<a class="headerlink" href="#example" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code><span class="nt">propagate</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">seed</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Hardware</span>
 <span class="w">  </span><span class="nt">criterion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Metropolis</span>
-<span class="w">  </span><span class="nt">repeat</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1000</span>
+<span class="w">  </span><span class="nt">steps</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1000</span>
 <span class="w">  </span><span class="nt">collections</span><span class="p">:</span>
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!Stochastic</span>
-<span class="w">      </span><span class="nt">repeat</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10</span>
+<span class="w">      </span><span class="nt">cycles</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10</span>
 <span class="w">      </span><span class="nt">moves</span><span class="p">:</span>
 <span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!TranslateMolecule</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> molecule</span><span class="p">:</span><span class="w"> </span><span class="nv">Water</span><span class="p p-Indicator">,</span><span class="nt"> max_displacement</span><span class="p">:</span><span class="w"> </span><span class="nv">0.5</span><span class="p p-Indicator">,</span><span class="nt"> weight</span><span class="p">:</span><span class="w"> </span><span class="nv">1.0</span><span class="w"> </span><span class="p p-Indicator">}</span>
 <span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!RotateMolecule</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> molecule</span><span class="p">:</span><span class="w"> </span><span class="nv">Water</span><span class="p p-Indicator">,</span><span class="nt"> max_angle</span><span class="p">:</span><span class="w"> </span><span class="nv">0.3</span><span class="p p-Indicator">,</span><span class="nt"> weight</span><span class="p">:</span><span class="w"> </span><span class="nv">1.0</span><span class="w"> </span><span class="p p-Indicator">}</span>
 <span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!VolumeMove</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> volume_displacement</span><span class="p">:</span><span class="w"> </span><span class="nv">0.04</span><span class="p p-Indicator">,</span><span class="nt"> weight</span><span class="p">:</span><span class="w"> </span><span class="nv">0.5</span><span class="w"> </span><span class="p p-Indicator">}</span>
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!Deterministic</span>
-<span class="w">      </span><span class="nt">repeat</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
+<span class="w">      </span><span class="nt">cycles</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
 <span class="w">      </span><span class="nt">moves</span><span class="p">:</span>
 <span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!TranslateAtom</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> molecule</span><span class="p">:</span><span class="w"> </span><span class="nv">Water</span><span class="p p-Indicator">,</span><span class="nt"> atom</span><span class="p">:</span><span class="w"> </span><span class="nv">O</span><span class="p p-Indicator">,</span><span class="nt"> max_displacement</span><span class="p">:</span><span class="w"> </span><span class="nv">0.1</span><span class="p p-Indicator">,</span><span class="nt"> weight</span><span class="p">:</span><span class="w"> </span><span class="nv">1.0</span><span class="w"> </span><span class="p p-Indicator">}</span>
 </code></pre></div>
@@ -1188,13 +1189,13 @@ Dropping this correction would drain the very region the method exists to sample
 <span class="w">        </span><span class="nt">max_displacement</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.5</span>
 <span class="w">        </span><span class="nt">repeat</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">100</span>
 <span class="w">        </span><span class="nt">preferential</span><span class="p">:</span>
-<span class="w">          </span><span class="nt">reference</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;molecule</span><span class="nv"> </span><span class="s">Protein&quot;</span>
+<span class="w">          </span><span class="nt">reference</span><span class="p">:</span><span class="w"> </span><span class="s">"molecule</span><span class="nv"> </span><span class="s">Protein"</span>
 <span class="w">          </span><span class="nt">exponent</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2</span>
 <span class="w">          </span><span class="nt">offset</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1.0</span>
 </code></pre></div>
 <p>Multiple reference groups can be selected; the distance is always to the nearest one:</p>
 <div class="highlight"><pre><span></span><code><span class="w">        </span><span class="nt">preferential</span><span class="p">:</span>
-<span class="w">          </span><span class="nt">reference</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;molecule</span><span class="nv"> </span><span class="s">Protein1</span><span class="nv"> </span><span class="s">or</span><span class="nv"> </span><span class="s">molecule</span><span class="nv"> </span><span class="s">Protein2&quot;</span>
+<span class="w">          </span><span class="nt">reference</span><span class="p">:</span><span class="w"> </span><span class="s">"molecule</span><span class="nv"> </span><span class="s">Protein1</span><span class="nv"> </span><span class="s">or</span><span class="nv"> </span><span class="s">molecule</span><span class="nv"> </span><span class="s">Protein2"</span>
 </code></pre></div>
 <p>The <code>reference</code> field uses the <a href="../selection_language/">selection language</a>,
 e.g. <code>"molecule Protein"</code>, <code>"protein"</code>, or boolean combinations.</p>
@@ -1461,10 +1462,11 @@ cluster that spans the periodic boundary still rotates correctly.</p>
 </tr>
 </tbody>
 </table>
-<p>Output reports the mean cluster size <span class="arithmatex">\(\langle N\rangle\)</span> with its standard error, the fraction of
-trials rejected to preserve membership (<code>bias_rejection_rate</code>), and the root-mean-square
-translational and rotational displacements. For an ideal gas, <span class="arithmatex">\(\langle N\rangle = 1 + (N/V)\,\tfrac{4}{3}\pi R_c^3\)</span>
-with threshold <span class="arithmatex">\(R_c\)</span>, a useful check that the clustering is unbiased.</p>
+<p>Output reports the mean cluster size <span class="arithmatex">\(\langle N\rangle\)</span> with an automatically blocked standard
+error. It also reports the fraction of trials rejected to preserve membership
+(<code>bias_rejection_rate</code>) and the root-mean-square translational and rotational displacements.
+For an ideal gas, <span class="arithmatex">\(\langle N\rangle = 1 + (N/V)\,\tfrac{4}{3}\pi R_c^3\)</span> with threshold <span class="arithmatex">\(R_c\)</span>,
+a useful check that the clustering is unbiased.</p>
 <hr />
 <h2 id="volume-move-npt">Volume Move (<em>NPT</em>)<a class="headerlink" href="#volume-move-npt" title="Permanent link">&para;</a></h2>
 <p>Proposes isotropic or anisotropic volume changes for sampling the <em>NPT</em> ensemble.
@@ -1481,7 +1483,7 @@ which contributes <span class="arithmatex">\(PV - (N+1) k_BT \ln V\)</span>.</p>
 <h3 id="example_1">Example<a class="headerlink" href="#example_1" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><span class="nt">system</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">energy</span><span class="p">:</span>
-<span class="w">    </span><span class="nt">pressure</span><span class="p">:</span><span class="w"> </span><span class="kt">!atm</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1.0</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!Pressure</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">atm</span><span class="p">:</span><span class="w"> </span><span class="nv">1.0</span><span class="p p-Indicator">}</span>
 
 <span class="nt">propagate</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">collections</span><span class="p">:</span>
@@ -1687,9 +1689,9 @@ and implicit protons:</p>
 <span class="w">      </span><span class="nt">moves</span><span class="p">:</span>
 <span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!SpeciationMove</span>
 <span class="w">          </span><span class="nt">reactions</span><span class="p">:</span>
-<span class="w">            </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;H₃PO₄</span><span class="nv"> </span><span class="s">=</span><span class="nv"> </span><span class="s">H₂PO₄⁻</span><span class="nv"> </span><span class="s">+</span><span class="nv"> </span><span class="s">~H+&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="kt">!pK</span><span class="w"> </span><span class="nv">2.15</span><span class="p p-Indicator">]</span>
-<span class="w">            </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;H₂PO₄⁻</span><span class="nv"> </span><span class="s">=</span><span class="nv"> </span><span class="s">HPO₄²⁻</span><span class="nv"> </span><span class="s">+</span><span class="nv"> </span><span class="s">~H+&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="kt">!pK</span><span class="w"> </span><span class="nv">7.20</span><span class="p p-Indicator">]</span>
-<span class="w">            </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;HPO₄²⁻</span><span class="nv"> </span><span class="s">=</span><span class="nv"> </span><span class="s">PO₄³⁻</span><span class="nv"> </span><span class="s">+</span><span class="nv"> </span><span class="s">~H+&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="kt">!pK</span><span class="w"> </span><span class="nv">12.35</span><span class="p p-Indicator">]</span>
+<span class="w">            </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">"H₃PO₄</span><span class="nv"> </span><span class="s">=</span><span class="nv"> </span><span class="s">H₂PO₄⁻</span><span class="nv"> </span><span class="s">+</span><span class="nv"> </span><span class="s">~H+"</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="kt">!pK</span><span class="w"> </span><span class="nv">2.15</span><span class="p p-Indicator">]</span>
+<span class="w">            </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">"H₂PO₄⁻</span><span class="nv"> </span><span class="s">=</span><span class="nv"> </span><span class="s">HPO₄²⁻</span><span class="nv"> </span><span class="s">+</span><span class="nv"> </span><span class="s">~H+"</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="kt">!pK</span><span class="w"> </span><span class="nv">7.20</span><span class="p p-Indicator">]</span>
+<span class="w">            </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">"HPO₄²⁻</span><span class="nv"> </span><span class="s">=</span><span class="nv"> </span><span class="s">PO₄³⁻</span><span class="nv"> </span><span class="s">+</span><span class="nv"> </span><span class="s">~H+"</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="kt">!pK</span><span class="w"> </span><span class="nv">12.35</span><span class="p p-Indicator">]</span>
 </code></pre></div>
 <p>At <span class="arithmatex">\(pH = pK_{a2} = 7.20\)</span>, the effective equilibrium constant for the
 second reaction is unity, giving equal populations of H₂PO₄⁻ and HPO₄²⁻.</p>
@@ -1717,7 +1719,7 @@ overhead from <span class="arithmatex">\(N\)</span> groups to one.</p>
 <span class="w">    </span><span class="nt">permittivity</span><span class="p">:</span><span class="w"> </span><span class="kt">!Water</span>
 <span class="w">    </span><span class="nt">temperature</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">298.15</span>
 <span class="w">  </span><span class="nt">energy</span><span class="p">:</span>
-<span class="w">    </span><span class="nt">nonbonded</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!Nonbonded</span>
 <span class="w">      </span><span class="nt">default</span><span class="p">:</span>
 <span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!Coulomb</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">cutoff</span><span class="p">:</span><span class="w"> </span><span class="nv">20.0</span><span class="p p-Indicator">}</span>
 <span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!WeeksChandlerAndersen</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">mixing</span><span class="p">:</span><span class="w"> </span><span class="nv">LB</span><span class="p p-Indicator">}</span>
@@ -1726,7 +1728,7 @@ overhead from <span class="arithmatex">\(N\)</span> groups to one.</p>
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">molecule</span><span class="p">:</span><span class="w"> </span><span class="nv">anion</span><span class="p p-Indicator">,</span><span class="nt">  N</span><span class="p">:</span><span class="w"> </span><span class="nv">120</span><span class="p p-Indicator">,</span><span class="nt"> active</span><span class="p">:</span><span class="w"> </span><span class="nv">30</span><span class="p p-Indicator">,</span><span class="nt"> insert</span><span class="p">:</span><span class="w"> </span><span class="kt">!RandomAtomPos</span><span class="w"> </span><span class="p p-Indicator">{}}</span>
 
 <span class="nt">propagate</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">repeat</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10000</span>
+<span class="w">  </span><span class="nt">steps</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10000</span>
 <span class="w">  </span><span class="nt">collections</span><span class="p">:</span>
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!Stochastic</span>
 <span class="w">      </span><span class="nt">moves</span><span class="p">:</span>
@@ -1738,7 +1740,7 @@ overhead from <span class="arithmatex">\(N\)</span> groups to one.</p>
 <span class="w">          </span><span class="nt">repeat</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">5</span>
 <span class="w">          </span><span class="nt">reactions</span><span class="p">:</span>
 <span class="w">            </span><span class="c1"># Both activities fold into K_eff; see Activity folding below.</span>
-<span class="w">            </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;=</span><span class="nv"> </span><span class="s">cation</span><span class="nv"> </span><span class="s">+</span><span class="nv"> </span><span class="s">anion&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="kt">!dG</span><span class="w"> </span><span class="nv">0.0</span><span class="p p-Indicator">]</span>
+<span class="w">            </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">"=</span><span class="nv"> </span><span class="s">cation</span><span class="nv"> </span><span class="s">+</span><span class="nv"> </span><span class="s">anion"</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="kt">!dG</span><span class="w"> </span><span class="nv">0.0</span><span class="p p-Indicator">]</span>
 </code></pre></div>
 <p>The ion densities settle <em>above</em> the 0.05 M reservoir activity — about 0.061 M here.
 The activity, not the concentration, is what the reservoir fixes; ion–ion attraction makes
@@ -1853,12 +1855,12 @@ and alternates between:</p>
    (using the <code>collections</code> defined above).</li>
 <li>Inter-box moves — volume exchange and particle transfer between the two boxes.</li>
 </ol>
-<p>The total number of Gibbs sweeps is <code>repeat / intra_steps</code>.</p>
+<p>The total number of Gibbs sweeps is <code>steps / intra_steps</code>.</p>
 <p>Molecule blocks must pre-allocate inactive slots for transfer using <code>active &lt; N</code>
 in the <code>blocks</code> section, e.g. <code>{ molecule: LJ, N: 600, active: 300 }</code>.</p>
 <h3 id="configuration">Configuration<a class="headerlink" href="#configuration" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><span class="nt">propagate</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">repeat</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">5000</span>
+<span class="w">  </span><span class="nt">steps</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">5000</span>
 <span class="w">  </span><span class="nt">collections</span><span class="p">:</span>
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!Stochastic</span>
 <span class="w">      </span><span class="nt">moves</span><span class="p">:</span>
@@ -1992,7 +1994,7 @@ each propagation cycle. On each MC→LD transition, atom positions, centers of m
 and rigid-body orientations are uploaded to the compute device; after the LD block,
 updated positions and orientations are downloaded back.</p>
 <p>Pair interactions are evaluated on-device using cubic spline interpolation of the
-tabulated pair potentials (see <code>energy.spline</code> in <a href="../energy/">Energy</a>).
+tabulated pair potentials (see the <code>!Nonbonded</code> term's <code>spline</code> in <a href="../energy/">Energy</a>).
 A cell list reduces pairwise force evaluation from <span class="arithmatex">\(O(n^2)\)</span> to <span class="arithmatex">\(O(n \cdot k)\)</span>
 where <span class="arithmatex">\(k\)</span> is the number of atoms in neighboring cells.
 The cell list is built on the CPU from periodically downloaded positions
@@ -2074,10 +2076,10 @@ thermostat independently to each angular velocity component:</p>
 <div class="highlight"><pre><span></span><code><span class="nt">propagate</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">seed</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Hardware</span>
 <span class="w">  </span><span class="nt">criterion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Metropolis</span>
-<span class="w">  </span><span class="nt">repeat</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">500</span>
+<span class="w">  </span><span class="nt">steps</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">500</span>
 <span class="w">  </span><span class="nt">collections</span><span class="p">:</span>
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!Stochastic</span>
-<span class="w">      </span><span class="nt">repeat</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">20</span>
+<span class="w">      </span><span class="nt">cycles</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">20</span>
 <span class="w">      </span><span class="nt">moves</span><span class="p">:</span>
 <span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!TranslateMolecule</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> molecule</span><span class="p">:</span><span class="w"> </span><span class="nv">Water</span><span class="p p-Indicator">,</span><span class="nt"> max_displacement</span><span class="p">:</span><span class="w"> </span><span class="nv">0.5</span><span class="p p-Indicator">,</span><span class="nt"> repeat</span><span class="p">:</span><span class="w"> </span><span class="nv">1</span><span class="w"> </span><span class="p p-Indicator">}</span>
 <span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!RotateMolecule</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> molecule</span><span class="p">:</span><span class="w"> </span><span class="nv">Water</span><span class="p p-Indicator">,</span><span class="nt"> max_angle</span><span class="p">:</span><span class="w"> </span><span class="nv">0.3</span><span class="p p-Indicator">,</span><span class="nt"> repeat</span><span class="p">:</span><span class="w"> </span><span class="nv">1</span><span class="w"> </span><span class="p p-Indicator">}</span>
@@ -2150,7 +2152,7 @@ from the equipartition theorem:</p>
   and persist on the compute device across subsequent LD blocks.</li>
 <li>MC rotation moves (<code>!RotateMolecule</code>) automatically track rigid-body orientation,
   which is transferred to the device at each LD block start.</li>
-<li>Energy splines must be configured (<code>energy.spline</code>) to provide on-device pair potentials.</li>
+<li>Energy splines must be configured (the <code>!Nonbonded</code> term's <code>spline</code>) to provide on-device pair potentials.</li>
 </ul>
 
 
@@ -2210,7 +2212,7 @@ from the equipartition theorem:</p>
       <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["content.code.copy", "navigation.top", "search.suggest", "search.highlight", "toc.follow"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"provider": "mike"}}</script>
     
     
-      <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
+      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
       
         <script src="../javascript/mathjax.js"></script>
       

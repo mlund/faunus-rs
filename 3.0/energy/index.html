@@ -21,7 +21,7 @@
       
       
       <link rel="icon" href="../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
     
     
       
@@ -29,7 +29,7 @@
       
     
     
-      <link rel="stylesheet" href="../assets/stylesheets/main.484c7ddc.min.css">
+      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
       
         
         <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
@@ -930,12 +930,15 @@
 
 <h1 id="energy">Energy<a class="headerlink" href="#energy" title="Permanent link">&para;</a></h1>
 <p>The Hamiltonian is the sum of all energy terms acting on the system.
-In a complete input file, energy terms are defined under <code>system.energy</code>.
-Included force-field fragments may instead use a top-level <code>energy</code> section;
-see <a href="#loading-nonbonded-from-include-files">Loading nonbonded from include files</a>.</p>
+In a complete input file, energy terms are defined under <code>system.energy</code> as a
+list of tagged entries (<code>!Nonbonded</code>, <code>!Pressure</code>, …), mirroring <code>analysis</code> and
+<code>moves</code>. Order is irrelevant — the total energy is a sum — and most terms may
+appear only once; <code>!Sasa</code>, <code>!Constrain</code>, <code>!CustomExternal</code> and <code>!CustomPair</code> may
+repeat. Included force-field fragments may instead use a top-level <code>energy</code>
+section; see <a href="#loading-nonbonded-from-include-files">Loading nonbonded from include files</a>.</p>
 <hr />
 <h2 id="external-pressure-isobaric">External Pressure (Isobaric)<a class="headerlink" href="#external-pressure-isobaric" title="Permanent link">&para;</a></h2>
-<p>The <code>pressure</code> energy term adds an external pressure contribution for the <em>NPT</em> ensemble:</p>
+<p>The <code>!Pressure</code> energy term adds an external pressure contribution for the <em>NPT</em> ensemble:</p>
 <div class="arithmatex">\[
 U = PV - (N + 1) k_BT \ln V
 \]</div>
@@ -945,49 +948,51 @@ and <span class="arithmatex">\(N\)</span> is the number of independently transla
 <h3 id="yaml-configuration">YAML configuration<a class="headerlink" href="#yaml-configuration" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><span class="nt">system</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">energy</span><span class="p">:</span>
-<span class="w">    </span><span class="nt">pressure</span><span class="p">:</span><span class="w"> </span><span class="kt">!atm</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1.0</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!Pressure</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">atm</span><span class="p">:</span><span class="w"> </span><span class="nv">1.0</span><span class="p p-Indicator">}</span>
 </code></pre></div>
-<p>Supported pressure units (YAML tags):</p>
+<p>The unit is a map key rather than a tag, since a YAML node cannot carry both
+<code>!Pressure</code> and a unit tag. <code>!Isobaric</code> is accepted as an alias for <code>!Pressure</code>.
+Supported pressure units:</p>
 <table>
 <thead>
 <tr>
-<th>Tag</th>
+<th>Key</th>
 <th>Unit</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>!atm</code></td>
+<td><code>atm</code></td>
 <td>atmospheres</td>
 </tr>
 <tr>
-<td><code>!bar</code></td>
+<td><code>bar</code></td>
 <td>bar</td>
 </tr>
 <tr>
-<td><code>!Pa</code></td>
+<td><code>Pa</code></td>
 <td>Pascal</td>
 </tr>
 <tr>
-<td><code>!kT</code></td>
+<td><code>kT</code></td>
 <td><span class="arithmatex">\(k_BT/\text{Å}^3\)</span></td>
 </tr>
 <tr>
-<td><code>!mM</code></td>
+<td><code>mM</code></td>
 <td>millimolar (ideal gas)</td>
 </tr>
 </tbody>
 </table>
 <hr />
 <h2 id="nonbonded-interactions">Nonbonded Interactions<a class="headerlink" href="#nonbonded-interactions" title="Permanent link">&para;</a></h2>
-<p>The <code>nonbonded</code> energy term handles pairwise particle interactions using a matrix
+<p>The <code>!Nonbonded</code> energy term handles pairwise particle interactions using a matrix
 of pair potentials indexed by atom type for O(1) lookup.
 Multiple potentials can be summed for each pair, and interactions for specific atom
 pairs can override the default.</p>
 <h3 id="yaml-configuration_1">YAML configuration<a class="headerlink" href="#yaml-configuration_1" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><span class="nt">system</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">energy</span><span class="p">:</span>
-<span class="w">    </span><span class="nt">nonbonded</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!Nonbonded</span>
 <span class="w">      </span><span class="nt">default</span><span class="p">:</span>
 <span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!LennardJones</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">mixing</span><span class="p">:</span><span class="w"> </span><span class="nv">LorentzBerthelot</span><span class="p p-Indicator">}</span>
 <span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!Coulomb</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">cutoff</span><span class="p">:</span><span class="w"> </span><span class="nv">12.0</span><span class="p p-Indicator">}</span>
@@ -1027,12 +1032,12 @@ pairs can override the default.</p>
 <h3 id="loading-nonbonded-from-include-files">Loading nonbonded from include files<a class="headerlink" href="#loading-nonbonded-from-include-files" title="Permanent link">&para;</a></h3>
 <p>Nonbonded definitions can be provided in an included force field file.
 The top-level <code>include</code> list is scanned for files with an <code>energy</code> section,
-and any <code>nonbonded</code> entries are merged into the input.
+and its <code>!Nonbonded</code> term is merged into the input.
 <code>replace</code>/<code>append</code> entries in the input take precedence over includes.
 <code>default</code> lists are concatenated; duplicate types from includes are skipped with a warning.</p>
 <div class="highlight"><pre><span></span><code><span class="c1"># assets/forcefield.yaml</span>
 <span class="nt">energy</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">nonbonded</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!Nonbonded</span>
 <span class="w">    </span><span class="nt">default</span><span class="p">:</span>
 <span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!AshbaughHatch</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">mixing</span><span class="p">:</span><span class="w"> </span><span class="nv">arithmetic</span><span class="p p-Indicator">,</span><span class="nt"> cutoff</span><span class="p">:</span><span class="w"> </span><span class="nv">20.0</span><span class="p p-Indicator">}</span>
 <span class="w">    </span><span class="nt">replace</span><span class="p">:</span>
@@ -1043,10 +1048,10 @@ and any <code>nonbonded</code> entries are merged into the input.
 <span class="nt">include</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">assets/forcefield.yaml</span><span class="p p-Indicator">]</span>
 <span class="nt">system</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">energy</span><span class="p">:</span>
-<span class="w">    </span><span class="nt">nonbonded</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!Nonbonded</span>
 <span class="w">      </span><span class="nt">default</span><span class="p">:</span>
 <span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!Coulomb</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">cutoff</span><span class="p">:</span><span class="w"> </span><span class="nv">40.0</span><span class="p p-Indicator">}</span>
-<span class="w">    </span><span class="nt">spline</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">cutoff</span><span class="p">:</span><span class="w"> </span><span class="nv">40.0</span><span class="p p-Indicator">}</span>
+<span class="w">      </span><span class="nt">spline</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">cutoff</span><span class="p">:</span><span class="w"> </span><span class="nv">40.0</span><span class="p p-Indicator">}</span>
 </code></pre></div>
 <h3 id="group-to-group-cutoff">Group-to-group cutoff<a class="headerlink" href="#group-to-group-cutoff" title="Permanent link">&para;</a></h3>
 <p>For molecular systems, distant group (molecule) pairs can be skipped using
@@ -1056,12 +1061,12 @@ bounding radii (max distance from the mass center to any member particle).
 This accelerates the energy without changing it, and — unlike
 <a href="#spline-tabulation">spline tabulation</a> — leaves the pair potentials exact
 (no tabulation, no energy shift).</p>
-<p>Add <code>cutoff</code> and <code>bounding_spheres</code> alongside <code>nonbonded</code>:</p>
+<p>Add <code>cutoff</code> and <code>bounding_spheres</code> inside <code>!Nonbonded</code>:</p>
 <div class="highlight"><pre><span></span><code><span class="nt">system</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">energy</span><span class="p">:</span>
-<span class="w">    </span><span class="nt">cutoff</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">50</span><span class="w">              </span><span class="c1"># group-to-group cutoff (Å)</span>
-<span class="w">    </span><span class="nt">bounding_spheres</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
-<span class="w">    </span><span class="nt">nonbonded</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!Nonbonded</span>
+<span class="w">      </span><span class="nt">cutoff</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">50</span><span class="w">              </span><span class="c1"># group-to-group cutoff (Å)</span>
+<span class="w">      </span><span class="nt">bounding_spheres</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 <span class="w">      </span><span class="nt">default</span><span class="p">:</span>
 <span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!Fanourgakis</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">cutoff</span><span class="p">:</span><span class="w"> </span><span class="nv">50</span><span class="p p-Indicator">}</span>
 <span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!AshbaughHatch</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">mixing</span><span class="p">:</span><span class="w"> </span><span class="nv">arithmetic</span><span class="p p-Indicator">,</span><span class="nt"> cutoff</span><span class="p">:</span><span class="w"> </span><span class="nv">20.0</span><span class="p p-Indicator">}</span>
@@ -1204,7 +1209,7 @@ true repulsive excluded volume.</p>
 <p><code>!CustomPotential</code> lets you define any pair potential as a mathematical expression in <code>r</code> (the pair distance in Å).
 Named constants can be passed via <code>constants</code>:</p>
 <div class="highlight"><pre><span></span><code><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!CustomPotential</span>
-<span class="w">  </span><span class="nt">function</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;4*eps*((sigma/r)^12</span><span class="nv"> </span><span class="s">-</span><span class="nv"> </span><span class="s">(sigma/r)^6)&quot;</span>
+<span class="w">  </span><span class="nt">function</span><span class="p">:</span><span class="w"> </span><span class="s">"4*eps*((sigma/r)^12</span><span class="nv"> </span><span class="s">-</span><span class="nv"> </span><span class="s">(sigma/r)^6)"</span>
 <span class="w">  </span><span class="nt">cutoff</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">14.0</span>
 <span class="w">  </span><span class="nt">constants</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> eps</span><span class="p">:</span><span class="w"> </span><span class="nv">0.5</span><span class="p p-Indicator">,</span><span class="nt"> sigma</span><span class="p">:</span><span class="w"> </span><span class="nv">3.4</span><span class="w"> </span><span class="p p-Indicator">}</span>
 </code></pre></div>
@@ -1273,6 +1278,11 @@ Electrostatic potentials read permittivity, temperature, and optional salt from 
 </tr>
 </tbody>
 </table>
+<p>The <code>salt</code> setting describes an implicit salt bath; it does not insert explicit
+ions into the system. Faunus uses the salt stoichiometry and molarity to derive
+the ionic strength and Debye length, which are then passed to supported
+screened electrostatic potentials. Without <code>salt</code>, the medium supplies no
+screening unless a pair potential defines its own <code>debye_length</code>.</p>
 <h4 id="dielectric-constant-models">Dielectric constant models<a class="headerlink" href="#dielectric-constant-models" title="Permanent link">&para;</a></h4>
 <table>
 <thead>
@@ -1309,44 +1319,14 @@ Electrostatic potentials read permittivity, temperature, and optional salt from 
 </tbody>
 </table>
 <h4 id="salt-types">Salt types<a class="headerlink" href="#salt-types" title="Permanent link">&para;</a></h4>
-<table>
-<thead>
-<tr>
-<th>Tag</th>
-<th>Formula</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>!NaCl</code></td>
-<td>NaCl (1:1 electrolyte)</td>
-</tr>
-<tr>
-<td><code>!CaCl₂</code></td>
-<td>CaCl₂</td>
-</tr>
-<tr>
-<td><code>!CaSO₄</code></td>
-<td>CaSO₄</td>
-</tr>
-<tr>
-<td><code>!Na₂SO₄</code></td>
-<td>Na₂SO₄</td>
-</tr>
-<tr>
-<td><code>!KAl(SO₄)₂</code></td>
-<td>KAl(SO₄)₂</td>
-</tr>
-<tr>
-<td><code>!LaCl₃</code></td>
-<td>LaCl₃</td>
-</tr>
-<tr>
-<td><code>!Custom</code></td>
-<td>Custom ion valencies, e.g. <code>!Custom [2, -1]</code></td>
-</tr>
-</tbody>
-</table>
+<ul>
+<li><code>!NaCl</code> — a 1:1 electrolyte</li>
+<li><code>!CaCl2</code>, <code>!CaSO4</code>, <code>!Na2SO4</code>, <code>!KAl(SO4)2</code>, <code>!LaCl3</code></li>
+<li><code>!Custom</code> — arbitrary ion valencies, e.g. <code>!Custom [2, -1]</code></li>
+</ul>
+<p>Tags are ASCII because a YAML tag may not contain subscripts. The subscripted
+spelling is accepted as an alias if the tag marker is dropped, e.g.
+<code>salt: [CaCl₂, 0.1]</code>.</p>
 <h3 id="electrostatic-potentials">Electrostatic potentials<a class="headerlink" href="#electrostatic-potentials" title="Permanent link">&para;</a></h3>
 <p>Electrostatic potentials combine atom charges with a coulombic scheme.</p>
 <table>
@@ -1359,7 +1339,7 @@ Electrostatic potentials read permittivity, temperature, and optional salt from 
 <tbody>
 <tr>
 <td><code>!Coulomb</code></td>
-<td><code>cutoff</code></td>
+<td><code>cutoff</code>, <code>debye_length</code></td>
 </tr>
 <tr>
 <td><code>!Ewald</code></td>
@@ -1371,10 +1351,27 @@ Electrostatic potentials read permittivity, temperature, and optional salt from 
 </tr>
 <tr>
 <td><code>!Fanourgakis</code></td>
-<td><code>cutoff</code></td>
+<td><code>cutoff</code>, <code>debye_length</code></td>
 </tr>
 </tbody>
 </table>
+<p>The recommended way to configure salt screening is <code>medium.salt</code>. For pair
+schemes that support explicit screening, a <code>debye_length</code> is also accepted and
+takes precedence for that pair; Faunus emits a warning when both settings are
+present. Omitting both settings leaves the pair potential unscreened.</p>
+<div class="highlight"><pre><span></span><code><span class="nt">system</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">medium</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">permittivity</span><span class="p">:</span><span class="w"> </span><span class="kt">!Water</span>
+<span class="w">    </span><span class="nt">temperature</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">298.15</span>
+<span class="w">    </span><span class="nt">salt</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="kt">!NaCl,</span><span class="w"> </span><span class="nv">0.005</span><span class="p p-Indicator">]</span>
+<span class="w">  </span><span class="nt">energy</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!Nonbonded</span>
+<span class="w">      </span><span class="nt">default</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!Fanourgakis</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">cutoff</span><span class="p">:</span><span class="w"> </span><span class="nv">50.0</span><span class="p p-Indicator">}</span>
+<span class="w">      </span><span class="nt">replace</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">[</span><span class="nv">Na</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">Cl</span><span class="p p-Indicator">]:</span>
+<span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!Fanourgakis</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">cutoff</span><span class="p">:</span><span class="w"> </span><span class="nv">50.0</span><span class="p p-Indicator">,</span><span class="nt"> debye_length</span><span class="p">:</span><span class="w"> </span><span class="nv">12.0</span><span class="p p-Indicator">}</span>
+</code></pre></div>
 <hr />
 <h2 id="ewald-summation">Ewald Summation<a class="headerlink" href="#ewald-summation" title="Permanent link">&para;</a></h2>
 <p>The Ewald method splits long-range electrostatic (or Yukawa) interactions into
@@ -1422,17 +1419,17 @@ When <span class="arithmatex">\(2\kappa r_c \geq -\ln\varepsilon\)</span>, the s
 the real-space sum alone achieves the target accuracy and the reciprocal sum
 is skipped entirely.</p>
 <h3 id="yaml-configuration_2">YAML configuration<a class="headerlink" href="#yaml-configuration_2" title="Permanent link">&para;</a></h3>
-<p>The <code>ewald</code> section automatically sets up both the real-space pair potential
+<p>The <code>!Ewald</code> term automatically sets up both the real-space pair potential
 (injected into the nonbonded defaults before splining) and the reciprocal-space
-energy term. No manual <code>!Ewald</code> entry is needed in the nonbonded list.</p>
+energy term. No manual <code>!CoulombEwald</code> pair potential is needed in the nonbonded list.</p>
 <div class="highlight"><pre><span></span><code><span class="nt">system</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">energy</span><span class="p">:</span>
-<span class="w">    </span><span class="nt">nonbonded</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!Nonbonded</span>
 <span class="w">      </span><span class="nt">default</span><span class="p">:</span>
 <span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!LennardJones</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">mixing</span><span class="p">:</span><span class="w"> </span><span class="nv">LB</span><span class="p p-Indicator">}</span>
-<span class="w">    </span><span class="nt">spline</span><span class="p">:</span>
-<span class="w">      </span><span class="nt">cutoff</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">14.0</span>
-<span class="w">    </span><span class="nt">ewald</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">spline</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">cutoff</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">14.0</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!Ewald</span>
 <span class="w">      </span><span class="nt">cutoff</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">9.0</span>
 <span class="w">      </span><span class="nt">accuracy</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1e-5</span>
 <span class="w">      </span><span class="nt">policy</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">PBC</span>
@@ -1487,17 +1484,17 @@ interactions excluded. This is configured per molecule in the topology via the
 <code>exclusions</code> key (list of intra-molecular index pairs).</p>
 <h3 id="spline-tabulation">Spline tabulation<a class="headerlink" href="#spline-tabulation" title="Permanent link">&para;</a></h3>
 <p>For performance, all nonbonded potentials can be tabulated using cubic Hermite splines.
-Add a <code>spline</code> section alongside <code>nonbonded</code>:</p>
+Add a <code>spline</code> section inside <code>!Nonbonded</code>:</p>
 <div class="highlight"><pre><span></span><code><span class="nt">system</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">energy</span><span class="p">:</span>
-<span class="w">    </span><span class="nt">nonbonded</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!Nonbonded</span>
 <span class="w">      </span><span class="nt">default</span><span class="p">:</span>
 <span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!WCA</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">mixing</span><span class="p">:</span><span class="w"> </span><span class="nv">LB</span><span class="p p-Indicator">}</span>
 <span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!Coulomb</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">cutoff</span><span class="p">:</span><span class="w"> </span><span class="nv">200</span><span class="p p-Indicator">}</span>
-<span class="w">    </span><span class="nt">spline</span><span class="p">:</span>
-<span class="w">      </span><span class="nt">cutoff</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">200.0</span>
-<span class="w">      </span><span class="nt">n_points</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2000</span>
-<span class="w">      </span><span class="nt">grid_type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">PowerLaw2</span>
+<span class="w">      </span><span class="nt">spline</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">cutoff</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">200.0</span>
+<span class="w">        </span><span class="nt">table_points</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2000</span>
+<span class="w">        </span><span class="nt">grid_type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">PowerLaw2</span>
 </code></pre></div>
 <table>
 <thead>
@@ -1516,7 +1513,7 @@ Add a <code>spline</code> section alongside <code>nonbonded</code>:</p>
 <td>Cutoff distance (Å)</td>
 </tr>
 <tr>
-<td><code>n_points</code></td>
+<td><code>table_points</code></td>
 <td>no</td>
 <td><code>2000</code></td>
 <td>Number of spline grid points</td>
@@ -1733,8 +1730,8 @@ The energy is evaluated per particle (or per mass center) and summed over all ma
 (<code>sin</code>, <code>cos</code>, <code>exp</code>, <code>ln</code>, <code>sqrt</code>, <code>abs</code>, <code>signum</code>, <code>floor</code>, etc.) are supported
 via <a href="https://docs.rs/exmex">exmex</a>. Built-in constants <code>PI</code>, <code>TAU</code> (=2π), and <code>π</code> are available.</p>
 <p>Python-style conditionals are supported:
-<div class="highlight"><pre><span></span><code>&quot;1.0 if x &gt; 0 else -1.0&quot;
-&quot;(3 if x &lt; 0.5 else 5) * sin(TAU * y)&quot;
+<div class="highlight"><pre><span></span><code>"1.0 if x &gt; 0 else -1.0"
+"(3 if x &lt; 0.5 else 5) * sin(TAU * y)"
 </code></pre></div></p>
 <p>Named constants use word-boundary matching, so single-letter names like <code>c</code> won't
 collide with function names like <code>cos</code>.</p>
@@ -1758,19 +1755,18 @@ parser for better performance:</p>
 <h3 id="yaml-configuration_4">YAML configuration<a class="headerlink" href="#yaml-configuration_4" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><span class="nt">system</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">energy</span><span class="p">:</span>
-<span class="w">    </span><span class="nt">custom_external</span><span class="p">:</span>
-<span class="w">      </span><span class="c1"># Expression with named constants</span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">selection</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;molecule</span><span class="nv"> </span><span class="s">water&quot;</span>
+<span class="w">    </span><span class="c1"># Expression with named constants</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!CustomExternal</span>
+<span class="w">        </span><span class="nt">selection</span><span class="p">:</span><span class="w"> </span><span class="s">"molecule</span><span class="nv"> </span><span class="s">water"</span>
 <span class="w">        </span><span class="nt">use_com</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 <span class="w">        </span><span class="nt">constants</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> radius</span><span class="p">:</span><span class="w"> </span><span class="nv">15</span><span class="p p-Indicator">,</span><span class="nt"> k</span><span class="p">:</span><span class="w"> </span><span class="nv">100</span><span class="w"> </span><span class="p p-Indicator">}</span>
-<span class="w">        </span><span class="nt">function</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;0.5</span><span class="nv"> </span><span class="s">*</span><span class="nv"> </span><span class="s">k</span><span class="nv"> </span><span class="s">*</span><span class="nv"> </span><span class="s">(x^2</span><span class="nv"> </span><span class="s">+</span><span class="nv"> </span><span class="s">y^2</span><span class="nv"> </span><span class="s">+</span><span class="nv"> </span><span class="s">z^2</span><span class="nv"> </span><span class="s">-</span><span class="nv"> </span><span class="s">radius^2)&quot;</span>
-<span class="w">      </span><span class="c1"># Expression with conditional</span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">selection</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;all&quot;</span>
-<span class="w">        </span><span class="nt">function</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;10.0</span><span class="nv"> </span><span class="s">if</span><span class="nv"> </span><span class="s">x</span><span class="nv"> </span><span class="s">&gt;</span><span class="nv"> </span><span class="s">0</span><span class="nv"> </span><span class="s">else</span><span class="nv"> </span><span class="s">-5.0&quot;</span>
-<span class="w">      </span><span class="c1"># Built-in preset</span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">selection</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;all&quot;</span>
-<span class="w">        </span><span class="nt">function</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">staircase-sincos</span>
+<span class="w">        </span><span class="nt">function</span><span class="p">:</span><span class="w"> </span><span class="s">"0.5</span><span class="nv"> </span><span class="s">*</span><span class="nv"> </span><span class="s">k</span><span class="nv"> </span><span class="s">*</span><span class="nv"> </span><span class="s">(x^2</span><span class="nv"> </span><span class="s">+</span><span class="nv"> </span><span class="s">y^2</span><span class="nv"> </span><span class="s">+</span><span class="nv"> </span><span class="s">z^2</span><span class="nv"> </span><span class="s">-</span><span class="nv"> </span><span class="s">radius^2)"</span>
+<span class="w">    </span><span class="c1"># Expression with conditional</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!CustomExternal</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">selection</span><span class="p">:</span><span class="w"> </span><span class="s">"all"</span><span class="p p-Indicator">,</span><span class="nt"> function</span><span class="p">:</span><span class="w"> </span><span class="s">"10.0</span><span class="nv"> </span><span class="s">if</span><span class="nv"> </span><span class="s">x</span><span class="nv"> </span><span class="s">&gt;</span><span class="nv"> </span><span class="s">0</span><span class="nv"> </span><span class="s">else</span><span class="nv"> </span><span class="s">-5.0"</span><span class="p p-Indicator">}</span>
+<span class="w">    </span><span class="c1"># Built-in preset</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!CustomExternal</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">selection</span><span class="p">:</span><span class="w"> </span><span class="s">"all"</span><span class="p p-Indicator">,</span><span class="nt"> function</span><span class="p">:</span><span class="w"> </span><span class="nv">staircase-sincos</span><span class="p p-Indicator">}</span>
 </code></pre></div>
+<p><code>!CustomExternal</code> may appear several times, one entry per potential.</p>
 <table>
 <thead>
 <tr>
@@ -1812,8 +1808,8 @@ center position, with <code>q</code> set to the net group charge.
 When <code>false</code> (default), the expression is evaluated at each matching atom position.</p>
 <hr />
 <h2 id="custom-pair-potential-com-com">Custom Pair Potential (COM-COM)<a class="headerlink" href="#custom-pair-potential-com-com" title="Permanent link">&para;</a></h2>
-<p>The <code>custom_pair</code> energy term applies a user-defined potential <code>U(r)</code> between the
-centres of mass of <em>two</em> rigid-body selections. Unlike <code>custom_external</code>, it
+<p>The <code>!CustomPair</code> energy term applies a user-defined potential <code>U(r)</code> between the
+centres of mass of <em>two</em> rigid-body selections. Unlike <code>!CustomExternal</code>, it
 contributes both energy (consumed by Metropolis MC) and forces
 (consumed by Langevin dynamics), distributed to each rigid body's atoms by mass
 fraction so the COM force is exact and the torque about the COM is zero.</p>
@@ -1853,18 +1849,18 @@ applies (operators, math functions, Python-style conditionals, named constants).
 <h3 id="yaml-configuration_5">YAML configuration<a class="headerlink" href="#yaml-configuration_5" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><span class="nt">system</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">energy</span><span class="p">:</span>
-<span class="w">    </span><span class="nt">custom_pair</span><span class="p">:</span>
-<span class="w">      </span><span class="c1"># Harmonic restraint at fixed COM-COM distance (umbrella window)</span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">selection1</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;molecule</span><span class="nv"> </span><span class="s">protein0&quot;</span>
-<span class="w">        </span><span class="nt">selection2</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;molecule</span><span class="nv"> </span><span class="s">protein1&quot;</span>
-<span class="w">        </span><span class="nt">function</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;0.5</span><span class="nv"> </span><span class="s">*</span><span class="nv"> </span><span class="s">k</span><span class="nv"> </span><span class="s">*</span><span class="nv"> </span><span class="s">(r</span><span class="nv"> </span><span class="s">-</span><span class="nv"> </span><span class="s">r0)^2&quot;</span>
+<span class="w">    </span><span class="c1"># Harmonic restraint at fixed COM-COM distance (umbrella window)</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!CustomPair</span>
+<span class="w">        </span><span class="nt">selections</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">"molecule</span><span class="nv"> </span><span class="s">protein0"</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">"molecule</span><span class="nv"> </span><span class="s">protein1"</span><span class="p p-Indicator">]</span>
+<span class="w">        </span><span class="nt">function</span><span class="p">:</span><span class="w"> </span><span class="s">"0.5</span><span class="nv"> </span><span class="s">*</span><span class="nv"> </span><span class="s">k</span><span class="nv"> </span><span class="s">*</span><span class="nv"> </span><span class="s">(r</span><span class="nv"> </span><span class="s">-</span><span class="nv"> </span><span class="s">r0)^2"</span>
 <span class="w">        </span><span class="nt">constants</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> k</span><span class="p">:</span><span class="w"> </span><span class="nv">100.0</span><span class="p p-Indicator">,</span><span class="nt"> r0</span><span class="p">:</span><span class="w"> </span><span class="nv">30.0</span><span class="w"> </span><span class="p p-Indicator">}</span>
-<span class="w">      </span><span class="c1"># Constant pulling force along the COM-COM axis (steered MD)</span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">selection1</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;molecule</span><span class="nv"> </span><span class="s">protein0&quot;</span>
-<span class="w">        </span><span class="nt">selection2</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;molecule</span><span class="nv"> </span><span class="s">protein1&quot;</span>
-<span class="w">        </span><span class="nt">function</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;f0</span><span class="nv"> </span><span class="s">*</span><span class="nv"> </span><span class="s">r&quot;</span>
+<span class="w">    </span><span class="c1"># Constant pulling force along the COM-COM axis (steered MD)</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!CustomPair</span>
+<span class="w">        </span><span class="nt">selections</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">"molecule</span><span class="nv"> </span><span class="s">protein0"</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">"molecule</span><span class="nv"> </span><span class="s">protein1"</span><span class="p p-Indicator">]</span>
+<span class="w">        </span><span class="nt">function</span><span class="p">:</span><span class="w"> </span><span class="s">"f0</span><span class="nv"> </span><span class="s">*</span><span class="nv"> </span><span class="s">r"</span>
 <span class="w">        </span><span class="nt">constants</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> f0</span><span class="p">:</span><span class="w"> </span><span class="nv">50.0</span><span class="w"> </span><span class="p p-Indicator">}</span>
 </code></pre></div>
+<p><code>!CustomPair</code> may appear several times, one entry per rigid-body pair.</p>
 <table>
 <thead>
 <tr>
@@ -1876,16 +1872,10 @@ applies (operators, math functions, Python-style conditionals, named constants).
 </thead>
 <tbody>
 <tr>
-<td><code>selection1</code></td>
+<td><code>selections</code></td>
 <td>yes</td>
 <td></td>
-<td>Selection that must resolve to one Rigid molecule</td>
-</tr>
-<tr>
-<td><code>selection2</code></td>
-<td>yes</td>
-<td></td>
-<td>Same, distinct from <code>selection1</code></td>
+<td>Pair <code>[a, b]</code>; each must resolve to one Rigid molecule, and the two must differ</td>
 </tr>
 <tr>
 <td><code>function</code></td>
@@ -1930,21 +1920,19 @@ by <span class="arithmatex">\(w = \exp(-\ln g(\text{bin}))\)</span>, recovering 
 <h3 id="yaml-configuration_6">YAML configuration<a class="headerlink" href="#yaml-configuration_6" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><span class="nt">system</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">energy</span><span class="p">:</span>
-<span class="w">    </span><span class="nt">penalty</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!Penalty</span>
 <span class="w">      </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">wl_states/histogram.yaml</span>
 <span class="w">      </span><span class="nt">coordinate</span><span class="p">:</span>
 <span class="w">        </span><span class="nt">property</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">atom_position</span>
-<span class="w">        </span><span class="nt">selection</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;atomtype</span><span class="nv"> </span><span class="s">A&quot;</span>
+<span class="w">        </span><span class="nt">selection</span><span class="p">:</span><span class="w"> </span><span class="s">"atomtype</span><span class="nv"> </span><span class="s">A"</span>
 <span class="w">        </span><span class="nt">projection</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">x</span>
-<span class="w">        </span><span class="nt">range</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">-2.0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">2.0</span><span class="p p-Indicator">]</span>
-<span class="w">        </span><span class="nt">resolution</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.1</span>
 <span class="w">      </span><span class="nt">coordinate2</span><span class="p">:</span><span class="w">  </span><span class="c1"># optional, for 2D</span>
 <span class="w">        </span><span class="nt">property</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">atom_position</span>
-<span class="w">        </span><span class="nt">selection</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;atomtype</span><span class="nv"> </span><span class="s">A&quot;</span>
+<span class="w">        </span><span class="nt">selection</span><span class="p">:</span><span class="w"> </span><span class="s">"atomtype</span><span class="nv"> </span><span class="s">A"</span>
 <span class="w">        </span><span class="nt">projection</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">y</span>
-<span class="w">        </span><span class="nt">range</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">-2.0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">2.0</span><span class="p p-Indicator">]</span>
-<span class="w">        </span><span class="nt">resolution</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.1</span>
 </code></pre></div>
+<p>The grid (bounds and bin width) is read from the checkpoint, so <code>coordinate</code>
+specifies only the collective variable — no <code>range</code> or <code>resolution</code>.</p>
 <table>
 <thead>
 <tr>
@@ -1971,6 +1959,9 @@ by <span class="arithmatex">\(w = \exp(-\ln g(\text{bin}))\)</span>, recovering 
 </tr>
 </tbody>
 </table>
+<p>Supply <code>coordinate2</code> when, and only when, the checkpoint stores a 2-D grid; a
+mismatch between the checkpoint dimensionality and the configured coordinates is
+rejected at startup.</p>
 <p>The penalty is placed at the front of the Hamiltonian so that out-of-range
 CV values return infinite energy, short-circuiting expensive downstream terms.</p>
 <hr />
@@ -2001,9 +1992,10 @@ Periodic boundary conditions are supported for orthorhombic cells.</p>
 
 <span class="nt">system</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">energy</span><span class="p">:</span>
-<span class="w">    </span><span class="nt">sasa</span><span class="p">:</span>
-<span class="w">      </span><span class="nt">probe_radius</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1.4</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!Sasa</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">probe_radius</span><span class="p">:</span><span class="w"> </span><span class="nv">1.4</span><span class="p p-Indicator">}</span>
 </code></pre></div>
+<p><code>!Sasa</code> may appear more than once — for example two probe radii — each an
+independent surface-area term.</p>
 <table>
 <thead>
 <tr>
@@ -2070,7 +2062,7 @@ added in future versions.</p>
 
 <span class="nt">system</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">energy</span><span class="p">:</span>
-<span class="w">    </span><span class="nt">contact_tessellation</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> probe_radius</span><span class="p">:</span><span class="w"> </span><span class="nv">1.4</span><span class="w"> </span><span class="p p-Indicator">}</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!ContactTessellation</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">probe_radius</span><span class="p">:</span><span class="w"> </span><span class="nv">1.4</span><span class="p p-Indicator">}</span>
 </code></pre></div>
 <table>
 <thead>
@@ -2102,34 +2094,72 @@ The bounding sphere cutoff automatically includes the probe diameter to account
 for the expanded tessellation radii.</p>
 <hr />
 <h2 id="constrain">Constrain<a class="headerlink" href="#constrain" title="Permanent link">&para;</a></h2>
-<p>Constrains a collective variable to a specified range.
-Two modes are supported:</p>
-<ul>
-<li>Hard constraint (default): returns infinite energy if the CV value falls
-  outside <code>[min, max]</code>, otherwise zero.</li>
-<li>Harmonic constraint: applies a quadratic penalty
-  <span class="arithmatex">\(\frac{1}{2} k (x_\text{eq} - x)^2\)</span> around an equilibrium value.</li>
-</ul>
+<p>Restrains a collective variable. Each entry pairs a <code>property</code> (the CV) with a
+<code>restraint</code>, a tagged form that fixes both the geometry and whether the wall is
+hard (infinite outside) or soft (quadratic):</p>
+<table>
+<thead>
+<tr>
+<th>Tag</th>
+<th>Energy</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>!Between</code></td>
+<td><span class="arithmatex">\(0\)</span> inside <span class="arithmatex">\([a, b]\)</span>, <span class="arithmatex">\(\infty\)</span> outside</td>
+<td>Hard two-sided wall</td>
+</tr>
+<tr>
+<td><code>!Below</code></td>
+<td><span class="arithmatex">\(0\)</span> for <span class="arithmatex">\(x \le b\)</span>, <span class="arithmatex">\(\infty\)</span> above</td>
+<td>Hard one-sided wall</td>
+</tr>
+<tr>
+<td><code>!Above</code></td>
+<td><span class="arithmatex">\(0\)</span> for <span class="arithmatex">\(x \ge a\)</span>, <span class="arithmatex">\(\infty\)</span> below</td>
+<td>Hard one-sided wall</td>
+</tr>
+<tr>
+<td><code>!Harmonic</code></td>
+<td><span class="arithmatex">\(\tfrac{1}{2} k (x_\text{eq} - x)^2\)</span></td>
+<td>Quadratic penalty about a point</td>
+</tr>
+<tr>
+<td><code>!HarmonicWall</code></td>
+<td><span class="arithmatex">\(0\)</span> inside <span class="arithmatex">\([a, b]\)</span>, <span class="arithmatex">\(\tfrac{1}{2} k\,d^2\)</span> beyond the nearest edge (distance <span class="arithmatex">\(d\)</span>)</td>
+<td>Flat-bottomed well (soft <code>!Between</code>)</td>
+</tr>
+</tbody>
+</table>
+<p><code>!HarmonicWall</code> confines the CV to an interval while pushing back smoothly rather
+than with an abrupt wall — the usual choice for keeping a coordinate in a window
+without the sampling artefacts of a hard boundary.</p>
 <h3 id="yaml-configuration_9">YAML configuration<a class="headerlink" href="#yaml-configuration_9" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><span class="nt">system</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">energy</span><span class="p">:</span>
-<span class="w">    </span><span class="nt">constrain</span><span class="p">:</span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">property</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">volume</span>
-<span class="w">        </span><span class="nt">range</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">1000.0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">5000.0</span><span class="p p-Indicator">]</span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">property</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">mass_center_position</span>
-<span class="w">        </span><span class="nt">selection</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;molecule</span><span class="nv"> </span><span class="s">protein&quot;</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!Constrain</span>
+<span class="w">        </span><span class="nt">property</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">volume</span>
+<span class="w">        </span><span class="nt">restraint</span><span class="p">:</span><span class="w"> </span><span class="kt">!Between</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">1000.0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">5000.0</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!Constrain</span>
+<span class="w">        </span><span class="nt">property</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">mass_center_position</span>
+<span class="w">        </span><span class="nt">selection</span><span class="p">:</span><span class="w"> </span><span class="s">"molecule</span><span class="nv"> </span><span class="s">protein"</span>
 <span class="w">        </span><span class="nt">projection</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">z</span>
-<span class="w">        </span><span class="nt">range</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">-50.0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">50.0</span><span class="p p-Indicator">]</span>
-<span class="w">        </span><span class="nt">harmonic</span><span class="p">:</span><span class="w"> </span><span class="c1"># optional</span>
-<span class="w">          </span><span class="nt">force_constant</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">100.0</span>
-<span class="w">          </span><span class="nt">equilibrium</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.0</span>
+<span class="w">        </span><span class="nt">restraint</span><span class="p">:</span><span class="w"> </span><span class="kt">!Below</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">50.0</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!Constrain</span>
+<span class="w">        </span><span class="nt">property</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">mass_center_position</span>
+<span class="w">        </span><span class="nt">selection</span><span class="p">:</span><span class="w"> </span><span class="s">"molecule</span><span class="nv"> </span><span class="s">protein"</span>
+<span class="w">        </span><span class="nt">projection</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">z</span>
+<span class="w">        </span><span class="nt">restraint</span><span class="p">:</span><span class="w"> </span><span class="kt">!HarmonicWall</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">interval</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">-50.0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">50.0</span><span class="p p-Indicator">],</span><span class="nt"> force_constant</span><span class="p">:</span><span class="w"> </span><span class="nv">100.0</span><span class="p p-Indicator">}</span>
 </code></pre></div>
+<p>Each <code>!Constrain</code> restrains one collective variable; use several entries for
+several constraints.</p>
 <table>
 <thead>
 <tr>
 <th>Key</th>
 <th>Required</th>
-<th>Default</th>
 <th>Description</th>
 </tr>
 </thead>
@@ -2137,57 +2167,29 @@ Two modes are supported:</p>
 <tr>
 <td><code>property</code></td>
 <td>yes</td>
-<td></td>
 <td>CV type (see <a href="../analysis/#supported-properties">collective variables</a>)</td>
 </tr>
 <tr>
-<td><code>range</code></td>
-<td>no</td>
-<td><code>[-∞, ∞]</code></td>
-<td>Allowed <code>[min, max]</code> interval</td>
-</tr>
-<tr>
-<td><code>harmonic</code></td>
-<td>no</td>
-<td></td>
-<td>Harmonic restraint parameters (see below)</td>
+<td><code>restraint</code></td>
+<td>yes</td>
+<td>One of the tags above; exactly one restraint per entry</td>
 </tr>
 <tr>
 <td><code>projection</code></td>
 <td>no</td>
-<td><code>xyz</code></td>
 <td>Axis projection (<code>x</code>, <code>y</code>, <code>z</code>, <code>xy</code>, …); alias: <code>dimension</code></td>
 </tr>
 <tr>
 <td><code>selection</code></td>
 <td>depends</td>
-<td></td>
 <td>Selection expression for one atom or group</td>
 </tr>
 </tbody>
 </table>
-<h4 id="harmonic-parameters">Harmonic parameters<a class="headerlink" href="#harmonic-parameters" title="Permanent link">&para;</a></h4>
-<table>
-<thead>
-<tr>
-<th>Key</th>
-<th>Required</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>force_constant</code></td>
-<td>yes</td>
-<td>Spring constant <span class="arithmatex">\(k\)</span> (kJ/mol/unit²)</td>
-</tr>
-<tr>
-<td><code>equilibrium</code></td>
-<td>yes</td>
-<td>Target value <span class="arithmatex">\(x_\text{eq}\)</span></td>
-</tr>
-</tbody>
-</table>
+<p><code>force_constant</code> is the spring constant <span class="arithmatex">\(k\)</span> (kJ/mol/unit²) and must be positive;
+<code>equilibrium</code> is the target value <span class="arithmatex">\(x_\text{eq}\)</span> for <code>!Harmonic</code>.</p>
+<p><strong>A restraint is required.</strong> Omitting <code>restraint</code>, or giving an interval with
+<code>min ≥ max</code>, is an error rather than a silently unconstrained run.</p>
 <h2 id="polymer-depletion-many-body-interaction">Polymer Depletion Many-Body Interaction<a class="headerlink" href="#polymer-depletion-many-body-interaction" title="Permanent link">&para;</a></h2>
 <p>The <code>polymer_depletion</code> energy term implements the Forsman &amp; Woodward many-body
 Hamiltonian for colloids immersed in an ideal polymer fluid
@@ -2318,7 +2320,7 @@ Analytical forces are not yet implemented for this mode.</p>
 <h3 id="yaml-configuration_10">YAML configuration<a class="headerlink" href="#yaml-configuration_10" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><span class="nt">system</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">energy</span><span class="p">:</span>
-<span class="w">    </span><span class="nt">polymer_depletion</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!PolymerDepletion</span>
 <span class="w">      </span><span class="nt">polymer_rg</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10.0</span>
 <span class="w">      </span><span class="nt">polymer_density</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.5</span>
 <span class="w">      </span><span class="nt">kappa</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1.0</span>
@@ -2328,7 +2330,7 @@ Analytical forces are not yet implemented for this mode.</p>
 <p>Or with self-consistent steric adsorption (mutually exclusive with <code>h_tilde</code>):</p>
 <div class="highlight"><pre><span></span><code><span class="nt">system</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">energy</span><span class="p">:</span>
-<span class="w">    </span><span class="nt">polymer_depletion</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!PolymerDepletion</span>
 <span class="w">      </span><span class="nt">polymer_rg</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">100.0</span>
 <span class="w">      </span><span class="nt">polymer_density</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1.0</span>
 <span class="w">      </span><span class="nt">kappa</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1.0</span>
@@ -2458,7 +2460,7 @@ A pairwise group energy cache gives O(1) lookups for single rigid-body MC moves.
 <h3 id="yaml-configuration_11">YAML configuration<a class="headerlink" href="#yaml-configuration_11" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><span class="nt">system</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">energy</span><span class="p">:</span>
-<span class="w">    </span><span class="nt">tabulated6d</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!Tabulated6d</span>
 <span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">molecules</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">ProteinA</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">ProteinA</span><span class="p p-Indicator">]</span>
 <span class="w">        </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">table_AA.bin.gz</span>
 <span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">molecules</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">ProteinA</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">ProteinB</span><span class="p p-Indicator">]</span>
@@ -2520,13 +2522,13 @@ can be omitted.</p>
 <p>A <code>medium</code> with <code>temperature</code> is required so that the inverse thermal energy
 <span class="arithmatex">\(\beta = 1/k_BT\)</span> can be computed for the Boltzmann-weighted interpolation.</p>
 <h3 id="automatic-nonbonded-exclusion">Automatic nonbonded exclusion<a class="headerlink" href="#automatic-nonbonded-exclusion" title="Permanent link">&para;</a></h3>
-<p>When <code>tabulated6d</code> or <code>tabulated3d</code> is active, molecule-type pairs covered by table entries are
-automatically excluded from the <code>nonbonded</code> energy term.
+<p>When <code>!Tabulated6d</code> or <code>!Tabulated3d</code> is active, molecule-type pairs covered by table entries are
+automatically excluded from the <code>!Nonbonded</code> energy term.
 This prevents double-counting when mixing tabulated rigid-body interactions with
 atom-level nonbonded potentials for other molecule types.</p>
 <hr />
 <h2 id="tabulated-3d-molecule-atom-energy">Tabulated 3D Molecule-Atom Energy<a class="headerlink" href="#tabulated-3d-molecule-atom-energy" title="Permanent link">&para;</a></h2>
-<p>The <code>tabulated3d</code> energy term loads pre-computed energy tables for interactions
+<p>The <code>!Tabulated3d</code> energy term loads pre-computed energy tables for interactions
 between a rigid molecule and an atomic group (e.g. ion-protein),
 providing O(1) energy lookups during Monte Carlo moves.</p>
 <p>Tables are generated by <a href="https://github.com/mlund/duello">Duello</a> <code>atom-scan</code>, which
@@ -2544,7 +2546,7 @@ No swap averaging is performed since the interaction is inherently asymmetric.</
 <h3 id="yaml-configuration_12">YAML configuration<a class="headerlink" href="#yaml-configuration_12" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><span class="nt">system</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">energy</span><span class="p">:</span>
-<span class="w">    </span><span class="nt">tabulated3d</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!Tabulated3d</span>
 <span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">molecules</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">Protein</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">Sodium</span><span class="p p-Indicator">]</span>
 <span class="w">        </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">protein_na.bin.gz</span>
 <span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">molecules</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">Protein</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">Chloride</span><span class="p p-Indicator">]</span>
@@ -2578,8 +2580,8 @@ Reversed pairs are detected automatically.</p>
 <p>Beyond <span class="arithmatex">\(R_\text{max}\)</span>, the tail correction from table metadata is used (if present);
 otherwise zero is returned. A <code>medium</code> with <code>temperature</code> is required for
 the Boltzmann-weighted interpolation.</p>
-<p>Molecule-type pairs covered by <code>tabulated3d</code> entries are automatically excluded
-from the <code>nonbonded</code> energy term, same as for <code>tabulated6d</code>.</p>
+<p>Molecule-type pairs covered by <code>!Tabulated3d</code> entries are automatically excluded
+from the <code>!Nonbonded</code> energy term, same as for <code>!Tabulated6d</code>.</p>
 
 
 
@@ -2638,7 +2640,7 @@ from the <code>nonbonded</code> energy term, same as for <code>tabulated6d</code
       <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["content.code.copy", "navigation.top", "search.suggest", "search.highlight", "toc.follow"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"provider": "mike"}}</script>
     
     
-      <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
+      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
       
         <script src="../javascript/mathjax.js"></script>
       
