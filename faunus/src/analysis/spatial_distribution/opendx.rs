@@ -80,7 +80,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn writes_header_and_x_fastest_data_order() {
+    fn writes_header_and_z_fastest_data_order() {
         let grid = Grid::from_points(&[Point::new(0.25, 0.25, 0.25)], 0.5, 0.0).unwrap();
         let values: Vec<f64> = (0..grid.num_voxels()).map(|i| i as f64).collect();
         let mut bytes = Vec::new();
@@ -91,5 +91,32 @@ mod tests {
         assert!(text.contains("delta 0.50000000 0.00000000 0.00000000"));
         assert!(text.contains("object 3 class array type double rank 0 items 1 data follows"));
         assert!(text.contains(" 0.00000000e0\n"));
+    }
+
+    #[test]
+    fn serializes_an_x_offset_voxel_after_all_yz_voxels() {
+        let grid = Grid::from_points(&[Point::zeros()], 1.0, 1.0).unwrap();
+        let mut values = vec![0.0; grid.num_voxels()];
+        values[grid.index_of(&Point::new(0.1, -1.0, -1.0)).unwrap()] = 42.0;
+
+        let mut bytes = Vec::new();
+        write_to(&mut bytes, &grid, &values, "relative_density").unwrap();
+        let text = String::from_utf8(bytes).unwrap();
+        let data: Vec<f64> = text
+            .split("data follows\n")
+            .nth(1)
+            .unwrap()
+            .split("attribute")
+            .next()
+            .unwrap()
+            .split_whitespace()
+            .map(|value| value.parse().unwrap())
+            .collect();
+
+        // OpenDX visits (x₀, y₀, z₀), (x₀, y₀, z₁), … before (x₁, y₀, z₀).
+        assert_eq!(
+            &data[..12],
+            &[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 42.0, 0.0, 0.0]
+        );
     }
 }
