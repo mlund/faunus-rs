@@ -49,7 +49,7 @@ use interatomic::coulomb::{Medium, Temperature};
 /// *traceless* Θ from [`geometry::quadrupole_moment`](crate::geometry), and it carries
 /// scheme/cutoff state we do not want here. All take the separation vector `R = rₐ − r_b` and are
 /// unit-tested against analytical two-body values.
-pub(crate) mod kernels {
+mod kernels {
     use crate::Point;
     use nalgebra::Matrix3;
 
@@ -551,18 +551,17 @@ impl<T: ObserveContext> Analyze<T> for MultipoleDistribution {
                 data.dipole_dipole.add(descriptor.dd, weight);
                 data.ion_quadrupole.add(descriptor.iq, weight);
 
-                let (len_a, len_b) = (a.dipole.norm(), b.dipole.norm());
-                if len_a > 1e-9 && len_b > 1e-9 {
-                    data.dipole_corr.add(descriptor.mucorr.unwrap(), weight);
-                    data.p2.add(descriptor.p2.unwrap(), weight);
-                    data.longitudinal.add(descriptor.long.unwrap(), weight);
+                if let (Some(mucorr), Some(p2), Some(long)) =
+                    (descriptor.mucorr, descriptor.p2, descriptor.long)
+                {
+                    data.dipole_corr.add(mucorr, weight);
+                    data.p2.add(p2, weight);
+                    data.longitudinal.add(long, weight);
                 }
 
                 data.quad_corr.add(descriptor.quadcorr, weight);
-                let (norm_a, norm_b) = (a.quadrupole.norm(), b.quadrupole.norm());
-                if norm_a > 0.0 && norm_b > 0.0 {
-                    data.quad_corr_norm
-                        .add(descriptor.quadcorr_norm.unwrap(), weight);
+                if let Some(quadcorr_norm) = descriptor.quadcorr_norm {
+                    data.quad_corr_norm.add(quadcorr_norm, weight);
                 }
             }
         }
@@ -634,7 +633,6 @@ mod tests {
     use crate::backend::{get_medium_str, Backend};
     use crate::Point;
     use approx::assert_relative_eq;
-    use interatomic::coulomb::Temperature;
     use tempfile::NamedTempFile;
 
     fn backend_from_str(yaml: &str) -> Backend {
@@ -647,7 +645,7 @@ mod tests {
     /// kJ/mol scale factor λ_B·RT for the medium encoded in `yaml`.
     fn energy_scale(yaml: &str) -> f64 {
         let medium = get_medium_str(yaml).unwrap();
-        medium.bjerrum_length() * crate::R_IN_KJ_PER_MOL * medium.temperature()
+        multipole_energy_scale(&medium)
     }
 
     fn builder(sel_a: &str, sel_b: &str, max_r: f64) -> MultipoleDistributionBuilder {

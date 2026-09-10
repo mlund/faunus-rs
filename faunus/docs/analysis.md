@@ -631,7 +631,7 @@ Key                   | Required | Default | Description
 `reference_file`      | no       |         | Optional XYZ file containing one representative pair in the pair frame
 `resolution`          | no       | `1.0`   | Cubic grid spacing in Å
 `padding`             | no       | `8.0`   | Margin in Å around the pair envelope
-`exclude_references`  | no       | `true`  | Exclude target atoms belonging to either reference molecule
+`exclude_reference`   | no       | `true`  | Exclude target atoms belonging to either reference molecule
 `midplane`            | no       |         | Optional density disk at the pair midpoint
 `condition`           | no       |         | List of pair-level multipole/orientation predicates
 
@@ -665,7 +665,9 @@ condition:
 The available observables are `ii`, `id`, `dd`, and `iq` for the ion–ion,
 ion–dipole, dipole–dipole, and ion–quadrupole terms, respectively. These energy
 terms are in kJ/mol. The dimensionless orientational observables are `mucorr`,
-`p2`, `long`, `quadcorr`, and `quadcorr_norm`. Each predicate must define at
+`p2`, `long`, and `quadcorr_norm`. The remaining observable, `quadcorr`, is the
+unnormalized product Θₐ:Θ_b in e²Å⁴ — bounds for it are many orders of magnitude
+away from those of its normalized counterpart. Each predicate must define at
 least one of `min` and `max`, and bounds are inclusive.
 
 Energy conditions use the same convention as `MultipoleDistribution`: the
