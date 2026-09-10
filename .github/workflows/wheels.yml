@@ -13,7 +13,25 @@ permissions:
   contents: read
 
 jobs:
+  # A release tag whose crate version is stale builds wheels PyPI has already
+  # seen, and rejects with "file already exists" only after every platform has
+  # compiled. Fail in seconds instead.
+  check-version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tag must match crate version
+        if: github.event_name == 'release'
+        run: |
+          crate=$(grep -m1 '^version' faunus/Cargo.toml | cut -d'"' -f2)
+          tag=${GITHUB_REF_NAME#v}
+          if [ "$crate" != "$tag" ]; then
+            echo "::error::release tag $GITHUB_REF_NAME implies version '$tag', but faunus/Cargo.toml is '$crate'"
+            exit 1
+          fi
+
   linux:
+    needs: check-version
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -39,6 +57,7 @@ jobs:
           path: faunus/dist
 
   macos:
+    needs: check-version
     runs-on: macos-latest
     strategy:
       matrix:
@@ -63,6 +82,7 @@ jobs:
           path: faunus/dist
 
   windows:
+    needs: check-version
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
