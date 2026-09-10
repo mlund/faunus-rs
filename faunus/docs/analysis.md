@@ -585,6 +585,104 @@ relative density.
 The output file is an OpenDX scalar grid suitable for visualization in VMD and
 PyMOL. Grid coordinates are in the reference body frame, not the lab frame.
 
+## Pair-conditioned spatial distribution
+
+`PairSpatialDistribution` measures ion density around pairs of rigid reference
+molecules selected by their center-of-mass separation. This is useful in dense
+systems where a single-molecule SDF averages over many relative environments:
+the pair frame has its origin at the pair midpoint and its x-axis along the
+minimum-image line joining the two reference centers. The y-axis is chosen from
+the first molecule's body frame, with a deterministic fallback when it is
+parallel to the pair axis.
+
+Only unique reference pairs are sampled. `pair_range` is an inclusive range in
+Å, and the analysis averages all pairs and frames that fall within it. Target
+atoms belonging to either reference molecule are excluded by default. The DX
+grid is bulk-normalized in the same way as `SpatialDistribution`.
+
+### Example
+
+```yaml
+analysis:
+  - !PairSpatialDistribution
+    reference: "molecule Macro"
+    selection: "atomtype Na"
+    pair_range: [42.0, 45.0]
+    file: sdf-na-pair.dx
+    reference_file: pair-macro.xyz
+    resolution: 1.5
+    padding: 8.0
+    midplane:
+      thickness: 1.5
+      radius: 20.0
+      file: sdf-na-pair-midplane.csv
+    frequency: !Every 100
+```
+
+### Options
+
+Key                   | Required | Default | Description
+--------------------- | -------- | ------- | -----------
+`reference`           | yes      |         | Rigid molecular groups forming the pair ensemble
+`selection`           | yes      |         | Target atoms accumulated around the pair midpoint
+`pair_range`          | yes      |         | Inclusive COM-distance interval `[minimum, maximum]` in Å
+`frequency`           | yes      |         | Sample frequency, e.g. `!Every 100`
+`file`                | yes      |         | OpenDX output grid
+`reference_file`      | no       |         | Optional XYZ file containing one representative pair in the pair frame
+`resolution`          | no       | `1.0`   | Cubic grid spacing in Å
+`padding`             | no       | `8.0`   | Margin in Å around the pair envelope
+`exclude_reference`   | no       | `true`  | Exclude target atoms belonging to either reference molecule
+`midplane`            | no       |         | Optional density disk at the pair midpoint
+`condition`           | no       |         | List of pair-level multipole/orientation predicates
+
+The optional `midplane` mapping contains `thickness`, `radius`, and `file`.
+It accumulates target atoms in a slab centered on the pair midpoint and writes
+a CSV table with `y/Å`, `z/Å`, and bulk-normalized `relative_density` columns.
+The disk uses the pair-frame y and z coordinates, so it can be plotted to show
+ion enrichment in the gap between neighboring macroions.
+
+If `reference_file` is requested, one accepted pair is written after sampling.
+Its separation is adjusted to the midpoint of `pair_range`, making it a
+representative overlay rather than a claim about one particular instantaneous
+pair. If no pair is accepted, the analysis reports an error for the requested
+reference file and writes zero-valued density grids.
+
+### Pair conditions
+
+Conditions are evaluated for each instantaneous pair before any target atoms are
+accumulated. Multiple predicates are combined with AND semantics; use separate
+`PairSpatialDistribution` analyses to produce separate density maps for
+different pair classes.
+
+```yaml
+condition:
+  - observable: dd
+    max: 0.0
+  - observable: quadcorr_norm
+    min: 0.2
+```
+
+The available observables are `ii`, `id`, `dd`, and `iq` for the ion–ion,
+ion–dipole, dipole–dipole, and ion–quadrupole terms, respectively. These energy
+terms are in kJ/mol. The dimensionless orientational observables are `mucorr`,
+`p2`, `long`, and `quadcorr_norm`. The remaining observable, `quadcorr`, is the
+unnormalized product Θₐ:Θ_b in e²Å⁴ — bounds for it are many orders of magnitude
+away from those of its normalized counterpart. Each predicate must define at
+least one of `min` and `max`, and bounds are inclusive.
+
+Energy conditions use the same convention as `MultipoleDistribution`: the
+separation vector is $R = r_a-r_b$. A condition requires the simulation medium,
+even when it uses only an orientational observable. Pair SDF output is always
+bulk-normalized; there is no molar-output option for this analysis. If a dipole
+is undefined or numerically zero, the dipole-orientation observables do not
+match any condition.
+
+For a dipolar CPPM, `dd < 0` selects dipole-attractive pairs. For a symmetric
+quadrupolar CPPM, `quadcorr_norm`, `p2`, and `iq` are generally more meaningful
+than a signed dipole direction. The first molecule in the pair frame is the
+lower-index reference group; this fixes the frame convention but is not an
+additional physical selection.
+
 ---
 
 ## Widom Insertion
