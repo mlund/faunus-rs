@@ -6,8 +6,9 @@ mod opendx;
 
 use self::grid::Grid;
 use self::normalize::{Normalization, OutputScale};
+use super::multipole_distribution::{multipole_energy_scale, pair_descriptor, GroupMoments};
 use super::{Analyze, Frequency, Sampling};
-use crate::auxiliary::MappingExt;
+use crate::auxiliary::{ColumnWriter, MappingExt};
 use crate::cell::{BoundaryConditions, Shape};
 use crate::group::Group;
 use crate::group::{AbsIndex, GroupIndex, MoleculeId};
@@ -16,6 +17,8 @@ use crate::topology::io::{self, StructureData};
 use crate::ObserveContext;
 use crate::Point;
 use anyhow::Result;
+use interatomic::coulomb::Medium;
+use nalgebra::Vector3;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
@@ -138,6 +141,257 @@ impl SpatialDistributionBuilder {
     }
 }
 
+/// Pair-level observable available to `PairSpatialDistribution` conditions.
+#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+enum PairObservable {
+    Ii,
+    Id,
+    Dd,
+    Iq,
+    Mucorr,
+    P2,
+    Long,
+    Quadcorr,
+    #[serde(rename = "quadcorr_norm")]
+    QuadcorrNorm,
+}
+
+impl PairObservable {
+    fn value(self, descriptor: &super::multipole_distribution::PairDescriptor) -> Option<f64> {
+        match self {
+            Self::Ii => Some(descriptor.ii),
+            Self::Id => Some(descriptor.id),
+            Self::Dd => Some(descriptor.dd),
+            Self::Iq => Some(descriptor.iq),
+            Self::Mucorr => descriptor.mucorr,
+            Self::P2 => descriptor.p2,
+            Self::Long => descriptor.long,
+            Self::Quadcorr => Some(descriptor.quadcorr),
+            Self::QuadcorrNorm => descriptor.quadcorr_norm,
+        }
+    }
+}
+
+/// One inclusive interval predicate on a pair observable.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct PairPredicateBuilder {
+    observable: PairObservable,
+    min: Option<f64>,
+    max: Option<f64>,
+}
+
+impl PairPredicateBuilder {
+    fn validate(&self) -> Result<()> {
+        anyhow::ensure!(
+            self.min.is_some() || self.max.is_some(),
+            "PairSpatialDistribution: a condition needs min or max"
+        );
+        if let Some(min) = self.min {
+            anyhow::ensure!(
+                min.is_finite(),
+                "PairSpatialDistribution: condition min must be finite"
+            );
+        }
+        if let Some(max) = self.max {
+            anyhow::ensure!(
+                max.is_finite(),
+                "PairSpatialDistribution: condition max must be finite"
+            );
+        }
+        if let (Some(min), Some(max)) = (self.min, self.max) {
+            anyhow::ensure!(
+                min <= max,
+                "PairSpatialDistribution: condition min must not exceed max"
+            );
+        }
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug)]
+struct PairCondition {
+    predicates: Vec<PairPredicateBuilder>,
+    energy_scale: f64,
+}
+
+impl PairCondition {
+    fn build(builders: &[PairPredicateBuilder], medium: Option<&Medium>) -> Result<Option<Self>> {
+        if builders.is_empty() {
+            return Ok(None);
+        }
+        let energy_scale = medium.map(multipole_energy_scale).ok_or_else(|| {
+            anyhow::anyhow!("PairSpatialDistribution: a medium is required when condition is set")
+        })?;
+        for predicate in builders {
+            predicate.validate()?;
+        }
+        Ok(Some(Self {
+            predicates: builders.to_vec(),
+            energy_scale,
+        }))
+    }
+
+    fn matches(
+        &self,
+        first: &GroupMoments,
+        second: &GroupMoments,
+        cell: &impl BoundaryConditions,
+    ) -> bool {
+        let descriptor = pair_descriptor(first, second, cell, self.energy_scale);
+        self.matches_descriptor(&descriptor)
+    }
+
+    fn matches_descriptor(
+        &self,
+        descriptor: &super::multipole_distribution::PairDescriptor,
+    ) -> bool {
+        self.predicates.iter().all(|predicate| {
+            let Some(value) = predicate.observable.value(descriptor) else {
+                return false;
+            };
+            predicate.min.is_none_or(|min| value >= min)
+                && predicate.max.is_none_or(|max| value <= max)
+        })
+    }
+}
+
+/// Optional two-dimensional slab through the midpoint of a molecular pair.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PairMidplaneBuilder {
+    /// Slab thickness along the pair axis, in Å.
+    thickness: f64,
+    /// Radius of the circular output disk, in Å.
+    radius: f64,
+    /// CSV output path.
+    file: PathBuf,
+}
+
+/// YAML builder for pair-conditioned spatial distribution analysis.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PairSpatialDistributionBuilder {
+    /// Molecular group selection used to form unique pairs.
+    reference: Selection,
+    /// Atom selection accumulated around the pair midpoint.
+    selection: Selection,
+    /// Inclusive lower and upper pair-distance bounds, in Å.
+    pair_range: [f64; 2],
+    /// Three-dimensional DX output path.
+    file: PathBuf,
+    /// Optional pair reference structure written in the pair frame.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    reference_file: Option<PathBuf>,
+    /// Pair-frame grid spacing, in Å.
+    #[serde(default = "default_resolution")]
+    resolution: f64,
+    /// Padding around the pair envelope, in Å.
+    #[serde(default = "default_padding")]
+    padding: f64,
+    /// Exclude target atoms belonging to either reference molecule.
+    #[serde(default = "default_true")]
+    exclude_reference: bool,
+    /// Optional per-pair multipole/orientation predicates, combined with AND.
+    #[serde(default)]
+    condition: Vec<PairPredicateBuilder>,
+    /// Optional density disk in the pair midplane.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    midplane: Option<PairMidplaneBuilder>,
+    /// Sampling frequency.
+    frequency: Frequency,
+}
+
+impl PairSpatialDistributionBuilder {
+    pub fn apply_output_dir(&mut self, dir: &std::path::Path) -> Result<()> {
+        crate::analysis::prefix_in_place(&mut self.file, dir)?;
+        if let Some(reference_file) = self.reference_file.as_mut() {
+            crate::analysis::prefix_in_place(reference_file, dir)?;
+        }
+        if let Some(midplane) = self.midplane.as_mut() {
+            crate::analysis::prefix_in_place(&mut midplane.file, dir)?;
+        }
+        Ok(())
+    }
+
+    pub fn build(
+        &self,
+        context: &impl ObserveContext,
+        medium: Option<&Medium>,
+    ) -> Result<PairSpatialDistribution> {
+        anyhow::ensure!(
+            self.resolution > 0.0,
+            "PairSpatialDistribution: resolution must be positive"
+        );
+        anyhow::ensure!(
+            self.padding >= 0.0,
+            "PairSpatialDistribution: padding must be non-negative"
+        );
+        anyhow::ensure!(
+            self.pair_range[0] >= 0.0 && self.pair_range[1] >= self.pair_range[0],
+            "PairSpatialDistribution: pair_range must be ordered and non-negative"
+        );
+        let condition = PairCondition::build(&self.condition, medium)?;
+        anyhow::ensure!(
+            context.cell().volume().is_some(),
+            "PairSpatialDistribution: bulk normalization requires cell volume"
+        );
+        if let Some(midplane) = &self.midplane {
+            anyhow::ensure!(
+                midplane.thickness > 0.0 && midplane.radius > 0.0,
+                "PairSpatialDistribution: midplane thickness and radius must be positive"
+            );
+        }
+
+        let reference_groups: Vec<GroupIndex> = context
+            .resolve_groups(&self.reference)
+            .into_iter()
+            .map(GroupIndex::new)
+            .collect();
+        anyhow::ensure!(
+            reference_groups.len() >= 2,
+            "PairSpatialDistribution: reference selection '{}' matched fewer than two groups",
+            self.reference.source()
+        );
+        validate_reference_groups(context, &reference_groups, self.reference.source())?;
+
+        let radius = reference_groups
+            .iter()
+            .filter_map(|&group_index| context.group(group_index).bounding_radius())
+            .fold(0.0_f64, f64::max);
+        let half_extent = 0.5 * self.pair_range[1] + radius + self.padding;
+        let points = [Point::repeat(-half_extent), Point::repeat(half_extent)];
+        let grid = Grid::from_points(&points, self.resolution, 0.0)?;
+        validate_grid_extent(context, &grid)?;
+
+        let midplane = self.midplane.as_ref().map(|builder| {
+            MidplaneGrid::new(
+                builder.radius,
+                self.resolution,
+                builder.thickness,
+                builder.file.clone(),
+            )
+        });
+
+        Ok(PairSpatialDistribution {
+            reference: CachedSelection::groups(self.reference.clone()),
+            selection: CachedSelection::atoms(self.selection.clone()),
+            pair_range: self.pair_range,
+            file: self.file.clone(),
+            reference_file: self.reference_file.clone(),
+            reference_structure: None,
+            grid: grid.clone(),
+            counts: vec![0.0; grid.num_voxels()],
+            normalization: Normalization::default(),
+            exclude_reference: self.exclude_reference,
+            condition,
+            midplane,
+            sampling: Sampling::new(self.frequency),
+        })
+    }
+}
+
 /// Spatial distribution function analysis.
 #[derive(Debug)]
 pub struct SpatialDistribution {
@@ -152,6 +406,100 @@ pub struct SpatialDistribution {
     scale: OutputScale,
     exclude_reference: bool,
     /// Frequency and frame count, owned by the framework.
+    sampling: Sampling,
+}
+
+#[derive(Debug)]
+struct MidplaneGrid {
+    origin: f64,
+    file: PathBuf,
+    radius: f64,
+    dims: usize,
+    spacing: f64,
+    thickness: f64,
+    counts: Vec<f64>,
+}
+
+impl MidplaneGrid {
+    fn new(radius: f64, spacing: f64, thickness: f64, file: PathBuf) -> Self {
+        let dims = 2 * (radius / spacing).ceil() as usize;
+        Self {
+            origin: -(dims as f64) * spacing / 2.0,
+            file,
+            radius,
+            dims,
+            spacing,
+            thickness,
+            counts: vec![0.0; dims * dims],
+        }
+    }
+
+    fn index_of(&self, y: f64, z: f64) -> Option<usize> {
+        if y * y + z * z > self.radius.powi(2) {
+            return None;
+        }
+        let iy = ((y - self.origin) / self.spacing).floor() as isize;
+        let iz = ((z - self.origin) / self.spacing).floor() as isize;
+        if iy < 0 || iz < 0 || iy >= self.dims as isize || iz >= self.dims as isize {
+            None
+        } else {
+            Some(iy as usize + self.dims * iz as usize)
+        }
+    }
+
+    /// Accumulate one target atom given in pair-frame coordinates.
+    ///
+    /// The slab test lives here with the disk test, so a caller cannot apply one
+    /// and forget the other.
+    fn accumulate(&mut self, body: &Point, weight: f64) {
+        if body.x.abs() >= 0.5 * self.thickness {
+            return;
+        }
+        if let Some(voxel) = self.index_of(body.y, body.z) {
+            self.counts[voxel] += weight;
+        }
+    }
+
+    fn write(&self, normalization: &Normalization) -> Result<()> {
+        let values = self.normalized(normalization);
+        let mut writer = ColumnWriter::open(&self.file, &["y/Å", "z/Å", "relative_density"])?;
+        for iz in 0..self.dims {
+            for iy in 0..self.dims {
+                let index = iy + self.dims * iz;
+                let y = self.origin + (iy as f64 + 0.5) * self.spacing;
+                let z = self.origin + (iz as f64 + 0.5) * self.spacing;
+                writer.write_row(&[
+                    &format!("{y:.6}"),
+                    &format!("{z:.6}"),
+                    &format!("{:.8}", values[index]),
+                ])?;
+            }
+        }
+        writer.flush()?;
+        Ok(())
+    }
+
+    fn normalized(&self, normalization: &Normalization) -> Vec<f64> {
+        let voxel_volume = self.spacing * self.spacing * self.thickness;
+        normalization.normalize_counts(&self.counts, voxel_volume, OutputScale::RelativeBulk)
+    }
+}
+
+#[derive(Debug)]
+pub struct PairSpatialDistribution {
+    reference: CachedSelection<Groups>,
+    selection: CachedSelection<Atoms>,
+    pair_range: [f64; 2],
+    file: PathBuf,
+    reference_structure: Option<ReferenceStructure>,
+    reference_file: Option<PathBuf>,
+    grid: Grid,
+    counts: Vec<f64>,
+    /// Sum of target number density over all accepted pair observations.
+    normalization: Normalization,
+    exclude_reference: bool,
+    condition: Option<PairCondition>,
+    midplane: Option<MidplaneGrid>,
     sampling: Sampling,
 }
 
@@ -201,6 +549,9 @@ struct ReferenceStructure {
     file: PathBuf,
     names: Vec<String>,
     positions: Vec<Point>,
+    /// Single-molecule and pair overlays are in different frames, so each names
+    /// its own.
+    comment: String,
 }
 
 impl ReferenceStructure {
@@ -208,7 +559,7 @@ impl ReferenceStructure {
         let data = StructureData {
             names: self.names.clone(),
             positions: self.positions.clone(),
-            comment: Some("Faunus SDF reference molecule (body frame)".to_owned()),
+            comment: Some(self.comment.clone()),
             ..Default::default()
         };
         io::write_structure_frame(&self.file, &data, false)
@@ -249,6 +600,7 @@ fn capture_reference_structure(
         file,
         names,
         positions,
+        comment: "Faunus SDF reference molecule (body frame)".to_owned(),
     })
 }
 
@@ -315,16 +667,169 @@ fn eligible_target_count(
         .count()
 }
 
+#[derive(Clone, Copy)]
+struct PairFrame {
+    origin: Point,
+    ex: Point,
+    ey: Point,
+    ez: Point,
+    separation: f64,
+}
+
+impl PairFrame {
+    #[cfg(test)]
+    fn new(context: &impl ObserveContext, first: GroupIndex, second: GroupIndex) -> Option<Self> {
+        let first_group = context.group(first);
+        let second_group = context.group(second);
+        let first_com = *first_group.mass_center()?;
+        let second_com = *second_group.mass_center()?;
+        let delta = context.cell().distance(&second_com, &first_com);
+        let separation = delta.norm();
+        Self::from_delta(context, first, first_com, delta, separation)
+    }
+
+    fn from_delta(
+        context: &impl ObserveContext,
+        first: GroupIndex,
+        first_com: Point,
+        delta: Point,
+        separation: f64,
+    ) -> Option<Self> {
+        if separation <= f64::EPSILON {
+            return None;
+        }
+        let first_group = context.group(first);
+        let ex = delta / separation;
+        let body_y = first_group
+            .quaternion()
+            .transform_vector(&Vector3::y_axis().into_inner());
+        let mut ey = body_y - ex * body_y.dot(&ex);
+        if ey.norm_squared() <= 1e-14 {
+            let body_z = first_group
+                .quaternion()
+                .transform_vector(&Vector3::z_axis().into_inner());
+            ey = body_z - ex * body_z.dot(&ex);
+        }
+        if ey.norm_squared() <= 1e-14 {
+            return None;
+        }
+        let ey = ey.normalize();
+        let ez = ex.cross(&ey).normalize();
+        Some(Self {
+            origin: first_com + delta * 0.5,
+            ex,
+            ey,
+            ez,
+            separation,
+        })
+    }
+
+    fn coordinates(&self, displacement: &Point) -> Point {
+        Point::new(
+            displacement.dot(&self.ex),
+            displacement.dot(&self.ey),
+            displacement.dot(&self.ez),
+        )
+    }
+
+    fn relative_position(&self, context: &impl ObserveContext, position: &Point) -> Point {
+        let displacement = context.cell().distance(position, &self.origin);
+        self.coordinates(&displacement)
+    }
+
+    fn molecule_atom_position(
+        &self,
+        context: &impl ObserveContext,
+        group: GroupIndex,
+        atom: usize,
+    ) -> Option<Point> {
+        let center = *context.group(group).mass_center()?;
+        let local = context.cell().distance(&context.position(atom), &center);
+        let center_offset = context.cell().distance(&center, &self.origin);
+        Some(self.coordinates(&(center_offset + local)))
+    }
+}
+
+fn unique_reference_pairs(
+    context: &impl ObserveContext,
+    references: &[GroupIndex],
+    pair_range: [f64; 2],
+) -> Vec<(GroupIndex, GroupIndex, PairFrame)> {
+    let mut pairs = Vec::new();
+    for (i, &first) in references.iter().enumerate() {
+        for &second in &references[i + 1..] {
+            let Some(first_com) = context.group(first).mass_center() else {
+                continue;
+            };
+            let Some(second_com) = context.group(second).mass_center() else {
+                continue;
+            };
+            let delta = context.cell().distance(second_com, first_com);
+            let separation = delta.norm();
+            if !(pair_range[0]..=pair_range[1]).contains(&separation) {
+                continue;
+            }
+            let Some(frame) = PairFrame::from_delta(context, first, *first_com, delta, separation)
+            else {
+                continue;
+            };
+            pairs.push((first, second, frame));
+        }
+    }
+    pairs
+}
+
+fn pair_reference_structure(
+    context: &impl ObserveContext,
+    pair: (GroupIndex, GroupIndex, PairFrame),
+    target_separation: f64,
+    file: PathBuf,
+) -> Result<ReferenceStructure> {
+    let (first, second, frame) = pair;
+    let topology = context.topology_ref();
+    let mut names = Vec::new();
+    let mut positions = Vec::new();
+    for group_index in [first, second] {
+        let group = context.group(group_index);
+        let molecule = topology.moleculekind(group.molecule());
+        for atom in group.iter_active() {
+            let relative = frame
+                .molecule_atom_position(context, group_index, atom)
+                .ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "PairSpatialDistribution: reference group {group_index} has no mass center"
+                    )
+                })?;
+            let relative_index = atom - group.start();
+            let topology_index = molecule.topology_index(relative_index);
+            names.push(
+                molecule
+                    .resolved_atom_name(topology_index, topology.atomkinds())
+                    .to_owned(),
+            );
+            // `relative` is already in the pair frame, whose x-axis is the pair
+            // axis; `frame.ex` is that axis in lab coordinates and must not be
+            // mixed in here.
+            let shift = if group_index == first {
+                (frame.separation - target_separation) * 0.5
+            } else {
+                (target_separation - frame.separation) * 0.5
+            };
+            positions.push(relative + Point::new(shift, 0.0, 0.0));
+        }
+    }
+    Ok(ReferenceStructure {
+        file,
+        names,
+        positions,
+        comment: "Faunus pair-conditioned SDF reference (pair frame)".to_owned(),
+    })
+}
+
 impl SpatialDistribution {
     fn normalized_values(&self) -> Vec<f64> {
-        let voxel_volume = self.grid.voxel_volume();
-        self.counts
-            .iter()
-            .map(|&count| {
-                self.normalization
-                    .normalize_count(count, voxel_volume, self.scale)
-            })
-            .collect()
+        self.normalization
+            .normalize_counts(&self.counts, self.grid.voxel_volume(), self.scale)
     }
 }
 
@@ -408,6 +913,151 @@ impl<T: ObserveContext> Analyze<T> for SpatialDistribution {
                 "reference_file",
                 reference_structure.file.display().to_string(),
             )?;
+        }
+        Some(yaml_serde::Value::Mapping(map))
+    }
+}
+
+impl_info!(
+    PairSpatialDistribution,
+    "pair_sdf",
+    "Pair-conditioned spatial distribution function"
+);
+
+impl<T: ObserveContext> Analyze<T> for PairSpatialDistribution {
+    impl_sampling_accessors!();
+
+    fn perform_sample(&mut self, context: &T, _step: usize, weight: f64) -> Result<()> {
+        let references = self.reference.resolve(context).to_vec();
+        if references.len() < 2 {
+            return Ok(());
+        }
+        validate_reference_groups(context, &references, self.reference.selection().source())?;
+        let targets = self.selection.resolve(context).to_vec();
+        let owners = atom_owners(context.groups(), context.num_particles());
+        let volume = context.cell().volume().ok_or_else(|| {
+            anyhow::anyhow!("PairSpatialDistribution: bulk normalization requires cell volume")
+        })?;
+        let pairs = unique_reference_pairs(context, &references, self.pair_range);
+
+        for (first, second, frame) in pairs {
+            if let Some(condition) = &self.condition {
+                let Some(first_moments) = GroupMoments::from_group(first.get(), context) else {
+                    continue;
+                };
+                let Some(second_moments) = GroupMoments::from_group(second.get(), context) else {
+                    continue;
+                };
+                if !condition.matches(&first_moments, &second_moments, context.cell()) {
+                    continue;
+                }
+            }
+            if self.reference_structure.is_none() {
+                if let Some(file) = &self.reference_file {
+                    let midpoint_separation = 0.5 * (self.pair_range[0] + self.pair_range[1]);
+                    self.reference_structure = Some(
+                        pair_reference_structure(
+                            context,
+                            (first, second, frame),
+                            midpoint_separation,
+                            file.clone(),
+                        )
+                        .map_err(|error| {
+                            anyhow::anyhow!(
+                                "PairSpatialDistribution: failed to capture reference structure: {error}"
+                            )
+                        })?,
+                    );
+                }
+            }
+            let excluded = |atom: AbsIndex| {
+                self.exclude_reference
+                    && (owners[atom.get()] == Some(first) || owners[atom.get()] == Some(second))
+            };
+            let mut eligible = 0;
+            for &atom in &targets {
+                if excluded(atom) {
+                    continue;
+                }
+                eligible += 1;
+                let body = frame.relative_position(context, &context.position(atom.get()));
+                if let Some(voxel) = self.grid.index_of(&body) {
+                    self.counts[voxel] += weight;
+                }
+                if let Some(midplane) = self.midplane.as_mut() {
+                    midplane.accumulate(&body, weight);
+                }
+            }
+            // `Normalization` only accumulates, so counting during the pass above
+            // and reporting afterwards is equivalent to a second filter pass.
+            self.normalization.observe_reference(
+                weight,
+                eligible,
+                Some(volume),
+                OutputScale::RelativeBulk,
+            )?;
+        }
+        Ok(())
+    }
+
+    fn write_to_disk(&mut self) -> Result<()> {
+        if self.sampling.num_samples() == 0 {
+            return Ok(());
+        }
+        if self.normalization.reference_observations() == 0.0 {
+            log::warn!(
+                "PairSpatialDistribution: no pairs matched pair_range and condition; writing zero density grids"
+            );
+        }
+        let values = self.normalization.normalize_counts(
+            &self.counts,
+            self.grid.voxel_volume(),
+            OutputScale::RelativeBulk,
+        );
+        opendx::write(
+            &self.file,
+            &self.grid,
+            &values,
+            OutputScale::RelativeBulk.unit_label(),
+        )?;
+
+        if let Some(midplane) = &self.midplane {
+            midplane.write(&self.normalization)?;
+        }
+
+        if let Some(reference_structure) = &self.reference_structure {
+            reference_structure.write()?;
+        } else if self.reference_file.is_some() {
+            log::error!(
+                "PairSpatialDistribution: reference_file was requested, but no pair matched"
+            );
+        }
+        Ok(())
+    }
+
+    fn results(&self) -> Option<yaml_serde::Value> {
+        if self.sampling.num_samples() == 0 {
+            return None;
+        }
+        let mut map = yaml_serde::Mapping::new();
+        map.try_insert("num_samples", self.sampling.num_samples())?;
+        map.try_insert(
+            "pair_observations",
+            self.normalization.reference_observations(),
+        )?;
+        map.try_insert("pair_range/Å", self.pair_range)?;
+        map.try_insert("conditioned", self.condition.is_some())?;
+        map.try_insert("grid", self.grid.dims())?;
+        map.try_insert("resolution/Å", self.grid.spacing())?;
+        map.try_insert("file", self.file.display().to_string())?;
+        if let Some(reference_structure) = &self.reference_structure {
+            map.try_insert(
+                "reference_file",
+                reference_structure.file.display().to_string(),
+            )?;
+        }
+        if let Some(midplane) = &self.midplane {
+            map.try_insert("midplane_file", midplane.file.display().to_string())?;
         }
         Some(yaml_serde::Value::Mapping(map))
     }
@@ -564,6 +1214,69 @@ frequency: !Every 100
             builders[0],
             AnalysisBuilder::SpatialDistribution(_)
         ));
+    }
+
+    #[test]
+    fn pair_condition_predicates_are_finite_inclusive_and_conjunctive() {
+        let builders: Vec<PairPredicateBuilder> = yaml_serde::from_str(
+            r#"
+- observable: dd
+  max: 0.0
+- observable: mucorr
+  min: -0.5
+  max: 0.5
+- observable: quadcorr_norm
+  min: 0.2
+  max: 1.0
+"#,
+        )
+        .unwrap();
+        let condition = PairCondition::build(&builders, Some(&Medium::neat_water(298.15)))
+            .unwrap()
+            .unwrap();
+        let descriptor = crate::analysis::multipole_distribution::PairDescriptor {
+            ii: 0.0,
+            id: 0.0,
+            dd: -1.0,
+            iq: 0.0,
+            mucorr: Some(0.0),
+            p2: Some(0.0),
+            long: Some(0.0),
+            quadcorr: 0.0,
+            quadcorr_norm: Some(0.5),
+        };
+        assert!(condition.matches_descriptor(&descriptor));
+
+        let mut repulsive = descriptor;
+        repulsive.dd = 1.0;
+        assert!(!condition.matches_descriptor(&repulsive));
+
+        let mut misaligned = descriptor;
+        misaligned.quadcorr_norm = Some(0.1);
+        assert!(!condition.matches_descriptor(&misaligned));
+
+        let mut apolar = descriptor;
+        apolar.mucorr = None;
+        assert!(!condition.matches_descriptor(&apolar));
+    }
+
+    #[test]
+    fn pair_condition_requires_a_medium() {
+        let context = cppm_context();
+        let builder: PairSpatialDistributionBuilder = yaml_serde::from_str(
+            r#"
+reference: "molecule CPPM"
+selection: "atomtype Na"
+pair_range: [40.0, 50.0]
+file: pair.dx
+condition:
+  - observable: dd
+    max: 0.0
+frequency: !Every 1
+"#,
+        )
+        .unwrap();
+        assert!(builder.build(&context, None).is_err());
     }
 
     #[test]
@@ -725,6 +1438,244 @@ frequency: !Every 1
         let expected_voxel = sdf.grid.index_of(&body_target).unwrap();
         assert_relative_eq!(sdf.counts[expected_voxel], 2.0);
         assert_relative_eq!(sdf.counts.iter().sum::<f64>(), 2.0);
+    }
+
+    #[test]
+    fn pair_density_aligns_midpoint_ions_with_pair_axis() {
+        let mut context = cppm_context();
+        let desired_centers = [Point::new(-22.0, 0.0, 0.0), Point::new(22.0, 0.0, 0.0)];
+        for (group_index, desired_center) in desired_centers.into_iter().enumerate() {
+            let current_center = *context.groups()[group_index].mass_center().unwrap();
+            context
+                .translate_group(group_index, &(desired_center - current_center))
+                .unwrap();
+        }
+        let first = GroupIndex::new(0);
+        let second = GroupIndex::new(1);
+        let frame = PairFrame::new(&context, first, second).unwrap();
+        let target = frame.origin + frame.ey;
+        let ion_indices: Vec<_> = context.groups()[2].iter_active().collect();
+        let mut positions: Vec<_> = (0..context.num_particles())
+            .map(|index| context.position(index))
+            .collect();
+        for &ion in &ion_indices {
+            positions[ion] = target;
+        }
+        context.set_all_positions(&positions).unwrap();
+
+        let tmp = tempfile::tempdir().unwrap();
+        let mut builder: PairSpatialDistributionBuilder = yaml_serde::from_str(
+            r#"
+reference: "molecule CPPM"
+selection: "atomtype Na"
+pair_range: [40.0, 50.0]
+file: pair.dx
+reference_file: pair.xyz
+resolution: 1.0
+padding: 2.0
+midplane:
+  thickness: 2.0
+  radius: 5.0
+  file: pair-midplane.csv
+frequency: !Every 1
+"#,
+        )
+        .unwrap();
+        builder.apply_output_dir(tmp.path()).unwrap();
+        let mut analysis = builder
+            .build(&context, Some(&Medium::neat_water(298.15)))
+            .unwrap();
+        Analyze::<Backend>::sample_now(&mut analysis, &context, 0, 1.0).unwrap();
+
+        let expected = analysis.grid.index_of(&Point::new(0.0, 1.0, 0.0)).unwrap();
+        assert_relative_eq!(analysis.counts[expected], 2.0);
+        assert_relative_eq!(analysis.counts.iter().sum::<f64>(), 2.0);
+        assert_relative_eq!(
+            analysis.normalization.normalize_count(
+                analysis.counts[expected],
+                analysis.grid.voxel_volume(),
+                OutputScale::RelativeBulk,
+            ),
+            1_000_000.0
+        );
+        let midplane = analysis.midplane.as_ref().unwrap();
+        let expected_midplane = midplane.index_of(1.0, 0.0).unwrap();
+        assert_relative_eq!(midplane.counts[expected_midplane], 2.0);
+
+        Analyze::<Backend>::write_to_disk(&mut analysis).unwrap();
+        assert!(tmp.path().join("pair.dx").is_file());
+        assert!(tmp.path().join("pair.xyz").is_file());
+        assert!(tmp.path().join("pair-midplane.csv").is_file());
+    }
+
+    /// A pair skewed off the lab axes: the overlay is emitted in the pair frame,
+    /// so a lab-frame separation adjustment tilts it out of the density grid.
+    #[test]
+    fn pair_reference_structure_lies_on_the_pair_axis() {
+        let mut context = cppm_context();
+        let desired_centers = [Point::new(-10.0, -10.0, 0.0), Point::new(10.0, 10.0, 0.0)];
+        for (group_index, desired_center) in desired_centers.into_iter().enumerate() {
+            let current_center = *context.groups()[group_index].mass_center().unwrap();
+            context
+                .translate_group(group_index, &(desired_center - current_center))
+                .unwrap();
+        }
+
+        let tmp = tempfile::tempdir().unwrap();
+        let mut builder: PairSpatialDistributionBuilder = yaml_serde::from_str(
+            r#"
+reference: "molecule CPPM"
+selection: "atomtype Na"
+pair_range: [25.0, 35.0]
+file: pair.dx
+reference_file: pair.xyz
+resolution: 1.0
+padding: 2.0
+frequency: !Every 1
+"#,
+        )
+        .unwrap();
+        builder.apply_output_dir(tmp.path()).unwrap();
+        let mut analysis = builder
+            .build(&context, Some(&Medium::neat_water(298.15)))
+            .unwrap();
+        Analyze::<Backend>::sample_now(&mut analysis, &context, 0, 1.0).unwrap();
+        Analyze::<Backend>::write_to_disk(&mut analysis).unwrap();
+
+        let structure = io::read_structure(&tmp.path().join("pair.xyz")).unwrap();
+        let half = structure.positions.len() / 2;
+        // Every atom carries unit mass here, so the centroid is the mass center.
+        let centroid = |atoms: &[Point]| {
+            atoms.iter().fold(Point::zeros(), |sum, p| sum + p) / atoms.len() as f64
+        };
+        let separation =
+            centroid(&structure.positions[half..]) - centroid(&structure.positions[..half]);
+
+        // Rescaled to the midpoint of `pair_range`, and along +x by construction.
+        assert_relative_eq!(separation.x, 30.0, epsilon = 1e-9);
+        assert_relative_eq!(separation.y, 0.0, epsilon = 1e-9);
+        assert_relative_eq!(separation.z, 0.0, epsilon = 1e-9);
+    }
+
+    #[test]
+    fn pair_condition_can_filter_pair_density() {
+        let mut context = cppm_context();
+        let desired_centers = [Point::new(-22.0, 0.0, 0.0), Point::new(22.0, 0.0, 0.0)];
+        for (group_index, desired_center) in desired_centers.into_iter().enumerate() {
+            let current_center = *context.groups()[group_index].mass_center().unwrap();
+            context
+                .translate_group(group_index, &(desired_center - current_center))
+                .unwrap();
+        }
+        let tmp = tempfile::tempdir().unwrap();
+        let mut builder: PairSpatialDistributionBuilder = yaml_serde::from_str(
+            r#"
+reference: "molecule CPPM"
+selection: "atomtype Na"
+pair_range: [40.0, 45.0]
+file: pair-conditioned.dx
+padding: 0.0
+condition:
+  - observable: mucorr
+    min: -1.0
+    max: 1.0
+frequency: !Every 1
+"#,
+        )
+        .unwrap();
+        builder.apply_output_dir(tmp.path()).unwrap();
+        let mut analysis = builder
+            .build(&context, Some(&Medium::neat_water(298.15)))
+            .unwrap();
+        Analyze::<Backend>::sample_now(&mut analysis, &context, 0, 1.0).unwrap();
+
+        assert_relative_eq!(analysis.normalization.reference_observations(), 1.0);
+        assert_relative_eq!(analysis.counts.iter().sum::<f64>(), 2.0);
+
+        let mut rejected: PairSpatialDistributionBuilder = yaml_serde::from_str(
+            r#"
+reference: "molecule CPPM"
+selection: "atomtype Na"
+pair_range: [40.0, 45.0]
+file: pair-rejected.dx
+reference_file: pair-rejected.xyz
+padding: 0.0
+condition:
+  - observable: mucorr
+    min: 2.0
+    max: 3.0
+frequency: !Every 1
+"#,
+        )
+        .unwrap();
+        rejected.apply_output_dir(tmp.path()).unwrap();
+        let mut rejected_analysis = rejected
+            .build(&context, Some(&Medium::neat_water(298.15)))
+            .unwrap();
+        Analyze::<Backend>::sample_now(&mut rejected_analysis, &context, 0, 1.0).unwrap();
+        assert_relative_eq!(
+            rejected_analysis.normalization.reference_observations(),
+            0.0
+        );
+        assert_relative_eq!(rejected_analysis.counts.iter().sum::<f64>(), 0.0);
+        // An unmatched `reference_file` is reported, not fatal: analyses sharing
+        // the run must still reach disk.
+        Analyze::<Backend>::write_to_disk(&mut rejected_analysis).unwrap();
+        assert!(tmp.path().join("pair-rejected.dx").is_file());
+        assert!(!tmp.path().join("pair-rejected.xyz").is_file());
+    }
+
+    #[test]
+    fn pair_density_uses_minimum_image_across_periodic_boundary() {
+        let mut context = cppm_context();
+        let desired_centers = [Point::new(48.0, 0.0, 0.0), Point::new(-48.0, 0.0, 0.0)];
+        for (group_index, desired_center) in desired_centers.into_iter().enumerate() {
+            let current_center = *context.groups()[group_index].mass_center().unwrap();
+            context
+                .translate_group(group_index, &(desired_center - current_center))
+                .unwrap();
+        }
+
+        let first = GroupIndex::new(0);
+        let second = GroupIndex::new(1);
+        let frame = PairFrame::new(&context, first, second).unwrap();
+        assert_relative_eq!(frame.separation, 4.0, epsilon = 1e-10);
+
+        // The physical midpoint is outside the primary image; wrapping it gives
+        // the equivalent ion position used by the simulation.
+        let mut target = frame.origin;
+        context.cell().boundary(&mut target);
+        let ion_indices: Vec<_> = context.groups()[2].iter_active().collect();
+        let mut positions: Vec<_> = (0..context.num_particles())
+            .map(|index| context.position(index))
+            .collect();
+        for &ion in &ion_indices {
+            positions[ion] = target;
+        }
+        context.set_all_positions(&positions).unwrap();
+
+        let tmp = tempfile::tempdir().unwrap();
+        let mut builder: PairSpatialDistributionBuilder = yaml_serde::from_str(
+            r#"
+reference: "molecule CPPM"
+selection: "atomtype Na"
+pair_range: [0.0, 10.0]
+file: pair-pbc.dx
+resolution: 1.0
+padding: 2.0
+frequency: !Every 1
+"#,
+        )
+        .unwrap();
+        builder.apply_output_dir(tmp.path()).unwrap();
+        let mut analysis = builder
+            .build(&context, Some(&Medium::neat_water(298.15)))
+            .unwrap();
+        Analyze::<Backend>::sample_now(&mut analysis, &context, 0, 1.0).unwrap();
+
+        let expected = analysis.grid.index_of(&Point::zeros()).unwrap();
+        assert_relative_eq!(analysis.counts[expected], 2.0);
+        assert_relative_eq!(analysis.counts.iter().sum::<f64>(), 2.0);
     }
 
     #[test]

@@ -55,6 +55,20 @@ impl Normalization {
         self.reference_observations
     }
 
+    /// Normalize a whole grid; the three density writers differ only in voxel
+    /// volume and scale.
+    pub(super) fn normalize_counts(
+        &self,
+        counts: &[f64],
+        voxel_volume: f64,
+        scale: OutputScale,
+    ) -> Vec<f64> {
+        counts
+            .iter()
+            .map(|&count| self.normalize_count(count, voxel_volume, scale))
+            .collect()
+    }
+
     pub(super) fn normalize_count(&self, count: f64, voxel_volume: f64, scale: OutputScale) -> f64 {
         match scale {
             OutputScale::RelativeBulk => {

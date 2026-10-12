@@ -56,6 +56,7 @@ pub(crate) use radial_distribution::RadialDistributionBuilder;
 pub(crate) use rotational_diffusion::RotationalDiffusionBuilder;
 pub(crate) use scaled_widom_insertion::ScaledWidomInsertionBuilder;
 pub(crate) use shape::ShapeAnalysisBuilder;
+pub(crate) use spatial_distribution::PairSpatialDistributionBuilder;
 pub(crate) use spatial_distribution::SpatialDistributionBuilder;
 pub(crate) use structure_writer::StructureWriterBuilder;
 pub(crate) use virtual_translate::VirtualTranslateBuilder;
@@ -233,6 +234,8 @@ analysis_builders! {
     RadialDistribution(RadialDistributionBuilder) => context,
     /// Spatial distribution function on a body-fixed grid
     SpatialDistribution(SpatialDistributionBuilder) => context,
+    /// Ion density in the pair frame of selected molecular pairs
+    PairSpatialDistribution(PairSpatialDistributionBuilder) => context_medium,
     /// Energy time series (total or partial)
     Energy(EnergyAnalysisBuilder) => context,
     /// Mean of one CV binned along another

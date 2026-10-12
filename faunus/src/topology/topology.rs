@@ -116,7 +116,7 @@ impl Topology {
     #[must_use = "this returns a Result that should be handled"]
     pub fn from_file(path: impl AsRef<Path>) -> anyhow::Result<Self> {
         let yaml = crate::auxiliary::read_yaml(&path)
-            .map_err(|err| anyhow::anyhow!("Error loading file {:?}: {}", &path.as_ref(), err))?;
+            .map_err(|err| anyhow::anyhow!("Error loading file {:?}: {}", path.as_ref(), err))?;
         Self::from_yaml_with_base(&yaml, Some(path.as_ref()))
     }
 
