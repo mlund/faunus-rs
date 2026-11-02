@@ -985,7 +985,9 @@ slabs must return it. Automatic blocking estimates all these errors across sampl
 Salts and osmolytes shift binding, folding and association equilibria through the way they
 redistribute around a molecule. This analysis measures that redistribution around one molecule, the
 *substrate*, and uses a Voronoi tessellation to divide it among residues. The dissolved species is
-the *ligand*, a term that implies no specific binding site.
+the *ligand*, a term that implies no specific binding site. The preferential-interaction literature
+usually calls the substrate the solute (component 2) and the ligand the cosolute (component 3), with
+water or another solvent as component 1.
 
 ```yaml
 analysis:
@@ -1031,6 +1033,10 @@ ligand centres can reach. The profile file holds the resulting excess $\Gamma(\d
 `gamma` and `gamma_error`. Increase `shell.max` until $\Gamma(\delta)$ reaches a plateau, and read the
 coefficient there. The approach need not be monotonic, so a profile still changing at the largest
 $\delta$ is unconverged.
+
+The name `gamma` does not show its concentration scale, here or in the other outputs. With `solvent`
+set, it is the molal coefficient $\Gamma_{23}$. Without `solvent`, it is the molar-scale $\rho_3 G_{23}$
+([below](#what-the-coefficient-means)). State which one when you report or compare values.
 
 The residue file reports, at the widest shell, the residue identifier, `asa/Å²`,
 `accessible_volume/Å³`, `b1/Å⁻²`, `kp`, `gamma` and `gamma_error`. `output.yaml` reports `gamma` at that
