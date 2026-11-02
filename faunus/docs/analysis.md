@@ -983,248 +983,9 @@ slabs must return it. Automatic blocking estimates all these errors across sampl
 ## Preferential Interaction
 
 Salts and osmolytes shift binding, folding and association equilibria through the way they
-redistribute around a molecule. This analysis measures that redistribution around one molecule,
-the *substrate*, and uses a Voronoi tessellation to resolve it by residue. The dissolved species is
-the *ligand*, a term that implies no specific binding site. In the usual numbering, solvent is component 1, the substrate
-is component 2 and the ligand is component 3.
-
-The thermodynamic target is the preferential interaction coefficient, measured by equilibrium
-dialysis:
-
-$$\Gamma_{23} = \left(\frac{\partial m_3}{\partial m_2}\right)_{T,\mu_1,\mu_3},$$
-
-where $m_i$ is a molality, $\mu_i$ a chemical potential and $T$ the temperature
-([Record & Anderson, 1995](https://doi.org/10.1016/S0006-3495(95)80254-7)). At infinite dilution
-of the substrate,
-
-$$\Gamma_{23} = \rho_3\left(G_{23} - G_{21}\right),$$
-
-where $\rho_i$ is a bulk number density and $G_{2j} = \int [g_{2j}(\mathbf{r}) - 1]\,d\mathbf{r}$ is a
-Kirkwood–Buff integral over the pair correlation function $g_{2j}$ of species $j$ around the
-substrate ([Smith, 2006](https://doi.org/10.1021/jp056100e)). The coefficient sets how an
-equilibrium constant $K$ responds to the ligand activity $a_3$. For a process with 1:1
-stoichiometry, such as folding, $\partial\ln K/\partial\ln a_3 = \Delta\Gamma_{23}$ at constant
-temperature and pressure, where $\Delta$ is the product value minus the reactant value
-([Pierce et al., 2008](https://doi.org/10.1007/s12013-007-9005-0)).
-
-### Integration domain
-
-Both estimators below integrate over a domain $D(\delta)$: the union of spheres of radius
-$R_i + r_{\rm lig} + \delta$ around the substrate atoms. Here $R_i = \sigma_i/2$ is the atomic
-radius, $r_{\rm lig}$ is the ligand exclusion radius set by `radius`, and $\delta$ is the distance
-beyond the surface that ligand centres can reach. The domain contains the substrate, so
-$\operatorname{Vol}[D(\delta)]$ includes the substrate interior. The `shell` option sets the values
-of $\delta$ to scan.
-
-Both estimators report a profile $\Gamma(\delta)$, written as `gamma`. They converge to different
-coefficients.
-
-### Implicit solvent
-
-Without solvent particles, the analysis reports
-
-$$\Gamma(\delta) = \left\langle N_3(\delta)
-- \rho_3\,\operatorname{Vol}\!\left[D(\delta)\right]\right\rangle,$$
-
-where $N_3(\delta)$ is the number of ligand centres in $D(\delta)$. The bulk density $\rho_3$ is
-measured in each frame, in the part of the cell outside the widest domain, so no substrate-free
-simulation is required. The product is formed before averaging, which preserves correlations
-between density and shape.
-
-This profile converges to the molar-scale coefficient $\rho_3 G_{23}$, not to $\Gamma_{23}$
-([Smith, 2006](https://doi.org/10.1021/jp056100e)). The difference is the substrate's own volume:
-
-$$\rho_3 G_{23} = \phi_1\Gamma_{23} - \rho_3\left(\bar V_2^\circ - RT\kappa_T/N_{\rm A}\right),$$
-
-where $\phi_1 = \rho_1\bar V_1$ is the solvent volume fraction, $\bar V_i$ is a partial molecular
-volume, $\bar V_2^\circ$ is its value at infinite dilution of the substrate, $\kappa_T$ is the
-isothermal compressibility, $R$ is the gas constant and $N_{\rm A}$ is the Avogadro constant. At low
-ligand concentration, $\Gamma_{23} \approx \rho_3 G_{23} + \rho_3\bar V_2^\circ$.
-
-A continuum solvent model cannot supply $\bar V_2^\circ$. Take it from experiment or an
-explicit-solvent simulation, and state the source. The reported `excluded_volume/Å³` is
-$\operatorname{Vol}[D(0)]$, the volume closed to ligand centres; it is not $\bar V_2^\circ$.
-Differences between states depend less on this input, because
-$\phi_1\,\partial\ln K/\partial\ln a_3 = \Delta(\rho_3 G_{23}) + \rho_3\Delta\bar V_2^\circ$
-([Smith, 2006](https://doi.org/10.1021/jp056100e)).
-
-### Explicit solvent
-
-With counted solvent, the analysis reports
-
-$$\Gamma(\delta) = \left\langle N_3(\delta)
-- \frac{N_3^{\rm bulk}}{N_1^{\rm bulk}}N_1(\delta)\right\rangle,$$
-
-where $N_1(\delta)$ is the number of solvent centres in $D(\delta)$, and $N_3^{\rm bulk}$ and
-$N_1^{\rm bulk}$ count ligand and solvent outside the widest domain
-([Baynes & Trout, 2003](https://doi.org/10.1021/jp0363996)). The substrate volume cancels, because
-ligand and solvent are counted in the same region. This profile therefore converges to
-$\Gamma_{23}$.
-
-The analysis evaluates the ratio and both local populations in each frame before averaging, and
-uses one bulk ratio for the whole profile. A sampled frame with no bulk solvent is an error,
-because its reference composition is undefined.
-
-### Reading the sign
-
-In explicit solvent, $\Gamma_{23} > 0$ means the ligand is accumulated around the substrate relative
-to bulk, and $\Gamma_{23} < 0$ means it is excluded. An excluded ligand can still have a raised local
-density if the volume it displaces outweighs its local enrichment.
-
-In implicit solvent, the sign of $\Gamma(\delta)$ alone does not separate these cases. The term
-$-\rho_3\operatorname{Vol}[D(\delta)]$ removes the ligand expected in the substrate interior, so
-$\Gamma(\delta)$ can be negative around a locally enriched substrate. A hard-core atomic ligand gives
-$\Gamma(0) = -\rho_3\operatorname{Vol}[D(0)]$, which is pure excluded volume. This limit does not
-apply to a soft ligand, which can enter $D(0)$, or to a molecular ligand counted at its mass centre.
-
-### Choosing the shell
-
-Use the profile to judge convergence: increase `shell.max` until $\Gamma(\delta)$ reaches a plateau,
-and read the coefficient there. The approach to the plateau need not be monotonic. If the profile
-still changes at the largest $\delta$, enlarge the cell or extend the shell.
-
-Leave sufficient bulk beyond the largest shell. Every sampled conformation must fit together with
-its largest shell without overlapping its periodic image or reaching a spherical boundary. A rigid
-substrate also requires a fixed cell, because its geometry is calculated once and reused under
-translation and rotation.
-
-A flexible substrate has its surface, domain volumes and residue partition recalculated at every
-sampled frame. It can be analyzed during simulation or by [`rerun`](#rerun), including trajectories
-whose cuboid changes between frames. This recalculation is substantially more expensive; increase
-the sampling interval if it dominates the run time. The substrate selection must cover exactly one
-complete molecular group.
-
-**Warning:** if a frame breaks one of these geometric conditions, this analysis stops sampling while
-the simulation continues. The log records a warning, and the output covers only the earlier frames.
-Compare `num_samples` with the expected number of samples before using the result.
-
-### Ions
-
-Analyze each ionic species in its own block, and give every species the same `radius`. Otherwise
-the same $\delta$ refers to different regions for different ions. At a plateau, the ion excesses
-balance the substrate charge:
-
-$$\sum_s z_s\Gamma_s = -Z,$$
-
-where $z_s$ is the signed valency of ion species $s$, $\Gamma_s$ is its excess and $Z$ is the signed
-substrate charge number. Use this relation as a convergence check. It also means that a single-ion
-excess partly reflects the substrate charge and is not a neutral-salt coefficient: for a 1:1 salt,
-$\Gamma_+ - \Gamma_- = -Z$.
-
-Only the sum of the ion coefficients enters the linkage for a 1:1 salt, whose mean ionic activity is
-$a_\pm$:
-$\partial\ln K_{\rm obs}/\partial\ln a_\pm = \Delta(\Gamma_+ + \Gamma_-)$, with
-$\Gamma_+ + \Gamma_- = |Z| + 2\Gamma_{\rm salt}$, where $K_{\rm obs}$ is the observed equilibrium
-constant and $\Gamma_{\rm salt}$ is the neutral-salt coefficient
-([Record & Anderson, 1995](https://doi.org/10.1016/S0006-3495(95)80254-7)). These relations use molal
-coefficients, so convert implicit-solvent profiles first.
-
-### Voronoi tessellation and residue contributions
-
-A radical (power) tessellation, a Voronoi partition weighted by atomic radius, divides $D(\delta)$
-among the substrate atoms. Atom $j$ owns the points $\mathbf{r}$ at which its power distance,
-$|\mathbf{r} - \mathbf{r}_j|^2 - (R_j + r_{\rm lig} + \delta)^2$, is smallest, where $\mathbf{r}_j$ is
-the atom's position. Cells neither overlap nor leave gaps, so every ligand centre, solvent centre and
-volume element has exactly one owner. Atom-centred spheres lack this property: they overlap, so
-several atoms count the same ligand. Volumes come from [`voronota-ltr`](https://github.com/mlund/voronota-ltr).
-
-![Radical cells tile the domain around caffeine, whereas atom-centred spheres of the same reach overlap.](figures/caffeine_partition.svg)
-
-*Partitioning $D(\delta)$ around caffeine, in the molecular plane. Colours mark element (C blue, N
-purple, O red, CH₃ green); grey is the van der Waals body and the dashed line is the surface
-accessible to ligand centres. (a) Radical cells tile the domain, so each ligand position and volume
-element has one owner. In this plane, ring atoms own volume only below the accessible surface; in
-three dimensions they are exposed above and below the ring. (b) Atom-centred spheres of the same
-reach overlap, and they extend through the molecule to surface the atom cannot reach.*
-
-Atoms sum into residues. An atom outside every residue record has its own row, named after its atom
-kind; this includes the charge beads of some coarse-grained models. Let $N_{3,i}(\delta)$ and
-$N_{1,i}(\delta)$ count the ligand and solvent centres owned by residue $i$, and let $v_i(\delta)$ be
-its cell volume. The residue excess is
-
-$$\gamma_i(\delta) = \left\langle N_{3,i}(\delta) - \rho_3 v_i(\delta)\right\rangle
-\quad\text{or}\quad
-\gamma_i(\delta) = \left\langle N_{3,i}(\delta)
-- \frac{N_3^{\rm bulk}}{N_1^{\rm bulk}}N_{1,i}(\delta)\right\rangle$$
-
-in implicit and explicit solvent, respectively. These terms sum to the profile at every $\delta$:
-
-$$\Gamma(\delta) = \sum_i \gamma_i(\delta).$$
-
-Exact group sums and residue-resolved coefficients are established for explicit solvent
-([Baynes & Trout, 2003](https://doi.org/10.1021/jp0363996);
-[Vagenende & Trout, 2012](https://doi.org/10.1016/j.bpj.2012.08.011)). The radical partition and its
-implicit-solvent form are specific to this analysis.
-
-The partition rule is a choice: the total does not depend on it, but the residue terms do. At equal
-radii, the tessellation reduces to an ordinary Voronoi partition. Its planar faces give exact cell
-volumes, which the implicit-solvent excess requires. Boundaries between atoms of unequal radius move
-with $\delta$, however, so a ligand can change owner as the domain grows.
-
-Occlusion follows from the cell geometry, with no second cutoff. An atom walled in by its neighbours
-owns volume only below the accessible surface, and an atom whose sphere lies inside a neighbour's has
-an empty cell. Because cell geometry depends on $r_{\rm lig}$, a pocket open to a small ligand can close
-to a large one.
-
-The residue file also reports two local descriptors. They are not thermodynamic coefficients.
-
-The *local-to-bulk partition coefficient* $K_{p,i}$ compares the ligand in the slab accessible to
-residue $i$ with the ligand expected at bulk composition. Values above one indicate local enrichment
-and values below one indicate depletion. In implicit solvent,
-
-$$K_{p,i} = \frac{\left\langle N_{3,i}(\delta)-N_{3,i}(0)\right\rangle}
-{\left\langle \rho_3\,v_i^{\rm acc}(\delta)\right\rangle},$$
-
-where $v_i^{\rm acc}(\delta) = v_i(\delta) - v_i(0)$ is the volume the residue's cell gains between
-$\delta = 0$ and $\delta$. This form
-assumes that the slab holds solvent at bulk density. In explicit solvent, the denominator is the
-sampled
-
-$$\left\langle \frac{N_3^{\rm bulk}}{N_1^{\rm bulk}}
-\left[N_{1,i}(\delta)-N_{1,i}(0)\right]\right\rangle.$$
-
-The *hydration density* $b_{1,i}$ is the number of water molecules per unit of accessible surface. In
-implicit solvent,
-
-$$b_{1,i} = \frac{\left\langle v_i^{\rm w}\right\rangle}
-{\bar v_{\rm w}\left\langle\mathrm{ASA}_i\right\rangle},$$
-
-where $\mathrm{ASA}_i$ is the area of residue $i$ accessible to a water probe of radius `probe_radius`,
-$v_i^{\rm w}$ is the volume of its slab, built from the same probe, and $\bar v_{\rm w} \approx
-29.9$ Å³ is the volume of one water molecule. In explicit solvent, $v_i^{\rm w}/\bar v_{\rm w}$ is
-replaced by the sampled $N_{1,i}(\delta)-N_{1,i}(0)$.
-
-Both descriptors are written only at the widest shell, so they describe the whole slab out to
-`shell.max`, not a hydration layer. A flat surface gives $b_{1,i} \approx \delta/\bar v_{\rm w}$,
-about 0.5 Å⁻² at $\delta = 15$ Å, against a typical first-layer value near 0.18 Å⁻²
-([Pegram & Record, 2008](https://doi.org/10.1021/jp800816a)). Do not compare the two. Both columns
-read `nan` where the required surface or volume is missing, or where a slab volume or population is
-negative, which ownership transfer can produce for atoms of unequal radius.
-
-### Finite-size effects
-
-A closed cell holds a fixed number of ligands, so ligand accumulated around the substrate depletes
-the rest of the cell. The reference outside the widest domain removes this depletion. A cell-average
-reference would instead shrink the excess by the factor $1 - \operatorname{Vol}[D(\delta)]/V$ in
-implicit solvent, where $V$ is the cell volume, or $1 - N_1(\delta)/N_1$ in explicit solvent, where
-$N_1$ is the total solvent count ([Pierce et al., 2008](https://doi.org/10.1007/s12013-007-9005-0)).
-Do not apply a further correction to the profile. The
-[Ganguly–van der Vegt correction](https://doi.org/10.1021/ct301017q) removes the same depletion from
-radial distribution functions, and the
-[Krüger extrapolation](https://doi.org/10.1021/jz301992u) applies to open subvolumes, with no known
-counterpart for a domain shaped like the substrate.
-
-The result belongs to the measured bulk composition, reported as `concentration/Å⁻³` or
-`bulk_ligand_to_solvent_ratio`, not to the nominal one. Averages at fixed particle number also differ
-from open-system averages at order $1/N$ ([Simon et al., 2022](https://doi.org/10.1063/5.0106162)).
-To test this residual, repeat the analysis in a larger cell at the same bulk composition.
-
-### Example
-
-One block is needed for each ligand species. Use `use_com: true` for a molecular ligand; otherwise,
-the selected atoms are counted individually. To use the explicit-solvent estimator, add `solvent`
-and state whether its selection is counted by molecular mass centre or by atom. Molecular water is
-normally counted by mass centre.
+redistribute around a molecule. This analysis measures that redistribution around one molecule, the
+*substrate*, and uses a Voronoi tessellation to divide it among residues. The dissolved species is
+the *ligand*, a term that implies no specific binding site.
 
 ```yaml
 analysis:
@@ -1248,60 +1009,172 @@ analysis:
     frequency: !Every 100
 ```
 
-### Options
+Each ligand species needs its own block.
 
 Key             | Required | Default | Description
 --------------- | -------- | ------- | --------------------------------------------------------
-`substrate`     | yes      |         | The complete molecular group the ligand is counted around
+`substrate`     | yes      |         | One complete molecular group
 `ligand`        | yes      |         | Atoms, or molecules when `use_com` is set, whose excess is measured
 `shell`         | yes      |         | The δ values to scan: `{max, resolution}` in Å, with `max` a multiple of `resolution`
-`use_com`       | no       | `false` | Count the mass centre of each selected molecule instead of each atom — a counting choice only; the ligand size is set independently by `radius`
-`solvent`       | no       |         | Explicit solvent as `{selection, use_com}`; its presence selects the explicit-solvent estimator
-`radius`        | no       | σ/2 (atoms), 0 (mass centre) | Ligand exclusion radius (Å), independent of `use_com`; the effective value is echoed as `ligand_radius/Å` in the report
-`probe_radius`  | no       | `1.4`   | Water radius (Å), setting the accessible surface and implicit-solvent shell behind $b_1$
+`frequency`     | yes      |         | Sample frequency, e.g. `!Every 100`
+`use_com`       | no       | `false` | Count the mass centre of each selected molecule instead of each atom
+`solvent`       | no       |         | Explicit solvent as `{selection, use_com}`; selects the explicit-solvent estimator
+`radius`        | no       | σ/2 (atoms), 0 (mass centre) | Ligand exclusion radius (Å), independent of `use_com`
+`probe_radius`  | no       | `1.4`   | Water probe radius (Å) for accessible surface area and implicit-solvent `b1`
 `profile`       | no       |         | Output file for Γ(δ) (see [Output file formats](#output-file-formats))
 `file`          | no       |         | Output file for the per-residue table
-`frequency`     | yes      |         | Sample frequency, e.g. `!Every 100`
 
-The profile file contains `delta/Å`, `gamma`, and its statistical error. The scale of `gamma` follows
-the estimator: molar ($\rho_3 G_{23}$) in implicit solvent and molal ($\Gamma_{23}$) in explicit solvent. The residue file contains
-the residue identifier, `asa/Å²`, `accessible_volume/Å³`, `b1/Å⁻²`, `kp`, and `gamma` with its
-error at the widest shell. Geometric quantities are ensemble averages for a flexible substrate.
-`output.yaml` reports `gamma` at that shell, the measured bulk density $\rho_3$ as
-`concentration/Å⁻³`, and the mean `excluded_volume/Å³`. With explicit solvent it also reports the bulk density $\rho_1$ as
-`solvent_concentration/Å⁻³`, and `bulk_ligand_to_solvent_ratio`. Rerun weights are applied to all reported averages. Errors are
-estimated automatically by hierarchical blocking: adjacent observations are combined into blocks
-of increasing length, and the coarsest level with at least 16 blocks sets the standard error. For
-short trajectories that never reach that threshold, the finest level is used instead. This reduces
-bias from serial correlation without requiring a user-selected block size. The trajectory must
-still be long enough to contain multiple correlation times ([Flyvbjerg & Petersen, 1989](https://doi.org/10.1063/1.457480)).
+### Reading the output
+
+The analysis counts ligand in a domain $D(\delta)$ that extends a distance $\delta$ beyond the surface
+ligand centres can reach. The profile file holds the resulting excess $\Gamma(\delta)$ as `delta/Å`,
+`gamma` and `gamma_error`. Increase `shell.max` until $\Gamma(\delta)$ reaches a plateau, and read the
+coefficient there. The approach need not be monotonic, so a profile still changing at the largest
+$\delta$ is unconverged.
+
+The residue file reports, at the widest shell, the residue identifier, `asa/Å²`,
+`accessible_volume/Å³`, `b1/Å⁻²`, `kp`, `gamma` and `gamma_error`. `output.yaml` reports `gamma` at that
+shell, the bulk density as `concentration/Å⁻³`, `excluded_volume/Å³` and `ligand_radius/Å`. Explicit
+solvent adds `solvent_concentration/Å⁻³` and `bulk_ligand_to_solvent_ratio`. Rerun weights apply to all
+averages, and geometric quantities are ensemble averages for a flexible substrate.
+
+Errors come from hierarchical blocking: the coarsest level with at least 16 blocks sets the standard
+error, so the trajectory must span multiple correlation times
+([Flyvbjerg & Petersen, 1989](https://doi.org/10.1063/1.457480)).
+
+Every sampled conformation must fit with its largest shell without overlapping its periodic image or
+reaching a spherical wall. A rigid substrate requires a fixed cell, because its geometry is calculated
+once. A flexible substrate is retessellated at every sampled frame, including during
+[`rerun`](#rerun) with a changing cuboid; increase the sampling interval if this dominates the run time.
+
+**Warning:** if a frame breaks these conditions, this analysis stops sampling while the simulation
+continues. The log records a warning, and the output covers only earlier frames. Compare `num_samples`
+with the expected number.
+
+### What the coefficient means
+
+Number the solvent 1, the substrate 2 and the ligand 3. The target is the preferential interaction
+coefficient, $\Gamma_{23} = (\partial m_3/\partial m_2)_{T,\mu_1,\mu_3}$, where $m_i$ is a molality,
+$\mu_i$ a chemical potential and $T$ the temperature
+([Record & Anderson, 1995](https://doi.org/10.1016/S0006-3495(95)80254-7)). At infinite dilution of the
+substrate, $\Gamma_{23} = \rho_3(G_{23} - G_{21})$, where $\rho_i$ is a bulk number density and $G_{2j}$
+is the Kirkwood–Buff integral of species $j$ around the substrate
+([Smith, 2006](https://doi.org/10.1021/jp056100e)). For a 1:1 process such as folding, an equilibrium
+constant $K$ responds to the ligand activity $a_3$ as $\partial\ln K/\partial\ln a_3 =
+\Delta\Gamma_{23}$, where $\Delta$ is product minus reactant
+([Pierce et al., 2008](https://doi.org/10.1007/s12013-007-9005-0)).
+
+The domain $D(\delta)$ is the union of spheres of radius $R_i + r_{\rm lig} + \delta$ around the
+substrate atoms, where $R_i = \sigma_i/2$ and $r_{\rm lig}$ is set by `radius`. It contains the
+substrate, so $\operatorname{Vol}[D(\delta)]$ includes the substrate interior. With $N_j(\delta)$
+centres of species $j$ in the domain, and bulk counts taken outside the widest domain in each frame,
+the two estimators are
+
+$$\Gamma(\delta) = \left\langle N_3(\delta) - \rho_3\operatorname{Vol}[D(\delta)]\right\rangle
+\quad\text{and}\quad
+\Gamma(\delta) = \left\langle N_3(\delta)
+- \frac{N_3^{\rm bulk}}{N_1^{\rm bulk}}N_1(\delta)\right\rangle$$
+
+in implicit and explicit solvent, respectively. They converge to different coefficients.
+
+In explicit solvent, the substrate volume cancels and the plateau is $\Gamma_{23}$
+([Baynes & Trout, 2003](https://doi.org/10.1021/jp0363996)). A positive value means the ligand is
+accumulated around the substrate relative to bulk, and a negative value means it is excluded.
+
+In implicit solvent, the plateau is the molar-scale coefficient $\rho_3 G_{23}$. It keeps the ligand
+missing from the substrate interior, so it can be negative around a locally enriched substrate. At low
+ligand concentration, $\Gamma_{23} \approx \rho_3 G_{23} + \rho_3\bar V_2^\circ$, where $\bar V_2^\circ$
+is the substrate's partial molecular volume at infinite dilution; Smith (2006) gives the exact relation.
+A continuum solvent cannot supply $\bar V_2^\circ$, and `excluded_volume/Å³` is not this quantity. Take
+it from experiment or an explicit-solvent simulation, and state the source.
+
+### Ions
+
+Analyze each ionic species in its own block with the same `radius`, so that equal $\delta$ means the
+same region. At a plateau, the ion excesses balance the signed substrate charge number $Z$:
+$\sum_s z_s\Gamma_s = -Z$, where $z_s$ is the signed valency of species $s$. Use this as a convergence
+check. A single-ion excess therefore partly reflects $Z$ and is not a neutral-salt coefficient. For a
+1:1 salt with mean ionic activity $a_\pm$, only the sum enters the linkage:
+$\partial\ln K/\partial\ln a_\pm = \Delta(\Gamma_+ + \Gamma_-)$
+([Record & Anderson, 1995](https://doi.org/10.1016/S0006-3495(95)80254-7)). This relation uses molal
+coefficients, so convert implicit-solvent profiles first.
+
+### Voronoi tessellation and residue contributions
+
+A radical (power) tessellation, a Voronoi partition weighted by atomic radius, divides $D(\delta)$ among
+the substrate atoms. Atom $j$ at $\mathbf{r}_j$ owns the points $\mathbf{r}$ at which its power distance,
+$|\mathbf{r} - \mathbf{r}_j|^2 - (R_j + r_{\rm lig} + \delta)^2$, is smallest. Every ligand centre,
+solvent centre and volume element therefore has exactly one owner. Volumes come from
+[`voronota-ltr`](https://github.com/mlund/voronota-ltr).
+
+![Radical cells tile the domain around caffeine, whereas atom-centred spheres of the same reach overlap.](figures/caffeine_partition.svg)
+
+*Partitioning $D(\delta)$ around caffeine, in the molecular plane. Grey is the van der Waals body and the
+dashed line the surface accessible to ligand centres. (a) Radical cells tile the domain. (b) Atom-centred
+spheres of the same reach overlap, so several atoms count the same ligand.*
+
+Atoms sum into residues; an atom outside every residue record, such as a charge bead in some
+coarse-grained models, has its own row named after its atom kind. With $N_{j,i}(\delta)$ centres of
+species $j$ and cell volume $v_i(\delta)$ owned by residue $i$, the residue excess is
+
+$$\gamma_i(\delta) = \left\langle N_{3,i}(\delta) - \rho_3 v_i(\delta)\right\rangle
+\quad\text{or}\quad
+\gamma_i(\delta) = \left\langle N_{3,i}(\delta)
+- \frac{N_3^{\rm bulk}}{N_1^{\rm bulk}}N_{1,i}(\delta)\right\rangle,$$
+
+and these terms sum exactly to $\Gamma(\delta)$
+([Baynes & Trout, 2003](https://doi.org/10.1021/jp0363996);
+[Vagenende & Trout, 2012](https://doi.org/10.1016/j.bpj.2012.08.011)). The radical partition and its
+implicit-solvent form are specific to this analysis. The total does not depend on the partition rule,
+but residue terms do, and boundaries between atoms of unequal radius move with $\delta$. A pocket open to
+a small ligand can close to a large one, because cell geometry depends on $r_{\rm lig}$.
+
+The columns `kp` and `b1` are local descriptors, not thermodynamic coefficients. `kp` compares the ligand
+in the residue's accessible slab with the amount expected at bulk composition; implicit solvent assumes
+solvent at bulk density in that slab. `b1` estimates water molecules per unit of accessible area
+([Courtenay et al., 2001](https://doi.org/10.1110/ps.ps.20801);
+[Pegram & Record, 2008](https://doi.org/10.1021/jp800816a)). Both describe the whole slab out to
+`shell.max`, so `b1` is not comparable with first-layer values near 0.18 Å⁻². Both read `nan` where the
+required surface or volume is missing, or where a slab volume or population is negative.
+
+### Finite-size effects
+
+A closed cell holds a fixed number of ligands, so ligand accumulated around the substrate depletes the
+rest of the cell. The reference outside the widest domain removes this depletion
+([Pierce et al., 2008](https://doi.org/10.1007/s12013-007-9005-0)), so do not correct the profile further.
+The [Ganguly–van der Vegt correction](https://doi.org/10.1021/ct301017q) removes the same depletion from
+radial distribution functions, and the [Krüger extrapolation](https://doi.org/10.1021/jz301992u) has no
+known counterpart for a domain shaped like the substrate.
+
+The result belongs to the measured bulk composition, not the nominal one. Averages at fixed particle
+number also differ from open-system averages at order $1/N$
+([Simon et al., 2022](https://doi.org/10.1063/5.0106162)). To test this residual, repeat the analysis in a
+larger cell at the same bulk composition.
 
 ### References
 
 - Baynes & Trout, *J. Phys. Chem. B* **107**, 14058 (2003).
   [10.1021/jp0363996](https://doi.org/10.1021/jp0363996)
+- Courtenay, Capp & Record, *Protein Sci.* **10**, 2485 (2001).
+  [10.1110/ps.ps.20801](https://doi.org/10.1110/ps.ps.20801)
+- Flyvbjerg & Petersen, *J. Chem. Phys.* **91**, 461 (1989).
+  [10.1063/1.457480](https://doi.org/10.1063/1.457480)
 - Ganguly & van der Vegt, *J. Chem. Theory Comput.* **9**, 1347 (2013).
   [10.1021/ct301017q](https://doi.org/10.1021/ct301017q)
 - Krüger, Schnell, Bedeaux, Kjelstrup, Vlugt & Simon, *J. Phys. Chem. Lett.* **4**, 235 (2013).
   [10.1021/jz301992u](https://doi.org/10.1021/jz301992u)
+- Pegram & Record, *J. Phys. Chem. B* **112**, 9428 (2008).
+  [10.1021/jp800816a](https://doi.org/10.1021/jp800816a)
 - Pierce, Kang, Aburi, Weerasinghe & Smith, *Cell Biochem. Biophys.* **50**, 1 (2008).
   [10.1007/s12013-007-9005-0](https://doi.org/10.1007/s12013-007-9005-0)
 - Record & Anderson, *Biophys. J.* **68**, 786 (1995).
   [10.1016/S0006-3495(95)80254-7](https://doi.org/10.1016/S0006-3495(95)80254-7)
-- Courtenay, Capp & Record, *Protein Sci.* **10**, 2485 (2001).
-  [10.1110/ps.ps.20801](https://doi.org/10.1110/ps.ps.20801)
-- Pegram & Record, *J. Phys. Chem. B* **112**, 9428 (2008).
-  [10.1021/jp800816a](https://doi.org/10.1021/jp800816a)
 - Simon, Krüger, Schnell, Vlugt, Kjelstrup & Bedeaux, *J. Chem. Phys.* **157**, 130901 (2022).
   [10.1063/5.0106162](https://doi.org/10.1063/5.0106162)
 - Smith, *J. Phys. Chem. B* **110**, 2862 (2006).
   [10.1021/jp056100e](https://doi.org/10.1021/jp056100e)
-- Tang & Bloomfield, *Biophys. J.* **82**, 2876 (2002).
-  [10.1016/S0006-3495(02)75629-4](https://doi.org/10.1016/S0006-3495(02)75629-4)
 - Vagenende & Trout, *Biophys. J.* **103**, 1354 (2012).
   [10.1016/j.bpj.2012.08.011](https://doi.org/10.1016/j.bpj.2012.08.011)
-- Flyvbjerg & Petersen, *J. Chem. Phys.* **91**, 461 (1989).
-  [10.1063/1.457480](https://doi.org/10.1063/1.457480)
 
 ---
 
