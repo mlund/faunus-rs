@@ -2458,7 +2458,9 @@ slabs must return it. Automatic blocking estimates all these errors across sampl
 <p>Salts and osmolytes shift binding, folding and association equilibria through the way they
 redistribute around a molecule. This analysis measures that redistribution around one molecule, the
 <em>substrate</em>, and uses a Voronoi tessellation to divide it among residues. The dissolved species is
-the <em>ligand</em>, a term that implies no specific binding site.</p>
+the <em>ligand</em>, a term that implies no specific binding site. The preferential-interaction literature
+usually calls the substrate the solute (component 2) and the ligand the cosolute (component 3), with
+water or another solvent as component 1.</p>
 <div class="highlight"><pre><span></span><code><span class="nt">analysis</span><span class="p">:</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!PreferentialInteraction</span>
 <span class="w">    </span><span class="nt">substrate</span><span class="p">:</span><span class="w"> </span><span class="s">"molecule</span><span class="nv"> </span><span class="s">protein"</span>
@@ -2558,6 +2560,9 @@ ligand centres can reach. The profile file holds the resulting excess <span clas
 <code>gamma</code> and <code>gamma_error</code>. Increase <code>shell.max</code> until <span class="arithmatex">\(\Gamma(\delta)\)</span> reaches a plateau, and read the
 coefficient there. The approach need not be monotonic, so a profile still changing at the largest
 <span class="arithmatex">\(\delta\)</span> is unconverged.</p>
+<p>The name <code>gamma</code> does not show its concentration scale, here or in the other outputs. With <code>solvent</code>
+set, it is the molal coefficient <span class="arithmatex">\(\Gamma_{23}\)</span>. Without <code>solvent</code>, it is the molar-scale <span class="arithmatex">\(\rho_3 G_{23}\)</span>
+(<a href="#what-the-coefficient-means">below</a>). State which one when you report or compare values.</p>
 <p>The residue file reports, at the widest shell, the residue identifier, <code>asa/Å²</code>,
 <code>accessible_volume/Å³</code>, <code>b1/Å⁻²</code>, <code>kp</code>, <code>gamma</code> and <code>gamma_error</code>. <code>output.yaml</code> reports <code>gamma</code> at that
 shell, the bulk density as <code>concentration/Å⁻³</code>, <code>excluded_volume/Å³</code> and <code>ligand_radius/Å</code>. Explicit
