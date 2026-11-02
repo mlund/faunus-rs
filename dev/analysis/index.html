@@ -21,7 +21,7 @@
       
       
       <link rel="icon" href="../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.0">
     
     
       
@@ -29,10 +29,10 @@
       
     
     
-      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
+      <link rel="stylesheet" href="../assets/stylesheets/main.57a0d79d.min.css">
       
         
-        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+        <link rel="stylesheet" href="../assets/stylesheets/palette.fb2fffe2.min.css">
       
       
 
@@ -2455,75 +2455,15 @@ additionally reports the slab layout and the mean total number of selected parti
 slabs must return it. Automatic blocking estimates all these errors across sampled configurations.</p>
 <hr />
 <h2 id="preferential-interaction">Preferential Interaction<a class="headerlink" href="#preferential-interaction" title="Permanent link">&para;</a></h2>
-<p>Measures the preferential interaction of a ligand around one molecular substrate. A positive
-<span class="arithmatex">\(\Gamma\)</span> means that the local solvent composition is enriched in ligand relative to bulk; a
-negative value means that it is depleted. Both implicit- and explicit-solvent estimators are
-available.</p>
-<p>For implicit solvent, the analysis reports the cumulative ligand excess</p>
-<div class="arithmatex">\[\Gamma(\delta) = \left\langle N(\delta)
-- c_{\mathrm{bulk}}\,\operatorname{Vol}\!\left[D(\delta)\right]\right\rangle,\]</div>
-<p>where <span class="arithmatex">\(N(\delta)\)</span> is the number of ligands in the shell, <span class="arithmatex">\(c_{\mathrm{bulk}}\)</span> is the measured bulk
-concentration, and <span class="arithmatex">\(D(\delta)\)</span> is the shell volume in the sampled conformation. The product is
-formed for each frame before averaging, preserving correlations between concentration and shape.
-The bulk concentration is measured in the remaining part of the simulation cell, so no
-substrate-free simulation is required.</p>
-<p>For explicit solvent, components 1 and 3 denote solvent and ligand. The finite-box estimator is</p>
-<div class="arithmatex">\[\Gamma_{23}(\delta) = \left\langle N_3(\delta)
-- \frac{N_3^{\rm bulk}}{N_1^{\rm bulk}}N_1(\delta)\right\rangle.\]</div>
-<p>The ratio and both local populations are evaluated in each frame before averaging. Ligand and
-solvent are counted in the same <span class="arithmatex">\(D(\delta)\)</span>; using different spatial regions would introduce a
-spurious displaced-solvent contribution. The bulk populations are those outside the widest shell,
-and that common bulk ratio is used throughout the profile. A sampled frame with no bulk solvent is
-an error because its reference composition is undefined.</p>
-<h3 id="choosing-the-shell">Choosing the shell<a class="headerlink" href="#choosing-the-shell" title="Permanent link">&para;</a></h3>
-<p>Use the profile to select <span class="arithmatex">\(\Gamma\)</span>: increase <code>shell.max</code> until <span class="arithmatex">\(\Gamma(\delta)\)</span> has reached a
-plateau. Do not use a profile that still changes at the largest <span class="arithmatex">\(\delta\)</span>; enlarge the cell or
-extend the shell instead. In implicit solvent, a hard-core atomic ligand gives an excluded-volume
-contribution at <span class="arithmatex">\(\delta=0\)</span>. This interpretation does not apply to a soft or centre-of-mass ligand.</p>
-<p>The substrate selection must cover exactly one complete molecular group. For a rigid substrate,
-the surface geometry is calculated once and reused under translation and rotation. For a flexible
-substrate, the surface, shell volumes, and residue partition are recalculated at every sampled
-frame. A flexible substrate can therefore be analyzed during simulation or by
-<a href="#rerun"><code>rerun</code></a>, including trajectories whose cuboid changes between frames. Flexible analysis
-is substantially more expensive; increase the sampling interval if tessellation dominates the
-run time.</p>
-<p>Leave sufficient bulk beyond the largest shell. Every sampled conformation must fit together with
-its largest shell without overlapping its periodic image or reaching a spherical boundary. A
-rigid substrate still requires a fixed cell because its geometric reference is reused.</p>
-<h3 id="ions-and-residue-contributions">Ions and residue contributions<a class="headerlink" href="#ions-and-residue-contributions" title="Permanent link">&para;</a></h3>
-<p>Analyze each ionic species separately. For a charged substrate, individual ion excesses include
-the electroneutrality contribution and are not neutral-salt coefficients. Combine the ion
-profiles with the salt stoichiometry and the activity convention appropriate to the system.</p>
-<p>The residue file partitions the total excess among residues:</p>
-<div class="arithmatex">\[\Gamma = \sum_i \gamma_i.\]</div>
-<p>The contributions sum to the profile at the same shell thickness and provide a spatial
-description of ligand enrichment. In implicit solvent, the local-to-bulk partition coefficient is</p>
-<div class="arithmatex">\[K_{p,i} = \frac{\left\langle N_i(\delta)-N_i(0)\right\rangle}
-{\left\langle c_{\mathrm{bulk}}\,v_i^{\rm acc}(\delta)\right\rangle},\]</div>
-<p>where <span class="arithmatex">\(v_i^{\rm acc}\)</span> is the volume accessible to ligand centres around residue <span class="arithmatex">\(i\)</span>. Values above
-one indicate local enrichment and values below one indicate depletion. In explicit solvent the
-corresponding denominator is</p>
-<div class="arithmatex">\[\left\langle \frac{N_3^{\rm bulk}}{N_1^{\rm bulk}}
-\left[N_{1,i}(\delta)-N_{1,i}(0)\right]\right\rangle,\]</div>
-<p>so <span class="arithmatex">\(K_{p,i}=1\)</span> when the accessible slab has the bulk ligand-to-solvent ratio. The implicit-solvent
-hydration density</p>
-<div class="arithmatex">\[b_{1,i} = \frac{\left\langle v_i^{\rm w}\right\rangle}
-{\bar v_{\rm w}\left\langle\mathrm{ASA}_i\right\rangle}\]</div>
-<p>estimates the water population from the water-probe volume. With explicit solvent,
-<span class="arithmatex">\(v_i^{\rm w}/\bar v_{\rm w}\)</span> is replaced by the sampled
-<span class="arithmatex">\(N_{1,i}(\delta)-N_{1,i}(0)\)</span> in the ligand-accessible slab. <code>kp</code> and <code>b1</code> are local descriptors,
-not thermodynamic coefficients; they depend on the selected shell thickness and are <code>nan</code> when the
-required local population, volume, or surface area is unavailable.</p>
-<h3 id="example_12">Example<a class="headerlink" href="#example_12" title="Permanent link">&para;</a></h3>
-<p>One block is needed for each ligand species. Use <code>use_com: true</code> for a molecular ligand; otherwise,
-the selected atoms are counted individually. To use the explicit-solvent estimator, add <code>solvent</code>
-and state whether its selection is counted by molecular mass centre or by atom. Molecular water is
-normally counted by mass centre.</p>
+<p>Salts and osmolytes shift binding, folding and association equilibria through the way they
+redistribute around a molecule. This analysis measures that redistribution around one molecule, the
+<em>substrate</em>, and uses a Voronoi tessellation to divide it among residues. The dissolved species is
+the <em>ligand</em>, a term that implies no specific binding site.</p>
 <div class="highlight"><pre><span></span><code><span class="nt">analysis</span><span class="p">:</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!PreferentialInteraction</span>
 <span class="w">    </span><span class="nt">substrate</span><span class="p">:</span><span class="w"> </span><span class="s">"molecule</span><span class="nv"> </span><span class="s">protein"</span>
 <span class="w">    </span><span class="nt">ligand</span><span class="p">:</span><span class="w"> </span><span class="s">"atomtype</span><span class="nv"> </span><span class="s">Na"</span>
-<span class="w">    </span><span class="nt">shell</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">max</span><span class="p">:</span><span class="w"> </span><span class="nv">15.0</span><span class="p p-Indicator">,</span><span class="nt"> resolution</span><span class="p">:</span><span class="w"> </span><span class="nv">0.5</span><span class="p p-Indicator">}</span><span class="w">   </span><span class="c1"># the δ ladder</span>
+<span class="w">    </span><span class="nt">shell</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">max</span><span class="p">:</span><span class="w"> </span><span class="nv">15.0</span><span class="p p-Indicator">,</span><span class="nt"> resolution</span><span class="p">:</span><span class="w"> </span><span class="nv">0.5</span><span class="p p-Indicator">}</span><span class="w">   </span><span class="c1"># the δ values to scan</span>
 <span class="w">    </span><span class="nt">profile</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">gamma_na.csv</span><span class="w">                 </span><span class="c1"># Γ(δ) — read this first</span>
 <span class="w">    </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">residues_na.csv</span><span class="w">                 </span><span class="c1"># one row per residue</span>
 <span class="w">    </span><span class="nt">frequency</span><span class="p">:</span><span class="w"> </span><span class="kt">!Every</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">100</span>
@@ -2539,7 +2479,7 @@ normally counted by mass centre.</p>
 <span class="w">    </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">residues_pp.csv</span>
 <span class="w">    </span><span class="nt">frequency</span><span class="p">:</span><span class="w"> </span><span class="kt">!Every</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">100</span>
 </code></pre></div>
-<h3 id="options_14">Options<a class="headerlink" href="#options_14" title="Permanent link">&para;</a></h3>
+<p>Each ligand species needs its own block.</p>
 <table>
 <thead>
 <tr>
@@ -2554,7 +2494,7 @@ normally counted by mass centre.</p>
 <td><code>substrate</code></td>
 <td>yes</td>
 <td></td>
-<td>The complete molecular group the ligand is counted around</td>
+<td>One complete molecular group</td>
 </tr>
 <tr>
 <td><code>ligand</code></td>
@@ -2566,31 +2506,37 @@ normally counted by mass centre.</p>
 <td><code>shell</code></td>
 <td>yes</td>
 <td></td>
-<td>The δ ladder: <code>{max, resolution}</code> in Å, with <code>max</code> a multiple of <code>resolution</code></td>
+<td>The δ values to scan: <code>{max, resolution}</code> in Å, with <code>max</code> a multiple of <code>resolution</code></td>
+</tr>
+<tr>
+<td><code>frequency</code></td>
+<td>yes</td>
+<td></td>
+<td>Sample frequency, e.g. <code>!Every 100</code></td>
 </tr>
 <tr>
 <td><code>use_com</code></td>
 <td>no</td>
 <td><code>false</code></td>
-<td>Count the mass centre of each selected molecule instead of each atom — a counting choice only; the ligand size is set independently by <code>radius</code></td>
+<td>Count the mass centre of each selected molecule instead of each atom</td>
 </tr>
 <tr>
 <td><code>solvent</code></td>
 <td>no</td>
 <td></td>
-<td>Explicit solvent as <code>{selection, use_com}</code>; its presence selects the finite-box estimator</td>
+<td>Explicit solvent as <code>{selection, use_com}</code>; selects the explicit-solvent estimator</td>
 </tr>
 <tr>
 <td><code>radius</code></td>
 <td>no</td>
 <td>σ/2 (atoms), 0 (mass centre)</td>
-<td>Ligand exclusion radius (Å), independent of <code>use_com</code>; the effective value is echoed as <code>ligand_radius/Å</code> in the report</td>
+<td>Ligand exclusion radius (Å), independent of <code>use_com</code></td>
 </tr>
 <tr>
 <td><code>probe_radius</code></td>
 <td>no</td>
 <td><code>1.4</code></td>
-<td>Water radius (Å), setting the accessible surface and implicit-solvent shell behind <span class="arithmatex">\(b_1\)</span></td>
+<td>Water probe radius (Å) for accessible surface area and implicit-solvent <code>b1</code></td>
 </tr>
 <tr>
 <td><code>profile</code></td>
@@ -2604,39 +2550,133 @@ normally counted by mass centre.</p>
 <td></td>
 <td>Output file for the per-residue table</td>
 </tr>
-<tr>
-<td><code>frequency</code></td>
-<td>yes</td>
-<td></td>
-<td>Sample frequency, e.g. <code>!Every 100</code></td>
-</tr>
 </tbody>
 </table>
-<p>The profile file contains <code>delta/Å</code>, <code>gamma</code>, and its statistical error. The residue file contains
-the residue identifier, <code>asa/Å²</code>, <code>accessible_volume/Å³</code>, <code>b1/Å⁻²</code>, <code>kp</code>, and <code>gamma</code> with its
-error at the widest shell. Geometric quantities are ensemble averages for a flexible substrate.
-<code>output.yaml</code> reports <code>gamma</code> at that shell, the measured bulk <code>concentration/Å⁻³</code>, and the mean
-<code>excluded_volume/Å³</code>. With explicit solvent it also reports <code>solvent_concentration/Å⁻³</code> and
-<code>bulk_ligand_to_solvent_ratio</code>. Rerun weights are applied to all reported averages. Errors are
-estimated automatically by hierarchical blocking: adjacent observations are combined into blocks
-of increasing length, and the coarsest level with at least 16 blocks sets the standard error. For
-short trajectories that never reach that threshold, the finest level is used instead. This reduces
-bias from serial correlation without requiring a user-selected block size. The trajectory must
-still be long enough to contain multiple correlation times (<a href="https://doi.org/10.1063/1.457480">Flyvbjerg &amp; Petersen, 1989</a>).</p>
+<h3 id="reading-the-output">Reading the output<a class="headerlink" href="#reading-the-output" title="Permanent link">&para;</a></h3>
+<p>The analysis counts ligand in a domain <span class="arithmatex">\(D(\delta)\)</span> that extends a distance <span class="arithmatex">\(\delta\)</span> beyond the surface
+ligand centres can reach. The profile file holds the resulting excess <span class="arithmatex">\(\Gamma(\delta)\)</span> as <code>delta/Å</code>,
+<code>gamma</code> and <code>gamma_error</code>. Increase <code>shell.max</code> until <span class="arithmatex">\(\Gamma(\delta)\)</span> reaches a plateau, and read the
+coefficient there. The approach need not be monotonic, so a profile still changing at the largest
+<span class="arithmatex">\(\delta\)</span> is unconverged.</p>
+<p>The residue file reports, at the widest shell, the residue identifier, <code>asa/Å²</code>,
+<code>accessible_volume/Å³</code>, <code>b1/Å⁻²</code>, <code>kp</code>, <code>gamma</code> and <code>gamma_error</code>. <code>output.yaml</code> reports <code>gamma</code> at that
+shell, the bulk density as <code>concentration/Å⁻³</code>, <code>excluded_volume/Å³</code> and <code>ligand_radius/Å</code>. Explicit
+solvent adds <code>solvent_concentration/Å⁻³</code> and <code>bulk_ligand_to_solvent_ratio</code>. Rerun weights apply to all
+averages, and geometric quantities are ensemble averages for a flexible substrate.</p>
+<p>Errors come from hierarchical blocking: the coarsest level with at least 16 blocks sets the standard
+error, so the trajectory must span multiple correlation times
+(<a href="https://doi.org/10.1063/1.457480">Flyvbjerg &amp; Petersen, 1989</a>).</p>
+<p>Every sampled conformation must fit with its largest shell without overlapping its periodic image or
+reaching a spherical wall. A rigid substrate requires a fixed cell, because its geometry is calculated
+once. A flexible substrate is retessellated at every sampled frame, including during
+<a href="#rerun"><code>rerun</code></a> with a changing cuboid; increase the sampling interval if this dominates the run time.</p>
+<p><strong>Warning:</strong> if a frame breaks these conditions, this analysis stops sampling while the simulation
+continues. The log records a warning, and the output covers only earlier frames. Compare <code>num_samples</code>
+with the expected number.</p>
+<h3 id="what-the-coefficient-means">What the coefficient means<a class="headerlink" href="#what-the-coefficient-means" title="Permanent link">&para;</a></h3>
+<p>Number the solvent 1, the substrate 2 and the ligand 3. The target is the preferential interaction
+coefficient, <span class="arithmatex">\(\Gamma_{23} = (\partial m_3/\partial m_2)_{T,\mu_1,\mu_3}\)</span>, where <span class="arithmatex">\(m_i\)</span> is a molality,
+<span class="arithmatex">\(\mu_i\)</span> a chemical potential and <span class="arithmatex">\(T\)</span> the temperature
+(<a href="https://doi.org/10.1016/S0006-3495(95)80254-7">Record &amp; Anderson, 1995</a>). At infinite dilution of the
+substrate, <span class="arithmatex">\(\Gamma_{23} = \rho_3(G_{23} - G_{21})\)</span>, where <span class="arithmatex">\(\rho_i\)</span> is a bulk number density and <span class="arithmatex">\(G_{2j}\)</span>
+is the Kirkwood–Buff integral of species <span class="arithmatex">\(j\)</span> around the substrate
+(<a href="https://doi.org/10.1021/jp056100e">Smith, 2006</a>). For a 1:1 process such as folding, an equilibrium
+constant <span class="arithmatex">\(K\)</span> responds to the ligand activity <span class="arithmatex">\(a_3\)</span> as <span class="arithmatex">\(\partial\ln K/\partial\ln a_3 =
+\Delta\Gamma_{23}\)</span>, where <span class="arithmatex">\(\Delta\)</span> is product minus reactant
+(<a href="https://doi.org/10.1007/s12013-007-9005-0">Pierce et al., 2008</a>).</p>
+<p>The domain <span class="arithmatex">\(D(\delta)\)</span> is the union of spheres of radius <span class="arithmatex">\(R_i + r_{\rm lig} + \delta\)</span> around the
+substrate atoms, where <span class="arithmatex">\(R_i = \sigma_i/2\)</span> and <span class="arithmatex">\(r_{\rm lig}\)</span> is set by <code>radius</code>. It contains the
+substrate, so <span class="arithmatex">\(\operatorname{Vol}[D(\delta)]\)</span> includes the substrate interior. With <span class="arithmatex">\(N_j(\delta)\)</span>
+centres of species <span class="arithmatex">\(j\)</span> in the domain, and bulk counts taken outside the widest domain in each frame,
+the two estimators are</p>
+<div class="arithmatex">\[\Gamma(\delta) = \left\langle N_3(\delta) - \rho_3\operatorname{Vol}[D(\delta)]\right\rangle
+\quad\text{and}\quad
+\Gamma(\delta) = \left\langle N_3(\delta)
+- \frac{N_3^{\rm bulk}}{N_1^{\rm bulk}}N_1(\delta)\right\rangle\]</div>
+<p>in implicit and explicit solvent, respectively. They converge to different coefficients.</p>
+<p>In explicit solvent, the substrate volume cancels and the plateau is <span class="arithmatex">\(\Gamma_{23}\)</span>
+(<a href="https://doi.org/10.1021/jp0363996">Baynes &amp; Trout, 2003</a>). A positive value means the ligand is
+accumulated around the substrate relative to bulk, and a negative value means it is excluded.</p>
+<p>In implicit solvent, the plateau is the molar-scale coefficient <span class="arithmatex">\(\rho_3 G_{23}\)</span>. It keeps the ligand
+missing from the substrate interior, so it can be negative around a locally enriched substrate. At low
+ligand concentration, <span class="arithmatex">\(\Gamma_{23} \approx \rho_3 G_{23} + \rho_3\bar V_2^\circ\)</span>, where <span class="arithmatex">\(\bar V_2^\circ\)</span>
+is the substrate's partial molecular volume at infinite dilution; Smith (2006) gives the exact relation.
+A continuum solvent cannot supply <span class="arithmatex">\(\bar V_2^\circ\)</span>, and <code>excluded_volume/Å³</code> is not this quantity. Take
+it from experiment or an explicit-solvent simulation, and state the source.</p>
+<h3 id="ions">Ions<a class="headerlink" href="#ions" title="Permanent link">&para;</a></h3>
+<p>Analyze each ionic species in its own block with the same <code>radius</code>, so that equal <span class="arithmatex">\(\delta\)</span> means the
+same region. At a plateau, the ion excesses balance the signed substrate charge number <span class="arithmatex">\(Z\)</span>:
+<span class="arithmatex">\(\sum_s z_s\Gamma_s = -Z\)</span>, where <span class="arithmatex">\(z_s\)</span> is the signed valency of species <span class="arithmatex">\(s\)</span>. Use this as a convergence
+check. A single-ion excess therefore partly reflects <span class="arithmatex">\(Z\)</span> and is not a neutral-salt coefficient. For a
+1:1 salt with mean ionic activity <span class="arithmatex">\(a_\pm\)</span>, only the sum enters the linkage:
+<span class="arithmatex">\(\partial\ln K/\partial\ln a_\pm = \Delta(\Gamma_+ + \Gamma_-)\)</span>
+(<a href="https://doi.org/10.1016/S0006-3495(95)80254-7">Record &amp; Anderson, 1995</a>). This relation uses molal
+coefficients, so convert implicit-solvent profiles first.</p>
+<h3 id="voronoi-tessellation-and-residue-contributions">Voronoi tessellation and residue contributions<a class="headerlink" href="#voronoi-tessellation-and-residue-contributions" title="Permanent link">&para;</a></h3>
+<p>A radical (power) tessellation, a Voronoi partition weighted by atomic radius, divides <span class="arithmatex">\(D(\delta)\)</span> among
+the substrate atoms. Atom <span class="arithmatex">\(j\)</span> at <span class="arithmatex">\(\mathbf{r}_j\)</span> owns the points <span class="arithmatex">\(\mathbf{r}\)</span> at which its power distance,
+<span class="arithmatex">\(|\mathbf{r} - \mathbf{r}_j|^2 - (R_j + r_{\rm lig} + \delta)^2\)</span>, is smallest. Every ligand centre,
+solvent centre and volume element therefore has exactly one owner. Volumes come from
+<a href="https://github.com/mlund/voronota-ltr"><code>voronota-ltr</code></a>.</p>
+<p><img alt="Radical cells tile the domain around caffeine, whereas atom-centred spheres of the same reach overlap." src="../figures/caffeine_partition.svg" /></p>
+<p><em>Partitioning <span class="arithmatex">\(D(\delta)\)</span> around caffeine, in the molecular plane. Grey is the van der Waals body and the
+dashed line the surface accessible to ligand centres. (a) Radical cells tile the domain. (b) Atom-centred
+spheres of the same reach overlap, so several atoms count the same ligand.</em></p>
+<p>Atoms sum into residues; an atom outside every residue record, such as a charge bead in some
+coarse-grained models, has its own row named after its atom kind. With <span class="arithmatex">\(N_{j,i}(\delta)\)</span> centres of
+species <span class="arithmatex">\(j\)</span> and cell volume <span class="arithmatex">\(v_i(\delta)\)</span> owned by residue <span class="arithmatex">\(i\)</span>, the residue excess is</p>
+<div class="arithmatex">\[\gamma_i(\delta) = \left\langle N_{3,i}(\delta) - \rho_3 v_i(\delta)\right\rangle
+\quad\text{or}\quad
+\gamma_i(\delta) = \left\langle N_{3,i}(\delta)
+- \frac{N_3^{\rm bulk}}{N_1^{\rm bulk}}N_{1,i}(\delta)\right\rangle,\]</div>
+<p>and these terms sum exactly to <span class="arithmatex">\(\Gamma(\delta)\)</span>
+(<a href="https://doi.org/10.1021/jp0363996">Baynes &amp; Trout, 2003</a>;
+<a href="https://doi.org/10.1016/j.bpj.2012.08.011">Vagenende &amp; Trout, 2012</a>). The radical partition and its
+implicit-solvent form are specific to this analysis. The total does not depend on the partition rule,
+but residue terms do, and boundaries between atoms of unequal radius move with <span class="arithmatex">\(\delta\)</span>. A pocket open to
+a small ligand can close to a large one, because cell geometry depends on <span class="arithmatex">\(r_{\rm lig}\)</span>.</p>
+<p>The columns <code>kp</code> and <code>b1</code> are local descriptors, not thermodynamic coefficients. <code>kp</code> compares the ligand
+in the residue's accessible slab with the amount expected at bulk composition; implicit solvent assumes
+solvent at bulk density in that slab. <code>b1</code> estimates water molecules per unit of accessible area
+(<a href="https://doi.org/10.1110/ps.ps.20801">Courtenay et al., 2001</a>;
+<a href="https://doi.org/10.1021/jp800816a">Pegram &amp; Record, 2008</a>). Both describe the whole slab out to
+<code>shell.max</code>, so <code>b1</code> is not comparable with first-layer values near 0.18 Å⁻². Both read <code>nan</code> where the
+required surface or volume is missing, or where a slab volume or population is negative.</p>
+<h3 id="finite-size-effects">Finite-size effects<a class="headerlink" href="#finite-size-effects" title="Permanent link">&para;</a></h3>
+<p>A closed cell holds a fixed number of ligands, so ligand accumulated around the substrate depletes the
+rest of the cell. The reference outside the widest domain removes this depletion
+(<a href="https://doi.org/10.1007/s12013-007-9005-0">Pierce et al., 2008</a>), so do not correct the profile further.
+The <a href="https://doi.org/10.1021/ct301017q">Ganguly–van der Vegt correction</a> removes the same depletion from
+radial distribution functions, and the <a href="https://doi.org/10.1021/jz301992u">Krüger extrapolation</a> has no
+known counterpart for a domain shaped like the substrate.</p>
+<p>The result belongs to the measured bulk composition, not the nominal one. Averages at fixed particle
+number also differ from open-system averages at order <span class="arithmatex">\(1/N\)</span>
+(<a href="https://doi.org/10.1063/5.0106162">Simon et al., 2022</a>). To test this residual, repeat the analysis in a
+larger cell at the same bulk composition.</p>
 <h3 id="references">References<a class="headerlink" href="#references" title="Permanent link">&para;</a></h3>
 <ul>
-<li>Record &amp; Anderson, <em>Biophys. J.</em> <strong>68</strong>, 786 (1995).
-  <a href="https://doi.org/10.1016/S0006-3495(95)80254-7">10.1016/S0006-3495(95)80254-7</a></li>
+<li>Baynes &amp; Trout, <em>J. Phys. Chem. B</em> <strong>107</strong>, 14058 (2003).
+  <a href="https://doi.org/10.1021/jp0363996">10.1021/jp0363996</a></li>
 <li>Courtenay, Capp &amp; Record, <em>Protein Sci.</em> <strong>10</strong>, 2485 (2001).
   <a href="https://doi.org/10.1110/ps.ps.20801">10.1110/ps.ps.20801</a></li>
-<li>Pegram &amp; Record, <em>J. Phys. Chem. B</em> <strong>112</strong>, 9428 (2008).
-  <a href="https://doi.org/10.1021/jp800816a">10.1021/jp800816a</a></li>
-<li>Tang &amp; Bloomfield, <em>Biophys. J.</em> <strong>82</strong>, 2876 (2002).
-  <a href="https://doi.org/10.1016/S0006-3495(02)75629-4">10.1016/S0006-3495(02)75629-4</a></li>
-<li>Vagenende &amp; Trout, <em>Biophys. J.</em> <strong>103</strong>, 1354 (2012).
-  <a href="https://doi.org/10.1016/j.bpj.2012.08.011">10.1016/j.bpj.2012.08.011</a></li>
 <li>Flyvbjerg &amp; Petersen, <em>J. Chem. Phys.</em> <strong>91</strong>, 461 (1989).
   <a href="https://doi.org/10.1063/1.457480">10.1063/1.457480</a></li>
+<li>Ganguly &amp; van der Vegt, <em>J. Chem. Theory Comput.</em> <strong>9</strong>, 1347 (2013).
+  <a href="https://doi.org/10.1021/ct301017q">10.1021/ct301017q</a></li>
+<li>Krüger, Schnell, Bedeaux, Kjelstrup, Vlugt &amp; Simon, <em>J. Phys. Chem. Lett.</em> <strong>4</strong>, 235 (2013).
+  <a href="https://doi.org/10.1021/jz301992u">10.1021/jz301992u</a></li>
+<li>Pegram &amp; Record, <em>J. Phys. Chem. B</em> <strong>112</strong>, 9428 (2008).
+  <a href="https://doi.org/10.1021/jp800816a">10.1021/jp800816a</a></li>
+<li>Pierce, Kang, Aburi, Weerasinghe &amp; Smith, <em>Cell Biochem. Biophys.</em> <strong>50</strong>, 1 (2008).
+  <a href="https://doi.org/10.1007/s12013-007-9005-0">10.1007/s12013-007-9005-0</a></li>
+<li>Record &amp; Anderson, <em>Biophys. J.</em> <strong>68</strong>, 786 (1995).
+  <a href="https://doi.org/10.1016/S0006-3495(95)80254-7">10.1016/S0006-3495(95)80254-7</a></li>
+<li>Simon, Krüger, Schnell, Vlugt, Kjelstrup &amp; Bedeaux, <em>J. Chem. Phys.</em> <strong>157</strong>, 130901 (2022).
+  <a href="https://doi.org/10.1063/5.0106162">10.1063/5.0106162</a></li>
+<li>Smith, <em>J. Phys. Chem. B</em> <strong>110</strong>, 2862 (2006).
+  <a href="https://doi.org/10.1021/jp056100e">10.1021/jp056100e</a></li>
+<li>Vagenende &amp; Trout, <em>Biophys. J.</em> <strong>103</strong>, 1354 (2012).
+  <a href="https://doi.org/10.1016/j.bpj.2012.08.011">10.1016/j.bpj.2012.08.011</a></li>
 </ul>
 <hr />
 <h2 id="mean-along-coordinate">Mean Along Coordinate<a class="headerlink" href="#mean-along-coordinate" title="Permanent link">&para;</a></h2>
@@ -2645,7 +2685,7 @@ CV2 is discretised into uniform bins of width <code>resolution</code>; no range 
 since bins are created on demand using a sorted map.
 The output file contains columns for the bin center, running mean of CV1, and sample count per bin.
 The file is rewritten at each sample so partial results survive crashes.</p>
-<h3 id="example_13">Example<a class="headerlink" href="#example_13" title="Permanent link">&para;</a></h3>
+<h3 id="example_12">Example<a class="headerlink" href="#example_12" title="Permanent link">&para;</a></h3>
 <p>Average charge of GLU residue as a function of distance from a protein:</p>
 <div class="highlight"><pre><span></span><code><span class="nt">analysis</span><span class="p">:</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!MeanAlongCoordinate</span>
@@ -2658,7 +2698,7 @@ The file is rewritten at each sample so partial results survive crashes.</p>
 <span class="w">    </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">charge_vs_dist.dat</span>
 <span class="w">    </span><span class="nt">frequency</span><span class="p">:</span><span class="w"> </span><span class="kt">!Every</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">100</span>
 </code></pre></div>
-<h3 id="options_15">Options<a class="headerlink" href="#options_15" title="Permanent link">&para;</a></h3>
+<h3 id="options_14">Options<a class="headerlink" href="#options_14" title="Permanent link">&para;</a></h3>
 <table>
 <thead>
 <tr>
@@ -2722,7 +2762,7 @@ In the principal coordinate system, <span class="arithmatex">\(\tilde{Q}\)</span
 selection, exploiting ensemble averaging.</p>
 <p>The selection must resolve to molecular groups (not atomic) that carry
 rigid-body quaternion state.</p>
-<h3 id="example_14">Example<a class="headerlink" href="#example_14" title="Permanent link">&para;</a></h3>
+<h3 id="example_13">Example<a class="headerlink" href="#example_13" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><span class="nt">analysis</span><span class="p">:</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!RotationalDiffusion</span>
 <span class="w">    </span><span class="nt">selection</span><span class="p">:</span><span class="w"> </span><span class="s">"molecule</span><span class="nv"> </span><span class="s">Water"</span>
@@ -2730,7 +2770,7 @@ rigid-body quaternion state.</p>
 <span class="w">    </span><span class="nt">frequency</span><span class="p">:</span><span class="w"> </span><span class="kt">!Every</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">100</span>
 <span class="w">    </span><span class="nt">max_lag</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1000</span>
 </code></pre></div>
-<h3 id="options_16">Options<a class="headerlink" href="#options_16" title="Permanent link">&para;</a></h3>
+<h3 id="options_15">Options<a class="headerlink" href="#options_15" title="Permanent link">&para;</a></h3>
 <table>
 <thead>
 <tr>
@@ -2827,7 +2867,7 @@ implicit solvent the reported energies are free energies relative to pure solven
 not mechanical energies. A <code>rerun</code> weights every snapshot by its trajectory
 weight, so biased (penalty or Wang–Landau) trajectories are reweighted correctly.</p>
 <p>The selection must resolve to molecular groups (not atomic) of a single kind.</p>
-<h3 id="example_15">Example<a class="headerlink" href="#example_15" title="Permanent link">&para;</a></h3>
+<h3 id="example_14">Example<a class="headerlink" href="#example_14" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><span class="nt">analysis</span><span class="p">:</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!WidomRotation</span>
 <span class="w">    </span><span class="nt">selection</span><span class="p">:</span><span class="w"> </span><span class="s">"molecule</span><span class="nv"> </span><span class="s">phytate"</span>
@@ -2841,7 +2881,7 @@ weight, so biased (penalty or Wang–Landau) trajectories are reweighted correct
 <span class="w">    </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">widomrot.csv.gz</span>
 <span class="w">    </span><span class="nt">frequency</span><span class="p">:</span><span class="w"> </span><span class="kt">!Every</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">100</span>
 </code></pre></div>
-<h3 id="options_17">Options<a class="headerlink" href="#options_17" title="Permanent link">&para;</a></h3>
+<h3 id="options_16">Options<a class="headerlink" href="#options_16" title="Permanent link">&para;</a></h3>
 <table>
 <thead>
 <tr>
@@ -3062,10 +3102,10 @@ and defines the desired analysis objects (e.g. RDF, energy time series).</p>
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["content.code.copy", "navigation.top", "search.suggest", "search.highlight", "toc.follow"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"provider": "mike"}}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["content.code.copy", "navigation.top", "search.suggest", "search.highlight", "toc.follow"], "search": "../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"provider": "mike"}}</script>
     
     
-      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
+      <script src="../assets/javascripts/bundle.c21346df.min.js"></script>
       
         <script src="../javascript/mathjax.js"></script>
       
