@@ -241,53 +241,7 @@ impl PreferentialInteractionBuilder {
                 "PreferentialInteraction: radius must be finite and non-negative, got {radius}"
             );
         }
-        // The σ-derived radius path already rejects an empty ligand selection, but the explicit
-        // `radius` and `use_com` paths skip it, so check here for every path.
-        let matched = if self.use_com {
-            !context.resolve_groups(&self.ligand).is_empty()
-        } else {
-            !context.resolve_atoms(&self.ligand).is_empty()
-        };
-        anyhow::ensure!(
-            matched,
-            "PreferentialInteraction: ligand selection '{}' matched nothing",
-            self.ligand.source()
-        );
-        if let Some(solvent) = &self.solvent {
-            let matched = if solvent.use_com {
-                !context.resolve_groups(&solvent.selection).is_empty()
-            } else {
-                !context.resolve_atoms(&solvent.selection).is_empty()
-            };
-            anyhow::ensure!(
-                matched,
-                "PreferentialInteraction: solvent selection '{}' matched nothing",
-                solvent.selection.source()
-            );
-            let ligand_atoms: std::collections::HashSet<_> =
-                context.resolve_atoms(&self.ligand).into_iter().collect();
-            let solvent_atoms = context.resolve_atoms(&solvent.selection);
-            anyhow::ensure!(
-                solvent_atoms
-                    .iter()
-                    .all(|atom| !ligand_atoms.contains(atom)),
-                "PreferentialInteraction: ligand selection '{}' and solvent selection '{}' \
-                 overlap; they must count distinct species",
-                self.ligand.source(),
-                solvent.selection.source()
-            );
-            let substrate_atoms: std::collections::HashSet<_> =
-                context.resolve_atoms(&self.substrate).into_iter().collect();
-            anyhow::ensure!(
-                solvent_atoms
-                    .iter()
-                    .all(|atom| !substrate_atoms.contains(atom)),
-                "PreferentialInteraction: substrate selection '{}' and solvent selection '{}' \
-                 overlap; the substrate cannot be its own solvent",
-                self.substrate.source(),
-                solvent.selection.source()
-            );
-        }
+        self.validate_selections(context)?;
         let ligand_radius = self.ligand_radius(context)?;
         let reference = SurfaceReference::new(
             context,
@@ -338,6 +292,38 @@ impl PreferentialInteractionBuilder {
         })
     }
 
+    /// Each role must match something and count its own atoms.
+    fn validate_selections(&self, context: &impl ObserveContext) -> Result<()> {
+        let matches_any = |selection: &Selection, use_com: bool| {
+            if use_com {
+                !context.resolve_groups(selection).is_empty()
+            } else {
+                !context.resolve_atoms(selection).is_empty()
+            }
+        };
+        // The σ-derived radius path already rejects an empty ligand selection, but the explicit
+        // `radius` and `use_com` paths skip it, so check here for every path.
+        anyhow::ensure!(
+            matches_any(&self.ligand, self.use_com),
+            "PreferentialInteraction: ligand selection '{}' matched nothing",
+            self.ligand.source()
+        );
+        let ligand = ("ligand", &self.ligand);
+        let substrate = ("substrate", &self.substrate);
+        ensure_disjoint(context, ligand, substrate)?;
+        if let Some(explicit) = &self.solvent {
+            anyhow::ensure!(
+                matches_any(&explicit.selection, explicit.use_com),
+                "PreferentialInteraction: solvent selection '{}' matched nothing",
+                explicit.selection.source()
+            );
+            let solvent = ("solvent", &explicit.selection);
+            ensure_disjoint(context, ligand, solvent)?;
+            ensure_disjoint(context, substrate, solvent)?;
+        }
+        Ok(())
+    }
+
     /// The single radius that sets the whole ladder.
     ///
     /// An averaged radius would corrupt every reference volume, so a selection spanning atom kinds
@@ -380,6 +366,28 @@ impl PreferentialInteractionBuilder {
         }
         Ok(first)
     }
+}
+
+/// Refuse two roles that share an atom. A substrate atom counted as ligand, for example, sits at
+/// distance zero in every frame, so Γ would shift with nothing to show for it.
+fn ensure_disjoint(
+    context: &impl ObserveContext,
+    (first_role, first): (&str, &Selection),
+    (second_role, second): (&str, &Selection),
+) -> Result<()> {
+    let first_atoms: std::collections::HashSet<_> =
+        context.resolve_atoms(first).into_iter().collect();
+    anyhow::ensure!(
+        context
+            .resolve_atoms(second)
+            .iter()
+            .all(|atom| !first_atoms.contains(atom)),
+        "PreferentialInteraction: {first_role} selection '{}' and {second_role} selection '{}' \
+         overlap; narrow one of them, e.g. with `and not molecule ...`",
+        first.source(),
+        second.source()
+    );
+    Ok(())
 }
 
 /// A residue of the substrate, and the geometry it offers a ligand.
@@ -1955,6 +1963,29 @@ propagate: {{seed: !Fixed 1, criterion: Metropolis, steps: 0, collections: []}}
             frequency: Frequency::Every(1),
         };
         let error = builder.build(&context).unwrap_err().to_string();
+        assert!(error.contains("overlap"), "{error}");
+    }
+
+    /// A substrate atom counted as ligand sits at distance zero in every frame, which would shift Γ
+    /// without any other sign. An explicit `radius` skips the mixed-σ refusal, leaving only this guard.
+    #[test]
+    fn a_ligand_sharing_atoms_with_the_substrate_is_refused() {
+        let context = system(&[[0.0, 0.0, 0.0]], &[[25.0, 0.0, 0.0]]);
+        let error = PreferentialInteractionBuilder {
+            substrate: Selection::parse("atomtype SUB").unwrap(),
+            ligand: Selection::parse("atomtype SUB or atomtype LIG").unwrap(),
+            use_com: false,
+            solvent: None,
+            radius: Some(1.5),
+            shell: SHELL,
+            solvent_probe: SOLVENT_PROBE,
+            profile: None,
+            file: None,
+            frequency: Frequency::Every(1),
+        }
+        .build(&context)
+        .unwrap_err()
+        .to_string();
         assert!(error.contains("overlap"), "{error}");
     }
 

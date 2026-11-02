@@ -1014,7 +1014,7 @@ Each ligand species needs its own block.
 Key             | Required | Default | Description
 --------------- | -------- | ------- | --------------------------------------------------------
 `substrate`     | yes      |         | One complete molecular group
-`ligand`        | yes      |         | Atoms, or molecules when `use_com` is set, whose excess is measured
+`ligand`        | yes      |         | Atoms, or molecules when `use_com` is set, whose excess is measured; must not share atoms with `substrate` or `solvent`
 `shell`         | yes      |         | The δ values to scan: `{max, resolution}` in Å, with `max` a multiple of `resolution`
 `frequency`     | yes      |         | Sample frequency, e.g. `!Every 100`
 `use_com`       | no       | `false` | Count the mass centre of each selected molecule instead of each atom
