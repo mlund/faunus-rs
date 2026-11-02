@@ -704,7 +704,7 @@ CV values return infinite energy, short-circuiting expensive downstream terms.
 ## Solvent Accessible Surface Area (SASA)
 
 Computes an implicit solvation energy based on the solvent-accessible surface area
-of each particle, using Voronoi tessellation (via `voronota-ltr`).
+of each particle, using Voronoi tessellation (via [`voronota-ltr`](https://github.com/mlund/voronota-ltr)).
 The energy is summed over all active particles:
 
 $$U = \sum_i \gamma_i \, A_i$$
