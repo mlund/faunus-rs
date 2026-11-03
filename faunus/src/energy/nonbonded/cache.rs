@@ -12,6 +12,10 @@ pub(in crate::energy) struct GroupEnergyCache {
     /// `group_energies[i]` = Σ_j pairwise[i * n + j]
     pub(in crate::energy) group_energies: Vec<f64>,
     pub(in crate::energy) n_groups: usize,
+    /// Rows to recompute from current positions before the next read. A partial update (one atom
+    /// of a GCMC mega-group, a few beads of a chain) only marks its row, so a burst of them costs
+    /// one row recompute instead of one per move.
+    pub(in crate::energy) stale_rows: Vec<usize>,
     // Backup buffers live inline so save_backup() reuses capacity instead of
     // allocating new Vecs on every MC step. `backup_rows` holds the pre-move rows of
     // `backup_indices`, concatenated `n_groups` entries each.

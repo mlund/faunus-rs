@@ -1107,3 +1107,100 @@ fn multi_group_partial_update_handles_more_than_eight_affected_atoms() {
     );
     assert_approx_eq!(f64, nonbonded.energy(&system, &change), expected);
 }
+
+/// Partial updates only mark their cache row stale, so a run of single-atom moves of an atomic
+/// group, accepted or rejected, followed by rigid-body moves must leave every cached group energy
+/// equal to a cache built from scratch.
+#[test]
+fn group_energy_cache_survives_partial_updates_and_rejects() {
+    use crate::energy::stateful::StatefulEnergy;
+    use crate::Point;
+    use rand::{Rng, SeedableRng};
+    use std::io::Write;
+
+    let yaml = "atoms:\n  - {name: A, mass: 1.0, sigma: 2.0, eps: 1.0}\n  \
+                - {name: I, mass: 1.0, sigma: 1.0, eps: 1.0}\n\
+                molecules:\n  - {name: M, atoms: [A, A, A], degrees_of_freedom: Rigid}\n  \
+                - {name: ION, atoms: [I], atomic: true}\n\
+                system:\n  cell: !Cuboid [12.0, 12.0, 12.0]\n  \
+                medium: {permittivity: !Vacuum, temperature: 298.15}\n  \
+                energy:\n    - !Nonbonded\n        default:\n          - !LennardJones {mixing: LB}\n  \
+                blocks:\n    - molecule: M\n      N: 2\n      \
+                insert: !Manual [[0.0, 0.0, 0.0], [2.0, 0.0, 0.0], [4.0, 0.0, 0.0], \
+                [0.0, 4.0, 0.0], [2.0, 4.0, 0.0], [4.0, 4.0, 0.0]]\n    \
+                - molecule: ION\n      N: 4\n      \
+                insert: !Manual [[0.0, 0.0, 3.0], [2.0, 2.0, 3.0], [4.0, 0.0, -3.0], [1.0, 4.0, 3.0]]\n";
+    let mut tmp = tempfile::NamedTempFile::new().unwrap();
+    tmp.write_all(yaml.as_bytes()).unwrap();
+    let path = tmp.path();
+
+    let topology = Arc::new(Topology::from_file(path).unwrap());
+    let builder = HamiltonianBuilder::from_file(path)
+        .unwrap()
+        .nonbonded()
+        .cloned()
+        .unwrap();
+    let new_matrix = || NonbondedMatrix::new(&builder, &topology, None).unwrap();
+    let mut system = Backend::from_raw_parts(
+        Arc::clone(&topology),
+        Cell::Cuboid(Cuboid::cubic(12.0)),
+        RefCell::new(Hamiltonian::from(vec![new_matrix().into()])),
+        None,
+        &mut rand::thread_rng(),
+    )
+    .unwrap();
+
+    let mut cached = new_matrix();
+    let rigid = |g| Change::SingleGroup(g, GroupChange::RigidBody);
+    let check = |cached: &NonbondedMatrix, system: &Backend| {
+        let fresh = new_matrix();
+        for g in 0..2 {
+            assert_approx_eq!(
+                f64,
+                cached.partial_energy(system, &rigid(g)),
+                fresh.partial_energy(system, &rigid(g)),
+                epsilon = 1e-9
+            );
+        }
+    };
+    cached.partial_energy(&system, &rigid(0)); // builds the cache
+
+    let n_ions = system.groups()[2].iter_active().count();
+    let mut rng = rand::rngs::StdRng::seed_from_u64(1);
+    for trial in 0..40 {
+        let accept = trial % 3 != 0;
+        // Ion moves in a burst, then a rigid-body move, as in a GCMC sweep
+        let (change, indices, new): (Change, Vec<usize>, Vec<Point>) = if trial % 4 == 3 {
+            let g = &system.groups()[trial % 2];
+            let shift = Point::new(rng.gen_range(-1.0..1.0), rng.gen_range(-1.0..1.0), 0.5);
+            let idx: Vec<usize> = g.iter_active().collect();
+            let pos = idx.iter().map(|&i| system.position(i) + shift).collect();
+            (rigid(trial % 2), idx, pos)
+        } else {
+            let rel = rng.gen_range(0..n_ions);
+            let i = system.groups()[2].iter_active().nth(rel).unwrap();
+            let pos = Point::new(
+                rng.gen_range(-6.0..6.0),
+                rng.gen_range(-6.0..6.0),
+                rng.gen_range(-6.0..6.0),
+            );
+            let change =
+                Change::SingleGroup(2, GroupChange::PartialUpdate(vec![RelIndex::new(rel)]));
+            (change, vec![i], vec![pos])
+        };
+        let old: Vec<Point> = indices.iter().map(|&i| system.position(i)).collect();
+
+        cached.partial_energy(&system, &change);
+        cached.save_backup(&system, &change);
+        system.set_positions(indices.iter().copied(), new.iter());
+        cached.refresh(&system, &change).unwrap();
+        cached.partial_energy(&system, &change);
+        if accept {
+            cached.discard_backup();
+        } else {
+            system.set_positions(indices.iter().copied(), old.iter());
+            cached.undo();
+        }
+        check(&cached, &system);
+    }
+}

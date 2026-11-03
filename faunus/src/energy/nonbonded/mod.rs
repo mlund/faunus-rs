@@ -310,6 +310,15 @@ fn particle_arrays_from_context<'a>(
     }
 }
 
+/// Particle arrays without the cell list, so group-pair cache rows are fully recomputed.
+fn full_pair_arrays<'a>(
+    context: &'a impl ObserveContext,
+) -> ParticleArrays<'a, impl SimulationCell + 'a> {
+    let mut arrays = particle_arrays_from_context(context);
+    arrays.cell_list = None;
+    arrays
+}
+
 impl<'a, C: SimulationCell> ParticleArrays<'a, C> {
     /// Minimum image squared distance from `(xi, yi, zi)` to particle `j`.
     ///
@@ -401,6 +410,12 @@ impl<P: IsotropicTwobodyEnergy> StatefulEnergy for NonbondedMatrix<P> {
         if let Change::SingleGroup(gi, GroupChange::RigidBody) = change {
             if let Some(ref cache) = *self.cache.read().unwrap() {
                 debug_assert_eq!(cache.n_groups, context.groups().len());
+                if cache.stale_rows.is_empty() {
+                    return cache.group_energies[*gi];
+                }
+            }
+            if let Some(cache) = self.cache.write().unwrap().as_mut() {
+                self.refresh_stale_rows(&full_pair_arrays(context), context.groups(), cache);
                 return cache.group_energies[*gi];
             }
         }
@@ -429,11 +444,14 @@ impl<P: IsotropicTwobodyEnergy> StatefulEnergy for NonbondedMatrix<P> {
 
     fn save_backup(&mut self, _context: &impl ObserveContext, change: &Change) {
         match change {
-            Change::SingleGroup(gi, GroupChange::RigidBody | GroupChange::PartialUpdate(_)) => {
+            Change::SingleGroup(gi, GroupChange::RigidBody) => {
                 if let Some(c) = self.cache.get_mut().unwrap().as_mut() {
                     c.save_backup([*gi]);
                 }
             }
+            // `update_cache` only marks the row stale, and a stale row is recomputed from the
+            // positions current at the next read (restored ones after a reject): no backup needed.
+            Change::SingleGroup(_, GroupChange::PartialUpdate(_)) => {}
             // Topology-changing moves (resize, insert, identity swap, etc.)
             // invalidate the entire N×N pairwise matrix.
             Change::None
@@ -1218,10 +1236,22 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
             .collect()
     }
 
-    /// Recompute the moved group's cache row with new positions (accept/reject agnostic).
+    /// Bring the moved group's cache row up to date with new positions (accept/reject agnostic).
+    ///
+    /// A rigid-body move recomputes the row now. A partial update only marks it stale: its row
+    /// costs O(group size × N) however few atoms moved, which for GCMC mega-groups made every
+    /// ion move quadratic in N.
     pub(super) fn update_cache(&mut self, context: &impl ObserveContext, change: &Change) {
         let group_index = match change {
-            Change::SingleGroup(gi, GroupChange::RigidBody | GroupChange::PartialUpdate(_)) => gi,
+            Change::SingleGroup(gi, GroupChange::RigidBody) => *gi,
+            Change::SingleGroup(gi, GroupChange::PartialUpdate(_)) => {
+                if let Some(cache) = self.cache.get_mut().unwrap().as_mut() {
+                    if !cache.stale_rows.contains(gi) {
+                        cache.stale_rows.push(*gi);
+                    }
+                }
+                return;
+            }
             Change::None
             | Change::Everything
             | Change::Volume(..)
@@ -1233,29 +1263,51 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
         // group_pair_energy(&self), and the cache lives inside self.
         let mut cache_opt = self.cache.get_mut().unwrap().take();
         if let Some(ref mut cache) = cache_opt {
-            // Bypass cell list so all group-pair interactions are fully recomputed
-            let mut arrays = particle_arrays_from_context(context);
-            arrays.cell_list = None;
-            let groups = context.groups();
-            let n = cache.n_groups;
-            let m = *group_index;
-
-            for gj in groups.iter() {
-                let j = gj.index();
-                if j == m {
-                    continue;
-                }
-                let new_pair = self.group_pair_energy(&arrays, &groups[m], gj);
-                let old_pair = cache.pairwise[m * n + j];
-                let delta = new_pair - old_pair;
-                cache.pairwise[m * n + j] = new_pair;
-                cache.pairwise[j * n + m] = new_pair;
-                cache.group_energies[j] += delta;
-            }
-            // Resum from the updated row to avoid accumulating floating-point drift.
-            cache.group_energies[m] = (0..n).map(|j| cache.pairwise[m * n + j]).sum();
+            // Rows still stale stay stale: refreshing them here, after the backup, would desync
+            // them from the group energies an undo restores.
+            self.recompute_row(
+                &full_pair_arrays(context),
+                context.groups(),
+                cache,
+                group_index,
+            );
         }
         *self.cache.get_mut().unwrap() = cache_opt;
+    }
+
+    /// Recompute row `m` from current positions and propagate the change to the other groups' totals.
+    fn recompute_row(
+        &self,
+        arrays: &ParticleArrays<'_, impl SimulationCell>,
+        groups: &[Group],
+        cache: &mut GroupEnergyCache,
+        m: usize,
+    ) {
+        let n = cache.n_groups;
+        for gj in groups.iter() {
+            let j = gj.index();
+            if j == m {
+                continue;
+            }
+            let new_pair = self.group_pair_energy(arrays, &groups[m], gj);
+            let delta = new_pair - cache.pairwise[m * n + j];
+            cache.pairwise[m * n + j] = new_pair;
+            cache.pairwise[j * n + m] = new_pair;
+            cache.group_energies[j] += delta;
+        }
+        // Resum from the updated row to avoid accumulating floating-point drift.
+        cache.group_energies[m] = (0..n).map(|j| cache.pairwise[m * n + j]).sum();
+    }
+
+    fn refresh_stale_rows(
+        &self,
+        arrays: &ParticleArrays<'_, impl SimulationCell>,
+        groups: &[Group],
+        cache: &mut GroupEnergyCache,
+    ) {
+        while let Some(m) = cache.stale_rows.pop() {
+            self.recompute_row(arrays, groups, cache, m);
+        }
     }
 
     /// Invalidate the pairwise energy cache (e.g. after Langevin dynamics).
