@@ -14,17 +14,15 @@
 
 //! Implementation of the Nonbonded energy terms.
 
-pub(crate) mod cache;
 #[cfg(test)]
 mod tests;
 
+use super::group_pair_cache::{GroupPairCache, GroupPairs, PairFn};
 use super::pairpot::PairPot;
 use super::stateful::{derived_energy, StatefulEnergy};
 use crate::ObserveContext;
-use cache::GroupEnergyCache;
 use interatomic::twobody::{IsotropicTwobodyEnergy, SplineConfig, SplinedPotential};
 use std::path::Path;
-use std::sync::RwLock;
 
 use crate::{
     cell::{PbcParams, SimulationCell},
@@ -59,14 +57,14 @@ const fn canonical_mol_pair(a: MoleculeId, b: MoleculeId) -> [MoleculeId; 2] {
 /// Entire molecule-type pairs can be excluded via `exclude_molecule_pair`,
 /// skipping all inter-group interactions between those molecule kinds.
 /// This is used automatically when [`super::tabulated::TabulatedEnergy`] handles the same pairs.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct NonbondedMatrix<P = PairPot> {
     /// Matrix of pair potentials based on atom type ids.
     pub(super) potentials: SquareMatrix<P>,
     /// Matrix of excluded interactions.
     pub(super) exclusions: ExclusionMatrix,
     /// Pairwise inter-group energy cache for O(1) old-energy lookup in MC moves.
-    cache: RwLock<Option<GroupEnergyCache>>,
+    cache: GroupPairCache,
     /// Global interaction cutoff for bounding-sphere culling (None = no culling).
     cutoff: Option<f64>,
     /// Enable bounding-sphere culling of distant group pairs.
@@ -74,19 +72,6 @@ pub struct NonbondedMatrix<P = PairPot> {
     /// Molecule-type pairs excluded from nonbonded evaluation (e.g. handled by TabulatedEnergy).
     /// Each entry is a sorted `[mol_a, mol_b]` pair of molecule kind indices.
     molecule_pair_exclusions: Vec<[MoleculeId; 2]>,
-}
-
-impl<P: Clone> Clone for NonbondedMatrix<P> {
-    fn clone(&self) -> Self {
-        Self {
-            potentials: self.potentials.clone(),
-            exclusions: self.exclusions.clone(),
-            cache: RwLock::new(self.cache.read().unwrap().clone()),
-            cutoff: self.cutoff,
-            use_bounding_spheres: self.use_bounding_spheres,
-            molecule_pair_exclusions: self.molecule_pair_exclusions.clone(),
-        }
-    }
 }
 
 /// Type alias for the splined variant of [`NonbondedMatrix`].
@@ -406,29 +391,15 @@ impl<P: IsotropicTwobodyEnergy> StatefulEnergy for NonbondedMatrix<P> {
     }
 
     fn partial_energy(&self, context: &impl ObserveContext, change: &Change) -> f64 {
-        // O(1) cache hit for rigid body moves (the MC hot path)
+        // The MC hot path: O(1) unless the cache needs building or has stale rows
         if let Change::SingleGroup(gi, GroupChange::RigidBody) = change {
-            if let Some(ref cache) = *self.cache.read().unwrap() {
-                debug_assert_eq!(cache.n_groups, context.groups().len());
-                if cache.stale_rows.is_empty() {
-                    return cache.group_energies[*gi];
-                }
-            }
-            if let Some(cache) = self.cache.write().unwrap().as_mut() {
-                self.refresh_stale_rows(&full_pair_arrays(context), context.groups(), cache);
-                return cache.group_energies[*gi];
-            }
+            return self.cache.group_energy(*gi, &self.cached_pairs(context));
         }
 
         let arrays = particle_arrays_from_context(context);
         let groups = context.groups();
         match change {
             Change::Everything | Change::Volume(_, _) => self.total_nonbonded(&arrays, groups),
-            Change::SingleGroup(gi, GroupChange::RigidBody) => {
-                // Cache miss — lazy-initialize all pairwise energies
-                self.initialize_cache(&arrays, groups);
-                self.cache.read().unwrap().as_ref().unwrap().group_energies[*gi]
-            }
             Change::SingleGroup(group_index, group_change) => {
                 self.single_group_change(&arrays, groups, *group_index, group_change)
             }
@@ -438,42 +409,20 @@ impl<P: IsotropicTwobodyEnergy> StatefulEnergy for NonbondedMatrix<P> {
     }
 
     fn refresh(&mut self, context: &impl ObserveContext, change: &Change) -> anyhow::Result<()> {
-        self.update_cache(context, change);
+        self.cache.refresh(change, &self.cached_pairs(context));
         Ok(())
     }
 
-    fn save_backup(&mut self, _context: &impl ObserveContext, change: &Change) {
-        match change {
-            Change::SingleGroup(gi, GroupChange::RigidBody) => {
-                if let Some(c) = self.cache.get_mut().unwrap().as_mut() {
-                    c.save_backup([*gi]);
-                }
-            }
-            // `update_cache` only marks the row stale, and a stale row is recomputed from the
-            // positions current at the next read (restored ones after a reject): no backup needed.
-            Change::SingleGroup(_, GroupChange::PartialUpdate(_)) => {}
-            // Topology-changing moves (resize, insert, identity swap, etc.)
-            // invalidate the entire N×N pairwise matrix.
-            Change::None
-            | Change::Everything
-            | Change::Volume(..)
-            | Change::Groups(..)
-            | Change::SingleGroup(..) => {
-                *self.cache.get_mut().unwrap() = None;
-            }
-        }
+    fn save_backup(&mut self, context: &impl ObserveContext, change: &Change) {
+        self.cache.save_backup(change, &self.cached_pairs(context));
     }
 
     fn undo(&mut self) {
-        if let Some(c) = self.cache.get_mut().unwrap().as_mut() {
-            c.undo();
-        }
+        self.cache.undo();
     }
 
     fn discard_backup(&mut self) {
-        if let Some(c) = self.cache.get_mut().unwrap().as_mut() {
-            c.discard_backup();
-        }
+        self.cache.discard_backup();
     }
 }
 
@@ -596,7 +545,7 @@ impl NonbondedMatrix {
         Ok(Self {
             potentials,
             exclusions,
-            cache: RwLock::new(None),
+            cache: GroupPairCache::default(),
             cutoff: None,
             use_bounding_spheres: true,
             molecule_pair_exclusions: Vec::new(),
@@ -654,7 +603,7 @@ impl NonbondedMatrix<SplinedPotential> {
         Self {
             potentials,
             exclusions: nonbonded.exclusions.clone(),
-            cache: RwLock::new(None),
+            cache: GroupPairCache::default(),
             cutoff: Some(cutoff),
             use_bounding_spheres: true,
             molecule_pair_exclusions: nonbonded.molecule_pair_exclusions.clone(),
@@ -1114,25 +1063,15 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
             .sum()
     }
 
-    /// Compute all pairwise inter-group energies and populate the cache.
-    fn initialize_cache(&self, arrays: &ParticleArrays<'_, impl SimulationCell>, groups: &[Group]) {
-        let n = groups.len();
-        let mut pairwise = vec![0.0; n * n];
-        let mut group_energies = vec![0.0; n];
-
-        for (gi, group_i) in groups.iter().enumerate() {
-            debug_assert!(group_i.index() == gi);
-            for group_j in groups.iter().skip(gi + 1) {
-                let gj = group_j.index();
-                let e = self.group_pair_energy(arrays, group_i, group_j);
-                pairwise[gi * n + gj] = e;
-                pairwise[gj * n + gi] = e;
-                group_energies[gi] += e;
-                group_energies[gj] += e;
-            }
+    /// Cached pair energies skip the cell list: a cached row must hold every pair of the two groups,
+    /// and `group_pair_energy` already culls by bounding sphere.
+    fn cached_pairs<'a>(&'a self, context: &'a impl ObserveContext) -> impl GroupPairs + 'a {
+        let arrays = full_pair_arrays(context);
+        let groups = context.groups();
+        PairFn {
+            n_groups: groups.len(),
+            pair: move |i: usize, j: usize| self.group_pair_energy(&arrays, &groups[i], &groups[j]),
         }
-
-        *self.cache.write().unwrap() = Some(GroupEnergyCache::new(pairwise, group_energies, n));
     }
 
     /// Compute per-atom nonbonded forces for all active particles using particle arrays.
@@ -1234,86 +1173,5 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
             .into_iter()
             .map(|[x, y, z]| crate::Point::new(x, y, z))
             .collect()
-    }
-
-    /// Bring the moved group's cache row up to date with new positions (accept/reject agnostic).
-    ///
-    /// A rigid-body move recomputes the row now. A partial update only marks it stale: its row
-    /// costs O(group size × N) however few atoms moved, which for GCMC mega-groups made every
-    /// ion move quadratic in N.
-    pub(super) fn update_cache(&mut self, context: &impl ObserveContext, change: &Change) {
-        let group_index = match change {
-            Change::SingleGroup(gi, GroupChange::RigidBody) => *gi,
-            Change::SingleGroup(gi, GroupChange::PartialUpdate(_)) => {
-                if let Some(cache) = self.cache.get_mut().unwrap().as_mut() {
-                    if !cache.stale_rows.contains(gi) {
-                        cache.stale_rows.push(*gi);
-                    }
-                }
-                return;
-            }
-            Change::None
-            | Change::Everything
-            | Change::Volume(..)
-            | Change::Groups(..)
-            | Change::SingleGroup(..) => return,
-        };
-
-        // take() avoids a borrow conflict: we need &mut cache while calling
-        // group_pair_energy(&self), and the cache lives inside self.
-        let mut cache_opt = self.cache.get_mut().unwrap().take();
-        if let Some(ref mut cache) = cache_opt {
-            // Rows still stale stay stale: refreshing them here, after the backup, would desync
-            // them from the group energies an undo restores.
-            self.recompute_row(
-                &full_pair_arrays(context),
-                context.groups(),
-                cache,
-                group_index,
-            );
-        }
-        *self.cache.get_mut().unwrap() = cache_opt;
-    }
-
-    /// Recompute row `m` from current positions and propagate the change to the other groups' totals.
-    fn recompute_row(
-        &self,
-        arrays: &ParticleArrays<'_, impl SimulationCell>,
-        groups: &[Group],
-        cache: &mut GroupEnergyCache,
-        m: usize,
-    ) {
-        let n = cache.n_groups;
-        for gj in groups.iter() {
-            let j = gj.index();
-            if j == m {
-                continue;
-            }
-            let new_pair = self.group_pair_energy(arrays, &groups[m], gj);
-            let delta = new_pair - cache.pairwise[m * n + j];
-            cache.pairwise[m * n + j] = new_pair;
-            cache.pairwise[j * n + m] = new_pair;
-            cache.group_energies[j] += delta;
-        }
-        // Resum from the updated row to avoid accumulating floating-point drift.
-        cache.group_energies[m] = (0..n).map(|j| cache.pairwise[m * n + j]).sum();
-    }
-
-    fn refresh_stale_rows(
-        &self,
-        arrays: &ParticleArrays<'_, impl SimulationCell>,
-        groups: &[Group],
-        cache: &mut GroupEnergyCache,
-    ) {
-        while let Some(m) = cache.stale_rows.pop() {
-            self.recompute_row(arrays, groups, cache, m);
-        }
-    }
-
-    /// Invalidate the pairwise energy cache (e.g. after Langevin dynamics).
-    /// The cache will be lazily rebuilt on the next rigid-body energy evaluation.
-    #[cfg_attr(not(feature = "gpu"), allow(dead_code))]
-    pub(crate) fn invalidate_cache(&mut self) {
-        *self.cache.get_mut().unwrap() = None;
     }
 }

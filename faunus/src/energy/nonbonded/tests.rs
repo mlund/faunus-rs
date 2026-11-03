@@ -1108,6 +1108,83 @@ fn multi_group_partial_update_handles_more_than_eight_affected_atoms() {
     assert_approx_eq!(f64, nonbonded.energy(&system, &change), expected);
 }
 
+/// A cubic system from YAML input, with a factory for matrices independent of the system's own.
+fn backend_from_yaml(yaml: &str, side: f64) -> (Backend, impl Fn() -> NonbondedMatrix) {
+    use std::io::Write;
+
+    let mut tmp = tempfile::NamedTempFile::new().unwrap();
+    tmp.write_all(yaml.as_bytes()).unwrap();
+    let path = tmp.path();
+
+    let topology = Arc::new(Topology::from_file(path).unwrap());
+    let builder = HamiltonianBuilder::from_file(path)
+        .unwrap()
+        .nonbonded()
+        .cloned()
+        .unwrap();
+    let new_matrix = {
+        let topology = Arc::clone(&topology);
+        move || NonbondedMatrix::new(&builder, &topology, None).unwrap()
+    };
+    let system = Backend::from_raw_parts(
+        topology,
+        Cell::Cuboid(Cuboid::cubic(side)),
+        RefCell::new(Hamiltonian::from(vec![new_matrix().into()])),
+        None,
+        &mut rand::thread_rng(),
+    )
+    .unwrap();
+    (system, new_matrix)
+}
+
+/// A rerun installs each frame with `restore_configuration`, with no backup or move in between. The
+/// frame's group energies must not come from the cache built on the previous frame. With two
+/// single-atom groups, the group energy equals the total, which is computed without the cache.
+#[test]
+fn restored_configuration_is_not_served_from_the_previous_cache() {
+    use crate::context::{Context, WithHamiltonian};
+    use crate::energy::EnergyChange;
+    use crate::{Particle, Point};
+
+    let yaml = "atoms:\n  - {name: A, mass: 1.0, sigma: 2.0, eps: 1.0}\n\
+                molecules:\n  - {name: M, atoms: [A], degrees_of_freedom: Rigid}\n\
+                system:\n  cell: !Cuboid [20.0, 20.0, 20.0]\n  \
+                medium: {permittivity: !Vacuum, temperature: 298.15}\n  \
+                energy:\n    - !Nonbonded\n        default:\n          - !LennardJones {mixing: LB}\n  \
+                blocks:\n    - molecule: M\n      N: 2\n      \
+                insert: !Manual [[0.0, 0.0, 0.0], [3.0, 0.0, 0.0]]\n";
+    let (mut system, _) = backend_from_yaml(yaml, 20.0);
+
+    let group_energy = |system: &Backend| {
+        system
+            .hamiltonian()
+            .energy(system, &Change::SingleGroup(0, GroupChange::RigidBody))
+    };
+    let first_frame = group_energy(&system); // builds the cache
+
+    let kind = system.atom_kind(0).get();
+    let particles = [
+        Particle::new(kind, Point::new(0.0, 0.0, 0.0)),
+        Particle::new(kind, Point::new(5.0, 0.0, 0.0)),
+    ];
+    let sizes: Vec<_> = system
+        .groups()
+        .iter()
+        .map(|g| GroupSize::from_count(g.len(), g.capacity()))
+        .collect();
+    let quaternions: Vec<_> = system.groups().iter().map(|g| *g.quaternion()).collect();
+    system
+        .restore_configuration(None, &particles, &sizes, &quaternions)
+        .unwrap();
+
+    let total = system.hamiltonian().energy(&system, &Change::Everything);
+    assert!(
+        (total - first_frame).abs() > 1e-3,
+        "the frames must differ for this test to mean anything"
+    );
+    assert_approx_eq!(f64, group_energy(&system), total, epsilon = 1e-9);
+}
+
 /// Partial updates only mark their cache row stale, so a run of single-atom moves of an atomic
 /// group, accepted or rejected, followed by rigid-body moves must leave every cached group energy
 /// equal to a cache built from scratch.
@@ -1116,7 +1193,6 @@ fn group_energy_cache_survives_partial_updates_and_rejects() {
     use crate::energy::stateful::StatefulEnergy;
     use crate::Point;
     use rand::{Rng, SeedableRng};
-    use std::io::Write;
 
     let yaml = "atoms:\n  - {name: A, mass: 1.0, sigma: 2.0, eps: 1.0}\n  \
                 - {name: I, mass: 1.0, sigma: 1.0, eps: 1.0}\n\
@@ -1130,25 +1206,7 @@ fn group_energy_cache_survives_partial_updates_and_rejects() {
                 [0.0, 4.0, 0.0], [2.0, 4.0, 0.0], [4.0, 4.0, 0.0]]\n    \
                 - molecule: ION\n      N: 4\n      \
                 insert: !Manual [[0.0, 0.0, 3.0], [2.0, 2.0, 3.0], [4.0, 0.0, -3.0], [1.0, 4.0, 3.0]]\n";
-    let mut tmp = tempfile::NamedTempFile::new().unwrap();
-    tmp.write_all(yaml.as_bytes()).unwrap();
-    let path = tmp.path();
-
-    let topology = Arc::new(Topology::from_file(path).unwrap());
-    let builder = HamiltonianBuilder::from_file(path)
-        .unwrap()
-        .nonbonded()
-        .cloned()
-        .unwrap();
-    let new_matrix = || NonbondedMatrix::new(&builder, &topology, None).unwrap();
-    let mut system = Backend::from_raw_parts(
-        Arc::clone(&topology),
-        Cell::Cuboid(Cuboid::cubic(12.0)),
-        RefCell::new(Hamiltonian::from(vec![new_matrix().into()])),
-        None,
-        &mut rand::thread_rng(),
-    )
-    .unwrap();
+    let (mut system, new_matrix) = backend_from_yaml(yaml, 12.0);
 
     let mut cached = new_matrix();
     let rigid = |g| Change::SingleGroup(g, GroupChange::RigidBody);

@@ -193,8 +193,8 @@ impl LangevinRunner {
             }
         }
 
-        // Invalidate energy caches since all molecules moved
-        context.hamiltonian_mut().invalidate_caches();
+        // Every energy term may hold state derived from the coordinates just written
+        context.update(&crate::Change::Everything)?;
 
         let (t_trans, t_rot) = gpu.download_temperature();
         self.t_trans.add(t_trans as f64);

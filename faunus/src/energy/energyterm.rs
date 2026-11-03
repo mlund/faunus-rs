@@ -214,19 +214,6 @@ impl EnergyTerm {
         }
     }
 
-    /// Invalidate any internal energy caches (e.g. after Langevin dynamics
-    /// has moved all molecules, making the pairwise cache stale).
-    #[cfg_attr(not(feature = "gpu"), allow(dead_code))]
-    pub(crate) fn invalidate_cache(&mut self) {
-        #[allow(clippy::wildcard_enum_match_arm)]
-        // only nonbonded terms hold an invalidatable cache
-        match self {
-            Self::NonbondedMatrix(x) => x.invalidate_cache(),
-            Self::NonbondedMatrixSplined(x) => x.invalidate_cache(),
-            _ => {}
-        }
-    }
-
     /// Optional per-term information as YAML, for output reporting.
     pub fn to_yaml(&self) -> Option<yaml_serde::Value> {
         match self {
