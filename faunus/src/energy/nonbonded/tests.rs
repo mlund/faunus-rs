@@ -1185,6 +1185,122 @@ fn restored_configuration_is_not_served_from_the_previous_cache() {
     assert_approx_eq!(f64, group_energy(&system), total, epsilon = 1e-9);
 }
 
+/// A reaction only marks the rows it names as stale. After each kind, rejected then accepted, every
+/// cached group energy must equal a cache built from scratch. Swap-and-pop and activation change the
+/// active set, so a row has to be recomputed from whichever set is current when it is read.
+#[test]
+fn group_energy_cache_survives_speciation() {
+    use crate::context::{Context, WithHamiltonian};
+    use crate::energy::EnergyChange;
+    use crate::propagate::ProposedMove;
+    use crate::transform::SpeciationAction;
+    use crate::Point;
+
+    let yaml = "atoms:\n  - {name: A, mass: 1.0, sigma: 2.0, eps: 1.0}\n  \
+                - {name: I, mass: 1.0, sigma: 1.0, eps: 1.0}\n\
+                molecules:\n  - {name: M, atoms: [A, A], degrees_of_freedom: Rigid}\n  \
+                - {name: ION, atoms: [I], atomic: true}\n\
+                system:\n  cell: !Cuboid [12.0, 12.0, 12.0]\n  \
+                medium: {permittivity: !Vacuum, temperature: 298.15}\n  \
+                energy:\n    - !Nonbonded\n        default:\n          - !LennardJones {mixing: LB}\n  \
+                blocks:\n    - molecule: M\n      N: 3\n      active: 2\n      \
+                insert: !Manual [[0.0, 0.0, 0.0], [2.0, 0.0, 0.0], [0.0, 4.0, 0.0], [2.0, 4.0, 0.0], \
+                [0.0, -4.0, 0.0], [2.0, -4.0, 0.0]]\n    \
+                - molecule: ION\n      N: 4\n      active: 2\n      \
+                insert: !Manual [[0.0, 0.0, 3.0], [2.0, 2.0, 3.0], [4.0, 0.0, -3.0], [1.0, 4.0, 3.0]]\n";
+    let (mut system, new_matrix) = backend_from_yaml(yaml, 12.0);
+    const M_SLOT: usize = 2;
+    const IONS: usize = 3;
+
+    let rigid = |g| Change::SingleGroup(g, GroupChange::RigidBody);
+    let check = |system: &Backend| {
+        let fresh = new_matrix();
+        for g in 0..=IONS {
+            assert_approx_eq!(
+                f64,
+                system.hamiltonian().energy(system, &rigid(g)),
+                fresh.partial_energy(system, &rigid(g)),
+                epsilon = 1e-9
+            );
+        }
+    };
+    let swap_to = system.atom_kind(system.groups()[0].iter_active().next().unwrap());
+    check(&system); // builds the cache
+
+    let propose = |system: &Backend, kind: usize| -> ProposedMove {
+        let ions = &system.groups()[IONS];
+        let first_ion = ions.iter_active().next().unwrap();
+        match kind {
+            0 => ProposedMove::speciation(
+                vec![SpeciationAction::ActivateAtom {
+                    group_index: IONS,
+                    position: Point::new(-3.0, 1.0, 2.0),
+                }],
+                vec![(
+                    IONS,
+                    GroupChange::ResizePartial(
+                        GroupSize::Expand(1),
+                        vec![RelIndex::new(ions.len())],
+                    ),
+                )],
+            ),
+            1 => ProposedMove::speciation(
+                vec![SpeciationAction::DeactivateAtom {
+                    group_index: IONS,
+                    abs_index: first_ion,
+                }],
+                vec![(
+                    IONS,
+                    GroupChange::AtomicShrink {
+                        rels: vec![RelIndex::new(0)],
+                        n_old: ions.len(),
+                    },
+                )],
+            ),
+            2 => ProposedMove::speciation(
+                vec![SpeciationAction::ActivateGroup {
+                    group_index: M_SLOT,
+                    positions: vec![Point::new(0.0, -4.0, 0.0), Point::new(2.0, -4.0, 0.0)],
+                }],
+                vec![(M_SLOT, GroupChange::Resize(GroupSize::Full))],
+            ),
+            3 => ProposedMove::speciation(
+                vec![SpeciationAction::DeactivateGroup(M_SLOT)],
+                vec![(M_SLOT, GroupChange::Resize(GroupSize::Empty))],
+            ),
+            _ => ProposedMove::speciation(
+                vec![SpeciationAction::SwapAtomKind {
+                    group_index: IONS,
+                    abs_index: first_ion,
+                    new_atom_id: swap_to,
+                }],
+                vec![(IONS, GroupChange::UpdateIdentity(vec![RelIndex::new(0)]))],
+            ),
+        }
+    };
+
+    for kind in 0..5 {
+        for accept in [false, true] {
+            let proposed = propose(&system, kind);
+            let before = system.hamiltonian().energy(&system, proposed.change());
+            system.save_energy_backups(proposed.change());
+            proposed.apply_with_backup(&mut system).unwrap();
+            system.update(proposed.change()).unwrap();
+            let after = system.hamiltonian().energy(&system, proposed.change());
+            assert!(
+                (after - before).abs() > 1e-6,
+                "kind {kind} must change the energy for this test to mean anything"
+            );
+            if accept {
+                system.discard_backup();
+            } else {
+                system.undo().unwrap();
+            }
+            check(&system);
+        }
+    }
+}
+
 /// Partial updates only mark their cache row stale, so a run of single-atom moves of an atomic
 /// group, accepted or rejected, followed by rigid-body moves must leave every cached group energy
 /// equal to a cache built from scratch.
