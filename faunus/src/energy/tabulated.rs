@@ -4,7 +4,7 @@
 //! [`icotable::Table6DAdaptive`]) and 3D molecule-atom tables
 //! ([`icotable::Table3DAdaptive`]) produced by Duello.
 
-use super::nonbonded::cache::GroupEnergyCache;
+use super::group_pair_cache::{GroupPairCache, GroupPairs, PairFn};
 use super::stateful::{derived_energy, StatefulEnergy};
 use crate::cell::BoundaryConditions;
 use crate::ObserveContext;
@@ -15,7 +15,7 @@ use icotable::{f16, PointGroup, Table3DAdaptive, Table6DAdaptive, Table6DFlat, V
 use serde::{Deserialize, Serialize};
 use std::cell::Cell;
 use std::path::PathBuf;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 
 /// The two 6D table formats (flat is legacy, adaptive is current) behind a single
 /// [`Lookup6D`] type, so the energy code is agnostic to the storage format.
@@ -169,31 +169,16 @@ pub(crate) struct Entry {
 ///
 /// Angular interpolation uses Boltzmann-weighted barycentric averaging to
 /// avoid Jensen's inequality bias at repulsive contacts.
-///
-/// The cache uses `RwLock` for lazy initialization from `energy(&self)`;
-/// mutating methods (`undo`, `save_backup`, etc.) use `get_mut()` since
-/// they receive `&mut self` from the `dispatch_stateful!` macro.
+#[derive(Clone)]
 pub struct TabulatedEnergy {
     entries: Vec<Entry>,
     /// Inverse thermal energy 1/kT in mol/kJ for Boltzmann-weighted interpolation.
     inv_thermal_energy: f64,
-    cache: RwLock<Option<GroupEnergyCache>>,
+    cache: GroupPairCache,
     /// Tracks |exp(-βU_fwd) - exp(-βU_rev)| for 6D self-interaction lookups.
     /// Only accumulated when double-lookup is active.
-    /// `Cell` because `pair_energy` takes `&self` (needed for `RwLock` lazy cache init).
+    /// `Cell` because `pair_energy` takes `&self`, as the cache evaluates it during reads.
     swap_stats: Cell<(usize, f64, f64)>,
-}
-
-/// Manual Clone because `RwLock` doesn't derive it; we snapshot the current cache state.
-impl Clone for TabulatedEnergy {
-    fn clone(&self) -> Self {
-        Self {
-            entries: self.entries.clone(),
-            inv_thermal_energy: self.inv_thermal_energy,
-            cache: RwLock::new(self.cache.read().expect("cache lock poisoned").clone()),
-            swap_stats: self.swap_stats.clone(),
-        }
-    }
 }
 
 impl std::fmt::Debug for TabulatedEnergy {
@@ -367,7 +352,7 @@ impl TabulatedEnergy {
         Self {
             entries,
             inv_thermal_energy,
-            cache: RwLock::new(None),
+            cache: GroupPairCache::default(),
             swap_stats: Cell::new((0, 0.0, 0.0)),
         }
     }
@@ -497,51 +482,11 @@ impl TabulatedEnergy {
         0.5 * (e_forward + e_reverse)
     }
 
-    /// Lazily initialize cache on first RigidBody query.
-    /// Uses `RwLock` (not `get_mut`) because `energy()` only has `&self`.
-    fn ensure_cache(&self, context: &impl ObserveContext) {
-        let needs_init = self.cache.read().expect("cache lock poisoned").is_none();
-        if needs_init {
-            let n = context.groups().len();
-            let mut pairwise = vec![0.0; n * n];
-            let mut group_energies = vec![0.0; n];
-            for i in 0..n {
-                for j in (i + 1)..n {
-                    let e = self.pair_energy(context, i, j);
-                    pairwise[i * n + j] = e;
-                    pairwise[j * n + i] = e;
-                    group_energies[i] += e;
-                    group_energies[j] += e;
-                }
-            }
-            *self.cache.write().expect("cache lock poisoned") =
-                Some(GroupEnergyCache::new(pairwise, group_energies, n));
+    fn cached_pairs<'a>(&'a self, context: &'a impl ObserveContext) -> impl GroupPairs + 'a {
+        PairFn {
+            n_groups: context.groups().len(),
+            pair: move |i: usize, j: usize| self.pair_energy(context, i, j),
         }
-    }
-
-    pub(crate) fn update_cache(&mut self, context: &impl ObserveContext, change: &Change) {
-        let &Change::SingleGroup(gi, GroupChange::RigidBody) = change else {
-            return;
-        };
-        // Take cache out to avoid borrow conflict with pair_energy(&self)
-        let Some(mut cache) = self.cache.get_mut().expect("cache lock poisoned").take() else {
-            return;
-        };
-        let n = cache.n_groups;
-        for j in 0..n {
-            if j == gi {
-                continue;
-            }
-            let new_e = self.pair_energy(context, gi, j);
-            let delta = new_e - cache.pairwise[gi * n + j];
-            cache.pairwise[gi * n + j] = new_e;
-            cache.pairwise[j * n + gi] = new_e;
-            cache.group_energies[j] += delta;
-        }
-        // Resum the moved group's row instead of accumulating deltas, so its cached total
-        // cannot drift over a long run of moves (issue #68; mirrors NonbondedMatrix).
-        cache.group_energies[gi] = (0..n).map(|j| cache.pairwise[gi * n + j]).sum();
-        *self.cache.get_mut().expect("cache lock poisoned") = Some(cache);
     }
 
     /// Welford online update of (count, mean, M2) statistics.
@@ -588,13 +533,7 @@ impl StatefulEnergy for TabulatedEnergy {
             Change::None => 0.0,
             Change::Everything | Change::Volume(_, _) => self.total_energy(context),
             Change::SingleGroup(gi, GroupChange::RigidBody) => {
-                self.ensure_cache(context);
-                self.cache
-                    .read()
-                    .expect("cache lock poisoned")
-                    .as_ref()
-                    .unwrap()
-                    .group_energies[*gi]
+                self.cache.group_energy(*gi, &self.cached_pairs(context))
             }
             Change::SingleGroup(gi, _) => {
                 let n = context.groups().len();
@@ -625,37 +564,19 @@ impl StatefulEnergy for TabulatedEnergy {
     }
 
     fn refresh(&mut self, context: &impl ObserveContext, change: &Change) -> anyhow::Result<()> {
-        self.update_cache(context, change);
+        self.cache.refresh(change, &self.cached_pairs(context));
         Ok(())
     }
 
-    fn save_backup(&mut self, _context: &impl ObserveContext, change: &Change) {
-        match change {
-            Change::SingleGroup(gi, GroupChange::RigidBody) => {
-                if let Some(c) = self.cache.get_mut().expect("cache lock poisoned").as_mut() {
-                    c.save_backup([*gi]);
-                }
-            }
-            // Topology-changing moves invalidate the N×N pairwise matrix.
-            Change::None
-            | Change::Everything
-            | Change::Volume(..)
-            | Change::Groups(..)
-            | Change::SingleGroup(..) => {
-                *self.cache.get_mut().expect("cache lock poisoned") = None;
-            }
-        }
+    fn save_backup(&mut self, context: &impl ObserveContext, change: &Change) {
+        self.cache.save_backup(change, &self.cached_pairs(context));
     }
 
     fn undo(&mut self) {
-        if let Some(c) = self.cache.get_mut().expect("cache lock poisoned").as_mut() {
-            c.undo();
-        }
+        self.cache.undo();
     }
 
     fn discard_backup(&mut self) {
-        if let Some(c) = self.cache.get_mut().expect("cache lock poisoned").as_mut() {
-            c.discard_backup();
-        }
+        self.cache.discard_backup();
     }
 }

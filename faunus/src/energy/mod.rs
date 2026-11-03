@@ -28,6 +28,7 @@ mod excluded_coulomb;
 pub mod exclusions;
 mod expr_helpers;
 mod external_pressure;
+mod group_pair_cache;
 mod hamiltonian;
 mod nonbonded;
 #[cfg(feature = "gpu")]

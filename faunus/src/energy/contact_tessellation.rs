@@ -28,8 +28,8 @@ use derive_builder::Builder;
 use serde::{Deserialize, Serialize};
 use voronota_ltr::{compute_contacts_only, Ball, PeriodicBox};
 
+use super::group_pair_cache::PairMatrix;
 use super::make_periodic_box;
-use super::nonbonded::cache::GroupEnergyCache;
 use super::stateful::{derived_energy, StatefulEnergy};
 
 /// Precomputed `γ_ab` matrix indexed by atom kind pairs.
@@ -154,46 +154,41 @@ fn pair_contact_energy(
         .sum()
 }
 
-/// Compute all pairwise energies and group energy sums.
-fn compute_all_pairwise(
-    context: &impl ObserveContext,
-    groups: &[Group],
+/// Parameters of a contact energy evaluation, borrowed so that `cache` stays free to be written.
+struct ContactPairs<'a> {
     probe_radius: f64,
     scaling: f64,
     max_sigma: f64,
-    gamma: &GammaMatrix,
-    periodic_box: Option<&PeriodicBox>,
-) -> (Vec<f64>, Vec<f64>) {
-    let n_groups = groups.len();
-    let mut pairwise = vec![0.0; n_groups * n_groups];
-    let mut group_energies = vec![0.0; n_groups];
-    for i in 0..n_groups {
-        for j in (i + 1)..n_groups {
-            if groups_beyond_cutoff(
+    gamma: &'a GammaMatrix,
+    periodic_box: Option<&'a PeriodicBox>,
+}
+
+impl ContactPairs<'_> {
+    fn energy(&self, context: &impl ObserveContext, i: usize, j: usize) -> f64 {
+        let groups = context.groups();
+        if groups_beyond_cutoff(
+            &groups[i],
+            &groups[j],
+            self.probe_radius,
+            self.max_sigma,
+            context.cell(),
+        ) {
+            return 0.0;
+        }
+        self.scaling
+            * pair_contact_energy(
+                context,
                 &groups[i],
                 &groups[j],
-                probe_radius,
-                max_sigma,
-                context.cell(),
-            ) {
-                continue;
-            }
-            let pair_energy = scaling
-                * pair_contact_energy(
-                    context,
-                    &groups[i],
-                    &groups[j],
-                    gamma,
-                    probe_radius,
-                    periodic_box,
-                );
-            pairwise[i * n_groups + j] = pair_energy;
-            pairwise[j * n_groups + i] = pair_energy;
-            group_energies[i] += pair_energy;
-            group_energies[j] += pair_energy;
-        }
+                self.gamma,
+                self.probe_radius,
+                self.periodic_box,
+            )
     }
-    (pairwise, group_energies)
+
+    fn all(&self, context: &impl ObserveContext) -> PairMatrix {
+        PairMatrix::from_pairs(context.groups().len(), |i, j| self.energy(context, i, j))
+    }
 }
 
 #[derive(Debug, Clone, Builder)]
@@ -215,7 +210,7 @@ pub struct ContactTessellationEnergy {
     /// Pairwise energy cache with O(1) group energy lookup and symmetric backup/undo
     #[builder_field_attr(serde(skip))]
     #[builder(default)]
-    cache: GroupEnergyCache,
+    cache: PairMatrix,
 
     /// Max atom diameter across all atom kinds (for bounding sphere cutoff)
     #[builder_field_attr(serde(skip))]
@@ -253,23 +248,21 @@ impl ContactTessellationEnergy {
             .fold(0.0_f64, f64::max);
         let periodic_box = make_periodic_box(context.cell());
 
-        let (pairwise, group_energies) = compute_all_pairwise(
-            context,
-            context.groups(),
+        let cache = ContactPairs {
             probe_radius,
             scaling,
             max_sigma,
-            &gamma,
-            periodic_box.as_ref(),
-        );
-        let n_groups = context.groups().len();
+            gamma: &gamma,
+            periodic_box: periodic_box.as_ref(),
+        }
+        .all(context);
 
         log::info!(
             "Contact tessellation: {} groups, probe={}, scaling={}, initial E={:.4} kJ/mol",
-            n_groups,
+            cache.n_groups(),
             probe_radius,
             scaling,
-            group_energies.iter().sum::<f64>() / 2.0,
+            cache.total(),
         );
 
         Ok(Self {
@@ -277,74 +270,33 @@ impl ContactTessellationEnergy {
             scaling,
             gamma,
             max_sigma,
-            cache: GroupEnergyCache::new(pairwise, group_energies, n_groups),
+            cache,
             periodic_box,
             periodic_box_backup: None,
         })
     }
 
     fn recompute_group_row(&mut self, context: &impl ObserveContext, k: usize) {
-        let groups = context.groups();
-        let n_groups = self.cache.n_groups;
-
-        // Snapshot before overwriting — needed for O(n) delta update below
-        let old_row: Vec<f64> = (0..n_groups)
-            .map(|j| self.cache.pairwise[k * n_groups + j])
-            .collect();
-
-        for j in 0..n_groups {
-            if j == k {
-                continue;
-            }
-            let pair_energy = if groups_beyond_cutoff(
-                &groups[k],
-                &groups[j],
-                self.probe_radius,
-                self.max_sigma,
-                context.cell(),
-            ) {
-                0.0
-            } else {
-                self.scaling
-                    * pair_contact_energy(
-                        context,
-                        &groups[k],
-                        &groups[j],
-                        &self.gamma,
-                        self.probe_radius,
-                        self.periodic_box.as_ref(),
-                    )
-            };
-            self.cache.pairwise[k * n_groups + j] = pair_energy;
-            self.cache.pairwise[j * n_groups + k] = pair_energy;
-        }
-
-        // O(n) delta update instead of O(n²) full recompute:
-        // group k gets a fresh sum; all others adjust by the per-pair difference
-        self.cache.group_energies[k] = (0..n_groups)
-            .filter(|&j| j != k)
-            .map(|j| self.cache.pairwise[k * n_groups + j])
-            .sum();
-        for (j, &old_energy) in old_row.iter().enumerate() {
-            if j != k {
-                self.cache.group_energies[j] += self.cache.pairwise[k * n_groups + j] - old_energy;
-            }
-        }
+        let pairs = ContactPairs {
+            probe_radius: self.probe_radius,
+            scaling: self.scaling,
+            max_sigma: self.max_sigma,
+            gamma: &self.gamma,
+            periodic_box: self.periodic_box.as_ref(),
+        };
+        self.cache.write_row(k, |j| pairs.energy(context, k, j));
     }
 
     fn rebuild_all(&mut self, context: &impl ObserveContext) {
-        let (pairwise, group_energies) = compute_all_pairwise(
-            context,
-            context.groups(),
-            self.probe_radius,
-            self.scaling,
-            self.max_sigma,
-            &self.gamma,
-            self.periodic_box.as_ref(),
-        );
-        self.cache.pairwise = pairwise;
-        self.cache.group_energies = group_energies;
-        self.cache.n_groups = context.groups().len();
+        let pairs = ContactPairs {
+            probe_radius: self.probe_radius,
+            scaling: self.scaling,
+            max_sigma: self.max_sigma,
+            gamma: &self.gamma,
+            periodic_box: self.periodic_box.as_ref(),
+        };
+        // In place, as a rejected volume move must still undo this rebuild.
+        self.cache.rebuild(|i, j| pairs.energy(context, i, j));
     }
 
     pub(super) fn energy(&self, context: &impl ObserveContext, change: &Change) -> f64 {
@@ -352,7 +304,7 @@ impl ContactTessellationEnergy {
     }
 
     pub(super) fn to_yaml(&self) -> yaml_serde::Value {
-        let total = self.cache.group_energies.iter().sum::<f64>() / 2.0;
+        let total = self.cache.total();
         yaml_map! {
             "probe_radius" => self.probe_radius,
             "scaling" => self.scaling,
@@ -366,28 +318,24 @@ impl StatefulEnergy for ContactTessellationEnergy {
     /// cache so drift is visible to the energy-drift check. Pure: touches no state.
     fn total_energy(&self, context: &impl ObserveContext) -> f64 {
         let periodic_box = make_periodic_box(context.cell());
-        let (_, group_energies) = compute_all_pairwise(
-            context,
-            context.groups(),
-            self.probe_radius,
-            self.scaling,
-            self.max_sigma,
-            &self.gamma,
-            periodic_box.as_ref(),
-        );
-        // Each pair counted in both group_energies[i] and [j], so halve.
-        group_energies.iter().sum::<f64>() / 2.0
+        ContactPairs {
+            probe_radius: self.probe_radius,
+            scaling: self.scaling,
+            max_sigma: self.max_sigma,
+            gamma: &self.gamma,
+            periodic_box: periodic_box.as_ref(),
+        }
+        .all(context)
+        .total()
     }
 
     fn partial_energy(&self, _context: &impl ObserveContext, change: &Change) -> f64 {
         match change {
-            Change::Everything | Change::Volume(..) => {
-                self.cache.group_energies.iter().sum::<f64>() / 2.0
-            }
-            Change::SingleGroup(k, _) => self.cache.group_energies[*k],
+            Change::Everything | Change::Volume(..) => self.cache.total(),
+            Change::SingleGroup(k, _) => self.cache.row_sum(*k),
             Change::Groups(changes) => {
                 // Sum pair energies involving changed groups, counting shared pairs once
-                let n_groups = self.cache.n_groups;
+                let n_groups = self.cache.n_groups();
                 let is_changed = |k: usize| changes.iter().any(|(idx, _)| *idx == k);
                 let mut total = 0.0;
                 for gi in 0..n_groups {
@@ -402,7 +350,7 @@ impl StatefulEnergy for ContactTessellationEnergy {
                         if is_changed(gj) && gj < gi {
                             continue;
                         }
-                        total += self.cache.pairwise[gi * n_groups + gj];
+                        total += self.cache.pair(gi, gj);
                     }
                 }
                 total
@@ -443,8 +391,7 @@ impl StatefulEnergy for ContactTessellationEnergy {
             // row and the periodic box so a rejected volume move is fully restored.
             Change::Volume(..) | Change::Everything => {
                 self.periodic_box_backup = self.periodic_box;
-                let n = self.cache.n_groups;
-                self.cache.save_backup(0..n);
+                self.cache.save_backup(0..self.cache.n_groups());
             }
             Change::None => {}
         }
