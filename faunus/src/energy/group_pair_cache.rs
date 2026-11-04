@@ -11,6 +11,24 @@ use std::sync::RwLock;
 pub(in crate::energy) trait GroupPairs {
     fn n_groups(&self) -> usize;
     fn pair(&self, i: usize, j: usize) -> f64;
+
+    /// Set `out[j]` to the energy of groups `m` and `j`, for `j ≥ first` and `j ≠ m`. All cache
+    /// evaluations come through here, so a term that can sweep a whole row overrides this.
+    fn row(&self, m: usize, first: usize, out: &mut [f64]) {
+        row_from_pairs(self, m, first, out);
+    }
+}
+
+/// [`GroupPairs::row`] one pair at a time, for terms that can only sometimes sweep.
+pub(in crate::energy) fn row_from_pairs<T: GroupPairs + ?Sized>(
+    pairs: &T,
+    m: usize,
+    first: usize,
+    out: &mut [f64],
+) {
+    for j in (first..pairs.n_groups()).filter(|&j| j != m) {
+        out[j] = pairs.pair(m, j);
+    }
 }
 
 /// [`GroupPairs`] from a closure.
@@ -41,26 +59,46 @@ pub(in crate::energy) struct PairMatrix {
 }
 
 impl PairMatrix {
+    fn zeros(n_groups: usize) -> Self {
+        Self {
+            pairwise: vec![0.0; n_groups * n_groups],
+            row_sums: vec![0.0; n_groups],
+            ..Default::default()
+        }
+    }
+
     pub(in crate::energy) fn from_pairs(
         n_groups: usize,
         pair: impl FnMut(usize, usize) -> f64,
     ) -> Self {
-        let mut matrix = Self {
-            pairwise: vec![0.0; n_groups * n_groups],
-            row_sums: vec![0.0; n_groups],
-            ..Default::default()
-        };
+        let mut matrix = Self::zeros(n_groups);
         matrix.rebuild(pair);
+        matrix
+    }
+
+    /// `row(i, out)` sets `out[j]` for every `j > i`, so each pair is evaluated once.
+    fn from_rows(n_groups: usize, row: impl FnMut(usize, &mut [f64])) -> Self {
+        let mut matrix = Self::zeros(n_groups);
+        matrix.rebuild_from_rows(row);
         matrix
     }
 
     /// Overwrite every pair, leaving any backup in place so a rebuild can be undone.
     pub(in crate::energy) fn rebuild(&mut self, mut pair: impl FnMut(usize, usize) -> f64) {
+        self.rebuild_from_rows(|i, out| {
+            for (j, energy) in out.iter_mut().enumerate().skip(i + 1) {
+                *energy = pair(i, j);
+            }
+        });
+    }
+
+    fn rebuild_from_rows(&mut self, mut row: impl FnMut(usize, &mut [f64])) {
         let n = self.n_groups();
+        let mut out = vec![0.0; n];
         self.row_sums.fill(0.0);
         for i in 0..n {
-            for j in (i + 1)..n {
-                let energy = pair(i, j);
+            row(i, &mut out);
+            for (j, &energy) in out.iter().enumerate().skip(i + 1) {
                 self.pairwise[i * n + j] = energy;
                 self.pairwise[j * n + i] = energy;
                 self.row_sums[i] += energy;
@@ -158,19 +196,29 @@ struct Inner {
     /// Rows to recompute before the next read. A partial update costs a full row recompute however
     /// few atoms moved, so a burst of them on one group is folded into a single recompute.
     stale_rows: Vec<usize>,
+    // Kept so a rigid trial doesn't allocate on every move.
+    row: Vec<f64>,
 }
 
 impl Inner {
     fn build(pairs: &impl GroupPairs) -> Self {
+        let n = pairs.n_groups();
         Self {
-            matrix: PairMatrix::from_pairs(pairs.n_groups(), |i, j| pairs.pair(i, j)),
+            matrix: PairMatrix::from_rows(n, |i, out| pairs.row(i, i + 1, out)),
             stale_rows: Vec::new(),
+            row: vec![0.0; n],
         }
+    }
+
+    fn write_row(&mut self, m: usize, pairs: &impl GroupPairs) {
+        pairs.row(m, 0, &mut self.row);
+        let row = &self.row;
+        self.matrix.write_row(m, |j| row[j]);
     }
 
     fn settle(&mut self, pairs: &impl GroupPairs) {
         while let Some(m) = self.stale_rows.pop() {
-            self.matrix.write_row(m, |j| pairs.pair(m, j));
+            self.write_row(m, pairs);
         }
     }
 }
@@ -244,7 +292,7 @@ impl GroupPairCache {
             Change::None | Change::SingleGroup(_, GroupChange::None) => {}
             Change::SingleGroup(gi, GroupChange::RigidBody) => {
                 if let Some(inner) = guard.as_mut() {
-                    inner.matrix.write_row(*gi, |j| pairs.pair(*gi, j));
+                    inner.write_row(*gi, pairs);
                 }
             }
             Change::SingleGroup(gi, _) => mark_stale(&mut guard, [*gi]),
@@ -488,6 +536,45 @@ mod tests {
         cache.refresh(&Change::Groups(cluster), &truth);
         assert_eq!(energies(&cache, &truth), [12.0, 13.0, 5.0]);
         assert_eq!(truth.evaluations.get(), 3);
+    }
+
+    /// A term with a cheaper whole-row evaluation, where any single-pair call would defeat it.
+    struct Sweeping(Truth);
+
+    impl GroupPairs for Sweeping {
+        fn n_groups(&self) -> usize {
+            self.0.n_groups()
+        }
+        fn pair(&self, _: usize, _: usize) -> f64 {
+            panic!("a sweeping term is only asked for rows");
+        }
+        fn row(&self, m: usize, first: usize, out: &mut [f64]) {
+            self.0.row(m, first, out);
+        }
+    }
+
+    /// Build, stale-row settling and rigid refresh are the only places pairs are evaluated.
+    #[test]
+    fn a_sweeping_term_is_only_asked_for_rows() {
+        let sweeping = Sweeping(Truth::new());
+        let mut cache = GroupPairCache::default();
+        assert_eq!(
+            [0, 1, 2].map(|g| cache.group_energy(g, &sweeping)),
+            [3.0, 4.0, 5.0]
+        );
+
+        sweeping.0.set(0, 1, 10.0);
+        cache.refresh(&insertion(0), &sweeping);
+        assert_eq!(cache.group_energy(1, &sweeping), 13.0);
+
+        cache.save_backup(&rigid(2), &sweeping);
+        sweeping.0.set(1, 2, 20.0);
+        cache.refresh(&rigid(2), &sweeping);
+        cache.discard_backup();
+        assert_eq!(
+            [0, 1, 2].map(|g| cache.group_energy(g, &sweeping)),
+            [12.0, 30.0, 22.0]
+        );
     }
 
     #[test]
