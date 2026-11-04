@@ -1185,6 +1185,81 @@ fn restored_configuration_is_not_served_from_the_previous_cache() {
     assert_approx_eq!(f64, group_energy(&system), total, epsilon = 1e-9);
 }
 
+const M_SLOT: usize = 2;
+const IONS: usize = 3;
+
+/// Two active rigid molecules, one empty slot and a partly active atomic group in a 12 Å box. The
+/// last ion wraps across the x face to reach the molecule at x = 4.
+fn resizable_system_yaml(nonbonded_extra: &str) -> String {
+    let head = "atoms:\n  - {name: A, mass: 1.0, sigma: 2.0, eps: 1.0}\n  \
+                - {name: I, mass: 1.0, sigma: 1.0, eps: 1.0}\n\
+                molecules:\n  - {name: M, atoms: [A, A], degrees_of_freedom: Rigid}\n  \
+                - {name: ION, atoms: [I], atomic: true}\n\
+                system:\n  cell: !Cuboid [12.0, 12.0, 12.0]\n  \
+                medium: {permittivity: !Vacuum, temperature: 298.15}\n  \
+                energy:\n    - !Nonbonded\n        default:\n          - !LennardJones {mixing: LB}\n";
+    let blocks = "  blocks:\n    - molecule: M\n      N: 3\n      active: 2\n      \
+                insert: !Manual [[0.0, 0.0, 0.0], [2.0, 0.0, 0.0], [0.0, 4.0, 0.0], [2.0, 4.0, 0.0], \
+                [0.0, -4.0, 0.0], [2.0, -4.0, 0.0]]\n    \
+                - molecule: ION\n      N: 4\n      active: 3\n      \
+                insert: !Manual [[0.0, 0.0, 3.0], [2.0, 2.0, 3.0], [-5.5, 0.0, 0.0], [1.0, 4.0, 3.0]]\n";
+    format!("{head}{nonbonded_extra}{blocks}")
+}
+
+/// One trial of each kind of reaction on the [`resizable_system_yaml`] system.
+fn speciation_trial(system: &Backend, kind: usize) -> crate::propagate::ProposedMove {
+    use crate::propagate::ProposedMove;
+    use crate::transform::SpeciationAction;
+    use crate::Point;
+
+    let ions = &system.groups()[IONS];
+    let first_ion = ions.iter_active().next().unwrap();
+    match kind {
+        0 => ProposedMove::speciation(
+            vec![SpeciationAction::ActivateAtom {
+                group_index: IONS,
+                position: Point::new(-3.0, 1.0, 2.0),
+            }],
+            vec![(
+                IONS,
+                GroupChange::ResizePartial(GroupSize::Expand(1), vec![RelIndex::new(ions.len())]),
+            )],
+        ),
+        1 => ProposedMove::speciation(
+            vec![SpeciationAction::DeactivateAtom {
+                group_index: IONS,
+                abs_index: first_ion,
+            }],
+            vec![(
+                IONS,
+                GroupChange::AtomicShrink {
+                    rels: vec![RelIndex::new(0)],
+                    n_old: ions.len(),
+                },
+            )],
+        ),
+        2 => ProposedMove::speciation(
+            vec![SpeciationAction::ActivateGroup {
+                group_index: M_SLOT,
+                positions: vec![Point::new(0.0, -4.0, 0.0), Point::new(2.0, -4.0, 0.0)],
+            }],
+            vec![(M_SLOT, GroupChange::Resize(GroupSize::Full))],
+        ),
+        3 => ProposedMove::speciation(
+            vec![SpeciationAction::DeactivateGroup(M_SLOT)],
+            vec![(M_SLOT, GroupChange::Resize(GroupSize::Empty))],
+        ),
+        _ => ProposedMove::speciation(
+            vec![SpeciationAction::SwapAtomKind {
+                group_index: IONS,
+                abs_index: first_ion,
+                new_atom_id: system.atom_kind(system.groups()[0].iter_active().next().unwrap()),
+            }],
+            vec![(IONS, GroupChange::UpdateIdentity(vec![RelIndex::new(0)]))],
+        ),
+    }
+}
+
 /// A reaction only marks the rows it names as stale. After each kind, rejected then accepted, every
 /// cached group energy must equal a cache built from scratch. Swap-and-pop and activation change the
 /// active set, so a row has to be recomputed from whichever set is current when it is read.
@@ -1192,25 +1267,8 @@ fn restored_configuration_is_not_served_from_the_previous_cache() {
 fn group_energy_cache_survives_speciation() {
     use crate::context::{Context, WithHamiltonian};
     use crate::energy::EnergyChange;
-    use crate::propagate::ProposedMove;
-    use crate::transform::SpeciationAction;
-    use crate::Point;
 
-    let yaml = "atoms:\n  - {name: A, mass: 1.0, sigma: 2.0, eps: 1.0}\n  \
-                - {name: I, mass: 1.0, sigma: 1.0, eps: 1.0}\n\
-                molecules:\n  - {name: M, atoms: [A, A], degrees_of_freedom: Rigid}\n  \
-                - {name: ION, atoms: [I], atomic: true}\n\
-                system:\n  cell: !Cuboid [12.0, 12.0, 12.0]\n  \
-                medium: {permittivity: !Vacuum, temperature: 298.15}\n  \
-                energy:\n    - !Nonbonded\n        default:\n          - !LennardJones {mixing: LB}\n  \
-                blocks:\n    - molecule: M\n      N: 3\n      active: 2\n      \
-                insert: !Manual [[0.0, 0.0, 0.0], [2.0, 0.0, 0.0], [0.0, 4.0, 0.0], [2.0, 4.0, 0.0], \
-                [0.0, -4.0, 0.0], [2.0, -4.0, 0.0]]\n    \
-                - molecule: ION\n      N: 4\n      active: 2\n      \
-                insert: !Manual [[0.0, 0.0, 3.0], [2.0, 2.0, 3.0], [4.0, 0.0, -3.0], [1.0, 4.0, 3.0]]\n";
-    let (mut system, new_matrix) = backend_from_yaml(yaml, 12.0);
-    const M_SLOT: usize = 2;
-    const IONS: usize = 3;
+    let (mut system, new_matrix) = backend_from_yaml(&resizable_system_yaml(""), 12.0);
 
     let rigid = |g| Change::SingleGroup(g, GroupChange::RigidBody);
     let check = |system: &Backend| {
@@ -1224,64 +1282,11 @@ fn group_energy_cache_survives_speciation() {
             );
         }
     };
-    let swap_to = system.atom_kind(system.groups()[0].iter_active().next().unwrap());
     check(&system); // builds the cache
-
-    let propose = |system: &Backend, kind: usize| -> ProposedMove {
-        let ions = &system.groups()[IONS];
-        let first_ion = ions.iter_active().next().unwrap();
-        match kind {
-            0 => ProposedMove::speciation(
-                vec![SpeciationAction::ActivateAtom {
-                    group_index: IONS,
-                    position: Point::new(-3.0, 1.0, 2.0),
-                }],
-                vec![(
-                    IONS,
-                    GroupChange::ResizePartial(
-                        GroupSize::Expand(1),
-                        vec![RelIndex::new(ions.len())],
-                    ),
-                )],
-            ),
-            1 => ProposedMove::speciation(
-                vec![SpeciationAction::DeactivateAtom {
-                    group_index: IONS,
-                    abs_index: first_ion,
-                }],
-                vec![(
-                    IONS,
-                    GroupChange::AtomicShrink {
-                        rels: vec![RelIndex::new(0)],
-                        n_old: ions.len(),
-                    },
-                )],
-            ),
-            2 => ProposedMove::speciation(
-                vec![SpeciationAction::ActivateGroup {
-                    group_index: M_SLOT,
-                    positions: vec![Point::new(0.0, -4.0, 0.0), Point::new(2.0, -4.0, 0.0)],
-                }],
-                vec![(M_SLOT, GroupChange::Resize(GroupSize::Full))],
-            ),
-            3 => ProposedMove::speciation(
-                vec![SpeciationAction::DeactivateGroup(M_SLOT)],
-                vec![(M_SLOT, GroupChange::Resize(GroupSize::Empty))],
-            ),
-            _ => ProposedMove::speciation(
-                vec![SpeciationAction::SwapAtomKind {
-                    group_index: IONS,
-                    abs_index: first_ion,
-                    new_atom_id: swap_to,
-                }],
-                vec![(IONS, GroupChange::UpdateIdentity(vec![RelIndex::new(0)]))],
-            ),
-        }
-    };
 
     for kind in 0..5 {
         for accept in [false, true] {
-            let proposed = propose(&system, kind);
+            let proposed = speciation_trial(&system, kind);
             let before = system.hamiltonian().energy(&system, proposed.change());
             system.save_energy_backups(proposed.change());
             proposed.apply_with_backup(&mut system).unwrap();
@@ -1297,6 +1302,151 @@ fn group_energy_cache_survives_speciation() {
                 system.undo().unwrap();
             }
             check(&system);
+        }
+    }
+}
+
+const SPLINE_5A_CELL_LIST: &str = "        spline: {cutoff: 5.0, cell_list: true}\n";
+
+fn backend_from_input(yaml: &str) -> Backend {
+    use std::io::Write;
+
+    let mut tmp = tempfile::NamedTempFile::new().unwrap();
+    tmp.write_all(yaml.as_bytes()).unwrap();
+    Backend::new(tmp.path(), None, &mut rand::thread_rng()).unwrap()
+}
+
+fn backend_with_spline(yaml: &str) -> (Backend, NonbondedMatrixSplined) {
+    let (_, new_matrix) = backend_from_yaml(yaml, 12.0);
+    let spline = NonbondedMatrixSplined::from_nonbonded(&new_matrix(), 5.0, None);
+    (backend_from_input(yaml), spline)
+}
+
+/// Every entry of a swept row against the all-pairs sum, in a box of only two cells per side, where
+/// the neighbour map wraps and a pair can only be reached through the periodic boundary.
+#[test]
+fn swept_row_matches_all_pairs_entry_by_entry() {
+    let (system, matrix) = backend_with_spline(&resizable_system_yaml(SPLINE_5A_CELL_LIST));
+    assert!(system.cell_list().is_some());
+
+    let pairs = matrix.cached_pairs(&system);
+    let mut interacting = 0;
+    for m in 0..=IONS {
+        for first in [0, m + 1] {
+            let mut out = [0.0; IONS + 1];
+            pairs.row(m, first, &mut out);
+            for j in (first..=IONS).filter(|&j| j != m) {
+                let expected = pairs.pair(m, j);
+                assert_approx_eq!(f64, out[j], expected, epsilon = 1e-12);
+                interacting += usize::from(expected != 0.0);
+            }
+        }
+    }
+    assert!(interacting > 0, "the groups must interact");
+}
+
+/// Literal energies, so sweep and all-pairs can't agree on a wrong answer. An ion at x = 3 with
+/// molecules at x = 0 and 9 and a 5 Å cutoff: only the first pair interacts, and LJ(σ=2, ε=1) at
+/// 3 Å is -0.3203, less the energy shift of -0.0163 at the cutoff.
+#[test]
+fn swept_row_bins_each_pair_by_group_and_stops_at_the_cutoff() {
+    let yaml = format!(
+        "atoms:\n  - {{name: A, mass: 1.0, sigma: 2.0, eps: 1.0}}\n\
+         molecules:\n  - {{name: M, atoms: [A], degrees_of_freedom: Rigid}}\n  \
+         - {{name: ION, atoms: [A], atomic: true}}\n\
+         system:\n  cell: !Cuboid [30.0, 30.0, 30.0]\n  \
+         medium: {{permittivity: !Vacuum, temperature: 298.15}}\n  \
+         energy:\n    - !Nonbonded\n        default:\n          - !LennardJones {{mixing: LB}}\n\
+         {SPLINE_5A_CELL_LIST}  \
+         blocks:\n    - molecule: M\n      N: 2\n      \
+         insert: !Manual [[0.0, 0.0, 0.0], [9.0, 0.0, 0.0]]\n    \
+         - molecule: ION\n      N: 1\n      insert: !Manual [[3.0, 0.0, 0.0]]\n"
+    );
+    let (system, matrix) = backend_with_spline(&yaml);
+    assert!(system.cell_list().is_some());
+    assert!(system.groups()[2].mass_center().is_none(), "must sweep");
+
+    let mut out = [0.0; 3];
+    matrix.cached_pairs(&system).row(2, 0, &mut out);
+    assert_approx_eq!(f64, out[0], -0.3203 + 0.0163, epsilon = 1e-3);
+    assert_eq!(out[1], 0.0);
+}
+
+/// An excluded molecule pair has no energy, and a cell list alone can't tell which group a
+/// neighbour belongs to.
+#[test]
+fn swept_row_applies_molecule_pair_exclusions() {
+    let (system, mut matrix) = backend_with_spline(&resizable_system_yaml(SPLINE_5A_CELL_LIST));
+    assert!(system.groups()[IONS].mass_center().is_none(), "must sweep");
+    let swept = |matrix: &NonbondedMatrixSplined| {
+        let mut out = [0.0; IONS + 1];
+        matrix.cached_pairs(&system).row(IONS, 0, &mut out);
+        out
+    };
+    assert!(swept(&matrix)[0] != 0.0);
+
+    let ions = system.groups()[IONS].molecule();
+    matrix.exclude_molecule_pair(system.groups()[0].molecule(), ions);
+    assert_eq!(swept(&matrix)[0], 0.0);
+}
+
+/// Two systems differing only by the cell list must read the same cached energies through rigid
+/// moves and every kind of reaction, rejected then accepted. Swap-and-pop and activation change
+/// both the active set and the neighbour lists a sweep walks.
+#[test]
+fn cell_list_rows_track_all_pairs_through_trials() {
+    use crate::context::{Context, WithHamiltonian};
+    use crate::energy::EnergyChange;
+    use crate::propagate::ProposedMove;
+    use crate::Point;
+
+    let mut swept = backend_from_input(&resizable_system_yaml(SPLINE_5A_CELL_LIST));
+    let mut all_pairs = backend_from_input(&resizable_system_yaml(
+        "        spline: {cutoff: 5.0, cell_list: false}\n",
+    ));
+    assert!(swept.cell_list().is_some() && all_pairs.cell_list().is_none());
+
+    let check = |swept: &Backend, all_pairs: &Backend| {
+        for g in 0..=IONS {
+            let rigid = Change::SingleGroup(g, GroupChange::RigidBody);
+            assert_approx_eq!(
+                f64,
+                swept.hamiltonian().energy(swept, &rigid),
+                all_pairs.hamiltonian().energy(all_pairs, &rigid),
+                epsilon = 1e-9
+            );
+        }
+    };
+    check(&swept, &all_pairs); // builds both caches
+
+    let trial = |system: &mut Backend, proposed: &ProposedMove, accept: bool| {
+        system.hamiltonian().energy(system, proposed.change());
+        system.save_energy_backups(proposed.change());
+        proposed.apply_with_backup(system).unwrap();
+        system.update(proposed.change()).unwrap();
+        system.hamiltonian().energy(system, proposed.change());
+        if accept {
+            system.discard_backup();
+        } else {
+            system.undo().unwrap();
+        }
+    };
+
+    for kind in 0..7 {
+        for accept in [false, true] {
+            let proposed = match kind {
+                5 => ProposedMove::translate_group(0, Point::new(0.5, 3.0, -1.0)),
+                // A full cell width, so a reject has to take the tracked cell-list undo.
+                6 => ProposedMove::translate_atoms(
+                    IONS,
+                    vec![RelIndex::new(0)],
+                    Point::new(6.0, 0.0, 0.0),
+                ),
+                _ => speciation_trial(&swept, kind),
+            };
+            trial(&mut swept, &proposed, accept);
+            trial(&mut all_pairs, &proposed, accept);
+            check(&swept, &all_pairs);
         }
     }
 }

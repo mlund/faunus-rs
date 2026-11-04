@@ -17,7 +17,7 @@
 #[cfg(test)]
 mod tests;
 
-use super::group_pair_cache::{GroupPairCache, GroupPairs, PairFn};
+use super::group_pair_cache::{row_from_pairs, GroupPairCache, GroupPairs};
 use super::pairpot::PairPot;
 use super::stateful::{derived_energy, StatefulEnergy};
 use crate::ObserveContext;
@@ -295,13 +295,68 @@ fn particle_arrays_from_context<'a>(
     }
 }
 
-/// Particle arrays without the cell list, so group-pair cache rows are fully recomputed.
-fn full_pair_arrays<'a>(
-    context: &'a impl ObserveContext,
-) -> ParticleArrays<'a, impl SimulationCell + 'a> {
-    let mut arrays = particle_arrays_from_context(context);
-    arrays.cell_list = None;
-    arrays
+struct CachedPairs<'a, P, S: SimulationCell, C> {
+    matrix: &'a NonbondedMatrix<P>,
+    arrays: ParticleArrays<'a, S>,
+    context: &'a C,
+}
+
+impl<P: IsotropicTwobodyEnergy, S: SimulationCell, C: ObserveContext> GroupPairs
+    for CachedPairs<'_, P, S, C>
+{
+    fn n_groups(&self) -> usize {
+        self.context.groups().len()
+    }
+
+    fn pair(&self, i: usize, j: usize) -> f64 {
+        let groups = self.context.groups();
+        self.matrix
+            .group_pair_energy(&self.arrays, &groups[i], &groups[j])
+    }
+
+    /// A group that bounding spheres can't cull would cost O(|m|·N) by pairs. A cell-list sweep costs
+    /// O(|m|·neighbours), and pairs it doesn't visit are beyond the cutoff. Cullable groups stay on
+    /// pairs, which is faster than a sweep.
+    fn row(&self, m: usize, first: usize, out: &mut [f64]) {
+        let own = &self.context.groups()[m];
+        let cullable = self.matrix.use_bounding_spheres && own.mass_center().is_some();
+        match self.arrays.cell_list {
+            Some(cell_list) if !cullable => self.sweep_row(cell_list, m, first, out),
+            _ => row_from_pairs(self, m, first, out),
+        }
+    }
+}
+
+impl<P: IsotropicTwobodyEnergy, S: SimulationCell, C: ObserveContext> CachedPairs<'_, P, S, C> {
+    fn sweep_row(
+        &self,
+        cell_list: &crate::celllist::CellList,
+        m: usize,
+        first: usize,
+        out: &mut [f64],
+    ) {
+        let groups = self.context.groups();
+        let own = &groups[m];
+        out[first..].fill(0.0);
+        for i in own.iter_active() {
+            for j in cell_list.neighbors(i).filter(|&j| !own.contains(j)) {
+                let g = self
+                    .context
+                    .group_of_particle(j)
+                    .expect("every particle belongs to a group");
+                if g < first
+                    || self
+                        .matrix
+                        .is_molecule_pair_excluded(own.molecule(), groups[g].molecule())
+                {
+                    continue;
+                }
+                out[g] += self
+                    .matrix
+                    .particle_energy(&self.arrays, i, std::iter::once(j));
+            }
+        }
+    }
 }
 
 impl<'a, C: SimulationCell> ParticleArrays<'a, C> {
@@ -1063,14 +1118,11 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
             .sum()
     }
 
-    /// Cached pair energies skip the cell list: a cached row must hold every pair of the two groups,
-    /// and `group_pair_energy` already culls by bounding sphere.
     fn cached_pairs<'a>(&'a self, context: &'a impl ObserveContext) -> impl GroupPairs + 'a {
-        let arrays = full_pair_arrays(context);
-        let groups = context.groups();
-        PairFn {
-            n_groups: groups.len(),
-            pair: move |i: usize, j: usize| self.group_pair_energy(&arrays, &groups[i], &groups[j]),
+        CachedPairs {
+            matrix: self,
+            arrays: particle_arrays_from_context(context),
+            context,
         }
     }
 
