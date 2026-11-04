@@ -175,6 +175,22 @@ impl Inner {
     }
 }
 
+/// Settling k rows evaluates k(n-1) pairs and a rebuild n(n-1)/2, so past n/2 stale rows the
+/// matrix isn't worth keeping.
+fn mark_stale(cache: &mut Option<Inner>, rows: impl IntoIterator<Item = usize>) {
+    let Some(inner) = cache.as_mut() else {
+        return;
+    };
+    for m in rows {
+        if !inner.stale_rows.contains(&m) {
+            inner.stale_rows.push(m);
+        }
+    }
+    if 2 * inner.stale_rows.len() > inner.matrix.n_groups() {
+        *cache = None;
+    }
+}
+
 /// Group energies that stay correct across any sequence of trial moves, given the
 /// `StatefulEnergy` call order: `save_backup` pre-move, `refresh` post-move, then `undo` or
 /// `discard_backup`.
@@ -231,19 +247,15 @@ impl GroupPairCache {
                     inner.matrix.write_row(*gi, |j| pairs.pair(*gi, j));
                 }
             }
-            Change::SingleGroup(gi, GroupChange::PartialUpdate(_)) => {
-                if let Some(inner) = guard.as_mut() {
-                    if !inner.stale_rows.contains(gi) {
-                        inner.stale_rows.push(*gi);
-                    }
-                }
+            Change::SingleGroup(gi, _) => mark_stale(&mut guard, [*gi]),
+            Change::Groups(changes) => {
+                let moved = changes
+                    .iter()
+                    .filter(|(_, group_change)| !matches!(group_change, GroupChange::None))
+                    .map(|(gi, _)| *gi);
+                mark_stale(&mut guard, moved);
             }
-            Change::Everything
-            | Change::Volume(..)
-            | Change::Groups(_)
-            | Change::SingleGroup(..) => {
-                *guard = None;
-            }
+            Change::Everything | Change::Volume(..) => *guard = None,
         }
     }
 
@@ -263,7 +275,7 @@ impl GroupPairCache {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::group::RelIndex;
+    use crate::group::{GroupSize, RelIndex};
     use std::cell::{Cell, RefCell};
 
     /// Stand-in for an energy term: the true pair energies, which a test edits to act as a move.
@@ -424,6 +436,58 @@ mod tests {
         truth.set(0, 1, 10.0);
         cache.refresh(&Change::Everything, &truth);
         assert_eq!(energies(&cache, &truth), [12.0, 13.0, 5.0]);
+    }
+
+    fn insertion(group: usize) -> Change {
+        Change::Groups(vec![(
+            group,
+            GroupChange::ResizePartial(GroupSize::Expand(1), vec![RelIndex::new(0)]),
+        )])
+    }
+
+    /// Only the named row is evaluated: rebuilding here is what GCMC must not pay for.
+    #[test]
+    fn insertion_recomputes_one_row_at_the_next_read() {
+        let truth = Truth::new();
+        let cache = GroupPairCache::default();
+        energies(&cache, &truth);
+        truth.evaluations.set(0);
+
+        truth.set(0, 1, 10.0);
+        cache.refresh(&insertion(0), &truth);
+        assert_eq!(truth.evaluations.get(), 0);
+        assert_eq!(energies(&cache, &truth), [12.0, 13.0, 5.0]);
+        assert_eq!(truth.evaluations.get(), 2);
+    }
+
+    #[test]
+    fn rejected_insertion_reads_the_restored_coordinates() {
+        let truth = Truth::new();
+        let mut cache = GroupPairCache::default();
+        energies(&cache, &truth);
+
+        cache.save_backup(&insertion(0), &truth);
+        truth.set(0, 1, 10.0);
+        cache.refresh(&insertion(0), &truth);
+
+        truth.set(0, 1, 1.0);
+        cache.undo();
+        assert_eq!(energies(&cache, &truth), [3.0, 4.0, 5.0]);
+    }
+
+    /// Settling two of three rows takes 4 evaluations, a rebuild only the 3 unique pairs.
+    #[test]
+    fn most_rows_stale_rebuilds_instead() {
+        let truth = Truth::new();
+        let cache = GroupPairCache::default();
+        energies(&cache, &truth);
+        truth.evaluations.set(0);
+
+        truth.set(0, 1, 10.0);
+        let cluster = [0, 1].map(|g| (g, GroupChange::RigidBody)).to_vec();
+        cache.refresh(&Change::Groups(cluster), &truth);
+        assert_eq!(energies(&cache, &truth), [12.0, 13.0, 5.0]);
+        assert_eq!(truth.evaluations.get(), 3);
     }
 
     #[test]
