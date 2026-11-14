@@ -33,7 +33,9 @@ use crate::{
 };
 
 use super::{
-    builder::HamiltonianBuilder, exclusions::ExclusionMatrix, square_matrix::SquareMatrix,
+    builder::HamiltonianBuilder,
+    exclusions::{ExclusionMatrix, ExclusionRow},
+    square_matrix::SquareMatrix,
     EnergyChange,
 };
 
@@ -102,7 +104,7 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
         j: usize,
     ) -> f64 {
         let distance_squared = context.get_distance_squared(i, j);
-        self.exclusions.get((i, j)) as f64
+        f64::from(u8::from(self.exclusions.interacts(i, j)))
             * self
                 .potentials
                 .get((context.atom_kind(i).get(), context.atom_kind(j).get()))
@@ -399,7 +401,7 @@ struct PairProbe<'a, P, S: SimulationCell> {
     y: f64,
     z: f64,
     kind: usize,
-    exclusions: &'a [u8],
+    exclusions: ExclusionRow<'a>,
 }
 
 impl<P: IsotropicTwobodyEnergy, S: SimulationCell> PairProbe<'_, P, S> {
@@ -411,7 +413,7 @@ impl<P: IsotropicTwobodyEnergy, S: SimulationCell> PairProbe<'_, P, S> {
         // No j==i guard needed: callers use disjoint ranges, and the exclusion
         // matrix diagonal is 0 (self-exclusion) so it would be skipped anyway.
         unsafe {
-            if *self.exclusions.get_unchecked(j) == 0 {
+            if !self.exclusions.interacts(j) {
                 return 0.0;
             }
             let rsq = self.arrays.distance_squared_to(self.x, self.y, self.z, j);
@@ -821,7 +823,6 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
             y,
             z,
             kind,
-            // Row slice gives a contiguous &[u8] for sequential cache-line reads over j.
             exclusions: self.exclusions.row(i),
         }
     }
@@ -1244,12 +1245,12 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
         debug_assert!(i < arrays.x.len());
         // SAFETY: i is a valid particle index from an active group range.
         let (xi, yi, zi, kind_i) = unsafe { read_particle(arrays, i) };
-        let excl_row = self.exclusions.row(i);
+        let exclusions = self.exclusions.row(i);
 
         for j in targets {
             debug_assert!(j < arrays.x.len());
             unsafe {
-                if *excl_row.get_unchecked(j) == 0 {
+                if !exclusions.interacts(j) {
                     continue;
                 }
                 let dr = arrays.distance_vector_to(xi, yi, zi, j);
