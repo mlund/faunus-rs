@@ -1153,7 +1153,7 @@ fn backend_from_yaml(yaml: &str, side: f64) -> (Backend, impl Fn() -> NonbondedM
 /// single-atom groups, the group energy equals the total, which is computed without the cache.
 #[test]
 fn restored_configuration_is_not_served_from_the_previous_cache() {
-    use crate::context::{Context, WithHamiltonian};
+    use crate::context::{Context, Orientations, WithHamiltonian};
     use crate::energy::EnergyChange;
     use crate::{Particle, Point};
 
@@ -1185,7 +1185,7 @@ fn restored_configuration_is_not_served_from_the_previous_cache() {
         .collect();
     let quaternions: Vec<_> = system.groups().iter().map(|g| *g.quaternion()).collect();
     system
-        .restore_configuration(None, &particles, &sizes, &quaternions)
+        .restore_configuration(None, &particles, &sizes, Orientations::Stored(&quaternions))
         .unwrap();
 
     let total = system.hamiltonian().energy(&system, &Change::Everything);

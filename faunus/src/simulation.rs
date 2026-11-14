@@ -717,34 +717,113 @@ fn validate_aux_header(header: &frame_state::FrameStateHeader, context: &Backend
     Ok(())
 }
 
-/// Load a single frame's state into the context from XTC positions + aux data.
-///
-/// `box_lengths` is the frame's own box, so a trajectory whose volume fluctuated replays each frame
-/// in the cell it was generated in rather than in the input file's.
-fn load_frame_into_context(
-    context: &mut Backend,
-    particles: &[Particle],
-    frame_state: &frame_state::FrameStateFrame,
-    box_lengths: Point,
-) -> anyhow::Result<()> {
-    use crate::group::GroupSize;
+/// What a replayed frame needs beyond the XTC coordinates: atom kinds, group sizes and orientations.
+enum FrameSource {
+    /// Recorded per frame by `save_frame_state`.
+    Aux {
+        reader: FrameStateReader,
+        frame: frame_state::FrameStateFrame,
+    },
+    /// The input's own topology: fixed atom kinds, every group full, orientations fitted to the
+    /// coordinates. What a trajectory from another code allows.
+    Topology { sizes: Vec<crate::group::GroupSize> },
+}
 
-    let sizes: Vec<GroupSize> = frame_state
-        .group_sizes
-        .iter()
-        .zip(context.groups().iter())
-        .map(|(&size, g)| GroupSize::from_count(size as usize, g.capacity()))
-        .collect();
+impl FrameSource {
+    /// An `.aux` named explicitly must exist. The one derived from the trajectory may be missing,
+    /// which falls back to the topology if every group is full. Atom kinds that changed during
+    /// the run (titration, swap) can't be detected from coordinates, hence the warning.
+    fn open(aux: &Path, explicit: bool, context: &Backend) -> Result<Self> {
+        if explicit || aux.try_exists().map_err(|source| Error::io(aux, source))? {
+            let reader = FrameStateReader::open(aux)?;
+            validate_aux_header(reader.header(), context)?;
+            return Ok(Self::Aux {
+                reader,
+                frame: frame_state::FrameStateFrame::default(),
+            });
+        }
+        if let Some(group) = context.groups().iter().find(|g| !g.is_full()) {
+            return Err(Error::Input(format!(
+                "no frame state file {}: without one every group must be full, but a {} group \
+                 is not; pass --aux, or write it with `save_frame_state: true`",
+                aux.display(),
+                crate::context::WithTopology::topology(context)
+                    .moleculekind(group.molecule())
+                    .name()
+            )));
+        }
+        log::warn!(
+            "No frame state file {}: atom kinds are taken from the input and orientations fitted \
+             to the coordinates. If atom kinds changed during the run (titration, swap moves), \
+             write the trajectory with `save_frame_state: true`",
+            aux.display()
+        );
+        Ok(Self::Topology {
+            sizes: vec![crate::group::GroupSize::Full; context.groups().len()],
+        })
+    }
 
-    let cell = context.cell().resized_to_box(box_lengths)?;
-    context.restore_configuration(cell, particles, &sizes, &frame_state.quaternions)
+    /// Load the next frame into `context`, given its coordinates in Å and its box.
+    ///
+    /// `box_lengths` is the frame's own box, so a trajectory whose volume fluctuated replays each
+    /// frame in the cell it was generated in rather than in the input file's.
+    fn load(
+        &mut self,
+        context: &mut Backend,
+        positions: impl Iterator<Item = Point>,
+        particles: &mut Vec<Particle>,
+        box_lengths: Point,
+        frame_index: usize,
+    ) -> Result<()> {
+        use crate::context::Orientations;
+        use crate::group::GroupSize;
+
+        let cell = context.cell().resized_to_box(box_lengths)?;
+        particles.clear();
+        let recorded_sizes: Vec<GroupSize>;
+        let (sizes, orientations) = match self {
+            Self::Aux { reader, frame } => {
+                if !reader.read_frame_into(frame)? {
+                    return Err(Error::Input(format!(
+                        "aux file ended before XTC at frame {frame_index}"
+                    )));
+                }
+                particles.extend(
+                    positions
+                        .zip(&frame.atom_ids)
+                        .map(|(pos, &id)| Particle::new(id as usize, pos)),
+                );
+                recorded_sizes = frame
+                    .group_sizes
+                    .iter()
+                    .zip(context.groups())
+                    .map(|(&size, g)| GroupSize::from_count(size as usize, g.capacity()))
+                    .collect();
+                (
+                    recorded_sizes.as_slice(),
+                    Orientations::Stored(&frame.quaternions),
+                )
+            }
+            Self::Topology { sizes } => {
+                particles.extend(
+                    positions
+                        .enumerate()
+                        .map(|(i, pos)| Particle::new(context.atom_kind(i).get(), pos)),
+                );
+                (sizes.as_slice(), Orientations::FitToReference)
+            }
+        };
+        context.restore_configuration(cell, particles, sizes, orientations)?;
+        Ok(())
+    }
 }
 
 /// Replay a trajectory through an input's Hamiltonian and analyses.
 ///
 /// The trajectory's Hamiltonian need not be the one that generated it, which is what makes this
 /// useful: analyses run again over saved frames, reweighted if the input carries a penalty bias.
-/// `aux` defaults to `traj` with its extension replaced by `.aux`.
+/// `aux` defaults to `traj` with its extension replaced by `.aux`; without one, every group must
+/// be full.
 ///
 /// This is a free function rather than a [`Simulation`] method because a replay is driven by the
 /// trajectory, not by the input's `propagate` section.
@@ -760,7 +839,7 @@ pub(crate) struct Replay {
     medium: Medium,
     traj: std::path::PathBuf,
     xtc_reader: molly::XTCReader<std::fs::File>,
-    aux_reader: FrameStateReader,
+    frame_source: FrameSource,
     weight_source: analysis::reweight::WeightSource,
 }
 
@@ -784,6 +863,7 @@ impl Replay {
         // Every frame must be sampled since we can't skip frames in the XTC/aux pair
         analyses.override_frequencies(Frequency::Every(1));
 
+        let explicit_aux = aux.is_some();
         let aux = aux
             .map(std::path::PathBuf::from)
             .unwrap_or_else(|| frame_state::aux_path_from_traj(traj));
@@ -802,8 +882,7 @@ impl Replay {
             }
         }
 
-        let aux_reader = FrameStateReader::open(&aux)?;
-        validate_aux_header(aux_reader.header(), &context)?;
+        let frame_source = FrameSource::open(&aux, explicit_aux, &context)?;
         let xtc_reader = molly::XTCReader::open(traj).map_err(|source| Error::io(traj, source))?;
 
         // Detect penalty bias for reweighting
@@ -831,7 +910,7 @@ impl Replay {
             medium,
             traj: traj.to_path_buf(),
             xtc_reader,
-            aux_reader,
+            frame_source,
             weight_source,
         })
     }
@@ -845,7 +924,7 @@ impl Replay {
             medium,
             traj,
             mut xtc_reader,
-            mut aux_reader,
+            mut frame_source,
             weight_source,
         } = self;
 
@@ -854,7 +933,6 @@ impl Replay {
         let mut frame_index = 0usize;
         // Pre-allocate and reuse across frames to avoid per-frame heap allocation
         let mut particles = Vec::with_capacity(n_particles);
-        let mut aux_frame = frame_state::FrameStateFrame::default();
 
         log::info!("Replaying trajectory: {}", traj.display());
 
@@ -872,12 +950,6 @@ impl Replay {
                 )));
             }
 
-            if !aux_reader.read_frame_into(&mut aux_frame)? {
-                return Err(Error::Input(format!(
-                    "aux file ended before XTC at frame {frame_index}"
-                )));
-            }
-
             // XTC stores positions in nm with corner at origin; Faunus uses Å with
             // center at origin. Column-major layout: [c0x, c0y, c0z, c1x, ...].
             let cols = frame.boxvec.to_cols_array();
@@ -887,17 +959,16 @@ impl Replay {
                 cols[8] as f64 * NM_TO_ANGSTROM * 0.5,
             );
 
-            particles.clear();
-            particles.extend((0..n_particles).map(|i| {
-                let pos = Point::new(
-                    frame.positions[3 * i] as f64 * NM_TO_ANGSTROM - box_half.x,
-                    frame.positions[3 * i + 1] as f64 * NM_TO_ANGSTROM - box_half.y,
-                    frame.positions[3 * i + 2] as f64 * NM_TO_ANGSTROM - box_half.z,
-                );
-                Particle::new(aux_frame.atom_ids[i] as usize, pos)
-            }));
-
-            load_frame_into_context(&mut context, &particles, &aux_frame, box_half * 2.0)?;
+            let positions = frame.positions.as_chunks::<3>().0.iter().map(|&[x, y, z]| {
+                Point::new(x as f64, y as f64, z as f64) * NM_TO_ANGSTROM - box_half
+            });
+            frame_source.load(
+                &mut context,
+                positions,
+                &mut particles,
+                box_half * 2.0,
+                frame_index,
+            )?;
             let weight = weight_source.weight(&context);
             analyses.sample_weighted(&context, frame_index, weight)?;
             frame_index += 1;

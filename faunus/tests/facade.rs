@@ -269,14 +269,123 @@ analysis:
     )
     .expect("write rerun input");
 
-    let output = faunus::replay(&rerun, &trajectory, None).expect("replay should succeed");
-    let frames = parse(output.to_yaml())["rerun"]["frames"]
-        .as_f64()
-        .expect("rerun block reports a frame count");
+    let (frames, _) = rerun_summary(&rerun, &trajectory);
     assert!(
         frames >= 2.0,
         "expected several frames replayed, got {frames}"
     );
+}
+
+/// Rigid triatomics, interacting, so the replayed energy depends on every frame's coordinates.
+const RIGID_SYSTEM: &str = "
+atoms:
+  - {name: A, mass: 1.0, sigma: 3.0, epsilon: 0.5}
+  - {name: B, mass: 1.0, sigma: 2.0, epsilon: 0.5}
+molecules:
+  - name: tri
+    degrees_of_freedom: Rigid
+    has_com: true
+    from_structure:
+      - A: [0.0, 0.0, 0.0]
+      - B: [1.5, 0.0, 0.0]
+      - B: [0.0, 1.5, 0.0]
+system:
+  cell: !Cuboid [20.0, 20.0, 20.0]
+  medium: {permittivity: !Vacuum, temperature: 298.15}
+  energy:
+    - !Nonbonded
+      default:
+        - !LennardJones {mixing: LB}
+  blocks:
+    - {molecule: tri, N: 6, insert: !RandomCOM {rotate: true, min_distance: 3.0}}";
+
+/// Replayed `(frames, last_frame_energy)`.
+fn rerun_summary(input: &Path, trajectory: &Path) -> (f64, f64) {
+    let output = faunus::replay(input, trajectory, None).expect("replay should succeed");
+    let rerun = &parse(output.to_yaml())["rerun"];
+    (
+        rerun["frames"].as_f64().expect("frame count"),
+        rerun["last_frame_energy"].as_f64().expect("energy"),
+    )
+}
+
+/// Trajectories from other codes carry no `.aux`. With every group full, topology supplies the
+/// atom kinds and the coordinates the orientations, so the rerun matches one that had the `.aux`.
+#[test]
+fn replay_without_frame_state_matches_replay_with_it() {
+    let temp = tempfile::tempdir().expect("temp dir");
+    let trajectory = temp.path().join("rigid.xtc");
+    let generator = temp.path().join("generate.yaml");
+    std::fs::write(
+        &generator,
+        format!(
+            "{RIGID_SYSTEM}
+analysis:
+  - !Trajectory {{file: \"{}\", save_frame_state: true, frequency: !Every 10}}
+propagate:
+  seed: !Fixed 7
+  criterion: Metropolis
+  steps: 50
+  collections:
+    - !Stochastic
+      moves:
+        - !TranslateMolecule {{molecule: tri, max_displacement: 1.0, repeat: 1}}
+        - !RotateMolecule {{molecule: tri, dprot: 1.0, weight: 1.0}}",
+            trajectory.display()
+        ),
+    )
+    .expect("write generator");
+    Simulation::from_file(&generator, None)
+        .expect("load generator")
+        .run()
+        .expect("generate trajectory");
+
+    let rerun = temp.path().join("rerun.yaml");
+    std::fs::write(&rerun, format!("{RIGID_SYSTEM}\nanalysis: []")).expect("write rerun input");
+    let with_aux = rerun_summary(&rerun, &trajectory);
+
+    std::fs::remove_file(temp.path().join("rigid.aux")).expect("generator wrote an .aux");
+    let without_aux = rerun_summary(&rerun, &trajectory);
+
+    assert!(
+        with_aux.0 >= 2.0,
+        "expected several frames, got {}",
+        with_aux.0
+    );
+    assert_eq!(without_aux.0, with_aux.0);
+    assert!(
+        with_aux.1 != 0.0,
+        "molecules never interact, so the test proves nothing"
+    );
+    assert_eq!(without_aux.1, with_aux.1);
+}
+
+/// Group sizes can only come from frame state, so a partially filled group needs the `.aux`.
+#[test]
+fn replay_of_a_partial_group_without_frame_state_is_an_error() {
+    let temp = tempfile::tempdir().expect("temp dir");
+    let input = temp.path().join("rerun.yaml");
+    let partial = RIGID_SYSTEM.replace("N: 6,", "N: 6, active: 3,");
+    std::fs::write(&input, format!("{partial}\nanalysis: []")).expect("write input");
+
+    let error = faunus::replay(&input, &temp.path().join("other.xtc"), None)
+        .expect_err("replay must fail")
+        .to_string();
+    assert!(error.contains("must be full"), "unexpected error: {error}");
+}
+
+/// A frame state file named explicitly is never silently replaced by the topology.
+#[test]
+fn replay_with_a_missing_explicit_frame_state_is_an_error() {
+    let temp = tempfile::tempdir().expect("temp dir");
+    let input = temp.path().join("rerun.yaml");
+    std::fs::write(&input, format!("{RIGID_SYSTEM}\nanalysis: []")).expect("write input");
+    let aux = temp.path().join("missing.aux");
+
+    let error = faunus::replay(&input, &temp.path().join("other.xtc"), Some(&aux))
+        .expect_err("replay must fail")
+        .to_string();
+    assert!(error.contains("missing.aux"), "unexpected error: {error}");
 }
 
 /// An NPT trajectory carries a box that fluctuates away from the input's. Replay must evaluate each

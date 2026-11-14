@@ -402,31 +402,53 @@ impl Backend {
         }
     }
 
-    /// `quaternions` is what the state file *recorded*; where the restored coordinates turn out to
-    /// be a rigid image of the molecule's reference conformation, the orientation is recomputed from
-    /// them instead, because the coordinates are what every energy term and analysis actually reads.
-    /// A state file written before orientations were tracked, or by a path that forgot to update
-    /// one, therefore heals on load rather than importing the lie.
+    /// A `Stored` orientation is what the state file *recorded*; where the restored coordinates turn
+    /// out to be a rigid image of the molecule's reference conformation, the orientation is
+    /// recomputed from them instead, because the coordinates are what every energy term and
+    /// analysis actually reads. A state file written before orientations were tracked, or by a path
+    /// that forgot to update one, therefore heals on load rather than importing the lie.
     fn apply_particles_and_groups(
         &mut self,
         particles: &[crate::Particle],
         sizes: &[GroupSize],
-        quaternions: &[crate::UnitQuaternion],
+        orientations: crate::context::Orientations<'_>,
     ) -> anyhow::Result<()> {
+        use crate::context::Orientations;
         /// Two orientations further apart than this describe visibly different molecules.
         const ORIENTATION_MISMATCH: f64 = 1e-6;
 
+        // Checked before anything is written, so a bad record leaves the context untouched.
+        let stored = match orientations {
+            Orientations::Stored(quaternions) => {
+                anyhow::ensure!(
+                    quaternions.len() == sizes.len(),
+                    "{} orientations for {} groups",
+                    quaternions.len(),
+                    sizes.len()
+                );
+                Some(quaternions)
+            }
+            Orientations::FitToReference => None,
+        };
         self.set_positions(0..particles.len(), particles.iter().map(|p| &p.pos));
         for (i, p) in particles.iter().enumerate() {
             // Every group's geometry is recomputed below, so skip the per-particle refresh.
             self.set_atom_kind_unchecked(i, AtomKindId::new(p.atom_id));
         }
-        for (i, (&size, &q)) in sizes.iter().zip(quaternions.iter()).enumerate() {
+        // `resize_group` refreshes each group's geometry against the final coordinates.
+        for (i, &size) in sizes.iter().enumerate() {
             self.resize_group(i, size)?;
-            self.groups[i].set_quaternion(q);
         }
 
-        // `resize_group` has already refreshed each group's geometry against the final coordinates.
+        let Some(quaternions) = stored else {
+            for i in 0..sizes.len() {
+                self.settle_orientation(i, OrientationPolicy::NeverInherit);
+            }
+            return Ok(());
+        };
+        for (group, &q) in self.groups.iter_mut().zip(quaternions) {
+            group.set_quaternion(q);
+        }
         let mut corrected = 0usize;
         for i in 0..sizes.len() {
             let recorded = *self.groups[i].quaternion();
@@ -842,17 +864,17 @@ impl Context for Backend {
         cell: Option<Cell>,
         particles: &[crate::Particle],
         sizes: &[GroupSize],
-        quaternions: &[crate::UnitQuaternion],
+        orientations: crate::context::Orientations<'_>,
     ) -> anyhow::Result<()> {
         // The box first: orientations are fitted, and coordinates binned, against the cell in force.
         match cell {
             Some(cell) => {
                 self.cell = cell;
                 self.cell_changed(|this| {
-                    this.apply_particles_and_groups(particles, sizes, quaternions)
+                    this.apply_particles_and_groups(particles, sizes, orientations)
                 })?;
             }
-            None => self.apply_particles_and_groups(particles, sizes, quaternions)?,
+            None => self.apply_particles_and_groups(particles, sizes, orientations)?,
         }
         Context::update(self, &Change::Everything)
     }
@@ -1308,8 +1330,59 @@ propagate: {seed: !Fixed 1, criterion: Metropolis, steps: 0, collections: []}
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::context::Orientations;
     use crate::energy::EnergyChange;
     use crate::WithHamiltonian;
+
+    /// Trajectory coordinates are rounded far beyond the exact-image tolerance (0.01 Å for XTC),
+    /// so with no orientation recorded the fit must tolerate them, not fall back to identity.
+    #[test]
+    fn fitted_orientation_survives_trajectory_rounding() {
+        let yaml = r#"
+atoms:
+  - {name: T1, mass: 1.0, sigma: 2.0}
+  - {name: T2, mass: 2.0, sigma: 2.0}
+  - {name: T3, mass: 3.0, sigma: 2.0}
+molecules:
+  - name: bent
+    degrees_of_freedom: Rigid
+    from_structure: [{T1: [-3.0, 0.0, 0.0]}, {T2: [0.0, 2.5, 0.0]}, {T3: [3.0, 0.0, 0.0]}]
+system:
+  cell: !Cuboid [30.0, 30.0, 30.0]
+  medium: {permittivity: !Vacuum, temperature: 298.15}
+  energy: []
+  blocks:
+    - {molecule: bent, N: 1, insert: !RandomCOM {rotate: true}}
+"#;
+        let mut context = Backend::from_yaml_str(
+            yaml,
+            None,
+            &mut <rand::rngs::StdRng as rand::SeedableRng>::seed_from_u64(3),
+        )
+        .unwrap();
+        let truth = *context.groups()[0].quaternion();
+        assert!(truth.angle() > 0.1, "insertion rotated it");
+
+        // Round to XTC precision: 0.001 nm.
+        let particles: Vec<_> = (0..3)
+            .map(|i| {
+                let pos = context.position(i).map(|x| (x * 100.0).round() / 100.0);
+                crate::Particle::new(context.atom_kind(i).get(), pos)
+            })
+            .collect();
+        context.groups[0].set_quaternion(UnitQuaternion::identity());
+        context
+            .restore_configuration(
+                None,
+                &particles,
+                &[GroupSize::Full],
+                Orientations::FitToReference,
+            )
+            .unwrap();
+
+        let error = context.groups()[0].quaternion().angle_to(&truth);
+        assert!(error < 5e-3, "fitted orientation is {error} rad off");
+    }
 
     /// Verify total energy equals sum of per-group energies, and mass_center matches auxiliary.
     #[test]
@@ -1476,8 +1549,12 @@ mod tests {
         );
 
         // Restore via apply_particles_and_groups
-        ctx.apply_particles_and_groups(&original_particles, &original_sizes, &original_quaternions)
-            .unwrap();
+        ctx.apply_particles_and_groups(
+            &original_particles,
+            &original_sizes,
+            Orientations::Stored(&original_quaternions),
+        )
+        .unwrap();
         ctx.update(&crate::Change::Everything).unwrap();
 
         // Verify positions restored
@@ -1681,7 +1758,12 @@ propagate: {{seed: !Fixed 1, criterion: Metropolis, steps: 0, collections: []}}
             .collect();
         let quaternions: Vec<_> = context.groups().iter().map(|g| *g.quaternion()).collect();
         context
-            .restore_configuration(Some(cell), &particles, &sizes, &quaternions)
+            .restore_configuration(
+                Some(cell),
+                &particles,
+                &sizes,
+                crate::context::Orientations::Stored(&quaternions),
+            )
             .unwrap();
     }
 

@@ -8,6 +8,17 @@ use std::{
     sync::Arc,
 };
 
+/// Where a restored configuration's group orientations come from.
+#[derive(Clone, Copy, Debug)]
+pub enum Orientations<'a> {
+    /// Recorded alongside the coordinates, one per group. Where the coordinates are an exact
+    /// rigid image of the reference structure, they override the record.
+    Stored(&'a [crate::UnitQuaternion]),
+    /// Nothing recorded: fit each group to its reference structure. Coordinates rounded by a
+    /// trajectory format are no exact rigid image, so a tolerant fit is the best estimate.
+    FitToReference,
+}
+
 /// Full control over a simulation system: the view the framework itself holds.
 ///
 /// Moves, analyses and energy terms are deliberately bound to the narrower [`ObserveContext`] or
@@ -36,7 +47,7 @@ pub trait Context:
         cell: Option<crate::cell::Cell>,
         particles: &[crate::Particle],
         sizes: &[crate::group::GroupSize],
-        quaternions: &[crate::UnitQuaternion],
+        orientations: Orientations<'_>,
     ) -> anyhow::Result<()>;
 
     /// Save energy term backups before a move is applied.

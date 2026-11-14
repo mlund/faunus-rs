@@ -40,7 +40,8 @@ enum Commands {
         /// XTC trajectory file
         #[clap(long)]
         traj: PathBuf,
-        /// Frame state file (default: derived from --traj by replacing extension with .aux)
+        /// Frame state file (default: --traj with extension .aux). Without one, atom kinds come
+        /// from the input, orientations are fitted, and every group must be full
         #[clap(long)]
         aux: Option<PathBuf>,
     },

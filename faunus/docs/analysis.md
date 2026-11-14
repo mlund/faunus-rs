@@ -456,8 +456,9 @@ quaternions, mass centers, and group sizes (for GC moves); swap moves change
 `atom_id`. When `save_frame_state: true`, a binary `.aux` file is written
 alongside each XTC frame, storing this per-frame microstate data.
 
-The `.aux` file is required by `faunus rerun` (see [Rerun](#rerun)) to fully
-reconstruct the simulation state from each trajectory frame.
+`faunus rerun` (see [Rerun](#rerun)) uses the `.aux` file to reconstruct the
+simulation state from each trajectory frame. It is needed when group sizes or
+atom types vary between frames.
 
 ---
 
@@ -1441,14 +1442,21 @@ Flag      | Required | Default                    | Description
 --------- | -------- | -------------------------- | -------------------------------------------
 `-i`      | yes      |                            | Input YAML with Hamiltonian + analysis config
 `--traj`  | yes      |                            | XTC trajectory file
-`--aux`   | no       | `traj.aux` (from `--traj`) | Frame state file
+`--aux`   | no       | `traj.aux` (from `--traj`) | Frame state file; optional if every group is full
 
 ### Requirements
 
-The trajectory must have been produced with `save_frame_state: true` on the
-[Trajectory](#trajectory) analysis, so that a matching `.aux` file exists.
-The `.aux` file header must match the topology in the rerun input (same number
-of groups, particles, and molecule types).
+With a frame state file, written by `save_frame_state: true` on the
+[Trajectory](#trajectory) analysis, each frame restores its group sizes, atom
+types and molecular orientations. The file header must match the topology in
+the rerun input (same number of groups, particles, and molecule types).
+
+Without one, as for a trajectory from another program, every frame takes its
+atom types from the rerun input, every group must be full, and molecular
+orientations are fitted to the coordinates. Results are then wrong if group
+sizes or atom types changed during the original run, for example through grand
+canonical, titration or swap moves; Faunus warns but can't detect this. A `--aux` file that is named
+explicitly but missing is an error.
 
 ### Example workflow
 

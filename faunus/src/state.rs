@@ -16,7 +16,7 @@
 
 use crate::{
     cell::Cell,
-    context::WithSimulationCell,
+    context::{Orientations, WithSimulationCell},
     group::{GroupCollection, GroupSize},
     Particle, UnitQuaternion,
 };
@@ -132,7 +132,12 @@ impl State {
 
         let sizes: Vec<_> = self.groups.iter().map(|gs| gs.size).collect();
         let quaternions: Vec<_> = self.groups.iter().map(|gs| gs.quaternion).collect();
-        context.restore_configuration(Some(self.cell), &self.particles, &sizes, &quaternions)?;
+        context.restore_configuration(
+            Some(self.cell),
+            &self.particles,
+            &sizes,
+            Orientations::Stored(&quaternions),
+        )?;
 
         log::info!("Restored simulation state");
         Ok(self.step)
