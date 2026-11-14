@@ -217,6 +217,23 @@ pub enum PairInteraction {
 }
 
 impl PairInteraction {
+    /// The YAML tag, for messages.
+    const fn name(&self) -> &'static str {
+        match self {
+            Self::AshbaughHatch(_) => "AshbaughHatch",
+            Self::KimHummer(_) => "KimHummer",
+            Self::LennardJones(_) => "LennardJones",
+            Self::WeeksChandlerAndersen(_) => "WeeksChandlerAndersen",
+            Self::HardSphere(_) => "HardSphere",
+            Self::CoulombEwald(_) => "CoulombEwald",
+            Self::CoulombRealSpaceEwald(_) => "CoulombRealSpaceEwald",
+            Self::CoulombPlain(_) => "CoulombPlain",
+            Self::CoulombReactionField(_) => "CoulombReactionField",
+            Self::CoulombFanourgakis(_) => "CoulombFanourgakis",
+            Self::CustomPotential(_) => "CustomPotential",
+        }
+    }
+
     /// True if this variant is an electrostatic interaction.
     pub fn is_coulomb(&self) -> bool {
         matches!(
@@ -426,7 +443,13 @@ impl PairPotentialBuilder {
     /// (skip duplicate types); `replace`/`append` entries and the evaluation
     /// settings (`spline`/`cutoff`/`bounding_spheres`) from the input take
     /// precedence over includes.
-    fn merge_from(&mut self, other: Self) {
+    fn merge_from(&mut self, other: Self, source: &Path) {
+        let ignored = |what: &str| {
+            log::warn!(
+                "Nonbonded {what} from {} ignored: already defined",
+                source.display()
+            );
+        };
         for interaction in other.default {
             let disc = std::mem::discriminant(&interaction);
             if self
@@ -434,20 +457,26 @@ impl PairPotentialBuilder {
                 .iter()
                 .any(|d| std::mem::discriminant(d) == disc)
             {
-                log::warn!(
-                    "Duplicate default nonbonded interaction '{interaction:?}' from include file — skipping"
-                );
+                ignored(&format!("default `{}`", interaction.name()));
             } else {
                 self.default.push(interaction);
             }
         }
-        let merge = |dst: &mut HashMap<_, _>, src: HashMap<_, _>| {
+        let merge = |section: &str, dst: &mut HashMap<_, _>, src: HashMap<_, _>| {
             for (key, value) in src {
-                dst.entry(key).or_insert(value);
+                match dst.entry(key) {
+                    std::collections::hash_map::Entry::Occupied(entry) => {
+                        let UnorderedPair(a, b) = entry.key();
+                        ignored(&format!("`{section}` for [{a}, {b}]"));
+                    }
+                    std::collections::hash_map::Entry::Vacant(entry) => {
+                        entry.insert(value);
+                    }
+                }
             }
         };
-        merge(&mut self.replace, other.replace);
-        merge(&mut self.append, other.append);
+        merge("replace", &mut self.replace, other.replace);
+        merge("append", &mut self.append, other.append);
 
         // Adopt the include's evaluation settings only where the input left them
         // unset, so nonbonded config factored into an include is honoured rather
@@ -455,12 +484,18 @@ impl PairPotentialBuilder {
         // it qualifies (a plain bool can't distinguish "unset" from "false").
         if self.spline.is_none() {
             self.spline = other.spline;
+        } else if other.spline.is_some() && other.spline != self.spline {
+            ignored("`spline`");
         }
         if self.cutoff.is_none() {
             self.cutoff = other.cutoff;
             if self.cutoff.is_some() {
                 self.bounding_spheres = other.bounding_spheres;
             }
+        } else if other.cutoff.is_some()
+            && (other.cutoff, other.bounding_spheres) != (self.cutoff, self.bounding_spheres)
+        {
+            ignored("`cutoff` and `bounding_spheres`");
         }
     }
 
@@ -879,48 +914,63 @@ impl HamiltonianBuilder {
     ///         default: [...]
     /// ```
     ///
-    /// The `!Nonbonded` term from `include` files is merged in; the input file takes precedence.
+    /// Included files carry energy in the same layout. As for atoms and molecules,
+    /// the first definition wins, in the order of
+    /// [`included_files`](crate::topology::include::included_files); a dropped
+    /// included term is logged. `!Nonbonded` terms merge field by field.
     pub(crate) fn from_file(path: impl AsRef<Path>) -> anyhow::Result<Self> {
-        let yaml = crate::auxiliary::read_yaml(&path)?;
-        let full: yaml_serde::Value = yaml_serde::from_str(&yaml)?;
-
-        let energy = full
-            .get("system")
-            .and_then(|system| system.get("energy"))
+        let path = path.as_ref();
+        let mut builder = Self::read_system_energy(path)?
             .ok_or_else(|| anyhow::anyhow!("Could not find `system.energy` in the YAML file."))?;
+        for file in crate::topology::include::included_files(path)? {
+            let included = Self::read_system_energy(&file)
+                .map_err(|err| anyhow::anyhow!("in included file {}: {err}", file.display()))?;
+            if let Some(included) = included {
+                included
+                    .validate_uniqueness()
+                    .map_err(|err| anyhow::anyhow!("in included file {}: {err}", file.display()))?;
+                builder.merge_include(included, &file);
+            }
+        }
+        builder.validate_uniqueness()?;
+        Ok(builder)
+    }
 
-        let mut builder = Self {
-            terms: Self::parse_energy_terms("system/energy", energy)?,
+    /// The `system.energy` terms of one file, if any.
+    fn read_system_energy(path: &Path) -> anyhow::Result<Option<Self>> {
+        let yaml = crate::auxiliary::read_yaml(path)?;
+        let full: yaml_serde::Value = yaml_serde::from_str(&yaml)?;
+        anyhow::ensure!(
+            full.get("energy").is_none(),
+            "move top-level `energy:` under `system:`"
+        );
+        let Some(energy) = full.get("system").and_then(|system| system.get("energy")) else {
+            return Ok(None);
         };
+        Ok(Some(Self {
+            terms: Self::parse_energy_terms("system/energy", energy)?,
+        }))
+    }
 
-        // Merge the nonbonded term from included files (input overrides include).
-        if let Some(includes) = full.get("include").and_then(|v| v.as_sequence()) {
-            let parent_dir = path.as_ref().parent().unwrap_or(Path::new("."));
-            for entry in includes {
-                let Some(rel) = entry.as_str() else { continue };
-                let inc_path = parent_dir.join(rel);
-                let inc_yaml = crate::auxiliary::read_yaml(&inc_path)?;
-                let inc_full: yaml_serde::Value = yaml_serde::from_str(&inc_yaml)?;
-                let Some(inc_energy) = inc_full.get("energy") else {
-                    continue;
-                };
-                // include files carry `energy:` at top level, so the bare label is correct here
-                let inc_terms = Self::parse_energy_terms("energy", inc_energy)?;
-                #[allow(clippy::wildcard_enum_match_arm)]
-                if let Some(inc_nb) = inc_terms.into_iter().find_map(|t| match t {
-                    EnergyTermBuilder::Nonbonded(pb) => Some(pb),
-                    _ => None,
-                }) {
-                    match builder.nonbonded_mut() {
-                        Some(nb) => nb.merge_from(inc_nb),
-                        None => builder.terms.push(EnergyTermBuilder::Nonbonded(inc_nb)),
+    /// Adds terms from an included file; unique terms already defined win.
+    fn merge_include(&mut self, included: Self, source: &Path) {
+        for term in included.terms {
+            match (term, self.nonbonded_mut()) {
+                (EnergyTermBuilder::Nonbonded(nb), Some(own)) => own.merge_from(nb, source),
+                (term, _) => {
+                    // Repeatable terms are independent, so they never clash.
+                    let (name, repeatable) = term.kind();
+                    if !repeatable && self.terms.iter().any(|t| t.kind().0 == name) {
+                        log::warn!(
+                            "`{name}` from {} ignored: already defined",
+                            source.display()
+                        );
+                    } else {
+                        self.terms.push(term);
                     }
                 }
             }
         }
-
-        builder.validate_uniqueness()?;
-        Ok(builder)
     }
 
     /// Parse a Hamiltonian from a YAML string with `system.energy` or `energy` structure.
@@ -1487,7 +1537,7 @@ mod tests {
             ..Default::default()
         };
 
-        base.merge_from(other);
+        base.merge_from(other, Path::new("include.yaml"));
 
         // existing key kept (input overrides include)
         assert_eq!(base.replace[&pair_aa], interaction1);
@@ -1516,7 +1566,7 @@ mod tests {
             ..Default::default()
         };
 
-        base.merge_from(other);
+        base.merge_from(other, Path::new("include.yaml"));
 
         // Different variants are concatenated
         assert_eq!(base.default, vec![coulomb, lj]);
@@ -1538,7 +1588,7 @@ mod tests {
             ..Default::default()
         };
 
-        base.merge_from(other);
+        base.merge_from(other, Path::new("include.yaml"));
 
         // Same variant from include is skipped
         assert_eq!(base.default, vec![kh1]);
@@ -1559,12 +1609,15 @@ mod tests {
         // Input left spline/culling unset → adopt the include's, including its
         // `bounding_spheres: false` which rides along with the culling cutoff.
         let mut base = PairPotentialBuilder::default();
-        base.merge_from(PairPotentialBuilder {
-            spline: Some(spline),
-            cutoff: Some(30.0),
-            bounding_spheres: false,
-            ..Default::default()
-        });
+        base.merge_from(
+            PairPotentialBuilder {
+                spline: Some(spline),
+                cutoff: Some(30.0),
+                bounding_spheres: false,
+                ..Default::default()
+            },
+            Path::new("include.yaml"),
+        );
         assert_eq!(base.spline().map(|s| s.cutoff), Some(12.0));
         assert_eq!(base.cutoff(), Some(30.0));
         assert!(!base.bounding_spheres());
@@ -1574,11 +1627,14 @@ mod tests {
             cutoff: Some(50.0),
             ..Default::default()
         };
-        base.merge_from(PairPotentialBuilder {
-            cutoff: Some(30.0),
-            bounding_spheres: false,
-            ..Default::default()
-        });
+        base.merge_from(
+            PairPotentialBuilder {
+                cutoff: Some(30.0),
+                bounding_spheres: false,
+                ..Default::default()
+            },
+            Path::new("include.yaml"),
+        );
         assert_eq!(base.cutoff(), Some(50.0));
         assert!(base.bounding_spheres());
     }
@@ -1632,7 +1688,7 @@ mod tests {
         // Include contributes a KimHummer default (a different variant than the parent's).
         std::fs::write(
             dir.path().join("lib.yaml"),
-            "energy:\n  - !Nonbonded\n      default:\n        - !KimHummer {mixing: LB}\n",
+            "system:\n  energy:\n    - !Nonbonded\n        default:\n          - !KimHummer {mixing: LB}\n",
         )
         .unwrap();
         let input = dir.path().join("input.yaml");
@@ -1647,5 +1703,133 @@ mod tests {
         let pb = builder.nonbonded().unwrap();
         // Parent's Coulomb and the include's KimHummer are different variants, so both survive.
         assert_eq!(pb.default.len(), 2);
+    }
+
+    /// Writes `files` (name, content) into a temp dir and builds from the first.
+    fn build_with_includes(files: &[(&str, &str)]) -> anyhow::Result<HamiltonianBuilder> {
+        let dir = tempfile::tempdir().unwrap();
+        for (name, content) in files {
+            std::fs::write(dir.path().join(name), content).unwrap();
+        }
+        HamiltonianBuilder::from_file(dir.path().join(files[0].0))
+    }
+
+    const AH_FORCEFIELD: &str = "system:\n  energy:\n    - !Nonbonded\n        \
+                                 default:\n          - !AshbaughHatch {mixing: arithmetic, cutoff: 20.0}\n";
+
+    /// A force field from cgkitten carries its energy where an input does.
+    #[test]
+    fn included_system_energy_is_merged() {
+        let builder = build_with_includes(&[
+            (
+                "input.yaml",
+                "include: [ff.yaml]\nsystem:\n  energy:\n    - !Pressure {atm: 1.0}\n",
+            ),
+            ("ff.yaml", AH_FORCEFIELD),
+        ])
+        .unwrap();
+        assert_eq!(builder.nonbonded().unwrap().default.len(), 1);
+    }
+
+    #[test]
+    fn top_level_energy_in_include_is_an_error() {
+        let err = build_with_includes(&[
+            ("input.yaml", "include: [ff.yaml]\nsystem:\n  energy: []\n"),
+            ("ff.yaml", "energy:\n  - !Pressure {atm: 1.0}\n"),
+        ])
+        .unwrap_err();
+        assert!(err.to_string().contains("system"), "{err}");
+    }
+
+    #[test]
+    fn input_term_wins_over_included_term() {
+        let builder = build_with_includes(&[
+            (
+                "input.yaml",
+                "include: [ff.yaml]\nsystem:\n  energy:\n    - !Pressure {atm: 1.0}\n",
+            ),
+            (
+                "ff.yaml",
+                "system:\n  energy:\n    - !Pressure {bar: 5.0}\n",
+            ),
+        ])
+        .unwrap();
+        assert!(matches!(builder.pressure(), Some(Pressure::Atm(p)) if *p == 1.0));
+    }
+
+    #[test]
+    fn included_term_missing_from_input_is_added() {
+        let builder = build_with_includes(&[
+            ("input.yaml", "include: [ff.yaml]\nsystem:\n  energy: []\n"),
+            (
+                "ff.yaml",
+                "system:\n  energy:\n    - !Pressure {bar: 5.0}\n",
+            ),
+        ])
+        .unwrap();
+        assert!(matches!(builder.pressure(), Some(Pressure::Bar(p)) if *p == 5.0));
+    }
+
+    /// The first file in depth-first order wins, as for atoms and molecules.
+    #[test]
+    fn nested_include_contributes_and_earlier_include_wins() {
+        let builder = build_with_includes(&[
+            (
+                "input.yaml",
+                "include: [a.yaml, c.yaml]\nsystem:\n  energy: []\n",
+            ),
+            ("a.yaml", "include: [b.yaml]\n"),
+            ("b.yaml", AH_FORCEFIELD),
+            (
+                "c.yaml",
+                "system:\n  energy:\n    - !Pressure {bar: 5.0}\n    - !Nonbonded\n        \
+                        default:\n          - !KimHummer {mixing: LB}\n",
+            ),
+        ])
+        .unwrap();
+        assert!(builder.pressure().is_some());
+        let default = &builder.nonbonded().unwrap().default;
+        assert_eq!(default.len(), 2, "b's AshbaughHatch, then c's KimHummer");
+        assert!(matches!(default[0], PairInteraction::AshbaughHatch(_)));
+    }
+
+    /// Repeatable terms are independent, so an included one adds to the input's.
+    #[test]
+    fn included_repeatable_term_is_appended() {
+        let builder = build_with_includes(&[
+            (
+                "input.yaml",
+                "include: [ff.yaml]\nsystem:\n  energy:\n    - !Sasa {probe_radius: 1.4}\n",
+            ),
+            (
+                "ff.yaml",
+                "system:\n  energy:\n    - !Sasa {probe_radius: 2.0}\n",
+            ),
+        ])
+        .unwrap();
+        assert_eq!(builder.sasas().count(), 2);
+    }
+
+    #[test]
+    fn duplicate_unique_term_within_an_include_is_an_error() {
+        let err = build_with_includes(&[
+            ("input.yaml", "include: [ff.yaml]\nsystem:\n  energy: []\n"),
+            (
+                "ff.yaml",
+                "system:\n  energy:\n    - !Pressure {atm: 1.0}\n    - !Pressure {bar: 5.0}\n",
+            ),
+        ])
+        .unwrap_err();
+        assert!(format!("{err:#}").contains("only once"), "{err:#}");
+    }
+
+    #[test]
+    fn include_cycle_is_an_error() {
+        let err = build_with_includes(&[
+            ("input.yaml", "include: [a.yaml]\nsystem:\n  energy: []\n"),
+            ("a.yaml", "include: [input.yaml]\n"),
+        ])
+        .unwrap_err();
+        assert!(err.to_string().contains("cycle"), "{err}");
     }
 }

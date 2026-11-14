@@ -85,19 +85,31 @@ impl Topology {
     /// Create partial topology without system. Used for topology includes.
     #[must_use = "this returns a Result that should be handled"]
     pub fn from_file_partial(path: impl AsRef<Path>) -> anyhow::Result<Self> {
-        let yaml = crate::auxiliary::read_yaml(&path)
-            .map_err(|err| anyhow::anyhow!("Error reading file {:?}: {}", path.as_ref(), err))?;
+        let mut topology = Self::read_included(path.as_ref())?;
+        topology.include_files(path.as_ref())?;
+        Ok(topology)
+    }
+
+    /// One included file, without following its own `include:` list.
+    fn read_included(path: &Path) -> anyhow::Result<Self> {
+        let yaml = crate::auxiliary::read_yaml(path)
+            .map_err(|err| anyhow::anyhow!("Error reading file {path:?}: {err}"))?;
         // Included files are parsed piecemeal here too, so their unknown/misspelled
         // top-level keys would vanish silently without this check (issue #64).
-        crate::auxiliary::validate_section_keys(&yaml_serde::from_str(&yaml)?)
-            .map_err(|err| anyhow::anyhow!("in included file {:?}: {err}", path.as_ref()))?;
-        let mut topology: Self = yaml_serde::from_str(&yaml)?;
-        for file in topology.include.iter_mut() {
-            file.finalize(&path);
+        let root: yaml_serde::Value = yaml_serde::from_str(&yaml)?;
+        crate::auxiliary::validate_section_keys(&root)
+            .map_err(|err| anyhow::anyhow!("in included file {path:?}: {err}"))?;
+        // Only atoms, molecules and energy are taken from an include; any other
+        // `system` section would be dropped.
+        if let Some(yaml_serde::Value::Mapping(system)) = root.get("system") {
+            for key in system.keys().filter_map(|k| k.as_str()) {
+                anyhow::ensure!(
+                    key == "energy" || key.starts_with('_'),
+                    "in included file {path:?}: `system.{key}` belongs in the main input"
+                );
+            }
         }
-        let includes = std::mem::take(&mut topology.include);
-        topology.include_topologies(includes)?;
-        Ok(topology)
+        Ok(yaml_serde::from_value(root)?)
     }
 
     /// Create partial topology from a YAML string (no file includes resolved).
@@ -148,7 +160,10 @@ impl Topology {
         }
 
         let base: &Path = match base {
-            Some(path) => path,
+            Some(path) => {
+                topology.include_files(path)?;
+                path
+            }
             None => {
                 anyhow::ensure!(
                     topology.include.is_empty(),
@@ -157,14 +172,6 @@ impl Topology {
                 Path::new(".")
             }
         };
-
-        // finalize includes
-        for file in topology.include.iter_mut() {
-            file.finalize(base);
-        }
-
-        let includes = std::mem::take(&mut topology.include);
-        topology.include_topologies(includes)?;
         topology.finalize_atoms()?;
         topology.finalize_molecules(base)?;
         topology.finalize_blocks(base)?;
@@ -271,18 +278,14 @@ impl Topology {
         }
     }
 
-    /// Read additional topologies into topology.
-    ///
-    /// ## Parameters
-    /// - `parent_path` path to the directory containing the parent topology file
-    /// - `topologies` paths to the topologies to be included (absolute or relative to the `parent_path`)
-    pub(crate) fn include_topologies(&mut self, topologies: Vec<InputPath>) -> anyhow::Result<()> {
-        for file in &topologies {
-            let included_top = Self::from_file_partial(file.path().unwrap())?;
-            self.include_atomkinds(&included_top.atomkinds);
-            self.include_moleculekinds(included_top.moleculekinds);
+    /// Merge atoms and molecules from every file `root` includes; the first
+    /// definition of a name wins.
+    fn include_files(&mut self, root: &Path) -> anyhow::Result<()> {
+        for file in super::include::included_files(root)? {
+            let included = Self::read_included(&file)?;
+            self.include_atomkinds(&included.atomkinds);
+            self.include_moleculekinds(included.moleculekinds);
         }
-
         Ok(())
     }
 

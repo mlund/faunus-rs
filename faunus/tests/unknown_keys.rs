@@ -318,6 +318,31 @@ fn rejects_unknown_key_in_included_file() {
     );
 }
 
+/// An include contributes atoms, molecules and energy; anything else under its
+/// `system:` would otherwise be dropped without a word.
+#[test]
+fn rejects_system_section_other_than_energy_in_included_file() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    std::fs::write(
+        dir.path().join("lib.yaml"),
+        "atoms:\n  - {name: OW, mass: 1.0, sigma: 1.0}\n  - {name: HW, mass: 1.0, sigma: 1.0}\n\
+         system:\n  blocks: []\n",
+    )
+    .unwrap();
+    let main = format!(
+        "include: [lib.yaml]\n{}",
+        BASE.split_once("molecules:")
+            .map(|(_, rest)| format!("molecules:{rest}"))
+            .unwrap(),
+    );
+    let path = dir.path().join("input.yaml");
+    std::fs::write(&path, main).unwrap();
+    let err = Simulation::from_file(&path, None)
+        .expect_err("`system.blocks` in an include must be rejected")
+        .to_string();
+    assert!(err.contains("blocks") && err.contains("lib.yaml"), "{err}");
+}
+
 #[test]
 fn disabled_underscore_section_is_allowed() {
     // `_`-prefixed keys intentionally disable a section and must not be rejected

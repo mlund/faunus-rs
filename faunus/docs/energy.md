@@ -5,8 +5,8 @@ In a complete input file, energy terms are defined under `system.energy` as a
 list of tagged entries (`!Nonbonded`, `!Pressure`, …), mirroring `analysis` and
 `moves`. Order is irrelevant — the total energy is a sum — and most terms may
 appear only once; `!Sasa`, `!Constrain`, `!CustomExternal` and `!CustomPair` may
-repeat. Included force-field fragments may instead use a top-level `energy`
-section; see [Loading nonbonded from include files](#loading-nonbonded-from-include-files).
+repeat. Included files, such as force fields, use the same layout; see
+[Energy terms from included files](#energy-terms-from-included-files).
 
 ---
 
@@ -82,23 +82,32 @@ Three sub-sections control how interactions are assigned to atom pairs:
 
 A pair may not appear in both `replace` and `append`.
 
-### Loading nonbonded from include files
+### Energy terms from included files
 
-Nonbonded definitions can be provided in an included force field file.
-The top-level `include` list is scanned for files with an `energy` section,
-and its `!Nonbonded` term is merged into the input.
-`replace`/`append` entries in the input take precedence over includes.
-`default` lists are concatenated; duplicate types from includes are skipped with a warning.
+An included file, such as a force field, can define energy terms under
+`system: energy:`, the same layout as the input file. A top-level `energy:` in an
+included file is an error. Files are read in the order described in
+[Including Files](topology.md#including-files), and the first definition of a
+term wins:
+
+- A term that the input does not define is added from the include, and the
+  repeatable terms listed above are always added.
+- Any other included term is ignored, with a warning naming the file.
+- `!Nonbonded` terms are merged entry by entry. `default` lists are joined and
+  skip interaction types that are already present. `replace` and `append`
+  entries, `spline` and `cutoff` follow the same first-wins rule, and each
+  ignored entry gives a warning.
 
 ```yaml
 # assets/forcefield.yaml
-energy:
-  - !Nonbonded
-    default:
-      - !AshbaughHatch {mixing: arithmetic, cutoff: 20.0}
-    replace:
-      [A, A]:
-        - !KimHummer {sigma: 5.0, epsilon: -0.18}
+system:
+  energy:
+    - !Nonbonded
+      default:
+        - !AshbaughHatch {mixing: arithmetic, cutoff: 20.0}
+      replace:
+        [A, A]:
+          - !KimHummer {sigma: 5.0, epsilon: -0.18}
 
 # input.yaml — gets both AshbaughHatch (from include) and Coulomb as defaults
 include: [assets/forcefield.yaml]

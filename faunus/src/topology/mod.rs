@@ -36,6 +36,7 @@ pub(crate) mod block;
 mod bond;
 mod chain;
 mod dihedral;
+pub(crate) mod include;
 pub mod io;
 mod molecule;
 mod residue;
@@ -420,7 +421,7 @@ impl InputPath {
     }
 
     /// Convert the raw_path to absolute path to the file.
-    fn finalize(&mut self, parent_file: impl AsRef<Path>) {
+    pub(crate) fn finalize(&mut self, parent_file: impl AsRef<Path>) {
         let mut path = PathBuf::from(&self.raw_path);
         if path.is_relative() {
             let parent_path = parent_file.as_ref().parent().unwrap();

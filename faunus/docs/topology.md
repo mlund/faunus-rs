@@ -376,8 +376,12 @@ system:
 
 ## Including Files
 
-Topology files can include other YAML files. Paths are relative to the including file.
-Definitions in later files take precedence; definitions in the main file take precedence over all includes.
+Topology files can include other YAML files, and included files can include
+further files. Paths are relative to the including file. Files are read
+depth-first: the main file first, then each listed file followed by the files
+that it includes. The first definition of an atom, molecule or energy term wins,
+and a later one is ignored with a warning. A file that is included twice is read
+once, and an include cycle is an error.
 
 ```yaml
 include: [forcefield.yaml, overrides.yaml]

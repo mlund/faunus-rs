@@ -346,11 +346,12 @@ def generate_faunus_yaml(output: str | None = None) -> str:
         )
 
     # Nonbonded: Coulomb as default, KH pairs under append: to inherit it
-    lines.append("energy:")
-    lines.append("  nonbonded:")
-    lines.append("    default:")
-    lines.append("      - !Coulomb {cutoff: 1000}")
-    lines.append("    append:")
+    lines.append("system:")
+    lines.append("  energy:")
+    lines.append("    - !Nonbonded")
+    lines.append("      default:")
+    lines.append("        - !Coulomb {cutoff: 1000}")
+    lines.append("      append:")
     for i, aa1 in enumerate(AA_ORDER):
         for j in range(i, len(AA_ORDER)):
             aa2 = AA_ORDER[j]
@@ -358,8 +359,8 @@ def generate_faunus_yaml(output: str | None = None) -> str:
             sig = get_sigma(aa1, aa2)
             eps_kj = eps * KT_TO_KJ_MOL
             lines.append(
-                f"      [{aa1}, {aa2}]:"
-                f"\n        - !KimHummer {{sigma: {sig}, epsilon: {eps_kj:.4f}}}"
+                f"        [{aa1}, {aa2}]:"
+                f"\n          - !KimHummer {{sigma: {sig}, epsilon: {eps_kj:.4f}}}"
             )
 
     text = "\n".join(lines) + "\n"
