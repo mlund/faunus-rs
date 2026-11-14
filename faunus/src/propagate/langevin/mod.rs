@@ -408,7 +408,8 @@ impl LangevinRunner {
             if (new_box - gpu.box_length).abs() > f32::EPSILON {
                 gpu.box_length = new_box;
                 if gpu.has_gpu_forces {
-                    let new_n = compute_n_cells_1d(gpu.box_length, gpu.max_cutoff);
+                    let new_n =
+                        compute_n_cells_1d(gpu.box_length, gpu.max_cutoff, gpu.n_atoms as usize);
                     if new_n != gpu.n_cells_1d {
                         gpu.n_cells_1d = new_n;
                         let nb_table = build_neighbor_cell_table(gpu.n_cells_1d);

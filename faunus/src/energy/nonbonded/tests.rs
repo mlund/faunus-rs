@@ -1727,3 +1727,16 @@ fn group_energy_cache_survives_partial_updates_and_rejects() {
         check(&cached, &system);
     }
 }
+
+/// An excluded pair contributes nothing even where its potential diverges: 0·∞ would be NaN.
+#[test]
+fn excluded_overlapping_pair_has_zero_energy() {
+    let yaml = "atoms:\n  - {name: A, mass: 1.0, sigma: 2.0, eps: 1.0}\n\
+         molecules:\n  - {name: M, atoms: [A, A], exclusions: [[0, 1]]}\n\
+         system:\n  cell: !Cuboid [20.0, 20.0, 20.0]\n  \
+         medium: {permittivity: !Vacuum, temperature: 298.15}\n  \
+         energy:\n    - !Nonbonded\n        default:\n          - !LennardJones {mixing: LB}\n  \
+         blocks:\n    - molecule: M\n      N: 1\n      insert: !Manual [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]]\n";
+    let (system, matrix) = backend_from_yaml(yaml, 20.0);
+    assert_eq!(matrix().particle_with_particle(&system, 0, 1), 0.0);
+}

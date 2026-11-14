@@ -438,6 +438,11 @@ Available grid types:
 | `PowerLaw(p)`  | Power-law with custom exponent $p$                       |
 | `InverseRsq`   | Uniform in $1/r^2$ — dense at short range               |
 
+The cell list divides the box into cells at least one `cutoff` wide. In a dilute system the
+cells are enlarged, so that there are at most about two cells per particle. Memory then
+grows with the number of particles rather than with the box volume, and every pair within
+the cutoff is still found.
+
 ---
 
 ## Excluded-Pair Coulomb Correction

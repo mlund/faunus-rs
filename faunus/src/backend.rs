@@ -500,7 +500,7 @@ impl Backend {
         if box_len.iter().any(|&l| l.is_infinite() || l <= 0.0) {
             return;
         }
-        let mut cl = crate::celllist::CellList::new(box_len, cutoff);
+        let mut cl = crate::celllist::CellList::new(box_len, cutoff, self.x.len());
         let x = &self.x;
         let y = &self.y;
         let z = &self.z;

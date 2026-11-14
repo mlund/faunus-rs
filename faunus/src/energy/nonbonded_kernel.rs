@@ -199,12 +199,13 @@ pub fn max_cutoff_from_spline_params(spline_params: &[f32]) -> f32 {
         .unwrap_or(0.0)
 }
 
-/// Compute number of cells per dimension so that cell_size >= cutoff.
-pub fn compute_n_cells_1d(box_length: f32, cutoff: f32) -> u32 {
+/// Cells per dimension of a cubic box; same sizing rule as the CPU cell list.
+pub fn compute_n_cells_1d(box_length: f32, cutoff: f32, n_atoms: usize) -> u32 {
     if cutoff <= 0.0 {
         return 1;
     }
-    (box_length / cutoff).floor().max(1.0) as u32
+    let box_len = [f64::from(box_length); 3];
+    crate::celllist::cells_per_axis(box_len, f64::from(cutoff), n_atoms)[0] as u32
 }
 
 /// Build flat neighbor cell table `[n³ × 27]` with PBC-wrapped indices.
@@ -392,10 +393,12 @@ mod tests {
 
     #[test]
     fn test_compute_n_cells_1d() {
-        assert_eq!(compute_n_cells_1d(10.0, 3.0), 3);
-        assert_eq!(compute_n_cells_1d(10.0, 10.0), 1);
-        assert_eq!(compute_n_cells_1d(10.0, 0.0), 1);
-        assert_eq!(compute_n_cells_1d(10.0, 2.0), 5);
+        assert_eq!(compute_n_cells_1d(10.0, 3.0, 1000), 3);
+        assert_eq!(compute_n_cells_1d(10.0, 10.0, 1000), 1);
+        assert_eq!(compute_n_cells_1d(10.0, 0.0, 1000), 1);
+        assert_eq!(compute_n_cells_1d(10.0, 2.0, 1000), 5);
+        // Sparse: 200³ cutoff-sized cells capped at 2·N = 64 000 → 40³.
+        assert_eq!(compute_n_cells_1d(1000.0, 5.0, 32_000), 40);
     }
 
     #[test]

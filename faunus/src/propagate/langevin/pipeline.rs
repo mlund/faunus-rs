@@ -338,7 +338,8 @@ impl<R: Runtime> LangevinGpu<R> {
             // Neighbor table is constant (depends only on grid size), so built once here.
             // The per-step cell_offsets/cell_atoms CSR is rebuilt in rebuild_cell_list().
             self.max_cutoff = max_cutoff_from_spline_params(params);
-            self.n_cells_1d = compute_n_cells_1d(self.box_length, self.max_cutoff);
+            self.n_cells_1d =
+                compute_n_cells_1d(self.box_length, self.max_cutoff, self.n_atoms as usize);
             let nb_table = build_neighbor_cell_table(self.n_cells_1d);
             self.neighbor_cells = self
                 .client

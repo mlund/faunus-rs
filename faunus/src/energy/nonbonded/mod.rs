@@ -103,13 +103,15 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
         i: usize,
         j: usize,
     ) -> f64 {
+        // Skipped, not weighted by zero: an overlapping excluded pair would give 0·∞ = NaN.
+        if !self.exclusions.interacts(i, j) {
+            return 0.0;
+        }
         let distance_squared = context.get_distance_squared(i, j);
-        f64::from(u8::from(self.exclusions.interacts(i, j)))
-            * self
-                .potentials
-                .get((context.atom_kind(i).get(), context.atom_kind(j).get()))
-                .expect("Atom kinds should exist in the nonbonded matrix.")
-                .isotropic_twobody_energy(distance_squared)
+        self.potentials
+            .get((context.atom_kind(i).get(), context.atom_kind(j).get()))
+            .expect("Atom kinds should exist in the nonbonded matrix.")
+            .isotropic_twobody_energy(distance_squared)
     }
 
     /// Energy of particle `i` with all other particles in `group` (self-avoiding).

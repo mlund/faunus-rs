@@ -4,6 +4,9 @@
 //! whose side length is at least `cutoff`. Neighbor queries for a particle
 //! then only visit the 27 (3³) adjacent cells, reducing the inner loop
 //! from O(N) to O(neighbors).
+//!
+//! In sparse systems cells are enlarged so that their number scales with
+//! the particle count rather than with box volume.
 
 use crate::Point;
 
@@ -26,21 +29,46 @@ pub struct CellList {
     cells: Vec<Vec<usize>>,
     /// Reverse map: particle index → flat cell index (for O(1) lookup/removal)
     particle_cell: Vec<usize>,
-    /// Precomputed neighbor cell offsets per cell (including self), with PBC wrapping
-    neighbor_offsets: Vec<Vec<usize>>,
+    /// Neighbor cells (including self, PBC-wrapped) of cell `c` are
+    /// `neighbor_cells[neighbor_start[c]..neighbor_start[c + 1]]`; flat to
+    /// avoid one heap block per cell.
+    neighbor_cells: Vec<usize>,
+    neighbor_start: Vec<usize>,
+}
+
+/// Upper bound on cell count. Cells beyond ~N are mostly empty yet each
+/// costs memory and a clone on every backup; at ≤ 2 cells per particle a
+/// neighbor query still visits only ~27·N/cells ≈ 14 candidates on average.
+/// Below the floor memory is negligible, so small systems keep the most
+/// selective, cutoff-sized cells.
+fn max_cells(capacity: usize) -> usize {
+    const FLOOR: usize = 16 * 16 * 16;
+    (2 * capacity).max(FLOOR)
+}
+
+/// Cells per axis: as many as the cutoff allows, unless that exceeds
+/// [`max_cells`], in which case all cells are enlarged uniformly.
+pub(crate) fn cells_per_axis(box_len: [f64; 3], cutoff: f64, capacity: usize) -> [usize; 3] {
+    let count = |side: f64| box_len.map(|len| (len / side).floor().max(1.0) as usize);
+    let limit = max_cells(capacity);
+    let volume: f64 = box_len.iter().product();
+    // Cube-root guess; thin axes clamped to one cell can still overshoot, hence the loop.
+    let mut side = cutoff.max((volume / limit as f64).cbrt());
+    let mut num_cells = count(side);
+    while num_cells.iter().product::<usize>() > limit {
+        side *= 1.1;
+        num_cells = count(side);
+    }
+    num_cells
 }
 
 impl CellList {
-    /// Create a new cell list for a box with the given side lengths and cutoff.
+    /// Create a cell list for a box with the given side lengths and cutoff.
     ///
-    /// Each cell dimension is at least `cutoff`; the actual number of cells
-    /// is `floor(box_len / cutoff)`, clamped to `[1, …]`.
-    pub fn new(box_len: [f64; 3], cutoff: f64) -> Self {
-        let num_cells = [
-            (box_len[0] / cutoff).floor().max(1.0) as usize,
-            (box_len[1] / cutoff).floor().max(1.0) as usize,
-            (box_len[2] / cutoff).floor().max(1.0) as usize,
-        ];
+    /// `capacity` is the total particle count (active and inactive) and
+    /// bounds the number of cells. Each cell side is at least `cutoff`.
+    pub fn new(box_len: [f64; 3], cutoff: f64, capacity: usize) -> Self {
+        let num_cells = cells_per_axis(box_len, cutoff, capacity);
         let cell_size = [
             box_len[0] / num_cells[0] as f64,
             box_len[1] / num_cells[1] as f64,
@@ -51,7 +79,7 @@ impl CellList {
         let total_cells = num_cells[0] * num_cells[1] * num_cells[2];
         let cells = vec![Vec::new(); total_cells];
 
-        let neighbor_offsets = Self::build_neighbor_map(num_cells);
+        let (neighbor_cells, neighbor_start) = Self::build_neighbor_map(num_cells);
 
         CellList {
             cell_size,
@@ -59,7 +87,8 @@ impl CellList {
             origin,
             cells,
             particle_cell: Vec::new(),
-            neighbor_offsets,
+            neighbor_cells,
+            neighbor_start,
         }
     }
 
@@ -90,7 +119,7 @@ impl CellList {
     /// Includes the particle's own cell (caller must skip self if needed).
     pub fn neighbors(&self, particle: usize) -> impl Iterator<Item = usize> + '_ {
         let ci = self.particle_cell[particle];
-        self.neighbor_offsets[ci]
+        self.neighbor_cells[self.neighbor_start[ci]..self.neighbor_start[ci + 1]]
             .iter()
             .flat_map(move |&neighbor_cell| self.cells[neighbor_cell].iter().copied())
     }
@@ -154,16 +183,19 @@ impl CellList {
     }
 
     /// Precompute the 27 neighbor cell indices (including self) for each cell,
-    /// wrapping with PBC.
-    fn build_neighbor_map(num_cells: [usize; 3]) -> Vec<Vec<usize>> {
+    /// wrapping with PBC. Fewer than three cells per axis yields duplicates,
+    /// which are dropped so no particle is visited twice.
+    fn build_neighbor_map(num_cells: [usize; 3]) -> (Vec<usize>, Vec<usize>) {
         let [nx, ny, nz] = num_cells;
         let total = nx * ny * nz;
-        let mut map = Vec::with_capacity(total);
+        let mut cells = Vec::with_capacity(27 * total);
+        let mut start = Vec::with_capacity(total + 1);
+        start.push(0);
 
         for ix in 0..nx {
             for iy in 0..ny {
                 for iz in 0..nz {
-                    let mut neighbors = Vec::with_capacity(27);
+                    let first = cells.len();
                     for dx in [-1_isize, 0, 1] {
                         for dy in [-1_isize, 0, 1] {
                             for dz in [-1_isize, 0, 1] {
@@ -171,17 +203,17 @@ impl CellList {
                                 let jy = (iy as isize + dy).rem_euclid(ny as isize) as usize;
                                 let jz = (iz as isize + dz).rem_euclid(nz as isize) as usize;
                                 let fi = flat_index(jx, jy, jz, ny, nz);
-                                if !neighbors.contains(&fi) {
-                                    neighbors.push(fi);
+                                if !cells[first..].contains(&fi) {
+                                    cells.push(fi);
                                 }
                             }
                         }
                     }
-                    map.push(neighbors);
+                    start.push(cells.len());
                 }
             }
         }
-        map
+        (cells, start)
     }
 }
 
@@ -255,7 +287,7 @@ mod tests {
     fn basic_cell_assignment() {
         let box_len = [10.0, 10.0, 10.0];
         let cutoff = 3.0;
-        let mut cl = CellList::new(box_len, cutoff);
+        let mut cl = CellList::new(box_len, cutoff, 100);
 
         // 3 cells per dimension (10/3 = 3.33 → 3)
         assert_eq!(cl.num_cells, [3, 3, 3]);
@@ -283,7 +315,7 @@ mod tests {
     fn neighbor_query_includes_nearby() {
         let box_len = [10.0, 10.0, 10.0];
         let cutoff = 3.0;
-        let mut cl = CellList::new(box_len, cutoff);
+        let mut cl = CellList::new(box_len, cutoff, 100);
 
         let positions = [
             Point::new(0.0, 0.0, 0.0),
@@ -303,7 +335,7 @@ mod tests {
     fn pbc_wrapping() {
         let box_len = [10.0, 10.0, 10.0];
         let cutoff = 3.0;
-        let mut cl = CellList::new(box_len, cutoff);
+        let mut cl = CellList::new(box_len, cutoff, 100);
 
         // Two particles near opposite edges — PBC neighbors
         let positions = [Point::new(-4.9, 0.0, 0.0), Point::new(4.9, 0.0, 0.0)];
@@ -323,7 +355,7 @@ mod tests {
     fn update_particle_moves_cell() {
         let box_len = [10.0, 10.0, 10.0];
         let cutoff = 3.0;
-        let mut cl = CellList::new(box_len, cutoff);
+        let mut cl = CellList::new(box_len, cutoff, 100);
 
         let positions = [Point::new(0.0, 0.0, 0.0)];
         cl.build(|i| positions[i], 1, 0..1);
@@ -342,7 +374,7 @@ mod tests {
     fn remove_particle() {
         let box_len = [10.0, 10.0, 10.0];
         let cutoff = 3.0;
-        let mut cl = CellList::new(box_len, cutoff);
+        let mut cl = CellList::new(box_len, cutoff, 100);
 
         let positions = [Point::new(0.0, 0.0, 0.0), Point::new(1.0, 0.0, 0.0)];
         cl.build(|i| positions[i], 2, 0..2);
@@ -354,17 +386,77 @@ mod tests {
         assert!(!neighbors.contains(&0));
     }
 
+    /// Memory must scale with particles, not volume: a sparse box would
+    /// otherwise allocate (L/cutoff)³ cells.
+    #[test]
+    fn sparse_box_caps_cell_count() {
+        let cutoff = 5.0;
+        let cl = CellList::new([1000.0; 3], cutoff, 30_000);
+        let total: usize = cl.num_cells.iter().product();
+        assert!(total <= 60_000, "{:?} cells", cl.num_cells);
+        assert!(cl.cell_size.iter().all(|&s| s >= cutoff));
+    }
+
+    #[test]
+    fn dense_box_keeps_cutoff_sized_cells() {
+        let cl = CellList::new([30.0, 20.0, 10.0], 3.0, 10_000);
+        assert_eq!(cl.num_cells, [10, 6, 3]);
+    }
+
+    /// Enlarged cells must still return every pair within the cutoff.
+    #[test]
+    fn capped_list_finds_every_pair_within_cutoff() {
+        use rand::{Rng, SeedableRng};
+        let box_len = [300.0, 240.0, 180.0];
+        let cutoff = 5.0;
+        let n = 300;
+        let mut rng = rand::rngs::StdRng::seed_from_u64(1);
+        let positions: Vec<Point> = (0..n)
+            .map(|_| {
+                Point::new(
+                    rng.gen_range(-150.0..150.0),
+                    rng.gen_range(-120.0..120.0),
+                    rng.gen_range(-90.0..90.0),
+                )
+            })
+            .collect();
+        let mut cl = CellList::new(box_len, cutoff, n);
+        assert!(
+            cl.num_cells.iter().product::<usize>() <= max_cells(n),
+            "must be capped"
+        );
+        assert!(
+            cl.cell_size.iter().any(|&s| s > 2.0 * cutoff),
+            "must be enlarged"
+        );
+        cl.build(|i| positions[i], n, 0..n);
+
+        let min_image = |a: f64, len: f64| a - len * (a / len).round();
+        for i in 0..n {
+            let found: Vec<usize> = cl.neighbors(i).collect();
+            for j in 0..n {
+                let d = positions[i] - positions[j];
+                let r2 = min_image(d.x, box_len[0]).powi(2)
+                    + min_image(d.y, box_len[1]).powi(2)
+                    + min_image(d.z, box_len[2]).powi(2);
+                if r2 < cutoff * cutoff {
+                    assert!(found.contains(&j), "pair ({i},{j}) missed");
+                }
+            }
+        }
+    }
+
     #[test]
     fn small_box_single_cell() {
         // Box smaller than cutoff → single cell
         let box_len = [2.0, 2.0, 2.0];
         let cutoff = 3.0;
-        let mut cl = CellList::new(box_len, cutoff);
+        let mut cl = CellList::new(box_len, cutoff, 100);
 
         assert_eq!(cl.num_cells, [1, 1, 1]);
         assert_eq!(cl.cells.len(), 1);
         // All neighbor cells are just cell 0
-        assert_eq!(cl.neighbor_offsets[0], vec![0]);
+        assert_eq!(cl.neighbor_cells, vec![0]);
 
         let positions = [Point::new(0.0, 0.0, 0.0), Point::new(0.5, 0.5, 0.5)];
         cl.build(|i| positions[i], 2, 0..2);
