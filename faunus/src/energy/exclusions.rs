@@ -19,52 +19,88 @@ use crate::Topology;
 
 /// Which particle pairs interact via nonbonded interactions.
 ///
-/// Values: 1 = particles interact, 0 = excluded pair.
+/// Exclusions only pair atoms of the same molecule, so each molecule kind keeps a small local
+/// table and particles in different molecules always interact: memory is O(N + Σ n_kind²).
 #[derive(Debug, Clone, PartialEq)]
-pub(super) struct ExclusionMatrix(SquareMatrix<u8>);
+pub(super) struct ExclusionMatrix {
+    /// Per molecule kind: 1 = atoms interact, 0 = excluded; the diagonal is 0.
+    kinds: Vec<SquareMatrix<u8>>,
+    /// Per particle: the molecule it belongs to.
+    owners: Vec<Owner>,
+}
+
+/// Where a particle's molecule starts and which kind table applies to it.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct Owner {
+    start: usize,
+    kind: usize,
+}
 
 impl ExclusionMatrix {
     /// Create exclusions based on topology.
+    ///
+    /// Particles are laid out block by block, each molecule a contiguous run of its atoms,
+    /// as in `Block::num_atoms`.
     pub fn from_topology(topology: &Topology) -> Self {
-        let n = topology.num_particles();
-        // Everything interacts except a particle with itself.
-        let mut exclusions = Self(SquareMatrix::from_fn(n, |i, j| u8::from(i != j)));
-
-        let mut atom_cnt = 0;
-        for block in topology.blocks() {
-            let molecule = &topology.moleculekinds()[block.molecule_index()];
-            for _ in 0..block.num_molecules() {
+        let kinds = topology
+            .moleculekinds()
+            .iter()
+            .map(|molecule| {
+                let mut local =
+                    SquareMatrix::from_fn(molecule.atom_indices().len(), |i, j| u8::from(i != j));
                 for exclusion in molecule.exclusions() {
-                    let rel = exclusion.into_ordered_tuple();
-                    let abs = (rel.0 + atom_cnt, rel.1 + atom_cnt);
-                    exclusions.set(abs, 0);
+                    let (i, j) = exclusion.into_ordered_tuple();
+                    local[(i, j)] = 0;
+                    local[(j, i)] = 0;
                 }
-                atom_cnt += molecule.atoms().len();
+                local
+            })
+            .collect();
+
+        let mut owners = Vec::with_capacity(topology.num_particles());
+        for block in topology.blocks() {
+            let kind = block.molecule_index();
+            let size = topology.moleculekinds()[kind].atom_indices().len();
+            for _ in 0..block.num_molecules() {
+                let start = owners.len();
+                owners.extend(std::iter::repeat_n(Owner { start, kind }, size));
             }
         }
-        exclusions
+        Self { kinds, owners }
     }
 
-    /// Get exclusion status for the specified pair of particle indices.
-    /// - 1 => particles interact via nonbonded interactions.
-    /// - 0 => particles do NOT interact via nonbonded interactions.
+    /// Whether particles `i` and `j` interact via nonbonded interactions.
+    pub fn interacts(&self, i: usize, j: usize) -> bool {
+        self.row(i).interacts(j)
+    }
+
+    /// Particle `i`'s exclusions, resolved once for a loop over partners `j`.
     #[inline]
-    pub fn get(&self, indices: (usize, usize)) -> u8 {
-        self.0[indices]
+    pub fn row(&self, i: usize) -> ExclusionRow<'_> {
+        let Owner { start, kind } = self.owners[i];
+        ExclusionRow {
+            start,
+            local: self.kinds[kind].row(i - start),
+        }
     }
+}
 
-    /// Contiguous row slice so the inner loop can use `get_unchecked(j)`
-    /// on a single slice instead of recomputing the offset each iteration.
-    #[inline]
-    pub fn row(&self, i: usize) -> &[u8] {
-        self.0.row(i)
-    }
+/// One particle's view of [`ExclusionMatrix`]: partners outside `start..start + local.len()`
+/// always interact, partners inside are looked up in `local`.
+#[derive(Debug, Clone, Copy)]
+pub(super) struct ExclusionRow<'a> {
+    start: usize,
+    local: &'a [u8],
+}
 
-    /// Set exclusion status for the specified pair of particle indices.
-    /// Sets both `(i,j)` and `(j,i)` in the matrix.
-    pub fn set(&mut self, (i, j): (usize, usize), value: u8) {
-        self.0[(i, j)] = value;
-        self.0[(j, i)] = value;
+impl ExclusionRow<'_> {
+    /// Whether this particle interacts with particle `j`.
+    #[inline(always)]
+    pub fn interacts(&self, j: usize) -> bool {
+        // Wrapping turns "j before start" into a huge offset, so one compare covers both sides.
+        let k = j.wrapping_sub(self.start);
+        // SAFETY: k < local.len() is checked first.
+        k >= self.local.len() || unsafe { *self.local.get_unchecked(k) != 0 }
     }
 }
 
@@ -72,15 +108,80 @@ impl ExclusionMatrix {
 mod tests {
     use super::*;
 
+    /// Two rigid dimers, then three flexible 4-bead chains with `excluded_neighbours: 1`:
+    /// directly bonded beads are excluded, and only within their own copy.
+    #[test]
+    fn flexible_chain_excludes_only_bonded_neighbours() {
+        let yaml = "\
+atoms:
+  - {name: A, mass: 1.0, sigma: 1.0}
+molecules:
+  - name: dimer
+    from_structure: [{A: [0, 0, 0]}, {A: [1, 0, 0]}]
+    degrees_of_freedom: Rigid
+  - name: chain
+    from_structure: [{A: [0, 0, 0]}, {A: [1, 0, 0]}, {A: [2, 0, 0]}, {A: [3, 0, 0]}]
+    bonds:
+      - {index: [0, 1]}
+      - {index: [1, 2]}
+      - {index: [2, 3]}
+    excluded_neighbours: 1
+system:
+  cell: !Cuboid [50.0, 50.0, 50.0]
+  medium: {permittivity: !Vacuum, temperature: 298.15}
+  energy: []
+  blocks:
+    - {molecule: dimer, N: 2, insert: !RandomCOM {}}
+    - {molecule: chain, N: 3, insert: !RandomCOM {}}
+";
+        let topology = Topology::from_str(yaml).unwrap();
+        let exclusions = ExclusionMatrix::from_topology(&topology);
+        // Particles: dimers @0, @2; chains @4, @8, @12.
+        let excluded = |i: usize, j: usize| {
+            let (i, j) = (i.min(j), i.max(j));
+            match (i, j) {
+                _ if i == j => true,
+                (0, 1) | (2, 3) => true,
+                _ if i >= 4 && (i - 4) / 4 == (j - 4) / 4 => j - i == 1,
+                _ => false,
+            }
+        };
+        for i in 0..16 {
+            for j in 0..16 {
+                assert_eq!(
+                    exclusions.interacts(i, j),
+                    !excluded(i, j),
+                    "pair ({i}, {j})"
+                );
+            }
+        }
+    }
+
+    /// Hot loops resolve particle `i` once via `row(i)`; it must answer like `interacts(i, j)`
+    /// for partners before, inside and after `i`'s own molecule.
+    #[test]
+    fn row_agrees_with_pairwise_lookup() {
+        let topology = Topology::from_file("tests/files/topology_pass.yaml").unwrap();
+        let exclusions = ExclusionMatrix::from_topology(&topology);
+        let n = topology.num_particles();
+        for i in 0..n {
+            let row = exclusions.row(i);
+            for j in 0..n {
+                assert_eq!(
+                    row.interacts(j),
+                    exclusions.interacts(i, j),
+                    "pair ({i}, {j})"
+                );
+            }
+        }
+    }
+
     #[test]
     fn test_exclusion_matrix() {
         let topology = Topology::from_file("tests/files/topology_pass.yaml").unwrap();
         let exclusions = ExclusionMatrix::from_topology(&topology);
 
         let num_particles = topology.num_particles();
-        assert_eq!(exclusions.row(0).len(), num_particles);
-        assert_eq!(exclusions.0.order(), num_particles);
-        assert_eq!(exclusions.0.iter().count(), num_particles * num_particles);
 
         // MOL (RigidAlchemical, 7 atoms) excludes all intra-molecular pairs.
         // MOL2 (Free, 3 atoms, no bonds) has no exclusions.
@@ -97,14 +198,10 @@ mod tests {
 
         for i in 0..num_particles {
             for j in 0..num_particles {
-                if expected_exclusions.contains(&(i, j))
+                let excluded = expected_exclusions.contains(&(i, j))
                     || expected_exclusions.contains(&(j, i))
-                    || i == j
-                {
-                    assert_eq!(exclusions.get((i, j)), 0);
-                } else {
-                    assert_eq!(exclusions.get((i, j)), 1);
-                }
+                    || i == j;
+                assert_eq!(exclusions.interacts(i, j), !excluded, "pair ({i}, {j})");
             }
         }
     }
@@ -170,7 +267,7 @@ mod tests {
                     if i == j {
                         continue;
                     }
-                    let cpu_excluded = excl.get((i, j)) == 0;
+                    let cpu_excluded = !excl.interacts(i, j);
                     let csr_excluded = csr_neighbors.contains(&(j as u32));
                     assert_eq!(
                         cpu_excluded, csr_excluded,

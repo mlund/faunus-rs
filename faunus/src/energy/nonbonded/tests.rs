@@ -814,7 +814,7 @@ fn test_nonbonded_forces() {
             if j == 0 {
                 continue;
             }
-            if nonbonded.exclusions.get((0, j)) == 0 {
+            if !nonbonded.exclusions.interacts(0, j) {
                 continue;
             }
             let dr = system.get_distance(0, j); // p0 - pj (from j to 0)
