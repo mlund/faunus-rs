@@ -1731,8 +1731,9 @@ enable per-frame visualization updates in VMD:</p>
 quaternions, mass centers, and group sizes (for GC moves); swap moves change
 <code>atom_id</code>. When <code>save_frame_state: true</code>, a binary <code>.aux</code> file is written
 alongside each XTC frame, storing this per-frame microstate data.</p>
-<p>The <code>.aux</code> file is required by <code>faunus rerun</code> (see <a href="#rerun">Rerun</a>) to fully
-reconstruct the simulation state from each trajectory frame.</p>
+<p><code>faunus rerun</code> (see <a href="#rerun">Rerun</a>) uses the <code>.aux</code> file to reconstruct the
+simulation state from each trajectory frame. It is needed when group sizes or
+atom types vary between frames.</p>
 <hr />
 <h2 id="radial-distribution-function">Radial Distribution Function<a class="headerlink" href="#radial-distribution-function" title="Permanent link">&para;</a></h2>
 <p>Computes the radial distribution function g(r) for pairs of particles or
@@ -3016,15 +3017,21 @@ used during the biased simulation.</p>
 <td><code>--aux</code></td>
 <td>no</td>
 <td><code>traj.aux</code> (from <code>--traj</code>)</td>
-<td>Frame state file</td>
+<td>Frame state file; optional if every group is full</td>
 </tr>
 </tbody>
 </table>
 <h3 id="requirements">Requirements<a class="headerlink" href="#requirements" title="Permanent link">&para;</a></h3>
-<p>The trajectory must have been produced with <code>save_frame_state: true</code> on the
-<a href="#trajectory">Trajectory</a> analysis, so that a matching <code>.aux</code> file exists.
-The <code>.aux</code> file header must match the topology in the rerun input (same number
-of groups, particles, and molecule types).</p>
+<p>With a frame state file, written by <code>save_frame_state: true</code> on the
+<a href="#trajectory">Trajectory</a> analysis, each frame restores its group sizes, atom
+types and molecular orientations. The file header must match the topology in
+the rerun input (same number of groups, particles, and molecule types).</p>
+<p>Without one, as for a trajectory from another program, every frame takes its
+atom types from the rerun input, every group must be full, and molecular
+orientations are fitted to the coordinates. Results are then wrong if group
+sizes or atom types changed during the original run, for example through grand
+canonical, titration or swap moves; Faunus warns but can't detect this. A <code>--aux</code> file that is named
+explicitly but missing is an error.</p>
 <h3 id="example-workflow">Example workflow<a class="headerlink" href="#example-workflow" title="Permanent link">&para;</a></h3>
 <ol>
 <li>

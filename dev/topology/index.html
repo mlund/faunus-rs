@@ -1471,8 +1471,12 @@ The optional <code>min_distance</code> field (Å) in <code>!RandomCOM</code> use
 </code></pre></div>
 <hr />
 <h2 id="including-files">Including Files<a class="headerlink" href="#including-files" title="Permanent link">&para;</a></h2>
-<p>Topology files can include other YAML files. Paths are relative to the including file.
-Definitions in later files take precedence; definitions in the main file take precedence over all includes.</p>
+<p>Topology files can include other YAML files, and included files can include
+further files. Paths are relative to the including file. Files are read
+depth-first: the main file first, then each listed file followed by the files
+that it includes. The first definition of an atom, molecule or energy term wins,
+and a later one is ignored with a warning. A file that is included twice is read
+once, and an include cycle is an error.</p>
 <div class="highlight"><pre><span></span><code><span class="nt">include</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">forcefield.yaml</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">overrides.yaml</span><span class="p p-Indicator">]</span>
 </code></pre></div>
 <h3 id="implicit-reservoirs">Implicit Reservoirs<a class="headerlink" href="#implicit-reservoirs" title="Permanent link">&para;</a></h3>

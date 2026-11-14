@@ -800,8 +800,10 @@ file is updated with the final state.</p>
 <p>The main output file contains the simulation summary, final energy terms, move
 statistics, and analysis results that do not use a separate file. Analyses with
 a <code>file:</code> field write their own data files, such as <code>energy.csv.gz</code>, <code>rdf.dat</code>,
-or <code>traj.xtc</code>. A trajectory that will later be used with <code>faunus rerun</code> must be
-written with <code>save_frame_state: true</code>; see <a href="analysis/#rerun">Rerun</a>.</p>
+or <code>traj.xtc</code>. A trajectory whose group sizes or atom types change during the
+run, as with grand canonical or swap moves, must be written with
+<code>save_frame_state: true</code> to be used with <code>faunus rerun</code>; see
+<a href="analysis/#rerun">Rerun</a>.</p>
 <p>Tracked examples:</p>
 <table>
 <thead>

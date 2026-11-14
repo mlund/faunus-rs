@@ -934,8 +934,8 @@ In a complete input file, energy terms are defined under <code>system.energy</co
 list of tagged entries (<code>!Nonbonded</code>, <code>!Pressure</code>, …), mirroring <code>analysis</code> and
 <code>moves</code>. Order is irrelevant — the total energy is a sum — and most terms may
 appear only once; <code>!Sasa</code>, <code>!Constrain</code>, <code>!CustomExternal</code> and <code>!CustomPair</code> may
-repeat. Included force-field fragments may instead use a top-level <code>energy</code>
-section; see <a href="#loading-nonbonded-from-include-files">Loading nonbonded from include files</a>.</p>
+repeat. Included files, such as force fields, use the same layout; see
+<a href="#energy-terms-from-included-files">Energy terms from included files</a>.</p>
 <hr />
 <h2 id="external-pressure-isobaric">External Pressure (Isobaric)<a class="headerlink" href="#external-pressure-isobaric" title="Permanent link">&para;</a></h2>
 <p>The <code>!Pressure</code> energy term adds an external pressure contribution for the <em>NPT</em> ensemble:</p>
@@ -1029,20 +1029,30 @@ pairs can override the default.</p>
 (e.g. AshbaughHatch), the append entry replaces that type; other default types
 (e.g. Coulomb) are kept.</p>
 <p>A pair may not appear in both <code>replace</code> and <code>append</code>.</p>
-<h3 id="loading-nonbonded-from-include-files">Loading nonbonded from include files<a class="headerlink" href="#loading-nonbonded-from-include-files" title="Permanent link">&para;</a></h3>
-<p>Nonbonded definitions can be provided in an included force field file.
-The top-level <code>include</code> list is scanned for files with an <code>energy</code> section,
-and its <code>!Nonbonded</code> term is merged into the input.
-<code>replace</code>/<code>append</code> entries in the input take precedence over includes.
-<code>default</code> lists are concatenated; duplicate types from includes are skipped with a warning.</p>
+<h3 id="energy-terms-from-included-files">Energy terms from included files<a class="headerlink" href="#energy-terms-from-included-files" title="Permanent link">&para;</a></h3>
+<p>An included file, such as a force field, can define energy terms under
+<code>system: energy:</code>, the same layout as the input file. A top-level <code>energy:</code> in an
+included file is an error. Files are read in the order described in
+<a href="../topology/#including-files">Including Files</a>, and the first definition of a
+term wins:</p>
+<ul>
+<li>A term that the input does not define is added from the include, and the
+  repeatable terms listed above are always added.</li>
+<li>Any other included term is ignored, with a warning naming the file.</li>
+<li><code>!Nonbonded</code> terms are merged entry by entry. <code>default</code> lists are joined and
+  skip interaction types that are already present. <code>replace</code> and <code>append</code>
+  entries, <code>spline</code> and <code>cutoff</code> follow the same first-wins rule, and each
+  ignored entry gives a warning.</li>
+</ul>
 <div class="highlight"><pre><span></span><code><span class="c1"># assets/forcefield.yaml</span>
-<span class="nt">energy</span><span class="p">:</span>
-<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!Nonbonded</span>
-<span class="w">    </span><span class="nt">default</span><span class="p">:</span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!AshbaughHatch</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">mixing</span><span class="p">:</span><span class="w"> </span><span class="nv">arithmetic</span><span class="p p-Indicator">,</span><span class="nt"> cutoff</span><span class="p">:</span><span class="w"> </span><span class="nv">20.0</span><span class="p p-Indicator">}</span>
-<span class="w">    </span><span class="nt">replace</span><span class="p">:</span>
-<span class="w">      </span><span class="p p-Indicator">[</span><span class="nv">A</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">A</span><span class="p p-Indicator">]:</span>
-<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!KimHummer</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">sigma</span><span class="p">:</span><span class="w"> </span><span class="nv">5.0</span><span class="p p-Indicator">,</span><span class="nt"> epsilon</span><span class="p">:</span><span class="w"> </span><span class="nv">-0.18</span><span class="p p-Indicator">}</span>
+<span class="nt">system</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">energy</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!Nonbonded</span>
+<span class="w">      </span><span class="nt">default</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!AshbaughHatch</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">mixing</span><span class="p">:</span><span class="w"> </span><span class="nv">arithmetic</span><span class="p p-Indicator">,</span><span class="nt"> cutoff</span><span class="p">:</span><span class="w"> </span><span class="nv">20.0</span><span class="p p-Indicator">}</span>
+<span class="w">      </span><span class="nt">replace</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">[</span><span class="nv">A</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">A</span><span class="p p-Indicator">]:</span>
+<span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!KimHummer</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">sigma</span><span class="p">:</span><span class="w"> </span><span class="nv">5.0</span><span class="p p-Indicator">,</span><span class="nt"> epsilon</span><span class="p">:</span><span class="w"> </span><span class="nv">-0.18</span><span class="p p-Indicator">}</span>
 
 <span class="c1"># input.yaml — gets both AshbaughHatch (from include) and Coulomb as defaults</span>
 <span class="nt">include</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">assets/forcefield.yaml</span><span class="p p-Indicator">]</span>
@@ -1581,6 +1591,17 @@ Add a <code>spline</code> section inside <code>!Nonbonded</code>:</p>
 </tr>
 </tbody>
 </table>
+<p>At setup, each tabulated pair potential is compared with the exact potential from
+half the inner edge of the table, where it extrapolates linearly, out to the cutoff,
+at distances where the pair energy is below 15 <span class="arithmatex">\(RT\)</span> in magnitude. If the table deviates by more than <span class="arithmatex">\(0.01\,RT\)</span> plus
+0.1 % of the energy, a warning names the atom pair, the distance and both energies.
+The usual remedy is a larger <code>table_points</code> or another <code>grid_type</code>. When the warning
+says the distance is below the table's inner edge, the table is extrapolating linearly
+into a region that the system can reach, and more grid points will not help.</p>
+<p>The cell list divides the box into cells at least one <code>cutoff</code> wide. In a dilute system the
+cells are enlarged, so that there are at most about eight cells per particle. Memory then
+grows with the number of particles rather than with the box volume, and every pair within
+the cutoff is still found.</p>
 <hr />
 <h2 id="excluded-pair-coulomb-correction">Excluded-Pair Coulomb Correction<a class="headerlink" href="#excluded-pair-coulomb-correction" title="Permanent link">&para;</a></h2>
 <p>Excluded pairs (from <code>excluded_neighbours</code> or <code>exclusions</code>) skip all nonbonded
