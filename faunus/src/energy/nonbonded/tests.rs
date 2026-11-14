@@ -1191,22 +1191,43 @@ const IONS: usize = 3;
 /// Two active rigid molecules, one empty slot and a partly active atomic group in a 12 Å box. The
 /// last ion wraps across the x face to reach the molecule at x = 4.
 fn resizable_system_yaml(nonbonded_extra: &str) -> String {
-    let head = "atoms:\n  - {name: A, mass: 1.0, sigma: 2.0, eps: 1.0}\n  \
-                - {name: I, mass: 1.0, sigma: 1.0, eps: 1.0}\n\
-                molecules:\n  - {name: M, atoms: [A, A], degrees_of_freedom: Rigid}\n  \
-                - {name: ION, atoms: [I], atomic: true}\n\
-                system:\n  cell: !Cuboid [12.0, 12.0, 12.0]\n  \
-                medium: {permittivity: !Vacuum, temperature: 298.15}\n  \
-                energy:\n    - !Nonbonded\n        default:\n          - !LennardJones {mixing: LB}\n";
-    let blocks = "  blocks:\n    - molecule: M\n      N: 3\n      active: 2\n      \
-                insert: !Manual [[0.0, 0.0, 0.0], [2.0, 0.0, 0.0], [0.0, 4.0, 0.0], [2.0, 4.0, 0.0], \
-                [0.0, -4.0, 0.0], [2.0, -4.0, 0.0]]\n    \
-                - molecule: ION\n      N: 4\n      active: 3\n      \
-                insert: !Manual [[0.0, 0.0, 3.0], [2.0, 2.0, 3.0], [-5.5, 0.0, 0.0], [1.0, 4.0, 3.0]]\n";
-    format!("{head}{nonbonded_extra}{blocks}")
+    system_with_slot_yaml(12.0, 0, nonbonded_extra)
 }
 
-/// One trial of each kind of reaction on the [`resizable_system_yaml`] system.
+/// The same groups in a box of six cells per side, with most ions out of the molecules' reach so that
+/// rigid rows sweep rather than evaluate them directly.
+fn spread_system_yaml(nonbonded_extra: &str) -> String {
+    system_with_slot_yaml(30.0, 20, nonbonded_extra)
+}
+
+fn system_with_slot_yaml(side: f64, far_ions: usize, nonbonded_extra: &str) -> String {
+    let far: String = (0..far_ions)
+        .map(|n| {
+            format!(
+                "[{}.0, {}.0, -13.0], ",
+                3 * (n % 5) as i32 - 6,
+                3 * (n / 5) as i32 - 6
+            )
+        })
+        .collect();
+    let (n, active) = (far_ions + 4, far_ions + 3);
+    format!(
+        "atoms:\n  - {{name: A, mass: 1.0, sigma: 2.0, eps: 1.0}}\n  \
+         - {{name: I, mass: 1.0, sigma: 1.0, eps: 1.0}}\n\
+         molecules:\n  - {{name: M, atoms: [A, A], degrees_of_freedom: Rigid}}\n  \
+         - {{name: ION, atoms: [I], atomic: true}}\n\
+         system:\n  cell: !Cuboid [{side:.1}, {side:.1}, {side:.1}]\n  \
+         medium: {{permittivity: !Vacuum, temperature: 298.15}}\n  \
+         energy:\n    - !Nonbonded\n        default:\n          - !LennardJones {{mixing: LB}}\n\
+         {nonbonded_extra}  blocks:\n    - molecule: M\n      N: 3\n      active: 2\n      \
+         insert: !Manual [[0.0, 0.0, 0.0], [2.0, 0.0, 0.0], [0.0, 4.0, 0.0], [2.0, 4.0, 0.0], \
+         [0.0, -4.0, 0.0], [2.0, -4.0, 0.0]]\n    \
+         - molecule: ION\n      N: {n}\n      active: {active}\n      \
+         insert: !Manual [[0.0, 0.0, 3.0], [2.0, 2.0, 3.0], [-5.5, 0.0, 0.0], {far}[1.0, 4.0, 3.0]]\n"
+    )
+}
+
+/// One trial of each kind of reaction, on a [`system_with_slot_yaml`] system.
 fn speciation_trial(system: &Backend, kind: usize) -> crate::propagate::ProposedMove {
     use crate::propagate::ProposedMove;
     use crate::transform::SpeciationAction;
@@ -1372,6 +1393,138 @@ fn swept_row_bins_each_pair_by_group_and_stops_at_the_cutoff() {
     assert_eq!(out[1], 0.0);
 }
 
+/// A row entry under this potential is the number of pairs visited for that group, which energies
+/// alone can't show: a pair skipped past the cutoff and one evaluated there both add nothing.
+#[derive(Debug, Clone)]
+struct UnitPotential;
+
+impl interatomic::Cutoff for UnitPotential {
+    fn cutoff(&self) -> f64 {
+        f64::INFINITY
+    }
+}
+
+impl IsotropicTwobodyEnergy for UnitPotential {
+    fn isotropic_twobody_energy(&self, _distance_squared: f64) -> f64 {
+        1.0
+    }
+}
+
+fn unit_matrix(spline: &NonbondedMatrixSplined) -> NonbondedMatrix<UnitPotential> {
+    NonbondedMatrix {
+        potentials: SquareMatrix::from_element(spline.potentials.order(), UnitPotential),
+        exclusions: spline.exclusions.clone(),
+        cache: Default::default(),
+        cutoff: Some(5.0),
+        use_bounding_spheres: true,
+        molecule_pair_exclusions: vec![],
+    }
+}
+
+/// A row of pair counts. Cells are 5 Å wide, so a neighbour search spans 5–10 Å to each side.
+fn pair_counts(yaml: &str, m: usize) -> Vec<f64> {
+    let (system, spline) = backend_with_spline(yaml);
+    assert!(system.cell_list().is_some());
+    let mut out = vec![0.0; system.groups().len()];
+    unit_matrix(&spline)
+        .cached_pairs(&system)
+        .row(m, 0, &mut out);
+    out
+}
+
+fn single_box_yaml(molecules: &str, blocks: &str) -> String {
+    format!(
+        "atoms:\n  - {{name: A, mass: 1.0, sigma: 2.0, eps: 1.0}}\n\
+         molecules:\n{molecules}\
+         system:\n  cell: !Cuboid [60.0, 60.0, 60.0]\n  \
+         medium: {{permittivity: !Vacuum, temperature: 298.15}}\n  \
+         energy:\n    - !Nonbonded\n        default:\n          - !LennardJones {{mixing: LB}}\n\
+         {SPLINE_5A_CELL_LIST}  blocks:\n{blocks}"
+    )
+}
+
+/// Evaluating every ion for each trial of each molecule is the cost this path exists to avoid.
+#[test]
+fn rigid_row_visits_only_neighbouring_atomic_partners() {
+    let yaml = single_box_yaml(
+        "  - {name: M, atoms: [A], degrees_of_freedom: Rigid}\n  \
+         - {name: ION, atoms: [A], atomic: true}\n",
+        "    - molecule: M\n      N: 1\n      insert: !Manual [[0.0, 0.0, 0.0]]\n    \
+         - molecule: ION\n      N: 3\n      \
+         insert: !Manual [[3.0, 0.0, 0.0], [20.0, 0.0, 0.0], [-20.0, 0.0, 0.0]]\n",
+    );
+    assert_eq!(pair_counts(&yaml, 0)[1], 1.0);
+}
+
+/// With fewer atoms to evaluate than neighbours to walk, a sweep would cost more than it saves. Three
+/// molecule atoms and a near ion make four neighbours, against two ions.
+#[test]
+fn rigid_row_evaluates_atomic_partners_directly_when_they_are_few() {
+    let yaml = single_box_yaml(
+        "  - {name: M, atoms: [A, A, A], degrees_of_freedom: Rigid}\n  \
+         - {name: ION, atoms: [A], atomic: true}\n",
+        "    - molecule: M\n      N: 1\n      \
+         insert: !Manual [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [2.0, 0.0, 0.0]]\n    \
+         - molecule: ION\n      N: 2\n      insert: !Manual [[3.0, 0.0, 0.0], [20.0, 0.0, 0.0]]\n",
+    );
+    assert_eq!(pair_counts(&yaml, 0)[1], 6.0);
+}
+
+/// A rigid molecule pair within sphere range is cheaper by direct evaluation than by sweep, so every
+/// atom pair counts here, including those too far apart for a neighbour search to reach.
+#[test]
+fn rigid_row_evaluates_rigid_partners_directly() {
+    let yaml = single_box_yaml(
+        "  - {name: M, atoms: [A, A], degrees_of_freedom: Rigid}\n",
+        "    - molecule: M\n      N: 2\n      \
+         insert: !Manual [[-4.0, 0.0, 0.0], [4.0, 0.0, 0.0], [8.0, 0.0, 0.0], [16.0, 0.0, 0.0]]\n",
+    );
+    assert_eq!(pair_counts(&yaml, 0)[1], 4.0);
+}
+
+/// A molecule with two atomic groups, enough of them far away that its row sweeps.
+fn rigid_row_with_two_atomic_groups() -> String {
+    single_box_yaml(
+        "  - {name: M, atoms: [A], degrees_of_freedom: Rigid}\n  \
+         - {name: ION, atoms: [A], atomic: true}\n  \
+         - {name: OTHER, atoms: [A], atomic: true}\n",
+        "    - molecule: M\n      N: 2\n      \
+         insert: !Manual [[0.0, 0.0, 0.0], [9.0, 0.0, 0.0]]\n    \
+         - molecule: ION\n      N: 6\n      \
+         insert: !Manual [[3.0, 0.0, 0.0], [20.0, 0.0, 0.0], [-20.0, 0.0, 0.0], \
+         [20.0, 5.0, 0.0], [-20.0, 5.0, 0.0], [20.0, -5.0, 0.0]]\n    \
+         - molecule: OTHER\n      N: 3\n      \
+         insert: !Manual [[-4.0, 0.0, 0.0], [20.0, 10.0, 0.0], [-20.0, 10.0, 0.0]]\n",
+    )
+}
+
+/// Literal energies expose a pair binned to the wrong group: LJ(σ=2, ε=1) less the -0.0163 shift at
+/// the 5 Å cutoff, at 3 Å and 4 Å from the molecule.
+#[test]
+fn swept_rigid_row_bins_atomic_partners_by_group() {
+    let yaml = rigid_row_with_two_atomic_groups();
+    assert_eq!(pair_counts(&yaml, 0)[1..], [0.0, 1.0, 1.0], "must sweep");
+
+    let (system, matrix) = backend_with_spline(&yaml);
+    let mut out = [0.0; 4];
+    matrix.cached_pairs(&system).row(0, 0, &mut out);
+    assert_eq!(out[1], 0.0);
+    assert_approx_eq!(f64, out[2], -0.3203 + 0.0163, epsilon = 1e-3);
+    assert_approx_eq!(f64, out[3], -0.0615 + 0.0163, epsilon = 1e-3);
+}
+
+/// The excluded group's atoms are still neighbours, and sit just past the partner before them.
+#[test]
+fn swept_rigid_row_ignores_neighbours_in_excluded_groups() {
+    let (system, mut matrix) = backend_with_spline(&rigid_row_with_two_atomic_groups());
+    matrix.exclude_molecule_pair(system.groups()[0].molecule(), system.groups()[3].molecule());
+
+    let mut out = [0.0; 4];
+    matrix.cached_pairs(&system).row(0, 0, &mut out);
+    assert_eq!(out[3], 0.0);
+    assert_approx_eq!(f64, out[2], -0.3203 + 0.0163, epsilon = 1e-3);
+}
+
 /// An excluded molecule pair has no energy, and a cell list alone can't tell which group a
 /// neighbour belongs to.
 #[test]
@@ -1395,18 +1548,27 @@ fn swept_row_applies_molecule_pair_exclusions() {
 /// both the active set and the neighbour lists a sweep walks.
 #[test]
 fn cell_list_rows_track_all_pairs_through_trials() {
+    use crate::cell::VolumeScalePolicy;
     use crate::context::{Context, WithHamiltonian};
     use crate::energy::EnergyChange;
+    use crate::montecarlo::NewOld;
     use crate::propagate::ProposedMove;
     use crate::Point;
 
-    let mut swept = backend_from_input(&resizable_system_yaml(SPLINE_5A_CELL_LIST));
-    let mut all_pairs = backend_from_input(&resizable_system_yaml(
+    let (mut swept, spline) = backend_with_spline(&spread_system_yaml(SPLINE_5A_CELL_LIST));
+    let mut all_pairs = backend_from_input(&spread_system_yaml(
         "        spline: {cutoff: 5.0, cell_list: false}\n",
     ));
     assert!(swept.cell_list().is_some() && all_pairs.cell_list().is_none());
+    let counter = unit_matrix(&spline);
 
     let check = |swept: &Backend, all_pairs: &Backend| {
+        for g in 0..2 {
+            let mut counts = [0.0; IONS + 1];
+            counter.cached_pairs(swept).row(g, 0, &mut counts);
+            let direct = 2 * swept.groups()[IONS].iter_active().len();
+            assert!(counts[IONS] < direct as f64, "rigid row must sweep");
+        }
         for g in 0..=IONS {
             let rigid = Change::SingleGroup(g, GroupChange::RigidBody);
             assert_approx_eq!(
@@ -1432,20 +1594,57 @@ fn cell_list_rows_track_all_pairs_through_trials() {
         }
     };
 
-    for kind in 0..7 {
+    type Trial = Box<dyn Fn(&Backend) -> ProposedMove>;
+    let mut trials: Vec<Trial> = vec![
+        // These bring molecules within reach of the far ions, which a sweep only finds if the cell
+        // list followed.
+        Box::new(|_| ProposedMove::translate_group(0, Point::new(9.0, 0.0, -10.0))),
+        Box::new(|_| {
+            ProposedMove::translate_atoms(IONS, vec![RelIndex::new(3)], Point::new(9.0, 10.0, 14.0))
+        }),
+        Box::new(|system| {
+            let shift = Point::new(0.0, 0.0, -10.0);
+            let center = *system.groups()[1].mass_center().unwrap() + shift;
+            ProposedMove::cluster(vec![1], vec![center], None, 0.0, shift)
+        }),
+        // Away from the molecule just moved. A rejected move left in the cell list would hide this
+        // ion from that molecule's row.
+        Box::new(|_| {
+            ProposedMove::translate_atoms(IONS, vec![RelIndex::new(20)], Point::new(0.0, 0.0, 16.0))
+        }),
+    ];
+    for kind in 0..5 {
+        trials.push(Box::new(move |system| speciation_trial(system, kind)));
+    }
+    trials.push(Box::new(|_| {
+        ProposedMove::translate_group(0, Point::new(0.5, 3.0, -1.0))
+    }));
+    // A full cell width, so a reject has to take the tracked cell-list undo.
+    trials.push(Box::new(|_| {
+        ProposedMove::translate_atoms(IONS, vec![RelIndex::new(0)], Point::new(6.0, 0.0, 0.0))
+    }));
+    // Every particle changes cell at once, and every row rebuilds from the new list.
+    trials.push(Box::new(|_| {
+        let volumes = NewOld {
+            new: 30000.0,
+            old: 27000.0,
+        };
+        ProposedMove::scale_volume(VolumeScalePolicy::Isotropic, volumes)
+    }));
+
+    for make_trial in &trials {
         for accept in [false, true] {
-            let proposed = match kind {
-                5 => ProposedMove::translate_group(0, Point::new(0.5, 3.0, -1.0)),
-                // A full cell width, so a reject has to take the tracked cell-list undo.
-                6 => ProposedMove::translate_atoms(
-                    IONS,
-                    vec![RelIndex::new(0)],
-                    Point::new(6.0, 0.0, 0.0),
-                ),
-                _ => speciation_trial(&swept, kind),
-            };
+            let proposed = make_trial(&swept);
             trial(&mut swept, &proposed, accept);
             trial(&mut all_pairs, &proposed, accept);
+            check(&swept, &all_pairs);
+
+            // Cached rows don't read the cell list, so make the molecules' rows read it again.
+            for g in 0..2 {
+                let nudge = ProposedMove::translate_group(g, Point::new(0.1, 0.0, 0.0));
+                trial(&mut swept, &nudge, true);
+                trial(&mut all_pairs, &nudge, true);
+            }
             check(&swept, &all_pairs);
         }
     }

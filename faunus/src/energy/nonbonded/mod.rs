@@ -314,47 +314,111 @@ impl<P: IsotropicTwobodyEnergy, S: SimulationCell, C: ObserveContext> GroupPairs
             .group_pair_energy(&self.arrays, &groups[i], &groups[j])
     }
 
-    /// A group that bounding spheres can't cull would cost O(|m|·N) by pairs. A cell-list sweep costs
-    /// O(|m|·neighbours), and pairs it doesn't visit are beyond the cutoff. Cullable groups stay on
-    /// pairs, which is faster than a sweep.
+    /// A pair that bounding spheres can't cull would cost O(|m|·|j|) directly. A cell-list sweep costs
+    /// O(|m|·neighbours), and pairs it doesn't visit are beyond the cutoff. Culling beats a sweep when
+    /// it applies to both groups.
     fn row(&self, m: usize, first: usize, out: &mut [f64]) {
-        let own = &self.context.groups()[m];
-        let cullable = self.matrix.use_bounding_spheres && own.mass_center().is_some();
-        match self.arrays.cell_list {
-            Some(cell_list) if !cullable => self.sweep_row(cell_list, m, first, out),
-            _ => row_from_pairs(self, m, first, out),
+        let Some(cell_list) = self.arrays.cell_list else {
+            return row_from_pairs(self, m, first, out);
+        };
+        let groups = self.context.groups();
+        let own = &groups[m];
+        let own_cullable = self.matrix.cullable(own);
+        let mut swept = Vec::new();
+        for j in (first..groups.len()).filter(|&j| j != m) {
+            if own_cullable && self.matrix.cullable(&groups[j]) {
+                out[j] = self.pair(m, j);
+            } else {
+                out[j] = 0.0;
+                if !self
+                    .matrix
+                    .is_molecule_pair_excluded(own.molecule(), groups[j].molecule())
+                {
+                    swept.push((groups[j].iter_active(), j));
+                }
+            }
         }
+        // A cullable group has few partners to sweep, but a sweep walks every neighbour regardless.
+        // Direct evaluation wins when it visits no more pairs.
+        if own_cullable && !swept.is_empty() {
+            let direct = own.iter_active().len()
+                * swept.iter().map(|(active, _)| active.len()).sum::<usize>();
+            let walked: usize = own
+                .iter_active()
+                .map(|i| cell_list.neighbors(i).count())
+                .sum();
+            if direct <= walked {
+                for (_, j) in swept.drain(..) {
+                    out[j] = self.pair(m, j);
+                }
+            }
+        }
+        self.sweep(cell_list, m, &swept, out);
     }
 }
 
 impl<P: IsotropicTwobodyEnergy, S: SimulationCell, C: ObserveContext> CachedPairs<'_, P, S, C> {
-    fn sweep_row(
+    /// Add to `out[g]` the pairs of group `m` with each `(active range, g)` in `partners`, ascending.
+    ///
+    /// The ranges are copied out of `Group`, a large struct, because this search runs per neighbour.
+    fn sweep(
         &self,
         cell_list: &crate::celllist::CellList,
         m: usize,
-        first: usize,
+        partners: &[(std::ops::Range<usize>, usize)],
         out: &mut [f64],
     ) {
-        let groups = self.context.groups();
-        let own = &groups[m];
-        out[first..].fill(0.0);
+        if partners.is_empty() {
+            return;
+        }
+        let own = &self.context.groups()[m];
         for i in own.iter_active() {
+            let probe = self.matrix.probe(&self.arrays, i);
+            // An atomic group's neighbours are largely its own, so skip the search for those.
             for j in cell_list.neighbors(i).filter(|&j| !own.contains(j)) {
-                let g = self
-                    .context
-                    .group_of_particle(j)
-                    .expect("every particle belongs to a group");
-                if g < first
-                    || self
-                        .matrix
-                        .is_molecule_pair_excluded(own.molecule(), groups[g].molecule())
-                {
-                    continue;
+                // Groups occupy ascending particle ranges, so the owner can only be the last partner
+                // starting at or before j. Other neighbours belong to no partner.
+                let candidates = partners.partition_point(|(active, _)| active.start <= j);
+                let owner = partners[..candidates].last();
+                if let Some((_, g)) = owner.filter(|(active, _)| active.contains(&j)) {
+                    out[*g] += probe.energy_with(j);
                 }
-                out[g] += self
-                    .matrix
-                    .particle_energy(&self.arrays, i, std::iter::once(j));
             }
+        }
+    }
+}
+
+/// One particle of a pair loop, read once rather than per partner.
+///
+/// A sweep picks its partners one at a time. Going through [`NonbondedMatrix::particle_energy`] for
+/// that adds a call site that can cost it its inlining, and with it every loop's speed.
+struct PairProbe<'a, P, S: SimulationCell> {
+    potentials: &'a SquareMatrix<P>,
+    arrays: &'a ParticleArrays<'a, S>,
+    x: f64,
+    y: f64,
+    z: f64,
+    kind: usize,
+    exclusions: &'a [u8],
+}
+
+impl<P: IsotropicTwobodyEnergy, S: SimulationCell> PairProbe<'_, P, S> {
+    #[inline(always)]
+    fn energy_with(&self, j: usize) -> f64 {
+        debug_assert!(j < self.arrays.x.len());
+        // SAFETY: j is a valid particle index from an active group range;
+        // atom kinds are topology-derived indices into the potentials matrix.
+        // No j==i guard needed: callers use disjoint ranges, and the exclusion
+        // matrix diagonal is 0 (self-exclusion) so it would be skipped anyway.
+        unsafe {
+            if *self.exclusions.get_unchecked(j) == 0 {
+                return 0.0;
+            }
+            let rsq = self.arrays.distance_squared_to(self.x, self.y, self.z, j);
+            let kind_j = *self.arrays.atom_kinds.get_unchecked(j) as usize;
+            self.potentials
+                .uget((self.kind, kind_j))
+                .isotropic_twobody_energy(rsq)
         }
     }
 }
@@ -732,31 +796,34 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
         i: usize,
         targets: impl Iterator<Item = usize>,
     ) -> f64 {
-        debug_assert!(i < arrays.x.len());
-        // SAFETY: i is a valid particle index from an active group range.
-        let (xi, yi, zi, kind_i) = unsafe { read_particle(arrays, i) };
-        // Row slice gives a contiguous &[u8] for sequential cache-line reads over j.
-        let excl_row = self.exclusions.row(i);
+        let probe = self.probe(arrays, i);
         let mut energy = 0.0;
         for j in targets {
-            debug_assert!(j < arrays.x.len());
-            // SAFETY: j is a valid particle index from an active group range;
-            // atom kinds are topology-derived indices into the potentials matrix.
-            // No j==i guard needed: callers use disjoint ranges, and the exclusion
-            // matrix diagonal is 0 (self-exclusion) so it would be skipped anyway.
-            unsafe {
-                if *excl_row.get_unchecked(j) == 0 {
-                    continue;
-                }
-                let rsq = arrays.distance_squared_to(xi, yi, zi, j);
-                let kind_j = *arrays.atom_kinds.get_unchecked(j) as usize;
-                energy += self
-                    .potentials
-                    .uget((kind_i, kind_j))
-                    .isotropic_twobody_energy(rsq);
-            }
+            energy += probe.energy_with(j);
         }
         energy
+    }
+
+    /// Particle `i`, ready for a pair loop. The index invariants of [`Self::particle_energy`] apply.
+    #[inline(always)]
+    fn probe<'a, S: SimulationCell>(
+        &'a self,
+        arrays: &'a ParticleArrays<'a, S>,
+        i: usize,
+    ) -> PairProbe<'a, P, S> {
+        debug_assert!(i < arrays.x.len());
+        // SAFETY: i is a valid particle index from an active group range.
+        let (x, y, z, kind) = unsafe { read_particle(arrays, i) };
+        PairProbe {
+            potentials: &self.potentials,
+            arrays,
+            x,
+            y,
+            z,
+            kind,
+            // Row slice gives a contiguous &[u8] for sequential cache-line reads over j.
+            exclusions: self.exclusions.row(i),
+        }
     }
 
     /// Intra-group energy (i < j pairs) via particle arrays.
@@ -1116,6 +1183,11 @@ impl<P: IsotropicTwobodyEnergy> NonbondedMatrix<P> {
             .iter_active()
             .map(|i| self.particle_energy(arrays, i, group_j.iter_active()))
             .sum()
+    }
+
+    /// Whether bounding spheres can rule out `group`'s pairs, for which it needs a mass center.
+    fn cullable(&self, group: &Group) -> bool {
+        self.use_bounding_spheres && group.mass_center().is_some()
     }
 
     fn cached_pairs<'a>(&'a self, context: &'a impl ObserveContext) -> impl GroupPairs + 'a {
