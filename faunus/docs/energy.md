@@ -438,8 +438,16 @@ Available grid types:
 | `PowerLaw(p)`  | Power-law with custom exponent $p$                       |
 | `InverseRsq`   | Uniform in $1/r^2$ — dense at short range               |
 
+At setup, each tabulated pair potential is compared with the exact potential from
+half the inner edge of the table, where it extrapolates linearly, out to the cutoff,
+at distances where the pair energy is below 15 $RT$ in magnitude. If the table deviates by more than $0.01\,RT$ plus
+0.1 % of the energy, a warning names the atom pair, the distance and both energies.
+The usual remedy is a larger `table_points` or another `grid_type`. When the warning
+says the distance is below the table's inner edge, the table is extrapolating linearly
+into a region that the system can reach, and more grid points will not help.
+
 The cell list divides the box into cells at least one `cutoff` wide. In a dilute system the
-cells are enlarged, so that there are at most about two cells per particle. Memory then
+cells are enlarged, so that there are at most about eight cells per particle. Memory then
 grows with the number of particles rather than with the box volume, and every pair within
 the cutoff is still found.
 

@@ -17,6 +17,8 @@
 #[cfg(test)]
 mod tests;
 
+pub(crate) mod spline_accuracy;
+
 use super::group_pair_cache::{row_from_pairs, GroupPairCache, GroupPairs};
 use super::pairpot::PairPot;
 use super::stateful::{derived_energy, StatefulEnergy};

@@ -23,7 +23,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 /// Thermal energy kT in kJ/mol.
-fn thermal_energy(medium: &Medium) -> f64 {
+pub(crate) fn thermal_energy(medium: &Medium) -> f64 {
     crate::R_IN_KJ_PER_MOL * medium.temperature()
 }
 

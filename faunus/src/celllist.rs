@@ -36,14 +36,13 @@ pub struct CellList {
     neighbor_start: Vec<usize>,
 }
 
-/// Upper bound on cell count. Cells beyond ~N are mostly empty yet each
-/// costs memory and a clone on every backup; at ≤ 2 cells per particle a
-/// neighbor query still visits only ~27·N/cells ≈ 14 candidates on average.
-/// Below the floor memory is negligible, so small systems keep the most
-/// selective, cutoff-sized cells.
+/// Upper bound on cell count. Cells beyond ~N are mostly empty yet each costs
+/// memory and a clone on every backup. The bound is generous because density
+/// is rarely uniform: a dense protein in a dilute box should keep cutoff-sized
+/// cells. Below the floor memory is negligible.
 fn max_cells(capacity: usize) -> usize {
     const FLOOR: usize = 16 * 16 * 16;
-    (2 * capacity).max(FLOOR)
+    (8 * capacity).max(FLOOR)
 }
 
 /// Cells per axis: as many as the cutoff allows, unless that exceeds
@@ -393,7 +392,7 @@ mod tests {
         let cutoff = 5.0;
         let cl = CellList::new([1000.0; 3], cutoff, 30_000);
         let total: usize = cl.num_cells.iter().product();
-        assert!(total <= 60_000, "{:?} cells", cl.num_cells);
+        assert!(total <= 240_000, "{:?} cells", cl.num_cells);
         assert!(cl.cell_size.iter().all(|&s| s >= cutoff));
     }
 
@@ -401,6 +400,14 @@ mod tests {
     fn dense_box_keeps_cutoff_sized_cells() {
         let cl = CellList::new([30.0, 20.0, 10.0], 3.0, 10_000);
         assert_eq!(cl.num_cells, [10, 6, 3]);
+    }
+
+    /// A 3100-atom protein with ions in a 300 Å box, 12 Å cutoff: 25³ cutoff-sized cells
+    /// fit the bound, so the dense protein isn't scanned with enlarged cells.
+    #[test]
+    fn clustered_system_keeps_cutoff_sized_cells() {
+        let cl = CellList::new([300.0; 3], 12.0, 3100);
+        assert_eq!(cl.num_cells, [25, 25, 25]);
     }
 
     /// Enlarged cells must still return every pair within the cutoff.

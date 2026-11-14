@@ -1,6 +1,6 @@
 version:
-  faunus: 3.0.0-beta.2
-  git_revision: v3.0.0-beta.2-48-gcf0c1cf-dirty
+  faunus: 3.0.0-beta.3
+  git_revision: v3.0.0-beta.3-9-gbe5e4d4-dirty
 medium:
   permittivity: Vacuum
   salt: null
@@ -34,29 +34,29 @@ cell: !Cuboid
 - 18.0
 - 18.0
 energy_change:
-  drift: 2.000888343900442e-11
-  final: -3420.3135850970907
-  initial: -3417.1590020925782
+  drift: 5.4569682106375694e-12
+  final: -3420.3135850962476
+  initial: -3417.1590020964845
 energy_timers:
 - cell_overlap:
-    total: 0.85
-    energy: 0.57
-    update: 0.28
+    total: 1.03
+    energy: 0.69
+    update: 0.35
 - nonbonded:
-    total: 98.3
-    energy: 7.43
-    update: 90.88
+    total: 97.93
+    energy: 14.45
+    update: 83.48
 - intramolecular:
-    total: 0.85
-    energy: 0.57
-    update: 0.28
+    total: 1.04
+    energy: 0.7
+    update: 0.34
 propagate:
   steps: 8000
   seed: !Fixed 42
   collections:
   - !Stochastic
     cycles: 1
-    elapsed_seconds: 1.149469134
+    elapsed_seconds: 0.924610466
     moves:
     - !TranslateMolecule
       molecule: water
@@ -72,7 +72,7 @@ propagate:
           samples: 64944
         elapsed_seconds: 0.0
         info: {}
-        energy_change_sum: -288.1651197354285
+        energy_change_sum: -288.16511968901415
         acceptance_ratio: 0.5135193397388519
     - !RotateMolecule
       molecule: water
@@ -87,7 +87,7 @@ propagate:
           samples: 63216
         elapsed_seconds: 0.0
         info: {}
-        energy_change_sum: 294.30890113522497
+        energy_change_sum: 294.30890109588694
         acceptance_ratio: 0.5818621867881549
     - !TranslateAtom
       atom: null
@@ -103,7 +103,7 @@ propagate:
           samples: 2632
         elapsed_seconds: 0.0
         info: {}
-        energy_change_sum: -27.27421488251618
+        energy_change_sum: -27.27421489093061
         acceptance_ratio: 0.7933130699088146
     - !TranslateMolecule
       molecule: solute
@@ -119,7 +119,7 @@ propagate:
           samples: 1379
         elapsed_seconds: 0.0
         info: {}
-        energy_change_sum: -13.226241127416692
+        energy_change_sum: -13.226241123225861
         acceptance_ratio: 0.6816533720087019
     - !RotateMolecule
       molecule: solute
@@ -134,7 +134,7 @@ propagate:
           samples: 1327
         elapsed_seconds: 0.0
         info: {}
-        energy_change_sum: 55.919902474767305
+        energy_change_sum: 55.91990247667822
         acceptance_ratio: 0.7256970610399397
     - !TranslateAtom
       atom: null
@@ -160,7 +160,7 @@ propagate:
           samples: 15696
         elapsed_seconds: 0.0
         info: {}
-        energy_change_sum: -24.71781086916315
+        energy_change_sum: -24.717810869162978
         acceptance_ratio: 0.6381880733944955
   criterion: MetropolisHastings
 analysis:

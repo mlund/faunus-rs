@@ -397,8 +397,8 @@ mod tests {
         assert_eq!(compute_n_cells_1d(10.0, 10.0, 1000), 1);
         assert_eq!(compute_n_cells_1d(10.0, 0.0, 1000), 1);
         assert_eq!(compute_n_cells_1d(10.0, 2.0, 1000), 5);
-        // Sparse: 200³ cutoff-sized cells capped at 2·N = 64 000 → 40³.
-        assert_eq!(compute_n_cells_1d(1000.0, 5.0, 32_000), 40);
+        // Sparse: 200³ cutoff-sized cells capped at 8·N = 64 000 → 40³.
+        assert_eq!(compute_n_cells_1d(1000.0, 5.0, 8_000), 40);
     }
 
     #[test]

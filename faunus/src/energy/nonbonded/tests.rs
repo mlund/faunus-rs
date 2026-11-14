@@ -1108,6 +1108,17 @@ fn multi_group_partial_update_handles_more_than_eight_affected_atoms() {
     assert_approx_eq!(f64, nonbonded.energy(&system, &change), expected);
 }
 
+/// The exact pair matrix of `yaml`, in its `system/medium`.
+fn matrix_from_yaml(yaml: &str) -> NonbondedMatrix {
+    use std::io::Write;
+    let mut tmp = tempfile::NamedTempFile::new().unwrap();
+    tmp.write_all(yaml.as_bytes()).unwrap();
+    let topology = Topology::from_file(tmp.path()).unwrap();
+    let builder = HamiltonianBuilder::from_file(tmp.path()).unwrap();
+    let medium = crate::backend::get_medium_str(yaml).unwrap();
+    NonbondedMatrix::new(builder.nonbonded().unwrap(), &topology, Some(medium)).unwrap()
+}
+
 /// A cubic system from YAML input, with a factory for matrices independent of the system's own.
 fn backend_from_yaml(yaml: &str, side: f64) -> (Backend, impl Fn() -> NonbondedMatrix) {
     use std::io::Write;
@@ -1739,4 +1750,70 @@ fn excluded_overlapping_pair_has_zero_energy() {
          blocks:\n    - molecule: M\n      N: 1\n      insert: !Manual [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]]\n";
     let (system, matrix) = backend_from_yaml(yaml, 20.0);
     assert_eq!(matrix().particle_with_particle(&system, 0, 1), 0.0);
+}
+
+const THERMAL_ENERGY: f64 = crate::R_IN_KJ_PER_MOL * 298.15;
+
+fn lj_pair_matrix() -> NonbondedMatrix {
+    let yaml = "atoms:\n  - {name: A, mass: 1.0, sigma: 3.0, eps: 1.0}\n\
+         molecules:\n  - {name: M, atoms: [A], atomic: true}\n\
+         system:\n  cell: !Cuboid [30.0, 30.0, 30.0]\n  \
+         medium: {permittivity: !Vacuum, temperature: 298.15}\n  \
+         energy:\n    - !Nonbonded\n        default:\n          - !LennardJones {mixing: LB}\n  \
+         blocks:\n    - {molecule: M, N: 1, insert: !Manual [[0.0, 0.0, 0.0]]}\n";
+    matrix_from_yaml(yaml)
+}
+
+/// A ten-point table across a Lennard-Jones well can't follow the curvature near contact.
+#[test]
+fn coarse_spline_table_is_flagged() {
+    let exact = lj_pair_matrix();
+    let config = SplineConfig {
+        n_points: 10,
+        ..Default::default()
+    };
+    let splined = NonbondedMatrixSplined::from_nonbonded(&exact, 12.0, Some(config));
+    let worst = spline_accuracy::worst_deviation(&exact, &splined, THERMAL_ENERGY)
+        .expect("a ten-point table must be flagged");
+    // Far beyond the 0.01 kT tolerance, and on the steep wall where the grid is sparse.
+    assert!(worst.error() > THERMAL_ENERGY, "{worst:?}");
+    assert!(worst.distance < 4.0, "{worst:?}");
+}
+
+/// Two opposite charges with Lennard-Jones and a Coulomb tail truncated at `coulomb_cutoff`.
+fn charged_pair_matrix(coulomb_cutoff: f64) -> NonbondedMatrix {
+    matrix_from_yaml(&format!(
+        "atoms:\n  - {{name: A, mass: 1.0, sigma: 3.0, eps: 1.0, charge: 1.0}}\n  \
+         - {{name: B, mass: 1.0, sigma: 3.0, eps: 1.0, charge: -1.0}}\n\
+         molecules:\n  - {{name: M, atoms: [A, B]}}\n\
+         system:\n  cell: !Cuboid [30.0, 30.0, 30.0]\n  \
+         medium: {{permittivity: !Water, temperature: 298.15}}\n  \
+         energy:\n    - !Nonbonded\n        default:\n          - !LennardJones {{mixing: LB}}\n          \
+         - !Coulomb {{cutoff: {coulomb_cutoff}}}\n  \
+         blocks:\n    - {{molecule: M, N: 1, insert: !Manual [[0.0, 0.0, 0.0], [5.0, 0.0, 0.0]]}}\n"
+    ))
+}
+
+/// The default table is accurate, and shifting the Coulomb tail (1.48 kJ/mol at 12 Å) to zero at
+/// the table cutoff is deliberate, not error.
+#[test]
+fn default_spline_table_with_shifted_coulomb_is_accurate() {
+    let exact = charged_pair_matrix(100.0);
+    let config = SplineConfig {
+        shift_energy: true,
+        ..Default::default()
+    };
+    let splined = NonbondedMatrixSplined::from_nonbonded(&exact, 12.0, Some(config));
+    let worst = spline_accuracy::worst_deviation(&exact, &splined, THERMAL_ENERGY);
+    assert_eq!(worst, None);
+}
+
+/// Most inputs truncate Coulomb at the table cutoff; the jump just past the outer node must not make
+/// the last interval ring.
+#[test]
+fn coulomb_truncated_at_spline_cutoff_is_accurate() {
+    let exact = charged_pair_matrix(12.0);
+    let splined = NonbondedMatrixSplined::from_nonbonded(&exact, 12.0, None);
+    let worst = spline_accuracy::worst_deviation(&exact, &splined, THERMAL_ENERGY);
+    assert_eq!(worst, None);
 }

@@ -1,6 +1,6 @@
 version:
-  faunus: 3.0.0-beta.2
-  git_revision: v3.0.0-beta.2-48-gcf0c1cf-dirty
+  faunus: 3.0.0-beta.3
+  git_revision: v3.0.0-beta.3-9-gbe5e4d4-dirty
 medium:
   permittivity: Vacuum
   salt: null
@@ -19,33 +19,33 @@ cell: !Cuboid
 - 15.764413629857481
 - 15.764413629857481
 energy_change:
-  drift: 9.276845958083868e-11
-  final: -8481.181689562274
-  initial: -8599.382718738849
+  drift: 1.6370904631912708e-10
+  final: -8481.181689552934
+  initial: -8599.382718734152
 energy:
 - external_pressure:
     pressure/kJ·mol⁻¹·Å⁻³: 0.000061019341250700007
     thermal_energy: 2.4943387854
 energy_timers:
 - cell_overlap:
-    total: 0.15
-    energy: 0.1
+    total: 0.14
+    energy: 0.09
     update: 0.05
 - nonbonded:
-    total: 99.7
-    energy: 83.1
-    update: 16.6
+    total: 99.72
+    energy: 82.84
+    update: 16.89
 - external_pressure:
-    total: 0.15
+    total: 0.14
     energy: 0.1
-    update: 0.05
+    update: 0.04
 propagate:
   steps: 1000
   seed: !Fixed 42
   collections:
   - !Deterministic
     cycles: 1
-    elapsed_seconds: 4.795957756
+    elapsed_seconds: 4.977131219
     moves:
     - !TranslateMolecule
       molecule: water
@@ -61,7 +61,7 @@ propagate:
           samples: 64000
         elapsed_seconds: 0.0
         info: {}
-        energy_change_sum: 154.76029853923646
+        energy_change_sum: 154.76029840280123
         acceptance_ratio: 0.421296875
     - !RotateMolecule
       molecule: water
@@ -76,7 +76,7 @@ propagate:
           samples: 64000
         elapsed_seconds: 0.0
         info: {}
-        energy_change_sum: -67.49453461857951
+        energy_change_sum: -67.49453481312632
         acceptance_ratio: 0.505578125
     - !VolumeMove
       volume_displacement: 0.03
@@ -91,7 +91,7 @@ propagate:
           samples: 5000
         elapsed_seconds: 0.0
         info: {}
-        energy_change_sum: 30.935265256010098
+        energy_change_sum: 30.93526559170641
         acceptance_ratio: 0.6954
   criterion: MetropolisHastings
 analysis:

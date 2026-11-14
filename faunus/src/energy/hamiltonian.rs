@@ -130,7 +130,7 @@ impl Hamiltonian {
         topology: &Topology,
         medium: Option<interatomic::coulomb::Medium>,
     ) -> anyhow::Result<EnergyTerm> {
-        let mut nonbonded = NonbondedMatrix::new(pairpot_builder, topology, medium)?;
+        let mut nonbonded = NonbondedMatrix::new(pairpot_builder, topology, medium.clone())?;
         if let Some(spline_opts) = pairpot_builder.spline() {
             let config = spline_opts.to_spline_config();
             let mut splined = NonbondedMatrixSplined::from_nonbonded(
@@ -138,6 +138,13 @@ impl Hamiltonian {
                 spline_opts.cutoff,
                 Some(config),
             );
+            // Without a medium the temperature is unknown; room temperature still
+            // gives a meaningful scale for the tolerance.
+            let thermal_energy = medium.as_ref().map_or(
+                crate::R_IN_KJ_PER_MOL * 298.15,
+                crate::simulation::thermal_energy,
+            );
+            warn_if_spline_inaccurate(&nonbonded, &splined, thermal_energy, topology);
             splined.set_bounding_spheres(spline_opts.bounding_spheres);
             log::info!(
                 "Using splined nonbonded potentials (cutoff={}, table_points={})",
@@ -589,6 +596,39 @@ impl EnergyChange for Hamiltonian {
         }
         sum
     }
+}
+
+/// Warns about the atom pair whose spline table departs most from the exact potential.
+fn warn_if_spline_inaccurate(
+    exact: &NonbondedMatrix,
+    splined: &NonbondedMatrixSplined,
+    thermal_energy: f64,
+    topology: &Topology,
+) {
+    let Some(worst) =
+        super::nonbonded::spline_accuracy::worst_deviation(exact, splined, thermal_energy)
+    else {
+        return;
+    };
+    let name = |i: usize| topology.atomkinds()[i].name();
+    let remedy = if worst.distance < worst.table_edge {
+        format!(
+            "This is below the table's inner edge at {:.2} Å, where it extrapolates linearly.",
+            worst.table_edge
+        )
+    } else {
+        "Increase `table_points` or try another `grid_type`.".to_string()
+    };
+    log::warn!(
+        "Spline table for {}–{} is off by {:.3} kT at r = {:.2} Å \
+         (exact {:.4}, table {:.4} kJ/mol). {remedy}",
+        name(worst.atom_kinds.0),
+        name(worst.atom_kinds.1),
+        worst.error() / thermal_energy,
+        worst.distance,
+        worst.exact,
+        worst.splined,
+    );
 }
 
 #[cfg(test)]
