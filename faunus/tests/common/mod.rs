@@ -33,11 +33,29 @@ pub fn run_faunus(input: &Path, state: &Path, output: &Path) {
     assert!(status.success(), "faunus exited with status: {status}");
 }
 
+/// Generators overwrite committed fixtures, and a bare `cargo test -- --ignored` runs them, so
+/// they write only when this is set to `1` (as `scripts/update_fixtures.sh` does).
+const REGENERATE: &str = "FAUNUS_REGENERATE";
+
+fn regenerate_requested(dir: &Path) -> bool {
+    let requested = std::env::var_os(REGENERATE).is_some_and(|value| value == "1");
+    if !requested {
+        eprintln!(
+            "not regenerating fixtures in {}; set {REGENERATE}=1 to overwrite them",
+            dir.display()
+        );
+    }
+    requested
+}
+
 /// Generate fixture files (state.yaml and reference_output.yaml) for a test directory.
 ///
 /// Two-phase: run from scratch to produce state, then run from state to produce
 /// deterministic reference output.
 pub fn generate_fixtures(dir: &Path) {
+    if !regenerate_requested(dir) {
+        return;
+    }
     let input = dir.join("input.yaml");
     let state = dir.join("state.yaml");
     let reference_output = dir.join("reference_output.yaml");
@@ -137,6 +155,9 @@ pub fn run_umbrella(input: &Path, state_dir: &Path, pmf_output: &Path) {
 /// Runs from scratch (per-window states live in a throwaway temp dir) so the
 /// committed fixture is just the input and the stitched PMF.
 pub fn generate_umbrella_fixtures(dir: &Path) {
+    if !regenerate_requested(dir) {
+        return;
+    }
     let input = dir.join("input.yaml");
     let reference = dir.join("reference_pmf.csv");
 

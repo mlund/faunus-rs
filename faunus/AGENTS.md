@@ -70,6 +70,6 @@ Upon startup, load these two skills:
 - `cargo fmt`
 - `cargo clippy --tests --no-deps`
 - `cargo check --workspace`, and verify compilation both with and without the `gpu` feature.
-- If needed, *Ask* before running `scripts/regression_tests.sh`. When running ignored tests by hand, pass `--exact` to avoid overwriting fixtures. Never commit fixture updates without confirming the physics is conserved.
+- If needed, *Ask* before running `scripts/regression_tests.sh`. Fixture generators write only with `FAUNUS_REGENERATE=1` (set by `scripts/update_fixtures.sh`). Never commit fixture updates without confirming the physics is conserved.
 - `scripts/docs-check/`, and confirm that the formulas and math in `docs/` agree with the code.
 - Verify DOIs with the `doi2bib` CLI.

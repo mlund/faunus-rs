@@ -1,4 +1,4 @@
 #!/bin/sh
 # Regenerate reference fixtures for regression tests
 set -e
-cargo test --release fixtures -- --ignored --test-threads=1
+FAUNUS_REGENERATE=1 cargo test --release fixtures -- --ignored --test-threads=1

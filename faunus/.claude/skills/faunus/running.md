@@ -156,18 +156,17 @@ cargo test
 ```
 
 Regression tests are ignored by default and validate against committed fixtures. Run them
-through the sanctioned script, which knows how to run the checks without regenerating
-fixtures:
+with:
 
 ```bash
 scripts/regression_tests.sh
 ```
 
-**Ask before running the regression suite** — it is slow. Never invoke the ignored tests
-as a bare `cargo test --test regression -- --include-ignored`: that also runs the fixture
-*generators* and can silently overwrite committed fixtures. When running one by hand,
-filter with `--exact` (e.g. `cargo test --release --test regression <name>::regression --
---exact --ignored`) so a generator does not run alongside it.
+**Ask before running the regression suite** — it is slow. The fixture *generators*
+(`<name>::fixtures`) write only when `FAUNUS_REGENERATE=1` is set, as
+`scripts/update_fixtures.sh` does, so a bare `cargo test -- --ignored` compares without
+overwriting. To run one check by hand: `cargo test --release --test regression
+<name>::regression -- --exact --ignored`.
 
 ## Key Tips
 
