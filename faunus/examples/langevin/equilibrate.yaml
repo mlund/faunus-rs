@@ -1,18 +1,31 @@
+# MC equilibration for input.yaml (same system). Langevin dynamics needs a relaxed start:
+# random insertion leaves chain–particle overlaps whose forces blow up the integrator.
+
 atoms:
-  - name: PP
+  - name: PP     # positive patch
     mass: 1.0
     charge: 1.0
     sigma: 4.0
     epsilon: 0.5
-  - name: NP
+  - name: NP     # negative patch / chain monomer
     mass: 1.0
     charge: -1.0
     sigma: 4.0
     epsilon: 0.5
-  - name: MP
+  - name: MP     # main particle
     mass: 100.0
     charge: 0.0
     sigma: 40.0
+    epsilon: 0.5
+  - name: Na     # counter ion
+    mass: 22.99
+    charge: 1.0
+    sigma: 3.33
+    epsilon: 0.01
+  - name: MM     # negative monomer
+    mass: 22.0
+    charge: -1.0
+    sigma: 4.0
     epsilon: 0.5
 
 molecules:
@@ -21,40 +34,79 @@ molecules:
     has_com: true
     from_structure: "../twobody/cppm-p18.xyz"
 
+  - name: Chain20
+    degrees_of_freedom: Free
+    excluded_neighbours: 1
+    atoms: [MM, MM, MM, MM, MM, MM, MM, MM, MM, MM,
+            MM, MM, MM, MM, MM, MM, MM, MM, MM, MM]
+    bonds:
+      - {index: [0, 1],   kind: !Harmonic {k: 40.0, req: 5.0}}
+      - {index: [1, 2],   kind: !Harmonic {k: 40.0, req: 5.0}}
+      - {index: [2, 3],   kind: !Harmonic {k: 40.0, req: 5.0}}
+      - {index: [3, 4],   kind: !Harmonic {k: 40.0, req: 5.0}}
+      - {index: [4, 5],   kind: !Harmonic {k: 40.0, req: 5.0}}
+      - {index: [5, 6],   kind: !Harmonic {k: 40.0, req: 5.0}}
+      - {index: [6, 7],   kind: !Harmonic {k: 40.0, req: 5.0}}
+      - {index: [7, 8],   kind: !Harmonic {k: 40.0, req: 5.0}}
+      - {index: [8, 9],   kind: !Harmonic {k: 40.0, req: 5.0}}
+      - {index: [9, 10],  kind: !Harmonic {k: 40.0, req: 5.0}}
+      - {index: [10, 11], kind: !Harmonic {k: 40.0, req: 5.0}}
+      - {index: [11, 12], kind: !Harmonic {k: 40.0, req: 5.0}}
+      - {index: [12, 13], kind: !Harmonic {k: 40.0, req: 5.0}}
+      - {index: [13, 14], kind: !Harmonic {k: 40.0, req: 5.0}}
+      - {index: [14, 15], kind: !Harmonic {k: 40.0, req: 5.0}}
+      - {index: [15, 16], kind: !Harmonic {k: 40.0, req: 5.0}}
+      - {index: [16, 17], kind: !Harmonic {k: 40.0, req: 5.0}}
+      - {index: [17, 18], kind: !Harmonic {k: 40.0, req: 5.0}}
+      - {index: [18, 19], kind: !Harmonic {k: 40.0, req: 5.0}}
+
+  - name: Na
+    atoms: [Na]
+
 system:
   cell: !Cuboid [292.4, 292.4, 292.4]
   medium:
     permittivity: !Water
     temperature: 298.15
     salt: [!NaCl, 0.05]
+
   blocks:
     - molecule: CPPM
       N: 20
       insert:
-        !RandomCOM { rotate: true }
+        !RandomCOM {
+          rotate: true,
+        }
+    - molecule: Chain20
+      N: 1
+      insert: !RandomWalk {bond_length: 5.0}
+    - molecule: Na
+      N: 180
+      insert: !RandomAtomPos {}
+
   energy:
     - !Nonbonded
       default:
         - !Coulomb {cutoff: 200}
         - !WeeksChandlerAndersen {mixing: LB}
-      spline:             # tabulate potentials for GPU evaluation
-        cutoff: 200.0
+      spline:
+        cutoff: 80.0
         table_points: 2000
 
 
-analysis:
-  - !Trajectory         # final configuration for visualization/restart
-    file: "eqout.xyz"
-    frequency: !End
-
+analysis: []
 
 propagate:
   seed: Hardware
   criterion: Metropolis
-  steps: 100
+  steps: 500
   collections:
     - !Stochastic
-      cycles: 100
+      cycles: 10
       moves:
-        - !TranslateMolecule {molecule: CPPM, dp: 80.0}
-        - !RotateMolecule {molecule: CPPM, dprot: 3.0}
+        - !TranslateMolecule {molecule: CPPM, dp: 50.0, repeat: 10}
+        - !RotateMolecule {molecule: CPPM, dprot: 0.5, repeat: 10}
+        - !TranslateMolecule {molecule: Chain20, dp: 50.0, repeat: 10}
+        - !RotateMolecule {molecule: Chain20, dprot: 0.5, repeat: 10}
+        - !PivotMove {molecule: Chain20, dprot: 0.5, repeat: 20}
+        - !TranslateMolecule {molecule: Na, dp: 10.0, repeat: 20}
