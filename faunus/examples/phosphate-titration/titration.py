@@ -45,7 +45,7 @@ SPECIES = {"H₃PO₄": 0, "H₂PO₄⁻": -1, "HPO₄²⁻": -2, "PO₄³⁻": 
 PKA = [2.15, 7.20, 12.35]
 
 
-def set_ph(text: str, ph: float, repeat: int = 5000) -> str:
+def set_ph(text: str, ph: float, steps: int = 5000) -> str:
     """Return input YAML with H⁺ activity and sweep count patched for *ph*."""
     activity = 10.0 ** (-ph)
     # Replace activity value on the H+ atom line (single-line YAML dict)
@@ -54,8 +54,12 @@ def set_ph(text: str, ph: float, repeat: int = 5000) -> str:
         rf"\g<1>{activity:.6e}",
         text,
     )
-    # Replace the outermost repeat (propagate.repeat = number of MC sweeps)
-    return re.sub(r"(repeat:\s*)\d+", rf"\g<1>{repeat}", text, count=1)
+    # Anchored to propagate's indent so a per-collection or per-move key can't match;
+    # raise rather than silently run the template's sweep count.
+    text, n = re.subn(r"(?m)^(  steps:\s*)\d+", rf"\g<1>{steps}", text, count=1)
+    if n != 1:
+        raise ValueError("input has no top-level `propagate.steps`")
+    return text
 
 
 def parse_counts(path: Path) -> dict[str, float]:

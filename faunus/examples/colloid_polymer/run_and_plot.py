@@ -83,10 +83,10 @@ system:
 propagate:
   seed: Hardware
   criterion: Metropolis
-  repeat: {repeat}
+  steps: {repeat}
   collections:
     - !Deterministic
-      repeat: {n}
+      cycles: {n}
       moves:
         - !TranslateMolecule {{molecule: Colloid, dp: {dp}}}
 
