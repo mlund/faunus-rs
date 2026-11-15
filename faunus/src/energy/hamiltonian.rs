@@ -50,7 +50,7 @@ impl Hamiltonian {
         let mut pairpot_builder;
         let pairpot_ref = if let Some(ewald) = builder.ewald() {
             let debye_length = medium.as_ref().and_then(|m| m.debye_length());
-            let real_space = ewald.real_space_scheme(debye_length);
+            let real_space = ewald.splitting(debye_length)?.real_space_scheme();
             log::info!(
                 "Ewald: injected real-space pair potential (cutoff={}, α={:.4})",
                 ewald.cutoff,
@@ -539,12 +539,15 @@ impl Hamiltonian {
         if let Some(ewald_builder) = builder.ewald() {
             let medium = medium
                 .ok_or_else(|| anyhow::anyhow!("Ewald requires a medium with permittivity"))?;
-            let injected_alpha = ewald_builder
-                .real_space_scheme(medium.debye_length())
-                .alpha();
-            let ewald = super::EwaldReciprocalEnergy::new(ewald_builder, context, medium)?;
-            // Only `optimize` moves α after injection; a user α is injected as is
-            if ewald_builder.optimize && ewald.alpha() != injected_alpha {
+            let splitting = ewald_builder.splitting(medium.debye_length())?;
+            let ewald = super::EwaldReciprocalEnergy::from_splitting(
+                ewald_builder,
+                &splitting,
+                context,
+                medium,
+            )?;
+            // The injected scheme came from this splitting; they differ only if `optimize` moved α
+            if ewald.real_space_scheme() != splitting.real_space_scheme() {
                 self.rebuild_nonbonded(
                     builder,
                     context.topology_ref(),
