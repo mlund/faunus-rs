@@ -35,8 +35,8 @@ use crate::cell::Shape;
 use crate::change::GroupChange;
 use crate::Change;
 use crate::ObserveContext;
-use interatomic::coulomb::pairwise::{RealSpaceEwald, ShortRangeFunction};
-use interatomic::coulomb::reciprocal::{EwaldPolicy, EwaldReciprocal};
+use interatomic::coulomb::pairwise::RealSpaceEwald;
+use interatomic::coulomb::reciprocal::{EwaldPolicy, EwaldReciprocal, EwaldSplitting};
 use interatomic::coulomb::DebyeLength;
 use serde::{Deserialize, Serialize};
 
@@ -123,35 +123,19 @@ const fn default_accuracy() -> f64 {
 }
 
 impl EwaldBuilder {
-    /// Real-space pair potential matching the reciprocal term as built, i.e. before any
-    /// `optimize`. The Hamiltonian injects it ahead of the reciprocal term.
-    pub fn real_space_scheme(&self, debye_length: Option<f64>) -> RealSpaceEwald {
-        match self.alpha {
-            Some(alpha) => RealSpaceEwald::from_alpha(self.cutoff, alpha, debye_length),
-            None => RealSpaceEwald::new(self.cutoff, self.accuracy, debye_length),
-        }
-    }
-
-    fn validate(&self, debye_length: Option<f64>) -> anyhow::Result<()> {
-        let Some(alpha) = self.alpha else {
-            return Ok(());
-        };
-        anyhow::ensure!(
-            !self.optimize,
-            "Ewald: `alpha` and `optimize` are mutually exclusive"
-        );
-        anyhow::ensure!(
-            alpha.is_finite() && alpha > 0.0,
-            "Ewald: `alpha` must be positive and finite, got {alpha}"
-        );
-        // Same guard as `optimize`: a small α leaves much of the pair energy beyond the cutoff
-        let at_cutoff = self.real_space_scheme(debye_length).short_range_f0(1.0);
-        if at_cutoff > 0.1 {
-            log::warn!(
-                "Ewald: α = {alpha} leaves S(r_c) = {at_cutoff:.3} of the pair energy at the cutoff"
-            );
-        }
-        Ok(())
+    /// The splitting both halves of the sum start from, before any `optimize`. It owns α:
+    /// the Hamiltonian injects its real-space scheme, and the reciprocal term is built from it.
+    pub fn splitting(&self, debye_length: Option<f64>) -> anyhow::Result<EwaldSplitting> {
+        Ok(match self.alpha {
+            Some(_) if self.optimize => {
+                anyhow::bail!("Ewald: `alpha` and `optimize` are mutually exclusive")
+            }
+            Some(alpha) => {
+                EwaldSplitting::with_alpha(self.cutoff, self.accuracy, debye_length, alpha)
+                    .map_err(|e| anyhow::anyhow!("Ewald: invalid `alpha` = {alpha}: {e}"))?
+            }
+            None => EwaldSplitting::new(self.cutoff, self.accuracy, debye_length),
+        })
     }
 }
 
@@ -162,17 +146,28 @@ impl EwaldReciprocalEnergy {
         context: &impl ObserveContext,
         medium: &interatomic::coulomb::Medium,
     ) -> anyhow::Result<Self> {
+        let splitting = builder.splitting(medium.debye_length())?;
+        Self::from_splitting(builder, &splitting, context, medium)
+    }
+
+    /// Create from a splitting the caller already injected into real space; `builder`
+    /// supplies the policy and whether to optimize.
+    pub fn from_splitting(
+        builder: &EwaldBuilder,
+        splitting: &EwaldSplitting,
+        context: &impl ObserveContext,
+        medium: &interatomic::coulomb::Medium,
+    ) -> anyhow::Result<Self> {
         let box_length = Self::box_length_from_context(context)?;
-        let debye_length = medium.debye_length();
-        builder.validate(debye_length)?;
-        let (cutoff, accuracy) = (builder.cutoff, builder.accuracy);
-        let mut ewald = match builder.alpha {
-            Some(alpha) => {
-                EwaldReciprocal::with_alpha(box_length, cutoff, accuracy, debye_length, alpha)
-            }
-            None => EwaldReciprocal::new(box_length, cutoff, accuracy, debye_length),
-        };
-        ewald.set_policy(builder.policy);
+        // A user α is not checked against the accuracy target; `optimize` has its own guard
+        if builder.alpha.is_some() && splitting.truncation_too_severe() {
+            log::warn!(
+                "Ewald: α = {} leaves S(r_c) = {:.3} of the pair energy at the cutoff",
+                splitting.alpha(),
+                splitting.short_range_at_cutoff()
+            );
+        }
+        let ewald = EwaldReciprocal::from_splitting(splitting, box_length, builder.policy);
         let prefactor = interatomic::coulomb::TO_CHEMISTRY_UNIT / medium.permittivity();
 
         log::info!(
@@ -214,8 +209,8 @@ impl EwaldReciprocalEnergy {
 
     /// Return the real-space Ewald scheme matching the current α.
     ///
-    /// After `optimize` this differs from [`EwaldBuilder::real_space_scheme`], so callers
-    /// rebuild the nonbonded pair matrix with it.
+    /// After `optimize` this can differ from the scheme of [`EwaldBuilder::splitting`],
+    /// so callers rebuild the nonbonded pair matrix with it.
     pub fn real_space_scheme(&self) -> RealSpaceEwald {
         self.state.ewald.real_space_scheme()
     }
@@ -673,15 +668,28 @@ mod tests {
         }
     }
 
-    /// The Hamiltonian injects this scheme before the reciprocal term exists, so it must
-    /// already carry the user α; otherwise the pair matrix is built twice.
+    /// The Hamiltonian injects the builder's real-space scheme before the reciprocal term
+    /// exists and rebuilds the pair matrix only if the term ends up with a different one.
+    /// Without `optimize` they must be identical, so the matrix is built once.
     #[test]
-    fn injected_real_space_scheme_follows_builder() {
-        approx::assert_relative_eq!(
-            fixed_alpha_builder().real_space_scheme(Some(10.0)).alpha(),
-            0.2,
-            max_relative = 1e-14
+    fn injected_scheme_equals_term_scheme_without_optimize() {
+        use interatomic::coulomb::{Medium, Salt};
+        let context = charged_context();
+        let medium = Medium::salt_water(298.15, Salt::SodiumChloride, 0.1);
+        let analytic = EwaldSplitting::new(12.0, 1e-4, medium.debye_length());
+        assert_eq!(
+            test_builder().splitting(medium.debye_length()).unwrap(),
+            analytic
         );
+        for builder in [test_builder(), fixed_alpha_builder()] {
+            let splitting = builder.splitting(medium.debye_length()).unwrap();
+            if builder.alpha.is_some() {
+                assert_eq!(splitting.alpha(), 0.2);
+            }
+            let injected = splitting.real_space_scheme();
+            let term = EwaldReciprocalEnergy::new(&builder, &context, &medium).unwrap();
+            assert_eq!(term.real_space_scheme(), injected);
+        }
     }
 
     /// The injected real-space part keeps the user α, so a volume change must too.
@@ -731,6 +739,7 @@ mod tests {
     /// sum; both halves of the split must stay usable (debug builds asserted α > 0).
     #[test]
     fn strong_screening_skips_reciprocal_space() {
+        use interatomic::coulomb::pairwise::ShortRangeFunction;
         use interatomic::coulomb::{DebyeLength, Medium, Salt};
         let context = charged_context();
         let medium = Medium::salt_water(298.15, Salt::SodiumChloride, 10.0); // λ_D ≈ 1 Å
@@ -740,7 +749,10 @@ mod tests {
         assert_eq!(term.alpha(), 0.0);
         assert_eq!(term.state.ewald.num_k_vectors(), 0);
         assert!(term.energy(&context, &Change::Everything).is_finite());
-        let real_space = builder.real_space_scheme(medium.debye_length());
+        let real_space = builder
+            .splitting(medium.debye_length())
+            .unwrap()
+            .real_space_scheme();
         assert!((0.0..=1.0).contains(&real_space.short_range_f0(0.5)));
     }
 
