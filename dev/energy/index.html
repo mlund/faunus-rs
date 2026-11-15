@@ -1478,6 +1478,12 @@ energy term. No manual <code>!CoulombEwald</code> pair potential is needed in th
 <td><code>false</code></td>
 <td>Jointly optimize <span class="arithmatex">\(\alpha\)</span> and <span class="arithmatex">\(n_\text{max}\)</span> to minimize k-vectors (Yukawa only)</td>
 </tr>
+<tr>
+<td><code>alpha</code></td>
+<td>no</td>
+<td></td>
+<td>Fixed splitting parameter <span class="arithmatex">\(\alpha\)</span> (Å⁻¹), e.g. from a fitted model; <span class="arithmatex">\(n_\text{max}\)</span> follows from <code>accuracy</code>. Not with <code>optimize</code></td>
+</tr>
 </tbody>
 </table>
 <p>If the medium defines a salt concentration, the corresponding Debye screening
