@@ -727,6 +727,23 @@ mod tests {
         assert!(term.energy(&context, &Change::Everything).is_finite());
     }
 
+    /// Screening strong enough that e^{−κ r_c} ≤ ε selects α = 0 and drops the reciprocal
+    /// sum; both halves of the split must stay usable (debug builds asserted α > 0).
+    #[test]
+    fn strong_screening_skips_reciprocal_space() {
+        use interatomic::coulomb::{DebyeLength, Medium, Salt};
+        let context = charged_context();
+        let medium = Medium::salt_water(298.15, Salt::SodiumChloride, 10.0); // λ_D ≈ 1 Å
+        let builder = test_builder();
+        assert!(builder.cutoff / medium.debye_length().unwrap() > -builder.accuracy.ln());
+        let term = EwaldReciprocalEnergy::new(&builder, &context, &medium).unwrap();
+        assert_eq!(term.alpha(), 0.0);
+        assert_eq!(term.state.ewald.num_k_vectors(), 0);
+        assert!(term.energy(&context, &Change::Everything).is_finite());
+        let real_space = builder.real_space_scheme(medium.debye_length());
+        assert!((0.0..=1.0).contains(&real_space.short_range_f0(0.5)));
+    }
+
     /// #67: `energy(Everything)` must be a fresh recompute, not the cache — otherwise
     /// accumulated structure-factor drift is invisible to the energy-drift check.
     #[test]
