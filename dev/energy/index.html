@@ -1422,12 +1422,18 @@ Kolafa–Perram error estimates:</p>
   \sqrt{-\ln \varepsilon} \right\rceil\]</div>
 <p>where <span class="arithmatex">\(r_c\)</span> is the real-space cutoff and <span class="arithmatex">\(L_\text{max}\)</span> is the largest box side length.
 Higher accuracy (smaller <span class="arithmatex">\(\varepsilon\)</span>) increases both <span class="arithmatex">\(\alpha\)</span> and the number of
-k-vectors. For Yukawa (<span class="arithmatex">\(\kappa &gt; 0\)</span>), the tighter Pålsson–Tornberg bound
-(<a href="https://arxiv.org/abs/1911.04875">arXiv:1911.04875</a>) is used instead,
-yielding a smaller <span class="arithmatex">\(\alpha\)</span> and fewer k-vectors than the Coulomb estimate.
-When <span class="arithmatex">\(2\kappa r_c \geq -\ln\varepsilon\)</span>, the screening is strong enough that
-the real-space sum alone achieves the target accuracy and the reciprocal sum
-is skipped entirely.</p>
+k-vectors.</p>
+<p>For Yukawa (<span class="arithmatex">\(\kappa &gt; 0\)</span>), <span class="arithmatex">\(\alpha\)</span> is chosen so that the real-space pair term
+left at the cutoff, <span class="arithmatex">\(r_c\,u_\text{real}(r_c)\)</span> for unit charges, is at most <span class="arithmatex">\(\varepsilon\)</span>
+(<a href="https://doi.org/10.1063/1.1326477">Salin &amp; Caillol, 2000</a>, Eq. 2.17).
+With <span class="arithmatex">\(\eta = \alpha r_c\)</span> and <span class="arithmatex">\(\zeta = \kappa r_c\)</span>, this is the larger root of</p>
+<div class="arithmatex">\[\eta^2 + \frac{\zeta^2}{4\eta^2} = -\ln\varepsilon,\]</div>
+<p>which gives an <span class="arithmatex">\(\alpha\)</span> slightly below the Coulomb value. The reciprocal cutoff is
+<span class="arithmatex">\(k_c = \sqrt{4\alpha^2(-\ln\varepsilon) - \kappa^2}\)</span>, so screening mainly saves
+k-vectors. When <span class="arithmatex">\(e^{-\kappa r_c} \le \varepsilon\)</span>, the bare Yukawa potential is
+already below the target at the cutoff and the reciprocal sum is skipped (<span class="arithmatex">\(\alpha = 0\)</span>).
+The target applies to a single pair at <span class="arithmatex">\(r_c\)</span>, not to the total energy or forces
+of a system.</p>
 <h3 id="yaml-configuration_2">YAML configuration<a class="headerlink" href="#yaml-configuration_2" title="Permanent link">&para;</a></h3>
 <p>The <code>!Ewald</code> term automatically sets up both the real-space pair potential
 (injected into the nonbonded defaults before splining) and the reciprocal-space
