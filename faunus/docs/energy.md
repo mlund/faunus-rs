@@ -358,12 +358,21 @@ $$\alpha = \frac{\sqrt{-\ln \varepsilon}}{r_c}, \quad
 
 where $r_c$ is the real-space cutoff and $L_\text{max}$ is the largest box side length.
 Higher accuracy (smaller $\varepsilon$) increases both $\alpha$ and the number of
-k-vectors. For Yukawa ($\kappa > 0$), the tighter Pålsson–Tornberg bound
-([arXiv:1911.04875](https://arxiv.org/abs/1911.04875)) is used instead,
-yielding a smaller $\alpha$ and fewer k-vectors than the Coulomb estimate.
-When $2\kappa r_c \geq -\ln\varepsilon$, the screening is strong enough that
-the real-space sum alone achieves the target accuracy and the reciprocal sum
-is skipped entirely.
+k-vectors.
+
+For Yukawa ($\kappa > 0$), $\alpha$ is chosen so that the real-space pair term
+left at the cutoff, $r_c\,u_\text{real}(r_c)$ for unit charges, is at most $\varepsilon$
+([Salin & Caillol, 2000](https://doi.org/10.1063/1.1326477), Eq. 2.17).
+With $\eta = \alpha r_c$ and $\zeta = \kappa r_c$, this is the larger root of
+
+$$\eta^2 + \frac{\zeta^2}{4\eta^2} = -\ln\varepsilon,$$
+
+which gives an $\alpha$ slightly below the Coulomb value. The reciprocal cutoff is
+$k_c = \sqrt{4\alpha^2(-\ln\varepsilon) - \kappa^2}$, so screening mainly saves
+k-vectors. When $e^{-\kappa r_c} \le \varepsilon$, the bare Yukawa potential is
+already below the target at the cutoff and the reciprocal sum is skipped ($\alpha = 0$).
+The target applies to a single pair at $r_c$, not to the total energy or forces
+of a system.
 
 ### YAML configuration
 
