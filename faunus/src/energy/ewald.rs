@@ -24,6 +24,10 @@
 //! k-vectors while preserving energy accuracy. This is only effective for
 //! Yukawa electrostatics (κ > 0) with PBC policy. If optimization changes α,
 //! the nonbonded real-space pair potential is automatically rebuilt to match.
+//!
+//! Alternatively, `alpha` fixes α (e.g. from a fitted model); the real-space potential is
+//! injected with that α from the start. An optimized or fixed α, and its k-space cutoff,
+//! survive volume changes, so real and reciprocal space stay split at the same α.
 
 use super::backup::Snapshot;
 use super::stateful::{derived_energy, StatefulEnergy};
@@ -31,6 +35,7 @@ use crate::cell::Shape;
 use crate::change::GroupChange;
 use crate::Change;
 use crate::ObserveContext;
+use interatomic::coulomb::pairwise::{RealSpaceEwald, ShortRangeFunction};
 use interatomic::coulomb::reciprocal::{EwaldPolicy, EwaldReciprocal};
 use interatomic::coulomb::DebyeLength;
 use serde::{Deserialize, Serialize};
@@ -86,6 +91,7 @@ impl std::fmt::Debug for EwaldReciprocalEnergy {
 ///   accuracy: 1e-5
 ///   policy: PBC
 ///   optimize: true  # reduce k-vectors for Yukawa; no-op for pure Coulomb or IPBC
+///   # alpha: 0.05   # or fix α instead of optimizing; n_max follows from accuracy
 /// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -106,10 +112,47 @@ pub struct EwaldBuilder {
     /// silently ignored for pure Coulomb or IPBC.
     #[serde(default)]
     pub optimize: bool,
+    /// Fixed splitting parameter α (Å⁻¹), e.g. from a fitted model; n_max then follows
+    /// from `accuracy`. Cannot be combined with `optimize`.
+    #[serde(default)]
+    pub alpha: Option<f64>,
 }
 
 const fn default_accuracy() -> f64 {
     1e-5
+}
+
+impl EwaldBuilder {
+    /// Real-space pair potential matching the reciprocal term as built, i.e. before any
+    /// `optimize`. The Hamiltonian injects it ahead of the reciprocal term.
+    pub fn real_space_scheme(&self, debye_length: Option<f64>) -> RealSpaceEwald {
+        match self.alpha {
+            Some(alpha) => RealSpaceEwald::from_alpha(self.cutoff, alpha, debye_length),
+            None => RealSpaceEwald::new(self.cutoff, self.accuracy, debye_length),
+        }
+    }
+
+    fn validate(&self, debye_length: Option<f64>) -> anyhow::Result<()> {
+        let Some(alpha) = self.alpha else {
+            return Ok(());
+        };
+        anyhow::ensure!(
+            !self.optimize,
+            "Ewald: `alpha` and `optimize` are mutually exclusive"
+        );
+        anyhow::ensure!(
+            alpha.is_finite() && alpha > 0.0,
+            "Ewald: `alpha` must be positive and finite, got {alpha}"
+        );
+        // Same guard as `optimize`: a small α leaves much of the pair energy beyond the cutoff
+        let at_cutoff = self.real_space_scheme(debye_length).short_range_f0(1.0);
+        if at_cutoff > 0.1 {
+            log::warn!(
+                "Ewald: α = {alpha} leaves S(r_c) = {at_cutoff:.3} of the pair energy at the cutoff"
+            );
+        }
+        Ok(())
+    }
 }
 
 impl EwaldReciprocalEnergy {
@@ -120,12 +163,15 @@ impl EwaldReciprocalEnergy {
         medium: &interatomic::coulomb::Medium,
     ) -> anyhow::Result<Self> {
         let box_length = Self::box_length_from_context(context)?;
-        let mut ewald = EwaldReciprocal::new(
-            box_length,
-            builder.cutoff,
-            builder.accuracy,
-            medium.debye_length(),
-        );
+        let debye_length = medium.debye_length();
+        builder.validate(debye_length)?;
+        let (cutoff, accuracy) = (builder.cutoff, builder.accuracy);
+        let mut ewald = match builder.alpha {
+            Some(alpha) => {
+                EwaldReciprocal::with_alpha(box_length, cutoff, accuracy, debye_length, alpha)
+            }
+            None => EwaldReciprocal::new(box_length, cutoff, accuracy, debye_length),
+        };
         ewald.set_policy(builder.policy);
         let prefactor = interatomic::coulomb::TO_CHEMISTRY_UNIT / medium.permittivity();
 
@@ -168,10 +214,9 @@ impl EwaldReciprocalEnergy {
 
     /// Return the real-space Ewald scheme matching the current α.
     ///
-    /// After optimization this may differ from the initial scheme derived from
-    /// `accuracy` alone, so callers should use this to rebuild the nonbonded
-    /// pair matrix when `optimize` is enabled.
-    pub fn real_space_scheme(&self) -> interatomic::coulomb::pairwise::RealSpaceEwald {
+    /// After `optimize` this differs from [`EwaldBuilder::real_space_scheme`], so callers
+    /// rebuild the nonbonded pair matrix with it.
+    pub fn real_space_scheme(&self) -> RealSpaceEwald {
         self.state.ewald.real_space_scheme()
     }
 
@@ -575,7 +620,85 @@ mod tests {
             accuracy: 1e-4,
             policy: EwaldPolicy::default(),
             optimize: false,
+            alpha: None,
         }
+    }
+
+    fn fixed_alpha_builder() -> EwaldBuilder {
+        EwaldBuilder {
+            alpha: Some(0.2),
+            ..test_builder()
+        }
+    }
+
+    #[test]
+    fn builder_parses_alpha() {
+        let b = yaml_serde::from_str::<EwaldBuilder>("cutoff: 12.0\nalpha: 0.2").unwrap();
+        assert_eq!(b.alpha, Some(0.2));
+    }
+
+    #[test]
+    fn user_alpha_sets_reciprocal_alpha() {
+        let context = charged_context();
+        let builder = fixed_alpha_builder();
+        let term = EwaldReciprocalEnergy::new(&builder, &context, &vacuum_medium()).unwrap();
+        assert_eq!(term.alpha(), 0.2);
+        // Stored as η = α·r_c, so α comes back with rounding
+        approx::assert_relative_eq!(term.real_space_scheme().alpha(), 0.2, max_relative = 1e-14);
+    }
+
+    /// `optimize` would overwrite a user-set α, so asking for both is an input error.
+    #[test]
+    fn alpha_with_optimize_is_rejected() {
+        let context = charged_context();
+        let builder = EwaldBuilder {
+            optimize: true,
+            ..fixed_alpha_builder()
+        };
+        assert!(EwaldReciprocalEnergy::new(&builder, &context, &vacuum_medium()).is_err());
+    }
+
+    #[test]
+    fn non_positive_or_nan_alpha_is_rejected() {
+        let context = charged_context();
+        for alpha in [0.0, -0.2, f64::NAN, f64::INFINITY] {
+            let builder = EwaldBuilder {
+                alpha: Some(alpha),
+                ..test_builder()
+            };
+            assert!(
+                EwaldReciprocalEnergy::new(&builder, &context, &vacuum_medium()).is_err(),
+                "alpha = {alpha}"
+            );
+        }
+    }
+
+    /// The Hamiltonian injects this scheme before the reciprocal term exists, so it must
+    /// already carry the user α; otherwise the pair matrix is built twice.
+    #[test]
+    fn injected_real_space_scheme_follows_builder() {
+        approx::assert_relative_eq!(
+            fixed_alpha_builder().real_space_scheme(Some(10.0)).alpha(),
+            0.2,
+            max_relative = 1e-14
+        );
+    }
+
+    /// The injected real-space part keeps the user α, so a volume change must too.
+    #[test]
+    fn volume_change_keeps_user_alpha() {
+        use crate::cell::VolumeScalePolicy;
+        use crate::context::Context;
+        use crate::montecarlo::NewOld;
+        let mut context = charged_context();
+        let builder = fixed_alpha_builder();
+        let mut term = EwaldReciprocalEnergy::new(&builder, &context, &vacuum_medium()).unwrap();
+        let old = context
+            .scale_volume_and_positions(30.0_f64.powi(3) * 1.1, VolumeScalePolicy::Isotropic)
+            .unwrap();
+        let change = Change::Volume(VolumeScalePolicy::Isotropic, NewOld::from(old * 1.1, old));
+        term.refresh(&context, &change).unwrap();
+        assert_eq!(term.alpha(), 0.2);
     }
 
     fn vacuum_medium() -> interatomic::coulomb::Medium {

@@ -50,20 +50,16 @@ impl Hamiltonian {
         let mut pairpot_builder;
         let pairpot_ref = if let Some(ewald) = builder.ewald() {
             let debye_length = medium.as_ref().and_then(|m| m.debye_length());
-            let real_space = interatomic::coulomb::pairwise::RealSpaceEwald::new(
+            let real_space = ewald.real_space_scheme(debye_length);
+            log::info!(
+                "Ewald: injected real-space pair potential (cutoff={}, α={:.4})",
                 ewald.cutoff,
-                ewald.accuracy,
-                debye_length,
+                real_space.alpha()
             );
             pairpot_builder = builder.nonbonded().cloned().unwrap_or_default();
             pairpot_builder.push_default(super::builder::PairInteraction::CoulombRealSpaceEwald(
                 real_space,
             ));
-            log::info!(
-                "Ewald: injected real-space pair potential (cutoff={}, accuracy={})",
-                ewald.cutoff,
-                ewald.accuracy
-            );
             Some(&pairpot_builder)
         } else {
             builder.nonbonded()
@@ -543,17 +539,12 @@ impl Hamiltonian {
         if let Some(ewald_builder) = builder.ewald() {
             let medium = medium
                 .ok_or_else(|| anyhow::anyhow!("Ewald requires a medium with permittivity"))?;
-            let initial_alpha = {
-                let debye_length = medium.debye_length();
-                interatomic::coulomb::pairwise::RealSpaceEwald::new(
-                    ewald_builder.cutoff,
-                    ewald_builder.accuracy,
-                    debye_length,
-                )
-                .alpha()
-            };
+            let injected_alpha = ewald_builder
+                .real_space_scheme(medium.debye_length())
+                .alpha();
             let ewald = super::EwaldReciprocalEnergy::new(ewald_builder, context, medium)?;
-            if ewald.alpha() != initial_alpha {
+            // Only `optimize` moves α after injection; a user α is injected as is
+            if ewald_builder.optimize && ewald.alpha() != injected_alpha {
                 self.rebuild_nonbonded(
                     builder,
                     context.topology_ref(),

@@ -391,6 +391,7 @@ system:
 | `accuracy` | no       | `1e-5`  | Target relative accuracy $\varepsilon$                      |
 | `policy`   | no       | `PBC`   | `PBC` or `IPBC` ([Stenqvist & Lund, 2018](https://doi.org/10.1080/00268976.2018.1516231)) |
 | `optimize` | no       | `false` | Jointly optimize $\alpha$ and $n_\text{max}$ to minimize k-vectors (Yukawa only) |
+| `alpha`    | no       |         | Fixed splitting parameter $\alpha$ (Å⁻¹), e.g. from a fitted model; $n_\text{max}$ follows from `accuracy`. Not with `optimize` |
 
 If the medium defines a salt concentration, the corresponding Debye screening
 parameter $\kappa$ is automatically propagated to both the real-space and
