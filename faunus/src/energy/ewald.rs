@@ -120,8 +120,12 @@ impl EwaldReciprocalEnergy {
         medium: &interatomic::coulomb::Medium,
     ) -> anyhow::Result<Self> {
         let box_length = Self::box_length_from_context(context)?;
-        let kappa = medium.debye_length().map(|d| 1.0 / d);
-        let mut ewald = EwaldReciprocal::new(box_length, builder.cutoff, builder.accuracy, kappa);
+        let mut ewald = EwaldReciprocal::new(
+            box_length,
+            builder.cutoff,
+            builder.accuracy,
+            medium.debye_length(),
+        );
         ewald.set_policy(builder.policy);
         let prefactor = interatomic::coulomb::TO_CHEMISTRY_UNIT / medium.permittivity();
 
@@ -580,6 +584,24 @@ mod tests {
             interatomic::coulomb::permittivity::Permittivity::Vacuum,
             None,
         )
+    }
+
+    /// `EwaldReciprocal::new` takes a Debye length; passing κ inverted it twice, giving
+    /// α = 0, no k-vectors and a NaN real-space energy for any salt.
+    #[test]
+    fn salt_screening_reaches_reciprocal_space() {
+        use interatomic::coulomb::{DebyeLength, Medium, Salt};
+        let context = charged_context();
+        let medium = Medium::salt_water(298.15, Salt::SodiumChloride, 0.1);
+        let term = EwaldReciprocalEnergy::new(&test_builder(), &context, &medium).unwrap();
+        approx::assert_relative_eq!(
+            term.state.ewald.debye_length().unwrap(),
+            medium.debye_length().unwrap(),
+            max_relative = 1e-12
+        );
+        assert!(term.state.ewald.alpha() > 0.0);
+        assert!(term.state.ewald.num_k_vectors() > 0);
+        assert!(term.energy(&context, &Change::Everything).is_finite());
     }
 
     /// #67: `energy(Everything)` must be a fresh recompute, not the cache — otherwise
