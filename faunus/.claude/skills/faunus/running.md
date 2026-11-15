@@ -155,7 +155,9 @@ rsync -az user@host:faunus/output.yaml .
 cargo test
 ```
 
-Regression tests are ignored by default and validate against committed fixtures. Run them
+Regression tests are ignored by default and validate against committed fixtures. Physics
+tests (`tests/gibbs_ensemble.rs`, `tests/double_layer.rs`) are ignored too and check against
+published values instead; a `regression` in their names puts them in the same run. Run them
 with:
 
 ```bash

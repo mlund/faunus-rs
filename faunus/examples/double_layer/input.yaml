@@ -1,13 +1,18 @@
-{# Electric double layer (Guldbrand, Jönsson, Wennerström & Linse, J. Chem. Phys. 80,
-   2221 (1984)): osmotic pressure between two uniformly charged planes. Uses Guldbrand's
-   parameters — σ=0.2244 C/m², 80 elementary charges of counterions, T=298 K
-   (ε_r·T=2.327×10⁴), 2a=21 Å, and the electrically-transparent midplane wall of their
-   Fig. 1c. The mono/divalent composition is set THERMODYNAMICALLY by a 2 Na⁺ ⇌ Ca²⁺ swap of
-   free energy `dG` (kJ/mol): high dG → 80 monovalent; low dG → 40 divalent (charge-conserving,
-   so σ is unchanged); between → mixtures. Each species has a lower/upper group pinned to its
-   side of the midplane, so the swap keeps each half neutral.
-   Method: see docs/analysis.md (DoubleLayerPressure). For the divalent attraction set lz=12
-   and a low dG. Parameters below are edited in place — faunus renders with no external context. #}
+{# Electric double layer: osmotic pressure between two uniformly charged planes, after
+   Guldbrand et al., J. Chem. Phys. 80, 2221 (1984), doi:10.1063/1.446912.
+   The defaults follow their Table I: σ = 0.2244 C/m², counterions carrying 80 e in total,
+   T = 298 K (ε_r·T = 2.327×10⁴ K) and 2a = 21 Å, with the electrically transparent midplane
+   wall of their Fig. 1c. tests/double_layer.rs checks P_osm against that table.
+
+   A 2 Na⁺ ⇌ Ca²⁺ swap with reaction free energy dG (kJ/mol) sets the counterion valency:
+   high dG gives 80 Na⁺, low dG gives 40 Ca²⁺, and values in between give mixtures. The swap
+   conserves charge, so σ stays fixed. Each species has one group per half, held on its side
+   of the midplane, so each half stays neutral. For the divalent attraction, set lz = 12 and
+   a low dG.
+
+   Edit the defaults below, or set a variable ahead of them ({% set dG = -50.0 %}); faunus
+   renders the template without external variables. Method: docs/analysis.md
+   (DoubleLayerPressure). #}
 {%- set sigma        = sigma        | default(0.014006) %}   {# |σ| e/Å² (0.2244 C/m²) #}
 {%- set total_charge = total_charge | default(80) %}         {# total counterion charge (multiple of 4) #}
 {%- set lz           = lz           | default(21.0) %}       {# plate separation 2a (Å) #}
@@ -71,7 +76,6 @@ propagate:
         - !TranslateMolecule { molecule: ca_up, dp: {{ dp }}, weight: {{ ca_slots }} }
         # 2 Na⁺ ⇌ Ca²⁺ per half (charge-conserving); dG sets the composition.
         - !SpeciationMove
-          temperature: 298.15
           weight: {{ (total_charge / 10) | int }}
           reactions:
             - ["na_lo + na_lo = ca_lo", !dG {{ dG }}]

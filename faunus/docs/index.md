@@ -80,7 +80,7 @@ Tracked examples:
 |---------|----------|
 | [CALVADOS protein model](https://github.com/mlund/faunus-rs/tree/main/examples/calvados3) | Coarse-grained protein simulation |
 | [Phosphate titration](https://github.com/mlund/faunus-rs/blob/main/examples/phosphate-titration/input.yaml) | Acid-base reactions and implicit protons |
-| [Double layer](https://github.com/mlund/faunus-rs/blob/main/examples/double_layer/input.yaml) | Charged slit geometry and electrostatic profiles |
+| [Double layer](https://github.com/mlund/faunus-rs/blob/main/examples/double_layer/input.yaml) | Osmotic pressure between charged planes with mono- or divalent counterions ([Guldbrand et al., 1984](https://doi.org/10.1063/1.446912)) |
 | [2D Wang-Landau](https://github.com/mlund/faunus-rs/blob/main/examples/wang_landau_2d/input.yaml) | Flat-histogram free-energy sampling |
 | [Gibbs ensemble LJ fluid](https://github.com/mlund/faunus-rs/blob/main/tests/files/gibbs_ensemble/input.yaml) | Two-box phase coexistence reference input from the test suite |
 
