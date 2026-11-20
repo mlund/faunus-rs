@@ -26,8 +26,9 @@
 //! the nonbonded real-space pair potential is automatically rebuilt to match.
 //!
 //! Alternatively, `alpha` fixes α (e.g. from a fitted model); the real-space potential is
-//! injected with that α from the start. An optimized or fixed α, and its k-space cutoff,
-//! survive volume changes, so real and reciprocal space stay split at the same α.
+//! injected with that α from the start. An optimized or fixed α survives volume changes, so
+//! real and reciprocal space stay split at the same α. Its k-vector set is kept too, so the
+//! energy is smooth in V for virtual-volume and NPT moves.
 
 use super::backup::Snapshot;
 use super::stateful::{derived_energy, StatefulEnergy};
