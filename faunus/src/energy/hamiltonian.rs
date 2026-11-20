@@ -309,6 +309,16 @@ impl Hamiltonian {
         self.forces_filtered(context, |_| true)
     }
 
+    /// The splined nonbonded term. Its presence puts LD pair and bonded forces on the GPU.
+    #[cfg_attr(not(feature = "gpu"), allow(dead_code))]
+    pub(crate) fn splined_nonbonded(&self) -> Option<&NonbondedMatrixSplined> {
+        #[allow(clippy::wildcard_enum_match_arm)] // only one variant is splined
+        self.energy_terms.iter().find_map(|t| match t {
+            EnergyTerm::NonbondedMatrixSplined(nb) => Some(nb),
+            _ => None,
+        })
+    }
+
     /// True if any energy term contributes forces that the GPU Langevin pipeline
     /// does *not* compute on-device. Caller uses this to decide whether to plumb
     /// a CPU-overlay callback into the GPU run loop.
