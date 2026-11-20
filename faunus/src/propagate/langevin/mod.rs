@@ -98,6 +98,13 @@ impl LangevinRunner {
     /// Refuse inputs LD would integrate with wrong or missing forces, at setup
     /// rather than at the first LD block.
     pub(in crate::propagate) fn check_supported(context: &impl Context) -> anyhow::Result<()> {
+        // The kernels wrap and image with a single box length
+        let cubic = matches!(context.cell(), crate::cell::Cell::Cuboid(_))
+            && context
+                .cell()
+                .bounding_box()
+                .is_some_and(|b| b.x == b.y && b.y == b.z);
+        anyhow::ensure!(cubic, "LangevinDynamics needs a cubic !Cuboid cell");
         let unsupported = context.hamiltonian().ld_unsupported_terms(context);
         anyhow::ensure!(
             unsupported.is_empty(),
