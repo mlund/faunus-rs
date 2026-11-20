@@ -310,13 +310,7 @@ pub(super) struct GpuSplineUpload {
 /// Returns `None` fields if no splined nonbonded term exists, falling back to CPU forces.
 pub(super) fn extract_spline_data<T: Context>(context: &T) -> GpuSplineUpload {
     let hamiltonian = context.hamiltonian();
-    let nonbonded = hamiltonian
-        .energy_terms()
-        .iter()
-        .find_map(|term| match term {
-            crate::energy::EnergyTerm::NonbondedMatrixSplined(nb) => Some(nb),
-            _ => None,
-        });
+    let nonbonded = hamiltonian.splined_nonbonded();
 
     let Some(nb) = nonbonded else {
         log::info!("No splined nonbonded term found; using CPU forces");
