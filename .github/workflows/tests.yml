@@ -1,0 +1,38 @@
+name: tests
+
+# Library unit tests. The `gpu` job runs the compute kernels on Mesa's lavapipe,
+# a software Vulkan device, so GPU tests need no GPU.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        features: ["", "gpu"]
+    name: lib ${{ matrix.features || 'cpu' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive # workspace [patch] redirects deps to these
+          fetch-depth: 0 # tags for git-describe provenance (build.rs)
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.features }}
+      - name: Install lavapipe
+        if: matrix.features == 'gpu'
+        run: sudo apt-get update && sudo apt-get install -y mesa-vulkan-drivers libvulkan1
+      - name: cargo test
+        run: cargo test -p faunus --lib --features "${{ matrix.features }}"

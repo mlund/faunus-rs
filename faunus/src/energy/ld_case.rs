@@ -1,5 +1,15 @@
 //! Test fixture for the Langevin-dynamics force checks.
 
+/// A system from the YAML `atoms:` … `system:` body, with an inert `propagate:` section.
+pub(crate) fn ld_system(body: &str) -> crate::backend::Backend {
+    use rand::SeedableRng;
+    let yaml = format!(
+        "{body}\npropagate: {{seed: !Fixed 1, criterion: Metropolis, steps: 0, collections: []}}\n"
+    );
+    let mut rng = rand::rngs::StdRng::seed_from_u64(1);
+    crate::backend::Backend::from_yaml_str(&yaml, None, &mut rng).unwrap()
+}
+
 /// A charged dimer (bonded, excluded pair kept), a rigid probe ion, and an
 /// uninserted flexible kind whose terms must not count.
 pub(crate) struct LdCase {
@@ -68,9 +78,8 @@ system:
         - !CoulombPlain {{cutoff: 15.0}}
       {spline}
 {extra}
-propagate: {{seed: !Fixed 1, criterion: Metropolis, steps: 0, collections: []}}
 "#
         );
-        crate::backend::Backend::from_yaml_str(&yaml, None, &mut rand::thread_rng()).unwrap()
+        ld_system(&yaml)
     }
 }
