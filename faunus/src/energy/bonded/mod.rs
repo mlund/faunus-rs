@@ -28,6 +28,36 @@ use super::backup::Snapshot;
 use super::stateful::{derived_energy, StatefulEnergy};
 use super::{EnergyChange, EnergyTerm};
 
+/// True if the GPU bonded kernels implement every bond, torsion and dihedral kind
+/// given; the repackers in `kernel.rs` silently skip the rest. Exhaustive matches
+/// so a new kind must be classified.
+pub(crate) fn device_bonded_forces(
+    bonds: &[crate::topology::Bond],
+    torsions: &[crate::topology::Torsion],
+    dihedrals: &[crate::topology::Dihedral],
+) -> bool {
+    use crate::topology::{BondKind, DihedralKind, TorsionKind};
+    // Unspecified kinds have zero energy, hence zero force.
+    let bond_ok = |b: &crate::topology::Bond| match b.kind() {
+        BondKind::Harmonic(_) | BondKind::Unspecified => true,
+        BondKind::FENE(_) | BondKind::Morse(_) | BondKind::UreyBradley(_) => false,
+    };
+    let torsion_ok = |t: &crate::topology::Torsion| match t.kind() {
+        TorsionKind::Harmonic(_) | TorsionKind::Unspecified => true,
+        TorsionKind::Cosine(_) => false,
+    };
+    let dihedral_ok = |d: &crate::topology::Dihedral| match d.kind() {
+        DihedralKind::ProperHarmonic(_)
+        | DihedralKind::ImproperHarmonic(_)
+        | DihedralKind::ProperPeriodic(_)
+        | DihedralKind::ImproperPeriodic(_)
+        | DihedralKind::Unspecified => true,
+    };
+    bonds.iter().all(bond_ok)
+        && torsions.iter().all(torsion_ok)
+        && dihedrals.iter().all(dihedral_ok)
+}
+
 /// Energy term for computing intramolecular bonded interactions.
 #[derive(Debug, Clone, Default)]
 pub struct IntramolecularBonded {}

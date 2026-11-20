@@ -95,6 +95,19 @@ impl LangevinRunner {
         self.energy_change_sum += delta;
     }
 
+    /// Refuse inputs LD would integrate with wrong or missing forces, at setup
+    /// rather than at the first LD block.
+    pub(in crate::propagate) fn check_supported(context: &impl Context) -> anyhow::Result<()> {
+        let unsupported = context.hamiltonian().ld_unsupported_terms(context);
+        anyhow::ensure!(
+            unsupported.is_empty(),
+            "LangevinDynamics: no forces for energy term(s) {}; \
+             LD would sample a different Hamiltonian than MC",
+            unsupported.join(", ")
+        );
+        Ok(())
+    }
+
     pub fn new(config: LangevinConfig) -> Self {
         Self {
             config,
@@ -135,10 +148,13 @@ impl LangevinRunner {
             // are computed on the host are summed each step into the COM
             // force/torque overlay buffer. When no such terms are present, no
             // callback is passed and the GPU loop runs without host round-trips.
-            if context.hamiltonian().has_ld_overlay_forces() {
+            let host_terms = context.hamiltonian().ld_host_terms(context);
+            if !host_terms.is_empty() {
                 let mut overlay = |positions: &[[f32; 4]]| -> (Vec<[f32; 4]>, Vec<[f32; 4]>) {
                     Self::write_positions(context, positions);
-                    let forces = context.hamiltonian().ld_overlay_forces(context);
+                    let forces = context
+                        .hamiltonian()
+                        .ld_overlay_forces(context, &host_terms);
                     reduce_forces_to_com(context, &forces)
                 };
                 gpu.run_steps(steps, Some(&mut overlay))?;

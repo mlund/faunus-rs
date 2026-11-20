@@ -517,7 +517,7 @@ const RAD_PER_DEG_SQ: f64 = (180.0 / std::f64::consts::PI) * (180.0 / std::f64::
 ///
 /// Each bond creates two directed entries (one per endpoint).
 /// Includes both intra-molecular and intermolecular bonds.
-/// Only harmonic bonds are supported.
+/// Only harmonic bonds are supported; keep `device_bonded_forces` in sync.
 pub fn repack_bonds(topology: &Topology, groups: &[Group]) -> CsrData {
     let n_atoms: usize = groups.iter().map(|g| g.capacity()).sum();
     let mut edges: Vec<Vec<(u32, f32, f32)>> = vec![Vec::new(); n_atoms];
@@ -580,7 +580,8 @@ pub fn repack_bonds(topology: &Topology, groups: &[Group]) -> CsrData {
 ///
 /// Each angle creates three entries (one per participating atom).
 /// Includes both intra-molecular and intermolecular torsions (angles).
-/// Spring constant is converted to radian units.
+/// Spring constant is converted to radian units. Only harmonic torsions are
+/// supported; keep `device_bonded_forces` in sync.
 pub fn repack_angles(topology: &Topology, groups: &[Group]) -> CsrData {
     let n_atoms: usize = groups.iter().map(|g| g.capacity()).sum();
     type AngleEntry = (u32, u32, f32, f32, f32); // (other1, other2, role, k_eff, theta_eq_rad)
@@ -660,7 +661,8 @@ pub fn repack_dihedrals(topology: &Topology, groups: &[Group]) -> CsrData {
     type DihedralEntry = (u32, u32, u32, [f32; 8]); // (other1, other2, other3, params)
     let mut entries: Vec<Vec<DihedralEntry>> = vec![Vec::new(); n_atoms];
 
-    /// Convert a dihedral to base_params, returning None for unsupported types.
+    /// Convert a dihedral to base_params, returning None for unsupported types;
+    /// keep `device_bonded_forces` in sync.
     fn dihedral_base_params(kind: &DihedralKind) -> Option<[f32; 8]> {
         match kind {
             DihedralKind::ProperHarmonic(h) | DihedralKind::ImproperHarmonic(h) => {

@@ -30,6 +30,8 @@ mod expr_helpers;
 mod external_pressure;
 mod group_pair_cache;
 mod hamiltonian;
+#[cfg(test)]
+pub(crate) mod ld_case;
 mod nonbonded;
 #[cfg(feature = "gpu")]
 pub(crate) mod nonbonded_kernel;
