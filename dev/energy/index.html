@@ -1397,6 +1397,11 @@ structure factor, <span class="arithmatex">\(\alpha\)</span> is the Ewald splitt
 Debye screening parameter (<span class="arithmatex">\(\kappa = 0\)</span> for unscreened Coulomb).
 For screened electrostatics (<span class="arithmatex">\(\kappa &gt; 0\)</span>), the method generalises to Yukawa Ewald summation
 (<a href="https://doi.org/10.1063/1.1326477">Salin &amp; Caillol, 2000</a>).</p>
+<p>Langevin dynamics uses the reciprocal-space force</p>
+<div class="arithmatex">\[\mathbf{F}_i = \frac{4\pi q_i}{V} \sum_{\mathbf{k} \neq 0} A(k)\, \mathbf{k}\,
+  \operatorname{Im}\bigl[S(\mathbf{k})^* e^{i \mathbf{k} \cdot \mathbf{r}_i}\bigr]\]</div>
+<p>where <span class="arithmatex">\(A(k)\)</span> is the fraction in <span class="arithmatex">\(U_\text{recip}\)</span> (PBC policy only).
+The real-space part enters through the nonbonded pair forces.</p>
 <h3 id="self-energy-and-electroneutrality-corrections">Self-energy and electroneutrality corrections<a class="headerlink" href="#self-energy-and-electroneutrality-corrections" title="Permanent link">&para;</a></h3>
 <p>The self-energy correction removes spurious self-interaction from the real-space sum.
 For non-neutral systems (<span class="arithmatex">\(Q = \sum_j q_j \neq 0\)</span>), additional corrections are needed
