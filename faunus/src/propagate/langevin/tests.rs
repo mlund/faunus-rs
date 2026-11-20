@@ -1309,6 +1309,23 @@ fn upload_and_reconstruct_preserves_a_rotated_rigid_molecule() {
     }
 }
 
+/// The kernels use one box length, so only a cubic, fully periodic cell is valid.
+#[test]
+fn check_supported_requires_cubic_cuboid() {
+    let check = |cell| {
+        LangevinRunner::check_supported(
+            &LdCase {
+                cell,
+                ..Default::default()
+            }
+            .context(),
+        )
+    };
+    assert!(check("!Cuboid [40.0, 40.0, 40.0]").is_ok());
+    assert!(check("!Cuboid [40.0, 40.0, 50.0]").is_err());
+    assert!(check("!Slit [40.0, 40.0, 40.0]").is_err());
+}
+
 #[test]
 fn check_supported_names_unsupported_terms() {
     let context = LdCase {
