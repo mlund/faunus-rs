@@ -323,6 +323,14 @@ Debye screening parameter ($\kappa = 0$ for unscreened Coulomb).
 For screened electrostatics ($\kappa > 0$), the method generalises to Yukawa Ewald summation
 ([Salin & Caillol, 2000](https://doi.org/10.1063/1.1326477)).
 
+Langevin dynamics uses the reciprocal-space force
+
+$$\mathbf{F}_i = \frac{4\pi q_i}{V} \sum_{\mathbf{k} \neq 0} A(k)\, \mathbf{k}\,
+  \operatorname{Im}\bigl[S(\mathbf{k})^* e^{i \mathbf{k} \cdot \mathbf{r}_i}\bigr]$$
+
+where $A(k)$ is the fraction in $U_\text{recip}$ (PBC policy only).
+The real-space part enters through the nonbonded pair forces.
+
 ### Self-energy and electroneutrality corrections
 
 The self-energy correction removes spurious self-interaction from the real-space sum.

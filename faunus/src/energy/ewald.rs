@@ -54,12 +54,50 @@ struct EwaldState {
     charges: Vec<f64>,
 }
 
+/// Charged active particles as structure-of-arrays, the layout coulomb takes.
+/// Zero charges are dropped: they add nothing to S(k) but cost N_k trig calls each.
+struct Charged {
+    /// Absolute particle index
+    index: Vec<usize>,
+    x: Vec<f64>,
+    y: Vec<f64>,
+    z: Vec<f64>,
+    q: Vec<f64>,
+}
+
+impl Charged {
+    fn from_context(context: &impl ObserveContext) -> Self {
+        let atomkinds = context.topology_ref().atomkinds();
+        let mut c = Self {
+            index: Vec::new(),
+            x: Vec::new(),
+            y: Vec::new(),
+            z: Vec::new(),
+            q: Vec::new(),
+        };
+        for i in context.groups().iter().flat_map(|g| g.iter_active()) {
+            let q = atomkinds[context.atom_kind(i).get()].charge();
+            if q != 0.0 {
+                let pos = context.position(i);
+                c.index.push(i);
+                c.x.push(pos.x);
+                c.y.push(pos.y);
+                c.z.push(pos.z);
+                c.q.push(q);
+            }
+        }
+        c
+    }
+}
+
 /// Ewald reciprocal-space energy with backup/undo for MC moves.
 #[derive(Clone)]
 pub struct EwaldReciprocalEnergy {
     state: Snapshot<EwaldState>,
     /// Electric prefactor: e²/(4πε₀ε_r) in kJ/mol·Å (immutable)
     prefactor: f64,
+    /// Decides the Langevin force path (immutable)
+    policy: EwaldPolicy,
     /// Reusable position buffers to avoid per-update allocations (scratch).
     pos_buf: (Vec<f64>, Vec<f64>, Vec<f64>),
     /// Old positions of affected particles: (global_index, [x, y, z]). Move-scoped
@@ -188,6 +226,7 @@ impl EwaldReciprocalEnergy {
                 charges,
             }),
             prefactor,
+            policy: builder.policy,
             pos_buf: (vec![0.0; n], vec![0.0; n], vec![0.0; n]),
             old_positions: Vec::new(),
         };
@@ -201,6 +240,14 @@ impl EwaldReciprocalEnergy {
             );
         }
         Ok(term)
+    }
+
+    /// Only PBC has a Langevin force path: the planned device kernel is PBC-only.
+    pub(super) fn ld_forces(&self) -> super::energyterm::LdForces {
+        match self.policy {
+            EwaldPolicy::PBC => super::energyterm::LdForces::Host,
+            EwaldPolicy::IPBC => super::energyterm::LdForces::Unsupported,
+        }
     }
 
     /// Current Ewald splitting parameter α.
@@ -395,21 +442,34 @@ impl EwaldReciprocalEnergy {
     /// accumulated structure-factor drift, a stale charge after an identity swap, or a box that
     /// has drifted from `context.cell()`.
     fn compute_total(&self, context: &impl ObserveContext) -> f64 {
-        let charges = Self::extract_charges(context);
-        let n = charges.len();
-        let (mut x, mut y, mut z) = (vec![0.0; n], vec![0.0; n], vec![0.0; n]);
-        for group in context.groups() {
-            for i in group.iter_active() {
-                let pos = context.position(i);
-                x[i] = pos.x;
-                y[i] = pos.y;
-                z[i] = pos.z;
-            }
-        }
+        let (ewald, charged) = self.fresh_summator(context);
+        self.prefactor * (ewald.energy() + ewald.self_energy(&charged.q))
+    }
+
+    /// Clone of the summator with S(k) rebuilt from the context's box and charged
+    /// active particles. The cached S(k) only tracks MC moves, so anything else that
+    /// moved atoms (Langevin dynamics, an energy-drift check) must not trust it.
+    fn fresh_summator(&self, context: &impl ObserveContext) -> (EwaldReciprocal, Charged) {
+        let charged = Charged::from_context(context);
         let box_length = Self::box_length_from_context(context).ok();
         let mut ewald = self.state.ewald.clone();
-        ewald.update_all(&x, &y, &z, &charges, box_length, false);
-        self.prefactor * (ewald.energy() + ewald.self_energy(&charges))
+        let Charged { x, y, z, q, .. } = &charged;
+        ewald.update_all(x, y, z, q, box_length, false);
+        (ewald, charged)
+    }
+
+    /// Reciprocal-space force on every particle (kJ/mol/Å), indexed by absolute
+    /// particle index; inactive and neutral particles get zero. O(N·N_k), from a
+    /// fresh S(k), so it is correct however the atoms got where they are.
+    pub(crate) fn forces(&self, context: &impl ObserveContext) -> Vec<crate::Point> {
+        let (ewald, charged) = self.fresh_summator(context);
+        let n = context.groups().iter().map(|g| g.capacity()).sum();
+        let mut forces = vec![crate::Point::zeros(); n];
+        for (k, &i) in charged.index.iter().enumerate() {
+            let pos = [charged.x[k], charged.y[k], charged.z[k]];
+            forces[i] = crate::Point::from(ewald.force(pos, charged.q[k])) * self.prefactor;
+        }
+        forces
     }
 
     /// Report Ewald parameters as YAML.
@@ -495,21 +555,97 @@ mod tests {
     use crate::energy::stateful::StatefulEnergy;
     use crate::group::{GroupCollectionMut, GroupSize};
     use crate::GroupChange;
-    use std::io::Write;
 
-    /// Two single-atom molecules of opposite charge (net neutral), individually deactivatable.
+    /// Unit cations and anions, one molecule each so they deactivate individually,
+    /// at `!Manual` positions in a 30 Å cube.
+    fn ion_context(cations: &[[f64; 3]], anions: &[[f64; 3]]) -> Backend {
+        let yaml = format!(
+            "atoms:\n  - {{name: Cat, mass: 1.0, charge: 1.0, sigma: 1.0}}\n  \
+             - {{name: Ani, mass: 1.0, charge: -1.0, sigma: 1.0}}\n\
+             molecules:\n  - {{name: CAT, atoms: [Cat]}}\n  - {{name: ANI, atoms: [Ani]}}\n\
+             system:\n  cell: !Cuboid [30.0, 30.0, 30.0]\n  \
+             medium: {{permittivity: !Vacuum, temperature: 300.0}}\n  energy: []\n  \
+             blocks:\n    - {{molecule: CAT, N: {}, insert: !Manual {:?}}}\n    \
+             - {{molecule: ANI, N: {}, insert: !Manual {:?}}}\n\
+             propagate: {{seed: !Fixed 1, criterion: Metropolis, steps: 0, collections: []}}\n",
+            cations.len(),
+            cations,
+            anions.len(),
+            anions
+        );
+        Backend::from_yaml_str(&yaml, None, &mut rand::thread_rng()).unwrap()
+    }
+
+    /// Two opposite charges, net neutral.
     fn charged_context() -> Backend {
-        let yaml = "atoms:\n  - {name: Cat, mass: 1.0, charge: 1.0, sigma: 1.0}\n  \
-                    - {name: Ani, mass: 1.0, charge: -1.0, sigma: 1.0}\n\
-                    molecules:\n  - {name: CAT, atoms: [Cat]}\n  - {name: ANI, atoms: [Ani]}\n\
-                    system:\n  cell: !Cuboid [30.0, 30.0, 30.0]\n  \
-                    medium: {permittivity: !Vacuum, temperature: 300.0}\n  energy: []\n  \
-                    blocks:\n    - {molecule: CAT, N: 1, insert: !Manual [[0.0, 0.0, 0.0]]}\n    \
-                    - {molecule: ANI, N: 1, insert: !Manual [[5.0, 0.0, 0.0]]}\n\
-                    propagate: {seed: !Fixed 1, criterion: Metropolis, steps: 0, collections: []}\n";
-        let mut tmp = tempfile::NamedTempFile::new().unwrap();
-        tmp.write_all(yaml.as_bytes()).unwrap();
-        Backend::new(tmp.path(), None, &mut rand::thread_rng()).unwrap()
+        ion_context(&[[0.0, 0.0, 0.0]], &[[5.0, 0.0, 0.0]])
+    }
+
+    /// Four unit charges, net neutral, at generic positions.
+    fn four_charge_context() -> Backend {
+        ion_context(
+            &[[0.0, 0.0, 0.0], [7.0, -3.0, 12.0]],
+            &[[5.0, 1.0, -2.0], [-9.0, 8.0, 4.0]],
+        )
+    }
+
+    fn max_norm(forces: &[crate::Point]) -> f64 {
+        forces.iter().map(|f| f.norm()).fold(0.0, f64::max)
+    }
+
+    fn yukawa_medium() -> interatomic::coulomb::Medium {
+        use interatomic::coulomb::{Medium, Salt};
+        Medium::salt_water(298.15, Salt::SodiumChloride, 0.05)
+    }
+
+    /// LD integrates `forces`, MC samples the energy: they must be one Hamiltonian.
+    /// The S(k) cache is never refreshed by LD, so moving atoms behind the term's
+    /// back also checks that `forces` reads the current positions.
+    #[test]
+    fn forces_are_minus_energy_gradient() {
+        use crate::Point;
+        let mut context = four_charge_context();
+        let term = EwaldReciprocalEnergy::new(&test_builder(), &context, &yukawa_medium()).unwrap();
+        context.translate_particles(&[1], &Point::new(0.4, -0.7, 0.2));
+
+        let forces = term.forces(&context);
+        // Energy with particle i displaced, then put back
+        let mut shifted = |i: usize, step: Point| {
+            context.translate_particles(&[i], &step);
+            let energy = term.energy(&context, &Change::Everything);
+            context.translate_particles(&[i], &-step);
+            energy
+        };
+        // coulomb evaluates S(k) in f32, so a smaller step differences rounding noise
+        let h = 1e-2;
+        let fmax = max_norm(&forces);
+        assert!(fmax > 0.0);
+        for (i, force) in forces.iter().enumerate() {
+            for d in 0..3 {
+                let mut step = Point::zeros();
+                step[d] = h;
+                let numeric = (shifted(i, -step) - shifted(i, step)) / (2.0 * h);
+                approx::assert_abs_diff_eq!(force[d], numeric, epsilon = 1e-5 * fmax);
+            }
+        }
+    }
+
+    /// Reciprocal forces are pairwise, so a neutral box feels no net force; a deactivated
+    /// particle carries no charge and must not be pushed by its stale position.
+    #[test]
+    fn forces_cancel_and_skip_inactive_particles() {
+        let mut context = four_charge_context();
+        let term = EwaldReciprocalEnergy::new(&test_builder(), &context, &yukawa_medium()).unwrap();
+        let forces = term.forces(&context);
+        let fmax = max_norm(&forces);
+        let net: crate::Point = forces.iter().sum();
+        assert!(net.norm() < 1e-5 * fmax, "net force {net}");
+
+        // Deactivate one CAT (group 0); the remaining three still interact
+        context.resize_group(0, GroupSize::Shrink(1)).unwrap();
+        let forces = term.forces(&context);
+        assert_eq!(forces[0], crate::Point::zeros());
+        assert!(forces[1..].iter().all(|f| f.norm() > 0.0));
     }
 
     #[test]

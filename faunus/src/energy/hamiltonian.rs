@@ -8,7 +8,10 @@ use super::{
 };
 use crate::time::Instant;
 use crate::ObserveContext;
-use crate::{topology::Topology, Change};
+use crate::{
+    topology::{DegreesOfFreedom, Topology},
+    Change,
+};
 use interatomic::coulomb::{DebyeLength, Temperature};
 use std::cell::Cell;
 use std::path::Path;
@@ -326,10 +329,24 @@ impl Hamiltonian {
         class: LdForces,
     ) -> impl Iterator<Item = (usize, &'a EnergyTerm)> {
         let on_device = self.splined_nonbonded().is_some();
-        self.energy_terms
-            .iter()
-            .enumerate()
-            .filter(move |(_, t)| t.ld_forces(context, on_device) == class)
+        // Host forces reach LD as rigid-body COM forces and torques, which
+        // per-atom-integrated flexible atoms never see
+        let has_flexible = context.groups().iter().any(|g| {
+            context
+                .topology_ref()
+                .moleculekind(g.molecule())
+                .degrees_of_freedom()
+                == DegreesOfFreedom::Free
+        });
+        self.energy_terms.iter().enumerate().filter(move |(_, t)| {
+            let source = t.ld_forces(context, on_device);
+            let source = if has_flexible && source == LdForces::Host {
+                LdForces::Unsupported
+            } else {
+                source
+            };
+            source == class
+        })
     }
 
     /// Indices of terms whose forces LD sums on the host each step. Classify once
@@ -722,11 +739,56 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(ld_unsupported(external), ["custom_external"]);
-        let ewald = LdCase {
-            extra: "    - !Ewald {cutoff: 12.0, accuracy: 1e-5}",
+    }
+
+    /// LD takes reciprocal forces on the host for PBC; IPBC has no LD force path.
+    #[test]
+    fn ld_accepts_ewald_only_with_pbc() {
+        let ewald = |extra| LdCase {
+            extra,
             ..Default::default()
         };
-        assert_eq!(ld_unsupported(ewald), ["ewald_reciprocal"]);
+        assert_eq!(
+            ld_unsupported(ewald("    - !Ewald {cutoff: 12.0, accuracy: 1e-5}")),
+            Vec::<&str>::new()
+        );
+        assert_eq!(
+            ld_unsupported(ewald(
+                "    - !Ewald {cutoff: 12.0, accuracy: 1e-5, policy: IPBC}"
+            )),
+            ["ewald_reciprocal"]
+        );
+    }
+
+    /// The host overlay feeds rigid-body COM forces and torques only, so it cannot
+    /// move the per-atom-integrated atoms of a flexible molecule.
+    #[test]
+    fn ld_refuses_host_forces_on_flexible_molecules() {
+        let flexible = |extra| LdCase {
+            dimer_dof: "Free",
+            extra,
+            ..Default::default()
+        };
+        // The dimer's kept excluded pair is refused regardless; count what host terms add
+        let base = ld_unsupported(flexible("")).len();
+        let ewald = ld_unsupported(flexible("    - !Ewald {cutoff: 12.0, accuracy: 1e-5}"));
+        assert_eq!(ewald.len(), base + 1);
+        assert!(ewald.contains(&"ewald_reciprocal"));
+    }
+
+    /// The host overlay is how LD sees the k-space forces until they run on-device.
+    #[test]
+    fn ld_overlay_carries_ewald_forces() {
+        use crate::WithHamiltonian;
+        let context = LdCase {
+            extra: "    - !Ewald {cutoff: 12.0, accuracy: 1e-5}",
+            ..Default::default()
+        }
+        .context();
+        let hamiltonian = context.hamiltonian();
+        let overlay = hamiltonian.ld_overlay_forces(&context, &hamiltonian.ld_host_terms(&context));
+        assert_eq!(overlay.len(), 3);
+        assert!(overlay.iter().all(|f| f.norm() > 0.0));
     }
 
     /// The GPU bonded kernels skip non-harmonic bonds, so a moving FENE bond has no force.
@@ -744,7 +806,8 @@ mod tests {
         );
     }
 
-    /// Without splines LD takes the CPU-force path, which has no bonded forces.
+    /// Without splines LD takes the CPU-force path: no bonded forces, and pair forces
+    /// reach only rigid bodies.
     #[test]
     fn ld_refuses_moving_bonds_without_splines() {
         let unsplined = |dimer_dof| LdCase {
@@ -755,7 +818,7 @@ mod tests {
         assert_eq!(ld_unsupported(unsplined("Rigid")), Vec::<&str>::new());
         assert_eq!(
             ld_unsupported(unsplined("Free")),
-            ["excluded_coulomb", "intramolecular"]
+            ["nonbonded", "excluded_coulomb", "intramolecular"]
         );
     }
 
