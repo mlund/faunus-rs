@@ -259,6 +259,7 @@ impl EnergyTerm {
             Self::NonbondedMatrix(x) => x.forces(context),
             Self::NonbondedMatrixSplined(x) => x.forces(context),
             Self::CustomPair(x) => x.forces(context),
+            Self::EwaldReciprocal(x) => x.forces(context),
             Self::IntramolecularBonded(_)
             | Self::IntermolecularBonded(_)
             | Self::SasaEnergy(_)
@@ -267,7 +268,6 @@ impl EnergyTerm {
             | Self::Constrain(_)
             | Self::ExternalPressure(_)
             | Self::CustomExternal(_)
-            | Self::EwaldReciprocal(_)
             | Self::PolymerDepletion(_)
             | Self::ExcludedCoulomb(_)
             | Self::Tabulated(_)
@@ -278,7 +278,8 @@ impl EnergyTerm {
     /// Where Langevin dynamics gets this term's forces. `on_device` is true when the
     /// GPU computes pair and bonded forces, i.e. a splined nonbonded term exists;
     /// otherwise LD sums `forces()` on the host. No wildcard, so a new variant
-    /// cannot reach LD without a decision.
+    /// cannot reach LD without a decision. The Hamiltonian refuses `Host` when
+    /// any molecule is flexible.
     pub(super) fn ld_forces(&self, context: &impl ObserveContext, on_device: bool) -> LdForces {
         let topology = context.topology_ref();
         // Inserted molecule kinds whose internal coordinates LD changes
@@ -328,8 +329,8 @@ impl EnergyTerm {
                     LdForces::Constant
                 }
             }
-            Self::EwaldReciprocal(_)
-            | Self::SasaEnergy(_)
+            Self::EwaldReciprocal(x) => x.ld_forces(),
+            Self::SasaEnergy(_)
             | Self::ContactTessellation(_)
             | Self::Constrain(_)
             | Self::CustomExternal(_)
