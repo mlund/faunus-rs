@@ -1,5 +1,5 @@
 use super::{
-    bonded::{IntermolecularBonded, IntramolecularBonded},
+    bonded::{self, IntermolecularBonded, IntramolecularBonded},
     constrain::Constrain,
     contact_tessellation::ContactTessellationEnergy,
     custom_external::CustomExternal,
@@ -15,8 +15,22 @@ use super::{
     tabulated::TabulatedEnergy,
     CellOverlap, EnergyChange,
 };
+use crate::topology::DegreesOfFreedom;
 use crate::Change;
 use crate::ObserveContext;
+
+/// Source of an energy term's forces under Langevin dynamics.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum LdForces {
+    /// Computed by the GPU pipeline.
+    Device,
+    /// Computed on the host each step and added as a COM force/torque overlay.
+    Host,
+    /// Energy cannot change during LD, so the force is zero.
+    Constant,
+    /// No forces; LD would sample a different Hamiltonian than MC.
+    Unsupported,
+}
 
 #[derive(Debug, Clone)]
 pub enum EnergyTerm {
@@ -261,28 +275,68 @@ impl EnergyTerm {
         }
     }
 
-    /// True when the GPU Langevin pipeline computes this term's forces on-device,
-    /// so the host must not recompute and double-count them in the overlay path.
-    /// Bonded variants are listed even though their CPU `forces()` arms are empty
-    /// today — they are computed inside the GPU loop.
-    pub(super) fn handled_by_gpu_ld(&self) -> bool {
-        matches!(
-            self,
-            Self::NonbondedMatrix(_)
-                | Self::NonbondedMatrixSplined(_)
-                | Self::IntramolecularBonded(_)
-                | Self::IntermolecularBonded(_)
-        )
-    }
-
-    /// True for variants whose `forces()` arm returns a non-empty vector.
-    /// Used by the GPU LD pre-flight to decide whether to plumb an overlay
-    /// callback. Keep in sync with the `forces()` match arms above.
-    pub(super) fn contributes_force(&self) -> bool {
-        matches!(
-            self,
-            Self::NonbondedMatrix(_) | Self::NonbondedMatrixSplined(_) | Self::CustomPair(_)
-        )
+    /// Where Langevin dynamics gets this term's forces. `on_device` is true when the
+    /// GPU computes pair and bonded forces, i.e. a splined nonbonded term exists;
+    /// otherwise LD sums `forces()` on the host. No wildcard, so a new variant
+    /// cannot reach LD without a decision.
+    pub(super) fn ld_forces(&self, context: &impl ObserveContext, on_device: bool) -> LdForces {
+        let topology = context.topology_ref();
+        // Inserted molecule kinds whose internal coordinates LD changes
+        let flexible = || {
+            context
+                .groups()
+                .iter()
+                .map(|g| topology.moleculekind(g.molecule()))
+                .filter(|m| m.degrees_of_freedom() == DegreesOfFreedom::Free)
+        };
+        // Bonded `forces()` arms are empty, so only the GPU kernels supply them
+        let bonded = |supported: bool| {
+            if on_device && supported {
+                LdForces::Device
+            } else {
+                LdForces::Unsupported
+            }
+        };
+        match self {
+            Self::NonbondedMatrixSplined(_) => LdForces::Device,
+            // Only reachable on the host path: the GPU has no unsplined pair kernel
+            Self::NonbondedMatrix(_) | Self::CustomPair(_) => LdForces::Host,
+            Self::IntramolecularBonded(_) => {
+                if !flexible().any(|m| m.has_bonded_potentials()) {
+                    LdForces::Constant
+                } else {
+                    bonded(flexible().all(|m| {
+                        bonded::device_bonded_forces(m.bonds(), m.torsions(), m.dihedrals())
+                    }))
+                }
+            }
+            Self::IntermolecularBonded(_) => {
+                let inter = topology.intermolecular();
+                bonded(bonded::device_bonded_forces(
+                    inter.bonds(),
+                    inter.torsions(),
+                    inter.dihedrals(),
+                ))
+            }
+            // LD runs at fixed volume in a periodic cube, so neither can change
+            Self::ExternalPressure(_) | Self::CellOverlap(_) => LdForces::Constant,
+            // Excluded pairs only move apart in flexible molecules
+            Self::ExcludedCoulomb(_) => {
+                if flexible().any(|m| m.keep_excluded_coulomb() && !m.exclusions().is_empty()) {
+                    LdForces::Unsupported
+                } else {
+                    LdForces::Constant
+                }
+            }
+            Self::EwaldReciprocal(_)
+            | Self::SasaEnergy(_)
+            | Self::ContactTessellation(_)
+            | Self::Constrain(_)
+            | Self::CustomExternal(_)
+            | Self::PolymerDepletion(_)
+            | Self::Tabulated(_)
+            | Self::Penalty(_) => LdForces::Unsupported,
+        }
     }
 
     /// Nonbonded energy between two sets of atom indices; `None` for non-nonbonded terms.

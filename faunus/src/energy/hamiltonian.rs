@@ -1,6 +1,7 @@
 use super::{
     bonded::{IntermolecularBonded, IntramolecularBonded},
     builder::HamiltonianBuilder,
+    energyterm::LdForces,
     external_pressure::ExternalPressure,
     nonbonded::{NonbondedMatrix, NonbondedMatrixSplined},
     CellOverlap, EnergyTerm,
@@ -230,6 +231,7 @@ impl Hamiltonian {
     /// Return a reference to the Penalty term, if present.
     pub fn penalty(&self) -> Option<&super::penalty::Penalty> {
         #[allow(clippy::wildcard_enum_match_arm)] // searching specifically for the Penalty term
+        #[allow(clippy::wildcard_enum_match_arm)] // only one variant is splined
         self.energy_terms.iter().find_map(|t| match t {
             EnergyTerm::Penalty(p) => Some(p),
             _ => None,
@@ -306,11 +308,10 @@ impl Hamiltonian {
     // Only the Langevin integrator needs forces, and it is gpu-gated.
     #[cfg_attr(not(feature = "gpu"), allow(dead_code))]
     pub(crate) fn forces(&self, context: &impl ObserveContext) -> Vec<crate::Point> {
-        self.forces_filtered(context, |_| true)
+        self.forces_filtered(context, |_, _| true)
     }
 
     /// The splined nonbonded term. Its presence puts LD pair and bonded forces on the GPU.
-    #[cfg_attr(not(feature = "gpu"), allow(dead_code))]
     pub(crate) fn splined_nonbonded(&self) -> Option<&NonbondedMatrixSplined> {
         #[allow(clippy::wildcard_enum_match_arm)] // only one variant is splined
         self.energy_terms.iter().find_map(|t| match t {
@@ -319,30 +320,59 @@ impl Hamiltonian {
         })
     }
 
-    /// True if any energy term contributes forces that the GPU Langevin pipeline
-    /// does *not* compute on-device. Caller uses this to decide whether to plumb
-    /// a CPU-overlay callback into the GPU run loop.
-    #[cfg_attr(not(feature = "gpu"), allow(dead_code))]
-    pub(crate) fn has_ld_overlay_forces(&self) -> bool {
+    fn ld_terms_of<'a>(
+        &'a self,
+        context: &'a impl ObserveContext,
+        class: LdForces,
+    ) -> impl Iterator<Item = (usize, &'a EnergyTerm)> {
+        let on_device = self.splined_nonbonded().is_some();
         self.energy_terms
             .iter()
-            .any(|t| !t.handled_by_gpu_ld() && t.contributes_force())
+            .enumerate()
+            .filter(move |(_, t)| t.ld_forces(context, on_device) == class)
     }
 
-    /// Per-atom forces from terms not handled by the on-device LD pipeline.
-    /// Summed for overlay accumulation onto the GPU's reduced COM forces/torques.
+    /// Indices of terms whose forces LD sums on the host each step. Classify once
+    /// per LD block, not per step, since classification scans the groups.
     #[cfg_attr(not(feature = "gpu"), allow(dead_code))]
-    pub(crate) fn ld_overlay_forces(&self, context: &impl ObserveContext) -> Vec<crate::Point> {
-        self.forces_filtered(context, |t| !t.handled_by_gpu_ld())
+    pub(crate) fn ld_host_terms(&self, context: &impl ObserveContext) -> Vec<usize> {
+        self.ld_terms_of(context, LdForces::Host)
+            .map(|(i, _)| i)
+            .collect()
+    }
+
+    /// Per-atom forces from the [`ld_host_terms`](Self::ld_host_terms), summed for
+    /// the overlay onto the GPU's COM forces/torques.
+    #[cfg_attr(not(feature = "gpu"), allow(dead_code))]
+    pub(crate) fn ld_overlay_forces(
+        &self,
+        context: &impl ObserveContext,
+        host_terms: &[usize],
+    ) -> Vec<crate::Point> {
+        self.forces_filtered(context, |i, _| host_terms.contains(&i))
+    }
+
+    /// Names of terms LD cannot take forces from; LD must refuse to run with any.
+    #[cfg_attr(not(feature = "gpu"), allow(dead_code))]
+    pub(crate) fn ld_unsupported_terms(&self, context: &impl ObserveContext) -> Vec<&'static str> {
+        self.ld_terms_of(context, LdForces::Unsupported)
+            // A nameless term must still block LD
+            .map(|(_, t)| crate::Info::short_name(t).unwrap_or("unnamed"))
+            .collect()
     }
 
     fn forces_filtered(
         &self,
         context: &impl ObserveContext,
-        keep: impl Fn(&EnergyTerm) -> bool,
+        keep: impl Fn(usize, &EnergyTerm) -> bool,
     ) -> Vec<crate::Point> {
         let mut result: Option<Vec<crate::Point>> = None;
-        for term in self.energy_terms.iter().filter(|t| keep(t)) {
+        for (_, term) in self
+            .energy_terms
+            .iter()
+            .enumerate()
+            .filter(|(i, t)| keep(*i, t))
+        {
             let term_forces = term.forces(context);
             if term_forces.is_empty() {
                 continue;
@@ -663,5 +693,87 @@ mod tests {
         assert_eq!(entry["update"].as_f64(), Some(0.05));
         // Clean 0.15, not 0.1 + 0.05 == 0.15000000000000002.
         assert_eq!(entry["total"].as_f64(), Some(0.15));
+    }
+
+    use crate::energy::ld_case::LdCase;
+
+    fn ld_unsupported(case: LdCase) -> Vec<&'static str> {
+        use crate::WithHamiltonian;
+        let context = case.context();
+        let names = context.hamiltonian().ld_unsupported_terms(&context);
+        names
+    }
+
+    #[test]
+    fn ld_accepts_splined_nonbonded_and_bonded() {
+        assert_eq!(ld_unsupported(LdCase::default()), Vec::<&str>::new());
+        let flexible = LdCase {
+            dimer_dof: "Free",
+            ..Default::default()
+        };
+        // Excluded Coulomb still blocks the flexible dimer; bonded must not.
+        assert_eq!(ld_unsupported(flexible), ["excluded_coulomb"]);
+    }
+
+    #[test]
+    fn ld_names_terms_without_forces() {
+        let external = LdCase {
+            extra: r#"    - !CustomExternal {selection: "all", function: "0.1 * z"}"#,
+            ..Default::default()
+        };
+        assert_eq!(ld_unsupported(external), ["custom_external"]);
+        let ewald = LdCase {
+            extra: "    - !Ewald {cutoff: 12.0, accuracy: 1e-5}",
+            ..Default::default()
+        };
+        assert_eq!(ld_unsupported(ewald), ["ewald_reciprocal"]);
+    }
+
+    /// The GPU bonded kernels skip non-harmonic bonds, so a moving FENE bond has no force.
+    #[test]
+    fn ld_refuses_bonds_the_device_skips() {
+        let fene = |dimer_dof| LdCase {
+            dimer_dof,
+            bond: "!FENE {k: 1.0, req: 3.0, rmax: 5.0}",
+            ..Default::default()
+        };
+        assert_eq!(ld_unsupported(fene("Rigid")), Vec::<&str>::new());
+        assert_eq!(
+            ld_unsupported(fene("Free")),
+            ["excluded_coulomb", "intramolecular"]
+        );
+    }
+
+    /// Without splines LD takes the CPU-force path, which has no bonded forces.
+    #[test]
+    fn ld_refuses_moving_bonds_without_splines() {
+        let unsplined = |dimer_dof| LdCase {
+            dimer_dof,
+            spline: false,
+            ..Default::default()
+        };
+        assert_eq!(ld_unsupported(unsplined("Rigid")), Vec::<&str>::new());
+        assert_eq!(
+            ld_unsupported(unsplined("Free")),
+            ["excluded_coulomb", "intramolecular"]
+        );
+    }
+
+    #[test]
+    fn ld_host_terms_select_custom_pair() {
+        use crate::WithHamiltonian;
+        let has_overlay = |extra| {
+            let context = LdCase {
+                extra,
+                ..Default::default()
+            }
+            .context();
+            let host = context.hamiltonian().ld_host_terms(&context);
+            !host.is_empty()
+        };
+        assert!(has_overlay(
+            r#"    - !CustomPair {selections: ["molecule dimer", "molecule probe"], function: "0.5 * r"}"#
+        ));
+        assert!(!has_overlay(""));
     }
 }

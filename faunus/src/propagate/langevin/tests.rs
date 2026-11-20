@@ -1,4 +1,5 @@
 use super::*;
+use crate::energy::ld_case::LdCase;
 use rand::{rngs::StdRng, SeedableRng};
 
 /// Seeded generator so the statistical assertions below cannot flake.
@@ -1306,4 +1307,15 @@ fn upload_and_reconstruct_preserves_a_rotated_rigid_molecule() {
             "atom {i} reconstructed at {got:?}, uploaded at {want:?}"
         );
     }
+}
+
+#[test]
+fn check_supported_names_unsupported_terms() {
+    let context = LdCase {
+        extra: r#"    - !CustomExternal {selection: "all", function: "0.1 * z"}"#,
+        ..Default::default()
+    }
+    .context();
+    let err = LangevinRunner::check_supported(&context).unwrap_err();
+    assert!(err.to_string().contains("custom_external"), "{err}");
 }

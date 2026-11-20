@@ -120,6 +120,7 @@ impl MoveCollectionBuilder {
         let (strategy, builder) = match self {
             #[cfg(feature = "gpu")]
             Self::LangevinDynamics(config) => {
+                LangevinRunner::check_supported(context)?;
                 return Ok(PropagationBlock::LangevinDynamics(Box::new(
                     LangevinRunner::new(config),
                 )));
