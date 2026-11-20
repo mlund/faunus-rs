@@ -2147,12 +2147,15 @@ from the equipartition theorem:</p>
 <h3 id="notes_1">Notes<a class="headerlink" href="#notes_1" title="Permanent link">&para;</a></h3>
 <ul>
 <li>Molecules must have <code>degrees_of_freedom: Rigid</code> and <code>has_com: true</code> in the topology.</li>
-<li>The simulation cell must be bounded (cuboid).</li>
+<li>The simulation cell must be a cubic <code>!Cuboid</code>.</li>
 <li>Velocities are initialized from the Maxwell–Boltzmann distribution on the first call
   and persist on the compute device across subsequent LD blocks.</li>
 <li>MC rotation moves (<code>!RotateMolecule</code>) automatically track rigid-body orientation,
   which is transferred to the device at each LD block start.</li>
 <li>Energy splines must be configured (the <code>!Nonbonded</code> term's <code>spline</code>) to provide on-device pair potentials.</li>
+<li>Every energy term must supply forces. Setup fails for terms that do not, e.g. SASA,
+  <code>!CustomExternal</code>, tabulated 6D potentials, or non-harmonic bonds and torsions in
+  flexible molecules, since LD would otherwise sample a different Hamiltonian than MC.</li>
 </ul>
 
 
