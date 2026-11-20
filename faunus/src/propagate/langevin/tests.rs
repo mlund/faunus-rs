@@ -1389,7 +1389,8 @@ fn assert_device_forces_match_cpu(mut context: crate::backend::Backend) {
     let flexible = flagged(&gpu.atom_is_flexible_host);
 
     let pick = |v: &[[f32; 4]], idx: &[usize]| idx.iter().map(|&i| v[i]).collect::<Vec<_>>();
-    let tolerance = 1e-4;
+    // Software Vulkan (lavapipe) f32 trig is ~1e-3 coarse; a dropped term deviates by ≳0.25
+    let tolerance = 5e-3;
     if !rigid.is_empty() {
         let com = relative_deviation(&pick(&device.com, &rigid), &pick(&cpu_com, &rigid));
         assert!(com < tolerance, "rigid COM force deviates by {com:.2e}");
