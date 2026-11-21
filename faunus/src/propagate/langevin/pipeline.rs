@@ -29,6 +29,13 @@ pub(super) const WORKGROUP_SIZE: u32 = 64;
 pub(super) type ForceCallback<'a> =
     &'a mut dyn FnMut(&[[f32; 4]]) -> (Vec<[f32; 4]>, Vec<[f32; 4]>);
 
+#[cfg(test)]
+pub(super) struct DeviceForces {
+    pub atoms: Vec<[f32; 4]>,
+    pub com: Vec<[f32; 4]>,
+    pub torques: Vec<[f32; 4]>,
+}
+
 /// Pre-computed data for initial state upload.
 ///
 /// All vectors use vec4-padded f32 layout so they can be written
@@ -146,7 +153,7 @@ pub(super) struct LangevinGpu<R: Runtime> {
     mol_masses_host: Vec<f32>,
     mol_inertia_host: Vec<f32>,
     atom_masses_host: Vec<f32>,
-    atom_is_flexible_host: Vec<u32>,
+    pub(super) atom_is_flexible_host: Vec<u32>,
 
     pub(super) n_atoms: u32,
     pub(super) n_molecules: u32,
@@ -966,6 +973,17 @@ impl<R: Runtime> LangevinGpu<R> {
 
     pub(super) fn download_positions(&self) -> Vec<[f32; 4]> {
         self.readback_vec4(&self.positions, self.n_atoms as usize)
+    }
+
+    /// Force buffers as the next half-kick reads them.
+    #[cfg(test)]
+    pub(super) fn download_forces(&self) -> DeviceForces {
+        let n_mol = self.n_molecules as usize;
+        DeviceForces {
+            atoms: self.readback_vec4(&self.atom_forces, self.n_atoms as usize),
+            com: self.readback_vec4(&self.com_forces, n_mol),
+            torques: self.readback_vec4(&self.torques, n_mol),
+        }
     }
 
     #[cfg(test)]

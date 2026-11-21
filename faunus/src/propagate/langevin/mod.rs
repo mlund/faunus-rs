@@ -148,34 +148,7 @@ impl LangevinRunner {
         }
         // Safe: always Some after the branch above
         let gpu = self.gpu.as_mut().unwrap();
-        let steps = self.config.steps;
-
-        if gpu.has_gpu_forces {
-            // GPU computes pair + bonded forces. Any energy terms whose forces
-            // are computed on the host are summed each step into the COM
-            // force/torque overlay buffer. When no such terms are present, no
-            // callback is passed and the GPU loop runs without host round-trips.
-            let host_terms = context.hamiltonian().ld_host_terms(context);
-            if !host_terms.is_empty() {
-                let mut overlay = |positions: &[[f32; 4]]| -> (Vec<[f32; 4]>, Vec<[f32; 4]>) {
-                    Self::write_positions(context, positions);
-                    let forces = context
-                        .hamiltonian()
-                        .ld_overlay_forces(context, &host_terms);
-                    reduce_forces_to_com(context, &forces)
-                };
-                gpu.run_steps(steps, Some(&mut overlay))?;
-            } else {
-                gpu.run_steps(steps, None)?;
-            }
-        } else {
-            let mut force_callback = |positions: &[[f32; 4]]| -> (Vec<[f32; 4]>, Vec<[f32; 4]>) {
-                Self::write_positions(context, positions);
-                let forces = context.hamiltonian().forces(context);
-                reduce_forces_to_com(context, &forces)
-            };
-            gpu.run_steps_with_cpu_forces(steps, &mut force_callback)?;
-        }
+        Self::integrate(context, gpu, self.config.steps)?;
 
         // LD -> MC: download positions and write back to context
         let gpu = self.gpu.as_ref().unwrap();
@@ -223,6 +196,43 @@ impl LangevinRunner {
         self.t_trans.add(t_trans as f64);
         self.t_rot.add(t_rot as f64);
         log::debug!("LD block: T_trans={t_trans:.1} K, T_rot={t_rot:.1} K");
+        Ok(())
+    }
+
+    /// Integrate `steps` BAOAB steps, taking each energy term's forces from where
+    /// [`crate::energy::Hamiltonian::ld_host_terms`] places them. With `steps = 0`
+    /// only the initial force pass runs.
+    fn integrate<T: Context>(
+        context: &mut T,
+        gpu: &mut LangevinGpu<cubecl::wgpu::WgpuRuntime>,
+        steps: usize,
+    ) -> anyhow::Result<()> {
+        if gpu.has_gpu_forces {
+            // GPU computes pair + bonded forces. Any energy terms whose forces
+            // are computed on the host are summed each step into the COM
+            // force/torque overlay buffer. When no such terms are present, no
+            // callback is passed and the GPU loop runs without host round-trips.
+            let host_terms = context.hamiltonian().ld_host_terms(context);
+            if !host_terms.is_empty() {
+                let mut overlay = |positions: &[[f32; 4]]| -> (Vec<[f32; 4]>, Vec<[f32; 4]>) {
+                    Self::write_positions(context, positions);
+                    let forces = context
+                        .hamiltonian()
+                        .ld_overlay_forces(context, &host_terms);
+                    reduce_forces_to_com(context, &forces)
+                };
+                gpu.run_steps(steps, Some(&mut overlay))?;
+            } else {
+                gpu.run_steps(steps, None)?;
+            }
+        } else {
+            let mut force_callback = |positions: &[[f32; 4]]| -> (Vec<[f32; 4]>, Vec<[f32; 4]>) {
+                Self::write_positions(context, positions);
+                let forces = context.hamiltonian().forces(context);
+                reduce_forces_to_com(context, &forces)
+            };
+            gpu.run_steps_with_cpu_forces(steps, &mut force_callback)?;
+        }
         Ok(())
     }
 

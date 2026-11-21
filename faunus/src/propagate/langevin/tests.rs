@@ -1,5 +1,6 @@
 use super::*;
-use crate::energy::ld_case::LdCase;
+use crate::context::WithHamiltonian as _;
+use crate::energy::ld_case::{ld_system, LdCase};
 use rand::{rngs::StdRng, SeedableRng};
 
 /// Seeded generator so the statistical assertions below cannot flake.
@@ -1242,7 +1243,7 @@ fn thermostat_noise_follows_the_seed() {
 fn rotated_trimer() -> crate::backend::Backend {
     use crate::context::Context;
 
-    let mut context = crate::backend::Backend::from_yaml_str(
+    let mut context = ld_system(
         r#"
 atoms:
   - {name: A, mass: 1.0, charge: 0.0}
@@ -1258,12 +1259,8 @@ system:
     - molecule: TRIMER
       N: 1
       insert: !Manual [[0.0, 0.0, 0.0], [2.0, 0.0, 0.0], [0.0, 1.5, 0.0]]
-propagate: {seed: !Fixed 1, criterion: Metropolis, steps: 0, collections: []}
 "#,
-        None,
-        &mut rand::thread_rng(),
-    )
-    .unwrap();
+    );
 
     // An orientation off every axis, so a lab/body mix-up cannot cancel by symmetry.
     let rotation = crate::UnitQuaternion::from_euler_angles(0.3, -0.7, 1.1);
@@ -1335,4 +1332,507 @@ fn check_supported_names_unsupported_terms() {
     .context();
     let err = LangevinRunner::check_supported(&context).unwrap_err();
     assert!(err.to_string().contains("custom_external"), "{err}");
+}
+
+// ============================================================================
+// On-device forces vs the CPU Hamiltonian
+// ============================================================================
+
+/// The LD settings the tests below vary from.
+fn ld_config(steps: usize) -> LangevinConfig {
+    LangevinConfig {
+        timestep: 0.005,
+        friction: 10.0,
+        steps,
+        temperature: 298.15,
+        cell_list_rebuild: 10,
+    }
+}
+
+/// Largest deviation of `got` from `want`, relative to the largest `want`.
+fn relative_deviation(got: &[[f32; 4]], want: &[[f32; 4]]) -> f32 {
+    let norm = |v: &[f32; 4]| (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt();
+    let diff = |a: &[f32; 4], b: &[f32; 4]| norm(&[a[0] - b[0], a[1] - b[1], a[2] - b[2], 0.0]);
+    let scale = want.iter().map(norm).fold(0.0, f32::max);
+    assert!(
+        scale > 1e-3,
+        "nothing to compare: largest reference {scale}"
+    );
+    got.iter()
+        .zip(want)
+        .map(|(a, b)| diff(a, b))
+        .fold(0.0, f32::max)
+        / scale
+}
+
+/// The first force pass of a Langevin block must match the CPU Hamiltonian.
+///
+/// Rigid molecules compare by COM force and torque, since the device skips their internal pairs
+/// (which cancel there); flexible atoms compare one by one.
+fn assert_device_forces_match_cpu(mut context: crate::backend::Backend) {
+    let mut rng = test_rng();
+    let mut gpu = LangevinRunner::init_gpu(&context, &ld_config(0), &mut rng).unwrap();
+    LangevinRunner::upload_full_state(&context, &mut gpu, &mut rng).unwrap();
+    assert!(gpu.has_gpu_forces, "case must run the on-device force path");
+    LangevinRunner::integrate(&mut context, &mut gpu, 0).unwrap();
+    let device = gpu.download_forces();
+
+    let cpu_atoms = context.hamiltonian().forces(&context);
+    let (cpu_com, cpu_torque) = reduce_forces_to_com(&context, &cpu_atoms);
+    // Compare what the device integrates, by the upload's own classification
+    let flagged = |flags: &[u32]| {
+        (0..flags.len())
+            .filter(|&i| flags[i] != 0)
+            .collect::<Vec<_>>()
+    };
+    let rigid = flagged(&gpu.mol_is_rigid_host);
+    let flexible = flagged(&gpu.atom_is_flexible_host);
+
+    let pick = |v: &[[f32; 4]], idx: &[usize]| idx.iter().map(|&i| v[i]).collect::<Vec<_>>();
+    // Software Vulkan (lavapipe) f32 trig is ~1e-3 coarse; a dropped term deviates by ≳0.25
+    let tolerance = 5e-3;
+    if !rigid.is_empty() {
+        let com = relative_deviation(&pick(&device.com, &rigid), &pick(&cpu_com, &rigid));
+        assert!(com < tolerance, "rigid COM force deviates by {com:.2e}");
+        let tau = relative_deviation(&pick(&device.torques, &rigid), &pick(&cpu_torque, &rigid));
+        assert!(tau < tolerance, "rigid torque deviates by {tau:.2e}");
+    }
+    if !flexible.is_empty() {
+        let want: Vec<_> = flexible
+            .iter()
+            .map(|&i| numeric_force(&mut context, i))
+            .collect();
+        let atoms = relative_deviation(&pick(&device.atoms, &flexible), &want);
+        assert!(
+            atoms < tolerance,
+            "flexible atom force deviates by {atoms:.2e}"
+        );
+    }
+}
+
+/// −∂U/∂rᵢ by central difference of the total energy. Bonded terms have no CPU
+/// `forces()`, so this is the only reference that covers every term.
+fn numeric_force(context: &mut crate::backend::Backend, i: usize) -> [f32; 4] {
+    use crate::context::Context as _;
+    use crate::energy::EnergyChange as _;
+    use crate::group::{GroupCollection as _, GroupCollectionMut as _};
+    const H: f64 = 1e-4;
+    let origin = context.position(i);
+    let mut energy_at = |dr: crate::Point| {
+        context.set_positions([i], [&(origin + dr)]);
+        context.update(&crate::Change::Everything).unwrap();
+        context
+            .hamiltonian()
+            .energy(context, &crate::Change::Everything)
+    };
+    let mut force = [0.0f32; 4];
+    for (axis, f) in force.iter_mut().take(3).enumerate() {
+        let dr = crate::Point::ith(axis, H);
+        *f = (-(energy_at(dr) - energy_at(-dr)) / (2.0 * H)) as f32;
+    }
+    energy_at(crate::Point::zeros());
+    force
+}
+
+/// Splined LJ + Coulomb, with a rigid dimer and free ions interacting across the box faces.
+#[test]
+fn device_pair_forces_across_the_periodic_boundary() {
+    assert_device_forces_match_cpu(ld_system(
+        r#"
+atoms:
+  - {name: A, charge: 1.0, mass: 10.0, sigma: 2.5, epsilon: 0.5}
+  - {name: B, charge: -1.0, mass: 12.0, sigma: 2.5, epsilon: 0.5}
+molecules:
+  - {name: dimer, atoms: [A, B], degrees_of_freedom: Rigid}
+  - {name: ion, atoms: [B], degrees_of_freedom: Free}
+system:
+  medium: {permittivity: !Vacuum, temperature: 298.15}
+  cell: !Cuboid [40.0, 40.0, 40.0]
+  blocks:
+    - {molecule: dimer, N: 1, insert: !Manual [[18.5, 0.0, 0.0], [-19.0, 0.8, 0.0]]}
+    - {molecule: ion, N: 2, insert: !Manual [[-16.0, 1.5, 0.5], [16.0, -1.0, 19.2]]}
+  energy:
+    - !Nonbonded
+      default:
+        - !LennardJones {mixing: LorentzBerthelot}
+        - !CoulombPlain {cutoff: 12.0}
+      spline: {cutoff: 12.0}
+"#,
+    ));
+}
+
+/// A free trimer: the bonded 0–1 and 1–2 pairs are excluded, the 1–3 pair 0–2 is not.
+#[test]
+fn device_pair_forces_skip_excluded_flexible_pairs() {
+    assert_device_forces_match_cpu(ld_system(
+        r#"
+atoms:
+  - {name: A, charge: 1.0, mass: 10.0, sigma: 3.0, epsilon: 0.5}
+  - {name: B, charge: -1.0, mass: 12.0, sigma: 3.0, epsilon: 0.5}
+molecules:
+  - name: chain
+    atoms: [A, B, A]
+    degrees_of_freedom: Free
+    excluded_neighbours: 1
+    bonds:
+      - {index: [0, 1], kind: !Harmonic {k: 5.0, req: 2.0}}
+      - {index: [1, 2], kind: !Harmonic {k: 5.0, req: 2.0}}
+system:
+  medium: {permittivity: !Vacuum, temperature: 298.15}
+  cell: !Cuboid [40.0, 40.0, 40.0]
+  blocks:
+    - {molecule: chain, N: 1, insert: !Manual [[0.0, 0.0, 0.0], [2.2, 0.0, 0.0], [2.8, 3.1, 0.0]]}
+  energy:
+    - !Nonbonded
+      default:
+        - !LennardJones {mixing: LorentzBerthelot}
+        - !CoulombPlain {cutoff: 12.0}
+      spline: {cutoff: 12.0}
+"#,
+    ));
+}
+
+/// A free, non-planar 4-mer whose only forces are bonded: all intramolecular pairs are excluded.
+#[test]
+fn device_bonded_forces() {
+    assert_device_forces_match_cpu(ld_system(
+        r#"
+atoms:
+  - {name: A, charge: 0.0, mass: 10.0, sigma: 3.0, epsilon: 0.5}
+molecules:
+  - name: chain
+    atoms: [A, A, A, A]
+    degrees_of_freedom: Free
+    excluded_neighbours: 3
+    bonds:
+      - {index: [0, 1], kind: !Harmonic {k: 5.0, req: 2.0}}
+      - {index: [1, 2], kind: !Harmonic {k: 5.0, req: 2.0}}
+      - {index: [2, 3], kind: !Harmonic {k: 5.0, req: 2.0}}
+    torsions:
+      - {index: [0, 1, 2], kind: !Harmonic {k: 0.02, aeq: 109.0}}
+      - {index: [1, 2, 3], kind: !Harmonic {k: 0.02, aeq: 120.0}}
+    dihedrals:
+      - {index: [0, 1, 2, 3], kind: !ProperHarmonic {k: 0.01, aeq: 60.0}}
+system:
+  medium: {permittivity: !Vacuum, temperature: 298.15}
+  cell: !Cuboid [40.0, 40.0, 40.0]
+  blocks:
+    - {molecule: chain, N: 1, insert: !Manual [[0.0, 0.0, 0.0], [2.3, 0.0, 0.0], [3.0, 1.9, 0.0], [4.6, 2.2, 1.5]]}
+  energy:
+    - !Nonbonded
+      default: [!LennardJones {mixing: LorentzBerthelot}]
+      spline: {cutoff: 12.0}
+"#,
+    ));
+}
+
+/// `CustomPair` has host forces only; they reach the rigid bodies through the COM overlay.
+#[test]
+fn device_forces_include_the_host_overlay() {
+    assert_device_forces_match_cpu(ld_system(
+        r#"
+atoms:
+  - {name: A, charge: 0.0, mass: 10.0, sigma: 3.0, epsilon: 0.5}
+molecules:
+  - {name: P, atoms: [A, A], degrees_of_freedom: Rigid}
+  - {name: Q, atoms: [A, A], degrees_of_freedom: Rigid}
+system:
+  medium: {permittivity: !Vacuum, temperature: 298.15}
+  cell: !Cuboid [40.0, 40.0, 40.0]
+  blocks:
+    - {molecule: P, N: 1, insert: !Manual [[0.0, 0.0, 0.0], [2.0, 1.0, 0.0]]}
+    - {molecule: Q, N: 1, insert: !Manual [[8.0, 0.0, 1.0], [9.0, 2.0, 0.0]]}
+  energy:
+    - !Nonbonded
+      default: [!LennardJones {mixing: LorentzBerthelot}]
+      spline: {cutoff: 12.0}
+    - !CustomPair
+        selections: ["molecule P", "molecule Q"]
+        function: "0.5 * k * (r - r0)^2"
+        constants: {k: 10.0, r0: 5.0}
+"#,
+    ));
+}
+
+// ============================================================================
+// Langevin blocks with on-device forces
+// ============================================================================
+
+/// Centres of an `n³` cubic lattice filling a box of side `n · spacing`.
+fn lattice_sites(n: usize, spacing: f64) -> impl Iterator<Item = (f64, f64, f64)> {
+    let at = move |d: usize| (d as f64 + 0.5 - 0.5 * n as f64) * spacing;
+    itertools::iproduct!(0..n, 0..n, 0..n).map(move |(i, j, k)| (at(i), at(j), at(k)))
+}
+
+/// Each site plus each offset in `layout`, as a YAML `!Manual` position list.
+fn manual_positions(sites: impl Iterator<Item = (f64, f64, f64)>, layout: &[[f64; 3]]) -> String {
+    sites
+        .flat_map(|(x, y, z)| {
+            layout
+                .iter()
+                .map(move |d| format!("[{}, {}, {}]", x + d[0], y + d[1], z + d[2]))
+        })
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+/// `n³` rigid dipolar trimers on a lattice, plus `m³` free, bonded 4-mers on a centred
+/// `m`-lattice of the same spacing (in the trimer voids for odd `n`, even `m`). Splined LJ +
+/// Coulomb throughout.
+fn trimers_and_chains(n: usize, spacing: f64, m: usize) -> crate::backend::Backend {
+    let box_length = n as f64 * spacing;
+    let trimer = [[0.0, 0.0, 0.0], [2.0, 0.0, 0.0], [0.0, 1.5, 0.5]];
+    let chain = [
+        [0.0, 0.0, 0.0],
+        [2.0, 0.0, 0.0],
+        [2.6, 1.8, 0.0],
+        [4.0, 2.2, 1.4],
+    ];
+    let mut blocks = format!(
+        "    - {{molecule: trimer, N: {}, insert: !Manual [{}]}}",
+        n * n * n,
+        manual_positions(lattice_sites(n, spacing), &trimer)
+    );
+    if m > 0 {
+        blocks += &format!(
+            "\n    - {{molecule: chain, N: {}, insert: !Manual [{}]}}",
+            m * m * m,
+            manual_positions(lattice_sites(m, spacing), &chain)
+        );
+    }
+    ld_system(&format!(
+        r#"
+atoms:
+  - {{name: P, charge: 1.0, mass: 10.0, sigma: 3.0, epsilon: 0.5}}
+  - {{name: N, charge: -1.0, mass: 12.0, sigma: 3.0, epsilon: 0.5}}
+  - {{name: O, charge: 0.0, mass: 14.0, sigma: 3.0, epsilon: 0.5}}
+molecules:
+  - {{name: trimer, atoms: [P, N, O], degrees_of_freedom: Rigid}}
+  - name: chain
+    atoms: [P, O, O, N]
+    degrees_of_freedom: Free
+    excluded_neighbours: 1
+    bonds:
+      - {{index: [0, 1], kind: !Harmonic {{k: 5.0, req: 2.0}}}}
+      - {{index: [1, 2], kind: !Harmonic {{k: 5.0, req: 2.0}}}}
+      - {{index: [2, 3], kind: !Harmonic {{k: 5.0, req: 2.0}}}}
+    torsions:
+      - {{index: [0, 1, 2], kind: !Harmonic {{k: 0.02, aeq: 109.0}}}}
+    dihedrals:
+      - {{index: [0, 1, 2, 3], kind: !ProperHarmonic {{k: 0.01, aeq: 60.0}}}}
+system:
+  medium: {{permittivity: !Water, temperature: 298.15}}
+  cell: !Cuboid [{box_length}, {box_length}, {box_length}]
+  blocks:
+{blocks}
+  energy:
+    - !Nonbonded
+      default:
+        - !LennardJones {{mixing: LorentzBerthelot}}
+        - !CoulombPlain {{cutoff: 12.0}}
+      spline: {{cutoff: 12.0}}
+"#
+    ))
+}
+
+/// Block temperatures `t` must average to `target` within 3σ, for `dof` degrees of freedom
+/// sampled in `blocks` near-independent blocks.
+fn assert_thermalised(name: &str, t: &Variance, target: f64, dof: f64, blocks: usize) {
+    let sigma = target * (2.0 / dof).sqrt() / (blocks as f64).sqrt();
+    assert!(
+        (t.mean() - target).abs() < 3.0 * sigma,
+        "{name} T = {:.1} K, expected {target} ± {sigma:.1} K",
+        t.mean()
+    );
+}
+
+/// Run `blocks` Langevin blocks from a fixed seed; return the runner and final positions.
+fn run_blocks(
+    context: &mut crate::backend::Backend,
+    config: &LangevinConfig,
+    seed: u64,
+    blocks: usize,
+) -> (LangevinRunner, Vec<[f32; 4]>) {
+    let mut runner = LangevinRunner::new(config.clone());
+    let mut rng = StdRng::seed_from_u64(seed);
+    for _ in 0..blocks {
+        runner.propagate(context, &mut rng).unwrap();
+    }
+    let positions = runner.gpu.as_ref().unwrap().download_positions();
+    (runner, positions)
+}
+
+/// Full blocks through `run_steps`: thermalised and reproducible from the seed.
+#[test]
+fn rigid_blocks_with_device_forces_thermalise() {
+    let (n, blocks) = (4, 20);
+    let config = ld_config(50);
+    let (runner, positions) = run_blocks(&mut trimers_and_chains(n, 15.0, 0), &config, 11, blocks);
+    assert!(runner.gpu.as_ref().unwrap().has_gpu_forces);
+
+    // Kinetic energy decorrelates as e^{−2γt}, and γt = 2.5 per block, so block
+    // temperatures are near-independent draws with relative spread √(2/3N).
+    let dof = 3.0 * (n * n * n) as f64;
+    let t = config.temperature;
+    assert_thermalised("translational", &runner.t_trans, t, dof, blocks);
+    assert_thermalised("rotational", &runner.t_rot, t, dof, blocks);
+
+    let (_, again) = run_blocks(&mut trimers_and_chains(n, 15.0, 0), &config, 11, blocks);
+    assert_eq!(positions, again, "same seed gave a different trajectory");
+}
+
+/// `n³` free molecules of `atoms` on a lattice, each at a site plus the offsets in `layout`.
+/// The LJ is weak and short-ranged, so the molecules hardly interact.
+fn dilute_free_molecules(n: usize, molecule: &str, layout: &[[f64; 3]]) -> crate::backend::Backend {
+    let spacing = 50.0;
+    let box_length = n as f64 * spacing;
+    let positions = manual_positions(lattice_sites(n, spacing), layout);
+    ld_system(&format!(
+        r#"
+atoms:
+  - {{name: Ar, charge: 0.0, mass: 39.948, sigma: 1.0, epsilon: 0.01}}
+molecules:
+  - {molecule}
+system:
+  medium: {{permittivity: !Vacuum, temperature: 298.15}}
+  cell: !Cuboid [{box_length}, {box_length}, {box_length}]
+  blocks:
+    - {{molecule: free, N: {}, insert: !Manual [{}]}}
+  energy:
+    - !Nonbonded
+      default: [!LennardJones {{mixing: LorentzBerthelot}}]
+      spline: {{cutoff: 3.0}}
+"#,
+        n * n * n,
+        positions
+    ))
+}
+
+fn flexible_config(steps: usize) -> LangevinConfig {
+    LangevinConfig {
+        timestep: 0.002,
+        cell_list_rebuild: 20,
+        ..ld_config(steps)
+    }
+}
+
+/// Einstein relation for free flexible atoms, including the ballistic start from
+/// Maxwell–Boltzmann velocities: MSD = 6D(t − (1 − e^{−γt})/γ), D = kT/(mγ).
+#[test]
+fn flexible_atom_diffusion() {
+    use crate::group::GroupCollection as _;
+    use crate::WithSimulationCell as _;
+    let n = 8;
+    let config = flexible_config(2000);
+    let mut context = dilute_free_molecules(
+        n,
+        "{name: free, atoms: [Ar], degrees_of_freedom: Free}",
+        &[[0.0; 3]],
+    );
+    let initial: Vec<_> = (0..context.num_particles())
+        .map(|i| context.position(i))
+        .collect();
+    run_blocks(&mut context, &config, 21, 1);
+
+    let msd = initial
+        .iter()
+        .enumerate()
+        .map(|(i, r0)| {
+            context
+                .cell()
+                .distance(&context.position(i), r0)
+                .norm_squared()
+        })
+        .sum::<f64>()
+        / initial.len() as f64;
+    let (gamma, t) = (config.friction, config.steps as f64 * config.timestep);
+    let d = crate::R_IN_KJ_PER_MOL * config.temperature * 100.0 / (39.948 * gamma);
+    let expected = 6.0 * d * (t - (1.0 - (-gamma * t).exp()) / gamma);
+    // Per-atom |Δr|² has relative spread √(2/3); 512 atoms give ≈ 4 %
+    assert!(
+        (msd / expected - 1.0).abs() < 0.12,
+        "MSD = {msd:.2} Å², expected {expected:.2} Å²"
+    );
+}
+
+/// A harmonic dimer with zero rest length: the bond vector is a 3D oscillator, so
+/// ⟨r²⟩ = 3kT/k exactly, and the flexible atoms' kinetic temperature is T.
+#[test]
+fn flexible_dimer_equipartition() {
+    use crate::group::GroupCollection as _;
+    use crate::WithSimulationCell as _;
+    let (n, k) = (5, 10.0);
+    let config = flexible_config(200);
+    let mut context = dilute_free_molecules(
+        n,
+        &format!(
+            "{{name: free, atoms: [Ar, Ar], degrees_of_freedom: Free, excluded_neighbours: 1, \
+             bonds: [{{index: [0, 1], kind: !Harmonic {{k: {k}, req: 0.0}}}}]}}"
+        ),
+        &[[0.0; 3], [0.5, 0.3, -0.2]],
+    );
+    let mut runner = LangevinRunner::new(config.clone());
+    let mut rng = StdRng::seed_from_u64(31);
+    // The bond relaxes in γμ/k ≈ 0.2 ps, so a 0.4 ps block decorrelates it
+    for _ in 0..5 {
+        runner.propagate(&mut context, &mut rng).unwrap();
+    }
+    runner.t_trans = Variance::new();
+    let blocks = 20;
+    let mut r2 = Variance::new();
+    for _ in 0..blocks {
+        runner.propagate(&mut context, &mut rng).unwrap();
+        for g in context.groups() {
+            let r = context.cell().distance(
+                &context.position(g.start()),
+                &context.position(g.start() + 1),
+            );
+            r2.add(r.norm_squared());
+        }
+    }
+    let kt = crate::R_IN_KJ_PER_MOL * config.temperature;
+    let expected = 3.0 * kt / k;
+    // r² ∝ χ²₃ has relative spread √(2/3); 2500 samples give ≈ 2 %
+    assert!(
+        (r2.mean() / expected - 1.0).abs() < 0.08,
+        "⟨r²⟩ = {:.3} Å², expected {expected:.3} Å²",
+        r2.mean()
+    );
+    let dof = 3.0 * context.num_particles() as f64;
+    assert_thermalised("kinetic", &runner.t_trans, config.temperature, dof, blocks);
+}
+
+/// A fixed-seed trajectory through every on-device kernel, recorded so a compute-backend
+/// upgrade can be checked against it. Regenerate with `FAUNUS_REGENERATE=1`.
+#[test]
+#[ignore = "f32 rounding differs between GPU drivers; run on the recording machine around a backend upgrade"]
+fn trajectory_matches_the_recorded_one() {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/files/langevin_trajectory.csv");
+    let (_, positions) = run_blocks(&mut trimers_and_chains(3, 18.0, 2), &ld_config(50), 41, 1);
+
+    if std::env::var_os("FAUNUS_REGENERATE").is_some_and(|v| v == "1") {
+        let csv: String = std::iter::once("x,y,z\n".to_string())
+            .chain(
+                positions
+                    .iter()
+                    .map(|p| format!("{},{},{}\n", p[0], p[1], p[2])),
+            )
+            .collect();
+        std::fs::write(&path, csv).unwrap();
+    }
+    let recorded: Vec<[f32; 3]> = std::fs::read_to_string(&path)
+        .unwrap()
+        .lines()
+        .skip(1)
+        .map(|line| {
+            let v: Vec<f32> = line.split(',').map(|x| x.parse().unwrap()).collect();
+            [v[0], v[1], v[2]]
+        })
+        .collect();
+    assert_eq!(recorded.len(), positions.len());
+    for (i, (got, want)) in positions.iter().zip(&recorded).enumerate() {
+        let deviation = (0..3).map(|d| (got[d] - want[d]).abs()).fold(0.0, f32::max);
+        assert!(deviation < 1e-4, "atom {i} at {got:?}, recorded {want:?}");
+    }
 }
