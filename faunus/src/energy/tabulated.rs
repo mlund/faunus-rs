@@ -41,17 +41,17 @@ impl TabulatedInteraction for Table6D {
 }
 
 impl Lookup6D for Table6D {
-    fn lookup(
+    fn interpolate(
         &self,
         r: f64,
         omega: f64,
         dir_a: &Vector3,
         dir_b: &Vector3,
         beta: Option<f64>,
-    ) -> f64 {
+    ) -> icotable::lookup::Interpolated {
         match self {
-            Self::Flat(t) => t.lookup(r, omega, dir_a, dir_b, beta),
-            Self::Adaptive(t) => t.lookup(r, omega, dir_a, dir_b, beta),
+            Self::Flat(t) => t.interpolate(r, omega, dir_a, dir_b, beta),
+            Self::Adaptive(t) => t.interpolate(r, omega, dir_a, dir_b, beta),
         }
     }
 }
@@ -411,19 +411,11 @@ impl TabulatedEnergy {
             return 0.0;
         };
 
+        // The tables' own pair_energy puts a wall below and the tail beyond their range.
         let sep = context.cell().distance(com_a, com_b);
-        let r = sep.norm();
-        let (rmin, rmax) = entry.table.r_range();
-        if r > rmax {
-            return entry.table.tail_energy(r);
-        }
-        if r < rmin {
-            return f64::INFINITY;
-        }
-
         match &*entry.table {
             TableKind::SixD(table) => self.pair_energy_6d(entry, table, swapped, &sep, ga, gb),
-            TableKind::ThreeD(table) => self.pair_energy_3d(table, swapped, &sep, r, ga, gb),
+            TableKind::ThreeD(table) => self.pair_energy_3d(table, swapped, &sep, ga, gb),
         }
     }
 
@@ -433,19 +425,15 @@ impl TabulatedEnergy {
         table: &Table3DAdaptive<f32>,
         swapped: bool,
         sep: &crate::Point,
-        r: f64,
         ga: &crate::group::Group,
         gb: &crate::group::Group,
     ) -> f64 {
         // mol_id_a is always the rigid molecule; when swapped, flip the
         // separation so it points molecule→atom in the correct direction.
         let (rigid_group, sign) = if swapped { (gb, -1.0) } else { (ga, 1.0) };
-        let oriented_sep = sep * sign;
-        // Body-frame direction aligns with the fixed reference frame of the Duello scan.
-        let dir = rigid_group
-            .quaternion()
-            .inverse_transform_vector(&(oriented_sep / r));
-        table.lookup(r, &dir, Some(self.inv_thermal_energy))
+        table
+            .pair_energy(&(sep * sign), rigid_group.quaternion(), self.inv_thermal_energy)
+            .energy
     }
 
     /// 6D lookup: two rigid molecule orientations + separation.
