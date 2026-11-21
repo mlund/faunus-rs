@@ -15,6 +15,7 @@
 //! CubeCL compute pipeline: GPU buffer management, kernel dispatch, and data readback.
 
 use super::kernels;
+use super::reciprocal::DeviceReciprocal;
 use super::{compute_temperature, LangevinConfig};
 use crate::energy::nonbonded_kernel::{
     build_cell_list, build_neighbor_cell_table, compute_n_cells_1d, max_cutoff_from_spline_params,
@@ -131,6 +132,9 @@ pub(super) struct LangevinGpu {
     dihedral_atoms: Handle,
     dihedral_params: Handle,
     has_dihedrals: bool,
+
+    /// Ewald k-space forces, added after the bonded ones
+    reciprocal: Option<DeviceReciprocal>,
 
     // Exclusion CSR for intra-molecular NB pairs in flexible molecules
     excl_offsets: Handle,
@@ -274,6 +278,7 @@ impl LangevinGpu {
             dihedral_atoms,
             dihedral_params,
             has_dihedrals: false,
+            reciprocal: None,
             excl_offsets,
             excl_atoms,
             mol_is_rigid,
@@ -471,6 +476,7 @@ impl LangevinGpu {
         self.rebuild_cell_list()?;
         self.dispatch_pair_forces();
         self.dispatch_bonded_forces();
+        self.dispatch_reciprocal_forces();
         self.dispatch_reduce();
         if let Some(cb) = overlay.as_deref_mut() {
             let positions = self.download_positions()?;
@@ -492,6 +498,7 @@ impl LangevinGpu {
 
             self.dispatch_pair_forces();
             self.dispatch_bonded_forces();
+            self.dispatch_reciprocal_forces();
             self.dispatch_reduce();
             if let Some(cb) = overlay.as_deref_mut() {
                 let positions = self.download_positions()?;
@@ -700,6 +707,18 @@ impl LangevinGpu {
                     inv_box,
                 )
             };
+        }
+    }
+
+    /// Replace the k-space data; `None` when the Hamiltonian has no Ewald term.
+    pub(super) fn upload_reciprocal(&mut self, data: Option<&crate::energy::ReciprocalDeviceData>) {
+        self.reciprocal = data.map(|d| DeviceReciprocal::new(&self.client, d));
+    }
+
+    /// Accumulates (`+=`), so it must follow `dispatch_pair_forces`.
+    fn dispatch_reciprocal_forces(&self) {
+        if let Some(reciprocal) = &self.reciprocal {
+            reciprocal.add_forces(&self.positions, &self.atom_forces);
         }
     }
 

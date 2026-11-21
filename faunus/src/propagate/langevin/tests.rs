@@ -1371,15 +1371,25 @@ fn relative_deviation(got: &[[f32; 4]], want: &[[f32; 4]]) -> f32 {
 /// Rigid molecules compare by COM force and torque, since the device skips their internal pairs
 /// (which cancel there); flexible atoms compare one by one.
 fn assert_device_forces_match_cpu(mut context: crate::backend::Backend) {
+    let mut gpu = uploaded_gpu(&context);
+    assert_block_forces_match_cpu(&mut context, &mut gpu);
+}
+
+/// A pipeline holding the first block's upload of `context`.
+fn uploaded_gpu(context: &crate::backend::Backend) -> LangevinGpu {
     let mut rng = test_rng();
-    let mut gpu = LangevinRunner::init_gpu(&context, &ld_config(0), &mut rng).unwrap();
-    LangevinRunner::upload_full_state(&context, &mut gpu, &mut rng).unwrap();
+    let mut gpu = LangevinRunner::init_gpu(context, &ld_config(0), &mut rng).unwrap();
+    LangevinRunner::upload_full_state(context, &mut gpu, &mut rng).unwrap();
     assert!(gpu.has_gpu_forces, "case must run the on-device force path");
-    LangevinRunner::integrate(&mut context, &mut gpu, 0).unwrap();
+    gpu
+}
+
+fn assert_block_forces_match_cpu(context: &mut crate::backend::Backend, gpu: &mut LangevinGpu) {
+    LangevinRunner::integrate(context, gpu, 0).unwrap();
     let device = gpu.download_forces().unwrap();
 
-    let cpu_atoms = context.hamiltonian().forces(&context);
-    let (cpu_com, cpu_torque) = reduce_forces_to_com(&context, &cpu_atoms);
+    let cpu_atoms = context.hamiltonian().forces(context);
+    let (cpu_com, cpu_torque) = reduce_forces_to_com(context, &cpu_atoms);
     // Compare what the device integrates, by the upload's own classification
     let flagged = |flags: &[u32]| {
         (0..flags.len())
@@ -1401,7 +1411,7 @@ fn assert_device_forces_match_cpu(mut context: crate::backend::Backend) {
     if !flexible.is_empty() {
         let want: Vec<_> = flexible
             .iter()
-            .map(|&i| numeric_force(&mut context, i))
+            .map(|&i| numeric_force(context, i))
             .collect();
         let atoms = relative_deviation(&pick(&device.atoms, &flexible), &want);
         assert!(
@@ -1553,6 +1563,49 @@ system:
         constants: {k: 10.0, r0: 5.0}
 "#,
     ));
+}
+
+/// Reciprocal-dominated Ewald (α·r_c = 3.6, sites ≥ 5 Å apart) on rigid dimers and free ions,
+/// so a missing or mis-scaled k-space force shows above the f32 tolerance.
+const EWALD_SYSTEM: &str = r#"
+atoms:
+  - {name: A, charge: 1.0, mass: 10.0, sigma: 1.0, epsilon: 0.1}
+  - {name: B, charge: -1.0, mass: 12.0, sigma: 1.0, epsilon: 0.1}
+molecules:
+  - {name: dimer, atoms: [A, B], degrees_of_freedom: Rigid}
+  - {name: ion, atoms: [A], degrees_of_freedom: Free}
+  - {name: counterion, atoms: [B], degrees_of_freedom: Free}
+system:
+  medium: {permittivity: !Vacuum, temperature: 298.15}
+  cell: !Cuboid [30.0, 30.0, 30.0]
+  blocks:
+    - {molecule: dimer, N: 2, insert: !Manual [[1.0, 0.5, 0.0], [6.0, 2.0, 1.0], [-9.0, -8.0, 4.0], [-13.5, -10.0, 6.0]]}
+    - {molecule: ion, N: 2, insert: !Manual [[12.0, -11.0, -7.0], [-4.0, 9.0, 13.5]]}
+    - {molecule: counterion, N: 2, insert: !Manual [[7.0, 12.0, -3.0], [-12.0, 3.0, -14.0]]}
+  energy:
+    - !Nonbonded
+      default: [!LennardJones {mixing: LorentzBerthelot}]
+      spline: {cutoff: 8.0}
+    - !Ewald {cutoff: 8.0, accuracy: 1e-5, alpha: 0.45}
+"#;
+
+#[test]
+fn device_ewald_reciprocal_forces() {
+    assert_device_forces_match_cpu(ld_system(EWALD_SYSTEM));
+}
+
+/// MC may resize the box between LD blocks; the k-vectors must follow it.
+#[test]
+fn device_ewald_forces_follow_a_resized_box() {
+    use crate::context::Context as _;
+    let mut context = ld_system(EWALD_SYSTEM);
+    let mut gpu = uploaded_gpu(&context);
+    context
+        .scale_volume_and_positions(34.0f64.powi(3), crate::cell::VolumeScalePolicy::Isotropic)
+        .unwrap();
+    context.update(&crate::Change::Everything).unwrap();
+    LangevinRunner::upload_context_state(&context, &mut gpu).unwrap();
+    assert_block_forces_match_cpu(&mut context, &mut gpu);
 }
 
 // ============================================================================
