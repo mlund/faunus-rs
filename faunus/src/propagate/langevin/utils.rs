@@ -377,3 +377,14 @@ pub(super) fn extract_bonded_data<T: Context>(
 
     (bonds, angles, dihedrals)
 }
+
+/// Ewald k-space data for the device kernels, or `None` without an Ewald term.
+pub(super) fn extract_reciprocal_data<T: Context>(
+    context: &T,
+) -> anyhow::Result<Option<crate::energy::ReciprocalDeviceData>> {
+    context
+        .hamiltonian()
+        .ewald_reciprocal()
+        .map(|ewald| ewald.device_data(context))
+        .transpose()
+}

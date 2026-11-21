@@ -22,6 +22,7 @@
 
 mod kernels;
 mod pipeline;
+mod reciprocal;
 #[cfg(test)]
 mod tests;
 mod utils;
@@ -139,7 +140,7 @@ impl LangevinRunner {
         rng: &mut impl Rng,
     ) -> anyhow::Result<()> {
         if let Some(gpu) = &mut self.gpu {
-            Self::upload_context_state(context, gpu);
+            Self::upload_context_state(context, gpu)?;
         } else {
             let mut gpu = Self::init_gpu(context, &self.config, rng)?;
             Self::upload_full_state(context, &mut gpu, rng)?;
@@ -419,13 +420,15 @@ impl LangevinRunner {
             atom_is_flexible,
             has_flexible,
         });
-        Ok(())
+        Self::upload_reciprocal(context, gpu)
     }
 
     /// Upload positions, COM, quaternions, and box length from context to device.
     ///
     /// Box length must be synced because NPT volume moves can change it between LD blocks.
-    fn upload_context_state<T: Context>(context: &T, gpu: &mut LangevinGpu) {
+    fn upload_context_state<T: Context>(context: &T, gpu: &mut LangevinGpu) -> anyhow::Result<()> {
+        // MC may have changed the box or the charges
+        Self::upload_reciprocal(context, gpu)?;
         let positions = pack_positions_f32(context);
         let (com_positions, quaternions) = pack_com_and_quaternions(context);
         gpu.upload_positions_com_quaternions(&positions, &com_positions, &quaternions);
@@ -453,6 +456,19 @@ impl LangevinRunner {
                 }
             }
         }
+        Ok(())
+    }
+
+    /// The k-space kernels run only beside the on-device pair forces; the CPU-force
+    /// path takes Ewald from the host.
+    fn upload_reciprocal<T: Context>(context: &T, gpu: &mut LangevinGpu) -> anyhow::Result<()> {
+        let data = if gpu.has_gpu_forces {
+            extract_reciprocal_data(context)?
+        } else {
+            None
+        };
+        gpu.upload_reciprocal(data.as_ref());
+        Ok(())
     }
 
     fn write_positions<T: Context>(context: &mut T, positions: &[[f32; 4]]) {

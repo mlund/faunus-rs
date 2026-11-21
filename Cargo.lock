@@ -1426,7 +1426,6 @@ dependencies = [
  "serde",
  "thiserror 2.0.18",
  "uom",
- "wide 1.5.0",
 ]
 
 [[package]]

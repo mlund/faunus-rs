@@ -50,6 +50,8 @@ pub use celloverlap::CellOverlap;
 pub use constrain::{Constrain, ConstrainBuilder, Restraint};
 pub use custom_external::{CustomExternal, CustomExternalBuilder};
 pub use energyterm::EnergyTerm;
+#[cfg(feature = "gpu")]
+pub(crate) use ewald::ReciprocalDeviceData;
 pub use ewald::{EwaldBuilder, EwaldReciprocalEnergy};
 pub use external_pressure::{ExternalPressure, Pressure};
 pub use hamiltonian::{EnergyChange, Hamiltonian};

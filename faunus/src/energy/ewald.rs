@@ -90,6 +90,22 @@ impl Charged {
     }
 }
 
+/// Reciprocal-space input for the device force kernels; layout and formula are
+/// fixed by [`interatomic::coulomb::gpu`]. Only charged active atoms are listed,
+/// since neutral ones cost N_k trig calls each for nothing.
+#[cfg(feature = "gpu")]
+pub(crate) struct ReciprocalDeviceData {
+    /// `(kx, ky, kz, A(k))` per k-vector
+    pub kvectors: Vec<[f32; 4]>,
+    /// Electric prefactor × 4π/V (kJ·mol⁻¹·Å⁻²)
+    pub force_prefactor: f32,
+    /// Absolute particle index of each charge
+    pub atoms: Vec<u32>,
+    pub charges: Vec<f32>,
+    /// Cubic box side, for wrapping before the f32 trig
+    pub box_length: f32,
+}
+
 /// Ewald reciprocal-space energy with backup/undo for MC moves.
 #[derive(Clone)]
 pub struct EwaldReciprocalEnergy {
@@ -242,11 +258,14 @@ impl EwaldReciprocalEnergy {
         Ok(term)
     }
 
-    /// Only PBC has a Langevin force path: the planned device kernel is PBC-only.
-    pub(super) fn ld_forces(&self) -> super::energyterm::LdForces {
+    /// Only PBC has Langevin forces. The device kernels need the splined pair
+    /// path; without it every force comes from the host.
+    pub(super) fn ld_forces(&self, on_device: bool) -> super::energyterm::LdForces {
+        use super::energyterm::LdForces;
         match self.policy {
-            EwaldPolicy::PBC => super::energyterm::LdForces::Host,
-            EwaldPolicy::IPBC => super::energyterm::LdForces::Unsupported,
+            EwaldPolicy::PBC if on_device => LdForces::Device,
+            EwaldPolicy::PBC => LdForces::Host,
+            EwaldPolicy::IPBC => LdForces::Unsupported,
         }
     }
 
@@ -470,6 +489,25 @@ impl EwaldReciprocalEnergy {
             forces[i] = crate::Point::from(ewald.force(pos, charged.q[k])) * self.prefactor;
         }
         forces
+    }
+
+    /// Snapshot for the on-device force kernels, from a fresh S(k) so the box and
+    /// charges are those of `context`. PBC only.
+    #[cfg(feature = "gpu")]
+    pub(crate) fn device_data(
+        &self,
+        context: &impl ObserveContext,
+    ) -> anyhow::Result<ReciprocalDeviceData> {
+        let (ewald, charged) = self.fresh_summator(context);
+        let kspace = interatomic::coulomb::gpu::GpuKSpace::try_from(&ewald)?;
+        let [box_length, ..] = Self::box_length_from_context(context)?;
+        Ok(ReciprocalDeviceData {
+            kvectors: kspace.kvectors().to_vec(),
+            force_prefactor: (self.prefactor * kspace.force_prefactor()) as f32,
+            atoms: charged.index.iter().map(|&i| i as u32).collect(),
+            charges: charged.q.iter().map(|&q| q as f32).collect(),
+            box_length: box_length as f32,
+        })
     }
 
     /// Report Ewald parameters as YAML.

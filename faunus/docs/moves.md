@@ -795,6 +795,9 @@ The cell list is built on the CPU from periodically downloaded positions
 and uploaded as a CSR structure; the rebuild interval is configurable.
 Intramolecular bonded forces (harmonic bonds, harmonic angles, and periodic/harmonic
 dihedrals) are also computed on-device when present in the topology.
+With Ewald summation, the reciprocal-space forces are also computed on-device: one pass builds
+the structure factor $S(\mathbf{k})$, a second gives the force on each atom.
+Only the PBC policy is supported.
 
 ### Theory
 
@@ -908,13 +911,15 @@ from the equipartition theorem:
 
 ### Notes
 
-- Molecules must have `degrees_of_freedom: Rigid` and `has_com: true` in the topology.
+- Rigid molecules need `degrees_of_freedom: Rigid` and `has_com: true`; free atoms are integrated individually.
 - The simulation cell must be a cubic `!Cuboid`.
 - Velocities are initialized from the Maxwell–Boltzmann distribution on the first call
   and persist on the compute device across subsequent LD blocks.
 - MC rotation moves (`!RotateMolecule`) automatically track rigid-body orientation,
   which is transferred to the device at each LD block start.
 - Energy splines must be configured (the `!Nonbonded` term's `spline`) to provide on-device pair potentials.
+- Ewald summation needs the PBC policy and energy splines; the reciprocal-space forces then
+  reach both rigid molecules and free atoms.
 - Every energy term must supply forces. Setup fails for terms that do not, e.g. SASA,
   `!CustomExternal`, tabulated 6D potentials, or non-harmonic bonds and torsions in
   flexible molecules, since LD would otherwise sample a different Hamiltonian than MC.

@@ -323,6 +323,15 @@ impl Hamiltonian {
         })
     }
 
+    #[cfg(feature = "gpu")]
+    pub(crate) fn ewald_reciprocal(&self) -> Option<&super::EwaldReciprocalEnergy> {
+        #[allow(clippy::wildcard_enum_match_arm)]
+        self.energy_terms.iter().find_map(|t| match t {
+            EnergyTerm::EwaldReciprocal(e) => Some(e.as_ref()),
+            _ => None,
+        })
+    }
+
     fn ld_terms_of<'a>(
         &'a self,
         context: &'a impl ObserveContext,
@@ -741,7 +750,7 @@ mod tests {
         assert_eq!(ld_unsupported(external), ["custom_external"]);
     }
 
-    /// LD takes reciprocal forces on the host for PBC; IPBC has no LD force path.
+    /// PBC Ewald has an LD force path; IPBC has none.
     #[test]
     fn ld_accepts_ewald_only_with_pbc() {
         let ewald = |extra| LdCase {
@@ -760,35 +769,35 @@ mod tests {
         );
     }
 
-    /// The host overlay feeds rigid-body COM forces and torques only, so it cannot
-    /// move the per-atom-integrated atoms of a flexible molecule.
+    /// With splines the k-space forces run on-device per atom, so flexible molecules
+    /// get them too; the host overlay only reaches rigid bodies.
     #[test]
-    fn ld_refuses_host_forces_on_flexible_molecules() {
+    fn ld_takes_ewald_on_device_with_splines() {
+        use crate::WithHamiltonian;
+        let ewald = "    - !Ewald {cutoff: 12.0, accuracy: 1e-5}";
+        let host_terms = |spline| {
+            let context = LdCase {
+                spline,
+                extra: ewald,
+                ..Default::default()
+            }
+            .context();
+            let host = context.hamiltonian().ld_host_terms(&context);
+            host.len()
+        };
+        // Unsplined: nonbonded and Ewald both go through the CPU force path
+        assert_eq!(host_terms(false), 2);
+        assert_eq!(host_terms(true), 0);
+
         let flexible = |extra| LdCase {
             dimer_dof: "Free",
             extra,
             ..Default::default()
         };
-        // The dimer's kept excluded pair is refused regardless; count what host terms add
-        let base = ld_unsupported(flexible("")).len();
-        let ewald = ld_unsupported(flexible("    - !Ewald {cutoff: 12.0, accuracy: 1e-5}"));
-        assert_eq!(ewald.len(), base + 1);
-        assert!(ewald.contains(&"ewald_reciprocal"));
-    }
-
-    /// The host overlay is how LD sees the k-space forces until they run on-device.
-    #[test]
-    fn ld_overlay_carries_ewald_forces() {
-        use crate::WithHamiltonian;
-        let context = LdCase {
-            extra: "    - !Ewald {cutoff: 12.0, accuracy: 1e-5}",
-            ..Default::default()
-        }
-        .context();
-        let hamiltonian = context.hamiltonian();
-        let overlay = hamiltonian.ld_overlay_forces(&context, &hamiltonian.ld_host_terms(&context));
-        assert_eq!(overlay.len(), 3);
-        assert!(overlay.iter().all(|f| f.norm() > 0.0));
+        assert_eq!(
+            ld_unsupported(flexible(ewald)),
+            ld_unsupported(flexible(""))
+        );
     }
 
     /// The GPU bonded kernels skip non-harmonic bonds, so a moving FENE bond has no force.

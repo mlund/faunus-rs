@@ -329,7 +329,7 @@ impl EnergyTerm {
                     LdForces::Constant
                 }
             }
-            Self::EwaldReciprocal(x) => x.ld_forces(),
+            Self::EwaldReciprocal(x) => x.ld_forces(on_device),
             Self::SasaEnergy(_)
             | Self::ContactTessellation(_)
             | Self::Constrain(_)
