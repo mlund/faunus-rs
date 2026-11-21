@@ -21,9 +21,13 @@ use crate::energy::nonbonded_kernel::{
 };
 use cubecl::prelude::*;
 use cubecl::server::Handle;
-use std::marker::PhantomData;
 
 pub(super) const WORKGROUP_SIZE: u32 = 64;
+
+/// Client on wgpu's best available device (`CUBECL_WGPU_DEFAULT_DEVICE` overrides).
+pub(super) fn wgpu_client() -> anyhow::Result<Client> {
+    Ok(cubecl::Device::wgpu(cubecl::device::WgpuDeviceKind::DefaultDevice)?.client())
+}
 
 /// Callback computing per-molecule COM forces and torques from atom positions.
 pub(super) type ForceCallback<'a> =
@@ -82,9 +86,9 @@ pub(super) struct LangevinUploadData {
     pub(super) has_flexible: bool,
 }
 
-/// CubeCL-based Langevin dynamics pipeline, generic over runtime backend.
-pub(super) struct LangevinGpu<R: Runtime> {
-    pub(super) client: ComputeClient<R>,
+/// CubeCL-based Langevin dynamics pipeline.
+pub(super) struct LangevinGpu {
+    pub(super) client: Client,
     pub(super) config: LangevinConfig,
 
     // Integrator state buffers
@@ -162,10 +166,9 @@ pub(super) struct LangevinGpu<R: Runtime> {
     /// Philox key for the thermostat noise, drawn from the run's seeded RNG.
     rng_seed: u32,
     step_counter: u32,
-    _runtime: PhantomData<R>,
 }
 
-impl<R: Runtime> std::fmt::Debug for LangevinGpu<R> {
+impl std::fmt::Debug for LangevinGpu {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("LangevinGpu")
             .field("n_atoms", &self.n_atoms)
@@ -177,9 +180,9 @@ impl<R: Runtime> std::fmt::Debug for LangevinGpu<R> {
     }
 }
 
-impl<R: Runtime> LangevinGpu<R> {
+impl LangevinGpu {
     pub(super) fn new(
-        client: ComputeClient<R>,
+        client: Client,
         config: LangevinConfig,
         n_atoms: u32,
         n_molecules: u32,
@@ -295,7 +298,6 @@ impl<R: Runtime> LangevinGpu<R> {
             kt,
             rng_seed,
             step_counter: 0,
-            _runtime: PhantomData,
         }
     }
 
@@ -363,8 +365,7 @@ impl<R: Runtime> LangevinGpu<R> {
         }
 
         // Upload bonded CSR data
-        let upload_csr = |client: &ComputeClient<R>,
-                          data: &crate::energy::bonded::kernel::CsrData| {
+        let upload_csr = |client: &Client, data: &crate::energy::bonded::kernel::CsrData| {
             (
                 client.create_from_slice(bytemuck::cast_slice(&data.offsets)),
                 client.create_from_slice(bytemuck::cast_slice(&data.atoms)),
@@ -438,13 +439,14 @@ impl<R: Runtime> LangevinGpu<R> {
     }
 
     /// Download positions and rebuild the cell list CSR on CPU, then upload.
-    fn rebuild_cell_list(&mut self) {
-        let positions = self.download_positions();
+    fn rebuild_cell_list(&mut self) -> anyhow::Result<()> {
+        let positions = self.download_positions()?;
         let (offsets, atoms) = build_cell_list(&positions, self.box_length, self.n_cells_1d);
         self.cell_offsets = self
             .client
             .create_from_slice(bytemuck::cast_slice(&offsets));
         self.cell_atoms = self.client.create_from_slice(bytemuck::cast_slice(&atoms));
+        Ok(())
     }
 
     /// Run `steps` BAOAB steps with on-device force computation.
@@ -466,45 +468,44 @@ impl<R: Runtime> LangevinGpu<R> {
         let rebuild_interval = self.config.cell_list_rebuild;
 
         // Initial cell list required before first force evaluation
-        self.rebuild_cell_list();
-        self.dispatch_pair_forces()?;
-        self.dispatch_bonded_forces()?;
-        self.dispatch_reduce()?;
+        self.rebuild_cell_list()?;
+        self.dispatch_pair_forces();
+        self.dispatch_bonded_forces();
+        self.dispatch_reduce();
         if let Some(cb) = overlay.as_deref_mut() {
-            let positions = self.download_positions();
+            let positions = self.download_positions()?;
             let (extra_com, extra_tau) = cb(&positions);
             self.upload_extra_com_forces_torques(&extra_com, &extra_tau);
-            self.dispatch_add_extra_com_forces()?;
+            self.dispatch_add_extra_com_forces();
         }
 
         for step in 0..steps as u32 {
-            self.dispatch_baoab()?;
-            self.dispatch_baoab_atoms()?;
-            self.dispatch_reconstruct()?;
+            self.dispatch_baoab();
+            self.dispatch_baoab_atoms();
+            self.dispatch_reconstruct();
 
             // Periodic rebuild keeps cell list valid as particles diffuse;
             // costs one GPU sync per rebuild (~0.1ms) vs force computation
             if rebuild_interval > 0 && (step + 1) % rebuild_interval == 0 {
-                self.rebuild_cell_list();
+                self.rebuild_cell_list()?;
             }
 
-            self.dispatch_pair_forces()?;
-            self.dispatch_bonded_forces()?;
-            self.dispatch_reduce()?;
+            self.dispatch_pair_forces();
+            self.dispatch_bonded_forces();
+            self.dispatch_reduce();
             if let Some(cb) = overlay.as_deref_mut() {
-                let positions = self.download_positions();
+                let positions = self.download_positions()?;
                 let (extra_com, extra_tau) = cb(&positions);
                 self.upload_extra_com_forces_torques(&extra_com, &extra_tau);
-                self.dispatch_add_extra_com_forces()?;
+                self.dispatch_add_extra_com_forces();
             }
 
-            self.dispatch_half_kick()?;
-            self.dispatch_half_kick_atoms()?;
+            self.dispatch_half_kick();
+            self.dispatch_half_kick_atoms();
             self.step_counter += 1;
         }
 
-        // Sync to ensure all work is complete
-        let _ = self.client.read_one(self.com_forces.clone());
+        self.sync()?;
         Ok(())
     }
 
@@ -519,23 +520,23 @@ impl<R: Runtime> LangevinGpu<R> {
     ) -> anyhow::Result<()> {
         self.log_first_step();
 
-        let positions = self.download_positions();
+        let positions = self.download_positions()?;
         let (com_forces, torques) = compute_forces(&positions);
         self.upload_com_forces_torques(&com_forces, &torques);
 
         for _ in 0..steps {
-            self.dispatch_baoab()?;
-            self.dispatch_reconstruct()?;
+            self.dispatch_baoab();
+            self.dispatch_reconstruct();
 
-            let positions = self.download_positions();
+            let positions = self.download_positions()?;
             let (com_forces, torques) = compute_forces(&positions);
             self.upload_com_forces_torques(&com_forces, &torques);
 
-            self.dispatch_half_kick()?;
+            self.dispatch_half_kick();
             self.step_counter += 1;
         }
 
-        let _ = self.client.read_one(self.com_forces.clone());
+        self.sync()?;
         Ok(())
     }
 
@@ -557,37 +558,34 @@ impl<R: Runtime> LangevinGpu<R> {
 
     /// Add `extra_com_forces` / `extra_torques` to `com_forces` / `torques`.
     /// Must run after `dispatch_reduce` so the overlay isn't clobbered.
-    fn dispatch_add_extra_com_forces(&self) -> anyhow::Result<()> {
+    fn dispatch_add_extra_com_forces(&self) {
         let count = CubeCount::Static(self.n_molecules.div_ceil(WORKGROUP_SIZE), 1, 1);
         let dim = CubeDim::new_1d(WORKGROUP_SIZE);
         unsafe {
-            kernels::add_extra_com_forces_kernel::launch_unchecked::<R>(
+            kernels::add_extra_com_forces_kernel::launch_unchecked(
                 &self.client,
                 count,
                 dim,
-                ArrayArg::from_raw_parts::<f32>(
-                    &self.extra_com_forces,
+                BufferArg::from_raw_parts(
+                    self.extra_com_forces.clone(),
                     self.n_molecules as usize * 4,
-                    1,
                 ),
-                ArrayArg::from_raw_parts::<f32>(
-                    &self.extra_torques,
+                BufferArg::from_raw_parts(
+                    self.extra_torques.clone(),
                     self.n_molecules as usize * 4,
-                    1,
                 ),
-                ArrayArg::from_raw_parts::<f32>(&self.com_forces, self.n_molecules as usize * 4, 1),
-                ArrayArg::from_raw_parts::<f32>(&self.torques, self.n_molecules as usize * 4, 1),
-                ScalarArg::new(self.n_molecules),
+                BufferArg::from_raw_parts(self.com_forces.clone(), self.n_molecules as usize * 4),
+                BufferArg::from_raw_parts(self.torques.clone(), self.n_molecules as usize * 4),
+                self.n_molecules,
             )
-        }?;
-        Ok(())
+        };
     }
 
     // ========================================================================
     // Kernel dispatch helpers
     // ========================================================================
 
-    fn dispatch_pair_forces(&self) -> anyhow::Result<()> {
+    fn dispatch_pair_forces(&self) {
         let count = CubeCount::Static(self.n_atoms.div_ceil(WORKGROUP_SIZE), 1, 1);
         let dim = CubeDim::new_1d(WORKGROUP_SIZE);
         let inv_box = 1.0f32 / self.box_length;
@@ -596,38 +594,35 @@ impl<R: Runtime> LangevinGpu<R> {
         let n3 = (self.n_cells_1d * self.n_cells_1d * self.n_cells_1d) as usize;
 
         unsafe {
-            crate::energy::nonbonded_kernel::pair_forces_kernel::launch_unchecked::<R>(
+            crate::energy::nonbonded_kernel::pair_forces_kernel::launch_unchecked(
                 &self.client,
                 count,
                 dim,
-                ArrayArg::from_raw_parts::<f32>(&self.positions, self.n_atoms as usize * 4, 1),
-                ArrayArg::from_raw_parts::<u32>(&self.atom_type_ids, self.n_atoms as usize, 1),
-                ArrayArg::from_raw_parts::<u32>(&self.mol_ids, self.n_atoms as usize, 1),
-                ArrayArg::from_raw_parts::<f32>(
-                    &self.spline_params,
+                BufferArg::from_raw_parts(self.positions.clone(), self.n_atoms as usize * 4),
+                BufferArg::from_raw_parts(self.atom_type_ids.clone(), self.n_atoms as usize),
+                BufferArg::from_raw_parts(self.mol_ids.clone(), self.n_atoms as usize),
+                BufferArg::from_raw_parts(
+                    self.spline_params.clone(),
                     (self.n_atom_types * self.n_atom_types) as usize * 8,
-                    1,
                 ),
-                ArrayArg::from_raw_parts::<f32>(
-                    &self.spline_coeffs,
+                BufferArg::from_raw_parts(
+                    self.spline_coeffs.clone(),
                     self.spline_coeffs.size() as usize / 4,
-                    1,
                 ),
-                ArrayArg::from_raw_parts::<u32>(&self.excl_offsets, self.n_atoms as usize + 1, 1),
-                ArrayArg::from_raw_parts::<u32>(&self.excl_atoms, n_excl_atoms, 1),
-                ArrayArg::from_raw_parts::<u32>(&self.mol_is_rigid, self.n_molecules as usize, 1),
-                ArrayArg::from_raw_parts::<u32>(&self.cell_offsets, n3 + 1, 1),
-                ArrayArg::from_raw_parts::<u32>(&self.cell_atoms, self.n_atoms as usize, 1),
-                ArrayArg::from_raw_parts::<u32>(&self.neighbor_cells, n3 * 27, 1),
-                ArrayArg::from_raw_parts::<f32>(&self.atom_forces, self.n_atoms as usize * 4, 1),
-                ScalarArg::new(self.n_atoms),
-                ScalarArg::new(self.n_atom_types),
-                ScalarArg::new(self.box_length),
-                ScalarArg::new(inv_box),
-                ScalarArg::new(self.n_cells_1d),
+                BufferArg::from_raw_parts(self.excl_offsets.clone(), self.n_atoms as usize + 1),
+                BufferArg::from_raw_parts(self.excl_atoms.clone(), n_excl_atoms),
+                BufferArg::from_raw_parts(self.mol_is_rigid.clone(), self.n_molecules as usize),
+                BufferArg::from_raw_parts(self.cell_offsets.clone(), n3 + 1),
+                BufferArg::from_raw_parts(self.cell_atoms.clone(), self.n_atoms as usize),
+                BufferArg::from_raw_parts(self.neighbor_cells.clone(), n3 * 27),
+                BufferArg::from_raw_parts(self.atom_forces.clone(), self.n_atoms as usize * 4),
+                self.n_atoms,
+                self.n_atom_types,
+                self.box_length,
+                inv_box,
+                self.n_cells_1d,
             )
-        }?;
-        Ok(())
+        };
     }
 
     /// Dispatch bond, angle, and dihedral force kernels.
@@ -635,7 +630,7 @@ impl<R: Runtime> LangevinGpu<R> {
     /// Must run after `dispatch_pair_forces` because the bonded kernels
     /// accumulate (`+=`) into the same `atom_forces` buffer that the
     /// nonbonded kernel initializes (`=`).
-    fn dispatch_bonded_forces(&self) -> anyhow::Result<()> {
+    fn dispatch_bonded_forces(&self) {
         let inv_box = 1.0f32 / self.box_length;
         // CubeCount isn't Copy, so we recreate per-launch
         let atom_count = || CubeCount::Static(self.n_atoms.div_ceil(WORKGROUP_SIZE), 1, 1);
@@ -645,353 +640,300 @@ impl<R: Runtime> LangevinGpu<R> {
             let n_bond_atoms = self.bond_atoms.size() as usize / 4;
             let n_params = self.bond_params.size() as usize / 4;
             unsafe {
-                crate::energy::bonded::kernel::bond_forces_kernel::launch_unchecked::<R>(
+                crate::energy::bonded::kernel::bond_forces_kernel::launch_unchecked(
                     &self.client,
                     atom_count(),
                     dim(),
-                    ArrayArg::from_raw_parts::<f32>(&self.positions, self.n_atoms as usize * 4, 1),
-                    ArrayArg::from_raw_parts::<u32>(
-                        &self.bond_offsets,
-                        self.n_atoms as usize + 1,
-                        1,
-                    ),
-                    ArrayArg::from_raw_parts::<u32>(&self.bond_atoms, n_bond_atoms, 1),
-                    ArrayArg::from_raw_parts::<f32>(&self.bond_params, n_params, 1),
-                    ArrayArg::from_raw_parts::<f32>(
-                        &self.atom_forces,
-                        self.n_atoms as usize * 4,
-                        1,
-                    ),
-                    ScalarArg::new(self.n_atoms),
-                    ScalarArg::new(self.box_length),
-                    ScalarArg::new(inv_box),
+                    BufferArg::from_raw_parts(self.positions.clone(), self.n_atoms as usize * 4),
+                    BufferArg::from_raw_parts(self.bond_offsets.clone(), self.n_atoms as usize + 1),
+                    BufferArg::from_raw_parts(self.bond_atoms.clone(), n_bond_atoms),
+                    BufferArg::from_raw_parts(self.bond_params.clone(), n_params),
+                    BufferArg::from_raw_parts(self.atom_forces.clone(), self.n_atoms as usize * 4),
+                    self.n_atoms,
+                    self.box_length,
+                    inv_box,
                 )
-            }?;
+            };
         }
 
         if self.has_angles {
             let n_atoms_idx = self.angle_atoms.size() as usize / 4;
             let n_params = self.angle_params.size() as usize / 4;
             unsafe {
-                crate::energy::bonded::kernel::angle_forces_kernel::launch_unchecked::<R>(
+                crate::energy::bonded::kernel::angle_forces_kernel::launch_unchecked(
                     &self.client,
                     atom_count(),
                     dim(),
-                    ArrayArg::from_raw_parts::<f32>(&self.positions, self.n_atoms as usize * 4, 1),
-                    ArrayArg::from_raw_parts::<u32>(
-                        &self.angle_offsets,
+                    BufferArg::from_raw_parts(self.positions.clone(), self.n_atoms as usize * 4),
+                    BufferArg::from_raw_parts(
+                        self.angle_offsets.clone(),
                         self.n_atoms as usize + 1,
-                        1,
                     ),
-                    ArrayArg::from_raw_parts::<u32>(&self.angle_atoms, n_atoms_idx, 1),
-                    ArrayArg::from_raw_parts::<f32>(&self.angle_params, n_params, 1),
-                    ArrayArg::from_raw_parts::<f32>(
-                        &self.atom_forces,
-                        self.n_atoms as usize * 4,
-                        1,
-                    ),
-                    ScalarArg::new(self.n_atoms),
-                    ScalarArg::new(self.box_length),
-                    ScalarArg::new(inv_box),
+                    BufferArg::from_raw_parts(self.angle_atoms.clone(), n_atoms_idx),
+                    BufferArg::from_raw_parts(self.angle_params.clone(), n_params),
+                    BufferArg::from_raw_parts(self.atom_forces.clone(), self.n_atoms as usize * 4),
+                    self.n_atoms,
+                    self.box_length,
+                    inv_box,
                 )
-            }?;
+            };
         }
 
         if self.has_dihedrals {
             let n_atoms_idx = self.dihedral_atoms.size() as usize / 4;
             let n_params = self.dihedral_params.size() as usize / 4;
             unsafe {
-                crate::energy::bonded::kernel::dihedral_forces_kernel::launch_unchecked::<R>(
+                crate::energy::bonded::kernel::dihedral_forces_kernel::launch_unchecked(
                     &self.client,
                     atom_count(),
                     dim(),
-                    ArrayArg::from_raw_parts::<f32>(&self.positions, self.n_atoms as usize * 4, 1),
-                    ArrayArg::from_raw_parts::<u32>(
-                        &self.dihedral_offsets,
+                    BufferArg::from_raw_parts(self.positions.clone(), self.n_atoms as usize * 4),
+                    BufferArg::from_raw_parts(
+                        self.dihedral_offsets.clone(),
                         self.n_atoms as usize + 1,
-                        1,
                     ),
-                    ArrayArg::from_raw_parts::<u32>(&self.dihedral_atoms, n_atoms_idx, 1),
-                    ArrayArg::from_raw_parts::<f32>(&self.dihedral_params, n_params, 1),
-                    ArrayArg::from_raw_parts::<f32>(
-                        &self.atom_forces,
-                        self.n_atoms as usize * 4,
-                        1,
-                    ),
-                    ScalarArg::new(self.n_atoms),
-                    ScalarArg::new(self.box_length),
-                    ScalarArg::new(inv_box),
+                    BufferArg::from_raw_parts(self.dihedral_atoms.clone(), n_atoms_idx),
+                    BufferArg::from_raw_parts(self.dihedral_params.clone(), n_params),
+                    BufferArg::from_raw_parts(self.atom_forces.clone(), self.n_atoms as usize * 4),
+                    self.n_atoms,
+                    self.box_length,
+                    inv_box,
                 )
-            }?;
+            };
         }
-        Ok(())
     }
 
-    fn dispatch_reduce(&self) -> anyhow::Result<()> {
+    fn dispatch_reduce(&self) {
         let count = CubeCount::Static(self.n_molecules.div_ceil(WORKGROUP_SIZE), 1, 1);
         let dim = CubeDim::new_1d(WORKGROUP_SIZE);
         let inv_box = 1.0f32 / self.box_length;
 
         unsafe {
-            kernels::reduce_forces_kernel::launch_unchecked::<R>(
+            kernels::reduce_forces_kernel::launch_unchecked(
                 &self.client,
                 count,
                 dim,
-                ArrayArg::from_raw_parts::<f32>(&self.atom_forces, self.n_atoms as usize * 4, 1),
-                ArrayArg::from_raw_parts::<f32>(&self.positions, self.n_atoms as usize * 4, 1),
-                ArrayArg::from_raw_parts::<f32>(
-                    &self.com_positions,
+                BufferArg::from_raw_parts(self.atom_forces.clone(), self.n_atoms as usize * 4),
+                BufferArg::from_raw_parts(self.positions.clone(), self.n_atoms as usize * 4),
+                BufferArg::from_raw_parts(
+                    self.com_positions.clone(),
                     self.n_molecules as usize * 4,
-                    1,
                 ),
-                ArrayArg::from_raw_parts::<u32>(
-                    &self.mol_atom_offsets,
+                BufferArg::from_raw_parts(
+                    self.mol_atom_offsets.clone(),
                     self.n_molecules as usize + 1,
-                    1,
                 ),
-                ArrayArg::from_raw_parts::<f32>(&self.com_forces, self.n_molecules as usize * 4, 1),
-                ArrayArg::from_raw_parts::<f32>(&self.torques, self.n_molecules as usize * 4, 1),
-                ArrayArg::from_raw_parts::<u32>(&self.mol_is_rigid, self.n_molecules as usize, 1),
-                ScalarArg::new(self.n_molecules),
-                ScalarArg::new(self.box_length),
-                ScalarArg::new(inv_box),
+                BufferArg::from_raw_parts(self.com_forces.clone(), self.n_molecules as usize * 4),
+                BufferArg::from_raw_parts(self.torques.clone(), self.n_molecules as usize * 4),
+                BufferArg::from_raw_parts(self.mol_is_rigid.clone(), self.n_molecules as usize),
+                self.n_molecules,
+                self.box_length,
+                inv_box,
             )
-        }?;
-        Ok(())
+        };
     }
 
-    fn dispatch_baoab(&self) -> anyhow::Result<()> {
+    fn dispatch_baoab(&self) {
         if !self.has_rigid {
-            return Ok(());
+            return;
         }
         let count = CubeCount::Static(self.n_molecules.div_ceil(WORKGROUP_SIZE), 1, 1);
         let dim = CubeDim::new_1d(WORKGROUP_SIZE);
 
         unsafe {
-            kernels::baoab_step::launch_unchecked::<R>(
+            kernels::baoab_step::launch_unchecked(
                 &self.client,
                 count,
                 dim,
-                ArrayArg::from_raw_parts::<f32>(
-                    &self.com_positions,
+                BufferArg::from_raw_parts(
+                    self.com_positions.clone(),
                     self.n_molecules as usize * 4,
-                    1,
                 ),
-                ArrayArg::from_raw_parts::<f32>(
-                    &self.com_velocities,
+                BufferArg::from_raw_parts(
+                    self.com_velocities.clone(),
                     self.n_molecules as usize * 4,
-                    1,
                 ),
-                ArrayArg::from_raw_parts::<f32>(
-                    &self.quaternions,
+                BufferArg::from_raw_parts(self.quaternions.clone(), self.n_molecules as usize * 4),
+                BufferArg::from_raw_parts(
+                    self.angular_velocities.clone(),
                     self.n_molecules as usize * 4,
-                    1,
                 ),
-                ArrayArg::from_raw_parts::<f32>(
-                    &self.angular_velocities,
-                    self.n_molecules as usize * 4,
-                    1,
-                ),
-                ArrayArg::from_raw_parts::<f32>(&self.com_forces, self.n_molecules as usize * 4, 1),
-                ArrayArg::from_raw_parts::<f32>(&self.torques, self.n_molecules as usize * 4, 1),
-                ArrayArg::from_raw_parts::<f32>(&self.mol_masses, self.n_molecules as usize, 1),
-                ArrayArg::from_raw_parts::<f32>(
-                    &self.mol_inertia,
-                    self.n_molecules as usize * 4,
-                    1,
-                ),
-                ArrayArg::from_raw_parts::<u32>(&self.mol_is_rigid, self.n_molecules as usize, 1),
-                ScalarArg::new(self.n_molecules),
-                ScalarArg::new(self.config.timestep as f32),
-                ScalarArg::new(self.config.friction as f32),
-                ScalarArg::new(self.kt),
-                ScalarArg::new(self.rng_seed),
-                ScalarArg::new(self.step_counter),
-                ScalarArg::new(self.box_length),
+                BufferArg::from_raw_parts(self.com_forces.clone(), self.n_molecules as usize * 4),
+                BufferArg::from_raw_parts(self.torques.clone(), self.n_molecules as usize * 4),
+                BufferArg::from_raw_parts(self.mol_masses.clone(), self.n_molecules as usize),
+                BufferArg::from_raw_parts(self.mol_inertia.clone(), self.n_molecules as usize * 4),
+                BufferArg::from_raw_parts(self.mol_is_rigid.clone(), self.n_molecules as usize),
+                self.n_molecules,
+                self.config.timestep as f32,
+                self.config.friction as f32,
+                self.kt,
+                self.rng_seed,
+                self.step_counter,
+                self.box_length,
             )
-        }?;
-        Ok(())
+        };
     }
 
-    pub(super) fn dispatch_reconstruct(&self) -> anyhow::Result<()> {
+    pub(super) fn dispatch_reconstruct(&self) {
         if !self.has_rigid {
-            return Ok(());
+            return;
         }
         let count = CubeCount::Static(self.n_atoms.div_ceil(WORKGROUP_SIZE), 1, 1);
         let dim = CubeDim::new_1d(WORKGROUP_SIZE);
 
         unsafe {
-            kernels::reconstruct_positions::launch_unchecked::<R>(
+            kernels::reconstruct_positions::launch_unchecked(
                 &self.client,
                 count,
                 dim,
-                ArrayArg::from_raw_parts::<f32>(
-                    &self.com_positions,
+                BufferArg::from_raw_parts(
+                    self.com_positions.clone(),
                     self.n_molecules as usize * 4,
-                    1,
                 ),
-                ArrayArg::from_raw_parts::<f32>(
-                    &self.quaternions,
-                    self.n_molecules as usize * 4,
-                    1,
-                ),
-                ArrayArg::from_raw_parts::<f32>(&self.ref_positions, self.n_atoms as usize * 4, 1),
-                ArrayArg::from_raw_parts::<f32>(&self.positions, self.n_atoms as usize * 4, 1),
-                ArrayArg::from_raw_parts::<u32>(
-                    &self.mol_atom_offsets,
+                BufferArg::from_raw_parts(self.quaternions.clone(), self.n_molecules as usize * 4),
+                BufferArg::from_raw_parts(self.ref_positions.clone(), self.n_atoms as usize * 4),
+                BufferArg::from_raw_parts(self.positions.clone(), self.n_atoms as usize * 4),
+                BufferArg::from_raw_parts(
+                    self.mol_atom_offsets.clone(),
                     self.n_molecules as usize + 1,
-                    1,
                 ),
-                ArrayArg::from_raw_parts::<u32>(&self.mol_is_rigid, self.n_molecules as usize, 1),
-                ScalarArg::new(self.n_atoms),
-                ScalarArg::new(self.n_molecules),
+                BufferArg::from_raw_parts(self.mol_is_rigid.clone(), self.n_molecules as usize),
+                self.n_atoms,
+                self.n_molecules,
             )
-        }?;
-        Ok(())
+        };
     }
 
-    fn dispatch_half_kick(&self) -> anyhow::Result<()> {
+    fn dispatch_half_kick(&self) {
         if !self.has_rigid {
-            return Ok(());
+            return;
         }
         let count = CubeCount::Static(self.n_molecules.div_ceil(WORKGROUP_SIZE), 1, 1);
         let dim = CubeDim::new_1d(WORKGROUP_SIZE);
 
         unsafe {
-            kernels::half_kick::launch_unchecked::<R>(
+            kernels::half_kick::launch_unchecked(
                 &self.client,
                 count,
                 dim,
-                ArrayArg::from_raw_parts::<f32>(
-                    &self.com_velocities,
+                BufferArg::from_raw_parts(
+                    self.com_velocities.clone(),
                     self.n_molecules as usize * 4,
-                    1,
                 ),
-                ArrayArg::from_raw_parts::<f32>(
-                    &self.angular_velocities,
+                BufferArg::from_raw_parts(
+                    self.angular_velocities.clone(),
                     self.n_molecules as usize * 4,
-                    1,
                 ),
-                ArrayArg::from_raw_parts::<f32>(&self.com_forces, self.n_molecules as usize * 4, 1),
-                ArrayArg::from_raw_parts::<f32>(&self.torques, self.n_molecules as usize * 4, 1),
-                ArrayArg::from_raw_parts::<f32>(
-                    &self.quaternions,
-                    self.n_molecules as usize * 4,
-                    1,
-                ),
-                ArrayArg::from_raw_parts::<f32>(&self.mol_masses, self.n_molecules as usize, 1),
-                ArrayArg::from_raw_parts::<f32>(
-                    &self.mol_inertia,
-                    self.n_molecules as usize * 4,
-                    1,
-                ),
-                ArrayArg::from_raw_parts::<u32>(&self.mol_is_rigid, self.n_molecules as usize, 1),
-                ScalarArg::new(self.n_molecules),
-                ScalarArg::new(self.config.timestep as f32),
+                BufferArg::from_raw_parts(self.com_forces.clone(), self.n_molecules as usize * 4),
+                BufferArg::from_raw_parts(self.torques.clone(), self.n_molecules as usize * 4),
+                BufferArg::from_raw_parts(self.quaternions.clone(), self.n_molecules as usize * 4),
+                BufferArg::from_raw_parts(self.mol_masses.clone(), self.n_molecules as usize),
+                BufferArg::from_raw_parts(self.mol_inertia.clone(), self.n_molecules as usize * 4),
+                BufferArg::from_raw_parts(self.mol_is_rigid.clone(), self.n_molecules as usize),
+                self.n_molecules,
+                self.config.timestep as f32,
             )
-        }?;
-        Ok(())
+        };
     }
 
     /// Dispatch per-atom BAOAB step for flexible atoms.
-    fn dispatch_baoab_atoms(&self) -> anyhow::Result<()> {
+    fn dispatch_baoab_atoms(&self) {
         if !self.has_flexible {
-            return Ok(());
+            return;
         }
         let count = CubeCount::Static(self.n_atoms.div_ceil(WORKGROUP_SIZE), 1, 1);
         let dim = CubeDim::new_1d(WORKGROUP_SIZE);
 
         unsafe {
-            kernels::baoab_atom_step::launch_unchecked::<R>(
+            kernels::baoab_atom_step::launch_unchecked(
                 &self.client,
                 count,
                 dim,
-                ArrayArg::from_raw_parts::<f32>(&self.positions, self.n_atoms as usize * 4, 1),
-                ArrayArg::from_raw_parts::<f32>(
-                    &self.atom_velocities,
-                    self.n_atoms as usize * 3,
-                    1,
-                ),
-                ArrayArg::from_raw_parts::<f32>(&self.atom_forces, self.n_atoms as usize * 4, 1),
-                ArrayArg::from_raw_parts::<f32>(&self.atom_masses_buf, self.n_atoms as usize, 1),
-                ArrayArg::from_raw_parts::<u32>(&self.atom_is_flexible, self.n_atoms as usize, 1),
-                ScalarArg::new(self.n_atoms),
-                ScalarArg::new(self.config.timestep as f32),
-                ScalarArg::new(self.config.friction as f32),
-                ScalarArg::new(self.kt),
-                ScalarArg::new(self.rng_seed),
-                ScalarArg::new(self.step_counter),
-                ScalarArg::new(self.box_length),
+                BufferArg::from_raw_parts(self.positions.clone(), self.n_atoms as usize * 4),
+                BufferArg::from_raw_parts(self.atom_velocities.clone(), self.n_atoms as usize * 3),
+                BufferArg::from_raw_parts(self.atom_forces.clone(), self.n_atoms as usize * 4),
+                BufferArg::from_raw_parts(self.atom_masses_buf.clone(), self.n_atoms as usize),
+                BufferArg::from_raw_parts(self.atom_is_flexible.clone(), self.n_atoms as usize),
+                self.n_atoms,
+                self.config.timestep as f32,
+                self.config.friction as f32,
+                self.kt,
+                self.rng_seed,
+                self.step_counter,
+                self.box_length,
             )
-        }?;
-        Ok(())
+        };
     }
 
     /// Dispatch closing B half-kick for flexible atoms.
-    fn dispatch_half_kick_atoms(&self) -> anyhow::Result<()> {
+    fn dispatch_half_kick_atoms(&self) {
         if !self.has_flexible {
-            return Ok(());
+            return;
         }
         let count = CubeCount::Static(self.n_atoms.div_ceil(WORKGROUP_SIZE), 1, 1);
         let dim = CubeDim::new_1d(WORKGROUP_SIZE);
 
         unsafe {
-            kernels::half_kick_atoms::launch_unchecked::<R>(
+            kernels::half_kick_atoms::launch_unchecked(
                 &self.client,
                 count,
                 dim,
-                ArrayArg::from_raw_parts::<f32>(
-                    &self.atom_velocities,
-                    self.n_atoms as usize * 3,
-                    1,
-                ),
-                ArrayArg::from_raw_parts::<f32>(&self.atom_forces, self.n_atoms as usize * 4, 1),
-                ArrayArg::from_raw_parts::<f32>(&self.atom_masses_buf, self.n_atoms as usize, 1),
-                ArrayArg::from_raw_parts::<u32>(&self.atom_is_flexible, self.n_atoms as usize, 1),
-                ScalarArg::new(self.n_atoms),
-                ScalarArg::new(self.config.timestep as f32),
+                BufferArg::from_raw_parts(self.atom_velocities.clone(), self.n_atoms as usize * 3),
+                BufferArg::from_raw_parts(self.atom_forces.clone(), self.n_atoms as usize * 4),
+                BufferArg::from_raw_parts(self.atom_masses_buf.clone(), self.n_atoms as usize),
+                BufferArg::from_raw_parts(self.atom_is_flexible.clone(), self.n_atoms as usize),
+                self.n_atoms,
+                self.config.timestep as f32,
             )
-        }?;
-        Ok(())
+        };
     }
 
     // ========================================================================
     // Data readback
     // ========================================================================
 
-    fn readback_f32(&self, handle: &Handle, count: usize) -> Vec<f32> {
-        let bytes = self.client.read_one(handle.clone());
+    /// Wait for queued work. Launches are infallible, so a kernel failure first shows on a read.
+    fn sync(&self) -> anyhow::Result<()> {
+        use anyhow::Context as _;
+        self.client
+            .read_one(self.com_forces.clone())
+            .context("GPU Langevin kernels failed")?;
+        Ok(())
+    }
+
+    fn readback_f32(&self, handle: &Handle, count: usize) -> anyhow::Result<Vec<f32>> {
+        let bytes = self.client.read_one(handle.clone())?;
         let all: &[f32] = bytemuck::cast_slice(&bytes);
-        all[..count].to_vec()
+        Ok(all[..count].to_vec())
     }
 
-    fn readback_vec4(&self, handle: &Handle, count: usize) -> Vec<[f32; 4]> {
-        let bytes = self.client.read_one(handle.clone());
+    fn readback_vec4(&self, handle: &Handle, count: usize) -> anyhow::Result<Vec<[f32; 4]>> {
+        let bytes = self.client.read_one(handle.clone())?;
         let all: &[[f32; 4]] = bytemuck::cast_slice(&bytes);
-        all[..count].to_vec()
+        Ok(all[..count].to_vec())
     }
 
-    pub(super) fn download_positions(&self) -> Vec<[f32; 4]> {
+    pub(super) fn download_positions(&self) -> anyhow::Result<Vec<[f32; 4]>> {
         self.readback_vec4(&self.positions, self.n_atoms as usize)
     }
 
     /// Force buffers as the next half-kick reads them.
     #[cfg(test)]
-    pub(super) fn download_forces(&self) -> DeviceForces {
+    pub(super) fn download_forces(&self) -> anyhow::Result<DeviceForces> {
         let n_mol = self.n_molecules as usize;
-        DeviceForces {
-            atoms: self.readback_vec4(&self.atom_forces, self.n_atoms as usize),
-            com: self.readback_vec4(&self.com_forces, n_mol),
-            torques: self.readback_vec4(&self.torques, n_mol),
-        }
+        Ok(DeviceForces {
+            atoms: self.readback_vec4(&self.atom_forces, self.n_atoms as usize)?,
+            com: self.readback_vec4(&self.com_forces, n_mol)?,
+            torques: self.readback_vec4(&self.torques, n_mol)?,
+        })
     }
 
     #[cfg(test)]
-    pub(super) fn download_com_velocities(&self) -> Vec<[f32; 4]> {
+    pub(super) fn download_com_velocities(&self) -> anyhow::Result<Vec<[f32; 4]>> {
         self.readback_vec4(&self.com_velocities, self.n_molecules as usize)
     }
 
-    pub(super) fn download_quaternions(&self) -> Vec<[f32; 4]> {
+    pub(super) fn download_quaternions(&self) -> anyhow::Result<Vec<[f32; 4]>> {
         self.readback_vec4(&self.quaternions, self.n_molecules as usize)
     }
 
@@ -1016,16 +958,16 @@ impl<R: Runtime> LangevinGpu<R> {
     }
 
     /// Download velocities from device and compute temperatures.
-    pub(super) fn download_temperature(&self) -> (f32, f32) {
+    pub(super) fn download_temperature(&self) -> anyhow::Result<(f32, f32)> {
         let n = self.n_molecules as usize;
-        let vel = self.readback_vec4(&self.com_velocities, n);
-        let omega = self.readback_vec4(&self.angular_velocities, n);
+        let vel = self.readback_vec4(&self.com_velocities, n)?;
+        let omega = self.readback_vec4(&self.angular_velocities, n)?;
         let atom_vel = if self.has_flexible {
-            self.readback_f32(&self.atom_velocities, self.n_atoms as usize * 3)
+            self.readback_f32(&self.atom_velocities, self.n_atoms as usize * 3)?
         } else {
             Vec::new()
         };
-        compute_temperature(
+        Ok(compute_temperature(
             &self.mol_is_rigid_host,
             &self.mol_masses_host,
             &self.mol_inertia_host,
@@ -1034,7 +976,7 @@ impl<R: Runtime> LangevinGpu<R> {
             &self.atom_is_flexible_host,
             &self.atom_masses_host,
             &atom_vel,
-        )
+        ))
     }
 
     fn log_first_step(&self) {

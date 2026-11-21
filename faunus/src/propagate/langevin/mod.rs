@@ -35,7 +35,6 @@ use crate::energy::nonbonded_kernel::{build_neighbor_cell_table, compute_n_cells
 use crate::topology::DegreesOfFreedom;
 use crate::Context;
 use average::{Estimate, Variance};
-use cubecl::prelude::*;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 
@@ -75,7 +74,7 @@ pub struct LangevinRunner {
     t_trans: Variance,
     /// Running average of rotational temperature (K) across LD blocks.
     t_rot: Variance,
-    gpu: Option<LangevinGpu<cubecl::wgpu::WgpuRuntime>>,
+    gpu: Option<LangevinGpu>,
 }
 
 impl LangevinRunner {
@@ -152,7 +151,7 @@ impl LangevinRunner {
 
         // LD -> MC: download positions and write back to context
         let gpu = self.gpu.as_ref().unwrap();
-        let positions = gpu.download_positions();
+        let positions = gpu.download_positions()?;
 
         // Check for explosion (NaN or extreme coordinates) in a single pass
         let (has_nan, max_coord) = positions.iter().fold((false, 0.0f32), |(nan, max), p| {
@@ -181,7 +180,7 @@ impl LangevinRunner {
 
         // LD->MC: the integrator advanced each rigid body's rotational degrees of freedom itself,
         // so its quaternion is the source of the coordinates written above, not a claim about them.
-        let gpu_quats = gpu.download_quaternions();
+        let gpu_quats = gpu.download_quaternions()?;
         let mol_is_rigid = &gpu.mol_is_rigid_host;
         for (i, q) in gpu_quats.iter().enumerate() {
             if mol_is_rigid[i] != 0 {
@@ -192,7 +191,7 @@ impl LangevinRunner {
         // Every energy term may hold state derived from the coordinates just written
         context.update(&crate::Change::Everything)?;
 
-        let (t_trans, t_rot) = gpu.download_temperature();
+        let (t_trans, t_rot) = gpu.download_temperature()?;
         self.t_trans.add(t_trans as f64);
         self.t_rot.add(t_rot as f64);
         log::debug!("LD block: T_trans={t_trans:.1} K, T_rot={t_rot:.1} K");
@@ -204,7 +203,7 @@ impl LangevinRunner {
     /// only the initial force pass runs.
     fn integrate<T: Context>(
         context: &mut T,
-        gpu: &mut LangevinGpu<cubecl::wgpu::WgpuRuntime>,
+        gpu: &mut LangevinGpu,
         steps: usize,
     ) -> anyhow::Result<()> {
         if gpu.has_gpu_forces {
@@ -241,7 +240,7 @@ impl LangevinRunner {
         context: &T,
         config: &LangevinConfig,
         rng: &mut impl Rng,
-    ) -> anyhow::Result<LangevinGpu<cubecl::wgpu::WgpuRuntime>> {
+    ) -> anyhow::Result<LangevinGpu> {
         let n_atoms = context.num_particles() as u32;
         let n_molecules = context.groups().len() as u32;
         let box_length = context
@@ -250,8 +249,7 @@ impl LangevinRunner {
             .ok_or_else(|| anyhow::anyhow!("LangevinDynamics requires a bounded cell"))?;
         let kt = (crate::R_IN_KJ_PER_MOL * config.temperature) as f32;
 
-        let device = cubecl::wgpu::WgpuDevice::DefaultDevice;
-        let client = cubecl::wgpu::WgpuRuntime::client(&device);
+        let client = pipeline::wgpu_client()?;
         log::info!("CubeCL wgpu runtime initialized");
 
         Ok(LangevinGpu::new(
@@ -268,7 +266,7 @@ impl LangevinRunner {
     /// Build upload data from the simulation context and write it to device buffers.
     fn upload_full_state<T: Context>(
         context: &T,
-        gpu: &mut LangevinGpu<cubecl::wgpu::WgpuRuntime>,
+        gpu: &mut LangevinGpu,
         rng: &mut impl Rng,
     ) -> anyhow::Result<()> {
         let n = context.num_particles();
@@ -427,10 +425,7 @@ impl LangevinRunner {
     /// Upload positions, COM, quaternions, and box length from context to device.
     ///
     /// Box length must be synced because NPT volume moves can change it between LD blocks.
-    fn upload_context_state<T: Context>(
-        context: &T,
-        gpu: &mut LangevinGpu<cubecl::wgpu::WgpuRuntime>,
-    ) {
+    fn upload_context_state<T: Context>(context: &T, gpu: &mut LangevinGpu) {
         let positions = pack_positions_f32(context);
         let (com_positions, quaternions) = pack_com_and_quaternions(context);
         gpu.upload_positions_com_quaternions(&positions, &com_positions, &quaternions);
