@@ -1058,9 +1058,9 @@ dependencies = [
 
 [[package]]
 name = "cgkitten"
-version = "0.2.0"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "077e15bd3620fddfd5dff14e4d9ccdb1906efc7687e5dc8f07bb9028a8d16593"
+checksum = "61743d20e18a41b4b48674af5be493a25bde1a52e599961db4c9a7c41f246b00"
 dependencies = [
  "log",
  "rand 0.8.6",
@@ -1328,6 +1328,15 @@ name = "const_soft_float"
 version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "87ca1caa64ef4ed453e68bb3db612e51cf1b2f5b871337f0fcab1c8f87cc3dff"
+
+[[package]]
+name = "constant_time_eq"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9eb6feb175df65d0a3ccd3e73484e940d0ac664e8034f0519fd49a93db3071d9"
+dependencies = [
+ "rustversion",
+]
 
 [[package]]
 name = "constcat"
@@ -1616,7 +1625,7 @@ dependencies = [
  "portable-atomic",
  "portable-atomic-util",
  "serde",
- "spin 0.12.3",
+ "spin",
  "tynm",
  "xxhash-rust",
 ]
@@ -1693,7 +1702,7 @@ dependencies = [
  "libc",
  "log",
  "pliron",
- "spin 0.12.3",
+ "spin",
  "sysinfo",
  "winapi",
 ]
@@ -1748,7 +1757,7 @@ dependencies = [
  "serde",
  "serde_bytes",
  "serde_json",
- "spin 0.12.3",
+ "spin",
  "toml",
  "turso",
  "wasm-bindgen",
@@ -1817,7 +1826,7 @@ dependencies = [
  "rustc_apfloat",
  "serde",
  "smallvec",
- "spin 0.12.3",
+ "spin",
  "thiserror 2.0.18",
  "variadics_please",
 ]
@@ -2033,7 +2042,7 @@ dependencies = [
  "num-traits",
  "paste",
  "serde",
- "spin 0.12.3",
+ "spin",
  "variadics_please",
 ]
 
@@ -2479,13 +2488,13 @@ dependencies = [
 
 [[package]]
 name = "duello"
-version = "0.4.0"
+version = "0.11.2"
 dependencies = [
  "anyhow",
  "approx",
  "average 0.16.0",
  "bytemuck",
- "cgkitten 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "cgkitten 0.5.0",
  "clap",
  "faunus",
  "flate2",
@@ -2499,7 +2508,7 @@ dependencies = [
  "itertools-num",
  "lazy_static",
  "log",
- "molly",
+ "molly 0.7.0",
  "nalgebra 0.34.2",
  "nalgebra-sparse",
  "nu-ansi-term",
@@ -2507,16 +2516,19 @@ dependencies = [
  "physical_constants",
  "pollster",
  "pretty_env_logger",
+ "pripps",
  "rand 0.8.6",
+ "rand_pcg",
  "rayon",
  "rgb",
  "semver",
  "serde",
  "serde_json",
  "textplots",
- "wgpu 29.0.4",
- "wide 0.7.33",
+ "web-time",
+ "wgpu 30.0.2",
  "yaml_serde",
+ "zip",
 ]
 
 [[package]]
@@ -3016,7 +3028,7 @@ dependencies = [
  "itertools 0.10.5",
  "log",
  "minijinja",
- "molly",
+ "molly 0.5.1",
  "nalgebra 0.34.2",
  "paste",
  "physical_constants",
@@ -3030,7 +3042,7 @@ dependencies = [
  "unordered-pair",
  "validator",
  "vergen-gitcl",
- "voronota-ltr",
+ "voronota-ltr 0.7.0",
  "web-time",
  "yaml_serde",
 ]
@@ -3083,6 +3095,7 @@ checksum = "843fba2746e448b37e26a819579957415c8cef339bf08564fe8b7ddbd959573c"
 dependencies = [
  "crc32fast",
  "miniz_oxide",
+ "zlib-rs",
 ]
 
 [[package]]
@@ -3733,6 +3746,7 @@ dependencies = [
  "anyhow",
  "approx",
  "bincode",
+ "bytemuck",
  "divan",
  "flate2",
  "get-size",
@@ -3743,9 +3757,11 @@ dependencies = [
  "log",
  "nalgebra 0.34.2",
  "num-traits",
+ "pollster",
  "rand 0.8.6",
  "serde",
  "tempfile",
+ "wgpu 29.0.4",
 ]
 
 [[package]]
@@ -4638,6 +4654,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "molly"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "80fc11cdd24f997d0db799faf11a20c1902a49e6b45157977137188ef13f3848"
+
+[[package]]
+name = "molly"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "75dccedc345e14623ecc79262729c65fb6a7262751e1ad7e4230664475c7957b"
+
+[[package]]
 name = "moxcms"
 version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4715,6 +4743,21 @@ dependencies = [
  "indexmap 2.14.0",
  "rustc-hash 1.1.0",
  "thiserror 2.0.18",
+]
+
+[[package]]
+name = "nalgebra"
+version = "0.33.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9d43ddcacf343185dfd6de2ee786d9e8b1c2301622afab66b6c73baf9882abfd"
+dependencies = [
+ "approx",
+ "matrixmultiply",
+ "num-complex",
+ "num-rational",
+ "num-traits",
+ "simba 0.9.1",
+ "typenum",
 ]
 
 [[package]]
@@ -4845,6 +4888,18 @@ name = "new_debug_unreachable"
 version = "1.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "650eef8c711430f1a879fdd01d4745a7deea475becfb90269c06775983bbf086"
+
+[[package]]
+name = "nix"
+version = "0.32.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "77730ed34f01f4990cb2ea67fec715ecebc6fab9a6396cf83c5529b13f581bdc"
+dependencies = [
+ "bitflags 2.13.2",
+ "cfg-if",
+ "cfg_aliases",
+ "libc",
+]
 
 [[package]]
 name = "no_std_io2"
@@ -5690,7 +5745,7 @@ dependencies = [
  "rustc_apfloat",
  "slotmap",
  "smallvec",
- "spin 0.10.0",
+ "spin",
  "thiserror 2.0.18",
  "utf8-chars",
 ]
@@ -5900,6 +5955,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "pripps"
+version = "0.1.0"
+source = "git+https://github.com/mlund/pripps.git#2b3d7a9dedcd8f13f029f5d2a130f00e95864336"
+dependencies = [
+ "bytemuck",
+ "futures-channel",
+ "itertools 0.14.0",
+ "log",
+ "molly 0.6.1",
+ "nalgebra 0.33.3",
+ "num-complex",
+ "pollster",
+ "rayon",
+ "serde",
+ "thiserror 2.0.18",
+ "voronota-ltr 0.7.1",
+ "wgpu 30.0.2",
+ "yaml_serde",
+]
+
+[[package]]
 name = "proc-macro-crate"
 version = "3.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6010,7 +6086,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1ad9c5423459fa2f729b8d9235fab810aa29628b171467744fc86d21460ad70d"
 dependencies = [
  "anyhow",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "proc-macro2",
  "quote",
  "syn 2.0.118",
@@ -7050,15 +7126,6 @@ checksum = "8c63890bd112432d974bab5e562a256e2ea23c6b690c02f0e2210d774e6ead2b"
 
 [[package]]
 name = "spin"
-version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d5fe4ccb98d9c292d56fec89a5e07da7fc4cf0dc11e156b41793132775d3e591"
-dependencies = [
- "lock_api",
-]
-
-[[package]]
-name = "spin"
 version = "0.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0134f9043ed38b087ac4f7d4af44c79e2c9e5094421fe3164f435ce585953b10"
@@ -7786,6 +7853,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "typed-path"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9ce898823d8cd0f028662d2f349694b1af0a5cc9be83f1d213a00d3147445e1e"
+
+[[package]]
 name = "typeid"
 version = "1.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8179,6 +8252,20 @@ dependencies = [
  "log",
  "nalgebra 0.34.2",
  "rayon",
+]
+
+[[package]]
+name = "voronota-ltr"
+version = "0.7.1"
+source = "git+https://github.com/mlund/voronota-ltr#c14b147062191e8e964c6d158863f386b0eb51db"
+dependencies = [
+ "clap",
+ "env_logger 0.11.11",
+ "log",
+ "nalgebra 0.34.2",
+ "rayon",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -9483,6 +9570,20 @@ name = "zeroize"
 version = "1.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e13c156562582aa81c60cb29407084cdb54c4164760106ab78e6c5b0858cf64e"
+dependencies = [
+ "zeroize_derive",
+]
+
+[[package]]
+name = "zeroize_derive"
+version = "1.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3c50655cbb0fe3fc43170059e702f1ce5e19b84cec58dc87b037a09935c2f328"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.118",
+]
 
 [[package]]
 name = "zerotrie"
@@ -9518,6 +9619,31 @@ dependencies = [
  "quote",
  "syn 3.0.10",
 ]
+
+[[package]]
+name = "zip"
+version = "9.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a9534624d547e3f516ecde0ed9a70d37788f01d340efcfdd03bf3ea8e163c1d0"
+dependencies = [
+ "constant_time_eq",
+ "crc32fast",
+ "flate2",
+ "getrandom 0.4.3",
+ "indexmap 2.14.0",
+ "libc",
+ "memchr",
+ "nix",
+ "typed-path",
+ "windows-sys 0.61.2",
+ "zeroize",
+]
+
+[[package]]
+name = "zlib-rs"
+version = "0.6.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b268e58e7c693d7c271f93ffc4ba3b380412554231c85bf61ca7af91042a4112"
 
 [[package]]
 name = "zmij"
