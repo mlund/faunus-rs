@@ -282,8 +282,8 @@ impl Tabulated6DBuilder {
                 };
                 log::info!(
                     "Loaded 6D table for ({}, {}): {}{}",
-                    &eb.molecules[0],
-                    &eb.molecules[1],
+                    eb.molecules[0],
+                    eb.molecules[1],
                     table.summary(),
                     sym_info,
                 );
@@ -292,7 +292,7 @@ impl Tabulated6DBuilder {
                 if eb.single_lookup && mol_id_a == mol_id_b {
                     log::info!(
                         "  Single-lookup enabled for ({}, {}): ~2x faster, small energy drift expected",
-                        &eb.molecules[0], &eb.molecules[1],
+                        eb.molecules[0], eb.molecules[1],
                     );
                 }
                 Ok(Entry {
@@ -325,8 +325,8 @@ impl Tabulated3DBuilder {
                 warn_temperature_mismatch(&table, &eb.file, inv_thermal_energy);
                 log::info!(
                     "Loaded 3D table for ({}, {}): {}",
-                    &eb.molecules[0],
-                    &eb.molecules[1],
+                    eb.molecules[0],
+                    eb.molecules[1],
                     table.summary(),
                 );
                 Ok(Entry {
