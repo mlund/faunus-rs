@@ -65,6 +65,16 @@ impl Table6D {
         }
     }
 
+    /// Identical molecules are exchange symmetric whatever the file says, so
+    /// [`Lookup6D::pair_energy`] combines both lookup orders.
+    fn mark_exchange(&mut self) {
+        let metadata = match self {
+            Self::Flat(t) => &mut t.metadata,
+            Self::Adaptive(t) => &mut t.metadata,
+        };
+        metadata.get_or_insert_with(Default::default).point_group = PointGroup::Exchange;
+    }
+
     /// One-line summary for logging.
     fn summary(&self) -> String {
         match self {
@@ -154,8 +164,8 @@ pub(crate) struct Entry {
     mol_id_b: usize,
     /// Shared via `Arc` so cloning (e.g. VirtualTranslate) is O(1).
     table: Arc<TableKind>,
-    /// Pre-symmetrized table, user opted into single lookup, or 3D table (inherently asymmetric).
-    skip_swap_averaging: bool,
+    /// User opted into one lookup order for a homo-dimer table.
+    single_lookup: bool,
 }
 
 /// Tabulated molecule-molecule and molecule-atom energy term.
@@ -270,8 +280,11 @@ impl Tabulated6DBuilder {
             .map(|eb| {
                 let mol_id_a = resolve_molecule(topology, &eb.molecules[0], "tabulated6d")?;
                 let mol_id_b = resolve_molecule(topology, &eb.molecules[1], "tabulated6d")?;
-                let table = TableKind::load_6d(&eb.file)
+                let mut table = TableKind::load_6d(&eb.file)
                     .with_context(|| format!("Failed to load 6D table '{}'", eb.file.display()))?;
+                if let (TableKind::SixD(t), true) = (&mut table, mol_id_a == mol_id_b) {
+                    t.mark_exchange();
+                }
                 table
                     .validate_metadata()
                     .with_context(|| format!("Invalid table '{}'", eb.file.display()))?;
@@ -287,9 +300,8 @@ impl Tabulated6DBuilder {
                     table.summary(),
                     sym_info,
                 );
-                let skip_swap_averaging =
-                    eb.single_lookup || *table.point_group() == PointGroup::Exchange;
-                if eb.single_lookup && mol_id_a == mol_id_b {
+                let single_lookup = eb.single_lookup && mol_id_a == mol_id_b;
+                if single_lookup {
                     log::info!(
                         "  Single-lookup enabled for ({}, {}): ~2x faster, small energy drift expected",
                         &eb.molecules[0], &eb.molecules[1],
@@ -298,7 +310,7 @@ impl Tabulated6DBuilder {
                 Ok(Entry {
                     mol_id_a,
                     mol_id_b,
-                    skip_swap_averaging,
+                    single_lookup,
                     table: Arc::new(table),
                 })
             })
@@ -332,7 +344,7 @@ impl Tabulated3DBuilder {
                 Ok(Entry {
                     mol_id_a,
                     mol_id_b,
-                    skip_swap_averaging: true, // inherently asymmetric
+                    single_lookup: false,
                     table: Arc::new(table),
                 })
             })
@@ -379,9 +391,9 @@ impl TabulatedEnergy {
 
     /// Energy between two groups via table lookup.
     ///
-    /// For 6D self-interaction tables (mol_a == mol_b), the lookup is by default
-    /// averaged over both A/B perspectives because `inverse_orient` maps
-    /// the swapped pair to different angular grid points.
+    /// For 6D self-interaction tables (mol_a == mol_b), both A/B perspectives
+    /// are combined by default (see [`Lookup6D::pair_energy`]), because
+    /// `inverse_orient` maps the swapped pair to different angular grid points.
     ///
     /// For 3D tables, only one perspective is used (molecule→atom direction
     /// in the molecule's body frame).
@@ -410,7 +422,7 @@ impl TabulatedEnergy {
         }
 
         match &*entry.table {
-            TableKind::SixD(table) => self.pair_energy_6d(entry, table, swapped, &sep, r, ga, gb),
+            TableKind::SixD(table) => self.pair_energy_6d(entry, table, swapped, &sep, ga, gb),
             TableKind::ThreeD(table) => self.pair_energy_3d(table, swapped, &sep, r, ga, gb),
         }
     }
@@ -438,18 +450,16 @@ impl TabulatedEnergy {
 
     /// 6D lookup: two rigid molecule orientations + separation.
     // `table` is pre-matched from `entry` by the caller to avoid re-dispatching.
-    #[allow(clippy::too_many_arguments)]
     fn pair_energy_6d(
         &self,
         entry: &Entry,
         table: &Table6D,
         swapped: bool,
         sep: &crate::Point,
-        r: f64,
         ga: &crate::group::Group,
         gb: &crate::group::Group,
     ) -> f64 {
-        // Reorder quaternions and negate separation so that `inverse_orient`
+        // Reorder quaternions and negate separation so that the lookup
         // always sees the table's canonical (mol_a, mol_b) ordering.
         let (q_a, q_b, oriented_sep) = if swapped {
             (gb.quaternion(), ga.quaternion(), -sep)
@@ -457,29 +467,16 @@ impl TabulatedEnergy {
             (ga.quaternion(), gb.quaternion(), *sep)
         };
 
-        let (_r, omega, dir_a, dir_b) = icotable::inverse_orient(&oriented_sep, q_a, q_b);
-        let e_forward = table.lookup(r, omega, &dir_a, &dir_b, Some(self.inv_thermal_energy));
-
-        // Hetero-dimer, pre-symmetrized, or user opted into single lookup
-        if entry.mol_id_a != entry.mol_id_b || entry.skip_swap_averaging {
-            return e_forward;
+        let beta = self.inv_thermal_energy;
+        if entry.single_lookup {
+            let (r, omega, dir_a, dir_b) = icotable::inverse_orient(&oriented_sep, q_a, q_b);
+            return table.lookup(r, omega, &dir_a, &dir_b, Some(beta));
         }
-
-        // Self-interaction: average both perspectives to restore exchange
-        // symmetry broken by interpolation on different angular grid points.
-        let (_r, omega2, dir_a2, dir_b2) = icotable::inverse_orient(&(-oriented_sep), q_b, q_a);
-        let e_reverse = table.lookup(r, omega2, &dir_a2, &dir_b2, Some(self.inv_thermal_energy));
-
-        // Track asymmetry in Boltzmann space: repulsive states (exp≈0)
-        // contribute negligibly, isolating the interpolation error at
-        // physically accessible configurations.
-        let bf = (-self.inv_thermal_energy * e_forward).exp();
-        let br = (-self.inv_thermal_energy * e_reverse).exp();
-        if bf.is_finite() && br.is_finite() {
-            self.welford_update((bf - br).abs());
+        let pair = table.pair_energy(&oriented_sep, q_a, q_b, beta);
+        if entry.mol_id_a == entry.mol_id_b {
+            self.welford_update(pair.order_mismatch);
         }
-
-        0.5 * (e_forward + e_reverse)
+        pair.energy
     }
 
     fn cached_pairs<'a>(&'a self, context: &'a impl ObserveContext) -> impl GroupPairs + 'a {
