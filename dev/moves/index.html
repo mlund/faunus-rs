@@ -2000,7 +2000,10 @@ where <span class="arithmatex">\(k\)</span> is the number of atoms in neighborin
 The cell list is built on the CPU from periodically downloaded positions
 and uploaded as a CSR structure; the rebuild interval is configurable.
 Intramolecular bonded forces (harmonic bonds, harmonic angles, and periodic/harmonic
-dihedrals) are also computed on-device when present in the topology.</p>
+dihedrals) are also computed on-device when present in the topology.
+With Ewald summation, the reciprocal-space forces are also computed on-device: one pass builds
+the structure factor <span class="arithmatex">\(S(\mathbf{k})\)</span>, a second gives the force on each atom.
+Only the PBC policy is supported.</p>
 <h3 id="theory">Theory<a class="headerlink" href="#theory" title="Permanent link">&para;</a></h3>
 <p>The Langevin equation couples Newtonian dynamics to a heat bath through
 friction and stochastic forces:</p>
@@ -2146,13 +2149,15 @@ from the equipartition theorem:</p>
 </code></pre></div>
 <h3 id="notes_1">Notes<a class="headerlink" href="#notes_1" title="Permanent link">&para;</a></h3>
 <ul>
-<li>Molecules must have <code>degrees_of_freedom: Rigid</code> and <code>has_com: true</code> in the topology.</li>
+<li>Rigid molecules need <code>degrees_of_freedom: Rigid</code> and <code>has_com: true</code>; free atoms are integrated individually.</li>
 <li>The simulation cell must be a cubic <code>!Cuboid</code>.</li>
 <li>Velocities are initialized from the Maxwell–Boltzmann distribution on the first call
   and persist on the compute device across subsequent LD blocks.</li>
 <li>MC rotation moves (<code>!RotateMolecule</code>) automatically track rigid-body orientation,
   which is transferred to the device at each LD block start.</li>
 <li>Energy splines must be configured (the <code>!Nonbonded</code> term's <code>spline</code>) to provide on-device pair potentials.</li>
+<li>Ewald summation needs the PBC policy and energy splines; the reciprocal-space forces then
+  reach both rigid molecules and free atoms.</li>
 <li>Every energy term must supply forces. Setup fails for terms that do not, e.g. SASA,
   <code>!CustomExternal</code>, tabulated 6D potentials, or non-harmonic bonds and torsions in
   flexible molecules, since LD would otherwise sample a different Hamiltonian than MC.</li>
